@@ -116,30 +116,34 @@ export default function Home() {
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
         {/* 헤더 */}
-        <header className="mb-6 flex items-center justify-between">
-          <div className="min-w-0 flex items-center gap-1">
-            <div>
-              <h1
-                className="text-lg md:text-2xl font-bold leading-tight"
-                style={{
-                  background: themeConfig.titleGradient,
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                }}
-              >
-                또니망고네
-                <br />
-                가계부
-              </h1>
-              <p className="text-slate-500 text-sm hidden md:block mt-1">우리 가족 지출을 한눈에!</p>
-            </div>
+        <header className="mb-6 flex items-center justify-between relative">
+          {/* 왼쪽: 곰돌이 */}
+          <div className="flex-shrink-0">
             <img
               src="/bear-removebg-preview.png"
               alt="곰돌이"
-              className="w-16 h-16 md:w-20 md:h-20 object-contain"
+              className="w-14 h-14 md:w-16 md:h-16 object-contain"
             />
           </div>
+
+          {/* 가운데: 제목 */}
+          <div className="absolute left-1/2 -translate-x-1/2 text-center">
+            <h1
+              className="text-lg md:text-2xl font-bold leading-tight"
+              style={{
+                background: themeConfig.titleGradient,
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}
+            >
+              또니망고네
+              <br />
+              가계부
+            </h1>
+          </div>
+
+          {/* 오른쪽: 버튼들 */}
           <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
             <Link
               href="/settings"
