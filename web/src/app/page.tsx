@@ -116,19 +116,11 @@ export default function Home() {
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
         {/* 헤더 */}
-        <header className="mb-6 flex items-center justify-between relative">
-          {/* 왼쪽 빈 공간 (버튼들과 균형 맞추기) */}
-          <div className="w-20 md:w-24 flex-shrink-0" />
-
-          {/* 가운데: 곰돌이 + 제목 */}
-          <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1">
-            <img
-              src="/bear-removebg-preview.png"
-              alt="곰돌이"
-              className="w-12 h-12 md:w-14 md:h-14 object-contain"
-            />
+        <header className="mb-6 flex items-center justify-between">
+          {/* 왼쪽: 제목 + 곰돌이 */}
+          <div className="flex items-center gap-2">
             <h1
-              className="text-lg md:text-2xl font-bold leading-tight text-center"
+              className="text-lg md:text-2xl font-bold leading-tight"
               style={{
                 background: themeConfig.titleGradient,
                 WebkitBackgroundClip: 'text',
@@ -140,6 +132,11 @@ export default function Home() {
               <br />
               가계부
             </h1>
+            <img
+              src="/bear-removebg-preview.png"
+              alt="곰돌이"
+              className="w-14 h-14 md:w-16 md:h-16 object-contain"
+            />
           </div>
 
           {/* 오른쪽: 버튼들 */}
