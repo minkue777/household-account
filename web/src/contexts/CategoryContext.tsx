@@ -11,6 +11,7 @@ import {
   setBudget as setBudgetService,
   generateCategoryKey,
 } from '@/lib/categoryService';
+import { fixInvalidCategories } from '@/lib/expenseService';
 
 interface CategoryContextType {
   categories: CategoryDocument[];
@@ -42,6 +43,7 @@ const UNKNOWN_CATEGORY = {
 export function CategoryProvider({ children }: { children: React.ReactNode }) {
   const [categories, setCategories] = useState<CategoryDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasMigrated, setHasMigrated] = useState(false);
 
   // 초기화 및 실시간 구독
   useEffect(() => {
@@ -66,6 +68,19 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
       }
     };
   }, []);
+
+  // 잘못된 카테고리 자동 수정 (한 번만 실행)
+  useEffect(() => {
+    if (!isLoading && categories.length > 0 && !hasMigrated) {
+      const validKeys = categories.map(c => c.key);
+      fixInvalidCategories(validKeys).then((count) => {
+        if (count > 0) {
+          console.log(`${count}개의 잘못된 카테고리가 수정되었습니다.`);
+        }
+        setHasMigrated(true);
+      });
+    }
+  }, [isLoading, categories, hasMigrated]);
 
   // 카테고리 조회 헬퍼
   const getCategoryByKey = useCallback(

@@ -9,6 +9,7 @@ import {
   orderBy,
   onSnapshot,
   Timestamp,
+  getDocs,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Expense } from '@/types/expense';
@@ -164,4 +165,36 @@ export async function addManualExpense(
     createdAt: Timestamp.now(),
   });
   return docRef.id;
+}
+
+/**
+ * 잘못된 카테고리 일괄 수정
+ */
+export async function fixInvalidCategories(
+  validCategories: string[]
+): Promise<number> {
+  const categoryMap: Record<string, string> = {
+    'baby': 'childcare',
+    'transport': 'living',
+    'medical': 'living',
+  };
+
+  const q = query(collection(db, COLLECTION_NAME));
+  const snapshot = await getDocs(q);
+
+  let fixedCount = 0;
+
+  for (const docSnap of snapshot.docs) {
+    const data = docSnap.data();
+    const category = (data.category || '').toLowerCase();
+
+    // 유효한 카테고리가 아닌 경우
+    if (!validCategories.includes(category)) {
+      const newCategory = categoryMap[category] || 'etc';
+      await updateDoc(doc(db, COLLECTION_NAME, docSnap.id), { category: newCategory });
+      fixedCount++;
+    }
+  }
+
+  return fixedCount;
 }

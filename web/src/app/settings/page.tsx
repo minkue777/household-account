@@ -12,7 +12,6 @@ import {
   updateMerchantRule,
   deleteMerchantRule,
 } from '@/lib/merchantRuleService';
-import { seedSampleData } from '@/lib/seedData';
 
 export default function SettingsPage() {
   const {
@@ -29,15 +28,15 @@ export default function SettingsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
+  // 섹션 펼침/접힘 상태
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+  const [isRulesOpen, setIsRulesOpen] = useState(false);
+
   // 가맹점 규칙 상태
   const [merchantRules, setMerchantRules] = useState<MerchantRule[]>([]);
   const [rulesLoading, setRulesLoading] = useState(true);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [editRuleCategory, setEditRuleCategory] = useState('');
-
-  // 샘플 데이터 추가 상태
-  const [isSeeding, setIsSeeding] = useState(false);
-  const [seedResult, setSeedResult] = useState<string | null>(null);
 
   // 가맹점 규칙 구독
   useEffect(() => {
@@ -129,258 +128,80 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        {/* 카테고리 섹션 */}
-        <h2 className="text-lg font-bold text-slate-800 mb-4">카테고리</h2>
+      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+        {/* 카테고리 섹션 - 아코디언 */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="divide-y divide-slate-100">
-            {categories.map((category) => (
-              <div key={category.id} className="p-4">
-                {editingId === category.id ? (
-                  // 편집 모드
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-3">
-                      <ColorPicker value={editColor} onChange={setEditColor} />
-                      <input
-                        type="text"
-                        value={editLabel}
-                        onChange={(e) => setEditLabel(e.target.value)}
-                        placeholder="카테고리명"
-                        className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-slate-500 mb-1">
-                        월 예산 (선택사항)
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          value={editBudget}
-                          onChange={(e) => setEditBudget(e.target.value)}
-                          placeholder="예산 없음"
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                          원
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleCancelEdit}
-                        className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
-                      >
-                        취소
-                      </button>
-                      <button
-                        onClick={handleSaveEdit}
-                        disabled={!editLabel.trim()}
-                        className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-slate-300"
-                      >
-                        저장
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  // 보기 모드
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium"
-                        style={{ backgroundColor: category.color }}
-                      >
-                        {category.label.slice(0, 2)}
-                      </div>
-                      <div>
-                        <div className="font-medium text-slate-800">
-                          {category.label}
-                          {category.isDefault && (
-                            <span className="ml-2 text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                              기본
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-sm text-slate-500">
-                          {category.budget
-                            ? `월 예산: ${category.budget.toLocaleString()}원`
-                            : '예산 미설정'}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleStartEdit(category)}
-                        className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                      </button>
-                      {!category.isDefault && (
-                        <button
-                          onClick={() => handleDelete(category.id)}
-                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
+          <button
+            onClick={() => setIsCategoryOpen(!isCategoryOpen)}
+            className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                </svg>
               </div>
-            ))}
-          </div>
-
-          {/* 새 카테고리 추가 */}
-          {showAddForm ? (
-            <div className="p-4 border-t border-slate-200 bg-slate-50">
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <ColorPicker value={newColor} onChange={setNewColor} />
-                  <input
-                    type="text"
-                    value={newLabel}
-                    onChange={(e) => setNewLabel(e.target.value)}
-                    placeholder="카테고리명"
-                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    autoFocus
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-slate-500 mb-1">
-                    월 예산 (선택사항)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={newBudget}
-                      onChange={(e) => setNewBudget(e.target.value)}
-                      placeholder="예산 없음"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                      원
-                    </span>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      setShowAddForm(false);
-                      setNewLabel('');
-                      setNewColor(COLOR_PALETTE[0]);
-                      setNewBudget('');
-                    }}
-                    className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
-                  >
-                    취소
-                  </button>
-                  <button
-                    onClick={handleAddCategory}
-                    disabled={!newLabel.trim()}
-                    className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-slate-300"
-                  >
-                    추가
-                  </button>
-                </div>
+              <div className="text-left">
+                <div className="font-semibold text-slate-800">카테고리</div>
+                <div className="text-sm text-slate-500">{categories.length}개</div>
               </div>
             </div>
-          ) : (
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="w-full p-4 border-t border-slate-200 flex items-center justify-center gap-2 text-blue-500 hover:bg-blue-50 transition-colors"
+            <svg
+              className={`w-5 h-5 text-slate-400 transition-transform ${isCategoryOpen ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <span className="font-medium">새 카테고리 추가</span>
-            </button>
-          )}
-        </div>
-
-        {/* 안내 문구 */}
-        <div className="mt-6 p-4 bg-slate-100 rounded-xl">
-          <div className="flex items-start gap-3">
-            <svg className="w-5 h-5 text-slate-400 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
-            <div className="text-sm text-slate-600">
-              <p className="font-medium mb-1">카테고리 관리 안내</p>
-              <ul className="space-y-1 text-slate-500">
-                <li>기본 카테고리(생활비, 육아비 등)는 삭제할 수 없습니다.</li>
-                <li>카테고리를 삭제해도 기존 지출 데이터는 유지됩니다.</li>
-                <li>월 예산을 설정하면 홈 화면에서 사용량을 확인할 수 있습니다.</li>
-              </ul>
-            </div>
-          </div>
-        </div>
+          </button>
 
-        {/* 가맹점 규칙 섹션 */}
-        <div className="mt-8">
-          <h2 className="text-lg font-bold text-slate-800 mb-4">가맹점 규칙</h2>
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            {rulesLoading ? (
-              <div className="p-8 text-center text-slate-400">로딩중...</div>
-            ) : merchantRules.length === 0 ? (
-              <div className="p-8 text-center text-slate-400">
-                저장된 가맹점 규칙이 없습니다.
-                <br />
-                <span className="text-sm">지출 상세에서 카테고리를 변경하면 자동으로 추가됩니다.</span>
-              </div>
-            ) : (
+          {isCategoryOpen && (
+            <div className="border-t border-slate-100">
               <div className="divide-y divide-slate-100">
-                {merchantRules.map((rule) => (
-                  <div key={rule.id} className="p-4">
-                    {editingRuleId === rule.id ? (
+                {categories.map((category) => (
+                  <div key={category.id} className="p-4">
+                    {editingId === category.id ? (
                       // 편집 모드
-                      <div className="space-y-3">
-                        <div className="font-medium text-slate-800">
-                          {rule.merchantKeyword}
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-3">
+                          <ColorPicker value={editColor} onChange={setEditColor} />
+                          <input
+                            type="text"
+                            value={editLabel}
+                            onChange={(e) => setEditLabel(e.target.value)}
+                            placeholder="카테고리명"
+                            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
                         </div>
-                        <div className="grid grid-cols-5 gap-2">
-                          {activeCategories.map((cat) => (
-                            <button
-                              key={cat.key}
-                              type="button"
-                              onClick={() => setEditRuleCategory(cat.key)}
-                              className={`flex flex-col items-center p-2 rounded-lg border-2 transition-colors ${
-                                editRuleCategory === cat.key
-                                  ? 'border-blue-500 bg-blue-50'
-                                  : 'border-slate-200 hover:border-slate-300'
-                              }`}
-                            >
-                              <div
-                                className="w-6 h-6 rounded-full mb-1"
-                                style={{ backgroundColor: cat.color }}
-                              />
-                              <span className="text-xs text-slate-700">
-                                {cat.label.slice(0, 2)}
-                              </span>
-                            </button>
-                          ))}
+                        <div>
+                          <label className="block text-sm text-slate-500 mb-1">
+                            월 예산 (선택사항)
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              value={editBudget}
+                              onChange={(e) => setEditBudget(e.target.value)}
+                              placeholder="예산 없음"
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                              원
+                            </span>
+                          </div>
                         </div>
                         <div className="flex gap-2">
                           <button
-                            onClick={() => {
-                              setEditingRuleId(null);
-                              setEditRuleCategory('');
-                            }}
+                            onClick={handleCancelEdit}
                             className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
                           >
                             취소
                           </button>
                           <button
-                            onClick={async () => {
-                              if (editRuleCategory && editRuleCategory !== rule.category) {
-                                await updateMerchantRule(rule.id, editRuleCategory);
-                              }
-                              setEditingRuleId(null);
-                              setEditRuleCategory('');
-                            }}
-                            className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                            onClick={handleSaveEdit}
+                            disabled={!editLabel.trim()}
+                            className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-slate-300"
                           >
                             저장
                           </button>
@@ -391,108 +212,284 @@ export default function SettingsPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div
-                            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium"
-                            style={{ backgroundColor: getCategoryColor(rule.category) }}
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium"
+                            style={{ backgroundColor: category.color }}
                           >
-                            {getCategoryLabel(rule.category).slice(0, 2)}
+                            {category.label.slice(0, 2)}
                           </div>
                           <div>
                             <div className="font-medium text-slate-800">
-                              {rule.merchantKeyword}
+                              {category.label}
+                              {category.isDefault && (
+                                <span className="ml-2 text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                                  기본
+                                </span>
+                              )}
                             </div>
                             <div className="text-sm text-slate-500">
-                              → {getCategoryLabel(rule.category)}
+                              {category.budget
+                                ? `월 예산: ${category.budget.toLocaleString()}원`
+                                : '예산 미설정'}
                             </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => {
-                              setEditingRuleId(rule.id);
-                              setEditRuleCategory(rule.category);
-                            }}
+                            onClick={() => handleStartEdit(category)}
                             className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
                           </button>
-                          <button
-                            onClick={async () => {
-                              if (confirm(`"${rule.merchantKeyword}" 규칙을 삭제하시겠습니까?`)) {
-                                await deleteMerchantRule(rule.id);
-                              }
-                            }}
-                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
+                          {!category.isDefault && (
+                            <button
+                              onClick={() => handleDelete(category.id)}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          )}
                         </div>
                       </div>
                     )}
                   </div>
                 ))}
               </div>
-            )}
-          </div>
 
-          {/* 가맹점 규칙 안내 */}
-          <div className="mt-4 p-4 bg-slate-100 rounded-xl">
-            <div className="flex items-start gap-3">
-              <svg className="w-5 h-5 text-slate-400 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
-              <div className="text-sm text-slate-600">
-                <p className="font-medium mb-1">가맹점 규칙 안내</p>
-                <ul className="space-y-1 text-slate-500">
-                  <li>지출 상세에서 카테고리를 변경하고 &ldquo;예&rdquo;를 선택하면 자동으로 추가됩니다.</li>
-                  <li>동일한 가맹점 결제 시 자동으로 지정된 카테고리가 적용됩니다.</li>
-                </ul>
-              </div>
+              {/* 새 카테고리 추가 */}
+              {showAddForm ? (
+                <div className="p-4 border-t border-slate-200 bg-slate-50">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <ColorPicker value={newColor} onChange={setNewColor} />
+                      <input
+                        type="text"
+                        value={newLabel}
+                        onChange={(e) => setNewLabel(e.target.value)}
+                        placeholder="카테고리명"
+                        className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-slate-500 mb-1">
+                        월 예산 (선택사항)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={newBudget}
+                          onChange={(e) => setNewBudget(e.target.value)}
+                          placeholder="예산 없음"
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                          원
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setShowAddForm(false);
+                          setNewLabel('');
+                          setNewColor(COLOR_PALETTE[0]);
+                          setNewBudget('');
+                        }}
+                        className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                      >
+                        취소
+                      </button>
+                      <button
+                        onClick={handleAddCategory}
+                        disabled={!newLabel.trim()}
+                        className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-slate-300"
+                      >
+                        추가
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowAddForm(true)}
+                  className="w-full p-4 border-t border-slate-200 flex items-center justify-center gap-2 text-blue-500 hover:bg-blue-50 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span className="font-medium">새 카테고리 추가</span>
+                </button>
+              )}
             </div>
-          </div>
+          )}
         </div>
 
-        {/* 개발자 도구 섹션 */}
-        <div className="mt-8">
-          <h2 className="text-lg font-bold text-slate-800 mb-4">개발자 도구</h2>
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium text-slate-800">샘플 데이터 추가</div>
+        {/* 가맹점 규칙 섹션 - 아코디언 */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <button
+            onClick={() => setIsRulesOpen(!isRulesOpen)}
+            className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              </div>
+              <div className="text-left">
+                <div className="font-semibold text-slate-800">가맹점 규칙</div>
                 <div className="text-sm text-slate-500">
-                  2025년 1월~12월, 2026년 1월 테스트 데이터 생성
+                  {rulesLoading ? '로딩중...' : `${merchantRules.length}개`}
                 </div>
               </div>
-              <button
-                onClick={async () => {
-                  if (!confirm('2025년~2026년 1월까지 약 300개의 샘플 지출 데이터를 추가합니다.\n계속하시겠습니까?')) {
-                    return;
-                  }
-                  setIsSeeding(true);
-                  setSeedResult(null);
-                  try {
-                    const count = await seedSampleData();
-                    setSeedResult(`${count}개의 샘플 데이터가 추가되었습니다!`);
-                  } catch (error) {
-                    setSeedResult('샘플 데이터 추가 실패');
-                    console.error(error);
-                  }
-                  setIsSeeding(false);
-                }}
-                disabled={isSeeding}
-                className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors disabled:bg-slate-300"
-              >
-                {isSeeding ? '추가 중...' : '데이터 추가'}
-              </button>
             </div>
-            {seedResult && (
-              <div className="mt-3 p-3 bg-green-50 text-green-700 rounded-lg text-sm">
-                {seedResult}
-              </div>
-            )}
+            <svg
+              className={`w-5 h-5 text-slate-400 transition-transform ${isRulesOpen ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {isRulesOpen && (
+            <div className="border-t border-slate-100">
+              {rulesLoading ? (
+                <div className="p-8 text-center text-slate-400">로딩중...</div>
+              ) : merchantRules.length === 0 ? (
+                <div className="p-8 text-center text-slate-400">
+                  저장된 가맹점 규칙이 없습니다.
+                  <br />
+                  <span className="text-sm">지출 상세에서 카테고리를 변경하면 자동으로 추가됩니다.</span>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {merchantRules.map((rule) => (
+                    <div key={rule.id} className="p-4">
+                      {editingRuleId === rule.id ? (
+                        // 편집 모드
+                        <div className="space-y-3">
+                          <div className="font-medium text-slate-800">
+                            {rule.merchantKeyword}
+                          </div>
+                          <div className="grid grid-cols-5 gap-2">
+                            {activeCategories.map((cat) => (
+                              <button
+                                key={cat.key}
+                                type="button"
+                                onClick={() => setEditRuleCategory(cat.key)}
+                                className={`flex flex-col items-center p-2 rounded-lg border-2 transition-colors ${
+                                  editRuleCategory === cat.key
+                                    ? 'border-blue-500 bg-blue-50'
+                                    : 'border-slate-200 hover:border-slate-300'
+                                }`}
+                              >
+                                <div
+                                  className="w-6 h-6 rounded-full mb-1"
+                                  style={{ backgroundColor: cat.color }}
+                                />
+                                <span className="text-xs text-slate-700">
+                                  {cat.label.slice(0, 2)}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingRuleId(null);
+                                setEditRuleCategory('');
+                              }}
+                              className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                            >
+                              취소
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (editRuleCategory && editRuleCategory !== rule.category) {
+                                  await updateMerchantRule(rule.id, editRuleCategory);
+                                }
+                                setEditingRuleId(null);
+                                setEditRuleCategory('');
+                              }}
+                              className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                            >
+                              저장
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        // 보기 모드
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium"
+                              style={{ backgroundColor: getCategoryColor(rule.category) }}
+                            >
+                              {getCategoryLabel(rule.category).slice(0, 2)}
+                            </div>
+                            <div>
+                              <div className="font-medium text-slate-800">
+                                {rule.merchantKeyword}
+                              </div>
+                              <div className="text-sm text-slate-500">
+                                → {getCategoryLabel(rule.category)}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingRuleId(rule.id);
+                                setEditRuleCategory(rule.category);
+                              }}
+                              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (confirm(`"${rule.merchantKeyword}" 규칙을 삭제하시겠습니까?`)) {
+                                  await deleteMerchantRule(rule.id);
+                                }
+                              }}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 안내 문구 */}
+        <div className="p-4 bg-slate-100 rounded-xl">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-slate-400 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+            <div className="text-sm text-slate-600">
+              <p className="font-medium mb-1">설정 안내</p>
+              <ul className="space-y-1 text-slate-500">
+                <li>기본 카테고리는 삭제할 수 없습니다.</li>
+                <li>가맹점 규칙은 지출 상세에서 자동 추가됩니다.</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>

@@ -42,8 +42,8 @@ export default function ColorPicker({ value, onChange }: ColorPickerProps) {
             onClick={() => setIsOpen(false)}
           />
           {/* 색상 팔레트 */}
-          <div className="absolute top-full left-0 mt-2 p-3 bg-white rounded-xl shadow-lg border border-slate-200 z-20">
-            <div className="grid grid-cols-4 gap-2">
+          <div className="absolute top-full left-0 mt-2 p-4 bg-white rounded-xl shadow-lg border border-slate-200 z-20">
+            <div className="grid grid-cols-4 gap-3">
               {COLOR_PALETTE.map((color) => (
                 <button
                   key={color}
@@ -52,7 +52,7 @@ export default function ColorPicker({ value, onChange }: ColorPickerProps) {
                     onChange(color);
                     setIsOpen(false);
                   }}
-                  className={`w-8 h-8 rounded-lg transition-transform hover:scale-110 ${
+                  className={`w-10 h-10 rounded-xl transition-transform hover:scale-110 ${
                     value === color ? 'ring-2 ring-blue-500 ring-offset-2' : ''
                   }`}
                   style={{ backgroundColor: color }}
