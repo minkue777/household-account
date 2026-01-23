@@ -27,31 +27,35 @@ const config: Config = {
             transform: 'translateY(0) scale(1)',
           },
         },
-        slideLeft: {
+        flipUp: {
           '0%': {
             opacity: '0',
-            transform: 'translateX(30px)',
+            transform: 'perspective(1000px) rotateX(60deg)',
+            transformOrigin: 'bottom center',
           },
           '100%': {
             opacity: '1',
-            transform: 'translateX(0)',
+            transform: 'perspective(1000px) rotateX(0deg)',
+            transformOrigin: 'bottom center',
           },
         },
-        slideRight: {
+        flipDown: {
           '0%': {
             opacity: '0',
-            transform: 'translateX(-30px)',
+            transform: 'perspective(1000px) rotateX(-60deg)',
+            transformOrigin: 'top center',
           },
           '100%': {
             opacity: '1',
-            transform: 'translateX(0)',
+            transform: 'perspective(1000px) rotateX(0deg)',
+            transformOrigin: 'top center',
           },
         },
       },
       animation: {
         slideDown: 'slideDown 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards',
-        slideLeft: 'slideLeft 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards',
-        slideRight: 'slideRight 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards',
+        flipUp: 'flipUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards',
+        flipDown: 'flipDown 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards',
       },
     },
   },
