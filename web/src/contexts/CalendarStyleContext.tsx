@@ -25,7 +25,7 @@ export function CalendarStyleProvider({ children }: { children: React.ReactNode 
   // localStorage에서 초기값 로드
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved && ['default', 'desk', 'wall', 'flip', 'modern'].includes(saved)) {
+    if (saved && ['default', 'modern'].includes(saved)) {
       setCalendarStyleState(saved as CalendarStyle);
     }
     setIsLoaded(true);
@@ -66,6 +66,6 @@ export function getCalendarStyleClass(style: CalendarStyle): string {
     case 'modern':
       return 'calendar-modern';
     default:
-      return 'bg-white/60 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50';
+      return 'calendar-default';
   }
 }
