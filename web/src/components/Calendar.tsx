@@ -97,7 +97,7 @@ export default function Calendar({
       <div className="grid grid-cols-7">
         {dates.map((day, index) => {
           if (day === null) {
-            return <div key={`empty-${index}`} className="h-16 md:h-28 bg-slate-50/50" />;
+            return <div key={`empty-${index}`} className="h-12 md:h-28 bg-slate-50/50" />;
           }
 
           const dateStr = formatDate(day);
@@ -112,65 +112,70 @@ export default function Calendar({
             <div
               key={day}
               onClick={() => onDateClick(dateStr)}
-              className={`h-16 md:h-28 border-b border-r border-slate-100 p-1 md:p-1.5 cursor-pointer transition-colors hover:bg-slate-50 ${
+              className={`h-12 md:h-28 border-b border-r border-slate-100 p-0.5 md:p-1.5 cursor-pointer transition-colors hover:bg-slate-50 ${
                 isSelected ? 'bg-blue-50 ring-2 ring-blue-400 ring-inset' : ''
               }`}
             >
-              {/* 날짜 숫자 */}
-              <div className="flex items-center justify-between mb-0.5 md:mb-1">
+              {/* 모바일: 날짜 + 금액만 세로 배치 */}
+              <div className="md:hidden flex flex-col items-center justify-center h-full">
                 <span
-                  className={`text-xs md:text-sm font-medium ${
+                  className={`text-xs font-medium ${
                     isToday
-                      ? 'bg-blue-500 text-white w-5 h-5 md:w-6 md:h-6 rounded-full flex items-center justify-center text-xs'
+                      ? 'bg-blue-500 text-white w-5 h-5 rounded-full flex items-center justify-center'
                       : DAY_COLORS[dayOfWeek]
                   }`}
                 >
                   {day}
                 </span>
                 {dayTotal > 0 && (
-                  <span className="text-[10px] md:text-xs text-slate-500 font-medium">
-                    {dayTotal >= 10000 ? `${Math.floor(dayTotal / 10000)}만` : dayTotal.toLocaleString()}
+                  <span className="text-[9px] text-slate-500 mt-0.5">
+                    {dayTotal >= 10000 ? `${Math.floor(dayTotal / 10000)}만` : `${Math.floor(dayTotal / 1000)}천`}
                   </span>
                 )}
               </div>
 
-              {/* 지출 항목들 - 모바일에서는 숨김 */}
-              <div className="hidden md:block space-y-0.5 overflow-hidden">
-                {dayExpenses.slice(0, 3).map((expense) => (
-                  <div
-                    key={expense.id}
-                    className="flex items-center gap-1 text-xs truncate"
+              {/* 데스크톱: 기존 레이아웃 */}
+              <div className="hidden md:block">
+                <div className="flex items-center justify-between mb-1">
+                  <span
+                    className={`text-sm font-medium ${
+                      isToday
+                        ? 'bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs'
+                        : DAY_COLORS[dayOfWeek]
+                    }`}
                   >
-                    <span
-                      className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: CATEGORY_COLORS[expense.category] }}
-                    />
-                    <span className="truncate text-slate-600">
-                      {expense.merchant}
+                    {day}
+                  </span>
+                  {dayTotal > 0 && (
+                    <span className="text-xs text-slate-500 font-medium">
+                      {dayTotal.toLocaleString()}
                     </span>
-                  </div>
-                ))}
-                {dayExpenses.length > 3 && (
-                  <div className="text-xs text-slate-400">
-                    +{dayExpenses.length - 3}건
-                  </div>
-                )}
-              </div>
-              {/* 모바일에서만 표시 - 지출이 있으면 점 표시 */}
-              {dayExpenses.length > 0 && (
-                <div className="flex md:hidden gap-0.5 justify-center mt-1">
-                  {dayExpenses.slice(0, 3).map((expense) => (
-                    <span
-                      key={expense.id}
-                      className="w-1.5 h-1.5 rounded-full"
-                      style={{ backgroundColor: CATEGORY_COLORS[expense.category] }}
-                    />
-                  ))}
-                  {dayExpenses.length > 3 && (
-                    <span className="text-[8px] text-slate-400 ml-0.5">+{dayExpenses.length - 3}</span>
                   )}
                 </div>
-              )}
+
+                {/* 지출 항목들 */}
+                <div className="space-y-0.5 overflow-hidden">
+                  {dayExpenses.slice(0, 3).map((expense) => (
+                    <div
+                      key={expense.id}
+                      className="flex items-center gap-1 text-xs truncate"
+                    >
+                      <span
+                        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: CATEGORY_COLORS[expense.category] }}
+                      />
+                      <span className="truncate text-slate-600">
+                        {expense.merchant}
+                      </span>
+                    </div>
+                  ))}
+                  {dayExpenses.length > 3 && (
+                    <div className="text-xs text-slate-400">
+                      +{dayExpenses.length - 3}건
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           );
         })}
