@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-export type CalendarStyle = 'default' | 'modern';
+export type CalendarStyle = 'elevation' | 'pressed' | 'glass';
 
 interface CalendarStyleContextType {
   calendarStyle: CalendarStyle;
@@ -14,18 +14,19 @@ const CalendarStyleContext = createContext<CalendarStyleContextType | undefined>
 const STORAGE_KEY = 'calendar-style';
 
 export const CALENDAR_STYLES: { key: CalendarStyle; label: string; description: string }[] = [
-  { key: 'default', label: '기본', description: '심플한 기본 스타일' },
-  { key: 'modern', label: '미니멀 모던', description: '부드러운 글래스 효과' },
+  { key: 'elevation', label: 'Soft Elevation', description: '부드럽게 떠있는 느낌' },
+  { key: 'pressed', label: 'Pressed Edge', description: '살짝 눌린 종이 느낌' },
+  { key: 'glass', label: 'Glass Depth', description: '유리판 깊이감' },
 ];
 
 export function CalendarStyleProvider({ children }: { children: React.ReactNode }) {
-  const [calendarStyle, setCalendarStyleState] = useState<CalendarStyle>('default');
+  const [calendarStyle, setCalendarStyleState] = useState<CalendarStyle>('elevation');
   const [isLoaded, setIsLoaded] = useState(false);
 
   // localStorage에서 초기값 로드
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved && ['default', 'modern'].includes(saved)) {
+    if (saved && ['elevation', 'pressed', 'glass'].includes(saved)) {
       setCalendarStyleState(saved as CalendarStyle);
     }
     setIsLoaded(true);
@@ -39,7 +40,7 @@ export function CalendarStyleProvider({ children }: { children: React.ReactNode 
   // 로딩 중에는 기본값 사용
   if (!isLoaded) {
     return (
-      <CalendarStyleContext.Provider value={{ calendarStyle: 'default', setCalendarStyle }}>
+      <CalendarStyleContext.Provider value={{ calendarStyle: 'elevation', setCalendarStyle }}>
         {children}
       </CalendarStyleContext.Provider>
     );
@@ -63,9 +64,11 @@ export function useCalendarStyle(): CalendarStyleContextType {
 // 스타일에 따른 CSS 클래스 반환
 export function getCalendarStyleClass(style: CalendarStyle): string {
   switch (style) {
-    case 'modern':
-      return 'calendar-modern';
+    case 'pressed':
+      return 'calendar-pressed';
+    case 'glass':
+      return 'calendar-glass';
     default:
-      return 'calendar-default';
+      return 'calendar-elevation';
   }
 }
