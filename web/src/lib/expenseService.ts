@@ -53,16 +53,14 @@ export function subscribeToMonthlyExpenses(
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
 
+  // 단순 쿼리 (인덱스 불필요) - 클라이언트에서 필터링
   const q = query(
     collection(db, COLLECTION_NAME),
-    where('date', '>=', startDate),
-    where('date', '<=', endDate),
-    orderBy('date', 'desc'),
-    orderBy('time', 'desc')
+    orderBy('date', 'desc')
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
-    const expenses: Expense[] = snapshot.docs.map((doc) => {
+    const allExpenses = snapshot.docs.map((doc) => {
       const data = doc.data();
       return {
         id: doc.id,
@@ -77,7 +75,13 @@ export function subscribeToMonthlyExpenses(
         memo: data.memo,
       } as Expense;
     });
-    callback(expenses);
+
+    // 클라이언트에서 날짜 필터링
+    const filtered = allExpenses.filter(
+      (e) => e.date >= startDate && e.date <= endDate
+    );
+
+    callback(filtered);
   }, (error) => {
     console.error('Firestore subscription error:', error);
     callback([]);
