@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import Calendar from '@/components/Calendar';
+import CategorySummary from '@/components/CategorySummary';
 import ExpenseDetail from '@/components/ExpenseDetail';
 import MonthSelector from '@/components/MonthSelector';
 import AddExpenseModal from '@/components/AddExpenseModal';
@@ -184,6 +185,20 @@ export default function Home() {
             onDateClick={handleDateClick}
             selectedDate={selectedDate}
           />
+
+          {/* 카테고리별 상세 내역 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <h3 className="text-sm font-semibold text-slate-700 mb-4">
+              카테고리별 지출
+            </h3>
+            {expenses.length > 0 ? (
+              <CategorySummary expenses={expenses} />
+            ) : (
+              <div className="text-center py-4 text-slate-400">
+                {isLoading ? '로딩중...' : '데이터 없음'}
+              </div>
+            )}
+          </div>
 
           {/* 선택된 날짜 상세 */}
           {selectedDate && (
