@@ -121,7 +121,7 @@ export default function Home() {
         <header className="mb-6 flex items-center justify-between">
           <div className="min-w-0 flex items-center gap-2">
             <img
-              src="/bear.jpg"
+              src="/bear.png"
               alt="곰돌이"
               className="w-10 h-10 md:w-12 md:h-12 rounded-full object-cover shadow-md"
             />
