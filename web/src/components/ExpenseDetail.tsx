@@ -7,12 +7,12 @@ import { useCategoryContext } from '@/contexts/CategoryContext';
 interface ExpenseDetailProps {
   date: string;
   expenses: Expense[];
-  onCategoryChange?: (expenseId: string, category: string) => void;
+  onExpenseUpdate?: (expenseId: string, data: { amount?: number; memo?: string; category?: string }) => void;
   onSaveMerchantRule?: (merchantName: string, category: string) => void;
   onDelete?: (expenseId: string) => void;
 }
 
-export default function ExpenseDetail({ date, expenses, onCategoryChange, onSaveMerchantRule, onDelete }: ExpenseDetailProps) {
+export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveMerchantRule, onDelete }: ExpenseDetailProps) {
   const total = expenses.reduce((sum, e) => sum + e.amount, 0);
 
   // 날짜 포맷팅
@@ -51,7 +51,7 @@ export default function ExpenseDetail({ date, expenses, onCategoryChange, onSave
           <ExpenseItem
             key={expense.id}
             expense={expense}
-            onCategoryChange={onCategoryChange}
+            onExpenseUpdate={onExpenseUpdate}
             onSaveMerchantRule={onSaveMerchantRule}
             onDelete={onDelete}
           />
@@ -63,50 +63,91 @@ export default function ExpenseDetail({ date, expenses, onCategoryChange, onSave
 
 interface ExpenseItemProps {
   expense: Expense;
-  onCategoryChange?: (expenseId: string, category: string) => void;
+  onExpenseUpdate?: (expenseId: string, data: { amount?: number; memo?: string; category?: string }) => void;
   onSaveMerchantRule?: (merchantName: string, category: string) => void;
   onDelete?: (expenseId: string) => void;
 }
 
-function ExpenseItem({ expense, onCategoryChange, onSaveMerchantRule, onDelete }: ExpenseItemProps) {
+function ExpenseItem({ expense, onExpenseUpdate, onSaveMerchantRule, onDelete }: ExpenseItemProps) {
   const { activeCategories, getCategoryLabel, getCategoryColor } = useCategoryContext();
 
-  const [showMenu, setShowMenu] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showRememberDialog, setShowRememberDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
+  // 편집 폼 상태
+  const [editAmount, setEditAmount] = useState(expense.amount.toString());
+  const [editMemo, setEditMemo] = useState(expense.memo || '');
+  const [editCategory, setEditCategory] = useState(expense.category);
+
   const expenseColor = getCategoryColor(expense.category);
   const expenseLabel = getCategoryLabel(expense.category);
+
+  const handleOpenEdit = () => {
+    setEditAmount(expense.amount.toString());
+    setEditMemo(expense.memo || '');
+    setEditCategory(expense.category);
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!onExpenseUpdate) return;
+
+    const newAmount = parseInt(editAmount, 10);
+    if (isNaN(newAmount) || newAmount <= 0) return;
+
+    const updates: { amount?: number; memo?: string; category?: string } = {};
+
+    if (newAmount !== expense.amount) {
+      updates.amount = newAmount;
+    }
+    if (editMemo !== (expense.memo || '')) {
+      updates.memo = editMemo;
+    }
+    if (editCategory !== expense.category) {
+      updates.category = editCategory;
+      setSelectedCategory(editCategory);
+    }
+
+    if (Object.keys(updates).length > 0) {
+      onExpenseUpdate(expense.id, updates);
+    }
+
+    setShowEditModal(false);
+
+    // 카테고리가 변경되었으면 기억할지 물어보기
+    if (editCategory !== expense.category) {
+      setShowRememberDialog(true);
+    }
+  };
 
   return (
     <div className="relative">
       <div
-        onClick={() => setShowMenu(!showMenu)}
+        onClick={handleOpenEdit}
         className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-3">
           {/* 카테고리 아이콘 */}
           <div
-            className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-medium"
+            className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0"
             style={{ backgroundColor: expenseColor }}
           >
             {expenseLabel.slice(0, 2)}
           </div>
-          <div>
-            <div className="font-medium text-slate-800">
+          <div className="min-w-0">
+            <div className="font-medium text-slate-800 truncate">
               {expense.merchant}
             </div>
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span>{expenseLabel}</span>
-              <span>•</span>
-              <span>
-                {expense.cardType === 'main' ? '본인카드' : '가족카드'}
-              </span>
-            </div>
+            {expense.memo && (
+              <div className="text-xs text-slate-500 truncate">
+                {expense.memo}
+              </div>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <div className="font-semibold text-slate-800">
             {expense.amount.toLocaleString()}원
           </div>
@@ -127,36 +168,102 @@ function ExpenseItem({ expense, onCategoryChange, onSaveMerchantRule, onDelete }
         </div>
       </div>
 
-      {/* 카테고리 변경 메뉴 */}
-      {showMenu && onCategoryChange && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-lg border border-slate-200 z-10 overflow-hidden">
-          <div className="p-2 text-xs text-slate-500 border-b border-slate-100">
-            카테고리 변경
+      {/* 편집 모달 */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 m-4 max-w-md w-full shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-800 mb-4">
+              지출 수정
+            </h3>
+
+            <div className="space-y-4">
+              {/* 가맹점명 (읽기 전용) */}
+              <div>
+                <label className="block text-sm font-medium text-slate-500 mb-1">
+                  가맹점
+                </label>
+                <div className="px-3 py-2 bg-slate-100 rounded-lg text-slate-700">
+                  {expense.merchant}
+                </div>
+              </div>
+
+              {/* 금액 */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  금액
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={editAmount}
+                    onChange={(e) => setEditAmount(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                    원
+                  </span>
+                </div>
+              </div>
+
+              {/* 카테고리 */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  카테고리
+                </label>
+                <div className="grid grid-cols-5 gap-2">
+                  {activeCategories.map((cat) => (
+                    <button
+                      key={cat.key}
+                      type="button"
+                      onClick={() => setEditCategory(cat.key)}
+                      className={`flex flex-col items-center p-2 rounded-lg border-2 transition-colors ${
+                        editCategory === cat.key
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div
+                        className="w-6 h-6 rounded-full mb-1"
+                        style={{ backgroundColor: cat.color }}
+                      />
+                      <span className="text-xs text-slate-700">
+                        {cat.label.slice(0, 2)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 메모 */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  메모
+                </label>
+                <input
+                  type="text"
+                  value={editMemo}
+                  onChange={(e) => setEditMemo(e.target.value)}
+                  placeholder="메모 입력 (선택)"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                저장
+              </button>
+            </div>
           </div>
-          {activeCategories.map((cat) => (
-            <button
-              key={cat.key}
-              onClick={() => {
-                if (cat.key !== expense.category) {
-                  onCategoryChange(expense.id, cat.key);
-                  setSelectedCategory(cat.key);
-                  setShowMenu(false);
-                  setShowRememberDialog(true);
-                } else {
-                  setShowMenu(false);
-                }
-              }}
-              className={`w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 transition-colors ${
-                expense.category === cat.key ? 'bg-slate-100' : ''
-              }`}
-            >
-              <div
-                className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: cat.color }}
-              />
-              <span className="text-sm">{cat.label}</span>
-            </button>
-          ))}
         </div>
       )}
 

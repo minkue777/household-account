@@ -7,7 +7,7 @@ import CategorySummary from '@/components/CategorySummary';
 import ExpenseDetail from '@/components/ExpenseDetail';
 import AddExpenseModal from '@/components/AddExpenseModal';
 import { Expense } from '@/types/expense';
-import { subscribeToMonthlyExpenses, updateCategory, addManualExpense, deleteExpense } from '@/lib/expenseService';
+import { subscribeToMonthlyExpenses, updateExpense, addManualExpense, deleteExpense } from '@/lib/expenseService';
 import { addMerchantRule } from '@/lib/merchantRuleService';
 
 export default function Home() {
@@ -69,12 +69,12 @@ export default function Home() {
     setSelectedDate(selectedDate === date ? null : date);
   };
 
-  // 카테고리 변경 핸들러
-  const handleCategoryChange = async (expenseId: string, category: string) => {
+  // 지출 수정 핸들러
+  const handleExpenseUpdate = async (expenseId: string, data: { amount?: number; memo?: string; category?: string }) => {
     try {
-      await updateCategory(expenseId, category);
+      await updateExpense(expenseId, data);
     } catch (error) {
-      console.error('카테고리 업데이트 실패:', error);
+      console.error('지출 업데이트 실패:', error);
     }
   };
 
@@ -194,7 +194,7 @@ export default function Home() {
               key={selectedDate}
               date={selectedDate}
               expenses={selectedDateExpenses}
-              onCategoryChange={handleCategoryChange}
+              onExpenseUpdate={handleExpenseUpdate}
               onSaveMerchantRule={handleSaveMerchantRule}
               onDelete={handleDeleteExpense}
             />
@@ -258,7 +258,7 @@ export default function Home() {
                 key={selectedDate}
                 date={selectedDate}
                 expenses={selectedDateExpenses}
-                onCategoryChange={handleCategoryChange}
+                onExpenseUpdate={handleExpenseUpdate}
                 onSaveMerchantRule={handleSaveMerchantRule}
                 onDelete={handleDeleteExpense}
               />
