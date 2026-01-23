@@ -110,9 +110,6 @@ export default function Home() {
     }
   };
 
-  // 월 총액
-  const monthlyTotal = expenses.reduce((sum, e) => sum + e.amount, 0);
-
   return (
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
@@ -188,8 +185,6 @@ export default function Home() {
               selectedDate={selectedDate}
               onPrevMonth={handlePrevMonth}
               onNextMonth={handleNextMonth}
-              monthlyTotal={monthlyTotal}
-              isLoading={isLoading}
             />
           </div>
 
@@ -254,8 +249,6 @@ export default function Home() {
                 selectedDate={selectedDate}
                 onPrevMonth={handlePrevMonth}
                 onNextMonth={handleNextMonth}
-                monthlyTotal={monthlyTotal}
-                isLoading={isLoading}
               />
             </div>
 

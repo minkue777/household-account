@@ -91,14 +91,14 @@ export default function Calendar({
   };
 
   return (
-    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 overflow-hidden">
+    <div className="bg-white/60 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 overflow-hidden">
       {/* 월 선택 헤더 */}
       {onPrevMonth && onNextMonth && (
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+        <div className="flex items-center justify-center px-4 py-3">
           <div className="flex items-center gap-2">
             <button
               onClick={onPrevMonth}
-              className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+              className="p-1.5 hover:bg-white/50 rounded-lg transition-colors"
             >
               <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -109,31 +109,18 @@ export default function Calendar({
             </span>
             <button
               onClick={onNextMonth}
-              className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+              className="p-1.5 hover:bg-white/50 rounded-lg transition-colors"
             >
               <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
           </div>
-          {monthlyTotal !== undefined && (
-            <div className="text-right">
-              {isLoading ? (
-                <span className="text-sm text-slate-400">로딩중...</span>
-              ) : (
-                <div className="flex items-baseline gap-1">
-                  <span className="text-sm text-slate-500">총</span>
-                  <span className="text-lg font-bold text-slate-800">{monthlyTotal.toLocaleString()}</span>
-                  <span className="text-sm text-slate-500">원</span>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       )}
 
       {/* 요일 헤더 */}
-      <div className="grid grid-cols-7 bg-gradient-to-r from-slate-50 to-slate-100/50 border-b border-slate-200/50">
+      <div className="grid grid-cols-7 border-y border-slate-200/50">
         {DAYS_OF_WEEK.map((day, index) => (
           <div
             key={day}
