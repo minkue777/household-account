@@ -120,7 +120,7 @@ export default function Home() {
             <h1 className="text-2xl font-bold text-slate-800 mb-2">
               또니망고네 가계부
             </h1>
-            <p className="text-slate-500">가족 지출을 한눈에 관리하세요</p>
+            <p className="text-slate-500">우리 가족 지출을 한눈에 관리하세요</p>
           </div>
           <button
             onClick={() => setShowAddModal(true)}
