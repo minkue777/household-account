@@ -55,7 +55,12 @@ export default function CategorySummary({ expenses }: CategorySummaryProps) {
             : 0;
 
         const isOverBudget = budget !== null && total > budget;
-        const usagePercent = budget !== null ? Math.round((total / budget) * 100) : null;
+        // 예산이 있으면 예산 대비 %, 없으면 전체 지출 대비 %
+        const displayPercent = budget !== null
+          ? Math.round((total / budget) * 100)
+          : totalAmount > 0
+            ? Math.round((total / totalAmount) * 100)
+            : 0;
 
         return (
           <div key={category} className="group">
@@ -74,11 +79,9 @@ export default function CategorySummary({ expenses }: CategorySummaryProps) {
                 <span className={`text-sm font-semibold ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
                   {total.toLocaleString()}원
                 </span>
-                {usagePercent !== null && (
-                  <span className={`text-xs font-medium ${isOverBudget ? 'text-red-500' : 'text-slate-500'}`}>
-                    ({usagePercent}%)
-                  </span>
-                )}
+                <span className={`text-xs font-medium min-w-[40px] text-right ${isOverBudget ? 'text-red-500' : 'text-slate-500'}`}>
+                  ({displayPercent}%)
+                </span>
               </div>
             </div>
             {/* 프로그레스 바 */}
