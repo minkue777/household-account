@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
+import Link from 'next/link';
 import Calendar from '@/components/Calendar';
-import DonutChart from '@/components/DonutChart';
-import CategorySummary from '@/components/CategorySummary';
 import ExpenseDetail from '@/components/ExpenseDetail';
 import MonthSelector from '@/components/MonthSelector';
 import AddExpenseModal from '@/components/AddExpenseModal';
@@ -122,15 +121,26 @@ export default function Home() {
             </h1>
             <p className="text-slate-500">우리 가족 지출을 한눈에!</p>
           </div>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            추가
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/stats"
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              통계
+            </Link>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              추가
+            </button>
+          </div>
         </header>
 
         {/* 수동 추가 모달 */}
@@ -141,10 +151,10 @@ export default function Home() {
           selectedDate={selectedDate}
         />
 
-        {/* 모바일: 세로 레이아웃 / 데스크톱: 그리드 레이아웃 */}
-        <div className="space-y-6">
-          {/* 월 선택 & 총액 - 항상 맨 위 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 lg:hidden">
+        {/* 메인 컨텐츠 */}
+        <div className="space-y-6 max-w-4xl mx-auto">
+          {/* 월 선택 & 총액 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
             <MonthSelector
               year={currentYear}
               month={currentMonth}
@@ -166,86 +176,25 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* 왼쪽: 요약 패널 (데스크톱에서만) */}
-            <div className="hidden lg:block lg:col-span-1 space-y-6">
-              {/* 월 선택 & 총액 */}
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                <MonthSelector
-                  year={currentYear}
-                  month={currentMonth}
-                  onPrevMonth={handlePrevMonth}
-                  onNextMonth={handleNextMonth}
-                />
-                <div className="mt-4 pt-4 border-t border-slate-100">
-                  <div className="text-sm text-slate-500">이번 달 총 지출</div>
-                  <div className="text-3xl font-bold text-slate-800">
-                    {isLoading ? (
-                      <span className="text-slate-400">로딩중...</span>
-                    ) : (
-                      <>
-                        {monthlyTotal.toLocaleString()}
-                        <span className="text-lg font-normal text-slate-500">원</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
+          {/* 캘린더 */}
+          <Calendar
+            year={currentYear}
+            month={currentMonth}
+            expenses={expenses}
+            onDateClick={handleDateClick}
+            selectedDate={selectedDate}
+          />
 
-              {/* 도넛 차트 */}
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                <h3 className="text-sm font-semibold text-slate-700 mb-4">
-                  카테고리별 지출
-                </h3>
-                <div className="h-48">
-                  {expenses.length > 0 ? (
-                    <DonutChart expenses={expenses} />
-                  ) : (
-                    <div className="h-full flex items-center justify-center text-slate-400">
-                      {isLoading ? '로딩중...' : '데이터 없음'}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* 카테고리 요약 */}
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                <h3 className="text-sm font-semibold text-slate-700 mb-4">
-                  상세 내역
-                </h3>
-                {expenses.length > 0 ? (
-                  <CategorySummary expenses={expenses} />
-                ) : (
-                  <div className="text-center py-4 text-slate-400">
-                    {isLoading ? '로딩중...' : '데이터 없음'}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* 오른쪽: 캘린더 & 상세 */}
-            <div className="lg:col-span-3 space-y-6">
-              {/* 캘린더 */}
-              <Calendar
-                year={currentYear}
-                month={currentMonth}
-                expenses={expenses}
-                onDateClick={handleDateClick}
-                selectedDate={selectedDate}
-              />
-
-              {/* 선택된 날짜 상세 */}
-              {selectedDate && (
-                <ExpenseDetail
-                  date={selectedDate}
-                  expenses={selectedDateExpenses}
-                  onCategoryChange={handleCategoryChange}
-                  onSaveMerchantRule={handleSaveMerchantRule}
-                  onDelete={handleDeleteExpense}
-                />
-              )}
-            </div>
-          </div>
+          {/* 선택된 날짜 상세 */}
+          {selectedDate && (
+            <ExpenseDetail
+              date={selectedDate}
+              expenses={selectedDateExpenses}
+              onCategoryChange={handleCategoryChange}
+              onSaveMerchantRule={handleSaveMerchantRule}
+              onDelete={handleDeleteExpense}
+            />
+          )}
         </div>
       </div>
     </main>

@@ -15,7 +15,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.household.account.service.CardNotificationListenerService
 import com.household.account.ui.MainScreen
+import com.household.account.ui.StatsScreen
 import com.household.account.ui.theme.HouseholdAccountTheme
+
+enum class Screen {
+    Main,
+    Stats
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -28,12 +34,24 @@ class MainActivity : ComponentActivity() {
                     mutableStateOf(isNotificationListenerEnabled())
                 }
 
+                var currentScreen by remember { mutableStateOf(Screen.Main) }
+
                 if (hasNotificationPermission) {
-                    MainScreen(
-                        onSettingsClick = {
-                            // 설정 화면으로 이동 (나중에 구현)
-                        }
-                    )
+                    when (currentScreen) {
+                        Screen.Main -> MainScreen(
+                            onSettingsClick = {
+                                // 설정 화면으로 이동 (나중에 구현)
+                            },
+                            onStatsClick = {
+                                currentScreen = Screen.Stats
+                            }
+                        )
+                        Screen.Stats -> StatsScreen(
+                            onBackClick = {
+                                currentScreen = Screen.Main
+                            }
+                        )
+                    }
                 } else {
                     NotificationPermissionScreen(
                         onRequestPermission = {

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -46,7 +47,8 @@ import kotlin.math.sin
 @Composable
 fun MainScreen(
     viewModel: MainViewModel = viewModel(),
-    onSettingsClick: () -> Unit = {}
+    onSettingsClick: () -> Unit = {},
+    onStatsClick: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
@@ -56,6 +58,9 @@ fun MainScreen(
             TopAppBar(
                 title = { Text("또니망고네 가계부") },
                 actions = {
+                    IconButton(onClick = onStatsClick) {
+                        Icon(Icons.Default.BarChart, contentDescription = "통계")
+                    }
                     IconButton(onClick = onSettingsClick) {
                         Icon(Icons.Default.Settings, contentDescription = "설정")
                     }
@@ -106,7 +111,7 @@ fun MainScreen(
                 )
             }
 
-            // 캘린더 (먼저 표시)
+            // 캘린더
             item {
                 CalendarCard(
                     year = uiState.currentYear,
@@ -114,14 +119,6 @@ fun MainScreen(
                     selectedDate = uiState.selectedDate,
                     onDateClick = viewModel::selectDate,
                     getDailyTotal = viewModel::getDailyTotal
-                )
-            }
-
-            // 도넛 차트
-            item {
-                DonutChartCard(
-                    categoryTotals = viewModel.getCategoryTotals(),
-                    totalAmount = viewModel.getMonthlyTotal()
                 )
             }
 
