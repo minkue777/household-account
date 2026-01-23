@@ -190,7 +190,7 @@ function ExpenseItem({ expense, onExpenseUpdate, onSaveMerchantRule, onDelete }:
 
       {/* 편집 모달 */}
       {showEditModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-6 m-4 max-w-md w-full shadow-xl">
             <h3 className="text-lg font-semibold text-slate-800 mb-4">
               지출 수정
@@ -289,7 +289,7 @@ function ExpenseItem({ expense, onExpenseUpdate, onSaveMerchantRule, onDelete }:
 
       {/* 기억할까요? 다이얼로그 */}
       {showRememberDialog && selectedCategory && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-6 m-4 max-w-sm w-full shadow-xl">
             <h3 className="text-lg font-semibold text-slate-800 mb-3">
               가맹점 기억하기
@@ -330,7 +330,7 @@ function ExpenseItem({ expense, onExpenseUpdate, onSaveMerchantRule, onDelete }:
 
       {/* 삭제 확인 다이얼로그 */}
       {showDeleteDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-6 m-4 max-w-sm w-full shadow-xl">
             <h3 className="text-lg font-semibold text-slate-800 mb-3">
               삭제 확인
