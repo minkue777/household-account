@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-export type CalendarStyle = 'default' | 'desk' | 'wall' | 'flip' | 'modern';
+export type CalendarStyle = 'default' | 'modern';
 
 interface CalendarStyleContextType {
   calendarStyle: CalendarStyle;
@@ -15,10 +15,7 @@ const STORAGE_KEY = 'calendar-style';
 
 export const CALENDAR_STYLES: { key: CalendarStyle; label: string; description: string }[] = [
   { key: 'default', label: '기본', description: '심플한 기본 스타일' },
-  { key: 'desk', label: '탁상 달력', description: '링 바인딩이 있는 탁상 달력' },
-  { key: 'wall', label: '벽걸이 달력', description: '핀으로 고정된 벽걸이 달력' },
-  { key: 'flip', label: '플립 달력', description: '모서리가 접힌 플립 달력' },
-  { key: 'modern', label: '미니멀 모던', description: '글로우 효과의 모던 스타일' },
+  { key: 'modern', label: '미니멀 모던', description: '부드러운 글래스 효과' },
 ];
 
 export function CalendarStyleProvider({ children }: { children: React.ReactNode }) {
@@ -66,12 +63,6 @@ export function useCalendarStyle(): CalendarStyleContextType {
 // 스타일에 따른 CSS 클래스 반환
 export function getCalendarStyleClass(style: CalendarStyle): string {
   switch (style) {
-    case 'desk':
-      return 'calendar-desk';
-    case 'wall':
-      return 'calendar-wall';
-    case 'flip':
-      return 'calendar-flip';
     case 'modern':
       return 'calendar-modern';
     default:

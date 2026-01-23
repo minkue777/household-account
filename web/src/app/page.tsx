@@ -9,6 +9,7 @@ import AddExpenseModal from '@/components/AddExpenseModal';
 import { Expense } from '@/types/expense';
 import { subscribeToMonthlyExpenses, updateExpense, addManualExpense, deleteExpense } from '@/lib/expenseService';
 import { addMerchantRule } from '@/lib/merchantRuleService';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function Home() {
   const [currentYear, setCurrentYear] = useState(2026);
@@ -18,6 +19,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
+  const { themeConfig } = useTheme();
 
   // Firebase 실시간 구독
   useEffect(() => {
@@ -118,7 +120,15 @@ export default function Home() {
           <div className="min-w-0 flex items-center gap-2">
             <div>
               <div className="flex items-center gap-1">
-                <h1 className="text-lg md:text-2xl font-bold gradient-text truncate">
+                <h1
+                  className="text-lg md:text-2xl font-bold truncate"
+                  style={{
+                    background: themeConfig.titleGradient,
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                  }}
+                >
                   또니망고네 가계부
                 </h1>
                 <img

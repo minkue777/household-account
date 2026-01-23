@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-export type ThemeType = 'default' | 'warm' | 'forest' | 'ocean' | 'mono' | 'dark';
+export type ThemeType = 'default' | 'warm' | 'forest' | 'ocean' | 'mono';
 
 export interface ThemeConfig {
   key: ThemeType;
@@ -17,6 +17,7 @@ export interface ThemeConfig {
   textMuted: string;
   accent: string;
   accentHover: string;
+  titleGradient: string; // 타이틀 그라데이션 색상
 }
 
 export const THEMES: ThemeConfig[] = [
@@ -33,6 +34,7 @@ export const THEMES: ThemeConfig[] = [
     textMuted: '#94a3b8',
     accent: '#3b82f6',
     accentHover: '#2563eb',
+    titleGradient: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
   },
   {
     key: 'warm',
@@ -47,6 +49,7 @@ export const THEMES: ThemeConfig[] = [
     textMuted: '#b45309',
     accent: '#f59e0b',
     accentHover: '#d97706',
+    titleGradient: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)',
   },
   {
     key: 'forest',
@@ -61,6 +64,7 @@ export const THEMES: ThemeConfig[] = [
     textMuted: '#15803d',
     accent: '#22c55e',
     accentHover: '#16a34a',
+    titleGradient: 'linear-gradient(135deg, #22c55e 0%, #059669 100%)',
   },
   {
     key: 'ocean',
@@ -75,6 +79,7 @@ export const THEMES: ThemeConfig[] = [
     textMuted: '#0e7490',
     accent: '#06b6d4',
     accentHover: '#0891b2',
+    titleGradient: 'linear-gradient(135deg, #06b6d4 0%, #0284c7 100%)',
   },
   {
     key: 'mono',
@@ -89,20 +94,7 @@ export const THEMES: ThemeConfig[] = [
     textMuted: '#64748b',
     accent: '#6366f1',
     accentHover: '#4f46e5',
-  },
-  {
-    key: 'dark',
-    label: '다크 모드',
-    description: '눈이 편안한 어두운 테마',
-    preview: 'linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #020617 100%)',
-    background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
-    cardBg: 'rgba(30, 41, 59, 0.8)',
-    cardBorder: 'rgba(51, 65, 85, 0.5)',
-    textPrimary: '#f1f5f9',
-    textSecondary: '#cbd5e1',
-    textMuted: '#94a3b8',
-    accent: '#60a5fa',
-    accentHover: '#3b82f6',
+    titleGradient: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
   },
 ];
 

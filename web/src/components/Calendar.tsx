@@ -185,17 +185,13 @@ export default function Calendar({
           const isToday =
             new Date().toISOString().slice(0, 10) === dateStr;
 
-          // 모던 스타일 특수 클래스
-          const modernTodayClass = calendarStyle === 'modern' && isToday ? 'today-pulse' : '';
-          const modernSelectedClass = calendarStyle === 'modern' && isSelected ? 'selected-glow' : '';
-
           return (
             <div
               key={day}
               onClick={() => onDateClick(dateStr)}
               className={`h-12 md:h-28 border-b border-r border-slate-100 p-0.5 md:p-1.5 cursor-pointer transition-all hover:bg-slate-50 ${
                 isSelected ? 'bg-blue-50 ring-2 ring-blue-400 ring-inset' : ''
-              } ${modernTodayClass} ${modernSelectedClass}`}
+              }`}
             >
               {/* 모바일: 날짜 + 금액만 세로 배치 */}
               <div className="md:hidden flex flex-col items-center justify-center h-full">
