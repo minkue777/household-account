@@ -193,7 +193,7 @@ export default function Calendar({
               }`}
             >
               {/* 모바일: 날짜 + 금액만 세로 배치 */}
-              <div className="md:hidden flex flex-col items-center justify-center h-full">
+              <div className="md:hidden flex flex-col items-center pt-1 h-full">
                 <span
                   className={`text-xs font-medium ${
                     isToday
