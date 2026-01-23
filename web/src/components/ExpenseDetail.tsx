@@ -33,12 +33,11 @@ export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveM
           {onAddExpense && (
             <button
               onClick={onAddExpense}
-              className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
+              className="p-2 text-slate-500 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              추가
             </button>
           )}
         </div>
@@ -55,22 +54,16 @@ export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveM
         <h3 className="text-lg font-semibold text-slate-800">
           {formatDate(date)}
         </h3>
-        <div className="flex items-center gap-3">
-          <span className="text-lg font-bold text-slate-800">
-            {total.toLocaleString()}원
-          </span>
-          {onAddExpense && (
-            <button
-              onClick={onAddExpense}
-              className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              추가
-            </button>
-          )}
-        </div>
+        {onAddExpense && (
+          <button
+            onClick={onAddExpense}
+            className="p-2 text-slate-500 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        )}
       </div>
 
       <div className="space-y-3">
