@@ -5,7 +5,6 @@ import Link from 'next/link';
 import Calendar from '@/components/Calendar';
 import CategorySummary from '@/components/CategorySummary';
 import ExpenseDetail from '@/components/ExpenseDetail';
-import MonthSelector from '@/components/MonthSelector';
 import AddExpenseModal from '@/components/AddExpenseModal';
 import { Expense } from '@/types/expense';
 import { subscribeToMonthlyExpenses, updateCategory, addManualExpense, deleteExpense } from '@/lib/expenseService';
@@ -166,30 +165,7 @@ export default function Home() {
 
         {/* 모바일 레이아웃 */}
         <div className="lg:hidden space-y-6">
-          {/* 월 선택 & 총액 */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6 transition-all hover:shadow-md">
-            <MonthSelector
-              year={currentYear}
-              month={currentMonth}
-              onPrevMonth={handlePrevMonth}
-              onNextMonth={handleNextMonth}
-            />
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">이번 달 총 지출</div>
-              {isLoading ? (
-                <div className="text-2xl text-slate-400">로딩중...</div>
-              ) : (
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
-                    {monthlyTotal.toLocaleString()}
-                  </span>
-                  <span className="text-base text-slate-400 font-medium">원</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* 캘린더 */}
+          {/* 캘린더 (월 선택 & 총액 통합) */}
           <div
             key={`${currentYear}-${currentMonth}`}
             className={slideDirection === 'left' ? 'animate-slideLeft' : slideDirection === 'right' ? 'animate-slideRight' : ''}
@@ -200,6 +176,10 @@ export default function Home() {
               expenses={expenses}
               onDateClick={handleDateClick}
               selectedDate={selectedDate}
+              onPrevMonth={handlePrevMonth}
+              onNextMonth={handleNextMonth}
+              monthlyTotal={monthlyTotal}
+              isLoading={isLoading}
             />
           </div>
 
@@ -234,29 +214,6 @@ export default function Home() {
         <div className="hidden lg:grid lg:grid-cols-4 gap-6">
           {/* 왼쪽 사이드바 */}
           <div className="lg:col-span-1 space-y-6">
-            {/* 월 선택 & 총액 */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6 transition-all hover:shadow-md">
-              <MonthSelector
-                year={currentYear}
-                month={currentMonth}
-                onPrevMonth={handlePrevMonth}
-                onNextMonth={handleNextMonth}
-              />
-              <div className="mt-4 pt-4 border-t border-slate-100">
-                <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">이번 달 총 지출</div>
-                {isLoading ? (
-                  <div className="text-2xl text-slate-400">로딩중...</div>
-                ) : (
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
-                      {monthlyTotal.toLocaleString()}
-                    </span>
-                    <span className="text-base text-slate-400 font-medium">원</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
             {/* 카테고리별 지출 */}
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6 transition-all hover:shadow-md">
               <h3 className="text-sm font-semibold text-slate-700 mb-4">
@@ -274,7 +231,7 @@ export default function Home() {
 
           {/* 오른쪽 메인 */}
           <div className="lg:col-span-3 space-y-6">
-            {/* 캘린더 */}
+            {/* 캘린더 (월 선택 & 총액 통합) */}
             <div
               key={`desktop-${currentYear}-${currentMonth}`}
               className={slideDirection === 'left' ? 'animate-slideLeft' : slideDirection === 'right' ? 'animate-slideRight' : ''}
@@ -285,6 +242,10 @@ export default function Home() {
                 expenses={expenses}
                 onDateClick={handleDateClick}
                 selectedDate={selectedDate}
+                onPrevMonth={handlePrevMonth}
+                onNextMonth={handleNextMonth}
+                monthlyTotal={monthlyTotal}
+                isLoading={isLoading}
               />
             </div>
 

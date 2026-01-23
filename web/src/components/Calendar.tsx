@@ -9,6 +9,10 @@ interface CalendarProps {
   expenses: Expense[];
   onDateClick: (date: string) => void;
   selectedDate: string | null;
+  onPrevMonth?: () => void;
+  onNextMonth?: () => void;
+  monthlyTotal?: number;
+  isLoading?: boolean;
 }
 
 const DAYS_OF_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
@@ -28,6 +32,10 @@ export default function Calendar({
   expenses,
   onDateClick,
   selectedDate,
+  onPrevMonth,
+  onNextMonth,
+  monthlyTotal,
+  isLoading,
 }: CalendarProps) {
   // 해당 월의 일수와 시작 요일 계산
   const { daysInMonth, startDay, dates } = useMemo(() => {
@@ -81,6 +89,46 @@ export default function Calendar({
 
   return (
     <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 overflow-hidden">
+      {/* 월 선택 헤더 */}
+      {onPrevMonth && onNextMonth && (
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onPrevMonth}
+              className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <span className="text-lg font-semibold text-slate-800 min-w-[120px] text-center">
+              {year}년 {month}월
+            </span>
+            <button
+              onClick={onNextMonth}
+              className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+          {monthlyTotal !== undefined && (
+            <div className="text-right">
+              {isLoading ? (
+                <span className="text-sm text-slate-400">로딩중...</span>
+              ) : (
+                <div className="flex items-baseline gap-1">
+                  <span className="text-sm text-slate-500">총</span>
+                  <span className="text-lg font-bold text-slate-800">{monthlyTotal.toLocaleString()}</span>
+                  <span className="text-sm text-slate-500">원</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 요일 헤더 */}
       <div className="grid grid-cols-7 bg-gradient-to-r from-slate-50 to-slate-100/50 border-b border-slate-200/50">
         {DAYS_OF_WEEK.map((day, index) => (
