@@ -128,7 +128,7 @@ export default function Home() {
                 <img
                   src="/bear-removebg-preview.png"
                   alt="곰돌이"
-                  className="w-20 h-20 md:w-28 md:h-28 object-contain"
+                  className="w-12 h-12 md:w-16 md:h-16 object-contain"
                 />
               </div>
               <p className="text-slate-500 text-sm hidden md:block">우리 가족 지출을 한눈에!</p>
