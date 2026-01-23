@@ -224,4 +224,11 @@ class MainViewModel : ViewModel() {
     fun getDailyTotal(date: String): Int {
         return getExpensesForDate(date).sumOf { it.amount }
     }
+
+    // 카테고리별 지출 내역
+    fun getExpensesByCategory(category: Category): List<Expense> {
+        return _uiState.value.expenses
+            .filter { it.getCategoryEnum() == category }
+            .sortedByDescending { it.date }
+    }
 }
