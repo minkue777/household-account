@@ -70,22 +70,13 @@ export default function CategorySummary({ expenses }: CategorySummaryProps) {
                 </span>
                 <span className="text-xs text-slate-400">{count}건</span>
               </div>
-              <div className="flex items-center gap-2">
-                {budget !== null ? (
-                  <div className="flex items-center gap-1">
-                    <span className={`text-sm font-semibold ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
-                      {total.toLocaleString()}
-                    </span>
-                    <span className="text-xs text-slate-400">
-                      / {budget.toLocaleString()}원
-                    </span>
-                    <span className={`text-xs font-medium ${isOverBudget ? 'text-red-500' : 'text-slate-500'}`}>
-                      ({usagePercent}%)
-                    </span>
-                  </div>
-                ) : (
-                  <span className="text-sm font-semibold text-slate-800">
-                    {total.toLocaleString()}원
+              <div className="flex items-center gap-1">
+                <span className={`text-sm font-semibold ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
+                  {total.toLocaleString()}원
+                </span>
+                {usagePercent !== null && (
+                  <span className={`text-xs font-medium ${isOverBudget ? 'text-red-500' : 'text-slate-500'}`}>
+                    ({usagePercent}%)
                   </span>
                 )}
               </div>
