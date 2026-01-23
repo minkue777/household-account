@@ -16,6 +16,23 @@ const config: Config = {
         'category-food': '#FBBF24',      // 식비 - 노랑
         'category-etc': '#9CA3AF',       // 기타 - 회색
       },
+      keyframes: {
+        slideDown: {
+          '0%': {
+            opacity: '0',
+            transform: 'translateY(-10px)',
+            maxHeight: '0'
+          },
+          '100%': {
+            opacity: '1',
+            transform: 'translateY(0)',
+            maxHeight: '1000px'
+          },
+        },
+      },
+      animation: {
+        slideDown: 'slideDown 0.3s ease-out forwards',
+      },
     },
   },
   plugins: [],
