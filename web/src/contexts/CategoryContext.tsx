@@ -1,0 +1,173 @@
+'use client';
+
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import {
+  CategoryDocument,
+  subscribeToCategories,
+  initializeDefaultCategories,
+  addCategory as addCategoryService,
+  updateCategory as updateCategoryService,
+  deleteCategory as deleteCategoryService,
+  setBudget as setBudgetService,
+  generateCategoryKey,
+} from '@/lib/categoryService';
+
+interface CategoryContextType {
+  categories: CategoryDocument[];
+  isLoading: boolean;
+  // 카테고리 조회 헬퍼
+  getCategoryByKey: (key: string) => CategoryDocument | undefined;
+  getCategoryLabel: (key: string) => string;
+  getCategoryColor: (key: string) => string;
+  getCategoryBudget: (key: string) => number | null;
+  // CRUD 작업
+  addCategory: (label: string, color: string, budget?: number | null) => Promise<string>;
+  updateCategory: (id: string, data: { label?: string; color?: string; budget?: number | null }) => Promise<void>;
+  deleteCategory: (id: string) => Promise<void>;
+  setBudget: (id: string, budget: number | null) => Promise<void>;
+  // 호환성 헬퍼 (기존 CATEGORY_LABELS, CATEGORY_COLORS 대체)
+  categoryLabels: Record<string, string>;
+  categoryColors: Record<string, string>;
+  activeCategories: CategoryDocument[];
+}
+
+const CategoryContext = createContext<CategoryContextType | undefined>(undefined);
+
+// 알 수 없는 카테고리용 기본값
+const UNKNOWN_CATEGORY = {
+  label: '알 수 없음',
+  color: '#6B7280',
+};
+
+export function CategoryProvider({ children }: { children: React.ReactNode }) {
+  const [categories, setCategories] = useState<CategoryDocument[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // 초기화 및 실시간 구독
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+
+    async function initialize() {
+      // 기본 카테고리 초기화 (첫 실행 시에만)
+      await initializeDefaultCategories();
+
+      // 실시간 구독 시작
+      unsubscribe = subscribeToCategories((cats) => {
+        setCategories(cats);
+        setIsLoading(false);
+      });
+    }
+
+    initialize();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, []);
+
+  // 카테고리 조회 헬퍼
+  const getCategoryByKey = useCallback(
+    (key: string): CategoryDocument | undefined => {
+      return categories.find((c) => c.key === key);
+    },
+    [categories]
+  );
+
+  const getCategoryLabel = useCallback(
+    (key: string): string => {
+      const category = categories.find((c) => c.key === key);
+      return category?.label ?? UNKNOWN_CATEGORY.label;
+    },
+    [categories]
+  );
+
+  const getCategoryColor = useCallback(
+    (key: string): string => {
+      const category = categories.find((c) => c.key === key);
+      return category?.color ?? UNKNOWN_CATEGORY.color;
+    },
+    [categories]
+  );
+
+  const getCategoryBudget = useCallback(
+    (key: string): number | null => {
+      const category = categories.find((c) => c.key === key);
+      return category?.budget ?? null;
+    },
+    [categories]
+  );
+
+  // CRUD 작업
+  const addCategory = useCallback(
+    async (label: string, color: string, budget: number | null = null): Promise<string> => {
+      const key = generateCategoryKey();
+      const order = categories.length;
+      return addCategoryService({ key, label, color, budget, order, isActive: true });
+    },
+    [categories.length]
+  );
+
+  const updateCategory = useCallback(
+    async (id: string, data: { label?: string; color?: string; budget?: number | null }): Promise<void> => {
+      await updateCategoryService(id, data);
+    },
+    []
+  );
+
+  const deleteCategory = useCallback(async (id: string): Promise<void> => {
+    await deleteCategoryService(id);
+  }, []);
+
+  const setBudget = useCallback(async (id: string, budget: number | null): Promise<void> => {
+    await setBudgetService(id, budget);
+  }, []);
+
+  // 호환성 헬퍼 (기존 코드와의 호환성을 위해)
+  const categoryLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const cat of categories) {
+      labels[cat.key] = cat.label;
+    }
+    return labels;
+  }, [categories]);
+
+  const categoryColors = useMemo(() => {
+    const colors: Record<string, string> = {};
+    for (const cat of categories) {
+      colors[cat.key] = cat.color;
+    }
+    return colors;
+  }, [categories]);
+
+  const activeCategories = useMemo(() => {
+    return categories.filter((c) => c.isActive);
+  }, [categories]);
+
+  const value: CategoryContextType = {
+    categories,
+    isLoading,
+    getCategoryByKey,
+    getCategoryLabel,
+    getCategoryColor,
+    getCategoryBudget,
+    addCategory,
+    updateCategory,
+    deleteCategory,
+    setBudget,
+    categoryLabels,
+    categoryColors,
+    activeCategories,
+  };
+
+  return <CategoryContext.Provider value={value}>{children}</CategoryContext.Provider>;
+}
+
+export function useCategoryContext(): CategoryContextType {
+  const context = useContext(CategoryContext);
+  if (context === undefined) {
+    throw new Error('useCategoryContext must be used within a CategoryProvider');
+  }
+  return context;
+}

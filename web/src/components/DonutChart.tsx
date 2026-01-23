@@ -3,7 +3,8 @@
 import { useMemo } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
-import { Expense, Category, CATEGORY_LABELS, CATEGORY_COLORS } from '@/types/expense';
+import { Expense, Category } from '@/types/expense';
+import { useCategoryContext } from '@/contexts/CategoryContext';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -12,6 +13,8 @@ interface DonutChartProps {
 }
 
 export default function DonutChart({ expenses }: DonutChartProps) {
+  const { getCategoryLabel, getCategoryColor } = useCategoryContext();
+
   const chartData = useMemo(() => {
     // 카테고리별 합계 계산
     const categoryTotals = new Map<Category, number>();
@@ -26,9 +29,9 @@ export default function DonutChart({ expenses }: DonutChartProps) {
       .filter(([_, amount]) => amount > 0)
       .sort((a, b) => b[1] - a[1]);
 
-    const labels = sortedCategories.map(([cat]) => CATEGORY_LABELS[cat]);
+    const labels = sortedCategories.map(([cat]) => getCategoryLabel(cat));
     const data = sortedCategories.map(([_, amount]) => amount);
-    const backgroundColor = sortedCategories.map(([cat]) => CATEGORY_COLORS[cat]);
+    const backgroundColor = sortedCategories.map(([cat]) => getCategoryColor(cat));
 
     return {
       labels,
@@ -41,7 +44,7 @@ export default function DonutChart({ expenses }: DonutChartProps) {
         },
       ],
     };
-  }, [expenses]);
+  }, [expenses, getCategoryLabel, getCategoryColor]);
 
   const options = {
     responsive: true,

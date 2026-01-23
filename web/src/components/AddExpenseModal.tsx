@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Category, CATEGORY_LABELS, CATEGORY_COLORS } from '@/types/expense';
+import { useState, useEffect } from 'react';
+import { useCategoryContext } from '@/contexts/CategoryContext';
 
 interface AddExpenseModalProps {
   isOpen: boolean;
@@ -16,12 +16,19 @@ export default function AddExpenseModal({
   onAdd,
   selectedDate,
 }: AddExpenseModalProps) {
+  const { activeCategories, isLoading } = useCategoryContext();
+
   const [merchant, setMerchant] = useState('');
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState<Category>('etc');
+  const [category, setCategory] = useState<string>('etc');
   const [date, setDate] = useState(selectedDate || new Date().toISOString().split('T')[0]);
 
-  const categories: Category[] = ['living', 'childcare', 'fixed', 'food', 'etc'];
+  // 활성 카테고리가 로드되면 첫 번째 카테고리를 기본값으로 설정
+  useEffect(() => {
+    if (activeCategories.length > 0 && !activeCategories.find(c => c.key === category)) {
+      setCategory(activeCategories[0].key);
+    }
+  }, [activeCategories, category]);
 
   const handleSubmit = () => {
     const amountNum = parseInt(amount, 10);
@@ -30,7 +37,7 @@ export default function AddExpenseModal({
       // 폼 초기화
       setMerchant('');
       setAmount('');
-      setCategory('etc');
+      setCategory(activeCategories[0]?.key || 'etc');
       onClose();
     }
   };
@@ -81,27 +88,35 @@ export default function AddExpenseModal({
             <label className="block text-sm font-medium text-slate-700 mb-1">
               카테고리
             </label>
-            <div className="grid grid-cols-5 gap-2">
-              {categories.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setCategory(cat)}
-                  className={`flex flex-col items-center p-2 rounded-lg border-2 transition-colors ${
-                    category === cat
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  <div
-                    className="w-6 h-6 rounded-full mb-1"
-                    style={{ backgroundColor: CATEGORY_COLORS[cat] }}
-                  />
-                  <span className="text-xs text-slate-700">
-                    {CATEGORY_LABELS[cat].slice(0, 2)}
-                  </span>
-                </button>
-              ))}
-            </div>
+            {isLoading ? (
+              <div className="grid grid-cols-5 gap-2">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="h-16 bg-slate-100 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-5 gap-2">
+                {activeCategories.map((cat) => (
+                  <button
+                    key={cat.key}
+                    onClick={() => setCategory(cat.key)}
+                    className={`flex flex-col items-center p-2 rounded-lg border-2 transition-colors ${
+                      category === cat.key
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div
+                      className="w-6 h-6 rounded-full mb-1"
+                      style={{ backgroundColor: cat.color }}
+                    />
+                    <span className="text-xs text-slate-700">
+                      {cat.label.slice(0, 2)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* 날짜 */}

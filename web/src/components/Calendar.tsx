@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Expense, CATEGORY_COLORS } from '@/types/expense';
+import { Expense } from '@/types/expense';
+import { useCategoryContext } from '@/contexts/CategoryContext';
 
 interface CalendarProps {
   year: number;
@@ -37,6 +38,8 @@ export default function Calendar({
   monthlyTotal,
   isLoading,
 }: CalendarProps) {
+  const { getCategoryColor } = useCategoryContext();
+
   // 해당 월의 일수와 시작 요일 계산
   const { daysInMonth, startDay, dates } = useMemo(() => {
     const firstDay = new Date(year, month - 1, 1);
@@ -210,7 +213,7 @@ export default function Calendar({
                     >
                       <span
                         className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: CATEGORY_COLORS[expense.category] }}
+                        style={{ backgroundColor: getCategoryColor(expense.category) }}
                       />
                       <span className="truncate text-slate-600">
                         {expense.merchant}

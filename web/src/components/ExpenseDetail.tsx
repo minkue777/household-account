@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Expense, Category, CATEGORY_LABELS, CATEGORY_COLORS } from '@/types/expense';
+import { Expense } from '@/types/expense';
+import { useCategoryContext } from '@/contexts/CategoryContext';
 
 interface ExpenseDetailProps {
   date: string;
@@ -68,11 +69,15 @@ interface ExpenseItemProps {
 }
 
 function ExpenseItem({ expense, onCategoryChange, onSaveMerchantRule, onDelete }: ExpenseItemProps) {
+  const { activeCategories, getCategoryLabel, getCategoryColor } = useCategoryContext();
+
   const [showMenu, setShowMenu] = useState(false);
   const [showRememberDialog, setShowRememberDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const categories: Category[] = ['living', 'childcare', 'fixed', 'food', 'etc'];
+
+  const expenseColor = getCategoryColor(expense.category);
+  const expenseLabel = getCategoryLabel(expense.category);
 
   return (
     <div className="relative">
@@ -84,16 +89,16 @@ function ExpenseItem({ expense, onCategoryChange, onSaveMerchantRule, onDelete }
           {/* 카테고리 아이콘 */}
           <div
             className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-medium"
-            style={{ backgroundColor: CATEGORY_COLORS[expense.category] }}
+            style={{ backgroundColor: expenseColor }}
           >
-            {CATEGORY_LABELS[expense.category].slice(0, 2)}
+            {expenseLabel.slice(0, 2)}
           </div>
           <div>
             <div className="font-medium text-slate-800">
               {expense.merchant}
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span>{CATEGORY_LABELS[expense.category]}</span>
+              <span>{expenseLabel}</span>
               <span>•</span>
               <span>
                 {expense.cardType === 'main' ? '본인카드' : '가족카드'}
@@ -128,13 +133,13 @@ function ExpenseItem({ expense, onCategoryChange, onSaveMerchantRule, onDelete }
           <div className="p-2 text-xs text-slate-500 border-b border-slate-100">
             카테고리 변경
           </div>
-          {categories.map((cat) => (
+          {activeCategories.map((cat) => (
             <button
-              key={cat}
+              key={cat.key}
               onClick={() => {
-                if (cat !== expense.category) {
-                  onCategoryChange(expense.id, cat);
-                  setSelectedCategory(cat);
+                if (cat.key !== expense.category) {
+                  onCategoryChange(expense.id, cat.key);
+                  setSelectedCategory(cat.key);
                   setShowMenu(false);
                   setShowRememberDialog(true);
                 } else {
@@ -142,14 +147,14 @@ function ExpenseItem({ expense, onCategoryChange, onSaveMerchantRule, onDelete }
                 }
               }}
               className={`w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 transition-colors ${
-                expense.category === cat ? 'bg-slate-100' : ''
+                expense.category === cat.key ? 'bg-slate-100' : ''
               }`}
             >
               <div
                 className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: CATEGORY_COLORS[cat] }}
+                style={{ backgroundColor: cat.color }}
               />
-              <span className="text-sm">{CATEGORY_LABELS[cat]}</span>
+              <span className="text-sm">{cat.label}</span>
             </button>
           ))}
         </div>
@@ -163,10 +168,10 @@ function ExpenseItem({ expense, onCategoryChange, onSaveMerchantRule, onDelete }
               가맹점 기억하기
             </h3>
             <p className="text-slate-600 mb-6">
-              &quot;{expense.merchant}&quot;을(를) {CATEGORY_LABELS[selectedCategory as Category]}(으)로 기억할까요?
+              &quot;{expense.merchant}&quot;을(를) {getCategoryLabel(selectedCategory)}(으)로 기억할까요?
               <br /><br />
               <span className="text-sm text-slate-500">
-                다음에 같은 가맹점에서 결제하면 자동으로 {CATEGORY_LABELS[selectedCategory as Category]}(으)로 분류됩니다.
+                다음에 같은 가맹점에서 결제하면 자동으로 {getCategoryLabel(selectedCategory)}(으)로 분류됩니다.
               </span>
             </p>
             <div className="flex gap-3">
