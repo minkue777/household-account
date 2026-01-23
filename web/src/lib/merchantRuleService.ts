@@ -2,6 +2,7 @@ import {
   collection,
   addDoc,
   deleteDoc,
+  updateDoc,
   doc,
   query,
   where,
@@ -40,6 +41,17 @@ export async function addMerchantRule(
     exactMatch,
   });
   return docRef.id;
+}
+
+/**
+ * 규칙 수정
+ */
+export async function updateMerchantRule(
+  id: string,
+  category: string
+): Promise<void> {
+  const docRef = doc(db, COLLECTION_NAME, id);
+  await updateDoc(docRef, { category });
 }
 
 /**

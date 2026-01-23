@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 
@@ -39,6 +39,37 @@ export default function Calendar({
   isLoading,
 }: CalendarProps) {
   const { getCategoryColor } = useCategoryContext();
+
+  // 스와이프 제스처 처리
+  const touchStartX = useRef<number | null>(null);
+  const touchEndX = useRef<number | null>(null);
+  const minSwipeDistance = 50;
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchEndX.current = null;
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStartX.current || !touchEndX.current) return;
+
+    const distance = touchStartX.current - touchEndX.current;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+
+    if (isLeftSwipe && onNextMonth) {
+      onNextMonth();
+    } else if (isRightSwipe && onPrevMonth) {
+      onPrevMonth();
+    }
+
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
 
   // 해당 월의 일수와 시작 요일 계산
   const { daysInMonth, startDay, dates } = useMemo(() => {
@@ -91,7 +122,12 @@ export default function Calendar({
   };
 
   return (
-    <div className="bg-white/60 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 overflow-hidden">
+    <div
+      className="bg-white/60 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 overflow-hidden"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
       {/* 월 선택 헤더 */}
       {onPrevMonth && onNextMonth && (
         <div className="flex items-center justify-center px-4 py-3">

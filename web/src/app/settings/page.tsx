@@ -1,11 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { CategoryDocument } from '@/lib/categoryService';
 import ColorPicker from '@/components/ColorPicker';
 import { COLOR_PALETTE } from '@/lib/categoryService';
+import {
+  MerchantRule,
+  subscribeToRules,
+  updateMerchantRule,
+  deleteMerchantRule,
+} from '@/lib/merchantRuleService';
+import { seedSampleData } from '@/lib/seedData';
 
 export default function SettingsPage() {
   const {
@@ -14,10 +21,32 @@ export default function SettingsPage() {
     addCategory,
     updateCategory,
     deleteCategory,
+    activeCategories,
+    getCategoryLabel,
+    getCategoryColor,
   } = useCategoryContext();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+
+  // 가맹점 규칙 상태
+  const [merchantRules, setMerchantRules] = useState<MerchantRule[]>([]);
+  const [rulesLoading, setRulesLoading] = useState(true);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [editRuleCategory, setEditRuleCategory] = useState('');
+
+  // 샘플 데이터 추가 상태
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [seedResult, setSeedResult] = useState<string | null>(null);
+
+  // 가맹점 규칙 구독
+  useEffect(() => {
+    const unsubscribe = subscribeToRules((rules) => {
+      setMerchantRules(rules);
+      setRulesLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // 새 카테고리 폼 상태
   const [newLabel, setNewLabel] = useState('');
@@ -96,12 +125,13 @@ export default function SettingsPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </Link>
-          <h1 className="text-xl font-bold text-slate-800">카테고리 설정</h1>
+          <h1 className="text-xl font-bold text-slate-800">설정</h1>
         </div>
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-6">
-        {/* 카테고리 목록 */}
+        {/* 카테고리 섹션 */}
+        <h2 className="text-lg font-bold text-slate-800 mb-4">카테고리</h2>
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="divide-y divide-slate-100">
             {categories.map((category) => (
@@ -285,6 +315,184 @@ export default function SettingsPage() {
                 <li>월 예산을 설정하면 홈 화면에서 사용량을 확인할 수 있습니다.</li>
               </ul>
             </div>
+          </div>
+        </div>
+
+        {/* 가맹점 규칙 섹션 */}
+        <div className="mt-8">
+          <h2 className="text-lg font-bold text-slate-800 mb-4">가맹점 규칙</h2>
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            {rulesLoading ? (
+              <div className="p-8 text-center text-slate-400">로딩중...</div>
+            ) : merchantRules.length === 0 ? (
+              <div className="p-8 text-center text-slate-400">
+                저장된 가맹점 규칙이 없습니다.
+                <br />
+                <span className="text-sm">지출 상세에서 카테고리를 변경하면 자동으로 추가됩니다.</span>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {merchantRules.map((rule) => (
+                  <div key={rule.id} className="p-4">
+                    {editingRuleId === rule.id ? (
+                      // 편집 모드
+                      <div className="space-y-3">
+                        <div className="font-medium text-slate-800">
+                          {rule.merchantKeyword}
+                        </div>
+                        <div className="grid grid-cols-5 gap-2">
+                          {activeCategories.map((cat) => (
+                            <button
+                              key={cat.key}
+                              type="button"
+                              onClick={() => setEditRuleCategory(cat.key)}
+                              className={`flex flex-col items-center p-2 rounded-lg border-2 transition-colors ${
+                                editRuleCategory === cat.key
+                                  ? 'border-blue-500 bg-blue-50'
+                                  : 'border-slate-200 hover:border-slate-300'
+                              }`}
+                            >
+                              <div
+                                className="w-6 h-6 rounded-full mb-1"
+                                style={{ backgroundColor: cat.color }}
+                              />
+                              <span className="text-xs text-slate-700">
+                                {cat.label.slice(0, 2)}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingRuleId(null);
+                              setEditRuleCategory('');
+                            }}
+                            className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                          >
+                            취소
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (editRuleCategory && editRuleCategory !== rule.category) {
+                                await updateMerchantRule(rule.id, editRuleCategory);
+                              }
+                              setEditingRuleId(null);
+                              setEditRuleCategory('');
+                            }}
+                            className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                          >
+                            저장
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      // 보기 모드
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium"
+                            style={{ backgroundColor: getCategoryColor(rule.category) }}
+                          >
+                            {getCategoryLabel(rule.category).slice(0, 2)}
+                          </div>
+                          <div>
+                            <div className="font-medium text-slate-800">
+                              {rule.merchantKeyword}
+                            </div>
+                            <div className="text-sm text-slate-500">
+                              → {getCategoryLabel(rule.category)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingRuleId(rule.id);
+                              setEditRuleCategory(rule.category);
+                            }}
+                            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (confirm(`"${rule.merchantKeyword}" 규칙을 삭제하시겠습니까?`)) {
+                                await deleteMerchantRule(rule.id);
+                              }
+                            }}
+                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 가맹점 규칙 안내 */}
+          <div className="mt-4 p-4 bg-slate-100 rounded-xl">
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 text-slate-400 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              <div className="text-sm text-slate-600">
+                <p className="font-medium mb-1">가맹점 규칙 안내</p>
+                <ul className="space-y-1 text-slate-500">
+                  <li>지출 상세에서 카테고리를 변경하고 &ldquo;예&rdquo;를 선택하면 자동으로 추가됩니다.</li>
+                  <li>동일한 가맹점 결제 시 자동으로 지정된 카테고리가 적용됩니다.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 개발자 도구 섹션 */}
+        <div className="mt-8">
+          <h2 className="text-lg font-bold text-slate-800 mb-4">개발자 도구</h2>
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-medium text-slate-800">샘플 데이터 추가</div>
+                <div className="text-sm text-slate-500">
+                  2025년 1월~12월, 2026년 1월 테스트 데이터 생성
+                </div>
+              </div>
+              <button
+                onClick={async () => {
+                  if (!confirm('2025년~2026년 1월까지 약 300개의 샘플 지출 데이터를 추가합니다.\n계속하시겠습니까?')) {
+                    return;
+                  }
+                  setIsSeeding(true);
+                  setSeedResult(null);
+                  try {
+                    const count = await seedSampleData();
+                    setSeedResult(`${count}개의 샘플 데이터가 추가되었습니다!`);
+                  } catch (error) {
+                    setSeedResult('샘플 데이터 추가 실패');
+                    console.error(error);
+                  }
+                  setIsSeeding(false);
+                }}
+                disabled={isSeeding}
+                className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors disabled:bg-slate-300"
+              >
+                {isSeeding ? '추가 중...' : '데이터 추가'}
+              </button>
+            </div>
+            {seedResult && (
+              <div className="mt-3 p-3 bg-green-50 text-green-700 rounded-lg text-sm">
+                {seedResult}
+              </div>
+            )}
           </div>
         </div>
       </div>
