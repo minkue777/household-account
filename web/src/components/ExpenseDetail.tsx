@@ -23,7 +23,7 @@ export default function ExpenseDetail({ date, expenses, onCategoryChange, onSave
 
   if (expenses.length === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 animate-slideDown">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6 animate-slideDown">
         <h3 className="text-lg font-semibold text-slate-800 mb-4">
           {formatDate(date)}
         </h3>
@@ -35,7 +35,7 @@ export default function ExpenseDetail({ date, expenses, onCategoryChange, onSave
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 animate-slideDown">
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6 animate-slideDown">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-slate-800">
           {formatDate(date)}

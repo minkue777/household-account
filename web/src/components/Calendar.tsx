@@ -80,9 +80,9 @@ export default function Calendar({
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 overflow-hidden">
       {/* 요일 헤더 */}
-      <div className="grid grid-cols-7 bg-slate-50 border-b border-slate-200">
+      <div className="grid grid-cols-7 bg-gradient-to-r from-slate-50 to-slate-100/50 border-b border-slate-200/50">
         {DAYS_OF_WEEK.map((day, index) => (
           <div
             key={day}

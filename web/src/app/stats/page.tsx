@@ -74,7 +74,7 @@ export default function StatsPage() {
 
         <div className="space-y-6">
           {/* 월 선택 & 총액 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6">
             <MonthSelector
               year={currentYear}
               month={currentMonth}
@@ -97,7 +97,7 @@ export default function StatsPage() {
           </div>
 
           {/* 도넛 차트 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6">
             <h3 className="text-lg font-semibold text-slate-700 mb-4">
               카테고리별 지출
             </h3>
@@ -113,7 +113,7 @@ export default function StatsPage() {
           </div>
 
           {/* 카테고리 요약 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6">
             <h3 className="text-lg font-semibold text-slate-700 mb-4">
               상세 내역
             </h3>
