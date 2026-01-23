@@ -120,15 +120,17 @@ export default function Home() {
         {/* 헤더 */}
         <header className="mb-6 flex items-center justify-between">
           <div className="min-w-0 flex items-center gap-2">
-            <img
-              src="/bear.png"
-              alt="곰돌이"
-              className="w-10 h-10 md:w-12 md:h-12 object-contain"
-            />
             <div>
-              <h1 className="text-lg md:text-2xl font-bold gradient-text truncate">
-                또니망고네 가계부
-              </h1>
+              <div className="flex items-center gap-1">
+                <h1 className="text-lg md:text-2xl font-bold gradient-text truncate">
+                  또니망고네 가계부
+                </h1>
+                <img
+                  src="/bear.png"
+                  alt="곰돌이"
+                  className="w-10 h-10 md:w-14 md:h-14 object-contain"
+                />
+              </div>
               <p className="text-slate-500 text-sm hidden md:block">우리 가족 지출을 한눈에!</p>
             </div>
           </div>
