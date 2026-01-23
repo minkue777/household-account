@@ -183,7 +183,7 @@ export default function Home() {
           {/* 캘린더 */}
           <div
             key={`${currentYear}-${currentMonth}`}
-            className={slideDirection === 'left' ? 'animate-flipUp' : slideDirection === 'right' ? 'animate-flipDown' : ''}
+            className={slideDirection === 'left' ? 'animate-pageNext' : slideDirection === 'right' ? 'animate-pagePrev' : ''}
           >
             <Calendar
               year={currentYear}
@@ -268,7 +268,7 @@ export default function Home() {
             {/* 캘린더 */}
             <div
               key={`desktop-${currentYear}-${currentMonth}`}
-              className={slideDirection === 'left' ? 'animate-flipUp' : slideDirection === 'right' ? 'animate-flipDown' : ''}
+              className={slideDirection === 'left' ? 'animate-pageNext' : slideDirection === 'right' ? 'animate-pagePrev' : ''}
             >
               <Calendar
                 year={currentYear}

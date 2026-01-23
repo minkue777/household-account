@@ -27,35 +27,31 @@ const config: Config = {
             transform: 'translateY(0) scale(1)',
           },
         },
-        flipUp: {
+        pageNext: {
           '0%': {
             opacity: '0',
-            transform: 'perspective(1000px) rotateX(60deg)',
-            transformOrigin: 'bottom center',
+            transform: 'translateY(-20px)',
           },
           '100%': {
             opacity: '1',
-            transform: 'perspective(1000px) rotateX(0deg)',
-            transformOrigin: 'bottom center',
+            transform: 'translateY(0)',
           },
         },
-        flipDown: {
+        pagePrev: {
           '0%': {
             opacity: '0',
-            transform: 'perspective(1000px) rotateX(-60deg)',
-            transformOrigin: 'top center',
+            transform: 'translateY(20px)',
           },
           '100%': {
             opacity: '1',
-            transform: 'perspective(1000px) rotateX(0deg)',
-            transformOrigin: 'top center',
+            transform: 'translateY(0)',
           },
         },
       },
       animation: {
         slideDown: 'slideDown 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards',
-        flipUp: 'flipUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards',
-        flipDown: 'flipDown 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards',
+        pageNext: 'pageNext 0.3s ease-out forwards',
+        pagePrev: 'pagePrev 0.3s ease-out forwards',
       },
     },
   },
