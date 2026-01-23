@@ -163,17 +163,17 @@ export default function Home() {
               onNextMonth={handleNextMonth}
             />
             <div className="mt-4 pt-4 border-t border-slate-100">
-              <div className="text-sm text-slate-500">이번 달 총 지출</div>
-              <div className="text-3xl font-bold text-slate-800">
-                {isLoading ? (
-                  <span className="text-slate-400">로딩중...</span>
-                ) : (
-                  <>
+              <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">이번 달 총 지출</div>
+              {isLoading ? (
+                <div className="text-2xl text-slate-400">로딩중...</div>
+              ) : (
+                <div className="flex items-baseline gap-1">
+                  <span className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
                     {monthlyTotal.toLocaleString()}
-                    <span className="text-lg font-normal text-slate-500">원</span>
-                  </>
-                )}
-              </div>
+                  </span>
+                  <span className="text-base text-slate-400 font-medium">원</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -226,17 +226,17 @@ export default function Home() {
                 onNextMonth={handleNextMonth}
               />
               <div className="mt-4 pt-4 border-t border-slate-100">
-                <div className="text-sm text-slate-500">이번 달 총 지출</div>
-                <div className="text-3xl font-bold text-slate-800">
-                  {isLoading ? (
-                    <span className="text-slate-400">로딩중...</span>
-                  ) : (
-                    <>
+                <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">이번 달 총 지출</div>
+                {isLoading ? (
+                  <div className="text-2xl text-slate-400">로딩중...</div>
+                ) : (
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
                       {monthlyTotal.toLocaleString()}
-                      <span className="text-lg font-normal text-slate-500">원</span>
-                    </>
-                  )}
-                </div>
+                    </span>
+                    <span className="text-base text-slate-400 font-medium">원</span>
+                  </div>
+                )}
               </div>
             </div>
 
