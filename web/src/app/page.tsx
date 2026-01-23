@@ -152,8 +152,8 @@ export default function Home() {
           selectedDate={selectedDate}
         />
 
-        {/* 메인 컨텐츠 */}
-        <div className="space-y-6 max-w-4xl mx-auto">
+        {/* 모바일 레이아웃 */}
+        <div className="lg:hidden space-y-6">
           {/* 월 선택 & 총액 */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
             <MonthSelector
@@ -186,7 +186,18 @@ export default function Home() {
             selectedDate={selectedDate}
           />
 
-          {/* 카테고리별 상세 내역 */}
+          {/* 선택된 날짜 상세 - 캘린더 바로 아래 */}
+          {selectedDate && (
+            <ExpenseDetail
+              date={selectedDate}
+              expenses={selectedDateExpenses}
+              onCategoryChange={handleCategoryChange}
+              onSaveMerchantRule={handleSaveMerchantRule}
+              onDelete={handleDeleteExpense}
+            />
+          )}
+
+          {/* 카테고리별 지출 - 맨 아래 */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
             <h3 className="text-sm font-semibold text-slate-700 mb-4">
               카테고리별 지출
@@ -199,17 +210,72 @@ export default function Home() {
               </div>
             )}
           </div>
+        </div>
 
-          {/* 선택된 날짜 상세 */}
-          {selectedDate && (
-            <ExpenseDetail
-              date={selectedDate}
-              expenses={selectedDateExpenses}
-              onCategoryChange={handleCategoryChange}
-              onSaveMerchantRule={handleSaveMerchantRule}
-              onDelete={handleDeleteExpense}
+        {/* 데스크톱 레이아웃 */}
+        <div className="hidden lg:grid lg:grid-cols-4 gap-6">
+          {/* 왼쪽 사이드바 */}
+          <div className="lg:col-span-1 space-y-6">
+            {/* 월 선택 & 총액 */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+              <MonthSelector
+                year={currentYear}
+                month={currentMonth}
+                onPrevMonth={handlePrevMonth}
+                onNextMonth={handleNextMonth}
+              />
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <div className="text-sm text-slate-500">이번 달 총 지출</div>
+                <div className="text-3xl font-bold text-slate-800">
+                  {isLoading ? (
+                    <span className="text-slate-400">로딩중...</span>
+                  ) : (
+                    <>
+                      {monthlyTotal.toLocaleString()}
+                      <span className="text-lg font-normal text-slate-500">원</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 카테고리별 지출 */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+              <h3 className="text-sm font-semibold text-slate-700 mb-4">
+                카테고리별 지출
+              </h3>
+              {expenses.length > 0 ? (
+                <CategorySummary expenses={expenses} />
+              ) : (
+                <div className="text-center py-4 text-slate-400">
+                  {isLoading ? '로딩중...' : '데이터 없음'}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 오른쪽 메인 */}
+          <div className="lg:col-span-3 space-y-6">
+            {/* 캘린더 */}
+            <Calendar
+              year={currentYear}
+              month={currentMonth}
+              expenses={expenses}
+              onDateClick={handleDateClick}
+              selectedDate={selectedDate}
             />
-          )}
+
+            {/* 선택된 날짜 상세 */}
+            {selectedDate && (
+              <ExpenseDetail
+                date={selectedDate}
+                expenses={selectedDateExpenses}
+                onCategoryChange={handleCategoryChange}
+                onSaveMerchantRule={handleSaveMerchantRule}
+                onDelete={handleDeleteExpense}
+              />
+            )}
+          </div>
         </div>
       </div>
     </main>
