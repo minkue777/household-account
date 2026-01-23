@@ -10,9 +10,10 @@ interface ExpenseDetailProps {
   onExpenseUpdate?: (expenseId: string, data: { amount?: number; memo?: string; category?: string }) => void;
   onSaveMerchantRule?: (merchantName: string, category: string) => void;
   onDelete?: (expenseId: string) => void;
+  onAddExpense?: () => void;
 }
 
-export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveMerchantRule, onDelete }: ExpenseDetailProps) {
+export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveMerchantRule, onDelete, onAddExpense }: ExpenseDetailProps) {
   const total = expenses.reduce((sum, e) => sum + e.amount, 0);
 
   // 날짜 포맷팅
@@ -25,9 +26,22 @@ export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveM
   if (expenses.length === 0) {
     return (
       <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6 animate-slideDown">
-        <h3 className="text-lg font-semibold text-slate-800 mb-4">
-          {formatDate(date)}
-        </h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-slate-800">
+            {formatDate(date)}
+          </h3>
+          {onAddExpense && (
+            <button
+              onClick={onAddExpense}
+              className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              추가
+            </button>
+          )}
+        </div>
         <div className="text-center py-8 text-slate-400">
           지출 내역이 없습니다
         </div>
@@ -41,9 +55,22 @@ export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveM
         <h3 className="text-lg font-semibold text-slate-800">
           {formatDate(date)}
         </h3>
-        <span className="text-lg font-bold text-slate-800">
-          {total.toLocaleString()}원
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-lg font-bold text-slate-800">
+            {total.toLocaleString()}원
+          </span>
+          {onAddExpense && (
+            <button
+              onClick={onAddExpense}
+              className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              추가
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="space-y-3">

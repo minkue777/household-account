@@ -150,15 +150,6 @@ export default function Home() {
               </svg>
               <span className="hidden md:inline">통계</span>
             </Link>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="bg-blue-500 hover:bg-blue-600 text-white p-2 md:px-4 md:py-2 rounded-xl flex items-center gap-2 transition-all shadow-sm hover:shadow-md"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <span className="hidden md:inline">추가</span>
-            </button>
           </div>
         </header>
 
@@ -197,6 +188,7 @@ export default function Home() {
               onExpenseUpdate={handleExpenseUpdate}
               onSaveMerchantRule={handleSaveMerchantRule}
               onDelete={handleDeleteExpense}
+              onAddExpense={() => setShowAddModal(true)}
             />
           )}
 
@@ -261,6 +253,7 @@ export default function Home() {
                 onExpenseUpdate={handleExpenseUpdate}
                 onSaveMerchantRule={handleSaveMerchantRule}
                 onDelete={handleDeleteExpense}
+                onAddExpense={() => setShowAddModal(true)}
               />
             )}
           </div>
