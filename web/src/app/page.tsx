@@ -116,30 +116,30 @@ export default function Home() {
       <div className="max-w-7xl mx-auto">
         {/* 헤더 */}
         <header className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800 mb-2">
+          <div className="min-w-0">
+            <h1 className="text-lg md:text-2xl font-bold text-slate-800 truncate">
               또니망고네 가계부
             </h1>
-            <p className="text-slate-500">우리 가족 지출을 한눈에!</p>
+            <p className="text-slate-500 text-sm hidden md:block">우리 가족 지출을 한눈에!</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
             <Link
               href="/stats"
-              className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 p-2 md:px-4 md:py-2 rounded-lg flex items-center gap-2 transition-colors"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
-              통계
+              <span className="hidden md:inline">통계</span>
             </Link>
             <button
               onClick={() => setShowAddModal(true)}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+              className="bg-blue-500 hover:bg-blue-600 text-white p-2 md:px-4 md:py-2 rounded-lg flex items-center gap-2 transition-colors"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              추가
+              <span className="hidden md:inline">추가</span>
             </button>
           </div>
         </header>
