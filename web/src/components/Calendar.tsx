@@ -3,6 +3,7 @@
 import { useMemo, useRef } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
+import { useCalendarStyle, getCalendarStyleClass } from '@/contexts/CalendarStyleContext';
 
 interface CalendarProps {
   year: number;
@@ -39,6 +40,8 @@ export default function Calendar({
   isLoading,
 }: CalendarProps) {
   const { getCategoryColor } = useCategoryContext();
+  const { calendarStyle } = useCalendarStyle();
+  const styleClass = getCalendarStyleClass(calendarStyle);
 
   // 스와이프 제스처 처리
   const touchStartX = useRef<number | null>(null);
@@ -123,7 +126,7 @@ export default function Calendar({
 
   return (
     <div
-      className="bg-white/60 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 overflow-hidden"
+      className={`${styleClass} overflow-hidden`}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -182,13 +185,17 @@ export default function Calendar({
           const isToday =
             new Date().toISOString().slice(0, 10) === dateStr;
 
+          // 모던 스타일 특수 클래스
+          const modernTodayClass = calendarStyle === 'modern' && isToday ? 'today-pulse' : '';
+          const modernSelectedClass = calendarStyle === 'modern' && isSelected ? 'selected-glow' : '';
+
           return (
             <div
               key={day}
               onClick={() => onDateClick(dateStr)}
-              className={`h-12 md:h-28 border-b border-r border-slate-100 p-0.5 md:p-1.5 cursor-pointer transition-colors hover:bg-slate-50 ${
+              className={`h-12 md:h-28 border-b border-r border-slate-100 p-0.5 md:p-1.5 cursor-pointer transition-all hover:bg-slate-50 ${
                 isSelected ? 'bg-blue-50 ring-2 ring-blue-400 ring-inset' : ''
-              }`}
+              } ${modernTodayClass} ${modernSelectedClass}`}
             >
               {/* 모바일: 날짜 + 금액만 세로 배치 */}
               <div className="md:hidden flex flex-col items-center justify-center h-full">

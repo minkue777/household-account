@@ -47,11 +47,22 @@ const config: Config = {
             transform: 'translateX(0)',
           },
         },
+        flipPage: {
+          '0%': {
+            transform: 'rotateX(0deg)',
+            transformOrigin: 'top',
+          },
+          '100%': {
+            transform: 'rotateX(-180deg)',
+            transformOrigin: 'top',
+          },
+        },
       },
       animation: {
         slideDown: 'slideDown 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards',
         slideLeft: 'slideLeft 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards',
         slideRight: 'slideRight 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards',
+        flipPage: 'flipPage 0.6s ease-in-out forwards',
       },
     },
   },

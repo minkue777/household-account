@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { CategoryProvider } from '@/contexts/CategoryContext'
+import { CalendarStyleProvider } from '@/contexts/CalendarStyleContext'
+import { ThemeProvider } from '@/contexts/ThemeContext'
 
 export const metadata: Metadata = {
   title: '또니망고네 가계부',
@@ -14,10 +16,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body className="min-h-screen bg-slate-50">
-        <CategoryProvider>
-          {children}
-        </CategoryProvider>
+      <body className="min-h-screen">
+        <ThemeProvider>
+          <CalendarStyleProvider>
+            <CategoryProvider>
+              {children}
+            </CategoryProvider>
+          </CalendarStyleProvider>
+        </ThemeProvider>
       </body>
     </html>
   )
