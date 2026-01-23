@@ -27,31 +27,31 @@ const config: Config = {
             transform: 'translateY(0) scale(1)',
           },
         },
-        pageNext: {
+        slideLeft: {
           '0%': {
             opacity: '0',
-            transform: 'translateY(-20px)',
+            transform: 'translateX(30px)',
           },
           '100%': {
             opacity: '1',
-            transform: 'translateY(0)',
+            transform: 'translateX(0)',
           },
         },
-        pagePrev: {
+        slideRight: {
           '0%': {
             opacity: '0',
-            transform: 'translateY(20px)',
+            transform: 'translateX(-30px)',
           },
           '100%': {
             opacity: '1',
-            transform: 'translateY(0)',
+            transform: 'translateX(0)',
           },
         },
       },
       animation: {
         slideDown: 'slideDown 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards',
-        pageNext: 'pageNext 0.3s ease-out forwards',
-        pagePrev: 'pagePrev 0.3s ease-out forwards',
+        slideLeft: 'slideLeft 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards',
+        slideRight: 'slideRight 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards',
       },
     },
   },
