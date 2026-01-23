@@ -18,6 +18,7 @@ export default function Home() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
 
   // Firebase 실시간 구독
   useEffect(() => {
@@ -43,6 +44,7 @@ export default function Home() {
 
   // 이전/다음 달 이동
   const handlePrevMonth = () => {
+    setSlideDirection('right');
     if (currentMonth === 1) {
       setCurrentYear(currentYear - 1);
       setCurrentMonth(12);
@@ -53,6 +55,7 @@ export default function Home() {
   };
 
   const handleNextMonth = () => {
+    setSlideDirection('left');
     if (currentMonth === 12) {
       setCurrentYear(currentYear + 1);
       setCurrentMonth(1);
@@ -178,13 +181,18 @@ export default function Home() {
           </div>
 
           {/* 캘린더 */}
-          <Calendar
-            year={currentYear}
-            month={currentMonth}
-            expenses={expenses}
-            onDateClick={handleDateClick}
-            selectedDate={selectedDate}
-          />
+          <div
+            key={`${currentYear}-${currentMonth}`}
+            className={slideDirection === 'left' ? 'animate-slideLeft' : slideDirection === 'right' ? 'animate-slideRight' : ''}
+          >
+            <Calendar
+              year={currentYear}
+              month={currentMonth}
+              expenses={expenses}
+              onDateClick={handleDateClick}
+              selectedDate={selectedDate}
+            />
+          </div>
 
           {/* 선택된 날짜 상세 - 캘린더 바로 아래 */}
           {selectedDate && (
@@ -258,13 +266,18 @@ export default function Home() {
           {/* 오른쪽 메인 */}
           <div className="lg:col-span-3 space-y-6">
             {/* 캘린더 */}
-            <Calendar
-              year={currentYear}
-              month={currentMonth}
-              expenses={expenses}
-              onDateClick={handleDateClick}
-              selectedDate={selectedDate}
-            />
+            <div
+              key={`desktop-${currentYear}-${currentMonth}`}
+              className={slideDirection === 'left' ? 'animate-slideLeft' : slideDirection === 'right' ? 'animate-slideRight' : ''}
+            >
+              <Calendar
+                year={currentYear}
+                month={currentMonth}
+                expenses={expenses}
+                onDateClick={handleDateClick}
+                selectedDate={selectedDate}
+              />
+            </div>
 
             {/* 선택된 날짜 상세 */}
             {selectedDate && (
