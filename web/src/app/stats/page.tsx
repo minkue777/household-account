@@ -1,26 +1,62 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import DonutChart from '@/components/DonutChart';
-import CategorySummary from '@/components/CategorySummary';
-import MonthSelector from '@/components/MonthSelector';
+import MonthlyTrendChart from '@/components/MonthlyTrendChart';
 import { Expense } from '@/types/expense';
-import { subscribeToMonthlyExpenses } from '@/lib/expenseService';
+import { subscribeToDateRangeExpenses } from '@/lib/expenseService';
+
+// 기간 프리셋
+type PeriodPreset = '3months' | '6months' | '1year' | 'custom';
 
 export default function StatsPage() {
-  const [currentYear, setCurrentYear] = useState(2026);
-  const [currentMonth, setCurrentMonth] = useState(1);
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('6months');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // 날짜 범위 계산
+  const { startDate, endDate } = useMemo(() => {
+    const now = new Date();
+    let start: Date;
+    let end = new Date(now.getFullYear(), now.getMonth() + 1, 0); // 이번 달 마지막 날
+
+    if (periodPreset === 'custom' && customStartDate && customEndDate) {
+      return { startDate: customStartDate, endDate: customEndDate };
+    }
+
+    switch (periodPreset) {
+      case '3months':
+        start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+        break;
+      case '6months':
+        start = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+        break;
+      case '1year':
+        start = new Date(now.getFullYear() - 1, now.getMonth() + 1, 1);
+        break;
+      default:
+        start = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+    }
+
+    const formatDate = (d: Date) => {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    return { startDate: formatDate(start), endDate: formatDate(end) };
+  }, [periodPreset, customStartDate, customEndDate]);
+
   // Firebase 실시간 구독
   useEffect(() => {
+    if (!startDate || !endDate) return;
+
     setIsLoading(true);
 
-    const unsubscribe = subscribeToMonthlyExpenses(
-      currentYear,
-      currentMonth,
+    const unsubscribe = subscribeToDateRangeExpenses(
+      startDate,
+      endDate,
       (newExpenses) => {
         setExpenses(newExpenses);
         setIsLoading(false);
@@ -28,33 +64,22 @@ export default function StatsPage() {
     );
 
     return () => unsubscribe();
-  }, [currentYear, currentMonth]);
+  }, [startDate, endDate]);
 
-  // 이전/다음 달 이동
-  const handlePrevMonth = () => {
-    if (currentMonth === 1) {
-      setCurrentYear(currentYear - 1);
-      setCurrentMonth(12);
-    } else {
-      setCurrentMonth(currentMonth - 1);
-    }
-  };
+  // 총 지출
+  const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0);
 
-  const handleNextMonth = () => {
-    if (currentMonth === 12) {
-      setCurrentYear(currentYear + 1);
-      setCurrentMonth(1);
-    } else {
-      setCurrentMonth(currentMonth + 1);
-    }
-  };
-
-  // 월 총액
-  const monthlyTotal = expenses.reduce((sum, e) => sum + e.amount, 0);
+  // 기간 표시 문자열
+  const periodLabel = useMemo(() => {
+    if (!startDate || !endDate) return '';
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    return `${start.getFullYear()}.${start.getMonth() + 1} - ${end.getFullYear()}.${end.getMonth() + 1}`;
+  }, [startDate, endDate]);
 
   return (
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-4xl mx-auto">
         {/* 헤더 */}
         <header className="mb-6">
           <div className="flex items-center gap-4 mb-2">
@@ -73,33 +98,120 @@ export default function StatsPage() {
         </header>
 
         <div className="space-y-6">
-          {/* 월 선택 & 총액 */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6">
-            <MonthSelector
-              year={currentYear}
-              month={currentMonth}
-              onPrevMonth={handlePrevMonth}
-              onNextMonth={handleNextMonth}
-            />
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">이번 달 총 지출</div>
-              {isLoading ? (
-                <div className="text-2xl text-slate-400">로딩중...</div>
-              ) : (
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
-                    {monthlyTotal.toLocaleString()}
+          {/* 기간 선택 */}
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-4">
+            <div className="flex flex-wrap gap-2 mb-4">
+              <button
+                onClick={() => setPeriodPreset('3months')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  periodPreset === '3months'
+                    ? 'bg-blue-500 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                3개월
+              </button>
+              <button
+                onClick={() => setPeriodPreset('6months')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  periodPreset === '6months'
+                    ? 'bg-blue-500 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                6개월
+              </button>
+              <button
+                onClick={() => setPeriodPreset('1year')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  periodPreset === '1year'
+                    ? 'bg-blue-500 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                1년
+              </button>
+              <button
+                onClick={() => setPeriodPreset('custom')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  periodPreset === 'custom'
+                    ? 'bg-blue-500 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                직접 선택
+              </button>
+            </div>
+
+            {/* 직접 선택 시 날짜 입력 */}
+            {periodPreset === 'custom' && (
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+                <input
+                  type="month"
+                  value={customStartDate ? customStartDate.substring(0, 7) : ''}
+                  onChange={(e) => setCustomStartDate(e.target.value ? `${e.target.value}-01` : '')}
+                  className="px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-slate-400">~</span>
+                <input
+                  type="month"
+                  value={customEndDate ? customEndDate.substring(0, 7) : ''}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      const [year, month] = e.target.value.split('-');
+                      const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+                      setCustomEndDate(`${e.target.value}-${lastDay}`);
+                    } else {
+                      setCustomEndDate('');
+                    }
+                  }}
+                  className="px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+
+            {/* 기간 & 총액 표시 */}
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
+              <div className="text-sm text-slate-500">{periodLabel}</div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-sm text-slate-500">총</span>
+                {isLoading ? (
+                  <span className="text-lg text-slate-400">로딩중...</span>
+                ) : (
+                  <span className="text-xl font-bold text-slate-800">
+                    {totalAmount.toLocaleString()}원
                   </span>
-                  <span className="text-base text-slate-400 font-medium">원</span>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
 
-          {/* 도넛 차트 */}
+          {/* 월별 추이 차트 */}
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6">
             <h3 className="text-lg font-semibold text-slate-700 mb-4">
-              카테고리별 지출
+              월별 지출 추이
+            </h3>
+            {isLoading ? (
+              <div className="h-72 flex items-center justify-center text-slate-400">
+                로딩중...
+              </div>
+            ) : expenses.length > 0 ? (
+              <MonthlyTrendChart
+                expenses={expenses}
+                startDate={startDate}
+                endDate={endDate}
+              />
+            ) : (
+              <div className="h-72 flex items-center justify-center text-slate-400">
+                데이터 없음
+              </div>
+            )}
+          </div>
+
+          {/* 도넛 차트 - 해당 기간 전체 */}
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6">
+            <h3 className="text-lg font-semibold text-slate-700 mb-4">
+              카테고리별 비율
             </h3>
             <div className="h-64">
               {expenses.length > 0 ? (
@@ -110,20 +222,6 @@ export default function StatsPage() {
                 </div>
               )}
             </div>
-          </div>
-
-          {/* 카테고리 요약 */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6">
-            <h3 className="text-lg font-semibold text-slate-700 mb-4">
-              상세 내역
-            </h3>
-            {expenses.length > 0 ? (
-              <CategorySummary expenses={expenses} />
-            ) : (
-              <div className="text-center py-8 text-slate-400">
-                {isLoading ? '로딩중...' : '데이터 없음'}
-              </div>
-            )}
           </div>
         </div>
       </div>

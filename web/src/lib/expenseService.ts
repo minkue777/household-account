@@ -99,6 +99,48 @@ export async function updateCategory(id: string, category: string): Promise<void
 }
 
 /**
+ * 기간별 지출 목록 실시간 구독
+ */
+export function subscribeToDateRangeExpenses(
+  startDate: string,  // YYYY-MM-DD
+  endDate: string,    // YYYY-MM-DD
+  callback: (expenses: Expense[]) => void
+): () => void {
+  const q = query(
+    collection(db, COLLECTION_NAME),
+    orderBy('date', 'desc')
+  );
+
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    const allExpenses = snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        date: data.date,
+        time: data.time,
+        merchant: data.merchant,
+        amount: data.amount,
+        category: (data.category || 'etc').toLowerCase(),
+        cardType: (data.cardType || 'main').toLowerCase(),
+        cardLastFour: data.cardLastFour,
+        memo: data.memo,
+      } as Expense;
+    });
+
+    const filtered = allExpenses.filter(
+      (e) => e.date >= startDate && e.date <= endDate
+    );
+
+    callback(filtered);
+  }, (error) => {
+    console.error('Firestore subscription error:', error);
+    callback([]);
+  });
+
+  return unsubscribe;
+}
+
+/**
  * 수동 지출 추가
  */
 export async function addManualExpense(
