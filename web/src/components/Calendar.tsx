@@ -3,7 +3,7 @@
 import { useMemo, useRef } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
-import { useCalendarStyle, getCalendarStyleClass } from '@/contexts/CalendarStyleContext';
+import { getCalendarStyleClass } from '@/contexts/CalendarStyleContext';
 
 interface CalendarProps {
   year: number;
@@ -40,8 +40,7 @@ export default function Calendar({
   isLoading,
 }: CalendarProps) {
   const { getCategoryColor } = useCategoryContext();
-  const { calendarStyle } = useCalendarStyle();
-  const styleClass = getCalendarStyleClass(calendarStyle);
+  const styleClass = getCalendarStyleClass();
 
   // 스와이프 제스처 처리
   const touchStartX = useRef<number | null>(null);

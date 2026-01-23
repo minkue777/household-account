@@ -12,7 +12,6 @@ import {
   updateMerchantRule,
   deleteMerchantRule,
 } from '@/lib/merchantRuleService';
-import { useCalendarStyle, CALENDAR_STYLES, CalendarStyle } from '@/contexts/CalendarStyleContext';
 import { useTheme, THEMES } from '@/contexts/ThemeContext';
 
 export default function SettingsPage() {
@@ -27,7 +26,6 @@ export default function SettingsPage() {
     getCategoryColor,
   } = useCategoryContext();
 
-  const { calendarStyle, setCalendarStyle } = useCalendarStyle();
   const { theme, setTheme, themeConfig } = useTheme();
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -36,7 +34,6 @@ export default function SettingsPage() {
   // 섹션 펼침/접힘 상태
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
-  const [isStyleOpen, setIsStyleOpen] = useState(false);
   const [isThemeOpen, setIsThemeOpen] = useState(false);
 
   // 가맹점 규칙 상태
@@ -535,66 +532,6 @@ export default function SettingsPage() {
                     />
                     <div className="font-medium text-slate-800 text-sm">{t.label}</div>
                     <div className="text-xs text-slate-500">{t.description}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 캘린더 스타일 섹션 - 아코디언 */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <button
-            onClick={() => setIsStyleOpen(!isStyleOpen)}
-            className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <div className="text-left">
-                <div className="font-semibold text-slate-800">캘린더 스타일</div>
-                <div className="text-sm text-slate-500">
-                  {CALENDAR_STYLES.find(s => s.key === calendarStyle)?.label || '기본'}
-                </div>
-              </div>
-            </div>
-            <svg
-              className={`w-5 h-5 text-slate-400 transition-transform ${isStyleOpen ? 'rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-
-          {isStyleOpen && (
-            <div className="border-t border-slate-100 p-4">
-              <div className="grid grid-cols-1 gap-3">
-                {CALENDAR_STYLES.map((style) => (
-                  <button
-                    key={style.key}
-                    onClick={() => setCalendarStyle(style.key)}
-                    className={`p-4 rounded-xl border-2 text-left transition-all ${
-                      calendarStyle === style.key
-                        ? 'border-purple-500 bg-purple-50'
-                        : 'border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium text-slate-800">{style.label}</div>
-                        <div className="text-sm text-slate-500">{style.description}</div>
-                      </div>
-                      {calendarStyle === style.key && (
-                        <svg className="w-5 h-5 text-purple-500" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                    </div>
                   </button>
                 ))}
               </div>

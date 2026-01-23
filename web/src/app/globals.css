@@ -104,36 +104,7 @@ body {
   background: #94a3b8;
 }
 
-/* ===== 캘린더 스타일 ===== */
-
-/* 1. Soft Elevation - 부드럽게 떠있는 느낌 */
-.calendar-elevation {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  border-radius: 20px;
-  box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.04),
-    0 6px 12px rgba(0, 0, 0, 0.06),
-    0 12px 24px rgba(0, 0, 0, 0.08),
-    0 24px 48px rgba(0, 0, 0, 0.06),
-    inset 0 2px 0 rgba(255, 255, 255, 1);
-}
-
-/* 2. Pressed Edge - 살짝 눌린 종이 느낌 */
-.calendar-pressed {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 16px;
-  box-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.08),
-    0 4px 12px rgba(0, 0, 0, 0.04),
-    inset 0 2px 4px rgba(0, 0, 0, 0.02),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.8);
-}
-
-/* 3. Glass Depth - 유리판 깊이감 */
+/* ===== 캘린더 스타일 (Glass Depth) ===== */
 .calendar-glass {
   background: linear-gradient(
     180deg,
