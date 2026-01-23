@@ -189,6 +189,7 @@ export default function Home() {
           {/* 선택된 날짜 상세 - 캘린더 바로 아래 */}
           {selectedDate && (
             <ExpenseDetail
+              key={selectedDate}
               date={selectedDate}
               expenses={selectedDateExpenses}
               onCategoryChange={handleCategoryChange}
@@ -268,6 +269,7 @@ export default function Home() {
             {/* 선택된 날짜 상세 */}
             {selectedDate && (
               <ExpenseDetail
+                key={selectedDate}
                 date={selectedDate}
                 expenses={selectedDateExpenses}
                 onCategoryChange={handleCategoryChange}
