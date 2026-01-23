@@ -126,9 +126,9 @@ export default function Home() {
                   또니망고네 가계부
                 </h1>
                 <img
-                  src="/bear.png"
+                  src="/bear-removebg-preview.png"
                   alt="곰돌이"
-                  className="w-10 h-10 md:w-14 md:h-14 object-contain"
+                  className="w-20 h-20 md:w-28 md:h-28 object-contain"
                 />
               </div>
               <p className="text-slate-500 text-sm hidden md:block">우리 가족 지출을 한눈에!</p>
