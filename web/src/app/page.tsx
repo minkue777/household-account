@@ -117,28 +117,28 @@ export default function Home() {
       <div className="max-w-7xl mx-auto">
         {/* 헤더 */}
         <header className="mb-6 flex items-center justify-between">
-          <div className="min-w-0 flex items-center gap-2">
+          <div className="min-w-0 flex items-center gap-1">
             <div>
-              <div className="flex items-center gap-1">
-                <h1
-                  className="text-lg md:text-2xl font-bold truncate"
-                  style={{
-                    background: themeConfig.titleGradient,
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text',
-                  }}
-                >
-                  또니망고네 가계부
-                </h1>
-                <img
-                  src="/bear-removebg-preview.png"
-                  alt="곰돌이"
-                  className="w-12 h-12 md:w-16 md:h-16 object-contain"
-                />
-              </div>
-              <p className="text-slate-500 text-sm hidden md:block">우리 가족 지출을 한눈에!</p>
+              <h1
+                className="text-lg md:text-2xl font-bold leading-tight"
+                style={{
+                  background: themeConfig.titleGradient,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}
+              >
+                또니망고네
+                <br />
+                가계부
+              </h1>
+              <p className="text-slate-500 text-sm hidden md:block mt-1">우리 가족 지출을 한눈에!</p>
             </div>
+            <img
+              src="/bear-removebg-preview.png"
+              alt="곰돌이"
+              className="w-16 h-16 md:w-20 md:h-20 object-contain"
+            />
           </div>
           <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
             <Link
