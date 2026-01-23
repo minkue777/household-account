@@ -20,18 +20,16 @@ const config: Config = {
         slideDown: {
           '0%': {
             opacity: '0',
-            transform: 'translateY(-10px)',
-            maxHeight: '0'
+            transform: 'translateY(-8px) scale(0.98)',
           },
           '100%': {
             opacity: '1',
-            transform: 'translateY(0)',
-            maxHeight: '1000px'
+            transform: 'translateY(0) scale(1)',
           },
         },
       },
       animation: {
-        slideDown: 'slideDown 0.3s ease-out forwards',
+        slideDown: 'slideDown 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards',
       },
     },
   },
