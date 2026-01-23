@@ -62,10 +62,21 @@ export function subscribeToMonthlyExpenses(
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
-    const expenses: Expense[] = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    } as Expense));
+    const expenses: Expense[] = snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        date: data.date,
+        time: data.time,
+        merchant: data.merchant,
+        amount: data.amount,
+        // Android는 대문자로 저장하므로 소문자로 변환
+        category: (data.category || 'etc').toLowerCase(),
+        cardType: (data.cardType || 'main').toLowerCase(),
+        cardLastFour: data.cardLastFour,
+        memo: data.memo,
+      } as Expense;
+    });
     callback(expenses);
   }, (error) => {
     console.error('Firestore subscription error:', error);
