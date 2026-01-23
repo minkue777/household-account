@@ -33,8 +33,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.household.account.data.Category
 import com.household.account.data.Expense
 import com.household.account.ui.theme.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import java.time.LocalDate
 import java.time.YearMonth
+import kotlin.math.cos
+import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,15 +106,7 @@ fun MainScreen(
                 )
             }
 
-            // 카테고리 요약
-            item {
-                CategorySummaryCard(
-                    categoryTotals = viewModel.getCategoryTotals(),
-                    totalAmount = viewModel.getMonthlyTotal()
-                )
-            }
-
-            // 캘린더
+            // 캘린더 (먼저 표시)
             item {
                 CalendarCard(
                     year = uiState.currentYear,
@@ -116,6 +114,22 @@ fun MainScreen(
                     selectedDate = uiState.selectedDate,
                     onDateClick = viewModel::selectDate,
                     getDailyTotal = viewModel::getDailyTotal
+                )
+            }
+
+            // 도넛 차트
+            item {
+                DonutChartCard(
+                    categoryTotals = viewModel.getCategoryTotals(),
+                    totalAmount = viewModel.getMonthlyTotal()
+                )
+            }
+
+            // 카테고리 요약
+            item {
+                CategorySummaryCard(
+                    categoryTotals = viewModel.getCategoryTotals(),
+                    totalAmount = viewModel.getMonthlyTotal()
                 )
             }
 
@@ -223,6 +237,130 @@ fun CategorySummaryCard(
                     percentage = percentage
                 )
                 Spacer(modifier = Modifier.height(12.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun DonutChartCard(
+    categoryTotals: Map<Category, Int>,
+    totalAmount: Int
+) {
+    if (totalAmount == 0) return
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Surface)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "카테고리별 비율",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(200.dp)
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                val sortedCategories = categoryTotals.entries
+                    .sortedByDescending { it.value }
+                    .filter { it.value > 0 }
+
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val strokeWidth = 40f
+                    val radius = (size.minDimension - strokeWidth) / 2
+                    val center = Offset(size.width / 2, size.height / 2)
+
+                    var startAngle = -90f
+
+                    sortedCategories.forEach { (category, amount) ->
+                        val sweepAngle = (amount.toFloat() / totalAmount) * 360f
+                        val color = when (category) {
+                            Category.LIVING -> CategoryLiving
+                            Category.CHILDCARE -> CategoryChildcare
+                            Category.FIXED -> CategoryFixed
+                            Category.FOOD -> CategoryFood
+                            Category.ETC -> CategoryEtc
+                        }
+
+                        drawArc(
+                            color = color,
+                            startAngle = startAngle,
+                            sweepAngle = sweepAngle,
+                            useCenter = false,
+                            topLeft = Offset(center.x - radius, center.y - radius),
+                            size = Size(radius * 2, radius * 2),
+                            style = Stroke(width = strokeWidth)
+                        )
+
+                        startAngle += sweepAngle
+                    }
+                }
+
+                // 중앙 총액
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "총 지출",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                    Text(
+                        text = "${"%,d".format(totalAmount)}원",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            // 범례
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                val sortedCategories = categoryTotals.entries
+                    .sortedByDescending { it.value }
+                    .filter { it.value > 0 }
+
+                sortedCategories.forEach { (category, _) ->
+                    val color = when (category) {
+                        Category.LIVING -> CategoryLiving
+                        Category.CHILDCARE -> CategoryChildcare
+                        Category.FIXED -> CategoryFixed
+                        Category.FOOD -> CategoryFood
+                        Category.ETC -> CategoryEtc
+                    }
+
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(color)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = category.label,
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+                    }
+                }
             }
         }
     }
