@@ -1,6 +1,14 @@
 // 카테고리 타입 - 이제 동적으로 관리됨
 export type Category = string;
 
+// 합쳐진 지출의 원본 정보
+export interface MergedExpenseInfo {
+  merchant: string;
+  amount: number;
+  category: string;
+  memo?: string;
+}
+
 export interface Expense {
   id: string;
   date: string;           // YYYY-MM-DD
@@ -11,6 +19,7 @@ export interface Expense {
   cardType: 'main' | 'family';  // 본인 카드 / 가족 카드
   cardLastFour?: string;  // 카드 마지막 4자리
   memo?: string;          // 메모 (선택)
+  mergedFrom?: MergedExpenseInfo[];  // 합쳐진 원본 지출들 (되돌리기용)
 }
 
 export interface DailyExpenses {

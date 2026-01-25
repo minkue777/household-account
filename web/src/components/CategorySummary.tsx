@@ -77,18 +77,16 @@ export default function CategorySummary({ expenses }: CategorySummaryProps) {
                 </span>
               </div>
             </div>
-            {/* 프로그레스 바 (예산이 있을 때만) */}
-            {hasBudget && (
-              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-300 ${isOverBudget ? 'animate-pulse' : ''}`}
-                  style={{
-                    width: `${percentage}%`,
-                    backgroundColor: isOverBudget ? '#EF4444' : color,
-                  }}
-                />
-              </div>
-            )}
+            {/* 프로그레스 바 */}
+            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${isOverBudget ? 'animate-pulse' : ''}`}
+                style={{
+                  width: `${percentage}%`,
+                  backgroundColor: isOverBudget ? '#EF4444' : color,
+                }}
+              />
+            </div>
             {/* 예산 초과 경고 */}
             {isOverBudget && (
               <div className="flex items-center gap-1 mt-1">

@@ -8,15 +8,16 @@ import { SplitItem } from '@/lib/expenseService';
 interface ExpenseDetailProps {
   date: string;
   expenses: Expense[];
-  onExpenseUpdate?: (expenseId: string, data: { amount?: number; memo?: string; category?: string }) => void;
+  onExpenseUpdate?: (expenseId: string, data: { amount?: number; memo?: string; category?: string; merchant?: string }) => void;
   onSaveMerchantRule?: (merchantName: string, category: string) => void;
   onDelete?: (expenseId: string) => void;
   onAddExpense?: () => void;
   onSplitExpense?: (expense: Expense, splits: SplitItem[]) => void;
   onMergeExpenses?: (targetExpense: Expense, sourceExpense: Expense) => void;
+  onUnmergeExpense?: (expense: Expense) => void;
 }
 
-export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveMerchantRule, onDelete, onAddExpense, onSplitExpense, onMergeExpenses }: ExpenseDetailProps) {
+export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveMerchantRule, onDelete, onAddExpense, onSplitExpense, onMergeExpenses, onUnmergeExpense }: ExpenseDetailProps) {
   const total = expenses.reduce((sum, e) => sum + e.amount, 0);
 
   // 날짜 포맷팅
@@ -80,6 +81,7 @@ export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveM
             onDelete={onDelete}
             onSplitExpense={onSplitExpense}
             onMergeExpenses={onMergeExpenses}
+            onUnmergeExpense={onUnmergeExpense}
           />
         ))}
       </div>
@@ -90,14 +92,15 @@ export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveM
 interface ExpenseItemProps {
   expense: Expense;
   allExpenses: Expense[];
-  onExpenseUpdate?: (expenseId: string, data: { amount?: number; memo?: string; category?: string }) => void;
+  onExpenseUpdate?: (expenseId: string, data: { amount?: number; memo?: string; category?: string; merchant?: string }) => void;
   onSaveMerchantRule?: (merchantName: string, category: string) => void;
   onDelete?: (expenseId: string) => void;
   onSplitExpense?: (expense: Expense, splits: SplitItem[]) => void;
   onMergeExpenses?: (targetExpense: Expense, sourceExpense: Expense) => void;
+  onUnmergeExpense?: (expense: Expense) => void;
 }
 
-function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule, onDelete, onSplitExpense, onMergeExpenses }: ExpenseItemProps) {
+function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule, onDelete, onSplitExpense, onMergeExpenses, onUnmergeExpense }: ExpenseItemProps) {
   const { activeCategories, getCategoryLabel, getCategoryColor } = useCategoryContext();
 
   const [showEditModal, setShowEditModal] = useState(false);
@@ -106,6 +109,7 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
   const [isDragOver, setIsDragOver] = useState(false);
 
   // 편집 폼 상태
+  const [editMerchant, setEditMerchant] = useState(expense.merchant);
   const [editAmount, setEditAmount] = useState(expense.amount.toString());
   const [editMemo, setEditMemo] = useState(expense.memo || '');
   const [editCategory, setEditCategory] = useState(expense.category);
@@ -235,6 +239,7 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
   };
 
   const handleOpenEdit = () => {
+    setEditMerchant(expense.merchant);
     setEditAmount(expense.amount.toString());
     setEditMemo(expense.memo || '');
     setEditCategory(expense.category);
@@ -247,9 +252,13 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
 
     const newAmount = parseInt(editAmount, 10);
     if (isNaN(newAmount) || newAmount <= 0) return;
+    if (!editMerchant.trim()) return;
 
-    const updates: { amount?: number; memo?: string; category?: string } = {};
+    const updates: { amount?: number; memo?: string; category?: string; merchant?: string } = {};
 
+    if (editMerchant.trim() !== expense.merchant) {
+      updates.merchant = editMerchant.trim();
+    }
     if (newAmount !== expense.amount) {
       updates.amount = newAmount;
     }
@@ -266,7 +275,7 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
 
     // 카테고리가 변경되었고 기억하기 체크했으면 규칙 저장
     if (editCategory !== expense.category && rememberMerchant && onSaveMerchantRule) {
-      onSaveMerchantRule(expense.merchant, editCategory);
+      onSaveMerchantRule(editMerchant.trim(), editCategory);
     }
 
     setShowEditModal(false);
@@ -342,14 +351,17 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
             </h3>
 
             <div className="space-y-4">
-              {/* 가맹점명 (읽기 전용) */}
+              {/* 가맹점명 */}
               <div>
-                <label className="block text-sm font-medium text-slate-500 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   가맹점
                 </label>
-                <div className="px-3 py-2 bg-slate-100 rounded-lg text-slate-700">
-                  {expense.merchant}
-                </div>
+                <input
+                  type="text"
+                  value={editMerchant}
+                  onChange={(e) => setEditMerchant(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
 
               {/* 금액 */}
@@ -433,6 +445,39 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
                 </label>
               )}
             </div>
+
+            {/* 합쳐진 지출 되돌리기 */}
+            {expense.mergedFrom && expense.mergedFrom.length > 0 && onUnmergeExpense && (
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-sm font-medium text-amber-800">
+                    {expense.mergedFrom.length}개의 지출이 합쳐진 항목입니다
+                  </span>
+                </div>
+                <div className="text-xs text-amber-700 mb-2 space-y-1">
+                  {expense.mergedFrom.map((item, idx) => (
+                    <div key={idx}>• {item.merchant} {item.amount.toLocaleString()}원</div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => {
+                    if (confirm('합치기를 되돌리면 원래 지출들이 복원됩니다. 진행하시겠습니까?')) {
+                      onUnmergeExpense(expense);
+                      setShowEditModal(false);
+                    }
+                  }}
+                  className="w-full py-2 px-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                  </svg>
+                  합치기 되돌리기
+                </button>
+              </div>
+            )}
 
             {/* 나누기 버튼 */}
             {onSplitExpense && (

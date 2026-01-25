@@ -12,7 +12,7 @@ import {
   getDocs,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Expense } from '@/types/expense';
+import { Expense, MergedExpenseInfo } from '@/types/expense';
 
 const COLLECTION_NAME = 'expenses';
 
@@ -74,6 +74,7 @@ export function subscribeToMonthlyExpenses(
         cardType: (data.cardType || 'main').toLowerCase(),
         cardLastFour: data.cardLastFour,
         memo: data.memo,
+        mergedFrom: data.mergedFrom,
       } as Expense;
     });
 
@@ -125,6 +126,7 @@ export function subscribeToDateRangeExpenses(
         cardType: (data.cardType || 'main').toLowerCase(),
         cardLastFour: data.cardLastFour,
         memo: data.memo,
+        mergedFrom: data.mergedFrom,
       } as Expense;
     });
 
@@ -242,6 +244,7 @@ export async function splitExpense(
 /**
  * 지출 합치기
  * 소스 지출을 타겟 지출에 합침 (타겟의 가맹점명, 카테고리 유지)
+ * 원본 정보를 저장하여 되돌리기 가능
  */
 export async function mergeExpenses(
   targetExpense: Expense,
@@ -250,8 +253,61 @@ export async function mergeExpenses(
   // 타겟 지출의 금액을 합산
   const newAmount = targetExpense.amount + sourceExpense.amount;
 
-  await updateExpense(targetExpense.id, { amount: newAmount });
+  // 원본 정보 저장 (되돌리기용)
+  const existingMerged = targetExpense.mergedFrom || [];
+  const mergedFrom: MergedExpenseInfo[] = [
+    ...existingMerged,
+    // 타겟이 아직 합쳐진 적 없으면 타겟 정보도 저장
+    ...(existingMerged.length === 0 ? [{
+      merchant: targetExpense.merchant,
+      amount: targetExpense.amount,
+      category: targetExpense.category,
+      memo: targetExpense.memo,
+    }] : []),
+    // 소스 정보 저장
+    {
+      merchant: sourceExpense.merchant,
+      amount: sourceExpense.amount,
+      category: sourceExpense.category,
+      memo: sourceExpense.memo,
+    },
+  ];
+
+  await updateExpense(targetExpense.id, { amount: newAmount, mergedFrom });
 
   // 소스 지출 삭제
   await deleteExpense(sourceExpense.id);
+}
+
+/**
+ * 합쳐진 지출 되돌리기
+ * 원본 지출들을 다시 생성하고 합쳐진 지출 삭제
+ */
+export async function unmergeExpense(expense: Expense): Promise<string[]> {
+  if (!expense.mergedFrom || expense.mergedFrom.length === 0) {
+    return [];
+  }
+
+  const newIds: string[] = [];
+
+  // 원본 지출들 다시 생성
+  for (const original of expense.mergedFrom) {
+    const docRef = await addDoc(collection(db, COLLECTION_NAME), {
+      date: expense.date,
+      time: expense.time,
+      merchant: original.merchant,
+      amount: original.amount,
+      category: original.category,
+      cardType: expense.cardType,
+      cardLastFour: expense.cardLastFour,
+      memo: original.memo || '',
+      createdAt: Timestamp.now(),
+    });
+    newIds.push(docRef.id);
+  }
+
+  // 합쳐진 지출 삭제
+  await deleteExpense(expense.id);
+
+  return newIds;
 }
