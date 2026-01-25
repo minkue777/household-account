@@ -8,7 +8,6 @@ import {
   where,
   getDocs,
   onSnapshot,
-  writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -114,28 +113,4 @@ export function subscribeToRules(
   );
 
   return unsubscribe;
-}
-
-// householdId가 없는 가맹점 규칙에 householdId 추가 (마이그레이션)
-export async function migrateRulesWithoutHouseholdId(householdId: string): Promise<number> {
-  if (!householdId) return 0;
-
-  const snapshot = await getDocs(collection(db, COLLECTION_NAME));
-  const batch = writeBatch(db);
-  let count = 0;
-
-  snapshot.docs.forEach((docSnap) => {
-    const data = docSnap.data();
-    if (!data.householdId) {
-      batch.update(docSnap.ref, { householdId });
-      count++;
-    }
-  });
-
-  if (count > 0) {
-    await batch.commit();
-    console.log(`${count}개의 가맹점 규칙에 householdId 추가됨`);
-  }
-
-  return count;
 }

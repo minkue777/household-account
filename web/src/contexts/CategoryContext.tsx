@@ -11,10 +11,7 @@ import {
   setBudget as setBudgetService,
   reorderCategories as reorderCategoriesService,
   generateCategoryKey,
-  migrateCategoriesWithoutHouseholdId,
 } from '@/lib/categoryService';
-import { migrateRulesWithoutHouseholdId } from '@/lib/merchantRuleService';
-import { fixInvalidCategories } from '@/lib/expenseService';
 import { getStoredHouseholdKey } from '@/lib/householdService';
 
 interface CategoryContextType {
@@ -48,7 +45,6 @@ const UNKNOWN_CATEGORY = {
 export function CategoryProvider({ children }: { children: React.ReactNode }) {
   const [categories, setCategories] = useState<CategoryDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [hasMigrated, setHasMigrated] = useState(false);
   const [householdId, setHouseholdId] = useState<string>('');
 
   // householdId 가져오기 (없으면 'guest' 사용)
@@ -76,10 +72,6 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
     let unsubscribe: (() => void) | undefined;
 
     async function initialize() {
-      // householdId가 없는 기존 데이터 마이그레이션 (한 번만 실행됨)
-      await migrateCategoriesWithoutHouseholdId(householdId);
-      await migrateRulesWithoutHouseholdId(householdId);
-
       // 기본 카테고리 초기화 (첫 실행 시에만, householdId별로)
       await initializeDefaultCategories(householdId);
 
@@ -98,19 +90,6 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
       }
     };
   }, [householdId]);
-
-  // 잘못된 카테고리 자동 수정 (한 번만 실행)
-  useEffect(() => {
-    if (!isLoading && categories.length > 0 && !hasMigrated) {
-      const validKeys = categories.map(c => c.key);
-      fixInvalidCategories(validKeys).then((count) => {
-        if (count > 0) {
-          console.log(`${count}개의 잘못된 카테고리가 수정되었습니다.`);
-        }
-        setHasMigrated(true);
-      });
-    }
-  }, [isLoading, categories, hasMigrated]);
 
   // 카테고리 조회 헬퍼
   const getCategoryByKey = useCallback(

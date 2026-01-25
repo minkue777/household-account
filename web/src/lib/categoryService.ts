@@ -143,30 +143,6 @@ export function generateCategoryKey(): string {
   return `custom_${Date.now()}`;
 }
 
-// householdId가 없는 카테고리에 householdId 추가 (마이그레이션)
-export async function migrateCategoriesWithoutHouseholdId(householdId: string): Promise<number> {
-  if (!householdId) return 0;
-
-  const snapshot = await getDocs(categoriesRef);
-  const batch = writeBatch(db);
-  let count = 0;
-
-  snapshot.docs.forEach((docSnap) => {
-    const data = docSnap.data();
-    if (!data.householdId) {
-      batch.update(docSnap.ref, { householdId });
-      count++;
-    }
-  });
-
-  if (count > 0) {
-    await batch.commit();
-    console.log(`${count}개의 카테고리에 householdId 추가됨`);
-  }
-
-  return count;
-}
-
 // 사전 정의된 색상 팔레트
 export const COLOR_PALETTE = [
   '#4ADE80', // Green
