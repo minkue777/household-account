@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
-import { CategoryProvider } from '@/contexts/CategoryContext'
-import { CalendarStyleProvider } from '@/contexts/CalendarStyleContext'
-import { ThemeProvider } from '@/contexts/ThemeContext'
+import AppProviders from '@/components/AppProviders'
 
 export const metadata: Metadata = {
   title: '또니망고네 가계부',
@@ -37,13 +35,9 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
       </head>
       <body className="min-h-screen">
-        <ThemeProvider>
-          <CalendarStyleProvider>
-            <CategoryProvider>
-              {children}
-            </CategoryProvider>
-          </CalendarStyleProvider>
-        </ThemeProvider>
+        <AppProviders>
+          {children}
+        </AppProviders>
       </body>
     </html>
   )

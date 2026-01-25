@@ -13,15 +13,29 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Expense, MergedExpenseInfo } from '@/types/expense';
+import { getStoredHouseholdKey } from './householdService';
 
 const COLLECTION_NAME = 'expenses';
+
+/**
+ * 현재 가구 키 가져오기
+ */
+function getHouseholdId(): string {
+  const key = getStoredHouseholdKey();
+  if (!key) {
+    throw new Error('가구 키가 없습니다. 다시 로그인해주세요.');
+  }
+  return key;
+}
 
 /**
  * 지출 추가
  */
 export async function addExpense(expense: Omit<Expense, 'id'>): Promise<string> {
+  const householdId = getHouseholdId();
   const docRef = await addDoc(collection(db, COLLECTION_NAME), {
     ...expense,
+    householdId,
     createdAt: Timestamp.now(),
   });
   return docRef.id;
@@ -51,12 +65,14 @@ export function subscribeToMonthlyExpenses(
   month: number,
   callback: (expenses: Expense[]) => void
 ): () => void {
+  const householdId = getHouseholdId();
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
 
-  // 단순 쿼리 (인덱스 불필요) - 클라이언트에서 필터링
+  // householdId로 필터링
   const q = query(
     collection(db, COLLECTION_NAME),
+    where('householdId', '==', householdId),
     orderBy('date', 'desc')
   );
 
@@ -108,8 +124,11 @@ export function subscribeToDateRangeExpenses(
   endDate: string,    // YYYY-MM-DD
   callback: (expenses: Expense[]) => void
 ): () => void {
+  const householdId = getHouseholdId();
+
   const q = query(
     collection(db, COLLECTION_NAME),
+    where('householdId', '==', householdId),
     orderBy('date', 'desc')
   );
 
@@ -153,6 +172,7 @@ export async function addManualExpense(
   date: string,
   memo?: string
 ): Promise<string> {
+  const householdId = getHouseholdId();
   const now = new Date();
   const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
@@ -165,6 +185,7 @@ export async function addManualExpense(
     cardType: 'main',
     cardLastFour: '수동',
     memo: memo || '',
+    householdId,
     createdAt: Timestamp.now(),
   });
   return docRef.id;
@@ -176,13 +197,17 @@ export async function addManualExpense(
 export async function fixInvalidCategories(
   validCategories: string[]
 ): Promise<number> {
+  const householdId = getHouseholdId();
   const categoryMap: Record<string, string> = {
     'baby': 'childcare',
     'transport': 'living',
     'medical': 'living',
   };
 
-  const q = query(collection(db, COLLECTION_NAME));
+  const q = query(
+    collection(db, COLLECTION_NAME),
+    where('householdId', '==', householdId)
+  );
   const snapshot = await getDocs(q);
 
   let fixedCount = 0;
@@ -217,6 +242,7 @@ export async function splitExpense(
   originalExpense: Expense,
   splits: SplitItem[]
 ): Promise<string[]> {
+  const householdId = getHouseholdId();
   const newIds: string[] = [];
 
   // 원본 지출 삭제
@@ -233,6 +259,7 @@ export async function splitExpense(
       cardType: originalExpense.cardType,
       cardLastFour: originalExpense.cardLastFour,
       memo: split.memo || '',
+      householdId,
       createdAt: Timestamp.now(),
     });
     newIds.push(docRef.id);
@@ -288,6 +315,7 @@ export async function unmergeExpense(expense: Expense): Promise<string[]> {
     return [];
   }
 
+  const householdId = getHouseholdId();
   const newIds: string[] = [];
 
   // 원본 지출들 다시 생성
@@ -301,6 +329,7 @@ export async function unmergeExpense(expense: Expense): Promise<string[]> {
       cardType: expense.cardType,
       cardLastFour: expense.cardLastFour,
       memo: original.memo || '',
+      householdId,
       createdAt: Timestamp.now(),
     });
     newIds.push(docRef.id);
@@ -321,8 +350,11 @@ export async function searchExpenses(keyword: string): Promise<Expense[]> {
     return [];
   }
 
+  const householdId = getHouseholdId();
+
   const q = query(
     collection(db, COLLECTION_NAME),
+    where('householdId', '==', householdId),
     orderBy('date', 'desc')
   );
 
