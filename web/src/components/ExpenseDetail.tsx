@@ -16,9 +16,11 @@ interface ExpenseDetailProps {
   onSplitExpense?: (expense: Expense, splits: SplitItem[]) => void;
   onMergeExpenses?: (targetExpense: Expense, sourceExpense: Expense) => void;
   onUnmergeExpense?: (expense: Expense) => void;
+  autoEditExpenseId?: string | null;
+  onAutoEditHandled?: () => void;
 }
 
-export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveMerchantRule, onDelete, onAddExpense, onSplitExpense, onMergeExpenses, onUnmergeExpense }: ExpenseDetailProps) {
+export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveMerchantRule, onDelete, onAddExpense, onSplitExpense, onMergeExpenses, onUnmergeExpense, autoEditExpenseId, onAutoEditHandled }: ExpenseDetailProps) {
   const total = expenses.reduce((sum, e) => sum + e.amount, 0);
 
   // 터치 드래그 상태
@@ -155,6 +157,9 @@ export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveM
             findItemAtPosition={findItemAtPosition}
             handleTouchDragEnd={handleTouchDragEnd}
             registerItemRef={registerItemRef}
+            // 자동 편집 모달 열기
+            autoEdit={autoEditExpenseId === expense.id}
+            onAutoEditHandled={onAutoEditHandled}
           />
         ))}
       </div>
@@ -179,6 +184,9 @@ interface ExpenseItemProps {
   findItemAtPosition: (x: number, y: number) => string | null;
   handleTouchDragEnd: (sourceId: string, targetId: string | null) => void;
   registerItemRef: (id: string, element: HTMLDivElement | null) => void;
+  // 자동 편집 모달 열기
+  autoEdit?: boolean;
+  onAutoEditHandled?: () => void;
 }
 
 function ExpenseItem({
@@ -197,10 +205,20 @@ function ExpenseItem({
   findItemAtPosition,
   handleTouchDragEnd,
   registerItemRef,
+  autoEdit,
+  onAutoEditHandled,
 }: ExpenseItemProps) {
   const { activeCategories, getCategoryLabel, getCategoryColor } = useCategoryContext();
 
   const [showEditModal, setShowEditModal] = useState(false);
+
+  // 자동 편집 모달 열기 (푸시 알림 클릭 시)
+  useEffect(() => {
+    if (autoEdit && !showEditModal) {
+      handleOpenEdit();
+      onAutoEditHandled?.();
+    }
+  }, [autoEdit]);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showSplitModal, setShowSplitModal] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);

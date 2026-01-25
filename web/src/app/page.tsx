@@ -72,13 +72,17 @@ export default function Home() {
     }
   }, [searchParams, router]);
 
+  // 자동 편집할 expense ID (ExpenseDetail에 전달)
+  const [autoEditExpenseId, setAutoEditExpenseId] = useState<string | null>(null);
+
   // 편집할 지출 찾아서 해당 날짜로 이동
   useEffect(() => {
     if (editExpenseId && expenses.length > 0) {
       const expense = expenses.find(e => e.id === editExpenseId);
       if (expense) {
-        // 해당 지출의 날짜 선택
+        // 해당 지출의 날짜 선택하고 자동 편집 모달 열기
         setSelectedDate(expense.date);
+        setAutoEditExpenseId(editExpenseId);
         setEditExpenseId(null);
       } else {
         // 현재 월에 없으면 전체 검색 필요 - 일단 검색 모달 열기
@@ -330,6 +334,8 @@ export default function Home() {
               onSplitExpense={handleSplitExpense}
               onMergeExpenses={handleMergeExpenses}
               onUnmergeExpense={handleUnmergeExpense}
+              autoEditExpenseId={autoEditExpenseId}
+              onAutoEditHandled={() => setAutoEditExpenseId(null)}
             />
           )}
 
@@ -421,6 +427,8 @@ export default function Home() {
                 onSplitExpense={handleSplitExpense}
                 onMergeExpenses={handleMergeExpenses}
                 onUnmergeExpense={handleUnmergeExpense}
+                autoEditExpenseId={autoEditExpenseId}
+                onAutoEditHandled={() => setAutoEditExpenseId(null)}
               />
             )}
           </div>
