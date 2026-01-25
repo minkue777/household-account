@@ -262,14 +262,14 @@ export async function mergeExpenses(
       merchant: targetExpense.merchant,
       amount: targetExpense.amount,
       category: targetExpense.category,
-      memo: targetExpense.memo,
+      memo: targetExpense.memo || '',
     }] : []),
     // 소스 정보 저장
     {
       merchant: sourceExpense.merchant,
       amount: sourceExpense.amount,
       category: sourceExpense.category,
-      memo: sourceExpense.memo,
+      memo: sourceExpense.memo || '',
     },
   ];
 
