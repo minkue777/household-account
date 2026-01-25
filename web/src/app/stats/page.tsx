@@ -5,7 +5,8 @@ import Link from 'next/link';
 import DonutChart from '@/components/DonutChart';
 import MonthlyTrendChart from '@/components/MonthlyTrendChart';
 import { Expense, Category } from '@/types/expense';
-import { subscribeToDateRangeExpenses } from '@/lib/expenseService';
+import { subscribeToDateRangeExpenses, updateExpense, deleteExpense } from '@/lib/expenseService';
+import { addMerchantRule } from '@/lib/merchantRuleService';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 
 // 기간 프리셋
@@ -21,7 +22,15 @@ export default function StatsPage() {
   // 카테고리 상세 모달 상태
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [selectedCategoryExpenses, setSelectedCategoryExpenses] = useState<Expense[]>([]);
-  const { getCategoryLabel, getCategoryColor } = useCategoryContext();
+  const { activeCategories, getCategoryLabel, getCategoryColor } = useCategoryContext();
+
+  // 지출 수정 모달 상태
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [editAmount, setEditAmount] = useState('');
+  const [editMemo, setEditMemo] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [rememberMerchant, setRememberMerchant] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const handleCategoryClick = (category: Category, categoryExpenses: Expense[]) => {
     setSelectedCategory(category);
@@ -29,6 +38,75 @@ export default function StatsPage() {
     setSelectedCategoryExpenses(
       [...categoryExpenses].sort((a, b) => b.date.localeCompare(a.date))
     );
+  };
+
+  // 지출 수정 모달 열기
+  const handleOpenEdit = (expense: Expense) => {
+    setEditingExpense(expense);
+    setEditAmount(expense.amount.toString());
+    setEditMemo(expense.memo || '');
+    setEditCategory(expense.category);
+    setRememberMerchant(false);
+  };
+
+  // 지출 수정 저장
+  const handleSaveEdit = async () => {
+    if (!editingExpense) return;
+
+    const newAmount = parseInt(editAmount, 10);
+    if (isNaN(newAmount) || newAmount <= 0) return;
+
+    const updates: { amount?: number; memo?: string; category?: string } = {};
+
+    if (newAmount !== editingExpense.amount) {
+      updates.amount = newAmount;
+    }
+    if (editMemo !== (editingExpense.memo || '')) {
+      updates.memo = editMemo;
+    }
+    if (editCategory !== editingExpense.category) {
+      updates.category = editCategory;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      try {
+        await updateExpense(editingExpense.id, updates);
+
+        // 카테고리가 변경되었고 기억하기 체크했으면 규칙 저장
+        if (editCategory !== editingExpense.category && rememberMerchant) {
+          await addMerchantRule(editingExpense.merchant, editCategory, true);
+        }
+
+        // 카테고리가 변경되면 현재 모달의 리스트에서 제거
+        if (editCategory !== editingExpense.category) {
+          setSelectedCategoryExpenses(prev =>
+            prev.filter(e => e.id !== editingExpense.id)
+          );
+        }
+      } catch (error) {
+        console.error('지출 수정 실패:', error);
+      }
+    }
+
+    setEditingExpense(null);
+  };
+
+  // 지출 삭제
+  const handleDeleteExpense = async () => {
+    if (!editingExpense) return;
+
+    try {
+      await deleteExpense(editingExpense.id);
+      // 리스트에서 제거
+      setSelectedCategoryExpenses(prev =>
+        prev.filter(e => e.id !== editingExpense.id)
+      );
+    } catch (error) {
+      console.error('지출 삭제 실패:', error);
+    }
+
+    setShowDeleteDialog(false);
+    setEditingExpense(null);
   };
 
   // 날짜 범위 계산
@@ -284,7 +362,8 @@ export default function StatsPage() {
                 {selectedCategoryExpenses.map((expense) => (
                   <div
                     key={expense.id}
-                    className="flex items-center justify-between p-3 bg-slate-50 rounded-xl"
+                    onClick={() => handleOpenEdit(expense)}
+                    className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="font-medium text-slate-800 truncate">
@@ -301,6 +380,177 @@ export default function StatsPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 지출 수정 모달 */}
+      {editingExpense && !showDeleteDialog && (
+        <div
+          className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
+          onClick={() => setEditingExpense(null)}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-slate-800 mb-4">
+              지출 수정
+            </h3>
+
+            <div className="space-y-4">
+              {/* 가맹점명 (읽기 전용) */}
+              <div>
+                <label className="block text-sm font-medium text-slate-500 mb-1">
+                  가맹점
+                </label>
+                <div className="px-3 py-2 bg-slate-100 rounded-lg text-slate-700">
+                  {editingExpense.merchant}
+                </div>
+              </div>
+
+              {/* 날짜 (읽기 전용) */}
+              <div>
+                <label className="block text-sm font-medium text-slate-500 mb-1">
+                  날짜
+                </label>
+                <div className="px-3 py-2 bg-slate-100 rounded-lg text-slate-700">
+                  {editingExpense.date}
+                </div>
+              </div>
+
+              {/* 금액 */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  금액
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={editAmount}
+                    onChange={(e) => setEditAmount(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                    원
+                  </span>
+                </div>
+              </div>
+
+              {/* 카테고리 */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  카테고리
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {activeCategories.map((cat) => (
+                    <button
+                      key={cat.key}
+                      type="button"
+                      onClick={() => setEditCategory(cat.key)}
+                      className={`flex flex-col items-center p-2 rounded-lg border-2 transition-colors min-w-[56px] ${
+                        editCategory === cat.key
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div
+                        className="w-6 h-6 rounded-full mb-1"
+                        style={{ backgroundColor: cat.color }}
+                      />
+                      <span className="text-xs text-slate-700">
+                        {cat.label.slice(0, 2)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 메모 */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  메모
+                </label>
+                <input
+                  type="text"
+                  value={editMemo}
+                  onChange={(e) => setEditMemo(e.target.value)}
+                  placeholder="메모 입력 (선택)"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* 가맹점 기억하기 (카테고리 변경시에만 표시) */}
+              {editCategory !== editingExpense.category && (
+                <label className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rememberMerchant}
+                    onChange={(e) => setRememberMerchant(e.target.checked)}
+                    className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-slate-700">
+                      이 가맹점 기억하기
+                    </span>
+                    <p className="text-xs text-slate-500">
+                      다음에 &quot;{editingExpense.merchant}&quot;에서 결제하면 자동으로 {getCategoryLabel(editCategory)}(으)로 분류
+                    </p>
+                  </div>
+                </label>
+              )}
+            </div>
+
+            {/* 삭제 버튼 */}
+            <button
+              onClick={() => setShowDeleteDialog(true)}
+              className="w-full py-2 px-4 border border-red-300 text-red-500 rounded-lg hover:bg-red-50 transition-colors mt-4"
+            >
+              삭제
+            </button>
+
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={() => setEditingExpense(null)}
+                className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 삭제 확인 다이얼로그 */}
+      {showDeleteDialog && editingExpense && (
+        <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center z-[70]">
+          <div className="bg-white rounded-2xl p-6 m-4 max-w-sm w-full shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-800 mb-3">
+              삭제 확인
+            </h3>
+            <p className="text-slate-600 mb-6">
+              &quot;{editingExpense.merchant}&quot; {editingExpense.amount.toLocaleString()}원을 삭제하시겠습니까?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteDialog(false)}
+                className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleDeleteExpense}
+                className="flex-1 py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+              >
+                삭제
+              </button>
             </div>
           </div>
         </div>
