@@ -148,7 +148,8 @@ export async function addManualExpense(
   merchant: string,
   amount: number,
   category: string,
-  date: string
+  date: string,
+  memo?: string
 ): Promise<string> {
   const now = new Date();
   const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -161,7 +162,7 @@ export async function addManualExpense(
     category,
     cardType: 'main',
     cardLastFour: '수동',
-    memo: '',
+    memo: memo || '',
     createdAt: Timestamp.now(),
   });
   return docRef.id;
@@ -207,6 +208,7 @@ export interface SplitItem {
   merchant: string;
   amount: number;
   category: string;
+  memo?: string;
 }
 
 export async function splitExpense(
@@ -228,7 +230,7 @@ export async function splitExpense(
       category: split.category,
       cardType: originalExpense.cardType,
       cardLastFour: originalExpense.cardLastFour,
-      memo: '',
+      memo: split.memo || '',
       createdAt: Timestamp.now(),
     });
     newIds.push(docRef.id);

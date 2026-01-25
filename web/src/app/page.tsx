@@ -93,9 +93,9 @@ export default function Home() {
   };
 
   // 수동 지출 추가 핸들러
-  const handleAddExpense = async (merchant: string, amount: number, category: string, date: string) => {
+  const handleAddExpense = async (merchant: string, amount: number, category: string, date: string, memo?: string) => {
     try {
-      await addManualExpense(merchant, amount, category, date);
+      await addManualExpense(merchant, amount, category, date, memo);
       console.log('지출 추가 성공:', merchant, amount);
     } catch (error) {
       console.error('지출 추가 실패:', error);

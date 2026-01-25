@@ -113,8 +113,8 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
 
   // 분할 폼 상태
   const [splits, setSplits] = useState<SplitItem[]>([
-    { merchant: expense.merchant, amount: Math.floor(expense.amount / 2), category: expense.category },
-    { merchant: expense.merchant, amount: expense.amount - Math.floor(expense.amount / 2), category: expense.category },
+    { merchant: expense.merchant, amount: Math.floor(expense.amount / 2), category: expense.category, memo: '' },
+    { merchant: expense.merchant, amount: expense.amount - Math.floor(expense.amount / 2), category: expense.category, memo: '' },
   ]);
 
   const expenseColor = getCategoryColor(expense.category);
@@ -155,8 +155,8 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
   // 분할 모달 열기
   const handleOpenSplit = () => {
     setSplits([
-      { merchant: expense.merchant, amount: Math.floor(expense.amount / 2), category: expense.category },
-      { merchant: expense.merchant, amount: expense.amount - Math.floor(expense.amount / 2), category: expense.category },
+      { merchant: expense.merchant, amount: Math.floor(expense.amount / 2), category: expense.category, memo: '' },
+      { merchant: expense.merchant, amount: expense.amount - Math.floor(expense.amount / 2), category: expense.category, memo: '' },
     ]);
     setSplitAmountInputs({});
     setShowEditModal(false);
@@ -167,7 +167,7 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
   const handleAddSplit = () => {
     const totalUsed = splits.reduce((sum, s) => sum + s.amount, 0);
     const remaining = Math.max(0, expense.amount - totalUsed);
-    setSplits([...splits, { merchant: expense.merchant, amount: remaining, category: expense.category }]);
+    setSplits([...splits, { merchant: expense.merchant, amount: remaining, category: expense.category, memo: '' }]);
   };
 
   // 분할 항목 삭제
@@ -601,6 +601,18 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  {/* 메모 */}
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">메모 (선택)</label>
+                    <input
+                      type="text"
+                      value={split.memo || ''}
+                      onChange={(e) => handleUpdateSplit(index, 'memo', e.target.value)}
+                      placeholder="메모 입력"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
                   </div>
                 </div>
               ))}

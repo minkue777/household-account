@@ -6,7 +6,7 @@ import { useCategoryContext } from '@/contexts/CategoryContext';
 interface AddExpenseModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (merchant: string, amount: number, category: string, date: string) => void;
+  onAdd: (merchant: string, amount: number, category: string, date: string, memo?: string) => void;
   selectedDate?: string | null;
 }
 
@@ -22,6 +22,7 @@ export default function AddExpenseModal({
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<string>('etc');
   const [date, setDate] = useState(selectedDate || new Date().toISOString().split('T')[0]);
+  const [memo, setMemo] = useState('');
 
   // 활성 카테고리가 로드되면 첫 번째 카테고리를 기본값으로 설정
   useEffect(() => {
@@ -33,11 +34,12 @@ export default function AddExpenseModal({
   const handleSubmit = () => {
     const amountNum = parseInt(amount, 10);
     if (merchant.trim() && amountNum > 0) {
-      onAdd(merchant.trim(), amountNum, category, date);
+      onAdd(merchant.trim(), amountNum, category, date, memo.trim() || undefined);
       // 폼 초기화
       setMerchant('');
       setAmount('');
       setCategory(activeCategories[0]?.key || 'etc');
+      setMemo('');
       onClose();
     }
   };
@@ -128,6 +130,20 @@ export default function AddExpenseModal({
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* 메모 */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              메모 (선택)
+            </label>
+            <input
+              type="text"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              placeholder="메모 입력"
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
