@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Calendar from '@/components/Calendar';
 import CategorySummary from '@/components/CategorySummary';
@@ -17,6 +18,9 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 
 export default function Home() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
   const [currentYear, setCurrentYear] = useState(2026);
   const [currentMonth, setCurrentMonth] = useState(1);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -27,6 +31,7 @@ export default function Home() {
   const [showBudgetTransferModal, setShowBudgetTransferModal] = useState(false);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   const [budgetTransfers, setBudgetTransfers] = useState<BudgetTransfer[]>([]);
+  const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
   const { themeConfig } = useTheme();
   const { getCategoryLabel, getCategoryColor, getCategoryBudget } = useCategoryContext();
 
@@ -56,6 +61,32 @@ export default function Home() {
     const unsubscribe = subscribeToMonthlyBudgetTransfers(yearMonth, setBudgetTransfers);
     return () => unsubscribe();
   }, [currentYear, currentMonth]);
+
+  // URL에서 edit 파라미터 처리 (푸시 알림 클릭 시)
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (editId) {
+      setEditExpenseId(editId);
+      // URL에서 edit 파라미터 제거
+      router.replace('/', { scroll: false });
+    }
+  }, [searchParams, router]);
+
+  // 편집할 지출 찾아서 해당 날짜로 이동
+  useEffect(() => {
+    if (editExpenseId && expenses.length > 0) {
+      const expense = expenses.find(e => e.id === editExpenseId);
+      if (expense) {
+        // 해당 지출의 날짜 선택
+        setSelectedDate(expense.date);
+        setEditExpenseId(null);
+      } else {
+        // 현재 월에 없으면 전체 검색 필요 - 일단 검색 모달 열기
+        setShowSearchModal(true);
+        setEditExpenseId(null);
+      }
+    }
+  }, [editExpenseId, expenses]);
 
   // 예산 조정값 계산
   const budgetAdjustments = useMemo(() => {
