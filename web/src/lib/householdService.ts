@@ -18,13 +18,18 @@ export interface Household {
 const householdsCollection = collection(db, 'households');
 
 /**
- * 랜덤 키 생성 (예: BEAR-1234)
+ * 랜덤 키 생성 (예: HH-7X3M-9PLQ-2WBN)
  */
 function generateKey(): string {
-  const words = ['BEAR', 'TONI', 'MANGO', 'STAR', 'MOON', 'SUN', 'CLOUD', 'TREE', 'LEAF', 'BIRD'];
-  const word = words[Math.floor(Math.random() * words.length)];
-  const num = Math.floor(1000 + Math.random() * 9000);
-  return `${word}-${num}`;
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 문자 제외 (0,O,1,I)
+  const segment = () => {
+    let result = '';
+    for (let i = 0; i < 4; i++) {
+      result += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return result;
+  };
+  return `HH-${segment()}-${segment()}-${segment()}`;
 }
 
 /**
