@@ -22,7 +22,7 @@ export default function Home() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   const { themeConfig } = useTheme();
-  const { getCategoryLabel, getCategoryColor } = useCategoryContext();
+  const { getCategoryLabel, getCategoryColor, getCategoryBudget } = useCategoryContext();
 
   // 카테고리 상세 모달 상태
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
@@ -355,9 +355,23 @@ export default function Home() {
                     <h3 className="text-lg font-semibold text-slate-800">
                       {getCategoryLabel(selectedCategory)}
                     </h3>
-                    <p className="text-sm text-slate-500">
-                      {currentMonth}월 · {selectedCategoryExpenses.length}건 · {selectedCategoryExpenses.reduce((sum, e) => sum + e.amount, 0).toLocaleString()}원
-                    </p>
+                    {(() => {
+                      const total = selectedCategoryExpenses.reduce((sum, e) => sum + e.amount, 0);
+                      const budget = getCategoryBudget(selectedCategory);
+                      const hasBudget = budget !== null && budget > 0;
+                      const percentage = hasBudget ? Math.round((total / budget) * 100) : 0;
+                      const isOverBudget = hasBudget && total > budget;
+
+                      return (
+                        <p className="text-sm text-slate-500">
+                          {currentMonth}월 · {selectedCategoryExpenses.length}건 · {' '}
+                          <span className={isOverBudget ? 'text-red-500 font-medium' : ''}>
+                            {total.toLocaleString()}
+                            {hasBudget ? ` / ${budget.toLocaleString()}원 (${percentage}%)` : '원'}
+                          </span>
+                        </p>
+                      );
+                    })()}
                   </div>
                 </div>
                 <button
@@ -373,25 +387,29 @@ export default function Home() {
               {/* 지출 내역 리스트 */}
               <div className="overflow-y-auto max-h-[60vh] p-4">
                 <div className="space-y-2">
-                  {selectedCategoryExpenses.map((expense) => (
-                    <div
-                      key={expense.id}
-                      className="flex items-center justify-between p-3 bg-slate-50 rounded-xl"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-slate-800 truncate">
-                          {expense.merchant}
+                  {selectedCategoryExpenses.map((expense) => {
+                    const categoryColor = getCategoryColor(selectedCategory);
+                    return (
+                      <div
+                        key={expense.id}
+                        className="flex items-center justify-between p-3 rounded-xl"
+                        style={{ backgroundColor: `${categoryColor}15` }}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium text-slate-800 truncate">
+                            {expense.merchant}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {expense.date}
+                            {expense.memo && ` · ${expense.memo}`}
+                          </div>
                         </div>
-                        <div className="text-xs text-slate-500">
-                          {expense.date}
-                          {expense.memo && ` · ${expense.memo}`}
+                        <div className="font-semibold text-slate-800 flex-shrink-0 ml-3">
+                          {expense.amount.toLocaleString()}원
                         </div>
                       </div>
-                      <div className="font-semibold text-slate-800 flex-shrink-0 ml-3">
-                        {expense.amount.toLocaleString()}원
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>

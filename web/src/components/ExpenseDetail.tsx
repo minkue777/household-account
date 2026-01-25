@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { SplitItem } from '@/lib/expenseService';
@@ -67,6 +67,24 @@ export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveM
       itemRefs.current.delete(id);
     }
   }, []);
+
+  // 드래그 중일 때 스크롤 방지
+  useEffect(() => {
+    if (!draggingExpenseId) return;
+
+    const preventScroll = (e: TouchEvent) => {
+      e.preventDefault();
+    };
+
+    // 드래그 중일 때 body에 스크롤 방지
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('touchmove', preventScroll, { passive: false });
+
+    return () => {
+      document.body.style.overflow = '';
+      document.removeEventListener('touchmove', preventScroll);
+    };
+  }, [draggingExpenseId]);
 
   if (expenses.length === 0) {
     return (
@@ -431,6 +449,7 @@ function ExpenseItem({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onClick={isDragging ? undefined : handleOpenEdit}
+        style={{ touchAction: isDragging || draggingExpenseId ? 'none' : 'auto' }}
         className={`flex items-center justify-between p-3 rounded-xl transition-all cursor-pointer select-none ${
           isDragging
             ? 'bg-blue-200 border-2 border-blue-500 scale-105 shadow-lg opacity-90'
