@@ -124,15 +124,17 @@ export default function SeedPage() {
         setStatus('guest 가구 이미 존재');
       }
 
-      // 2. 기존 샘플 데이터 확인
+      // 2. 기존 샘플 데이터 삭제
       const expensesRef = collection(db, 'expenses');
       const q = query(expensesRef, where('householdId', '==', GUEST_KEY));
       const snapshot = await getDocs(q);
 
       if (snapshot.size > 0) {
-        setStatus(`이미 ${snapshot.size}개의 샘플 데이터가 있습니다.`);
-        setIsRunning(false);
-        return;
+        setStatus(`기존 ${snapshot.size}개 데이터 삭제 중...`);
+        const { deleteDoc } = await import('firebase/firestore');
+        for (const docSnap of snapshot.docs) {
+          await deleteDoc(docSnap.ref);
+        }
       }
 
       // 3. 샘플 데이터 추가
