@@ -311,3 +311,45 @@ export async function unmergeExpense(expense: Expense): Promise<string[]> {
 
   return newIds;
 }
+
+/**
+ * 키워드로 지출 검색
+ * 가맹점명, 메모에서 키워드 검색
+ */
+export async function searchExpenses(keyword: string): Promise<Expense[]> {
+  if (!keyword.trim()) {
+    return [];
+  }
+
+  const q = query(
+    collection(db, COLLECTION_NAME),
+    orderBy('date', 'desc')
+  );
+
+  const snapshot = await getDocs(q);
+  const lowerKeyword = keyword.toLowerCase();
+
+  const results = snapshot.docs
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        date: data.date,
+        time: data.time,
+        merchant: data.merchant,
+        amount: data.amount,
+        category: (data.category || 'etc').toLowerCase(),
+        cardType: (data.cardType || 'main').toLowerCase(),
+        cardLastFour: data.cardLastFour,
+        memo: data.memo,
+        mergedFrom: data.mergedFrom,
+      } as Expense;
+    })
+    .filter((expense) => {
+      const merchantMatch = expense.merchant.toLowerCase().includes(lowerKeyword);
+      const memoMatch = expense.memo?.toLowerCase().includes(lowerKeyword);
+      return merchantMatch || memoMatch;
+    });
+
+  return results;
+}

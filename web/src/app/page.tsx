@@ -6,6 +6,7 @@ import Calendar from '@/components/Calendar';
 import CategorySummary from '@/components/CategorySummary';
 import ExpenseDetail from '@/components/ExpenseDetail';
 import AddExpenseModal from '@/components/AddExpenseModal';
+import SearchModal from '@/components/SearchModal';
 import Portal from '@/components/Portal';
 import { Expense, Category } from '@/types/expense';
 import { subscribeToMonthlyExpenses, updateExpense, addManualExpense, deleteExpense, splitExpense, mergeExpenses, unmergeExpense, SplitItem } from '@/lib/expenseService';
@@ -20,6 +21,7 @@ export default function Home() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   const { themeConfig } = useTheme();
   const { getCategoryLabel, getCategoryColor, getCategoryBudget } = useCategoryContext();
@@ -194,6 +196,15 @@ export default function Home() {
 
           {/* 오른쪽: 버튼들 */}
           <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
+            <button
+              onClick={() => setShowSearchModal(true)}
+              className="bg-white/80 hover:bg-white text-slate-600 p-2 md:px-4 md:py-2 rounded-xl flex items-center gap-2 transition-all shadow-sm hover:shadow border border-slate-200/50"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <span className="hidden md:inline">검색</span>
+            </button>
             <Link
               href="/settings"
               className="bg-white/80 hover:bg-white text-slate-600 p-2 md:px-4 md:py-2 rounded-xl flex items-center gap-2 transition-all shadow-sm hover:shadow border border-slate-200/50"
@@ -222,6 +233,12 @@ export default function Home() {
           onClose={() => setShowAddModal(false)}
           onAdd={handleAddExpense}
           selectedDate={selectedDate}
+        />
+
+        {/* 검색 모달 */}
+        <SearchModal
+          isOpen={showSearchModal}
+          onClose={() => setShowSearchModal(false)}
         />
 
         {/* 모바일 레이아웃 */}
