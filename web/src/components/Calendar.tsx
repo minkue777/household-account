@@ -170,7 +170,7 @@ export default function Calendar({
       </div>
 
       {/* 날짜 그리드 */}
-      <div className="grid grid-cols-7">
+      <div className="grid grid-cols-7 overflow-hidden rounded-b-2xl">
         {dates.map((day, index) => {
           if (day === null) {
             return <div key={`empty-${index}`} className="h-12 md:h-28 bg-slate-50/50" />;
@@ -189,7 +189,7 @@ export default function Calendar({
               key={day}
               onClick={() => onDateClick(dateStr)}
               className={`h-12 md:h-28 border-b border-r border-slate-100 p-0.5 md:p-1.5 cursor-pointer transition-all hover:bg-slate-50 ${
-                isSelected ? 'bg-blue-50 ring-2 ring-blue-400 ring-inset' : ''
+                isSelected ? 'bg-blue-50 border-2 border-blue-400' : ''
               }`}
             >
               {/* 모바일: 날짜 + 금액만 세로 배치 */}
