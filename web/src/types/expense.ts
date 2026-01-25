@@ -4,10 +4,12 @@ export type Category = string;
 export interface Expense {
   id: string;
   date: string;           // YYYY-MM-DD
+  time?: string;          // HH:mm
   merchant: string;       // 가맹점명
   amount: number;         // 금액
   category: Category;     // 카테고리 (동적)
   cardType: 'main' | 'family';  // 본인 카드 / 가족 카드
+  cardLastFour?: string;  // 카드 마지막 4자리
   memo?: string;          // 메모 (선택)
 }
 
