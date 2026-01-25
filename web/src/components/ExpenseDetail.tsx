@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { SplitItem } from '@/lib/expenseService';
+import Portal from './Portal';
 
 interface ExpenseDetailProps {
   date: string;
@@ -338,15 +339,15 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
 
       {/* 편집 모달 */}
       {showEditModal && (
-        <div
-          className="fixed top-0 left-0 right-0 bottom-0 bg-slate-900/20 backdrop-blur-sm z-[9999] flex items-start justify-center pt-8 pb-4 px-4 overflow-y-auto"
-          style={{ position: 'fixed' }}
-          onClick={() => setShowEditModal(false)}
-        >
+        <Portal>
           <div
-            className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[9999] flex items-start justify-center pt-8 pb-4 px-4 overflow-y-auto"
+            onClick={() => setShowEditModal(false)}
           >
+            <div
+              className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
             <h3 className="text-lg font-semibold text-slate-800 mb-4">
               지출 수정
             </h3>
@@ -507,53 +508,57 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
                 저장
               </button>
             </div>
+            </div>
           </div>
-        </div>
+        </Portal>
       )}
 
       {/* 삭제 확인 다이얼로그 */}
       {showDeleteDialog && (
-        <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 m-4 max-w-sm w-full shadow-xl">
-            <h3 className="text-lg font-semibold text-slate-800 mb-3">
-              삭제 확인
-            </h3>
-            <p className="text-slate-600 mb-6">
-              &quot;{expense.merchant}&quot; {expense.amount.toLocaleString()}원을 삭제하시겠습니까?
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowDeleteDialog(false)}
-                className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
-              >
-                취소
-              </button>
-              <button
-                onClick={() => {
-                  if (onDelete) {
-                    onDelete(expense.id);
-                  }
-                  setShowDeleteDialog(false);
-                }}
-                className="flex-1 py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-              >
-                삭제
-              </button>
+        <Portal>
+          <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center z-[9999]">
+            <div className="bg-white rounded-2xl p-6 m-4 max-w-sm w-full shadow-xl">
+              <h3 className="text-lg font-semibold text-slate-800 mb-3">
+                삭제 확인
+              </h3>
+              <p className="text-slate-600 mb-6">
+                &quot;{expense.merchant}&quot; {expense.amount.toLocaleString()}원을 삭제하시겠습니까?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDeleteDialog(false)}
+                  className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={() => {
+                    if (onDelete) {
+                      onDelete(expense.id);
+                    }
+                    setShowDeleteDialog(false);
+                  }}
+                  className="flex-1 py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                >
+                  삭제
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </Portal>
       )}
 
       {/* 분할 모달 */}
       {showSplitModal && (
-        <div
-          className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => setShowSplitModal(false)}
-        >
+        <Portal>
           <div
-            className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-xl max-h-[85vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-start justify-center z-[9999] pt-8 pb-4 px-4 overflow-y-auto"
+            onClick={() => setShowSplitModal(false)}
           >
+            <div
+              className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
             <h3 className="text-lg font-semibold text-slate-800 mb-2">
               지출 나누기
             </h3>
@@ -689,8 +694,9 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
                 나누기
               </button>
             </div>
+            </div>
           </div>
-        </div>
+        </Portal>
       )}
     </div>
   );
