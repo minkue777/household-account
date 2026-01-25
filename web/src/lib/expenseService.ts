@@ -198,3 +198,58 @@ export async function fixInvalidCategories(
 
   return fixedCount;
 }
+
+/**
+ * 지출 분할
+ * 원본 지출을 삭제하고 여러 개의 새 지출로 분할
+ */
+export interface SplitItem {
+  merchant: string;
+  amount: number;
+  category: string;
+}
+
+export async function splitExpense(
+  originalExpense: Expense,
+  splits: SplitItem[]
+): Promise<string[]> {
+  const newIds: string[] = [];
+
+  // 원본 지출 삭제
+  await deleteExpense(originalExpense.id);
+
+  // 분할된 지출들 추가
+  for (const split of splits) {
+    const docRef = await addDoc(collection(db, COLLECTION_NAME), {
+      date: originalExpense.date,
+      time: originalExpense.time,
+      merchant: split.merchant,
+      amount: split.amount,
+      category: split.category,
+      cardType: originalExpense.cardType,
+      cardLastFour: originalExpense.cardLastFour,
+      memo: '',
+      createdAt: Timestamp.now(),
+    });
+    newIds.push(docRef.id);
+  }
+
+  return newIds;
+}
+
+/**
+ * 지출 합치기
+ * 소스 지출을 타겟 지출에 합침 (타겟의 가맹점명, 카테고리 유지)
+ */
+export async function mergeExpenses(
+  targetExpense: Expense,
+  sourceExpense: Expense
+): Promise<void> {
+  // 타겟 지출의 금액을 합산
+  const newAmount = targetExpense.amount + sourceExpense.amount;
+
+  await updateExpense(targetExpense.id, { amount: newAmount });
+
+  // 소스 지출 삭제
+  await deleteExpense(sourceExpense.id);
+}

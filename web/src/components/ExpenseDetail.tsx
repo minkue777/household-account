@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
+import { SplitItem } from '@/lib/expenseService';
 
 interface ExpenseDetailProps {
   date: string;
@@ -11,9 +12,11 @@ interface ExpenseDetailProps {
   onSaveMerchantRule?: (merchantName: string, category: string) => void;
   onDelete?: (expenseId: string) => void;
   onAddExpense?: () => void;
+  onSplitExpense?: (expense: Expense, splits: SplitItem[]) => void;
+  onMergeExpenses?: (targetExpense: Expense, sourceExpense: Expense) => void;
 }
 
-export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveMerchantRule, onDelete, onAddExpense }: ExpenseDetailProps) {
+export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveMerchantRule, onDelete, onAddExpense, onSplitExpense, onMergeExpenses }: ExpenseDetailProps) {
   const total = expenses.reduce((sum, e) => sum + e.amount, 0);
 
   // 날짜 포맷팅
@@ -71,9 +74,12 @@ export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveM
           <ExpenseItem
             key={expense.id}
             expense={expense}
+            allExpenses={expenses}
             onExpenseUpdate={onExpenseUpdate}
             onSaveMerchantRule={onSaveMerchantRule}
             onDelete={onDelete}
+            onSplitExpense={onSplitExpense}
+            onMergeExpenses={onMergeExpenses}
           />
         ))}
       </div>
@@ -83,16 +89,21 @@ export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveM
 
 interface ExpenseItemProps {
   expense: Expense;
+  allExpenses: Expense[];
   onExpenseUpdate?: (expenseId: string, data: { amount?: number; memo?: string; category?: string }) => void;
   onSaveMerchantRule?: (merchantName: string, category: string) => void;
   onDelete?: (expenseId: string) => void;
+  onSplitExpense?: (expense: Expense, splits: SplitItem[]) => void;
+  onMergeExpenses?: (targetExpense: Expense, sourceExpense: Expense) => void;
 }
 
-function ExpenseItem({ expense, onExpenseUpdate, onSaveMerchantRule, onDelete }: ExpenseItemProps) {
+function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule, onDelete, onSplitExpense, onMergeExpenses }: ExpenseItemProps) {
   const { activeCategories, getCategoryLabel, getCategoryColor } = useCategoryContext();
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showSplitModal, setShowSplitModal] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // 편집 폼 상태
   const [editAmount, setEditAmount] = useState(expense.amount.toString());
@@ -100,8 +111,96 @@ function ExpenseItem({ expense, onExpenseUpdate, onSaveMerchantRule, onDelete }:
   const [editCategory, setEditCategory] = useState(expense.category);
   const [rememberMerchant, setRememberMerchant] = useState(false);
 
+  // 분할 폼 상태
+  const [splits, setSplits] = useState<SplitItem[]>([
+    { merchant: expense.merchant, amount: Math.floor(expense.amount / 2), category: expense.category },
+    { merchant: expense.merchant, amount: expense.amount - Math.floor(expense.amount / 2), category: expense.category },
+  ]);
+
   const expenseColor = getCategoryColor(expense.category);
   const expenseLabel = getCategoryLabel(expense.category);
+
+  // 드래그 앤 드롭 핸들러
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('expense-id', expense.id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    const draggedId = e.dataTransfer.types.includes('expense-id');
+    if (draggedId) {
+      setIsDragOver(true);
+      e.dataTransfer.dropEffect = 'move';
+    }
+  };
+
+  const handleDragLeave = () => {
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const sourceId = e.dataTransfer.getData('expense-id');
+
+    if (sourceId && sourceId !== expense.id && onMergeExpenses) {
+      const sourceExpense = allExpenses.find((exp) => exp.id === sourceId);
+      if (sourceExpense) {
+        onMergeExpenses(expense, sourceExpense);
+      }
+    }
+  };
+
+  // 분할 모달 열기
+  const handleOpenSplit = () => {
+    setSplits([
+      { merchant: expense.merchant, amount: Math.floor(expense.amount / 2), category: expense.category },
+      { merchant: expense.merchant, amount: expense.amount - Math.floor(expense.amount / 2), category: expense.category },
+    ]);
+    setShowEditModal(false);
+    setShowSplitModal(true);
+  };
+
+  // 분할 항목 추가
+  const handleAddSplit = () => {
+    const totalUsed = splits.reduce((sum, s) => sum + s.amount, 0);
+    const remaining = Math.max(0, expense.amount - totalUsed);
+    setSplits([...splits, { merchant: expense.merchant, amount: remaining, category: expense.category }]);
+  };
+
+  // 분할 항목 삭제
+  const handleRemoveSplit = (index: number) => {
+    if (splits.length <= 2) return;
+    setSplits(splits.filter((_, i) => i !== index));
+  };
+
+  // 분할 항목 수정
+  const handleUpdateSplit = (index: number, field: keyof SplitItem, value: string | number) => {
+    const newSplits = [...splits];
+    if (field === 'amount') {
+      newSplits[index] = { ...newSplits[index], amount: Number(value) || 0 };
+    } else {
+      newSplits[index] = { ...newSplits[index], [field]: value };
+    }
+    setSplits(newSplits);
+  };
+
+  // 분할 저장
+  const handleSaveSplit = () => {
+    if (!onSplitExpense) return;
+    const totalSplit = splits.reduce((sum, s) => sum + s.amount, 0);
+    if (totalSplit !== expense.amount) {
+      alert(`분할 금액의 합(${totalSplit.toLocaleString()}원)이 원래 금액(${expense.amount.toLocaleString()}원)과 일치하지 않습니다.`);
+      return;
+    }
+    if (splits.some((s) => s.amount <= 0)) {
+      alert('모든 분할 항목의 금액은 0보다 커야 합니다.');
+      return;
+    }
+    onSplitExpense(expense, splits);
+    setShowSplitModal(false);
+  };
 
   const handleOpenEdit = () => {
     setEditAmount(expense.amount.toString());
@@ -144,8 +243,17 @@ function ExpenseItem({ expense, onExpenseUpdate, onSaveMerchantRule, onDelete }:
   return (
     <div className="relative">
       <div
+        draggable
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         onClick={handleOpenEdit}
-        className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+        className={`flex items-center justify-between p-3 rounded-xl transition-colors cursor-pointer ${
+          isDragOver
+            ? 'bg-blue-100 border-2 border-blue-400 border-dashed'
+            : 'bg-slate-50 hover:bg-slate-100'
+        }`}
       >
         <div className="flex items-center gap-3">
           {/* 카테고리 아이콘 */}
@@ -294,7 +402,20 @@ function ExpenseItem({ expense, onExpenseUpdate, onSaveMerchantRule, onDelete }:
               )}
             </div>
 
-            <div className="flex gap-3 mt-6">
+            {/* 나누기 버튼 */}
+            {onSplitExpense && (
+              <button
+                onClick={handleOpenSplit}
+                className="w-full py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 mt-4"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                나누기
+              </button>
+            )}
+
+            <div className="flex gap-3 mt-4">
               <button
                 onClick={() => setShowEditModal(false)}
                 className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
@@ -339,6 +460,137 @@ function ExpenseItem({ expense, onExpenseUpdate, onSaveMerchantRule, onDelete }:
                 className="flex-1 py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
               >
                 삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 분할 모달 */}
+      {showSplitModal && (
+        <div
+          className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setShowSplitModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-xl max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-slate-800 mb-2">
+              지출 나누기
+            </h3>
+            <p className="text-sm text-slate-500 mb-4">
+              {expense.merchant} {expense.amount.toLocaleString()}원을 여러 항목으로 나눕니다
+            </p>
+
+            {/* 분할 합계 표시 */}
+            <div className="mb-4 p-3 bg-slate-100 rounded-lg">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">분할 합계</span>
+                <span className={`font-medium ${
+                  splits.reduce((sum, s) => sum + s.amount, 0) === expense.amount
+                    ? 'text-green-600'
+                    : 'text-red-500'
+                }`}>
+                  {splits.reduce((sum, s) => sum + s.amount, 0).toLocaleString()}원 / {expense.amount.toLocaleString()}원
+                </span>
+              </div>
+            </div>
+
+            {/* 분할 항목들 */}
+            <div className="space-y-4 mb-4">
+              {splits.map((split, index) => (
+                <div key={index} className="p-4 border border-slate-200 rounded-xl">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium text-slate-700">항목 {index + 1}</span>
+                    {splits.length > 2 && (
+                      <button
+                        onClick={() => handleRemoveSplit(index)}
+                        className="text-slate-400 hover:text-red-500"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 가맹점명 */}
+                  <div className="mb-3">
+                    <label className="block text-xs text-slate-500 mb-1">가맹점명</label>
+                    <input
+                      type="text"
+                      value={split.merchant}
+                      onChange={(e) => handleUpdateSplit(index, 'merchant', e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                  </div>
+
+                  {/* 금액 */}
+                  <div className="mb-3">
+                    <label className="block text-xs text-slate-500 mb-1">금액</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={split.amount}
+                        onChange={(e) => handleUpdateSplit(index, 'amount', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm pr-10"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">원</span>
+                    </div>
+                  </div>
+
+                  {/* 카테고리 */}
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">카테고리</label>
+                    <div className="flex flex-wrap gap-2">
+                      {activeCategories.map((cat) => (
+                        <button
+                          key={cat.key}
+                          type="button"
+                          onClick={() => handleUpdateSplit(index, 'category', cat.key)}
+                          className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-colors text-xs ${
+                            split.category === cat.key
+                              ? 'border-blue-500 bg-blue-50'
+                              : 'border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: cat.color }}
+                          />
+                          <span className="text-slate-700">{cat.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* 항목 추가 버튼 */}
+            <button
+              onClick={handleAddSplit}
+              className="w-full py-2 px-4 border border-dashed border-slate-300 rounded-lg text-slate-500 hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 mb-4"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              항목 추가
+            </button>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowSplitModal(false)}
+                className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSaveSplit}
+                className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                나누기
               </button>
             </div>
           </div>

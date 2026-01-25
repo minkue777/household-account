@@ -7,7 +7,7 @@ import CategorySummary from '@/components/CategorySummary';
 import ExpenseDetail from '@/components/ExpenseDetail';
 import AddExpenseModal from '@/components/AddExpenseModal';
 import { Expense } from '@/types/expense';
-import { subscribeToMonthlyExpenses, updateExpense, addManualExpense, deleteExpense } from '@/lib/expenseService';
+import { subscribeToMonthlyExpenses, updateExpense, addManualExpense, deleteExpense, splitExpense, mergeExpenses, SplitItem } from '@/lib/expenseService';
 import { addMerchantRule } from '@/lib/merchantRuleService';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -112,6 +112,26 @@ export default function Home() {
     }
   };
 
+  // 지출 분할 핸들러
+  const handleSplitExpense = async (expense: Expense, splits: SplitItem[]) => {
+    try {
+      await splitExpense(expense, splits);
+      console.log('지출 분할 성공:', expense.merchant, '->', splits.length, '개');
+    } catch (error) {
+      console.error('지출 분할 실패:', error);
+    }
+  };
+
+  // 지출 합치기 핸들러
+  const handleMergeExpenses = async (targetExpense: Expense, sourceExpense: Expense) => {
+    try {
+      await mergeExpenses(targetExpense, sourceExpense);
+      console.log('지출 합치기 성공:', targetExpense.merchant, '+', sourceExpense.merchant);
+    } catch (error) {
+      console.error('지출 합치기 실패:', error);
+    }
+  };
+
   return (
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
@@ -199,6 +219,8 @@ export default function Home() {
               onSaveMerchantRule={handleSaveMerchantRule}
               onDelete={handleDeleteExpense}
               onAddExpense={() => setShowAddModal(true)}
+              onSplitExpense={handleSplitExpense}
+              onMergeExpenses={handleMergeExpenses}
             />
           )}
 
@@ -264,6 +286,8 @@ export default function Home() {
                 onSaveMerchantRule={handleSaveMerchantRule}
                 onDelete={handleDeleteExpense}
                 onAddExpense={() => setShowAddModal(true)}
+                onSplitExpense={handleSplitExpense}
+                onMergeExpenses={handleMergeExpenses}
               />
             )}
           </div>
