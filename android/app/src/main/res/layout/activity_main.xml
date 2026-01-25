@@ -25,7 +25,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="알림 접근 권한 필요"
+            android:text="앱 권한 설정 필요"
             android:textSize="24sp"
             android:textStyle="bold"
             android:textColor="#1E293B" />
@@ -34,7 +34,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="카드 결제 알림을 자동으로 기록하려면\n알림 접근 권한이 필요합니다."
+            android:text="카드 결제 알림을 자동으로 기록하려면\n아래 두 가지 권한이 필요합니다."
             android:textSize="16sp"
             android:textColor="#64748B"
             android:gravity="center" />
@@ -43,15 +43,24 @@
             android:id="@+id/btnRequestPermission"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
-            android:text="권한 설정하기"
+            android:layout_marginTop="24dp"
+            android:text="1. 알림 접근 권한 설정"
             android:textSize="16sp" />
+
+        <Button
+            android:id="@+id/btnRequestOverlayPermission"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="2. 다른 앱 위에 표시 권한 설정"
+            android:textSize="16sp"
+            android:visibility="visible" />
 
         <Button
             android:id="@+id/btnCheckPermission"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="16dp"
             android:text="권한 확인"
             android:textSize="16sp"
             style="?android:attr/buttonBarButtonStyle" />
@@ -83,7 +92,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="1. '권한 설정하기' 버튼을 누릅니다\n2. '또니망고네 가계부' 앱을 찾습니다\n3. 토글을 켜서 권한을 허용합니다\n4. 이 화면으로 돌아와 '권한 확인'을 누릅니다"
+                    android:text="알림 접근: 카드 결제 알림 감지\n다른 앱 위에 표시: 결제 후 바로 편집창 띄우기\n\n각 버튼을 눌러 설정 후 '권한 확인'을 누르세요"
                     android:textSize="14sp"
                     android:textColor="#64748B"
                     android:lineSpacingExtra="4dp" />

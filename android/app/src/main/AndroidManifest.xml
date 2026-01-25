@@ -13,6 +13,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- 다른 앱 위에 표시 권한 (QuickEditActivity 오버레이) -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <application
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher_foreground"
@@ -32,12 +35,16 @@
             </intent-filter>
         </activity>
 
-        <!-- 빠른 편집 액티비티 (팝업 스타일) -->
+        <!-- 빠른 편집 액티비티 (팝업 스타일, 다른 앱 위에 표시) -->
         <activity
             android:name=".QuickEditActivity"
             android:exported="false"
             android:theme="@style/Theme.QuickEdit"
-            android:excludeFromRecents="true" />
+            android:excludeFromRecents="true"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true"
+            android:taskAffinity=""
+            android:launchMode="singleInstance" />
 
         <!-- 알림 리스너 서비스 -->
         <service

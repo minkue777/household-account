@@ -26,33 +26,6 @@
         android:textColor="#64748B"
         android:layout_marginBottom="16dp" />
 
-    <!-- 분할 합계 표시 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:background="#F1F5F9"
-        android:padding="12dp"
-        android:layout_marginBottom="16dp">
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="분할 합계"
-            android:textSize="14sp"
-            android:textColor="#64748B" />
-
-        <TextView
-            android:id="@+id/tvSplitTotal"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="25,000원 / 25,000원"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="#22C55E" />
-    </LinearLayout>
-
     <!-- 분할 항목 컨테이너 (ScrollView 안에) -->
     <ScrollView
         android:layout_width="match_parent"

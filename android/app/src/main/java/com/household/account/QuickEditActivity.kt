@@ -18,11 +18,11 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.flexbox.FlexboxLayout
-import com.google.android.material.switchmaterial.SwitchMaterial
 import com.household.account.data.CategoryData
 import com.household.account.data.CategoryRepository
 import com.household.account.data.Expense
 import com.household.account.data.ExpenseRepository
+import com.household.account.util.HouseholdPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -69,7 +69,6 @@ class QuickEditActivity : AppCompatActivity() {
     private lateinit var etMemo: EditText
     private lateinit var categoryContainer: FlexboxLayout
     private lateinit var tvDateTime: TextView
-    private lateinit var switchNotify: SwitchMaterial
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -114,7 +113,6 @@ class QuickEditActivity : AppCompatActivity() {
         etMemo = findViewById(R.id.etMemo)
         categoryContainer = findViewById(R.id.categoryContainer)
         tvDateTime = findViewById(R.id.tvDateTime)
-        switchNotify = findViewById(R.id.switchNotify)
     }
 
     private fun setupUI() {
@@ -247,14 +245,14 @@ class QuickEditActivity : AppCompatActivity() {
             finish()
         }
 
-        // 취소 버튼
-        findViewById<Button>(R.id.btnCancel).setOnClickListener {
-            finish()
-        }
-
         // 저장 버튼
         findViewById<Button>(R.id.btnSave).setOnClickListener {
-            saveChanges()
+            saveChanges(notifyPartner = false)
+        }
+
+        // 또니에게 전송 버튼 (저장 없이 알림만)
+        findViewById<Button>(R.id.btnNotify).setOnClickListener {
+            sendNotifyOnly()
         }
 
         // 나누기 버튼
@@ -268,7 +266,32 @@ class QuickEditActivity : AppCompatActivity() {
         }
     }
 
-    private fun saveChanges() {
+    /**
+     * 저장 없이 또니에게 알림만 전송
+     */
+    private fun sendNotifyOnly() {
+        if (expenseId.isEmpty()) {
+            finish()
+            return
+        }
+
+        activityScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    expenseRepository.updateExpenseAllFields(
+                        expenseId = expenseId,
+                        notifyPartner = true
+                    )
+                }
+                Toast.makeText(this@QuickEditActivity, "또니에게 전송됨", Toast.LENGTH_SHORT).show()
+                finish()
+            } catch (e: Exception) {
+                Toast.makeText(this@QuickEditActivity, "전송에 실패했습니다", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun saveChanges(notifyPartner: Boolean) {
         val merchant = etMerchant.text.toString().trim()
         val amountStr = etAmount.text.toString().trim()
         val memo = etMemo.text.toString().trim()
@@ -289,8 +312,6 @@ class QuickEditActivity : AppCompatActivity() {
             return
         }
 
-        val notifyPartner = switchNotify.isChecked
-
         activityScope.launch {
             try {
                 withContext(Dispatchers.IO) {
@@ -303,7 +324,7 @@ class QuickEditActivity : AppCompatActivity() {
                         notifyPartner = notifyPartner
                     )
                 }
-                val message = if (notifyPartner) "저장 및 알림 전송됨" else "저장되었습니다"
+                val message = if (notifyPartner) "저장 및 또니에게 전송됨" else "저장되었습니다"
                 Toast.makeText(this@QuickEditActivity, message, Toast.LENGTH_SHORT).show()
                 finish()
             } catch (e: Exception) {
@@ -367,19 +388,16 @@ class QuickEditActivity : AppCompatActivity() {
 
         val splitItemsContainer = view.findViewById<LinearLayout>(R.id.splitItemsContainer)
         val tvSplitInfo = view.findViewById<TextView>(R.id.tvSplitInfo)
-        val tvSplitTotal = view.findViewById<TextView>(R.id.tvSplitTotal)
 
         tvSplitInfo.text = "$currentMerchant ${NumberFormat.getNumberInstance(Locale.KOREA).format(currentAmount)}원을 여러 항목으로 나눕니다"
 
-        fun updateTotalDisplay() {
-            val total = splits.sumOf { it.amount }
-            val isMatch = total == currentAmount
-            tvSplitTotal.text = "${NumberFormat.getNumberInstance(Locale.KOREA).format(total)}원 / ${NumberFormat.getNumberInstance(Locale.KOREA).format(currentAmount)}원"
-            tvSplitTotal.setTextColor(Color.parseColor(if (isMatch) "#22C55E" else "#EF4444"))
-        }
+        // 각 항목의 EditText 참조 저장 (자동 금액 조정용)
+        val amountEditTexts = mutableListOf<EditText>()
+        var isAutoAdjusting = false  // 재귀 호출 방지 플래그
 
         fun renderSplitItems() {
             splitItemsContainer.removeAllViews()
+            amountEditTexts.clear()
 
             splits.forEachIndexed { index, split ->
                 val itemView = LayoutInflater.from(this).inflate(R.layout.item_split_expense, splitItemsContainer, false)
@@ -396,12 +414,13 @@ class QuickEditActivity : AppCompatActivity() {
                 etAmount.setText(split.amount.toString())
                 etMemo.setText(split.memo)
 
+                amountEditTexts.add(etAmount)
+
                 // 삭제 버튼 (3개 이상일 때만 표시)
                 btnRemove.visibility = if (splits.size > 2) View.VISIBLE else View.GONE
                 btnRemove.setOnClickListener {
                     splits.removeAt(index)
                     renderSplitItems()
-                    updateTotalDisplay()
                 }
 
                 // 카테고리 버튼들
@@ -427,15 +446,24 @@ class QuickEditActivity : AppCompatActivity() {
                     override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
                     override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
                     override fun afterTextChanged(s: Editable?) {
+                        if (isAutoAdjusting) return
+
                         val newAmount = s.toString().toIntOrNull() ?: 0
                         split.amount = newAmount
 
-                        // 2개일 때 다른 항목 자동 조정
+                        // 2개 항목일 때만 다른 쪽 자동 조정
                         if (splits.size == 2) {
                             val otherIndex = if (index == 0) 1 else 0
-                            splits[otherIndex].amount = maxOf(0, currentAmount - newAmount)
+                            val otherAmount = maxOf(0, currentAmount - newAmount)
+                            splits[otherIndex].amount = otherAmount
+
+                            // 다른 EditText 업데이트
+                            if (amountEditTexts.size == 2) {
+                                isAutoAdjusting = true
+                                amountEditTexts[otherIndex].setText(otherAmount.toString())
+                                isAutoAdjusting = false
+                            }
                         }
-                        updateTotalDisplay()
                     }
                 })
 
@@ -457,7 +485,6 @@ class QuickEditActivity : AppCompatActivity() {
             val remaining = maxOf(0, currentAmount - totalUsed)
             splits.add(SplitItem(currentMerchant, remaining, selectedCategoryKey, ""))
             renderSplitItems()
-            updateTotalDisplay()
         }
 
         // 취소 버튼
@@ -480,6 +507,7 @@ class QuickEditActivity : AppCompatActivity() {
             // 분할 실행
             activityScope.launch {
                 try {
+                    val householdId = HouseholdPreferences.getHouseholdKey(this@QuickEditActivity)
                     val expenseList = splits.map { split ->
                         Expense(
                             date = originalDate,
@@ -487,7 +515,8 @@ class QuickEditActivity : AppCompatActivity() {
                             merchant = split.merchant,
                             amount = split.amount,
                             category = split.category,
-                            memo = split.memo
+                            memo = split.memo,
+                            householdId = householdId
                         )
                     }
 
@@ -505,7 +534,6 @@ class QuickEditActivity : AppCompatActivity() {
         }
 
         renderSplitItems()
-        updateTotalDisplay()
 
         dialog.show()
 

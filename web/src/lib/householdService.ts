@@ -9,6 +9,17 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 
+// Android WebView 브리지 인터페이스
+interface AndroidBridge {
+  setHouseholdKey: (key: string) => void;
+  getHouseholdKey: () => string;
+  clearHouseholdKey: () => void;
+}
+
+interface WindowWithBridge extends Window {
+  AndroidBridge?: AndroidBridge;
+}
+
 export interface Household {
   id: string;
   name: string;
@@ -111,6 +122,11 @@ export function getStoredHouseholdKey(): string | null {
 export function setStoredHouseholdKey(key: string): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('householdKey', key);
+
+  // Android WebView 브리지가 있으면 SharedPreferences에도 동기화
+  if (typeof (window as WindowWithBridge).AndroidBridge?.setHouseholdKey === 'function') {
+    (window as WindowWithBridge).AndroidBridge.setHouseholdKey(key);
+  }
 }
 
 /**
@@ -119,6 +135,11 @@ export function setStoredHouseholdKey(key: string): void {
 export function clearStoredHouseholdKey(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem('householdKey');
+
+  // Android WebView 브리지가 있으면 SharedPreferences에서도 삭제
+  if (typeof (window as WindowWithBridge).AndroidBridge?.clearHouseholdKey === 'function') {
+    (window as WindowWithBridge).AndroidBridge.clearHouseholdKey();
+  }
 }
 
 /**

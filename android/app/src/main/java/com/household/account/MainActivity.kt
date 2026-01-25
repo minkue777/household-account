@@ -1,6 +1,9 @@
 package com.household.account
 
+import android.annotation.SuppressLint
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
@@ -29,7 +32,6 @@ class MainActivity : AppCompatActivity() {
 
         setupWebView()
         setupPermissionButtons()
-
         checkPermissionAndShowContent()
     }
 
@@ -39,9 +41,16 @@ class MainActivity : AppCompatActivity() {
         checkPermissionAndShowContent()
     }
 
+    @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     private fun setupWebView() {
         webView.apply {
-            webViewClient = WebViewClient()
+            // 페이지 로드 완료 시 localStorage에서 householdKey 동기화
+            webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    syncHouseholdKeyFromLocalStorage()
+                }
+            }
             webChromeClient = WebChromeClient()
 
             settings.apply {
@@ -53,12 +62,34 @@ class MainActivity : AppCompatActivity() {
                 loadWithOverviewMode = true
                 useWideViewPort = true
             }
+
+            // JavaScript 인터페이스 추가 - localStorage와 SharedPreferences 동기화
+            addJavascriptInterface(WebViewBridge(this@MainActivity), WebViewBridge.BRIDGE_NAME)
         }
+    }
+
+    /**
+     * localStorage에서 householdKey를 읽어 SharedPreferences에 동기화
+     */
+    private fun syncHouseholdKeyFromLocalStorage() {
+        val script = """
+            (function() {
+                var key = localStorage.getItem('householdKey');
+                if (key && key.length > 0) {
+                    AndroidBridge.setHouseholdKey(key);
+                }
+            })();
+        """.trimIndent()
+        webView.evaluateJavascript(script, null)
     }
 
     private fun setupPermissionButtons() {
         findViewById<Button>(R.id.btnRequestPermission).setOnClickListener {
             openNotificationListenerSettings()
+        }
+
+        findViewById<Button>(R.id.btnRequestOverlayPermission)?.setOnClickListener {
+            openOverlaySettings()
         }
 
         findViewById<Button>(R.id.btnCheckPermission).setOnClickListener {
@@ -67,10 +98,56 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissionAndShowContent() {
-        if (isNotificationListenerEnabled()) {
+        val hasNotificationPermission = isNotificationListenerEnabled()
+        val hasOverlayPermission = isOverlayPermissionGranted()
+
+        if (hasNotificationPermission && hasOverlayPermission) {
             showWebView()
         } else {
             showPermissionScreen()
+            updatePermissionUI(hasNotificationPermission, hasOverlayPermission)
+        }
+    }
+
+    /**
+     * 다른 앱 위에 표시 권한이 있는지 확인
+     */
+    private fun isOverlayPermissionGranted(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Settings.canDrawOverlays(this)
+        } else {
+            true
+        }
+    }
+
+    /**
+     * 권한 UI 상태 업데이트
+     */
+    private fun updatePermissionUI(hasNotification: Boolean, hasOverlay: Boolean) {
+        // 알림 권한 버튼
+        val btnNotification = findViewById<Button>(R.id.btnRequestPermission)
+        btnNotification.isEnabled = !hasNotification
+        btnNotification.text = if (hasNotification) "알림 권한 ✓" else "알림 접근 권한 설정"
+
+        // 오버레이 권한 버튼
+        val btnOverlay = findViewById<Button>(R.id.btnRequestOverlayPermission)
+        btnOverlay?.let {
+            it.visibility = View.VISIBLE
+            it.isEnabled = !hasOverlay
+            it.text = if (hasOverlay) "오버레이 권한 ✓" else "다른 앱 위에 표시 권한 설정"
+        }
+    }
+
+    /**
+     * 다른 앱 위에 표시 설정 열기
+     */
+    private fun openOverlaySettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+            startActivity(intent)
         }
     }
 

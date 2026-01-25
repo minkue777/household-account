@@ -42,6 +42,7 @@ data class Expense(
     val cardType: String = CardType.MAIN.name, // 카드 타입
     val cardLastFour: String = "",   // 카드 끝 4자리
     val memo: String = "",           // 메모
+    val householdId: String = "",    // 가구 키
     val createdAt: Timestamp = Timestamp.now()
 ) {
     // Firestore 저장을 위한 no-arg constructor
@@ -55,11 +56,12 @@ data class Expense(
         cardType = CardType.MAIN.name,
         cardLastFour = "",
         memo = "",
+        householdId = "",
         createdAt = Timestamp.now()
     )
 
     fun toMap(): Map<String, Any> {
-        return mapOf(
+        val map = mutableMapOf<String, Any>(
             "date" to date,
             "time" to time,
             "merchant" to merchant,
@@ -70,6 +72,10 @@ data class Expense(
             "memo" to memo,
             "createdAt" to createdAt
         )
+        if (householdId.isNotEmpty()) {
+            map["householdId"] = householdId
+        }
+        return map
     }
 
     fun getCategoryEnum(): Category {
