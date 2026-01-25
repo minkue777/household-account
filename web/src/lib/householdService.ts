@@ -32,14 +32,16 @@ function generateKey(): string {
 /**
  * 새 가구 키 생성
  */
-export async function createHousehold(name?: string): Promise<string> {
-  let key = generateKey();
+export async function createHousehold(name?: string, customKey?: string): Promise<string> {
+  let key = customKey || generateKey();
 
-  // 중복 체크
-  let exists = await getDoc(doc(householdsCollection, key));
-  while (exists.exists()) {
-    key = generateKey();
-    exists = await getDoc(doc(householdsCollection, key));
+  // 중복 체크 (커스텀 키가 아닌 경우에만)
+  if (!customKey) {
+    let exists = await getDoc(doc(householdsCollection, key));
+    while (exists.exists()) {
+      key = generateKey();
+      exists = await getDoc(doc(householdsCollection, key));
+    }
   }
 
   await setDoc(doc(householdsCollection, key), {
