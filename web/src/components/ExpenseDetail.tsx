@@ -339,14 +339,14 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
       {/* 편집 모달 */}
       {showEditModal && (
         <div
-          className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-50 overflow-y-auto"
+          className="fixed top-0 left-0 right-0 bottom-0 bg-slate-900/20 backdrop-blur-sm z-[9999] flex items-center justify-center p-4"
+          style={{ position: 'fixed' }}
           onClick={() => setShowEditModal(false)}
         >
-          <div className="min-h-full flex items-center justify-center p-4">
-            <div
-              className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl my-8"
-              onClick={(e) => e.stopPropagation()}
-            >
+          <div
+            className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-lg font-semibold text-slate-800 mb-4">
               지출 수정
             </h3>
@@ -506,7 +506,6 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
               >
                 저장
               </button>
-            </div>
             </div>
           </div>
         </div>
