@@ -85,6 +85,14 @@ export default function StatsPage() {
           setSelectedCategoryExpenses(prev =>
             prev.filter(e => e.id !== editingExpense.id)
           );
+        } else {
+          // 카테고리가 같으면 리스트에서 해당 항목 업데이트
+          setSelectedCategoryExpenses(prev =>
+            prev.map(e => e.id === editingExpense.id
+              ? { ...e, ...updates }
+              : e
+            )
+          );
         }
       } catch (error) {
         console.error('지출 수정 실패:', error);
