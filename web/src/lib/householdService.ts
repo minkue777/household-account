@@ -18,18 +18,15 @@ export interface Household {
 const householdsCollection = collection(db, 'households');
 
 /**
- * 랜덤 키 생성 (예: HH-7X3M-9PLQ-2WBN)
+ * 랜덤 키 생성 (Firebase 문서 ID 스타일: qpQ134bXYz2kABCdef12)
  */
 function generateKey(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 문자 제외 (0,O,1,I)
-  const segment = () => {
-    let result = '';
-    for (let i = 0; i < 4; i++) {
-      result += chars[Math.floor(Math.random() * chars.length)];
-    }
-    return result;
-  };
-  return `HH-${segment()}-${segment()}-${segment()}`;
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < 20; i++) {
+    result += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return result;
 }
 
 /**
@@ -57,7 +54,7 @@ export async function createHousehold(name?: string): Promise<string> {
  * 가구 키 유효성 확인
  */
 export async function validateHouseholdKey(key: string): Promise<boolean> {
-  const docRef = doc(householdsCollection, key.toUpperCase());
+  const docRef = doc(householdsCollection, key);
   const docSnap = await getDoc(docRef);
   return docSnap.exists();
 }
@@ -66,7 +63,7 @@ export async function validateHouseholdKey(key: string): Promise<boolean> {
  * 가구 정보 가져오기
  */
 export async function getHousehold(key: string): Promise<Household | null> {
-  const docRef = doc(householdsCollection, key.toUpperCase());
+  const docRef = doc(householdsCollection, key);
   const docSnap = await getDoc(docRef);
 
   if (!docSnap.exists()) return null;
@@ -111,7 +108,7 @@ export function getStoredHouseholdKey(): string | null {
  */
 export function setStoredHouseholdKey(key: string): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem('householdKey', key.toUpperCase());
+  localStorage.setItem('householdKey', key);
 }
 
 /**

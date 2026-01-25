@@ -38,9 +38,9 @@ export default function HouseholdLogin() {
           <input
             type="text"
             value={key}
-            onChange={(e) => setKey(e.target.value.toUpperCase())}
-            placeholder="예: HH-XXXX-XXXX-XXXX"
-            className="w-full px-4 py-3 border border-slate-300 rounded-xl text-center font-mono text-lg tracking-wider focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            onChange={(e) => setKey(e.target.value)}
+            placeholder="가구 키 입력"
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl text-center font-mono text-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             autoFocus
           />
 

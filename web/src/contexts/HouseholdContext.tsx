@@ -49,14 +49,14 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (key: string): Promise<boolean> => {
-    const upperKey = key.toUpperCase();
-    const isValid = await validateHouseholdKey(upperKey);
+    const trimmedKey = key.trim();
+    const isValid = await validateHouseholdKey(trimmedKey);
 
     if (isValid) {
-      const data = await getHousehold(upperKey);
+      const data = await getHousehold(trimmedKey);
       setHousehold(data);
-      setHouseholdKey(upperKey);
-      setStoredHouseholdKey(upperKey);
+      setHouseholdKey(trimmedKey);
+      setStoredHouseholdKey(trimmedKey);
       return true;
     }
 
