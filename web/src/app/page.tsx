@@ -161,7 +161,8 @@ export default function Home() {
   // 가맹점 규칙 저장 핸들러
   const handleSaveMerchantRule = async (merchantName: string, category: string) => {
     try {
-      const ruleId = await addMerchantRule(merchantName, category, true);
+      const householdId = getStoredHouseholdKey() || 'guest';
+      const ruleId = await addMerchantRule(householdId, merchantName, category, true);
       if (ruleId) {
         console.log('규칙 저장 성공:', merchantName, '->', category);
       }

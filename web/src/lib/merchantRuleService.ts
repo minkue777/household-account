@@ -15,6 +15,7 @@ const COLLECTION_NAME = 'merchant_rules';
 
 export interface MerchantRule {
   id: string;
+  householdId: string;
   merchantKeyword: string;
   category: string;
   exactMatch: boolean;
@@ -24,18 +25,22 @@ export interface MerchantRule {
  * 규칙 추가
  */
 export async function addMerchantRule(
+  householdId: string,
   merchantKeyword: string,
   category: string,
   exactMatch: boolean = true
 ): Promise<string> {
+  if (!householdId) return '';
+
   // 이미 같은 키워드 규칙이 있는지 확인
-  const exists = await ruleExists(merchantKeyword);
+  const exists = await ruleExists(householdId, merchantKeyword);
   if (exists) {
     console.log('이미 규칙이 존재함:', merchantKeyword);
     return '';
   }
 
   const docRef = await addDoc(collection(db, COLLECTION_NAME), {
+    householdId,
     merchantKeyword,
     category,
     exactMatch,
@@ -63,11 +68,12 @@ export async function deleteMerchantRule(id: string): Promise<void> {
 }
 
 /**
- * 같은 키워드 규칙이 있는지 확인
+ * 같은 키워드 규칙이 있는지 확인 (householdId별로)
  */
-export async function ruleExists(keyword: string): Promise<boolean> {
+export async function ruleExists(householdId: string, keyword: string): Promise<boolean> {
   const q = query(
     collection(db, COLLECTION_NAME),
+    where('householdId', '==', householdId),
     where('merchantKeyword', '==', keyword)
   );
   const snapshot = await getDocs(q);
@@ -75,12 +81,21 @@ export async function ruleExists(keyword: string): Promise<boolean> {
 }
 
 /**
- * 모든 규칙 실시간 구독
+ * 모든 규칙 실시간 구독 (householdId별로)
  */
 export function subscribeToRules(
+  householdId: string,
   callback: (rules: MerchantRule[]) => void
 ): () => void {
-  const q = query(collection(db, COLLECTION_NAME));
+  if (!householdId) {
+    callback([]);
+    return () => {};
+  }
+
+  const q = query(
+    collection(db, COLLECTION_NAME),
+    where('householdId', '==', householdId)
+  );
 
   const unsubscribe = onSnapshot(
     q,

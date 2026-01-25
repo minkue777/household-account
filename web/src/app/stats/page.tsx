@@ -7,6 +7,7 @@ import MonthlyTrendChart from '@/components/MonthlyTrendChart';
 import { Expense, Category } from '@/types/expense';
 import { subscribeToDateRangeExpenses, updateExpense, deleteExpense } from '@/lib/expenseService';
 import { addMerchantRule } from '@/lib/merchantRuleService';
+import { getStoredHouseholdKey } from '@/lib/householdService';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 
 // 기간 프리셋
@@ -77,7 +78,8 @@ export default function StatsPage() {
 
         // 카테고리가 변경되었고 기억하기 체크했으면 규칙 저장
         if (editCategory !== editingExpense.category && rememberMerchant) {
-          await addMerchantRule(editingExpense.merchant, editCategory, true);
+          const householdId = getStoredHouseholdKey() || 'guest';
+          await addMerchantRule(householdId, editingExpense.merchant, editCategory, true);
         }
 
         // 카테고리가 변경되면 현재 모달의 리스트에서 제거

@@ -12,6 +12,7 @@ import {
   updateMerchantRule,
   deleteMerchantRule,
 } from '@/lib/merchantRuleService';
+import { getStoredHouseholdKey } from '@/lib/householdService';
 import { useTheme, THEMES } from '@/contexts/ThemeContext';
 import NotificationSettings from '@/components/NotificationSettings';
 import { isIOS } from '@/lib/pushNotificationService';
@@ -58,7 +59,8 @@ export default function SettingsPage() {
 
   // 가맹점 규칙 구독
   useEffect(() => {
-    const unsubscribe = subscribeToRules((rules) => {
+    const householdId = getStoredHouseholdKey() || 'guest';
+    const unsubscribe = subscribeToRules(householdId, (rules) => {
       setMerchantRules(rules);
       setRulesLoading(false);
     });
