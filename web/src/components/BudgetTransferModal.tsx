@@ -27,7 +27,7 @@ export default function BudgetTransferModal({ isOpen, onClose, year, month }: Bu
 
   // householdId 가져오기
   useEffect(() => {
-    setHouseholdId(getStoredHouseholdKey());
+    setHouseholdId(getStoredHouseholdKey() || '');
   }, []);
 
   // 예산이 있는 카테고리만 필터링
