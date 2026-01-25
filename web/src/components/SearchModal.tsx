@@ -9,6 +9,8 @@ import Portal from './Portal';
 interface SearchModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onExpenseUpdate?: (expenseId: string, data: { amount?: number; memo?: string; category?: string; merchant?: string }) => void;
+  onDelete?: (expenseId: string) => void;
 }
 
 interface MonthlyGroup {
@@ -18,8 +20,8 @@ interface MonthlyGroup {
   total: number;
 }
 
-export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
-  const { getCategoryLabel, getCategoryColor } = useCategoryContext();
+export default function SearchModal({ isOpen, onClose, onExpenseUpdate, onDelete }: SearchModalProps) {
+  const { activeCategories, getCategoryLabel, getCategoryColor } = useCategoryContext();
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState<Expense[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -27,6 +29,13 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // 편집 폼 상태
+  const [editMerchant, setEditMerchant] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editMemo, setEditMemo] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // 모달 열릴 때 input에 포커스
   useEffect(() => {
@@ -42,8 +51,66 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
       setResults([]);
       setSelectedExpense(null);
       setExpandedMonth(null);
+      setShowDeleteConfirm(false);
     }
   }, [isOpen]);
+
+  // 선택된 지출이 변경되면 편집 폼 초기화
+  useEffect(() => {
+    if (selectedExpense) {
+      setEditMerchant(selectedExpense.merchant);
+      setEditAmount(selectedExpense.amount.toString());
+      setEditMemo(selectedExpense.memo || '');
+      setEditCategory(selectedExpense.category);
+      setShowDeleteConfirm(false);
+    }
+  }, [selectedExpense]);
+
+  // 검색 결과 새로고침
+  const refreshSearch = async () => {
+    if (!keyword.trim()) return;
+    const searchResults = await searchExpenses(keyword);
+    setResults(searchResults);
+  };
+
+  // 수정 저장
+  const handleSaveEdit = async () => {
+    if (!selectedExpense || !onExpenseUpdate) return;
+
+    const newAmount = parseInt(editAmount, 10);
+    if (isNaN(newAmount) || newAmount <= 0) return;
+    if (!editMerchant.trim()) return;
+
+    const updates: { amount?: number; memo?: string; category?: string; merchant?: string } = {};
+
+    if (editMerchant.trim() !== selectedExpense.merchant) {
+      updates.merchant = editMerchant.trim();
+    }
+    if (newAmount !== selectedExpense.amount) {
+      updates.amount = newAmount;
+    }
+    if (editMemo !== (selectedExpense.memo || '')) {
+      updates.memo = editMemo;
+    }
+    if (editCategory !== selectedExpense.category) {
+      updates.category = editCategory;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await onExpenseUpdate(selectedExpense.id, updates);
+      await refreshSearch();
+    }
+
+    setSelectedExpense(null);
+  };
+
+  // 삭제
+  const handleDelete = async () => {
+    if (!selectedExpense || !onDelete) return;
+    await onDelete(selectedExpense.id);
+    await refreshSearch();
+    setSelectedExpense(null);
+  };
 
   // 키워드 변경 시 자동 검색 (debounce 적용)
   useEffect(() => {
@@ -277,10 +344,10 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
         </div>
       </div>
 
-      {/* 지출 상세 모달 */}
+      {/* 지출 수정 모달 */}
       {selectedExpense && (
         <div
-          className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-[10000] flex items-start justify-center pt-16 px-4 pb-4 overflow-y-auto"
           onClick={() => setSelectedExpense(null)}
         >
           <div
@@ -288,7 +355,7 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-800">지출 상세</h3>
+              <h3 className="text-lg font-semibold text-slate-800">지출 수정</h3>
               <button
                 onClick={() => setSelectedExpense(null)}
                 className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
@@ -299,66 +366,138 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
               </button>
             </div>
 
+            {/* 날짜/시간 정보 */}
+            <div className="text-sm text-slate-500 mb-4">
+              {selectedExpense.date} {selectedExpense.time && `· ${selectedExpense.time}`}
+              {selectedExpense.cardLastFour && ` · ${selectedExpense.cardLastFour}`}
+            </div>
+
             <div className="space-y-4">
-              {/* 카테고리 & 가맹점 */}
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center text-white font-medium"
-                  style={{ backgroundColor: getCategoryColor(selectedExpense.category) }}
-                >
-                  {getCategoryLabel(selectedExpense.category).slice(0, 2)}
-                </div>
-                <div>
-                  <div className="text-lg font-semibold text-slate-800">
-                    {selectedExpense.merchant}
-                  </div>
-                  <div className="text-sm text-slate-500">
-                    {getCategoryLabel(selectedExpense.category)}
-                  </div>
-                </div>
+              {/* 가맹점명 */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  가맹점
+                </label>
+                <input
+                  type="text"
+                  value={editMerchant}
+                  onChange={(e) => setEditMerchant(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
 
               {/* 금액 */}
-              <div className="bg-slate-50 rounded-xl p-4">
-                <div className="text-sm text-slate-500 mb-1">금액</div>
-                <div className="text-2xl font-bold text-slate-800">
-                  {selectedExpense.amount.toLocaleString()}원
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  금액
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={editAmount}
+                    onChange={(e) => setEditAmount(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                    원
+                  </span>
                 </div>
               </div>
 
-              {/* 상세 정보 */}
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">날짜</span>
-                  <span className="text-slate-800">{selectedExpense.date}</span>
+              {/* 카테고리 */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  카테고리
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {activeCategories.map((cat) => (
+                    <button
+                      key={cat.key}
+                      type="button"
+                      onClick={() => setEditCategory(cat.key)}
+                      className={`flex flex-col items-center p-2 rounded-lg border-2 transition-colors min-w-[56px] ${
+                        editCategory === cat.key
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div
+                        className="w-6 h-6 rounded-full mb-1"
+                        style={{ backgroundColor: cat.color }}
+                      />
+                      <span className="text-xs text-slate-700">
+                        {cat.label.slice(0, 2)}
+                      </span>
+                    </button>
+                  ))}
                 </div>
-                {selectedExpense.time && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">시간</span>
-                    <span className="text-slate-800">{selectedExpense.time}</span>
-                  </div>
-                )}
-                {selectedExpense.cardLastFour && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">결제수단</span>
-                    <span className="text-slate-800">{selectedExpense.cardLastFour}</span>
-                  </div>
-                )}
-                {selectedExpense.memo && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">메모</span>
-                    <span className="text-slate-800">{selectedExpense.memo}</span>
-                  </div>
-                )}
+              </div>
+
+              {/* 메모 */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  메모
+                </label>
+                <input
+                  type="text"
+                  value={editMemo}
+                  onChange={(e) => setEditMemo(e.target.value)}
+                  placeholder="메모 입력 (선택)"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
             </div>
 
-            <button
-              onClick={() => setSelectedExpense(null)}
-              className="w-full mt-6 py-3 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors"
-            >
-              닫기
-            </button>
+            {/* 삭제 확인 */}
+            {showDeleteConfirm ? (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl">
+                <p className="text-sm text-red-700 mb-3">
+                  정말 삭제하시겠습니까?
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    className="flex-1 py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                  >
+                    삭제
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* 삭제 버튼 */}
+                {onDelete && (
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="w-full mt-4 py-2 px-4 border border-red-300 text-red-500 rounded-lg hover:bg-red-50 transition-colors"
+                  >
+                    삭제
+                  </button>
+                )}
+
+                {/* 저장/취소 버튼 */}
+                <div className="flex gap-3 mt-4">
+                  <button
+                    onClick={() => setSelectedExpense(null)}
+                    className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                  >
+                    저장
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

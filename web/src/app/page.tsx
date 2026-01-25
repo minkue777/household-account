@@ -239,6 +239,8 @@ export default function Home() {
         <SearchModal
           isOpen={showSearchModal}
           onClose={() => setShowSearchModal(false)}
+          onExpenseUpdate={handleExpenseUpdate}
+          onDelete={handleDeleteExpense}
         />
 
         {/* 모바일 레이아웃 */}
