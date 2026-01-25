@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
+import Portal from './Portal';
 
 interface AddExpenseModalProps {
   isOpen: boolean;
@@ -54,8 +55,9 @@ export default function AddExpenseModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl p-6 m-4 max-w-md w-full shadow-xl">
+    <Portal>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+        <div className="bg-white rounded-2xl p-6 m-4 max-w-md w-full shadow-xl">
         <h2 className="text-xl font-bold text-slate-800 mb-6">지출 추가</h2>
 
         <div className="space-y-4">
@@ -172,7 +174,8 @@ export default function AddExpenseModal({
             추가
           </button>
         </div>
+        </div>
       </div>
-    </div>
+    </Portal>
   );
 }

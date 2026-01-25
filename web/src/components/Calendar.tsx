@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { getCalendarStyleClass } from '@/contexts/CalendarStyleContext';
+import Portal from './Portal';
 
 interface CalendarProps {
   year: number;
@@ -155,15 +156,15 @@ export default function Calendar({
 
       {/* 년/월 선택 모달 */}
       {showYearMonthPicker && (
-        <div
-          className="fixed top-0 left-0 right-0 bottom-0 bg-slate-900/20 backdrop-blur-sm z-[9999] flex items-center justify-center p-4"
-          style={{ position: 'fixed' }}
-          onClick={() => setShowYearMonthPicker(false)}
-        >
+        <Portal>
           <div
-            className="bg-white rounded-2xl p-4 shadow-xl w-72"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[9999] flex items-center justify-center p-4"
+            onClick={() => setShowYearMonthPicker(false)}
           >
+            <div
+              className="bg-white rounded-2xl p-4 shadow-xl w-72"
+              onClick={(e) => e.stopPropagation()}
+            >
             {/* 년도 선택 */}
             <div className="flex items-center justify-between mb-4">
               <button
@@ -215,8 +216,9 @@ export default function Calendar({
             >
               오늘로 이동
             </button>
+            </div>
           </div>
-        </div>
+        </Portal>
       )}
 
       {/* 요일 헤더 */}
