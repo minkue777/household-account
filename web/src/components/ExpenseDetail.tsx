@@ -341,7 +341,7 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
       {showEditModal && (
         <Portal>
           <div
-            className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[9999] flex items-start justify-center pt-8 pb-4 px-4 overflow-y-auto"
+            className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[9999] flex items-start justify-center pt-20 pb-4 px-4 overflow-y-auto"
             onClick={() => setShowEditModal(false)}
           >
             <div
@@ -552,7 +552,7 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
       {showSplitModal && (
         <Portal>
           <div
-            className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-start justify-center z-[9999] pt-8 pb-4 px-4 overflow-y-auto"
+            className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-start justify-center z-[9999] pt-20 pb-4 px-4 overflow-y-auto"
             onClick={() => setShowSplitModal(false)}
           >
             <div
