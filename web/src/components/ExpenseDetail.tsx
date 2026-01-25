@@ -296,7 +296,7 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
             : 'bg-slate-50 hover:bg-slate-100'
         }`}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
           {/* 카테고리 아이콘 */}
           <div
             className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0"
@@ -304,7 +304,7 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
           >
             {expenseLabel.slice(0, 2)}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="font-medium text-slate-800 truncate">
               {expense.merchant}
             </div>
@@ -315,7 +315,7 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
           <div className="font-semibold text-slate-800">
             {expense.amount.toLocaleString()}원
           </div>
