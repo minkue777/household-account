@@ -51,8 +51,7 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
 
   // householdId 가져오기
   useEffect(() => {
-    const key = getStoredHouseholdKey();
-    setHouseholdId(key);
+    setHouseholdId(getStoredHouseholdKey() || '');
 
     // localStorage 변경 감지 (다른 탭에서 변경 시)
     const handleStorageChange = (e: StorageEvent) => {
