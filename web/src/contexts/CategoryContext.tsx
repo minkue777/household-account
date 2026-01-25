@@ -9,6 +9,7 @@ import {
   updateCategory as updateCategoryService,
   deleteCategory as deleteCategoryService,
   setBudget as setBudgetService,
+  reorderCategories as reorderCategoriesService,
   generateCategoryKey,
 } from '@/lib/categoryService';
 import { fixInvalidCategories } from '@/lib/expenseService';
@@ -26,6 +27,7 @@ interface CategoryContextType {
   updateCategory: (id: string, data: { label?: string; color?: string; budget?: number | null }) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
   setBudget: (id: string, budget: number | null) => Promise<void>;
+  reorderCategories: (categories: CategoryDocument[]) => Promise<void>;
   // 호환성 헬퍼 (기존 CATEGORY_LABELS, CATEGORY_COLORS 대체)
   categoryLabels: Record<string, string>;
   categoryColors: Record<string, string>;
@@ -139,6 +141,11 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
     await setBudgetService(id, budget);
   }, []);
 
+  const reorderCategories = useCallback(async (reorderedCategories: CategoryDocument[]): Promise<void> => {
+    const updates = reorderedCategories.map((cat, index) => ({ id: cat.id, order: index }));
+    await reorderCategoriesService(updates);
+  }, []);
+
   // 호환성 헬퍼 (기존 코드와의 호환성을 위해)
   const categoryLabels = useMemo(() => {
     const labels: Record<string, string> = {};
@@ -171,6 +178,7 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
     updateCategory,
     deleteCategory,
     setBudget,
+    reorderCategories,
     categoryLabels,
     categoryColors,
     activeCategories,

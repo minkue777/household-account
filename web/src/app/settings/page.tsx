@@ -21,6 +21,7 @@ export default function SettingsPage() {
     addCategory,
     updateCategory,
     deleteCategory,
+    reorderCategories,
     activeCategories,
     getCategoryLabel,
     getCategoryColor,
@@ -30,6 +31,10 @@ export default function SettingsPage() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+
+  // 드래그 앤 드롭 상태
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   // 섹션 펼침/접힘 상태
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
@@ -107,6 +112,56 @@ export default function SettingsPage() {
     }
   };
 
+  // 드래그 앤 드롭 핸들러
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedId(id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    if (draggedId && draggedId !== id) {
+      setDragOverId(id);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverId(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!draggedId || draggedId === targetId) {
+      setDraggedId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    const draggedIndex = categories.findIndex((c) => c.id === draggedId);
+    const targetIndex = categories.findIndex((c) => c.id === targetId);
+
+    if (draggedIndex === -1 || targetIndex === -1) {
+      setDraggedId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    // 새 순서 배열 생성
+    const reordered = [...categories];
+    const [removed] = reordered.splice(draggedIndex, 1);
+    reordered.splice(targetIndex, 0, removed);
+
+    await reorderCategories(reordered);
+
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -164,7 +219,22 @@ export default function SettingsPage() {
             <div className="border-t border-slate-100">
               <div className="divide-y divide-slate-100">
                 {categories.map((category) => (
-                  <div key={category.id} className="p-4">
+                  <div
+                    key={category.id}
+                    draggable={editingId !== category.id}
+                    onDragStart={(e) => handleDragStart(e, category.id)}
+                    onDragOver={(e) => handleDragOver(e, category.id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, category.id)}
+                    onDragEnd={handleDragEnd}
+                    className={`p-4 transition-all ${
+                      draggedId === category.id
+                        ? 'opacity-50 bg-slate-100'
+                        : dragOverId === category.id
+                          ? 'bg-blue-50 border-l-4 border-blue-500'
+                          : ''
+                    }`}
+                  >
                     {editingId === category.id ? (
                       // 편집 모드
                       <div className="space-y-4">
@@ -215,6 +285,12 @@ export default function SettingsPage() {
                       // 보기 모드
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
+                          {/* 드래그 핸들 */}
+                          <div className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600">
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z" />
+                            </svg>
+                          </div>
                           <div
                             className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium"
                             style={{ backgroundColor: category.color }}
@@ -548,6 +624,7 @@ export default function SettingsPage() {
             <div className="text-sm text-slate-600">
               <p className="font-medium mb-1">설정 안내</p>
               <ul className="space-y-1 text-slate-500">
+                <li>카테고리를 드래그하여 순서를 변경할 수 있습니다.</li>
                 <li>기본 카테고리는 삭제할 수 없습니다.</li>
                 <li>가맹점 규칙은 지출 상세에서 자동 추가됩니다.</li>
               </ul>

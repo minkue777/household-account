@@ -9,7 +9,7 @@ interface CategorySummaryProps {
 }
 
 export default function CategorySummary({ expenses }: CategorySummaryProps) {
-  const { getCategoryLabel, getCategoryColor, getCategoryBudget, isLoading } = useCategoryContext();
+  const { categories, getCategoryLabel, getCategoryColor, getCategoryBudget, isLoading } = useCategoryContext();
 
   const categorySummary = useMemo(() => {
     const totals = new Map<Category, { total: number; count: number }>();
@@ -22,13 +22,16 @@ export default function CategorySummary({ expenses }: CategorySummaryProps) {
       });
     });
 
-    // 금액 순으로 정렬
+    // 카테고리 순서대로 정렬 (설정에서 지정한 순서)
+    const categoryOrder = new Map(categories.map((c, index) => [c.key, index]));
     return Array.from(totals.entries())
       .map(([category, { total, count }]) => ({ category, total, count }))
-      .sort((a, b) => b.total - a.total);
-  }, [expenses]);
-
-  const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0);
+      .sort((a, b) => {
+        const orderA = categoryOrder.get(a.category) ?? 999;
+        const orderB = categoryOrder.get(b.category) ?? 999;
+        return orderA - orderB;
+      });
+  }, [expenses, categories]);
 
   if (isLoading) {
     return (
@@ -48,13 +51,8 @@ export default function CategorySummary({ expenses }: CategorySummaryProps) {
         const label = getCategoryLabel(category);
         const hasBudget = budget !== null && budget > 0;
 
-        // 예산이 있으면 예산 대비 %, 없으면 전체 대비 비율 (막대용)
-        const percentage = hasBudget
-          ? Math.min((total / budget) * 100, 100)
-          : totalAmount > 0
-            ? (total / totalAmount) * 100
-            : 0;
-
+        // 예산이 있을 때만 퍼센트 계산
+        const percentage = hasBudget ? Math.min((total / budget) * 100, 100) : 0;
         const isOverBudget = hasBudget && total > budget;
 
         return (
@@ -79,16 +77,18 @@ export default function CategorySummary({ expenses }: CategorySummaryProps) {
                 </span>
               </div>
             </div>
-            {/* 프로그레스 바 */}
-            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-300 ${isOverBudget ? 'animate-pulse' : ''}`}
-                style={{
-                  width: `${percentage}%`,
-                  backgroundColor: isOverBudget ? '#EF4444' : color,
-                }}
-              />
-            </div>
+            {/* 프로그레스 바 (예산이 있을 때만) */}
+            {hasBudget && (
+              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${isOverBudget ? 'animate-pulse' : ''}`}
+                  style={{
+                    width: `${percentage}%`,
+                    backgroundColor: isOverBudget ? '#EF4444' : color,
+                  }}
+                />
+              </div>
+            )}
             {/* 예산 초과 경고 */}
             {isOverBudget && (
               <div className="flex items-center gap-1 mt-1">
