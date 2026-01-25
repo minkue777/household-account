@@ -61,10 +61,17 @@ exports.onExpenseUpdated = functions
     }
     console.log('알림 전송 시작 (notifyPartner: true로 변경됨)');
     const expense = after;
-    // 알림 전송할 토큰 목록 가져오기
-    const tokensSnapshot = await db.collection('fcmTokens').get();
+    const householdId = expense.householdId;
+    if (!householdId) {
+        console.log('householdId가 없어서 알림 전송 스킵');
+        return null;
+    }
+    // 같은 householdId를 가진 토큰만 가져오기
+    const tokensSnapshot = await db.collection('fcmTokens')
+        .where('householdId', '==', householdId)
+        .get();
     if (tokensSnapshot.empty) {
-        console.log('등록된 FCM 토큰이 없습니다.');
+        console.log(`householdId(${householdId})에 해당하는 FCM 토큰이 없습니다.`);
         return null;
     }
     const tokens = [];
@@ -78,6 +85,7 @@ exports.onExpenseUpdated = functions
         console.log('유효한 FCM 토큰이 없습니다.');
         return null;
     }
+    console.log(`householdId(${householdId})에 ${tokens.length}개의 토큰으로 알림 전송`);
     // 금액 포맷팅
     const amount = ((_a = expense.amount) === null || _a === void 0 ? void 0 : _a.toLocaleString('ko-KR')) || '0';
     const merchant = expense.merchant || '알 수 없는 가맹점';
@@ -153,9 +161,12 @@ exports.onExpenseUpdated = functions
 exports.saveFcmToken = functions
     .region('asia-northeast3')
     .https.onCall(async (data, context) => {
-    const { token, deviceInfo } = data;
+    const { token, deviceInfo, householdId } = data;
     if (!token) {
         throw new functions.https.HttpsError('invalid-argument', 'FCM 토큰이 필요합니다.');
+    }
+    if (!householdId) {
+        throw new functions.https.HttpsError('invalid-argument', 'householdId가 필요합니다.');
     }
     try {
         // 기존 토큰 확인
@@ -163,12 +174,14 @@ exports.saveFcmToken = functions
             .where('token', '==', token)
             .get();
         if (!existingToken.empty) {
-            // 이미 존재하면 업데이트
+            // 이미 존재하면 업데이트 (householdId도 업데이트 - 계정 변경 대응)
             const docId = existingToken.docs[0].id;
             await db.collection('fcmTokens').doc(docId).update({
                 lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
                 deviceInfo: deviceInfo || null,
+                householdId: householdId,
             });
+            console.log(`토큰 업데이트 완료 (householdId: ${householdId})`);
             return { success: true, message: '토큰 업데이트 완료' };
         }
         // 새 토큰 저장
@@ -177,7 +190,9 @@ exports.saveFcmToken = functions
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
             deviceInfo: deviceInfo || null,
+            householdId: householdId,
         });
+        console.log(`새 토큰 저장 완료 (householdId: ${householdId})`);
         return { success: true, message: '토큰 저장 완료' };
     }
     catch (error) {

@@ -3,7 +3,6 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from './firebase';
 
 // VAPID 키 (Firebase Console > 프로젝트 설정 > 클라우드 메시징 > 웹 푸시 인증서에서 생성)
-// 이 키는 나중에 실제 키로 교체해야 합니다
 const VAPID_KEY = 'BLI2AoMlLXi5yMOfCAPdup52iEoPoItcWzFQws-Vb5xviQ9VA1ex7oTLZ9M5kqDccQoYAiMaNSUQZSjURD98y3k';
 
 let messaging: Messaging | null = null;
@@ -99,14 +98,17 @@ async function saveTokenToServer(token: string): Promise<void> {
     const functions = getFunctions(app, 'asia-northeast3');
     const saveFcmToken = httpsCallable(functions, 'saveFcmToken');
 
+    // localStorage에서 householdKey 가져오기
+    const householdKey = localStorage.getItem('householdKey') || '';
+
     const deviceInfo = {
       userAgent: navigator.userAgent,
       platform: navigator.platform,
       language: navigator.language,
     };
 
-    await saveFcmToken({ token, deviceInfo });
-    console.log('FCM 토큰 서버 저장 완료');
+    await saveFcmToken({ token, deviceInfo, householdId: householdKey });
+    console.log('FCM 토큰 서버 저장 완료 (householdId:', householdKey, ')');
   } catch (error) {
     console.error('FCM 토큰 서버 저장 실패:', error);
     throw error;
