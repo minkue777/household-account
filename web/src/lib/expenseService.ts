@@ -69,11 +69,10 @@ export function subscribeToMonthlyExpenses(
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
 
-  // householdId로 필터링
+  // householdId로 필터링 (인덱스 없이 클라이언트에서 정렬)
   const q = query(
     collection(db, COLLECTION_NAME),
-    where('householdId', '==', householdId),
-    orderBy('date', 'desc')
+    where('householdId', '==', householdId)
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -94,10 +93,10 @@ export function subscribeToMonthlyExpenses(
       } as Expense;
     });
 
-    // 클라이언트에서 날짜 필터링
-    const filtered = allExpenses.filter(
-      (e) => e.date >= startDate && e.date <= endDate
-    );
+    // 클라이언트에서 날짜 필터링 및 정렬
+    const filtered = allExpenses
+      .filter((e) => e.date >= startDate && e.date <= endDate)
+      .sort((a, b) => b.date.localeCompare(a.date));
 
     callback(filtered);
   }, (error) => {
@@ -128,8 +127,7 @@ export function subscribeToDateRangeExpenses(
 
   const q = query(
     collection(db, COLLECTION_NAME),
-    where('householdId', '==', householdId),
-    orderBy('date', 'desc')
+    where('householdId', '==', householdId)
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -149,9 +147,9 @@ export function subscribeToDateRangeExpenses(
       } as Expense;
     });
 
-    const filtered = allExpenses.filter(
-      (e) => e.date >= startDate && e.date <= endDate
-    );
+    const filtered = allExpenses
+      .filter((e) => e.date >= startDate && e.date <= endDate)
+      .sort((a, b) => b.date.localeCompare(a.date));
 
     callback(filtered);
   }, (error) => {
@@ -354,8 +352,7 @@ export async function searchExpenses(keyword: string): Promise<Expense[]> {
 
   const q = query(
     collection(db, COLLECTION_NAME),
-    where('householdId', '==', householdId),
-    orderBy('date', 'desc')
+    where('householdId', '==', householdId)
   );
 
   const snapshot = await getDocs(q);
@@ -381,7 +378,8 @@ export async function searchExpenses(keyword: string): Promise<Expense[]> {
       const merchantMatch = expense.merchant.toLowerCase().includes(lowerKeyword);
       const memoMatch = expense.memo?.toLowerCase().includes(lowerKeyword);
       return merchantMatch || memoMatch;
-    });
+    })
+    .sort((a, b) => b.date.localeCompare(a.date));
 
   return results;
 }
