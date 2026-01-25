@@ -56,10 +56,6 @@ export default function CategorySummary({ expenses }: CategorySummaryProps) {
             : 0;
 
         const isOverBudget = hasBudget && total > budget;
-        // 예산이 있을 때만 % 표시
-        const displayPercent = hasBudget
-          ? Math.round((total / budget) * 100)
-          : null;
 
         return (
           <div key={category} className="group">
@@ -78,25 +74,21 @@ export default function CategorySummary({ expenses }: CategorySummaryProps) {
                 <span className={`text-sm font-semibold ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
                   {total.toLocaleString()}원
                 </span>
-                {displayPercent !== null && (
-                  <span className={`text-xs font-medium min-w-[40px] text-right ${isOverBudget ? 'text-red-500' : 'text-slate-500'}`}>
-                    ({displayPercent}%)
-                  </span>
-                )}
+                <span className={`text-xs font-medium min-w-[40px] text-right ${isOverBudget ? 'text-red-500' : 'text-slate-500'}`}>
+                  {hasBudget ? `(${Math.round((total / budget) * 100)}%)` : '(--)'}
+                </span>
               </div>
             </div>
-            {/* 프로그레스 바 - 예산 있을 때만 표시 */}
-            {hasBudget && (
-              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-300 ${isOverBudget ? 'animate-pulse' : ''}`}
-                  style={{
-                    width: `${percentage}%`,
-                    backgroundColor: isOverBudget ? '#EF4444' : color,
-                  }}
-                />
-              </div>
-            )}
+            {/* 프로그레스 바 */}
+            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${isOverBudget ? 'animate-pulse' : ''}`}
+                style={{
+                  width: `${percentage}%`,
+                  backgroundColor: isOverBudget ? '#EF4444' : color,
+                }}
+              />
+            </div>
             {/* 예산 초과 경고 */}
             {isOverBudget && (
               <div className="flex items-center gap-1 mt-1">
