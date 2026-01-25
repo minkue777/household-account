@@ -25,9 +25,9 @@ export default function BudgetTransferModal({ isOpen, onClose, year, month }: Bu
 
   const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
 
-  // householdId 가져오기
+  // householdId 가져오기 (없으면 'guest' 사용)
   useEffect(() => {
-    setHouseholdId(getStoredHouseholdKey() || '');
+    setHouseholdId(getStoredHouseholdKey() || 'guest');
   }, []);
 
   // 예산이 있는 카테고리만 필터링

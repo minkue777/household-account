@@ -58,11 +58,7 @@ export default function Home() {
 
   // 예산 이동 구독
   useEffect(() => {
-    const householdId = getStoredHouseholdKey();
-    if (!householdId) {
-      setBudgetTransfers([]);
-      return;
-    }
+    const householdId = getStoredHouseholdKey() || 'guest';
     const yearMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
     const unsubscribe = subscribeToMonthlyBudgetTransfers(householdId, yearMonth, setBudgetTransfers);
     return () => unsubscribe();

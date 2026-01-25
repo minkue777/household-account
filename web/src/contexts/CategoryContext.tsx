@@ -49,14 +49,14 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
   const [hasMigrated, setHasMigrated] = useState(false);
   const [householdId, setHouseholdId] = useState<string>('');
 
-  // householdId 가져오기
+  // householdId 가져오기 (없으면 'guest' 사용)
   useEffect(() => {
-    setHouseholdId(getStoredHouseholdKey() || '');
+    setHouseholdId(getStoredHouseholdKey() || 'guest');
 
     // localStorage 변경 감지 (다른 탭에서 변경 시)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'householdKey') {
-        setHouseholdId(e.newValue || '');
+        setHouseholdId(e.newValue || 'guest');
       }
     };
     window.addEventListener('storage', handleStorageChange);
