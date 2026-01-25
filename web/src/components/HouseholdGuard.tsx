@@ -8,8 +8,8 @@ export default function HouseholdGuard({ children }: { children: React.ReactNode
   const { isLoading, isAuthenticated } = useHousehold();
   const pathname = usePathname();
 
-  // 관리자 페이지는 로그인 없이 접근 가능
-  if (pathname === '/admin') {
+  // 관리자 페이지와 게스트 페이지는 로그인 없이 접근 가능
+  if (pathname === '/admin' || pathname.startsWith('/admin/') || pathname === '/guest') {
     return <>{children}</>;
   }
 
