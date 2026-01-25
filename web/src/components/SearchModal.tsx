@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Expense } from '@/types/expense';
 import { searchExpenses } from '@/lib/expenseService';
 import { useCategoryContext } from '@/contexts/CategoryContext';
@@ -23,10 +23,10 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState<Expense[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   // 모달 열릴 때 input에 포커스
   useEffect(() => {
@@ -40,39 +40,51 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
     if (!isOpen) {
       setKeyword('');
       setResults([]);
-      setHasSearched(false);
       setSelectedExpense(null);
       setExpandedMonth(null);
     }
   }, [isOpen]);
 
-  // 검색 실행
-  const handleSearch = useCallback(async () => {
-    if (!keyword.trim()) return;
+  // 키워드 변경 시 자동 검색 (debounce 적용)
+  useEffect(() => {
+    // 이전 타이머 취소
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
 
-    setIsSearching(true);
-    setHasSearched(true);
-    try {
-      const searchResults = await searchExpenses(keyword);
-      setResults(searchResults);
-      // 첫 번째 월 자동 펼치기
-      if (searchResults.length > 0) {
-        const firstMonth = searchResults[0].date.substring(0, 7);
-        setExpandedMonth(firstMonth);
+    // 키워드가 비어있으면 결과 초기화
+    if (!keyword.trim()) {
+      setResults([]);
+      setExpandedMonth(null);
+      return;
+    }
+
+    // 300ms 후 검색 실행
+    debounceTimer.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const searchResults = await searchExpenses(keyword);
+        setResults(searchResults);
+        // 첫 번째 월 자동 펼치기
+        if (searchResults.length > 0) {
+          const firstMonth = searchResults[0].date.substring(0, 7);
+          setExpandedMonth(firstMonth);
+        } else {
+          setExpandedMonth(null);
+        }
+      } catch (error) {
+        console.error('검색 실패:', error);
+      } finally {
+        setIsSearching(false);
       }
-    } catch (error) {
-      console.error('검색 실패:', error);
-    } finally {
-      setIsSearching(false);
-    }
-  }, [keyword]);
+    }, 300);
 
-  // Enter 키 처리
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
-  };
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, [keyword]);
 
   // 월별 그룹화
   const groupedResults: MonthlyGroup[] = results.reduce((groups, expense) => {
@@ -119,9 +131,8 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
                   type="text"
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
-                  onKeyDown={handleKeyDown}
                   placeholder="가맹점명, 메모로 검색..."
-                  className="w-full pl-10 pr-4 py-3 bg-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800"
+                  className="w-full pl-10 pr-10 py-3 bg-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800"
                 />
                 <svg
                   className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400"
@@ -136,14 +147,18 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
                     d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                   />
                 </svg>
+                {/* 키워드 지우기 버튼 */}
+                {keyword && (
+                  <button
+                    onClick={() => setKeyword('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-200 rounded-full transition-colors"
+                  >
+                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
               </div>
-              <button
-                onClick={handleSearch}
-                disabled={!keyword.trim() || isSearching}
-                className="px-4 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                검색
-              </button>
               <button
                 onClick={onClose}
                 className="p-3 hover:bg-slate-100 rounded-xl transition-colors"
@@ -161,7 +176,7 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
               <div className="flex items-center justify-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
               </div>
-            ) : hasSearched ? (
+            ) : keyword.trim() ? (
               results.length > 0 ? (
                 <div className="space-y-4">
                   {/* 검색 요약 */}
