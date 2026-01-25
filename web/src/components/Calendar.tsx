@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef } from 'react';
+import { useMemo, useState } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { getCalendarStyleClass } from '@/contexts/CalendarStyleContext';
@@ -15,6 +15,7 @@ interface CalendarProps {
   onNextMonth?: () => void;
   monthlyTotal?: number;
   isLoading?: boolean;
+  onYearMonthChange?: (year: number, month: number) => void;
 }
 
 const DAYS_OF_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
@@ -28,6 +29,8 @@ const DAY_COLORS = [
   'text-blue-500',   // 토요일
 ];
 
+const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
 export default function Calendar({
   year,
   month,
@@ -38,40 +41,12 @@ export default function Calendar({
   onNextMonth,
   monthlyTotal,
   isLoading,
+  onYearMonthChange,
 }: CalendarProps) {
   const { getCategoryColor } = useCategoryContext();
   const styleClass = getCalendarStyleClass();
-
-  // 스와이프 제스처 처리
-  const touchStartX = useRef<number | null>(null);
-  const touchEndX = useRef<number | null>(null);
-  const minSwipeDistance = 50;
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchEndX.current = null;
-    touchStartX.current = e.targetTouches[0].clientX;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    touchEndX.current = e.targetTouches[0].clientX;
-  };
-
-  const handleTouchEnd = () => {
-    if (!touchStartX.current || !touchEndX.current) return;
-
-    const distance = touchStartX.current - touchEndX.current;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
-
-    if (isLeftSwipe && onNextMonth) {
-      onNextMonth();
-    } else if (isRightSwipe && onPrevMonth) {
-      onPrevMonth();
-    }
-
-    touchStartX.current = null;
-    touchEndX.current = null;
-  };
+  const [showYearMonthPicker, setShowYearMonthPicker] = useState(false);
+  const [pickerYear, setPickerYear] = useState(year);
 
   // 해당 월의 일수와 시작 요일 계산
   const { daysInMonth, startDay, dates } = useMemo(() => {
@@ -123,13 +98,28 @@ export default function Calendar({
     return expensesByDate.get(dateStr) || [];
   };
 
+  // 년/월 선택 핸들러
+  const handleYearMonthSelect = (selectedMonth: number) => {
+    if (onYearMonthChange) {
+      onYearMonthChange(pickerYear, selectedMonth);
+    } else {
+      // onYearMonthChange가 없으면 기존 방식으로 월 이동
+      const monthDiff = (pickerYear - year) * 12 + (selectedMonth - month);
+      if (monthDiff > 0) {
+        for (let i = 0; i < monthDiff; i++) {
+          onNextMonth?.();
+        }
+      } else if (monthDiff < 0) {
+        for (let i = 0; i < Math.abs(monthDiff); i++) {
+          onPrevMonth?.();
+        }
+      }
+    }
+    setShowYearMonthPicker(false);
+  };
+
   return (
-    <div
-      className={`${styleClass} overflow-hidden`}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-    >
+    <div className={`${styleClass} overflow-hidden`}>
       {/* 월 선택 헤더 */}
       {onPrevMonth && onNextMonth && (
         <div className="flex items-center justify-center px-4 py-3">
@@ -142,9 +132,15 @@ export default function Calendar({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-            <span className="text-lg font-semibold text-slate-800 min-w-[120px] text-center">
+            <button
+              onClick={() => {
+                setPickerYear(year);
+                setShowYearMonthPicker(true);
+              }}
+              className="text-lg font-semibold text-slate-800 min-w-[120px] text-center hover:bg-white/50 rounded-lg px-2 py-1 transition-colors"
+            >
               {year}년 {month}월
-            </span>
+            </button>
             <button
               onClick={onNextMonth}
               className="p-1.5 hover:bg-white/50 rounded-lg transition-colors"
@@ -152,6 +148,72 @@ export default function Calendar({
               <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 년/월 선택 모달 */}
+      {showYearMonthPicker && (
+        <div
+          className="fixed top-0 left-0 right-0 bottom-0 bg-slate-900/20 backdrop-blur-sm z-[9999] flex items-center justify-center p-4"
+          style={{ position: 'fixed' }}
+          onClick={() => setShowYearMonthPicker(false)}
+        >
+          <div
+            className="bg-white rounded-2xl p-4 shadow-xl w-72"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 년도 선택 */}
+            <div className="flex items-center justify-between mb-4">
+              <button
+                onClick={() => setPickerYear(pickerYear - 1)}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <span className="text-xl font-bold text-slate-800">{pickerYear}년</span>
+              <button
+                onClick={() => setPickerYear(pickerYear + 1)}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+
+            {/* 월 선택 그리드 */}
+            <div className="grid grid-cols-4 gap-2">
+              {MONTHS.map((m) => (
+                <button
+                  key={m}
+                  onClick={() => handleYearMonthSelect(m)}
+                  className={`py-3 rounded-xl text-sm font-medium transition-colors ${
+                    pickerYear === year && m === month
+                      ? 'bg-blue-500 text-white'
+                      : 'hover:bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  {m}월
+                </button>
+              ))}
+            </div>
+
+            {/* 오늘로 이동 버튼 */}
+            <button
+              onClick={() => {
+                const today = new Date();
+                if (onYearMonthChange) {
+                  onYearMonthChange(today.getFullYear(), today.getMonth() + 1);
+                }
+                setShowYearMonthPicker(false);
+              }}
+              className="w-full mt-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-sm font-medium text-slate-700 transition-colors"
+            >
+              오늘로 이동
             </button>
           </div>
         </div>
@@ -188,8 +250,10 @@ export default function Calendar({
             <div
               key={day}
               onClick={() => onDateClick(dateStr)}
-              className={`h-12 md:h-28 border-b border-r border-slate-100 p-0.5 md:p-1.5 cursor-pointer transition-all hover:bg-slate-50 ${
-                isSelected ? 'bg-blue-50 border-2 border-blue-400' : ''
+              className={`h-12 md:h-28 p-0.5 md:p-1.5 cursor-pointer transition-all hover:bg-slate-50 ${
+                isSelected
+                  ? 'bg-blue-50 border-2 border-blue-400'
+                  : 'border-b border-r border-slate-100'
               }`}
             >
               {/* 모바일: 날짜 + 금액만 세로 배치 */}

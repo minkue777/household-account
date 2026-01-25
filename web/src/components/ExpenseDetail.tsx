@@ -339,12 +339,12 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
       {/* 편집 모달 */}
       {showEditModal && (
         <div
-          className="fixed top-0 left-0 right-0 bottom-0 bg-slate-900/20 backdrop-blur-sm z-[9999] flex items-center justify-center p-4"
+          className="fixed top-0 left-0 right-0 bottom-0 bg-slate-900/20 backdrop-blur-sm z-[9999] flex items-start justify-center pt-8 pb-4 px-4 overflow-y-auto"
           style={{ position: 'fixed' }}
           onClick={() => setShowEditModal(false)}
         >
           <div
-            className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold text-slate-800 mb-4">

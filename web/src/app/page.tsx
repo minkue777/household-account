@@ -71,6 +71,13 @@ export default function Home() {
     setSelectedDate(selectedDate === date ? null : date);
   };
 
+  // 년/월 직접 선택 핸들러
+  const handleYearMonthChange = (newYear: number, newMonth: number) => {
+    setCurrentYear(newYear);
+    setCurrentMonth(newMonth);
+    setSelectedDate(null);
+  };
+
   // 지출 수정 핸들러
   const handleExpenseUpdate = async (expenseId: string, data: { amount?: number; memo?: string; category?: string }) => {
     try {
@@ -216,6 +223,7 @@ export default function Home() {
               selectedDate={selectedDate}
               onPrevMonth={handlePrevMonth}
               onNextMonth={handleNextMonth}
+              onYearMonthChange={handleYearMonthChange}
             />
           </div>
 
@@ -284,6 +292,7 @@ export default function Home() {
                 selectedDate={selectedDate}
                 onPrevMonth={handlePrevMonth}
                 onNextMonth={handleNextMonth}
+                onYearMonthChange={handleYearMonthChange}
               />
             </div>
 
