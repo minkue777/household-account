@@ -10,29 +10,91 @@ import { onAuthChange, isAdmin } from '@/lib/authService';
 const GUEST_KEY = 'guest';
 const GUEST_NAME = '샘플 가계부';
 
-// 샘플 데이터
-const SAMPLE_EXPENSES = [
-  { merchant: '스타벅스', amount: 6500, category: 'food', daysAgo: 0 },
-  { merchant: '쿠팡', amount: 45000, category: 'living', daysAgo: 0 },
-  { merchant: '이마트', amount: 87000, category: 'food', daysAgo: 1 },
-  { merchant: '넷플릭스', amount: 17000, category: 'fixed', daysAgo: 2 },
-  { merchant: '주유소', amount: 80000, category: 'living', daysAgo: 2 },
-  { merchant: '어린이집', amount: 450000, category: 'childcare', daysAgo: 3 },
-  { merchant: 'GS25', amount: 3500, category: 'food', daysAgo: 3 },
-  { merchant: '다이소', amount: 12000, category: 'living', daysAgo: 4 },
-  { merchant: '올리브영', amount: 35000, category: 'living', daysAgo: 5 },
-  { merchant: '배달의민족', amount: 28000, category: 'food', daysAgo: 5 },
-  { merchant: '병원', amount: 15000, category: 'etc', daysAgo: 6 },
-  { merchant: '교보문고', amount: 22000, category: 'etc', daysAgo: 7 },
-  { merchant: '맥도날드', amount: 15500, category: 'food', daysAgo: 8 },
-  { merchant: '통신비', amount: 55000, category: 'fixed', daysAgo: 10 },
-  { merchant: '관리비', amount: 180000, category: 'fixed', daysAgo: 10 },
-  { merchant: '카페', amount: 4500, category: 'food', daysAgo: 12 },
-  { merchant: '마트', amount: 65000, category: 'food', daysAgo: 14 },
-  { merchant: '아기용품', amount: 78000, category: 'childcare', daysAgo: 15 },
-  { merchant: '약국', amount: 8500, category: 'etc', daysAgo: 18 },
-  { merchant: '주차비', amount: 5000, category: 'living', daysAgo: 20 },
+// 반복 사용할 가맹점 템플릿
+const EXPENSE_TEMPLATES = [
+  // 식비
+  { merchant: '스타벅스', amount: [5500, 6500, 7000], category: 'food' },
+  { merchant: '이마트', amount: [45000, 87000, 120000], category: 'food' },
+  { merchant: '배달의민족', amount: [18000, 28000, 35000], category: 'food' },
+  { merchant: 'GS25', amount: [2500, 3500, 5000], category: 'food' },
+  { merchant: '맥도날드', amount: [12000, 15500, 22000], category: 'food' },
+  { merchant: '카페', amount: [4500, 5500, 6000], category: 'food' },
+  { merchant: '홈플러스', amount: [35000, 55000, 78000], category: 'food' },
+  { merchant: '쿠팡이츠', amount: [15000, 25000, 32000], category: 'food' },
+  // 생활비
+  { merchant: '쿠팡', amount: [25000, 45000, 89000], category: 'living' },
+  { merchant: '주유소', amount: [60000, 80000, 95000], category: 'living' },
+  { merchant: '다이소', amount: [8000, 12000, 18000], category: 'living' },
+  { merchant: '올리브영', amount: [25000, 35000, 55000], category: 'living' },
+  { merchant: '주차비', amount: [3000, 5000, 8000], category: 'living' },
+  { merchant: '세탁소', amount: [8000, 15000, 25000], category: 'living' },
+  // 고정비
+  { merchant: '넷플릭스', amount: [17000], category: 'fixed' },
+  { merchant: '통신비', amount: [55000], category: 'fixed' },
+  { merchant: '관리비', amount: [150000, 180000, 210000], category: 'fixed' },
+  { merchant: '보험료', amount: [120000], category: 'fixed' },
+  { merchant: '인터넷', amount: [33000], category: 'fixed' },
+  // 육아비
+  { merchant: '어린이집', amount: [450000], category: 'childcare' },
+  { merchant: '아기용품', amount: [45000, 78000, 120000], category: 'childcare' },
+  { merchant: '소아과', amount: [15000, 25000, 35000], category: 'childcare' },
+  { merchant: '장난감', amount: [25000, 45000, 65000], category: 'childcare' },
+  // 기타
+  { merchant: '병원', amount: [15000, 35000, 55000], category: 'etc' },
+  { merchant: '교보문고', amount: [15000, 22000, 35000], category: 'etc' },
+  { merchant: '약국', amount: [5500, 8500, 15000], category: 'etc' },
+  { merchant: '미용실', amount: [15000, 25000, 35000], category: 'etc' },
 ];
+
+// 2025년 1월부터 2026년 1월까지 데이터 생성
+function generateSampleExpenses() {
+  const expenses: { merchant: string; amount: number; category: string; date: string }[] = [];
+
+  const startDate = new Date('2025-01-01');
+  const endDate = new Date('2026-01-25');
+
+  // 각 월마다 15~25개 지출 생성
+  const currentDate = new Date(startDate);
+
+  while (currentDate <= endDate) {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const expensesThisMonth = 15 + Math.floor(Math.random() * 11); // 15~25개
+
+    // 고정비는 매월 초에 추가
+    const fixedExpenses = EXPENSE_TEMPLATES.filter(t => t.category === 'fixed');
+    for (const template of fixedExpenses) {
+      const day = 1 + Math.floor(Math.random() * 10);
+      const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const amount = template.amount[Math.floor(Math.random() * template.amount.length)];
+      expenses.push({ merchant: template.merchant, amount, category: template.category, date });
+    }
+
+    // 어린이집은 매월 추가
+    const childcareFixed = EXPENSE_TEMPLATES.find(t => t.merchant === '어린이집');
+    if (childcareFixed) {
+      const day = 5 + Math.floor(Math.random() * 5);
+      const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      expenses.push({ merchant: childcareFixed.merchant, amount: childcareFixed.amount[0], category: childcareFixed.category, date });
+    }
+
+    // 나머지 랜덤 지출
+    const nonFixedTemplates = EXPENSE_TEMPLATES.filter(t => t.category !== 'fixed' && t.merchant !== '어린이집');
+    for (let i = 0; i < expensesThisMonth; i++) {
+      const template = nonFixedTemplates[Math.floor(Math.random() * nonFixedTemplates.length)];
+      const day = 1 + Math.floor(Math.random() * daysInMonth);
+      const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const amount = template.amount[Math.floor(Math.random() * template.amount.length)];
+      expenses.push({ merchant: template.merchant, amount, category: template.category, date });
+    }
+
+    // 다음 달로
+    currentDate.setMonth(currentDate.getMonth() + 1);
+  }
+
+  return expenses;
+}
 
 export default function SeedPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -74,13 +136,12 @@ export default function SeedPage() {
       }
 
       // 3. 샘플 데이터 추가
-      setStatus('샘플 데이터 추가 중...');
-      const now = new Date();
+      setStatus('샘플 데이터 생성 중...');
+      const sampleExpenses = generateSampleExpenses();
+      setStatus(`${sampleExpenses.length}개의 샘플 데이터 추가 중...`);
 
-      for (const expense of SAMPLE_EXPENSES) {
-        const date = new Date(now);
-        date.setDate(date.getDate() - expense.daysAgo);
-        const dateStr = date.toISOString().split('T')[0];
+      let count = 0;
+      for (const expense of sampleExpenses) {
         const hour = 9 + Math.floor(Math.random() * 12);
         const minute = Math.floor(Math.random() * 60);
         const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
@@ -89,7 +150,7 @@ export default function SeedPage() {
           merchant: expense.merchant,
           amount: expense.amount,
           category: expense.category,
-          date: dateStr,
+          date: expense.date,
           time: timeStr,
           cardType: 'main',
           cardLastFour: '1234',
@@ -97,9 +158,14 @@ export default function SeedPage() {
           householdId: GUEST_KEY,
           createdAt: Timestamp.now(),
         });
+
+        count++;
+        if (count % 50 === 0) {
+          setStatus(`${count}/${sampleExpenses.length}개 추가 중...`);
+        }
       }
 
-      setStatus(`완료! ${SAMPLE_EXPENSES.length}개의 샘플 데이터 추가됨`);
+      setStatus(`완료! ${sampleExpenses.length}개의 샘플 데이터 추가됨 (2025.01 ~ 2026.01)`);
     } catch (error) {
       console.error(error);
       setStatus('에러: ' + (error as Error).message);
