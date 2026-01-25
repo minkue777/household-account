@@ -11,7 +11,9 @@ import {
   setBudget as setBudgetService,
   reorderCategories as reorderCategoriesService,
   generateCategoryKey,
+  migrateCategoriesWithoutHouseholdId,
 } from '@/lib/categoryService';
+import { migrateRulesWithoutHouseholdId } from '@/lib/merchantRuleService';
 import { fixInvalidCategories } from '@/lib/expenseService';
 import { getStoredHouseholdKey } from '@/lib/householdService';
 
@@ -74,6 +76,10 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
     let unsubscribe: (() => void) | undefined;
 
     async function initialize() {
+      // householdId가 없는 기존 데이터 마이그레이션 (한 번만 실행됨)
+      await migrateCategoriesWithoutHouseholdId(householdId);
+      await migrateRulesWithoutHouseholdId(householdId);
+
       // 기본 카테고리 초기화 (첫 실행 시에만, householdId별로)
       await initializeDefaultCategories(householdId);
 
