@@ -14,6 +14,7 @@ const COLLECTION_NAME = 'budgetTransfers';
 
 export interface BudgetTransfer {
   id: string;
+  householdId: string;    // 가구 ID
   yearMonth: string;      // "2026-01"
   fromCategory: string;   // 예산을 빼는 카테고리
   toCategory: string;     // 예산을 받는 카테고리
@@ -26,6 +27,7 @@ export interface BudgetTransfer {
  * 예산 이동 추가
  */
 export async function addBudgetTransfer(
+  householdId: string,
   yearMonth: string,
   fromCategory: string,
   toCategory: string,
@@ -33,6 +35,7 @@ export async function addBudgetTransfer(
   memo?: string
 ): Promise<string> {
   const docRef = await addDoc(collection(db, COLLECTION_NAME), {
+    householdId,
     yearMonth,
     fromCategory,
     toCategory,
@@ -52,14 +55,21 @@ export async function deleteBudgetTransfer(id: string): Promise<void> {
 }
 
 /**
- * 특정 월의 예산 이동 목록 실시간 구독
+ * 특정 월의 예산 이동 목록 실시간 구독 (householdId별로)
  */
 export function subscribeToMonthlyBudgetTransfers(
+  householdId: string,
   yearMonth: string,
   callback: (transfers: BudgetTransfer[]) => void
 ): () => void {
+  if (!householdId) {
+    callback([]);
+    return () => {};
+  }
+
   const q = query(
     collection(db, COLLECTION_NAME),
+    where('householdId', '==', householdId),
     where('yearMonth', '==', yearMonth)
   );
 
@@ -68,6 +78,7 @@ export function subscribeToMonthlyBudgetTransfers(
       const data = doc.data();
       return {
         id: doc.id,
+        householdId: data.householdId,
         yearMonth: data.yearMonth,
         fromCategory: data.fromCategory,
         toCategory: data.toCategory,

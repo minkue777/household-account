@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { BudgetTransfer, addBudgetTransfer, deleteBudgetTransfer, subscribeToMonthlyBudgetTransfers, calculateBudgetAdjustments } from '@/lib/budgetTransferService';
+import { getStoredHouseholdKey } from '@/lib/householdService';
 import Portal from './Portal';
 
 interface BudgetTransferModalProps {
@@ -20,8 +21,14 @@ export default function BudgetTransferModal({ isOpen, onClose, year, month }: Bu
   const [amount, setAmount] = useState('');
   const [memo, setMemo] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [householdId, setHouseholdId] = useState('');
 
   const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
+
+  // householdId 가져오기
+  useEffect(() => {
+    setHouseholdId(getStoredHouseholdKey());
+  }, []);
 
   // 예산이 있는 카테고리만 필터링
   const categoriesWithBudget = activeCategories.filter(
@@ -30,11 +37,11 @@ export default function BudgetTransferModal({ isOpen, onClose, year, month }: Bu
 
   // 예산 이동 목록 구독
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !householdId) return;
 
-    const unsubscribe = subscribeToMonthlyBudgetTransfers(yearMonth, setTransfers);
+    const unsubscribe = subscribeToMonthlyBudgetTransfers(householdId, yearMonth, setTransfers);
     return () => unsubscribe();
-  }, [isOpen, yearMonth]);
+  }, [isOpen, yearMonth, householdId]);
 
   // 모달 열릴 때 초기화
   useEffect(() => {
@@ -52,14 +59,14 @@ export default function BudgetTransferModal({ isOpen, onClose, year, month }: Bu
 
   // 예산 이동 추가
   const handleAdd = async () => {
-    if (!fromCategory || !toCategory || !amount) return;
+    if (!fromCategory || !toCategory || !amount || !householdId) return;
     if (fromCategory === toCategory) return;
 
     const amountNum = parseInt(amount, 10);
     if (isNaN(amountNum) || amountNum <= 0) return;
 
     try {
-      await addBudgetTransfer(yearMonth, fromCategory, toCategory, amountNum, memo);
+      await addBudgetTransfer(householdId, yearMonth, fromCategory, toCategory, amountNum, memo);
       setFromCategory('');
       setToCategory('');
       setAmount('');

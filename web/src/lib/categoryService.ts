@@ -9,6 +9,7 @@ import {
   orderBy,
   getDocs,
   writeBatch,
+  where,
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -21,10 +22,11 @@ export interface CategoryDocument {
   order: number;         // 정렬 순서
   isDefault: boolean;    // 기본 카테고리 (삭제 불가)
   isActive: boolean;     // 활성화 여부
+  householdId: string;   // 가구 ID
 }
 
-// 기본 카테고리 정의
-const DEFAULT_CATEGORIES: Omit<CategoryDocument, 'id'>[] = [
+// 기본 카테고리 정의 (householdId는 동적으로 추가)
+const DEFAULT_CATEGORIES: Omit<CategoryDocument, 'id' | 'householdId'>[] = [
   { key: 'living', label: '생활비', color: '#4ADE80', budget: null, order: 0, isDefault: true, isActive: true },
   { key: 'childcare', label: '육아비', color: '#F472B6', budget: null, order: 1, isDefault: true, isActive: true },
   { key: 'fixed', label: '고정비', color: '#60A5FA', budget: null, order: 2, isDefault: true, isActive: true },
@@ -37,29 +39,34 @@ const COLLECTION_NAME = 'categories';
 // 컬렉션 참조
 const categoriesRef = collection(db, COLLECTION_NAME);
 
-// 기본 카테고리 초기화 (첫 실행 시)
-export async function initializeDefaultCategories(): Promise<void> {
-  const snapshot = await getDocs(categoriesRef);
+// 기본 카테고리 초기화 (첫 실행 시, householdId별로)
+export async function initializeDefaultCategories(householdId: string): Promise<void> {
+  if (!householdId) return;
+
+  const q = query(categoriesRef, where('householdId', '==', householdId));
+  const snapshot = await getDocs(q);
 
   if (snapshot.empty) {
     const batch = writeBatch(db);
 
     for (const category of DEFAULT_CATEGORIES) {
       const docRef = doc(categoriesRef);
-      batch.set(docRef, category);
+      batch.set(docRef, { ...category, householdId });
     }
 
     await batch.commit();
-    console.log('기본 카테고리가 초기화되었습니다.');
+    console.log(`기본 카테고리가 초기화되었습니다. (householdId: ${householdId})`);
   }
 }
 
 // 카테고리 추가
 export async function addCategory(
-  category: Omit<CategoryDocument, 'id' | 'isDefault'>
+  category: Omit<CategoryDocument, 'id' | 'isDefault' | 'householdId'>,
+  householdId: string
 ): Promise<string> {
   const docRef = await addDoc(categoriesRef, {
     ...category,
+    householdId,
     isDefault: false,
   });
   return docRef.id;
@@ -99,11 +106,21 @@ export async function reorderCategories(
   await batch.commit();
 }
 
-// 실시간 구독
+// 실시간 구독 (householdId별로)
 export function subscribeToCategories(
+  householdId: string,
   callback: (categories: CategoryDocument[]) => void
 ): () => void {
-  const q = query(categoriesRef, orderBy('order', 'asc'));
+  if (!householdId) {
+    callback([]);
+    return () => {};
+  }
+
+  const q = query(
+    categoriesRef,
+    where('householdId', '==', householdId),
+    orderBy('order', 'asc')
+  );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
     const categories: CategoryDocument[] = snapshot.docs.map((doc) => ({

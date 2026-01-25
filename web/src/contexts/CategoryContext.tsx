@@ -13,6 +13,7 @@ import {
   generateCategoryKey,
 } from '@/lib/categoryService';
 import { fixInvalidCategories } from '@/lib/expenseService';
+import { getStoredHouseholdKey } from '@/lib/householdService';
 
 interface CategoryContextType {
   categories: CategoryDocument[];
@@ -46,17 +47,39 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
   const [categories, setCategories] = useState<CategoryDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasMigrated, setHasMigrated] = useState(false);
+  const [householdId, setHouseholdId] = useState<string>('');
+
+  // householdId 가져오기
+  useEffect(() => {
+    const key = getStoredHouseholdKey();
+    setHouseholdId(key);
+
+    // localStorage 변경 감지 (다른 탭에서 변경 시)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'householdKey') {
+        setHouseholdId(e.newValue || '');
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   // 초기화 및 실시간 구독
   useEffect(() => {
+    if (!householdId) {
+      setCategories([]);
+      setIsLoading(false);
+      return;
+    }
+
     let unsubscribe: (() => void) | undefined;
 
     async function initialize() {
-      // 기본 카테고리 초기화 (첫 실행 시에만)
-      await initializeDefaultCategories();
+      // 기본 카테고리 초기화 (첫 실행 시에만, householdId별로)
+      await initializeDefaultCategories(householdId);
 
-      // 실시간 구독 시작
-      unsubscribe = subscribeToCategories((cats) => {
+      // 실시간 구독 시작 (householdId별로)
+      unsubscribe = subscribeToCategories(householdId, (cats) => {
         setCategories(cats);
         setIsLoading(false);
       });
@@ -69,7 +92,7 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
         unsubscribe();
       }
     };
-  }, []);
+  }, [householdId]);
 
   // 잘못된 카테고리 자동 수정 (한 번만 실행)
   useEffect(() => {
@@ -119,11 +142,12 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
   // CRUD 작업
   const addCategory = useCallback(
     async (label: string, color: string, budget: number | null = null): Promise<string> => {
+      if (!householdId) throw new Error('householdId가 설정되지 않았습니다.');
       const key = generateCategoryKey();
       const order = categories.length;
-      return addCategoryService({ key, label, color, budget, order, isActive: true });
+      return addCategoryService({ key, label, color, budget, order, isActive: true }, householdId);
     },
-    [categories.length]
+    [categories.length, householdId]
   );
 
   const updateCategory = useCallback(

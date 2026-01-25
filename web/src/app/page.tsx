@@ -14,6 +14,7 @@ import { Expense, Category } from '@/types/expense';
 import { subscribeToMonthlyExpenses, updateExpense, addManualExpense, deleteExpense, splitExpense, mergeExpenses, unmergeExpense, SplitItem } from '@/lib/expenseService';
 import { addMerchantRule } from '@/lib/merchantRuleService';
 import { subscribeToMonthlyBudgetTransfers, calculateBudgetAdjustments, BudgetTransfer } from '@/lib/budgetTransferService';
+import { getStoredHouseholdKey } from '@/lib/householdService';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 
@@ -57,8 +58,13 @@ export default function Home() {
 
   // 예산 이동 구독
   useEffect(() => {
+    const householdId = getStoredHouseholdKey();
+    if (!householdId) {
+      setBudgetTransfers([]);
+      return;
+    }
     const yearMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
-    const unsubscribe = subscribeToMonthlyBudgetTransfers(yearMonth, setBudgetTransfers);
+    const unsubscribe = subscribeToMonthlyBudgetTransfers(householdId, yearMonth, setBudgetTransfers);
     return () => unsubscribe();
   }, [currentYear, currentMonth]);
 
