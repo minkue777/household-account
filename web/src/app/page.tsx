@@ -6,10 +6,12 @@ import Calendar from '@/components/Calendar';
 import CategorySummary from '@/components/CategorySummary';
 import ExpenseDetail from '@/components/ExpenseDetail';
 import AddExpenseModal from '@/components/AddExpenseModal';
-import { Expense } from '@/types/expense';
+import Portal from '@/components/Portal';
+import { Expense, Category } from '@/types/expense';
 import { subscribeToMonthlyExpenses, updateExpense, addManualExpense, deleteExpense, splitExpense, mergeExpenses, unmergeExpense, SplitItem } from '@/lib/expenseService';
 import { addMerchantRule } from '@/lib/merchantRuleService';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useCategoryContext } from '@/contexts/CategoryContext';
 
 export default function Home() {
   const [currentYear, setCurrentYear] = useState(2026);
@@ -20,6 +22,11 @@ export default function Home() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   const { themeConfig } = useTheme();
+  const { getCategoryLabel, getCategoryColor } = useCategoryContext();
+
+  // 카테고리 상세 모달 상태
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [selectedCategoryExpenses, setSelectedCategoryExpenses] = useState<Expense[]>([]);
 
   // Firebase 실시간 구독
   useEffect(() => {
@@ -76,6 +83,15 @@ export default function Home() {
     setCurrentYear(newYear);
     setCurrentMonth(newMonth);
     setSelectedDate(null);
+  };
+
+  // 카테고리 클릭 핸들러
+  const handleCategoryClick = (category: Category, categoryExpenses: Expense[]) => {
+    setSelectedCategory(category);
+    // 날짜 내림차순 정렬
+    setSelectedCategoryExpenses(
+      [...categoryExpenses].sort((a, b) => b.date.localeCompare(a.date))
+    );
   };
 
   // 지출 수정 핸들러
@@ -249,7 +265,7 @@ export default function Home() {
               카테고리별 지출
             </h3>
             {expenses.length > 0 ? (
-              <CategorySummary expenses={expenses} />
+              <CategorySummary expenses={expenses} onCategoryClick={handleCategoryClick} />
             ) : (
               <div className="text-center py-4 text-slate-400">
                 {isLoading ? '로딩중...' : '데이터 없음'}
@@ -268,7 +284,7 @@ export default function Home() {
                 카테고리별 지출
               </h3>
               {expenses.length > 0 ? (
-                <CategorySummary expenses={expenses} />
+                <CategorySummary expenses={expenses} onCategoryClick={handleCategoryClick} />
               ) : (
                 <div className="text-center py-4 text-slate-400">
                   {isLoading ? '로딩중...' : '데이터 없음'}
@@ -314,6 +330,74 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* 카테고리 지출 내역 모달 */}
+      {selectedCategory && (
+        <Portal>
+          <div
+            className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
+            onClick={() => setSelectedCategory(null)}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* 모달 헤더 */}
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium"
+                    style={{ backgroundColor: getCategoryColor(selectedCategory) }}
+                  >
+                    {getCategoryLabel(selectedCategory).slice(0, 2)}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-800">
+                      {getCategoryLabel(selectedCategory)}
+                    </h3>
+                    <p className="text-sm text-slate-500">
+                      {currentMonth}월 · {selectedCategoryExpenses.length}건 · {selectedCategoryExpenses.reduce((sum, e) => sum + e.amount, 0).toLocaleString()}원
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedCategory(null)}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* 지출 내역 리스트 */}
+              <div className="overflow-y-auto max-h-[60vh] p-4">
+                <div className="space-y-2">
+                  {selectedCategoryExpenses.map((expense) => (
+                    <div
+                      key={expense.id}
+                      className="flex items-center justify-between p-3 bg-slate-50 rounded-xl"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-slate-800 truncate">
+                          {expense.merchant}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {expense.date}
+                          {expense.memo && ` · ${expense.memo}`}
+                        </div>
+                      </div>
+                      <div className="font-semibold text-slate-800 flex-shrink-0 ml-3">
+                        {expense.amount.toLocaleString()}원
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </Portal>
+      )}
     </main>
   );
 }

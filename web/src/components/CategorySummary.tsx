@@ -6,9 +6,10 @@ import { useCategoryContext } from '@/contexts/CategoryContext';
 
 interface CategorySummaryProps {
   expenses: Expense[];
+  onCategoryClick?: (category: Category, categoryExpenses: Expense[]) => void;
 }
 
-export default function CategorySummary({ expenses }: CategorySummaryProps) {
+export default function CategorySummary({ expenses, onCategoryClick }: CategorySummaryProps) {
   const { categories, getCategoryLabel, getCategoryColor, getCategoryBudget, isLoading } = useCategoryContext();
 
   const categorySummary = useMemo(() => {
@@ -55,8 +56,15 @@ export default function CategorySummary({ expenses }: CategorySummaryProps) {
         const percentage = hasBudget ? Math.min((total / budget) * 100, 100) : 0;
         const isOverBudget = hasBudget && total > budget;
 
+        // 해당 카테고리의 지출 목록
+        const categoryExpenses = expenses.filter(e => e.category === category);
+
         return (
-          <div key={category} className="group">
+          <div
+            key={category}
+            className={`group ${onCategoryClick ? 'cursor-pointer hover:bg-slate-50 -mx-2 px-2 py-1 rounded-lg transition-colors' : ''}`}
+            onClick={() => onCategoryClick?.(category, categoryExpenses)}
+          >
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
                 <span
@@ -67,6 +75,11 @@ export default function CategorySummary({ expenses }: CategorySummaryProps) {
                   {label}
                 </span>
                 <span className="text-xs text-slate-400">{count}건</span>
+                {onCategoryClick && (
+                  <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                )}
               </div>
               <div className="flex items-center gap-1">
                 <span className={`text-sm font-semibold ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
