@@ -158,6 +158,7 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
       { merchant: expense.merchant, amount: Math.floor(expense.amount / 2), category: expense.category },
       { merchant: expense.merchant, amount: expense.amount - Math.floor(expense.amount / 2), category: expense.category },
     ]);
+    setSplitAmountInputs({});
     setShowEditModal(false);
     setShowSplitModal(true);
   };
@@ -179,11 +180,42 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
   const handleUpdateSplit = (index: number, field: keyof SplitItem, value: string | number) => {
     const newSplits = [...splits];
     if (field === 'amount') {
-      newSplits[index] = { ...newSplits[index], amount: Number(value) || 0 };
+      const newAmount = Number(value) || 0;
+      newSplits[index] = { ...newSplits[index], amount: newAmount };
+
+      // 2개 항목일 때 다른 항목 자동 조정
+      if (newSplits.length === 2) {
+        const otherIndex = index === 0 ? 1 : 0;
+        const otherAmount = Math.max(0, expense.amount - newAmount);
+        newSplits[otherIndex] = { ...newSplits[otherIndex], amount: otherAmount };
+      }
     } else {
       newSplits[index] = { ...newSplits[index], [field]: value };
     }
     setSplits(newSplits);
+  };
+
+  // 금액 입력 핸들러 (0 처리)
+  const [splitAmountInputs, setSplitAmountInputs] = useState<Record<number, string>>({});
+
+  const handleAmountInputChange = (index: number, value: string) => {
+    // 빈 문자열이면 빈 상태 유지
+    if (value === '') {
+      setSplitAmountInputs({ ...splitAmountInputs, [index]: '' });
+      handleUpdateSplit(index, 'amount', 0);
+      return;
+    }
+    // 숫자만 허용하고 앞의 0 제거
+    const numericValue = value.replace(/[^0-9]/g, '').replace(/^0+/, '') || '0';
+    setSplitAmountInputs({ ...splitAmountInputs, [index]: numericValue });
+    handleUpdateSplit(index, 'amount', numericValue);
+  };
+
+  const getAmountInputValue = (index: number, amount: number) => {
+    if (splitAmountInputs[index] !== undefined) {
+      return splitAmountInputs[index];
+    }
+    return amount.toString();
   };
 
   // 분할 저장
@@ -531,9 +563,15 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
                     <label className="block text-xs text-slate-500 mb-1">금액</label>
                     <div className="relative">
                       <input
-                        type="number"
-                        value={split.amount}
-                        onChange={(e) => handleUpdateSplit(index, 'amount', e.target.value)}
+                        type="text"
+                        inputMode="numeric"
+                        value={getAmountInputValue(index, split.amount)}
+                        onChange={(e) => handleAmountInputChange(index, e.target.value)}
+                        onFocus={(e) => {
+                          if (split.amount === 0) {
+                            setSplitAmountInputs({ ...splitAmountInputs, [index]: '' });
+                          }
+                        }}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm pr-10"
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">원</span>
