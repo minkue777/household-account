@@ -7,9 +7,10 @@ import { useCategoryContext } from '@/contexts/CategoryContext';
 interface CategorySummaryProps {
   expenses: Expense[];
   onCategoryClick?: (category: Category, categoryExpenses: Expense[]) => void;
+  budgetAdjustments?: Record<string, number>;
 }
 
-export default function CategorySummary({ expenses, onCategoryClick }: CategorySummaryProps) {
+export default function CategorySummary({ expenses, onCategoryClick, budgetAdjustments = {} }: CategorySummaryProps) {
   const { categories, getCategoryLabel, getCategoryColor, getCategoryBudget, isLoading } = useCategoryContext();
 
   const categorySummary = useMemo(() => {
@@ -47,10 +48,13 @@ export default function CategorySummary({ expenses, onCategoryClick }: CategoryS
   return (
     <div className="space-y-2">
       {categorySummary.map(({ category, total, count }) => {
-        const budget = getCategoryBudget(category);
+        const originalBudget = getCategoryBudget(category);
+        const adjustment = budgetAdjustments[category] || 0;
+        const budget = originalBudget !== null ? originalBudget + adjustment : null;
         const color = getCategoryColor(category);
         const label = getCategoryLabel(category);
         const hasBudget = budget !== null && budget > 0;
+        const hasAdjustment = adjustment !== 0;
 
         // 예산이 있을 때만 퍼센트 계산
         const percentage = hasBudget ? Math.min((total / budget) * 100, 100) : 0;
@@ -79,6 +83,11 @@ export default function CategorySummary({ expenses, onCategoryClick }: CategoryS
                 <span className={`text-sm font-semibold ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
                   {total.toLocaleString()}원
                 </span>
+                {hasAdjustment && (
+                  <span className={`text-xs ${adjustment > 0 ? 'text-green-500' : 'text-orange-500'}`}>
+                    {adjustment > 0 ? '↑' : '↓'}
+                  </span>
+                )}
                 <span className={`text-xs font-medium min-w-[40px] text-right ${isOverBudget ? 'text-red-500' : 'text-slate-500'}`}>
                   {hasBudget ? `(${Math.round((total / budget) * 100)}%)` : '(--)'}
                 </span>
