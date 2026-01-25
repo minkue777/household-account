@@ -92,14 +92,13 @@ function ExpenseItem({ expense, onExpenseUpdate, onSaveMerchantRule, onDelete }:
   const { activeCategories, getCategoryLabel, getCategoryColor } = useCategoryContext();
 
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showRememberDialog, setShowRememberDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   // 편집 폼 상태
   const [editAmount, setEditAmount] = useState(expense.amount.toString());
   const [editMemo, setEditMemo] = useState(expense.memo || '');
   const [editCategory, setEditCategory] = useState(expense.category);
+  const [rememberMerchant, setRememberMerchant] = useState(false);
 
   const expenseColor = getCategoryColor(expense.category);
   const expenseLabel = getCategoryLabel(expense.category);
@@ -108,6 +107,7 @@ function ExpenseItem({ expense, onExpenseUpdate, onSaveMerchantRule, onDelete }:
     setEditAmount(expense.amount.toString());
     setEditMemo(expense.memo || '');
     setEditCategory(expense.category);
+    setRememberMerchant(false);
     setShowEditModal(true);
   };
 
@@ -127,19 +127,18 @@ function ExpenseItem({ expense, onExpenseUpdate, onSaveMerchantRule, onDelete }:
     }
     if (editCategory !== expense.category) {
       updates.category = editCategory;
-      setSelectedCategory(editCategory);
     }
 
     if (Object.keys(updates).length > 0) {
       onExpenseUpdate(expense.id, updates);
     }
 
-    setShowEditModal(false);
-
-    // 카테고리가 변경되었으면 기억할지 물어보기
-    if (editCategory !== expense.category) {
-      setShowRememberDialog(true);
+    // 카테고리가 변경되었고 기억하기 체크했으면 규칙 저장
+    if (editCategory !== expense.category && rememberMerchant && onSaveMerchantRule) {
+      onSaveMerchantRule(expense.merchant, editCategory);
     }
+
+    setShowEditModal(false);
   };
 
   return (
@@ -190,8 +189,14 @@ function ExpenseItem({ expense, onExpenseUpdate, onSaveMerchantRule, onDelete }:
 
       {/* 편집 모달 */}
       {showEditModal && (
-        <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 m-4 max-w-md w-full shadow-xl">
+        <div
+          className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setShowEditModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-lg font-semibold text-slate-800 mb-4">
               지출 수정
             </h3>
@@ -230,13 +235,13 @@ function ExpenseItem({ expense, onExpenseUpdate, onSaveMerchantRule, onDelete }:
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   카테고리
                 </label>
-                <div className="grid grid-cols-5 gap-2">
+                <div className="flex flex-wrap gap-2">
                   {activeCategories.map((cat) => (
                     <button
                       key={cat.key}
                       type="button"
                       onClick={() => setEditCategory(cat.key)}
-                      className={`flex flex-col items-center p-2 rounded-lg border-2 transition-colors ${
+                      className={`flex flex-col items-center p-2 rounded-lg border-2 transition-colors min-w-[56px] ${
                         editCategory === cat.key
                           ? 'border-blue-500 bg-blue-50'
                           : 'border-slate-200 hover:border-slate-300'
@@ -267,6 +272,26 @@ function ExpenseItem({ expense, onExpenseUpdate, onSaveMerchantRule, onDelete }:
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+
+              {/* 가맹점 기억하기 (카테고리 변경시에만 표시) */}
+              {editCategory !== expense.category && (
+                <label className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rememberMerchant}
+                    onChange={(e) => setRememberMerchant(e.target.checked)}
+                    className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-slate-700">
+                      이 가맹점 기억하기
+                    </span>
+                    <p className="text-xs text-slate-500">
+                      다음에 &quot;{expense.merchant}&quot;에서 결제하면 자동으로 {getCategoryLabel(editCategory)}(으)로 분류
+                    </p>
+                  </div>
+                </label>
+              )}
             </div>
 
             <div className="flex gap-3 mt-6">
@@ -281,47 +306,6 @@ function ExpenseItem({ expense, onExpenseUpdate, onSaveMerchantRule, onDelete }:
                 className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
               >
                 저장
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 기억할까요? 다이얼로그 */}
-      {showRememberDialog && selectedCategory && (
-        <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 m-4 max-w-sm w-full shadow-xl">
-            <h3 className="text-lg font-semibold text-slate-800 mb-3">
-              가맹점 기억하기
-            </h3>
-            <p className="text-slate-600 mb-6">
-              &quot;{expense.merchant}&quot;을(를) {getCategoryLabel(selectedCategory)}(으)로 기억할까요?
-              <br /><br />
-              <span className="text-sm text-slate-500">
-                다음에 같은 가맹점에서 결제하면 자동으로 {getCategoryLabel(selectedCategory)}(으)로 분류됩니다.
-              </span>
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setShowRememberDialog(false);
-                  setSelectedCategory(null);
-                }}
-                className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
-              >
-                아니오
-              </button>
-              <button
-                onClick={() => {
-                  if (onSaveMerchantRule && selectedCategory) {
-                    onSaveMerchantRule(expense.merchant, selectedCategory);
-                  }
-                  setShowRememberDialog(false);
-                  setSelectedCategory(null);
-                }}
-                className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-              >
-                예
               </button>
             </div>
           </div>

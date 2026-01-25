@@ -16,41 +16,30 @@ data class ParseResult(
 )
 
 /**
- * KB Pay 알림 파서
+ * KB 국민카드 알림 파서
  *
- * 알림 형식 1 (간단):
- * [KB Pay 사용 알림] 신용 0027 01/23 13:05 51,000원
- * 라그로서리 승인
- *
- * 알림 형식 2 (상세):
+ * 처리하는 형식 (KB국민카드 앱):
  * KB국민카드0027승인
  * 이*규님
  * 3,680원 일시불
  * 01/23 16:43
  * 지에스더프레시
  * 누적2,008,994원
+ *
+ * [KB Pay 사용 알림] 형식은 중복이므로 무시됨 (패턴 불일치로 자동 제외)
  */
 object KBCardParser {
 
-    // KB Pay 간단 알림 패턴
-    // [KB Pay 사용 알림] 신용 {카드4자리} {MM/DD} {HH:mm} {금액}원
-    private val KBPAY_SIMPLE_PATTERN = Regex(
-        """\[KB Pay 사용 알림\]\s*신용\s*(\d{4})\s*(\d{2}/\d{2})\s*(\d{2}:\d{2})\s*([\d,]+)원"""
-    )
-
-    // KB Pay 상세 알림 패턴
-    // KB국민카드{카드4자리}승인 ... {금액}원 일시불 ... {MM/DD} {HH:mm} ... {가맹점명}
-    private val KBPAY_DETAIL_PATTERN = Regex(
-        """KB국민카드(\d{4})승인"""
-    )
-    private val DETAIL_AMOUNT_PATTERN = Regex("""([\d,]+)원\s*일시불""")
-    private val DETAIL_DATE_PATTERN = Regex("""(\d{2}/\d{2})\s+(\d{2}:\d{2})""")
-
-    // 가맹점명 패턴 (두 번째 줄: {가맹점명} 승인)
-    private val MERCHANT_PATTERN = Regex("""^(.+?)\s*승인\s*$""", RegexOption.MULTILINE)
+    // KB국민카드 승인 알림 패턴
+    private val KB_CARD_PATTERN = Regex("""KB국민카드(\d{4})승인""")
+    private val AMOUNT_PATTERN = Regex("""([\d,]+)원\s*일시불""")
+    private val DATE_TIME_PATTERN = Regex("""(\d{2}/\d{2})\s+(\d{2}:\d{2})""")
 
     /**
      * 알림 텍스트 파싱
+     *
+     * KB국민카드xxxx승인 형식만 처리 (중복 방지)
+     * [KB Pay 사용 알림] 형식은 패턴 불일치로 자동 무시됨
      *
      * @param notificationText 알림 전체 텍스트
      * @param mainCardLastFour 본인 카드 끝 4자리
@@ -60,47 +49,12 @@ object KBCardParser {
         notificationText: String,
         mainCardLastFour: String = "0027"
     ): ParseResult {
-        // 간단 형식 먼저 시도
-        val simpleResult = parseSimpleFormat(notificationText, mainCardLastFour)
-        if (simpleResult.success) {
-            return simpleResult
-        }
-
-        // 상세 형식 시도
-        val detailResult = parseDetailFormat(notificationText, mainCardLastFour)
-        if (detailResult.success) {
-            return detailResult
-        }
-
-        return ParseResult(false, errorMessage = "KB Pay 알림 형식이 아닙니다")
+        // KB국민카드xxxx승인 형식만 매칭
+        return parseDetailFormat(notificationText, mainCardLastFour)
     }
 
     /**
-     * 간단 형식 파싱
-     * [KB Pay 사용 알림] 신용 0027 01/23 16:23 2,900원 반디소아청소년과 승인
-     */
-    private fun parseSimpleFormat(
-        notificationText: String,
-        mainCardLastFour: String
-    ): ParseResult {
-        try {
-            val kbPayMatch = KBPAY_SIMPLE_PATTERN.find(notificationText)
-                ?: return ParseResult(false, errorMessage = "간단 형식 아님")
-
-            val (cardLast4, dateStr, timeStr, amountStr) = kbPayMatch.destructured
-
-            // 가맹점명 추출 (금액 뒤 텍스트에서)
-            val afterAmount = notificationText.substringAfter("${amountStr}원").trim()
-            val merchant = afterAmount.replace("승인", "").trim().ifEmpty { "알 수 없음" }
-
-            return createExpense(cardLast4, dateStr, timeStr, amountStr, merchant, mainCardLastFour)
-        } catch (e: Exception) {
-            return ParseResult(false, errorMessage = "간단 형식 파싱 오류: ${e.message}")
-        }
-    }
-
-    /**
-     * 상세 형식 파싱
+     * KB국민카드 승인 알림 파싱
      * KB국민카드0027승인
      * 이*규님
      * 3,680원 일시불
@@ -113,17 +67,17 @@ object KBCardParser {
     ): ParseResult {
         try {
             // 카드번호 추출
-            val cardMatch = KBPAY_DETAIL_PATTERN.find(notificationText)
-                ?: return ParseResult(false, errorMessage = "상세 형식 아님")
+            val cardMatch = KB_CARD_PATTERN.find(notificationText)
+                ?: return ParseResult(false, errorMessage = "KB국민카드 승인 형식 아님")
             val cardLast4 = cardMatch.groupValues[1]
 
             // 금액 추출
-            val amountMatch = DETAIL_AMOUNT_PATTERN.find(notificationText)
+            val amountMatch = AMOUNT_PATTERN.find(notificationText)
                 ?: return ParseResult(false, errorMessage = "금액 없음")
             val amountStr = amountMatch.groupValues[1]
 
             // 날짜/시간 추출
-            val dateMatch = DETAIL_DATE_PATTERN.find(notificationText)
+            val dateMatch = DATE_TIME_PATTERN.find(notificationText)
                 ?: return ParseResult(false, errorMessage = "날짜 없음")
             val dateStr = dateMatch.groupValues[1]
             val timeStr = dateMatch.groupValues[2]
@@ -146,7 +100,7 @@ object KBCardParser {
 
             return createExpense(cardLast4, dateStr, timeStr, amountStr, merchant, mainCardLastFour)
         } catch (e: Exception) {
-            return ParseResult(false, errorMessage = "상세 형식 파싱 오류: ${e.message}")
+            return ParseResult(false, errorMessage = "파싱 오류: ${e.message}")
         }
     }
 

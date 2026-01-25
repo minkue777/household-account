@@ -30,16 +30,18 @@ class CardNotificationListenerService : NotificationListenerService() {
         private const val KB_PAY_PACKAGE = "com.kbcard.cxh.appcard"
         private const val KB_CARD_PACKAGE = "com.kbcard.kbkookmincard"
 
-        // 지역화폐 앱 패키지명 (화성시 희망화성지역화폐 등)
+        // 지역화폐 앱 패키지명
         private const val HWASEONG_LOCAL_CURRENCY = "com.mobiletoong.gpay"  // 희망화성지역화폐
         private const val CHAK_WALLET = "com.coocon.chakwallet"  // 착한페이 (화성시)
+        private const val GYEONGGI_LOCAL_CURRENCY = "gov.gyeonggi.ggcard"  // 경기지역화폐
 
         // 지원하는 패키지 목록
         private val SUPPORTED_PACKAGES = setOf(
             KB_PAY_PACKAGE,
             KB_CARD_PACKAGE,
             HWASEONG_LOCAL_CURRENCY,
-            CHAK_WALLET
+            CHAK_WALLET,
+            GYEONGGI_LOCAL_CURRENCY
         )
 
         // 알림 감지 브로드캐스트 액션
@@ -80,7 +82,7 @@ class CardNotificationListenerService : NotificationListenerService() {
             // 앱 종류에 따라 파서 선택
             val result: ParseResult = when (packageName) {
                 KB_PAY_PACKAGE, KB_CARD_PACKAGE -> KBCardParser.parse(fullText)
-                HWASEONG_LOCAL_CURRENCY, CHAK_WALLET -> LocalCurrencyParser.parse(fullText)
+                HWASEONG_LOCAL_CURRENCY, CHAK_WALLET, GYEONGGI_LOCAL_CURRENCY -> LocalCurrencyParser.parse(fullText)
                 else -> ParseResult(false, errorMessage = "지원하지 않는 앱")
             }
 
