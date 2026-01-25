@@ -129,6 +129,10 @@ export function subscribeToCategories(
     })) as CategoryDocument[];
 
     callback(categories);
+  }, (error) => {
+    console.error('카테고리 구독 에러:', error);
+    // 인덱스 오류 시 링크가 에러 메시지에 포함됨
+    callback([]);
   });
 
   return unsubscribe;
