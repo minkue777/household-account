@@ -199,6 +199,7 @@ export default function SearchModal({ isOpen, onClose, onExpenseUpdate, onDelete
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
                   placeholder="가맹점명, 메모로 검색..."
+                  autoFocus
                   className="w-full pl-10 pr-10 py-3 bg-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800"
                 />
                 <svg

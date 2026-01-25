@@ -10,17 +10,17 @@ import { addMerchantRule } from '@/lib/merchantRuleService';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 
 // 기간 프리셋
-type PeriodPreset = '3months' | '6months' | '1year' | 'custom';
+type PeriodPreset = '1month' | '3months' | '6months' | '1year' | 'custom';
 
 export default function StatsPage() {
-  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('6months');
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('1month');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 카테고리 필터 상태 (월별 추이 차트와 공유)
-  const [enabledCategories, setEnabledCategories] = useState<Set<string>>(() => new Set(['all']));
+  // 카테고리 필터 상태 (월별 추이 차트와 공유) - 기본값: 식비, 생활비, 육아비
+  const [enabledCategories, setEnabledCategories] = useState<Set<string>>(() => new Set(['food', 'living', 'childcare']));
 
   // 카테고리 상세 모달 상태
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
@@ -131,6 +131,9 @@ export default function StatsPage() {
     }
 
     switch (periodPreset) {
+      case '1month':
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
       case '3months':
         start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
         break;
@@ -141,7 +144,7 @@ export default function StatsPage() {
         start = new Date(now.getFullYear() - 1, now.getMonth() + 1, 1);
         break;
       default:
-        start = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
     }
 
     const formatDate = (d: Date) => {
@@ -223,6 +226,16 @@ export default function StatsPage() {
           {/* 기간 선택 */}
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-4">
             <div className="flex flex-wrap gap-2 mb-4">
+              <button
+                onClick={() => setPeriodPreset('1month')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  periodPreset === '1month'
+                    ? 'bg-blue-500 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                이번달
+              </button>
               <button
                 onClick={() => setPeriodPreset('3months')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
