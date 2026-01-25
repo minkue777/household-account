@@ -624,10 +624,12 @@ export default function SettingsPage() {
           )}
         </div>
 
-        {/* 알림 설정 섹션 - iOS에서만 표시 (테스트용 임시 표시) */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <NotificationSettings />
-        </div>
+        {/* 알림 설정 섹션 - iOS에서만 표시 */}
+        {isIOSDevice && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <NotificationSettings />
+          </div>
+        )}
 
         {/* 안내 문구 */}
         <div className="p-4 bg-slate-100 rounded-xl">
