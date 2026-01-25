@@ -118,3 +118,26 @@ export function clearStoredHouseholdKey(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem('householdKey');
 }
+
+/**
+ * 기존 데이터 마이그레이션 (householdId 없는 문서에 추가)
+ */
+export async function migrateExpensesToHousehold(householdId: string): Promise<number> {
+  const { collection, getDocs, updateDoc, doc } = await import('firebase/firestore');
+  const { db } = await import('./firebase');
+
+  const expensesRef = collection(db, 'expenses');
+  const snapshot = await getDocs(expensesRef);
+
+  let migratedCount = 0;
+
+  for (const docSnap of snapshot.docs) {
+    const data = docSnap.data();
+    if (!data.householdId) {
+      await updateDoc(doc(db, 'expenses', docSnap.id), { householdId });
+      migratedCount++;
+    }
+  }
+
+  return migratedCount;
+}

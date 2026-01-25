@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createHousehold, getAllHouseholds, deleteHousehold, Household } from '@/lib/householdService';
+import { createHousehold, getAllHouseholds, deleteHousehold, Household, migrateExpensesToHousehold } from '@/lib/householdService';
 
 export default function AdminPage() {
   const [households, setHouseholds] = useState<Household[]>([]);
@@ -9,6 +9,8 @@ export default function AdminPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [migrateResult, setMigrateResult] = useState<string | null>(null);
 
   const loadHouseholds = async () => {
     const data = await getAllHouseholds();
@@ -51,10 +53,33 @@ export default function AdminPage() {
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
+  const handleMigrate = async (key: string) => {
+    if (!confirm(`"${key}"로 기존 데이터를 마이그레이션하시겠습니까?`)) return;
+
+    setIsMigrating(true);
+    setMigrateResult(null);
+
+    try {
+      const count = await migrateExpensesToHousehold(key);
+      setMigrateResult(`${count}개 문서 마이그레이션 완료`);
+    } catch (error) {
+      setMigrateResult('마이그레이션 실패');
+      console.error(error);
+    } finally {
+      setIsMigrating(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 p-4">
       <div className="max-w-lg mx-auto">
         <h1 className="text-2xl font-bold text-slate-800 mb-6">관리자</h1>
+
+        {migrateResult && (
+          <div className="mb-4 p-3 bg-blue-50 text-blue-700 rounded-xl text-sm">
+            {migrateResult}
+          </div>
+        )}
 
         {/* 키 생성 */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 mb-4">
@@ -117,6 +142,13 @@ export default function AdminPage() {
                       }`}
                     >
                       {copiedKey === household.id ? '복사됨' : '복사'}
+                    </button>
+                    <button
+                      onClick={() => handleMigrate(household.id)}
+                      disabled={isMigrating}
+                      className="px-3 py-1.5 bg-blue-50 text-blue-500 rounded-lg text-sm hover:bg-blue-100 transition-colors disabled:opacity-50"
+                    >
+                      {isMigrating ? '...' : '마이그레이션'}
                     </button>
                     <button
                       onClick={() => handleDelete(household.id)}
