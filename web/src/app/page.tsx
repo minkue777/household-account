@@ -382,13 +382,13 @@ export default function Home() {
                       const isOverBudget = hasBudget && total > budget;
 
                       return (
-                        <p className="text-sm text-slate-500">
-                          {currentMonth}월 · {selectedCategoryExpenses.length}건 · {' '}
-                          <span className={isOverBudget ? 'text-red-500 font-medium' : ''}>
+                        <div className="text-sm text-slate-500">
+                          <p>{currentMonth}월 · {selectedCategoryExpenses.length}건</p>
+                          <p className={isOverBudget ? 'text-red-500 font-medium' : ''}>
                             {total.toLocaleString()}
                             {hasBudget ? ` / ${budget.toLocaleString()}원 (${percentage}%)` : '원'}
-                          </span>
-                        </p>
+                          </p>
+                        </div>
                       );
                     })()}
                   </div>
@@ -406,14 +406,11 @@ export default function Home() {
               {/* 지출 내역 리스트 */}
               <div className="overflow-y-auto max-h-[60vh] p-4">
                 <div className="space-y-2">
-                  {selectedCategoryExpenses.map((expense) => {
-                    const categoryColor = getCategoryColor(selectedCategory);
-                    return (
-                      <div
-                        key={expense.id}
-                        className="flex items-center justify-between p-3 rounded-xl"
-                        style={{ backgroundColor: `${categoryColor}15` }}
-                      >
+                  {selectedCategoryExpenses.map((expense) => (
+                    <div
+                      key={expense.id}
+                      className="flex items-center justify-between p-3 bg-slate-50 rounded-xl"
+                    >
                         <div className="min-w-0 flex-1">
                           <div className="font-medium text-slate-800 truncate">
                             {expense.merchant}
@@ -427,8 +424,7 @@ export default function Home() {
                           {expense.amount.toLocaleString()}원
                         </div>
                       </div>
-                    );
-                  })}
+                  ))}
                 </div>
               </div>
             </div>
