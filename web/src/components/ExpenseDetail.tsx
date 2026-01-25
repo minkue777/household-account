@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { SplitItem } from '@/lib/expenseService';
@@ -21,12 +21,52 @@ interface ExpenseDetailProps {
 export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveMerchantRule, onDelete, onAddExpense, onSplitExpense, onMergeExpenses, onUnmergeExpense }: ExpenseDetailProps) {
   const total = expenses.reduce((sum, e) => sum + e.amount, 0);
 
+  // 터치 드래그 상태
+  const [draggingExpenseId, setDraggingExpenseId] = useState<string | null>(null);
+  const [dragOverExpenseId, setDragOverExpenseId] = useState<string | null>(null);
+  const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
   // 날짜 포맷팅
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
     const days = ['일', '월', '화', '수', '목', '금', '토'];
     return `${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
   };
+
+  // 터치 이동 중 어떤 항목 위에 있는지 확인
+  const findItemAtPosition = useCallback((x: number, y: number): string | null => {
+    const entries = Array.from(itemRefs.current.entries());
+    for (let i = 0; i < entries.length; i++) {
+      const [id, element] = entries[i];
+      if (id === draggingExpenseId) continue;
+      const rect = element.getBoundingClientRect();
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        return id;
+      }
+    }
+    return null;
+  }, [draggingExpenseId]);
+
+  // 터치 드래그 종료 시 합치기
+  const handleTouchDragEnd = useCallback((sourceId: string, targetId: string | null) => {
+    if (targetId && sourceId !== targetId && onMergeExpenses) {
+      const sourceExpense = expenses.find(e => e.id === sourceId);
+      const targetExpense = expenses.find(e => e.id === targetId);
+      if (sourceExpense && targetExpense) {
+        onMergeExpenses(targetExpense, sourceExpense);
+      }
+    }
+    setDraggingExpenseId(null);
+    setDragOverExpenseId(null);
+  }, [expenses, onMergeExpenses]);
+
+  const registerItemRef = useCallback((id: string, element: HTMLDivElement | null) => {
+    if (element) {
+      itemRefs.current.set(id, element);
+    } else {
+      itemRefs.current.delete(id);
+    }
+  }, []);
 
   if (expenses.length === 0) {
     return (
@@ -71,6 +111,12 @@ export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveM
         )}
       </div>
 
+      {draggingExpenseId && (
+        <div className="mb-2 px-3 py-1.5 bg-blue-100 text-blue-700 text-xs rounded-lg text-center">
+          다른 항목 위에 놓으면 합칩니다
+        </div>
+      )}
+
       <div className="space-y-3">
         {expenses.map((expense) => (
           <ExpenseItem
@@ -83,6 +129,14 @@ export default function ExpenseDetail({ date, expenses, onExpenseUpdate, onSaveM
             onSplitExpense={onSplitExpense}
             onMergeExpenses={onMergeExpenses}
             onUnmergeExpense={onUnmergeExpense}
+            // 터치 드래그 props
+            draggingExpenseId={draggingExpenseId}
+            setDraggingExpenseId={setDraggingExpenseId}
+            dragOverExpenseId={dragOverExpenseId}
+            setDragOverExpenseId={setDragOverExpenseId}
+            findItemAtPosition={findItemAtPosition}
+            handleTouchDragEnd={handleTouchDragEnd}
+            registerItemRef={registerItemRef}
           />
         ))}
       </div>
@@ -99,15 +153,45 @@ interface ExpenseItemProps {
   onSplitExpense?: (expense: Expense, splits: SplitItem[]) => void;
   onMergeExpenses?: (targetExpense: Expense, sourceExpense: Expense) => void;
   onUnmergeExpense?: (expense: Expense) => void;
+  // 터치 드래그 props
+  draggingExpenseId: string | null;
+  setDraggingExpenseId: (id: string | null) => void;
+  dragOverExpenseId: string | null;
+  setDragOverExpenseId: (id: string | null) => void;
+  findItemAtPosition: (x: number, y: number) => string | null;
+  handleTouchDragEnd: (sourceId: string, targetId: string | null) => void;
+  registerItemRef: (id: string, element: HTMLDivElement | null) => void;
 }
 
-function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule, onDelete, onSplitExpense, onMergeExpenses, onUnmergeExpense }: ExpenseItemProps) {
+function ExpenseItem({
+  expense,
+  allExpenses,
+  onExpenseUpdate,
+  onSaveMerchantRule,
+  onDelete,
+  onSplitExpense,
+  onMergeExpenses,
+  onUnmergeExpense,
+  draggingExpenseId,
+  setDraggingExpenseId,
+  dragOverExpenseId,
+  setDragOverExpenseId,
+  findItemAtPosition,
+  handleTouchDragEnd,
+  registerItemRef,
+}: ExpenseItemProps) {
   const { activeCategories, getCategoryLabel, getCategoryColor } = useCategoryContext();
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showSplitModal, setShowSplitModal] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+
+  // 터치 드래그 상태
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const touchStartPos = useRef<{ x: number; y: number } | null>(null);
+  const isDragging = draggingExpenseId === expense.id;
+  const isDropTarget = dragOverExpenseId === expense.id && draggingExpenseId !== expense.id;
 
   // 편집 폼 상태
   const [editMerchant, setEditMerchant] = useState(expense.merchant);
@@ -125,7 +209,7 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
   const expenseColor = getCategoryColor(expense.category);
   const expenseLabel = getCategoryLabel(expense.category);
 
-  // 드래그 앤 드롭 핸들러
+  // 데스크톱 드래그 앤 드롭 핸들러
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData('expense-id', expense.id);
     e.dataTransfer.effectAllowed = 'move';
@@ -155,6 +239,59 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
         onMergeExpenses(expense, sourceExpense);
       }
     }
+  };
+
+  // 모바일 터치 핸들러
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+
+    // 롱프레스 타이머 (500ms)
+    longPressTimer.current = setTimeout(() => {
+      setDraggingExpenseId(expense.id);
+      // 진동 피드백 (지원하는 기기에서만)
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    }, 500);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartPos.current) return;
+
+    const touch = e.touches[0];
+    const moveX = Math.abs(touch.clientX - touchStartPos.current.x);
+    const moveY = Math.abs(touch.clientY - touchStartPos.current.y);
+
+    // 움직임이 감지되면 롱프레스 취소 (드래그 중이 아닐 때만)
+    if (!isDragging && (moveX > 10 || moveY > 10)) {
+      if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+      }
+    }
+
+    // 드래그 중이면 드롭 타겟 찾기
+    if (isDragging) {
+      e.preventDefault();
+      const targetId = findItemAtPosition(touch.clientX, touch.clientY);
+      setDragOverExpenseId(targetId);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    // 롱프레스 타이머 정리
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+
+    // 드래그 중이었으면 드롭 처리
+    if (isDragging) {
+      handleTouchDragEnd(expense.id, dragOverExpenseId);
+    }
+
+    touchStartPos.current = null;
   };
 
   // 분할 모달 열기
@@ -283,16 +420,21 @@ function ExpenseItem({ expense, allExpenses, onExpenseUpdate, onSaveMerchantRule
   };
 
   return (
-    <div className="relative">
+    <div className="relative" ref={(el) => registerItemRef(expense.id, el)}>
       <div
         draggable
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={handleOpenEdit}
-        className={`flex items-center justify-between p-3 rounded-xl transition-colors cursor-pointer ${
-          isDragOver
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={isDragging ? undefined : handleOpenEdit}
+        className={`flex items-center justify-between p-3 rounded-xl transition-all cursor-pointer select-none ${
+          isDragging
+            ? 'bg-blue-200 border-2 border-blue-500 scale-105 shadow-lg opacity-90'
+            : isDropTarget || isDragOver
             ? 'bg-blue-100 border-2 border-blue-400 border-dashed'
             : 'bg-slate-50 hover:bg-slate-100'
         }`}
