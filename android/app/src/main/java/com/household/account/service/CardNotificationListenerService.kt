@@ -1,18 +1,11 @@
 package com.household.account.service
 
 import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import com.household.account.QuickEditActivity
-import com.household.account.R
 import com.household.account.data.Category
 import com.household.account.data.Expense
 import com.household.account.data.ExpenseRepository
@@ -25,8 +18,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import java.text.NumberFormat
-import java.util.Locale
 
 /**
  * 카드사 알림을 감지하는 서비스
@@ -69,36 +60,9 @@ class CardNotificationListenerService : NotificationListenerService() {
         // 알림 감지 브로드캐스트 액션
         const val ACTION_NOTIFICATION_RECEIVED = "com.household.account.NOTIFICATION_RECEIVED"
         const val EXTRA_EXPENSE_JSON = "expense_json"
-
-        // 알림 채널
-        private const val CHANNEL_ID = "expense_quick_edit"
-        private const val CHANNEL_NAME = "지출 빠른 편집"
-        private var notificationId = 1000
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var notificationManager: NotificationManager? = null
-
-    override fun onCreate() {
-        super.onCreate()
-        notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        createNotificationChannel()
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "카드 결제 후 빠른 편집 알림"
-                enableVibration(true)
-                setShowBadge(true)
-            }
-            notificationManager?.createNotificationChannel(channel)
-        }
-    }
     private val expenseRepository = ExpenseRepository()
     private val ruleRepository = MerchantRuleRepository()
     private val rawNotificationRepository = RawNotificationRepository()
@@ -160,9 +124,9 @@ class CardNotificationListenerService : NotificationListenerService() {
                         val docId = expenseRepository.addExpense(expenseToSave)
                         Log.d(TAG, "Firebase 저장 완료 - 카테고리: ${expenseToSave.category}, ID: $docId")
 
-                        // 빠른 편집 알림 표시
+                        // 빠른 편집 화면 바로 띄우기
                         if (docId.isNotEmpty()) {
-                            showQuickEditNotification(expenseToSave.copy(id = docId))
+                            launchQuickEditActivity(expenseToSave.copy(id = docId))
                         }
 
                         // 브로드캐스트로 UI에 알림
@@ -196,11 +160,10 @@ class CardNotificationListenerService : NotificationListenerService() {
     }
 
     /**
-     * 빠른 편집 알림 표시
+     * 빠른 편집 화면 바로 띄우기
      */
-    private fun showQuickEditNotification(expense: Expense) {
+    private fun launchQuickEditActivity(expense: Expense) {
         try {
-            // QuickEditActivity를 열기 위한 Intent
             val intent = Intent(this, QuickEditActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra(QuickEditActivity.EXTRA_EXPENSE_ID, expense.id)
@@ -210,33 +173,10 @@ class CardNotificationListenerService : NotificationListenerService() {
                 putExtra(QuickEditActivity.EXTRA_TIME, expense.time)
                 putExtra(QuickEditActivity.EXTRA_CATEGORY, expense.category)
             }
-
-            val pendingIntent = PendingIntent.getActivity(
-                this,
-                notificationId,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
-            // 금액 포맷팅
-            val formattedAmount = NumberFormat.getNumberInstance(Locale.KOREA).format(expense.amount) + "원"
-
-            // 알림 생성
-            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setContentTitle(expense.merchant)
-                .setContentText("$formattedAmount - 탭하여 메모/카테고리 편집")
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setAutoCancel(true)
-                .setContentIntent(pendingIntent)
-                .setCategory(NotificationCompat.CATEGORY_REMINDER)
-                .build()
-
-            notificationManager?.notify(notificationId++, notification)
-            Log.d(TAG, "빠른 편집 알림 표시: ${expense.merchant}")
-
+            startActivity(intent)
+            Log.d(TAG, "빠른 편집 화면 실행: ${expense.merchant}")
         } catch (e: Exception) {
-            Log.e(TAG, "알림 표시 실패", e)
+            Log.e(TAG, "빠른 편집 화면 실행 실패", e)
         }
     }
 
