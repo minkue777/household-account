@@ -31,6 +31,13 @@ export default function AddExpenseModal({
     }
   }, [activeCategories, category]);
 
+  // 모달이 열릴 때 선택된 날짜로 초기화
+  useEffect(() => {
+    if (isOpen) {
+      setDate(selectedDate || new Date().toISOString().split('T')[0]);
+    }
+  }, [isOpen, selectedDate]);
+
   const handleSubmit = () => {
     const amountNum = parseInt(amount, 10);
     if (merchant.trim() && amountNum > 0) {
