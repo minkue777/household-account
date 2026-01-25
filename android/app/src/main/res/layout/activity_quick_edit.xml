@@ -1,160 +1,242 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
     android:background="@android:color/white"
-    android:padding="24dp">
+    android:fillViewport="true">
 
-    <!-- 헤더 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="20dp">
+        android:orientation="vertical"
+        android:padding="24dp">
 
-        <TextView
-            android:layout_width="0dp"
+        <!-- 헤더 -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="지출 빠른 편집"
-            android:textSize="20sp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="20dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="지출 수정"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="#1E293B" />
+
+            <ImageButton
+                android:id="@+id/btnClose"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_menu_close_clear_cancel"
+                android:contentDescription="닫기" />
+        </LinearLayout>
+
+        <!-- 가맹점 입력 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="가맹점"
+            android:textSize="14sp"
             android:textStyle="bold"
-            android:textColor="#1E293B" />
+            android:textColor="#475569"
+            android:layout_marginBottom="8dp" />
 
-        <ImageButton
-            android:id="@+id/btnClose"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_close_clear_cancel"
-            android:contentDescription="닫기" />
-    </LinearLayout>
+        <EditText
+            android:id="@+id/etMerchant"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:background="@drawable/edit_text_background"
+            android:padding="12dp"
+            android:textSize="16sp"
+            android:inputType="text"
+            android:maxLines="1"
+            android:layout_marginBottom="16dp" />
 
-    <!-- 지출 정보 카드 -->
-    <androidx.cardview.widget.CardView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="20dp"
-        app:cardCornerRadius="12dp"
-        app:cardElevation="2dp"
-        app:cardBackgroundColor="#F8FAFC">
+        <!-- 금액 입력 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="금액"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="#475569"
+            android:layout_marginBottom="8dp" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp">
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <EditText
+                android:id="@+id/etAmount"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:background="@drawable/edit_text_background"
+                android:padding="12dp"
+                android:textSize="16sp"
+                android:inputType="number"
+                android:maxLines="1" />
 
             <TextView
-                android:id="@+id/tvMerchant"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="가맹점명"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:textColor="#1E293B" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginTop="8dp">
-
-                <TextView
-                    android:id="@+id/tvAmount"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="0원"
-                    android:textSize="24sp"
-                    android:textStyle="bold"
-                    android:textColor="#3B82F6" />
-
-                <TextView
-                    android:id="@+id/tvDateTime"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="01/23 16:43"
-                    android:textSize="14sp"
-                    android:textColor="#64748B" />
-            </LinearLayout>
+                android:layout_height="48dp"
+                android:gravity="center"
+                android:paddingStart="12dp"
+                android:paddingEnd="4dp"
+                android:text="원"
+                android:textSize="16sp"
+                android:textColor="#64748B" />
         </LinearLayout>
-    </androidx.cardview.widget.CardView>
 
-    <!-- 카테고리 선택 -->
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="카테고리"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:textColor="#475569"
-        android:layout_marginBottom="8dp" />
-
-    <HorizontalScrollView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:scrollbars="none"
-        android:layout_marginBottom="20dp">
-
-        <LinearLayout
-            android:id="@+id/categoryContainer"
+        <!-- 카테고리 선택 -->
+        <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal" />
-    </HorizontalScrollView>
+            android:text="카테고리"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="#475569"
+            android:layout_marginBottom="8dp" />
 
-    <!-- 메모 입력 -->
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="메모"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:textColor="#475569"
-        android:layout_marginBottom="8dp" />
+        <com.google.android.flexbox.FlexboxLayout
+            android:id="@+id/categoryContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:flexWrap="wrap"
+            app:alignItems="flex_start"
+            app:justifyContent="flex_start" />
 
-    <EditText
-        android:id="@+id/etMemo"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:minHeight="48dp"
-        android:background="@drawable/edit_text_background"
-        android:padding="12dp"
-        android:hint="메모 입력 (선택)"
-        android:textSize="16sp"
-        android:inputType="text"
-        android:maxLines="2"
-        android:layout_marginBottom="24dp" />
+        <!-- 메모 입력 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="메모"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="#475569"
+            android:layout_marginBottom="8dp" />
 
-    <!-- 버튼 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        <EditText
+            android:id="@+id/etMemo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:background="@drawable/edit_text_background"
+            android:padding="12dp"
+            android:hint="메모 입력 (선택)"
+            android:textSize="16sp"
+            android:inputType="text"
+            android:maxLines="2"
+            android:layout_marginBottom="16dp" />
 
+        <!-- 날짜/시간 정보 (읽기 전용) -->
+        <TextView
+            android:id="@+id/tvDateTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="01/23 16:43"
+            android:textSize="14sp"
+            android:textColor="#94A3B8"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 알림 보내기 토글 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="12dp"
+            android:background="@drawable/edit_text_background"
+            android:layout_marginBottom="20dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="알림 보내기"
+                    android:textSize="14sp"
+                    android:textColor="#1E293B" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="다른 기기로 푸시 알림 전송"
+                    android:textSize="12sp"
+                    android:textColor="#94A3B8" />
+            </LinearLayout>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switchNotify"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false" />
+        </LinearLayout>
+
+        <!-- 나누기 버튼 -->
         <Button
-            android:id="@+id/btnSkip"
-            android:layout_width="0dp"
+            android:id="@+id/btnSplit"
+            android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:layout_weight="1"
-            android:layout_marginEnd="8dp"
-            android:text="건너뛰기"
-            android:textColor="#64748B"
-            android:backgroundTint="#E2E8F0" />
+            android:text="나누기"
+            android:textColor="#475569"
+            android:textSize="14sp"
+            android:backgroundTint="#F1F5F9"
+            android:layout_marginBottom="12dp" />
 
+        <!-- 삭제 버튼 -->
         <Button
-            android:id="@+id/btnSave"
-            android:layout_width="0dp"
+            android:id="@+id/btnDelete"
+            android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:text="저장"
-            android:textColor="@android:color/white"
-            android:backgroundTint="#3B82F6" />
+            android:text="삭제"
+            android:textColor="#EF4444"
+            android:textSize="14sp"
+            android:backgroundTint="#FEF2F2"
+            android:layout_marginBottom="24dp" />
+
+        <!-- 하단 버튼 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnCancel"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:text="취소"
+                android:textColor="#64748B"
+                android:backgroundTint="#E2E8F0" />
+
+            <Button
+                android:id="@+id/btnSave"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="저장"
+                android:textColor="@android:color/white"
+                android:backgroundTint="#3B82F6" />
+        </LinearLayout>
+
     </LinearLayout>
-
-</LinearLayout>
+</ScrollView>

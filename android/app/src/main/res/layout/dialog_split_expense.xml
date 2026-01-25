@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@android:color/white"
+    android:padding="24dp">
+
+    <!-- 헤더 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="지출 나누기"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:textColor="#1E293B"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:id="@+id/tvSplitInfo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="테스트 가맹점 25,000원을 여러 항목으로 나눕니다"
+        android:textSize="14sp"
+        android:textColor="#64748B"
+        android:layout_marginBottom="16dp" />
+
+    <!-- 분할 합계 표시 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="#F1F5F9"
+        android:padding="12dp"
+        android:layout_marginBottom="16dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="분할 합계"
+            android:textSize="14sp"
+            android:textColor="#64748B" />
+
+        <TextView
+            android:id="@+id/tvSplitTotal"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="25,000원 / 25,000원"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="#22C55E" />
+    </LinearLayout>
+
+    <!-- 분할 항목 컨테이너 (ScrollView 안에) -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginBottom="16dp"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:id="@+id/splitItemsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
+
+    <!-- 항목 추가 버튼 -->
+    <Button
+        android:id="@+id/btnAddSplit"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:text="+ 항목 추가"
+        android:textColor="#64748B"
+        android:textSize="14sp"
+        android:backgroundTint="#F1F5F9"
+        android:layout_marginBottom="24dp" />
+
+    <!-- 하단 버튼 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnCancelSplit"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="8dp"
+            android:text="취소"
+            android:textColor="#64748B"
+            android:backgroundTint="#E2E8F0" />
+
+        <Button
+            android:id="@+id/btnConfirmSplit"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:text="나누기"
+            android:textColor="@android:color/white"
+            android:backgroundTint="#3B82F6" />
+    </LinearLayout>
+
+</LinearLayout>

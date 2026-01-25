@@ -1,18 +1,27 @@
 package com.household.account
 
+import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Gravity
+import android.view.LayoutInflater
+import android.view.View
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
-import com.household.account.data.Category
+import com.google.android.flexbox.FlexboxLayout
+import com.google.android.material.switchmaterial.SwitchMaterial
+import com.household.account.data.CategoryData
+import com.household.account.data.CategoryRepository
+import com.household.account.data.Expense
 import com.household.account.data.ExpenseRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,8 +32,8 @@ import java.text.NumberFormat
 import java.util.Locale
 
 /**
- * 지출 빠른 편집 액티비티
- * 카드 결제 알림 후 바로 메모/카테고리를 수정할 수 있는 화면
+ * 지출 수정 액티비티
+ * 카드 결제 알림 후 가맹점, 금액, 카테고리, 메모를 수정할 수 있는 화면
  */
 class QuickEditActivity : AppCompatActivity() {
 
@@ -39,158 +48,282 @@ class QuickEditActivity : AppCompatActivity() {
 
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val expenseRepository = ExpenseRepository()
+    private val categoryRepository = CategoryRepository()
 
+    // 원본 데이터
     private var expenseId: String = ""
-    private var selectedCategory: Category = Category.ETC
-    private val categoryButtons = mutableMapOf<Category, TextView>()
+    private var originalMerchant: String = ""
+    private var originalAmount: Int = 0
+    private var originalCategory: String = ""
+    private var originalDate: String = ""
+    private var originalTime: String = ""
+
+    // 현재 선택된 값들
+    private var selectedCategoryKey: String = ""
+    private var categories: List<CategoryData> = emptyList()
+    private val categoryViews = mutableMapOf<String, View>()
+
+    // UI 요소
+    private lateinit var etMerchant: EditText
+    private lateinit var etAmount: EditText
+    private lateinit var etMemo: EditText
+    private lateinit var categoryContainer: FlexboxLayout
+    private lateinit var tvDateTime: TextView
+    private lateinit var switchNotify: SwitchMaterial
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 팝업 스타일 설정
         setupWindowStyle()
-
         setContentView(R.layout.activity_quick_edit)
 
         // Intent 데이터 추출
         expenseId = intent.getStringExtra(EXTRA_EXPENSE_ID) ?: ""
-        val merchant = intent.getStringExtra(EXTRA_MERCHANT) ?: ""
-        val amount = intent.getIntExtra(EXTRA_AMOUNT, 0)
-        val date = intent.getStringExtra(EXTRA_DATE) ?: ""
-        val time = intent.getStringExtra(EXTRA_TIME) ?: ""
-        val categoryName = intent.getStringExtra(EXTRA_CATEGORY) ?: Category.ETC.name
+        originalMerchant = intent.getStringExtra(EXTRA_MERCHANT) ?: ""
+        originalAmount = intent.getIntExtra(EXTRA_AMOUNT, 0)
+        originalDate = intent.getStringExtra(EXTRA_DATE) ?: ""
+        originalTime = intent.getStringExtra(EXTRA_TIME) ?: ""
+        originalCategory = intent.getStringExtra(EXTRA_CATEGORY) ?: "etc"
 
-        selectedCategory = try {
-            Category.valueOf(categoryName)
-        } catch (e: Exception) {
-            Category.ETC
-        }
+        // 카테고리 키 정규화 (대문자 -> 소문자)
+        selectedCategoryKey = originalCategory.lowercase()
 
-        setupUI(merchant, amount, date, time)
-        setupCategoryButtons()
+        initViews()
+        setupUI()
+        loadCategories()
         setupButtons()
     }
 
     private fun setupWindowStyle() {
-        // 다이얼로그 스타일로 표시
         window.setLayout(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT
         )
         window.setGravity(Gravity.BOTTOM)
-
-        // 배경 딤 처리
         window.setBackgroundDrawableResource(android.R.color.white)
         window.attributes = window.attributes.apply {
             dimAmount = 0.5f
             flags = flags or WindowManager.LayoutParams.FLAG_DIM_BEHIND
         }
-
-        // 상태바 아래서 시작하도록
         window.decorView.setPadding(0, 0, 0, 0)
     }
 
-    private fun setupUI(merchant: String, amount: Int, date: String, time: String) {
-        findViewById<TextView>(R.id.tvMerchant).text = merchant
+    private fun initViews() {
+        etMerchant = findViewById(R.id.etMerchant)
+        etAmount = findViewById(R.id.etAmount)
+        etMemo = findViewById(R.id.etMemo)
+        categoryContainer = findViewById(R.id.categoryContainer)
+        tvDateTime = findViewById(R.id.tvDateTime)
+        switchNotify = findViewById(R.id.switchNotify)
+    }
 
-        val formattedAmount = NumberFormat.getNumberInstance(Locale.KOREA).format(amount) + "원"
-        findViewById<TextView>(R.id.tvAmount).text = formattedAmount
+    private fun setupUI() {
+        // 가맹점
+        etMerchant.setText(originalMerchant)
 
-        // 날짜/시간 포맷팅 (2025-01-23 → 01/23)
+        // 금액
+        etAmount.setText(originalAmount.toString())
+
+        // 날짜/시간 포맷팅
         val dateTime = buildString {
-            if (date.length >= 10) {
-                append(date.substring(5, 7))
+            if (originalDate.length >= 10) {
+                append(originalDate.substring(5, 7))
                 append("/")
-                append(date.substring(8, 10))
+                append(originalDate.substring(8, 10))
             }
-            if (time.isNotEmpty()) {
+            if (originalTime.isNotEmpty()) {
                 append(" ")
-                append(time)
+                append(originalTime)
             }
         }
-        findViewById<TextView>(R.id.tvDateTime).text = dateTime
+        tvDateTime.text = dateTime
+    }
+
+    private fun loadCategories() {
+        activityScope.launch {
+            try {
+                categories = withContext(Dispatchers.IO) {
+                    categoryRepository.getActiveCategories()
+                }
+                setupCategoryButtons()
+            } catch (e: Exception) {
+                // 기본 카테고리 사용
+                categories = CategoryRepository.DEFAULT_CATEGORIES
+                setupCategoryButtons()
+            }
+        }
     }
 
     private fun setupCategoryButtons() {
-        val container = findViewById<LinearLayout>(R.id.categoryContainer)
-        container.removeAllViews()
+        categoryContainer.removeAllViews()
+        categoryViews.clear()
 
-        Category.entries.forEach { category ->
+        categories.forEach { category ->
             val button = createCategoryButton(category)
-            categoryButtons[category] = button
-            container.addView(button)
+            categoryViews[category.key] = button
+            categoryContainer.addView(button)
 
             button.setOnClickListener {
-                selectCategory(category)
+                selectCategory(category.key)
             }
         }
 
-        // 초기 선택 상태 반영
         updateCategorySelection()
     }
 
-    private fun createCategoryButton(category: Category): TextView {
-        val button = TextView(this).apply {
-            text = category.label
-            textSize = 14f
-            setPadding(40, 24, 40, 24)
+    private fun createCategoryButton(category: CategoryData): LinearLayout {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
+            setPadding(24, 16, 24, 16)
 
-            val params = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+            val params = FlexboxLayout.LayoutParams(
+                FlexboxLayout.LayoutParams.WRAP_CONTENT,
+                FlexboxLayout.LayoutParams.WRAP_CONTENT
             ).apply {
-                marginEnd = 12
+                setMargins(0, 0, 12, 12)
             }
             layoutParams = params
         }
 
-        return button
+        // 색상 원
+        val colorCircle = View(this).apply {
+            val size = (24 * resources.displayMetrics.density).toInt()
+            layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                bottomMargin = (4 * resources.displayMetrics.density).toInt()
+            }
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.parseColor(category.color))
+            }
+        }
+
+        // 라벨
+        val label = TextView(this).apply {
+            text = category.label.take(2)
+            textSize = 12f
+            setTextColor(Color.parseColor("#475569"))
+            gravity = Gravity.CENTER
+        }
+
+        container.addView(colorCircle)
+        container.addView(label)
+
+        return container
     }
 
-    private fun selectCategory(category: Category) {
-        selectedCategory = category
+    private fun selectCategory(categoryKey: String) {
+        selectedCategoryKey = categoryKey
         updateCategorySelection()
     }
 
     private fun updateCategorySelection() {
-        categoryButtons.forEach { (category, button) ->
-            val isSelected = category == selectedCategory
+        categoryViews.forEach { (key, view) ->
+            val isSelected = key == selectedCategoryKey
 
             val background = GradientDrawable().apply {
-                cornerRadius = 50f
+                cornerRadius = 12 * resources.displayMetrics.density
                 if (isSelected) {
-                    setColor(category.color.toInt())
+                    setColor(Color.parseColor("#EFF6FF"))
+                    setStroke(
+                        (2 * resources.displayMetrics.density).toInt(),
+                        Color.parseColor("#3B82F6")
+                    )
                 } else {
-                    setColor(Color.parseColor("#F1F5F9"))
-                    setStroke(2, Color.parseColor("#E2E8F0"))
+                    setColor(Color.TRANSPARENT)
+                    setStroke(
+                        (1 * resources.displayMetrics.density).toInt(),
+                        Color.parseColor("#E2E8F0")
+                    )
                 }
             }
-
-            button.background = background
-            button.setTextColor(
-                if (isSelected) Color.WHITE else Color.parseColor("#475569")
-            )
+            view.background = background
         }
     }
 
     private fun setupButtons() {
+        // 닫기 버튼
         findViewById<ImageButton>(R.id.btnClose).setOnClickListener {
             finish()
         }
 
-        findViewById<Button>(R.id.btnSkip).setOnClickListener {
+        // 취소 버튼
+        findViewById<Button>(R.id.btnCancel).setOnClickListener {
             finish()
         }
 
+        // 저장 버튼
         findViewById<Button>(R.id.btnSave).setOnClickListener {
             saveChanges()
+        }
+
+        // 나누기 버튼
+        findViewById<Button>(R.id.btnSplit).setOnClickListener {
+            showSplitDialog()
+        }
+
+        // 삭제 버튼
+        findViewById<Button>(R.id.btnDelete).setOnClickListener {
+            showDeleteConfirmation()
         }
     }
 
     private fun saveChanges() {
-        val memo = findViewById<EditText>(R.id.etMemo).text.toString().trim()
+        val merchant = etMerchant.text.toString().trim()
+        val amountStr = etAmount.text.toString().trim()
+        val memo = etMemo.text.toString().trim()
 
+        if (merchant.isEmpty()) {
+            Toast.makeText(this, "가맹점명을 입력해주세요", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val amount = amountStr.toIntOrNull()
+        if (amount == null || amount <= 0) {
+            Toast.makeText(this, "올바른 금액을 입력해주세요", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (expenseId.isEmpty()) {
+            finish()
+            return
+        }
+
+        val notifyPartner = switchNotify.isChecked
+
+        activityScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    expenseRepository.updateExpenseAllFields(
+                        expenseId = expenseId,
+                        merchant = if (merchant != originalMerchant) merchant else null,
+                        amount = if (amount != originalAmount) amount else null,
+                        category = if (selectedCategoryKey != originalCategory.lowercase()) selectedCategoryKey else null,
+                        memo = memo.ifEmpty { null },
+                        notifyPartner = notifyPartner
+                    )
+                }
+                val message = if (notifyPartner) "저장 및 알림 전송됨" else "저장되었습니다"
+                Toast.makeText(this@QuickEditActivity, message, Toast.LENGTH_SHORT).show()
+                finish()
+            } catch (e: Exception) {
+                Toast.makeText(this@QuickEditActivity, "저장에 실패했습니다", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun showDeleteConfirmation() {
+        AlertDialog.Builder(this)
+            .setTitle("삭제 확인")
+            .setMessage("\"$originalMerchant\" ${NumberFormat.getNumberInstance(Locale.KOREA).format(originalAmount)}원을 삭제하시겠습니까?")
+            .setPositiveButton("삭제") { _, _ ->
+                deleteExpense()
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun deleteExpense() {
         if (expenseId.isEmpty()) {
             finish()
             return
@@ -199,18 +332,244 @@ class QuickEditActivity : AppCompatActivity() {
         activityScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    // 카테고리와 메모 업데이트
-                    expenseRepository.updateExpenseFields(
-                        expenseId = expenseId,
-                        category = selectedCategory.name,
-                        memo = memo
-                    )
+                    expenseRepository.deleteExpense(expenseId)
                 }
+                Toast.makeText(this@QuickEditActivity, "삭제되었습니다", Toast.LENGTH_SHORT).show()
                 finish()
             } catch (e: Exception) {
-                // 에러 처리 (간단히 종료)
-                finish()
+                Toast.makeText(this@QuickEditActivity, "삭제에 실패했습니다", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    private fun showSplitDialog() {
+        val currentAmount = etAmount.text.toString().toIntOrNull() ?: originalAmount
+        val currentMerchant = etMerchant.text.toString().ifEmpty { originalMerchant }
+
+        val dialog = AlertDialog.Builder(this, R.style.Theme_QuickEdit)
+            .create()
+
+        val view = LayoutInflater.from(this).inflate(R.layout.dialog_split_expense, null)
+        dialog.setView(view)
+
+        // 분할 항목 데이터
+        data class SplitItem(
+            var merchant: String,
+            var amount: Int,
+            var category: String,
+            var memo: String
+        )
+
+        val splits = mutableListOf(
+            SplitItem(currentMerchant, currentAmount / 2, selectedCategoryKey, ""),
+            SplitItem(currentMerchant, currentAmount - currentAmount / 2, selectedCategoryKey, "")
+        )
+
+        val splitItemsContainer = view.findViewById<LinearLayout>(R.id.splitItemsContainer)
+        val tvSplitInfo = view.findViewById<TextView>(R.id.tvSplitInfo)
+        val tvSplitTotal = view.findViewById<TextView>(R.id.tvSplitTotal)
+
+        tvSplitInfo.text = "$currentMerchant ${NumberFormat.getNumberInstance(Locale.KOREA).format(currentAmount)}원을 여러 항목으로 나눕니다"
+
+        fun updateTotalDisplay() {
+            val total = splits.sumOf { it.amount }
+            val isMatch = total == currentAmount
+            tvSplitTotal.text = "${NumberFormat.getNumberInstance(Locale.KOREA).format(total)}원 / ${NumberFormat.getNumberInstance(Locale.KOREA).format(currentAmount)}원"
+            tvSplitTotal.setTextColor(Color.parseColor(if (isMatch) "#22C55E" else "#EF4444"))
+        }
+
+        fun renderSplitItems() {
+            splitItemsContainer.removeAllViews()
+
+            splits.forEachIndexed { index, split ->
+                val itemView = LayoutInflater.from(this).inflate(R.layout.item_split_expense, splitItemsContainer, false)
+
+                itemView.findViewById<TextView>(R.id.tvItemNumber).text = "항목 ${index + 1}"
+
+                val etMerchant = itemView.findViewById<EditText>(R.id.etMerchant)
+                val etAmount = itemView.findViewById<EditText>(R.id.etAmount)
+                val etMemo = itemView.findViewById<EditText>(R.id.etMemo)
+                val btnRemove = itemView.findViewById<ImageButton>(R.id.btnRemove)
+                val categoryContainer = itemView.findViewById<FlexboxLayout>(R.id.categoryContainer)
+
+                etMerchant.setText(split.merchant)
+                etAmount.setText(split.amount.toString())
+                etMemo.setText(split.memo)
+
+                // 삭제 버튼 (3개 이상일 때만 표시)
+                btnRemove.visibility = if (splits.size > 2) View.VISIBLE else View.GONE
+                btnRemove.setOnClickListener {
+                    splits.removeAt(index)
+                    renderSplitItems()
+                    updateTotalDisplay()
+                }
+
+                // 카테고리 버튼들
+                categories.forEach { category ->
+                    val catButton = createSmallCategoryButton(category, split.category == category.key)
+                    catButton.setOnClickListener {
+                        split.category = category.key
+                        renderSplitItems()
+                    }
+                    categoryContainer.addView(catButton)
+                }
+
+                // 텍스트 변경 리스너
+                etMerchant.addTextChangedListener(object : TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                    override fun afterTextChanged(s: Editable?) {
+                        split.merchant = s.toString()
+                    }
+                })
+
+                etAmount.addTextChangedListener(object : TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                    override fun afterTextChanged(s: Editable?) {
+                        val newAmount = s.toString().toIntOrNull() ?: 0
+                        split.amount = newAmount
+
+                        // 2개일 때 다른 항목 자동 조정
+                        if (splits.size == 2) {
+                            val otherIndex = if (index == 0) 1 else 0
+                            splits[otherIndex].amount = maxOf(0, currentAmount - newAmount)
+                        }
+                        updateTotalDisplay()
+                    }
+                })
+
+                etMemo.addTextChangedListener(object : TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                    override fun afterTextChanged(s: Editable?) {
+                        split.memo = s.toString()
+                    }
+                })
+
+                splitItemsContainer.addView(itemView)
+            }
+        }
+
+        // 항목 추가 버튼
+        view.findViewById<Button>(R.id.btnAddSplit).setOnClickListener {
+            val totalUsed = splits.sumOf { it.amount }
+            val remaining = maxOf(0, currentAmount - totalUsed)
+            splits.add(SplitItem(currentMerchant, remaining, selectedCategoryKey, ""))
+            renderSplitItems()
+            updateTotalDisplay()
+        }
+
+        // 취소 버튼
+        view.findViewById<Button>(R.id.btnCancelSplit).setOnClickListener {
+            dialog.dismiss()
+        }
+
+        // 나누기 확인 버튼
+        view.findViewById<Button>(R.id.btnConfirmSplit).setOnClickListener {
+            val total = splits.sumOf { it.amount }
+            if (total != currentAmount) {
+                Toast.makeText(this, "분할 금액의 합이 원래 금액과 일치하지 않습니다", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (splits.any { it.amount <= 0 }) {
+                Toast.makeText(this, "모든 분할 항목의 금액은 0보다 커야 합니다", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            // 분할 실행
+            activityScope.launch {
+                try {
+                    val expenseList = splits.map { split ->
+                        Expense(
+                            date = originalDate,
+                            time = originalTime,
+                            merchant = split.merchant,
+                            amount = split.amount,
+                            category = split.category,
+                            memo = split.memo
+                        )
+                    }
+
+                    withContext(Dispatchers.IO) {
+                        expenseRepository.splitExpense(expenseId, expenseList)
+                    }
+
+                    Toast.makeText(this@QuickEditActivity, "분할되었습니다", Toast.LENGTH_SHORT).show()
+                    dialog.dismiss()
+                    finish()
+                } catch (e: Exception) {
+                    Toast.makeText(this@QuickEditActivity, "분할에 실패했습니다", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        renderSplitItems()
+        updateTotalDisplay()
+
+        dialog.show()
+
+        // 다이얼로그 크기 설정
+        dialog.window?.setLayout(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            (resources.displayMetrics.heightPixels * 0.85).toInt()
+        )
+    }
+
+    private fun createSmallCategoryButton(category: CategoryData, isSelected: Boolean): LinearLayout {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(16, 8, 16, 8)
+
+            val params = FlexboxLayout.LayoutParams(
+                FlexboxLayout.LayoutParams.WRAP_CONTENT,
+                FlexboxLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(0, 0, 8, 8)
+            }
+            layoutParams = params
+
+            background = GradientDrawable().apply {
+                cornerRadius = 8 * resources.displayMetrics.density
+                if (isSelected) {
+                    setColor(Color.parseColor("#EFF6FF"))
+                    setStroke(
+                        (2 * resources.displayMetrics.density).toInt(),
+                        Color.parseColor("#3B82F6")
+                    )
+                } else {
+                    setColor(Color.TRANSPARENT)
+                    setStroke(
+                        (1 * resources.displayMetrics.density).toInt(),
+                        Color.parseColor("#E2E8F0")
+                    )
+                }
+            }
+        }
+
+        // 색상 원
+        val colorCircle = View(this).apply {
+            val size = (12 * resources.displayMetrics.density).toInt()
+            layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                marginEnd = (6 * resources.displayMetrics.density).toInt()
+            }
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.parseColor(category.color))
+            }
+        }
+
+        // 라벨
+        val label = TextView(this).apply {
+            text = category.label
+            textSize = 12f
+            setTextColor(Color.parseColor("#475569"))
+        }
+
+        container.addView(colorCircle)
+        container.addView(label)
+
+        return container
     }
 }

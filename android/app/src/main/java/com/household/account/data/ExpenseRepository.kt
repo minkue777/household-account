@@ -173,4 +173,51 @@ class ExpenseRepository {
             Log.e(TAG, "updateExpenseFields failed", e)
         }
     }
+
+    /**
+     * 지출 항목 전체 필드 업데이트 (가맹점, 금액, 카테고리, 메모, 알림 여부)
+     */
+    suspend fun updateExpenseAllFields(
+        expenseId: String,
+        merchant: String? = null,
+        amount: Int? = null,
+        category: String? = null,
+        memo: String? = null,
+        notifyPartner: Boolean = false
+    ) {
+        try {
+            val updates = mutableMapOf<String, Any>()
+            merchant?.let { updates["merchant"] = it }
+            amount?.let { updates["amount"] = it }
+            category?.let { updates["category"] = it }
+            memo?.let { updates["memo"] = it }
+            updates["notifyPartner"] = notifyPartner
+
+            if (updates.isNotEmpty()) {
+                expensesCollection.document(expenseId)
+                    .update(updates)
+                    .await()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "updateExpenseAllFields failed", e)
+        }
+    }
+
+    /**
+     * 지출 분할 (원본 삭제 후 여러 개 생성)
+     */
+    suspend fun splitExpense(originalExpenseId: String, splits: List<Expense>): List<String> {
+        return try {
+            // 원본 삭제
+            deleteExpense(originalExpenseId)
+
+            // 분할된 항목들 추가
+            splits.map { expense ->
+                addExpense(expense)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "splitExpense failed", e)
+            emptyList()
+        }
+    }
 }

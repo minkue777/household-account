@@ -19,7 +19,6 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var permissionLayout: LinearLayout
-    private lateinit var testButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,28 +26,11 @@ class MainActivity : AppCompatActivity() {
 
         webView = findViewById(R.id.webView)
         permissionLayout = findViewById(R.id.permissionLayout)
-        testButton = findViewById(R.id.btnTestPopup)
 
         setupWebView()
         setupPermissionButtons()
-        setupTestButton()
 
         checkPermissionAndShowContent()
-    }
-
-    private fun setupTestButton() {
-        testButton.setOnClickListener {
-            // 테스트용 QuickEditActivity 실행
-            val intent = Intent(this, QuickEditActivity::class.java).apply {
-                putExtra(QuickEditActivity.EXTRA_EXPENSE_ID, "test_id_${System.currentTimeMillis()}")
-                putExtra(QuickEditActivity.EXTRA_MERCHANT, "테스트 가맹점")
-                putExtra(QuickEditActivity.EXTRA_AMOUNT, 25000)
-                putExtra(QuickEditActivity.EXTRA_DATE, java.time.LocalDate.now().toString())
-                putExtra(QuickEditActivity.EXTRA_TIME, java.time.LocalTime.now().toString().substring(0, 5))
-                putExtra(QuickEditActivity.EXTRA_CATEGORY, "ETC")
-            }
-            startActivity(intent)
-        }
     }
 
     override fun onResume() {
@@ -95,7 +77,6 @@ class MainActivity : AppCompatActivity() {
     private fun showWebView() {
         permissionLayout.visibility = View.GONE
         webView.visibility = View.VISIBLE
-        testButton.visibility = View.VISIBLE
 
         // 이미 로드된 경우 다시 로드하지 않음
         if (webView.url == null) {
@@ -105,7 +86,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun showPermissionScreen() {
         webView.visibility = View.GONE
-        testButton.visibility = View.GONE
         permissionLayout.visibility = View.VISIBLE
     }
 

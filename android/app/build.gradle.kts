@@ -41,6 +41,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.cardview:cardview:1.0.0")
+    implementation("com.google.android.material:material:1.11.0")
+    implementation("com.google.android.flexbox:flexbox:3.0.0")
 
     // Firebase (알림 서비스용)
     implementation(platform("com.google.firebase:firebase-bom:32.6.0"))

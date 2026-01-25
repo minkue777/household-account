@@ -124,9 +124,12 @@ class CardNotificationListenerService : NotificationListenerService() {
                         val docId = expenseRepository.addExpense(expenseToSave)
                         Log.d(TAG, "Firebase 저장 완료 - 카테고리: ${expenseToSave.category}, ID: $docId")
 
-                        // 빠른 편집 화면 바로 띄우기
+                        // 빠른 편집 화면 바로 띄우기 (카테고리는 소문자로 변환)
                         if (docId.isNotEmpty()) {
-                            launchQuickEditActivity(expenseToSave.copy(id = docId))
+                            launchQuickEditActivity(expenseToSave.copy(
+                                id = docId,
+                                category = expenseToSave.category.lowercase()
+                            ))
                         }
 
                         // 브로드캐스트로 UI에 알림

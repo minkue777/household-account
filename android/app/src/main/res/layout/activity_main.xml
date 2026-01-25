@@ -11,17 +11,6 @@
         android:layout_height="match_parent"
         android:visibility="gone" />
 
-    <!-- 테스트 버튼 (개발용) -->
-    <Button
-        android:id="@+id/btnTestPopup"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
-        android:text="테스트"
-        android:textSize="12sp"
-        android:visibility="gone" />
-
     <!-- 권한 요청 화면 -->
     <LinearLayout
         android:id="@+id/permissionLayout"

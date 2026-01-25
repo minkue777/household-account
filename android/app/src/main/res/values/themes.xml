@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.HouseholdAccount" parent="Theme.AppCompat.Light.NoActionBar">
+    <style name="Theme.HouseholdAccount" parent="Theme.Material3.Light.NoActionBar">
         <item name="android:statusBarColor">#3B82F6</item>
         <item name="android:windowBackground">#F8FAFC</item>
+        <item name="colorPrimary">#3B82F6</item>
+        <item name="colorPrimaryContainer">#EFF6FF</item>
+        <item name="colorOnPrimary">@android:color/white</item>
     </style>
 
     <!-- 빠른 편집 팝업 테마 -->
-    <style name="Theme.QuickEdit" parent="Theme.AppCompat.Light.Dialog">
+    <style name="Theme.QuickEdit" parent="Theme.Material3.Light.Dialog">
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowIsFloating">true</item>
