@@ -46,21 +46,20 @@ export default function CategorySummary({ expenses }: CategorySummaryProps) {
         const budget = getCategoryBudget(category);
         const color = getCategoryColor(category);
         const label = getCategoryLabel(category);
+        const hasBudget = budget !== null && budget > 0;
 
-        // 예산이 있으면 예산 대비 %, 없으면 전체 대비 % 표시
-        const percentage = budget !== null
+        // 예산이 있으면 예산 대비 %, 없으면 전체 대비 비율 (막대용)
+        const percentage = hasBudget
           ? Math.min((total / budget) * 100, 100)
           : totalAmount > 0
             ? (total / totalAmount) * 100
             : 0;
 
-        const isOverBudget = budget !== null && total > budget;
-        // 예산이 있으면 예산 대비 %, 없으면 전체 지출 대비 %
-        const displayPercent = budget !== null
+        const isOverBudget = hasBudget && total > budget;
+        // 예산이 있을 때만 % 표시
+        const displayPercent = hasBudget
           ? Math.round((total / budget) * 100)
-          : totalAmount > 0
-            ? Math.round((total / totalAmount) * 100)
-            : 0;
+          : null;
 
         return (
           <div key={category} className="group">
@@ -79,21 +78,25 @@ export default function CategorySummary({ expenses }: CategorySummaryProps) {
                 <span className={`text-sm font-semibold ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
                   {total.toLocaleString()}원
                 </span>
-                <span className={`text-xs font-medium min-w-[40px] text-right ${isOverBudget ? 'text-red-500' : 'text-slate-500'}`}>
-                  ({displayPercent}%)
-                </span>
+                {displayPercent !== null && (
+                  <span className={`text-xs font-medium min-w-[40px] text-right ${isOverBudget ? 'text-red-500' : 'text-slate-500'}`}>
+                    ({displayPercent}%)
+                  </span>
+                )}
               </div>
             </div>
-            {/* 프로그레스 바 */}
-            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-300 ${isOverBudget ? 'animate-pulse' : ''}`}
-                style={{
-                  width: `${percentage}%`,
-                  backgroundColor: isOverBudget ? '#EF4444' : color,
-                }}
-              />
-            </div>
+            {/* 프로그레스 바 - 예산 있을 때만 표시 */}
+            {hasBudget && (
+              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${isOverBudget ? 'animate-pulse' : ''}`}
+                  style={{
+                    width: `${percentage}%`,
+                    backgroundColor: isOverBudget ? '#EF4444' : color,
+                  }}
+                />
+              </div>
+            )}
             {/* 예산 초과 경고 */}
             {isOverBudget && (
               <div className="flex items-center gap-1 mt-1">
