@@ -124,8 +124,9 @@ export function setStoredHouseholdKey(key: string): void {
   localStorage.setItem('householdKey', key);
 
   // Android WebView 브리지가 있으면 SharedPreferences에도 동기화
-  if (typeof (window as WindowWithBridge).AndroidBridge?.setHouseholdKey === 'function') {
-    (window as WindowWithBridge).AndroidBridge.setHouseholdKey(key);
+  const bridge = (window as WindowWithBridge).AndroidBridge;
+  if (bridge && typeof bridge.setHouseholdKey === 'function') {
+    bridge.setHouseholdKey(key);
   }
 }
 
@@ -137,8 +138,9 @@ export function clearStoredHouseholdKey(): void {
   localStorage.removeItem('householdKey');
 
   // Android WebView 브리지가 있으면 SharedPreferences에서도 삭제
-  if (typeof (window as WindowWithBridge).AndroidBridge?.clearHouseholdKey === 'function') {
-    (window as WindowWithBridge).AndroidBridge.clearHouseholdKey();
+  const bridge = (window as WindowWithBridge).AndroidBridge;
+  if (bridge && typeof bridge.clearHouseholdKey === 'function') {
+    bridge.clearHouseholdKey();
   }
 }
 
