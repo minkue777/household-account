@@ -19,6 +19,9 @@ export default function StatsPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // 카테고리 필터 상태 (월별 추이 차트와 공유)
+  const [enabledCategories, setEnabledCategories] = useState<Set<string>>(() => new Set(['all']));
+
   // 카테고리 상세 모달 상태
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [selectedCategoryExpenses, setSelectedCategoryExpenses] = useState<Expense[]>([]);
@@ -158,8 +161,27 @@ export default function StatsPage() {
     return () => unsubscribe();
   }, [startDate, endDate]);
 
-  // 총 지출
-  const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0);
+  // 필터링된 지출 (선택된 카테고리만)
+  const filteredExpenses = useMemo(() => {
+    if (enabledCategories.has('all')) {
+      return expenses;
+    }
+    return expenses.filter((e) => enabledCategories.has(e.category));
+  }, [expenses, enabledCategories]);
+
+  // 총 지출 (필터링된 것 기준)
+  const totalAmount = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+  // 필터 라벨 (선택된 카테고리 표시)
+  const filterLabel = useMemo(() => {
+    if (enabledCategories.has('all')) {
+      return null;
+    }
+    const selectedLabels = activeCategories
+      .filter((cat) => enabledCategories.has(cat.key))
+      .map((cat) => cat.label);
+    return selectedLabels.length > 0 ? selectedLabels.join(', ') : null;
+  }, [enabledCategories, activeCategories]);
 
   // 기간 표시 문자열
   const periodLabel = useMemo(() => {
@@ -265,15 +287,20 @@ export default function StatsPage() {
             {/* 기간 & 총액 표시 */}
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
               <div className="text-sm text-slate-500">{periodLabel}</div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-sm text-slate-500">총</span>
-                {isLoading ? (
-                  <span className="text-lg text-slate-400">로딩중...</span>
-                ) : (
-                  <span className="text-xl font-bold text-slate-800">
-                    {totalAmount.toLocaleString()}원
-                  </span>
+              <div className="text-right">
+                {filterLabel && (
+                  <div className="text-xs text-blue-500 mb-1">{filterLabel}</div>
                 )}
+                <div className="flex items-baseline gap-1 justify-end">
+                  <span className="text-sm text-slate-500">총</span>
+                  {isLoading ? (
+                    <span className="text-lg text-slate-400">로딩중...</span>
+                  ) : (
+                    <span className="text-xl font-bold text-slate-800">
+                      {totalAmount.toLocaleString()}원
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -292,6 +319,8 @@ export default function StatsPage() {
                 expenses={expenses}
                 startDate={startDate}
                 endDate={endDate}
+                enabledCategories={enabledCategories}
+                onCategoryToggle={setEnabledCategories}
               />
             ) : (
               <div className="h-72 flex items-center justify-center text-slate-400">
@@ -300,14 +329,17 @@ export default function StatsPage() {
             )}
           </div>
 
-          {/* 도넛 차트 - 해당 기간 전체 */}
+          {/* 도넛 차트 - 선택된 카테고리 기준 */}
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6">
             <h3 className="text-lg font-semibold text-slate-700 mb-4">
               카테고리별 비율
+              {filterLabel && (
+                <span className="text-sm font-normal text-blue-500 ml-2">({filterLabel})</span>
+              )}
             </h3>
             <div className="min-h-64">
-              {expenses.length > 0 ? (
-                <DonutChart expenses={expenses} onCategoryClick={handleCategoryClick} />
+              {filteredExpenses.length > 0 ? (
+                <DonutChart expenses={filteredExpenses} onCategoryClick={handleCategoryClick} />
               ) : (
                 <div className="h-64 flex items-center justify-center text-slate-400">
                   {isLoading ? '로딩중...' : '데이터 없음'}

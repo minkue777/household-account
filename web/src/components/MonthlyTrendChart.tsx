@@ -31,16 +31,20 @@ interface MonthlyTrendChartProps {
   expenses: Expense[];
   startDate: string;  // YYYY-MM-DD
   endDate: string;    // YYYY-MM-DD
+  enabledCategories?: Set<string>;
+  onCategoryToggle?: (categories: Set<string>) => void;
 }
 
-export default function MonthlyTrendChart({ expenses, startDate, endDate }: MonthlyTrendChartProps) {
+export default function MonthlyTrendChart({ expenses, startDate, endDate, enabledCategories: externalEnabled, onCategoryToggle }: MonthlyTrendChartProps) {
   const { activeCategories, getCategoryColor, getCategoryLabel } = useCategoryContext();
 
-  // 토글 상태: 'all' + 각 카테고리 key
-  const [enabledCategories, setEnabledCategories] = useState<Set<string>>(() => {
-    const initial = new Set<string>(['all']);
-    return initial;
+  // 내부 상태 (외부에서 제어하지 않을 때 사용)
+  const [internalEnabled, setInternalEnabled] = useState<Set<string>>(() => {
+    return new Set<string>(['all']);
   });
+
+  // 외부 제어 여부에 따라 사용할 상태 결정
+  const enabledCategories = externalEnabled ?? internalEnabled;
 
   // 월별 라벨 생성
   const months = useMemo(() => {
@@ -178,15 +182,18 @@ export default function MonthlyTrendChart({ expenses, startDate, endDate }: Mont
 
   // 토글 핸들러
   const toggleCategory = (key: string) => {
-    setEnabledCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
+    const next = new Set(enabledCategories);
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      next.add(key);
+    }
+
+    if (onCategoryToggle) {
+      onCategoryToggle(next);
+    } else {
+      setInternalEnabled(next);
+    }
   };
 
   return (
