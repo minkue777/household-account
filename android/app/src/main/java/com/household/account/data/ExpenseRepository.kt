@@ -154,4 +154,23 @@ class ExpenseRepository {
             Log.e(TAG, "updateCategory failed", e)
         }
     }
+
+    /**
+     * 카테고리와 메모 업데이트
+     */
+    suspend fun updateExpenseFields(expenseId: String, category: String, memo: String) {
+        try {
+            val updates = mutableMapOf<String, Any>(
+                "category" to category
+            )
+            if (memo.isNotEmpty()) {
+                updates["memo"] = memo
+            }
+            expensesCollection.document(expenseId)
+                .update(updates)
+                .await()
+        } catch (e: Exception) {
+            Log.e(TAG, "updateExpenseFields failed", e)
+        }
+    }
 }
