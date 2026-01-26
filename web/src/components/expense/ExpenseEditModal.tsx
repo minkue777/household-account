@@ -152,18 +152,17 @@ export default function ExpenseEditModal({
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   분할 인식
                 </label>
-                <select
-                  value={splitMonths}
-                  onChange={(e) => setSplitMonths(parseInt(e.target.value, 10))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value={1}>분할 안 함</option>
-                  <option value={2}>2개월</option>
-                  <option value={3}>3개월</option>
-                  <option value={4}>4개월</option>
-                  <option value={6}>6개월</option>
-                  <option value={12}>12개월</option>
-                </select>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="1"
+                    max="24"
+                    value={splitMonths}
+                    onChange={(e) => setSplitMonths(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-12"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">개월</span>
+                </div>
                 {splitMonths > 1 && (
                   <p className="mt-2 text-sm text-purple-600">
                     → 매월 {Math.floor(expense.amount / splitMonths).toLocaleString()}원씩 {splitMonths}개월
