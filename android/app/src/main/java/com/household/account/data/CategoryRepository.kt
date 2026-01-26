@@ -19,7 +19,8 @@ data class CategoryData(
     val budget: Long? = null,       // 월 예산 (null이면 무제한)
     val order: Int = 0,             // 정렬 순서
     val isDefault: Boolean = false, // 기본 카테고리 (삭제 불가)
-    val isActive: Boolean = true    // 활성화 여부
+    val isActive: Boolean = true,   // 활성화 여부
+    val householdId: String = ""    // 가구 ID
 )
 
 /**
@@ -44,11 +45,17 @@ class CategoryRepository {
     }
 
     /**
-     * 모든 활성 카테고리 조회 (일회성)
+     * 모든 활성 카테고리 조회 (일회성, householdId 필터링)
      */
-    suspend fun getActiveCategories(): List<CategoryData> {
+    suspend fun getActiveCategories(householdId: String): List<CategoryData> {
+        if (householdId.isEmpty()) {
+            Log.w(TAG, "householdId is empty, using defaults")
+            return DEFAULT_CATEGORIES
+        }
+
         return try {
             val snapshot = categoriesCollection
+                .whereEqualTo("householdId", householdId)
                 .orderBy("order", Query.Direction.ASCENDING)
                 .get()
                 .await()
@@ -63,7 +70,8 @@ class CategoryRepository {
                         budget = doc.getLong("budget"),
                         order = doc.getLong("order")?.toInt() ?: 0,
                         isDefault = doc.getBoolean("isDefault") ?: false,
-                        isActive = doc.getBoolean("isActive") ?: true
+                        isActive = doc.getBoolean("isActive") ?: true,
+                        householdId = doc.getString("householdId") ?: ""
                     )
                 } catch (e: Exception) {
                     Log.e(TAG, "Document parse error", e)
@@ -72,7 +80,7 @@ class CategoryRepository {
             }.filter { it.isActive }
 
             if (categories.isEmpty()) {
-                Log.w(TAG, "No categories found, using defaults")
+                Log.w(TAG, "No categories found for householdId: $householdId, using defaults")
                 DEFAULT_CATEGORIES
             } else {
                 categories
@@ -84,10 +92,17 @@ class CategoryRepository {
     }
 
     /**
-     * 카테고리 실시간 구독
+     * 카테고리 실시간 구독 (householdId 필터링)
      */
-    fun subscribeToCategories(): Flow<List<CategoryData>> = callbackFlow {
+    fun subscribeToCategories(householdId: String): Flow<List<CategoryData>> = callbackFlow {
+        if (householdId.isEmpty()) {
+            trySend(DEFAULT_CATEGORIES)
+            awaitClose { }
+            return@callbackFlow
+        }
+
         val listenerRegistration = categoriesCollection
+            .whereEqualTo("householdId", householdId)
             .orderBy("order", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
@@ -106,7 +121,8 @@ class CategoryRepository {
                             budget = doc.getLong("budget"),
                             order = doc.getLong("order")?.toInt() ?: 0,
                             isDefault = doc.getBoolean("isDefault") ?: false,
-                            isActive = doc.getBoolean("isActive") ?: true
+                            isActive = doc.getBoolean("isActive") ?: true,
+                            householdId = doc.getString("householdId") ?: ""
                         )
                     } catch (e: Exception) {
                         null

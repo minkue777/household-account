@@ -140,8 +140,9 @@ class QuickEditActivity : AppCompatActivity() {
     private fun loadCategories() {
         activityScope.launch {
             try {
+                val householdId = HouseholdPreferences.getHouseholdKey(this@QuickEditActivity)
                 categories = withContext(Dispatchers.IO) {
-                    categoryRepository.getActiveCategories()
+                    categoryRepository.getActiveCategories(householdId)
                 }
                 setupCategoryButtons()
             } catch (e: Exception) {
