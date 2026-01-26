@@ -126,10 +126,9 @@ class CardNotificationListenerService : NotificationListenerService() {
             if (result.success && result.expense != null) {
                 Log.i(TAG, "파싱 성공: ${result.expense}")
 
-                // 저장된 규칙으로 카테고리 찾기
+                // 저장된 규칙으로 지출 정보 매핑
                 serviceScope.launch {
                     try {
-                        val category = ruleRepository.findCategoryForMerchant(result.expense.merchant)
                         val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
 
                         if (householdId.isEmpty()) {
@@ -137,15 +136,27 @@ class CardNotificationListenerService : NotificationListenerService() {
                             return@launch
                         }
 
-                        val expenseToSave = if (category != null) {
-                            result.expense.copy(category = category.name, householdId = householdId)
+                        // 규칙 매핑 결과 조회 (가맹점명, 카테고리, 메모 모두 매핑)
+                        val mappingResult = ruleRepository.findMappingForMerchant(householdId, result.expense.merchant)
+
+                        val expenseToSave = if (mappingResult != null) {
+                            result.expense.copy(
+                                merchant = mappingResult.mappedMerchant,
+                                category = mappingResult.mappedCategory.name,
+                                memo = mappingResult.mappedMemo.ifEmpty { result.expense.memo },
+                                householdId = householdId
+                            )
                         } else {
                             // 규칙이 없으면 기타로 저장
                             result.expense.copy(category = Category.ETC.name, householdId = householdId)
                         }
 
                         val docId = expenseRepository.addExpense(expenseToSave)
-                        Log.d(TAG, "Firebase 저장 완료 - householdId: $householdId, 카테고리: ${expenseToSave.category}, ID: $docId")
+                        val originalMerchant = result.expense.merchant
+                        val mappedInfo = if (mappingResult != null && originalMerchant != expenseToSave.merchant) {
+                            " (원본: $originalMerchant)"
+                        } else ""
+                        Log.d(TAG, "Firebase 저장 완료 - householdId: $householdId, 가맹점: ${expenseToSave.merchant}$mappedInfo, 카테고리: ${expenseToSave.category}, ID: $docId")
 
                         // 빠른 편집 화면 바로 띄우기 (카테고리는 소문자로 변환)
                         if (docId.isNotEmpty()) {

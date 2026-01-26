@@ -17,6 +17,80 @@ class MerchantRuleRepository {
 
     companion object {
         private const val TAG = "MerchantRuleRepository"
+
+        /**
+         * 매칭 타입별 우선순위 (높을수록 먼저 적용)
+         */
+        private val MATCH_TYPE_PRIORITY = mapOf(
+            MatchType.exact to 5,
+            MatchType.startsWith to 4,
+            MatchType.endsWith to 3,
+            MatchType.contains to 2,
+            MatchType.regex to 1
+        )
+    }
+
+    /**
+     * 가맹점명이 규칙과 매칭되는지 확인
+     */
+    private fun matchesMerchant(
+        merchantName: String,
+        keyword: String,
+        matchType: MatchType
+    ): Boolean {
+        val normalizedMerchant = merchantName.lowercase().trim()
+        val normalizedKeyword = keyword.lowercase().trim()
+
+        return when (matchType) {
+            MatchType.exact -> normalizedMerchant == normalizedKeyword
+            MatchType.contains -> normalizedMerchant.contains(normalizedKeyword)
+            MatchType.startsWith -> normalizedMerchant.startsWith(normalizedKeyword)
+            MatchType.endsWith -> normalizedMerchant.endsWith(normalizedKeyword)
+            MatchType.regex -> {
+                try {
+                    val regex = Regex(keyword, RegexOption.IGNORE_CASE)
+                    regex.containsMatchIn(merchantName)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Invalid regex pattern: $keyword", e)
+                    false
+                }
+            }
+        }
+    }
+
+    /**
+     * 가맹점명에 매칭되는 규칙 찾기
+     * 우선순위: priority 높은 순 > exact > startsWith > endsWith > contains > regex
+     */
+    private fun findMatchingRule(merchantName: String, rules: List<MerchantRule>): MerchantRule? {
+        // 활성화된 규칙만 필터링
+        val activeRules = rules.filter { it.isActive }
+
+        // 우선순위별로 정렬
+        val sortedRules = activeRules.sortedWith(compareBy(
+            { -(it.priority) },  // priority 높은 순 (음수로 변환하여 내림차순)
+            { -(MATCH_TYPE_PRIORITY[it.getMatchTypeEnum()] ?: 0) }  // matchType 우선순위
+        ))
+
+        // 매칭되는 첫 번째 규칙 반환
+        return sortedRules.find { rule ->
+            matchesMerchant(merchantName, rule.merchantKeyword, rule.getMatchTypeEnum())
+        }
+    }
+
+    /**
+     * 가맹점명에 규칙을 적용하여 매핑된 값 반환
+     */
+    fun applyRule(merchantName: String, rules: List<MerchantRule>): AppliedRuleResult? {
+        val rule = findMatchingRule(merchantName, rules) ?: return null
+        val mapping = rule.getMappingObject()
+
+        return AppliedRuleResult(
+            rule = rule,
+            mappedMerchant = mapping.merchant ?: merchantName,
+            mappedCategory = rule.getCategoryEnum(),
+            mappedMemo = mapping.memo ?: ""
+        )
     }
 
     /**
@@ -57,10 +131,17 @@ class MerchantRuleRepository {
     }
 
     /**
-     * 모든 규칙 조회 (실시간)
+     * 모든 규칙 조회 (실시간, householdId 필터링)
      */
-    fun getAllRules(): Flow<List<MerchantRule>> = callbackFlow {
+    fun getAllRules(householdId: String): Flow<List<MerchantRule>> = callbackFlow {
+        if (householdId.isEmpty()) {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
+
         val listenerRegistration = rulesCollection
+            .whereEqualTo("householdId", householdId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     Log.e(TAG, "Firestore listen failed", error)
@@ -86,44 +167,56 @@ class MerchantRuleRepository {
     }
 
     /**
-     * 가맹점명으로 카테고리 찾기
+     * 가맹점명으로 매핑 결과 찾기 (householdId 필터링)
+     * 새 API: 카테고리뿐 아니라 가맹점명, 메모도 매핑
      */
-    suspend fun findCategoryForMerchant(merchantName: String): Category? {
+    suspend fun findMappingForMerchant(householdId: String, merchantName: String): AppliedRuleResult? {
+        if (householdId.isEmpty()) {
+            Log.w(TAG, "householdId is empty, skipping rule lookup")
+            return null
+        }
+
         return try {
-            val snapshot = rulesCollection.get().await()
+            val snapshot = rulesCollection
+                .whereEqualTo("householdId", householdId)
+                .get()
+                .await()
             val rules = snapshot.documents.mapNotNull { doc ->
                 doc.toObject(MerchantRule::class.java)?.copy(id = doc.id)
             }
 
-            // 정확히 일치하는 규칙 먼저 찾기
-            val exactMatch = rules.find { rule ->
-                rule.exactMatch && rule.merchantKeyword.equals(merchantName, ignoreCase = true)
-            }
-            if (exactMatch != null) {
-                return exactMatch.getCategoryEnum()
-            }
-
-            // 부분 일치 규칙 찾기
-            val partialMatch = rules.find { rule ->
-                !rule.exactMatch && merchantName.contains(rule.merchantKeyword, ignoreCase = true)
-            }
-            partialMatch?.getCategoryEnum()
-
+            applyRule(merchantName, rules)
         } catch (e: Exception) {
-            Log.e(TAG, "findCategoryForMerchant failed", e)
+            Log.e(TAG, "findMappingForMerchant failed", e)
             null
         }
     }
 
     /**
-     * 같은 키워드 규칙이 있는지 확인
+     * 가맹점명으로 카테고리 찾기 (하위 호환성 유지)
+     * @deprecated Use findMappingForMerchant instead
      */
-    suspend fun ruleExists(keyword: String): Boolean {
+    @Deprecated("Use findMappingForMerchant instead", ReplaceWith("findMappingForMerchant(householdId, merchantName)?.mappedCategory"))
+    suspend fun findCategoryForMerchant(householdId: String, merchantName: String): Category? {
+        return findMappingForMerchant(householdId, merchantName)?.mappedCategory
+    }
+
+    /**
+     * 같은 키워드/매칭타입 규칙이 있는지 확인
+     */
+    suspend fun ruleExists(householdId: String, keyword: String, matchType: MatchType? = null): Boolean {
+        if (householdId.isEmpty()) return false
+
         return try {
-            val snapshot = rulesCollection
+            var query = rulesCollection
+                .whereEqualTo("householdId", householdId)
                 .whereEqualTo("merchantKeyword", keyword)
-                .get()
-                .await()
+
+            if (matchType != null) {
+                query = query.whereEqualTo("matchType", matchType.name)
+            }
+
+            val snapshot = query.get().await()
             !snapshot.isEmpty
         } catch (e: Exception) {
             Log.e(TAG, "ruleExists check failed", e)
