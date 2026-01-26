@@ -28,6 +28,8 @@ export async function addRecurringExpense(
 ): Promise<string> {
   if (!householdId) return '';
 
+  // 새로 추가한 정기 지출은 다음 달부터 자동 등록되도록
+  // lastRegisteredMonth를 현재 월로 설정
   const docRef = await addDoc(recurringRef, {
     householdId,
     merchant: input.merchant,
@@ -36,6 +38,7 @@ export async function addRecurringExpense(
     dayOfMonth: input.dayOfMonth,
     memo: input.memo || '',
     isActive: true,
+    lastRegisteredMonth: getCurrentMonthString(),
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
   });
@@ -139,7 +142,7 @@ export async function getRecurringExpenses(householdId: string): Promise<Recurri
 /**
  * 현재 월 문자열 생성 (예: "2024-01")
  */
-function getCurrentMonthString(): string {
+export function getCurrentMonthString(): string {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');

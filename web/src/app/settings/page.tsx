@@ -899,9 +899,9 @@ export default function SettingsPage() {
                       </div>
                     </div>
 
-                    {/* 매월 며칠 */}
+                    {/* 결제일 */}
                     <div>
-                      <label className="block text-sm text-slate-600 mb-1">매월 며칠</label>
+                      <label className="block text-sm text-slate-600 mb-1">결제일</label>
                       <div className="relative">
                         <input
                           type="number"
