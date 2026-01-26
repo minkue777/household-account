@@ -35,24 +35,25 @@ export function matchesMerchant(
   matchType: MatchType
 ): boolean {
   const normalizedMerchant = merchantName.toLowerCase().trim();
-  const normalizedKeyword = keyword.toLowerCase().trim();
 
-  switch (matchType) {
-    case 'exact':
-      return normalizedMerchant === normalizedKeyword;
-    case 'contains':
-      return normalizedMerchant.includes(normalizedKeyword);
-    case 'startsWith':
-      return normalizedMerchant.startsWith(normalizedKeyword);
-    case 'endsWith':
-      return normalizedMerchant.endsWith(normalizedKeyword);
-    case 'keywords':
-      // 쉼표로 구분된 키워드 중 하나라도 포함되면 매칭
-      const keywords = keyword.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
-      return keywords.some(k => normalizedMerchant.includes(k));
-    default:
-      return false;
-  }
+  // 쉼표가 있으면 OR 조건으로 처리
+  const keywords = keyword.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
+
+  // 각 키워드에 대해 매칭 검사 (하나라도 매칭되면 true)
+  return keywords.some(normalizedKeyword => {
+    switch (matchType) {
+      case 'exact':
+        return normalizedMerchant === normalizedKeyword;
+      case 'contains':
+        return normalizedMerchant.includes(normalizedKeyword);
+      case 'startsWith':
+        return normalizedMerchant.startsWith(normalizedKeyword);
+      case 'endsWith':
+        return normalizedMerchant.endsWith(normalizedKeyword);
+      default:
+        return false;
+    }
+  });
 }
 
 /**
@@ -68,11 +69,10 @@ export function findMatchingRule(
 
   // 우선순위별로 정렬 (priority 높은 순, 같으면 matchType 우선순위)
   const matchTypePriority: Record<MatchType, number> = {
-    exact: 5,
-    startsWith: 4,
-    endsWith: 3,
-    contains: 2,
-    keywords: 1,
+    exact: 4,
+    startsWith: 3,
+    endsWith: 2,
+    contains: 1,
   };
 
   const sortedRules = [...activeRules].sort((a, b) => {

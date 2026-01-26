@@ -1,5 +1,6 @@
 // 매칭 타입: 가맹점명을 어떻게 매칭할지 결정
-export type MatchType = 'exact' | 'contains' | 'startsWith' | 'endsWith' | 'keywords';
+// 키워드에 쉼표가 있으면 OR 조건으로 처리됨
+export type MatchType = 'exact' | 'contains' | 'startsWith' | 'endsWith';
 
 // 규칙이 매칭되면 적용할 값들
 export interface MerchantRuleMapping {
@@ -56,7 +57,6 @@ export const MATCH_TYPE_LABELS: Record<MatchType, string> = {
   contains: '포함',
   startsWith: '시작',
   endsWith: '종료',
-  keywords: '키워드(OR)',
 };
 
 // 매칭 타입별 설명 상세 (UI용)
@@ -65,5 +65,4 @@ export const MATCH_TYPE_DESCRIPTIONS: Record<MatchType, string> = {
   contains: '가맹점명에 키워드가 포함될 때',
   startsWith: '가맹점명이 키워드로 시작할 때',
   endsWith: '가맹점명이 키워드로 끝날 때',
-  keywords: '쉼표로 구분된 키워드 중 하나라도 포함될 때',
 };

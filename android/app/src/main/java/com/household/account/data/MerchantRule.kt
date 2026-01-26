@@ -5,13 +5,13 @@ import com.google.firebase.Timestamp
 
 /**
  * 매칭 타입: 가맹점명을 어떻게 매칭할지 결정
+ * 키워드에 쉼표가 있으면 OR 조건으로 처리됨
  */
 enum class MatchType {
     exact,      // 정확히 일치
     contains,   // 포함
     startsWith, // 시작
-    endsWith,   // 종료
-    keywords;   // 키워드(OR) - 쉼표로 구분된 키워드 중 하나라도 포함
+    endsWith;   // 종료
 
     companion object {
         fun fromString(value: String?): MatchType {

@@ -22,16 +22,16 @@ class MerchantRuleRepository {
          * 매칭 타입별 우선순위 (높을수록 먼저 적용)
          */
         private val MATCH_TYPE_PRIORITY = mapOf(
-            MatchType.exact to 5,
-            MatchType.startsWith to 4,
-            MatchType.endsWith to 3,
-            MatchType.contains to 2,
-            MatchType.keywords to 1
+            MatchType.exact to 4,
+            MatchType.startsWith to 3,
+            MatchType.endsWith to 2,
+            MatchType.contains to 1
         )
     }
 
     /**
      * 가맹점명이 규칙과 매칭되는지 확인
+     * 키워드에 쉼표가 있으면 OR 조건으로 처리
      */
     private fun matchesMerchant(
         merchantName: String,
@@ -39,24 +39,24 @@ class MerchantRuleRepository {
         matchType: MatchType
     ): Boolean {
         val normalizedMerchant = merchantName.lowercase().trim()
-        val normalizedKeyword = keyword.lowercase().trim()
 
-        return when (matchType) {
-            MatchType.exact -> normalizedMerchant == normalizedKeyword
-            MatchType.contains -> normalizedMerchant.contains(normalizedKeyword)
-            MatchType.startsWith -> normalizedMerchant.startsWith(normalizedKeyword)
-            MatchType.endsWith -> normalizedMerchant.endsWith(normalizedKeyword)
-            MatchType.keywords -> {
-                // 쉼표로 구분된 키워드 중 하나라도 포함되면 매칭
-                val keywords = keyword.split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }
-                keywords.any { normalizedMerchant.contains(it) }
+        // 쉼표가 있으면 OR 조건으로 처리
+        val keywords = keyword.split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+
+        // 각 키워드에 대해 매칭 검사 (하나라도 매칭되면 true)
+        return keywords.any { normalizedKeyword ->
+            when (matchType) {
+                MatchType.exact -> normalizedMerchant == normalizedKeyword
+                MatchType.contains -> normalizedMerchant.contains(normalizedKeyword)
+                MatchType.startsWith -> normalizedMerchant.startsWith(normalizedKeyword)
+                MatchType.endsWith -> normalizedMerchant.endsWith(normalizedKeyword)
             }
         }
     }
 
     /**
      * 가맹점명에 매칭되는 규칙 찾기
-     * 우선순위: priority 높은 순 > exact > startsWith > endsWith > contains > keywords
+     * 우선순위: priority 높은 순 > exact > startsWith > endsWith > contains
      */
     private fun findMatchingRule(merchantName: String, rules: List<MerchantRule>): MerchantRule? {
         // 활성화된 규칙만 필터링
