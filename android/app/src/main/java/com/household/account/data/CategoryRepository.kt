@@ -145,4 +145,21 @@ class CategoryRepository {
         val normalizedKey = key.lowercase()
         return categories.find { it.key == normalizedKey || it.key == key }
     }
+
+    /**
+     * label로 카테고리 찾기
+     */
+    fun findCategoryByLabel(categories: List<CategoryData>, label: String): CategoryData? {
+        return categories.find { it.label == label }
+    }
+
+    /**
+     * "기타" 카테고리 키 가져오기 (householdId 기반)
+     * 없으면 "etc" 반환
+     */
+    suspend fun getDefaultCategoryKey(householdId: String): String {
+        val categories = getActiveCategories(householdId)
+        val etcCategory = findCategoryByLabel(categories, "기타")
+        return etcCategory?.key ?: "etc"
+    }
 }

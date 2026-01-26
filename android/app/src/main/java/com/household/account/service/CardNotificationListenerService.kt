@@ -6,7 +6,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.household.account.QuickEditActivity
-import com.household.account.data.Category
+import com.household.account.data.CategoryRepository
 import com.household.account.data.Expense
 import com.household.account.data.ExpenseRepository
 import com.household.account.data.MerchantRuleRepository
@@ -55,6 +55,7 @@ class CardNotificationListenerService : NotificationListenerService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val expenseRepository = ExpenseRepository()
     private val ruleRepository = MerchantRuleRepository()
+    private val categoryRepository = CategoryRepository()
 
     // 중복 알림 방지 (최근 처리한 알림 해시 저장, 30초 유지)
     private val recentNotifications = mutableMapOf<String, Long>()
@@ -147,8 +148,9 @@ class CardNotificationListenerService : NotificationListenerService() {
                                 householdId = householdId
                             )
                         } else {
-                            // 규칙이 없으면 기타로 저장
-                            result.expense.copy(category = Category.ETC.name, householdId = householdId)
+                            // 규칙이 없으면 "기타" 카테고리로 저장 (동적 조회)
+                            val defaultCategoryKey = categoryRepository.getDefaultCategoryKey(householdId)
+                            result.expense.copy(category = defaultCategoryKey, householdId = householdId)
                         }
 
                         val docId = expenseRepository.addExpense(expenseToSave)
