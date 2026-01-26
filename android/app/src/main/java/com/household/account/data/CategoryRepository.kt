@@ -154,17 +154,32 @@ class CategoryRepository {
     }
 
     /**
-     * "기타" 카테고리 키 가져오기 (householdId 기반)
-     * 우선순위: "기타" 라벨 > 첫 번째 활성 카테고리 > "etc" 폴백
+     * household 설정에서 기본 카테고리 키 가져오기
+     * Firestore households/{householdId}/defaultCategoryKey 필드 읽기
+     * 없으면 "기타" 라벨 카테고리 또는 "etc" 폴백
      */
     suspend fun getDefaultCategoryKey(householdId: String): String {
-        val categories = getActiveCategories(householdId)
-        // 1. "기타" 라벨 카테고리 찾기
-        val etcCategory = findCategoryByLabel(categories, "기타")
-        if (etcCategory != null) return etcCategory.key
-        // 2. 첫 번째 활성 카테고리 사용
-        if (categories.isNotEmpty()) return categories.first().key
-        // 3. 최후의 폴백
-        return "etc"
+        if (householdId.isEmpty()) return "etc"
+
+        return try {
+            // 1. household 설정에서 defaultCategoryKey 조회
+            val householdDoc = firestore.collection("households")
+                .document(householdId)
+                .get()
+                .await()
+
+            val savedDefault = householdDoc.getString("defaultCategoryKey")
+            if (!savedDefault.isNullOrEmpty()) {
+                return savedDefault
+            }
+
+            // 2. 설정이 없으면 "기타" 라벨 카테고리 찾기
+            val categories = getActiveCategories(householdId)
+            val etcCategory = findCategoryByLabel(categories, "기타")
+            etcCategory?.key ?: "etc"
+        } catch (e: Exception) {
+            Log.e(TAG, "getDefaultCategoryKey failed", e)
+            "etc"
+        }
     }
 }

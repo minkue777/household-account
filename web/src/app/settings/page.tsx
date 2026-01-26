@@ -15,7 +15,7 @@ import {
   addMerchantRuleV2,
   MATCH_TYPE_LABELS,
 } from '@/lib/merchantRuleService';
-import { getStoredHouseholdKey } from '@/lib/householdService';
+import { getStoredHouseholdKey, getHousehold, setDefaultCategoryKey } from '@/lib/householdService';
 import { useTheme, THEMES } from '@/contexts/ThemeContext';
 import NotificationSettings from '@/components/NotificationSettings';
 import { isIOS } from '@/lib/pushNotificationService';
@@ -60,6 +60,10 @@ export default function SettingsPage() {
   const [ruleCategory, setRuleCategory] = useState('');
   const [ruleMemo, setRuleMemo] = useState('');
 
+  // 기본 카테고리 설정
+  const [defaultCategory, setDefaultCategory] = useState<string>('');
+  const [isDefaultCategoryOpen, setIsDefaultCategoryOpen] = useState(false);
+
   // iOS 여부
   const [isIOSDevice, setIsIOSDevice] = useState(false);
 
@@ -67,13 +71,21 @@ export default function SettingsPage() {
     setIsIOSDevice(isIOS());
   }, []);
 
-  // 가맹점 규칙 구독
+  // 가맹점 규칙 구독 및 household 설정 로드
   useEffect(() => {
     const householdId = getStoredHouseholdKey() || 'guest';
     const unsubscribe = subscribeToRules(householdId, (rules) => {
       setMerchantRules(rules);
       setRulesLoading(false);
     });
+
+    // household 설정 로드
+    getHousehold(householdId).then((household) => {
+      if (household?.defaultCategoryKey) {
+        setDefaultCategory(household.defaultCategoryKey);
+      }
+    });
+
     return () => unsubscribe();
   }, []);
 
@@ -131,6 +143,13 @@ export default function SettingsPage() {
     if (confirm('이 카테고리를 삭제하시겠습니까?\n기존 지출 데이터는 유지되며 "알 수 없음"으로 표시됩니다.')) {
       await deleteCategory(id);
     }
+  };
+
+  // 기본 카테고리 변경
+  const handleDefaultCategoryChange = async (categoryKey: string) => {
+    const householdId = getStoredHouseholdKey() || 'guest';
+    await setDefaultCategoryKey(householdId, categoryKey);
+    setDefaultCategory(categoryKey);
   };
 
   // 가맹점 규칙 핸들러
@@ -711,6 +730,66 @@ export default function SettingsPage() {
                   <span className="font-medium">새 규칙 추가</span>
                 </button>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* 기본 카테고리 섹션 - 아코디언 */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <button
+            onClick={() => setIsDefaultCategoryOpen(!isDefaultCategoryOpen)}
+            className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium"
+                style={{ backgroundColor: defaultCategory ? getCategoryColor(defaultCategory) : '#9CA3AF' }}
+              >
+                {defaultCategory ? getCategoryLabel(defaultCategory).slice(0, 2) : '?'}
+              </div>
+              <div className="text-left">
+                <div className="font-semibold text-slate-800">기본 카테고리</div>
+                <div className="text-sm text-slate-500">
+                  {defaultCategory ? getCategoryLabel(defaultCategory) : '미설정'}
+                </div>
+              </div>
+            </div>
+            <svg
+              className={`w-5 h-5 text-slate-400 transition-transform ${isDefaultCategoryOpen ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {isDefaultCategoryOpen && (
+            <div className="border-t border-slate-100 p-4">
+              <p className="text-sm text-slate-500 mb-4">
+                가맹점 규칙에 해당하지 않는 지출의 기본 카테고리입니다.
+              </p>
+              <div className="grid grid-cols-4 gap-2">
+                {activeCategories.map((cat) => (
+                  <button
+                    key={cat.key}
+                    onClick={() => handleDefaultCategoryChange(cat.key)}
+                    className={`flex flex-col items-center p-3 rounded-xl border-2 transition-all ${
+                      defaultCategory === cat.key
+                        ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div
+                      className="w-8 h-8 rounded-full mb-2"
+                      style={{ backgroundColor: cat.color }}
+                    />
+                    <span className="text-xs text-slate-700 text-center">
+                      {cat.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>

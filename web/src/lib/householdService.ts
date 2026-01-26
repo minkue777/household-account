@@ -5,6 +5,7 @@ import {
   getDoc,
   getDocs,
   deleteDoc,
+  updateDoc,
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -73,6 +74,7 @@ export async function getHousehold(key: string): Promise<Household | null> {
     id: docSnap.id,
     name: data.name,
     createdAt: data.createdAt?.toDate() || new Date(),
+    defaultCategoryKey: data.defaultCategoryKey,
   };
 }
 
@@ -93,6 +95,14 @@ export async function getAllHouseholds(): Promise<Household[]> {
  */
 export async function deleteHousehold(key: string): Promise<void> {
   await deleteDoc(doc(householdsCollection, key));
+}
+
+/**
+ * 기본 카테고리 설정
+ */
+export async function setDefaultCategoryKey(householdKey: string, categoryKey: string): Promise<void> {
+  const docRef = doc(householdsCollection, householdKey);
+  await updateDoc(docRef, { defaultCategoryKey: categoryKey });
 }
 
 /**
