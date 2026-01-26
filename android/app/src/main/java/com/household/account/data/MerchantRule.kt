@@ -11,7 +11,7 @@ enum class MatchType {
     contains,   // 포함
     startsWith, // 시작
     endsWith,   // 종료
-    regex;      // 정규표현식
+    keywords;   // 키워드(OR) - 쉼표로 구분된 키워드 중 하나라도 포함
 
     companion object {
         fun fromString(value: String?): MatchType {

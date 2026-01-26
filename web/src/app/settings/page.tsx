@@ -568,7 +568,7 @@ export default function SettingsPage() {
                         매칭 방식
                       </label>
                       <div className="grid grid-cols-3 gap-2">
-                        {(['contains', 'exact', 'startsWith', 'endsWith', 'regex'] as MatchType[]).map((type) => (
+                        {(['contains', 'exact', 'startsWith', 'endsWith', 'keywords'] as MatchType[]).map((type) => (
                           <button
                             key={type}
                             type="button"
@@ -588,7 +588,7 @@ export default function SettingsPage() {
                         {ruleMatchType === 'exact' && '가맹점명이 키워드와 정확히 일치하면 매칭'}
                         {ruleMatchType === 'startsWith' && '가맹점명이 키워드로 시작하면 매칭'}
                         {ruleMatchType === 'endsWith' && '가맹점명이 키워드로 끝나면 매칭'}
-                        {ruleMatchType === 'regex' && '정규표현식 패턴 (예: 약국|병원|의원)'}
+                        {ruleMatchType === 'keywords' && '쉼표로 구분 (예: 약국, 병원, 의원)'}
                       </p>
                     </div>
 

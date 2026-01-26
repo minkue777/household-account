@@ -26,7 +26,7 @@ class MerchantRuleRepository {
             MatchType.startsWith to 4,
             MatchType.endsWith to 3,
             MatchType.contains to 2,
-            MatchType.regex to 1
+            MatchType.keywords to 1
         )
     }
 
@@ -46,21 +46,17 @@ class MerchantRuleRepository {
             MatchType.contains -> normalizedMerchant.contains(normalizedKeyword)
             MatchType.startsWith -> normalizedMerchant.startsWith(normalizedKeyword)
             MatchType.endsWith -> normalizedMerchant.endsWith(normalizedKeyword)
-            MatchType.regex -> {
-                try {
-                    val regex = Regex(keyword, RegexOption.IGNORE_CASE)
-                    regex.containsMatchIn(merchantName)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Invalid regex pattern: $keyword", e)
-                    false
-                }
+            MatchType.keywords -> {
+                // 쉼표로 구분된 키워드 중 하나라도 포함되면 매칭
+                val keywords = keyword.split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+                keywords.any { normalizedMerchant.contains(it) }
             }
         }
     }
 
     /**
      * 가맹점명에 매칭되는 규칙 찾기
-     * 우선순위: priority 높은 순 > exact > startsWith > endsWith > contains > regex
+     * 우선순위: priority 높은 순 > exact > startsWith > endsWith > contains > keywords
      */
     private fun findMatchingRule(merchantName: String, rules: List<MerchantRule>): MerchantRule? {
         // 활성화된 규칙만 필터링

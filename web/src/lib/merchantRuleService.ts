@@ -46,14 +46,10 @@ export function matchesMerchant(
       return normalizedMerchant.startsWith(normalizedKeyword);
     case 'endsWith':
       return normalizedMerchant.endsWith(normalizedKeyword);
-    case 'regex':
-      try {
-        const regex = new RegExp(keyword, 'i');
-        return regex.test(merchantName);
-      } catch {
-        console.warn('Invalid regex pattern:', keyword);
-        return false;
-      }
+    case 'keywords':
+      // 쉼표로 구분된 키워드 중 하나라도 포함되면 매칭
+      const keywords = keyword.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
+      return keywords.some(k => normalizedMerchant.includes(k));
     default:
       return false;
   }
@@ -76,7 +72,7 @@ export function findMatchingRule(
     startsWith: 4,
     endsWith: 3,
     contains: 2,
-    regex: 1,
+    keywords: 1,
   };
 
   const sortedRules = [...activeRules].sort((a, b) => {
