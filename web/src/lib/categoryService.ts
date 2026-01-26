@@ -12,18 +12,9 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { CategoryDocument } from '@/types/category';
 
-export interface CategoryDocument {
-  id: string;
-  key: string;           // 'living', 'custom_001' 등
-  label: string;         // '생활비', '취미' 등
-  color: string;         // '#4ADE80'
-  budget: number | null; // 월 예산 (null이면 무제한)
-  order: number;         // 정렬 순서
-  isDefault: boolean;    // 기본 카테고리 (삭제 불가)
-  isActive: boolean;     // 활성화 여부
-  householdId: string;   // 가구 ID
-}
+export type { CategoryDocument };
 
 // 기본 카테고리 정의 (householdId는 동적으로 추가)
 const DEFAULT_CATEGORIES: Omit<CategoryDocument, 'id' | 'householdId'>[] = [

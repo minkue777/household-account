@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import Portal from './Portal';
+import { CategorySelector, AmountInput } from './common';
 
 interface AddExpenseModalProps {
   isOpen: boolean;
@@ -80,18 +81,11 @@ export default function AddExpenseModal({
             <label className="block text-sm font-medium text-slate-700 mb-1">
               금액
             </label>
-            <div className="relative">
-              <input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0"
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
-              />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500">
-                원
-              </span>
-            </div>
+            <AmountInput
+              value={amount}
+              onChange={setAmount}
+              className="px-4"
+            />
           </div>
 
           {/* 카테고리 */}
@@ -99,35 +93,11 @@ export default function AddExpenseModal({
             <label className="block text-sm font-medium text-slate-700 mb-1">
               카테고리
             </label>
-            {isLoading ? (
-              <div className="grid grid-cols-5 gap-2">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="h-16 bg-slate-100 rounded-lg animate-pulse" />
-                ))}
-              </div>
-            ) : (
-              <div className="grid grid-cols-5 gap-2">
-                {activeCategories.map((cat) => (
-                  <button
-                    key={cat.key}
-                    onClick={() => setCategory(cat.key)}
-                    className={`flex flex-col items-center p-2 rounded-lg border-2 transition-colors ${
-                      category === cat.key
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div
-                      className="w-6 h-6 rounded-full mb-1"
-                      style={{ backgroundColor: cat.color }}
-                    />
-                    <span className="text-xs text-slate-700">
-                      {cat.label.slice(0, 2)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
+            <CategorySelector
+              value={category}
+              onChange={setCategory}
+              isLoading={isLoading}
+            />
           </div>
 
           {/* 날짜 */}

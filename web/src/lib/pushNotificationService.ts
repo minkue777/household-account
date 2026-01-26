@@ -1,6 +1,7 @@
 import { getMessaging, getToken, onMessage, Messaging } from 'firebase/messaging';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from './firebase';
+import { Platform } from './utils/platform';
 
 // VAPID 키 (Firebase Console > 프로젝트 설정 > 클라우드 메시징 > 웹 푸시 인증서에서 생성)
 const VAPID_KEY = 'BLI2AoMlLXi5yMOfCAPdup52iEoPoItcWzFQws-Vb5xviQ9VA1ex7oTLZ9M5kqDccQoYAiMaNSUQZSjURD98y3k';
@@ -11,14 +12,10 @@ let messaging: Messaging | null = null;
  * FCM 메시징 초기화
  */
 export function initializeMessaging(): Messaging | null {
-  if (typeof window === 'undefined') return null;
-
-  // iOS Safari 체크
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  const isStandalone = (window.navigator as any).standalone === true;
+  if (Platform.isServer()) return null;
 
   // iOS PWA에서만 동작
-  if (isIOS && !isStandalone) {
+  if (Platform.isIOS() && !Platform.isIOSPWA()) {
     console.log('iOS에서는 홈 화면에 추가한 PWA에서만 푸시 알림이 지원됩니다.');
     return null;
   }
@@ -36,10 +33,10 @@ export function initializeMessaging(): Messaging | null {
  * 푸시 알림 권한 요청 및 토큰 등록
  */
 export async function requestNotificationPermission(): Promise<string | null> {
-  if (typeof window === 'undefined') return null;
+  if (Platform.isServer()) return null;
 
   // 알림 지원 확인
-  if (!('Notification' in window)) {
+  if (!Platform.supportsNotification()) {
     console.log('이 브라우저는 알림을 지원하지 않습니다.');
     return null;
   }
@@ -139,18 +136,14 @@ export function setupForegroundMessageListener(
  * 푸시 알림 지원 여부 확인
  */
 export function isPushNotificationSupported(): boolean {
-  if (typeof window === 'undefined') return false;
-
-  return 'Notification' in window &&
-         'serviceWorker' in navigator &&
-         'PushManager' in window;
+  return Platform.supportsPushNotification();
 }
 
 /**
  * 현재 알림 권한 상태 확인
  */
 export function getNotificationPermissionStatus(): NotificationPermission | null {
-  if (typeof window === 'undefined' || !('Notification' in window)) {
+  if (Platform.isServer() || !Platform.supportsNotification()) {
     return null;
   }
   return Notification.permission;
@@ -160,18 +153,12 @@ export function getNotificationPermissionStatus(): NotificationPermission | null
  * iOS PWA 여부 확인
  */
 export function isIOSPWA(): boolean {
-  if (typeof window === 'undefined') return false;
-
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  const isStandalone = (window.navigator as any).standalone === true;
-
-  return isIOS && isStandalone;
+  return Platform.isIOSPWA();
 }
 
 /**
  * iOS인지 확인
  */
 export function isIOS(): boolean {
-  if (typeof window === 'undefined') return false;
-  return /iPad|iPhone|iPod/.test(navigator.userAgent);
+  return Platform.isIOS();
 }

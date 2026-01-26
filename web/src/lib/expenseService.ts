@@ -6,10 +6,12 @@ import {
   doc,
   query,
   where,
-  orderBy,
   onSnapshot,
   Timestamp,
   getDocs,
+  runTransaction,
+  QueryDocumentSnapshot,
+  DocumentData,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Expense, MergedExpenseInfo } from '@/types/expense';
@@ -26,6 +28,26 @@ function getHouseholdId(): string {
     throw new Error('가구 키가 없습니다. 다시 로그인해주세요.');
   }
   return key;
+}
+
+/**
+ * Firestore 문서를 Expense 객체로 변환 (DRY 원칙)
+ */
+function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense {
+  const data = docSnap.data();
+  return {
+    id: docSnap.id,
+    date: data.date,
+    time: data.time,
+    merchant: data.merchant,
+    amount: data.amount,
+    // Android는 대문자로 저장하므로 소문자로 변환
+    category: (data.category || 'etc').toLowerCase(),
+    cardType: (data.cardType || 'main').toLowerCase(),
+    cardLastFour: data.cardLastFour,
+    memo: data.memo,
+    mergedFrom: data.mergedFrom,
+  };
 }
 
 /**
@@ -76,22 +98,7 @@ export function subscribeToMonthlyExpenses(
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
-    const allExpenses = snapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        date: data.date,
-        time: data.time,
-        merchant: data.merchant,
-        amount: data.amount,
-        // Android는 대문자로 저장하므로 소문자로 변환
-        category: (data.category || 'etc').toLowerCase(),
-        cardType: (data.cardType || 'main').toLowerCase(),
-        cardLastFour: data.cardLastFour,
-        memo: data.memo,
-        mergedFrom: data.mergedFrom,
-      } as Expense;
-    });
+    const allExpenses = snapshot.docs.map(mapDocToExpense);
 
     // 클라이언트에서 날짜 필터링 및 정렬
     const filtered = allExpenses
@@ -131,21 +138,7 @@ export function subscribeToDateRangeExpenses(
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
-    const allExpenses = snapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        date: data.date,
-        time: data.time,
-        merchant: data.merchant,
-        amount: data.amount,
-        category: (data.category || 'etc').toLowerCase(),
-        cardType: (data.cardType || 'main').toLowerCase(),
-        cardLastFour: data.cardLastFour,
-        memo: data.memo,
-        mergedFrom: data.mergedFrom,
-      } as Expense;
-    });
+    const allExpenses = snapshot.docs.map(mapDocToExpense);
 
     const filtered = allExpenses
       .filter((e) => e.date >= startDate && e.date <= endDate)
@@ -241,29 +234,33 @@ export async function splitExpense(
   splits: SplitItem[]
 ): Promise<string[]> {
   const householdId = getHouseholdId();
-  const newIds: string[] = [];
 
-  // 원본 지출 삭제
-  await deleteExpense(originalExpense.id);
+  return runTransaction(db, async (transaction) => {
+    // 원본 지출 삭제
+    const originalRef = doc(db, COLLECTION_NAME, originalExpense.id);
+    transaction.delete(originalRef);
 
-  // 분할된 지출들 추가
-  for (const split of splits) {
-    const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-      date: originalExpense.date,
-      time: originalExpense.time,
-      merchant: split.merchant,
-      amount: split.amount,
-      category: split.category,
-      cardType: originalExpense.cardType,
-      cardLastFour: originalExpense.cardLastFour,
-      memo: split.memo || '',
-      householdId,
-      createdAt: Timestamp.now(),
-    });
-    newIds.push(docRef.id);
-  }
+    // 분할된 지출들 추가
+    const newIds: string[] = [];
+    for (const split of splits) {
+      const newDocRef = doc(collection(db, COLLECTION_NAME));
+      transaction.set(newDocRef, {
+        date: originalExpense.date,
+        time: originalExpense.time,
+        merchant: split.merchant,
+        amount: split.amount,
+        category: split.category,
+        cardType: originalExpense.cardType,
+        cardLastFour: originalExpense.cardLastFour,
+        memo: split.memo || '',
+        householdId,
+        createdAt: Timestamp.now(),
+      });
+      newIds.push(newDocRef.id);
+    }
 
-  return newIds;
+    return newIds;
+  });
 }
 
 /**
@@ -275,33 +272,38 @@ export async function mergeExpenses(
   targetExpense: Expense,
   sourceExpense: Expense
 ): Promise<void> {
-  // 타겟 지출의 금액을 합산
-  const newAmount = targetExpense.amount + sourceExpense.amount;
+  return runTransaction(db, async (transaction) => {
+    // 타겟 지출의 금액을 합산
+    const newAmount = targetExpense.amount + sourceExpense.amount;
 
-  // 원본 정보 저장 (되돌리기용)
-  const existingMerged = targetExpense.mergedFrom || [];
-  const mergedFrom: MergedExpenseInfo[] = [
-    ...existingMerged,
-    // 타겟이 아직 합쳐진 적 없으면 타겟 정보도 저장
-    ...(existingMerged.length === 0 ? [{
-      merchant: targetExpense.merchant,
-      amount: targetExpense.amount,
-      category: targetExpense.category,
-      memo: targetExpense.memo || '',
-    }] : []),
-    // 소스 정보 저장
-    {
-      merchant: sourceExpense.merchant,
-      amount: sourceExpense.amount,
-      category: sourceExpense.category,
-      memo: sourceExpense.memo || '',
-    },
-  ];
+    // 원본 정보 저장 (되돌리기용)
+    const existingMerged = targetExpense.mergedFrom || [];
+    const mergedFrom: MergedExpenseInfo[] = [
+      ...existingMerged,
+      // 타겟이 아직 합쳐진 적 없으면 타겟 정보도 저장
+      ...(existingMerged.length === 0 ? [{
+        merchant: targetExpense.merchant,
+        amount: targetExpense.amount,
+        category: targetExpense.category,
+        memo: targetExpense.memo || '',
+      }] : []),
+      // 소스 정보 저장
+      {
+        merchant: sourceExpense.merchant,
+        amount: sourceExpense.amount,
+        category: sourceExpense.category,
+        memo: sourceExpense.memo || '',
+      },
+    ];
 
-  await updateExpense(targetExpense.id, { amount: newAmount, mergedFrom });
+    // 타겟 지출 업데이트
+    const targetRef = doc(db, COLLECTION_NAME, targetExpense.id);
+    transaction.update(targetRef, { amount: newAmount, mergedFrom });
 
-  // 소스 지출 삭제
-  await deleteExpense(sourceExpense.id);
+    // 소스 지출 삭제
+    const sourceRef = doc(db, COLLECTION_NAME, sourceExpense.id);
+    transaction.delete(sourceRef);
+  });
 }
 
 /**
@@ -314,29 +316,34 @@ export async function unmergeExpense(expense: Expense): Promise<string[]> {
   }
 
   const householdId = getHouseholdId();
-  const newIds: string[] = [];
 
-  // 원본 지출들 다시 생성
-  for (const original of expense.mergedFrom) {
-    const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-      date: expense.date,
-      time: expense.time,
-      merchant: original.merchant,
-      amount: original.amount,
-      category: original.category,
-      cardType: expense.cardType,
-      cardLastFour: expense.cardLastFour,
-      memo: original.memo || '',
-      householdId,
-      createdAt: Timestamp.now(),
-    });
-    newIds.push(docRef.id);
-  }
+  return runTransaction(db, async (transaction) => {
+    const newIds: string[] = [];
 
-  // 합쳐진 지출 삭제
-  await deleteExpense(expense.id);
+    // 원본 지출들 다시 생성
+    for (const original of expense.mergedFrom!) {
+      const newDocRef = doc(collection(db, COLLECTION_NAME));
+      transaction.set(newDocRef, {
+        date: expense.date,
+        time: expense.time,
+        merchant: original.merchant,
+        amount: original.amount,
+        category: original.category,
+        cardType: expense.cardType,
+        cardLastFour: expense.cardLastFour,
+        memo: original.memo || '',
+        householdId,
+        createdAt: Timestamp.now(),
+      });
+      newIds.push(newDocRef.id);
+    }
 
-  return newIds;
+    // 합쳐진 지출 삭제
+    const expenseRef = doc(db, COLLECTION_NAME, expense.id);
+    transaction.delete(expenseRef);
+
+    return newIds;
+  });
 }
 
 /**
@@ -359,21 +366,7 @@ export async function searchExpenses(keyword: string): Promise<Expense[]> {
   const lowerKeyword = keyword.toLowerCase();
 
   const results = snapshot.docs
-    .map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        date: data.date,
-        time: data.time,
-        merchant: data.merchant,
-        amount: data.amount,
-        category: (data.category || 'etc').toLowerCase(),
-        cardType: (data.cardType || 'main').toLowerCase(),
-        cardLastFour: data.cardLastFour,
-        memo: data.memo,
-        mergedFrom: data.mergedFrom,
-      } as Expense;
-    })
+    .map(mapDocToExpense)
     .filter((expense) => {
       const merchantMatch = expense.merchant.toLowerCase().includes(lowerKeyword);
       const memoMatch = expense.memo?.toLowerCase().includes(lowerKeyword);

@@ -8,23 +8,10 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { Household } from '@/types/household';
+import { HouseholdStorage } from './storage/householdStorage';
 
-// Android WebView 브리지 인터페이스
-interface AndroidBridge {
-  setHouseholdKey: (key: string) => void;
-  getHouseholdKey: () => string;
-  clearHouseholdKey: () => void;
-}
-
-interface WindowWithBridge extends Window {
-  AndroidBridge?: AndroidBridge;
-}
-
-export interface Household {
-  id: string;
-  name: string;
-  createdAt: Date;
-}
+export type { Household };
 
 const householdsCollection = collection(db, 'households');
 
@@ -112,36 +99,21 @@ export async function deleteHousehold(key: string): Promise<void> {
  * 로컬스토리지에서 가구 키 가져오기
  */
 export function getStoredHouseholdKey(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('householdKey');
+  return HouseholdStorage.get();
 }
 
 /**
  * 로컬스토리지에 가구 키 저장
  */
 export function setStoredHouseholdKey(key: string): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem('householdKey', key);
-
-  // Android WebView 브리지가 있으면 SharedPreferences에도 동기화
-  const bridge = (window as WindowWithBridge).AndroidBridge;
-  if (bridge && typeof bridge.setHouseholdKey === 'function') {
-    bridge.setHouseholdKey(key);
-  }
+  HouseholdStorage.set(key);
 }
 
 /**
  * 로컬스토리지에서 가구 키 삭제
  */
 export function clearStoredHouseholdKey(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem('householdKey');
-
-  // Android WebView 브리지가 있으면 SharedPreferences에서도 삭제
-  const bridge = (window as WindowWithBridge).AndroidBridge;
-  if (bridge && typeof bridge.clearHouseholdKey === 'function') {
-    bridge.clearHouseholdKey();
-  }
+  HouseholdStorage.clear();
 }
 
 /**

@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
-import { getCalendarStyleClass } from '@/contexts/CalendarStyleContext';
 import Portal from './Portal';
 
 interface CalendarProps {
@@ -45,7 +44,6 @@ export default function Calendar({
   onYearMonthChange,
 }: CalendarProps) {
   const { getCategoryColor } = useCategoryContext();
-  const styleClass = getCalendarStyleClass();
   const [showYearMonthPicker, setShowYearMonthPicker] = useState(false);
   const [pickerYear, setPickerYear] = useState(year);
 
@@ -120,7 +118,7 @@ export default function Calendar({
   };
 
   return (
-    <div className={`${styleClass} overflow-hidden`}>
+    <div className="calendar-glass overflow-hidden">
       {/* 월 선택 헤더 */}
       {onPrevMonth && onNextMonth && (
         <div className="flex items-center justify-center px-4 py-3">
