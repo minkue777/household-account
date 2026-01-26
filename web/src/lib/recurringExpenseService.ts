@@ -14,6 +14,8 @@ import { db } from './firebase';
 import { RecurringExpense, CreateRecurringExpenseInput } from '@/types/recurring';
 import { addExpense } from './expenseService';
 
+export type { RecurringExpense, CreateRecurringExpenseInput };
+
 const COLLECTION_NAME = 'recurring_expenses';
 const recurringRef = collection(db, COLLECTION_NAME);
 
