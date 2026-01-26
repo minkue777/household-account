@@ -194,7 +194,7 @@ export async function processRecurringExpenses(householdId: string): Promise<num
         amount: expense.amount,
         category: expense.category,
         memo: expense.memo || '',
-        cardType: 'etc', // 카드 외 결제
+        cardType: 'main', // 정기 지출
       });
 
       // lastRegisteredMonth 업데이트
