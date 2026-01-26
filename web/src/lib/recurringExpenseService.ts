@@ -187,14 +187,13 @@ export async function processRecurringExpenses(householdId: string): Promise<num
     // 지출 등록
     try {
       await addExpense({
-        householdId,
         date: todayString,
         time: '09:00',
         merchant: expense.merchant,
         amount: expense.amount,
         category: expense.category,
         memo: expense.memo || '',
-        cardType: 'main', // 정기 지출
+        cardType: 'main',
       });
 
       // lastRegisteredMonth 업데이트
