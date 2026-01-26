@@ -35,6 +35,7 @@ export default function ExpenseEditModal({
   const [editCategory, setEditCategory] = useState(expense.category);
   const [rememberMerchant, setRememberMerchant] = useState(false);
   const [splitMonths, setSplitMonths] = useState(1);
+  const [showSplitInput, setShowSplitInput] = useState(false);
 
   // 모달이 열릴 때 상태 초기화
   useEffect(() => {
@@ -45,6 +46,7 @@ export default function ExpenseEditModal({
       setEditCategory(expense.category);
       setRememberMerchant(false);
       setSplitMonths(1);
+      setShowSplitInput(false);
     }
   }, [isOpen, expense]);
 
@@ -115,10 +117,47 @@ export default function ExpenseEditModal({
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 금액
               </label>
-              <AmountInput
-                value={editAmount}
-                onChange={setEditAmount}
-              />
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <AmountInput
+                    value={editAmount}
+                    onChange={setEditAmount}
+                  />
+                </div>
+                {onSplitMonths && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSplitInput(!showSplitInput);
+                      if (showSplitInput) setSplitMonths(1);
+                    }}
+                    className={`px-3 py-2 rounded-lg border transition-colors ${
+                      showSplitInput
+                        ? 'bg-purple-100 border-purple-300 text-purple-600'
+                        : 'border-slate-300 text-slate-500 hover:bg-slate-50'
+                    }`}
+                    title="분할 인식"
+                  >
+                    ÷
+                  </button>
+                )}
+              </div>
+              {showSplitInput && (
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="2"
+                    max="24"
+                    value={splitMonths}
+                    onChange={(e) => setSplitMonths(Math.max(2, parseInt(e.target.value, 10) || 2))}
+                    className="w-20 px-3 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-center"
+                  />
+                  <span className="text-sm text-slate-600">개월 분할</span>
+                  <span className="text-sm text-purple-600 ml-auto">
+                    월 {Math.floor(expense.amount / splitMonths).toLocaleString()}원
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* 카테고리 */}
@@ -145,31 +184,6 @@ export default function ExpenseEditModal({
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-
-            {/* 분할 인식 */}
-            {onSplitMonths && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  분할 인식
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    min="1"
-                    max="24"
-                    value={splitMonths}
-                    onChange={(e) => setSplitMonths(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-12"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">개월</span>
-                </div>
-                {splitMonths > 1 && (
-                  <p className="mt-2 text-sm text-purple-600">
-                    → 매월 {Math.floor(expense.amount / splitMonths).toLocaleString()}원씩 {splitMonths}개월
-                  </p>
-                )}
-              </div>
-            )}
 
             {/* 가맹점 기억하기 (카테고리 변경시에만 표시) */}
             {editCategory !== expense.category && (
@@ -248,7 +262,7 @@ export default function ExpenseEditModal({
             >
               취소
             </button>
-            {splitMonths > 1 && onSplitMonths ? (
+            {showSplitInput && splitMonths > 1 && onSplitMonths ? (
               <button
                 onClick={() => {
                   if (confirm(`이 지출을 ${splitMonths}개월로 분할하시겠습니까?\n기존 지출은 삭제되고 분할된 지출이 등록됩니다.`)) {
