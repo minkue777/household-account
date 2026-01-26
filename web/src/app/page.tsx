@@ -15,6 +15,7 @@ import { subscribeToMonthlyExpenses, updateExpense, addManualExpense, deleteExpe
 import { addMerchantRule } from '@/lib/merchantRuleService';
 import { subscribeToMonthlyBudgetTransfers, calculateBudgetAdjustments, BudgetTransfer } from '@/lib/budgetTransferService';
 import { getStoredHouseholdKey } from '@/lib/householdService';
+import { processRecurringExpenses } from '@/lib/recurringExpenseService';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 
@@ -39,6 +40,18 @@ export default function Home() {
   // 카테고리 상세 모달 상태
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [selectedCategoryExpenses, setSelectedCategoryExpenses] = useState<Expense[]>([]);
+
+  // 정기 지출 자동 등록 (앱 로드 시 한 번만)
+  useEffect(() => {
+    const householdId = getStoredHouseholdKey();
+    if (householdId) {
+      processRecurringExpenses(householdId).then((count) => {
+        if (count > 0) {
+          console.log(`정기 지출 ${count}건 자동 등록됨`);
+        }
+      });
+    }
+  }, []);
 
   // Firebase 실시간 구독
   useEffect(() => {
