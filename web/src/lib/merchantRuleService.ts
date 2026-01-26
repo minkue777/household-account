@@ -115,7 +115,7 @@ export function applyRule(
     rule,
     mappedValues: {
       merchant: mapping.merchant ?? merchantName,
-      category: mapping.category ?? 'etc',
+      category: mapping.category || 'etc',
       memo: mapping.memo ?? '',
     },
   };

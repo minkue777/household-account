@@ -155,11 +155,16 @@ class CategoryRepository {
 
     /**
      * "기타" 카테고리 키 가져오기 (householdId 기반)
-     * 없으면 "etc" 반환
+     * 우선순위: "기타" 라벨 > 첫 번째 활성 카테고리 > "etc" 폴백
      */
     suspend fun getDefaultCategoryKey(householdId: String): String {
         val categories = getActiveCategories(householdId)
+        // 1. "기타" 라벨 카테고리 찾기
         val etcCategory = findCategoryByLabel(categories, "기타")
-        return etcCategory?.key ?: "etc"
+        if (etcCategory != null) return etcCategory.key
+        // 2. 첫 번째 활성 카테고리 사용
+        if (categories.isNotEmpty()) return categories.first().key
+        // 3. 최후의 폴백
+        return "etc"
     }
 }
