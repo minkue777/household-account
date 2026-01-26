@@ -13,7 +13,13 @@ dist/
 android/.gradle/
 android/build/
 android/app/build/
+android/app/.gradle/
 android/local.properties
+android/app/local.properties
+
+# Test coverage
+coverage/
+web/coverage/
 *.apk
 *.aab
 
