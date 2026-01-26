@@ -112,7 +112,7 @@ export default function ExpenseSplitModal({
           onClick={(e) => e.stopPropagation()}
         >
           <h3 className="text-lg font-semibold text-slate-800 mb-2">
-            지출 나누기
+            지출 내역 분리
           </h3>
           <p className="text-sm text-slate-500 mb-4">
             {expense.merchant} {expense.amount.toLocaleString()}원을 여러 항목으로 나눕니다

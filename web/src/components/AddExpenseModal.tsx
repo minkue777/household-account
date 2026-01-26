@@ -105,7 +105,7 @@ export default function AddExpenseModal({
                     ? 'bg-purple-100 border-purple-300 text-purple-600'
                     : 'border-slate-300 text-slate-500 hover:bg-slate-50'
                 }`}
-                title="분할 인식"
+                title="월별 분할"
               >
                 ÷
               </button>

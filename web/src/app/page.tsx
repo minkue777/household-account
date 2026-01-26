@@ -188,7 +188,7 @@ export default function Home() {
   const handleAddExpense = async (merchant: string, amount: number, category: string, date: string, memo?: string, splitMonths?: number) => {
     try {
       if (splitMonths && splitMonths > 1) {
-        // 분할 인식: n개월에 걸쳐 등록
+        // 월별 분할: n개월에 걸쳐 등록
         const monthlyAmount = Math.floor(amount / splitMonths);
         const baseDate = new Date(date);
 

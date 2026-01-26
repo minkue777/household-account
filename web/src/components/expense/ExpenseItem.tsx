@@ -164,7 +164,7 @@ export default function ExpenseItem({
     }
   };
 
-  // 분할 인식 처리 (여러 달에 걸쳐 분할)
+  // 월별 분할 처리 (여러 달에 걸쳐 분할)
   const handleSplitMonths = async (months: number) => {
     if (!onDelete) return;
 
@@ -192,7 +192,7 @@ export default function ExpenseItem({
       // 기존 지출 삭제
       onDelete(expense.id);
     } catch (error) {
-      console.error('분할 인식 처리 실패:', error);
+      console.error('월별 분할 처리 실패:', error);
       alert('분할 처리 중 오류가 발생했습니다.');
     }
   };
