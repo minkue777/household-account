@@ -502,7 +502,7 @@ export default function SettingsPage() {
                             </button>
                             <button
                               onClick={async () => {
-                                if (editRuleCategory && editRuleCategory !== rule.category) {
+                                if (editRuleCategory && editRuleCategory !== (rule.mapping?.category || rule.category)) {
                                   await updateMerchantRule(rule.id, editRuleCategory);
                                 }
                                 setEditingRuleId(null);
@@ -520,16 +520,16 @@ export default function SettingsPage() {
                           <div className="flex items-center gap-3">
                             <div
                               className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium"
-                              style={{ backgroundColor: getCategoryColor(rule.category) }}
+                              style={{ backgroundColor: getCategoryColor(rule.mapping?.category || rule.category || 'etc') }}
                             >
-                              {getCategoryLabel(rule.category).slice(0, 2)}
+                              {getCategoryLabel(rule.mapping?.category || rule.category || 'etc').slice(0, 2)}
                             </div>
                             <div>
                               <div className="font-medium text-slate-800">
                                 {rule.merchantKeyword}
                               </div>
                               <div className="text-sm text-slate-500">
-                                → {getCategoryLabel(rule.category)}
+                                → {getCategoryLabel(rule.mapping?.category || rule.category || 'etc')}
                               </div>
                             </div>
                           </div>
@@ -537,7 +537,7 @@ export default function SettingsPage() {
                             <button
                               onClick={() => {
                                 setEditingRuleId(rule.id);
-                                setEditRuleCategory(rule.category);
+                                setEditRuleCategory(rule.mapping?.category || rule.category || 'etc');
                               }}
                               className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                             >
