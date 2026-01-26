@@ -20,6 +20,9 @@ export interface Expense {
   cardLastFour?: string;  // 카드 마지막 4자리
   memo?: string;          // 메모 (선택)
   mergedFrom?: MergedExpenseInfo[];  // 합쳐진 원본 지출들 (되돌리기용)
+  splitGroupId?: string;  // 월별 분할 그룹 ID (같은 ID면 같은 분할 그룹)
+  splitIndex?: number;    // 분할 순서 (1, 2, 3...)
+  splitTotal?: number;    // 총 분할 개월 수
 }
 
 export interface DailyExpenses {

@@ -15,6 +15,8 @@ interface ExpenseEditModalProps {
   onUnmerge?: () => void;
   onOpenSplit?: () => void;
   onSplitMonths?: (months: number) => void;
+  onDeleteSplitGroup?: () => void;
+  onUpdateSplitGroup?: (newMonths: number) => void;
 }
 
 export default function ExpenseEditModal({
@@ -26,6 +28,8 @@ export default function ExpenseEditModal({
   onUnmerge,
   onOpenSplit,
   onSplitMonths,
+  onDeleteSplitGroup,
+  onUpdateSplitGroup,
 }: ExpenseEditModalProps) {
   const { getCategoryLabel } = useCategoryContext();
 
@@ -36,6 +40,8 @@ export default function ExpenseEditModal({
   const [rememberMerchant, setRememberMerchant] = useState(false);
   const [splitMonths, setSplitMonths] = useState(1);
   const [showSplitInput, setShowSplitInput] = useState(false);
+  const [editSplitMonths, setEditSplitMonths] = useState(expense.splitTotal || 2);
+  const [showEditSplitGroup, setShowEditSplitGroup] = useState(false);
 
   // 모달이 열릴 때 상태 초기화
   useEffect(() => {
@@ -47,6 +53,8 @@ export default function ExpenseEditModal({
       setRememberMerchant(false);
       setSplitMonths(1);
       setShowSplitInput(false);
+      setEditSplitMonths(expense.splitTotal || 2);
+      setShowEditSplitGroup(false);
     }
   }, [isOpen, expense]);
 
@@ -240,8 +248,81 @@ export default function ExpenseEditModal({
             </div>
           )}
 
+          {/* 월별 분할 그룹 관리 */}
+          {expense.splitGroupId && (onDeleteSplitGroup || onUpdateSplitGroup) && (
+            <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="text-sm font-medium text-purple-800">
+                  월별 분할 ({expense.splitIndex}/{expense.splitTotal})
+                </span>
+              </div>
+
+              {showEditSplitGroup ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="2"
+                      max="24"
+                      value={editSplitMonths}
+                      onChange={(e) => setEditSplitMonths(Math.max(2, parseInt(e.target.value, 10) || 2))}
+                      className="w-20 px-3 py-1.5 border border-purple-300 rounded-lg text-center"
+                    />
+                    <span className="text-sm text-purple-700">개월로 변경</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowEditSplitGroup(false)}
+                      className="flex-1 py-1.5 px-3 border border-purple-300 rounded-lg text-purple-600 text-sm hover:bg-purple-100"
+                    >
+                      취소
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (onUpdateSplitGroup && confirm(`전체 분할을 ${editSplitMonths}개월로 변경하시겠습니까?`)) {
+                          onUpdateSplitGroup(editSplitMonths);
+                          onClose();
+                        }
+                      }}
+                      className="flex-1 py-1.5 px-3 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600"
+                    >
+                      변경
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  {onUpdateSplitGroup && (
+                    <button
+                      onClick={() => setShowEditSplitGroup(true)}
+                      className="flex-1 py-2 px-3 border border-purple-300 rounded-lg text-purple-600 text-sm hover:bg-purple-100"
+                    >
+                      개월 수 변경
+                    </button>
+                  )}
+                  {onDeleteSplitGroup && (
+                    <button
+                      onClick={() => {
+                        if (confirm('월별 분할 전체를 삭제하시겠습니까?\n모든 분할 항목이 삭제됩니다.')) {
+                          onDeleteSplitGroup();
+                          onClose();
+                        }
+                      }}
+                      className="flex-1 py-2 px-3 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600"
+                    >
+                      전체 삭제
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* 나누기 버튼 */}
-          {onOpenSplit && (
+          {onOpenSplit && !expense.splitGroupId && (
             <button
               onClick={() => {
                 onClose();

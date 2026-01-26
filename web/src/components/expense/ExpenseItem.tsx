@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Expense } from '@/types/expense';
-import { SplitItem, addExpense } from '@/lib/expenseService';
+import { SplitItem, addExpense, generateSplitGroupId, deleteSplitGroup, updateSplitGroup } from '@/lib/expenseService';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import ExpenseEditModal from './ExpenseEditModal';
 import ExpenseSplitModal from './ExpenseSplitModal';
@@ -170,9 +170,10 @@ export default function ExpenseItem({
 
     const monthlyAmount = Math.floor(expense.amount / months);
     const baseDate = new Date(expense.date);
+    const splitGroupId = generateSplitGroupId();
 
     try {
-      // 분할된 지출 생성
+      // 분할된 지출 생성 (그룹 ID로 연결)
       for (let i = 0; i < months; i++) {
         const targetDate = new Date(baseDate);
         targetDate.setMonth(targetDate.getMonth() + i);
@@ -184,8 +185,11 @@ export default function ExpenseItem({
           merchant: expense.merchant,
           amount: monthlyAmount,
           category: expense.category,
-          memo: `${expense.memo || ''} (${i + 1}/${months})`.trim(),
+          memo: `(${i + 1}/${months})`,
           cardType: expense.cardType || 'main',
+          splitGroupId,
+          splitIndex: i + 1,
+          splitTotal: months,
         });
       }
 
@@ -194,6 +198,30 @@ export default function ExpenseItem({
     } catch (error) {
       console.error('월별 분할 처리 실패:', error);
       alert('분할 처리 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 월별 분할 그룹 전체 삭제
+  const handleDeleteSplitGroup = async () => {
+    if (!expense.splitGroupId) return;
+
+    try {
+      await deleteSplitGroup(expense.splitGroupId);
+    } catch (error) {
+      console.error('분할 그룹 삭제 실패:', error);
+      alert('삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 월별 분할 그룹 개월 수 변경
+  const handleUpdateSplitGroup = async (newMonths: number) => {
+    if (!expense.splitGroupId) return;
+
+    try {
+      await updateSplitGroup(expense.splitGroupId, newMonths);
+    } catch (error) {
+      console.error('분할 그룹 수정 실패:', error);
+      alert('수정 중 오류가 발생했습니다.');
     }
   };
 
@@ -266,6 +294,8 @@ export default function ExpenseItem({
         onUnmerge={onUnmergeExpense ? () => onUnmergeExpense(expense) : undefined}
         onOpenSplit={onSplitExpense ? () => setShowSplitModal(true) : undefined}
         onSplitMonths={onDelete ? handleSplitMonths : undefined}
+        onDeleteSplitGroup={expense.splitGroupId ? handleDeleteSplitGroup : undefined}
+        onUpdateSplitGroup={expense.splitGroupId ? handleUpdateSplitGroup : undefined}
       />
 
       {/* 삭제 확인 다이얼로그 */}

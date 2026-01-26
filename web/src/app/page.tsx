@@ -11,7 +11,7 @@ import SearchModal from '@/components/SearchModal';
 import BudgetTransferModal from '@/components/BudgetTransferModal';
 import Portal from '@/components/Portal';
 import { Expense, Category } from '@/types/expense';
-import { subscribeToMonthlyExpenses, updateExpense, addManualExpense, deleteExpense, splitExpense, mergeExpenses, unmergeExpense, SplitItem } from '@/lib/expenseService';
+import { subscribeToMonthlyExpenses, updateExpense, addManualExpense, deleteExpense, splitExpense, mergeExpenses, unmergeExpense, SplitItem, generateSplitGroupId, addExpense } from '@/lib/expenseService';
 import { addMerchantRule } from '@/lib/merchantRuleService';
 import { subscribeToMonthlyBudgetTransfers, calculateBudgetAdjustments, BudgetTransfer } from '@/lib/budgetTransferService';
 import { getStoredHouseholdKey } from '@/lib/householdService';
@@ -188,19 +188,30 @@ export default function Home() {
   const handleAddExpense = async (merchant: string, amount: number, category: string, date: string, memo?: string, splitMonths?: number) => {
     try {
       if (splitMonths && splitMonths > 1) {
-        // 월별 분할: n개월에 걸쳐 등록
+        // 월별 분할: n개월에 걸쳐 등록 (그룹 ID로 연결)
         const monthlyAmount = Math.floor(amount / splitMonths);
         const baseDate = new Date(date);
+        const splitGroupId = generateSplitGroupId();
 
         for (let i = 0; i < splitMonths; i++) {
           const targetDate = new Date(baseDate);
           targetDate.setMonth(targetDate.getMonth() + i);
           const dateStr = targetDate.toISOString().split('T')[0];
-          const splitMemo = memo ? `${memo} (${i + 1}/${splitMonths})` : `(${i + 1}/${splitMonths})`;
 
-          await addManualExpense(merchant, monthlyAmount, category, dateStr, splitMemo);
+          await addExpense({
+            date: dateStr,
+            time: '09:00',
+            merchant,
+            amount: monthlyAmount,
+            category,
+            cardType: 'main',
+            memo: `(${i + 1}/${splitMonths})`,
+            splitGroupId,
+            splitIndex: i + 1,
+            splitTotal: splitMonths,
+          });
         }
-        console.log(`분할 지출 추가 성공: ${merchant} ${monthlyAmount}원 x ${splitMonths}개월`);
+        console.log(`월별 분할 지출 추가 성공: ${merchant} ${monthlyAmount}원 x ${splitMonths}개월`);
       } else {
         await addManualExpense(merchant, amount, category, date, memo);
         console.log('지출 추가 성공:', merchant, amount);

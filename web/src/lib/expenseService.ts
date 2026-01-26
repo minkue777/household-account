@@ -47,6 +47,9 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
     cardLastFour: data.cardLastFour,
     memo: data.memo,
     mergedFrom: data.mergedFrom,
+    splitGroupId: data.splitGroupId,
+    splitIndex: data.splitIndex,
+    splitTotal: data.splitTotal,
   };
 }
 
@@ -375,4 +378,100 @@ export async function searchExpenses(keyword: string): Promise<Expense[]> {
     .sort((a, b) => b.date.localeCompare(a.date));
 
   return results;
+}
+
+/**
+ * 월별 분할 그룹 ID 생성
+ */
+export function generateSplitGroupId(): string {
+  return `split_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
+ * 월별 분할 그룹의 모든 지출 조회
+ */
+export async function getSplitGroupExpenses(splitGroupId: string): Promise<Expense[]> {
+  const householdId = getHouseholdId();
+
+  const q = query(
+    collection(db, COLLECTION_NAME),
+    where('householdId', '==', householdId),
+    where('splitGroupId', '==', splitGroupId)
+  );
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs
+    .map(mapDocToExpense)
+    .sort((a, b) => (a.splitIndex || 0) - (b.splitIndex || 0));
+}
+
+/**
+ * 월별 분할 그룹 전체 삭제
+ */
+export async function deleteSplitGroup(splitGroupId: string): Promise<void> {
+  const expenses = await getSplitGroupExpenses(splitGroupId);
+
+  await runTransaction(db, async (transaction) => {
+    for (const expense of expenses) {
+      const docRef = doc(db, COLLECTION_NAME, expense.id);
+      transaction.delete(docRef);
+    }
+  });
+}
+
+/**
+ * 월별 분할 그룹 개월 수 수정
+ * 기존 그룹 삭제 후 새로운 개월 수로 재생성
+ */
+export async function updateSplitGroup(
+  splitGroupId: string,
+  newMonths: number
+): Promise<string> {
+  const expenses = await getSplitGroupExpenses(splitGroupId);
+  if (expenses.length === 0) {
+    throw new Error('분할 그룹을 찾을 수 없습니다.');
+  }
+
+  // 원본 정보 계산
+  const firstExpense = expenses[0];
+  const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const monthlyAmount = Math.floor(totalAmount / newMonths);
+  const baseDate = new Date(firstExpense.date);
+
+  // 새 그룹 ID 생성
+  const newGroupId = generateSplitGroupId();
+  const householdId = getHouseholdId();
+
+  await runTransaction(db, async (transaction) => {
+    // 기존 그룹 삭제
+    for (const expense of expenses) {
+      const docRef = doc(db, COLLECTION_NAME, expense.id);
+      transaction.delete(docRef);
+    }
+
+    // 새로운 분할 지출 생성
+    for (let i = 0; i < newMonths; i++) {
+      const targetDate = new Date(baseDate);
+      targetDate.setMonth(targetDate.getMonth() + i);
+      const dateStr = targetDate.toISOString().split('T')[0];
+
+      const newDocRef = doc(collection(db, COLLECTION_NAME));
+      transaction.set(newDocRef, {
+        date: dateStr,
+        time: firstExpense.time || '09:00',
+        merchant: firstExpense.merchant,
+        amount: monthlyAmount,
+        category: firstExpense.category,
+        cardType: firstExpense.cardType || 'main',
+        memo: `(${i + 1}/${newMonths})`,
+        splitGroupId: newGroupId,
+        splitIndex: i + 1,
+        splitTotal: newMonths,
+        householdId,
+        createdAt: Timestamp.now(),
+      });
+    }
+  });
+
+  return newGroupId;
 }
