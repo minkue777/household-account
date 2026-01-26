@@ -73,7 +73,6 @@ export default function BudgetTransferModal({ isOpen, onClose, year, month }: Bu
       setMemo('');
       setIsAdding(false);
     } catch (error) {
-      console.error('예산 이동 추가 실패:', error);
     }
   };
 
@@ -82,7 +81,6 @@ export default function BudgetTransferModal({ isOpen, onClose, year, month }: Bu
     try {
       await deleteBudgetTransfer(id);
     } catch (error) {
-      console.error('예산 이동 삭제 실패:', error);
     }
   };
 

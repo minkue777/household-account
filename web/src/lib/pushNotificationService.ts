@@ -16,7 +16,6 @@ export function initializeMessaging(): Messaging | null {
 
   // iOS PWA에서만 동작
   if (Platform.isIOS() && !Platform.isIOSPWA()) {
-    console.log('iOS에서는 홈 화면에 추가한 PWA에서만 푸시 알림이 지원됩니다.');
     return null;
   }
 
@@ -24,7 +23,6 @@ export function initializeMessaging(): Messaging | null {
     messaging = getMessaging(app);
     return messaging;
   } catch (error) {
-    console.error('FCM 초기화 실패:', error);
     return null;
   }
 }
@@ -37,7 +35,6 @@ export async function requestNotificationPermission(): Promise<string | null> {
 
   // 알림 지원 확인
   if (!Platform.supportsNotification()) {
-    console.log('이 브라우저는 알림을 지원하지 않습니다.');
     return null;
   }
 
@@ -45,16 +42,13 @@ export async function requestNotificationPermission(): Promise<string | null> {
   const permission = await Notification.requestPermission();
 
   if (permission !== 'granted') {
-    console.log('알림 권한이 거부되었습니다.');
     return null;
   }
 
   // 서비스 워커 등록
   try {
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-    console.log('Service Worker 등록 완료:', registration);
   } catch (error) {
-    console.error('Service Worker 등록 실패:', error);
     return null;
   }
 
@@ -74,15 +68,12 @@ export async function requestNotificationPermission(): Promise<string | null> {
     });
 
     if (token) {
-      console.log('FCM 토큰:', token);
       await saveTokenToServer(token);
       return token;
     } else {
-      console.log('FCM 토큰을 가져올 수 없습니다.');
       return null;
     }
   } catch (error) {
-    console.error('FCM 토큰 가져오기 실패:', error);
     return null;
   }
 }
@@ -105,9 +96,7 @@ async function saveTokenToServer(token: string): Promise<void> {
     };
 
     await saveFcmToken({ token, deviceInfo, householdId: householdKey });
-    console.log('FCM 토큰 서버 저장 완료 (householdId:', householdKey, ')');
   } catch (error) {
-    console.error('FCM 토큰 서버 저장 실패:', error);
     throw error;
   }
 }
@@ -127,7 +116,6 @@ export function setupForegroundMessageListener(
   }
 
   return onMessage(messaging, (payload) => {
-    console.log('포그라운드 메시지 수신:', payload);
     onMessageReceived(payload);
   });
 }

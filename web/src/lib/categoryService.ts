@@ -46,7 +46,6 @@ export async function initializeDefaultCategories(householdId: string): Promise<
     }
 
     await batch.commit();
-    console.log(`기본 카테고리가 초기화되었습니다. (householdId: ${householdId})`);
   }
 }
 
@@ -121,7 +120,6 @@ export function subscribeToCategories(
 
     callback(categories);
   }, (error) => {
-    console.error('카테고리 구독 에러:', error);
     // 인덱스 오류 시 링크가 에러 메시지에 포함됨
     callback([]);
   });

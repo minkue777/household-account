@@ -110,7 +110,6 @@ export function subscribeToMonthlyExpenses(
 
     callback(filtered);
   }, (error) => {
-    console.error('Firestore subscription error:', error);
     callback([]);
   });
 
@@ -149,7 +148,6 @@ export function subscribeToDateRangeExpenses(
 
     callback(filtered);
   }, (error) => {
-    console.error('Firestore subscription error:', error);
     callback([]);
   });
 

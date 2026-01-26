@@ -47,7 +47,6 @@ export default function Home() {
     if (householdId) {
       processRecurringExpenses(householdId).then((count) => {
         if (count > 0) {
-          console.log(`정기 지출 ${count}건 자동 등록됨`);
         }
       });
     }
@@ -167,7 +166,6 @@ export default function Home() {
     try {
       await updateExpense(expenseId, data);
     } catch (error) {
-      console.error('지출 업데이트 실패:', error);
     }
   };
 
@@ -177,10 +175,8 @@ export default function Home() {
       const householdId = getStoredHouseholdKey() || 'guest';
       const ruleId = await addMerchantRule(householdId, merchantName, category, true);
       if (ruleId) {
-        console.log('규칙 저장 성공:', merchantName, '->', category);
       }
     } catch (error) {
-      console.error('규칙 저장 실패:', error);
     }
   };
 
@@ -211,13 +207,10 @@ export default function Home() {
             splitTotal: splitMonths,
           });
         }
-        console.log(`월별 분할 지출 추가 성공: ${merchant} ${monthlyAmount}원 x ${splitMonths}개월`);
       } else {
         await addManualExpense(merchant, amount, category, date, memo);
-        console.log('지출 추가 성공:', merchant, amount);
       }
     } catch (error) {
-      console.error('지출 추가 실패:', error);
     }
   };
 
@@ -225,9 +218,7 @@ export default function Home() {
   const handleDeleteExpense = async (expenseId: string) => {
     try {
       await deleteExpense(expenseId);
-      console.log('지출 삭제 성공:', expenseId);
     } catch (error) {
-      console.error('지출 삭제 실패:', error);
     }
   };
 
@@ -235,9 +226,7 @@ export default function Home() {
   const handleSplitExpense = async (expense: Expense, splits: SplitItem[]) => {
     try {
       await splitExpense(expense, splits);
-      console.log('지출 분할 성공:', expense.merchant, '->', splits.length, '개');
     } catch (error) {
-      console.error('지출 분할 실패:', error);
     }
   };
 
@@ -245,9 +234,7 @@ export default function Home() {
   const handleMergeExpenses = async (targetExpense: Expense, sourceExpense: Expense) => {
     try {
       await mergeExpenses(targetExpense, sourceExpense);
-      console.log('지출 합치기 성공:', targetExpense.merchant, '+', sourceExpense.merchant);
     } catch (error) {
-      console.error('지출 합치기 실패:', error);
     }
   };
 
@@ -255,9 +242,7 @@ export default function Home() {
   const handleUnmergeExpense = async (expense: Expense) => {
     try {
       await unmergeExpense(expense);
-      console.log('합치기 되돌리기 성공:', expense.merchant);
     } catch (error) {
-      console.error('합치기 되돌리기 실패:', error);
     }
   };
 

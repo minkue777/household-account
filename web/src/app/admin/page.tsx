@@ -48,7 +48,6 @@ export default function AdminPage() {
       setCopiedKey(key);
       setTimeout(() => setCopiedKey(null), 2000);
     } catch (error) {
-      console.error('키 생성 실패:', error);
     } finally {
       setIsCreating(false);
     }

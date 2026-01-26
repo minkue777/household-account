@@ -85,7 +85,6 @@ export default function SearchModal({ isOpen, onClose, onExpenseUpdate, onDelete
           setExpandedMonth(null);
         }
       } catch (error) {
-        console.error('검색 실패:', error);
       } finally {
         setIsSearching(false);
       }

@@ -81,7 +81,6 @@ export function subscribeToMonthlyBudgetTransfers(
     });
     callback(transfers);
   }, (error) => {
-    console.error('Budget transfer subscription error:', error);
     callback([]);
   });
 

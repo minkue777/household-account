@@ -28,7 +28,6 @@ export default function NotificationSettings() {
         setPermission('granted');
       }
     } catch (err) {
-      console.error(err);
     } finally {
       setIsLoading(false);
     }

@@ -104,7 +104,6 @@ export function subscribeToRecurringExpenses(
       callback(expenses);
     },
     (error) => {
-      console.error('Recurring expenses subscription error:', error);
       callback([]);
     }
   );
@@ -206,9 +205,7 @@ export async function processRecurringExpenses(householdId: string): Promise<num
       });
 
       registeredCount++;
-      console.log(`정기 지출 자동 등록: ${expense.merchant} ${expense.amount}원`);
     } catch (error) {
-      console.error(`정기 지출 등록 실패: ${expense.merchant}`, error);
     }
   }
 

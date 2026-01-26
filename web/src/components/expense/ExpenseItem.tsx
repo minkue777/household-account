@@ -196,7 +196,6 @@ export default function ExpenseItem({
       // 기존 지출 삭제
       onDelete(expense.id);
     } catch (error) {
-      console.error('월별 분할 처리 실패:', error);
       alert('분할 처리 중 오류가 발생했습니다.');
     }
   };
@@ -208,7 +207,6 @@ export default function ExpenseItem({
     try {
       await deleteSplitGroup(expense.splitGroupId);
     } catch (error) {
-      console.error('분할 그룹 삭제 실패:', error);
       alert('삭제 중 오류가 발생했습니다.');
     }
   };
@@ -220,7 +218,6 @@ export default function ExpenseItem({
     try {
       await updateSplitGroup(expense.splitGroupId, newMonths);
     } catch (error) {
-      console.error('분할 그룹 수정 실패:', error);
       alert('수정 중 오류가 발생했습니다.');
     }
   };

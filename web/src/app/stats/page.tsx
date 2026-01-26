@@ -97,7 +97,6 @@ export default function StatsPage() {
           );
         }
       } catch (error) {
-        console.error('지출 수정 실패:', error);
       }
     }
 
@@ -115,7 +114,6 @@ export default function StatsPage() {
         prev.filter(e => e.id !== editingExpense.id)
       );
     } catch (error) {
-      console.error('지출 삭제 실패:', error);
     }
 
     setShowDeleteDialog(false);

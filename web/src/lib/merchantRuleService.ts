@@ -129,7 +129,6 @@ export async function addMerchantRuleV2(
   // 이미 같은 키워드/매칭타입 조합이 있는지 확인
   const exists = await ruleExistsV2(householdId, input.merchantKeyword, input.matchType);
   if (exists) {
-    console.log('이미 규칙이 존재함:', input.merchantKeyword, input.matchType);
     return '';
   }
 
@@ -278,7 +277,6 @@ export function subscribeToRules(
       callback(rules);
     },
     (error) => {
-      console.error('Rules subscription error:', error);
       callback([]);
     }
   );
