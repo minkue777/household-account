@@ -185,10 +185,26 @@ export default function Home() {
   };
 
   // 수동 지출 추가 핸들러
-  const handleAddExpense = async (merchant: string, amount: number, category: string, date: string, memo?: string) => {
+  const handleAddExpense = async (merchant: string, amount: number, category: string, date: string, memo?: string, splitMonths?: number) => {
     try {
-      await addManualExpense(merchant, amount, category, date, memo);
-      console.log('지출 추가 성공:', merchant, amount);
+      if (splitMonths && splitMonths > 1) {
+        // 분할 인식: n개월에 걸쳐 등록
+        const monthlyAmount = Math.floor(amount / splitMonths);
+        const baseDate = new Date(date);
+
+        for (let i = 0; i < splitMonths; i++) {
+          const targetDate = new Date(baseDate);
+          targetDate.setMonth(targetDate.getMonth() + i);
+          const dateStr = targetDate.toISOString().split('T')[0];
+          const splitMemo = memo ? `${memo} (${i + 1}/${splitMonths})` : `(${i + 1}/${splitMonths})`;
+
+          await addManualExpense(merchant, monthlyAmount, category, dateStr, splitMemo);
+        }
+        console.log(`분할 지출 추가 성공: ${merchant} ${monthlyAmount}원 x ${splitMonths}개월`);
+      } else {
+        await addManualExpense(merchant, amount, category, date, memo);
+        console.log('지출 추가 성공:', merchant, amount);
+      }
     } catch (error) {
       console.error('지출 추가 실패:', error);
     }

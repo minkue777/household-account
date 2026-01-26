@@ -8,7 +8,7 @@ import { CategorySelector, AmountInput } from './common';
 interface AddExpenseModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (merchant: string, amount: number, category: string, date: string, memo?: string) => void;
+  onAdd: (merchant: string, amount: number, category: string, date: string, memo?: string, splitMonths?: number) => void;
   selectedDate?: string | null;
 }
 
@@ -25,6 +25,7 @@ export default function AddExpenseModal({
   const [category, setCategory] = useState<string>('etc');
   const [date, setDate] = useState(selectedDate || new Date().toISOString().split('T')[0]);
   const [memo, setMemo] = useState('');
+  const [splitMonths, setSplitMonths] = useState(1); // 1이면 분할 안 함
 
   // 활성 카테고리가 로드되면 첫 번째 카테고리를 기본값으로 설정
   useEffect(() => {
@@ -43,12 +44,13 @@ export default function AddExpenseModal({
   const handleSubmit = () => {
     const amountNum = parseInt(amount, 10);
     if (merchant.trim() && amountNum > 0) {
-      onAdd(merchant.trim(), amountNum, category, date, memo.trim() || undefined);
+      onAdd(merchant.trim(), amountNum, category, date, memo.trim() || undefined, splitMonths > 1 ? splitMonths : undefined);
       // 폼 초기화
       setMerchant('');
       setAmount('');
       setCategory(activeCategories[0]?.key || 'etc');
       setMemo('');
+      setSplitMonths(1);
       onClose();
     }
   };
@@ -125,6 +127,32 @@ export default function AddExpenseModal({
               placeholder="메모 입력"
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
+
+          {/* 분할 인식 */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              분할 인식 (선택)
+            </label>
+            <div className="flex items-center gap-2">
+              <select
+                value={splitMonths}
+                onChange={(e) => setSplitMonths(parseInt(e.target.value, 10))}
+                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value={1}>분할 안 함</option>
+                <option value={2}>2개월</option>
+                <option value={3}>3개월</option>
+                <option value={4}>4개월</option>
+                <option value={6}>6개월</option>
+                <option value={12}>12개월</option>
+              </select>
+            </div>
+            {splitMonths > 1 && amount && (
+              <p className="mt-2 text-sm text-purple-600">
+                → 매월 {Math.floor(parseInt(amount, 10) / splitMonths).toLocaleString()}원씩 {splitMonths}개월
+              </p>
+            )}
           </div>
         </div>
 
