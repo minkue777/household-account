@@ -53,7 +53,7 @@ export interface AppliedRule {
 
 // 매칭 타입별 설명 (UI용)
 export const MATCH_TYPE_LABELS: Record<MatchType, string> = {
-  exact: '정확히 일치',
+  exact: '일치',
   contains: '포함',
   startsWith: '시작',
   endsWith: '종료',

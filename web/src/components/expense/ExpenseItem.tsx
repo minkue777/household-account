@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Expense } from '@/types/expense';
-import { SplitItem } from '@/lib/expenseService';
+import { SplitItem, addExpense } from '@/lib/expenseService';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import ExpenseEditModal from './ExpenseEditModal';
 import ExpenseSplitModal from './ExpenseSplitModal';
@@ -164,6 +164,39 @@ export default function ExpenseItem({
     }
   };
 
+  // 분할 인식 처리 (여러 달에 걸쳐 분할)
+  const handleSplitMonths = async (months: number) => {
+    if (!onDelete) return;
+
+    const monthlyAmount = Math.floor(expense.amount / months);
+    const baseDate = new Date(expense.date);
+
+    try {
+      // 분할된 지출 생성
+      for (let i = 0; i < months; i++) {
+        const targetDate = new Date(baseDate);
+        targetDate.setMonth(targetDate.getMonth() + i);
+        const dateStr = targetDate.toISOString().split('T')[0];
+
+        await addExpense({
+          date: dateStr,
+          time: expense.time || '09:00',
+          merchant: expense.merchant,
+          amount: monthlyAmount,
+          category: expense.category,
+          memo: `${expense.memo || ''} (${i + 1}/${months})`.trim(),
+          cardType: expense.cardType || 'main',
+        });
+      }
+
+      // 기존 지출 삭제
+      onDelete(expense.id);
+    } catch (error) {
+      console.error('분할 인식 처리 실패:', error);
+      alert('분할 처리 중 오류가 발생했습니다.');
+    }
+  };
+
   return (
     <div className="relative" ref={(el) => registerItemRef(expense.id, el)}>
       <div
@@ -232,6 +265,7 @@ export default function ExpenseItem({
         onSaveMerchantRule={onSaveMerchantRule}
         onUnmerge={onUnmergeExpense ? () => onUnmergeExpense(expense) : undefined}
         onOpenSplit={onSplitExpense ? () => setShowSplitModal(true) : undefined}
+        onSplitMonths={onDelete ? handleSplitMonths : undefined}
       />
 
       {/* 삭제 확인 다이얼로그 */}

@@ -14,6 +14,7 @@ interface ExpenseEditModalProps {
   onSaveMerchantRule?: (merchantName: string, category: string) => void;
   onUnmerge?: () => void;
   onOpenSplit?: () => void;
+  onSplitMonths?: (months: number) => void;
 }
 
 export default function ExpenseEditModal({
@@ -24,6 +25,7 @@ export default function ExpenseEditModal({
   onSaveMerchantRule,
   onUnmerge,
   onOpenSplit,
+  onSplitMonths,
 }: ExpenseEditModalProps) {
   const { getCategoryLabel } = useCategoryContext();
 
@@ -32,6 +34,7 @@ export default function ExpenseEditModal({
   const [editMemo, setEditMemo] = useState(expense.memo || '');
   const [editCategory, setEditCategory] = useState(expense.category);
   const [rememberMerchant, setRememberMerchant] = useState(false);
+  const [splitMonths, setSplitMonths] = useState(1);
 
   // 모달이 열릴 때 상태 초기화
   useEffect(() => {
@@ -41,6 +44,7 @@ export default function ExpenseEditModal({
       setEditMemo(expense.memo || '');
       setEditCategory(expense.category);
       setRememberMerchant(false);
+      setSplitMonths(1);
     }
   }, [isOpen, expense]);
 
@@ -142,6 +146,32 @@ export default function ExpenseEditModal({
               />
             </div>
 
+            {/* 분할 인식 */}
+            {onSplitMonths && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  분할 인식
+                </label>
+                <select
+                  value={splitMonths}
+                  onChange={(e) => setSplitMonths(parseInt(e.target.value, 10))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={1}>분할 안 함</option>
+                  <option value={2}>2개월</option>
+                  <option value={3}>3개월</option>
+                  <option value={4}>4개월</option>
+                  <option value={6}>6개월</option>
+                  <option value={12}>12개월</option>
+                </select>
+                {splitMonths > 1 && (
+                  <p className="mt-2 text-sm text-purple-600">
+                    → 매월 {Math.floor(expense.amount / splitMonths).toLocaleString()}원씩 {splitMonths}개월
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* 가맹점 기억하기 (카테고리 변경시에만 표시) */}
             {editCategory !== expense.category && (
               <label className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg cursor-pointer">
@@ -219,12 +249,26 @@ export default function ExpenseEditModal({
             >
               취소
             </button>
-            <button
-              onClick={handleSave}
-              className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              저장
-            </button>
+            {splitMonths > 1 && onSplitMonths ? (
+              <button
+                onClick={() => {
+                  if (confirm(`이 지출을 ${splitMonths}개월로 분할하시겠습니까?\n기존 지출은 삭제되고 분할된 지출이 등록됩니다.`)) {
+                    onSplitMonths(splitMonths);
+                    onClose();
+                  }
+                }}
+                className="flex-1 py-2 px-4 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+              >
+                분할 적용
+              </button>
+            ) : (
+              <button
+                onClick={handleSave}
+                className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                저장
+              </button>
+            )}
           </div>
         </div>
       </div>

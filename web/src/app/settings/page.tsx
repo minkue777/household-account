@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { CategoryDocument } from '@/lib/categoryService';
@@ -59,6 +59,7 @@ export default function SettingsPage() {
   const [rulesLoading, setRulesLoading] = useState(true);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [showAddRuleForm, setShowAddRuleForm] = useState(false);
+  const ruleFormRef = useRef<HTMLDivElement>(null);
 
   // 규칙 폼 상태 (추가/편집 공용)
   const [ruleKeyword, setRuleKeyword] = useState('');
@@ -200,6 +201,10 @@ export default function SettingsPage() {
     setRuleCategory(rule.mapping?.category || rule.category || '');
     setRuleMemo(rule.mapping?.memo || '');
     setShowAddRuleForm(false);
+    // 폼으로 스크롤
+    setTimeout(() => {
+      ruleFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   };
 
   const handleSaveRule = async () => {
@@ -623,7 +628,7 @@ export default function SettingsPage() {
             <div className="border-t border-slate-100">
               {/* 규칙 추가/편집 폼 */}
               {(showAddRuleForm || editingRuleId) && (
-                <div className="p-4 bg-slate-50 border-b border-slate-200">
+                <div ref={ruleFormRef} className="p-4 bg-slate-50 border-b border-slate-200">
                   <div className="space-y-4">
                     <div className="font-medium text-slate-800">
                       {editingRuleId ? '규칙 편집' : '새 규칙 추가'}
@@ -760,22 +765,22 @@ export default function SettingsPage() {
                 <div className="divide-y divide-slate-100">
                   {merchantRules.map((rule) => (
                     <div key={rule.id} className={`p-4 ${editingRuleId === rule.id ? 'hidden' : ''}`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
                           <div
-                            className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-medium"
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0"
                             style={{ backgroundColor: getCategoryColor(rule.mapping?.category || rule.category || 'etc') }}
                           >
                             {getCategoryLabel(rule.mapping?.category || rule.category || 'etc').slice(0, 2)}
                           </div>
-                          <div>
+                          <div className="min-w-0 flex-1">
                             <div className="font-medium text-slate-800 flex items-center gap-2">
-                              <span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                              <span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-600 flex-shrink-0">
                                 {MATCH_TYPE_LABELS[rule.matchType] || '포함'}
                               </span>
-                              {rule.merchantKeyword}
+                              <span className="truncate">{rule.merchantKeyword}</span>
                             </div>
-                            <div className="text-sm text-slate-500">
+                            <div className="text-sm text-slate-500 truncate">
                               → {rule.mapping?.merchant ? (
                                 <span className="text-green-600">{rule.mapping.merchant}</span>
                               ) : (
@@ -789,7 +794,7 @@ export default function SettingsPage() {
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           <button
                             onClick={() => handleStartEditRule(rule)}
                             className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
