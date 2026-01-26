@@ -414,6 +414,8 @@ export async function cancelSplitGroup(splitGroupId: string): Promise<void> {
   const householdId = getHouseholdId();
   const firstExpense = expenses[0];
   const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0);
+  // 가맹점명에서 분할 표시 제거 (예: "스타벅스 (1/3)" -> "스타벅스")
+  const baseMerchant = firstExpense.merchant.replace(/\s*\(\d+\/\d+\)$/, '');
 
   await runTransaction(db, async (transaction) => {
     // 분할된 지출 모두 삭제
@@ -427,7 +429,7 @@ export async function cancelSplitGroup(splitGroupId: string): Promise<void> {
     transaction.set(newDocRef, {
       date: firstExpense.date,
       time: firstExpense.time || '09:00',
-      merchant: firstExpense.merchant,
+      merchant: baseMerchant,
       amount: totalAmount,
       category: firstExpense.category,
       cardType: firstExpense.cardType || 'main',
@@ -455,6 +457,8 @@ export async function updateSplitGroup(
   const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0);
   const monthlyAmount = Math.floor(totalAmount / newMonths);
   const baseDate = new Date(firstExpense.date);
+  // 가맹점명에서 기존 분할 표시 제거 (예: "스타벅스 (1/3)" -> "스타벅스")
+  const baseMerchant = firstExpense.merchant.replace(/\s*\(\d+\/\d+\)$/, '');
 
   // 새 그룹 ID 생성
   const newGroupId = generateSplitGroupId();
@@ -477,11 +481,10 @@ export async function updateSplitGroup(
       transaction.set(newDocRef, {
         date: dateStr,
         time: firstExpense.time || '09:00',
-        merchant: firstExpense.merchant,
+        merchant: `${baseMerchant} (${i + 1}/${newMonths})`,
         amount: monthlyAmount,
         category: firstExpense.category,
         cardType: firstExpense.cardType || 'main',
-        memo: `(${i + 1}/${newMonths})`,
         splitGroupId: newGroupId,
         splitIndex: i + 1,
         splitTotal: newMonths,

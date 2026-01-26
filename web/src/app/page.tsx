@@ -197,11 +197,10 @@ export default function Home() {
           await addExpense({
             date: dateStr,
             time: '09:00',
-            merchant,
+            merchant: `${merchant} (${i + 1}/${splitMonths})`,
             amount: monthlyAmount,
             category,
             cardType: 'main',
-            memo: `(${i + 1}/${splitMonths})`,
             splitGroupId,
             splitIndex: i + 1,
             splitTotal: splitMonths,

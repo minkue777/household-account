@@ -182,10 +182,9 @@ export default function ExpenseItem({
         await addExpense({
           date: dateStr,
           time: expense.time || '09:00',
-          merchant: expense.merchant,
+          merchant: `${expense.merchant} (${i + 1}/${months})`,
           amount: monthlyAmount,
           category: expense.category,
-          memo: `(${i + 1}/${months})`,
           cardType: expense.cardType || 'main',
           splitGroupId,
           splitIndex: i + 1,
