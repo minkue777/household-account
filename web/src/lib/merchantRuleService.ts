@@ -18,9 +18,11 @@ import {
   MerchantRuleMapping,
   CreateMerchantRuleInput,
   AppliedRule,
+  MATCH_TYPE_LABELS,
 } from '@/types/merchant';
 
 export type { MerchantRule, MatchType, MerchantRuleMapping, CreateMerchantRuleInput, AppliedRule };
+export { MATCH_TYPE_LABELS };
 
 const COLLECTION_NAME = 'merchant_rules';
 
