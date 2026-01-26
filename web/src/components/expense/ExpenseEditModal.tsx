@@ -15,7 +15,7 @@ interface ExpenseEditModalProps {
   onUnmerge?: () => void;
   onOpenSplit?: () => void;
   onSplitMonths?: (months: number) => void;
-  onDeleteSplitGroup?: () => void;
+  onCancelSplitGroup?: () => void;
   onUpdateSplitGroup?: (newMonths: number) => void;
 }
 
@@ -28,7 +28,7 @@ export default function ExpenseEditModal({
   onUnmerge,
   onOpenSplit,
   onSplitMonths,
-  onDeleteSplitGroup,
+  onCancelSplitGroup,
   onUpdateSplitGroup,
 }: ExpenseEditModalProps) {
   const { getCategoryLabel } = useCategoryContext();
@@ -249,7 +249,7 @@ export default function ExpenseEditModal({
           )}
 
           {/* 월별 분할 그룹 관리 */}
-          {expense.splitGroupId && (onDeleteSplitGroup || onUpdateSplitGroup) && (
+          {expense.splitGroupId && (onCancelSplitGroup || onUpdateSplitGroup) && (
             <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
               <div className="flex items-center gap-2 mb-2">
                 <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -303,17 +303,17 @@ export default function ExpenseEditModal({
                       개월 수 변경
                     </button>
                   )}
-                  {onDeleteSplitGroup && (
+                  {onCancelSplitGroup && (
                     <button
                       onClick={() => {
-                        if (confirm('월별 분할 전체를 삭제하시겠습니까?\n모든 분할 항목이 삭제됩니다.')) {
-                          onDeleteSplitGroup();
+                        if (confirm('분할을 취소하고 원래 금액으로 합치시겠습니까?')) {
+                          onCancelSplitGroup();
                           onClose();
                         }
                       }}
-                      className="flex-1 py-2 px-3 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600"
+                      className="flex-1 py-2 px-3 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600"
                     >
-                      전체 삭제
+                      분할 취소
                     </button>
                   )}
                 </div>

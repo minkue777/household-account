@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Expense } from '@/types/expense';
-import { SplitItem, addExpense, generateSplitGroupId, deleteSplitGroup, updateSplitGroup } from '@/lib/expenseService';
+import { SplitItem, addExpense, generateSplitGroupId, cancelSplitGroup, updateSplitGroup } from '@/lib/expenseService';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import ExpenseEditModal from './ExpenseEditModal';
 import ExpenseSplitModal from './ExpenseSplitModal';
@@ -200,14 +200,14 @@ export default function ExpenseItem({
     }
   };
 
-  // 월별 분할 그룹 전체 삭제
-  const handleDeleteSplitGroup = async () => {
+  // 월별 분할 취소 (합치기)
+  const handleCancelSplitGroup = async () => {
     if (!expense.splitGroupId) return;
 
     try {
-      await deleteSplitGroup(expense.splitGroupId);
+      await cancelSplitGroup(expense.splitGroupId);
     } catch (error) {
-      alert('삭제 중 오류가 발생했습니다.');
+      alert('분할 취소 중 오류가 발생했습니다.');
     }
   };
 
@@ -291,7 +291,7 @@ export default function ExpenseItem({
         onUnmerge={onUnmergeExpense ? () => onUnmergeExpense(expense) : undefined}
         onOpenSplit={onSplitExpense ? () => setShowSplitModal(true) : undefined}
         onSplitMonths={onDelete ? handleSplitMonths : undefined}
-        onDeleteSplitGroup={expense.splitGroupId ? handleDeleteSplitGroup : undefined}
+        onCancelSplitGroup={expense.splitGroupId ? handleCancelSplitGroup : undefined}
         onUpdateSplitGroup={expense.splitGroupId ? handleUpdateSplitGroup : undefined}
       />
 

@@ -404,16 +404,36 @@ export async function getSplitGroupExpenses(splitGroupId: string): Promise<Expen
 }
 
 /**
- * 월별 분할 그룹 전체 삭제
+ * 월별 분할 취소 (합치기)
+ * 분할된 지출들을 삭제하고 원래 금액의 단일 지출로 복원
  */
-export async function deleteSplitGroup(splitGroupId: string): Promise<void> {
+export async function cancelSplitGroup(splitGroupId: string): Promise<void> {
   const expenses = await getSplitGroupExpenses(splitGroupId);
+  if (expenses.length === 0) return;
+
+  const householdId = getHouseholdId();
+  const firstExpense = expenses[0];
+  const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0);
 
   await runTransaction(db, async (transaction) => {
+    // 분할된 지출 모두 삭제
     for (const expense of expenses) {
       const docRef = doc(db, COLLECTION_NAME, expense.id);
       transaction.delete(docRef);
     }
+
+    // 원래 금액의 단일 지출 생성
+    const newDocRef = doc(collection(db, COLLECTION_NAME));
+    transaction.set(newDocRef, {
+      date: firstExpense.date,
+      time: firstExpense.time || '09:00',
+      merchant: firstExpense.merchant,
+      amount: totalAmount,
+      category: firstExpense.category,
+      cardType: firstExpense.cardType || 'main',
+      householdId,
+      createdAt: Timestamp.now(),
+    });
   });
 }
 
