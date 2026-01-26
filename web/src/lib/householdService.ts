@@ -46,6 +46,7 @@ export async function createHousehold(name?: string, customKey?: string): Promis
   await setDoc(doc(householdsCollection, key), {
     name: name || key,
     createdAt: serverTimestamp(),
+    defaultCategoryKey: 'etc', // 기본 카테고리: 기타
   });
 
   return key;
