@@ -96,8 +96,9 @@ export default function AddExpenseModal({
               <button
                 type="button"
                 onClick={() => {
+                  if (!showSplitInput) setSplitMonths(2);
+                  else setSplitMonths(1);
                   setShowSplitInput(!showSplitInput);
-                  if (showSplitInput) setSplitMonths(1);
                 }}
                 className={`px-3 py-2 rounded-lg border transition-colors ${
                   showSplitInput
