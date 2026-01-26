@@ -62,7 +62,6 @@ export default function SettingsPage() {
 
   // 기본 카테고리 설정
   const [defaultCategory, setDefaultCategory] = useState<string>('');
-  const [isDefaultCategoryOpen, setIsDefaultCategoryOpen] = useState(false);
 
   // iOS 여부
   const [isIOSDevice, setIsIOSDevice] = useState(false);
@@ -388,8 +387,13 @@ export default function SettingsPage() {
                             {category.label.slice(0, 2)}
                           </div>
                           <div>
-                            <div className="font-medium text-slate-800">
+                            <div className="font-medium text-slate-800 flex items-center gap-2">
                               {category.label}
+                              {defaultCategory === category.key && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-600">
+                                  기본
+                                </span>
+                              )}
                             </div>
                             <div className="text-sm text-slate-500">
                               {category.budget
@@ -398,7 +402,21 @@ export default function SettingsPage() {
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                          {/* 기본 카테고리 설정 버튼 */}
+                          <button
+                            onClick={() => handleDefaultCategoryChange(category.key)}
+                            className={`p-2 rounded-lg transition-colors ${
+                              defaultCategory === category.key
+                                ? 'text-blue-500 bg-blue-50'
+                                : 'text-slate-400 hover:text-blue-500 hover:bg-blue-50'
+                            }`}
+                            title="기본 카테고리로 설정"
+                          >
+                            <svg className="w-5 h-5" fill={defaultCategory === category.key ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                            </svg>
+                          </button>
                           <button
                             onClick={() => handleStartEdit(category)}
                             className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
@@ -730,66 +748,6 @@ export default function SettingsPage() {
                   <span className="font-medium">새 규칙 추가</span>
                 </button>
               )}
-            </div>
-          )}
-        </div>
-
-        {/* 기본 카테고리 섹션 - 아코디언 */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <button
-            onClick={() => setIsDefaultCategoryOpen(!isDefaultCategoryOpen)}
-            className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium"
-                style={{ backgroundColor: defaultCategory ? getCategoryColor(defaultCategory) : '#9CA3AF' }}
-              >
-                {defaultCategory ? getCategoryLabel(defaultCategory).slice(0, 2) : '?'}
-              </div>
-              <div className="text-left">
-                <div className="font-semibold text-slate-800">기본 카테고리</div>
-                <div className="text-sm text-slate-500">
-                  {defaultCategory ? getCategoryLabel(defaultCategory) : '미설정'}
-                </div>
-              </div>
-            </div>
-            <svg
-              className={`w-5 h-5 text-slate-400 transition-transform ${isDefaultCategoryOpen ? 'rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-
-          {isDefaultCategoryOpen && (
-            <div className="border-t border-slate-100 p-4">
-              <p className="text-sm text-slate-500 mb-4">
-                가맹점 규칙에 해당하지 않는 지출의 기본 카테고리입니다.
-              </p>
-              <div className="grid grid-cols-4 gap-2">
-                {activeCategories.map((cat) => (
-                  <button
-                    key={cat.key}
-                    onClick={() => handleDefaultCategoryChange(cat.key)}
-                    className={`flex flex-col items-center p-3 rounded-xl border-2 transition-all ${
-                      defaultCategory === cat.key
-                        ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
-                        : 'border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div
-                      className="w-8 h-8 rounded-full mb-2"
-                      style={{ backgroundColor: cat.color }}
-                    />
-                    <span className="text-xs text-slate-700 text-center">
-                      {cat.label}
-                    </span>
-                  </button>
-                ))}
-              </div>
             </div>
           )}
         </div>
