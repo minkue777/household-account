@@ -345,22 +345,6 @@ export default function ExpenseEditModal({
             </div>
           )}
 
-          {/* 나누기 버튼 */}
-          {onOpenSplit && !expense.splitGroupId && (
-            <button
-              onClick={() => {
-                onClose();
-                onOpenSplit();
-              }}
-              className="w-full py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 mt-4"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-              </svg>
-              지출 내역 분리
-            </button>
-          )}
-
           {/* 삭제 확인 */}
           {showDeleteConfirm ? (
             <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl">
@@ -386,49 +370,66 @@ export default function ExpenseEditModal({
               </div>
             </div>
           ) : (
-            <div className="flex gap-3 mt-4">
-              {onDelete && (
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="flex-1 py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                >
-                  삭제
-                </button>
-              )}
-              {onNotifyPartner && (
-                <button
-                  onClick={() => {
-                    onNotifyPartner();
-                    onClose();
-                  }}
-                  className="flex-1 py-2 px-4 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-                >
-                  또니에게 전송
-                </button>
-              )}
-              {showSplitInput && onSplitMonths ? (
-                <button
-                  onClick={() => {
-                    const months = parseInt(splitMonthsInput, 10);
-                    if (isNaN(months) || months < 2) {
-                      alert('2개월 이상부터 분할할 수 있습니다.');
-                      return;
-                    }
-                    onSplitMonths(months);
-                    onClose();
-                  }}
-                  className="flex-1 py-2 px-4 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
-                >
-                  분할 적용
-                </button>
-              ) : (
-                <button
-                  onClick={handleSave}
-                  className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                >
-                  저장
-                </button>
-              )}
+            <div className="mt-4 space-y-2">
+              {/* 1행: 지출 내역 분리, 삭제 */}
+              <div className="flex gap-2">
+                {onOpenSplit && !expense.splitGroupId && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenSplit();
+                    }}
+                    className="flex-1 py-2 px-4 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
+                  >
+                    지출 내역 분리
+                  </button>
+                )}
+                {onDelete && (
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="flex-1 py-2 px-4 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors"
+                  >
+                    삭제
+                  </button>
+                )}
+              </div>
+              {/* 2행: 또니에게 전송, 저장/분할 적용 */}
+              <div className="flex gap-2">
+                {onNotifyPartner && (
+                  <button
+                    onClick={() => {
+                      onNotifyPartner();
+                      onClose();
+                    }}
+                    className="flex-1 py-2 px-4 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
+                  >
+                    또니에게 전송
+                  </button>
+                )}
+                {showSplitInput && onSplitMonths ? (
+                  <button
+                    onClick={() => {
+                      const months = parseInt(splitMonthsInput, 10);
+                      if (isNaN(months) || months < 2) {
+                        alert('2개월 이상부터 분할할 수 있습니다.');
+                        return;
+                      }
+                      onSplitMonths(months);
+                      onClose();
+                    }}
+                    className="flex-1 py-2 px-4 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+                  >
+                    분할 적용
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSave}
+                    className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                  >
+                    저장
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
