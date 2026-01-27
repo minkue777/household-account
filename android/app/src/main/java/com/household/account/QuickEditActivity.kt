@@ -74,6 +74,7 @@ class QuickEditActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         setupWindowStyle()
+        setFinishOnTouchOutside(false)  // 외부 터치해도 닫히지 않음
         setContentView(R.layout.activity_quick_edit)
 
         // Intent 데이터 추출
