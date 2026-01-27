@@ -28,6 +28,7 @@ export default function SearchExpenseEdit({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [splitMonthsInput, setSplitMonthsInput] = useState('2');
   const [showSplitInput, setShowSplitInput] = useState(false);
+  const [splitMonthsError, setSplitMonthsError] = useState(false);
   const [showSplitModal, setShowSplitModal] = useState(false);
   const [editSplitMonths, setEditSplitMonths] = useState(expense.splitTotal || 2);
   const [showEditSplitGroup, setShowEditSplitGroup] = useState(false);
@@ -41,6 +42,7 @@ export default function SearchExpenseEdit({
     setShowDeleteConfirm(false);
     setSplitMonthsInput('2');
     setShowSplitInput(false);
+    setSplitMonthsError(false);
     setEditSplitMonths(expense.splitTotal || 2);
     setShowEditSplitGroup(false);
   }, [expense]);
@@ -222,24 +224,36 @@ export default function SearchExpenseEdit({
               )}
             </div>
             {showSplitInput && (
-              <div className="mt-2 flex items-center gap-2">
-                <input
-                  type="number"
-                  min="2"
-                  max="24"
-                  value={splitMonthsInput}
-                  onChange={(e) => setSplitMonthsInput(e.target.value)}
-                  onBlur={(e) => {
-                    const val = parseInt(e.target.value, 10);
-                    if (isNaN(val) || val < 2) setSplitMonthsInput('2');
-                    else if (val > 24) setSplitMonthsInput('24');
-                  }}
-                  className="w-20 px-3 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-center"
-                />
-                <span className="text-sm text-slate-600">개월 분할</span>
-                <span className="text-sm text-purple-600 ml-auto">
-                  월 {Math.floor(expense.amount / (parseInt(splitMonthsInput, 10) || 2)).toLocaleString()}원
-                </span>
+              <div className="mt-2">
+                <div className={`flex items-center gap-2 ${splitMonthsError ? 'animate-shake' : ''}`}>
+                  <input
+                    type="number"
+                    min="2"
+                    max="24"
+                    value={splitMonthsInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSplitMonthsInput(val);
+                      const num = parseInt(val, 10);
+                      if (val && !isNaN(num) && num < 2) {
+                        setSplitMonthsError(true);
+                        setTimeout(() => setSplitMonthsError(false), 500);
+                      }
+                    }}
+                    className={`w-20 px-3 py-1.5 border rounded-lg focus:outline-none focus:ring-2 text-center ${
+                      splitMonthsError
+                        ? 'border-red-400 focus:ring-red-400'
+                        : 'border-slate-300 focus:ring-purple-500'
+                    }`}
+                  />
+                  <span className="text-sm text-slate-600">개월 분할</span>
+                  <span className="text-sm text-purple-600 ml-auto">
+                    월 {Math.floor(expense.amount / (parseInt(splitMonthsInput, 10) || 2)).toLocaleString()}원
+                  </span>
+                </div>
+                {splitMonthsError && (
+                  <p className="text-xs text-red-500 mt-1">2개월 이상부터 분할할 수 있습니다</p>
+                )}
               </div>
             )}
           </div>
