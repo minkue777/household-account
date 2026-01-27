@@ -163,7 +163,7 @@
             android:maxLines="1"
             android:layout_marginBottom="12dp" />
 
-        <!-- 버튼들 (나누기, 삭제) -->
+        <!-- 버튼들 1행 (분리, 또니에게) - 회색 배경 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -174,52 +174,52 @@
                 android:id="@+id/btnSplit"
                 android:layout_width="0dp"
                 android:layout_weight="1"
-                android:layout_height="40dp"
-                android:layout_marginEnd="6dp"
-                android:text="나누기"
-                android:textColor="#475569"
-                android:textSize="13sp"
-                android:backgroundTint="#F1F5F9" />
-
-            <Button
-                android:id="@+id/btnDelete"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="40dp"
-                android:layout_marginStart="6dp"
-                android:text="삭제"
-                android:textColor="#EF4444"
-                android:textSize="13sp"
-                android:backgroundTint="#FEF2F2" />
-        </LinearLayout>
-
-        <!-- 버튼들 (또니에게 전송, 저장) -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
+                android:layout_height="44dp"
+                android:layout_marginEnd="4dp"
+                android:text="분리"
+                android:textColor="#1E293B"
+                android:textSize="14sp"
+                android:backgroundTint="#E2E8F0" />
 
             <Button
                 android:id="@+id/btnNotify"
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="44dp"
-                android:layout_marginEnd="6dp"
-                android:text="또니에게 전송"
-                android:textColor="#0D9488"
+                android:layout_marginStart="4dp"
+                android:text="또니에게"
+                android:textColor="#1E293B"
                 android:textSize="14sp"
-                android:backgroundTint="#F0FDFA" />
+                android:backgroundTint="#E2E8F0" />
+        </LinearLayout>
+
+        <!-- 버튼들 2행 (삭제, 저장) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnDelete"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="44dp"
+                android:layout_marginEnd="4dp"
+                android:text="삭제"
+                android:textColor="#1E293B"
+                android:textSize="14sp"
+                android:backgroundTint="#E2E8F0" />
 
             <Button
                 android:id="@+id/btnSave"
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="44dp"
-                android:layout_marginStart="6dp"
+                android:layout_marginStart="4dp"
                 android:text="저장"
-                android:textColor="#3B82F6"
+                android:textColor="#FFFFFF"
                 android:textSize="14sp"
-                android:backgroundTint="#EFF6FF" />
+                android:backgroundTint="#3B82F6" />
         </LinearLayout>
 
         <!-- 숨김 처리 (코드 호환용) -->
