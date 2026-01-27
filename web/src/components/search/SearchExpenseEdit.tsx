@@ -381,7 +381,7 @@ export default function SearchExpenseEdit({
               <button
                 onClick={() => {
                   const months = parseInt(splitMonthsInput, 10);
-                  if (months >= 2 && confirm(`이 지출을 ${months}개월로 분할하시겠습니까?\n기존 지출은 삭제되고 분할된 지출이 등록됩니다.`)) {
+                  if (months >= 2) {
                     handleSplitMonths(months);
                   }
                 }}
