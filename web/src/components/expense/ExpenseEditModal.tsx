@@ -399,7 +399,7 @@ export default function ExpenseEditModal({
                       onNotifyPartner();
                       onClose();
                     }}
-                    className="flex-1 py-2.5 px-4 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-colors font-medium"
+                    className="flex-1 py-2.5 px-4 bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-100 transition-colors font-medium"
                   >
                     또니에게 전송
                   </button>
@@ -415,14 +415,14 @@ export default function ExpenseEditModal({
                       onSplitMonths(months);
                       onClose();
                     }}
-                    className="flex-1 py-2.5 px-4 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-colors font-medium"
+                    className="flex-1 py-2.5 px-4 bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-100 transition-colors font-medium"
                   >
                     분할 적용
                   </button>
                 ) : (
                   <button
                     onClick={handleSave}
-                    className="flex-1 py-2.5 px-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-medium"
+                    className="flex-1 py-2.5 px-4 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors font-medium"
                   >
                     저장
                   </button>

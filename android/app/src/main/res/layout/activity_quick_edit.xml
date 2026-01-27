@@ -206,9 +206,9 @@
                 android:layout_height="44dp"
                 android:layout_marginEnd="6dp"
                 android:text="또니에게 전송"
-                android:textColor="@android:color/white"
+                android:textColor="#8B5CF6"
                 android:textSize="14sp"
-                android:backgroundTint="#8B5CF6" />
+                android:backgroundTint="#F3E8FF" />
 
             <Button
                 android:id="@+id/btnSave"
@@ -217,9 +217,9 @@
                 android:layout_height="44dp"
                 android:layout_marginStart="6dp"
                 android:text="저장"
-                android:textColor="@android:color/white"
+                android:textColor="#3B82F6"
                 android:textSize="14sp"
-                android:backgroundTint="#3B82F6" />
+                android:backgroundTint="#EFF6FF" />
         </LinearLayout>
 
         <!-- 숨김 처리 (코드 호환용) -->
