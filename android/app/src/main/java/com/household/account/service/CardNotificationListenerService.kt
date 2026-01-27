@@ -213,9 +213,7 @@ class CardNotificationListenerService : NotificationListenerService() {
 
             val intent = Intent(this, QuickEditActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
-                        Intent.FLAG_ACTIVITY_NO_HISTORY
+                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
                 putExtra(QuickEditActivity.EXTRA_EXPENSE_ID, expense.id)
                 putExtra(QuickEditActivity.EXTRA_MERCHANT, expense.merchant)
                 putExtra(QuickEditActivity.EXTRA_AMOUNT, expense.amount)
