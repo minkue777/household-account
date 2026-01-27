@@ -188,6 +188,7 @@ export default function ExpenseItem({
           amount: monthlyAmount,
           category: expense.category,
           cardType: expense.cardType || 'main',
+          memo: expense.memo,
           splitGroupId,
           splitIndex: i + 1,
           splitTotal: months,

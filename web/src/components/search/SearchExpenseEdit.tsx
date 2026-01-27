@@ -107,6 +107,7 @@ export default function SearchExpenseEdit({
           amount: monthlyAmount,
           category: expense.category,
           cardType: expense.cardType || 'main',
+          memo: expense.memo,
           splitGroupId,
           splitIndex: i + 1,
           splitTotal: months,
@@ -230,9 +231,12 @@ export default function SearchExpenseEdit({
                     type="number"
                     min="2"
                     max="24"
+                    step="1"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={splitMonthsInput}
                     onChange={(e) => {
-                      const val = e.target.value;
+                      const val = e.target.value.replace(/[^0-9]/g, '');
                       setSplitMonthsInput(val);
                       const num = parseInt(val, 10);
                       setSplitMonthsError(val !== '' && !isNaN(num) && num < 2);

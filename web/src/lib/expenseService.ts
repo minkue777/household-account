@@ -432,7 +432,7 @@ export async function cancelSplitGroup(splitGroupId: string): Promise<void> {
       transaction.delete(docRef);
     }
 
-    // 원래 금액의 단일 지출 생성
+    // 원래 금액의 단일 지출 생성 (첫 번째 항목의 메모 유지)
     const newDocRef = doc(collection(db, COLLECTION_NAME));
     transaction.set(newDocRef, {
       date: firstExpense.date,
@@ -441,6 +441,7 @@ export async function cancelSplitGroup(splitGroupId: string): Promise<void> {
       amount: totalAmount,
       category: firstExpense.category,
       cardType: firstExpense.cardType || 'main',
+      memo: firstExpense.memo || '',
       householdId,
       createdAt: Timestamp.now(),
     });
@@ -493,6 +494,7 @@ export async function updateSplitGroup(
         amount: monthlyAmount,
         category: firstExpense.category,
         cardType: firstExpense.cardType || 'main',
+        memo: firstExpense.memo || '',
         splitGroupId: newGroupId,
         splitIndex: i + 1,
         splitTotal: newMonths,
