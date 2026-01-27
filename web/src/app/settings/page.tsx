@@ -460,12 +460,6 @@ export default function SettingsPage() {
                       // 보기 모드
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          {/* 드래그 핸들 */}
-                          <div className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600">
-                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z" />
-                            </svg>
-                          </div>
                           <div
                             className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium"
                             style={{ backgroundColor: category.color }}
