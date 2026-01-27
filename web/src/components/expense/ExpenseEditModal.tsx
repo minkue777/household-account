@@ -393,14 +393,16 @@ export default function ExpenseEditModal({
                   삭제
                 </button>
               )}
-              {showSplitInput && parseInt(splitMonthsInput, 10) >= 2 && onSplitMonths ? (
+              {showSplitInput && onSplitMonths ? (
                 <button
                   onClick={() => {
                     const months = parseInt(splitMonthsInput, 10);
-                    if (months >= 2) {
-                      onSplitMonths(months);
-                      onClose();
+                    if (isNaN(months) || months < 2) {
+                      alert('2개월 이상부터 분할할 수 있습니다.');
+                      return;
                     }
+                    onSplitMonths(months);
+                    onClose();
                   }}
                   className="flex-1 py-2 px-4 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
                 >
