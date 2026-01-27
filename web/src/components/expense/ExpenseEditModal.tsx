@@ -377,7 +377,7 @@ export default function ExpenseEditModal({
                       onClose();
                       onOpenSplit();
                     }}
-                    className="flex-1 py-2 px-4 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
+                    className="flex-1 py-2.5 px-4 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-colors font-medium"
                   >
                     지출 내역 분리
                   </button>
@@ -385,7 +385,7 @@ export default function ExpenseEditModal({
                 {onDelete && (
                   <button
                     onClick={() => setShowDeleteConfirm(true)}
-                    className="flex-1 py-2 px-4 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors"
+                    className="flex-1 py-2.5 px-4 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors font-medium"
                   >
                     삭제
                   </button>
@@ -399,7 +399,7 @@ export default function ExpenseEditModal({
                       onNotifyPartner();
                       onClose();
                     }}
-                    className="flex-1 py-2 px-4 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
+                    className="flex-1 py-2.5 px-4 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-colors font-medium"
                   >
                     또니에게 전송
                   </button>
@@ -415,14 +415,14 @@ export default function ExpenseEditModal({
                       onSplitMonths(months);
                       onClose();
                     }}
-                    className="flex-1 py-2 px-4 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+                    className="flex-1 py-2.5 px-4 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-colors font-medium"
                   >
                     분할 적용
                   </button>
                 ) : (
                   <button
                     onClick={handleSave}
-                    className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                    className="flex-1 py-2.5 px-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-medium"
                   >
                     저장
                   </button>
