@@ -391,7 +391,7 @@ export default function ExpenseEditModal({
                       onClose();
                       onOpenSplit();
                     }}
-                    className="flex-1 py-2.5 px-4 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors font-medium"
+                    className="flex-1 py-2.5 px-4 bg-slate-500 text-white rounded-xl hover:bg-slate-600 transition-colors font-medium"
                   >
                     지출 내역 분리
                   </button>
@@ -399,7 +399,7 @@ export default function ExpenseEditModal({
                 {onDelete && (
                   <button
                     onClick={() => setShowDeleteConfirm(true)}
-                    className="flex-1 py-2.5 px-4 bg-slate-100 text-red-500 rounded-xl hover:bg-red-50 transition-colors font-medium"
+                    className="flex-1 py-2.5 px-4 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors font-medium"
                   >
                     삭제
                   </button>
@@ -413,7 +413,7 @@ export default function ExpenseEditModal({
                       onNotifyPartner();
                       onClose();
                     }}
-                    className="flex-1 py-2.5 px-4 bg-slate-100 text-teal-600 rounded-xl hover:bg-teal-50 transition-colors font-medium"
+                    className="flex-1 py-2.5 px-4 bg-teal-500 text-white rounded-xl hover:bg-teal-600 transition-colors font-medium"
                   >
                     또니에게 전송
                   </button>
