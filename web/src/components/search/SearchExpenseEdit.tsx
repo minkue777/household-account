@@ -398,7 +398,7 @@ export default function SearchExpenseEdit({
               {onDelete && (
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
-                  className="flex-1 py-2.5 px-4 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors font-medium"
+                  className="flex-1 py-2.5 px-4 bg-slate-200 text-slate-800 rounded-xl hover:bg-slate-300 transition-colors font-medium"
                 >
                   삭제
                 </button>
