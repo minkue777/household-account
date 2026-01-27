@@ -235,10 +235,7 @@ export default function SearchExpenseEdit({
                       const val = e.target.value;
                       setSplitMonthsInput(val);
                       const num = parseInt(val, 10);
-                      if (val && !isNaN(num) && num < 2) {
-                        setSplitMonthsError(true);
-                        setTimeout(() => setSplitMonthsError(false), 500);
-                      }
+                      setSplitMonthsError(val !== '' && !isNaN(num) && num < 2);
                     }}
                     className={`w-20 px-3 py-1.5 border rounded-lg focus:outline-none focus:ring-2 text-center ${
                       splitMonthsError
