@@ -383,7 +383,7 @@ export default function ExpenseEditModal({
             </div>
           ) : (
             <div className="mt-4 space-y-2">
-              {/* 1행 */}
+              {/* 1행: 연한 스타일 */}
               <div className="flex gap-2">
                 {onOpenSplit && !expense.splitGroupId && (
                   <button
@@ -391,31 +391,31 @@ export default function ExpenseEditModal({
                       onClose();
                       onOpenSplit();
                     }}
-                    className="flex-1 py-2.5 px-4 bg-slate-500 text-white rounded-xl hover:bg-slate-600 transition-colors font-medium"
+                    className="flex-1 py-2.5 px-4 border border-slate-300 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors font-medium"
                   >
                     지출 내역 분리
                   </button>
                 )}
-                {onDelete && (
-                  <button
-                    onClick={() => setShowDeleteConfirm(true)}
-                    className="flex-1 py-2.5 px-4 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors font-medium"
-                  >
-                    삭제
-                  </button>
-                )}
-              </div>
-              {/* 2행 */}
-              <div className="flex gap-2">
                 {onNotifyPartner && (
                   <button
                     onClick={() => {
                       onNotifyPartner();
                       onClose();
                     }}
-                    className="flex-1 py-2.5 px-4 bg-teal-500 text-white rounded-xl hover:bg-teal-600 transition-colors font-medium"
+                    className="flex-1 py-2.5 px-4 border border-slate-300 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors font-medium"
                   >
                     또니에게 전송
+                  </button>
+                )}
+              </div>
+              {/* 2행: 진한 스타일 */}
+              <div className="flex gap-2">
+                {onDelete && (
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="flex-1 py-2.5 px-4 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors font-medium"
+                  >
+                    삭제
                   </button>
                 )}
                 {showSplitInput && onSplitMonths ? (
