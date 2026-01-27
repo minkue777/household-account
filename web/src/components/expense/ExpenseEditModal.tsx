@@ -410,7 +410,7 @@ export default function ExpenseEditModal({
                       onNotifyPartner();
                       onClose();
                     }}
-                    className="flex-1 py-2.5 px-4 bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-100 transition-colors font-medium"
+                    className="flex-1 py-2.5 px-4 bg-teal-50 text-teal-600 rounded-xl hover:bg-teal-100 transition-colors font-medium"
                   >
                     또니에게 전송
                   </button>
