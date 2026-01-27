@@ -372,60 +372,73 @@ export default function SearchExpenseEdit({
             </div>
           </div>
         ) : (
-          <div className="mt-4 space-y-2">
-            {/* 1행: 지출 내역 분리, 삭제 */}
-            <div className="flex gap-2">
+          <div className="mt-4 space-y-3">
+            {/* 보조 액션: 아이콘 버튼들 */}
+            <div className="flex justify-center gap-6">
               {onSplitExpense && !expense.splitGroupId && (
                 <button
                   onClick={() => setShowSplitModal(true)}
-                  className="flex-1 py-2.5 px-4 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-colors font-medium"
+                  className="flex flex-col items-center gap-1 text-slate-500 hover:text-slate-700 transition-colors"
                 >
-                  지출 내역 분리
+                  <div className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    </svg>
+                  </div>
+                  <span className="text-xs">분리</span>
                 </button>
               )}
-              {onDelete && (
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="flex-1 py-2.5 px-4 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors font-medium"
-                >
-                  삭제
-                </button>
-              )}
-            </div>
-            {/* 2행: 또니에게 전송, 저장/분할 적용 */}
-            <div className="flex gap-2">
               <button
                 onClick={() => {
                   notifyPartner(expense.id);
                   onClose();
                 }}
-                className="flex-1 py-2.5 px-4 bg-teal-50 text-teal-600 rounded-xl hover:bg-teal-100 transition-colors font-medium"
+                className="flex flex-col items-center gap-1 text-teal-500 hover:text-teal-700 transition-colors"
               >
-                또니에게 전송
+                <div className="w-10 h-10 rounded-full bg-teal-50 hover:bg-teal-100 flex items-center justify-center transition-colors">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                </div>
+                <span className="text-xs">전송</span>
               </button>
-              {showSplitInput ? (
+              {onDelete && (
                 <button
-                  onClick={() => {
-                    const months = parseInt(splitMonthsInput, 10);
-                    if (isNaN(months) || months < 2) {
-                      alert('2개월 이상부터 분할할 수 있습니다.');
-                      return;
-                    }
-                    handleSplitMonths(months);
-                  }}
-                  className="flex-1 py-2.5 px-4 bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-100 transition-colors font-medium"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="flex flex-col items-center gap-1 text-red-400 hover:text-red-600 transition-colors"
                 >
-                  분할 적용
-                </button>
-              ) : (
-                <button
-                  onClick={handleSaveEdit}
-                  className="flex-1 py-2.5 px-4 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors font-medium"
-                >
-                  저장
+                  <div className="w-10 h-10 rounded-full bg-red-50 hover:bg-red-100 flex items-center justify-center transition-colors">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </div>
+                  <span className="text-xs">삭제</span>
                 </button>
               )}
             </div>
+            {/* 메인 액션 버튼 */}
+            {showSplitInput ? (
+              <button
+                onClick={() => {
+                  const months = parseInt(splitMonthsInput, 10);
+                  if (isNaN(months) || months < 2) {
+                    alert('2개월 이상부터 분할할 수 있습니다.');
+                    return;
+                  }
+                  handleSplitMonths(months);
+                }}
+                className="w-full py-3 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-colors font-medium"
+              >
+                분할 적용
+              </button>
+            ) : (
+              <button
+                onClick={handleSaveEdit}
+                className="w-full py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-medium"
+              >
+                저장
+              </button>
+            )}
           </div>
         )}
       </div>
