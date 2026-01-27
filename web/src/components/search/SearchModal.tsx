@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Expense } from '@/types/expense';
-import { searchExpenses } from '@/lib/expenseService';
+import { searchExpenses, SplitItem } from '@/lib/expenseService';
 import Portal from '../Portal';
 import SearchResultList from './SearchResultList';
 import SearchExpenseEdit from './SearchExpenseEdit';
@@ -12,9 +12,10 @@ interface SearchModalProps {
   onClose: () => void;
   onExpenseUpdate?: (expenseId: string, data: { amount?: number; memo?: string; category?: string; merchant?: string }) => void;
   onDelete?: (expenseId: string) => void;
+  onSplitExpense?: (expense: Expense, splits: SplitItem[]) => void;
 }
 
-export default function SearchModal({ isOpen, onClose, onExpenseUpdate, onDelete }: SearchModalProps) {
+export default function SearchModal({ isOpen, onClose, onExpenseUpdate, onDelete, onSplitExpense }: SearchModalProps) {
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState<Expense[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -59,6 +60,14 @@ export default function SearchModal({ isOpen, onClose, onExpenseUpdate, onDelete
     if (!onDelete) return;
     await onDelete(id);
     await refreshSearch();
+  };
+
+  // 지출 분리
+  const handleSplitExpense = (expense: Expense, splits: SplitItem[]) => {
+    if (onSplitExpense) {
+      onSplitExpense(expense, splits);
+      refreshSearch();
+    }
   };
 
   // 키워드 변경 시 자동 검색 (debounce 적용)
@@ -178,6 +187,7 @@ export default function SearchModal({ isOpen, onClose, onExpenseUpdate, onDelete
           onClose={() => setSelectedExpense(null)}
           onSave={handleSaveEdit}
           onDelete={onDelete ? handleDelete : undefined}
+          onSplitExpense={onSplitExpense ? handleSplitExpense : undefined}
         />
       )}
     </Portal>

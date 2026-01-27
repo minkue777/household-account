@@ -990,30 +990,34 @@ export default function SettingsPage() {
                 <div className="divide-y divide-slate-100">
                   {recurringExpenses.map((expense) => (
                     <div key={expense.id} className={`p-4 ${editingRecurringId === expense.id ? 'hidden' : ''}`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
                           <div
-                            className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-medium"
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0"
                             style={{ backgroundColor: getCategoryColor(expense.category) }}
                           >
                             {getCategoryLabel(expense.category).slice(0, 2)}
                           </div>
-                          <div>
-                            <div className="font-medium text-slate-800">
-                              {expense.merchant}
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium text-slate-800 flex items-center gap-2">
+                              <span className="truncate">{expense.merchant}</span>
                               {!expense.isActive && (
-                                <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-slate-200 text-slate-500">
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-slate-200 text-slate-500 flex-shrink-0">
                                   비활성
                                 </span>
                               )}
                             </div>
                             <div className="text-sm text-slate-500">
                               매월 {expense.dayOfMonth}일 · {expense.amount.toLocaleString()}원
-                              {expense.memo && <span className="text-slate-400"> · {expense.memo}</span>}
                             </div>
+                            {expense.memo && (
+                              <div className="text-sm text-slate-400 truncate">
+                                {expense.memo}
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           {/* 활성화/비활성화 토글 */}
                           <button
                             onClick={async () => {
@@ -1026,9 +1030,15 @@ export default function SettingsPage() {
                             }`}
                             title={expense.isActive ? '비활성화' : '활성화'}
                           >
-                            <svg className="w-5 h-5" fill={expense.isActive ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+                            {expense.isActive ? (
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            ) : (
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="9" strokeWidth={2} />
+                              </svg>
+                            )}
                           </button>
                           <button
                             onClick={() => handleStartEditRecurring(expense)}

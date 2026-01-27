@@ -319,6 +319,7 @@ export default function Home() {
           onClose={() => setShowSearchModal(false)}
           onExpenseUpdate={handleExpenseUpdate}
           onDelete={handleDeleteExpense}
+          onSplitExpense={handleSplitExpense}
         />
 
         {/* 예산 조정 모달 */}

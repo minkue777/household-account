@@ -6,7 +6,6 @@ import { SplitItem, addExpense, generateSplitGroupId, cancelSplitGroup, updateSp
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import ExpenseEditModal from './ExpenseEditModal';
 import ExpenseSplitModal from './ExpenseSplitModal';
-import { ConfirmDialog } from '../common';
 
 interface ExpenseItemProps {
   expense: Expense;
@@ -52,7 +51,6 @@ export default function ExpenseItem({
   const { getCategoryLabel, getCategoryColor } = useCategoryContext();
 
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showSplitModal, setShowSplitModal] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -264,19 +262,6 @@ export default function ExpenseItem({
           <div className="font-semibold text-slate-800">
             {expense.amount.toLocaleString()}원
           </div>
-          {onDelete && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowDeleteDialog(true);
-              }}
-              className="p-1 text-slate-400 hover:text-red-500 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          )}
         </div>
       </div>
 
@@ -292,22 +277,7 @@ export default function ExpenseItem({
         onSplitMonths={onDelete ? handleSplitMonths : undefined}
         onCancelSplitGroup={expense.splitGroupId ? handleCancelSplitGroup : undefined}
         onUpdateSplitGroup={expense.splitGroupId ? handleUpdateSplitGroup : undefined}
-      />
-
-      {/* 삭제 확인 다이얼로그 */}
-      <ConfirmDialog
-        isOpen={showDeleteDialog}
-        title="삭제 확인"
-        message={`"${expense.merchant}" ${expense.amount.toLocaleString()}원을 삭제하시겠습니까?`}
-        confirmLabel="삭제"
-        variant="danger"
-        onConfirm={() => {
-          if (onDelete) {
-            onDelete(expense.id);
-          }
-          setShowDeleteDialog(false);
-        }}
-        onCancel={() => setShowDeleteDialog(false)}
+        onDelete={onDelete ? () => onDelete(expense.id) : undefined}
       />
 
       {/* 분할 모달 */}

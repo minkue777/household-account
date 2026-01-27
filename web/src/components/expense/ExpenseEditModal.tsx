@@ -17,6 +17,7 @@ interface ExpenseEditModalProps {
   onSplitMonths?: (months: number) => void;
   onCancelSplitGroup?: () => void;
   onUpdateSplitGroup?: (newMonths: number) => void;
+  onDelete?: () => void;
 }
 
 export default function ExpenseEditModal({
@@ -30,6 +31,7 @@ export default function ExpenseEditModal({
   onSplitMonths,
   onCancelSplitGroup,
   onUpdateSplitGroup,
+  onDelete,
 }: ExpenseEditModalProps) {
   const { getCategoryLabel } = useCategoryContext();
 
@@ -38,10 +40,11 @@ export default function ExpenseEditModal({
   const [editMemo, setEditMemo] = useState(expense.memo || '');
   const [editCategory, setEditCategory] = useState(expense.category);
   const [rememberMerchant, setRememberMerchant] = useState(false);
-  const [splitMonths, setSplitMonths] = useState(1);
+  const [splitMonthsInput, setSplitMonthsInput] = useState('2');
   const [showSplitInput, setShowSplitInput] = useState(false);
   const [editSplitMonths, setEditSplitMonths] = useState(expense.splitTotal || 2);
   const [showEditSplitGroup, setShowEditSplitGroup] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // 모달이 열릴 때 상태 초기화
   useEffect(() => {
@@ -51,10 +54,11 @@ export default function ExpenseEditModal({
       setEditMemo(expense.memo || '');
       setEditCategory(expense.category);
       setRememberMerchant(false);
-      setSplitMonths(1);
+      setSplitMonthsInput('2');
       setShowSplitInput(false);
       setEditSplitMonths(expense.splitTotal || 2);
       setShowEditSplitGroup(false);
+      setShowDeleteConfirm(false);
     }
   }, [isOpen, expense]);
 
@@ -95,16 +99,30 @@ export default function ExpenseEditModal({
   return (
     <Portal>
       <div
-        className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[9999] flex items-start justify-center pt-20 pb-4 px-4 overflow-y-auto"
+        className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-[9999] flex items-start justify-center pt-16 px-4 pb-4 overflow-y-auto"
         onClick={onClose}
       >
         <div
-          className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl"
+          className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
           onClick={(e) => e.stopPropagation()}
         >
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">
-            지출 수정
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-slate-800">지출 수정</h3>
+            <button
+              onClick={onClose}
+              className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* 날짜/시간 정보 */}
+          <div className="text-sm text-slate-500 mb-4">
+            {expense.date} {expense.time && `· ${expense.time}`}
+            {expense.cardLastFour && ` · ${expense.cardLastFour}`}
+          </div>
 
           <div className="space-y-4">
             {/* 가맹점명 */}
@@ -132,12 +150,11 @@ export default function ExpenseEditModal({
                     onChange={setEditAmount}
                   />
                 </div>
-                {onSplitMonths && (
+                {onSplitMonths && !expense.splitGroupId && (
                   <button
                     type="button"
                     onClick={() => {
-                      if (!showSplitInput) setSplitMonths(2);
-                      else setSplitMonths(1);
+                      if (!showSplitInput) setSplitMonthsInput('2');
                       setShowSplitInput(!showSplitInput);
                     }}
                     className={`px-3 py-2 rounded-lg border transition-colors ${
@@ -157,13 +174,18 @@ export default function ExpenseEditModal({
                     type="number"
                     min="2"
                     max="24"
-                    value={splitMonths}
-                    onChange={(e) => setSplitMonths(Math.max(2, parseInt(e.target.value, 10) || 2))}
+                    value={splitMonthsInput}
+                    onChange={(e) => setSplitMonthsInput(e.target.value)}
+                    onBlur={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (isNaN(val) || val < 2) setSplitMonthsInput('2');
+                      else if (val > 24) setSplitMonthsInput('24');
+                    }}
                     className="w-20 px-3 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-center"
                   />
                   <span className="text-sm text-slate-600">개월 분할</span>
                   <span className="text-sm text-purple-600 ml-auto">
-                    월 {Math.floor(expense.amount / splitMonths).toLocaleString()}원
+                    월 {Math.floor(expense.amount / (parseInt(splitMonthsInput, 10) || 2)).toLocaleString()}원
                   </span>
                 </div>
               )}
@@ -337,34 +359,63 @@ export default function ExpenseEditModal({
             </button>
           )}
 
-          <div className="flex gap-3 mt-4">
-            <button
-              onClick={onClose}
-              className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
-            >
-              취소
-            </button>
-            {showSplitInput && splitMonths > 1 && onSplitMonths ? (
-              <button
-                onClick={() => {
-                  if (confirm(`이 지출을 ${splitMonths}개월로 분할하시겠습니까?\n기존 지출은 삭제되고 분할된 지출이 등록됩니다.`)) {
-                    onSplitMonths(splitMonths);
+          {/* 삭제 확인 */}
+          {showDeleteConfirm ? (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl">
+              <p className="text-sm text-red-700 mb-3">
+                정말 삭제하시겠습니까?
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={() => {
+                    onDelete?.();
                     onClose();
-                  }
-                }}
-                className="flex-1 py-2 px-4 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
-              >
-                분할 적용
-              </button>
-            ) : (
-              <button
-                onClick={handleSave}
-                className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-              >
-                저장
-              </button>
-            )}
-          </div>
+                  }}
+                  className="flex-1 py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                >
+                  삭제
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-3 mt-4">
+              {onDelete && (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="flex-1 py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                >
+                  삭제
+                </button>
+              )}
+              {showSplitInput && parseInt(splitMonthsInput, 10) >= 2 && onSplitMonths ? (
+                <button
+                  onClick={() => {
+                    const months = parseInt(splitMonthsInput, 10);
+                    if (months >= 2 && confirm(`이 지출을 ${months}개월로 분할하시겠습니까?\n기존 지출은 삭제되고 분할된 지출이 등록됩니다.`)) {
+                      onSplitMonths(months);
+                      onClose();
+                    }
+                  }}
+                  className="flex-1 py-2 px-4 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+                >
+                  분할 적용
+                </button>
+              ) : (
+                <button
+                  onClick={handleSave}
+                  className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                >
+                  저장
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </Portal>
