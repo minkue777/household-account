@@ -383,61 +383,65 @@ export default function ExpenseEditModal({
             </div>
           ) : (
             <div className="mt-4 space-y-2">
-              {/* 메인 액션 버튼 */}
-              {showSplitInput && onSplitMonths ? (
-                <button
-                  onClick={() => {
-                    const months = parseInt(splitMonthsInput, 10);
-                    if (isNaN(months) || months < 2) {
-                      alert('2개월 이상부터 분할할 수 있습니다.');
-                      return;
-                    }
-                    onSplitMonths(months);
-                    onClose();
-                  }}
-                  className="w-full py-3 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-colors font-medium"
-                >
-                  분할 적용
-                </button>
-              ) : (
-                <button
-                  onClick={handleSave}
-                  className="w-full py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-medium"
-                >
-                  저장
-                </button>
-              )}
-              {/* 보조 액션 버튼들 */}
-              {onNotifyPartner && (
-                <button
-                  onClick={() => {
-                    onNotifyPartner();
-                    onClose();
-                  }}
-                  className="w-full py-2.5 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors"
-                >
-                  또니에게 전송
-                </button>
-              )}
-              {onOpenSplit && !expense.splitGroupId && (
-                <button
-                  onClick={() => {
-                    onClose();
-                    onOpenSplit();
-                  }}
-                  className="w-full py-2.5 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors"
-                >
-                  지출 내역 분리
-                </button>
-              )}
-              {onDelete && (
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="w-full py-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                >
-                  삭제
-                </button>
-              )}
+              {/* 1행 */}
+              <div className="flex gap-2">
+                {onOpenSplit && !expense.splitGroupId && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenSplit();
+                    }}
+                    className="flex-1 py-2.5 px-4 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors font-medium"
+                  >
+                    지출 내역 분리
+                  </button>
+                )}
+                {onDelete && (
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="flex-1 py-2.5 px-4 bg-slate-100 text-red-500 rounded-xl hover:bg-red-50 transition-colors font-medium"
+                  >
+                    삭제
+                  </button>
+                )}
+              </div>
+              {/* 2행 */}
+              <div className="flex gap-2">
+                {onNotifyPartner && (
+                  <button
+                    onClick={() => {
+                      onNotifyPartner();
+                      onClose();
+                    }}
+                    className="flex-1 py-2.5 px-4 bg-slate-100 text-teal-600 rounded-xl hover:bg-teal-50 transition-colors font-medium"
+                  >
+                    또니에게 전송
+                  </button>
+                )}
+                {showSplitInput && onSplitMonths ? (
+                  <button
+                    onClick={() => {
+                      const months = parseInt(splitMonthsInput, 10);
+                      if (isNaN(months) || months < 2) {
+                        alert('2개월 이상부터 분할할 수 있습니다.');
+                        return;
+                      }
+                      onSplitMonths(months);
+                      onClose();
+                    }}
+                    className="flex-1 py-2.5 px-4 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-colors font-medium"
+                  >
+                    분할 적용
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSave}
+                    className="flex-1 py-2.5 px-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-medium"
+                  >
+                    저장
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
