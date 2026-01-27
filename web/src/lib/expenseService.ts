@@ -75,6 +75,14 @@ export async function updateExpense(id: string, data: Partial<Expense>): Promise
 }
 
 /**
+ * 또니에게 전송 (notifyPartner 플래그 설정)
+ */
+export async function notifyPartner(id: string): Promise<void> {
+  const docRef = doc(db, COLLECTION_NAME, id);
+  await updateDoc(docRef, { notifyPartner: true });
+}
+
+/**
  * 지출 삭제
  */
 export async function deleteExpense(id: string): Promise<void> {

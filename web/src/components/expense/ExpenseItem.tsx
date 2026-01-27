@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Expense } from '@/types/expense';
-import { SplitItem, addExpense, generateSplitGroupId, cancelSplitGroup, updateSplitGroup } from '@/lib/expenseService';
+import { SplitItem, addExpense, generateSplitGroupId, cancelSplitGroup, updateSplitGroup, notifyPartner } from '@/lib/expenseService';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import ExpenseEditModal from './ExpenseEditModal';
 import ExpenseSplitModal from './ExpenseSplitModal';
@@ -278,6 +278,7 @@ export default function ExpenseItem({
         onCancelSplitGroup={expense.splitGroupId ? handleCancelSplitGroup : undefined}
         onUpdateSplitGroup={expense.splitGroupId ? handleUpdateSplitGroup : undefined}
         onDelete={onDelete ? () => onDelete(expense.id) : undefined}
+        onNotifyPartner={() => notifyPartner(expense.id)}
       />
 
       {/* 분할 모달 */}

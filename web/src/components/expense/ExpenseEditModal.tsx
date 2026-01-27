@@ -18,6 +18,7 @@ interface ExpenseEditModalProps {
   onCancelSplitGroup?: () => void;
   onUpdateSplitGroup?: (newMonths: number) => void;
   onDelete?: () => void;
+  onNotifyPartner?: () => void;
 }
 
 export default function ExpenseEditModal({
@@ -32,6 +33,7 @@ export default function ExpenseEditModal({
   onCancelSplitGroup,
   onUpdateSplitGroup,
   onDelete,
+  onNotifyPartner,
 }: ExpenseEditModalProps) {
   const { getCategoryLabel } = useCategoryContext();
 
@@ -391,6 +393,17 @@ export default function ExpenseEditModal({
                   className="flex-1 py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                 >
                   삭제
+                </button>
+              )}
+              {onNotifyPartner && (
+                <button
+                  onClick={() => {
+                    onNotifyPartner();
+                    onClose();
+                  }}
+                  className="flex-1 py-2 px-4 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                >
+                  또니에게 전송
                 </button>
               )}
               {showSplitInput && onSplitMonths ? (

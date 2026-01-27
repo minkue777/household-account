@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Expense } from '@/types/expense';
-import { SplitItem, addExpense, generateSplitGroupId, cancelSplitGroup, updateSplitGroup } from '@/lib/expenseService';
+import { SplitItem, addExpense, generateSplitGroupId, cancelSplitGroup, updateSplitGroup, notifyPartner } from '@/lib/expenseService';
 import { CategorySelector, AmountInput } from '../common';
 import ExpenseSplitModal from '../expense/ExpenseSplitModal';
 
@@ -377,6 +377,15 @@ export default function SearchExpenseEdit({
                 삭제
               </button>
             )}
+            <button
+              onClick={() => {
+                notifyPartner(expense.id);
+                onClose();
+              }}
+              className="flex-1 py-2 px-4 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+            >
+              또니에게 전송
+            </button>
             {showSplitInput ? (
               <button
                 onClick={() => {
