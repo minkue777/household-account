@@ -330,10 +330,8 @@ export default function ExpenseEditModal({
                   {onCancelSplitGroup && (
                     <button
                       onClick={() => {
-                        if (confirm('분할을 취소하고 원래 금액으로 합치시겠습니까?')) {
-                          onCancelSplitGroup();
-                          onClose();
-                        }
+                        onCancelSplitGroup();
+                        onClose();
                       }}
                       className="flex-1 py-2 px-3 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600"
                     >

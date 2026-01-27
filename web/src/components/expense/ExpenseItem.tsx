@@ -165,6 +165,10 @@ export default function ExpenseItem({
   // 월별 분할 처리 (여러 달에 걸쳐 분할)
   const handleSplitMonths = async (months: number) => {
     if (!onDelete) return;
+    if (months < 2) {
+      alert('2개월 이상부터 분할할 수 있습니다.');
+      return;
+    }
 
     const monthlyAmount = Math.floor(expense.amount / months);
     const baseDate = new Date(expense.date);

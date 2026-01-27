@@ -82,6 +82,10 @@ export default function SearchExpenseEdit({
   // 월별 분할 처리 (여러 달에 걸쳐 분할)
   const handleSplitMonths = async (months: number) => {
     if (!onDelete) return;
+    if (months < 2) {
+      alert('2개월 이상부터 분할할 수 있습니다.');
+      return;
+    }
 
     const monthlyAmount = Math.floor(expense.amount / months);
     const baseDate = new Date(expense.date);
@@ -320,9 +324,7 @@ export default function SearchExpenseEdit({
                 </button>
                 <button
                   onClick={() => {
-                    if (confirm('분할을 취소하고 원래 금액으로 합치시겠습니까?')) {
-                      handleCancelSplitGroup();
-                    }
+                    handleCancelSplitGroup();
                   }}
                   className="flex-1 py-2 px-3 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600"
                 >
