@@ -41,7 +41,7 @@ export default function BalanceCards({
     return (
         <div className={`grid grid-cols-2 gap-2 ${className}`}>
             {/* 1. 경기지역화폐 카드 */}
-            <div className="relative overflow-hidden bg-white/80 backdrop-blur-xl border border-white/60 rounded-xl p-2.5 shadow-md">
+            <div className="bg-white/80 backdrop-blur-xl border border-white/60 rounded-xl p-2.5 shadow-md">
                 <div className="flex items-center gap-1.5 mb-1">
                     <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center border border-blue-100 text-blue-500">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -53,12 +53,10 @@ export default function BalanceCards({
                 <div className="text-lg font-bold text-slate-800 tracking-tight font-[family-name:var(--font-inter)]">
                     784,694<span className="text-xs font-medium text-slate-400 ml-0.5">원</span>
                 </div>
-                {/* 장식용 그래픽 */}
-                <div className="absolute -right-3 -top-3 w-14 h-14 bg-blue-400/20 rounded-full blur-2xl" />
             </div>
 
             {/* 2. 남은 예산 카드 */}
-            <div className="relative overflow-hidden bg-white/80 backdrop-blur-xl border border-white/60 rounded-xl p-2.5 shadow-md">
+            <div className="bg-white/80 backdrop-blur-xl border border-white/60 rounded-xl p-2.5 shadow-md">
                 <div className="flex items-center gap-1.5 mb-1">
                     <div className={`w-6 h-6 rounded-full flex items-center justify-center border ${isOverBudget
                             ? 'bg-red-50 border-red-100 text-red-500'
@@ -75,8 +73,6 @@ export default function BalanceCards({
                 <div className={`text-lg font-bold tracking-tight font-[family-name:var(--font-inter)] ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
                     {isOverBudget && '-'}{Math.abs(remaining).toLocaleString()}<span className={`text-xs font-medium ml-0.5 ${isOverBudget ? 'text-red-300' : 'text-slate-400'}`}>원</span>
                 </div>
-                {/* 장식용 그래픽 */}
-                <div className={`absolute -right-3 -top-3 w-14 h-14 rounded-full blur-2xl ${isOverBudget ? 'bg-red-400/20' : 'bg-emerald-400/20'}`} />
             </div>
         </div>
     );
