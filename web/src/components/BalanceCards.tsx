@@ -41,7 +41,7 @@ export default function BalanceCards({
     return (
         <div className={`grid grid-cols-2 gap-2 ${className}`}>
             {/* 1. 경기지역화폐 카드 */}
-            <div className="relative group overflow-hidden bg-white/60 backdrop-blur-xl border border-white/60 rounded-xl p-2.5 shadow-sm transition-all hover:shadow-md hover:bg-white/80">
+            <div className="relative group overflow-hidden bg-white/60 backdrop-blur-xl border border-white/60 rounded-xl p-2.5 shadow-sm transition-all hover:shadow-md hover:bg-white/80 border-l-4 border-l-blue-400">
                 <div className="flex items-center gap-1.5 mb-1">
                     <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center border border-blue-100 text-blue-500">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -58,7 +58,7 @@ export default function BalanceCards({
             </div>
 
             {/* 2. 남은 예산 카드 */}
-            <div className="relative group overflow-hidden bg-white/60 backdrop-blur-xl border border-white/60 rounded-xl p-2.5 shadow-sm transition-all hover:shadow-md hover:bg-white/80">
+            <div className={`relative group overflow-hidden bg-white/60 backdrop-blur-xl border border-white/60 rounded-xl p-2.5 shadow-sm transition-all hover:shadow-md hover:bg-white/80 border-l-4 ${isOverBudget ? 'border-l-red-400' : 'border-l-emerald-400'}`}>
                 <div className="flex items-center gap-1.5 mb-1">
                     <div className={`w-6 h-6 rounded-full flex items-center justify-center border ${isOverBudget
                             ? 'bg-red-50 border-red-100 text-red-500'
