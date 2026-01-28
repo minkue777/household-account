@@ -154,14 +154,7 @@ object LocalCurrencyParser {
                     val balanceStr = match.groupValues[1]
                     val balance = balanceStr.replace(",", "").toIntOrNull()
                     if (balance != null) {
-                        // 지역화폐 종류 감지
-                        val currencyType = when {
-                            notificationText.contains("경기지역화폐") -> "경기지역화폐"
-                            notificationText.contains("희망화성") -> "희망화성지역화폐"
-                            notificationText.contains("착한페이") -> "착한페이"
-                            else -> "지역화폐"
-                        }
-                        return BalanceResult(balance, currencyType)
+                        return BalanceResult(balance, "경기지역화폐")
                     }
                 }
             }
