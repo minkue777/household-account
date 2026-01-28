@@ -334,7 +334,8 @@ export default function Home() {
         <div className="grid grid-cols-2 gap-2 mb-4">
           {/* 경기지역화폐 잔액 */}
           <div className="relative overflow-hidden bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl p-3 shadow-md">
-            <div className="absolute -top-1 -right-1 text-4xl text-white/10 font-bold">₩</div>
+            <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+            <div className="absolute bottom-0 left-0 w-12 h-12 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
             <div className="relative">
               <div className="flex items-center gap-1.5 mb-1">
                 <div className="w-6 h-6 bg-white/20 rounded-md flex items-center justify-center">
@@ -374,7 +375,8 @@ export default function Home() {
                   ? 'bg-gradient-to-br from-red-500 to-rose-600'
                   : 'bg-gradient-to-br from-blue-500 to-indigo-600'
               }`}>
-                <div className="absolute -top-1 -right-1 text-4xl text-white/10 font-bold">₩</div>
+                <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <div className="absolute bottom-0 left-0 w-12 h-12 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
                 <div className="relative">
                   <div className="flex items-center gap-1.5 mb-1">
                     <div className="w-6 h-6 bg-white/20 rounded-md flex items-center justify-center">
