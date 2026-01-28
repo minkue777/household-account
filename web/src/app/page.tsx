@@ -331,22 +331,19 @@ export default function Home() {
         />
 
         {/* 잔액 요약 카드 */}
-        <div className="grid grid-cols-2 gap-3 mb-6">
+        <div className="grid grid-cols-2 gap-2 mb-4">
           {/* 경기지역화폐 잔액 */}
-          <div className="relative overflow-hidden bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-4 shadow-lg">
-            <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-            <div className="absolute bottom-0 left-0 w-16 h-16 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+          <div className="relative overflow-hidden bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl p-3 shadow-md">
+            <div className="absolute -top-1 -right-1 text-4xl text-white/10 font-bold">₩</div>
             <div className="relative">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-6 h-6 bg-white/20 rounded-md flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">₩</span>
                 </div>
                 <span className="text-white/80 text-xs font-medium">경기지역화폐</span>
               </div>
-              <div className="text-white text-xl md:text-2xl font-bold">
-                784,694<span className="text-base font-normal ml-0.5">원</span>
+              <div className="text-white text-lg font-bold">
+                784,694<span className="text-sm font-normal ml-0.5">원</span>
               </div>
             </div>
           </div>
@@ -370,35 +367,32 @@ export default function Home() {
             const isOverBudget = remaining < 0;
 
             return (
-              <div className={`relative overflow-hidden rounded-2xl p-4 shadow-lg ${
+              <div className={`relative overflow-hidden rounded-xl p-3 shadow-md ${
                 isOverBudget
                   ? 'bg-gradient-to-br from-red-500 to-rose-600'
                   : 'bg-gradient-to-br from-blue-500 to-indigo-600'
               }`}>
-                <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-                <div className="absolute bottom-0 left-0 w-16 h-16 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+                <div className="absolute -top-1 -right-1 text-4xl text-white/10 font-bold">₩</div>
                 <div className="relative">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <div className="w-6 h-6 bg-white/20 rounded-md flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">₩</span>
                     </div>
                     <span className="text-white/80 text-xs font-medium">
                       {currentMonth}월 남은 예산
                     </span>
                   </div>
-                  <div className="text-white text-xl md:text-2xl font-bold">
-                    {isOverBudget ? '-' : ''}{Math.abs(remaining).toLocaleString()}<span className="text-base font-normal ml-0.5">원</span>
+                  <div className="text-white text-lg font-bold">
+                    {isOverBudget ? '-' : ''}{Math.abs(remaining).toLocaleString()}<span className="text-sm font-normal ml-0.5">원</span>
                   </div>
                   {/* 프로그레스 바 */}
-                  <div className="mt-2 h-1.5 bg-white/20 rounded-full overflow-hidden">
+                  <div className="mt-1.5 h-1 bg-white/20 rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all ${isOverBudget ? 'bg-white' : 'bg-white/80'}`}
                       style={{ width: `${Math.min(percentage, 100)}%` }}
                     />
                   </div>
-                  <div className="mt-1 text-white/60 text-xs">
+                  <div className="mt-0.5 text-white/60 text-[10px]">
                     {percentage}% 사용
                   </div>
                 </div>
