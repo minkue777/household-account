@@ -1,6 +1,13 @@
 import type { Metadata, Viewport } from 'next'
+import { Poppins } from 'next/font/google'
 import './globals.css'
 import AppProviders from '@/components/AppProviders'
+
+const poppins = Poppins({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-poppins',
+})
 
 export const metadata: Metadata = {
   title: '또니망고네 가계부',
@@ -34,7 +41,7 @@ export default function RootLayout({
       <head>
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
       </head>
-      <body className="min-h-screen">
+      <body className={`min-h-screen ${poppins.variable}`}>
         <AppProviders>
           {children}
         </AppProviders>

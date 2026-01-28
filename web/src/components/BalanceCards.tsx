@@ -55,7 +55,7 @@ export default function BalanceCards({
                         </div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold text-slate-800 tracking-tight tabular-nums">
+                        <div className="text-2xl font-bold text-slate-800 tracking-tight font-[family-name:var(--font-poppins)]">
                             784,694
                             <span className="text-sm font-medium text-slate-400 ml-1">원</span>
                         </div>
@@ -87,7 +87,7 @@ export default function BalanceCards({
                     </div>
 
                     <div>
-                        <div className={`text-2xl font-bold tracking-tight tabular-nums flex items-baseline ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
+                        <div className={`text-2xl font-bold tracking-tight font-[family-name:var(--font-poppins)] flex items-baseline ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
                             {isOverBudget && '-'}
                             {Math.abs(remaining).toLocaleString()}
                             <span className={`text-sm font-medium ml-1 ${isOverBudget ? 'text-red-300' : 'text-slate-400'}`}>원</span>
