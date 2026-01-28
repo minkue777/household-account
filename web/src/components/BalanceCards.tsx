@@ -50,8 +50,12 @@ export default function BalanceCards({
                     </div>
                     <span className="text-xs font-semibold text-slate-600">경기지역화폐</span>
                 </div>
-                <div className="text-lg font-bold text-slate-800 tracking-tight font-[family-name:var(--font-inter)]">
-                    784,694<span className="text-xs font-medium text-slate-400 ml-0.5">원</span>
+                <div className="text-lg font-bold text-slate-800 tracking-tight font-[family-name:var(--font-inter)] flex items-center">
+                    784,694
+                    <svg className="w-4 h-4 ml-0.5 text-yellow-400" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="12" r="10" fill="currentColor"/>
+                        <text x="12" y="16" textAnchor="middle" fontSize="10" fill="#854d0e" fontWeight="bold">&#8361;</text>
+                    </svg>
                 </div>
             </div>
 
@@ -70,8 +74,12 @@ export default function BalanceCards({
                         {currentMonth}월 예산
                     </span>
                 </div>
-                <div className={`text-lg font-bold tracking-tight font-[family-name:var(--font-inter)] ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
-                    {isOverBudget && '-'}{Math.abs(remaining).toLocaleString()}<span className={`text-xs font-medium ml-0.5 ${isOverBudget ? 'text-red-300' : 'text-slate-400'}`}>원</span>
+                <div className={`text-lg font-bold tracking-tight font-[family-name:var(--font-inter)] flex items-center ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
+                    {isOverBudget && '-'}{Math.abs(remaining).toLocaleString()}
+                    <svg className="w-4 h-4 ml-0.5 text-yellow-400" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="12" r="10" fill="currentColor"/>
+                        <text x="12" y="16" textAnchor="middle" fontSize="10" fill="#854d0e" fontWeight="bold">&#8361;</text>
+                    </svg>
                 </div>
             </div>
         </div>
