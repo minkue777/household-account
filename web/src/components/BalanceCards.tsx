@@ -4,7 +4,7 @@
 import { useMemo } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
-import { Coins, CreditCard, Wallet } from 'lucide-react';
+import { CircleDollarSign, CreditCard, Wallet } from 'lucide-react';
 
 interface BalanceCardsProps {
     currentMonth: number;
@@ -51,7 +51,7 @@ export default function BalanceCards({
                 </div>
                 <div className="text-lg font-bold text-slate-800 tracking-tight font-[family-name:var(--font-inter)] flex items-center">
                     784,694
-                    <Coins className="w-4 h-4 ml-1 text-yellow-500" />
+                    <CircleDollarSign className="w-4 h-4 ml-1 text-yellow-500" />
                 </div>
             </div>
 
@@ -70,7 +70,7 @@ export default function BalanceCards({
                 </div>
                 <div className={`text-lg font-bold tracking-tight font-[family-name:var(--font-inter)] flex items-center ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
                     {isOverBudget && '-'}{Math.abs(remaining).toLocaleString()}
-                    <Coins className="w-4 h-4 ml-1 text-yellow-500" />
+                    <CircleDollarSign className="w-4 h-4 ml-1 text-yellow-500" />
                 </div>
             </div>
         </div>
