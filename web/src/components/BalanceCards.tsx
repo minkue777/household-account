@@ -1,5 +1,6 @@
 'use client';
 
+// 잔액 카드 컴포넌트
 import { useMemo } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
