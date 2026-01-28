@@ -55,7 +55,7 @@ export default function BalanceCards({
                         </div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold text-slate-800 tracking-tight">
+                        <div className="text-2xl font-bold text-slate-800 tracking-tight tabular-nums">
                             784,694
                             <span className="text-sm font-medium text-slate-400 ml-1">원</span>
                         </div>
@@ -70,7 +70,7 @@ export default function BalanceCards({
             {/* 2. 남은 예산 카드 */}
             <div className={`relative group overflow-hidden bg-white/60 backdrop-blur-xl border border-white/60 rounded-2xl p-4 shadow-sm transition-all hover:shadow-md hover:bg-white/80`}>
                 <div className="flex flex-col h-full justify-between">
-                    <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-start mb-3">
                         <div className="flex items-center gap-2">
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center border ${isOverBudget
                                     ? 'bg-red-50 border-red-100 text-red-500'
@@ -84,16 +84,10 @@ export default function BalanceCards({
                                 {currentMonth}월 예산
                             </span>
                         </div>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isOverBudget
-                                ? 'bg-red-100 text-red-600'
-                                : 'bg-slate-100 text-slate-500'
-                            }`}>
-                            {percentage}%
-                        </span>
                     </div>
 
                     <div>
-                        <div className={`text-2xl font-bold tracking-tight flex items-baseline ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
+                        <div className={`text-2xl font-bold tracking-tight tabular-nums flex items-baseline ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
                             {isOverBudget && '-'}
                             {Math.abs(remaining).toLocaleString()}
                             <span className={`text-sm font-medium ml-1 ${isOverBudget ? 'text-red-300' : 'text-slate-400'}`}>원</span>
@@ -109,6 +103,9 @@ export default function BalanceCards({
                                 style={{ width: `${Math.min(percentage, 100)}%` }}
                             />
                         </div>
+                        <p className={`text-[11px] mt-1 ${isOverBudget ? 'text-red-400' : 'text-slate-400'}`}>
+                            {percentage}% 사용
+                        </p>
                     </div>
                 </div>
 
