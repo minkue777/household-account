@@ -50,7 +50,7 @@ export default function BalanceCards({
     return (
         <div className={`grid grid-cols-2 gap-2 ${className}`}>
             {/* 1. 경기지역화폐 카드 */}
-            <div className="bg-white/80 backdrop-blur-xl border border-white/60 rounded-xl p-2.5 shadow-md">
+            <div className="balance-card-glass p-2.5">
                 <div className="flex items-center gap-1.5 mb-1">
                     <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center border border-blue-100 text-blue-500">
                         <CreditCard className="w-3.5 h-3.5" />
@@ -64,7 +64,7 @@ export default function BalanceCards({
             </div>
 
             {/* 2. 남은 예산 카드 */}
-            <div className="bg-white/80 backdrop-blur-xl border border-white/60 rounded-xl p-2.5 shadow-md">
+            <div className="balance-card-glass p-2.5">
                 <div className="flex items-center gap-1.5 mb-1">
                     <div className={`w-6 h-6 rounded-full flex items-center justify-center border ${isOverBudget
                             ? 'bg-red-50 border-red-100 text-red-500'
