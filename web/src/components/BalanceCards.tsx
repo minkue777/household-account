@@ -42,7 +42,7 @@ export default function BalanceCards({
     return (
         <div className={`grid grid-cols-2 gap-3 ${className}`}>
             {/* 1. 경기지역화폐 카드 */}
-            <div className="relative group overflow-hidden bg-white/60 backdrop-blur-xl border border-white/60 rounded-2xl p-4 shadow-sm transition-all hover:shadow-md hover:bg-white/80">
+            <div className="relative group overflow-hidden bg-white/60 backdrop-blur-xl border border-white/60 rounded-2xl p-3 shadow-sm transition-all hover:shadow-md hover:bg-white/80">
                 <div className="flex items-center gap-2 mb-2">
                     <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center border border-blue-100 text-blue-500">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -51,7 +51,7 @@ export default function BalanceCards({
                     </div>
                     <span className="text-sm font-semibold text-slate-600">경기지역화폐</span>
                 </div>
-                <div className="text-2xl font-bold text-slate-800 tracking-tight font-[family-name:var(--font-inter)]">
+                <div className="text-xl font-bold text-slate-800 tracking-tight font-[family-name:var(--font-inter)]">
                     784,694
                     <span className="text-sm font-medium text-slate-400 ml-1">원</span>
                 </div>
@@ -62,7 +62,7 @@ export default function BalanceCards({
             </div>
 
             {/* 2. 남은 예산 카드 */}
-            <div className={`relative group overflow-hidden bg-white/60 backdrop-blur-xl border border-white/60 rounded-2xl p-4 shadow-sm transition-all hover:shadow-md hover:bg-white/80`}>
+            <div className={`relative group overflow-hidden bg-white/60 backdrop-blur-xl border border-white/60 rounded-2xl p-3 shadow-sm transition-all hover:shadow-md hover:bg-white/80`}>
                 <div className="flex items-center gap-2 mb-2">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center border ${isOverBudget
                             ? 'bg-red-50 border-red-100 text-red-500'
@@ -76,7 +76,7 @@ export default function BalanceCards({
                         {currentMonth}월 예산
                     </span>
                 </div>
-                <div className={`text-2xl font-bold tracking-tight font-[family-name:var(--font-inter)] ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
+                <div className={`text-xl font-bold tracking-tight font-[family-name:var(--font-inter)] ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
                     {isOverBudget && '-'}
                     {Math.abs(remaining).toLocaleString()}
                     <span className={`text-sm font-medium ml-1 ${isOverBudget ? 'text-red-300' : 'text-slate-400'}`}>원</span>
