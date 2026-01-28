@@ -65,7 +65,7 @@ export default function BalanceCards({
                         <Wallet className="w-3.5 h-3.5" />
                     </div>
                     <span className="text-xs font-semibold text-slate-600">
-                        {currentMonth}월 예산
+                        {currentMonth}월 잔여 예산
                     </span>
                 </div>
                 <div className={`text-lg font-bold tracking-tight font-[family-name:var(--font-inter)] flex items-center ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
