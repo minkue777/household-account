@@ -4,7 +4,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
-import { CircleDollarSign, CreditCard, Wallet } from 'lucide-react';
+import { CreditCard, Wallet } from 'lucide-react';
 import { subscribeToLocalCurrencyBalance, LocalCurrencyBalance } from '@/lib/balanceService';
 
 interface BalanceCardsProps {
@@ -57,9 +57,9 @@ export default function BalanceCards({
                     </div>
                     <span className="text-xs font-semibold text-slate-600">경기지역화폐</span>
                 </div>
-                <div className="text-lg font-bold text-slate-800 tracking-tight font-[family-name:var(--font-inter)] flex items-center">
+                <div className="text-lg font-bold text-slate-800 tracking-tight font-['Pretendard'] flex items-center">
                     {localCurrencyBalance ? localCurrencyBalance.balance.toLocaleString() : '-'}
-                    <CircleDollarSign className="w-4 h-4 ml-1 text-yellow-500" />
+                    <span className="text-xs font-medium text-slate-400 ml-0.5">원</span>
                 </div>
             </div>
 
@@ -76,9 +76,9 @@ export default function BalanceCards({
                         {currentMonth}월 잔여 예산
                     </span>
                 </div>
-                <div className={`text-lg font-bold tracking-tight font-[family-name:var(--font-inter)] flex items-center ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
+                <div className={`text-lg font-bold tracking-tight font-['Pretendard'] flex items-center ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
                     {isOverBudget && '-'}{Math.abs(remaining).toLocaleString()}
-                    <CircleDollarSign className="w-4 h-4 ml-1 text-yellow-500" />
+                    <span className={`text-xs font-medium ml-0.5 ${isOverBudget ? 'text-red-300' : 'text-slate-400'}`}>원</span>
                 </div>
             </div>
         </div>
