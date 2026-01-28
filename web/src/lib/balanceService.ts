@@ -1,4 +1,4 @@
-import { doc, onSnapshot, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import { getStoredHouseholdKey } from './householdService';
 
@@ -20,17 +20,22 @@ export function subscribeToLocalCurrencyBalance(
     return () => {};
   }
 
-  const docRef = doc(db, 'households', householdKey, 'balances', 'localCurrency');
+  const balancesRef = collection(db, 'balances');
+  const q = query(
+    balancesRef,
+    where('householdId', '==', householdKey),
+    where('type', '==', 'localCurrency')
+  );
 
   const unsubscribe = onSnapshot(
-    docRef,
+    q,
     (snapshot) => {
-      if (!snapshot.exists()) {
+      if (snapshot.empty) {
         callback(null);
         return;
       }
 
-      const data = snapshot.data();
+      const data = snapshot.docs[0].data();
       callback({
         balance: data.balance || 0,
         currencyType: data.currencyType || '지역화폐',
