@@ -333,7 +333,7 @@ export default function Home() {
         {/* 잔액 요약 카드 */}
         <div className="grid grid-cols-2 gap-2 mb-4">
           {/* 경기지역화폐 잔액 */}
-          <div className="relative overflow-hidden bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl p-3 shadow-md">
+          <div className="relative overflow-hidden bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-3 shadow-md">
             <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
             <div className="absolute bottom-0 left-0 w-12 h-12 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
             <div className="relative">
@@ -346,7 +346,7 @@ export default function Home() {
                 <span className="text-white/80 text-xs font-medium">경기지역화폐</span>
               </div>
               <div className="text-white text-lg font-bold">
-                ₩784,694
+                784,694<span className="text-sm font-normal ml-0.5">원</span>
               </div>
             </div>
           </div>
@@ -373,7 +373,7 @@ export default function Home() {
               <div className={`relative overflow-hidden rounded-xl p-3 shadow-md ${
                 isOverBudget
                   ? 'bg-gradient-to-br from-red-500 to-rose-600'
-                  : 'bg-gradient-to-br from-blue-500 to-indigo-600'
+                  : 'bg-gradient-to-br from-violet-500 to-purple-600'
               }`}>
                 <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
                 <div className="absolute bottom-0 left-0 w-12 h-12 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
@@ -389,7 +389,7 @@ export default function Home() {
                     </span>
                   </div>
                   <div className="text-white text-lg font-bold">
-                    {isOverBudget ? '-₩' : '₩'}{Math.abs(remaining).toLocaleString()}
+                    {isOverBudget ? '-' : ''}{Math.abs(remaining).toLocaleString()}<span className="text-sm font-normal ml-0.5">원</span>
                   </div>
                   {/* 프로그레스 바 */}
                   <div className="mt-1.5 h-1 bg-white/20 rounded-full overflow-hidden">
