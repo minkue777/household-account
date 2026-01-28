@@ -356,12 +356,14 @@ export default function Home() {
             const foodBudget = getCategoryBudget('food') || 0;
             const livingBudget = getCategoryBudget('living') || 0;
             const childcareBudget = getCategoryBudget('childcare') || 0;
-            const totalBudget = foodBudget + livingBudget + childcareBudget;
+            const fixedBudget = getCategoryBudget('fixed') || 0;
+            const totalBudget = foodBudget + livingBudget + childcareBudget + fixedBudget;
 
             const foodSpent = expenses.filter(e => e.category === 'food').reduce((sum, e) => sum + e.amount, 0);
             const livingSpent = expenses.filter(e => e.category === 'living').reduce((sum, e) => sum + e.amount, 0);
             const childcareSpent = expenses.filter(e => e.category === 'childcare').reduce((sum, e) => sum + e.amount, 0);
-            const totalSpent = foodSpent + livingSpent + childcareSpent;
+            const fixedSpent = expenses.filter(e => e.category === 'fixed').reduce((sum, e) => sum + e.amount, 0);
+            const totalSpent = foodSpent + livingSpent + childcareSpent + fixedSpent;
 
             const remaining = totalBudget - totalSpent;
             const percentage = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
