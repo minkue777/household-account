@@ -6,6 +6,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.household.account.QuickEditActivity
+import com.household.account.data.BalanceRepository
 import com.household.account.data.CategoryRepository
 import com.household.account.data.Expense
 import com.household.account.data.ExpenseRepository
@@ -56,6 +57,7 @@ class CardNotificationListenerService : NotificationListenerService() {
     private val expenseRepository = ExpenseRepository()
     private val ruleRepository = MerchantRuleRepository()
     private val categoryRepository = CategoryRepository()
+    private val balanceRepository = BalanceRepository()
 
     // 중복 알림 방지 (최근 처리한 알림 해시 저장, 30초 유지)
     private val recentNotifications = mutableMapOf<String, Long>()
@@ -122,6 +124,28 @@ class CardNotificationListenerService : NotificationListenerService() {
                 KB_PAY_PACKAGE, KB_CARD_PACKAGE -> KBCardParser.parse(fullText)
                 HWASEONG_LOCAL_CURRENCY, CHAK_WALLET, GYEONGGI_LOCAL_CURRENCY -> LocalCurrencyParser.parse(fullText)
                 else -> ParseResult(false, errorMessage = "지원하지 않는 앱")
+            }
+
+            // 지역화폐인 경우 잔액도 파싱해서 저장
+            if (packageName in setOf(HWASEONG_LOCAL_CURRENCY, CHAK_WALLET, GYEONGGI_LOCAL_CURRENCY)) {
+                val balanceResult = LocalCurrencyParser.parseBalance(fullText)
+                if (balanceResult.balance != null) {
+                    serviceScope.launch {
+                        try {
+                            val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
+                            if (householdId.isNotEmpty()) {
+                                balanceRepository.saveLocalCurrencyBalance(
+                                    householdId,
+                                    balanceResult.balance,
+                                    balanceResult.currencyType ?: "지역화폐"
+                                )
+                                Log.d(TAG, "잔액 저장 완료: ${balanceResult.balance}원 (${balanceResult.currencyType})")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "잔액 저장 실패", e)
+                        }
+                    }
+                }
             }
 
             if (result.success && result.expense != null) {

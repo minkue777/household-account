@@ -25,6 +25,19 @@ import java.time.format.DateTimeFormatter
  */
 object LocalCurrencyParser {
 
+    // 잔액 파싱 결과
+    data class BalanceResult(
+        val balance: Int?,
+        val currencyType: String? = null  // "경기지역화폐", "희망화성지역화폐" 등
+    )
+
+    // 잔액 패턴 (총 보유 잔액, 잔액 등)
+    private val BALANCE_PATTERNS = listOf(
+        Regex("""총\s*보유\s*잔액\s*\n?\s*([\d,]+)원"""),
+        Regex("""잔액\s*[:\s]*([\d,]+)원"""),
+        Regex("""보유\s*잔액\s*[:\s]*([\d,]+)원""")
+    )
+
     // 다양한 결제 패턴 지원
     private val PAYMENT_PATTERNS = listOf(
         Regex("""결제\s*완료\s*([\d,]+)원"""),
@@ -127,6 +140,34 @@ object LocalCurrencyParser {
 
         } catch (e: Exception) {
             return ParseResult(false, errorMessage = "파싱 오류: ${e.message}")
+        }
+    }
+
+    /**
+     * 알림에서 잔액 정보만 추출
+     */
+    fun parseBalance(notificationText: String): BalanceResult {
+        try {
+            for (pattern in BALANCE_PATTERNS) {
+                val match = pattern.find(notificationText)
+                if (match != null) {
+                    val balanceStr = match.groupValues[1]
+                    val balance = balanceStr.replace(",", "").toIntOrNull()
+                    if (balance != null) {
+                        // 지역화폐 종류 감지
+                        val currencyType = when {
+                            notificationText.contains("경기지역화폐") -> "경기지역화폐"
+                            notificationText.contains("희망화성") -> "희망화성지역화폐"
+                            notificationText.contains("착한페이") -> "착한페이"
+                            else -> "지역화폐"
+                        }
+                        return BalanceResult(balance, currencyType)
+                    }
+                }
+            }
+            return BalanceResult(null)
+        } catch (e: Exception) {
+            return BalanceResult(null)
         }
     }
 }

@@ -1,10 +1,11 @@
 'use client';
 
 // 잔액 카드 컴포넌트
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { CircleDollarSign, CreditCard, Wallet } from 'lucide-react';
+import { subscribeToLocalCurrencyBalance, LocalCurrencyBalance } from '@/lib/balanceService';
 
 interface BalanceCardsProps {
     currentMonth: number;
@@ -18,6 +19,13 @@ export default function BalanceCards({
     className = '',
 }: BalanceCardsProps) {
     const { getCategoryBudget } = useCategoryContext();
+    const [localCurrencyBalance, setLocalCurrencyBalance] = useState<LocalCurrencyBalance | null>(null);
+
+    // 지역화폐 잔액 구독
+    useEffect(() => {
+        const unsubscribe = subscribeToLocalCurrencyBalance(setLocalCurrencyBalance);
+        return () => unsubscribe();
+    }, []);
 
     // 예산 상태 계산
     const { remaining, isOverBudget } = useMemo(() => {
@@ -50,7 +58,7 @@ export default function BalanceCards({
                     <span className="text-xs font-semibold text-slate-600">경기지역화폐</span>
                 </div>
                 <div className="text-lg font-bold text-slate-800 tracking-tight font-[family-name:var(--font-inter)] flex items-center">
-                    784,694
+                    {localCurrencyBalance ? localCurrencyBalance.balance.toLocaleString() : '-'}
                     <CircleDollarSign className="w-4 h-4 ml-1 text-yellow-500" />
                 </div>
             </div>
