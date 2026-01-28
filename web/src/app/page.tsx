@@ -373,7 +373,7 @@ export default function Home() {
               <div className={`relative overflow-hidden rounded-xl p-3 shadow-md ${
                 isOverBudget
                   ? 'bg-gradient-to-br from-red-500 to-rose-600'
-                  : 'bg-gradient-to-br from-orange-400 to-rose-500'
+                  : 'bg-gradient-to-br from-teal-400 to-cyan-500'
               }`}>
                 <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
                 <div className="absolute bottom-0 left-0 w-12 h-12 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
@@ -545,7 +545,7 @@ export default function Home() {
                   <div className={`relative overflow-hidden rounded-xl p-3 shadow-md ${
                     isOverBudget
                       ? 'bg-gradient-to-br from-red-500 to-rose-600'
-                      : 'bg-gradient-to-br from-orange-400 to-rose-500'
+                      : 'bg-gradient-to-br from-teal-400 to-cyan-500'
                   }`}>
                     <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
                     <div className="absolute bottom-0 left-0 w-12 h-12 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
