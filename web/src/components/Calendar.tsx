@@ -235,7 +235,7 @@ export default function Calendar({
       <div className="grid grid-cols-7 overflow-hidden rounded-b-2xl">
         {dates.map((day, index) => {
           if (day === null) {
-            return <div key={`empty-${index}`} className="h-12 md:h-28 bg-slate-50/50" />;
+            return <div key={`empty-${index}`} className="h-12 md:h-28 bg-slate-50/30 m-[1px] rounded-lg" />;
           }
 
           const dateStr = formatDate(day);
@@ -250,10 +250,10 @@ export default function Calendar({
             <div
               key={day}
               onClick={() => onDateClick(dateStr)}
-              className={`h-12 md:h-28 p-0.5 md:p-1.5 cursor-pointer transition-all hover:bg-slate-50 ${
+              className={`h-12 md:h-28 p-0.5 md:p-1.5 cursor-pointer transition-all m-[1px] rounded-lg ${
                 isSelected
-                  ? 'bg-blue-50 border-2 border-blue-400'
-                  : 'border-b border-r border-slate-100'
+                  ? 'bg-blue-50 ring-2 ring-blue-400/50 shadow-sm'
+                  : 'hover:bg-slate-50/80'
               }`}
             >
               {/* 모바일: 날짜 + 금액만 세로 배치 */}
