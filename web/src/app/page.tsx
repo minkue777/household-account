@@ -630,18 +630,28 @@ export default function Home() {
                     {localCurrencyExpenses.map((expense) => (
                       <div
                         key={expense.id}
-                        className="flex items-center justify-between p-3 bg-slate-50 rounded-xl"
+                        className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors"
+                        onClick={() => {
+                          setShowLocalCurrencyModal(false);
+                          setSelectedDate(expense.date);
+                          setEditExpenseId(expense.id);
+                        }}
                       >
+                        {/* 카테고리 색상 표시 */}
+                        <div
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: getCategoryColor(expense.category) }}
+                        />
                         <div className="min-w-0 flex-1">
                           <div className="font-medium text-slate-800 truncate">
                             {expense.merchant}
                           </div>
                           <div className="text-xs text-slate-500">
-                            {expense.date}
+                            {expense.date} · {getCategoryLabel(expense.category)}
                             {expense.memo && ` · ${expense.memo}`}
                           </div>
                         </div>
-                        <div className="font-semibold text-slate-800 flex-shrink-0 ml-3">
+                        <div className="font-semibold text-slate-800 flex-shrink-0">
                           {expense.amount.toLocaleString()}원
                         </div>
                       </div>
