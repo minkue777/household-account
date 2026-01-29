@@ -124,12 +124,21 @@ export async function addMerchantRuleV2(
   householdId: string,
   input: CreateMerchantRuleInput
 ): Promise<string> {
-  if (!householdId) return '';
+  if (!householdId) {
+    console.log('[merchantRule] householdId 없음');
+    return '';
+  }
 
   // 이미 같은 키워드/매칭타입 조합이 있는지 확인
-  const exists = await ruleExistsV2(householdId, input.merchantKeyword, input.matchType);
-  if (exists) {
-    return '';
+  try {
+    const exists = await ruleExistsV2(householdId, input.merchantKeyword, input.matchType);
+    console.log('[merchantRule] 중복 체크:', { exists, keyword: input.merchantKeyword, matchType: input.matchType });
+    if (exists) {
+      console.log('[merchantRule] 이미 존재하는 규칙');
+      return '';
+    }
+  } catch (e) {
+    console.error('[merchantRule] 중복 체크 오류:', e);
   }
 
   const docRef = await addDoc(collection(db, COLLECTION_NAME), {

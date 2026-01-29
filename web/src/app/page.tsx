@@ -186,10 +186,15 @@ export default function Home() {
   const handleSaveMerchantRule = async (merchantName: string, category: string) => {
     try {
       const householdId = getStoredHouseholdKey() || 'guest';
+      console.log('가맹점 규칙 저장 시도:', { householdId, merchantName, category });
       const ruleId = await addMerchantRule(householdId, merchantName, category, true);
       if (ruleId) {
+        console.log('가맹점 규칙 저장 성공:', ruleId);
+      } else {
+        console.log('가맹점 규칙 저장 실패 또는 이미 존재');
       }
     } catch (error) {
+      console.error('가맹점 규칙 저장 오류:', error);
     }
   };
 
