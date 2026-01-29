@@ -637,17 +637,19 @@ export default function Home() {
                           setEditExpenseId(expense.id);
                         }}
                       >
-                        {/* 카테고리 색상 표시 */}
+                        {/* 카테고리 뱃지 */}
                         <div
-                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0"
                           style={{ backgroundColor: getCategoryColor(expense.category) }}
-                        />
+                        >
+                          {getCategoryLabel(expense.category).slice(0, 2)}
+                        </div>
                         <div className="min-w-0 flex-1">
                           <div className="font-medium text-slate-800 truncate">
                             {expense.merchant}
                           </div>
                           <div className="text-xs text-slate-500">
-                            {expense.date} · {getCategoryLabel(expense.category)}
+                            {expense.date}
                             {expense.memo && ` · ${expense.memo}`}
                           </div>
                         </div>
