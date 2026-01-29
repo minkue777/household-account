@@ -11,12 +11,14 @@ interface BalanceCardsProps {
     currentMonth: number;
     expenses: Expense[];
     className?: string;
+    onLocalCurrencyClick?: (expenses: Expense[]) => void;
 }
 
 export default function BalanceCards({
     currentMonth,
     expenses,
     className = '',
+    onLocalCurrencyClick,
 }: BalanceCardsProps) {
     const { getCategoryBudget } = useCategoryContext();
     const [localCurrencyBalance, setLocalCurrencyBalance] = useState<LocalCurrencyBalance | null>(null);
@@ -47,10 +49,21 @@ export default function BalanceCards({
         return { remaining, isOverBudget };
     }, [expenses, getCategoryBudget]);
 
+    // 지역화폐 지출 필터링 및 클릭 핸들러
+    const handleLocalCurrencyClick = () => {
+        if (onLocalCurrencyClick) {
+            const localCurrencyExpenses = expenses.filter(e => e.cardLastFour === '지역');
+            onLocalCurrencyClick(localCurrencyExpenses);
+        }
+    };
+
     return (
         <div className={`grid grid-cols-2 gap-2 ${className}`}>
             {/* 1. 경기지역화폐 카드 */}
-            <div className="balance-card-glass p-2.5">
+            <div
+                className="balance-card-glass p-2.5 cursor-pointer hover:shadow-lg transition-shadow"
+                onClick={handleLocalCurrencyClick}
+            >
                 <div className="flex items-center gap-1.5 mb-1">
                     <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center border border-blue-100 text-blue-500">
                         <CreditCard className="w-3.5 h-3.5" />
