@@ -7,6 +7,7 @@ import {
   subscribeToAssets,
   subscribeToAssetHistory,
   getMonthlyAssetChange,
+  saveMonthlySnapshot,
   addSampleAssets,
 } from '@/lib/assetService';
 import {
@@ -60,11 +61,20 @@ export default function AssetsPage() {
     return () => unsubscribe();
   }, []);
 
-  // 월별 변동액 조회
+  // 월별 변동액 조회 및 스냅샷 저장
   useEffect(() => {
-    getMonthlyAssetChange()
+    if (assets.length === 0) return;
+
+    const activeAssets = assets.filter((a) => a.isActive);
+    const currentTotal = activeAssets.reduce((sum, a) => sum + a.currentBalance, 0);
+
+    // 전월 대비 변동액 계산
+    getMonthlyAssetChange(currentTotal)
       .then(setMonthlyChange)
       .catch(() => setMonthlyChange(0));
+
+    // 이번 달 스냅샷 저장 (현재 총자산)
+    saveMonthlySnapshot(currentTotal);
   }, [assets]);
 
   // 각 자산의 이력 구독

@@ -9,6 +9,8 @@ import {
   onSnapshot,
   Timestamp,
   getDocs,
+  getDoc,
+  setDoc,
   runTransaction,
   QueryDocumentSnapshot,
   DocumentData,
@@ -317,26 +319,60 @@ export async function getAssetHistoryByPeriod(
 }
 
 /**
- * 이번 달 자산 변동액 계산
+ * 전월 말 총자산 스냅샷 조회
  */
-export async function getMonthlyAssetChange(): Promise<number> {
+export async function getPreviousMonthTotal(): Promise<number | null> {
   const householdId = getHouseholdId();
   const now = new Date();
-  const startOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-  const endOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-31`;
 
-  const q = query(
-    collection(db, HISTORY_COLLECTION),
-    where('householdId', '==', householdId)
-  );
+  // 전월 계산
+  const prevMonth = now.getMonth() === 0 ? 12 : now.getMonth();
+  const prevYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+  const snapshotId = `${householdId}_${prevYear}-${String(prevMonth).padStart(2, '0')}`;
 
-  const snapshot = await getDocs(q);
-  const allHistory = snapshot.docs.map(mapDocToHistory);
+  try {
+    const docSnap = await getDoc(doc(db, 'asset_snapshots', snapshotId));
+    if (docSnap.exists()) {
+      return docSnap.data().totalBalance || null;
+    }
+  } catch (error) {
+    console.error('스냅샷 조회 오류:', error);
+  }
+  return null;
+}
 
-  // 이번 달 변동액 합계
-  return allHistory
-    .filter((h) => h.date >= startOfMonth && h.date <= endOfMonth)
-    .reduce((sum, h) => sum + h.changeAmount, 0);
+/**
+ * 이번 달 총자산 스냅샷 저장
+ */
+export async function saveMonthlySnapshot(totalBalance: number): Promise<void> {
+  const householdId = getHouseholdId();
+  const now = new Date();
+  const snapshotId = `${householdId}_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  try {
+    await setDoc(doc(db, 'asset_snapshots', snapshotId), {
+      householdId,
+      totalBalance,
+      month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
+      updatedAt: Timestamp.now(),
+    });
+  } catch (error) {
+    console.error('스냅샷 저장 오류:', error);
+  }
+}
+
+/**
+ * 이번 달 자산 변동액 계산 (전월 대비)
+ */
+export async function getMonthlyAssetChange(currentTotal: number): Promise<number> {
+  const previousTotal = await getPreviousMonthTotal();
+
+  // 전월 스냅샷이 없으면 0 반환
+  if (previousTotal === null) {
+    return 0;
+  }
+
+  return currentTotal - previousTotal;
 }
 
 /**

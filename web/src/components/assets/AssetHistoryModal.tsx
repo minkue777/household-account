@@ -519,7 +519,7 @@ export default function AssetHistoryModal({
               // 주식: 종목 검색 + 보유 종목 목록
               <div className="space-y-4">
                 {/* 종목 검색 */}
-                <div className="space-y-3">
+                <div className="bg-green-50 rounded-xl p-4 space-y-3">
                   <div className="relative">
                     <label className="block text-sm font-medium text-slate-700 mb-1">종목 검색</label>
                     <input
