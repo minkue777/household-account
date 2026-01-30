@@ -129,6 +129,18 @@ export async function updateAsset(id: string, data: Partial<Asset>): Promise<voi
 }
 
 /**
+ * 자산 순서 일괄 업데이트
+ */
+export async function updateAssetOrders(assetOrders: { id: string; order: number }[]): Promise<void> {
+  await runTransaction(db, async (transaction) => {
+    assetOrders.forEach(({ id, order }) => {
+      const docRef = doc(db, ASSETS_COLLECTION, id);
+      transaction.update(docRef, { order, updatedAt: Timestamp.now() });
+    });
+  });
+}
+
+/**
  * 자산 삭제 (및 관련 이력 삭제)
  */
 export async function deleteAsset(id: string): Promise<void> {
