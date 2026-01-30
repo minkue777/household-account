@@ -1,7 +1,7 @@
 'use client';
 
 import { AssetType, ASSET_TYPE_CONFIG } from '@/types/asset';
-import { Building2, TrendingUp, Home } from 'lucide-react';
+import { Building2, CandlestickChart, Home, Coins } from 'lucide-react';
 
 interface AssetTypeSelectorProps {
   selectedType: AssetType;
@@ -10,15 +10,16 @@ interface AssetTypeSelectorProps {
 }
 
 const ICONS: Record<AssetType, React.ReactNode> = {
-  bank: <Building2 className="w-4 h-4" />,
-  investment: <TrendingUp className="w-4 h-4" />,
+  savings: <Building2 className="w-4 h-4" />,
+  stock: <CandlestickChart className="w-4 h-4" />,
   property: <Home className="w-4 h-4" />,
+  gold: <Coins className="w-4 h-4" />,
 };
 
 export default function AssetTypeSelector({
   selectedType,
   onTypeChange,
-  assetCounts = { bank: 0, investment: 0, property: 0 },
+  assetCounts = { savings: 0, stock: 0, property: 0, gold: 0 },
 }: AssetTypeSelectorProps) {
   return (
     <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
