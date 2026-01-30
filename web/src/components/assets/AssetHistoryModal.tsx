@@ -338,7 +338,7 @@ export default function AssetHistoryModal({
                   <h3 className="text-lg font-bold text-slate-800">{asset.name}</h3>
                   <p className="text-sm text-slate-500">
                     {asset.subType && `${asset.subType} · `}
-                    {asset.currentBalance.toLocaleString()}원
+                    {isStock ? '평가금액 ' : ''}{asset.currentBalance.toLocaleString()}원
                   </p>
                 </div>
               </div>
@@ -474,7 +474,7 @@ export default function AssetHistoryModal({
 
           {/* 주식: 종목 검색 폼 (콘텐츠 영역 밖) */}
           {isStock && (
-            <div className="p-4 bg-green-50 border-b border-green-100">
+            <div className="p-4 bg-blue-100 border-b border-blue-200">
               <div className="space-y-3">
                 <div className="relative">
                   <label className="block text-sm font-medium text-slate-700 mb-1">종목 검색</label>
@@ -489,10 +489,10 @@ export default function AssetHistoryModal({
                       }
                     }}
                     placeholder="종목명 입력"
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   />
                   {isSearching && (
-                    <Loader2 className="w-4 h-4 text-green-500 absolute right-3 top-9 animate-spin" />
+                    <Loader2 className="w-4 h-4 text-blue-500 absolute right-3 top-9 animate-spin" />
                   )}
 
                   {searchResults.length > 0 && !selectedStock && (
@@ -514,16 +514,16 @@ export default function AssetHistoryModal({
 
                 {selectedStock && (
                   <>
-                    <div className="bg-white rounded-lg p-3 border border-green-200">
+                    <div className="bg-white rounded-lg p-3 border border-blue-200">
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-medium text-slate-800">{selectedStock.name}</p>
                           <p className="text-xs text-slate-500">{selectedStock.code}</p>
                         </div>
                         {isLoadingPrice ? (
-                          <Loader2 className="w-4 h-4 text-green-500 animate-spin" />
+                          <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
                         ) : currentPrice ? (
-                          <p className="font-semibold text-green-600">{currentPrice.toLocaleString()}원</p>
+                          <p className="font-semibold text-red-500">{currentPrice.toLocaleString()}원</p>
                         ) : null}
                       </div>
                     </div>
@@ -536,7 +536,7 @@ export default function AssetHistoryModal({
                         value={quantity}
                         onChange={(e) => setQuantity(e.target.value.replace(/[^0-9]/g, ''))}
                         placeholder="0"
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       />
                     </div>
 
@@ -549,7 +549,7 @@ export default function AssetHistoryModal({
                           value={avgPrice ? parseInt(avgPrice, 10).toLocaleString() : ''}
                           onChange={(e) => setAvgPrice(e.target.value.replace(/[^0-9]/g, ''))}
                           placeholder="0"
-                          className="w-full px-4 py-2 pr-8 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                          className="w-full px-4 py-2 pr-8 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                         />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">원</span>
                       </div>
@@ -559,7 +559,7 @@ export default function AssetHistoryModal({
                       type="button"
                       onClick={handleAddHolding}
                       disabled={!selectedStock || !quantity || isSubmitting}
-                      className="w-full py-2.5 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:bg-slate-300 font-medium"
+                      className="w-full py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-slate-300 font-medium"
                     >
                       {isSubmitting ? '추가 중...' : '종목 추가'}
                     </button>
@@ -662,14 +662,7 @@ export default function AssetHistoryModal({
             ) : isStock ? (
               // 주식: 보유 종목 목록
               <>
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-medium text-slate-500">보유 종목</h4>
-                    {holdings.length > 0 && (
-                      <p className="text-sm text-slate-500">
-                        평가금액 <span className="font-semibold text-slate-700">{totalStockValue.toLocaleString()}원</span>
-                      </p>
-                    )}
-                  </div>
+                  <h4 className="text-sm font-medium text-slate-500 mb-3">보유 종목</h4>
                   {isLoadingHoldings ? (
                     <div className="text-center py-8 text-slate-400">로딩 중...</div>
                   ) : holdings.length === 0 ? (
@@ -682,7 +675,14 @@ export default function AssetHistoryModal({
                         editingHolding?.id === holding.id ? (
                           // 수정 모드
                           <div key={holding.id} className="p-3 bg-blue-50 rounded-xl space-y-3">
-                            <p className="font-medium text-slate-800">{holding.stockName}</p>
+                            <div className="flex items-center justify-between">
+                              <p className="font-medium text-slate-800">{holding.stockName}</p>
+                              {holding.currentPrice && (
+                                <p className="text-sm font-semibold text-red-500">
+                                  {holding.currentPrice.toLocaleString()}원
+                                </p>
+                              )}
+                            </div>
                             <div className="grid grid-cols-2 gap-2">
                               <div>
                                 <label className="block text-xs text-slate-500 mb-1">수량</label>
