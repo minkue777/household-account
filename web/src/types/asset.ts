@@ -4,6 +4,10 @@ import { Timestamp } from 'firebase/firestore';
 export const FAMILY_MEMBERS = ['전체', '이민규', '이진선', '이지아'] as const;
 export type FamilyMember = typeof FAMILY_MEMBERS[number];
 
+// 자산 소유자 옵션 (가구 공동 자산 포함)
+export const ASSET_OWNERS = ['가구', '이민규', '이진선', '이지아'] as const;
+export type AssetOwner = typeof ASSET_OWNERS[number];
+
 // 자산 타입
 export type AssetType = 'savings' | 'stock' | 'property' | 'gold';
 

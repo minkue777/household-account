@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { AssetType, AssetInput, ASSET_TYPE_CONFIG, FAMILY_MEMBERS } from '@/types/asset';
+import { AssetType, AssetInput, ASSET_TYPE_CONFIG, ASSET_OWNERS } from '@/types/asset';
 import { addAsset } from '@/lib/assetService';
 import Portal from '@/components/Portal';
 import { X, Building2, CandlestickChart, Home, Coins } from 'lucide-react';
@@ -30,7 +30,7 @@ const PLACEHOLDERS: Record<AssetType, string> = {
 export default function AssetAddModal({ isOpen, onClose, defaultType = 'savings' }: AssetAddModalProps) {
   const [name, setName] = useState('');
   const [type, setType] = useState<AssetType>(defaultType);
-  const [owner, setOwner] = useState<string>(FAMILY_MEMBERS[1]);
+  const [owner, setOwner] = useState<string>(ASSET_OWNERS[0]);
   const [balance, setBalance] = useState('');
   const [memo, setMemo] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,7 +45,7 @@ export default function AssetAddModal({ isOpen, onClose, defaultType = 'savings'
   useEffect(() => {
     if (isOpen) {
       setType(defaultType);
-      setOwner(FAMILY_MEMBERS[1]);
+      setOwner(ASSET_OWNERS[0]);
       setName('');
       setBalance('');
       setMemo('');
@@ -129,18 +129,18 @@ export default function AssetAddModal({ isOpen, onClose, defaultType = 'savings'
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">소유자</label>
               <div className="flex flex-wrap gap-2">
-                {FAMILY_MEMBERS.filter(m => m !== '전체').map((member) => (
+                {ASSET_OWNERS.map((ownerOption) => (
                   <button
-                    key={member}
+                    key={ownerOption}
                     type="button"
-                    onClick={() => setOwner(member)}
+                    onClick={() => setOwner(ownerOption)}
                     className={`px-3 py-1.5 rounded-full text-sm transition-all ${
-                      owner === member
+                      owner === ownerOption
                         ? 'bg-blue-500 text-white'
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
-                    {member}
+                    {ownerOption}
                   </button>
                 ))}
               </div>
