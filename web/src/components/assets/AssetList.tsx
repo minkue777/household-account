@@ -4,7 +4,7 @@ import { useState, useRef, useCallback } from 'react';
 import { Asset, AssetHistoryEntry } from '@/types/asset';
 import { updateAssetOrders } from '@/lib/assetService';
 import AssetCard from './AssetCard';
-import { Plus, GripVertical } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 interface AssetListProps {
   assets: Asset[];
@@ -204,32 +204,21 @@ export default function AssetList({
                 onDragEnd={handleDragEnd}
                 onDragLeave={() => setDragOverId(null)}
                 onTouchStart={(e) => handleTouchStart(e, asset.id)}
-                className={`relative flex items-center transition-all ${
+                className={`relative transition-all cursor-grab active:cursor-grabbing ${
                   isDragging ? 'opacity-50 scale-95' : ''
                 } ${isDragOver ? 'bg-blue-50' : ''}`}
               >
-                {/* 드래그 핸들 */}
-                <div
-                  className={`flex-shrink-0 p-2 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-400 transition-colors ${
-                    isLongPress && isDragging ? 'text-blue-500' : ''
-                  }`}
-                >
-                  <GripVertical className="w-4 h-4" />
-                </div>
-
                 {/* 드롭 인디케이터 */}
                 {isDragOver && (
                   <div className="absolute left-0 right-0 top-0 h-0.5 bg-blue-500" />
                 )}
 
                 {/* 자산 카드 */}
-                <div className="flex-1 min-w-0">
-                  <AssetCard
-                    asset={asset}
-                    lastChange={getLastChange(asset.id)}
-                    onClick={() => !isLongPress && onAssetClick(asset)}
-                  />
-                </div>
+                <AssetCard
+                  asset={asset}
+                  lastChange={getLastChange(asset.id)}
+                  onClick={() => !isLongPress && onAssetClick(asset)}
+                />
               </div>
             );
           })}
