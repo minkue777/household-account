@@ -2,9 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { Asset, AssetHistoryEntry, ASSET_TYPE_CONFIG, StockHolding, StockSearchResult } from '@/types/asset';
-import { subscribeToAssetHistory, updateBalanceWithHistory, deleteHistoryEntry, subscribeToStockHoldings, addStockHolding, deleteStockHolding } from '@/lib/assetService';
+import { subscribeToAssetHistory, updateBalanceWithHistory, deleteHistoryEntry, subscribeToStockHoldings, addStockHolding, deleteStockHolding, updateAsset } from '@/lib/assetService';
 import Portal from '@/components/Portal';
-import { X, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Banknote, Home, BarChart3, Coins, Loader2 } from 'lucide-react';
+import { X, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Banknote, Home, BarChart3, Coins, Loader2, RefreshCw } from 'lucide-react';
+
+interface GoldPriceData {
+  buyPricePerDon: number;
+  sellPricePerDon: number;
+  timestamp: string;
+  estimated?: boolean;
+}
 
 interface AssetHistoryModalProps {
   isOpen: boolean;
@@ -12,7 +19,6 @@ interface AssetHistoryModalProps {
   asset: Asset | null;
   onEditAsset: () => void;
   onViewChart: () => void;
-  onViewGold?: () => void;
 }
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -28,7 +34,6 @@ export default function AssetHistoryModal({
   asset,
   onEditAsset,
   onViewChart,
-  onViewGold,
 }: AssetHistoryModalProps) {
   const [history, setHistory] = useState<AssetHistoryEntry[]>([]);
   const [showUpdateForm, setShowUpdateForm] = useState(false);
@@ -50,9 +55,14 @@ export default function AssetHistoryModal({
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
 
-  // 이력 구독 (주식 타입이 아닐 때)
+  // 금 관련 상태
+  const [goldQuantity, setGoldQuantity] = useState('');
+  const [goldPrice, setGoldPrice] = useState<GoldPriceData | null>(null);
+  const [isLoadingGoldPrice, setIsLoadingGoldPrice] = useState(false);
+
+  // 이력 구독 (주식/금 타입이 아닐 때)
   useEffect(() => {
-    if (!asset || asset.type === 'stock') return;
+    if (!asset || asset.type === 'stock' || asset.type === 'gold') return;
 
     const unsubscribe = subscribeToAssetHistory(asset.id, setHistory);
     return () => unsubscribe();
@@ -73,6 +83,36 @@ export default function AssetHistoryModal({
 
     return () => unsubscribe();
   }, [isOpen, asset]);
+
+  // 금 시세 및 보유량 로드
+  useEffect(() => {
+    if (!isOpen || !asset || asset.type !== 'gold') return;
+
+    // memo에서 돈 단위 추출
+    const match = asset.memo?.match(/(\d+(?:\.\d+)?)\s*돈/);
+    if (match) {
+      setGoldQuantity(match[1]);
+    } else {
+      setGoldQuantity('');
+    }
+    fetchGoldPrice();
+  }, [isOpen, asset]);
+
+  // 금 시세 조회
+  const fetchGoldPrice = async () => {
+    setIsLoadingGoldPrice(true);
+    try {
+      const response = await fetch('/api/gold/price');
+      if (response.ok) {
+        const data = await response.json();
+        setGoldPrice(data);
+      }
+    } catch (error) {
+      console.error('금 시세 조회 오류:', error);
+    } finally {
+      setIsLoadingGoldPrice(false);
+    }
+  };
 
   // 종목 검색
   useEffect(() => {
@@ -199,8 +239,28 @@ export default function AssetHistoryModal({
     setCurrentPrice(null);
   };
 
+  // 금 저장
+  const handleSaveGold = async () => {
+    if (!asset || !goldQuantity || !goldPrice || isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      // 팔 때 가격으로 평가금액 계산
+      const totalValue = Math.round(goldPrice.sellPricePerDon * parseFloat(goldQuantity));
+      await updateAsset(asset.id, {
+        currentBalance: totalValue,
+        memo: `${goldQuantity}돈`,
+      });
+      onClose();
+    } catch (error) {
+      console.error('금 보유량 저장 오류:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // 평가금액 계산
-  const calculateValue = (holding: StockHolding) => {
+  const calculateStockValue = (holding: StockHolding) => {
     const price = holding.currentPrice || holding.avgPrice || 0;
     return price * holding.quantity;
   };
@@ -209,7 +269,11 @@ export default function AssetHistoryModal({
 
   const config = ASSET_TYPE_CONFIG[asset.type];
   const isStock = asset.type === 'stock';
-  const totalStockValue = holdings.reduce((sum, h) => sum + calculateValue(h), 0);
+  const isGold = asset.type === 'gold';
+  const totalStockValue = holdings.reduce((sum, h) => sum + calculateStockValue(h), 0);
+  const goldTotalValue = goldPrice && goldQuantity
+    ? Math.round(goldPrice.sellPricePerDon * parseFloat(goldQuantity))
+    : 0;
 
   return (
     <Portal>
@@ -235,6 +299,7 @@ export default function AssetHistoryModal({
               </div>
               <div className="flex items-center gap-1">
                 <button
+                  type="button"
                   onClick={onEditAsset}
                   className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500"
                   title="수정"
@@ -242,6 +307,7 @@ export default function AssetHistoryModal({
                   <Edit2 className="w-5 h-5" />
                 </button>
                 <button
+                  type="button"
                   onClick={onClose}
                   className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
                 >
@@ -250,18 +316,9 @@ export default function AssetHistoryModal({
               </div>
             </div>
 
-            {/* 버튼들 */}
-            <div className="mt-4 flex gap-2">
-              {isStock ? (
-                <button
-                  type="button"
-                  onClick={() => setShowAddStockForm(true)}
-                  className="px-4 py-2.5 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors flex items-center gap-1.5"
-                >
-                  <Plus className="w-4 h-4" />
-                  종목 추가
-                </button>
-              ) : (
+            {/* 버튼들 - 주식/금이 아닐 때만 표시 */}
+            {!isStock && !isGold && (
+              <div className="mt-4 flex gap-2">
                 <button
                   type="button"
                   onClick={() => setShowUpdateForm(true)}
@@ -270,29 +327,40 @@ export default function AssetHistoryModal({
                   <Plus className="w-4 h-4" />
                   잔액 업데이트
                 </button>
-              )}
-              {asset.type === 'gold' && onViewGold && (
                 <button
                   type="button"
-                  onClick={onViewGold}
-                  className="px-4 py-2.5 bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-colors flex items-center gap-1.5"
+                  onClick={onViewChart}
+                  className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-colors"
                 >
-                  <Coins className="w-4 h-4" />
-                  시세
+                  차트
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={onViewChart}
-                className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-colors"
-              >
-                차트
-              </button>
-            </div>
+              </div>
+            )}
+
+            {/* 주식: 종목 추가 버튼 */}
+            {isStock && (
+              <div className="mt-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddStockForm(true)}
+                  className="px-4 py-2.5 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  종목 추가
+                </button>
+                <button
+                  type="button"
+                  onClick={onViewChart}
+                  className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-colors"
+                >
+                  차트
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* 잔액 업데이트 폼 (주식 아닐 때) */}
-          {!isStock && showUpdateForm && (
+          {/* 잔액 업데이트 폼 (예적금/부동산) */}
+          {!isStock && !isGold && showUpdateForm && (
             <div className="p-4 bg-blue-50 border-b border-blue-100">
               <div className="space-y-3">
                 <div>
@@ -487,7 +555,95 @@ export default function AssetHistoryModal({
 
           {/* 콘텐츠 영역 */}
           <div className="flex-1 overflow-y-auto p-4">
-            {isStock ? (
+            {isGold ? (
+              // 금: 시세 및 보유량
+              <div className="space-y-4">
+                {/* 금 시세 */}
+                <div className="bg-amber-50 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium text-amber-700">현재 금 시세 (1돈)</span>
+                    <button
+                      type="button"
+                      onClick={fetchGoldPrice}
+                      disabled={isLoadingGoldPrice}
+                      className="p-1 text-amber-600 hover:bg-amber-100 rounded transition-colors"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isLoadingGoldPrice ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
+                  {isLoadingGoldPrice ? (
+                    <div className="flex items-center gap-2 text-amber-600">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>시세 조회 중...</span>
+                    </div>
+                  ) : goldPrice ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-white rounded-lg p-3">
+                        <p className="text-xs text-slate-500 mb-1">살 때</p>
+                        <p className="text-lg font-bold text-red-500">
+                          {goldPrice.buyPricePerDon.toLocaleString()}
+                          <span className="text-sm font-normal text-slate-400 ml-1">원</span>
+                        </p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3">
+                        <p className="text-xs text-slate-500 mb-1">팔 때</p>
+                        <p className="text-lg font-bold text-blue-500">
+                          {goldPrice.sellPricePerDon.toLocaleString()}
+                          <span className="text-sm font-normal text-slate-400 ml-1">원</span>
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-amber-600">시세를 불러올 수 없습니다</p>
+                  )}
+                </div>
+
+                {/* 보유량 입력 */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    보유량
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={goldQuantity}
+                      onChange={(e) => setGoldQuantity(e.target.value.replace(/[^0-9.]/g, ''))}
+                      placeholder="0"
+                      className="w-full px-4 py-3 pr-12 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-lg"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">
+                      돈
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    1돈 = 3.75g (순금 24K 기준)
+                  </p>
+                </div>
+
+                {/* 평가금액 */}
+                {goldQuantity && parseFloat(goldQuantity) > 0 && goldPrice && (
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600">평가금액 (팔 때 기준)</span>
+                      <span className="text-xl font-bold text-slate-800">
+                        {goldTotalValue.toLocaleString()}원
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 저장 버튼 */}
+                <button
+                  type="button"
+                  onClick={handleSaveGold}
+                  disabled={!goldQuantity || !goldPrice || isSubmitting}
+                  className="w-full py-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed font-medium"
+                >
+                  {isSubmitting ? '저장 중...' : '저장'}
+                </button>
+              </div>
+            ) : isStock ? (
               // 주식: 보유 종목 목록
               <>
                 <div className="flex items-center justify-between mb-3">
@@ -520,9 +676,10 @@ export default function AssetHistoryModal({
                         </div>
                         <div className="flex items-center gap-2">
                           <p className="font-semibold text-slate-800">
-                            {calculateValue(holding).toLocaleString()}원
+                            {calculateStockValue(holding).toLocaleString()}원
                           </p>
                           <button
+                            type="button"
                             onClick={() => handleDeleteHolding(holding.id)}
                             className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                           >
@@ -592,6 +749,7 @@ export default function AssetHistoryModal({
                         </div>
 
                         <button
+                          type="button"
                           onClick={() => handleDeleteHistory(entry.id)}
                           className="p-1.5 hover:bg-red-100 rounded-lg transition-colors text-slate-400 hover:text-red-500"
                           disabled={isSubmitting}

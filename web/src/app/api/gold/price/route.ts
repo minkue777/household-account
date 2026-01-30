@@ -2,13 +2,12 @@ import { NextResponse } from 'next/server';
 
 // 1돈 = 3.75g
 const DON_TO_GRAM = 3.75;
+// 금 거래 스프레드 (약 2.5%)
+const SPREAD_PERCENT = 0.025;
 
 export async function GET() {
   try {
-    // 한국 금 시세 조회 (네이버 금융에서 국제 금 시세 + 환율로 계산)
-    // 또는 직접 금 시세 API 사용
-
-    // 방법 1: Yahoo Finance에서 국제 금 시세 조회 (USD/oz)
+    // Yahoo Finance에서 국제 금 시세 조회 (USD/oz)
     const goldResponse = await fetch(
       'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d',
       { next: { revalidate: 300 } } // 5분 캐시
@@ -40,28 +39,29 @@ export async function GET() {
     // 1 troy oz = 31.1035g
     const TROY_OZ_TO_GRAM = 31.1035;
 
-    // g당 원화 가격 계산
-    const pricePerGram = (goldUsdPerOz / TROY_OZ_TO_GRAM) * usdKrw;
+    // g당 원화 가격 계산 (기준가)
+    const basePricePerGram = (goldUsdPerOz / TROY_OZ_TO_GRAM) * usdKrw;
 
     // 1돈 가격 계산
-    const pricePerDon = pricePerGram * DON_TO_GRAM;
+    const basePricePerDon = basePricePerGram * DON_TO_GRAM;
+
+    // 살 때 (buy): 기준가 + 스프레드
+    const buyPricePerDon = Math.round(basePricePerDon * (1 + SPREAD_PERCENT));
+    // 팔 때 (sell): 기준가 - 스프레드
+    const sellPricePerDon = Math.round(basePricePerDon * (1 - SPREAD_PERCENT));
 
     return NextResponse.json({
-      pricePerGram: Math.round(pricePerGram),
-      pricePerDon: Math.round(pricePerDon),
-      goldUsdPerOz: Math.round(goldUsdPerOz * 100) / 100,
-      usdKrw: Math.round(usdKrw),
+      buyPricePerDon,   // 살 때 (1돈)
+      sellPricePerDon,  // 팔 때 (1돈)
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
     console.error('금 시세 조회 오류:', error);
 
-    // 실패 시 대략적인 시세 반환 (2024년 기준 약 10만원/돈)
+    // 실패 시 대략적인 시세 반환
     return NextResponse.json({
-      pricePerGram: 95000,
-      pricePerDon: 356250,
-      goldUsdPerOz: 2300,
-      usdKrw: 1350,
+      buyPricePerDon: 365000,
+      sellPricePerDon: 347000,
       timestamp: new Date().toISOString(),
       estimated: true,
     });
