@@ -17,6 +17,7 @@ import {
   AssetHistoryModal,
   AssetBalanceChart,
   StockHoldingModal,
+  GoldHoldingModal,
 } from '@/components/assets';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -37,6 +38,7 @@ export default function AssetsPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showChartModal, setShowChartModal] = useState(false);
   const [showHoldingModal, setShowHoldingModal] = useState(false);
+  const [showGoldModal, setShowGoldModal] = useState(false);
   const [isAddingSample, setIsAddingSample] = useState(false);
   const [selectedMember, setSelectedMember] = useState<string>('전체');
 
@@ -117,6 +119,12 @@ export default function AssetsPage() {
   const handleViewHoldings = () => {
     setShowHistoryModal(false);
     setShowHoldingModal(true);
+  };
+
+  // 금 시세 보기
+  const handleViewGold = () => {
+    setShowHistoryModal(false);
+    setShowGoldModal(true);
   };
 
   return (
@@ -207,6 +215,7 @@ export default function AssetsPage() {
           onEditAsset={handleEditAsset}
           onViewChart={handleViewChart}
           onViewHoldings={handleViewHoldings}
+          onViewGold={handleViewGold}
         />
 
         {/* 잔액 차트 모달 */}
@@ -225,6 +234,16 @@ export default function AssetsPage() {
           isOpen={showHoldingModal}
           onClose={() => {
             setShowHoldingModal(false);
+            setSelectedAsset(null);
+          }}
+          asset={selectedAsset}
+        />
+
+        {/* 금 보유량 모달 */}
+        <GoldHoldingModal
+          isOpen={showGoldModal}
+          onClose={() => {
+            setShowGoldModal(false);
             setSelectedAsset(null);
           }}
           asset={selectedAsset}

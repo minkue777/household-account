@@ -13,6 +13,7 @@ interface AssetHistoryModalProps {
   onEditAsset: () => void;
   onViewChart: () => void;
   onViewHoldings?: () => void;
+  onViewGold?: () => void;
 }
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -29,6 +30,7 @@ export default function AssetHistoryModal({
   onEditAsset,
   onViewChart,
   onViewHoldings,
+  onViewGold,
 }: AssetHistoryModalProps) {
   const [history, setHistory] = useState<AssetHistoryEntry[]>([]);
   const [showUpdateForm, setShowUpdateForm] = useState(false);
@@ -143,6 +145,15 @@ export default function AssetHistoryModal({
                 >
                   <List className="w-4 h-4" />
                   종목
+                </button>
+              )}
+              {asset.type === 'gold' && onViewGold && (
+                <button
+                  onClick={onViewGold}
+                  className="px-4 py-2.5 bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-colors flex items-center gap-1.5"
+                >
+                  <Coins className="w-4 h-4" />
+                  시세
                 </button>
               )}
               <button
