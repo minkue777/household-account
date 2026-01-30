@@ -142,7 +142,7 @@ export default function AssetSummaryCard({
       </div>
 
       {/* 가족 구성원 탭 */}
-      <div className="flex gap-4 px-5">
+      <div className="flex gap-6 px-5">
         {FAMILY_MEMBERS.map((member) => (
           <button
             key={member}
