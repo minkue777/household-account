@@ -59,8 +59,9 @@ export default function AssetCard({ asset, lastChange, onClick }: AssetCardProps
       <div className="text-right flex-shrink-0">
         <p className="font-semibold text-slate-900">
           {asset.currentBalance.toLocaleString()}
+          <span className="text-xs font-normal text-slate-400 ml-0.5">원</span>
         </p>
-        {showChange ? (
+        {showChange && (
           <p className={`text-xs ${hasPositiveChange ? 'text-red-500' : 'text-blue-500'}`}>
             {hasPositiveChange ? '+' : ''}{lastChange.amount.toLocaleString()}원
             {changeRate !== 0 && !isNaN(changeRate) && isFinite(changeRate) && (
@@ -69,8 +70,6 @@ export default function AssetCard({ asset, lastChange, onClick }: AssetCardProps
               </span>
             )}
           </p>
-        ) : (
-          <p className="text-xs text-slate-300">원</p>
         )}
       </div>
     </button>
