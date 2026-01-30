@@ -122,51 +122,52 @@ export default function AssetSummaryCard({
   const isNegative = monthlyChange < 0;
 
   return (
-    <div className="space-y-3">
-      {/* 총 자산 요약 + 가족 탭 */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100">
-        <div className="p-5 pb-3">
-          <p className="text-2xl font-bold text-slate-900 tracking-tight">
-            {totalBalance.toLocaleString()}
-            <span className="text-base font-medium text-slate-400 ml-1">원</span>
-          </p>
-          {/* 변동률 */}
-          <p className={`text-sm mt-1 ${isPositive ? 'text-green-500' : isNegative ? 'text-red-500' : 'text-slate-400'}`}>
-            {monthlyChange !== 0 ? (
-              <>
-                {isPositive ? '+ ' : ''}{changeRate.toFixed(2)}%
-                {isPositive ? '↑' : isNegative ? '↓' : ''}{' '}
-                {isPositive ? '+' : ''}{Math.abs(monthlyChange).toLocaleString()}원
-              </>
-            ) : (
-              '이번 달 변동 없음'
-            )}
-          </p>
-        </div>
-
-        {/* 가족 구성원 탭 */}
-        <div className="flex border-t border-slate-100">
-          {FAMILY_MEMBERS.map((member) => (
-            <button
-              key={member}
-              onClick={() => onMemberChange(member)}
-              className={`flex-1 py-3 text-sm font-medium transition-all relative ${
-                selectedMember === member
-                  ? 'text-blue-500'
-                  : 'text-slate-400 hover:text-slate-600'
-              }`}
-            >
-              {member}
-              {selectedMember === member && (
-                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-full" />
-              )}
-            </button>
-          ))}
-        </div>
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+      {/* 총 자산 금액 */}
+      <div className="px-5 pt-5">
+        <p className="text-2xl font-bold text-slate-900 tracking-tight">
+          {totalBalance.toLocaleString()}
+          <span className="text-base font-medium text-slate-400 ml-1">원</span>
+        </p>
+        {/* 변동률 */}
+        <p className={`text-sm mt-1 ${isPositive ? 'text-green-500' : isNegative ? 'text-red-500' : 'text-slate-400'}`}>
+          {monthlyChange !== 0 ? (
+            <>
+              {isPositive ? '+ ' : ''}{changeRate.toFixed(2)}%
+              {isPositive ? '↑' : isNegative ? '↓' : ''}{' '}
+              {isPositive ? '+' : ''}{Math.abs(monthlyChange).toLocaleString()}원
+            </>
+          ) : (
+            '이번 달 변동 없음'
+          )}
+        </p>
       </div>
 
+      {/* 가족 구성원 탭 */}
+      <div className="flex mt-4 px-5">
+        {FAMILY_MEMBERS.map((member) => (
+          <button
+            key={member}
+            onClick={() => onMemberChange(member)}
+            className={`flex-1 pb-2 text-sm font-medium transition-all relative ${
+              selectedMember === member
+                ? 'text-blue-500'
+                : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            {member}
+            {selectedMember === member && (
+              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-full" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* 구분선 */}
+      <div className="border-t border-slate-100 mx-5" />
+
       {/* 도넛 차트 + 범례 */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+      <div className="p-5">
         <div className="flex items-center">
           {/* 차트 */}
           <div className="w-[120px] h-[120px] flex-shrink-0">
