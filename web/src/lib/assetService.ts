@@ -80,8 +80,13 @@ export async function addAsset(input: AssetInput): Promise<string> {
   const householdId = getHouseholdId();
   const now = Timestamp.now();
 
+  // undefined 값 제거 (Firestore는 undefined를 허용하지 않음)
+  const cleanInput = Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined)
+  );
+
   const docRef = await addDoc(collection(db, ASSETS_COLLECTION), {
-    ...input,
+    ...cleanInput,
     householdId,
     createdAt: now,
     updatedAt: now,
@@ -109,8 +114,14 @@ export async function addAsset(input: AssetInput): Promise<string> {
  */
 export async function updateAsset(id: string, data: Partial<Asset>): Promise<void> {
   const docRef = doc(db, ASSETS_COLLECTION, id);
+
+  // undefined 값 제거 (Firestore는 undefined를 허용하지 않음)
+  const cleanData = Object.fromEntries(
+    Object.entries(data).filter(([, value]) => value !== undefined)
+  );
+
   await updateDoc(docRef, {
-    ...data,
+    ...cleanData,
     updatedAt: Timestamp.now(),
   });
 }
