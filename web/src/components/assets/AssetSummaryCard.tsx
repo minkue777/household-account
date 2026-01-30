@@ -68,11 +68,12 @@ export default function AssetSummaryCard({
     return balances.sort((a, b) => b.balance - a.balance);
   }, [filteredAssets, totalBalance]);
 
-  // 차트용 푸른 계열 색상
+  // 차트용 색상
   const CHART_COLORS: Record<AssetType, string> = {
-    bank: '#3B82F6',      // 파란색
-    investment: '#60A5FA', // 연한 파란색
-    property: '#93C5FD',   // 더 연한 파란색
+    savings: '#3B82F6',   // 파란색 (예적금)
+    stock: '#10B981',     // 초록색 (주식)
+    property: '#8B5CF6',  // 보라색 (부동산)
+    gold: '#F59E0B',      // 금색 (금)
   };
 
   // 도넛 차트 데이터

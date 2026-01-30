@@ -30,7 +30,7 @@ export default function AssetsPage() {
 
   // 모달 상태
   const [showAddModal, setShowAddModal] = useState(false);
-  const [addModalType, setAddModalType] = useState<AssetType>('bank');
+  const [addModalType, setAddModalType] = useState<AssetType>('savings');
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -95,7 +95,7 @@ export default function AssetsPage() {
 
   // 자산 추가 열기
   const handleAddClick = () => {
-    setAddModalType('bank');
+    setAddModalType('savings');
     setShowAddModal(true);
   };
 

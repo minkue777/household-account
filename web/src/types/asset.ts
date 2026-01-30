@@ -5,13 +5,7 @@ export const FAMILY_MEMBERS = ['전체', '이민규', '이진선', '이지아'] 
 export type FamilyMember = typeof FAMILY_MEMBERS[number];
 
 // 자산 타입
-export type AssetType = 'bank' | 'investment' | 'property';
-
-// 자산 하위 타입
-export type AssetSubType =
-  | '예금' | '적금' | 'CMA'           // bank
-  | '주식' | '펀드' | '코인' | 'ETF'   // investment
-  | '부동산' | '차량' | '기타';        // property
+export type AssetType = 'savings' | 'stock' | 'property' | 'gold';
 
 // 자산 타입별 설정
 export const ASSET_TYPE_CONFIG: Record<AssetType, {
@@ -20,23 +14,29 @@ export const ASSET_TYPE_CONFIG: Record<AssetType, {
   color: string;
   subTypes: string[];
 }> = {
-  bank: {
-    label: '은행',
+  savings: {
+    label: '예적금',
     icon: 'Building2',
     color: '#3B82F6',
     subTypes: ['예금', '적금', 'CMA'],
   },
-  investment: {
-    label: '투자',
+  stock: {
+    label: '주식',
     icon: 'TrendingUp',
     color: '#10B981',
     subTypes: [], // 종목 검색으로 대체
   },
   property: {
-    label: '부동산/차량',
+    label: '부동산',
     icon: 'Home',
     color: '#8B5CF6',
-    subTypes: ['부동산', '차량', '기타'],
+    subTypes: [],
+  },
+  gold: {
+    label: '금',
+    icon: 'Coins',
+    color: '#F59E0B',
+    subTypes: [],
   },
 };
 

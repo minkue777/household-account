@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { AssetType, AssetInput, ASSET_TYPE_CONFIG, StockSearchResult, FAMILY_MEMBERS } from '@/types/asset';
 import { addAsset } from '@/lib/assetService';
 import Portal from '@/components/Portal';
-import { X, Building2, TrendingUp, Home, Loader2 } from 'lucide-react';
+import { X, Building2, TrendingUp, Home, Coins, Loader2 } from 'lucide-react';
 
 interface AssetAddModalProps {
   isOpen: boolean;
@@ -13,12 +13,13 @@ interface AssetAddModalProps {
 }
 
 const ICONS: Record<AssetType, React.ReactNode> = {
-  bank: <Building2 className="w-5 h-5" />,
-  investment: <TrendingUp className="w-5 h-5" />,
+  savings: <Building2 className="w-5 h-5" />,
+  stock: <TrendingUp className="w-5 h-5" />,
   property: <Home className="w-5 h-5" />,
+  gold: <Coins className="w-5 h-5" />,
 };
 
-export default function AssetAddModal({ isOpen, onClose, defaultType = 'bank' }: AssetAddModalProps) {
+export default function AssetAddModal({ isOpen, onClose, defaultType = 'savings' }: AssetAddModalProps) {
   const [name, setName] = useState('');
   const [type, setType] = useState<AssetType>(defaultType);
   const [subType, setSubType] = useState('');
@@ -36,8 +37,8 @@ export default function AssetAddModal({ isOpen, onClose, defaultType = 'bank' }:
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
 
-  // 투자 타입인지 확인
-  const isInvestmentType = type === 'investment';
+  // 주식 타입인지 확인
+  const isStockType = type === 'stock';
 
   // 타입 변경시 초기화
   useEffect(() => {
@@ -72,7 +73,7 @@ export default function AssetAddModal({ isOpen, onClose, defaultType = 'bank' }:
 
   // 종목 검색 (타이핑할 때마다)
   useEffect(() => {
-    if (!isInvestmentType || searchQuery.length < 1) {
+    if (!isStockType || searchQuery.length < 1) {
       setSearchResults([]);
       return;
     }
@@ -92,7 +93,7 @@ export default function AssetAddModal({ isOpen, onClose, defaultType = 'bank' }:
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, isInvestmentType]);
+  }, [searchQuery, isStockType]);
 
   // 종목 선택
   const handleSelectStock = async (stock: StockSearchResult) => {
@@ -123,23 +124,23 @@ export default function AssetAddModal({ isOpen, onClose, defaultType = 'bank' }:
 
   const handleSubmit = async () => {
     if (isSubmitting) return;
-    if (isInvestmentType && (!stockCode || !quantity)) return;
-    if (!isInvestmentType && !name.trim()) return;
+    if (isStockType && (!stockCode || !quantity)) return;
+    if (!isStockType && !name.trim()) return;
 
     setIsSubmitting(true);
     try {
       const input: AssetInput = {
         name: name.trim(),
         type,
-        subType: isInvestmentType ? undefined : (subType || undefined),
+        subType: isStockType ? undefined : (subType || undefined),
         owner,
-        currentBalance: isInvestmentType ? calculatedBalance : (parseInt(balance, 10) || 0),
+        currentBalance: isStockType ? calculatedBalance : (parseInt(balance, 10) || 0),
         currency: 'KRW',
         memo: memo.trim() || undefined,
         isActive: true,
         order: Date.now(),
-        stockCode: isInvestmentType ? stockCode : undefined,
-        quantity: isInvestmentType ? parseInt(quantity, 10) || undefined : undefined,
+        stockCode: isStockType ? stockCode : undefined,
+        quantity: isStockType ? parseInt(quantity, 10) || undefined : undefined,
       };
 
       await addAsset(input);
@@ -246,7 +247,7 @@ export default function AssetAddModal({ isOpen, onClose, defaultType = 'bank' }:
             )}
 
             {/* 투자: 종목 검색 */}
-            {isInvestmentType ? (
+            {isStockType ? (
               <>
                 <div className="relative">
                   <label className="block text-sm font-medium text-slate-700 mb-1">종목 검색</label>
@@ -388,7 +389,7 @@ export default function AssetAddModal({ isOpen, onClose, defaultType = 'bank' }:
               onClick={handleSubmit}
               disabled={
                 isSubmitting ||
-                (isInvestmentType ? (!stockCode || !quantity) : !name.trim())
+                (isStockType ? (!stockCode || !quantity) : !name.trim())
               }
               className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
             >
