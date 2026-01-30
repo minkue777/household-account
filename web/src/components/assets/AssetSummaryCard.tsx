@@ -130,12 +130,10 @@ export default function AssetSummaryCard({
           <span className="text-base font-medium text-slate-400 ml-1">원</span>
         </p>
         {/* 변동률 */}
-        <p className={`text-sm mt-1 ${isPositive ? 'text-green-500' : isNegative ? 'text-red-500' : 'text-slate-400'}`}>
+        <p className={`text-sm mt-1 ${isPositive ? 'text-red-500' : isNegative ? 'text-blue-500' : 'text-slate-400'}`}>
           {monthlyChange !== 0 ? (
             <>
-              {isPositive ? '+ ' : ''}{changeRate.toFixed(2)}%
-              {isPositive ? '↑' : isNegative ? '↓' : ''}{' '}
-              {isPositive ? '+' : ''}{Math.abs(monthlyChange).toLocaleString()}원
+              {isPositive ? '+' : ''}{changeRate.toFixed(2)}% ({Math.abs(monthlyChange).toLocaleString()}원)
             </>
           ) : (
             '이번 달 변동 없음'
