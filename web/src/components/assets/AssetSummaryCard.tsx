@@ -7,6 +7,12 @@ import { Asset, ASSET_TYPE_CONFIG, AssetType, FAMILY_MEMBERS } from '@/types/ass
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
+// 이전 타입 매핑 (DB 호환용)
+const TYPE_FALLBACK: Record<string, AssetType> = {
+  bank: 'savings',
+  investment: 'stock',
+};
+
 interface AssetSummaryCardProps {
   assets: Asset[];
   monthlyChange: number;
@@ -53,7 +59,7 @@ export default function AssetSummaryCard({
 
     (Object.keys(ASSET_TYPE_CONFIG) as AssetType[]).forEach((type) => {
       const balance = filteredAssets
-        .filter((a) => a.type === type)
+        .filter((a) => (TYPE_FALLBACK[a.type] || a.type) === type)
         .reduce((sum, a) => sum + a.currentBalance, 0);
 
       if (balance > 0) {
