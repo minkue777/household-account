@@ -116,7 +116,7 @@ export default function AssetsPage() {
       <div className="max-w-lg mx-auto">
         {/* 헤더 */}
         <header className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <Link
               href="/"
               className="p-2 hover:bg-white/80 rounded-xl transition-colors"
@@ -124,7 +124,7 @@ export default function AssetsPage() {
               <ArrowLeft className="w-5 h-5 text-slate-600" />
             </Link>
             <h1
-              className="text-xl md:text-2xl font-bold"
+              className="text-lg md:text-2xl font-bold leading-tight"
               style={{
                 background: themeConfig.titleGradient,
                 WebkitBackgroundClip: 'text',
@@ -132,8 +132,15 @@ export default function AssetsPage() {
                 backgroundClip: 'text',
               }}
             >
-              자산 현황
+              또니망고네
+              <br />
+              자산
             </h1>
+            <img
+              src="/bear-removebg-preview.png"
+              alt="곰돌이"
+              className="w-14 h-14 md:w-16 md:h-16 object-contain"
+            />
           </div>
           {/* 샘플 데이터 추가 버튼 (자산이 없을 때만) */}
           {!isLoading && assets.length === 0 && (
