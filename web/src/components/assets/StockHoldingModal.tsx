@@ -115,10 +115,10 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
 
   // 종목 삭제
   const handleDeleteHolding = async (holdingId: string) => {
-    if (!confirm('이 종목을 삭제하시겠습니까?')) return;
+    if (!asset || !confirm('이 종목을 삭제하시겠습니까?')) return;
 
     try {
-      await deleteStockHolding(holdingId);
+      await deleteStockHolding(holdingId, asset.id);
     } catch (error) {
       console.error('종목 삭제 오류:', error);
     }

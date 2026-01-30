@@ -503,6 +503,31 @@ function mapDocToHolding(docSnap: QueryDocumentSnapshot<DocumentData>): StockHol
 }
 
 /**
+ * 주식 계좌의 총 평가금액 계산 및 업데이트
+ */
+async function updateAssetBalanceFromHoldings(assetId: string): Promise<void> {
+  const householdId = getHouseholdId();
+
+  const q = query(
+    collection(db, HOLDINGS_COLLECTION),
+    where('householdId', '==', householdId),
+    where('assetId', '==', assetId)
+  );
+
+  const snapshot = await getDocs(q);
+  const totalValue = snapshot.docs.reduce((sum, doc) => {
+    const data = doc.data();
+    const price = data.currentPrice || data.avgPrice || 0;
+    return sum + (price * (data.quantity || 0));
+  }, 0);
+
+  await updateDoc(doc(db, ASSETS_COLLECTION, assetId), {
+    currentBalance: totalValue,
+    updatedAt: Timestamp.now(),
+  });
+}
+
+/**
  * 주식 보유 종목 추가
  */
 export async function addStockHolding(input: StockHoldingInput): Promise<string> {
@@ -520,13 +545,16 @@ export async function addStockHolding(input: StockHoldingInput): Promise<string>
     updatedAt: now,
   });
 
+  // 자산 총액 업데이트
+  await updateAssetBalanceFromHoldings(input.assetId);
+
   return docRef.id;
 }
 
 /**
  * 주식 보유 종목 수정
  */
-export async function updateStockHolding(id: string, data: Partial<StockHolding>): Promise<void> {
+export async function updateStockHolding(id: string, assetId: string, data: Partial<StockHolding>): Promise<void> {
   const docRef = doc(db, HOLDINGS_COLLECTION, id);
 
   const cleanData = Object.fromEntries(
@@ -537,13 +565,19 @@ export async function updateStockHolding(id: string, data: Partial<StockHolding>
     ...cleanData,
     updatedAt: Timestamp.now(),
   });
+
+  // 자산 총액 업데이트
+  await updateAssetBalanceFromHoldings(assetId);
 }
 
 /**
  * 주식 보유 종목 삭제
  */
-export async function deleteStockHolding(id: string): Promise<void> {
+export async function deleteStockHolding(id: string, assetId: string): Promise<void> {
   await deleteDoc(doc(db, HOLDINGS_COLLECTION, id));
+
+  // 자산 총액 업데이트
+  await updateAssetBalanceFromHoldings(assetId);
 }
 
 /**

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Asset, AssetHistoryEntry, ASSET_TYPE_CONFIG, StockHolding, StockSearchResult } from '@/types/asset';
-import { subscribeToAssetHistory, updateBalanceWithHistory, deleteHistoryEntry, subscribeToStockHoldings, addStockHolding, deleteStockHolding, updateAsset } from '@/lib/assetService';
+import { subscribeToAssetHistory, updateBalanceWithHistory, deleteHistoryEntry, subscribeToStockHoldings, addStockHolding, updateStockHolding, deleteStockHolding, updateAsset } from '@/lib/assetService';
 import Portal from '@/components/Portal';
 import { X, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Banknote, Home, BarChart3, Coins, Loader2, RefreshCw } from 'lucide-react';
 
@@ -53,6 +53,11 @@ export default function AssetHistoryModal({
   const [avgPrice, setAvgPrice] = useState('');
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
+
+  // 보유 종목 수정 상태
+  const [editingHolding, setEditingHolding] = useState<StockHolding | null>(null);
+  const [editQuantity, setEditQuantity] = useState('');
+  const [editAvgPrice, setEditAvgPrice] = useState('');
 
   // 금 관련 상태
   const [goldQuantity, setGoldQuantity] = useState('');
@@ -228,11 +233,45 @@ export default function AssetHistoryModal({
 
   // 종목 삭제
   const handleDeleteHolding = async (holdingId: string) => {
+    if (!asset) return;
     try {
-      await deleteStockHolding(holdingId);
+      await deleteStockHolding(holdingId, asset.id);
     } catch (error) {
       console.error('종목 삭제 오류:', error);
     }
+  };
+
+  // 보유 종목 수정 시작
+  const handleEditHolding = (holding: StockHolding) => {
+    setEditingHolding(holding);
+    setEditQuantity(holding.quantity.toString());
+    setEditAvgPrice(holding.avgPrice?.toString() || '');
+  };
+
+  // 보유 종목 수정 저장
+  const handleSaveHolding = async () => {
+    if (!asset || !editingHolding || isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      await updateStockHolding(editingHolding.id, asset.id, {
+        quantity: parseInt(editQuantity, 10),
+        avgPrice: editAvgPrice ? parseInt(editAvgPrice, 10) : undefined,
+      });
+      setEditingHolding(null);
+    } catch (error) {
+      console.error('종목 수정 오류:', error);
+      alert('종목 수정에 실패했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // 보유 종목 수정 취소
+  const handleCancelEditHolding = () => {
+    setEditingHolding(null);
+    setEditQuantity('');
+    setEditAvgPrice('');
   };
 
   // 주식 폼 초기화
@@ -638,30 +677,82 @@ export default function AssetHistoryModal({
                   ) : (
                     <div className="space-y-2">
                       {holdings.map((holding) => (
-                        <div
-                          key={holding.id}
-                          className="flex items-center justify-between p-3 bg-slate-50 rounded-xl"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-slate-800 truncate">{holding.stockName}</p>
-                            <p className="text-xs text-slate-500">
-                              {holding.quantity.toLocaleString()}주
-                              {holding.currentPrice && ` · ${holding.currentPrice.toLocaleString()}원`}
-                            </p>
+                        editingHolding?.id === holding.id ? (
+                          // 수정 모드
+                          <div key={holding.id} className="p-3 bg-blue-50 rounded-xl space-y-3">
+                            <p className="font-medium text-slate-800">{holding.stockName}</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-xs text-slate-500 mb-1">수량</label>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={editQuantity}
+                                  onChange={(e) => setEditQuantity(e.target.value.replace(/[^0-9]/g, ''))}
+                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-slate-500 mb-1">평균 매입가</label>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={editAvgPrice ? parseInt(editAvgPrice, 10).toLocaleString() : ''}
+                                  onChange={(e) => setEditAvgPrice(e.target.value.replace(/[^0-9]/g, ''))}
+                                  placeholder="0"
+                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={handleCancelEditHolding}
+                                className="flex-1 py-2 border border-slate-300 rounded-lg text-slate-600 text-sm hover:bg-white"
+                              >
+                                취소
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleSaveHolding}
+                                disabled={!editQuantity || isSubmitting}
+                                className="flex-1 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 disabled:bg-slate-300"
+                              >
+                                {isSubmitting ? '저장 중...' : '저장'}
+                              </button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold text-slate-800">
-                              {calculateStockValue(holding).toLocaleString()}원
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteHolding(holding.id)}
-                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                        ) : (
+                          // 일반 모드
+                          <div
+                            key={holding.id}
+                            onClick={() => handleEditHolding(holding)}
+                            className="flex items-center justify-between p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-slate-800 truncate">{holding.stockName}</p>
+                              <p className="text-xs text-slate-500">
+                                {holding.quantity.toLocaleString()}주
+                                {holding.avgPrice && ` · 평단 ${holding.avgPrice.toLocaleString()}원`}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-slate-800">
+                                {calculateStockValue(holding).toLocaleString()}원
+                              </p>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteHolding(holding.id);
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
-                        </div>
+                        )
                       ))}
                     </div>
                   )}
