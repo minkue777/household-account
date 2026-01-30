@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Asset, AssetType, ASSET_TYPE_CONFIG } from '@/types/asset';
 import { updateAsset, deleteAsset } from '@/lib/assetService';
 import Portal from '@/components/Portal';
-import { X, Trash2, Building2, TrendingUp, Home } from 'lucide-react';
+import { X, Trash2, Building2, CandlestickChart, Home, Coins } from 'lucide-react';
 
 interface AssetEditModalProps {
   isOpen: boolean;
@@ -13,14 +13,15 @@ interface AssetEditModalProps {
 }
 
 const ICONS: Record<AssetType, React.ReactNode> = {
-  bank: <Building2 className="w-5 h-5" />,
-  investment: <TrendingUp className="w-5 h-5" />,
+  savings: <Building2 className="w-5 h-5" />,
+  stock: <CandlestickChart className="w-5 h-5" />,
   property: <Home className="w-5 h-5" />,
+  gold: <Coins className="w-5 h-5" />,
 };
 
 export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModalProps) {
   const [name, setName] = useState('');
-  const [type, setType] = useState<AssetType>('bank');
+  const [type, setType] = useState<AssetType>('savings');
   const [subType, setSubType] = useState('');
   const [memo, setMemo] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -134,7 +135,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
                 {/* 자산 타입 */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">유형</label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-4 gap-2">
                     {(Object.keys(ASSET_TYPE_CONFIG) as AssetType[]).map((t) => {
                       const config = ASSET_TYPE_CONFIG[t];
                       const isSelected = type === t;
