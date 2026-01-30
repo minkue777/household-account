@@ -268,8 +268,8 @@ export default function Home() {
       <div className="max-w-7xl mx-auto">
         {/* 헤더 */}
         <header className="mb-6 flex items-center justify-between">
-          {/* 왼쪽: 제목 + 곰돌이 */}
-          <div className="flex items-center gap-2">
+          {/* 왼쪽: 제목 + 곰돌이 (클릭 시 자산 페이지로 이동) */}
+          <Link href="/assets" className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer">
             <h1
               className="text-lg md:text-2xl font-bold leading-tight"
               style={{
@@ -288,7 +288,7 @@ export default function Home() {
               alt="곰돌이"
               className="w-14 h-14 md:w-16 md:h-16 object-contain"
             />
-          </div>
+          </Link>
 
           {/* 오른쪽: 버튼들 */}
           <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
@@ -301,15 +301,6 @@ export default function Home() {
               </svg>
               <span className="hidden md:inline">검색</span>
             </button>
-            <Link
-              href="/assets"
-              className="bg-white/80 hover:bg-white text-slate-600 p-2 md:px-4 md:py-2 rounded-xl flex items-center gap-2 transition-all shadow-sm hover:shadow border border-slate-200/50"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-              <span className="hidden md:inline">자산</span>
-            </Link>
             <Link
               href="/settings"
               className="bg-white/80 hover:bg-white text-slate-600 p-2 md:px-4 md:py-2 rounded-xl flex items-center gap-2 transition-all shadow-sm hover:shadow border border-slate-200/50"

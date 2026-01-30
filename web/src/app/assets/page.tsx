@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
 import { Asset, AssetType, AssetHistoryEntry } from '@/types/asset';
 import {
   subscribeToAssets,
@@ -116,13 +115,8 @@ export default function AssetsPage() {
       <div className="max-w-lg mx-auto">
         {/* 헤더 */}
         <header className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Link
-              href="/"
-              className="p-2 hover:bg-white/80 rounded-xl transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5 text-slate-600" />
-            </Link>
+          {/* 제목 + 곰돌이 (클릭 시 가계부 페이지로 이동) */}
+          <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer">
             <h1
               className="text-lg md:text-2xl font-bold leading-tight"
               style={{
@@ -141,7 +135,7 @@ export default function AssetsPage() {
               alt="곰돌이"
               className="w-14 h-14 md:w-16 md:h-16 object-contain"
             />
-          </div>
+          </Link>
           {/* 샘플 데이터 추가 버튼 (자산이 없을 때만) */}
           {!isLoading && assets.length === 0 && (
             <button
