@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
-import { Asset, ASSET_TYPE_CONFIG, AssetType } from '@/types/asset';
+import { Asset, ASSET_TYPE_CONFIG, AssetType, FAMILY_MEMBERS } from '@/types/asset';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -11,13 +11,27 @@ interface AssetSummaryCardProps {
   assets: Asset[];
   monthlyChange: number;
   previousMonthTotal?: number;
+  selectedMember: string;
+  onMemberChange: (member: string) => void;
 }
 
-export default function AssetSummaryCard({ assets, monthlyChange, previousMonthTotal }: AssetSummaryCardProps) {
+export default function AssetSummaryCard({
+  assets,
+  monthlyChange,
+  previousMonthTotal,
+  selectedMember,
+  onMemberChange,
+}: AssetSummaryCardProps) {
+  // 선택된 멤버로 필터링
+  const filteredAssets = useMemo(() => {
+    if (selectedMember === '전체') {
+      return assets.filter((a) => a.isActive);
+    }
+    return assets.filter((a) => a.isActive && a.owner === selectedMember);
+  }, [assets, selectedMember]);
+
   // 총 자산 계산
-  const totalBalance = assets
-    .filter((a) => a.isActive)
-    .reduce((sum, a) => sum + a.currentBalance, 0);
+  const totalBalance = filteredAssets.reduce((sum, a) => sum + a.currentBalance, 0);
 
   // 변동률 계산
   const changeRate = useMemo(() => {
@@ -38,8 +52,8 @@ export default function AssetSummaryCard({ assets, monthlyChange, previousMonthT
     const balances: { type: AssetType; balance: number; percentage: number }[] = [];
 
     (Object.keys(ASSET_TYPE_CONFIG) as AssetType[]).forEach((type) => {
-      const balance = assets
-        .filter((a) => a.isActive && a.type === type)
+      const balance = filteredAssets
+        .filter((a) => a.type === type)
         .reduce((sum, a) => sum + a.currentBalance, 0);
 
       if (balance > 0) {
@@ -52,7 +66,7 @@ export default function AssetSummaryCard({ assets, monthlyChange, previousMonthT
     });
 
     return balances.sort((a, b) => b.balance - a.balance);
-  }, [assets, totalBalance]);
+  }, [filteredAssets, totalBalance]);
 
   // 차트용 푸른 계열 색상
   const CHART_COLORS: Record<AssetType, string> = {
@@ -108,9 +122,28 @@ export default function AssetSummaryCard({ assets, monthlyChange, previousMonthT
   const isNegative = monthlyChange < 0;
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-      {/* 총 자산 */}
-      <div className="px-5 pt-5 pb-4">
+    <div className="space-y-3">
+      {/* 가족 구성원 탭 */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-1.5">
+        <div className="flex">
+          {FAMILY_MEMBERS.map((member) => (
+            <button
+              key={member}
+              onClick={() => onMemberChange(member)}
+              className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all ${
+                selectedMember === member
+                  ? 'bg-blue-500 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {member}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 총 자산 요약 */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
         <p className="text-2xl font-bold text-slate-900 tracking-tight">
           {totalBalance.toLocaleString()}
           <span className="text-base font-medium text-slate-400 ml-1">원</span>
@@ -129,11 +162,8 @@ export default function AssetSummaryCard({ assets, monthlyChange, previousMonthT
         </p>
       </div>
 
-      {/* 구분선 */}
-      <div className="border-t border-slate-100" />
-
       {/* 도넛 차트 + 범례 */}
-      <div className="p-5">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
         <div className="flex items-center">
           {/* 차트 */}
           <div className="w-[120px] h-[120px] flex-shrink-0">
@@ -154,7 +184,7 @@ export default function AssetSummaryCard({ assets, monthlyChange, previousMonthT
                     <span className="text-sm text-slate-600">{config.label}</span>
                   </div>
                   <span className="text-sm font-medium text-slate-800">
-                    {item.percentage.toFixed(2)}%
+                    {item.percentage.toFixed(1)}%
                   </span>
                 </div>
               );

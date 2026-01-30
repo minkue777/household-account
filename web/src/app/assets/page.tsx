@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Asset, AssetType, AssetHistoryEntry } from '@/types/asset';
+import { Asset, AssetType, AssetHistoryEntry, FAMILY_MEMBERS } from '@/types/asset';
 import {
   subscribeToAssets,
   subscribeToAssetHistory,
@@ -36,6 +36,7 @@ export default function AssetsPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showChartModal, setShowChartModal] = useState(false);
   const [isAddingSample, setIsAddingSample] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<string>('전체');
 
   // 샘플 데이터 추가
   const handleAddSampleData = async () => {
@@ -152,12 +153,17 @@ export default function AssetsPage() {
           <div className="text-center py-12 text-slate-400">로딩 중...</div>
         ) : (
           <div className="space-y-4">
-            {/* 총 자산 요약 + 도넛 차트 */}
-            <AssetSummaryCard assets={assets} monthlyChange={monthlyChange} />
+            {/* 가족 탭 + 총 자산 요약 + 도넛 차트 */}
+            <AssetSummaryCard
+              assets={assets}
+              monthlyChange={monthlyChange}
+              selectedMember={selectedMember}
+              onMemberChange={setSelectedMember}
+            />
 
             {/* 보유 현황 */}
             <AssetList
-              assets={assets}
+              assets={selectedMember === '전체' ? assets : assets.filter(a => a.owner === selectedMember)}
               historyMap={historyMap}
               onAssetClick={handleAssetClick}
               onAddClick={handleAddClick}

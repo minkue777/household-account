@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { AssetType, AssetInput, ASSET_TYPE_CONFIG, StockSearchResult } from '@/types/asset';
+import { AssetType, AssetInput, ASSET_TYPE_CONFIG, StockSearchResult, FAMILY_MEMBERS } from '@/types/asset';
 import { addAsset } from '@/lib/assetService';
 import Portal from '@/components/Portal';
 import { X, Building2, TrendingUp, Home, Loader2 } from 'lucide-react';
@@ -22,6 +22,7 @@ export default function AssetAddModal({ isOpen, onClose, defaultType = 'bank' }:
   const [name, setName] = useState('');
   const [type, setType] = useState<AssetType>(defaultType);
   const [subType, setSubType] = useState('');
+  const [owner, setOwner] = useState<string>(FAMILY_MEMBERS[1]); // 기본: 첫 번째 가족 구성원
   const [balance, setBalance] = useState('');
   const [memo, setMemo] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,6 +58,7 @@ export default function AssetAddModal({ isOpen, onClose, defaultType = 'bank' }:
       setType(defaultType);
       const config = ASSET_TYPE_CONFIG[defaultType];
       setSubType(config.subTypes[0] || '');
+      setOwner(FAMILY_MEMBERS[1]);
       setName('');
       setBalance('');
       setMemo('');
@@ -130,6 +132,7 @@ export default function AssetAddModal({ isOpen, onClose, defaultType = 'bank' }:
         name: name.trim(),
         type,
         subType: isInvestmentType ? undefined : (subType || undefined),
+        owner,
         currentBalance: isInvestmentType ? calculatedBalance : (parseInt(balance, 10) || 0),
         currency: 'KRW',
         memo: memo.trim() || undefined,
@@ -195,6 +198,27 @@ export default function AssetAddModal({ isOpen, onClose, defaultType = 'bank' }:
                     </button>
                   );
                 })}
+              </div>
+            </div>
+
+            {/* 소유자 선택 */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">소유자</label>
+              <div className="flex flex-wrap gap-2">
+                {FAMILY_MEMBERS.filter(m => m !== '전체').map((member) => (
+                  <button
+                    key={member}
+                    type="button"
+                    onClick={() => setOwner(member)}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-all ${
+                      owner === member
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {member}
+                  </button>
+                ))}
               </div>
             </div>
 

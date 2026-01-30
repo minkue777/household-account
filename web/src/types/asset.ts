@@ -1,5 +1,9 @@
 import { Timestamp } from 'firebase/firestore';
 
+// 가족 구성원
+export const FAMILY_MEMBERS = ['전체', '이민규', '이진선', '이지아'] as const;
+export type FamilyMember = typeof FAMILY_MEMBERS[number];
+
 // 자산 타입
 export type AssetType = 'bank' | 'investment' | 'property';
 
@@ -43,6 +47,7 @@ export interface Asset {
   name: string;              // "KB은행 예금", "삼성전자 주식"
   type: AssetType;
   subType?: string;          // "예금", "적금", "주식", "펀드", "코인", "부동산", "차량"
+  owner?: string;            // 소유자 (가족 구성원)
   currentBalance: number;
   currency: string;          // 'KRW' (기본)
   memo?: string;
