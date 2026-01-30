@@ -10,6 +10,7 @@ interface AssetAddModalProps {
   isOpen: boolean;
   onClose: () => void;
   defaultType?: AssetType;
+  defaultOwner?: string;
 }
 
 const ICONS: Record<AssetType, React.ReactNode> = {
@@ -27,7 +28,7 @@ const PLACEHOLDERS: Record<AssetType, string> = {
   gold: '예: KRX 금현물, 금통장',
 };
 
-export default function AssetAddModal({ isOpen, onClose, defaultType = 'savings' }: AssetAddModalProps) {
+export default function AssetAddModal({ isOpen, onClose, defaultType = 'savings', defaultOwner }: AssetAddModalProps) {
   const [name, setName] = useState('');
   const [type, setType] = useState<AssetType>(defaultType);
   const [owner, setOwner] = useState<string>(ASSET_OWNERS[0]);
@@ -45,12 +46,14 @@ export default function AssetAddModal({ isOpen, onClose, defaultType = 'savings'
   useEffect(() => {
     if (isOpen) {
       setType(defaultType);
-      setOwner(ASSET_OWNERS[0]);
+      // 선택된 멤버가 있고 '전체'가 아니면 해당 멤버를 기본 소유자로
+      const initialOwner = defaultOwner && defaultOwner !== '전체' ? defaultOwner : ASSET_OWNERS[0];
+      setOwner(initialOwner);
       setName('');
       setBalance('');
       setMemo('');
     }
-  }, [isOpen, defaultType]);
+  }, [isOpen, defaultType, defaultOwner]);
 
   const handleSubmit = async () => {
     if (isSubmitting || !name.trim()) return;

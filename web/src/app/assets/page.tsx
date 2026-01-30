@@ -204,6 +204,7 @@ export default function AssetsPage() {
           isOpen={showAddModal}
           onClose={() => setShowAddModal(false)}
           defaultType={addModalType}
+          defaultOwner={selectedMember}
         />
 
         {/* 자산 수정 모달 */}
