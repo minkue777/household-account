@@ -15,11 +15,12 @@ import {
   orderBy,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Asset, AssetHistoryEntry, AssetInput } from '@/types/asset';
+import { Asset, AssetHistoryEntry, AssetInput, StockHolding, StockHoldingInput } from '@/types/asset';
 import { getStoredHouseholdKey } from './householdService';
 
 const ASSETS_COLLECTION = 'assets';
 const HISTORY_COLLECTION = 'asset_history';
+const HOLDINGS_COLLECTION = 'stock_holdings';
 
 /**
  * 현재 가구 키 가져오기
@@ -424,4 +425,138 @@ export async function addSampleAssets(): Promise<void> {
   for (const asset of sampleAssets) {
     await addAsset(asset);
   }
+}
+
+// ============================================
+// 주식 보유 종목 관련 함수
+// ============================================
+
+/**
+ * Firestore 문서를 StockHolding 객체로 변환
+ */
+function mapDocToHolding(docSnap: QueryDocumentSnapshot<DocumentData>): StockHolding {
+  const data = docSnap.data();
+  return {
+    id: docSnap.id,
+    assetId: data.assetId,
+    householdId: data.householdId,
+    stockCode: data.stockCode,
+    stockName: data.stockName,
+    quantity: data.quantity,
+    avgPrice: data.avgPrice,
+    currentPrice: data.currentPrice,
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+  };
+}
+
+/**
+ * 주식 보유 종목 추가
+ */
+export async function addStockHolding(input: StockHoldingInput): Promise<string> {
+  const householdId = getHouseholdId();
+  const now = Timestamp.now();
+
+  const cleanInput = Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined)
+  );
+
+  const docRef = await addDoc(collection(db, HOLDINGS_COLLECTION), {
+    ...cleanInput,
+    householdId,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return docRef.id;
+}
+
+/**
+ * 주식 보유 종목 수정
+ */
+export async function updateStockHolding(id: string, data: Partial<StockHolding>): Promise<void> {
+  const docRef = doc(db, HOLDINGS_COLLECTION, id);
+
+  const cleanData = Object.fromEntries(
+    Object.entries(data).filter(([, value]) => value !== undefined)
+  );
+
+  await updateDoc(docRef, {
+    ...cleanData,
+    updatedAt: Timestamp.now(),
+  });
+}
+
+/**
+ * 주식 보유 종목 삭제
+ */
+export async function deleteStockHolding(id: string): Promise<void> {
+  await deleteDoc(doc(db, HOLDINGS_COLLECTION, id));
+}
+
+/**
+ * 특정 자산(계좌)의 보유 종목 실시간 구독
+ */
+export function subscribeToStockHoldings(
+  assetId: string,
+  callback: (holdings: StockHolding[]) => void
+): () => void {
+  const householdId = getHouseholdId();
+
+  const q = query(
+    collection(db, HOLDINGS_COLLECTION),
+    where('householdId', '==', householdId),
+    where('assetId', '==', assetId)
+  );
+
+  const unsubscribe = onSnapshot(
+    q,
+    (snapshot) => {
+      const holdings = snapshot.docs.map(mapDocToHolding);
+      holdings.sort((a, b) => a.stockName.localeCompare(b.stockName));
+      callback(holdings);
+    },
+    (error) => {
+      console.error('보유 종목 구독 오류:', error);
+      callback([]);
+    }
+  );
+
+  return unsubscribe;
+}
+
+/**
+ * 자산 삭제 시 연결된 보유 종목도 함께 삭제
+ */
+export async function deleteAssetWithHoldings(assetId: string): Promise<void> {
+  const householdId = getHouseholdId();
+
+  // 관련 이력 조회
+  const historyQuery = query(
+    collection(db, HISTORY_COLLECTION),
+    where('householdId', '==', householdId),
+    where('assetId', '==', assetId)
+  );
+  const historySnapshot = await getDocs(historyQuery);
+
+  // 관련 보유 종목 조회
+  const holdingsQuery = query(
+    collection(db, HOLDINGS_COLLECTION),
+    where('householdId', '==', householdId),
+    where('assetId', '==', assetId)
+  );
+  const holdingsSnapshot = await getDocs(holdingsQuery);
+
+  await runTransaction(db, async (transaction) => {
+    // 이력 삭제
+    historySnapshot.docs.forEach((docSnap) => {
+      transaction.delete(doc(db, HISTORY_COLLECTION, docSnap.id));
+    });
+    // 보유 종목 삭제
+    holdingsSnapshot.docs.forEach((docSnap) => {
+      transaction.delete(doc(db, HOLDINGS_COLLECTION, docSnap.id));
+    });
+    // 자산 삭제
+    transaction.delete(doc(db, ASSETS_COLLECTION, assetId));
+  });
 }

@@ -5,3 +5,4 @@ export { default as AssetAddModal } from './AssetAddModal';
 export { default as AssetEditModal } from './AssetEditModal';
 export { default as AssetHistoryModal } from './AssetHistoryModal';
 export { default as AssetBalanceChart } from './AssetBalanceChart';
+export { default as StockHoldingModal } from './StockHoldingModal';

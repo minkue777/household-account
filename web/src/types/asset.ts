@@ -92,8 +92,25 @@ export interface AssetHistoryEntry {
   createdAt: Timestamp;
 }
 
+// 주식 보유 종목 (주식 계좌의 세부 항목)
+export interface StockHolding {
+  id: string;
+  assetId: string;           // 연결된 자산(계좌) ID
+  householdId: string;
+  stockCode: string;         // 종목코드
+  stockName: string;         // 종목명
+  quantity: number;          // 보유 수량
+  avgPrice?: number;         // 평균 매입가
+  currentPrice?: number;     // 현재가 (조회 시 업데이트)
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 // 자산 생성 입력
 export type AssetInput = Omit<Asset, 'id' | 'householdId' | 'createdAt' | 'updatedAt'>;
 
 // 자산 이력 생성 입력
 export type AssetHistoryInput = Omit<AssetHistoryEntry, 'id' | 'householdId' | 'createdAt'>;
+
+// 주식 보유 종목 생성 입력
+export type StockHoldingInput = Omit<StockHolding, 'id' | 'householdId' | 'createdAt' | 'updatedAt'>;

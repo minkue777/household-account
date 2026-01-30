@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Asset, AssetHistoryEntry, ASSET_TYPE_CONFIG } from '@/types/asset';
 import { subscribeToAssetHistory, updateBalanceWithHistory, deleteHistoryEntry } from '@/lib/assetService';
 import Portal from '@/components/Portal';
-import { X, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Building2, Home } from 'lucide-react';
+import { X, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Building2, Home, CandlestickChart, Coins, List } from 'lucide-react';
 
 interface AssetHistoryModalProps {
   isOpen: boolean;
@@ -12,12 +12,14 @@ interface AssetHistoryModalProps {
   asset: Asset | null;
   onEditAsset: () => void;
   onViewChart: () => void;
+  onViewHoldings?: () => void;
 }
 
 const ICONS: Record<string, React.ReactNode> = {
-  bank: <Building2 className="w-5 h-5" />,
-  investment: <TrendingUp className="w-5 h-5" />,
+  savings: <Building2 className="w-5 h-5" />,
+  stock: <CandlestickChart className="w-5 h-5" />,
   property: <Home className="w-5 h-5" />,
+  gold: <Coins className="w-5 h-5" />,
 };
 
 export default function AssetHistoryModal({
@@ -26,6 +28,7 @@ export default function AssetHistoryModal({
   asset,
   onEditAsset,
   onViewChart,
+  onViewHoldings,
 }: AssetHistoryModalProps) {
   const [history, setHistory] = useState<AssetHistoryEntry[]>([]);
   const [showUpdateForm, setShowUpdateForm] = useState(false);
@@ -124,7 +127,7 @@ export default function AssetHistoryModal({
               </div>
             </div>
 
-            {/* 잔액 업데이트 버튼 */}
+            {/* 버튼들 */}
             <div className="mt-4 flex gap-2">
               <button
                 onClick={() => setShowUpdateForm(true)}
@@ -133,6 +136,15 @@ export default function AssetHistoryModal({
                 <Plus className="w-4 h-4" />
                 잔액 업데이트
               </button>
+              {asset.type === 'stock' && onViewHoldings && (
+                <button
+                  onClick={onViewHoldings}
+                  className="px-4 py-2.5 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors flex items-center gap-1.5"
+                >
+                  <List className="w-4 h-4" />
+                  종목
+                </button>
+              )}
               <button
                 onClick={onViewChart}
                 className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-colors"
