@@ -1,7 +1,7 @@
 'use client';
 
 import { Asset, ASSET_TYPE_CONFIG } from '@/types/asset';
-import { Building2, TrendingUp, Home } from 'lucide-react';
+import { Building2, CandlestickChart, Home, Coins } from 'lucide-react';
 
 interface AssetCardProps {
   asset: Asset;
@@ -13,22 +13,25 @@ interface AssetCardProps {
 }
 
 const ICONS: Record<string, React.ReactNode> = {
-  bank: <Building2 className="w-5 h-5" />,
-  investment: <TrendingUp className="w-5 h-5" />,
+  savings: <Building2 className="w-5 h-5" />,
+  stock: <CandlestickChart className="w-5 h-5" />,
   property: <Home className="w-5 h-5" />,
+  gold: <Coins className="w-5 h-5" />,
 };
 
 export default function AssetCard({ asset, lastChange, onClick }: AssetCardProps) {
   const config = ASSET_TYPE_CONFIG[asset.type];
   const iconColor = asset.color || config.color;
 
+  // 주식 타입만 변동 표시
+  const showChange = asset.type === 'stock' && lastChange && lastChange.amount !== 0;
+
   // 변동률 계산 (이전 잔액 대비)
-  const changeRate = lastChange && lastChange.amount !== 0 && (asset.currentBalance - lastChange.amount) !== 0
+  const changeRate = showChange && (asset.currentBalance - lastChange.amount) !== 0
     ? ((lastChange.amount / (asset.currentBalance - lastChange.amount)) * 100)
     : 0;
 
   const hasPositiveChange = lastChange && lastChange.amount > 0;
-  const hasNegativeChange = lastChange && lastChange.amount < 0;
 
   return (
     <button
@@ -52,22 +55,22 @@ export default function AssetCard({ asset, lastChange, onClick }: AssetCardProps
         </p>
       </div>
 
-      {/* 금액 & 변동률 */}
+      {/* 금액 & 변동률 (주식만) */}
       <div className="text-right flex-shrink-0">
         <p className="font-semibold text-slate-900">
           {asset.currentBalance.toLocaleString()}
         </p>
-        {lastChange && lastChange.amount !== 0 ? (
-          <p className={`text-xs ${hasPositiveChange ? 'text-green-500' : 'text-red-500'}`}>
+        {showChange ? (
+          <p className={`text-xs ${hasPositiveChange ? 'text-red-500' : 'text-blue-500'}`}>
             {hasPositiveChange ? '+' : ''}{lastChange.amount.toLocaleString()}원
             {changeRate !== 0 && !isNaN(changeRate) && isFinite(changeRate) && (
               <span className="ml-1">
-                {changeRate > 0 ? '+' : ''}{changeRate.toFixed(1)}%
+                ({changeRate > 0 ? '+' : ''}{changeRate.toFixed(1)}%)
               </span>
             )}
           </p>
         ) : (
-          <p className="text-xs text-slate-300">-</p>
+          <p className="text-xs text-slate-300">원</p>
         )}
       </div>
     </button>
