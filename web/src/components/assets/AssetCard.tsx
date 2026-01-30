@@ -51,6 +51,7 @@ export default function AssetCard({ asset, lastChange, onClick }: AssetCardProps
         <h3 className="font-semibold text-slate-900 truncate">{asset.name}</h3>
         <p className="text-xs text-slate-400 truncate">
           {asset.subType || config.label}
+          {asset.owner && ` · ${asset.owner}`}
           {asset.memo && ` · ${asset.memo}`}
         </p>
       </div>
