@@ -15,35 +15,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ results: [] });
   }
 
-  // 여러 소스에서 순차적으로 시도
-  let results: StockSearchResult[] = [];
-
-  // 1. KRX API 시도
   try {
-    results = await searchKRX(query);
-    if (results.length > 0) {
-      return NextResponse.json({ results: results.slice(0, 15) });
-    }
-  } catch (error) {
-    console.error('KRX 검색 실패:', error);
-  }
-
-  // 2. 네이버 금융 시도
-  try {
-    results = await searchNaver(query);
-    if (results.length > 0) {
-      return NextResponse.json({ results: results.slice(0, 15) });
-    }
-  } catch (error) {
-    console.error('네이버 검색 실패:', error);
-  }
-
-  // 3. Yahoo Finance 폴백
-  try {
-    results = await searchYahoo(query);
+    const results = await searchKRX(query);
     return NextResponse.json({ results: results.slice(0, 15) });
   } catch (error) {
-    console.error('Yahoo 검색 실패:', error);
+    console.error('KRX 검색 실패:', error);
     return NextResponse.json({ results: [], error: '검색 실패' });
   }
 }
@@ -83,79 +59,6 @@ async function searchKRX(query: string): Promise<StockSearchResult[]> {
         market: item.marketName || item.mkt_nm || 'KRX',
         type: detectType(item.codeName || item.isin_name),
       });
-    }
-  }
-
-  return results;
-}
-
-// 네이버 금융 자동완성 검색
-async function searchNaver(query: string): Promise<StockSearchResult[]> {
-  const encodedQuery = encodeURIComponent(query);
-  const url = `https://ac.finance.naver.com/ac?q=${encodedQuery}&q_enc=utf-8&t_korstock=1&t_usstock=0&st=111&r_lt=111`;
-
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'application/json, text/javascript, */*; q=0.01',
-      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Referer': 'https://finance.naver.com/',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`네이버 API 응답 오류: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const results: StockSearchResult[] = [];
-
-  if (data.items && data.items[0]) {
-    for (const item of data.items[0]) {
-      if (item.length >= 2) {
-        const name = item[0];
-        const code = item[1];
-        results.push({
-          code,
-          name,
-          market: 'KRX',
-          type: detectType(name),
-        });
-      }
-    }
-  }
-
-  return results;
-}
-
-// Yahoo Finance 검색
-async function searchYahoo(query: string): Promise<StockSearchResult[]> {
-  const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=20&lang=ko-KR&region=KR`;
-
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Yahoo API 응답 오류: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const results: StockSearchResult[] = [];
-
-  if (data.quotes) {
-    for (const quote of data.quotes) {
-      // 한국 주식만 필터링
-      if (quote.symbol?.endsWith('.KS') || quote.symbol?.endsWith('.KQ')) {
-        results.push({
-          code: quote.symbol.replace('.KS', '').replace('.KQ', ''),
-          name: quote.shortname || quote.longname || quote.symbol,
-          market: quote.symbol.endsWith('.KS') ? 'KOSPI' : 'KOSDAQ',
-          type: quote.quoteType === 'ETF' ? 'ETF' : 'STOCK',
-        });
-      }
     }
   }
 
