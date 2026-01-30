@@ -119,15 +119,22 @@ export async function addAsset(input: AssetInput): Promise<string> {
 export async function updateAsset(id: string, data: Partial<Asset>): Promise<void> {
   const docRef = doc(db, ASSETS_COLLECTION, id);
 
-  // undefined 값 제거 (Firestore는 undefined를 허용하지 않음)
-  const cleanData = Object.fromEntries(
-    Object.entries(data).filter(([, value]) => value !== undefined)
-  );
+  // undefined 값만 제거 (빈 문자열은 허용)
+  const cleanData: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined) {
+      cleanData[key] = value;
+    }
+  }
+
+  console.log('updateAsset 호출:', id, cleanData);
 
   await updateDoc(docRef, {
     ...cleanData,
     updatedAt: Timestamp.now(),
   });
+
+  console.log('updateAsset 완료');
 }
 
 /**

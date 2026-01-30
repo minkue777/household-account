@@ -52,12 +52,13 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
       await updateAsset(asset.id, {
         name: name.trim(),
         type,
-        subType: subType || undefined,
-        memo: memo.trim() || undefined,
+        subType: subType || '',
+        memo: memo.trim(),
       });
       onClose();
     } catch (error) {
       console.error('자산 수정 오류:', error);
+      alert('자산 수정에 실패했습니다. 다시 시도해주세요.');
     } finally {
       setIsSubmitting(false);
     }
