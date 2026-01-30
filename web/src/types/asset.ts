@@ -1,0 +1,74 @@
+import { Timestamp } from 'firebase/firestore';
+
+// 자산 타입
+export type AssetType = 'bank' | 'investment' | 'property';
+
+// 자산 하위 타입
+export type AssetSubType =
+  | '예금' | '적금' | 'CMA'           // bank
+  | '주식' | '펀드' | '코인' | 'ETF'   // investment
+  | '부동산' | '차량' | '기타';        // property
+
+// 자산 타입별 설정
+export const ASSET_TYPE_CONFIG: Record<AssetType, {
+  label: string;
+  icon: string;
+  color: string;
+  subTypes: string[];
+}> = {
+  bank: {
+    label: '은행',
+    icon: 'Building2',
+    color: '#3B82F6',
+    subTypes: ['예금', '적금', 'CMA'],
+  },
+  investment: {
+    label: '투자',
+    icon: 'TrendingUp',
+    color: '#10B981',
+    subTypes: ['주식', '펀드', '코인', 'ETF'],
+  },
+  property: {
+    label: '부동산/차량',
+    icon: 'Home',
+    color: '#8B5CF6',
+    subTypes: ['부동산', '차량', '기타'],
+  },
+};
+
+// 자산 인터페이스
+export interface Asset {
+  id: string;
+  householdId: string;
+  name: string;              // "KB은행 예금", "삼성전자 주식"
+  type: AssetType;
+  subType?: string;          // "예금", "적금", "주식", "펀드", "코인", "부동산", "차량"
+  currentBalance: number;
+  currency: string;          // 'KRW' (기본)
+  memo?: string;
+  icon?: string;             // Lucide 아이콘명
+  color?: string;
+  isActive: boolean;
+  order: number;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// 자산 이력 인터페이스
+export interface AssetHistoryEntry {
+  id: string;
+  householdId: string;
+  assetId: string;
+  balance: number;
+  date: string;              // YYYY-MM-DD
+  previousBalance: number;
+  changeAmount: number;
+  memo?: string;
+  createdAt: Timestamp;
+}
+
+// 자산 생성 입력
+export type AssetInput = Omit<Asset, 'id' | 'householdId' | 'createdAt' | 'updatedAt'>;
+
+// 자산 이력 생성 입력
+export type AssetHistoryInput = Omit<AssetHistoryEntry, 'id' | 'householdId' | 'createdAt'>;
