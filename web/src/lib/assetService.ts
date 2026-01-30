@@ -330,3 +330,94 @@ export async function updateAssetOrder(assets: { id: string; order: number }[]):
   );
   await Promise.all(batch);
 }
+
+/**
+ * 샘플 데이터 추가 (개발용)
+ */
+export async function addSampleAssets(): Promise<void> {
+  const sampleAssets: AssetInput[] = [
+    {
+      name: 'KB국민은행',
+      type: 'bank',
+      subType: '예금',
+      currentBalance: 15420000,
+      currency: 'KRW',
+      memo: '월급통장',
+      isActive: true,
+      order: 1,
+    },
+    {
+      name: '카카오뱅크',
+      type: 'bank',
+      subType: '예금',
+      currentBalance: 3250000,
+      currency: 'KRW',
+      memo: '생활비',
+      isActive: true,
+      order: 2,
+    },
+    {
+      name: '토스뱅크',
+      type: 'bank',
+      subType: '적금',
+      currentBalance: 12000000,
+      currency: 'KRW',
+      memo: '비상금',
+      isActive: true,
+      order: 3,
+    },
+    {
+      name: '삼성전자',
+      type: 'investment',
+      subType: '주식',
+      currentBalance: 8500000,
+      currency: 'KRW',
+      memo: '10주 보유',
+      isActive: true,
+      order: 4,
+    },
+    {
+      name: 'TIGER 미국S&P500',
+      type: 'investment',
+      subType: 'ETF',
+      currentBalance: 5200000,
+      currency: 'KRW',
+      isActive: true,
+      order: 5,
+    },
+    {
+      name: '비트코인',
+      type: 'investment',
+      subType: '코인',
+      currentBalance: 2100000,
+      currency: 'KRW',
+      memo: '0.015 BTC',
+      isActive: true,
+      order: 6,
+    },
+    {
+      name: '아파트 전세보증금',
+      type: 'property',
+      subType: '부동산',
+      currentBalance: 300000000,
+      currency: 'KRW',
+      memo: '2024.03 만기',
+      isActive: true,
+      order: 7,
+    },
+    {
+      name: '자동차',
+      type: 'property',
+      subType: '차량',
+      currentBalance: 18000000,
+      currency: 'KRW',
+      memo: '아반떼 CN7',
+      isActive: true,
+      order: 8,
+    },
+  ];
+
+  for (const asset of sampleAssets) {
+    await addAsset(asset);
+  }
+}

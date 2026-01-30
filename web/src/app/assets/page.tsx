@@ -8,6 +8,7 @@ import {
   subscribeToAssets,
   subscribeToAssetHistory,
   getMonthlyAssetChange,
+  addSampleAssets,
 } from '@/lib/assetService';
 import {
   AssetSummaryCard,
@@ -35,6 +36,19 @@ export default function AssetsPage() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showChartModal, setShowChartModal] = useState(false);
+  const [isAddingSample, setIsAddingSample] = useState(false);
+
+  // 샘플 데이터 추가
+  const handleAddSampleData = async () => {
+    setIsAddingSample(true);
+    try {
+      await addSampleAssets();
+    } catch (error) {
+      console.error('샘플 데이터 추가 오류:', error);
+    } finally {
+      setIsAddingSample(false);
+    }
+  };
 
   // 자산 구독
   useEffect(() => {
@@ -101,24 +115,36 @@ export default function AssetsPage() {
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
       <div className="max-w-lg mx-auto">
         {/* 헤더 */}
-        <header className="mb-6 flex items-center gap-3">
-          <Link
-            href="/"
-            className="p-2 hover:bg-white/80 rounded-xl transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5 text-slate-600" />
-          </Link>
-          <h1
-            className="text-xl md:text-2xl font-bold"
-            style={{
-              background: themeConfig.titleGradient,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}
-          >
-            자산 현황
-          </h1>
+        <header className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="p-2 hover:bg-white/80 rounded-xl transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5 text-slate-600" />
+            </Link>
+            <h1
+              className="text-xl md:text-2xl font-bold"
+              style={{
+                background: themeConfig.titleGradient,
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}
+            >
+              자산 현황
+            </h1>
+          </div>
+          {/* 샘플 데이터 추가 버튼 (자산이 없을 때만) */}
+          {!isLoading && assets.length === 0 && (
+            <button
+              onClick={handleAddSampleData}
+              disabled={isAddingSample}
+              className="text-sm text-blue-500 hover:text-blue-600 disabled:text-slate-400"
+            >
+              {isAddingSample ? '추가 중...' : '샘플 데이터'}
+            </button>
+          )}
         </header>
 
         {isLoading ? (
