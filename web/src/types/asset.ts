@@ -26,7 +26,7 @@ export const ASSET_TYPE_CONFIG: Record<AssetType, {
     label: '투자',
     icon: 'TrendingUp',
     color: '#10B981',
-    subTypes: ['주식', '펀드', '코인', 'ETF'],
+    subTypes: [], // 종목 검색으로 대체
   },
   property: {
     label: '부동산/차량',
@@ -61,8 +61,6 @@ export interface Asset {
 export interface StockSearchResult {
   code: string;
   name: string;
-  market: string;
-  type: string;
 }
 
 // 주식 시세 정보
