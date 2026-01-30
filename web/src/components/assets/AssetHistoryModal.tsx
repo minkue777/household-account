@@ -74,6 +74,14 @@ export default function AssetHistoryModal({
       return;
     }
 
+    // 모달 열릴 때 검색 폼 초기화
+    setSearchQuery('');
+    setSearchResults([]);
+    setSelectedStock(null);
+    setQuantity('');
+    setAvgPrice('');
+    setCurrentPrice(null);
+
     setIsLoadingHoldings(true);
     const unsubscribe = subscribeToStockHoldings(asset.id, (newHoldings) => {
       setHoldings(newHoldings);
@@ -558,16 +566,16 @@ export default function AssetHistoryModal({
 
                   {selectedStock && (
                     <>
-                      <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                      <div className="bg-white rounded-lg p-3 border border-slate-200">
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="font-medium text-slate-800">{selectedStock.name}</p>
                             <p className="text-xs text-slate-500">{selectedStock.code}</p>
                           </div>
                           {isLoadingPrice ? (
-                            <Loader2 className="w-4 h-4 text-green-500 animate-spin" />
+                            <Loader2 className="w-4 h-4 text-slate-500 animate-spin" />
                           ) : currentPrice ? (
-                            <p className="font-semibold text-green-600">{currentPrice.toLocaleString()}원</p>
+                            <p className="font-semibold text-slate-800">{currentPrice.toLocaleString()}원</p>
                           ) : null}
                         </div>
                       </div>
