@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Asset, AssetHistoryEntry, ASSET_TYPE_CONFIG } from '@/types/asset';
-import { subscribeToAssetHistory, updateBalanceWithHistory, deleteHistoryEntry } from '@/lib/assetService';
+import { Asset, AssetHistoryEntry, ASSET_TYPE_CONFIG, StockHolding, StockSearchResult } from '@/types/asset';
+import { subscribeToAssetHistory, updateBalanceWithHistory, deleteHistoryEntry, subscribeToStockHoldings, addStockHolding, deleteStockHolding } from '@/lib/assetService';
 import Portal from '@/components/Portal';
-import { X, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Banknote, Home, BarChart3, Coins, List } from 'lucide-react';
+import { X, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Banknote, Home, BarChart3, Coins, Loader2 } from 'lucide-react';
 
 interface AssetHistoryModalProps {
   isOpen: boolean;
@@ -12,7 +12,6 @@ interface AssetHistoryModalProps {
   asset: Asset | null;
   onEditAsset: () => void;
   onViewChart: () => void;
-  onViewHoldings?: () => void;
   onViewGold?: () => void;
 }
 
@@ -29,7 +28,6 @@ export default function AssetHistoryModal({
   asset,
   onEditAsset,
   onViewChart,
-  onViewHoldings,
   onViewGold,
 }: AssetHistoryModalProps) {
   const [history, setHistory] = useState<AssetHistoryEntry[]>([]);
@@ -39,13 +37,66 @@ export default function AssetHistoryModal({
   const [updateMemo, setUpdateMemo] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 이력 구독
+  // 주식 관련 상태
+  const [holdings, setHoldings] = useState<StockHolding[]>([]);
+  const [isLoadingHoldings, setIsLoadingHoldings] = useState(true);
+  const [showAddStockForm, setShowAddStockForm] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<StockSearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [selectedStock, setSelectedStock] = useState<StockSearchResult | null>(null);
+  const [quantity, setQuantity] = useState('');
+  const [avgPrice, setAvgPrice] = useState('');
+  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
+
+  // 이력 구독 (주식 타입이 아닐 때)
   useEffect(() => {
-    if (!asset) return;
+    if (!asset || asset.type === 'stock') return;
 
     const unsubscribe = subscribeToAssetHistory(asset.id, setHistory);
     return () => unsubscribe();
   }, [asset]);
+
+  // 주식 보유 종목 구독
+  useEffect(() => {
+    if (!isOpen || !asset || asset.type !== 'stock') {
+      setHoldings([]);
+      return;
+    }
+
+    setIsLoadingHoldings(true);
+    const unsubscribe = subscribeToStockHoldings(asset.id, (newHoldings) => {
+      setHoldings(newHoldings);
+      setIsLoadingHoldings(false);
+    });
+
+    return () => unsubscribe();
+  }, [isOpen, asset]);
+
+  // 종목 검색
+  useEffect(() => {
+    if (searchQuery.length < 1) {
+      setSearchResults([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const response = await fetch(`/api/stock/search?q=${encodeURIComponent(searchQuery)}`);
+        const data = await response.json();
+        setSearchResults(data.results || []);
+      } catch (error) {
+        console.error('종목 검색 오류:', error);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // 잔액 업데이트 폼 초기화
   useEffect(() => {
@@ -86,9 +137,79 @@ export default function AssetHistoryModal({
     }
   };
 
+  // 종목 선택
+  const handleSelectStock = async (stock: StockSearchResult) => {
+    setSelectedStock(stock);
+    setSearchQuery(stock.name);
+    setSearchResults([]);
+
+    setIsLoadingPrice(true);
+    try {
+      const response = await fetch(`/api/stock/price?code=${stock.code}`);
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentPrice(data.price);
+      }
+    } catch (error) {
+      console.error('시세 조회 오류:', error);
+    } finally {
+      setIsLoadingPrice(false);
+    }
+  };
+
+  // 종목 추가
+  const handleAddHolding = async () => {
+    if (!asset || !selectedStock || !quantity || isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      await addStockHolding({
+        assetId: asset.id,
+        stockCode: selectedStock.code,
+        stockName: selectedStock.name,
+        quantity: parseInt(quantity, 10),
+        avgPrice: avgPrice ? parseInt(avgPrice, 10) : undefined,
+        currentPrice: currentPrice || undefined,
+      });
+      resetStockForm();
+    } catch (error) {
+      console.error('종목 추가 오류:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // 종목 삭제
+  const handleDeleteHolding = async (holdingId: string) => {
+    try {
+      await deleteStockHolding(holdingId);
+    } catch (error) {
+      console.error('종목 삭제 오류:', error);
+    }
+  };
+
+  // 주식 폼 초기화
+  const resetStockForm = () => {
+    setShowAddStockForm(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    setSelectedStock(null);
+    setQuantity('');
+    setAvgPrice('');
+    setCurrentPrice(null);
+  };
+
+  // 평가금액 계산
+  const calculateValue = (holding: StockHolding) => {
+    const price = holding.currentPrice || holding.avgPrice || 0;
+    return price * holding.quantity;
+  };
+
   if (!isOpen || !asset) return null;
 
   const config = ASSET_TYPE_CONFIG[asset.type];
+  const isStock = asset.type === 'stock';
+  const totalStockValue = holdings.reduce((sum, h) => sum + calculateValue(h), 0);
 
   return (
     <Portal>
@@ -131,22 +252,21 @@ export default function AssetHistoryModal({
 
             {/* 버튼들 */}
             <div className="mt-4 flex gap-2">
-              {asset.type !== 'stock' && (
+              {isStock ? (
+                <button
+                  onClick={() => setShowAddStockForm(true)}
+                  className="px-4 py-2.5 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  종목 추가
+                </button>
+              ) : (
                 <button
                   onClick={() => setShowUpdateForm(true)}
                   className="px-4 py-2.5 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-1.5"
                 >
                   <Plus className="w-4 h-4" />
                   잔액 업데이트
-                </button>
-              )}
-              {asset.type === 'stock' && onViewHoldings && (
-                <button
-                  onClick={onViewHoldings}
-                  className="px-4 py-2.5 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors flex items-center gap-1.5"
-                >
-                  <List className="w-4 h-4" />
-                  종목
                 </button>
               )}
               {asset.type === 'gold' && onViewGold && (
@@ -167,8 +287,8 @@ export default function AssetHistoryModal({
             </div>
           </div>
 
-          {/* 잔액 업데이트 폼 */}
-          {showUpdateForm && (
+          {/* 잔액 업데이트 폼 (주식 아닐 때) */}
+          {!isStock && showUpdateForm && (
             <div className="p-4 bg-blue-50 border-b border-blue-100">
               <div className="space-y-3">
                 <div>
@@ -253,75 +373,228 @@ export default function AssetHistoryModal({
             </div>
           )}
 
-          {/* 이력 목록 */}
-          <div className="flex-1 overflow-y-auto p-4">
-            <h4 className="text-sm font-medium text-slate-500 mb-3">변동 이력</h4>
-            {history.length === 0 ? (
-              <div className="text-center py-8 text-slate-400">
-                아직 이력이 없습니다.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {history.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl"
-                  >
-                    {/* 변동 아이콘 */}
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        entry.changeAmount > 0
-                          ? 'bg-green-100 text-green-500'
-                          : entry.changeAmount < 0
-                          ? 'bg-red-100 text-red-500'
-                          : 'bg-slate-100 text-slate-400'
-                      }`}
-                    >
-                      {entry.changeAmount > 0 ? (
-                        <TrendingUp className="w-4 h-4" />
-                      ) : entry.changeAmount < 0 ? (
-                        <TrendingDown className="w-4 h-4" />
-                      ) : (
-                        <span className="text-xs">-</span>
-                      )}
+          {/* 종목 추가 폼 (주식일 때) */}
+          {isStock && showAddStockForm && (
+            <div className="p-4 bg-green-50 border-b border-green-100">
+              <div className="space-y-3">
+                <div className="relative">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">종목 검색</label>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      if (selectedStock) {
+                        setSelectedStock(null);
+                        setCurrentPrice(null);
+                      }
+                    }}
+                    placeholder="종목명 입력"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                  />
+                  {isSearching && (
+                    <Loader2 className="w-4 h-4 text-green-500 absolute right-3 top-9 animate-spin" />
+                  )}
+
+                  {searchResults.length > 0 && !selectedStock && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {searchResults.map((stock) => (
+                        <button
+                          key={stock.code}
+                          type="button"
+                          onClick={() => handleSelectStock(stock)}
+                          className="w-full px-4 py-2.5 text-left hover:bg-slate-50 flex items-center justify-between"
+                        >
+                          <span className="font-medium text-slate-800">{stock.name}</span>
+                          <span className="text-xs text-slate-500">{stock.code}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {selectedStock && (
+                  <>
+                    <div className="bg-white rounded-lg p-3 border border-green-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-slate-800">{selectedStock.name}</p>
+                          <p className="text-xs text-slate-500">{selectedStock.code}</p>
+                        </div>
+                        {isLoadingPrice ? (
+                          <Loader2 className="w-4 h-4 text-green-500 animate-spin" />
+                        ) : currentPrice ? (
+                          <p className="font-semibold text-green-600">{currentPrice.toLocaleString()}원</p>
+                        ) : null}
+                      </div>
                     </div>
 
-                    {/* 정보 */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-800">
-                          {entry.balance.toLocaleString()}원
-                        </span>
-                        <span
-                          className={`text-sm ${
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">보유 수량</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={quantity}
+                        onChange={(e) => setQuantity(e.target.value.replace(/[^0-9]/g, ''))}
+                        placeholder="0"
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">평균 매입가 (선택)</label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={avgPrice ? parseInt(avgPrice, 10).toLocaleString() : ''}
+                          onChange={(e) => setAvgPrice(e.target.value.replace(/[^0-9]/g, ''))}
+                          placeholder="0"
+                          className="w-full px-4 py-2 pr-8 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">원</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={resetStockForm}
+                    className="flex-1 py-2 border border-slate-300 rounded-lg text-slate-600 hover:bg-white transition-colors"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={handleAddHolding}
+                    disabled={!selectedStock || !quantity || isSubmitting}
+                    className="flex-1 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:bg-slate-300"
+                  >
+                    {isSubmitting ? '추가 중...' : '추가'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 콘텐츠 영역 */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {isStock ? (
+              // 주식: 보유 종목 목록
+              <>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-medium text-slate-500">보유 종목</h4>
+                  {holdings.length > 0 && (
+                    <p className="text-sm text-slate-500">
+                      평가금액 <span className="font-semibold text-slate-700">{totalStockValue.toLocaleString()}원</span>
+                    </p>
+                  )}
+                </div>
+                {isLoadingHoldings ? (
+                  <div className="text-center py-8 text-slate-400">로딩 중...</div>
+                ) : holdings.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400">
+                    보유 종목이 없습니다
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {holdings.map((holding) => (
+                      <div
+                        key={holding.id}
+                        className="flex items-center justify-between p-3 bg-slate-50 rounded-xl"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-slate-800 truncate">{holding.stockName}</p>
+                          <p className="text-xs text-slate-500">
+                            {holding.quantity.toLocaleString()}주
+                            {holding.currentPrice && ` · ${holding.currentPrice.toLocaleString()}원`}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-slate-800">
+                            {calculateValue(holding).toLocaleString()}원
+                          </p>
+                          <button
+                            onClick={() => handleDeleteHolding(holding.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              // 기타: 변동 이력
+              <>
+                <h4 className="text-sm font-medium text-slate-500 mb-3">변동 이력</h4>
+                {history.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400">
+                    아직 이력이 없습니다.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {history.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl"
+                      >
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                             entry.changeAmount > 0
-                              ? 'text-green-500'
+                              ? 'bg-green-100 text-green-500'
                               : entry.changeAmount < 0
-                              ? 'text-red-500'
-                              : 'text-slate-400'
+                              ? 'bg-red-100 text-red-500'
+                              : 'bg-slate-100 text-slate-400'
                           }`}
                         >
-                          ({entry.changeAmount > 0 ? '+' : ''}
-                          {entry.changeAmount.toLocaleString()})
-                        </span>
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        {entry.date}
-                        {entry.memo && ` · ${entry.memo}`}
-                      </div>
-                    </div>
+                          {entry.changeAmount > 0 ? (
+                            <TrendingUp className="w-4 h-4" />
+                          ) : entry.changeAmount < 0 ? (
+                            <TrendingDown className="w-4 h-4" />
+                          ) : (
+                            <span className="text-xs">-</span>
+                          )}
+                        </div>
 
-                    {/* 삭제 버튼 */}
-                    <button
-                      onClick={() => handleDeleteHistory(entry.id)}
-                      className="p-1.5 hover:bg-red-100 rounded-lg transition-colors text-slate-400 hover:text-red-500"
-                      disabled={isSubmitting}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-800">
+                              {entry.balance.toLocaleString()}원
+                            </span>
+                            <span
+                              className={`text-sm ${
+                                entry.changeAmount > 0
+                                  ? 'text-green-500'
+                                  : entry.changeAmount < 0
+                                  ? 'text-red-500'
+                                  : 'text-slate-400'
+                              }`}
+                            >
+                              ({entry.changeAmount > 0 ? '+' : ''}
+                              {entry.changeAmount.toLocaleString()})
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {entry.date}
+                            {entry.memo && ` · ${entry.memo}`}
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleDeleteHistory(entry.id)}
+                          className="p-1.5 hover:bg-red-100 rounded-lg transition-colors text-slate-400 hover:text-red-500"
+                          disabled={isSubmitting}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
           </div>
         </div>
