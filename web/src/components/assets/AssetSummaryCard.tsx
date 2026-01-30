@@ -124,7 +124,7 @@ export default function AssetSummaryCard({
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
       {/* 총 자산 금액 */}
-      <div className="px-5 pt-5">
+      <div className="px-5 pt-5 pb-4">
         <p className="text-2xl font-bold text-slate-900 tracking-tight">
           {totalBalance.toLocaleString()}
           <span className="text-base font-medium text-slate-400 ml-1">원</span>
@@ -144,7 +144,7 @@ export default function AssetSummaryCard({
       </div>
 
       {/* 가족 구성원 탭 */}
-      <div className="flex gap-4 mt-4 px-5">
+      <div className="flex gap-4 px-5">
         {FAMILY_MEMBERS.map((member) => (
           <button
             key={member}
