@@ -50,8 +50,30 @@ export interface Asset {
   color?: string;
   isActive: boolean;
   order: number;
+  // 주식/ETF 전용 필드
+  stockCode?: string;        // 종목코드 (예: "005930", "482730")
+  quantity?: number;         // 보유 수량
   createdAt: Timestamp;
   updatedAt: Timestamp;
+}
+
+// 주식 검색 결과
+export interface StockSearchResult {
+  code: string;
+  name: string;
+  market: string;
+  type: string;
+}
+
+// 주식 시세 정보
+export interface StockPriceInfo {
+  code: string;
+  name: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  previousClose: number;
+  currency: string;
 }
 
 // 자산 이력 인터페이스
