@@ -44,6 +44,7 @@ function mapDocToAsset(docSnap: QueryDocumentSnapshot<DocumentData>): Asset {
     name: data.name,
     type: data.type,
     subType: data.subType,
+    owner: data.owner,
     currentBalance: data.currentBalance || 0,
     currency: data.currency || 'KRW',
     memo: data.memo,
