@@ -111,9 +111,9 @@ export default function AssetSummaryCard({ assets, monthlyChange, previousMonthT
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
       {/* 총 자산 */}
       <div className="px-5 pt-5 pb-4">
-        <p className="text-[32px] font-bold text-slate-900 tracking-tight">
+        <p className="text-2xl font-bold text-slate-900 tracking-tight">
           {totalBalance.toLocaleString()}
-          <span className="text-lg font-medium text-slate-400 ml-1">원</span>
+          <span className="text-base font-medium text-slate-400 ml-1">원</span>
         </p>
         {/* 변동률 */}
         <p className={`text-sm mt-1 ${isPositive ? 'text-green-500' : isNegative ? 'text-red-500' : 'text-slate-400'}`}>
