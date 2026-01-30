@@ -4,7 +4,6 @@ import { useMemo } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
 import { Asset, ASSET_TYPE_CONFIG, AssetType } from '@/types/asset';
-import { TrendingUp, TrendingDown } from 'lucide-react';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -55,6 +54,13 @@ export default function AssetSummaryCard({ assets, monthlyChange, previousMonthT
     return balances.sort((a, b) => b.balance - a.balance);
   }, [assets, totalBalance]);
 
+  // 차트용 푸른 계열 색상
+  const CHART_COLORS: Record<AssetType, string> = {
+    bank: '#3B82F6',      // 파란색
+    investment: '#60A5FA', // 연한 파란색
+    property: '#93C5FD',   // 더 연한 파란색
+  };
+
   // 도넛 차트 데이터
   const chartData = useMemo(() => {
     if (typeData.length === 0) {
@@ -72,7 +78,7 @@ export default function AssetSummaryCard({ assets, monthlyChange, previousMonthT
       labels: typeData.map((d) => ASSET_TYPE_CONFIG[d.type].label),
       datasets: [{
         data: typeData.map((d) => d.balance),
-        backgroundColor: typeData.map((d) => ASSET_TYPE_CONFIG[d.type].color),
+        backgroundColor: typeData.map((d) => CHART_COLORS[d.type]),
         borderWidth: 0,
         cutout: '65%',
       }],
@@ -102,60 +108,61 @@ export default function AssetSummaryCard({ assets, monthlyChange, previousMonthT
   const isNegative = monthlyChange < 0;
 
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
       {/* 총 자산 */}
-      <div className="text-center mb-6">
-        <p className="text-slate-500 text-sm mb-2">총 자산</p>
-        <p className="text-3xl font-bold text-slate-900">
+      <div className="px-5 pt-5 pb-4">
+        <p className="text-[32px] font-bold text-slate-900 tracking-tight">
           {totalBalance.toLocaleString()}
-          <span className="text-lg font-normal text-slate-400 ml-1">원</span>
+          <span className="text-lg font-medium text-slate-400 ml-1">원</span>
         </p>
         {/* 변동률 */}
-        {monthlyChange !== 0 && (
-          <div className="flex items-center justify-center gap-1 mt-2">
-            {isPositive ? (
-              <TrendingUp className="w-4 h-4 text-green-500" />
-            ) : (
-              <TrendingDown className="w-4 h-4 text-red-500" />
-            )}
-            <span className={`text-sm font-medium ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
-              {changeRate !== 0 && `${changeRate > 0 ? '+' : ''}${changeRate.toFixed(2)}%`}
-              {' '}
-              {isPositive ? '+' : ''}{monthlyChange.toLocaleString()}원
-            </span>
-          </div>
-        )}
+        <p className={`text-sm mt-1 ${isPositive ? 'text-green-500' : isNegative ? 'text-red-500' : 'text-slate-400'}`}>
+          {monthlyChange !== 0 ? (
+            <>
+              {isPositive ? '+ ' : ''}{changeRate.toFixed(2)}%
+              {isPositive ? '↑' : isNegative ? '↓' : ''}{' '}
+              {isPositive ? '+' : ''}{Math.abs(monthlyChange).toLocaleString()}원
+            </>
+          ) : (
+            '이번 달 변동 없음'
+          )}
+        </p>
       </div>
 
-      {/* 도넛 차트 + 범례 */}
-      <div className="flex items-center gap-6">
-        {/* 차트 */}
-        <div className="w-32 h-32 flex-shrink-0">
-          <Doughnut data={chartData} options={chartOptions} />
-        </div>
+      {/* 구분선 */}
+      <div className="border-t border-slate-100" />
 
-        {/* 범례 */}
-        <div className="flex-1 space-y-2">
-          {typeData.map((item) => {
-            const config = ASSET_TYPE_CONFIG[item.type];
-            return (
-              <div key={item.type} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: config.color }}
-                  />
-                  <span className="text-sm text-slate-600">{config.label}</span>
+      {/* 도넛 차트 + 범례 */}
+      <div className="p-5">
+        <div className="flex items-center">
+          {/* 차트 */}
+          <div className="w-[120px] h-[120px] flex-shrink-0">
+            <Doughnut data={chartData} options={chartOptions} />
+          </div>
+
+          {/* 범례 */}
+          <div className="flex-1 ml-6 space-y-2.5">
+            {typeData.map((item) => {
+              const config = ASSET_TYPE_CONFIG[item.type];
+              return (
+                <div key={item.type} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: CHART_COLORS[item.type] }}
+                    />
+                    <span className="text-sm text-slate-600">{config.label}</span>
+                  </div>
+                  <span className="text-sm font-medium text-slate-800">
+                    {item.percentage.toFixed(2)}%
+                  </span>
                 </div>
-                <span className="text-sm font-medium text-slate-800">
-                  {item.percentage.toFixed(1)}%
-                </span>
-              </div>
-            );
-          })}
-          {typeData.length === 0 && (
-            <p className="text-sm text-slate-400">등록된 자산이 없습니다</p>
-          )}
+              );
+            })}
+            {typeData.length === 0 && (
+              <p className="text-sm text-slate-400">등록된 자산이 없습니다</p>
+            )}
+          </div>
         </div>
       </div>
     </div>

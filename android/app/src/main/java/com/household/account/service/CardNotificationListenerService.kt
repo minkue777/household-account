@@ -167,7 +167,7 @@ class CardNotificationListenerService : NotificationListenerService() {
                         val expenseToSave = if (mappingResult != null) {
                             result.expense.copy(
                                 merchant = mappingResult.mappedMerchant,
-                                category = mappingResult.mappedCategory.name,
+                                category = mappingResult.mappedCategoryKey,
                                 memo = mappingResult.mappedMemo.ifEmpty { result.expense.memo },
                                 householdId = householdId
                             )

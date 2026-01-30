@@ -36,7 +36,7 @@ export default function AssetList({
   return (
     <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
       {/* 헤더 */}
-      <div className="flex items-center justify-between mb-4 px-1">
+      <div className="flex items-center justify-between mb-2 px-2">
         <h3 className="font-semibold text-slate-800">보유 현황</h3>
         <button
           onClick={onAddClick}
@@ -46,6 +46,9 @@ export default function AssetList({
           추가
         </button>
       </div>
+
+      {/* 구분선 */}
+      <div className="border-b border-slate-100 mb-2" />
 
       {/* 자산 목록 */}
       {activeAssets.length === 0 ? (
@@ -60,7 +63,7 @@ export default function AssetList({
           </button>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="divide-y divide-slate-50">
           {activeAssets.map((asset) => (
             <AssetCard
               key={asset.id}

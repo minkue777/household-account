@@ -112,6 +112,15 @@ data class MerchantRule(
         }
     }
 
+    /**
+     * 카테고리 키 반환 (동적 카테고리 지원)
+     * enum 변환 없이 원본 문자열 그대로 반환
+     */
+    fun getCategoryKey(): String {
+        val mapping = getMappingObject()
+        return mapping.category ?: category.lowercase()
+    }
+
     fun toMap(): Map<String, Any?> {
         return mapOf(
             "householdId" to householdId,
@@ -131,10 +140,11 @@ data class MerchantRule(
 
 /**
  * 가맹점명에 규칙을 적용한 결과
+ * mappedCategoryKey: 동적 카테고리를 지원하는 문자열 키 (예: "food", "용돈", "비상금")
  */
 data class AppliedRuleResult(
     val rule: MerchantRule,
     val mappedMerchant: String,
-    val mappedCategory: Category,
+    val mappedCategoryKey: String,
     val mappedMemo: String
 )

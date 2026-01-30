@@ -84,7 +84,7 @@ class MerchantRuleRepository {
         return AppliedRuleResult(
             rule = rule,
             mappedMerchant = mapping.merchant ?: merchantName,
-            mappedCategory = rule.getCategoryEnum(),
+            mappedCategoryKey = rule.getCategoryKey(),
             mappedMemo = mapping.memo ?: ""
         )
     }
@@ -189,12 +189,12 @@ class MerchantRuleRepository {
     }
 
     /**
-     * 가맹점명으로 카테고리 찾기 (하위 호환성 유지)
+     * 가맹점명으로 카테고리 키 찾기 (하위 호환성 유지)
      * @deprecated Use findMappingForMerchant instead
      */
-    @Deprecated("Use findMappingForMerchant instead", ReplaceWith("findMappingForMerchant(householdId, merchantName)?.mappedCategory"))
-    suspend fun findCategoryForMerchant(householdId: String, merchantName: String): Category? {
-        return findMappingForMerchant(householdId, merchantName)?.mappedCategory
+    @Deprecated("Use findMappingForMerchant instead", ReplaceWith("findMappingForMerchant(householdId, merchantName)?.mappedCategoryKey"))
+    suspend fun findCategoryKeyForMerchant(householdId: String, merchantName: String): String? {
+        return findMappingForMerchant(householdId, merchantName)?.mappedCategoryKey
     }
 
     /**
