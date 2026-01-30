@@ -127,14 +127,10 @@ export async function updateAsset(id: string, data: Partial<Asset>): Promise<voi
     }
   }
 
-  console.log('updateAsset 호출:', id, cleanData);
-
   await updateDoc(docRef, {
     ...cleanData,
     updatedAt: Timestamp.now(),
   });
-
-  console.log('updateAsset 완료');
 }
 
 /**
