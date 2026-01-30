@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { Asset, AssetType, AssetHistoryEntry } from '@/types/asset';
@@ -11,7 +11,6 @@ import {
 } from '@/lib/assetService';
 import {
   AssetSummaryCard,
-  AssetTypeSelector,
   AssetList,
   AssetAddModal,
   AssetEditModal,
@@ -23,7 +22,6 @@ import { useTheme } from '@/contexts/ThemeContext';
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [selectedType, setSelectedType] = useState<AssetType>('bank');
   const [monthlyChange, setMonthlyChange] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -32,6 +30,7 @@ export default function AssetsPage() {
 
   // 모달 상태
   const [showAddModal, setShowAddModal] = useState(false);
+  const [addModalType, setAddModalType] = useState<AssetType>('bank');
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -54,12 +53,12 @@ export default function AssetsPage() {
       .catch(() => setMonthlyChange(0));
   }, [assets]);
 
-  // 각 자산의 이력 구독 (선택된 타입의 자산만)
+  // 각 자산의 이력 구독
   useEffect(() => {
-    const filteredAssets = assets.filter((a) => a.type === selectedType && a.isActive);
+    const activeAssets = assets.filter((a) => a.isActive);
     const unsubscribes: (() => void)[] = [];
 
-    filteredAssets.forEach((asset) => {
+    activeAssets.forEach((asset) => {
       const unsub = subscribeToAssetHistory(asset.id, (history) => {
         setHistoryMap((prev) => ({
           ...prev,
@@ -72,21 +71,18 @@ export default function AssetsPage() {
     return () => {
       unsubscribes.forEach((unsub) => unsub());
     };
-  }, [assets, selectedType]);
-
-  // 타입별 자산 수
-  const assetCounts = useMemo(() => {
-    const counts: Record<AssetType, number> = { bank: 0, investment: 0, property: 0 };
-    assets.filter((a) => a.isActive).forEach((a) => {
-      counts[a.type]++;
-    });
-    return counts;
   }, [assets]);
 
   // 자산 클릭 핸들러
   const handleAssetClick = (asset: Asset) => {
     setSelectedAsset(asset);
     setShowHistoryModal(true);
+  };
+
+  // 자산 추가 열기
+  const handleAddClick = () => {
+    setAddModalType('bank');
+    setShowAddModal(true);
   };
 
   // 자산 수정 열기
@@ -103,7 +99,7 @@ export default function AssetsPage() {
 
   return (
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-lg mx-auto">
         {/* 헤더 */}
         <header className="mb-6 flex items-center gap-3">
           <Link
@@ -121,31 +117,23 @@ export default function AssetsPage() {
               backgroundClip: 'text',
             }}
           >
-            자산 관리
+            자산 현황
           </h1>
         </header>
 
         {isLoading ? (
           <div className="text-center py-12 text-slate-400">로딩 중...</div>
         ) : (
-          <div className="space-y-6">
-            {/* 총 자산 요약 */}
+          <div className="space-y-4">
+            {/* 총 자산 요약 + 도넛 차트 */}
             <AssetSummaryCard assets={assets} monthlyChange={monthlyChange} />
 
-            {/* 타입 선택 탭 */}
-            <AssetTypeSelector
-              selectedType={selectedType}
-              onTypeChange={setSelectedType}
-              assetCounts={assetCounts}
-            />
-
-            {/* 자산 목록 */}
+            {/* 보유 현황 */}
             <AssetList
               assets={assets}
-              selectedType={selectedType}
               historyMap={historyMap}
               onAssetClick={handleAssetClick}
-              onAddClick={() => setShowAddModal(true)}
+              onAddClick={handleAddClick}
             />
           </div>
         )}
@@ -154,7 +142,7 @@ export default function AssetsPage() {
         <AssetAddModal
           isOpen={showAddModal}
           onClose={() => setShowAddModal(false)}
-          defaultType={selectedType}
+          defaultType={addModalType}
         />
 
         {/* 자산 수정 모달 */}
