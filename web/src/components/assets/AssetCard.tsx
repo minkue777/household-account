@@ -1,7 +1,7 @@
 'use client';
 
 import { Asset, ASSET_TYPE_CONFIG } from '@/types/asset';
-import { Building2, CandlestickChart, Home, Coins } from 'lucide-react';
+import { Building2, Activity, Home, Coins } from 'lucide-react';
 
 interface AssetCardProps {
   asset: Asset;
@@ -14,7 +14,7 @@ interface AssetCardProps {
 
 const ICONS: Record<string, React.ReactNode> = {
   savings: <Building2 className="w-5 h-5" />,
-  stock: <CandlestickChart className="w-5 h-5" />,
+  stock: <Activity className="w-5 h-5" />,
   property: <Home className="w-5 h-5" />,
   gold: <Coins className="w-5 h-5" />,
 };

@@ -26,7 +26,7 @@ export const ASSET_TYPE_CONFIG: Record<AssetType, {
   },
   stock: {
     label: '주식',
-    icon: 'CandlestickChart',
+    icon: 'Activity',
     color: '#10B981',
     subTypes: [], // 종목 검색으로 대체
   },

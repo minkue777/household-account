@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Asset, AssetType, ASSET_TYPE_CONFIG } from '@/types/asset';
 import { updateAsset, deleteAsset } from '@/lib/assetService';
 import Portal from '@/components/Portal';
-import { X, Trash2, Building2, CandlestickChart, Home, Coins } from 'lucide-react';
+import { X, Trash2, Building2, Activity, Home, Coins } from 'lucide-react';
 
 interface AssetEditModalProps {
   isOpen: boolean;
@@ -14,7 +14,7 @@ interface AssetEditModalProps {
 
 const ICONS: Record<AssetType, React.ReactNode> = {
   savings: <Building2 className="w-5 h-5" />,
-  stock: <CandlestickChart className="w-5 h-5" />,
+  stock: <Activity className="w-5 h-5" />,
   property: <Home className="w-5 h-5" />,
   gold: <Coins className="w-5 h-5" />,
 };
