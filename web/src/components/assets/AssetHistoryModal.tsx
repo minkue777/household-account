@@ -254,6 +254,7 @@ export default function AssetHistoryModal({
             <div className="mt-4 flex gap-2">
               {isStock ? (
                 <button
+                  type="button"
                   onClick={() => setShowAddStockForm(true)}
                   className="px-4 py-2.5 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors flex items-center gap-1.5"
                 >
@@ -262,6 +263,7 @@ export default function AssetHistoryModal({
                 </button>
               ) : (
                 <button
+                  type="button"
                   onClick={() => setShowUpdateForm(true)}
                   className="px-4 py-2.5 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-1.5"
                 >
@@ -271,6 +273,7 @@ export default function AssetHistoryModal({
               )}
               {asset.type === 'gold' && onViewGold && (
                 <button
+                  type="button"
                   onClick={onViewGold}
                   className="px-4 py-2.5 bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-colors flex items-center gap-1.5"
                 >
@@ -279,6 +282,7 @@ export default function AssetHistoryModal({
                 </button>
               )}
               <button
+                type="button"
                 onClick={onViewChart}
                 className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-colors"
               >
@@ -356,12 +360,14 @@ export default function AssetHistoryModal({
                 </div>
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={() => setShowUpdateForm(false)}
                     className="flex-1 py-2 border border-slate-300 rounded-lg text-slate-600 hover:bg-white transition-colors"
                   >
                     취소
                   </button>
                   <button
+                    type="button"
                     onClick={handleUpdateBalance}
                     disabled={!newBalance || isSubmitting}
                     className="flex-1 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-slate-300"
@@ -460,12 +466,14 @@ export default function AssetHistoryModal({
 
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={resetStockForm}
                     className="flex-1 py-2 border border-slate-300 rounded-lg text-slate-600 hover:bg-white transition-colors"
                   >
                     취소
                   </button>
                   <button
+                    type="button"
                     onClick={handleAddHolding}
                     disabled={!selectedStock || !quantity || isSubmitting}
                     className="flex-1 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:bg-slate-300"

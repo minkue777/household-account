@@ -204,9 +204,10 @@ export default function AssetList({
                 onDragEnd={handleDragEnd}
                 onDragLeave={() => setDragOverId(null)}
                 onTouchStart={(e) => handleTouchStart(e, asset.id)}
-                className={`relative transition-all cursor-grab active:cursor-grabbing ${
+                className={`relative transition-all ${
                   isDragging ? 'opacity-50 scale-95' : ''
                 } ${isDragOver ? 'bg-blue-50' : ''}`}
+                style={{ touchAction: 'pan-y' }}
               >
                 {/* 드롭 인디케이터 */}
                 {isDragOver && (
@@ -217,7 +218,11 @@ export default function AssetList({
                 <AssetCard
                   asset={asset}
                   lastChange={getLastChange(asset.id)}
-                  onClick={() => !isLongPress && onAssetClick(asset)}
+                  onClick={() => {
+                    if (!isLongPress) {
+                      onAssetClick(asset);
+                    }
+                  }}
                 />
               </div>
             );
