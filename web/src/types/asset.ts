@@ -53,6 +53,7 @@ export interface Asset {
   subType?: string;          // "예금", "적금", "주식", "펀드", "코인", "부동산", "차량"
   owner?: string;            // 소유자 (가족 구성원)
   currentBalance: number;
+  costBasis?: number;        // 투자원금 (주식 계좌용)
   currency: string;          // 'KRW' (기본)
   memo?: string;
   icon?: string;             // Lucide 아이콘명

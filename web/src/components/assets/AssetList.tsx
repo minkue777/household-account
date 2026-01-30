@@ -217,7 +217,6 @@ export default function AssetList({
                 {/* 자산 카드 */}
                 <AssetCard
                   asset={asset}
-                  lastChange={getLastChange(asset.id)}
                   onClick={() => {
                     if (!isLongPress) {
                       onAssetClick(asset);

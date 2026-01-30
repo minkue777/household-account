@@ -19,19 +19,17 @@ const ICONS: Record<string, React.ReactNode> = {
   gold: <Coins className="w-5 h-5" />,
 };
 
-export default function AssetCard({ asset, lastChange, onClick }: AssetCardProps) {
+export default function AssetCard({ asset, onClick }: AssetCardProps) {
   const config = ASSET_TYPE_CONFIG[asset.type];
   const iconColor = asset.color || config.color;
 
-  // 주식 타입만 변동 표시
-  const showChange = asset.type === 'stock' && lastChange && lastChange.amount !== 0;
-
-  // 변동률 계산 (이전 잔액 대비)
-  const changeRate = showChange && (asset.currentBalance - lastChange.amount) !== 0
-    ? ((lastChange.amount / (asset.currentBalance - lastChange.amount)) * 100)
-    : 0;
-
-  const hasPositiveChange = lastChange && lastChange.amount > 0;
+  // 주식 계좌: 수익률 계산 (평가금액 vs 투자원금)
+  const isStock = asset.type === 'stock';
+  const costBasis = asset.costBasis || 0;
+  const profitLoss = isStock && costBasis > 0 ? asset.currentBalance - costBasis : 0;
+  const profitLossRate = isStock && costBasis > 0 ? (profitLoss / costBasis) * 100 : 0;
+  const showProfitLoss = isStock && costBasis > 0;
+  const isProfit = profitLoss >= 0;
 
   return (
     <button
@@ -56,20 +54,18 @@ export default function AssetCard({ asset, lastChange, onClick }: AssetCardProps
         </p>
       </div>
 
-      {/* 금액 & 변동률 (주식만) */}
+      {/* 금액 & 수익률 (주식만) */}
       <div className="text-right flex-shrink-0">
         <p className="font-semibold text-slate-900">
           {asset.currentBalance.toLocaleString()}
           <span className="text-xs font-normal text-slate-400 ml-0.5">원</span>
         </p>
-        {showChange && (
-          <p className={`text-xs ${hasPositiveChange ? 'text-red-500' : 'text-blue-500'}`}>
-            {hasPositiveChange ? '+' : ''}{lastChange.amount.toLocaleString()}원
-            {changeRate !== 0 && !isNaN(changeRate) && isFinite(changeRate) && (
-              <span className="ml-1">
-                ({changeRate > 0 ? '+' : ''}{changeRate.toFixed(1)}%)
-              </span>
-            )}
+        {showProfitLoss && (
+          <p className={`text-xs ${isProfit ? 'text-red-500' : 'text-blue-500'}`}>
+            {isProfit ? '+' : ''}{profitLossRate.toFixed(2)}%
+            <span className="ml-1">
+              ({isProfit ? '+' : ''}{profitLoss.toLocaleString()})
+            </span>
           </p>
         )}
       </div>

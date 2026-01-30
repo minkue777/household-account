@@ -48,6 +48,7 @@ function mapDocToAsset(docSnap: QueryDocumentSnapshot<DocumentData>): Asset {
     subType: data.subType,
     owner: data.owner,
     currentBalance: data.currentBalance || 0,
+    costBasis: data.costBasis,
     currency: data.currency || 'KRW',
     memo: data.memo,
     icon: data.icon,
@@ -503,7 +504,7 @@ function mapDocToHolding(docSnap: QueryDocumentSnapshot<DocumentData>): StockHol
 }
 
 /**
- * 주식 계좌의 총 평가금액 계산 및 업데이트
+ * 주식 계좌의 총 평가금액 및 투자원금 계산 및 업데이트
  */
 async function updateAssetBalanceFromHoldings(assetId: string): Promise<void> {
   const householdId = getHouseholdId();
@@ -515,14 +516,23 @@ async function updateAssetBalanceFromHoldings(assetId: string): Promise<void> {
   );
 
   const snapshot = await getDocs(q);
-  const totalValue = snapshot.docs.reduce((sum, doc) => {
-    const data = doc.data();
-    const price = data.currentPrice || data.avgPrice || 0;
-    return sum + (price * (data.quantity || 0));
-  }, 0);
+
+  let totalValue = 0;
+  let totalCostBasis = 0;
+
+  snapshot.docs.forEach((docSnap) => {
+    const data = docSnap.data();
+    const quantity = data.quantity || 0;
+    const avgPrice = data.avgPrice || 0;
+    const currentPrice = data.currentPrice || avgPrice;
+
+    totalValue += currentPrice * quantity;
+    totalCostBasis += avgPrice * quantity;
+  });
 
   await updateDoc(doc(db, ASSETS_COLLECTION, assetId), {
     currentBalance: totalValue,
+    costBasis: totalCostBasis,
     updatedAt: Timestamp.now(),
   });
 }
