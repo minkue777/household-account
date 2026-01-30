@@ -19,19 +19,12 @@ const ICONS: Record<string, React.ReactNode> = {
   gold: <Coins className="w-5 h-5" />,
 };
 
-// 이전 타입 매핑 (DB 호환용)
-const TYPE_FALLBACK: Record<string, string> = {
-  bank: 'savings',
-  investment: 'stock',
-};
-
 export default function AssetCard({ asset, lastChange, onClick }: AssetCardProps) {
-  const effectiveType = TYPE_FALLBACK[asset.type] || asset.type;
-  const config = ASSET_TYPE_CONFIG[effectiveType as keyof typeof ASSET_TYPE_CONFIG] || ASSET_TYPE_CONFIG.savings;
+  const config = ASSET_TYPE_CONFIG[asset.type];
   const iconColor = asset.color || config.color;
 
   // 주식 타입만 변동 표시
-  const showChange = effectiveType === 'stock' && lastChange && lastChange.amount !== 0;
+  const showChange = asset.type === 'stock' && lastChange && lastChange.amount !== 0;
 
   // 변동률 계산 (이전 잔액 대비)
   const changeRate = showChange && (asset.currentBalance - lastChange.amount) !== 0
@@ -50,7 +43,7 @@ export default function AssetCard({ asset, lastChange, onClick }: AssetCardProps
         className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
         style={{ backgroundColor: iconColor, color: 'white' }}
       >
-        {ICONS[effectiveType] || ICONS.savings}
+        {ICONS[asset.type]}
       </div>
 
       {/* 이름 & 부가정보 */}

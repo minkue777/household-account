@@ -1,16 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Asset, AssetHistoryEntry, ASSET_TYPE_CONFIG, AssetType } from '@/types/asset';
+import { Asset, AssetHistoryEntry, ASSET_TYPE_CONFIG } from '@/types/asset';
 import { subscribeToAssetHistory, updateBalanceWithHistory, deleteHistoryEntry } from '@/lib/assetService';
 import Portal from '@/components/Portal';
 import { X, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Building2, Home, CandlestickChart, Coins, List } from 'lucide-react';
-
-// 이전 타입 매핑 (DB 호환용)
-const TYPE_FALLBACK: Record<string, AssetType> = {
-  bank: 'savings',
-  investment: 'stock',
-};
 
 interface AssetHistoryModalProps {
   isOpen: boolean;
@@ -94,8 +88,7 @@ export default function AssetHistoryModal({
 
   if (!isOpen || !asset) return null;
 
-  const effectiveType = TYPE_FALLBACK[asset.type] || asset.type;
-  const config = ASSET_TYPE_CONFIG[effectiveType as AssetType] || ASSET_TYPE_CONFIG.savings;
+  const config = ASSET_TYPE_CONFIG[asset.type];
 
   return (
     <Portal>
@@ -109,7 +102,7 @@ export default function AssetHistoryModal({
                   className="w-12 h-12 rounded-full flex items-center justify-center"
                   style={{ backgroundColor: `${asset.color || config.color}15`, color: asset.color || config.color }}
                 >
-                  {ICONS[effectiveType] || ICONS.savings}
+                  {ICONS[asset.type]}
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-800">{asset.name}</h3>
@@ -145,7 +138,7 @@ export default function AssetHistoryModal({
                 <Plus className="w-4 h-4" />
                 잔액 업데이트
               </button>
-              {effectiveType === 'stock' && onViewHoldings && (
+              {asset.type === 'stock' && onViewHoldings && (
                 <button
                   onClick={onViewHoldings}
                   className="px-4 py-2.5 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors flex items-center gap-1.5"
@@ -154,7 +147,7 @@ export default function AssetHistoryModal({
                   종목
                 </button>
               )}
-              {effectiveType === 'gold' && onViewGold && (
+              {asset.type === 'gold' && onViewGold && (
                 <button
                   onClick={onViewGold}
                   className="px-4 py-2.5 bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-colors flex items-center gap-1.5"
