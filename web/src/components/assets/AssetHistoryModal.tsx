@@ -131,13 +131,15 @@ export default function AssetHistoryModal({
 
             {/* 버튼들 */}
             <div className="mt-4 flex gap-2">
-              <button
-                onClick={() => setShowUpdateForm(true)}
-                className="px-4 py-2.5 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-1.5"
-              >
-                <Plus className="w-4 h-4" />
-                잔액 업데이트
-              </button>
+              {asset.type !== 'stock' && (
+                <button
+                  onClick={() => setShowUpdateForm(true)}
+                  className="px-4 py-2.5 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  잔액 업데이트
+                </button>
+              )}
               {asset.type === 'stock' && onViewHoldings && (
                 <button
                   onClick={onViewHoldings}
