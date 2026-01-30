@@ -123,43 +123,46 @@ export default function AssetSummaryCard({
 
   return (
     <div className="space-y-3">
-      {/* 가족 구성원 탭 */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-1.5">
-        <div className="flex">
+      {/* 총 자산 요약 + 가족 탭 */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100">
+        <div className="p-5 pb-3">
+          <p className="text-2xl font-bold text-slate-900 tracking-tight">
+            {totalBalance.toLocaleString()}
+            <span className="text-base font-medium text-slate-400 ml-1">원</span>
+          </p>
+          {/* 변동률 */}
+          <p className={`text-sm mt-1 ${isPositive ? 'text-green-500' : isNegative ? 'text-red-500' : 'text-slate-400'}`}>
+            {monthlyChange !== 0 ? (
+              <>
+                {isPositive ? '+ ' : ''}{changeRate.toFixed(2)}%
+                {isPositive ? '↑' : isNegative ? '↓' : ''}{' '}
+                {isPositive ? '+' : ''}{Math.abs(monthlyChange).toLocaleString()}원
+              </>
+            ) : (
+              '이번 달 변동 없음'
+            )}
+          </p>
+        </div>
+
+        {/* 가족 구성원 탭 */}
+        <div className="flex border-t border-slate-100">
           {FAMILY_MEMBERS.map((member) => (
             <button
               key={member}
               onClick={() => onMemberChange(member)}
-              className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all ${
+              className={`flex-1 py-3 text-sm font-medium transition-all relative ${
                 selectedMember === member
-                  ? 'bg-blue-500 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-50'
+                  ? 'text-blue-500'
+                  : 'text-slate-400 hover:text-slate-600'
               }`}
             >
               {member}
+              {selectedMember === member && (
+                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-full" />
+              )}
             </button>
           ))}
         </div>
-      </div>
-
-      {/* 총 자산 요약 */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
-        <p className="text-2xl font-bold text-slate-900 tracking-tight">
-          {totalBalance.toLocaleString()}
-          <span className="text-base font-medium text-slate-400 ml-1">원</span>
-        </p>
-        {/* 변동률 */}
-        <p className={`text-sm mt-1 ${isPositive ? 'text-green-500' : isNegative ? 'text-red-500' : 'text-slate-400'}`}>
-          {monthlyChange !== 0 ? (
-            <>
-              {isPositive ? '+ ' : ''}{changeRate.toFixed(2)}%
-              {isPositive ? '↑' : isNegative ? '↓' : ''}{' '}
-              {isPositive ? '+' : ''}{Math.abs(monthlyChange).toLocaleString()}원
-            </>
-          ) : (
-            '이번 달 변동 없음'
-          )}
-        </p>
       </div>
 
       {/* 도넛 차트 + 범례 */}
