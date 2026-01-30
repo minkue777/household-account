@@ -45,7 +45,6 @@ export default function AssetHistoryModal({
   // 주식 관련 상태
   const [holdings, setHoldings] = useState<StockHolding[]>([]);
   const [isLoadingHoldings, setIsLoadingHoldings] = useState(true);
-  const [showAddStockForm, setShowAddStockForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<StockSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -230,7 +229,6 @@ export default function AssetHistoryModal({
 
   // 주식 폼 초기화
   const resetStockForm = () => {
-    setShowAddStockForm(false);
     setSearchQuery('');
     setSearchResults([]);
     setSelectedStock(null);
@@ -337,26 +335,6 @@ export default function AssetHistoryModal({
               </div>
             )}
 
-            {/* 주식: 종목 추가 버튼 */}
-            {isStock && (
-              <div className="mt-4 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddStockForm(true)}
-                  className="px-4 py-2.5 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors flex items-center gap-1.5"
-                >
-                  <Plus className="w-4 h-4" />
-                  종목 추가
-                </button>
-                <button
-                  type="button"
-                  onClick={onViewChart}
-                  className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-colors"
-                >
-                  차트
-                </button>
-              </div>
-            )}
           </div>
 
           {/* 잔액 업데이트 폼 (예적금/부동산) */}
@@ -441,112 +419,6 @@ export default function AssetHistoryModal({
                     className="flex-1 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-slate-300"
                   >
                     {isSubmitting ? '저장 중...' : '저장'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 종목 추가 폼 (주식일 때) */}
-          {isStock && showAddStockForm && (
-            <div className="p-4 bg-green-50 border-b border-green-100">
-              <div className="space-y-3">
-                <div className="relative">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">종목 검색</label>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      if (selectedStock) {
-                        setSelectedStock(null);
-                        setCurrentPrice(null);
-                      }
-                    }}
-                    placeholder="종목명 입력"
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
-                  />
-                  {isSearching && (
-                    <Loader2 className="w-4 h-4 text-green-500 absolute right-3 top-9 animate-spin" />
-                  )}
-
-                  {searchResults.length > 0 && !selectedStock && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                      {searchResults.map((stock) => (
-                        <button
-                          key={stock.code}
-                          type="button"
-                          onClick={() => handleSelectStock(stock)}
-                          className="w-full px-4 py-2.5 text-left hover:bg-slate-50 flex items-center justify-between"
-                        >
-                          <span className="font-medium text-slate-800">{stock.name}</span>
-                          <span className="text-xs text-slate-500">{stock.code}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {selectedStock && (
-                  <>
-                    <div className="bg-white rounded-lg p-3 border border-green-200">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-slate-800">{selectedStock.name}</p>
-                          <p className="text-xs text-slate-500">{selectedStock.code}</p>
-                        </div>
-                        {isLoadingPrice ? (
-                          <Loader2 className="w-4 h-4 text-green-500 animate-spin" />
-                        ) : currentPrice ? (
-                          <p className="font-semibold text-green-600">{currentPrice.toLocaleString()}원</p>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">보유 수량</label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={quantity}
-                        onChange={(e) => setQuantity(e.target.value.replace(/[^0-9]/g, ''))}
-                        placeholder="0"
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">평균 매입가 (선택)</label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={avgPrice ? parseInt(avgPrice, 10).toLocaleString() : ''}
-                          onChange={(e) => setAvgPrice(e.target.value.replace(/[^0-9]/g, ''))}
-                          placeholder="0"
-                          className="w-full px-4 py-2 pr-8 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">원</span>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={resetStockForm}
-                    className="flex-1 py-2 border border-slate-300 rounded-lg text-slate-600 hover:bg-white transition-colors"
-                  >
-                    취소
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleAddHolding}
-                    disabled={!selectedStock || !quantity || isSubmitting}
-                    className="flex-1 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:bg-slate-300"
-                  >
-                    {isSubmitting ? '추가 중...' : '추가'}
                   </button>
                 </div>
               </div>
@@ -644,53 +516,149 @@ export default function AssetHistoryModal({
                 </button>
               </div>
             ) : isStock ? (
-              // 주식: 보유 종목 목록
-              <>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-medium text-slate-500">보유 종목</h4>
-                  {holdings.length > 0 && (
-                    <p className="text-sm text-slate-500">
-                      평가금액 <span className="font-semibold text-slate-700">{totalStockValue.toLocaleString()}원</span>
-                    </p>
-                  )}
-                </div>
-                {isLoadingHoldings ? (
-                  <div className="text-center py-8 text-slate-400">로딩 중...</div>
-                ) : holdings.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400">
-                    보유 종목이 없습니다
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {holdings.map((holding) => (
-                      <div
-                        key={holding.id}
-                        className="flex items-center justify-between p-3 bg-slate-50 rounded-xl"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-slate-800 truncate">{holding.stockName}</p>
-                          <p className="text-xs text-slate-500">
-                            {holding.quantity.toLocaleString()}주
-                            {holding.currentPrice && ` · ${holding.currentPrice.toLocaleString()}원`}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-semibold text-slate-800">
-                            {calculateStockValue(holding).toLocaleString()}원
-                          </p>
+              // 주식: 종목 검색 + 보유 종목 목록
+              <div className="space-y-4">
+                {/* 종목 검색 */}
+                <div className="space-y-3">
+                  <div className="relative">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">종목 검색</label>
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        if (selectedStock) {
+                          setSelectedStock(null);
+                          setCurrentPrice(null);
+                        }
+                      }}
+                      placeholder="종목명 입력"
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                    />
+                    {isSearching && (
+                      <Loader2 className="w-4 h-4 text-green-500 absolute right-3 top-9 animate-spin" />
+                    )}
+
+                    {searchResults.length > 0 && !selectedStock && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {searchResults.map((stock) => (
                           <button
+                            key={stock.code}
                             type="button"
-                            onClick={() => handleDeleteHolding(holding.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            onClick={() => handleSelectStock(stock)}
+                            className="w-full px-4 py-2.5 text-left hover:bg-slate-50 flex items-center justify-between"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <span className="font-medium text-slate-800">{stock.name}</span>
+                            <span className="text-xs text-slate-500">{stock.code}</span>
                           </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {selectedStock && (
+                    <>
+                      <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium text-slate-800">{selectedStock.name}</p>
+                            <p className="text-xs text-slate-500">{selectedStock.code}</p>
+                          </div>
+                          {isLoadingPrice ? (
+                            <Loader2 className="w-4 h-4 text-green-500 animate-spin" />
+                          ) : currentPrice ? (
+                            <p className="font-semibold text-green-600">{currentPrice.toLocaleString()}원</p>
+                          ) : null}
                         </div>
                       </div>
-                    ))}
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">보유 수량</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={quantity}
+                          onChange={(e) => setQuantity(e.target.value.replace(/[^0-9]/g, ''))}
+                          placeholder="0"
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">평균 매입가 (선택)</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={avgPrice ? parseInt(avgPrice, 10).toLocaleString() : ''}
+                            onChange={(e) => setAvgPrice(e.target.value.replace(/[^0-9]/g, ''))}
+                            placeholder="0"
+                            className="w-full px-4 py-2 pr-8 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">원</span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleAddHolding}
+                        disabled={!selectedStock || !quantity || isSubmitting}
+                        className="w-full py-2.5 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:bg-slate-300 font-medium"
+                      >
+                        {isSubmitting ? '추가 중...' : '종목 추가'}
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* 보유 종목 목록 */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-medium text-slate-500">보유 종목</h4>
+                    {holdings.length > 0 && (
+                      <p className="text-sm text-slate-500">
+                        평가금액 <span className="font-semibold text-slate-700">{totalStockValue.toLocaleString()}원</span>
+                      </p>
+                    )}
                   </div>
-                )}
-              </>
+                  {isLoadingHoldings ? (
+                    <div className="text-center py-8 text-slate-400">로딩 중...</div>
+                  ) : holdings.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400">
+                      보유 종목이 없습니다
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {holdings.map((holding) => (
+                        <div
+                          key={holding.id}
+                          className="flex items-center justify-between p-3 bg-slate-50 rounded-xl"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-slate-800 truncate">{holding.stockName}</p>
+                            <p className="text-xs text-slate-500">
+                              {holding.quantity.toLocaleString()}주
+                              {holding.currentPrice && ` · ${holding.currentPrice.toLocaleString()}원`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-slate-800">
+                              {calculateStockValue(holding).toLocaleString()}원
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteHolding(holding.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             ) : (
               // 기타: 변동 이력
               <>
