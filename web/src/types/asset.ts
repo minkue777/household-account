@@ -20,13 +20,13 @@ export const ASSET_TYPE_CONFIG: Record<AssetType, {
 }> = {
   savings: {
     label: '예적금',
-    icon: 'Building2',
+    icon: 'Banknote',
     color: '#3B82F6',
     subTypes: ['예금', '적금', 'CMA'],
   },
   stock: {
     label: '주식',
-    icon: 'Activity',
+    icon: 'BarChart3',
     color: '#10B981',
     subTypes: [], // 종목 검색으로 대체
   },

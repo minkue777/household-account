@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Asset, AssetHistoryEntry, ASSET_TYPE_CONFIG } from '@/types/asset';
 import { subscribeToAssetHistory, updateBalanceWithHistory, deleteHistoryEntry } from '@/lib/assetService';
 import Portal from '@/components/Portal';
-import { X, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Building2, Home, Activity, Coins, List } from 'lucide-react';
+import { X, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Banknote, Home, BarChart3, Coins, List } from 'lucide-react';
 
 interface AssetHistoryModalProps {
   isOpen: boolean;
@@ -17,8 +17,8 @@ interface AssetHistoryModalProps {
 }
 
 const ICONS: Record<string, React.ReactNode> = {
-  savings: <Building2 className="w-5 h-5" />,
-  stock: <Activity className="w-5 h-5" />,
+  savings: <Banknote className="w-5 h-5" />,
+  stock: <BarChart3 className="w-5 h-5" />,
   property: <Home className="w-5 h-5" />,
   gold: <Coins className="w-5 h-5" />,
 };

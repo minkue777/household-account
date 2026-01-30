@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { AssetType, AssetInput, ASSET_TYPE_CONFIG, ASSET_OWNERS } from '@/types/asset';
 import { addAsset } from '@/lib/assetService';
 import Portal from '@/components/Portal';
-import { X, Building2, Activity, Home, Coins } from 'lucide-react';
+import { X, Banknote, BarChart3, Home, Coins } from 'lucide-react';
 
 interface AssetAddModalProps {
   isOpen: boolean;
@@ -14,8 +14,8 @@ interface AssetAddModalProps {
 }
 
 const ICONS: Record<AssetType, React.ReactNode> = {
-  savings: <Building2 className="w-5 h-5" />,
-  stock: <Activity className="w-5 h-5" />,
+  savings: <Banknote className="w-5 h-5" />,
+  stock: <BarChart3 className="w-5 h-5" />,
   property: <Home className="w-5 h-5" />,
   gold: <Coins className="w-5 h-5" />,
 };

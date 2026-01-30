@@ -1,7 +1,7 @@
 'use client';
 
 import { AssetType, ASSET_TYPE_CONFIG } from '@/types/asset';
-import { Building2, Activity, Home, Coins } from 'lucide-react';
+import { Banknote, BarChart3, Home, Coins } from 'lucide-react';
 
 interface AssetTypeSelectorProps {
   selectedType: AssetType;
@@ -10,8 +10,8 @@ interface AssetTypeSelectorProps {
 }
 
 const ICONS: Record<AssetType, React.ReactNode> = {
-  savings: <Building2 className="w-4 h-4" />,
-  stock: <Activity className="w-4 h-4" />,
+  savings: <Banknote className="w-4 h-4" />,
+  stock: <BarChart3 className="w-4 h-4" />,
   property: <Home className="w-4 h-4" />,
   gold: <Coins className="w-4 h-4" />,
 };
