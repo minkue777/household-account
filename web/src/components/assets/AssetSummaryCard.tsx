@@ -144,12 +144,12 @@ export default function AssetSummaryCard({
       </div>
 
       {/* 가족 구성원 탭 */}
-      <div className="flex mt-4 px-5">
+      <div className="flex gap-4 mt-4 px-5">
         {FAMILY_MEMBERS.map((member) => (
           <button
             key={member}
             onClick={() => onMemberChange(member)}
-            className={`flex-1 pb-2 text-sm font-medium transition-all relative ${
+            className={`pb-2 text-sm font-medium transition-all relative ${
               selectedMember === member
                 ? 'text-blue-500'
                 : 'text-slate-400 hover:text-slate-600'
@@ -157,7 +157,7 @@ export default function AssetSummaryCard({
           >
             {member}
             {selectedMember === member && (
-              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-full" />
+              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full h-0.5 bg-blue-500 rounded-full" />
             )}
           </button>
         ))}
