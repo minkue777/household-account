@@ -320,6 +320,13 @@ export default function AssetHistoryModal({
     ? Math.round(goldPrice.sellPricePerDon * parseFloat(goldQuantity))
     : 0;
 
+  // 주식 계좌 수익률 계산
+  const investmentBase = asset.initialInvestment || 0;
+  const stockProfitLoss = isStock && investmentBase > 0 ? asset.currentBalance - investmentBase : 0;
+  const stockProfitLossRate = isStock && investmentBase > 0 ? (stockProfitLoss / investmentBase) * 100 : 0;
+  const showStockProfitLoss = isStock && investmentBase > 0;
+  const isStockProfit = stockProfitLoss >= 0;
+
   return (
     <Portal>
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
@@ -340,6 +347,14 @@ export default function AssetHistoryModal({
                     {asset.subType && `${asset.subType} · `}
                     {isStock ? '평가금액 ' : ''}{asset.currentBalance.toLocaleString()}원
                   </p>
+                  {showStockProfitLoss && (
+                    <p className={`text-sm font-medium ${isStockProfit ? 'text-red-500' : 'text-blue-500'}`}>
+                      {isStockProfit ? '+' : ''}{stockProfitLossRate.toFixed(2)}%
+                      <span className="ml-1">
+                        ({isStockProfit ? '+' : ''}{stockProfitLoss.toLocaleString()}원)
+                      </span>
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-1">
@@ -709,6 +724,18 @@ export default function AssetHistoryModal({
                             <div className="flex gap-2">
                               <button
                                 type="button"
+                                onClick={() => {
+                                  if (confirm(`${holding.stockName}을(를) 삭제하시겠습니까?`)) {
+                                    handleDeleteHolding(holding.id);
+                                    setEditingHolding(null);
+                                  }
+                                }}
+                                className="py-2 px-3 border border-red-300 text-red-500 rounded-lg text-sm hover:bg-red-50"
+                              >
+                                삭제
+                              </button>
+                              <button
+                                type="button"
                                 onClick={handleCancelEditHolding}
                                 className="flex-1 py-2 border border-slate-300 rounded-lg text-slate-600 text-sm hover:bg-white"
                               >
@@ -726,34 +753,47 @@ export default function AssetHistoryModal({
                           </div>
                         ) : (
                           // 일반 모드
-                          <div
-                            key={holding.id}
-                            onClick={() => handleEditHolding(holding)}
-                            className="flex items-center justify-between p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors"
-                          >
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-slate-800 truncate">{holding.stockName}</p>
-                              <p className="text-xs text-slate-500">
-                                {holding.quantity.toLocaleString()}주
-                                {holding.avgPrice && ` · 평단 ${holding.avgPrice.toLocaleString()}원`}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <p className="font-semibold text-slate-800">
-                                {calculateStockValue(holding).toLocaleString()}원
-                              </p>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteHolding(holding.id);
-                                }}
-                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          (() => {
+                            const hasAvgPrice = holding.avgPrice && holding.avgPrice > 0;
+                            const hasCurrentPrice = holding.currentPrice && holding.currentPrice > 0;
+                            const holdingProfitLoss = hasAvgPrice && hasCurrentPrice
+                              ? (holding.currentPrice! - holding.avgPrice!) * holding.quantity
+                              : 0;
+                            const holdingProfitRate = hasAvgPrice && hasCurrentPrice
+                              ? ((holding.currentPrice! - holding.avgPrice!) / holding.avgPrice!) * 100
+                              : 0;
+                            const showHoldingProfit = hasAvgPrice && hasCurrentPrice;
+                            const isHoldingProfit = holdingProfitLoss >= 0;
+
+                            return (
+                              <div
+                                key={holding.id}
+                                onClick={() => handleEditHolding(holding)}
+                                className="flex items-center justify-between p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors"
                               >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
+                                <div className="flex-1 min-w-0 mr-4">
+                                  <p className="font-medium text-slate-800 truncate">{holding.stockName}</p>
+                                  <p className="text-xs text-slate-500">
+                                    {holding.quantity.toLocaleString()}주
+                                    {holding.avgPrice && ` · 평단 ${holding.avgPrice.toLocaleString()}원`}
+                                  </p>
+                                </div>
+                                <div className="text-right flex-shrink-0">
+                                  <p className="font-semibold text-slate-800">
+                                    {calculateStockValue(holding).toLocaleString()}원
+                                  </p>
+                                  {showHoldingProfit && (
+                                    <p className={`text-xs ${isHoldingProfit ? 'text-red-500' : 'text-blue-500'}`}>
+                                      {isHoldingProfit ? '+' : ''}{holdingProfitRate.toFixed(2)}%
+                                      <span className="ml-1">
+                                        ({isHoldingProfit ? '+' : ''}{holdingProfitLoss.toLocaleString()})
+                                      </span>
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()
                         )
                       ))}
                     </div>
