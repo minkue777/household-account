@@ -123,7 +123,7 @@ export default function AssetSummaryCard({
   const isNegative = monthlyChange < 0;
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-visible">
       {/* 총 자산 금액 */}
       <div className="px-5 pt-5 pb-8">
         <p className="text-3xl font-bold text-slate-900 tracking-tight">
@@ -169,7 +169,7 @@ export default function AssetSummaryCard({
       <div className="p-5">
         <div className="flex items-center">
           {/* 차트 */}
-          <div className="w-[120px] h-[120px] flex-shrink-0">
+          <div className="w-[140px] h-[140px] flex-shrink-0 -m-[10px]">
             <Doughnut data={chartData} options={chartOptions} />
           </div>
 
