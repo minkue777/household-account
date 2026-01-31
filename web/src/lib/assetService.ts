@@ -704,6 +704,21 @@ export function subscribeToStockHoldings(
 }
 
 /**
+ * 모든 주식 보유 종목 조회 (배당금 계산용)
+ */
+export async function getAllStockHoldings(): Promise<StockHolding[]> {
+  const householdId = getHouseholdId();
+
+  const q = query(
+    collection(db, HOLDINGS_COLLECTION),
+    where('householdId', '==', householdId)
+  );
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(mapDocToHolding);
+}
+
+/**
  * 자산 삭제 시 연결된 보유 종목도 함께 삭제
  */
 export async function deleteAssetWithHoldings(assetId: string): Promise<void> {
