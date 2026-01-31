@@ -8,13 +8,14 @@ import {
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
   Title,
   Tooltip,
   Legend,
   Filler,
 } from 'chart.js';
-import { Line } from 'react-chartjs-2';
-import { ArrowLeft, TrendingUp, TrendingDown } from 'lucide-react';
+import { Line, Bar } from 'react-chartjs-2';
+import { ArrowLeft, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Asset, AssetHistoryEntry } from '@/types/asset';
 import { subscribeToAssets, getAssetHistoryByPeriod } from '@/lib/assetService';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -24,6 +25,7 @@ ChartJS.register(
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
   Title,
   Tooltip,
   Legend,
@@ -31,6 +33,7 @@ ChartJS.register(
 );
 
 type PeriodType = '1M' | '3M' | '6M' | '1Y' | 'ALL';
+type ProfitViewType = 'monthly' | 'daily';
 
 export default function AssetStatsPage() {
   const { themeConfig } = useTheme();
@@ -38,6 +41,11 @@ export default function AssetStatsPage() {
   const [history, setHistory] = useState<AssetHistoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('1M');
+
+  // 수익 차트 관련 상태
+  const [profitView, setProfitView] = useState<ProfitViewType>('monthly');
+  const [profitYear, setProfitYear] = useState(new Date().getFullYear());
+  const [profitMonth, setProfitMonth] = useState(new Date().getMonth() + 1);
 
   // 현재 날짜 정보
   const now = new Date();
@@ -234,6 +242,145 @@ export default function AssetStatsPage() {
     },
   };
 
+  // 월별 수익 데이터 계산
+  const monthlyProfitData = useMemo(() => {
+    const monthlyData: { month: number; profit: number; rate: number }[] = [];
+
+    for (let month = 1; month <= 12; month++) {
+      const startDate = `${profitYear}-${String(month).padStart(2, '0')}-01`;
+      const endDate = `${profitYear}-${String(month).padStart(2, '0')}-31`;
+
+      const monthHistory = history.filter(
+        (h) => h.date >= startDate && h.date <= endDate
+      );
+
+      const totalChange = monthHistory.reduce((sum, h) => sum + h.changeAmount, 0);
+
+      // 월초 자산 추정 (해당 월의 첫 기록 이전 총액)
+      const firstEntry = monthHistory.sort((a, b) => a.date.localeCompare(b.date))[0];
+      const baseAmount = firstEntry ? firstEntry.balance - firstEntry.changeAmount : totalAssets;
+      const rate = baseAmount > 0 ? (totalChange / baseAmount) * 100 : 0;
+
+      monthlyData.push({
+        month,
+        profit: totalChange,
+        rate,
+      });
+    }
+
+    return monthlyData;
+  }, [history, profitYear, totalAssets]);
+
+  // 일별 수익 데이터 계산
+  const dailyProfitData = useMemo(() => {
+    const daysInMonth = new Date(profitYear, profitMonth, 0).getDate();
+    const dailyData: { day: number; profit: number; rate: number }[] = [];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${profitYear}-${String(profitMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+      const dayHistory = history.filter((h) => h.date === dateStr);
+      const totalChange = dayHistory.reduce((sum, h) => sum + h.changeAmount, 0);
+
+      // 해당 일의 기준 자산
+      const firstEntry = dayHistory[0];
+      const baseAmount = firstEntry ? firstEntry.balance - firstEntry.changeAmount : 0;
+      const rate = baseAmount > 0 ? (totalChange / baseAmount) * 100 : 0;
+
+      dailyData.push({
+        day,
+        profit: totalChange,
+        rate,
+      });
+    }
+
+    return dailyData;
+  }, [history, profitYear, profitMonth]);
+
+  // 수익 바 차트 데이터
+  const profitChartData = useMemo(() => {
+    if (profitView === 'monthly') {
+      return {
+        labels: monthlyProfitData.map((d) => String(d.month)),
+        datasets: [
+          {
+            data: monthlyProfitData.map((d) => d.profit),
+            backgroundColor: monthlyProfitData.map((d) =>
+              d.profit >= 0 ? 'rgba(239, 68, 68, 0.8)' : 'rgba(59, 130, 246, 0.8)'
+            ),
+            borderRadius: 4,
+          },
+        ],
+      };
+    } else {
+      return {
+        labels: dailyProfitData.map((d) => String(d.day)),
+        datasets: [
+          {
+            data: dailyProfitData.map((d) => d.profit),
+            backgroundColor: dailyProfitData.map((d) =>
+              d.profit >= 0 ? 'rgba(239, 68, 68, 0.8)' : 'rgba(59, 130, 246, 0.8)'
+            ),
+            borderRadius: 2,
+          },
+        ],
+      };
+    }
+  }, [profitView, monthlyProfitData, dailyProfitData]);
+
+  const profitChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        callbacks: {
+          label: function (context: any) {
+            const value = context.raw as number;
+            return `${value >= 0 ? '+' : ''}${value.toLocaleString()}원`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: {
+          display: false,
+        },
+      },
+      y: {
+        grid: {
+          color: 'rgba(0, 0, 0, 0.05)',
+        },
+        ticks: {
+          callback: function (value: any) {
+            if (Math.abs(value) >= 1000000) {
+              return `${(value / 1000000).toFixed(1)}백만`;
+            } else if (Math.abs(value) >= 10000) {
+              return `${(value / 10000).toFixed(0)}만`;
+            }
+            return value;
+          },
+        },
+      },
+    },
+  };
+
+  // 수익 테이블 데이터 (내림차순)
+  const profitTableData = useMemo(() => {
+    if (profitView === 'monthly') {
+      return monthlyProfitData
+        .filter((d) => d.profit !== 0)
+        .sort((a, b) => b.month - a.month);
+    } else {
+      return dailyProfitData
+        .filter((d) => d.profit !== 0)
+        .sort((a, b) => b.day - a.day);
+    }
+  }, [profitView, monthlyProfitData, dailyProfitData]);
+
   // 기간 변동액
   const periodChange = dailyTotals.length > 1
     ? dailyTotals[dailyTotals.length - 1].total - dailyTotals[0].total
@@ -308,6 +455,134 @@ export default function AssetStatsPage() {
               <h3 className="text-sm font-semibold text-slate-700 mb-4">자산 추이</h3>
               <div className="h-[250px]">
                 <Line data={chartData} options={chartOptions} />
+              </div>
+            </div>
+
+            {/* 수익 차트 */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+              {/* 헤더: 제목 + 월별/일별 토글 */}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-slate-700">수익 차트</h3>
+                <div className="flex bg-slate-100 rounded-lg p-0.5">
+                  <button
+                    onClick={() => setProfitView('monthly')}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                      profitView === 'monthly'
+                        ? 'bg-white text-slate-800 shadow-sm'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    월별
+                  </button>
+                  <button
+                    onClick={() => setProfitView('daily')}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                      profitView === 'daily'
+                        ? 'bg-white text-slate-800 shadow-sm'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    일별
+                  </button>
+                </div>
+              </div>
+
+              {/* 연도/월 네비게이션 */}
+              <div className="flex items-center justify-center gap-4 mb-4">
+                <button
+                  onClick={() => {
+                    if (profitView === 'monthly') {
+                      setProfitYear((y) => y - 1);
+                    } else {
+                      if (profitMonth === 1) {
+                        setProfitYear((y) => y - 1);
+                        setProfitMonth(12);
+                      } else {
+                        setProfitMonth((m) => m - 1);
+                      }
+                    }
+                  }}
+                  className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5 text-slate-500" />
+                </button>
+                <span className="text-sm font-medium text-slate-700 min-w-[100px] text-center">
+                  {profitView === 'monthly'
+                    ? `${profitYear}년`
+                    : `${profitYear}년 ${profitMonth}월`}
+                </span>
+                <button
+                  onClick={() => {
+                    if (profitView === 'monthly') {
+                      setProfitYear((y) => y + 1);
+                    } else {
+                      if (profitMonth === 12) {
+                        setProfitYear((y) => y + 1);
+                        setProfitMonth(1);
+                      } else {
+                        setProfitMonth((m) => m + 1);
+                      }
+                    }
+                  }}
+                  className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+
+              {/* 바 차트 */}
+              <div className="h-[180px] mb-4">
+                <Bar data={profitChartData} options={profitChartOptions} />
+              </div>
+
+              {/* 수익 테이블 */}
+              <div>
+                <h4 className="text-sm font-medium text-slate-600 mb-2">
+                  {profitView === 'monthly' ? '월별' : '일별'} 평가수익
+                </h4>
+                {profitTableData.length === 0 ? (
+                  <p className="text-center py-4 text-slate-400 text-sm">
+                    변동 내역이 없습니다
+                  </p>
+                ) : (
+                  <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                    {/* 테이블 헤더 */}
+                    <div className="flex items-center text-xs text-slate-500 py-2 border-b border-slate-100">
+                      <span className="flex-1">{profitView === 'monthly' ? '월' : '일'}</span>
+                      <span className="w-20 text-right">수익률</span>
+                      <span className="w-28 text-right">수익</span>
+                    </div>
+                    {/* 테이블 바디 */}
+                    {profitTableData.map((item) => (
+                      <div
+                        key={profitView === 'monthly' ? (item as any).month : (item as any).day}
+                        className="flex items-center py-2 text-sm"
+                      >
+                        <span className="flex-1 text-slate-700">
+                          {profitView === 'monthly'
+                            ? `${(item as any).month}월`
+                            : `${(item as any).day}일`}
+                        </span>
+                        <span
+                          className={`w-20 text-right font-medium ${
+                            item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
+                          }`}
+                        >
+                          {item.profit >= 0 ? '+' : ''}
+                          {item.rate.toFixed(2)}%
+                        </span>
+                        <span
+                          className={`w-28 text-right font-medium ${
+                            item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
+                          }`}
+                        >
+                          {item.profit >= 0 ? '+' : ''}
+                          {item.profit.toLocaleString()}원
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
