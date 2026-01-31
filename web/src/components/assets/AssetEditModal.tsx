@@ -23,6 +23,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
   const [name, setName] = useState('');
   const [type, setType] = useState<AssetType>('savings');
   const [subType, setSubType] = useState('');
+  const [initialInvestment, setInitialInvestment] = useState('');
   const [memo, setMemo] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -33,6 +34,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
       setName(asset.name);
       setType(asset.type);
       setSubType(asset.subType || ASSET_TYPE_CONFIG[asset.type].subTypes[0] || '');
+      setInitialInvestment(asset.initialInvestment?.toString() || '');
       setMemo(asset.memo || '');
     }
   }, [asset]);
@@ -54,6 +56,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
         type,
         subType: subType || '',
         memo: memo.trim(),
+        ...(type === 'stock' ? { initialInvestment: initialInvestment ? parseInt(initialInvestment, 10) : undefined } : {}),
       });
       onClose();
     } catch (error) {
@@ -215,6 +218,28 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
                     {asset.currentBalance.toLocaleString()}원
                   </div>
                 </div>
+
+                {/* 투자원금 (주식만) */}
+                {type === 'stock' && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      투자원금
+                      <span className="text-xs text-slate-400 ml-2">(선택)</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={initialInvestment ? parseInt(initialInvestment, 10).toLocaleString() : ''}
+                        onChange={(e) => setInitialInvestment(e.target.value.replace(/[^0-9]/g, ''))}
+                        placeholder="0"
+                        className="w-full px-4 py-2 pr-8 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">원</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">계좌 전체 수익률 계산에 사용됩니다</p>
+                  </div>
+                )}
 
                 {/* 메모 */}
                 <div>

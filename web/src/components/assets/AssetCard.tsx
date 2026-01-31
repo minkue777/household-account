@@ -25,10 +25,10 @@ export default function AssetCard({ asset, onClick }: AssetCardProps) {
 
   // 주식 계좌: 수익률 계산 (평가금액 vs 투자원금)
   const isStock = asset.type === 'stock';
-  const costBasis = asset.costBasis || 0;
-  const profitLoss = isStock && costBasis > 0 ? asset.currentBalance - costBasis : 0;
-  const profitLossRate = isStock && costBasis > 0 ? (profitLoss / costBasis) * 100 : 0;
-  const showProfitLoss = isStock && costBasis > 0;
+  const investmentBase = asset.initialInvestment || 0; // 사용자가 입력한 투자원금
+  const profitLoss = isStock && investmentBase > 0 ? asset.currentBalance - investmentBase : 0;
+  const profitLossRate = isStock && investmentBase > 0 ? (profitLoss / investmentBase) * 100 : 0;
+  const showProfitLoss = isStock && investmentBase > 0;
   const isProfit = profitLoss >= 0;
 
   return (
