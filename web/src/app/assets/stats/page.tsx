@@ -17,7 +17,7 @@ import {
 import { Line, Bar } from 'react-chartjs-2';
 import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { Asset, AssetHistoryEntry, StockHolding } from '@/types/asset';
-import { subscribeToAssets, getAssetHistoryByPeriod, getAllStockHoldings } from '@/lib/assetService';
+import { subscribeToAssets, getAssetHistoryByPeriod, getAllStockHoldings, saveDividendSnapshot } from '@/lib/assetService';
 import { useTheme } from '@/contexts/ThemeContext';
 
 // 배당금 정보 인터페이스
@@ -472,6 +472,17 @@ export default function AssetStatsPage() {
 
     return monthlyData;
   }, [stockHoldings, dividendInfoMap, dividendYear]);
+
+  // 배당금 스냅샷 저장 (변경 시에만)
+  useEffect(() => {
+    if (isDividendLoading || stockHoldings.length === 0) return;
+
+    const monthlyAmounts = monthlyDividendData.map((d) => d.dividend);
+    // 모두 0이면 저장하지 않음
+    if (monthlyAmounts.every((v) => v === 0)) return;
+
+    saveDividendSnapshot(dividendYear, monthlyAmounts);
+  }, [monthlyDividendData, dividendYear, isDividendLoading, stockHoldings.length]);
 
   // 배당금 바 차트 데이터
   const dividendChartData = useMemo(() => {

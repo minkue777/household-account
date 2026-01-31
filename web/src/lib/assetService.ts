@@ -703,6 +703,64 @@ export function subscribeToStockHoldings(
   return unsubscribe;
 }
 
+// ============================================
+// 배당금 스냅샷 관련 함수
+// ============================================
+
+const DIVIDEND_COLLECTION = 'dividend_snapshots';
+
+/**
+ * 연도별 배당금 스냅샷 조회
+ */
+export async function getDividendSnapshot(year: number): Promise<number[] | null> {
+  const householdId = getHouseholdId();
+  const docId = `${householdId}_${year}`;
+
+  try {
+    const docSnap = await getDoc(doc(db, DIVIDEND_COLLECTION, docId));
+    if (docSnap.exists()) {
+      return docSnap.data().monthlyData || null;
+    }
+  } catch (error) {
+    console.error('배당금 스냅샷 조회 오류:', error);
+  }
+  return null;
+}
+
+/**
+ * 연도별 배당금 스냅샷 저장 (변경 시에만)
+ */
+export async function saveDividendSnapshot(
+  year: number,
+  monthlyData: number[]
+): Promise<boolean> {
+  const householdId = getHouseholdId();
+  const docId = `${householdId}_${year}`;
+
+  try {
+    // 기존 데이터 조회
+    const existing = await getDividendSnapshot(year);
+
+    // 비교: 같으면 skip
+    if (existing && JSON.stringify(existing) === JSON.stringify(monthlyData)) {
+      return false; // 변경 없음
+    }
+
+    // 다르면 업데이트
+    await setDoc(doc(db, DIVIDEND_COLLECTION, docId), {
+      householdId,
+      year,
+      monthlyData,
+      updatedAt: Timestamp.now(),
+    });
+
+    return true; // 업데이트됨
+  } catch (error) {
+    console.error('배당금 스냅샷 저장 오류:', error);
+    return false;
+  }
+}
+
 /**
  * 모든 주식 보유 종목 조회 (배당금 계산용)
  */
