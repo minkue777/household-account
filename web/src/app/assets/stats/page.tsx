@@ -99,11 +99,11 @@ export default function AssetStatsPage() {
     fetchHistory();
   }, [selectedPeriod]);
 
-  // 현재 총 자산 (금융자산 필터 적용)
+  // 현재 총 자산 (금융자산 필터 적용 - 부동산 제외)
   const totalAssets = useMemo(() => {
     return assets
       .filter((a) => a.isActive)
-      .filter((a) => !financialOnly || a.type === 'savings' || a.type === 'stock')
+      .filter((a) => !financialOnly || a.type !== 'property')
       .reduce((sum, a) => sum + a.currentBalance, 0);
   }, [assets, financialOnly]);
 
