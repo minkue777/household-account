@@ -45,7 +45,7 @@ ChartJS.register(
 type PeriodType = '3M' | '6M' | '1Y' | 'ALL';
 type ProfitViewType = 'monthly' | 'daily';
 
-// 숫자를 한글 단위로 변환 (예: 1481758652 → "14억8175만8652")
+// 숫자를 한글 단위로 변환 (예: 1481758652 → "14억 8175만 8652")
 function formatKoreanUnit(num: number): string {
   if (num === 0) return '0';
 
@@ -56,12 +56,12 @@ function formatKoreanUnit(num: number): string {
   const man = Math.floor((absNum % 100000000) / 10000);
   const rest = absNum % 10000;
 
-  let result = '';
-  if (eok > 0) result += `${eok}억`;
-  if (man > 0) result += `${man}만`;
-  if (rest > 0) result += `${rest}`;
+  const parts = [];
+  if (eok > 0) parts.push(`${eok}억`);
+  if (man > 0) parts.push(`${man}만`);
+  if (rest > 0) parts.push(`${rest}`);
 
-  return sign + result;
+  return sign + parts.join(' ');
 }
 
 export default function AssetStatsPage() {
@@ -632,9 +632,9 @@ export default function AssetStatsPage() {
               <p className="text-2xl font-bold text-slate-900">
                 {totalAssets.toLocaleString()}
                 <span className="text-base font-medium text-slate-400 ml-1">원</span>
-                <span className="text-sm font-normal text-slate-400 ml-2">
-                  ({formatKoreanUnit(totalAssets)}원)
-                </span>
+              </p>
+              <p className="text-sm text-slate-400 mt-0.5">
+                ({formatKoreanUnit(totalAssets)}원)
               </p>
               {periodChange !== 0 && (
                 <p className={`text-sm mt-1 ${periodChange > 0 ? 'text-red-500' : 'text-blue-500'}`}>
