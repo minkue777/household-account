@@ -352,6 +352,12 @@ export default function AssetStatsPage() {
         grid: {
           display: false,
         },
+        ticks: {
+          maxRotation: 0,
+          minRotation: 0,
+          font: { size: 11 },
+          color: '#94a3b8',
+        },
       },
       y: {
         grid: {
