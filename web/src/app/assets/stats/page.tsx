@@ -15,7 +15,7 @@ import {
   Filler,
 } from 'chart.js';
 import { Line, Bar } from 'react-chartjs-2';
-import { ArrowLeft, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Asset, AssetHistoryEntry } from '@/types/asset';
 import { subscribeToAssets, getAssetHistoryByPeriod } from '@/lib/assetService';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -32,7 +32,7 @@ ChartJS.register(
   Filler
 );
 
-type PeriodType = '1M' | '3M' | '6M' | '1Y' | 'ALL';
+type PeriodType = '3M' | '6M' | '1Y' | 'ALL';
 type ProfitViewType = 'monthly' | 'daily';
 
 export default function AssetStatsPage() {
@@ -40,7 +40,7 @@ export default function AssetStatsPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [history, setHistory] = useState<AssetHistoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('1M');
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('3M');
 
   // 수익 차트 관련 상태
   const [profitView, setProfitView] = useState<ProfitViewType>('monthly');
@@ -49,8 +49,6 @@ export default function AssetStatsPage() {
 
   // 현재 날짜 정보
   const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth() + 1;
 
   // 자산 구독
   useEffect(() => {
@@ -70,9 +68,6 @@ export default function AssetStatsPage() {
         let startDate: string;
 
         switch (selectedPeriod) {
-          case '1M':
-            startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString().split('T')[0];
-            break;
           case '3M':
             startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).toISOString().split('T')[0];
             break;
@@ -86,7 +81,7 @@ export default function AssetStatsPage() {
             startDate = '2020-01-01';
             break;
           default:
-            startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString().split('T')[0];
+            startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).toISOString().split('T')[0];
         }
 
         const historyData = await getAssetHistoryByPeriod(startDate, endDate);
@@ -148,33 +143,6 @@ export default function AssetStatsPage() {
 
     return dailyData;
   }, [history, totalAssets]);
-
-  // 이번 달 일별 변동 내역
-  const monthlyChanges = useMemo(() => {
-    const startOfMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
-    const endOfMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}-31`;
-
-    // 날짜별 변동 그룹화
-    const changesByDate: Record<string, { total: number; details: AssetHistoryEntry[] }> = {};
-
-    history
-      .filter((h) => h.date >= startOfMonth && h.date <= endOfMonth)
-      .forEach((entry) => {
-        if (!changesByDate[entry.date]) {
-          changesByDate[entry.date] = { total: 0, details: [] };
-        }
-        changesByDate[entry.date].total += entry.changeAmount;
-        changesByDate[entry.date].details.push(entry);
-      });
-
-    // 날짜순 정렬 (내림차순)
-    return Object.entries(changesByDate)
-      .sort(([a], [b]) => b.localeCompare(a))
-      .map(([date, data]) => ({
-        date,
-        ...data,
-      }));
-  }, [history, currentYear, currentMonth]);
 
   // 차트 데이터
   const chartData = useMemo(() => {
@@ -242,6 +210,23 @@ export default function AssetStatsPage() {
     },
   };
 
+  // 전날 데이터가 있는 날짜 Set (초기 등록 데이터 필터링용)
+  const datesWithPreviousDay = useMemo(() => {
+    const allDates = new Set(history.map((h) => h.date));
+    const validDates = new Set<string>();
+
+    allDates.forEach((date) => {
+      const prevDate = new Date(date);
+      prevDate.setDate(prevDate.getDate() - 1);
+      const prevDateStr = prevDate.toISOString().split('T')[0];
+      if (allDates.has(prevDateStr)) {
+        validDates.add(date);
+      }
+    });
+
+    return validDates;
+  }, [history]);
+
   // 월별 수익 데이터 계산
   const monthlyProfitData = useMemo(() => {
     const monthlyData: { month: number; profit: number; rate: number }[] = [];
@@ -250,8 +235,9 @@ export default function AssetStatsPage() {
       const startDate = `${profitYear}-${String(month).padStart(2, '0')}-01`;
       const endDate = `${profitYear}-${String(month).padStart(2, '0')}-31`;
 
+      // 전날 데이터가 있는 기록만 필터링
       const monthHistory = history.filter(
-        (h) => h.date >= startDate && h.date <= endDate
+        (h) => h.date >= startDate && h.date <= endDate && datesWithPreviousDay.has(h.date)
       );
 
       const totalChange = monthHistory.reduce((sum, h) => sum + h.changeAmount, 0);
@@ -269,7 +255,7 @@ export default function AssetStatsPage() {
     }
 
     return monthlyData;
-  }, [history, profitYear, totalAssets]);
+  }, [history, profitYear, totalAssets, datesWithPreviousDay]);
 
   // 일별 수익 데이터 계산
   const dailyProfitData = useMemo(() => {
@@ -279,7 +265,8 @@ export default function AssetStatsPage() {
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${profitYear}-${String(profitMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-      const dayHistory = history.filter((h) => h.date === dateStr);
+      // 전날 데이터가 있는 기록만 필터링
+      const dayHistory = history.filter((h) => h.date === dateStr && datesWithPreviousDay.has(h.date));
       const totalChange = dayHistory.reduce((sum, h) => sum + h.changeAmount, 0);
 
       // 해당 일의 기준 자산
@@ -295,7 +282,7 @@ export default function AssetStatsPage() {
     }
 
     return dailyData;
-  }, [history, profitYear, profitMonth]);
+  }, [history, profitYear, profitMonth, datesWithPreviousDay]);
 
   // 수익 바 차트 데이터
   const profitChartData = useMemo(() => {
@@ -435,7 +422,7 @@ export default function AssetStatsPage() {
 
             {/* 기간 선택 */}
             <div className="flex gap-2">
-              {(['1M', '3M', '6M', '1Y', 'ALL'] as PeriodType[]).map((period) => (
+              {(['3M', '6M', '1Y', 'ALL'] as PeriodType[]).map((period) => (
                 <button
                   key={period}
                   onClick={() => setSelectedPeriod(period)}
@@ -586,66 +573,6 @@ export default function AssetStatsPage() {
               </div>
             </div>
 
-            {/* 이번 달 일별 변동 */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
-              <h3 className="text-sm font-semibold text-slate-700 mb-4">
-                {currentMonth}월 일별 변동
-              </h3>
-              {monthlyChanges.length === 0 ? (
-                <p className="text-center py-8 text-slate-400">
-                  이번 달 변동 내역이 없습니다
-                </p>
-              ) : (
-                <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                  {monthlyChanges.map((item) => (
-                    <div
-                      key={item.date}
-                      className="flex items-center justify-between p-3 bg-slate-50 rounded-xl"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                            item.total > 0
-                              ? 'bg-red-100 text-red-500'
-                              : item.total < 0
-                              ? 'bg-blue-100 text-blue-500'
-                              : 'bg-slate-100 text-slate-400'
-                          }`}
-                        >
-                          {item.total > 0 ? (
-                            <TrendingUp className="w-4 h-4" />
-                          ) : item.total < 0 ? (
-                            <TrendingDown className="w-4 h-4" />
-                          ) : (
-                            <span className="text-xs">-</span>
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-medium text-slate-800">
-                            {new Date(item.date).getDate()}일
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {item.details.length}건 변동
-                          </p>
-                        </div>
-                      </div>
-                      <p
-                        className={`font-semibold ${
-                          item.total > 0
-                            ? 'text-red-500'
-                            : item.total < 0
-                            ? 'text-blue-500'
-                            : 'text-slate-400'
-                        }`}
-                      >
-                        {item.total > 0 ? '+' : ''}
-                        {item.total.toLocaleString()}원
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
         )}
       </div>
