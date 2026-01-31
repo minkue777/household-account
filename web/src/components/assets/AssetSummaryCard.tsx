@@ -123,7 +123,7 @@ export default function AssetSummaryCard({
   const isNegative = monthlyChange < 0;
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100">
       {/* 총 자산 금액 */}
       <div className="px-5 pt-5 pb-8">
         <p className="text-3xl font-bold text-slate-900 tracking-tight">

@@ -321,7 +321,7 @@ export default function AssetHistoryModal({
     : 0;
 
   // 주식 계좌 수익률 계산
-  const investmentBase = asset.initialInvestment || 0;
+  const investmentBase = asset.initialInvestment || asset.costBasis || 0;
   const stockProfitLoss = isStock && investmentBase > 0 ? asset.currentBalance - investmentBase : 0;
   const stockProfitLossRate = isStock && investmentBase > 0 ? (stockProfitLoss / investmentBase) * 100 : 0;
   const showStockProfitLoss = isStock && investmentBase > 0;
