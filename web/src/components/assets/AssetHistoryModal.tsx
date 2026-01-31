@@ -13,6 +13,15 @@ interface GoldPriceData {
   estimated?: boolean;
 }
 
+interface DividendInfo {
+  code: string;
+  name: string;
+  recentDividend: number | null;
+  paymentDate: string | null;
+  frequency: number | null;
+  dividendYield: number | null;
+}
+
 interface AssetHistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -58,6 +67,10 @@ export default function AssetHistoryModal({
   const [editingHolding, setEditingHolding] = useState<StockHolding | null>(null);
   const [editQuantity, setEditQuantity] = useState('');
   const [editAvgPrice, setEditAvgPrice] = useState('');
+
+  // 배당금 정보 상태
+  const [dividendInfoMap, setDividendInfoMap] = useState<Record<string, DividendInfo>>({});
+  const [loadingDividends, setLoadingDividends] = useState<Set<string>>(new Set());
 
   // 금 관련 상태
   const [goldQuantity, setGoldQuantity] = useState('');
@@ -109,6 +122,40 @@ export default function AssetHistoryModal({
     }
     fetchGoldPrice();
   }, [isOpen, asset]);
+
+  // 배당금 정보 조회
+  const fetchDividendInfo = async (stockCode: string) => {
+    if (dividendInfoMap[stockCode] || loadingDividends.has(stockCode)) return;
+
+    setLoadingDividends(prev => new Set(prev).add(stockCode));
+    try {
+      const response = await fetch(`/api/stock/dividend?code=${stockCode}`);
+      if (response.ok) {
+        const data = await response.json();
+        setDividendInfoMap(prev => ({ ...prev, [stockCode]: data }));
+      }
+    } catch (error) {
+      console.error('배당금 조회 오류:', error);
+    } finally {
+      setLoadingDividends(prev => {
+        const next = new Set(prev);
+        next.delete(stockCode);
+        return next;
+      });
+    }
+  };
+
+  // 보유 종목이 변경되면 배당금 정보 조회
+  useEffect(() => {
+    if (!isOpen || holdings.length === 0) return;
+
+    holdings.forEach(holding => {
+      // 이미 조회했거나 로딩중이면 스킵
+      if (dividendInfoMap[holding.stockCode] || loadingDividends.has(holding.stockCode)) return;
+      fetchDividendInfo(holding.stockCode);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holdings, isOpen]);
 
   // 금 시세 조회
   const fetchGoldPrice = async () => {
@@ -764,33 +811,66 @@ export default function AssetHistoryModal({
                               : 0;
                             const showHoldingProfit = hasAvgPrice && hasCurrentPrice;
                             const isHoldingProfit = holdingProfitLoss >= 0;
+                            const dividendInfo = dividendInfoMap[holding.stockCode];
+                            const isLoadingDividend = loadingDividends.has(holding.stockCode);
+                            // 예상 월 배당금 계산 (연간 배당금 / 12)
+                            const monthlyDividend = dividendInfo?.recentDividend && dividendInfo?.frequency
+                              ? Math.round((dividendInfo.recentDividend * dividendInfo.frequency * holding.quantity) / 12)
+                              : null;
 
                             return (
                               <div
                                 key={holding.id}
                                 onClick={() => handleEditHolding(holding)}
-                                className="flex items-center justify-between p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors"
+                                className="p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors"
                               >
-                                <div className="flex-1 min-w-0 mr-4">
-                                  <p className="font-medium text-slate-800 truncate">{holding.stockName}</p>
-                                  <p className="text-xs text-slate-500">
-                                    {holding.quantity.toLocaleString()}주
-                                    {holding.avgPrice && ` · 평단 ${holding.avgPrice.toLocaleString()}원`}
-                                  </p>
-                                </div>
-                                <div className="text-right flex-shrink-0">
-                                  <p className="font-semibold text-slate-800">
-                                    {calculateStockValue(holding).toLocaleString()}원
-                                  </p>
-                                  {showHoldingProfit && (
-                                    <p className={`text-xs ${isHoldingProfit ? 'text-red-500' : 'text-blue-500'}`}>
-                                      {isHoldingProfit ? '+' : ''}{holdingProfitRate.toFixed(2)}%
-                                      <span className="ml-1">
-                                        ({isHoldingProfit ? '+' : ''}{holdingProfitLoss.toLocaleString()})
-                                      </span>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex-1 min-w-0 mr-4">
+                                    <p className="font-medium text-slate-800 truncate">{holding.stockName}</p>
+                                    <p className="text-xs text-slate-500">
+                                      {holding.quantity.toLocaleString()}주
+                                      {holding.avgPrice && ` · 평단 ${holding.avgPrice.toLocaleString()}원`}
                                     </p>
-                                  )}
+                                  </div>
+                                  <div className="text-right flex-shrink-0">
+                                    <p className="font-semibold text-slate-800">
+                                      {calculateStockValue(holding).toLocaleString()}원
+                                    </p>
+                                    {showHoldingProfit && (
+                                      <p className={`text-xs ${isHoldingProfit ? 'text-red-500' : 'text-blue-500'}`}>
+                                        {isHoldingProfit ? '+' : ''}{holdingProfitRate.toFixed(2)}%
+                                        <span className="ml-1">
+                                          ({isHoldingProfit ? '+' : ''}{holdingProfitLoss.toLocaleString()})
+                                        </span>
+                                      </p>
+                                    )}
+                                  </div>
                                 </div>
+                                {/* 배당금 정보 */}
+                                {isLoadingDividend ? (
+                                  <div className="mt-2 pt-2 border-t border-slate-200">
+                                    <p className="text-xs text-slate-400">배당 정보 로딩중...</p>
+                                  </div>
+                                ) : dividendInfo && dividendInfo.recentDividend ? (
+                                  <div className="mt-2 pt-2 border-t border-slate-200">
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className="text-slate-500">
+                                        분배금 {dividendInfo.recentDividend.toLocaleString()}원
+                                        {dividendInfo.frequency && ` · 연 ${dividendInfo.frequency}회`}
+                                      </span>
+                                      {monthlyDividend && (
+                                        <span className="text-emerald-600 font-medium">
+                                          월 ~{monthlyDividend.toLocaleString()}원
+                                        </span>
+                                      )}
+                                    </div>
+                                    {dividendInfo.paymentDate && (
+                                      <p className="text-xs text-slate-400 mt-0.5">
+                                        최근 지급일: {dividendInfo.paymentDate}
+                                      </p>
+                                    )}
+                                  </div>
+                                ) : null}
                               </div>
                             );
                           })()
