@@ -273,14 +273,15 @@ export default function AssetStatsPage() {
         grid: {
           color: 'rgba(0, 0, 0, 0.05)',
         },
+        title: {
+          display: true,
+          text: '(억원)',
+          font: { size: 11 },
+          color: '#94a3b8',
+        },
         ticks: {
           callback: function (value: any) {
-            if (value >= 100000000) {
-              return `${(value / 100000000).toFixed(1)}억`;
-            } else if (value >= 10000) {
-              return `${(value / 10000).toFixed(0)}만`;
-            }
-            return value;
+            return (value / 100000000).toFixed(1);
           },
         },
       },
