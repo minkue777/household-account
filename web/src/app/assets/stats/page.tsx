@@ -341,12 +341,17 @@ export default function AssetStatsPage() {
         grid: {
           color: 'rgba(0, 0, 0, 0.05)',
         },
+        title: {
+          display: true,
+          text: '(만원)',
+          font: { size: 11 },
+          color: '#94a3b8',
+        },
         ticks: {
           callback: function (value: any) {
-            if (Math.abs(value) >= 1000000) {
-              return `${(value / 1000000).toFixed(1)}백만`;
-            } else if (Math.abs(value) >= 10000) {
-              return `${(value / 10000).toFixed(0)}만`;
+            // 만원 단위로 표시
+            if (Math.abs(value) >= 10000) {
+              return (value / 10000).toFixed(0);
             }
             return value;
           },
