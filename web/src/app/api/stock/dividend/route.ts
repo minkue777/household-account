@@ -74,14 +74,14 @@ function parseDividendInfo(html: string, code: string): DividendInfo {
       result.recentDividend = parseInt(dividendMatch[1].replace(/,/g, ''), 10);
     }
 
-    // 지급일 추출 - YYYY/MM/DD 형식
-    const dateMatch = html.match(/(\d{4}\/\d{2}\/\d{2})/);
+    // 지급기준일 추출 - "최근 분배금 지급기준일" 뒤의 날짜
+    const dateMatch = html.match(/최근\s*분배금\s*지급기준일[^0-9]*(\d{4}\/\d{2}\/\d{2})/);
     if (dateMatch) {
       result.paymentDate = dateMatch[1];
     }
 
-    // 연간 지급 횟수 추출
-    const frequencyMatch = html.match(/연\s*(\d+)\s*회/);
+    // 연간 지급 횟수 추출 - "연 분배횟수" 뒤의 숫자
+    const frequencyMatch = html.match(/연\s*분배횟수[^0-9]*(\d+)/);
     if (frequencyMatch) {
       result.frequency = parseInt(frequencyMatch[1], 10);
     }
