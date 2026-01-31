@@ -610,9 +610,9 @@ export default function AssetStatsPage() {
               <p className="text-sm text-slate-500 mb-1">
                 {financialOnly ? '금융자산' : '현재 총 자산'}
               </p>
-              <p className="text-3xl font-bold text-slate-900">
+              <p className="text-2xl font-bold text-slate-900">
                 {totalAssets.toLocaleString()}
-                <span className="text-lg font-medium text-slate-400 ml-1">원</span>
+                <span className="text-base font-medium text-slate-400 ml-1">원</span>
               </p>
               {periodChange !== 0 && (
                 <p className={`text-sm mt-1 ${periodChange > 0 ? 'text-red-500' : 'text-blue-500'}`}>
