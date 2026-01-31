@@ -7,6 +7,25 @@ import { Asset, ASSET_TYPE_CONFIG, AssetType, FAMILY_MEMBERS } from '@/types/ass
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
+// 숫자를 한글 단위로 변환 (예: 1481758652 → "14억8175만8652")
+function formatKoreanUnit(num: number): string {
+  if (num === 0) return '0';
+
+  const absNum = Math.abs(num);
+  const sign = num < 0 ? '-' : '';
+
+  const eok = Math.floor(absNum / 100000000);
+  const man = Math.floor((absNum % 100000000) / 10000);
+  const rest = absNum % 10000;
+
+  let result = '';
+  if (eok > 0) result += `${eok}억`;
+  if (man > 0) result += `${man}만`;
+  if (rest > 0) result += `${rest}`;
+
+  return sign + result;
+}
+
 interface AssetSummaryCardProps {
   assets: Asset[];
   monthlyChange: number;
@@ -130,6 +149,9 @@ export default function AssetSummaryCard({
         <p className="text-2xl font-bold text-slate-900 tracking-tight">
           {totalBalance.toLocaleString()}
           <span className="text-base font-medium text-slate-400 ml-1">원</span>
+          <span className="text-sm font-normal text-slate-400 ml-2">
+            ({formatKoreanUnit(totalBalance)}원)
+          </span>
         </p>
         {/* 변동률 */}
         <p className={`text-sm mt-1 ${isPositive ? 'text-red-500' : isNegative ? 'text-blue-500' : 'text-slate-400'}`}>

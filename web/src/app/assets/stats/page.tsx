@@ -45,6 +45,25 @@ ChartJS.register(
 type PeriodType = '3M' | '6M' | '1Y' | 'ALL';
 type ProfitViewType = 'monthly' | 'daily';
 
+// 숫자를 한글 단위로 변환 (예: 1481758652 → "14억8175만8652")
+function formatKoreanUnit(num: number): string {
+  if (num === 0) return '0';
+
+  const absNum = Math.abs(num);
+  const sign = num < 0 ? '-' : '';
+
+  const eok = Math.floor(absNum / 100000000);
+  const man = Math.floor((absNum % 100000000) / 10000);
+  const rest = absNum % 10000;
+
+  let result = '';
+  if (eok > 0) result += `${eok}억`;
+  if (man > 0) result += `${man}만`;
+  if (rest > 0) result += `${rest}`;
+
+  return sign + result;
+}
+
 export default function AssetStatsPage() {
   const { themeConfig } = useTheme();
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -613,6 +632,9 @@ export default function AssetStatsPage() {
               <p className="text-2xl font-bold text-slate-900">
                 {totalAssets.toLocaleString()}
                 <span className="text-base font-medium text-slate-400 ml-1">원</span>
+                <span className="text-sm font-normal text-slate-400 ml-2">
+                  ({formatKoreanUnit(totalAssets)}원)
+                </span>
               </p>
               {periodChange !== 0 && (
                 <p className={`text-sm mt-1 ${periodChange > 0 ? 'text-red-500' : 'text-blue-500'}`}>
@@ -820,7 +842,7 @@ export default function AssetStatsPage() {
               {/* 연간 배당금 합계 */}
               <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                 <span className="text-sm text-slate-600">연간 배당금</span>
-                <span className="text-lg font-bold text-emerald-600">
+                <span className="text-lg font-bold text-red-500">
                   {totalDividend.toLocaleString()}원
                 </span>
               </div>
