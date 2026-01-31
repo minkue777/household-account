@@ -42,6 +42,9 @@ export default function AssetStatsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('3M');
 
+  // 금융자산만 보기 필터
+  const [financialOnly, setFinancialOnly] = useState(false);
+
   // 수익 차트 관련 상태
   const [profitView, setProfitView] = useState<ProfitViewType>('monthly');
   const [profitYear, setProfitYear] = useState(new Date().getFullYear());
@@ -96,10 +99,13 @@ export default function AssetStatsPage() {
     fetchHistory();
   }, [selectedPeriod]);
 
-  // 현재 총 자산
-  const totalAssets = assets
-    .filter((a) => a.isActive)
-    .reduce((sum, a) => sum + a.currentBalance, 0);
+  // 현재 총 자산 (금융자산 필터 적용)
+  const totalAssets = useMemo(() => {
+    return assets
+      .filter((a) => a.isActive)
+      .filter((a) => !financialOnly || a.type === 'savings' || a.type === 'stock')
+      .reduce((sum, a) => sum + a.currentBalance, 0);
+  }, [assets, financialOnly]);
 
   // 일별 자산 합계 계산 (총자산 스냅샷 사용)
   const dailyTotals = useMemo(() => {
@@ -434,9 +440,25 @@ export default function AssetStatsPage() {
           <div className="text-center py-12 text-slate-400">로딩 중...</div>
         ) : (
           <div className="space-y-4">
+            {/* 금융자산 필터 */}
+            <div className="flex justify-end">
+              <button
+                onClick={() => setFinancialOnly(!financialOnly)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all ${
+                  financialOnly
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {financialOnly ? '금융자산' : '전체자산'}
+              </button>
+            </div>
+
             {/* 현재 총 자산 */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
-              <p className="text-sm text-slate-500 mb-1">현재 총 자산</p>
+              <p className="text-sm text-slate-500 mb-1">
+                {financialOnly ? '금융자산' : '현재 총 자산'}
+              </p>
               <p className="text-3xl font-bold text-slate-900">
                 {totalAssets.toLocaleString()}
                 <span className="text-lg font-medium text-slate-400 ml-1">원</span>
