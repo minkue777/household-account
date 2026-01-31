@@ -17,7 +17,7 @@ import {
 import { Line, Bar } from 'react-chartjs-2';
 import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { Asset, AssetHistoryEntry, StockHolding } from '@/types/asset';
-import { subscribeToAssets, getAssetHistoryByPeriod, getAllStockHoldings, saveDividendSnapshot } from '@/lib/assetService';
+import { subscribeToAssets, getAssetHistoryByPeriod, getAllStockHoldings, saveDividendSnapshot, getDividendSnapshot } from '@/lib/assetService';
 import { useTheme } from '@/contexts/ThemeContext';
 
 // 배당금 정보 인터페이스
@@ -66,6 +66,7 @@ export default function AssetStatsPage() {
   const [stockHoldings, setStockHoldings] = useState<StockHolding[]>([]);
   const [dividendInfoMap, setDividendInfoMap] = useState<Record<string, DividendInfo>>({});
   const [isDividendLoading, setIsDividendLoading] = useState(false);
+  const [cachedDividendData, setCachedDividendData] = useState<number[] | null>(null);
 
   // 현재 날짜 정보
   const now = new Date();
@@ -115,6 +116,15 @@ export default function AssetStatsPage() {
 
     fetchHistory();
   }, [selectedPeriod]);
+
+  // 저장된 배당금 데이터 조회
+  useEffect(() => {
+    const fetchCachedDividend = async () => {
+      const cached = await getDividendSnapshot(dividendYear);
+      setCachedDividendData(cached);
+    };
+    fetchCachedDividend();
+  }, [dividendYear]);
 
   // 보유 종목 및 배당금 정보 조회
   useEffect(() => {
@@ -445,14 +455,15 @@ export default function AssetStatsPage() {
     ? ((periodChange / dailyTotals[0].total) * 100)
     : 0;
 
-  // 월별 배당금 데이터 계산 (실제 공시된 배당금만 해당 월에 표시)
+  // 월별 배당금 데이터 (캐시된 데이터 우선, API 데이터로 업데이트)
   const monthlyDividendData = useMemo(() => {
+    // 캐시된 데이터가 있으면 그걸 기본값으로 사용
     const monthlyData = Array.from({ length: 12 }, (_, i) => ({
       month: i + 1,
-      dividend: 0,
+      dividend: cachedDividendData ? cachedDividendData[i] : 0,
     }));
 
-    // 각 보유 종목별로 배당금 계산
+    // API에서 가져온 배당금 정보로 계산 (새 데이터가 있으면 덮어쓰기)
     stockHoldings.forEach((holding) => {
       const dividendInfo = dividendInfoMap[holding.stockCode];
       if (!dividendInfo || !dividendInfo.recentDividend || !dividendInfo.paymentDate) {
@@ -462,16 +473,17 @@ export default function AssetStatsPage() {
       // 지급일에서 연도/월 추출 (YYYY/MM/DD 형식)
       const [paymentYear, paymentMonth] = dividendInfo.paymentDate.split('/').map(Number);
 
-      // 선택된 연도와 일치하는 경우에만 표시
+      // 선택된 연도와 일치하는 경우에만 업데이트
       if (paymentYear === dividendYear) {
         const quantity = holding.quantity || 0;
         const dividendAmount = dividendInfo.recentDividend * quantity;
-        monthlyData[paymentMonth - 1].dividend += dividendAmount;
+        // API로 계산된 값이 있으면 해당 월 업데이트
+        monthlyData[paymentMonth - 1].dividend = dividendAmount;
       }
     });
 
     return monthlyData;
-  }, [stockHoldings, dividendInfoMap, dividendYear]);
+  }, [stockHoldings, dividendInfoMap, dividendYear, cachedDividendData]);
 
   // 배당금 스냅샷 저장 (변경 시에만)
   useEffect(() => {
