@@ -15,7 +15,7 @@ import {
   Filler,
 } from 'chart.js';
 import { Line, Bar } from 'react-chartjs-2';
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { Asset, AssetHistoryEntry } from '@/types/asset';
 import { subscribeToAssets, getAssetHistoryByPeriod } from '@/lib/assetService';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -49,6 +49,10 @@ export default function AssetStatsPage() {
   const [profitView, setProfitView] = useState<ProfitViewType>('monthly');
   const [profitYear, setProfitYear] = useState(new Date().getFullYear());
   const [profitMonth, setProfitMonth] = useState(new Date().getMonth() + 1);
+  const [showProfitTable, setShowProfitTable] = useState(false);
+
+  // 배당금 차트 관련 상태
+  const [dividendYear, setDividendYear] = useState(new Date().getFullYear());
 
   // 현재 날짜 정보
   const now = new Date();
@@ -388,6 +392,82 @@ export default function AssetStatsPage() {
     ? ((periodChange / dailyTotals[0].total) * 100)
     : 0;
 
+  // 월별 배당금 데이터 (TODO: 실제 배당금 데이터 연동 필요)
+  const monthlyDividendData = useMemo(() => {
+    // 현재는 빈 데이터, 추후 실제 배당금 이력 연동
+    return Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      dividend: 0,
+    }));
+  }, []);
+
+  // 배당금 바 차트 데이터
+  const dividendChartData = useMemo(() => {
+    return {
+      labels: monthlyDividendData.map((d) => String(d.month)),
+      datasets: [
+        {
+          data: monthlyDividendData.map((d) => d.dividend),
+          backgroundColor: 'rgba(16, 185, 129, 0.8)', // 초록색
+          borderRadius: 4,
+        },
+      ],
+    };
+  }, [monthlyDividendData]);
+
+  const dividendChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        callbacks: {
+          label: function (context: any) {
+            const value = context.raw as number;
+            return `${value.toLocaleString()}원`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: {
+          display: false,
+        },
+        ticks: {
+          maxRotation: 0,
+          minRotation: 0,
+          font: { size: 11 },
+          color: '#94a3b8',
+        },
+      },
+      y: {
+        grid: {
+          color: 'rgba(0, 0, 0, 0.05)',
+        },
+        title: {
+          display: true,
+          text: '(만원)',
+          font: { size: 11 },
+          color: '#94a3b8',
+        },
+        ticks: {
+          callback: function (value: any) {
+            if (Math.abs(value) >= 10000) {
+              return (value / 10000).toFixed(0);
+            }
+            return value;
+          },
+        },
+      },
+    },
+  };
+
+  // 배당금 합계
+  const totalDividend = monthlyDividendData.reduce((sum, d) => sum + d.dividend, 0);
+
   return (
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
       <div className="max-w-lg mx-auto">
@@ -549,55 +629,112 @@ export default function AssetStatsPage() {
                 <Bar data={profitChartData} options={profitChartOptions} />
               </div>
 
-              {/* 수익 테이블 */}
+              {/* 수익 테이블 (접기/펼치기) */}
               <div>
-                <h4 className="text-sm font-medium text-slate-600 mb-2">
-                  {profitView === 'monthly' ? '월별' : '일별'} 평가수익
-                </h4>
-                {profitTableData.length === 0 ? (
-                  <p className="text-center py-4 text-slate-400 text-sm">
-                    변동 내역이 없습니다
-                  </p>
-                ) : (
-                  <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                    {/* 테이블 헤더 */}
-                    <div className="flex items-center text-xs text-slate-500 py-2 border-b border-slate-100">
-                      <span className="flex-1">{profitView === 'monthly' ? '월' : '일'}</span>
-                      <span className="w-20 text-right">수익률</span>
-                      <span className="w-28 text-right">수익</span>
-                    </div>
-                    {/* 테이블 바디 */}
-                    {profitTableData.map((item) => (
-                      <div
-                        key={profitView === 'monthly' ? (item as any).month : (item as any).day}
-                        className="flex items-center py-2 text-sm"
-                      >
-                        <span className="flex-1 text-slate-700">
-                          {profitView === 'monthly'
-                            ? `${(item as any).month}월`
-                            : `${(item as any).day}일`}
-                        </span>
-                        <span
-                          className={`w-20 text-right font-medium ${
-                            item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
-                          }`}
-                        >
-                          {item.profit >= 0 ? '+' : ''}
-                          {item.rate.toFixed(2)}%
-                        </span>
-                        <span
-                          className={`w-28 text-right font-medium ${
-                            item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
-                          }`}
-                        >
-                          {item.profit >= 0 ? '+' : ''}
-                          {item.profit.toLocaleString()}원
-                        </span>
+                <button
+                  onClick={() => setShowProfitTable(!showProfitTable)}
+                  className="w-full flex items-center justify-between text-sm font-medium text-slate-600 py-2 hover:text-slate-800 transition-colors"
+                >
+                  <span>{profitView === 'monthly' ? '월별' : '일별'} 평가수익</span>
+                  {showProfitTable ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
+                </button>
+                {showProfitTable && (
+                  <>
+                    {profitTableData.length === 0 ? (
+                      <p className="text-center py-4 text-slate-400 text-sm">
+                        변동 내역이 없습니다
+                      </p>
+                    ) : (
+                      <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                        {/* 테이블 헤더 */}
+                        <div className="flex items-center text-xs text-slate-500 py-2 border-b border-slate-100">
+                          <span className="flex-1">{profitView === 'monthly' ? '월' : '일'}</span>
+                          <span className="w-20 text-right">수익률</span>
+                          <span className="w-28 text-right">수익</span>
+                        </div>
+                        {/* 테이블 바디 */}
+                        {profitTableData.map((item) => (
+                          <div
+                            key={profitView === 'monthly' ? (item as any).month : (item as any).day}
+                            className="flex items-center py-2 text-sm"
+                          >
+                            <span className="flex-1 text-slate-700">
+                              {profitView === 'monthly'
+                                ? `${(item as any).month}월`
+                                : `${(item as any).day}일`}
+                            </span>
+                            <span
+                              className={`w-20 text-right font-medium ${
+                                item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
+                              }`}
+                            >
+                              {item.profit >= 0 ? '+' : ''}
+                              {item.rate.toFixed(2)}%
+                            </span>
+                            <span
+                              className={`w-28 text-right font-medium ${
+                                item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
+                              }`}
+                            >
+                              {item.profit >= 0 ? '+' : ''}
+                              {item.profit.toLocaleString()}원
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    )}
+                  </>
                 )}
               </div>
+            </div>
+
+            {/* 배당금 차트 */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-slate-700">배당금 현황</h3>
+              </div>
+
+              {/* 연도 네비게이션 */}
+              <div className="flex items-center justify-center gap-4 mb-4">
+                <button
+                  onClick={() => setDividendYear((y) => y - 1)}
+                  className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5 text-slate-500" />
+                </button>
+                <span className="text-sm font-medium text-slate-700 min-w-[80px] text-center">
+                  {dividendYear}년
+                </span>
+                <button
+                  onClick={() => setDividendYear((y) => y + 1)}
+                  className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+
+              {/* 배당금 바 차트 */}
+              <div className="h-[180px] mb-4">
+                <Bar data={dividendChartData} options={dividendChartOptions} />
+              </div>
+
+              {/* 연간 배당금 합계 */}
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                <span className="text-sm text-slate-600">연간 배당금</span>
+                <span className="text-lg font-bold text-emerald-600">
+                  {totalDividend.toLocaleString()}원
+                </span>
+              </div>
+
+              {totalDividend === 0 && (
+                <p className="text-xs text-slate-400 mt-2 text-center">
+                  배당금 데이터가 없습니다
+                </p>
+              )}
             </div>
 
           </div>
