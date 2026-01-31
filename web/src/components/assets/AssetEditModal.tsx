@@ -56,7 +56,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
         type,
         subType: subType || '',
         memo: memo.trim(),
-        ...(type === 'stock' ? { initialInvestment: initialInvestment ? parseInt(initialInvestment, 10) : undefined } : {}),
+        ...(type === 'stock' ? { initialInvestment: initialInvestment ? parseInt(initialInvestment, 10) : 0 } : {}),
       });
       onClose();
     } catch (error) {
