@@ -51,13 +51,19 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
 
     setIsSubmitting(true);
     try {
-      await updateAsset(asset.id, {
+      const updateData: Record<string, unknown> = {
         name: name.trim(),
         type,
         subType: subType || '',
         memo: memo.trim(),
-        ...(type === 'stock' ? { initialInvestment: initialInvestment ? parseInt(initialInvestment, 10) : 0 } : {}),
-      });
+      };
+
+      // 주식 계좌일 때 투자원금 저장
+      if (type === 'stock') {
+        updateData.initialInvestment = initialInvestment ? parseInt(initialInvestment, 10) : 0;
+      }
+
+      await updateAsset(asset.id, updateData as Partial<Asset>);
       onClose();
     } catch (error) {
       console.error('자산 수정 오류:', error);
