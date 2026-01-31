@@ -445,7 +445,7 @@ export default function AssetStatsPage() {
     ? ((periodChange / dailyTotals[0].total) * 100)
     : 0;
 
-  // 월별 배당금 데이터 계산
+  // 월별 배당금 데이터 계산 (실제 공시된 배당금만 해당 월에 표시)
   const monthlyDividendData = useMemo(() => {
     const monthlyData = Array.from({ length: 12 }, (_, i) => ({
       month: i + 1,
@@ -455,45 +455,23 @@ export default function AssetStatsPage() {
     // 각 보유 종목별로 배당금 계산
     stockHoldings.forEach((holding) => {
       const dividendInfo = dividendInfoMap[holding.stockCode];
-      if (!dividendInfo || !dividendInfo.recentDividend || !dividendInfo.frequency) {
+      if (!dividendInfo || !dividendInfo.recentDividend || !dividendInfo.paymentDate) {
         return;
       }
 
-      const quantity = holding.quantity || 0;
-      const dividendPerShare = dividendInfo.recentDividend;
-      const frequency = dividendInfo.frequency;
+      // 지급일에서 연도/월 추출 (YYYY/MM/DD 형식)
+      const [paymentYear, paymentMonth] = dividendInfo.paymentDate.split('/').map(Number);
 
-      // 배당 지급 월 결정
-      if (dividendInfo.paymentDate) {
-        // 지급일에서 월 추출 (YYYY/MM/DD 형식)
-        const paymentMonth = parseInt(dividendInfo.paymentDate.split('/')[1], 10);
-
-        if (frequency === 12) {
-          // 월배당: 매월 지급
-          for (let m = 0; m < 12; m++) {
-            monthlyData[m].dividend += dividendPerShare * quantity;
-          }
-        } else if (frequency === 4) {
-          // 분기배당: 3개월 간격
-          for (let i = 0; i < 4; i++) {
-            const month = ((paymentMonth - 1 + i * 3) % 12);
-            monthlyData[month].dividend += dividendPerShare * quantity;
-          }
-        } else if (frequency === 2) {
-          // 반기배당: 6개월 간격
-          for (let i = 0; i < 2; i++) {
-            const month = ((paymentMonth - 1 + i * 6) % 12);
-            monthlyData[month].dividend += dividendPerShare * quantity;
-          }
-        } else if (frequency === 1) {
-          // 연배당: 해당 월에만 지급
-          monthlyData[paymentMonth - 1].dividend += dividendPerShare * quantity;
-        }
+      // 선택된 연도와 일치하는 경우에만 표시
+      if (paymentYear === dividendYear) {
+        const quantity = holding.quantity || 0;
+        const dividendAmount = dividendInfo.recentDividend * quantity;
+        monthlyData[paymentMonth - 1].dividend += dividendAmount;
       }
     });
 
     return monthlyData;
-  }, [stockHoldings, dividendInfoMap]);
+  }, [stockHoldings, dividendInfoMap, dividendYear]);
 
   // 배당금 바 차트 데이터
   const dividendChartData = useMemo(() => {
