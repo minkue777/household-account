@@ -381,6 +381,71 @@ export async function getMonthlyAssetChange(currentTotal: number): Promise<numbe
 }
 
 /**
+ * 오늘의 총자산 스냅샷 저장 (일별 자동 기록)
+ */
+export async function saveDailyTotalSnapshot(totalBalance: number): Promise<void> {
+  const householdId = getHouseholdId();
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const snapshotId = `${householdId}_total_${today}`;
+
+  try {
+    // 기존 스냅샷 확인
+    const existingSnap = await getDoc(doc(db, HISTORY_COLLECTION, snapshotId));
+
+    if (existingSnap.exists()) {
+      const existingData = existingSnap.data();
+      const previousBalance = existingData.balance || 0;
+
+      // 잔액이 변경된 경우에만 업데이트
+      if (previousBalance !== totalBalance) {
+        await setDoc(doc(db, HISTORY_COLLECTION, snapshotId), {
+          householdId,
+          assetId: 'TOTAL', // 총자산 표시용 특수 ID
+          balance: totalBalance,
+          date: today,
+          previousBalance,
+          changeAmount: totalBalance - previousBalance,
+          memo: '자동 기록',
+          createdAt: existingData.createdAt,
+          updatedAt: Timestamp.now(),
+        });
+      }
+    } else {
+      // 전날 스냅샷 조회
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      const yesterdaySnapId = `${householdId}_total_${yesterdayStr}`;
+
+      let previousBalance = 0;
+      try {
+        const yesterdaySnap = await getDoc(doc(db, HISTORY_COLLECTION, yesterdaySnapId));
+        if (yesterdaySnap.exists()) {
+          previousBalance = yesterdaySnap.data().balance || 0;
+        }
+      } catch {
+        // 전날 데이터 없음
+      }
+
+      // 새 스냅샷 생성
+      await setDoc(doc(db, HISTORY_COLLECTION, snapshotId), {
+        householdId,
+        assetId: 'TOTAL',
+        balance: totalBalance,
+        date: today,
+        previousBalance,
+        changeAmount: totalBalance - previousBalance,
+        memo: '자동 기록',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+    }
+  } catch (error) {
+    console.error('일별 스냅샷 저장 오류:', error);
+  }
+}
+
+/**
  * 이력 항목 삭제
  */
 export async function deleteHistoryEntry(historyId: string): Promise<void> {

@@ -101,26 +101,36 @@ export default function AssetStatsPage() {
     .filter((a) => a.isActive)
     .reduce((sum, a) => sum + a.currentBalance, 0);
 
-  // 일별 자산 합계 계산
+  // 일별 자산 합계 계산 (총자산 스냅샷 사용)
   const dailyTotals = useMemo(() => {
-    // 날짜별 변동 그룹화
-    const changesByDate: Record<string, number> = {};
+    // 총자산 스냅샷 필터링 (assetId === 'TOTAL')
+    const totalSnapshots = history
+      .filter((entry) => entry.assetId === 'TOTAL')
+      .sort((a, b) => a.date.localeCompare(b.date));
 
+    // 스냅샷이 있으면 직접 사용
+    if (totalSnapshots.length > 0) {
+      return totalSnapshots.map((entry) => ({
+        date: entry.date,
+        total: entry.balance,
+        change: entry.changeAmount,
+      }));
+    }
+
+    // 스냅샷이 없으면 기존 방식 (개별 자산 이력에서 계산)
+    const changesByDate: Record<string, number> = {};
     history.forEach((entry) => {
+      if (entry.assetId === 'TOTAL') return; // 총자산 스냅샷 제외
       if (!changesByDate[entry.date]) {
         changesByDate[entry.date] = 0;
       }
       changesByDate[entry.date] += entry.changeAmount;
     });
 
-    // 날짜순 정렬
     const sortedDates = Object.keys(changesByDate).sort();
-
-    // 누적 합계 계산 (현재 총액에서 역산)
     let runningTotal = totalAssets;
     const dailyData: { date: string; total: number; change: number }[] = [];
 
-    // 역순으로 누적 계산
     for (let i = sortedDates.length - 1; i >= 0; i--) {
       const date = sortedDates[i];
       const change = changesByDate[date];
@@ -132,7 +142,6 @@ export default function AssetStatsPage() {
       runningTotal -= change;
     }
 
-    // 시작점 추가 (이력이 없는 경우 현재값만)
     if (dailyData.length === 0) {
       dailyData.push({
         date: new Date().toISOString().split('T')[0],
@@ -210,9 +219,16 @@ export default function AssetStatsPage() {
     },
   };
 
+  // 총자산 스냅샷만 필터링
+  const totalSnapshots = useMemo(() => {
+    return history
+      .filter((h) => h.assetId === 'TOTAL')
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [history]);
+
   // 전날 데이터가 있는 날짜 Set (초기 등록 데이터 필터링용)
   const datesWithPreviousDay = useMemo(() => {
-    const allDates = new Set(history.map((h) => h.date));
+    const allDates = new Set(totalSnapshots.map((h) => h.date));
     const validDates = new Set<string>();
 
     allDates.forEach((date) => {
@@ -225,7 +241,7 @@ export default function AssetStatsPage() {
     });
 
     return validDates;
-  }, [history]);
+  }, [totalSnapshots]);
 
   // 월별 수익 데이터 계산
   const monthlyProfitData = useMemo(() => {
@@ -235,15 +251,15 @@ export default function AssetStatsPage() {
       const startDate = `${profitYear}-${String(month).padStart(2, '0')}-01`;
       const endDate = `${profitYear}-${String(month).padStart(2, '0')}-31`;
 
-      // 전날 데이터가 있는 기록만 필터링
-      const monthHistory = history.filter(
+      // 해당 월의 총자산 스냅샷 중 전날 데이터가 있는 것만
+      const monthSnapshots = totalSnapshots.filter(
         (h) => h.date >= startDate && h.date <= endDate && datesWithPreviousDay.has(h.date)
       );
 
-      const totalChange = monthHistory.reduce((sum, h) => sum + h.changeAmount, 0);
+      const totalChange = monthSnapshots.reduce((sum, h) => sum + h.changeAmount, 0);
 
-      // 월초 자산 추정 (해당 월의 첫 기록 이전 총액)
-      const firstEntry = monthHistory.sort((a, b) => a.date.localeCompare(b.date))[0];
+      // 월초 자산 추정
+      const firstEntry = monthSnapshots[0];
       const baseAmount = firstEntry ? firstEntry.balance - firstEntry.changeAmount : totalAssets;
       const rate = baseAmount > 0 ? (totalChange / baseAmount) * 100 : 0;
 
@@ -255,7 +271,7 @@ export default function AssetStatsPage() {
     }
 
     return monthlyData;
-  }, [history, profitYear, totalAssets, datesWithPreviousDay]);
+  }, [totalSnapshots, profitYear, totalAssets, datesWithPreviousDay]);
 
   // 일별 수익 데이터 계산
   const dailyProfitData = useMemo(() => {
@@ -265,24 +281,24 @@ export default function AssetStatsPage() {
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${profitYear}-${String(profitMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-      // 전날 데이터가 있는 기록만 필터링
-      const dayHistory = history.filter((h) => h.date === dateStr && datesWithPreviousDay.has(h.date));
-      const totalChange = dayHistory.reduce((sum, h) => sum + h.changeAmount, 0);
+      // 해당 날짜의 총자산 스냅샷 (전날 데이터가 있는 경우만)
+      const daySnapshot = totalSnapshots.find(
+        (h) => h.date === dateStr && datesWithPreviousDay.has(h.date)
+      );
 
-      // 해당 일의 기준 자산
-      const firstEntry = dayHistory[0];
-      const baseAmount = firstEntry ? firstEntry.balance - firstEntry.changeAmount : 0;
-      const rate = baseAmount > 0 ? (totalChange / baseAmount) * 100 : 0;
+      const profit = daySnapshot?.changeAmount || 0;
+      const baseAmount = daySnapshot ? daySnapshot.balance - daySnapshot.changeAmount : 0;
+      const rate = baseAmount > 0 ? (profit / baseAmount) * 100 : 0;
 
       dailyData.push({
         day,
-        profit: totalChange,
+        profit,
         rate,
       });
     }
 
     return dailyData;
-  }, [history, profitYear, profitMonth, datesWithPreviousDay]);
+  }, [totalSnapshots, profitYear, profitMonth, datesWithPreviousDay]);
 
   // 수익 바 차트 데이터
   const profitChartData = useMemo(() => {

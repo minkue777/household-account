@@ -8,6 +8,7 @@ import {
   subscribeToAssetHistory,
   getMonthlyAssetChange,
   saveMonthlySnapshot,
+  saveDailyTotalSnapshot,
   addSampleAssets,
 } from '@/lib/assetService';
 import {
@@ -75,6 +76,9 @@ export default function AssetsPage() {
 
     // 이번 달 스냅샷 저장 (현재 총자산)
     saveMonthlySnapshot(currentTotal);
+
+    // 일별 총자산 스냅샷 저장 (자산 추이 차트용)
+    saveDailyTotalSnapshot(currentTotal);
   }, [assets]);
 
   // 각 자산의 이력 구독
