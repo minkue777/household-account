@@ -154,15 +154,11 @@ export default function AssetSummaryCard({
           ({formatKoreanUnit(totalBalance)}원)
         </p>
         {/* 변동률 */}
-        <p className={`text-sm mt-1 ${isPositive ? 'text-red-500' : isNegative ? 'text-blue-500' : 'text-slate-400'}`}>
-          {monthlyChange !== 0 ? (
-            <>
-              {isPositive ? '+' : ''}{changeRate.toFixed(2)}% ({Math.abs(monthlyChange).toLocaleString()}원)
-            </>
-          ) : (
-            '이번 달 변동 없음'
-          )}
-        </p>
+        {monthlyChange !== 0 && (
+          <p className={`text-sm mt-1 ${isPositive ? 'text-red-500' : 'text-blue-500'}`}>
+            {isPositive ? '+' : ''}{changeRate.toFixed(2)}% ({Math.abs(monthlyChange).toLocaleString()}원)
+          </p>
+        )}
       </div>
 
       {/* 가족 구성원 탭 */}
