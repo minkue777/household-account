@@ -107,57 +107,33 @@ export default function AssetStatsPage() {
       .reduce((sum, a) => sum + a.currentBalance, 0);
   }, [assets, financialOnly]);
 
-  // 일별 자산 합계 계산 (총자산 스냅샷 사용)
+  // 스냅샷 타입 (필터에 따라 TOTAL 또는 FINANCIAL)
+  const snapshotType = financialOnly ? 'FINANCIAL' : 'TOTAL';
+
+  // 일별 자산 합계 계산 (스냅샷 사용)
   const dailyTotals = useMemo(() => {
-    // 총자산 스냅샷 필터링 (assetId === 'TOTAL')
-    const totalSnapshots = history
-      .filter((entry) => entry.assetId === 'TOTAL')
+    // 필터에 맞는 스냅샷 필터링
+    const snapshots = history
+      .filter((entry) => entry.assetId === snapshotType)
       .sort((a, b) => a.date.localeCompare(b.date));
 
     // 스냅샷이 있으면 직접 사용
-    if (totalSnapshots.length > 0) {
-      return totalSnapshots.map((entry) => ({
+    if (snapshots.length > 0) {
+      return snapshots.map((entry) => ({
         date: entry.date,
         total: entry.balance,
         change: entry.changeAmount,
       }));
     }
 
-    // 스냅샷이 없으면 기존 방식 (개별 자산 이력에서 계산)
-    const changesByDate: Record<string, number> = {};
-    history.forEach((entry) => {
-      if (entry.assetId === 'TOTAL') return; // 총자산 스냅샷 제외
-      if (!changesByDate[entry.date]) {
-        changesByDate[entry.date] = 0;
-      }
-      changesByDate[entry.date] += entry.changeAmount;
-    });
+    // 스냅샷이 없으면 현재값만 표시
+    return [{
+      date: new Date().toISOString().split('T')[0],
+      total: totalAssets,
+      change: 0,
+    }];
+  }, [history, snapshotType, totalAssets]);
 
-    const sortedDates = Object.keys(changesByDate).sort();
-    let runningTotal = totalAssets;
-    const dailyData: { date: string; total: number; change: number }[] = [];
-
-    for (let i = sortedDates.length - 1; i >= 0; i--) {
-      const date = sortedDates[i];
-      const change = changesByDate[date];
-      dailyData.unshift({
-        date,
-        total: runningTotal,
-        change,
-      });
-      runningTotal -= change;
-    }
-
-    if (dailyData.length === 0) {
-      dailyData.push({
-        date: new Date().toISOString().split('T')[0],
-        total: totalAssets,
-        change: 0,
-      });
-    }
-
-    return dailyData;
-  }, [history, totalAssets]);
 
   // 차트 데이터
   const chartData = useMemo(() => {
@@ -225,12 +201,12 @@ export default function AssetStatsPage() {
     },
   };
 
-  // 총자산 스냅샷만 필터링
+  // 스냅샷 필터링 (필터에 따라 TOTAL 또는 FINANCIAL)
   const totalSnapshots = useMemo(() => {
     return history
-      .filter((h) => h.assetId === 'TOTAL')
+      .filter((h) => h.assetId === snapshotType)
       .sort((a, b) => a.date.localeCompare(b.date));
-  }, [history]);
+  }, [history, snapshotType]);
 
   // 전날 데이터가 있는 날짜 Set (초기 등록 데이터 필터링용)
   const datesWithPreviousDay = useMemo(() => {

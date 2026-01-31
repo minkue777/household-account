@@ -381,41 +381,42 @@ export async function getMonthlyAssetChange(currentTotal: number): Promise<numbe
 }
 
 /**
- * 오늘의 총자산 스냅샷 저장 (일별 자동 기록)
+ * 일별 스냅샷 저장 헬퍼 함수
  */
-export async function saveDailyTotalSnapshot(totalBalance: number): Promise<void> {
+async function saveDailySnapshot(
+  assetId: string,
+  balance: number,
+  snapshotIdSuffix: string
+): Promise<void> {
   const householdId = getHouseholdId();
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-  const snapshotId = `${householdId}_total_${today}`;
+  const today = new Date().toISOString().split('T')[0];
+  const snapshotId = `${householdId}_${snapshotIdSuffix}_${today}`;
 
   try {
-    // 기존 스냅샷 확인
     const existingSnap = await getDoc(doc(db, HISTORY_COLLECTION, snapshotId));
 
     if (existingSnap.exists()) {
       const existingData = existingSnap.data();
       const previousBalance = existingData.balance || 0;
 
-      // 잔액이 변경된 경우에만 업데이트
-      if (previousBalance !== totalBalance) {
+      if (previousBalance !== balance) {
         await setDoc(doc(db, HISTORY_COLLECTION, snapshotId), {
           householdId,
-          assetId: 'TOTAL', // 총자산 표시용 특수 ID
-          balance: totalBalance,
+          assetId,
+          balance,
           date: today,
           previousBalance,
-          changeAmount: totalBalance - previousBalance,
+          changeAmount: balance - previousBalance,
           memo: '자동 기록',
           createdAt: existingData.createdAt,
           updatedAt: Timestamp.now(),
         });
       }
     } else {
-      // 전날 스냅샷 조회
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString().split('T')[0];
-      const yesterdaySnapId = `${householdId}_total_${yesterdayStr}`;
+      const yesterdaySnapId = `${householdId}_${snapshotIdSuffix}_${yesterdayStr}`;
 
       let previousBalance = 0;
       try {
@@ -427,14 +428,13 @@ export async function saveDailyTotalSnapshot(totalBalance: number): Promise<void
         // 전날 데이터 없음
       }
 
-      // 새 스냅샷 생성
       await setDoc(doc(db, HISTORY_COLLECTION, snapshotId), {
         householdId,
-        assetId: 'TOTAL',
-        balance: totalBalance,
+        assetId,
+        balance,
         date: today,
         previousBalance,
-        changeAmount: totalBalance - previousBalance,
+        changeAmount: balance - previousBalance,
         memo: '자동 기록',
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
@@ -442,6 +442,22 @@ export async function saveDailyTotalSnapshot(totalBalance: number): Promise<void
     }
   } catch (error) {
     console.error('일별 스냅샷 저장 오류:', error);
+  }
+}
+
+/**
+ * 오늘의 총자산 스냅샷 저장 (일별 자동 기록)
+ */
+export async function saveDailyTotalSnapshot(
+  totalBalance: number,
+  financialBalance?: number
+): Promise<void> {
+  // 전체 자산 스냅샷 저장
+  await saveDailySnapshot('TOTAL', totalBalance, 'total');
+
+  // 금융자산 스냅샷 저장 (부동산 제외)
+  if (financialBalance !== undefined) {
+    await saveDailySnapshot('FINANCIAL', financialBalance, 'financial');
   }
 }
 

@@ -68,6 +68,10 @@ export default function AssetsPage() {
 
     const activeAssets = assets.filter((a) => a.isActive);
     const currentTotal = activeAssets.reduce((sum, a) => sum + a.currentBalance, 0);
+    // 금융자산 (부동산 제외)
+    const financialTotal = activeAssets
+      .filter((a) => a.type !== 'property')
+      .reduce((sum, a) => sum + a.currentBalance, 0);
 
     // 전월 대비 변동액 계산
     getMonthlyAssetChange(currentTotal)
@@ -78,7 +82,7 @@ export default function AssetsPage() {
     saveMonthlySnapshot(currentTotal);
 
     // 일별 총자산 스냅샷 저장 (자산 추이 차트용)
-    saveDailyTotalSnapshot(currentTotal);
+    saveDailyTotalSnapshot(currentTotal, financialTotal);
   }, [assets]);
 
   // 각 자산의 이력 구독
