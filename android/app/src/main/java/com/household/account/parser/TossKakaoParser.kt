@@ -42,10 +42,11 @@ object TossKakaoParser {
             val date = dateTimeMatch?.groupValues?.get(1) ?: ""
             val time = dateTimeMatch?.groupValues?.get(2) ?: ""
 
-            // 거래한 모임원 파싱: "거래한 모임원 : 이*선"
-            val memberRegex = """거래한 모임원\s*:\s*(.+)""".toRegex()
-            val memberMatch = memberRegex.find(text)
-            val memberName = memberMatch?.groupValues?.get(1)?.trim() ?: ""
+            // 이름 파싱: 날짜/시간 다음 줄에 있는 이름 (거래한 모임원 전)
+            // "02/01 21:39\n이진선\n거래한 모임원"
+            val nameRegex = """\d{2}:\d{2}\s*\n\s*([가-힣]+)\s*\n""".toRegex()
+            val nameMatch = nameRegex.find(text)
+            val memberName = nameMatch?.groupValues?.get(1)?.trim() ?: ""
 
             return WithdrawalInfo(
                 amount = amount,

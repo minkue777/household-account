@@ -14,7 +14,8 @@ object MGSaemaeulParser {
         val amount: Int,
         val balance: Int,
         val date: String,      // MM/DD
-        val time: String       // HH:mm
+        val time: String,      // HH:mm
+        val accountHolder: String  // 예금주 이름
     )
 
     /**
@@ -54,11 +55,17 @@ object MGSaemaeulParser {
             val date = dateTimeMatch?.groupValues?.get(1) ?: ""
             val time = dateTimeMatch?.groupValues?.get(2) ?: ""
 
+            // 예금주 이름 파싱: "<새마을금고>900326**6 이민규"
+            val nameRegex = """<새마을금고>\d+\*+\d+\s+([가-힣]+)""".toRegex()
+            val nameMatch = nameRegex.find(text)
+            val accountHolder = nameMatch?.groupValues?.get(1)?.trim() ?: ""
+
             return DepositInfo(
                 amount = amount,
                 balance = balance,
                 date = date,
-                time = time
+                time = time,
+                accountHolder = accountHolder
             )
         } catch (e: Exception) {
             return null

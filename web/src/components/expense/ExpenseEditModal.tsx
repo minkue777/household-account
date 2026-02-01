@@ -152,10 +152,25 @@ export default function ExpenseEditModal({
               if (!isSettleable) return null;
 
               if (expense.settled) {
+                // 정산 시간 포맷팅 (ISO → MM/DD HH:mm)
+                let settledTime = '';
+                if (expense.settledAt) {
+                  try {
+                    const date = new Date(expense.settledAt);
+                    settledTime = `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                  } catch (e) {
+                    // ignore
+                  }
+                }
                 return (
-                  <span className="px-2.5 py-1 bg-slate-400 text-white text-xs rounded-lg">
-                    정산완료{expense.settledBy ? `: ${expense.settledBy}` : ''}
-                  </span>
+                  <div className="text-right">
+                    <div className="px-2.5 py-1 bg-slate-400 text-white text-xs rounded-lg inline-block">
+                      정산완료{expense.settledBy ? `: ${expense.settledBy}` : ''}
+                    </div>
+                    {settledTime && (
+                      <div className="text-[10px] text-slate-400 mt-0.5">{settledTime}</div>
+                    )}
+                  </div>
                 );
               }
 

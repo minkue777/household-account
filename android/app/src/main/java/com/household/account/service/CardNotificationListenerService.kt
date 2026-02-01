@@ -304,8 +304,9 @@ class CardNotificationListenerService : NotificationListenerService() {
                     )
 
                     if (matchedExpense != null) {
-                        // 정산 완료 처리 (토스뱅크 카톡 = 이진선)
-                        expenseRepository.markAsSettled(matchedExpense.id, "이진선")
+                        // 정산 완료 처리 (파싱된 이름 사용)
+                        val settledBy = withdrawalInfo.memberName.ifEmpty { "토스뱅크" }
+                        expenseRepository.markAsSettled(matchedExpense.id, settledBy)
                     }
                 } catch (e: Exception) {
                     // ignored
@@ -361,8 +362,9 @@ class CardNotificationListenerService : NotificationListenerService() {
                 )
 
                 if (matchedExpense != null) {
-                    // 정산 완료 처리 (새마을금고 SMS = 이민규)
-                    expenseRepository.markAsSettled(matchedExpense.id, "이민규")
+                    // 정산 완료 처리 (파싱된 이름 사용)
+                    val settledBy = depositInfo.accountHolder.ifEmpty { "새마을금고" }
+                    expenseRepository.markAsSettled(matchedExpense.id, settledBy)
                 }
             } catch (e: Exception) {
                 // ignored

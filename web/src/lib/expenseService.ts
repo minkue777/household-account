@@ -52,6 +52,7 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
     splitTotal: data.splitTotal,
     settled: data.settled || false,
     settledBy: data.settledBy,
+    settledAt: data.settledAt,
   };
 }
 
