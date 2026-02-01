@@ -24,8 +24,8 @@ export default function Home() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const [currentYear, setCurrentYear] = useState(2026);
-  const [currentMonth, setCurrentMonth] = useState(1);
+  const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
+  const [currentMonth, setCurrentMonth] = useState(() => new Date().getMonth() + 1);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(true);
