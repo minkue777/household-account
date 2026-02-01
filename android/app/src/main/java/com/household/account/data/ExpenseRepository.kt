@@ -216,7 +216,7 @@ class ExpenseRepository {
      * 2. 정산 요청이 1분 이내인지 확인
      * 3. 금액이 일치하는지 확인
      */
-    suspend fun findUnsettledExpenseByAmount(householdId: String, amount: Int): Expense? {
+    suspend fun findUnsettledExpenseByAmount(householdId: String, amount: Int, debugLog: ((String, Map<String, Any>) -> Unit)? = null): Expense? {
         return try {
             // householdId로만 쿼리 (settled 필드가 없을 수 있음)
             val snapshot = expensesCollection
@@ -227,38 +227,56 @@ class ExpenseRepository {
             val now = java.time.Instant.now()
             val oneMinuteAgo = now.minusSeconds(60)
 
-            val expenses = snapshot.documents
+            val allExpenses = snapshot.documents
                 .mapNotNull { doc ->
                     doc.toObject(Expense::class.java)?.copy(id = doc.id)
                 }
-                .filter { expense ->
-                    // settled가 없거나 false인 것만
-                    !expense.settled
+
+            debugLog?.invoke("MATCH_STEP1_TOTAL", mapOf("count" to allExpenses.size))
+
+            val unsettledExpenses = allExpenses.filter { !it.settled }
+            debugLog?.invoke("MATCH_STEP2_UNSETTLED", mapOf("count" to unsettledExpenses.size))
+
+            val withSettlementRequest = unsettledExpenses.filter { expense ->
+                val cardType = expense.cardType.uppercase()
+                cardType != "MAIN" && cardType != "FAMILY" && expense.settlementRequestedAt.isNotEmpty()
+            }
+            debugLog?.invoke("MATCH_STEP3_HAS_REQUEST", mapOf(
+                "count" to withSettlementRequest.size,
+                "items" to withSettlementRequest.take(3).map { "${it.merchant}|${it.cardType}|${it.settlementRequestedAt}" }
+            ))
+
+            val withinTimeLimit = withSettlementRequest.filter { expense ->
+                try {
+                    val requestTime = java.time.Instant.parse(expense.settlementRequestedAt)
+                    requestTime.isAfter(oneMinuteAgo)
+                } catch (e: Exception) {
+                    false
                 }
-                .filter { expense ->
-                    // cardType이 main, family가 아니고, 정산 요청이 있는 것
-                    val cardType = expense.cardType.uppercase()
-                    cardType != "MAIN" && cardType != "FAMILY" && expense.settlementRequestedAt.isNotEmpty()
-                }
-                .filter { expense ->
-                    // 정산 요청이 1분 이내인지 확인
-                    try {
-                        val requestTime = java.time.Instant.parse(expense.settlementRequestedAt)
-                        requestTime.isAfter(oneMinuteAgo)
-                    } catch (e: Exception) {
-                        false
-                    }
-                }
-                .sortedByDescending { it.settlementRequestedAt }
+            }
+            debugLog?.invoke("MATCH_STEP4_WITHIN_1MIN", mapOf(
+                "count" to withinTimeLimit.size,
+                "now" to now.toString(),
+                "oneMinuteAgo" to oneMinuteAgo.toString()
+            ))
+
+            val expenses = withinTimeLimit.sortedByDescending { it.settlementRequestedAt }
 
             // 가장 최근 정산 요청된 것이 금액과 일치하면 반환
             val mostRecentRequest = expenses.firstOrNull()
+            debugLog?.invoke("MATCH_STEP5_AMOUNT_CHECK", mapOf(
+                "mostRecent" to (mostRecentRequest?.let { "${it.merchant}|${it.amount}" } ?: "null"),
+                "targetAmount" to amount,
+                "match" to (mostRecentRequest?.amount == amount)
+            ))
+
             if (mostRecentRequest != null && mostRecentRequest.amount == amount) {
                 mostRecentRequest
             } else {
                 null
             }
         } catch (e: Exception) {
+            debugLog?.invoke("MATCH_ERROR", mapOf("error" to (e.message ?: "unknown")))
             null
         }
     }

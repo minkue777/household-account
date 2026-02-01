@@ -388,7 +388,7 @@ class CardNotificationListenerService : NotificationListenerService() {
                 val matchedExpense = expenseRepository.findUnsettledExpenseByAmount(
                     householdId,
                     depositInfo.amount
-                )
+                ) { event, data -> saveDebugLog(householdId, event, data) }
 
                 if (matchedExpense != null) {
                     saveDebugLog(householdId, "SMS_MATCHED", mapOf(
