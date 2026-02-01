@@ -36,6 +36,22 @@ export function getBankName(code: string): string {
 }
 
 /**
+ * 안드로이드 여부 확인
+ */
+function isAndroid(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Android/i.test(navigator.userAgent);
+}
+
+/**
+ * iOS 여부 확인
+ */
+function isIOS(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent);
+}
+
+/**
  * 토스 송금 딥링크 생성
  */
 export function createTossTransferLink(params: {
@@ -46,18 +62,23 @@ export function createTossTransferLink(params: {
 }): string {
   const { bankCode, accountNo, amount, message } = params;
 
-  // 토스 송금 딥링크 형식
-  // supertoss://send?bank=XXX&accountNo=XXX&amount=XXX&message=XXX
-  const url = new URL('supertoss://send');
-  url.searchParams.set('bank', bankCode);
-  url.searchParams.set('accountNo', accountNo);
-  url.searchParams.set('amount', amount.toString());
-
+  // 쿼리 파라미터 생성
+  const queryParams = new URLSearchParams();
+  queryParams.set('bank', bankCode);
+  queryParams.set('accountNo', accountNo);
+  queryParams.set('amount', amount.toString());
   if (message) {
-    url.searchParams.set('message', message);
+    queryParams.set('message', message);
   }
 
-  return url.toString();
+  if (isAndroid()) {
+    // 안드로이드: intent:// URL 사용
+    // intent://send?params#Intent;scheme=supertoss;package=viva.republica.toss;end
+    return `intent://send?${queryParams.toString()}#Intent;scheme=supertoss;package=viva.republica.toss;end`;
+  } else {
+    // iOS 및 기타: 기본 딥링크
+    return `supertoss://send?${queryParams.toString()}`;
+  }
 }
 
 /**
