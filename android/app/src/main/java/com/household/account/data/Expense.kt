@@ -2,6 +2,7 @@ package com.household.account.data
 
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
+import com.google.firebase.firestore.Exclude
 
 /**
  * 지출 카테고리
@@ -43,7 +44,7 @@ data class Expense(
     val cardLastFour: String = "",   // 카드 끝 4자리
     val memo: String = "",           // 메모
     val householdId: String = "",    // 가구 키
-    val createdAt: Timestamp = Timestamp.now(),
+    @get:Exclude val createdAt: Timestamp = Timestamp.now(),  // 역직렬화 제외 (타입 불일치 방지)
     val settled: Boolean = false,    // 정산 완료 여부
     val settledAt: String = "",      // 정산 완료 시간
     val settlementRequestedAt: String = ""  // 정산 요청 시간 (정산하기 버튼 클릭 시)
