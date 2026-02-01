@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { Expense } from '@/types/expense';
-import { PersonalAccount } from '@/types/household';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import Portal from '../Portal';
 import { CategorySelector, AmountInput } from '../common';
 import { openTossTransfer } from '@/lib/tossService';
+import { PersonalAccountStorage, LocalPersonalAccount } from '@/lib/storage/personalAccountStorage';
 
 interface ExpenseEditModalProps {
   expense: Expense;
@@ -21,7 +21,6 @@ interface ExpenseEditModalProps {
   onUpdateSplitGroup?: (newMonths: number) => void;
   onDelete?: () => void;
   onNotifyPartner?: () => void;
-  personalAccounts?: PersonalAccount[];
 }
 
 export default function ExpenseEditModal({
@@ -37,10 +36,10 @@ export default function ExpenseEditModal({
   onUpdateSplitGroup,
   onDelete,
   onNotifyPartner,
-  personalAccounts = [],
 }: ExpenseEditModalProps) {
   const { getCategoryLabel } = useCategoryContext();
 
+  const [personalAccount, setPersonalAccount] = useState<LocalPersonalAccount | null>(null);
   const [editMerchant, setEditMerchant] = useState(expense.merchant);
   const [editAmount, setEditAmount] = useState(expense.amount.toString());
   const [editMemo, setEditMemo] = useState(expense.memo || '');
@@ -52,6 +51,11 @@ export default function ExpenseEditModal({
   const [editSplitMonths, setEditSplitMonths] = useState(expense.splitTotal || 2);
   const [showEditSplitGroup, setShowEditSplitGroup] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // 개인 계좌 로드 (localStorage)
+  useEffect(() => {
+    setPersonalAccount(PersonalAccountStorage.get());
+  }, []);
 
   // 모달이 열릴 때 상태 초기화
   useEffect(() => {
@@ -126,10 +130,27 @@ export default function ExpenseEditModal({
             </button>
           </div>
 
-          {/* 날짜/시간 정보 */}
-          <div className="text-sm text-slate-500 mb-4">
-            {expense.date} {expense.time && `· ${expense.time}`}
-            {expense.cardLastFour && ` · ${expense.cardLastFour}`}
+          {/* 날짜/시간 정보 + 정산하기 */}
+          <div className="flex items-center justify-between text-sm text-slate-500 mb-4">
+            <div>
+              {expense.date} {expense.time && `· ${expense.time}`}
+              {expense.cardLastFour && ` · ${expense.cardLastFour}`}
+            </div>
+            {personalAccount && (
+              <button
+                onClick={() => {
+                  openTossTransfer({
+                    bankCode: personalAccount.bankCode,
+                    accountNo: personalAccount.accountNo,
+                    amount: expense.amount,
+                    message: expense.merchant,
+                  });
+                }}
+                className="px-2.5 py-1 bg-teal-500 text-white text-xs rounded-lg hover:bg-teal-600 transition-colors"
+              >
+                정산하기
+              </button>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -416,48 +437,6 @@ export default function ExpenseEditModal({
                     </svg>
                     또니에게
                   </button>
-                )}
-                {personalAccounts.length > 0 && (
-                  personalAccounts.length === 1 ? (
-                    // 계좌가 1개면 바로 정산
-                    <button
-                      onClick={() => {
-                        openTossTransfer({
-                          bankCode: personalAccounts[0].bankCode,
-                          accountNo: personalAccounts[0].accountNo,
-                          amount: expense.amount,
-                          message: expense.merchant,
-                        });
-                      }}
-                      className="flex-1 py-2.5 px-4 bg-teal-500 text-white rounded-xl hover:bg-teal-600 transition-colors font-medium flex items-center justify-center gap-1.5"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      {personalAccounts[0].name}에게
-                    </button>
-                  ) : (
-                    // 계좌가 여러 개면 각각 버튼 표시
-                    personalAccounts.map((account) => (
-                      <button
-                        key={account.id}
-                        onClick={() => {
-                          openTossTransfer({
-                            bankCode: account.bankCode,
-                            accountNo: account.accountNo,
-                            amount: expense.amount,
-                            message: expense.merchant,
-                          });
-                        }}
-                        className="flex-1 py-2.5 px-4 bg-teal-500 text-white rounded-xl hover:bg-teal-600 transition-colors font-medium flex items-center justify-center gap-1.5"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        {account.name}에게
-                      </button>
-                    ))
-                  )
                 )}
               </div>
               {/* 2행: 진한 스타일 */}

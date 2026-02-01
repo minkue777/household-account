@@ -2,9 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Expense } from '@/types/expense';
-import { PersonalAccount } from '@/types/household';
 import { SplitItem, addExpense, generateSplitGroupId, cancelSplitGroup, updateSplitGroup, notifyPartner } from '@/lib/expenseService';
-import { getStoredHouseholdKey, getHousehold } from '@/lib/householdService';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import ExpenseEditModal from './ExpenseEditModal';
 import ExpenseSplitModal from './ExpenseSplitModal';
@@ -55,19 +53,6 @@ export default function ExpenseItem({
   const [showEditModal, setShowEditModal] = useState(false);
   const [showSplitModal, setShowSplitModal] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [personalAccounts, setPersonalAccounts] = useState<PersonalAccount[]>([]);
-
-  // 개인 계좌 로드
-  useEffect(() => {
-    const householdId = getStoredHouseholdKey();
-    if (householdId) {
-      getHousehold(householdId).then((household) => {
-        if (household?.personalAccounts) {
-          setPersonalAccounts(household.personalAccounts);
-        }
-      });
-    }
-  }, []);
 
   // 터치 드래그 상태
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
@@ -299,7 +284,6 @@ export default function ExpenseItem({
         onUpdateSplitGroup={expense.splitGroupId ? handleUpdateSplitGroup : undefined}
         onDelete={onDelete ? () => onDelete(expense.id) : undefined}
         onNotifyPartner={() => notifyPartner(expense.id)}
-        personalAccounts={personalAccounts}
       />
 
       {/* 분할 모달 */}
