@@ -218,10 +218,9 @@ class ExpenseRepository {
      */
     suspend fun findUnsettledExpenseByAmount(householdId: String, amount: Int): Expense? {
         return try {
-            // settlementRequestedAt이 있는 미정산 지출 중 가장 최근 것 찾기
+            // householdId로만 쿼리 (settled 필드가 없을 수 있음)
             val snapshot = expensesCollection
                 .whereEqualTo("householdId", householdId)
-                .whereEqualTo("settled", false)
                 .get()
                 .await()
 
@@ -231,6 +230,10 @@ class ExpenseRepository {
             val expenses = snapshot.documents
                 .mapNotNull { doc ->
                     doc.toObject(Expense::class.java)?.copy(id = doc.id)
+                }
+                .filter { expense ->
+                    // settled가 없거나 false인 것만
+                    !expense.settled
                 }
                 .filter { expense ->
                     // cardType이 main, family가 아니고, 정산 요청이 있는 것
