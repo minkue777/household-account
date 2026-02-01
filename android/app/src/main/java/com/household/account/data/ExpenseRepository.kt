@@ -292,8 +292,9 @@ class ExpenseRepository {
 
     /**
      * 지출 정산 완료 처리
+     * @param settledBy 정산한 사람 이름 (토스뱅크 카톡: 이진선, 새마을금고 SMS: 이민규)
      */
-    suspend fun markAsSettled(expenseId: String) {
+    suspend fun markAsSettled(expenseId: String, settledBy: String) {
         try {
             val now = java.time.LocalDateTime.now()
                 .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME)
@@ -302,7 +303,8 @@ class ExpenseRepository {
                 .update(
                     mapOf(
                         "settled" to true,
-                        "settledAt" to now
+                        "settledAt" to now,
+                        "settledBy" to settledBy
                     )
                 )
                 .await()

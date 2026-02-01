@@ -25,6 +25,7 @@ export interface Expense {
   splitTotal?: number;    // 총 분할 개월 수
   settled?: boolean;      // 정산 완료 여부
   settledAt?: string;     // 정산 완료 시간
+  settledBy?: string;     // 정산한 사람 (이민규 or 이진선)
   settlementRequestedAt?: string;  // 정산 요청 시간 (정산하기 버튼 클릭 시)
 }
 

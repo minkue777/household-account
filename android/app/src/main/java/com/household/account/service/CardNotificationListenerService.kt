@@ -314,8 +314,8 @@ class CardNotificationListenerService : NotificationListenerService() {
                     )
 
                     if (matchedExpense != null) {
-                        // 정산 완료 처리
-                        expenseRepository.markAsSettled(matchedExpense.id)
+                        // 정산 완료 처리 (토스뱅크 카톡 = 이진선)
+                        expenseRepository.markAsSettled(matchedExpense.id, "이진선")
                     }
                 } catch (e: Exception) {
                     // ignored
@@ -396,8 +396,8 @@ class CardNotificationListenerService : NotificationListenerService() {
                         "merchant" to matchedExpense.merchant,
                         "amount" to matchedExpense.amount
                     ))
-                    // 정산 완료 처리
-                    expenseRepository.markAsSettled(matchedExpense.id)
+                    // 정산 완료 처리 (새마을금고 SMS = 이민규)
+                    expenseRepository.markAsSettled(matchedExpense.id, "이민규")
                     saveDebugLog(householdId, "SMS_SETTLED", mapOf("expenseId" to matchedExpense.id))
                 } else {
                     saveDebugLog(householdId, "SMS_NO_MATCH", mapOf("amount" to depositInfo.amount))

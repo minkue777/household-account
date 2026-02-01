@@ -154,7 +154,7 @@ export default function ExpenseEditModal({
               if (expense.settled) {
                 return (
                   <span className="px-2.5 py-1 bg-slate-400 text-white text-xs rounded-lg">
-                    정산완료
+                    정산완료{expense.settledBy ? `: ${expense.settledBy}` : ''}
                   </span>
                 );
               }
