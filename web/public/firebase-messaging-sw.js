@@ -14,38 +14,8 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// 백그라운드 메시지 처리 (data-only 메시지)
-messaging.onBackgroundMessage((payload) => {
-  console.log('[firebase-messaging-sw.js] 백그라운드 메시지 수신:', payload);
-
-  const notificationTitle = payload.data?.title || '새 지출';
-  const notificationOptions = {
-    body: payload.data?.body || '탭해서 확인하세요',
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/icon-72x72.png',
-    vibrate: [200, 100, 200],
-    tag: 'expense-notification',
-    renotify: true,
-    requireInteraction: true,
-    data: payload.data || {},
-    actions: [
-      {
-        action: 'edit',
-        title: '수정하기',
-      },
-      {
-        action: 'dismiss',
-        title: '닫기',
-      },
-    ],
-  };
-
-  self.registration.showNotification(notificationTitle, notificationOptions);
-});
-
 // 알림 클릭 처리
 self.addEventListener('notificationclick', (event) => {
-  console.log('[firebase-messaging-sw.js] 알림 클릭:', event);
 
   event.notification.close();
 

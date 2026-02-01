@@ -1,6 +1,5 @@
 package com.household.account.data
 
-import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
@@ -16,10 +15,6 @@ class ExpenseRepository {
     private val firestore = FirebaseFirestore.getInstance()
     private val expensesCollection = firestore.collection("expenses")
 
-    companion object {
-        private const val TAG = "ExpenseRepository"
-    }
-
     /**
      * 지출 추가
      */
@@ -28,7 +23,6 @@ class ExpenseRepository {
             val docRef = expensesCollection.add(expense.toMap()).await()
             docRef.id
         } catch (e: Exception) {
-            Log.e(TAG, "addExpense failed", e)
             ""
         }
     }
@@ -42,7 +36,7 @@ class ExpenseRepository {
                 expensesCollection.document(expense.id).set(expense.toMap()).await()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "updateExpense failed", e)
+            // ignored
         }
     }
 
@@ -53,7 +47,7 @@ class ExpenseRepository {
         try {
             expensesCollection.document(expenseId).delete().await()
         } catch (e: Exception) {
-            Log.e(TAG, "deleteExpense failed", e)
+            // ignored
         }
     }
 
@@ -69,7 +63,6 @@ class ExpenseRepository {
             .orderBy("date", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e(TAG, "Firestore listen failed", error)
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
@@ -78,7 +71,6 @@ class ExpenseRepository {
                     try {
                         doc.toObject(Expense::class.java)?.copy(id = doc.id)
                     } catch (e: Exception) {
-                        Log.e(TAG, "Document parse error", e)
                         null
                     }
                 }?.filter { expense ->
@@ -102,7 +94,6 @@ class ExpenseRepository {
             .whereEqualTo("date", date)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e(TAG, "Firestore listen failed", error)
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
@@ -137,7 +128,6 @@ class ExpenseRepository {
                 doc.toObject(Expense::class.java)?.copy(id = doc.id)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "getAllExpenses failed", e)
             emptyList()
         }
     }
@@ -151,7 +141,7 @@ class ExpenseRepository {
                 .update("category", category.name)
                 .await()
         } catch (e: Exception) {
-            Log.e(TAG, "updateCategory failed", e)
+            // ignored
         }
     }
 
@@ -170,7 +160,7 @@ class ExpenseRepository {
                 .update(updates)
                 .await()
         } catch (e: Exception) {
-            Log.e(TAG, "updateExpenseFields failed", e)
+            // ignored
         }
     }
 
@@ -199,7 +189,7 @@ class ExpenseRepository {
                     .await()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "updateExpenseAllFields failed", e)
+            // ignored
         }
     }
 
@@ -216,7 +206,6 @@ class ExpenseRepository {
                 addExpense(expense)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "splitExpense failed", e)
             emptyList()
         }
     }
@@ -246,24 +235,14 @@ class ExpenseRepository {
                 }
                 .sortedByDescending { it.settlementRequestedAt }
 
-            // 가장 최근 정산 요청된 것 찾기
+            // 가장 최근 정산 요청된 것이 금액과 일치하면 반환
             val mostRecentRequest = expenses.firstOrNull()
-
-            if (mostRecentRequest != null) {
-                // 금액이 일치하는지 확인
-                if (mostRecentRequest.amount == amount) {
-                    Log.d(TAG, "정산 매칭 성공: ${mostRecentRequest.merchant}, 금액=${amount}원")
-                    mostRecentRequest
-                } else {
-                    Log.w(TAG, "정산 금액 불일치: 요청=${mostRecentRequest.amount}원, 출금=${amount}원")
-                    null
-                }
+            if (mostRecentRequest != null && mostRecentRequest.amount == amount) {
+                mostRecentRequest
             } else {
-                Log.d(TAG, "정산 요청된 미정산 지출 없음")
                 null
             }
         } catch (e: Exception) {
-            Log.e(TAG, "findUnsettledExpenseByAmount failed", e)
             null
         }
     }
@@ -284,9 +263,8 @@ class ExpenseRepository {
                     )
                 )
                 .await()
-            Log.d(TAG, "markAsSettled success: $expenseId")
         } catch (e: Exception) {
-            Log.e(TAG, "markAsSettled failed", e)
+            // ignored
         }
     }
 }

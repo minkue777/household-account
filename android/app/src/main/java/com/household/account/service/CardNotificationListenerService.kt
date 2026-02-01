@@ -4,7 +4,6 @@ import android.app.Notification
 import android.content.Intent
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import android.util.Log
 import com.household.account.QuickEditActivity
 import com.household.account.data.BalanceRepository
 import com.household.account.data.CategoryRepository
@@ -29,8 +28,6 @@ import kotlinx.coroutines.launch
 class CardNotificationListenerService : NotificationListenerService() {
 
     companion object {
-        private const val TAG = "CardNotificationListener"
-
         // KB Pay 앱 패키지명
         private const val KB_PAY_PACKAGE = "com.kbcard.cxh.appcard"
         private const val KB_CARD_PACKAGE = "com.kbcard.kbkookmincard"
@@ -88,8 +85,6 @@ class CardNotificationListenerService : NotificationListenerService() {
             return
         }
 
-        Log.d(TAG, "결제 알림 감지: $packageName")
-
         try {
             val notification = sbn.notification
             val extras = notification.extras
@@ -112,11 +107,8 @@ class CardNotificationListenerService : NotificationListenerService() {
                 }
             }.trim()
 
-            Log.d(TAG, "알림 내용: $fullText")
-
             // 빈 알림 무시
             if (fullText.isEmpty()) {
-                Log.d(TAG, "빈 알림 무시")
                 return
             }
 
@@ -128,7 +120,6 @@ class CardNotificationListenerService : NotificationListenerService() {
                 recentNotifications.entries.removeIf { now - it.value > DUPLICATE_WINDOW_MS }
                 // 중복 체크
                 if (recentNotifications.containsKey(notificationKey)) {
-                    Log.d(TAG, "중복 알림 무시: $notificationKey")
                     return
                 }
                 recentNotifications[notificationKey] = now
@@ -154,25 +145,21 @@ class CardNotificationListenerService : NotificationListenerService() {
                                     balanceResult.balance,
                                     balanceResult.currencyType ?: "지역화폐"
                                 )
-                                Log.d(TAG, "잔액 저장 완료: ${balanceResult.balance}원 (${balanceResult.currencyType})")
                             }
                         } catch (e: Exception) {
-                            Log.e(TAG, "잔액 저장 실패", e)
+                            // ignored
                         }
                     }
                 }
             }
 
             if (result.success && result.expense != null) {
-                Log.i(TAG, "파싱 성공: ${result.expense}")
-
                 // 저장된 규칙으로 지출 정보 매핑
                 serviceScope.launch {
                     try {
                         val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
 
                         if (householdId.isEmpty()) {
-                            Log.w(TAG, "householdId가 설정되지 않음 - 저장 건너뜀")
                             return@launch
                         }
 
@@ -193,11 +180,6 @@ class CardNotificationListenerService : NotificationListenerService() {
                         }
 
                         val docId = expenseRepository.addExpense(expenseToSave)
-                        val originalMerchant = result.expense.merchant
-                        val mappedInfo = if (mappingResult != null && originalMerchant != expenseToSave.merchant) {
-                            " (원본: $originalMerchant)"
-                        } else ""
-                        Log.d(TAG, "Firebase 저장 완료 - householdId: $householdId, 가맹점: ${expenseToSave.merchant}$mappedInfo, 카테고리: ${expenseToSave.category}, ID: $docId")
 
                         // 빠른 편집 화면 바로 띄우기 (카테고리는 소문자로 변환)
                         if (docId.isNotEmpty()) {
@@ -211,16 +193,13 @@ class CardNotificationListenerService : NotificationListenerService() {
                         sendBroadcast(Intent(ACTION_NOTIFICATION_RECEIVED))
 
                     } catch (e: Exception) {
-                        Log.e(TAG, "Firebase 저장 실패", e)
+                        // ignored
                     }
                 }
-            } else {
-                Log.w(TAG, "파싱 실패: ${result.errorMessage}")
-                Log.w(TAG, "원본 알림 [$packageName]: $fullText")
             }
 
         } catch (e: Exception) {
-            Log.e(TAG, "알림 처리 중 오류", e)
+            // ignored
         }
     }
 
@@ -230,12 +209,10 @@ class CardNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        Log.d(TAG, "NotificationListener 연결됨")
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
-        Log.d(TAG, "NotificationListener 연결 해제됨")
     }
 
     /**
@@ -246,7 +223,6 @@ class CardNotificationListenerService : NotificationListenerService() {
             // 다른 앱 위에 표시 권한 확인
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M &&
                 !android.provider.Settings.canDrawOverlays(applicationContext)) {
-                Log.w(TAG, "다른 앱 위에 표시 권한이 없음")
                 return
             }
 
@@ -261,9 +237,8 @@ class CardNotificationListenerService : NotificationListenerService() {
                 putExtra(QuickEditActivity.EXTRA_CATEGORY, expense.category)
             }
             startActivity(intent)
-            Log.d(TAG, "빠른 편집 화면 실행: ${expense.merchant}")
         } catch (e: Exception) {
-            Log.e(TAG, "빠른 편집 화면 실행 실패", e)
+            // ignored
         }
     }
 
@@ -294,23 +269,14 @@ class CardNotificationListenerService : NotificationListenerService() {
                 }
             }
 
-            Log.d(TAG, "토스뱅크 알림 감지: $fullText")
-
             // 출금 정보 파싱
-            val withdrawalInfo = TossKakaoParser.parseWithdrawal(fullText)
-            if (withdrawalInfo == null) {
-                Log.d(TAG, "출금 정보 파싱 실패 (정산 알림 아님)")
-                return
-            }
-
-            Log.d(TAG, "출금 정보 파싱 성공: ${withdrawalInfo.amount}원")
+            val withdrawalInfo = TossKakaoParser.parseWithdrawal(fullText) ?: return
 
             // 미정산 지출 매칭 및 정산 완료 처리
             serviceScope.launch {
                 try {
                     val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
                     if (householdId.isEmpty()) {
-                        Log.w(TAG, "householdId가 설정되지 않음")
                         return@launch
                     }
 
@@ -323,16 +289,13 @@ class CardNotificationListenerService : NotificationListenerService() {
                     if (matchedExpense != null) {
                         // 정산 완료 처리
                         expenseRepository.markAsSettled(matchedExpense.id)
-                        Log.i(TAG, "정산 완료: ${matchedExpense.merchant} ${matchedExpense.amount}원")
-                    } else {
-                        Log.d(TAG, "매칭되는 미정산 지출 없음: ${withdrawalInfo.amount}원")
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "정산 처리 실패", e)
+                    // ignored
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "정산 알림 처리 중 오류", e)
+            // ignored
         }
     }
 

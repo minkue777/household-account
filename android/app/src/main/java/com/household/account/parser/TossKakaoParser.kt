@@ -1,7 +1,5 @@
 package com.household.account.parser
 
-import android.util.Log
-
 /**
  * 토스뱅크 카카오톡 알림 파싱
  *
@@ -14,8 +12,6 @@ import android.util.Log
  * 거래한 모임원 : 이*선
  */
 object TossKakaoParser {
-
-    private const val TAG = "TossKakaoParser"
 
     data class WithdrawalInfo(
         val amount: Int,
@@ -37,11 +33,7 @@ object TossKakaoParser {
 
             // 금액 파싱: "10,000원이 출금됐어요" 또는 "1원이 출금됐어요"
             val amountRegex = """([0-9,]+)원이 출금됐어요""".toRegex()
-            val amountMatch = amountRegex.find(text)
-            if (amountMatch == null) {
-                Log.d(TAG, "금액 파싱 실패")
-                return null
-            }
+            val amountMatch = amountRegex.find(text) ?: return null
             val amount = amountMatch.groupValues[1].replace(",", "").toIntOrNull() ?: return null
 
             // 날짜/시간 파싱: "02/01 21:39"
@@ -55,8 +47,6 @@ object TossKakaoParser {
             val memberMatch = memberRegex.find(text)
             val memberName = memberMatch?.groupValues?.get(1)?.trim() ?: ""
 
-            Log.d(TAG, "파싱 성공: 금액=$amount, 날짜=$date, 시간=$time, 모임원=$memberName")
-
             return WithdrawalInfo(
                 amount = amount,
                 date = date,
@@ -64,7 +54,6 @@ object TossKakaoParser {
                 memberName = memberName
             )
         } catch (e: Exception) {
-            Log.e(TAG, "파싱 에러", e)
             return null
         }
     }

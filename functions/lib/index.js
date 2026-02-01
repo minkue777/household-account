@@ -58,14 +58,11 @@ exports.onExpenseUpdated = functions
     const wasNotifying = before.notifyPartner === true;
     const isNotifying = after.notifyPartner === true;
     if (wasNotifying || !isNotifying) {
-        console.log('알림 전송 스킵 (notifyPartner 변경 없음 또는 false)');
         return null;
     }
-    console.log('알림 전송 시작 (notifyPartner: true로 변경됨)');
     const expense = after;
     const householdId = expense.householdId;
     if (!householdId) {
-        console.log('householdId가 없어서 알림 전송 스킵');
         return null;
     }
     // 같은 householdId를 가진 토큰만 가져오기
@@ -73,7 +70,6 @@ exports.onExpenseUpdated = functions
         .where('householdId', '==', householdId)
         .get();
     if (tokensSnapshot.empty) {
-        console.log(`householdId(${householdId})에 해당하는 FCM 토큰이 없습니다.`);
         return null;
     }
     const tokens = [];
@@ -84,20 +80,19 @@ exports.onExpenseUpdated = functions
         }
     });
     if (tokens.length === 0) {
-        console.log('유효한 FCM 토큰이 없습니다.');
         return null;
     }
-    console.log(`householdId(${householdId})에 ${tokens.length}개의 토큰으로 알림 전송`);
     // 금액 포맷팅
     const amount = ((_a = expense.amount) === null || _a === void 0 ? void 0 : _a.toLocaleString('ko-KR')) || '0';
     const merchant = expense.merchant || '알 수 없는 가맹점';
-    // 푸시 알림 메시지 (data-only: 서비스 워커에서만 알림 표시)
+    // 푸시 알림 메시지
     const message = {
         tokens: tokens,
-        // notification 필드 제거 - 있으면 FCM SDK가 자동 알림 + 서비스워커 알림으로 중복 발생
-        data: {
+        notification: {
             title: `💳 ${merchant}`,
             body: `${amount}원 - 탭해서 카테고리를 확인하세요`,
+        },
+        data: {
             expenseId: expenseId,
             merchant: merchant,
             amount: String(expense.amount || 0),
@@ -107,22 +102,6 @@ exports.onExpenseUpdated = functions
             type: 'new_expense',
         },
         webpush: {
-            notification: {
-                icon: '/icons/icon-192x192.png',
-                badge: '/icons/icon-72x72.png',
-                vibrate: [200, 100, 200],
-                requireInteraction: true,
-                actions: [
-                    {
-                        action: 'edit',
-                        title: '수정하기',
-                    },
-                    {
-                        action: 'dismiss',
-                        title: '닫기',
-                    },
-                ],
-            },
             fcmOptions: {
                 link: `/?edit=${expenseId}`,
             },
@@ -130,14 +109,12 @@ exports.onExpenseUpdated = functions
     };
     try {
         const response = await messaging.sendEachForMulticast(message);
-        console.log(`푸시 알림 전송 완료: 성공 ${response.successCount}, 실패 ${response.failureCount}`);
         // 실패한 토큰 정리
         if (response.failureCount > 0) {
             const failedTokens = [];
             response.responses.forEach((resp, idx) => {
                 if (!resp.success) {
                     failedTokens.push(tokens[idx]);
-                    console.error(`토큰 전송 실패: ${tokens[idx]}`, resp.error);
                 }
             });
             // 실패한 토큰 삭제
@@ -152,7 +129,6 @@ exports.onExpenseUpdated = functions
         return response;
     }
     catch (error) {
-        console.error('푸시 알림 전송 실패:', error);
         return null;
     }
 });
@@ -182,7 +158,6 @@ exports.saveFcmToken = functions
                 deviceInfo: deviceInfo || null,
                 householdId: householdId,
             });
-            console.log(`토큰 업데이트 완료 (householdId: ${householdId})`);
             return { success: true, message: '토큰 업데이트 완료' };
         }
         // 새 토큰 저장
@@ -193,11 +168,9 @@ exports.saveFcmToken = functions
             deviceInfo: deviceInfo || null,
             householdId: householdId,
         });
-        console.log(`새 토큰 저장 완료 (householdId: ${householdId})`);
         return { success: true, message: '토큰 저장 완료' };
     }
     catch (error) {
-        console.error('FCM 토큰 저장 실패:', error);
         throw new functions.https.HttpsError('internal', 'FCM 토큰 저장에 실패했습니다.');
     }
 });
@@ -207,14 +180,12 @@ function parseCardMessage(message) {
         // 금액 찾기: "9,990원" 또는 "250,000원"
         const amountMatch = message.match(/([0-9,]+)원\s*(일시불|할부)/);
         if (!amountMatch) {
-            console.log('금액 파싱 실패');
             return null;
         }
         const amount = parseInt(amountMatch[1].replace(/,/g, ''), 10);
         // 날짜/시간/가맹점 찾기: "01/29 16:49 롯데슈퍼동탄디에"
         const dateTimeMatch = message.match(/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})\s+(.+?)(?:\n|$)/);
         if (!dateTimeMatch) {
-            console.log('날짜/시간/가맹점 파싱 실패');
             return null;
         }
         const month = dateTimeMatch[1];
@@ -243,7 +214,6 @@ function parseCardMessage(message) {
         };
     }
     catch (error) {
-        console.error('메시지 파싱 에러:', error);
         return null;
     }
 }
@@ -270,7 +240,6 @@ exports.addExpenseFromMessage = functions
         const { message, token, householdId } = req.body;
         // 토큰 검증
         if (token !== API_TOKEN) {
-            console.log('잘못된 토큰:', token);
             res.status(401).json({ success: false, error: '인증 실패' });
             return;
         }
@@ -282,14 +251,12 @@ exports.addExpenseFromMessage = functions
             res.status(400).json({ success: false, error: 'householdId가 필요합니다' });
             return;
         }
-        console.log('수신된 메시지:', message);
         // 메시지 파싱
         const parsed = parseCardMessage(message);
         if (!parsed) {
             res.status(400).json({ success: false, error: '메시지 파싱 실패', rawMessage: message });
             return;
         }
-        console.log('파싱 결과:', parsed);
         // 중복 체크 (같은 날짜, 시간, 금액, 가맹점)
         const duplicateCheck = await db.collection('expenses')
             .where('householdId', '==', householdId)
@@ -299,7 +266,6 @@ exports.addExpenseFromMessage = functions
             .where('merchant', '==', parsed.merchant)
             .get();
         if (!duplicateCheck.empty) {
-            console.log('중복 지출 감지, 스킵');
             res.status(200).json({ success: true, message: '이미 등록된 지출입니다', duplicate: true });
             return;
         }
@@ -317,7 +283,6 @@ exports.addExpenseFromMessage = functions
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
         };
         const docRef = await db.collection('expenses').add(expenseData);
-        console.log('지출 저장 완료:', docRef.id);
         res.status(200).json({
             success: true,
             message: '지출 등록 완료',
@@ -326,7 +291,6 @@ exports.addExpenseFromMessage = functions
         });
     }
     catch (error) {
-        console.error('API 에러:', error);
         res.status(500).json({ success: false, error: '서버 에러' });
     }
 });
