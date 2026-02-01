@@ -214,7 +214,7 @@ class ExpenseRepository {
      * 정산 대기 중인 지출 찾기 (pendingSettlement == true)
      * 금액이 일치하는 것만 반환
      */
-    suspend fun findPendingSettlement(householdId: String, amount: Int, debugLog: ((String, Map<String, Any>) -> Unit)? = null): Expense? {
+    suspend fun findPendingSettlement(householdId: String, amount: Int): Expense? {
         return try {
             // pendingSettlement == true인 것만 쿼리 (효율적)
             val snapshot = expensesCollection
@@ -228,24 +228,11 @@ class ExpenseRepository {
                     doc.toObject(Expense::class.java)?.copy(id = doc.id)
                 }
 
-            debugLog?.invoke("MATCH_PENDING", mapOf(
-                "count" to pendingExpenses.size,
-                "items" to pendingExpenses.map { "${it.merchant}|${it.amount}" }
-            ))
-
             // 금액이 일치하는 것 찾기 (여러 개면 가장 최근 것)
-            val matched = pendingExpenses
+            pendingExpenses
                 .filter { it.amount == amount }
                 .maxByOrNull { it.settlementRequestedAt }
-
-            debugLog?.invoke("MATCH_RESULT", mapOf(
-                "targetAmount" to amount,
-                "matched" to (matched?.let { "${it.merchant}|${it.amount}" } ?: "null")
-            ))
-
-            matched
         } catch (e: Exception) {
-            debugLog?.invoke("MATCH_ERROR", mapOf("error" to (e.message ?: "unknown")))
             null
         }
     }

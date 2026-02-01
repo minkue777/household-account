@@ -85,16 +85,6 @@ class CardNotificationListenerService : NotificationListenerService() {
 
         val packageName = sbn.packageName
 
-        // 디버그: 모든 알림 패키지명 로그
-        serviceScope.launch {
-            val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
-            saveDebugLog(householdId, "NOTIFICATION", mapOf(
-                "package" to packageName,
-                "inSMS" to (packageName in SMS_PACKAGES),
-                "inSettlement" to (packageName in SETTLEMENT_PACKAGES)
-            ))
-        }
-
         // 정산 알림 처리 (카카오톡 토스뱅크)
         if (packageName in SETTLEMENT_PACKAGES) {
             handleSettlementNotification(sbn)
@@ -307,7 +297,7 @@ class CardNotificationListenerService : NotificationListenerService() {
                         return@launch
                     }
 
-                    // 금액이 일치하는 미정산 지출 찾기
+                    // 정산 대기 중인 지출 찾기
                     val matchedExpense = expenseRepository.findPendingSettlement(
                         householdId,
                         withdrawalInfo.amount
@@ -352,77 +342,31 @@ class CardNotificationListenerService : NotificationListenerService() {
                     }
                 }
 
-                val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
-
-                // 디버그 로그: SMS 알림 수신
-                saveDebugLog(householdId, "SMS_RECEIVED", mapOf(
-                    "package" to sbn.packageName,
-                    "title" to title,
-                    "text" to text,
-                    "fullText" to fullText
-                ))
-
                 if (!MGSaemaeulParser.isMGSaemaeulMessage(title, fullText)) {
-                    saveDebugLog(householdId, "SMS_NOT_MG", mapOf("reason" to "not MG message"))
                     return@launch
                 }
 
                 // 입금 정보 파싱
-                val depositInfo = MGSaemaeulParser.parseDeposit(fullText)
-                if (depositInfo == null) {
-                    saveDebugLog(householdId, "SMS_PARSE_FAIL", mapOf("fullText" to fullText))
-                    return@launch
-                }
+                val depositInfo = MGSaemaeulParser.parseDeposit(fullText) ?: return@launch
 
-                saveDebugLog(householdId, "SMS_PARSED", mapOf(
-                    "amount" to depositInfo.amount,
-                    "balance" to depositInfo.balance
-                ))
-
+                val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
                 if (householdId.isEmpty()) {
-                    saveDebugLog(householdId, "SMS_NO_HOUSEHOLD", mapOf())
                     return@launch
                 }
 
-                // 금액이 일치하는 미정산 지출 찾기
+                // 정산 대기 중인 지출 찾기
                 val matchedExpense = expenseRepository.findPendingSettlement(
                     householdId,
                     depositInfo.amount
-                ) { event, data -> saveDebugLog(householdId, event, data) }
+                )
 
                 if (matchedExpense != null) {
-                    saveDebugLog(householdId, "SMS_MATCHED", mapOf(
-                        "expenseId" to matchedExpense.id,
-                        "merchant" to matchedExpense.merchant,
-                        "amount" to matchedExpense.amount
-                    ))
                     // 정산 완료 처리 (새마을금고 SMS = 이민규)
                     expenseRepository.markAsSettled(matchedExpense.id, "이민규")
-                    saveDebugLog(householdId, "SMS_SETTLED", mapOf("expenseId" to matchedExpense.id))
-                } else {
-                    saveDebugLog(householdId, "SMS_NO_MATCH", mapOf("amount" to depositInfo.amount))
                 }
             } catch (e: Exception) {
-                saveDebugLog("", "SMS_ERROR", mapOf("error" to (e.message ?: "unknown")))
+                // ignored
             }
-        }
-    }
-
-    /**
-     * Firestore에 디버그 로그 저장
-     */
-    private fun saveDebugLog(householdId: String, event: String, data: Map<String, Any>) {
-        try {
-            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-            val logData = mutableMapOf<String, Any>(
-                "event" to event,
-                "timestamp" to com.google.firebase.Timestamp.now(),
-                "householdId" to householdId
-            )
-            logData.putAll(data)
-            firestore.collection("debug_logs").add(logData)
-        } catch (e: Exception) {
-            // ignored
         }
     }
 
