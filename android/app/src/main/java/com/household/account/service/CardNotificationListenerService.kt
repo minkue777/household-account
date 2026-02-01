@@ -320,56 +320,97 @@ class CardNotificationListenerService : NotificationListenerService() {
      * SMS 정산 알림 처리 (새마을금고 입금 알림)
      */
     private fun handleSmsSettlementNotification(sbn: StatusBarNotification) {
-        try {
-            val notification = sbn.notification
-            val extras = notification.extras
+        serviceScope.launch {
+            try {
+                val notification = sbn.notification
+                val extras = notification.extras
 
-            val title = extras.getString(Notification.EXTRA_TITLE) ?: ""
-            val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
-            val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
+                val title = extras.getString(Notification.EXTRA_TITLE) ?: ""
+                val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+                val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
 
-            // 새마을금고 메시지인지 확인
-            val fullText = buildString {
-                if (title.isNotEmpty()) {
-                    append(title)
-                    append("\n")
+                // 새마을금고 메시지인지 확인
+                val fullText = buildString {
+                    if (title.isNotEmpty()) {
+                        append(title)
+                        append("\n")
+                    }
+                    if (bigText.isNotEmpty()) {
+                        append(bigText)
+                    } else {
+                        append(text)
+                    }
                 }
-                if (bigText.isNotEmpty()) {
-                    append(bigText)
+
+                val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
+
+                // 디버그 로그: SMS 알림 수신
+                saveDebugLog(householdId, "SMS_RECEIVED", mapOf(
+                    "package" to sbn.packageName,
+                    "title" to title,
+                    "text" to text,
+                    "fullText" to fullText
+                ))
+
+                if (!MGSaemaeulParser.isMGSaemaeulMessage(title, fullText)) {
+                    saveDebugLog(householdId, "SMS_NOT_MG", mapOf("reason" to "not MG message"))
+                    return@launch
+                }
+
+                // 입금 정보 파싱
+                val depositInfo = MGSaemaeulParser.parseDeposit(fullText)
+                if (depositInfo == null) {
+                    saveDebugLog(householdId, "SMS_PARSE_FAIL", mapOf("fullText" to fullText))
+                    return@launch
+                }
+
+                saveDebugLog(householdId, "SMS_PARSED", mapOf(
+                    "amount" to depositInfo.amount,
+                    "balance" to depositInfo.balance
+                ))
+
+                if (householdId.isEmpty()) {
+                    saveDebugLog(householdId, "SMS_NO_HOUSEHOLD", mapOf())
+                    return@launch
+                }
+
+                // 금액이 일치하는 미정산 지출 찾기
+                val matchedExpense = expenseRepository.findUnsettledExpenseByAmount(
+                    householdId,
+                    depositInfo.amount
+                )
+
+                if (matchedExpense != null) {
+                    saveDebugLog(householdId, "SMS_MATCHED", mapOf(
+                        "expenseId" to matchedExpense.id,
+                        "merchant" to matchedExpense.merchant,
+                        "amount" to matchedExpense.amount
+                    ))
+                    // 정산 완료 처리
+                    expenseRepository.markAsSettled(matchedExpense.id)
+                    saveDebugLog(householdId, "SMS_SETTLED", mapOf("expenseId" to matchedExpense.id))
                 } else {
-                    append(text)
+                    saveDebugLog(householdId, "SMS_NO_MATCH", mapOf("amount" to depositInfo.amount))
                 }
+            } catch (e: Exception) {
+                saveDebugLog("", "SMS_ERROR", mapOf("error" to (e.message ?: "unknown")))
             }
+        }
+    }
 
-            if (!MGSaemaeulParser.isMGSaemaeulMessage(title, fullText)) {
-                return
-            }
-
-            // 입금 정보 파싱
-            val depositInfo = MGSaemaeulParser.parseDeposit(fullText) ?: return
-
-            // 미정산 지출 매칭 및 정산 완료 처리
-            serviceScope.launch {
-                try {
-                    val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
-                    if (householdId.isEmpty()) {
-                        return@launch
-                    }
-
-                    // 금액이 일치하는 미정산 지출 찾기
-                    val matchedExpense = expenseRepository.findUnsettledExpenseByAmount(
-                        householdId,
-                        depositInfo.amount
-                    )
-
-                    if (matchedExpense != null) {
-                        // 정산 완료 처리
-                        expenseRepository.markAsSettled(matchedExpense.id)
-                    }
-                } catch (e: Exception) {
-                    // ignored
-                }
-            }
+    /**
+     * Firestore에 디버그 로그 저장
+     */
+    private fun saveDebugLog(householdId: String, event: String, data: Map<String, Any>) {
+        try {
+            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            val logData = mutableMapOf<String, Any>(
+                "event" to event,
+                "timestamp" to com.google.firebase.Timestamp.now(),
+                "householdId" to householdId
+            )
+            logData.putAll(data)
+            firestore.collection("debug_logs").add(logData)
         } catch (e: Exception) {
             // ignored
         }
