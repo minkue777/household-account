@@ -211,9 +211,10 @@ class ExpenseRepository {
     }
 
     /**
-     * 가장 최근 정산 요청된 지출 찾기 + 금액 검증
+     * 가장 최근 정산 요청된 지출 찾기 + 시간 검증 + 금액 검증
      * 1. settlementRequestedAt이 가장 최근인 미정산 지출 찾기
-     * 2. 금액이 일치하는지 확인
+     * 2. 정산 요청이 1분 이내인지 확인
+     * 3. 금액이 일치하는지 확인
      */
     suspend fun findUnsettledExpenseByAmount(householdId: String, amount: Int): Expense? {
         return try {
@@ -224,6 +225,9 @@ class ExpenseRepository {
                 .get()
                 .await()
 
+            val now = java.time.Instant.now()
+            val oneMinuteAgo = now.minusSeconds(60)
+
             val expenses = snapshot.documents
                 .mapNotNull { doc ->
                     doc.toObject(Expense::class.java)?.copy(id = doc.id)
@@ -232,6 +236,15 @@ class ExpenseRepository {
                     // cardType이 main, family가 아니고, 정산 요청이 있는 것
                     val cardType = expense.cardType.uppercase()
                     cardType != "MAIN" && cardType != "FAMILY" && expense.settlementRequestedAt.isNotEmpty()
+                }
+                .filter { expense ->
+                    // 정산 요청이 1분 이내인지 확인
+                    try {
+                        val requestTime = java.time.Instant.parse(expense.settlementRequestedAt)
+                        requestTime.isAfter(oneMinuteAgo)
+                    } catch (e: Exception) {
+                        false
+                    }
                 }
                 .sortedByDescending { it.settlementRequestedAt }
 
