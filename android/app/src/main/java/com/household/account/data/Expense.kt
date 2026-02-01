@@ -43,7 +43,9 @@ data class Expense(
     val cardLastFour: String = "",   // 카드 끝 4자리
     val memo: String = "",           // 메모
     val householdId: String = "",    // 가구 키
-    val createdAt: Timestamp = Timestamp.now()
+    val createdAt: Timestamp = Timestamp.now(),
+    val settled: Boolean = false,    // 정산 완료 여부
+    val settledAt: String = ""       // 정산 완료 시간
 ) {
     // Firestore 저장을 위한 no-arg constructor
     constructor() : this(
@@ -57,7 +59,9 @@ data class Expense(
         cardLastFour = "",
         memo = "",
         householdId = "",
-        createdAt = Timestamp.now()
+        createdAt = Timestamp.now(),
+        settled = false,
+        settledAt = ""
     )
 
     fun toMap(): Map<String, Any> {

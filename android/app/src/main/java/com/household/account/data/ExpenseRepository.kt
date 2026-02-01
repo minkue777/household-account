@@ -220,4 +220,55 @@ class ExpenseRepository {
             emptyList()
         }
     }
+
+    /**
+     * 금액으로 미정산 지출 찾기 (정산 대상: cardType이 main, family가 아닌 것)
+     * 가장 최근 지출 중 금액이 일치하고 정산되지 않은 것
+     */
+    suspend fun findUnsettledExpenseByAmount(householdId: String, amount: Int): Expense? {
+        return try {
+            val snapshot = expensesCollection
+                .whereEqualTo("householdId", householdId)
+                .whereEqualTo("amount", amount)
+                .orderBy("date", Query.Direction.DESCENDING)
+                .limit(10)  // 최근 10개 중에서 찾기
+                .get()
+                .await()
+
+            snapshot.documents
+                .mapNotNull { doc ->
+                    doc.toObject(Expense::class.java)?.copy(id = doc.id)
+                }
+                .firstOrNull { expense ->
+                    // cardType이 main, family가 아니고, 아직 정산되지 않은 것
+                    val cardType = expense.cardType.uppercase()
+                    cardType != "MAIN" && cardType != "FAMILY" && !expense.settled
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "findUnsettledExpenseByAmount failed", e)
+            null
+        }
+    }
+
+    /**
+     * 지출 정산 완료 처리
+     */
+    suspend fun markAsSettled(expenseId: String) {
+        try {
+            val now = java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+
+            expensesCollection.document(expenseId)
+                .update(
+                    mapOf(
+                        "settled" to true,
+                        "settledAt" to now
+                    )
+                )
+                .await()
+            Log.d(TAG, "markAsSettled success: $expenseId")
+        } catch (e: Exception) {
+            Log.e(TAG, "markAsSettled failed", e)
+        }
+    }
 }

@@ -136,20 +136,26 @@ export default function ExpenseEditModal({
               {expense.date} {expense.time && `· ${expense.time}`}
               {expense.cardLastFour && ` · ${expense.cardLastFour}`}
             </div>
-            {personalAccount && expense.cardType !== 'main' && expense.cardType !== 'family' && (
-              <button
-                onClick={() => {
-                  openTossTransfer({
-                    bankCode: personalAccount.bankCode,
-                    accountNo: personalAccount.accountNo,
-                    amount: expense.amount,
-                    message: expense.merchant,
-                  });
-                }}
-                className="px-2.5 py-1 bg-teal-500 text-white text-xs rounded-lg hover:bg-teal-600 transition-colors"
-              >
-                정산하기
-              </button>
+            {expense.cardType !== 'main' && expense.cardType !== 'family' && (
+              expense.settled ? (
+                <span className="px-2.5 py-1 bg-slate-400 text-white text-xs rounded-lg">
+                  정산완료
+                </span>
+              ) : personalAccount ? (
+                <button
+                  onClick={() => {
+                    openTossTransfer({
+                      bankCode: personalAccount.bankCode,
+                      accountNo: personalAccount.accountNo,
+                      amount: expense.amount,
+                      message: expense.merchant,
+                    });
+                  }}
+                  className="px-2.5 py-1 bg-teal-500 text-white text-xs rounded-lg hover:bg-teal-600 transition-colors"
+                >
+                  정산하기
+                </button>
+              ) : null
             )}
           </div>
 

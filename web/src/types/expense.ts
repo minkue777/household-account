@@ -23,6 +23,8 @@ export interface Expense {
   splitGroupId?: string;  // 월별 분할 그룹 ID (같은 ID면 같은 분할 그룹)
   splitIndex?: number;    // 분할 순서 (1, 2, 3...)
   splitTotal?: number;    // 총 분할 개월 수
+  settled?: boolean;      // 정산 완료 여부
+  settledAt?: string;     // 정산 완료 시간
 }
 
 export interface DailyExpenses {
