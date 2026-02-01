@@ -163,6 +163,22 @@ export async function deletePersonalAccount(householdKey: string, accountId: str
 }
 
 /**
+ * 기본 개인 계좌 설정
+ */
+export async function setDefaultPersonalAccount(householdKey: string, accountId: string): Promise<void> {
+  const docRef = doc(householdsCollection, householdKey);
+  const docSnap = await getDoc(docRef);
+
+  const currentAccounts: PersonalAccount[] = docSnap.data()?.personalAccounts || [];
+  const updatedAccounts = currentAccounts.map(acc => ({
+    ...acc,
+    isDefault: acc.id === accountId
+  }));
+
+  await updateDoc(docRef, { personalAccounts: updatedAccounts });
+}
+
+/**
  * 로컬스토리지에서 가구 키 가져오기
  */
 export function getStoredHouseholdKey(): string | null {

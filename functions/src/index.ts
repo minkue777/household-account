@@ -6,6 +6,9 @@ admin.initializeApp();
 const db = admin.firestore();
 const messaging = admin.messaging();
 
+// iOS 단축어용 API 토큰 (환경변수로 관리 권장)
+const API_TOKEN = 'household-account-ios-shortcut-2024';
+
 /**
  * 지출이 수정되면 iOS PWA에 푸시 알림 전송
  * notifyPartner가 false → true로 변경될 때만 알림 전송
@@ -183,5 +186,170 @@ export const saveFcmToken = functions
     } catch (error) {
       console.error('FCM 토큰 저장 실패:', error);
       throw new functions.https.HttpsError('internal', 'FCM 토큰 저장에 실패했습니다.');
+    }
+  });
+
+/**
+ * 카드사 메시지 파싱
+ * 삼성카드 포맷:
+ * 삼성1876승인 이*선
+ * 9,990원 일시불
+ * 01/29 16:49 롯데슈퍼동탄디에
+ * 누적541,665원
+ */
+interface ParsedExpense {
+  amount: number;
+  merchant: string;
+  date: string;
+  time: string;
+  cardName: string;
+}
+
+function parseCardMessage(message: string): ParsedExpense | null {
+  try {
+    // 삼성카드 포맷 파싱
+    // 금액 찾기: "9,990원" 또는 "250,000원"
+    const amountMatch = message.match(/([0-9,]+)원\s*(일시불|할부)/);
+    if (!amountMatch) {
+      console.log('금액 파싱 실패');
+      return null;
+    }
+    const amount = parseInt(amountMatch[1].replace(/,/g, ''), 10);
+
+    // 날짜/시간/가맹점 찾기: "01/29 16:49 롯데슈퍼동탄디에"
+    const dateTimeMatch = message.match(/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})\s+(.+?)(?:\n|$)/);
+    if (!dateTimeMatch) {
+      console.log('날짜/시간/가맹점 파싱 실패');
+      return null;
+    }
+
+    const month = dateTimeMatch[1];
+    const day = dateTimeMatch[2];
+    const hour = dateTimeMatch[3];
+    const minute = dateTimeMatch[4];
+    const merchant = dateTimeMatch[5].trim();
+
+    // 현재 연도 사용 (1월인데 12월 결제면 작년으로 처리)
+    const now = new Date();
+    let year = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    if (parseInt(month) > currentMonth + 1) {
+      year -= 1; // 작년 결제
+    }
+
+    const date = `${year}-${month}-${day}`;
+    const time = `${hour}:${minute}`;
+
+    // 카드 이름 찾기: "삼성1876승인"
+    const cardMatch = message.match(/(삼성|신한|국민|현대|롯데|하나|우리|BC|NH)[\d]*승인/);
+    const cardName = cardMatch ? cardMatch[0].replace('승인', '') : '삼성카드';
+
+    return {
+      amount,
+      merchant,
+      date,
+      time,
+      cardName,
+    };
+  } catch (error) {
+    console.error('메시지 파싱 에러:', error);
+    return null;
+  }
+}
+
+/**
+ * iOS 단축어에서 호출하는 API
+ * SMS/카카오톡 메시지를 받아서 파싱 후 Firestore에 저장
+ */
+export const addExpenseFromMessage = functions
+  .region('asia-northeast3')
+  .https.onRequest(async (req, res) => {
+    // CORS 헤더
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ success: false, error: 'Method not allowed' });
+      return;
+    }
+
+    try {
+      const { message, token, householdId } = req.body;
+
+      // 토큰 검증
+      if (token !== API_TOKEN) {
+        console.log('잘못된 토큰:', token);
+        res.status(401).json({ success: false, error: '인증 실패' });
+        return;
+      }
+
+      if (!message) {
+        res.status(400).json({ success: false, error: '메시지가 필요합니다' });
+        return;
+      }
+
+      if (!householdId) {
+        res.status(400).json({ success: false, error: 'householdId가 필요합니다' });
+        return;
+      }
+
+      console.log('수신된 메시지:', message);
+
+      // 메시지 파싱
+      const parsed = parseCardMessage(message);
+      if (!parsed) {
+        res.status(400).json({ success: false, error: '메시지 파싱 실패', rawMessage: message });
+        return;
+      }
+
+      console.log('파싱 결과:', parsed);
+
+      // 중복 체크 (같은 날짜, 시간, 금액, 가맹점)
+      const duplicateCheck = await db.collection('expenses')
+        .where('householdId', '==', householdId)
+        .where('date', '==', parsed.date)
+        .where('time', '==', parsed.time)
+        .where('amount', '==', parsed.amount)
+        .where('merchant', '==', parsed.merchant)
+        .get();
+
+      if (!duplicateCheck.empty) {
+        console.log('중복 지출 감지, 스킵');
+        res.status(200).json({ success: true, message: '이미 등록된 지출입니다', duplicate: true });
+        return;
+      }
+
+      // Firestore에 저장
+      const expenseData = {
+        amount: parsed.amount,
+        merchant: parsed.merchant,
+        date: parsed.date,
+        time: parsed.time,
+        category: 'etc', // 기본 카테고리
+        memo: `${parsed.cardName} (iOS 단축어)`,
+        householdId: householdId,
+        source: 'ios-shortcut',
+        notifyPartner: true, // 안드로이드에 푸시 알림
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+
+      const docRef = await db.collection('expenses').add(expenseData);
+      console.log('지출 저장 완료:', docRef.id);
+
+      res.status(200).json({
+        success: true,
+        message: '지출 등록 완료',
+        expenseId: docRef.id,
+        parsed: parsed,
+      });
+    } catch (error) {
+      console.error('API 에러:', error);
+      res.status(500).json({ success: false, error: '서버 에러' });
     }
   });

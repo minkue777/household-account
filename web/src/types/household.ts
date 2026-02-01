@@ -12,6 +12,7 @@ export interface PersonalAccount {
   bankCode: string;  // 은행 코드
   bankName: string;  // 은행명
   accountNo: string; // 계좌번호
+  isDefault?: boolean; // 기본 계좌 여부
 }
 
 export interface Household {
