@@ -14,13 +14,13 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// 백그라운드 메시지 처리
+// 백그라운드 메시지 처리 (data-only 메시지)
 messaging.onBackgroundMessage((payload) => {
   console.log('[firebase-messaging-sw.js] 백그라운드 메시지 수신:', payload);
 
-  const notificationTitle = payload.notification?.title || '새 지출';
+  const notificationTitle = payload.data?.title || '새 지출';
   const notificationOptions = {
-    body: payload.notification?.body || '탭해서 확인하세요',
+    body: payload.data?.body || '탭해서 확인하세요',
     icon: '/icons/icon-192x192.png',
     badge: '/icons/icon-72x72.png',
     vibrate: [200, 100, 200],

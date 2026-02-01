@@ -66,14 +66,13 @@ export const onExpenseUpdated = functions
     const amount = expense.amount?.toLocaleString('ko-KR') || '0';
     const merchant = expense.merchant || '알 수 없는 가맹점';
 
-    // 푸시 알림 메시지
+    // 푸시 알림 메시지 (data-only: 서비스 워커에서만 알림 표시)
     const message: admin.messaging.MulticastMessage = {
       tokens: tokens,
-      notification: {
+      // notification 필드 제거 - 있으면 FCM SDK가 자동 알림 + 서비스워커 알림으로 중복 발생
+      data: {
         title: `💳 ${merchant}`,
         body: `${amount}원 - 탭해서 카테고리를 확인하세요`,
-      },
-      data: {
         expenseId: expenseId,
         merchant: merchant,
         amount: String(expense.amount || 0),
