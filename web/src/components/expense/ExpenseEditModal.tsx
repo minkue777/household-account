@@ -136,7 +136,7 @@ export default function ExpenseEditModal({
               {expense.date} {expense.time && `· ${expense.time}`}
               {expense.cardLastFour && ` · ${expense.cardLastFour}`}
             </div>
-            {personalAccount && (
+            {personalAccount && expense.cardType !== 'main' && expense.cardType !== 'family' && (
               <button
                 onClick={() => {
                   openTossTransfer({
