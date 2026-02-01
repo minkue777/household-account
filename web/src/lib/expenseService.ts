@@ -50,6 +50,7 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
     splitGroupId: data.splitGroupId,
     splitIndex: data.splitIndex,
     splitTotal: data.splitTotal,
+    settled: data.settled || false,
   };
 }
 
