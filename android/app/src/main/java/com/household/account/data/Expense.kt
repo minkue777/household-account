@@ -45,7 +45,8 @@ data class Expense(
     val householdId: String = "",    // 가구 키
     val createdAt: Timestamp = Timestamp.now(),
     val settled: Boolean = false,    // 정산 완료 여부
-    val settledAt: String = ""       // 정산 완료 시간
+    val settledAt: String = "",      // 정산 완료 시간
+    val settlementRequestedAt: String = ""  // 정산 요청 시간 (정산하기 버튼 클릭 시)
 ) {
     // Firestore 저장을 위한 no-arg constructor
     constructor() : this(
@@ -61,7 +62,8 @@ data class Expense(
         householdId = "",
         createdAt = Timestamp.now(),
         settled = false,
-        settledAt = ""
+        settledAt = "",
+        settlementRequestedAt = ""
     )
 
     fun toMap(): Map<String, Any> {

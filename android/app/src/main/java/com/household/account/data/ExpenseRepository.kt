@@ -222,28 +222,46 @@ class ExpenseRepository {
     }
 
     /**
-     * 금액으로 미정산 지출 찾기 (정산 대상: cardType이 main, family가 아닌 것)
-     * 가장 최근 지출 중 금액이 일치하고 정산되지 않은 것
+     * 가장 최근 정산 요청된 지출 찾기 + 금액 검증
+     * 1. settlementRequestedAt이 가장 최근인 미정산 지출 찾기
+     * 2. 금액이 일치하는지 확인
      */
     suspend fun findUnsettledExpenseByAmount(householdId: String, amount: Int): Expense? {
         return try {
+            // settlementRequestedAt이 있는 미정산 지출 중 가장 최근 것 찾기
             val snapshot = expensesCollection
                 .whereEqualTo("householdId", householdId)
-                .whereEqualTo("amount", amount)
-                .orderBy("date", Query.Direction.DESCENDING)
-                .limit(10)  // 최근 10개 중에서 찾기
+                .whereEqualTo("settled", false)
                 .get()
                 .await()
 
-            snapshot.documents
+            val expenses = snapshot.documents
                 .mapNotNull { doc ->
                     doc.toObject(Expense::class.java)?.copy(id = doc.id)
                 }
-                .firstOrNull { expense ->
-                    // cardType이 main, family가 아니고, 아직 정산되지 않은 것
+                .filter { expense ->
+                    // cardType이 main, family가 아니고, 정산 요청이 있는 것
                     val cardType = expense.cardType.uppercase()
-                    cardType != "MAIN" && cardType != "FAMILY" && !expense.settled
+                    cardType != "MAIN" && cardType != "FAMILY" && expense.settlementRequestedAt.isNotEmpty()
                 }
+                .sortedByDescending { it.settlementRequestedAt }
+
+            // 가장 최근 정산 요청된 것 찾기
+            val mostRecentRequest = expenses.firstOrNull()
+
+            if (mostRecentRequest != null) {
+                // 금액이 일치하는지 확인
+                if (mostRecentRequest.amount == amount) {
+                    Log.d(TAG, "정산 매칭 성공: ${mostRecentRequest.merchant}, 금액=${amount}원")
+                    mostRecentRequest
+                } else {
+                    Log.w(TAG, "정산 금액 불일치: 요청=${mostRecentRequest.amount}원, 출금=${amount}원")
+                    null
+                }
+            } else {
+                Log.d(TAG, "정산 요청된 미정산 지출 없음")
+                null
+            }
         } catch (e: Exception) {
             Log.e(TAG, "findUnsettledExpenseByAmount failed", e)
             null

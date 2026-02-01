@@ -21,6 +21,7 @@ interface ExpenseEditModalProps {
   onUpdateSplitGroup?: (newMonths: number) => void;
   onDelete?: () => void;
   onNotifyPartner?: () => void;
+  onSettlementRequest?: () => void;
 }
 
 export default function ExpenseEditModal({
@@ -36,6 +37,7 @@ export default function ExpenseEditModal({
   onUpdateSplitGroup,
   onDelete,
   onNotifyPartner,
+  onSettlementRequest,
 }: ExpenseEditModalProps) {
   const { getCategoryLabel } = useCategoryContext();
 
@@ -144,6 +146,9 @@ export default function ExpenseEditModal({
               ) : personalAccount ? (
                 <button
                   onClick={() => {
+                    // 정산 요청 시간 기록
+                    onSettlementRequest?.();
+                    // 토스 앱으로 송금
                     openTossTransfer({
                       bankCode: personalAccount.bankCode,
                       accountNo: personalAccount.accountNo,

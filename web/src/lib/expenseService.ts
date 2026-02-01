@@ -83,6 +83,14 @@ export async function notifyPartner(id: string): Promise<void> {
 }
 
 /**
+ * 정산 요청 (정산하기 버튼 클릭 시 호출)
+ */
+export async function requestSettlement(id: string): Promise<void> {
+  const docRef = doc(db, COLLECTION_NAME, id);
+  await updateDoc(docRef, { settlementRequestedAt: new Date().toISOString() });
+}
+
+/**
  * 지출 삭제
  */
 export async function deleteExpense(id: string): Promise<void> {
