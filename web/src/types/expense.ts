@@ -16,7 +16,7 @@ export interface Expense {
   merchant: string;       // 가맹점명
   amount: number;         // 금액
   category: Category;     // 카테고리 (동적)
-  cardType: 'main' | 'family';  // 본인 카드 / 가족 카드
+  cardType?: string;  // 'main' | 'family' | undefined (iOS 단축어는 없음)
   cardLastFour?: string;  // 카드 마지막 4자리
   memo?: string;          // 메모 (선택)
   mergedFrom?: MergedExpenseInfo[];  // 합쳐진 원본 지출들 (되돌리기용)

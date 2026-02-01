@@ -190,7 +190,7 @@ export async function addManualExpense(
     merchant,
     amount,
     category,
-    cardType: 'main',
+    cardType: 'manual',
     cardLastFour: '수동',
     memo: memo || '',
     householdId,

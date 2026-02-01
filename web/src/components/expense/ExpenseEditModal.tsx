@@ -138,7 +138,7 @@ export default function ExpenseEditModal({
               {expense.date} {expense.time && `· ${expense.time}`}
               {expense.cardLastFour && ` · ${expense.cardLastFour}`}
             </div>
-            {expense.cardType !== 'main' && expense.cardType !== 'family' && (
+            {expense.cardType?.toLowerCase() !== 'main' && expense.cardType?.toLowerCase() !== 'family' && (
               expense.settled ? (
                 <span className="px-2.5 py-1 bg-slate-400 text-white text-xs rounded-lg">
                   정산완료
