@@ -1,6 +1,5 @@
 package com.household.account.parser
 
-import com.household.account.data.CardType
 import com.household.account.data.Category
 import com.household.account.data.Expense
 import java.time.LocalDate
@@ -132,7 +131,7 @@ object LocalCurrencyParser {
                 merchant = merchant,
                 amount = amount,
                 category = Category.ETC.name,
-                cardType = CardType.MAIN.name,  // 지역화폐는 본인 사용으로 처리
+                cardType = "LOCAL_CURRENCY",  // 지역화폐 전용 타입
                 cardLastFour = "지역"  // 지역화폐 표시
             )
 
