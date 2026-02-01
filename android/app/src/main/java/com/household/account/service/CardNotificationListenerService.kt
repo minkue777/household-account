@@ -85,6 +85,16 @@ class CardNotificationListenerService : NotificationListenerService() {
 
         val packageName = sbn.packageName
 
+        // 디버그: 모든 알림 패키지명 로그
+        serviceScope.launch {
+            val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
+            saveDebugLog(householdId, "NOTIFICATION", mapOf(
+                "package" to packageName,
+                "inSMS" to (packageName in SMS_PACKAGES),
+                "inSettlement" to (packageName in SETTLEMENT_PACKAGES)
+            ))
+        }
+
         // 정산 알림 처리 (카카오톡 토스뱅크)
         if (packageName in SETTLEMENT_PACKAGES) {
             handleSettlementNotification(sbn)
