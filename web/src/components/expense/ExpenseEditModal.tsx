@@ -138,17 +138,34 @@ export default function ExpenseEditModal({
               {expense.date} {expense.time && `· ${expense.time}`}
               {expense.cardLastFour && ` · ${expense.cardLastFour}`}
             </div>
-            {expense.cardType?.toLowerCase() !== 'main' && expense.cardType?.toLowerCase() !== 'family' && expense.cardType?.toLowerCase() !== 'local_currency' && (
-              expense.settled ? (
-                <span className="px-2.5 py-1 bg-slate-400 text-white text-xs rounded-lg">
-                  정산완료
-                </span>
-              ) : personalAccount ? (
+            {(() => {
+              // 이번 달 지출인지 확인
+              const now = new Date();
+              const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+              const expenseYearMonth = expense.date.substring(0, 7);
+              const isCurrentMonth = currentYearMonth === expenseYearMonth;
+
+              const isSettleable = expense.cardType?.toLowerCase() !== 'main' &&
+                                   expense.cardType?.toLowerCase() !== 'family' &&
+                                   expense.cardType?.toLowerCase() !== 'local_currency';
+
+              if (!isSettleable) return null;
+
+              if (expense.settled) {
+                return (
+                  <span className="px-2.5 py-1 bg-slate-400 text-white text-xs rounded-lg">
+                    정산완료
+                  </span>
+                );
+              }
+
+              // 이번 달 아니면 정산하기 버튼 안 보임
+              if (!isCurrentMonth || !personalAccount) return null;
+
+              return (
                 <button
                   onClick={() => {
-                    // 정산 요청 시간 기록
                     onSettlementRequest?.();
-                    // 토스 앱으로 송금
                     openTossTransfer({
                       bankCode: personalAccount.bankCode,
                       accountNo: personalAccount.accountNo,
@@ -160,8 +177,8 @@ export default function ExpenseEditModal({
                 >
                   정산하기
                 </button>
-              ) : null
-            )}
+              );
+            })()}
           </div>
 
           <div className="space-y-4">

@@ -215,6 +215,7 @@ class ExpenseRepository {
      * 1. settlementRequestedAt이 가장 최근인 미정산 지출 찾기
      * 2. 정산 요청이 1분 이내인지 확인
      * 3. 금액이 일치하는지 확인
+     * 4. 이번 달 지출만 대상
      */
     suspend fun findUnsettledExpenseByAmount(householdId: String, amount: Int, debugLog: ((String, Map<String, Any>) -> Unit)? = null): Expense? {
         return try {
@@ -227,6 +228,10 @@ class ExpenseRepository {
             val now = java.time.Instant.now()
             val oneMinuteAgo = now.minusSeconds(60)
 
+            // 이번 달 날짜 범위
+            val today = java.time.LocalDate.now()
+            val currentYearMonth = String.format("%04d-%02d", today.year, today.monthValue)
+
             val allExpenses = snapshot.documents
                 .mapNotNull { doc ->
                     doc.toObject(Expense::class.java)?.copy(id = doc.id)
@@ -234,7 +239,11 @@ class ExpenseRepository {
 
             debugLog?.invoke("MATCH_STEP1_TOTAL", mapOf("count" to allExpenses.size))
 
-            val unsettledExpenses = allExpenses.filter { !it.settled }
+            // 이번 달 지출만 필터링
+            val currentMonthExpenses = allExpenses.filter { it.date.startsWith(currentYearMonth) }
+            debugLog?.invoke("MATCH_STEP1B_CURRENT_MONTH", mapOf("count" to currentMonthExpenses.size, "yearMonth" to currentYearMonth))
+
+            val unsettledExpenses = currentMonthExpenses.filter { !it.settled }
             debugLog?.invoke("MATCH_STEP2_UNSETTLED", mapOf("count" to unsettledExpenses.size))
 
             val withSettlementRequest = unsettledExpenses.filter { expense ->
