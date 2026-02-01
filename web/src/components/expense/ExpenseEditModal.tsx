@@ -162,15 +162,13 @@ export default function ExpenseEditModal({
                     // ignore
                   }
                 }
-                // (이름 · 시간) 형식
-                const details = [expense.settledBy, settledTime].filter(Boolean).join(' · ');
                 return (
                   <div className="text-right">
                     <div className="px-2.5 py-1 bg-slate-400 text-white text-xs rounded-lg inline-block">
-                      정산완료
+                      정산완료{expense.settledBy ? `: ${expense.settledBy}` : ''}
                     </div>
-                    {details && (
-                      <div className="text-[10px] text-slate-400 mt-0.5">({details})</div>
+                    {settledTime && (
+                      <div className="text-[10px] text-slate-400 mt-0.5">({settledTime})</div>
                     )}
                   </div>
                 );
