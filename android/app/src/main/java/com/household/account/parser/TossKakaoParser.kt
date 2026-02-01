@@ -26,8 +26,8 @@ object TossKakaoParser {
      */
     fun parseWithdrawal(text: String): WithdrawalInfo? {
         try {
-            // [출금 안내] 포함 확인
-            if (!text.contains("[출금 안내]")) {
+            // [출금 안내] + 망고네 생활비 계좌 포함 확인
+            if (!text.contains("[출금 안내]") || !text.contains("망고네 생활비 계좌")) {
                 return null
             }
 
