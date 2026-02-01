@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Expense } from '@/types/expense';
-import { SettlementAccount } from '@/types/household';
+import { PersonalAccount } from '@/types/household';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import Portal from '../Portal';
 import { CategorySelector, AmountInput } from '../common';
@@ -21,7 +21,7 @@ interface ExpenseEditModalProps {
   onUpdateSplitGroup?: (newMonths: number) => void;
   onDelete?: () => void;
   onNotifyPartner?: () => void;
-  settlementAccount?: SettlementAccount | null;
+  personalAccounts?: PersonalAccount[];
 }
 
 export default function ExpenseEditModal({
@@ -37,7 +37,7 @@ export default function ExpenseEditModal({
   onUpdateSplitGroup,
   onDelete,
   onNotifyPartner,
-  settlementAccount,
+  personalAccounts = [],
 }: ExpenseEditModalProps) {
   const { getCategoryLabel } = useCategoryContext();
 
@@ -417,23 +417,47 @@ export default function ExpenseEditModal({
                     또니에게
                   </button>
                 )}
-                {settlementAccount && (
-                  <button
-                    onClick={() => {
-                      openTossTransfer({
-                        bankCode: settlementAccount.bankCode,
-                        accountNo: settlementAccount.accountNo,
-                        amount: expense.amount,
-                        message: expense.merchant,
-                      });
-                    }}
-                    className="flex-1 py-2.5 px-4 bg-teal-500 text-white rounded-xl hover:bg-teal-600 transition-colors font-medium flex items-center justify-center gap-1.5"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    정산하기
-                  </button>
+                {personalAccounts.length > 0 && (
+                  personalAccounts.length === 1 ? (
+                    // 계좌가 1개면 바로 정산
+                    <button
+                      onClick={() => {
+                        openTossTransfer({
+                          bankCode: personalAccounts[0].bankCode,
+                          accountNo: personalAccounts[0].accountNo,
+                          amount: expense.amount,
+                          message: expense.merchant,
+                        });
+                      }}
+                      className="flex-1 py-2.5 px-4 bg-teal-500 text-white rounded-xl hover:bg-teal-600 transition-colors font-medium flex items-center justify-center gap-1.5"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      {personalAccounts[0].name}에게
+                    </button>
+                  ) : (
+                    // 계좌가 여러 개면 각각 버튼 표시
+                    personalAccounts.map((account) => (
+                      <button
+                        key={account.id}
+                        onClick={() => {
+                          openTossTransfer({
+                            bankCode: account.bankCode,
+                            accountNo: account.accountNo,
+                            amount: expense.amount,
+                            message: expense.merchant,
+                          });
+                        }}
+                        className="flex-1 py-2.5 px-4 bg-teal-500 text-white rounded-xl hover:bg-teal-600 transition-colors font-medium flex items-center justify-center gap-1.5"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {account.name}에게
+                      </button>
+                    ))
+                  )
                 )}
               </div>
               {/* 2행: 진한 스타일 */}

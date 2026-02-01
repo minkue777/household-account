@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Expense } from '@/types/expense';
-import { SettlementAccount } from '@/types/household';
+import { PersonalAccount } from '@/types/household';
 import { SplitItem, addExpense, generateSplitGroupId, cancelSplitGroup, updateSplitGroup, notifyPartner } from '@/lib/expenseService';
 import { getStoredHouseholdKey, getHousehold } from '@/lib/householdService';
 import { useCategoryContext } from '@/contexts/CategoryContext';
@@ -55,15 +55,15 @@ export default function ExpenseItem({
   const [showEditModal, setShowEditModal] = useState(false);
   const [showSplitModal, setShowSplitModal] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [settlementAccount, setSettlementAccount] = useState<SettlementAccount | null>(null);
+  const [personalAccounts, setPersonalAccounts] = useState<PersonalAccount[]>([]);
 
-  // 정산 계좌 로드
+  // 개인 계좌 로드
   useEffect(() => {
     const householdId = getStoredHouseholdKey();
     if (householdId) {
       getHousehold(householdId).then((household) => {
-        if (household?.settlementAccount) {
-          setSettlementAccount(household.settlementAccount);
+        if (household?.personalAccounts) {
+          setPersonalAccounts(household.personalAccounts);
         }
       });
     }
@@ -299,7 +299,7 @@ export default function ExpenseItem({
         onUpdateSplitGroup={expense.splitGroupId ? handleUpdateSplitGroup : undefined}
         onDelete={onDelete ? () => onDelete(expense.id) : undefined}
         onNotifyPartner={() => notifyPartner(expense.id)}
-        settlementAccount={settlementAccount}
+        personalAccounts={personalAccounts}
       />
 
       {/* 분할 모달 */}
