@@ -81,6 +81,11 @@ data class Expense(
         if (householdId.isNotEmpty()) {
             map["householdId"] = householdId
         }
+        // 정산 가능한 카드 타입인 경우 settled 필드 추가 (MAIN, FAMILY 제외)
+        val upperCardType = cardType.uppercase()
+        if (upperCardType != "MAIN" && upperCardType != "FAMILY") {
+            map["settled"] = false
+        }
         return map
     }
 

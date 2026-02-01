@@ -195,6 +195,7 @@ export async function addManualExpense(
     memo: memo || '',
     householdId,
     createdAt: Timestamp.now(),
+    settled: false,  // 수동 지출은 정산 가능
   });
   return docRef.id;
 }
@@ -259,9 +260,10 @@ export async function splitExpense(
 
     // 분할된 지출들 추가
     const newIds: string[] = [];
+    const isSettleable = originalExpense.cardType !== 'main' && originalExpense.cardType !== 'family';
     for (const split of splits) {
       const newDocRef = doc(collection(db, COLLECTION_NAME));
-      transaction.set(newDocRef, {
+      const expenseData: Record<string, unknown> = {
         date: originalExpense.date,
         time: originalExpense.time,
         merchant: split.merchant,
@@ -272,7 +274,11 @@ export async function splitExpense(
         memo: split.memo || '',
         householdId,
         createdAt: Timestamp.now(),
-      });
+      };
+      if (isSettleable) {
+        expenseData.settled = false;
+      }
+      transaction.set(newDocRef, expenseData);
       newIds.push(newDocRef.id);
     }
 
@@ -338,9 +344,10 @@ export async function unmergeExpense(expense: Expense): Promise<string[]> {
     const newIds: string[] = [];
 
     // 원본 지출들 다시 생성
+    const isSettleable = expense.cardType !== 'main' && expense.cardType !== 'family';
     for (const original of expense.mergedFrom!) {
       const newDocRef = doc(collection(db, COLLECTION_NAME));
-      transaction.set(newDocRef, {
+      const expenseData: Record<string, unknown> = {
         date: expense.date,
         time: expense.time,
         merchant: original.merchant,
@@ -351,7 +358,11 @@ export async function unmergeExpense(expense: Expense): Promise<string[]> {
         memo: original.memo || '',
         householdId,
         createdAt: Timestamp.now(),
-      });
+      };
+      if (isSettleable) {
+        expenseData.settled = false;
+      }
+      transaction.set(newDocRef, expenseData);
       newIds.push(newDocRef.id);
     }
 
@@ -441,18 +452,24 @@ export async function cancelSplitGroup(splitGroupId: string): Promise<void> {
     }
 
     // 원래 금액의 단일 지출 생성 (첫 번째 항목의 메모 유지)
+    const cardType = firstExpense.cardType || 'main';
+    const isSettleable = cardType !== 'main' && cardType !== 'family';
     const newDocRef = doc(collection(db, COLLECTION_NAME));
-    transaction.set(newDocRef, {
+    const expenseData: Record<string, unknown> = {
       date: firstExpense.date,
       time: firstExpense.time || '09:00',
       merchant: baseMerchant,
       amount: totalAmount,
       category: firstExpense.category,
-      cardType: firstExpense.cardType || 'main',
+      cardType,
       memo: firstExpense.memo || '',
       householdId,
       createdAt: Timestamp.now(),
-    });
+    };
+    if (isSettleable) {
+      expenseData.settled = false;
+    }
+    transaction.set(newDocRef, expenseData);
   });
 }
 
@@ -489,26 +506,32 @@ export async function updateSplitGroup(
     }
 
     // 새로운 분할 지출 생성
+    const cardType = firstExpense.cardType || 'main';
+    const isSettleable = cardType !== 'main' && cardType !== 'family';
     for (let i = 0; i < newMonths; i++) {
       const targetDate = new Date(baseDate);
       targetDate.setMonth(targetDate.getMonth() + i);
       const dateStr = targetDate.toISOString().split('T')[0];
 
       const newDocRef = doc(collection(db, COLLECTION_NAME));
-      transaction.set(newDocRef, {
+      const expenseData: Record<string, unknown> = {
         date: dateStr,
         time: firstExpense.time || '09:00',
         merchant: `${baseMerchant} (${i + 1}/${newMonths})`,
         amount: monthlyAmount,
         category: firstExpense.category,
-        cardType: firstExpense.cardType || 'main',
+        cardType,
         memo: firstExpense.memo || '',
         splitGroupId: newGroupId,
         splitIndex: i + 1,
         splitTotal: newMonths,
         householdId,
         createdAt: Timestamp.now(),
-      });
+      };
+      if (isSettleable) {
+        expenseData.settled = false;
+      }
+      transaction.set(newDocRef, expenseData);
     }
   });
 
