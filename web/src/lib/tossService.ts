@@ -92,6 +92,11 @@ export function openTossTransfer(params: {
 }): void {
   const link = createTossTransferLink(params);
 
-  // 딥링크로 이동
-  window.location.href = link;
+  // <a> 태그를 동적으로 생성해서 클릭 (더 안정적인 방식)
+  const anchor = document.createElement('a');
+  anchor.href = link;
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
 }
