@@ -47,7 +47,8 @@ data class Expense(
     @get:Exclude val createdAt: Timestamp = Timestamp.now(),  // 역직렬화 제외 (타입 불일치 방지)
     val settled: Boolean = false,    // 정산 완료 여부
     val settledAt: String = "",      // 정산 완료 시간
-    val settlementRequestedAt: String = ""  // 정산 요청 시간 (정산하기 버튼 클릭 시)
+    val settlementRequestedAt: String = "",  // 정산 요청 시간 (정산하기 버튼 클릭 시)
+    val pendingSettlement: Boolean = false   // 정산 대기 중 (정산하기 버튼 클릭 시 true)
 ) {
     // Firestore 저장을 위한 no-arg constructor
     constructor() : this(
@@ -64,7 +65,8 @@ data class Expense(
         createdAt = Timestamp.now(),
         settled = false,
         settledAt = "",
-        settlementRequestedAt = ""
+        settlementRequestedAt = "",
+        pendingSettlement = false
     )
 
     fun toMap(): Map<String, Any> {

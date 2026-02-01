@@ -308,7 +308,7 @@ class CardNotificationListenerService : NotificationListenerService() {
                     }
 
                     // 금액이 일치하는 미정산 지출 찾기
-                    val matchedExpense = expenseRepository.findUnsettledExpenseByAmount(
+                    val matchedExpense = expenseRepository.findPendingSettlement(
                         householdId,
                         withdrawalInfo.amount
                     )
@@ -385,7 +385,7 @@ class CardNotificationListenerService : NotificationListenerService() {
                 }
 
                 // 금액이 일치하는 미정산 지출 찾기
-                val matchedExpense = expenseRepository.findUnsettledExpenseByAmount(
+                val matchedExpense = expenseRepository.findPendingSettlement(
                     householdId,
                     depositInfo.amount
                 ) { event, data -> saveDebugLog(householdId, event, data) }

@@ -211,79 +211,39 @@ class ExpenseRepository {
     }
 
     /**
-     * 가장 최근 정산 요청된 지출 찾기 + 시간 검증 + 금액 검증
-     * 1. settlementRequestedAt이 가장 최근인 미정산 지출 찾기
-     * 2. 정산 요청이 1분 이내인지 확인
-     * 3. 금액이 일치하는지 확인
-     * 4. 이번 달 지출만 대상
+     * 정산 대기 중인 지출 찾기 (pendingSettlement == true)
+     * 금액이 일치하는 것만 반환
      */
-    suspend fun findUnsettledExpenseByAmount(householdId: String, amount: Int, debugLog: ((String, Map<String, Any>) -> Unit)? = null): Expense? {
+    suspend fun findPendingSettlement(householdId: String, amount: Int, debugLog: ((String, Map<String, Any>) -> Unit)? = null): Expense? {
         return try {
-            // householdId로만 쿼리 (settled 필드가 없을 수 있음)
+            // pendingSettlement == true인 것만 쿼리 (효율적)
             val snapshot = expensesCollection
                 .whereEqualTo("householdId", householdId)
+                .whereEqualTo("pendingSettlement", true)
                 .get()
                 .await()
 
-            val now = java.time.Instant.now()
-            val oneMinuteAgo = now.minusSeconds(60)
-
-            // 이번 달 날짜 범위
-            val today = java.time.LocalDate.now()
-            val currentYearMonth = String.format("%04d-%02d", today.year, today.monthValue)
-
-            val allExpenses = snapshot.documents
+            val pendingExpenses = snapshot.documents
                 .mapNotNull { doc ->
                     doc.toObject(Expense::class.java)?.copy(id = doc.id)
                 }
 
-            debugLog?.invoke("MATCH_STEP1_TOTAL", mapOf("count" to allExpenses.size))
-
-            // 이번 달 지출만 필터링
-            val currentMonthExpenses = allExpenses.filter { it.date.startsWith(currentYearMonth) }
-            debugLog?.invoke("MATCH_STEP1B_CURRENT_MONTH", mapOf("count" to currentMonthExpenses.size, "yearMonth" to currentYearMonth))
-
-            val unsettledExpenses = currentMonthExpenses.filter { !it.settled }
-            debugLog?.invoke("MATCH_STEP2_UNSETTLED", mapOf("count" to unsettledExpenses.size))
-
-            val withSettlementRequest = unsettledExpenses.filter { expense ->
-                val cardType = expense.cardType.uppercase()
-                cardType != "MAIN" && cardType != "FAMILY" && expense.settlementRequestedAt.isNotEmpty()
-            }
-            debugLog?.invoke("MATCH_STEP3_HAS_REQUEST", mapOf(
-                "count" to withSettlementRequest.size,
-                "items" to withSettlementRequest.take(3).map { "${it.merchant}|${it.cardType}|${it.settlementRequestedAt}" }
+            debugLog?.invoke("MATCH_PENDING", mapOf(
+                "count" to pendingExpenses.size,
+                "items" to pendingExpenses.map { "${it.merchant}|${it.amount}" }
             ))
 
-            val withinTimeLimit = withSettlementRequest.filter { expense ->
-                try {
-                    val requestTime = java.time.Instant.parse(expense.settlementRequestedAt)
-                    requestTime.isAfter(oneMinuteAgo)
-                } catch (e: Exception) {
-                    false
-                }
-            }
-            debugLog?.invoke("MATCH_STEP4_WITHIN_1MIN", mapOf(
-                "count" to withinTimeLimit.size,
-                "now" to now.toString(),
-                "oneMinuteAgo" to oneMinuteAgo.toString()
-            ))
+            // 금액이 일치하는 것 찾기 (여러 개면 가장 최근 것)
+            val matched = pendingExpenses
+                .filter { it.amount == amount }
+                .maxByOrNull { it.settlementRequestedAt }
 
-            val expenses = withinTimeLimit.sortedByDescending { it.settlementRequestedAt }
-
-            // 가장 최근 정산 요청된 것이 금액과 일치하면 반환
-            val mostRecentRequest = expenses.firstOrNull()
-            debugLog?.invoke("MATCH_STEP5_AMOUNT_CHECK", mapOf(
-                "mostRecent" to (mostRecentRequest?.let { "${it.merchant}|${it.amount}" } ?: "null"),
+            debugLog?.invoke("MATCH_RESULT", mapOf(
                 "targetAmount" to amount,
-                "match" to (mostRecentRequest?.amount == amount)
+                "matched" to (matched?.let { "${it.merchant}|${it.amount}" } ?: "null")
             ))
 
-            if (mostRecentRequest != null && mostRecentRequest.amount == amount) {
-                mostRecentRequest
-            } else {
-                null
-            }
+            matched
         } catch (e: Exception) {
             debugLog?.invoke("MATCH_ERROR", mapOf("error" to (e.message ?: "unknown")))
             null
@@ -304,7 +264,8 @@ class ExpenseRepository {
                     mapOf(
                         "settled" to true,
                         "settledAt" to now,
-                        "settledBy" to settledBy
+                        "settledBy" to settledBy,
+                        "pendingSettlement" to com.google.firebase.firestore.FieldValue.delete()
                     )
                 )
                 .await()

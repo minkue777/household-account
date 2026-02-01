@@ -86,10 +86,14 @@ export async function notifyPartner(id: string): Promise<void> {
 
 /**
  * 정산 요청 (정산하기 버튼 클릭 시 호출)
+ * pendingSettlement: true로 표시하여 빠른 검색 가능
  */
 export async function requestSettlement(id: string): Promise<void> {
   const docRef = doc(db, COLLECTION_NAME, id);
-  await updateDoc(docRef, { settlementRequestedAt: new Date().toISOString() });
+  await updateDoc(docRef, {
+    settlementRequestedAt: new Date().toISOString(),
+    pendingSettlement: true
+  });
 }
 
 /**
