@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Vercel 캐싱 비활성화
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 interface StockPriceResult {
   code: string;
   name: string;
@@ -28,6 +32,7 @@ export async function GET(request: NextRequest) {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
+      cache: 'no-store',
     });
 
     if (!response.ok) {
