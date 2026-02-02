@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
     // Yahoo Finance API로 시세 조회
     // 한국 주식은 .KS (코스피) 또는 .KQ (코스닥) 접미사 필요
     const symbol = code.includes('.') ? code : `${code}.KS`;
-    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`;
+    const timestamp = Date.now();
+    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d&_t=${timestamp}`;
 
     const response = await fetch(yahooUrl, {
       headers: {
@@ -40,11 +41,12 @@ export async function GET(request: NextRequest) {
       if (!code.includes('.')) {
         const kosdaq = `${code}.KQ`;
         const retryResponse = await fetch(
-          `https://query1.finance.yahoo.com/v8/finance/chart/${kosdaq}?interval=1d&range=1d`,
+          `https://query1.finance.yahoo.com/v8/finance/chart/${kosdaq}?interval=1d&range=1d&_t=${timestamp}`,
           {
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             },
+            cache: 'no-store',
           }
         );
 
@@ -107,16 +109,18 @@ export async function POST(request: NextRequest) {
     const results: Record<string, StockPriceResult | null> = {};
 
     // 병렬로 조회
+    const timestamp = Date.now();
     await Promise.all(
       codes.map(async (code: string) => {
         try {
           const symbol = code.includes('.') ? code : `${code}.KS`;
           const response = await fetch(
-            `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`,
+            `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d&_t=${timestamp}`,
             {
               headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
               },
+              cache: 'no-store',
             }
           );
 
