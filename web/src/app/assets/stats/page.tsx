@@ -86,6 +86,7 @@ export default function AssetStatsPage() {
   const [dividendInfoMap, setDividendInfoMap] = useState<Record<string, DividendInfo>>({});
   const [isDividendLoading, setIsDividendLoading] = useState(false);
   const [cachedDividendData, setCachedDividendData] = useState<number[] | null>(null);
+  const [showDividendDetail, setShowDividendDetail] = useState(false);
 
   // 현재 날짜 정보
   const now = new Date();
@@ -592,6 +593,52 @@ export default function AssetStatsPage() {
   // 배당금 합계
   const totalDividend = monthlyDividendData.reduce((sum, d) => sum + d.dividend, 0);
 
+  // 종목별 배당금 상세 내역 (디버깅용)
+  const dividendDetailList = useMemo(() => {
+    // 종목별 수량 합산
+    const quantityByStock: Record<string, number> = {};
+    stockHoldings.forEach((holding) => {
+      if (holding.stockCode) {
+        quantityByStock[holding.stockCode] = (quantityByStock[holding.stockCode] || 0) + (holding.quantity || 0);
+      }
+    });
+
+    const details: {
+      stockCode: string;
+      stockName: string;
+      quantity: number;
+      dividendPerShare: number;
+      totalDividend: number;
+      paymentDate: string;
+      paymentMonth: number;
+    }[] = [];
+
+    Object.entries(quantityByStock).forEach(([stockCode, totalQuantity]) => {
+      const dividendInfo = dividendInfoMap[stockCode];
+      if (!dividendInfo || !dividendInfo.recentDividend || !dividendInfo.paymentDate) {
+        return;
+      }
+
+      const [paymentYear, paymentMonth] = dividendInfo.paymentDate.split('/').map(Number);
+
+      // 선택된 연도와 일치하는 경우에만
+      if (paymentYear === dividendYear) {
+        details.push({
+          stockCode,
+          stockName: dividendInfo.name || stockCode,
+          quantity: totalQuantity,
+          dividendPerShare: dividendInfo.recentDividend,
+          totalDividend: dividendInfo.recentDividend * totalQuantity,
+          paymentDate: dividendInfo.paymentDate,
+          paymentMonth,
+        });
+      }
+    });
+
+    // 월별, 금액순 정렬
+    return details.sort((a, b) => a.paymentMonth - b.paymentMonth || b.totalDividend - a.totalDividend);
+  }, [stockHoldings, dividendInfoMap, dividendYear]);
+
   return (
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
       <div className="max-w-lg mx-auto">
@@ -868,6 +915,68 @@ export default function AssetStatsPage() {
                     : '배당금 정보가 없는 종목입니다'}
                 </p>
               ) : null}
+
+              {/* 종목별 배당금 상세 (접기/펼치기) */}
+              {dividendDetailList.length > 0 && (
+                <div className="mt-4">
+                  <button
+                    onClick={() => setShowDividendDetail(!showDividendDetail)}
+                    className="w-full flex items-center justify-between text-sm font-medium text-slate-600 py-2 hover:text-slate-800 transition-colors"
+                  >
+                    <span>종목별 배당금 상세</span>
+                    {showDividendDetail ? (
+                      <ChevronUp className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </button>
+                  {showDividendDetail && (
+                    <div className="space-y-1 max-h-[300px] overflow-y-auto">
+                      {/* 테이블 헤더 */}
+                      <div className="flex items-center text-xs text-slate-500 py-2 border-b border-slate-100 gap-2">
+                        <span className="flex-1">종목</span>
+                        <span className="w-14 text-right">수량</span>
+                        <span className="w-16 text-right">주당</span>
+                        <span className="w-20 text-right">합계</span>
+                        <span className="w-10 text-right">월</span>
+                      </div>
+                      {/* 테이블 바디 */}
+                      {dividendDetailList.map((item) => (
+                        <div
+                          key={item.stockCode}
+                          className="flex items-center py-2 text-sm gap-2"
+                        >
+                          <span className="flex-1 text-slate-700 truncate text-xs">
+                            {item.stockName.replace(/&nbsp;/g, ' ').replace(/\(A\d+\)/, '')}
+                          </span>
+                          <span className="w-14 text-right text-slate-600 text-xs">
+                            {item.quantity.toLocaleString()}
+                          </span>
+                          <span className="w-16 text-right text-slate-600 text-xs">
+                            {item.dividendPerShare.toLocaleString()}
+                          </span>
+                          <span className="w-20 text-right font-medium text-emerald-600 text-xs">
+                            {item.totalDividend.toLocaleString()}
+                          </span>
+                          <span className="w-10 text-right text-slate-400 text-xs">
+                            {item.paymentMonth}월
+                          </span>
+                        </div>
+                      ))}
+                      {/* 합계 */}
+                      <div className="flex items-center py-2 text-sm gap-2 border-t border-slate-200 mt-2">
+                        <span className="flex-1 text-slate-700 font-medium">합계</span>
+                        <span className="w-14"></span>
+                        <span className="w-16"></span>
+                        <span className="w-20 text-right font-bold text-emerald-600">
+                          {dividendDetailList.reduce((sum, d) => sum + d.totalDividend, 0).toLocaleString()}
+                        </span>
+                        <span className="w-10"></span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
           </div>
