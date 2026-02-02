@@ -86,7 +86,13 @@ function parseYahooResponse(data: any, code: string): NextResponse {
     currency: meta.currency || 'KRW',
   };
 
-  return NextResponse.json(priceResult);
+  return NextResponse.json(priceResult, {
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'CDN-Cache-Control': 'no-store',
+      'Vercel-CDN-Cache-Control': 'no-store',
+    },
+  });
 }
 
 // 여러 종목 한번에 조회
@@ -143,7 +149,13 @@ export async function POST(request: NextRequest) {
       })
     );
 
-    return NextResponse.json({ prices: results });
+    return NextResponse.json({ prices: results }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'CDN-Cache-Control': 'no-store',
+        'Vercel-CDN-Cache-Control': 'no-store',
+      },
+    });
   } catch (error) {
     console.error('시세 일괄 조회 오류:', error);
     return NextResponse.json({ error: '시세 조회 실패' }, { status: 500 });
