@@ -92,13 +92,17 @@ export default function AssetHistoryModal({
       return;
     }
 
-    // 모달 열릴 때 검색 폼 초기화
+    // 모달 열릴 때 폼 초기화
     setSearchQuery('');
     setSearchResults([]);
     setSelectedStock(null);
     setQuantity('');
     setAvgPrice('');
     setCurrentPrice(null);
+    // 수정 모드 초기화
+    setEditingHolding(null);
+    setEditQuantity('');
+    setEditAvgPrice('');
 
     setIsLoadingHoldings(true);
     const unsubscribe = subscribeToStockHoldings(asset.id, (newHoldings) => {
