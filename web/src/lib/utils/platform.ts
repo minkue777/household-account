@@ -39,6 +39,14 @@ export const Platform = {
   },
 
   /**
+   * 모바일 디바이스 여부 (Android, iOS)
+   */
+  isMobile: (): boolean => {
+    if (typeof window === 'undefined') return false;
+    return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  },
+
+  /**
    * 서버 환경 여부 (SSR)
    */
   isServer: (): boolean => {

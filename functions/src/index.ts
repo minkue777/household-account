@@ -83,6 +83,9 @@ export const onExpenseUpdated = functions
         type: 'new_expense',
       },
       webpush: {
+        notification: {
+          icon: 'https://household-account-app-demo-v1.vercel.app/icons/icon-192x192.png',
+        },
         fcmOptions: {
           link: `/?edit=${expenseId}`,
         },
@@ -188,6 +191,9 @@ export const onExpenseCreated = functions
         type: 'new_expense',
       },
       webpush: {
+        notification: {
+          icon: 'https://household-account-app-demo-v1.vercel.app/icons/icon-192x192.png',
+        },
         fcmOptions: {
           link: `/?edit=${expenseId}`,
         },

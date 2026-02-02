@@ -34,6 +34,11 @@ export function initializeMessaging(): Messaging | null {
 export async function requestNotificationPermission(): Promise<string | null> {
   if (Platform.isServer()) return null;
 
+  // 모바일에서만 FCM 토큰 등록 (PC 제외)
+  if (!Platform.isMobile()) {
+    return null;
+  }
+
   // 알림 지원 확인
   if (!Platform.supportsNotification()) {
     return null;
