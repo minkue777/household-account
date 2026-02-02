@@ -777,6 +777,62 @@ export async function getAllStockHoldings(): Promise<StockHolding[]> {
 }
 
 /**
+ * 모든 주식 보유종목의 실시간 가격 갱신
+ * - 네이버 금융 API로 현재가 조회
+ * - Firestore 업데이트
+ * - 계좌별 총액 자동 갱신
+ */
+export async function refreshAllStockPrices(): Promise<void> {
+  const holdings = await getAllStockHoldings();
+  if (holdings.length === 0) return;
+
+  // 종목코드별로 그룹화 (중복 API 호출 방지)
+  const holdingsByCode: Record<string, StockHolding[]> = {};
+  holdings.forEach((h) => {
+    if (!holdingsByCode[h.stockCode]) {
+      holdingsByCode[h.stockCode] = [];
+    }
+    holdingsByCode[h.stockCode].push(h);
+  });
+
+  // 업데이트된 assetId 추적 (중복 계산 방지)
+  const updatedAssetIds = new Set<string>();
+
+  // 종목별로 가격 조회 및 업데이트
+  await Promise.all(
+    Object.entries(holdingsByCode).map(async ([stockCode, stockHoldings]) => {
+      try {
+        const response = await fetch(`/api/stock/price?code=${stockCode}`);
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const newPrice = data.price;
+
+        // 해당 종목의 모든 보유 내역 업데이트
+        await Promise.all(
+          stockHoldings.map(async (holding) => {
+            if (holding.currentPrice !== newPrice) {
+              await updateDoc(doc(db, HOLDINGS_COLLECTION, holding.id), {
+                currentPrice: newPrice,
+                updatedAt: Timestamp.now(),
+              });
+              updatedAssetIds.add(holding.assetId);
+            }
+          })
+        );
+      } catch (error) {
+        console.error(`가격 갱신 실패 (${stockCode}):`, error);
+      }
+    })
+  );
+
+  // 변경된 자산들의 총액 업데이트
+  await Promise.all(
+    Array.from(updatedAssetIds).map((assetId) => updateAssetBalanceFromHoldings(assetId))
+  );
+}
+
+/**
  * 자산 삭제 시 연결된 보유 종목도 함께 삭제
  */
 export async function deleteAssetWithHoldings(assetId: string): Promise<void> {

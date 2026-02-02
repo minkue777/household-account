@@ -10,6 +10,7 @@ import {
   saveMonthlySnapshot,
   saveDailyTotalSnapshot,
   addSampleAssets,
+  refreshAllStockPrices,
 } from '@/lib/assetService';
 import {
   AssetSummaryCard,
@@ -60,6 +61,11 @@ export default function AssetsPage() {
       setIsLoading(false);
     });
     return () => unsubscribe();
+  }, []);
+
+  // 페이지 로드 시 주식 가격 자동 갱신
+  useEffect(() => {
+    refreshAllStockPrices().catch(console.error);
   }, []);
 
   // 월별 변동액 조회 및 스냅샷 저장
