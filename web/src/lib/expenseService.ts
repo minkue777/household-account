@@ -16,6 +16,7 @@ import {
 import { db } from './firebase';
 import { Expense, MergedExpenseInfo } from '@/types/expense';
 import { getStoredHouseholdKey } from './householdService';
+import { DeviceOwnerStorage } from './storage/deviceOwnerStorage';
 
 const COLLECTION_NAME = 'expenses';
 
@@ -61,10 +62,12 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
  */
 export async function addExpense(expense: Omit<Expense, 'id'>): Promise<string> {
   const householdId = getHouseholdId();
+  const createdBy = DeviceOwnerStorage.get();
   const docRef = await addDoc(collection(db, COLLECTION_NAME), {
     ...expense,
     householdId,
     createdAt: Timestamp.now(),
+    ...(createdBy && { createdBy }),
   });
   return docRef.id;
 }
@@ -82,7 +85,11 @@ export async function updateExpense(id: string, data: Partial<Expense>): Promise
  */
 export async function notifyPartner(id: string): Promise<void> {
   const docRef = doc(db, COLLECTION_NAME, id);
-  await updateDoc(docRef, { notifyPartner: true });
+  const deviceOwner = DeviceOwnerStorage.get();
+  await updateDoc(docRef, {
+    notifyPartnerAt: Timestamp.now(),
+    notifyPartnerBy: deviceOwner || null,
+  });
 }
 
 /**

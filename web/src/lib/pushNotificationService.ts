@@ -2,6 +2,7 @@ import { getMessaging, getToken, onMessage, Messaging } from 'firebase/messaging
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from './firebase';
 import { Platform } from './utils/platform';
+import { DeviceOwnerStorage } from './storage/deviceOwnerStorage';
 
 // VAPID 키 (Firebase Console > 프로젝트 설정 > 클라우드 메시징 > 웹 푸시 인증서에서 생성)
 const VAPID_KEY = 'BLI2AoMlLXi5yMOfCAPdup52iEoPoItcWzFQws-Vb5xviQ9VA1ex7oTLZ9M5kqDccQoYAiMaNSUQZSjURD98y3k';
@@ -95,9 +96,37 @@ async function saveTokenToServer(token: string): Promise<void> {
       language: navigator.language,
     };
 
-    await saveFcmToken({ token, deviceInfo, householdId: householdKey });
+    const deviceOwner = DeviceOwnerStorage.get();
+
+    await saveFcmToken({ token, deviceInfo, householdId: householdKey, deviceOwner });
   } catch (error) {
     throw error;
+  }
+}
+
+/**
+ * FCM 토큰 재등록 (deviceOwner 변경 시 호출)
+ */
+export async function refreshFcmToken(): Promise<void> {
+  if (Platform.isServer()) return;
+
+  if (!messaging) {
+    messaging = initializeMessaging();
+  }
+
+  if (!messaging) return;
+
+  try {
+    const token = await getToken(messaging, {
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: await navigator.serviceWorker.ready,
+    });
+
+    if (token) {
+      await saveTokenToServer(token);
+    }
+  } catch (error) {
+    // 무시
   }
 }
 

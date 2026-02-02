@@ -97,6 +97,7 @@ export default function SettingsPage() {
   const [accountBankCode, setAccountBankCode] = useState('');
   const [accountNo, setAccountNo] = useState('');
 
+
   useEffect(() => {
     setIsIOSDevice(isIOS());
     // 개인 계좌 로드 (localStorage)

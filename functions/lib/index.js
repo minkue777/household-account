@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.addExpenseFromMessage = exports.saveFcmToken = exports.onExpenseUpdated = void 0;
+exports.addExpenseFromMessage = exports.saveFcmToken = exports.onExpenseCreated = exports.onExpenseUpdated = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
@@ -42,22 +42,22 @@ const messaging = admin.messaging();
 // iOS 단축어용 API 토큰 (환경변수로 관리 권장)
 const API_TOKEN = 'household-account-ios-shortcut-2024';
 /**
- * 지출이 수정되면 iOS PWA에 푸시 알림 전송
- * notifyPartner가 false → true로 변경될 때만 알림 전송
+ * "또니에게" 버튼 클릭 시 상대방에게 푸시 알림 전송
+ * notifyPartnerAt 타임스탬프가 변경될 때마다 알림 전송 (매번 가능)
  */
 exports.onExpenseUpdated = functions
     .region('asia-northeast3') // 서울 리전
     .firestore
     .document('expenses/{expenseId}')
     .onUpdate(async (change, context) => {
-    var _a;
+    var _a, _b, _c, _d, _e;
     const before = change.before.data();
     const after = change.after.data();
     const expenseId = context.params.expenseId;
-    // notifyPartner가 false → true로 변경된 경우에만 알림 전송
-    const wasNotifying = before.notifyPartner === true;
-    const isNotifying = after.notifyPartner === true;
-    if (wasNotifying || !isNotifying) {
+    // notifyPartnerAt이 변경된 경우에만 알림 전송 (타임스탬프 기반)
+    const beforeTime = ((_b = (_a = before.notifyPartnerAt) === null || _a === void 0 ? void 0 : _a.toMillis) === null || _b === void 0 ? void 0 : _b.call(_a)) || before.notifyPartnerAt || 0;
+    const afterTime = ((_d = (_c = after.notifyPartnerAt) === null || _c === void 0 ? void 0 : _c.toMillis) === null || _d === void 0 ? void 0 : _d.call(_c)) || after.notifyPartnerAt || 0;
+    if (beforeTime === afterTime || afterTime === 0) {
         return null;
     }
     const expense = after;
@@ -65,7 +65,9 @@ exports.onExpenseUpdated = functions
     if (!householdId) {
         return null;
     }
-    // 같은 householdId를 가진 토큰만 가져오기
+    // 알림 보낸 사람 확인 (notifyPartnerBy 필드)
+    const notifyBy = after.notifyPartnerBy;
+    // 같은 householdId를 가진 토큰 중 notifyBy와 다른 deviceOwner만 가져오기
     const tokensSnapshot = await db.collection('fcmTokens')
         .where('householdId', '==', householdId)
         .get();
@@ -74,16 +76,17 @@ exports.onExpenseUpdated = functions
     }
     const tokens = [];
     tokensSnapshot.forEach(doc => {
-        const token = doc.data().token;
-        if (token) {
-            tokens.push(token);
+        const data = doc.data();
+        // notifyBy가 있으면 다른 사람에게만, 없으면 모두에게
+        if (data.token && (!notifyBy || data.deviceOwner !== notifyBy)) {
+            tokens.push(data.token);
         }
     });
     if (tokens.length === 0) {
         return null;
     }
     // 금액 포맷팅
-    const amount = ((_a = expense.amount) === null || _a === void 0 ? void 0 : _a.toLocaleString('ko-KR')) || '0';
+    const amount = ((_e = expense.amount) === null || _e === void 0 ? void 0 : _e.toLocaleString('ko-KR')) || '0';
     const merchant = expense.merchant || '알 수 없는 가맹점';
     // 푸시 알림 메시지
     const message = {
@@ -133,12 +136,105 @@ exports.onExpenseUpdated = functions
     }
 });
 /**
+ * 새 지출이 생성되면 상대방에게 푸시 알림 전송
+ * - iOS 단축어: 또니 → 망고에게 알림
+ * - 웹앱 (createdBy 있음): 생성자가 아닌 상대방에게 알림
+ */
+exports.onExpenseCreated = functions
+    .region('asia-northeast3')
+    .firestore
+    .document('expenses/{expenseId}')
+    .onCreate(async (snapshot, context) => {
+    var _a;
+    const expense = snapshot.data();
+    const expenseId = context.params.expenseId;
+    const householdId = expense.householdId;
+    if (!householdId) {
+        return null;
+    }
+    // 알림 보낼 대상 결정
+    // iOS 단축어: source가 'ios-shortcut'이면 또니가 등록한 것
+    // 웹앱: createdBy 필드로 누가 등록했는지 확인
+    const createdBy = expense.source === 'ios-shortcut' ? '또니' : expense.createdBy;
+    // createdBy가 없으면 알림 안 보냄 (누가 등록했는지 모름)
+    if (!createdBy) {
+        return null;
+    }
+    // 같은 householdId를 가진 토큰 중 createdBy와 다른 deviceOwner만 가져오기
+    const tokensSnapshot = await db.collection('fcmTokens')
+        .where('householdId', '==', householdId)
+        .get();
+    if (tokensSnapshot.empty) {
+        return null;
+    }
+    const tokens = [];
+    tokensSnapshot.forEach(doc => {
+        const data = doc.data();
+        // createdBy와 다른 사람의 기기에만 알림
+        if (data.token && data.deviceOwner !== createdBy) {
+            tokens.push(data.token);
+        }
+    });
+    if (tokens.length === 0) {
+        return null;
+    }
+    // 금액 포맷팅
+    const amount = ((_a = expense.amount) === null || _a === void 0 ? void 0 : _a.toLocaleString('ko-KR')) || '0';
+    const merchant = expense.merchant || '알 수 없는 가맹점';
+    // 푸시 알림 메시지
+    const message = {
+        tokens: tokens,
+        notification: {
+            title: `📱 ${merchant}`,
+            body: `${amount}원 - ${createdBy}님이 등록한 지출이에요`,
+        },
+        data: {
+            expenseId: expenseId,
+            merchant: merchant,
+            amount: String(expense.amount || 0),
+            date: expense.date || '',
+            time: expense.time || '',
+            category: expense.category || 'etc',
+            type: 'new_expense',
+        },
+        webpush: {
+            fcmOptions: {
+                link: `/?edit=${expenseId}`,
+            },
+        },
+    };
+    try {
+        const response = await messaging.sendEachForMulticast(message);
+        // 실패한 토큰 정리
+        if (response.failureCount > 0) {
+            const failedTokens = [];
+            response.responses.forEach((resp, idx) => {
+                if (!resp.success) {
+                    failedTokens.push(tokens[idx]);
+                }
+            });
+            // 실패한 토큰 삭제
+            const deletePromises = failedTokens.map(async (token) => {
+                const tokenQuery = await db.collection('fcmTokens')
+                    .where('token', '==', token)
+                    .get();
+                tokenQuery.forEach(doc => doc.ref.delete());
+            });
+            await Promise.all(deletePromises);
+        }
+        return response;
+    }
+    catch (error) {
+        return null;
+    }
+});
+/**
  * FCM 토큰 저장 API
  */
 exports.saveFcmToken = functions
     .region('asia-northeast3')
     .https.onCall(async (data, context) => {
-    const { token, deviceInfo, householdId } = data;
+    const { token, deviceInfo, householdId, deviceOwner } = data;
     if (!token) {
         throw new functions.https.HttpsError('invalid-argument', 'FCM 토큰이 필요합니다.');
     }
@@ -157,6 +253,7 @@ exports.saveFcmToken = functions
                 lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
                 deviceInfo: deviceInfo || null,
                 householdId: householdId,
+                deviceOwner: deviceOwner || null,
             });
             return { success: true, message: '토큰 업데이트 완료' };
         }
@@ -167,6 +264,7 @@ exports.saveFcmToken = functions
             lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
             deviceInfo: deviceInfo || null,
             householdId: householdId,
+            deviceOwner: deviceOwner || null,
         });
         return { success: true, message: '토큰 저장 완료' };
     }
@@ -184,7 +282,7 @@ function parseCardMessage(message) {
         }
         const amount = parseInt(amountMatch[1].replace(/,/g, ''), 10);
         // 날짜/시간/가맹점 찾기: "01/29 16:49 롯데슈퍼동탄디에"
-        const dateTimeMatch = message.match(/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})\s+(.+?)(?:\n|$)/);
+        const dateTimeMatch = message.match(/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})\s+(.+?)(?:\s*누적|\n|$)/);
         if (!dateTimeMatch) {
             return null;
         }
@@ -192,7 +290,7 @@ function parseCardMessage(message) {
         const day = dateTimeMatch[2];
         const hour = dateTimeMatch[3];
         const minute = dateTimeMatch[4];
-        const merchant = dateTimeMatch[5].trim();
+        const merchant = dateTimeMatch[5].trim().replace(/\s*누적.*$/, '');
         // 현재 연도 사용 (1월인데 12월 결제면 작년으로 처리)
         const now = new Date();
         let year = now.getFullYear();
@@ -203,14 +301,16 @@ function parseCardMessage(message) {
         const date = `${year}-${month}-${day}`;
         const time = `${hour}:${minute}`;
         // 카드 이름 찾기: "삼성1876승인"
-        const cardMatch = message.match(/(삼성|신한|국민|현대|롯데|하나|우리|BC|NH)[\d]*승인/);
-        const cardName = cardMatch ? cardMatch[0].replace('승인', '') : '삼성카드';
+        const cardMatch = message.match(/(삼성|신한|국민|현대|롯데|하나|우리|BC|NH)([\d]*)승인/);
+        const cardName = cardMatch ? cardMatch[1] + (cardMatch[2] || '') : '삼성카드';
+        const cardLastFour = cardMatch && cardMatch[2] ? cardMatch[2] : undefined;
         return {
             amount,
             merchant,
             date,
             time,
             cardName,
+            cardLastFour,
         };
     }
     catch (error) {
@@ -276,12 +376,16 @@ exports.addExpenseFromMessage = functions
             date: parsed.date,
             time: parsed.time,
             category: 'etc', // 기본 카테고리
-            memo: `${parsed.cardName} (iOS 단축어)`,
+            memo: '',
             householdId: householdId,
             source: 'ios-shortcut',
-            notifyPartner: true, // 안드로이드에 푸시 알림
+            notifyPartner: false, // "또니에게" 버튼으로 알림 보낼 수 있도록
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
         };
+        // 카드 끝 4자리가 있으면 추가
+        if (parsed.cardLastFour) {
+            expenseData.cardLastFour = parsed.cardLastFour;
+        }
         const docRef = await db.collection('expenses').add(expenseData);
         res.status(200).json({
             success: true,
