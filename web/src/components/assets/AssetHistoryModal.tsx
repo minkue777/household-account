@@ -123,6 +123,43 @@ export default function AssetHistoryModal({
     fetchGoldPrice();
   }, [isOpen, asset]);
 
+  // 실시간 가격으로 보유 종목 업데이트
+  const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
+
+  const refreshHoldingPrices = async () => {
+    if (holdings.length === 0 || !asset) return;
+
+    setIsRefreshingPrices(true);
+    try {
+      const updatedHoldings = await Promise.all(
+        holdings.map(async (holding) => {
+          try {
+            const response = await fetch(`/api/stock/price?code=${holding.stockCode}`);
+            if (response.ok) {
+              const data = await response.json();
+              // Firestore 업데이트
+              await updateStockHolding(holding.id, asset.id, { currentPrice: data.price });
+              return { ...holding, currentPrice: data.price };
+            }
+          } catch (error) {
+            console.error(`가격 조회 실패 (${holding.stockCode}):`, error);
+          }
+          return holding;
+        })
+      );
+      setHoldings(updatedHoldings);
+    } finally {
+      setIsRefreshingPrices(false);
+    }
+  };
+
+  // 모달 열릴 때 자동으로 가격 새로고침
+  useEffect(() => {
+    if (isOpen && asset?.type === 'stock' && holdings.length > 0 && !isLoadingHoldings) {
+      refreshHoldingPrices();
+    }
+  }, [isOpen, asset?.type, holdings.length, isLoadingHoldings]);
+
   // 배당금 정보 조회
   const fetchDividendInfo = async (stockCode: string) => {
     if (dividendInfoMap[stockCode] || loadingDividends.has(stockCode)) return;
@@ -724,7 +761,19 @@ export default function AssetHistoryModal({
             ) : isStock ? (
               // 주식: 보유 종목 목록
               <>
-                  <h4 className="text-sm font-medium text-slate-500 mb-3">보유 종목</h4>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-medium text-slate-500">보유 종목</h4>
+                    {holdings.length > 0 && (
+                      <button
+                        onClick={refreshHoldingPrices}
+                        disabled={isRefreshingPrices}
+                        className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isRefreshingPrices ? 'animate-spin' : ''}`} />
+                        {isRefreshingPrices ? '갱신중...' : '시세 갱신'}
+                      </button>
+                    )}
+                  </div>
                   {isLoadingHoldings ? (
                     <div className="text-center py-8 text-slate-400">로딩 중...</div>
                   ) : holdings.length === 0 ? (
