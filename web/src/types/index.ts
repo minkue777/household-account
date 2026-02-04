@@ -3,4 +3,3 @@ export * from './expense';
 export * from './category';
 export * from './household';
 export * from './merchant';
-export * from './budget';

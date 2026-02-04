@@ -44,7 +44,7 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
     amount: data.amount,
     // Android는 대문자로 저장하므로 소문자로 변환
     category: (data.category || 'etc').toLowerCase(),
-    cardType: (data.cardType || 'main').toLowerCase(),
+    cardType: data.cardType?.toLowerCase() || (data.cardLastFour === '1876' ? 'sam' : 'main'),
     cardLastFour: data.cardLastFour,
     memo: data.memo,
     mergedFrom: data.mergedFrom,

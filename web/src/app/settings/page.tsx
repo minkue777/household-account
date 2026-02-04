@@ -28,6 +28,7 @@ import {
   updateRecurringExpense,
   deleteRecurringExpense,
 } from '@/lib/recurringExpenseService';
+import { fixFeb2ChangeAmount } from '@/lib/assetService';
 
 export default function SettingsPage() {
   const {
@@ -72,6 +73,10 @@ export default function SettingsPage() {
 
   // 기본 카테고리 설정
   const [defaultCategory, setDefaultCategory] = useState<string>('');
+
+  // 복구 상태
+  const [fixResult, setFixResult] = useState<string | null>(null);
+  const [isFixing, setIsFixing] = useState(false);
 
   // 정기 지출 상태
   const [isRecurringOpen, setIsRecurringOpen] = useState(false);
@@ -1332,6 +1337,32 @@ export default function SettingsPage() {
             <NotificationSettings />
           </div>
         )}
+
+        {/* 1회성 복구 */}
+        <div className="p-4 bg-orange-50 rounded-xl border border-orange-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-orange-800">2월 자산 이력 복구</p>
+              <p className="text-xs text-orange-600">2/2, 2/3, 2/4 changeAmount 수정</p>
+            </div>
+            <button
+              onClick={async () => {
+                setIsFixing(true);
+                setFixResult(null);
+                const result = await fixFeb2ChangeAmount();
+                setFixResult(result.message);
+                setIsFixing(false);
+              }}
+              disabled={isFixing}
+              className="px-3 py-1.5 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600 disabled:opacity-50"
+            >
+              {isFixing ? '복구 중...' : '복구 실행'}
+            </button>
+          </div>
+          {fixResult && (
+            <pre className="mt-2 text-sm text-orange-700 whitespace-pre-wrap">{fixResult}</pre>
+          )}
+        </div>
 
         {/* 안내 문구 */}
         <div className="p-4 bg-slate-100 rounded-xl">

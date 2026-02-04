@@ -8,13 +8,11 @@ import CategorySummary from '@/components/CategorySummary';
 import ExpenseDetail from '@/components/ExpenseDetail';
 import AddExpenseModal from '@/components/AddExpenseModal';
 import SearchModal from '@/components/SearchModal';
-import BudgetTransferModal from '@/components/BudgetTransferModal';
 import Portal from '@/components/Portal';
 import { Expense, Category } from '@/types/expense';
 import BalanceCards from '@/components/BalanceCards';
 import { subscribeToMonthlyExpenses, updateExpense, addManualExpense, deleteExpense, splitExpense, mergeExpenses, unmergeExpense, SplitItem, generateSplitGroupId, addExpense } from '@/lib/expenseService';
 import { addMerchantRule } from '@/lib/merchantRuleService';
-import { subscribeToMonthlyBudgetTransfers, calculateBudgetAdjustments, BudgetTransfer } from '@/lib/budgetTransferService';
 import { getStoredHouseholdKey } from '@/lib/householdService';
 import { processRecurringExpenses } from '@/lib/recurringExpenseService';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -31,9 +29,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
-  const [showBudgetTransferModal, setShowBudgetTransferModal] = useState(false);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
-  const [budgetTransfers, setBudgetTransfers] = useState<BudgetTransfer[]>([]);
   const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
   const { themeConfig } = useTheme();
   const { getCategoryLabel, getCategoryColor, getCategoryBudget } = useCategoryContext();
@@ -73,14 +69,6 @@ export default function Home() {
     return () => unsubscribe();
   }, [currentYear, currentMonth]);
 
-  // 예산 이동 구독
-  useEffect(() => {
-    const householdId = getStoredHouseholdKey() || 'guest';
-    const yearMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
-    const unsubscribe = subscribeToMonthlyBudgetTransfers(householdId, yearMonth, setBudgetTransfers);
-    return () => unsubscribe();
-  }, [currentYear, currentMonth]);
-
   // URL에서 edit 파라미터 처리 (푸시 알림 클릭 시)
   useEffect(() => {
     const editId = searchParams.get('edit');
@@ -110,11 +98,6 @@ export default function Home() {
       }
     }
   }, [editExpenseId, expenses]);
-
-  // 예산 조정값 계산
-  const budgetAdjustments = useMemo(() => {
-    return calculateBudgetAdjustments(budgetTransfers);
-  }, [budgetTransfers]);
 
   // 선택된 날짜의 지출
   const selectedDateExpenses = useMemo(() => {
@@ -340,14 +323,6 @@ export default function Home() {
           onSplitExpense={handleSplitExpense}
         />
 
-        {/* 예산 조정 모달 */}
-        <BudgetTransferModal
-          isOpen={showBudgetTransferModal}
-          onClose={() => setShowBudgetTransferModal(false)}
-          year={currentYear}
-          month={currentMonth}
-        />
-
         {/* 잔액 요약 카드 - 모바일 */}
         <BalanceCards
           currentMonth={currentMonth}
@@ -395,22 +370,11 @@ export default function Home() {
 
           {/* 카테고리별 지출 - 맨 아래 */}
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6 transition-all hover:shadow-md">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-slate-700">
-                카테고리별 지출
-              </h3>
-              <button
-                onClick={() => setShowBudgetTransferModal(true)}
-                className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                </svg>
-                예산 조정
-              </button>
-            </div>
+            <h3 className="text-sm font-semibold text-slate-700 mb-4">
+              카테고리별 지출
+            </h3>
             {expenses.length > 0 ? (
-              <CategorySummary expenses={expenses} onCategoryClick={handleCategoryClick} budgetAdjustments={budgetAdjustments} />
+              <CategorySummary expenses={expenses} onCategoryClick={handleCategoryClick} />
             ) : (
               <div className="text-center py-4 text-slate-400">
                 {isLoading ? '로딩중...' : '데이터 없음'}
@@ -425,22 +389,11 @@ export default function Home() {
           <div className="lg:col-span-1 space-y-6">
             {/* 카테고리별 지출 */}
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6 transition-all hover:shadow-md">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-slate-700">
-                  카테고리별 지출
-                </h3>
-                <button
-                  onClick={() => setShowBudgetTransferModal(true)}
-                  className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                  </svg>
-                  예산 조정
-                </button>
-              </div>
+              <h3 className="text-sm font-semibold text-slate-700 mb-4">
+                카테고리별 지출
+              </h3>
               {expenses.length > 0 ? (
-                <CategorySummary expenses={expenses} onCategoryClick={handleCategoryClick} budgetAdjustments={budgetAdjustments} />
+                <CategorySummary expenses={expenses} onCategoryClick={handleCategoryClick} />
               ) : (
                 <div className="text-center py-4 text-slate-400">
                   {isLoading ? '로딩중...' : '데이터 없음'}
@@ -522,9 +475,7 @@ export default function Home() {
                     </h3>
                     {(() => {
                       const total = selectedCategoryExpenses.reduce((sum, e) => sum + e.amount, 0);
-                      const originalBudget = getCategoryBudget(selectedCategory);
-                      const adjustment = budgetAdjustments[selectedCategory] || 0;
-                      const budget = originalBudget !== null ? originalBudget + adjustment : null;
+                      const budget = getCategoryBudget(selectedCategory);
                       const hasBudget = budget !== null && budget > 0;
                       const percentage = hasBudget ? Math.round((total / budget) * 100) : 0;
                       const isOverBudget = hasBudget && total > budget;
@@ -535,11 +486,6 @@ export default function Home() {
                           <p className={isOverBudget ? 'text-red-500 font-medium' : ''}>
                             {total.toLocaleString()}
                             {hasBudget ? ` / ${budget.toLocaleString()}원 (${percentage}%)` : '원'}
-                            {adjustment !== 0 && (
-                              <span className={`ml-1 ${adjustment > 0 ? 'text-green-500' : 'text-orange-500'}`}>
-                                ({adjustment > 0 ? '+' : ''}{adjustment.toLocaleString()})
-                              </span>
-                            )}
                           </p>
                         </div>
                       );

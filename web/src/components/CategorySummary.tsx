@@ -7,10 +7,9 @@ import { useCategoryContext } from '@/contexts/CategoryContext';
 interface CategorySummaryProps {
   expenses: Expense[];
   onCategoryClick?: (category: Category, categoryExpenses: Expense[]) => void;
-  budgetAdjustments?: Record<string, number>;
 }
 
-export default function CategorySummary({ expenses, onCategoryClick, budgetAdjustments = {} }: CategorySummaryProps) {
+export default function CategorySummary({ expenses, onCategoryClick }: CategorySummaryProps) {
   const { categories, getCategoryLabel, getCategoryColor, getCategoryBudget, isLoading } = useCategoryContext();
 
   const categorySummary = useMemo(() => {
@@ -48,9 +47,7 @@ export default function CategorySummary({ expenses, onCategoryClick, budgetAdjus
   return (
     <div className="space-y-2">
       {categorySummary.map(({ category, total, count }) => {
-        const originalBudget = getCategoryBudget(category);
-        const adjustment = budgetAdjustments[category] || 0;
-        const budget = originalBudget !== null ? originalBudget + adjustment : null;
+        const budget = getCategoryBudget(category);
         const color = getCategoryColor(category);
         const label = getCategoryLabel(category);
         const hasBudget = budget !== null && budget > 0;

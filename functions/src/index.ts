@@ -418,7 +418,6 @@ export const addExpenseFromMessage = functions
         memo: '',
         householdId: householdId,
         source: 'ios-shortcut',
-        notifyPartner: false, // "또니에게" 버튼으로 알림 보낼 수 있도록
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       };
 

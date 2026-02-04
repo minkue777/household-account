@@ -397,9 +397,10 @@ async function saveDailySnapshot(
 
     if (existingSnap.exists()) {
       const existingData = existingSnap.data();
-      const previousBalance = existingData.balance || 0;
+      // 기존에 저장된 previousBalance 유지 (어제의 잔액)
+      const previousBalance = existingData.previousBalance ?? 0;
 
-      if (previousBalance !== balance) {
+      if (existingData.balance !== balance) {
         await setDoc(doc(db, HISTORY_COLLECTION, snapshotId), {
           householdId,
           assetId,
@@ -866,4 +867,71 @@ export async function deleteAssetWithHoldings(assetId: string): Promise<void> {
     // 자산 삭제
     transaction.delete(doc(db, ASSETS_COLLECTION, assetId));
   });
+}
+
+/**
+ * [1회성] 2월 asset_history changeAmount 복구
+ * changeAmount = 다음날 balance - 오늘 balance
+ */
+export async function fixFeb2ChangeAmount(): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  const householdId = getHouseholdId();
+  const dates = ['2026-02-02', '2026-02-03', '2026-02-04'];
+  const results: string[] = [];
+
+  try {
+    for (const date of dates) {
+      const currentDate = new Date(date);
+      const nextDate = new Date(currentDate);
+      nextDate.setDate(nextDate.getDate() + 1);
+      const nextDateStr = nextDate.toISOString().split('T')[0];
+
+      const currentId = `${householdId}_total_${date}`;
+      const nextId = `${householdId}_total_${nextDateStr}`;
+
+      const [currentSnap, nextSnap] = await Promise.all([
+        getDoc(doc(db, HISTORY_COLLECTION, currentId)),
+        getDoc(doc(db, HISTORY_COLLECTION, nextId)),
+      ]);
+
+      if (!currentSnap.exists()) {
+        results.push(`${date}: 데이터 없음`);
+        continue;
+      }
+      if (!nextSnap.exists()) {
+        results.push(`${date}: 다음날 데이터 없음`);
+        continue;
+      }
+
+      const currentData = currentSnap.data();
+      const nextData = nextSnap.data();
+
+      const currentBalance = currentData.balance || 0;
+      const nextBalance = nextData.balance || 0;
+      const correctChangeAmount = nextBalance - currentBalance;
+      const beforeChangeAmount = currentData.changeAmount;
+
+      if (beforeChangeAmount === correctChangeAmount) {
+        results.push(`${date}: 이미 정상`);
+        continue;
+      }
+
+      await updateDoc(doc(db, HISTORY_COLLECTION, currentId), {
+        changeAmount: correctChangeAmount,
+        memo: '복구됨',
+      });
+
+      results.push(`${date}: ${beforeChangeAmount?.toLocaleString() ?? '?'}원 → ${correctChangeAmount.toLocaleString()}원`);
+    }
+
+    return {
+      success: true,
+      message: results.join('\n'),
+    };
+  } catch (error) {
+    console.error('복구 오류:', error);
+    return { success: false, message: '복구 중 오류 발생' };
+  }
 }
