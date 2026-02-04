@@ -879,51 +879,56 @@ export async function fixFeb2ChangeAmount(): Promise<{
 }> {
   const householdId = getHouseholdId();
   const dates = ['2026-02-02', '2026-02-03', '2026-02-04'];
+  const types = ['total', 'financial'];
   const results: string[] = [];
 
   try {
-    for (const date of dates) {
-      const currentDate = new Date(date);
-      const nextDate = new Date(currentDate);
-      nextDate.setDate(nextDate.getDate() + 1);
-      const nextDateStr = nextDate.toISOString().split('T')[0];
+    for (const type of types) {
+      results.push(`[${type}]`);
 
-      const currentId = `${householdId}_total_${date}`;
-      const nextId = `${householdId}_total_${nextDateStr}`;
+      for (const date of dates) {
+        const currentDate = new Date(date);
+        const nextDate = new Date(currentDate);
+        nextDate.setDate(nextDate.getDate() + 1);
+        const nextDateStr = nextDate.toISOString().split('T')[0];
 
-      const [currentSnap, nextSnap] = await Promise.all([
-        getDoc(doc(db, HISTORY_COLLECTION, currentId)),
-        getDoc(doc(db, HISTORY_COLLECTION, nextId)),
-      ]);
+        const currentId = `${householdId}_${type}_${date}`;
+        const nextId = `${householdId}_${type}_${nextDateStr}`;
 
-      if (!currentSnap.exists()) {
-        results.push(`${date}: 데이터 없음`);
-        continue;
+        const [currentSnap, nextSnap] = await Promise.all([
+          getDoc(doc(db, HISTORY_COLLECTION, currentId)),
+          getDoc(doc(db, HISTORY_COLLECTION, nextId)),
+        ]);
+
+        if (!currentSnap.exists()) {
+          results.push(`${date}: 데이터 없음`);
+          continue;
+        }
+        if (!nextSnap.exists()) {
+          results.push(`${date}: 다음날 데이터 없음`);
+          continue;
+        }
+
+        const currentData = currentSnap.data();
+        const nextData = nextSnap.data();
+
+        const currentBalance = currentData.balance || 0;
+        const nextBalance = nextData.balance || 0;
+        const correctChangeAmount = nextBalance - currentBalance;
+        const beforeChangeAmount = currentData.changeAmount;
+
+        if (beforeChangeAmount === correctChangeAmount) {
+          results.push(`${date}: 이미 정상`);
+          continue;
+        }
+
+        await updateDoc(doc(db, HISTORY_COLLECTION, currentId), {
+          changeAmount: correctChangeAmount,
+          memo: '복구됨',
+        });
+
+        results.push(`${date}: ${beforeChangeAmount?.toLocaleString() ?? '?'}원 → ${correctChangeAmount.toLocaleString()}원`);
       }
-      if (!nextSnap.exists()) {
-        results.push(`${date}: 다음날 데이터 없음`);
-        continue;
-      }
-
-      const currentData = currentSnap.data();
-      const nextData = nextSnap.data();
-
-      const currentBalance = currentData.balance || 0;
-      const nextBalance = nextData.balance || 0;
-      const correctChangeAmount = nextBalance - currentBalance;
-      const beforeChangeAmount = currentData.changeAmount;
-
-      if (beforeChangeAmount === correctChangeAmount) {
-        results.push(`${date}: 이미 정상`);
-        continue;
-      }
-
-      await updateDoc(doc(db, HISTORY_COLLECTION, currentId), {
-        changeAmount: correctChangeAmount,
-        memo: '복구됨',
-      });
-
-      results.push(`${date}: ${beforeChangeAmount?.toLocaleString() ?? '?'}원 → ${correctChangeAmount.toLocaleString()}원`);
     }
 
     return {
