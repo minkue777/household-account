@@ -424,6 +424,8 @@ export const addExpenseFromMessage = functions
       // 카드 끝 4자리가 있으면 추가
       if (parsed.cardLastFour) {
         expenseData.cardLastFour = parsed.cardLastFour;
+        // 삼성카드(1876)면 cardType을 'sam'으로 설정
+        expenseData.cardType = parsed.cardLastFour === '1876' ? 'sam' : 'main';
       }
 
       const docRef = await db.collection('expenses').add(expenseData);
