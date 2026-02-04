@@ -381,6 +381,40 @@ export async function getMonthlyAssetChange(currentTotal: number): Promise<numbe
 }
 
 /**
+ * 오늘 자산 변동액 계산 (전일 대비)
+ */
+export async function getDailyAssetChange(): Promise<number> {
+  const householdId = getHouseholdId();
+  const today = new Date().toISOString().split('T')[0];
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+  const todayId = `${householdId}_financial_${today}`;
+  const yesterdayId = `${householdId}_financial_${yesterdayStr}`;
+
+  try {
+    const [todaySnap, yesterdaySnap] = await Promise.all([
+      getDoc(doc(db, HISTORY_COLLECTION, todayId)),
+      getDoc(doc(db, HISTORY_COLLECTION, yesterdayId)),
+    ]);
+
+    if (!todaySnap.exists() || !yesterdaySnap.exists()) {
+      return 0;
+    }
+
+    const todayBalance = todaySnap.data().balance || 0;
+    const yesterdayBalance = yesterdaySnap.data().balance || 0;
+
+    return todayBalance - yesterdayBalance;
+  } catch (error) {
+    console.error('일간 변동액 조회 오류:', error);
+    return 0;
+  }
+}
+
+/**
  * 일별 스냅샷 저장 헬퍼 함수
  */
 async function saveDailySnapshot(

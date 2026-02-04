@@ -6,7 +6,7 @@ import { Asset, AssetType, AssetHistoryEntry, FAMILY_MEMBERS } from '@/types/ass
 import {
   subscribeToAssets,
   subscribeToAssetHistory,
-  getMonthlyAssetChange,
+  getDailyAssetChange,
   saveMonthlySnapshot,
   saveDailyTotalSnapshot,
   addSampleAssets,
@@ -25,7 +25,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [monthlyChange, setMonthlyChange] = useState(0);
+  const [dailyChange, setDailyChange] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
   // 각 자산의 이력 맵
@@ -68,7 +68,7 @@ export default function AssetsPage() {
     refreshAllStockPrices().catch(console.error);
   }, []);
 
-  // 월별 변동액 조회 및 스냅샷 저장
+  // 일간 변동액 조회 및 스냅샷 저장
   useEffect(() => {
     if (assets.length === 0) return;
 
@@ -79,10 +79,10 @@ export default function AssetsPage() {
       .filter((a) => a.type !== 'property')
       .reduce((sum, a) => sum + a.currentBalance, 0);
 
-    // 전월 대비 변동액 계산
-    getMonthlyAssetChange(currentTotal)
-      .then(setMonthlyChange)
-      .catch(() => setMonthlyChange(0));
+    // 전일 대비 변동액 계산
+    getDailyAssetChange()
+      .then(setDailyChange)
+      .catch(() => setDailyChange(0));
 
     // 이번 달 스냅샷 저장 (현재 총자산)
     saveMonthlySnapshot(currentTotal);
@@ -192,7 +192,7 @@ export default function AssetsPage() {
             {/* 가족 탭 + 총 자산 요약 + 도넛 차트 */}
             <AssetSummaryCard
               assets={assets}
-              monthlyChange={monthlyChange}
+              dailyChange={dailyChange}
               selectedMember={selectedMember}
               onMemberChange={setSelectedMember}
             />

@@ -28,7 +28,7 @@ function formatKoreanUnit(num: number): string {
 
 interface AssetSummaryCardProps {
   assets: Asset[];
-  monthlyChange: number;
+  dailyChange: number;
   previousMonthTotal?: number;
   selectedMember: string;
   onMemberChange: (member: string) => void;
@@ -36,7 +36,7 @@ interface AssetSummaryCardProps {
 
 export default function AssetSummaryCard({
   assets,
-  monthlyChange,
+  dailyChange,
   previousMonthTotal,
   selectedMember,
   onMemberChange,
@@ -57,14 +57,14 @@ export default function AssetSummaryCard({
     if (previousMonthTotal && previousMonthTotal > 0) {
       return ((totalBalance - previousMonthTotal) / previousMonthTotal) * 100;
     }
-    if (totalBalance > 0 && monthlyChange !== 0) {
-      const prevTotal = totalBalance - monthlyChange;
+    if (totalBalance > 0 && dailyChange !== 0) {
+      const prevTotal = totalBalance - dailyChange;
       if (prevTotal > 0) {
-        return (monthlyChange / prevTotal) * 100;
+        return (dailyChange / prevTotal) * 100;
       }
     }
     return 0;
-  }, [totalBalance, previousMonthTotal, monthlyChange]);
+  }, [totalBalance, previousMonthTotal, dailyChange]);
 
   // 타입별 자산 합계
   const typeData = useMemo(() => {
@@ -138,8 +138,8 @@ export default function AssetSummaryCard({
     },
   };
 
-  const isPositive = monthlyChange > 0;
-  const isNegative = monthlyChange < 0;
+  const isPositive = dailyChange > 0;
+  const isNegative = dailyChange < 0;
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-visible">
@@ -154,9 +154,9 @@ export default function AssetSummaryCard({
           ({formatKoreanUnit(totalBalance)}원)
         </p>
         {/* 변동률 */}
-        {monthlyChange !== 0 && (
+        {dailyChange !== 0 && (
           <p className={`text-sm mt-1 ${isPositive ? 'text-red-500' : 'text-blue-500'}`}>
-            {isPositive ? '+' : ''}{changeRate.toFixed(2)}% ({Math.abs(monthlyChange).toLocaleString()}원)
+            {isPositive ? '+' : ''}{changeRate.toFixed(2)}% ({Math.abs(dailyChange).toLocaleString()}원)
           </p>
         )}
       </div>
