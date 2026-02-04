@@ -871,7 +871,7 @@ export async function deleteAssetWithHoldings(assetId: string): Promise<void> {
 
 /**
  * [1회성] 2월 asset_history changeAmount 복구
- * changeAmount = 다음날 balance - 오늘 balance
+ * changeAmount = 오늘 balance - 어제 balance (당일 변동액)
  */
 export async function fixFeb2ChangeAmount(): Promise<{
   success: boolean;
@@ -888,33 +888,33 @@ export async function fixFeb2ChangeAmount(): Promise<{
 
       for (const date of dates) {
         const currentDate = new Date(date);
-        const nextDate = new Date(currentDate);
-        nextDate.setDate(nextDate.getDate() + 1);
-        const nextDateStr = nextDate.toISOString().split('T')[0];
+        const prevDate = new Date(currentDate);
+        prevDate.setDate(prevDate.getDate() - 1);
+        const prevDateStr = prevDate.toISOString().split('T')[0];
 
         const currentId = `${householdId}_${type}_${date}`;
-        const nextId = `${householdId}_${type}_${nextDateStr}`;
+        const prevId = `${householdId}_${type}_${prevDateStr}`;
 
-        const [currentSnap, nextSnap] = await Promise.all([
+        const [currentSnap, prevSnap] = await Promise.all([
           getDoc(doc(db, HISTORY_COLLECTION, currentId)),
-          getDoc(doc(db, HISTORY_COLLECTION, nextId)),
+          getDoc(doc(db, HISTORY_COLLECTION, prevId)),
         ]);
 
         if (!currentSnap.exists()) {
           results.push(`${date}: 데이터 없음`);
           continue;
         }
-        if (!nextSnap.exists()) {
-          results.push(`${date}: 다음날 데이터 없음`);
+        if (!prevSnap.exists()) {
+          results.push(`${date}: 전날 데이터 없음`);
           continue;
         }
 
         const currentData = currentSnap.data();
-        const nextData = nextSnap.data();
+        const prevData = prevSnap.data();
 
         const currentBalance = currentData.balance || 0;
-        const nextBalance = nextData.balance || 0;
-        const correctChangeAmount = nextBalance - currentBalance;
+        const prevBalance = prevData.balance || 0;
+        const correctChangeAmount = currentBalance - prevBalance;
         const beforeChangeAmount = currentData.changeAmount;
 
         if (beforeChangeAmount === correctChangeAmount) {
@@ -924,6 +924,7 @@ export async function fixFeb2ChangeAmount(): Promise<{
 
         await updateDoc(doc(db, HISTORY_COLLECTION, currentId), {
           changeAmount: correctChangeAmount,
+          previousBalance: prevBalance,
           memo: '복구됨',
         });
 
