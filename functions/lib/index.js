@@ -385,12 +385,13 @@ exports.addExpenseFromMessage = functions
             memo: '',
             householdId: householdId,
             source: 'ios-shortcut',
-            notifyPartner: false, // "또니에게" 버튼으로 알림 보낼 수 있도록
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
         };
         // 카드 끝 4자리가 있으면 추가
         if (parsed.cardLastFour) {
             expenseData.cardLastFour = parsed.cardLastFour;
+            // 삼성카드(1876)면 cardType을 'sam'으로 설정
+            expenseData.cardType = parsed.cardLastFour === '1876' ? 'sam' : 'main';
         }
         const docRef = await db.collection('expenses').add(expenseData);
         res.status(200).json({

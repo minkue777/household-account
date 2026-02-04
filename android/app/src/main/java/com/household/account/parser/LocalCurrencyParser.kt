@@ -131,7 +131,7 @@ object LocalCurrencyParser {
                 merchant = merchant,
                 amount = amount,
                 category = Category.ETC.name,
-                cardType = "LOCAL_CURRENCY",  // 지역화폐 전용 타입
+                cardType = "local_currency",  // 지역화폐 전용 타입 (소문자)
                 cardLastFour = "지역"  // 지역화폐 표시
             )
 

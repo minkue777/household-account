@@ -139,7 +139,7 @@ object KBCardParser {
                 merchant = merchant,
                 amount = amount,
                 category = Category.ETC.name,
-                cardType = cardType.name,
+                cardType = cardType.key,  // 소문자로 저장
                 cardLastFour = cardLast4
             )
 

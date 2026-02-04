@@ -145,9 +145,28 @@ export default function ExpenseEditModal({
               const expenseYearMonth = expense.date.substring(0, 7);
               const isCurrentMonth = currentYearMonth === expenseYearMonth;
 
-              const isSettleable = expense.cardType?.toLowerCase() !== 'main' &&
-                                   expense.cardType?.toLowerCase() !== 'family' &&
-                                   expense.cardType?.toLowerCase() !== 'local_currency';
+              // 정산 필요 여부 확인
+              const cardType = expense.cardType?.toLowerCase();
+              const category = expense.category;
+
+              // 생활비 카테고리 (식비, 육아, 생활비)
+              const livingCategories = ['food', 'childcare', 'living'];
+
+              let isSettleable = false;
+
+              // local_currency는 정산 불필요
+              if (cardType === 'local_currency') {
+                isSettleable = false;
+              }
+              // 비상금 카테고리(etc)는 카드 종류 상관없이 정산 필요
+              else if (category === 'etc') {
+                isSettleable = true;
+              }
+              // 삼성카드(sam)는 생활비 카테고리만 정산 필요
+              else if (cardType === 'sam') {
+                isSettleable = livingCategories.includes(category);
+              }
+              // 그 외 (국민카드 main/family 등)는 정산 불필요
 
               if (!isSettleable) return null;
 

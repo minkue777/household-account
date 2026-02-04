@@ -32,6 +32,33 @@ function getHouseholdId(): string {
 }
 
 /**
+ * 정산 필요 여부 판단
+ * - 삼성카드(sam) + 생활비(food, childcare, living) → 필요
+ * - 삼성카드(sam) + 비상금(etc) → 필요
+ * - 국민카드(main/family) + 비상금(etc) → 필요
+ * - 그 외 → 불필요
+ */
+function checkSettleable(cardType: string | undefined, category: string): boolean {
+  const card = cardType?.toLowerCase();
+  const livingCategories = ['food', 'childcare', 'living'];
+
+  // local_currency는 정산 불필요
+  if (card === 'local_currency') {
+    return false;
+  }
+  // 비상금(etc)은 카드 종류 상관없이 정산 필요 (local_currency 제외)
+  if (category === 'etc') {
+    return true;
+  }
+  // 삼성카드(sam)는 생활비 카테고리만 정산 필요
+  if (card === 'sam') {
+    return livingCategories.includes(category);
+  }
+  // 그 외 (국민카드 main/family 등)는 정산 불필요
+  return false;
+}
+
+/**
  * Firestore 문서를 Expense 객체로 변환 (DRY 원칙)
  */
 function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense {
@@ -274,7 +301,6 @@ export async function splitExpense(
 
     // 분할된 지출들 추가
     const newIds: string[] = [];
-    const isSettleable = originalExpense.cardType !== 'main' && originalExpense.cardType !== 'family';
     for (const split of splits) {
       const newDocRef = doc(collection(db, COLLECTION_NAME));
       const expenseData: Record<string, unknown> = {
@@ -289,7 +315,8 @@ export async function splitExpense(
         householdId,
         createdAt: Timestamp.now(),
       };
-      if (isSettleable) {
+      // 각 분할 항목의 카테고리에 따라 정산 필요 여부 결정
+      if (checkSettleable(originalExpense.cardType, split.category)) {
         expenseData.settled = false;
       }
       transaction.set(newDocRef, expenseData);
@@ -358,7 +385,6 @@ export async function unmergeExpense(expense: Expense): Promise<string[]> {
     const newIds: string[] = [];
 
     // 원본 지출들 다시 생성
-    const isSettleable = expense.cardType !== 'main' && expense.cardType !== 'family';
     for (const original of expense.mergedFrom!) {
       const newDocRef = doc(collection(db, COLLECTION_NAME));
       const expenseData: Record<string, unknown> = {
@@ -373,7 +399,8 @@ export async function unmergeExpense(expense: Expense): Promise<string[]> {
         householdId,
         createdAt: Timestamp.now(),
       };
-      if (isSettleable) {
+      // 각 원본 항목의 카테고리에 따라 정산 필요 여부 결정
+      if (checkSettleable(expense.cardType, original.category)) {
         expenseData.settled = false;
       }
       transaction.set(newDocRef, expenseData);
@@ -467,7 +494,6 @@ export async function cancelSplitGroup(splitGroupId: string): Promise<void> {
 
     // 원래 금액의 단일 지출 생성 (첫 번째 항목의 메모 유지)
     const cardType = firstExpense.cardType || 'main';
-    const isSettleable = cardType !== 'main' && cardType !== 'family';
     const newDocRef = doc(collection(db, COLLECTION_NAME));
     const expenseData: Record<string, unknown> = {
       date: firstExpense.date,
@@ -480,7 +506,7 @@ export async function cancelSplitGroup(splitGroupId: string): Promise<void> {
       householdId,
       createdAt: Timestamp.now(),
     };
-    if (isSettleable) {
+    if (checkSettleable(cardType, firstExpense.category)) {
       expenseData.settled = false;
     }
     transaction.set(newDocRef, expenseData);
@@ -521,7 +547,7 @@ export async function updateSplitGroup(
 
     // 새로운 분할 지출 생성
     const cardType = firstExpense.cardType || 'main';
-    const isSettleable = cardType !== 'main' && cardType !== 'family';
+    const shouldSettle = checkSettleable(cardType, firstExpense.category);
     for (let i = 0; i < newMonths; i++) {
       const targetDate = new Date(baseDate);
       targetDate.setMonth(targetDate.getMonth() + i);
@@ -542,7 +568,7 @@ export async function updateSplitGroup(
         householdId,
         createdAt: Timestamp.now(),
       };
-      if (isSettleable) {
+      if (shouldSettle) {
         expenseData.settled = false;
       }
       transaction.set(newDocRef, expenseData);
