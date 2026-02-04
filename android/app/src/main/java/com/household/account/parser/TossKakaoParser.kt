@@ -5,7 +5,7 @@ package com.household.account.parser
  *
  * 출금 알림 형식:
  * [출금 안내]
- * 망고네 생활비 계좌 모임통장에서 (또는 망고네 비상금 계좌)
+ * 망고네 생활비 계좌 모임통장에서 (또는 망고네 비상금 모임통장에서)
  * 10,000원이 출금됐어요.
  * 02/01 21:39
  * 이진선
@@ -26,11 +26,11 @@ object TossKakaoParser {
      */
     fun parseWithdrawal(text: String): WithdrawalInfo? {
         try {
-            // [출금 안내] + (망고네 생활비 계좌 또는 망고네 비상금 계좌) 포함 확인
+            // [출금 안내] + (망고네 생활비 또는 망고네 비상금) 포함 확인
             if (!text.contains("[출금 안내]")) {
                 return null
             }
-            if (!text.contains("망고네 생활비 계좌") && !text.contains("망고네 비상금 계좌")) {
+            if (!text.contains("망고네 생활비") && !text.contains("망고네 비상금")) {
                 return null
             }
 
