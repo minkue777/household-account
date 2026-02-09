@@ -7,7 +7,6 @@ import {
   subscribeToAssets,
   subscribeToAssetHistory,
   getDailyAssetChange,
-  saveMonthlySnapshot,
   saveDailyTotalSnapshot,
   addSampleAssets,
   refreshAllStockPrices,
@@ -83,9 +82,6 @@ export default function AssetsPage() {
     getDailyAssetChange()
       .then(setDailyChange)
       .catch(() => setDailyChange(0));
-
-    // 이번 달 스냅샷 저장 (현재 총자산)
-    saveMonthlySnapshot(currentTotal);
 
     // 일별 총자산 스냅샷 저장 (자산 추이 차트용)
     saveDailyTotalSnapshot(currentTotal, financialTotal);

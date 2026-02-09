@@ -324,46 +324,39 @@ export async function getAssetHistoryByPeriod(
 }
 
 /**
- * 전월 말 총자산 스냅샷 조회
+ * 전월 말 총자산 조회 (asset_history에서 전월 마지막 TOTAL 스냅샷)
  */
 export async function getPreviousMonthTotal(): Promise<number | null> {
   const householdId = getHouseholdId();
   const now = new Date();
 
-  // 전월 계산
-  const prevMonth = now.getMonth() === 0 ? 12 : now.getMonth();
-  const prevYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-  const snapshotId = `${householdId}_${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+  // 전월 마지막 날 계산
+  const lastDayOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+  const endDate = lastDayOfPrevMonth.toISOString().split('T')[0];
+
+  // 전월 첫째 날
+  const firstDayOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const startDate = firstDayOfPrevMonth.toISOString().split('T')[0];
 
   try {
-    const docSnap = await getDoc(doc(db, 'asset_snapshots', snapshotId));
-    if (docSnap.exists()) {
-      return docSnap.data().totalBalance || null;
+    // 전월의 TOTAL 스냅샷 중 가장 마지막 날짜 조회
+    const q = query(
+      collection(db, HISTORY_COLLECTION),
+      where('householdId', '==', householdId),
+      where('assetId', '==', 'TOTAL'),
+      where('date', '>=', startDate),
+      where('date', '<=', endDate),
+      orderBy('date', 'desc')
+    );
+
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+      return snapshot.docs[0].data().balance || null;
     }
   } catch (error) {
-    console.error('스냅샷 조회 오류:', error);
+    console.error('전월 총자산 조회 오류:', error);
   }
   return null;
-}
-
-/**
- * 이번 달 총자산 스냅샷 저장
- */
-export async function saveMonthlySnapshot(totalBalance: number): Promise<void> {
-  const householdId = getHouseholdId();
-  const now = new Date();
-  const snapshotId = `${householdId}_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-  try {
-    await setDoc(doc(db, 'asset_snapshots', snapshotId), {
-      householdId,
-      totalBalance,
-      month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
-      updatedAt: Timestamp.now(),
-    });
-  } catch (error) {
-    console.error('스냅샷 저장 오류:', error);
-  }
 }
 
 /**
