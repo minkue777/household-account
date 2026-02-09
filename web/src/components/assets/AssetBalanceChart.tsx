@@ -15,7 +15,7 @@ import {
 import { Line } from 'react-chartjs-2';
 import { Asset, AssetHistoryEntry, ASSET_TYPE_CONFIG } from '@/types/asset';
 import { getAssetHistoryByPeriod } from '@/lib/assetService';
-import Portal from '@/components/Portal';
+import { Portal } from '@/components/common';
 import { X, Calendar } from 'lucide-react';
 
 ChartJS.register(

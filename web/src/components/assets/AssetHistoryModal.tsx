@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Asset, ASSET_TYPE_CONFIG, StockHolding, StockSearchResult } from '@/types/asset';
 import { subscribeToStockHoldings, addStockHolding, updateStockHolding, deleteStockHolding, updateAsset } from '@/lib/assetService';
-import Portal from '@/components/Portal';
+import { Portal } from '@/components/common';
 import { X, Plus, Edit2, Banknote, Home, BarChart3, Coins, Loader2, RefreshCw } from 'lucide-react';
 
 interface GoldPriceData {

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Expense } from '@/types/expense';
 import { searchExpenses, SplitItem } from '@/lib/expenseService';
-import Portal from '../Portal';
+import { Portal } from '../common';
 import SearchResultList from './SearchResultList';
 import SearchExpenseEdit from './SearchExpenseEdit';
 

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Asset } from '@/types/asset';
 import { updateAsset } from '@/lib/assetService';
-import Portal from '@/components/Portal';
+import { Portal } from '@/components/common';
 import { X, Loader2, RefreshCw } from 'lucide-react';
 
 interface GoldPriceData {

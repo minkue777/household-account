@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Expense } from '@/types/expense';
 import { SplitItem } from '@/lib/expenseService';
-import Portal from '../Portal';
-import { CategorySelector } from '../common';
+import { Portal, CategorySelector } from '../common';
 
 interface ExpenseSplitModalProps {
   expense: Expense;

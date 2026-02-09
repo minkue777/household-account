@@ -18,6 +18,10 @@ import { Expense, MergedExpenseInfo } from '@/types/expense';
 import { getStoredHouseholdKey } from './householdService';
 import { DeviceOwnerStorage } from './storage/deviceOwnerStorage';
 
+// 정산 관련 함수는 settlementService에서 re-export (기존 import 호환성 유지)
+export { checkSettleable, notifyPartner, requestSettlement, settleExpense, unsettleExpense } from './settlementService';
+import { checkSettleable } from './settlementService';
+
 const COLLECTION_NAME = 'expenses';
 
 /**
@@ -29,33 +33,6 @@ function getHouseholdId(): string {
     throw new Error('가구 키가 없습니다. 다시 로그인해주세요.');
   }
   return key;
-}
-
-/**
- * 정산 필요 여부 판단
- * - 삼성카드(sam) + 생활비(food, childcare, living) → 필요
- * - 삼성카드(sam) + 비상금(etc) → 필요
- * - 국민카드(main/family) + 비상금(etc) → 필요
- * - 그 외 → 불필요
- */
-function checkSettleable(cardType: string | undefined, category: string): boolean {
-  const card = cardType?.toLowerCase();
-  const livingCategories = ['food', 'childcare', 'living'];
-
-  // local_currency는 정산 불필요
-  if (card === 'local_currency') {
-    return false;
-  }
-  // 비상금(etc)은 카드 종류 상관없이 정산 필요 (local_currency 제외)
-  if (category === 'etc') {
-    return true;
-  }
-  // 삼성카드(sam)는 생활비 카테고리만 정산 필요
-  if (card === 'sam') {
-    return livingCategories.includes(category);
-  }
-  // 그 외 (국민카드 main/family 등)는 정산 불필요
-  return false;
 }
 
 /**
@@ -108,30 +85,6 @@ export async function updateExpense(id: string, data: Partial<Expense>): Promise
 }
 
 /**
- * 또니에게 전송 (notifyPartner 플래그 설정)
- */
-export async function notifyPartner(id: string): Promise<void> {
-  const docRef = doc(db, COLLECTION_NAME, id);
-  const deviceOwner = DeviceOwnerStorage.get();
-  await updateDoc(docRef, {
-    notifyPartnerAt: Timestamp.now(),
-    notifyPartnerBy: deviceOwner || null,
-  });
-}
-
-/**
- * 정산 요청 (정산하기 버튼 클릭 시 호출)
- * pendingSettlement: true로 표시하여 빠른 검색 가능
- */
-export async function requestSettlement(id: string): Promise<void> {
-  const docRef = doc(db, COLLECTION_NAME, id);
-  await updateDoc(docRef, {
-    settlementRequestedAt: new Date().toISOString(),
-    pendingSettlement: true
-  });
-}
-
-/**
  * 지출 삭제
  */
 export async function deleteExpense(id: string): Promise<void> {
@@ -174,9 +127,9 @@ export function subscribeToMonthlyExpenses(
 }
 
 /**
- * 카테고리 업데이트
+ * 지출의 카테고리 업데이트
  */
-export async function updateCategory(id: string, category: string): Promise<void> {
+export async function updateExpenseCategory(id: string, category: string): Promise<void> {
   const docRef = doc(db, COLLECTION_NAME, id);
   await updateDoc(docRef, { category });
 }

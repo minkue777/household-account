@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Asset, StockHolding, StockSearchResult } from '@/types/asset';
 import { addStockHolding, updateStockHolding, deleteStockHolding, subscribeToStockHoldings } from '@/lib/assetService';
-import Portal from '@/components/Portal';
+import { Portal } from '@/components/common';
 import { X, Plus, Trash2, Loader2 } from 'lucide-react';
 
 interface StockHoldingModalProps {

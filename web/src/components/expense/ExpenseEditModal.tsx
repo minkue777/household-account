@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
-import Portal from '../Portal';
-import { CategorySelector, AmountInput } from '../common';
+import { Portal, CategorySelector, AmountInput } from '../common';
 import { openTossTransfer } from '@/lib/tossService';
+import { checkSettleable } from '@/lib/settlementService';
 import { PersonalAccountStorage, LocalPersonalAccount } from '@/lib/storage/personalAccountStorage';
 
 interface ExpenseEditModalProps {
@@ -146,28 +146,7 @@ export default function ExpenseEditModal({
               const isCurrentMonth = currentYearMonth === expenseYearMonth;
 
               // 정산 필요 여부 확인
-              const cardType = expense.cardType?.toLowerCase();
-              const category = expense.category;
-
-              // 생활비 카테고리 (식비, 육아, 생활비)
-              const livingCategories = ['food', 'childcare', 'living'];
-
-              let isSettleable = false;
-
-              // local_currency는 정산 불필요
-              if (cardType === 'local_currency') {
-                isSettleable = false;
-              }
-              // 비상금 카테고리(etc)는 카드 종류 상관없이 정산 필요
-              else if (category === 'etc') {
-                isSettleable = true;
-              }
-              // 삼성카드(sam)는 생활비 카테고리만 정산 필요
-              else if (cardType === 'sam') {
-                isSettleable = livingCategories.includes(category);
-              }
-              // 그 외 (국민카드 main/family 등)는 정산 불필요
-
+              const isSettleable = checkSettleable(expense.cardType, expense.category);
               if (!isSettleable) return null;
 
               if (expense.settled) {

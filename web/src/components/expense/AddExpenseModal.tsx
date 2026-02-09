@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
-import Portal from './Portal';
-import { CategorySelector, AmountInput } from './common';
+import { Portal } from '@/components/common';
+import { CategorySelector, AmountInput } from '@/components/common';
 
 interface AddExpenseModalProps {
   isOpen: boolean;

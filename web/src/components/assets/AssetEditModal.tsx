@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Asset, AssetType, ASSET_TYPE_CONFIG } from '@/types/asset';
 import { updateAsset, deleteAsset } from '@/lib/assetService';
-import Portal from '@/components/Portal';
+import { Portal } from '@/components/common';
 import { X, Trash2, Banknote, BarChart3, Home, Coins } from 'lucide-react';
 
 interface AssetEditModalProps {

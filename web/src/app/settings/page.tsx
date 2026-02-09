@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { CategoryDocument } from '@/lib/categoryService';
-import ColorPicker from '@/components/ColorPicker';
+import { ColorPicker } from '@/components/common';
 import { COLOR_PALETTE } from '@/lib/categoryService';
 import {
   MerchantRule,

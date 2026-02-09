@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { AssetType, AssetInput, ASSET_TYPE_CONFIG, ASSET_OWNERS } from '@/types/asset';
 import { addAsset } from '@/lib/assetService';
-import Portal from '@/components/Portal';
+import { Portal } from '@/components/common';
 import { X, Banknote, BarChart3, Home, Coins } from 'lucide-react';
 
 interface AssetAddModalProps {

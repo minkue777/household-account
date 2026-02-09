@@ -1,6 +1,6 @@
 'use client';
 
-import Portal from '../Portal';
+import Portal from './Portal';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
