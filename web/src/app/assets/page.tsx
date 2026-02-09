@@ -75,7 +75,7 @@ export default function AssetsPage() {
       .reduce((sum, a) => sum + a.currentBalance, 0);
 
     // 전일 대비 변동액 계산
-    getDailyAssetChange()
+    getDailyAssetChange(financialTotal)
       .then(setDailyChange)
       .catch(() => setDailyChange(0));
 
