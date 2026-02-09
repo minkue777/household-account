@@ -1,21 +1,19 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { Asset, AssetHistoryEntry } from '@/types/asset';
+import { Asset } from '@/types/asset';
 import { updateAssetOrders } from '@/lib/assetService';
 import AssetCard from './AssetCard';
 import { Plus } from 'lucide-react';
 
 interface AssetListProps {
   assets: Asset[];
-  historyMap: Record<string, AssetHistoryEntry[]>;
   onAssetClick: (asset: Asset) => void;
   onAddClick: () => void;
 }
 
 export default function AssetList({
   assets,
-  historyMap,
   onAssetClick,
   onAddClick,
 }: AssetListProps) {
@@ -33,17 +31,6 @@ export default function AssetList({
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const touchStartY = useRef<number>(0);
   const draggedElement = useRef<HTMLDivElement | null>(null);
-
-  // 각 자산의 마지막 변동 가져오기
-  const getLastChange = (assetId: string) => {
-    const history = historyMap[assetId];
-    if (!history || history.length === 0) return undefined;
-    const last = history[0];
-    return {
-      amount: last.changeAmount,
-      date: last.date,
-    };
-  };
 
   // 순서 변경 적용
   const applyReorder = useCallback(async (fromId: string, toId: string) => {

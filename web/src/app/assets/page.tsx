@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Asset, AssetType, AssetHistoryEntry, FAMILY_MEMBERS } from '@/types/asset';
+import { Asset, AssetType, FAMILY_MEMBERS } from '@/types/asset';
 import {
   subscribeToAssets,
-  subscribeToAssetHistory,
   getDailyAssetChange,
   saveDailyTotalSnapshot,
   addSampleAssets,
@@ -26,9 +25,6 @@ export default function AssetsPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [dailyChange, setDailyChange] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-
-  // 각 자산의 이력 맵
-  const [historyMap, setHistoryMap] = useState<Record<string, AssetHistoryEntry[]>>({});
 
   // 모달 상태
   const [showAddModal, setShowAddModal] = useState(false);
@@ -85,26 +81,6 @@ export default function AssetsPage() {
 
     // 일별 총자산 스냅샷 저장 (자산 추이 차트용)
     saveDailyTotalSnapshot(currentTotal, financialTotal);
-  }, [assets]);
-
-  // 각 자산의 이력 구독
-  useEffect(() => {
-    const activeAssets = assets.filter((a) => a.isActive);
-    const unsubscribes: (() => void)[] = [];
-
-    activeAssets.forEach((asset) => {
-      const unsub = subscribeToAssetHistory(asset.id, (history) => {
-        setHistoryMap((prev) => ({
-          ...prev,
-          [asset.id]: history,
-        }));
-      });
-      unsubscribes.push(unsub);
-    });
-
-    return () => {
-      unsubscribes.forEach((unsub) => unsub());
-    };
   }, [assets]);
 
   // 자산 클릭 핸들러
@@ -196,7 +172,6 @@ export default function AssetsPage() {
             {/* 보유 현황 */}
             <AssetList
               assets={selectedMember === '전체' ? assets : assets.filter(a => a.owner === selectedMember)}
-              historyMap={historyMap}
               onAssetClick={handleAssetClick}
               onAddClick={handleAddClick}
             />

@@ -98,20 +98,6 @@ export async function addAsset(input: AssetInput): Promise<string> {
     updatedAt: now,
   });
 
-  // 초기 잔액이 있으면 이력 추가
-  if (input.currentBalance > 0) {
-    await addDoc(collection(db, HISTORY_COLLECTION), {
-      householdId,
-      assetId: docRef.id,
-      balance: input.currentBalance,
-      date: new Date().toISOString().split('T')[0],
-      previousBalance: 0,
-      changeAmount: input.currentBalance,
-      memo: '초기 잔액',
-      createdAt: now,
-    });
-  }
-
   return docRef.id;
 }
 
@@ -202,102 +188,6 @@ export function subscribeToAssets(
   );
 
   return unsubscribe;
-}
-
-/**
- * 특정 자산의 이력 조회
- */
-export async function getAssetHistory(assetId: string): Promise<AssetHistoryEntry[]> {
-  const householdId = getHouseholdId();
-
-  const q = query(
-    collection(db, HISTORY_COLLECTION),
-    where('householdId', '==', householdId),
-    where('assetId', '==', assetId)
-  );
-
-  const snapshot = await getDocs(q);
-  const history = snapshot.docs.map(mapDocToHistory);
-
-  // 날짜 내림차순 정렬
-  return history.sort((a, b) => b.date.localeCompare(a.date));
-}
-
-/**
- * 특정 자산의 이력 실시간 구독
- */
-export function subscribeToAssetHistory(
-  assetId: string,
-  callback: (history: AssetHistoryEntry[]) => void
-): () => void {
-  const householdId = getHouseholdId();
-
-  const q = query(
-    collection(db, HISTORY_COLLECTION),
-    where('householdId', '==', householdId),
-    where('assetId', '==', assetId)
-  );
-
-  const unsubscribe = onSnapshot(
-    q,
-    (snapshot) => {
-      const history = snapshot.docs.map(mapDocToHistory);
-      // 날짜 내림차순 정렬
-      history.sort((a, b) => b.date.localeCompare(a.date));
-      callback(history);
-    },
-    (error) => {
-      console.error('자산 이력 구독 오류:', error);
-      callback([]);
-    }
-  );
-
-  return unsubscribe;
-}
-
-/**
- * 잔액 업데이트 (트랜잭션으로 자산 + 이력 동시 업데이트)
- */
-export async function updateBalanceWithHistory(
-  assetId: string,
-  newBalance: number,
-  date: string,
-  memo?: string
-): Promise<void> {
-  const householdId = getHouseholdId();
-  const now = Timestamp.now();
-
-  await runTransaction(db, async (transaction) => {
-    // 1. 현재 자산 조회
-    const assetRef = doc(db, ASSETS_COLLECTION, assetId);
-    const assetSnap = await transaction.get(assetRef);
-
-    if (!assetSnap.exists()) {
-      throw new Error('자산을 찾을 수 없습니다.');
-    }
-
-    const currentBalance = assetSnap.data().currentBalance || 0;
-    const changeAmount = newBalance - currentBalance;
-
-    // 2. 이력 추가
-    const historyRef = doc(collection(db, HISTORY_COLLECTION));
-    transaction.set(historyRef, {
-      householdId,
-      assetId,
-      balance: newBalance,
-      date,
-      previousBalance: currentBalance,
-      changeAmount,
-      memo: memo || '',
-      createdAt: now,
-    });
-
-    // 3. 자산 잔액 업데이트
-    transaction.update(assetRef, {
-      currentBalance: newBalance,
-      updatedAt: now,
-    });
-  });
 }
 
 /**
@@ -503,13 +393,6 @@ export async function saveDailyTotalSnapshot(
   if (financialBalance !== undefined) {
     await saveDailySnapshot('FINANCIAL', financialBalance, 'financial');
   }
-}
-
-/**
- * 이력 항목 삭제
- */
-export async function deleteHistoryEntry(historyId: string): Promise<void> {
-  await deleteDoc(doc(db, HISTORY_COLLECTION, historyId));
 }
 
 /**

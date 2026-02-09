@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Asset, AssetHistoryEntry, ASSET_TYPE_CONFIG, StockHolding, StockSearchResult } from '@/types/asset';
-import { subscribeToAssetHistory, updateBalanceWithHistory, deleteHistoryEntry, subscribeToStockHoldings, addStockHolding, updateStockHolding, deleteStockHolding, updateAsset } from '@/lib/assetService';
+import { Asset, ASSET_TYPE_CONFIG, StockHolding, StockSearchResult } from '@/types/asset';
+import { subscribeToStockHoldings, addStockHolding, updateStockHolding, deleteStockHolding, updateAsset } from '@/lib/assetService';
 import Portal from '@/components/Portal';
-import { X, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Banknote, Home, BarChart3, Coins, Loader2, RefreshCw } from 'lucide-react';
+import { X, Plus, Edit2, Banknote, Home, BarChart3, Coins, Loader2, RefreshCw } from 'lucide-react';
 
 interface GoldPriceData {
   buyPricePerDon: number;
@@ -44,11 +44,8 @@ export default function AssetHistoryModal({
   onEditAsset,
   onViewChart,
 }: AssetHistoryModalProps) {
-  const [history, setHistory] = useState<AssetHistoryEntry[]>([]);
   const [showUpdateForm, setShowUpdateForm] = useState(false);
   const [newBalance, setNewBalance] = useState('');
-  const [updateDate, setUpdateDate] = useState(new Date().toISOString().split('T')[0]);
-  const [updateMemo, setUpdateMemo] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // 주식 관련 상태
@@ -76,14 +73,6 @@ export default function AssetHistoryModal({
   const [goldQuantity, setGoldQuantity] = useState('');
   const [goldPrice, setGoldPrice] = useState<GoldPriceData | null>(null);
   const [isLoadingGoldPrice, setIsLoadingGoldPrice] = useState(false);
-
-  // 이력 구독 (주식/금 타입이 아닐 때)
-  useEffect(() => {
-    if (!asset || asset.type === 'stock' || asset.type === 'gold') return;
-
-    const unsubscribe = subscribeToAssetHistory(asset.id, setHistory);
-    return () => unsubscribe();
-  }, [asset]);
 
   // 주식 보유 종목 구독
   useEffect(() => {
@@ -242,8 +231,6 @@ export default function AssetHistoryModal({
   useEffect(() => {
     if (showUpdateForm && asset) {
       setNewBalance(asset.currentBalance.toString());
-      setUpdateDate(new Date().toISOString().split('T')[0]);
-      setUpdateMemo('');
     }
   }, [showUpdateForm, asset]);
 
@@ -255,23 +242,10 @@ export default function AssetHistoryModal({
 
     setIsSubmitting(true);
     try {
-      await updateBalanceWithHistory(asset.id, balanceNum, updateDate, updateMemo.trim());
+      await updateAsset(asset.id, { currentBalance: balanceNum });
       setShowUpdateForm(false);
     } catch (error) {
       console.error('잔액 업데이트 오류:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDeleteHistory = async (historyId: string) => {
-    if (isSubmitting) return;
-
-    setIsSubmitting(true);
-    try {
-      await deleteHistoryEntry(historyId);
-    } catch (error) {
-      console.error('이력 삭제 오류:', error);
     } finally {
       setIsSubmitting(false);
     }
@@ -528,31 +502,6 @@ export default function AssetHistoryModal({
                       원
                     </p>
                   )}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      날짜
-                    </label>
-                    <input
-                      type="date"
-                      value={updateDate}
-                      onChange={(e) => setUpdateDate(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      메모
-                    </label>
-                    <input
-                      type="text"
-                      value={updateMemo}
-                      onChange={(e) => setUpdateMemo(e.target.value)}
-                      placeholder="메모 (선택)"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    />
-                  </div>
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -933,75 +882,10 @@ export default function AssetHistoryModal({
                   )}
               </>
             ) : (
-              // 기타: 변동 이력
-              <>
-                <h4 className="text-sm font-medium text-slate-500 mb-3">변동 이력</h4>
-                {history.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400">
-                    아직 이력이 없습니다.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {history.map((entry) => (
-                      <div
-                        key={entry.id}
-                        className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl"
-                      >
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                            entry.changeAmount > 0
-                              ? 'bg-green-100 text-green-500'
-                              : entry.changeAmount < 0
-                              ? 'bg-red-100 text-red-500'
-                              : 'bg-slate-100 text-slate-400'
-                          }`}
-                        >
-                          {entry.changeAmount > 0 ? (
-                            <TrendingUp className="w-4 h-4" />
-                          ) : entry.changeAmount < 0 ? (
-                            <TrendingDown className="w-4 h-4" />
-                          ) : (
-                            <span className="text-xs">-</span>
-                          )}
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-slate-800">
-                              {entry.balance.toLocaleString()}원
-                            </span>
-                            <span
-                              className={`text-sm ${
-                                entry.changeAmount > 0
-                                  ? 'text-green-500'
-                                  : entry.changeAmount < 0
-                                  ? 'text-red-500'
-                                  : 'text-slate-400'
-                              }`}
-                            >
-                              ({entry.changeAmount > 0 ? '+' : ''}
-                              {entry.changeAmount.toLocaleString()})
-                            </span>
-                          </div>
-                          <div className="text-xs text-slate-500">
-                            {entry.date}
-                            {entry.memo && ` · ${entry.memo}`}
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteHistory(entry.id)}
-                          className="p-1.5 hover:bg-red-100 rounded-lg transition-colors text-slate-400 hover:text-red-500"
-                          disabled={isSubmitting}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
+              // 기타 자산: 메모 표시
+              <div className="text-center py-8 text-slate-400">
+                {asset.memo || '메모가 없습니다.'}
+              </div>
             )}
           </div>
         </div>
