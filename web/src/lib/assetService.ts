@@ -263,7 +263,7 @@ export async function getMonthlyAssetChange(currentTotal: number): Promise<numbe
 }
 
 /**
- * 오늘 자산 변동액 계산 (가장 최근 데이터 대비)
+ * 오늘 자산 변동액 계산 (저장된 changeAmount 사용)
  */
 export async function getDailyAssetChange(): Promise<number> {
   const householdId = getHouseholdId();
@@ -277,24 +277,8 @@ export async function getDailyAssetChange(): Promise<number> {
       return 0;
     }
 
-    const todayBalance = todaySnap.data().balance || 0;
-
-    // 이전 스냅샷 조회
-    const q = query(
-      collection(db, HISTORY_COLLECTION),
-      where('householdId', '==', householdId),
-      where('assetId', '==', 'FINANCIAL'),
-      where('date', '<', today),
-      orderBy('date', 'desc')
-    );
-
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) {
-      return 0;
-    }
-
-    const prevBalance = snapshot.docs[0].data().balance || 0;
-    return todayBalance - prevBalance;
+    // 스냅샷 저장 시 계산된 changeAmount 사용
+    return todaySnap.data().changeAmount || 0;
   } catch (error) {
     console.error('일간 변동액 조회 오류:', error);
     return 0;
