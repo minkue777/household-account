@@ -92,7 +92,6 @@ export interface AssetHistoryEntry {
   assetId: string;
   balance: number;
   date: string;              // YYYY-MM-DD
-  previousBalance: number;
   changeAmount: number;
   memo?: string;
   createdAt: Timestamp;

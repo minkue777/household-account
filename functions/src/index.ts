@@ -610,7 +610,7 @@ export const dailyAssetSnapshot = functions
             assetId: string,
             suffix: string,
             balance: number,
-            previousBalance: number
+            prevBalance: number
           ) => {
             const snapshotId = `${householdId}_${suffix}_${today}`;
             const existingSnap = await db.collection('asset_history').doc(snapshotId).get();
@@ -620,8 +620,7 @@ export const dailyAssetSnapshot = functions
               assetId,
               balance,
               date: today,
-              previousBalance,
-              changeAmount: balance - previousBalance,
+              changeAmount: balance - prevBalance,
               memo: '자동 기록',
               updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             };

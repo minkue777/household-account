@@ -550,7 +550,7 @@ exports.dailyAssetSnapshot = functions
                 const prevTotal = await getPreviousBalance('TOTAL');
                 const prevFinancial = await getPreviousBalance('FINANCIAL');
                 // 2-6. 스냅샷 저장
-                const saveSnapshot = async (assetId, suffix, balance, previousBalance) => {
+                const saveSnapshot = async (assetId, suffix, balance, prevBalance) => {
                     const snapshotId = `${householdId}_${suffix}_${today}`;
                     const existingSnap = await db.collection('asset_history').doc(snapshotId).get();
                     const snapshotData = {
@@ -558,8 +558,7 @@ exports.dailyAssetSnapshot = functions
                         assetId,
                         balance,
                         date: today,
-                        previousBalance,
-                        changeAmount: balance - previousBalance,
+                        changeAmount: balance - prevBalance,
                         memo: '자동 기록',
                         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                     };

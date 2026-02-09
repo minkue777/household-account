@@ -72,7 +72,6 @@ function mapDocToHistory(docSnap: QueryDocumentSnapshot<DocumentData>): AssetHis
     assetId: data.assetId,
     balance: data.balance,
     date: data.date,
-    previousBalance: data.previousBalance,
     changeAmount: data.changeAmount,
     memo: data.memo,
     createdAt: data.createdAt,
@@ -278,16 +277,9 @@ export async function getDailyAssetChange(): Promise<number> {
       return 0;
     }
 
-    const todayData = todaySnap.data();
-    const todayBalance = todayData.balance || 0;
-    const previousBalance = todayData.previousBalance ?? 0;
+    const todayBalance = todaySnap.data().balance || 0;
 
-    // 오늘 스냅샷에 저장된 previousBalance 사용
-    if (previousBalance > 0) {
-      return todayBalance - previousBalance;
-    }
-
-    // previousBalance가 없으면 가장 최근 데이터 찾기
+    // 이전 스냅샷 조회
     const q = query(
       collection(db, HISTORY_COLLECTION),
       where('householdId', '==', householdId),
@@ -324,51 +316,49 @@ async function saveDailySnapshot(
   try {
     const existingSnap = await getDoc(doc(db, HISTORY_COLLECTION, snapshotId));
 
+    // 이전 스냅샷 조회해서 changeAmount 계산
+    let prevBalance = 0;
+    try {
+      const q = query(
+        collection(db, HISTORY_COLLECTION),
+        where('householdId', '==', householdId),
+        where('assetId', '==', assetId),
+        where('date', '<', today),
+        orderBy('date', 'desc')
+      );
+
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        prevBalance = snapshot.docs[0].data().balance || 0;
+      }
+    } catch {
+      // 이전 데이터 없음
+    }
+
+    const changeAmount = balance - prevBalance;
+
     if (existingSnap.exists()) {
       const existingData = existingSnap.data();
-      // 기존에 저장된 previousBalance 유지 (어제의 잔액)
-      const previousBalance = existingData.previousBalance ?? 0;
-
+      // 잔액이 변경된 경우에만 업데이트
       if (existingData.balance !== balance) {
         await setDoc(doc(db, HISTORY_COLLECTION, snapshotId), {
           householdId,
           assetId,
           balance,
           date: today,
-          previousBalance,
-          changeAmount: balance - previousBalance,
+          changeAmount,
           memo: '자동 기록',
           createdAt: existingData.createdAt,
           updatedAt: Timestamp.now(),
         });
       }
     } else {
-      // 가장 최근 이전 스냅샷 찾기 (어제가 없을 수 있음 - 주말 등)
-      let previousBalance = 0;
-      try {
-        const q = query(
-          collection(db, HISTORY_COLLECTION),
-          where('householdId', '==', householdId),
-          where('assetId', '==', assetId),
-          where('date', '<', today),
-          orderBy('date', 'desc')
-        );
-
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-          previousBalance = snapshot.docs[0].data().balance || 0;
-        }
-      } catch {
-        // 이전 데이터 없음
-      }
-
       await setDoc(doc(db, HISTORY_COLLECTION, snapshotId), {
         householdId,
         assetId,
         balance,
         date: today,
-        previousBalance,
-        changeAmount: balance - previousBalance,
+        changeAmount,
         memo: '자동 기록',
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
@@ -850,7 +840,6 @@ export async function fixFeb2ChangeAmount(): Promise<{
 
         await updateDoc(doc(db, HISTORY_COLLECTION, currentId), {
           changeAmount: correctChangeAmount,
-          previousBalance: prevBalance,
           memo: '복구됨',
         });
 

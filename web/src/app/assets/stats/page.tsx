@@ -205,19 +205,11 @@ export default function AssetStatsPage() {
 
     // 스냅샷이 있으면 직접 사용
     if (snapshots.length > 0) {
-      return snapshots.map((entry, idx) => {
-        // changeAmount가 잘못된 경우 (previousBalance가 0) 직접 계산
-        let change = entry.changeAmount;
-        if (entry.previousBalance === 0 && idx > 0) {
-          // 이전 스냅샷에서 balance 가져와서 계산
-          change = entry.balance - snapshots[idx - 1].balance;
-        }
-        return {
-          date: entry.date,
-          total: entry.balance,
-          change,
-        };
-      });
+      return snapshots.map((entry) => ({
+        date: entry.date,
+        total: entry.balance,
+        change: entry.changeAmount,
+      }));
     }
 
     // 스냅샷이 없으면 현재값만 표시
