@@ -381,33 +381,45 @@ export async function getMonthlyAssetChange(currentTotal: number): Promise<numbe
 }
 
 /**
- * 오늘 자산 변동액 계산 (전일 대비)
+ * 오늘 자산 변동액 계산 (가장 최근 데이터 대비)
  */
 export async function getDailyAssetChange(): Promise<number> {
   const householdId = getHouseholdId();
   const today = new Date().toISOString().split('T')[0];
-
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
-
   const todayId = `${householdId}_financial_${today}`;
-  const yesterdayId = `${householdId}_financial_${yesterdayStr}`;
 
   try {
-    const [todaySnap, yesterdaySnap] = await Promise.all([
-      getDoc(doc(db, HISTORY_COLLECTION, todayId)),
-      getDoc(doc(db, HISTORY_COLLECTION, yesterdayId)),
-    ]);
+    const todaySnap = await getDoc(doc(db, HISTORY_COLLECTION, todayId));
 
-    if (!todaySnap.exists() || !yesterdaySnap.exists()) {
+    if (!todaySnap.exists()) {
       return 0;
     }
 
-    const todayBalance = todaySnap.data().balance || 0;
-    const yesterdayBalance = yesterdaySnap.data().balance || 0;
+    const todayData = todaySnap.data();
+    const todayBalance = todayData.balance || 0;
+    const previousBalance = todayData.previousBalance ?? 0;
 
-    return todayBalance - yesterdayBalance;
+    // 오늘 스냅샷에 저장된 previousBalance 사용
+    if (previousBalance > 0) {
+      return todayBalance - previousBalance;
+    }
+
+    // previousBalance가 없으면 가장 최근 데이터 찾기
+    const q = query(
+      collection(db, HISTORY_COLLECTION),
+      where('householdId', '==', householdId),
+      where('assetId', '==', 'FINANCIAL'),
+      where('date', '<', today),
+      orderBy('date', 'desc')
+    );
+
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) {
+      return 0;
+    }
+
+    const prevBalance = snapshot.docs[0].data().balance || 0;
+    return todayBalance - prevBalance;
   } catch (error) {
     console.error('일간 변동액 조회 오류:', error);
     return 0;
@@ -448,19 +460,23 @@ async function saveDailySnapshot(
         });
       }
     } else {
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
-      const yesterdaySnapId = `${householdId}_${snapshotIdSuffix}_${yesterdayStr}`;
-
+      // 가장 최근 이전 스냅샷 찾기 (어제가 없을 수 있음 - 주말 등)
       let previousBalance = 0;
       try {
-        const yesterdaySnap = await getDoc(doc(db, HISTORY_COLLECTION, yesterdaySnapId));
-        if (yesterdaySnap.exists()) {
-          previousBalance = yesterdaySnap.data().balance || 0;
+        const q = query(
+          collection(db, HISTORY_COLLECTION),
+          where('householdId', '==', householdId),
+          where('assetId', '==', assetId),
+          where('date', '<', today),
+          orderBy('date', 'desc')
+        );
+
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+          previousBalance = snapshot.docs[0].data().balance || 0;
         }
       } catch {
-        // 전날 데이터 없음
+        // 이전 데이터 없음
       }
 
       await setDoc(doc(db, HISTORY_COLLECTION, snapshotId), {
