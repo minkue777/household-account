@@ -295,23 +295,6 @@ export default function AssetStatsPage() {
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [history, snapshotType]);
 
-  // 전날 데이터가 있는 날짜 Set (초기 등록 데이터 필터링용)
-  const datesWithPreviousDay = useMemo(() => {
-    const allDates = new Set(totalSnapshots.map((h) => h.date));
-    const validDates = new Set<string>();
-
-    allDates.forEach((date) => {
-      const prevDate = new Date(date);
-      prevDate.setDate(prevDate.getDate() - 1);
-      const prevDateStr = prevDate.toISOString().split('T')[0];
-      if (allDates.has(prevDateStr)) {
-        validDates.add(date);
-      }
-    });
-
-    return validDates;
-  }, [totalSnapshots]);
-
   // 월별 수익 데이터 계산
   const monthlyProfitData = useMemo(() => {
     const monthlyData: { month: number; profit: number; rate: number }[] = [];
@@ -320,9 +303,8 @@ export default function AssetStatsPage() {
       const startDate = `${profitYear}-${String(month).padStart(2, '0')}-01`;
       const endDate = `${profitYear}-${String(month).padStart(2, '0')}-31`;
 
-      // 해당 월의 총자산 스냅샷 중 전날 데이터가 있는 것만
       const monthSnapshots = totalSnapshots.filter(
-        (h) => h.date >= startDate && h.date <= endDate && datesWithPreviousDay.has(h.date)
+        (h) => h.date >= startDate && h.date <= endDate
       );
 
       const totalChange = monthSnapshots.reduce((sum, h) => sum + h.changeAmount, 0);
@@ -340,7 +322,7 @@ export default function AssetStatsPage() {
     }
 
     return monthlyData;
-  }, [totalSnapshots, profitYear, totalAssets, datesWithPreviousDay]);
+  }, [totalSnapshots, profitYear, totalAssets]);
 
   // 일별 수익 데이터 계산
   const dailyProfitData = useMemo(() => {
@@ -350,10 +332,7 @@ export default function AssetStatsPage() {
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${profitYear}-${String(profitMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-      // 해당 날짜의 총자산 스냅샷 (전날 데이터가 있는 경우만)
-      const daySnapshot = totalSnapshots.find(
-        (h) => h.date === dateStr && datesWithPreviousDay.has(h.date)
-      );
+      const daySnapshot = totalSnapshots.find((h) => h.date === dateStr);
 
       const profit = daySnapshot?.changeAmount || 0;
       const baseAmount = daySnapshot ? daySnapshot.balance - daySnapshot.changeAmount : 0;
@@ -367,7 +346,7 @@ export default function AssetStatsPage() {
     }
 
     return dailyData;
-  }, [totalSnapshots, profitYear, profitMonth, datesWithPreviousDay]);
+  }, [totalSnapshots, profitYear, profitMonth]);
 
   // 수익 바 차트 데이터
   const profitChartData = useMemo(() => {
