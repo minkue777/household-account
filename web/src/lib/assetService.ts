@@ -301,7 +301,7 @@ async function saveDailySnapshot(
     const existingSnap = await getDoc(doc(db, HISTORY_COLLECTION, snapshotId));
 
     // 이전 스냅샷 조회해서 changeAmount 계산
-    let prevBalance = 0;
+    let changeAmount = 0;
     try {
       const q = query(
         collection(db, HISTORY_COLLECTION),
@@ -313,13 +313,13 @@ async function saveDailySnapshot(
 
       const snapshot = await getDocs(q);
       if (!snapshot.empty) {
-        prevBalance = snapshot.docs[0].data().balance || 0;
+        const prevBalance = snapshot.docs[0].data().balance || 0;
+        changeAmount = balance - prevBalance;
       }
+      // 이전 스냅샷이 없으면 (첫 등록) changeAmount = 0 유지
     } catch {
-      // 이전 데이터 없음
+      // 이전 데이터 없음 → changeAmount = 0
     }
-
-    const changeAmount = balance - prevBalance;
 
     if (existingSnap.exists()) {
       const existingData = existingSnap.data();
