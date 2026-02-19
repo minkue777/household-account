@@ -4,6 +4,12 @@ import { useState, useEffect } from 'react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { Portal } from '@/components/common';
 import { CategorySelector, AmountInput } from '@/components/common';
+import {
+  sanitizeSplitMonthsInput,
+  hasSplitMonthsError,
+  parseValidSplitMonths,
+  splitMonthsMinMessage,
+} from '@/lib/utils/splitMonths';
 
 interface AddExpenseModalProps {
   isOpen: boolean;
@@ -25,8 +31,9 @@ export default function AddExpenseModal({
   const [category, setCategory] = useState<string>('etc');
   const [date, setDate] = useState(selectedDate || new Date().toISOString().split('T')[0]);
   const [memo, setMemo] = useState('');
-  const [splitMonths, setSplitMonths] = useState(1);
+  const [splitMonthsInput, setSplitMonthsInput] = useState('2');
   const [showSplitInput, setShowSplitInput] = useState(false);
+  const [splitMonthsError, setSplitMonthsError] = useState(false);
 
   // 활성 카테고리가 로드되면 첫 번째 카테고리를 기본값으로 설정
   useEffect(() => {
@@ -39,22 +46,37 @@ export default function AddExpenseModal({
   useEffect(() => {
     if (isOpen) {
       setDate(selectedDate || new Date().toISOString().split('T')[0]);
+      setSplitMonthsInput('2');
+      setShowSplitInput(false);
+      setSplitMonthsError(false);
     }
   }, [isOpen, selectedDate]);
 
   const handleSubmit = () => {
     const amountNum = parseInt(amount, 10);
-    if (merchant.trim() && amountNum > 0) {
-      onAdd(merchant.trim(), amountNum, category, date, memo.trim() || undefined, showSplitInput && splitMonths > 1 ? splitMonths : undefined);
-      // 폼 초기화
-      setMerchant('');
-      setAmount('');
-      setCategory(activeCategories[0]?.key || 'etc');
-      setMemo('');
-      setSplitMonths(1);
-      setShowSplitInput(false);
-      onClose();
+    if (!merchant.trim() || amountNum <= 0) return;
+
+    let splitMonths: number | undefined;
+    if (showSplitInput) {
+      const parsedMonths = parseValidSplitMonths(splitMonthsInput);
+      if (parsedMonths === null) {
+        setSplitMonthsError(true);
+        return;
+      }
+      splitMonths = parsedMonths;
     }
+
+    onAdd(merchant.trim(), amountNum, category, date, memo.trim() || undefined, splitMonths);
+
+    // 폼 초기화
+    setMerchant('');
+    setAmount('');
+    setCategory(activeCategories[0]?.key || 'etc');
+    setMemo('');
+    setSplitMonthsInput('2');
+    setShowSplitInput(false);
+    setSplitMonthsError(false);
+    onClose();
   };
 
   if (!isOpen) return null;
@@ -96,8 +118,8 @@ export default function AddExpenseModal({
               <button
                 type="button"
                 onClick={() => {
-                  if (!showSplitInput) setSplitMonths(2);
-                  else setSplitMonths(1);
+                  if (!showSplitInput) setSplitMonthsInput('2');
+                  setSplitMonthsError(false);
                   setShowSplitInput(!showSplitInput);
                 }}
                 className={`px-3 py-2 rounded-lg border transition-colors ${
@@ -116,17 +138,31 @@ export default function AddExpenseModal({
                   type="number"
                   min="2"
                   max="24"
-                  value={splitMonths}
-                  onChange={(e) => setSplitMonths(Math.max(2, parseInt(e.target.value, 10) || 2))}
-                  className="w-20 px-3 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-center"
+                  step="1"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={splitMonthsInput}
+                  onChange={(e) => {
+                    const value = sanitizeSplitMonthsInput(e.target.value);
+                    setSplitMonthsInput(value);
+                    setSplitMonthsError(hasSplitMonthsError(value));
+                  }}
+                  className={`w-20 px-3 py-1.5 border rounded-lg focus:outline-none focus:ring-2 text-center ${
+                    splitMonthsError
+                      ? 'border-red-400 focus:ring-red-400'
+                      : 'border-slate-300 focus:ring-purple-500'
+                  }`}
                 />
                 <span className="text-sm text-slate-600">개월 분할</span>
                 {amount && (
                   <span className="text-sm text-purple-600 ml-auto">
-                    월 {Math.floor(parseInt(amount, 10) / splitMonths).toLocaleString()}원
+                    월 {Math.floor(parseInt(amount, 10) / (parseInt(splitMonthsInput, 10) || 2)).toLocaleString()}원
                   </span>
                 )}
               </div>
+            )}
+            {showSplitInput && splitMonthsError && (
+              <p className="text-xs text-red-500 mt-1">{splitMonthsMinMessage}</p>
             )}
           </div>
 

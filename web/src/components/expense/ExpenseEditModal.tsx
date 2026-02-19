@@ -7,6 +7,12 @@ import { Portal, CategorySelector, AmountInput } from '../common';
 import { openTossTransfer } from '@/lib/tossService';
 import { checkSettleable } from '@/lib/settlementService';
 import { PersonalAccountStorage, LocalPersonalAccount } from '@/lib/storage/personalAccountStorage';
+import {
+  sanitizeSplitMonthsInput,
+  hasSplitMonthsError,
+  parseValidSplitMonths,
+  splitMonthsMinMessage,
+} from '@/lib/utils/splitMonths';
 
 interface ExpenseEditModalProps {
   expense: Expense;
@@ -226,6 +232,7 @@ export default function ExpenseEditModal({
                     type="button"
                     onClick={() => {
                       if (!showSplitInput) setSplitMonthsInput('2');
+                      setSplitMonthsError(false);
                       setShowSplitInput(!showSplitInput);
                     }}
                     className={`px-3 py-2 rounded-lg border transition-colors ${
@@ -251,10 +258,9 @@ export default function ExpenseEditModal({
                       pattern="[0-9]*"
                       value={splitMonthsInput}
                       onChange={(e) => {
-                        const val = e.target.value.replace(/[^0-9]/g, '');
-                        setSplitMonthsInput(val);
-                        const num = parseInt(val, 10);
-                        setSplitMonthsError(val !== '' && !isNaN(num) && num < 2);
+                        const value = sanitizeSplitMonthsInput(e.target.value);
+                        setSplitMonthsInput(value);
+                        setSplitMonthsError(hasSplitMonthsError(value));
                       }}
                       className={`w-20 px-3 py-1.5 border rounded-lg focus:outline-none focus:ring-2 text-center ${
                         splitMonthsError
@@ -268,7 +274,7 @@ export default function ExpenseEditModal({
                     </span>
                   </div>
                   {splitMonthsError && (
-                    <p className="text-xs text-red-500 mt-1">2개월 이상부터 분할할 수 있습니다</p>
+                    <p className="text-xs text-red-500 mt-1">{splitMonthsMinMessage}</p>
                   )}
                 </div>
               )}
@@ -497,9 +503,9 @@ export default function ExpenseEditModal({
                 {showSplitInput && onSplitMonths ? (
                   <button
                     onClick={() => {
-                      const months = parseInt(splitMonthsInput, 10);
-                      if (isNaN(months) || months < 2) {
-                        alert('2개월 이상부터 분할할 수 있습니다.');
+                      const months = parseValidSplitMonths(splitMonthsInput);
+                      if (months === null) {
+                        alert(splitMonthsMinMessage);
                         return;
                       }
                       onSplitMonths(months);

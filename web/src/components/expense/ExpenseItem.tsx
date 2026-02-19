@@ -2,7 +2,12 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Expense } from '@/types/expense';
-import { SplitItem, addExpense, generateSplitGroupId, cancelSplitGroup, updateSplitGroup, notifyPartner, requestSettlement } from '@/lib/expenseService';
+import { SplitItem, notifyPartner, requestSettlement } from '@/lib/expenseService';
+import {
+  runSplitMonthsAction,
+  runCancelSplitGroupAction,
+  runUpdateSplitGroupAction,
+} from '@/lib/utils/monthlySplitActions';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import ExpenseEditModal from './ExpenseEditModal';
 import ExpenseSplitModal from './ExpenseSplitModal';
@@ -165,63 +170,21 @@ export default function ExpenseItem({
   // 월별 분할 처리 (여러 달에 걸쳐 분할)
   const handleSplitMonths = async (months: number) => {
     if (!onDelete) return;
-    if (months < 2) {
-      alert('2개월 이상부터 분할할 수 있습니다.');
-      return;
-    }
-
-    const monthlyAmount = Math.floor(expense.amount / months);
-    const baseDate = new Date(expense.date);
-    const splitGroupId = generateSplitGroupId();
-
-    try {
-      // 분할된 지출 생성 (그룹 ID로 연결)
-      for (let i = 0; i < months; i++) {
-        const targetDate = new Date(baseDate);
-        targetDate.setMonth(targetDate.getMonth() + i);
-        const dateStr = targetDate.toISOString().split('T')[0];
-
-        await addExpense({
-          date: dateStr,
-          time: expense.time || '09:00',
-          merchant: `${expense.merchant} (${i + 1}/${months})`,
-          amount: monthlyAmount,
-          category: expense.category,
-          cardType: expense.cardType || 'main',
-          memo: expense.memo,
-          splitGroupId,
-          splitIndex: i + 1,
-          splitTotal: months,
-        });
-      }
-
-      // 기존 지출 삭제
-      onDelete(expense.id);
-    } catch (error) {
-      alert('분할 처리 중 오류가 발생했습니다.');
-    }
+    await runSplitMonthsAction({
+      expense,
+      months,
+      deleteExpense: onDelete,
+    });
   };
 
   // 월별 분할 취소 (합치기)
   const handleCancelSplitGroup = async () => {
-    if (!expense.splitGroupId) return;
-
-    try {
-      await cancelSplitGroup(expense.splitGroupId);
-    } catch (error) {
-      alert('분할 취소 중 오류가 발생했습니다.');
-    }
+    await runCancelSplitGroupAction({ expense });
   };
 
   // 월별 분할 그룹 개월 수 변경
   const handleUpdateSplitGroup = async (newMonths: number) => {
-    if (!expense.splitGroupId) return;
-
-    try {
-      await updateSplitGroup(expense.splitGroupId, newMonths);
-    } catch (error) {
-      alert('수정 중 오류가 발생했습니다.');
-    }
+    await runUpdateSplitGroupAction({ expense, newMonths });
   };
 
   return (

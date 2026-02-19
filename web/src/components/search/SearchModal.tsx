@@ -2,10 +2,19 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Expense } from '@/types/expense';
-import { searchExpenses, SplitItem } from '@/lib/expenseService';
+import {
+  searchExpenses,
+  SplitItem,
+  notifyPartner,
+} from '@/lib/expenseService';
+import {
+  runSplitMonthsAction,
+  runCancelSplitGroupAction,
+  runUpdateSplitGroupAction,
+} from '@/lib/utils/monthlySplitActions';
 import { Portal } from '../common';
+import { ExpenseEditModal, ExpenseSplitModal } from '../expense';
 import SearchResultList from './SearchResultList';
-import SearchExpenseEdit from './SearchExpenseEdit';
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -20,6 +29,7 @@ export default function SearchModal({ isOpen, onClose, onExpenseUpdate, onDelete
   const [results, setResults] = useState<Expense[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const [splitExpense, setSplitExpense] = useState<Expense | null>(null);
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
@@ -37,6 +47,7 @@ export default function SearchModal({ isOpen, onClose, onExpenseUpdate, onDelete
       setKeyword('');
       setResults([]);
       setSelectedExpense(null);
+      setSplitExpense(null);
       setExpandedMonth(null);
     }
   }, [isOpen]);
@@ -68,6 +79,39 @@ export default function SearchModal({ isOpen, onClose, onExpenseUpdate, onDelete
       onSplitExpense(expense, splits);
       refreshSearch();
     }
+  };
+
+  const handleSplitMonths = async (months: number) => {
+    if (!selectedExpense || !onDelete) return;
+    await runSplitMonthsAction({
+      expense: selectedExpense,
+      months,
+      deleteExpense: onDelete,
+      onSuccess: refreshSearch,
+    });
+  };
+
+  const handleCancelSplitGroup = async () => {
+    if (!selectedExpense) return;
+    await runCancelSplitGroupAction({
+      expense: selectedExpense,
+      onSuccess: refreshSearch,
+    });
+  };
+
+  const handleUpdateSplitGroup = async (newMonths: number) => {
+    if (!selectedExpense) return;
+    await runUpdateSplitGroupAction({
+      expense: selectedExpense,
+      newMonths,
+      onSuccess: refreshSearch,
+    });
+  };
+
+  const handleSaveSplitFromModal = (splits: SplitItem[]) => {
+    if (!splitExpense) return;
+    handleSplitExpense(splitExpense, splits);
+    setSplitExpense(null);
   };
 
   // 키워드 변경 시 자동 검색 (debounce 적용)
@@ -182,12 +226,26 @@ export default function SearchModal({ isOpen, onClose, onExpenseUpdate, onDelete
 
       {/* 지출 수정 모달 */}
       {selectedExpense && (
-        <SearchExpenseEdit
+        <ExpenseEditModal
           expense={selectedExpense}
+          isOpen={!!selectedExpense}
           onClose={() => setSelectedExpense(null)}
-          onSave={handleSaveEdit}
-          onDelete={onDelete ? handleDelete : undefined}
-          onSplitExpense={onSplitExpense ? handleSplitExpense : undefined}
+          onSave={(updates) => { void handleSaveEdit(updates); }}
+          onOpenSplit={onSplitExpense ? () => setSplitExpense(selectedExpense) : undefined}
+          onSplitMonths={onDelete ? (months) => { void handleSplitMonths(months); } : undefined}
+          onCancelSplitGroup={selectedExpense.splitGroupId ? () => { void handleCancelSplitGroup(); } : undefined}
+          onUpdateSplitGroup={selectedExpense.splitGroupId ? (newMonths) => { void handleUpdateSplitGroup(newMonths); } : undefined}
+          onDelete={onDelete ? () => { void handleDelete(selectedExpense.id); } : undefined}
+          onNotifyPartner={() => { void notifyPartner(selectedExpense.id); }}
+        />
+      )}
+
+      {splitExpense && (
+        <ExpenseSplitModal
+          expense={splitExpense}
+          isOpen={!!splitExpense}
+          onClose={() => setSplitExpense(null)}
+          onSave={handleSaveSplitFromModal}
         />
       )}
     </Portal>
