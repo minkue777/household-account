@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Asset, StockHolding, StockSearchResult } from '@/types/asset';
-import { addStockHolding, updateStockHolding, deleteStockHolding, subscribeToStockHoldings } from '@/lib/assetService';
+import { useEffect, useState } from 'react';
+import { Asset } from '@/types/asset';
 import { Portal } from '@/components/common';
 import { X, Plus, Trash2, Loader2 } from 'lucide-react';
+import { calculateHoldingValue, useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
 
 interface StockHoldingModalProps {
   isOpen: boolean;
@@ -13,144 +13,64 @@ interface StockHoldingModalProps {
 }
 
 export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldingModalProps) {
-  const [holdings, setHoldings] = useState<StockHolding[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
 
-  // 종목 추가 폼 상태
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<StockSearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [selectedStock, setSelectedStock] = useState<StockSearchResult | null>(null);
-  const [quantity, setQuantity] = useState('');
-  const [avgPrice, setAvgPrice] = useState('');
-  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
-  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const {
+    holdings,
+    isLoadingHoldings,
+    totalHoldingValue,
+    searchQuery,
+    setSearchQuery,
+    searchResults,
+    isSearching,
+    selectedStock,
+    selectStock,
+    quantity,
+    setQuantityInput,
+    avgPrice,
+    setAvgPriceInput,
+    currentPrice,
+    isLoadingPrice,
+    isAddingHolding,
+    addHolding,
+    deleteHolding,
+    resetStockForm,
+  } = useStockHoldingManager({ isOpen, asset });
 
-  // 보유 종목 구독
   useEffect(() => {
-    if (!isOpen || !asset) {
-      setHoldings([]);
-      return;
+    if (!isOpen) {
+      setShowAddForm(false);
     }
+  }, [isOpen]);
 
-    setIsLoading(true);
-    const unsubscribe = subscribeToStockHoldings(asset.id, (newHoldings) => {
-      setHoldings(newHoldings);
-      setIsLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [isOpen, asset]);
-
-  // 종목 검색
-  useEffect(() => {
-    if (searchQuery.length < 1) {
-      setSearchResults([]);
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      setIsSearching(true);
-      try {
-        const response = await fetch(`/api/stock/search?q=${encodeURIComponent(searchQuery)}`);
-        const data = await response.json();
-        setSearchResults(data.results || []);
-      } catch (error) {
-        console.error('종목 검색 오류:', error);
-        setSearchResults([]);
-      } finally {
-        setIsSearching(false);
-      }
-    }, 150);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  // 종목 선택
-  const handleSelectStock = async (stock: StockSearchResult) => {
-    setSelectedStock(stock);
-    setSearchQuery(stock.name);
-    setSearchResults([]);
-
-    // 현재가 조회
-    setIsLoadingPrice(true);
-    try {
-      const response = await fetch(`/api/stock/price?code=${stock.code}`);
-      if (response.ok) {
-        const data = await response.json();
-        setCurrentPrice(data.price);
-      }
-    } catch (error) {
-      console.error('시세 조회 오류:', error);
-    } finally {
-      setIsLoadingPrice(false);
-    }
-  };
-
-  // 종목 추가
   const handleAddHolding = async () => {
-    if (!asset || !selectedStock || !quantity || isSubmitting) return;
-
-    setIsSubmitting(true);
-    try {
-      await addStockHolding({
-        assetId: asset.id,
-        stockCode: selectedStock.code,
-        stockName: selectedStock.name,
-        quantity: parseInt(quantity, 10),
-        avgPrice: avgPrice ? parseInt(avgPrice, 10) : undefined,
-        currentPrice: currentPrice || undefined,
-      });
-
-      // 폼 초기화
-      resetForm();
-    } catch (error) {
-      console.error('종목 추가 오류:', error);
-    } finally {
-      setIsSubmitting(false);
+    const added = await addHolding();
+    if (added) {
+      setShowAddForm(false);
     }
   };
 
-  // 종목 삭제
   const handleDeleteHolding = async (holdingId: string) => {
-    if (!asset || !confirm('이 종목을 삭제하시겠습니까?')) return;
-
-    try {
-      await deleteStockHolding(holdingId, asset.id);
-    } catch (error) {
-      console.error('종목 삭제 오류:', error);
+    if (!confirm('이 종목을 삭제하시겠습니까?')) {
+      return;
     }
+
+    await deleteHolding(holdingId);
   };
 
-  // 폼 초기화
-  const resetForm = () => {
+  const handleCancelAddForm = () => {
     setShowAddForm(false);
-    setSearchQuery('');
-    setSearchResults([]);
-    setSelectedStock(null);
-    setQuantity('');
-    setAvgPrice('');
-    setCurrentPrice(null);
+    resetStockForm();
   };
 
-  // 평가금액 계산
-  const calculateValue = (holding: StockHolding) => {
-    const price = holding.currentPrice || holding.avgPrice || 0;
-    return price * holding.quantity;
-  };
-
-  // 전체 평가금액
-  const totalValue = holdings.reduce((sum, h) => sum + calculateValue(h), 0);
-
-  if (!isOpen || !asset) return null;
+  if (!isOpen || !asset) {
+    return null;
+  }
 
   return (
     <Portal>
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
         <div className="bg-white rounded-2xl p-6 m-4 max-w-md w-full shadow-xl max-h-[90vh] overflow-y-auto">
-          {/* 헤더 */}
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-xl font-bold text-slate-800">{asset.name}</h2>
@@ -164,19 +84,17 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
             </button>
           </div>
 
-          {/* 총 평가금액 */}
           <div className="bg-slate-50 rounded-xl p-4 mb-4">
             <p className="text-sm text-slate-500">총 평가금액</p>
             <p className="text-2xl font-bold text-slate-800">
-              {totalValue.toLocaleString()}
+              {totalHoldingValue.toLocaleString()}
               <span className="text-base font-medium text-slate-400 ml-1">원</span>
             </p>
           </div>
 
-          {/* 보유 종목 목록 */}
           <div className="space-y-2 mb-4">
-            {isLoading ? (
-              <div className="text-center py-8 text-slate-400">로딩 중...</div>
+            {isLoadingHoldings ? (
+              <div className="text-center py-8 text-slate-400">로딩 중..</div>
             ) : holdings.length === 0 ? (
               <div className="text-center py-8 text-slate-400">
                 보유 종목이 없습니다
@@ -196,10 +114,12 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
                   </div>
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-slate-800">
-                      {calculateValue(holding).toLocaleString()}원
+                      {calculateHoldingValue(holding).toLocaleString()}원
                     </p>
                     <button
-                      onClick={() => handleDeleteHolding(holding.id)}
+                      onClick={() => {
+                        void handleDeleteHolding(holding.id);
+                      }}
                       className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -210,7 +130,6 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
             )}
           </div>
 
-          {/* 종목 추가 폼 */}
           {showAddForm ? (
             <div className="border-t border-slate-100 pt-4 space-y-3">
               <div className="relative">
@@ -218,13 +137,7 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
                 <input
                   type="text"
                   value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    if (selectedStock) {
-                      setSelectedStock(null);
-                      setCurrentPrice(null);
-                    }
-                  }}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="종목명 입력 (예: 삼성전자, TIGER)"
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -232,14 +145,15 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
                   <Loader2 className="w-4 h-4 text-blue-500 absolute right-3 top-9 animate-spin" />
                 )}
 
-                {/* 검색 결과 */}
                 {searchResults.length > 0 && !selectedStock && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                     {searchResults.map((stock) => (
                       <button
                         key={stock.code}
                         type="button"
-                        onClick={() => handleSelectStock(stock)}
+                        onClick={() => {
+                          void selectStock(stock);
+                        }}
                         className="w-full px-4 py-2.5 text-left hover:bg-slate-50 flex items-center justify-between"
                       >
                         <span className="font-medium text-slate-800">{stock.name}</span>
@@ -250,7 +164,6 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
                 )}
               </div>
 
-              {/* 선택된 종목 */}
               {selectedStock && (
                 <div className="bg-blue-50 rounded-lg p-3">
                   <div className="flex items-center justify-between">
@@ -267,7 +180,6 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
                 </div>
               )}
 
-              {/* 보유 수량 */}
               {selectedStock && (
                 <>
                   <div>
@@ -276,7 +188,7 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
                       type="text"
                       inputMode="numeric"
                       value={quantity}
-                      onChange={(e) => setQuantity(e.target.value.replace(/[^0-9]/g, ''))}
+                      onChange={(e) => setQuantityInput(e.target.value)}
                       placeholder="0"
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
@@ -289,7 +201,7 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
                         type="text"
                         inputMode="numeric"
                         value={avgPrice ? parseInt(avgPrice, 10).toLocaleString() : ''}
-                        onChange={(e) => setAvgPrice(e.target.value.replace(/[^0-9]/g, ''))}
+                        onChange={(e) => setAvgPriceInput(e.target.value)}
                         placeholder="0"
                         className="w-full px-4 py-2 pr-8 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
@@ -297,7 +209,6 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
                     </div>
                   </div>
 
-                  {/* 평가금액 미리보기 */}
                   {quantity && parseInt(quantity, 10) > 0 && currentPrice && (
                     <div className="bg-slate-50 rounded-lg p-3">
                       <div className="flex items-center justify-between">
@@ -311,20 +222,21 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
                 </>
               )}
 
-              {/* 버튼 */}
               <div className="flex gap-2 pt-2">
                 <button
-                  onClick={resetForm}
+                  onClick={handleCancelAddForm}
                   className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
                 >
                   취소
                 </button>
                 <button
-                  onClick={handleAddHolding}
-                  disabled={!selectedStock || !quantity || isSubmitting}
+                  onClick={() => {
+                    void handleAddHolding();
+                  }}
+                  disabled={!selectedStock || !quantity || isAddingHolding}
                   className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
                 >
-                  {isSubmitting ? '추가 중...' : '추가'}
+                  {isAddingHolding ? '추가 중..' : '추가'}
                 </button>
               </div>
             </div>

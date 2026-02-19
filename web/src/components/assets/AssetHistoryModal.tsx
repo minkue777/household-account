@@ -1,17 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Asset, ASSET_TYPE_CONFIG, StockHolding, StockSearchResult } from '@/types/asset';
-import { subscribeToStockHoldings, addStockHolding, updateStockHolding, deleteStockHolding, updateAsset } from '@/lib/assetService';
+import { Asset, ASSET_TYPE_CONFIG, StockHolding } from '@/types/asset';
+import { updateStockHolding, updateAsset } from '@/lib/assetService';
 import { Portal } from '@/components/common';
 import { X, Plus, Edit2, Banknote, Home, BarChart3, Coins, Loader2, RefreshCw } from 'lucide-react';
-
-interface GoldPriceData {
-  buyPricePerDon: number;
-  sellPricePerDon: number;
-  timestamp: string;
-  estimated?: boolean;
-}
+import { calculateHoldingValue, useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
+import { useGoldHolding } from '@/lib/utils/useGoldHolding';
 
 interface DividendInfo {
   code: string;
@@ -48,17 +43,27 @@ export default function AssetHistoryModal({
   const [newBalance, setNewBalance] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 주식 관련 상태
-  const [holdings, setHoldings] = useState<StockHolding[]>([]);
-  const [isLoadingHoldings, setIsLoadingHoldings] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<StockSearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [selectedStock, setSelectedStock] = useState<StockSearchResult | null>(null);
-  const [quantity, setQuantity] = useState('');
-  const [avgPrice, setAvgPrice] = useState('');
-  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
-  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
+  const {
+    holdings,
+    isLoadingHoldings,
+    searchQuery,
+    setSearchQuery,
+    searchResults,
+    isSearching,
+    selectedStock,
+    selectStock: handleSelectStock,
+    quantity,
+    setQuantityInput: setQuantity,
+    avgPrice,
+    setAvgPriceInput: setAvgPrice,
+    currentPrice,
+    isLoadingPrice,
+    isAddingHolding,
+    addHolding,
+    deleteHolding,
+    isRefreshingPrices,
+    refreshHoldingPrices,
+  } = useStockHoldingManager({ isOpen, asset });
 
   // 보유 종목 수정 상태
   const [editingHolding, setEditingHolding] = useState<StockHolding | null>(null);
@@ -69,89 +74,23 @@ export default function AssetHistoryModal({
   const [dividendInfoMap, setDividendInfoMap] = useState<Record<string, DividendInfo>>({});
   const [loadingDividends, setLoadingDividends] = useState<Set<string>>(new Set());
 
-  // 금 관련 상태
-  const [goldQuantity, setGoldQuantity] = useState('');
-  const [goldPrice, setGoldPrice] = useState<GoldPriceData | null>(null);
-  const [isLoadingGoldPrice, setIsLoadingGoldPrice] = useState(false);
-
-  // 주식 보유 종목 구독
-  useEffect(() => {
-    if (!isOpen || !asset || asset.type !== 'stock') {
-      setHoldings([]);
-      return;
-    }
-
-    // 모달 열릴 때 폼 초기화
-    setSearchQuery('');
-    setSearchResults([]);
-    setSelectedStock(null);
-    setQuantity('');
-    setAvgPrice('');
-    setCurrentPrice(null);
-    // 수정 모드 초기화
-    setEditingHolding(null);
-    setEditQuantity('');
-    setEditAvgPrice('');
-
-    setIsLoadingHoldings(true);
-    const unsubscribe = subscribeToStockHoldings(asset.id, (newHoldings) => {
-      setHoldings(newHoldings);
-      setIsLoadingHoldings(false);
-    });
-
-    return () => unsubscribe();
-  }, [isOpen, asset]);
-
-  // 금 시세 및 보유량 로드
-  useEffect(() => {
-    if (!isOpen || !asset || asset.type !== 'gold') return;
-
-    // memo에서 돈 단위 추출
-    const match = asset.memo?.match(/(\d+(?:\.\d+)?)\s*돈/);
-    if (match) {
-      setGoldQuantity(match[1]);
-    } else {
-      setGoldQuantity('');
-    }
-    fetchGoldPrice();
-  }, [isOpen, asset]);
-
-  // 실시간 가격으로 보유 종목 업데이트
-  const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
-
-  const refreshHoldingPrices = async () => {
-    if (holdings.length === 0 || !asset) return;
-
-    setIsRefreshingPrices(true);
-    try {
-      const updatedHoldings = await Promise.all(
-        holdings.map(async (holding) => {
-          try {
-            const response = await fetch(`/api/stock/price?code=${holding.stockCode}`);
-            if (response.ok) {
-              const data = await response.json();
-              // Firestore 업데이트
-              await updateStockHolding(holding.id, asset.id, { currentPrice: data.price });
-              return { ...holding, currentPrice: data.price };
-            }
-          } catch (error) {
-            console.error(`가격 조회 실패 (${holding.stockCode}):`, error);
-          }
-          return holding;
-        })
-      );
-      setHoldings(updatedHoldings);
-    } finally {
-      setIsRefreshingPrices(false);
-    }
-  };
+  const {
+    quantity: goldQuantity,
+    setQuantityInput: setGoldQuantity,
+    goldPrice,
+    isLoadingPrice: isLoadingGoldPrice,
+    refreshGoldPrice: fetchGoldPrice,
+    totalValue: goldTotalValue,
+    isSaving: isSavingGoldHolding,
+    saveGoldHolding,
+  } = useGoldHolding({ isOpen, asset });
 
   // 모달 열릴 때 자동으로 가격 새로고침
   useEffect(() => {
     if (isOpen && asset?.type === 'stock' && holdings.length > 0 && !isLoadingHoldings) {
-      refreshHoldingPrices();
+      void refreshHoldingPrices();
     }
-  }, [isOpen, asset?.type, holdings.length, isLoadingHoldings]);
+  }, [isOpen, asset?.type, holdings.length, isLoadingHoldings, refreshHoldingPrices]);
 
   // 배당금 정보 조회
   const fetchDividendInfo = async (stockCode: string) => {
@@ -187,46 +126,6 @@ export default function AssetHistoryModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [holdings, isOpen]);
 
-  // 금 시세 조회
-  const fetchGoldPrice = async () => {
-    setIsLoadingGoldPrice(true);
-    try {
-      const response = await fetch('/api/gold/price');
-      if (response.ok) {
-        const data = await response.json();
-        setGoldPrice(data);
-      }
-    } catch (error) {
-      console.error('금 시세 조회 오류:', error);
-    } finally {
-      setIsLoadingGoldPrice(false);
-    }
-  };
-
-  // 종목 검색
-  useEffect(() => {
-    if (searchQuery.length < 1) {
-      setSearchResults([]);
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      setIsSearching(true);
-      try {
-        const response = await fetch(`/api/stock/search?q=${encodeURIComponent(searchQuery)}`);
-        const data = await response.json();
-        setSearchResults(data.results || []);
-      } catch (error) {
-        console.error('종목 검색 오류:', error);
-        setSearchResults([]);
-      } finally {
-        setIsSearching(false);
-      }
-    }, 150);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
   // 잔액 업데이트 폼 초기화
   useEffect(() => {
     if (showUpdateForm && asset) {
@@ -251,56 +150,12 @@ export default function AssetHistoryModal({
     }
   };
 
-  // 종목 선택
-  const handleSelectStock = async (stock: StockSearchResult) => {
-    setSelectedStock(stock);
-    setSearchQuery(stock.name);
-    setSearchResults([]);
-
-    setIsLoadingPrice(true);
-    try {
-      const response = await fetch(`/api/stock/price?code=${stock.code}`);
-      if (response.ok) {
-        const data = await response.json();
-        setCurrentPrice(data.price);
-      }
-    } catch (error) {
-      console.error('시세 조회 오류:', error);
-    } finally {
-      setIsLoadingPrice(false);
-    }
-  };
-
-  // 종목 추가
   const handleAddHolding = async () => {
-    if (!asset || !selectedStock || !quantity || isSubmitting) return;
-
-    setIsSubmitting(true);
-    try {
-      await addStockHolding({
-        assetId: asset.id,
-        stockCode: selectedStock.code,
-        stockName: selectedStock.name,
-        quantity: parseInt(quantity, 10),
-        avgPrice: avgPrice ? parseInt(avgPrice, 10) : undefined,
-        currentPrice: currentPrice || undefined,
-      });
-      resetStockForm();
-    } catch (error) {
-      console.error('종목 추가 오류:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
+    await addHolding();
   };
 
-  // 종목 삭제
   const handleDeleteHolding = async (holdingId: string) => {
-    if (!asset) return;
-    try {
-      await deleteStockHolding(holdingId, asset.id);
-    } catch (error) {
-      console.error('종목 삭제 오류:', error);
-    }
+    await deleteHolding(holdingId);
   };
 
   // 보유 종목 수정 시작
@@ -336,40 +191,11 @@ export default function AssetHistoryModal({
     setEditAvgPrice('');
   };
 
-  // 주식 폼 초기화
-  const resetStockForm = () => {
-    setSearchQuery('');
-    setSearchResults([]);
-    setSelectedStock(null);
-    setQuantity('');
-    setAvgPrice('');
-    setCurrentPrice(null);
-  };
-
-  // 금 저장
   const handleSaveGold = async () => {
-    if (!asset || !goldQuantity || !goldPrice || isSubmitting) return;
-
-    setIsSubmitting(true);
-    try {
-      // 팔 때 가격으로 평가금액 계산
-      const totalValue = Math.round(goldPrice.sellPricePerDon * parseFloat(goldQuantity));
-      await updateAsset(asset.id, {
-        currentBalance: totalValue,
-        memo: `${goldQuantity}돈`,
-      });
+    const saved = await saveGoldHolding();
+    if (saved) {
       onClose();
-    } catch (error) {
-      console.error('금 보유량 저장 오류:', error);
-    } finally {
-      setIsSubmitting(false);
     }
-  };
-
-  // 평가금액 계산
-  const calculateStockValue = (holding: StockHolding) => {
-    const price = holding.currentPrice || holding.avgPrice || 0;
-    return price * holding.quantity;
   };
 
   if (!isOpen || !asset) return null;
@@ -377,11 +203,6 @@ export default function AssetHistoryModal({
   const config = ASSET_TYPE_CONFIG[asset.type];
   const isStock = asset.type === 'stock';
   const isGold = asset.type === 'gold';
-  const totalStockValue = holdings.reduce((sum, h) => sum + calculateStockValue(h), 0);
-  const goldTotalValue = goldPrice && goldQuantity
-    ? Math.round(goldPrice.sellPricePerDon * parseFloat(goldQuantity))
-    : 0;
-
   // 주식 계좌 수익률 계산
   const investmentBase = asset.initialInvestment || asset.costBasis || 0;
   const stockProfitLoss = isStock && investmentBase > 0 ? asset.currentBalance - investmentBase : 0;
@@ -533,13 +354,7 @@ export default function AssetHistoryModal({
                   <input
                     type="text"
                     value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      if (selectedStock) {
-                        setSelectedStock(null);
-                        setCurrentPrice(null);
-                      }
-                    }}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="종목명 입력"
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   />
@@ -553,7 +368,9 @@ export default function AssetHistoryModal({
                         <button
                           key={stock.code}
                           type="button"
-                          onClick={() => handleSelectStock(stock)}
+                          onClick={() => {
+                            void handleSelectStock(stock);
+                          }}
                           className="w-full px-4 py-2.5 text-left hover:bg-slate-50 flex items-center justify-between"
                         >
                           <span className="font-medium text-slate-800">{stock.name}</span>
@@ -610,10 +427,10 @@ export default function AssetHistoryModal({
                     <button
                       type="button"
                       onClick={handleAddHolding}
-                      disabled={!selectedStock || !quantity || isSubmitting}
+                      disabled={!selectedStock || !quantity || isAddingHolding}
                       className="w-full py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-slate-300 font-medium"
                     >
-                      {isSubmitting ? '추가 중...' : '종목 추가'}
+                      {isAddingHolding ? '추가 중...' : '종목 추가'}
                     </button>
                   </>
                 )}
@@ -705,10 +522,10 @@ export default function AssetHistoryModal({
                 <button
                   type="button"
                   onClick={handleSaveGold}
-                  disabled={!goldQuantity || !goldPrice || isSubmitting}
+                  disabled={!goldQuantity || !goldPrice || isSavingGoldHolding}
                   className="w-full py-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed font-medium"
                 >
-                  {isSubmitting ? '저장 중...' : '저장'}
+                  {isSavingGoldHolding ? '저장 중...' : '저장'}
                 </button>
               </div>
             ) : isStock ? (
@@ -836,7 +653,7 @@ export default function AssetHistoryModal({
                                   </div>
                                   <div className="text-right flex-shrink-0">
                                     <p className="font-semibold text-slate-800">
-                                      {calculateStockValue(holding).toLocaleString()}원
+                                      {calculateHoldingValue(holding).toLocaleString()}원
                                     </p>
                                     {showHoldingProfit && (
                                       <p className={`text-xs ${isHoldingProfit ? 'text-red-500' : 'text-blue-500'}`}>

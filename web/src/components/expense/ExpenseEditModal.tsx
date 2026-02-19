@@ -7,12 +7,8 @@ import { Portal, CategorySelector, AmountInput } from '../common';
 import { openTossTransfer } from '@/lib/tossService';
 import { checkSettleable } from '@/lib/settlementService';
 import { PersonalAccountStorage, LocalPersonalAccount } from '@/lib/storage/personalAccountStorage';
-import {
-  sanitizeSplitMonthsInput,
-  hasSplitMonthsError,
-  parseValidSplitMonths,
-  splitMonthsMinMessage,
-} from '@/lib/utils/splitMonths';
+import { useMonthlySplitInput } from '@/lib/utils/useMonthlySplitInput';
+import MonthlySplitAmountControl from '@/components/expense/MonthlySplitAmountControl';
 
 interface ExpenseEditModalProps {
   expense: Expense;
@@ -53,9 +49,15 @@ export default function ExpenseEditModal({
   const [editMemo, setEditMemo] = useState(expense.memo || '');
   const [editCategory, setEditCategory] = useState(expense.category);
   const [rememberMerchant, setRememberMerchant] = useState(false);
-  const [splitMonthsInput, setSplitMonthsInput] = useState('2');
-  const [showSplitInput, setShowSplitInput] = useState(false);
-  const [splitMonthsError, setSplitMonthsError] = useState(false);
+  const {
+    splitMonthsInput,
+    showSplitInput,
+    splitMonthsError,
+    resetMonthlySplitInput,
+    toggleSplitInput,
+    handleSplitMonthsInputChange,
+    getValidSplitMonths,
+  } = useMonthlySplitInput();
   const [editSplitMonths, setEditSplitMonths] = useState(expense.splitTotal || 2);
   const [showEditSplitGroup, setShowEditSplitGroup] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -73,14 +75,12 @@ export default function ExpenseEditModal({
       setEditMemo(expense.memo || '');
       setEditCategory(expense.category);
       setRememberMerchant(false);
-      setSplitMonthsInput('2');
-      setShowSplitInput(false);
-      setSplitMonthsError(false);
+      resetMonthlySplitInput();
       setEditSplitMonths(expense.splitTotal || 2);
       setShowEditSplitGroup(false);
       setShowDeleteConfirm(false);
     }
-  }, [isOpen, expense]);
+  }, [isOpen, expense, resetMonthlySplitInput]);
 
   const handleSave = () => {
     const newAmount = parseInt(editAmount, 10);
@@ -220,64 +220,21 @@ export default function ExpenseEditModal({
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 금액
               </label>
-              <div className="flex gap-2">
-                <div className="flex-1">
+              <MonthlySplitAmountControl
+                enabled={Boolean(onSplitMonths && !expense.splitGroupId)}
+                amountField={(
                   <AmountInput
                     value={editAmount}
                     onChange={setEditAmount}
                   />
-                </div>
-                {onSplitMonths && !expense.splitGroupId && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!showSplitInput) setSplitMonthsInput('2');
-                      setSplitMonthsError(false);
-                      setShowSplitInput(!showSplitInput);
-                    }}
-                    className={`px-3 py-2 rounded-lg border transition-colors ${
-                      showSplitInput
-                        ? 'bg-purple-100 border-purple-300 text-purple-600'
-                        : 'border-slate-300 text-slate-500 hover:bg-slate-50'
-                    }`}
-                    title="월별 분할"
-                  >
-                    ÷
-                  </button>
                 )}
-              </div>
-              {showSplitInput && (
-                <div className="mt-2">
-                  <div className={`flex items-center gap-2 ${splitMonthsError ? 'animate-shake' : ''}`}>
-                    <input
-                      type="number"
-                      min="2"
-                      max="24"
-                      step="1"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      value={splitMonthsInput}
-                      onChange={(e) => {
-                        const value = sanitizeSplitMonthsInput(e.target.value);
-                        setSplitMonthsInput(value);
-                        setSplitMonthsError(hasSplitMonthsError(value));
-                      }}
-                      className={`w-20 px-3 py-1.5 border rounded-lg focus:outline-none focus:ring-2 text-center ${
-                        splitMonthsError
-                          ? 'border-red-400 focus:ring-red-400'
-                          : 'border-slate-300 focus:ring-purple-500'
-                      }`}
-                    />
-                    <span className="text-sm text-slate-600">개월 분할</span>
-                    <span className="text-sm text-purple-600 ml-auto">
-                      월 {Math.floor(expense.amount / (parseInt(splitMonthsInput, 10) || 2)).toLocaleString()}원
-                    </span>
-                  </div>
-                  {splitMonthsError && (
-                    <p className="text-xs text-red-500 mt-1">{splitMonthsMinMessage}</p>
-                  )}
-                </div>
-              )}
+                amountForPreview={editAmount ? Number.parseInt(editAmount, 10) : undefined}
+                showSplitInput={showSplitInput}
+                splitMonthsInput={splitMonthsInput}
+                splitMonthsError={splitMonthsError}
+                onToggle={toggleSplitInput}
+                onSplitMonthsInputChange={handleSplitMonthsInputChange}
+              />
             </div>
 
             {/* 카테고리 */}
@@ -503,9 +460,8 @@ export default function ExpenseEditModal({
                 {showSplitInput && onSplitMonths ? (
                   <button
                     onClick={() => {
-                      const months = parseValidSplitMonths(splitMonthsInput);
+                      const months = getValidSplitMonths({ alertOnError: true });
                       if (months === null) {
-                        alert(splitMonthsMinMessage);
                         return;
                       }
                       onSplitMonths(months);
