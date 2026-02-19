@@ -1,14 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
-import { Portal, CategorySelector, AmountInput } from '../common';
+import { ConfirmDialog, Portal } from '@/components/common';
 import { openTossTransfer } from '@/lib/tossService';
 import { checkSettleable } from '@/lib/settlementService';
 import { PersonalAccountStorage, LocalPersonalAccount } from '@/lib/storage/personalAccountStorage';
 import { useMonthlySplitInput } from '@/lib/utils/useMonthlySplitInput';
-import MonthlySplitAmountControl from '@/components/expense/MonthlySplitAmountControl';
+import { buildExpenseUpdates, trimExpenseMerchant } from '@/lib/utils/expenseForm';
+import { useExpenseFormState } from '@/lib/utils/useExpenseFormState';
+import ExpenseFormFields from '@/components/expense/ExpenseFormFields';
+import ExpenseActionButtons from '@/components/expense/ExpenseActionButtons';
 
 interface ExpenseEditModalProps {
   expense: Expense;
@@ -44,10 +47,25 @@ export default function ExpenseEditModal({
   const { getCategoryLabel } = useCategoryContext();
 
   const [personalAccount, setPersonalAccount] = useState<LocalPersonalAccount | null>(null);
-  const [editMerchant, setEditMerchant] = useState(expense.merchant);
-  const [editAmount, setEditAmount] = useState(expense.amount.toString());
-  const [editMemo, setEditMemo] = useState(expense.memo || '');
-  const [editCategory, setEditCategory] = useState(expense.category);
+  const {
+    merchant,
+    amount,
+    category,
+    memo,
+    setMerchant,
+    setAmount,
+    setCategory,
+    setMemo,
+    resetExpenseFormState,
+  } = useExpenseFormState({
+    initial: {
+      merchant: expense.merchant,
+      amount: expense.amount.toString(),
+      category: expense.category,
+      memo: expense.memo || '',
+      date: expense.date,
+    },
+  });
   const [rememberMerchant, setRememberMerchant] = useState(false);
   const {
     splitMonthsInput,
@@ -62,53 +80,53 @@ export default function ExpenseEditModal({
   const [showEditSplitGroup, setShowEditSplitGroup] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // 개인 계좌 로드 (localStorage)
   useEffect(() => {
     setPersonalAccount(PersonalAccountStorage.get());
   }, []);
 
-  // 모달이 열릴 때 상태 초기화
   useEffect(() => {
     if (isOpen) {
-      setEditMerchant(expense.merchant);
-      setEditAmount(expense.amount.toString());
-      setEditMemo(expense.memo || '');
-      setEditCategory(expense.category);
+      resetExpenseFormState({
+        merchant: expense.merchant,
+        amount: expense.amount.toString(),
+        category: expense.category,
+        memo: expense.memo || '',
+        date: expense.date,
+      });
       setRememberMerchant(false);
       resetMonthlySplitInput();
       setEditSplitMonths(expense.splitTotal || 2);
       setShowEditSplitGroup(false);
       setShowDeleteConfirm(false);
     }
-  }, [isOpen, expense, resetMonthlySplitInput]);
+  }, [isOpen, expense, resetExpenseFormState, resetMonthlySplitInput]);
 
   const handleSave = () => {
-    const newAmount = parseInt(editAmount, 10);
-    if (isNaN(newAmount) || newAmount <= 0) return;
-    if (!editMerchant.trim()) return;
+    const updates = buildExpenseUpdates({
+      original: {
+        merchant: expense.merchant,
+        amount: expense.amount,
+        category: expense.category,
+        memo: expense.memo,
+      },
+      draft: {
+        merchant,
+        amountInput: amount,
+        category,
+        memo,
+      },
+    });
 
-    const updates: { amount?: number; memo?: string; category?: string; merchant?: string } = {};
-
-    if (editMerchant.trim() !== expense.merchant) {
-      updates.merchant = editMerchant.trim();
-    }
-    if (newAmount !== expense.amount) {
-      updates.amount = newAmount;
-    }
-    if (editMemo !== (expense.memo || '')) {
-      updates.memo = editMemo;
-    }
-    if (editCategory !== expense.category) {
-      updates.category = editCategory;
+    if (updates === null) {
+      return;
     }
 
     if (Object.keys(updates).length > 0) {
       onSave(updates);
     }
 
-    // 카테고리가 변경되었고 기억하기 체크했으면 규칙 저장
-    if (editCategory !== expense.category && rememberMerchant && onSaveMerchantRule) {
-      onSaveMerchantRule(editMerchant.trim(), editCategory);
+    if (category !== expense.category && rememberMerchant && onSaveMerchantRule) {
+      onSaveMerchantRule(trimExpenseMerchant(merchant), category);
     }
 
     onClose();
@@ -117,154 +135,111 @@ export default function ExpenseEditModal({
   if (!isOpen) return null;
 
   return (
-    <Portal>
-      <div
-        className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-[9999] flex items-start justify-center pt-16 px-4 pb-4 overflow-y-auto"
-        onClick={onClose}
-      >
+    <>
+      <Portal>
         <div
-          className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
-          onClick={(e) => e.stopPropagation()}
+          className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-[9999] flex items-start justify-center pt-16 px-4 pb-4 overflow-y-auto"
+          onClick={onClose}
         >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-800">지출 수정</h3>
-            <button
-              onClick={onClose}
-              className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
-            >
-              <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          {/* 날짜/시간 정보 + 정산하기 */}
-          <div className="flex items-center justify-between text-sm text-slate-500 mb-4">
-            <div>
-              {expense.date} {expense.time && `· ${expense.time}`}
-              {expense.cardLastFour && ` · ${expense.cardLastFour}`}
+          <div
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-800">지출 수정</h3>
+              <button
+                onClick={onClose}
+                className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-            {(() => {
-              // 이번 달 지출인지 확인
-              const now = new Date();
-              const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-              const expenseYearMonth = expense.date.substring(0, 7);
-              const isCurrentMonth = currentYearMonth === expenseYearMonth;
 
-              // 정산 필요 여부 확인
-              const isSettleable = checkSettleable(expense.cardType, expense.category);
-              if (!isSettleable) return null;
+            <div className="flex items-center justify-between text-sm text-slate-500 mb-4">
+              <div>
+                {expense.date} {expense.time && `· ${expense.time}`}
+                {expense.cardLastFour && ` · ${expense.cardLastFour}`}
+              </div>
+              {(() => {
+                const now = new Date();
+                const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                const expenseYearMonth = expense.date.substring(0, 7);
+                const isCurrentMonth = currentYearMonth === expenseYearMonth;
 
-              if (expense.settled) {
-                // 정산 시간 포맷팅 (ISO → MM/DD HH:mm)
-                let settledTime = '';
-                if (expense.settledAt) {
-                  try {
-                    const date = new Date(expense.settledAt);
-                    settledTime = `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-                  } catch (e) {
-                    // ignore
+                const isSettleable = checkSettleable(expense.cardType, expense.category);
+                if (!isSettleable) return null;
+
+                if (expense.settled) {
+                  let settledTime = '';
+                  if (expense.settledAt) {
+                    try {
+                      const date = new Date(expense.settledAt);
+                      settledTime = `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                    } catch {
+                      settledTime = '';
+                    }
                   }
-                }
-                const details = [expense.settledBy, settledTime].filter(Boolean).join(' · ');
-                return (
-                  <div className="text-right">
-                    <div className="px-2.5 py-1 bg-slate-400 text-white text-xs rounded-lg inline-block">
-                      정산완료
+                  const details = [expense.settledBy, settledTime].filter(Boolean).join(' · ');
+                  return (
+                    <div className="text-right">
+                      <div className="px-2.5 py-1 bg-slate-400 text-white text-xs rounded-lg inline-block">
+                        정산완료
+                      </div>
+                      {details && (
+                        <div className="text-[10px] text-slate-400 mt-0.5">({details})</div>
+                      )}
                     </div>
-                    {details && (
-                      <div className="text-[10px] text-slate-400 mt-0.5">({details})</div>
-                    )}
-                  </div>
+                  );
+                }
+
+                if (!isCurrentMonth || !personalAccount) return null;
+
+                return (
+                  <button
+                    onClick={() => {
+                      onSettlementRequest?.();
+                      openTossTransfer({
+                        bankCode: personalAccount.bankCode,
+                        accountNo: personalAccount.accountNo,
+                        amount: expense.amount,
+                        message: expense.merchant,
+                      });
+                    }}
+                    className="px-2.5 py-1 bg-teal-500 text-white text-xs rounded-lg hover:bg-teal-600 transition-colors"
+                  >
+                    정산하기
+                  </button>
                 );
-              }
-
-              // 이번 달 아니면 정산하기 버튼 안 보임
-              if (!isCurrentMonth || !personalAccount) return null;
-
-              return (
-                <button
-                  onClick={() => {
-                    onSettlementRequest?.();
-                    openTossTransfer({
-                      bankCode: personalAccount.bankCode,
-                      accountNo: personalAccount.accountNo,
-                      amount: expense.amount,
-                      message: expense.merchant,
-                    });
-                  }}
-                  className="px-2.5 py-1 bg-teal-500 text-white text-xs rounded-lg hover:bg-teal-600 transition-colors"
-                >
-                  정산하기
-                </button>
-              );
-            })()}
-          </div>
-
-          <div className="space-y-4">
-            {/* 가맹점명 */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                가맹점
-              </label>
-              <input
-                type="text"
-                value={editMerchant}
-                onChange={(e) => setEditMerchant(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              })()}
             </div>
 
-            {/* 금액 */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                금액
-              </label>
-              <MonthlySplitAmountControl
-                enabled={Boolean(onSplitMonths && !expense.splitGroupId)}
-                amountField={(
-                  <AmountInput
-                    value={editAmount}
-                    onChange={setEditAmount}
-                  />
-                )}
-                amountForPreview={editAmount ? Number.parseInt(editAmount, 10) : undefined}
-                showSplitInput={showSplitInput}
-                splitMonthsInput={splitMonthsInput}
-                splitMonthsError={splitMonthsError}
-                onToggle={toggleSplitInput}
-                onSplitMonthsInputChange={handleSplitMonthsInputChange}
-              />
-            </div>
+            <ExpenseFormFields
+              merchant={merchant}
+              onMerchantChange={setMerchant}
+              amount={amount}
+              onAmountChange={setAmount}
+              category={category}
+              onCategoryChange={setCategory}
+              memo={memo}
+              onMemoChange={setMemo}
+              merchantLabel="가맹점"
+              memoLabel="메모"
+              memoPlaceholder="메모 입력 (선택)"
+              textInputPaddingClassName="px-3"
+              monthlySplit={{
+                enabled: Boolean(onSplitMonths && !expense.splitGroupId),
+                showSplitInput,
+                splitMonthsInput,
+                splitMonthsError,
+                onToggle: toggleSplitInput,
+                onSplitMonthsInputChange: handleSplitMonthsInputChange,
+              }}
+            />
 
-            {/* 카테고리 */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                카테고리
-              </label>
-              <CategorySelector
-                value={editCategory}
-                onChange={setEditCategory}
-              />
-            </div>
-
-            {/* 메모 */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                메모
-              </label>
-              <input
-                type="text"
-                value={editMemo}
-                onChange={(e) => setEditMemo(e.target.value)}
-                placeholder="메모 입력 (선택)"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* 가맹점 기억하기 (카테고리 변경시에만 표시) */}
-            {editCategory !== expense.category && (
-              <label className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg cursor-pointer">
+            {category !== expense.category && (
+              <label className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg cursor-pointer mt-4">
                 <input
                   type="checkbox"
                   checked={rememberMerchant}
@@ -276,144 +251,115 @@ export default function ExpenseEditModal({
                     이 가맹점 기억하기
                   </span>
                   <p className="text-xs text-slate-500">
-                    다음에 &quot;{expense.merchant}&quot;에서 결제하면 자동으로 {getCategoryLabel(editCategory)}(으)로 분류
+                    다음에 &quot;{expense.merchant}&quot;에서 결제하면 자동으로 {getCategoryLabel(category)}(으)로 분류
                   </p>
                 </div>
               </label>
             )}
-          </div>
 
-          {/* 합쳐진 지출 되돌리기 */}
-          {expense.mergedFrom && expense.mergedFrom.length > 0 && onUnmerge && (
-            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <div className="flex items-center gap-2 mb-2">
-                <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="text-sm font-medium text-amber-800">
-                  {expense.mergedFrom.length}개의 지출이 합쳐진 항목입니다
-                </span>
-              </div>
-              <div className="text-xs text-amber-700 mb-2 space-y-1">
-                {expense.mergedFrom.map((item, idx) => (
-                  <div key={idx}>• {item.merchant} {item.amount.toLocaleString()}원</div>
-                ))}
-              </div>
-              <button
-                onClick={() => {
-                  if (confirm('합치기를 되돌리면 원래 지출들이 복원됩니다. 진행하시겠습니까?')) {
-                    onUnmerge();
-                    onClose();
-                  }
-                }}
-                className="w-full py-2 px-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors flex items-center justify-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                </svg>
-                합치기 되돌리기
-              </button>
-            </div>
-          )}
-
-          {/* 월별 분할 그룹 관리 */}
-          {expense.splitGroupId && (onCancelSplitGroup || onUpdateSplitGroup) && (
-            <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-              <div className="flex items-center gap-2 mb-2">
-                <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <span className="text-sm font-medium text-purple-800">
-                  월별 분할 ({expense.splitIndex}/{expense.splitTotal})
-                </span>
-              </div>
-
-              {showEditSplitGroup ? (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min="2"
-                      max="24"
-                      value={editSplitMonths}
-                      onChange={(e) => setEditSplitMonths(Math.max(2, parseInt(e.target.value, 10) || 2))}
-                      className="w-20 px-3 py-1.5 border border-purple-300 rounded-lg text-center"
-                    />
-                    <span className="text-sm text-purple-700">개월로 변경</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setShowEditSplitGroup(false)}
-                      className="flex-1 py-1.5 px-3 border border-purple-300 rounded-lg text-purple-600 text-sm hover:bg-purple-100"
-                    >
-                      취소
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (onUpdateSplitGroup && confirm(`전체 분할을 ${editSplitMonths}개월로 변경하시겠습니까?`)) {
-                          onUpdateSplitGroup(editSplitMonths);
-                          onClose();
-                        }
-                      }}
-                      className="flex-1 py-1.5 px-3 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600"
-                    >
-                      변경
-                    </button>
-                  </div>
+            {expense.mergedFrom && expense.mergedFrom.length > 0 && onUnmerge && (
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-sm font-medium text-amber-800">
+                    {expense.mergedFrom.length}개의 지출이 합쳐진 항목입니다
+                  </span>
                 </div>
-              ) : (
-                <div className="flex gap-2">
-                  {onUpdateSplitGroup && (
-                    <button
-                      onClick={() => setShowEditSplitGroup(true)}
-                      className="flex-1 py-2 px-3 border border-purple-300 rounded-lg text-purple-600 text-sm hover:bg-purple-100"
-                    >
-                      개월 수 변경
-                    </button>
-                  )}
-                  {onCancelSplitGroup && (
-                    <button
-                      onClick={() => {
-                        onCancelSplitGroup();
-                        onClose();
-                      }}
-                      className="flex-1 py-2 px-3 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600"
-                    >
-                      분할 취소
-                    </button>
-                  )}
+                <div className="text-xs text-amber-700 mb-2 space-y-1">
+                  {expense.mergedFrom.map((item, idx) => (
+                    <div key={idx}>• {item.merchant} {item.amount.toLocaleString()}원</div>
+                  ))}
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* 삭제 확인 */}
-          {showDeleteConfirm ? (
-            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl">
-              <p className="text-sm text-red-700 mb-3">
-                정말 삭제하시겠습니까?
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
-                >
-                  취소
-                </button>
                 <button
                   onClick={() => {
-                    onDelete?.();
-                    onClose();
+                    if (confirm('합치기를 되돌리면 원래 지출들이 복원됩니다. 진행하시겠습니까?')) {
+                      onUnmerge();
+                      onClose();
+                    }
                   }}
-                  className="flex-1 py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                  className="w-full py-2 px-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors flex items-center justify-center gap-2"
                 >
-                  삭제
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                  </svg>
+                  합치기 되돌리기
                 </button>
               </div>
-            </div>
-          ) : (
+            )}
+
+            {expense.splitGroupId && (onCancelSplitGroup || onUpdateSplitGroup) && (
+              <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span className="text-sm font-medium text-purple-800">
+                    월별 분할 ({expense.splitIndex}/{expense.splitTotal})
+                  </span>
+                </div>
+
+                {showEditSplitGroup ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="2"
+                        max="24"
+                        value={editSplitMonths}
+                        onChange={(e) => setEditSplitMonths(Math.max(2, Number.parseInt(e.target.value, 10) || 2))}
+                        className="w-20 px-3 py-1.5 border border-purple-300 rounded-lg text-center"
+                      />
+                      <span className="text-sm text-purple-700">개월로 변경</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowEditSplitGroup(false)}
+                        className="flex-1 py-1.5 px-3 border border-purple-300 rounded-lg text-purple-600 text-sm hover:bg-purple-100"
+                      >
+                        취소
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (onUpdateSplitGroup && confirm(`전체 분할을 ${editSplitMonths}개월로 변경하시겠습니까?`)) {
+                            onUpdateSplitGroup(editSplitMonths);
+                            onClose();
+                          }
+                        }}
+                        className="flex-1 py-1.5 px-3 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600"
+                      >
+                        변경
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    {onUpdateSplitGroup && (
+                      <button
+                        onClick={() => setShowEditSplitGroup(true)}
+                        className="flex-1 py-2 px-3 border border-purple-300 rounded-lg text-purple-600 text-sm hover:bg-purple-100"
+                      >
+                        개월 수 변경
+                      </button>
+                    )}
+                    {onCancelSplitGroup && (
+                      <button
+                        onClick={() => {
+                          onCancelSplitGroup();
+                          onClose();
+                        }}
+                        className="flex-1 py-2 px-3 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600"
+                      >
+                        분할 취소
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="mt-4 space-y-2">
-              {/* 1행: 연한 스타일 */}
               <div className="flex gap-2">
                 {onOpenSplit && !expense.splitGroupId && (
                   <button
@@ -440,53 +386,64 @@ export default function ExpenseEditModal({
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                     </svg>
-                    또니에게
+                    파트너에게
                   </button>
                 )}
               </div>
-              {/* 2행: 진한 스타일 */}
-              <div className="flex gap-2">
-                {onDelete && (
-                  <button
-                    onClick={() => setShowDeleteConfirm(true)}
-                    className="flex-1 py-2.5 px-4 bg-slate-200 text-slate-800 rounded-xl hover:bg-slate-300 transition-colors font-medium flex items-center justify-center gap-1.5"
-                  >
+
+              <ExpenseActionButtons
+                size="large"
+                leftButton={onDelete ? {
+                  label: '삭제',
+                  onClick: () => setShowDeleteConfirm(true),
+                  variant: 'neutral',
+                  icon: (
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
-                    삭제
-                  </button>
-                )}
-                {showSplitInput && onSplitMonths ? (
-                  <button
-                    onClick={() => {
-                      const months = getValidSplitMonths({ alertOnError: true });
-                      if (months === null) {
-                        return;
-                      }
-                      onSplitMonths(months);
-                      onClose();
-                    }}
-                    className="flex-1 py-2.5 px-4 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-colors font-medium"
-                  >
-                    분할 적용
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSave}
-                    className="flex-1 py-2.5 px-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-medium flex items-center justify-center gap-1.5"
-                  >
+                  ),
+                } : undefined}
+                rightButton={showSplitInput && onSplitMonths ? {
+                  label: '분할 적용',
+                  onClick: () => {
+                    const months = getValidSplitMonths({ alertOnError: true });
+                    if (months === null) {
+                      return;
+                    }
+                    onSplitMonths(months);
+                    onClose();
+                  },
+                  variant: 'accent',
+                } : {
+                  label: '저장',
+                  onClick: handleSave,
+                  variant: 'primary',
+                  icon: (
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
-                    저장
-                  </button>
-                )}
-              </div>
+                  ),
+                }}
+              />
             </div>
-          )}
+          </div>
         </div>
-      </div>
-    </Portal>
+      </Portal>
+
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="지출 삭제"
+        message="정말 삭제하시겠습니까?"
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        variant="danger"
+        onConfirm={() => {
+          onDelete?.();
+          onClose();
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
+    </>
   );
 }
+
