@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Asset } from '@/types/asset';
-import { Portal } from '@/components/common';
+import { ModalOverlay } from '@/components/common';
 import { X, Plus, Trash2, Loader2 } from 'lucide-react';
 import { calculateHoldingValue, useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
 
@@ -68,8 +68,7 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
   }
 
   return (
-    <Portal>
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+    <ModalOverlay onClose={onClose}>
         <div className="bg-white rounded-2xl p-6 m-4 max-w-md w-full shadow-xl max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -250,7 +249,6 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
             </button>
           )}
         </div>
-      </div>
-    </Portal>
+    </ModalOverlay>
   );
 }

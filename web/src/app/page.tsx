@@ -2,20 +2,19 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import Calendar from '@/components/Calendar';
 import CategorySummary from '@/components/CategorySummary';
 import { ExpenseDetail, AddExpenseModal } from '@/components/expense';
 import { SearchModal } from '@/components/search';
-import { Portal } from '@/components/common';
 import { Expense, Category } from '@/types/expense';
 import BalanceCards from '@/components/BalanceCards';
+import HomeHeader from '@/components/HomeHeader';
+import CategoryDetailModal from '@/components/CategoryDetailModal';
+import LocalCurrencyModal from '@/components/LocalCurrencyModal';
 import { subscribeToMonthlyExpenses, updateExpense, addManualExpense, deleteExpense, splitExpense, mergeExpenses, unmergeExpense, SplitItem, generateSplitGroupId, addExpense } from '@/lib/expenseService';
 import { addMerchantRule } from '@/lib/merchantRuleService';
 import { getStoredHouseholdKey } from '@/lib/householdService';
 import { processRecurringExpenses } from '@/lib/recurringExpenseService';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useCategoryContext } from '@/contexts/CategoryContext';
 
 export default function Home() {
   const searchParams = useSearchParams();
@@ -30,8 +29,6 @@ export default function Home() {
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
-  const { themeConfig } = useTheme();
-  const { getCategoryLabel, getCategoryColor, getCategoryBudget } = useCategoryContext();
 
   // 카테고리 상세 모달 상태
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
@@ -249,61 +246,7 @@ export default function Home() {
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
         {/* 헤더 */}
-        <header className="mb-6 flex items-center justify-between">
-          {/* 왼쪽: 제목 + 곰돌이 (클릭 시 자산 페이지로 이동) */}
-          <Link href="/assets" className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer">
-            <h1
-              className="text-lg md:text-2xl font-bold leading-tight"
-              style={{
-                background: themeConfig.titleGradient,
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-              }}
-            >
-              또니망고네
-              <br />
-              가계부
-            </h1>
-            <img
-              src="/bear-removebg-preview.png"
-              alt="곰돌이"
-              className="w-14 h-14 md:w-16 md:h-16 object-contain"
-            />
-          </Link>
-
-          {/* 오른쪽: 버튼들 */}
-          <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
-            <button
-              onClick={() => setShowSearchModal(true)}
-              className="bg-white/80 hover:bg-white text-slate-600 p-2 md:px-4 md:py-2 rounded-xl flex items-center gap-2 transition-all shadow-sm hover:shadow border border-slate-200/50"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <span className="hidden md:inline">검색</span>
-            </button>
-            <Link
-              href="/settings"
-              className="bg-white/80 hover:bg-white text-slate-600 p-2 md:px-4 md:py-2 rounded-xl flex items-center gap-2 transition-all shadow-sm hover:shadow border border-slate-200/50"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <span className="hidden md:inline">설정</span>
-            </Link>
-            <Link
-              href="/stats"
-              className="bg-white/80 hover:bg-white text-slate-600 p-2 md:px-4 md:py-2 rounded-xl flex items-center gap-2 transition-all shadow-sm hover:shadow border border-slate-200/50"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              <span className="hidden md:inline">통계</span>
-            </Link>
-          </div>
-        </header>
+        <HomeHeader onSearchClick={() => setShowSearchModal(true)} />
 
         {/* 수동 추가 모달 */}
         <AddExpenseModal
@@ -450,170 +393,26 @@ export default function Home() {
 
       {/* 카테고리 지출 내역 모달 */}
       {selectedCategory && (
-        <Portal>
-          <div
-            className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
-            onClick={() => setSelectedCategory(null)}
-          >
-            <div
-              className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* 모달 헤더 */}
-              <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium"
-                    style={{ backgroundColor: getCategoryColor(selectedCategory) }}
-                  >
-                    {getCategoryLabel(selectedCategory).slice(0, 2)}
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-800">
-                      {getCategoryLabel(selectedCategory)}
-                    </h3>
-                    {(() => {
-                      const total = selectedCategoryExpenses.reduce((sum, e) => sum + e.amount, 0);
-                      const budget = getCategoryBudget(selectedCategory);
-                      const hasBudget = budget !== null && budget > 0;
-                      const percentage = hasBudget ? Math.round((total / budget) * 100) : 0;
-                      const isOverBudget = hasBudget && total > budget;
-
-                      return (
-                        <div className="text-sm text-slate-500">
-                          <p>{currentMonth}월 · {selectedCategoryExpenses.length}건</p>
-                          <p className={isOverBudget ? 'text-red-500 font-medium' : ''}>
-                            {total.toLocaleString()}
-                            {hasBudget ? ` / ${budget.toLocaleString()}원 (${percentage}%)` : '원'}
-                          </p>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSelectedCategory(null)}
-                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              {/* 지출 내역 리스트 */}
-              <div className="overflow-y-auto max-h-[60vh] p-4">
-                <div className="space-y-2">
-                  {selectedCategoryExpenses.map((expense) => (
-                    <div
-                      key={expense.id}
-                      className="flex items-center justify-between p-3 bg-slate-50 rounded-xl"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-slate-800 truncate">
-                          {expense.merchant}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          {expense.date}
-                          {expense.memo && ` · ${expense.memo}`}
-                        </div>
-                      </div>
-                      <div className="font-semibold text-slate-800 flex-shrink-0 ml-3">
-                        {expense.amount.toLocaleString()}원
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </Portal>
+        <CategoryDetailModal
+          category={selectedCategory}
+          expenses={selectedCategoryExpenses}
+          currentMonth={currentMonth}
+          onClose={() => setSelectedCategory(null)}
+        />
       )}
 
       {/* 지역화폐 지출 내역 모달 */}
       {showLocalCurrencyModal && (
-        <Portal>
-          <div
-            className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
-            onClick={() => setShowLocalCurrencyModal(false)}
-          >
-            <div
-              className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* 모달 헤더 */}
-              <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center bg-blue-100 text-blue-600">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-800">
-                      경기지역화폐
-                    </h3>
-                    <div className="text-sm text-slate-500">
-                      <p>{currentMonth}월 · {localCurrencyExpenses.length}건</p>
-                      <p>{localCurrencyExpenses.reduce((sum, e) => sum + e.amount, 0).toLocaleString()}원</p>
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowLocalCurrencyModal(false)}
-                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              {/* 지출 내역 리스트 */}
-              <div className="overflow-y-auto max-h-[60vh] p-4">
-                {localCurrencyExpenses.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400">
-                    이번 달 경기지역화폐 지출 내역이 없습니다.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {localCurrencyExpenses.map((expense) => (
-                      <div
-                        key={expense.id}
-                        className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors"
-                        onClick={() => {
-                          setShowLocalCurrencyModal(false);
-                          setSelectedDate(expense.date);
-                          setEditExpenseId(expense.id);
-                        }}
-                      >
-                        {/* 카테고리 뱃지 */}
-                        <div
-                          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0"
-                          style={{ backgroundColor: getCategoryColor(expense.category) }}
-                        >
-                          {getCategoryLabel(expense.category).slice(0, 2)}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="font-medium text-slate-800 truncate">
-                            {expense.merchant}
-                          </div>
-                          <div className="text-xs text-slate-500">
-                            {expense.date}
-                            {expense.memo && ` · ${expense.memo}`}
-                          </div>
-                        </div>
-                        <div className="font-semibold text-slate-800 flex-shrink-0">
-                          {expense.amount.toLocaleString()}원
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </Portal>
+        <LocalCurrencyModal
+          expenses={localCurrencyExpenses}
+          currentMonth={currentMonth}
+          onClose={() => setShowLocalCurrencyModal(false)}
+          onExpenseClick={(expense) => {
+            setShowLocalCurrencyModal(false);
+            setSelectedDate(expense.date);
+            setEditExpenseId(expense.id);
+          }}
+        />
       )}
     </main>
   );

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { AssetInput, AssetType, ASSET_OWNERS } from '@/types/asset';
 import { addAsset } from '@/lib/assetService';
-import { Portal } from '@/components/common';
+import { ModalOverlay } from '@/components/common';
 import { X } from 'lucide-react';
 import { AssetMemoField, AssetTypeGrid, StockInitialInvestmentField } from './AssetFormFields';
 
@@ -92,8 +92,7 @@ export default function AssetAddModal({
   }
 
   return (
-    <Portal>
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+    <ModalOverlay onClose={onClose}>
         <div className="bg-white rounded-2xl p-6 m-4 max-w-md w-full shadow-xl max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-slate-800">자산 추가</h2>
@@ -189,7 +188,6 @@ export default function AssetAddModal({
             </button>
           </div>
         </div>
-      </div>
-    </Portal>
+    </ModalOverlay>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
-import { Portal } from '@/components/common';
+import { ModalOverlay } from '@/components/common';
 import { useMonthlySplitInput } from '@/lib/utils/useMonthlySplitInput';
 import { useExpenseFormState } from '@/lib/utils/useExpenseFormState';
 import {
@@ -124,8 +124,7 @@ export default function AddExpenseModal({
   if (!isOpen) return null;
 
   return (
-    <Portal>
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+    <ModalOverlay onClose={onClose}>
         <div className="bg-white rounded-2xl p-6 m-4 max-w-md w-full shadow-xl">
           <h2 className="text-xl font-bold text-slate-800 mb-6">지출 추가</h2>
 
@@ -173,8 +172,7 @@ export default function AddExpenseModal({
             }}
           />
         </div>
-      </div>
-    </Portal>
+    </ModalOverlay>
   );
 }
 

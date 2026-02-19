@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Asset, AssetType, ASSET_TYPE_CONFIG } from '@/types/asset';
 import { deleteAsset, updateAsset } from '@/lib/assetService';
-import { ConfirmDialog, Portal } from '@/components/common';
+import { ConfirmDialog, ModalOverlay } from '@/components/common';
 import { X, Trash2 } from 'lucide-react';
 import { AssetMemoField, AssetTypeGrid, StockInitialInvestmentField } from './AssetFormFields';
 
@@ -91,8 +91,8 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
   }
 
   return (
-    <Portal>
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+    <>
+      <ModalOverlay onClose={onClose}>
         <div className="bg-white rounded-2xl p-6 m-4 max-w-md w-full shadow-xl">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-slate-800">자산 수정</h2>
@@ -191,7 +191,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
             </button>
           </div>
         </div>
-      </div>
+      </ModalOverlay>
 
       <ConfirmDialog
         isOpen={showDeleteConfirm}
@@ -205,6 +205,6 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
         }}
         onCancel={() => setShowDeleteConfirm(false)}
       />
-    </Portal>
+    </>
   );
 }

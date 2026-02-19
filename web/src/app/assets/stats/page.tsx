@@ -14,21 +14,13 @@ import {
   Legend,
   Filler,
 } from 'chart.js';
-import { Line, Bar } from 'react-chartjs-2';
-import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
-import { Asset, AssetHistoryEntry, StockHolding } from '@/types/asset';
-import { subscribeToAssets, getAssetHistoryByPeriod, getAllStockHoldings, saveDividendSnapshot, getDividendSnapshot } from '@/lib/assetService';
+import { Line } from 'react-chartjs-2';
+import { ArrowLeft } from 'lucide-react';
+import { Asset, AssetHistoryEntry } from '@/types/asset';
+import { subscribeToAssets, getAssetHistoryByPeriod } from '@/lib/assetService';
 import { useTheme } from '@/contexts/ThemeContext';
-
-// 배당금 정보 인터페이스
-interface DividendInfo {
-  code: string;
-  name: string;
-  recentDividend: number | null;
-  paymentDate: string | null;
-  frequency: number | null;
-  dividendYield: number | null;
-}
+import AssetProfitChart from '@/components/assets/AssetProfitChart';
+import AssetDividendChart from '@/components/assets/AssetDividendChart';
 
 ChartJS.register(
   CategoryScale,
@@ -43,7 +35,6 @@ ChartJS.register(
 );
 
 type PeriodType = '3M' | '6M' | '1Y' | 'ALL';
-type ProfitViewType = 'monthly' | 'daily';
 
 // 숫자를 한글 단위로 변환 (예: 1481758652 → "14억 8175만 8652")
 function formatKoreanUnit(num: number): string {
@@ -73,19 +64,6 @@ export default function AssetStatsPage() {
 
   // 금융자산만 보기 필터
   const [financialOnly, setFinancialOnly] = useState(false);
-
-  // 수익 차트 관련 상태
-  const [profitView, setProfitView] = useState<ProfitViewType>('monthly');
-  const [profitYear, setProfitYear] = useState(new Date().getFullYear());
-  const [profitMonth, setProfitMonth] = useState(new Date().getMonth() + 1);
-  const [showProfitTable, setShowProfitTable] = useState(false);
-
-  // 배당금 차트 관련 상태
-  const [dividendYear, setDividendYear] = useState(new Date().getFullYear());
-  const [stockHoldings, setStockHoldings] = useState<StockHolding[]>([]);
-  const [dividendInfoMap, setDividendInfoMap] = useState<Record<string, DividendInfo>>({});
-  const [isDividendLoading, setIsDividendLoading] = useState(false);
-  const [cachedDividendData, setCachedDividendData] = useState<number[] | null>(null);
 
   // 현재 날짜 정보
   const now = new Date();
@@ -135,55 +113,6 @@ export default function AssetStatsPage() {
 
     fetchHistory();
   }, [selectedPeriod]);
-
-  // 저장된 배당금 데이터 조회
-  useEffect(() => {
-    const fetchCachedDividend = async () => {
-      const cached = await getDividendSnapshot(dividendYear);
-      setCachedDividendData(cached);
-    };
-    fetchCachedDividend();
-  }, [dividendYear]);
-
-  // 보유 종목 및 배당금 정보 조회
-  useEffect(() => {
-    const fetchDividendData = async () => {
-      setIsDividendLoading(true);
-      try {
-        // 모든 주식 보유 종목 가져오기
-        const holdings = await getAllStockHoldings();
-        setStockHoldings(holdings);
-
-        // 각 종목의 배당금 정보 조회
-        const dividendMap: Record<string, DividendInfo> = {};
-
-        for (const holding of holdings) {
-          if (!holding.stockCode) continue;
-
-          // 이미 조회한 종목은 스킵
-          if (dividendMap[holding.stockCode]) continue;
-
-          try {
-            const response = await fetch(`/api/stock/dividend?code=${holding.stockCode}`);
-            if (response.ok) {
-              const data = await response.json();
-              dividendMap[holding.stockCode] = data;
-            }
-          } catch (error) {
-            console.error(`배당금 조회 오류 (${holding.stockCode}):`, error);
-          }
-        }
-
-        setDividendInfoMap(dividendMap);
-      } catch (error) {
-        console.error('보유 종목 조회 오류:', error);
-      } finally {
-        setIsDividendLoading(false);
-      }
-    };
-
-    fetchDividendData();
-  }, []);
 
   // 현재 총 자산 (금융자산 필터 적용 - 부동산 제외)
   const totalAssets = useMemo(() => {
@@ -295,156 +224,6 @@ export default function AssetStatsPage() {
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [history, snapshotType]);
 
-  // 월별 수익 데이터 계산
-  const monthlyProfitData = useMemo(() => {
-    const monthlyData: { month: number; profit: number; rate: number }[] = [];
-
-    for (let month = 1; month <= 12; month++) {
-      const startDate = `${profitYear}-${String(month).padStart(2, '0')}-01`;
-      const endDate = `${profitYear}-${String(month).padStart(2, '0')}-31`;
-
-      const monthSnapshots = totalSnapshots.filter(
-        (h) => h.date >= startDate && h.date <= endDate
-      );
-
-      const totalChange = monthSnapshots.reduce((sum, h) => sum + h.changeAmount, 0);
-
-      // 월초 자산 추정
-      const firstEntry = monthSnapshots[0];
-      const baseAmount = firstEntry ? firstEntry.balance - firstEntry.changeAmount : totalAssets;
-      const rate = baseAmount > 0 ? (totalChange / baseAmount) * 100 : 0;
-
-      monthlyData.push({
-        month,
-        profit: totalChange,
-        rate,
-      });
-    }
-
-    return monthlyData;
-  }, [totalSnapshots, profitYear, totalAssets]);
-
-  // 일별 수익 데이터 계산
-  const dailyProfitData = useMemo(() => {
-    const daysInMonth = new Date(profitYear, profitMonth, 0).getDate();
-    const dailyData: { day: number; profit: number; rate: number }[] = [];
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = `${profitYear}-${String(profitMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-
-      const daySnapshot = totalSnapshots.find((h) => h.date === dateStr);
-
-      const profit = daySnapshot?.changeAmount || 0;
-      const baseAmount = daySnapshot ? daySnapshot.balance - daySnapshot.changeAmount : 0;
-      const rate = baseAmount > 0 ? (profit / baseAmount) * 100 : 0;
-
-      dailyData.push({
-        day,
-        profit,
-        rate,
-      });
-    }
-
-    return dailyData;
-  }, [totalSnapshots, profitYear, profitMonth]);
-
-  // 수익 바 차트 데이터
-  const profitChartData = useMemo(() => {
-    if (profitView === 'monthly') {
-      return {
-        labels: monthlyProfitData.map((d) => String(d.month)),
-        datasets: [
-          {
-            data: monthlyProfitData.map((d) => d.profit),
-            backgroundColor: monthlyProfitData.map((d) =>
-              d.profit >= 0 ? 'rgba(239, 68, 68, 0.8)' : 'rgba(59, 130, 246, 0.8)'
-            ),
-            borderRadius: 4,
-          },
-        ],
-      };
-    } else {
-      return {
-        labels: dailyProfitData.map((d) => String(d.day)),
-        datasets: [
-          {
-            data: dailyProfitData.map((d) => d.profit),
-            backgroundColor: dailyProfitData.map((d) =>
-              d.profit >= 0 ? 'rgba(239, 68, 68, 0.8)' : 'rgba(59, 130, 246, 0.8)'
-            ),
-            borderRadius: 2,
-          },
-        ],
-      };
-    }
-  }, [profitView, monthlyProfitData, dailyProfitData]);
-
-  const profitChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false,
-      },
-      tooltip: {
-        callbacks: {
-          label: function (context: any) {
-            const value = context.raw as number;
-            return `${value >= 0 ? '+' : ''}${value.toLocaleString()}원`;
-          },
-        },
-      },
-    },
-    scales: {
-      x: {
-        grid: {
-          display: false,
-        },
-        ticks: {
-          maxRotation: 0,
-          minRotation: 0,
-          font: { size: 11 },
-          color: '#94a3b8',
-        },
-      },
-      y: {
-        grid: {
-          color: 'rgba(0, 0, 0, 0.05)',
-        },
-        title: {
-          display: true,
-          text: '(백만원)',
-          font: { size: 11 },
-          color: '#94a3b8',
-        },
-        ticks: {
-          callback: function (value: any) {
-            // 백만원 단위로 표시
-            if (Math.abs(value) >= 1000000) {
-              return (value / 1000000).toFixed(1);
-            } else if (Math.abs(value) >= 10000) {
-              return (value / 1000000).toFixed(2);
-            }
-            return value;
-          },
-        },
-      },
-    },
-  };
-
-  // 수익 테이블 데이터 (내림차순)
-  const profitTableData = useMemo(() => {
-    if (profitView === 'monthly') {
-      return monthlyProfitData
-        .filter((d) => d.profit !== 0)
-        .sort((a, b) => b.month - a.month);
-    } else {
-      return dailyProfitData
-        .filter((d) => d.profit !== 0)
-        .sort((a, b) => b.day - a.day);
-    }
-  }, [profitView, monthlyProfitData, dailyProfitData]);
-
   // 기간 변동액
   const periodChange = dailyTotals.length > 1
     ? dailyTotals[dailyTotals.length - 1].total - dailyTotals[0].total
@@ -453,123 +232,6 @@ export default function AssetStatsPage() {
   const periodChangeRate = dailyTotals.length > 1 && dailyTotals[0].total > 0
     ? ((periodChange / dailyTotals[0].total) * 100)
     : 0;
-
-  // 월별 배당금 데이터 (API 데이터 우선 계산, 없으면 캐시 사용)
-  const monthlyDividendData = useMemo(() => {
-    // API에서 계산한 데이터 (0부터 시작)
-    const calculatedData = Array.from({ length: 12 }, () => 0);
-
-    // 같은 종목이 여러 계좌에 있을 수 있으므로 종목별로 수량 합산
-    const quantityByStock: Record<string, number> = {};
-    stockHoldings.forEach((holding) => {
-      if (holding.stockCode) {
-        quantityByStock[holding.stockCode] = (quantityByStock[holding.stockCode] || 0) + (holding.quantity || 0);
-      }
-    });
-
-    // 종목별 합산된 수량으로 배당금 계산
-    Object.entries(quantityByStock).forEach(([stockCode, totalQuantity]) => {
-      const dividendInfo = dividendInfoMap[stockCode];
-      if (!dividendInfo || !dividendInfo.recentDividend || !dividendInfo.paymentDate) {
-        return;
-      }
-
-      // 지급일에서 연도/월 추출 (YYYY/MM/DD 형식)
-      const [paymentYear, paymentMonth] = dividendInfo.paymentDate.split('/').map(Number);
-
-      // 선택된 연도와 일치하는 경우에만 계산
-      if (paymentYear === dividendYear) {
-        const dividendAmount = dividendInfo.recentDividend * totalQuantity;
-        calculatedData[paymentMonth - 1] += dividendAmount;
-      }
-    });
-
-    // 월별 데이터 생성 (API 계산값이 있으면 사용, 없으면 캐시값 사용)
-    const hasCalculatedData = calculatedData.some((v) => v > 0);
-
-    return Array.from({ length: 12 }, (_, i) => ({
-      month: i + 1,
-      dividend: hasCalculatedData ? calculatedData[i] : (cachedDividendData ? cachedDividendData[i] : 0),
-    }));
-  }, [stockHoldings, dividendInfoMap, dividendYear, cachedDividendData]);
-
-  // 배당금 스냅샷 저장 (변경 시에만)
-  useEffect(() => {
-    if (isDividendLoading || stockHoldings.length === 0) return;
-
-    const monthlyAmounts = monthlyDividendData.map((d) => d.dividend);
-    // 모두 0이면 저장하지 않음
-    if (monthlyAmounts.every((v) => v === 0)) return;
-
-    saveDividendSnapshot(dividendYear, monthlyAmounts);
-  }, [monthlyDividendData, dividendYear, isDividendLoading, stockHoldings.length]);
-
-  // 배당금 바 차트 데이터
-  const dividendChartData = useMemo(() => {
-    return {
-      labels: monthlyDividendData.map((d) => String(d.month)),
-      datasets: [
-        {
-          data: monthlyDividendData.map((d) => d.dividend),
-          backgroundColor: 'rgba(16, 185, 129, 0.8)', // 초록색
-          borderRadius: 4,
-        },
-      ],
-    };
-  }, [monthlyDividendData]);
-
-  const dividendChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false,
-      },
-      tooltip: {
-        callbacks: {
-          label: function (context: any) {
-            const value = context.raw as number;
-            return `${value.toLocaleString()}원`;
-          },
-        },
-      },
-    },
-    scales: {
-      x: {
-        grid: {
-          display: false,
-        },
-        ticks: {
-          maxRotation: 0,
-          minRotation: 0,
-          font: { size: 11 },
-          color: '#94a3b8',
-        },
-      },
-      y: {
-        grid: {
-          color: 'rgba(0, 0, 0, 0.05)',
-        },
-        title: {
-          display: true,
-          text: '(만원)',
-          font: { size: 11 },
-          color: '#94a3b8',
-        },
-        ticks: {
-          callback: function (value: any) {
-            if (Math.abs(value) >= 10000) {
-              return (value / 10000).toFixed(0);
-            }
-            return value;
-          },
-        },
-      },
-    },
-  };
-
-  // 배당금 합계
-  const totalDividend = monthlyDividendData.reduce((sum, d) => sum + d.dividend, 0);
 
   return (
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
@@ -659,195 +321,13 @@ export default function AssetStatsPage() {
             </div>
 
             {/* 수익 차트 */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
-              {/* 헤더: 제목 + 월별/일별 토글 */}
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-slate-700">수익 차트</h3>
-                <div className="flex bg-slate-100 rounded-lg p-0.5">
-                  <button
-                    onClick={() => setProfitView('monthly')}
-                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                      profitView === 'monthly'
-                        ? 'bg-white text-slate-800 shadow-sm'
-                        : 'text-slate-500'
-                    }`}
-                  >
-                    월별
-                  </button>
-                  <button
-                    onClick={() => setProfitView('daily')}
-                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                      profitView === 'daily'
-                        ? 'bg-white text-slate-800 shadow-sm'
-                        : 'text-slate-500'
-                    }`}
-                  >
-                    일별
-                  </button>
-                </div>
-              </div>
-
-              {/* 연도/월 네비게이션 */}
-              <div className="flex items-center justify-center gap-4 mb-4">
-                <button
-                  onClick={() => {
-                    if (profitView === 'monthly') {
-                      setProfitYear((y) => y - 1);
-                    } else {
-                      if (profitMonth === 1) {
-                        setProfitYear((y) => y - 1);
-                        setProfitMonth(12);
-                      } else {
-                        setProfitMonth((m) => m - 1);
-                      }
-                    }
-                  }}
-                  className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <ChevronLeft className="w-5 h-5 text-slate-500" />
-                </button>
-                <span className="text-sm font-medium text-slate-700 min-w-[100px] text-center">
-                  {profitView === 'monthly'
-                    ? `${profitYear}년`
-                    : `${profitYear}년 ${profitMonth}월`}
-                </span>
-                <button
-                  onClick={() => {
-                    if (profitView === 'monthly') {
-                      setProfitYear((y) => y + 1);
-                    } else {
-                      if (profitMonth === 12) {
-                        setProfitYear((y) => y + 1);
-                        setProfitMonth(1);
-                      } else {
-                        setProfitMonth((m) => m + 1);
-                      }
-                    }
-                  }}
-                  className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <ChevronRight className="w-5 h-5 text-slate-500" />
-                </button>
-              </div>
-
-              {/* 바 차트 */}
-              <div className="h-[180px] mb-4">
-                <Bar data={profitChartData} options={profitChartOptions} />
-              </div>
-
-              {/* 수익 테이블 (접기/펼치기) */}
-              <div>
-                <button
-                  onClick={() => setShowProfitTable(!showProfitTable)}
-                  className="w-full flex items-center justify-between text-sm font-medium text-slate-600 py-2 hover:text-slate-800 transition-colors"
-                >
-                  <span>{profitView === 'monthly' ? '월별' : '일별'} 평가수익</span>
-                  {showProfitTable ? (
-                    <ChevronUp className="w-4 h-4" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4" />
-                  )}
-                </button>
-                {showProfitTable && (
-                  <>
-                    {profitTableData.length === 0 ? (
-                      <p className="text-center py-4 text-slate-400 text-sm">
-                        변동 내역이 없습니다
-                      </p>
-                    ) : (
-                      <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                        {/* 테이블 헤더 */}
-                        <div className="flex items-center text-xs text-slate-500 py-2 border-b border-slate-100">
-                          <span className="flex-1">{profitView === 'monthly' ? '월' : '일'}</span>
-                          <span className="w-20 text-right">수익률</span>
-                          <span className="w-28 text-right">수익</span>
-                        </div>
-                        {/* 테이블 바디 */}
-                        {profitTableData.map((item) => (
-                          <div
-                            key={profitView === 'monthly' ? (item as any).month : (item as any).day}
-                            className="flex items-center py-2 text-sm"
-                          >
-                            <span className="flex-1 text-slate-700">
-                              {profitView === 'monthly'
-                                ? `${(item as any).month}월`
-                                : `${(item as any).day}일`}
-                            </span>
-                            <span
-                              className={`w-20 text-right font-medium ${
-                                item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
-                              }`}
-                            >
-                              {item.profit >= 0 ? '+' : ''}
-                              {item.rate.toFixed(2)}%
-                            </span>
-                            <span
-                              className={`w-28 text-right font-medium ${
-                                item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
-                              }`}
-                            >
-                              {item.profit >= 0 ? '+' : ''}
-                              {item.profit.toLocaleString()}원
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
+            <AssetProfitChart
+              totalSnapshots={totalSnapshots}
+              totalAssets={totalAssets}
+            />
 
             {/* 배당금 차트 */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-slate-700">배당금 현황</h3>
-              </div>
-
-              {/* 연도 네비게이션 */}
-              <div className="flex items-center justify-center gap-4 mb-4">
-                <button
-                  onClick={() => setDividendYear((y) => y - 1)}
-                  className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <ChevronLeft className="w-5 h-5 text-slate-500" />
-                </button>
-                <span className="text-sm font-medium text-slate-700 min-w-[80px] text-center">
-                  {dividendYear}년
-                </span>
-                <button
-                  onClick={() => setDividendYear((y) => y + 1)}
-                  className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <ChevronRight className="w-5 h-5 text-slate-500" />
-                </button>
-              </div>
-
-              {/* 배당금 바 차트 */}
-              <div className="h-[180px] mb-4">
-                <Bar data={dividendChartData} options={dividendChartOptions} />
-              </div>
-
-              {/* 연간 배당금 합계 */}
-              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                <span className="text-sm text-slate-600">연간 배당금</span>
-                <span className="text-lg font-bold text-red-500">
-                  {totalDividend.toLocaleString()}원
-                </span>
-              </div>
-
-              {isDividendLoading ? (
-                <p className="text-xs text-slate-400 mt-2 text-center">
-                  배당금 정보 조회 중...
-                </p>
-              ) : totalDividend === 0 ? (
-                <p className="text-xs text-slate-400 mt-2 text-center">
-                  {stockHoldings.length === 0
-                    ? '보유 종목이 없습니다'
-                    : '배당금 정보가 없는 종목입니다'}
-                </p>
-              ) : null}
-            </div>
+            <AssetDividendChart />
 
           </div>
         )}

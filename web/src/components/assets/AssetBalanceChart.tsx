@@ -15,7 +15,7 @@ import {
 import { Line } from 'react-chartjs-2';
 import { Asset, AssetHistoryEntry, ASSET_TYPE_CONFIG } from '@/types/asset';
 import { getAssetHistoryByPeriod } from '@/lib/assetService';
-import { Portal } from '@/components/common';
+import { ModalOverlay } from '@/components/common';
 import { X, Calendar } from 'lucide-react';
 
 ChartJS.register(
@@ -242,8 +242,7 @@ export default function AssetBalanceChart({
   if (!isOpen) return null;
 
   return (
-    <Portal>
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+    <ModalOverlay onClose={onClose}>
         <div className="bg-white rounded-2xl m-4 max-w-2xl w-full shadow-xl max-h-[90vh] overflow-hidden flex flex-col">
           {/* 헤더 */}
           <div className="p-4 border-b border-slate-100">
@@ -312,7 +311,6 @@ export default function AssetBalanceChart({
             )}
           </div>
         </div>
-      </div>
-    </Portal>
+    </ModalOverlay>
   );
 }

@@ -61,43 +61,34 @@ exports.onExpenseUpdated = functions
     // notifyPartnerAt이 변경된 경우에만 알림 전송 (타임스탬프 기반)
     const beforeTime = ((_b = (_a = before.notifyPartnerAt) === null || _a === void 0 ? void 0 : _a.toMillis) === null || _b === void 0 ? void 0 : _b.call(_a)) || before.notifyPartnerAt || 0;
     const afterTime = ((_d = (_c = after.notifyPartnerAt) === null || _c === void 0 ? void 0 : _c.toMillis) === null || _d === void 0 ? void 0 : _d.call(_c)) || after.notifyPartnerAt || 0;
-    console.log(`[notify] expenseId=${expenseId} beforeTime=${beforeTime} afterTime=${afterTime}`);
     if (beforeTime === afterTime || afterTime === 0) {
-        console.log('[notify] 타임스탬프 변경 없음 → 스킵');
         return null;
     }
     const expense = after;
     const householdId = expense.householdId;
     if (!householdId) {
-        console.log('[notify] householdId 없음 → 스킵');
         return null;
     }
     // 알림 보낸 사람 확인 (notifyPartnerBy 필드)
     const notifyBy = after.notifyPartnerBy;
-    console.log(`[notify] householdId=${householdId} notifyBy=${notifyBy}`);
     // 같은 householdId를 가진 토큰 중 notifyBy와 다른 deviceOwner만 가져오기
     const tokensSnapshot = await db.collection('fcmTokens')
         .where('householdId', '==', householdId)
         .get();
     if (tokensSnapshot.empty) {
-        console.log('[notify] fcmTokens 없음 → 스킵');
         return null;
     }
     const tokens = [];
     tokensSnapshot.forEach(doc => {
-        var _a;
         const data = doc.data();
-        console.log(`[notify] 토큰 발견: deviceOwner=${data.deviceOwner} token=${(_a = data.token) === null || _a === void 0 ? void 0 : _a.substring(0, 20)}...`);
         // notifyBy가 있으면 다른 사람에게만, 없으면 모두에게
         if (data.token && (!notifyBy || data.deviceOwner !== notifyBy)) {
             tokens.push(data.token);
         }
     });
     if (tokens.length === 0) {
-        console.log('[notify] 대상 토큰 0개 → 스킵');
         return null;
     }
-    console.log(`[notify] FCM 전송 대상: ${tokens.length}개`);
     // 금액 포맷팅
     const amount = ((_e = expense.amount) === null || _e === void 0 ? void 0 : _e.toLocaleString('ko-KR')) || '0';
     const merchant = expense.merchant || '알 수 없는 가맹점';
@@ -128,14 +119,7 @@ exports.onExpenseUpdated = functions
     };
     try {
         const response = await messaging.sendEachForMulticast(message);
-        console.log(`[notify] FCM 결과: 성공=${response.successCount} 실패=${response.failureCount}`);
         if (response.failureCount > 0) {
-            response.responses.forEach((resp, idx) => {
-                var _a;
-                if (!resp.success) {
-                    console.error(`[notify] FCM 실패 [${idx}]:`, (_a = resp.error) === null || _a === void 0 ? void 0 : _a.message);
-                }
-            });
             // 실패한 토큰 삭제
             const failedTokens = [];
             response.responses.forEach((resp, idx) => {
@@ -154,7 +138,7 @@ exports.onExpenseUpdated = functions
         return response;
     }
     catch (error) {
-        console.error('[notify] FCM 전송 에러:', error);
+        console.error('FCM 전송 에러:', error);
         return null;
     }
 });

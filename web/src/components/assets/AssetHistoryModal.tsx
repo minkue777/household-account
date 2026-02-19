@@ -1,21 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Asset, ASSET_TYPE_CONFIG, StockHolding } from '@/types/asset';
-import { updateStockHolding, updateAsset } from '@/lib/assetService';
-import { Portal } from '@/components/common';
-import { X, Plus, Edit2, Banknote, Home, BarChart3, Coins, Loader2, RefreshCw } from 'lucide-react';
-import { calculateHoldingValue, useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
+import { Asset, ASSET_TYPE_CONFIG } from '@/types/asset';
+import { updateAsset } from '@/lib/assetService';
+import { ModalOverlay } from '@/components/common';
+import { X, Plus, Edit2, Banknote, Home, BarChart3, Coins } from 'lucide-react';
+import { useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
 import { useGoldHolding } from '@/lib/utils/useGoldHolding';
-
-interface DividendInfo {
-  code: string;
-  name: string;
-  recentDividend: number | null;
-  paymentDate: string | null;
-  frequency: number | null;
-  dividendYield: number | null;
-}
+import GoldHoldingSection from './GoldHoldingSection';
+import StockSearchForm from './StockSearchForm';
+import StockHoldingList from './StockHoldingList';
 
 interface AssetHistoryModalProps {
   isOpen: boolean;
@@ -43,88 +37,16 @@ export default function AssetHistoryModal({
   const [newBalance, setNewBalance] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const {
-    holdings,
-    isLoadingHoldings,
-    searchQuery,
-    setSearchQuery,
-    searchResults,
-    isSearching,
-    selectedStock,
-    selectStock: handleSelectStock,
-    quantity,
-    setQuantityInput: setQuantity,
-    avgPrice,
-    setAvgPriceInput: setAvgPrice,
-    currentPrice,
-    isLoadingPrice,
-    isAddingHolding,
-    addHolding,
-    deleteHolding,
-    isRefreshingPrices,
-    refreshHoldingPrices,
-  } = useStockHoldingManager({ isOpen, asset });
+  const stockManager = useStockHoldingManager({ isOpen, asset });
 
-  // 보유 종목 수정 상태
-  const [editingHolding, setEditingHolding] = useState<StockHolding | null>(null);
-  const [editQuantity, setEditQuantity] = useState('');
-  const [editAvgPrice, setEditAvgPrice] = useState('');
-
-  // 배당금 정보 상태
-  const [dividendInfoMap, setDividendInfoMap] = useState<Record<string, DividendInfo>>({});
-  const [loadingDividends, setLoadingDividends] = useState<Set<string>>(new Set());
-
-  const {
-    quantity: goldQuantity,
-    setQuantityInput: setGoldQuantity,
-    goldPrice,
-    isLoadingPrice: isLoadingGoldPrice,
-    refreshGoldPrice: fetchGoldPrice,
-    totalValue: goldTotalValue,
-    isSaving: isSavingGoldHolding,
-    saveGoldHolding,
-  } = useGoldHolding({ isOpen, asset });
+  const goldHolding = useGoldHolding({ isOpen, asset });
 
   // 모달 열릴 때 자동으로 가격 새로고침
   useEffect(() => {
-    if (isOpen && asset?.type === 'stock' && holdings.length > 0 && !isLoadingHoldings) {
-      void refreshHoldingPrices();
+    if (isOpen && asset?.type === 'stock' && stockManager.holdings.length > 0 && !stockManager.isLoadingHoldings) {
+      void stockManager.refreshHoldingPrices();
     }
-  }, [isOpen, asset?.type, holdings.length, isLoadingHoldings, refreshHoldingPrices]);
-
-  // 배당금 정보 조회
-  const fetchDividendInfo = async (stockCode: string) => {
-    if (dividendInfoMap[stockCode] || loadingDividends.has(stockCode)) return;
-
-    setLoadingDividends(prev => new Set(prev).add(stockCode));
-    try {
-      const response = await fetch(`/api/stock/dividend?code=${stockCode}`);
-      if (response.ok) {
-        const data = await response.json();
-        setDividendInfoMap(prev => ({ ...prev, [stockCode]: data }));
-      }
-    } catch (error) {
-      console.error('배당금 조회 오류:', error);
-    } finally {
-      setLoadingDividends(prev => {
-        const next = new Set(prev);
-        next.delete(stockCode);
-        return next;
-      });
-    }
-  };
-
-  // 보유 종목이 변경되면 배당금 정보 조회
-  useEffect(() => {
-    if (!isOpen || holdings.length === 0) return;
-
-    holdings.forEach(holding => {
-      // 이미 조회했거나 로딩중이면 스킵
-      if (dividendInfoMap[holding.stockCode] || loadingDividends.has(holding.stockCode)) return;
-      fetchDividendInfo(holding.stockCode);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [holdings, isOpen]);
+  }, [isOpen, asset?.type, stockManager.holdings.length, stockManager.isLoadingHoldings, stockManager.refreshHoldingPrices]);
 
   // 잔액 업데이트 폼 초기화
   useEffect(() => {
@@ -151,48 +73,11 @@ export default function AssetHistoryModal({
   };
 
   const handleAddHolding = async () => {
-    await addHolding();
-  };
-
-  const handleDeleteHolding = async (holdingId: string) => {
-    await deleteHolding(holdingId);
-  };
-
-  // 보유 종목 수정 시작
-  const handleEditHolding = (holding: StockHolding) => {
-    setEditingHolding(holding);
-    setEditQuantity(holding.quantity.toString());
-    setEditAvgPrice(holding.avgPrice?.toString() || '');
-  };
-
-  // 보유 종목 수정 저장
-  const handleSaveHolding = async () => {
-    if (!asset || !editingHolding || isSubmitting) return;
-
-    setIsSubmitting(true);
-    try {
-      await updateStockHolding(editingHolding.id, asset.id, {
-        quantity: parseInt(editQuantity, 10),
-        avgPrice: editAvgPrice ? parseInt(editAvgPrice, 10) : undefined,
-      });
-      setEditingHolding(null);
-    } catch (error) {
-      console.error('종목 수정 오류:', error);
-      alert('종목 수정에 실패했습니다.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // 보유 종목 수정 취소
-  const handleCancelEditHolding = () => {
-    setEditingHolding(null);
-    setEditQuantity('');
-    setEditAvgPrice('');
+    await stockManager.addHolding();
   };
 
   const handleSaveGold = async () => {
-    const saved = await saveGoldHolding();
+    const saved = await goldHolding.saveGoldHolding();
     if (saved) {
       onClose();
     }
@@ -211,8 +96,7 @@ export default function AssetHistoryModal({
   const isStockProfit = stockProfitLoss >= 0;
 
   return (
-    <Portal>
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+    <ModalOverlay onClose={onClose}>
         <div className="bg-white rounded-2xl m-4 max-w-lg w-full shadow-xl max-h-[90vh] overflow-hidden flex flex-col">
           {/* 헤더 */}
           <div className="p-4 border-b border-slate-100">
@@ -347,357 +231,49 @@ export default function AssetHistoryModal({
 
           {/* 주식: 종목 검색 폼 (콘텐츠 영역 밖) */}
           {isStock && (
-            <div className="p-4 bg-blue-100 border-b border-blue-200">
-              <div className="space-y-3">
-                <div className="relative">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">종목 검색</label>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="종목명 입력"
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                  />
-                  {isSearching && (
-                    <Loader2 className="w-4 h-4 text-blue-500 absolute right-3 top-9 animate-spin" />
-                  )}
-
-                  {searchResults.length > 0 && !selectedStock && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                      {searchResults.map((stock) => (
-                        <button
-                          key={stock.code}
-                          type="button"
-                          onClick={() => {
-                            void handleSelectStock(stock);
-                          }}
-                          className="w-full px-4 py-2.5 text-left hover:bg-slate-50 flex items-center justify-between"
-                        >
-                          <span className="font-medium text-slate-800">{stock.name}</span>
-                          <span className="text-xs text-slate-500">{stock.code}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {selectedStock && (
-                  <>
-                    <div className="bg-white rounded-lg p-3 border border-blue-200">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-slate-800">{selectedStock.name}</p>
-                          <p className="text-xs text-slate-500">{selectedStock.code}</p>
-                        </div>
-                        {isLoadingPrice ? (
-                          <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-                        ) : currentPrice ? (
-                          <p className="font-semibold text-red-500">{currentPrice.toLocaleString()}원</p>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">보유 수량</label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={quantity}
-                        onChange={(e) => setQuantity(e.target.value.replace(/[^0-9]/g, ''))}
-                        placeholder="0"
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">평균 매입가 (선택)</label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={avgPrice ? parseInt(avgPrice, 10).toLocaleString() : ''}
-                          onChange={(e) => setAvgPrice(e.target.value.replace(/[^0-9]/g, ''))}
-                          placeholder="0"
-                          className="w-full px-4 py-2 pr-8 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">원</span>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleAddHolding}
-                      disabled={!selectedStock || !quantity || isAddingHolding}
-                      className="w-full py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-slate-300 font-medium"
-                    >
-                      {isAddingHolding ? '추가 중...' : '종목 추가'}
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
+            <StockSearchForm
+              state={{
+                searchQuery: stockManager.searchQuery,
+                setSearchQuery: stockManager.setSearchQuery,
+                searchResults: stockManager.searchResults,
+                isSearching: stockManager.isSearching,
+                selectedStock: stockManager.selectedStock,
+                selectStock: stockManager.selectStock,
+                quantity: stockManager.quantity,
+                setQuantityInput: stockManager.setQuantityInput,
+                avgPrice: stockManager.avgPrice,
+                setAvgPriceInput: stockManager.setAvgPriceInput,
+                currentPrice: stockManager.currentPrice,
+                isLoadingPrice: stockManager.isLoadingPrice,
+                isAddingHolding: stockManager.isAddingHolding,
+              }}
+              onAdd={handleAddHolding}
+            />
           )}
 
           {/* 콘텐츠 영역 */}
           <div className="flex-1 overflow-y-auto p-4">
             {isGold ? (
-              // 금: 시세 및 보유량
-              <div className="space-y-4">
-                {/* 금 시세 */}
-                <div className="bg-amber-50 rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-amber-700">현재 금 시세 (1돈)</span>
-                    <button
-                      type="button"
-                      onClick={fetchGoldPrice}
-                      disabled={isLoadingGoldPrice}
-                      className="p-1 text-amber-600 hover:bg-amber-100 rounded transition-colors"
-                    >
-                      <RefreshCw className={`w-4 h-4 ${isLoadingGoldPrice ? 'animate-spin' : ''}`} />
-                    </button>
-                  </div>
-                  {isLoadingGoldPrice ? (
-                    <div className="flex items-center gap-2 text-amber-600">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>시세 조회 중...</span>
-                    </div>
-                  ) : goldPrice ? (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-white rounded-lg p-3">
-                        <p className="text-xs text-slate-500 mb-1">살 때</p>
-                        <p className="text-lg font-bold text-red-500">
-                          {goldPrice.buyPricePerDon.toLocaleString()}
-                          <span className="text-sm font-normal text-slate-400 ml-1">원</span>
-                        </p>
-                      </div>
-                      <div className="bg-white rounded-lg p-3">
-                        <p className="text-xs text-slate-500 mb-1">팔 때</p>
-                        <p className="text-lg font-bold text-blue-500">
-                          {goldPrice.sellPricePerDon.toLocaleString()}
-                          <span className="text-sm font-normal text-slate-400 ml-1">원</span>
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-amber-600">시세를 불러올 수 없습니다</p>
-                  )}
-                </div>
-
-                {/* 보유량 입력 */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    보유량
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={goldQuantity}
-                      onChange={(e) => setGoldQuantity(e.target.value.replace(/[^0-9.]/g, ''))}
-                      placeholder="0"
-                      className="w-full px-4 py-3 pr-12 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-lg"
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">
-                      돈
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    1돈 = 3.75g (순금 24K 기준)
-                  </p>
-                </div>
-
-                {/* 평가금액 */}
-                {goldQuantity && parseFloat(goldQuantity) > 0 && goldPrice && (
-                  <div className="bg-slate-50 rounded-xl p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600">평가금액 (팔 때 기준)</span>
-                      <span className="text-xl font-bold text-slate-800">
-                        {goldTotalValue.toLocaleString()}원
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {/* 저장 버튼 */}
-                <button
-                  type="button"
-                  onClick={handleSaveGold}
-                  disabled={!goldQuantity || !goldPrice || isSavingGoldHolding}
-                  className="w-full py-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed font-medium"
-                >
-                  {isSavingGoldHolding ? '저장 중...' : '저장'}
-                </button>
-              </div>
+              <GoldHoldingSection
+                state={{
+                  quantity: goldHolding.quantity,
+                  setQuantityInput: goldHolding.setQuantityInput,
+                  goldPrice: goldHolding.goldPrice,
+                  isLoadingPrice: goldHolding.isLoadingPrice,
+                  refreshGoldPrice: goldHolding.refreshGoldPrice,
+                  totalValue: goldHolding.totalValue,
+                  isSaving: goldHolding.isSaving,
+                }}
+                onSave={handleSaveGold}
+              />
             ) : isStock ? (
-              // 주식: 보유 종목 목록
-              <>
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-medium text-slate-500">보유 종목</h4>
-                    {holdings.length > 0 && (
-                      <button
-                        onClick={refreshHoldingPrices}
-                        disabled={isRefreshingPrices}
-                        className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 disabled:opacity-50"
-                      >
-                        <RefreshCw className={`w-3 h-3 ${isRefreshingPrices ? 'animate-spin' : ''}`} />
-                        {isRefreshingPrices ? '갱신중...' : '시세 갱신'}
-                      </button>
-                    )}
-                  </div>
-                  {isLoadingHoldings ? (
-                    <div className="text-center py-8 text-slate-400">로딩 중...</div>
-                  ) : holdings.length === 0 ? (
-                    <div className="text-center py-8 text-slate-400">
-                      보유 종목이 없습니다
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {holdings.map((holding) => (
-                        editingHolding?.id === holding.id ? (
-                          // 수정 모드
-                          <div key={holding.id} className="p-3 bg-blue-50 rounded-xl space-y-3">
-                            <div className="flex items-center justify-between">
-                              <p className="font-medium text-slate-800">{holding.stockName}</p>
-                              {holding.currentPrice && (
-                                <p className="text-sm font-semibold text-red-500">
-                                  {holding.currentPrice.toLocaleString()}원
-                                </p>
-                              )}
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <label className="block text-xs text-slate-500 mb-1">수량</label>
-                                <input
-                                  type="text"
-                                  inputMode="numeric"
-                                  value={editQuantity}
-                                  onChange={(e) => setEditQuantity(e.target.value.replace(/[^0-9]/g, ''))}
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs text-slate-500 mb-1">평균 매입가</label>
-                                <input
-                                  type="text"
-                                  inputMode="numeric"
-                                  value={editAvgPrice ? parseInt(editAvgPrice, 10).toLocaleString() : ''}
-                                  onChange={(e) => setEditAvgPrice(e.target.value.replace(/[^0-9]/g, ''))}
-                                  placeholder="0"
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
-                                />
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (confirm(`${holding.stockName}을(를) 삭제하시겠습니까?`)) {
-                                    handleDeleteHolding(holding.id);
-                                    setEditingHolding(null);
-                                  }
-                                }}
-                                className="py-2 px-3 border border-red-300 text-red-500 rounded-lg text-sm hover:bg-red-50"
-                              >
-                                삭제
-                              </button>
-                              <button
-                                type="button"
-                                onClick={handleCancelEditHolding}
-                                className="flex-1 py-2 border border-slate-300 rounded-lg text-slate-600 text-sm hover:bg-white"
-                              >
-                                취소
-                              </button>
-                              <button
-                                type="button"
-                                onClick={handleSaveHolding}
-                                disabled={!editQuantity || isSubmitting}
-                                className="flex-1 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 disabled:bg-slate-300"
-                              >
-                                {isSubmitting ? '저장 중...' : '저장'}
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          // 일반 모드
-                          (() => {
-                            const hasAvgPrice = holding.avgPrice && holding.avgPrice > 0;
-                            const hasCurrentPrice = holding.currentPrice && holding.currentPrice > 0;
-                            const holdingProfitLoss = hasAvgPrice && hasCurrentPrice
-                              ? (holding.currentPrice! - holding.avgPrice!) * holding.quantity
-                              : 0;
-                            const holdingProfitRate = hasAvgPrice && hasCurrentPrice
-                              ? ((holding.currentPrice! - holding.avgPrice!) / holding.avgPrice!) * 100
-                              : 0;
-                            const showHoldingProfit = hasAvgPrice && hasCurrentPrice;
-                            const isHoldingProfit = holdingProfitLoss >= 0;
-                            const dividendInfo = dividendInfoMap[holding.stockCode];
-                            const isLoadingDividend = loadingDividends.has(holding.stockCode);
-                            // 예상 월 배당금 계산 (연간 배당금 / 12)
-                            const monthlyDividend = dividendInfo?.recentDividend && dividendInfo?.frequency
-                              ? Math.round((dividendInfo.recentDividend * dividendInfo.frequency * holding.quantity) / 12)
-                              : null;
-
-                            return (
-                              <div
-                                key={holding.id}
-                                onClick={() => handleEditHolding(holding)}
-                                className="p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors"
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex-1 min-w-0 mr-4">
-                                    <p className="font-medium text-slate-800 truncate">{holding.stockName}</p>
-                                    <p className="text-xs text-slate-500">
-                                      {holding.quantity.toLocaleString()}주
-                                      {holding.avgPrice && ` · 평단 ${holding.avgPrice.toLocaleString()}원`}
-                                    </p>
-                                  </div>
-                                  <div className="text-right flex-shrink-0">
-                                    <p className="font-semibold text-slate-800">
-                                      {calculateHoldingValue(holding).toLocaleString()}원
-                                    </p>
-                                    {showHoldingProfit && (
-                                      <p className={`text-xs ${isHoldingProfit ? 'text-red-500' : 'text-blue-500'}`}>
-                                        {isHoldingProfit ? '+' : ''}{holdingProfitRate.toFixed(2)}%
-                                        <span className="ml-1">
-                                          ({isHoldingProfit ? '+' : ''}{holdingProfitLoss.toLocaleString()})
-                                        </span>
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                                {/* 배당금 정보 */}
-                                {isLoadingDividend ? (
-                                  <div className="mt-2 pt-2 border-t border-slate-200">
-                                    <p className="text-xs text-slate-400">배당 정보 로딩중...</p>
-                                  </div>
-                                ) : dividendInfo && dividendInfo.recentDividend ? (
-                                  <div className="mt-2 pt-2 border-t border-slate-200">
-                                    <div className="flex items-center justify-between text-xs">
-                                      <span className="text-slate-500">
-                                        분배금 {dividendInfo.recentDividend.toLocaleString()}원
-                                        {dividendInfo.frequency && ` · 연 ${dividendInfo.frequency}회`}
-                                      </span>
-                                      {monthlyDividend && (
-                                        <span className="text-emerald-600 font-medium">
-                                          월 ~{monthlyDividend.toLocaleString()}원
-                                        </span>
-                                      )}
-                                    </div>
-                                    {dividendInfo.paymentDate && (
-                                      <p className="text-xs text-slate-400 mt-0.5">
-                                        최근 지급일: {dividendInfo.paymentDate}
-                                      </p>
-                                    )}
-                                  </div>
-                                ) : null}
-                              </div>
-                            );
-                          })()
-                        )
-                      ))}
-                    </div>
-                  )}
-              </>
+              <StockHoldingList
+                holdings={stockManager.holdings}
+                isLoading={stockManager.isLoadingHoldings}
+                isRefreshing={stockManager.isRefreshingPrices}
+                onRefresh={stockManager.refreshHoldingPrices}
+                assetId={asset.id}
+              />
             ) : (
               // 기타 자산: 메모 표시
               <div className="text-center py-8 text-slate-400">
@@ -706,7 +282,6 @@ export default function AssetHistoryModal({
             )}
           </div>
         </div>
-      </div>
-    </Portal>
+    </ModalOverlay>
   );
 }

@@ -7,3 +7,5 @@ export { default as AssetHistoryModal } from './AssetHistoryModal';
 export { default as AssetBalanceChart } from './AssetBalanceChart';
 export { default as StockHoldingModal } from './StockHoldingModal';
 export { default as GoldHoldingModal } from './GoldHoldingModal';
+export { default as AssetProfitChart } from './AssetProfitChart';
+export { default as AssetDividendChart } from './AssetDividendChart';

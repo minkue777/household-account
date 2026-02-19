@@ -1,0 +1,234 @@
+import * as functions from 'firebase-functions';
+import * as admin from 'firebase-admin';
+import { db, messaging, REGION } from './config';
+import { cleanupFailedTokens } from './helpers';
+
+/**
+ * "파트너에게" 버튼 클릭 시 상대방에게 푸시 알림 전송
+ * notifyPartnerAt 타임스탬프가 변경될 때마다 알림 전송 (매번 가능)
+ */
+export const onExpenseUpdated = functions
+  .region(REGION)
+  .firestore
+  .document('expenses/{expenseId}')
+  .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+    const expenseId = context.params.expenseId;
+
+    // notifyPartnerAt이 변경된 경우에만 알림 전송 (타임스탬프 기반)
+    const beforeTime = before.notifyPartnerAt?.toMillis?.() || before.notifyPartnerAt || 0;
+    const afterTime = after.notifyPartnerAt?.toMillis?.() || after.notifyPartnerAt || 0;
+
+    if (beforeTime === afterTime || afterTime === 0) {
+      return null;
+    }
+
+    const expense = after;
+    const householdId = expense.householdId;
+
+    if (!householdId) {
+      return null;
+    }
+
+    // 알림 보낸 사람 확인 (notifyPartnerBy 필드)
+    const notifyBy = after.notifyPartnerBy;
+
+    // 같은 householdId를 가진 토큰 중 notifyBy와 다른 deviceOwner만 가져오기
+    const tokensSnapshot = await db.collection('fcmTokens')
+      .where('householdId', '==', householdId)
+      .get();
+
+    if (tokensSnapshot.empty) {
+      return null;
+    }
+
+    const tokens: string[] = [];
+    tokensSnapshot.forEach(doc => {
+      const data = doc.data();
+      // notifyBy가 있으면 다른 사람에게만, 없으면 모두에게
+      if (data.token && (!notifyBy || data.deviceOwner !== notifyBy)) {
+        tokens.push(data.token);
+      }
+    });
+
+    if (tokens.length === 0) {
+      return null;
+    }
+
+    // 금액 포맷팅
+    const amount = expense.amount?.toLocaleString('ko-KR') || '0';
+    const merchant = expense.merchant || '알 수 없는 가맹점';
+
+    const message: admin.messaging.MulticastMessage = {
+      tokens: tokens,
+      notification: {
+        title: `💳 ${merchant}`,
+        body: `${amount}원 - 탭해서 카테고리를 확인하세요`,
+      },
+      data: {
+        expenseId: expenseId,
+        merchant: merchant,
+        amount: String(expense.amount || 0),
+        date: expense.date || '',
+        time: expense.time || '',
+        category: expense.category || 'etc',
+        type: 'new_expense',
+      },
+      webpush: {
+        notification: {
+          icon: 'https://household-account-app-demo-v1.vercel.app/icons/icon-192x192.png',
+        },
+        fcmOptions: {
+          link: `/?edit=${expenseId}`,
+        },
+      },
+    };
+
+    try {
+      const response = await messaging.sendEachForMulticast(message);
+      await cleanupFailedTokens(tokens, response);
+      return response;
+    } catch (error) {
+      console.error('FCM 전송 에러:', error);
+      return null;
+    }
+  });
+
+/**
+ * 또니(아이폰)가 지출 생성하면 망고(안드로이드)에게 알림
+ * - iOS 단축어로 등록
+ * - 아이폰 웹앱에서 수동 등록
+ * 망고가 등록한 건 "또니에게" 버튼으로만 알림 전송
+ */
+export const onExpenseCreated = functions
+  .region(REGION)
+  .firestore
+  .document('expenses/{expenseId}')
+  .onCreate(async (snapshot, context) => {
+    const expense = snapshot.data();
+    const expenseId = context.params.expenseId;
+
+    const householdId = expense.householdId;
+    if (!householdId) {
+      return null;
+    }
+
+    // 또니가 등록한 경우에만 알림
+    // iOS 단축어: source가 'ios-shortcut'
+    // 아이폰 웹앱: createdBy가 '또니'
+    const isFromToni = expense.source === 'ios-shortcut' || expense.createdBy === '또니';
+
+    if (!isFromToni) {
+      return null; // 망고가 등록한 건 알림 안 보냄
+    }
+
+    // 망고(안드로이드) 기기의 토큰만 가져오기
+    const tokensSnapshot = await db.collection('fcmTokens')
+      .where('householdId', '==', householdId)
+      .where('deviceOwner', '==', '망고')
+      .get();
+
+    if (tokensSnapshot.empty) {
+      return null;
+    }
+
+    const tokens: string[] = [];
+    tokensSnapshot.forEach(doc => {
+      const data = doc.data();
+      if (data.token) {
+        tokens.push(data.token);
+      }
+    });
+
+    if (tokens.length === 0) {
+      return null;
+    }
+
+    // 금액 포맷팅
+    const amount = expense.amount?.toLocaleString('ko-KR') || '0';
+    const merchant = expense.merchant || '알 수 없는 가맹점';
+
+    const message: admin.messaging.MulticastMessage = {
+      tokens: tokens,
+      notification: {
+        title: `📱 ${merchant}`,
+        body: `${amount}원 - 또니가 등록한 지출이에요`,
+      },
+      data: {
+        expenseId: expenseId,
+        merchant: merchant,
+        amount: String(expense.amount || 0),
+        date: expense.date || '',
+        time: expense.time || '',
+        category: expense.category || 'etc',
+        type: 'new_expense',
+      },
+      webpush: {
+        notification: {
+          icon: 'https://household-account-app-demo-v1.vercel.app/icons/icon-192x192.png',
+        },
+        fcmOptions: {
+          link: `/?edit=${expenseId}`,
+        },
+      },
+    };
+
+    try {
+      const response = await messaging.sendEachForMulticast(message);
+      await cleanupFailedTokens(tokens, response);
+      return response;
+    } catch (error) {
+      return null;
+    }
+  });
+
+/**
+ * FCM 토큰 저장 API
+ */
+export const saveFcmToken = functions
+  .region(REGION)
+  .https.onCall(async (data, context) => {
+    const { token, deviceInfo, householdId, deviceOwner } = data;
+
+    if (!token) {
+      throw new functions.https.HttpsError('invalid-argument', 'FCM 토큰이 필요합니다.');
+    }
+
+    if (!householdId) {
+      throw new functions.https.HttpsError('invalid-argument', 'householdId가 필요합니다.');
+    }
+
+    try {
+      // 기존 토큰 확인
+      const existingToken = await db.collection('fcmTokens')
+        .where('token', '==', token)
+        .get();
+
+      if (!existingToken.empty) {
+        // 이미 존재하면 업데이트 (householdId도 업데이트 - 계정 변경 대응)
+        const docId = existingToken.docs[0].id;
+        await db.collection('fcmTokens').doc(docId).update({
+          lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+          deviceInfo: deviceInfo || null,
+          householdId: householdId,
+          deviceOwner: deviceOwner || null,
+        });
+        return { success: true, message: '토큰 업데이트 완료' };
+      }
+
+      // 새 토큰 저장
+      await db.collection('fcmTokens').add({
+        token: token,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+        deviceInfo: deviceInfo || null,
+        householdId: householdId,
+        deviceOwner: deviceOwner || null,
+      });
+
+      return { success: true, message: '토큰 저장 완료' };
+    } catch (error) {
+      throw new functions.https.HttpsError('internal', 'FCM 토큰 저장에 실패했습니다.');
+    }
+  });
