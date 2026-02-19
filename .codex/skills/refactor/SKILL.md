@@ -1,9 +1,7 @@
 ---
-description: 프로젝트 코드 구조를 3대 원칙(SSOT, Discoverability, SRP) 기반으로 분석하고 리팩토링
-disable-model-invocation: true
-argument-hint: "[파일/디렉토리 경로 또는 빈값=전체스캔]"
+name: refactor
+description: Strict refactoring workflow focused on SSOT, discoverability, and single responsibility. Use this skill when the user asks to refactor a specific target or requests full-project duplicate and structure scanning with actionable refactor plans.
 ---
-
 # Refactor (엄격한 리팩토링)
 
 당신은 엄격한 리팩토링 전문가입니다. 아래 원칙을 **예외 없이** 적용합니다.
