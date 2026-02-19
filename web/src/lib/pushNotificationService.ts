@@ -184,3 +184,60 @@ export function isIOSPWA(): boolean {
 export function isIOS(): boolean {
   return Platform.isIOS();
 }
+
+/**
+ * FCM 등록 디버그 (각 단계별 결과 반환)
+ */
+export async function debugFcmRegistration(): Promise<string[]> {
+  const logs: string[] = [];
+
+  logs.push(`isServer: ${Platform.isServer()}`);
+  logs.push(`isMobile: ${Platform.isMobile()}`);
+  logs.push(`isIOS: ${Platform.isIOS()}`);
+  logs.push(`isIOSPWA: ${Platform.isIOSPWA()}`);
+  logs.push(`supportsNotification: ${Platform.supportsNotification()}`);
+  logs.push(`permission: ${typeof Notification !== 'undefined' ? Notification.permission : 'N/A'}`);
+
+  // 서비스 워커
+  try {
+    const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    logs.push(`SW 등록: OK (state=${reg.active?.state || reg.waiting?.state || reg.installing?.state || 'none'})`);
+  } catch (e: unknown) {
+    logs.push(`SW 등록: FAIL (${e instanceof Error ? e.message : e})`);
+    return logs;
+  }
+
+  // 메시징 초기화
+  try {
+    const msg = initializeMessaging();
+    logs.push(`messaging 초기화: ${msg ? 'OK' : 'FAIL (null)'}`);
+    if (!msg) return logs;
+  } catch (e: unknown) {
+    logs.push(`messaging 초기화: FAIL (${e instanceof Error ? e.message : e})`);
+    return logs;
+  }
+
+  // 토큰 발급
+  try {
+    const swReg = await navigator.serviceWorker.ready;
+    logs.push(`SW ready: OK`);
+    const token = await getToken(messaging!, {
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: swReg,
+    });
+    logs.push(`getToken: ${token ? token.substring(0, 20) + '...' : 'null'}`);
+
+    if (token) {
+      try {
+        await saveTokenToServer(token);
+        logs.push(`saveToken: OK`);
+      } catch (e: unknown) {
+        logs.push(`saveToken: FAIL (${e instanceof Error ? e.message : e})`);
+      }
+    }
+  } catch (e: unknown) {
+    logs.push(`getToken: FAIL (${e instanceof Error ? e.message : e})`);
+  }
+
+  return logs;
+}
