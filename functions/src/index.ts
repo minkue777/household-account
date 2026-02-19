@@ -11,7 +11,7 @@ const messaging = admin.messaging();
 const API_TOKEN = 'household-account-ios-shortcut-2024';
 
 /**
- * "또니에게" 버튼 클릭 시 상대방에게 푸시 알림 전송
+ * "파트너에게" 버튼 클릭 시 상대방에게 푸시 알림 전송
  * notifyPartnerAt 타임스탬프가 변경될 때마다 알림 전송 (매번 가능)
  */
 export const onExpenseUpdated = functions
@@ -96,16 +96,14 @@ export const onExpenseUpdated = functions
     try {
       const response = await messaging.sendEachForMulticast(message);
 
-      // 실패한 토큰 정리
       if (response.failureCount > 0) {
+        // 실패한 토큰 삭제
         const failedTokens: string[] = [];
         response.responses.forEach((resp, idx) => {
           if (!resp.success) {
             failedTokens.push(tokens[idx]);
           }
         });
-
-        // 실패한 토큰 삭제
         const deletePromises = failedTokens.map(async (token) => {
           const tokenQuery = await db.collection('fcmTokens')
             .where('token', '==', token)
@@ -117,6 +115,7 @@ export const onExpenseUpdated = functions
 
       return response;
     } catch (error) {
+      console.error('FCM 전송 에러:', error);
       return null;
     }
   });
