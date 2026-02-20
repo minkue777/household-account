@@ -41,12 +41,13 @@ export default function AssetHistoryModal({
 
   const goldHolding = useGoldHolding({ isOpen, asset });
 
-  // 모달 열릴 때 자동으로 가격 새로고침
+  // 모달 열릴 때 자동으로 가격 새로고침 (1회만)
   useEffect(() => {
     if (isOpen && asset?.type === 'stock' && stockManager.holdings.length > 0 && !stockManager.isLoadingHoldings) {
       void stockManager.refreshHoldingPrices();
     }
-  }, [isOpen, asset?.type, stockManager.holdings.length, stockManager.isLoadingHoldings, stockManager.refreshHoldingPrices]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, asset?.type, stockManager.isLoadingHoldings]);
 
   // 잔액 업데이트 폼 초기화
   useEffect(() => {

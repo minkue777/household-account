@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Asset, StockHolding, StockSearchResult } from '@/types/asset';
 import {
   addStockHolding,
@@ -40,6 +40,7 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
 
   const isStockAsset = asset?.type === 'stock';
   const assetId = asset?.id;
+  const holdingsRef = useRef(holdings);
 
   const resetStockForm = useCallback(() => {
     setSearchQuery('');
@@ -63,6 +64,7 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
 
     const unsubscribe = subscribeToStockHoldings(assetId, (newHoldings) => {
       setHoldings(newHoldings);
+      holdingsRef.current = newHoldings;
       setIsLoadingHoldings(false);
     });
 
@@ -181,35 +183,30 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
   }, [assetId, isStockAsset]);
 
   const refreshHoldingPrices = useCallback(async () => {
-    if (!assetId || !isStockAsset || holdings.length === 0) {
+    const currentHoldings = holdingsRef.current;
+    if (!assetId || !isStockAsset || currentHoldings.length === 0) {
       return;
     }
 
     setIsRefreshingPrices(true);
     try {
-      const updatedHoldings = await Promise.all(
-        holdings.map(async (holding) => {
+      await Promise.all(
+        currentHoldings.map(async (holding) => {
           try {
             const response = await fetch(`/api/stock/price?code=${holding.stockCode}`);
-            if (!response.ok) {
-              return holding;
-            }
+            if (!response.ok) return;
 
             const data = await response.json();
             await updateStockHolding(holding.id, assetId, { currentPrice: data.price });
-            return { ...holding, currentPrice: data.price };
           } catch (error) {
             console.error(`Failed to refresh stock price (${holding.stockCode}):`, error);
-            return holding;
           }
         })
       );
-
-      setHoldings(updatedHoldings);
     } finally {
       setIsRefreshingPrices(false);
     }
-  }, [assetId, holdings, isStockAsset]);
+  }, [assetId, isStockAsset]);
 
   const totalHoldingValue = useMemo(() => {
     return holdings.reduce((sum, holding) => sum + calculateHoldingValue(holding), 0);
