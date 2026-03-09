@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Expense } from '@/types/expense';
-import { SplitItem, notifyPartner, requestSettlement } from '@/lib/expenseService';
+import { SplitItem, notifyPartner } from '@/lib/expenseService';
 import {
   runSplitMonthsAction,
   runCancelSplitGroupAction,
@@ -247,7 +247,6 @@ export default function ExpenseItem({
         onUpdateSplitGroup={expense.splitGroupId ? handleUpdateSplitGroup : undefined}
         onDelete={onDelete ? () => onDelete(expense.id) : undefined}
         onNotifyPartner={() => notifyPartner(expense.id)}
-        onSettlementRequest={() => requestSettlement(expense.id)}
       />
 
       {/* 분할 모달 */}

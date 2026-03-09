@@ -9,7 +9,6 @@ import {
   CategorySettings,
   MerchantRuleSettings,
   RecurringExpenseSettings,
-  PersonalAccountSettings,
   ThemeSettings,
 } from '@/components/settings';
 
@@ -57,9 +56,6 @@ export default function SettingsPage() {
 
         {/* 정기 지출 섹션 */}
         <RecurringExpenseSettings />
-
-        {/* 내 정산 계좌 섹션 */}
-        <PersonalAccountSettings />
 
         {/* 테마 섹션 */}
         <ThemeSettings />

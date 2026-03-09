@@ -5,7 +5,6 @@ import { Expense } from '@/types/expense';
 import {
   searchExpenses,
   SplitItem,
-  notifyPartner,
 } from '@/lib/expenseService';
 import {
   runSplitMonthsAction,
@@ -236,7 +235,6 @@ export default function SearchModal({ isOpen, onClose, onExpenseUpdate, onDelete
           onCancelSplitGroup={selectedExpense.splitGroupId ? () => { void handleCancelSplitGroup(); } : undefined}
           onUpdateSplitGroup={selectedExpense.splitGroupId ? (newMonths) => { void handleUpdateSplitGroup(newMonths); } : undefined}
           onDelete={onDelete ? () => { void handleDelete(selectedExpense.id); } : undefined}
-          onNotifyPartner={() => { void notifyPartner(selectedExpense.id); }}
         />
       )}
 

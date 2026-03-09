@@ -4,9 +4,6 @@ import { useEffect, useState } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { ConfirmDialog, Portal } from '@/components/common';
-import { openTossTransfer } from '@/lib/tossService';
-import { checkSettleable } from '@/lib/settlementService';
-import { PersonalAccountStorage, LocalPersonalAccount } from '@/lib/storage/personalAccountStorage';
 import { useMonthlySplitInput } from '@/lib/utils/useMonthlySplitInput';
 import { buildExpenseUpdates, trimExpenseMerchant } from '@/lib/utils/expenseForm';
 import { useExpenseFormState } from '@/lib/utils/useExpenseFormState';
@@ -26,7 +23,6 @@ interface ExpenseEditModalProps {
   onUpdateSplitGroup?: (newMonths: number) => void;
   onDelete?: () => void;
   onNotifyPartner?: () => void;
-  onSettlementRequest?: () => void;
 }
 
 export default function ExpenseEditModal({
@@ -42,11 +38,9 @@ export default function ExpenseEditModal({
   onUpdateSplitGroup,
   onDelete,
   onNotifyPartner,
-  onSettlementRequest,
 }: ExpenseEditModalProps) {
   const { getCategoryLabel } = useCategoryContext();
 
-  const [personalAccount, setPersonalAccount] = useState<LocalPersonalAccount | null>(null);
   const {
     merchant,
     amount,
@@ -79,10 +73,6 @@ export default function ExpenseEditModal({
   const [editSplitMonths, setEditSplitMonths] = useState(expense.splitTotal || 2);
   const [showEditSplitGroup, setShowEditSplitGroup] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  useEffect(() => {
-    setPersonalAccount(PersonalAccountStorage.get());
-  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -157,62 +147,9 @@ export default function ExpenseEditModal({
               </button>
             </div>
 
-            <div className="flex items-center justify-between text-sm text-slate-500 mb-4">
-              <div>
-                {expense.date} {expense.time && `· ${expense.time}`}
-                {expense.cardLastFour && ` · ${expense.cardLastFour}`}
-              </div>
-              {(() => {
-                const now = new Date();
-                const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-                const expenseYearMonth = expense.date.substring(0, 7);
-                const isCurrentMonth = currentYearMonth === expenseYearMonth;
-
-                const isSettleable = checkSettleable(expense.cardType, expense.category);
-                if (!isSettleable) return null;
-
-                if (expense.settled) {
-                  let settledTime = '';
-                  if (expense.settledAt) {
-                    try {
-                      const date = new Date(expense.settledAt);
-                      settledTime = `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-                    } catch {
-                      settledTime = '';
-                    }
-                  }
-                  const details = [expense.settledBy, settledTime].filter(Boolean).join(' · ');
-                  return (
-                    <div className="text-right">
-                      <div className="px-2.5 py-1 bg-slate-400 text-white text-xs rounded-lg inline-block">
-                        정산완료
-                      </div>
-                      {details && (
-                        <div className="text-[10px] text-slate-400 mt-0.5">({details})</div>
-                      )}
-                    </div>
-                  );
-                }
-
-                if (!isCurrentMonth || !personalAccount) return null;
-
-                return (
-                  <button
-                    onClick={() => {
-                      onSettlementRequest?.();
-                      openTossTransfer({
-                        bankCode: personalAccount.bankCode,
-                        accountNo: personalAccount.accountNo,
-                        amount: expense.amount,
-                        message: expense.merchant,
-                      });
-                    }}
-                    className="px-2.5 py-1 bg-teal-500 text-white text-xs rounded-lg hover:bg-teal-600 transition-colors"
-                  >
-                    정산하기
-                  </button>
-                );
-              })()}
+            <div className="text-sm text-slate-500 mb-4">
+              {expense.date} {expense.time && `· ${expense.time}`}
+              {expense.cardLastFour && ` · ${expense.cardLastFour}`}
             </div>
 
             <ExpenseFormFields
