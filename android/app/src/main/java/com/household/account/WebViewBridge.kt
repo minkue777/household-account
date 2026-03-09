@@ -3,6 +3,7 @@ package com.household.account
 import android.content.Context
 import android.util.Log
 import android.webkit.JavascriptInterface
+import com.household.account.util.FcmTokenManager
 import com.household.account.util.HouseholdPreferences
 
 /**
@@ -53,6 +54,8 @@ class WebViewBridge(private val context: Context) {
     fun setMemberName(name: String) {
         Log.d(TAG, "setMemberName: $name")
         HouseholdPreferences.setMemberName(context, name)
+        // 멤버 이름 설정 후 FCM 토큰 등록/갱신
+        FcmTokenManager.registerCurrentToken(context)
     }
 
     /**

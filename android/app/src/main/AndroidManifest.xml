@@ -54,6 +54,15 @@
             </intent-filter>
         </service>
 
+        <!-- FCM 서비스 (푸시 알림 수신 + 토큰 갱신) -->
+        <service
+            android:name=".service.FcmService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
     </application>
 
 </manifest>

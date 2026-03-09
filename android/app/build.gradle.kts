@@ -47,6 +47,7 @@ dependencies {
     // Firebase (알림 서비스용)
     implementation(platform("com.google.firebase:firebase-bom:32.6.0"))
     implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-messaging-ktx")
 
     // Coroutines (알림 서비스용)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")

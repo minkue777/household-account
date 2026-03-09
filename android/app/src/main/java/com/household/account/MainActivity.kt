@@ -13,6 +13,8 @@ import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
+import com.household.account.util.FcmTokenManager
+import com.household.account.util.HouseholdPreferences
 
 class MainActivity : AppCompatActivity() {
 
@@ -166,6 +168,12 @@ class MainActivity : AppCompatActivity() {
         // 이미 로드된 경우 다시 로드하지 않음
         if (webView.url == null) {
             webView.loadUrl(WEB_APP_URL)
+        }
+
+        // householdKey + memberName이 있으면 FCM 토큰 등록
+        if (HouseholdPreferences.hasHouseholdKey(this) &&
+            HouseholdPreferences.getMemberName(this).isNotEmpty()) {
+            FcmTokenManager.registerCurrentToken(this)
         }
     }
 
