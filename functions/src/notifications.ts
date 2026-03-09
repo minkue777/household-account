@@ -193,32 +193,15 @@ export const saveFcmToken = functions
     }
 
     try {
-      // 기존 토큰 확인
-      const existingToken = await db.collection('fcmTokens')
-        .where('token', '==', token)
-        .get();
-
-      if (!existingToken.empty) {
-        // 이미 존재하면 업데이트 (householdId도 업데이트 - 계정 변경 대응)
-        const docId = existingToken.docs[0].id;
-        await db.collection('fcmTokens').doc(docId).update({
-          lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
-          deviceInfo: deviceInfo || null,
-          householdId: householdId,
-          deviceOwner: deviceOwner || null,
-        });
-        return { success: true, message: '토큰 업데이트 완료' };
-      }
-
-      // 새 토큰 저장
-      await db.collection('fcmTokens').add({
+      // householdId_deviceOwner를 document ID로 사용 → 1인 1토큰 보장
+      const docId = `${householdId}_${deviceOwner}`;
+      await db.collection('fcmTokens').doc(docId).set({
         token: token,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
         lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
         deviceInfo: deviceInfo || null,
         householdId: householdId,
         deviceOwner: deviceOwner || null,
-      });
+      }, { merge: true });
 
       return { success: true, message: '토큰 저장 완료' };
     } catch (error) {

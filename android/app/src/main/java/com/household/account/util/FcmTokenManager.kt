@@ -5,6 +5,7 @@ import android.os.Build
 import android.util.Log
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.messaging.FirebaseMessaging
 
 /**
@@ -41,20 +42,12 @@ object FcmTokenManager {
             "lastUpdated" to FieldValue.serverTimestamp()
         )
 
-        // 기존 토큰 검색 → 있으면 update, 없으면 create
-        db.collection(COLLECTION)
-            .whereEqualTo("token", token)
-            .get()
-            .addOnSuccessListener { snapshot ->
-                if (!snapshot.isEmpty) {
-                    val docRef = snapshot.documents[0].reference
-                    docRef.update(tokenData)
-                    Log.d(TAG, "FCM token updated in Firestore")
-                } else {
-                    tokenData["createdAt"] = FieldValue.serverTimestamp()
-                    db.collection(COLLECTION).add(tokenData)
-                    Log.d(TAG, "FCM token created in Firestore")
-                }
+        // householdId_deviceOwner를 document ID로 사용 → 1인 1토큰 보장
+        val docId = "${householdId}_${memberName}"
+        db.collection(COLLECTION).document(docId)
+            .set(tokenData, SetOptions.merge())
+            .addOnSuccessListener {
+                Log.d(TAG, "FCM token saved to Firestore")
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Failed to save FCM token", e)
