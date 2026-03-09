@@ -102,6 +102,7 @@ async function saveTokenToServer(token: string): Promise<void> {
     };
 
     const deviceOwner = MemberStorage.getMemberName();
+    if (!deviceOwner) return; // 멤버 선택 전이면 토큰 저장 생략
 
     await saveFcmToken({ token, deviceInfo, householdId: householdKey, deviceOwner });
   } catch (error) {

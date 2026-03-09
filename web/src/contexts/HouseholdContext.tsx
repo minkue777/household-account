@@ -12,6 +12,7 @@ import {
 } from '@/lib/householdService';
 import { HouseholdMember, WindowWithBridge } from '@/types/household';
 import { MemberStorage } from '@/lib/storage/memberStorage';
+import { refreshFcmToken } from '@/lib/pushNotificationService';
 
 interface HouseholdContextType {
   household: Household | null;
@@ -22,6 +23,7 @@ interface HouseholdContextType {
   login: (key: string) => Promise<boolean>;
   logout: () => void;
   selectMember: (member: HouseholdMember) => void;
+  switchMember: () => void;
   addMember: (name: string) => Promise<HouseholdMember>;
 }
 
@@ -102,6 +104,11 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     MemberStorage.remove();
   };
 
+  const switchMember = useCallback(() => {
+    setCurrentMember(null);
+    MemberStorage.remove();
+  }, []);
+
   const selectMember = useCallback((member: HouseholdMember) => {
     setCurrentMember(member);
     MemberStorage.set(member.id, member.name);
@@ -116,6 +123,9 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     if (typeof window !== 'undefined') {
       syncMemberToAndroidBridge(member, partner);
     }
+
+    // FCM 토큰에 deviceOwner 반영
+    refreshFcmToken().catch(() => {});
   }, [household]);
 
   const addMember = useCallback(async (name: string): Promise<HouseholdMember> => {
@@ -144,6 +154,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         selectMember,
+        switchMember,
         addMember,
       }}
     >

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useCategoryContext } from '@/contexts/CategoryContext';
+import { useHousehold } from '@/contexts/HouseholdContext';
 import NotificationSettings from '@/components/NotificationSettings';
 import { isIOS } from '@/lib/pushNotificationService';
 import {
@@ -14,6 +15,7 @@ import {
 
 export default function SettingsPage() {
   const { isLoading } = useCategoryContext();
+  const { currentMember, household, switchMember } = useHousehold();
 
   // iOS 여부
   const [isIOSDevice, setIsIOSDevice] = useState(false);
@@ -48,6 +50,29 @@ export default function SettingsPage() {
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+        {/* 내 정보 섹션 */}
+        {currentMember && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                  <span className="text-blue-600 font-bold text-lg">{currentMember.name[0]}</span>
+                </div>
+                <div>
+                  <p className="font-medium text-slate-800">{currentMember.name}</p>
+                  <p className="text-xs text-slate-400">{household?.name || '가계부'}</p>
+                </div>
+              </div>
+              <button
+                onClick={switchMember}
+                className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                변경
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* 카테고리 섹션 */}
         <CategorySettings />
 
