@@ -96,10 +96,8 @@ export const onExpenseUpdated = functions
   });
 
 /**
- * 또니(아이폰)가 지출 생성하면 망고(안드로이드)에게 알림
- * - iOS 단축어로 등록
- * - 아이폰 웹앱에서 수동 등록
- * 망고가 등록한 건 "또니에게" 버튼으로만 알림 전송
+ * 지출 생성 시 다른 멤버에게 알림 전송
+ * createdBy가 있으면 해당 멤버를 제외한 나머지에게 푸시
  */
 export const onExpenseCreated = functions
   .region(REGION)
@@ -114,19 +112,14 @@ export const onExpenseCreated = functions
       return null;
     }
 
-    // 또니가 등록한 경우에만 알림
-    // iOS 단축어: source가 'ios-shortcut'
-    // 아이폰 웹앱: createdBy가 '또니'
-    const isFromToni = expense.source === 'ios-shortcut' || expense.createdBy === '또니';
-
-    if (!isFromToni) {
-      return null; // 망고가 등록한 건 알림 안 보냄
+    const createdBy = expense.createdBy;
+    if (!createdBy) {
+      return null;
     }
 
-    // 망고(안드로이드) 기기의 토큰만 가져오기
+    // 같은 household의 모든 토큰 조회, createdBy가 아닌 멤버에게만 전송
     const tokensSnapshot = await db.collection('fcmTokens')
       .where('householdId', '==', householdId)
-      .where('deviceOwner', '==', '망고')
       .get();
 
     if (tokensSnapshot.empty) {
@@ -136,7 +129,7 @@ export const onExpenseCreated = functions
     const tokens: string[] = [];
     tokensSnapshot.forEach(doc => {
       const data = doc.data();
-      if (data.token) {
+      if (data.token && data.deviceOwner !== createdBy) {
         tokens.push(data.token);
       }
     });
@@ -153,7 +146,7 @@ export const onExpenseCreated = functions
       tokens: tokens,
       notification: {
         title: `📱 ${merchant}`,
-        body: `${amount}원 - 또니가 등록한 지출이에요`,
+        body: `${amount}원 - ${createdBy}님이 등록한 지출이에요`,
       },
       data: {
         expenseId: expenseId,

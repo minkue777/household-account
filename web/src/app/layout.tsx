@@ -9,13 +9,13 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: '또니망고네 가계부',
+  title: '가계부',
   description: '가족 지출 관리 앱',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: '또니망고네 가계부',
+    title: '가계부',
   },
   formatDetection: {
     telephone: false,

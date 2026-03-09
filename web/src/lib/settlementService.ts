@@ -9,7 +9,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { DeviceOwnerStorage } from './storage/deviceOwnerStorage';
+import { MemberStorage } from './storage/memberStorage';
 
 const COLLECTION_NAME = 'expenses';
 
@@ -52,7 +52,7 @@ export function checkSettleable(cardType: string | undefined, category: string):
  */
 export async function notifyPartner(id: string): Promise<void> {
   const docRef = doc(db, COLLECTION_NAME, id);
-  const deviceOwner = DeviceOwnerStorage.get();
+  const deviceOwner = MemberStorage.getMemberName();
   await updateDoc(docRef, {
     notifyPartnerAt: Timestamp.now(),
     notifyPartnerBy: deviceOwner || null,
@@ -76,7 +76,7 @@ export async function requestSettlement(id: string): Promise<void> {
  */
 export async function settleExpense(id: string): Promise<void> {
   const docRef = doc(db, COLLECTION_NAME, id);
-  const deviceOwner = DeviceOwnerStorage.get();
+  const deviceOwner = MemberStorage.getMemberName();
   await updateDoc(docRef, {
     settled: true,
     settledAt: new Date().toISOString(),

@@ -69,7 +69,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * localStorage에서 householdKey를 읽어 SharedPreferences에 동기화
+     * localStorage에서 householdKey, 멤버 정보를 읽어 SharedPreferences에 동기화
      */
     private fun syncHouseholdKeyFromLocalStorage() {
         val script = """
@@ -77,6 +77,14 @@ class MainActivity : AppCompatActivity() {
                 var key = localStorage.getItem('householdKey');
                 if (key && key.length > 0) {
                     AndroidBridge.setHouseholdKey(key);
+                }
+                var memberName = localStorage.getItem('currentMemberName');
+                if (memberName && memberName.length > 0) {
+                    AndroidBridge.setMemberName(memberName);
+                }
+                var partnerName = localStorage.getItem('partnerName');
+                if (partnerName && partnerName.length > 0) {
+                    AndroidBridge.setPartnerName(partnerName);
                 }
             })();
         """.trimIndent()

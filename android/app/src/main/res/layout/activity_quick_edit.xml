@@ -163,7 +163,7 @@
             android:maxLines="1"
             android:layout_marginBottom="12dp" />
 
-        <!-- 버튼들 1행 (분리, 또니에게) - 회색 배경 -->
+        <!-- 버튼들 1행 (분리, 전송) - 회색 배경 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -187,7 +187,7 @@
                 android:layout_weight="1"
                 android:layout_height="44dp"
                 android:layout_marginStart="4dp"
-                android:text="또니에게"
+                android:text="전송"
                 android:textColor="#1E293B"
                 android:textSize="14sp"
                 android:backgroundTint="#E2E8F0" />

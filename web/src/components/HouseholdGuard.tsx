@@ -2,10 +2,11 @@
 
 import { useHousehold } from '@/contexts/HouseholdContext';
 import HouseholdLogin from './HouseholdLogin';
+import MemberSelection from './MemberSelection';
 import { usePathname } from 'next/navigation';
 
 export default function HouseholdGuard({ children }: { children: React.ReactNode }) {
-  const { isLoading, isAuthenticated } = useHousehold();
+  const { isLoading, isAuthenticated, currentMember } = useHousehold();
   const pathname = usePathname();
 
   // 관리자 페이지와 게스트 페이지는 로그인 없이 접근 가능
@@ -25,6 +26,11 @@ export default function HouseholdGuard({ children }: { children: React.ReactNode
   // 인증되지 않음
   if (!isAuthenticated) {
     return <HouseholdLogin />;
+  }
+
+  // 멤버 미선택
+  if (!currentMember) {
+    return <MemberSelection />;
   }
 
   return <>{children}</>;

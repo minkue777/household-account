@@ -19,9 +19,11 @@ import {
   AssetBalanceChart,
 } from '@/components/assets';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useHousehold } from '@/contexts/HouseholdContext';
 
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
+  const { household } = useHousehold();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [dailyChange, setDailyChange] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -123,7 +125,7 @@ export default function AssetsPage() {
                 backgroundClip: 'text',
               }}
             >
-              또니망고네
+              {household?.name || '우리집'}
               <br />
               자산
             </h1>

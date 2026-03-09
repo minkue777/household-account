@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useHousehold } from '@/contexts/HouseholdContext';
 
 interface HomeHeaderProps {
   onSearchClick: () => void;
@@ -9,6 +10,7 @@ interface HomeHeaderProps {
 
 export default function HomeHeader({ onSearchClick }: HomeHeaderProps) {
   const { themeConfig } = useTheme();
+  const { household } = useHousehold();
 
   return (
     <header className="mb-6 flex items-center justify-between">
@@ -23,7 +25,7 @@ export default function HomeHeader({ onSearchClick }: HomeHeaderProps) {
             backgroundClip: 'text',
           }}
         >
-          또니망고네
+          {household?.name || '우리집'}
           <br />
           가계부
         </h1>

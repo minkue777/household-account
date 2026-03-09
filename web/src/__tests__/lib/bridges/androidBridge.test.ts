@@ -20,6 +20,8 @@ describe('AndroidBridge', () => {
         setHouseholdKey: jest.fn(),
         getHouseholdKey: jest.fn(),
         clearHouseholdKey: jest.fn(),
+        setMemberName: jest.fn(),
+        setPartnerName: jest.fn(),
       };
 
       expect(AndroidBridge.isAvailable()).toBe(true);
@@ -37,6 +39,8 @@ describe('AndroidBridge', () => {
         setHouseholdKey: mockSetHouseholdKey,
         getHouseholdKey: jest.fn(),
         clearHouseholdKey: jest.fn(),
+        setMemberName: jest.fn(),
+        setPartnerName: jest.fn(),
       };
 
       AndroidBridge.setHouseholdKey('test-key');
@@ -61,6 +65,8 @@ describe('AndroidBridge', () => {
         setHouseholdKey: jest.fn(),
         getHouseholdKey: mockGetHouseholdKey,
         clearHouseholdKey: jest.fn(),
+        setMemberName: jest.fn(),
+        setPartnerName: jest.fn(),
       };
 
       const result = AndroidBridge.getHouseholdKey();
@@ -86,6 +92,8 @@ describe('AndroidBridge', () => {
         setHouseholdKey: jest.fn(),
         getHouseholdKey: jest.fn(),
         clearHouseholdKey: mockClearHouseholdKey,
+        setMemberName: jest.fn(),
+        setPartnerName: jest.fn(),
       };
 
       AndroidBridge.clearHouseholdKey();

@@ -9,7 +9,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Household, SettlementAccount, PersonalAccount } from '@/types/household';
+import { Household, HouseholdMember, SettlementAccount, PersonalAccount } from '@/types/household';
 import { HouseholdStorage } from './storage/householdStorage';
 
 export type { Household };
@@ -76,6 +76,7 @@ export async function getHousehold(key: string): Promise<Household | null> {
     name: data.name,
     createdAt: data.createdAt?.toDate() || new Date(),
     defaultCategoryKey: data.defaultCategoryKey,
+    members: data.members || [],
     settlementAccount: data.settlementAccount,
     personalAccounts: data.personalAccounts || [],
   };
@@ -86,11 +87,30 @@ export async function getHousehold(key: string): Promise<Household | null> {
  */
 export async function getAllHouseholds(): Promise<Household[]> {
   const snapshot = await getDocs(householdsCollection);
-  return snapshot.docs.map(doc => ({
-    id: doc.id,
-    name: doc.data().name,
-    createdAt: doc.data().createdAt?.toDate() || new Date(),
+  return snapshot.docs.map(d => ({
+    id: d.id,
+    name: d.data().name,
+    createdAt: d.data().createdAt?.toDate() || new Date(),
+    members: d.data().members || [],
   }));
+}
+
+/**
+ * 가구에 멤버 추가
+ */
+export async function addHouseholdMember(householdKey: string, name: string): Promise<HouseholdMember> {
+  const docRef = doc(householdsCollection, householdKey);
+  const docSnap = await getDoc(docRef);
+
+  const id = `m_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+  const newMember: HouseholdMember = { id, name };
+
+  const currentMembers: HouseholdMember[] = docSnap.data()?.members || [];
+  await updateDoc(docRef, {
+    members: [...currentMembers, newMember],
+  });
+
+  return newMember;
 }
 
 /**

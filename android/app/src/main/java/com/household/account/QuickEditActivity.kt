@@ -252,8 +252,11 @@ class QuickEditActivity : AppCompatActivity() {
             saveChanges(notifyPartner = false)
         }
 
-        // 또니에게 전송 버튼 (저장 없이 알림만)
-        findViewById<Button>(R.id.btnNotify).setOnClickListener {
+        // 파트너에게 전송 버튼 (저장 없이 알림만)
+        val partnerName = HouseholdPreferences.getPartnerName(this)
+        val btnNotify = findViewById<Button>(R.id.btnNotify)
+        btnNotify.text = if (partnerName.isNotEmpty()) "${partnerName}에게" else "전송"
+        btnNotify.setOnClickListener {
             sendNotifyOnly()
         }
 
@@ -269,7 +272,7 @@ class QuickEditActivity : AppCompatActivity() {
     }
 
     /**
-     * 저장 없이 또니에게 알림만 전송
+     * 저장 없이 파트너에게 알림만 전송
      */
     private fun sendNotifyOnly() {
         if (expenseId.isEmpty()) {
@@ -285,7 +288,9 @@ class QuickEditActivity : AppCompatActivity() {
                         notifyPartner = true
                     )
                 }
-                Toast.makeText(this@QuickEditActivity, "또니에게 전송됨", Toast.LENGTH_SHORT).show()
+                val pName = HouseholdPreferences.getPartnerName(this@QuickEditActivity)
+                val toastMsg = if (pName.isNotEmpty()) "${pName}에게 전송됨" else "전송됨"
+                Toast.makeText(this@QuickEditActivity, toastMsg, Toast.LENGTH_SHORT).show()
                 finish()
             } catch (e: Exception) {
                 Toast.makeText(this@QuickEditActivity, "전송에 실패했습니다", Toast.LENGTH_SHORT).show()
@@ -326,7 +331,10 @@ class QuickEditActivity : AppCompatActivity() {
                         notifyPartner = notifyPartner
                     )
                 }
-                val message = if (notifyPartner) "저장 및 또니에게 전송됨" else "저장되었습니다"
+                val pName = HouseholdPreferences.getPartnerName(this@QuickEditActivity)
+                val message = if (notifyPartner) {
+                    if (pName.isNotEmpty()) "저장 및 ${pName}에게 전송됨" else "저장 및 전송됨"
+                } else "저장되었습니다"
                 Toast.makeText(this@QuickEditActivity, message, Toast.LENGTH_SHORT).show()
                 finish()
             } catch (e: Exception) {

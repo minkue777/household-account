@@ -11,6 +11,8 @@ object HouseholdPreferences {
 
     private const val PREF_NAME = "household_prefs"
     private const val KEY_HOUSEHOLD_ID = "householdKey"
+    private const val KEY_MEMBER_NAME = "memberName"
+    private const val KEY_PARTNER_NAME = "partnerName"
 
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -42,5 +44,33 @@ object HouseholdPreferences {
      */
     fun hasHouseholdKey(context: Context): Boolean {
         return getHouseholdKey(context).isNotEmpty()
+    }
+
+    /**
+     * 현재 멤버 이름 저장
+     */
+    fun setMemberName(context: Context, name: String) {
+        getPrefs(context).edit().putString(KEY_MEMBER_NAME, name).apply()
+    }
+
+    /**
+     * 현재 멤버 이름 조회
+     */
+    fun getMemberName(context: Context): String {
+        return getPrefs(context).getString(KEY_MEMBER_NAME, "") ?: ""
+    }
+
+    /**
+     * 파트너 이름 저장
+     */
+    fun setPartnerName(context: Context, name: String) {
+        getPrefs(context).edit().putString(KEY_PARTNER_NAME, name).apply()
+    }
+
+    /**
+     * 파트너 이름 조회
+     */
+    fun getPartnerName(context: Context): String {
+        return getPrefs(context).getString(KEY_PARTNER_NAME, "") ?: ""
     }
 }

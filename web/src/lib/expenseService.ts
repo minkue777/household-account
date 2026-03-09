@@ -16,7 +16,7 @@ import {
 import { db } from './firebase';
 import { Expense, MergedExpenseInfo } from '@/types/expense';
 import { getStoredHouseholdKey } from './householdService';
-import { DeviceOwnerStorage } from './storage/deviceOwnerStorage';
+import { MemberStorage } from './storage/memberStorage';
 
 // 정산 관련 함수는 settlementService에서 re-export (기존 import 호환성 유지)
 export { checkSettleable, notifyPartner, requestSettlement, settleExpense, unsettleExpense } from './settlementService';
@@ -66,7 +66,7 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
  */
 export async function addExpense(expense: Omit<Expense, 'id'>): Promise<string> {
   const householdId = getHouseholdId();
-  const createdBy = DeviceOwnerStorage.get();
+  const createdBy = MemberStorage.getMemberName();
   const docRef = await addDoc(collection(db, COLLECTION_NAME), {
     ...expense,
     householdId,

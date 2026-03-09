@@ -2,7 +2,7 @@ import { getMessaging, getToken, onMessage, Messaging } from 'firebase/messaging
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from './firebase';
 import { Platform } from './utils/platform';
-import { DeviceOwnerStorage } from './storage/deviceOwnerStorage';
+import { MemberStorage } from './storage/memberStorage';
 
 // VAPID 키 (Firebase Console > 프로젝트 설정 > 클라우드 메시징 > 웹 푸시 인증서에서 생성)
 const VAPID_KEY = 'BLI2AoMlLXi5yMOfCAPdup52iEoPoItcWzFQws-Vb5xviQ9VA1ex7oTLZ9M5kqDccQoYAiMaNSUQZSjURD98y3k';
@@ -101,7 +101,7 @@ async function saveTokenToServer(token: string): Promise<void> {
       language: navigator.language,
     };
 
-    const deviceOwner = DeviceOwnerStorage.get();
+    const deviceOwner = MemberStorage.getMemberName();
 
     await saveFcmToken({ token, deviceInfo, householdId: householdKey, deviceOwner });
   } catch (error) {

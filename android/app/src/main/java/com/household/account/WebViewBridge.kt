@@ -45,4 +45,22 @@ class WebViewBridge(private val context: Context) {
         Log.d(TAG, "clearHouseholdKey")
         HouseholdPreferences.clearHouseholdKey(context)
     }
+
+    /**
+     * JavaScript에서 호출: 현재 멤버 이름 저장
+     */
+    @JavascriptInterface
+    fun setMemberName(name: String) {
+        Log.d(TAG, "setMemberName: $name")
+        HouseholdPreferences.setMemberName(context, name)
+    }
+
+    /**
+     * JavaScript에서 호출: 파트너 이름 저장
+     */
+    @JavascriptInterface
+    fun setPartnerName(name: String) {
+        Log.d(TAG, "setPartnerName: $name")
+        HouseholdPreferences.setPartnerName(context, name)
+    }
 }
