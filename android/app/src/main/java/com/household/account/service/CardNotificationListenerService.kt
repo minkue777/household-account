@@ -13,6 +13,7 @@ import com.household.account.data.ExpenseRepository
 import com.household.account.data.MerchantRuleRepository
 import com.household.account.parser.KBCardParser
 import com.household.account.parser.LocalCurrencyParser
+import com.household.account.parser.NaverPayParser
 import com.household.account.parser.NHPayParser
 import com.household.account.parser.ParseResult
 import com.household.account.util.HouseholdPreferences
@@ -27,6 +28,7 @@ class CardNotificationListenerService : NotificationListenerService() {
         private const val KB_PAY_PACKAGE = "com.kbcard.cxh.appcard"
         private const val KB_CARD_PACKAGE = "com.kbcard.kbkookmincard"
         private const val NH_PAY_PACKAGE = "nh.smart.nhallonepay"
+        private const val NAVER_PAY_PACKAGE = "com.naverfin.payapp"
 
         private const val HWASEONG_LOCAL_CURRENCY = "com.mobiletoong.gpay"
         private const val CHAK_WALLET = "com.coocon.chakwallet"
@@ -40,6 +42,10 @@ class CardNotificationListenerService : NotificationListenerService() {
 
         private val knownNhPackages = setOf(
             NH_PAY_PACKAGE
+        )
+
+        private val knownNaverPayPackages = setOf(
+            NAVER_PAY_PACKAGE
         )
 
         private val knownLocalCurrencyPackages = setOf(
@@ -56,6 +62,7 @@ class CardNotificationListenerService : NotificationListenerService() {
     private enum class NotificationSource {
         KB,
         NH,
+        NAVER_PAY,
         LOCAL_CURRENCY
     }
 
@@ -110,6 +117,7 @@ class CardNotificationListenerService : NotificationListenerService() {
             val result: ParseResult = when (source) {
                 NotificationSource.KB -> KBCardParser.parse(fullText)
                 NotificationSource.NH -> NHPayParser.parse(fullText)
+                NotificationSource.NAVER_PAY -> NaverPayParser.parse(fullText, sbn.postTime)
                 NotificationSource.LOCAL_CURRENCY -> LocalCurrencyParser.parse(fullText)
             }
 
@@ -139,6 +147,8 @@ class CardNotificationListenerService : NotificationListenerService() {
         return when {
             packageName in knownKbPackages || KBCardParser.matches(fullText) -> NotificationSource.KB
             packageName in knownNhPackages || NHPayParser.matches(fullText) -> NotificationSource.NH
+            packageName in knownNaverPayPackages || NaverPayParser.matches(fullText) ->
+                NotificationSource.NAVER_PAY
             packageName in knownLocalCurrencyPackages || LocalCurrencyParser.matches(fullText) ->
                 NotificationSource.LOCAL_CURRENCY
 
