@@ -165,7 +165,7 @@ class ExpenseRepository {
     }
 
     /**
-     * 지출 항목 전체 필드 업데이트 (가맹점, 금액, 카테고리, 메모, 알림 여부)
+     * 지출 항목 전체 필드 업데이트
      */
     suspend fun updateExpenseAllFields(
         expenseId: String,
@@ -173,7 +173,7 @@ class ExpenseRepository {
         amount: Int? = null,
         category: String? = null,
         memo: String? = null,
-        notifyPartner: Boolean = false
+        notifyPartnerBy: String? = null
     ) {
         try {
             val updates = mutableMapOf<String, Any>()
@@ -181,7 +181,10 @@ class ExpenseRepository {
             amount?.let { updates["amount"] = it }
             category?.let { updates["category"] = it }
             memo?.let { updates["memo"] = it }
-            updates["notifyPartner"] = notifyPartner
+            notifyPartnerBy?.let {
+                updates["notifyPartnerAt"] = com.google.firebase.firestore.FieldValue.serverTimestamp()
+                updates["notifyPartnerBy"] = it
+            }
 
             if (updates.isNotEmpty()) {
                 expensesCollection.document(expenseId)
@@ -207,57 +210,6 @@ class ExpenseRepository {
             }
         } catch (e: Exception) {
             emptyList()
-        }
-    }
-
-    /**
-     * 정산 대기 중인 지출 찾기 (pendingSettlement == true)
-     * 금액이 일치하는 것만 반환
-     */
-    suspend fun findPendingSettlement(householdId: String, amount: Int): Expense? {
-        return try {
-            // pendingSettlement == true인 것만 쿼리 (효율적)
-            val snapshot = expensesCollection
-                .whereEqualTo("householdId", householdId)
-                .whereEqualTo("pendingSettlement", true)
-                .get()
-                .await()
-
-            val pendingExpenses = snapshot.documents
-                .mapNotNull { doc ->
-                    doc.toObject(Expense::class.java)?.copy(id = doc.id)
-                }
-
-            // 금액이 일치하는 것 찾기 (여러 개면 가장 최근 것)
-            pendingExpenses
-                .filter { it.amount == amount }
-                .maxByOrNull { it.settlementRequestedAt }
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    /**
-     * 지출 정산 완료 처리
-     * @param settledBy 정산한 사람 이름 (토스뱅크 카톡: 이진선, 새마을금고 SMS: 이민규)
-     */
-    suspend fun markAsSettled(expenseId: String, settledBy: String) {
-        try {
-            val now = java.time.LocalDateTime.now()
-                .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-
-            expensesCollection.document(expenseId)
-                .update(
-                    mapOf(
-                        "settled" to true,
-                        "settledAt" to now,
-                        "settledBy" to settledBy,
-                        "pendingSettlement" to com.google.firebase.firestore.FieldValue.delete()
-                    )
-                )
-                .await()
-        } catch (e: Exception) {
-            // ignored
         }
     }
 }

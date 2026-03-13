@@ -18,10 +18,6 @@ import { Expense, MergedExpenseInfo } from '@/types/expense';
 import { getStoredHouseholdKey } from './householdService';
 import { MemberStorage } from './storage/memberStorage';
 
-// 정산 관련 함수는 settlementService에서 re-export (기존 import 호환성 유지)
-export { checkSettleable, notifyPartner, requestSettlement, settleExpense, unsettleExpense } from './settlementService';
-import { checkSettleable } from './settlementService';
-
 const COLLECTION_NAME = 'expenses';
 
 /**
@@ -55,9 +51,6 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
     splitGroupId: data.splitGroupId,
     splitIndex: data.splitIndex,
     splitTotal: data.splitTotal,
-    settled: data.settled || false,
-    settledBy: data.settledBy,
-    settledAt: data.settledAt,
   };
 }
 
@@ -189,7 +182,6 @@ export async function addManualExpense(
     memo: memo || '',
     householdId,
     createdAt: Timestamp.now(),
-    settled: false,  // 수동 지출은 정산 가능
   });
   return docRef.id;
 }
@@ -268,10 +260,6 @@ export async function splitExpense(
         householdId,
         createdAt: Timestamp.now(),
       };
-      // 각 분할 항목의 카테고리에 따라 정산 필요 여부 결정
-      if (checkSettleable(originalExpense.cardType, split.category)) {
-        expenseData.settled = false;
-      }
       transaction.set(newDocRef, expenseData);
       newIds.push(newDocRef.id);
     }
@@ -352,10 +340,6 @@ export async function unmergeExpense(expense: Expense): Promise<string[]> {
         householdId,
         createdAt: Timestamp.now(),
       };
-      // 각 원본 항목의 카테고리에 따라 정산 필요 여부 결정
-      if (checkSettleable(expense.cardType, original.category)) {
-        expenseData.settled = false;
-      }
       transaction.set(newDocRef, expenseData);
       newIds.push(newDocRef.id);
     }
@@ -459,9 +443,6 @@ export async function cancelSplitGroup(splitGroupId: string): Promise<void> {
       householdId,
       createdAt: Timestamp.now(),
     };
-    if (checkSettleable(cardType, firstExpense.category)) {
-      expenseData.settled = false;
-    }
     transaction.set(newDocRef, expenseData);
   });
 }
@@ -500,7 +481,6 @@ export async function updateSplitGroup(
 
     // 새로운 분할 지출 생성
     const cardType = firstExpense.cardType || 'main';
-    const shouldSettle = checkSettleable(cardType, firstExpense.category);
     for (let i = 0; i < newMonths; i++) {
       const targetDate = new Date(baseDate);
       targetDate.setMonth(targetDate.getMonth() + i);
@@ -521,9 +501,6 @@ export async function updateSplitGroup(
         householdId,
         createdAt: Timestamp.now(),
       };
-      if (shouldSettle) {
-        expenseData.settled = false;
-      }
       transaction.set(newDocRef, expenseData);
     }
   });

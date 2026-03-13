@@ -222,18 +222,5 @@
                 android:backgroundTint="#3B82F6" />
         </LinearLayout>
 
-        <!-- 숨김 처리 (코드 호환용) -->
-        <Button
-            android:id="@+id/btnCancel"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:visibility="gone" />
-
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/switchNotify"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:visibility="gone" />
-
     </LinearLayout>
 </ScrollView>

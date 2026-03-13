@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Expense } from '@/types/expense';
-import { SplitItem, notifyPartner } from '@/lib/expenseService';
+import { SplitItem } from '@/lib/expenseService';
+import { notifyPartner } from '@/lib/partnerNotificationService';
 import {
   runSplitMonthsAction,
   runCancelSplitGroupAction,

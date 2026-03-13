@@ -9,7 +9,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Household, HouseholdMember, SettlementAccount, PersonalAccount } from '@/types/household';
+import { Household, HouseholdMember } from '@/types/household';
 import { HouseholdStorage } from './storage/householdStorage';
 
 export type { Household };
@@ -77,8 +77,6 @@ export async function getHousehold(key: string): Promise<Household | null> {
     createdAt: data.createdAt?.toDate() || new Date(),
     defaultCategoryKey: data.defaultCategoryKey,
     members: data.members || [],
-    settlementAccount: data.settlementAccount,
-    personalAccounts: data.personalAccounts || [],
   };
 }
 
@@ -126,76 +124,6 @@ export async function deleteHousehold(key: string): Promise<void> {
 export async function setDefaultCategoryKey(householdKey: string, categoryKey: string): Promise<void> {
   const docRef = doc(householdsCollection, householdKey);
   await updateDoc(docRef, { defaultCategoryKey: categoryKey });
-}
-
-/**
- * 정산 계좌 설정 (deprecated - personalAccounts 사용 권장)
- */
-export async function setSettlementAccount(householdKey: string, account: SettlementAccount | null): Promise<void> {
-  const docRef = doc(householdsCollection, householdKey);
-  await updateDoc(docRef, { settlementAccount: account });
-}
-
-/**
- * 개인 계좌 추가
- */
-export async function addPersonalAccount(householdKey: string, account: Omit<PersonalAccount, 'id'>): Promise<string> {
-  const docRef = doc(householdsCollection, householdKey);
-  const docSnap = await getDoc(docRef);
-
-  const id = `pa_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const newAccount: PersonalAccount = { ...account, id };
-
-  const currentAccounts = docSnap.data()?.personalAccounts || [];
-  await updateDoc(docRef, {
-    personalAccounts: [...currentAccounts, newAccount]
-  });
-
-  return id;
-}
-
-/**
- * 개인 계좌 수정
- */
-export async function updatePersonalAccount(householdKey: string, accountId: string, updates: Partial<Omit<PersonalAccount, 'id'>>): Promise<void> {
-  const docRef = doc(householdsCollection, householdKey);
-  const docSnap = await getDoc(docRef);
-
-  const currentAccounts: PersonalAccount[] = docSnap.data()?.personalAccounts || [];
-  const updatedAccounts = currentAccounts.map(acc =>
-    acc.id === accountId ? { ...acc, ...updates } : acc
-  );
-
-  await updateDoc(docRef, { personalAccounts: updatedAccounts });
-}
-
-/**
- * 개인 계좌 삭제
- */
-export async function deletePersonalAccount(householdKey: string, accountId: string): Promise<void> {
-  const docRef = doc(householdsCollection, householdKey);
-  const docSnap = await getDoc(docRef);
-
-  const currentAccounts: PersonalAccount[] = docSnap.data()?.personalAccounts || [];
-  const filteredAccounts = currentAccounts.filter(acc => acc.id !== accountId);
-
-  await updateDoc(docRef, { personalAccounts: filteredAccounts });
-}
-
-/**
- * 기본 개인 계좌 설정
- */
-export async function setDefaultPersonalAccount(householdKey: string, accountId: string): Promise<void> {
-  const docRef = doc(householdsCollection, householdKey);
-  const docSnap = await getDoc(docRef);
-
-  const currentAccounts: PersonalAccount[] = docSnap.data()?.personalAccounts || [];
-  const updatedAccounts = currentAccounts.map(acc => ({
-    ...acc,
-    isDefault: acc.id === accountId
-  }));
-
-  await updateDoc(docRef, { personalAccounts: updatedAccounts });
 }
 
 /**

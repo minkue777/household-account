@@ -249,7 +249,7 @@ class QuickEditActivity : AppCompatActivity() {
 
         // 저장 버튼
         findViewById<Button>(R.id.btnSave).setOnClickListener {
-            saveChanges(notifyPartner = false)
+            saveChanges()
         }
 
         // 파트너에게 전송 버튼 (저장 없이 알림만)
@@ -271,9 +271,6 @@ class QuickEditActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * 저장 없이 파트너에게 알림만 전송
-     */
     private fun sendNotifyOnly() {
         if (expenseId.isEmpty()) {
             finish()
@@ -282,10 +279,11 @@ class QuickEditActivity : AppCompatActivity() {
 
         activityScope.launch {
             try {
+                val memberName = HouseholdPreferences.getMemberName(this@QuickEditActivity).ifEmpty { null }
                 withContext(Dispatchers.IO) {
                     expenseRepository.updateExpenseAllFields(
                         expenseId = expenseId,
-                        notifyPartner = true
+                        notifyPartnerBy = memberName
                     )
                 }
                 val pName = HouseholdPreferences.getPartnerName(this@QuickEditActivity)
@@ -298,7 +296,7 @@ class QuickEditActivity : AppCompatActivity() {
         }
     }
 
-    private fun saveChanges(notifyPartner: Boolean) {
+    private fun saveChanges() {
         val merchant = etMerchant.text.toString().trim()
         val amountStr = etAmount.text.toString().trim()
         val memo = etMemo.text.toString().trim()
@@ -327,15 +325,10 @@ class QuickEditActivity : AppCompatActivity() {
                         merchant = if (merchant != originalMerchant) merchant else null,
                         amount = if (amount != originalAmount) amount else null,
                         category = if (selectedCategoryKey != originalCategory.lowercase()) selectedCategoryKey else null,
-                        memo = memo.ifEmpty { null },
-                        notifyPartner = notifyPartner
+                        memo = memo.ifEmpty { null }
                     )
                 }
-                val pName = HouseholdPreferences.getPartnerName(this@QuickEditActivity)
-                val message = if (notifyPartner) {
-                    if (pName.isNotEmpty()) "저장 및 ${pName}에게 전송됨" else "저장 및 전송됨"
-                } else "저장되었습니다"
-                Toast.makeText(this@QuickEditActivity, message, Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@QuickEditActivity, "저장되었습니다", Toast.LENGTH_SHORT).show()
                 finish()
             } catch (e: Exception) {
                 Toast.makeText(this@QuickEditActivity, "저장에 실패했습니다", Toast.LENGTH_SHORT).show()
