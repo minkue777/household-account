@@ -5,7 +5,7 @@ import { MemberStorage } from './storage/memberStorage';
 const COLLECTION_NAME = 'expenses';
 
 /**
- * 파트너에게 알림 전송 요청
+ * 지출 알림 전송 요청
  */
 export async function notifyPartner(id: string): Promise<void> {
   const docRef = doc(db, COLLECTION_NAME, id);

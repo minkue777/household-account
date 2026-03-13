@@ -252,10 +252,9 @@ class QuickEditActivity : AppCompatActivity() {
             saveChanges()
         }
 
-        // 파트너에게 전송 버튼 (저장 없이 알림만)
-        val partnerName = HouseholdPreferences.getPartnerName(this)
+        // 알림 보내기 버튼 (저장 없이 알림만)
         val btnNotify = findViewById<Button>(R.id.btnNotify)
-        btnNotify.text = if (partnerName.isNotEmpty()) "${partnerName}에게" else "전송"
+        btnNotify.text = "알림 보내기"
         btnNotify.setOnClickListener {
             sendNotifyOnly()
         }
@@ -286,12 +285,10 @@ class QuickEditActivity : AppCompatActivity() {
                         notifyPartnerBy = memberName
                     )
                 }
-                val pName = HouseholdPreferences.getPartnerName(this@QuickEditActivity)
-                val toastMsg = if (pName.isNotEmpty()) "${pName}에게 전송됨" else "전송됨"
-                Toast.makeText(this@QuickEditActivity, toastMsg, Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@QuickEditActivity, "알림을 보냈습니다", Toast.LENGTH_SHORT).show()
                 finish()
             } catch (e: Exception) {
-                Toast.makeText(this@QuickEditActivity, "전송에 실패했습니다", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@QuickEditActivity, "알림 보내기에 실패했습니다", Toast.LENGTH_SHORT).show()
             }
         }
     }

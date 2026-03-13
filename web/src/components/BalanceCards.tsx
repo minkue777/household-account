@@ -52,14 +52,14 @@ export default function BalanceCards({
     // 지역화폐 지출 필터링 및 클릭 핸들러
     const handleLocalCurrencyClick = () => {
         if (onLocalCurrencyClick) {
-            const localCurrencyExpenses = expenses.filter(e => e.cardLastFour === '지역');
+            const localCurrencyExpenses = expenses.filter(e => e.cardType === 'local_currency');
             onLocalCurrencyClick(localCurrencyExpenses);
         }
     };
 
     return (
         <div className={`grid grid-cols-2 gap-2 ${className}`}>
-            {/* 1. 경기지역화폐 카드 */}
+            {/* 1. 지역화폐 잔액 카드 */}
             <div
                 className="balance-card-glass p-2.5 cursor-pointer hover:shadow-lg transition-shadow"
                 onClick={handleLocalCurrencyClick}
@@ -68,7 +68,7 @@ export default function BalanceCards({
                     <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center border border-blue-100 text-blue-500">
                         <CreditCard className="w-3.5 h-3.5" />
                     </div>
-                    <span className="text-xs font-semibold text-slate-600">경기지역화폐</span>
+                    <span className="text-xs font-semibold text-slate-600">지역화폐 잔액</span>
                 </div>
                 <div className="text-lg font-bold text-slate-800 tracking-tight font-['Pretendard'] flex items-center">
                     {localCurrencyBalance ? localCurrencyBalance.balance.toLocaleString() : '-'}
