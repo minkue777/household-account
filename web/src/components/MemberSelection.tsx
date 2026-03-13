@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useHousehold } from '@/contexts/HouseholdContext';
 
 export default function MemberSelection() {
-  const { household, selectMember, addMember } = useHousehold();
+  const { household, selectMember, addMember, logout } = useHousehold();
   const [showAddForm, setShowAddForm] = useState(false);
   const [newName, setNewName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -86,17 +86,31 @@ export default function MemberSelection() {
                 돌아가기
               </button>
             )}
+            <button
+              onClick={logout}
+              className="w-full mt-2 py-2 text-sm text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              가구키 다시 입력
+            </button>
           </div>
         )}
 
         {/* 새 멤버 추가 버튼 (기존 멤버 있을 때만) */}
         {members.length > 0 && !showForm && (
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="w-full py-2.5 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 hover:border-blue-400 hover:text-blue-500 transition-colors text-sm"
-          >
-            + 새 멤버 추가
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="w-full py-2.5 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 hover:border-blue-400 hover:text-blue-500 transition-colors text-sm"
+            >
+              + 새 멤버 추가
+            </button>
+            <button
+              onClick={logout}
+              className="w-full py-2.5 text-sm text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              가구키 다시 입력
+            </button>
+          </div>
         )}
       </div>
     </div>
