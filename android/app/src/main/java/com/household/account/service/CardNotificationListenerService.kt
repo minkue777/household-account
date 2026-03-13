@@ -2,6 +2,7 @@ package com.household.account.service
 
 import android.app.Notification
 import android.content.Intent
+import android.provider.Settings
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.household.account.QuickEditActivity
@@ -12,6 +13,7 @@ import com.household.account.data.ExpenseRepository
 import com.household.account.data.MerchantRuleRepository
 import com.household.account.parser.KBCardParser
 import com.household.account.parser.LocalCurrencyParser
+import com.household.account.parser.NHPayParser
 import com.household.account.parser.ParseResult
 import com.household.account.util.HouseholdPreferences
 import kotlinx.coroutines.CoroutineScope
@@ -19,35 +21,42 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-/**
- * 카드사 알림을 감지하는 서비스
- *
- * 사용자가 설정 > 알림 접근 권한에서 이 앱을 활성화해야 동작합니다.
- */
 class CardNotificationListenerService : NotificationListenerService() {
 
     companion object {
-        // KB Pay 앱 패키지명
         private const val KB_PAY_PACKAGE = "com.kbcard.cxh.appcard"
         private const val KB_CARD_PACKAGE = "com.kbcard.kbkookmincard"
+        private const val NH_PAY_PACKAGE = "nh.smart.nhallonepay"
 
-        // 지역화폐 앱 패키지명
-        private const val HWASEONG_LOCAL_CURRENCY = "com.mobiletoong.gpay"  // 희망화성지역화폐
-        private const val CHAK_WALLET = "com.coocon.chakwallet"  // 착한페이 (화성시)
-        private const val GYEONGGI_LOCAL_CURRENCY = "gov.gyeonggi.ggcard"  // 경기지역화폐
+        private const val HWASEONG_LOCAL_CURRENCY = "com.mobiletoong.gpay"
+        private const val CHAK_WALLET = "com.coocon.chakwallet"
+        private const val GYEONGGI_LOCAL_CURRENCY = "gov.gyeonggi.ggcard"
+        private const val DAEJEON_LOVE_CARD = "kr.co.nmcs.daejeonpay"
 
-        // 지원하는 패키지 목록 (결제 파싱용)
-        private val SUPPORTED_PACKAGES = setOf(
+        private val knownKbPackages = setOf(
             KB_PAY_PACKAGE,
-            KB_CARD_PACKAGE,
-            HWASEONG_LOCAL_CURRENCY,
-            CHAK_WALLET,
-            GYEONGGI_LOCAL_CURRENCY
+            KB_CARD_PACKAGE
         )
 
-        // 알림 감지 브로드캐스트 액션
+        private val knownNhPackages = setOf(
+            NH_PAY_PACKAGE
+        )
+
+        private val knownLocalCurrencyPackages = setOf(
+            HWASEONG_LOCAL_CURRENCY,
+            CHAK_WALLET,
+            GYEONGGI_LOCAL_CURRENCY,
+            DAEJEON_LOVE_CARD
+        )
+
         const val ACTION_NOTIFICATION_RECEIVED = "com.household.account.NOTIFICATION_RECEIVED"
         const val EXTRA_EXPENSE_JSON = "expense_json"
+    }
+
+    private enum class NotificationSource {
+        KB,
+        NH,
+        LOCAL_CURRENCY
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -56,140 +65,66 @@ class CardNotificationListenerService : NotificationListenerService() {
     private val categoryRepository = CategoryRepository()
     private val balanceRepository = BalanceRepository()
 
-    // 중복 알림 방지 (최근 처리한 알림 해시 저장, 30초 유지)
     private val recentNotifications = mutableMapOf<String, Long>()
-    private val DUPLICATE_WINDOW_MS = 30_000L
+    private val duplicateWindowMs = 30_000L
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
 
-        val packageName = sbn.packageName
-
-        // 결제 파싱 지원 앱인지 확인
-        if (packageName !in SUPPORTED_PACKAGES) {
-            return
-        }
-
         try {
-            val notification = sbn.notification
-            val extras = notification.extras
+            val packageName = sbn.packageName
+            val extras = sbn.notification.extras
 
-            // 알림 텍스트 추출
             val title = extras.getString(Notification.EXTRA_TITLE) ?: ""
             val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
             val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
 
-            // 전체 알림 텍스트 조합 (title 항상 포함)
             val fullText = buildString {
-                if (title.isNotEmpty()) {
+                if (title.isNotBlank()) {
                     append(title)
                     append("\n")
                 }
-                if (bigText.isNotEmpty()) {
+                if (bigText.isNotBlank()) {
                     append(bigText)
-                } else if (text.isNotEmpty()) {
+                } else if (text.isNotBlank()) {
                     append(text)
                 }
             }.trim()
 
-            // 빈 알림 무시
             if (fullText.isEmpty()) {
                 return
             }
 
-            // 중복 알림 체크 (금액+가맹점 조합으로 30초 내 중복 방지)
+            val source = detectSource(packageName, fullText) ?: return
+
             val notificationKey = "${packageName}_${fullText.hashCode()}"
             val now = System.currentTimeMillis()
             synchronized(recentNotifications) {
-                // 오래된 항목 정리
-                recentNotifications.entries.removeIf { now - it.value > DUPLICATE_WINDOW_MS }
-                // 중복 체크
+                recentNotifications.entries.removeIf { now - it.value > duplicateWindowMs }
                 if (recentNotifications.containsKey(notificationKey)) {
                     return
                 }
                 recentNotifications[notificationKey] = now
             }
 
-            // 앱 종류에 따라 파서 선택
-            val result: ParseResult = when (packageName) {
-                KB_PAY_PACKAGE, KB_CARD_PACKAGE -> KBCardParser.parse(fullText)
-                HWASEONG_LOCAL_CURRENCY, CHAK_WALLET, GYEONGGI_LOCAL_CURRENCY -> LocalCurrencyParser.parse(fullText)
-                else -> ParseResult(false, errorMessage = "지원하지 않는 앱")
+            val result: ParseResult = when (source) {
+                NotificationSource.KB -> KBCardParser.parse(fullText)
+                NotificationSource.NH -> NHPayParser.parse(fullText)
+                NotificationSource.LOCAL_CURRENCY -> LocalCurrencyParser.parse(fullText)
             }
 
-            // 지역화폐인 경우 잔액도 파싱해서 저장
-            if (packageName in setOf(HWASEONG_LOCAL_CURRENCY, CHAK_WALLET, GYEONGGI_LOCAL_CURRENCY)) {
-                val balanceResult = LocalCurrencyParser.parseBalance(fullText)
-                if (balanceResult.balance != null) {
-                    serviceScope.launch {
-                        try {
-                            val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
-                            if (householdId.isNotEmpty()) {
-                                balanceRepository.saveLocalCurrencyBalance(
-                                    householdId,
-                                    balanceResult.balance,
-                                    balanceResult.currencyType ?: "지역화폐"
-                                )
-                            }
-                        } catch (e: Exception) {
-                            // ignored
-                        }
-                    }
-                }
+            if (source == NotificationSource.LOCAL_CURRENCY) {
+                saveLocalCurrencyBalanceIfPresent(fullText)
             }
 
             if (result.success && result.expense != null) {
-                // 저장된 규칙으로 지출 정보 매핑
-                serviceScope.launch {
-                    try {
-                        val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
-
-                        if (householdId.isEmpty()) {
-                            return@launch
-                        }
-
-                        // 규칙 매핑 결과 조회 (가맹점명, 카테고리, 메모 모두 매핑)
-                        val mappingResult = ruleRepository.findMappingForMerchant(householdId, result.expense.merchant)
-
-                        val expenseToSave = if (mappingResult != null) {
-                            result.expense.copy(
-                                merchant = mappingResult.mappedMerchant,
-                                category = mappingResult.mappedCategoryKey,
-                                memo = mappingResult.mappedMemo.ifEmpty { result.expense.memo },
-                                householdId = householdId
-                            )
-                        } else {
-                            // 규칙이 없으면 "기타" 카테고리로 저장 (동적 조회)
-                            val defaultCategoryKey = categoryRepository.getDefaultCategoryKey(householdId)
-                            result.expense.copy(category = defaultCategoryKey, householdId = householdId)
-                        }
-
-                        val docId = expenseRepository.addExpense(expenseToSave)
-
-                        // 빠른 편집 화면 바로 띄우기 (카테고리는 소문자로 변환)
-                        if (docId.isNotEmpty()) {
-                            launchQuickEditActivity(expenseToSave.copy(
-                                id = docId,
-                                category = expenseToSave.category.lowercase()
-                            ))
-                        }
-
-                        // 브로드캐스트로 UI에 알림
-                        sendBroadcast(Intent(ACTION_NOTIFICATION_RECEIVED))
-
-                    } catch (e: Exception) {
-                        // ignored
-                    }
-                }
+                saveExpenseAndLaunchQuickEdit(result.expense)
             }
-
-        } catch (e: Exception) {
-            // ignored
+        } catch (_: Exception) {
         }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        // 알림 제거 시 특별한 처리 없음
     }
 
     override fun onListenerConnected() {
@@ -200,20 +135,87 @@ class CardNotificationListenerService : NotificationListenerService() {
         super.onListenerDisconnected()
     }
 
-    /**
-     * 빠른 편집 화면 바로 띄우기 (다른 앱 위에 오버레이)
-     */
+    private fun detectSource(packageName: String, fullText: String): NotificationSource? {
+        return when {
+            packageName in knownKbPackages || KBCardParser.matches(fullText) -> NotificationSource.KB
+            packageName in knownNhPackages || NHPayParser.matches(fullText) -> NotificationSource.NH
+            packageName in knownLocalCurrencyPackages || LocalCurrencyParser.matches(fullText) ->
+                NotificationSource.LOCAL_CURRENCY
+
+            else -> null
+        }
+    }
+
+    private fun saveLocalCurrencyBalanceIfPresent(fullText: String) {
+        val balanceResult = LocalCurrencyParser.parseBalance(fullText)
+        val balance = balanceResult.balance ?: return
+
+        serviceScope.launch {
+            try {
+                val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
+                if (householdId.isNotEmpty()) {
+                    balanceRepository.saveLocalCurrencyBalance(
+                        householdId,
+                        balance,
+                        balanceResult.currencyType ?: "지역화폐"
+                    )
+                }
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun saveExpenseAndLaunchQuickEdit(expense: Expense) {
+        serviceScope.launch {
+            try {
+                val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
+                if (householdId.isEmpty()) {
+                    return@launch
+                }
+
+                val mappingResult = ruleRepository.findMappingForMerchant(householdId, expense.merchant)
+
+                val expenseToSave = if (mappingResult != null) {
+                    expense.copy(
+                        merchant = mappingResult.mappedMerchant,
+                        category = mappingResult.mappedCategoryKey,
+                        memo = mappingResult.mappedMemo.ifEmpty { expense.memo },
+                        householdId = householdId
+                    )
+                } else {
+                    val defaultCategoryKey = categoryRepository.getDefaultCategoryKey(householdId)
+                    expense.copy(
+                        category = defaultCategoryKey,
+                        householdId = householdId
+                    )
+                }
+
+                val documentId = expenseRepository.addExpense(expenseToSave)
+                if (documentId.isNotEmpty()) {
+                    launchQuickEditActivity(
+                        expenseToSave.copy(
+                            id = documentId,
+                            category = expenseToSave.category.lowercase()
+                        )
+                    )
+                }
+
+                sendBroadcast(Intent(ACTION_NOTIFICATION_RECEIVED))
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     private fun launchQuickEditActivity(expense: Expense) {
         try {
-            // 다른 앱 위에 표시 권한 확인
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M &&
-                !android.provider.Settings.canDrawOverlays(applicationContext)) {
+                !Settings.canDrawOverlays(applicationContext)
+            ) {
                 return
             }
 
             val intent = Intent(this, QuickEditActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
                 putExtra(QuickEditActivity.EXTRA_EXPENSE_ID, expense.id)
                 putExtra(QuickEditActivity.EXTRA_MERCHANT, expense.merchant)
                 putExtra(QuickEditActivity.EXTRA_AMOUNT, expense.amount)
@@ -222,8 +224,7 @@ class CardNotificationListenerService : NotificationListenerService() {
                 putExtra(QuickEditActivity.EXTRA_CATEGORY, expense.category)
             }
             startActivity(intent)
-        } catch (e: Exception) {
-            // ignored
+        } catch (_: Exception) {
         }
     }
 }
