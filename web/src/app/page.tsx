@@ -201,6 +201,8 @@ export default function Home() {
             splitGroupId,
             splitIndex: i + 1,
             splitTotal: splitMonths,
+          }, {
+            notifyOnCreate: false,
           });
         }
       } else {

@@ -20,6 +20,10 @@ import { MemberStorage } from './storage/memberStorage';
 
 const COLLECTION_NAME = 'expenses';
 
+interface AddExpenseOptions {
+  notifyOnCreate?: boolean;
+}
+
 /**
  * 현재 가구 키 가져오기
  */
@@ -57,9 +61,13 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
 /**
  * 지출 추가
  */
-export async function addExpense(expense: Omit<Expense, 'id'>): Promise<string> {
+export async function addExpense(
+  expense: Omit<Expense, 'id'>,
+  options: AddExpenseOptions = {}
+): Promise<string> {
   const householdId = getHouseholdId();
-  const createdBy = MemberStorage.getMemberName();
+  const { notifyOnCreate = true } = options;
+  const createdBy = notifyOnCreate ? MemberStorage.getMemberName() : null;
   const docRef = await addDoc(collection(db, COLLECTION_NAME), {
     ...expense,
     householdId,

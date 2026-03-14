@@ -71,6 +71,8 @@ export async function runSplitMonthsAction({
         splitGroupId,
         splitIndex: i + 1,
         splitTotal: months,
+      }, {
+        notifyOnCreate: false,
       });
     }
 
