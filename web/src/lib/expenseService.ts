@@ -17,6 +17,7 @@ import { db } from './firebase';
 import { Expense, MergedExpenseInfo } from '@/types/expense';
 import { getStoredHouseholdKey } from './householdService';
 import { MemberStorage } from './storage/memberStorage';
+import { getMonthlySplitDate } from '@/lib/utils/monthlySplitDate';
 
 const COLLECTION_NAME = 'expenses';
 
@@ -472,7 +473,6 @@ export async function updateSplitGroup(
   const firstExpense = expenses[0];
   const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0);
   const monthlyAmount = Math.floor(totalAmount / newMonths);
-  const baseDate = new Date(firstExpense.date);
   // 가맹점명에서 기존 분할 표시 제거 (예: "스타벅스 (1/3)" -> "스타벅스")
   const baseMerchant = firstExpense.merchant.replace(/\s*\(\d+\/\d+\)$/, '');
 
@@ -490,9 +490,7 @@ export async function updateSplitGroup(
     // 새로운 분할 지출 생성
     const cardType = firstExpense.cardType || 'main';
     for (let i = 0; i < newMonths; i++) {
-      const targetDate = new Date(baseDate);
-      targetDate.setMonth(targetDate.getMonth() + i);
-      const dateStr = targetDate.toISOString().split('T')[0];
+      const dateStr = getMonthlySplitDate(firstExpense.date, i);
 
       const newDocRef = doc(collection(db, COLLECTION_NAME));
       const expenseData: Record<string, unknown> = {

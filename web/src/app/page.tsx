@@ -15,6 +15,7 @@ import { subscribeToMonthlyExpenses, updateExpense, addManualExpense, deleteExpe
 import { addMerchantRule } from '@/lib/merchantRuleService';
 import { getStoredHouseholdKey } from '@/lib/householdService';
 import { processRecurringExpenses } from '@/lib/recurringExpenseService';
+import { getMonthlySplitDate } from '@/lib/utils/monthlySplitDate';
 
 export default function Home() {
   const searchParams = useSearchParams();
@@ -183,13 +184,10 @@ export default function Home() {
       if (splitMonths && splitMonths > 1) {
         // 월별 분할: n개월에 걸쳐 등록 (그룹 ID로 연결)
         const monthlyAmount = Math.floor(amount / splitMonths);
-        const baseDate = new Date(date);
         const splitGroupId = generateSplitGroupId();
 
         for (let i = 0; i < splitMonths; i++) {
-          const targetDate = new Date(baseDate);
-          targetDate.setMonth(targetDate.getMonth() + i);
-          const dateStr = targetDate.toISOString().split('T')[0];
+          const dateStr = getMonthlySplitDate(date, i);
 
           await addExpense({
             date: dateStr,

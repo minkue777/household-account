@@ -12,6 +12,7 @@ import com.household.account.data.Expense
 import com.household.account.data.ExpenseRepository
 import com.household.account.data.MerchantRuleRepository
 import com.household.account.parser.KBCardParser
+import com.household.account.parser.ExpenseEventType
 import com.household.account.parser.LocalCurrencyParser
 import com.household.account.parser.NaverPayParser
 import com.household.account.parser.NHPayParser
@@ -126,7 +127,10 @@ class CardNotificationListenerService : NotificationListenerService() {
             }
 
             if (result.success && result.expense != null) {
-                saveExpenseAndLaunchQuickEdit(result.expense)
+                when (result.eventType) {
+                    ExpenseEventType.APPROVAL -> saveExpenseAndLaunchQuickEdit(result.expense)
+                    ExpenseEventType.CANCELLATION -> cancelMatchingExpense(result.expense)
+                }
             }
         } catch (_: Exception) {
         }
@@ -210,6 +214,54 @@ class CardNotificationListenerService : NotificationListenerService() {
                     )
                 }
 
+                sendBroadcast(Intent(ACTION_NOTIFICATION_RECEIVED))
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun cancelMatchingExpense(expense: Expense) {
+        serviceScope.launch {
+            try {
+                val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
+                if (householdId.isEmpty()) {
+                    return@launch
+                }
+
+                val mappingResult = ruleRepository.findMappingForMerchant(householdId, expense.merchant)
+                val expenseToCancel = if (mappingResult != null) {
+                    expense.copy(
+                        merchant = mappingResult.mappedMerchant,
+                        householdId = householdId
+                    )
+                } else {
+                    expense.copy(householdId = householdId)
+                }
+
+                val matchedExpense = expenseRepository.findExpenseForCancellation(
+                    householdId = householdId,
+                    expense = expenseToCancel
+                )
+
+                val expensesToDelete = when {
+                    matchedExpense?.splitGroupId?.isNotBlank() == true -> {
+                        expenseRepository.getExpensesBySplitGroup(
+                            householdId = householdId,
+                            splitGroupId = matchedExpense.splitGroupId
+                        ).ifEmpty { listOf(matchedExpense) }
+                    }
+                    matchedExpense != null -> listOf(matchedExpense)
+                    else -> expenseRepository.findSplitGroupExpensesForCancellation(
+                        householdId = householdId,
+                        expense = expenseToCancel
+                    )
+                }
+
+                if (expensesToDelete.isEmpty()) {
+                    return@launch
+                }
+
+                expensesToDelete.forEach { expenseRepository.deleteExpense(it.id) }
                 sendBroadcast(Intent(ACTION_NOTIFICATION_RECEIVED))
             } catch (_: Exception) {
             }

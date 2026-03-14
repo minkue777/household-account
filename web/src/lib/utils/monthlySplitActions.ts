@@ -5,6 +5,7 @@ import {
   generateSplitGroupId,
   updateSplitGroup,
 } from '@/lib/expenseService';
+import { getMonthlySplitDate } from '@/lib/utils/monthlySplitDate';
 import { splitMonthsMinMessage } from '@/lib/utils/splitMonths';
 
 type AsyncVoid = void | Promise<void>;
@@ -51,14 +52,11 @@ export async function runSplitMonthsAction({
   }
 
   const monthlyAmount = Math.floor(expense.amount / months);
-  const baseDate = new Date(expense.date);
   const splitGroupId = generateSplitGroupId();
 
   try {
     for (let i = 0; i < months; i++) {
-      const targetDate = new Date(baseDate);
-      targetDate.setMonth(targetDate.getMonth() + i);
-      const dateStr = targetDate.toISOString().split('T')[0];
+      const dateStr = getMonthlySplitDate(expense.date, i);
 
       await addExpense({
         date: dateStr,

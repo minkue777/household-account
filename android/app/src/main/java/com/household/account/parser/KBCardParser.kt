@@ -11,15 +11,21 @@ import java.time.format.DateTimeFormatter
 data class ParseResult(
     val success: Boolean,
     val expense: Expense? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val eventType: ExpenseEventType = ExpenseEventType.APPROVAL
 )
+
+enum class ExpenseEventType {
+    APPROVAL,
+    CANCELLATION
+}
 
 object KBCardParser {
 
     private val kbPaySimplePattern = Regex(
         """\[KB\s*Pay\s*사용\s*알림\]\s*(신용|체크)\s*(\d{4})\s*(\d{2}/\d{2})\s*(\d{2}:\d{2})\s*([\d,]+)원"""
     )
-    private val cardPattern = Regex("""KB국민카드(\d{4})\s*승인""")
+    private val cardPattern = Regex("""KB국민카드(\d{4})\s*(승인|취소)""")
     private val detailAmountPattern = Regex("""([\d,]+)원\s*(?:일시불|할부)?""")
     private val dateTimePattern = Regex("""(\d{2}/\d{2})\s+(\d{2}:\d{2})""")
     private val summaryAmountDatePattern = Regex("""([\d,]+)원\s+(\d{2}/\d{2})(?:\s+(\d{2}:\d{2}))?""")
@@ -56,15 +62,16 @@ object KBCardParser {
             val dateValue = match.groupValues[3]
             val timeValue = match.groupValues[4]
             val amountValue = match.groupValues[5]
-            val merchant = extractSimpleMerchant(notificationText, match.range.last + 1)
+            val merchantInfo = extractSimpleMerchant(notificationText, match.range.last + 1)
 
             createExpense(
                 cardLastFour = cardLastFour,
                 dateValue = dateValue,
                 timeValue = timeValue,
                 amountValue = amountValue,
-                merchant = merchant,
-                mainCardLastFour = mainCardLastFour
+                merchant = merchantInfo.first,
+                mainCardLastFour = mainCardLastFour,
+                eventType = merchantInfo.second
             )
         } catch (e: Exception) {
             ParseResult(false, errorMessage = "KB simple parse failed: ${e.message}")
@@ -86,7 +93,8 @@ object KBCardParser {
                 timeValue = dateMatch.groupValues[2],
                 amountValue = amountMatch.groupValues[1],
                 merchant = extractMerchantAfterLine(notificationText, dateMatch.value),
-                mainCardLastFour = mainCardLastFour
+                mainCardLastFour = mainCardLastFour,
+                eventType = resolveEventType(cardMatch.groupValues[2])
             )
         } catch (e: Exception) {
             ParseResult(false, errorMessage = "KB detail parse failed: ${e.message}")
@@ -121,20 +129,24 @@ object KBCardParser {
                 },
                 amountValue = amountDateMatch.groupValues[1],
                 merchant = merchant,
-                mainCardLastFour = mainCardLastFour
+                mainCardLastFour = mainCardLastFour,
+                eventType = resolveEventType(cardMatch.groupValues[2])
             )
         } catch (e: Exception) {
             ParseResult(false, errorMessage = "KB summary parse failed: ${e.message}")
         }
     }
 
-    private fun extractSimpleMerchant(notificationText: String, startIndex: Int): String {
+    private fun extractSimpleMerchant(
+        notificationText: String,
+        startIndex: Int
+    ): Pair<String, ExpenseEventType> {
         val rawTail = notificationText
             .substring(startIndex.coerceAtMost(notificationText.length))
             .trim()
 
         if (rawTail.isBlank()) {
-            return "알수없음"
+            return "알수없음" to ExpenseEventType.APPROVAL
         }
 
         val candidates = rawTail
@@ -149,7 +161,7 @@ object KBCardParser {
             }
         }
 
-        return "알수없음"
+        return "알수없음" to ExpenseEventType.APPROVAL
     }
 
     private fun extractMerchantAfterLine(notificationText: String, marker: String): String {
@@ -170,16 +182,21 @@ object KBCardParser {
         for (index in startIndex until lines.size) {
             val normalized = normalizeMerchant(lines[index])
             if (normalized != null) {
-                return normalized
+                return normalized.first
             }
         }
 
         return "알수없음"
     }
 
-    private fun normalizeMerchant(value: String): String? {
+    private fun normalizeMerchant(value: String): Pair<String, ExpenseEventType>? {
+        val eventType = when {
+            value.matches(Regex(""".*\s+취소\s*$""")) -> ExpenseEventType.CANCELLATION
+            else -> ExpenseEventType.APPROVAL
+        }
+
         val normalized = value
-            .replace(Regex("""\s*승인\s*$"""), "")
+            .replace(Regex("""\s*(승인|취소)\s*$"""), "")
             .trim()
 
         if (normalized.isBlank()) return null
@@ -187,7 +204,7 @@ object KBCardParser {
         if (normalized.matches(Regex("""^[\d,\s/:]+원?$"""))) return null
         if (normalized.matches(Regex("""^(신용|체크)\s+\d{4}.*$"""))) return null
 
-        return normalized
+        return normalized to eventType
     }
 
     private fun createExpense(
@@ -196,7 +213,8 @@ object KBCardParser {
         timeValue: String,
         amountValue: String,
         merchant: String,
-        mainCardLastFour: String?
+        mainCardLastFour: String?,
+        eventType: ExpenseEventType = ExpenseEventType.APPROVAL
     ): ParseResult {
         return try {
             val amount = amountValue.replace(",", "").toIntOrNull()
@@ -212,10 +230,19 @@ object KBCardParser {
                     category = Category.ETC.name,
                     cardType = resolveCardType(cardLastFour, mainCardLastFour).key,
                     cardLastFour = cardLastFour
-                )
+                ),
+                eventType = eventType
             )
         } catch (e: Exception) {
             ParseResult(false, errorMessage = "Expense creation failed: ${e.message}")
+        }
+    }
+
+    private fun resolveEventType(value: String): ExpenseEventType {
+        return if (value == "취소") {
+            ExpenseEventType.CANCELLATION
+        } else {
+            ExpenseEventType.APPROVAL
         }
     }
 

@@ -22,7 +22,7 @@ enum class Category(val label: String, val color: Long) {
 }
 
 /**
- * 카드 타입 (소문자로 저장)
+ * 카드 타입
  */
 enum class CardType(val label: String, val key: String) {
     MAIN("본인카드", "main"),
@@ -39,14 +39,16 @@ data class Expense(
     val time: String = "",           // HH:mm
     val merchant: String = "",       // 가맹점명
     val amount: Int = 0,             // 금액
-    val category: String = Category.ETC.name,  // 카테고리
-    val cardType: String = CardType.MAIN.key,  // 카드 타입 (소문자: main, family, sam, local_currency)
-    val cardLastFour: String = "",   // 카드 끝 4자리
-    val memo: String = "",           // 메모
-    val householdId: String = "",    // 가구 키
-    @get:Exclude val createdAt: Timestamp = Timestamp.now(),  // 역직렬화 제외 (타입 불일치 방지)
+    val category: String = Category.ETC.name,
+    val cardType: String = CardType.MAIN.key,
+    val cardLastFour: String = "",
+    val memo: String = "",
+    val splitGroupId: String = "",
+    val splitIndex: Int? = null,
+    val splitTotal: Int? = null,
+    val householdId: String = "",
+    @get:Exclude val createdAt: Timestamp = Timestamp.now(),
 ) {
-    // Firestore 저장을 위한 no-arg constructor
     constructor() : this(
         id = "",
         date = "",
@@ -57,6 +59,9 @@ data class Expense(
         cardType = CardType.MAIN.key,
         cardLastFour = "",
         memo = "",
+        splitGroupId = "",
+        splitIndex = null,
+        splitTotal = null,
         householdId = "",
         createdAt = Timestamp.now()
     )
@@ -73,9 +78,17 @@ data class Expense(
             "memo" to memo,
             "createdAt" to createdAt
         )
+
+        if (splitGroupId.isNotEmpty()) {
+            map["splitGroupId"] = splitGroupId
+        }
+        splitIndex?.let { map["splitIndex"] = it }
+        splitTotal?.let { map["splitTotal"] = it }
+
         if (householdId.isNotEmpty()) {
             map["householdId"] = householdId
         }
+
         return map
     }
 
@@ -89,9 +102,8 @@ data class Expense(
 
     fun getCardTypeEnum(): CardType {
         return try {
-            // 소문자 key로 매칭 시도
             CardType.entries.find { it.key == cardType.lowercase() }
-                ?: CardType.valueOf(cardType.uppercase())  // 대문자 enum name으로 시도
+                ?: CardType.valueOf(cardType.uppercase())
         } catch (e: Exception) {
             CardType.MAIN
         }

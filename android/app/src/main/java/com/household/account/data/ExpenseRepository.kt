@@ -51,6 +51,148 @@ class ExpenseRepository {
         }
     }
 
+    suspend fun getExpensesBySplitGroup(
+        householdId: String,
+        splitGroupId: String
+    ): List<Expense> {
+        if (householdId.isEmpty() || splitGroupId.isBlank()) {
+            return emptyList()
+        }
+
+        return try {
+            val snapshot = expensesCollection
+                .whereEqualTo("householdId", householdId)
+                .whereEqualTo("splitGroupId", splitGroupId)
+                .get()
+                .await()
+
+            snapshot.documents
+                .mapNotNull { doc -> doc.toObject(Expense::class.java)?.copy(id = doc.id) }
+                .sortedWith(compareBy({ it.splitIndex ?: Int.MAX_VALUE }, { it.date }, { it.time }))
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun findExpenseForCancellation(
+        householdId: String,
+        expense: Expense
+    ): Expense? {
+        if (householdId.isEmpty()) {
+            return null
+        }
+
+        return try {
+            val snapshot = expensesCollection
+                .whereEqualTo("householdId", householdId)
+                .whereEqualTo("date", expense.date)
+                .get()
+                .await()
+
+            val normalizedMerchant = normalizeMerchant(expense.merchant)
+
+            val expenses = snapshot.documents.mapNotNull { doc ->
+                doc.toObject(Expense::class.java)?.copy(id = doc.id)
+            }
+
+            val candidates = expenses.filter { existing ->
+                existing.amount == expense.amount &&
+                    normalizeMerchant(existing.merchant) == normalizedMerchant &&
+                    matchesCardLastFour(existing.cardLastFour, expense.cardLastFour)
+            }
+
+            val fallbackCandidates = if (candidates.isEmpty()) {
+                expenses.filter { existing ->
+                    existing.amount == expense.amount &&
+                        matchesCardLastFour(existing.cardLastFour, expense.cardLastFour)
+                }
+            } else {
+                candidates
+            }
+
+            fallbackCandidates.minWithOrNull(
+                compareBy<Expense> {
+                    if (timesMatch(it.time, expense.time)) 0 else 1
+                }.thenByDescending { it.id }
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun findSplitGroupExpensesForCancellation(
+        householdId: String,
+        expense: Expense
+    ): List<Expense> {
+        if (householdId.isEmpty()) {
+            return emptyList()
+        }
+
+        return try {
+            val snapshot = expensesCollection
+                .whereEqualTo("householdId", householdId)
+                .whereEqualTo("date", expense.date)
+                .get()
+                .await()
+
+            val splitGroupSeedExpenses = snapshot.documents
+                .mapNotNull { doc -> doc.toObject(Expense::class.java)?.copy(id = doc.id) }
+                .filter { it.splitGroupId.isNotBlank() }
+
+            val normalizedMerchant = normalizeMerchant(expense.merchant)
+
+            splitGroupSeedExpenses
+                .groupBy { it.splitGroupId }
+                .values
+                .mapNotNull { groupedExpenses ->
+                    val firstExpense = groupedExpenses.minByOrNull { it.splitIndex ?: Int.MAX_VALUE }
+                        ?: return@mapNotNull null
+
+                    if (normalizeSplitMerchant(firstExpense.merchant) != normalizedMerchant) {
+                        return@mapNotNull null
+                    }
+
+                    if (!matchesCardLastFour(firstExpense.cardLastFour, expense.cardLastFour)) {
+                        return@mapNotNull null
+                    }
+
+                    val allGroupExpenses = getExpensesBySplitGroup(
+                        householdId = householdId,
+                        splitGroupId = firstExpense.splitGroupId
+                    )
+                    if (allGroupExpenses.isEmpty()) {
+                        return@mapNotNull null
+                    }
+
+                    val splitCount = firstExpense.splitTotal ?: allGroupExpenses.size
+                    if (!matchesSplitGroupAmount(
+                            savedTotalAmount = allGroupExpenses.sumOf { it.amount },
+                            incomingAmount = expense.amount,
+                            splitCount = splitCount
+                        )
+                    ) {
+                        return@mapNotNull null
+                    }
+
+                    SplitGroupCancellationMatch(
+                        expenses = allGroupExpenses,
+                        exactAmount = allGroupExpenses.sumOf { it.amount } == expense.amount,
+                        exactTime = timesMatch(firstExpense.time, expense.time),
+                        firstExpenseId = firstExpense.id
+                    )
+                }
+                .minWithOrNull(
+                    compareByDescending<SplitGroupCancellationMatch> { it.exactAmount }
+                        .thenByDescending { it.exactTime }
+                        .thenByDescending { it.firstExpenseId }
+                )
+                ?.expenses
+                ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     /**
      * 특정 월의 지출 목록 조회 (실시간) - 단순화된 쿼리
      */
@@ -212,4 +354,45 @@ class ExpenseRepository {
             emptyList()
         }
     }
+
+    private fun normalizeMerchant(value: String): String {
+        return value.trim().lowercase()
+    }
+
+    private fun normalizeSplitMerchant(value: String): String {
+        return normalizeMerchant(value.replace(Regex("""\s*\(\d+/\d+\)$"""), ""))
+    }
+
+    private fun matchesCardLastFour(savedValue: String, incomingValue: String): Boolean {
+        return incomingValue.isBlank() || savedValue == incomingValue
+    }
+
+    private fun matchesSplitGroupAmount(
+        savedTotalAmount: Int,
+        incomingAmount: Int,
+        splitCount: Int
+    ): Boolean {
+        if (savedTotalAmount == incomingAmount) {
+            return true
+        }
+
+        val allowedDifference = splitCount.coerceAtLeast(1) - 1
+        return incomingAmount > savedTotalAmount &&
+            incomingAmount - savedTotalAmount <= allowedDifference
+    }
+
+    private fun timesMatch(savedValue: String, incomingValue: String): Boolean {
+        if (savedValue.isBlank() || incomingValue.isBlank()) {
+            return false
+        }
+
+        return savedValue == incomingValue
+    }
+
+    private data class SplitGroupCancellationMatch(
+        val expenses: List<Expense>,
+        val exactAmount: Boolean,
+        val exactTime: Boolean,
+        val firstExpenseId: String
+    )
 }
