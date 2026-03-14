@@ -3,7 +3,9 @@ package com.household.account.parser
 import com.household.account.data.CardType
 import com.household.account.data.Category
 import com.household.account.data.Expense
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 data class ParseResult(
@@ -14,42 +16,47 @@ data class ParseResult(
 
 object KBCardParser {
 
-    private val kbCardPattern = Regex("""KB국민카드(\d{4})승인""")
-    private val amountPattern = Regex("""([\d,]+)원\s*일시불""")
+    private val kbPaySimplePattern = Regex(
+        """\[KB\s*Pay\s*사용\s*알림\]\s*(신용|체크)\s*(\d{4})\s*(\d{2}/\d{2})\s*(\d{2}:\d{2})\s*([\d,]+)원"""
+    )
+    private val cardPattern = Regex("""KB국민카드(\d{4})\s*승인""")
+    private val detailAmountPattern = Regex("""([\d,]+)원\s*(?:일시불|할부)?""")
     private val dateTimePattern = Regex("""(\d{2}/\d{2})\s+(\d{2}:\d{2})""")
+    private val summaryAmountDatePattern = Regex("""([\d,]+)원\s+(\d{2}/\d{2})(?:\s+(\d{2}:\d{2}))?""")
 
     fun matches(notificationText: String): Boolean {
-        return kbCardPattern.containsMatchIn(notificationText) &&
-            amountPattern.containsMatchIn(notificationText) &&
-            dateTimePattern.containsMatchIn(notificationText)
+        return kbPaySimplePattern.containsMatchIn(notificationText) ||
+            (
+                cardPattern.containsMatchIn(notificationText) &&
+                    (
+                        dateTimePattern.containsMatchIn(notificationText) ||
+                            summaryAmountDatePattern.containsMatchIn(notificationText)
+                        )
+                )
     }
 
     fun parse(
         notificationText: String,
-        mainCardLastFour: String? = null
+        mainCardLastFour: String? = null,
+        postedAtMillis: Long? = null
     ): ParseResult {
-        return parseDetailFormat(notificationText, mainCardLastFour)
+        parseSimpleFormat(notificationText, mainCardLastFour)?.let { return it }
+        parseDetailFormat(notificationText, mainCardLastFour)?.let { return it }
+        parseSummaryFormat(notificationText, mainCardLastFour, postedAtMillis)?.let { return it }
+        return ParseResult(false, errorMessage = "KB card format not found")
     }
 
-    private fun parseDetailFormat(
+    private fun parseSimpleFormat(
         notificationText: String,
         mainCardLastFour: String?
-    ): ParseResult {
+    ): ParseResult? {
         return try {
-            val cardMatch = kbCardPattern.find(notificationText)
-                ?: return ParseResult(false, errorMessage = "KB card approval format not found")
-            val cardLastFour = cardMatch.groupValues[1]
-
-            val amountMatch = amountPattern.find(notificationText)
-                ?: return ParseResult(false, errorMessage = "Amount not found")
-            val amountValue = amountMatch.groupValues[1]
-
-            val dateMatch = dateTimePattern.find(notificationText)
-                ?: return ParseResult(false, errorMessage = "Date/time not found")
-            val dateValue = dateMatch.groupValues[1]
-            val timeValue = dateMatch.groupValues[2]
-
-            val merchant = extractMerchant(notificationText, dateValue)
+            val match = kbPaySimplePattern.find(notificationText) ?: return null
+            val cardLastFour = match.groupValues[2]
+            val dateValue = match.groupValues[3]
+            val timeValue = match.groupValues[4]
+            val amountValue = match.groupValues[5]
+            val merchant = extractSimpleMerchant(notificationText, match.range.last + 1)
 
             createExpense(
                 cardLastFour = cardLastFour,
@@ -60,26 +67,127 @@ object KBCardParser {
                 mainCardLastFour = mainCardLastFour
             )
         } catch (e: Exception) {
-            ParseResult(false, errorMessage = "KB parse failed: ${e.message}")
+            ParseResult(false, errorMessage = "KB simple parse failed: ${e.message}")
         }
     }
 
-    private fun extractMerchant(notificationText: String, dateValue: String): String {
-        val lines = notificationText
-            .split("\n")
+    private fun parseDetailFormat(
+        notificationText: String,
+        mainCardLastFour: String?
+    ): ParseResult? {
+        return try {
+            val cardMatch = cardPattern.find(notificationText) ?: return null
+            val dateMatch = dateTimePattern.find(notificationText) ?: return null
+            val amountMatch = detailAmountPattern.find(notificationText) ?: return null
+
+            createExpense(
+                cardLastFour = cardMatch.groupValues[1],
+                dateValue = dateMatch.groupValues[1],
+                timeValue = dateMatch.groupValues[2],
+                amountValue = amountMatch.groupValues[1],
+                merchant = extractMerchantAfterLine(notificationText, dateMatch.value),
+                mainCardLastFour = mainCardLastFour
+            )
+        } catch (e: Exception) {
+            ParseResult(false, errorMessage = "KB detail parse failed: ${e.message}")
+        }
+    }
+
+    private fun parseSummaryFormat(
+        notificationText: String,
+        mainCardLastFour: String?,
+        postedAtMillis: Long?
+    ): ParseResult? {
+        return try {
+            val cardMatch = cardPattern.find(notificationText) ?: return null
+            val lines = notificationText
+                .lines()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+
+            val amountDateIndex = lines.indexOfFirst { summaryAmountDatePattern.containsMatchIn(it) }
+            if (amountDateIndex < 0) {
+                return null
+            }
+
+            val amountDateMatch = summaryAmountDatePattern.find(lines[amountDateIndex]) ?: return null
+            val merchant = extractMerchantFromNextLines(lines, amountDateIndex + 1)
+
+            createExpense(
+                cardLastFour = cardMatch.groupValues[1],
+                dateValue = amountDateMatch.groupValues[2],
+                timeValue = amountDateMatch.groupValues[3].ifBlank {
+                    resolvePostedTime(postedAtMillis)
+                },
+                amountValue = amountDateMatch.groupValues[1],
+                merchant = merchant,
+                mainCardLastFour = mainCardLastFour
+            )
+        } catch (e: Exception) {
+            ParseResult(false, errorMessage = "KB summary parse failed: ${e.message}")
+        }
+    }
+
+    private fun extractSimpleMerchant(notificationText: String, startIndex: Int): String {
+        val rawTail = notificationText
+            .substring(startIndex.coerceAtMost(notificationText.length))
+            .trim()
+
+        if (rawTail.isBlank()) {
+            return "알수없음"
+        }
+
+        val candidates = rawTail
+            .lines()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
 
-        for (index in lines.indices) {
-            if (lines[index].contains(dateValue) && index + 1 < lines.size) {
-                val candidate = lines[index + 1]
-                if (!candidate.startsWith("누적") && !candidate.matches(Regex("""^\d.*"""))) {
-                    return candidate
-                }
+        for (candidate in candidates) {
+            val normalized = normalizeMerchant(candidate)
+            if (normalized != null) {
+                return normalized
             }
         }
 
         return "알수없음"
+    }
+
+    private fun extractMerchantAfterLine(notificationText: String, marker: String): String {
+        val lines = notificationText
+            .lines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+        val markerIndex = lines.indexOfFirst { it.contains(marker) }
+        if (markerIndex < 0) {
+            return "알수없음"
+        }
+
+        return extractMerchantFromNextLines(lines, markerIndex + 1)
+    }
+
+    private fun extractMerchantFromNextLines(lines: List<String>, startIndex: Int): String {
+        for (index in startIndex until lines.size) {
+            val normalized = normalizeMerchant(lines[index])
+            if (normalized != null) {
+                return normalized
+            }
+        }
+
+        return "알수없음"
+    }
+
+    private fun normalizeMerchant(value: String): String? {
+        val normalized = value
+            .replace(Regex("""\s*승인\s*$"""), "")
+            .trim()
+
+        if (normalized.isBlank()) return null
+        if (normalized.startsWith("누적")) return null
+        if (normalized.matches(Regex("""^[\d,\s/:]+원?$"""))) return null
+        if (normalized.matches(Regex("""^(신용|체크)\s+\d{4}.*$"""))) return null
+
+        return normalized
     }
 
     private fun createExpense(
@@ -94,18 +202,15 @@ object KBCardParser {
             val amount = amountValue.replace(",", "").toIntOrNull()
                 ?: return ParseResult(false, errorMessage = "Invalid amount: $amountValue")
 
-            val formattedDate = resolveDate(dateValue)
-            val cardType = resolveCardType(cardLastFour, mainCardLastFour)
-
             ParseResult(
                 success = true,
                 expense = Expense(
-                    date = formattedDate,
+                    date = resolveDate(dateValue),
                     time = timeValue,
                     merchant = merchant,
                     amount = amount,
                     category = Category.ETC.name,
-                    cardType = cardType.key,
+                    cardType = resolveCardType(cardLastFour, mainCardLastFour).key,
                     cardLastFour = cardLastFour
                 )
             )
@@ -132,7 +237,17 @@ object KBCardParser {
     private fun resolveDate(dateValue: String): String {
         val currentYear = LocalDate.now().year
         val (month, day) = dateValue.split("/").map { it.toInt() }
-        val date = LocalDate.of(currentYear, month, day)
-        return date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        return LocalDate.of(currentYear, month, day).format(DateTimeFormatter.ISO_LOCAL_DATE)
+    }
+
+    private fun resolvePostedTime(postedAtMillis: Long?): String {
+        if (postedAtMillis == null || postedAtMillis <= 0L) {
+            return "00:00"
+        }
+
+        return Instant.ofEpochMilli(postedAtMillis)
+            .atZone(ZoneId.systemDefault())
+            .toLocalTime()
+            .format(DateTimeFormatter.ofPattern("HH:mm"))
     }
 }

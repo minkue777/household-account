@@ -115,7 +115,7 @@ class CardNotificationListenerService : NotificationListenerService() {
             }
 
             val result: ParseResult = when (source) {
-                NotificationSource.KB -> KBCardParser.parse(fullText)
+                NotificationSource.KB -> KBCardParser.parse(fullText, postedAtMillis = sbn.postTime)
                 NotificationSource.NH -> NHPayParser.parse(fullText)
                 NotificationSource.NAVER_PAY -> NaverPayParser.parse(fullText, sbn.postTime)
                 NotificationSource.LOCAL_CURRENCY -> LocalCurrencyParser.parse(fullText)
