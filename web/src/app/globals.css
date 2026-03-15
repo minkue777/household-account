@@ -10,7 +10,7 @@
 
   /* 테마 CSS 변수 (기본값) */
   --theme-background: linear-gradient(135deg, #f0f4ff 0%, #faf5ff 50%, #fff1f2 100%);
-  --theme-card-bg: rgba(255, 255, 255, 0.8);
+  --theme-card-bg: rgba(255, 255, 255, 0.96);
   --theme-card-border: rgba(255, 255, 255, 0.5);
   --theme-text-primary: #1e293b;
   --theme-text-secondary: #475569;

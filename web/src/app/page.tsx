@@ -311,7 +311,7 @@ export default function Home() {
           )}
 
           {/* 카테고리별 지출 - 맨 아래 */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6 transition-all hover:shadow-md">
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-sm border border-slate-200/70 p-6 transition-all hover:shadow-md">
             <h3 className="text-sm font-semibold text-slate-700 mb-4">
               카테고리별 지출
             </h3>
@@ -330,7 +330,7 @@ export default function Home() {
           {/* 왼쪽 사이드바 */}
           <div className="lg:col-span-1 space-y-6">
             {/* 카테고리별 지출 */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6 transition-all hover:shadow-md">
+            <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-sm border border-slate-200/70 p-6 transition-all hover:shadow-md">
               <h3 className="text-sm font-semibold text-slate-700 mb-4">
                 카테고리별 지출
               </h3>

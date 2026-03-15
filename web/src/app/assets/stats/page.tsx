@@ -240,7 +240,7 @@ export default function AssetStatsPage() {
         <header className="mb-6 flex items-center gap-3">
           <Link
             href="/assets"
-            className="p-2 hover:bg-white/80 rounded-xl transition-colors"
+            className="p-2 hover:bg-white/95 rounded-xl transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-slate-600" />
           </Link>

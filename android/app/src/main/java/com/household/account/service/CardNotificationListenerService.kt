@@ -11,11 +11,11 @@ import com.household.account.data.CategoryRepository
 import com.household.account.data.Expense
 import com.household.account.data.ExpenseRepository
 import com.household.account.data.MerchantRuleRepository
-import com.household.account.parser.KBCardParser
 import com.household.account.parser.ExpenseEventType
+import com.household.account.parser.KBCardParser
 import com.household.account.parser.LocalCurrencyParser
-import com.household.account.parser.NaverPayParser
 import com.household.account.parser.NHPayParser
+import com.household.account.parser.NaverPayParser
 import com.household.account.parser.ParseResult
 import com.household.account.util.HouseholdPreferences
 import kotlinx.coroutines.CoroutineScope
@@ -41,14 +41,8 @@ class CardNotificationListenerService : NotificationListenerService() {
             KB_CARD_PACKAGE
         )
 
-        private val knownNhPackages = setOf(
-            NH_PAY_PACKAGE
-        )
-
-        private val knownNaverPayPackages = setOf(
-            NAVER_PAY_PACKAGE
-        )
-
+        private val knownNhPackages = setOf(NH_PAY_PACKAGE)
+        private val knownNaverPayPackages = setOf(NAVER_PAY_PACKAGE)
         private val knownLocalCurrencyPackages = setOf(
             HWASEONG_LOCAL_CURRENCY,
             CHAK_WALLET,
@@ -107,12 +101,8 @@ class CardNotificationListenerService : NotificationListenerService() {
 
             val notificationKey = "${packageName}_${fullText.hashCode()}"
             val now = System.currentTimeMillis()
-            synchronized(recentNotifications) {
-                recentNotifications.entries.removeIf { now - it.value > duplicateWindowMs }
-                if (recentNotifications.containsKey(notificationKey)) {
-                    return
-                }
-                recentNotifications[notificationKey] = now
+            if (rememberRecentKey(recentNotifications, notificationKey, now, duplicateWindowMs)) {
+                return
             }
 
             val result: ParseResult = when (source) {
@@ -155,7 +145,6 @@ class CardNotificationListenerService : NotificationListenerService() {
                 NotificationSource.NAVER_PAY
             packageName in knownLocalCurrencyPackages || LocalCurrencyParser.matches(fullText) ->
                 NotificationSource.LOCAL_CURRENCY
-
             else -> null
         }
     }
@@ -250,6 +239,7 @@ class CardNotificationListenerService : NotificationListenerService() {
                             splitGroupId = matchedExpense.splitGroupId
                         ).ifEmpty { listOf(matchedExpense) }
                     }
+
                     matchedExpense != null -> listOf(matchedExpense)
                     else -> expenseRepository.findSplitGroupExpensesForCancellation(
                         householdId = householdId,
@@ -288,5 +278,22 @@ class CardNotificationListenerService : NotificationListenerService() {
             startActivity(intent)
         } catch (_: Exception) {
         }
+    }
+
+    private fun rememberRecentKey(
+        recentMap: MutableMap<String, Long>,
+        key: String,
+        now: Long,
+        windowMs: Long
+    ): Boolean {
+        synchronized(recentMap) {
+            recentMap.entries.removeIf { now - it.value > windowMs }
+            if (recentMap.containsKey(key)) {
+                return true
+            }
+            recentMap[key] = now
+        }
+
+        return false
     }
 }

@@ -192,7 +192,7 @@ export default function StatsPage() {
 
         <div className="space-y-6">
           {/* 기간 선택 */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-4">
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-sm border border-slate-200/70 p-4">
             <PeriodSelector
               periodPreset={periodPreset}
               onPresetChange={setPeriodPreset}
@@ -226,7 +226,7 @@ export default function StatsPage() {
           </div>
 
           {/* 월별 추이 차트 */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6">
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-sm border border-slate-200/70 p-6">
             <h3 className="text-lg font-semibold text-slate-700 mb-4">
               월별 지출 추이
             </h3>
@@ -250,7 +250,7 @@ export default function StatsPage() {
           </div>
 
           {/* 도넛 차트 - 선택된 카테고리 기준 */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6">
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-sm border border-slate-200/70 p-6">
             <h3 className="text-lg font-semibold text-slate-700 mb-4">
               카테고리별 비율
               {filterLabel && (
