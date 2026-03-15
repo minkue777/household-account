@@ -10,18 +10,7 @@ interface CategorySummaryProps {
 }
 
 export default function CategorySummary({ expenses, onCategoryClick }: CategorySummaryProps) {
-  const {
-    categories,
-    getCategoryLabel,
-    getCategoryColor,
-    getCategoryBudget,
-    isLoading,
-  } = useCategoryContext();
-
-  const overallTotal = useMemo(
-    () => expenses.reduce((sum, expense) => sum + expense.amount, 0),
-    [expenses]
-  );
+  const { categories, getCategoryLabel, getCategoryColor, getCategoryBudget, isLoading } = useCategoryContext();
 
   const categorySummary = useMemo(() => {
     const totals = new Map<Category, { total: number; count: number }>();
@@ -34,113 +23,88 @@ export default function CategorySummary({ expenses, onCategoryClick }: CategoryS
       });
     });
 
-    const categoryOrder = new Map(categories.map((category, index) => [category.key, index]));
-
+    // 카테고리 순서대로 정렬 (설정에서 지정한 순서)
+    const categoryOrder = new Map(categories.map((c, index) => [c.key, index]));
     return Array.from(totals.entries())
       .map(([category, { total, count }]) => ({ category, total, count }))
-      .sort((left, right) => {
-        const leftOrder = categoryOrder.get(left.category) ?? 999;
-        const rightOrder = categoryOrder.get(right.category) ?? 999;
-        return leftOrder - rightOrder;
+      .sort((a, b) => {
+        const orderA = categoryOrder.get(a.category) ?? 999;
+        const orderB = categoryOrder.get(b.category) ?? 999;
+        return orderA - orderB;
       });
   }, [expenses, categories]);
 
   if (isLoading) {
     return (
-      <div className="space-y-3 animate-pulse">
-        {[1, 2, 3].map((index) => (
-          <div key={index} className="h-24 rounded-2xl bg-slate-100" />
+      <div className="space-y-2 animate-pulse">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-10 bg-slate-100 rounded" />
         ))}
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {categorySummary.map(({ category, total, count }) => {
         const budget = getCategoryBudget(category);
         const color = getCategoryColor(category);
         const label = getCategoryLabel(category);
         const hasBudget = budget !== null && budget > 0;
+
+        // 예산이 있을 때만 퍼센트 계산
         const percentage = hasBudget ? Math.min((total / budget) * 100, 100) : 0;
         const isOverBudget = hasBudget && total > budget;
-        const share = overallTotal > 0 ? Math.round((total / overallTotal) * 100) : 0;
-        const categoryExpenses = expenses.filter((expense) => expense.category === category);
+
+        // 해당 카테고리의 지출 목록
+        const categoryExpenses = expenses.filter(e => e.category === category);
 
         return (
           <div
             key={category}
-            className={`rounded-2xl border border-slate-100 bg-slate-50/80 p-3 transition-all ${
-              onCategoryClick
-                ? 'cursor-pointer hover:border-slate-200 hover:bg-white hover:shadow-sm'
-                : ''
-            }`}
+            className={`group ${onCategoryClick ? 'cursor-pointer hover:bg-slate-50 -mx-2 px-2 py-1 rounded-lg transition-colors' : ''}`}
             onClick={() => onCategoryClick?.(category, categoryExpenses)}
           >
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0 flex items-start gap-3">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
                 <span
-                  className="mt-1 h-3 w-3 flex-shrink-0 rounded-full ring-4 ring-white"
+                  className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: color }}
                 />
-
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-800">
-                    {label}
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                    <span>{count}건</span>
-                    <span className="h-1 w-1 rounded-full bg-slate-300" />
-                    <span>{share}% 비중</span>
-                    {hasBudget && (
-                      <>
-                        <span className="h-1 w-1 rounded-full bg-slate-300" />
-                        <span>예산 {budget.toLocaleString()}원</span>
-                      </>
-                    )}
-                  </div>
-                </div>
+                <span className="text-sm font-medium text-slate-700">
+                  {label}
+                </span>
               </div>
-
-              <div className="text-right">
-                <div className={`text-sm font-bold ${isOverBudget ? 'text-red-500' : 'text-slate-900'}`}>
+              <div className="flex items-center gap-1">
+                <span className={`text-sm font-semibold ${isOverBudget ? 'text-red-500' : 'text-slate-800'}`}>
                   {total.toLocaleString()}원
-                </div>
-                <div className={`mt-1 text-[11px] ${isOverBudget ? 'text-red-500' : 'text-slate-400'}`}>
-                  {hasBudget ? `예산 대비 ${Math.round((total / budget) * 100)}%` : '예산 미설정'}
-                </div>
+                </span>
+                <span className={`text-xs font-medium min-w-[40px] text-right ${isOverBudget ? 'text-red-500' : 'text-slate-500'}`}>
+                  {hasBudget ? `(${Math.round((total / budget) * 100)}%)` : '(--)'}
+                </span>
               </div>
             </div>
-
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+            {/* 프로그레스 바 */}
+            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-300 ${isOverBudget ? 'animate-pulse' : ''}`}
                 style={{
                   width: `${percentage}%`,
-                  backgroundColor: isOverBudget ? '#ef4444' : color,
+                  backgroundColor: isOverBudget ? '#EF4444' : color,
                 }}
               />
             </div>
-
-            <div className="mt-2 flex items-center justify-between text-[11px]">
-              {hasBudget ? (
-                <>
-                  <span className={isOverBudget ? 'text-red-500' : 'text-slate-500'}>
-                    {isOverBudget
-                      ? `예산 초과 ${(total - budget).toLocaleString()}원`
-                      : `예산까지 ${(budget - total).toLocaleString()}원 남음`}
-                  </span>
-                  <span className={isOverBudget ? 'text-red-500' : 'text-slate-400'}>
-                    {Math.round((total / budget) * 100)}%
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className="text-slate-500">예산을 설정하면 진행률이 표시됩니다.</span>
-                  <span className="text-slate-400">{share}%</span>
-                </>
-              )}
-            </div>
+            {/* 예산 초과 경고 */}
+            {isOverBudget && (
+              <div className="flex items-center gap-1 mt-1">
+                <svg className="w-3 h-3 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <span className="text-xs text-red-500">
+                  예산 초과 {(total - budget).toLocaleString()}원
+                </span>
+              </div>
+            )}
           </div>
         );
       })}
