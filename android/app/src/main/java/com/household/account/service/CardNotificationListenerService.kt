@@ -16,9 +16,11 @@ import com.household.account.parser.ExpenseEventType
 import com.household.account.parser.GyeonggiLocalCurrencyParser
 import com.household.account.parser.KBCardParser
 import com.household.account.parser.LocalCurrencyBalanceResult
+import com.household.account.parser.LotteCardParser
 import com.household.account.parser.NHPayParser
 import com.household.account.parser.NaverPayParser
 import com.household.account.parser.ParseResult
+import com.household.account.parser.SamsungCardParser
 import com.household.account.util.HouseholdPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -62,6 +64,8 @@ class CardNotificationListenerService : NotificationListenerService() {
         KB,
         NH,
         NAVER_PAY,
+        SAMSUNG,
+        LOTTE,
         GYEONGGI_LOCAL_CURRENCY,
         DAEJEON_LOCAL_CURRENCY
     }
@@ -114,6 +118,8 @@ class CardNotificationListenerService : NotificationListenerService() {
                 NotificationSource.KB -> KBCardParser.parse(fullText, postedAtMillis = sbn.postTime)
                 NotificationSource.NH -> NHPayParser.parse(fullText)
                 NotificationSource.NAVER_PAY -> NaverPayParser.parse(fullText, sbn.postTime)
+                NotificationSource.SAMSUNG -> SamsungCardParser.parse(fullText)
+                NotificationSource.LOTTE -> LotteCardParser.parse(fullText)
                 NotificationSource.GYEONGGI_LOCAL_CURRENCY -> GyeonggiLocalCurrencyParser.parse(fullText)
                 NotificationSource.DAEJEON_LOCAL_CURRENCY -> DaejeonLocalCurrencyParser.parse(fullText)
             }
@@ -152,6 +158,8 @@ class CardNotificationListenerService : NotificationListenerService() {
             packageName in knownNhPackages || NHPayParser.matches(fullText) -> NotificationSource.NH
             packageName in knownNaverPayPackages || NaverPayParser.matches(fullText) ->
                 NotificationSource.NAVER_PAY
+            SamsungCardParser.matches(fullText) -> NotificationSource.SAMSUNG
+            LotteCardParser.matches(fullText) -> NotificationSource.LOTTE
             packageName in knownGyeonggiLocalCurrencyPackages || GyeonggiLocalCurrencyParser.matches(fullText) ->
                 NotificationSource.GYEONGGI_LOCAL_CURRENCY
             packageName in knownDaejeonLocalCurrencyPackages || DaejeonLocalCurrencyParser.matches(fullText) ->
