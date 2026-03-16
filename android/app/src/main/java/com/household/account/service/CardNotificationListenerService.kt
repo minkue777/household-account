@@ -11,9 +11,11 @@ import com.household.account.data.CategoryRepository
 import com.household.account.data.Expense
 import com.household.account.data.ExpenseRepository
 import com.household.account.data.MerchantRuleRepository
+import com.household.account.parser.DaejeonLocalCurrencyParser
 import com.household.account.parser.ExpenseEventType
+import com.household.account.parser.GyeonggiLocalCurrencyParser
 import com.household.account.parser.KBCardParser
-import com.household.account.parser.LocalCurrencyParser
+import com.household.account.parser.LocalCurrencyBalanceResult
 import com.household.account.parser.NHPayParser
 import com.household.account.parser.NaverPayParser
 import com.household.account.parser.ParseResult
@@ -43,10 +45,12 @@ class CardNotificationListenerService : NotificationListenerService() {
 
         private val knownNhPackages = setOf(NH_PAY_PACKAGE)
         private val knownNaverPayPackages = setOf(NAVER_PAY_PACKAGE)
-        private val knownLocalCurrencyPackages = setOf(
+        private val knownGyeonggiLocalCurrencyPackages = setOf(
             HWASEONG_LOCAL_CURRENCY,
             CHAK_WALLET,
-            GYEONGGI_LOCAL_CURRENCY,
+            GYEONGGI_LOCAL_CURRENCY
+        )
+        private val knownDaejeonLocalCurrencyPackages = setOf(
             DAEJEON_LOVE_CARD
         )
 
@@ -58,7 +62,8 @@ class CardNotificationListenerService : NotificationListenerService() {
         KB,
         NH,
         NAVER_PAY,
-        LOCAL_CURRENCY
+        GYEONGGI_LOCAL_CURRENCY,
+        DAEJEON_LOCAL_CURRENCY
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -109,11 +114,15 @@ class CardNotificationListenerService : NotificationListenerService() {
                 NotificationSource.KB -> KBCardParser.parse(fullText, postedAtMillis = sbn.postTime)
                 NotificationSource.NH -> NHPayParser.parse(fullText)
                 NotificationSource.NAVER_PAY -> NaverPayParser.parse(fullText, sbn.postTime)
-                NotificationSource.LOCAL_CURRENCY -> LocalCurrencyParser.parse(fullText)
+                NotificationSource.GYEONGGI_LOCAL_CURRENCY -> GyeonggiLocalCurrencyParser.parse(fullText)
+                NotificationSource.DAEJEON_LOCAL_CURRENCY -> DaejeonLocalCurrencyParser.parse(fullText)
             }
 
-            if (source == NotificationSource.LOCAL_CURRENCY) {
-                saveLocalCurrencyBalanceIfPresent(fullText)
+            if (
+                source == NotificationSource.GYEONGGI_LOCAL_CURRENCY ||
+                source == NotificationSource.DAEJEON_LOCAL_CURRENCY
+            ) {
+                saveLocalCurrencyBalanceIfPresent(source, fullText)
             }
 
             if (result.success && result.expense != null) {
@@ -143,14 +152,25 @@ class CardNotificationListenerService : NotificationListenerService() {
             packageName in knownNhPackages || NHPayParser.matches(fullText) -> NotificationSource.NH
             packageName in knownNaverPayPackages || NaverPayParser.matches(fullText) ->
                 NotificationSource.NAVER_PAY
-            packageName in knownLocalCurrencyPackages || LocalCurrencyParser.matches(fullText) ->
-                NotificationSource.LOCAL_CURRENCY
+            packageName in knownGyeonggiLocalCurrencyPackages || GyeonggiLocalCurrencyParser.matches(fullText) ->
+                NotificationSource.GYEONGGI_LOCAL_CURRENCY
+            packageName in knownDaejeonLocalCurrencyPackages || DaejeonLocalCurrencyParser.matches(fullText) ->
+                NotificationSource.DAEJEON_LOCAL_CURRENCY
             else -> null
         }
     }
 
-    private fun saveLocalCurrencyBalanceIfPresent(fullText: String) {
-        val balanceResult = LocalCurrencyParser.parseBalance(fullText)
+    private fun saveLocalCurrencyBalanceIfPresent(
+        source: NotificationSource,
+        fullText: String
+    ) {
+        val balanceResult: LocalCurrencyBalanceResult = when (source) {
+            NotificationSource.GYEONGGI_LOCAL_CURRENCY ->
+                GyeonggiLocalCurrencyParser.parseBalance(fullText)
+            NotificationSource.DAEJEON_LOCAL_CURRENCY ->
+                DaejeonLocalCurrencyParser.parseBalance(fullText)
+            else -> return
+        }
         val balance = balanceResult.balance ?: return
 
         serviceScope.launch {
