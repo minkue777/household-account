@@ -8,17 +8,15 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-object NaverPayParser {
+object TossBankParser {
 
-    private val paymentPattern = Regex(
-        """(.+?)에서\s*([\d,]+)원\s*결제(?:되었습니다|되었어요|됐어요)"""
-    )
+    private val amountEventPattern = Regex("""([\d,]+)원\s*(결제(?:\s*취소)?)""")
+    private val merchantPattern = Regex("""토스뱅크\s*체크카드\s*\|\s*(.+)""")
 
     fun matches(notificationText: String): Boolean {
         val normalized = normalize(notificationText)
-        return normalized.contains("네이버페이") &&
-            !normalized.contains("충전") &&
-            paymentPattern.containsMatchIn(normalized)
+        return amountEventPattern.containsMatchIn(normalized) &&
+            merchantPattern.containsMatchIn(normalized)
     }
 
     fun parse(
@@ -27,13 +25,23 @@ object NaverPayParser {
     ): ParseResult {
         return try {
             val normalized = normalize(notificationText)
-            val paymentMatch = paymentPattern.find(normalized)
-                ?: return ParseResult(false, errorMessage = "Naver Pay payment format not found")
+            val amountEventMatch = amountEventPattern.find(normalized)
+                ?: return ParseResult(false, errorMessage = "Toss Bank amount/event format not found")
+            val merchantMatch = merchantPattern.find(normalized)
+                ?: return ParseResult(false, errorMessage = "Toss Bank merchant format not found")
 
-            val merchant = paymentMatch.groupValues[1].trim()
-            val amount = paymentMatch.groupValues[2].replace(",", "").toIntOrNull()
+            val merchant = merchantMatch.groupValues[1].trim()
+            if (merchant.contains("가승인")) {
+                return ParseResult(false, errorMessage = "Toss Bank pre-authorization ignored")
+            }
+
+            val amount = amountEventMatch.groupValues[1].replace(",", "").toIntOrNull()
                 ?: return ParseResult(false, errorMessage = "Invalid amount")
-
+            val eventType = if (amountEventMatch.groupValues[2].contains("취소")) {
+                ExpenseEventType.CANCELLATION
+            } else {
+                ExpenseEventType.APPROVAL
+            }
             val occurredAt = resolveDateTime(postedAtMillis)
 
             ParseResult(
@@ -45,24 +53,21 @@ object NaverPayParser {
                     amount = amount,
                     category = Category.ETC.name,
                     cardType = CardType.MAIN.key,
-                    cardLastFour = "네이버페이"
-                )
+                    cardLastFour = "토스"
+                ),
+                eventType = eventType
             )
         } catch (e: Exception) {
-            ParseResult(false, errorMessage = "Naver Pay parse failed: ${e.message}")
+            ParseResult(false, errorMessage = "Toss Bank parse failed: ${e.message}")
         }
     }
 
     private fun normalize(value: String): String {
-        val lines = value
+        return value
             .lines()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
-            .dropWhile { it == "네이버페이" }
-
-        return lines
-            .joinToString(" ")
-            .replace(Regex("""\s+"""), " ")
+            .joinToString("\n")
             .trim()
     }
 
