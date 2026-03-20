@@ -36,7 +36,7 @@ export default function BalanceCards({
   className = '',
   onLocalCurrencyClick,
 }: BalanceCardsProps) {
-  const { getCategoryBudget } = useCategoryContext();
+  const { activeCategories } = useCategoryContext();
   const [localCurrencyBalance, setLocalCurrencyBalance] = useState<LocalCurrencyBalance | null>(null);
 
   const needsLocalCurrencyBalance = useMemo(() => {
@@ -57,21 +57,34 @@ export default function BalanceCards({
   }, [needsLocalCurrencyBalance]);
 
   const { remaining, isOverBudget, monthlySpent } = useMemo(() => {
-    const foodBudget = getCategoryBudget('food') || 0;
-    const livingBudget = getCategoryBudget('living') || 0;
-    const childcareBudget = getCategoryBudget('childcare') || 0;
-    const fixedBudget = getCategoryBudget('fixed') || 0;
-    const totalBudget = foodBudget + livingBudget + childcareBudget + fixedBudget;
+    const budgetedCategoryKeys = new Set<string>();
+    let totalBudget = 0;
 
+    for (const category of activeCategories) {
+      if (category.budget === null) {
+        continue;
+      }
+
+      budgetedCategoryKeys.add(category.key);
+      totalBudget += category.budget;
+    }
+
+    const budgetedSpent = expenses.reduce((sum, expense) => {
+      if (!budgetedCategoryKeys.has(expense.category)) {
+        return sum;
+      }
+
+      return sum + expense.amount;
+    }, 0);
     const totalSpent = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-    const remainingBudget = totalBudget - totalSpent;
+    const remainingBudget = totalBudget - budgetedSpent;
 
     return {
       remaining: remainingBudget,
       isOverBudget: remainingBudget < 0,
       monthlySpent: totalSpent,
     };
-  }, [expenses, getCategoryBudget]);
+  }, [activeCategories, expenses]);
 
   const handleLocalCurrencyClick = () => {
     if (!onLocalCurrencyClick) {
