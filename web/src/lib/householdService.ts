@@ -1,24 +1,33 @@
 import {
   collection,
+  deleteDoc,
   doc,
-  setDoc,
   getDoc,
   getDocs,
-  deleteDoc,
-  updateDoc,
   serverTimestamp,
+  setDoc,
+  updateDoc,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Household, HouseholdMember } from '@/types/household';
+import {
+  DEFAULT_HOME_SUMMARY_CONFIG,
+  HomeSummaryCardKey,
+  HomeSummaryConfig,
+  Household,
+  HouseholdMember,
+} from '@/types/household';
 import { HouseholdStorage } from './storage/householdStorage';
 
 export type { Household };
 
 const householdsCollection = collection(db, 'households');
+const HOME_SUMMARY_CARD_KEYS: HomeSummaryCardKey[] = [
+  'localCurrencyBalance',
+  'monthlyRemainingBudget',
+  'monthlySpent',
+  'yearlySpent',
+];
 
-/**
- * 랜덤 키 생성 (Firebase 문서 ID 스타일: qpQ134bXYz2kABCdef12)
- */
 function generateKey(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -28,13 +37,29 @@ function generateKey(): string {
   return result;
 }
 
-/**
- * 새 가구 키 생성
- */
+function isHomeSummaryCardKey(value: unknown): value is HomeSummaryCardKey {
+  return typeof value === 'string' && HOME_SUMMARY_CARD_KEYS.includes(value as HomeSummaryCardKey);
+}
+
+function resolveHomeSummaryConfig(value: unknown): HomeSummaryConfig {
+  const leftCard =
+    typeof value === 'object' && value !== null ? (value as Record<string, unknown>).leftCard : null;
+  const rightCard =
+    typeof value === 'object' && value !== null ? (value as Record<string, unknown>).rightCard : null;
+
+  return {
+    leftCard: isHomeSummaryCardKey(leftCard)
+      ? leftCard
+      : DEFAULT_HOME_SUMMARY_CONFIG.leftCard,
+    rightCard: isHomeSummaryCardKey(rightCard)
+      ? rightCard
+      : DEFAULT_HOME_SUMMARY_CONFIG.rightCard,
+  };
+}
+
 export async function createHousehold(name?: string, customKey?: string): Promise<string> {
   let key = customKey || generateKey();
 
-  // 중복 체크 (커스텀 키가 아닌 경우에만)
   if (!customKey) {
     let exists = await getDoc(doc(householdsCollection, key));
     while (exists.exists()) {
@@ -46,24 +71,19 @@ export async function createHousehold(name?: string, customKey?: string): Promis
   await setDoc(doc(householdsCollection, key), {
     name: name || key,
     createdAt: serverTimestamp(),
-    defaultCategoryKey: 'etc', // 기본 카테고리: 기타
+    defaultCategoryKey: 'etc',
+    homeSummaryConfig: DEFAULT_HOME_SUMMARY_CONFIG,
   });
 
   return key;
 }
 
-/**
- * 가구 키 유효성 확인
- */
 export async function validateHouseholdKey(key: string): Promise<boolean> {
   const docRef = doc(householdsCollection, key);
   const docSnap = await getDoc(docRef);
   return docSnap.exists();
 }
 
-/**
- * 가구 정보 가져오기
- */
 export async function getHousehold(key: string): Promise<Household | null> {
   const docRef = doc(householdsCollection, key);
   const docSnap = await getDoc(docRef);
@@ -76,27 +96,30 @@ export async function getHousehold(key: string): Promise<Household | null> {
     name: data.name,
     createdAt: data.createdAt?.toDate() || new Date(),
     defaultCategoryKey: data.defaultCategoryKey,
+    homeSummaryConfig: resolveHomeSummaryConfig(data.homeSummaryConfig),
     members: data.members || [],
   };
 }
 
-/**
- * 모든 가구 목록 가져오기
- */
 export async function getAllHouseholds(): Promise<Household[]> {
   const snapshot = await getDocs(householdsCollection);
-  return snapshot.docs.map(d => ({
-    id: d.id,
-    name: d.data().name,
-    createdAt: d.data().createdAt?.toDate() || new Date(),
-    members: d.data().members || [],
-  }));
+  return snapshot.docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      name: data.name,
+      createdAt: data.createdAt?.toDate() || new Date(),
+      defaultCategoryKey: data.defaultCategoryKey,
+      homeSummaryConfig: resolveHomeSummaryConfig(data.homeSummaryConfig),
+      members: data.members || [],
+    };
+  });
 }
 
-/**
- * 가구에 멤버 추가
- */
-export async function addHouseholdMember(householdKey: string, name: string): Promise<HouseholdMember> {
+export async function addHouseholdMember(
+  householdKey: string,
+  name: string
+): Promise<HouseholdMember> {
   const docRef = doc(householdsCollection, householdKey);
   const docSnap = await getDoc(docRef);
 
@@ -111,45 +134,30 @@ export async function addHouseholdMember(householdKey: string, name: string): Pr
   return newMember;
 }
 
-/**
- * 가구 삭제
- */
 export async function deleteHousehold(key: string): Promise<void> {
   await deleteDoc(doc(householdsCollection, key));
 }
 
-/**
- * 기본 카테고리 설정
- */
-export async function setDefaultCategoryKey(householdKey: string, categoryKey: string): Promise<void> {
+export async function setDefaultCategoryKey(
+  householdKey: string,
+  categoryKey: string
+): Promise<void> {
   const docRef = doc(householdsCollection, householdKey);
   await updateDoc(docRef, { defaultCategoryKey: categoryKey });
 }
 
-/**
- * 로컬스토리지에서 가구 키 가져오기
- */
 export function getStoredHouseholdKey(): string | null {
   return HouseholdStorage.get();
 }
 
-/**
- * 로컬스토리지에 가구 키 저장
- */
 export function setStoredHouseholdKey(key: string): void {
   HouseholdStorage.set(key);
 }
 
-/**
- * 로컬스토리지에서 가구 키 삭제
- */
 export function clearStoredHouseholdKey(): void {
   HouseholdStorage.clear();
 }
 
-/**
- * 기존 데이터 마이그레이션 (householdId 없는 문서에 추가)
- */
 export async function migrateExpensesToHousehold(householdId: string): Promise<number> {
   const expensesRef = collection(db, 'expenses');
   const snapshot = await getDocs(expensesRef);

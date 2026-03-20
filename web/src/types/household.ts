@@ -1,18 +1,34 @@
 // 가구 멤버
 export interface HouseholdMember {
-  id: string;       // 고유 ID (예: "m_abc123")
-  name: string;     // 사용자가 입력한 이름
+  id: string;
+  name: string;
 }
+
+export type HomeSummaryCardKey =
+  | 'localCurrencyBalance'
+  | 'monthlyRemainingBudget'
+  | 'monthlySpent'
+  | 'yearlySpent';
+
+export interface HomeSummaryConfig {
+  leftCard: HomeSummaryCardKey;
+  rightCard: HomeSummaryCardKey;
+}
+
+export const DEFAULT_HOME_SUMMARY_CONFIG: HomeSummaryConfig = {
+  leftCard: 'localCurrencyBalance',
+  rightCard: 'monthlyRemainingBudget',
+};
 
 export interface Household {
   id: string;
   name: string;
   createdAt: Date;
-  defaultCategoryKey?: string; // 규칙 미매칭 시 기본 카테고리
-  members: HouseholdMember[]; // 가구 멤버 목록
+  defaultCategoryKey?: string;
+  homeSummaryConfig?: HomeSummaryConfig;
+  members: HouseholdMember[];
 }
 
-// Android WebView 브리지 인터페이스
 export interface AndroidBridge {
   setHouseholdKey: (key: string) => void;
   getHouseholdKey: () => string;

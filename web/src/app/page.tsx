@@ -7,24 +7,28 @@ import CategorySummary from '@/components/CategorySummary';
 import { ExpenseDetail, AddExpenseModal } from '@/components/expense';
 import { SearchModal } from '@/components/search';
 import { Expense, Category } from '@/types/expense';
+import { DEFAULT_HOME_SUMMARY_CONFIG } from '@/types/household';
 import BalanceCards from '@/components/BalanceCards';
 import HomeHeader from '@/components/HomeHeader';
 import CategoryDetailModal from '@/components/CategoryDetailModal';
 import LocalCurrencyModal from '@/components/LocalCurrencyModal';
-import { subscribeToMonthlyExpenses, updateExpense, addManualExpense, deleteExpense, splitExpense, mergeExpenses, unmergeExpense, SplitItem, generateSplitGroupId, addExpense } from '@/lib/expenseService';
+import { subscribeToMonthlyExpenses, subscribeToDateRangeExpenses, updateExpense, addManualExpense, deleteExpense, splitExpense, mergeExpenses, unmergeExpense, SplitItem, generateSplitGroupId, addExpense } from '@/lib/expenseService';
 import { addMerchantRule } from '@/lib/merchantRuleService';
 import { getStoredHouseholdKey } from '@/lib/householdService';
 import { processRecurringExpenses } from '@/lib/recurringExpenseService';
 import { getMonthlySplitDate } from '@/lib/utils/monthlySplitDate';
+import { useHousehold } from '@/contexts/HouseholdContext';
 
 export default function Home() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { household } = useHousehold();
 
   const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
   const [currentMonth, setCurrentMonth] = useState(() => new Date().getMonth() + 1);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [yearlySpent, setYearlySpent] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -38,6 +42,9 @@ export default function Home() {
   // 지역화폐 지출 모달 상태
   const [showLocalCurrencyModal, setShowLocalCurrencyModal] = useState(false);
   const [localCurrencyExpenses, setLocalCurrencyExpenses] = useState<Expense[]>([]);
+  const homeSummaryConfig = household?.homeSummaryConfig || DEFAULT_HOME_SUMMARY_CONFIG;
+  const needsYearlySpent =
+    homeSummaryConfig.leftCard === 'yearlySpent' || homeSummaryConfig.rightCard === 'yearlySpent';
 
   // 정기 지출 자동 등록 (앱 로드 시 한 번만)
   useEffect(() => {
@@ -65,6 +72,22 @@ export default function Home() {
 
     return () => unsubscribe();
   }, [currentYear, currentMonth]);
+
+  useEffect(() => {
+    if (!needsYearlySpent) {
+      setYearlySpent(null);
+      return undefined;
+    }
+
+    const startDate = `${currentYear}-01-01`;
+    const endDate = `${currentYear}-12-31`;
+
+    const unsubscribe = subscribeToDateRangeExpenses(startDate, endDate, (yearExpenses) => {
+      setYearlySpent(yearExpenses.reduce((sum, expense) => sum + expense.amount, 0));
+    });
+
+    return () => unsubscribe();
+  }, [currentYear, needsYearlySpent]);
 
   // URL에서 edit 파라미터 처리 (푸시 알림 클릭 시)
   useEffect(() => {
@@ -267,8 +290,11 @@ export default function Home() {
 
         {/* 잔액 요약 카드 - 모바일 */}
         <BalanceCards
+          currentYear={currentYear}
           currentMonth={currentMonth}
           expenses={expenses}
+          yearlySpent={yearlySpent}
+          summaryConfig={homeSummaryConfig}
           className="lg:hidden mb-4"
           onLocalCurrencyClick={handleLocalCurrencyClick}
         />
@@ -348,8 +374,11 @@ export default function Home() {
           <div className="lg:col-span-3 space-y-6">
             {/* 잔액 요약 카드 - 데스크톱 */}
             <BalanceCards
+              currentYear={currentYear}
               currentMonth={currentMonth}
               expenses={expenses}
+              yearlySpent={yearlySpent}
+              summaryConfig={homeSummaryConfig}
               onLocalCurrencyClick={handleLocalCurrencyClick}
             />
 
