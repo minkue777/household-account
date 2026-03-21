@@ -11,14 +11,16 @@ import java.time.format.DateTimeFormatter
 object NaverPayParser {
 
     private val paymentPattern = Regex(
-        """(.+?)에서\s*([\d,]+)원\s*결제(?:되었습니다|되었어요|됐어요)"""
+        """(.+?)에서\s*([\d,]+)원을?\s*결제(?:했습니다|했어요|됐어요)"""
     )
+    private val titlePrefixPattern = Regex("""^네이버페이\s*""")
 
     fun matches(notificationText: String): Boolean {
-        val normalized = normalize(notificationText)
-        return normalized.contains("네이버페이") &&
-            !normalized.contains("충전") &&
-            paymentPattern.containsMatchIn(normalized)
+        val lines = normalizeLines(notificationText)
+        return lines.any { line ->
+            val sanitized = sanitizePaymentLine(line)
+            paymentPattern.containsMatchIn(sanitized)
+        }
     }
 
     fun parse(
@@ -26,8 +28,12 @@ object NaverPayParser {
         postedAtMillis: Long? = null
     ): ParseResult {
         return try {
-            val normalized = normalize(notificationText)
-            val paymentMatch = paymentPattern.find(normalized)
+            val paymentLine = normalizeLines(notificationText)
+                .map(::sanitizePaymentLine)
+                .firstOrNull { paymentPattern.containsMatchIn(it) }
+                ?: return ParseResult(false, errorMessage = "Naver Pay payment format not found")
+
+            val paymentMatch = paymentPattern.find(paymentLine)
                 ?: return ParseResult(false, errorMessage = "Naver Pay payment format not found")
 
             val merchant = paymentMatch.groupValues[1].trim()
@@ -53,16 +59,16 @@ object NaverPayParser {
         }
     }
 
-    private fun normalize(value: String): String {
-        val lines = value
+    private fun normalizeLines(value: String): List<String> {
+        return value
             .lines()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
-            .dropWhile { it == "네이버페이" }
+    }
 
-        return lines
-            .joinToString(" ")
-            .replace(Regex("""\s+"""), " ")
+    private fun sanitizePaymentLine(value: String): String {
+        return value
+            .replace(titlePrefixPattern, "")
             .trim()
     }
 

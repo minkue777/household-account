@@ -12,11 +12,15 @@ object KakaoPayParser {
 
     private val paymentTitlePattern = Regex("""결제가\s*완료되었어요""")
     private val paymentBodyPattern = Regex("""(.+?)에서\s*([\d,]+)원을\s*결제했어요\.?""")
+    private val appNamePrefixPattern = Regex("""^카카오페이\s*""")
+    private val titlePrefixPattern = Regex("""^결제가\s*완료되었어요\s*""")
 
     fun matches(notificationText: String): Boolean {
-        val normalized = normalize(notificationText)
-        return paymentTitlePattern.containsMatchIn(normalized) &&
-            paymentBodyPattern.containsMatchIn(normalized)
+        val lines = normalizeLines(notificationText)
+        return lines.any { line ->
+            val sanitized = sanitizePaymentLine(line)
+            paymentBodyPattern.containsMatchIn(sanitized)
+        } || sanitizePaymentLine(lines.joinToString(" ")).let { paymentBodyPattern.containsMatchIn(it) }
     }
 
     fun parse(
@@ -24,12 +28,19 @@ object KakaoPayParser {
         postedAtMillis: Long? = null
     ): ParseResult {
         return try {
-            val normalized = normalize(notificationText)
-            if (!paymentTitlePattern.containsMatchIn(normalized)) {
+            val lines = normalizeLines(notificationText)
+            val combinedLine = sanitizePaymentLine(lines.joinToString(" "))
+            val paymentLine = lines
+                .map(::sanitizePaymentLine)
+                .firstOrNull { paymentBodyPattern.containsMatchIn(it) }
+                ?: if (paymentBodyPattern.containsMatchIn(combinedLine)) combinedLine else null
+                ?: return ParseResult(false, errorMessage = "Kakao Pay payment body not found")
+
+            if (!paymentTitlePattern.containsMatchIn(lines.joinToString(" "))) {
                 return ParseResult(false, errorMessage = "Kakao Pay payment title not found")
             }
 
-            val paymentMatch = paymentBodyPattern.find(normalized)
+            val paymentMatch = paymentBodyPattern.find(paymentLine)
                 ?: return ParseResult(false, errorMessage = "Kakao Pay payment body not found")
 
             val merchant = paymentMatch.groupValues[1].trim()
@@ -54,16 +65,17 @@ object KakaoPayParser {
         }
     }
 
-    private fun normalize(value: String): String {
-        val lines = value
+    private fun normalizeLines(value: String): List<String> {
+        return value
             .lines()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
-            .dropWhile { it == "카카오페이" }
+    }
 
-        return lines
-            .joinToString(" ")
-            .replace(Regex("""\s+"""), " ")
+    private fun sanitizePaymentLine(value: String): String {
+        return value
+            .replace(appNamePrefixPattern, "")
+            .replace(titlePrefixPattern, "")
             .trim()
     }
 
