@@ -17,10 +17,6 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    match /notification_logs/{logId} {
-      allow read, write: if isAuthenticated();
-    }
-
     match /assets/{assetId} {
       allow read, write: if isAuthenticated();
     }

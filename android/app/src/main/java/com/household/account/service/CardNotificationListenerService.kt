@@ -11,7 +11,6 @@ import com.household.account.data.CategoryRepository
 import com.household.account.data.Expense
 import com.household.account.data.ExpenseRepository
 import com.household.account.data.MerchantRuleRepository
-import com.household.account.data.NotificationLogRepository
 import com.household.account.parser.DaejeonLocalCurrencyParser
 import com.household.account.parser.ExpenseEventType
 import com.household.account.parser.GyeonggiLocalCurrencyParser
@@ -84,7 +83,6 @@ class CardNotificationListenerService : NotificationListenerService() {
     private val ruleRepository = MerchantRuleRepository()
     private val categoryRepository = CategoryRepository()
     private val balanceRepository = BalanceRepository()
-    private val notificationLogRepository = NotificationLogRepository()
 
     private val recentNotifications = mutableMapOf<String, Long>()
     private val duplicateWindowMs = 30_000L
@@ -136,19 +134,6 @@ class CardNotificationListenerService : NotificationListenerService() {
                 NotificationSource.DAEJEON_LOCAL_CURRENCY -> DaejeonLocalCurrencyParser.parse(fullText)
             }
 
-            if (shouldLogRawNotification(source)) {
-                saveTrackedNotification(
-                    source = source,
-                    packageName = packageName,
-                    title = title,
-                    text = text,
-                    bigText = bigText,
-                    fullText = fullText,
-                    postedAtMillis = sbn.postTime,
-                    parseResult = result
-                )
-            }
-
             if (
                 source == NotificationSource.GYEONGGI_LOCAL_CURRENCY ||
                 source == NotificationSource.DAEJEON_LOCAL_CURRENCY
@@ -194,48 +179,6 @@ class CardNotificationListenerService : NotificationListenerService() {
             packageName in knownDaejeonLocalCurrencyPackages || DaejeonLocalCurrencyParser.matches(fullText) ->
                 NotificationSource.DAEJEON_LOCAL_CURRENCY
             else -> null
-        }
-    }
-
-    private fun shouldLogRawNotification(source: NotificationSource): Boolean {
-        return when (source) {
-            NotificationSource.NAVER_PAY,
-            NotificationSource.TOSS_BANK,
-            NotificationSource.KAKAOPAY -> true
-            else -> false
-        }
-    }
-
-    private fun saveTrackedNotification(
-        source: NotificationSource,
-        packageName: String,
-        title: String,
-        text: String,
-        bigText: String,
-        fullText: String,
-        postedAtMillis: Long,
-        parseResult: ParseResult
-    ) {
-        serviceScope.launch {
-            try {
-                val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
-                if (householdId.isEmpty()) {
-                    return@launch
-                }
-
-                notificationLogRepository.saveNotificationLog(
-                    householdId = householdId,
-                    packageName = packageName,
-                    source = source.name,
-                    title = title,
-                    text = text,
-                    bigText = bigText,
-                    fullText = fullText,
-                    postedAtMillis = postedAtMillis,
-                    parseResult = parseResult
-                )
-            } catch (_: Exception) {
-            }
         }
     }
 
