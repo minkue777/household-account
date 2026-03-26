@@ -3,6 +3,7 @@ package com.household.account.parser
 import com.household.account.data.CardType
 import com.household.account.data.Category
 import com.household.account.data.Expense
+import com.household.account.util.CardLabelFormatter
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -164,7 +165,7 @@ object KBCardParser {
                     amount = amount,
                     category = Category.ETC.name,
                     cardType = resolveCardType(cardLastFour, mainCardLastFour).key,
-                    cardLastFour = cardLastFour
+                    cardLastFour = CardLabelFormatter.formatCardLabel("국민", cardLastFour)
                 ),
                 eventType = eventType
             )

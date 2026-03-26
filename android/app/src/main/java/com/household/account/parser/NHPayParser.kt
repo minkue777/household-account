@@ -3,12 +3,13 @@ package com.household.account.parser
 import com.household.account.data.CardType
 import com.household.account.data.Category
 import com.household.account.data.Expense
+import com.household.account.util.CardLabelFormatter
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 object NHPayParser {
 
-    private val cardPattern = Regex("""NH카드([0-9*]{4})승인""")
+    private val cardPattern = Regex("""NH카드([0-9*xX]{4})승인""")
     private val amountPattern = Regex("""([\d,]+)원\s*일시불""")
     private val dateTimePattern = Regex("""(\d{2}/\d{2})\s+(\d{2}:\d{2})""")
 
@@ -50,7 +51,7 @@ object NHPayParser {
                     amount = amount,
                     category = Category.ETC.name,
                     cardType = resolveCardType(cardToken, mainCardToken).key,
-                    cardLastFour = cardToken
+                    cardLastFour = CardLabelFormatter.formatCardLabel("농협", cardToken)
                 )
             )
         } catch (e: Exception) {

@@ -2,6 +2,7 @@ package com.household.account.data
 
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.household.account.util.CardLabelFormatter
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -364,7 +365,20 @@ class ExpenseRepository {
     }
 
     private fun matchesCardLastFour(savedValue: String, incomingValue: String): Boolean {
-        return incomingValue.isBlank() || savedValue == incomingValue
+        if (incomingValue.isBlank()) {
+            return true
+        }
+
+        if (savedValue == incomingValue) {
+            return true
+        }
+
+        val savedToken = CardLabelFormatter.extractCardToken(savedValue)
+        val incomingToken = CardLabelFormatter.extractCardToken(incomingValue)
+
+        return savedToken != null &&
+            incomingToken != null &&
+            savedToken == incomingToken
     }
 
     private fun matchesSplitGroupAmount(

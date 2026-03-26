@@ -3,13 +3,14 @@ package com.household.account.parser
 import com.household.account.data.CardType
 import com.household.account.data.Category
 import com.household.account.data.Expense
+import com.household.account.util.CardLabelFormatter
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 object LotteCardParser {
 
     private val amountPattern = Regex("""([\d,]+)원\s*(승인|취소)""")
-    private val cardTokenPattern = Regex("""\(([0-9*]{4})\)""")
+    private val cardTokenPattern = Regex("""\(([0-9*xX]{4})\)""")
     private val installmentDateTimePattern = Regex("""(?:일시불|할부[^,]*)\s*,\s*(\d{2}/\d{2})\s+(\d{2}:\d{2})""")
 
     fun matches(notificationText: String): Boolean {
@@ -73,7 +74,7 @@ object LotteCardParser {
                     amount = amount,
                     category = Category.ETC.name,
                     cardType = resolveCardType(cardToken, mainCardToken).key,
-                    cardLastFour = cardToken
+                    cardLastFour = CardLabelFormatter.formatCardLabel("롯데", cardToken)
                 ),
                 eventType = eventType
             )

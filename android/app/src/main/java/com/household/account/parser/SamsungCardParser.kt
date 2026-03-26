@@ -3,12 +3,13 @@ package com.household.account.parser
 import com.household.account.data.CardType
 import com.household.account.data.Category
 import com.household.account.data.Expense
+import com.household.account.util.CardLabelFormatter
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 object SamsungCardParser {
 
-    private val cardPattern = Regex("""삼성([0-9*]{4})\s*(승인|취소)""")
+    private val cardPattern = Regex("""삼성([0-9*xX]{4})\s*(승인|취소)""")
     private val amountPattern = Regex("""([\d,]+)원\s*(일시불|할부)?""")
     private val dateTimeMerchantPattern = Regex("""(\d{2}/\d{2})\s+(\d{2}:\d{2})\s+(.+)""")
 
@@ -48,7 +49,7 @@ object SamsungCardParser {
                     amount = amount,
                     category = Category.ETC.name,
                     cardType = resolveCardType(cardToken, mainCardToken).key,
-                    cardLastFour = cardToken
+                    cardLastFour = CardLabelFormatter.formatCardLabel("삼성", cardToken)
                 ),
                 eventType = eventType
             )
