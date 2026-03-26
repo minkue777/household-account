@@ -52,7 +52,19 @@ object SmsCardMessageParser {
         val billingLabel = "${amountMatch.groupValues[1]}월분 ${amountMatch.groupValues[2].trim()}"
         val amount = amountMatch.groupValues[3].replace(",", "").toIntOrNull() ?: return null
 
-        val merchant = billingLabel
+        val merchantLines = lines
+            .take(amountLineIndex)
+            .filterNot { it == "[Web발신]" || nhSenderPattern.matches(it) }
+
+        val merchant = if (billingLabel.contains("관리비")) {
+            billingLabel
+        } else {
+            merchantLines
+                .plus(billingLabel)
+                .joinToString(" ")
+                .trim()
+                .ifBlank { billingLabel }
+        }
         val occurredAt = resolveDateTime(postedAtMillis)
 
         return ParseResult(
