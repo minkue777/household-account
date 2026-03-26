@@ -28,8 +28,14 @@ export async function addRecurringExpense(
 ): Promise<string> {
   if (!householdId) return '';
 
-  // 새로 추가한 정기 지출은 다음 달부터 자동 등록되도록
-  // lastRegisteredMonth를 현재 월로 설정
+  const now = new Date();
+  const targetDay = getEffectiveDayOfMonth(
+    now.getFullYear(),
+    now.getMonth() + 1,
+    input.dayOfMonth
+  );
+  const initialLastRegisteredMonth =
+    now.getDate() <= targetDay ? getPreviousMonthString(now) : getCurrentMonthString();
   const docRef = await addDoc(recurringRef, {
     householdId,
     merchant: input.merchant,
@@ -38,7 +44,7 @@ export async function addRecurringExpense(
     dayOfMonth: input.dayOfMonth,
     memo: input.memo || '',
     isActive: true,
-    lastRegisteredMonth: getCurrentMonthString(),
+    lastRegisteredMonth: initialLastRegisteredMonth,
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
   });
@@ -149,14 +155,30 @@ export function getCurrentMonthString(): string {
 }
 
 /**
- * 오늘 날짜 문자열 생성 (예: "2024-01-15")
+ * ?? ??? ?? ??? ??? ??
  */
-function getTodayString(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+function getEffectiveDayOfMonth(year: number, month: number, dayOfMonth: number): number {
+  const lastDayOfMonth = new Date(year, month, 0).getDate();
+  return Math.min(dayOfMonth, lastDayOfMonth);
+}
+
+/**
+ * ?? ?? ?? ?? ?? ??? ?? (?: "2024-01-15")
+ */
+function getRecurringExpenseDate(year: number, month: number, dayOfMonth: number): string {
+  const safeMonth = String(month).padStart(2, '0');
+  const safeDay = String(getEffectiveDayOfMonth(year, month, dayOfMonth)).padStart(2, '0');
+  return `${year}-${safeMonth}-${safeDay}`;
+}
+
+/**
+ * ?? ? ??? ?? (?: "2023-12")
+ */
+function getPreviousMonthString(referenceDate: Date = new Date()): string {
+  const previousMonthDate = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - 1, 1);
+  const year = previousMonthDate.getFullYear();
+  const month = String(previousMonthDate.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
 }
 
 /**
@@ -170,8 +192,9 @@ export async function processRecurringExpenses(householdId: string): Promise<num
 
   const today = new Date();
   const currentDay = today.getDate();
+  const currentYear = today.getFullYear();
+  const currentMonthNumber = today.getMonth() + 1;
   const currentMonth = getCurrentMonthString();
-  const todayString = getTodayString();
 
   const expenses = await getRecurringExpenses(householdId);
   let registeredCount = 0;
@@ -184,12 +207,14 @@ export async function processRecurringExpenses(householdId: string): Promise<num
     if (expense.lastRegisteredMonth === currentMonth) continue;
 
     // 아직 등록일이 안 됐으면 스킵
-    if (currentDay < expense.dayOfMonth) continue;
+    const targetDay = getEffectiveDayOfMonth(currentYear, currentMonthNumber, expense.dayOfMonth);
+
+    if (currentDay < targetDay) continue;
 
     // 지출 등록
     try {
       await addExpense({
-        date: todayString,
+        date: getRecurringExpenseDate(currentYear, currentMonthNumber, expense.dayOfMonth),
         time: '09:00',
         merchant: expense.merchant,
         amount: expense.amount,
