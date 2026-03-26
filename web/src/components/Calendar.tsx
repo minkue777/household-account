@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { Portal } from './common';
+import { getTodayLocalDate } from '@/lib/utils/date';
 
 interface CalendarProps {
   year: number;
@@ -243,8 +244,7 @@ export default function Calendar({
           const dayTotal = getDayTotal(day);
           const isSelected = selectedDate === dateStr;
           const dayOfWeek = (startDay + day - 1) % 7;
-          const isToday =
-            new Date().toISOString().slice(0, 10) === dateStr;
+          const isToday = getTodayLocalDate() === dateStr;
 
           return (
             <div

@@ -12,6 +12,7 @@ import {
   toOptionalMemo,
   trimExpenseMerchant,
 } from '@/lib/utils/expenseForm';
+import { getTodayLocalDate } from '@/lib/utils/date';
 import ExpenseFormFields from '@/components/expense/ExpenseFormFields';
 import ExpenseActionButtons from '@/components/expense/ExpenseActionButtons';
 
@@ -27,10 +28,6 @@ interface AddExpenseModalProps {
     splitMonths?: number
   ) => void;
   selectedDate?: string | null;
-}
-
-function getTodayDate(): string {
-  return new Date().toISOString().split('T')[0];
 }
 
 export default function AddExpenseModal({
@@ -58,7 +55,7 @@ export default function AddExpenseModal({
       amount: '',
       category: 'etc',
       memo: '',
-      date: selectedDate || getTodayDate(),
+      date: selectedDate || getTodayLocalDate(),
     },
   });
   const {
@@ -79,7 +76,7 @@ export default function AddExpenseModal({
 
   useEffect(() => {
     if (isOpen) {
-      setDate(selectedDate || getTodayDate());
+      setDate(selectedDate || getTodayLocalDate());
       resetMonthlySplitInput();
     }
   }, [isOpen, selectedDate, setDate, resetMonthlySplitInput]);
@@ -175,4 +172,3 @@ export default function AddExpenseModal({
     </ModalOverlay>
   );
 }
-

@@ -17,6 +17,7 @@ import { Asset, AssetHistoryEntry, ASSET_TYPE_CONFIG } from '@/types/asset';
 import { getAssetHistoryByPeriod } from '@/lib/assetService';
 import { ModalOverlay } from '@/components/common';
 import { X, Calendar } from 'lucide-react';
+import { formatLocalDate } from '@/lib/utils/date';
 
 ChartJS.register(
   CategoryScale,
@@ -59,7 +60,7 @@ export default function AssetBalanceChart({
   // 기간에 따른 시작/종료 날짜 계산
   const { startDate, endDate } = useMemo(() => {
     const now = new Date();
-    const end = now.toISOString().split('T')[0];
+    const end = formatLocalDate(now);
     let start: Date;
 
     switch (period) {
@@ -79,7 +80,7 @@ export default function AssetBalanceChart({
     }
 
     return {
-      startDate: start.toISOString().split('T')[0],
+      startDate: formatLocalDate(start),
       endDate: end,
     };
   }, [period]);

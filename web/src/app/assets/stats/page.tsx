@@ -21,6 +21,7 @@ import { subscribeToAssets, getAssetHistoryByPeriod } from '@/lib/assetService';
 import { useTheme } from '@/contexts/ThemeContext';
 import AssetProfitChart from '@/components/assets/AssetProfitChart';
 import AssetDividendChart from '@/components/assets/AssetDividendChart';
+import { formatLocalDate } from '@/lib/utils/date';
 
 ChartJS.register(
   CategoryScale,
@@ -82,24 +83,24 @@ export default function AssetStatsPage() {
       setIsLoading(true);
       try {
         // 기간 계산
-        const endDate = new Date().toISOString().split('T')[0];
+        const endDate = formatLocalDate(new Date());
         let startDate: string;
 
         switch (selectedPeriod) {
           case '3M':
-            startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).toISOString().split('T')[0];
+            startDate = formatLocalDate(new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()));
             break;
           case '6M':
-            startDate = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate()).toISOString().split('T')[0];
+            startDate = formatLocalDate(new Date(now.getFullYear(), now.getMonth() - 6, now.getDate()));
             break;
           case '1Y':
-            startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()).toISOString().split('T')[0];
+            startDate = formatLocalDate(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
             break;
           case 'ALL':
             startDate = '2020-01-01';
             break;
           default:
-            startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).toISOString().split('T')[0];
+            startDate = formatLocalDate(new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()));
         }
 
         const historyData = await getAssetHistoryByPeriod(startDate, endDate);
@@ -143,7 +144,7 @@ export default function AssetStatsPage() {
 
     // 스냅샷이 없으면 현재값만 표시
     return [{
-      date: new Date().toISOString().split('T')[0],
+      date: formatLocalDate(new Date()),
       total: totalAssets,
       change: 0,
     }];

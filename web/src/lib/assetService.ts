@@ -19,6 +19,7 @@ import {
 import { db } from './firebase';
 import { Asset, AssetHistoryEntry, AssetInput, StockHolding, StockHoldingInput } from '@/types/asset';
 import { getStoredHouseholdKey } from './householdService';
+import { formatLocalDate } from './utils/date';
 
 const ASSETS_COLLECTION = 'assets';
 const HISTORY_COLLECTION = 'asset_history';
@@ -221,11 +222,11 @@ export async function getPreviousMonthTotal(): Promise<number | null> {
 
   // 전월 마지막 날 계산
   const lastDayOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
-  const endDate = lastDayOfPrevMonth.toISOString().split('T')[0];
+  const endDate = formatLocalDate(lastDayOfPrevMonth);
 
   // 전월 첫째 날
   const firstDayOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const startDate = firstDayOfPrevMonth.toISOString().split('T')[0];
+  const startDate = formatLocalDate(firstDayOfPrevMonth);
 
   try {
     // 전월의 TOTAL 스냅샷 중 가장 마지막 날짜 조회
@@ -267,7 +268,7 @@ export async function getMonthlyAssetChange(currentTotal: number): Promise<numbe
  */
 export async function getDailyAssetChange(): Promise<number> {
   const householdId = getHouseholdId();
-  const today = new Date().toISOString().split('T')[0];
+  const today = formatLocalDate(new Date());
   const todayId = `${householdId}_financial_${today}`;
 
   try {
@@ -294,7 +295,7 @@ async function saveDailySnapshot(
   snapshotIdSuffix: string
 ): Promise<void> {
   const householdId = getHouseholdId();
-  const today = new Date().toISOString().split('T')[0];
+  const today = formatLocalDate(new Date());
   const snapshotId = `${householdId}_${snapshotIdSuffix}_${today}`;
 
   try {
