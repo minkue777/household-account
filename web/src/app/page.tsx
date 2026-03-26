@@ -22,7 +22,7 @@ import { useHousehold } from '@/contexts/HouseholdContext';
 export default function Home() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { household } = useHousehold();
+  const { household, householdKey } = useHousehold();
 
   const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
   const [currentMonth, setCurrentMonth] = useState(() => new Date().getMonth() + 1);
@@ -48,14 +48,15 @@ export default function Home() {
 
   // 정기 지출 자동 등록 (앱 로드 시 한 번만)
   useEffect(() => {
-    const householdId = getStoredHouseholdKey();
-    if (householdId) {
-      processRecurringExpenses(householdId).then((count) => {
-        if (count > 0) {
-        }
-      });
+    if (!householdKey) {
+      return;
     }
-  }, []);
+
+    processRecurringExpenses(householdKey).then((count) => {
+      if (count > 0) {
+      }
+    });
+  }, [householdKey]);
 
   // Firebase 실시간 구독
   useEffect(() => {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
-import { getStoredHouseholdKey } from '@/lib/householdService';
+import { useHousehold } from '@/contexts/HouseholdContext';
 import {
   RecurringExpense,
   subscribeToRecurringExpenses,
@@ -17,6 +17,7 @@ export default function RecurringExpenseSettings() {
     getCategoryLabel,
     getCategoryColor,
   } = useCategoryContext();
+  const { householdKey } = useHousehold();
 
   // 섹션 펼침/접힘 상태
   const [isRecurringOpen, setIsRecurringOpen] = useState(false);
@@ -36,9 +37,15 @@ export default function RecurringExpenseSettings() {
 
   // 정기 지출 구독
   useEffect(() => {
-    const householdId = getStoredHouseholdKey() || 'guest';
+    if (!householdKey) {
+      setRecurringExpenses([]);
+      setRecurringLoading(false);
+      return () => {};
+    }
 
-    const unsubscribeRecurring = subscribeToRecurringExpenses(householdId, (expenses) => {
+    setRecurringLoading(true);
+
+    const unsubscribeRecurring = subscribeToRecurringExpenses(householdKey, (expenses) => {
       setRecurringExpenses(expenses);
       setRecurringLoading(false);
     });
@@ -46,7 +53,7 @@ export default function RecurringExpenseSettings() {
     return () => {
       unsubscribeRecurring();
     };
-  }, []);
+  }, [householdKey]);
 
   // 정기 지출 핸들러
   const resetRecurringForm = () => {
@@ -71,8 +78,7 @@ export default function RecurringExpenseSettings() {
 
   const handleSaveRecurring = async () => {
     if (!recurringMerchant.trim() || !recurringAmount || !recurringCategory || !recurringDay) return;
-
-    const householdId = getStoredHouseholdKey() || 'guest';
+    if (!householdKey) return;
     const amount = parseInt(recurringAmount, 10);
     const dayOfMonth = parseInt(recurringDay, 10);
 
@@ -87,7 +93,7 @@ export default function RecurringExpenseSettings() {
         memo: recurringMemo.trim(),
       });
     } else {
-      await addRecurringExpense(householdId, {
+      await addRecurringExpense(householdKey, {
         merchant: recurringMerchant.trim(),
         amount,
         category: recurringCategory,
