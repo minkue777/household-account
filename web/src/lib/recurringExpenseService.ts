@@ -219,6 +219,7 @@ export async function processRecurringExpenses(householdId: string): Promise<num
         merchant: expense.merchant,
         amount: expense.amount,
         category: expense.category,
+        cardLastFour: '정기지출',
         memo: expense.memo || '',
         cardType: 'main',
       });
