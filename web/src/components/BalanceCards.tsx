@@ -123,7 +123,7 @@ export default function BalanceCards({
           key,
           label: `${currentMonth}월 지출`,
           valueText: monthlySpent.toLocaleString(),
-          accentClassName: 'bg-amber-50 border-amber-100 text-amber-500',
+          accentClassName: 'bg-slate-100 border-slate-200 text-slate-600',
           icon: Calendar,
           iconClassName: 'text-yellow-500',
         };
