@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import {
@@ -27,6 +27,7 @@ export default function RecurringExpenseSettings() {
   const [recurringLoading, setRecurringLoading] = useState(true);
   const [showAddRecurringForm, setShowAddRecurringForm] = useState(false);
   const [editingRecurringId, setEditingRecurringId] = useState<string | null>(null);
+  const recurringFormRef = useRef<HTMLDivElement>(null);
 
   // 정기 지출 폼 상태
   const [recurringMerchant, setRecurringMerchant] = useState('');
@@ -74,6 +75,9 @@ export default function RecurringExpenseSettings() {
     setRecurringDay(expense.dayOfMonth.toString());
     setRecurringMemo(expense.memo || '');
     setShowAddRecurringForm(false);
+    setTimeout(() => {
+      recurringFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   };
 
   const handleSaveRecurring = async () => {
@@ -138,7 +142,7 @@ export default function RecurringExpenseSettings() {
         <div className="border-t border-slate-100">
           {/* 추가/편집 폼 */}
           {(showAddRecurringForm || editingRecurringId) && (
-            <div className="p-4 bg-slate-50 border-b border-slate-200">
+            <div ref={recurringFormRef} className="scroll-mt-24 p-4 bg-slate-50 border-b border-slate-200">
               <div className="space-y-4">
                 <div className="font-medium text-slate-800">
                   {editingRecurringId ? '정기 지출 편집' : '새 정기 지출 추가'}
