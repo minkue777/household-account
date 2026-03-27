@@ -138,7 +138,7 @@ export default function MerchantRuleSettings() {
         <div className="border-t border-slate-100">
           {/* 규칙 추가/편집 폼 */}
           {(showAddRuleForm || editingRuleId) && (
-            <div ref={ruleFormRef} className="p-4 bg-slate-50 border-b border-slate-200">
+            <div ref={ruleFormRef} className="scroll-mt-24 p-4 bg-slate-50 border-b border-slate-200">
               <div className="space-y-4">
                 <div className="font-medium text-slate-800">
                   {editingRuleId ? '규칙 편집' : '새 규칙 추가'}
