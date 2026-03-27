@@ -14,7 +14,7 @@ import { getStoredHouseholdKey } from '@/lib/householdService';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 
 export default function StatsPage() {
-  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('1month');
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('1year');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -99,9 +99,6 @@ export default function StatsPage() {
     }
 
     switch (periodPreset) {
-      case '1month':
-        start = new Date(now.getFullYear(), now.getMonth(), 1);
-        break;
       case '3months':
         start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
         break;
@@ -112,7 +109,7 @@ export default function StatsPage() {
         start = new Date(now.getFullYear() - 1, now.getMonth() + 1, 1);
         break;
       default:
-        start = new Date(now.getFullYear(), now.getMonth(), 1);
+        start = new Date(now.getFullYear() - 1, now.getMonth() + 1, 1);
     }
 
     const formatDate = (d: Date) => {
