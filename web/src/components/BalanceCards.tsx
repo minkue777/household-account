@@ -1,7 +1,7 @@
 'use client';
 
 import { ComponentType, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, CalendarRange, CircleDollarSign, CreditCard, Wallet } from 'lucide-react';
+import { Calendar, CalendarDays, CircleDollarSign, CreditCard, Wallet } from 'lucide-react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { subscribeToLocalCurrencyBalance, LocalCurrencyBalance } from '@/lib/balanceService';
 import { Expense } from '@/types/expense';
@@ -124,7 +124,7 @@ export default function BalanceCards({
           label: `${currentMonth}월 지출`,
           valueText: monthlySpent.toLocaleString(),
           accentClassName: 'bg-amber-50 border-amber-100 text-amber-500',
-          icon: CalendarRange,
+          icon: Calendar,
           iconClassName: 'text-yellow-500',
         };
       case 'yearlySpent':
