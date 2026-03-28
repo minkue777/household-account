@@ -63,9 +63,6 @@ export default function MemberSelection() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-lg">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100 text-2xl font-semibold text-blue-600">
-            {household?.name?.[0] || '가'}
-          </div>
           <h1 className="text-xl font-bold text-slate-800">{household?.name || '가계부'}</h1>
           <p className="mt-1 text-sm text-slate-500">
             {members.length > 0 ? '사용할 사용자를 선택해주세요' : '사용자 이름을 먼저 입력해주세요'}
