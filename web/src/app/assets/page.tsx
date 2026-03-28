@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Asset, AssetType, FAMILY_MEMBERS } from '@/types/asset';
+import { Asset, AssetType } from '@/types/asset';
 import {
   subscribeToAssets,
   getDailyAssetChange,
@@ -20,6 +20,11 @@ import {
 } from '@/components/assets';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
+import {
+  ALL_MEMBERS_OPTION,
+  getAssetMemberOptions,
+  getAssetOwnerOptions,
+} from '@/lib/assets/memberOptions';
 
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
@@ -28,7 +33,6 @@ export default function AssetsPage() {
   const [dailyChange, setDailyChange] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 모달 상태
   const [showAddModal, setShowAddModal] = useState(false);
   const [addModalType, setAddModalType] = useState<AssetType>('savings');
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
@@ -36,9 +40,15 @@ export default function AssetsPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showChartModal, setShowChartModal] = useState(false);
   const [isAddingSample, setIsAddingSample] = useState(false);
-  const [selectedMember, setSelectedMember] = useState<string>('전체');
+  const [selectedMember, setSelectedMember] = useState<string>(ALL_MEMBERS_OPTION);
 
-  // 샘플 데이터 추가
+  const memberNames = useMemo(
+    () => household?.members.map((member) => member.name) ?? [],
+    [household?.members]
+  );
+  const memberOptions = useMemo(() => getAssetMemberOptions(memberNames), [memberNames]);
+  const ownerOptions = useMemo(() => getAssetOwnerOptions(memberNames), [memberNames]);
+
   const handleAddSampleData = async () => {
     setIsAddingSample(true);
     try {
@@ -50,7 +60,6 @@ export default function AssetsPage() {
     }
   };
 
-  // 자산 구독
   useEffect(() => {
     setIsLoading(true);
     const unsubscribe = subscribeToAssets((newAssets) => {
@@ -60,64 +69,67 @@ export default function AssetsPage() {
     return () => unsubscribe();
   }, []);
 
-  // 페이지 로드 시 주식 가격 자동 갱신
   useEffect(() => {
     refreshAllStockPrices().catch(console.error);
   }, []);
 
-  // 일간 변동액 조회 및 스냅샷 저장
+  useEffect(() => {
+    if (!memberOptions.includes(selectedMember)) {
+      setSelectedMember(ALL_MEMBERS_OPTION);
+    }
+  }, [memberOptions, selectedMember]);
+
   useEffect(() => {
     if (assets.length === 0) return;
 
-    const activeAssets = assets.filter((a) => a.isActive);
-    const currentTotal = activeAssets.reduce((sum, a) => sum + a.currentBalance, 0);
-    // 금융자산 (부동산 제외)
+    const activeAssets = assets.filter((asset) => asset.isActive);
+    const currentTotal = activeAssets.reduce((sum, asset) => sum + asset.currentBalance, 0);
     const financialTotal = activeAssets
-      .filter((a) => a.type !== 'property')
-      .reduce((sum, a) => sum + a.currentBalance, 0);
+      .filter((asset) => asset.type !== 'property')
+      .reduce((sum, asset) => sum + asset.currentBalance, 0);
 
-    // 전일 대비 변동액 계산
     getDailyAssetChange()
       .then(setDailyChange)
       .catch(() => setDailyChange(0));
 
-    // 일별 총자산 스냅샷 저장 (자산 추이 차트용)
     saveDailyTotalSnapshot(currentTotal, financialTotal);
   }, [assets]);
 
-  // 자산 클릭 핸들러
   const handleAssetClick = (asset: Asset) => {
     setSelectedAsset(asset);
     setShowHistoryModal(true);
   };
 
-  // 자산 추가 열기
   const handleAddClick = () => {
     setAddModalType('savings');
     setShowAddModal(true);
   };
 
-  // 자산 수정 열기
   const handleEditAsset = () => {
     setShowHistoryModal(false);
     setShowEditModal(true);
   };
 
-  // 차트 보기
   const handleViewChart = () => {
     setShowHistoryModal(false);
     setShowChartModal(true);
   };
 
+  const visibleAssets =
+    selectedMember === ALL_MEMBERS_OPTION
+      ? assets
+      : assets.filter((asset) => asset.owner === selectedMember);
+
   return (
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
-      <div className="max-w-lg mx-auto">
-        {/* 헤더 */}
+      <div className="mx-auto max-w-lg">
         <header className="mb-6 flex items-center justify-between">
-          {/* 제목 + 곰돌이 (클릭 시 가계부 페이지로 이동) */}
-          <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer">
+          <Link
+            href="/"
+            className="flex cursor-pointer items-center gap-2 transition-opacity hover:opacity-80"
+          >
             <h1
-              className="text-lg md:text-2xl font-bold leading-tight"
+              className="text-lg font-bold leading-tight md:text-2xl"
               style={{
                 background: themeConfig.titleGradient,
                 WebkitBackgroundClip: 'text',
@@ -132,12 +144,11 @@ export default function AssetsPage() {
             <img
               src="/bear-removebg-preview.png"
               alt="곰돌이"
-              className="w-14 h-14 md:w-16 md:h-16 object-contain"
+              className="h-14 w-14 object-contain md:h-16 md:w-16"
             />
           </Link>
-          {/* 우측 버튼들 */}
+
           <div className="flex items-center gap-2">
-            {/* 샘플 데이터 추가 버튼 (자산이 없을 때만) */}
             {!isLoading && assets.length === 0 && (
               <button
                 onClick={handleAddSampleData}
@@ -147,48 +158,56 @@ export default function AssetsPage() {
                 {isAddingSample ? '추가 중...' : '샘플 데이터'}
               </button>
             )}
-            {/* 통계 버튼 */}
+
             <Link
               href="/assets/stats"
-              className="p-2 bg-white/95 hover:bg-white rounded-xl transition-all shadow-sm hover:shadow border border-slate-200/70"
+              className="rounded-xl border border-slate-200/70 bg-white/95 p-2 shadow-sm transition-all hover:bg-white hover:shadow"
             >
-              <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              <svg
+                className="h-5 w-5 text-slate-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                />
               </svg>
             </Link>
           </div>
         </header>
 
         {isLoading ? (
-          <div className="text-center py-12 text-slate-400">로딩 중...</div>
+          <div className="py-12 text-center text-slate-400">로딩 중...</div>
         ) : (
           <div className="space-y-4">
-            {/* 가족 탭 + 총 자산 요약 + 도넛 차트 */}
             <AssetSummaryCard
               assets={assets}
               dailyChange={dailyChange}
               selectedMember={selectedMember}
+              memberOptions={memberOptions}
               onMemberChange={setSelectedMember}
             />
 
-            {/* 보유 현황 */}
             <AssetList
-              assets={selectedMember === '전체' ? assets : assets.filter(a => a.owner === selectedMember)}
+              assets={visibleAssets}
               onAssetClick={handleAssetClick}
               onAddClick={handleAddClick}
             />
           </div>
         )}
 
-        {/* 자산 추가 모달 */}
         <AssetAddModal
           isOpen={showAddModal}
           onClose={() => setShowAddModal(false)}
           defaultType={addModalType}
           defaultOwner={selectedMember}
+          ownerOptions={ownerOptions}
         />
 
-        {/* 자산 수정 모달 */}
         <AssetEditModal
           isOpen={showEditModal}
           onClose={() => {
@@ -198,7 +217,6 @@ export default function AssetsPage() {
           asset={selectedAsset}
         />
 
-        {/* 자산 이력 모달 */}
         <AssetHistoryModal
           isOpen={showHistoryModal}
           onClose={() => {
@@ -210,7 +228,6 @@ export default function AssetsPage() {
           onViewChart={handleViewChart}
         />
 
-        {/* 잔액 차트 모달 */}
         <AssetBalanceChart
           isOpen={showChartModal}
           onClose={() => {
@@ -220,7 +237,6 @@ export default function AssetsPage() {
           asset={selectedAsset}
           assets={assets}
         />
-
       </div>
     </main>
   );

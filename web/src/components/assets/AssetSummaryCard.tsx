@@ -3,22 +3,21 @@
 import { useMemo } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
-import { Asset, ASSET_TYPE_CONFIG, AssetType, FAMILY_MEMBERS } from '@/types/asset';
+import { Asset, ASSET_TYPE_CONFIG, AssetType } from '@/types/asset';
+import { ALL_MEMBERS_OPTION } from '@/lib/assets/memberOptions';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-// 숫자를 한글 단위로 변환 (예: 1481758652 → "14억 8175만 8652")
 function formatKoreanUnit(num: number): string {
   if (num === 0) return '0';
 
   const absNum = Math.abs(num);
   const sign = num < 0 ? '-' : '';
-
   const eok = Math.floor(absNum / 100000000);
   const man = Math.floor((absNum % 100000000) / 10000);
   const rest = absNum % 10000;
 
-  const parts = [];
+  const parts: string[] = [];
   if (eok > 0) parts.push(`${eok}억`);
   if (man > 0) parts.push(`${man}만`);
   if (rest > 0) parts.push(`${rest}`);
@@ -31,6 +30,7 @@ interface AssetSummaryCardProps {
   dailyChange: number;
   previousMonthTotal?: number;
   selectedMember: string;
+  memberOptions: string[];
   onMemberChange: (member: string) => void;
 }
 
@@ -39,41 +39,41 @@ export default function AssetSummaryCard({
   dailyChange,
   previousMonthTotal,
   selectedMember,
+  memberOptions,
   onMemberChange,
 }: AssetSummaryCardProps) {
-  // 선택된 멤버로 필터링
   const filteredAssets = useMemo(() => {
-    if (selectedMember === '전체') {
-      return assets.filter((a) => a.isActive);
+    if (selectedMember === ALL_MEMBERS_OPTION) {
+      return assets.filter((asset) => asset.isActive);
     }
-    return assets.filter((a) => a.isActive && a.owner === selectedMember);
+
+    return assets.filter((asset) => asset.isActive && asset.owner === selectedMember);
   }, [assets, selectedMember]);
 
-  // 총 자산 계산
-  const totalBalance = filteredAssets.reduce((sum, a) => sum + a.currentBalance, 0);
+  const totalBalance = filteredAssets.reduce((sum, asset) => sum + asset.currentBalance, 0);
 
-  // 변동률 계산
   const changeRate = useMemo(() => {
     if (previousMonthTotal && previousMonthTotal > 0) {
       return ((totalBalance - previousMonthTotal) / previousMonthTotal) * 100;
     }
+
     if (totalBalance > 0 && dailyChange !== 0) {
-      const prevTotal = totalBalance - dailyChange;
-      if (prevTotal > 0) {
-        return (dailyChange / prevTotal) * 100;
+      const previousTotal = totalBalance - dailyChange;
+      if (previousTotal > 0) {
+        return (dailyChange / previousTotal) * 100;
       }
     }
-    return 0;
-  }, [totalBalance, previousMonthTotal, dailyChange]);
 
-  // 타입별 자산 합계
+    return 0;
+  }, [dailyChange, previousMonthTotal, totalBalance]);
+
   const typeData = useMemo(() => {
     const balances: { type: AssetType; balance: number; percentage: number }[] = [];
 
     (Object.keys(ASSET_TYPE_CONFIG) as AssetType[]).forEach((type) => {
       const balance = filteredAssets
-        .filter((a) => a.type === type)
-        .reduce((sum, a) => sum + a.currentBalance, 0);
+        .filter((asset) => asset.type === type)
+        .reduce((sum, asset) => sum + asset.currentBalance, 0);
 
       if (balance > 0) {
         balances.push({
@@ -87,35 +87,37 @@ export default function AssetSummaryCard({
     return balances.sort((a, b) => b.balance - a.balance);
   }, [filteredAssets, totalBalance]);
 
-  // 차트용 색상
-  const CHART_COLORS: Record<AssetType, string> = {
-    savings: '#3B82F6',   // 파란색 (예적금)
-    stock: '#10B981',     // 초록색 (주식)
-    property: '#8B5CF6',  // 보라색 (부동산)
-    gold: '#F59E0B',      // 금색 (금)
+  const chartColors: Record<AssetType, string> = {
+    savings: '#3B82F6',
+    stock: '#10B981',
+    property: '#8B5CF6',
+    gold: '#F59E0B',
   };
 
-  // 도넛 차트 데이터
   const chartData = useMemo(() => {
     if (typeData.length === 0) {
       return {
         labels: ['자산 없음'],
-        datasets: [{
-          data: [1],
-          backgroundColor: ['#E2E8F0'],
-          borderWidth: 0,
-        }],
+        datasets: [
+          {
+            data: [1],
+            backgroundColor: ['#E2E8F0'],
+            borderWidth: 0,
+          },
+        ],
       };
     }
 
     return {
-      labels: typeData.map((d) => ASSET_TYPE_CONFIG[d.type].label),
-      datasets: [{
-        data: typeData.map((d) => d.balance),
-        backgroundColor: typeData.map((d) => CHART_COLORS[d.type]),
-        borderWidth: 0,
-        cutout: '65%',
-      }],
+      labels: typeData.map((item) => ASSET_TYPE_CONFIG[item.type].label),
+      datasets: [
+        {
+          data: typeData.map((item) => item.balance),
+          backgroundColor: typeData.map((item) => chartColors[item.type]),
+          borderWidth: 0,
+          cutout: '65%',
+        },
+      ],
     };
   }, [typeData]);
 
@@ -128,7 +130,7 @@ export default function AssetSummaryCard({
       },
       tooltip: {
         callbacks: {
-          label: function (context: any) {
+          label(context: any) {
             const value = context.raw as number;
             const percentage = totalBalance > 0 ? ((value / totalBalance) * 100).toFixed(1) : 0;
             return `${value.toLocaleString()}원 (${percentage}%)`;
@@ -139,69 +141,58 @@ export default function AssetSummaryCard({
   };
 
   const isPositive = dailyChange > 0;
-  const isNegative = dailyChange < 0;
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-visible">
-      {/* 총 자산 금액 */}
-      <div className="px-5 pt-5 pb-8">
-        <p className="text-sm text-slate-500 mb-1">현재 총 자산</p>
-        <p className="text-2xl font-bold text-slate-900 tracking-tight">
+    <div className="overflow-visible rounded-2xl border border-slate-100 bg-white shadow-sm">
+      <div className="px-5 pb-8 pt-5">
+        <p className="mb-1 text-sm text-slate-500">현재 총자산</p>
+        <p className="text-2xl font-bold tracking-tight text-slate-900">
           {totalBalance.toLocaleString()}
-          <span className="text-base font-medium text-slate-400 ml-1">원</span>
+          <span className="ml-1 text-base font-medium text-slate-400">원</span>
         </p>
-        <p className="text-sm text-slate-400 mt-0.5">
-          ({formatKoreanUnit(totalBalance)}원)
-        </p>
-        {/* 변동률 */}
+        <p className="mt-0.5 text-sm text-slate-400">({formatKoreanUnit(totalBalance)}원)</p>
         {dailyChange !== 0 && (
-          <p className={`text-sm mt-1 ${isPositive ? 'text-red-500' : 'text-blue-500'}`}>
-            {isPositive ? '+' : ''}{changeRate.toFixed(2)}% ({Math.abs(dailyChange).toLocaleString()}원)
+          <p className={`mt-1 text-sm ${isPositive ? 'text-red-500' : 'text-blue-500'}`}>
+            {isPositive ? '+' : ''}
+            {changeRate.toFixed(2)}% ({Math.abs(dailyChange).toLocaleString()}원)
           </p>
         )}
       </div>
 
-      {/* 가족 구성원 탭 */}
       <div className="flex gap-6 px-5">
-        {FAMILY_MEMBERS.map((member) => (
+        {memberOptions.map((member) => (
           <button
             key={member}
             onClick={() => onMemberChange(member)}
-            className={`pb-2 text-sm font-medium transition-all relative ${
-              selectedMember === member
-                ? 'text-blue-500'
-                : 'text-slate-400 hover:text-slate-600'
+            className={`relative pb-2 text-sm font-medium transition-all ${
+              selectedMember === member ? 'text-blue-500' : 'text-slate-400 hover:text-slate-600'
             }`}
           >
             {member}
             {selectedMember === member && (
-              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full h-0.5 bg-blue-500 rounded-full" />
+              <div className="absolute bottom-0 left-1/2 h-0.5 w-full -translate-x-1/2 rounded-full bg-blue-500" />
             )}
           </button>
         ))}
       </div>
 
-      {/* 구분선 */}
-      <div className="border-t border-slate-100 mx-5" />
+      <div className="mx-5 border-t border-slate-100" />
 
-      {/* 도넛 차트 + 범례 */}
       <div className="p-5">
         <div className="flex items-center">
-          {/* 차트 */}
-          <div className="w-[140px] h-[140px] flex-shrink-0 -m-[10px]">
+          <div className="-m-[10px] h-[140px] w-[140px] flex-shrink-0">
             <Doughnut data={chartData} options={chartOptions} />
           </div>
 
-          {/* 범례 */}
-          <div className="flex-1 ml-6 space-y-2.5">
+          <div className="ml-6 flex-1 space-y-2.5">
             {typeData.map((item) => {
               const config = ASSET_TYPE_CONFIG[item.type];
               return (
                 <div key={item.type} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div
-                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: CHART_COLORS[item.type] }}
+                      className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
+                      style={{ backgroundColor: chartColors[item.type] }}
                     />
                     <span className="text-sm text-slate-600">{config.label}</span>
                   </div>

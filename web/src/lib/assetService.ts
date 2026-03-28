@@ -20,6 +20,7 @@ import { db } from './firebase';
 import { Asset, AssetHistoryEntry, AssetInput, StockHolding, StockHoldingInput } from '@/types/asset';
 import { getStoredHouseholdKey } from './householdService';
 import { formatLocalDate } from './utils/date';
+import { buildLegacyAssetOwnerMap } from './assets/memberOptions';
 
 const ASSETS_COLLECTION = 'assets';
 const HISTORY_COLLECTION = 'asset_history';
@@ -119,6 +120,42 @@ export async function updateAsset(id: string, data: Partial<Asset>): Promise<voi
     ...cleanData,
     updatedAt: Timestamp.now(),
   });
+}
+
+/**
+ * 예전 고정 멤버명으로 저장된 자산 소유자를 현재 가구 멤버명으로 마이그레이션
+ */
+export async function migrateLegacyAssetOwners(memberNames: string[]): Promise<number> {
+  const householdId = getHouseholdId();
+  const ownerMap = buildLegacyAssetOwnerMap(memberNames);
+  const legacyOwners = Object.keys(ownerMap);
+
+  if (legacyOwners.length === 0) {
+    return 0;
+  }
+
+  const q = query(
+    collection(db, ASSETS_COLLECTION),
+    where('householdId', '==', householdId)
+  );
+
+  const snapshot = await getDocs(q);
+  const targets = snapshot.docs.filter((docSnap) => {
+    const owner = docSnap.data().owner;
+    return typeof owner === 'string' && !!ownerMap[owner] && ownerMap[owner] !== owner;
+  });
+
+  await Promise.all(
+    targets.map((docSnap) => {
+      const owner = docSnap.data().owner as string;
+      return updateDoc(doc(db, ASSETS_COLLECTION, docSnap.id), {
+        owner: ownerMap[owner],
+        updatedAt: Timestamp.now(),
+      });
+    })
+  );
+
+  return targets.length;
 }
 
 /**
