@@ -8,6 +8,7 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from './firebase';
 import {
   DEFAULT_HOME_SUMMARY_CONFIG,
@@ -17,6 +18,7 @@ import {
   HouseholdMember,
 } from '@/types/household';
 import { HouseholdStorage } from './storage/householdStorage';
+import { app } from './firebase';
 
 export type { Household };
 
@@ -132,6 +134,20 @@ export async function addHouseholdMember(
   });
 
   return newMember;
+}
+
+export async function renameHouseholdMember(
+  householdKey: string,
+  memberId: string,
+  newName: string
+): Promise<void> {
+  const functions = getFunctions(app, 'asia-northeast3');
+  const renameMemberCallable = httpsCallable(functions, 'renameHouseholdMember');
+  await renameMemberCallable({
+    householdId: householdKey,
+    memberId,
+    newName,
+  });
 }
 
 export async function deleteHousehold(key: string): Promise<void> {

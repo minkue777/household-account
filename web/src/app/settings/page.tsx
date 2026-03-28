@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
@@ -15,33 +15,55 @@ import {
 
 export default function SettingsPage() {
   const { isLoading } = useCategoryContext();
-  const { currentMember, household, switchMember } = useHousehold();
+  const { currentMember, household, switchMember, renameCurrentMember } = useHousehold();
 
-  // iOS 여부
   const [isIOSDevice, setIsIOSDevice] = useState(false);
+  const [isEditingMemberName, setIsEditingMemberName] = useState(false);
+  const [memberNameInput, setMemberNameInput] = useState('');
+  const [isSavingMemberName, setIsSavingMemberName] = useState(false);
 
   useEffect(() => {
     setIsIOSDevice(isIOS());
   }, []);
 
+  useEffect(() => {
+    if (currentMember) {
+      setMemberNameInput(currentMember.name);
+    }
+  }, [currentMember]);
+
+  const handleRenameMember = async () => {
+    const trimmedName = memberNameInput.trim();
+    if (!trimmedName || !currentMember) {
+      return;
+    }
+
+    setIsSavingMemberName(true);
+    try {
+      await renameCurrentMember(trimmedName);
+      setIsEditingMemberName(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '이름 변경에 실패했습니다.';
+      alert(message);
+    } finally {
+      setIsSavingMemberName(false);
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-slate-400">로딩중...</div>
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="text-slate-400">로딩 중...</div>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* 헤더 */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-4">
-          <Link
-            href="/"
-            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-          >
-            <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="sticky top-0 z-10 border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-2xl items-center gap-4 px-4 py-4">
+          <Link href="/" className="rounded-lg p-2 transition-colors hover:bg-slate-100">
+            <svg className="h-5 w-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </Link>
@@ -49,14 +71,13 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
-        {/* 내 정보 섹션 */}
+      <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
         {currentMember && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                  <span className="text-blue-600 font-bold text-lg">{currentMember.name[0]}</span>
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
+                  <span className="text-lg font-bold text-blue-600">{currentMember.name[0]}</span>
                 </div>
                 <div>
                   <p className="font-medium text-slate-800">{currentMember.name}</p>
@@ -65,33 +86,66 @@ export default function SettingsPage() {
               </div>
               <button
                 onClick={switchMember}
-                className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
+                className="text-sm text-slate-400 transition-colors hover:text-slate-600"
               >
                 변경
               </button>
             </div>
+
+            {isEditingMemberName ? (
+              <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
+                <input
+                  type="text"
+                  value={memberNameInput}
+                  onChange={(e) => setMemberNameInput(e.target.value)}
+                  placeholder="사용자 이름"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      void handleRenameMember();
+                    }
+                  }}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setMemberNameInput(currentMember.name);
+                      setIsEditingMemberName(false);
+                    }}
+                    className="flex-1 rounded-xl border border-slate-300 px-4 py-2 text-slate-600 transition-colors hover:bg-slate-50"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={() => void handleRenameMember()}
+                    disabled={!memberNameInput.trim() || isSavingMemberName}
+                    className="flex-1 rounded-xl bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    {isSavingMemberName ? '저장 중...' : '이름 저장'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsEditingMemberName(true)}
+                className="mt-4 text-sm font-medium text-blue-500 transition-colors hover:text-blue-600"
+              >
+                이름 수정
+              </button>
+            )}
           </div>
         )}
 
-        {/* 카테고리 섹션 */}
         <CategorySettings />
-
-        {/* 가맹점 규칙 섹션 */}
         <MerchantRuleSettings />
-
-        {/* 정기 지출 섹션 */}
         <RecurringExpenseSettings />
-
-        {/* 테마 섹션 */}
         <ThemeSettings />
 
-        {/* 알림 설정 섹션 - iOS에서만 표시 */}
         {isIOSDevice && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <NotificationSettings />
           </div>
         )}
-
       </div>
     </div>
   );

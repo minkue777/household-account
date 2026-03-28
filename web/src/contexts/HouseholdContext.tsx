@@ -9,6 +9,7 @@ import {
   setStoredHouseholdKey,
   clearStoredHouseholdKey,
   addHouseholdMember,
+  renameHouseholdMember,
 } from '@/lib/householdService';
 import { HouseholdMember, WindowWithBridge } from '@/types/household';
 import { MemberStorage } from '@/lib/storage/memberStorage';
@@ -25,6 +26,7 @@ interface HouseholdContextType {
   selectMember: (member: HouseholdMember) => void;
   switchMember: () => void;
   addMember: (name: string) => Promise<HouseholdMember>;
+  renameCurrentMember: (name: string) => Promise<void>;
 }
 
 const HouseholdContext = createContext<HouseholdContextType | undefined>(undefined);
@@ -143,6 +145,45 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     return newMember;
   }, [householdKey]);
 
+  const renameCurrentMember = useCallback(async (name: string): Promise<void> => {
+    const trimmedName = name.trim();
+    if (!householdKey || !currentMember || !household) {
+      throw new Error('멤버 정보를 찾을 수 없습니다');
+    }
+
+    if (!trimmedName) {
+      throw new Error('이름을 입력해주세요');
+    }
+
+    if (trimmedName === currentMember.name) {
+      return;
+    }
+
+    await renameHouseholdMember(householdKey, currentMember.id, trimmedName);
+
+    const updatedMembers = household.members.map((member) =>
+      member.id === currentMember.id ? { ...member, name: trimmedName } : member
+    );
+    const updatedMember = { ...currentMember, name: trimmedName };
+    const partner = updatedMembers.find((member) => member.id !== currentMember.id);
+
+    setHousehold({
+      ...household,
+      members: updatedMembers,
+    });
+    setCurrentMember(updatedMember);
+    MemberStorage.set(updatedMember.id, updatedMember.name);
+    if (partner) {
+      MemberStorage.setPartnerName(partner.name);
+    }
+
+    if (typeof window !== 'undefined') {
+      syncMemberToAndroidBridge(updatedMember, partner);
+    }
+
+    refreshFcmToken().catch(() => {});
+  }, [currentMember, household, householdKey]);
+
   return (
     <HouseholdContext.Provider
       value={{
@@ -156,6 +197,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         selectMember,
         switchMember,
         addMember,
+        renameCurrentMember,
       }}
     >
       {children}
