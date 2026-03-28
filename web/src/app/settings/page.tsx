@@ -15,40 +15,13 @@ import {
 
 export default function SettingsPage() {
   const { isLoading } = useCategoryContext();
-  const { currentMember, household, switchMember, renameCurrentMember } = useHousehold();
+  const { currentMember, household, switchMember } = useHousehold();
 
   const [isIOSDevice, setIsIOSDevice] = useState(false);
-  const [isEditingMemberName, setIsEditingMemberName] = useState(false);
-  const [memberNameInput, setMemberNameInput] = useState('');
-  const [isSavingMemberName, setIsSavingMemberName] = useState(false);
 
   useEffect(() => {
     setIsIOSDevice(isIOS());
   }, []);
-
-  useEffect(() => {
-    if (currentMember) {
-      setMemberNameInput(currentMember.name);
-    }
-  }, [currentMember]);
-
-  const handleRenameMember = async () => {
-    const trimmedName = memberNameInput.trim();
-    if (!trimmedName || !currentMember) {
-      return;
-    }
-
-    setIsSavingMemberName(true);
-    try {
-      await renameCurrentMember(trimmedName);
-      setIsEditingMemberName(false);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '이름 변경에 실패했습니다.';
-      alert(message);
-    } finally {
-      setIsSavingMemberName(false);
-    }
-  };
 
   if (isLoading) {
     return (
@@ -91,48 +64,6 @@ export default function SettingsPage() {
                 변경
               </button>
             </div>
-
-            {isEditingMemberName ? (
-              <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
-                <input
-                  type="text"
-                  value={memberNameInput}
-                  onChange={(e) => setMemberNameInput(e.target.value)}
-                  placeholder="사용자 이름"
-                  className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      void handleRenameMember();
-                    }
-                  }}
-                />
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      setMemberNameInput(currentMember.name);
-                      setIsEditingMemberName(false);
-                    }}
-                    className="flex-1 rounded-xl border border-slate-300 px-4 py-2 text-slate-600 transition-colors hover:bg-slate-50"
-                  >
-                    취소
-                  </button>
-                  <button
-                    onClick={() => void handleRenameMember()}
-                    disabled={!memberNameInput.trim() || isSavingMemberName}
-                    className="flex-1 rounded-xl bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
-                  >
-                    {isSavingMemberName ? '저장 중...' : '이름 저장'}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => setIsEditingMemberName(true)}
-                className="mt-4 text-sm font-medium text-blue-500 transition-colors hover:text-blue-600"
-              >
-                이름 수정
-              </button>
-            )}
           </div>
         )}
 
