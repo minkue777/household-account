@@ -9,12 +9,13 @@ import java.time.format.DateTimeFormatter
 
 object NHPayParser {
 
+    private val titlePattern = Regex("""NH농협\s*카드""")
     private val cardPattern = Regex("""NH카드([0-9*xX]{4})승인""")
-    private val amountPattern = Regex("""([\d,]+)원\s*일시불""")
+    private val amountPattern = Regex("""([\d,]+)원""")
     private val dateTimePattern = Regex("""(\d{2}/\d{2})\s+(\d{2}:\d{2})""")
 
     fun matches(notificationText: String): Boolean {
-        return notificationText.contains("NH농협카드") &&
+        return titlePattern.containsMatchIn(notificationText) &&
             cardPattern.containsMatchIn(notificationText) &&
             amountPattern.containsMatchIn(notificationText) &&
             dateTimePattern.containsMatchIn(notificationText)
@@ -68,9 +69,9 @@ object NHPayParser {
         for (index in lines.indices) {
             if (lines[index].contains(dateValue) && index + 1 < lines.size) {
                 val candidate = lines[index + 1]
-                if (!candidate.startsWith("누적") &&
+                if (!candidate.startsWith("잔액") &&
                     !candidate.startsWith("총누적") &&
-                    !candidate.startsWith("총 누적") &&
+                    !candidate.startsWith("총 사용") &&
                     !candidate.matches(Regex("""^\d.*"""))
                 ) {
                     return candidate

@@ -10,12 +10,13 @@ import java.time.format.DateTimeFormatter
 
 object DigitalOnnuriParser {
 
-    private val paymentPattern =
-        Regex("""\[디지털온누리상품권\]\s*(.+?)에서\s*([\d,]+)원이\s*결제되었어요""")
+    private val paymentPattern = Regex(
+        """\[디지털온누리상품권]\s*(?:[^,\n]+님,\s*)?(.+?)에서\s*([\d,]+)원이\s*결제"""
+    )
 
     fun matches(notificationText: String): Boolean {
         val normalized = normalize(notificationText)
-        return normalized.contains("디지털온누리상품권") &&
+        return normalized.contains("디지털온누리") &&
             paymentPattern.containsMatchIn(normalized)
     }
 
