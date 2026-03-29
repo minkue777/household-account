@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import {
   Check,
   Copy,
+  Download,
   ExternalLink,
   KeyRound,
   Link2,
@@ -19,6 +20,8 @@ const IOS_SHORTCUT_API_URL =
   'https://asia-northeast3-household-account-6f300.cloudfunctions.net/addExpenseFromMessage';
 const IOS_SHORTCUT_API_TOKEN = 'household-account-ios-shortcut-2024';
 const IOS_SETUP_SHORTCUT_NAME = '가계부 자동등록 설정';
+const IOS_SETUP_SHORTCUT_SHARE_URL =
+  'https://www.icloud.com/shortcuts/a2791b93177b4c5e9b36f2b869eb3cb9';
 
 async function copyToClipboard(text: string) {
   if (navigator.clipboard?.writeText) {
@@ -134,6 +137,14 @@ export default function IosShortcutSetupCard() {
     window.location.href = 'shortcuts://create-shortcut';
   };
 
+  const openShortcutInstall = () => {
+    if (!IOS_SETUP_SHORTCUT_SHARE_URL) {
+      alert('공유 단축어 링크가 아직 연결되지 않았습니다. 실제 설치 링크를 한 번 등록해야 이 버튼이 동작합니다.');
+      return;
+    }
+    window.location.href = IOS_SETUP_SHORTCUT_SHARE_URL;
+  };
+
   const runSetupShortcut = () => {
     if (!setupShortcutUrl) return;
     window.location.href = setupShortcutUrl;
@@ -155,7 +166,7 @@ export default function IosShortcutSetupCard() {
             <div>
               <h2 className="text-base font-semibold text-slate-800">iPhone 문자 자동등록</h2>
               <p className="mt-1 text-sm leading-6 text-slate-500">
-                설정 단축어를 한 번 실행하면 연동 값이 자동으로 채워지고, 이후에는 자동화만 연결하면 됩니다.
+                단축어 설치 링크를 열고, 설치 후에는 설정 단축어를 실행해서 연동 값을 자동으로 채우는 흐름입니다.
               </p>
             </div>
           </div>
@@ -204,10 +215,47 @@ export default function IosShortcutSetupCard() {
         <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
           <div className="flex items-start gap-3">
             <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm">
+              <Download className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-semibold text-slate-800">1. 설정 단축어 설치</h3>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                Apple 공식 방식으로는 공유된 iCloud 단축어 링크를 열면 설치 화면이 뜹니다. 이 버튼은 그 설치 링크를 여는 자리입니다.
+              </p>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={openShortcutInstall}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  설정 단축어 설치
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCopy('shortcut-name', IOS_SETUP_SHORTCUT_NAME)}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                >
+                  {copiedKey === 'shortcut-name' ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                  {copiedKey === 'shortcut-name' ? '이름 복사됨' : '단축어 이름 복사'}
+                </button>
+              </div>
+              {!IOS_SETUP_SHORTCUT_SHARE_URL && (
+                <p className="mt-3 text-xs leading-5 text-slate-500">
+                  아직 실제 iCloud 공유 링크가 연결되지 않았습니다. 이 버튼이 완전히 동작하려면 공유 단축어 링크를 한 번 넣어야 합니다.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm">
               <WandSparkles className="h-4 w-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-slate-800">딥링크로 설정 단축어 실행</h3>
+              <h3 className="font-semibold text-slate-800">2. 설치 후 설정 단축어 실행</h3>
               <p className="mt-1 text-sm leading-6 text-slate-600">
                 아래 버튼은 <span className="font-medium text-slate-800">{IOS_SETUP_SHORTCUT_NAME}</span> 단축어를 열고,
                 URL·토큰·가계 키·사용자 이름을 한 번에 입력값으로 넘깁니다.
@@ -260,16 +308,16 @@ export default function IosShortcutSetupCard() {
           </div>
           <div className="space-y-3 text-sm leading-6 text-slate-600">
             <div>
-              <div className="font-medium text-slate-800">1. 설정 단축어 실행</div>
-              <div>위 버튼으로 연동 값을 자동 입력한 뒤 단축어 안에 저장합니다.</div>
+              <div className="font-medium text-slate-800">1. 설정 단축어 설치</div>
+              <div>앱 안의 설치 버튼으로 공유 단축어 링크를 열고 단축어를 컬렉션에 추가합니다.</div>
             </div>
             <div>
-              <div className="font-medium text-slate-800">2. 메시지 자동화 만들기</div>
+              <div className="font-medium text-slate-800">2. 설정 단축어 실행</div>
+              <div>앱 안의 실행 버튼으로 연동 값을 한 번에 채웁니다.</div>
+            </div>
+            <div>
+              <div className="font-medium text-slate-800">3. 메시지 자동화 만들기</div>
               <div>단축어 앱 자동화 탭에서 메시지 트리거를 만들고 카드 문자 발신 번호나 공통 문구를 고릅니다.</div>
-            </div>
-            <div>
-              <div className="font-medium text-slate-800">3. 기존 카드 등록 단축어 실행</div>
-              <div>자동화 안에서 액션을 새로 짜지 말고, 이미 준비된 카드 등록 단축어를 실행하도록 연결합니다.</div>
             </div>
             <div>
               <div className="font-medium text-slate-800">4. 실행 전에 묻기 끄기</div>
