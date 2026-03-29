@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Check,
   Copy,
@@ -9,6 +10,7 @@ import {
   Link2,
   MessageSquareText,
   Smartphone,
+  WandSparkles,
 } from 'lucide-react';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { isIOS } from '@/lib/pushNotificationService';
@@ -16,6 +18,7 @@ import { isIOS } from '@/lib/pushNotificationService';
 const IOS_SHORTCUT_API_URL =
   'https://asia-northeast3-household-account-6f300.cloudfunctions.net/addExpenseFromMessage';
 const IOS_SHORTCUT_API_TOKEN = 'household-account-ios-shortcut-2024';
+const IOS_SETUP_SHORTCUT_NAME = '가계부 자동등록 설정';
 
 async function copyToClipboard(text: string) {
   if (navigator.clipboard?.writeText) {
@@ -67,6 +70,7 @@ function CopyRow({
 
 export default function IosShortcutSetupCard() {
   const { household, householdKey, currentMember } = useHousehold();
+  const searchParams = useSearchParams();
   const [isIOSDevice, setIsIOSDevice] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -84,19 +88,43 @@ export default function IosShortcutSetupCard() {
     return () => window.clearTimeout(timer);
   }, [copiedKey]);
 
+  const setupStatus = searchParams.get('iosShortcutSetup');
+
+  const setupPayload = useMemo(() => {
+    if (!householdKey || !currentMember) return '';
+
+    return JSON.stringify(
+      {
+        apiUrl: IOS_SHORTCUT_API_URL,
+        token: IOS_SHORTCUT_API_TOKEN,
+        householdId: householdKey,
+        householdName: household?.name || '',
+        memberName: currentMember.name,
+      },
+      null,
+      2
+    );
+  }, [currentMember, household?.name, householdKey]);
+
+  const setupShortcutUrl = useMemo(() => {
+    if (!setupPayload || typeof window === 'undefined') return '';
+
+    const callbackBase = `${window.location.origin}/settings`;
+    const params = new URLSearchParams({
+      name: IOS_SETUP_SHORTCUT_NAME,
+      input: 'text',
+      text: setupPayload,
+      'x-success': `${callbackBase}?iosShortcutSetup=done`,
+      'x-cancel': `${callbackBase}?iosShortcutSetup=cancel`,
+      'x-error': `${callbackBase}?iosShortcutSetup=error`,
+    });
+
+    return `shortcuts://x-callback-url/run-shortcut?${params.toString()}`;
+  }, [setupPayload]);
+
   if (!householdKey || !currentMember) {
     return null;
   }
-
-  const payloadExample = JSON.stringify(
-    {
-      message: '{{카드 문자 원문}}',
-      token: IOS_SHORTCUT_API_TOKEN,
-      householdId: householdKey,
-    },
-    null,
-    2
-  );
 
   const openShortcutsApp = () => {
     window.location.href = 'shortcuts://';
@@ -104,6 +132,11 @@ export default function IosShortcutSetupCard() {
 
   const openShortcutEditor = () => {
     window.location.href = 'shortcuts://create-shortcut';
+  };
+
+  const runSetupShortcut = () => {
+    if (!setupShortcutUrl) return;
+    window.location.href = setupShortcutUrl;
   };
 
   const handleCopy = async (key: string, value: string) => {
@@ -122,7 +155,7 @@ export default function IosShortcutSetupCard() {
             <div>
               <h2 className="text-base font-semibold text-slate-800">iPhone 문자 자동등록</h2>
               <p className="mt-1 text-sm leading-6 text-slate-500">
-                단축어와 개인 자동화를 한 번만 설정하면 카드 문자를 자동으로 가계부에 넣을 수 있습니다.
+                설정 단축어를 한 번 실행하면 연동 값이 자동으로 채워지고, 이후에는 자동화만 연결하면 됩니다.
               </p>
             </div>
           </div>
@@ -142,7 +175,7 @@ export default function IosShortcutSetupCard() {
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
             <div className="text-xs font-medium uppercase tracking-wide text-slate-400">현재 사용자</div>
             <div className="mt-2 font-semibold text-slate-800">{currentMember.name}</div>
-            <div className="mt-1 text-sm text-slate-500">단축어를 설치하는 iPhone 사용자 이름을 확인해 주세요.</div>
+            <div className="mt-1 text-sm text-slate-500">설정 단축어로 함께 넘길 사용자 이름입니다.</div>
           </div>
         </div>
 
@@ -152,11 +185,60 @@ export default function IosShortcutSetupCard() {
           </div>
         )}
 
+        {setupStatus === 'done' && (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-900">
+            설정 단축어 실행이 끝났습니다. 이제 iPhone 단축어 앱에서 개인 자동화만 연결해 주시면 됩니다.
+          </div>
+        )}
+        {setupStatus === 'cancel' && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+            설정 단축어 실행이 취소되었습니다. 다시 눌러 연동 값을 채워 주세요.
+          </div>
+        )}
+        {setupStatus === 'error' && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-900">
+            설정 단축어 실행 중 오류가 있었습니다. 단축어 이름과 설치 여부를 먼저 확인해 주세요.
+          </div>
+        )}
+
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm">
+              <WandSparkles className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-semibold text-slate-800">딥링크로 설정 단축어 실행</h3>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                아래 버튼은 <span className="font-medium text-slate-800">{IOS_SETUP_SHORTCUT_NAME}</span> 단축어를 열고,
+                URL·토큰·가계 키·사용자 이름을 한 번에 입력값으로 넘깁니다.
+              </p>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={runSetupShortcut}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  설정 단축어 실행
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCopy('shortcut-url', setupShortcutUrl)}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                >
+                  {copiedKey === 'shortcut-url' ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                  {copiedKey === 'shortcut-url' ? '딥링크 복사됨' : '딥링크 복사'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="grid gap-3 md:grid-cols-2">
           <button
             type="button"
             onClick={openShortcutsApp}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
           >
             <ExternalLink className="h-4 w-4" />
             단축어 앱 열기
@@ -174,37 +256,36 @@ export default function IosShortcutSetupCard() {
         <div className="rounded-2xl border border-slate-200 p-4">
           <div className="mb-3 flex items-center gap-2">
             <MessageSquareText className="h-4 w-4 text-blue-500" />
-            <h3 className="font-semibold text-slate-800">설치 순서</h3>
+            <h3 className="font-semibold text-slate-800">가장 짧은 설정 순서</h3>
           </div>
           <div className="space-y-3 text-sm leading-6 text-slate-600">
             <div>
-              <div className="font-medium text-slate-800">1. 단축어 준비</div>
-              <div>단축어 앱에서 기존 단축어를 열거나 새 단축어를 만든 뒤, 카드 문자 원문을 서버로 보내는 흐름을 넣어 주세요.</div>
+              <div className="font-medium text-slate-800">1. 설정 단축어 실행</div>
+              <div>위 버튼으로 연동 값을 자동 입력한 뒤 단축어 안에 저장합니다.</div>
             </div>
             <div>
-              <div className="font-medium text-slate-800">2. 개인 자동화 만들기</div>
-              <div>
-                단축어 앱의 <span className="font-medium text-slate-800">자동화</span> 탭에서
-                <span className="font-medium text-slate-800"> 메시지</span> 트리거를 만들고, 카드 문자 발신 번호나 공통 문구로 조건을 걸어 주세요.
-              </div>
+              <div className="font-medium text-slate-800">2. 메시지 자동화 만들기</div>
+              <div>단축어 앱 자동화 탭에서 메시지 트리거를 만들고 카드 문자 발신 번호나 공통 문구를 고릅니다.</div>
             </div>
             <div>
-              <div className="font-medium text-slate-800">3. 기존 단축어 실행으로 연결</div>
-              <div>자동화 안에서 액션을 새로 짜지 말고, 이미 만든 카드 등록 단축어를 실행하도록 연결해 주세요.</div>
+              <div className="font-medium text-slate-800">3. 기존 카드 등록 단축어 실행</div>
+              <div>자동화 안에서 액션을 새로 짜지 말고, 이미 준비된 카드 등록 단축어를 실행하도록 연결합니다.</div>
             </div>
             <div>
               <div className="font-medium text-slate-800">4. 실행 전에 묻기 끄기</div>
-              <div>자동화 저장 직전에 실행 전에 묻기를 꺼야 실제로 자동 등록됩니다.</div>
+              <div>이 옵션을 꺼야 실제로 자동 등록됩니다.</div>
             </div>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <KeyRound className="h-4 w-4 text-blue-500" />
-            <h3 className="font-semibold text-slate-800">연동 값 복사</h3>
-          </div>
-          <div className="space-y-3">
+        <details className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <summary className="cursor-pointer list-none text-sm font-semibold text-slate-800">
+            고급 설정 값 직접 보기
+          </summary>
+          <p className="mt-3 text-sm leading-6 text-slate-500">
+            설정 단축어가 없거나 수동으로 확인해야 할 때만 아래 값을 사용해 주세요.
+          </p>
+          <div className="mt-3 space-y-3">
             <CopyRow
               label="요청 URL"
               value={IOS_SHORTCUT_API_URL}
@@ -224,33 +305,26 @@ export default function IosShortcutSetupCard() {
               onCopy={() => void handleCopy('household', householdKey)}
             />
           </div>
-        </div>
+        </details>
 
         <details className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <summary className="cursor-pointer list-none text-sm font-semibold text-slate-800">
-            단축어 요청 예시 보기
+            설정 단축어에 넘기는 JSON 보기
           </summary>
-          <p className="mt-3 text-sm leading-6 text-slate-500">
-            현재 단축어에 값을 수동으로 넣어야 할 때는 아래 JSON 형태를 기준으로 맞추면 됩니다.
-          </p>
           <div className="mt-3 rounded-2xl bg-slate-900 p-4">
             <pre className="overflow-x-auto whitespace-pre-wrap text-xs leading-6 text-slate-100">
-              {payloadExample}
+              {setupPayload}
             </pre>
           </div>
           <button
             type="button"
-            onClick={() => void handleCopy('payload', payloadExample)}
+            onClick={() => void handleCopy('payload', setupPayload)}
             className="mt-3 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
           >
             {copiedKey === 'payload' ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-            {copiedKey === 'payload' ? '예시 복사됨' : 'JSON 예시 복사'}
+            {copiedKey === 'payload' ? 'JSON 복사됨' : 'JSON 복사'}
           </button>
         </details>
-
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-900">
-          설정이 끝나면 카드 문자 한 건으로 먼저 테스트해 보시고, 가계부에 즉시 들어오는지 확인해 주세요.
-        </div>
       </div>
     </section>
   );
