@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
 import {
   Check,
   Copy,
@@ -73,7 +72,6 @@ function CopyRow({
 
 export default function IosShortcutSetupCard() {
   const { household, householdKey, currentMember } = useHousehold();
-  const searchParams = useSearchParams();
   const [isIOSDevice, setIsIOSDevice] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -90,8 +88,6 @@ export default function IosShortcutSetupCard() {
 
     return () => window.clearTimeout(timer);
   }, [copiedKey]);
-
-  const setupStatus = searchParams.get('iosShortcutSetup');
 
   const setupPayload = useMemo(() => {
     if (!householdKey || !currentMember) return '';
@@ -110,16 +106,11 @@ export default function IosShortcutSetupCard() {
   }, [currentMember, household?.name, householdKey]);
 
   const setupShortcutUrl = useMemo(() => {
-    if (!setupPayload || typeof window === 'undefined') return '';
-
-    const callbackBase = `${window.location.origin}/settings`;
+    if (!setupPayload) return '';
     const query = [
       ['name', IOS_SETUP_SHORTCUT_NAME],
       ['input', 'text'],
       ['text', setupPayload],
-      ['x-success', `${callbackBase}?iosShortcutSetup=done`],
-      ['x-cancel', `${callbackBase}?iosShortcutSetup=cancel`],
-      ['x-error', `${callbackBase}?iosShortcutSetup=error`],
     ]
       .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
       .join('&');
@@ -195,22 +186,6 @@ export default function IosShortcutSetupCard() {
         {!isIOSDevice && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
             지금 보고 계신 기기에서는 미리보기만 가능합니다. 실제 설정은 iPhone의 Safari 또는 단축어 앱에서 진행해 주세요.
-          </div>
-        )}
-
-        {setupStatus === 'done' && (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-900">
-            설정 단축어 실행이 끝났습니다. 이제 iPhone 단축어 앱에서 개인 자동화만 연결해 주시면 됩니다.
-          </div>
-        )}
-        {setupStatus === 'cancel' && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
-            설정 단축어 실행이 취소되었습니다. 다시 눌러 연동 값을 채워 주세요.
-          </div>
-        )}
-        {setupStatus === 'error' && (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-900">
-            설정 단축어 실행 중 오류가 있었습니다. 단축어 이름과 설치 여부를 먼저 확인해 주세요.
           </div>
         )}
 
