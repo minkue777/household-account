@@ -9,15 +9,17 @@ import java.time.format.DateTimeFormatter
 
 object NHPayParser {
 
-    private val titlePattern = Regex("""NH농협\s*카드""")
-    private val cardPattern = Regex("""NH카드([0-9*xX]{4})승인(취소)?""")
+    private val nhCardKeyword = Regex("""NH카드""")
+    private val approvalPattern = Regex("""승인(취소)?""")
+    private val cardSectionPattern = Regex("""NH카드\s*([^\n]*?)\s*승인""")
+    private val cardTokenPattern = Regex("""[0-9xX*＊]{4}""")
     private val amountPattern = Regex("""([\d,]+)원""")
-    private val dateTimePattern = Regex("""(\d{2}/\d{2})\s+(\d{2}:\d{2})""")
+    private val dateTimePattern = Regex("""(\d{1,2}/\d{1,2})\s+(\d{2}:\d{2})""")
 
     fun matches(notificationText: String): Boolean {
-        return titlePattern.containsMatchIn(notificationText) &&
-            cardPattern.containsMatchIn(notificationText) &&
-            amountPattern.containsMatchIn(notificationText) &&
+        return nhCardKeyword.containsMatchIn(notificationText) &&
+            approvalPattern.containsMatchIn(notificationText) &&
+            extractPaymentAmount(notificationText) != null &&
             dateTimePattern.containsMatchIn(notificationText)
     }
 
@@ -26,18 +28,21 @@ object NHPayParser {
         mainCardToken: String? = null
     ): ParseResult {
         return try {
-            val cardMatch = cardPattern.find(notificationText)
-                ?: return ParseResult(false, errorMessage = "NH card approval format not found")
-            val cardToken = cardMatch.groupValues[1]
-            val eventType = if (cardMatch.groupValues[2] == "취소") {
+            if (!nhCardKeyword.containsMatchIn(notificationText) ||
+                !approvalPattern.containsMatchIn(notificationText)
+            ) {
+                return ParseResult(false, errorMessage = "NH card approval format not found")
+            }
+
+            val cardToken = extractCardToken(notificationText)
+            val eventType = if (notificationText.contains("승인취소")) {
                 ExpenseEventType.CANCELLATION
             } else {
                 ExpenseEventType.APPROVAL
             }
 
-            val amountMatch = amountPattern.find(notificationText)
+            val amount = extractPaymentAmount(notificationText)
                 ?: return ParseResult(false, errorMessage = "Amount not found")
-            val amountValue = amountMatch.groupValues[1]
 
             val dateMatch = dateTimePattern.find(notificationText)
                 ?: return ParseResult(false, errorMessage = "Date/time not found")
@@ -45,8 +50,6 @@ object NHPayParser {
             val timeValue = dateMatch.groupValues[2]
 
             val merchant = extractMerchant(notificationText, dateValue)
-            val amount = amountValue.replace(",", "").toIntOrNull()
-                ?: return ParseResult(false, errorMessage = "Invalid amount: $amountValue")
 
             ParseResult(
                 success = true,
@@ -66,6 +69,41 @@ object NHPayParser {
         }
     }
 
+    private fun extractCardToken(notificationText: String): String? {
+        val rawSection = cardSectionPattern.find(notificationText)?.groupValues?.get(1).orEmpty()
+        if (rawSection.isBlank()) {
+            return null
+        }
+
+        val normalizedSection = rawSection.replace(Regex("""\s+"""), "")
+        val token = cardTokenPattern.find(normalizedSection)?.value ?: return null
+
+        return token
+            .replace('＊', '*')
+            .replace('X', 'x')
+    }
+
+    private fun extractPaymentAmount(notificationText: String): Int? {
+        val lines = notificationText
+            .split("\n")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+        for (line in lines) {
+            if (line.startsWith("잔액") ||
+                line.startsWith("총누적") ||
+                line.startsWith("총 사용")
+            ) {
+                continue
+            }
+
+            val match = amountPattern.find(line) ?: continue
+            return match.groupValues[1].replace(",", "").toIntOrNull()
+        }
+
+        return null
+    }
+
     private fun extractMerchant(notificationText: String, dateValue: String): String {
         val lines = notificationText
             .split("\n")
@@ -78,7 +116,7 @@ object NHPayParser {
                 if (!candidate.startsWith("잔액") &&
                     !candidate.startsWith("총누적") &&
                     !candidate.startsWith("총 사용") &&
-                    !candidate.matches(Regex("""^\d.*"""))
+                    !amountPattern.containsMatchIn(candidate)
                 ) {
                     return candidate
                 }
@@ -88,8 +126,8 @@ object NHPayParser {
         return "알수없음"
     }
 
-    private fun resolveCardType(cardToken: String, mainCardToken: String?): CardType {
-        if (mainCardToken.isNullOrBlank()) {
+    private fun resolveCardType(cardToken: String?, mainCardToken: String?): CardType {
+        if (cardToken.isNullOrBlank() || mainCardToken.isNullOrBlank()) {
             return CardType.MAIN
         }
 
