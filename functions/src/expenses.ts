@@ -11,6 +11,40 @@ interface ParsedExpense {
   cardLastFour?: string;
 }
 
+function normalizeShortcutValue(value: unknown): string {
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(normalizeShortcutValue).filter(Boolean).join('\n').trim();
+  }
+
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const preferredKeys = ['string', 'text', 'value', 'plainText', 'PlainText'];
+
+    for (const key of preferredKeys) {
+      const candidate = record[key];
+      if (typeof candidate === 'string' && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+
+    try {
+      return JSON.stringify(value);
+    } catch (_error) {
+      return '';
+    }
+  }
+
+  return '';
+}
+
 /**
  * 카드사 메시지 파싱
  * 삼성카드 포맷:
@@ -21,13 +55,15 @@ interface ParsedExpense {
  */
 function parseCardMessage(message: string): ParsedExpense | null {
   try {
-    const amountMatch = message.match(/([0-9,]+)원\s*(일시불|할부)/);
+    const normalizedMessage = message.replace(/\r/g, '').trim();
+
+    const amountMatch = normalizedMessage.match(/([0-9,]+)원(?:\s*(일시불|할부|체크))?/);
     if (!amountMatch) {
       return null;
     }
     const amount = parseInt(amountMatch[1].replace(/,/g, ''), 10);
 
-    const dateTimeMatch = message.match(/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})\s+(.+?)(?:\s*누적|\n|$)/);
+    const dateTimeMatch = normalizedMessage.match(/(\d{1,2})\/(\d{1,2})\s+(\d{2}):(\d{2})\s+(.+?)(?:\s*누적|\n|$)/);
     if (!dateTimeMatch) {
       return null;
     }
@@ -45,10 +81,10 @@ function parseCardMessage(message: string): ParsedExpense | null {
       year -= 1;
     }
 
-    const date = `${year}-${month}-${day}`;
+    const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
     const time = `${hour}:${minute}`;
 
-    const cardMatch = message.match(/(삼성|신한|국민|현대|롯데|하나|우리|BC|NH)([\d]*)승인/);
+    const cardMatch = normalizedMessage.match(/(삼성|신한|국민|현대|롯데|하나|우리|BC|NH)([\d]*)승인/);
     const cardName = cardMatch ? cardMatch[1] + (cardMatch[2] || '') : '삼성카드';
     const cardLastFour = cardMatch && cardMatch[2] ? cardMatch[2] : undefined;
 
@@ -56,6 +92,15 @@ function parseCardMessage(message: string): ParsedExpense | null {
   } catch (error) {
     return null;
   }
+}
+
+async function getDefaultCategoryKey(householdId: string): Promise<string> {
+  const householdSnapshot = await db.collection('households').doc(householdId).get();
+  const defaultCategoryKey = householdSnapshot.data()?.defaultCategoryKey;
+
+  return typeof defaultCategoryKey === 'string' && defaultCategoryKey.trim()
+    ? defaultCategoryKey.trim()
+    : 'etc';
 }
 
 /**
@@ -80,9 +125,16 @@ export const addExpenseFromMessage = functions
     }
 
     try {
-      const { message, token, householdId } = req.body;
+      const rawMessage = req.body?.message;
+      const rawToken = req.body?.token;
+      const rawHouseholdId = req.body?.householdId;
 
-      if (token !== API_TOKEN) {
+      const message = normalizeShortcutValue(rawMessage);
+      const token = normalizeShortcutValue(rawToken);
+      const householdId = normalizeShortcutValue(rawHouseholdId);
+      const tokenMatched = token === API_TOKEN;
+
+      if (!tokenMatched) {
         res.status(401).json({ success: false, error: '인증 실패' });
         return;
       }
@@ -99,7 +151,11 @@ export const addExpenseFromMessage = functions
 
       const parsed = parseCardMessage(message);
       if (!parsed) {
-        res.status(400).json({ success: false, error: '메시지 파싱 실패', rawMessage: message });
+        res.status(400).json({
+          success: false,
+          error: '메시지 파싱 실패',
+          rawMessage: message,
+        });
         return;
       }
 
@@ -117,12 +173,14 @@ export const addExpenseFromMessage = functions
         return;
       }
 
+      const defaultCategoryKey = await getDefaultCategoryKey(householdId);
+
       const expenseData: Record<string, unknown> = {
         amount: parsed.amount,
         merchant: parsed.merchant,
         date: parsed.date,
         time: parsed.time,
-        category: 'etc',
+        category: defaultCategoryKey,
         memo: '',
         householdId: householdId,
         source: 'ios-shortcut',

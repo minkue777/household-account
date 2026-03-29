@@ -8,7 +8,6 @@ import NotificationSettings from '@/components/NotificationSettings';
 import { isIOS } from '@/lib/pushNotificationService';
 import {
   CategorySettings,
-  IosShortcutSetupCard,
   MerchantRuleSettings,
   RecurringExpenseSettings,
   ThemeSettings,
@@ -72,7 +71,6 @@ export default function SettingsPage() {
         <MerchantRuleSettings />
         <RecurringExpenseSettings />
         <ThemeSettings />
-        <IosShortcutSetupCard />
 
         {isIOSDevice && (
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

@@ -37,6 +37,34 @@ exports.addExpenseFromMessage = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const config_1 = require("./config");
+function normalizeShortcutValue(value) {
+    if (typeof value === 'string') {
+        return value.trim();
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+        return String(value);
+    }
+    if (Array.isArray(value)) {
+        return value.map(normalizeShortcutValue).filter(Boolean).join('\n').trim();
+    }
+    if (value && typeof value === 'object') {
+        const record = value;
+        const preferredKeys = ['string', 'text', 'value', 'plainText', 'PlainText'];
+        for (const key of preferredKeys) {
+            const candidate = record[key];
+            if (typeof candidate === 'string' && candidate.trim()) {
+                return candidate.trim();
+            }
+        }
+        try {
+            return JSON.stringify(value);
+        }
+        catch (_error) {
+            return '';
+        }
+    }
+    return '';
+}
 /**
  * 카드사 메시지 파싱
  * 삼성카드 포맷:
@@ -47,12 +75,13 @@ const config_1 = require("./config");
  */
 function parseCardMessage(message) {
     try {
-        const amountMatch = message.match(/([0-9,]+)원\s*(일시불|할부)/);
+        const normalizedMessage = message.replace(/\r/g, '').trim();
+        const amountMatch = normalizedMessage.match(/([0-9,]+)원(?:\s*(일시불|할부|체크))?/);
         if (!amountMatch) {
             return null;
         }
         const amount = parseInt(amountMatch[1].replace(/,/g, ''), 10);
-        const dateTimeMatch = message.match(/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})\s+(.+?)(?:\s*누적|\n|$)/);
+        const dateTimeMatch = normalizedMessage.match(/(\d{1,2})\/(\d{1,2})\s+(\d{2}):(\d{2})\s+(.+?)(?:\s*누적|\n|$)/);
         if (!dateTimeMatch) {
             return null;
         }
@@ -67,9 +96,9 @@ function parseCardMessage(message) {
         if (parseInt(month) > currentMonth + 1) {
             year -= 1;
         }
-        const date = `${year}-${month}-${day}`;
+        const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
         const time = `${hour}:${minute}`;
-        const cardMatch = message.match(/(삼성|신한|국민|현대|롯데|하나|우리|BC|NH)([\d]*)승인/);
+        const cardMatch = normalizedMessage.match(/(삼성|신한|국민|현대|롯데|하나|우리|BC|NH)([\d]*)승인/);
         const cardName = cardMatch ? cardMatch[1] + (cardMatch[2] || '') : '삼성카드';
         const cardLastFour = cardMatch && cardMatch[2] ? cardMatch[2] : undefined;
         return { amount, merchant, date, time, cardName, cardLastFour };
@@ -78,6 +107,14 @@ function parseCardMessage(message) {
         return null;
     }
 }
+async function getDefaultCategoryKey(householdId) {
+    var _a;
+    const householdSnapshot = await config_1.db.collection('households').doc(householdId).get();
+    const defaultCategoryKey = (_a = householdSnapshot.data()) === null || _a === void 0 ? void 0 : _a.defaultCategoryKey;
+    return typeof defaultCategoryKey === 'string' && defaultCategoryKey.trim()
+        ? defaultCategoryKey.trim()
+        : 'etc';
+}
 /**
  * iOS 단축어에서 호출하는 API
  * SMS/카카오톡 메시지를 받아서 파싱 후 Firestore에 저장
@@ -85,6 +122,7 @@ function parseCardMessage(message) {
 exports.addExpenseFromMessage = functions
     .region(config_1.REGION)
     .https.onRequest(async (req, res) => {
+    var _a, _b, _c;
     res.set('Access-Control-Allow-Origin', '*');
     res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -97,8 +135,14 @@ exports.addExpenseFromMessage = functions
         return;
     }
     try {
-        const { message, token, householdId } = req.body;
-        if (token !== config_1.API_TOKEN) {
+        const rawMessage = (_a = req.body) === null || _a === void 0 ? void 0 : _a.message;
+        const rawToken = (_b = req.body) === null || _b === void 0 ? void 0 : _b.token;
+        const rawHouseholdId = (_c = req.body) === null || _c === void 0 ? void 0 : _c.householdId;
+        const message = normalizeShortcutValue(rawMessage);
+        const token = normalizeShortcutValue(rawToken);
+        const householdId = normalizeShortcutValue(rawHouseholdId);
+        const tokenMatched = token === config_1.API_TOKEN;
+        if (!tokenMatched) {
             res.status(401).json({ success: false, error: '인증 실패' });
             return;
         }
@@ -112,7 +156,11 @@ exports.addExpenseFromMessage = functions
         }
         const parsed = parseCardMessage(message);
         if (!parsed) {
-            res.status(400).json({ success: false, error: '메시지 파싱 실패', rawMessage: message });
+            res.status(400).json({
+                success: false,
+                error: '메시지 파싱 실패',
+                rawMessage: message,
+            });
             return;
         }
         // 중복 체크
@@ -127,12 +175,13 @@ exports.addExpenseFromMessage = functions
             res.status(200).json({ success: true, message: '이미 등록된 지출입니다', duplicate: true });
             return;
         }
+        const defaultCategoryKey = await getDefaultCategoryKey(householdId);
         const expenseData = {
             amount: parsed.amount,
             merchant: parsed.merchant,
             date: parsed.date,
             time: parsed.time,
-            category: 'etc',
+            category: defaultCategoryKey,
             memo: '',
             householdId: householdId,
             source: 'ios-shortcut',
