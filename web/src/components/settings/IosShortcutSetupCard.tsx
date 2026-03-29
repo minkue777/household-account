@@ -21,6 +21,9 @@ const IOS_SHORTCUT_API_TOKEN = 'household-account-ios-shortcut-2024';
 const IOS_SETUP_SHORTCUT_NAME = '가계부 자동등록 설정';
 const IOS_SETUP_SHORTCUT_SHARE_URL =
   'https://www.icloud.com/shortcuts/a2791b93177b4c5e9b36f2b869eb3cb9';
+const IOS_REGISTER_SHORTCUT_NAME = '가계부 문자등록';
+const IOS_REGISTER_SHORTCUT_SHARE_URL =
+  'https://www.icloud.com/shortcuts/1cc6273c8f174bfd913f1fc39f1b6caa';
 
 async function copyToClipboard(text: string) {
   if (navigator.clipboard?.writeText) {
@@ -126,8 +129,12 @@ export default function IosShortcutSetupCard() {
     window.location.href = 'shortcuts://';
   };
 
-  const openShortcutEditor = () => {
-    window.location.href = 'shortcuts://create-shortcut';
+  const openRegisterShortcutInstall = () => {
+    if (!IOS_REGISTER_SHORTCUT_SHARE_URL) {
+      alert('문자등록 단축어 공유 링크가 아직 연결되지 않았습니다.');
+      return;
+    }
+    window.location.href = IOS_REGISTER_SHORTCUT_SHARE_URL;
   };
 
   const openShortcutInstall = () => {
@@ -270,11 +277,11 @@ export default function IosShortcutSetupCard() {
           </button>
           <button
             type="button"
-            onClick={openShortcutEditor}
+            onClick={openRegisterShortcutInstall}
             className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
           >
             <Link2 className="h-4 w-4" />
-            새 단축어 만들기
+            문자등록 단축어 설치
           </button>
         </div>
 
@@ -293,11 +300,15 @@ export default function IosShortcutSetupCard() {
               <div>앱 안의 실행 버튼으로 연동 값을 한 번에 채웁니다.</div>
             </div>
             <div>
-              <div className="font-medium text-slate-800">3. 메시지 자동화 만들기</div>
+              <div className="font-medium text-slate-800">3. 문자등록 단축어 설치</div>
+              <div>{IOS_REGISTER_SHORTCUT_NAME} 공유 링크를 열어 실제 저장용 단축어를 설치합니다.</div>
+            </div>
+            <div>
+              <div className="font-medium text-slate-800">4. 메시지 자동화 만들기</div>
               <div>단축어 앱 자동화 탭에서 메시지 트리거를 만들고 카드 문자 발신 번호나 공통 문구를 고릅니다.</div>
             </div>
             <div>
-              <div className="font-medium text-slate-800">4. 실행 전에 묻기 끄기</div>
+              <div className="font-medium text-slate-800">5. 실행 전에 묻기 끄기</div>
               <div>이 옵션을 꺼야 실제로 자동 등록됩니다.</div>
             </div>
           </div>
