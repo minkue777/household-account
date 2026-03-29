@@ -1,32 +1,101 @@
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    function isAuthenticated() {
-      return request.auth != null;
-    }
+ rules_version = '2';                                                                                                                                                                                                                                                                               
+  service cloud.firestore {
+    match /databases/{database}/documents {
 
-    match /households/{householdId} {
-      allow read, write: if isAuthenticated();
-    }
+      // expenses 컬렉션
+      match /expenses/{expenseId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.householdId != null;
+        allow delete: if true;
+      }
 
-    match /expenses/{expenseId} {
-      allow read, write: if isAuthenticated();
-    }
+      // categories 컬렉션
+      match /categories/{categoryId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.householdId != null;
+        allow delete: if true;
+      }
 
-    match /balances/{balanceId} {
-      allow read, write: if isAuthenticated();
-    }
+      // merchant_rules 컬렉션
+      match /merchant_rules/{ruleId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.householdId != null;
+        allow delete: if true;
+      }
 
-    match /assets/{assetId} {
-      allow read, write: if isAuthenticated();
-    }
+      // households 컬렉션
+      match /households/{householdId} {
+        allow read, write: if true;
+      }
 
-    match /asset_history/{historyId} {
-      allow read, write: if isAuthenticated();
-    }
+      // recurring_expenses 컬렉션
+      match /recurring_expenses/{recurringId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.householdId != null;
+        allow delete: if true;
+      }
 
-    match /stock_holdings/{holdingId} {
-      allow read, write: if isAuthenticated();
+      // budgetTransfers 컬렉션
+      match /budgetTransfers/{transferId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.householdId != null;
+        allow delete: if true;
+      }
+      
+      // balances 컬렉션
+      match /balances/{balanceId} {
+        allow read: if true;                                                                                                                                                                                                                                                                           
+        allow create, update: if request.resource.data.householdId != null;
+        allow delete: if true;
+      }
+      
+      // assets 컬렉션
+      match /assets/{assetId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.householdId != null;
+        allow delete: if true;
+      }
+      
+      // asset_history 컬렉션
+      match /asset_history/{historyId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.householdId != null;
+        allow delete: if true;
+      }
+      
+      // stock_holdings 컬렉션
+      match /stock_holdings/{holdingId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.householdId != null;
+        allow delete: if true;
+      }
+      
+      // asset_snapshots 컬렉션
+      match /asset_snapshots/{snapshotId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.householdId != null;
+        allow delete: if true;
+      }
+      
+      // dividend_snapshots 컬렉션
+      match /dividend_snapshots/{snapshotId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.householdId != null;
+        allow delete: if true;
+      }
+      
+      // fcmTokens 컬렉션
+			match /fcmTokens/{tokenId} {
+  		  allow read: if true;
+        allow create, update: if request.resource.data.householdId != null;
+        allow delete: if true;
+      }
+      
+      // notification_debug_logs 컬렉션
+      match /notification_debug_logs/{logId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.householdId != null;
+        allow delete: if true;
+      }
     }
   }
-}

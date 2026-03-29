@@ -11,6 +11,7 @@ import com.household.account.data.CategoryRepository
 import com.household.account.data.Expense
 import com.household.account.data.ExpenseRepository
 import com.household.account.data.MerchantRuleRepository
+import com.household.account.data.NotificationDebugLogRepository
 import com.household.account.parser.DaejeonLocalCurrencyParser
 import com.household.account.parser.DigitalOnnuriParser
 import com.household.account.parser.ExpenseEventType
@@ -93,6 +94,7 @@ class CardNotificationListenerService : NotificationListenerService() {
     private val ruleRepository = MerchantRuleRepository()
     private val categoryRepository = CategoryRepository()
     private val balanceRepository = BalanceRepository()
+    private val notificationDebugLogRepository = NotificationDebugLogRepository()
 
     private val recentNotifications = mutableMapOf<String, Long>()
     private val duplicateWindowMs = 30_000L
@@ -107,22 +109,41 @@ class CardNotificationListenerService : NotificationListenerService() {
             val title = extras.getString(Notification.EXTRA_TITLE) ?: ""
             val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
             val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
+            val textLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+                ?.map { it?.toString().orEmpty().trim() }
+                ?.filter { it.isNotEmpty() }
+                ?: emptyList()
+
+            val bodyText = when {
+                textLines.isNotEmpty() -> textLines.joinToString("\n")
+                bigText.isNotBlank() -> bigText
+                text.isNotBlank() -> text
+                else -> ""
+            }
 
             val fullText = buildString {
                 if (title.isNotBlank()) {
                     append(title)
                     append("\n")
                 }
-                if (bigText.isNotBlank()) {
-                    append(bigText)
-                } else if (text.isNotBlank()) {
-                    append(text)
+                if (bodyText.isNotBlank()) {
+                    append(bodyText)
                 }
             }.trim()
 
             if (fullText.isEmpty()) {
                 return
             }
+
+            saveRawNotificationLogIfNeeded(
+                packageName = packageName,
+                title = title,
+                text = text,
+                bigText = bigText,
+                textLines = textLines,
+                fullText = fullText,
+                postedAtMillis = sbn.postTime
+            )
 
             val source = detectSource(packageName, fullText) ?: return
 
@@ -197,6 +218,54 @@ class CardNotificationListenerService : NotificationListenerService() {
             packageName in knownDaejeonLocalCurrencyPackages || DaejeonLocalCurrencyParser.matches(fullText) ->
                 NotificationSource.DAEJEON_LOCAL_CURRENCY
             else -> null
+        }
+    }
+
+    private fun detectSourceByPackage(packageName: String): NotificationSource? {
+        return when {
+            packageName in knownKbPackages -> NotificationSource.KB
+            packageName in knownNhPackages -> NotificationSource.NH
+            packageName in knownNaverPayPackages -> NotificationSource.NAVER_PAY
+            packageName in knownTossPackages -> NotificationSource.TOSS_BANK
+            packageName in knownKakaoPayPackages -> NotificationSource.KAKAOPAY
+            packageName in knownDigitalOnnuriPackages -> NotificationSource.DIGITAL_ONNURI
+            packageName in knownPayboocPackages -> NotificationSource.PAYBOOC_ISP
+            packageName in knownGyeonggiLocalCurrencyPackages ->
+                NotificationSource.GYEONGGI_LOCAL_CURRENCY
+            packageName in knownDaejeonLocalCurrencyPackages ->
+                NotificationSource.DAEJEON_LOCAL_CURRENCY
+            SmsNotificationParser.isSupportedPackage(packageName) -> NotificationSource.SMS
+            else -> null
+        }
+    }
+
+    private fun saveRawNotificationLogIfNeeded(
+        packageName: String,
+        title: String,
+        text: String,
+        bigText: String,
+        textLines: List<String>,
+        fullText: String,
+        postedAtMillis: Long
+    ) {
+        val source = detectSourceByPackage(packageName) ?: return
+
+        serviceScope.launch {
+            try {
+                notificationDebugLogRepository.saveRawLog(
+                    householdId = HouseholdPreferences.getHouseholdKey(applicationContext),
+                    memberName = HouseholdPreferences.getMemberName(applicationContext),
+                    packageName = packageName,
+                    source = source.name,
+                    title = title,
+                    text = text,
+                    bigText = bigText,
+                    textLines = textLines,
+                    fullText = fullText,
+                    postedAtMillis = postedAtMillis
+                )
+            } catch (_: Exception) {
+            }
         }
     }
 

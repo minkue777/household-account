@@ -10,7 +10,7 @@ import java.time.format.DateTimeFormatter
 object NHPayParser {
 
     private val titlePattern = Regex("""NH농협\s*카드""")
-    private val cardPattern = Regex("""NH카드([0-9*xX]{4})승인""")
+    private val cardPattern = Regex("""NH카드([0-9*xX]{4})승인(취소)?""")
     private val amountPattern = Regex("""([\d,]+)원""")
     private val dateTimePattern = Regex("""(\d{2}/\d{2})\s+(\d{2}:\d{2})""")
 
@@ -29,6 +29,11 @@ object NHPayParser {
             val cardMatch = cardPattern.find(notificationText)
                 ?: return ParseResult(false, errorMessage = "NH card approval format not found")
             val cardToken = cardMatch.groupValues[1]
+            val eventType = if (cardMatch.groupValues[2] == "취소") {
+                ExpenseEventType.CANCELLATION
+            } else {
+                ExpenseEventType.APPROVAL
+            }
 
             val amountMatch = amountPattern.find(notificationText)
                 ?: return ParseResult(false, errorMessage = "Amount not found")
@@ -53,7 +58,8 @@ object NHPayParser {
                     category = Category.ETC.name,
                     cardType = resolveCardType(cardToken, mainCardToken).key,
                     cardLastFour = CardLabelFormatter.formatCardLabel("농협", cardToken)
-                )
+                ),
+                eventType = eventType
             )
         } catch (e: Exception) {
             ParseResult(false, errorMessage = "NH parse failed: ${e.message}")

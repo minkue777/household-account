@@ -8,8 +8,12 @@ object SmsNotificationParser {
         "com.android.mms"
     )
 
+    fun isSupportedPackage(packageName: String): Boolean {
+        return packageName in knownSmsPackages
+    }
+
     fun matches(packageName: String, notificationText: String): Boolean {
-        if (packageName !in knownSmsPackages) {
+        if (!isSupportedPackage(packageName)) {
             return false
         }
 
