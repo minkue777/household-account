@@ -113,16 +113,18 @@ export default function IosShortcutSetupCard() {
     if (!setupPayload || typeof window === 'undefined') return '';
 
     const callbackBase = `${window.location.origin}/settings`;
-    const params = new URLSearchParams({
-      name: IOS_SETUP_SHORTCUT_NAME,
-      input: 'text',
-      text: setupPayload,
-      'x-success': `${callbackBase}?iosShortcutSetup=done`,
-      'x-cancel': `${callbackBase}?iosShortcutSetup=cancel`,
-      'x-error': `${callbackBase}?iosShortcutSetup=error`,
-    });
+    const query = [
+      ['name', IOS_SETUP_SHORTCUT_NAME],
+      ['input', 'text'],
+      ['text', setupPayload],
+      ['x-success', `${callbackBase}?iosShortcutSetup=done`],
+      ['x-cancel', `${callbackBase}?iosShortcutSetup=cancel`],
+      ['x-error', `${callbackBase}?iosShortcutSetup=error`],
+    ]
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+      .join('&');
 
-    return `shortcuts://x-callback-url/run-shortcut?${params.toString()}`;
+    return `shortcuts://x-callback-url/run-shortcut?${query}`;
   }, [setupPayload]);
 
   if (!householdKey || !currentMember) {
