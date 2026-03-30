@@ -14,6 +14,7 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
   const { themeConfig } = useTheme();
   const { household } = useHousehold();
   const isIncome = transactionType === 'income';
+  // 제목 클릭으로 지출/수입 화면을 전환합니다.
   const titleHref = isIncome ? '/' : '/income';
 
   return (
