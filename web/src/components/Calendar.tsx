@@ -303,7 +303,12 @@ export default function Calendar({
                     >
                       <span
                         className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: getCategoryColor(expense.category) }}
+                        style={{
+                          backgroundColor:
+                            (expense.transactionType || 'expense') === 'income'
+                              ? '#10B981'
+                              : getCategoryColor(expense.category),
+                        }}
                       />
                       <span className="truncate text-slate-600">
                         {getLedgerPrimaryText(expense, expense.transactionType || 'expense')}
