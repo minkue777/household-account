@@ -192,14 +192,20 @@ export default function AssetSummaryCard({
           }
 
           const chartRect = chart.canvas.getBoundingClientRect();
-          const wrapRect = chartWrapRef.current.getBoundingClientRect();
-          const relativeLeft = chartRect.left - wrapRect.left + tooltip.caretX;
-          const relativeTop = chartRect.top - wrapRect.top + tooltip.caretY;
+          const tooltipHalfWidth = 110;
+          const viewportPadding = 12;
+          const desiredLeft = chartRect.left + tooltip.caretX;
+          const desiredTop = chartRect.top + tooltip.caretY - 16;
+          const clampedLeft = Math.min(
+            Math.max(desiredLeft, tooltipHalfWidth + viewportPadding),
+            window.innerWidth - tooltipHalfWidth - viewportPadding
+          );
+          const clampedTop = Math.max(desiredTop, 56);
 
           setTooltipState({
             visible: true,
-            left: relativeLeft,
-            top: relativeTop - 16,
+            left: clampedLeft,
+            top: clampedTop,
             title: ASSET_TYPE_CONFIG[item.type].label,
             value: `${item.balance.toLocaleString()}원 (${item.percentage.toFixed(1)}%)`,
             color: chartColors[item.type],
@@ -253,7 +259,7 @@ export default function AssetSummaryCard({
             <Doughnut data={chartData} options={chartOptions} />
             {tooltipState.visible && (
               <div
-                className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg"
+                className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg"
                 style={{
                   left: tooltipState.left,
                   top: tooltipState.top,
