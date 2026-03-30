@@ -49,6 +49,10 @@ const PLACEHOLDERS: Record<AssetType, string> = {
   loan: '예: 전세대출, 신용대출',
 };
 
+function isGoldRelatedStockName(name: string) {
+  return /(골드|금\s*현물|금\s*선물|금은선물)/i.test(name);
+}
+
 function sanitizeNumericInput(rawValue: string) {
   return rawValue.replace(/[^0-9]/g, '');
 }
@@ -199,7 +203,7 @@ export default function AssetAddModal({
           const results: StockSearchResult[] = data.results || [];
           setSearchResults(
             isGoldEtf
-              ? results.filter((item) => /금|골드/i.test(item.name))
+              ? results.filter((item) => isGoldRelatedStockName(item.name))
               : results
           );
         }
