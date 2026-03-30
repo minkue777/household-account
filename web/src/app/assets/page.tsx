@@ -144,7 +144,7 @@ export default function AssetsPage() {
             <img
               src="/lupy.png"
               alt="루피"
-              className="h-14 w-14 object-contain md:h-16 md:w-16"
+              className="h-16 w-16 object-contain md:h-[4.5rem] md:w-[4.5rem]"
             />
           </Link>
 

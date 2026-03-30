@@ -40,7 +40,7 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
           <img
             src="/lupy.png"
             alt="자산으로 이동"
-            className="h-14 w-14 object-contain md:h-16 md:w-16"
+            className="h-16 w-16 object-contain md:h-[4.5rem] md:w-[4.5rem]"
           />
         </Link>
       </div>
