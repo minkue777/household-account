@@ -142,9 +142,9 @@ export default function AssetsPage() {
               자산
             </h1>
             <img
-              src="/lupy.png"
-              alt="루피"
-              className="h-[4.5rem] w-[4.5rem] object-contain md:h-20 md:w-20"
+              src="/bear-removebg-preview.png"
+              alt="곰돌이"
+              className="h-14 w-14 object-contain md:h-16 md:w-16"
             />
           </Link>
 
