@@ -6,13 +6,19 @@ import {
   AssetType,
   ASSET_TYPE_CONFIG,
   CryptoSearchResult,
+  LoanRepaymentMethod,
   StockSearchResult,
   isGoldEtfSubType,
 } from '@/types/asset';
 import { addAsset, addCryptoHolding, addStockHolding } from '@/lib/assetService';
 import { ModalOverlay } from '@/components/common';
 import { X, Trash2 } from 'lucide-react';
-import { AssetMemoField, AssetTypeGrid, SavingsRecurringFields } from './AssetFormFields';
+import {
+  AssetMemoField,
+  AssetTypeGrid,
+  LoanRepaymentFields,
+  SavingsRecurringFields,
+} from './AssetFormFields';
 import StockSearchForm, { StockSearchState } from './StockSearchForm';
 import CryptoSearchForm, { CryptoSearchState } from './CryptoSearchForm';
 import { HOUSEHOLD_OWNER_OPTION } from '@/lib/assets/memberOptions';
@@ -94,6 +100,10 @@ export default function AssetAddModal({
   const [balance, setBalance] = useState('');
   const [recurringContributionAmount, setRecurringContributionAmount] = useState('');
   const [recurringContributionDay, setRecurringContributionDay] = useState('');
+  const [loanInterestRate, setLoanInterestRate] = useState('');
+  const [loanRepaymentMethod, setLoanRepaymentMethod] = useState<LoanRepaymentMethod | ''>('');
+  const [loanMonthlyPaymentAmount, setLoanMonthlyPaymentAmount] = useState('');
+  const [loanPaymentDay, setLoanPaymentDay] = useState('');
   const [memo, setMemo] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -122,6 +132,10 @@ export default function AssetAddModal({
   const isGoldEtf = type === 'gold' && isGoldEtfSubType(subType);
   const isStockLikeAsset = type === 'stock' || isGoldEtf;
   const isSavingsInstallment = type === 'savings' && subType === '적금';
+  const isLoanAsset = type === 'loan';
+  const isScheduledLoan =
+    isLoanAsset &&
+    (loanRepaymentMethod === '원리금균등상환' || loanRepaymentMethod === '원금균등상환');
 
   const resetStockForm = () => {
     setSearchQuery('');
@@ -146,6 +160,10 @@ export default function AssetAddModal({
     setBalance('');
     setRecurringContributionAmount('');
     setRecurringContributionDay('');
+    setLoanInterestRate('');
+    setLoanRepaymentMethod('');
+    setLoanMonthlyPaymentAmount('');
+    setLoanPaymentDay('');
     setMemo('');
     setPendingHoldings([]);
     setPendingCryptoHoldings([]);
@@ -177,6 +195,10 @@ export default function AssetAddModal({
     setBalance('');
     setRecurringContributionAmount('');
     setRecurringContributionDay('');
+    setLoanInterestRate('');
+    setLoanRepaymentMethod('');
+    setLoanMonthlyPaymentAmount('');
+    setLoanPaymentDay('');
     setMemo('');
     setPendingHoldings([]);
     setPendingCryptoHoldings([]);
@@ -389,6 +411,19 @@ export default function AssetAddModal({
           new Date().getDate() >= getEffectiveContributionDay(parseInt(recurringContributionDay, 10))
             ? getCurrentYearMonth()
             : '',
+        loanInterestRate: isLoanAsset ? parseFloat(loanInterestRate) || 0 : 0,
+        loanRepaymentMethod: isLoanAsset ? loanRepaymentMethod || undefined : undefined,
+        loanMonthlyPaymentAmount:
+          isScheduledLoan ? parseInt(loanMonthlyPaymentAmount, 10) || 0 : 0,
+        loanPaymentDay: isScheduledLoan ? parseInt(loanPaymentDay, 10) || 0 : 0,
+        lastAutoRepaymentMonth:
+          isScheduledLoan &&
+          (parseFloat(loanInterestRate) || 0) > 0 &&
+          (parseInt(loanMonthlyPaymentAmount, 10) || 0) > 0 &&
+          (parseInt(loanPaymentDay, 10) || 0) > 0 &&
+          new Date().getDate() >= getEffectiveContributionDay(parseInt(loanPaymentDay, 10))
+            ? getCurrentYearMonth()
+            : '',
         currency: 'KRW',
         memo: memo.trim() || undefined,
         isActive: true,
@@ -593,6 +628,20 @@ export default function AssetAddModal({
               dayValue={recurringContributionDay}
               onAmountChange={setRecurringContributionAmount}
               onDayChange={setRecurringContributionDay}
+            />
+          )}
+
+          {isLoanAsset && (
+            <LoanRepaymentFields
+              balanceValue={balance}
+              interestRateValue={loanInterestRate}
+              repaymentMethodValue={loanRepaymentMethod}
+              monthlyPaymentValue={loanMonthlyPaymentAmount}
+              paymentDayValue={loanPaymentDay}
+              onInterestRateChange={setLoanInterestRate}
+              onRepaymentMethodChange={setLoanRepaymentMethod}
+              onMonthlyPaymentChange={setLoanMonthlyPaymentAmount}
+              onPaymentDayChange={setLoanPaymentDay}
             />
           )}
 

@@ -30,7 +30,10 @@ import {
 import { getStoredHouseholdKey } from './householdService';
 import { formatLocalDate } from './utils/date';
 import { buildLegacyAssetOwnerMap } from './assets/memberOptions';
-import { sumSignedBalancesByAssetType } from './assets/assetMath';
+import {
+  calculateExpectedLoanPrincipalPayment,
+  sumSignedBalancesByAssetType,
+} from './assets/assetMath';
 
 const ASSETS_COLLECTION = 'assets';
 const HISTORY_COLLECTION = 'asset_history';
@@ -64,6 +67,11 @@ function mapDocToAsset(docSnap: QueryDocumentSnapshot<DocumentData>): Asset {
     recurringContributionAmount: data.recurringContributionAmount || 0,
     recurringContributionDay: data.recurringContributionDay || 0,
     lastAutoContributionMonth: data.lastAutoContributionMonth || '',
+    loanInterestRate: data.loanInterestRate || 0,
+    loanRepaymentMethod: data.loanRepaymentMethod || '',
+    loanMonthlyPaymentAmount: data.loanMonthlyPaymentAmount || 0,
+    loanPaymentDay: data.loanPaymentDay || 0,
+    lastAutoRepaymentMonth: data.lastAutoRepaymentMonth || '',
     costBasis: data.costBasis,
     initialInvestment: data.initialInvestment,
     currency: data.currency || 'KRW',
@@ -530,6 +538,97 @@ export async function processSavingsAutoContributions(): Promise<number> {
         transaction.update(docRef, {
           currentBalance: (data.currentBalance || 0) + amount,
           lastAutoContributionMonth: currentMonth,
+          updatedAt: Timestamp.now(),
+        });
+        appliedCount += 1;
+      });
+    })
+  );
+
+  return appliedCount;
+}
+
+export async function processLoanAutoRepayments(): Promise<number> {
+  const householdId = getHouseholdId();
+  const now = new Date();
+  const currentMonth = getCurrentYearMonth();
+
+  const q = query(
+    collection(db, ASSETS_COLLECTION),
+    where('householdId', '==', householdId)
+  );
+
+  const snapshot = await getDocs(q);
+  const targets = snapshot.docs.filter((docSnap) => {
+    const data = docSnap.data();
+    const paymentAmount = data.loanMonthlyPaymentAmount || 0;
+    const paymentDay = data.loanPaymentDay || 0;
+    const interestRate = data.loanInterestRate || 0;
+    const repaymentMethod = data.loanRepaymentMethod || '';
+    const lastAppliedMonth = data.lastAutoRepaymentMonth || '';
+    const dueDay = getEffectiveContributionDay(paymentDay, now);
+
+    return (
+      data.isActive !== false &&
+      data.type === 'loan' &&
+      (repaymentMethod === '원리금균등상환' || repaymentMethod === '원금균등상환') &&
+      paymentAmount > 0 &&
+      paymentDay >= 1 &&
+      paymentDay <= 31 &&
+      interestRate > 0 &&
+      now.getDate() >= dueDay &&
+      lastAppliedMonth !== currentMonth
+    );
+  });
+
+  if (targets.length === 0) {
+    return 0;
+  }
+
+  let appliedCount = 0;
+
+  await Promise.all(
+    targets.map(async (docSnap) => {
+      const docRef = doc(db, ASSETS_COLLECTION, docSnap.id);
+
+      await runTransaction(db, async (transaction) => {
+        const latestSnap = await transaction.get(docRef);
+        if (!latestSnap.exists()) return;
+
+        const data = latestSnap.data();
+        const paymentAmount = data.loanMonthlyPaymentAmount || 0;
+        const paymentDay = data.loanPaymentDay || 0;
+        const interestRate = data.loanInterestRate || 0;
+        const repaymentMethod = data.loanRepaymentMethod || '';
+        const lastAppliedMonth = data.lastAutoRepaymentMonth || '';
+        const dueDay = getEffectiveContributionDay(paymentDay, now);
+
+        if (
+          data.isActive === false ||
+          data.type !== 'loan' ||
+          (repaymentMethod !== '원리금균등상환' && repaymentMethod !== '원금균등상환') ||
+          paymentAmount <= 0 ||
+          paymentDay < 1 ||
+          paymentDay > 31 ||
+          interestRate <= 0 ||
+          now.getDate() < dueDay ||
+          lastAppliedMonth === currentMonth
+        ) {
+          return;
+        }
+
+        const currentBalance = Math.max(0, data.currentBalance || 0);
+        const principalPayment = calculateExpectedLoanPrincipalPayment({
+          type: 'loan',
+          currentBalance,
+          loanInterestRate: interestRate,
+          loanMonthlyPaymentAmount: paymentAmount,
+          loanRepaymentMethod: repaymentMethod,
+        });
+
+        transaction.update(docRef, {
+          currentBalance: Math.max(0, currentBalance - principalPayment),
+          lastAutoRepaymentMonth: currentMonth,
           updatedAt: Timestamp.now(),
         });
         appliedCount += 1;

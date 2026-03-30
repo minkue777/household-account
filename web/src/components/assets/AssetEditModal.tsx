@@ -5,6 +5,7 @@ import {
   Asset,
   AssetType,
   ASSET_TYPE_CONFIG,
+  LoanRepaymentMethod,
   isGoldEtfSubType,
   normalizeGoldSubType,
 } from '@/types/asset';
@@ -14,6 +15,7 @@ import { X, Trash2 } from 'lucide-react';
 import {
   AssetMemoField,
   AssetTypeGrid,
+  LoanRepaymentFields,
   SavingsRecurringFields,
   StockInitialInvestmentField,
 } from './AssetFormFields';
@@ -53,6 +55,10 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
   const [balance, setBalance] = useState('');
   const [recurringContributionAmount, setRecurringContributionAmount] = useState('');
   const [recurringContributionDay, setRecurringContributionDay] = useState('');
+  const [loanInterestRate, setLoanInterestRate] = useState('');
+  const [loanRepaymentMethod, setLoanRepaymentMethod] = useState<LoanRepaymentMethod | ''>('');
+  const [loanMonthlyPaymentAmount, setLoanMonthlyPaymentAmount] = useState('');
+  const [loanPaymentDay, setLoanPaymentDay] = useState('');
   const [initialInvestment, setInitialInvestment] = useState('');
   const [memo, setMemo] = useState('');
   const [goldQuantity, setGoldQuantity] = useState('');
@@ -80,6 +86,14 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
     setRecurringContributionDay(
       asset.recurringContributionDay ? asset.recurringContributionDay.toString() : ''
     );
+    setLoanInterestRate(
+      asset.loanInterestRate ? asset.loanInterestRate.toString() : ''
+    );
+    setLoanRepaymentMethod(asset.loanRepaymentMethod || '');
+    setLoanMonthlyPaymentAmount(
+      asset.loanMonthlyPaymentAmount ? asset.loanMonthlyPaymentAmount.toString() : ''
+    );
+    setLoanPaymentDay(asset.loanPaymentDay ? asset.loanPaymentDay.toString() : '');
     setInitialInvestment(asset.initialInvestment?.toString() || '');
     setMemo(asset.type === 'gold' && !isGoldEtfSubType(asset.subType) ? '' : asset.memo || '');
     setGoldQuantity(goldQuantityMatch ? goldQuantityMatch[1] : '');
@@ -109,6 +123,13 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
       const rawRecurringDay = parseInt(recurringContributionDay, 10) || 0;
       const recurringDay = rawRecurringDay >= 1 && rawRecurringDay <= 31 ? rawRecurringDay : 0;
       const isSavingsInstallment = type === 'savings' && subType === '적금';
+      const rawLoanPaymentDay = parseInt(loanPaymentDay, 10) || 0;
+      const normalizedLoanPaymentDay =
+        rawLoanPaymentDay >= 1 && rawLoanPaymentDay <= 31 ? rawLoanPaymentDay : 0;
+      const isLoanAsset = type === 'loan';
+      const isScheduledLoan =
+        isLoanAsset &&
+        (loanRepaymentMethod === '원리금균등상환' || loanRepaymentMethod === '원금균등상환');
 
       const updateData: Record<string, unknown> = {
         name: name.trim(),
@@ -125,6 +146,21 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
                 new Date().getDate() >= getEffectiveContributionDay(recurringDay)
               ? getCurrentYearMonth()
               : asset.lastAutoContributionMonth || '',
+        loanInterestRate: isLoanAsset ? parseFloat(loanInterestRate) || 0 : 0,
+        loanRepaymentMethod: isLoanAsset ? loanRepaymentMethod || '' : '',
+        loanMonthlyPaymentAmount: isScheduledLoan ? parseInt(loanMonthlyPaymentAmount, 10) || 0 : 0,
+        loanPaymentDay: isScheduledLoan ? normalizedLoanPaymentDay : 0,
+        lastAutoRepaymentMonth:
+          !isScheduledLoan
+            ? ''
+            : asset.lastAutoRepaymentMonth === getCurrentYearMonth()
+              ? asset.lastAutoRepaymentMonth
+              : (parseFloat(loanInterestRate) || 0) > 0 &&
+                  (parseInt(loanMonthlyPaymentAmount, 10) || 0) > 0 &&
+                  normalizedLoanPaymentDay > 0 &&
+                  new Date().getDate() >= getEffectiveContributionDay(normalizedLoanPaymentDay)
+                ? getCurrentYearMonth()
+                : asset.lastAutoRepaymentMonth || '',
       };
 
       if (type === 'stock') {
@@ -177,6 +213,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
   const isPhysicalGold = isGold && !isGoldEtf;
   const isHoldingManaged = isStock || isCrypto || isGoldEtf;
   const isSavingsInstallment = type === 'savings' && subType === '적금';
+  const isLoanAsset = type === 'loan';
 
   return (
     <>
@@ -266,6 +303,20 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
                 dayValue={recurringContributionDay}
                 onAmountChange={setRecurringContributionAmount}
                 onDayChange={setRecurringContributionDay}
+              />
+            )}
+
+            {isLoanAsset && (
+              <LoanRepaymentFields
+                balanceValue={balance}
+                interestRateValue={loanInterestRate}
+                repaymentMethodValue={loanRepaymentMethod}
+                monthlyPaymentValue={loanMonthlyPaymentAmount}
+                paymentDayValue={loanPaymentDay}
+                onInterestRateChange={setLoanInterestRate}
+                onRepaymentMethodChange={setLoanRepaymentMethod}
+                onMonthlyPaymentChange={setLoanMonthlyPaymentAmount}
+                onPaymentDayChange={setLoanPaymentDay}
               />
             )}
 

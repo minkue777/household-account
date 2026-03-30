@@ -22,6 +22,7 @@ import { ArrowLeft } from 'lucide-react';
 import { ASSET_TYPE_CONFIG, Asset, AssetHistoryEntry, AssetType } from '@/types/asset';
 import {
   getAssetHistoryByPeriod,
+  processLoanAutoRepayments,
   processSavingsAutoContributions,
   saveDailyTotalSnapshot,
   subscribeToAssets,
@@ -112,6 +113,7 @@ export default function AssetStatsPage() {
 
   useEffect(() => {
     processSavingsAutoContributions().catch(console.error);
+    processLoanAutoRepayments().catch(console.error);
   }, []);
 
   useEffect(() => {

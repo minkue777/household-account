@@ -1,7 +1,7 @@
 'use client';
 
 import { Asset, ASSET_TYPE_CONFIG, isGoldEtfSubType } from '@/types/asset';
-import { getAssetSignedBalance } from '@/lib/assets/assetMath';
+import { formatLoanMetaParts, getAssetSignedBalance } from '@/lib/assets/assetMath';
 import { ASSET_TYPE_ICON_COMPONENTS } from './assetIcons';
 
 interface AssetCardProps {
@@ -29,6 +29,18 @@ export default function AssetCard({ asset, onClick }: AssetCardProps) {
   const profitLossRate = isHoldingManaged && investmentBase > 0 ? (profitLoss / investmentBase) * 100 : 0;
   const showProfitLoss = isHoldingManaged && investmentBase > 0;
   const isProfit = profitLoss >= 0;
+  const metaParts =
+    asset.type === 'loan'
+      ? [
+          asset.subType,
+          asset.owner,
+          ...formatLoanMetaParts(asset),
+        ].filter(Boolean)
+      : [
+          asset.subType || config.label,
+          asset.owner,
+          asset.memo,
+        ].filter(Boolean);
 
   return (
     <button
@@ -47,9 +59,7 @@ export default function AssetCard({ asset, onClick }: AssetCardProps) {
       <div className="flex-1 min-w-0">
         <h3 className="font-semibold text-slate-900 truncate">{asset.name}</h3>
         <p className="text-xs text-slate-400 truncate">
-          {asset.subType || config.label}
-          {asset.owner && ` · ${asset.owner}`}
-          {asset.memo && ` · ${asset.memo}`}
+          {metaParts.join(' · ')}
         </p>
       </div>
 

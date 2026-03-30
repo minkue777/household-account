@@ -8,6 +8,7 @@ import {
   getDailyAssetChange,
   saveDailyTotalSnapshot,
   addSampleAssets,
+  processLoanAutoRepayments,
   processSavingsAutoContributions,
   refreshAllCryptoPrices,
   refreshAllStockPrices,
@@ -74,6 +75,7 @@ export default function AssetsPage() {
 
   useEffect(() => {
     processSavingsAutoContributions().catch(console.error);
+    processLoanAutoRepayments().catch(console.error);
     refreshAllStockPrices().catch(console.error);
     refreshAllCryptoPrices().catch(console.error);
   }, []);

@@ -8,6 +8,13 @@ export type AssetOwner = typeof ASSET_OWNERS[number];
 
 export type AssetType = 'savings' | 'stock' | 'crypto' | 'property' | 'gold' | 'loan';
 
+export const LOAN_REPAYMENT_METHODS = [
+  '원리금균등상환',
+  '원금균등상환',
+  '만기일시상환',
+] as const;
+export type LoanRepaymentMethod = typeof LOAN_REPAYMENT_METHODS[number];
+
 export const ASSET_TYPE_CONFIG: Record<
   AssetType,
   {
@@ -66,6 +73,11 @@ export interface Asset {
   recurringContributionAmount?: number;
   recurringContributionDay?: number;
   lastAutoContributionMonth?: string;
+  loanInterestRate?: number;
+  loanRepaymentMethod?: LoanRepaymentMethod;
+  loanMonthlyPaymentAmount?: number;
+  loanPaymentDay?: number;
+  lastAutoRepaymentMonth?: string;
   costBasis?: number;
   initialInvestment?: number;
   currency: string;
