@@ -15,7 +15,6 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
   const { household } = useHousehold();
   const isIncome = transactionType === 'income';
   const titleHref = isIncome ? '/' : '/income';
-  const modeLabel = isIncome ? '지출 보기' : '수입 보기';
 
   return (
     <header className="mb-6 flex items-center justify-between gap-4">
@@ -34,7 +33,6 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
             <br />
             가계부
           </h1>
-          <p className="mt-2 text-sm font-medium text-slate-500">{modeLabel}</p>
         </Link>
 
         <Link href="/assets" className="cursor-pointer transition-opacity hover:opacity-80">
