@@ -6,7 +6,7 @@ export type FamilyMember = typeof FAMILY_MEMBERS[number];
 export const ASSET_OWNERS = ['가구', '이민규', '이진선', '이지아'] as const;
 export type AssetOwner = typeof ASSET_OWNERS[number];
 
-export type AssetType = 'savings' | 'stock' | 'property' | 'gold' | 'loan';
+export type AssetType = 'savings' | 'stock' | 'crypto' | 'property' | 'gold' | 'loan';
 
 export const ASSET_TYPE_CONFIG: Record<
   AssetType,
@@ -27,6 +27,12 @@ export const ASSET_TYPE_CONFIG: Record<
     label: '주식',
     icon: 'ChartCandlestick',
     color: '#10B981',
+    subTypes: [],
+  },
+  crypto: {
+    label: '코인',
+    icon: 'Bitcoin',
+    color: '#F97316',
     subTypes: [],
   },
   property: {
@@ -86,6 +92,21 @@ export interface StockPriceInfo {
   currency: string;
 }
 
+export interface CryptoSearchResult {
+  code: string;
+  name: string;
+}
+
+export interface CryptoPriceInfo {
+  code: string;
+  name: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  previousClose: number;
+  currency: string;
+}
+
 export interface AssetHistoryEntry {
   id: string;
   householdId: string;
@@ -110,6 +131,20 @@ export interface StockHolding {
   updatedAt: Timestamp;
 }
 
+export interface CryptoHolding {
+  id: string;
+  assetId: string;
+  householdId: string;
+  marketCode: string;
+  coinName: string;
+  quantity: number;
+  avgPrice?: number;
+  currentPrice?: number;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 export type AssetInput = Omit<Asset, 'id' | 'householdId' | 'createdAt' | 'updatedAt'>;
 export type AssetHistoryInput = Omit<AssetHistoryEntry, 'id' | 'householdId' | 'createdAt'>;
 export type StockHoldingInput = Omit<StockHolding, 'id' | 'householdId' | 'createdAt' | 'updatedAt'>;
+export type CryptoHoldingInput = Omit<CryptoHolding, 'id' | 'householdId' | 'createdAt' | 'updatedAt'>;

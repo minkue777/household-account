@@ -128,6 +128,7 @@ export default function AssetSummaryCard({
   const chartColors: Record<AssetType, string> = {
     savings: '#3B82F6',
     stock: '#10B981',
+    crypto: '#F97316',
     property: '#8B5CF6',
     gold: '#F59E0B',
     loan: '#EF4444',

@@ -18,13 +18,13 @@ export default function AssetCard({ asset, onClick }: AssetCardProps) {
   const iconColor = asset.color || config.color;
   const Icon = ASSET_TYPE_ICON_COMPONENTS[asset.type];
 
-  // 주식 계좌: 수익률 계산 (평가금액 vs 투자원금)
-  const isStock = asset.type === 'stock';
+  // 시장형 자산: 수익률 계산 (평가금액 vs 투자원금)
+  const isHoldingManaged = asset.type === 'stock' || asset.type === 'crypto';
   const signedBalance = getAssetSignedBalance(asset);
   const investmentBase = asset.initialInvestment || asset.costBasis || 0; // 투자원금 또는 평단가 합계
-  const profitLoss = isStock && investmentBase > 0 ? asset.currentBalance - investmentBase : 0;
-  const profitLossRate = isStock && investmentBase > 0 ? (profitLoss / investmentBase) * 100 : 0;
-  const showProfitLoss = isStock && investmentBase > 0;
+  const profitLoss = isHoldingManaged && investmentBase > 0 ? asset.currentBalance - investmentBase : 0;
+  const profitLossRate = isHoldingManaged && investmentBase > 0 ? (profitLoss / investmentBase) * 100 : 0;
+  const showProfitLoss = isHoldingManaged && investmentBase > 0;
   const isProfit = profitLoss >= 0;
 
   return (

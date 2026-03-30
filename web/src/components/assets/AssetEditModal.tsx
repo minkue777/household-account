@@ -80,6 +80,8 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
       if (type === 'stock') {
         updateData.initialInvestment = initialInvestment ? parseInt(initialInvestment, 10) : 0;
         updateData.memo = memo.trim();
+      } else if (type === 'crypto') {
+        updateData.memo = memo.trim();
       } else {
         updateData.currentBalance = parseInt(balance, 10) || 0;
         updateData.memo = type === 'gold' ? (goldQuantity ? `${goldQuantity}돈` : '') : memo.trim();
@@ -117,6 +119,8 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
   }
 
   const isStock = type === 'stock';
+  const isCrypto = type === 'crypto';
+  const isHoldingManaged = isStock || isCrypto;
   const isGold = type === 'gold';
 
   return (
@@ -183,7 +187,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
               />
             </div>
 
-            {!isStock && (
+            {!isHoldingManaged && (
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">현재 잔액</label>
                 <div className="relative">

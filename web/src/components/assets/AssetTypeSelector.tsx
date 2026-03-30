@@ -12,7 +12,7 @@ interface AssetTypeSelectorProps {
 export default function AssetTypeSelector({
   selectedType,
   onTypeChange,
-  assetCounts = { savings: 0, stock: 0, property: 0, gold: 0, loan: 0 },
+  assetCounts = { savings: 0, stock: 0, crypto: 0, property: 0, gold: 0, loan: 0 },
 }: AssetTypeSelectorProps) {
   return (
     <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">

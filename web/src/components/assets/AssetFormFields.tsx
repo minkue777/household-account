@@ -15,7 +15,7 @@ export function AssetTypeGrid({
   itemLabelClassName = 'text-[11px] sm:text-xs font-medium',
 }: AssetTypeGridProps) {
   return (
-    <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6 sm:gap-2">
       {(Object.keys(ASSET_TYPE_CONFIG) as AssetType[]).map((type) => {
         const config = ASSET_TYPE_CONFIG[type];
         const isSelected = value === type;

@@ -8,6 +8,7 @@ import {
   getDailyAssetChange,
   saveDailyTotalSnapshot,
   addSampleAssets,
+  refreshAllCryptoPrices,
   refreshAllStockPrices,
 } from '@/lib/assetService';
 import {
@@ -72,6 +73,7 @@ export default function AssetsPage() {
 
   useEffect(() => {
     refreshAllStockPrices().catch(console.error);
+    refreshAllCryptoPrices().catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -99,7 +101,7 @@ export default function AssetsPage() {
   const handleAssetClick = (asset: Asset) => {
     setSelectedAsset(asset);
 
-    if (asset.type === 'stock') {
+    if (asset.type === 'stock' || asset.type === 'crypto') {
       setShowHistoryModal(true);
       return;
     }

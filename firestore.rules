@@ -69,6 +69,13 @@
         allow create, update: if request.resource.data.householdId != null;
         allow delete: if true;
       }
+
+      // crypto_holdings 컬렉션
+      match /crypto_holdings/{holdingId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.householdId != null;
+        allow delete: if true;
+      }
       
       // asset_snapshots 컬렉션
       match /asset_snapshots/{snapshotId} {

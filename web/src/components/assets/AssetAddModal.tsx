@@ -1,12 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AssetInput, AssetType, ASSET_TYPE_CONFIG, StockSearchResult } from '@/types/asset';
-import { addAsset, addStockHolding } from '@/lib/assetService';
+import {
+  AssetInput,
+  AssetType,
+  ASSET_TYPE_CONFIG,
+  CryptoSearchResult,
+  StockSearchResult,
+} from '@/types/asset';
+import { addAsset, addCryptoHolding, addStockHolding } from '@/lib/assetService';
 import { ModalOverlay } from '@/components/common';
 import { X, Trash2 } from 'lucide-react';
 import { AssetMemoField, AssetTypeGrid } from './AssetFormFields';
 import StockSearchForm, { StockSearchState } from './StockSearchForm';
+import CryptoSearchForm, { CryptoSearchState } from './CryptoSearchForm';
 import { HOUSEHOLD_OWNER_OPTION } from '@/lib/assets/memberOptions';
 
 interface AssetAddModalProps {
@@ -25,9 +32,18 @@ interface PendingStockHolding {
   currentPrice?: number;
 }
 
+interface PendingCryptoHolding {
+  marketCode: string;
+  coinName: string;
+  quantity: number;
+  avgPrice?: number;
+  currentPrice?: number;
+}
+
 const PLACEHOLDERS: Record<AssetType, string> = {
   savings: '예: 비상금 통장, 체크카드',
   stock: '예: 주식계좌, ISA, 연금저축',
+  crypto: '예: 업비트, 빗썸, 코인원',
   property: '예: 전세보증금, 청약통장',
   gold: '예: KRX 금현물, 금통장',
   loan: '예: 전세대출, 신용대출',
@@ -35,6 +51,17 @@ const PLACEHOLDERS: Record<AssetType, string> = {
 
 function sanitizeNumericInput(rawValue: string) {
   return rawValue.replace(/[^0-9]/g, '');
+}
+
+function sanitizeDecimalInput(rawValue: string) {
+  const cleaned = rawValue.replace(/[^0-9.]/g, '');
+  const firstDot = cleaned.indexOf('.');
+
+  if (firstDot === -1) {
+    return cleaned;
+  }
+
+  return `${cleaned.slice(0, firstDot + 1)}${cleaned.slice(firstDot + 1).replace(/\./g, '')}`;
 }
 
 export default function AssetAddModal({
@@ -63,6 +90,17 @@ export default function AssetAddModal({
   const [isAddingHolding, setIsAddingHolding] = useState(false);
   const [pendingHoldings, setPendingHoldings] = useState<PendingStockHolding[]>([]);
 
+  const [cryptoSearchQuery, setCryptoSearchQuery] = useState('');
+  const [cryptoSearchResults, setCryptoSearchResults] = useState<CryptoSearchResult[]>([]);
+  const [isCryptoSearching, setIsCryptoSearching] = useState(false);
+  const [selectedCoin, setSelectedCoin] = useState<CryptoSearchResult | null>(null);
+  const [coinQuantity, setCoinQuantity] = useState('');
+  const [coinAvgPrice, setCoinAvgPrice] = useState('');
+  const [coinCurrentPrice, setCoinCurrentPrice] = useState<number | null>(null);
+  const [isLoadingCoinPrice, setIsLoadingCoinPrice] = useState(false);
+  const [isAddingCoinHolding, setIsAddingCoinHolding] = useState(false);
+  const [pendingCryptoHoldings, setPendingCryptoHoldings] = useState<PendingCryptoHolding[]>([]);
+
   const resetStockForm = () => {
     setSearchQuery('');
     setSearchResults([]);
@@ -72,12 +110,23 @@ export default function AssetAddModal({
     setCurrentPrice(null);
   };
 
+  const resetCryptoForm = () => {
+    setCryptoSearchQuery('');
+    setCryptoSearchResults([]);
+    setSelectedCoin(null);
+    setCoinQuantity('');
+    setCoinAvgPrice('');
+    setCoinCurrentPrice(null);
+  };
+
   useEffect(() => {
     setName('');
     setBalance('');
     setMemo('');
     setPendingHoldings([]);
+    setPendingCryptoHoldings([]);
     resetStockForm();
+    resetCryptoForm();
   }, [type]);
 
   useEffect(() => {
@@ -104,7 +153,9 @@ export default function AssetAddModal({
     setBalance('');
     setMemo('');
     setPendingHoldings([]);
+    setPendingCryptoHoldings([]);
     resetStockForm();
+    resetCryptoForm();
   }, [defaultOwner, defaultType, isOpen, ownerOptions]);
 
   useEffect(() => {
@@ -143,6 +194,43 @@ export default function AssetAddModal({
       clearTimeout(timer);
     };
   }, [searchQuery, selectedStock, type]);
+
+  useEffect(() => {
+    if (type !== 'crypto' || cryptoSearchQuery.length < 1) {
+      setCryptoSearchResults([]);
+      return;
+    }
+
+    if (selectedCoin && selectedCoin.name === cryptoSearchQuery) {
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setIsCryptoSearching(true);
+      try {
+        const response = await fetch(`/api/crypto/search?q=${encodeURIComponent(cryptoSearchQuery)}`);
+        const data = await response.json();
+        if (!cancelled) {
+          setCryptoSearchResults(data.results || []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCryptoSearchResults([]);
+        }
+        console.error('코인 검색 오류:', error);
+      } finally {
+        if (!cancelled) {
+          setIsCryptoSearching(false);
+        }
+      }
+    }, 150);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [cryptoSearchQuery, selectedCoin, type]);
 
   const handleSelectStock = async (stock: StockSearchResult) => {
     setSelectedStock(stock);
@@ -190,8 +278,58 @@ export default function AssetAddModal({
     }
   };
 
+  const handleSelectCoin = async (coin: CryptoSearchResult) => {
+    setSelectedCoin(coin);
+    setCryptoSearchQuery(coin.name);
+    setCryptoSearchResults([]);
+    setIsLoadingCoinPrice(true);
+
+    try {
+      const response = await fetch(`/api/crypto/price?market=${encodeURIComponent(coin.code)}`);
+      if (!response.ok) {
+        setCoinCurrentPrice(null);
+        return;
+      }
+
+      const data = await response.json();
+      setCoinCurrentPrice(data.price);
+    } catch (error) {
+      setCoinCurrentPrice(null);
+      console.error('코인 시세 조회 오류:', error);
+    } finally {
+      setIsLoadingCoinPrice(false);
+    }
+  };
+
+  const handleAddPendingCryptoHolding = async () => {
+    if (!selectedCoin || !coinQuantity || isAddingCoinHolding) {
+      return;
+    }
+
+    setIsAddingCoinHolding(true);
+    try {
+      setPendingCryptoHoldings((prev) => [
+        ...prev,
+        {
+          marketCode: selectedCoin.code,
+          coinName: selectedCoin.name,
+          quantity: parseFloat(coinQuantity),
+          avgPrice: coinAvgPrice ? parseInt(coinAvgPrice, 10) : undefined,
+          currentPrice: coinCurrentPrice || undefined,
+        },
+      ]);
+      resetCryptoForm();
+    } finally {
+      setIsAddingCoinHolding(false);
+    }
+  };
+
   const handleRemovePendingHolding = (index: number) => {
     setPendingHoldings((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleRemovePendingCryptoHolding = (index: number) => {
+    setPendingCryptoHoldings((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async () => {
@@ -206,7 +344,7 @@ export default function AssetAddModal({
         type,
         subType: subType || undefined,
         owner,
-        currentBalance: type === 'stock' ? 0 : parseInt(balance, 10) || 0,
+        currentBalance: type === 'stock' || type === 'crypto' ? 0 : parseInt(balance, 10) || 0,
         currency: 'KRW',
         memo: memo.trim() || undefined,
         isActive: true,
@@ -222,6 +360,21 @@ export default function AssetAddModal({
               assetId,
               stockCode: holding.stockCode,
               stockName: holding.stockName,
+              quantity: holding.quantity,
+              avgPrice: holding.avgPrice,
+              currentPrice: holding.currentPrice,
+            })
+          )
+        );
+      }
+
+      if (type === 'crypto' && pendingCryptoHoldings.length > 0) {
+        await Promise.all(
+          pendingCryptoHoldings.map((holding) =>
+            addCryptoHolding({
+              assetId,
+              marketCode: holding.marketCode,
+              coinName: holding.coinName,
               quantity: holding.quantity,
               avgPrice: holding.avgPrice,
               currentPrice: holding.currentPrice,
@@ -266,7 +419,36 @@ export default function AssetAddModal({
     isAddingHolding,
   };
 
+  const cryptoSearchState: CryptoSearchState = {
+    searchQuery: cryptoSearchQuery,
+    setSearchQuery: (value) => {
+      setCryptoSearchQuery(value);
+      if (selectedCoin) {
+        setSelectedCoin(null);
+        setCoinCurrentPrice(null);
+      }
+    },
+    searchResults: cryptoSearchResults,
+    isSearching: isCryptoSearching,
+    selectedCoin,
+    selectCoin: (coin) => {
+      void handleSelectCoin(coin);
+    },
+    quantity: coinQuantity,
+    setQuantityInput: (value) => setCoinQuantity(sanitizeDecimalInput(value)),
+    avgPrice: coinAvgPrice,
+    setAvgPriceInput: (value) => setCoinAvgPrice(sanitizeNumericInput(value)),
+    currentPrice: coinCurrentPrice,
+    isLoadingPrice: isLoadingCoinPrice,
+    isAddingHolding: isAddingCoinHolding,
+  };
+
   const pendingStockTotal = pendingHoldings.reduce((sum, holding) => {
+    const price = holding.currentPrice || holding.avgPrice || 0;
+    return sum + price * holding.quantity;
+  }, 0);
+
+  const pendingCryptoTotal = pendingCryptoHoldings.reduce((sum, holding) => {
     const price = holding.currentPrice || holding.avgPrice || 0;
     return sum + price * holding.quantity;
   }, 0);
@@ -343,7 +525,7 @@ export default function AssetAddModal({
             />
           </div>
 
-          {type !== 'stock' && (
+          {type !== 'stock' && type !== 'crypto' && (
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">현재 금액</label>
               <div className="relative">
@@ -406,6 +588,68 @@ export default function AssetAddModal({
                         <button
                           type="button"
                           onClick={() => handleRemovePendingHolding(index)}
+                          className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {type === 'crypto' && (
+            <div className="space-y-3 rounded-2xl border border-orange-100 bg-orange-50/70 p-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">보유 코인</label>
+                <p className="text-xs text-slate-500">
+                  현재 금액은 입력하지 않고, 추가한 코인의 평가금액 합계로 자동 계산됩니다.
+                </p>
+              </div>
+
+              <CryptoSearchForm
+                state={cryptoSearchState}
+                onAdd={() => {
+                  void handleAddPendingCryptoHolding();
+                }}
+              />
+
+              {pendingCryptoHoldings.length > 0 && (
+                <div className="space-y-2 rounded-xl border border-orange-100 bg-white p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-slate-700">추가할 코인</p>
+                    <p className="text-xs text-slate-500">
+                      예상 평가금액 {Math.round(pendingCryptoTotal).toLocaleString()}원
+                    </p>
+                  </div>
+                  {pendingCryptoHoldings.map((holding, index) => {
+                    const holdingValue =
+                      (holding.currentPrice || holding.avgPrice || 0) * holding.quantity;
+
+                    return (
+                      <div
+                        key={`${holding.marketCode}-${index}`}
+                        className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-800">
+                            {holding.coinName}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {holding.quantity.toLocaleString('ko-KR', {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 8,
+                            })}
+                            {holding.avgPrice ? ` · 평단 ${holding.avgPrice.toLocaleString()}원` : ''}
+                            {holdingValue > 0 ? ` · ${Math.round(holdingValue).toLocaleString()}원` : ''}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-slate-400">{holding.marketCode}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePendingCryptoHolding(index)}
                           className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
                         >
                           <Trash2 className="h-4 w-4" />

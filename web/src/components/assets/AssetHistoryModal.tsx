@@ -6,10 +6,13 @@ import { updateAsset } from '@/lib/assetService';
 import { ModalOverlay } from '@/components/common';
 import { X, Plus, Edit2 } from 'lucide-react';
 import { useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
+import { useCryptoHoldingManager } from '@/lib/utils/useCryptoHoldingManager';
 import { useGoldHolding } from '@/lib/utils/useGoldHolding';
 import GoldHoldingSection from './GoldHoldingSection';
 import StockSearchForm from './StockSearchForm';
 import StockHoldingList from './StockHoldingList';
+import CryptoSearchForm from './CryptoSearchForm';
+import CryptoHoldingList from './CryptoHoldingList';
 import { getAssetSignedBalance } from '@/lib/assets/assetMath';
 import { ASSET_TYPE_ICON_COMPONENTS } from './assetIcons';
 
@@ -33,6 +36,7 @@ export default function AssetHistoryModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const stockManager = useStockHoldingManager({ isOpen, asset });
+  const cryptoManager = useCryptoHoldingManager({ isOpen, asset });
 
   const goldHolding = useGoldHolding({ isOpen, asset });
 
@@ -43,6 +47,13 @@ export default function AssetHistoryModal({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, asset?.type, stockManager.isLoadingHoldings]);
+
+  useEffect(() => {
+    if (isOpen && asset?.type === 'crypto' && cryptoManager.holdings.length > 0 && !cryptoManager.isLoadingHoldings) {
+      void cryptoManager.refreshHoldingPrices();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, asset?.type, cryptoManager.isLoadingHoldings]);
 
   // 잔액 업데이트 폼 초기화
   useEffect(() => {
@@ -84,14 +95,17 @@ export default function AssetHistoryModal({
   const config = ASSET_TYPE_CONFIG[asset.type];
   const Icon = ASSET_TYPE_ICON_COMPONENTS[asset.type];
   const isStock = asset.type === 'stock';
+  const isCrypto = asset.type === 'crypto';
   const isGold = asset.type === 'gold';
+  const isHoldingManaged = isStock || isCrypto;
   const signedBalance = getAssetSignedBalance(asset);
-  // 주식 계좌 수익률 계산
+  // 시장형 자산 수익률 계산
   const investmentBase = asset.initialInvestment || asset.costBasis || 0;
-  const stockProfitLoss = isStock && investmentBase > 0 ? asset.currentBalance - investmentBase : 0;
-  const stockProfitLossRate = isStock && investmentBase > 0 ? (stockProfitLoss / investmentBase) * 100 : 0;
-  const showStockProfitLoss = isStock && investmentBase > 0;
-  const isStockProfit = stockProfitLoss >= 0;
+  const holdingProfitLoss = isHoldingManaged && investmentBase > 0 ? asset.currentBalance - investmentBase : 0;
+  const holdingProfitLossRate =
+    isHoldingManaged && investmentBase > 0 ? (holdingProfitLoss / investmentBase) * 100 : 0;
+  const showHoldingProfitLoss = isHoldingManaged && investmentBase > 0;
+  const isHoldingProfit = holdingProfitLoss >= 0;
 
   return (
     <ModalOverlay onClose={onClose}>
@@ -110,13 +124,13 @@ export default function AssetHistoryModal({
                   <h3 className="text-lg font-bold text-slate-800">{asset.name}</h3>
                   <p className="text-sm text-slate-500">
                     {asset.subType && `${asset.subType} · `}
-                    {isStock ? '평가금액 ' : ''}{signedBalance.toLocaleString()}원
+                    {isHoldingManaged ? '평가금액 ' : ''}{signedBalance.toLocaleString()}원
                   </p>
-                  {showStockProfitLoss && (
-                    <p className={`text-sm font-medium ${isStockProfit ? 'text-red-500' : 'text-blue-500'}`}>
-                      {isStockProfit ? '+' : ''}{stockProfitLossRate.toFixed(2)}%
+                  {showHoldingProfitLoss && (
+                    <p className={`text-sm font-medium ${isHoldingProfit ? 'text-red-500' : 'text-blue-500'}`}>
+                      {isHoldingProfit ? '+' : ''}{holdingProfitLossRate.toFixed(2)}%
                       <span className="ml-1">
-                        ({isStockProfit ? '+' : ''}{stockProfitLoss.toLocaleString()}원)
+                        ({isHoldingProfit ? '+' : ''}{holdingProfitLoss.toLocaleString()}원)
                       </span>
                     </p>
                   )}
@@ -142,7 +156,7 @@ export default function AssetHistoryModal({
             </div>
 
             {/* 버튼들 - 주식/금이 아닐 때만 표시 */}
-            {!isStock && !isGold && (
+            {!isHoldingManaged && !isGold && (
               <div className="mt-4 flex gap-2">
                 <button
                   type="button"
@@ -165,7 +179,7 @@ export default function AssetHistoryModal({
           </div>
 
           {/* 잔액 업데이트 폼 (예적금/부동산) */}
-          {!isStock && !isGold && showUpdateForm && (
+          {!isHoldingManaged && !isGold && showUpdateForm && (
             <div className="p-4 bg-blue-50 border-b border-blue-100">
               <div className="space-y-3">
                 <div>
@@ -249,6 +263,29 @@ export default function AssetHistoryModal({
             />
           )}
 
+          {isCrypto && (
+            <CryptoSearchForm
+              state={{
+                searchQuery: cryptoManager.searchQuery,
+                setSearchQuery: cryptoManager.setSearchQuery,
+                searchResults: cryptoManager.searchResults,
+                isSearching: cryptoManager.isSearching,
+                selectedCoin: cryptoManager.selectedCoin,
+                selectCoin: cryptoManager.selectCoin,
+                quantity: cryptoManager.quantity,
+                setQuantityInput: cryptoManager.setQuantityInput,
+                avgPrice: cryptoManager.avgPrice,
+                setAvgPriceInput: cryptoManager.setAvgPriceInput,
+                currentPrice: cryptoManager.currentPrice,
+                isLoadingPrice: cryptoManager.isLoadingPrice,
+                isAddingHolding: cryptoManager.isAddingHolding,
+              }}
+              onAdd={() => {
+                void cryptoManager.addHolding();
+              }}
+            />
+          )}
+
           {/* 콘텐츠 영역 */}
           <div className="flex-1 overflow-y-auto p-4">
             {isGold ? (
@@ -270,6 +307,14 @@ export default function AssetHistoryModal({
                 isLoading={stockManager.isLoadingHoldings}
                 isRefreshing={stockManager.isRefreshingPrices}
                 onRefresh={stockManager.refreshHoldingPrices}
+                assetId={asset.id}
+              />
+            ) : isCrypto ? (
+              <CryptoHoldingList
+                holdings={cryptoManager.holdings}
+                isLoading={cryptoManager.isLoadingHoldings}
+                isRefreshing={cryptoManager.isRefreshingPrices}
+                onRefresh={cryptoManager.refreshHoldingPrices}
                 assetId={asset.id}
               />
             ) : (
