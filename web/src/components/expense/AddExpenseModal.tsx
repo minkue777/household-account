@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect } from 'react';
+import { AmountInput, ModalOverlay } from '@/components/common';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { TransactionType } from '@/types/expense';
-import { ModalOverlay } from '@/components/common';
 import { useMonthlySplitInput } from '@/lib/utils/useMonthlySplitInput';
 import { useExpenseFormState } from '@/lib/utils/useExpenseFormState';
 import {
@@ -14,8 +14,8 @@ import {
   trimExpenseMerchant,
 } from '@/lib/utils/expenseForm';
 import { getTodayLocalDate } from '@/lib/utils/date';
-import ExpenseFormFields from '@/components/expense/ExpenseFormFields';
 import ExpenseActionButtons from '@/components/expense/ExpenseActionButtons';
+import ExpenseFormFields from '@/components/expense/ExpenseFormFields';
 
 interface AddExpenseModalProps {
   isOpen: boolean;
@@ -41,9 +41,8 @@ export default function AddExpenseModal({
 }: AddExpenseModalProps) {
   const { activeCategories, isLoading } = useCategoryContext();
   const isIncome = transactionType === 'income';
-  const transactionLabel = transactionType === 'income' ? '수입' : '지출';
-  const merchantLabel = transactionType === 'income' ? '수입처명' : '가맹점명';
-  const defaultMerchant = transactionType === 'income' ? '수입' : '';
+  const defaultMerchant = isIncome ? '수입' : '';
+  const defaultDate = selectedDate || getTodayLocalDate();
 
   const {
     merchant,
@@ -63,9 +62,10 @@ export default function AddExpenseModal({
       amount: '',
       category: 'etc',
       memo: '',
-      date: selectedDate || getTodayLocalDate(),
+      date: defaultDate,
     },
   });
+
   const {
     splitMonthsInput,
     showSplitInput,
@@ -77,26 +77,53 @@ export default function AddExpenseModal({
   } = useMonthlySplitInput();
 
   useEffect(() => {
-    if (activeCategories.length > 0 && !activeCategories.find((item) => item.key === category)) {
-      setCategory(resolveDefaultCategoryKey(activeCategories, category));
-    }
-  }, [activeCategories, category, setCategory]);
-
-  useEffect(() => {
     if (!isOpen) {
       return;
     }
 
-    setMerchant(defaultMerchant);
-    setDate(selectedDate || getTodayLocalDate());
+    resetExpenseFormState({
+      merchant: defaultMerchant,
+      amount: '',
+      category: resolveDefaultCategoryKey(activeCategories),
+      memo: '',
+      date: selectedDate || getTodayLocalDate(),
+    });
     resetMonthlySplitInput();
-  }, [defaultMerchant, isOpen, selectedDate, setDate, setMerchant, resetMonthlySplitInput]);
+  }, [
+    activeCategories,
+    defaultMerchant,
+    isOpen,
+    resetExpenseFormState,
+    resetMonthlySplitInput,
+    selectedDate,
+  ]);
 
   const handleSubmit = () => {
-    const normalizedMerchant = trimExpenseMerchant(merchant) || defaultMerchant;
-    const normalizedAmount = parsePositiveExpenseAmount(amount);
+    const parsedAmount = parsePositiveExpenseAmount(amount);
+    if (parsedAmount === null) {
+      return;
+    }
 
-    if (!normalizedMerchant || normalizedAmount === null) {
+    if (isIncome) {
+      const item = memo.trim();
+      if (!item) {
+        return;
+      }
+
+      onAdd('수입', parsedAmount, 'etc', date, item);
+      resetExpenseFormState({
+        merchant: defaultMerchant,
+        amount: '',
+        category: 'etc',
+        memo: '',
+        date,
+      });
+      onClose();
+      return;
+    }
+
+    const normalizedMerchant = trimExpenseMerchant(merchant);
+    if (!normalizedMerchant) {
       return;
     }
 
@@ -111,7 +138,7 @@ export default function AddExpenseModal({
 
     onAdd(
       normalizedMerchant,
-      normalizedAmount,
+      parsedAmount,
       category,
       date,
       toOptionalMemo(memo),
@@ -129,43 +156,75 @@ export default function AddExpenseModal({
     onClose();
   };
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    return null;
+  }
 
   return (
     <ModalOverlay onClose={onClose}>
       <div className="m-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-        <h2 className="mb-6 text-xl font-bold text-slate-800">{transactionLabel} 추가</h2>
+        <h2 className="mb-6 text-xl font-bold text-slate-800">
+          {isIncome ? '수입 추가' : '지출 추가'}
+        </h2>
 
-        <ExpenseFormFields
-          merchant={merchant}
-          onMerchantChange={setMerchant}
-          amount={amount}
-          onAmountChange={setAmount}
-          category={category}
-          onCategoryChange={setCategory}
-          memo={memo}
-          onMemoChange={setMemo}
-          date={date}
-          onDateChange={setDate}
-          showDateField
-          categoryLoading={isLoading}
-          merchantLabel={merchantLabel}
-          merchantPlaceholder={`${merchantLabel}을 입력하세요`}
-          memoLabel="메모 (선택)"
-          memoPlaceholder="메모를 입력하세요"
-          textInputPaddingClassName="px-4"
-          amountInputClassName="px-4"
-          showMerchantField={!isIncome}
-          showCategoryField={!isIncome}
-          monthlySplit={{
-            enabled: true,
-            showSplitInput,
-            splitMonthsInput,
-            splitMonthsError,
-            onToggle: toggleSplitInput,
-            onSplitMonthsInputChange: handleSplitMonthsInputChange,
-          }}
-        />
+        {isIncome ? (
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">항목</label>
+              <input
+                type="text"
+                value={memo}
+                onChange={(event) => setMemo(event.target.value)}
+                placeholder="항목을 입력하세요"
+                className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">금액</label>
+              <AmountInput value={amount} onChange={setAmount} className="px-4" />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">날짜</label>
+              <input
+                type="date"
+                value={date}
+                onChange={(event) => setDate(event.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+        ) : (
+          <ExpenseFormFields
+            merchant={merchant}
+            onMerchantChange={setMerchant}
+            amount={amount}
+            onAmountChange={setAmount}
+            category={category}
+            onCategoryChange={setCategory}
+            memo={memo}
+            onMemoChange={setMemo}
+            date={date}
+            onDateChange={setDate}
+            showDateField
+            categoryLoading={isLoading}
+            merchantLabel="가맹점명"
+            merchantPlaceholder="가맹점명을 입력하세요"
+            memoLabel="메모 (선택)"
+            memoPlaceholder="메모를 입력하세요"
+            textInputPaddingClassName="px-4"
+            amountInputClassName="px-4"
+            monthlySplit={{
+              enabled: true,
+              showSplitInput,
+              splitMonthsInput,
+              splitMonthsError,
+              onToggle: toggleSplitInput,
+              onSplitMonthsInputChange: handleSplitMonthsInputChange,
+            }}
+          />
+        )}
 
         <ExpenseActionButtons
           className="mt-6 gap-3"
@@ -178,7 +237,9 @@ export default function AddExpenseModal({
             label: '추가',
             onClick: handleSubmit,
             variant: 'primary',
-            disabled: isIncome ? parsePositiveExpenseAmount(amount) === null : !isExpenseSubmitEnabled(merchant, amount),
+            disabled: isIncome
+              ? parsePositiveExpenseAmount(amount) === null || memo.trim().length === 0
+              : !isExpenseSubmitEnabled(merchant, amount),
           }}
         />
       </div>

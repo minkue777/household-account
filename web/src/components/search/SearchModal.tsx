@@ -15,7 +15,10 @@ import SearchResultList from './SearchResultList';
 interface SearchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onExpenseUpdate?: (expenseId: string, data: { amount?: number; memo?: string; category?: string; merchant?: string }) => void;
+  onExpenseUpdate?: (
+    expenseId: string,
+    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string }
+  ) => void;
   onDelete?: (expenseId: string) => void;
   onSplitExpense?: (expense: Expense, splits: SplitItem[]) => void;
   transactionType: TransactionType;
@@ -68,6 +71,7 @@ export default function SearchModal({
     memo?: string;
     category?: string;
     merchant?: string;
+    date?: string;
   }) => {
     if (!selectedExpense || !onExpenseUpdate) return;
     await onExpenseUpdate(selectedExpense.id, updates);
@@ -233,13 +237,21 @@ export default function SearchModal({
           onSave={(updates) => {
             void handleSaveEdit(updates);
           }}
-          onOpenSplit={onSplitExpense ? () => setSplitExpense(selectedExpense) : undefined}
-          onSplitMonths={onDelete ? (months) => void handleSplitMonths(months) : undefined}
+          onOpenSplit={
+            transactionType === 'expense' && onSplitExpense ? () => setSplitExpense(selectedExpense) : undefined
+          }
+          onSplitMonths={
+            transactionType === 'expense' && onDelete ? (months) => void handleSplitMonths(months) : undefined
+          }
           onCancelSplitGroup={
-            selectedExpense.splitGroupId ? () => void handleCancelSplitGroup() : undefined
+            transactionType === 'expense' && selectedExpense.splitGroupId
+              ? () => void handleCancelSplitGroup()
+              : undefined
           }
           onUpdateSplitGroup={
-            selectedExpense.splitGroupId ? (newMonths) => void handleUpdateSplitGroup(newMonths) : undefined
+            transactionType === 'expense' && selectedExpense.splitGroupId
+              ? (newMonths) => void handleUpdateSplitGroup(newMonths)
+              : undefined
           }
           onDelete={onDelete ? () => void handleDelete(selectedExpense.id) : undefined}
           transactionType={transactionType}

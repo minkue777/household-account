@@ -17,7 +17,10 @@ import ExpenseSplitModal from './ExpenseSplitModal';
 interface ExpenseItemProps {
   expense: Expense;
   allExpenses: Expense[];
-  onExpenseUpdate?: (expenseId: string, data: { amount?: number; memo?: string; category?: string; merchant?: string }) => void;
+  onExpenseUpdate?: (
+    expenseId: string,
+    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string }
+  ) => void;
   onSaveMerchantRule?: (merchantName: string, category: string) => void;
   onDelete?: (expenseId: string) => void;
   onSplitExpense?: (expense: Expense, splits: SplitItem[]) => void;
@@ -161,7 +164,9 @@ export default function ExpenseItem({
     touchStartPos.current = null;
   };
 
-  const handleSaveEdit = (updates: { amount?: number; memo?: string; category?: string; merchant?: string }) => {
+  const handleSaveEdit = (
+    updates: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string }
+  ) => {
     if (onExpenseUpdate && Object.keys(updates).length > 0) {
       onExpenseUpdate(expense.id, updates);
     }
@@ -248,12 +253,12 @@ export default function ExpenseItem({
         onSave={handleSaveEdit}
         onSaveMerchantRule={onSaveMerchantRule}
         onUnmerge={onUnmergeExpense ? () => onUnmergeExpense(expense) : undefined}
-        onOpenSplit={onSplitExpense ? () => setShowSplitModal(true) : undefined}
-        onSplitMonths={onDelete ? handleSplitMonths : undefined}
-        onCancelSplitGroup={expense.splitGroupId ? handleCancelSplitGroup : undefined}
-        onUpdateSplitGroup={expense.splitGroupId ? handleUpdateSplitGroup : undefined}
+        onOpenSplit={transactionType === 'expense' && onSplitExpense ? () => setShowSplitModal(true) : undefined}
+        onSplitMonths={transactionType === 'expense' && onDelete ? handleSplitMonths : undefined}
+        onCancelSplitGroup={transactionType === 'expense' && expense.splitGroupId ? handleCancelSplitGroup : undefined}
+        onUpdateSplitGroup={transactionType === 'expense' && expense.splitGroupId ? handleUpdateSplitGroup : undefined}
         onDelete={onDelete ? () => onDelete(expense.id) : undefined}
-        onNotifyPartner={() => notifyPartner(expense.id)}
+        onNotifyPartner={transactionType === 'expense' ? () => notifyPartner(expense.id) : undefined}
       />
 
       {/* 분할 모달 */}

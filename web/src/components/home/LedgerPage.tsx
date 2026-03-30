@@ -188,7 +188,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
 
   const handleExpenseUpdate = async (
     expenseId: string,
-    data: { amount?: number; memo?: string; category?: string; merchant?: string }
+    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string }
   ) => {
     await updateExpense(expenseId, data);
   };

@@ -8,7 +8,10 @@ import { useDragAndDrop } from './hooks/useDragAndDrop';
 interface ExpenseDetailProps {
   date: string;
   expenses: Expense[];
-  onExpenseUpdate?: (expenseId: string, data: { amount?: number; memo?: string; category?: string; merchant?: string }) => void;
+  onExpenseUpdate?: (
+    expenseId: string,
+    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string }
+  ) => void;
   onSaveMerchantRule?: (merchantName: string, category: string) => void;
   onDelete?: (expenseId: string) => void;
   onAddExpense?: () => void;

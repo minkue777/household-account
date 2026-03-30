@@ -10,12 +10,14 @@ interface BuildExpenseUpdatesParams {
     amount: number;
     category: CategoryKey;
     memo?: string;
+    date?: string;
   };
   draft: {
     merchant: string;
     amountInput: string;
     category: CategoryKey;
     memo: string;
+    date?: string;
   };
 }
 
@@ -24,6 +26,7 @@ export interface ExpenseUpdates {
   memo?: string;
   category?: string;
   merchant?: string;
+  date?: string;
 }
 
 export function trimExpenseMerchant(merchant: string): string {
@@ -86,6 +89,9 @@ export function buildExpenseUpdates({
     updates.category = draft.category;
   }
 
+  if (draft.date !== undefined && draft.date !== original.date) {
+    updates.date = draft.date;
+  }
+
   return updates;
 }
-
