@@ -95,7 +95,7 @@ export default function AssetsPage() {
       .then(setDailyChange)
       .catch(() => setDailyChange(0));
 
-    saveDailyTotalSnapshot(currentTotal, financialTotal);
+    saveDailyTotalSnapshot(currentTotal, financialTotal, activeAssets);
   }, [assets]);
 
   const handleAssetClick = (asset: Asset) => {

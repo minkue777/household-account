@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   Chart as ChartJS,
+  ChartData,
+  ChartDataset,
+  ChartOptions,
   CategoryScale,
   LinearScale,
   PointElement,
@@ -16,13 +19,13 @@ import {
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { ArrowLeft } from 'lucide-react';
-import { Asset, AssetHistoryEntry } from '@/types/asset';
-import { subscribeToAssets, getAssetHistoryByPeriod } from '@/lib/assetService';
+import { ASSET_TYPE_CONFIG, Asset, AssetHistoryEntry, AssetType } from '@/types/asset';
+import { getAssetHistoryByPeriod, saveDailyTotalSnapshot, subscribeToAssets } from '@/lib/assetService';
 import { useTheme } from '@/contexts/ThemeContext';
 import AssetProfitChart from '@/components/assets/AssetProfitChart';
 import AssetDividendChart from '@/components/assets/AssetDividendChart';
 import { formatLocalDate } from '@/lib/utils/date';
-import { getAssetSignedBalance } from '@/lib/assets/assetMath';
+import { sumSignedAssetBalances, sumSignedBalancesByAssetType } from '@/lib/assets/assetMath';
 
 ChartJS.register(
   CategoryScale,
@@ -37,8 +40,11 @@ ChartJS.register(
 );
 
 type PeriodType = '3M' | '6M' | '1Y' | 'ALL';
+type TrendSeriesKey = 'all' | AssetType;
 
-// 숫자를 한글 단위로 변환 (예: 1481758652 → "14억 8175만 8652")
+const TYPE_SNAPSHOT_PREFIX = 'TYPE_';
+const ASSET_TYPE_ORDER: AssetType[] = ['savings', 'stock', 'crypto', 'property', 'gold', 'loan'];
+
 function formatKoreanUnit(num: number): string {
   if (num === 0) return '0';
 
@@ -57,20 +63,41 @@ function formatKoreanUnit(num: number): string {
   return sign + parts.join(' ');
 }
 
+function isAssetType(value: string): value is AssetType {
+  return value in ASSET_TYPE_CONFIG;
+}
+
+function buildCarriedSeries(
+  dates: string[],
+  entries: AssetHistoryEntry[],
+  fallbackValue?: number
+): Array<number | null> {
+  if (entries.length === 0) {
+    return dates.map((_, index) => (index === dates.length - 1 && fallbackValue !== undefined ? fallbackValue : null));
+  }
+
+  const balanceByDate = new Map(entries.map((entry) => [entry.date, entry.balance]));
+  let lastValue: number | null = null;
+
+  return dates.map((date) => {
+    const value = balanceByDate.get(date);
+    if (value !== undefined) {
+      lastValue = value;
+    }
+    return lastValue;
+  });
+}
+
 export default function AssetStatsPage() {
   const { themeConfig } = useTheme();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [history, setHistory] = useState<AssetHistoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('3M');
-
-  // 금융자산만 보기 필터
   const [financialOnly, setFinancialOnly] = useState(false);
+  const [enabledSeries, setEnabledSeries] = useState<Set<TrendSeriesKey>>(new Set<TrendSeriesKey>(['all']));
+  const hasInitializedSeries = useRef(false);
 
-  // 현재 날짜 정보
-  const now = new Date();
-
-  // 자산 구독
   useEffect(() => {
     const unsubscribe = subscribeToAssets((newAssets) => {
       setAssets(newAssets);
@@ -78,12 +105,11 @@ export default function AssetStatsPage() {
     return () => unsubscribe();
   }, []);
 
-  // 이력 조회
   useEffect(() => {
     const fetchHistory = async () => {
       setIsLoading(true);
       try {
-        // 기간 계산
+        const now = new Date();
         const endDate = formatLocalDate(new Date());
         let startDate: string;
 
@@ -116,129 +142,260 @@ export default function AssetStatsPage() {
     fetchHistory();
   }, [selectedPeriod]);
 
-  // 현재 총 자산 (금융자산 필터 적용 - 부동산 제외)
-  const totalAssets = useMemo(() => {
-    return assets
-      .filter((a) => a.isActive)
-      .filter((a) => !financialOnly || a.type !== 'property')
-      .reduce((sum, a) => sum + getAssetSignedBalance(a), 0);
-  }, [assets, financialOnly]);
+  const activeAssets = useMemo(() => assets.filter((asset) => asset.isActive), [assets]);
 
-  // 스냅샷 타입 (필터에 따라 TOTAL 또는 FINANCIAL)
+  useEffect(() => {
+    if (activeAssets.length === 0) return;
+
+    const currentTotal = sumSignedAssetBalances(activeAssets);
+    const financialTotal = sumSignedAssetBalances(
+      activeAssets.filter((asset) => asset.type !== 'property')
+    );
+
+    saveDailyTotalSnapshot(currentTotal, financialTotal, activeAssets).catch((error) => {
+      console.error('자산 스냅샷 저장 오류:', error);
+    });
+  }, [activeAssets]);
+
+  const visibleAssets = useMemo(
+    () => activeAssets.filter((asset) => !financialOnly || asset.type !== 'property'),
+    [activeAssets, financialOnly]
+  );
+
+  const totalAssets = useMemo(() => sumSignedAssetBalances(visibleAssets), [visibleAssets]);
+  const typeTotals = useMemo(() => sumSignedBalancesByAssetType(visibleAssets), [visibleAssets]);
   const snapshotType = financialOnly ? 'FINANCIAL' : 'TOTAL';
 
-  // 일별 자산 합계 계산 (스냅샷 사용)
-  const dailyTotals = useMemo(() => {
-    // 필터에 맞는 스냅샷 필터링
-    const snapshots = history
-      .filter((entry) => entry.assetId === snapshotType)
-      .sort((a, b) => a.date.localeCompare(b.date));
+  const totalSnapshots = useMemo(
+    () =>
+      history
+        .filter((entry) => entry.assetId === snapshotType)
+        .sort((a, b) => a.date.localeCompare(b.date)),
+    [history, snapshotType]
+  );
 
-    // 스냅샷이 있으면 직접 사용
-    if (snapshots.length > 0) {
-      return snapshots.map((entry) => ({
+  const typeSnapshots = useMemo(() => {
+    const result = {} as Record<AssetType, AssetHistoryEntry[]>;
+    ASSET_TYPE_ORDER.forEach((type) => {
+      result[type] = [];
+    });
+
+    history.forEach((entry) => {
+      if (!entry.assetId.startsWith(TYPE_SNAPSHOT_PREFIX)) return;
+      const typeKey = entry.assetId.slice(TYPE_SNAPSHOT_PREFIX.length);
+      if (!isAssetType(typeKey)) return;
+      if (financialOnly && typeKey === 'property') return;
+      result[typeKey].push(entry);
+    });
+
+    ASSET_TYPE_ORDER.forEach((type) => {
+      result[type].sort((a, b) => a.date.localeCompare(b.date));
+    });
+
+    return result;
+  }, [financialOnly, history]);
+
+  const availableTypes = useMemo(() => {
+    const available = new Set<AssetType>();
+    visibleAssets.forEach((asset) => available.add(asset.type));
+
+    return ASSET_TYPE_ORDER.filter((type) => available.has(type));
+  }, [visibleAssets]);
+
+  useEffect(() => {
+    const allowedKeys = new Set<TrendSeriesKey>(['all', ...availableTypes]);
+
+    setEnabledSeries((prev) => {
+      if (!hasInitializedSeries.current && availableTypes.length > 0) {
+        hasInitializedSeries.current = true;
+        return new Set<TrendSeriesKey>(['all', ...availableTypes]);
+      }
+
+      const next = new Set<TrendSeriesKey>(
+        Array.from(prev).filter((key) => allowedKeys.has(key))
+      );
+
+      if (next.size === 0) {
+        return new Set<TrendSeriesKey>(['all', ...availableTypes]);
+      }
+
+      return next;
+    });
+  }, [availableTypes]);
+
+  const summaryTotals = useMemo(() => {
+    if (totalSnapshots.length > 0) {
+      return totalSnapshots.map((entry) => ({
         date: entry.date,
         total: entry.balance,
         change: entry.changeAmount,
       }));
     }
 
-    // 스냅샷이 없으면 현재값만 표시
-    return [{
-      date: formatLocalDate(new Date()),
-      total: totalAssets,
-      change: 0,
-    }];
-  }, [history, snapshotType, totalAssets]);
+    return [
+      {
+        date: formatLocalDate(new Date()),
+        total: totalAssets,
+        change: 0,
+      },
+    ];
+  }, [totalAssets, totalSnapshots]);
 
+  const chartDates = useMemo(() => {
+    const dateSet = new Set<string>();
 
-  // 차트 데이터
-  const chartData = useMemo(() => {
-    const labels = dailyTotals.map((d) => {
-      const date = new Date(d.date);
+    if (enabledSeries.has('all')) {
+      totalSnapshots.forEach((entry) => dateSet.add(entry.date));
+    }
+
+    availableTypes.forEach((type) => {
+      if (!enabledSeries.has(type)) return;
+      typeSnapshots[type].forEach((entry) => dateSet.add(entry.date));
+    });
+
+    if (dateSet.size === 0) {
+      dateSet.add(formatLocalDate(new Date()));
+    }
+
+    return Array.from(dateSet).sort();
+  }, [availableTypes, enabledSeries, totalSnapshots, typeSnapshots]);
+
+  const chartData = useMemo<ChartData<'line', Array<number | null>, string>>(() => {
+    const labels = chartDates.map((dateString) => {
+      const date = new Date(dateString);
       return `${date.getMonth() + 1}/${date.getDate()}`;
     });
 
-    return {
-      labels,
-      datasets: [
-        {
-          label: '총 자산',
-          data: dailyTotals.map((d) => d.total),
-          borderColor: '#3B82F6',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          fill: true,
-          tension: 0.3,
-          pointRadius: dailyTotals.length > 30 ? 0 : 3,
-          pointHoverRadius: 5,
-        },
-      ],
-    };
-  }, [dailyTotals]);
+    const datasets: Array<ChartDataset<'line', Array<number | null>>> = [];
 
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false,
+    if (enabledSeries.has('all')) {
+      datasets.push({
+        label: financialOnly ? '금융자산' : '전체',
+        data: buildCarriedSeries(chartDates, totalSnapshots, totalAssets),
+        borderColor: '#3B82F6',
+        backgroundColor: 'rgba(59, 130, 246, 0.10)',
+        borderWidth: 3,
+        fill: true,
+        tension: 0.3,
+        pointRadius: chartDates.length > 45 ? 0 : 3,
+        pointHoverRadius: 5,
+      });
+    }
+
+    availableTypes.forEach((type) => {
+      if (!enabledSeries.has(type)) return;
+
+      const config = ASSET_TYPE_CONFIG[type];
+
+      datasets.push({
+        label: config.label,
+        data: buildCarriedSeries(chartDates, typeSnapshots[type], typeTotals[type]),
+        borderColor: config.color,
+        backgroundColor: `${config.color}20`,
+        borderWidth: 2,
+        fill: false,
+        tension: 0.3,
+        pointRadius: chartDates.length > 45 ? 0 : 2.5,
+        pointHoverRadius: 5,
+      });
+    });
+
+    return { labels, datasets };
+  }, [
+    availableTypes,
+    chartDates,
+    enabledSeries,
+    financialOnly,
+    totalAssets,
+    totalSnapshots,
+    typeSnapshots,
+    typeTotals,
+  ]);
+
+  const chartOptions = useMemo<ChartOptions<'line'>>(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: 'index' as const,
+        intersect: false,
       },
-      tooltip: {
-        callbacks: {
-          label: function (context: any) {
-            return `${context.raw.toLocaleString()}원`;
-          },
-        },
-      },
-    },
-    scales: {
-      x: {
-        grid: {
+      plugins: {
+        legend: {
           display: false,
         },
-        ticks: {
-          maxTicksLimit: 7,
-        },
-      },
-      y: {
-        grid: {
-          color: 'rgba(0, 0, 0, 0.05)',
-        },
-        title: {
-          display: true,
-          text: '(억원)',
-          font: { size: 11 },
-          color: '#94a3b8',
-        },
-        ticks: {
-          callback: function (value: any) {
-            return (value / 100000000).toFixed(1);
+        tooltip: {
+          callbacks: {
+            label(context: { dataset: { label?: string }; parsed: { y: number | null } }) {
+              if (context.parsed.y === null) return `${context.dataset.label}: 데이터 없음`;
+              return `${context.dataset.label}: ${context.parsed.y.toLocaleString()}원`;
+            },
           },
         },
       },
-    },
+      scales: {
+        x: {
+          grid: {
+            display: false,
+          },
+          ticks: {
+            maxTicksLimit: 7,
+          },
+        },
+        y: {
+          beginAtZero: false,
+          grid: {
+            color: 'rgba(0, 0, 0, 0.05)',
+          },
+          title: {
+            display: true,
+            text: '(억원)',
+            font: { size: 11 },
+            color: '#94a3b8',
+          },
+          ticks: {
+            callback(value: string | number) {
+              const numericValue = typeof value === 'number' ? value : Number(value);
+              return (numericValue / 100000000).toFixed(1);
+            },
+          },
+        },
+      },
+    }),
+    []
+  );
+
+  const periodChange =
+    summaryTotals.length > 1
+      ? summaryTotals[summaryTotals.length - 1].total - summaryTotals[0].total
+      : 0;
+
+  const periodChangeRate =
+    summaryTotals.length > 1 && summaryTotals[0].total > 0
+      ? (periodChange / summaryTotals[0].total) * 100
+      : 0;
+
+  const toggleSeries = (key: TrendSeriesKey) => {
+    setEnabledSeries((prev) => {
+      const next = new Set(prev);
+
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+
+      if (next.size === 0) {
+        next.add('all');
+      }
+
+      return next;
+    });
   };
-
-  // 스냅샷 필터링 (필터에 따라 TOTAL 또는 FINANCIAL)
-  const totalSnapshots = useMemo(() => {
-    return history
-      .filter((h) => h.assetId === snapshotType)
-      .sort((a, b) => a.date.localeCompare(b.date));
-  }, [history, snapshotType]);
-
-  // 기간 변동액
-  const periodChange = dailyTotals.length > 1
-    ? dailyTotals[dailyTotals.length - 1].total - dailyTotals[0].total
-    : 0;
-
-  const periodChangeRate = dailyTotals.length > 1 && dailyTotals[0].total > 0
-    ? ((periodChange / dailyTotals[0].total) * 100)
-    : 0;
 
   return (
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
       <div className="max-w-lg mx-auto">
-        {/* 헤더 */}
         <header className="mb-6 flex items-center gap-3">
           <Link
             href="/assets"
@@ -263,7 +420,6 @@ export default function AssetStatsPage() {
           <div className="text-center py-12 text-slate-400">로딩 중...</div>
         ) : (
           <div className="space-y-4">
-            {/* 금융자산 필터 */}
             <div className="flex justify-end">
               <button
                 onClick={() => setFinancialOnly(!financialOnly)}
@@ -277,7 +433,6 @@ export default function AssetStatsPage() {
               </button>
             </div>
 
-            {/* 현재 총 자산 */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
               <p className="text-sm text-slate-500 mb-1">
                 {financialOnly ? '금융자산' : '현재 총 자산'}
@@ -291,13 +446,14 @@ export default function AssetStatsPage() {
               </p>
               {periodChange !== 0 && (
                 <p className={`text-sm mt-1 ${periodChange > 0 ? 'text-red-500' : 'text-blue-500'}`}>
-                  {periodChange > 0 ? '+' : ''}{periodChange.toLocaleString()}원
-                  ({periodChangeRate > 0 ? '+' : ''}{periodChangeRate.toFixed(2)}%)
+                  {periodChange > 0 ? '+' : ''}
+                  {periodChange.toLocaleString()}원
+                  ({periodChangeRate > 0 ? '+' : ''}
+                  {periodChangeRate.toFixed(2)}%)
                 </p>
               )}
             </div>
 
-            {/* 기간 선택 */}
             <div className="flex gap-2">
               {(['3M', '6M', '1Y', 'ALL'] as PeriodType[]).map((period) => (
                 <button
@@ -314,23 +470,65 @@ export default function AssetStatsPage() {
               ))}
             </div>
 
-            {/* 자산 추이 차트 */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
               <h3 className="text-sm font-semibold text-slate-700 mb-4">자산 추이</h3>
-              <div className="h-[250px]">
-                <Line data={chartData} options={chartOptions} />
+
+              <div className="flex flex-wrap gap-2 mb-4">
+                <button
+                  onClick={() => toggleSeries('all')}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                    enabledSeries.has('all')
+                      ? 'bg-blue-500 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                  }`}
+                >
+                  전체
+                </button>
+
+                {availableTypes.map((type) => {
+                  const config = ASSET_TYPE_CONFIG[type];
+                  const isEnabled = enabledSeries.has(type);
+
+                  return (
+                    <button
+                      key={type}
+                      onClick={() => toggleSeries(type)}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${
+                        isEnabled
+                          ? 'text-white shadow-md'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
+                      style={{
+                        backgroundColor: isEnabled ? config.color : undefined,
+                      }}
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: isEnabled ? 'white' : config.color }}
+                      />
+                      {config.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="h-[280px]">
+                {chartData.datasets.length > 0 ? (
+                  <Line data={chartData} options={chartOptions} />
+                ) : (
+                  <div className="h-full flex items-center justify-center text-slate-400">
+                    표시할 자산 유형을 선택하세요
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* 수익 차트 */}
             <AssetProfitChart
               totalSnapshots={totalSnapshots}
               totalAssets={totalAssets}
             />
 
-            {/* 배당금 차트 */}
             <AssetDividendChart />
-
           </div>
         )}
       </div>

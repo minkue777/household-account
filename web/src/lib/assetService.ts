@@ -21,6 +21,7 @@ import {
   Asset,
   AssetHistoryEntry,
   AssetInput,
+  AssetType,
   CryptoHolding,
   CryptoHoldingInput,
   StockHolding,
@@ -29,6 +30,7 @@ import {
 import { getStoredHouseholdKey } from './householdService';
 import { formatLocalDate } from './utils/date';
 import { buildLegacyAssetOwnerMap } from './assets/memberOptions';
+import { sumSignedBalancesByAssetType } from './assets/assetMath';
 
 const ASSETS_COLLECTION = 'assets';
 const HISTORY_COLLECTION = 'asset_history';
@@ -427,7 +429,8 @@ async function saveDailySnapshot(
  */
 export async function saveDailyTotalSnapshot(
   totalBalance: number,
-  financialBalance?: number
+  financialBalance?: number,
+  assets?: Array<Pick<Asset, 'type' | 'currentBalance'>>
 ): Promise<void> {
   // 전체 자산 스냅샷 저장
   await saveDailySnapshot('TOTAL', totalBalance, 'total');
@@ -435,6 +438,16 @@ export async function saveDailyTotalSnapshot(
   // 금융자산 스냅샷 저장 (부동산 제외)
   if (financialBalance !== undefined) {
     await saveDailySnapshot('FINANCIAL', financialBalance, 'financial');
+  }
+
+  if (assets && assets.length > 0) {
+    const typeTotals = sumSignedBalancesByAssetType(assets);
+
+    await Promise.all(
+      Object.entries(typeTotals).map(([type, balance]) =>
+        saveDailySnapshot(`TYPE_${type}`, balance, `type_${type as AssetType}`)
+      )
+    );
   }
 }
 
