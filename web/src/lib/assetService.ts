@@ -61,6 +61,9 @@ function mapDocToAsset(docSnap: QueryDocumentSnapshot<DocumentData>): Asset {
     subType: data.subType,
     owner: data.owner,
     currentBalance: data.currentBalance || 0,
+    recurringContributionAmount: data.recurringContributionAmount || 0,
+    recurringContributionDay: data.recurringContributionDay || 0,
+    lastAutoContributionMonth: data.lastAutoContributionMonth || '',
     costBasis: data.costBasis,
     initialInvestment: data.initialInvestment,
     currency: data.currency || 'KRW',
@@ -74,6 +77,16 @@ function mapDocToAsset(docSnap: QueryDocumentSnapshot<DocumentData>): Asset {
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
   };
+}
+
+function getCurrentYearMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getEffectiveContributionDay(dayOfMonth: number, now = new Date()): number {
+  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return Math.min(dayOfMonth, lastDayOfMonth);
 }
 
 /**
@@ -449,6 +462,82 @@ export async function saveDailyTotalSnapshot(
       )
     );
   }
+}
+
+export async function processSavingsAutoContributions(): Promise<number> {
+  const householdId = getHouseholdId();
+  const now = new Date();
+  const currentMonth = getCurrentYearMonth();
+
+  const q = query(
+    collection(db, ASSETS_COLLECTION),
+    where('householdId', '==', householdId)
+  );
+
+  const snapshot = await getDocs(q);
+  const targets = snapshot.docs.filter((docSnap) => {
+    const data = docSnap.data();
+    const amount = data.recurringContributionAmount || 0;
+    const day = data.recurringContributionDay || 0;
+    const lastAppliedMonth = data.lastAutoContributionMonth || '';
+    const dueDay = getEffectiveContributionDay(day, now);
+
+    return (
+      data.isActive !== false &&
+      data.type === 'savings' &&
+      data.subType === '적금' &&
+      amount > 0 &&
+      day >= 1 &&
+      day <= 31 &&
+      now.getDate() >= dueDay &&
+      lastAppliedMonth !== currentMonth
+    );
+  });
+
+  if (targets.length === 0) {
+    return 0;
+  }
+
+  let appliedCount = 0;
+
+  await Promise.all(
+    targets.map(async (docSnap) => {
+      const docRef = doc(db, ASSETS_COLLECTION, docSnap.id);
+
+      await runTransaction(db, async (transaction) => {
+        const latestSnap = await transaction.get(docRef);
+        if (!latestSnap.exists()) return;
+
+        const data = latestSnap.data();
+        const amount = data.recurringContributionAmount || 0;
+        const day = data.recurringContributionDay || 0;
+        const lastAppliedMonth = data.lastAutoContributionMonth || '';
+        const dueDay = getEffectiveContributionDay(day, now);
+
+        if (
+          data.isActive === false ||
+          data.type !== 'savings' ||
+          data.subType !== '적금' ||
+          amount <= 0 ||
+          day < 1 ||
+          day > 31 ||
+          now.getDate() < dueDay ||
+          lastAppliedMonth === currentMonth
+        ) {
+          return;
+        }
+
+        transaction.update(docRef, {
+          currentBalance: (data.currentBalance || 0) + amount,
+          lastAutoContributionMonth: currentMonth,
+          updatedAt: Timestamp.now(),
+        });
+        appliedCount += 1;
+      });
+    })
+  );
+
+  return appliedCount;
 }
 
 /**

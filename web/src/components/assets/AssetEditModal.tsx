@@ -5,7 +5,12 @@ import { Asset, AssetType, ASSET_TYPE_CONFIG } from '@/types/asset';
 import { deleteAsset, updateAsset } from '@/lib/assetService';
 import { ConfirmDialog, ModalOverlay } from '@/components/common';
 import { X, Trash2 } from 'lucide-react';
-import { AssetMemoField, AssetTypeGrid, StockInitialInvestmentField } from './AssetFormFields';
+import {
+  AssetMemoField,
+  AssetTypeGrid,
+  SavingsRecurringFields,
+  StockInitialInvestmentField,
+} from './AssetFormFields';
 
 interface AssetEditModalProps {
   isOpen: boolean;
@@ -24,11 +29,24 @@ function sanitizeGoldQuantity(rawValue: string) {
   return `${cleaned.slice(0, firstDot + 1)}${cleaned.slice(firstDot + 1).replace(/\./g, '')}`;
 }
 
+function getCurrentYearMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getEffectiveContributionDay(dayOfMonth: number) {
+  const now = new Date();
+  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return Math.min(dayOfMonth, lastDayOfMonth);
+}
+
 export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModalProps) {
   const [name, setName] = useState('');
   const [type, setType] = useState<AssetType>('savings');
   const [subType, setSubType] = useState('');
   const [balance, setBalance] = useState('');
+  const [recurringContributionAmount, setRecurringContributionAmount] = useState('');
+  const [recurringContributionDay, setRecurringContributionDay] = useState('');
   const [initialInvestment, setInitialInvestment] = useState('');
   const [memo, setMemo] = useState('');
   const [goldQuantity, setGoldQuantity] = useState('');
@@ -46,6 +64,12 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
     setType(asset.type);
     setSubType(asset.subType || ASSET_TYPE_CONFIG[asset.type].subTypes[0] || '');
     setBalance(Math.abs(asset.currentBalance || 0).toString());
+    setRecurringContributionAmount(
+      asset.recurringContributionAmount ? asset.recurringContributionAmount.toString() : ''
+    );
+    setRecurringContributionDay(
+      asset.recurringContributionDay ? asset.recurringContributionDay.toString() : ''
+    );
     setInitialInvestment(asset.initialInvestment?.toString() || '');
     setMemo(asset.type === 'gold' && asset.subType !== '금 ETF' ? '' : asset.memo || '');
     setGoldQuantity(goldQuantityMatch ? goldQuantityMatch[1] : '');
@@ -71,10 +95,26 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
 
     setIsSubmitting(true);
     try {
+      const recurringAmount = parseInt(recurringContributionAmount, 10) || 0;
+      const rawRecurringDay = parseInt(recurringContributionDay, 10) || 0;
+      const recurringDay = rawRecurringDay >= 1 && rawRecurringDay <= 31 ? rawRecurringDay : 0;
+      const isSavingsInstallment = type === 'savings' && subType === '적금';
+
       const updateData: Record<string, unknown> = {
         name: name.trim(),
         type,
         subType: subType || '',
+        recurringContributionAmount: isSavingsInstallment ? recurringAmount : 0,
+        recurringContributionDay: isSavingsInstallment ? recurringDay : 0,
+        lastAutoContributionMonth: !isSavingsInstallment
+          ? ''
+          : asset.lastAutoContributionMonth === getCurrentYearMonth()
+            ? asset.lastAutoContributionMonth
+            : recurringAmount > 0 &&
+                recurringDay > 0 &&
+                new Date().getDate() >= getEffectiveContributionDay(recurringDay)
+              ? getCurrentYearMonth()
+              : asset.lastAutoContributionMonth || '',
       };
 
       if (type === 'stock') {
@@ -126,6 +166,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
   const isGoldEtf = isGold && subType === '금 ETF';
   const isPhysicalGold = isGold && !isGoldEtf;
   const isHoldingManaged = isStock || isCrypto || isGoldEtf;
+  const isSavingsInstallment = type === 'savings' && subType === '적금';
 
   return (
     <>
@@ -206,6 +247,15 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">원</span>
                 </div>
               </div>
+            )}
+
+            {isSavingsInstallment && (
+              <SavingsRecurringFields
+                amountValue={recurringContributionAmount}
+                dayValue={recurringContributionDay}
+                onAmountChange={setRecurringContributionAmount}
+                onDayChange={setRecurringContributionDay}
+              />
             )}
 
             {isPhysicalGold && (

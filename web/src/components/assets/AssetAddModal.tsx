@@ -11,7 +11,7 @@ import {
 import { addAsset, addCryptoHolding, addStockHolding } from '@/lib/assetService';
 import { ModalOverlay } from '@/components/common';
 import { X, Trash2 } from 'lucide-react';
-import { AssetMemoField, AssetTypeGrid } from './AssetFormFields';
+import { AssetMemoField, AssetTypeGrid, SavingsRecurringFields } from './AssetFormFields';
 import StockSearchForm, { StockSearchState } from './StockSearchForm';
 import CryptoSearchForm, { CryptoSearchState } from './CryptoSearchForm';
 import { HOUSEHOLD_OWNER_OPTION } from '@/lib/assets/memberOptions';
@@ -64,6 +64,17 @@ function sanitizeDecimalInput(rawValue: string) {
   return `${cleaned.slice(0, firstDot + 1)}${cleaned.slice(firstDot + 1).replace(/\./g, '')}`;
 }
 
+function getCurrentYearMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getEffectiveContributionDay(dayOfMonth: number) {
+  const now = new Date();
+  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return Math.min(dayOfMonth, lastDayOfMonth);
+}
+
 export default function AssetAddModal({
   isOpen,
   onClose,
@@ -76,6 +87,8 @@ export default function AssetAddModal({
   const [subType, setSubType] = useState('');
   const [owner, setOwner] = useState(ownerOptions[0] || HOUSEHOLD_OWNER_OPTION);
   const [balance, setBalance] = useState('');
+  const [recurringContributionAmount, setRecurringContributionAmount] = useState('');
+  const [recurringContributionDay, setRecurringContributionDay] = useState('');
   const [memo, setMemo] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -103,6 +116,7 @@ export default function AssetAddModal({
 
   const isGoldEtf = type === 'gold' && subType === '금 ETF';
   const isStockLikeAsset = type === 'stock' || isGoldEtf;
+  const isSavingsInstallment = type === 'savings' && subType === '적금';
 
   const resetStockForm = () => {
     setSearchQuery('');
@@ -125,6 +139,8 @@ export default function AssetAddModal({
   useEffect(() => {
     setName('');
     setBalance('');
+    setRecurringContributionAmount('');
+    setRecurringContributionDay('');
     setMemo('');
     setPendingHoldings([]);
     setPendingCryptoHoldings([]);
@@ -154,6 +170,8 @@ export default function AssetAddModal({
     setOwner(initialOwner);
     setName('');
     setBalance('');
+    setRecurringContributionAmount('');
+    setRecurringContributionDay('');
     setMemo('');
     setPendingHoldings([]);
     setPendingCryptoHoldings([]);
@@ -353,6 +371,19 @@ export default function AssetAddModal({
         subType: subType || undefined,
         owner,
         currentBalance: isStockLikeAsset || type === 'crypto' ? 0 : parseInt(balance, 10) || 0,
+        recurringContributionAmount: isSavingsInstallment
+          ? parseInt(recurringContributionAmount, 10) || 0
+          : 0,
+        recurringContributionDay: isSavingsInstallment
+          ? parseInt(recurringContributionDay, 10) || 0
+          : 0,
+        lastAutoContributionMonth:
+          isSavingsInstallment &&
+          (parseInt(recurringContributionAmount, 10) || 0) > 0 &&
+          (parseInt(recurringContributionDay, 10) || 0) > 0 &&
+          new Date().getDate() >= getEffectiveContributionDay(parseInt(recurringContributionDay, 10))
+            ? getCurrentYearMonth()
+            : '',
         currency: 'KRW',
         memo: memo.trim() || undefined,
         isActive: true,
@@ -548,6 +579,15 @@ export default function AssetAddModal({
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">원</span>
               </div>
             </div>
+          )}
+
+          {isSavingsInstallment && (
+            <SavingsRecurringFields
+              amountValue={recurringContributionAmount}
+              dayValue={recurringContributionDay}
+              onAmountChange={setRecurringContributionAmount}
+              onDayChange={setRecurringContributionDay}
+            />
           )}
 
           {isStockLikeAsset && (

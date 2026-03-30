@@ -63,6 +63,9 @@ export interface Asset {
   subType?: string;
   owner?: string;
   currentBalance: number;
+  recurringContributionAmount?: number;
+  recurringContributionDay?: number;
+  lastAutoContributionMonth?: string;
   costBasis?: number;
   initialInvestment?: number;
   currency: string;

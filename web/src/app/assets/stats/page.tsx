@@ -20,7 +20,12 @@ import {
 import { Line } from 'react-chartjs-2';
 import { ArrowLeft } from 'lucide-react';
 import { ASSET_TYPE_CONFIG, Asset, AssetHistoryEntry, AssetType } from '@/types/asset';
-import { getAssetHistoryByPeriod, saveDailyTotalSnapshot, subscribeToAssets } from '@/lib/assetService';
+import {
+  getAssetHistoryByPeriod,
+  processSavingsAutoContributions,
+  saveDailyTotalSnapshot,
+  subscribeToAssets,
+} from '@/lib/assetService';
 import { useTheme } from '@/contexts/ThemeContext';
 import AssetProfitChart from '@/components/assets/AssetProfitChart';
 import AssetDividendChart from '@/components/assets/AssetDividendChart';
@@ -103,6 +108,10 @@ export default function AssetStatsPage() {
       setAssets(newAssets);
     });
     return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    processSavingsAutoContributions().catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -274,11 +283,13 @@ export default function AssetStatsPage() {
         data: buildCarriedSeries(chartDates, totalSnapshots, totalAssets),
         borderColor: '#3B82F6',
         backgroundColor: 'rgba(59, 130, 246, 0.10)',
-        borderWidth: 3,
+        borderWidth: 2,
         fill: true,
         tension: 0.3,
-        pointRadius: chartDates.length > 45 ? 0 : 3,
-        pointHoverRadius: 5,
+        cubicInterpolationMode: 'monotone',
+        spanGaps: true,
+        pointRadius: chartDates.length > 14 ? 0 : 2.5,
+        pointHoverRadius: 4,
       });
     }
 
@@ -292,11 +303,13 @@ export default function AssetStatsPage() {
         data: buildCarriedSeries(chartDates, typeSnapshots[type], typeTotals[type]),
         borderColor: config.color,
         backgroundColor: `${config.color}20`,
-        borderWidth: 2,
+        borderWidth: 1.75,
         fill: false,
         tension: 0.3,
-        pointRadius: chartDates.length > 45 ? 0 : 2.5,
-        pointHoverRadius: 5,
+        cubicInterpolationMode: 'monotone',
+        spanGaps: true,
+        pointRadius: chartDates.length > 14 ? 0 : 2,
+        pointHoverRadius: 4,
       });
     });
 
@@ -359,6 +372,15 @@ export default function AssetStatsPage() {
               return (numericValue / 100000000).toFixed(1);
             },
           },
+        },
+      },
+      elements: {
+        line: {
+          borderCapStyle: 'round',
+          borderJoinStyle: 'round',
+        },
+        point: {
+          hitRadius: 10,
         },
       },
     }),
