@@ -1,21 +1,13 @@
 'use client';
 
 import { AssetType, ASSET_TYPE_CONFIG } from '@/types/asset';
-import { Banknote, BarChart3, Home, Coins, CircleMinus } from 'lucide-react';
+import { ASSET_TYPE_ICON_COMPONENTS } from './assetIcons';
 
 interface AssetTypeSelectorProps {
   selectedType: AssetType;
   onTypeChange: (type: AssetType) => void;
   assetCounts?: Record<AssetType, number>;
 }
-
-const ICONS: Record<AssetType, React.ReactNode> = {
-  savings: <Banknote className="w-4 h-4" />,
-  stock: <BarChart3 className="w-4 h-4" />,
-  property: <Home className="w-4 h-4" />,
-  gold: <Coins className="w-4 h-4" />,
-  loan: <CircleMinus className="w-4 h-4" />,
-};
 
 export default function AssetTypeSelector({
   selectedType,
@@ -28,6 +20,7 @@ export default function AssetTypeSelector({
         const config = ASSET_TYPE_CONFIG[type];
         const isSelected = selectedType === type;
         const count = assetCounts[type];
+        const Icon = ASSET_TYPE_ICON_COMPONENTS[type];
 
         return (
           <button
@@ -40,7 +33,7 @@ export default function AssetTypeSelector({
             }`}
           >
             <span style={{ color: isSelected ? config.color : undefined }}>
-              {ICONS[type]}
+              <Icon className="w-4 h-4" />
             </span>
             <span>{config.label}</span>
             {count > 0 && (

@@ -4,13 +4,14 @@ import { useState, useEffect } from 'react';
 import { Asset, ASSET_TYPE_CONFIG } from '@/types/asset';
 import { updateAsset } from '@/lib/assetService';
 import { ModalOverlay } from '@/components/common';
-import { X, Plus, Edit2, Banknote, Home, BarChart3, Coins, CircleMinus } from 'lucide-react';
+import { X, Plus, Edit2 } from 'lucide-react';
 import { useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
 import { useGoldHolding } from '@/lib/utils/useGoldHolding';
 import GoldHoldingSection from './GoldHoldingSection';
 import StockSearchForm from './StockSearchForm';
 import StockHoldingList from './StockHoldingList';
 import { getAssetSignedBalance } from '@/lib/assets/assetMath';
+import { ASSET_TYPE_ICON_COMPONENTS } from './assetIcons';
 
 interface AssetHistoryModalProps {
   isOpen: boolean;
@@ -19,14 +20,6 @@ interface AssetHistoryModalProps {
   onEditAsset: () => void;
   onViewChart: () => void;
 }
-
-const ICONS: Record<string, React.ReactNode> = {
-  savings: <Banknote className="w-5 h-5" />,
-  stock: <BarChart3 className="w-5 h-5" />,
-  property: <Home className="w-5 h-5" />,
-  gold: <Coins className="w-5 h-5" />,
-  loan: <CircleMinus className="w-5 h-5" />,
-};
 
 export default function AssetHistoryModal({
   isOpen,
@@ -89,6 +82,7 @@ export default function AssetHistoryModal({
   if (!isOpen || !asset) return null;
 
   const config = ASSET_TYPE_CONFIG[asset.type];
+  const Icon = ASSET_TYPE_ICON_COMPONENTS[asset.type];
   const isStock = asset.type === 'stock';
   const isGold = asset.type === 'gold';
   const signedBalance = getAssetSignedBalance(asset);
@@ -110,7 +104,7 @@ export default function AssetHistoryModal({
                   className="w-12 h-12 rounded-full flex items-center justify-center"
                   style={{ backgroundColor: `${asset.color || config.color}15`, color: asset.color || config.color }}
                 >
-                  {ICONS[asset.type]}
+                  <Icon className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-800">{asset.name}</h3>

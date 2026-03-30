@@ -1,8 +1,8 @@
 'use client';
 
 import { Asset, ASSET_TYPE_CONFIG } from '@/types/asset';
-import { Banknote, BarChart3, Home, Coins, CircleMinus } from 'lucide-react';
 import { getAssetSignedBalance } from '@/lib/assets/assetMath';
+import { ASSET_TYPE_ICON_COMPONENTS } from './assetIcons';
 
 interface AssetCardProps {
   asset: Asset;
@@ -13,17 +13,10 @@ interface AssetCardProps {
   onClick: () => void;
 }
 
-const ICONS: Record<string, React.ReactNode> = {
-  savings: <Banknote className="w-5 h-5" />,
-  stock: <BarChart3 className="w-5 h-5" />,
-  property: <Home className="w-5 h-5" />,
-  gold: <Coins className="w-5 h-5" />,
-  loan: <CircleMinus className="w-5 h-5" />,
-};
-
 export default function AssetCard({ asset, onClick }: AssetCardProps) {
   const config = ASSET_TYPE_CONFIG[asset.type];
   const iconColor = asset.color || config.color;
+  const Icon = ASSET_TYPE_ICON_COMPONENTS[asset.type];
 
   // 주식 계좌: 수익률 계산 (평가금액 vs 투자원금)
   const isStock = asset.type === 'stock';
@@ -44,7 +37,7 @@ export default function AssetCard({ asset, onClick }: AssetCardProps) {
         className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
         style={{ backgroundColor: iconColor, color: 'white' }}
       >
-        {ICONS[asset.type]}
+        <Icon className="w-5 h-5" />
       </div>
 
       {/* 이름 & 부가정보 */}

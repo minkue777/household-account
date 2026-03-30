@@ -1,15 +1,7 @@
 'use client';
 
 import { AssetType, ASSET_TYPE_CONFIG } from '@/types/asset';
-import { Banknote, BarChart3, Home, Coins, CircleMinus } from 'lucide-react';
-
-const ICONS: Record<AssetType, React.ReactNode> = {
-  savings: <Banknote className="w-5 h-5" />,
-  stock: <BarChart3 className="w-5 h-5" />,
-  property: <Home className="w-5 h-5" />,
-  gold: <Coins className="w-5 h-5" />,
-  loan: <CircleMinus className="w-5 h-5" />,
-};
+import { ASSET_TYPE_ICON_COMPONENTS } from './assetIcons';
 
 interface AssetTypeGridProps {
   value: AssetType;
@@ -20,29 +12,34 @@ interface AssetTypeGridProps {
 export function AssetTypeGrid({
   value,
   onChange,
-  itemLabelClassName = 'text-xs font-medium',
+  itemLabelClassName = 'text-[11px] sm:text-xs font-medium',
 }: AssetTypeGridProps) {
   return (
-    <div className="grid grid-cols-5 gap-2">
+    <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
       {(Object.keys(ASSET_TYPE_CONFIG) as AssetType[]).map((type) => {
         const config = ASSET_TYPE_CONFIG[type];
         const isSelected = value === type;
+        const Icon = ASSET_TYPE_ICON_COMPONENTS[type];
 
         return (
           <button
             key={type}
             type="button"
             onClick={() => onChange(type)}
-            className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all ${
+            className={`flex min-h-[76px] flex-col items-center justify-center gap-1.5 rounded-xl border-2 px-2 py-2.5 transition-all sm:min-h-[84px] sm:p-3 ${
               isSelected
                 ? 'border-blue-500 bg-blue-50'
                 : 'border-slate-200 hover:border-slate-300'
             }`}
           >
             <span style={{ color: isSelected ? config.color : '#64748b' }}>
-              {ICONS[type]}
+              <Icon className="w-5 h-5" />
             </span>
-            <span className={`${itemLabelClassName} ${isSelected ? 'text-blue-600' : 'text-slate-600'}`}>
+            <span
+              className={`whitespace-nowrap leading-none tracking-[-0.01em] ${itemLabelClassName} ${
+                isSelected ? 'text-blue-600' : 'text-slate-600'
+              }`}
+            >
               {config.label}
             </span>
           </button>

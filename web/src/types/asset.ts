@@ -20,13 +20,13 @@ export const ASSET_TYPE_CONFIG: Record<AssetType, {
 }> = {
   savings: {
     label: '예적금',
-    icon: 'Banknote',
+    icon: 'WalletMinimal',
     color: '#3B82F6',
     subTypes: ['예금', '적금', 'CMA'],
   },
   stock: {
     label: '주식',
-    icon: 'BarChart3',
+    icon: 'ChartCandlestick',
     color: '#10B981',
     subTypes: [], // 종목 검색으로 대체
   },
@@ -44,7 +44,7 @@ export const ASSET_TYPE_CONFIG: Record<AssetType, {
   },
   loan: {
     label: '대출',
-    icon: 'CircleMinus',
+    icon: 'HandCoins',
     color: '#EF4444',
     subTypes: ['신용대출', '주택담보대출', '전세대출', '학자금대출'],
   },
