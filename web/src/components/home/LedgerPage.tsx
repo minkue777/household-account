@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Calendar from '@/components/Calendar';
 import CategorySummary from '@/components/CategorySummary';
-import { ExpenseDetail, AddExpenseModal } from '@/components/expense';
+import { ExpenseDetail, AddExpenseModal, IncomeSummaryModal } from '@/components/expense';
 import { SearchModal } from '@/components/search';
 import { Expense, Category, TransactionType } from '@/types/expense';
 import { DEFAULT_HOME_SUMMARY_CONFIG } from '@/types/household';
@@ -47,6 +47,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   const [currentMonth, setCurrentMonth] = useState(() => new Date().getMonth() + 1);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [yearlyExpenses, setYearlyExpenses] = useState<Expense[]>([]);
   const [yearlyTotal, setYearlyTotal] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -58,6 +59,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   const [showLocalCurrencyModal, setShowLocalCurrencyModal] = useState(false);
   const [localCurrencyExpenses, setLocalCurrencyExpenses] = useState<Expense[]>([]);
   const [autoEditExpenseId, setAutoEditExpenseId] = useState<string | null>(null);
+  const [incomeSummaryMode, setIncomeSummaryMode] = useState<'monthly' | 'yearly' | null>(null);
 
   const homeSummaryConfig = household?.homeSummaryConfig || DEFAULT_HOME_SUMMARY_CONFIG;
   const needsYearlyTotal =
@@ -92,6 +94,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   useEffect(() => {
     if (!needsYearlyTotal) {
       setYearlyTotal(null);
+      setYearlyExpenses([]);
       return undefined;
     }
 
@@ -102,6 +105,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
       startDate,
       endDate,
       (yearExpenses) => {
+        setYearlyExpenses(yearExpenses);
         setYearlyTotal(yearExpenses.reduce((sum, expense) => sum + expense.amount, 0));
       },
       { transactionType }
@@ -184,6 +188,22 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   const handleLocalCurrencyClick = (items: Expense[]) => {
     setLocalCurrencyExpenses([...items].sort((a, b) => b.date.localeCompare(a.date)));
     setShowLocalCurrencyModal(true);
+  };
+
+  const handleMonthlyIncomeClick = () => {
+    if (!isIncome) {
+      return;
+    }
+
+    setIncomeSummaryMode('monthly');
+  };
+
+  const handleYearlyIncomeClick = () => {
+    if (!isIncome) {
+      return;
+    }
+
+    setIncomeSummaryMode('yearly');
   };
 
   const handleExpenseUpdate = async (
@@ -291,6 +311,8 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
           transactionType={transactionType}
           className="mb-4 lg:hidden"
           onLocalCurrencyClick={isIncome ? undefined : handleLocalCurrencyClick}
+          onMonthlyIncomeClick={isIncome ? () => handleMonthlyIncomeClick() : undefined}
+          onYearlyIncomeClick={isIncome ? handleYearlyIncomeClick : undefined}
         />
 
         <div className="space-y-6 lg:hidden">
@@ -385,6 +407,8 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
               summaryConfig={homeSummaryConfig}
               transactionType={transactionType}
               onLocalCurrencyClick={isIncome ? undefined : handleLocalCurrencyClick}
+              onMonthlyIncomeClick={isIncome ? () => handleMonthlyIncomeClick() : undefined}
+              onYearlyIncomeClick={isIncome ? handleYearlyIncomeClick : undefined}
             />
 
             <div
@@ -450,6 +474,19 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
             setSelectedDate(expense.date);
             setEditExpenseId(expense.id);
           }}
+        />
+      )}
+
+      {isIncome && incomeSummaryMode && (
+        <IncomeSummaryModal
+          isOpen={true}
+          mode={incomeSummaryMode}
+          expenses={incomeSummaryMode === 'monthly' ? expenses : yearlyExpenses}
+          currentYear={currentYear}
+          currentMonth={currentMonth}
+          onClose={() => setIncomeSummaryMode(null)}
+          onExpenseUpdate={handleExpenseUpdate}
+          onDelete={handleDeleteExpense}
         />
       )}
     </main>

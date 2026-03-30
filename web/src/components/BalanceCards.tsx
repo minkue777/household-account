@@ -16,6 +16,8 @@ interface BalanceCardsProps {
   transactionType: TransactionType;
   className?: string;
   onLocalCurrencyClick?: (expenses: Expense[]) => void;
+  onMonthlyIncomeClick?: (expenses: Expense[]) => void;
+  onYearlyIncomeClick?: () => void;
 }
 
 interface SummaryCardContent {
@@ -37,6 +39,8 @@ export default function BalanceCards({
   transactionType,
   className = '',
   onLocalCurrencyClick,
+  onMonthlyIncomeClick,
+  onYearlyIncomeClick,
 }: BalanceCardsProps) {
   const isIncome = transactionType === 'income';
   const { activeCategories } = useCategoryContext();
@@ -83,6 +87,7 @@ export default function BalanceCards({
 
       return sum + expense.amount;
     }, 0);
+
     const totalSpent = expenses.reduce((sum, expense) => sum + expense.amount, 0);
     const remainingBudget = totalBudget - budgetedSpent;
 
@@ -100,6 +105,22 @@ export default function BalanceCards({
 
     const localCurrencyExpenses = expenses.filter((expense) => expense.cardType === 'local_currency');
     onLocalCurrencyClick(localCurrencyExpenses);
+  };
+
+  const handleMonthlyIncomeClick = () => {
+    if (!onMonthlyIncomeClick) {
+      return;
+    }
+
+    onMonthlyIncomeClick(expenses);
+  };
+
+  const handleYearlyIncomeClick = () => {
+    if (!onYearlyIncomeClick) {
+      return;
+    }
+
+    onYearlyIncomeClick();
   };
 
   const buildCardContent = (key: HomeSummaryCardKey): SummaryCardContent => {
@@ -154,6 +175,7 @@ export default function BalanceCards({
       accentClassName: 'bg-blue-50 border-blue-100 text-blue-500',
       icon: Calendar,
       iconClassName: 'text-pink-500',
+      clickable: true,
     },
     {
       key: 'yearlyIncome',
@@ -162,6 +184,7 @@ export default function BalanceCards({
       accentClassName: 'bg-emerald-50 border-emerald-100 text-emerald-500',
       icon: CalendarDays,
       iconClassName: 'text-pink-500',
+      clickable: true,
     },
   ];
 
@@ -173,27 +196,34 @@ export default function BalanceCards({
     <div className={`grid grid-cols-2 gap-2 ${className}`}>
       {cards.map((card) => {
         const Icon = card.icon;
-        const isLocalCurrencyCard = card.key === 'localCurrencyBalance';
+        const handleCardClick =
+          card.key === 'localCurrencyBalance'
+            ? handleLocalCurrencyClick
+            : card.key === 'monthlyIncome'
+              ? handleMonthlyIncomeClick
+              : card.key === 'yearlyIncome'
+                ? handleYearlyIncomeClick
+                : undefined;
 
         return (
           <div
             key={card.key}
             className={`balance-card-glass p-2.5 ${
-              card.clickable ? 'cursor-pointer hover:shadow-lg transition-shadow' : ''
+              card.clickable ? 'cursor-pointer transition-shadow hover:shadow-lg' : ''
             }`}
-            onClick={isLocalCurrencyCard ? handleLocalCurrencyClick : undefined}
+            onClick={handleCardClick}
           >
-            <div className="flex items-center gap-1.5 mb-1">
+            <div className="mb-1 flex items-center gap-1.5">
               <div
-                className={`w-6 h-6 rounded-full flex items-center justify-center border ${card.accentClassName}`}
+                className={`flex h-6 w-6 items-center justify-center rounded-full border ${card.accentClassName}`}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <Icon className="h-3.5 w-3.5" />
               </div>
               <span className="text-xs font-semibold text-slate-600">{card.label}</span>
             </div>
-            <div className="text-lg font-bold text-slate-800 tracking-tight font-['Pretendard'] flex items-center">
+            <div className="flex items-center font-['Pretendard'] text-lg font-bold tracking-tight text-slate-800">
               {card.valueText}
-              <CircleDollarSign className={`w-4 h-4 ml-1 ${card.iconClassName}`} />
+              <CircleDollarSign className={`ml-1 h-4 w-4 ${card.iconClassName}`} />
             </div>
           </div>
         );
