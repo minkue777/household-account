@@ -1,6 +1,6 @@
 'use client';
 
-import { Expense } from '@/types/expense';
+import { Expense, TransactionType } from '@/types/expense';
 import { SplitItem } from '@/lib/expenseService';
 import ExpenseItem from './ExpenseItem';
 import { useDragAndDrop } from './hooks/useDragAndDrop';
@@ -17,6 +17,7 @@ interface ExpenseDetailProps {
   onUnmergeExpense?: (expense: Expense) => void;
   autoEditExpenseId?: string | null;
   onAutoEditHandled?: () => void;
+  transactionType: TransactionType;
 }
 
 export default function ExpenseDetail({
@@ -31,7 +32,9 @@ export default function ExpenseDetail({
   onUnmergeExpense,
   autoEditExpenseId,
   onAutoEditHandled,
+  transactionType,
 }: ExpenseDetailProps) {
+  const transactionLabel = transactionType === 'income' ? '수입' : '지출';
   const {
     draggingExpenseId,
     setDraggingExpenseId,
@@ -42,50 +45,43 @@ export default function ExpenseDetail({
     registerItemRef,
   } = useDragAndDrop({ expenses, onMergeExpenses });
 
-  // 날짜 포맷팅
   const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr);
+    const dateValue = new Date(dateStr);
     const days = ['일', '월', '화', '수', '목', '금', '토'];
-    return `${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
+    return `${dateValue.getMonth() + 1}월 ${dateValue.getDate()}일 (${days[dateValue.getDay()]})`;
   };
 
   if (expenses.length === 0) {
     return (
-      <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-sm border border-slate-200/70 p-6 animate-slideDown">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-slate-800">
-            {formatDate(date)}
-          </h3>
+      <div className="animate-slideDown rounded-2xl border border-slate-200/70 bg-white/95 p-6 shadow-sm backdrop-blur-sm">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-slate-800">{formatDate(date)}</h3>
           {onAddExpense && (
             <button
               onClick={onAddExpense}
-              className="p-2 text-slate-500 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+              className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-500"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
             </button>
           )}
         </div>
-        <div className="text-center py-8 text-slate-400">
-          지출 내역이 없습니다
-        </div>
+        <div className="py-8 text-center text-slate-400">{transactionLabel} 내역이 없습니다</div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-sm border border-slate-200/70 p-6 animate-slideDown">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-slate-800">
-          {formatDate(date)}
-        </h3>
+    <div className="animate-slideDown rounded-2xl border border-slate-200/70 bg-white/95 p-6 shadow-sm backdrop-blur-sm">
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-slate-800">{formatDate(date)}</h3>
         {onAddExpense && (
           <button
             onClick={onAddExpense}
-            className="p-2 text-slate-500 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+            className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-500"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
           </button>
@@ -93,8 +89,8 @@ export default function ExpenseDetail({
       </div>
 
       {draggingExpenseId && (
-        <div className="mb-2 px-3 py-1.5 bg-blue-100 text-blue-700 text-xs rounded-lg text-center">
-          다른 항목 위에 놓으면 합칩니다
+        <div className="mb-2 rounded-lg bg-blue-100 px-3 py-1.5 text-center text-xs text-blue-700">
+          다른 항목 위에 놓으면 합쳐집니다
         </div>
       )}
 
@@ -119,6 +115,7 @@ export default function ExpenseDetail({
             registerItemRef={registerItemRef}
             autoEdit={autoEditExpenseId === expense.id}
             onAutoEditHandled={onAutoEditHandled}
+            transactionType={transactionType}
           />
         ))}
       </div>

@@ -39,6 +39,7 @@ data class Expense(
     val time: String = "",           // HH:mm
     val merchant: String = "",       // 가맹점명
     val amount: Int = 0,             // 금액
+    val transactionType: String = "expense",
     val category: String = Category.ETC.name,
     val cardType: String = CardType.MAIN.key,
     val cardLastFour: String = "",
@@ -55,6 +56,7 @@ data class Expense(
         time = "",
         merchant = "",
         amount = 0,
+        transactionType = "expense",
         category = Category.ETC.name,
         cardType = CardType.MAIN.key,
         cardLastFour = "",
@@ -72,6 +74,7 @@ data class Expense(
             "time" to time,
             "merchant" to merchant,
             "amount" to amount,
+            "transactionType" to transactionType,
             "category" to category,
             "cardType" to cardType,
             "cardLastFour" to cardLastFour,

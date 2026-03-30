@@ -4,7 +4,7 @@ import { ComponentType, useEffect, useMemo, useState } from 'react';
 import { Calendar, CalendarDays, CircleDollarSign, CreditCard, Wallet } from 'lucide-react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { subscribeToLocalCurrencyBalance, LocalCurrencyBalance } from '@/lib/balanceService';
-import { Expense } from '@/types/expense';
+import { Expense, TransactionType } from '@/types/expense';
 import { HomeSummaryCardKey, HomeSummaryConfig } from '@/types/household';
 
 interface BalanceCardsProps {
@@ -13,12 +13,13 @@ interface BalanceCardsProps {
   expenses: Expense[];
   yearlySpent: number | null;
   summaryConfig: HomeSummaryConfig;
+  transactionType: TransactionType;
   className?: string;
   onLocalCurrencyClick?: (expenses: Expense[]) => void;
 }
 
 interface SummaryCardContent {
-  key: HomeSummaryCardKey;
+  key: HomeSummaryCardKey | 'monthlyIncome' | 'yearlyIncome';
   label: string;
   valueText: string;
   accentClassName: string;
@@ -33,18 +34,24 @@ export default function BalanceCards({
   expenses,
   yearlySpent,
   summaryConfig,
+  transactionType,
   className = '',
   onLocalCurrencyClick,
 }: BalanceCardsProps) {
+  const isIncome = transactionType === 'income';
   const { activeCategories } = useCategoryContext();
   const [localCurrencyBalance, setLocalCurrencyBalance] = useState<LocalCurrencyBalance | null>(null);
 
   const needsLocalCurrencyBalance = useMemo(() => {
+    if (isIncome) {
+      return false;
+    }
+
     return (
       summaryConfig.leftCard === 'localCurrencyBalance' ||
       summaryConfig.rightCard === 'localCurrencyBalance'
     );
-  }, [summaryConfig.leftCard, summaryConfig.rightCard]);
+  }, [isIncome, summaryConfig.leftCard, summaryConfig.rightCard]);
 
   useEffect(() => {
     if (!needsLocalCurrencyBalance) {
@@ -139,7 +146,28 @@ export default function BalanceCards({
     }
   };
 
-  const cards = [buildCardContent(summaryConfig.leftCard), buildCardContent(summaryConfig.rightCard)];
+  const incomeCards: SummaryCardContent[] = [
+    {
+      key: 'monthlyIncome',
+      label: `${currentMonth}월 수입`,
+      valueText: monthlySpent.toLocaleString(),
+      accentClassName: 'bg-emerald-50 border-emerald-100 text-emerald-500',
+      icon: Calendar,
+      iconClassName: 'text-emerald-500',
+    },
+    {
+      key: 'yearlyIncome',
+      label: `${currentYear}년 수입`,
+      valueText: yearlySpent !== null ? yearlySpent.toLocaleString() : '-',
+      accentClassName: 'bg-teal-50 border-teal-100 text-teal-500',
+      icon: CalendarDays,
+      iconClassName: 'text-teal-500',
+    },
+  ];
+
+  const cards = isIncome
+    ? incomeCards
+    : [buildCardContent(summaryConfig.leftCard), buildCardContent(summaryConfig.rightCard)];
 
   return (
     <div className={`grid grid-cols-2 gap-2 ${className}`}>

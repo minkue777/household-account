@@ -181,6 +181,7 @@ exports.addExpenseFromMessage = functions
             merchant: parsed.merchant,
             date: parsed.date,
             time: parsed.time,
+            transactionType: 'expense',
             category: defaultCategoryKey,
             memo: '',
             householdId: householdId,

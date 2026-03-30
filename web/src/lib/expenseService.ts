@@ -14,15 +14,20 @@ import {
   DocumentData,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Expense, MergedExpenseInfo } from '@/types/expense';
+import { Expense, MergedExpenseInfo, TransactionType } from '@/types/expense';
 import { getStoredHouseholdKey } from './householdService';
 import { MemberStorage } from './storage/memberStorage';
 import { getMonthlySplitDate } from '@/lib/utils/monthlySplitDate';
 
 const COLLECTION_NAME = 'expenses';
+const DEFAULT_TRANSACTION_TYPE: TransactionType = 'expense';
 
 interface AddExpenseOptions {
   notifyOnCreate?: boolean;
+}
+
+interface ExpenseQueryOptions {
+  transactionType?: TransactionType;
 }
 
 /**
@@ -47,6 +52,7 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
     time: data.time,
     merchant: data.merchant,
     amount: data.amount,
+    transactionType: (data.transactionType || DEFAULT_TRANSACTION_TYPE) as TransactionType,
     // Android는 대문자로 저장하므로 소문자로 변환
     category: (data.category || 'etc').toLowerCase(),
     cardType: data.cardType?.toLowerCase() || (data.cardLastFour === '1876' ? 'sam' : 'main'),
@@ -57,6 +63,17 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
     splitIndex: data.splitIndex,
     splitTotal: data.splitTotal,
   };
+}
+
+function matchesTransactionType(
+  expense: Expense,
+  transactionType: TransactionType | undefined
+): boolean {
+  if (!transactionType) {
+    return true;
+  }
+
+  return (expense.transactionType || DEFAULT_TRANSACTION_TYPE) === transactionType;
 }
 
 /**
@@ -71,6 +88,7 @@ export async function addExpense(
   const createdBy = notifyOnCreate ? MemberStorage.getMemberName() : null;
   const docRef = await addDoc(collection(db, COLLECTION_NAME), {
     ...expense,
+    transactionType: expense.transactionType || DEFAULT_TRANSACTION_TYPE,
     householdId,
     createdAt: Timestamp.now(),
     ...(createdBy && { createdBy }),
@@ -100,7 +118,8 @@ export async function deleteExpense(id: string): Promise<void> {
 export function subscribeToMonthlyExpenses(
   year: number,
   month: number,
-  callback: (expenses: Expense[]) => void
+  callback: (expenses: Expense[]) => void,
+  options: ExpenseQueryOptions = { transactionType: DEFAULT_TRANSACTION_TYPE }
 ): () => void {
   const householdId = getHouseholdId();
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
@@ -118,6 +137,7 @@ export function subscribeToMonthlyExpenses(
     // 클라이언트에서 날짜 필터링 및 정렬
     const filtered = allExpenses
       .filter((e) => e.date >= startDate && e.date <= endDate)
+      .filter((e) => matchesTransactionType(e, options.transactionType))
       .sort((a, b) => b.date.localeCompare(a.date));
 
     callback(filtered);
@@ -142,7 +162,8 @@ export async function updateExpenseCategory(id: string, category: string): Promi
 export function subscribeToDateRangeExpenses(
   startDate: string,  // YYYY-MM-DD
   endDate: string,    // YYYY-MM-DD
-  callback: (expenses: Expense[]) => void
+  callback: (expenses: Expense[]) => void,
+  options: ExpenseQueryOptions = { transactionType: DEFAULT_TRANSACTION_TYPE }
 ): () => void {
   const householdId = getHouseholdId();
 
@@ -156,6 +177,7 @@ export function subscribeToDateRangeExpenses(
 
     const filtered = allExpenses
       .filter((e) => e.date >= startDate && e.date <= endDate)
+      .filter((e) => matchesTransactionType(e, options.transactionType))
       .sort((a, b) => b.date.localeCompare(a.date));
 
     callback(filtered);
@@ -174,7 +196,8 @@ export async function addManualExpense(
   amount: number,
   category: string,
   date: string,
-  memo?: string
+  memo?: string,
+  transactionType: TransactionType = DEFAULT_TRANSACTION_TYPE
 ): Promise<string> {
   const householdId = getHouseholdId();
   const now = new Date();
@@ -185,6 +208,7 @@ export async function addManualExpense(
     time,
     merchant,
     amount,
+    transactionType,
     category,
     cardType: 'manual',
     cardLastFour: '수동',
@@ -262,6 +286,7 @@ export async function splitExpense(
         time: originalExpense.time,
         merchant: split.merchant,
         amount: split.amount,
+        transactionType: originalExpense.transactionType || DEFAULT_TRANSACTION_TYPE,
         category: split.category,
         cardType: originalExpense.cardType,
         cardLastFour: originalExpense.cardLastFour,
@@ -342,6 +367,7 @@ export async function unmergeExpense(expense: Expense): Promise<string[]> {
         time: expense.time,
         merchant: original.merchant,
         amount: original.amount,
+        transactionType: expense.transactionType || DEFAULT_TRANSACTION_TYPE,
         category: original.category,
         cardType: expense.cardType,
         cardLastFour: expense.cardLastFour,
@@ -365,7 +391,10 @@ export async function unmergeExpense(expense: Expense): Promise<string[]> {
  * 키워드로 지출 검색
  * 가맹점명, 메모에서 키워드 검색
  */
-export async function searchExpenses(keyword: string): Promise<Expense[]> {
+export async function searchExpenses(
+  keyword: string,
+  options: ExpenseQueryOptions = { transactionType: DEFAULT_TRANSACTION_TYPE }
+): Promise<Expense[]> {
   if (!keyword.trim()) {
     return [];
   }
@@ -382,6 +411,7 @@ export async function searchExpenses(keyword: string): Promise<Expense[]> {
 
   const results = snapshot.docs
     .map(mapDocToExpense)
+    .filter((expense) => matchesTransactionType(expense, options.transactionType))
     .filter((expense) => {
       const merchantMatch = expense.merchant.toLowerCase().includes(lowerKeyword);
       const memoMatch = expense.memo?.toLowerCase().includes(lowerKeyword);
@@ -446,6 +476,7 @@ export async function cancelSplitGroup(splitGroupId: string): Promise<void> {
       time: firstExpense.time || '09:00',
       merchant: baseMerchant,
       amount: totalAmount,
+      transactionType: firstExpense.transactionType || DEFAULT_TRANSACTION_TYPE,
       category: firstExpense.category,
       cardType,
       memo: firstExpense.memo || '',
@@ -498,6 +529,7 @@ export async function updateSplitGroup(
         time: firstExpense.time || '09:00',
         merchant: `${baseMerchant} (${i + 1}/${newMonths})`,
         amount: monthlyAmount,
+        transactionType: firstExpense.transactionType || DEFAULT_TRANSACTION_TYPE,
         category: firstExpense.category,
         cardType,
         memo: firstExpense.memo || '',

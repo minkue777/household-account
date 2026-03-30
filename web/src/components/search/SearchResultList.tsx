@@ -1,6 +1,6 @@
 'use client';
 
-import { Expense } from '@/types/expense';
+import { Expense, TransactionType } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 
 interface MonthlyGroup {
@@ -17,6 +17,7 @@ interface SearchResultListProps {
   expandedMonth: string | null;
   onExpandedMonthChange: (month: string | null) => void;
   onExpenseClick: (expense: Expense) => void;
+  transactionType: TransactionType;
 }
 
 export default function SearchResultList({
@@ -26,88 +27,96 @@ export default function SearchResultList({
   expandedMonth,
   onExpandedMonthChange,
   onExpenseClick,
+  transactionType,
 }: SearchResultListProps) {
   const { getCategoryLabel, getCategoryColor } = useCategoryContext();
+  const transactionLabel = transactionType === 'income' ? '수입' : '지출';
 
-  // 월별 그룹화
   const groupedResults: MonthlyGroup[] = results.reduce((groups, expense) => {
     const yearMonth = expense.date.substring(0, 7);
-    const existingGroup = groups.find((g) => g.yearMonth === yearMonth);
+    const existingGroup = groups.find((group) => group.yearMonth === yearMonth);
 
     if (existingGroup) {
       existingGroup.expenses.push(expense);
       existingGroup.total += expense.amount;
-    } else {
-      const [year, month] = yearMonth.split('-');
-      groups.push({
-        yearMonth,
-        label: `${year}년 ${parseInt(month)}월`,
-        expenses: [expense],
-        total: expense.amount,
-      });
+      return groups;
     }
+
+    const [year, month] = yearMonth.split('-');
+    groups.push({
+      yearMonth,
+      label: `${year}년 ${Number.parseInt(month, 10)}월`,
+      expenses: [expense],
+      total: expense.amount,
+    });
 
     return groups;
   }, [] as MonthlyGroup[]);
 
-  // 총 합계
-  const totalAmount = results.reduce((sum, e) => sum + e.amount, 0);
+  const totalAmount = results.reduce((sum, expense) => sum + expense.amount, 0);
 
   if (isSearching) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-500" />
       </div>
     );
   }
 
   if (!keyword.trim()) {
     return (
-      <div className="text-center py-12 text-slate-400">
-        <svg className="w-12 h-12 mx-auto mb-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      <div className="py-12 text-center text-slate-400">
+        <svg className="mx-auto mb-3 h-12 w-12 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          />
         </svg>
-        <p>가맹점명이나 메모를 검색해보세요</p>
+        <p>{transactionLabel}처명이나 메모를 검색해보세요.</p>
       </div>
     );
   }
 
   if (results.length === 0) {
     return (
-      <div className="text-center py-12 text-slate-400">
-        <svg className="w-12 h-12 mx-auto mb-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      <div className="py-12 text-center text-slate-400">
+        <svg className="mx-auto mb-3 h-12 w-12 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          />
         </svg>
-        <p>&quot;{keyword}&quot;에 대한 검색 결과가 없습니다</p>
+        <p>&quot;{keyword}&quot;에 대한 검색 결과가 없습니다.</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      {/* 검색 요약 */}
-      <div className="bg-blue-50 rounded-xl p-4">
+      <div className="rounded-xl bg-blue-50 p-4">
         <div className="flex items-center justify-between">
-          <span className="text-blue-800 font-medium">
-            &quot;{keyword}&quot; 검색 결과
-          </span>
+          <span className="font-medium text-blue-800">&quot;{keyword}&quot; 검색 결과</span>
           <span className="text-blue-600">
             {results.length}건 · {totalAmount.toLocaleString()}원
           </span>
         </div>
       </div>
 
-      {/* 월별 그룹 */}
       {groupedResults.map((group) => (
-        <div key={group.yearMonth} className="border border-slate-200 rounded-xl overflow-hidden">
-          {/* 월 헤더 */}
+        <div key={group.yearMonth} className="overflow-hidden rounded-xl border border-slate-200">
           <button
-            onClick={() => onExpandedMonthChange(expandedMonth === group.yearMonth ? null : group.yearMonth)}
-            className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition-colors"
+            onClick={() =>
+              onExpandedMonthChange(expandedMonth === group.yearMonth ? null : group.yearMonth)
+            }
+            className="flex w-full items-center justify-between bg-slate-50 p-4 transition-colors hover:bg-slate-100"
           >
             <div className="flex items-center gap-2">
               <svg
-                className={`w-4 h-4 text-slate-500 transition-transform ${
+                className={`h-4 w-4 text-slate-500 transition-transform ${
                   expandedMonth === group.yearMonth ? 'rotate-90' : ''
                 }`}
                 fill="none"
@@ -119,12 +128,9 @@ export default function SearchResultList({
               <span className="font-semibold text-slate-800">{group.label}</span>
               <span className="text-sm text-slate-500">{group.expenses.length}건</span>
             </div>
-            <span className="font-semibold text-slate-800">
-              {group.total.toLocaleString()}원
-            </span>
+            <span className="font-semibold text-slate-800">{group.total.toLocaleString()}원</span>
           </button>
 
-          {/* 지출 목록 */}
           {expandedMonth === group.yearMonth && (
             <div className="divide-y divide-slate-100">
               {group.expenses.map((expense) => {
@@ -133,26 +139,24 @@ export default function SearchResultList({
                   <div
                     key={expense.id}
                     onClick={() => onExpenseClick(expense)}
-                    className="flex items-center justify-between p-3 hover:bg-slate-50 cursor-pointer transition-colors"
+                    className="flex cursor-pointer items-center justify-between p-3 transition-colors hover:bg-slate-50"
                   >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
                       <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0"
+                        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
                         style={{ backgroundColor: categoryColor }}
                       >
                         {getCategoryLabel(expense.category).slice(0, 2)}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="font-medium text-slate-800 truncate">
-                          {expense.merchant}
-                        </div>
+                        <div className="truncate font-medium text-slate-800">{expense.merchant}</div>
                         <div className="text-xs text-slate-500">
                           {expense.date}
-                          {expense.memo && ` · ${expense.memo}`}
+                          {expense.memo ? ` · ${expense.memo}` : ''}
                         </div>
                       </div>
                     </div>
-                    <div className="font-semibold text-slate-800 flex-shrink-0 ml-3">
+                    <div className="ml-3 flex-shrink-0 font-semibold text-slate-800">
                       {expense.amount.toLocaleString()}원
                     </div>
                   </div>

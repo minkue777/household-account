@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Expense } from '@/types/expense';
+import { Expense, TransactionType } from '@/types/expense';
 import { SplitItem } from '@/lib/expenseService';
 import { notifyPartner } from '@/lib/partnerNotificationService';
 import {
@@ -33,6 +33,7 @@ interface ExpenseItemProps {
   // 자동 편집 모달 열기
   autoEdit?: boolean;
   onAutoEditHandled?: () => void;
+  transactionType: TransactionType;
 }
 
 export default function ExpenseItem({
@@ -53,6 +54,7 @@ export default function ExpenseItem({
   registerItemRef,
   autoEdit,
   onAutoEditHandled,
+  transactionType,
 }: ExpenseItemProps) {
   const { getCategoryLabel, getCategoryColor } = useCategoryContext();
 
@@ -239,6 +241,7 @@ export default function ExpenseItem({
         expense={expense}
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
+        transactionType={transactionType}
         onSave={handleSaveEdit}
         onSaveMerchantRule={onSaveMerchantRule}
         onUnmerge={onUnmergeExpense ? () => onUnmergeExpense(expense) : undefined}

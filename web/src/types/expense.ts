@@ -1,5 +1,6 @@
 // 카테고리 타입 - 이제 동적으로 관리됨
 export type Category = string;
+export type TransactionType = 'expense' | 'income';
 
 // 합쳐진 지출의 원본 정보
 export interface MergedExpenseInfo {
@@ -15,6 +16,7 @@ export interface Expense {
   time?: string;          // HH:mm
   merchant: string;       // 가맹점명
   amount: number;         // 금액
+  transactionType?: TransactionType;
   category: Category;     // 카테고리 (동적)
   cardType?: string;  // 'main' | 'family' | undefined (iOS 단축어는 없음)
   cardLastFour?: string;  // 카드 마지막 4자리
