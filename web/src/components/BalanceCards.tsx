@@ -151,7 +151,7 @@ export default function BalanceCards({
       key: 'monthlyIncome',
       label: `${currentMonth}월 수입`,
       valueText: monthlySpent.toLocaleString(),
-      accentClassName: 'bg-pink-50 border-pink-100 text-pink-500',
+      accentClassName: 'bg-blue-50 border-blue-100 text-blue-500',
       icon: Calendar,
       iconClassName: 'text-pink-500',
     },
@@ -159,9 +159,9 @@ export default function BalanceCards({
       key: 'yearlyIncome',
       label: `${currentYear}년 수입`,
       valueText: yearlySpent !== null ? yearlySpent.toLocaleString() : '-',
-      accentClassName: 'bg-rose-50 border-rose-100 text-rose-500',
+      accentClassName: 'bg-emerald-50 border-emerald-100 text-emerald-500',
       icon: CalendarDays,
-      iconClassName: 'text-rose-500',
+      iconClassName: 'text-pink-500',
     },
   ];
 
