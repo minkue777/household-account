@@ -38,7 +38,7 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
 
         <Link href="/assets" className="cursor-pointer transition-opacity hover:opacity-80">
           <img
-            src="/bear-removebg-preview.png"
+            src="/lupy.png"
             alt="자산으로 이동"
             className="h-14 w-14 object-contain md:h-16 md:w-16"
           />
