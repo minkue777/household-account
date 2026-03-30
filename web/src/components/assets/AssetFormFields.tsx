@@ -12,7 +12,7 @@ interface AssetTypeGridProps {
 export function AssetTypeGrid({
   value,
   onChange,
-  itemLabelClassName = 'text-[11px] sm:text-xs font-medium',
+  itemLabelClassName = 'text-[10px] sm:text-xs font-medium',
 }: AssetTypeGridProps) {
   return (
     <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6 sm:gap-2">
@@ -26,7 +26,7 @@ export function AssetTypeGrid({
             key={type}
             type="button"
             onClick={() => onChange(type)}
-            className={`flex min-h-[76px] flex-col items-center justify-center gap-1.5 rounded-xl border-2 px-2 py-2.5 transition-all sm:min-h-[84px] sm:p-3 ${
+            className={`flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-xl border-2 px-1.5 py-2 transition-all sm:min-h-[84px] sm:gap-1.5 sm:px-2.5 sm:py-3 ${
               isSelected
                 ? 'bg-white'
                 : 'border-slate-200 hover:border-slate-300'
@@ -41,7 +41,7 @@ export function AssetTypeGrid({
             }
           >
             <span style={{ color: isSelected ? config.color : '#64748b' }}>
-              <Icon className="w-5 h-5" />
+              <Icon className="h-[18px] w-[18px] sm:h-5 sm:w-5" />
             </span>
             <span
               className={`whitespace-nowrap leading-none tracking-[-0.01em] ${itemLabelClassName}`}

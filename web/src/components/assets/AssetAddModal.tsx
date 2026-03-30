@@ -499,8 +499,8 @@ export default function AssetAddModal({
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div className="m-4 max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
-        <div className="mb-6 flex items-center justify-between">
+      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl sm:max-h-[90vh]">
+        <div className="flex shrink-0 items-center justify-between px-5 pb-4 pt-5 sm:px-6 sm:pt-6">
           <h2 className="text-xl font-bold text-slate-800">자산 추가</h2>
           <button
             onClick={onClose}
@@ -510,7 +510,8 @@ export default function AssetAddModal({
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 sm:px-6 sm:pb-6">
+          <div className="space-y-4">
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">유형</label>
             <AssetTypeGrid value={type} onChange={setType} />
@@ -714,9 +715,10 @@ export default function AssetAddModal({
           )}
 
           <AssetMemoField value={memo} onChange={setMemo} />
+          </div>
         </div>
 
-        <div className="mt-6 flex gap-3">
+        <div className="flex shrink-0 gap-3 border-t border-slate-100 px-5 py-4 sm:px-6 sm:py-5">
           <button
             onClick={onClose}
             className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-slate-600 transition-colors hover:bg-slate-50"
