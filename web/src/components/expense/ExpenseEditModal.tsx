@@ -43,6 +43,7 @@ export default function ExpenseEditModal({
 }: ExpenseEditModalProps) {
   const { getCategoryLabel } = useCategoryContext();
   const transactionLabel = transactionType === 'income' ? '수입' : '지출';
+  const isIncome = transactionType === 'income';
 
   const {
     merchant,
@@ -172,10 +173,12 @@ export default function ExpenseEditModal({
               onCategoryChange={setCategory}
               memo={memo}
               onMemoChange={setMemo}
-              merchantLabel={transactionType === 'income' ? '수입처명' : '가맹점명'}
+              merchantLabel={isIncome ? '수입처명' : '가맹점명'}
               memoLabel="메모"
               memoPlaceholder="메모를 입력하세요"
               textInputPaddingClassName="px-3"
+              showMerchantField={!isIncome}
+              showCategoryField={!isIncome}
               monthlySplit={{
                 enabled: Boolean(onSplitMonths && !expense.splitGroupId),
                 showSplitInput,
@@ -186,7 +189,7 @@ export default function ExpenseEditModal({
               }}
             />
 
-            {transactionType === 'expense' && category !== expense.category && onSaveMerchantRule && (
+            {!isIncome && category !== expense.category && onSaveMerchantRule && (
               <label className="mt-4 flex cursor-pointer items-center gap-2 rounded-lg bg-blue-50 p-3">
                 <input
                   type="checkbox"
@@ -346,7 +349,7 @@ export default function ExpenseEditModal({
                     분리
                   </button>
                 )}
-                {onNotifyPartner && transactionType === 'expense' && (
+                {onNotifyPartner && !isIncome && (
                   <button
                     onClick={() => {
                       onNotifyPartner();

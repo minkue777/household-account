@@ -14,11 +14,13 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
   const { themeConfig } = useTheme();
   const { household } = useHousehold();
   const isIncome = transactionType === 'income';
+  const titleHref = isIncome ? '/' : '/income';
+  const modeLabel = isIncome ? '지출 보기' : '수입 보기';
 
   return (
     <header className="mb-6 flex items-center justify-between gap-4">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="min-w-0">
+        <Link href={titleHref} className="min-w-0 transition-opacity hover:opacity-80">
           <h1
             className="text-lg font-bold leading-tight md:text-2xl"
             style={{
@@ -32,29 +34,8 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
             <br />
             가계부
           </h1>
-          <div className="mt-2 inline-flex rounded-xl border border-slate-200 bg-white/90 p-1 shadow-sm">
-            <Link
-              href="/"
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                !isIncome
-                  ? 'bg-blue-500 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              지출
-            </Link>
-            <Link
-              href="/income"
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                isIncome
-                  ? 'bg-emerald-500 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              수입
-            </Link>
-          </div>
-        </div>
+          <p className="mt-2 text-sm font-medium text-slate-500">{modeLabel}</p>
+        </Link>
 
         <Link href="/assets" className="cursor-pointer transition-opacity hover:opacity-80">
           <img

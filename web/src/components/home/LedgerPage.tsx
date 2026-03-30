@@ -334,26 +334,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
             />
           )}
 
-          <div className="rounded-2xl border border-slate-200/70 bg-white/95 p-6 shadow-sm transition-all hover:shadow-md">
-            <h3 className="mb-4 text-sm font-semibold text-slate-700">
-              카테고리별 {transactionLabel}
-            </h3>
-            {expenses.length > 0 ? (
-              <CategorySummary
-                expenses={expenses}
-                onCategoryClick={handleCategoryClick}
-                showBudgetProgress={!isIncome}
-              />
-            ) : (
-              <div className="py-4 text-center text-slate-400">
-                {isLoading ? '로딩 중...' : '데이터가 없습니다'}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="hidden gap-6 lg:grid lg:grid-cols-4">
-          <div className="space-y-6 lg:col-span-1">
+          {!isIncome && (
             <div className="rounded-2xl border border-slate-200/70 bg-white/95 p-6 shadow-sm transition-all hover:shadow-md">
               <h3 className="mb-4 text-sm font-semibold text-slate-700">
                 카테고리별 {transactionLabel}
@@ -370,9 +351,32 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
                 </div>
               )}
             </div>
-          </div>
+          )}
+        </div>
 
-          <div className="space-y-6 lg:col-span-3">
+        <div className={`hidden gap-6 lg:grid ${isIncome ? 'lg:grid-cols-1' : 'lg:grid-cols-4'}`}>
+          {!isIncome && (
+            <div className="space-y-6 lg:col-span-1">
+              <div className="rounded-2xl border border-slate-200/70 bg-white/95 p-6 shadow-sm transition-all hover:shadow-md">
+                <h3 className="mb-4 text-sm font-semibold text-slate-700">
+                  카테고리별 {transactionLabel}
+                </h3>
+                {expenses.length > 0 ? (
+                  <CategorySummary
+                    expenses={expenses}
+                    onCategoryClick={handleCategoryClick}
+                    showBudgetProgress={!isIncome}
+                  />
+                ) : (
+                  <div className="py-4 text-center text-slate-400">
+                    {isLoading ? '로딩 중...' : '데이터가 없습니다'}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className={`space-y-6 ${isIncome ? '' : 'lg:col-span-3'}`}>
             <BalanceCards
               currentYear={currentYear}
               currentMonth={currentMonth}
@@ -426,7 +430,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
         </div>
       </div>
 
-      {selectedCategory && (
+      {!isIncome && selectedCategory && (
         <CategoryDetailModal
           category={selectedCategory}
           expenses={selectedCategoryExpenses}

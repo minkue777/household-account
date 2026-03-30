@@ -30,6 +30,8 @@ interface ExpenseFormFieldsProps {
   memoPlaceholder?: string;
   textInputPaddingClassName?: string;
   amountInputClassName?: string;
+  showMerchantField?: boolean;
+  showCategoryField?: boolean;
 }
 
 export default function ExpenseFormFields({
@@ -52,28 +54,28 @@ export default function ExpenseFormFields({
   memoPlaceholder,
   textInputPaddingClassName = 'px-3',
   amountInputClassName,
+  showMerchantField = true,
+  showCategoryField = true,
 }: ExpenseFormFieldsProps) {
   const textInputClassName = `w-full ${textInputPaddingClassName} py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500`;
 
   return (
     <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">
-          {merchantLabel}
-        </label>
-        <input
-          type="text"
-          value={merchant}
-          onChange={(e) => onMerchantChange(e.target.value)}
-          placeholder={merchantPlaceholder}
-          className={textInputClassName}
-        />
-      </div>
+      {showMerchantField && (
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">{merchantLabel}</label>
+          <input
+            type="text"
+            value={merchant}
+            onChange={(event) => onMerchantChange(event.target.value)}
+            placeholder={merchantPlaceholder}
+            className={textInputClassName}
+          />
+        </div>
+      )}
 
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">
-          금액
-        </label>
+        <label className="mb-1 block text-sm font-medium text-slate-700">금액</label>
         <MonthlySplitAmountControl
           enabled={monthlySplit.enabled}
           amountField={(
@@ -92,39 +94,35 @@ export default function ExpenseFormFields({
         />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">
-          카테고리
-        </label>
-        <CategorySelector
-          value={category}
-          onChange={onCategoryChange}
-          isLoading={categoryLoading}
-        />
-      </div>
+      {showCategoryField && (
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">카테고리</label>
+          <CategorySelector
+            value={category}
+            onChange={onCategoryChange}
+            isLoading={categoryLoading}
+          />
+        </div>
+      )}
 
       {showDateField && date !== undefined && onDateChange && (
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
-            날짜
-          </label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">날짜</label>
           <input
             type="date"
             value={date}
-            onChange={(e) => onDateChange(e.target.value)}
+            onChange={(event) => onDateChange(event.target.value)}
             className={textInputClassName}
           />
         </div>
       )}
 
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">
-          {memoLabel}
-        </label>
+        <label className="mb-1 block text-sm font-medium text-slate-700">{memoLabel}</label>
         <input
           type="text"
           value={memo}
-          onChange={(e) => onMemoChange(e.target.value)}
+          onChange={(event) => onMemoChange(event.target.value)}
           placeholder={memoPlaceholder}
           className={textInputClassName}
         />
@@ -132,4 +130,3 @@ export default function ExpenseFormFields({
     </div>
   );
 }
-

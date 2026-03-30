@@ -5,6 +5,7 @@ import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { Portal } from './common';
 import { getTodayLocalDate } from '@/lib/utils/date';
+import { getLedgerPrimaryText } from '@/lib/utils/ledgerDisplay';
 
 interface CalendarProps {
   year: number;
@@ -305,7 +306,7 @@ export default function Calendar({
                         style={{ backgroundColor: getCategoryColor(expense.category) }}
                       />
                       <span className="truncate text-slate-600">
-                        {expense.merchant}
+                        {getLedgerPrimaryText(expense, expense.transactionType || 'expense')}
                       </span>
                     </div>
                   ))}

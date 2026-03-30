@@ -40,8 +40,10 @@ export default function AddExpenseModal({
   transactionType,
 }: AddExpenseModalProps) {
   const { activeCategories, isLoading } = useCategoryContext();
+  const isIncome = transactionType === 'income';
   const transactionLabel = transactionType === 'income' ? '수입' : '지출';
   const merchantLabel = transactionType === 'income' ? '수입처명' : '가맹점명';
+  const defaultMerchant = transactionType === 'income' ? '수입' : '';
 
   const {
     merchant,
@@ -57,7 +59,7 @@ export default function AddExpenseModal({
     resetExpenseFormState,
   } = useExpenseFormState({
     initial: {
-      merchant: '',
+      merchant: defaultMerchant,
       amount: '',
       category: 'etc',
       memo: '',
@@ -85,12 +87,13 @@ export default function AddExpenseModal({
       return;
     }
 
+    setMerchant(defaultMerchant);
     setDate(selectedDate || getTodayLocalDate());
     resetMonthlySplitInput();
-  }, [isOpen, selectedDate, setDate, resetMonthlySplitInput]);
+  }, [defaultMerchant, isOpen, selectedDate, setDate, setMerchant, resetMonthlySplitInput]);
 
   const handleSubmit = () => {
-    const normalizedMerchant = trimExpenseMerchant(merchant);
+    const normalizedMerchant = trimExpenseMerchant(merchant) || defaultMerchant;
     const normalizedAmount = parsePositiveExpenseAmount(amount);
 
     if (!normalizedMerchant || normalizedAmount === null) {
@@ -116,7 +119,7 @@ export default function AddExpenseModal({
     );
 
     resetExpenseFormState({
-      merchant: '',
+      merchant: defaultMerchant,
       amount: '',
       category: resolveDefaultCategoryKey(activeCategories),
       memo: '',
@@ -152,6 +155,8 @@ export default function AddExpenseModal({
           memoPlaceholder="메모를 입력하세요"
           textInputPaddingClassName="px-4"
           amountInputClassName="px-4"
+          showMerchantField={!isIncome}
+          showCategoryField={!isIncome}
           monthlySplit={{
             enabled: true,
             showSplitInput,
@@ -173,7 +178,7 @@ export default function AddExpenseModal({
             label: '추가',
             onClick: handleSubmit,
             variant: 'primary',
-            disabled: !isExpenseSubmitEnabled(merchant, amount),
+            disabled: isIncome ? parsePositiveExpenseAmount(amount) === null : !isExpenseSubmitEnabled(merchant, amount),
           }}
         />
       </div>

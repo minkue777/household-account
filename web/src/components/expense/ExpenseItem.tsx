@@ -9,6 +9,7 @@ import {
   runCancelSplitGroupAction,
   runUpdateSplitGroupAction,
 } from '@/lib/utils/monthlySplitActions';
+import { getLedgerPrimaryText, getLedgerSecondaryText } from '@/lib/utils/ledgerDisplay';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import ExpenseEditModal from './ExpenseEditModal';
 import ExpenseSplitModal from './ExpenseSplitModal';
@@ -70,6 +71,8 @@ export default function ExpenseItem({
 
   const expenseColor = getCategoryColor(expense.category);
   const expenseLabel = getCategoryLabel(expense.category);
+  const primaryText = getLedgerPrimaryText(expense, transactionType);
+  const secondaryText = getLedgerSecondaryText(expense, transactionType);
 
   // 자동 편집 모달 열기 (푸시 알림 클릭 시)
   useEffect(() => {
@@ -214,17 +217,17 @@ export default function ExpenseItem({
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <div
             className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0"
-            style={{ backgroundColor: expenseColor }}
+            style={{ backgroundColor: transactionType === 'income' ? '#10B981' : expenseColor }}
           >
-            {expenseLabel.slice(0, 2)}
+            {transactionType === 'income' ? '수입' : expenseLabel.slice(0, 2)}
           </div>
           <div className="min-w-0 flex-1">
             <div className="font-medium text-slate-800 truncate">
-              {expense.merchant}
+              {primaryText}
             </div>
-            {expense.memo && (
+            {secondaryText && (
               <div className="text-xs text-slate-500 truncate">
-                {expense.memo}
+                {secondaryText}
               </div>
             )}
           </div>

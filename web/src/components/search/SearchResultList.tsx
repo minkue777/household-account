@@ -2,6 +2,7 @@
 
 import { Expense, TransactionType } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
+import { getLedgerPrimaryText, getLedgerSecondaryText } from '@/lib/utils/ledgerDisplay';
 
 interface MonthlyGroup {
   yearMonth: string;
@@ -135,6 +136,8 @@ export default function SearchResultList({
             <div className="divide-y divide-slate-100">
               {group.expenses.map((expense) => {
                 const categoryColor = getCategoryColor(expense.category);
+                const primaryText = getLedgerPrimaryText(expense, transactionType);
+                const secondaryText = getLedgerSecondaryText(expense, transactionType);
                 return (
                   <div
                     key={expense.id}
@@ -144,15 +147,15 @@ export default function SearchResultList({
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <div
                         className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
-                        style={{ backgroundColor: categoryColor }}
+                        style={{ backgroundColor: transactionType === 'income' ? '#10B981' : categoryColor }}
                       >
-                        {getCategoryLabel(expense.category).slice(0, 2)}
+                        {transactionType === 'income' ? '수입' : getCategoryLabel(expense.category).slice(0, 2)}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium text-slate-800">{expense.merchant}</div>
+                        <div className="truncate font-medium text-slate-800">{primaryText}</div>
                         <div className="text-xs text-slate-500">
                           {expense.date}
-                          {expense.memo ? ` · ${expense.memo}` : ''}
+                          {secondaryText ? ` · ${secondaryText}` : ''}
                         </div>
                       </div>
                     </div>
