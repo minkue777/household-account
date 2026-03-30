@@ -25,6 +25,7 @@ import {
   getAssetMemberOptions,
   getAssetOwnerOptions,
 } from '@/lib/assets/memberOptions';
+import { sumSignedAssetBalances } from '@/lib/assets/assetMath';
 
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
@@ -83,10 +84,10 @@ export default function AssetsPage() {
     if (assets.length === 0) return;
 
     const activeAssets = assets.filter((asset) => asset.isActive);
-    const currentTotal = activeAssets.reduce((sum, asset) => sum + asset.currentBalance, 0);
-    const financialTotal = activeAssets
-      .filter((asset) => asset.type !== 'property')
-      .reduce((sum, asset) => sum + asset.currentBalance, 0);
+    const currentTotal = sumSignedAssetBalances(activeAssets);
+    const financialTotal = sumSignedAssetBalances(
+      activeAssets.filter((asset) => asset.type !== 'property')
+    );
 
     getDailyAssetChange()
       .then(setDailyChange)

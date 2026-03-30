@@ -21,6 +21,7 @@ const PLACEHOLDERS: Record<AssetType, string> = {
   stock: '예: 주식계좌, ISA, 연금저축',
   property: '예: 전세보증금, 청약통장',
   gold: '예: KRX 금현물, 금통장',
+  loan: '예: 전세대출, 신용대출',
 };
 
 export default function AssetAddModal({

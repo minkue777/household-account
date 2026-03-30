@@ -22,6 +22,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import AssetProfitChart from '@/components/assets/AssetProfitChart';
 import AssetDividendChart from '@/components/assets/AssetDividendChart';
 import { formatLocalDate } from '@/lib/utils/date';
+import { getAssetSignedBalance } from '@/lib/assets/assetMath';
 
 ChartJS.register(
   CategoryScale,
@@ -120,7 +121,7 @@ export default function AssetStatsPage() {
     return assets
       .filter((a) => a.isActive)
       .filter((a) => !financialOnly || a.type !== 'property')
-      .reduce((sum, a) => sum + a.currentBalance, 0);
+      .reduce((sum, a) => sum + getAssetSignedBalance(a), 0);
   }, [assets, financialOnly]);
 
   // 스냅샷 타입 (필터에 따라 TOTAL 또는 FINANCIAL)

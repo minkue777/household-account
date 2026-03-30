@@ -6,6 +6,7 @@ import { deleteAsset, updateAsset } from '@/lib/assetService';
 import { ConfirmDialog, ModalOverlay } from '@/components/common';
 import { X, Trash2 } from 'lucide-react';
 import { AssetMemoField, AssetTypeGrid, StockInitialInvestmentField } from './AssetFormFields';
+import { getAssetSignedBalance } from '@/lib/assets/assetMath';
 
 interface AssetEditModalProps {
   isOpen: boolean;
@@ -158,7 +159,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
                 <span className="text-xs text-slate-400 ml-2">(이력에서 수정)</span>
               </label>
               <div className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
-                {asset.currentBalance.toLocaleString()}원
+                {getAssetSignedBalance(asset).toLocaleString()}원
               </div>
             </div>
 

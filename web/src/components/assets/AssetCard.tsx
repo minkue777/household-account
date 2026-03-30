@@ -1,7 +1,8 @@
 'use client';
 
 import { Asset, ASSET_TYPE_CONFIG } from '@/types/asset';
-import { Banknote, BarChart3, Home, Coins } from 'lucide-react';
+import { Banknote, BarChart3, Home, Coins, CircleMinus } from 'lucide-react';
+import { getAssetSignedBalance } from '@/lib/assets/assetMath';
 
 interface AssetCardProps {
   asset: Asset;
@@ -17,6 +18,7 @@ const ICONS: Record<string, React.ReactNode> = {
   stock: <BarChart3 className="w-5 h-5" />,
   property: <Home className="w-5 h-5" />,
   gold: <Coins className="w-5 h-5" />,
+  loan: <CircleMinus className="w-5 h-5" />,
 };
 
 export default function AssetCard({ asset, onClick }: AssetCardProps) {
@@ -25,6 +27,7 @@ export default function AssetCard({ asset, onClick }: AssetCardProps) {
 
   // 주식 계좌: 수익률 계산 (평가금액 vs 투자원금)
   const isStock = asset.type === 'stock';
+  const signedBalance = getAssetSignedBalance(asset);
   const investmentBase = asset.initialInvestment || asset.costBasis || 0; // 투자원금 또는 평단가 합계
   const profitLoss = isStock && investmentBase > 0 ? asset.currentBalance - investmentBase : 0;
   const profitLossRate = isStock && investmentBase > 0 ? (profitLoss / investmentBase) * 100 : 0;
@@ -57,7 +60,7 @@ export default function AssetCard({ asset, onClick }: AssetCardProps) {
       {/* 금액 & 수익률 (주식만) */}
       <div className="text-right flex-shrink-0">
         <p className="font-semibold text-slate-900">
-          {asset.currentBalance.toLocaleString()}
+          {signedBalance.toLocaleString()}
           <span className="text-xs font-normal text-slate-400 ml-0.5">원</span>
         </p>
         {showProfitLoss && (

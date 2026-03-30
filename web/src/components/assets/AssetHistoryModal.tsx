@@ -4,12 +4,13 @@ import { useState, useEffect } from 'react';
 import { Asset, ASSET_TYPE_CONFIG } from '@/types/asset';
 import { updateAsset } from '@/lib/assetService';
 import { ModalOverlay } from '@/components/common';
-import { X, Plus, Edit2, Banknote, Home, BarChart3, Coins } from 'lucide-react';
+import { X, Plus, Edit2, Banknote, Home, BarChart3, Coins, CircleMinus } from 'lucide-react';
 import { useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
 import { useGoldHolding } from '@/lib/utils/useGoldHolding';
 import GoldHoldingSection from './GoldHoldingSection';
 import StockSearchForm from './StockSearchForm';
 import StockHoldingList from './StockHoldingList';
+import { getAssetSignedBalance } from '@/lib/assets/assetMath';
 
 interface AssetHistoryModalProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ const ICONS: Record<string, React.ReactNode> = {
   stock: <BarChart3 className="w-5 h-5" />,
   property: <Home className="w-5 h-5" />,
   gold: <Coins className="w-5 h-5" />,
+  loan: <CircleMinus className="w-5 h-5" />,
 };
 
 export default function AssetHistoryModal({
@@ -89,6 +91,7 @@ export default function AssetHistoryModal({
   const config = ASSET_TYPE_CONFIG[asset.type];
   const isStock = asset.type === 'stock';
   const isGold = asset.type === 'gold';
+  const signedBalance = getAssetSignedBalance(asset);
   // 주식 계좌 수익률 계산
   const investmentBase = asset.initialInvestment || asset.costBasis || 0;
   const stockProfitLoss = isStock && investmentBase > 0 ? asset.currentBalance - investmentBase : 0;
@@ -113,7 +116,7 @@ export default function AssetHistoryModal({
                   <h3 className="text-lg font-bold text-slate-800">{asset.name}</h3>
                   <p className="text-sm text-slate-500">
                     {asset.subType && `${asset.subType} · `}
-                    {isStock ? '평가금액 ' : ''}{asset.currentBalance.toLocaleString()}원
+                    {isStock ? '평가금액 ' : ''}{signedBalance.toLocaleString()}원
                   </p>
                   {showStockProfitLoss && (
                     <p className={`text-sm font-medium ${isStockProfit ? 'text-red-500' : 'text-blue-500'}`}>

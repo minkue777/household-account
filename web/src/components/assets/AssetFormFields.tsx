@@ -1,13 +1,14 @@
 'use client';
 
 import { AssetType, ASSET_TYPE_CONFIG } from '@/types/asset';
-import { Banknote, BarChart3, Home, Coins } from 'lucide-react';
+import { Banknote, BarChart3, Home, Coins, CircleMinus } from 'lucide-react';
 
 const ICONS: Record<AssetType, React.ReactNode> = {
   savings: <Banknote className="w-5 h-5" />,
   stock: <BarChart3 className="w-5 h-5" />,
   property: <Home className="w-5 h-5" />,
   gold: <Coins className="w-5 h-5" />,
+  loan: <CircleMinus className="w-5 h-5" />,
 };
 
 interface AssetTypeGridProps {
@@ -22,7 +23,7 @@ export function AssetTypeGrid({
   itemLabelClassName = 'text-xs font-medium',
 }: AssetTypeGridProps) {
   return (
-    <div className="grid grid-cols-4 gap-2">
+    <div className="grid grid-cols-5 gap-2">
       {(Object.keys(ASSET_TYPE_CONFIG) as AssetType[]).map((type) => {
         const config = ASSET_TYPE_CONFIG[type];
         const isSelected = value === type;

@@ -9,7 +9,7 @@ export const ASSET_OWNERS = ['가구', '이민규', '이진선', '이지아'] as
 export type AssetOwner = typeof ASSET_OWNERS[number];
 
 // 자산 타입
-export type AssetType = 'savings' | 'stock' | 'property' | 'gold';
+export type AssetType = 'savings' | 'stock' | 'property' | 'gold' | 'loan';
 
 // 자산 타입별 설정
 export const ASSET_TYPE_CONFIG: Record<AssetType, {
@@ -41,6 +41,12 @@ export const ASSET_TYPE_CONFIG: Record<AssetType, {
     icon: 'Coins',
     color: '#F59E0B',
     subTypes: [],
+  },
+  loan: {
+    label: '대출',
+    icon: 'CircleMinus',
+    color: '#EF4444',
+    subTypes: ['신용대출', '주택담보대출', '전세대출', '학자금대출'],
   },
 };
 

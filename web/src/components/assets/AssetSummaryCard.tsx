@@ -5,6 +5,7 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
 import { Asset, ASSET_TYPE_CONFIG, AssetType } from '@/types/asset';
 import { ALL_MEMBERS_OPTION } from '@/lib/assets/memberOptions';
+import { getAssetChartBalance, getAssetSignedBalance, sumSignedAssetBalances } from '@/lib/assets/assetMath';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -50,7 +51,8 @@ export default function AssetSummaryCard({
     return assets.filter((asset) => asset.isActive && asset.owner === selectedMember);
   }, [assets, selectedMember]);
 
-  const totalBalance = filteredAssets.reduce((sum, asset) => sum + asset.currentBalance, 0);
+  const totalBalance = sumSignedAssetBalances(filteredAssets);
+  const totalChartBalance = filteredAssets.reduce((sum, asset) => sum + getAssetChartBalance(asset), 0);
 
   const changeRate = useMemo(() => {
     if (previousMonthTotal && previousMonthTotal > 0) {
@@ -73,25 +75,26 @@ export default function AssetSummaryCard({
     (Object.keys(ASSET_TYPE_CONFIG) as AssetType[]).forEach((type) => {
       const balance = filteredAssets
         .filter((asset) => asset.type === type)
-        .reduce((sum, asset) => sum + asset.currentBalance, 0);
+        .reduce((sum, asset) => sum + getAssetSignedBalance(asset), 0);
 
-      if (balance > 0) {
+      if (balance !== 0) {
         balances.push({
           type,
           balance,
-          percentage: totalBalance > 0 ? (balance / totalBalance) * 100 : 0,
+          percentage: totalChartBalance > 0 ? (Math.abs(balance) / totalChartBalance) * 100 : 0,
         });
       }
     });
 
-    return balances.sort((a, b) => b.balance - a.balance);
-  }, [filteredAssets, totalBalance]);
+    return balances.sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
+  }, [filteredAssets, totalChartBalance]);
 
   const chartColors: Record<AssetType, string> = {
     savings: '#3B82F6',
     stock: '#10B981',
     property: '#8B5CF6',
     gold: '#F59E0B',
+    loan: '#EF4444',
   };
 
   const chartData = useMemo(() => {
@@ -112,7 +115,7 @@ export default function AssetSummaryCard({
       labels: typeData.map((item) => ASSET_TYPE_CONFIG[item.type].label),
       datasets: [
         {
-          data: typeData.map((item) => item.balance),
+          data: typeData.map((item) => Math.abs(item.balance)),
           backgroundColor: typeData.map((item) => chartColors[item.type]),
           borderWidth: 0,
           cutout: '65%',
@@ -132,8 +135,9 @@ export default function AssetSummaryCard({
         callbacks: {
           label(context: any) {
             const value = context.raw as number;
-            const percentage = totalBalance > 0 ? ((value / totalBalance) * 100).toFixed(1) : 0;
-            return `${value.toLocaleString()}원 (${percentage}%)`;
+            const item = typeData[context.dataIndex];
+            const percentage = totalChartBalance > 0 ? ((value / totalChartBalance) * 100).toFixed(1) : 0;
+            return `${item.balance.toLocaleString()}원 (${percentage}%)`;
           },
         },
       },
