@@ -618,7 +618,7 @@
     },
     {
       "code": "132030",
-      "name": "KODEX ????(H)"
+      "name": "KODEX 골드선물(H)"
     },
     {
       "code": "130680",
@@ -626,11 +626,11 @@
     },
     {
       "code": "319640",
-      "name": "TIGER ????(H)"
+      "name": "TIGER 골드선물(H)"
     },
     {
       "code": "411060",
-      "name": "ACE KRX???"
+      "name": "ACE KRX금현물"
     },
     {
       "code": "448540",
@@ -10886,35 +10886,35 @@
     },
     {
       "code": "0072R0",
-      "name": "TIGER KRX???"
+      "name": "TIGER KRX금현물"
     },
     {
       "code": "530067",
-      "name": "?? KRX ??? ETN"
+      "name": "삼성 KRX 금현물 ETN"
     },
     {
       "code": "280940",
-      "name": "KODEX ???????(H)"
+      "name": "KODEX 골드선물인버스(H)"
     },
     {
       "code": "225130",
-      "name": "ACE ???? ????(?? H)"
+      "name": "ACE 골드선물 레버리지(합성 H)"
     },
     {
       "code": "139320",
-      "name": "TIGER ????(H)"
+      "name": "TIGER 금은선물(H)"
     },
     {
       "code": "580022",
-      "name": "KB ???? ? ?? ETN(H)"
+      "name": "KB 레버리지 금 선물 ETN(H)"
     },
     {
       "code": "500037",
-      "name": "?? ???? ? ?? ETN"
+      "name": "신한 레버리지 금 선물 ETN"
     },
     {
       "code": "530056",
-      "name": "?? ??? 2X ? ?? ETN(H)"
+      "name": "삼성 인버스 2X 금 선물 ETN(H)"
     }
   ]
 }
