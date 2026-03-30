@@ -5,7 +5,7 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
 import { Asset, ASSET_TYPE_CONFIG, AssetType } from '@/types/asset';
 import { ALL_MEMBERS_OPTION } from '@/lib/assets/memberOptions';
-import { getAssetChartBalance, getAssetSignedBalance, sumSignedAssetBalances } from '@/lib/assets/assetMath';
+import { getAssetSignedBalance, sumSignedAssetBalances } from '@/lib/assets/assetMath';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -52,8 +52,6 @@ export default function AssetSummaryCard({
   }, [assets, selectedMember]);
 
   const totalBalance = sumSignedAssetBalances(filteredAssets);
-  const totalChartBalance = filteredAssets.reduce((sum, asset) => sum + getAssetChartBalance(asset), 0);
-
   const changeRate = useMemo(() => {
     if (previousMonthTotal && previousMonthTotal > 0) {
       return ((totalBalance - previousMonthTotal) / previousMonthTotal) * 100;
@@ -71,23 +69,42 @@ export default function AssetSummaryCard({
 
   const typeData = useMemo(() => {
     const balances: { type: AssetType; balance: number; percentage: number }[] = [];
+    const totalLoanBalance = filteredAssets
+      .filter((asset) => asset.type === 'loan')
+      .reduce((sum, asset) => sum + Math.abs(asset.currentBalance || 0), 0);
 
     (Object.keys(ASSET_TYPE_CONFIG) as AssetType[]).forEach((type) => {
-      const balance = filteredAssets
+      if (type === 'loan') {
+        return;
+      }
+
+      const baseBalance = filteredAssets
         .filter((asset) => asset.type === type)
-        .reduce((sum, asset) => sum + getAssetSignedBalance(asset), 0);
+        .reduce((sum, asset) => sum + Math.abs(getAssetSignedBalance(asset)), 0);
+
+      const balance =
+        type === 'property'
+          ? Math.max(0, baseBalance - totalLoanBalance)
+          : baseBalance;
 
       if (balance !== 0) {
         balances.push({
           type,
           balance,
-          percentage: totalChartBalance > 0 ? (Math.abs(balance) / totalChartBalance) * 100 : 0,
+          percentage: 0,
         });
       }
     });
 
-    return balances.sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
-  }, [filteredAssets, totalChartBalance]);
+    const totalChartBalance = balances.reduce((sum, item) => sum + item.balance, 0);
+
+    return balances
+      .map((item) => ({
+        ...item,
+        percentage: totalChartBalance > 0 ? (item.balance / totalChartBalance) * 100 : 0,
+      }))
+      .sort((a, b) => b.balance - a.balance);
+  }, [filteredAssets]);
 
   const chartColors: Record<AssetType, string> = {
     savings: '#3B82F6',
@@ -136,6 +153,7 @@ export default function AssetSummaryCard({
           label(context: any) {
             const value = context.raw as number;
             const item = typeData[context.dataIndex];
+            const totalChartBalance = typeData.reduce((sum, typeItem) => sum + typeItem.balance, 0);
             const percentage = totalChartBalance > 0 ? ((value / totalChartBalance) * 100).toFixed(1) : 0;
             return `${item.balance.toLocaleString()}원 (${percentage}%)`;
           },
