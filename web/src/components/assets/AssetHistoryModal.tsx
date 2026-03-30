@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Asset, ASSET_TYPE_CONFIG } from '@/types/asset';
+import { Asset, ASSET_TYPE_CONFIG, isGoldEtfSubType } from '@/types/asset';
 import { updateAsset } from '@/lib/assetService';
 import { ModalOverlay } from '@/components/common';
 import { X, Plus, Edit2 } from 'lucide-react';
@@ -39,14 +39,20 @@ export default function AssetHistoryModal({
   const cryptoManager = useCryptoHoldingManager({ isOpen, asset });
 
   const goldHolding = useGoldHolding({ isOpen, asset });
+  const isGoldEtfAsset = asset?.type === 'gold' && isGoldEtfSubType(asset?.subType);
 
   // 모달 열릴 때 자동으로 가격 새로고침 (1회만)
   useEffect(() => {
-    if (isOpen && asset?.type === 'stock' && stockManager.holdings.length > 0 && !stockManager.isLoadingHoldings) {
+    if (
+      isOpen &&
+      (asset?.type === 'stock' || isGoldEtfAsset) &&
+      stockManager.holdings.length > 0 &&
+      !stockManager.isLoadingHoldings
+    ) {
       void stockManager.refreshHoldingPrices();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, asset?.type, stockManager.isLoadingHoldings]);
+  }, [isOpen, asset?.type, asset?.subType, isGoldEtfAsset, stockManager.isLoadingHoldings]);
 
   useEffect(() => {
     if (isOpen && asset?.type === 'crypto' && cryptoManager.holdings.length > 0 && !cryptoManager.isLoadingHoldings) {
@@ -97,7 +103,7 @@ export default function AssetHistoryModal({
   const isStock = asset.type === 'stock';
   const isCrypto = asset.type === 'crypto';
   const isGold = asset.type === 'gold';
-  const isGoldEtf = isGold && asset.subType === '금 ETF';
+  const isGoldEtf = isGold && isGoldEtfSubType(asset.subType);
   const isPhysicalGold = isGold && !isGoldEtf;
   const isHoldingManaged = isStock || isCrypto || isGoldEtf;
   const signedBalance = getAssetSignedBalance(asset);

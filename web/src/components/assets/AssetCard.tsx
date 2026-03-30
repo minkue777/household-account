@@ -1,6 +1,6 @@
 'use client';
 
-import { Asset, ASSET_TYPE_CONFIG } from '@/types/asset';
+import { Asset, ASSET_TYPE_CONFIG, isGoldEtfSubType } from '@/types/asset';
 import { getAssetSignedBalance } from '@/lib/assets/assetMath';
 import { ASSET_TYPE_ICON_COMPONENTS } from './assetIcons';
 
@@ -22,7 +22,7 @@ export default function AssetCard({ asset, onClick }: AssetCardProps) {
   const isHoldingManaged =
     asset.type === 'stock' ||
     asset.type === 'crypto' ||
-    (asset.type === 'gold' && asset.subType === '금 ETF');
+    (asset.type === 'gold' && isGoldEtfSubType(asset.subType));
   const signedBalance = getAssetSignedBalance(asset);
   const investmentBase = asset.initialInvestment || asset.costBasis || 0; // 투자원금 또는 평단가 합계
   const profitLoss = isHoldingManaged && investmentBase > 0 ? asset.currentBalance - investmentBase : 0;

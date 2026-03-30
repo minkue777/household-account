@@ -7,6 +7,7 @@ import {
   ASSET_TYPE_CONFIG,
   CryptoSearchResult,
   StockSearchResult,
+  isGoldEtfSubType,
 } from '@/types/asset';
 import { addAsset, addCryptoHolding, addStockHolding } from '@/lib/assetService';
 import { ModalOverlay } from '@/components/common';
@@ -118,7 +119,7 @@ export default function AssetAddModal({
   const [isAddingCoinHolding, setIsAddingCoinHolding] = useState(false);
   const [pendingCryptoHoldings, setPendingCryptoHoldings] = useState<PendingCryptoHolding[]>([]);
 
-  const isGoldEtf = type === 'gold' && subType === '금 ETF';
+  const isGoldEtf = type === 'gold' && isGoldEtfSubType(subType);
   const isStockLikeAsset = type === 'stock' || isGoldEtf;
   const isSavingsInstallment = type === 'savings' && subType === '적금';
 

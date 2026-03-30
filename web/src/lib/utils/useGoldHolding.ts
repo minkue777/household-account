@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Asset } from '@/types/asset';
+import { Asset, isGoldEtfSubType } from '@/types/asset';
 import { updateAsset } from '@/lib/assetService';
 
 export interface GoldPriceData {
@@ -60,6 +60,7 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
   const [isSaving, setIsSaving] = useState(false);
 
   const isGoldAsset = asset?.type === 'gold';
+  const isPhysicalGoldAsset = isGoldAsset && !isGoldEtfSubType(asset?.subType);
   const assetId = asset?.id;
 
   const setQuantityInput = useCallback((rawValue: string) => {
@@ -89,7 +90,7 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
   }, []);
 
   useEffect(() => {
-    if (!isOpen || !asset || !isGoldAsset) {
+    if (!isOpen || !asset || !isPhysicalGoldAsset) {
       setQuantity('');
       setGoldPrice(null);
       return;
@@ -99,7 +100,7 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
     setQuantity(match ? match[1] : '');
 
     void refreshGoldPrice();
-  }, [asset?.memo, assetId, isGoldAsset, isOpen, refreshGoldPrice]);
+  }, [asset?.memo, asset?.subType, assetId, isOpen, isPhysicalGoldAsset, refreshGoldPrice]);
 
   const totalValue = useMemo(() => {
     if (!goldPrice || !quantity) {
@@ -115,7 +116,7 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
   }, [goldPrice, quantity]);
 
   const saveGoldHolding = useCallback(async () => {
-    if (!assetId || !isGoldAsset || !goldPrice || !quantity || isSaving) {
+    if (!assetId || !isPhysicalGoldAsset || !goldPrice || !quantity || isSaving) {
       return false;
     }
 
@@ -136,7 +137,7 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
     } finally {
       setIsSaving(false);
     }
-  }, [assetId, goldPrice, isGoldAsset, isSaving, quantity, totalValue]);
+  }, [assetId, goldPrice, isPhysicalGoldAsset, isSaving, quantity, totalValue]);
 
   return {
     quantity,

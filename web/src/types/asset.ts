@@ -151,3 +151,29 @@ export type AssetInput = Omit<Asset, 'id' | 'householdId' | 'createdAt' | 'updat
 export type AssetHistoryInput = Omit<AssetHistoryEntry, 'id' | 'householdId' | 'createdAt'>;
 export type StockHoldingInput = Omit<StockHolding, 'id' | 'householdId' | 'createdAt' | 'updatedAt'>;
 export type CryptoHoldingInput = Omit<CryptoHolding, 'id' | 'householdId' | 'createdAt' | 'updatedAt'>;
+
+function normalizeSubTypeValue(value?: string) {
+  return (value || '').toLowerCase().replace(/\s+/g, '');
+}
+
+export function normalizeGoldSubType(subType?: string) {
+  const normalized = normalizeSubTypeValue(subType);
+
+  if (!normalized) {
+    return '';
+  }
+
+  if (normalized === '금etf' || normalized === 'etf' || normalized === '주식') {
+    return '금 ETF';
+  }
+
+  if (normalized === '실물금' || normalized === '현물') {
+    return '실물 금';
+  }
+
+  return subType || '';
+}
+
+export function isGoldEtfSubType(subType?: string) {
+  return normalizeGoldSubType(subType) === '금 ETF';
+}

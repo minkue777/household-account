@@ -1,7 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Asset, AssetType, ASSET_TYPE_CONFIG } from '@/types/asset';
+import {
+  Asset,
+  AssetType,
+  ASSET_TYPE_CONFIG,
+  isGoldEtfSubType,
+  normalizeGoldSubType,
+} from '@/types/asset';
 import { deleteAsset, updateAsset } from '@/lib/assetService';
 import { ConfirmDialog, ModalOverlay } from '@/components/common';
 import { X, Trash2 } from 'lucide-react';
@@ -59,10 +65,14 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
     }
 
     const goldQuantityMatch = asset.memo?.match(/(\d+(?:\.\d+)?)\s*돈/);
+    const resolvedSubType =
+      asset.type === 'gold'
+        ? normalizeGoldSubType(asset.subType) || ASSET_TYPE_CONFIG[asset.type].subTypes[0] || ''
+        : asset.subType || ASSET_TYPE_CONFIG[asset.type].subTypes[0] || '';
 
     setName(asset.name);
     setType(asset.type);
-    setSubType(asset.subType || ASSET_TYPE_CONFIG[asset.type].subTypes[0] || '');
+    setSubType(resolvedSubType);
     setBalance(Math.abs(asset.currentBalance || 0).toString());
     setRecurringContributionAmount(
       asset.recurringContributionAmount ? asset.recurringContributionAmount.toString() : ''
@@ -71,7 +81,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
       asset.recurringContributionDay ? asset.recurringContributionDay.toString() : ''
     );
     setInitialInvestment(asset.initialInvestment?.toString() || '');
-    setMemo(asset.type === 'gold' && asset.subType !== '금 ETF' ? '' : asset.memo || '');
+    setMemo(asset.type === 'gold' && !isGoldEtfSubType(asset.subType) ? '' : asset.memo || '');
     setGoldQuantity(goldQuantityMatch ? goldQuantityMatch[1] : '');
     setShowDeleteConfirm(false);
   }, [asset]);
@@ -122,7 +132,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
         updateData.memo = memo.trim();
       } else if (type === 'crypto') {
         updateData.memo = memo.trim();
-      } else if (type === 'gold' && subType === '금 ETF') {
+      } else if (type === 'gold' && isGoldEtfSubType(subType)) {
         updateData.memo = memo.trim();
       } else {
         updateData.currentBalance = parseInt(balance, 10) || 0;
@@ -163,7 +173,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
   const isStock = type === 'stock';
   const isCrypto = type === 'crypto';
   const isGold = type === 'gold';
-  const isGoldEtf = isGold && subType === '금 ETF';
+  const isGoldEtf = isGold && isGoldEtfSubType(subType);
   const isPhysicalGold = isGold && !isGoldEtf;
   const isHoldingManaged = isStock || isCrypto || isGoldEtf;
   const isSavingsInstallment = type === 'savings' && subType === '적금';

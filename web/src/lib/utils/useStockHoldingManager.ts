@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Asset, StockHolding, StockSearchResult } from '@/types/asset';
+import { Asset, StockHolding, StockSearchResult, isGoldEtfSubType } from '@/types/asset';
 import {
   addStockHolding,
   deleteStockHolding,
@@ -39,7 +39,7 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
 
   const isStockAsset =
-    asset?.type === 'stock' || (asset?.type === 'gold' && asset?.subType === '금 ETF');
+    asset?.type === 'stock' || (asset?.type === 'gold' && isGoldEtfSubType(asset?.subType));
   const assetId = asset?.id;
   const holdingsRef = useRef(holdings);
 
