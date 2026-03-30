@@ -6,7 +6,6 @@ import { deleteAsset, updateAsset } from '@/lib/assetService';
 import { ConfirmDialog, ModalOverlay } from '@/components/common';
 import { X, Trash2 } from 'lucide-react';
 import { AssetMemoField, AssetTypeGrid, StockInitialInvestmentField } from './AssetFormFields';
-import { getAssetSignedBalance } from '@/lib/assets/assetMath';
 
 interface AssetEditModalProps {
   isOpen: boolean;
@@ -14,12 +13,25 @@ interface AssetEditModalProps {
   asset: Asset | null;
 }
 
+function sanitizeGoldQuantity(rawValue: string) {
+  const cleaned = rawValue.replace(/[^0-9.]/g, '');
+  const firstDot = cleaned.indexOf('.');
+
+  if (firstDot === -1) {
+    return cleaned;
+  }
+
+  return `${cleaned.slice(0, firstDot + 1)}${cleaned.slice(firstDot + 1).replace(/\./g, '')}`;
+}
+
 export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModalProps) {
   const [name, setName] = useState('');
   const [type, setType] = useState<AssetType>('savings');
   const [subType, setSubType] = useState('');
+  const [balance, setBalance] = useState('');
   const [initialInvestment, setInitialInvestment] = useState('');
   const [memo, setMemo] = useState('');
+  const [goldQuantity, setGoldQuantity] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -28,11 +40,15 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
       return;
     }
 
+    const goldQuantityMatch = asset.memo?.match(/(\d+(?:\.\d+)?)\s*돈/);
+
     setName(asset.name);
     setType(asset.type);
     setSubType(asset.subType || ASSET_TYPE_CONFIG[asset.type].subTypes[0] || '');
+    setBalance(Math.abs(asset.currentBalance || 0).toString());
     setInitialInvestment(asset.initialInvestment?.toString() || '');
-    setMemo(asset.memo || '');
+    setMemo(asset.type === 'gold' ? '' : asset.memo || '');
+    setGoldQuantity(goldQuantityMatch ? goldQuantityMatch[1] : '');
     setShowDeleteConfirm(false);
   }, [asset]);
 
@@ -41,6 +57,12 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
       setSubType(ASSET_TYPE_CONFIG[type].subTypes[0] || '');
     }
   }, [subType, type]);
+
+  useEffect(() => {
+    if (type !== 'gold') {
+      setGoldQuantity('');
+    }
+  }, [type]);
 
   const handleSubmit = async () => {
     if (!asset || !name.trim() || isSubmitting) {
@@ -53,11 +75,14 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
         name: name.trim(),
         type,
         subType: subType || '',
-        memo: memo.trim(),
       };
 
       if (type === 'stock') {
         updateData.initialInvestment = initialInvestment ? parseInt(initialInvestment, 10) : 0;
+        updateData.memo = memo.trim();
+      } else {
+        updateData.currentBalance = parseInt(balance, 10) || 0;
+        updateData.memo = type === 'gold' ? (goldQuantity ? `${goldQuantity}돈` : '') : memo.trim();
       }
 
       await updateAsset(asset.id, updateData as Partial<Asset>);
@@ -91,31 +116,34 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
     return null;
   }
 
+  const isStock = type === 'stock';
+  const isGold = type === 'gold';
+
   return (
     <>
       <ModalOverlay onClose={onClose}>
-        <div className="bg-white rounded-2xl p-6 m-4 max-w-md w-full shadow-xl">
-          <div className="flex items-center justify-between mb-6">
+        <div className="m-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+          <div className="mb-6 flex items-center justify-between">
             <h2 className="text-xl font-bold text-slate-800">자산 수정</h2>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowDeleteConfirm(true)}
-                className="p-2 hover:bg-red-50 rounded-lg transition-colors text-red-500"
+                className="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
               >
-                <Trash2 className="w-5 h-5" />
+                <Trash2 className="h-5 w-5" />
               </button>
               <button
                 onClick={onClose}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                className="rounded-lg p-2 transition-colors hover:bg-slate-100"
               >
-                <X className="w-5 h-5 text-slate-500" />
+                <X className="h-5 w-5 text-slate-500" />
               </button>
             </div>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">유형</label>
+              <label className="mb-2 block text-sm font-medium text-slate-700">유형</label>
               <AssetTypeGrid
                 value={type}
                 onChange={setType}
@@ -123,70 +151,98 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">세부 유형</label>
-              <div className="flex flex-wrap gap-2">
-                {ASSET_TYPE_CONFIG[type].subTypes.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setSubType(option)}
-                    className={`px-3 py-1.5 rounded-full text-sm transition-all ${
-                      subType === option
-                        ? 'bg-slate-800 text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    {option}
-                  </button>
-                ))}
+            {ASSET_TYPE_CONFIG[type].subTypes.length > 0 && (
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">세부 유형</label>
+                <div className="flex flex-wrap gap-2">
+                  {ASSET_TYPE_CONFIG[type].subTypes.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setSubType(option)}
+                      className={`rounded-full px-3 py-1.5 text-sm transition-all ${
+                        subType === option
+                          ? 'bg-slate-800 text-white'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">자산명</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">자산명</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                현재 잔액
-                <span className="text-xs text-slate-400 ml-2">(이력에서 수정)</span>
-              </label>
-              <div className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
-                {getAssetSignedBalance(asset).toLocaleString()}원
+            {!isStock && (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">현재 잔액</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={balance ? parseInt(balance, 10).toLocaleString() : ''}
+                    onChange={(e) => setBalance(e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="0"
+                    className="w-full rounded-lg border border-slate-300 px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">원</span>
+                </div>
               </div>
-            </div>
+            )}
 
-            {type === 'stock' && (
+            {isGold && (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">보유량</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={goldQuantity}
+                    onChange={(e) => setGoldQuantity(sanitizeGoldQuantity(e.target.value))}
+                    placeholder="0"
+                    className="w-full rounded-lg border border-slate-300 px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">돈</span>
+                </div>
+              </div>
+            )}
+
+            {isStock && (
               <StockInitialInvestmentField
                 value={initialInvestment}
                 onChange={setInitialInvestment}
               />
             )}
 
-            <AssetMemoField
-              value={memo}
-              onChange={setMemo}
-            />
+            {!isGold && (
+              <AssetMemoField
+                value={memo}
+                onChange={setMemo}
+              />
+            )}
           </div>
 
-          <div className="flex gap-3 mt-6">
+          <div className="mt-6 flex gap-3">
             <button
               onClick={onClose}
-              className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+              className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-slate-600 transition-colors hover:bg-slate-50"
             >
               취소
             </button>
             <button
               onClick={handleSubmit}
               disabled={!name.trim() || isSubmitting}
-              className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
+              className="flex-1 rounded-lg bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {isSubmitting ? '저장 중..' : '저장'}
             </button>

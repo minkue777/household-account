@@ -41,6 +41,7 @@ interface TooltipState {
   top: number;
   title: string;
   value: string;
+  color: string;
 }
 
 export default function AssetSummaryCard({
@@ -58,6 +59,7 @@ export default function AssetSummaryCard({
     top: 0,
     title: '',
     value: '',
+    color: '#000000',
   });
 
   const filteredAssets = useMemo(() => {
@@ -200,6 +202,7 @@ export default function AssetSummaryCard({
             top: relativeTop - 16,
             title: ASSET_TYPE_CONFIG[item.type].label,
             value: `${item.balance.toLocaleString()}원 (${item.percentage.toFixed(1)}%)`,
+            color: chartColors[item.type],
           });
         },
       },
@@ -256,7 +259,13 @@ export default function AssetSummaryCard({
                   top: tooltipState.top,
                 }}
               >
-                <div className="font-semibold">{tooltipState.title}</div>
+                <div className="flex items-center gap-1.5 font-semibold">
+                  <span
+                    className="h-2 w-2 flex-shrink-0 rounded-full"
+                    style={{ backgroundColor: tooltipState.color }}
+                  />
+                  <span>{tooltipState.title}</span>
+                </div>
                 <div className="mt-0.5 whitespace-nowrap text-slate-100">{tooltipState.value}</div>
               </div>
             )}
