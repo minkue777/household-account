@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AssetInput, AssetType } from '@/types/asset';
+import { AssetInput, AssetType, ASSET_TYPE_CONFIG } from '@/types/asset';
 import { addAsset } from '@/lib/assetService';
 import { ModalOverlay } from '@/components/common';
 import { X } from 'lucide-react';
@@ -33,6 +33,7 @@ export default function AssetAddModal({
 }: AssetAddModalProps) {
   const [name, setName] = useState('');
   const [type, setType] = useState<AssetType>(defaultType);
+  const [subType, setSubType] = useState('');
   const [owner, setOwner] = useState(ownerOptions[0] || HOUSEHOLD_OWNER_OPTION);
   const [balance, setBalance] = useState('');
   const [initialInvestment, setInitialInvestment] = useState('');
@@ -46,15 +47,24 @@ export default function AssetAddModal({
   }, [type]);
 
   useEffect(() => {
+    if (!ASSET_TYPE_CONFIG[type].subTypes.includes(subType)) {
+      setSubType(ASSET_TYPE_CONFIG[type].subTypes[0] || '');
+    }
+  }, [subType, type]);
+
+  useEffect(() => {
     if (!isOpen) {
       return;
     }
 
     setType(defaultType);
+    setSubType(ASSET_TYPE_CONFIG[defaultType].subTypes[0] || '');
+
     const initialOwner =
       defaultOwner && ownerOptions.includes(defaultOwner)
         ? defaultOwner
         : ownerOptions[0] || HOUSEHOLD_OWNER_OPTION;
+
     setOwner(initialOwner);
     setName('');
     setBalance('');
@@ -72,6 +82,7 @@ export default function AssetAddModal({
       const input: AssetInput = {
         name: name.trim(),
         type,
+        subType: subType || undefined,
         owner,
         currentBalance: parseInt(balance, 10) || 0,
         currency: 'KRW',
@@ -114,6 +125,28 @@ export default function AssetAddModal({
             <label className="mb-2 block text-sm font-medium text-slate-700">유형</label>
             <AssetTypeGrid value={type} onChange={setType} />
           </div>
+
+          {ASSET_TYPE_CONFIG[type].subTypes.length > 0 && (
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">세부 유형</label>
+              <div className="flex flex-wrap gap-2">
+                {ASSET_TYPE_CONFIG[type].subTypes.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setSubType(option)}
+                    className={`rounded-full px-3 py-1.5 text-sm transition-all ${
+                      subType === option
+                        ? 'bg-slate-800 text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">소유자</label>
@@ -183,7 +216,7 @@ export default function AssetAddModal({
             disabled={isSubmitting || !name.trim()}
             className="flex-1 rounded-lg bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            {isSubmitting ? '추가 중...' : '추가'}
+            {isSubmitting ? '추가 중..' : '추가'}
           </button>
         </div>
       </div>

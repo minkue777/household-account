@@ -98,7 +98,13 @@ export default function AssetsPage() {
 
   const handleAssetClick = (asset: Asset) => {
     setSelectedAsset(asset);
-    setShowHistoryModal(true);
+
+    if (asset.type === 'stock') {
+      setShowHistoryModal(true);
+      return;
+    }
+
+    setShowEditModal(true);
   };
 
   const handleAddClick = () => {

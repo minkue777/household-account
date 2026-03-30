@@ -1,23 +1,22 @@
 import { Timestamp } from 'firebase/firestore';
 
-// 가족 구성원
 export const FAMILY_MEMBERS = ['전체', '이민규', '이진선', '이지아'] as const;
 export type FamilyMember = typeof FAMILY_MEMBERS[number];
 
-// 자산 소유자 옵션 (가구 공동 자산 포함)
 export const ASSET_OWNERS = ['가구', '이민규', '이진선', '이지아'] as const;
 export type AssetOwner = typeof ASSET_OWNERS[number];
 
-// 자산 타입
 export type AssetType = 'savings' | 'stock' | 'property' | 'gold' | 'loan';
 
-// 자산 타입별 설정
-export const ASSET_TYPE_CONFIG: Record<AssetType, {
-  label: string;
-  icon: string;
-  color: string;
-  subTypes: string[];
-}> = {
+export const ASSET_TYPE_CONFIG: Record<
+  AssetType,
+  {
+    label: string;
+    icon: string;
+    color: string;
+    subTypes: string[];
+  }
+> = {
   savings: {
     label: '예적금',
     icon: 'WalletMinimal',
@@ -28,7 +27,7 @@ export const ASSET_TYPE_CONFIG: Record<AssetType, {
     label: '주식',
     icon: 'ChartCandlestick',
     color: '#10B981',
-    subTypes: [], // 종목 검색으로 대체
+    subTypes: [],
   },
   property: {
     label: '부동산',
@@ -46,41 +45,37 @@ export const ASSET_TYPE_CONFIG: Record<AssetType, {
     label: '대출',
     icon: 'HandCoins',
     color: '#EF4444',
-    subTypes: ['신용대출', '주택담보대출', '전세대출', '학자금대출'],
+    subTypes: ['신용대출', '주택담보대출', '전세대출'],
   },
 };
 
-// 자산 인터페이스
 export interface Asset {
   id: string;
   householdId: string;
-  name: string;              // "KB은행 예금", "삼성전자 주식"
+  name: string;
   type: AssetType;
-  subType?: string;          // "예금", "적금", "주식", "펀드", "코인", "부동산", "차량"
-  owner?: string;            // 소유자 (가족 구성원)
+  subType?: string;
+  owner?: string;
   currentBalance: number;
-  costBasis?: number;        // 보유종목 평단가 합계 (자동 계산)
-  initialInvestment?: number; // 투자원금 (사용자 입력)
-  currency: string;          // 'KRW' (기본)
+  costBasis?: number;
+  initialInvestment?: number;
+  currency: string;
   memo?: string;
-  icon?: string;             // Lucide 아이콘명
+  icon?: string;
   color?: string;
   isActive: boolean;
   order: number;
-  // 주식/ETF 전용 필드
-  stockCode?: string;        // 종목코드 (예: "005930", "482730")
-  quantity?: number;         // 보유 수량
+  stockCode?: string;
+  quantity?: number;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
 
-// 주식 검색 결과
 export interface StockSearchResult {
   code: string;
   name: string;
 }
 
-// 주식 시세 정보
 export interface StockPriceInfo {
   code: string;
   name: string;
@@ -91,37 +86,30 @@ export interface StockPriceInfo {
   currency: string;
 }
 
-// 자산 이력 인터페이스
 export interface AssetHistoryEntry {
   id: string;
   householdId: string;
   assetId: string;
   balance: number;
-  date: string;              // YYYY-MM-DD
+  date: string;
   changeAmount: number;
   memo?: string;
   createdAt: Timestamp;
 }
 
-// 주식 보유 종목 (주식 계좌의 세부 항목)
 export interface StockHolding {
   id: string;
-  assetId: string;           // 연결된 자산(계좌) ID
+  assetId: string;
   householdId: string;
-  stockCode: string;         // 종목코드
-  stockName: string;         // 종목명
-  quantity: number;          // 보유 수량
-  avgPrice?: number;         // 평균 매입가
-  currentPrice?: number;     // 현재가 (조회 시 업데이트)
+  stockCode: string;
+  stockName: string;
+  quantity: number;
+  avgPrice?: number;
+  currentPrice?: number;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
 
-// 자산 생성 입력
 export type AssetInput = Omit<Asset, 'id' | 'householdId' | 'createdAt' | 'updatedAt'>;
-
-// 자산 이력 생성 입력
 export type AssetHistoryInput = Omit<AssetHistoryEntry, 'id' | 'householdId' | 'createdAt'>;
-
-// 주식 보유 종목 생성 입력
 export type StockHoldingInput = Omit<StockHolding, 'id' | 'householdId' | 'createdAt' | 'updatedAt'>;

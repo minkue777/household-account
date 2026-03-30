@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
 import { Asset, ASSET_TYPE_CONFIG, AssetType } from '@/types/asset';
@@ -35,6 +35,14 @@ interface AssetSummaryCardProps {
   onMemberChange: (member: string) => void;
 }
 
+interface TooltipState {
+  visible: boolean;
+  left: number;
+  top: number;
+  title: string;
+  value: string;
+}
+
 export default function AssetSummaryCard({
   assets,
   dailyChange,
@@ -43,6 +51,15 @@ export default function AssetSummaryCard({
   memberOptions,
   onMemberChange,
 }: AssetSummaryCardProps) {
+  const chartWrapRef = useRef<HTMLDivElement | null>(null);
+  const [tooltipState, setTooltipState] = useState<TooltipState>({
+    visible: false,
+    left: 0,
+    top: 0,
+    title: '',
+    value: '',
+  });
+
   const filteredAssets = useMemo(() => {
     if (selectedMember === ALL_MEMBERS_OPTION) {
       return assets.filter((asset) => asset.isActive);
@@ -52,6 +69,7 @@ export default function AssetSummaryCard({
   }, [assets, selectedMember]);
 
   const totalBalance = sumSignedAssetBalances(filteredAssets);
+
   const changeRate = useMemo(() => {
     if (previousMonthTotal && previousMonthTotal > 0) {
       return ((totalBalance - previousMonthTotal) / previousMonthTotal) * 100;
@@ -69,8 +87,9 @@ export default function AssetSummaryCard({
 
   const typeData = useMemo(() => {
     const balances: { type: AssetType; balance: number; percentage: number }[] = [];
-    const totalLoanBalance = filteredAssets
-      .filter((asset) => asset.type === 'loan')
+    const securedLoanSubTypes = new Set(['주택담보대출', '전세대출']);
+    const totalPropertyLinkedLoanBalance = filteredAssets
+      .filter((asset) => asset.type === 'loan' && securedLoanSubTypes.has(asset.subType || ''))
       .reduce((sum, asset) => sum + Math.abs(asset.currentBalance || 0), 0);
 
     (Object.keys(ASSET_TYPE_CONFIG) as AssetType[]).forEach((type) => {
@@ -83,9 +102,7 @@ export default function AssetSummaryCard({
         .reduce((sum, asset) => sum + Math.abs(getAssetSignedBalance(asset)), 0);
 
       const balance =
-        type === 'property'
-          ? Math.max(0, baseBalance - totalLoanBalance)
-          : baseBalance;
+        type === 'property' ? Math.max(0, baseBalance - totalPropertyLinkedLoanBalance) : baseBalance;
 
       if (balance !== 0) {
         balances.push({
@@ -132,7 +149,7 @@ export default function AssetSummaryCard({
       labels: typeData.map((item) => ASSET_TYPE_CONFIG[item.type].label),
       datasets: [
         {
-          data: typeData.map((item) => Math.abs(item.balance)),
+          data: typeData.map((item) => item.balance),
           backgroundColor: typeData.map((item) => chartColors[item.type]),
           borderWidth: 0,
           cutout: '65%',
@@ -144,19 +161,46 @@ export default function AssetSummaryCard({
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    layout: {
+      padding: 10,
+    },
     plugins: {
       legend: {
         display: false,
       },
       tooltip: {
-        callbacks: {
-          label(context: any) {
-            const value = context.raw as number;
-            const item = typeData[context.dataIndex];
-            const totalChartBalance = typeData.reduce((sum, typeItem) => sum + typeItem.balance, 0);
-            const percentage = totalChartBalance > 0 ? ((value / totalChartBalance) * 100).toFixed(1) : 0;
-            return `${item.balance.toLocaleString()}원 (${percentage}%)`;
-          },
+        enabled: false,
+        external: (context: any) => {
+          const tooltip = context.tooltip;
+          const chart = context.chart;
+
+          if (!chartWrapRef.current) {
+            return;
+          }
+
+          if (!tooltip || tooltip.opacity === 0 || !tooltip.dataPoints?.length) {
+            setTooltipState((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+            return;
+          }
+
+          const dataPoint = tooltip.dataPoints[0];
+          const item = typeData[dataPoint.dataIndex];
+          if (!item) {
+            return;
+          }
+
+          const chartRect = chart.canvas.getBoundingClientRect();
+          const wrapRect = chartWrapRef.current.getBoundingClientRect();
+          const relativeLeft = chartRect.left - wrapRect.left + tooltip.caretX;
+          const relativeTop = chartRect.top - wrapRect.top + tooltip.caretY;
+
+          setTooltipState({
+            visible: true,
+            left: relativeLeft,
+            top: relativeTop - 16,
+            title: ASSET_TYPE_CONFIG[item.type].label,
+            value: `${item.balance.toLocaleString()}원 (${item.percentage.toFixed(1)}%)`,
+          });
         },
       },
     },
@@ -202,8 +246,20 @@ export default function AssetSummaryCard({
 
       <div className="p-5">
         <div className="flex items-center">
-          <div className="-m-[10px] h-[140px] w-[140px] flex-shrink-0">
+          <div ref={chartWrapRef} className="relative -m-[10px] h-[140px] w-[140px] flex-shrink-0 overflow-visible">
             <Doughnut data={chartData} options={chartOptions} />
+            {tooltipState.visible && (
+              <div
+                className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg"
+                style={{
+                  left: tooltipState.left,
+                  top: tooltipState.top,
+                }}
+              >
+                <div className="font-semibold">{tooltipState.title}</div>
+                <div className="mt-0.5 whitespace-nowrap text-slate-100">{tooltipState.value}</div>
+              </div>
+            )}
           </div>
 
           <div className="ml-6 flex-1 space-y-2.5">
@@ -218,15 +274,11 @@ export default function AssetSummaryCard({
                     />
                     <span className="text-sm text-slate-600">{config.label}</span>
                   </div>
-                  <span className="text-sm font-medium text-slate-800">
-                    {item.percentage.toFixed(1)}%
-                  </span>
+                  <span className="text-sm font-medium text-slate-800">{item.percentage.toFixed(1)}%</span>
                 </div>
               );
             })}
-            {typeData.length === 0 && (
-              <p className="text-sm text-slate-400">등록된 자산이 없습니다</p>
-            )}
+            {typeData.length === 0 && <p className="text-sm text-slate-400">등록된 자산이 없습니다</p>}
           </div>
         </div>
       </div>
