@@ -38,7 +38,8 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
   const [isAddingHolding, setIsAddingHolding] = useState(false);
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
 
-  const isStockAsset = asset?.type === 'stock';
+  const isStockAsset =
+    asset?.type === 'stock' || (asset?.type === 'gold' && asset?.subType === '금 ETF');
   const assetId = asset?.id;
   const holdingsRef = useRef(holdings);
 

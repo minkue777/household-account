@@ -45,7 +45,7 @@ export const ASSET_TYPE_CONFIG: Record<
     label: '금',
     icon: 'Coins',
     color: '#F59E0B',
-    subTypes: [],
+    subTypes: ['실물 금', '금 ETF'],
   },
   loan: {
     label: '대출',

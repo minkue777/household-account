@@ -47,7 +47,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
     setSubType(asset.subType || ASSET_TYPE_CONFIG[asset.type].subTypes[0] || '');
     setBalance(Math.abs(asset.currentBalance || 0).toString());
     setInitialInvestment(asset.initialInvestment?.toString() || '');
-    setMemo(asset.type === 'gold' ? '' : asset.memo || '');
+    setMemo(asset.type === 'gold' && asset.subType !== '금 ETF' ? '' : asset.memo || '');
     setGoldQuantity(goldQuantityMatch ? goldQuantityMatch[1] : '');
     setShowDeleteConfirm(false);
   }, [asset]);
@@ -81,6 +81,8 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
         updateData.initialInvestment = initialInvestment ? parseInt(initialInvestment, 10) : 0;
         updateData.memo = memo.trim();
       } else if (type === 'crypto') {
+        updateData.memo = memo.trim();
+      } else if (type === 'gold' && subType === '금 ETF') {
         updateData.memo = memo.trim();
       } else {
         updateData.currentBalance = parseInt(balance, 10) || 0;
@@ -120,8 +122,10 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
 
   const isStock = type === 'stock';
   const isCrypto = type === 'crypto';
-  const isHoldingManaged = isStock || isCrypto;
   const isGold = type === 'gold';
+  const isGoldEtf = isGold && subType === '금 ETF';
+  const isPhysicalGold = isGold && !isGoldEtf;
+  const isHoldingManaged = isStock || isCrypto || isGoldEtf;
 
   return (
     <>
@@ -204,7 +208,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
               </div>
             )}
 
-            {isGold && (
+            {isPhysicalGold && (
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">보유량</label>
                 <div className="relative">
@@ -228,7 +232,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
               />
             )}
 
-            {!isGold && (
+            {!isPhysicalGold && (
               <AssetMemoField
                 value={memo}
                 onChange={setMemo}

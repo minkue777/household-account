@@ -19,7 +19,10 @@ export default function AssetCard({ asset, onClick }: AssetCardProps) {
   const Icon = ASSET_TYPE_ICON_COMPONENTS[asset.type];
 
   // 시장형 자산: 수익률 계산 (평가금액 vs 투자원금)
-  const isHoldingManaged = asset.type === 'stock' || asset.type === 'crypto';
+  const isHoldingManaged =
+    asset.type === 'stock' ||
+    asset.type === 'crypto' ||
+    (asset.type === 'gold' && asset.subType === '금 ETF');
   const signedBalance = getAssetSignedBalance(asset);
   const investmentBase = asset.initialInvestment || asset.costBasis || 0; // 투자원금 또는 평단가 합계
   const profitLoss = isHoldingManaged && investmentBase > 0 ? asset.currentBalance - investmentBase : 0;

@@ -101,7 +101,7 @@ export default function AssetsPage() {
   const handleAssetClick = (asset: Asset) => {
     setSelectedAsset(asset);
 
-    if (asset.type === 'stock' || asset.type === 'crypto') {
+    if (asset.type === 'stock' || asset.type === 'crypto' || asset.type === 'gold') {
       setShowHistoryModal(true);
       return;
     }

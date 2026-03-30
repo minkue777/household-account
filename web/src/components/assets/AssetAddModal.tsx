@@ -101,6 +101,9 @@ export default function AssetAddModal({
   const [isAddingCoinHolding, setIsAddingCoinHolding] = useState(false);
   const [pendingCryptoHoldings, setPendingCryptoHoldings] = useState<PendingCryptoHolding[]>([]);
 
+  const isGoldEtf = type === 'gold' && subType === '금 ETF';
+  const isStockLikeAsset = type === 'stock' || isGoldEtf;
+
   const resetStockForm = () => {
     setSearchQuery('');
     setSearchResults([]);
@@ -159,7 +162,7 @@ export default function AssetAddModal({
   }, [defaultOwner, defaultType, isOpen, ownerOptions]);
 
   useEffect(() => {
-    if (type !== 'stock' || searchQuery.length < 1) {
+    if (!isStockLikeAsset || searchQuery.length < 1) {
       setSearchResults([]);
       return;
     }
@@ -175,7 +178,12 @@ export default function AssetAddModal({
         const response = await fetch(`/api/stock/search?q=${encodeURIComponent(searchQuery)}`);
         const data = await response.json();
         if (!cancelled) {
-          setSearchResults(data.results || []);
+          const results: StockSearchResult[] = data.results || [];
+          setSearchResults(
+            isGoldEtf
+              ? results.filter((item) => /금|골드/i.test(item.name))
+              : results
+          );
         }
       } catch (error) {
         if (!cancelled) {
@@ -193,7 +201,7 @@ export default function AssetAddModal({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [searchQuery, selectedStock, type]);
+  }, [isGoldEtf, isStockLikeAsset, searchQuery, selectedStock]);
 
   useEffect(() => {
     if (type !== 'crypto' || cryptoSearchQuery.length < 1) {
@@ -344,7 +352,7 @@ export default function AssetAddModal({
         type,
         subType: subType || undefined,
         owner,
-        currentBalance: type === 'stock' || type === 'crypto' ? 0 : parseInt(balance, 10) || 0,
+        currentBalance: isStockLikeAsset || type === 'crypto' ? 0 : parseInt(balance, 10) || 0,
         currency: 'KRW',
         memo: memo.trim() || undefined,
         isActive: true,
@@ -353,7 +361,7 @@ export default function AssetAddModal({
 
       const assetId = await addAsset(input);
 
-      if (type === 'stock' && pendingHoldings.length > 0) {
+      if (isStockLikeAsset && pendingHoldings.length > 0) {
         await Promise.all(
           pendingHoldings.map((holding) =>
             addStockHolding({
@@ -525,7 +533,7 @@ export default function AssetAddModal({
             />
           </div>
 
-          {type !== 'stock' && type !== 'crypto' && (
+          {!isStockLikeAsset && type !== 'crypto' && (
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">현재 금액</label>
               <div className="relative">
@@ -542,13 +550,12 @@ export default function AssetAddModal({
             </div>
           )}
 
-          {type === 'stock' && (
+          {isStockLikeAsset && (
             <div className="space-y-3 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">보유 종목</label>
-                <p className="text-xs text-slate-500">
-                  현재 금액은 입력하지 않고, 추가한 종목의 평가금액 합계로 자동 계산됩니다.
-                </p>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  {isGoldEtf ? '보유 ETF' : '보유 종목'}
+                </label>
               </div>
 
               <StockSearchForm
@@ -561,7 +568,9 @@ export default function AssetAddModal({
               {pendingHoldings.length > 0 && (
                 <div className="space-y-2 rounded-xl border border-blue-100 bg-white p-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-slate-700">추가할 종목</p>
+                    <p className="text-sm font-medium text-slate-700">
+                      추가할 {isGoldEtf ? 'ETF' : '종목'}
+                    </p>
                     <p className="text-xs text-slate-500">
                       예상 평가금액 {pendingStockTotal.toLocaleString()}원
                     </p>
@@ -604,9 +613,6 @@ export default function AssetAddModal({
             <div className="space-y-3 rounded-2xl border border-orange-100 bg-orange-50/70 p-4">
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">보유 코인</label>
-                <p className="text-xs text-slate-500">
-                  현재 금액은 입력하지 않고, 추가한 코인의 평가금액 합계로 자동 계산됩니다.
-                </p>
               </div>
 
               <CryptoSearchForm

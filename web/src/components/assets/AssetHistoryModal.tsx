@@ -97,7 +97,9 @@ export default function AssetHistoryModal({
   const isStock = asset.type === 'stock';
   const isCrypto = asset.type === 'crypto';
   const isGold = asset.type === 'gold';
-  const isHoldingManaged = isStock || isCrypto;
+  const isGoldEtf = isGold && asset.subType === '금 ETF';
+  const isPhysicalGold = isGold && !isGoldEtf;
+  const isHoldingManaged = isStock || isCrypto || isGoldEtf;
   const signedBalance = getAssetSignedBalance(asset);
   // 시장형 자산 수익률 계산
   const investmentBase = asset.initialInvestment || asset.costBasis || 0;
@@ -242,7 +244,7 @@ export default function AssetHistoryModal({
           )}
 
           {/* 주식: 종목 검색 폼 (콘텐츠 영역 밖) */}
-          {isStock && (
+          {(isStock || isGoldEtf) && (
             <StockSearchForm
               state={{
                 searchQuery: stockManager.searchQuery,
@@ -288,7 +290,7 @@ export default function AssetHistoryModal({
 
           {/* 콘텐츠 영역 */}
           <div className="flex-1 overflow-y-auto p-4">
-            {isGold ? (
+            {isPhysicalGold ? (
               <GoldHoldingSection
                 state={{
                   quantity: goldHolding.quantity,
@@ -301,7 +303,7 @@ export default function AssetHistoryModal({
                 }}
                 onSave={handleSaveGold}
               />
-            ) : isStock ? (
+            ) : isStock || isGoldEtf ? (
               <StockHoldingList
                 holdings={stockManager.holdings}
                 isLoading={stockManager.isLoadingHoldings}
