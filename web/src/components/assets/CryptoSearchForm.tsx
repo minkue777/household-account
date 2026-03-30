@@ -50,7 +50,7 @@ export default function CryptoSearchForm({ state, onAdd }: CryptoSearchFormProps
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="코인명 또는 KRW-BTC 입력"
+            placeholder="코인명 입력"
             className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
           />
           {isSearching && (
