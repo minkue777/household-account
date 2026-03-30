@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { CategoryDocument } from '@/lib/categoryService';
-import { ColorPicker } from '@/components/common';
+import { ColorPicker, ConfirmDialog } from '@/components/common';
 import { COLOR_PALETTE } from '@/lib/categoryService';
 import { getStoredHouseholdKey, getHousehold, setDefaultCategoryKey } from '@/lib/householdService';
 
@@ -18,6 +18,7 @@ export default function CategorySettings() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [pendingDeleteCategory, setPendingDeleteCategory] = useState<CategoryDocument | null>(null);
 
   // 드래그 앤 드롭 상태
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -89,10 +90,11 @@ export default function CategorySettings() {
     setEditBudget('');
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('이 카테고리를 삭제하시겠습니까?\n기존 지출 데이터는 유지되며 "알 수 없음"으로 표시됩니다.')) {
-      await deleteCategory(id);
-    }
+  const handleDelete = async () => {
+    if (!pendingDeleteCategory) return;
+
+    await deleteCategory(pendingDeleteCategory.id);
+    setPendingDeleteCategory(null);
   };
 
   // 기본 카테고리 변경
@@ -295,7 +297,7 @@ export default function CategorySettings() {
                         </svg>
                       </button>
                       <button
-                        onClick={() => handleDelete(category.id)}
+                        onClick={() => setPendingDeleteCategory(category)}
                         className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -376,6 +378,23 @@ export default function CategorySettings() {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={!!pendingDeleteCategory}
+        title="카테고리 삭제"
+        message={
+          pendingDeleteCategory
+            ? `"${pendingDeleteCategory.label}" 카테고리를 삭제하시겠습니까? 기존 지출 데이터는 유지되며 "알 수 없음"으로 표시됩니다.`
+            : ''
+        }
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        variant="danger"
+        onConfirm={() => {
+          void handleDelete();
+        }}
+        onCancel={() => setPendingDeleteCategory(null)}
+      />
     </div>
   );
 }

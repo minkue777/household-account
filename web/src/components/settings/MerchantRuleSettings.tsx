@@ -12,6 +12,7 @@ import {
   MATCH_TYPE_LABELS,
 } from '@/lib/merchantRuleService';
 import { getStoredHouseholdKey } from '@/lib/householdService';
+import { ConfirmDialog } from '@/components/common';
 
 export default function MerchantRuleSettings() {
   const {
@@ -28,6 +29,7 @@ export default function MerchantRuleSettings() {
   const [rulesLoading, setRulesLoading] = useState(true);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [showAddRuleForm, setShowAddRuleForm] = useState(false);
+  const [pendingDeleteRule, setPendingDeleteRule] = useState<MerchantRule | null>(null);
   const ruleFormRef = useRef<HTMLDivElement>(null);
 
   // 규칙 폼 상태 (추가/편집 공용)
@@ -103,6 +105,13 @@ export default function MerchantRuleSettings() {
     }
 
     resetRuleForm();
+  };
+
+  const handleDeleteRule = async () => {
+    if (!pendingDeleteRule) return;
+
+    await deleteMerchantRule(pendingDeleteRule.id);
+    setPendingDeleteRule(null);
   };
 
   return (
@@ -314,11 +323,7 @@ export default function MerchantRuleSettings() {
                         </svg>
                       </button>
                       <button
-                        onClick={async () => {
-                          if (confirm(`"${rule.merchantKeyword}" 규칙을 삭제하시겠습니까?`)) {
-                            await deleteMerchantRule(rule.id);
-                          }
-                        }}
+                        onClick={() => setPendingDeleteRule(rule)}
                         className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -346,6 +351,23 @@ export default function MerchantRuleSettings() {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={!!pendingDeleteRule}
+        title="가맹점 규칙 삭제"
+        message={
+          pendingDeleteRule
+            ? `"${pendingDeleteRule.merchantKeyword}" 규칙을 삭제하시겠습니까?`
+            : ''
+        }
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        variant="danger"
+        onConfirm={() => {
+          void handleDeleteRule();
+        }}
+        onCancel={() => setPendingDeleteRule(null)}
+      />
     </div>
   );
 }

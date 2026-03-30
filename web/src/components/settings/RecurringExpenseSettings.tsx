@@ -10,6 +10,7 @@ import {
   updateRecurringExpense,
   deleteRecurringExpense,
 } from '@/lib/recurringExpenseService';
+import { ConfirmDialog } from '@/components/common';
 
 export default function RecurringExpenseSettings() {
   const {
@@ -27,6 +28,7 @@ export default function RecurringExpenseSettings() {
   const [recurringLoading, setRecurringLoading] = useState(true);
   const [showAddRecurringForm, setShowAddRecurringForm] = useState(false);
   const [editingRecurringId, setEditingRecurringId] = useState<string | null>(null);
+  const [pendingDeleteRecurring, setPendingDeleteRecurring] = useState<RecurringExpense | null>(null);
   const recurringFormRef = useRef<HTMLDivElement>(null);
 
   // 정기 지출 폼 상태
@@ -107,6 +109,13 @@ export default function RecurringExpenseSettings() {
     }
 
     resetRecurringForm();
+  };
+
+  const handleDeleteRecurring = async () => {
+    if (!pendingDeleteRecurring) return;
+
+    await deleteRecurringExpense(pendingDeleteRecurring.id);
+    setPendingDeleteRecurring(null);
   };
 
   return (
@@ -320,11 +329,7 @@ export default function RecurringExpenseSettings() {
                         </svg>
                       </button>
                       <button
-                        onClick={async () => {
-                          if (confirm(`"${expense.merchant}" 정기 지출을 삭제하시겠습니까?`)) {
-                            await deleteRecurringExpense(expense.id);
-                          }
-                        }}
+                        onClick={() => setPendingDeleteRecurring(expense)}
                         className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -352,6 +357,23 @@ export default function RecurringExpenseSettings() {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={!!pendingDeleteRecurring}
+        title="정기 지출 삭제"
+        message={
+          pendingDeleteRecurring
+            ? `"${pendingDeleteRecurring.merchant}" 정기 지출을 삭제하시겠습니까?`
+            : ''
+        }
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        variant="danger"
+        onConfirm={() => {
+          void handleDeleteRecurring();
+        }}
+        onCancel={() => setPendingDeleteRecurring(null)}
+      />
     </div>
   );
 }
