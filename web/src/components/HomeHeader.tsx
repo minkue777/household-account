@@ -31,8 +31,12 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
           >
             {household?.name || '우리집'}
             <br />
-            <span>가계부</span>
-            <span className={isIncome ? 'opacity-100' : 'opacity-0'}> (수입)</span>
+            <span className="relative inline-block overflow-visible">
+              <span>가계부</span>
+              {isIncome && (
+                <span className="absolute left-full ml-1 top-0 whitespace-nowrap">(수입)</span>
+              )}
+            </span>
           </h1>
         </Link>
 
