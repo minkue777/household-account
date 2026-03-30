@@ -151,17 +151,17 @@ export default function BalanceCards({
       key: 'monthlyIncome',
       label: `${currentMonth}월 수입`,
       valueText: monthlySpent.toLocaleString(),
-      accentClassName: 'bg-emerald-50 border-emerald-100 text-emerald-500',
+      accentClassName: 'bg-pink-50 border-pink-100 text-pink-500',
       icon: Calendar,
-      iconClassName: 'text-emerald-500',
+      iconClassName: 'text-pink-500',
     },
     {
       key: 'yearlyIncome',
       label: `${currentYear}년 수입`,
       valueText: yearlySpent !== null ? yearlySpent.toLocaleString() : '-',
-      accentClassName: 'bg-teal-50 border-teal-100 text-teal-500',
+      accentClassName: 'bg-rose-50 border-rose-100 text-rose-500',
       icon: CalendarDays,
-      iconClassName: 'text-teal-500',
+      iconClassName: 'text-rose-500',
     },
   ];
 

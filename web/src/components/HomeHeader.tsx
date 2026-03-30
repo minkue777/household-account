@@ -15,10 +15,11 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
   const { household } = useHousehold();
   const isIncome = transactionType === 'income';
   const titleHref = isIncome ? '/' : '/income';
+  const subtitle = isIncome ? '가계부 (수입)' : '가계부';
 
   return (
     <header className="mb-6 flex items-center justify-between gap-4">
-      <div className="flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 items-center gap-4 md:gap-5">
         <Link href={titleHref} className="min-w-0 transition-opacity hover:opacity-80">
           <h1
             className="text-lg font-bold leading-tight md:text-2xl"
@@ -31,11 +32,11 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
           >
             {household?.name || '우리집'}
             <br />
-            가계부
+            {subtitle}
           </h1>
         </Link>
 
-        <Link href="/assets" className="cursor-pointer transition-opacity hover:opacity-80">
+        <Link href="/assets" className="ml-1 cursor-pointer transition-opacity hover:opacity-80 md:ml-2">
           <img
             src="/bear-removebg-preview.png"
             alt="자산으로 이동"
