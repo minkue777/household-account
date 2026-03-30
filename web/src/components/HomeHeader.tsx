@@ -14,7 +14,6 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
   const { themeConfig } = useTheme();
   const { household } = useHousehold();
   const isIncome = transactionType === 'income';
-  // 제목 클릭으로 지출/수입 화면을 전환합니다.
   const titleHref = isIncome ? '/' : '/income';
 
   return (
@@ -32,12 +31,8 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
           >
             {household?.name || '우리집'}
             <br />
-            <span className="relative inline-block overflow-visible">
-              <span>가계부</span>
-              {isIncome && (
-                <span className="absolute left-full ml-1 top-0 whitespace-nowrap">(수입)</span>
-              )}
-            </span>
+            <span>가계부</span>
+            <span className={isIncome ? 'opacity-100' : 'opacity-0'}> (수입)</span>
           </h1>
         </Link>
 
