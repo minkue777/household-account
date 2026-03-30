@@ -28,17 +28,24 @@ export function AssetTypeGrid({
             onClick={() => onChange(type)}
             className={`flex min-h-[76px] flex-col items-center justify-center gap-1.5 rounded-xl border-2 px-2 py-2.5 transition-all sm:min-h-[84px] sm:p-3 ${
               isSelected
-                ? 'border-blue-500 bg-blue-50'
+                ? 'bg-white'
                 : 'border-slate-200 hover:border-slate-300'
             }`}
+            style={
+              isSelected
+                ? {
+                    borderColor: config.color,
+                    backgroundColor: `${config.color}12`,
+                  }
+                : undefined
+            }
           >
             <span style={{ color: isSelected ? config.color : '#64748b' }}>
               <Icon className="w-5 h-5" />
             </span>
             <span
-              className={`whitespace-nowrap leading-none tracking-[-0.01em] ${itemLabelClassName} ${
-                isSelected ? 'text-blue-600' : 'text-slate-600'
-              }`}
+              className={`whitespace-nowrap leading-none tracking-[-0.01em] ${itemLabelClassName}`}
+              style={{ color: isSelected ? config.color : '#475569' }}
             >
               {config.label}
             </span>
