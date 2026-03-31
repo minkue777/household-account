@@ -24,6 +24,7 @@ import {
   getAssetHistoryByPeriod,
   processLoanAutoRepayments,
   processSavingsAutoContributions,
+  refreshAllPhysicalGoldValues,
   saveDailyTotalSnapshot,
   subscribeToAssets,
 } from '@/lib/assetService';
@@ -114,6 +115,7 @@ export default function AssetStatsPage() {
   useEffect(() => {
     processSavingsAutoContributions().catch(console.error);
     processLoanAutoRepayments().catch(console.error);
+    refreshAllPhysicalGoldValues().catch(console.error);
   }, []);
 
   useEffect(() => {

@@ -10,6 +10,7 @@ import {
   addSampleAssets,
   processLoanAutoRepayments,
   processSavingsAutoContributions,
+  refreshAllPhysicalGoldValues,
   refreshAllCryptoPrices,
   refreshAllStockPrices,
 } from '@/lib/assetService';
@@ -76,6 +77,7 @@ export default function AssetsPage() {
   useEffect(() => {
     processSavingsAutoContributions().catch(console.error);
     processLoanAutoRepayments().catch(console.error);
+    refreshAllPhysicalGoldValues().catch(console.error);
     refreshAllStockPrices().catch(console.error);
     refreshAllCryptoPrices().catch(console.error);
   }, []);

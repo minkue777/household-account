@@ -26,6 +26,7 @@ import {
   CryptoHoldingInput,
   StockHolding,
   StockHoldingInput,
+  isGoldEtfSubType,
 } from '@/types/asset';
 import { getStoredHouseholdKey } from './householdService';
 import { formatLocalDate } from './utils/date';
@@ -95,6 +96,20 @@ function getCurrentYearMonth(): string {
 function getEffectiveContributionDay(dayOfMonth: number, now = new Date()): number {
   const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   return Math.min(dayOfMonth, lastDayOfMonth);
+}
+
+function extractPhysicalGoldQuantity(asset: Pick<Asset, 'quantity' | 'memo'>): number {
+  if (typeof asset.quantity === 'number' && Number.isFinite(asset.quantity) && asset.quantity > 0) {
+    return asset.quantity;
+  }
+
+  const match = asset.memo?.match(/(\d+(?:\.\d+)?)\s*돈/);
+  if (!match) {
+    return 0;
+  }
+
+  const parsed = parseFloat(match[1]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
 /**
@@ -1177,6 +1192,67 @@ export async function refreshAllCryptoPrices(): Promise<void> {
 
   await Promise.all(
     Array.from(updatedAssetIds).map((assetId) => updateAssetBalanceFromCryptoHoldings(assetId))
+  );
+}
+
+export async function refreshAllPhysicalGoldValues(): Promise<void> {
+  const householdId = getHouseholdId();
+
+  const q = query(
+    collection(db, ASSETS_COLLECTION),
+    where('householdId', '==', householdId)
+  );
+
+  const snapshot = await getDocs(q);
+  const physicalGoldAssets = snapshot.docs
+    .map(mapDocToAsset)
+    .filter((asset) => asset.type === 'gold' && !isGoldEtfSubType(asset.subType));
+
+  if (physicalGoldAssets.length === 0) {
+    return;
+  }
+
+  let sellPricePerDon = 0;
+
+  try {
+    const response = await fetch('/api/gold/price');
+    if (!response.ok) {
+      return;
+    }
+
+    const payload = await response.json();
+    sellPricePerDon =
+      typeof payload?.sellPricePerDon === 'number'
+        ? payload.sellPricePerDon
+        : typeof payload?.pricePerDon === 'number'
+          ? payload.pricePerDon
+          : 0;
+  } catch (error) {
+    console.error('실물 금 시세 갱신 실패:', error);
+    return;
+  }
+
+  if (sellPricePerDon <= 0) {
+    return;
+  }
+
+  await Promise.all(
+    physicalGoldAssets.map(async (asset) => {
+      const quantity = extractPhysicalGoldQuantity(asset);
+      if (quantity <= 0) {
+        return;
+      }
+
+      const nextBalance = Math.round(sellPricePerDon * quantity);
+      if (nextBalance === asset.currentBalance) {
+        return;
+      }
+
+      await updateDoc(doc(db, ASSETS_COLLECTION, asset.id), {
+        currentBalance: nextBalance,
+        updatedAt: Timestamp.now(),
+      });
+    })
   );
 }
 
