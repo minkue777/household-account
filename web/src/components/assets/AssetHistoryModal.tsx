@@ -61,6 +61,13 @@ export default function AssetHistoryModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, asset?.type, cryptoManager.isLoadingHoldings]);
 
+  useEffect(() => {
+    if (isOpen && asset?.type === 'gold' && !isGoldEtfSubType(asset?.subType)) {
+      onClose();
+      onEditAsset();
+    }
+  }, [asset, isOpen, onClose, onEditAsset]);
+
   // 잔액 업데이트 폼 초기화
   useEffect(() => {
     if (showUpdateForm && asset) {
@@ -114,6 +121,8 @@ export default function AssetHistoryModal({
     isHoldingManaged && investmentBase > 0 ? (holdingProfitLoss / investmentBase) * 100 : 0;
   const showHoldingProfitLoss = isHoldingManaged && investmentBase > 0;
   const isHoldingProfit = holdingProfitLoss >= 0;
+
+  if (isPhysicalGold) return null;
 
   return (
     <ModalOverlay onClose={onClose}>

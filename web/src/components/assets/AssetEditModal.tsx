@@ -16,9 +16,11 @@ import {
   AssetMemoField,
   AssetTypeGrid,
   LoanRepaymentFields,
+  PhysicalGoldFields,
   SavingsRecurringFields,
   StockInitialInvestmentField,
 } from './AssetFormFields';
+import { useGoldHolding } from '@/lib/utils/useGoldHolding';
 
 interface AssetEditModalProps {
   isOpen: boolean;
@@ -64,6 +66,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
   const [goldQuantity, setGoldQuantity] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const goldHolding = useGoldHolding({ isOpen, asset });
 
   useEffect(() => {
     if (!asset) {
@@ -99,6 +102,12 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
     setGoldQuantity(goldQuantityMatch ? goldQuantityMatch[1] : '');
     setShowDeleteConfirm(false);
   }, [asset]);
+
+  useEffect(() => {
+    if (type === 'gold' && !isGoldEtfSubType(subType)) {
+      setGoldQuantity(goldHolding.quantity);
+    }
+  }, [goldHolding.quantity, subType, type]);
 
   useEffect(() => {
     if (!ASSET_TYPE_CONFIG[type].subTypes.includes(subType)) {
@@ -171,7 +180,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
       } else if (type === 'gold' && isGoldEtfSubType(subType)) {
         updateData.memo = memo.trim();
       } else {
-        updateData.currentBalance = parseInt(balance, 10) || 0;
+        updateData.currentBalance = goldHolding.totalValue || parseInt(balance, 10) || 0;
         updateData.memo = type === 'gold' ? (goldQuantity ? `${goldQuantity}돈` : '') : memo.trim();
       }
 
@@ -321,20 +330,19 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
             )}
 
             {isPhysicalGold && (
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">보유량</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={goldQuantity}
-                    onChange={(e) => setGoldQuantity(sanitizeGoldQuantity(e.target.value))}
-                    placeholder="0"
-                    className="w-full rounded-lg border border-slate-300 px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">돈</span>
-                </div>
-              </div>
+              <PhysicalGoldFields
+                quantityValue={goldQuantity}
+                onQuantityChange={(value) => {
+                  const nextValue = sanitizeGoldQuantity(value);
+                  setGoldQuantity(nextValue);
+                  goldHolding.setQuantityInput(nextValue);
+                }}
+                goldPrice={goldHolding.goldPrice}
+                isLoadingPrice={goldHolding.isLoadingPrice}
+                onRefreshPrice={() => {
+                  void goldHolding.refreshGoldPrice();
+                }}
+              />
             )}
 
             {isStock && (

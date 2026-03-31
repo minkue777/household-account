@@ -1,5 +1,6 @@
 'use client';
 
+import type { GoldPriceData } from '@/lib/utils/useGoldHolding';
 import { calculateExpectedLoanPrincipalPayment } from '@/lib/assets/assetMath';
 import {
   AssetType,
@@ -281,6 +282,72 @@ export function LoanRepaymentFields({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+interface PhysicalGoldFieldsProps {
+  quantityValue: string;
+  onQuantityChange: (value: string) => void;
+  goldPrice: GoldPriceData | null;
+  isLoadingPrice: boolean;
+  onRefreshPrice: () => void;
+}
+
+export function PhysicalGoldFields({
+  quantityValue,
+  onQuantityChange,
+  goldPrice,
+  isLoadingPrice,
+  onRefreshPrice,
+}: PhysicalGoldFieldsProps) {
+  return (
+    <div className="space-y-3 rounded-xl border border-amber-100 bg-amber-50/70 p-4">
+      <div className="flex items-center justify-between">
+        <label className="block text-sm font-medium text-slate-700">현재 금 시세 (1돈)</label>
+        <button
+          type="button"
+          onClick={onRefreshPrice}
+          className="rounded-lg px-2 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
+        >
+          {isLoadingPrice ? '불러오는 중...' : '새로고침'}
+        </button>
+      </div>
+
+      {goldPrice ? (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-lg border border-amber-100 bg-white px-3 py-2">
+            <p className="text-xs text-slate-500">살 때</p>
+            <p className="mt-1 text-sm font-semibold text-red-500">
+              {goldPrice.buyPricePerDon.toLocaleString()}원
+            </p>
+          </div>
+          <div className="rounded-lg border border-amber-100 bg-white px-3 py-2">
+            <p className="text-xs text-slate-500">팔 때</p>
+            <p className="mt-1 text-sm font-semibold text-blue-500">
+              {goldPrice.sellPricePerDon.toLocaleString()}원
+            </p>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-amber-700">현재 시세를 아직 불러오지 못했습니다.</p>
+      )}
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">보유량</label>
+        <div className="relative">
+          <input
+            type="text"
+            inputMode="decimal"
+            value={quantityValue}
+            onChange={(e) => onQuantityChange(e.target.value)}
+            placeholder="0"
+            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-amber-500"
+          />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">돈</span>
+        </div>
+        <p className="mt-1 text-[11px] text-slate-400">실제 자산 평가 금액은 팔 때 기준으로 자동 계산됩니다.</p>
+      </div>
     </div>
   );
 }
