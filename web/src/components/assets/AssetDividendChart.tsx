@@ -293,7 +293,7 @@ export default function AssetDividendChart() {
                           <p className="mt-1 text-xs text-slate-500">지급일 {event.paymentDate}</p>
                         </div>
                         <div className="text-right">
-                          <p className="font-semibold text-amber-500">
+                          <p className="font-semibold text-emerald-600">
                             {event.totalAmount.toLocaleString()}원
                           </p>
                           <p className="mt-1 text-xs text-slate-500">총 배당금</p>
