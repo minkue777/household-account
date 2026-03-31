@@ -1,12 +1,107 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+interface NaverInfoItem {
+  code?: string;
+  key?: string;
+  value?: string;
+  valueDesc?: string;
+}
+
+interface NaverIntegrationResponse {
+  stockEndType?: string;
+  stockName?: string;
+  totalInfos?: NaverInfoItem[];
+  etfKeyIndicator?: {
+    dividendYieldTtm?: number | null;
+  } | null;
+}
+
 interface DividendInfo {
   code: string;
   name: string;
-  recentDividend: number | null;      // 최근 분배금 (원)
-  paymentDate: string | null;          // 지급일
-  frequency: number | null;            // 연간 지급 횟수
-  dividendYield: number | null;        // 배당수익률 (%)
+  recentDividend: number | null;
+  paymentDate: string | null;
+  frequency: number | null;
+  dividendYield: number | null;
+  annualDividendPerShare: number | null;
+  isEstimated: boolean;
+}
+
+function parseNumberText(value?: string | number | null) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.replace(/[^0-9.-]/g, '');
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parsePercentText(value?: string | number | null) {
+  return parseNumberText(value);
+}
+
+function buildInfoMap(items?: NaverInfoItem[]) {
+  const infoMap = new Map<string, NaverInfoItem>();
+
+  (items || []).forEach((item) => {
+    if (!item.code) {
+      return;
+    }
+
+    infoMap.set(item.code, item);
+  });
+
+  return infoMap;
+}
+
+function parseDividendInfo(
+  code: string,
+  payload: NaverIntegrationResponse
+): DividendInfo {
+  const infoMap = buildInfoMap(payload.totalInfos);
+  const stockName = payload.stockName || code;
+  const stockEndType = payload.stockEndType || 'stock';
+
+  const closePrice = parseNumberText(infoMap.get('lastClosePrice')?.value);
+  const stockAnnualDividend = parseNumberText(infoMap.get('dividend')?.value);
+  const stockDividendYield = parsePercentText(infoMap.get('dividendYieldRatio')?.value);
+  const etfDividendYield = parsePercentText(payload.etfKeyIndicator?.dividendYieldTtm);
+
+  if (stockEndType === 'stock') {
+    return {
+      code,
+      name: stockName,
+      recentDividend: stockAnnualDividend,
+      paymentDate: null,
+      frequency: stockAnnualDividend ? 1 : null,
+      dividendYield: stockDividendYield,
+      annualDividendPerShare: stockAnnualDividend,
+      isEstimated: false,
+    };
+  }
+
+  const annualDividendPerShare =
+    closePrice && etfDividendYield ? Math.round((closePrice * etfDividendYield) / 100) : null;
+
+  return {
+    code,
+    name: stockName,
+    recentDividend: null,
+    paymentDate: null,
+    frequency: null,
+    dividendYield: etfDividendYield,
+    annualDividendPerShare,
+    isEstimated: annualDividendPerShare !== null,
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -14,34 +109,29 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code');
 
   if (!code) {
-    return NextResponse.json(
-      { error: '종목 코드가 필요합니다' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: '종목 코드가 필요합니다' }, { status: 400 });
+  }
+
+  if (!/^\d+$/.test(code)) {
+    return NextResponse.json({ error: '지원하지 않는 종목 코드입니다' }, { status: 400 });
   }
 
   try {
-    // FnGuide ETF 페이지에서 분배금 정보 크롤링
-    const url = `https://comp.fnguide.com/SVO2/ASP/etf_snapshot.asp?pGB=1&gicode=A${code}`;
-
-    const response = await fetch(url, {
+    const response = await fetch(`https://m.stock.naver.com/api/stock/${code}/integration`, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+        Referer: 'https://m.stock.naver.com/',
       },
+      cache: 'no-store',
     });
 
     if (!response.ok) {
-      throw new Error('FnGuide 페이지 조회 실패');
+      throw new Error(`네이버 종목 정보 조회 실패 (${response.status})`);
     }
 
-    const html = await response.text();
-
-    // HTML 파싱하여 분배금 정보 추출
-    const dividendInfo = parseDividendInfo(html, code);
-
-    return NextResponse.json(dividendInfo);
+    const payload = (await response.json()) as NaverIntegrationResponse;
+    return NextResponse.json(parseDividendInfo(code, payload));
   } catch (error) {
     console.error('배당금 조회 오류:', error);
     return NextResponse.json(
@@ -49,51 +139,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-function parseDividendInfo(html: string, code: string): DividendInfo {
-  const result: DividendInfo = {
-    code,
-    name: '',
-    recentDividend: null,
-    paymentDate: null,
-    frequency: null,
-    dividendYield: null,
-  };
-
-  try {
-    // 종목명 추출
-    const nameMatch = html.match(/<title>([^<]+)/);
-    if (nameMatch) {
-      result.name = nameMatch[1].replace(/\s*\|.*$/, '').trim();
-    }
-
-    // 최근 분배금 추출 - "최근 분배금(원)" 또는 비슷한 패턴
-    const dividendMatch = html.match(/최근\s*분배금[^0-9]*([0-9,]+)/);
-    if (dividendMatch) {
-      result.recentDividend = parseInt(dividendMatch[1].replace(/,/g, ''), 10);
-    }
-
-    // 지급기준일 추출 - "최근 분배금 지급기준일" 뒤의 날짜
-    const dateMatch = html.match(/최근\s*분배금\s*지급기준일[^0-9]*(\d{4}\/\d{2}\/\d{2})/);
-    if (dateMatch) {
-      result.paymentDate = dateMatch[1];
-    }
-
-    // 연간 지급 횟수 추출 - "연 분배횟수" 뒤의 숫자
-    const frequencyMatch = html.match(/연\s*분배횟수[^0-9]*(\d+)/);
-    if (frequencyMatch) {
-      result.frequency = parseInt(frequencyMatch[1], 10);
-    }
-
-    // 배당수익률 추출
-    const yieldMatch = html.match(/배당수익률[^0-9]*([0-9.]+)\s*%/);
-    if (yieldMatch) {
-      result.dividendYield = parseFloat(yieldMatch[1]);
-    }
-  } catch (e) {
-    console.error('HTML 파싱 오류:', e);
-  }
-
-  return result;
 }

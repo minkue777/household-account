@@ -13,6 +13,8 @@ interface DividendInfo {
   paymentDate: string | null;
   frequency: number | null;
   dividendYield: number | null;
+  annualDividendPerShare: number | null;
+  isEstimated: boolean;
 }
 
 interface StockHoldingListProps {
@@ -36,6 +38,45 @@ function getHoldingTypeLabel(holding: StockHolding) {
 
 function supportsDividendInfo(holding: StockHolding) {
   return getHoldingType(holding) === 'stock' && /^\d+$/.test(holding.stockCode || '');
+}
+
+function getDividendSummary(dividendInfo?: DividendInfo) {
+  if (!dividendInfo) {
+    return null;
+  }
+
+  if (dividendInfo.annualDividendPerShare && dividendInfo.annualDividendPerShare > 0) {
+    const parts = [
+      `${dividendInfo.isEstimated ? '연간 추정' : '연간 배당'} ${dividendInfo.annualDividendPerShare.toLocaleString()}원`,
+    ];
+
+    if (dividendInfo.frequency) {
+      parts.push(`연 ${dividendInfo.frequency}회`);
+    }
+
+    if (typeof dividendInfo.dividendYield === 'number') {
+      parts.push(`수익률 ${dividendInfo.dividendYield.toFixed(2)}%`);
+    }
+
+    return parts.join(' · ');
+  }
+
+  if (dividendInfo.recentDividend && dividendInfo.frequency) {
+    const paymentLabel =
+      dividendInfo.frequency === 12
+        ? '월당'
+        : dividendInfo.frequency === 4
+          ? '분기당'
+          : dividendInfo.frequency === 2
+            ? '반기당'
+            : dividendInfo.frequency === 1
+              ? '연간'
+              : '회당';
+
+    return `${paymentLabel} ${dividendInfo.recentDividend.toLocaleString()}원 · 연 ${dividendInfo.frequency}회`;
+  }
+
+  return null;
 }
 
 function getSectionLabel(holdings: StockHolding[], fallbackLabel: string) {
@@ -65,9 +106,12 @@ function HoldingItem({ holding, dividendInfo, isLoadingDividend, onEdit }: Holdi
   const showHoldingProfit = hasAvgPrice && hasCurrentPrice;
   const isHoldingProfit = holdingProfitLoss >= 0;
   const monthlyDividend =
-    dividendInfo?.recentDividend && dividendInfo?.frequency
-      ? Math.round((dividendInfo.recentDividend * dividendInfo.frequency * holding.quantity) / 12)
+    dividendInfo?.annualDividendPerShare && dividendInfo.annualDividendPerShare > 0
+      ? Math.round((dividendInfo.annualDividendPerShare * holding.quantity) / 12)
+      : dividendInfo?.recentDividend && dividendInfo?.frequency
+        ? Math.round((dividendInfo.recentDividend * dividendInfo.frequency * holding.quantity) / 12)
       : null;
+  const dividendSummary = getDividendSummary(dividendInfo);
 
   return (
     <div
@@ -102,18 +146,15 @@ function HoldingItem({ holding, dividendInfo, isLoadingDividend, onEdit }: Holdi
         <div className="mt-2 border-t border-slate-200 pt-2">
           <p className="text-xs text-slate-400">배당 정보를 불러오는 중입니다.</p>
         </div>
-      ) : holdingType === 'stock' && dividendInfo?.recentDividend ? (
+      ) : holdingType === 'stock' && dividendSummary ? (
         <div className="mt-2 border-t border-slate-200 pt-2">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-500">
-              분기당 {dividendInfo.recentDividend.toLocaleString()}원
-              {dividendInfo.frequency ? ` · 연 ${dividendInfo.frequency}회` : ''}
-            </span>
+            <span className="text-slate-500">{dividendSummary}</span>
             {monthlyDividend ? (
               <span className="font-medium text-emerald-600">월 {monthlyDividend.toLocaleString()}원</span>
             ) : null}
           </div>
-          {dividendInfo.paymentDate ? (
+          {dividendInfo?.paymentDate && !dividendInfo.isEstimated ? (
             <p className="mt-0.5 text-xs text-slate-400">최근 지급일: {dividendInfo.paymentDate}</p>
           ) : null}
         </div>
