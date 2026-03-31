@@ -1016,17 +1016,68 @@ export function subscribeToCryptoHoldings(
 
 const DIVIDEND_COLLECTION = 'dividend_snapshots';
 
+export interface DividendSnapshotEventRecord {
+  stockCode: string;
+  stockName: string;
+  paymentDate: string;
+  perShareAmount: number;
+  quantity: number;
+  totalAmount: number;
+}
+
+export interface DividendSnapshotData {
+  monthlyData: number[];
+  events: Record<string, DividendSnapshotEventRecord>;
+}
+
+function createEmptyDividendMonthlyData() {
+  return Array.from({ length: 12 }, () => 0);
+}
+
+function normalizeDividendSnapshotData(data?: DocumentData | null): DividendSnapshotData {
+  const monthlyData = Array.isArray(data?.monthlyData)
+    ? [...data.monthlyData, ...createEmptyDividendMonthlyData()].slice(0, 12).map((value) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+      })
+    : createEmptyDividendMonthlyData();
+
+  const events = data?.events && typeof data.events === 'object' ? data.events : {};
+
+  return {
+    monthlyData,
+    events,
+  };
+}
+
+function buildDividendMonthlyDataFromEvents(
+  events: Record<string, DividendSnapshotEventRecord>
+): number[] {
+  const monthlyData = createEmptyDividendMonthlyData();
+
+  Object.values(events).forEach((event) => {
+    const [year, month] = event.paymentDate.split('-').map(Number);
+    if (!year || !month || month < 1 || month > 12) {
+      return;
+    }
+
+    monthlyData[month - 1] += event.totalAmount;
+  });
+
+  return monthlyData.map((amount) => Math.round(amount));
+}
+
 /**
  * 연도별 배당금 스냅샷 조회
  */
-export async function getDividendSnapshot(year: number): Promise<number[] | null> {
+export async function getDividendSnapshot(year: number): Promise<DividendSnapshotData | null> {
   const householdId = getHouseholdId();
   const docId = `${householdId}_${year}`;
 
   try {
     const docSnap = await getDoc(doc(db, DIVIDEND_COLLECTION, docId));
     if (docSnap.exists()) {
-      return docSnap.data().monthlyData || null;
+      return normalizeDividendSnapshotData(docSnap.data());
     }
   } catch (error) {
     console.error('배당금 스냅샷 조회 오류:', error);
@@ -1039,7 +1090,8 @@ export async function getDividendSnapshot(year: number): Promise<number[] | null
  */
 export async function saveDividendSnapshot(
   year: number,
-  monthlyData: number[]
+  monthlyData: number[],
+  events: Record<string, DividendSnapshotEventRecord> = {}
 ): Promise<boolean> {
   const householdId = getHouseholdId();
   const docId = `${householdId}_${year}`;
@@ -1047,9 +1099,19 @@ export async function saveDividendSnapshot(
   try {
     // 기존 데이터 조회
     const existing = await getDividendSnapshot(year);
+    const normalizedMonthlyData = [...monthlyData, ...createEmptyDividendMonthlyData()]
+      .slice(0, 12)
+      .map((value) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+      });
 
     // 비교: 같으면 skip
-    if (existing && JSON.stringify(existing) === JSON.stringify(monthlyData)) {
+    if (
+      existing &&
+      JSON.stringify(existing.monthlyData) === JSON.stringify(normalizedMonthlyData) &&
+      JSON.stringify(existing.events) === JSON.stringify(events)
+    ) {
       return false; // 변경 없음
     }
 
@@ -1057,7 +1119,8 @@ export async function saveDividendSnapshot(
     await setDoc(doc(db, DIVIDEND_COLLECTION, docId), {
       householdId,
       year,
-      monthlyData,
+      monthlyData: normalizedMonthlyData,
+      events,
       updatedAt: Timestamp.now(),
     });
 
@@ -1065,6 +1128,37 @@ export async function saveDividendSnapshot(
   } catch (error) {
     console.error('배당금 스냅샷 저장 오류:', error);
     return false;
+  }
+}
+
+export async function mergeDividendSnapshotEvents(
+  year: number,
+  newEvents: Record<string, DividendSnapshotEventRecord>
+): Promise<DividendSnapshotData | null> {
+  const householdId = getHouseholdId();
+  const docId = `${householdId}_${year}`;
+
+  try {
+    const existing = await getDividendSnapshot(year);
+    const mergedEvents = {
+      ...(existing?.events || {}),
+      ...newEvents,
+    };
+
+    if (Object.keys(mergedEvents).length === 0) {
+      return existing;
+    }
+
+    const monthlyData = buildDividendMonthlyDataFromEvents(mergedEvents);
+    await saveDividendSnapshot(year, monthlyData, mergedEvents);
+
+    return {
+      monthlyData,
+      events: mergedEvents,
+    };
+  } catch (error) {
+    console.error('배당금 이벤트 병합 오류:', error);
+    return null;
   }
 }
 

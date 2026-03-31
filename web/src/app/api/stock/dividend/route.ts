@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { fetchKindEtfDividendInfo } from '@/lib/server/kindEtfDividend';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 interface NaverInfoItem {
   code?: string;
@@ -25,6 +29,10 @@ interface DividendInfo {
   dividendYield: number | null;
   annualDividendPerShare: number | null;
   isEstimated: boolean;
+  paymentEvents: Array<{
+    paymentDate: string;
+    dividend: number;
+  }>;
 }
 
 function parseNumberText(value?: string | number | null) {
@@ -63,10 +71,10 @@ function buildInfoMap(items?: NaverInfoItem[]) {
   return infoMap;
 }
 
-function parseDividendInfo(
+async function parseDividendInfo(
   code: string,
   payload: NaverIntegrationResponse
-): DividendInfo {
+): Promise<DividendInfo> {
   const infoMap = buildInfoMap(payload.totalInfos);
   const stockName = payload.stockName || code;
   const stockEndType = payload.stockEndType || 'stock';
@@ -86,7 +94,28 @@ function parseDividendInfo(
       dividendYield: stockDividendYield,
       annualDividendPerShare: stockAnnualDividend,
       isEstimated: false,
+      paymentEvents: [],
     };
+  }
+
+  try {
+    const kindDividendInfo = await fetchKindEtfDividendInfo(code, stockName);
+
+    if (kindDividendInfo) {
+      return {
+        code,
+        name: stockName,
+        recentDividend: kindDividendInfo.recentDividend,
+        paymentDate: kindDividendInfo.paymentDate,
+        frequency: kindDividendInfo.frequency,
+        dividendYield: etfDividendYield,
+        annualDividendPerShare: kindDividendInfo.annualDividendPerShare,
+        isEstimated: false,
+        paymentEvents: kindDividendInfo.paymentEvents,
+      };
+    }
+  } catch (error) {
+    console.error('KIND ETF 분배금 조회 오류:', error);
   }
 
   const annualDividendPerShare =
@@ -101,6 +130,7 @@ function parseDividendInfo(
     dividendYield: etfDividendYield,
     annualDividendPerShare,
     isEstimated: annualDividendPerShare !== null,
+    paymentEvents: [],
   };
 }
 
@@ -131,7 +161,7 @@ export async function GET(request: NextRequest) {
     }
 
     const payload = (await response.json()) as NaverIntegrationResponse;
-    return NextResponse.json(parseDividendInfo(code, payload));
+    return NextResponse.json(await parseDividendInfo(code, payload));
   } catch (error) {
     console.error('배당금 조회 오류:', error);
     return NextResponse.json(

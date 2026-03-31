@@ -45,6 +45,25 @@ function getDividendSummary(dividendInfo?: DividendInfo) {
     return null;
   }
 
+  if (
+    !dividendInfo.isEstimated &&
+    dividendInfo.recentDividend &&
+    dividendInfo.recentDividend > 0 &&
+    dividendInfo.frequency &&
+    dividendInfo.frequency > 0
+  ) {
+    const parts = [
+      `최근 지급 ${dividendInfo.recentDividend.toLocaleString()}원`,
+      `연 ${dividendInfo.frequency}회`,
+    ];
+
+    if (typeof dividendInfo.dividendYield === 'number') {
+      parts.push(`수익률 ${dividendInfo.dividendYield.toFixed(2)}%`);
+    }
+
+    return parts.join(' · ');
+  }
+
   if (dividendInfo.annualDividendPerShare && dividendInfo.annualDividendPerShare > 0) {
     const parts = [
       `${dividendInfo.isEstimated ? '연간 추정' : '연간 배당'} ${dividendInfo.annualDividendPerShare.toLocaleString()}원`,
