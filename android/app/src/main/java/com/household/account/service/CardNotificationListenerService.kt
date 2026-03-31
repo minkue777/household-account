@@ -70,6 +70,8 @@ class CardNotificationListenerService : NotificationListenerService() {
             DAEJEON_LOVE_CARD
         )
 
+        private val tossWalkingTitlePattern = Regex("""^\d[\d,]*\s*걸음$""")
+
         const val ACTION_NOTIFICATION_RECEIVED = "com.household.account.NOTIFICATION_RECEIVED"
         const val EXTRA_EXPENSE_JSON = "expense_json"
     }
@@ -249,6 +251,15 @@ class CardNotificationListenerService : NotificationListenerService() {
         postedAtMillis: Long
     ) {
         val source = detectSourceByPackage(packageName) ?: return
+        val normalizedTitle = title.trim()
+
+        if (
+            source == NotificationSource.TOSS_BANK &&
+            normalizedTitle.isNotEmpty() &&
+            tossWalkingTitlePattern.matches(normalizedTitle)
+        ) {
+            return
+        }
 
         serviceScope.launch {
             try {

@@ -17,6 +17,14 @@ object KakaoPayParser {
 
     fun matches(notificationText: String): Boolean {
         val lines = normalizeLines(notificationText)
+        val hasKakaoMarker =
+            paymentTitlePattern.containsMatchIn(lines.joinToString(" ")) ||
+                lines.any { appNamePrefixPattern.containsMatchIn(it) }
+
+        if (!hasKakaoMarker) {
+            return false
+        }
+
         return lines.any { line ->
             val sanitized = sanitizePaymentLine(line)
             paymentBodyPattern.containsMatchIn(sanitized)

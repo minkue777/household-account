@@ -17,6 +17,13 @@ object NaverPayParser {
 
     fun matches(notificationText: String): Boolean {
         val lines = normalizeLines(notificationText)
+        val hasNaverMarker = lines.any { titlePrefixPattern.containsMatchIn(it) } ||
+            notificationText.contains("네이버페이")
+
+        if (!hasNaverMarker) {
+            return false
+        }
+
         return lines.any { line ->
             val sanitized = sanitizePaymentLine(line)
             paymentPattern.containsMatchIn(sanitized)
@@ -28,7 +35,15 @@ object NaverPayParser {
         postedAtMillis: Long? = null
     ): ParseResult {
         return try {
-            val paymentLine = normalizeLines(notificationText)
+            val lines = normalizeLines(notificationText)
+            val hasNaverMarker = lines.any { titlePrefixPattern.containsMatchIn(it) } ||
+                notificationText.contains("네이버페이")
+
+            if (!hasNaverMarker) {
+                return ParseResult(false, errorMessage = "Naver Pay marker not found")
+            }
+
+            val paymentLine = lines
                 .map(::sanitizePaymentLine)
                 .firstOrNull { paymentPattern.containsMatchIn(it) }
                 ?: return ParseResult(false, errorMessage = "Naver Pay payment format not found")
