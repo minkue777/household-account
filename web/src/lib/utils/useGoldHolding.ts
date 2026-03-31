@@ -53,6 +53,19 @@ interface UseGoldHoldingOptions {
   asset: Asset | null;
 }
 
+function extractGoldQuantity(asset: Asset | null) {
+  if (!asset) {
+    return '';
+  }
+
+  if (typeof asset.quantity === 'number' && Number.isFinite(asset.quantity) && asset.quantity > 0) {
+    return asset.quantity.toString();
+  }
+
+  const match = asset.memo?.match(/(\d+(?:\.\d+)?)\s*돈/);
+  return match ? match[1] : '';
+}
+
 export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
   const [quantity, setQuantity] = useState('');
   const [goldPrice, setGoldPrice] = useState<GoldPriceData | null>(null);
@@ -96,11 +109,10 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
       return;
     }
 
-    const match = asset.memo?.match(/(\d+(?:\.\d+)?)\s*돈/);
-    setQuantity(match ? match[1] : '');
+    setQuantity(extractGoldQuantity(asset));
 
     void refreshGoldPrice();
-  }, [asset?.memo, asset?.subType, assetId, isOpen, isPhysicalGoldAsset, refreshGoldPrice]);
+  }, [asset?.memo, asset?.quantity, asset?.subType, assetId, isOpen, isPhysicalGoldAsset, refreshGoldPrice]);
 
   const totalValue = useMemo(() => {
     if (!goldPrice || !quantity) {
@@ -128,7 +140,7 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
     try {
       await updateAsset(assetId, {
         currentBalance: totalValue,
-        memo: `${quantity}돈`,
+        quantity: parseFloat(quantity) || 0,
       });
       return true;
     } catch (error) {

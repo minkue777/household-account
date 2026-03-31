@@ -39,6 +39,23 @@ function sanitizeGoldQuantity(rawValue: string) {
   return `${cleaned.slice(0, firstDot + 1)}${cleaned.slice(firstDot + 1).replace(/\./g, '')}`;
 }
 
+function extractGoldQuantityFromAsset(asset: Asset) {
+  if (typeof asset.quantity === 'number' && Number.isFinite(asset.quantity) && asset.quantity > 0) {
+    return asset.quantity.toString();
+  }
+
+  const goldQuantityMatch = asset.memo?.match(/(\d+(?:\.\d+)?)\s*돈/);
+  return goldQuantityMatch ? goldQuantityMatch[1] : '';
+}
+
+function extractGoldMemoFromAsset(asset: Asset) {
+  if (!asset.memo) {
+    return '';
+  }
+
+  return /^\s*\d+(?:\.\d+)?\s*돈\s*$/.test(asset.memo) ? '' : asset.memo;
+}
+
 function getCurrentYearMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -73,7 +90,6 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
       return;
     }
 
-    const goldQuantityMatch = asset.memo?.match(/(\d+(?:\.\d+)?)\s*돈/);
     const resolvedSubType =
       asset.type === 'gold'
         ? normalizeGoldSubType(asset.subType) || ASSET_TYPE_CONFIG[asset.type].subTypes[0] || ''
@@ -98,8 +114,12 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
     );
     setLoanPaymentDay(asset.loanPaymentDay ? asset.loanPaymentDay.toString() : '');
     setInitialInvestment(asset.initialInvestment?.toString() || '');
-    setMemo(asset.type === 'gold' && !isGoldEtfSubType(asset.subType) ? '' : asset.memo || '');
-    setGoldQuantity(goldQuantityMatch ? goldQuantityMatch[1] : '');
+    setMemo(
+      asset.type === 'gold' && !isGoldEtfSubType(asset.subType)
+        ? extractGoldMemoFromAsset(asset)
+        : asset.memo || ''
+    );
+    setGoldQuantity(extractGoldQuantityFromAsset(asset));
     setShowDeleteConfirm(false);
   }, [asset]);
 
@@ -180,8 +200,16 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
       } else if (type === 'gold' && isGoldEtfSubType(subType)) {
         updateData.memo = memo.trim();
       } else {
-        updateData.currentBalance = goldHolding.totalValue || parseInt(balance, 10) || 0;
-        updateData.memo = type === 'gold' ? (goldQuantity ? `${goldQuantity}돈` : '') : memo.trim();
+        updateData.currentBalance =
+          type === 'gold'
+            ? (goldHolding.totalValue > 0
+                ? goldHolding.totalValue
+                : parseInt(balance, 10) || Math.abs(asset.currentBalance || 0))
+            : parseInt(balance, 10) || 0;
+        updateData.memo = memo.trim();
+        if (type === 'gold') {
+          updateData.quantity = parseFloat(goldQuantity) || 0;
+        }
       }
 
       await updateAsset(asset.id, updateData as Partial<Asset>);
@@ -223,6 +251,10 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
   const isHoldingManaged = isStock || isCrypto || isGoldEtf;
   const isSavingsInstallment = type === 'savings' && subType === '적금';
   const isLoanAsset = type === 'loan';
+  const physicalGoldEvaluatedBalance =
+    isPhysicalGold && goldHolding.totalValue > 0
+      ? goldHolding.totalValue
+      : parseInt(balance, 10) || Math.abs(asset.currentBalance || 0);
 
   return (
     <>
@@ -289,7 +321,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
               />
             </div>
 
-            {!isHoldingManaged && (
+            {!isHoldingManaged && !isPhysicalGold && (
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">현재 잔액</label>
                 <div className="relative">
@@ -300,6 +332,22 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
                     onChange={(e) => setBalance(e.target.value.replace(/[^0-9]/g, ''))}
                     placeholder="0"
                     className="w-full rounded-lg border border-slate-300 px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">원</span>
+                </div>
+              </div>
+            )}
+
+            {isPhysicalGold && (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">평가 금액</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={physicalGoldEvaluatedBalance.toLocaleString()}
+                    readOnly
+                    disabled
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 pr-8 text-slate-500"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">원</span>
                 </div>
@@ -352,12 +400,10 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
               />
             )}
 
-            {!isPhysicalGold && (
-              <AssetMemoField
-                value={memo}
-                onChange={setMemo}
-              />
-            )}
+            <AssetMemoField
+              value={memo}
+              onChange={setMemo}
+            />
             </div>
           </div>
 
