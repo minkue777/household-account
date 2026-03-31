@@ -26,7 +26,7 @@ export default function ManualHoldingForm({
             type="text"
             value={name}
             onChange={(e) => onNameChange(e.target.value)}
-            placeholder="예: 신한라이프생명보험3(후), 신한투자증권 예수금"
+            placeholder="항목명 입력"
             className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
