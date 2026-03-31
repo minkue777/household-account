@@ -398,16 +398,11 @@ async function upsertDividendEvent(
   let totalAmount = typeof existing?.totalAmount === 'number' ? existing.totalAmount : null;
   let status = (existing?.status as string | undefined) || 'announced';
   const shouldCaptureEligibleQuantityToday = today === event.recordDate;
-  const shouldBackfillEligibleQuantity =
-    eligibleQuantity === null && today > event.paymentDate;
 
-  if (eligibleQuantity === null && (shouldCaptureEligibleQuantityToday || shouldBackfillEligibleQuantity)) {
+  if (eligibleQuantity === null && shouldCaptureEligibleQuantityToday) {
     eligibleQuantity = holding.quantity;
     updates.eligibleQuantity = eligibleQuantity;
     updates.eligibleCapturedAt = today;
-    if (shouldBackfillEligibleQuantity) {
-      updates.quantitySource = 'current_fallback';
-    }
     status = 'recorded';
     changed = true;
   }
