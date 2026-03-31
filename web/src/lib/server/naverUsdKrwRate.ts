@@ -13,6 +13,10 @@ function stripHtml(value: string) {
   return value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+function normalizeNumberText(value: string) {
+  return value.replace(/\s+/g, '');
+}
+
 function parseDecimalNumber(value: string) {
   const normalized = value.replace(/,/g, '');
   const parsed = parseFloat(normalized);
@@ -43,7 +47,7 @@ export async function fetchUsdKrwRate(): Promise<number | null> {
     }
 
     const parsedRate = parseDecimalNumber(
-      stripHtml(todayPriceBlock[1]).match(/([\d,]+\.\d+)/)?.[1] || ''
+      normalizeNumberText(stripHtml(todayPriceBlock[1])).match(/([\d,]+\.\d+)/)?.[1] || ''
     );
 
     if (!parsedRate) {
