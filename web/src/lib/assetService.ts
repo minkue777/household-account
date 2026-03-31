@@ -761,9 +761,10 @@ function mapDocToHolding(docSnap: QueryDocumentSnapshot<DocumentData>): StockHol
     id: docSnap.id,
     assetId: data.assetId,
     householdId: data.householdId,
-    stockCode: data.stockCode,
+    holdingType: data.holdingType || 'stock',
+    stockCode: data.stockCode || '',
     stockName: data.stockName,
-    quantity: data.quantity,
+    quantity: data.quantity || 1,
     avgPrice: data.avgPrice,
     currentPrice: data.currentPrice,
     createdAt: data.createdAt,
@@ -1089,7 +1090,9 @@ export async function getAllStockHoldings(): Promise<StockHolding[]> {
  * - 계좌별 총액 자동 갱신
  */
 export async function refreshAllStockPrices(): Promise<void> {
-  const holdings = await getAllStockHoldings();
+  const holdings = (await getAllStockHoldings()).filter(
+    (holding) => (holding.holdingType || 'stock') === 'stock' && !!holding.stockCode
+  );
   if (holdings.length === 0) return;
 
   // 종목코드별로 그룹화 (중복 API 호출 방지)

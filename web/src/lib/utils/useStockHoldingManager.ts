@@ -11,6 +11,8 @@ function sanitizeNumericInput(rawValue: string) {
   return rawValue.replace(/[^0-9]/g, '');
 }
 
+export type ManualHoldingType = 'bond' | 'cash';
+
 export function calculateHoldingValue(
   holding: Pick<StockHolding, 'quantity' | 'currentPrice' | 'avgPrice'>
 ) {
@@ -37,6 +39,11 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const [isAddingHolding, setIsAddingHolding] = useState(false);
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
+  const [manualHoldingType, setManualHoldingType] = useState<ManualHoldingType>('bond');
+  const [manualName, setManualName] = useState('');
+  const [manualCurrentValue, setManualCurrentValue] = useState('');
+  const [manualPurchaseValue, setManualPurchaseValue] = useState('');
+  const [isAddingManualHolding, setIsAddingManualHolding] = useState(false);
 
   const isStockAsset =
     asset?.type === 'stock' || (asset?.type === 'gold' && isGoldEtfSubType(asset?.subType));
@@ -52,15 +59,24 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     setCurrentPrice(null);
   }, []);
 
+  const resetManualForm = useCallback(() => {
+    setManualHoldingType('bond');
+    setManualName('');
+    setManualCurrentValue('');
+    setManualPurchaseValue('');
+  }, []);
+
   useEffect(() => {
     if (!isOpen || !assetId || !isStockAsset) {
       setHoldings([]);
       setIsLoadingHoldings(false);
       resetStockForm();
+      resetManualForm();
       return;
     }
 
     resetStockForm();
+    resetManualForm();
     setIsLoadingHoldings(true);
 
     const unsubscribe = subscribeToStockHoldings(assetId, (newHoldings) => {
@@ -70,7 +86,7 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     });
 
     return () => unsubscribe();
-  }, [assetId, isOpen, isStockAsset, resetStockForm]);
+  }, [assetId, isOpen, isStockAsset, resetManualForm, resetStockForm]);
 
   useEffect(() => {
     if (searchQuery.length < 1) {
@@ -121,6 +137,14 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     setAvgPrice(sanitizeNumericInput(value));
   }, []);
 
+  const setManualCurrentValueInput = useCallback((value: string) => {
+    setManualCurrentValue(sanitizeNumericInput(value));
+  }, []);
+
+  const setManualPurchaseValueInput = useCallback((value: string) => {
+    setManualPurchaseValue(sanitizeNumericInput(value));
+  }, []);
+
   const selectStock = useCallback(async (stock: StockSearchResult) => {
     setSelectedStock(stock);
     setSearchQuery(stock.name);
@@ -169,6 +193,41 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     }
   }, [assetId, avgPrice, currentPrice, isAddingHolding, isStockAsset, quantity, resetStockForm, selectedStock]);
 
+  const addManualHolding = useCallback(async () => {
+    if (!assetId || !isStockAsset || !manualName.trim() || !manualCurrentValue || isAddingManualHolding) {
+      return false;
+    }
+
+    setIsAddingManualHolding(true);
+    try {
+      await addStockHolding({
+        assetId,
+        holdingType: manualHoldingType,
+        stockCode: '',
+        stockName: manualName.trim(),
+        quantity: 1,
+        avgPrice: manualPurchaseValue ? parseInt(manualPurchaseValue, 10) : undefined,
+        currentPrice: parseInt(manualCurrentValue, 10),
+      });
+      resetManualForm();
+      return true;
+    } catch (error) {
+      console.error('Failed to add manual holding:', error);
+      return false;
+    } finally {
+      setIsAddingManualHolding(false);
+    }
+  }, [
+    assetId,
+    isAddingManualHolding,
+    isStockAsset,
+    manualCurrentValue,
+    manualHoldingType,
+    manualName,
+    manualPurchaseValue,
+    resetManualForm,
+  ]);
+
   const deleteHolding = useCallback(async (holdingId: string) => {
     if (!assetId || !isStockAsset) {
       return false;
@@ -184,7 +243,9 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
   }, [assetId, isStockAsset]);
 
   const refreshHoldingPrices = useCallback(async () => {
-    const currentHoldings = holdingsRef.current;
+    const currentHoldings = holdingsRef.current.filter(
+      (holding) => (holding.holdingType || 'stock') === 'stock' && !!holding.stockCode
+    );
     if (!assetId || !isStockAsset || currentHoldings.length === 0) {
       return;
     }
@@ -231,8 +292,19 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     isLoadingPrice,
     isAddingHolding,
     addHolding,
+    manualHoldingType,
+    setManualHoldingType,
+    manualName,
+    setManualName,
+    manualCurrentValue,
+    setManualCurrentValueInput,
+    manualPurchaseValue,
+    setManualPurchaseValueInput,
+    isAddingManualHolding,
+    addManualHolding,
     deleteHolding,
     resetStockForm,
+    resetManualForm,
     isRefreshingPrices,
     refreshHoldingPrices,
   };

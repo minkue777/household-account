@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Asset, ASSET_TYPE_CONFIG, isGoldEtfSubType } from '@/types/asset';
 import { ModalOverlay } from '@/components/common';
 import { X, Edit2 } from 'lucide-react';
@@ -10,6 +10,7 @@ import { getAssetSignedBalance } from '@/lib/assets/assetMath';
 import { ASSET_TYPE_ICON_COMPONENTS } from './assetIcons';
 import StockSearchForm from './StockSearchForm';
 import StockHoldingList from './StockHoldingList';
+import ManualHoldingForm from './ManualHoldingForm';
 import CryptoSearchForm from './CryptoSearchForm';
 import CryptoHoldingList from './CryptoHoldingList';
 
@@ -30,6 +31,13 @@ export default function AssetHistoryModal({
   const stockManager = useStockHoldingManager({ isOpen, asset });
   const cryptoManager = useCryptoHoldingManager({ isOpen, asset });
   const isGoldEtfAsset = asset?.type === 'gold' && isGoldEtfSubType(asset?.subType);
+  const [stockInputMode, setStockInputMode] = useState<'search' | 'manual'>('search');
+
+  useEffect(() => {
+    if (isOpen) {
+      setStockInputMode('search');
+    }
+  }, [asset?.id, isOpen]);
 
   useEffect(() => {
     if (
@@ -127,7 +135,36 @@ export default function AssetHistoryModal({
           </div>
         </div>
 
-        {(isStock || isGoldEtf) && (
+        {isStock && (
+          <div className="border-b border-blue-200 bg-blue-100 px-4 pt-4">
+            <div className="mb-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setStockInputMode('search')}
+                className={`rounded-full px-3 py-1.5 text-sm transition-all ${
+                  stockInputMode === 'search'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                종목 검색
+              </button>
+              <button
+                type="button"
+                onClick={() => setStockInputMode('manual')}
+                className={`rounded-full px-3 py-1.5 text-sm transition-all ${
+                  stockInputMode === 'manual'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                수동 추가
+              </button>
+            </div>
+          </div>
+        )}
+
+        {(isStock || isGoldEtf) && stockInputMode === 'search' && (
           <StockSearchForm
             state={{
               searchQuery: stockManager.searchQuery,
@@ -146,6 +183,23 @@ export default function AssetHistoryModal({
             }}
             onAdd={async () => {
               await stockManager.addHolding();
+            }}
+          />
+        )}
+
+        {isStock && stockInputMode === 'manual' && (
+          <ManualHoldingForm
+            holdingType={stockManager.manualHoldingType}
+            onHoldingTypeChange={stockManager.setManualHoldingType}
+            name={stockManager.manualName}
+            onNameChange={stockManager.setManualName}
+            currentValue={stockManager.manualCurrentValue}
+            onCurrentValueChange={stockManager.setManualCurrentValueInput}
+            purchaseValue={stockManager.manualPurchaseValue}
+            onPurchaseValueChange={stockManager.setManualPurchaseValueInput}
+            isAdding={stockManager.isAddingManualHolding}
+            onAdd={async () => {
+              await stockManager.addManualHolding();
             }}
           />
         )}
