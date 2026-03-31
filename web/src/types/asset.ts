@@ -52,7 +52,7 @@ export const ASSET_TYPE_CONFIG: Record<
     label: '금',
     icon: 'Coins',
     color: '#F59E0B',
-    subTypes: ['실물 금', '금 ETF'],
+    subTypes: ['실물', '주식'],
   },
   loan: {
     label: '대출',
@@ -176,16 +176,16 @@ export function normalizeGoldSubType(subType?: string) {
   }
 
   if (normalized === '금etf' || normalized === 'etf' || normalized === '주식') {
-    return '금 ETF';
+    return '주식';
   }
 
-  if (normalized === '실물금' || normalized === '현물') {
-    return '실물 금';
+  if (normalized === '실물금' || normalized === '현물' || normalized === '실물') {
+    return '실물';
   }
 
   return subType || '';
 }
 
 export function isGoldEtfSubType(subType?: string) {
-  return normalizeGoldSubType(subType) === '금 ETF';
+  return normalizeGoldSubType(subType) === '주식';
 }

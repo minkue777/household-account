@@ -1,6 +1,14 @@
 {
   "stocks": [
     {
+      "code": "KRXGOLD1KG",
+      "name": "금 99.99_1kg"
+    },
+    {
+      "code": "KRXGOLD100G",
+      "name": "미니금 99.99_100g"
+    },
+    {
       "code": "000020",
       "name": "동화약품"
     },
