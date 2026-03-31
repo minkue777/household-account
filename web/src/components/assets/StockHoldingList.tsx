@@ -89,8 +89,8 @@ export default function StockHoldingList({
       setEditQuantity(holding.quantity.toString());
       setEditAvgPrice(holding.avgPrice?.toString() || '');
     } else {
-      setEditQuantity(holding.avgPrice?.toString() || '');
-      setEditAvgPrice((holding.currentPrice || 0).toString());
+      setEditQuantity((holding.currentPrice || 0).toString());
+      setEditAvgPrice('');
     }
   };
 
@@ -109,8 +109,8 @@ export default function StockHoldingList({
         await updateStockHolding(editingHolding.id, assetId, {
           stockName: editName.trim(),
           quantity: 1,
-          avgPrice: editQuantity ? parseInt(editQuantity, 10) : undefined,
-          currentPrice: editAvgPrice ? parseInt(editAvgPrice, 10) : 0,
+          avgPrice: undefined,
+          currentPrice: editQuantity ? parseInt(editQuantity, 10) : 0,
         });
       }
       setEditingHolding(null);
@@ -210,29 +210,16 @@ export default function StockHoldingList({
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="mb-1 block text-xs text-slate-500">매수금액</label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={editQuantity ? parseInt(editQuantity, 10).toLocaleString() : ''}
-                        onChange={(e) => setEditQuantity(e.target.value.replace(/[^0-9]/g, ''))}
-                        placeholder="0"
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs text-slate-500">평가금액</label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={editAvgPrice ? parseInt(editAvgPrice, 10).toLocaleString() : ''}
-                        onChange={(e) => setEditAvgPrice(e.target.value.replace(/[^0-9]/g, ''))}
-                        placeholder="0"
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                      />
-                    </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-slate-500">금액</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={editQuantity ? parseInt(editQuantity, 10).toLocaleString() : ''}
+                      onChange={(e) => setEditQuantity(e.target.value.replace(/[^0-9]/g, ''))}
+                      placeholder="0"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                    />
                   </div>
                 )}
 
@@ -261,7 +248,7 @@ export default function StockHoldingList({
                     onClick={handleSaveHolding}
                     disabled={
                       !editName.trim() ||
-                      !(getHoldingType(holding) === 'stock' ? editQuantity : editAvgPrice) ||
+                      !editQuantity ||
                       isSubmitting
                     }
                     className="flex-1 rounded-lg bg-blue-500 py-2 text-sm text-white hover:bg-blue-600 disabled:bg-slate-300"
@@ -323,7 +310,7 @@ function HoldingItem({ holding, dividendInfo, isLoadingDividend, onEdit }: Holdi
           <p className="text-xs text-slate-500">
             {holdingType === 'stock'
               ? `${holding.quantity.toLocaleString()}주${holding.avgPrice ? ` · 평단 ${holding.avgPrice.toLocaleString()}원` : ''}`
-              : `${getHoldingTypeLabel(holding)}${holding.avgPrice ? ` · 매수 ${holding.avgPrice.toLocaleString()}원` : ''}`}
+              : `${getHoldingTypeLabel(holding)}`}
           </p>
         </div>
         <div className="flex-shrink-0 text-right">

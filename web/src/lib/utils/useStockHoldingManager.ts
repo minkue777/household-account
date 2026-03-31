@@ -39,10 +39,8 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const [isAddingHolding, setIsAddingHolding] = useState(false);
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
-  const [manualHoldingType, setManualHoldingType] = useState<ManualHoldingType>('bond');
   const [manualName, setManualName] = useState('');
   const [manualCurrentValue, setManualCurrentValue] = useState('');
-  const [manualPurchaseValue, setManualPurchaseValue] = useState('');
   const [isAddingManualHolding, setIsAddingManualHolding] = useState(false);
 
   const isStockAsset =
@@ -60,10 +58,8 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
   }, []);
 
   const resetManualForm = useCallback(() => {
-    setManualHoldingType('bond');
     setManualName('');
     setManualCurrentValue('');
-    setManualPurchaseValue('');
   }, []);
 
   useEffect(() => {
@@ -141,10 +137,6 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     setManualCurrentValue(sanitizeNumericInput(value));
   }, []);
 
-  const setManualPurchaseValueInput = useCallback((value: string) => {
-    setManualPurchaseValue(sanitizeNumericInput(value));
-  }, []);
-
   const selectStock = useCallback(async (stock: StockSearchResult) => {
     setSelectedStock(stock);
     setSearchQuery(stock.name);
@@ -200,13 +192,16 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
 
     setIsAddingManualHolding(true);
     try {
+      const trimmedName = manualName.trim();
+      const inferredManualType: ManualHoldingType =
+        trimmedName.includes('예수금') ? 'cash' : 'bond';
+
       await addStockHolding({
         assetId,
-        holdingType: manualHoldingType,
+        holdingType: inferredManualType,
         stockCode: '',
-        stockName: manualName.trim(),
+        stockName: trimmedName,
         quantity: 1,
-        avgPrice: manualPurchaseValue ? parseInt(manualPurchaseValue, 10) : undefined,
         currentPrice: parseInt(manualCurrentValue, 10),
       });
       resetManualForm();
@@ -222,9 +217,7 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     isAddingManualHolding,
     isStockAsset,
     manualCurrentValue,
-    manualHoldingType,
     manualName,
-    manualPurchaseValue,
     resetManualForm,
   ]);
 
@@ -292,14 +285,10 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     isLoadingPrice,
     isAddingHolding,
     addHolding,
-    manualHoldingType,
-    setManualHoldingType,
     manualName,
     setManualName,
     manualCurrentValue,
     setManualCurrentValueInput,
-    manualPurchaseValue,
-    setManualPurchaseValueInput,
     isAddingManualHolding,
     addManualHolding,
     deleteHolding,

@@ -189,14 +189,10 @@ export default function AssetHistoryModal({
 
         {isStock && stockInputMode === 'manual' && (
           <ManualHoldingForm
-            holdingType={stockManager.manualHoldingType}
-            onHoldingTypeChange={stockManager.setManualHoldingType}
             name={stockManager.manualName}
             onNameChange={stockManager.setManualName}
             currentValue={stockManager.manualCurrentValue}
             onCurrentValueChange={stockManager.setManualCurrentValueInput}
-            purchaseValue={stockManager.manualPurchaseValue}
-            onPurchaseValueChange={stockManager.setManualPurchaseValueInput}
             isAdding={stockManager.isAddingManualHolding}
             onAdd={async () => {
               await stockManager.addManualHolding();
