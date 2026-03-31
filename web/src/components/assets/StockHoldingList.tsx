@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { ChevronDown, ChevronRight, RefreshCw, X } from 'lucide-react';
+import { ModalOverlay } from '@/components/common';
 import { deleteStockHolding, updateStockHolding } from '@/lib/assetService';
-import { StockHolding } from '@/types/asset';
 import { calculateHoldingValue } from '@/lib/utils/useStockHoldingManager';
+import { StockHolding } from '@/types/asset';
 
 interface DividendInfo {
   code: string;
@@ -29,15 +30,28 @@ interface HoldingSummaryCardProps {
   holding: StockHolding;
   dividendInfo?: DividendInfo;
   isLoadingDividend: boolean;
-  isExpanded: boolean;
-  onToggle: (holding: StockHolding) => void;
+  onOpen: (holding: StockHolding) => void;
+}
+
+interface HoldingDetailModalProps {
+  holding: StockHolding;
+  editName: string;
+  editQuantity: string;
+  editAvgPrice: string;
+  isSubmitting: boolean;
+  onChangeName: (value: string) => void;
+  onChangeQuantity: (value: string) => void;
+  onChangeAvgPrice: (value: string) => void;
+  onClose: () => void;
+  onDelete: () => void;
+  onSave: () => void;
 }
 
 interface CollapsibleSectionProps {
   title: string;
   isOpen: boolean;
   onToggle: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 function getHoldingType(holding: StockHolding) {
@@ -46,8 +60,10 @@ function getHoldingType(holding: StockHolding) {
 
 function getHoldingTypeLabel(holding: StockHolding) {
   const holdingType = getHoldingType(holding);
+
   if (holdingType === 'bond') return '채권';
   if (holdingType === 'cash') return '예수금';
+
   return '주식';
 }
 
@@ -55,6 +71,17 @@ function supportsDividendInfo(holding: StockHolding) {
   return (
     getHoldingType(holding) === 'stock' && /^[A-Z0-9]+$/i.test((holding.stockCode || '').trim())
   );
+}
+
+function formatCompactAmount(value: number) {
+  const absoluteValue = Math.abs(Math.trunc(value));
+  const sign = value < 0 ? '-' : '';
+
+  if (absoluteValue >= 10000) {
+    return `${sign}${Math.floor(absoluteValue / 10000)}만`;
+  }
+
+  return `${sign}${absoluteValue.toLocaleString()}원`;
 }
 
 function getDividendSummary(dividendInfo?: DividendInfo) {
@@ -117,15 +144,14 @@ function getDividendSummary(dividendInfo?: DividendInfo) {
 
 function getSectionLabel(holdings: StockHolding[], fallbackLabel: string) {
   const total = holdings.reduce((sum, holding) => sum + calculateHoldingValue(holding), 0);
-  return `${fallbackLabel} ${total.toLocaleString()}원`;
+  return `${fallbackLabel} ${formatCompactAmount(total)}`;
 }
 
 function HoldingSummaryCard({
   holding,
   dividendInfo,
   isLoadingDividend,
-  isExpanded,
-  onToggle,
+  onOpen,
 }: HoldingSummaryCardProps) {
   const holdingType = getHoldingType(holding);
   const hasAvgPrice = (holding.avgPrice || 0) > 0;
@@ -147,23 +173,18 @@ function HoldingSummaryCard({
         ? Math.round((dividendInfo.recentDividend * dividendInfo.frequency * holding.quantity) / 12)
         : null;
   const dividendSummary = getDividendSummary(dividendInfo);
+  const valueLabel = formatCompactAmount(calculateHoldingValue(holding));
+  const profitAmountLabel = formatCompactAmount(holdingProfitLoss);
 
   return (
     <button
       type="button"
-      onClick={() => onToggle(holding)}
+      onClick={() => onOpen(holding)}
       className="w-full rounded-xl bg-slate-50 p-3 text-left transition-colors hover:bg-slate-100"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <ChevronDown
-              className={`h-4 w-4 flex-shrink-0 text-slate-400 transition-transform ${
-                isExpanded ? 'rotate-180' : '-rotate-90'
-              }`}
-            />
-            <p className="truncate font-medium text-slate-800">{holding.stockName}</p>
-          </div>
+          <p className="truncate font-medium text-slate-800">{holding.stockName}</p>
           <p className="mt-1 text-xs text-slate-500">
             {holdingType === 'stock'
               ? `${holding.quantity.toLocaleString()}주${holding.avgPrice ? ` · 평단 ${holding.avgPrice.toLocaleString()}원` : ''}`
@@ -171,14 +192,14 @@ function HoldingSummaryCard({
           </p>
         </div>
         <div className="flex-shrink-0 text-right">
-          <p className="font-semibold text-slate-800">{calculateHoldingValue(holding).toLocaleString()}원</p>
+          <p className="font-semibold text-slate-800">{valueLabel}</p>
           {showHoldingProfit ? (
             <p className={`text-xs ${isHoldingProfit ? 'text-red-500' : 'text-blue-500'}`}>
               {isHoldingProfit ? '+' : ''}
               {holdingProfitRate.toFixed(2)}%
               <span className="ml-1">
                 ({isHoldingProfit ? '+' : ''}
-                {holdingProfitLoss.toLocaleString()})
+                {profitAmountLabel})
               </span>
             </p>
           ) : null}
@@ -194,7 +215,7 @@ function HoldingSummaryCard({
           <div className="flex items-center justify-between gap-3 text-xs">
             <span className="min-w-0 flex-1 text-slate-500">{dividendSummary}</span>
             {monthlyDividend ? (
-              <span className="font-medium text-emerald-600">월 {monthlyDividend.toLocaleString()}원</span>
+              <span className="font-medium text-emerald-600">월 {formatCompactAmount(monthlyDividend)}</span>
             ) : null}
           </div>
           {dividendInfo?.paymentDate && !dividendInfo.isEstimated ? (
@@ -203,6 +224,119 @@ function HoldingSummaryCard({
         </div>
       ) : null}
     </button>
+  );
+}
+
+function HoldingDetailModal({
+  holding,
+  editName,
+  editQuantity,
+  editAvgPrice,
+  isSubmitting,
+  onChangeName,
+  onChangeQuantity,
+  onChangeAvgPrice,
+  onClose,
+  onDelete,
+  onSave,
+}: HoldingDetailModalProps) {
+  const holdingType = getHoldingType(holding);
+  const totalValue = calculateHoldingValue(holding);
+
+  return (
+    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[10010] flex items-center justify-center bg-black/55 px-4 py-6">
+      <div
+        className="w-full max-w-sm rounded-2xl bg-white shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4">
+          <div className="min-w-0">
+            <h5 className="truncate text-base font-semibold text-slate-800">{holding.stockName}</h5>
+            <p className="mt-1 text-xs text-slate-500">
+              {holdingType === 'stock'
+                ? `현재 평가금액 ${totalValue.toLocaleString()}원`
+                : `${getHoldingTypeLabel(holding)} · ${totalValue.toLocaleString()}원`}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            aria-label="상세 창 닫기"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-4 px-4 py-4">
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">항목명</label>
+            <input
+              type="text"
+              value={editName}
+              onChange={(event) => onChangeName(event.target.value)}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            />
+          </div>
+
+          {holdingType === 'stock' ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">수량</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={editQuantity}
+                  onChange={(event) => onChangeQuantity(event.target.value.replace(/[^0-9]/g, ''))}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">평단</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={editAvgPrice ? parseInt(editAvgPrice, 10).toLocaleString() : ''}
+                  onChange={(event) => onChangeAvgPrice(event.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder="0"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">금액</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={editQuantity ? parseInt(editQuantity, 10).toLocaleString() : ''}
+                onChange={(event) => onChangeQuantity(event.target.value.replace(/[^0-9]/g, ''))}
+                placeholder="0"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2 border-t border-slate-100 px-4 py-4">
+          <button
+            type="button"
+            onClick={onDelete}
+            className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-500 transition-colors hover:bg-red-50"
+          >
+            삭제
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={!editName.trim() || !editQuantity || isSubmitting}
+            className="flex-1 rounded-lg bg-blue-500 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-600 disabled:bg-slate-300"
+          >
+            {isSubmitting ? '저장 중...' : '저장'}
+          </button>
+        </div>
+      </div>
+    </ModalOverlay>
   );
 }
 
@@ -310,12 +444,7 @@ export default function StockHoldingList({
     setEditAvgPrice('');
   };
 
-  const handleToggleHolding = (holding: StockHolding) => {
-    if (editingHolding?.id === holding.id) {
-      resetEditingState();
-      return;
-    }
-
+  const handleOpenHolding = (holding: StockHolding) => {
     setEditingHolding(holding);
     setEditName(holding.stockName);
 
@@ -323,11 +452,12 @@ export default function StockHoldingList({
       setIsStockSectionOpen(true);
       setEditQuantity(holding.quantity.toString());
       setEditAvgPrice(holding.avgPrice?.toString() || '');
-    } else {
-      setIsManualSectionOpen(true);
-      setEditQuantity((holding.currentPrice || 0).toString());
-      setEditAvgPrice('');
+      return;
     }
+
+    setIsManualSectionOpen(true);
+    setEditQuantity((holding.currentPrice || 0).toString());
+    setEditAvgPrice('');
   };
 
   const handleSaveHolding = async () => {
@@ -378,105 +508,15 @@ export default function StockHoldingList({
 
   const hasRefreshableHolding = stockHoldings.some((holding) => !!holding.stockCode);
 
-  const renderEditableItem = (holding: StockHolding) => (
-    <div
-      key={`${holding.id}_editor`}
-      onClick={(event) => event.stopPropagation()}
-      className="space-y-3 border-t border-slate-200 bg-blue-50 p-3"
-    >
-      <div className="flex items-center justify-between">
-        <p className="font-medium text-slate-800">{holding.stockName}</p>
-        {(holding.currentPrice || 0) > 0 ? (
-          <p className="text-sm font-semibold text-red-500">
-            {(holding.currentPrice || 0).toLocaleString()}원
-          </p>
-        ) : null}
-      </div>
-
-      <div>
-        <label className="mb-1 block text-xs text-slate-500">항목명</label>
-        <input
-          type="text"
-          value={editName}
-          onChange={(event) => setEditName(event.target.value)}
-          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-        />
-      </div>
-
-      {getHoldingType(holding) === 'stock' ? (
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">수량</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={editQuantity}
-              onChange={(event) => setEditQuantity(event.target.value.replace(/[^0-9]/g, ''))}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">평단</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={editAvgPrice ? parseInt(editAvgPrice, 10).toLocaleString() : ''}
-              onChange={(event) => setEditAvgPrice(event.target.value.replace(/[^0-9]/g, ''))}
-              placeholder="0"
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-            />
-          </div>
-        </div>
-      ) : (
-        <div>
-          <label className="mb-1 block text-xs text-slate-500">금액</label>
-          <input
-            type="text"
-            inputMode="numeric"
-            value={editQuantity ? parseInt(editQuantity, 10).toLocaleString() : ''}
-            onChange={(event) => setEditQuantity(event.target.value.replace(/[^0-9]/g, ''))}
-            placeholder="0"
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-          />
-        </div>
-      )}
-
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => void handleDeleteHolding(holding.id, holding.stockName)}
-          className="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-500 hover:bg-red-50"
-        >
-          삭제
-        </button>
-        <button
-          type="button"
-          onClick={handleSaveHolding}
-          disabled={!editName.trim() || !editQuantity || isSubmitting}
-          className="flex-1 rounded-lg bg-blue-500 py-2 text-sm text-white hover:bg-blue-600 disabled:bg-slate-300"
-        >
-          {isSubmitting ? '저장 중..' : '저장'}
-        </button>
-      </div>
-    </div>
+  const renderHoldingItem = (holding: StockHolding) => (
+    <HoldingSummaryCard
+      key={holding.id}
+      holding={holding}
+      dividendInfo={supportsDividendInfo(holding) ? dividendInfoMap[holding.stockCode] : undefined}
+      isLoadingDividend={supportsDividendInfo(holding) ? loadingDividends.has(holding.stockCode) : false}
+      onOpen={handleOpenHolding}
+    />
   );
-
-  const renderHoldingItem = (holding: StockHolding) => {
-    const isExpanded = editingHolding?.id === holding.id;
-
-    return (
-      <div key={holding.id} className="overflow-hidden rounded-xl bg-slate-50">
-        <HoldingSummaryCard
-          holding={holding}
-          dividendInfo={supportsDividendInfo(holding) ? dividendInfoMap[holding.stockCode] : undefined}
-          isLoadingDividend={supportsDividendInfo(holding) ? loadingDividends.has(holding.stockCode) : false}
-          isExpanded={isExpanded}
-          onToggle={handleToggleHolding}
-        />
-        {isExpanded ? renderEditableItem(holding) : null}
-      </div>
-    );
-  };
 
   return (
     <>
@@ -489,7 +529,7 @@ export default function StockHoldingList({
             className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 disabled:opacity-50"
           >
             <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
-            {isRefreshing ? '갱신 중..' : '시세 갱신'}
+            {isRefreshing ? '갱신 중...' : '시세 갱신'}
           </button>
         ) : null}
       </div>
@@ -523,6 +563,22 @@ export default function StockHoldingList({
       ) : (
         <div className="space-y-2">{holdings.map(renderHoldingItem)}</div>
       )}
+
+      {editingHolding ? (
+        <HoldingDetailModal
+          holding={editingHolding}
+          editName={editName}
+          editQuantity={editQuantity}
+          editAvgPrice={editAvgPrice}
+          isSubmitting={isSubmitting}
+          onChangeName={setEditName}
+          onChangeQuantity={setEditQuantity}
+          onChangeAvgPrice={setEditAvgPrice}
+          onClose={resetEditingState}
+          onDelete={() => void handleDeleteHolding(editingHolding.id, editingHolding.stockName)}
+          onSave={() => void handleSaveHolding()}
+        />
+      ) : null}
     </>
   );
 }
