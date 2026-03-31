@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { fetchNaverGoldMarketData } from '@/lib/server/naverGoldPrice';
 
 // Vercel 캐싱 비활성화
 export const dynamic = 'force-dynamic';
@@ -73,49 +74,12 @@ async function fetchNaverStock(code: string): Promise<StockPriceResult | null> {
 
 async function fetchKrGoldSpot(code: string): Promise<StockPriceResult | null> {
   try {
-    const goldResponse = await fetch(
-      'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d',
-      {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
-        cache: 'no-store',
-      }
-    );
-
-    if (!goldResponse.ok) {
+    const marketData = await fetchNaverGoldMarketData();
+    if (!marketData) {
       return null;
     }
-
-    const goldData = await goldResponse.json();
-    const goldUsdPerOz = goldData.chart?.result?.[0]?.meta?.regularMarketPrice;
-
-    if (!goldUsdPerOz) {
-      return null;
-    }
-
-    const fxResponse = await fetch(
-      'https://query1.finance.yahoo.com/v8/finance/chart/KRW=X?interval=1d&range=1d',
-      {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
-        cache: 'no-store',
-      }
-    );
-
-    let usdKrw = 1350;
-    if (fxResponse.ok) {
-      const fxData = await fxResponse.json();
-      usdKrw = fxData.chart?.result?.[0]?.meta?.regularMarketPrice || 1350;
-    }
-
-    const troyOzToGram = 31.1035;
-    const spreadPercent = 0.025;
-    const midpointPricePerGram = ((goldUsdPerOz / troyOzToGram) * usdKrw);
-    const retailMidPricePerGram = midpointPricePerGram;
-    const price = Math.round(retailMidPricePerGram);
-    const previousClose = Math.round(price / (1 + spreadPercent * 0.1));
+    const price = marketData.pricePerGram;
+    const previousClose = marketData.previousClosePerGram;
 
     return {
       code,

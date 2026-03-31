@@ -29,6 +29,15 @@ export default function AssetCard({ asset, onClick }: AssetCardProps) {
   const profitLossRate = isHoldingManaged && investmentBase > 0 ? (profitLoss / investmentBase) * 100 : 0;
   const showProfitLoss = isHoldingManaged && investmentBase > 0;
   const isProfit = profitLoss >= 0;
+  const goldQuantityLabel =
+    asset.type === 'gold' && !isGoldEtfSubType(asset.subType)
+      ? typeof asset.quantity === 'number' && Number.isFinite(asset.quantity) && asset.quantity > 0
+        ? `${asset.quantity}돈`
+        : (() => {
+            const match = asset.memo?.match(/(\d+(?:\.\d+)?)\s*돈/);
+            return match ? `${match[1]}돈` : '';
+          })()
+      : '';
   const metaParts =
     asset.type === 'loan'
       ? [
@@ -36,6 +45,13 @@ export default function AssetCard({ asset, onClick }: AssetCardProps) {
           asset.owner,
           ...formatLoanMetaParts(asset),
         ].filter(Boolean)
+      : asset.type === 'gold' && !isGoldEtfSubType(asset.subType)
+        ? [
+            asset.subType || config.label,
+            asset.owner,
+            goldQuantityLabel,
+            asset.memo,
+          ].filter(Boolean)
       : [
           asset.subType || config.label,
           asset.owner,

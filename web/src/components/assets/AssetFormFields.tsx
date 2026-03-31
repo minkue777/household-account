@@ -302,13 +302,13 @@ export function PhysicalGoldFields({
   onRefreshPrice,
 }: PhysicalGoldFieldsProps) {
   return (
-    <div className="space-y-3 rounded-xl border border-amber-100 bg-amber-50/70 p-4">
+    <div className="space-y-3 rounded-xl border border-amber-300 bg-amber-100/80 p-4 shadow-sm shadow-amber-100/70">
       <div className="flex items-center justify-between">
         <label className="block text-sm font-medium text-slate-700">현재 금 시세 (1돈)</label>
         <button
           type="button"
           onClick={onRefreshPrice}
-          className="rounded-lg px-2 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
+          className="rounded-lg px-2 py-1 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-200"
         >
           {isLoadingPrice ? '불러오는 중...' : '새로고침'}
         </button>
@@ -316,13 +316,13 @@ export function PhysicalGoldFields({
 
       {goldPrice ? (
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-lg border border-amber-100 bg-white px-3 py-2">
+          <div className="rounded-lg border border-amber-200 bg-white px-3 py-2">
             <p className="text-xs text-slate-500">살 때</p>
             <p className="mt-1 text-sm font-semibold text-red-500">
               {goldPrice.buyPricePerDon.toLocaleString()}원
             </p>
           </div>
-          <div className="rounded-lg border border-amber-100 bg-white px-3 py-2">
+          <div className="rounded-lg border border-amber-200 bg-white px-3 py-2">
             <p className="text-xs text-slate-500">팔 때</p>
             <p className="mt-1 text-sm font-semibold text-blue-500">
               {goldPrice.sellPricePerDon.toLocaleString()}원
