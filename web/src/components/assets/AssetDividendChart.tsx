@@ -308,7 +308,7 @@ export default function AssetDividendChart() {
                         </div>
                       </div>
 
-                      <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-600">
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
                         <div className="rounded-xl bg-white px-3 py-2">
                           <p className="text-slate-400">주당 배당금</p>
                           <p className="mt-1 font-medium text-slate-700">
@@ -319,12 +319,6 @@ export default function AssetDividendChart() {
                           <p className="text-slate-400">수량</p>
                           <p className="mt-1 font-medium text-slate-700">
                             {event.quantity.toLocaleString()}주
-                          </p>
-                        </div>
-                        <div className="rounded-xl bg-white px-3 py-2">
-                          <p className="text-slate-400">계산식</p>
-                          <p className="mt-1 font-medium text-slate-700">
-                            {event.perShareAmount.toLocaleString()} × {event.quantity.toLocaleString()}
                           </p>
                         </div>
                       </div>
