@@ -95,6 +95,7 @@ export interface Asset {
 export interface StockSearchResult {
   code: string;
   name: string;
+  market?: 'KR' | 'US';
 }
 
 export interface StockPriceInfo {
@@ -105,6 +106,10 @@ export interface StockPriceInfo {
   changePercent: number;
   previousClose: number;
   currency: string;
+  sourcePrice?: number;
+  sourcePreviousClose?: number;
+  sourceCurrency?: string;
+  exchangeRate?: number;
 }
 
 export interface CryptoSearchResult {

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchNaverGoldMarketData } from '@/lib/server/naverGoldPrice';
+import { fetchUsdKrwRate } from '@/lib/server/naverUsdKrwRate';
+import { getUsStockSymbol } from '@/lib/server/usStockSymbols';
 
-// Vercel 캐싱 비활성화
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
@@ -13,6 +14,10 @@ interface StockPriceResult {
   changePercent: number;
   previousClose: number;
   currency: string;
+  sourcePrice?: number;
+  sourcePreviousClose?: number;
+  sourceCurrency?: string;
+  exchangeRate?: number;
 }
 
 interface NaverStockResponse {
@@ -20,6 +25,22 @@ interface NaverStockResponse {
   closePrice: string;
   compareToPreviousClosePrice: string;
   fluctuationsRatio: string;
+}
+
+interface NasdaqQuoteResponse {
+  data?: {
+    companyName?: string;
+    primaryData?: {
+      lastSalePrice?: string;
+      netChange?: string;
+      percentageChange?: string;
+    };
+    secondaryData?: {
+      lastSalePrice?: string;
+      netChange?: string;
+      percentageChange?: string;
+    };
+  };
 }
 
 const GOLD_SPOT_CODES: Record<string, string> = {
@@ -33,9 +54,31 @@ const CACHE_HEADERS = {
   'Vercel-CDN-Cache-Control': 'no-store',
 };
 
-/**
- * 네이버 금융 API로 주식 시세 조회
- */
+const NASDAQ_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+  Accept: 'application/json, text/plain, */*',
+  Origin: 'https://www.nasdaq.com',
+  Referer: 'https://www.nasdaq.com/',
+};
+
+function parseInteger(value: string) {
+  return parseInt(value.replace(/,/g, ''), 10);
+}
+
+function parseDecimalNumber(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.replace(/[^0-9.+-]/g, '');
+  if (!normalized || normalized === '+' || normalized === '-') {
+    return null;
+  }
+
+  const parsed = parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 async function fetchNaverStock(code: string): Promise<StockPriceResult | null> {
   try {
     const response = await fetch(`https://m.stock.naver.com/api/stock/${code}/basic`, {
@@ -50,10 +93,8 @@ async function fetchNaverStock(code: string): Promise<StockPriceResult | null> {
     }
 
     const data: NaverStockResponse = await response.json();
-
-    // 콤마 제거하고 숫자로 변환
-    const price = parseInt(data.closePrice.replace(/,/g, ''), 10);
-    const change = parseInt(data.compareToPreviousClosePrice.replace(/,/g, ''), 10);
+    const price = parseInteger(data.closePrice);
+    const change = parseInteger(data.compareToPreviousClosePrice);
     const changePercent = parseFloat(data.fluctuationsRatio);
     const previousClose = price - change;
 
@@ -67,7 +108,7 @@ async function fetchNaverStock(code: string): Promise<StockPriceResult | null> {
       currency: 'KRW',
     };
   } catch (error) {
-    console.error(`네이버 시세 조회 오류 (${code}):`, error);
+    console.error(`Failed to fetch Naver stock price (${code}):`, error);
     return null;
   }
 }
@@ -78,6 +119,7 @@ async function fetchKrGoldSpot(code: string): Promise<StockPriceResult | null> {
     if (!marketData) {
       return null;
     }
+
     const price = marketData.pricePerGram;
     const previousClose = marketData.previousClosePerGram;
 
@@ -91,56 +133,156 @@ async function fetchKrGoldSpot(code: string): Promise<StockPriceResult | null> {
       currency: 'KRW',
     };
   } catch (error) {
-    console.error(`금 현물 시세 조회 오류 (${code}):`, error);
+    console.error(`Failed to fetch KRX gold spot price (${code}):`, error);
     return null;
   }
 }
 
-export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
-  const code = searchParams.get('code');
+async function fetchNasdaqQuote(symbol: string, assetClass: 'stock' | 'etf') {
+  const response = await fetch(
+    `https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/info?assetclass=${
+      assetClass === 'etf' ? 'etf' : 'stocks'
+    }`,
+    {
+      headers: NASDAQ_HEADERS,
+      cache: 'no-store',
+    }
+  );
 
-  if (!code) {
-    return NextResponse.json({ error: '종목코드가 필요합니다' }, { status: 400 });
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = (await response.json()) as NasdaqQuoteResponse;
+  return payload.data || null;
+}
+
+async function fetchUsStock(code: string): Promise<StockPriceResult | null> {
+  const symbol = code.replace(/^US:/, '').trim().toUpperCase();
+  if (!symbol) {
+    return null;
   }
 
   try {
-    const result = GOLD_SPOT_CODES[code] ? await fetchKrGoldSpot(code) : await fetchNaverStock(code);
+    const symbolInfo = await getUsStockSymbol(symbol);
+    const candidateAssetClasses: Array<'stock' | 'etf'> = symbolInfo
+      ? [symbolInfo.assetClass, symbolInfo.assetClass === 'etf' ? 'stock' : 'etf']
+      : ['stock', 'etf'];
+
+    let quoteData: NonNullable<NasdaqQuoteResponse['data']> | null = null;
+
+    for (const assetClass of candidateAssetClasses) {
+      quoteData = await fetchNasdaqQuote(symbol, assetClass);
+      if (quoteData) {
+        break;
+      }
+    }
+
+    if (!quoteData) {
+      return null;
+    }
+
+    const primaryPrice = parseDecimalNumber(quoteData.primaryData?.lastSalePrice);
+    const secondaryPrice = parseDecimalNumber(quoteData.secondaryData?.lastSalePrice);
+    const primaryNetChange = parseDecimalNumber(quoteData.primaryData?.netChange);
+    const secondaryNetChange = parseDecimalNumber(quoteData.secondaryData?.netChange);
+    const primaryChangePercent = parseDecimalNumber(quoteData.primaryData?.percentageChange);
+    const secondaryChangePercent = parseDecimalNumber(quoteData.secondaryData?.percentageChange);
+
+    const sourcePrice = primaryPrice ?? secondaryPrice;
+    const sourcePreviousClose =
+      secondaryPrice ??
+      (sourcePrice !== null && primaryNetChange !== null ? sourcePrice - primaryNetChange : null) ??
+      (sourcePrice !== null && secondaryNetChange !== null ? sourcePrice - secondaryNetChange : null);
+
+    if (sourcePrice === null || sourcePreviousClose === null) {
+      return null;
+    }
+
+    const exchangeRate = await fetchUsdKrwRate();
+    if (!exchangeRate) {
+      return null;
+    }
+
+    const price = Math.round(sourcePrice * exchangeRate);
+    const previousClose = Math.round(sourcePreviousClose * exchangeRate);
+    const change = price - previousClose;
+    const changePercent =
+      sourcePreviousClose > 0
+        ? ((sourcePrice - sourcePreviousClose) / sourcePreviousClose) * 100
+        : primaryChangePercent ?? secondaryChangePercent ?? 0;
+
+    return {
+      code,
+      name: quoteData.companyName || symbolInfo?.name || symbol,
+      price,
+      change,
+      changePercent,
+      previousClose,
+      currency: 'KRW',
+      sourcePrice,
+      sourcePreviousClose,
+      sourceCurrency: 'USD',
+      exchangeRate,
+    };
+  } catch (error) {
+    console.error(`Failed to fetch US stock price (${code}):`, error);
+    return null;
+  }
+}
+
+async function fetchStockPrice(code: string) {
+  if (GOLD_SPOT_CODES[code]) {
+    return fetchKrGoldSpot(code);
+  }
+
+  if (code.startsWith('US:')) {
+    return fetchUsStock(code);
+  }
+
+  return fetchNaverStock(code);
+}
+
+export async function GET(request: NextRequest) {
+  const code = request.nextUrl.searchParams.get('code');
+
+  if (!code) {
+    return NextResponse.json({ error: '종목코드가 필요합니다.' }, { status: 400 });
+  }
+
+  try {
+    const result = await fetchStockPrice(code);
 
     if (!result) {
-      return NextResponse.json({ error: '시세 조회 실패' }, { status: 404 });
+      return NextResponse.json({ error: '시세 조회에 실패했습니다.' }, { status: 404 });
     }
 
     return NextResponse.json(result, { headers: CACHE_HEADERS });
   } catch (error) {
-    console.error('시세 조회 오류:', error);
-    return NextResponse.json({ error: '시세 조회 실패' }, { status: 500 });
+    console.error('Failed to fetch stock price:', error);
+    return NextResponse.json({ error: '시세 조회에 실패했습니다.' }, { status: 500 });
   }
 }
 
-// 여러 종목 한번에 조회
 export async function POST(request: NextRequest) {
   try {
     const { codes } = await request.json();
 
-    if (!codes || !Array.isArray(codes) || codes.length === 0) {
-      return NextResponse.json({ error: '종목코드 배열이 필요합니다' }, { status: 400 });
+    if (!Array.isArray(codes) || codes.length === 0) {
+      return NextResponse.json({ error: '종목코드 배열이 필요합니다.' }, { status: 400 });
     }
 
     const results: Record<string, StockPriceResult | null> = {};
 
-    // 병렬로 조회
     await Promise.all(
       codes.map(async (code: string) => {
-        results[code] = GOLD_SPOT_CODES[code]
-          ? await fetchKrGoldSpot(code)
-          : await fetchNaverStock(code);
+        results[code] = await fetchStockPrice(code);
       })
     );
 
     return NextResponse.json({ prices: results }, { headers: CACHE_HEADERS });
   } catch (error) {
-    console.error('시세 일괄 조회 오류:', error);
-    return NextResponse.json({ error: '시세 조회 실패' }, { status: 500 });
+    console.error('Failed to fetch stock prices:', error);
+    return NextResponse.json({ error: '시세 조회에 실패했습니다.' }, { status: 500 });
   }
 }

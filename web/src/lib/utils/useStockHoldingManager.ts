@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Asset, StockHolding, StockSearchResult, isGoldEtfSubType } from '@/types/asset';
+import {
+  Asset,
+  StockHolding,
+  StockPriceInfo,
+  StockSearchResult,
+  isGoldEtfSubType,
+} from '@/types/asset';
 import {
   addStockHolding,
   deleteStockHolding,
@@ -36,6 +42,7 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
   const [quantity, setQuantity] = useState('');
   const [avgPrice, setAvgPrice] = useState('');
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+  const [currentPriceInfo, setCurrentPriceInfo] = useState<StockPriceInfo | null>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const [isAddingHolding, setIsAddingHolding] = useState(false);
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
@@ -55,6 +62,7 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     setQuantity('');
     setAvgPrice('');
     setCurrentPrice(null);
+    setCurrentPriceInfo(null);
   }, []);
 
   const resetManualForm = useCallback(() => {
@@ -122,6 +130,7 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     if (selectedStock) {
       setSelectedStock(null);
       setCurrentPrice(null);
+      setCurrentPriceInfo(null);
     }
   }, [selectedStock]);
 
@@ -147,13 +156,16 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
       const response = await fetch(`/api/stock/price?code=${stock.code}`);
       if (!response.ok) {
         setCurrentPrice(null);
+        setCurrentPriceInfo(null);
         return;
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as StockPriceInfo;
       setCurrentPrice(data.price);
+      setCurrentPriceInfo(data);
     } catch (error) {
       setCurrentPrice(null);
+      setCurrentPriceInfo(null);
       console.error('Failed to fetch stock price:', error);
     } finally {
       setIsLoadingPrice(false);
@@ -173,7 +185,7 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
         stockName: selectedStock.name,
         quantity: parseInt(quantity, 10),
         avgPrice: avgPrice ? parseInt(avgPrice, 10) : undefined,
-        currentPrice: currentPrice || undefined,
+        currentPrice: currentPriceInfo?.price || currentPrice || undefined,
       });
       resetStockForm();
       return true;
@@ -183,7 +195,17 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     } finally {
       setIsAddingHolding(false);
     }
-  }, [assetId, avgPrice, currentPrice, isAddingHolding, isStockAsset, quantity, resetStockForm, selectedStock]);
+  }, [
+    assetId,
+    avgPrice,
+    currentPrice,
+    currentPriceInfo,
+    isAddingHolding,
+    isStockAsset,
+    quantity,
+    resetStockForm,
+    selectedStock,
+  ]);
 
   const addManualHolding = useCallback(async () => {
     if (!assetId || !isStockAsset || !manualName.trim() || !manualCurrentValue || isAddingManualHolding) {
@@ -282,6 +304,7 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     avgPrice,
     setAvgPriceInput,
     currentPrice,
+    currentPriceInfo,
     isLoadingPrice,
     isAddingHolding,
     addHolding,

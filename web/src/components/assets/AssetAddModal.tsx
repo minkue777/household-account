@@ -7,6 +7,7 @@ import {
   ASSET_TYPE_CONFIG,
   CryptoSearchResult,
   LoanRepaymentMethod,
+  StockPriceInfo,
   StockSearchResult,
   isGoldEtfSubType,
 } from '@/types/asset';
@@ -114,6 +115,7 @@ export default function AssetAddModal({
   const [quantity, setQuantity] = useState('');
   const [avgPrice, setAvgPrice] = useState('');
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+  const [currentPriceInfo, setCurrentPriceInfo] = useState<StockPriceInfo | null>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const [isAddingHolding, setIsAddingHolding] = useState(false);
   const [pendingHoldings, setPendingHoldings] = useState<PendingStockHolding[]>([]);
@@ -144,6 +146,7 @@ export default function AssetAddModal({
     setQuantity('');
     setAvgPrice('');
     setCurrentPrice(null);
+    setCurrentPriceInfo(null);
   };
 
   const resetCryptoForm = () => {
@@ -295,11 +298,13 @@ export default function AssetAddModal({
       const response = await fetch(`/api/stock/price?code=${stock.code}`);
       if (!response.ok) {
         setCurrentPrice(null);
+        setCurrentPriceInfo(null);
         return;
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as StockPriceInfo;
       setCurrentPrice(data.price);
+      setCurrentPriceInfo(data);
     } catch (error) {
       setCurrentPrice(null);
       console.error('주가 조회 오류:', error);
@@ -481,6 +486,7 @@ export default function AssetAddModal({
       if (selectedStock) {
         setSelectedStock(null);
         setCurrentPrice(null);
+        setCurrentPriceInfo(null);
       }
     },
     searchResults,
@@ -494,6 +500,7 @@ export default function AssetAddModal({
     avgPrice,
     setAvgPriceInput: (value) => setAvgPrice(sanitizeNumericInput(value)),
     currentPrice,
+    currentPriceInfo,
     isLoadingPrice,
     isAddingHolding,
   };

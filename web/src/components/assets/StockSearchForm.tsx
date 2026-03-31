@@ -1,7 +1,7 @@
 'use client';
 
 import { Loader2 } from 'lucide-react';
-import type { StockSearchResult } from '@/types/asset';
+import type { StockPriceInfo, StockSearchResult } from '@/types/asset';
 
 export interface StockSearchState {
   searchQuery: string;
@@ -15,6 +15,7 @@ export interface StockSearchState {
   avgPrice: string;
   setAvgPriceInput: (value: string) => void;
   currentPrice: number | null;
+  currentPriceInfo?: StockPriceInfo | null;
   isLoadingPrice: boolean;
   isAddingHolding: boolean;
 }
@@ -22,6 +23,26 @@ export interface StockSearchState {
 interface StockSearchFormProps {
   state: StockSearchState;
   onAdd: () => void;
+}
+
+function getDisplayCode(stock: Pick<StockSearchResult, 'code' | 'market'>) {
+  if (stock.market === 'US' && stock.code.startsWith('US:')) {
+    return `미국 · ${stock.code.replace(/^US:/, '')}`;
+  }
+
+  return stock.code;
+}
+
+function formatUsdPrice(price?: number) {
+  if (typeof price !== 'number' || !Number.isFinite(price)) {
+    return null;
+  }
+
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+  }).format(price);
 }
 
 export default function StockSearchForm({ state, onAdd }: StockSearchFormProps) {
@@ -37,39 +58,45 @@ export default function StockSearchForm({ state, onAdd }: StockSearchFormProps) 
     avgPrice,
     setAvgPriceInput,
     currentPrice,
+    currentPriceInfo,
     isLoadingPrice,
     isAddingHolding,
   } = state;
 
+  const priceInfo = currentPriceInfo || null;
+  const averagePriceLabel =
+    selectedStock?.market === 'US' ? '평균 매입가 (원 기준, 선택)' : '평균 매입가 (선택)';
+  const usdPriceLabel = formatUsdPrice(priceInfo?.sourcePrice);
+
   return (
-    <div className="p-4 bg-blue-100 border-b border-blue-200">
+    <div className="border-b border-blue-200 bg-blue-100 p-4">
       <div className="space-y-3">
         <div className="relative">
-          <label className="block text-sm font-medium text-slate-700 mb-1">종목 검색</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">종목 검색</label>
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="종목명 입력"
-            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           {isSearching && (
-            <Loader2 className="w-4 h-4 text-blue-500 absolute right-3 top-9 animate-spin" />
+            <Loader2 className="absolute right-3 top-9 h-4 w-4 animate-spin text-blue-500" />
           )}
 
           {searchResults.length > 0 && !selectedStock && (
-            <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+            <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
               {searchResults.map((stock) => (
                 <button
-                  key={stock.code}
+                  key={`${stock.market || 'KR'}-${stock.code}`}
                   type="button"
                   onClick={() => {
                     void selectStock(stock);
                   }}
-                  className="w-full px-4 py-2.5 text-left hover:bg-slate-50 flex items-center justify-between"
+                  className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-50"
                 >
                   <span className="font-medium text-slate-800">{stock.name}</span>
-                  <span className="text-xs text-slate-500">{stock.code}</span>
+                  <span className="text-xs text-slate-500">{getDisplayCode(stock)}</span>
                 </button>
               ))}
             </div>
@@ -78,34 +105,41 @@ export default function StockSearchForm({ state, onAdd }: StockSearchFormProps) 
 
         {selectedStock && (
           <>
-            <div className="bg-white rounded-lg p-3 border border-blue-200">
-              <div className="flex items-center justify-between">
-                <div>
+            <div className="rounded-lg border border-blue-200 bg-white p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
                   <p className="font-medium text-slate-800">{selectedStock.name}</p>
-                  <p className="text-xs text-slate-500">{selectedStock.code}</p>
+                  <p className="text-xs text-slate-500">{getDisplayCode(selectedStock)}</p>
                 </div>
                 {isLoadingPrice ? (
-                  <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
                 ) : currentPrice ? (
-                  <p className="font-semibold text-red-500">{currentPrice.toLocaleString()}원</p>
+                  <div className="text-right">
+                    <p className="font-semibold text-red-500">{currentPrice.toLocaleString()}원</p>
+                    {usdPriceLabel && (
+                      <p className="text-xs text-slate-400">{usdPriceLabel}</p>
+                    )}
+                  </div>
                 ) : null}
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">보유 수량</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">보유 수량</label>
               <input
                 type="text"
                 inputMode="numeric"
                 value={quantity}
                 onChange={(e) => setQuantityInput(e.target.value.replace(/[^0-9]/g, ''))}
                 placeholder="0"
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">평균 매입가 (선택)</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                {averagePriceLabel}
+              </label>
               <div className="relative">
                 <input
                   type="text"
@@ -113,7 +147,7 @@ export default function StockSearchForm({ state, onAdd }: StockSearchFormProps) 
                   value={avgPrice ? parseInt(avgPrice, 10).toLocaleString() : ''}
                   onChange={(e) => setAvgPriceInput(e.target.value.replace(/[^0-9]/g, ''))}
                   placeholder="0"
-                  className="w-full px-4 py-2 pr-8 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">원</span>
               </div>
@@ -123,7 +157,7 @@ export default function StockSearchForm({ state, onAdd }: StockSearchFormProps) 
               type="button"
               onClick={onAdd}
               disabled={!selectedStock || !quantity || isAddingHolding}
-              className="w-full py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-slate-300 font-medium"
+              className="w-full rounded-lg bg-blue-500 py-2.5 font-medium text-white transition-colors hover:bg-blue-600 disabled:bg-slate-300"
             >
               {isAddingHolding ? '추가 중...' : '종목 추가'}
             </button>

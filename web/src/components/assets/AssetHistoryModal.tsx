@@ -178,6 +178,7 @@ export default function AssetHistoryModal({
               avgPrice: stockManager.avgPrice,
               setAvgPriceInput: stockManager.setAvgPriceInput,
               currentPrice: stockManager.currentPrice,
+              currentPriceInfo: stockManager.currentPriceInfo,
               isLoadingPrice: stockManager.isLoadingPrice,
               isAddingHolding: stockManager.isAddingHolding,
             }}
