@@ -37,7 +37,9 @@ function getHoldingTypeLabel(holding: StockHolding) {
 }
 
 function supportsDividendInfo(holding: StockHolding) {
-  return getHoldingType(holding) === 'stock' && /^\d+$/.test(holding.stockCode || '');
+  return (
+    getHoldingType(holding) === 'stock' && /^[A-Z0-9]+$/i.test((holding.stockCode || '').trim())
+  );
 }
 
 function getDividendSummary(dividendInfo?: DividendInfo) {
@@ -246,7 +248,9 @@ export default function StockHoldingList({
       setLoadingDividends((prev) => new Set(prev).add(holding.stockCode));
       void (async () => {
         try {
-          const response = await fetch(`/api/stock/dividend?code=${holding.stockCode}`);
+          const response = await fetch(
+            `/api/stock/dividend?code=${encodeURIComponent(holding.stockCode)}&name=${encodeURIComponent(holding.stockName)}`
+          );
           if (response.ok) {
             const data = (await response.json()) as DividendInfo;
             setDividendInfoMap((prev) => ({ ...prev, [holding.stockCode]: data }));

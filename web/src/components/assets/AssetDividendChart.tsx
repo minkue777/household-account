@@ -6,9 +6,11 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { StockHolding } from '@/types/asset';
 import {
   DividendSnapshotData,
+  getDividendHoldingSnapshotMap,
   getAllStockHoldings,
   getDividendSnapshot,
   mergeDividendSnapshotEvents,
+  syncDividendHoldingSnapshots,
 } from '@/lib/assetService';
 import { ModalOverlay } from '@/components/common';
 
@@ -30,7 +32,10 @@ interface DividendInfo {
 const CURRENT_YEAR = new Date().getFullYear();
 
 function supportsDividendInfo(holding: StockHolding) {
-  return (holding.holdingType || 'stock') === 'stock' && /^\d+$/.test(holding.stockCode || '');
+  return (
+    (holding.holdingType || 'stock') === 'stock' &&
+    /^[A-Z0-9]+$/i.test((holding.stockCode || '').trim())
+  );
 }
 
 function isPastOrToday(dateText: string) {
@@ -46,6 +51,21 @@ function isPastOrToday(dateText: string) {
 
 function createEmptyMonthlyData() {
   return Array.from({ length: 12 }, () => 0);
+}
+
+function getSnapshotQuantityForDate(
+  snapshots: Array<{ date: string; quantity: number }>,
+  targetDate: string
+) {
+  let matchedQuantity: number | null = null;
+
+  snapshots.forEach((snapshot) => {
+    if (snapshot.date <= targetDate) {
+      matchedQuantity = snapshot.quantity;
+    }
+  });
+
+  return matchedQuantity;
 }
 
 export default function AssetDividendChart() {
@@ -79,13 +99,18 @@ export default function AssetDividendChart() {
           return;
         }
 
+        await syncDividendHoldingSnapshots(holdings);
         setStockHoldings(holdings);
 
         const uniqueCodes = Array.from(new Set(holdings.map((holding) => holding.stockCode)));
         const responses = await Promise.all(
           uniqueCodes.map(async (stockCode) => {
             try {
-              const response = await fetch(`/api/stock/dividend?code=${stockCode}`);
+              const stockName =
+                holdings.find((holding) => holding.stockCode === stockCode)?.stockName || stockCode;
+              const response = await fetch(
+                `/api/stock/dividend?code=${encodeURIComponent(stockCode)}&name=${encodeURIComponent(stockName)}`
+              );
               if (!response.ok) {
                 return null;
               }
@@ -141,65 +166,62 @@ export default function AssetDividendChart() {
       return;
     }
 
-    const quantityByStock: Record<string, { quantity: number; name: string }> = {};
-
-    stockHoldings.forEach((holding) => {
-      if (!supportsDividendInfo(holding)) {
-        return;
-      }
-
-      const current = quantityByStock[holding.stockCode] || {
-        quantity: 0,
-        name: holding.stockName,
-      };
-      current.quantity += holding.quantity || 0;
-      current.name = holding.stockName;
-      quantityByStock[holding.stockCode] = current;
-    });
-
-    const newEvents = Object.entries(quantityByStock).reduce<
-      Record<
-        string,
-        {
-          stockCode: string;
-          stockName: string;
-          paymentDate: string;
-          perShareAmount: number;
-          quantity: number;
-          totalAmount: number;
-        }
-      >
-    >((acc, [stockCode, stock]) => {
-      const dividendInfo = dividendInfoMap[stockCode];
-
-      if (!dividendInfo?.paymentEvents?.length || stock.quantity <= 0) {
-        return acc;
-      }
-
-      dividendInfo.paymentEvents.forEach((event) => {
-        if (!event.paymentDate.startsWith(`${CURRENT_YEAR}-`)) {
-          return;
-        }
-
-        if (!isPastOrToday(event.paymentDate) || event.dividend <= 0) {
-          return;
-        }
-
-        const eventKey = `${stockCode}_${event.paymentDate}_${event.dividend}`;
-        acc[eventKey] = {
-          stockCode,
-          stockName: stock.name,
-          paymentDate: event.paymentDate,
-          perShareAmount: event.dividend,
-          quantity: stock.quantity,
-          totalAmount: event.dividend * stock.quantity,
-        };
-      });
-
-      return acc;
-    }, {});
-
     void (async () => {
+      const stockCodes = Array.from(
+        new Set(stockHoldings.filter(supportsDividendInfo).map((holding) => holding.stockCode))
+      );
+      const snapshotMap = await getDividendHoldingSnapshotMap(stockCodes);
+
+      const newEvents = stockCodes.reduce<
+        Record<
+          string,
+          {
+            stockCode: string;
+            stockName: string;
+            paymentDate: string;
+            perShareAmount: number;
+            quantity: number;
+            totalAmount: number;
+          }
+        >
+      >((acc, stockCode) => {
+        const dividendInfo = dividendInfoMap[stockCode];
+        if (!dividendInfo?.paymentEvents?.length) {
+          return acc;
+        }
+
+        const stockName =
+          stockHoldings.find((holding) => holding.stockCode === stockCode)?.stockName || dividendInfo.name;
+        const snapshots = snapshotMap[stockCode] || [];
+
+        dividendInfo.paymentEvents.forEach((event) => {
+          if (!event.paymentDate.startsWith(`${CURRENT_YEAR}-`)) {
+            return;
+          }
+
+          if (!isPastOrToday(event.paymentDate) || event.dividend <= 0) {
+            return;
+          }
+
+          const snapshotQuantity = getSnapshotQuantityForDate(snapshots, event.paymentDate);
+          if (!snapshotQuantity || snapshotQuantity <= 0) {
+            return;
+          }
+
+          const eventKey = `${stockCode}_${event.paymentDate}_${event.dividend}`;
+          acc[eventKey] = {
+            stockCode,
+            stockName,
+            paymentDate: event.paymentDate,
+            perShareAmount: event.dividend,
+            quantity: snapshotQuantity,
+            totalAmount: event.dividend * snapshotQuantity,
+          };
+        });
+
+        return acc;
+      }, {});
+
       const merged = await mergeDividendSnapshotEvents(dividendYear, newEvents);
       if (merged) {
         setCachedDividendSnapshot(merged);

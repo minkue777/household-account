@@ -90,6 +90,13 @@
         allow create, update: if request.resource.data.householdId != null;
         allow delete: if true;
       }
+
+      // dividend_holding_snapshots 컬렉션
+      match /dividend_holding_snapshots/{snapshotId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.householdId != null;
+        allow delete: if true;
+      }
       
       // fcmTokens 컬렉션
 			match /fcmTokens/{tokenId} {

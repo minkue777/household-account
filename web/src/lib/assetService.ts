@@ -40,6 +40,7 @@ const ASSETS_COLLECTION = 'assets';
 const HISTORY_COLLECTION = 'asset_history';
 const HOLDINGS_COLLECTION = 'stock_holdings';
 const CRYPTO_HOLDINGS_COLLECTION = 'crypto_holdings';
+const DIVIDEND_HOLDING_SNAPSHOT_COLLECTION = 'dividend_holding_snapshots';
 
 /**
  * 현재 가구 키 가져오기
@@ -874,6 +875,10 @@ export async function addStockHolding(input: StockHoldingInput): Promise<string>
   // 자산 총액 업데이트
   await updateAssetBalanceFromHoldings(input.assetId);
 
+  if (isDividendTrackableHoldingData(input)) {
+    await saveDividendHoldingSnapshotForStockCode(input.stockCode, input.stockName);
+  }
+
   return docRef.id;
 }
 
@@ -902,6 +907,8 @@ export async function addCryptoHolding(input: CryptoHoldingInput): Promise<strin
  */
 export async function updateStockHolding(id: string, assetId: string, data: Partial<StockHolding>): Promise<void> {
   const docRef = doc(db, HOLDINGS_COLLECTION, id);
+  const existingSnap = await getDoc(docRef);
+  const existingData = existingSnap.exists() ? existingSnap.data() : null;
 
   const cleanData = Object.fromEntries(
     Object.entries(data).filter(([, value]) => value !== undefined)
@@ -914,6 +921,31 @@ export async function updateStockHolding(id: string, assetId: string, data: Part
 
   // 자산 총액 업데이트
   await updateAssetBalanceFromHoldings(assetId);
+
+  const existingStockCode = existingData?.stockCode;
+  const existingStockName = existingData?.stockName;
+  const existingHoldingType = existingData?.holdingType || 'stock';
+  const nextStockCode = (data.stockCode as string | undefined) || existingStockCode;
+  const nextStockName = (data.stockName as string | undefined) || existingStockName;
+  const nextHoldingType = (data.holdingType as string | undefined) || existingHoldingType;
+
+  if (
+    existingStockCode &&
+    isDividendTrackableHoldingData({
+      holdingType: existingHoldingType,
+      stockCode: existingStockCode,
+    })
+  ) {
+    await saveDividendHoldingSnapshotForStockCode(existingStockCode, existingStockName);
+  }
+
+  if (
+    nextStockCode &&
+    (nextStockCode !== existingStockCode || nextHoldingType !== existingHoldingType) &&
+    isDividendTrackableHoldingData({ holdingType: nextHoldingType, stockCode: nextStockCode })
+  ) {
+    await saveDividendHoldingSnapshotForStockCode(nextStockCode, nextStockName);
+  }
 }
 
 export async function updateCryptoHolding(
@@ -939,10 +971,16 @@ export async function updateCryptoHolding(
  * 주식 보유 종목 삭제
  */
 export async function deleteStockHolding(id: string, assetId: string): Promise<void> {
+  const holdingSnap = await getDoc(doc(db, HOLDINGS_COLLECTION, id));
+  const holdingData = holdingSnap.exists() ? holdingSnap.data() : null;
   await deleteDoc(doc(db, HOLDINGS_COLLECTION, id));
 
   // 자산 총액 업데이트
   await updateAssetBalanceFromHoldings(assetId);
+
+  if (holdingData && isDividendTrackableHoldingData(holdingData)) {
+    await saveDividendHoldingSnapshotForStockCode(holdingData.stockCode, holdingData.stockName);
+  }
 }
 
 export async function deleteCryptoHolding(id: string, assetId: string): Promise<void> {
@@ -1030,6 +1068,13 @@ export interface DividendSnapshotData {
   events: Record<string, DividendSnapshotEventRecord>;
 }
 
+export interface DividendHoldingSnapshot {
+  stockCode: string;
+  stockName: string;
+  date: string;
+  quantity: number;
+}
+
 function createEmptyDividendMonthlyData() {
   return Array.from({ length: 12 }, () => 0);
 }
@@ -1065,6 +1110,110 @@ function buildDividendMonthlyDataFromEvents(
   });
 
   return monthlyData.map((amount) => Math.round(amount));
+}
+
+function isDividendTrackableHoldingData(data: {
+  holdingType?: string;
+  stockCode?: string;
+}) {
+  const holdingType = data.holdingType || 'stock';
+  return holdingType === 'stock' && /^[A-Z0-9]+$/i.test((data.stockCode || '').trim());
+}
+
+async function saveDividendHoldingSnapshotForStockCode(
+  stockCode: string,
+  fallbackStockName?: string
+): Promise<void> {
+  const householdId = getHouseholdId();
+  const today = formatLocalDate(new Date());
+  const snapshotId = `${householdId}_${stockCode}_${today}`;
+
+  const q = query(
+    collection(db, HOLDINGS_COLLECTION),
+    where('householdId', '==', householdId),
+    where('stockCode', '==', stockCode)
+  );
+
+  const snapshot = await getDocs(q);
+  let quantity = 0;
+  let stockName = fallbackStockName || stockCode;
+
+  snapshot.docs.forEach((docSnap) => {
+    const data = docSnap.data();
+    if (!isDividendTrackableHoldingData(data)) {
+      return;
+    }
+
+    quantity += data.quantity || 0;
+    stockName = data.stockName || stockName;
+  });
+
+  await setDoc(doc(db, DIVIDEND_HOLDING_SNAPSHOT_COLLECTION, snapshotId), {
+    householdId,
+    stockCode,
+    stockName,
+    date: today,
+    quantity,
+    updatedAt: Timestamp.now(),
+  });
+}
+
+export async function syncDividendHoldingSnapshots(holdings: StockHolding[]): Promise<void> {
+  const uniqueStocks = Object.values(
+    holdings.reduce<Record<string, { stockCode: string; stockName: string }>>((acc, holding) => {
+      if (!isDividendTrackableHoldingData(holding)) {
+        return acc;
+      }
+
+      acc[holding.stockCode] = {
+        stockCode: holding.stockCode,
+        stockName: holding.stockName,
+      };
+      return acc;
+    }, {})
+  );
+
+  await Promise.all(
+    uniqueStocks.map((stock) =>
+      saveDividendHoldingSnapshotForStockCode(stock.stockCode, stock.stockName)
+    )
+  );
+}
+
+export async function getDividendHoldingSnapshotMap(
+  stockCodes: string[]
+): Promise<Record<string, DividendHoldingSnapshot[]>> {
+  const householdId = getHouseholdId();
+  const uniqueCodes = Array.from(
+    new Set(stockCodes.filter((code) => /^[A-Z0-9]+$/i.test((code || '').trim())))
+  );
+  const result: Record<string, DividendHoldingSnapshot[]> = {};
+
+  await Promise.all(
+    uniqueCodes.map(async (stockCode) => {
+      const q = query(
+        collection(db, DIVIDEND_HOLDING_SNAPSHOT_COLLECTION),
+        where('householdId', '==', householdId),
+        where('stockCode', '==', stockCode)
+      );
+
+      const snapshot = await getDocs(q);
+      result[stockCode] = snapshot.docs
+        .map((docSnap) => {
+          const data = docSnap.data();
+          return {
+            stockCode,
+            stockName: data.stockName || stockCode,
+            date: data.date,
+            quantity: data.quantity || 0,
+          };
+        })
+        .filter((entry) => !!entry.date)
+        .sort((left, right) => left.date.localeCompare(right.date));
+    })
+  );
+
+  return result;
 }
 
 /**
@@ -1142,8 +1291,13 @@ export async function mergeDividendSnapshotEvents(
     const existing = await getDividendSnapshot(year);
     const mergedEvents = {
       ...(existing?.events || {}),
-      ...newEvents,
     };
+
+    Object.entries(newEvents).forEach(([eventKey, eventValue]) => {
+      if (!mergedEvents[eventKey]) {
+        mergedEvents[eventKey] = eventValue;
+      }
+    });
 
     if (Object.keys(mergedEvents).length === 0) {
       return existing;

@@ -71,6 +71,14 @@ function buildInfoMap(items?: NaverInfoItem[]) {
   return infoMap;
 }
 
+function isDomesticNumericCode(code: string) {
+  return /^\d+$/.test(code);
+}
+
+function isDomesticAlphaNumericCode(code: string) {
+  return /^[A-Z0-9]+$/.test(code) && !isDomesticNumericCode(code);
+}
+
 async function parseDividendInfo(
   code: string,
   payload: NaverIntegrationResponse
@@ -115,7 +123,7 @@ async function parseDividendInfo(
       };
     }
   } catch (error) {
-    console.error('KIND ETF 분배금 조회 오류:', error);
+    console.error('KIND ETF 배당 조회 오류:', error);
   }
 
   const annualDividendPerShare =
@@ -136,14 +144,54 @@ async function parseDividendInfo(
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const code = searchParams.get('code');
+  const code = searchParams.get('code')?.trim().toUpperCase();
+  const stockName = searchParams.get('name')?.trim() ?? '';
 
   if (!code) {
-    return NextResponse.json({ error: '종목 코드가 필요합니다' }, { status: 400 });
+    return NextResponse.json({ error: '종목 코드가 필요합니다.' }, { status: 400 });
   }
 
-  if (!/^\d+$/.test(code)) {
-    return NextResponse.json({ error: '지원하지 않는 종목 코드입니다' }, { status: 400 });
+  if (isDomesticAlphaNumericCode(code)) {
+    try {
+      const resolvedName = stockName || code;
+      const kindDividendInfo = await fetchKindEtfDividendInfo(code, resolvedName);
+
+      if (!kindDividendInfo) {
+        return NextResponse.json({
+          code,
+          name: resolvedName,
+          recentDividend: null,
+          paymentDate: null,
+          frequency: null,
+          dividendYield: null,
+          annualDividendPerShare: null,
+          isEstimated: false,
+          paymentEvents: [],
+        } satisfies DividendInfo);
+      }
+
+      return NextResponse.json({
+        code,
+        name: resolvedName,
+        recentDividend: kindDividendInfo.recentDividend,
+        paymentDate: kindDividendInfo.paymentDate,
+        frequency: kindDividendInfo.frequency,
+        dividendYield: null,
+        annualDividendPerShare: kindDividendInfo.annualDividendPerShare,
+        isEstimated: false,
+        paymentEvents: kindDividendInfo.paymentEvents,
+      } satisfies DividendInfo);
+    } catch (error) {
+      console.error('KIND ETF 배당 조회 오류:', error);
+      return NextResponse.json(
+        { error: '배당금 정보를 가져올 수 없습니다.' },
+        { status: 500 }
+      );
+    }
+  }
+
+  if (!isDomesticNumericCode(code)) {
+    return NextResponse.json({ error: '지원하지 않는 종목 코드입니다.' }, { status: 400 });
   }
 
   try {
@@ -165,7 +213,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('배당금 조회 오류:', error);
     return NextResponse.json(
-      { error: '배당금 정보를 가져올 수 없습니다' },
+      { error: '배당금 정보를 가져올 수 없습니다.' },
       { status: 500 }
     );
   }
