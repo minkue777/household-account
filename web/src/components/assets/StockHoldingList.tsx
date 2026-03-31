@@ -96,16 +96,10 @@ function getDividendSummary(dividendInfo?: DividendInfo) {
     dividendInfo.frequency &&
     dividendInfo.frequency > 0
   ) {
-    const parts = [
+    return [
       `최근 지급 ${dividendInfo.recentDividend.toLocaleString()}원`,
       `연 ${dividendInfo.frequency}회`,
-    ];
-
-    if (typeof dividendInfo.dividendYield === 'number') {
-      parts.push(`수익률 ${dividendInfo.dividendYield.toFixed(2)}%`);
-    }
-
-    return parts.join(' · ');
+    ].join(' · ');
   }
 
   if (dividendInfo.annualDividendPerShare && dividendInfo.annualDividendPerShare > 0) {
@@ -115,10 +109,6 @@ function getDividendSummary(dividendInfo?: DividendInfo) {
 
     if (dividendInfo.frequency) {
       parts.push(`연 ${dividendInfo.frequency}회`);
-    }
-
-    if (typeof dividendInfo.dividendYield === 'number') {
-      parts.push(`수익률 ${dividendInfo.dividendYield.toFixed(2)}%`);
     }
 
     return parts.join(' · ');
@@ -173,6 +163,10 @@ function HoldingSummaryCard({
         ? Math.round((dividendInfo.recentDividend * dividendInfo.frequency * holding.quantity) / 12)
         : null;
   const dividendSummary = getDividendSummary(dividendInfo);
+  const dividendYieldLabel =
+    typeof dividendInfo?.dividendYield === 'number'
+      ? `배당수익률 ${dividendInfo.dividendYield.toFixed(2)}%`
+      : null;
   const valueLabel = formatCompactAmount(calculateHoldingValue(holding));
   const profitAmountLabel = formatCompactAmount(holdingProfitLoss);
 
@@ -218,6 +212,9 @@ function HoldingSummaryCard({
               <span className="font-medium text-emerald-600">월 {formatCompactAmount(monthlyDividend)}</span>
             ) : null}
           </div>
+          {dividendYieldLabel ? (
+            <p className="mt-1 text-xs text-slate-400">{dividendYieldLabel}</p>
+          ) : null}
           {dividendInfo?.paymentDate && !dividendInfo.isEstimated ? (
             <p className="mt-0.5 text-xs text-slate-400">최근 지급일: {dividendInfo.paymentDate}</p>
           ) : null}
@@ -244,7 +241,10 @@ function HoldingDetailModal({
   const totalValue = calculateHoldingValue(holding);
 
   return (
-    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[10010] flex items-center justify-center bg-black/55 px-4 py-6">
+    <ModalOverlay
+      onClose={onClose}
+      className="fixed inset-0 z-[10010] flex items-center justify-center bg-black/55 px-4 py-6"
+    >
       <div
         className="w-full max-w-sm rounded-2xl bg-white shadow-2xl"
         onClick={(event) => event.stopPropagation()}

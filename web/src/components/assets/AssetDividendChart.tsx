@@ -241,14 +241,10 @@ export default function AssetDividendChart() {
           </span>
         </div>
 
-        {totalDividend > 0 ? (
-          <p className="mt-1 text-center text-[11px] text-slate-400">
-            막대를 누르면 해당 달의 상세 내역을 볼 수 있습니다.
-          </p>
-        ) : null}
-
         {isDividendLoading ? (
-          <p className="mt-2 text-center text-xs text-slate-400">배당금 정보를 불러오는 중입니다.</p>
+          <p className="mt-2 text-center text-xs text-slate-400">
+            배당금 정보를 불러오는 중입니다.
+          </p>
         ) : totalDividend === 0 ? (
           <p className="mt-2 text-center text-xs text-slate-400">
             {stockHoldings.length === 0
@@ -297,7 +293,7 @@ export default function AssetDividendChart() {
                           <p className="mt-1 text-xs text-slate-500">지급일 {event.paymentDate}</p>
                         </div>
                         <div className="text-right">
-                          <p className="font-semibold text-emerald-600">
+                          <p className="font-semibold text-blue-600">
                             {event.totalAmount.toLocaleString()}원
                           </p>
                           <p className="mt-1 text-xs text-slate-500">총 배당금</p>
@@ -325,9 +321,9 @@ export default function AssetDividendChart() {
             </div>
 
             <div className="border-t border-slate-100 px-5 py-4">
-              <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3">
-                <span className="text-sm font-medium text-slate-700">{selectedMonthLabel} 총 배당금</span>
-                <span className="text-lg font-bold text-emerald-600">
+              <div className="flex items-center justify-between rounded-2xl bg-red-50 px-4 py-3">
+                <span className="text-sm font-medium text-red-500">{selectedMonthLabel} 총 배당금</span>
+                <span className="text-lg font-bold text-red-500">
                   {selectedMonthTotal.toLocaleString()}원
                 </span>
               </div>
