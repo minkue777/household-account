@@ -35,6 +35,7 @@ export interface AndroidBridge {
   clearHouseholdKey: () => void;
   setMemberName: (name: string) => void;
   setPartnerName: (name: string) => void;
+  getAppVersion?: () => string;
 }
 
 export interface WindowWithBridge extends Window {

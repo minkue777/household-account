@@ -12,15 +12,18 @@ import {
   RecurringExpenseSettings,
   ThemeSettings,
 } from '@/components/settings';
+import { AndroidBridge } from '@/lib/bridges/androidBridge';
 
 export default function SettingsPage() {
   const { isLoading } = useCategoryContext();
   const { currentMember, household, switchMember } = useHousehold();
 
   const [isIOSDevice, setIsIOSDevice] = useState(false);
+  const [appVersionLabel, setAppVersionLabel] = useState<string | null>(null);
 
   useEffect(() => {
     setIsIOSDevice(isIOS());
+    setAppVersionLabel(AndroidBridge.getAppVersion());
   }, []);
 
   if (isLoading) {
@@ -75,6 +78,12 @@ export default function SettingsPage() {
         {isIOSDevice && (
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <NotificationSettings />
+          </div>
+        )}
+
+        {appVersionLabel && (
+          <div className="px-1 pb-2 pt-1 text-center text-xs text-slate-400">
+            {appVersionLabel}
           </div>
         )}
       </div>

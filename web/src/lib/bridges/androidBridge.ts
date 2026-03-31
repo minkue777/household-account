@@ -46,4 +46,16 @@ export const AndroidBridge = {
       bridge.clearHouseholdKey();
     }
   },
+
+  /**
+   * 현재 설치된 안드로이드 앱 버전 조회
+   */
+  getAppVersion: (): string | null => {
+    if (typeof window === 'undefined') return null;
+    const bridge = (window as WindowWithBridge).AndroidBridge;
+    if (bridge && typeof bridge.getAppVersion === 'function') {
+      return bridge.getAppVersion();
+    }
+    return null;
+  },
 };
