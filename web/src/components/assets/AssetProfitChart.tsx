@@ -13,7 +13,7 @@ interface AssetProfitChartProps {
 }
 
 export default function AssetProfitChart({ totalSnapshots, totalAssets }: AssetProfitChartProps) {
-  const [profitView, setProfitView] = useState<ProfitViewType>('monthly');
+  const [profitView, setProfitView] = useState<ProfitViewType>('daily');
   const [profitYear, setProfitYear] = useState(new Date().getFullYear());
   const [profitMonth, setProfitMonth] = useState(new Date().getMonth() + 1);
   const [showProfitTable, setShowProfitTable] = useState(false);

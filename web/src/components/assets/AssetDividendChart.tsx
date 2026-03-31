@@ -241,10 +241,6 @@ export default function AssetDividendChart() {
           </span>
         </div>
 
-        <p className="mt-2 text-center text-[11px] text-slate-400">
-          지급 완료 후 저장된 ETF 배당 기록입니다.
-        </p>
-
         {totalDividend > 0 ? (
           <p className="mt-1 text-center text-[11px] text-slate-400">
             막대를 누르면 해당 달의 상세 내역을 볼 수 있습니다.

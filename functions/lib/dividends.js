@@ -293,9 +293,14 @@ async function upsertDividendEvent(holding, event, today) {
         status = 'recorded';
         changed = true;
     }
-    if (totalAmount === null && eligibleQuantity !== null && today >= event.paymentDate) {
+    if (totalAmount === null && eligibleQuantity !== null && today >= event.recordDate) {
         totalAmount = Math.round(event.dividend * eligibleQuantity);
         updates.totalAmount = totalAmount;
+        updates.fixedCapturedAt = today;
+        status = 'fixed';
+        changed = true;
+    }
+    if (totalAmount !== null && status !== 'paid' && today >= event.paymentDate) {
         updates.paidCapturedAt = today;
         status = 'paid';
         changed = true;
@@ -342,7 +347,8 @@ async function rebuildDividendSnapshot(householdId, year) {
         : {};
     const paidEvents = dividendEventsSnapshot.docs.reduce((acc, docSnap) => {
         const data = docSnap.data();
-        if (data.status !== 'paid' || typeof data.totalAmount !== 'number') {
+        if (!['fixed', 'paid'].includes(String(data.status || '')) ||
+            typeof data.totalAmount !== 'number') {
             return acc;
         }
         const paymentDate = data.paymentDate;
