@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Asset, AssetType } from '@/types/asset';
+import { Asset, AssetType, isGoldEtfSubType } from '@/types/asset';
 import {
   subscribeToAssets,
   getDailyAssetChange,
@@ -104,6 +104,11 @@ export default function AssetsPage() {
 
   const handleAssetClick = (asset: Asset) => {
     setSelectedAsset(asset);
+
+    if (asset.type === 'gold' && !isGoldEtfSubType(asset.subType)) {
+      setShowEditModal(true);
+      return;
+    }
 
     if (asset.type === 'stock' || asset.type === 'crypto' || asset.type === 'gold') {
       setShowHistoryModal(true);
