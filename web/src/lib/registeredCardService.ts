@@ -2,11 +2,11 @@ import {
   Timestamp,
   addDoc,
   collection,
-  deleteDoc,
   doc,
   getDocs,
   onSnapshot,
   query,
+  updateDoc,
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -24,6 +24,10 @@ function normalizeCardLastFour(value: string | undefined): string {
 
 function sortRegisteredCards(cards: RegisteredCard[]): RegisteredCard[] {
   return [...cards].sort((a, b) => {
+    if (a.isActive !== b.isActive) {
+      return a.isActive ? -1 : 1;
+    }
+
     if (a.cardLabel !== b.cardLabel) {
       return a.cardLabel.localeCompare(b.cardLabel, 'ko');
     }
@@ -52,8 +56,7 @@ export function subscribeToRegisteredCards(
     (snapshot) => {
       const cards = snapshot.docs
         .map((cardDoc) => mapRegisteredCardDocument(cardDoc.id, cardDoc.data()))
-        .filter((card) => card.owner === owner)
-        .filter((card) => card.isActive);
+        .filter((card) => card.owner === owner);
 
       callback(sortRegisteredCards(cards));
     },
@@ -93,8 +96,11 @@ export async function addRegisteredCard(input: CreateRegisteredCardInput): Promi
   return documentRef.id;
 }
 
-export async function deleteRegisteredCard(cardId: string): Promise<void> {
-  await deleteDoc(doc(db, COLLECTION_NAME, cardId));
+export async function updateRegisteredCardActive(cardId: string, isActive: boolean): Promise<void> {
+  await updateDoc(doc(db, COLLECTION_NAME, cardId), {
+    isActive,
+    updatedAt: Timestamp.now(),
+  });
 }
 
 async function getRegisteredCards(
