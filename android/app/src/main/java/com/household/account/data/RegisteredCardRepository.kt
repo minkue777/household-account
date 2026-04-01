@@ -28,8 +28,7 @@ class RegisteredCardRepository {
         }
 
         return registeredCards.any { card ->
-            card.isActive &&
-                normalizeOwner(card.owner) == normalizeOwner(owner) &&
+            normalizeOwner(card.owner) == normalizeOwner(owner) &&
                 normalizeCardLabel(card.cardLabel) == expenseCardLabel &&
                 (
                     card.cardLastFour.isBlank() ||

@@ -53,8 +53,7 @@ export function subscribeToRegisteredCards(
     (snapshot) => {
       const cards = snapshot.docs
         .map((cardDoc) => mapRegisteredCardDocument(cardDoc.id, cardDoc.data()))
-        .filter((card) => card.owner === owner)
-        .filter((card) => card.isActive);
+        .filter((card) => card.owner === owner);
 
       callback(sortRegisteredCards(cards));
     },
