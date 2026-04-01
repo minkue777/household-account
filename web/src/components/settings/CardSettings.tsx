@@ -85,7 +85,7 @@ function getCardStyle(cardLabel: string) {
     case '국민':
       return {
         container:
-          'border border-amber-200/50 bg-gradient-to-br from-[#fffcef] via-[#fff6db] to-[#fdecb3] shadow-[0_10px_24px_-16px_rgba(161,98,7,0.42),0_2px_6px_rgba(255,255,255,0.62)_inset] hover:border-amber-300/65',
+          'border border-transparent bg-gradient-to-br from-[#fffef6] via-[#fff4cc] to-[#f6dd88] shadow-[0_14px_28px_-16px_rgba(161,98,7,0.52),0_2px_8px_rgba(255,255,255,0.72)_inset,0_-6px_14px_rgba(217,119,6,0.08)_inset] hover:border-transparent',
         title: 'text-slate-900',
         number: 'text-amber-800',
         mark: 'text-amber-600/70',
@@ -93,7 +93,7 @@ function getCardStyle(cardLabel: string) {
     case '삼성':
       return {
         container:
-          'border border-blue-200/55 bg-gradient-to-br from-[#f7fbff] via-[#eaf4ff] to-[#d9e9ff] shadow-[0_10px_24px_-16px_rgba(37,99,235,0.3),0_2px_6px_rgba(255,255,255,0.6)_inset] hover:border-blue-300/65',
+          'border border-transparent bg-gradient-to-br from-[#fbfdff] via-[#e6f0ff] to-[#bfd8ff] shadow-[0_14px_28px_-16px_rgba(37,99,235,0.42),0_2px_8px_rgba(255,255,255,0.7)_inset,0_-6px_14px_rgba(59,130,246,0.08)_inset] hover:border-transparent',
         title: 'text-slate-900',
         number: 'text-blue-700',
         mark: 'text-blue-500/70',
@@ -101,7 +101,7 @@ function getCardStyle(cardLabel: string) {
     case '농협':
       return {
         container:
-          'border border-emerald-200/55 bg-gradient-to-br from-[#f7fffb] via-[#e8f9ef] to-[#d4f0df] shadow-[0_10px_24px_-16px_rgba(22,163,74,0.26),0_2px_6px_rgba(255,255,255,0.6)_inset] hover:border-emerald-300/65',
+          'border border-transparent bg-gradient-to-br from-[#fbfff9] via-[#e4f8e9] to-[#bde5c8] shadow-[0_14px_28px_-16px_rgba(22,163,74,0.4),0_2px_8px_rgba(255,255,255,0.68)_inset,0_-6px_14px_rgba(22,163,74,0.08)_inset] hover:border-transparent',
         title: 'text-slate-900',
         number: 'text-emerald-700',
         mark: 'text-emerald-500/70',
@@ -117,7 +117,7 @@ function getCardStyle(cardLabel: string) {
     case '비씨':
       return {
         container:
-          'border border-transparent bg-gradient-to-br from-[#fffdf8] via-[#faf4e8] to-[#f1e7d1] shadow-[0_10px_24px_-16px_rgba(120,113,108,0.24),0_2px_6px_rgba(255,255,255,0.5)_inset] hover:border-transparent',
+          'border border-transparent bg-gradient-to-br from-[#fffefb] via-[#f8f0e0] to-[#e7dac0] shadow-[0_14px_28px_-16px_rgba(120,113,108,0.34),0_2px_8px_rgba(255,255,255,0.72)_inset,0_-6px_14px_rgba(120,113,108,0.05)_inset] hover:border-transparent',
         title: 'text-slate-900',
         number: 'text-stone-700',
         mark: 'text-stone-500/70',
@@ -157,7 +157,7 @@ function getCardStyle(cardLabel: string) {
     case '대전사랑카드':
       return {
         container:
-          'border border-slate-200/60 bg-gradient-to-br from-[#ffffff] via-[#fff9f9] to-[#f6f2f2] shadow-[0_10px_24px_-16px_rgba(127,29,29,0.18),0_2px_6px_rgba(255,255,255,0.62)_inset] hover:border-red-200/70',
+          'border border-transparent bg-gradient-to-br from-[#ffffff] via-[#fff8f8] to-[#efe9e9] shadow-[0_14px_28px_-16px_rgba(127,29,29,0.26),0_2px_8px_rgba(255,255,255,0.78)_inset,0_-6px_14px_rgba(127,29,29,0.04)_inset] hover:border-transparent',
         title: 'text-slate-900',
         number: 'text-slate-800',
         mark: 'text-red-500/70',
