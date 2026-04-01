@@ -481,12 +481,10 @@ function RegisteredCardTile({
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.42),transparent_46%)]" />
       <div className="pointer-events-none absolute inset-0 rounded-[13px] shadow-[inset_0_1px_0_rgba(255,255,255,0.82),inset_0_-1px_0_rgba(15,23,42,0.04)]" />
-      <div className="pointer-events-none absolute left-1 top-[56%] -translate-y-1/2 opacity-95">
-        <div className="relative h-[22px] w-[24px] rounded-[6px] border border-[#b7852b]/45 bg-gradient-to-br from-[#efd089] via-[#ddb56a] to-[#bf8d3a] shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
-          <div className="absolute inset-[2px] rounded-[4px] border border-black/10" />
-          <div className="absolute left-1/2 top-[2px] bottom-[2px] w-px -translate-x-1/2 bg-black/10" />
-          <div className="absolute inset-x-[4px] top-[7px] h-px bg-black/10" />
-          <div className="absolute inset-x-[4px] bottom-[7px] h-px bg-black/8" />
+      <div className="pointer-events-none absolute left-1 top-[57%] -translate-y-1/2 opacity-95">
+        <div className="relative h-[16px] w-[20px] rounded-[4px] border border-[#b7852b]/35 bg-gradient-to-br from-[#ebcc82] via-[#d9b066] to-[#bc8d3a] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
+          <div className="absolute left-1/2 top-[2px] bottom-[2px] w-px -translate-x-1/2 bg-black/8" />
+          <div className="absolute inset-x-[3px] top-1/2 h-px -translate-y-1/2 bg-black/8" />
         </div>
       </div>
       <div className="relative aspect-[1.586/1]">
