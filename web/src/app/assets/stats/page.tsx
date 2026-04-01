@@ -95,6 +95,20 @@ function buildCarriedSeries(
   });
 }
 
+function areSameActiveElements(
+  current: Array<{ datasetIndex: number; index: number }>,
+  next: Array<{ datasetIndex: number; index: number }>
+) {
+  if (current.length !== next.length) {
+    return false;
+  }
+
+  return current.every((element, idx) => (
+    element.datasetIndex === next[idx]?.datasetIndex &&
+    element.index === next[idx]?.index
+  ));
+}
+
 export default function AssetStatsPage() {
   const { themeConfig } = useTheme();
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -338,8 +352,21 @@ export default function AssetStatsPage() {
         mode: 'index' as const,
         intersect: false,
       },
-      onClick: (_event, elements, chart) => {
+      onClick: (event, elements, chart) => {
         if (elements.length > 0) {
+          const clickedElements = elements.map(({ datasetIndex, index }) => ({ datasetIndex, index }));
+          const activeElements = chart.getActiveElements().map(({ datasetIndex, index }) => ({ datasetIndex, index }));
+
+          if (areSameActiveElements(activeElements, clickedElements)) {
+            chart.setActiveElements([]);
+            chart.tooltip?.setActiveElements([], { x: 0, y: 0 });
+            chart.update();
+            return;
+          }
+
+          chart.setActiveElements(clickedElements);
+          chart.tooltip?.setActiveElements(clickedElements, { x: event.x, y: event.y });
+          chart.update();
           return;
         }
 

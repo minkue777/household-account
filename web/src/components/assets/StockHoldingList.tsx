@@ -285,7 +285,7 @@ function HoldingEditorCard({
         <button
           type="button"
           onClick={onDelete}
-          className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-500 transition-colors hover:bg-red-50"
+          className="flex-1 rounded-lg border border-red-300 px-4 py-2 text-sm text-red-500 transition-colors hover:bg-red-50"
         >
           삭제
         </button>

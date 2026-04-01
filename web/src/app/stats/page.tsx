@@ -173,7 +173,7 @@ export default function StatsPage() {
               </svg>
             </Link>
             <h1
-              className="text-2xl font-bold"
+              className="text-lg md:text-xl font-bold"
               style={{
                 background: themeConfig.titleGradient,
                 WebkitBackgroundClip: 'text',

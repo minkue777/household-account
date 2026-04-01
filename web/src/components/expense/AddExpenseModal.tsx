@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { AmountInput, ModalOverlay } from '@/components/common';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { TransactionType } from '@/types/expense';
@@ -187,12 +188,15 @@ export default function AddExpenseModal({
 
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">날짜</label>
-              <input
-                type="date"
-                value={date}
-                onChange={(event) => setDate(event.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500 [&::-webkit-calendar-picker-indicator]:mr-1 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-              />
+              <div className="relative">
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(event) => setDate(event.target.value)}
+                  className="w-full appearance-none rounded-lg border border-slate-300 px-4 py-2 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-12 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0"
+                />
+                <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              </div>
             </div>
           </div>
         ) : (
