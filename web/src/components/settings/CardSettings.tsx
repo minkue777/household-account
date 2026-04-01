@@ -114,13 +114,29 @@ function getCardStyle(cardLabel: string) {
         number: 'text-slate-700',
         mark: 'text-slate-500/70',
       };
+    case '네이버페이':
+      return {
+        container:
+          'border border-transparent bg-gradient-to-br from-[#11d94d] via-[#08c63f] to-[#05b938] shadow-[0_10px_24px_-16px_rgba(22,163,74,0.35),0_2px_6px_rgba(255,255,255,0.12)_inset] hover:border-transparent',
+        title: 'text-white',
+        number: 'text-white/90',
+        mark: 'text-white/70',
+      };
     case '카카오페이':
       return {
         container:
-          'border-2 border-yellow-300 bg-gradient-to-br from-[#fff36a] via-[#ffe500] to-[#ffd800] shadow-[0_10px_24px_-16px_rgba(161,98,7,0.28),0_2px_6px_rgba(255,255,255,0.35)_inset] hover:border-yellow-400',
+          'border border-transparent bg-gradient-to-br from-[#fff36a] via-[#ffe500] to-[#ffd800] shadow-[0_10px_24px_-16px_rgba(161,98,7,0.28),0_2px_6px_rgba(255,255,255,0.2)_inset] hover:border-transparent',
         title: 'text-slate-900',
         number: 'text-slate-800',
         mark: 'text-slate-800/70',
+      };
+    case '토스':
+      return {
+        container:
+          'border border-sky-100 bg-gradient-to-br from-[#fbfdff] via-[#f3f7ff] to-[#eef4ff] shadow-[0_10px_24px_-16px_rgba(59,130,246,0.22),0_2px_6px_rgba(255,255,255,0.4)_inset] hover:border-sky-200',
+        title: 'text-slate-900',
+        number: 'text-slate-800',
+        mark: 'text-slate-500/70',
       };
     case '대전사랑카드':
       return {
@@ -531,8 +547,11 @@ function RegisteredCardTile({
   onClick: () => void;
 }) {
   const style = getCardStyle(card.cardLabel);
+  const isNaverPay = card.cardLabel === '네이버페이';
   const isKakaoPay = card.cardLabel === '카카오페이';
+  const isToss = card.cardLabel === '토스';
   const isDaejeonLoveCard = card.cardLabel === '대전사랑카드';
+  const isLogoOnlyCard = isNaverPay || isKakaoPay || isToss;
 
   return (
     <button
@@ -545,7 +564,7 @@ function RegisteredCardTile({
       {isDaejeonLoveCard && (
         <div className="pointer-events-none absolute -bottom-[2px] left-[-2px] right-[-2px] h-[24%] rounded-b-[12px] bg-[#b7191f]" />
       )}
-      {!isKakaoPay && (
+      {!isLogoOnlyCard && (
         <div className="pointer-events-none absolute left-2 top-[57%] -translate-y-1/2 opacity-95">
         <div className="relative h-[16px] w-[21px] rounded-[4px] border border-[#b7852b]/35 bg-gradient-to-br from-[#ebcc82] via-[#d9b066] to-[#bc8d3a] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
           <div className="absolute left-[32%] top-[2px] bottom-[2px] w-px bg-black/10" />
@@ -557,11 +576,22 @@ function RegisteredCardTile({
         </div>
       )}
       <div className="relative aspect-[1.586/1]">
-        <div className="absolute left-1 top-0.5">
-          <p className={`text-[10px] font-semibold tracking-tight ${style.title}`}>
-            {getCardDisplayName(card.cardLabel)}
-          </p>
-        </div>
+        {!isLogoOnlyCard && (
+          <div className="absolute left-1 top-0.5">
+            <p className={`text-[10px] font-semibold tracking-tight ${style.title}`}>
+              {getCardDisplayName(card.cardLabel)}
+            </p>
+          </div>
+        )}
+
+        {isNaverPay && (
+          <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 text-white">
+            <div className="flex h-[18px] w-[18px] items-center justify-center bg-white text-[14px] font-black text-[#06c755] shadow-[0_1px_2px_rgba(0,0,0,0.12)]">
+              N
+            </div>
+            <span className="text-[16px] font-semibold tracking-[-0.04em] leading-none">Pay</span>
+          </div>
+        )}
 
         {isKakaoPay && (
           <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 text-slate-900">
@@ -570,6 +600,23 @@ function RegisteredCardTile({
             </div>
             <span className="text-[18px] font-black tracking-[-0.06em] leading-none">pay</span>
           </div>
+        )}
+
+        {isToss && (
+          <>
+            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[13px]">
+              <div className="absolute -left-[8px] top-[-8px] h-[42px] w-[24px] rotate-12 bg-sky-200/35 blur-[2px]" />
+              <div className="absolute right-[-10px] bottom-[-8px] h-[28px] w-[56px] rounded-full bg-sky-300/25 blur-[2px]" />
+            </div>
+            <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 text-slate-900">
+              <div className="relative h-[18px] w-[20px]">
+                <div className="absolute left-0 top-[2px] h-[14px] w-[11px] rounded-[8px] bg-gradient-to-br from-[#25a7ff] to-[#0f6bff]" />
+                <div className="absolute right-0 top-[2px] h-[14px] w-[11px] rounded-[8px] bg-gradient-to-br from-[#0f6bff] to-[#1643ff]" />
+                <div className="absolute left-[9px] top-0 h-[18px] w-[3px] -skew-x-[12deg] bg-[#0b84ff]" />
+              </div>
+              <span className="text-[16px] font-black tracking-[-0.05em] leading-none">toss</span>
+            </div>
+          </>
         )}
 
         {card.cardLastFour ? (
