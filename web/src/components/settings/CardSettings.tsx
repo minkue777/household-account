@@ -448,16 +448,23 @@ function RegisteredCardTile({
     <button
       type="button"
       onClick={onClick}
-      className={`group relative w-full overflow-hidden rounded-[24px] p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${style.container}`}
+      className={`group relative w-full overflow-hidden rounded-[20px] p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${style.container}`}
     >
-      <div className="aspect-[1.58/1]">
+      <div className="pointer-events-none absolute right-11 top-1/2 -translate-y-1/2 opacity-90">
+        <div className="relative h-8 w-11 rounded-[10px] border border-white/60 bg-gradient-to-br from-[#f8e6a6] via-[#e8c976] to-[#c79d44] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]">
+          <div className="absolute inset-y-1 left-1/3 w-px bg-white/30" />
+          <div className="absolute inset-y-1 right-1/3 w-px bg-black/10" />
+          <div className="absolute inset-x-1 top-1/2 h-px -translate-y-1/2 bg-white/25" />
+        </div>
+      </div>
+      <div className="aspect-[2.3/1]">
         <div className="flex h-full flex-col justify-between">
           <div className="flex items-start justify-between gap-3">
-            <div className="rounded-full border border-white/60 bg-white/70 px-2.5 py-1 text-[10px] font-medium text-slate-500">
+            <div className="rounded-full border border-white/60 bg-white/70 px-2 py-0.5 text-[9px] font-medium text-slate-500">
               등록 카드
             </div>
             <svg
-              className={`h-5 w-5 flex-shrink-0 transition-transform group-hover:translate-x-0.5 ${style.mark}`}
+              className={`h-4 w-4 flex-shrink-0 transition-transform group-hover:translate-x-0.5 ${style.mark}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -466,12 +473,12 @@ function RegisteredCardTile({
             </svg>
           </div>
 
-          <div className="space-y-1">
-            <p className={`text-xl font-semibold tracking-tight ${style.title}`}>{card.cardLabel}</p>
+          <div className="space-y-0.5">
+            <p className={`text-lg font-semibold tracking-tight ${style.title}`}>{card.cardLabel}</p>
             {card.cardLastFour ? (
-              <p className={`text-lg font-medium tracking-[0.18em] ${style.number}`}>{card.cardLastFour}</p>
+              <p className={`text-base font-medium tracking-[0.18em] ${style.number}`}>{card.cardLastFour}</p>
             ) : (
-              <p className={`text-sm font-medium ${style.number}`}>번호 없이 인식</p>
+              <p className={`text-xs font-medium ${style.number}`}>번호 없이 인식</p>
             )}
           </div>
         </div>
