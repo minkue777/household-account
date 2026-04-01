@@ -85,7 +85,6 @@ export async function addRegisteredCard(input: CreateRegisteredCardInput): Promi
     owner,
     cardLabel,
     cardLastFour: normalizedLastFour,
-    isActive: true,
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
   });

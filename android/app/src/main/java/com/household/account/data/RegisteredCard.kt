@@ -8,6 +8,5 @@ data class RegisteredCard(
     val householdId: String = "",
     val owner: String = "",
     val cardLabel: String = "",
-    val cardLastFour: String = "",
-    val isActive: Boolean = true
+    val cardLastFour: String = ""
 )

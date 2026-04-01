@@ -6,7 +6,6 @@ export interface RegisteredCard {
   owner: string;
   cardLabel: string;
   cardLastFour: string;
-  isActive: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -50,7 +49,6 @@ export function mapRegisteredCardDocument(
     owner: typeof data.owner === 'string' ? data.owner : '',
     cardLabel: typeof data.cardLabel === 'string' ? data.cardLabel : '',
     cardLastFour: typeof data.cardLastFour === 'string' ? data.cardLastFour : '',
-    isActive: data.isActive !== false,
     createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : undefined,
     updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : undefined,
   };

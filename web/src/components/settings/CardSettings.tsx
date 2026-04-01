@@ -33,6 +33,26 @@ function isNumberlessLabel(label: string) {
   return NUMBERLESS_REGISTERED_CARD_LABELS.has(label as RegisteredCardLabel);
 }
 
+function getCardStyle(cardLabel: string) {
+  if (cardLabel === '국민') {
+    return {
+      container:
+        'border-2 border-amber-300 bg-gradient-to-br from-white via-amber-50 to-amber-100 shadow-amber-100/80 hover:border-amber-400',
+      title: 'text-slate-900',
+      number: 'text-amber-700',
+      mark: 'text-amber-500/70',
+    };
+  }
+
+  return {
+    container:
+      'border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 shadow-slate-200/70 hover:border-violet-200',
+    title: 'text-slate-900',
+    number: 'text-slate-600',
+    mark: 'text-slate-300',
+  };
+}
+
 export default function CardSettings({ householdId, ownerName }: CardSettingsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -292,36 +312,11 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
               ) : (
                 <div className="space-y-3 p-4">
                   {cards.map((card) => (
-                    <button
+                    <RegisteredCardTile
                       key={card.id}
-                      type="button"
+                      card={card}
                       onClick={() => setSelectedCardId(card.id)}
-                      className="w-full rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 text-left shadow-sm transition-all hover:border-violet-200 hover:shadow-md"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="truncate text-base font-semibold text-slate-800">
-                            {formatCardDisplay(card)}
-                          </div>
-                          <div className="mt-1 text-xs text-slate-500">
-                            눌러서 카드번호 수정 또는 삭제
-                          </div>
-                        </div>
-                        <svg
-                          className="mt-0.5 h-5 w-5 flex-shrink-0 text-slate-300"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 5l7 7-7 7"
-                          />
-                        </svg>
-                      </div>
-                    </button>
+                    />
                   ))}
                 </div>
               )}
@@ -437,5 +432,50 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
         onCancel={() => setPendingDeleteId(null)}
       />
     </div>
+  );
+}
+
+function RegisteredCardTile({
+  card,
+  onClick,
+}: {
+  card: CardItem;
+  onClick: () => void;
+}) {
+  const style = getCardStyle(card.cardLabel);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group relative w-full overflow-hidden rounded-[24px] p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${style.container}`}
+    >
+      <div className="aspect-[1.58/1]">
+        <div className="flex h-full flex-col justify-between">
+          <div className="flex items-start justify-between gap-3">
+            <div className="rounded-full border border-white/60 bg-white/70 px-2.5 py-1 text-[10px] font-medium text-slate-500">
+              등록 카드
+            </div>
+            <svg
+              className={`h-5 w-5 flex-shrink-0 transition-transform group-hover:translate-x-0.5 ${style.mark}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+
+          <div className="space-y-1">
+            <p className={`text-xl font-semibold tracking-tight ${style.title}`}>{card.cardLabel}</p>
+            {card.cardLastFour ? (
+              <p className={`text-lg font-medium tracking-[0.18em] ${style.number}`}>{card.cardLastFour}</p>
+            ) : (
+              <p className={`text-sm font-medium ${style.number}`}>번호 없이 인식</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </button>
   );
 }
