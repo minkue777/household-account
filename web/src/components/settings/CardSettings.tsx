@@ -564,7 +564,7 @@ function RegisteredCardTile({
         </div>
 
         {isKakaoPay && (
-          <div className="absolute left-[10px] top-[50%] flex -translate-y-1/2 items-center gap-1.5 text-slate-900">
+          <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 text-slate-900">
             <div className="relative h-[18px] w-[18px] rounded-full bg-current">
               <div className="absolute -bottom-[3px] left-[3px] h-0 w-0 border-l-[4px] border-r-[2px] border-t-[6px] border-l-transparent border-r-transparent border-t-current" />
             </div>
@@ -572,13 +572,11 @@ function RegisteredCardTile({
           </div>
         )}
 
-        <div className={isDaejeonLoveCard ? 'absolute bottom-[12px] right-1.5' : 'absolute bottom-1 right-1.5'}>
-          {card.cardLastFour ? (
+        {card.cardLastFour ? (
+          <div className={isDaejeonLoveCard ? 'absolute bottom-[12px] right-1.5' : 'absolute bottom-1 right-1.5'}>
             <p className={`text-[11px] font-semibold tracking-[0.14em] ${style.number}`}>{card.cardLastFour}</p>
-          ) : (
-            <p className={`text-[11px] font-medium ${style.number}`}>번호 없이 인식</p>
-          )}
-        </div>
+          </div>
+        ) : null}
       </div>
     </button>
   );
