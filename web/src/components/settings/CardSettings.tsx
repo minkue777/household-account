@@ -114,6 +114,14 @@ function getCardStyle(cardLabel: string) {
         number: 'text-slate-700',
         mark: 'text-slate-500/70',
       };
+    case '대전사랑카드':
+      return {
+        container:
+          'border-2 border-slate-300 bg-gradient-to-br from-[#ffffff] via-[#fffefe] to-[#fbfbfb] shadow-[0_10px_24px_-16px_rgba(127,29,29,0.18),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-red-300',
+        title: 'text-slate-900',
+        number: 'text-slate-800',
+        mark: 'text-red-500/70',
+      };
     default:
       return {
         container:
@@ -515,6 +523,7 @@ function RegisteredCardTile({
   onClick: () => void;
 }) {
   const style = getCardStyle(card.cardLabel);
+  const isDaejeonLoveCard = card.cardLabel === '대전사랑카드';
 
   return (
     <button
@@ -524,6 +533,9 @@ function RegisteredCardTile({
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.42),transparent_46%)]" />
       <div className="pointer-events-none absolute inset-0 rounded-[13px] shadow-[inset_0_1px_0_rgba(255,255,255,0.82),inset_0_-1px_0_rgba(15,23,42,0.04)]" />
+      {isDaejeonLoveCard && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[22%] rounded-b-[11px] bg-[#b7191f]" />
+      )}
       <div className="pointer-events-none absolute left-2 top-[57%] -translate-y-1/2 opacity-95">
         <div className="relative h-[16px] w-[21px] rounded-[4px] border border-[#b7852b]/35 bg-gradient-to-br from-[#ebcc82] via-[#d9b066] to-[#bc8d3a] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
           <div className="absolute left-[32%] top-[2px] bottom-[2px] w-px bg-black/10" />
@@ -540,7 +552,7 @@ function RegisteredCardTile({
           </p>
         </div>
 
-        <div className="absolute bottom-1 right-1.5">
+        <div className={isDaejeonLoveCard ? 'absolute bottom-[12px] right-1.5' : 'absolute bottom-1 right-1.5'}>
           {card.cardLastFour ? (
             <p className={`text-[11px] font-semibold tracking-[0.14em] ${style.number}`}>{card.cardLastFour}</p>
           ) : (
