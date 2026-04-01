@@ -8,6 +8,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import NotificationSettings from '@/components/NotificationSettings';
 import { isIOS } from '@/lib/pushNotificationService';
 import {
+  CardSettings,
   CategorySettings,
   MerchantRuleSettings,
   RecurringExpenseSettings,
@@ -83,6 +84,10 @@ export default function SettingsPage() {
             </div>
           )}
 
+          <CardSettings
+            householdId={household?.id}
+            ownerName={currentMember?.name}
+          />
           <CategorySettings />
           <MerchantRuleSettings />
           <RecurringExpenseSettings />

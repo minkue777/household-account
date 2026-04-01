@@ -27,4 +27,17 @@ object CardLabelFormatter {
             else -> labeledTokenPattern.find(trimmed)?.groupValues?.get(1)?.lowercase()
         }
     }
+
+    fun extractCardLabel(value: String): String? {
+        val trimmed = value.trim()
+        if (trimmed.isBlank() || rawTokenPattern.matches(trimmed)) {
+            return null
+        }
+
+        return if (labeledTokenPattern.containsMatchIn(trimmed)) {
+            trimmed.substringBefore("(").trim().ifBlank { null }
+        } else {
+            trimmed
+        }
+    }
 }

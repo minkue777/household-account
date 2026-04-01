@@ -23,6 +23,13 @@
         allow delete: if true;
       }
 
+      // registered_cards 컬렉션
+      match /registered_cards/{cardId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.householdId != null;
+        allow delete: if true;
+      }
+
       // households 컬렉션
       match /households/{householdId} {
         allow read, write: if true;

@@ -12,6 +12,7 @@ import com.household.account.data.Expense
 import com.household.account.data.ExpenseRepository
 import com.household.account.data.MerchantRuleRepository
 import com.household.account.data.NotificationDebugLogRepository
+import com.household.account.data.RegisteredCardRepository
 import com.household.account.parser.DaejeonLocalCurrencyParser
 import com.household.account.parser.DigitalOnnuriParser
 import com.household.account.parser.ExpenseEventType
@@ -96,6 +97,7 @@ class CardNotificationListenerService : NotificationListenerService() {
     private val ruleRepository = MerchantRuleRepository()
     private val categoryRepository = CategoryRepository()
     private val balanceRepository = BalanceRepository()
+    private val registeredCardRepository = RegisteredCardRepository()
     private val notificationDebugLogRepository = NotificationDebugLogRepository()
 
     private val recentNotifications = mutableMapOf<String, Long>()
@@ -331,6 +333,15 @@ class CardNotificationListenerService : NotificationListenerService() {
                         category = defaultCategoryKey,
                         householdId = householdId
                     )
+                }
+                val memberName = HouseholdPreferences.getMemberName(applicationContext)
+                val isRegisteredCard = registeredCardRepository.matchesRegisteredCard(
+                    householdId = householdId,
+                    owner = memberName,
+                    cardValue = expenseToSave.cardLastFour
+                )
+                if (!isRegisteredCard) {
+                    return@launch
                 }
 
                 val duplicatedExpense = expenseRepository.findDuplicateExpenseForRegistration(
