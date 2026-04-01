@@ -66,7 +66,7 @@ function getCardStyle(cardLabel: string) {
   if (cardLabel === '국민') {
     return {
       container:
-        'border-2 border-amber-300 bg-gradient-to-br from-[#fffdfa] via-[#fff4cf] to-[#f1d36f] shadow-[0_12px_24px_-14px_rgba(217,159,21,0.8)] hover:border-amber-400',
+        'border-2 border-amber-300 bg-gradient-to-br from-[#fffef8] via-[#fff7dd] to-[#f6da84] shadow-[0_10px_24px_-16px_rgba(161,98,7,0.5),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-amber-400',
       title: 'text-slate-900',
       number: 'text-amber-800',
       mark: 'text-amber-600/70',
@@ -75,7 +75,7 @@ function getCardStyle(cardLabel: string) {
 
   return {
     container:
-      'border border-slate-200 bg-gradient-to-br from-[#ffffff] via-[#f8fafc] to-[#e9eef5] shadow-[0_12px_24px_-16px_rgba(15,23,42,0.35)] hover:border-violet-200',
+      'border border-slate-200 bg-gradient-to-br from-[#ffffff] via-[#f8fafc] to-[#edf2f7] shadow-[0_10px_24px_-18px_rgba(15,23,42,0.35),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-violet-200',
     title: 'text-slate-900',
     number: 'text-slate-600',
     mark: 'text-slate-300',
@@ -480,9 +480,8 @@ function RegisteredCardTile({
       className={`group relative block w-[192px] max-w-full overflow-hidden rounded-[18px] p-2.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${style.container}`}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.78),transparent_42%)]" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black/8 to-transparent" />
-      <div className="pointer-events-none absolute inset-0 rounded-[18px] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),inset_0_-1px_0_rgba(15,23,42,0.05)]" />
-      <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 opacity-95">
+      <div className="pointer-events-none absolute inset-0 rounded-[18px] shadow-[inset_0_1px_0_rgba(255,255,255,0.82),inset_0_-1px_0_rgba(15,23,42,0.04)]" />
+      <div className="pointer-events-none absolute left-3 top-[44%] -translate-y-1/2 opacity-95">
         <div className="relative h-7 w-10 rounded-[9px] border border-white/60 bg-gradient-to-br from-[#f8e6a6] via-[#e8c976] to-[#c79d44] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]">
           <div className="absolute inset-y-1 left-1/3 w-px bg-white/30" />
           <div className="absolute inset-y-1 right-1/3 w-px bg-black/10" />
@@ -502,14 +501,14 @@ function RegisteredCardTile({
             </svg>
           </div>
 
-          <div className="flex h-full flex-col justify-between pl-12 pt-1">
-            <div>
+          <div className="flex h-full flex-col justify-between pl-12 pt-0.5">
+            <div className="pt-0.5">
               <p className={`text-[15px] font-semibold tracking-tight ${style.title}`}>
                 {getCardDisplayName(card.cardLabel)}
               </p>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end pb-0.5">
               {card.cardLastFour ? (
                 <p className={`text-sm font-semibold tracking-[0.18em] ${style.number}`}>{card.cardLastFour}</p>
               ) : (
