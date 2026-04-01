@@ -109,10 +109,10 @@ function getCardStyle(cardLabel: string) {
     case '롯데':
       return {
         container:
-          'border border-transparent bg-gradient-to-br from-[#fbfff9] via-[#e4f8e9] to-[#bde5c8] shadow-[0_14px_28px_-16px_rgba(22,163,74,0.4),0_2px_8px_rgba(255,255,255,0.68)_inset,0_-6px_14px_rgba(22,163,74,0.08)_inset] hover:border-transparent',
+          'border border-transparent bg-gradient-to-br from-[#fbfbfb] via-[#ebebeb] to-[#cfcfd3] shadow-[0_14px_28px_-16px_rgba(100,116,139,0.34),0_2px_8px_rgba(255,255,255,0.78)_inset,0_-6px_14px_rgba(59,130,246,0.05)_inset] hover:border-transparent',
         title: 'text-slate-900',
-        number: 'text-emerald-700',
-        mark: 'text-emerald-500/70',
+        number: 'text-slate-700',
+        mark: 'text-sky-600/65',
       };
     case '비씨':
       return {
