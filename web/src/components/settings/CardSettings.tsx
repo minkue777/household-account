@@ -477,38 +477,27 @@ function RegisteredCardTile({
     <button
       type="button"
       onClick={onClick}
-      className={`group relative block w-[192px] max-w-full overflow-hidden rounded-[18px] p-2.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${style.container}`}
+      className={`group relative block w-[96px] max-w-full overflow-hidden rounded-[12px] p-1.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${style.container}`}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.42),transparent_46%)]" />
-      <div className="pointer-events-none absolute inset-0 rounded-[18px] shadow-[inset_0_1px_0_rgba(255,255,255,0.82),inset_0_-1px_0_rgba(15,23,42,0.04)]" />
-      <div className="pointer-events-none absolute left-3 top-[50%] -translate-y-1/2 opacity-95">
-        <div className="relative h-[32px] w-[42px] rounded-[11px] border border-white/60 bg-gradient-to-br from-[#f8e6a6] via-[#e8c976] to-[#c79d44] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]">
-          <div className="absolute inset-y-1.5 left-[34%] w-px bg-white/30" />
-          <div className="absolute inset-y-1.5 right-[34%] w-px bg-black/10" />
-          <div className="absolute inset-x-1.5 top-1/2 h-px -translate-y-1/2 bg-white/25" />
+      <div className="pointer-events-none absolute inset-0 rounded-[12px] shadow-[inset_0_1px_0_rgba(255,255,255,0.82),inset_0_-1px_0_rgba(15,23,42,0.04)]" />
+      <div className="pointer-events-none absolute left-1.5 top-[54%] -translate-y-1/2 opacity-95">
+        <div className="relative h-[20px] w-[26px] rounded-[7px] border border-white/60 bg-gradient-to-br from-[#f8e6a6] via-[#e8c976] to-[#c79d44] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]">
+          <div className="absolute inset-y-1 left-[34%] w-px bg-white/30" />
+          <div className="absolute inset-y-1 right-[34%] w-px bg-black/10" />
+          <div className="absolute inset-x-1 top-1/2 h-px -translate-y-1/2 bg-white/25" />
         </div>
       </div>
       <div className="relative aspect-[1.586/1]">
-        <div className="absolute left-2.5 top-1.5">
-          <p className={`text-[14px] font-semibold tracking-tight ${style.title}`}>
+        <div className="absolute left-1.5 top-1">
+          <p className={`text-[9px] font-semibold tracking-tight ${style.title}`}>
             {getCardDisplayName(card.cardLabel)}
           </p>
         </div>
 
-        <div className="absolute right-1.5 top-1.5">
-          <svg
-            className={`h-3.5 w-3.5 flex-shrink-0 transition-transform group-hover:translate-x-0.5 ${style.mark}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </div>
-
-        <div className="absolute bottom-1.5 right-2.5">
+        <div className="absolute bottom-1 right-1.5">
           {card.cardLastFour ? (
-            <p className={`text-sm font-semibold tracking-[0.18em] ${style.number}`}>{card.cardLastFour}</p>
+            <p className={`text-[11px] font-semibold tracking-[0.14em] ${style.number}`}>{card.cardLastFour}</p>
           ) : (
             <p className={`text-[11px] font-medium ${style.number}`}>번호 없이 인식</p>
           )}
