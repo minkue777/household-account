@@ -738,6 +738,7 @@ function RegisteredCardTile({
       }`}
     >
       <div className="pointer-events-none absolute inset-0 rounded-[13px] border border-black/[0.08]" />
+      <div className="pointer-events-none absolute inset-x-[1px] top-[1px] h-[30%] rounded-t-[12px] bg-gradient-to-b from-white/16 via-white/6 to-transparent" />
       {isDaejeonLoveCard && (
         <div className="pointer-events-none absolute -bottom-[2px] left-[-2px] right-[-2px] h-[24%] rounded-b-[12px] bg-[#c91f27]" />
       )}
