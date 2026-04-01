@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ConfirmDialog, ModalOverlay } from '@/components/common';
 import {
   addRegisteredCard,
   deleteRegisteredCard,
   subscribeToRegisteredCards,
   updateRegisteredCard,
+  updateRegisteredCardOrder,
 } from '@/lib/registeredCardService';
 import {
   NUMBERLESS_REGISTERED_CARD_LABELS,
@@ -23,6 +24,21 @@ interface CardItem {
   id: string;
   cardLabel: string;
   cardLastFour: string;
+  orderIndex?: number;
+}
+
+function moveCard(cards: CardItem[], sourceId: string, targetId: string): CardItem[] {
+  const sourceIndex = cards.findIndex((card) => card.id === sourceId);
+  const targetIndex = cards.findIndex((card) => card.id === targetId);
+
+  if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) {
+    return cards;
+  }
+
+  const nextCards = [...cards];
+  const [movedCard] = nextCards.splice(sourceIndex, 1);
+  nextCards.splice(targetIndex, 0, movedCard);
+  return nextCards;
 }
 
 function formatCardDisplay(card: CardItem) {
@@ -169,6 +185,12 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [formError, setFormError] = useState('');
   const [detailError, setDetailError] = useState('');
+  const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
+  const cardsRef = useRef<CardItem[]>([]);
+  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragStateRef = useRef<{ cardId: string; active: boolean } | null>(null);
+  const dragUnsubscribeRef = useRef<(() => void) | null>(null);
+  const lastDragEndRef = useRef(0);
 
   useEffect(() => {
     setIsLoading(true);
@@ -179,11 +201,28 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
           id: card.id,
           cardLabel: card.cardLabel,
           cardLastFour: card.cardLastFour,
+          orderIndex: card.orderIndex,
         }))
       );
       setIsLoading(false);
     });
   }, [householdId, ownerName]);
+
+  useEffect(() => {
+    cardsRef.current = cards;
+  }, [cards]);
+
+  useEffect(() => {
+    if (!householdId || !ownerName || cards.length === 0) {
+      return;
+    }
+
+    if (!cards.some((card) => typeof card.orderIndex !== 'number')) {
+      return;
+    }
+
+    void updateRegisteredCardOrder(cards.map((card) => card.id));
+  }, [cards, householdId, ownerName]);
 
   const hidesCardNumber = useMemo(
     () => NUMBERLESS_REGISTERED_CARD_LABELS.has(selectedLabel),
@@ -285,6 +324,106 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
 
     setPendingDeleteId(null);
   };
+
+  const clearPressTimer = () => {
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+  };
+
+  const cleanupDragListeners = () => {
+    dragUnsubscribeRef.current?.();
+    dragUnsubscribeRef.current = null;
+  };
+
+  const finishDrag = async () => {
+    clearPressTimer();
+    cleanupDragListeners();
+
+    if (!dragStateRef.current?.active) {
+      dragStateRef.current = null;
+      return;
+    }
+
+    dragStateRef.current = null;
+    setDraggingCardId(null);
+    lastDragEndRef.current = Date.now();
+
+    if (householdId && ownerName) {
+      await updateRegisteredCardOrder(cardsRef.current.map((card) => card.id));
+    }
+  };
+
+  const handleCardPointerDown = (cardId: string) => (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) {
+      return;
+    }
+
+    const startX = event.clientX;
+    const startY = event.clientY;
+    dragStateRef.current = { cardId, active: false };
+
+    clearPressTimer();
+    cleanupDragListeners();
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const dragState = dragStateRef.current;
+      if (!dragState) {
+        return;
+      }
+
+      const movedDistance = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
+      if (!dragState.active && movedDistance > 8) {
+        clearPressTimer();
+      }
+
+      if (!dragState.active) {
+        return;
+      }
+
+      moveEvent.preventDefault();
+      const target = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY) as HTMLElement | null;
+      const targetCard = target?.closest('[data-card-id]') as HTMLElement | null;
+      const targetId = targetCard?.dataset.cardId;
+
+      if (!targetId || targetId === dragState.cardId) {
+        return;
+      }
+
+      setCards((prev) => moveCard(prev, dragState.cardId, targetId));
+    };
+
+    const handlePointerUp = () => {
+      void finishDrag();
+    };
+
+    dragUnsubscribeRef.current = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove, { passive: false });
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+
+    pressTimerRef.current = setTimeout(() => {
+      if (!dragStateRef.current || dragStateRef.current.cardId !== cardId) {
+        return;
+      }
+
+      dragStateRef.current.active = true;
+      setDraggingCardId(cardId);
+    }, 240);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearPressTimer();
+      cleanupDragListeners();
+    };
+  }, []);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -414,12 +553,20 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                   등록된 카드가 없습니다.
                 </div>
               ) : (
-                <div className="grid grid-cols-3 gap-2 p-4">
+                <div className={`grid grid-cols-3 gap-2 p-4 ${draggingCardId ? 'touch-none' : ''}`}>
                   {cards.map((card) => (
                     <RegisteredCardTile
                       key={card.id}
                       card={card}
-                      onClick={() => setSelectedCardId(card.id)}
+                      isDragging={draggingCardId === card.id}
+                      onPointerDown={handleCardPointerDown(card.id)}
+                      onClick={() => {
+                        if (Date.now() - lastDragEndRef.current < 250) {
+                          return;
+                        }
+
+                        setSelectedCardId(card.id);
+                      }}
                     />
                   ))}
                 </div>
@@ -541,9 +688,13 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
 
 function RegisteredCardTile({
   card,
+  isDragging = false,
+  onPointerDown,
   onClick,
 }: {
   card: CardItem;
+  isDragging?: boolean;
+  onPointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onClick: () => void;
 }) {
   const style = getCardStyle(card.cardLabel);
@@ -556,13 +707,17 @@ function RegisteredCardTile({
   return (
     <button
       type="button"
+      data-card-id={card.id}
+      onPointerDown={onPointerDown}
       onClick={onClick}
-      className={`group relative block w-full min-w-0 overflow-hidden rounded-[13px] p-1.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${style.container}`}
+      className={`group relative block w-full min-w-0 overflow-hidden rounded-[13px] p-1.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${style.container} ${
+        isDragging ? 'z-10 scale-[1.03] ring-2 ring-violet-300 shadow-lg' : ''
+      }`}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.42),transparent_46%)]" />
       <div className="pointer-events-none absolute inset-0 rounded-[13px] shadow-[inset_0_1px_0_rgba(255,255,255,0.82),inset_0_-1px_0_rgba(15,23,42,0.04)]" />
       {isDaejeonLoveCard && (
-        <div className="pointer-events-none absolute -bottom-[2px] left-[-2px] right-[-2px] h-[24%] rounded-b-[12px] bg-[#b7191f]" />
+        <div className="pointer-events-none absolute -bottom-[2px] left-[-2px] right-[-2px] h-[24%] rounded-b-[12px] bg-[#c91f27]" />
       )}
       {!isLogoOnlyCard && (
         <div className="pointer-events-none absolute left-2 top-[57%] -translate-y-1/2 opacity-95">
