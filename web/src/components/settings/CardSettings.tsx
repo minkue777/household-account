@@ -93,10 +93,10 @@ function getCardStyle(cardLabel: string) {
     case '삼성':
       return {
         container:
-          'border border-transparent bg-gradient-to-br from-[#f7fbff] via-[#dcecff] to-[#9ec5ff] shadow-[0_14px_28px_-16px_rgba(29,78,216,0.5),0_2px_8px_rgba(255,255,255,0.72)_inset,0_-6px_14px_rgba(37,99,235,0.12)_inset] hover:border-transparent',
+          'border border-transparent bg-gradient-to-br from-[#f4fbff] via-[#9dc8ea] to-[#4f90cf] shadow-[0_14px_28px_-16px_rgba(8,47,73,0.34),0_2px_8px_rgba(255,255,255,0.74)_inset,0_-6px_14px_rgba(14,116,144,0.12)_inset] hover:border-transparent',
         title: 'text-slate-900',
-        number: 'text-blue-800',
-        mark: 'text-blue-600/70',
+        number: 'text-sky-900',
+        mark: 'text-sky-700/70',
       };
     case '농협':
       return {
