@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ConfirmDialog, ModalOverlay } from '@/components/common';
 import {
   addRegisteredCard,
@@ -187,6 +187,8 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
   const [detailError, setDetailError] = useState('');
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const cardsRef = useRef<CardItem[]>([]);
+  const cardGridRef = useRef<HTMLDivElement | null>(null);
+  const previousCardRectsRef = useRef<Map<string, DOMRect>>(new Map());
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragStateRef = useRef<{ cardId: string; active: boolean } | null>(null);
   const dragUnsubscribeRef = useRef<(() => void) | null>(null);
@@ -210,6 +212,64 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
 
   useEffect(() => {
     cardsRef.current = cards;
+  }, [cards]);
+
+  useLayoutEffect(() => {
+    const grid = cardGridRef.current;
+    if (!grid) {
+      return;
+    }
+
+    const cardElements = Array.from(grid.querySelectorAll<HTMLElement>('[data-card-id]'));
+    const nextRects = new Map(
+      cardElements
+        .map((element) => {
+          const cardId = element.dataset.cardId;
+          return cardId ? ([cardId, element.getBoundingClientRect()] as const) : null;
+        })
+        .filter((entry): entry is readonly [string, DOMRect] => entry !== null)
+    );
+
+    const previousRects = previousCardRectsRef.current;
+
+    cardElements.forEach((element) => {
+      const cardId = element.dataset.cardId;
+      if (!cardId) {
+        return;
+      }
+
+      const previousRect = previousRects.get(cardId);
+      const nextRect = nextRects.get(cardId);
+
+      if (!previousRect || !nextRect) {
+        return;
+      }
+
+      const deltaX = previousRect.left - nextRect.left;
+      const deltaY = previousRect.top - nextRect.top;
+
+      if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) {
+        return;
+      }
+
+      element.style.transition = 'none';
+      element.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+      element.style.willChange = 'transform';
+
+      requestAnimationFrame(() => {
+        element.style.transition = 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)';
+        element.style.transform = '';
+      });
+
+      const handleTransitionEnd = () => {
+        element.style.transition = '';
+        element.style.willChange = '';
+      };
+
+      element.addEventListener('transitionend', handleTransitionEnd, { once: true });
+    });
+
+    previousCardRectsRef.current = nextRects;
   }, [cards]);
 
   useEffect(() => {
@@ -576,7 +636,10 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                   등록된 카드가 없습니다.
                 </div>
               ) : (
-                <div className={`grid grid-cols-3 gap-2 p-4 ${draggingCardId ? 'touch-none' : ''}`}>
+                <div
+                  ref={cardGridRef}
+                  className={`grid grid-cols-3 gap-2 p-4 ${draggingCardId ? 'touch-none' : ''}`}
+                >
                   {cards.map((card) => (
                     <RegisteredCardTile
                       key={card.id}
