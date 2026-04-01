@@ -425,6 +425,29 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
     };
   }, []);
 
+  useEffect(() => {
+    if (!draggingCardId) {
+      return;
+    }
+
+    const preventScroll = (event: TouchEvent) => {
+      event.preventDefault();
+    };
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    document.addEventListener('touchmove', preventScroll, { passive: false });
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.removeEventListener('touchmove', preventScroll);
+    };
+  }, [draggingCardId]);
+
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <button
