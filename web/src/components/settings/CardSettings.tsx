@@ -114,6 +114,14 @@ function getCardStyle(cardLabel: string) {
         number: 'text-slate-700',
         mark: 'text-slate-500/70',
       };
+    case '카카오페이':
+      return {
+        container:
+          'border-2 border-yellow-300 bg-gradient-to-br from-[#fff36a] via-[#ffe500] to-[#ffd800] shadow-[0_10px_24px_-16px_rgba(161,98,7,0.28),0_2px_6px_rgba(255,255,255,0.35)_inset] hover:border-yellow-400',
+        title: 'text-slate-900',
+        number: 'text-slate-800',
+        mark: 'text-slate-800/70',
+      };
     case '대전사랑카드':
       return {
         container:
@@ -523,6 +531,7 @@ function RegisteredCardTile({
   onClick: () => void;
 }) {
   const style = getCardStyle(card.cardLabel);
+  const isKakaoPay = card.cardLabel === '카카오페이';
   const isDaejeonLoveCard = card.cardLabel === '대전사랑카드';
 
   return (
@@ -536,7 +545,8 @@ function RegisteredCardTile({
       {isDaejeonLoveCard && (
         <div className="pointer-events-none absolute -bottom-[2px] left-[-2px] right-[-2px] h-[24%] rounded-b-[12px] bg-[#b7191f]" />
       )}
-      <div className="pointer-events-none absolute left-2 top-[57%] -translate-y-1/2 opacity-95">
+      {!isKakaoPay && (
+        <div className="pointer-events-none absolute left-2 top-[57%] -translate-y-1/2 opacity-95">
         <div className="relative h-[16px] w-[21px] rounded-[4px] border border-[#b7852b]/35 bg-gradient-to-br from-[#ebcc82] via-[#d9b066] to-[#bc8d3a] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
           <div className="absolute left-[32%] top-[2px] bottom-[2px] w-px bg-black/10" />
           <div className="absolute left-1/2 top-[1px] bottom-[1px] w-px -translate-x-1/2 bg-black/12" />
@@ -544,13 +554,23 @@ function RegisteredCardTile({
           <div className="absolute inset-x-[4px] top-[5px] h-px bg-black/10" />
           <div className="absolute inset-x-[4px] bottom-[5px] h-px bg-black/10" />
         </div>
-      </div>
+        </div>
+      )}
       <div className="relative aspect-[1.586/1]">
         <div className="absolute left-1 top-0.5">
           <p className={`text-[10px] font-semibold tracking-tight ${style.title}`}>
             {getCardDisplayName(card.cardLabel)}
           </p>
         </div>
+
+        {isKakaoPay && (
+          <div className="absolute left-[10px] top-[50%] flex -translate-y-1/2 items-center gap-1.5 text-slate-900">
+            <div className="relative h-[18px] w-[18px] rounded-full bg-current">
+              <div className="absolute -bottom-[3px] left-[3px] h-0 w-0 border-l-[4px] border-r-[2px] border-t-[6px] border-l-transparent border-r-transparent border-t-current" />
+            </div>
+            <span className="text-[18px] font-black tracking-[-0.06em] leading-none">pay</span>
+          </div>
+        )}
 
         <div className={isDaejeonLoveCard ? 'absolute bottom-[12px] right-1.5' : 'absolute bottom-1 right-1.5'}>
           {card.cardLastFour ? (
