@@ -257,7 +257,7 @@ export default function AssetDividendChart() {
       {selectedMonth ? (
         <ModalOverlay onClose={() => setSelectedMonth(null)}>
           <div className="m-4 flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
-            <div className="relative border-b border-slate-100 px-5 pb-4 pt-7">
+            <div className="relative border-b border-slate-100 px-5 pb-4 pt-8">
               <button
                 type="button"
                 onClick={() => setSelectedMonth(null)}
@@ -265,11 +265,11 @@ export default function AssetDividendChart() {
               >
                 <X className="h-3.5 w-3.5 text-slate-500" />
               </button>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 pr-4">
                 <h3 className="min-w-0 flex-1 text-base font-semibold text-slate-800">
                   {selectedMonthLabel} 배당금
                 </h3>
-                <div className="w-[132px] flex-shrink-0 text-right">
+                <div className="min-w-[140px] flex-shrink-0 text-right">
                   <span className="text-lg font-semibold tracking-tight text-red-500">
                     {selectedMonthTotal.toLocaleString()}원
                   </span>
