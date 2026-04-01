@@ -117,10 +117,10 @@ function getCardStyle(cardLabel: string) {
     case '비씨':
       return {
         container:
-          'border border-transparent bg-gradient-to-br from-[#fffefb] via-[#f8f0e0] to-[#e7dac0] shadow-[0_14px_28px_-16px_rgba(120,113,108,0.34),0_2px_8px_rgba(255,255,255,0.72)_inset,0_-6px_14px_rgba(120,113,108,0.05)_inset] hover:border-transparent',
+          'border border-transparent bg-gradient-to-br from-[#fff6f7] via-[#f8b6bd] to-[#e54d55] shadow-[0_14px_28px_-16px_rgba(190,24,93,0.34),0_2px_8px_rgba(255,255,255,0.72)_inset,0_-6px_14px_rgba(225,29,72,0.08)_inset] hover:border-transparent',
         title: 'text-slate-900',
-        number: 'text-stone-700',
-        mark: 'text-stone-500/70',
+        number: 'text-rose-800',
+        mark: 'text-rose-600/70',
       };
     case '현대':
       return {
