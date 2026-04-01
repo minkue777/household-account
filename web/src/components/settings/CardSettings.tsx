@@ -339,7 +339,7 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                   등록된 카드가 없습니다.
                 </div>
               ) : (
-                <div className="flex flex-wrap items-start gap-3 p-4">
+                <div className="grid grid-cols-3 gap-2 p-4">
                   {cards.map((card) => (
                     <RegisteredCardTile
                       key={card.id}
@@ -477,18 +477,16 @@ function RegisteredCardTile({
     <button
       type="button"
       onClick={onClick}
-      className={`group relative block w-[116px] max-w-full overflow-hidden rounded-[13px] p-1.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${style.container}`}
+      className={`group relative block w-full min-w-0 overflow-hidden rounded-[13px] p-1.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${style.container}`}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.42),transparent_46%)]" />
       <div className="pointer-events-none absolute inset-0 rounded-[13px] shadow-[inset_0_1px_0_rgba(255,255,255,0.82),inset_0_-1px_0_rgba(15,23,42,0.04)]" />
       <div className="pointer-events-none absolute left-1 top-[56%] -translate-y-1/2 opacity-95">
-        <div className="relative h-[22px] w-[24px] rounded-[6px] border border-white/55 bg-gradient-to-br from-[#f0d38c] via-[#deb86c] to-[#bf8f3c] shadow-[inset_0_1px_0_rgba(255,255,255,0.38)]">
-          <div className="absolute inset-[2px] rounded-[4px] border border-black/8" />
-          <div className="absolute inset-y-1 left-[31%] w-px bg-white/28" />
-          <div className="absolute inset-y-1 right-[31%] w-px bg-black/10" />
-          <div className="absolute left-1/2 top-1 bottom-1 w-px -translate-x-1/2 bg-black/8" />
-          <div className="absolute inset-x-1 top-[38%] h-px bg-white/22" />
-          <div className="absolute inset-x-1 bottom-[38%] h-px bg-black/8" />
+        <div className="relative h-[22px] w-[24px] rounded-[6px] border border-[#b7852b]/45 bg-gradient-to-br from-[#efd089] via-[#ddb56a] to-[#bf8d3a] shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
+          <div className="absolute inset-[2px] rounded-[4px] border border-black/10" />
+          <div className="absolute left-1/2 top-[2px] bottom-[2px] w-px -translate-x-1/2 bg-black/10" />
+          <div className="absolute inset-x-[4px] top-[7px] h-px bg-black/10" />
+          <div className="absolute inset-x-[4px] bottom-[7px] h-px bg-black/8" />
         </div>
       </div>
       <div className="relative aspect-[1.586/1]">
