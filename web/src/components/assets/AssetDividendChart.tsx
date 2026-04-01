@@ -196,8 +196,6 @@ export default function AssetDividendChart() {
   const totalDividend = monthlyDividendData.reduce((sum, item) => sum + item.dividend, 0);
   const selectedMonthLabel = selectedMonth ? `${selectedMonth}월` : '';
   const selectedMonthTotal = selectedMonthEvents.reduce((sum, event) => sum + event.totalAmount, 0);
-  const shortDividendYearLabel = `${String(dividendYear).slice(-2)}년`;
-
   return (
     <>
       <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
@@ -260,10 +258,9 @@ export default function AssetDividendChart() {
           <div className="m-4 flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
             <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4">
               <h3 className="text-base font-semibold text-slate-800">
-                {shortDividendYearLabel} {selectedMonthLabel} 배당금
+                {selectedMonthLabel} 배당금
               </h3>
-              <div className="flex items-baseline gap-2 text-right">
-                <span className="text-xs font-medium text-slate-500">총액</span>
+              <div className="flex items-baseline text-right">
                 <span className="text-lg font-semibold tracking-tight text-red-500">
                   {selectedMonthTotal.toLocaleString()}원
                 </span>
