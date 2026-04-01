@@ -85,7 +85,7 @@ function getCardStyle(cardLabel: string) {
     case '국민':
       return {
         container:
-          'border border-transparent bg-gradient-to-br from-[#fffef9] via-[#fbefbf] to-[#e5c15c] shadow-[0_16px_30px_-18px_rgba(146,64,14,0.5),0_2px_10px_rgba(255,255,255,0.78)_inset,0_-8px_18px_rgba(146,64,14,0.1)_inset] hover:border-transparent',
+          'border border-transparent bg-gradient-to-br from-[#fff9cf] via-[#ffd45c] to-[#f0b321] shadow-[0_16px_30px_-18px_rgba(161,98,7,0.54),0_2px_10px_rgba(255,255,255,0.74)_inset,0_-8px_18px_rgba(180,83,9,0.12)_inset] hover:border-transparent',
         title: 'text-slate-900',
         number: 'text-amber-900',
         mark: 'text-amber-700/70',
