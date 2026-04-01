@@ -66,7 +66,7 @@ function getCardStyle(cardLabel: string) {
   if (cardLabel === '국민') {
     return {
       container:
-        'border-2 border-amber-300 bg-gradient-to-br from-[#fffef8] via-[#fff7dd] to-[#f6da84] shadow-[0_10px_24px_-16px_rgba(161,98,7,0.5),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-amber-400',
+        'border-2 border-amber-300 bg-gradient-to-br from-[#fffdf8] via-[#fffdf7] to-[#fffaf0] shadow-[0_10px_24px_-16px_rgba(161,98,7,0.5),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-amber-400',
       title: 'text-slate-900',
       number: 'text-amber-800',
       mark: 'text-amber-600/70',
@@ -75,7 +75,7 @@ function getCardStyle(cardLabel: string) {
 
   return {
     container:
-      'border border-slate-200 bg-gradient-to-br from-[#ffffff] via-[#f8fafc] to-[#edf2f7] shadow-[0_10px_24px_-18px_rgba(15,23,42,0.35),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-violet-200',
+      'border border-slate-200 bg-gradient-to-br from-[#fdfefe] via-[#fcfdfe] to-[#fafbfd] shadow-[0_10px_24px_-18px_rgba(15,23,42,0.35),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-violet-200',
     title: 'text-slate-900',
     number: 'text-slate-600',
     mark: 'text-slate-300',
@@ -479,13 +479,13 @@ function RegisteredCardTile({
       onClick={onClick}
       className={`group relative block w-[192px] max-w-full overflow-hidden rounded-[18px] p-2.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${style.container}`}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.78),transparent_42%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.42),transparent_46%)]" />
       <div className="pointer-events-none absolute inset-0 rounded-[18px] shadow-[inset_0_1px_0_rgba(255,255,255,0.82),inset_0_-1px_0_rgba(15,23,42,0.04)]" />
-      <div className="pointer-events-none absolute left-3 top-[44%] -translate-y-1/2 opacity-95">
-        <div className="relative h-7 w-10 rounded-[9px] border border-white/60 bg-gradient-to-br from-[#f8e6a6] via-[#e8c976] to-[#c79d44] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]">
-          <div className="absolute inset-y-1 left-1/3 w-px bg-white/30" />
-          <div className="absolute inset-y-1 right-1/3 w-px bg-black/10" />
-          <div className="absolute inset-x-1 top-1/2 h-px -translate-y-1/2 bg-white/25" />
+      <div className="pointer-events-none absolute left-3 top-[50%] -translate-y-1/2 opacity-95">
+        <div className="relative h-[32px] w-[42px] rounded-[11px] border border-white/60 bg-gradient-to-br from-[#f8e6a6] via-[#e8c976] to-[#c79d44] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]">
+          <div className="absolute inset-y-1.5 left-[34%] w-px bg-white/30" />
+          <div className="absolute inset-y-1.5 right-[34%] w-px bg-black/10" />
+          <div className="absolute inset-x-1.5 top-1/2 h-px -translate-y-1/2 bg-white/25" />
         </div>
       </div>
       <div className="relative aspect-[1.586/1]">
