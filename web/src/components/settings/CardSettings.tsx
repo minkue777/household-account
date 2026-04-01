@@ -489,33 +489,29 @@ function RegisteredCardTile({
         </div>
       </div>
       <div className="relative aspect-[1.586/1]">
-        <div className="flex h-full flex-col justify-between">
-          <div className="flex items-start justify-end">
-            <svg
-              className={`h-3.5 w-3.5 flex-shrink-0 transition-transform group-hover:translate-x-0.5 ${style.mark}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </div>
+        <div className="absolute left-2.5 top-1.5">
+          <p className={`text-[14px] font-semibold tracking-tight ${style.title}`}>
+            {getCardDisplayName(card.cardLabel)}
+          </p>
+        </div>
 
-          <div className="flex h-full flex-col justify-between pl-12 pt-0.5">
-            <div className="pt-0.5">
-              <p className={`text-[15px] font-semibold tracking-tight ${style.title}`}>
-                {getCardDisplayName(card.cardLabel)}
-              </p>
-            </div>
+        <div className="absolute right-1.5 top-1.5">
+          <svg
+            className={`h-3.5 w-3.5 flex-shrink-0 transition-transform group-hover:translate-x-0.5 ${style.mark}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
 
-            <div className="flex justify-end pb-0.5">
-              {card.cardLastFour ? (
-                <p className={`text-sm font-semibold tracking-[0.18em] ${style.number}`}>{card.cardLastFour}</p>
-              ) : (
-                <p className={`text-[11px] font-medium ${style.number}`}>번호 없이 인식</p>
-              )}
-            </div>
-          </div>
+        <div className="absolute bottom-1.5 right-2.5">
+          {card.cardLastFour ? (
+            <p className={`text-sm font-semibold tracking-[0.18em] ${style.number}`}>{card.cardLastFour}</p>
+          ) : (
+            <p className={`text-[11px] font-medium ${style.number}`}>번호 없이 인식</p>
+          )}
         </div>
       </div>
     </button>
