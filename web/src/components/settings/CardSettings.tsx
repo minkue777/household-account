@@ -33,20 +33,49 @@ function isNumberlessLabel(label: string) {
   return NUMBERLESS_REGISTERED_CARD_LABELS.has(label as RegisteredCardLabel);
 }
 
+function getCardDisplayName(cardLabel: string) {
+  switch (cardLabel) {
+    case '국민':
+      return 'KB국민카드';
+    case '삼성':
+      return '삼성카드';
+    case '농협':
+      return 'NH농협카드';
+    case '롯데':
+      return '롯데카드';
+    case '비씨':
+      return 'BC카드';
+    case '네이버페이':
+      return 'NAVER Pay';
+    case '카카오페이':
+      return '카카오페이';
+    case '토스':
+      return '토스';
+    case '대전사랑카드':
+      return '대전사랑카드';
+    case '온누리':
+      return '온누리상품권';
+    case '지역':
+      return '지역카드';
+    default:
+      return cardLabel;
+  }
+}
+
 function getCardStyle(cardLabel: string) {
   if (cardLabel === '국민') {
     return {
       container:
-        'border-2 border-amber-300 bg-gradient-to-br from-white via-amber-50 to-amber-100 shadow-amber-100/80 hover:border-amber-400',
+        'border-2 border-amber-300 bg-gradient-to-br from-[#fffdfa] via-[#fff4cf] to-[#f1d36f] shadow-[0_12px_24px_-14px_rgba(217,159,21,0.8)] hover:border-amber-400',
       title: 'text-slate-900',
-      number: 'text-amber-700',
-      mark: 'text-amber-500/70',
+      number: 'text-amber-800',
+      mark: 'text-amber-600/70',
     };
   }
 
   return {
     container:
-      'border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 shadow-slate-200/70 hover:border-violet-200',
+      'border border-slate-200 bg-gradient-to-br from-[#ffffff] via-[#f8fafc] to-[#e9eef5] shadow-[0_12px_24px_-16px_rgba(15,23,42,0.35)] hover:border-violet-200',
     title: 'text-slate-900',
     number: 'text-slate-600',
     mark: 'text-slate-300',
@@ -450,19 +479,19 @@ function RegisteredCardTile({
       onClick={onClick}
       className={`group relative block w-[192px] max-w-full overflow-hidden rounded-[18px] p-2.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${style.container}`}
     >
-      <div className="pointer-events-none absolute left-8 top-1/2 -translate-y-1/2 opacity-90">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.78),transparent_42%)]" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black/8 to-transparent" />
+      <div className="pointer-events-none absolute inset-0 rounded-[18px] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),inset_0_-1px_0_rgba(15,23,42,0.05)]" />
+      <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 opacity-95">
         <div className="relative h-7 w-10 rounded-[9px] border border-white/60 bg-gradient-to-br from-[#f8e6a6] via-[#e8c976] to-[#c79d44] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]">
           <div className="absolute inset-y-1 left-1/3 w-px bg-white/30" />
           <div className="absolute inset-y-1 right-1/3 w-px bg-black/10" />
           <div className="absolute inset-x-1 top-1/2 h-px -translate-y-1/2 bg-white/25" />
         </div>
       </div>
-      <div className="aspect-[1.586/1]">
+      <div className="relative aspect-[1.586/1]">
         <div className="flex h-full flex-col justify-between">
-          <div className="flex items-start justify-between gap-3">
-            <div className="rounded-full border border-white/60 bg-white/70 px-1.5 py-0.5 text-[8px] font-medium text-slate-500">
-              등록 카드
-            </div>
+          <div className="flex items-start justify-end">
             <svg
               className={`h-3.5 w-3.5 flex-shrink-0 transition-transform group-hover:translate-x-0.5 ${style.mark}`}
               fill="none"
@@ -473,13 +502,20 @@ function RegisteredCardTile({
             </svg>
           </div>
 
-          <div className="space-y-0.5">
-            <p className={`text-base font-semibold tracking-tight ${style.title}`}>{card.cardLabel}</p>
-            {card.cardLastFour ? (
-              <p className={`text-sm font-medium tracking-[0.18em] ${style.number}`}>{card.cardLastFour}</p>
-            ) : (
-              <p className={`text-[11px] font-medium ${style.number}`}>번호 없이 인식</p>
-            )}
+          <div className="flex h-full flex-col justify-between pl-12 pt-1">
+            <div>
+              <p className={`text-[15px] font-semibold tracking-tight ${style.title}`}>
+                {getCardDisplayName(card.cardLabel)}
+              </p>
+            </div>
+
+            <div className="flex justify-end">
+              {card.cardLastFour ? (
+                <p className={`text-sm font-semibold tracking-[0.18em] ${style.number}`}>{card.cardLastFour}</p>
+              ) : (
+                <p className={`text-[11px] font-medium ${style.number}`}>번호 없이 인식</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
