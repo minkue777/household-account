@@ -605,12 +605,11 @@ function RegisteredCardTile({
         {isToss && (
           <>
             <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 text-white">
-              <div className="relative h-[18px] w-[20px]">
-                <div className="absolute left-0 top-[2px] h-[14px] w-[11px] rounded-[8px] bg-white" />
-                <div className="absolute right-0 top-[2px] h-[14px] w-[11px] rounded-[8px] bg-white/95" />
-                <div className="absolute left-[9px] top-0 h-[18px] w-[3px] -skew-x-[12deg] bg-white" />
+              <div className="relative h-[18px] w-[18px]">
+                <div className="absolute right-0 top-[2px] h-[14px] w-[14px] rounded-full bg-white" />
+                <div className="absolute left-[1px] top-[6px] h-[9px] w-[8px] -rotate-[18deg] rounded-[8px_8px_8px_1px] bg-white" />
               </div>
-              <span className="text-[16px] font-black tracking-[-0.05em] leading-none">toss</span>
+              <span className="text-[16px] font-bold tracking-[-0.05em] leading-none">toss</span>
             </div>
           </>
         )}
