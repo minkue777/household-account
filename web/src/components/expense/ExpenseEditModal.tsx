@@ -195,7 +195,7 @@ export default function ExpenseEditModal({
           type="date"
           value={date}
           onChange={(event) => setDate(event.target.value)}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500 [&::-webkit-calendar-picker-indicator]:mr-1 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
         />
       </div>
     </div>

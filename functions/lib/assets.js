@@ -154,13 +154,18 @@ exports.dailyAssetSnapshot = functions
                     .get();
                 let totalBalance = 0;
                 let financialBalance = 0;
+                const ownerTotals = {};
                 allAssetsSnapshot.docs.forEach((doc) => {
                     const data = doc.data();
-                    const balance = data.currentBalance || 0;
+                    const rawBalance = data.currentBalance || 0;
+                    const balance = data.type === 'loan' ? -Math.abs(rawBalance) : rawBalance;
                     totalBalance += balance;
                     // 금융자산 (부동산 제외)
                     if (data.type !== 'property') {
                         financialBalance += balance;
+                    }
+                    if (typeof data.owner === 'string' && data.owner) {
+                        ownerTotals[data.owner] = (ownerTotals[data.owner] || 0) + balance;
                     }
                 });
                 // 2-5. 이전 스냅샷 조회 (previousBalance 계산용)
@@ -178,6 +183,10 @@ exports.dailyAssetSnapshot = functions
                 };
                 const prevTotal = await getPreviousBalance('TOTAL');
                 const prevFinancial = await getPreviousBalance('FINANCIAL');
+                const prevOwnerTotals = await Promise.all(Object.keys(ownerTotals).map(async (owner) => [
+                    owner,
+                    await getPreviousBalance(`OWNER_${owner}`),
+                ]));
                 // 2-6. 스냅샷 저장
                 const saveSnapshot = async (assetId, suffix, balance, prevBalance) => {
                     const snapshotId = `${householdId}_${suffix}_${today}`;
@@ -200,6 +209,7 @@ exports.dailyAssetSnapshot = functions
                 };
                 await saveSnapshot('TOTAL', 'total', totalBalance, prevTotal);
                 await saveSnapshot('FINANCIAL', 'financial', financialBalance, prevFinancial);
+                await Promise.all(prevOwnerTotals.map(([owner, prevBalance]) => saveSnapshot(`OWNER_${owner}`, `owner_${encodeURIComponent(owner)}`, ownerTotals[owner], prevBalance)));
                 console.log(`가구 ${householdId} 완료: 총자산=${totalBalance}, 금융=${financialBalance}`);
             }
             catch (error) {

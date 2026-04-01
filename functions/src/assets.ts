@@ -133,15 +133,21 @@ export const dailyAssetSnapshot = functions
 
           let totalBalance = 0;
           let financialBalance = 0;
+          const ownerTotals: Record<string, number> = {};
 
           allAssetsSnapshot.docs.forEach((doc) => {
             const data = doc.data();
-            const balance = data.currentBalance || 0;
+            const rawBalance = data.currentBalance || 0;
+            const balance = data.type === 'loan' ? -Math.abs(rawBalance) : rawBalance;
             totalBalance += balance;
 
             // 금융자산 (부동산 제외)
             if (data.type !== 'property') {
               financialBalance += balance;
+            }
+
+            if (typeof data.owner === 'string' && data.owner) {
+              ownerTotals[data.owner] = (ownerTotals[data.owner] || 0) + balance;
             }
           });
 
@@ -161,6 +167,12 @@ export const dailyAssetSnapshot = functions
 
           const prevTotal = await getPreviousBalance('TOTAL');
           const prevFinancial = await getPreviousBalance('FINANCIAL');
+          const prevOwnerTotals = await Promise.all(
+            Object.keys(ownerTotals).map(async (owner) => [
+              owner,
+              await getPreviousBalance(`OWNER_${owner}`),
+            ] as const)
+          );
 
           // 2-6. 스냅샷 저장
           const saveSnapshot = async (
@@ -194,6 +206,11 @@ export const dailyAssetSnapshot = functions
 
           await saveSnapshot('TOTAL', 'total', totalBalance, prevTotal);
           await saveSnapshot('FINANCIAL', 'financial', financialBalance, prevFinancial);
+          await Promise.all(
+            prevOwnerTotals.map(([owner, prevBalance]) =>
+              saveSnapshot(`OWNER_${owner}`, `owner_${encodeURIComponent(owner)}`, ownerTotals[owner], prevBalance)
+            )
+          );
 
           console.log(`가구 ${householdId} 완료: 총자산=${totalBalance}, 금융=${financialBalance}`);
         } catch (error) {

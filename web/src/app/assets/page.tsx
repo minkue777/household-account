@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Asset, AssetType, isGoldEtfSubType } from '@/types/asset';
 import {
   subscribeToAssets,
-  getDailyAssetChange,
+  getDailyAssetChangeByOwner,
   saveDailyTotalSnapshot,
   addSampleAssets,
   processLoanAutoRepayments,
@@ -89,7 +89,10 @@ export default function AssetsPage() {
   }, [memberOptions, selectedMember]);
 
   useEffect(() => {
-    if (assets.length === 0) return;
+    if (assets.length === 0) {
+      setDailyChange(0);
+      return;
+    }
 
     const activeAssets = assets.filter((asset) => asset.isActive);
     const currentTotal = sumSignedAssetBalances(activeAssets);
@@ -97,12 +100,18 @@ export default function AssetsPage() {
       activeAssets.filter((asset) => asset.type !== 'property')
     );
 
-    getDailyAssetChange()
-      .then(setDailyChange)
-      .catch(() => setDailyChange(0));
+    const syncDailySummary = async () => {
+      try {
+        await saveDailyTotalSnapshot(currentTotal, financialTotal, activeAssets);
+        const change = await getDailyAssetChangeByOwner(selectedMember);
+        setDailyChange(change);
+      } catch {
+        setDailyChange(0);
+      }
+    };
 
-    saveDailyTotalSnapshot(currentTotal, financialTotal, activeAssets);
-  }, [assets]);
+    void syncDailySummary();
+  }, [assets, selectedMember]);
 
   const handleAssetClick = (asset: Asset) => {
     setSelectedAsset(asset);
@@ -143,30 +152,32 @@ export default function AssetsPage() {
   return (
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
       <div className="mx-auto max-w-lg">
-        <header className="mb-6 flex items-center justify-between">
-          <Link
-            href="/"
-            className="flex cursor-pointer items-center gap-2 transition-opacity hover:opacity-80"
-          >
-            <h1
-              className="text-lg font-bold leading-tight md:text-2xl"
-              style={{
-                background: themeConfig.titleGradient,
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-              }}
-            >
-              {household?.name || '우리집'}
-              <br />
-              자산
-            </h1>
-            <img
-              src="/bear-removebg-preview.png"
-              alt="곰돌이"
-              className="h-14 w-14 object-contain md:h-16 md:w-16"
-            />
-          </Link>
+        <header className="mb-6 flex items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <Link href="/" className="min-w-0 transition-opacity hover:opacity-80">
+              <h1
+                className="text-lg font-bold leading-tight md:text-2xl"
+                style={{
+                  background: themeConfig.titleGradient,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}
+              >
+                {household?.name || '우리집'}
+                <br />
+                자산
+              </h1>
+            </Link>
+
+            <Link href="/" className="cursor-pointer transition-opacity hover:opacity-80">
+              <img
+                src="/bear-removebg-preview.png"
+                alt="홈으로 이동"
+                className="h-14 w-14 object-contain md:h-16 md:w-16"
+              />
+            </Link>
+          </div>
 
           <div className="flex items-center gap-2">
             {!isLoading && assets.length === 0 && (

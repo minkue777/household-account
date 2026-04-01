@@ -16,6 +16,16 @@ import { addExpense } from './expenseService';
 
 export type { RecurringExpense, CreateRecurringExpenseInput };
 
+function sortRecurringExpenses(expenses: RecurringExpense[]) {
+  return [...expenses].sort((a, b) => {
+    if (a.dayOfMonth !== b.dayOfMonth) {
+      return a.dayOfMonth - b.dayOfMonth;
+    }
+
+    return a.merchant.localeCompare(b.merchant, 'ko');
+  });
+}
+
 const COLLECTION_NAME = 'recurring_expenses';
 const recurringRef = collection(db, COLLECTION_NAME);
 
@@ -107,7 +117,7 @@ export function subscribeToRecurringExpenses(
           updatedAt: data.updatedAt?.toDate(),
         };
       });
-      callback(expenses);
+      callback(sortRecurringExpenses(expenses));
     },
     (error) => {
       callback([]);
@@ -126,7 +136,7 @@ export async function getRecurringExpenses(householdId: string): Promise<Recurri
   const q = query(recurringRef, where('householdId', '==', householdId));
   const snapshot = await getDocs(q);
 
-  return snapshot.docs.map((doc) => {
+  const expenses = snapshot.docs.map((doc) => {
     const data = doc.data();
     return {
       id: doc.id,
@@ -142,6 +152,8 @@ export async function getRecurringExpenses(householdId: string): Promise<Recurri
       updatedAt: data.updatedAt?.toDate(),
     };
   });
+
+  return sortRecurringExpenses(expenses);
 }
 
 /**

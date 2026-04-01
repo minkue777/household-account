@@ -30,9 +30,10 @@ import {
 } from '@/types/asset';
 import { getStoredHouseholdKey } from './householdService';
 import { formatLocalDate } from './utils/date';
-import { buildLegacyAssetOwnerMap } from './assets/memberOptions';
+import { ALL_MEMBERS_OPTION, buildLegacyAssetOwnerMap } from './assets/memberOptions';
 import {
   calculateExpectedLoanPrincipalPayment,
+  getAssetSignedBalance,
   sumSignedBalancesByAssetType,
 } from './assets/assetMath';
 
@@ -375,7 +376,7 @@ export async function getMonthlyAssetChange(currentTotal: number): Promise<numbe
 export async function getDailyAssetChange(): Promise<number> {
   const householdId = getHouseholdId();
   const today = formatLocalDate(new Date());
-  const todayId = `${householdId}_financial_${today}`;
+  const todayId = `${householdId}_total_${today}`;
 
   try {
     const todaySnap = await getDoc(doc(db, HISTORY_COLLECTION, todayId));
@@ -466,7 +467,7 @@ async function saveDailySnapshot(
 export async function saveDailyTotalSnapshot(
   totalBalance: number,
   financialBalance?: number,
-  assets?: Array<Pick<Asset, 'type' | 'currentBalance'>>
+  assets?: Array<Pick<Asset, 'type' | 'currentBalance' | 'owner'>>
 ): Promise<void> {
   // 전체 자산 스냅샷 저장
   await saveDailySnapshot('TOTAL', totalBalance, 'total');
@@ -478,12 +479,56 @@ export async function saveDailyTotalSnapshot(
 
   if (assets && assets.length > 0) {
     const typeTotals = sumSignedBalancesByAssetType(assets);
+    const ownerTotals = assets.reduce<Record<string, number>>((accumulator, asset) => {
+      if (!asset.owner) {
+        return accumulator;
+      }
+
+      accumulator[asset.owner] = (accumulator[asset.owner] || 0) + getAssetSignedBalance(asset);
+      return accumulator;
+    }, {});
 
     await Promise.all(
-      Object.entries(typeTotals).map(([type, balance]) =>
-        saveDailySnapshot(`TYPE_${type}`, balance, `type_${type as AssetType}`)
-      )
+      [
+        ...Object.entries(typeTotals).map(([type, balance]) =>
+          saveDailySnapshot(`TYPE_${type}`, balance, `type_${type as AssetType}`)
+        ),
+        ...Object.entries(ownerTotals).map(([owner, balance]) =>
+          saveDailySnapshot(getOwnerSnapshotAssetId(owner), balance, getOwnerSnapshotIdSuffix(owner))
+        ),
+      ]
     );
+  }
+}
+
+function getOwnerSnapshotAssetId(owner: string): string {
+  return `OWNER_${owner}`;
+}
+
+function getOwnerSnapshotIdSuffix(owner: string): string {
+  return `owner_${encodeURIComponent(owner)}`;
+}
+
+export async function getDailyAssetChangeByOwner(owner: string): Promise<number> {
+  if (!owner || owner === ALL_MEMBERS_OPTION) {
+    return getDailyAssetChange();
+  }
+
+  const householdId = getHouseholdId();
+  const today = formatLocalDate(new Date());
+  const todayId = `${householdId}_${getOwnerSnapshotIdSuffix(owner)}_${today}`;
+
+  try {
+    const todaySnap = await getDoc(doc(db, HISTORY_COLLECTION, todayId));
+
+    if (!todaySnap.exists()) {
+      return 0;
+    }
+
+    return todaySnap.data().changeAmount || 0;
+  } catch (error) {
+    console.error('사용자별 자산 변동액 조회 오류:', error);
+    return 0;
   }
 }
 

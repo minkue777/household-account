@@ -104,6 +104,7 @@ export default function AssetStatsPage() {
   const [financialOnly, setFinancialOnly] = useState(false);
   const [enabledSeries, setEnabledSeries] = useState<Set<TrendSeriesKey>>(new Set<TrendSeriesKey>(['all']));
   const hasInitializedSeries = useRef(false);
+  const trendChartRef = useRef<ChartJS<'line', Array<number | null>, string> | null>(null);
 
   useEffect(() => {
     const unsubscribe = subscribeToAssets((newAssets) => {
@@ -337,6 +338,15 @@ export default function AssetStatsPage() {
         mode: 'index' as const,
         intersect: false,
       },
+      onClick: (_event, elements, chart) => {
+        if (elements.length > 0) {
+          return;
+        }
+
+        chart.setActiveElements([]);
+        chart.tooltip?.setActiveElements([], { x: 0, y: 0 });
+        chart.update();
+      },
       plugins: {
         legend: {
           display: false,
@@ -419,10 +429,22 @@ export default function AssetStatsPage() {
     });
   };
 
+  const clearTrendChartSelection = () => {
+    const chart = trendChartRef.current;
+
+    if (!chart) {
+      return;
+    }
+
+    chart.setActiveElements([]);
+    chart.tooltip?.setActiveElements([], { x: 0, y: 0 });
+    chart.update();
+  };
+
   return (
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
       <div className="max-w-lg mx-auto">
-        <header className="mb-6 flex items-center gap-3">
+        <header className="mb-4 flex items-center gap-3">
           <Link
             href="/assets"
             className="p-2 hover:bg-white/95 rounded-xl transition-colors"
@@ -446,7 +468,7 @@ export default function AssetStatsPage() {
           <div className="text-center py-12 text-slate-400">로딩 중...</div>
         ) : (
           <div className="space-y-4">
-            <div className="flex justify-end">
+            <div className="hidden justify-end">
               <button
                 onClick={() => setFinancialOnly(!financialOnly)}
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all ${
@@ -459,7 +481,17 @@ export default function AssetStatsPage() {
               </button>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+            <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+              <button
+                onClick={() => setFinancialOnly(!financialOnly)}
+                className={`absolute right-5 top-5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+                  financialOnly
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {financialOnly ? '금융자산' : '전체자산'}
+              </button>
               <p className="text-sm text-slate-500 mb-1">
                 {financialOnly ? '금융자산' : '현재 총 자산'}
               </p>
@@ -496,7 +528,10 @@ export default function AssetStatsPage() {
               ))}
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+            <div
+              className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5"
+              onClick={clearTrendChartSelection}
+            >
               <h3 className="text-sm font-semibold text-slate-700 mb-4">자산 추이</h3>
 
               <div className="flex flex-wrap gap-2 mb-4">
@@ -538,9 +573,9 @@ export default function AssetStatsPage() {
                 })}
               </div>
 
-              <div className="h-[280px]">
+              <div className="h-[280px]" onClick={(event) => event.stopPropagation()}>
                 {chartData.datasets.length > 0 ? (
-                  <Line data={chartData} options={chartOptions} />
+                  <Line ref={trendChartRef} data={chartData} options={chartOptions} />
                 ) : (
                   <div className="h-full flex items-center justify-center text-slate-400">
                     표시할 자산 유형을 선택하세요

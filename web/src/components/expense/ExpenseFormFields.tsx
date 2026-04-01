@@ -58,6 +58,7 @@ export default function ExpenseFormFields({
   showCategoryField = true,
 }: ExpenseFormFieldsProps) {
   const textInputClassName = `w-full ${textInputPaddingClassName} py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500`;
+  const dateInputClassName = `w-full ${textInputPaddingClassName} py-2 pr-10 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 [&::-webkit-calendar-picker-indicator]:mr-1 [&::-webkit-calendar-picker-indicator]:cursor-pointer`;
 
   return (
     <div className="space-y-4">
@@ -112,7 +113,7 @@ export default function ExpenseFormFields({
             type="date"
             value={date}
             onChange={(event) => onDateChange(event.target.value)}
-            className={textInputClassName}
+            className={dateInputClassName}
           />
         </div>
       )}

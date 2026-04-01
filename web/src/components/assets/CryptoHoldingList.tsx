@@ -51,7 +51,9 @@ export default function CryptoHoldingList({
   };
 
   const handleSaveHolding = async () => {
-    if (!editingHolding || isSubmitting) return;
+    if (!editingHolding || isSubmitting) {
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -87,7 +89,7 @@ export default function CryptoHoldingList({
             className="flex items-center gap-1 text-xs text-orange-500 hover:text-orange-600 disabled:opacity-50"
           >
             <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
-            {isRefreshing ? '갱신중...' : '시세 갱신'}
+            {isRefreshing ? '갱신 중...' : '시세 갱신'}
           </button>
         )}
       </div>
@@ -100,7 +102,11 @@ export default function CryptoHoldingList({
         <div className="space-y-2">
           {holdings.map((holding) =>
             editingHolding?.id === holding.id ? (
-              <div key={holding.id} className="space-y-3 rounded-xl bg-orange-50 p-3">
+              <div
+                key={holding.id}
+                onClick={() => setEditingHolding(null)}
+                className="space-y-3 rounded-xl bg-orange-50 p-3"
+              >
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-medium text-slate-800">{holding.coinName}</p>
@@ -112,7 +118,11 @@ export default function CryptoHoldingList({
                     </p>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+
+                <div
+                  className="grid grid-cols-2 gap-2"
+                  onClick={(event) => event.stopPropagation()}
+                >
                   <div>
                     <label className="mb-1 block text-xs text-slate-500">수량</label>
                     <input
@@ -124,7 +134,7 @@ export default function CryptoHoldingList({
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-slate-500">평균 매수가</label>
+                    <label className="mb-1 block text-xs text-slate-500">평단 매수가</label>
                     <input
                       type="text"
                       inputMode="numeric"
@@ -135,11 +145,12 @@ export default function CryptoHoldingList({
                     />
                   </div>
                 </div>
-                <div className="flex gap-2">
+
+                <div className="flex gap-2" onClick={(event) => event.stopPropagation()}>
                   <button
                     type="button"
                     onClick={() => {
-                      if (confirm(`${holding.coinName}을(를) 삭제하시겠습니까?`)) {
+                      if (confirm(`${holding.coinName}을 삭제하시겠습니까?`)) {
                         void handleDeleteHolding(holding.id);
                         setEditingHolding(null);
                       }
@@ -147,13 +158,6 @@ export default function CryptoHoldingList({
                     className="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-500 hover:bg-red-50"
                   >
                     삭제
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingHolding(null)}
-                    className="flex-1 rounded-lg border border-slate-300 py-2 text-sm text-slate-600 hover:bg-white"
-                  >
-                    취소
                   </button>
                   <button
                     type="button"
@@ -200,12 +204,13 @@ function CryptoHoldingItem({ holding, onEdit }: CryptoHoldingItemProps) {
       <div className="flex items-center justify-between">
         <div className="mr-4 min-w-0 flex-1">
           <p className="truncate font-medium text-slate-800">{holding.coinName}</p>
+          <p className="mt-0.5 text-[11px] text-slate-400">{holding.marketCode}</p>
           <p className="text-xs text-slate-500">
             {formatQuantity(holding.quantity)}
             {holding.avgPrice ? ` · 평단 ${holding.avgPrice.toLocaleString()}원` : ''}
           </p>
-          <p className="mt-0.5 text-[11px] text-slate-400">{holding.marketCode}</p>
         </div>
+
         <div className="flex-shrink-0 text-right">
           <p className="font-semibold text-slate-800">
             {Math.round(calculateCryptoHoldingValue(holding)).toLocaleString()}원
