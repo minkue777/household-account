@@ -262,9 +262,12 @@ export default function AssetDividendChart() {
                 <h3 className="text-lg font-bold text-slate-800">
                   {dividendYear}년 {selectedMonthLabel} 배당금
                 </h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  총 {selectedMonthTotal.toLocaleString()}원
-                </p>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-sm font-medium text-slate-500">총액</span>
+                  <span className="text-2xl font-bold text-red-500">
+                    {selectedMonthTotal.toLocaleString()}원
+                  </span>
+                </div>
               </div>
               <button
                 type="button"
@@ -318,15 +321,6 @@ export default function AssetDividendChart() {
                   ))}
                 </div>
               )}
-            </div>
-
-            <div className="border-t border-slate-100 px-5 py-4">
-              <div className="flex items-center justify-between px-1 py-1">
-                <span className="text-sm font-medium text-slate-900">{selectedMonthLabel} 총 배당금</span>
-                <span className="text-lg font-bold text-red-500">
-                  {selectedMonthTotal.toLocaleString()}원
-                </span>
-              </div>
             </div>
           </div>
         </ModalOverlay>
