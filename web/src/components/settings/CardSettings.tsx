@@ -101,18 +101,18 @@ function getCardStyle(cardLabel: string) {
     case '농협':
       return {
         container:
-          'border border-transparent bg-gradient-to-br from-[#fbfff9] via-[#e4f8e9] to-[#bde5c8] shadow-[0_14px_28px_-16px_rgba(22,163,74,0.4),0_2px_8px_rgba(255,255,255,0.68)_inset,0_-6px_14px_rgba(22,163,74,0.08)_inset] hover:border-transparent',
-        title: 'text-slate-900',
-        number: 'text-emerald-700',
-        mark: 'text-emerald-500/70',
-      };
-    case '롯데':
-      return {
-        container:
           'border border-transparent bg-gradient-to-br from-[#23396d] via-[#1b2f5b] to-[#132243] shadow-[0_10px_24px_-16px_rgba(15,23,42,0.48),0_2px_6px_rgba(255,255,255,0.08)_inset] hover:border-transparent',
         title: 'text-white',
         number: 'text-white/95',
         mark: 'text-white/70',
+      };
+    case '롯데':
+      return {
+        container:
+          'border border-transparent bg-gradient-to-br from-[#fbfff9] via-[#e4f8e9] to-[#bde5c8] shadow-[0_14px_28px_-16px_rgba(22,163,74,0.4),0_2px_8px_rgba(255,255,255,0.68)_inset,0_-6px_14px_rgba(22,163,74,0.08)_inset] hover:border-transparent',
+        title: 'text-slate-900',
+        number: 'text-emerald-700',
+        mark: 'text-emerald-500/70',
       };
     case '비씨':
       return {
