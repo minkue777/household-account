@@ -333,6 +333,14 @@ class CardNotificationListenerService : NotificationListenerService() {
                     )
                 }
 
+                val duplicatedExpense = expenseRepository.findDuplicateExpenseForRegistration(
+                    householdId = householdId,
+                    expense = expenseToSave
+                )
+                if (duplicatedExpense != null) {
+                    return@launch
+                }
+
                 val documentId = expenseRepository.addExpense(expenseToSave)
                 if (documentId.isNotEmpty()) {
                     launchQuickEditActivity(

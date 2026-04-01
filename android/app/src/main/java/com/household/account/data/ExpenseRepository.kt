@@ -121,6 +121,36 @@ class ExpenseRepository {
         }
     }
 
+    suspend fun findDuplicateExpenseForRegistration(
+        householdId: String,
+        expense: Expense
+    ): Expense? {
+        if (householdId.isEmpty() || expense.date.isBlank()) {
+            return null
+        }
+
+        return try {
+            val snapshot = expensesCollection
+                .whereEqualTo("householdId", householdId)
+                .whereEqualTo("date", expense.date)
+                .get()
+                .await()
+
+            val normalizedMerchant = normalizeMerchant(expense.merchant)
+
+            snapshot.documents
+                .mapNotNull { doc -> doc.toObject(Expense::class.java)?.copy(id = doc.id) }
+                .firstOrNull { existing ->
+                    existing.transactionType == expense.transactionType &&
+                        existing.amount == expense.amount &&
+                        existing.time == expense.time &&
+                        normalizeMerchant(existing.merchant) == normalizedMerchant
+                }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     suspend fun findSplitGroupExpensesForCancellation(
         householdId: String,
         expense: Expense
