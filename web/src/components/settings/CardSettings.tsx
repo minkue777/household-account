@@ -69,7 +69,7 @@ function getCardStyle(cardLabel: string) {
     case '국민':
       return {
         container:
-          'border-2 border-amber-300 bg-gradient-to-br from-[#fffdf8] via-[#fffdf7] to-[#fffaf0] shadow-[0_10px_24px_-16px_rgba(161,98,7,0.5),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-amber-400',
+          'border border-amber-200/60 bg-gradient-to-br from-[#fffdf8] via-[#fffdf7] to-[#fffaf0] shadow-[0_10px_24px_-16px_rgba(161,98,7,0.45),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-amber-300/70',
         title: 'text-slate-900',
         number: 'text-amber-800',
         mark: 'text-amber-600/70',
@@ -77,7 +77,7 @@ function getCardStyle(cardLabel: string) {
     case '삼성':
       return {
         container:
-          'border-2 border-blue-300 bg-gradient-to-br from-[#fbfdff] via-[#f6faff] to-[#edf4ff] shadow-[0_10px_24px_-16px_rgba(37,99,235,0.32),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-blue-400',
+          'border border-blue-200/65 bg-gradient-to-br from-[#fbfdff] via-[#f6faff] to-[#edf4ff] shadow-[0_10px_24px_-16px_rgba(37,99,235,0.28),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-blue-300/75',
         title: 'text-slate-900',
         number: 'text-blue-700',
         mark: 'text-blue-500/70',
@@ -85,7 +85,7 @@ function getCardStyle(cardLabel: string) {
     case '농협':
       return {
         container:
-          'border-2 border-emerald-300 bg-gradient-to-br from-[#fbfffd] via-[#f2fbf5] to-[#e8f6ec] shadow-[0_10px_24px_-16px_rgba(22,163,74,0.28),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-emerald-400',
+          'border border-emerald-200/65 bg-gradient-to-br from-[#fbfffd] via-[#f2fbf5] to-[#e8f6ec] shadow-[0_10px_24px_-16px_rgba(22,163,74,0.24),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-emerald-300/75',
         title: 'text-slate-900',
         number: 'text-emerald-700',
         mark: 'text-emerald-500/70',
@@ -93,7 +93,7 @@ function getCardStyle(cardLabel: string) {
     case '롯데':
       return {
         container:
-          'border-2 border-rose-300 bg-gradient-to-br from-[#fffdfd] via-[#fff6f7] to-[#ffedf0] shadow-[0_10px_24px_-16px_rgba(225,29,72,0.28),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-rose-400',
+          'border border-rose-200/65 bg-gradient-to-br from-[#fffdfd] via-[#fff6f7] to-[#ffedf0] shadow-[0_10px_24px_-16px_rgba(225,29,72,0.24),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-rose-300/75',
         title: 'text-slate-900',
         number: 'text-rose-700',
         mark: 'text-rose-500/70',
@@ -101,7 +101,7 @@ function getCardStyle(cardLabel: string) {
     case '비씨':
       return {
         container:
-          'border-2 border-sky-300 bg-gradient-to-br from-[#fcfeff] via-[#f4faff] to-[#eaf4ff] shadow-[0_10px_24px_-16px_rgba(2,132,199,0.28),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-sky-400',
+          'border border-sky-200/65 bg-gradient-to-br from-[#fcfeff] via-[#f4faff] to-[#eaf4ff] shadow-[0_10px_24px_-16px_rgba(2,132,199,0.24),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-sky-300/75',
         title: 'text-slate-900',
         number: 'text-sky-700',
         mark: 'text-sky-500/70',
@@ -109,7 +109,7 @@ function getCardStyle(cardLabel: string) {
     case '현대':
       return {
         container:
-          'border-2 border-slate-400 bg-gradient-to-br from-[#ffffff] via-[#f7f8fa] to-[#eef1f5] shadow-[0_10px_24px_-16px_rgba(51,65,85,0.3),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-slate-500',
+          'border border-slate-300/70 bg-gradient-to-br from-[#ffffff] via-[#f7f8fa] to-[#eef1f5] shadow-[0_10px_24px_-16px_rgba(51,65,85,0.26),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-slate-400/80',
         title: 'text-slate-900',
         number: 'text-slate-700',
         mark: 'text-slate-500/70',
@@ -141,7 +141,7 @@ function getCardStyle(cardLabel: string) {
     case '대전사랑카드':
       return {
         container:
-          'border-2 border-slate-300 bg-gradient-to-br from-[#ffffff] via-[#fffefe] to-[#fbfbfb] shadow-[0_10px_24px_-16px_rgba(127,29,29,0.18),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-red-300',
+          'border border-slate-200/70 bg-gradient-to-br from-[#ffffff] via-[#fffefe] to-[#fbfbfb] shadow-[0_10px_24px_-16px_rgba(127,29,29,0.16),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-red-200/80',
         title: 'text-slate-900',
         number: 'text-slate-800',
         mark: 'text-red-500/70',
