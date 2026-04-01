@@ -133,10 +133,10 @@ function getCardStyle(cardLabel: string) {
     case '토스':
       return {
         container:
-          'border border-sky-100 bg-gradient-to-br from-[#fbfdff] via-[#f3f7ff] to-[#eef4ff] shadow-[0_10px_24px_-16px_rgba(59,130,246,0.22),0_2px_6px_rgba(255,255,255,0.4)_inset] hover:border-sky-200',
-        title: 'text-slate-900',
-        number: 'text-slate-800',
-        mark: 'text-slate-500/70',
+          'border border-transparent bg-gradient-to-br from-[#1f58f0] via-[#1b50e3] to-[#1848d6] shadow-[0_10px_24px_-16px_rgba(29,78,216,0.42),0_2px_6px_rgba(255,255,255,0.08)_inset] hover:border-transparent',
+        title: 'text-white',
+        number: 'text-white/95',
+        mark: 'text-white/70',
       };
     case '대전사랑카드':
       return {
@@ -604,15 +604,11 @@ function RegisteredCardTile({
 
         {isToss && (
           <>
-            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[13px]">
-              <div className="absolute -left-[8px] top-[-8px] h-[42px] w-[24px] rotate-12 bg-sky-200/35 blur-[2px]" />
-              <div className="absolute right-[-10px] bottom-[-8px] h-[28px] w-[56px] rounded-full bg-sky-300/25 blur-[2px]" />
-            </div>
-            <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 text-slate-900">
+            <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 text-white">
               <div className="relative h-[18px] w-[20px]">
-                <div className="absolute left-0 top-[2px] h-[14px] w-[11px] rounded-[8px] bg-gradient-to-br from-[#25a7ff] to-[#0f6bff]" />
-                <div className="absolute right-0 top-[2px] h-[14px] w-[11px] rounded-[8px] bg-gradient-to-br from-[#0f6bff] to-[#1643ff]" />
-                <div className="absolute left-[9px] top-0 h-[18px] w-[3px] -skew-x-[12deg] bg-[#0b84ff]" />
+                <div className="absolute left-0 top-[2px] h-[14px] w-[11px] rounded-[8px] bg-white" />
+                <div className="absolute right-0 top-[2px] h-[14px] w-[11px] rounded-[8px] bg-white/95" />
+                <div className="absolute left-[9px] top-0 h-[18px] w-[3px] -skew-x-[12deg] bg-white" />
               </div>
               <span className="text-[16px] font-black tracking-[-0.05em] leading-none">toss</span>
             </div>
