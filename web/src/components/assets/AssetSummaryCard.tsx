@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
 import { Asset, ASSET_TYPE_CONFIG, AssetType } from '@/types/asset';
@@ -61,6 +61,26 @@ export default function AssetSummaryCard({
     value: '',
     color: '#000000',
   });
+
+  useEffect(() => {
+    if (!tooltipState.visible) {
+      return;
+    }
+
+    const hideTooltip = () => {
+      setTooltipState((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+    };
+
+    window.addEventListener('scroll', hideTooltip, true);
+    window.addEventListener('resize', hideTooltip);
+    window.addEventListener('touchmove', hideTooltip, { passive: true });
+
+    return () => {
+      window.removeEventListener('scroll', hideTooltip, true);
+      window.removeEventListener('resize', hideTooltip);
+      window.removeEventListener('touchmove', hideTooltip);
+    };
+  }, [tooltipState.visible]);
 
   const filteredAssets = useMemo(() => {
     if (selectedMember === ALL_MEMBERS_OPTION) {

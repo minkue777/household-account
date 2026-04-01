@@ -257,24 +257,24 @@ export default function AssetDividendChart() {
       {selectedMonth ? (
         <ModalOverlay onClose={() => setSelectedMonth(null)}>
           <div className="m-4 flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
-            <div className="relative border-b border-slate-100 px-5 py-4 pr-12">
-              <div className="flex items-center justify-between gap-4">
-                <h3 className="text-base font-semibold text-slate-800">
+            <div className="relative border-b border-slate-100 px-5 pb-4 pt-7">
+              <button
+                type="button"
+                onClick={() => setSelectedMonth(null)}
+                className="absolute right-3 top-2 rounded-md p-1 transition-colors hover:bg-slate-100"
+              >
+                <X className="h-3.5 w-3.5 text-slate-500" />
+              </button>
+              <div className="flex items-center gap-4">
+                <h3 className="min-w-0 flex-1 text-base font-semibold text-slate-800">
                   {selectedMonthLabel} 배당금
                 </h3>
-                <div className="min-w-0 text-right">
+                <div className="w-[132px] flex-shrink-0 text-right">
                   <span className="text-lg font-semibold tracking-tight text-red-500">
                     {selectedMonthTotal.toLocaleString()}원
                   </span>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedMonth(null)}
-                className="absolute right-3 top-3 rounded-md p-1.5 transition-colors hover:bg-slate-100"
-              >
-                <X className="h-4 w-4 text-slate-500" />
-              </button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-4">
