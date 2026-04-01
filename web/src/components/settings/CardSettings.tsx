@@ -750,8 +750,11 @@ function RegisteredCardTile({
 
         {isKakaoPay && (
           <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 text-slate-900">
-            <div className="relative h-[18px] w-[18px] rounded-full bg-current">
-              <div className="absolute -bottom-[3px] left-[3px] h-0 w-0 border-l-[4px] border-r-[2px] border-t-[6px] border-l-transparent border-r-transparent border-t-current" />
+            <div className="relative h-[15px] w-[19px] rounded-[999px] bg-current">
+              <div
+                className="absolute left-[3px] top-[11px] h-[6px] w-[6px] bg-current"
+                style={{ clipPath: 'polygon(0 0, 100% 12%, 30% 100%)' }}
+              />
             </div>
             <span className="text-[18px] font-black tracking-[-0.06em] leading-none">pay</span>
           </div>
