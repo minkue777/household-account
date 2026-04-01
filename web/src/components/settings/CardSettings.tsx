@@ -109,26 +109,26 @@ function getCardStyle(cardLabel: string) {
     case '롯데':
       return {
         container:
-          'border border-rose-200/55 bg-gradient-to-br from-[#fffafa] via-[#ffecef] to-[#ffdce3] shadow-[0_10px_24px_-16px_rgba(225,29,72,0.26),0_2px_6px_rgba(255,255,255,0.6)_inset] hover:border-rose-300/65',
-        title: 'text-slate-900',
-        number: 'text-rose-700',
-        mark: 'text-rose-500/70',
+          'border border-transparent bg-gradient-to-br from-[#23396d] via-[#1b2f5b] to-[#132243] shadow-[0_10px_24px_-16px_rgba(15,23,42,0.48),0_2px_6px_rgba(255,255,255,0.08)_inset] hover:border-transparent',
+        title: 'text-white',
+        number: 'text-white/95',
+        mark: 'text-white/70',
       };
     case '비씨':
       return {
         container:
-          'border border-sky-200/55 bg-gradient-to-br from-[#f9fdff] via-[#eaf6ff] to-[#d8edff] shadow-[0_10px_24px_-16px_rgba(2,132,199,0.26),0_2px_6px_rgba(255,255,255,0.6)_inset] hover:border-sky-300/65',
+          'border border-transparent bg-gradient-to-br from-[#fffdf8] via-[#faf4e8] to-[#f1e7d1] shadow-[0_10px_24px_-16px_rgba(120,113,108,0.24),0_2px_6px_rgba(255,255,255,0.5)_inset] hover:border-transparent',
         title: 'text-slate-900',
-        number: 'text-sky-700',
-        mark: 'text-sky-500/70',
+        number: 'text-stone-700',
+        mark: 'text-stone-500/70',
       };
     case '현대':
       return {
         container:
-          'border border-slate-300/55 bg-gradient-to-br from-[#fcfcfd] via-[#f1f4f8] to-[#e1e7ef] shadow-[0_10px_24px_-16px_rgba(51,65,85,0.28),0_2px_6px_rgba(255,255,255,0.6)_inset] hover:border-slate-400/70',
-        title: 'text-slate-900',
-        number: 'text-slate-700',
-        mark: 'text-slate-500/70',
+          'border border-transparent bg-gradient-to-br from-[#272727] via-[#141414] to-[#050505] shadow-[0_10px_24px_-16px_rgba(0,0,0,0.52),0_2px_6px_rgba(255,255,255,0.06)_inset] hover:border-transparent',
+        title: 'text-white',
+        number: 'text-white/95',
+        mark: 'text-white/65',
       };
     case '네이버페이':
       return {
@@ -762,7 +762,10 @@ function RegisteredCardTile({
             <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 text-white">
               <div className="relative h-[18px] w-[18px]">
                 <div className="absolute right-0 top-[2px] h-[14px] w-[14px] rounded-full bg-white" />
-                <div className="absolute left-[1px] top-[6px] h-[9px] w-[8px] -rotate-[18deg] rounded-[8px_8px_8px_1px] bg-white" />
+                <div
+                  className="absolute left-[1px] top-[6px] h-[9px] w-[8px] -rotate-[18deg] bg-white"
+                  style={{ clipPath: 'polygon(18% 8%, 100% 0, 84% 72%, 38% 100%, 0 72%)' }}
+                />
               </div>
               <span className="text-[16px] font-bold tracking-[-0.05em] leading-none">toss</span>
             </div>
