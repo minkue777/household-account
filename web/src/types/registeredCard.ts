@@ -23,6 +23,7 @@ export const REGISTERED_CARD_LABELS = [
   '농협',
   '롯데',
   '비씨',
+  '현대',
   '네이버페이',
   '카카오페이',
   '토스',

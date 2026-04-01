@@ -45,6 +45,8 @@ function getCardDisplayName(cardLabel: string) {
       return '롯데카드';
     case '비씨':
       return 'BC카드';
+    case '현대':
+      return '현대카드';
     case '네이버페이':
       return 'NAVER Pay';
     case '카카오페이':
@@ -63,23 +65,64 @@ function getCardDisplayName(cardLabel: string) {
 }
 
 function getCardStyle(cardLabel: string) {
-  if (cardLabel === '국민') {
-    return {
-      container:
-        'border-2 border-amber-300 bg-gradient-to-br from-[#fffdf8] via-[#fffdf7] to-[#fffaf0] shadow-[0_10px_24px_-16px_rgba(161,98,7,0.5),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-amber-400',
-      title: 'text-slate-900',
-      number: 'text-amber-800',
-      mark: 'text-amber-600/70',
-    };
+  switch (cardLabel) {
+    case '국민':
+      return {
+        container:
+          'border-2 border-amber-300 bg-gradient-to-br from-[#fffdf8] via-[#fffdf7] to-[#fffaf0] shadow-[0_10px_24px_-16px_rgba(161,98,7,0.5),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-amber-400',
+        title: 'text-slate-900',
+        number: 'text-amber-800',
+        mark: 'text-amber-600/70',
+      };
+    case '삼성':
+      return {
+        container:
+          'border-2 border-blue-300 bg-gradient-to-br from-[#fbfdff] via-[#f6faff] to-[#edf4ff] shadow-[0_10px_24px_-16px_rgba(37,99,235,0.32),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-blue-400',
+        title: 'text-slate-900',
+        number: 'text-blue-700',
+        mark: 'text-blue-500/70',
+      };
+    case '농협':
+      return {
+        container:
+          'border-2 border-emerald-300 bg-gradient-to-br from-[#fbfffd] via-[#f2fbf5] to-[#e8f6ec] shadow-[0_10px_24px_-16px_rgba(22,163,74,0.28),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-emerald-400',
+        title: 'text-slate-900',
+        number: 'text-emerald-700',
+        mark: 'text-emerald-500/70',
+      };
+    case '롯데':
+      return {
+        container:
+          'border-2 border-rose-300 bg-gradient-to-br from-[#fffdfd] via-[#fff6f7] to-[#ffedf0] shadow-[0_10px_24px_-16px_rgba(225,29,72,0.28),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-rose-400',
+        title: 'text-slate-900',
+        number: 'text-rose-700',
+        mark: 'text-rose-500/70',
+      };
+    case '비씨':
+      return {
+        container:
+          'border-2 border-red-300 bg-gradient-to-br from-[#fffdfd] via-[#fff7f7] to-[#ffeeee] shadow-[0_10px_24px_-16px_rgba(220,38,38,0.28),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-red-400',
+        title: 'text-slate-900',
+        number: 'text-red-700',
+        mark: 'text-red-500/70',
+      };
+    case '현대':
+      return {
+        container:
+          'border-2 border-slate-400 bg-gradient-to-br from-[#ffffff] via-[#f7f8fa] to-[#eef1f5] shadow-[0_10px_24px_-16px_rgba(51,65,85,0.3),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-slate-500',
+        title: 'text-slate-900',
+        number: 'text-slate-700',
+        mark: 'text-slate-500/70',
+      };
+    default:
+      return {
+        container:
+          'border border-slate-200 bg-gradient-to-br from-[#fdfefe] via-[#fcfdfe] to-[#fafbfd] shadow-[0_10px_24px_-18px_rgba(15,23,42,0.35),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-violet-200',
+        title: 'text-slate-900',
+        number: 'text-slate-600',
+        mark: 'text-slate-300',
+      };
   }
-
-  return {
-    container:
-      'border border-slate-200 bg-gradient-to-br from-[#fdfefe] via-[#fcfdfe] to-[#fafbfd] shadow-[0_10px_24px_-18px_rgba(15,23,42,0.35),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:border-violet-200',
-    title: 'text-slate-900',
-    number: 'text-slate-600',
-    mark: 'text-slate-300',
-  };
 }
 
 export default function CardSettings({ householdId, ownerName }: CardSettingsProps) {
@@ -482,13 +525,12 @@ function RegisteredCardTile({
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.42),transparent_46%)]" />
       <div className="pointer-events-none absolute inset-0 rounded-[13px] shadow-[inset_0_1px_0_rgba(255,255,255,0.82),inset_0_-1px_0_rgba(15,23,42,0.04)]" />
       <div className="pointer-events-none absolute left-2 top-[57%] -translate-y-1/2 opacity-95">
-        <div className="relative h-[16px] w-[21px] rounded-[4px] border border-[#b7852b]/35 bg-gradient-to-br from-[#ebcc82] via-[#d9b066] to-[#bc8d3a] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
-          <div className="absolute inset-[1px] rounded-[3px] border border-black/6" />
-          <div className="absolute left-[30%] top-[2px] bottom-[2px] w-px bg-black/6" />
-          <div className="absolute left-1/2 top-[2px] bottom-[2px] w-px -translate-x-1/2 bg-black/9" />
-          <div className="absolute right-[30%] top-[2px] bottom-[2px] w-px bg-black/6" />
-          <div className="absolute inset-x-[3px] top-[5px] h-px bg-black/6" />
-          <div className="absolute inset-x-[3px] bottom-[5px] h-px bg-black/6" />
+        <div className="relative h-[16px] w-[21px] rounded-[4px] border border-[#b7852b]/35 bg-gradient-to-br from-[#ebcc82] via-[#d9b066] to-[#bc8d3a] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+          <div className="absolute left-[32%] top-[2px] bottom-[2px] w-px bg-black/10" />
+          <div className="absolute left-1/2 top-[1px] bottom-[1px] w-px -translate-x-1/2 bg-black/12" />
+          <div className="absolute right-[32%] top-[2px] bottom-[2px] w-px bg-black/10" />
+          <div className="absolute inset-x-[4px] top-[5px] h-px bg-black/10" />
+          <div className="absolute inset-x-[4px] bottom-[5px] h-px bg-black/10" />
         </div>
       </div>
       <div className="relative aspect-[1.586/1]">
