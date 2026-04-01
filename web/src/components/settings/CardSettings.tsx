@@ -56,7 +56,7 @@ function getCardDisplayName(cardLabel: string) {
     case '삼성':
       return '삼성카드';
     case '농협':
-      return 'NH농협카드';
+      return 'NH카드';
     case '롯데':
       return '롯데카드';
     case '비씨':
