@@ -2,6 +2,7 @@ import {
   Timestamp,
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDocs,
   onSnapshot,
@@ -24,10 +25,6 @@ function normalizeCardLastFour(value: string | undefined): string {
 
 function sortRegisteredCards(cards: RegisteredCard[]): RegisteredCard[] {
   return [...cards].sort((a, b) => {
-    if (a.isActive !== b.isActive) {
-      return a.isActive ? -1 : 1;
-    }
-
     if (a.cardLabel !== b.cardLabel) {
       return a.cardLabel.localeCompare(b.cardLabel, 'ko');
     }
@@ -56,7 +53,8 @@ export function subscribeToRegisteredCards(
     (snapshot) => {
       const cards = snapshot.docs
         .map((cardDoc) => mapRegisteredCardDocument(cardDoc.id, cardDoc.data()))
-        .filter((card) => card.owner === owner);
+        .filter((card) => card.owner === owner)
+        .filter((card) => card.isActive);
 
       callback(sortRegisteredCards(cards));
     },
@@ -96,11 +94,45 @@ export async function addRegisteredCard(input: CreateRegisteredCardInput): Promi
   return documentRef.id;
 }
 
-export async function updateRegisteredCardActive(cardId: string, isActive: boolean): Promise<void> {
+export async function deleteRegisteredCard(cardId: string): Promise<void> {
+  await deleteDoc(doc(db, COLLECTION_NAME, cardId));
+}
+
+export async function updateRegisteredCard(input: {
+  cardId: string;
+  householdId: string;
+  owner: string;
+  cardLabel: string;
+  cardLastFour?: string;
+}): Promise<boolean> {
+  const normalizedLastFour = normalizeCardLastFour(input.cardLastFour);
+  const householdId = input.householdId.trim();
+  const owner = input.owner.trim();
+  const cardLabel = input.cardLabel.trim();
+  const cardId = input.cardId.trim();
+
+  if (!householdId || !owner || !cardLabel || !cardId) {
+    return false;
+  }
+
+  const existingCards = await getRegisteredCards(householdId, owner);
+  const alreadyExists = existingCards.some(
+    (card) =>
+      card.id !== cardId &&
+      card.cardLabel === cardLabel &&
+      card.cardLastFour === normalizedLastFour
+  );
+
+  if (alreadyExists) {
+    return false;
+  }
+
   await updateDoc(doc(db, COLLECTION_NAME, cardId), {
-    isActive,
+    cardLastFour: normalizedLastFour,
     updatedAt: Timestamp.now(),
   });
+
+  return true;
 }
 
 async function getRegisteredCards(

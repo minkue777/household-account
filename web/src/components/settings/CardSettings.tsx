@@ -1,11 +1,12 @@
 'use client';
 
-import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
+import { ConfirmDialog, ModalOverlay } from '@/components/common';
 import {
   addRegisteredCard,
+  deleteRegisteredCard,
   subscribeToRegisteredCards,
-  updateRegisteredCardActive,
+  updateRegisteredCard,
 } from '@/lib/registeredCardService';
 import {
   NUMBERLESS_REGISTERED_CARD_LABELS,
@@ -22,77 +23,14 @@ interface CardItem {
   id: string;
   cardLabel: string;
   cardLastFour: string;
-  isActive: boolean;
-}
-
-const CARD_IMAGE_MAP: Partial<Record<RegisteredCardLabel, string>> = {
-  삼성: '/card-logos/samsung.jpg',
-  국민: '/card-logos/kb.jpg',
-  농협: '/card-logos/nh.jpg',
-  네이버페이: '/card-logos/naverpay.jpg',
-  토스: '/card-logos/toss.jpg',
-  대전사랑카드: '/card-logos/daejeon-love-card.jpg',
-};
-
-const CARD_IMAGE_CLASS_MAP: Partial<Record<RegisteredCardLabel, string>> = {
-  네이버페이: 'object-contain p-1 bg-white',
-  토스: 'object-contain p-1 bg-white',
-};
-
-const CARD_STYLE_MAP: Partial<Record<RegisteredCardLabel, string>> = {
-  삼성: 'bg-gradient-to-br from-slate-800 to-slate-600',
-  국민: 'bg-[#f6c240]',
-  농협: 'bg-gradient-to-br from-emerald-500 to-green-600',
-  롯데: 'bg-gradient-to-br from-rose-500 to-red-600',
-  비씨: 'bg-gradient-to-br from-indigo-500 to-blue-600',
-  네이버페이: 'bg-gradient-to-br from-emerald-500 to-green-600',
-  카카오페이: 'bg-[#fde047]',
-  토스: 'bg-gradient-to-br from-sky-500 to-blue-600',
-  대전사랑카드: 'bg-gradient-to-br from-red-500 to-rose-600',
-  온누리: 'bg-gradient-to-br from-orange-400 to-amber-500',
-  지역: 'bg-gradient-to-br from-teal-400 to-cyan-500',
-};
-
-function getCardImage(cardLabel: string) {
-  return CARD_IMAGE_MAP[cardLabel as RegisteredCardLabel] || null;
-}
-
-function getCardBackground(cardLabel: string) {
-  return CARD_STYLE_MAP[cardLabel as RegisteredCardLabel] || 'bg-gradient-to-br from-slate-700 to-slate-500';
-}
-
-function getCardImageClassName(cardLabel: string) {
-  return CARD_IMAGE_CLASS_MAP[cardLabel as RegisteredCardLabel] || 'object-cover';
 }
 
 function formatCardDisplay(card: CardItem) {
   return card.cardLastFour ? `${card.cardLabel} (${card.cardLastFour})` : card.cardLabel;
 }
 
-function Toggle({
-  checked,
-  onChange,
-}: {
-  checked: boolean;
-  onChange: (nextValue: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-full transition-colors ${
-        checked ? 'bg-violet-500' : 'bg-slate-300'
-      }`}
-    >
-      <span
-        className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
-          checked ? 'translate-x-6' : 'translate-x-1'
-        }`}
-      />
-    </button>
-  );
+function isNumberlessLabel(label: string) {
+  return NUMBERLESS_REGISTERED_CARD_LABELS.has(label as RegisteredCardLabel);
 }
 
 export default function CardSettings({ householdId, ownerName }: CardSettingsProps) {
@@ -102,7 +40,11 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
   const [cardLastFour, setCardLastFour] = useState('');
   const [cards, setCards] = useState<CardItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [updatingCardId, setUpdatingCardId] = useState<string | null>(null);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [detailCardLastFour, setDetailCardLastFour] = useState('');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [formError, setFormError] = useState('');
+  const [detailError, setDetailError] = useState('');
 
   useEffect(() => {
     setIsLoading(true);
@@ -113,7 +55,6 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
           id: card.id,
           cardLabel: card.cardLabel,
           cardLastFour: card.cardLastFour,
-          isActive: card.isActive,
         }))
       );
       setIsLoading(false);
@@ -124,6 +65,12 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
     () => NUMBERLESS_REGISTERED_CARD_LABELS.has(selectedLabel),
     [selectedLabel]
   );
+  const selectedCard = cards.find((card) => card.id === selectedCardId) ?? null;
+  const pendingDeleteCard = cards.find((card) => card.id === pendingDeleteId) ?? null;
+  const detailHidesCardNumber = selectedCard ? isNumberlessLabel(selectedCard.cardLabel) : false;
+  const canSave = hidesCardNumber || cardLastFour.length === 4 || cardLastFour.length === 0;
+  const canSaveDetail =
+    detailHidesCardNumber || detailCardLastFour.length === 4 || detailCardLastFour.length === 0;
 
   useEffect(() => {
     if (hidesCardNumber) {
@@ -131,32 +78,88 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
     }
   }, [hidesCardNumber]);
 
-  const canSave = hidesCardNumber || cardLastFour.length === 4 || cardLastFour.length === 0;
+  useEffect(() => {
+    setFormError('');
+  }, [selectedLabel, cardLastFour]);
+
+  useEffect(() => {
+    if (!selectedCard) {
+      setDetailCardLastFour('');
+      setDetailError('');
+      return;
+    }
+
+    setDetailCardLastFour(selectedCard.cardLastFour);
+    setDetailError('');
+  }, [selectedCard]);
+
+  useEffect(() => {
+    if (detailHidesCardNumber) {
+      setDetailCardLastFour('');
+    }
+  }, [detailHidesCardNumber]);
+
+  useEffect(() => {
+    setDetailError('');
+  }, [detailCardLastFour]);
 
   const handleSave = async () => {
     if (!householdId || !ownerName) {
       return;
     }
 
-    await addRegisteredCard({
+    const documentId = await addRegisteredCard({
       householdId,
       owner: ownerName,
       cardLabel: selectedLabel,
       cardLastFour: hidesCardNumber ? '' : cardLastFour,
     });
 
+    if (!documentId) {
+      setFormError('이미 등록된 카드입니다.');
+      return;
+    }
+
     setCardLastFour('');
     setSelectedLabel('삼성');
+    setFormError('');
     setIsAdding(false);
   };
 
-  const handleToggle = async (cardId: string, nextValue: boolean) => {
-    setUpdatingCardId(cardId);
-    try {
-      await updateRegisteredCardActive(cardId, nextValue);
-    } finally {
-      setUpdatingCardId(null);
+  const handleSaveDetail = async () => {
+    if (!householdId || !ownerName || !selectedCard) {
+      return;
     }
+
+    const updated = await updateRegisteredCard({
+      cardId: selectedCard.id,
+      householdId,
+      owner: ownerName,
+      cardLabel: selectedCard.cardLabel,
+      cardLastFour: detailHidesCardNumber ? '' : detailCardLastFour,
+    });
+
+    if (!updated) {
+      setDetailError('이미 등록된 카드입니다.');
+      return;
+    }
+
+    setSelectedCardId(null);
+    setDetailError('');
+  };
+
+  const handleDelete = async () => {
+    if (!pendingDeleteId) {
+      return;
+    }
+
+    await deleteRegisteredCard(pendingDeleteId);
+
+    if (selectedCardId === pendingDeleteId) {
+      setSelectedCardId(null);
+    }
+
+    setPendingDeleteId(null);
   };
 
   return (
@@ -226,7 +229,7 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                       </div>
                     </div>
 
-                    {!hidesCardNumber && (
+                    {!hidesCardNumber ? (
                       <div>
                         <label className="mb-1 block text-sm text-slate-600">
                           카드번호 끝 4자리 <span className="text-slate-400">(선택)</span>
@@ -246,13 +249,13 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                           비워두면 {selectedLabel} 결제는 번호와 상관없이 전부 인식합니다.
                         </p>
                       </div>
-                    )}
-
-                    {hidesCardNumber && (
+                    ) : (
                       <div className="rounded-lg border border-violet-100 bg-violet-50 px-3 py-2 text-sm text-violet-700">
                         {selectedLabel}는 카드번호 없이 등록되고, 해당 종류 결제를 전부 인식합니다.
                       </div>
                     )}
+
+                    {formError && <p className="text-sm text-red-500">{formError}</p>}
 
                     <div className="flex gap-2">
                       <button
@@ -260,6 +263,7 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                           setIsAdding(false);
                           setCardLastFour('');
                           setSelectedLabel('삼성');
+                          setFormError('');
                         }}
                         className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-slate-600 transition-colors hover:bg-slate-100"
                       >
@@ -286,55 +290,38 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                   등록된 카드가 없습니다.
                 </div>
               ) : (
-                <div className="space-y-2.5 p-4">
+                <div className="space-y-3 p-4">
                   {cards.map((card) => (
-                    <div
+                    <button
                       key={card.id}
-                      className={`flex items-center gap-3 rounded-xl border px-3 py-3 transition-colors ${
-                        card.isActive
-                          ? 'border-slate-200 bg-white'
-                          : 'border-slate-200 bg-slate-50 opacity-80'
-                      }`}
+                      type="button"
+                      onClick={() => setSelectedCardId(card.id)}
+                      className="w-full rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 text-left shadow-sm transition-all hover:border-violet-200 hover:shadow-md"
                     >
-                      <div
-                        className={`relative flex h-9 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/40 ${getCardBackground(card.cardLabel)}`}
-                      >
-                        {getCardImage(card.cardLabel) ? (
-                          <Image
-                            src={getCardImage(card.cardLabel) as string}
-                            alt={`${card.cardLabel} 카드`}
-                            fill
-                            className={getCardImageClassName(card.cardLabel)}
-                            sizes="56px"
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-base font-semibold text-slate-800">
+                            {formatCardDisplay(card)}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            눌러서 카드번호 수정 또는 삭제
+                          </div>
+                        </div>
+                        <svg
+                          className="mt-0.5 h-5 w-5 flex-shrink-0 text-slate-300"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 5l7 7-7 7"
                           />
-                        ) : (
-                          <span className="px-1 text-[10px] font-semibold text-white">
-                            {card.cardLabel}
-                          </span>
-                        )}
+                        </svg>
                       </div>
-
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-slate-800">
-                          {formatCardDisplay(card)}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-400">
-                          {card.isActive ? '활성' : '비활성'}
-                        </span>
-                        <Toggle
-                          checked={card.isActive}
-                          onChange={(nextValue) => {
-                            void handleToggle(card.id, nextValue);
-                          }}
-                        />
-                        {updatingCardId === card.id && (
-                          <div className="h-3 w-3 rounded-full border-2 border-violet-500 border-t-transparent animate-spin" />
-                        )}
-                      </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -354,6 +341,101 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
           )}
         </div>
       )}
+
+      {selectedCard && (
+        <ModalOverlay onClose={() => setSelectedCardId(null)}>
+          <div
+            className="my-auto w-full max-w-md rounded-3xl bg-white shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">등록 카드 수정</h3>
+                <p className="mt-1 text-sm text-slate-500">{formatCardDisplay(selectedCard)}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedCardId(null)}
+                className="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4 px-5 py-5">
+              <div>
+                <label className="mb-1 block text-sm text-slate-600">카드 종류</label>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base font-semibold text-slate-800">
+                  {selectedCard.cardLabel}
+                </div>
+              </div>
+
+              {!detailHidesCardNumber ? (
+                <div>
+                  <label className="mb-1 block text-sm text-slate-600">
+                    카드번호 끝 4자리 <span className="text-slate-400">(선택)</span>
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={4}
+                    value={detailCardLastFour}
+                    onChange={(event) =>
+                      setDetailCardLastFour(event.target.value.replace(/\D/g, '').slice(0, 4))
+                    }
+                    placeholder="예: 1234"
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                  <p className="mt-1 text-xs text-slate-500">
+                    비워두면 {selectedCard.cardLabel} 결제는 번호와 상관없이 전부 인식합니다.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-700">
+                  {selectedCard.cardLabel}는 카드번호 없이 등록되고, 해당 종류 결제를 전부 인식합니다.
+                </div>
+              )}
+
+              {detailError && <p className="text-sm text-red-500">{detailError}</p>}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setPendingDeleteId(selectedCard.id)}
+                  className="flex-1 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 font-medium text-red-600 transition-colors hover:bg-red-100"
+                >
+                  삭제
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleSaveDetail();
+                  }}
+                  disabled={!canSaveDetail}
+                  className="flex-1 rounded-2xl bg-violet-500 px-4 py-3 font-medium text-white transition-colors hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  저장
+                </button>
+              </div>
+            </div>
+          </div>
+        </ModalOverlay>
+      )}
+
+      <ConfirmDialog
+        isOpen={!!pendingDeleteCard}
+        title="등록 카드 삭제"
+        message={pendingDeleteCard ? `${formatCardDisplay(pendingDeleteCard)} 카드를 삭제하시겠습니까?` : ''}
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        variant="danger"
+        onConfirm={() => {
+          void handleDelete();
+        }}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }
