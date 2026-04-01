@@ -85,7 +85,7 @@ function getCardStyle(cardLabel: string) {
     case '국민':
       return {
         container:
-          'border border-transparent bg-gradient-to-br from-[#fff9cf] via-[#ffd45c] to-[#f0b321] shadow-[0_16px_30px_-18px_rgba(161,98,7,0.54),0_2px_10px_rgba(255,255,255,0.74)_inset,0_-8px_18px_rgba(180,83,9,0.12)_inset] hover:border-transparent',
+          'border border-transparent bg-gradient-to-br from-[#fffbe0] via-[#ffde69] to-[#f6c12a] shadow-[0_18px_34px_-18px_rgba(161,98,7,0.58),0_2px_10px_rgba(255,255,255,0.76)_inset,0_-10px_18px_rgba(180,83,9,0.12)_inset] hover:border-transparent',
         title: 'text-slate-900',
         number: 'text-amber-900',
         mark: 'text-amber-700/70',
@@ -117,10 +117,10 @@ function getCardStyle(cardLabel: string) {
     case '비씨':
       return {
         container:
-          'border border-transparent bg-gradient-to-br from-[#fff6f7] via-[#f8b6bd] to-[#e54d55] shadow-[0_14px_28px_-16px_rgba(190,24,93,0.34),0_2px_8px_rgba(255,255,255,0.72)_inset,0_-6px_14px_rgba(225,29,72,0.08)_inset] hover:border-transparent',
+          'border border-transparent bg-gradient-to-br from-[#fff8fa] via-[#f7c7cf] to-[#ec7d87] shadow-[0_16px_30px_-18px_rgba(190,24,93,0.28),0_2px_9px_rgba(255,255,255,0.74)_inset,0_-8px_16px_rgba(225,29,72,0.06)_inset] hover:border-transparent',
         title: 'text-slate-900',
-        number: 'text-rose-800',
-        mark: 'text-rose-600/70',
+        number: 'text-rose-700',
+        mark: 'text-rose-500/70',
       };
     case '현대':
       return {
@@ -800,10 +800,10 @@ function RegisteredCardTile({
         isDragging ? 'z-10 scale-[1.03] ring-2 ring-violet-300 shadow-lg' : ''
       }`}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.22),transparent_42%)]" />
-      <div className="pointer-events-none absolute inset-0 rounded-[13px] border border-black/[0.06]" />
-      <div className="pointer-events-none absolute inset-x-[1px] bottom-[1px] h-[34%] rounded-b-[12px] bg-[linear-gradient(to_top,rgba(15,23,42,0.12),transparent)] opacity-70" />
-      <div className="pointer-events-none absolute inset-0 rounded-[13px] shadow-[inset_0_1px_0_rgba(255,255,255,0.68),inset_0_-8px_14px_rgba(15,23,42,0.08)]" />
+      <div className="pointer-events-none absolute inset-px rounded-[12px] bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_42%)]" />
+      <div className="pointer-events-none absolute inset-0 rounded-[13px] border border-black/[0.08]" />
+      <div className="pointer-events-none absolute inset-x-[1px] bottom-[1px] h-[38%] rounded-b-[12px] bg-[linear-gradient(to_top,rgba(15,23,42,0.16),transparent)] opacity-80" />
+      <div className="pointer-events-none absolute inset-0 rounded-[13px] shadow-[inset_0_1px_0_rgba(255,255,255,0.62),inset_0_-10px_16px_rgba(15,23,42,0.10)]" />
       {isDaejeonLoveCard && (
         <div className="pointer-events-none absolute -bottom-[2px] left-[-2px] right-[-2px] h-[24%] rounded-b-[12px] bg-[#c91f27]" />
       )}
