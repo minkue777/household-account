@@ -262,9 +262,9 @@ export default function AssetDividendChart() {
                 <h3 className="text-lg font-bold text-slate-800">
                   {dividendYear}년 {selectedMonthLabel} 배당금
                 </h3>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-sm font-medium text-slate-500">총액</span>
-                  <span className="text-2xl font-bold text-red-500">
+                <div className="mt-2 inline-flex items-baseline gap-2 rounded-xl bg-slate-50 px-3 py-2">
+                  <span className="text-xs font-medium text-slate-500">총액</span>
+                  <span className="text-xl font-semibold tracking-tight text-red-500">
                     {selectedMonthTotal.toLocaleString()}원
                   </span>
                 </div>
