@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
 import { ConfirmDialog } from '@/components/common';
 import {
@@ -18,18 +19,118 @@ interface CardSettingsProps {
   ownerName?: string | null;
 }
 
+interface CardItem {
+  id: string;
+  cardLabel: string;
+  cardLastFour: string;
+}
+
+const CARD_IMAGE_MAP: Partial<Record<RegisteredCardLabel, string>> = {
+  삼성: '/card-logos/samsung.jpg',
+  국민: '/card-logos/kb.jpg',
+  네이버페이: '/card-logos/naverpay.jpg',
+  농협: '/card-logos/nh.jpg',
+  대전사랑카드: '/card-logos/daejeon-love-card.jpg',
+  토스: '/card-logos/toss.jpg',
+};
+
+const CARD_STYLE_MAP: Partial<
+  Record<
+    RegisteredCardLabel,
+    {
+      bgClassName: string;
+      textClassName: string;
+      badgeClassName: string;
+    }
+  >
+> = {
+  삼성: {
+    bgClassName: 'bg-gradient-to-br from-slate-800 to-slate-600',
+    textClassName: 'text-white',
+    badgeClassName: 'bg-white/20 text-white',
+  },
+  국민: {
+    bgClassName: 'bg-[#f6c240]',
+    textClassName: 'text-slate-900',
+    badgeClassName: 'bg-black/10 text-slate-800',
+  },
+  농협: {
+    bgClassName: 'bg-gradient-to-br from-emerald-500 to-green-600',
+    textClassName: 'text-white',
+    badgeClassName: 'bg-white/15 text-white',
+  },
+  롯데: {
+    bgClassName: 'bg-gradient-to-br from-rose-500 to-red-600',
+    textClassName: 'text-white',
+    badgeClassName: 'bg-white/15 text-white',
+  },
+  비씨: {
+    bgClassName: 'bg-gradient-to-br from-indigo-500 to-blue-600',
+    textClassName: 'text-white',
+    badgeClassName: 'bg-white/15 text-white',
+  },
+  네이버페이: {
+    bgClassName: 'bg-gradient-to-br from-emerald-500 to-green-600',
+    textClassName: 'text-white',
+    badgeClassName: 'bg-white/15 text-white',
+  },
+  카카오페이: {
+    bgClassName: 'bg-[#fde047]',
+    textClassName: 'text-slate-900',
+    badgeClassName: 'bg-black/10 text-slate-800',
+  },
+  토스: {
+    bgClassName: 'bg-gradient-to-br from-sky-500 to-blue-600',
+    textClassName: 'text-white',
+    badgeClassName: 'bg-white/15 text-white',
+  },
+  대전사랑카드: {
+    bgClassName: 'bg-gradient-to-br from-red-500 to-rose-600',
+    textClassName: 'text-white',
+    badgeClassName: 'bg-white/15 text-white',
+  },
+  온누리: {
+    bgClassName: 'bg-gradient-to-br from-orange-400 to-amber-500',
+    textClassName: 'text-white',
+    badgeClassName: 'bg-white/15 text-white',
+  },
+  지역: {
+    bgClassName: 'bg-gradient-to-br from-teal-400 to-cyan-500',
+    textClassName: 'text-white',
+    badgeClassName: 'bg-white/15 text-white',
+  },
+};
+
+function getCardVisualStyle(cardLabel: string) {
+  return (
+    CARD_STYLE_MAP[cardLabel as RegisteredCardLabel] || {
+      bgClassName: 'bg-gradient-to-br from-slate-700 to-slate-500',
+      textClassName: 'text-white',
+      badgeClassName: 'bg-white/15 text-white',
+    }
+  );
+}
+
+function getCardImage(cardLabel: string) {
+  return CARD_IMAGE_MAP[cardLabel as RegisteredCardLabel] || null;
+}
+
+function getCardDescription(card: CardItem) {
+  return card.cardLastFour
+    ? `끝 4자리 ${card.cardLastFour} 결제만 인식`
+    : '번호와 상관없이 전체 결제를 인식';
+}
+
+function getCardTokenChip(card: CardItem) {
+  return card.cardLastFour || '전체 인식';
+}
+
 export default function CardSettings({ householdId, ownerName }: CardSettingsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [selectedLabel, setSelectedLabel] = useState<RegisteredCardLabel>('삼성');
   const [cardLastFour, setCardLastFour] = useState('');
-  const [cards, setCards] = useState<
-    Array<{
-      id: string;
-      cardLabel: string;
-      cardLastFour: string;
-    }>
-  >([]);
+  const [cards, setCards] = useState<CardItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
@@ -179,7 +280,7 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
 
                     {hidesCardNumber && (
                       <div className="rounded-lg border border-violet-100 bg-violet-50 px-3 py-2 text-sm text-violet-700">
-                        {selectedLabel}는 카드번호 없이 등록되며, 해당 종류 결제를 전부 인식합니다.
+                        {selectedLabel}는 카드번호 없이 등록되고, 해당 종류 결제를 전부 인식합니다.
                       </div>
                     )}
 
@@ -215,32 +316,67 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                   등록된 카드가 없습니다.
                 </div>
               ) : (
-                <div className="divide-y divide-slate-100">
-                  {cards.map((card) => (
-                    <div key={card.id} className="flex items-center justify-between gap-3 p-4">
-                      <div className="min-w-0">
-                        <div className="font-medium text-slate-800">{card.cardLabel}</div>
-                        <div className="text-sm text-slate-500">
-                          {card.cardLastFour
-                            ? `끝 4자리 ${card.cardLastFour}`
-                            : '번호와 상관없이 전체 인식'}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setPendingDeleteId(card.id)}
-                        className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                <div className="space-y-3 p-4">
+                  {cards.map((card) => {
+                    const imageSrc = getCardImage(card.cardLabel);
+                    const style = getCardVisualStyle(card.cardLabel);
+
+                    return (
+                      <div
+                        key={card.id}
+                        className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
                       >
-                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
+                        <div
+                          className={`relative flex h-12 w-[78px] flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/30 shadow-sm ${style.bgClassName}`}
+                        >
+                          {imageSrc ? (
+                            <Image
+                              src={imageSrc}
+                              alt={`${card.cardLabel} 카드`}
+                              fill
+                              className="object-cover"
+                              sizes="78px"
+                            />
+                          ) : (
+                            <span className={`text-sm font-semibold ${style.textClassName}`}>
+                              {card.cardLabel}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-semibold text-slate-800">{card.cardLabel}</p>
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${style.badgeClassName}`}
+                            >
+                              등록됨
+                            </span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold tracking-[0.22em] text-white">
+                              {getCardTokenChip(card)}
+                            </span>
+                            <span className="text-sm text-slate-500">{getCardDescription(card)}</span>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => setPendingDeleteId(card.id)}
+                          className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                        >
+                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 

@@ -27,6 +27,7 @@ export const REGISTERED_CARD_LABELS = [
   '네이버페이',
   '카카오페이',
   '토스',
+  '대전사랑카드',
   '온누리',
   '지역',
 ] as const;

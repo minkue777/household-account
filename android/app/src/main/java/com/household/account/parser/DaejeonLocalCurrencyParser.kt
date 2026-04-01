@@ -168,9 +168,9 @@ object DaejeonLocalCurrencyParser {
 
     private fun formatCardLabel(cardLastFour: String?): String {
         return if (cardLastFour.isNullOrBlank() || !cardLastFour.matches(Regex("""\d{4}"""))) {
-            "지역"
+            "대전사랑카드"
         } else {
-            "지역($cardLastFour)"
+            "대전사랑카드($cardLastFour)"
         }
     }
 }
