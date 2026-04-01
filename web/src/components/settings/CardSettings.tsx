@@ -466,7 +466,7 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
             </svg>
           </div>
           <div className="text-left">
-            <div className="font-semibold text-slate-800">등록 카드</div>
+            <div className="font-semibold text-slate-800">카드 등록</div>
             <div className="text-sm text-slate-500">
               {ownerName ? `${ownerName}님 카드 ${cards.length}개` : '구성원을 먼저 선택해주세요'}
             </div>
