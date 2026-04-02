@@ -917,16 +917,11 @@ function RegisteredCardTile({
         )}
 
         {isKakaoPay && (
-          <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 text-slate-900">
-            <svg
-              className="h-[16px] w-[21px] fill-current"
-              viewBox="0 0 44 30"
-              aria-hidden="true"
-            >
-              <ellipse cx="22" cy="11.5" rx="16.2" ry="10.2" />
-              <path d="M13.4 18.4 10.8 26.6 19.8 20.2Z" />
-            </svg>
-            <span className="text-[18px] font-black tracking-[-0.01em] leading-none">pay</span>
+          <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 text-slate-900">
+            <div className="relative h-[18px] w-[18px] rounded-full bg-current">
+              <div className="absolute -bottom-[3px] left-[3px] h-0 w-0 border-l-[4px] border-r-[2px] border-t-[6px] border-l-transparent border-r-transparent border-t-current" />
+            </div>
+            <span className="text-[18px] font-black tracking-[-0.06em] leading-none">pay</span>
           </div>
         )}
 
