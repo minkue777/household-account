@@ -58,13 +58,7 @@ class RegisteredCardRepository {
 
     private fun normalizeCardLabel(value: String?): String? {
         val normalized = value?.trim()?.lowercase()
-        val aliased = when (normalized) {
-            "지역" -> "경기지역화폐"
-            "온누리" -> "온누리상품권"
-            else -> normalized
-        }
-
-        return aliased?.takeIf { it.isNotBlank() }
+        return normalized?.takeIf { it.isNotBlank() }
     }
 
     private fun normalizeCardToken(value: String?): String? {

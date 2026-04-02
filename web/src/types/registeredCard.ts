@@ -50,15 +50,7 @@ function normalizeRegisteredCardLabel(value: unknown): string {
     return '';
   }
 
-  const trimmed = value.trim();
-  if (trimmed === '지역') {
-    return '경기지역화폐';
-  }
-  if (trimmed === '온누리') {
-    return '온누리상품권';
-  }
-
-  return trimmed;
+  return value.trim();
 }
 
 export function mapRegisteredCardDocument(

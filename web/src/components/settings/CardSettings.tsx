@@ -101,8 +101,6 @@ function getCardDisplayName(cardLabel: string) {
       return '온누리상품권';
     case '경기지역화폐':
       return '경기지역화폐';
-    case '지역':
-      return '경기지역화폐';
     default:
       return cardLabel;
   }
