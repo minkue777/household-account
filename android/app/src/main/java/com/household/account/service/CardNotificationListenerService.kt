@@ -28,6 +28,7 @@ import com.household.account.parser.ParseResult
 import com.household.account.parser.SamsungCardParser
 import com.household.account.parser.SmsNotificationParser
 import com.household.account.parser.TossBankParser
+import com.household.account.util.CardLabelFormatter
 import com.household.account.util.HouseholdPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -335,29 +336,50 @@ class CardNotificationListenerService : NotificationListenerService() {
                     )
                 }
                 val memberName = HouseholdPreferences.getMemberName(applicationContext)
-                val isRegisteredCard = registeredCardRepository.matchesRegisteredCard(
+                val matchedRegisteredCard = registeredCardRepository.findMatchedRegisteredCard(
                     householdId = householdId,
                     owner = memberName,
                     cardValue = expenseToSave.cardLastFour
                 )
-                if (!isRegisteredCard) {
+                if (matchedRegisteredCard == null) {
                     return@launch
+                }
+
+                val normalizedExpenseToken = CardLabelFormatter.normalizeCardToken(expenseToSave.cardLastFour)
+                val normalizedRegisteredToken = CardLabelFormatter.normalizeCardToken(
+                    matchedRegisteredCard.cardLastFour
+                )
+
+                val normalizedExpenseToSave = if (
+                    matchedRegisteredCard.cardLastFour.isNotBlank() &&
+                    normalizedExpenseToken != null &&
+                    normalizedRegisteredToken != null &&
+                    normalizedExpenseToken != normalizedRegisteredToken
+                ) {
+                    expenseToSave.copy(
+                        cardLastFour = CardLabelFormatter.formatCardLabel(
+                            matchedRegisteredCard.cardLabel,
+                            matchedRegisteredCard.cardLastFour
+                        )
+                    )
+                } else {
+                    expenseToSave
                 }
 
                 val duplicatedExpense = expenseRepository.findDuplicateExpenseForRegistration(
                     householdId = householdId,
-                    expense = expenseToSave
+                    expense = normalizedExpenseToSave
                 )
                 if (duplicatedExpense != null) {
                     return@launch
                 }
 
-                val documentId = expenseRepository.addExpense(expenseToSave)
+                val documentId = expenseRepository.addExpense(normalizedExpenseToSave)
                 if (documentId.isNotEmpty()) {
                     launchQuickEditActivity(
-                        expenseToSave.copy(
+                        normalizedExpenseToSave.copy(
                             id = documentId,
-                            category = expenseToSave.category.lowercase()
+                            category = normalizedExpenseToSave.category.lowercase()
                         )
                     )
                 }

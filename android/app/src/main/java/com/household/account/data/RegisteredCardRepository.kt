@@ -14,19 +14,31 @@ class RegisteredCardRepository {
         owner: String,
         cardValue: String
     ): Boolean {
+        return findMatchedRegisteredCard(
+            householdId = householdId,
+            owner = owner,
+            cardValue = cardValue
+        ) != null
+    }
+
+    suspend fun findMatchedRegisteredCard(
+        householdId: String,
+        owner: String,
+        cardValue: String
+    ): RegisteredCard? {
         if (householdId.isBlank() || owner.isBlank() || cardValue.isBlank()) {
-            return false
+            return null
         }
 
         val expenseCardLabel = normalizeCardLabel(CardLabelFormatter.extractCardLabel(cardValue))
-            ?: return false
+            ?: return null
         val registeredCards = getRegisteredCards(householdId)
 
         if (registeredCards.isEmpty()) {
-            return false
+            return null
         }
 
-        return registeredCards.any { card ->
+        return registeredCards.firstOrNull { card ->
             normalizeOwner(card.owner) == normalizeOwner(owner) &&
                 normalizeCardLabel(card.cardLabel) == expenseCardLabel &&
                 (
