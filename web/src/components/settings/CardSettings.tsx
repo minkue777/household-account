@@ -917,21 +917,21 @@ function RegisteredCardTile({
         )}
 
         {isKakaoPay && (
-          <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 text-slate-900">
+          <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 text-slate-900">
             <svg
-              className="h-[15px] w-[21px] fill-current"
-              viewBox="0 0 42 28"
+              className="h-[16px] w-[21px] fill-current"
+              viewBox="0 0 44 30"
               aria-hidden="true"
             >
-              <ellipse cx="21" cy="11" rx="15.5" ry="8.8" />
-              <path d="M12.5 16.8 10.4 24.2 18.4 18.2Z" />
+              <ellipse cx="22" cy="11.5" rx="16.2" ry="10.2" />
+              <path d="M13.4 18.4 10.8 26.6 19.8 20.2Z" />
             </svg>
-            <span className="text-[18px] font-black tracking-[0.02em] leading-none">pay</span>
+            <span className="text-[18px] font-black tracking-[-0.01em] leading-none">pay</span>
           </div>
         )}
 
         {isToss && (
-          <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 text-white">
+          <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 text-white">
             <svg
               className="h-[18px] w-[18px] fill-current"
               viewBox="0 0 28 28"
