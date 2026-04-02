@@ -49,9 +49,9 @@ function getCardLabelTitle(tab: CardTab): string {
 function getCardNumberHint(tab: CardTab): string {
   switch (tab) {
     case 'simple':
-      return '간편결제는 카드번호 없이 모든 결제를 가계부에 등록합니다.';
+      return '';
     default:
-      return '카드번호를 입력하지 않으면 해당 카드의 모든 결제를 가계부에 등록합니다.';
+      return '입력하지 않으면 해당 카드의 모든 결제를 가계부에 등록합니다.';
   }
 }
 
@@ -658,14 +658,18 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                           placeholder="예: 1234"
                           className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500"
                         />
-                        <p className="mt-1 text-xs text-slate-500">
-                          {getCardNumberHint(selectedTab)}
-                        </p>
+                        {getCardNumberHint(selectedTab) ? (
+                          <p className="mt-1 text-xs text-slate-500">
+                            {getCardNumberHint(selectedTab)}
+                          </p>
+                        ) : null}
                       </div>
                     ) : (
-                      <div className="rounded-lg border border-violet-100 bg-violet-50 px-3 py-2 text-sm text-violet-700">
-                        {getCardNumberHint(selectedTab)}
-                      </div>
+                      getCardNumberHint(selectedTab) ? (
+                        <div className="rounded-lg border border-violet-100 bg-violet-50 px-3 py-2 text-sm text-violet-700">
+                          {getCardNumberHint(selectedTab)}
+                        </div>
+                      ) : null
                     )}
 
                     {formError && <p className="text-sm text-red-500">{formError}</p>}
@@ -786,14 +790,18 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                     placeholder="예: 1234"
                     className="w-full rounded-2xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-violet-500"
                   />
-                  <p className="mt-1 text-xs text-slate-500">
-                    {getCardNumberHint(selectedCardTab)}
-                  </p>
+                  {getCardNumberHint(selectedCardTab) ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      {getCardNumberHint(selectedCardTab)}
+                    </p>
+                  ) : null}
                 </div>
               ) : (
-                <div className="rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-700">
-                  {getCardNumberHint(selectedCardTab)}
-                </div>
+                getCardNumberHint(selectedCardTab) ? (
+                  <div className="rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-700">
+                    {getCardNumberHint(selectedCardTab)}
+                  </div>
+                ) : null
               )}
 
               {detailError && <p className="text-sm text-red-500">{detailError}</p>}
