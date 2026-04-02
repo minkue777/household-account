@@ -40,4 +40,40 @@ object CardLabelFormatter {
             trimmed
         }
     }
+
+    fun normalizeCardToken(value: String?): String? {
+        if (value.isNullOrBlank()) {
+            return null
+        }
+
+        val rawToken = extractCardToken(value) ?: value
+        val normalized = rawToken
+            .trim()
+            .lowercase()
+            .replace("＊", "x")
+            .replace("*", "x")
+            .replace(Regex("""[^0-9x]"""), "")
+            .takeLast(4)
+
+        return normalized.takeIf { it.isNotBlank() }
+    }
+
+    fun matchesCardToken(firstValue: String?, secondValue: String?): Boolean {
+        val firstToken = normalizeCardToken(firstValue) ?: return false
+        val secondToken = normalizeCardToken(secondValue) ?: return false
+
+        if (firstToken == secondToken) {
+            return true
+        }
+
+        if (firstToken.length != secondToken.length) {
+            return false
+        }
+
+        return firstToken.indices.all { index ->
+            val firstChar = firstToken[index]
+            val secondChar = secondToken[index]
+            firstChar == secondChar || firstChar == 'x' || secondChar == 'x'
+        }
+    }
 }

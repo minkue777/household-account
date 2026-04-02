@@ -403,12 +403,7 @@ class ExpenseRepository {
             return true
         }
 
-        val savedToken = CardLabelFormatter.extractCardToken(savedValue)
-        val incomingToken = CardLabelFormatter.extractCardToken(incomingValue)
-
-        return savedToken != null &&
-            incomingToken != null &&
-            savedToken == incomingToken
+        return CardLabelFormatter.matchesCardToken(savedValue, incomingValue)
     }
 
     private fun matchesSplitGroupAmount(

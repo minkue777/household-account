@@ -20,7 +20,6 @@ class RegisteredCardRepository {
 
         val expenseCardLabel = normalizeCardLabel(CardLabelFormatter.extractCardLabel(cardValue))
             ?: return false
-        val expenseCardToken = normalizeCardToken(CardLabelFormatter.extractCardToken(cardValue))
         val registeredCards = getRegisteredCards(householdId)
 
         if (registeredCards.isEmpty()) {
@@ -32,8 +31,8 @@ class RegisteredCardRepository {
                 normalizeCardLabel(card.cardLabel) == expenseCardLabel &&
                 (
                     card.cardLastFour.isBlank() ||
-                        normalizeCardToken(card.cardLastFour) == expenseCardToken
-                    )
+                        CardLabelFormatter.matchesCardToken(card.cardLastFour, cardValue)
+                )
         }
     }
 
@@ -58,11 +57,6 @@ class RegisteredCardRepository {
 
     private fun normalizeCardLabel(value: String?): String? {
         val normalized = value?.trim()?.lowercase()
-        return normalized?.takeIf { it.isNotBlank() }
-    }
-
-    private fun normalizeCardToken(value: String?): String? {
-        val normalized = value?.replace(Regex("""\D"""), "")?.takeLast(4)
         return normalized?.takeIf { it.isNotBlank() }
     }
 }
