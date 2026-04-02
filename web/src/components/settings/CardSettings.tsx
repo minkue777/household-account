@@ -179,7 +179,7 @@ function getCardStyle(cardLabel: string) {
     case '우리':
       return {
         container:
-          'border border-transparent bg-gradient-to-br from-[#c9f7e7] to-[#48d4a3] shadow-[0_3px_8px_rgba(5,150,105,0.10),0_18px_34px_-16px_rgba(5,150,105,0.34),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
+          'border border-transparent bg-gradient-to-br from-[#e3fff5] to-[#69e0bb] shadow-[0_3px_8px_rgba(5,150,105,0.10),0_18px_34px_-16px_rgba(5,150,105,0.34),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
         title: 'text-slate-900',
         number: 'text-slate-900',
         mark: 'text-emerald-700/70',
@@ -195,10 +195,10 @@ function getCardStyle(cardLabel: string) {
     case '하나':
       return {
         container:
-          'border border-transparent bg-gradient-to-br from-[#c8f3e6] to-[#43c69a] shadow-[0_3px_8px_rgba(13,148,136,0.10),0_18px_34px_-16px_rgba(13,148,136,0.34),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
-        title: 'text-slate-900',
-        number: 'text-slate-900',
-        mark: 'text-teal-700/70',
+          'border border-transparent bg-gradient-to-br from-[#86d8c9] to-[#0d8e73] shadow-[0_3px_8px_rgba(13,148,136,0.12),0_18px_34px_-16px_rgba(13,148,136,0.40),0_1px_0_rgba(255,255,255,0.22)_inset,0_14px_20px_-14px_rgba(255,255,255,0.10)_inset] hover:border-transparent',
+        title: 'text-white',
+        number: 'text-white/95',
+        mark: 'text-white/70',
       };
     case '네이버페이':
       return {
