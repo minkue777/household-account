@@ -265,18 +265,18 @@ export default function AssetProfitChart({ totalSnapshots, totalAssets }: AssetP
                 변동 내역이 없습니다
               </p>
             ) : (
-              <div className="space-y-1 max-h-[200px] overflow-y-auto">
+              <div className="space-y-0.5">
                 {/* 테이블 헤더 */}
-                <div className="flex items-center text-xs text-slate-500 py-2 border-b border-slate-100">
+                <div className="flex items-center text-xs text-slate-500 py-1.5 border-b border-slate-100">
                   <span className="flex-1">{profitView === 'monthly' ? '월' : '일'}</span>
-                  <span className="w-20 text-right">수익률</span>
-                  <span className="w-28 text-right">수익</span>
+                  <span className="w-16 text-right">수익률</span>
+                  <span className="w-24 text-right">수익</span>
                 </div>
                 {/* 테이블 바디 */}
                 {profitTableData.map((item) => (
                   <div
                     key={profitView === 'monthly' ? (item as any).month : (item as any).day}
-                    className="flex items-center py-2 text-sm"
+                    className="flex items-center py-1.5 text-sm"
                   >
                     <span className="flex-1 text-slate-700">
                       {profitView === 'monthly'
@@ -284,7 +284,7 @@ export default function AssetProfitChart({ totalSnapshots, totalAssets }: AssetP
                         : `${(item as any).day}일`}
                     </span>
                     <span
-                      className={`w-20 text-right font-medium ${
+                      className={`w-16 text-right font-medium ${
                         item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
                       }`}
                     >
@@ -292,7 +292,7 @@ export default function AssetProfitChart({ totalSnapshots, totalAssets }: AssetP
                       {item.rate.toFixed(2)}%
                     </span>
                     <span
-                      className={`w-28 text-right font-medium ${
+                      className={`w-24 text-right font-medium ${
                         item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
                       }`}
                     >
