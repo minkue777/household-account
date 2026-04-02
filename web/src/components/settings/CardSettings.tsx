@@ -35,6 +35,26 @@ const CARD_TAB_ITEMS: Array<{ key: CardTab; label: string }> = [
   { key: 'simple', label: '간편결제' },
 ];
 
+function getCardLabelTitle(tab: CardTab): string {
+  switch (tab) {
+    case 'local':
+      return '지역화폐 종류';
+    case 'simple':
+      return '간편결제 종류';
+    default:
+      return '카드 종류';
+  }
+}
+
+function getCardNumberHint(tab: CardTab): string {
+  switch (tab) {
+    case 'simple':
+      return '간편결제는 카드번호 없이 모든 결제를 가계부에 등록합니다.';
+    default:
+      return '카드번호를 입력하지 않으면 해당 카드의 모든 결제를 가계부에 등록합니다.';
+  }
+}
+
 function getCardCategory(cardLabel: string): CardTab {
   if (['네이버페이', '카카오페이', '토스'].includes(cardLabel)) {
     return 'simple';
@@ -309,6 +329,7 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
   const canSave = hidesCardNumber || cardLastFour.length === 4 || cardLastFour.length === 0;
   const canSaveDetail =
     detailHidesCardNumber || detailCardLastFour.length === 4 || detailCardLastFour.length === 0;
+  const selectedCardTab = selectedCard ? getCardCategory(selectedCard.cardLabel) : selectedTab;
 
   useEffect(() => {
     if (hidesCardNumber) {
@@ -581,7 +602,7 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                         key={tab.key}
                         type="button"
                         onClick={() => setSelectedTab(tab.key)}
-                        className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                        className={`rounded-xl px-2 py-2 text-[13px] font-medium leading-none whitespace-nowrap transition-colors sm:px-3 sm:text-sm ${
                           isActive
                             ? 'bg-white text-violet-700 shadow-sm'
                             : 'text-slate-500 hover:text-slate-700'
@@ -600,7 +621,9 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                     <div className="font-medium text-slate-800">카드 등록</div>
 
                     <div>
-                      <label className="mb-2 block text-sm text-slate-600">카드 종류</label>
+                      <label className="mb-2 block text-sm text-slate-600">
+                        {getCardLabelTitle(selectedTab)}
+                      </label>
                       <div className="grid grid-cols-3 gap-2">
                         {tabLabelOptions.map((label) => (
                           <button
@@ -636,12 +659,12 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                           className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500"
                         />
                         <p className="mt-1 text-xs text-slate-500">
-                          비워두면 {selectedLabel} 결제는 번호와 상관없이 전부 인식합니다.
+                          {getCardNumberHint(selectedTab)}
                         </p>
                       </div>
                     ) : (
                       <div className="rounded-lg border border-violet-100 bg-violet-50 px-3 py-2 text-sm text-violet-700">
-                        {selectedLabel}는 카드번호 없이 등록되고, 해당 종류 결제를 전부 인식합니다.
+                        {getCardNumberHint(selectedTab)}
                       </div>
                     )}
 
@@ -739,7 +762,9 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
 
             <div className="space-y-4 px-5 py-5">
               <div>
-                <label className="mb-1 block text-sm text-slate-600">카드 종류</label>
+                <label className="mb-1 block text-sm text-slate-600">
+                  {getCardLabelTitle(selectedCardTab)}
+                </label>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base font-semibold text-slate-800">
                   {selectedCard.cardLabel}
                 </div>
@@ -762,12 +787,12 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                     className="w-full rounded-2xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-violet-500"
                   />
                   <p className="mt-1 text-xs text-slate-500">
-                    비워두면 {selectedCard.cardLabel} 결제는 번호와 상관없이 전부 인식합니다.
+                    {getCardNumberHint(selectedCardTab)}
                   </p>
                 </div>
               ) : (
                 <div className="rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-700">
-                  {selectedCard.cardLabel}는 카드번호 없이 등록되고, 해당 종류 결제를 전부 인식합니다.
+                  {getCardNumberHint(selectedCardTab)}
                 </div>
               )}
 
