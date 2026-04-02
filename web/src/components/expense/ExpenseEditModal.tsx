@@ -87,6 +87,27 @@ export default function ExpenseEditModal({
   const [showEditSplitGroup, setShowEditSplitGroup] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  const displayCardLabel = (() => {
+    if (!expense.cardLastFour) {
+      return '';
+    }
+
+    const localCurrencyMatch = expense.cardLastFour.match(/^(?:경기지역화폐|대전사랑카드)\((.+)\)$/);
+    if (localCurrencyMatch) {
+      return `지역(${localCurrencyMatch[1]})`;
+    }
+
+    if (expense.cardLastFour === '경기지역화폐' || expense.cardLastFour === '대전사랑카드') {
+      return '지역';
+    }
+
+    if (expense.cardLastFour === '온누리상품권') {
+      return '온누리';
+    }
+
+    return expense.cardLastFour;
+  })();
+
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -209,7 +230,7 @@ export default function ExpenseEditModal({
     <div className="mb-4 text-sm text-slate-500">
       {expense.date}
       {expense.time ? ` · ${expense.time}` : ''}
-      {expense.cardLastFour ? ` · ${expense.cardLastFour}` : ''}
+      {displayCardLabel ? ` · ${displayCardLabel}` : ''}
     </div>
   );
 
