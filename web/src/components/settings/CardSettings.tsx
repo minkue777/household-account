@@ -76,7 +76,7 @@ function getCardDisplayName(cardLabel: string) {
     case '삼성':
       return '삼성카드';
     case '농협':
-      return 'NH카드';
+      return 'NH농협카드';
     case '롯데':
       return '롯데카드';
     case '비씨':
@@ -119,10 +119,10 @@ function getCardStyle(cardLabel: string) {
     case '삼성':
       return {
         container:
-          'border border-transparent bg-gradient-to-br from-[#b5d8f3] to-[#73a9d8] shadow-[0_3px_8px_rgba(8,47,73,0.10),0_18px_34px_-16px_rgba(8,47,73,0.34),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
+          'border border-transparent bg-gradient-to-br from-[#bfe8ff] to-[#5fb8e8] shadow-[0_3px_8px_rgba(8,47,73,0.10),0_18px_34px_-16px_rgba(8,47,73,0.34),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
         title: 'text-slate-900',
-        number: 'text-sky-900',
-        mark: 'text-sky-700/70',
+        number: 'text-cyan-900',
+        mark: 'text-cyan-700/70',
       };
     case '농협':
       return {
@@ -167,18 +167,18 @@ function getCardStyle(cardLabel: string) {
     case '신한':
       return {
         container:
-          'border border-transparent bg-gradient-to-br from-[#c7dcff] to-[#5f85d6] shadow-[0_3px_8px_rgba(37,99,235,0.10),0_18px_34px_-16px_rgba(37,99,235,0.34),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
-        title: 'text-slate-900',
-        number: 'text-blue-900',
-        mark: 'text-blue-700/70',
+          'border border-transparent bg-gradient-to-br from-[#8fb4ff] to-[#2f5fc8] shadow-[0_3px_8px_rgba(37,99,235,0.10),0_18px_34px_-16px_rgba(37,99,235,0.34),0_1px_0_rgba(255,255,255,0.26)_inset,0_14px_20px_-14px_rgba(255,255,255,0.12)_inset] hover:border-transparent',
+        title: 'text-white',
+        number: 'text-white/95',
+        mark: 'text-white/70',
       };
     case '하나':
       return {
         container:
-          'border border-transparent bg-gradient-to-br from-[#d7f3dc] to-[#78cd87] shadow-[0_3px_8px_rgba(22,101,52,0.10),0_18px_34px_-16px_rgba(22,101,52,0.34),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
+          'border border-transparent bg-gradient-to-br from-[#c8f3e6] to-[#43c69a] shadow-[0_3px_8px_rgba(13,148,136,0.10),0_18px_34px_-16px_rgba(13,148,136,0.34),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
         title: 'text-slate-900',
-        number: 'text-emerald-900',
-        mark: 'text-emerald-700/70',
+        number: 'text-teal-900',
+        mark: 'text-teal-700/70',
       };
     case '네이버페이':
       return {
