@@ -133,7 +133,7 @@ function getCardStyle(cardLabel: string) {
         container:
           'border border-transparent bg-gradient-to-br from-[#fff4b6] to-[#f6ce4d] shadow-[0_3px_8px_rgba(120,53,15,0.10),0_22px_40px_-18px_rgba(161,98,7,0.50),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
         title: 'text-slate-900',
-        number: 'text-amber-900',
+        number: 'text-slate-900',
         mark: 'text-amber-700/70',
       };
     case '삼성':
@@ -141,7 +141,7 @@ function getCardStyle(cardLabel: string) {
         container:
           'border border-transparent bg-gradient-to-br from-[#bfe8ff] to-[#5fb8e8] shadow-[0_3px_8px_rgba(8,47,73,0.10),0_18px_34px_-16px_rgba(8,47,73,0.34),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
         title: 'text-slate-900',
-        number: 'text-cyan-900',
+        number: 'text-slate-900',
         mark: 'text-cyan-700/70',
       };
     case '농협':
@@ -157,7 +157,7 @@ function getCardStyle(cardLabel: string) {
         container:
           'border border-transparent bg-gradient-to-br from-[#f6f6f8] to-[#dfdfe4] shadow-[0_3px_8px_rgba(100,116,139,0.10),0_18px_34px_-16px_rgba(100,116,139,0.34),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
         title: 'text-slate-900',
-        number: 'text-slate-700',
+        number: 'text-slate-900',
         mark: 'text-sky-600/65',
       };
     case '비씨':
@@ -165,7 +165,7 @@ function getCardStyle(cardLabel: string) {
         container:
           'border border-transparent bg-gradient-to-br from-[#fad7dd] to-[#efacb3] shadow-[0_3px_8px_rgba(190,24,93,0.10),0_20px_34px_-18px_rgba(190,24,93,0.30),0_1px_0_rgba(255,255,255,0.28)_inset,0_14px_20px_-14px_rgba(255,255,255,0.12)_inset] hover:border-transparent',
         title: 'text-slate-900',
-        number: 'text-rose-700',
+        number: 'text-slate-900',
         mark: 'text-rose-500/70',
       };
     case '현대':
@@ -181,7 +181,7 @@ function getCardStyle(cardLabel: string) {
         container:
           'border border-transparent bg-gradient-to-br from-[#bbf0ef] to-[#4ec8c5] shadow-[0_3px_8px_rgba(15,118,110,0.10),0_18px_34px_-16px_rgba(15,118,110,0.34),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
         title: 'text-slate-900',
-        number: 'text-teal-900',
+        number: 'text-slate-900',
         mark: 'text-teal-700/70',
       };
     case '신한':
@@ -197,7 +197,7 @@ function getCardStyle(cardLabel: string) {
         container:
           'border border-transparent bg-gradient-to-br from-[#c8f3e6] to-[#43c69a] shadow-[0_3px_8px_rgba(13,148,136,0.10),0_18px_34px_-16px_rgba(13,148,136,0.34),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
         title: 'text-slate-900',
-        number: 'text-teal-900',
+        number: 'text-slate-900',
         mark: 'text-teal-700/70',
       };
     case '네이버페이':
