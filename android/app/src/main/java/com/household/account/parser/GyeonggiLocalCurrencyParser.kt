@@ -52,7 +52,7 @@ object GyeonggiLocalCurrencyParser {
                     amount = amount,
                     category = Category.ETC.name,
                     cardType = "local_currency",
-                    cardLastFour = "지역"
+                    cardLastFour = "경기지역화폐"
                 )
             )
         } catch (e: Exception) {

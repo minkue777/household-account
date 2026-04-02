@@ -43,7 +43,7 @@ object DigitalOnnuriParser {
                     amount = amount,
                     category = Category.ETC.name,
                     cardType = CardType.MAIN.key,
-                    cardLastFour = "온누리"
+                    cardLastFour = "온누리상품권"
                 )
             )
         } catch (e: Exception) {

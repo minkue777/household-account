@@ -60,6 +60,7 @@ class RegisteredCardRepository {
         val normalized = value?.trim()?.lowercase()
         val aliased = when (normalized) {
             "지역" -> "경기지역화폐"
+            "온누리" -> "온누리상품권"
             else -> normalized
         }
 

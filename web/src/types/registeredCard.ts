@@ -33,7 +33,7 @@ export const REGISTERED_CARD_LABELS = [
   '카카오페이',
   '토스',
   '대전사랑카드',
-  '온누리',
+  '온누리상품권',
   '경기지역화폐',
 ] as const;
 
@@ -53,6 +53,9 @@ function normalizeRegisteredCardLabel(value: unknown): string {
   const trimmed = value.trim();
   if (trimmed === '지역') {
     return '경기지역화폐';
+  }
+  if (trimmed === '온누리') {
+    return '온누리상품권';
   }
 
   return trimmed;
