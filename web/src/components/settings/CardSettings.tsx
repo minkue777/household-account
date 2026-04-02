@@ -179,10 +179,10 @@ function getCardStyle(cardLabel: string) {
     case '우리':
       return {
         container:
-          'border border-transparent bg-gradient-to-br from-[#bbf0ef] to-[#4ec8c5] shadow-[0_3px_8px_rgba(15,118,110,0.10),0_18px_34px_-16px_rgba(15,118,110,0.34),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
+          'border border-transparent bg-gradient-to-br from-[#c9f7e7] to-[#48d4a3] shadow-[0_3px_8px_rgba(5,150,105,0.10),0_18px_34px_-16px_rgba(5,150,105,0.34),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
         title: 'text-slate-900',
         number: 'text-slate-900',
-        mark: 'text-teal-700/70',
+        mark: 'text-emerald-700/70',
       };
     case '신한':
       return {
