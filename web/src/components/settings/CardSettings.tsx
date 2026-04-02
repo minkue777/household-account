@@ -27,6 +27,26 @@ interface CardItem {
   orderIndex?: number;
 }
 
+type CardTab = 'credit' | 'local' | 'simple';
+
+const CARD_TAB_ITEMS: Array<{ key: CardTab; label: string }> = [
+  { key: 'credit', label: '신용/체크카드' },
+  { key: 'local', label: '지역화폐' },
+  { key: 'simple', label: '간편결제' },
+];
+
+function getCardCategory(cardLabel: string): CardTab {
+  if (['네이버페이', '카카오페이', '토스'].includes(cardLabel)) {
+    return 'simple';
+  }
+
+  if (['대전사랑카드', '온누리', '경기지역화폐'].includes(cardLabel)) {
+    return 'local';
+  }
+
+  return 'credit';
+}
+
 function moveCard(cards: CardItem[], sourceId: string, targetId: string): CardItem[] {
   const sourceIndex = cards.findIndex((card) => card.id === sourceId);
   const targetIndex = cards.findIndex((card) => card.id === targetId);
@@ -63,6 +83,12 @@ function getCardDisplayName(cardLabel: string) {
       return 'BC카드';
     case '현대':
       return '현대카드';
+    case '우리':
+      return '우리카드';
+    case '신한':
+      return '신한카드';
+    case '하나':
+      return '하나카드';
     case '네이버페이':
       return 'NAVER Pay';
     case '카카오페이':
@@ -73,8 +99,10 @@ function getCardDisplayName(cardLabel: string) {
       return '대전사랑카드';
     case '온누리':
       return '온누리상품권';
+    case '경기지역화폐':
+      return '경기지역화폐';
     case '지역':
-      return '지역카드';
+      return '경기지역화폐';
     default:
       return cardLabel;
   }
@@ -130,6 +158,30 @@ function getCardStyle(cardLabel: string) {
         number: 'text-white/95',
         mark: 'text-white/65',
       };
+    case '우리':
+      return {
+        container:
+          'border border-transparent bg-gradient-to-br from-[#bbf0ef] to-[#4ec8c5] shadow-[0_3px_8px_rgba(15,118,110,0.10),0_18px_34px_-16px_rgba(15,118,110,0.34),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
+        title: 'text-slate-900',
+        number: 'text-teal-900',
+        mark: 'text-teal-700/70',
+      };
+    case '신한':
+      return {
+        container:
+          'border border-transparent bg-gradient-to-br from-[#c7dcff] to-[#5f85d6] shadow-[0_3px_8px_rgba(37,99,235,0.10),0_18px_34px_-16px_rgba(37,99,235,0.34),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
+        title: 'text-slate-900',
+        number: 'text-blue-900',
+        mark: 'text-blue-700/70',
+      };
+    case '하나':
+      return {
+        container:
+          'border border-transparent bg-gradient-to-br from-[#d7f3dc] to-[#78cd87] shadow-[0_3px_8px_rgba(22,101,52,0.10),0_18px_34px_-16px_rgba(22,101,52,0.34),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.14)_inset] hover:border-transparent',
+        title: 'text-slate-900',
+        number: 'text-emerald-900',
+        mark: 'text-emerald-700/70',
+      };
     case '네이버페이':
       return {
         container:
@@ -162,6 +214,22 @@ function getCardStyle(cardLabel: string) {
         number: 'text-slate-800',
         mark: 'text-red-500/70',
       };
+    case '온누리':
+      return {
+        container:
+          'border border-transparent bg-gradient-to-br from-[#fffaf2] to-[#f6ecde] shadow-[0_3px_8px_rgba(194,65,12,0.08),0_18px_32px_-16px_rgba(194,65,12,0.28),0_1px_0_rgba(255,255,255,0.24)_inset,0_14px_20px_-14px_rgba(255,255,255,0.10)_inset] hover:border-transparent',
+        title: 'text-slate-900',
+        number: 'text-slate-800',
+        mark: 'text-orange-500/70',
+      };
+    case '경기지역화폐':
+      return {
+        container:
+          'border border-transparent bg-gradient-to-br from-[#fbfdff] to-[#edf3ff] shadow-[0_3px_8px_rgba(37,99,235,0.08),0_18px_32px_-16px_rgba(37,99,235,0.24),0_1px_0_rgba(255,255,255,0.24)_inset,0_14px_20px_-14px_rgba(255,255,255,0.10)_inset] hover:border-transparent',
+        title: 'text-slate-900',
+        number: 'text-slate-800',
+        mark: 'text-blue-500/70',
+      };
     default:
       return {
         container:
@@ -175,6 +243,7 @@ function getCardStyle(cardLabel: string) {
 
 export default function CardSettings({ householdId, ownerName }: CardSettingsProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [selectedTab, setSelectedTab] = useState<CardTab>('credit');
   const [isAdding, setIsAdding] = useState(false);
   const [selectedLabel, setSelectedLabel] = useState<RegisteredCardLabel>('삼성');
   const [cardLastFour, setCardLastFour] = useState('');
@@ -231,6 +300,14 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
   const selectedCard = cards.find((card) => card.id === selectedCardId) ?? null;
   const pendingDeleteCard = cards.find((card) => card.id === pendingDeleteId) ?? null;
   const detailHidesCardNumber = selectedCard ? isNumberlessLabel(selectedCard.cardLabel) : false;
+  const filteredCards = useMemo(
+    () => cards.filter((card) => getCardCategory(card.cardLabel) === selectedTab),
+    [cards, selectedTab]
+  );
+  const tabLabelOptions = useMemo(
+    () => REGISTERED_CARD_LABELS.filter((label) => getCardCategory(label) === selectedTab),
+    [selectedTab]
+  );
   const canSave = hidesCardNumber || cardLastFour.length === 4 || cardLastFour.length === 0;
   const canSaveDetail =
     detailHidesCardNumber || detailCardLastFour.length === 4 || detailCardLastFour.length === 0;
@@ -240,6 +317,12 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
       setCardLastFour('');
     }
   }, [hidesCardNumber]);
+
+  useEffect(() => {
+    if (!tabLabelOptions.includes(selectedLabel)) {
+      setSelectedLabel(tabLabelOptions[0] ?? '삼성');
+    }
+  }, [selectedLabel, tabLabelOptions]);
 
   useEffect(() => {
     setFormError('');
@@ -284,7 +367,7 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
     }
 
     setCardLastFour('');
-    setSelectedLabel('삼성');
+    setSelectedLabel(tabLabelOptions[0] ?? '삼성');
     setFormError('');
     setIsAdding(false);
   };
@@ -490,6 +573,29 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
             </div>
           ) : (
             <>
+              <div className="border-b border-slate-200 px-4 py-3">
+                <div className="grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-1">
+                  {CARD_TAB_ITEMS.map((tab) => {
+                    const isActive = selectedTab === tab.key;
+
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setSelectedTab(tab.key)}
+                        className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                          isActive
+                            ? 'bg-white text-violet-700 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {isAdding && (
                 <div className="border-b border-slate-200 bg-slate-50 p-4">
                   <div className="space-y-4">
@@ -498,7 +604,7 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                     <div>
                       <label className="mb-2 block text-sm text-slate-600">카드 종류</label>
                       <div className="grid grid-cols-3 gap-2">
-                        {REGISTERED_CARD_LABELS.map((label) => (
+                        {tabLabelOptions.map((label) => (
                           <button
                             key={label}
                             type="button"
@@ -548,7 +654,7 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                         onClick={() => {
                           setIsAdding(false);
                           setCardLastFour('');
-                          setSelectedLabel('삼성');
+                          setSelectedLabel(tabLabelOptions[0] ?? '삼성');
                           setFormError('');
                         }}
                         className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-slate-600 transition-colors hover:bg-slate-100"
@@ -571,13 +677,13 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
 
               {isLoading ? (
                 <div className="p-6 text-center text-sm text-slate-400">불러오는 중입니다.</div>
-              ) : cards.length === 0 && !isAdding ? (
+              ) : filteredCards.length === 0 && !isAdding ? (
                 <div className="p-6 text-center text-sm text-slate-400">
-                  등록된 카드가 없습니다.
+                  {cards.length === 0 ? '등록된 카드가 없습니다.' : '이 분류에 등록된 카드가 없습니다.'}
                 </div>
               ) : (
                 <div className={`grid grid-cols-3 gap-2 p-4 ${draggingCardId ? 'touch-none' : ''}`}>
-                  {cards.map((card) => (
+                  {filteredCards.map((card) => (
                     <RegisteredCardTile
                       key={card.id}
                       card={card}
@@ -725,7 +831,10 @@ function RegisteredCardTile({
   const isKakaoPay = card.cardLabel === '카카오페이';
   const isToss = card.cardLabel === '토스';
   const isDaejeonLoveCard = card.cardLabel === '대전사랑카드';
+  const isOnnuri = card.cardLabel === '온누리';
+  const isGyeonggiLocalCurrency = card.cardLabel === '경기지역화폐';
   const isLogoOnlyCard = isNaverPay || isKakaoPay || isToss;
+  const isLocalAccentCard = isDaejeonLoveCard || isOnnuri || isGyeonggiLocalCurrency;
 
   return (
     <button
@@ -740,6 +849,12 @@ function RegisteredCardTile({
       <div className="pointer-events-none absolute inset-0 rounded-[13px] border border-black/[0.08]" />
       {isDaejeonLoveCard && (
         <div className="pointer-events-none absolute -bottom-[2px] left-[-2px] right-[-2px] h-[24%] rounded-b-[12px] bg-[#c91f27]" />
+      )}
+      {isOnnuri && (
+        <div className="pointer-events-none absolute -bottom-[2px] left-[-2px] right-[-2px] h-[24%] rounded-b-[12px] bg-[#f58220]" />
+      )}
+      {isGyeonggiLocalCurrency && (
+        <div className="pointer-events-none absolute -bottom-[2px] left-[-2px] right-[-2px] h-[24%] rounded-b-[12px] bg-[#2f76db]" />
       )}
       {!isLogoOnlyCard && (
         <div className="pointer-events-none absolute left-2 top-[57%] -translate-y-1/2 opacity-95">
@@ -772,33 +887,37 @@ function RegisteredCardTile({
 
         {isKakaoPay && (
           <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 text-slate-900">
-            <div className="relative h-[15px] w-[19px] rounded-[999px] bg-current">
-              <div
-                className="absolute left-[3px] top-[11px] h-[6px] w-[6px] bg-current"
-                style={{ clipPath: 'polygon(0 0, 100% 12%, 30% 100%)' }}
-              />
-            </div>
-            <span className="text-[18px] font-black tracking-[-0.06em] leading-none">pay</span>
+            <svg
+              className="h-[15px] w-[21px] fill-current"
+              viewBox="0 0 42 28"
+              aria-hidden="true"
+            >
+              <ellipse cx="21" cy="11" rx="15.5" ry="8.8" />
+              <path d="M12.5 16.8 10.4 24.2 18.4 18.2Z" />
+            </svg>
+            <span className="text-[18px] font-black tracking-[0.02em] leading-none">pay</span>
           </div>
         )}
 
         {isToss && (
-          <>
-            <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 text-white">
-              <div className="relative h-[18px] w-[18px]">
-                <div className="absolute right-0 top-[2px] h-[14px] w-[14px] rounded-full bg-white" />
-                <div
-                  className="absolute left-[1px] top-[6px] h-[9px] w-[8px] -rotate-[18deg] bg-white"
-                  style={{ clipPath: 'polygon(18% 8%, 100% 0, 84% 72%, 38% 100%, 0 72%)' }}
-                />
-              </div>
+          <div className="absolute left-1/2 top-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 text-white">
+            <svg
+              className="h-[18px] w-[18px] fill-current"
+              viewBox="0 0 28 28"
+              aria-hidden="true"
+            >
+              <path d="M18.3 4.2c4.8 0 8.5 3.4 8.5 7.8 0 4.6-3.8 8.2-8.7 8.2-1.1 0-2.2-.2-3.2-.5L5.1 23.8l2.6-7.2c-1.8-1.2-2.8-2.8-2.8-4.6 0-4.4 3.8-7.8 8.7-7.8h4.7Z" />
+            </svg>
               <span className="text-[16px] font-bold tracking-[-0.05em] leading-none">toss</span>
-            </div>
-          </>
+          </div>
         )}
 
         {card.cardLastFour ? (
-          <div className={isDaejeonLoveCard ? 'absolute bottom-[12px] right-1.5' : 'absolute bottom-1 right-1.5'}>
+          <div
+            className={
+              isLocalAccentCard ? 'absolute bottom-[12px] right-1.5' : 'absolute bottom-1 right-1.5'
+            }
+          >
             <p className={`text-[11px] font-semibold tracking-[0.14em] ${style.number}`}>{card.cardLastFour}</p>
           </div>
         ) : null}
