@@ -9,6 +9,7 @@ interface CategoryDetailModalProps {
   expenses: Expense[];
   currentMonth: number;
   onClose: () => void;
+  onExpenseClick: (expense: Expense) => void;
   transactionType: TransactionType;
 }
 
@@ -17,6 +18,7 @@ export default function CategoryDetailModal({
   expenses,
   currentMonth,
   onClose,
+  onExpenseClick,
   transactionType,
 }: CategoryDetailModalProps) {
   const { getCategoryLabel, getCategoryColor, getCategoryBudget } = useCategoryContext();
@@ -68,7 +70,12 @@ export default function CategoryDetailModal({
           <div className="max-h-[60vh] overflow-y-auto p-4">
             <div className="space-y-2">
               {expenses.map((expense) => (
-                <div key={expense.id} className="flex items-center justify-between rounded-xl bg-slate-50 p-3">
+                <button
+                  key={expense.id}
+                  type="button"
+                  onClick={() => onExpenseClick(expense)}
+                  className="flex w-full items-center justify-between rounded-xl bg-slate-50 p-3 text-left transition-colors hover:bg-slate-100"
+                >
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium text-slate-800">{expense.merchant}</div>
                     <div className="text-xs text-slate-500">
@@ -79,7 +86,7 @@ export default function CategoryDetailModal({
                   <div className="ml-3 flex-shrink-0 font-semibold text-slate-800">
                     {expense.amount.toLocaleString()}원
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>

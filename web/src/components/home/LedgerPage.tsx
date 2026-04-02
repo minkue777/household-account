@@ -460,6 +460,11 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
           expenses={selectedCategoryExpenses}
           currentMonth={currentMonth}
           onClose={() => setSelectedCategory(null)}
+          onExpenseClick={(expense) => {
+            setSelectedCategory(null);
+            setSelectedDate(expense.date);
+            setEditExpenseId(expense.id);
+          }}
           transactionType={transactionType}
         />
       )}
