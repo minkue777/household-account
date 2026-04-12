@@ -10,6 +10,10 @@ function parseNumber(value: string) {
   return parseInt(value.replace(/,/g, ''), 10);
 }
 
+const PRICE_REGEX = /<strong[^>]*>\uAD6D\uB0B4\s+\uAE08<\/strong>[\s\S]*?<strong[^>]*>([\d,]+)<span[^>]*>\uC6D0\/g<\/span><\/strong>/;
+const PREVIOUS_CLOSE_REGEX = /<span[^>]*>\uC804\uC77C<\/span><span[^>]*>([\d,]+)<\/span>/;
+const DATE_REGEX = /<time>(\d{2}\.\d{2})\.<\/time><span[^>]*>\uC7A5\uB9C8\uAC10<\/span>[\s\S]*?<span[^>]*>KRX\s+\uAE08\uC2DC\uC7A5<\/span>/;
+
 export async function fetchNaverGoldMarketData(): Promise<NaverGoldMarketData | null> {
   try {
     const response = await fetch(NAVER_GOLD_URL, {
@@ -24,16 +28,16 @@ export async function fetchNaverGoldMarketData(): Promise<NaverGoldMarketData | 
     }
 
     const html = await response.text();
-    const priceMatch = html.match(/([\d,]+)\s*원\/g/);
-    const previousCloseMatch = html.match(/전일\s*([\d,]+)/);
-    const dateMatch = html.match(/(\d{2}\.\d{2})\.장마감 KRX 금시장/);
+    const priceMatch = html.match(PRICE_REGEX);
+    const previousCloseMatch = html.match(PREVIOUS_CLOSE_REGEX);
+    const dateMatch = html.match(DATE_REGEX);
 
-    if (!priceMatch || !previousCloseMatch) {
+    if (!priceMatch?.[1] || !previousCloseMatch?.[1]) {
       return null;
     }
 
     const now = new Date();
-    const timestamp = dateMatch
+    const timestamp = dateMatch?.[1]
       ? `${now.getFullYear()}-${dateMatch[1].replace('.', '-')}`
       : now.toISOString();
 
@@ -43,7 +47,7 @@ export async function fetchNaverGoldMarketData(): Promise<NaverGoldMarketData | 
       timestamp,
     };
   } catch (error) {
-    console.error('네이버 금 시세 조회 오류:', error);
+    console.error('Failed to fetch Naver gold market data:', error);
     return null;
   }
 }
