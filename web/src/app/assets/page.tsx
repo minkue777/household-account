@@ -5,8 +5,7 @@ import Link from 'next/link';
 import { Asset, AssetType, isGoldEtfSubType } from '@/types/asset';
 import {
   subscribeToAssets,
-  getDailyAssetChangeByOwner,
-  saveDailyTotalSnapshot,
+  getRealtimeDailyAssetChangeByOwner,
   addSampleAssets,
   processLoanAutoRepayments,
   processSavingsAutoContributions,
@@ -29,7 +28,6 @@ import {
   getAssetMemberOptions,
   getAssetOwnerOptions,
 } from '@/lib/assets/memberOptions';
-import { sumSignedAssetBalances } from '@/lib/assets/assetMath';
 
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
@@ -95,15 +93,10 @@ export default function AssetsPage() {
     }
 
     const activeAssets = assets.filter((asset) => asset.isActive);
-    const currentTotal = sumSignedAssetBalances(activeAssets);
-    const financialTotal = sumSignedAssetBalances(
-      activeAssets.filter((asset) => asset.type !== 'property')
-    );
 
     const syncDailySummary = async () => {
       try {
-        await saveDailyTotalSnapshot(currentTotal, financialTotal, activeAssets);
-        const change = await getDailyAssetChangeByOwner(selectedMember);
+        const change = await getRealtimeDailyAssetChangeByOwner(selectedMember, activeAssets);
         setDailyChange(change);
       } catch {
         setDailyChange(0);
