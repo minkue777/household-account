@@ -381,7 +381,7 @@ async function rebuildDividendSnapshot(householdId, year) {
 }
 exports.dailyDividendSnapshot = functions
     .region(config_1.REGION)
-    .pubsub.schedule('55 23 * * *')
+    .pubsub.schedule('0 17 * * *')
     .timeZone('Asia/Seoul')
     .onRun(async () => {
     console.log('일일 배당 스냅샷 작업 시작');

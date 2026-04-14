@@ -415,7 +415,7 @@ async function upsertDividendEvent(
     changed = true;
   }
 
-  if (totalAmount !== null && status !== 'paid' && today >= event.recordDate) {
+  if (totalAmount !== null && status !== 'paid' && today >= event.paymentDate) {
     updates.paidCapturedAt = today;
     status = 'paid';
     changed = true;
