@@ -415,7 +415,7 @@ async function upsertDividendEvent(
     changed = true;
   }
 
-  if (totalAmount !== null && status !== 'paid' && today >= event.paymentDate) {
+  if (totalAmount !== null && status !== 'paid' && today >= event.recordDate) {
     updates.paidCapturedAt = today;
     status = 'paid';
     changed = true;
@@ -532,7 +532,7 @@ async function rebuildDividendSnapshot(householdId: string, year: number) {
 
 export const dailyDividendSnapshot = functions
   .region(REGION)
-  .pubsub.schedule('55 23 * * *')
+  .pubsub.schedule('0 17 * * *')
   .timeZone('Asia/Seoul')
   .onRun(async () => {
     console.log('일일 배당 스냅샷 작업 시작');
