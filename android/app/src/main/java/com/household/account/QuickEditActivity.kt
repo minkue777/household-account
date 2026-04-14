@@ -44,6 +44,7 @@ class QuickEditActivity : AppCompatActivity() {
         const val EXTRA_DATE = "date"
         const val EXTRA_TIME = "time"
         const val EXTRA_CATEGORY = "category"
+        const val EXTRA_MEMO = "memo"
     }
 
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -57,6 +58,7 @@ class QuickEditActivity : AppCompatActivity() {
     private var originalCategory: String = ""
     private var originalDate: String = ""
     private var originalTime: String = ""
+    private var originalMemo: String = ""
 
     // 현재 선택된 값들
     private var selectedCategoryKey: String = ""
@@ -84,6 +86,7 @@ class QuickEditActivity : AppCompatActivity() {
         originalDate = intent.getStringExtra(EXTRA_DATE) ?: ""
         originalTime = intent.getStringExtra(EXTRA_TIME) ?: ""
         originalCategory = intent.getStringExtra(EXTRA_CATEGORY) ?: "etc"
+        originalMemo = intent.getStringExtra(EXTRA_MEMO) ?: ""
 
         // 카테고리 키 정규화 (대문자 -> 소문자)
         selectedCategoryKey = originalCategory.lowercase()
@@ -122,6 +125,9 @@ class QuickEditActivity : AppCompatActivity() {
 
         // 금액
         etAmount.setText(originalAmount.toString())
+
+        // 메모
+        etMemo.setText(originalMemo)
 
         // 날짜/시간 포맷팅
         val dateTime = buildString {

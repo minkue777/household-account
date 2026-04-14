@@ -455,6 +455,7 @@ class CardNotificationListenerService : NotificationListenerService() {
                 putExtra(QuickEditActivity.EXTRA_DATE, expense.date)
                 putExtra(QuickEditActivity.EXTRA_TIME, expense.time)
                 putExtra(QuickEditActivity.EXTRA_CATEGORY, expense.category)
+                putExtra(QuickEditActivity.EXTRA_MEMO, expense.memo)
             }
             startActivity(intent)
         } catch (_: Exception) {
