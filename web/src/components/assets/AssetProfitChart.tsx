@@ -207,7 +207,7 @@ export default function AssetProfitChart({
   const tableTitle = profitView === 'monthly' ? '월별 평가수익' : '일별 평가수익';
 
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-700">수익 차트</h3>
         <div className="flex rounded-lg bg-slate-100 p-0.5">
@@ -276,14 +276,14 @@ export default function AssetProfitChart({
         </button>
       </div>
 
-      <div className="mb-4 h-[180px]">
+      <div className="mb-3 h-[180px]">
         <Bar data={profitChartData} options={profitChartOptions} />
       </div>
 
       <div>
         <button
           onClick={() => setShowProfitTable((prev) => !prev)}
-          className="flex w-full items-center justify-between py-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-800"
+          className="flex w-full items-center justify-between py-1.5 text-sm font-medium text-slate-600 transition-colors hover:text-slate-800"
         >
           <span>{tableTitle}</span>
           {showProfitTable ? (
@@ -302,27 +302,27 @@ export default function AssetProfitChart({
             ) : (
               <div className="tabular-nums">
                 <div className="flex items-center border-b border-slate-100 pb-1 text-[10px] font-medium tracking-[-0.01em] text-slate-400">
-                  <span className="w-10 shrink-0">일</span>
-                  <span className="ml-auto w-[60px] shrink-0 text-right">수익률</span>
-                  <span className="ml-4 w-[110px] shrink-0 text-right">수익</span>
+                  <span className="w-11 shrink-0">일</span>
+                  <span className="ml-auto w-[58px] shrink-0 text-right">수익률</span>
+                  <span className="ml-5 w-[108px] shrink-0 text-right">수익</span>
                 </div>
 
                 <div className="space-y-0 pt-1">
                   {profitTableData.map((item) => (
                     <div
                       key={item.label}
-                      className="flex items-center py-[3px] text-[12px] leading-[18px] tracking-[-0.01em]"
+                      className="flex items-center py-1 text-[11px] leading-[19px] tracking-[-0.01em]"
                     >
-                      <span className="w-10 shrink-0 text-slate-700">{item.label}</span>
+                      <span className="w-11 shrink-0 text-slate-700">{item.label}</span>
                       <span
-                        className={`ml-auto w-[60px] shrink-0 text-right font-medium ${
+                        className={`ml-auto w-[58px] shrink-0 text-right font-medium ${
                           item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
                         }`}
                       >
                         {formatSignedRate(item.rate)}
                       </span>
                       <span
-                        className={`ml-4 w-[110px] shrink-0 text-right font-medium ${
+                        className={`ml-5 w-[108px] shrink-0 text-right font-medium ${
                           item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
                         }`}
                       >
