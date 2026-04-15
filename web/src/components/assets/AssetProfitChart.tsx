@@ -304,7 +304,7 @@ export default function AssetProfitChart({
                 <div className="flex items-center border-b border-slate-100 pb-1 text-[12px] font-medium tracking-[-0.01em] text-slate-400">
                   <span className="w-11 shrink-0">일</span>
                   <span className="ml-auto w-[58px] shrink-0 text-right">수익률</span>
-                  <span className="ml-6 w-[108px] shrink-0 text-right">수익</span>
+                  <span className="ml-7 w-[108px] shrink-0 text-right">수익</span>
                 </div>
 
                 <div className="space-y-0 pt-1">
@@ -313,7 +313,12 @@ export default function AssetProfitChart({
                       key={item.label}
                       className="flex items-center py-[5px] text-[13px] leading-[19px] tracking-[-0.01em]"
                     >
-                      <span className="w-11 shrink-0 text-slate-700">{item.label}</span>
+                      <span
+                        className="w-11 shrink-0 tracking-[-0.02em] text-slate-700"
+                        style={{ fontVariantNumeric: 'normal' }}
+                      >
+                        {item.label}
+                      </span>
                       <span
                         className={`ml-auto w-[58px] shrink-0 text-right font-medium ${
                           item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
@@ -322,7 +327,7 @@ export default function AssetProfitChart({
                         {formatSignedRate(item.rate)}
                       </span>
                       <span
-                        className={`ml-6 w-[108px] shrink-0 text-right font-medium ${
+                        className={`ml-7 w-[108px] shrink-0 text-right font-medium ${
                           item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
                         }`}
                       >
