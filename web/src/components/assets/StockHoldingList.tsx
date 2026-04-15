@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { deleteStockHolding, updateStockHolding } from '@/lib/assetService';
 import { calculateHoldingValue } from '@/lib/utils/useStockHoldingManager';
 import { StockHolding } from '@/types/asset';
@@ -44,13 +44,6 @@ interface HoldingEditorCardProps {
   onClose: () => void;
   onDelete: () => void;
   onSave: () => void;
-}
-
-interface CollapsibleSectionProps {
-  title: string;
-  isOpen: boolean;
-  onToggle: () => void;
-  children: ReactNode;
 }
 
 function sanitizeIntegerInput(rawValue: string) {
@@ -116,11 +109,6 @@ function getDividendSummary(dividendInfo?: DividendInfo) {
   }
 
   return null;
-}
-
-function getSectionLabel(holdings: StockHolding[], fallbackLabel: string) {
-  const total = holdings.reduce((sum, holding) => sum + calculateHoldingValue(holding), 0);
-  return `${fallbackLabel} ${formatCompactAmount(total)}`;
 }
 
 function HoldingSummaryCard({
@@ -302,26 +290,6 @@ function HoldingEditorCard({
   );
 }
 
-function CollapsibleSection({ title, isOpen, onToggle, children }: CollapsibleSectionProps) {
-  return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-slate-50"
-      >
-        <span className="text-sm font-medium text-slate-700">{title}</span>
-        {isOpen ? (
-          <ChevronDown className="h-4 w-4 text-slate-400" />
-        ) : (
-          <ChevronRight className="h-4 w-4 text-slate-400" />
-        )}
-      </button>
-      {isOpen ? <div className="space-y-2 border-t border-slate-100 p-3">{children}</div> : null}
-    </div>
-  );
-}
-
 export default function StockHoldingList({
   holdings,
   isLoading,
@@ -336,8 +304,6 @@ export default function StockHoldingList({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dividendInfoMap, setDividendInfoMap] = useState<Record<string, DividendInfo>>({});
   const [loadingDividends, setLoadingDividends] = useState<Set<string>>(new Set());
-  const [isStockSectionOpen, setIsStockSectionOpen] = useState(true);
-  const [isManualSectionOpen, setIsManualSectionOpen] = useState(true);
 
   const stockHoldings = useMemo(
     () => holdings.filter((holding) => getHoldingType(holding) === 'stock'),
@@ -347,7 +313,10 @@ export default function StockHoldingList({
     () => holdings.filter((holding) => getHoldingType(holding) !== 'stock'),
     [holdings]
   );
-  const hasManualHoldings = manualHoldings.length > 0;
+  const orderedHoldings = useMemo(
+    () => [...stockHoldings, ...manualHoldings],
+    [manualHoldings, stockHoldings]
+  );
 
   useEffect(() => {
     if (holdings.length === 0) {
@@ -388,17 +357,6 @@ export default function StockHoldingList({
     });
   }, [dividendInfoMap, holdings, loadingDividends]);
 
-  useEffect(() => {
-    if (!hasManualHoldings) {
-      setIsStockSectionOpen(true);
-      setIsManualSectionOpen(true);
-      return;
-    }
-
-    setIsStockSectionOpen(false);
-    setIsManualSectionOpen(false);
-  }, [assetId, hasManualHoldings]);
-
   const resetEditingState = () => {
     setEditingHolding(null);
     setEditName('');
@@ -416,13 +374,11 @@ export default function StockHoldingList({
     setEditName(holding.stockName);
 
     if (getHoldingType(holding) === 'stock') {
-      setIsStockSectionOpen(true);
       setEditQuantity(holding.quantity.toString());
       setEditAvgPrice(holding.avgPrice?.toString() || '');
       return;
     }
 
-    setIsManualSectionOpen(true);
     setEditQuantity((holding.currentPrice || 0).toString());
     setEditAvgPrice('');
   };
@@ -524,32 +480,10 @@ export default function StockHoldingList({
 
       {isLoading ? (
         <div className="py-8 text-center text-slate-400">로딩 중입니다.</div>
-      ) : holdings.length === 0 ? (
+      ) : orderedHoldings.length === 0 ? (
         <div className="py-8 text-center text-slate-400">보유 항목이 없습니다.</div>
-      ) : hasManualHoldings ? (
-        <div className="space-y-3">
-          {stockHoldings.length > 0 ? (
-            <CollapsibleSection
-              title={getSectionLabel(stockHoldings, '주식 종목')}
-              isOpen={isStockSectionOpen}
-              onToggle={() => setIsStockSectionOpen((prev) => !prev)}
-            >
-              {stockHoldings.map(renderHoldingItem)}
-            </CollapsibleSection>
-          ) : null}
-
-          {manualHoldings.length > 0 ? (
-            <CollapsibleSection
-              title={getSectionLabel(manualHoldings, '수동 추가')}
-              isOpen={isManualSectionOpen}
-              onToggle={() => setIsManualSectionOpen((prev) => !prev)}
-            >
-              {manualHoldings.map(renderHoldingItem)}
-            </CollapsibleSection>
-          ) : null}
-        </div>
       ) : (
-        <div className="space-y-2">{holdings.map(renderHoldingItem)}</div>
+        <div className="space-y-2">{orderedHoldings.map(renderHoldingItem)}</div>
       )}
     </>
   );
