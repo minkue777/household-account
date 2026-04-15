@@ -301,32 +301,28 @@ export default function AssetProfitChart({
               </p>
             ) : (
               <div className="tabular-nums">
-                <div
-                  className="grid items-center border-b border-slate-100 pb-1.5 text-[11px] font-medium text-slate-400"
-                  style={{ gridTemplateColumns: '52px 78px minmax(0, 1fr)', columnGap: '18px' }}
-                >
-                  <span>일</span>
-                  <span className="text-right">수익률</span>
-                  <span className="text-right">수익</span>
+                <div className="flex items-center border-b border-slate-100 pb-1 text-[10px] font-medium tracking-[-0.01em] text-slate-400">
+                  <span className="w-10 shrink-0">일</span>
+                  <span className="ml-auto w-[60px] shrink-0 text-right">수익률</span>
+                  <span className="ml-4 w-[110px] shrink-0 text-right">수익</span>
                 </div>
 
-                <div className="space-y-0.5 pt-1">
+                <div className="space-y-0 pt-1">
                   {profitTableData.map((item) => (
                     <div
                       key={item.label}
-                      className="grid items-center py-1 text-[13px] leading-5"
-                      style={{ gridTemplateColumns: '52px 78px minmax(0, 1fr)', columnGap: '18px' }}
+                      className="flex items-center py-[3px] text-[12px] leading-[18px] tracking-[-0.01em]"
                     >
-                      <span className="text-slate-700">{item.label}</span>
+                      <span className="w-10 shrink-0 text-slate-700">{item.label}</span>
                       <span
-                        className={`text-right font-medium ${
+                        className={`ml-auto w-[60px] shrink-0 text-right font-medium ${
                           item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
                         }`}
                       >
                         {formatSignedRate(item.rate)}
                       </span>
                       <span
-                        className={`text-right font-medium ${
+                        className={`ml-4 w-[110px] shrink-0 text-right font-medium ${
                           item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
                         }`}
                       >
