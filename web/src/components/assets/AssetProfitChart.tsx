@@ -303,7 +303,7 @@ export default function AssetProfitChart({
               <div className="tabular-nums">
                 <div className="flex items-center border-b border-slate-100 pb-1 text-[12px] font-medium tracking-[-0.01em] text-slate-400">
                   <span className="w-11 shrink-0">일</span>
-                  <span className="ml-auto w-[58px] shrink-0 text-right">수익률</span>
+                  <span className="ml-auto w-[66px] shrink-0 text-right">수익률</span>
                   <span className="ml-5 w-[108px] shrink-0 text-right">수익</span>
                 </div>
 
@@ -315,7 +315,7 @@ export default function AssetProfitChart({
                     >
                       <span className="w-11 shrink-0 text-slate-700">{item.label}</span>
                       <span
-                        className={`ml-auto w-[58px] shrink-0 text-right font-medium ${
+                        className={`ml-auto w-[66px] shrink-0 text-right font-medium ${
                           item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
                         }`}
                       >
