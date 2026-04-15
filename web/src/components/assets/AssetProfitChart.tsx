@@ -311,19 +311,19 @@ export default function AssetProfitChart({
                   {profitTableData.map((item) => (
                     <div
                       key={item.label}
-                      className="flex items-center py-[3px] text-[13px] leading-[19px] tracking-[-0.01em]"
+                      className="flex items-center py-[5px] text-[13px] leading-[19px] tracking-[-0.01em]"
                     >
                       <span className="w-11 shrink-0 text-slate-700">{item.label}</span>
                       <span
                         className={`ml-auto w-[58px] shrink-0 text-right font-medium ${
-                          item.profit >= 0 ? 'text-red-400' : 'text-blue-400'
+                          item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
                         }`}
                       >
                         {formatSignedRate(item.rate)}
                       </span>
                       <span
                         className={`ml-5 w-[108px] shrink-0 text-right font-medium ${
-                          item.profit >= 0 ? 'text-red-400' : 'text-blue-400'
+                          item.profit >= 0 ? 'text-red-500' : 'text-blue-500'
                         }`}
                       >
                         {formatSignedAmount(item.profit)}
