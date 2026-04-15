@@ -60,6 +60,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   const [localCurrencyExpenses, setLocalCurrencyExpenses] = useState<Expense[]>([]);
   const [autoEditExpenseId, setAutoEditExpenseId] = useState<string | null>(null);
   const [incomeSummaryMode, setIncomeSummaryMode] = useState<'monthly' | 'yearly' | null>(null);
+  const [isDesktopLayout, setIsDesktopLayout] = useState(false);
 
   const homeSummaryConfig = household?.homeSummaryConfig || DEFAULT_HOME_SUMMARY_CONFIG;
   const needsYearlyTotal =
@@ -74,6 +75,26 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
 
     processRecurringExpenses(householdKey).then(() => undefined);
   }, [householdKey, isIncome]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const mediaQuery = window.matchMedia('(min-width: 1024px)');
+    const applyLayout = (matches: boolean) => {
+      setIsDesktopLayout(matches);
+    };
+
+    applyLayout(mediaQuery.matches);
+
+    const handleChange = (event: MediaQueryListEvent) => {
+      applyLayout(event.matches);
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
 
   useEffect(() => {
     setIsLoading(true);
@@ -350,7 +371,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
               onSplitExpense={handleSplitExpense}
               onMergeExpenses={handleMergeExpenses}
               onUnmergeExpense={handleUnmergeExpense}
-              autoEditExpenseId={autoEditExpenseId}
+              autoEditExpenseId={isDesktopLayout ? null : autoEditExpenseId}
               onAutoEditHandled={() => setAutoEditExpenseId(null)}
               transactionType={transactionType}
             />
@@ -445,7 +466,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
                 onSplitExpense={handleSplitExpense}
                 onMergeExpenses={handleMergeExpenses}
                 onUnmergeExpense={handleUnmergeExpense}
-                autoEditExpenseId={autoEditExpenseId}
+                autoEditExpenseId={isDesktopLayout ? autoEditExpenseId : null}
                 onAutoEditHandled={() => setAutoEditExpenseId(null)}
                 transactionType={transactionType}
               />
