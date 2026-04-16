@@ -4,6 +4,9 @@ const KIND_DISCLOSURE_BY_CORP_URL =
 const KIND_VIEWER_URL = 'https://kind.krx.co.kr/common/disclsviewer.do';
 const KIND_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
+const DISCLOSURE_PAGE_SIZE = 100;
+const MAX_DISCLOSURE_PAGES = 6;
+const MIN_DISCLOSURE_DETAIL_COUNT = 8;
 
 export interface KindStockDividendInfo {
   recentDividend: number | null;
@@ -52,6 +55,10 @@ function decodeHtmlText(value: string) {
 
 function stripHtml(value: string) {
   return decodeHtmlText(value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+}
+
+function normalizeKoreanText(value: string) {
+  return value.replace(/\s+/g, '').trim();
 }
 
 function parseNumberText(value?: string | null) {
@@ -113,6 +120,18 @@ function normalizeCookieHeader(response: Response) {
     .join('; ');
 }
 
+function decodeBuffer(arrayBuffer: ArrayBuffer, contentType: string | null) {
+  const charset =
+    contentType?.match(/charset=([^;]+)/i)?.[1]?.trim().toLowerCase() ||
+    'utf-8';
+
+  try {
+    return new TextDecoder(charset).decode(arrayBuffer);
+  } catch {
+    return new TextDecoder('utf-8').decode(arrayBuffer);
+  }
+}
+
 async function fetchKindResponse(url: string, init?: RequestInit) {
   const response = await fetch(url, {
     ...init,
@@ -132,7 +151,8 @@ async function fetchKindResponse(url: string, init?: RequestInit) {
 
 async function fetchKindText(url: string, init?: RequestInit) {
   const response = await fetchKindResponse(url, init);
-  return response.text();
+  const arrayBuffer = await response.arrayBuffer();
+  return decodeBuffer(arrayBuffer, response.headers.get('content-type'));
 }
 
 async function fetchKindSessionCookie(mainUrl: string) {
@@ -208,6 +228,11 @@ async function fetchDividendSummaryRows(code: string, stockName: string) {
   return parseSummaryRows(html);
 }
 
+function isDividendDisclosureTitle(title: string) {
+  const normalized = normalizeKoreanText(title);
+  return normalized.includes('현금ㆍ현물배당결정');
+}
+
 function parseDisclosureRows(html: string) {
   return Array.from(html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g))
     .map((match) => {
@@ -219,32 +244,29 @@ function parseDisclosureRows(html: string) {
       const cells = Array.from(rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g), (cell) =>
         stripHtml(cell[1])
       );
-      const disclosureMatch =
-        rowHtml.match(/openDisclsViewer\('([^']+)','[^']*'\)[\s\S]*?title=['"]([^'"]+)['"]/) || null;
+      const acceptNumber = rowHtml.match(/openDisclsViewer\('([^']+)','[^']*'\)/)?.[1] || null;
 
-      if (cells.length < 4 || !disclosureMatch) {
+      if (cells.length < 4 || !acceptNumber) {
         return null;
       }
 
       return {
-        acceptNumber: disclosureMatch[1],
+        acceptNumber,
         disclosedAt: cells[1],
-        title: decodeHtmlText(disclosureMatch[2]),
+        title: cells[3],
       } satisfies KindDisclosureSearchRow;
     })
     .filter((row): row is KindDisclosureSearchRow => row !== null);
 }
 
-async function fetchDividendDisclosureRows(code: string, stockName: string) {
-  const cookie = await fetchKindSessionCookie(
-    `${KIND_DISCLOSURE_BY_CORP_URL}?method=searchDisclosureByCorpMain`
-  );
-
-  const toDate = new Date();
-  const fromDate = new Date(toDate);
-  fromDate.setDate(toDate.getDate() - 450);
-
-  const reportName = '현금ㆍ현물 배당 결정';
+async function fetchDisclosurePageRows(
+  cookie: string,
+  code: string,
+  stockName: string,
+  pageIndex: number,
+  fromDate: string,
+  toDate: string
+) {
   const body = new URLSearchParams({
     method: 'searchDisclosureByCorpSub',
     forward: 'searchdisclosurebycorp_sub',
@@ -255,16 +277,16 @@ async function fetchDividendDisclosureRows(code: string, stockName: string) {
     repIsuSrtCd: `A${code}`,
     isurCd: '',
     repIsuCd: '',
-    currentPageSize: '100',
-    pageIndex: '1',
+    currentPageSize: String(DISCLOSURE_PAGE_SIZE),
+    pageIndex: String(pageIndex),
     listStatCd: 'Y',
     secugrpId: 'ST',
     orderMode: '1',
     orderStat: 'D',
-    reportNm: reportName,
-    reportNmTemp: reportName,
-    fromDate: formatDate(fromDate),
-    toDate: formatDate(toDate),
+    reportNm: '',
+    reportNmTemp: '',
+    fromDate,
+    toDate,
   });
 
   const html = await fetchKindText(KIND_DISCLOSURE_BY_CORP_URL, {
@@ -280,6 +302,44 @@ async function fetchDividendDisclosureRows(code: string, stockName: string) {
   });
 
   return parseDisclosureRows(html);
+}
+
+async function fetchDividendDisclosureRows(code: string, stockName: string) {
+  const cookie = await fetchKindSessionCookie(
+    `${KIND_DISCLOSURE_BY_CORP_URL}?method=searchDisclosureByCorpMain`
+  );
+
+  const toDate = new Date();
+  const fromDate = new Date(toDate);
+  fromDate.setDate(toDate.getDate() - 1500);
+
+  const collectedRows: KindDisclosureSearchRow[] = [];
+
+  for (let pageIndex = 1; pageIndex <= MAX_DISCLOSURE_PAGES; pageIndex += 1) {
+    const pageRows = await fetchDisclosurePageRows(
+      cookie,
+      code,
+      stockName,
+      pageIndex,
+      formatDate(fromDate),
+      formatDate(toDate)
+    );
+
+    if (pageRows.length === 0) {
+      break;
+    }
+
+    collectedRows.push(...pageRows.filter((row) => isDividendDisclosureTitle(row.title)));
+
+    if (
+      collectedRows.length >= MIN_DISCLOSURE_DETAIL_COUNT ||
+      pageRows.length < DISCLOSURE_PAGE_SIZE
+    ) {
+      break;
+    }
+  }
+
+  return Array.from(new Map(collectedRows.map((row) => [row.acceptNumber, row])).values());
 }
 
 async function fetchDisclosureDocumentNumber(acceptNumber: string) {
@@ -318,23 +378,31 @@ function parseDisclosureDetail(html: string) {
     }
 
     const [firstCell, secondCell, thirdCell] = cells;
+    const normalizedFirstCell = normalizeKoreanText(firstCell);
+    const normalizedSecondCell = normalizeKoreanText(secondCell || '');
 
-    if (firstCell.includes('배당구분')) {
+    if (normalizedFirstCell.includes('배당구분')) {
       dividendKind = cells[cells.length - 1] || null;
       continue;
     }
 
-    if (firstCell.includes('1주당 배당금') && secondCell?.includes('보통주식')) {
+    if (
+      normalizedFirstCell.includes('1주당배당금(원)') &&
+      normalizedSecondCell.includes('보통주식')
+    ) {
       dividend = parseNumberText(thirdCell);
       continue;
     }
 
-    if (firstCell.includes('배당기준일')) {
+    if (normalizedFirstCell.includes('배당기준일')) {
       recordDate = parseDateText(cells[cells.length - 1]);
       continue;
     }
 
-    if (firstCell.includes('배당금지급 예정일자')) {
+    if (
+      normalizedFirstCell.includes('배당금지급예정일자') ||
+      normalizedFirstCell.includes('배당금지급예정일')
+    ) {
       paymentDate = parseDateText(cells[cells.length - 1]);
     }
   }
@@ -383,14 +451,28 @@ async function fetchDividendDisclosureDetails(rows: KindDisclosureSearchRow[]) {
         disclosedAt: string;
       } => detail !== null
     )
-    .sort((left, right) => right.recordDate.localeCompare(left.recordDate));
+    .filter((detail, index, array) => {
+      const currentKey = `${detail.recordDate}|${detail.paymentDate || ''}|${detail.dividend}`;
+      return (
+        index ===
+        array.findIndex(
+          (candidate) =>
+            `${candidate.recordDate}|${candidate.paymentDate || ''}|${candidate.dividend}` ===
+            currentKey
+        )
+      );
+    })
+    .sort((left, right) => {
+      const dateOrder = right.recordDate.localeCompare(left.recordDate);
+      return dateOrder !== 0 ? dateOrder : right.disclosedAt.localeCompare(left.disclosedAt);
+    });
 }
 
 function inferAnnualFrequency(
   details: Array<KindStockDividendDisclosureDetail & { disclosedAt: string }>
 ) {
   if (details.length <= 1) {
-    const latestKind = details[0]?.dividendKind || '';
+    const latestKind = normalizeKoreanText(details[0]?.dividendKind || '');
 
     if (latestKind.includes('분기')) {
       return 4;
@@ -433,6 +515,27 @@ function buildAnnualDividendFromDetails(
   return details.slice(0, frequency).reduce((sum, detail) => sum + detail.dividend, 0);
 }
 
+function sanitizeDividendDetails(
+  details: Array<KindStockDividendDisclosureDetail & { disclosedAt: string }>,
+  annualDividendPerShare: number | null
+) {
+  if (!annualDividendPerShare || details.length === 0) {
+    return details;
+  }
+
+  return details.filter((detail) => {
+    if (detail.dividend <= 0) {
+      return false;
+    }
+
+    if (detail.dividend > annualDividendPerShare) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
 export async function fetchKindStockDividendInfo(
   code: string,
   stockName: string
@@ -451,12 +554,14 @@ export async function fetchKindStockDividendInfo(
   }
 
   const latestSummary = summaryRows[0] || null;
-  const latestDetail = details[0] || null;
-  const frequency = inferAnnualFrequency(details);
+  const roughFrequency = inferAnnualFrequency(details);
   const annualDividendPerShare =
     latestSummary?.annualDividendPerShare ??
-    buildAnnualDividendFromDetails(details, frequency) ??
+    buildAnnualDividendFromDetails(details, roughFrequency) ??
     null;
+  const sanitizedDetails = sanitizeDividendDetails(details, annualDividendPerShare);
+  const latestDetail = sanitizedDetails[0] || null;
+  const frequency = inferAnnualFrequency(sanitizedDetails);
 
   return {
     recentDividend: latestDetail?.dividend ?? null,
@@ -464,7 +569,7 @@ export async function fetchKindStockDividendInfo(
     frequency,
     dividendYield: latestSummary?.dividendYield ?? null,
     annualDividendPerShare,
-    paymentEvents: details
+    paymentEvents: sanitizedDetails
       .filter((detail) => detail.paymentDate)
       .map((detail) => ({
         paymentDate: detail.paymentDate as string,
