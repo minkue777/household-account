@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchKindEtfDividendInfo } from '@/lib/server/kindEtfDividend';
+import { fetchKindStockDividendInfo } from '@/lib/server/kindStockDividend';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -93,12 +94,32 @@ async function parseDividendInfo(
   const etfDividendYield = parsePercentText(payload.etfKeyIndicator?.dividendYieldTtm);
 
   if (stockEndType === 'stock') {
+    try {
+      const kindDividendInfo = await fetchKindStockDividendInfo(code, stockName);
+
+      if (kindDividendInfo) {
+        return {
+          code,
+          name: stockName,
+          recentDividend: kindDividendInfo.recentDividend,
+          paymentDate: kindDividendInfo.paymentDate,
+          frequency: kindDividendInfo.frequency,
+          dividendYield: kindDividendInfo.dividendYield ?? stockDividendYield,
+          annualDividendPerShare: kindDividendInfo.annualDividendPerShare,
+          isEstimated: false,
+          paymentEvents: kindDividendInfo.paymentEvents,
+        };
+      }
+    } catch (error) {
+      console.error('KIND 개별주식 배당 조회 오류:', error);
+    }
+
     return {
       code,
       name: stockName,
-      recentDividend: stockAnnualDividend,
+      recentDividend: null,
       paymentDate: null,
-      frequency: stockAnnualDividend ? 1 : null,
+      frequency: null,
       dividendYield: stockDividendYield,
       annualDividendPerShare: stockAnnualDividend,
       isEstimated: false,
