@@ -127,6 +127,58 @@ function upsertRealtimeSnapshot(
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
+function buildCombinedSnapshots(
+  assetId: string,
+  snapshotsByType: Record<AssetType, AssetHistoryEntry[]>,
+  includedTypes: AssetType[]
+): AssetHistoryEntry[] {
+  const dateSet = new Set<string>();
+
+  includedTypes.forEach((type) => {
+    snapshotsByType[type].forEach((entry) => dateSet.add(entry.date));
+  });
+
+  const dates = Array.from(dateSet).sort();
+  const carriedBalances = includedTypes.reduce<Record<AssetType, number | null>>((acc, type) => {
+    acc[type] = null;
+    return acc;
+  }, {} as Record<AssetType, number | null>);
+
+  let previousBalance: number | null = null;
+
+  return dates.map((date) => {
+    let balance = 0;
+    let householdId = '';
+
+    includedTypes.forEach((type) => {
+      const matchedEntry = snapshotsByType[type].find((entry) => entry.date === date);
+
+      if (matchedEntry) {
+        carriedBalances[type] = matchedEntry.balance;
+        householdId = householdId || matchedEntry.householdId;
+      }
+
+      if (carriedBalances[type] !== null) {
+        balance += carriedBalances[type] || 0;
+      }
+    });
+
+    const changeAmount = previousBalance === null ? 0 : balance - previousBalance;
+    previousBalance = balance;
+
+    return {
+      id: `combined_${assetId}_${date}`,
+      householdId,
+      assetId,
+      balance,
+      date,
+      changeAmount,
+      memo: '합산 계산',
+      createdAt: Timestamp.now(),
+    };
+  });
+}
+
 function areSameActiveElements(
   current: Array<{ datasetIndex: number; index: number }>,
   next: Array<{ datasetIndex: number; index: number }>
@@ -203,24 +255,19 @@ export default function AssetStatsPage() {
 
   const activeAssets = useMemo(() => assets.filter((asset) => asset.isActive), [assets]);
   const visibleAssets = useMemo(
-    () => activeAssets.filter((asset) => !financialOnly || asset.type !== 'property'),
+    () => activeAssets.filter((asset) => !financialOnly || (asset.type !== 'property' && asset.type !== 'loan')),
     [activeAssets, financialOnly]
   );
   const totalAssets = useMemo(() => sumSignedAssetBalances(visibleAssets), [visibleAssets]);
   const typeTotals = useMemo(() => sumSignedBalancesByAssetType(visibleAssets), [visibleAssets]);
   const today = formatLocalDate(new Date());
-  const snapshotType = financialOnly ? 'FINANCIAL' : 'TOTAL';
+  const snapshotType = 'TOTAL';
 
   const totalSnapshots = useMemo(
     () => history
       .filter((entry) => entry.assetId === snapshotType)
       .sort((a, b) => a.date.localeCompare(b.date)),
     [history, snapshotType]
-  );
-
-  const displayTotalSnapshots = useMemo(
-    () => upsertRealtimeSnapshot(totalSnapshots, snapshotType, totalAssets, today),
-    [snapshotType, today, totalAssets, totalSnapshots]
   );
 
   const typeSnapshots = useMemo(() => {
@@ -241,7 +288,7 @@ export default function AssetStatsPage() {
         return;
       }
 
-      if (financialOnly && typeKey === 'property') {
+      if (financialOnly && (typeKey === 'property' || typeKey === 'loan')) {
         return;
       }
 
@@ -264,6 +311,18 @@ export default function AssetStatsPage() {
 
     return result;
   }, [today, typeSnapshots, typeTotals]);
+
+  const displayTotalSnapshots = useMemo(() => {
+    if (!financialOnly) {
+      return upsertRealtimeSnapshot(totalSnapshots, snapshotType, totalAssets, today);
+    }
+
+    return buildCombinedSnapshots(
+      'FINANCIAL_EXCLUDING_LOAN',
+      displayTypeSnapshots,
+      ['savings', 'stock', 'crypto', 'gold']
+    );
+  }, [displayTypeSnapshots, financialOnly, snapshotType, today, totalAssets, totalSnapshots]);
 
   const availableTypes = useMemo(() => {
     const available = new Set<AssetType>();
