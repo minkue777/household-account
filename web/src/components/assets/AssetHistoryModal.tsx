@@ -166,6 +166,10 @@ export default function AssetHistoryModal({
 
         {(isStock || isGoldEtf) && stockInputMode === 'search' && (
           <StockSearchForm
+            theme={isGoldEtf ? 'amber' : 'blue'}
+            searchLabel={isGoldEtf ? 'ETF 검색' : '종목 검색'}
+            searchPlaceholder={isGoldEtf ? 'ETF명 입력' : '종목명 입력'}
+            addButtonLabel={isGoldEtf ? 'ETF 추가' : '종목 추가'}
             state={{
               searchQuery: stockManager.searchQuery,
               setSearchQuery: stockManager.setSearchQuery,

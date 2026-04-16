@@ -23,7 +23,28 @@ export interface StockSearchState {
 interface StockSearchFormProps {
   state: StockSearchState;
   onAdd: () => void;
+  theme?: 'blue' | 'amber';
+  searchLabel?: string;
+  searchPlaceholder?: string;
+  addButtonLabel?: string;
 }
+
+const THEME_STYLES = {
+  blue: {
+    wrapper: 'border-b border-blue-200 bg-blue-100',
+    loader: 'text-blue-500',
+    selectedCard: 'border-blue-200',
+    focus: 'focus:ring-blue-500',
+    button: 'bg-blue-500 hover:bg-blue-600',
+  },
+  amber: {
+    wrapper: 'border-b border-amber-200 bg-amber-100',
+    loader: 'text-amber-500',
+    selectedCard: 'border-amber-200',
+    focus: 'focus:ring-amber-500',
+    button: 'bg-amber-500 hover:bg-amber-600',
+  },
+} as const;
 
 function getDisplayCode(stock: Pick<StockSearchResult, 'code' | 'market'>) {
   if (stock.market === 'US' && stock.code.startsWith('US:')) {
@@ -45,7 +66,14 @@ function formatUsdPrice(price?: number) {
   }).format(price);
 }
 
-export default function StockSearchForm({ state, onAdd }: StockSearchFormProps) {
+export default function StockSearchForm({
+  state,
+  onAdd,
+  theme = 'blue',
+  searchLabel = '종목 검색',
+  searchPlaceholder = '종목명 입력',
+  addButtonLabel = '종목 추가',
+}: StockSearchFormProps) {
   const {
     searchQuery,
     setSearchQuery,
@@ -64,24 +92,25 @@ export default function StockSearchForm({ state, onAdd }: StockSearchFormProps) 
   } = state;
 
   const priceInfo = currentPriceInfo || null;
+  const themeStyle = THEME_STYLES[theme];
   const averagePriceLabel =
     selectedStock?.market === 'US' ? '평균 매입가 (원 기준, 선택)' : '평균 매입가 (선택)';
   const usdPriceLabel = formatUsdPrice(priceInfo?.sourcePrice);
 
   return (
-    <div className="border-b border-blue-200 bg-blue-100 p-4">
+    <div className={`${themeStyle.wrapper} p-4`}>
       <div className="space-y-3">
         <div className="relative">
-          <label className="mb-1 block text-sm font-medium text-slate-700">종목 검색</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">{searchLabel}</label>
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="종목명 입력"
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder={searchPlaceholder}
+            className={`w-full rounded-lg border border-slate-300 bg-white px-4 py-2 focus:outline-none focus:ring-2 ${themeStyle.focus}`}
           />
           {isSearching && (
-            <Loader2 className="absolute right-3 top-9 h-4 w-4 animate-spin text-blue-500" />
+            <Loader2 className={`absolute right-3 top-9 h-4 w-4 animate-spin ${themeStyle.loader}`} />
           )}
 
           {searchResults.length > 0 && !selectedStock && (
@@ -105,14 +134,14 @@ export default function StockSearchForm({ state, onAdd }: StockSearchFormProps) 
 
         {selectedStock && (
           <>
-            <div className="rounded-lg border border-blue-200 bg-white p-3">
+            <div className={`rounded-lg border bg-white p-3 ${themeStyle.selectedCard}`}>
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-medium text-slate-800">{selectedStock.name}</p>
                   <p className="text-xs text-slate-500">{getDisplayCode(selectedStock)}</p>
                 </div>
                 {isLoadingPrice ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                  <Loader2 className={`h-4 w-4 animate-spin ${themeStyle.loader}`} />
                 ) : currentPrice ? (
                   <div className="text-right">
                     <p className="font-semibold text-red-500">{currentPrice.toLocaleString()}원</p>
@@ -132,7 +161,7 @@ export default function StockSearchForm({ state, onAdd }: StockSearchFormProps) 
                 value={quantity}
                 onChange={(e) => setQuantityInput(e.target.value.replace(/[^0-9]/g, ''))}
                 placeholder="0"
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`w-full rounded-lg border border-slate-300 bg-white px-4 py-2 focus:outline-none focus:ring-2 ${themeStyle.focus}`}
               />
             </div>
 
@@ -147,7 +176,7 @@ export default function StockSearchForm({ state, onAdd }: StockSearchFormProps) 
                   value={avgPrice ? parseInt(avgPrice, 10).toLocaleString() : ''}
                   onChange={(e) => setAvgPriceInput(e.target.value.replace(/[^0-9]/g, ''))}
                   placeholder="0"
-                  className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`w-full rounded-lg border border-slate-300 bg-white px-4 py-2 pr-8 focus:outline-none focus:ring-2 ${themeStyle.focus}`}
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">원</span>
               </div>
@@ -157,9 +186,9 @@ export default function StockSearchForm({ state, onAdd }: StockSearchFormProps) 
               type="button"
               onClick={onAdd}
               disabled={!selectedStock || !quantity || isAddingHolding}
-              className="w-full rounded-lg bg-blue-500 py-2.5 font-medium text-white transition-colors hover:bg-blue-600 disabled:bg-slate-300"
+              className={`w-full rounded-lg py-2.5 font-medium text-white transition-colors disabled:bg-slate-300 ${themeStyle.button}`}
             >
-              {isAddingHolding ? '추가 중...' : '종목 추가'}
+              {isAddingHolding ? '추가 중...' : addButtonLabel}
             </button>
           </>
         )}

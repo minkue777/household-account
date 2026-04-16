@@ -538,6 +538,10 @@ export default function AssetAddModal({
     const price = holding.currentPrice || holding.avgPrice || 0;
     return sum + price * holding.quantity;
   }, 0);
+  const stockPendingWrapperClass = isGoldEtf
+    ? 'space-y-2 rounded-xl border border-amber-100 bg-amber-50/70 p-3'
+    : 'space-y-2 rounded-xl border border-blue-100 bg-blue-50/70 p-3';
+  const stockPendingTitleClass = isGoldEtf ? 'text-amber-800' : 'text-slate-700';
 
   return (
     <ModalOverlay onClose={onClose}>
@@ -653,14 +657,12 @@ export default function AssetAddModal({
           )}
 
           {isStockLikeAsset && (
-            <div className="space-y-3 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  {isGoldEtf ? '보유 ETF' : '보유 종목'}
-                </label>
-              </div>
-
+            <>
               <StockSearchForm
+                theme={isGoldEtf ? 'amber' : 'blue'}
+                searchLabel={isGoldEtf ? 'ETF 검색' : '종목 검색'}
+                searchPlaceholder={isGoldEtf ? 'ETF명 입력' : '종목명 입력'}
+                addButtonLabel={isGoldEtf ? 'ETF 추가' : '종목 추가'}
                 state={stockSearchState}
                 onAdd={() => {
                   void handleAddPendingHolding();
@@ -668,9 +670,9 @@ export default function AssetAddModal({
               />
 
               {pendingHoldings.length > 0 && (
-                <div className="space-y-2 rounded-xl border border-blue-100 bg-white p-3">
+                <div className={stockPendingWrapperClass}>
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-slate-700">
+                    <p className={`text-sm font-medium ${stockPendingTitleClass}`}>
                       추가할 {isGoldEtf ? 'ETF' : '종목'}
                     </p>
                     <p className="text-xs text-slate-500">
@@ -684,7 +686,7 @@ export default function AssetAddModal({
                     return (
                       <div
                         key={`${holding.stockCode}-${index}`}
-                        className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+                        className="flex items-center justify-between rounded-lg border border-slate-100 bg-white px-3 py-2"
                       >
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-slate-800">
@@ -708,15 +710,11 @@ export default function AssetAddModal({
                   })}
                 </div>
               )}
-            </div>
+            </>
           )}
 
           {type === 'crypto' && (
-            <div className="space-y-3 rounded-2xl border border-orange-100 bg-orange-50/70 p-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">보유 코인</label>
-              </div>
-
+            <>
               <CryptoSearchForm
                 state={cryptoSearchState}
                 onAdd={() => {
@@ -725,9 +723,9 @@ export default function AssetAddModal({
               />
 
               {pendingCryptoHoldings.length > 0 && (
-                <div className="space-y-2 rounded-xl border border-orange-100 bg-white p-3">
+                <div className="space-y-2 rounded-xl border border-orange-100 bg-orange-50/70 p-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-slate-700">추가할 코인</p>
+                    <p className="text-sm font-medium text-orange-800">추가할 코인</p>
                     <p className="text-xs text-slate-500">
                       예상 평가금액 {Math.round(pendingCryptoTotal).toLocaleString()}원
                     </p>
@@ -739,7 +737,7 @@ export default function AssetAddModal({
                     return (
                       <div
                         key={`${holding.marketCode}-${index}`}
-                        className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+                        className="flex items-center justify-between rounded-lg border border-slate-100 bg-white px-3 py-2"
                       >
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-slate-800">
@@ -767,7 +765,7 @@ export default function AssetAddModal({
                   })}
                 </div>
               )}
-            </div>
+            </>
           )}
 
           <AssetMemoField value={memo} onChange={setMemo} />
