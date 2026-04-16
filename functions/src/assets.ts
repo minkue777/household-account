@@ -177,7 +177,7 @@ export const dailyAssetSnapshot = functions
 
             totalBalance += balance;
 
-            if (type !== 'property') {
+            if (type !== 'property' && type !== 'loan') {
               financialBalance += balance;
             }
 

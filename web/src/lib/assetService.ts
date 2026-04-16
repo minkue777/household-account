@@ -506,7 +506,7 @@ export async function saveDailyTotalSnapshot(
   // 전체 자산 스냅샷 저장
   await saveDailySnapshot('TOTAL', totalBalance, 'total');
 
-  // 금융자산 스냅샷 저장 (부동산 제외)
+  // 금융자산 스냅샷 저장 (부동산/대출 제외)
   if (financialBalance !== undefined) {
     await saveDailySnapshot('FINANCIAL', financialBalance, 'financial');
   }

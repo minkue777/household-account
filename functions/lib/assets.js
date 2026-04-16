@@ -172,7 +172,7 @@ exports.dailyAssetSnapshot = functions
                     const type = data.type;
                     const owner = data.owner;
                     totalBalance += balance;
-                    if (type !== 'property') {
+                    if (type !== 'property' && type !== 'loan') {
                         financialBalance += balance;
                     }
                     if (ASSET_TYPE_ORDER.includes(type)) {
