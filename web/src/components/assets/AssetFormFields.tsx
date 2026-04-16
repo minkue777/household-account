@@ -14,12 +14,14 @@ interface AssetTypeGridProps {
   value: AssetType;
   onChange: (type: AssetType) => void;
   itemLabelClassName?: string;
+  disabled?: boolean;
 }
 
 export function AssetTypeGrid({
   value,
   onChange,
   itemLabelClassName = 'text-[10px] sm:text-xs font-medium',
+  disabled = false,
 }: AssetTypeGridProps) {
   return (
     <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6 sm:gap-2">
@@ -33,11 +35,12 @@ export function AssetTypeGrid({
             key={type}
             type="button"
             onClick={() => onChange(type)}
+            disabled={disabled}
             className={`flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-xl border-2 px-1.5 py-2 transition-all sm:min-h-[84px] sm:gap-1.5 sm:px-2.5 sm:py-3 ${
               isSelected
                 ? 'bg-white'
                 : 'border-slate-200 hover:border-slate-300'
-            }`}
+            } ${disabled ? 'cursor-default' : ''}`}
             style={
               isSelected
                 ? {

@@ -286,6 +286,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
                 value={type}
                 onChange={setType}
                 itemLabelClassName="text-[11px] sm:text-sm font-medium"
+                disabled
               />
             </div>
 
@@ -294,18 +295,16 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
                 <label className="mb-2 block text-sm font-medium text-slate-700">세부 유형</label>
                 <div className="flex flex-wrap gap-2">
                   {ASSET_TYPE_CONFIG[type].subTypes.map((option) => (
-                    <button
+                    <div
                       key={option}
-                      type="button"
-                      onClick={() => setSubType(option)}
                       className={`rounded-full px-3 py-1.5 text-sm transition-all ${
                         subType === option
                           ? 'bg-slate-800 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          : 'bg-slate-100 text-slate-600'
                       }`}
                     >
                       {option}
-                    </button>
+                    </div>
                   ))}
                 </div>
               </div>

@@ -28,7 +28,7 @@ export const ASSET_TYPE_CONFIG: Record<
     label: '예적금',
     icon: 'WalletMinimal',
     color: '#3B82F6',
-    subTypes: ['예금', '적금', 'CMA'],
+    subTypes: ['예금', '적금', '보험'],
   },
   stock: {
     label: '주식',
