@@ -273,7 +273,7 @@ function HoldingEditorCard({
         <button
           type="button"
           onClick={onDelete}
-          className="flex-1 rounded-lg border border-red-300 px-4 py-2 text-sm text-red-500 transition-colors hover:bg-red-50"
+          className="flex-1 rounded-lg border border-red-300 px-3 py-2 text-sm text-red-500 hover:bg-red-50"
         >
           삭제
         </button>
@@ -281,7 +281,7 @@ function HoldingEditorCard({
           type="button"
           onClick={onSave}
           disabled={!editName.trim() || !editQuantity || isSubmitting}
-          className="flex-1 rounded-lg bg-blue-500 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-600 disabled:bg-slate-300"
+          className="flex-1 rounded-lg bg-blue-500 px-3 py-2 text-sm text-white hover:bg-blue-600 disabled:bg-slate-300"
         >
           {isSubmitting ? '저장 중...' : '저장'}
         </button>
