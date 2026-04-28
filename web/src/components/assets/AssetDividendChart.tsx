@@ -351,7 +351,7 @@ export default function AssetDividendChart() {
             {isCurrentYear ? '올해 누적 배당금' : '연간 배당금'}
           </span>
           <span className="text-lg font-bold text-red-500">
-            {Math.round(totalDividend).toLocaleString()}원
+            {Math.round(totalDividend + totalEstimatedDividend).toLocaleString()}원
           </span>
         </div>
 
