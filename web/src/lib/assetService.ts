@@ -1120,6 +1120,7 @@ export function subscribeToCryptoHoldings(
 // ============================================
 
 const DIVIDEND_COLLECTION = 'dividend_snapshots';
+const DIVIDEND_EVENTS_COLLECTION = 'dividend_events';
 
 export interface DividendSnapshotEventRecord {
   stockCode: string;
@@ -1133,6 +1134,20 @@ export interface DividendSnapshotEventRecord {
 export interface DividendSnapshotData {
   monthlyData: number[];
   events: Record<string, DividendSnapshotEventRecord>;
+}
+
+export interface DividendEventRecord {
+  id: string;
+  householdId: string;
+  stockCode: string;
+  stockName: string;
+  recordDate: string;
+  paymentDate: string;
+  paymentYear: number | null;
+  perShareAmount: number;
+  eligibleQuantity: number | null;
+  totalAmount: number | null;
+  status: string;
 }
 
 function createEmptyDividendMonthlyData() {
@@ -1152,6 +1167,28 @@ function normalizeDividendSnapshotData(data?: DocumentData | null): DividendSnap
   return {
     monthlyData,
     events,
+  };
+}
+
+function mapDocToDividendEvent(docSnap: QueryDocumentSnapshot<DocumentData>): DividendEventRecord {
+  const data = docSnap.data();
+  const paymentDate = String(data.paymentDate || '');
+
+  return {
+    id: docSnap.id,
+    householdId: data.householdId,
+    stockCode: String(data.stockCode || '').trim().toUpperCase(),
+    stockName: data.stockName || data.stockCode || '',
+    recordDate: String(data.recordDate || ''),
+    paymentDate,
+    paymentYear:
+      typeof data.paymentYear === 'number'
+        ? data.paymentYear
+        : Number(paymentDate.slice(0, 4)) || null,
+    perShareAmount: Number(data.perShareAmount || 0),
+    eligibleQuantity: typeof data.eligibleQuantity === 'number' ? data.eligibleQuantity : null,
+    totalAmount: typeof data.totalAmount === 'number' ? data.totalAmount : null,
+    status: String(data.status || ''),
   };
 }
 
@@ -1189,6 +1226,32 @@ export async function getDividendSnapshot(year: number): Promise<DividendSnapsho
     console.error('배당금 스냅샷 조회 오류:', error);
   }
   return null;
+}
+
+export async function getDividendEventsByYear(year: number): Promise<DividendEventRecord[]> {
+  const householdId = getHouseholdId();
+
+  try {
+    const q = query(
+      collection(db, DIVIDEND_EVENTS_COLLECTION),
+      where('householdId', '==', householdId)
+    );
+    const snapshot = await getDocs(q);
+
+    return snapshot.docs
+      .map(mapDocToDividendEvent)
+      .filter((event) => event.paymentYear === year)
+      .sort((left, right) => {
+        if (left.paymentDate !== right.paymentDate) {
+          return right.paymentDate.localeCompare(left.paymentDate);
+        }
+
+        return left.stockName.localeCompare(right.stockName, 'ko');
+      });
+  } catch (error) {
+    console.error('배당금 이벤트 조회 오류:', error);
+    return [];
+  }
 }
 
 /**

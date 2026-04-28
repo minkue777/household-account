@@ -4,8 +4,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { StockHolding } from '@/types/asset';
-import { DividendSnapshotData, getAllStockHoldings, getDividendSnapshot } from '@/lib/assetService';
+import {
+  DividendEventRecord,
+  DividendSnapshotData,
+  getAllStockHoldings,
+  getDividendEventsByYear,
+  getDividendSnapshot,
+} from '@/lib/assetService';
 import { ModalOverlay } from '@/components/common';
+import { formatLocalDate } from '@/lib/utils/date';
 
 interface DividendSnapshotEvent {
   stockCode: string;
@@ -15,6 +22,7 @@ interface DividendSnapshotEvent {
   quantity: number;
   totalAmount: number;
   recordDate?: string;
+  isEstimated?: boolean;
 }
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -36,6 +44,7 @@ export default function AssetDividendChart() {
   const [cachedDividendSnapshot, setCachedDividendSnapshot] = useState<DividendSnapshotData | null>(
     null
   );
+  const [dividendEvents, setDividendEvents] = useState<DividendEventRecord[]>([]);
   const [isDividendLoading, setIsDividendLoading] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
 
@@ -46,9 +55,10 @@ export default function AssetDividendChart() {
       setIsDividendLoading(true);
 
       try {
-        const [allHoldings, snapshot] = await Promise.all([
+        const [allHoldings, snapshot, events] = await Promise.all([
           getAllStockHoldings(),
           getDividendSnapshot(dividendYear),
+          getDividendEventsByYear(dividendYear),
         ]);
 
         if (isCancelled) {
@@ -57,6 +67,7 @@ export default function AssetDividendChart() {
 
         setStockHoldings(allHoldings.filter(supportsDividendInfo));
         setCachedDividendSnapshot(snapshot);
+        setDividendEvents(events);
       } catch (error) {
         console.error('배당금 현황 조회 오류:', error);
       } finally {
@@ -86,6 +97,71 @@ export default function AssetDividendChart() {
   }, [dividendYear]);
 
   const isCurrentYear = dividendYear === CURRENT_YEAR;
+  const today = formatLocalDate(new Date());
+
+  const holdingQuantityByCode = useMemo(() => {
+    return stockHoldings.reduce<Record<string, number>>((accumulator, holding) => {
+      const stockCode = holding.stockCode.trim().toUpperCase();
+      accumulator[stockCode] = (accumulator[stockCode] || 0) + (holding.quantity || 0);
+      return accumulator;
+    }, {});
+  }, [stockHoldings]);
+
+  const projectedDividendEvents = useMemo<DividendSnapshotEvent[]>(() => {
+    const confirmedEventKeys = new Set(
+      Object.values(cachedDividendSnapshot?.events || {}).map((event) =>
+        `${event.stockCode}_${event.paymentDate}_${event.perShareAmount}`
+      )
+    );
+
+    return dividendEvents
+      .filter((event) => {
+        if (event.status !== 'announced' || event.totalAmount !== null) {
+          return false;
+        }
+
+        if (!event.recordDate || event.recordDate < today) {
+          return false;
+        }
+
+        const eventKey = `${event.stockCode}_${event.paymentDate}_${event.perShareAmount}`;
+        if (confirmedEventKeys.has(eventKey)) {
+          return false;
+        }
+
+        const quantity = holdingQuantityByCode[event.stockCode] || 0;
+        return quantity > 0 && event.perShareAmount > 0;
+      })
+      .map((event) => {
+        const quantity = holdingQuantityByCode[event.stockCode] || 0;
+
+        return {
+          stockCode: event.stockCode,
+          stockName: event.stockName,
+          recordDate: event.recordDate,
+          paymentDate: event.paymentDate,
+          perShareAmount: event.perShareAmount,
+          quantity,
+          totalAmount: Math.round(event.perShareAmount * quantity),
+          isEstimated: true,
+        };
+      });
+  }, [cachedDividendSnapshot?.events, dividendEvents, holdingQuantityByCode, today]);
+
+  const projectedMonthlyData = useMemo(() => {
+    const monthlyTotals = createEmptyMonthlyData();
+
+    projectedDividendEvents.forEach((event) => {
+      const [year, month] = event.paymentDate.split('-').map(Number);
+      if (year !== dividendYear || month < 1 || month > 12) {
+        return;
+      }
+
+      monthlyTotals[month - 1] += event.totalAmount;
+    });
+
+    return monthlyTotals;
+  }, [dividendYear, projectedDividendEvents]);
 
   const monthlyDividendData = useMemo(() => {
     const monthlyTotals = cachedDividendSnapshot?.monthlyData || createEmptyMonthlyData();
@@ -93,35 +169,59 @@ export default function AssetDividendChart() {
     return monthlyTotals.map((dividend, index) => ({
       month: index + 1,
       dividend,
+      estimatedDividend: projectedMonthlyData[index] || 0,
     }));
-  }, [cachedDividendSnapshot]);
+  }, [cachedDividendSnapshot, projectedMonthlyData]);
 
   const selectedMonthEvents = useMemo(() => {
     if (!selectedMonth) {
       return [];
     }
 
-    return Object.values(cachedDividendSnapshot?.events || {})
+    const confirmedEvents = Object.values(cachedDividendSnapshot?.events || {})
       .filter((event) => {
         const [year, month] = event.paymentDate.split('-').map(Number);
         return year === dividendYear && month === selectedMonth;
       })
+      .map((event) => ({ ...event, isEstimated: false }));
+
+    const estimatedEvents = projectedDividendEvents.filter((event) => {
+      const [year, month] = event.paymentDate.split('-').map(Number);
+      return year === dividendYear && month === selectedMonth;
+    });
+
+    return [...confirmedEvents, ...estimatedEvents]
       .sort((left, right) => {
         if (left.paymentDate !== right.paymentDate) {
           return right.paymentDate.localeCompare(left.paymentDate);
         }
 
+        if (left.isEstimated !== right.isEstimated) {
+          return left.isEstimated ? 1 : -1;
+        }
+
         return left.stockName.localeCompare(right.stockName, 'ko');
       }) as DividendSnapshotEvent[];
-  }, [cachedDividendSnapshot?.events, dividendYear, selectedMonth]);
+  }, [cachedDividendSnapshot?.events, dividendYear, projectedDividendEvents, selectedMonth]);
 
   const dividendChartData = useMemo(
     () => ({
       labels: monthlyDividendData.map((item) => String(item.month)),
       datasets: [
         {
+          label: '확정',
           data: monthlyDividendData.map((item) => item.dividend),
           backgroundColor: 'rgba(16, 185, 129, 0.8)',
+          stack: 'dividend',
+          borderRadius: 4,
+        },
+        {
+          label: '예상',
+          data: monthlyDividendData.map((item) => item.estimatedDividend),
+          backgroundColor: 'rgba(16, 185, 129, 0.24)',
+          borderColor: 'rgba(16, 185, 129, 0.55)',
+          borderWidth: 1,
+          stack: 'dividend',
           borderRadius: 4,
         },
       ],
@@ -140,7 +240,7 @@ export default function AssetDividendChart() {
 
       const month = firstElement.index + 1;
       const selectedData = monthlyDividendData[firstElement.index];
-      if (!selectedData || selectedData.dividend <= 0) {
+      if (!selectedData || selectedData.dividend + selectedData.estimatedDividend <= 0) {
         return;
       }
 
@@ -148,18 +248,26 @@ export default function AssetDividendChart() {
     },
     plugins: {
       legend: {
-        display: false,
+        display: true,
+        labels: {
+          boxHeight: 8,
+          boxWidth: 12,
+          color: '#64748b',
+          font: { size: 11 },
+        },
       },
       tooltip: {
         callbacks: {
           label(context: any) {
-            return `${Math.round(Number(context.raw || 0)).toLocaleString()}원`;
+            const label = context.dataset.label ? `${context.dataset.label}: ` : '';
+            return `${label}${Math.round(Number(context.raw || 0)).toLocaleString()}원`;
           },
         },
       },
     },
     scales: {
       x: {
+        stacked: true,
         grid: {
           display: false,
         },
@@ -171,6 +279,7 @@ export default function AssetDividendChart() {
         },
       },
       y: {
+        stacked: true,
         grid: {
           color: 'rgba(0, 0, 0, 0.05)',
         },
@@ -194,6 +303,10 @@ export default function AssetDividendChart() {
   };
 
   const totalDividend = monthlyDividendData.reduce((sum, item) => sum + item.dividend, 0);
+  const totalEstimatedDividend = monthlyDividendData.reduce(
+    (sum, item) => sum + item.estimatedDividend,
+    0
+  );
   const selectedMonthLabel = selectedMonth ? `${selectedMonth}월` : '';
   const selectedMonthTotal = selectedMonthEvents.reduce((sum, event) => sum + event.totalAmount, 0);
 
@@ -236,16 +349,23 @@ export default function AssetDividendChart() {
           <span className="text-sm text-slate-600">
             {isCurrentYear ? '올해 누적 배당금' : '연간 배당금'}
           </span>
-          <span className="text-lg font-bold text-red-500">
-            {Math.round(totalDividend).toLocaleString()}원
-          </span>
+          <div className="text-right">
+            <span className="text-lg font-bold text-red-500">
+              {Math.round(totalDividend).toLocaleString()}원
+            </span>
+            {totalEstimatedDividend > 0 ? (
+              <p className="mt-0.5 text-xs font-medium text-emerald-600">
+                예상 포함 {Math.round(totalDividend + totalEstimatedDividend).toLocaleString()}원
+              </p>
+            ) : null}
+          </div>
         </div>
 
         {isDividendLoading ? (
           <p className="mt-2 text-center text-xs text-slate-400">
             배당금 정보를 불러오는 중입니다.
           </p>
-        ) : totalDividend === 0 ? (
+        ) : totalDividend + totalEstimatedDividend === 0 ? (
           <p className="mt-2 text-center text-xs text-slate-400">
             {stockHoldings.length === 0
               ? '배당을 지원하는 국내 ETF 보유 종목이 없습니다'
@@ -292,13 +412,18 @@ export default function AssetDividendChart() {
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-semibold text-slate-800">{event.stockName}</p>
-                          <p className="mt-1 text-xs text-slate-500">지급일 {event.paymentDate}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            지급일 {event.paymentDate}
+                            {event.isEstimated && event.recordDate ? ` · 기준일 ${event.recordDate}` : ''}
+                          </p>
                         </div>
                         <div className="text-right">
-                          <p className="font-semibold text-emerald-600">
+                          <p className={`font-semibold ${event.isEstimated ? 'text-emerald-500' : 'text-emerald-600'}`}>
                             {event.totalAmount.toLocaleString()}원
                           </p>
-                          <p className="mt-1 text-xs text-slate-500">배당금</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {event.isEstimated ? '예상 배당금' : '배당금'}
+                          </p>
                         </div>
                       </div>
 
