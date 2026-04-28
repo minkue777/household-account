@@ -406,10 +406,12 @@ export default function AssetDividendChart() {
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-semibold text-slate-800">{event.stockName}</p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            지급일 {event.paymentDate}
-                            {event.isEstimated && event.recordDate ? ` · 기준일 ${event.recordDate}` : ''}
-                          </p>
+                          <div className="mt-1 space-y-0.5 text-xs text-slate-500">
+                            <p>지급일 {event.paymentDate}</p>
+                            {event.isEstimated && event.recordDate ? (
+                              <p>기준일 {event.recordDate}</p>
+                            ) : null}
+                          </div>
                         </div>
                         <div className="text-right">
                           <p className={`font-semibold ${event.isEstimated ? 'text-emerald-500' : 'text-emerald-600'}`}>
