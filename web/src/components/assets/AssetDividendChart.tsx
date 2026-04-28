@@ -249,6 +249,7 @@ export default function AssetDividendChart() {
     plugins: {
       legend: {
         display: true,
+        align: 'end',
         labels: {
           boxHeight: 8,
           boxWidth: 12,
@@ -349,16 +350,9 @@ export default function AssetDividendChart() {
           <span className="text-sm text-slate-600">
             {isCurrentYear ? '올해 누적 배당금' : '연간 배당금'}
           </span>
-          <div className="text-right">
-            <span className="text-lg font-bold text-red-500">
-              {Math.round(totalDividend).toLocaleString()}원
-            </span>
-            {totalEstimatedDividend > 0 ? (
-              <p className="mt-0.5 text-xs font-medium text-emerald-600">
-                예상 포함 {Math.round(totalDividend + totalEstimatedDividend).toLocaleString()}원
-              </p>
-            ) : null}
-          </div>
+          <span className="text-lg font-bold text-red-500">
+            {Math.round(totalDividend).toLocaleString()}원
+          </span>
         </div>
 
         {isDividendLoading ? (
