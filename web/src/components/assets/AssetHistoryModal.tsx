@@ -84,10 +84,10 @@ export default function AssetHistoryModal({
     <ModalOverlay onClose={onClose}>
       <div className="m-4 flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
         <div className="border-b border-slate-100 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
               <div
-                className="flex h-12 w-12 items-center justify-center rounded-full"
+                className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full"
                 style={{
                   backgroundColor: `${asset.color || config.color}15`,
                   color: asset.color || config.color,
@@ -95,44 +95,50 @@ export default function AssetHistoryModal({
               >
                 <Icon className="h-5 w-5" />
               </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-800">{asset.name}</h3>
-                <p className="text-sm text-slate-500">
+              <div className="min-w-0 flex-1">
+                <h3 className="truncate text-lg font-bold text-slate-800">{asset.name}</h3>
+                <p className="truncate text-sm text-slate-500">
                   {asset.subType ? `${asset.subType} · ` : ''}
                   {isHoldingManaged ? '평가금액 ' : ''}
                   {signedBalance.toLocaleString()}원
                 </p>
-                {showHoldingProfitLoss && (
-                  <p className={`text-sm font-medium ${isHoldingProfit ? 'text-red-500' : 'text-blue-500'}`}>
-                    {isHoldingProfit ? '+' : ''}
-                    {holdingProfitLossRate.toFixed(2)}%
-                    <span className="ml-1">
-                      ({isHoldingProfit ? '+' : ''}
-                      {holdingProfitLoss.toLocaleString()}원)
-                    </span>
-                  </p>
-                )}
               </div>
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className="flex flex-shrink-0 items-center gap-0.5">
               <button
                 type="button"
                 onClick={onEditAsset}
-                className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100"
+                className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100"
                 title="수정"
+                aria-label="자산 수정"
               >
-                <Edit2 className="h-5 w-5" />
+                <Edit2 className="h-4 w-4" />
               </button>
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-lg p-2 transition-colors hover:bg-slate-100"
+                className="rounded-lg p-1.5 transition-colors hover:bg-slate-100"
+                aria-label="닫기"
               >
-                <X className="h-5 w-5 text-slate-500" />
+                <X className="h-4 w-4 text-slate-500" />
               </button>
             </div>
           </div>
+          {showHoldingProfitLoss && (
+            <p
+              className={`mt-1 truncate pl-[60px] text-sm font-medium ${
+                isHoldingProfit ? 'text-red-500' : 'text-blue-500'
+              }`}
+            >
+              {isHoldingProfit ? '+' : ''}
+              {holdingProfitLossRate.toFixed(2)}%
+              <span className="ml-1">
+                ({isHoldingProfit ? '+' : ''}
+                {holdingProfitLoss.toLocaleString()}원)
+              </span>
+            </p>
+          )}
         </div>
 
         {isStock && (
