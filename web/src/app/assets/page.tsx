@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { BarChart3 } from 'lucide-react';
+import { ChartPie } from 'lucide-react';
 import { Asset, AssetType, isGoldEtfSubType } from '@/types/asset';
 import {
   subscribeToAssets,
@@ -188,7 +188,7 @@ export default function AssetsPage() {
               href="/assets/stats"
               className="rounded-xl border border-slate-200/70 bg-white/95 p-2 shadow-sm transition-all hover:bg-white hover:shadow"
             >
-              <BarChart3 className="h-5 w-5 text-slate-600" />
+              <ChartPie className="h-5 w-5 text-slate-600" />
             </Link>
           </div>
         </header>
