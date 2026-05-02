@@ -1,5 +1,6 @@
 'use client';
 
+import { ChevronRight, Search } from 'lucide-react';
 import { Expense, TransactionType } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { getLedgerPrimaryText, getLedgerSecondaryText } from '@/lib/utils/ledgerDisplay';
@@ -67,14 +68,7 @@ export default function SearchResultList({
   if (!keyword.trim()) {
     return (
       <div className="py-12 text-center text-slate-400">
-        <svg className="mx-auto mb-3 h-12 w-12 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-          />
-        </svg>
+        <Search className="mx-auto mb-3 h-12 w-12 text-slate-300" />
         <p>{transactionLabel}처명이나 메모를 검색해보세요.</p>
       </div>
     );
@@ -83,14 +77,7 @@ export default function SearchResultList({
   if (results.length === 0) {
     return (
       <div className="py-12 text-center text-slate-400">
-        <svg className="mx-auto mb-3 h-12 w-12 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-          />
-        </svg>
+        <Search className="mx-auto mb-3 h-12 w-12 text-slate-300" />
         <p>&quot;{keyword}&quot;에 대한 검색 결과가 없습니다.</p>
       </div>
     );
@@ -116,16 +103,11 @@ export default function SearchResultList({
             className="flex w-full items-center justify-between bg-slate-50 p-4 transition-colors hover:bg-slate-100"
           >
             <div className="flex items-center gap-2">
-              <svg
+              <ChevronRight
                 className={`h-4 w-4 text-slate-500 transition-transform ${
                   expandedMonth === group.yearMonth ? 'rotate-90' : ''
                 }`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
+              />
               <span className="font-semibold text-slate-800">{group.label}</span>
               <span className="text-sm text-slate-500">{group.expenses.length}건</span>
             </div>

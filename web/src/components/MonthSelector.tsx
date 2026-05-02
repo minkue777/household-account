@@ -1,5 +1,7 @@
 'use client';
 
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+
 interface MonthSelectorProps {
   year: number;
   month: number;
@@ -20,19 +22,7 @@ export default function MonthSelector({
         className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
         aria-label="이전 달"
       >
-        <svg
-          className="w-5 h-5 text-slate-600"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M15 19l-7-7 7-7"
-          />
-        </svg>
+        <ChevronLeft className="h-5 w-5 text-slate-600" />
       </button>
       <h2 className="text-xl font-bold text-slate-800 min-w-[140px] text-center">
         {year}년 {month}월
@@ -42,19 +32,7 @@ export default function MonthSelector({
         className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
         aria-label="다음 달"
       >
-        <svg
-          className="w-5 h-5 text-slate-600"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M9 5l7 7-7 7"
-          />
-        </svg>
+        <ChevronRight className="h-5 w-5 text-slate-600" />
       </button>
     </div>
   );

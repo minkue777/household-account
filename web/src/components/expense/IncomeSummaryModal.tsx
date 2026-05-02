@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { ChevronRight, X } from 'lucide-react';
 import { Portal } from '@/components/common';
 import { Expense } from '@/types/expense';
 import { getLedgerPrimaryText, getLedgerSecondaryText } from '@/lib/utils/ledgerDisplay';
@@ -175,15 +176,9 @@ export default function IncomeSummaryModal({
                 <button
                   onClick={onClose}
                   className="rounded-xl p-3 transition-colors hover:bg-slate-100"
+                  aria-label="닫기"
                 >
-                  <svg
-                    className="h-5 w-5 text-slate-500"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <X className="h-5 w-5 text-slate-500" />
                 </button>
               </div>
             </div>
@@ -206,16 +201,11 @@ export default function IncomeSummaryModal({
                         className="flex w-full items-center justify-between bg-slate-50 p-4 transition-colors hover:bg-slate-100"
                       >
                         <div className="flex items-center gap-2">
-                          <svg
+                          <ChevronRight
                             className={`h-4 w-4 text-slate-500 transition-transform ${
                               expandedMonth === group.yearMonth ? 'rotate-90' : ''
                             }`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
+                          />
                           <span className="font-semibold text-slate-800">{group.label}</span>
                           <span className="text-sm text-slate-500">{group.expenses.length}건</span>
                         </div>

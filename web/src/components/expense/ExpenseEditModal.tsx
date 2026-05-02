@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, Info, Share2, Split, Trash2, Undo2, X } from 'lucide-react';
 import { AmountInput, ConfirmDialog, Portal } from '@/components/common';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { Expense, TransactionType } from '@/types/expense';
@@ -257,14 +257,7 @@ export default function ExpenseEditModal({
       {expense.mergedFrom && expense.mergedFrom.length > 0 && onUnmerge && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
           <div className="mb-2 flex items-center gap-2">
-            <svg className="h-4 w-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
+            <Info className="h-4 w-4 text-amber-600" />
             <span className="text-sm font-medium text-amber-800">
               {expense.mergedFrom.length}개의 항목이 합쳐져 있습니다
             </span>
@@ -283,14 +276,7 @@ export default function ExpenseEditModal({
             }}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-white transition-colors hover:bg-amber-600"
           >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
-              />
-            </svg>
+            <Undo2 className="h-4 w-4" />
             합치기 되돌리기
           </button>
         </div>
@@ -299,14 +285,7 @@ export default function ExpenseEditModal({
       {expense.splitGroupId && (onCancelSplitGroup || onUpdateSplitGroup) && (
         <div className="mt-4 rounded-lg border border-purple-200 bg-purple-50 p-3">
           <div className="mb-2 flex items-center gap-2">
-            <svg className="h-4 w-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
+            <CalendarDays className="h-4 w-4 text-purple-600" />
             <span className="text-sm font-medium text-purple-800">
               월별 분할 ({expense.splitIndex}/{expense.splitTotal})
             </span>
@@ -389,14 +368,7 @@ export default function ExpenseEditModal({
             }}
             className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-slate-200 px-4 py-2.5 font-medium text-slate-800 transition-colors hover:bg-slate-300"
           >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-              />
-            </svg>
+            <Split className="h-4 w-4" />
             분리
           </button>
         )}
@@ -408,14 +380,7 @@ export default function ExpenseEditModal({
             }}
             className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-slate-200 px-4 py-2.5 font-medium text-slate-800 transition-colors hover:bg-slate-300"
           >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-              />
-            </svg>
+            <Share2 className="h-4 w-4" />
             알림 보내기
           </button>
         )}
@@ -430,14 +395,7 @@ export default function ExpenseEditModal({
                 onClick: () => setShowDeleteConfirm(true),
                 variant: 'neutral',
                 icon: (
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    />
-                  </svg>
+                  <Trash2 className="h-4 w-4" />
                 ),
               }
             : undefined
@@ -461,9 +419,7 @@ export default function ExpenseEditModal({
                 onClick: handleSave,
                 variant: 'primary',
                 icon: (
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
+                  <Check className="h-4 w-4" />
                 ),
               }
         }
@@ -487,10 +443,9 @@ export default function ExpenseEditModal({
               <button
                 onClick={onClose}
                 className="rounded-lg p-1 transition-colors hover:bg-slate-100"
+                aria-label="닫기"
               >
-                <svg className="h-5 w-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="h-5 w-5 text-slate-500" />
               </button>
             </div>
 

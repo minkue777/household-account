@@ -1,5 +1,6 @@
 'use client';
 
+import { Plus } from 'lucide-react';
 import { Expense, TransactionType } from '@/types/expense';
 import { SplitItem } from '@/lib/expenseService';
 import ExpenseItem from './ExpenseItem';
@@ -63,10 +64,9 @@ export default function ExpenseDetail({
             <button
               onClick={onAddExpense}
               className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-500"
+              aria-label={`${transactionLabel} 추가`}
             >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
+              <Plus className="h-5 w-5" />
             </button>
           )}
         </div>
@@ -83,10 +83,9 @@ export default function ExpenseDetail({
           <button
             onClick={onAddExpense}
             className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-500"
+            aria-label={`${transactionLabel} 추가`}
           >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
+            <Plus className="h-5 w-5" />
           </button>
         )}
       </div>

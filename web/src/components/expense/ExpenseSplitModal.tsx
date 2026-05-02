@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { Plus, X } from 'lucide-react';
 import { Expense } from '@/types/expense';
 import { SplitItem } from '@/lib/expenseService';
 import { Portal, CategorySelector } from '../common';
@@ -141,10 +142,9 @@ export default function ExpenseSplitModal({
                     <button
                       onClick={() => handleRemoveSplit(index)}
                       className="text-slate-400 hover:text-red-500"
+                      aria-label={`항목 ${index + 1} 삭제`}
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
+                      <X className="h-4 w-4" />
                     </button>
                   )}
                 </div>
@@ -210,9 +210,7 @@ export default function ExpenseSplitModal({
             onClick={handleAddSplit}
             className="w-full py-2 px-4 border border-dashed border-slate-300 rounded-lg text-slate-500 hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 mb-4"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
+            <Plus className="h-4 w-4" />
             항목 추가
           </button>
 

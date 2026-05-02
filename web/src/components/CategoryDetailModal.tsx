@@ -1,5 +1,6 @@
 'use client';
 
+import { X } from 'lucide-react';
 import { Portal } from '@/components/common';
 import { Expense, Category, TransactionType } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
@@ -60,10 +61,12 @@ export default function CategoryDetailModal({
                 </div>
               </div>
             </div>
-            <button onClick={onClose} className="rounded-lg p-2 transition-colors hover:bg-slate-100">
-              <svg className="h-5 w-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+            <button
+              onClick={onClose}
+              className="rounded-lg p-2 transition-colors hover:bg-slate-100"
+              aria-label="닫기"
+            >
+              <X className="h-5 w-5 text-slate-500" />
             </button>
           </div>
 

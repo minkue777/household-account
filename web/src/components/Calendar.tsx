@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { Portal } from './common';
@@ -128,10 +129,9 @@ export default function Calendar({
             <button
               onClick={onPrevMonth}
               className="p-1.5 hover:bg-white/50 rounded-lg transition-colors"
+              aria-label="이전 달"
             >
-              <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
+              <ChevronLeft className="h-5 w-5 text-slate-600" />
             </button>
             <button
               onClick={() => {
@@ -145,10 +145,9 @@ export default function Calendar({
             <button
               onClick={onNextMonth}
               className="p-1.5 hover:bg-white/50 rounded-lg transition-colors"
+              aria-label="다음 달"
             >
-              <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
+              <ChevronRight className="h-5 w-5 text-slate-600" />
             </button>
           </div>
         </div>
@@ -170,19 +169,17 @@ export default function Calendar({
               <button
                 onClick={() => setPickerYear(pickerYear - 1)}
                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                aria-label="이전 해"
               >
-                <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
+                <ChevronLeft className="h-5 w-5 text-slate-600" />
               </button>
               <span className="text-xl font-bold text-slate-800">{pickerYear}년</span>
               <button
                 onClick={() => setPickerYear(pickerYear + 1)}
                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                aria-label="다음 해"
               >
-                <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
+                <ChevronRight className="h-5 w-5 text-slate-600" />
               </button>
             </div>
 
