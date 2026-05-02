@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -43,9 +44,7 @@ export default function SettingsPage() {
         <header className="mb-6">
           <div className="mb-2 flex items-center gap-4">
             <Link href="/" className="text-slate-500 transition-colors hover:text-slate-700">
-              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
+              <ArrowLeft className="h-6 w-6" />
             </Link>
             <h1
               className="text-lg md:text-xl font-bold"

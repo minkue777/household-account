@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useTheme, THEMES } from '@/contexts/ThemeContext';
+import { ChevronDown, Palette } from 'lucide-react';
 
 export default function ThemeSettings() {
   const { theme, setTheme, themeConfig } = useTheme();
@@ -20,9 +21,7 @@ export default function ThemeSettings() {
             className="w-10 h-10 rounded-full flex items-center justify-center"
             style={{ background: themeConfig.preview }}
           >
-            <svg className="w-5 h-5 text-white drop-shadow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-            </svg>
+            <Palette className="h-5 w-5 text-white drop-shadow" />
           </div>
           <div className="text-left">
             <div className="font-semibold text-slate-800">테마</div>
@@ -31,14 +30,9 @@ export default function ThemeSettings() {
             </div>
           </div>
         </div>
-        <svg
-          className={`w-5 h-5 text-slate-400 transition-transform ${isThemeOpen ? 'rotate-180' : ''}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        <ChevronDown
+          className={`h-5 w-5 text-slate-400 transition-transform ${isThemeOpen ? 'rotate-180' : ''}`}
+        />
       </button>
 
       {isThemeOpen && (

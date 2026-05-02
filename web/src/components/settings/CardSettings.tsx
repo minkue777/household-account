@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ConfirmDialog, ModalOverlay } from '@/components/common';
+import { ChevronDown, CreditCard, Plus, X } from 'lucide-react';
 import {
   addRegisteredCard,
   deleteRegisteredCard,
@@ -558,14 +559,7 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
       >
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-100">
-            <svg className="h-5 w-5 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 10h18M7 15h1m3 0h2m6-8H5a2 2 0 00-2 2v6a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2z"
-              />
-            </svg>
+            <CreditCard className="h-5 w-5 text-violet-600" />
           </div>
           <div className="text-left">
             <div className="font-semibold text-slate-800">카드 등록</div>
@@ -574,14 +568,9 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
             </div>
           </div>
         </div>
-        <svg
+        <ChevronDown
           className={`h-5 w-5 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        />
       </button>
 
       {isOpen && (
@@ -731,9 +720,7 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                   onClick={() => setIsAdding(true)}
                   className="flex w-full items-center justify-center gap-2 border-t border-slate-200 p-4 font-medium text-violet-600 transition-colors hover:bg-violet-50"
                 >
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
+                  <Plus className="h-5 w-5" />
                   카드 등록
                 </button>
               )}
@@ -757,10 +744,9 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                 type="button"
                 onClick={() => setSelectedCardId(null)}
                 className="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                aria-label="닫기"
               >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="h-4 w-4" />
               </button>
             </div>
 
