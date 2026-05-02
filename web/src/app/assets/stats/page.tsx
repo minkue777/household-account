@@ -149,7 +149,6 @@ export default function AssetStatsPage() {
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('3M');
   const [financialOnly, setFinancialOnly] = useState(false);
   const [enabledSeries, setEnabledSeries] = useState<Set<TrendSeriesKey>>(new Set<TrendSeriesKey>(['all']));
-  const hasInitializedSeries = useRef(false);
   const trendChartRef = useRef<ChartJS<'line', Array<number | null>, string> | null>(null);
 
   useEffect(() => {
@@ -279,17 +278,12 @@ export default function AssetStatsPage() {
     const allowedKeys = new Set<TrendSeriesKey>(['all', ...availableTypes]);
 
     setEnabledSeries((prev) => {
-      if (!hasInitializedSeries.current && availableTypes.length > 0) {
-        hasInitializedSeries.current = true;
-        return new Set<TrendSeriesKey>(['all', ...availableTypes]);
-      }
-
       const next = new Set<TrendSeriesKey>(
         Array.from(prev).filter((key) => allowedKeys.has(key))
       );
 
       if (next.size === 0) {
-        return new Set<TrendSeriesKey>(['all', ...availableTypes]);
+        return new Set<TrendSeriesKey>(['all']);
       }
 
       return next;
@@ -595,7 +589,7 @@ export default function AssetStatsPage() {
               className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm"
               onClick={clearTrendChartSelection}
             >
-              <h3 className="mb-4 text-sm font-semibold text-slate-700">자산 추이 그래프</h3>
+              <h3 className="mb-4 text-sm font-semibold text-slate-700">자산 추이</h3>
 
               <div className="mb-4 flex flex-wrap gap-2">
                 <button
