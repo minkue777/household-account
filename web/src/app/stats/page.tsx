@@ -128,27 +128,7 @@ export default function StatsPage() {
     return () => unsubscribe();
   }, [startDate, endDate]);
 
-  const filteredExpenses = useMemo(() => {
-    if (enabledCategories.has('all')) {
-      return expenses;
-    }
-
-    return expenses.filter((expense) => enabledCategories.has(expense.category));
-  }, [expenses, enabledCategories]);
-
-  const totalAmount = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-
-  const filterLabel = useMemo(() => {
-    if (enabledCategories.has('all')) {
-      return null;
-    }
-
-    const selectedLabels = activeCategories
-      .filter((category) => enabledCategories.has(category.key))
-      .map((category) => category.label);
-
-    return selectedLabels.length > 0 ? selectedLabels.join(', ') : null;
-  }, [enabledCategories, activeCategories]);
+  const totalAmount = expenses.reduce((sum, expense) => sum + expense.amount, 0);
 
   const periodLabel = useMemo(() => {
     if (!startDate || !endDate) {
@@ -198,7 +178,6 @@ export default function StatsPage() {
             <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
               <div className="text-sm text-slate-500">{periodLabel}</div>
               <div className="text-right">
-                {filterLabel ? <div className="mb-1 text-xs text-blue-500">{filterLabel}</div> : null}
                 <div className="flex items-baseline justify-end gap-1">
                   <span className="text-sm text-slate-500">총</span>
                   {isLoading ? (
@@ -229,13 +208,10 @@ export default function StatsPage() {
           </div>
 
           <div className="rounded-2xl border border-slate-200/70 bg-white/95 p-6 shadow-sm backdrop-blur-sm">
-            <h3 className="mb-4 text-lg font-semibold text-slate-700">
-              카테고리별 비중
-              {filterLabel ? <span className="ml-2 text-sm font-normal text-blue-500">({filterLabel})</span> : null}
-            </h3>
+            <h3 className="mb-4 text-lg font-semibold text-slate-700">카테고리별 비중</h3>
             <div className="min-h-64">
-              {filteredExpenses.length > 0 ? (
-                <DonutChart expenses={filteredExpenses} onCategoryClick={handleCategoryClick} />
+              {expenses.length > 0 ? (
+                <DonutChart expenses={expenses} onCategoryClick={handleCategoryClick} />
               ) : (
                 <div className="flex h-64 items-center justify-center text-slate-400">
                   {isLoading ? '로딩중...' : '데이터가 없습니다'}
