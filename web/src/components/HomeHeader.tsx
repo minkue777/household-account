@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { BarChart3, Search, Settings } from 'lucide-react';
+import { ChartPie, Search, Settings } from 'lucide-react';
 import { TransactionType } from '@/types/expense';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
@@ -70,7 +70,7 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
           className="rounded-xl border border-slate-200/70 bg-white/95 p-2 text-slate-600 shadow-sm transition-all hover:bg-white hover:shadow md:px-4 md:py-2"
         >
           <span className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5" />
+            <ChartPie className="h-5 w-5" />
             <span className="hidden md:inline">통계</span>
           </span>
         </Link>
