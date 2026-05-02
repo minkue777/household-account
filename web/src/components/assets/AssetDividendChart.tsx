@@ -248,20 +248,12 @@ export default function AssetDividendChart() {
     },
     plugins: {
       legend: {
-        display: true,
-        align: 'end',
-        labels: {
-          boxHeight: 8,
-          boxWidth: 12,
-          color: '#64748b',
-          font: { size: 11 },
-        },
+        display: false,
       },
       tooltip: {
         callbacks: {
           label(context: any) {
-            const label = context.dataset.label ? `${context.dataset.label}: ` : '';
-            return `${label}${Math.round(Number(context.raw || 0)).toLocaleString()}원`;
+            return `${Math.round(Number(context.raw || 0)).toLocaleString()}원`;
           },
         },
       },
