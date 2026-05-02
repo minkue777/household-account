@@ -6,11 +6,12 @@ import DonutChart from '@/components/DonutChart';
 import MonthlyTrendChart from '@/components/MonthlyTrendChart';
 import PeriodSelector, { PeriodPreset } from '@/components/stats/PeriodSelector';
 import CategoryExpenseModal from '@/components/stats/CategoryExpenseModal';
-import StatsExpenseEditModal from '@/components/stats/StatsExpenseEditModal';
+import ExpenseEditModal from '@/components/expense/ExpenseEditModal';
 import { Expense, Category } from '@/types/expense';
 import { subscribeToDateRangeExpenses, updateExpense, deleteExpense } from '@/lib/expenseService';
 import { addMerchantRule } from '@/lib/merchantRuleService';
 import { getStoredHouseholdKey } from '@/lib/householdService';
+import { ExpenseUpdates } from '@/lib/utils/expenseForm';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -55,18 +56,9 @@ export default function StatsPage() {
     setSelectedCategoryExpenses([...categoryExpenses].sort((a, b) => b.date.localeCompare(a.date)));
   };
 
-  const handleSaveEdit = async (
-    expense: Expense,
-    updates: { amount?: number; memo?: string; category?: string },
-    rememberMerchant: boolean
-  ) => {
+  const handleSaveEdit = async (expense: Expense, updates: ExpenseUpdates) => {
     try {
       await updateExpense(expense.id, updates);
-
-      if (updates.category && updates.category !== expense.category && rememberMerchant) {
-        const householdId = getStoredHouseholdKey() || 'guest';
-        await addMerchantRule(householdId, expense.merchant, updates.category, true);
-      }
 
       if (updates.category && updates.category !== expense.category) {
         setSelectedCategoryExpenses((prev) => prev.filter((item) => item.id !== expense.id));
@@ -78,6 +70,11 @@ export default function StatsPage() {
     } finally {
       setEditingExpense(null);
     }
+  };
+
+  const handleSaveMerchantRule = async (merchantName: string, category: string) => {
+    const householdId = getStoredHouseholdKey() || 'guest';
+    await addMerchantRule(householdId, merchantName, category, true);
   };
 
   const handleDeleteExpense = async (expense: Expense) => {
@@ -260,11 +257,20 @@ export default function StatsPage() {
       ) : null}
 
       {editingExpense ? (
-        <StatsExpenseEditModal
+        <ExpenseEditModal
           expense={editingExpense}
+          isOpen={!!editingExpense}
           onClose={() => setEditingExpense(null)}
-          onSave={handleSaveEdit}
-          onDelete={handleDeleteExpense}
+          onSave={(updates) => {
+            void handleSaveEdit(editingExpense, updates);
+          }}
+          onSaveMerchantRule={(merchantName, category) => {
+            void handleSaveMerchantRule(merchantName, category);
+          }}
+          onDelete={() => {
+            void handleDeleteExpense(editingExpense);
+          }}
+          transactionType="expense"
         />
       ) : null}
     </main>
