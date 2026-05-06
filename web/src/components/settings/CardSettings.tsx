@@ -862,7 +862,7 @@ function RegisteredCardTile({
   const isGyeonggiLocalCurrency = card.cardLabel === '경기지역화폐';
   const isYeominjeon = card.cardLabel === '여민전';
   const isLogoOnlyCard = isNaverPay || isKakaoPay || isToss;
-  const isLocalAccentCard = isDaejeonLoveCard || isOnnuri || isGyeonggiLocalCurrency || isYeominjeon;
+  const isLocalAccentCard = isDaejeonLoveCard || isOnnuri || isGyeonggiLocalCurrency;
 
   return (
     <button
@@ -886,11 +886,15 @@ function RegisteredCardTile({
       )}
       {isYeominjeon && (
         <>
-          <div className="pointer-events-none absolute -right-[3px] bottom-[10%] h-[38%] w-[42%] rounded-tl-[22px] bg-[#d9ebf7]/65" />
-          <div className="pointer-events-none absolute right-[5px] bottom-[13%] text-[34px] font-black leading-none text-[#6aa8cf]/20">
-            세종
+          <div className="pointer-events-none absolute left-[37%] top-[17%] text-[10px] font-semibold leading-tight text-slate-300/75 [writing-mode:vertical-rl]">
+            나라말씀
           </div>
-          <div className="pointer-events-none absolute -bottom-[2px] left-[-2px] right-[-2px] h-[14%] rounded-b-[12px] bg-[#1b8cc8]" />
+          <div className="pointer-events-none absolute left-[35%] bottom-[-17%] text-[62px] font-black leading-none text-[#78bee4]/24">
+            세
+          </div>
+          <div className="pointer-events-none absolute right-[-10%] bottom-[-15%] text-[62px] font-black leading-none text-[#8aa2b3]/24">
+            종
+          </div>
         </>
       )}
       {!isLogoOnlyCard && (
@@ -908,11 +912,7 @@ function RegisteredCardTile({
         {isYeominjeon && (
           <>
             <div className="absolute left-1 top-0.5">
-              <p className="text-[9px] font-semibold leading-none text-[#1682bd]">세종특별자치시</p>
-              <p className="mt-0.5 text-[8px] font-medium leading-none text-slate-400">SEJONG CARD</p>
-            </div>
-            <div className="absolute right-1 top-0 text-right">
-              <p className="text-[13px] font-black leading-none text-[#1d4f9a]">여민전</p>
+              <p className="text-[10px] font-semibold leading-none text-[#1682bd]">세종지역화폐</p>
             </div>
           </>
         )}
