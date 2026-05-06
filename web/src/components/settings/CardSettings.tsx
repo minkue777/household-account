@@ -886,14 +886,8 @@ function RegisteredCardTile({
       )}
       {isYeominjeon && (
         <>
-          <div className="pointer-events-none absolute left-[37%] top-[17%] text-[10px] font-semibold leading-tight text-slate-300/75 [writing-mode:vertical-rl]">
-            나라말씀
-          </div>
-          <div className="pointer-events-none absolute left-[35%] bottom-[-17%] text-[62px] font-black leading-none text-[#78bee4]/24">
-            세
-          </div>
-          <div className="pointer-events-none absolute right-[-10%] bottom-[-15%] text-[62px] font-black leading-none text-[#8aa2b3]/24">
-            종
+          <div className="pointer-events-none absolute left-[36%] bottom-[-16%] text-[54px] font-black leading-none tracking-tight text-[#78bee4]/22">
+            세종
           </div>
         </>
       )}
@@ -912,7 +906,7 @@ function RegisteredCardTile({
         {isYeominjeon && (
           <>
             <div className="absolute left-1 top-0.5">
-              <p className="text-[10px] font-semibold leading-none text-[#1682bd]">세종지역화폐</p>
+              <p className="text-[10px] font-semibold leading-none text-slate-900">세종지역화폐</p>
             </div>
           </>
         )}
