@@ -8,6 +8,7 @@ class RegisteredCardRepository {
 
     private val firestore = FirebaseFirestore.getInstance()
     private val cardsCollection = firestore.collection("registered_cards")
+    private val labelOnlyNotificationLabels = setOf("여민전")
 
     suspend fun matchesRegisteredCard(
         householdId: String,
@@ -39,10 +40,19 @@ class RegisteredCardRepository {
         }
 
         return registeredCards.firstOrNull { card ->
+            val registeredCardLabel = normalizeCardLabel(card.cardLabel)
+            val expenseCardToken = CardLabelFormatter.extractCardToken(cardValue)
+
             normalizeOwner(card.owner) == normalizeOwner(owner) &&
-                normalizeCardLabel(card.cardLabel) == expenseCardLabel &&
+                registeredCardLabel == expenseCardLabel &&
                 (
                     card.cardLastFour.isBlank() ||
+                        (
+                            expenseCardToken == null &&
+                                labelOnlyNotificationLabels.any { label ->
+                                    normalizeCardLabel(label) == registeredCardLabel
+                                }
+                            ) ||
                         CardLabelFormatter.matchesCardToken(card.cardLastFour, cardValue)
                 )
         }

@@ -92,13 +92,19 @@ export default function ExpenseEditModal({
       return '';
     }
 
-    const localCurrencyMatch = expense.cardLastFour.match(/^(?:경기지역화폐|대전사랑카드)\((.+)\)$/);
+    const localCurrencyMatch = expense.cardLastFour.match(/^(경기지역화폐|대전사랑카드|여민전)\((.+)\)$/);
     if (localCurrencyMatch) {
-      return `지역(${localCurrencyMatch[1]})`;
+      return localCurrencyMatch[1] === '여민전'
+        ? `여민전(${localCurrencyMatch[2]})`
+        : `지역(${localCurrencyMatch[2]})`;
     }
 
     if (expense.cardLastFour === '경기지역화폐' || expense.cardLastFour === '대전사랑카드') {
       return '지역';
+    }
+
+    if (expense.cardLastFour === '여민전') {
+      return '여민전';
     }
 
     if (expense.cardLastFour === '온누리상품권') {

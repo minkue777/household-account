@@ -13,6 +13,7 @@ import com.household.account.data.ExpenseRepository
 import com.household.account.data.MerchantRuleRepository
 import com.household.account.data.NotificationDebugLogRepository
 import com.household.account.data.RegisteredCardRepository
+import com.household.account.parser.CityGasBillParser
 import com.household.account.parser.DaejeonLocalCurrencyParser
 import com.household.account.parser.DigitalOnnuriParser
 import com.household.account.parser.ExpenseEventType
@@ -26,6 +27,7 @@ import com.household.account.parser.NaverPayParser
 import com.household.account.parser.PayboocISPParser
 import com.household.account.parser.ParseResult
 import com.household.account.parser.SamsungCardParser
+import com.household.account.parser.SejongLocalCurrencyParser
 import com.household.account.parser.SmsNotificationParser
 import com.household.account.parser.TossBankParser
 import com.household.account.util.CardLabelFormatter
@@ -44,6 +46,7 @@ class CardNotificationListenerService : NotificationListenerService() {
         private const val NAVER_PAY_PACKAGE = "com.naverfin.payapp"
         private const val TOSS_PACKAGE = "viva.republica.toss"
         private const val KAKAOPAY_PACKAGE = "com.kakaopay.app"
+        private const val KAKAO_TALK_PACKAGE = "com.kakao.talk"
         private const val DIGITAL_ONNURI_PACKAGE = "com.komsco.kpay"
         private const val PAYBOOC_ISP_PACKAGE = "kvp.jjy.MispAndroid320"
 
@@ -51,6 +54,7 @@ class CardNotificationListenerService : NotificationListenerService() {
         private const val CHAK_WALLET = "com.coocon.chakwallet"
         private const val GYEONGGI_LOCAL_CURRENCY = "gov.gyeonggi.ggcard"
         private const val DAEJEON_LOVE_CARD = "kr.co.nmcs.daejeonpay"
+        private const val SEJONG_YEOMINPAY = "gov.sejong.yeominpay"
 
         private val knownKbPackages = setOf(
             KB_PAY_PACKAGE,
@@ -71,6 +75,36 @@ class CardNotificationListenerService : NotificationListenerService() {
         private val knownDaejeonLocalCurrencyPackages = setOf(
             DAEJEON_LOVE_CARD
         )
+        private val knownSejongLocalCurrencyPackages = setOf(
+            SEJONG_YEOMINPAY
+        )
+
+        private val debugOnlyNotificationPackages = mapOf(
+            "com.shcard.smartpay" to "SHINHAN_CARD",
+            "kr.co.samsungcard.mpocket" to "SAMSUNG_CARD",
+            "com.hyundaicard.appcard" to "HYUNDAI_CARD",
+            "com.lcacApp" to "LOTTE_CARD",
+            "com.hanaskcard.paycla" to "HANA_CARD",
+            "com.wooricard.smartapp" to "WOORI_CARD",
+            "com.ibk.cdp" to "IBK_CARD",
+            "kr.co.citibank.citimobile" to "CITI_CARD",
+            "com.epost.psf.sdsi" to "EPOST_BANKING",
+            "com.epost.psf.ss" to "EPOST_PAY",
+            "com.kakaobank.channel" to "KAKAO_BANK",
+            "com.kbankwith.smartbank" to "K_BANK",
+            "com.scbank.ma30" to "SC_BANK",
+            "co.kr.kdb.android.smartkdb" to "KDB_BANK",
+            "kr.co.dgb.dgbm" to "IM_BANK",
+            "kr.co.busanbank.mbp" to "BUSAN_BANK",
+            "com.knb.psb" to "KYONGNAM_BANK",
+            "com.kjbank.asb.pbanking" to "GWANGJU_BANK",
+            "kr.co.jbbank.privatebank" to "JEONBUK_BANK",
+            "com.jejubank.smartnew" to "JEJU_BANK",
+            "com.suhyup.pesmb" to "SUHYUP_BANK",
+            "com.suhyup.psmb" to "SUHYUP_PARTNER_BANK",
+            "kr.co.cu.onbank" to "CU_BANK",
+            "com.smg.spbs" to "MG_BANK"
+        )
 
         private val tossWalkingTitlePattern = Regex("""^\d[\d,]*\s*걸음$""")
 
@@ -90,7 +124,9 @@ class CardNotificationListenerService : NotificationListenerService() {
         SAMSUNG,
         LOTTE,
         GYEONGGI_LOCAL_CURRENCY,
-        DAEJEON_LOCAL_CURRENCY
+        DAEJEON_LOCAL_CURRENCY,
+        SEJONG_LOCAL_CURRENCY,
+        CITY_GAS_BILL
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -171,11 +207,14 @@ class CardNotificationListenerService : NotificationListenerService() {
                 NotificationSource.LOTTE -> LotteCardParser.parse(fullText)
                 NotificationSource.GYEONGGI_LOCAL_CURRENCY -> GyeonggiLocalCurrencyParser.parse(fullText)
                 NotificationSource.DAEJEON_LOCAL_CURRENCY -> DaejeonLocalCurrencyParser.parse(fullText)
+                NotificationSource.SEJONG_LOCAL_CURRENCY -> SejongLocalCurrencyParser.parse(fullText, sbn.postTime)
+                NotificationSource.CITY_GAS_BILL -> CityGasBillParser.parse(fullText, sbn.postTime)
             }
 
             if (
                 source == NotificationSource.GYEONGGI_LOCAL_CURRENCY ||
-                source == NotificationSource.DAEJEON_LOCAL_CURRENCY
+                source == NotificationSource.DAEJEON_LOCAL_CURRENCY ||
+                source == NotificationSource.SEJONG_LOCAL_CURRENCY
             ) {
                 saveLocalCurrencyBalanceIfPresent(source, fullText)
             }
@@ -222,6 +261,10 @@ class CardNotificationListenerService : NotificationListenerService() {
                 NotificationSource.GYEONGGI_LOCAL_CURRENCY
             packageName in knownDaejeonLocalCurrencyPackages || DaejeonLocalCurrencyParser.matches(fullText) ->
                 NotificationSource.DAEJEON_LOCAL_CURRENCY
+            packageName in knownSejongLocalCurrencyPackages || SejongLocalCurrencyParser.matches(fullText) ->
+                NotificationSource.SEJONG_LOCAL_CURRENCY
+            packageName == KAKAO_TALK_PACKAGE && CityGasBillParser.matches(fullText) ->
+                NotificationSource.CITY_GAS_BILL
             else -> null
         }
     }
@@ -239,6 +282,8 @@ class CardNotificationListenerService : NotificationListenerService() {
                 NotificationSource.GYEONGGI_LOCAL_CURRENCY
             packageName in knownDaejeonLocalCurrencyPackages ->
                 NotificationSource.DAEJEON_LOCAL_CURRENCY
+            packageName in knownSejongLocalCurrencyPackages ->
+                NotificationSource.SEJONG_LOCAL_CURRENCY
             SmsNotificationParser.isSupportedPackage(packageName) -> NotificationSource.SMS
             else -> null
         }
@@ -253,11 +298,11 @@ class CardNotificationListenerService : NotificationListenerService() {
         fullText: String,
         postedAtMillis: Long
     ) {
-        val source = detectSourceByPackage(packageName) ?: return
+        val source = resolveDebugLogSource(packageName, fullText) ?: return
         val normalizedTitle = title.trim()
 
         if (
-            source == NotificationSource.TOSS_BANK &&
+            source == NotificationSource.TOSS_BANK.name &&
             normalizedTitle.isNotEmpty() &&
             tossWalkingTitlePattern.matches(normalizedTitle)
         ) {
@@ -270,7 +315,7 @@ class CardNotificationListenerService : NotificationListenerService() {
                     householdId = HouseholdPreferences.getHouseholdKey(applicationContext),
                     memberName = HouseholdPreferences.getMemberName(applicationContext),
                     packageName = packageName,
-                    source = source.name,
+                    source = source,
                     title = title,
                     text = text,
                     bigText = bigText,
@@ -283,6 +328,15 @@ class CardNotificationListenerService : NotificationListenerService() {
         }
     }
 
+    private fun resolveDebugLogSource(packageName: String, fullText: String): String? {
+        if (packageName == KAKAO_TALK_PACKAGE) {
+            return detectSource(packageName, fullText)?.name
+        }
+
+        return detectSourceByPackage(packageName)?.name
+            ?: debugOnlyNotificationPackages[packageName]
+    }
+
     private fun saveLocalCurrencyBalanceIfPresent(
         source: NotificationSource,
         fullText: String
@@ -292,6 +346,8 @@ class CardNotificationListenerService : NotificationListenerService() {
                 GyeonggiLocalCurrencyParser.parseBalance(fullText)
             NotificationSource.DAEJEON_LOCAL_CURRENCY ->
                 DaejeonLocalCurrencyParser.parseBalance(fullText)
+            NotificationSource.SEJONG_LOCAL_CURRENCY ->
+                SejongLocalCurrencyParser.parseBalance(fullText)
             else -> return
         }
         val balance = balanceResult.balance ?: return
@@ -321,12 +377,19 @@ class CardNotificationListenerService : NotificationListenerService() {
 
                 val mappingResult = ruleRepository.findMappingForMerchant(householdId, expense.merchant)
 
+                val isBillExpense = expense.cardType == CityGasBillParser.CARD_TYPE
+
                 val expenseToSave = if (mappingResult != null) {
                     expense.copy(
                         merchant = mappingResult.mappedMerchant,
                         category = mappingResult.mappedCategoryKey,
                         memo = mappingResult.mappedMemo.ifEmpty { expense.memo },
                         householdId = householdId
+                    )
+                } else if (isBillExpense) {
+                    expense.copy(
+                        householdId = householdId,
+                        cardLastFour = ""
                     )
                 } else {
                     val defaultCategoryKey = categoryRepository.getDefaultCategoryKey(householdId)
@@ -335,35 +398,40 @@ class CardNotificationListenerService : NotificationListenerService() {
                         householdId = householdId
                     )
                 }
-                val memberName = HouseholdPreferences.getMemberName(applicationContext)
-                val matchedRegisteredCard = registeredCardRepository.findMatchedRegisteredCard(
-                    householdId = householdId,
-                    owner = memberName,
-                    cardValue = expenseToSave.cardLastFour
-                )
-                if (matchedRegisteredCard == null) {
-                    return@launch
-                }
 
-                val normalizedExpenseToken = CardLabelFormatter.normalizeCardToken(expenseToSave.cardLastFour)
-                val normalizedRegisteredToken = CardLabelFormatter.normalizeCardToken(
-                    matchedRegisteredCard.cardLastFour
-                )
-
-                val normalizedExpenseToSave = if (
-                    matchedRegisteredCard.cardLastFour.isNotBlank() &&
-                    normalizedExpenseToken != null &&
-                    normalizedRegisteredToken != null &&
-                    normalizedExpenseToken != normalizedRegisteredToken
-                ) {
-                    expenseToSave.copy(
-                        cardLastFour = CardLabelFormatter.formatCardLabel(
-                            matchedRegisteredCard.cardLabel,
-                            matchedRegisteredCard.cardLastFour
-                        )
-                    )
-                } else {
+                val normalizedExpenseToSave = if (isBillExpense) {
                     expenseToSave
+                } else {
+                    val memberName = HouseholdPreferences.getMemberName(applicationContext)
+                    val matchedRegisteredCard = registeredCardRepository.findMatchedRegisteredCard(
+                        householdId = householdId,
+                        owner = memberName,
+                        cardValue = expenseToSave.cardLastFour
+                    )
+                    if (matchedRegisteredCard == null) {
+                        return@launch
+                    }
+
+                    val normalizedExpenseToken = CardLabelFormatter.normalizeCardToken(expenseToSave.cardLastFour)
+                    val normalizedRegisteredToken = CardLabelFormatter.normalizeCardToken(
+                        matchedRegisteredCard.cardLastFour
+                    )
+
+                    if (
+                        matchedRegisteredCard.cardLastFour.isNotBlank() &&
+                        normalizedExpenseToken != null &&
+                        normalizedRegisteredToken != null &&
+                        normalizedExpenseToken != normalizedRegisteredToken
+                    ) {
+                        expenseToSave.copy(
+                            cardLastFour = CardLabelFormatter.formatCardLabel(
+                                matchedRegisteredCard.cardLabel,
+                                matchedRegisteredCard.cardLastFour
+                            )
+                        )
+                    } else {
+                        expenseToSave
+                    }
                 }
 
                 val duplicatedExpense = expenseRepository.findDuplicateExpenseForRegistration(

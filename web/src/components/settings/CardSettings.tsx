@@ -61,7 +61,7 @@ function getCardCategory(cardLabel: string): CardTab {
     return 'simple';
   }
 
-  if (['대전사랑카드', '온누리상품권', '경기지역화폐'].includes(cardLabel)) {
+  if (['대전사랑카드', '온누리상품권', '경기지역화폐', '여민전'].includes(cardLabel)) {
     return 'local';
   }
 
@@ -122,6 +122,8 @@ function getCardDisplayName(cardLabel: string) {
       return '온누리상품권';
     case '경기지역화폐':
       return '경기지역화폐';
+    case '여민전':
+      return '여민전';
     default:
       return cardLabel;
   }
@@ -248,6 +250,14 @@ function getCardStyle(cardLabel: string) {
         title: 'text-slate-900',
         number: 'text-slate-800',
         mark: 'text-blue-500/70',
+      };
+    case '여민전':
+      return {
+        container:
+          'border border-transparent bg-gradient-to-br from-[#ffffff] via-[#f7fbff] to-[#e9f5ff] shadow-[0_3px_8px_rgba(14,116,144,0.08),0_18px_32px_-16px_rgba(14,116,144,0.24),0_1px_0_rgba(255,255,255,0.30)_inset,0_14px_20px_-14px_rgba(255,255,255,0.12)_inset] hover:border-transparent',
+        title: 'text-slate-900',
+        number: 'text-slate-700',
+        mark: 'text-sky-600/70',
       };
     default:
       return {
@@ -850,8 +860,9 @@ function RegisteredCardTile({
   const isDaejeonLoveCard = card.cardLabel === '대전사랑카드';
   const isOnnuri = card.cardLabel === '온누리상품권';
   const isGyeonggiLocalCurrency = card.cardLabel === '경기지역화폐';
+  const isYeominjeon = card.cardLabel === '여민전';
   const isLogoOnlyCard = isNaverPay || isKakaoPay || isToss;
-  const isLocalAccentCard = isDaejeonLoveCard || isOnnuri || isGyeonggiLocalCurrency;
+  const isLocalAccentCard = isDaejeonLoveCard || isOnnuri || isGyeonggiLocalCurrency || isYeominjeon;
 
   return (
     <button
@@ -873,6 +884,15 @@ function RegisteredCardTile({
       {isGyeonggiLocalCurrency && (
         <div className="pointer-events-none absolute -bottom-[2px] left-[-2px] right-[-2px] h-[24%] rounded-b-[12px] bg-[#2f76db]" />
       )}
+      {isYeominjeon && (
+        <>
+          <div className="pointer-events-none absolute -right-[3px] bottom-[10%] h-[38%] w-[42%] rounded-tl-[22px] bg-[#d9ebf7]/65" />
+          <div className="pointer-events-none absolute right-[5px] bottom-[13%] text-[34px] font-black leading-none text-[#6aa8cf]/20">
+            세종
+          </div>
+          <div className="pointer-events-none absolute -bottom-[2px] left-[-2px] right-[-2px] h-[14%] rounded-b-[12px] bg-[#1b8cc8]" />
+        </>
+      )}
       {!isLogoOnlyCard && (
         <div className="pointer-events-none absolute left-2 top-[57%] -translate-y-1/2 opacity-95">
         <div className="relative h-[16px] w-[21px] rounded-[4px] border border-[#b7852b]/35 bg-gradient-to-br from-[#ebcc82] via-[#d9b066] to-[#bc8d3a] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
@@ -885,7 +905,19 @@ function RegisteredCardTile({
         </div>
       )}
       <div className="relative aspect-[1.586/1]">
-        {!isLogoOnlyCard && (
+        {isYeominjeon && (
+          <>
+            <div className="absolute left-1 top-0.5">
+              <p className="text-[9px] font-semibold leading-none text-[#1682bd]">세종특별자치시</p>
+              <p className="mt-0.5 text-[8px] font-medium leading-none text-slate-400">SEJONG CARD</p>
+            </div>
+            <div className="absolute right-1 top-0 text-right">
+              <p className="text-[13px] font-black leading-none text-[#1d4f9a]">여민전</p>
+            </div>
+          </>
+        )}
+
+        {!isLogoOnlyCard && !isYeominjeon && (
           <div className="absolute left-1 top-0.5">
             <p className={`text-[10px] font-semibold tracking-tight ${style.title}`}>
               {getCardDisplayName(card.cardLabel)}

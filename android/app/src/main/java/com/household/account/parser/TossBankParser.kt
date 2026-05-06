@@ -11,7 +11,7 @@ import java.time.format.DateTimeFormatter
 object TossBankParser {
 
     private val amountEventPattern = Regex("""([\d,]+)원\s*(결제(?:\s*취소)?)""")
-    private val merchantPattern = Regex("""토스뱅크\s*체크카드\s*\|\s*(.+)""")
+    private val merchantPattern = Regex("""(?:토스뱅크\s*체크카드|페이스페이\s*\(토스뱅크\))\s*\|\s*(.+)""")
 
     fun matches(notificationText: String): Boolean {
         val normalized = normalize(notificationText)
