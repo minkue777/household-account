@@ -9,12 +9,13 @@ import java.time.format.DateTimeFormatter
 
 object SejongLocalCurrencyParser {
 
-    private const val CARD_LABEL = "여민전"
+    private const val NOTIFICATION_LABEL = "여민전"
+    private const val CARD_LABEL = "세종지역화폐"
     private val paymentPattern = Regex("""결제\s*완료\s*([\d,]+)원""")
     private val balancePattern = Regex("""여민전\s*총\s*보유\s*잔액\s*([\d,]+)원""")
 
     fun matches(notificationText: String): Boolean {
-        return notificationText.contains(CARD_LABEL) &&
+        return notificationText.contains(NOTIFICATION_LABEL) &&
             (
                 paymentPattern.containsMatchIn(notificationText) ||
                     balancePattern.containsMatchIn(notificationText)
@@ -80,6 +81,7 @@ object SejongLocalCurrencyParser {
     private fun isMerchantCandidate(value: String): Boolean {
         if (value.isBlank()) return false
         if (value == CARD_LABEL) return false
+        if (value == NOTIFICATION_LABEL) return false
         if (paymentPattern.containsMatchIn(value)) return false
         if (balancePattern.containsMatchIn(value)) return false
         return value.length in 2..60

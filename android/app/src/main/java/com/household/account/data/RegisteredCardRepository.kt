@@ -8,7 +8,7 @@ class RegisteredCardRepository {
 
     private val firestore = FirebaseFirestore.getInstance()
     private val cardsCollection = firestore.collection("registered_cards")
-    private val labelOnlyNotificationLabels = setOf("여민전")
+    private val labelOnlyNotificationLabels = setOf("세종지역화폐")
 
     suspend fun matchesRegisteredCard(
         householdId: String,
@@ -79,6 +79,9 @@ class RegisteredCardRepository {
 
     private fun normalizeCardLabel(value: String?): String? {
         val normalized = value?.trim()?.lowercase()
-        return normalized?.takeIf { it.isNotBlank() }
+        return when (normalized?.takeIf { it.isNotBlank() }) {
+            "여민전" -> "세종지역화폐"
+            else -> normalized?.takeIf { it.isNotBlank() }
+        }
     }
 }

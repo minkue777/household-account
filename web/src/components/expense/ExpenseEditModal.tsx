@@ -92,10 +92,10 @@ export default function ExpenseEditModal({
       return '';
     }
 
-    const localCurrencyMatch = expense.cardLastFour.match(/^(경기지역화폐|대전사랑카드|여민전)\((.+)\)$/);
+    const localCurrencyMatch = expense.cardLastFour.match(/^(경기지역화폐|대전사랑카드|세종지역화폐|여민전)\((.+)\)$/);
     if (localCurrencyMatch) {
-      return localCurrencyMatch[1] === '여민전'
-        ? `여민전(${localCurrencyMatch[2]})`
+      return localCurrencyMatch[1] === '세종지역화폐' || localCurrencyMatch[1] === '여민전'
+        ? `세종지역화폐(${localCurrencyMatch[2]})`
         : `지역(${localCurrencyMatch[2]})`;
     }
 
@@ -103,8 +103,8 @@ export default function ExpenseEditModal({
       return '지역';
     }
 
-    if (expense.cardLastFour === '여민전') {
-      return '여민전';
+    if (expense.cardLastFour === '세종지역화폐' || expense.cardLastFour === '여민전') {
+      return '세종지역화폐';
     }
 
     if (expense.cardLastFour === '온누리상품권') {

@@ -35,7 +35,7 @@ export const REGISTERED_CARD_LABELS = [
   '대전사랑카드',
   '온누리상품권',
   '경기지역화폐',
-  '여민전',
+  '세종지역화폐',
 ] as const;
 
 export type RegisteredCardLabel = (typeof REGISTERED_CARD_LABELS)[number];

@@ -61,7 +61,7 @@ function getCardCategory(cardLabel: string): CardTab {
     return 'simple';
   }
 
-  if (['대전사랑카드', '온누리상품권', '경기지역화폐', '여민전'].includes(cardLabel)) {
+  if (['대전사랑카드', '온누리상품권', '경기지역화폐', '세종지역화폐', '여민전'].includes(cardLabel)) {
     return 'local';
   }
 
@@ -122,8 +122,9 @@ function getCardDisplayName(cardLabel: string) {
       return '온누리상품권';
     case '경기지역화폐':
       return '경기지역화폐';
+    case '세종지역화폐':
     case '여민전':
-      return '여민전';
+      return '세종지역화폐';
     default:
       return cardLabel;
   }
@@ -251,6 +252,7 @@ function getCardStyle(cardLabel: string) {
         number: 'text-slate-800',
         mark: 'text-blue-500/70',
       };
+    case '세종지역화폐':
     case '여민전':
       return {
         container:
@@ -860,7 +862,7 @@ function RegisteredCardTile({
   const isDaejeonLoveCard = card.cardLabel === '대전사랑카드';
   const isOnnuri = card.cardLabel === '온누리상품권';
   const isGyeonggiLocalCurrency = card.cardLabel === '경기지역화폐';
-  const isYeominjeon = card.cardLabel === '여민전';
+  const isYeominjeon = card.cardLabel === '세종지역화폐' || card.cardLabel === '여민전';
   const isLogoOnlyCard = isNaverPay || isKakaoPay || isToss;
   const isLocalAccentCard = isDaejeonLoveCard || isOnnuri || isGyeonggiLocalCurrency;
 
