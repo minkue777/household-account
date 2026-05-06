@@ -886,7 +886,6 @@ function RegisteredCardTile({
       )}
       {isYeominjeon && (
         <>
-          <div className="pointer-events-none absolute -right-[3px] bottom-[10%] h-[38%] w-[42%] rounded-tl-[22px] bg-[#d9ebf7]/65" />
           <div
             className="pointer-events-none absolute right-[5px] bottom-[13%] text-[34px] leading-none tracking-[-0.04em] text-[#6aa8cf]/20"
             style={{
