@@ -886,7 +886,7 @@ function RegisteredCardTile({
       )}
       {isYeominjeon && (
         <>
-          <div className="pointer-events-none absolute left-[36%] bottom-[-16%] text-[54px] font-black leading-none tracking-tight text-[#78bee4]/22">
+          <div className="pointer-events-none absolute right-2 bottom-2 text-[28px] font-black leading-none tracking-tight text-[#78bee4]/24">
             세종
           </div>
         </>
@@ -905,8 +905,8 @@ function RegisteredCardTile({
       <div className="relative aspect-[1.586/1]">
         {isYeominjeon && (
           <>
-            <div className="absolute left-1 top-0.5">
-              <p className="text-[10px] font-semibold leading-none text-slate-900">세종지역화폐</p>
+            <div className="absolute left-1 top-1">
+              <p className="text-[10px] font-semibold tracking-tight text-slate-900">세종지역화폐</p>
             </div>
           </>
         )}
@@ -950,7 +950,7 @@ function RegisteredCardTile({
           </div>
         )}
 
-        {card.cardLastFour ? (
+        {card.cardLastFour && !isYeominjeon ? (
           <div
             className={
               isLocalAccentCard ? 'absolute bottom-[12px] right-1.5' : 'absolute bottom-1 right-1.5'
