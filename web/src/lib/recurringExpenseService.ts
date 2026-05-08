@@ -9,10 +9,11 @@ import {
   getDocs,
   onSnapshot,
   Timestamp,
+  runTransaction,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { RecurringExpense, CreateRecurringExpenseInput } from '@/types/recurring';
-import { addExpense } from './expenseService';
+import { MemberStorage } from './storage/memberStorage';
 
 export type { RecurringExpense, CreateRecurringExpenseInput };
 
@@ -27,6 +28,7 @@ function sortRecurringExpenses(expenses: RecurringExpense[]) {
 }
 
 const COLLECTION_NAME = 'recurring_expenses';
+const EXPENSE_COLLECTION_NAME = 'expenses';
 const recurringRef = collection(db, COLLECTION_NAME);
 
 /**
@@ -183,6 +185,10 @@ function getRecurringExpenseDate(year: number, month: number, dayOfMonth: number
   return `${year}-${safeMonth}-${safeDay}`;
 }
 
+function getRecurringExpenseDocumentId(recurringExpenseId: string, month: string): string {
+  return `recurring_${recurringExpenseId}_${month}`;
+}
+
 /**
  * ?? ? ??? ?? (?: "2023-12")
  */
@@ -209,6 +215,7 @@ export async function processRecurringExpenses(householdId: string): Promise<num
   const currentMonth = getCurrentMonthString();
 
   const expenses = await getRecurringExpenses(householdId);
+  const createdBy = MemberStorage.getMemberName();
   let registeredCount = 0;
 
   for (const expense of expenses) {
@@ -225,24 +232,70 @@ export async function processRecurringExpenses(householdId: string): Promise<num
 
     // 지출 등록
     try {
-      await addExpense({
-        date: getRecurringExpenseDate(currentYear, currentMonthNumber, expense.dayOfMonth),
-        time: '09:00',
-        merchant: expense.merchant,
-        amount: expense.amount,
-        category: expense.category,
-        cardLastFour: '정기지출',
-        memo: expense.memo || '',
-        cardType: 'main',
+      const wasRegistered = await runTransaction(db, async (transaction) => {
+        const recurringDocRef = doc(db, COLLECTION_NAME, expense.id);
+        const recurringDocSnap = await transaction.get(recurringDocRef);
+
+        if (!recurringDocSnap.exists()) return false;
+
+        const recurringData = recurringDocSnap.data();
+        if (recurringData.householdId !== householdId) return false;
+        if ((recurringData.isActive ?? true) === false) return false;
+        if (recurringData.lastRegisteredMonth === currentMonth) return false;
+
+        const dayOfMonth = recurringData.dayOfMonth ?? expense.dayOfMonth;
+        const targetDayInTransaction = getEffectiveDayOfMonth(
+          currentYear,
+          currentMonthNumber,
+          dayOfMonth
+        );
+
+        if (currentDay < targetDayInTransaction) return false;
+
+        const expenseDocRef = doc(
+          db,
+          EXPENSE_COLLECTION_NAME,
+          getRecurringExpenseDocumentId(expense.id, currentMonth)
+        );
+        const expenseDocSnap = await transaction.get(expenseDocRef);
+        const now = Timestamp.now();
+
+        if (expenseDocSnap.exists()) {
+          transaction.update(recurringDocRef, {
+            lastRegisteredMonth: currentMonth,
+            updatedAt: now,
+          });
+          return false;
+        }
+
+        transaction.set(expenseDocRef, {
+          householdId,
+          date: getRecurringExpenseDate(currentYear, currentMonthNumber, dayOfMonth),
+          time: '09:00',
+          merchant: recurringData.merchant,
+          amount: recurringData.amount,
+          transactionType: 'expense',
+          category: recurringData.category,
+          cardLastFour: '정기지출',
+          memo: recurringData.memo || '',
+          cardType: 'main',
+          recurringExpenseId: expense.id,
+          recurringMonth: currentMonth,
+          createdAt: now,
+          ...(createdBy && { createdBy }),
+        });
+
+        transaction.update(recurringDocRef, {
+          lastRegisteredMonth: currentMonth,
+          updatedAt: now,
+        });
+
+        return true;
       });
 
-      // lastRegisteredMonth 업데이트
-      await updateDoc(doc(db, COLLECTION_NAME, expense.id), {
-        lastRegisteredMonth: currentMonth,
-        updatedAt: Timestamp.now(),
-      });
-
-      registeredCount++;
+      if (wasRegistered) {
+        registeredCount++;
+      }
     } catch (error) {
     }
   }
