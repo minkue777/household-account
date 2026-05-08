@@ -47,6 +47,7 @@ export default function QuickEditOverlaySettings({
           </div>
           <div className="min-w-0">
             <div className="font-semibold text-slate-800">결제 후 바로 편집</div>
+            <div className="text-sm text-slate-500">결제 알림 후 편집창 자동 열기</div>
           </div>
         </div>
         <button
