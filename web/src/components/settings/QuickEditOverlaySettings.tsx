@@ -47,11 +47,6 @@ export default function QuickEditOverlaySettings({
           </div>
           <div className="min-w-0">
             <div className="font-semibold text-slate-800">결제 후 바로 편집</div>
-            <div className="text-sm text-slate-500">
-              {isEnabled
-                ? '결제 알림을 기록한 뒤 편집창 열기'
-                : `${memberName}님은 결제 후 편집창을 열지 않음`}
-            </div>
           </div>
         </div>
         <button
