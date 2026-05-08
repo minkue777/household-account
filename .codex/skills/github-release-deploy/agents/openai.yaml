@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub 릴리즈 배포"
+  short_description: "Household-account Android APK를 GitHub Release로 배포합니다."
+  default_prompt: "이 프로젝트의 Android APK를 새 버전으로 빌드하고 GitHub Release에 배포해 주세요."
