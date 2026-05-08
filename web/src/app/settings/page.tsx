@@ -88,10 +88,6 @@ export default function SettingsPage() {
             householdId={household?.id}
             ownerName={currentMember?.name}
           />
-          <QuickEditOverlaySettings
-            householdId={household?.id}
-            memberName={currentMember?.name}
-          />
           <CategorySettings />
           <MerchantRuleSettings />
           <RecurringExpenseSettings />
@@ -102,6 +98,11 @@ export default function SettingsPage() {
               <NotificationSettings />
             </div>
           )}
+
+          <QuickEditOverlaySettings
+            householdId={household?.id}
+            memberName={currentMember?.name}
+          />
 
           {appVersionLabel && (
             <div className="px-1 pb-2 pt-1 text-center text-xs text-slate-400">

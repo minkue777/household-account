@@ -46,11 +46,11 @@ export default function QuickEditOverlaySettings({
             <Edit2 className="h-5 w-5 text-slate-600" />
           </div>
           <div className="min-w-0">
-            <div className="font-semibold text-slate-800">퀵에딧 오버레이</div>
+            <div className="font-semibold text-slate-800">결제 후 바로 편집</div>
             <div className="text-sm text-slate-500">
               {isEnabled
-                ? '결제 후 바로 편집창 띄우기'
-                : `${memberName}님은 자동 편집창을 띄우지 않음`}
+                ? '결제 알림을 기록한 뒤 편집창 열기'
+                : `${memberName}님은 결제 후 편집창을 열지 않음`}
             </div>
           </div>
         </div>
@@ -58,7 +58,7 @@ export default function QuickEditOverlaySettings({
           type="button"
           role="switch"
           aria-checked={isEnabled}
-          aria-label={`${memberName} 퀵에딧 오버레이`}
+          aria-label={`${memberName} 결제 후 바로 편집`}
           onClick={handleToggle}
           className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
             isEnabled ? 'bg-blue-500' : 'bg-slate-300'
