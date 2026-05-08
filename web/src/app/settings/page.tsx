@@ -12,6 +12,7 @@ import {
   CardSettings,
   CategorySettings,
   MerchantRuleSettings,
+  QuickEditOverlaySettings,
   RecurringExpenseSettings,
   ThemeSettings,
 } from '@/components/settings';
@@ -86,6 +87,10 @@ export default function SettingsPage() {
           <CardSettings
             householdId={household?.id}
             ownerName={currentMember?.name}
+          />
+          <QuickEditOverlaySettings
+            householdId={household?.id}
+            memberName={currentMember?.name}
           />
           <CategorySettings />
           <MerchantRuleSettings />

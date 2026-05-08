@@ -58,4 +58,31 @@ export const AndroidBridge = {
     }
     return null;
   },
+
+  /**
+   * 현재 기기의 가구원별 퀵에딧 오버레이 사용 여부
+   */
+  isQuickEditOverlayEnabled: (householdId: string, memberName: string): boolean => {
+    if (typeof window === 'undefined') return true;
+    const bridge = (window as WindowWithBridge).AndroidBridge;
+    if (bridge && typeof bridge.isQuickEditOverlayEnabled === 'function') {
+      return bridge.isQuickEditOverlayEnabled(householdId, memberName);
+    }
+    return true;
+  },
+
+  /**
+   * 현재 기기의 가구원별 퀵에딧 오버레이 사용 여부 저장
+   */
+  setQuickEditOverlayEnabled: (
+    householdId: string,
+    memberName: string,
+    enabled: boolean
+  ): void => {
+    if (typeof window === 'undefined') return;
+    const bridge = (window as WindowWithBridge).AndroidBridge;
+    if (bridge && typeof bridge.setQuickEditOverlayEnabled === 'function') {
+      bridge.setQuickEditOverlayEnabled(householdId, memberName, enabled);
+    }
+  },
 };

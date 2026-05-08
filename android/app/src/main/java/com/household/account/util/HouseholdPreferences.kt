@@ -13,6 +13,7 @@ object HouseholdPreferences {
     private const val KEY_HOUSEHOLD_ID = "householdKey"
     private const val KEY_MEMBER_NAME = "memberName"
     private const val KEY_PARTNER_NAME = "partnerName"
+    private const val KEY_QUICK_EDIT_OVERLAY_PREFIX = "quickEditOverlayEnabled"
 
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -72,5 +73,43 @@ object HouseholdPreferences {
      */
     fun getPartnerName(context: Context): String {
         return getPrefs(context).getString(KEY_PARTNER_NAME, "") ?: ""
+    }
+
+    fun isQuickEditOverlayEnabled(context: Context): Boolean {
+        return isQuickEditOverlayEnabled(
+            context,
+            getHouseholdKey(context),
+            getMemberName(context)
+        )
+    }
+
+    fun isQuickEditOverlayEnabled(
+        context: Context,
+        householdId: String,
+        memberName: String
+    ): Boolean {
+        val key = getQuickEditOverlayKey(householdId, memberName) ?: return true
+        return getPrefs(context).getBoolean(key, true)
+    }
+
+    fun setQuickEditOverlayEnabled(
+        context: Context,
+        householdId: String,
+        memberName: String,
+        enabled: Boolean
+    ) {
+        val key = getQuickEditOverlayKey(householdId, memberName) ?: return
+        getPrefs(context).edit().putBoolean(key, enabled).apply()
+    }
+
+    private fun getQuickEditOverlayKey(householdId: String, memberName: String): String? {
+        val normalizedHouseholdId = householdId.trim()
+        val normalizedMemberName = memberName.trim()
+
+        if (normalizedHouseholdId.isEmpty() || normalizedMemberName.isEmpty()) {
+            return null
+        }
+
+        return "${KEY_QUICK_EDIT_OVERLAY_PREFIX}_${normalizedHouseholdId}_${normalizedMemberName}"
     }
 }

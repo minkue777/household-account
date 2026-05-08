@@ -36,6 +36,12 @@ export interface AndroidBridge {
   setMemberName: (name: string) => void;
   setPartnerName: (name: string) => void;
   getAppVersion?: () => string;
+  isQuickEditOverlayEnabled?: (householdId: string, memberName: string) => boolean;
+  setQuickEditOverlayEnabled?: (
+    householdId: string,
+    memberName: string,
+    enabled: boolean
+  ) => void;
 }
 
 export interface WindowWithBridge extends Window {

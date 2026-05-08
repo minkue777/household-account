@@ -69,6 +69,16 @@ class WebViewBridge(private val context: Context) {
         HouseholdPreferences.setPartnerName(context, name)
     }
 
+    @JavascriptInterface
+    fun isQuickEditOverlayEnabled(householdId: String, memberName: String): Boolean {
+        return HouseholdPreferences.isQuickEditOverlayEnabled(context, householdId, memberName)
+    }
+
+    @JavascriptInterface
+    fun setQuickEditOverlayEnabled(householdId: String, memberName: String, enabled: Boolean) {
+        HouseholdPreferences.setQuickEditOverlayEnabled(context, householdId, memberName, enabled)
+    }
+
     /**
      * JavaScript에서 호출: 현재 설치된 안드로이드 앱 버전 조회
      */
