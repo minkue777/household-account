@@ -1,0 +1,4 @@
+interface:
+  display_name: "ETF 종목 동기화"
+  short_description: "네이버 금융 ETF 목록으로 stocks.json을 최신화"
+  default_prompt: "ETF 목록 최신화해줘"
