@@ -141,10 +141,31 @@ function areSameActiveElements(
   ));
 }
 
+function getPeriodRange(period: PeriodType, now = new Date()) {
+  const endDate = formatLocalDate(now);
+  let startDate = formatLocalDate(new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()));
+
+  switch (period) {
+    case '6M':
+      startDate = formatLocalDate(new Date(now.getFullYear(), now.getMonth() - 6, now.getDate()));
+      break;
+    case '1Y':
+      startDate = formatLocalDate(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
+      break;
+    case 'ALL':
+      startDate = '2020-01-01';
+      break;
+    default:
+      break;
+  }
+
+  return { startDate, endDate };
+}
+
 export default function AssetStatsPage() {
   const { themeConfig } = useTheme();
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [history, setHistory] = useState<AssetHistoryEntry[]>([]);
+  const [allHistory, setAllHistory] = useState<AssetHistoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('3M');
   const [financialOnly, setFinancialOnly] = useState(false);
@@ -170,26 +191,8 @@ export default function AssetStatsPage() {
       setIsLoading(true);
 
       try {
-        const now = new Date();
-        const endDate = formatLocalDate(now);
-        let startDate = formatLocalDate(new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()));
-
-        switch (selectedPeriod) {
-          case '6M':
-            startDate = formatLocalDate(new Date(now.getFullYear(), now.getMonth() - 6, now.getDate()));
-            break;
-          case '1Y':
-            startDate = formatLocalDate(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
-            break;
-          case 'ALL':
-            startDate = '2020-01-01';
-            break;
-          default:
-            break;
-        }
-
-        const historyData = await getAssetHistoryByPeriod(startDate, endDate);
-        setHistory(historyData);
+        const historyData = await getAssetHistoryByPeriod('2020-01-01', formatLocalDate(new Date()));
+        setAllHistory(historyData);
       } catch (error) {
         console.error('자산 통계 이력을 불러오지 못했습니다.', error);
       } finally {
@@ -198,7 +201,7 @@ export default function AssetStatsPage() {
     };
 
     void fetchHistory();
-  }, [selectedPeriod]);
+  }, []);
 
   const activeAssets = useMemo(() => assets.filter((asset) => asset.isActive), [assets]);
   const visibleAssets = useMemo(
@@ -209,6 +212,16 @@ export default function AssetStatsPage() {
   const typeTotals = useMemo(() => sumSignedBalancesByAssetType(visibleAssets), [visibleAssets]);
   const today = formatLocalDate(new Date());
   const snapshotType = financialOnly ? 'FINANCIAL' : 'TOTAL';
+  const selectedPeriodRange = useMemo(() => getPeriodRange(selectedPeriod), [selectedPeriod]);
+  const history = useMemo(
+    () => allHistory
+      .filter((entry) => (
+        entry.date >= selectedPeriodRange.startDate &&
+        entry.date <= selectedPeriodRange.endDate
+      ))
+      .sort((a, b) => a.date.localeCompare(b.date)),
+    [allHistory, selectedPeriodRange.endDate, selectedPeriodRange.startDate]
+  );
 
   const totalSnapshots = useMemo(
     () => history
@@ -262,6 +275,17 @@ export default function AssetStatsPage() {
   const displayTotalSnapshots = useMemo(
     () => upsertRealtimeSnapshot(totalSnapshots, snapshotType, totalAssets, today),
     [snapshotType, today, totalAssets, totalSnapshots]
+  );
+  const profitTotalSnapshots = useMemo(
+    () => upsertRealtimeSnapshot(
+      allHistory
+        .filter((entry) => entry.assetId === snapshotType)
+        .sort((a, b) => a.date.localeCompare(b.date)),
+      snapshotType,
+      totalAssets,
+      today
+    ),
+    [allHistory, snapshotType, today, totalAssets]
   );
 
   const availableTypes = useMemo(() => {
@@ -642,7 +666,7 @@ export default function AssetStatsPage() {
             </div>
 
             <AssetProfitChart
-              totalSnapshots={displayTotalSnapshots}
+              totalSnapshots={profitTotalSnapshots}
               totalAssets={totalAssets}
             />
 
