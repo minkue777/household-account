@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Asset } from '@/types/asset';
-import { ModalOverlay } from '@/components/common';
+import { ConfirmDialog, ModalOverlay } from '@/components/common';
 import { X, Plus, Trash2, Loader2 } from 'lucide-react';
 import { calculateHoldingValue, useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
 
@@ -14,6 +14,7 @@ interface StockHoldingModalProps {
 
 export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldingModalProps) {
   const [showAddForm, setShowAddForm] = useState(false);
+  const [pendingDeleteHoldingId, setPendingDeleteHoldingId] = useState<string | null>(null);
 
   const {
     holdings,
@@ -40,6 +41,7 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
   useEffect(() => {
     if (!isOpen) {
       setShowAddForm(false);
+      setPendingDeleteHoldingId(null);
     }
   }, [isOpen]);
 
@@ -51,11 +53,8 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
   };
 
   const handleDeleteHolding = async (holdingId: string) => {
-    if (!confirm('이 종목을 삭제하시겠습니까?')) {
-      return;
-    }
-
     await deleteHolding(holdingId);
+    setPendingDeleteHoldingId(null);
   };
 
   const handleCancelAddForm = () => {
@@ -67,8 +66,11 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
     return null;
   }
 
+  const pendingDeleteHolding = holdings.find((holding) => holding.id === pendingDeleteHoldingId) ?? null;
+
   return (
-    <ModalOverlay onClose={onClose}>
+    <>
+      <ModalOverlay onClose={onClose}>
         <div className="bg-white rounded-2xl p-6 m-4 max-w-md w-full shadow-xl max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -116,9 +118,7 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
                       {calculateHoldingValue(holding).toLocaleString()}원
                     </p>
                     <button
-                      onClick={() => {
-                        void handleDeleteHolding(holding.id);
-                      }}
+                      onClick={() => setPendingDeleteHoldingId(holding.id)}
                       className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -249,6 +249,26 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
             </button>
           )}
         </div>
-    </ModalOverlay>
+      </ModalOverlay>
+
+      <ConfirmDialog
+        isOpen={!!pendingDeleteHolding}
+        title="보유 종목 삭제"
+        message={
+          pendingDeleteHolding
+            ? `"${pendingDeleteHolding.stockName}" 종목을 삭제하시겠습니까?`
+            : ''
+        }
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        variant="danger"
+        onConfirm={() => {
+          if (pendingDeleteHolding) {
+            void handleDeleteHolding(pendingDeleteHolding.id);
+          }
+        }}
+        onCancel={() => setPendingDeleteHoldingId(null)}
+      />
+    </>
   );
 }

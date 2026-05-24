@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
+import { ConfirmDialog } from '@/components/common';
 import { deleteStockHolding, updateStockHolding } from '@/lib/assetService';
 import { calculateHoldingValue } from '@/lib/utils/useStockHoldingManager';
 import { StockHolding } from '@/types/asset';
@@ -304,6 +305,7 @@ export default function StockHoldingList({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dividendInfoMap, setDividendInfoMap] = useState<Record<string, DividendInfo>>({});
   const [loadingDividends, setLoadingDividends] = useState<Set<string>>(new Set());
+  const [pendingDeleteHolding, setPendingDeleteHolding] = useState<StockHolding | null>(null);
 
   const stockHoldings = useMemo(
     () => holdings.filter((holding) => getHoldingType(holding) === 'stock'),
@@ -415,14 +417,15 @@ export default function StockHoldingList({
     }
   };
 
-  const handleDeleteHolding = async (holdingId: string, stockName: string) => {
-    if (!confirm(`${stockName}을 삭제하시겠습니까?`)) {
+  const handleDeleteHolding = async () => {
+    if (!pendingDeleteHolding) {
       return;
     }
 
     try {
-      await deleteStockHolding(holdingId, assetId);
+      await deleteStockHolding(pendingDeleteHolding.id, assetId);
       resetEditingState();
+      setPendingDeleteHolding(null);
     } catch (error) {
       console.error('보유 항목 삭제 오류:', error);
       alert('보유 항목 삭제에 실패했습니다.');
@@ -445,7 +448,7 @@ export default function StockHoldingList({
           onChangeQuantity={setEditQuantity}
           onChangeAvgPrice={setEditAvgPrice}
           onClose={resetEditingState}
-          onDelete={() => void handleDeleteHolding(holding.id, holding.stockName)}
+          onDelete={() => setPendingDeleteHolding(holding)}
           onSave={() => void handleSaveHolding()}
         />
       );
@@ -485,6 +488,23 @@ export default function StockHoldingList({
       ) : (
         <div className="space-y-2">{orderedHoldings.map(renderHoldingItem)}</div>
       )}
+
+      <ConfirmDialog
+        isOpen={!!pendingDeleteHolding}
+        title="보유 항목 삭제"
+        message={
+          pendingDeleteHolding
+            ? `"${pendingDeleteHolding.stockName}"을(를) 삭제하시겠습니까?`
+            : ''
+        }
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        variant="danger"
+        onConfirm={() => {
+          void handleDeleteHolding();
+        }}
+        onCancel={() => setPendingDeleteHolding(null)}
+      />
     </>
   );
 }

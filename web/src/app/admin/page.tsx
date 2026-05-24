@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
+import { ConfirmDialog } from '@/components/common';
 import { createHousehold, getAllHouseholds, deleteHousehold, Household } from '@/lib/householdService';
 import { signInWithGoogle, logOut, onAuthChange, isAdmin } from '@/lib/authService';
 
@@ -14,6 +15,7 @@ export default function AdminPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
 
   // 인증 상태 구독
   useEffect(() => {
@@ -53,11 +55,14 @@ export default function AdminPage() {
     }
   };
 
-  const handleDelete = async (key: string) => {
-    if (confirm(`"${key}" 키를 삭제하시겠습니까?\n해당 가구의 데이터는 삭제되지 않습니다.`)) {
-      await deleteHousehold(key);
-      await loadHouseholds();
+  const handleDelete = async () => {
+    if (!pendingDeleteKey) {
+      return;
     }
+
+    await deleteHousehold(pendingDeleteKey);
+    await loadHouseholds();
+    setPendingDeleteKey(null);
   };
 
   const handleCopy = async (key: string) => {
@@ -198,7 +203,7 @@ export default function AdminPage() {
                       {copiedKey === household.id ? '복사됨' : '복사'}
                     </button>
                     <button
-                      onClick={() => handleDelete(household.id)}
+                      onClick={() => setPendingDeleteKey(household.id)}
                       className="px-3 py-1.5 bg-red-50 text-red-500 rounded-lg text-sm hover:bg-red-100 transition-colors"
                     >
                       삭제
@@ -210,6 +215,23 @@ export default function AdminPage() {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={!!pendingDeleteKey}
+        title="가구 키 삭제"
+        message={
+          pendingDeleteKey
+            ? `"${pendingDeleteKey}" 키를 삭제하시겠습니까? 해당 가구의 데이터는 삭제되지 않습니다.`
+            : ''
+        }
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        variant="danger"
+        onConfirm={() => {
+          void handleDelete();
+        }}
+        onCancel={() => setPendingDeleteKey(null)}
+      />
     </div>
   );
 }

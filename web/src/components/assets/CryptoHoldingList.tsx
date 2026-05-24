@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { CryptoHolding } from '@/types/asset';
+import { ConfirmDialog } from '@/components/common';
 import { deleteCryptoHolding, updateCryptoHolding } from '@/lib/assetService';
 import { calculateCryptoHoldingValue } from '@/lib/utils/useCryptoHoldingManager';
 
@@ -43,6 +44,7 @@ export default function CryptoHoldingList({
   const [editQuantity, setEditQuantity] = useState('');
   const [editAvgPrice, setEditAvgPrice] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingDeleteHolding, setPendingDeleteHolding] = useState<CryptoHolding | null>(null);
 
   const handleEditHolding = (holding: CryptoHolding) => {
     setEditingHolding(holding);
@@ -70,9 +72,15 @@ export default function CryptoHoldingList({
     }
   };
 
-  const handleDeleteHolding = async (holdingId: string) => {
+  const handleDeleteHolding = async () => {
+    if (!pendingDeleteHolding) {
+      return;
+    }
+
     try {
-      await deleteCryptoHolding(holdingId, assetId);
+      await deleteCryptoHolding(pendingDeleteHolding.id, assetId);
+      setEditingHolding(null);
+      setPendingDeleteHolding(null);
     } catch (error) {
       console.error('코인 삭제 오류:', error);
     }
@@ -149,12 +157,7 @@ export default function CryptoHoldingList({
                 <div className="flex gap-2" onClick={(event) => event.stopPropagation()}>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (confirm(`${holding.coinName}을 삭제하시겠습니까?`)) {
-                        void handleDeleteHolding(holding.id);
-                        setEditingHolding(null);
-                      }
-                    }}
+                    onClick={() => setPendingDeleteHolding(holding)}
                     className="flex-1 rounded-lg border border-red-300 px-3 py-2 text-sm text-red-500 hover:bg-red-50"
                   >
                     삭제
@@ -177,6 +180,23 @@ export default function CryptoHoldingList({
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={!!pendingDeleteHolding}
+        title="보유 코인 삭제"
+        message={
+          pendingDeleteHolding
+            ? `"${pendingDeleteHolding.coinName}"을(를) 삭제하시겠습니까?`
+            : ''
+        }
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        variant="danger"
+        onConfirm={() => {
+          void handleDeleteHolding();
+        }}
+        onCancel={() => setPendingDeleteHolding(null)}
+      />
     </>
   );
 }

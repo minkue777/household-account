@@ -32,6 +32,8 @@ interface ExpenseEditModalProps {
   transactionType: TransactionType;
 }
 
+type ExpenseActionConfirmType = 'unmerge' | 'updateSplitGroup';
+
 export default function ExpenseEditModal({
   expense,
   isOpen,
@@ -86,6 +88,7 @@ export default function ExpenseEditModal({
   const [editSplitMonths, setEditSplitMonths] = useState(expense.splitTotal || 2);
   const [showEditSplitGroup, setShowEditSplitGroup] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [pendingActionConfirm, setPendingActionConfirm] = useState<ExpenseActionConfirmType | null>(null);
 
   const displayCardLabel = (() => {
     if (!expense.cardLastFour) {
@@ -131,6 +134,7 @@ export default function ExpenseEditModal({
     setEditSplitMonths(expense.splitTotal || 2);
     setShowEditSplitGroup(false);
     setShowDeleteConfirm(false);
+    setPendingActionConfirm(null);
   }, [expense, isOpen, resetExpenseFormState, resetMonthlySplitInput]);
 
   const handleSave = () => {
@@ -195,9 +199,35 @@ export default function ExpenseEditModal({
     onClose();
   };
 
+  const handleActionConfirm = () => {
+    if (pendingActionConfirm === 'unmerge' && onUnmerge) {
+      setPendingActionConfirm(null);
+      onUnmerge();
+      onClose();
+      return;
+    }
+
+    if (pendingActionConfirm === 'updateSplitGroup' && onUpdateSplitGroup) {
+      setPendingActionConfirm(null);
+      onUpdateSplitGroup(editSplitMonths);
+      onClose();
+    }
+  };
+
   if (!isOpen) {
     return null;
   }
+
+  const actionConfirmTitle =
+    pendingActionConfirm === 'unmerge'
+      ? '합치기 되돌리기'
+      : '분할 개월 수 변경';
+  const actionConfirmMessage =
+    pendingActionConfirm === 'unmerge'
+      ? '합치기를 되돌리면 원래 항목들이 복원됩니다. 진행하시겠습니까?'
+      : `전체 분할을 ${editSplitMonths}개월로 변경하시겠습니까?`;
+  const actionConfirmLabel =
+    pendingActionConfirm === 'updateSplitGroup' ? '변경' : '진행';
 
   const renderIncomeFields = () => (
     <div className="space-y-4">
@@ -274,12 +304,7 @@ export default function ExpenseEditModal({
             ))}
           </div>
           <button
-            onClick={() => {
-              if (confirm('합치기를 되돌리면 원래 항목들이 복원됩니다. 진행하시겠습니까?')) {
-                onUnmerge();
-                onClose();
-              }
-            }}
+            onClick={() => setPendingActionConfirm('unmerge')}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-white transition-colors hover:bg-amber-600"
           >
             <Undo2 className="h-4 w-4" />
@@ -321,12 +346,8 @@ export default function ExpenseEditModal({
                 </button>
                 <button
                   onClick={() => {
-                    if (
-                      onUpdateSplitGroup &&
-                      confirm(`전체 분할을 ${editSplitMonths}개월로 변경하시겠습니까?`)
-                    ) {
-                      onUpdateSplitGroup(editSplitMonths);
-                      onClose();
+                    if (onUpdateSplitGroup) {
+                      setPendingActionConfirm('updateSplitGroup');
                     }
                   }}
                   className="flex-1 rounded-lg bg-purple-500 px-3 py-1.5 text-sm text-white hover:bg-purple-600"
@@ -527,6 +548,16 @@ export default function ExpenseEditModal({
           onClose();
         }}
         onCancel={() => setShowDeleteConfirm(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={pendingActionConfirm !== null}
+        title={actionConfirmTitle}
+        message={actionConfirmMessage}
+        confirmLabel={actionConfirmLabel}
+        cancelLabel="취소"
+        onConfirm={handleActionConfirm}
+        onCancel={() => setPendingActionConfirm(null)}
       />
     </>
   );
