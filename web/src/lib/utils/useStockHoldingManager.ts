@@ -17,7 +17,7 @@ function sanitizeNumericInput(rawValue: string) {
   return rawValue.replace(/[^0-9]/g, '');
 }
 
-export type ManualHoldingType = 'bond' | 'cash';
+export type ManualHoldingType = 'manual' | 'cash';
 
 export function calculateHoldingValue(
   holding: Pick<StockHolding, 'quantity' | 'currentPrice' | 'avgPrice'>
@@ -216,7 +216,7 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     try {
       const trimmedName = manualName.trim();
       const inferredManualType: ManualHoldingType =
-        trimmedName.includes('예수금') ? 'cash' : 'bond';
+        trimmedName.includes('예수금') ? 'cash' : 'manual';
 
       await addStockHolding({
         assetId,

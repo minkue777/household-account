@@ -142,7 +142,7 @@ export interface StockHolding {
   id: string;
   assetId: string;
   householdId: string;
-  holdingType?: 'stock' | 'bond' | 'cash';
+  holdingType?: 'stock' | 'bond' | 'cash' | 'manual';
   stockCode: string;
   stockName: string;
   quantity: number;

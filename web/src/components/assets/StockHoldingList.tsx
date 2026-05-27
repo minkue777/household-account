@@ -66,7 +66,11 @@ function getHoldingTypeLabel(holding: StockHolding) {
     return '예수금';
   }
 
-  return '주식';
+  if (holdingType === 'manual') {
+    return '수동';
+  }
+
+  return '수동';
 }
 
 function supportsDividendInfo(holding: StockHolding) {
