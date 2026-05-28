@@ -13,6 +13,7 @@ object TossBankParser {
     private val amountEventPattern = Regex("""([\d,]+)원\s*(결제(?:\s*취소)?)""")
     private val merchantPattern = Regex("""(?:토스뱅크\s*체크카드|페이스페이\s*\(토스뱅크\))\s*\|\s*(.+)""")
     private val amountLineMerchantPattern = Regex("""[\d,]+원\s*결제(?:\s*취소)?\s*\|\s*(.+)""")
+    private val cashbackPattern = Regex("""(?m)^([\d,]+)원\s*캐시백""")
 
     fun matches(notificationText: String): Boolean {
         val normalized = normalize(notificationText)
@@ -40,12 +41,23 @@ object TossBankParser {
                 return ParseResult(false, errorMessage = "Toss Bank pre-authorization ignored")
             }
 
-            val amount = amountEventMatch.groupValues[1].replace(",", "").toIntOrNull()
+            val grossAmount = amountEventMatch.groupValues[1].replace(",", "").toIntOrNull()
                 ?: return ParseResult(false, errorMessage = "Invalid amount")
             val eventType = if (amountEventMatch.groupValues[2].contains("취소")) {
                 ExpenseEventType.CANCELLATION
             } else {
                 ExpenseEventType.APPROVAL
+            }
+            val cashbackAmount = cashbackPattern.find(normalized)
+                ?.groupValues
+                ?.get(1)
+                ?.replace(",", "")
+                ?.toIntOrNull()
+                ?: 0
+            val amount = if (eventType == ExpenseEventType.APPROVAL && cashbackAmount > 0) {
+                (grossAmount - cashbackAmount).coerceAtLeast(0)
+            } else {
+                grossAmount
             }
             val occurredAt = resolveDateTime(postedAtMillis)
 
