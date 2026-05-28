@@ -12,11 +12,15 @@ object TossBankParser {
 
     private val amountEventPattern = Regex("""([\d,]+)원\s*(결제(?:\s*취소)?)""")
     private val merchantPattern = Regex("""(?:토스뱅크\s*체크카드|페이스페이\s*\(토스뱅크\))\s*\|\s*(.+)""")
+    private val amountLineMerchantPattern = Regex("""[\d,]+원\s*결제(?:\s*취소)?\s*\|\s*(.+)""")
 
     fun matches(notificationText: String): Boolean {
         val normalized = normalize(notificationText)
         return amountEventPattern.containsMatchIn(normalized) &&
-            merchantPattern.containsMatchIn(normalized)
+            (
+                merchantPattern.containsMatchIn(normalized) ||
+                    amountLineMerchantPattern.containsMatchIn(normalized)
+            )
     }
 
     fun parse(
@@ -28,6 +32,7 @@ object TossBankParser {
             val amountEventMatch = amountEventPattern.find(normalized)
                 ?: return ParseResult(false, errorMessage = "Toss Bank amount/event format not found")
             val merchantMatch = merchantPattern.find(normalized)
+                ?: amountLineMerchantPattern.find(normalized)
                 ?: return ParseResult(false, errorMessage = "Toss Bank merchant format not found")
 
             val merchant = merchantMatch.groupValues[1].trim()
