@@ -33,6 +33,9 @@ export default function SearchResultList({
 }: SearchResultListProps) {
   const { getCategoryLabel, getCategoryColor } = useCategoryContext();
   const transactionLabel = transactionType === 'income' ? '수입' : '지출';
+  const emptyGuideText = transactionType === 'income'
+    ? `${transactionLabel}처명이나 메모를 검색해보세요.`
+    : '지출처명, 메모, 카드명을 검색해보세요.';
 
   const groupedResults: MonthlyGroup[] = results.reduce((groups, expense) => {
     const yearMonth = expense.date.substring(0, 7);
@@ -69,7 +72,7 @@ export default function SearchResultList({
     return (
       <div className="py-12 text-center text-slate-400">
         <Search className="mx-auto mb-3 h-12 w-12 text-slate-300" />
-        <p>{transactionLabel}처명이나 메모를 검색해보세요.</p>
+        <p>{emptyGuideText}</p>
       </div>
     );
   }

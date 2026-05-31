@@ -259,6 +259,88 @@ describe('expenseService', () => {
 
       expect(result).toHaveLength(1);
     });
+
+    it('should filter by card label', async () => {
+      const mockDocs = [
+        {
+          id: 'exp1',
+          data: () => ({
+            date: '2024-01-15',
+            time: '12:00',
+            merchant: 'Store A',
+            amount: 5000,
+            category: 'food',
+            cardType: 'main',
+            cardLastFour: '국민(2972)',
+          }),
+        },
+        {
+          id: 'exp2',
+          data: () => ({
+            date: '2024-01-16',
+            time: '13:00',
+            merchant: 'Store B',
+            amount: 20000,
+            category: 'shopping',
+            cardType: 'main',
+            cardLastFour: '삼성(2972)',
+          }),
+        },
+      ];
+      (getDocs as jest.Mock).mockResolvedValue({ docs: mockDocs });
+
+      const result = await searchExpenses('국민');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].cardLastFour).toBe('국민(2972)');
+    });
+
+    it('should filter by exact card label and number', async () => {
+      const mockDocs = [
+        {
+          id: 'exp1',
+          data: () => ({
+            date: '2024-01-15',
+            time: '12:00',
+            merchant: 'Store A',
+            amount: 5000,
+            category: 'food',
+            cardType: 'main',
+            cardLastFour: '국민(2972)',
+          }),
+        },
+        {
+          id: 'exp2',
+          data: () => ({
+            date: '2024-01-16',
+            time: '13:00',
+            merchant: 'Store B',
+            amount: 20000,
+            category: 'shopping',
+            cardType: 'main',
+            cardLastFour: '국민(1234)',
+          }),
+        },
+        {
+          id: 'exp3',
+          data: () => ({
+            date: '2024-01-17',
+            time: '14:00',
+            merchant: 'Store C',
+            amount: 30000,
+            category: 'shopping',
+            cardType: 'main',
+            cardLastFour: '삼성(2972)',
+          }),
+        },
+      ];
+      (getDocs as jest.Mock).mockResolvedValue({ docs: mockDocs });
+
+      const result = await searchExpenses('국민(2972)');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('exp1');
+    });
   });
 
   describe('subscribeToMonthlyExpenses', () => {

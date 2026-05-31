@@ -30,6 +30,39 @@ interface ExpenseQueryOptions {
   transactionType?: TransactionType;
 }
 
+interface ExactCardSearchKeyword {
+  label: string;
+  token: string;
+}
+
+const CARD_LABEL_ALIAS_GROUPS = [
+  ['국민', '국민카드', 'KB', 'KB국민', 'KB국민카드'],
+  ['삼성', '삼성카드'],
+  ['농협', '농협카드', 'NH', 'NH농협'],
+  ['롯데', '롯데카드'],
+  ['비씨', '비씨카드', 'BC', 'BC카드'],
+  ['현대', '현대카드'],
+  ['우리', '우리카드'],
+  ['신한', '신한카드'],
+  ['하나', '하나카드'],
+  ['네이버페이', '네이버'],
+  ['카카오페이', '카카오'],
+  ['토스', '토스뱅크'],
+  ['대전사랑카드', '대전사랑', '대전지역화폐'],
+  ['경기지역화폐', '경기지역', '경기화폐'],
+  ['세종지역화폐', '여민전', '세종화폐'],
+  ['온누리상품권', '온누리'],
+] as const;
+
+const CARD_TYPE_SEARCH_TERMS: Record<string, string[]> = {
+  main: ['main', '본인', '본인카드'],
+  family: ['family', '가족', '가족카드'],
+  manual: ['manual', '수동'],
+  local_currency: ['local_currency', '지역', '지역화폐'],
+};
+
+const EXACT_CARD_KEYWORD_PATTERN = /^(.+?)\s*\(\s*([0-9*xX＊]{4})\s*\)$/;
+
 /**
  * 현재 가구 키 가져오기
  */
@@ -74,6 +107,150 @@ function matchesTransactionType(
   }
 
   return (expense.transactionType || DEFAULT_TRANSACTION_TYPE) === transactionType;
+}
+
+function normalizeSearchText(value: string | undefined): string {
+  return (value || '').trim().toLowerCase();
+}
+
+function compactSearchText(value: string | undefined): string {
+  return normalizeSearchText(value).replace(/\s+/g, '');
+}
+
+function parseExactCardSearchKeyword(keyword: string): ExactCardSearchKeyword | null {
+  const match = keyword.trim().match(EXACT_CARD_KEYWORD_PATTERN);
+  if (!match) {
+    return null;
+  }
+
+  const label = match[1].trim();
+  if (!getKnownCardLabelAliasGroup(label)) {
+    return null;
+  }
+
+  const token = normalizeCardToken(match[2]);
+  if (!token) {
+    return null;
+  }
+
+  return {
+    label,
+    token,
+  };
+}
+
+function extractCardLabel(cardValue: string | undefined): string {
+  const value = cardValue?.trim() || '';
+  if (!value) {
+    return '';
+  }
+
+  const match = value.match(/^(.+?)\s*\(/);
+  if (match) {
+    return match[1].trim();
+  }
+
+  return /^[0-9*xX＊]{4}$/.test(value) ? '' : value;
+}
+
+function normalizeCardToken(cardValue: string | undefined): string {
+  const value = cardValue?.trim() || '';
+  const token = value.match(/\(([0-9*xX＊]{4})\)/)?.[1] || value;
+
+  return token
+    .toLowerCase()
+    .replace(/＊/g, 'x')
+    .replace(/\*/g, 'x')
+    .replace(/[^0-9x]/g, '')
+    .slice(-4);
+}
+
+function matchesCardToken(leftToken: string, rightToken: string): boolean {
+  if (!leftToken || !rightToken || leftToken.length !== rightToken.length) {
+    return false;
+  }
+
+  return leftToken
+    .split('')
+    .every((char, index) => char === rightToken[index] || char === 'x' || rightToken[index] === 'x');
+}
+
+function getKnownCardLabelAliasGroup(label: string): readonly string[] | null {
+  const normalizedLabel = compactSearchText(label);
+  return CARD_LABEL_ALIAS_GROUPS.find((group) =>
+    group.some((alias) => compactSearchText(alias) === normalizedLabel)
+  ) || null;
+}
+
+function getCardLabelAliasGroup(label: string): readonly string[] {
+  return getKnownCardLabelAliasGroup(label) || [label];
+}
+
+function matchesCardLabel(leftLabel: string, rightLabel: string): boolean {
+  const normalizedLeft = compactSearchText(leftLabel);
+  const normalizedRight = compactSearchText(rightLabel);
+
+  if (!normalizedLeft || !normalizedRight) {
+    return false;
+  }
+
+  if (normalizedLeft === normalizedRight) {
+    return true;
+  }
+
+  const leftAliases = getCardLabelAliasGroup(leftLabel).map(compactSearchText);
+  const rightAliases = getCardLabelAliasGroup(rightLabel).map(compactSearchText);
+
+  return leftAliases.some((alias) => rightAliases.includes(alias));
+}
+
+function getExpenseCardSearchTexts(expense: Expense): string[] {
+  const cardValue = expense.cardLastFour || '';
+  const cardLabel = extractCardLabel(cardValue);
+  const cardToken = normalizeCardToken(cardValue);
+  const cardType = expense.cardType || '';
+  const searchTexts = [cardValue, cardType, ...(CARD_TYPE_SEARCH_TERMS[cardType] || [])];
+
+  if (cardLabel) {
+    searchTexts.push(...getCardLabelAliasGroup(cardLabel));
+  }
+
+  if (cardLabel && cardToken) {
+    searchTexts.push(
+      `${cardLabel}(${cardToken})`,
+      ...getCardLabelAliasGroup(cardLabel).map((alias) => `${alias}(${cardToken})`)
+    );
+  }
+
+  if (cardToken) {
+    searchTexts.push(cardToken, `(${cardToken})`);
+  }
+
+  return searchTexts;
+}
+
+function matchesCardSearch(expense: Expense, keyword: string): boolean {
+  const exactCardKeyword = parseExactCardSearchKeyword(keyword);
+  const cardValue = expense.cardLastFour || '';
+
+  if (exactCardKeyword) {
+    const cardLabel = extractCardLabel(cardValue);
+    const cardToken = normalizeCardToken(cardValue);
+
+    return (
+      matchesCardLabel(cardLabel, exactCardKeyword.label) &&
+      matchesCardToken(cardToken, exactCardKeyword.token)
+    );
+  }
+
+  const compactKeyword = compactSearchText(keyword);
+  if (!compactKeyword) {
+    return false;
+  }
+
+  return getExpenseCardSearchTexts(expense).some((value) =>
+    compactSearchText(value).includes(compactKeyword)
+  );
 }
 
 /**
@@ -389,7 +566,7 @@ export async function unmergeExpense(expense: Expense): Promise<string[]> {
 
 /**
  * 키워드로 지출 검색
- * 가맹점명, 메모에서 키워드 검색
+ * 가맹점명, 메모, 카드 정보에서 키워드 검색
  */
 export async function searchExpenses(
   keyword: string,
@@ -407,15 +584,16 @@ export async function searchExpenses(
   );
 
   const snapshot = await getDocs(q);
-  const lowerKeyword = keyword.toLowerCase();
+  const lowerKeyword = normalizeSearchText(keyword);
 
   const results = snapshot.docs
     .map(mapDocToExpense)
     .filter((expense) => matchesTransactionType(expense, options.transactionType))
     .filter((expense) => {
-      const merchantMatch = expense.merchant.toLowerCase().includes(lowerKeyword);
-      const memoMatch = expense.memo?.toLowerCase().includes(lowerKeyword);
-      return merchantMatch || memoMatch;
+      const merchantMatch = normalizeSearchText(expense.merchant).includes(lowerKeyword);
+      const memoMatch = normalizeSearchText(expense.memo).includes(lowerKeyword);
+      const cardMatch = matchesCardSearch(expense, keyword);
+      return merchantMatch || memoMatch || cardMatch;
     })
     .sort((a, b) => b.date.localeCompare(a.date));
 

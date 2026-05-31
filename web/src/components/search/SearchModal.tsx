@@ -159,6 +159,10 @@ export default function SearchModal({
 
   if (!isOpen) return null;
 
+  const searchPlaceholder = transactionType === 'income'
+    ? `${transactionLabel}처명이나 메모를 검색해보세요`
+    : '지출처명, 메모, 카드명을 검색해보세요';
+
   return (
     <Portal>
       <div
@@ -177,7 +181,7 @@ export default function SearchModal({
                   type="text"
                   value={keyword}
                   onChange={(event) => setKeyword(event.target.value)}
-                  placeholder={`${transactionLabel}처명이나 메모를 검색해보세요`}
+                  placeholder={searchPlaceholder}
                   autoFocus
                   className="w-full rounded-xl bg-slate-100 py-3 pl-10 pr-10 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
