@@ -3,6 +3,7 @@ package com.household.account.data
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.household.account.util.CardLabelFormatter
+import java.time.LocalDate
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -15,6 +16,7 @@ class ExpenseRepository {
 
     private val firestore = FirebaseFirestore.getInstance()
     private val expensesCollection = firestore.collection("expenses")
+    private val cancellationLookbackDays = 30L
 
     /**
      * 지출 추가
@@ -84,41 +86,78 @@ class ExpenseRepository {
         }
 
         return try {
-            val snapshot = expensesCollection
-                .whereEqualTo("householdId", householdId)
-                .whereEqualTo("date", expense.date)
-                .get()
-                .await()
+            findCancellationCandidate(
+                expenses = getExpensesForDate(householdId, expense.date),
+                expense = expense
+            )?.let { return it }
 
-            val normalizedMerchant = normalizeMerchant(expense.merchant)
+            val targetDate = runCatching { LocalDate.parse(expense.date) }.getOrNull()
+                ?: return null
 
-            val expenses = snapshot.documents.mapNotNull { doc ->
-                doc.toObject(Expense::class.java)?.copy(id = doc.id)
+            for (dayOffset in 1..cancellationLookbackDays) {
+                val date = targetDate.minusDays(dayOffset).toString()
+                findCancellationCandidate(
+                    expenses = getExpensesForDate(householdId, date),
+                    expense = expense
+                )?.let { return it }
             }
 
-            val candidates = expenses.filter { existing ->
-                existing.amount == expense.amount &&
-                    normalizeMerchant(existing.merchant) == normalizedMerchant &&
-                    matchesCardLastFour(existing.cardLastFour, expense.cardLastFour)
-            }
-
-            val fallbackCandidates = if (candidates.isEmpty()) {
-                expenses.filter { existing ->
-                    existing.amount == expense.amount &&
-                        matchesCardLastFour(existing.cardLastFour, expense.cardLastFour)
-                }
-            } else {
-                candidates
-            }
-
-            fallbackCandidates.minWithOrNull(
-                compareBy<Expense> {
-                    if (timesMatch(it.time, expense.time)) 0 else 1
-                }.thenByDescending { it.id }
-            )
+            null
         } catch (e: Exception) {
             null
         }
+    }
+
+    private suspend fun getExpensesForDate(
+        householdId: String,
+        date: String
+    ): List<Expense> {
+        if (householdId.isEmpty() || date.isBlank()) {
+            return emptyList()
+        }
+
+        return try {
+            val snapshot = expensesCollection
+                .whereEqualTo("householdId", householdId)
+                .whereEqualTo("date", date)
+                .get()
+                .await()
+
+            snapshot.documents.mapNotNull { doc ->
+                doc.toObject(Expense::class.java)?.copy(id = doc.id)
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun findCancellationCandidate(
+        expenses: List<Expense>,
+        expense: Expense
+    ): Expense? {
+        val normalizedMerchant = normalizeMerchant(expense.merchant)
+
+        val candidates = expenses.filter { existing ->
+            existing.amount == expense.amount &&
+                normalizeMerchant(existing.merchant) == normalizedMerchant &&
+                matchesCardLastFour(existing.cardLastFour, expense.cardLastFour)
+        }
+
+        val fallbackCandidates = if (candidates.isEmpty()) {
+            expenses.filter { existing ->
+                existing.amount == expense.amount &&
+                    matchesCardLastFour(existing.cardLastFour, expense.cardLastFour)
+            }
+        } else {
+            candidates
+        }
+
+        return fallbackCandidates.minWithOrNull(
+            compareBy<Expense> {
+                if (timesMatch(it.time, expense.time)) 0 else 1
+            }.thenByDescending { it.date }
+                .thenByDescending { it.id }
+        )
     }
 
     suspend fun findDuplicateExpenseForRegistration(
