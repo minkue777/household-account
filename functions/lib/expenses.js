@@ -122,7 +122,7 @@ async function getDefaultCategoryKey(householdId) {
 exports.addExpenseFromMessage = functions
     .region(config_1.REGION)
     .https.onRequest(async (req, res) => {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
     res.set('Access-Control-Allow-Origin', '*');
     res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -138,9 +138,11 @@ exports.addExpenseFromMessage = functions
         const rawMessage = (_a = req.body) === null || _a === void 0 ? void 0 : _a.message;
         const rawToken = (_b = req.body) === null || _b === void 0 ? void 0 : _b.token;
         const rawHouseholdId = (_c = req.body) === null || _c === void 0 ? void 0 : _c.householdId;
+        const rawCreatedBy = (_j = (_g = (_e = (_d = req.body) === null || _d === void 0 ? void 0 : _d.createdBy) !== null && _e !== void 0 ? _e : (_f = req.body) === null || _f === void 0 ? void 0 : _f.memberName) !== null && _g !== void 0 ? _g : (_h = req.body) === null || _h === void 0 ? void 0 : _h.deviceOwner) !== null && _j !== void 0 ? _j : (_k = req.body) === null || _k === void 0 ? void 0 : _k.owner;
         const message = normalizeShortcutValue(rawMessage);
         const token = normalizeShortcutValue(rawToken);
         const householdId = normalizeShortcutValue(rawHouseholdId);
+        const createdBy = normalizeShortcutValue(rawCreatedBy);
         const tokenMatched = token === config_1.API_TOKEN;
         if (!tokenMatched) {
             res.status(401).json({ success: false, error: '인증 실패' });
@@ -188,6 +190,9 @@ exports.addExpenseFromMessage = functions
             source: 'ios-shortcut',
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
         };
+        if (createdBy) {
+            expenseData.createdBy = createdBy;
+        }
         if (parsed.cardLastFour) {
             expenseData.cardLastFour = parsed.cardLastFour;
             expenseData.cardType = parsed.cardLastFour === '1876' ? 'sam' : 'main';

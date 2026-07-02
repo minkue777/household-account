@@ -128,10 +128,12 @@ export const addExpenseFromMessage = functions
       const rawMessage = req.body?.message;
       const rawToken = req.body?.token;
       const rawHouseholdId = req.body?.householdId;
+      const rawCreatedBy = req.body?.createdBy ?? req.body?.memberName ?? req.body?.deviceOwner ?? req.body?.owner;
 
       const message = normalizeShortcutValue(rawMessage);
       const token = normalizeShortcutValue(rawToken);
       const householdId = normalizeShortcutValue(rawHouseholdId);
+      const createdBy = normalizeShortcutValue(rawCreatedBy);
       const tokenMatched = token === API_TOKEN;
 
       if (!tokenMatched) {
@@ -187,6 +189,10 @@ export const addExpenseFromMessage = functions
         source: 'ios-shortcut',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       };
+
+      if (createdBy) {
+        expenseData.createdBy = createdBy;
+      }
 
       if (parsed.cardLastFour) {
         expenseData.cardLastFour = parsed.cardLastFour;

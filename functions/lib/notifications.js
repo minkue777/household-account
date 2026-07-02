@@ -120,8 +120,8 @@ exports.onExpenseUpdated = functions
     }
 });
 /**
- * 지출 생성 시 다른 멤버에게 알림 전송
- * createdBy가 있으면 해당 멤버를 제외한 나머지에게 푸시
+ * 지출 생성 시 푸시 알림 전송
+ * 일반 지출은 createdBy를 제외한 멤버에게, iOS 단축어 지출은 createdBy 본인에게 보낸다.
  */
 exports.onExpenseCreated = functions
     .region(config_1.REGION)
@@ -139,7 +139,7 @@ exports.onExpenseCreated = functions
     if (!createdBy) {
         return null;
     }
-    // 같은 household의 모든 토큰 조회, createdBy가 아닌 멤버에게만 전송
+    const isIosShortcutExpense = expense.source === 'ios-shortcut';
     const tokensSnapshot = await config_1.db.collection('fcmTokens')
         .where('householdId', '==', householdId)
         .get();
@@ -149,7 +149,9 @@ exports.onExpenseCreated = functions
     const tokens = [];
     tokensSnapshot.forEach(doc => {
         const data = doc.data();
-        if (data.token && data.deviceOwner !== createdBy) {
+        const isTargetOwner = data.deviceOwner === createdBy;
+        const shouldSend = isIosShortcutExpense ? isTargetOwner : !isTargetOwner;
+        if (data.token && shouldSend) {
             tokens.push(data.token);
         }
     });
@@ -163,7 +165,9 @@ exports.onExpenseCreated = functions
         tokens: tokens,
         notification: {
             title: `📱 ${merchant}`,
-            body: `${amount}원 - ${createdBy}님이 등록한 지출이에요`,
+            body: isIosShortcutExpense
+                ? `${amount}원 - 지출이 등록됐어요`
+                : `${amount}원 - ${createdBy}님이 등록한 지출이에요`,
         },
         data: {
             expenseId: expenseId,
