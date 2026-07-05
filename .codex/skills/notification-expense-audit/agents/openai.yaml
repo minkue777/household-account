@@ -1,0 +1,4 @@
+interface:
+  display_name: "알림 지출 누락 감사"
+  short_description: "소비 알림과 누락 지출을 대조하고 파서를 보정합니다."
+  default_prompt: "Use $notification-expense-audit to find spending notifications without matching expenses, update unsupported parsers, then commit and push."
