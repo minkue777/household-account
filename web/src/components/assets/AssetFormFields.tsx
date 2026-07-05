@@ -341,7 +341,6 @@ export function PhysicalGoldFields({
           />
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">돈</span>
         </div>
-        <p className="mt-1 text-[11px] text-slate-400">자산 평가 금액은 KRX 금시장 기준가로 자동 계산됩니다.</p>
       </div>
     </div>
   );
