@@ -1483,7 +1483,7 @@ export async function refreshAllPhysicalGoldValues(): Promise<void> {
     return;
   }
 
-  let sellPricePerDon = 0;
+  let pricePerDon = 0;
 
   try {
     const response = await fetch('/api/gold/price');
@@ -1492,18 +1492,18 @@ export async function refreshAllPhysicalGoldValues(): Promise<void> {
     }
 
     const payload = await response.json();
-    sellPricePerDon =
-      typeof payload?.sellPricePerDon === 'number'
-        ? payload.sellPricePerDon
-        : typeof payload?.pricePerDon === 'number'
-          ? payload.pricePerDon
+    pricePerDon =
+      typeof payload?.pricePerDon === 'number'
+        ? payload.pricePerDon
+        : typeof payload?.sellPricePerDon === 'number'
+          ? payload.sellPricePerDon
           : 0;
   } catch (error) {
     console.error('실물 금 시세 갱신 실패:', error);
     return;
   }
 
-  if (sellPricePerDon <= 0) {
+  if (pricePerDon <= 0) {
     return;
   }
 
@@ -1514,7 +1514,7 @@ export async function refreshAllPhysicalGoldValues(): Promise<void> {
         return;
       }
 
-      const nextBalance = Math.round(sellPricePerDon * quantity);
+      const nextBalance = Math.round(pricePerDon * quantity);
       if (nextBalance === asset.currentBalance) {
         return;
       }

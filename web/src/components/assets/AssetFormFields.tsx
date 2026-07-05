@@ -1,6 +1,6 @@
 'use client';
 
-import type { GoldPriceData } from '@/lib/utils/useGoldHolding';
+import { getGoldPricePerDon, type GoldPriceData } from '@/lib/utils/useGoldHolding';
 import { calculateExpectedLoanPrincipalPayment } from '@/lib/assets/assetMath';
 import {
   AssetType,
@@ -318,19 +318,11 @@ export function PhysicalGoldFields({
       </div>
 
       {goldPrice ? (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-lg border border-amber-100 bg-white px-3 py-2">
-            <p className="text-xs text-slate-500">살 때</p>
-            <p className="mt-1 text-sm font-semibold text-red-500">
-              {goldPrice.buyPricePerDon.toLocaleString()}원
-            </p>
-          </div>
-          <div className="rounded-lg border border-amber-100 bg-white px-3 py-2">
-            <p className="text-xs text-slate-500">팔 때</p>
-            <p className="mt-1 text-sm font-semibold text-blue-500">
-              {goldPrice.sellPricePerDon.toLocaleString()}원
-            </p>
-          </div>
+        <div className="rounded-lg border border-amber-100 bg-white px-3 py-2">
+          <p className="text-xs text-slate-500">KRX 금시장 기준가</p>
+          <p className="mt-1 text-sm font-semibold text-amber-600">
+            {getGoldPricePerDon(goldPrice).toLocaleString()}원
+          </p>
         </div>
       ) : (
         <p className="text-sm text-amber-700">현재 시세를 아직 불러오지 못했습니다.</p>
@@ -349,7 +341,7 @@ export function PhysicalGoldFields({
           />
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">돈</span>
         </div>
-        <p className="mt-1 text-[11px] text-slate-400">실제 자산 평가 금액은 팔 때 기준으로 자동 계산됩니다.</p>
+        <p className="mt-1 text-[11px] text-slate-400">자산 평가 금액은 KRX 금시장 기준가로 자동 계산됩니다.</p>
       </div>
     </div>
   );

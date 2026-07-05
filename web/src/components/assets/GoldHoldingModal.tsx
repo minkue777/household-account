@@ -3,7 +3,7 @@
 import { Asset } from '@/types/asset';
 import { ModalOverlay } from '@/components/common';
 import { X, Loader2, RefreshCw } from 'lucide-react';
-import { useGoldHolding } from '@/lib/utils/useGoldHolding';
+import { getGoldPricePerDon, useGoldHolding } from '@/lib/utils/useGoldHolding';
 
 interface GoldHoldingModalProps {
   isOpen: boolean;
@@ -71,21 +71,12 @@ export default function GoldHoldingModal({ isOpen, onClose, asset }: GoldHolding
                 <span>시세 조회 중..</span>
               </div>
             ) : goldPrice ? (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white rounded-lg p-3">
-                  <p className="text-xs text-slate-500 mb-1">구매가 (1돈)</p>
-                  <p className="text-lg font-bold text-red-500">
-                    {goldPrice.buyPricePerDon.toLocaleString()}
-                    <span className="text-sm font-normal text-slate-400 ml-1">원</span>
-                  </p>
-                </div>
-                <div className="bg-white rounded-lg p-3">
-                  <p className="text-xs text-slate-500 mb-1">판매가 (1돈)</p>
-                  <p className="text-lg font-bold text-blue-500">
-                    {goldPrice.sellPricePerDon.toLocaleString()}
-                    <span className="text-sm font-normal text-slate-400 ml-1">원</span>
-                  </p>
-                </div>
+              <div className="bg-white rounded-lg p-3">
+                <p className="text-xs text-slate-500 mb-1">KRX 금시장 기준가 (1돈)</p>
+                <p className="text-lg font-bold text-amber-600">
+                  {getGoldPricePerDon(goldPrice).toLocaleString()}
+                  <span className="text-sm font-normal text-slate-400 ml-1">원</span>
+                </p>
               </div>
             ) : (
               <p className="text-amber-600">시세를 불러올 수 없습니다.</p>
@@ -114,13 +105,13 @@ export default function GoldHoldingModal({ isOpen, onClose, asset }: GoldHolding
             {parsedQuantity > 0 && goldPrice && (
               <div className="bg-slate-50 rounded-xl p-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-600">평가금액 (판매가 기준)</span>
+                  <span className="text-slate-600">평가금액</span>
                   <span className="text-xl font-bold text-slate-800">
                     {totalValue.toLocaleString()}원
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-1 text-right">
-                  {goldPrice.sellPricePerDon.toLocaleString()}원 × {parsedQuantity}돈
+                  {getGoldPricePerDon(goldPrice).toLocaleString()}원 × {parsedQuantity}돈
                 </p>
               </div>
             )}

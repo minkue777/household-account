@@ -3,10 +3,16 @@ import { Asset, isGoldEtfSubType } from '@/types/asset';
 import { updateAsset } from '@/lib/assetService';
 
 export interface GoldPriceData {
+  pricePerDon?: number;
   buyPricePerDon: number;
   sellPricePerDon: number;
   timestamp: string;
   estimated?: boolean;
+  source?: string;
+}
+
+export function getGoldPricePerDon(goldPrice: GoldPriceData) {
+  return goldPrice.pricePerDon ?? goldPrice.sellPricePerDon;
 }
 
 function sanitizeGoldQuantityInput(rawValue: string) {
@@ -29,19 +35,23 @@ function normalizeGoldPricePayload(payload: unknown): GoldPriceData | null {
 
   if (typeof data.buyPricePerDon === 'number' && typeof data.sellPricePerDon === 'number') {
     return {
+      pricePerDon: typeof data.pricePerDon === 'number' ? data.pricePerDon : undefined,
       buyPricePerDon: data.buyPricePerDon,
       sellPricePerDon: data.sellPricePerDon,
       timestamp: typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString(),
       estimated: typeof data.estimated === 'boolean' ? data.estimated : undefined,
+      source: typeof data.source === 'string' ? data.source : undefined,
     };
   }
 
   if (typeof data.pricePerDon === 'number') {
     return {
+      pricePerDon: data.pricePerDon,
       buyPricePerDon: data.pricePerDon,
       sellPricePerDon: data.pricePerDon,
       timestamp: typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString(),
       estimated: typeof data.estimated === 'boolean' ? data.estimated : undefined,
+      source: typeof data.source === 'string' ? data.source : undefined,
     };
   }
 
@@ -124,7 +134,7 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
       return 0;
     }
 
-    return Math.round(goldPrice.sellPricePerDon * parsedQuantity);
+    return Math.round(getGoldPricePerDon(goldPrice) * parsedQuantity);
   }, [goldPrice, quantity]);
 
   const saveGoldHolding = useCallback(async () => {

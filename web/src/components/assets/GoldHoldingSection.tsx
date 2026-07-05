@@ -1,7 +1,7 @@
 'use client';
 
 import { Loader2, RefreshCw } from 'lucide-react';
-import type { GoldPriceData } from '@/lib/utils/useGoldHolding';
+import { getGoldPricePerDon, type GoldPriceData } from '@/lib/utils/useGoldHolding';
 
 export interface GoldHoldingState {
   quantity: string;
@@ -50,21 +50,12 @@ export default function GoldHoldingSection({ state, onSave }: GoldHoldingSection
             <span>시세 조회 중...</span>
           </div>
         ) : goldPrice ? (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-white rounded-lg p-3">
-              <p className="text-xs text-slate-500 mb-1">살 때</p>
-              <p className="text-lg font-bold text-red-500">
-                {goldPrice.buyPricePerDon.toLocaleString()}
-                <span className="text-sm font-normal text-slate-400 ml-1">원</span>
-              </p>
-            </div>
-            <div className="bg-white rounded-lg p-3">
-              <p className="text-xs text-slate-500 mb-1">팔 때</p>
-              <p className="text-lg font-bold text-blue-500">
-                {goldPrice.sellPricePerDon.toLocaleString()}
-                <span className="text-sm font-normal text-slate-400 ml-1">원</span>
-              </p>
-            </div>
+          <div className="bg-white rounded-lg p-3">
+            <p className="text-xs text-slate-500 mb-1">KRX 금시장 기준가</p>
+            <p className="text-lg font-bold text-amber-600">
+              {getGoldPricePerDon(goldPrice).toLocaleString()}
+              <span className="text-sm font-normal text-slate-400 ml-1">원</span>
+            </p>
           </div>
         ) : (
           <p className="text-amber-600">시세를 불러올 수 없습니다</p>
@@ -98,7 +89,7 @@ export default function GoldHoldingSection({ state, onSave }: GoldHoldingSection
       {quantity && parseFloat(quantity) > 0 && goldPrice && (
         <div className="bg-slate-50 rounded-xl p-4">
           <div className="flex items-center justify-between">
-            <span className="text-slate-600">평가금액 (팔 때 기준)</span>
+            <span className="text-slate-600">평가금액</span>
             <span className="text-xl font-bold text-slate-800">
               {totalValue.toLocaleString()}원
             </span>
