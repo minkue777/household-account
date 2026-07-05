@@ -57,7 +57,7 @@ const DEBUG_ONLY_SOURCES = new Set([
 ]);
 
 const POSITIVE_MARKER = /(승인|사용|결제|이용|일시불|체크카드|납부|청구서|청구|출금)/;
-const NEGATIVE_AMOUNT_CONTEXT = /(캐시백|할인|포인트|적립|잔액|입금|받았|혜택|리워드)/;
+const NEGATIVE_AMOUNT_CONTEXT = /(캐시백|할인|포인트|적립|잔액|누적|총 보유|입금|받았|혜택|리워드|충전)/;
 const CANCELLATION_MARKER = /(취소|승인취소|매출취소|결제취소)/;
 const MARKETING_ONLY = /(광고|이벤트|혜택|쿠폰)/;
 
@@ -74,37 +74,38 @@ async function main() {
   }
 
   const projectRoot = findProjectRoot(process.cwd());
-  const admin = loadFirebaseAdmin(projectRoot);
   const projectId = readProjectId(projectRoot);
-
-  if (!admin.apps.length) {
-    admin.initializeApp(buildFirebaseOptions(admin, projectId, options));
-  }
-
-  const db = admin.firestore();
   const householdId = HOUSEHOLD_ALIASES[options.household] || options.household;
   const toDate = options.to || formatDateKst(Date.now());
   const fromDate = options.from || addDays(toDate, -(options.days - 1));
   const startMillis = kstStartMillis(fromDate);
   const endMillis = kstStartMillis(addDays(toDate, 1)) - 1;
 
-  const [logs, expenses, registeredCards] = await Promise.all([
-    fetchNotificationLogs(db, householdId, startMillis, endMillis),
-    fetchExpenses(db, householdId, fromDate, toDate),
-    fetchRegisteredCards(db, householdId),
-  ]);
+  const { logs, expenses, registeredCards } = await fetchAuditData({
+    projectRoot,
+    projectId,
+    householdId,
+    fromDate,
+    toDate,
+    startMillis,
+    endMillis,
+    options,
+  });
 
   const candidates = logs
     .map((log) => parseSpendingCandidate(log))
     .filter(Boolean);
 
   const missing = candidates
-    .map((candidate) => ({
-      ...candidate,
-      matches: findExpenseMatches(candidate, expenses),
-      parser: inferParser(candidate),
-      registeredCard: inferRegisteredCard(candidate, registeredCards),
-    }))
+    .map((candidate) => {
+      const parser = inferParser(candidate);
+      return {
+        ...candidate,
+        matches: findExpenseMatches(candidate, expenses),
+        parser,
+        registeredCard: inferRegisteredCard({ ...candidate, parser }, registeredCards),
+      };
+    })
     .filter((candidate) => candidate.matches.length === 0)
     .map((candidate) => ({
       ...candidate,
@@ -127,6 +128,70 @@ async function main() {
   } else {
     printMarkdown(report);
   }
+}
+
+async function fetchAuditData(context) {
+  try {
+    return await fetchAuditDataWithAdmin(context);
+  } catch (error) {
+    if (!isDefaultCredentialError(error)) {
+      throw error;
+    }
+    return fetchAuditDataWithFirebaseCli(context);
+  }
+}
+
+async function fetchAuditDataWithAdmin({
+  projectRoot,
+  projectId,
+  householdId,
+  fromDate,
+  toDate,
+  startMillis,
+  endMillis,
+  options,
+}) {
+  const admin = loadFirebaseAdmin(projectRoot);
+
+  if (!admin.apps.length) {
+    admin.initializeApp(buildFirebaseOptions(admin, projectId, options));
+  }
+
+  const db = admin.firestore();
+  const [logs, expenses, registeredCards] = await Promise.all([
+    fetchNotificationLogs(db, householdId, startMillis, endMillis),
+    fetchExpenses(db, householdId, fromDate, toDate),
+    fetchRegisteredCards(db, householdId),
+  ]);
+
+  return { logs, expenses, registeredCards };
+}
+
+async function fetchAuditDataWithFirebaseCli({
+  projectRoot,
+  projectId,
+  householdId,
+  fromDate,
+  toDate,
+  startMillis,
+  endMillis,
+}) {
+  const accessToken = await getFirebaseCliAccessToken(projectRoot);
+  const [logs, expenses, registeredCards] = await Promise.all([
+    restQueryCollection(projectId, accessToken, 'notification_debug_logs', householdId),
+    restQueryCollection(projectId, accessToken, 'expenses', householdId),
+    restQueryCollection(projectId, accessToken, 'registered_cards', householdId),
+  ]);
+
+  return {
+    logs: logs
+      .filter((doc) => Number(doc.postedAtMillis || 0) >= startMillis && Number(doc.postedAtMillis || 0) <= endMillis)
+      .sort(compareByPostedAt),
+    expenses: expenses
+      .filter((doc) => typeof doc.date === 'string' && doc.date >= fromDate && doc.date <= toDate)
+      .sort(compareExpense),
+    registeredCards,
+  };
 }
 
 function parseArgs(args) {
@@ -232,6 +297,109 @@ function buildFirebaseOptions(admin, projectId, options) {
   return appOptions;
 }
 
+function isDefaultCredentialError(error) {
+  const message = String(error && error.message || '');
+  return message.includes('Could not load the default credentials') ||
+    message.includes('Unable to detect a Project Id') ||
+    message.includes('invalid_grant');
+}
+
+async function getFirebaseCliAccessToken(projectRoot) {
+  const firebaseToolsLib = findFirebaseToolsLib(projectRoot);
+  const auth = require(path.join(firebaseToolsLib, 'auth.js'));
+  const scopes = require(path.join(firebaseToolsLib, 'scopes.js'));
+  const account = auth.getProjectDefaultAccount(projectRoot) || auth.getGlobalDefaultAccount();
+
+  if (!account || !account.tokens || !account.tokens.refresh_token) {
+    throw new Error('Firebase CLI account not found. Run: firebase login');
+  }
+
+  const token = await auth.getAccessToken(account.tokens.refresh_token, [
+    scopes.CLOUD_PLATFORM,
+    scopes.FIREBASE_PLATFORM,
+  ]);
+
+  if (!token || !token.access_token) {
+    throw new Error('Firebase CLI access token not available.');
+  }
+
+  return token.access_token;
+}
+
+function findFirebaseToolsLib(projectRoot) {
+  const candidates = [
+    path.join(projectRoot, 'node_modules', 'firebase-tools', 'lib'),
+    process.env.APPDATA ? path.join(process.env.APPDATA, 'npm', 'node_modules', 'firebase-tools', 'lib') : '',
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, 'auth.js'))) {
+      return candidate;
+    }
+  }
+
+  throw new Error('firebase-tools module not found. Install Firebase CLI or run with --credentials.');
+}
+
+async function restQueryCollection(projectId, accessToken, collectionId, householdId) {
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents:runQuery`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId }],
+        where: {
+          fieldFilter: {
+            field: { fieldPath: 'householdId' },
+            op: 'EQUAL',
+            value: { stringValue: householdId },
+          },
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Firestore REST query failed (${response.status}) for ${collectionId}: ${body}`);
+  }
+
+  const rows = await response.json();
+  return rows
+    .map((row) => row.document)
+    .filter(Boolean)
+    .map((document) => ({
+      id: decodeURIComponent(String(document.name || '').split('/').pop() || ''),
+      ...firestoreFieldsToObject(document.fields || {}),
+    }));
+}
+
+function firestoreFieldsToObject(fields) {
+  return Object.fromEntries(
+    Object.entries(fields).map(([key, value]) => [key, firestoreValueToJs(value)])
+  );
+}
+
+function firestoreValueToJs(value) {
+  if (Object.prototype.hasOwnProperty.call(value, 'stringValue')) return value.stringValue;
+  if (Object.prototype.hasOwnProperty.call(value, 'integerValue')) return Number(value.integerValue);
+  if (Object.prototype.hasOwnProperty.call(value, 'doubleValue')) return Number(value.doubleValue);
+  if (Object.prototype.hasOwnProperty.call(value, 'booleanValue')) return Boolean(value.booleanValue);
+  if (Object.prototype.hasOwnProperty.call(value, 'timestampValue')) return value.timestampValue;
+  if (Object.prototype.hasOwnProperty.call(value, 'nullValue')) return null;
+  if (Object.prototype.hasOwnProperty.call(value, 'arrayValue')) {
+    return (value.arrayValue.values || []).map(firestoreValueToJs);
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'mapValue')) {
+    return firestoreFieldsToObject(value.mapValue.fields || {});
+  }
+  return undefined;
+}
+
 async function fetchNotificationLogs(db, householdId, startMillis, endMillis) {
   const collection = db.collection('notification_debug_logs');
   const filterFn = (doc) =>
@@ -313,6 +481,41 @@ function parseSpendingCandidate(log) {
     return null;
   }
 
+  const isPaymentLike = /(승인|결제 완료|결제되었습니다|사용|일시불|납부|청구서|체크)/.test(text);
+  if (log.source === 'SMS' && !/(승인|승인취소|사용금액\s*:|카드.*사용)/.test(text)) {
+    return null;
+  }
+  if (/\(광고\)/.test(text)) {
+    return null;
+  }
+  if (/(카드대금 정상 납부|청구서작성일|요금합계|이자 받는 날|넣어드렸어요)/.test(text)) {
+    return null;
+  }
+  if (/(결제금액|결제예정금액|피해지원금 사용안내)/.test(text)) {
+    return null;
+  }
+  if (log.source === 'NH' && /\(지역화폐\s*[\d,]+원\s*사용\)/.test(text)) {
+    return null;
+  }
+  if (log.source === 'TOSS_BANK' && /출금/.test(text) && !/결제/.test(text)) {
+    return null;
+  }
+  if (log.source === 'SMS' && /카드 자동납부 정상승인 안내/.test(text)) {
+    return null;
+  }
+  if (/가승인/.test(text)) {
+    return null;
+  }
+  if (/캐시백/.test(text) && !/(결제|승인|사용)/.test(text)) {
+    return null;
+  }
+  if (/송금/.test(text) && !/(결제|승인|사용|납부|청구)/.test(text)) {
+    return null;
+  }
+  if (/충전되었/.test(text)) {
+    return null;
+  }
+
   const amountInfo = pickPaymentAmount(text);
   if (!amountInfo) {
     return null;
@@ -364,8 +567,11 @@ function parseSpendingCandidate(log) {
 }
 
 function buildFullText(log) {
+  if (String(log.fullText || '').trim()) {
+    return String(log.fullText || '').trim();
+  }
+
   const candidates = [
-    log.fullText,
     log.title,
     log.text,
     log.bigText,
@@ -378,6 +584,27 @@ function buildFullText(log) {
 }
 
 function pickPaymentAmount(text) {
+  const explicitPatterns = [
+    /결제\s*완료\s*([0-9][0-9,]*)\s*원/,
+    /^([0-9][0-9,]*)\s*원\s*결제/m,
+    /([0-9][0-9,]*)\s*원\s*(?:일시불|체크)(?:\s|$)/,
+    /에서\s*([0-9][0-9,]*)\s*원\s*사용/,
+    /사용금액\s*:\s*([0-9][0-9,]*)\s*원/,
+    /총\s*금액은\s*([0-9][0-9,]*)\s*원/,
+    /([0-9][0-9,]*)\s*원이\s*결제/,
+    /([0-9][0-9,]*)\s*원을?\s*결제(?:했습니다|했어요|되었습니다|됐어요)/,
+  ];
+
+  for (const pattern of explicitPatterns) {
+    const match = pattern.exec(text);
+    if (match) {
+      const amount = Number(match[1].replace(/,/g, ''));
+      if (amount > 0) {
+        return { amount, score: 10, context: match[0] };
+      }
+    }
+  }
+
   const matches = Array.from(text.matchAll(/([0-9][0-9,]*)\s*원/g));
   if (matches.length === 0) {
     return null;
@@ -392,7 +619,7 @@ function pickPaymentAmount(text) {
       let score = 0;
 
       if (POSITIVE_MARKER.test(context)) score += 4;
-      if (NEGATIVE_AMOUNT_CONTEXT.test(context)) score -= 3;
+      if (NEGATIVE_AMOUNT_CONTEXT.test(context)) score -= 8;
       if (amount > 0) score += 1;
 
       return { amount, score, context };
@@ -430,6 +657,13 @@ function parseDateTime(text, postedAtMillis) {
       const date = adjustYear(`${postedYear}-${pad2(match[1])}-${pad2(match[2])}`, postedDate);
       return { date, time: `${pad2(match[3])}:${pad2(match[4])}` };
     }
+  }
+
+  const amountDateMatch = text.match(/[0-9][0-9,]*\s*원\s+(\d{1,2})[./-](\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (amountDateMatch) {
+    const date = adjustYear(`${postedYear}-${pad2(amountDateMatch[1])}-${pad2(amountDateMatch[2])}`, postedDate);
+    const time = amountDateMatch[3] ? `${pad2(amountDateMatch[3])}:${pad2(amountDateMatch[4])}` : formatTimeKst(postedAtMillis || Date.now());
+    return { date, time };
   }
 
   const timeMatch = text.match(/(\d{1,2}):(\d{2})/);

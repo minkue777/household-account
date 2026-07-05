@@ -42,7 +42,7 @@ node .codex\skills\notification-expense-audit\scripts\audit_missing_expenses.js 
 - `--credentials <service-account.json>`: ADC가 없을 때 사용할 Firebase 서비스 계정 JSON입니다.
 - `--json`: Markdown 대신 JSON으로 출력합니다.
 
-스크립트는 DB를 수정하지 않습니다. Firestore 인증은 Firebase Admin 기본 인증(ADC), `GOOGLE_APPLICATION_CREDENTIALS`, 또는 `--credentials`를 사용합니다. `functions/node_modules/firebase-admin`이 없으면 먼저 `npm --prefix functions install`을 실행합니다.
+스크립트는 DB를 수정하지 않습니다. Firestore 인증은 Firebase Admin 기본 인증(ADC), `GOOGLE_APPLICATION_CREDENTIALS`, `--credentials`, 또는 로그인된 Firebase CLI 계정을 사용합니다. `functions/node_modules/firebase-admin`이 없으면 먼저 `npm --prefix functions install`을 실행합니다.
 
 ## 판정 절차
 
