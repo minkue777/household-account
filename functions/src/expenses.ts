@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
-import { db, REGION, API_TOKEN } from './config';
+import { db, messaging, REGION, API_TOKEN } from './config';
+import { cleanupFailedTokens } from './helpers';
 
 interface ParsedExpense {
   amount: number;
@@ -8,6 +9,7 @@ interface ParsedExpense {
   date: string;
   time: string;
   cardName: string;
+  cardLabel: string;
   cardLastFour?: string;
 }
 
@@ -85,13 +87,173 @@ function parseCardMessage(message: string): ParsedExpense | null {
     const time = `${hour}:${minute}`;
 
     const cardMatch = normalizedMessage.match(/(삼성|신한|국민|현대|롯데|하나|우리|BC|NH)([\d]*)승인/);
+    const cardLabel = normalizeCardLabel(cardMatch ? cardMatch[1] : '삼성');
     const cardName = cardMatch ? cardMatch[1] + (cardMatch[2] || '') : '삼성카드';
     const cardLastFour = cardMatch && cardMatch[2] ? cardMatch[2] : undefined;
 
-    return { amount, merchant, date, time, cardName, cardLastFour };
+    return { amount, merchant, date, time, cardName, cardLabel, cardLastFour };
   } catch (error) {
     return null;
   }
+}
+
+function normalizeCardLabel(value: string | undefined): string {
+  const normalized = (value || '').trim().toLowerCase();
+
+  switch (normalized) {
+    case 'bc':
+      return '비씨';
+    case 'nh':
+      return '농협';
+    default:
+      return (value || '').trim();
+  }
+}
+
+function normalizeCardToken(value: unknown): string | null {
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    return null;
+  }
+
+  const normalized = String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/＊/g, 'x')
+    .replace(/\*/g, 'x')
+    .replace(/[^0-9x]/g, '')
+    .slice(-4);
+
+  return normalized || null;
+}
+
+function matchesCardToken(firstValue: unknown, secondValue: unknown): boolean {
+  const firstToken = normalizeCardToken(firstValue);
+  const secondToken = normalizeCardToken(secondValue);
+
+  if (!firstToken || !secondToken || firstToken.length !== secondToken.length) {
+    return false;
+  }
+
+  return firstToken.split('').every((char, index) => {
+    const otherChar = secondToken[index];
+    return char === otherChar || char === 'x' || otherChar === 'x';
+  });
+}
+
+async function resolveShortcutOwner(
+  householdId: string,
+  parsed: ParsedExpense,
+  requestedOwner: string
+): Promise<string | null> {
+  const normalizedRequestedOwner = requestedOwner.trim();
+  const tokenSnapshot = await db.collection('fcmTokens')
+    .where('householdId', '==', householdId)
+    .get();
+  const tokenOwners = new Set<string>();
+
+  tokenSnapshot.forEach(doc => {
+    const owner = doc.data().deviceOwner;
+    if (typeof owner === 'string' && owner.trim()) {
+      tokenOwners.add(owner.trim());
+    }
+  });
+
+  if (normalizedRequestedOwner && tokenOwners.has(normalizedRequestedOwner)) {
+    return normalizedRequestedOwner;
+  }
+
+  const registeredCardsSnapshot = await db.collection('registered_cards')
+    .where('householdId', '==', householdId)
+    .get();
+
+  const labelMatchedCards: Array<{ owner: string; cardLastFour: unknown }> = [];
+  registeredCardsSnapshot.forEach(doc => {
+    const card = doc.data();
+    const owner = typeof card.owner === 'string' ? card.owner.trim() : '';
+    const cardLabel = normalizeCardLabel(typeof card.cardLabel === 'string' ? card.cardLabel : '');
+
+    if (owner && cardLabel === parsed.cardLabel) {
+      labelMatchedCards.push({
+        owner,
+        cardLastFour: card.cardLastFour,
+      });
+    }
+  });
+
+  const exactCard = labelMatchedCards.find(card =>
+    matchesCardToken(card.cardLastFour, parsed.cardLastFour)
+  );
+  if (exactCard) {
+    return exactCard.owner;
+  }
+
+  const uniqueOwners = Array.from(new Set(labelMatchedCards.map(card => card.owner)));
+  if (uniqueOwners.length === 1) {
+    return uniqueOwners[0];
+  }
+
+  return normalizedRequestedOwner || null;
+}
+
+async function sendShortcutExpenseNotification(
+  householdId: string,
+  targetOwner: string | null,
+  expenseId: string,
+  parsed: ParsedExpense,
+  duplicate: boolean
+): Promise<boolean> {
+  if (!targetOwner) {
+    return false;
+  }
+
+  const tokensSnapshot = await db.collection('fcmTokens')
+    .where('householdId', '==', householdId)
+    .get();
+  const tokens: string[] = [];
+
+  tokensSnapshot.forEach(doc => {
+    const data = doc.data();
+    if (data.token && data.deviceOwner === targetOwner) {
+      tokens.push(data.token);
+    }
+  });
+
+  if (tokens.length === 0) {
+    return false;
+  }
+
+  const amount = parsed.amount.toLocaleString('ko-KR');
+  const message: admin.messaging.MulticastMessage = {
+    tokens,
+    notification: {
+      title: `📱 ${parsed.merchant}`,
+      body: duplicate
+        ? `${amount}원 - 이미 등록된 지출이에요`
+        : `${amount}원 - 지출이 등록됐어요`,
+    },
+    data: {
+      expenseId,
+      merchant: parsed.merchant,
+      amount: String(parsed.amount),
+      date: parsed.date,
+      time: parsed.time,
+      category: 'etc',
+      type: 'new_expense',
+    },
+    webpush: {
+      notification: {
+        icon: 'https://household-account-app-demo-v1.vercel.app/icons/icon-192x192.png',
+      },
+      fcmOptions: {
+        link: `/?edit=${expenseId}`,
+      },
+    },
+  };
+
+  const response = await messaging.sendEachForMulticast(message);
+  await cleanupFailedTokens(tokens, response);
+
+  return response.successCount > 0;
 }
 
 async function getDefaultCategoryKey(householdId: string): Promise<string> {
@@ -161,6 +323,8 @@ export const addExpenseFromMessage = functions
         return;
       }
 
+      const shortcutOwner = await resolveShortcutOwner(householdId, parsed, createdBy);
+
       // 중복 체크
       const duplicateCheck = await db.collection('expenses')
         .where('householdId', '==', householdId)
@@ -171,7 +335,22 @@ export const addExpenseFromMessage = functions
         .get();
 
       if (!duplicateCheck.empty) {
-        res.status(200).json({ success: true, message: '이미 등록된 지출입니다', duplicate: true });
+        const duplicateDoc = duplicateCheck.docs[0];
+        const notificationSent = await sendShortcutExpenseNotification(
+          householdId,
+          shortcutOwner,
+          duplicateDoc.id,
+          parsed,
+          true
+        );
+
+        res.status(200).json({
+          success: true,
+          message: '이미 등록된 지출입니다',
+          duplicate: true,
+          notificationSent,
+          targetOwner: shortcutOwner,
+        });
         return;
       }
 
@@ -190,8 +369,8 @@ export const addExpenseFromMessage = functions
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       };
 
-      if (createdBy) {
-        expenseData.createdBy = createdBy;
+      if (shortcutOwner) {
+        expenseData.createdBy = shortcutOwner;
       }
 
       if (parsed.cardLastFour) {
