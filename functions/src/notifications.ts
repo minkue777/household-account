@@ -117,6 +117,11 @@ export const onExpenseCreated = functions
       return null;
     }
     const isIosShortcutExpense = expense.source === 'ios-shortcut';
+    const isRecurringExpense = expense.source === 'recurring';
+
+    if (isRecurringExpense) {
+      return null;
+    }
 
     const tokensSnapshot = await db.collection('fcmTokens')
       .where('householdId', '==', householdId)

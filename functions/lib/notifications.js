@@ -140,6 +140,10 @@ exports.onExpenseCreated = functions
         return null;
     }
     const isIosShortcutExpense = expense.source === 'ios-shortcut';
+    const isRecurringExpense = expense.source === 'recurring';
+    if (isRecurringExpense) {
+        return null;
+    }
     const tokensSnapshot = await config_1.db.collection('fcmTokens')
         .where('householdId', '==', householdId)
         .get();

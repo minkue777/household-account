@@ -279,6 +279,7 @@ export async function processRecurringExpenses(householdId: string): Promise<num
           cardLastFour: '정기지출',
           memo: recurringData.memo || '',
           cardType: 'main',
+          source: 'recurring',
           recurringExpenseId: expense.id,
           recurringMonth: currentMonth,
           createdAt: now,
