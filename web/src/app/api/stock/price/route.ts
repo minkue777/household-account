@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { fetchNaverGoldMarketData } from '@/lib/server/naverGoldPrice';
 import { fetchUsdKrwRate } from '@/lib/server/naverUsdKrwRate';
 import { getUsStockSymbol } from '@/lib/server/usStockSymbols';
+import {
+  fetchNationalGrowthFundNav,
+  NATIONAL_GROWTH_FUND,
+} from '@/lib/server/miraeFundNav';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -18,6 +22,9 @@ interface StockPriceResult {
   sourcePreviousClose?: number;
   sourceCurrency?: string;
   exchangeRate?: number;
+  instrumentType?: 'stock' | 'etf' | 'fund';
+  priceScale?: number;
+  quoteAsOf?: string;
 }
 
 interface NaverStockResponse {
@@ -231,7 +238,36 @@ async function fetchUsStock(code: string): Promise<StockPriceResult | null> {
   }
 }
 
+async function fetchNationalGrowthFund(): Promise<StockPriceResult | null> {
+  try {
+    const quotes = await fetchNationalGrowthFundNav();
+    const latest = quotes[0];
+    const previous = quotes.find((quote) => quote.date < latest.date) || latest;
+    const change = latest.nav - previous.nav;
+
+    return {
+      code: NATIONAL_GROWTH_FUND.code,
+      name: NATIONAL_GROWTH_FUND.name,
+      price: latest.nav,
+      change,
+      changePercent: previous.nav > 0 ? (change / previous.nav) * 100 : 0,
+      previousClose: previous.nav,
+      currency: 'KRW',
+      instrumentType: NATIONAL_GROWTH_FUND.instrumentType,
+      priceScale: NATIONAL_GROWTH_FUND.priceScale,
+      quoteAsOf: latest.date,
+    };
+  } catch (error) {
+    console.error('Failed to fetch Mirae Asset national growth fund NAV:', error);
+    return null;
+  }
+}
+
 async function fetchStockPrice(code: string) {
+  if (code === NATIONAL_GROWTH_FUND.code) {
+    return fetchNationalGrowthFund();
+  }
+
   if (GOLD_SPOT_CODES[code]) {
     return fetchKrGoldSpot(code);
   }

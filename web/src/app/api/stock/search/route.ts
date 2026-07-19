@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import stocksData from '@/data/stocks.json';
 import { getUsStockAliases } from '@/lib/server/usStockAliases';
 import { getUsStockSymbols } from '@/lib/server/usStockSymbols';
+import { NATIONAL_GROWTH_FUND } from '@/lib/server/miraeFundNav';
 
 interface StockSearchResult {
   code: string;
   name: string;
   market?: 'KR' | 'US';
+  instrumentType?: 'stock' | 'etf' | 'fund';
+  priceScale?: number;
 }
 
 interface SearchCandidate extends StockSearchResult {
@@ -84,6 +87,31 @@ async function getDomesticResults(query: string, normalizedQuery: string): Promi
   return results;
 }
 
+function getFundResults(query: string, normalizedQuery: string): SearchCandidate[] {
+  const score = getSearchScore({
+    query,
+    normalizedQuery,
+    name: NATIONAL_GROWTH_FUND.name,
+    code: NATIONAL_GROWTH_FUND.kofIaCode,
+    aliases: [...NATIONAL_GROWTH_FUND.aliases],
+  });
+
+  if (score < 0) {
+    return [];
+  }
+
+  return [
+    {
+      code: NATIONAL_GROWTH_FUND.code,
+      name: NATIONAL_GROWTH_FUND.name,
+      market: NATIONAL_GROWTH_FUND.market,
+      instrumentType: NATIONAL_GROWTH_FUND.instrumentType,
+      priceScale: NATIONAL_GROWTH_FUND.priceScale,
+      score,
+    },
+  ];
+}
+
 async function getUsResults(query: string, normalizedQuery: string): Promise<SearchCandidate[]> {
   try {
     // 미국 종목은 정적 JSON 대신 실시간 심볼 목록을 읽어 검색합니다.
@@ -129,13 +157,14 @@ export async function GET(request: NextRequest) {
 
   const lowerQuery = query.toLowerCase();
   const normalizedQuery = normalizeSearchValue(query);
+  const fundResults = getFundResults(lowerQuery, normalizedQuery);
 
   const [domesticResults, usResults] = await Promise.all([
     getDomesticResults(lowerQuery, normalizedQuery),
     getUsResults(lowerQuery, normalizedQuery),
   ]);
 
-  const results = [...domesticResults, ...usResults]
+  const results = [...fundResults, ...domesticResults, ...usResults]
     .sort((a, b) => {
       if (a.score !== b.score) {
         return b.score - a.score;

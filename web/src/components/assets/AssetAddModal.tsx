@@ -23,6 +23,7 @@ import {
 import StockSearchForm, { StockSearchState } from './StockSearchForm';
 import CryptoSearchForm, { CryptoSearchState } from './CryptoSearchForm';
 import { HOUSEHOLD_OWNER_OPTION } from '@/lib/assets/memberOptions';
+import { calculateHoldingValue } from '@/lib/assets/holdingValuation';
 
 interface AssetAddModalProps {
   isOpen: boolean;
@@ -38,6 +39,9 @@ interface PendingStockHolding {
   quantity: number;
   avgPrice?: number;
   currentPrice?: number;
+  instrumentType?: 'stock' | 'etf' | 'fund';
+  priceScale?: number;
+  quoteAsOf?: string;
 }
 
 interface PendingCryptoHolding {
@@ -325,9 +329,13 @@ export default function AssetAddModal({
         {
           stockCode: selectedStock.code,
           stockName: selectedStock.name,
-          quantity: parseInt(quantity, 10),
-          avgPrice: avgPrice ? parseInt(avgPrice, 10) : undefined,
+          quantity: Number(quantity),
+          avgPrice: avgPrice ? Number(avgPrice) : undefined,
           currentPrice: currentPrice || undefined,
+          instrumentType:
+            currentPriceInfo?.instrumentType || selectedStock.instrumentType || 'stock',
+          priceScale: currentPriceInfo?.priceScale || selectedStock.priceScale || 1,
+          quoteAsOf: currentPriceInfo?.quoteAsOf,
         },
       ]);
       resetStockForm();
@@ -447,6 +455,9 @@ export default function AssetAddModal({
               quantity: holding.quantity,
               avgPrice: holding.avgPrice,
               currentPrice: holding.currentPrice,
+              instrumentType: holding.instrumentType,
+              priceScale: holding.priceScale,
+              quoteAsOf: holding.quoteAsOf,
             })
           )
         );
@@ -496,9 +507,19 @@ export default function AssetAddModal({
       void handleSelectStock(stock);
     },
     quantity,
-    setQuantityInput: (value) => setQuantity(sanitizeNumericInput(value)),
+    setQuantityInput: (value) =>
+      setQuantity(
+        selectedStock?.instrumentType === 'fund'
+          ? sanitizeDecimalInput(value)
+          : sanitizeNumericInput(value)
+      ),
     avgPrice,
-    setAvgPriceInput: (value) => setAvgPrice(sanitizeNumericInput(value)),
+    setAvgPriceInput: (value) =>
+      setAvgPrice(
+        selectedStock?.instrumentType === 'fund'
+          ? sanitizeDecimalInput(value)
+          : sanitizeNumericInput(value)
+      ),
     currentPrice,
     currentPriceInfo,
     isLoadingPrice,
@@ -530,8 +551,7 @@ export default function AssetAddModal({
   };
 
   const pendingStockTotal = pendingHoldings.reduce((sum, holding) => {
-    const price = holding.currentPrice || holding.avgPrice || 0;
-    return sum + price * holding.quantity;
+    return sum + calculateHoldingValue(holding);
   }, 0);
 
   const pendingCryptoTotal = pendingCryptoHoldings.reduce((sum, holding) => {
@@ -680,8 +700,8 @@ export default function AssetAddModal({
                     </p>
                   </div>
                   {pendingHoldings.map((holding, index) => {
-                    const holdingValue =
-                      (holding.currentPrice || holding.avgPrice || 0) * holding.quantity;
+                    const holdingValue = calculateHoldingValue(holding);
+                    const isFund = holding.instrumentType === 'fund';
 
                     return (
                       <div
@@ -693,8 +713,11 @@ export default function AssetAddModal({
                             {holding.stockName}
                           </p>
                           <p className="text-xs text-slate-500">
-                            {holding.quantity.toLocaleString()}주
-                            {holding.avgPrice ? ` · 평단 ${holding.avgPrice.toLocaleString()}원` : ''}
+                            {holding.quantity.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}
+                            {isFund ? '좌' : '주'}
+                            {holding.avgPrice
+                              ? ` · ${isFund ? '매입 기준가' : '평단'} ${holding.avgPrice.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}원`
+                              : ''}
                             {holdingValue > 0 ? ` · ${holdingValue.toLocaleString()}원` : ''}
                           </p>
                         </div>

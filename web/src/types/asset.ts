@@ -96,6 +96,8 @@ export interface StockSearchResult {
   code: string;
   name: string;
   market?: 'KR' | 'US';
+  instrumentType?: 'stock' | 'etf' | 'fund';
+  priceScale?: number;
 }
 
 export interface StockPriceInfo {
@@ -110,6 +112,9 @@ export interface StockPriceInfo {
   sourcePreviousClose?: number;
   sourceCurrency?: string;
   exchangeRate?: number;
+  instrumentType?: 'stock' | 'etf' | 'fund';
+  priceScale?: number;
+  quoteAsOf?: string;
 }
 
 export interface CryptoSearchResult {
@@ -148,6 +153,9 @@ export interface StockHolding {
   quantity: number;
   avgPrice?: number;
   currentPrice?: number;
+  instrumentType?: 'stock' | 'etf' | 'fund';
+  priceScale?: number;
+  quoteAsOf?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

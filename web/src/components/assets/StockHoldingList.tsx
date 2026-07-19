@@ -4,7 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { ConfirmDialog } from '@/components/common';
 import { deleteStockHolding, updateStockHolding } from '@/lib/assetService';
-import { calculateHoldingValue } from '@/lib/utils/useStockHoldingManager';
+import {
+  calculateHoldingProfitLoss,
+  calculateHoldingValue,
+  isFundHolding,
+} from '@/lib/assets/holdingValuation';
 import { StockHolding } from '@/types/asset';
 
 interface DividendInfo {
@@ -51,12 +55,29 @@ function sanitizeIntegerInput(rawValue: string) {
   return rawValue.replace(/[^0-9]/g, '');
 }
 
+function sanitizeDecimalInput(rawValue: string) {
+  const cleaned = rawValue.replace(/[^0-9.]/g, '');
+  const firstDot = cleaned.indexOf('.');
+  return firstDot < 0
+    ? cleaned
+    : `${cleaned.slice(0, firstDot + 1)}${cleaned.slice(firstDot + 1).replace(/\./g, '')}`;
+}
+
+function formatEditableNumber(value: string, maximumFractionDigits: number) {
+  if (!value) return '';
+  const parsed = Number(value);
+  return Number.isFinite(parsed)
+    ? parsed.toLocaleString('ko-KR', { maximumFractionDigits })
+    : value;
+}
+
 function getHoldingType(holding: StockHolding) {
   return holding.holdingType || 'stock';
 }
 
 function getHoldingTypeLabel(holding: StockHolding) {
   const holdingType = getHoldingType(holding);
+  const isFund = isFundHolding(holding);
 
   if (holdingType === 'bond') {
     return '채권';
@@ -123,11 +144,12 @@ function HoldingSummaryCard({
   onOpen,
 }: HoldingSummaryCardProps) {
   const holdingType = getHoldingType(holding);
+  const isFund = isFundHolding(holding);
   const hasAvgPrice = (holding.avgPrice || 0) > 0;
   const hasCurrentPrice = (holding.currentPrice || 0) > 0;
   const holdingProfitLoss =
     hasAvgPrice && hasCurrentPrice
-      ? ((holding.currentPrice || 0) - (holding.avgPrice || 0)) * holding.quantity
+      ? calculateHoldingProfitLoss(holding)
       : 0;
   const holdingProfitRate =
     hasAvgPrice && hasCurrentPrice && (holding.avgPrice || 0) > 0
@@ -154,7 +176,9 @@ function HoldingSummaryCard({
           <p className="truncate font-medium text-slate-800">{holding.stockName}</p>
           <p className="mt-1 text-xs text-slate-500">
             {holdingType === 'stock'
-              ? `수량 ${holding.quantity.toLocaleString()}주${holding.avgPrice ? ` · 평단 ${holding.avgPrice.toLocaleString()}원` : ''}`
+              ? isFund
+                ? `좌수 ${holding.quantity.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}좌${holding.avgPrice ? ` · 매입 기준가 ${holding.avgPrice.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}원` : ''}`
+                : `수량 ${holding.quantity.toLocaleString()}주${holding.avgPrice ? ` · 평단 ${holding.avgPrice.toLocaleString()}원` : ''}`
               : getHoldingTypeLabel(holding)}
           </p>
         </div>
@@ -205,10 +229,11 @@ function HoldingEditorCard({
   onSave,
 }: HoldingEditorCardProps) {
   const holdingType = getHoldingType(holding);
+  const isFund = isFundHolding(holding);
   const topRightLabel =
     holdingType === 'stock'
       ? holding.currentPrice
-        ? `${holding.currentPrice.toLocaleString()}원`
+        ? `${isFund ? '기준가 ' : ''}${holding.currentPrice.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}원`
         : `${calculateHoldingValue(holding).toLocaleString()}원`
       : `${calculateHoldingValue(holding).toLocaleString()}원`;
 
@@ -238,22 +263,38 @@ function HoldingEditorCard({
         {holdingType === 'stock' ? (
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="mb-1 block text-xs text-slate-500">수량</label>
+              <label className="mb-1 block text-xs text-slate-500">
+                {isFund ? '보유 좌수' : '수량'}
+              </label>
               <input
                 type="text"
-                inputMode="numeric"
-                value={editQuantity ? parseInt(editQuantity, 10).toLocaleString() : ''}
-                onChange={(event) => onChangeQuantity(sanitizeIntegerInput(event.target.value))}
+                inputMode={isFund ? 'decimal' : 'numeric'}
+                value={formatEditableNumber(editQuantity, isFund ? 4 : 0)}
+                onChange={(event) =>
+                  onChangeQuantity(
+                    isFund
+                      ? sanitizeDecimalInput(event.target.value)
+                      : sanitizeIntegerInput(event.target.value)
+                  )
+                }
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-slate-500">평단</label>
+              <label className="mb-1 block text-xs text-slate-500">
+                {isFund ? '매입 기준가' : '평단'}
+              </label>
               <input
                 type="text"
-                inputMode="numeric"
-                value={editAvgPrice ? parseInt(editAvgPrice, 10).toLocaleString() : ''}
-                onChange={(event) => onChangeAvgPrice(sanitizeIntegerInput(event.target.value))}
+                inputMode={isFund ? 'decimal' : 'numeric'}
+                value={formatEditableNumber(editAvgPrice, isFund ? 4 : 0)}
+                onChange={(event) =>
+                  onChangeAvgPrice(
+                    isFund
+                      ? sanitizeDecimalInput(event.target.value)
+                      : sanitizeIntegerInput(event.target.value)
+                  )
+                }
                 placeholder="0"
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
               />
@@ -400,8 +441,8 @@ export default function StockHoldingList({
       if (getHoldingType(editingHolding) === 'stock') {
         await updateStockHolding(editingHolding.id, assetId, {
           stockName: editName.trim(),
-          quantity: parseInt(editQuantity, 10),
-          avgPrice: editAvgPrice ? parseInt(editAvgPrice, 10) : undefined,
+          quantity: Number(editQuantity),
+          avgPrice: editAvgPrice ? Number(editAvgPrice) : undefined,
         });
       } else {
         await updateStockHolding(editingHolding.id, assetId, {

@@ -47,11 +47,26 @@ const THEME_STYLES = {
 } as const;
 
 function getDisplayCode(stock: Pick<StockSearchResult, 'code' | 'market'>) {
+  if (stock.code === 'FUND:K55301EW0012') {
+    return '펀드 · EW001';
+  }
+
   if (stock.market === 'US' && stock.code.startsWith('US:')) {
     return `미국 · ${stock.code.replace(/^US:/, '')}`;
   }
 
   return stock.code;
+}
+
+function formatNumericInput(value: string, maximumFractionDigits = 4) {
+  if (!value) {
+    return '';
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed)
+    ? parsed.toLocaleString('ko-KR', { maximumFractionDigits })
+    : value;
 }
 
 function formatUsdPrice(price?: number) {
@@ -93,8 +108,13 @@ export default function StockSearchForm({
 
   const priceInfo = currentPriceInfo || null;
   const themeStyle = THEME_STYLES[theme];
+  const isFund = selectedStock?.instrumentType === 'fund';
   const averagePriceLabel =
-    selectedStock?.market === 'US' ? '평균 매입가 (원 기준, 선택)' : '평균 매입가 (선택)';
+    isFund
+      ? '평균 매입 기준가 (선택)'
+      : selectedStock?.market === 'US'
+        ? '평균 매입가 (원 기준, 선택)'
+        : '평균 매입가 (선택)';
   const usdPriceLabel = formatUsdPrice(priceInfo?.sourcePrice);
 
   return (
@@ -144,7 +164,13 @@ export default function StockSearchForm({
                   <Loader2 className={`h-4 w-4 animate-spin ${themeStyle.loader}`} />
                 ) : currentPrice ? (
                   <div className="text-right">
-                    <p className="font-semibold text-red-500">{currentPrice.toLocaleString()}원</p>
+                    <p className="font-semibold text-red-500">
+                      {isFund ? '기준가 ' : ''}
+                      {currentPrice.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}원
+                    </p>
+                    {isFund && priceInfo?.quoteAsOf ? (
+                      <p className="text-xs text-slate-400">{priceInfo.quoteAsOf} 기준</p>
+                    ) : null}
                     {usdPriceLabel && (
                       <p className="text-xs text-slate-400">{usdPriceLabel}</p>
                     )}
@@ -154,12 +180,14 @@ export default function StockSearchForm({
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">보유 수량</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                {isFund ? '보유 좌수' : '보유 수량'}
+              </label>
               <input
                 type="text"
-                inputMode="numeric"
-                value={quantity}
-                onChange={(e) => setQuantityInput(e.target.value.replace(/[^0-9]/g, ''))}
+                inputMode={isFund ? 'decimal' : 'numeric'}
+                value={formatNumericInput(quantity, isFund ? 4 : 0)}
+                onChange={(e) => setQuantityInput(e.target.value)}
                 placeholder="0"
                 className={`w-full rounded-lg border border-slate-300 bg-white px-4 py-2 focus:outline-none focus:ring-2 ${themeStyle.focus}`}
               />
@@ -172,9 +200,9 @@ export default function StockSearchForm({
               <div className="relative">
                 <input
                   type="text"
-                  inputMode="numeric"
-                  value={avgPrice ? parseInt(avgPrice, 10).toLocaleString() : ''}
-                  onChange={(e) => setAvgPriceInput(e.target.value.replace(/[^0-9]/g, ''))}
+                  inputMode={isFund ? 'decimal' : 'numeric'}
+                  value={formatNumericInput(avgPrice, isFund ? 4 : 0)}
+                  onChange={(e) => setAvgPriceInput(e.target.value)}
                   placeholder="0"
                   className={`w-full rounded-lg border border-slate-300 bg-white px-4 py-2 pr-8 focus:outline-none focus:ring-2 ${themeStyle.focus}`}
                 />

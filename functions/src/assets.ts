@@ -6,8 +6,72 @@ import { db, REGION } from './config';
 type AssetType = 'savings' | 'stock' | 'crypto' | 'property' | 'gold' | 'loan';
 
 const ASSET_TYPE_ORDER: AssetType[] = ['savings', 'stock', 'crypto', 'property', 'gold', 'loan'];
+const NATIONAL_GROWTH_FUND_CODE = 'FUND:K55301EW0012';
+const NATIONAL_GROWTH_FUND_PRICE_URL =
+  'https://investments.miraeasset.com/magi/fund/basePrices.do?fundGb=2&fundCd=539502&period=1M';
+
+function getSeoulDate(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function parseLatestFundNav(html: string): number | null {
+  const asOfDate = getSeoulDate();
+  const quotes: Array<{ date: string; nav: number }> = [];
+  const rowPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  const cellPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+
+  let rowMatch: RegExpExecArray | null;
+  while ((rowMatch = rowPattern.exec(html)) !== null) {
+    const cells: string[] = [];
+    cellPattern.lastIndex = 0;
+
+    let cellMatch: RegExpExecArray | null;
+    while ((cellMatch = cellPattern.exec(rowMatch[1])) !== null) {
+      cells.push(cellMatch[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').trim());
+    }
+    const dateMatch = cells[0]?.match(/^(\d{4})[.-](\d{2})[.-](\d{2})$/);
+    const date = dateMatch ? `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}` : null;
+    const nav = cells[1] ? Number(cells[1].replace(/,/g, '')) : NaN;
+
+    if (date && date <= asOfDate && Number.isFinite(nav) && nav > 0) {
+      quotes.push({ date, nav });
+    }
+  }
+
+  quotes.sort((a, b) => b.date.localeCompare(a.date));
+  return quotes[0]?.nav ?? null;
+}
+
+async function fetchNationalGrowthFundNav(): Promise<number | null> {
+  try {
+    const response = await fetch(NATIONAL_GROWTH_FUND_PRICE_URL, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; HouseholdAccount/1.0)',
+        Accept: 'text/html,application/xhtml+xml',
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return parseLatestFundNav(await response.text());
+  } catch (error) {
+    console.error('국민성장펀드 기준가 조회 오류:', error);
+    return null;
+  }
+}
 
 async function fetchStockPrice(code: string): Promise<number | null> {
+  if (code === NATIONAL_GROWTH_FUND_CODE) {
+    return fetchNationalGrowthFundNav();
+  }
+
   try {
     const response = await fetch(`https://m.stock.naver.com/api/stock/${code}/basic`, {
       headers: {
@@ -88,8 +152,9 @@ export const dailyAssetSnapshot = functions
           const holdingsByCode: Record<string, Array<{
             id: string;
             assetId: string;
-            quantity: number;
-            avgPrice: number;
+              quantity: number;
+              avgPrice: number;
+              priceScale: number;
           }>> = {};
 
           holdingsSnapshot.docs.forEach((doc) => {
@@ -109,6 +174,7 @@ export const dailyAssetSnapshot = functions
               assetId: data.assetId,
               quantity: data.quantity || 0,
               avgPrice: data.avgPrice || 0,
+              priceScale: data.priceScale || 1,
             });
           });
 
@@ -144,9 +210,10 @@ export const dailyAssetSnapshot = functions
               const quantity = data.quantity || 0;
               const avgPrice = data.avgPrice || 0;
               const currentPrice = data.currentPrice || avgPrice;
+              const priceScale = data.priceScale || 1;
 
-              totalValue += currentPrice * quantity;
-              totalCostBasis += avgPrice * quantity;
+              totalValue += (currentPrice * quantity) / priceScale;
+              totalCostBasis += (avgPrice * quantity) / priceScale;
             });
 
             await db.collection('assets').doc(assetId).update({

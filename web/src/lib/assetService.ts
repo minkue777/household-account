@@ -36,6 +36,10 @@ import {
   getAssetSignedBalance,
   sumSignedBalancesByAssetType,
 } from './assets/assetMath';
+import {
+  calculateHoldingCostBasis,
+  calculateHoldingValue,
+} from './assets/holdingValuation';
 
 const ASSETS_COLLECTION = 'assets';
 const HISTORY_COLLECTION = 'asset_history';
@@ -872,6 +876,9 @@ function mapDocToHolding(docSnap: QueryDocumentSnapshot<DocumentData>): StockHol
     quantity: data.quantity || 1,
     avgPrice: data.avgPrice,
     currentPrice: data.currentPrice,
+    instrumentType: data.instrumentType,
+    priceScale: data.priceScale,
+    quoteAsOf: data.quoteAsOf,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
   };
@@ -912,12 +919,15 @@ async function updateAssetBalanceFromHoldings(assetId: string): Promise<void> {
 
   snapshot.docs.forEach((docSnap) => {
     const data = docSnap.data();
-    const quantity = data.quantity || 0;
-    const avgPrice = data.avgPrice || 0;
-    const currentPrice = data.currentPrice || avgPrice;
+    const holding = {
+      quantity: data.quantity || 0,
+      avgPrice: data.avgPrice,
+      currentPrice: data.currentPrice,
+      priceScale: data.priceScale,
+    };
 
-    totalValue += currentPrice * quantity;
-    totalCostBasis += avgPrice * quantity;
+    totalValue += calculateHoldingValue(holding);
+    totalCostBasis += calculateHoldingCostBasis(holding);
   });
 
   await updateDoc(doc(db, ASSETS_COLLECTION, assetId), {
@@ -1388,9 +1398,20 @@ export async function refreshAllStockPrices(): Promise<void> {
         // 해당 종목의 모든 보유 내역 업데이트
         await Promise.all(
           stockHoldings.map(async (holding) => {
-            if (holding.currentPrice !== newPrice) {
+            const nextInstrumentType = data.instrumentType || holding.instrumentType || 'stock';
+            const nextPriceScale = data.priceScale || holding.priceScale || 1;
+            const shouldUpdate =
+              holding.currentPrice !== newPrice ||
+              holding.instrumentType !== nextInstrumentType ||
+              holding.priceScale !== nextPriceScale ||
+              (!!data.quoteAsOf && holding.quoteAsOf !== data.quoteAsOf);
+
+            if (shouldUpdate) {
               await updateDoc(doc(db, HOLDINGS_COLLECTION, holding.id), {
                 currentPrice: newPrice,
+                instrumentType: nextInstrumentType,
+                priceScale: nextPriceScale,
+                ...(data.quoteAsOf ? { quoteAsOf: data.quoteAsOf } : {}),
                 updatedAt: Timestamp.now(),
               });
               updatedAssetIds.add(holding.assetId);

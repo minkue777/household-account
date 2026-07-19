@@ -12,19 +12,24 @@ import {
   subscribeToStockHoldings,
   updateStockHolding,
 } from '@/lib/assetService';
+import { calculateHoldingValue } from '@/lib/assets/holdingValuation';
 
 function sanitizeNumericInput(rawValue: string) {
   return rawValue.replace(/[^0-9]/g, '');
 }
 
+function sanitizeDecimalInput(rawValue: string) {
+  const cleaned = rawValue.replace(/[^0-9.]/g, '');
+  const firstDot = cleaned.indexOf('.');
+
+  return firstDot < 0
+    ? cleaned
+    : `${cleaned.slice(0, firstDot + 1)}${cleaned.slice(firstDot + 1).replace(/\./g, '')}`;
+}
+
 export type ManualHoldingType = 'manual' | 'cash';
 
-export function calculateHoldingValue(
-  holding: Pick<StockHolding, 'quantity' | 'currentPrice' | 'avgPrice'>
-) {
-  const price = holding.currentPrice || holding.avgPrice || 0;
-  return price * holding.quantity;
-}
+export { calculateHoldingValue } from '@/lib/assets/holdingValuation';
 
 interface UseStockHoldingManagerOptions {
   isOpen: boolean;
@@ -135,12 +140,20 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
   }, [selectedStock]);
 
   const setQuantityInput = useCallback((value: string) => {
-    setQuantity(sanitizeNumericInput(value));
-  }, []);
+    setQuantity(
+      selectedStock?.instrumentType === 'fund'
+        ? sanitizeDecimalInput(value)
+        : sanitizeNumericInput(value)
+    );
+  }, [selectedStock?.instrumentType]);
 
   const setAvgPriceInput = useCallback((value: string) => {
-    setAvgPrice(sanitizeNumericInput(value));
-  }, []);
+    setAvgPrice(
+      selectedStock?.instrumentType === 'fund'
+        ? sanitizeDecimalInput(value)
+        : sanitizeNumericInput(value)
+    );
+  }, [selectedStock?.instrumentType]);
 
   const setManualCurrentValueInput = useCallback((value: string) => {
     setManualCurrentValue(sanitizeNumericInput(value));
@@ -183,9 +196,13 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
         assetId,
         stockCode: selectedStock.code,
         stockName: selectedStock.name,
-        quantity: parseInt(quantity, 10),
-        avgPrice: avgPrice ? parseInt(avgPrice, 10) : undefined,
+        quantity: Number(quantity),
+        avgPrice: avgPrice ? Number(avgPrice) : undefined,
         currentPrice: currentPriceInfo?.price || currentPrice || undefined,
+        instrumentType:
+          currentPriceInfo?.instrumentType || selectedStock.instrumentType || 'stock',
+        priceScale: currentPriceInfo?.priceScale || selectedStock.priceScale || 1,
+        quoteAsOf: currentPriceInfo?.quoteAsOf,
       });
       resetStockForm();
       return true;
@@ -274,7 +291,12 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
             if (!response.ok) return;
 
             const data = await response.json();
-            await updateStockHolding(holding.id, assetId, { currentPrice: data.price });
+            await updateStockHolding(holding.id, assetId, {
+              currentPrice: data.price,
+              instrumentType: data.instrumentType || holding.instrumentType || 'stock',
+              priceScale: data.priceScale || holding.priceScale || 1,
+              ...(data.quoteAsOf ? { quoteAsOf: data.quoteAsOf } : {}),
+            });
           } catch (error) {
             console.error(`Failed to refresh stock price (${holding.stockCode}):`, error);
           }

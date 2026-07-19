@@ -42,7 +42,62 @@ const admin = __importStar(require("firebase-admin"));
 const node_fetch_1 = __importDefault(require("node-fetch"));
 const config_1 = require("./config");
 const ASSET_TYPE_ORDER = ['savings', 'stock', 'crypto', 'property', 'gold', 'loan'];
+const NATIONAL_GROWTH_FUND_CODE = 'FUND:K55301EW0012';
+const NATIONAL_GROWTH_FUND_PRICE_URL = 'https://investments.miraeasset.com/magi/fund/basePrices.do?fundGb=2&fundCd=539502&period=1M';
+function getSeoulDate() {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Seoul',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).format(new Date());
+}
+function parseLatestFundNav(html) {
+    var _a, _b, _c;
+    const asOfDate = getSeoulDate();
+    const quotes = [];
+    const rowPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    const cellPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+    let rowMatch;
+    while ((rowMatch = rowPattern.exec(html)) !== null) {
+        const cells = [];
+        cellPattern.lastIndex = 0;
+        let cellMatch;
+        while ((cellMatch = cellPattern.exec(rowMatch[1])) !== null) {
+            cells.push(cellMatch[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').trim());
+        }
+        const dateMatch = (_a = cells[0]) === null || _a === void 0 ? void 0 : _a.match(/^(\d{4})[.-](\d{2})[.-](\d{2})$/);
+        const date = dateMatch ? `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}` : null;
+        const nav = cells[1] ? Number(cells[1].replace(/,/g, '')) : NaN;
+        if (date && date <= asOfDate && Number.isFinite(nav) && nav > 0) {
+            quotes.push({ date, nav });
+        }
+    }
+    quotes.sort((a, b) => b.date.localeCompare(a.date));
+    return (_c = (_b = quotes[0]) === null || _b === void 0 ? void 0 : _b.nav) !== null && _c !== void 0 ? _c : null;
+}
+async function fetchNationalGrowthFundNav() {
+    try {
+        const response = await (0, node_fetch_1.default)(NATIONAL_GROWTH_FUND_PRICE_URL, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; HouseholdAccount/1.0)',
+                Accept: 'text/html,application/xhtml+xml',
+            },
+        });
+        if (!response.ok) {
+            return null;
+        }
+        return parseLatestFundNav(await response.text());
+    }
+    catch (error) {
+        console.error('국민성장펀드 기준가 조회 오류:', error);
+        return null;
+    }
+}
 async function fetchStockPrice(code) {
+    if (code === NATIONAL_GROWTH_FUND_CODE) {
+        return fetchNationalGrowthFundNav();
+    }
     try {
         const response = await (0, node_fetch_1.default)(`https://m.stock.naver.com/api/stock/${code}/basic`, {
             headers: {
@@ -118,6 +173,7 @@ exports.dailyAssetSnapshot = functions
                         assetId: data.assetId,
                         quantity: data.quantity || 0,
                         avgPrice: data.avgPrice || 0,
+                        priceScale: data.priceScale || 1,
                     });
                 });
                 const updatedAssetIds = new Set();
@@ -146,8 +202,9 @@ exports.dailyAssetSnapshot = functions
                         const quantity = data.quantity || 0;
                         const avgPrice = data.avgPrice || 0;
                         const currentPrice = data.currentPrice || avgPrice;
-                        totalValue += currentPrice * quantity;
-                        totalCostBasis += avgPrice * quantity;
+                        const priceScale = data.priceScale || 1;
+                        totalValue += (currentPrice * quantity) / priceScale;
+                        totalCostBasis += (avgPrice * quantity) / priceScale;
                     });
                     await config_1.db.collection('assets').doc(assetId).update({
                         currentBalance: totalValue,

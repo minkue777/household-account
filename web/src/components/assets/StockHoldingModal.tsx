@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { Asset } from '@/types/asset';
 import { ConfirmDialog, ModalOverlay } from '@/components/common';
 import { X, Plus, Trash2, Loader2 } from 'lucide-react';
-import { calculateHoldingValue, useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
+import { useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
+import { calculateHoldingValue, isFundHolding } from '@/lib/assets/holdingValuation';
 
 interface StockHoldingModalProps {
   isOpen: boolean;
@@ -109,8 +110,10 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-slate-800 truncate">{holding.stockName}</p>
                     <p className="text-xs text-slate-500">
-                      {holding.quantity.toLocaleString()}주
-                      {holding.currentPrice && ` · ${holding.currentPrice.toLocaleString()}원`}
+                      {holding.quantity.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}
+                      {isFundHolding(holding) ? '좌' : '주'}
+                      {holding.currentPrice &&
+                        ` · ${isFundHolding(holding) ? '기준가 ' : ''}${holding.currentPrice.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}원`}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -173,7 +176,10 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
                     {isLoadingPrice ? (
                       <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
                     ) : currentPrice ? (
-                      <p className="font-semibold text-blue-600">{currentPrice.toLocaleString()}원</p>
+                      <p className="font-semibold text-blue-600">
+                        {selectedStock.instrumentType === 'fund' ? '기준가 ' : ''}
+                        {currentPrice.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}원
+                      </p>
                     ) : null}
                   </div>
                 </div>
@@ -182,10 +188,12 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
               {selectedStock && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">보유 수량</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      {selectedStock.instrumentType === 'fund' ? '보유 좌수' : '보유 수량'}
+                    </label>
                     <input
                       type="text"
-                      inputMode="numeric"
+                      inputMode={selectedStock.instrumentType === 'fund' ? 'decimal' : 'numeric'}
                       value={quantity}
                       onChange={(e) => setQuantityInput(e.target.value)}
                       placeholder="0"
@@ -194,12 +202,23 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">평균 매입가 (선택)</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      {selectedStock.instrumentType === 'fund'
+                        ? '평균 매입 기준가 (선택)'
+                        : '평균 매입가 (선택)'}
+                    </label>
                     <div className="relative">
                       <input
                         type="text"
-                        inputMode="numeric"
-                        value={avgPrice ? parseInt(avgPrice, 10).toLocaleString() : ''}
+                        inputMode={selectedStock.instrumentType === 'fund' ? 'decimal' : 'numeric'}
+                        value={
+                          avgPrice
+                            ? Number(avgPrice).toLocaleString('ko-KR', {
+                                maximumFractionDigits:
+                                  selectedStock.instrumentType === 'fund' ? 4 : 0,
+                              })
+                            : ''
+                        }
                         onChange={(e) => setAvgPriceInput(e.target.value)}
                         placeholder="0"
                         className="w-full px-4 py-2 pr-8 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -208,12 +227,17 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
                     </div>
                   </div>
 
-                  {quantity && parseInt(quantity, 10) > 0 && currentPrice && (
+                  {quantity && Number(quantity) > 0 && currentPrice && (
                     <div className="bg-slate-50 rounded-lg p-3">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-slate-600">예상 평가금액</span>
                         <span className="font-semibold text-slate-800">
-                          {(currentPrice * parseInt(quantity, 10)).toLocaleString()}원
+                          {calculateHoldingValue({
+                            quantity: Number(quantity),
+                            currentPrice,
+                            avgPrice: avgPrice ? Number(avgPrice) : undefined,
+                            priceScale: selectedStock.priceScale,
+                          }).toLocaleString()}원
                         </span>
                       </div>
                     </div>
