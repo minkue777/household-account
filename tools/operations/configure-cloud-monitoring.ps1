@@ -94,7 +94,6 @@ function Threshold-Condition([string]$DisplayName, [string]$MetricName) {
             comparison = "COMPARISON_GT"
             thresholdValue = 0
             duration = "0s"
-            evaluationMissingData = "EVALUATION_MISSING_DATA_INACTIVE"
             aggregations = @(@{
                 alignmentPeriod = "300s"
                 perSeriesAligner = "ALIGN_SUM"
