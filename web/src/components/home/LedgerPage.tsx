@@ -22,13 +22,9 @@ import {
   mergeExpenses,
   unmergeExpense,
   SplitItem,
-  generateSplitGroupId,
-  addExpense,
+  addManualMonthlySplit,
 } from '@/lib/expenseService';
 import { addMerchantRule } from '@/lib/merchantRuleService';
-import { getStoredHouseholdKey } from '@/lib/householdService';
-import { processRecurringExpenses } from '@/lib/recurringExpenseService';
-import { getMonthlySplitDate } from '@/lib/utils/monthlySplitDate';
 import { useHousehold } from '@/contexts/HouseholdContext';
 
 interface LedgerPageProps {
@@ -67,14 +63,6 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     isIncome ||
     homeSummaryConfig.leftCard === 'yearlySpent' ||
     homeSummaryConfig.rightCard === 'yearlySpent';
-
-  useEffect(() => {
-    if (!householdKey || isIncome) {
-      return;
-    }
-
-    processRecurringExpenses(householdKey).then(() => undefined);
-  }, [householdKey, isIncome]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -231,7 +219,10 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     expenseId: string,
     data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string }
   ) => {
-    await updateExpense(expenseId, data);
+    const expense = expenses.find((item) => item.id === expenseId)
+      ?? yearlyExpenses.find((item) => item.id === expenseId);
+    if (!expense) throw new Error('수정할 거래의 최신 버전을 찾을 수 없습니다.');
+    await updateExpense(expenseId, data, expense.aggregateVersion);
   };
 
   const handleSaveMerchantRule = async (merchantName: string, category: string) => {
@@ -239,7 +230,8 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
       return;
     }
 
-    const householdId = getStoredHouseholdKey() || 'guest';
+    if (!householdKey) throw new Error('인증된 가구 세션이 필요합니다.');
+    const householdId = householdKey;
     await addMerchantRule(householdId, merchantName, category, true);
   };
 
@@ -252,30 +244,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     splitMonths?: number
   ) => {
     if (splitMonths && splitMonths > 1) {
-      const monthlyAmount = Math.floor(amount / splitMonths);
-      const splitGroupId = generateSplitGroupId();
-
-      for (let i = 0; i < splitMonths; i++) {
-        const dateStr = getMonthlySplitDate(date, i);
-
-        await addExpense(
-          {
-            date: dateStr,
-            time: '09:00',
-            merchant: `${merchant} (${i + 1}/${splitMonths})`,
-            amount: monthlyAmount,
-            transactionType,
-            category,
-            cardType: 'main',
-            splitGroupId,
-            splitIndex: i + 1,
-            splitTotal: splitMonths,
-          },
-          {
-            notifyOnCreate: false,
-          }
-        );
-      }
+      await addManualMonthlySplit(merchant, amount, category, date, splitMonths, memo);
       return;
     }
 
@@ -283,7 +252,10 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   };
 
   const handleDeleteExpense = async (expenseId: string) => {
-    await deleteExpense(expenseId);
+    const expense = expenses.find((item) => item.id === expenseId)
+      ?? yearlyExpenses.find((item) => item.id === expenseId);
+    if (!expense) throw new Error('삭제할 거래의 최신 버전을 찾을 수 없습니다.');
+    await deleteExpense(expenseId, expense.aggregateVersion);
   };
 
   const handleSplitExpense = async (expense: Expense, splits: SplitItem[]) => {

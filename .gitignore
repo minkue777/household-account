@@ -5,9 +5,10 @@ node_modules/
 
 # Build outputs
 .next/
-out/
+/out/
 build/
 dist/
+/functions/lib/
 
 # Android
 android/.gradle/

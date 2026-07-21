@@ -1,0 +1,237 @@
+{
+  "fixtureVersion": 1,
+  "contractVersion": "capture-envelope.v1",
+  "cases": [
+    {
+      "caseId": "android-approval-only",
+      "requirementIds": [
+        "T-ING-003",
+        "T-PARSE-001"
+      ],
+      "description": "등록된 Android package의 승인 관찰을 payment branch 하나로 전달한다",
+      "producer": "android-edge",
+      "envelope": {
+        "contractVersion": "capture-envelope.v1",
+        "observationId": "observation.android.approval.001",
+        "originChannel": "android-notification",
+        "sourceEvidence": {
+          "kind": "android-registered-package",
+          "sourceType": "kb-card",
+          "packageName": "com.kbcard.cxh.appcard",
+          "registryVersion": "source-registry.v1"
+        },
+        "observedAt": "2026-07-19T10:05:01+09:00",
+        "parser": {
+          "parserId": "kb-card-parser",
+          "parserVersion": "2.0.0"
+        },
+        "rawPayloadHash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "paymentObservation": {
+          "branchId": "branch.android.approval.001",
+          "observationType": "approval",
+          "amountInWon": 12000,
+          "occurredLocalDate": "2026-07-19",
+          "occurredLocalTime": "10:05",
+          "zoneId": "Asia/Seoul",
+          "merchantEvidence": {
+            "rawCandidate": "가맹점 A"
+          },
+          "cardEvidence": {
+            "companyLabel": "국민",
+            "maskedToken": "1234"
+          }
+        }
+      },
+      "expectedConsumer": {
+        "consumer": "payment-intake",
+        "originChannel": "android-notification",
+        "transactionBranch": "approval",
+        "balanceBranch": "absent"
+      }
+    },
+    {
+      "caseId": "android-cancellation-only",
+      "requirementIds": [
+        "T-ING-003",
+        "T-PARSE-002"
+      ],
+      "description": "등록된 Android package의 취소 관찰을 cancellation payment branch로 전달한다",
+      "producer": "android-edge",
+      "envelope": {
+        "contractVersion": "capture-envelope.v1",
+        "observationId": "observation.android.cancellation.001",
+        "originChannel": "android-notification",
+        "sourceEvidence": {
+          "kind": "android-registered-package",
+          "sourceType": "kb-card",
+          "packageName": "com.kbcard.cxh.appcard",
+          "registryVersion": "source-registry.v1"
+        },
+        "observedAt": "2026-07-20T09:00:00+09:00",
+        "parser": {
+          "parserId": "kb-card-parser",
+          "parserVersion": "2.0.0"
+        },
+        "rawPayloadHash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "paymentObservation": {
+          "branchId": "branch.android.cancellation.001",
+          "observationType": "cancellation",
+          "amountInWon": 12000,
+          "occurredLocalDate": "2026-07-20",
+          "occurredLocalTime": "09:00",
+          "zoneId": "Asia/Seoul",
+          "merchantEvidence": {
+            "rawCandidate": "가맹점 A"
+          },
+          "cardEvidence": {
+            "companyLabel": "국민",
+            "maskedToken": "1234"
+          }
+        }
+      },
+      "expectedConsumer": {
+        "consumer": "payment-intake",
+        "originChannel": "android-notification",
+        "transactionBranch": "cancellation",
+        "balanceBranch": "absent"
+      }
+    },
+    {
+      "caseId": "android-balance-only",
+      "requirementIds": [
+        "T-ING-BAL-001"
+      ],
+      "description": "등록된 지역화폐 Android package의 잔액만 유효해도 balance branch를 전달한다",
+      "producer": "android-edge",
+      "envelope": {
+        "contractVersion": "capture-envelope.v1",
+        "observationId": "observation.android.balance.001",
+        "originChannel": "android-notification",
+        "sourceEvidence": {
+          "kind": "android-registered-package",
+          "sourceType": "gyeonggi-local-currency",
+          "packageName": "gov.gyeonggi.ggcard",
+          "registryVersion": "source-registry.v1"
+        },
+        "observedAt": "2026-07-19T11:00:00+09:00",
+        "parser": {
+          "parserId": "gyeonggi-local-currency-parser",
+          "parserVersion": "1.0.0"
+        },
+        "rawPayloadHash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "balanceObservation": {
+          "branchId": "branch.android.balance.001",
+          "currencyType": "gyeonggi",
+          "balanceInWon": 88000,
+          "observedAt": "2026-07-19T11:00:00+09:00"
+        }
+      },
+      "expectedConsumer": {
+        "consumer": "payment-intake",
+        "originChannel": "android-notification",
+        "transactionBranch": "absent",
+        "balanceBranch": "present"
+      }
+    },
+    {
+      "caseId": "android-payment-and-balance",
+      "requirementIds": [
+        "T-ING-BAL-001",
+        "T-PARSE-001"
+      ],
+      "description": "한 Android 관찰의 결제와 잔액을 독립된 두 branch로 함께 전달한다",
+      "producer": "android-edge",
+      "envelope": {
+        "contractVersion": "capture-envelope.v1",
+        "observationId": "observation.android.combined.001",
+        "originChannel": "android-notification",
+        "sourceEvidence": {
+          "kind": "android-registered-package",
+          "sourceType": "gyeonggi-local-currency",
+          "packageName": "gov.gyeonggi.ggcard",
+          "registryVersion": "source-registry.v1"
+        },
+        "observedAt": "2026-07-19T11:01:00+09:00",
+        "parser": {
+          "parserId": "gyeonggi-local-currency-parser",
+          "parserVersion": "1.0.0"
+        },
+        "rawPayloadHash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "paymentObservation": {
+          "branchId": "branch.android.combined.payment.001",
+          "observationType": "approval",
+          "amountInWon": 5000,
+          "occurredLocalDate": "2026-07-19",
+          "occurredLocalTime": "11:01",
+          "zoneId": "Asia/Seoul",
+          "merchantEvidence": {
+            "rawCandidate": "가맹점 B"
+          },
+          "cardEvidence": {
+            "companyLabel": "경기지역화폐",
+            "maskedToken": "5678"
+          },
+          "localCurrencyType": "gyeonggi"
+        },
+        "balanceObservation": {
+          "branchId": "branch.android.combined.balance.001",
+          "currencyType": "gyeonggi",
+          "balanceInWon": 83000,
+          "observedAt": "2026-07-19T11:01:00+09:00"
+        }
+      },
+      "expectedConsumer": {
+        "consumer": "payment-intake",
+        "originChannel": "android-notification",
+        "transactionBranch": "approval",
+        "balanceBranch": "present"
+      }
+    },
+    {
+      "caseId": "ios-shortcut-approval-only",
+      "requirementIds": [
+        "T-IOS-001",
+        "T-PARSE-004"
+      ],
+      "description": "Shortcut credential 증거는 package 없이 승인 payment branch만 전달한다",
+      "producer": "shortcut-adapter",
+      "envelope": {
+        "contractVersion": "capture-envelope.v1",
+        "observationId": "observation.ios.approval.001",
+        "originChannel": "ios-shortcut",
+        "sourceEvidence": {
+          "kind": "ios-shortcut-credential",
+          "sourceType": "ios-shortcut",
+          "credentialIdHash": "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+        },
+        "observedAt": "2026-07-19T12:00:01+09:00",
+        "parser": {
+          "parserId": "shortcut-card-message-parser",
+          "parserVersion": "1.0.0"
+        },
+        "rawPayloadHash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "paymentObservation": {
+          "branchId": "branch.ios.approval.001",
+          "observationType": "approval",
+          "amountInWon": 23000,
+          "occurredLocalDate": "2026-07-19",
+          "occurredLocalTime": "12:00",
+          "zoneId": "Asia/Seoul",
+          "merchantEvidence": {
+            "rawCandidate": "가맹점 C"
+          },
+          "cardEvidence": {
+            "companyLabel": "국민",
+            "maskedToken": "9876"
+          }
+        }
+      },
+      "expectedConsumer": {
+        "consumer": "payment-intake",
+        "originChannel": "ios-shortcut",
+        "transactionBranch": "approval",
+        "balanceBranch": "absent"
+      }
+    }
+  ]
+}

@@ -1,0 +1,93 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://household-account.local/schemas/operations/scheduled-job-manifest.v1.schema.json",
+  "title": "Scheduled Job Manifest V1",
+  "description": "Cloud Scheduler가 호출하는 공개 Application 계약의 배포 독립적 manifest입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "timezone",
+    "jobs"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "timezone": {
+      "const": "Asia/Seoul"
+    },
+    "jobs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/scheduledJob"
+      }
+    }
+  },
+  "$defs": {
+    "scheduledJob": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jobName",
+        "cron",
+        "publicInputPort",
+        "capability",
+        "idempotency",
+        "dependsOn"
+      ],
+      "properties": {
+        "jobName": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+        },
+        "cron": {
+          "type": "string",
+          "minLength": 1
+        },
+        "publicInputPort": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9]+$"
+        },
+        "capability": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$"
+        },
+        "idempotency": {
+          "$ref": "#/$defs/idempotency"
+        },
+        "dependsOn": {
+          "description": "선행 예약 작업의 성공에 대한 실행 의존성입니다. 관측 대상은 의존성이 아닙니다.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+          }
+        }
+      }
+    },
+    "idempotency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "executionKeyTemplate",
+        "targetKeyTemplate"
+      ],
+      "properties": {
+        "executionKeyTemplate": {
+          "description": "Scheduler occurrence를 하나의 JobRun으로 수렴시키는 키입니다.",
+          "type": "string",
+          "minLength": 1
+        },
+        "targetKeyTemplate": {
+          "description": "같은 occurrence 안에서 완료된 업무 대상을 중복 반영하지 않는 키입니다.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,304 @@
+{
+  "schemaVersion": 1,
+  "policy": "payment-occurrence-year",
+  "cases": [
+    {
+      "caseId": "year-boundary-december-rolls-back",
+      "requirementIds": [
+        "T-PARSE-003"
+      ],
+      "description": "1월에 수신한 12월 결제는 전년을 선택한다",
+      "input": {
+        "month": 12,
+        "day": 31,
+        "hour": 23,
+        "minute": 59,
+        "receivedAt": "2026-01-01T00:05:00+09:00",
+        "zoneId": "Asia/Seoul"
+      },
+      "expected": {
+        "kind": "success",
+        "occurredLocalDateTime": "2025-12-31T23:59"
+      }
+    },
+    {
+      "caseId": "same-day-future-minute-rolls-back",
+      "requirementIds": [
+        "T-PARSE-003"
+      ],
+      "description": "같은 날짜라도 수신 시각보다 1분 미래이면 전년을 선택한다",
+      "input": {
+        "month": 7,
+        "day": 19,
+        "hour": 10,
+        "minute": 1,
+        "receivedAt": "2026-07-19T10:00:00+09:00",
+        "zoneId": "Asia/Seoul"
+      },
+      "expected": {
+        "kind": "success",
+        "occurredLocalDateTime": "2025-07-19T10:01"
+      }
+    },
+    {
+      "caseId": "exact-received-minute-keeps-current-year",
+      "requirementIds": [
+        "T-PARSE-003"
+      ],
+      "description": "수신 시각과 정확히 같으면 현재 연도를 유지한다",
+      "input": {
+        "month": 7,
+        "day": 19,
+        "hour": 10,
+        "minute": 0,
+        "receivedAt": "2026-07-19T10:00:00+09:00",
+        "zoneId": "Asia/Seoul"
+      },
+      "expected": {
+        "kind": "success",
+        "occurredLocalDateTime": "2026-07-19T10:00"
+      }
+    },
+    {
+      "caseId": "past-month-keeps-current-year",
+      "requirementIds": [
+        "T-PARSE-003"
+      ],
+      "description": "12월에 수신한 지난 1월 결제는 현재 연도를 유지한다",
+      "input": {
+        "month": 1,
+        "day": 1,
+        "hour": 0,
+        "minute": 0,
+        "receivedAt": "2026-12-31T23:59:00+09:00",
+        "zoneId": "Asia/Seoul"
+      },
+      "expected": {
+        "kind": "success",
+        "occurredLocalDateTime": "2026-01-01T00:00"
+      }
+    },
+    {
+      "caseId": "leap-day-finds-nearest-valid-year",
+      "requirementIds": [
+        "T-PARSE-003"
+      ],
+      "description": "현재 연도에 없는 2월 29일은 가장 가까운 과거 윤년을 선택한다",
+      "input": {
+        "month": 2,
+        "day": 29,
+        "hour": 9,
+        "minute": 30,
+        "receivedAt": "2025-03-01T00:00:00+09:00",
+        "zoneId": "Asia/Seoul"
+      },
+      "expected": {
+        "kind": "success",
+        "occurredLocalDateTime": "2024-02-29T09:30"
+      }
+    },
+    {
+      "caseId": "invalid-month-zero",
+      "requirementIds": [
+        "T-PARSE-003"
+      ],
+      "description": "0월은 날짜 오류로 거부한다",
+      "input": {
+        "month": 0,
+        "day": 10,
+        "hour": 10,
+        "minute": 0,
+        "receivedAt": "2026-07-19T10:00:00+09:00",
+        "zoneId": "Asia/Seoul"
+      },
+      "expected": {
+        "kind": "parseFailure",
+        "code": "INVALID_DATE"
+      }
+    },
+    {
+      "caseId": "invalid-month-thirteen",
+      "requirementIds": [
+        "T-PARSE-003"
+      ],
+      "description": "13월은 날짜 오류로 거부한다",
+      "input": {
+        "month": 13,
+        "day": 10,
+        "hour": 10,
+        "minute": 0,
+        "receivedAt": "2026-07-19T10:00:00+09:00",
+        "zoneId": "Asia/Seoul"
+      },
+      "expected": {
+        "kind": "parseFailure",
+        "code": "INVALID_DATE"
+      }
+    },
+    {
+      "caseId": "invalid-april-thirty-first",
+      "requirementIds": [
+        "T-PARSE-003"
+      ],
+      "description": "4월 31일은 날짜 오류로 거부한다",
+      "input": {
+        "month": 4,
+        "day": 31,
+        "hour": 10,
+        "minute": 0,
+        "receivedAt": "2026-07-19T10:00:00+09:00",
+        "zoneId": "Asia/Seoul"
+      },
+      "expected": {
+        "kind": "parseFailure",
+        "code": "INVALID_DATE"
+      }
+    },
+    {
+      "caseId": "invalid-february-thirtieth",
+      "requirementIds": [
+        "T-PARSE-003"
+      ],
+      "description": "2월 30일은 날짜 오류로 거부한다",
+      "input": {
+        "month": 2,
+        "day": 30,
+        "hour": 10,
+        "minute": 0,
+        "receivedAt": "2026-07-19T10:00:00+09:00",
+        "zoneId": "Asia/Seoul"
+      },
+      "expected": {
+        "kind": "parseFailure",
+        "code": "INVALID_DATE"
+      }
+    },
+    {
+      "caseId": "invalid-hour-negative",
+      "requirementIds": [
+        "T-PARSE-003"
+      ],
+      "description": "음수 시는 시간 오류로 거부한다",
+      "input": {
+        "month": 7,
+        "day": 19,
+        "hour": -1,
+        "minute": 0,
+        "receivedAt": "2026-07-19T10:00:00+09:00",
+        "zoneId": "Asia/Seoul"
+      },
+      "expected": {
+        "kind": "parseFailure",
+        "code": "INVALID_TIME"
+      }
+    },
+    {
+      "caseId": "invalid-hour-twenty-four",
+      "requirementIds": [
+        "T-PARSE-003"
+      ],
+      "description": "24시는 시간 오류로 거부한다",
+      "input": {
+        "month": 7,
+        "day": 19,
+        "hour": 24,
+        "minute": 0,
+        "receivedAt": "2026-07-19T10:00:00+09:00",
+        "zoneId": "Asia/Seoul"
+      },
+      "expected": {
+        "kind": "parseFailure",
+        "code": "INVALID_TIME"
+      }
+    },
+    {
+      "caseId": "invalid-minute-negative",
+      "requirementIds": [
+        "T-PARSE-003"
+      ],
+      "description": "음수 분은 시간 오류로 거부한다",
+      "input": {
+        "month": 7,
+        "day": 19,
+        "hour": 10,
+        "minute": -1,
+        "receivedAt": "2026-07-19T10:00:00+09:00",
+        "zoneId": "Asia/Seoul"
+      },
+      "expected": {
+        "kind": "parseFailure",
+        "code": "INVALID_TIME"
+      }
+    },
+    {
+      "caseId": "invalid-minute-sixty",
+      "requirementIds": [
+        "T-PARSE-003"
+      ],
+      "description": "60분은 시간 오류로 거부한다",
+      "input": {
+        "month": 7,
+        "day": 19,
+        "hour": 10,
+        "minute": 60,
+        "receivedAt": "2026-07-19T10:00:00+09:00",
+        "zoneId": "Asia/Seoul"
+      },
+      "expected": {
+        "kind": "parseFailure",
+        "code": "INVALID_TIME"
+      }
+    },
+    {
+      "caseId": "utc-received-at",
+      "requirementIds": [
+        "T-PARSE-TIME-001"
+      ],
+      "description": "UTC 수신 Instant는 Asia/Seoul 시각으로 변환한 뒤 판단한다",
+      "input": {
+        "month": 1,
+        "day": 1,
+        "hour": 23,
+        "minute": 59,
+        "receivedAt": "2026-01-01T15:05:00Z",
+        "zoneId": "Asia/Seoul"
+      },
+      "expected": {
+        "kind": "success",
+        "occurredLocalDateTime": "2026-01-01T23:59"
+      }
+    },
+    {
+      "caseId": "seoul-offset-equivalent-received-at",
+      "requirementIds": [
+        "T-PARSE-TIME-001"
+      ],
+      "description": "같은 수신 Instant의 Asia/Seoul offset 표기도 동일한 결과를 낸다",
+      "input": {
+        "month": 1,
+        "day": 1,
+        "hour": 23,
+        "minute": 59,
+        "receivedAt": "2026-01-02T00:05:00+09:00",
+        "zoneId": "Asia/Seoul"
+      },
+      "expected": {
+        "kind": "success",
+        "occurredLocalDateTime": "2026-01-01T23:59"
+      }
+    }
+  ],
+  "equivalenceGroups": [
+    {
+      "groupId": "same-instant-different-offset",
+      "requirementIds": [
+        "T-PARSE-TIME-001"
+      ],
+      "description": "같은 Instant는 UTC 또는 Asia/Seoul offset 표기와 무관하게 같은 결과를 반환한다",
+      "caseIds": [
+        "utc-received-at",
+        "seoul-offset-equivalent-received-at"
+      ]
+    }
+  ]
+}

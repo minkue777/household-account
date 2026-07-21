@@ -23,8 +23,8 @@ export default function NotificationSettings() {
   const handleEnableNotifications = async () => {
     setIsLoading(true);
     try {
-      const token = await requestNotificationPermission();
-      if (token) {
+      const registered = await requestNotificationPermission();
+      if (registered) {
         setPermission('granted');
       }
     } catch (err) {

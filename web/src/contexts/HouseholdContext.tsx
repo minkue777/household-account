@@ -1,19 +1,38 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import {
-  Household,
-  getHousehold,
-  validateHouseholdKey,
-  getStoredHouseholdKey,
-  setStoredHouseholdKey,
-  clearStoredHouseholdKey,
-  addHouseholdMember,
-  renameHouseholdMember as renameHouseholdMemberInService,
-} from '@/lib/householdService';
-import { HouseholdMember, WindowWithBridge } from '@/types/household';
-import { MemberStorage } from '@/lib/storage/memberStorage';
-import { refreshFcmToken } from '@/lib/pushNotificationService';
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import type { User } from 'firebase/auth';
+import { getHousehold, renameHouseholdMember } from '@/lib/householdService';
+import { logOut, onAuthChange, signInWithGoogle } from '@/lib/authService';
+import type { Household, HouseholdMember } from '@/types/household';
+import { householdCommands } from '@/features/access-household/application/householdCommands';
+import {
+  captureLegacySessionCandidate,
+  clearLegacySessionCandidate,
+  type LegacySessionCandidate,
+} from '@/features/access-household/application/legacySessionCandidate';
+import {
+  clearClientSessionScope,
+  setClientSessionScope,
+} from '@/composition/clientSessionScope';
+import { removePwaFidEndpointForLogout } from '@/platform/pwa/fidEndpointLifecycle';
+import { clearPwaRuntimeCaches } from '@/platform/pwa/sessionCache';
+
+export type HouseholdSessionState =
+  | 'resolving'
+  | 'signed-out'
+  | 'legacy-confirmation'
+  | 'first-visit'
+  | 'ready'
+  | 'error';
 
 interface HouseholdContextType {
   household: Household | null;
@@ -21,206 +40,260 @@ interface HouseholdContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   currentMember: HouseholdMember | null;
-  login: (key: string) => Promise<boolean>;
-  logout: () => void;
-  selectMember: (member: HouseholdMember) => void;
-  switchMember: () => void;
-  addMember: (name: string) => Promise<HouseholdMember>;
+  sessionState: HouseholdSessionState;
+  sessionError: string | null;
+  legacyCandidate: LegacySessionCandidate | null;
+  signIn: () => Promise<void>;
+  retrySession: () => Promise<void>;
+  confirmLegacyMembership: () => Promise<void>;
+  createHouseholdForSelf: (householdName: string, memberName: string) => Promise<void>;
+  joinHouseholdAsSelf: (invitationCode: string, memberName: string) => Promise<void>;
+  logout: () => Promise<void>;
   renameMember: (memberId: string, name: string) => Promise<void>;
 }
 
 const HouseholdContext = createContext<HouseholdContextType | undefined>(undefined);
 
-/**
- * Android 브리지로 멤버 정보 동기화
- */
-function syncMemberToAndroidBridge(member: HouseholdMember, partner: HouseholdMember | undefined) {
-  const bridge = (window as unknown as WindowWithBridge).AndroidBridge;
-  if (!bridge) return;
-  bridge.setMemberName?.(member.name);
-  if (partner) {
-    bridge.setPartnerName?.(partner.name);
-  }
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : '가계부 세션을 복원하지 못했습니다.';
 }
 
 export function HouseholdProvider({ children }: { children: ReactNode }) {
   const [household, setHousehold] = useState<Household | null>(null);
   const [householdKey, setHouseholdKey] = useState<string | null>(null);
   const [currentMember, setCurrentMember] = useState<HouseholdMember | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [sessionState, setSessionState] = useState<HouseholdSessionState>('resolving');
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [legacyCandidate, setLegacyCandidate] = useState<LegacySessionCandidate | null>(null);
+  const activeUserRef = useRef<User | null>(null);
+  const resolutionGenerationRef = useRef(0);
+  const sessionGenerationRef = useRef(0);
 
-  // 초기 로드: 저장된 키 + 멤버 확인
-  useEffect(() => {
-    const loadHousehold = async () => {
-      const storedKey = getStoredHouseholdKey();
-
-      if (storedKey) {
-        const isValid = await validateHouseholdKey(storedKey);
-        if (isValid) {
-          const data = await getHousehold(storedKey);
-          setHousehold(data);
-          setHouseholdKey(storedKey);
-
-          // 저장된 멤버 ID로 currentMember 복원
-          const storedMemberId = MemberStorage.getMemberId();
-          if (storedMemberId && data?.members) {
-            const member = data.members.find(m => m.id === storedMemberId);
-            if (member) {
-              setCurrentMember(member);
-            } else {
-              // 저장된 ID가 멤버 목록에 없으면 초기화
-              MemberStorage.remove();
-            }
-          }
-        } else {
-          clearStoredHouseholdKey();
-        }
-      }
-
-      setIsLoading(false);
-    };
-
-    loadHousehold();
-  }, []);
-
-  const login = async (key: string): Promise<boolean> => {
-    const trimmedKey = key.trim();
-    const isValid = await validateHouseholdKey(trimmedKey);
-
-    if (isValid) {
-      const data = await getHousehold(trimmedKey);
-      setHousehold(data);
-      setHouseholdKey(trimmedKey);
-      setStoredHouseholdKey(trimmedKey);
-      return true;
-    }
-
-    return false;
-  };
-
-  const logout = () => {
+  const clearResolvedSession = useCallback(() => {
+    clearClientSessionScope();
     setHousehold(null);
     setHouseholdKey(null);
     setCurrentMember(null);
-    clearStoredHouseholdKey();
-    MemberStorage.remove();
-  };
-
-  const switchMember = useCallback(() => {
-    setCurrentMember(null);
-    MemberStorage.remove();
   }, []);
 
-  const selectMember = useCallback((member: HouseholdMember) => {
-    setCurrentMember(member);
-    MemberStorage.set(member.id, member.name);
+  const restoreSignedInUser = useCallback(async (
+    user: User,
+    candidate?: LegacySessionCandidate
+  ) => {
+    const resolutionGeneration = ++resolutionGenerationRef.current;
+    setSessionState('resolving');
+    setSessionError(null);
+    clearResolvedSession();
 
-    // 파트너 이름 계산 및 저장
-    const partner = household?.members.find(m => m.id !== member.id);
-    if (partner) {
-      MemberStorage.setPartnerName(partner.name);
+    try {
+      const resolution = await householdCommands.resolveSignedInUser();
+      if (resolutionGeneration !== resolutionGenerationRef.current) return;
+
+      if (resolution.kind === 'first-visit-required') {
+        if (candidate) {
+          setLegacyCandidate(candidate);
+          setSessionState('legacy-confirmation');
+        } else {
+          setLegacyCandidate(null);
+          setSessionState('first-visit');
+        }
+        return;
+      }
+
+      const membership = resolution.membership;
+      if (
+        !membership.householdId ||
+        !membership.memberId ||
+        !membership.displayName ||
+        !Number.isInteger(membership.aggregateVersion) ||
+        membership.aggregateVersion < 1
+      ) {
+        throw new Error('서버가 완전한 본인 Membership을 반환하지 않았습니다.');
+      }
+
+      const loadedHousehold = await getHousehold(membership.householdId);
+      if (!loadedHousehold) throw new Error('연결된 가계부 Read Model을 찾을 수 없습니다.');
+      if (resolutionGeneration !== resolutionGenerationRef.current) return;
+
+      const self: HouseholdMember = {
+        id: membership.memberId,
+        name: membership.displayName,
+        aggregateVersion: membership.aggregateVersion,
+      };
+      const members = loadedHousehold.members.some((member) => member.id === self.id)
+        ? loadedHousehold.members.map((member) => member.id === self.id ? self : member)
+        : [...loadedHousehold.members, self];
+      const nextHousehold = { ...loadedHousehold, members };
+      const sessionGeneration = ++sessionGenerationRef.current;
+
+      setClientSessionScope({
+        sessionGeneration,
+        principalUid: user.uid,
+        householdId: membership.householdId,
+        memberId: membership.memberId,
+      });
+      setHousehold(nextHousehold);
+      setHouseholdKey(membership.householdId);
+      setCurrentMember(self);
+      setLegacyCandidate(null);
+      clearLegacySessionCandidate();
+      setSessionState('ready');
+    } catch (error) {
+      if (resolutionGeneration !== resolutionGenerationRef.current) return;
+      clearResolvedSession();
+      setSessionError(errorMessage(error));
+      setSessionState('error');
     }
+  }, [clearResolvedSession]);
 
-    // Android 브리지 동기화
-    if (typeof window !== 'undefined') {
-      syncMemberToAndroidBridge(member, partner);
-    }
-
-    // FCM 토큰에 deviceOwner 반영
-    refreshFcmToken().catch(() => {});
-  }, [household]);
-
-  const addMember = useCallback(async (name: string): Promise<HouseholdMember> => {
-    if (!householdKey) {
-      throw new Error('가구 키가 없습니다');
-    }
-    const newMember = await addHouseholdMember(householdKey, name);
-
-    // household 상태 업데이트
-    setHousehold(prev => prev ? {
-      ...prev,
-      members: [...prev.members, newMember],
-    } : prev);
-
-    return newMember;
-  }, [householdKey]);
-
-  const renameMember = useCallback(async (memberId: string, name: string): Promise<void> => {
-    const trimmedName = name.trim();
-    if (!householdKey || !household) {
-      throw new Error('멤버 정보를 찾을 수 없습니다');
-    }
-
-    if (!trimmedName) {
-      throw new Error('이름을 입력해주세요');
-    }
-
-    const targetMember = household.members.find((member) => member.id === memberId);
-    if (!targetMember) {
-      throw new Error('멤버 정보를 찾을 수 없습니다');
-    }
-
-    if (trimmedName === targetMember.name) {
+  useEffect(() => onAuthChange((user) => {
+    activeUserRef.current = user;
+    if (!user) {
+      resolutionGenerationRef.current += 1;
+      clearResolvedSession();
+      setLegacyCandidate(null);
+      setSessionError(null);
+      setSessionState('signed-out');
       return;
     }
+    void restoreSignedInUser(user, captureLegacySessionCandidate());
+  }), [clearResolvedSession, restoreSignedInUser]);
 
-    await renameHouseholdMemberInService(householdKey, memberId, trimmedName);
+  const signIn = useCallback(async () => {
+    const candidate = captureLegacySessionCandidate();
+    setLegacyCandidate(candidate ?? null);
+    setSessionError(null);
+    try {
+      const user = activeUserRef.current ?? await signInWithGoogle();
+      if (!user) {
+        setSessionError('Google 로그인을 완료하지 못했습니다.');
+        setSessionState('signed-out');
+        return;
+      }
+      activeUserRef.current = user;
+      await restoreSignedInUser(user, candidate);
+    } catch (error) {
+      setSessionError(errorMessage(error));
+      setSessionState('signed-out');
+    }
+  }, [restoreSignedInUser]);
 
-    const updatedMembers = household.members.map((member) =>
-      member.id === memberId ? { ...member, name: trimmedName } : member
+  const retrySession = useCallback(async () => {
+    const user = activeUserRef.current;
+    if (!user) {
+      await signIn();
+      return;
+    }
+    await restoreSignedInUser(user, legacyCandidate ?? captureLegacySessionCandidate());
+  }, [legacyCandidate, restoreSignedInUser, signIn]);
+
+  const confirmLegacyMembership = useCallback(async () => {
+    const user = activeUserRef.current;
+    if (!user || !legacyCandidate) throw new Error('연결할 기존 세션 후보가 없습니다.');
+    setSessionState('resolving');
+    setSessionError(null);
+    try {
+      await householdCommands.claimLegacyMembership(legacyCandidate);
+      await restoreSignedInUser(user);
+    } catch (error) {
+      setSessionError(errorMessage(error));
+      setSessionState('legacy-confirmation');
+      throw error;
+    }
+  }, [legacyCandidate, restoreSignedInUser]);
+
+  const createHouseholdForSelf = useCallback(async (
+    householdName: string,
+    memberName: string
+  ) => {
+    const user = activeUserRef.current;
+    if (!user) throw new Error('Google 로그인이 필요합니다.');
+    setSessionState('resolving');
+    setSessionError(null);
+    try {
+      await householdCommands.createWithSelf(householdName.trim(), memberName.trim());
+      await restoreSignedInUser(user);
+    } catch (error) {
+      setSessionError(errorMessage(error));
+      setSessionState('first-visit');
+      throw error;
+    }
+  }, [restoreSignedInUser]);
+
+  const joinHouseholdAsSelf = useCallback(async (
+    invitationCode: string,
+    memberName: string
+  ) => {
+    const user = activeUserRef.current;
+    if (!user) throw new Error('Google 로그인이 필요합니다.');
+    setSessionState('resolving');
+    setSessionError(null);
+    try {
+      await householdCommands.joinAsSelf(invitationCode.trim(), memberName.trim());
+      await restoreSignedInUser(user);
+    } catch (error) {
+      setSessionError(errorMessage(error));
+      setSessionState('first-visit');
+      throw error;
+    }
+  }, [restoreSignedInUser]);
+
+  const logout = useCallback(async () => {
+    await removePwaFidEndpointForLogout();
+    await logOut();
+    resolutionGenerationRef.current += 1;
+    activeUserRef.current = null;
+    clearResolvedSession();
+    clearLegacySessionCandidate();
+    setLegacyCandidate(null);
+    setSessionState('signed-out');
+    await clearPwaRuntimeCaches().catch(() => {});
+  }, [clearResolvedSession]);
+
+  const renameMember = useCallback(async (memberId: string, name: string) => {
+    const trimmedName = name.trim();
+    if (!household || !currentMember || memberId !== currentMember.id) {
+      throw new Error('본인의 이름만 변경할 수 있습니다.');
+    }
+    if (!trimmedName) throw new Error('이름을 입력해 주세요.');
+    if (trimmedName === currentMember.name) return;
+
+    await renameHouseholdMember(
+      household.id,
+      currentMember.id,
+      trimmedName,
+      currentMember.aggregateVersion
     );
-
+    const updated = {
+      ...currentMember,
+      name: trimmedName,
+      aggregateVersion: currentMember.aggregateVersion + 1,
+    };
+    setCurrentMember(updated);
     setHousehold({
       ...household,
-      members: updatedMembers,
+      members: household.members.map((member) => member.id === updated.id ? updated : member),
     });
-
-    if (currentMember?.id === memberId) {
-      const updatedMember = { ...currentMember, name: trimmedName };
-      const partner = updatedMembers.find((member) => member.id !== currentMember.id);
-
-      setCurrentMember(updatedMember);
-      MemberStorage.set(updatedMember.id, updatedMember.name);
-      if (partner) {
-        MemberStorage.setPartnerName(partner.name);
-      }
-
-      if (typeof window !== 'undefined') {
-        syncMemberToAndroidBridge(updatedMember, partner);
-      }
-
-      refreshFcmToken().catch(() => {});
-      return;
-    }
-
-    if (currentMember) {
-      const partner = updatedMembers.find((member) => member.id !== currentMember.id);
-      if (partner) {
-        MemberStorage.setPartnerName(partner.name);
-      }
-
-      if (typeof window !== 'undefined') {
-        syncMemberToAndroidBridge(currentMember, partner);
-      }
-    }
-  }, [currentMember, household, householdKey]);
+  }, [currentMember, household]);
 
   return (
-    <HouseholdContext.Provider
-      value={{
-        household,
-        householdKey,
-        isLoading,
-        isAuthenticated: !!householdKey,
-        currentMember,
-        login,
-        logout,
-        selectMember,
-        switchMember,
-        addMember,
-        renameMember,
-      }}
-    >
+    <HouseholdContext.Provider value={{
+      household,
+      householdKey,
+      isLoading: sessionState === 'resolving',
+      isAuthenticated: sessionState === 'ready',
+      currentMember,
+      sessionState,
+      sessionError,
+      legacyCandidate,
+      signIn,
+      retrySession,
+      confirmLegacyMembership,
+      createHouseholdForSelf,
+      joinHouseholdAsSelf,
+      logout,
+      renameMember,
+    }}>
       {children}
     </HouseholdContext.Provider>
   );
@@ -228,8 +301,6 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
 
 export function useHousehold() {
   const context = useContext(HouseholdContext);
-  if (context === undefined) {
-    throw new Error('useHousehold must be used within a HouseholdProvider');
-  }
+  if (!context) throw new Error('useHousehold must be used within a HouseholdProvider');
   return context;
 }

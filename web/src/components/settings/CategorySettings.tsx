@@ -5,10 +5,12 @@ import { useCategoryContext } from '@/contexts/CategoryContext';
 import { CategoryDocument } from '@/lib/categoryService';
 import { ColorPicker, ConfirmDialog } from '@/components/common';
 import { COLOR_PALETTE } from '@/lib/categoryService';
-import { getStoredHouseholdKey, getHousehold, setDefaultCategoryKey } from '@/lib/householdService';
+import { setDefaultCategoryKey } from '@/lib/householdService';
+import { useHousehold } from '@/contexts/HouseholdContext';
 import { ChevronDown, Edit2, Plus, Star, Tags, Trash2 } from 'lucide-react';
 
 export default function CategorySettings() {
+  const { household } = useHousehold();
   const {
     categories,
     addCategory,
@@ -41,15 +43,9 @@ export default function CategorySettings() {
   const [editColor, setEditColor] = useState('');
   const [editBudget, setEditBudget] = useState('');
 
-  // household 설정 로드
   useEffect(() => {
-    const householdId = getStoredHouseholdKey() || 'guest';
-    getHousehold(householdId).then((household) => {
-      if (household?.defaultCategoryKey) {
-        setDefaultCategory(household.defaultCategoryKey);
-      }
-    });
-  }, []);
+    setDefaultCategory(household?.defaultCategoryKey ?? '');
+  }, [household?.defaultCategoryKey]);
 
   const handleAddCategory = async () => {
     if (!newLabel.trim()) return;
@@ -100,7 +96,8 @@ export default function CategorySettings() {
 
   // 기본 카테고리 변경
   const handleDefaultCategoryChange = async (categoryKey: string) => {
-    const householdId = getStoredHouseholdKey() || 'guest';
+    if (!household?.id) throw new Error('인증된 가구 세션이 필요합니다.');
+    const householdId = household.id;
     await setDefaultCategoryKey(householdId, categoryKey);
     setDefaultCategory(categoryKey);
   };

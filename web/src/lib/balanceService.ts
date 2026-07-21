@@ -1,6 +1,12 @@
-import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
-import { db } from './firebase';
-import { getStoredHouseholdKey } from './householdService';
+import {
+  collection,
+  db,
+  onSnapshot,
+  query,
+  timestampToDate,
+  where,
+} from '@/platform/read-model/firestoreReadModel';
+import { requireClientSessionScope } from '@/composition/clientSessionScope';
 
 export interface LocalCurrencyBalance {
   balance: number;
@@ -14,11 +20,7 @@ export interface LocalCurrencyBalance {
 export function subscribeToLocalCurrencyBalance(
   callback: (balance: LocalCurrencyBalance | null) => void
 ): () => void {
-  const householdKey = getStoredHouseholdKey();
-  if (!householdKey) {
-    callback(null);
-    return () => {};
-  }
+  const householdKey = requireClientSessionScope().householdId;
 
   const balancesRef = collection(db, 'balances');
   const q = query(
@@ -39,9 +41,7 @@ export function subscribeToLocalCurrencyBalance(
       callback({
         balance: data.balance || 0,
         currencyType: data.currencyType || '지역화폐',
-        updatedAt: data.updatedAt instanceof Timestamp
-          ? data.updatedAt.toDate()
-          : null,
+        updatedAt: timestampToDate(data.updatedAt) ?? null,
       });
     },
     (error) => {

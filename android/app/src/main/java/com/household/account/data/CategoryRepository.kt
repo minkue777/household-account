@@ -49,7 +49,7 @@ class CategoryRepository {
      */
     suspend fun getActiveCategories(householdId: String): List<CategoryData> {
         if (householdId.isEmpty()) {
-            Log.w(TAG, "householdId is empty, using defaults")
+            Log.w(TAG, "CATEGORY_SCOPE_MISSING")
             return DEFAULT_CATEGORIES
         }
 
@@ -74,19 +74,19 @@ class CategoryRepository {
                         householdId = doc.getString("householdId") ?: ""
                     )
                 } catch (e: Exception) {
-                    Log.e(TAG, "Document parse error", e)
+                    Log.e(TAG, "CATEGORY_DOCUMENT_INVALID")
                     null
                 }
             }.filter { it.isActive }
 
             if (categories.isEmpty()) {
-                Log.w(TAG, "No categories found for householdId: $householdId, using defaults")
+                Log.w(TAG, "CATEGORY_RESULT_EMPTY")
                 DEFAULT_CATEGORIES
             } else {
                 categories
             }
         } catch (e: Exception) {
-            Log.e(TAG, "getActiveCategories failed", e)
+            Log.e(TAG, "CATEGORY_READ_FAILED")
             DEFAULT_CATEGORIES
         }
     }
@@ -106,7 +106,7 @@ class CategoryRepository {
             .orderBy("order", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e(TAG, "Firestore listen failed", error)
+                    Log.e(TAG, "CATEGORY_SUBSCRIPTION_FAILED")
                     trySend(DEFAULT_CATEGORIES)
                     return@addSnapshotListener
                 }
@@ -167,7 +167,7 @@ class CategoryRepository {
 
             householdDoc.getString("defaultCategoryKey") ?: "etc"
         } catch (e: Exception) {
-            Log.e(TAG, "getDefaultCategoryKey failed", e)
+            Log.e(TAG, "DEFAULT_CATEGORY_READ_FAILED")
             "etc"
         }
     }

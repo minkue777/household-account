@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "timezone": "Asia/Seoul",
+  "jobs": [
+    {
+      "jobName": "recurring-daily",
+      "cron": "0 0 * * *",
+      "publicInputPort": "ProcessDueRecurringPlans",
+      "capability": "recurring.process",
+      "idempotency": {
+        "executionKeyTemplate": "recurring-daily:{asOfDate}",
+        "targetKeyTemplate": "planId:YYYY-MM"
+      },
+      "dependsOn": []
+    },
+    {
+      "jobName": "asset-automation-daily",
+      "cron": "0 0 * * *",
+      "publicInputPort": "ProcessDueAssetAutomation",
+      "capability": "portfolio.job.asset-automation",
+      "idempotency": {
+        "executionKeyTemplate": "asset-automation-daily:{asOfDate}",
+        "targetKeyTemplate": "householdId:assetId:operation:YYYY-MM"
+      },
+      "dependsOn": []
+    },
+    {
+      "jobName": "instrument-catalog-daily",
+      "cron": "0 6 * * *",
+      "publicInputPort": "PublishInstrumentCatalog",
+      "capability": "portfolio.job.instrument-catalog",
+      "idempotency": {
+        "executionKeyTemplate": "instrument-catalog:{asOfDate}:{schemaVersion}",
+        "targetKeyTemplate": "snapshotGeneration:checksum"
+      },
+      "dependsOn": []
+    },
+    {
+      "jobName": "dividend-hourly",
+      "cron": "0 9-20 * * *",
+      "publicInputPort": "RefreshDividendEvents",
+      "capability": "portfolio.job.dividend-refresh",
+      "idempotency": {
+        "executionKeyTemplate": "dividend-hourly:{scheduledHour}",
+        "targetKeyTemplate": "phase:cursor:eventId"
+      },
+      "dependsOn": []
+    },
+    {
+      "jobName": "asset-valuation-daily",
+      "cron": "55 23 * * *",
+      "publicInputPort": "RunDailyAssetValuation",
+      "capability": "portfolio.job.daily-valuation",
+      "idempotency": {
+        "executionKeyTemplate": "asset-valuation-daily:{asOfDate}",
+        "targetKeyTemplate": "runId:assetId:quoteBatchId"
+      },
+      "dependsOn": []
+    },
+    {
+      "jobName": "scheduled-job-monitor",
+      "cron": "*/5 * * * *",
+      "publicInputPort": "DetectMissingOrOverdueRuns",
+      "capability": "operations.job.monitor",
+      "idempotency": {
+        "executionKeyTemplate": "scheduled-job-monitor:{scheduledMinute}",
+        "targetKeyTemplate": "jobName:scheduledFor"
+      },
+      "dependsOn": []
+    }
+  ]
+}

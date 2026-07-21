@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Asset,
   StockHolding,
@@ -9,10 +9,11 @@ import {
 import {
   addStockHolding,
   deleteStockHolding,
+  refreshAssetMarketValues,
   subscribeToStockHoldings,
-  updateStockHolding,
 } from '@/lib/assetService';
 import { calculateHoldingValue } from '@/lib/assets/holdingValuation';
+import { portfolioQueries } from '@/features/portfolio/application/portfolioQueries';
 
 function sanitizeNumericInput(rawValue: string) {
   return rawValue.replace(/[^0-9]/g, '');
@@ -58,7 +59,6 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
   const isStockAsset =
     asset?.type === 'stock' || (asset?.type === 'gold' && isGoldEtfSubType(asset?.subType));
   const assetId = asset?.id;
-  const holdingsRef = useRef(holdings);
 
   const resetStockForm = useCallback(() => {
     setSearchQuery('');
@@ -90,7 +90,6 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
 
     const unsubscribe = subscribeToStockHoldings(assetId, (newHoldings) => {
       setHoldings(newHoldings);
-      holdingsRef.current = newHoldings;
       setIsLoadingHoldings(false);
     });
 
@@ -107,10 +106,9 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const response = await fetch(`/api/stock/search?q=${encodeURIComponent(searchQuery)}`);
-        const data = await response.json();
+        const results = await portfolioQueries.searchStocks(searchQuery);
         if (!cancelled) {
-          setSearchResults(data.results || []);
+          setSearchResults(results);
         }
       } catch (error) {
         if (!cancelled) {
@@ -166,14 +164,7 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     setIsLoadingPrice(true);
 
     try {
-      const response = await fetch(`/api/stock/price?code=${stock.code}`);
-      if (!response.ok) {
-        setCurrentPrice(null);
-        setCurrentPriceInfo(null);
-        return;
-      }
-
-      const data = (await response.json()) as StockPriceInfo;
+      const data = await portfolioQueries.getStockQuote(stock);
       setCurrentPrice(data.price);
       setCurrentPriceInfo(data);
     } catch (error) {
@@ -196,6 +187,7 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
         assetId,
         stockCode: selectedStock.code,
         stockName: selectedStock.name,
+        market: selectedStock.market,
         quantity: Number(quantity),
         avgPrice: avgPrice ? Number(avgPrice) : undefined,
         currentPrice: currentPriceInfo?.price || currentPrice || undefined,
@@ -240,6 +232,7 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
         holdingType: inferredManualType,
         stockCode: '',
         stockName: trimmedName,
+        market: 'UNRESOLVED',
         quantity: 1,
         currentPrice: parseInt(manualCurrentValue, 10),
       });
@@ -275,33 +268,15 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
   }, [assetId, isStockAsset]);
 
   const refreshHoldingPrices = useCallback(async () => {
-    const currentHoldings = holdingsRef.current.filter(
-      (holding) => (holding.holdingType || 'stock') === 'stock' && !!holding.stockCode
-    );
-    if (!assetId || !isStockAsset || currentHoldings.length === 0) {
+    if (!assetId || !isStockAsset) {
       return;
     }
 
     setIsRefreshingPrices(true);
     try {
-      await Promise.all(
-        currentHoldings.map(async (holding) => {
-          try {
-            const response = await fetch(`/api/stock/price?code=${holding.stockCode}`);
-            if (!response.ok) return;
-
-            const data = await response.json();
-            await updateStockHolding(holding.id, assetId, {
-              currentPrice: data.price,
-              instrumentType: data.instrumentType || holding.instrumentType || 'stock',
-              priceScale: data.priceScale || holding.priceScale || 1,
-              ...(data.quoteAsOf ? { quoteAsOf: data.quoteAsOf } : {}),
-            });
-          } catch (error) {
-            console.error(`Failed to refresh stock price (${holding.stockCode}):`, error);
-          }
-        })
-      );
+      await refreshAssetMarketValues(assetId, 'stock');
+    } catch (error) {
+      console.error('Failed to refresh asset stock prices:', error);
     } finally {
       setIsRefreshingPrices(false);
     }

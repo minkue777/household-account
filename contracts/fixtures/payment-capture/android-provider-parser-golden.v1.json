@@ -1,0 +1,209 @@
+{
+  "fixtureVersion": 1,
+  "zoneId": "Asia/Seoul",
+  "cases": [
+    {
+      "caseId": "kb-approval",
+      "requirementIds": ["T-PARSE-001", "PARSE-KB-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "com.kbcard.cxh.appcard", "parserId": "kb-card-parser" },
+      "raw": { "postedAt": "2026-07-19T10:16:00+09:00", "title": "KB국민카드", "text": "승인 12,300원\n07/19 10:15\n국민(1234)\n가맹점가" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 12300, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "10:15", "merchant": "가맹점가", "cardCompany": "국민", "maskedCardToken": "1234" } }
+    },
+    {
+      "caseId": "kb-cancellation",
+      "requirementIds": ["T-PARSE-002", "PARSE-KB-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "com.kbcard.cxh.appcard", "parserId": "kb-card-parser" },
+      "raw": { "postedAt": "2026-07-20T09:01:00+09:00", "title": "KB국민카드", "bigText": "승인취소 12,300원\n07/19 10:15\n국민(1234)\n가맹점가" },
+      "expected": { "kind": "Parsed", "payment": { "type": "cancellation", "amountInWon": 12300, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "10:15", "merchant": "가맹점가", "cardCompany": "국민", "maskedCardToken": "1234" } }
+    },
+    {
+      "caseId": "kb-summary-posted-time",
+      "requirementIds": ["T-PARSE-001", "PARSE-KB-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "com.kbcard.kbkookmincard", "parserId": "kb-card-parser" },
+      "raw": { "postedAt": "2026-07-19T22:31:45+09:00", "title": "KB국민카드", "text": "07/19 이용금액 8,800원\n국민(9876)\n가맹점나" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 8800, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "22:31", "merchant": "가맹점나", "cardCompany": "국민", "maskedCardToken": "9876", "timeSource": "postedAt" } }
+    },
+    {
+      "caseId": "kb-summary-without-posted-time",
+      "requirementIds": ["T-PARSE-001", "PARSE-KB-001"],
+      "source": { "packageName": "com.kbcard.kbkookmincard", "parserId": "kb-card-parser" },
+      "raw": { "title": "KB국민카드", "text": "07/19 이용금액 8,800원\n국민(9876)\n가맹점나" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 8800, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "00:00", "merchant": "가맹점나", "cardCompany": "국민", "maskedCardToken": "9876" } }
+    },
+    {
+      "caseId": "nh-approval",
+      "requirementIds": ["T-PARSE-001", "PARSE-NH-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "nh.smart.nhallonepay", "parserId": "nh-pay-parser" },
+      "raw": { "postedAt": "2026-07-19T11:02:00+09:00", "textLines": ["NH카드 승인", "15,000원", "7/19 11:01", "농협5678", "가맹점다"] },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 15000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "11:01", "merchant": "가맹점다", "cardCompany": "농협", "maskedCardToken": "5678" } }
+    },
+    {
+      "caseId": "nh-cancellation",
+      "requirementIds": ["T-PARSE-002", "PARSE-NH-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "nh.smart.nhallonepay", "parserId": "nh-pay-parser" },
+      "raw": { "postedAt": "2026-07-20T12:02:00+09:00", "bigText": "NH카드 승인취소\n15,000원\n7/19 11:01\n농협5678\n가맹점다" },
+      "expected": { "kind": "Parsed", "payment": { "type": "cancellation", "amountInWon": 15000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "11:01", "merchant": "가맹점다", "cardCompany": "농협", "maskedCardToken": "5678" } }
+    },
+    {
+      "caseId": "naver-approval-posted-time",
+      "requirementIds": ["T-PARSE-001", "PARSE-NAVER-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "com.naverfin.payapp", "parserId": "naver-pay-parser" },
+      "raw": { "postedAt": "2026-07-19T12:03:27+09:00", "title": "네이버페이", "text": "가맹점라에서 6,700원을 결제했습니다." },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 6700, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "12:03", "merchant": "가맹점라", "cardCompany": "네이버페이", "timeSource": "postedAt" } }
+    },
+    {
+      "caseId": "toss-check-card-cashback",
+      "requirementIds": ["T-PARSE-001", "PARSE-TOSS-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "viva.republica.toss", "parserId": "toss-bank-parser" },
+      "raw": { "postedAt": "2026-07-19T13:11:00+09:00", "title": "토스뱅크 체크카드", "text": "3,000원 결제\n캐시백 500원\n07/19 13:10\n가맹점마" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 2500, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "13:10", "merchant": "가맹점마", "cardCompany": "토스" } }
+    },
+    {
+      "caseId": "toss-cashback-clamped-to-zero",
+      "requirementIds": ["T-PARSE-001", "PARSE-TOSS-001"],
+      "source": { "packageName": "viva.republica.toss", "parserId": "toss-bank-parser" },
+      "raw": { "postedAt": "2026-07-19T13:21:00+09:00", "title": "토스 페이스페이", "text": "1,000원 결제\n캐시백 1,500원\n07/19 13:20\n가맹점바" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 0, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "13:20", "merchant": "가맹점바", "cardCompany": "토스" } }
+    },
+    {
+      "caseId": "toss-cancellation-total",
+      "requirementIds": ["T-PARSE-002", "PARSE-TOSS-001"],
+      "source": { "packageName": "viva.republica.toss", "parserId": "toss-bank-parser" },
+      "raw": { "postedAt": "2026-07-20T13:31:00+09:00", "title": "토스뱅크 체크카드", "text": "3,000원 결제 취소\n캐시백 회수 500원\n07/19 13:10\n가맹점마" },
+      "expected": { "kind": "Parsed", "payment": { "type": "cancellation", "amountInWon": 3000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "13:10", "merchant": "가맹점마", "cardCompany": "토스" } }
+    },
+    {
+      "caseId": "toss-preauthorization-ignored",
+      "requirementIds": ["T-PARSE-001", "PARSE-TOSS-001"],
+      "source": { "packageName": "viva.republica.toss", "parserId": "toss-bank-parser" },
+      "raw": { "postedAt": "2026-07-19T14:00:00+09:00", "title": "토스", "text": "해외 결제 가승인 100원\n가맹점사" },
+      "expected": { "kind": "Ignored", "code": "PREAUTHORIZATION" }
+    },
+    {
+      "caseId": "kakao-approval-posted-time",
+      "requirementIds": ["T-PARSE-001", "PARSE-KAKAO-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "com.kakaopay.app", "parserId": "kakao-pay-parser" },
+      "raw": { "postedAt": "2026-07-19T14:05:44+09:00", "title": "결제 완료", "text": "가맹점아\n4,500원" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 4500, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "14:05", "merchant": "가맹점아", "cardCompany": "카카오페이", "timeSource": "postedAt" } }
+    },
+    {
+      "caseId": "onnuri-approval-posted-time",
+      "requirementIds": ["T-PARSE-001", "PARSE-ONNURI-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "com.komsco.kpay", "parserId": "digital-onnuri-parser" },
+      "raw": { "postedAt": "2026-07-19T15:00:11+09:00", "title": "디지털 온누리상품권", "text": "가맹점자에서 11,000원 결제" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 11000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "15:00", "merchant": "가맹점자", "cardCompany": "디지털온누리", "timeSource": "postedAt" } }
+    },
+    {
+      "caseId": "paybooc-inline-approval",
+      "requirementIds": ["T-PARSE-001", "PARSE-PAYBOOC-001"],
+      "source": { "packageName": "kvp.jjy.MispAndroid320", "parserId": "paybooc-isp-parser" },
+      "raw": { "postedAt": "2026-07-19T15:11:00+09:00", "title": "페이북", "text": "BC카드(4321) 승인 7,900원 07/19 15:10 가맹점차" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 7900, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "15:10", "merchant": "가맹점차", "cardCompany": "BC", "maskedCardToken": "4321" } }
+    },
+    {
+      "caseId": "paybooc-separated-cancellation",
+      "requirementIds": ["T-PARSE-002", "PARSE-PAYBOOC-001"],
+      "source": { "packageName": "kvp.jjy.MispAndroid320", "parserId": "paybooc-isp-parser" },
+      "raw": { "postedAt": "2026-07-20T15:12:00+09:00", "title": "페이북", "textLines": ["BC카드(4321)", "매출취소", "7,900원", "07/19 15:10", "가맹점차"] },
+      "expected": { "kind": "Parsed", "payment": { "type": "cancellation", "amountInWon": 7900, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "15:10", "merchant": "가맹점차", "cardCompany": "BC", "maskedCardToken": "4321" } }
+    },
+    {
+      "caseId": "paybooc-empty-merchant-rejected",
+      "requirementIds": ["T-PARSE-001", "PARSE-PAYBOOC-001"],
+      "source": { "packageName": "kvp.jjy.MispAndroid320", "parserId": "paybooc-isp-parser" },
+      "raw": { "postedAt": "2026-07-19T15:12:00+09:00", "title": "페이북", "text": "BC카드(4321) 승인 7,900원 07/19 15:10" },
+      "expected": { "kind": "Rejected", "code": "MERCHANT_REQUIRED" }
+    },
+    {
+      "caseId": "paybooc-zero-amount-rejected",
+      "requirementIds": ["T-PARSE-001", "PARSE-PAYBOOC-001"],
+      "source": { "packageName": "kvp.jjy.MispAndroid320", "parserId": "paybooc-isp-parser" },
+      "raw": { "postedAt": "2026-07-19T15:12:00+09:00", "title": "페이북", "text": "BC카드(4321) 승인 0원 07/19 15:10 가맹점차" },
+      "expected": { "kind": "Rejected", "code": "AMOUNT_NOT_POSITIVE" }
+    },
+    {
+      "caseId": "samsung-approval",
+      "requirementIds": ["T-PARSE-001", "PARSE-SAMSUNG-001"],
+      "source": { "packageName": "com.samsung.android.spay", "parserId": "samsung-card-parser" },
+      "raw": { "postedAt": "2026-07-19T16:01:00+09:00", "title": "삼성카드", "text": "삼성(3456) 승인\n21,000원\n07/19 16:00\n가맹점카" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 21000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "16:00", "merchant": "가맹점카", "cardCompany": "삼성", "maskedCardToken": "3456" } }
+    },
+    {
+      "caseId": "samsung-cancellation",
+      "requirementIds": ["T-PARSE-002", "PARSE-SAMSUNG-001"],
+      "source": { "packageName": "com.samsung.android.spay", "parserId": "samsung-card-parser" },
+      "raw": { "postedAt": "2026-07-20T16:01:00+09:00", "title": "삼성카드", "text": "삼성(3456) 승인취소\n21,000원\n07/19 16:00\n가맹점카" },
+      "expected": { "kind": "Parsed", "payment": { "type": "cancellation", "amountInWon": 21000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "16:00", "merchant": "가맹점카", "cardCompany": "삼성", "maskedCardToken": "3456" } }
+    },
+    {
+      "caseId": "lotte-installment-approval",
+      "requirementIds": ["T-PARSE-001", "PARSE-LOTTE-001"],
+      "source": { "packageName": "com.lcacApp", "parserId": "lotte-card-parser" },
+      "raw": { "postedAt": "2026-07-19T17:01:00+09:00", "title": "롯데카드", "text": "롯데(2468) 승인\n90,000원\n07/19 17:00\n3개월 할부\n가맹점타" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 90000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "17:00", "merchant": "가맹점타", "cardCompany": "롯데", "maskedCardToken": "2468", "installmentMonths": 3 } }
+    },
+    {
+      "caseId": "lotte-cancellation",
+      "requirementIds": ["T-PARSE-002", "PARSE-LOTTE-001"],
+      "source": { "packageName": "com.lcacApp", "parserId": "lotte-card-parser" },
+      "raw": { "postedAt": "2026-07-20T17:01:00+09:00", "title": "롯데카드", "text": "롯데(2468) 승인취소\n90,000원\n07/19 17:00\n가맹점타" },
+      "expected": { "kind": "Parsed", "payment": { "type": "cancellation", "amountInWon": 90000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "17:00", "merchant": "가맹점타", "cardCompany": "롯데", "maskedCardToken": "2468" } }
+    },
+    {
+      "caseId": "gyeonggi-payment-and-balance",
+      "requirementIds": ["T-PARSE-001", "T-ING-BAL-001", "PARSE-GYEONGGI-001"],
+      "source": { "packageName": "gov.gyeonggi.ggcard", "parserId": "gyeonggi-local-currency-parser" },
+      "raw": { "postedAt": "2026-07-19T18:01:00+09:00", "title": "경기지역화폐", "text": "결제 5,000원\n07/19 18:00\n가맹점파\n잔액 83,000원" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 5000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "18:00", "merchant": "가맹점파", "cardCompany": "경기지역화폐", "localCurrencyType": "gyeonggi" }, "balance": { "amountInWon": 83000, "localCurrencyType": "gyeonggi" } }
+    },
+    {
+      "caseId": "gyeonggi-balance-only",
+      "requirementIds": ["T-PARSE-001", "T-ING-BAL-001", "PARSE-GYEONGGI-001"],
+      "source": { "packageName": "gov.gyeonggi.ggcard", "parserId": "gyeonggi-local-currency-parser" },
+      "raw": { "postedAt": "2026-07-19T18:02:00+09:00", "title": "경기지역화폐", "text": "현재 사용가능 잔액 83,000원" },
+      "expected": { "kind": "Parsed", "balance": { "amountInWon": 83000, "localCurrencyType": "gyeonggi" } }
+    },
+    {
+      "caseId": "daejeon-detail-payment-and-balance",
+      "requirementIds": ["T-PARSE-001", "T-ING-BAL-001", "PARSE-DAEJEON-001"],
+      "source": { "packageName": "kr.co.nmcs.daejeonpay", "parserId": "daejeon-local-currency-parser" },
+      "raw": { "postedAt": "2026-07-19T18:31:00+09:00", "title": "대전사랑카드", "text": "대전사랑카드(1357)\n6,000원 결제\n07/19 18:30\n가맹점하\n사용가능금액 44,000원" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 6000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "18:30", "merchant": "가맹점하", "cardCompany": "대전사랑카드", "maskedCardToken": "1357", "localCurrencyType": "daejeon" }, "balance": { "amountInWon": 44000, "localCurrencyType": "daejeon" } }
+    },
+    {
+      "caseId": "daejeon-fallback-approval",
+      "requirementIds": ["T-PARSE-001", "PARSE-DAEJEON-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "kr.co.nmcs.daejeonpay", "parserId": "daejeon-local-currency-parser" },
+      "raw": { "postedAt": "2026-07-19T18:41:13+09:00", "title": "대전사랑카드", "text": "가맹점거 3,500원 사용\n잔액 40,500원" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 3500, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "18:41", "merchant": "가맹점거", "cardCompany": "대전사랑카드", "localCurrencyType": "daejeon", "timeSource": "postedAt" }, "balance": { "amountInWon": 40500, "localCurrencyType": "daejeon" } }
+    },
+    {
+      "caseId": "sejong-payment-and-balance",
+      "requirementIds": ["T-PARSE-001", "T-ING-BAL-001", "PARSE-SEJONG-001"],
+      "source": { "packageName": "gov.sejong.yeominpay", "parserId": "sejong-local-currency-parser" },
+      "raw": { "postedAt": "2026-07-19T19:01:00+09:00", "title": "여민전", "text": "결제완료 8,000원\n07/19 19:00\n가맹점너\n보유 잔액 32,000원" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 8000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "19:00", "merchant": "가맹점너", "cardCompany": "세종", "localCurrencyType": "sejong" }, "balance": { "amountInWon": 32000, "localCurrencyType": "sejong" } }
+    },
+    {
+      "caseId": "sejong-balance-only",
+      "requirementIds": ["T-PARSE-001", "T-ING-BAL-001", "PARSE-SEJONG-001"],
+      "source": { "packageName": "gov.sejong.yeominpay", "parserId": "sejong-local-currency-parser" },
+      "raw": { "postedAt": "2026-07-19T19:02:00+09:00", "title": "여민전", "text": "보유 잔액 32,000원" },
+      "expected": { "kind": "Parsed", "balance": { "amountInWon": 32000, "localCurrencyType": "sejong" } }
+    },
+    {
+      "caseId": "sms-bill-approved",
+      "requirementIds": ["T-PARSE-001", "PARSE-SMSBILL-001"],
+      "source": { "packageName": "com.google.android.apps.messaging", "parserId": "sms-card-message-parser" },
+      "raw": { "postedAt": "2026-07-19T20:01:00+09:00", "title": "문자 메시지", "text": "[NH카드] 7월 아파트관리비 182,000원 정상 납부 완료" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 182000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "20:01", "merchant": "7월 아파트관리비", "cardCompany": "농협", "timeSource": "postedAt" } }
+    },
+    {
+      "caseId": "sms-bill-similar-message-ignored",
+      "requirementIds": ["T-PARSE-001", "PARSE-SMSBILL-001"],
+      "source": { "packageName": "com.google.android.apps.messaging", "parserId": "sms-card-message-parser" },
+      "raw": { "postedAt": "2026-07-19T20:02:00+09:00", "title": "문자 메시지", "text": "[NH카드] 7월 아파트관리비 납부 예정 금액 182,000원" },
+      "expected": { "kind": "Ignored", "code": "NOT_COMPLETED_PAYMENT" }
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://household-account.local/schemas/system/household-command-response.v1.schema.json",
+  "title": "Household Command Response V1",
+  "description": "공통 Command callable이 반환하는 transport 결과입니다. Firebase 예외와 내부 stack을 Domain 결과에서 분리합니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "commandId",
+    "result"
+  ],
+  "properties": {
+    "contractVersion": {
+      "const": "household-command-response.v1"
+    },
+    "commandId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "result": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/succeeded"
+        },
+        {
+          "$ref": "#/$defs/alreadyProcessed"
+        },
+        {
+          "$ref": "#/$defs/rejected"
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "succeeded": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "const": "succeeded"
+        },
+        "value": {}
+      }
+    },
+    "alreadyProcessed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "const": "already-processed"
+        },
+        "value": {}
+      }
+    },
+    "rejected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "error"
+      ],
+      "properties": {
+        "kind": {
+          "const": "rejected"
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "retryable"
+          ],
+          "properties": {
+            "code": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]{1,79}$"
+            },
+            "retryable": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+  }
+}

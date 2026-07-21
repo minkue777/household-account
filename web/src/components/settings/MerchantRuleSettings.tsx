@@ -11,11 +11,12 @@ import {
   addMerchantRuleV2,
   MATCH_TYPE_LABELS,
 } from '@/lib/merchantRuleService';
-import { getStoredHouseholdKey } from '@/lib/householdService';
+import { useHousehold } from '@/contexts/HouseholdContext';
 import { ConfirmDialog } from '@/components/common';
 import { Building2, ChevronDown, Edit2, Plus, Trash2 } from 'lucide-react';
 
 export default function MerchantRuleSettings() {
+  const { householdKey } = useHousehold();
   const {
     activeCategories,
     getCategoryLabel,
@@ -42,7 +43,12 @@ export default function MerchantRuleSettings() {
 
   // 가맹점 규칙 구독
   useEffect(() => {
-    const householdId = getStoredHouseholdKey() || 'guest';
+    if (!householdKey) {
+      setMerchantRules([]);
+      setRulesLoading(false);
+      return undefined;
+    }
+    const householdId = householdKey;
 
     const unsubscribeRules = subscribeToRules(householdId, (rules) => {
       setMerchantRules(rules);
@@ -52,7 +58,7 @@ export default function MerchantRuleSettings() {
     return () => {
       unsubscribeRules();
     };
-  }, []);
+  }, [householdKey]);
 
   // 가맹점 규칙 핸들러
   const resetRuleForm = () => {
@@ -82,7 +88,8 @@ export default function MerchantRuleSettings() {
   const handleSaveRule = async () => {
     if (!ruleKeyword.trim() || !ruleCategory) return;
 
-    const householdId = getStoredHouseholdKey() || 'guest';
+    if (!householdKey) throw new Error('인증된 가구 세션이 필요합니다.');
+    const householdId = householdKey;
     const mapping = {
       ...(ruleMappedMerchant.trim() && { merchant: ruleMappedMerchant.trim() }),
       category: ruleCategory,

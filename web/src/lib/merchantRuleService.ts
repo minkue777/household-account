@@ -1,17 +1,11 @@
 import {
   collection,
-  addDoc,
-  deleteDoc,
-  updateDoc,
-  doc,
   query,
   where,
   getDocs,
   onSnapshot,
-  orderBy,
-  Timestamp,
-} from 'firebase/firestore';
-import { db } from './firebase';
+  db,
+} from '@/platform/read-model/firestoreReadModel';
 import {
   MerchantRule,
   MatchType,
@@ -20,11 +14,17 @@ import {
   AppliedRule,
   MATCH_TYPE_LABELS,
 } from '@/types/merchant';
+import { paymentConfigurationCommands } from '@/features/payment-configuration/application/paymentConfigurationCommands';
+import { requireClientSessionScope } from '@/composition/clientSessionScope';
 
 export type { MerchantRule, MatchType, MerchantRuleMapping, CreateMerchantRuleInput, AppliedRule };
 export { MATCH_TYPE_LABELS };
 
 const COLLECTION_NAME = 'merchant_rules';
+
+function requireHouseholdId(): string {
+  return requireClientSessionScope().householdId;
+}
 
 /**
  * 가맹점명이 규칙과 매칭되는지 확인
@@ -129,30 +129,7 @@ export async function addMerchantRuleV2(
     return '';
   }
 
-  // 이미 같은 키워드/매칭타입 조합이 있는지 확인
-  try {
-    const exists = await ruleExistsV2(householdId, input.merchantKeyword, input.matchType);
-    console.log('[merchantRule] 중복 체크:', { exists, keyword: input.merchantKeyword, matchType: input.matchType });
-    if (exists) {
-      console.log('[merchantRule] 이미 존재하는 규칙');
-      return '';
-    }
-  } catch (e) {
-    console.error('[merchantRule] 중복 체크 오류:', e);
-  }
-
-  const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-    householdId,
-    merchantKeyword: input.merchantKeyword,
-    matchType: input.matchType,
-    mapping: input.mapping,
-    priority: input.priority ?? 0,
-    isActive: true,
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now(),
-  });
-
-  return docRef.id;
+  return paymentConfigurationCommands.createMerchantRule(householdId, input);
 }
 
 /**
@@ -179,11 +156,7 @@ export async function updateMerchantRuleV2(
   id: string,
   updates: Partial<Pick<MerchantRule, 'merchantKeyword' | 'matchType' | 'mapping' | 'priority' | 'isActive'>>
 ): Promise<void> {
-  const docRef = doc(db, COLLECTION_NAME, id);
-  await updateDoc(docRef, {
-    ...updates,
-    updatedAt: Timestamp.now(),
-  });
+  await paymentConfigurationCommands.updateMerchantRule(requireHouseholdId(), id, updates);
 }
 
 /**
@@ -203,8 +176,7 @@ export async function updateMerchantRule(
  * 규칙 삭제
  */
 export async function deleteMerchantRule(id: string): Promise<void> {
-  const docRef = doc(db, COLLECTION_NAME, id);
-  await deleteDoc(docRef);
+  await paymentConfigurationCommands.deleteMerchantRule(requireHouseholdId(), id);
 }
 
 /**

@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Asset, CryptoHolding, CryptoSearchResult } from '@/types/asset';
 import {
   addCryptoHolding,
   deleteCryptoHolding,
+  refreshAssetMarketValues,
   subscribeToCryptoHoldings,
-  updateCryptoHolding,
 } from '@/lib/assetService';
+import { portfolioQueries } from '@/features/portfolio/application/portfolioQueries';
 
 function sanitizeDecimalInput(rawValue: string) {
   const cleaned = rawValue.replace(/[^0-9.]/g, '');
@@ -47,7 +48,6 @@ export function useCryptoHoldingManager({ isOpen, asset }: UseCryptoHoldingManag
 
   const isCryptoAsset = asset?.type === 'crypto';
   const assetId = asset?.id;
-  const holdingsRef = useRef(holdings);
 
   const resetCryptoForm = useCallback(() => {
     setSearchQuery('');
@@ -71,7 +71,6 @@ export function useCryptoHoldingManager({ isOpen, asset }: UseCryptoHoldingManag
 
     const unsubscribe = subscribeToCryptoHoldings(assetId, (newHoldings) => {
       setHoldings(newHoldings);
-      holdingsRef.current = newHoldings;
       setIsLoadingHoldings(false);
     });
 
@@ -88,10 +87,9 @@ export function useCryptoHoldingManager({ isOpen, asset }: UseCryptoHoldingManag
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const response = await fetch(`/api/crypto/search?q=${encodeURIComponent(searchQuery)}`);
-        const data = await response.json();
+        const results = await portfolioQueries.searchCrypto(searchQuery);
         if (!cancelled) {
-          setSearchResults(data.results || []);
+          setSearchResults(results);
         }
       } catch (error) {
         if (!cancelled) {
@@ -137,13 +135,7 @@ export function useCryptoHoldingManager({ isOpen, asset }: UseCryptoHoldingManag
     setIsLoadingPrice(true);
 
     try {
-      const response = await fetch(`/api/crypto/price?market=${encodeURIComponent(coin.code)}`);
-      if (!response.ok) {
-        setCurrentPrice(null);
-        return;
-      }
-
-      const data = await response.json();
+      const data = await portfolioQueries.getCryptoQuote(coin);
       setCurrentPrice(data.price);
     } catch (error) {
       setCurrentPrice(null);
@@ -193,28 +185,15 @@ export function useCryptoHoldingManager({ isOpen, asset }: UseCryptoHoldingManag
   }, [assetId, isCryptoAsset]);
 
   const refreshHoldingPrices = useCallback(async () => {
-    const currentHoldings = holdingsRef.current;
-    if (!assetId || !isCryptoAsset || currentHoldings.length === 0) {
+    if (!assetId || !isCryptoAsset) {
       return;
     }
 
     setIsRefreshingPrices(true);
     try {
-      await Promise.all(
-        currentHoldings.map(async (holding) => {
-          try {
-            const response = await fetch(
-              `/api/crypto/price?market=${encodeURIComponent(holding.marketCode)}`
-            );
-            if (!response.ok) return;
-
-            const data = await response.json();
-            await updateCryptoHolding(holding.id, assetId, { currentPrice: data.price });
-          } catch (error) {
-            console.error(`Failed to refresh crypto price (${holding.marketCode}):`, error);
-          }
-        })
-      );
+      await refreshAssetMarketValues(assetId, 'crypto');
+    } catch (error) {
+      console.error('Failed to refresh asset crypto prices:', error);
     } finally {
       setIsRefreshingPrices(false);
     }

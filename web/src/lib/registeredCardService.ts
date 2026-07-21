@@ -1,26 +1,26 @@
 import {
-  Timestamp,
-  addDoc,
   collection,
-  deleteDoc,
-  doc,
   getDocs,
   onSnapshot,
   query,
-  updateDoc,
-  writeBatch,
   where,
-} from 'firebase/firestore';
-import { db } from './firebase';
+  db,
+} from '@/platform/read-model/firestoreReadModel';
 import {
   CreateRegisteredCardInput,
   NUMBERLESS_REGISTERED_CARD_LABELS,
   RegisteredCard,
   mapRegisteredCardDocument,
 } from '@/types/registeredCard';
+import { paymentConfigurationCommands } from '@/features/payment-configuration/application/paymentConfigurationCommands';
+import { requireClientSessionScope } from '@/composition/clientSessionScope';
 
 const COLLECTION_NAME = 'registered_cards';
 const NUMBERLESS_SORT_WEIGHT = 1000;
+
+function requireHouseholdId(): string {
+  return requireClientSessionScope().householdId;
+}
 
 function normalizeCardLastFour(value: string | undefined): string {
   return (value || '').replace(/\D/g, '').slice(-4);
@@ -99,35 +99,14 @@ export async function addRegisteredCard(input: CreateRegisteredCardInput): Promi
     return '';
   }
 
-  const existingCards = await getRegisteredCards(householdId, owner);
-  const alreadyExists = existingCards.some(
-    (card) => card.cardLabel === cardLabel && card.cardLastFour === normalizedLastFour
-  );
-
-  if (alreadyExists) {
-    return '';
-  }
-
-  const hasOrderedCards = existingCards.some((card) => typeof card.orderIndex === 'number');
-  const nextOrderIndex = hasOrderedCards
-    ? Math.max(...existingCards.map((card) => card.orderIndex ?? -1), -1) + 1
-    : undefined;
-
-  const documentRef = await addDoc(collection(db, COLLECTION_NAME), {
-    householdId,
-    owner,
+  return paymentConfigurationCommands.registerCard(householdId, {
     cardLabel,
     cardLastFour: normalizedLastFour,
-    ...(typeof nextOrderIndex === 'number' ? { orderIndex: nextOrderIndex } : {}),
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now(),
   });
-
-  return documentRef.id;
 }
 
 export async function deleteRegisteredCard(cardId: string): Promise<void> {
-  await deleteDoc(doc(db, COLLECTION_NAME, cardId));
+  await paymentConfigurationCommands.deleteCard(requireHouseholdId(), cardId);
 }
 
 export async function updateRegisteredCard(input: {
@@ -147,24 +126,10 @@ export async function updateRegisteredCard(input: {
     return false;
   }
 
-  const existingCards = await getRegisteredCards(householdId, owner);
-  const alreadyExists = existingCards.some(
-    (card) =>
-      card.id !== cardId &&
-      card.cardLabel === cardLabel &&
-      card.cardLastFour === normalizedLastFour
-  );
-
-  if (alreadyExists) {
-    return false;
-  }
-
-  await updateDoc(doc(db, COLLECTION_NAME, cardId), {
+  return paymentConfigurationCommands.updateCard(householdId, cardId, {
+    cardLabel,
     cardLastFour: normalizedLastFour,
-    updatedAt: Timestamp.now(),
   });
-
-  return true;
 }
 
 export async function updateRegisteredCardOrder(cardIds: string[]): Promise<void> {
@@ -172,17 +137,7 @@ export async function updateRegisteredCardOrder(cardIds: string[]): Promise<void
     return;
   }
 
-  const batch = writeBatch(db);
-  const updatedAt = Timestamp.now();
-
-  cardIds.forEach((cardId, index) => {
-    batch.update(doc(db, COLLECTION_NAME, cardId), {
-      orderIndex: index,
-      updatedAt,
-    });
-  });
-
-  await batch.commit();
+  await paymentConfigurationCommands.reorderCards(requireHouseholdId(), cardIds);
 }
 
 async function getRegisteredCards(

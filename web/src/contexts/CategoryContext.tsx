@@ -4,7 +4,6 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import {
   CategoryDocument,
   subscribeToCategories,
-  initializeDefaultCategories,
   addCategory as addCategoryService,
   updateCategory as updateCategoryService,
   deleteCategory as deleteCategoryService,
@@ -12,7 +11,7 @@ import {
   reorderCategories as reorderCategoriesService,
   generateCategoryKey,
 } from '@/lib/categoryService';
-import { getStoredHouseholdKey } from '@/lib/householdService';
+import { useHousehold } from '@/contexts/HouseholdContext';
 
 interface CategoryContextType {
   categories: CategoryDocument[];
@@ -45,24 +44,12 @@ const UNKNOWN_CATEGORY = {
 export function CategoryProvider({ children }: { children: React.ReactNode }) {
   const [categories, setCategories] = useState<CategoryDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [householdId, setHouseholdId] = useState<string>('');
-
-  // householdId 가져오기 (없으면 'guest' 사용)
-  useEffect(() => {
-    setHouseholdId(getStoredHouseholdKey() || 'guest');
-
-    // localStorage 변경 감지 (다른 탭에서 변경 시)
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'householdKey') {
-        setHouseholdId(e.newValue || 'guest');
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
+  const { householdKey } = useHousehold();
+  const householdId = householdKey ?? '';
 
   // 초기화 및 실시간 구독
   useEffect(() => {
+    setIsLoading(true);
     if (!householdId) {
       setCategories([]);
       setIsLoading(false);
@@ -71,11 +58,8 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
 
     let unsubscribe: (() => void) | undefined;
 
-    async function initialize() {
-      // 기본 카테고리 초기화 (첫 실행 시에만, householdId별로)
-      await initializeDefaultCategories(householdId);
-
-      // 실시간 구독 시작 (householdId별로)
+    function initialize() {
+      // 기본 카테고리는 HouseholdCreated 이벤트를 소비한 서버가 생성합니다.
       unsubscribe = subscribeToCategories(householdId, (cats) => {
         setCategories(cats);
         setIsLoading(false);

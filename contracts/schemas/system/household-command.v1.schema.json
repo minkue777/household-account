@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://household-account.local/schemas/system/household-command.v1.schema.json",
+  "title": "Household Command V1",
+  "description": "Web과 Android가 인증된 Firebase callable 경계로 전달하는 공통 Command envelope입니다. Actor 신원과 권한은 서버가 인증 정보와 Membership에서 도출합니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "commandId",
+    "idempotencyKey",
+    "command",
+    "payload"
+  ],
+  "properties": {
+    "contractVersion": {
+      "const": "household-command.v1"
+    },
+    "commandId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "idempotencyKey": {
+      "$ref": "#/$defs/stableId"
+    },
+    "householdId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "command": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 120,
+      "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+\\.v[1-9][0-9]*$"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    }
+  }
+}

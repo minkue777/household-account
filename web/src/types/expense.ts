@@ -12,6 +12,7 @@ export interface MergedExpenseInfo {
 
 export interface Expense {
   id: string;
+  aggregateVersion: number;
   date: string;           // YYYY-MM-DD
   time?: string;          // HH:mm
   merchant: string;       // 가맹점명

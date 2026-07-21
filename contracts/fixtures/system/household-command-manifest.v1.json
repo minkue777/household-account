@@ -1,0 +1,65 @@
+{
+  "contractVersion": "household-command-manifest.v1",
+  "commands": [
+    { "name": "access.resolve-signed-in-user.v1", "owner": "access", "scope": "principal", "clients": ["web", "android"] },
+    { "name": "access.claim-legacy-membership.v1", "owner": "access", "scope": "principal", "clients": ["web", "android"] },
+    { "name": "access.create-household-with-self.v1", "owner": "access", "scope": "principal", "clients": ["web"] },
+    { "name": "access.join-household-as-self.v1", "owner": "access", "scope": "principal", "clients": ["web"] },
+    { "name": "access.create-invitation.v1", "owner": "access", "scope": "household", "clients": ["web"] },
+    { "name": "access.rename-self.v1", "owner": "access", "scope": "household", "clients": ["web"] },
+    { "name": "access.create-asset-owner-profile.v1", "owner": "access", "scope": "household", "clients": ["web"] },
+    { "name": "access.rename-asset-owner-profile.v1", "owner": "access", "scope": "household", "clients": ["web"] },
+    { "name": "access.archive-asset-owner-profile.v1", "owner": "access", "scope": "household", "clients": ["web"] },
+    { "name": "access.request-household-deletion.v1", "owner": "access", "scope": "household", "clients": ["web"] },
+
+    { "name": "ledger.record-manual-transaction.v1", "owner": "household-finance.ledger", "scope": "household", "clients": ["web"] },
+    { "name": "ledger.update-transaction.v1", "owner": "household-finance.ledger", "scope": "household", "clients": ["web", "android"] },
+    { "name": "ledger.delete-transaction.v1", "owner": "household-finance.ledger", "scope": "household", "clients": ["web", "android"] },
+    { "name": "ledger.change-transaction-category.v1", "owner": "household-finance.ledger", "scope": "household", "clients": ["web", "android"] },
+    { "name": "ledger.split-transaction.v1", "owner": "household-finance.ledger", "scope": "household", "clients": ["web", "android"] },
+    { "name": "ledger.record-manual-monthly-split.v1", "owner": "household-finance.ledger", "scope": "household", "clients": ["web"] },
+    { "name": "ledger.split-existing-transaction-monthly.v1", "owner": "household-finance.ledger", "scope": "household", "clients": ["web"] },
+    { "name": "ledger.merge-transactions.v1", "owner": "household-finance.ledger", "scope": "household", "clients": ["web"] },
+    { "name": "ledger.unmerge-transaction.v1", "owner": "household-finance.ledger", "scope": "household", "clients": ["web"] },
+    { "name": "ledger.cancel-monthly-split.v1", "owner": "household-finance.ledger", "scope": "household", "clients": ["web"] },
+    { "name": "ledger.reconfigure-monthly-split.v1", "owner": "household-finance.ledger", "scope": "household", "clients": ["web"] },
+    { "name": "ledger.request-notification.v1", "owner": "household-finance.ledger", "scope": "household", "clients": ["web", "android"] },
+
+    { "name": "category.create.v1", "owner": "household-finance.categories-budget", "scope": "household", "clients": ["web"] },
+    { "name": "category.update.v1", "owner": "household-finance.categories-budget", "scope": "household", "clients": ["web"] },
+    { "name": "category.archive.v1", "owner": "household-finance.categories-budget", "scope": "household", "clients": ["web"] },
+    { "name": "category.set-budget.v1", "owner": "household-finance.categories-budget", "scope": "household", "clients": ["web"] },
+    { "name": "category.reorder.v1", "owner": "household-finance.categories-budget", "scope": "household", "clients": ["web"] },
+    { "name": "category.set-default.v1", "owner": "household-finance.categories-budget", "scope": "household", "clients": ["web"] },
+
+    { "name": "recurring.create-plan.v1", "owner": "household-finance.recurring", "scope": "household", "clients": ["web"] },
+    { "name": "recurring.update-plan.v1", "owner": "household-finance.recurring", "scope": "household", "clients": ["web"] },
+    { "name": "recurring.delete-plan.v1", "owner": "household-finance.recurring", "scope": "household", "clients": ["web"] },
+
+    { "name": "payment-configuration.create-merchant-rule.v1", "owner": "payment-capture.configuration", "scope": "household", "clients": ["web"] },
+    { "name": "payment-configuration.update-merchant-rule.v1", "owner": "payment-capture.configuration", "scope": "household", "clients": ["web"] },
+    { "name": "payment-configuration.delete-merchant-rule.v1", "owner": "payment-capture.configuration", "scope": "household", "clients": ["web"] },
+    { "name": "payment-configuration.register-card.v1", "owner": "payment-capture.configuration", "scope": "household", "clients": ["web"] },
+    { "name": "payment-configuration.update-card.v1", "owner": "payment-capture.configuration", "scope": "household", "clients": ["web"] },
+    { "name": "payment-configuration.delete-card.v1", "owner": "payment-capture.configuration", "scope": "household", "clients": ["web"] },
+    { "name": "payment-configuration.reorder-cards.v1", "owner": "payment-capture.configuration", "scope": "household", "clients": ["web"] },
+
+    { "name": "shortcut.issue-credential.v1", "owner": "payment-capture.shortcut-ingestion", "scope": "household", "clients": ["web"] },
+    { "name": "shortcut.reissue-credential.v1", "owner": "payment-capture.shortcut-ingestion", "scope": "household", "clients": ["web"] },
+    { "name": "shortcut.revoke-credential.v1", "owner": "payment-capture.shortcut-ingestion", "scope": "household", "clients": ["web"] },
+
+    { "name": "portfolio.create-asset.v1", "owner": "portfolio.core", "scope": "household", "clients": ["web"] },
+    { "name": "portfolio.update-asset.v1", "owner": "portfolio.core", "scope": "household", "clients": ["web"] },
+    { "name": "portfolio.reorder-assets.v1", "owner": "portfolio.core", "scope": "household", "clients": ["web"] },
+    { "name": "portfolio.delete-asset.v1", "owner": "portfolio.core", "scope": "household", "clients": ["web"] },
+    { "name": "portfolio.add-position.v1", "owner": "portfolio.holdings", "scope": "household", "clients": ["web"] },
+    { "name": "portfolio.update-position.v1", "owner": "portfolio.holdings", "scope": "household", "clients": ["web"] },
+    { "name": "portfolio.delete-position.v1", "owner": "portfolio.holdings", "scope": "household", "clients": ["web"] },
+    { "name": "portfolio.refresh-market-values.v1", "owner": "portfolio.holdings", "scope": "household", "clients": ["web"] },
+
+    { "name": "notifications.register-endpoint.v1", "owner": "notifications", "scope": "household", "clients": ["web", "android"] },
+    { "name": "notifications.remove-endpoint.v1", "owner": "notifications", "scope": "household", "clients": ["web", "android"] },
+    { "name": "home.update-summary-preferences.v1", "owner": "home-preferences", "scope": "household", "clients": ["web"] },
+    { "name": "home.select-local-currency.v1", "owner": "home-preferences", "scope": "household", "clients": ["web"] }
+  ]
+}

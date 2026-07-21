@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Asset, isGoldEtfSubType } from '@/types/asset';
-import { updateAsset } from '@/lib/assetService';
+import { refreshAssetMarketValues, updateAsset } from '@/lib/assetService';
 
 export interface GoldPriceData {
   pricePerDon?: number;
@@ -26,36 +26,25 @@ function sanitizeGoldQuantityInput(rawValue: string) {
   return `${cleaned.slice(0, firstDot + 1)}${cleaned.slice(firstDot + 1).replace(/\./g, '')}`;
 }
 
-function normalizeGoldPricePayload(payload: unknown): GoldPriceData | null {
-  if (!payload || typeof payload !== 'object') {
+function observedGoldPrice(asset: Asset | null): GoldPriceData | null {
+  if (
+    asset === null ||
+    typeof asset.quantity !== 'number' ||
+    !Number.isFinite(asset.quantity) ||
+    asset.quantity <= 0 ||
+    !Number.isFinite(asset.currentBalance) ||
+    asset.currentBalance <= 0
+  ) {
     return null;
   }
-
-  const data = payload as Record<string, unknown>;
-
-  if (typeof data.buyPricePerDon === 'number' && typeof data.sellPricePerDon === 'number') {
-    return {
-      pricePerDon: typeof data.pricePerDon === 'number' ? data.pricePerDon : undefined,
-      buyPricePerDon: data.buyPricePerDon,
-      sellPricePerDon: data.sellPricePerDon,
-      timestamp: typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString(),
-      estimated: typeof data.estimated === 'boolean' ? data.estimated : undefined,
-      source: typeof data.source === 'string' ? data.source : undefined,
-    };
-  }
-
-  if (typeof data.pricePerDon === 'number') {
-    return {
-      pricePerDon: data.pricePerDon,
-      buyPricePerDon: data.pricePerDon,
-      sellPricePerDon: data.pricePerDon,
-      timestamp: typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString(),
-      estimated: typeof data.estimated === 'boolean' ? data.estimated : undefined,
-      source: typeof data.source === 'string' ? data.source : undefined,
-    };
-  }
-
-  return null;
+  const pricePerDon = asset.currentBalance / asset.quantity;
+  return {
+    pricePerDon,
+    buyPricePerDon: pricePerDon,
+    sellPricePerDon: pricePerDon,
+    timestamp: asset.updatedAt.toISOString(),
+    source: 'portfolio-last-success',
+  };
 }
 
 interface UseGoldHoldingOptions {
@@ -91,38 +80,43 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
   }, []);
 
   const refreshGoldPrice = useCallback(async () => {
+    if (!assetId || !isPhysicalGoldAsset) {
+      return null;
+    }
     setIsLoadingPrice(true);
     try {
-      const response = await fetch('/api/gold/price');
-      if (!response.ok) {
-        setGoldPrice(null);
-        return null;
-      }
-
-      const payload = await response.json();
-      const normalized = normalizeGoldPricePayload(payload);
-      setGoldPrice(normalized);
-      return normalized;
+      await refreshAssetMarketValues(assetId, 'physical-gold');
+      return null;
     } catch (error) {
-      setGoldPrice(null);
-      console.error('Failed to fetch gold price:', error);
+      console.error('Failed to refresh asset gold price:', error);
       return null;
     } finally {
       setIsLoadingPrice(false);
     }
-  }, []);
+  }, [assetId, isPhysicalGoldAsset]);
 
   useEffect(() => {
-    if (!isOpen || !asset || !isPhysicalGoldAsset) {
+    if (!isOpen || !assetId || !isPhysicalGoldAsset) {
       setQuantity('');
       setGoldPrice(null);
       return;
     }
-
-    setQuantity(extractGoldQuantity(asset));
-
     void refreshGoldPrice();
-  }, [asset?.memo, asset?.quantity, asset?.subType, assetId, isOpen, isPhysicalGoldAsset, refreshGoldPrice]);
+  }, [assetId, isOpen, isPhysicalGoldAsset, refreshGoldPrice]);
+
+  useEffect(() => {
+    if (!isOpen || !asset || !isPhysicalGoldAsset) return;
+    setQuantity(extractGoldQuantity(asset));
+    setGoldPrice(observedGoldPrice(asset));
+  }, [
+    asset,
+    asset?.currentBalance,
+    asset?.memo,
+    asset?.quantity,
+    asset?.updatedAt,
+    isOpen,
+    isPhysicalGoldAsset,
+  ]);
 
   const totalValue = useMemo(() => {
     if (!goldPrice || !quantity) {

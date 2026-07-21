@@ -31,8 +31,9 @@ interface AssetSummaryCardProps {
   dailyChange: number;
   previousMonthTotal?: number;
   selectedMember: string;
-  memberOptions: string[];
+  memberOptions: Array<{ key: string; label: string }>;
   onMemberChange: (member: string) => void;
+  onAddOwner: () => void;
 }
 
 interface TooltipState {
@@ -51,6 +52,7 @@ export default function AssetSummaryCard({
   selectedMember,
   memberOptions,
   onMemberChange,
+  onAddOwner,
 }: AssetSummaryCardProps) {
   const chartWrapRef = useRef<HTMLDivElement | null>(null);
   const [tooltipState, setTooltipState] = useState<TooltipState>({
@@ -87,8 +89,15 @@ export default function AssetSummaryCard({
       return assets.filter((asset) => asset.isActive);
     }
 
-    return assets.filter((asset) => asset.isActive && asset.owner === selectedMember);
-  }, [assets, selectedMember]);
+    const selectedLabel = memberOptions.find(({ key }) => key === selectedMember)?.label;
+    return assets.filter(
+      (asset) =>
+        asset.isActive &&
+        (asset.ownerRef?.kind === 'profile'
+          ? asset.ownerRef.profileId === selectedMember
+          : asset.owner === selectedLabel)
+    );
+  }, [assets, memberOptions, selectedMember]);
 
   const totalBalance = sumSignedAssetBalances(filteredAssets);
 
@@ -258,18 +267,26 @@ export default function AssetSummaryCard({
       <div className="flex gap-6 px-5">
         {memberOptions.map((member) => (
           <button
-            key={member}
-            onClick={() => onMemberChange(member)}
+            key={member.key}
+            onClick={() => onMemberChange(member.key)}
             className={`relative pb-2 text-sm font-medium transition-all ${
-              selectedMember === member ? 'text-blue-500' : 'text-slate-400 hover:text-slate-600'
+              selectedMember === member.key ? 'text-blue-500' : 'text-slate-400 hover:text-slate-600'
             }`}
           >
-            {member}
-            {selectedMember === member && (
+            {member.label}
+            {selectedMember === member.key && (
               <div className="absolute bottom-0 left-1/2 h-0.5 w-full -translate-x-1/2 rounded-full bg-blue-500" />
             )}
           </button>
         ))}
+        <button
+          type="button"
+          aria-label="자산 명의자 추가"
+          onClick={onAddOwner}
+          className="pb-2 text-lg font-semibold leading-none text-slate-400 hover:text-blue-500"
+        >
+          +
+        </button>
       </div>
 
       <div className="mx-5 border-t border-slate-100" />

@@ -15,12 +15,14 @@ import {
   QuickEditOverlaySettings,
   RecurringExpenseSettings,
   ThemeSettings,
+  InvitationSettings,
+  ShortcutSettings,
 } from '@/components/settings';
 import { AndroidBridge } from '@/lib/bridges/androidBridge';
 
 export default function SettingsPage() {
   const { isLoading } = useCategoryContext();
-  const { currentMember, household, switchMember } = useHousehold();
+  const { currentMember, household, logout } = useHousehold();
   const { themeConfig } = useTheme();
 
   const [isIOSDevice, setIsIOSDevice] = useState(false);
@@ -28,7 +30,9 @@ export default function SettingsPage() {
 
   useEffect(() => {
     setIsIOSDevice(isIOS());
-    setAppVersionLabel(AndroidBridge.getAppVersion());
+    void AndroidBridge.getAppVersion()
+      .then(setAppVersionLabel)
+      .catch(() => setAppVersionLabel(null));
   }, []);
 
   if (isLoading) {
@@ -75,10 +79,10 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 <button
-                  onClick={switchMember}
+                  onClick={() => void logout()}
                   className="text-sm text-slate-400 transition-colors hover:text-slate-600"
                 >
-                  변경
+                  로그아웃
                 </button>
               </div>
             </div>
@@ -88,6 +92,8 @@ export default function SettingsPage() {
             householdId={household?.id}
             ownerName={currentMember?.name}
           />
+          <InvitationSettings />
+          {isIOSDevice && <ShortcutSettings />}
           <CategorySettings />
           <MerchantRuleSettings />
           <RecurringExpenseSettings />
@@ -101,6 +107,7 @@ export default function SettingsPage() {
 
           <QuickEditOverlaySettings
             householdId={household?.id}
+            memberId={currentMember?.id}
             memberName={currentMember?.name}
           />
 

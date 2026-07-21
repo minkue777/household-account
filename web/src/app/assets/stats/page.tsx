@@ -18,13 +18,10 @@ import {
   Filler,
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import { Timestamp } from 'firebase/firestore';
 import { ArrowLeft } from 'lucide-react';
 import { ASSET_TYPE_CONFIG, type Asset, type AssetHistoryEntry, type AssetType } from '@/types/asset';
 import {
   getAssetHistoryByPeriod,
-  processLoanAutoRepayments,
-  processSavingsAutoContributions,
   refreshAllPhysicalGoldValues,
   subscribeToAssets,
 } from '@/lib/assetService';
@@ -110,7 +107,7 @@ function upsertRealtimeSnapshot(
   const previousEntry = [...sortedEntries].reverse().find((entry) => entry.date < today);
   const changeAmount = previousEntry ? currentBalance - previousEntry.balance : 0;
   const householdId = sortedEntries[0]?.householdId ?? '';
-  const createdAt = previousEntry?.createdAt ?? sortedEntries[0]?.createdAt ?? Timestamp.now();
+  const createdAt = previousEntry?.createdAt ?? sortedEntries[0]?.createdAt ?? new Date();
 
   const realtimeEntry: AssetHistoryEntry = {
     id: `realtime_${assetId}_${today}`,
@@ -181,8 +178,6 @@ export default function AssetStatsPage() {
   }, []);
 
   useEffect(() => {
-    processSavingsAutoContributions().catch(console.error);
-    processLoanAutoRepayments().catch(console.error);
     refreshAllPhysicalGoldValues().catch(console.error);
   }, []);
 

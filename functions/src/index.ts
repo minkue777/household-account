@@ -1,5 +1,16 @@
-export { onExpenseUpdated, onExpenseCreated, saveFcmToken } from './notifications';
-export { addExpenseFromMessage } from './expenses';
-export { dailyAssetSnapshot } from './assets';
-export { dailyDividendSnapshot } from './dividends';
-export { renameHouseholdMember } from './households';
+export {
+  addExpenseFromMessage,
+  assetAutomationDaily,
+  assetValuationDaily,
+  consumeNotificationOutbox,
+  createWebViewSessionToken,
+  dividendHourly,
+  executeAdminAccess,
+  executeHouseholdCommand,
+  executeHouseholdQuery,
+  instrumentCatalogDaily,
+  recurringDaily,
+  scheduledJobMonitor,
+  submitCaptureEnvelope,
+  submitNotificationDiagnostic,
+} from "./bootstrap/firebaseFunctionFacade";

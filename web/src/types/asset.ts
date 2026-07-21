@@ -1,5 +1,3 @@
-import { Timestamp } from 'firebase/firestore';
-
 export const FAMILY_MEMBERS = ['전체', '이민규', '이진선', '이지아'] as const;
 export type FamilyMember = typeof FAMILY_MEMBERS[number];
 
@@ -7,6 +5,16 @@ export const ASSET_OWNERS = ['가구', '이민규', '이진선', '이지아'] as
 export type AssetOwner = typeof ASSET_OWNERS[number];
 
 export type AssetType = 'savings' | 'stock' | 'crypto' | 'property' | 'gold' | 'loan';
+
+export type AssetOwnerRef =
+  | { kind: 'household' }
+  | { kind: 'profile'; profileId: string };
+
+export interface AssetOwnerOption {
+  key: string;
+  label: string;
+  ownerRef: AssetOwnerRef;
+}
 
 export const LOAN_REPAYMENT_METHODS = [
   '원리금균등상환',
@@ -69,6 +77,7 @@ export interface Asset {
   type: AssetType;
   subType?: string;
   owner?: string;
+  ownerRef?: AssetOwnerRef;
   currentBalance: number;
   recurringContributionAmount?: number;
   recurringContributionDay?: number;
@@ -88,15 +97,15 @@ export interface Asset {
   order: number;
   stockCode?: string;
   quantity?: number;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface StockSearchResult {
   code: string;
   name: string;
-  market?: 'KR' | 'US';
-  instrumentType?: 'stock' | 'etf' | 'fund';
+  market: 'KRX' | 'US' | 'KOFIA_FUND';
+  instrumentType?: 'stock' | 'etf' | 'etn' | 'fund';
   priceScale?: number;
 }
 
@@ -112,7 +121,7 @@ export interface StockPriceInfo {
   sourcePreviousClose?: number;
   sourceCurrency?: string;
   exchangeRate?: number;
-  instrumentType?: 'stock' | 'etf' | 'fund';
+  instrumentType?: 'stock' | 'etf' | 'etn' | 'fund';
   priceScale?: number;
   quoteAsOf?: string;
 }
@@ -140,7 +149,7 @@ export interface AssetHistoryEntry {
   date: string;
   changeAmount: number;
   memo?: string;
-  createdAt: Timestamp;
+  createdAt: Date;
 }
 
 export interface StockHolding {
@@ -150,14 +159,15 @@ export interface StockHolding {
   holdingType?: 'stock' | 'bond' | 'cash' | 'manual';
   stockCode: string;
   stockName: string;
+  market: 'KRX' | 'US' | 'KOFIA_FUND' | 'UNRESOLVED';
   quantity: number;
   avgPrice?: number;
   currentPrice?: number;
-  instrumentType?: 'stock' | 'etf' | 'fund';
+  instrumentType?: 'stock' | 'etf' | 'etn' | 'fund';
   priceScale?: number;
   quoteAsOf?: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface CryptoHolding {
@@ -169,8 +179,8 @@ export interface CryptoHolding {
   quantity: number;
   avgPrice?: number;
   currentPrice?: number;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export type AssetInput = Omit<Asset, 'id' | 'householdId' | 'createdAt' | 'updatedAt'>;

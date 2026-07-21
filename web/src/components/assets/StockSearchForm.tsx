@@ -137,7 +137,7 @@ export default function StockSearchForm({
             <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
               {searchResults.map((stock) => (
                 <button
-                  key={`${stock.market || 'KR'}-${stock.code}`}
+                  key={`${stock.market}-${stock.code}`}
                   type="button"
                   onClick={() => {
                     void selectStock(stock);

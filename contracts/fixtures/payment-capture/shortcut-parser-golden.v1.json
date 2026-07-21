@@ -1,0 +1,139 @@
+{
+  "fixtureVersion": 1,
+  "zoneId": "Asia/Seoul",
+  "cases": [
+    {
+      "caseId": "samsung",
+      "requirementIds": ["T-PARSE-004", "IOS-003"],
+      "receivedAt": "2026-07-19T08:51:00+09:00",
+      "message": "삼성1234승인 김*원\n10,000원 일시불\n07/19 08:50 가맹점가",
+      "expected": { "kind": "Parsed", "amountInWon": 10000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "08:50", "merchant": "가맹점가", "cardEvidence": { "companyLabel": "삼성", "maskedToken": "1234" } }
+    },
+    {
+      "caseId": "shinhan",
+      "requirementIds": ["T-PARSE-004", "IOS-003"],
+      "receivedAt": "2026-07-19T08:51:00+09:00",
+      "message": "신한2345승인 김*원\n11,000원 일시불\n07/19 08:50 가맹점나",
+      "expected": { "kind": "Parsed", "amountInWon": 11000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "08:50", "merchant": "가맹점나", "cardEvidence": { "companyLabel": "신한", "maskedToken": "2345" } }
+    },
+    {
+      "caseId": "kb",
+      "requirementIds": ["T-PARSE-004", "IOS-003"],
+      "receivedAt": "2026-07-19T08:51:00+09:00",
+      "message": "국민3456승인 김*원\n12,000원 일시불\n07/19 08:50 가맹점다",
+      "expected": { "kind": "Parsed", "amountInWon": 12000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "08:50", "merchant": "가맹점다", "cardEvidence": { "companyLabel": "국민", "maskedToken": "3456" } }
+    },
+    {
+      "caseId": "hyundai",
+      "requirementIds": ["T-PARSE-004", "IOS-003"],
+      "receivedAt": "2026-07-19T08:51:00+09:00",
+      "message": "현대4567승인 김*원\n13,000원 일시불\n07/19 08:50 가맹점라",
+      "expected": { "kind": "Parsed", "amountInWon": 13000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "08:50", "merchant": "가맹점라", "cardEvidence": { "companyLabel": "현대", "maskedToken": "4567" } }
+    },
+    {
+      "caseId": "lotte",
+      "requirementIds": ["T-PARSE-004", "IOS-003"],
+      "receivedAt": "2026-07-19T08:51:00+09:00",
+      "message": "롯데5678승인 김*원\n14,000원 일시불\n07/19 08:50 가맹점마",
+      "expected": { "kind": "Parsed", "amountInWon": 14000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "08:50", "merchant": "가맹점마", "cardEvidence": { "companyLabel": "롯데", "maskedToken": "5678" } }
+    },
+    {
+      "caseId": "hana",
+      "requirementIds": ["T-PARSE-004", "IOS-003"],
+      "receivedAt": "2026-07-19T08:51:00+09:00",
+      "message": "하나6789승인 김*원\n15,000원 일시불\n07/19 08:50 가맹점바",
+      "expected": { "kind": "Parsed", "amountInWon": 15000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "08:50", "merchant": "가맹점바", "cardEvidence": { "companyLabel": "하나", "maskedToken": "6789" } }
+    },
+    {
+      "caseId": "woori",
+      "requirementIds": ["T-PARSE-004", "IOS-003"],
+      "receivedAt": "2026-07-19T08:51:00+09:00",
+      "message": "우리7890승인 김*원\n16,000원 일시불\n07/19 08:50 가맹점사",
+      "expected": { "kind": "Parsed", "amountInWon": 16000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "08:50", "merchant": "가맹점사", "cardEvidence": { "companyLabel": "우리", "maskedToken": "7890" } }
+    },
+    {
+      "caseId": "woori-without-number",
+      "requirementIds": ["T-PARSE-004", "IOS-003"],
+      "receivedAt": "2026-07-19T08:51:00+09:00",
+      "message": "우리승인 김*원\n16,000원 일시불\n07/19 08:50 가맹점사",
+      "expected": { "kind": "Parsed", "amountInWon": 16000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "08:50", "merchant": "가맹점사", "cardEvidence": { "companyLabel": "우리" } }
+    },
+    {
+      "caseId": "bc-normalized",
+      "requirementIds": ["T-PARSE-004", "IOS-003"],
+      "receivedAt": "2026-07-19T08:51:00+09:00",
+      "message": "BC8901승인 김*원\n17,000원 일시불\n07/19 08:50 가맹점아",
+      "expected": { "kind": "Parsed", "amountInWon": 17000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "08:50", "merchant": "가맹점아", "cardEvidence": { "companyLabel": "비씨", "maskedToken": "8901" } }
+    },
+    {
+      "caseId": "nh-normalized",
+      "requirementIds": ["T-PARSE-004", "IOS-003"],
+      "receivedAt": "2026-07-19T08:51:00+09:00",
+      "message": "NH9012승인 김*원\n18,000원 일시불\n07/19 08:50 가맹점자",
+      "expected": { "kind": "Parsed", "amountInWon": 18000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "08:50", "merchant": "가맹점자", "cardEvidence": { "companyLabel": "농협", "maskedToken": "9012" } }
+    },
+    {
+      "caseId": "nearest-past-year",
+      "requirementIds": ["T-PARSE-004", "T-PARSE-003", "IOS-004"],
+      "receivedAt": "2026-01-01T00:01:00+09:00",
+      "message": "국민3456승인 김*원\n12,000원 일시불\n12/31 23:59 가맹점차",
+      "expected": { "kind": "Parsed", "amountInWon": 12000, "occurredLocalDate": "2025-12-31", "occurredLocalTime": "23:59", "merchant": "가맹점차", "cardEvidence": { "companyLabel": "국민", "maskedToken": "3456" } }
+    },
+    {
+      "caseId": "missing-header",
+      "requirementIds": ["T-PARSE-004", "IOS-003", "IOS-010"],
+      "receivedAt": "2026-07-19T08:51:00+09:00",
+      "message": "1234승인 김*원\n10,000원 일시불\n07/19 08:50 가맹점가",
+      "expected": { "kind": "Rejected", "code": "CARD_COMPANY_REQUIRED" }
+    },
+    {
+      "caseId": "unsupported-header",
+      "requirementIds": ["T-PARSE-004", "IOS-003", "IOS-010"],
+      "receivedAt": "2026-07-19T08:51:00+09:00",
+      "message": "케이뱅크1234승인 김*원\n10,000원 일시불\n07/19 08:50 가맹점가",
+      "expected": { "kind": "Rejected", "code": "UNSUPPORTED_CARD_COMPANY" }
+    },
+    {
+      "caseId": "zero-amount",
+      "requirementIds": ["T-IOS-002", "IOS-010"],
+      "receivedAt": "2026-07-19T08:51:00+09:00",
+      "message": "국민3456승인 김*원\n0원 일시불\n07/19 08:50 가맹점가",
+      "expected": { "kind": "Rejected", "code": "AMOUNT_NOT_POSITIVE" }
+    },
+    {
+      "caseId": "negative-amount",
+      "requirementIds": ["T-IOS-002", "IOS-010"],
+      "receivedAt": "2026-07-19T08:51:00+09:00",
+      "message": "국민3456승인 김*원\n-1,000원 일시불\n07/19 08:50 가맹점가",
+      "expected": { "kind": "Rejected", "code": "AMOUNT_NOT_POSITIVE" }
+    },
+    {
+      "caseId": "nan-amount",
+      "requirementIds": ["T-IOS-002", "IOS-010"],
+      "receivedAt": "2026-07-19T08:51:00+09:00",
+      "message": "국민3456승인 김*원\nNaN원 일시불\n07/19 08:50 가맹점가",
+      "expected": { "kind": "Rejected", "code": "AMOUNT_NOT_FINITE" }
+    },
+    {
+      "caseId": "overflow-amount",
+      "requirementIds": ["T-IOS-002", "IOS-010"],
+      "receivedAt": "2026-07-19T08:51:00+09:00",
+      "message": "국민3456승인 김*원\n9,007,199,254,740,992원 일시불\n07/19 08:50 가맹점가",
+      "expected": { "kind": "Rejected", "code": "AMOUNT_OUT_OF_RANGE" }
+    },
+    {
+      "caseId": "invalid-calendar-date",
+      "requirementIds": ["T-IOS-002", "IOS-010"],
+      "receivedAt": "2026-02-28T08:51:00+09:00",
+      "message": "국민3456승인 김*원\n10,000원 일시불\n02/30 08:50 가맹점가",
+      "expected": { "kind": "Rejected", "code": "INVALID_DATE" }
+    },
+    {
+      "caseId": "invalid-time",
+      "requirementIds": ["T-IOS-002", "IOS-010"],
+      "receivedAt": "2026-07-19T08:51:00+09:00",
+      "message": "국민3456승인 김*원\n10,000원 일시불\n07/19 24:00 가맹점가",
+      "expected": { "kind": "Rejected", "code": "INVALID_TIME" }
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "timezone": "Asia/Seoul",
+  "definitions": [
+    {
+      "jobName": "recurring-daily",
+      "cron": "0 0 * * *",
+      "startGraceSeconds": 300,
+      "executionDeadlineSeconds": 480,
+      "heartbeatTimeoutSeconds": 180,
+      "leaseDurationSeconds": 300,
+      "pageSize": 100,
+      "maxPagesPerOccurrence": 100
+    },
+    {
+      "jobName": "asset-automation-daily",
+      "cron": "0 0 * * *",
+      "startGraceSeconds": 300,
+      "executionDeadlineSeconds": 480,
+      "heartbeatTimeoutSeconds": 180,
+      "leaseDurationSeconds": 300,
+      "pageSize": 100,
+      "maxPagesPerOccurrence": 100
+    },
+    {
+      "jobName": "instrument-catalog-daily",
+      "cron": "0 6 * * *",
+      "startGraceSeconds": 300,
+      "executionDeadlineSeconds": 480,
+      "heartbeatTimeoutSeconds": 300,
+      "leaseDurationSeconds": 300,
+      "pageSize": 1000,
+      "maxPagesPerOccurrence": 10
+    },
+    {
+      "jobName": "dividend-hourly",
+      "cron": "0 9-20 * * *",
+      "startGraceSeconds": 300,
+      "executionDeadlineSeconds": 480,
+      "heartbeatTimeoutSeconds": 300,
+      "leaseDurationSeconds": 300,
+      "pageSize": 50,
+      "maxPagesPerOccurrence": 200
+    },
+    {
+      "jobName": "asset-valuation-daily",
+      "cron": "55 23 * * *",
+      "startGraceSeconds": 300,
+      "executionDeadlineSeconds": 480,
+      "heartbeatTimeoutSeconds": 300,
+      "leaseDurationSeconds": 300,
+      "pageSize": 50,
+      "maxPagesPerOccurrence": 1000
+    },
+    {
+      "jobName": "scheduled-job-monitor",
+      "cron": "*/5 * * * *",
+      "startGraceSeconds": 120,
+      "executionDeadlineSeconds": 240,
+      "heartbeatTimeoutSeconds": 120,
+      "leaseDurationSeconds": 300,
+      "pageSize": 200,
+      "maxPagesPerOccurrence": 20
+    }
+  ]
+}

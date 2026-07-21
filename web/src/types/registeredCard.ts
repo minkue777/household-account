@@ -1,5 +1,3 @@
-import { Timestamp } from 'firebase/firestore';
-
 export interface RegisteredCard {
   id: string;
   householdId: string;
@@ -54,6 +52,19 @@ function normalizeRegisteredCardLabel(value: unknown): string {
   return value.trim();
 }
 
+function timestampLikeToDate(value: unknown): Date | undefined {
+  if (value instanceof Date) return value;
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'toDate' in value &&
+    typeof (value as { toDate?: unknown }).toDate === 'function'
+  ) {
+    return (value as { toDate(): Date }).toDate();
+  }
+  return undefined;
+}
+
 export function mapRegisteredCardDocument(
   id: string,
   data: Record<string, unknown>
@@ -65,7 +76,7 @@ export function mapRegisteredCardDocument(
     cardLabel: normalizeRegisteredCardLabel(data.cardLabel),
     cardLastFour: typeof data.cardLastFour === 'string' ? data.cardLastFour : '',
     orderIndex: typeof data.orderIndex === 'number' ? data.orderIndex : undefined,
-    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : undefined,
-    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : undefined,
+    createdAt: timestampLikeToDate(data.createdAt),
+    updatedAt: timestampLikeToDate(data.updatedAt),
   };
 }

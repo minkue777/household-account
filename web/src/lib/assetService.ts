@@ -1,22 +1,17 @@
 import {
   collection,
-  addDoc,
-  updateDoc,
-  deleteDoc,
   doc,
   query,
   where,
   onSnapshot,
-  Timestamp,
   getDocs,
   getDoc,
-  setDoc,
-  runTransaction,
   QueryDocumentSnapshot,
   DocumentData,
   orderBy,
-} from 'firebase/firestore';
-import { db } from './firebase';
+  db,
+  timestampToDate,
+} from '@/platform/read-model/firestoreReadModel';
 import {
   Asset,
   AssetHistoryEntry,
@@ -28,11 +23,11 @@ import {
   StockHoldingInput,
   isGoldEtfSubType,
 } from '@/types/asset';
-import { getStoredHouseholdKey } from './householdService';
+import { requireClientSessionScope } from '@/composition/clientSessionScope';
+import { portfolioCommands } from '@/features/portfolio/application/portfolioCommands';
 import { formatLocalDate } from './utils/date';
-import { ALL_MEMBERS_OPTION, buildLegacyAssetOwnerMap } from './assets/memberOptions';
+import { ALL_MEMBERS_OPTION } from './assets/memberOptions';
 import {
-  calculateExpectedLoanPrincipalPayment,
   getAssetSignedBalance,
   sumSignedBalancesByAssetType,
 } from './assets/assetMath';
@@ -50,11 +45,7 @@ const CRYPTO_HOLDINGS_COLLECTION = 'crypto_holdings';
  * 현재 가구 키 가져오기
  */
 function getHouseholdId(): string {
-  const key = getStoredHouseholdKey();
-  if (!key) {
-    throw new Error('가구 키가 없습니다. 다시 로그인해주세요.');
-  }
-  return key;
+  return requireClientSessionScope().householdId;
 }
 
 /**
@@ -69,6 +60,12 @@ function mapDocToAsset(docSnap: QueryDocumentSnapshot<DocumentData>): Asset {
     type: data.type,
     subType: data.subType,
     owner: data.owner,
+    ownerRef:
+      data.ownerRef?.kind === 'household'
+        ? { kind: 'household' }
+        : data.ownerRef?.kind === 'profile' && typeof data.ownerRef.profileId === 'string'
+          ? { kind: 'profile', profileId: data.ownerRef.profileId }
+          : undefined,
     currentBalance: data.currentBalance || 0,
     recurringContributionAmount: data.recurringContributionAmount || 0,
     recurringContributionDay: data.recurringContributionDay || 0,
@@ -88,19 +85,9 @@ function mapDocToAsset(docSnap: QueryDocumentSnapshot<DocumentData>): Asset {
     order: data.order || 0,
     stockCode: data.stockCode,
     quantity: data.quantity,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
+    createdAt: timestampToDate(data.createdAt) ?? new Date(0),
+    updatedAt: timestampToDate(data.updatedAt) ?? new Date(0),
   };
-}
-
-function getCurrentYearMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function getEffectiveContributionDay(dayOfMonth: number, now = new Date()): number {
-  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  return Math.min(dayOfMonth, lastDayOfMonth);
 }
 
 function extractPhysicalGoldQuantity(asset: Pick<Asset, 'quantity' | 'memo'>): number {
@@ -130,7 +117,7 @@ function mapDocToHistory(docSnap: QueryDocumentSnapshot<DocumentData>): AssetHis
     date: data.date,
     changeAmount: data.changeAmount,
     memo: data.memo,
-    createdAt: data.createdAt,
+    createdAt: timestampToDate(data.createdAt) ?? new Date(0),
   };
 }
 
@@ -138,134 +125,28 @@ function mapDocToHistory(docSnap: QueryDocumentSnapshot<DocumentData>): AssetHis
  * 자산 추가
  */
 export async function addAsset(input: AssetInput): Promise<string> {
-  const householdId = getHouseholdId();
-  const now = Timestamp.now();
-
-  // undefined 값 제거 (Firestore는 undefined를 허용하지 않음)
-  const cleanInput = Object.fromEntries(
-    Object.entries(input).filter(([, value]) => value !== undefined)
-  );
-
-  const docRef = await addDoc(collection(db, ASSETS_COLLECTION), {
-    ...cleanInput,
-    householdId,
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  return docRef.id;
+  return portfolioCommands.createAsset(getHouseholdId(), input);
 }
 
 /**
  * 자산 수정
  */
 export async function updateAsset(id: string, data: Partial<Asset>): Promise<void> {
-  const docRef = doc(db, ASSETS_COLLECTION, id);
-
-  // undefined 값만 제거 (빈 문자열은 허용)
-  const cleanData: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(data)) {
-    if (value !== undefined) {
-      cleanData[key] = value;
-    }
-  }
-
-  await updateDoc(docRef, {
-    ...cleanData,
-    updatedAt: Timestamp.now(),
-  });
-}
-
-/**
- * 예전 고정 멤버명으로 저장된 자산 소유자를 현재 가구 멤버명으로 마이그레이션
- */
-export async function migrateLegacyAssetOwners(memberNames: string[]): Promise<number> {
-  const householdId = getHouseholdId();
-  const ownerMap = buildLegacyAssetOwnerMap(memberNames);
-  const legacyOwners = Object.keys(ownerMap);
-
-  if (legacyOwners.length === 0) {
-    return 0;
-  }
-
-  const q = query(
-    collection(db, ASSETS_COLLECTION),
-    where('householdId', '==', householdId)
-  );
-
-  const snapshot = await getDocs(q);
-  const targets = snapshot.docs.filter((docSnap) => {
-    const owner = docSnap.data().owner;
-    return typeof owner === 'string' && !!ownerMap[owner] && ownerMap[owner] !== owner;
-  });
-
-  await Promise.all(
-    targets.map((docSnap) => {
-      const owner = docSnap.data().owner as string;
-      return updateDoc(doc(db, ASSETS_COLLECTION, docSnap.id), {
-        owner: ownerMap[owner],
-        updatedAt: Timestamp.now(),
-      });
-    })
-  );
-
-  return targets.length;
+  await portfolioCommands.updateAsset(getHouseholdId(), id, data);
 }
 
 /**
  * 자산 순서 일괄 업데이트
  */
 export async function updateAssetOrders(assetOrders: { id: string; order: number }[]): Promise<void> {
-  await runTransaction(db, async (transaction) => {
-    assetOrders.forEach(({ id, order }) => {
-      const docRef = doc(db, ASSETS_COLLECTION, id);
-      transaction.update(docRef, { order, updatedAt: Timestamp.now() });
-    });
-  });
+  await portfolioCommands.reorderAssets(getHouseholdId(), assetOrders);
 }
 
 /**
- * 자산 삭제 (및 관련 이력 삭제)
+ * 자산 논리 삭제 (이력과 보유 내역은 운영 복구를 위해 보존)
  */
 export async function deleteAsset(id: string): Promise<void> {
-  const householdId = getHouseholdId();
-
-  // 관련 이력 삭제
-  const historyQuery = query(
-    collection(db, HISTORY_COLLECTION),
-    where('householdId', '==', householdId),
-    where('assetId', '==', id)
-  );
-  const historySnapshot = await getDocs(historyQuery);
-
-  const holdingsQuery = query(
-    collection(db, HOLDINGS_COLLECTION),
-    where('householdId', '==', householdId),
-    where('assetId', '==', id)
-  );
-  const holdingsSnapshot = await getDocs(holdingsQuery);
-
-  const cryptoHoldingsQuery = query(
-    collection(db, CRYPTO_HOLDINGS_COLLECTION),
-    where('householdId', '==', householdId),
-    where('assetId', '==', id)
-  );
-  const cryptoHoldingsSnapshot = await getDocs(cryptoHoldingsQuery);
-
-  await runTransaction(db, async (transaction) => {
-    // 이력 삭제
-    historySnapshot.docs.forEach((docSnap) => {
-      transaction.delete(doc(db, HISTORY_COLLECTION, docSnap.id));
-    });
-    holdingsSnapshot.docs.forEach((docSnap) => {
-      transaction.delete(doc(db, HOLDINGS_COLLECTION, docSnap.id));
-    });
-    cryptoHoldingsSnapshot.docs.forEach((docSnap) => {
-      transaction.delete(doc(db, CRYPTO_HOLDINGS_COLLECTION, docSnap.id));
-    });
-    // 자산 삭제
-    transaction.delete(doc(db, ASSETS_COLLECTION, id));
-  });
+  await portfolioCommands.deleteAsset(getHouseholdId(), id);
 }
 
 /**
@@ -431,114 +312,6 @@ export async function getDailyAssetChange(): Promise<number> {
   }
 }
 
-/**
- * 일별 스냅샷 저장 헬퍼 함수
- */
-async function saveDailySnapshot(
-  assetId: string,
-  balance: number,
-  snapshotIdSuffix: string
-): Promise<void> {
-  const householdId = getHouseholdId();
-  const today = formatLocalDate(new Date());
-  const snapshotId = `${householdId}_${snapshotIdSuffix}_${today}`;
-
-  try {
-    const existingSnap = await getDoc(doc(db, HISTORY_COLLECTION, snapshotId));
-
-    // 이전 스냅샷 조회해서 changeAmount 계산
-    let changeAmount = 0;
-    try {
-      const q = query(
-        collection(db, HISTORY_COLLECTION),
-        where('householdId', '==', householdId),
-        where('assetId', '==', assetId),
-        where('date', '<', today),
-        orderBy('date', 'desc')
-      );
-
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        const prevBalance = snapshot.docs[0].data().balance || 0;
-        changeAmount = balance - prevBalance;
-      }
-      // 이전 스냅샷이 없으면 (첫 등록) changeAmount = 0 유지
-    } catch {
-      // 이전 데이터 없음 → changeAmount = 0
-    }
-
-    if (existingSnap.exists()) {
-      const existingData = existingSnap.data();
-      // 잔액이 변경된 경우에만 업데이트
-      if (existingData.balance !== balance) {
-        await setDoc(doc(db, HISTORY_COLLECTION, snapshotId), {
-          householdId,
-          assetId,
-          balance,
-          date: today,
-          changeAmount,
-          memo: '자동 기록',
-          createdAt: existingData.createdAt,
-          updatedAt: Timestamp.now(),
-        });
-      }
-    } else {
-      await setDoc(doc(db, HISTORY_COLLECTION, snapshotId), {
-        householdId,
-        assetId,
-        balance,
-        date: today,
-        changeAmount,
-        memo: '자동 기록',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      });
-    }
-  } catch (error) {
-    console.error('일별 스냅샷 저장 오류:', error);
-  }
-}
-
-/**
- * 오늘의 총자산 스냅샷 저장 (일별 자동 기록)
- */
-export async function saveDailyTotalSnapshot(
-  totalBalance: number,
-  financialBalance?: number,
-  assets?: Array<Pick<Asset, 'type' | 'currentBalance' | 'owner'>>
-): Promise<void> {
-  // 전체 자산 스냅샷 저장
-  await saveDailySnapshot('TOTAL', totalBalance, 'total');
-
-  // 금융자산 스냅샷 저장 (부동산/대출 제외)
-  if (financialBalance !== undefined) {
-    await saveDailySnapshot('FINANCIAL', financialBalance, 'financial');
-  }
-
-  if (assets && assets.length > 0) {
-    const typeTotals = sumSignedBalancesByAssetType(assets);
-    const ownerTotals = assets.reduce<Record<string, number>>((accumulator, asset) => {
-      if (!asset.owner) {
-        return accumulator;
-      }
-
-      accumulator[asset.owner] = (accumulator[asset.owner] || 0) + getAssetSignedBalance(asset);
-      return accumulator;
-    }, {});
-
-    await Promise.all(
-      [
-        ...Object.entries(typeTotals).map(([type, balance]) =>
-          saveDailySnapshot(`TYPE_${type}`, balance, `type_${type as AssetType}`)
-        ),
-        ...Object.entries(ownerTotals).map(([owner, balance]) =>
-          saveDailySnapshot(getOwnerSnapshotAssetId(owner), balance, getOwnerSnapshotIdSuffix(owner))
-        ),
-      ]
-    );
-  }
-}
-
 function getOwnerSnapshotAssetId(owner: string): string {
   return `OWNER_${owner}`;
 }
@@ -594,183 +367,6 @@ export async function getDailyAssetChangeByOwner(owner: string): Promise<number>
     console.error('사용자별 자산 변동액 조회 오류:', error);
     return 0;
   }
-}
-
-export async function processSavingsAutoContributions(): Promise<number> {
-  const householdId = getHouseholdId();
-  const now = new Date();
-  const currentMonth = getCurrentYearMonth();
-
-  const q = query(
-    collection(db, ASSETS_COLLECTION),
-    where('householdId', '==', householdId)
-  );
-
-  const snapshot = await getDocs(q);
-  const targets = snapshot.docs.filter((docSnap) => {
-    const data = docSnap.data();
-    const amount = data.recurringContributionAmount || 0;
-    const day = data.recurringContributionDay || 0;
-    const lastAppliedMonth = data.lastAutoContributionMonth || '';
-    const dueDay = getEffectiveContributionDay(day, now);
-
-    return (
-      data.isActive !== false &&
-      data.type === 'savings' &&
-      data.subType === '적금' &&
-      amount > 0 &&
-      day >= 1 &&
-      day <= 31 &&
-      now.getDate() >= dueDay &&
-      lastAppliedMonth !== currentMonth
-    );
-  });
-
-  if (targets.length === 0) {
-    return 0;
-  }
-
-  let appliedCount = 0;
-
-  await Promise.all(
-    targets.map(async (docSnap) => {
-      const docRef = doc(db, ASSETS_COLLECTION, docSnap.id);
-
-      await runTransaction(db, async (transaction) => {
-        const latestSnap = await transaction.get(docRef);
-        if (!latestSnap.exists()) return;
-
-        const data = latestSnap.data();
-        const amount = data.recurringContributionAmount || 0;
-        const day = data.recurringContributionDay || 0;
-        const lastAppliedMonth = data.lastAutoContributionMonth || '';
-        const dueDay = getEffectiveContributionDay(day, now);
-
-        if (
-          data.isActive === false ||
-          data.type !== 'savings' ||
-          data.subType !== '적금' ||
-          amount <= 0 ||
-          day < 1 ||
-          day > 31 ||
-          now.getDate() < dueDay ||
-          lastAppliedMonth === currentMonth
-        ) {
-          return;
-        }
-
-        transaction.update(docRef, {
-          currentBalance: (data.currentBalance || 0) + amount,
-          lastAutoContributionMonth: currentMonth,
-          updatedAt: Timestamp.now(),
-        });
-        appliedCount += 1;
-      });
-    })
-  );
-
-  return appliedCount;
-}
-
-export async function processLoanAutoRepayments(): Promise<number> {
-  const householdId = getHouseholdId();
-  const now = new Date();
-  const currentMonth = getCurrentYearMonth();
-
-  const q = query(
-    collection(db, ASSETS_COLLECTION),
-    where('householdId', '==', householdId)
-  );
-
-  const snapshot = await getDocs(q);
-  const targets = snapshot.docs.filter((docSnap) => {
-    const data = docSnap.data();
-    const paymentAmount = data.loanMonthlyPaymentAmount || 0;
-    const paymentDay = data.loanPaymentDay || 0;
-    const interestRate = data.loanInterestRate || 0;
-    const repaymentMethod = data.loanRepaymentMethod || '';
-    const lastAppliedMonth = data.lastAutoRepaymentMonth || '';
-    const dueDay = getEffectiveContributionDay(paymentDay, now);
-
-    return (
-      data.isActive !== false &&
-      data.type === 'loan' &&
-      (repaymentMethod === '원리금균등상환' || repaymentMethod === '원금균등상환') &&
-      paymentAmount > 0 &&
-      paymentDay >= 1 &&
-      paymentDay <= 31 &&
-      interestRate > 0 &&
-      now.getDate() >= dueDay &&
-      lastAppliedMonth !== currentMonth
-    );
-  });
-
-  if (targets.length === 0) {
-    return 0;
-  }
-
-  let appliedCount = 0;
-
-  await Promise.all(
-    targets.map(async (docSnap) => {
-      const docRef = doc(db, ASSETS_COLLECTION, docSnap.id);
-
-      await runTransaction(db, async (transaction) => {
-        const latestSnap = await transaction.get(docRef);
-        if (!latestSnap.exists()) return;
-
-        const data = latestSnap.data();
-        const paymentAmount = data.loanMonthlyPaymentAmount || 0;
-        const paymentDay = data.loanPaymentDay || 0;
-        const interestRate = data.loanInterestRate || 0;
-        const repaymentMethod = data.loanRepaymentMethod || '';
-        const lastAppliedMonth = data.lastAutoRepaymentMonth || '';
-        const dueDay = getEffectiveContributionDay(paymentDay, now);
-
-        if (
-          data.isActive === false ||
-          data.type !== 'loan' ||
-          (repaymentMethod !== '원리금균등상환' && repaymentMethod !== '원금균등상환') ||
-          paymentAmount <= 0 ||
-          paymentDay < 1 ||
-          paymentDay > 31 ||
-          interestRate <= 0 ||
-          now.getDate() < dueDay ||
-          lastAppliedMonth === currentMonth
-        ) {
-          return;
-        }
-
-        const currentBalance = Math.max(0, data.currentBalance || 0);
-        const principalPayment = calculateExpectedLoanPrincipalPayment({
-          type: 'loan',
-          currentBalance,
-          loanInterestRate: interestRate,
-          loanMonthlyPaymentAmount: paymentAmount,
-          loanRepaymentMethod: repaymentMethod,
-        });
-
-        transaction.update(docRef, {
-          currentBalance: Math.max(0, currentBalance - principalPayment),
-          lastAutoRepaymentMonth: currentMonth,
-          updatedAt: Timestamp.now(),
-        });
-        appliedCount += 1;
-      });
-    })
-  );
-
-  return appliedCount;
-}
-
-/**
- * 자산 순서 업데이트
- */
-export async function updateAssetOrder(assets: { id: string; order: number }[]): Promise<void> {
-  const batch = assets.map(({ id, order }) =>
-    updateDoc(doc(db, ASSETS_COLLECTION, id), { order, updatedAt: Timestamp.now() })
-  );
-  await Promise.all(batch);
 }
 
 /**
@@ -873,14 +469,20 @@ function mapDocToHolding(docSnap: QueryDocumentSnapshot<DocumentData>): StockHol
     holdingType: data.holdingType || 'stock',
     stockCode: data.stockCode || '',
     stockName: data.stockName,
+    market:
+      data.market === 'KRX' ||
+      data.market === 'US' ||
+      data.market === 'KOFIA_FUND'
+        ? data.market
+        : 'UNRESOLVED',
     quantity: data.quantity || 1,
     avgPrice: data.avgPrice,
     currentPrice: data.currentPrice,
     instrumentType: data.instrumentType,
     priceScale: data.priceScale,
     quoteAsOf: data.quoteAsOf,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
+    createdAt: timestampToDate(data.createdAt) ?? new Date(0),
+    updatedAt: timestampToDate(data.updatedAt) ?? new Date(0),
   };
 }
 
@@ -895,140 +497,27 @@ function mapDocToCryptoHolding(docSnap: QueryDocumentSnapshot<DocumentData>): Cr
     quantity: data.quantity,
     avgPrice: data.avgPrice,
     currentPrice: data.currentPrice,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
+    createdAt: timestampToDate(data.createdAt) ?? new Date(0),
+    updatedAt: timestampToDate(data.updatedAt) ?? new Date(0),
   };
-}
-
-/**
- * 주식 계좌의 총 평가금액 및 투자원금 계산 및 업데이트
- */
-async function updateAssetBalanceFromHoldings(assetId: string): Promise<void> {
-  const householdId = getHouseholdId();
-
-  const q = query(
-    collection(db, HOLDINGS_COLLECTION),
-    where('householdId', '==', householdId),
-    where('assetId', '==', assetId)
-  );
-
-  const snapshot = await getDocs(q);
-
-  let totalValue = 0;
-  let totalCostBasis = 0;
-
-  snapshot.docs.forEach((docSnap) => {
-    const data = docSnap.data();
-    const holding = {
-      quantity: data.quantity || 0,
-      avgPrice: data.avgPrice,
-      currentPrice: data.currentPrice,
-      priceScale: data.priceScale,
-    };
-
-    totalValue += calculateHoldingValue(holding);
-    totalCostBasis += calculateHoldingCostBasis(holding);
-  });
-
-  await updateDoc(doc(db, ASSETS_COLLECTION, assetId), {
-    currentBalance: totalValue,
-    costBasis: totalCostBasis,
-    updatedAt: Timestamp.now(),
-  });
-}
-
-async function updateAssetBalanceFromCryptoHoldings(assetId: string): Promise<void> {
-  const householdId = getHouseholdId();
-
-  const q = query(
-    collection(db, CRYPTO_HOLDINGS_COLLECTION),
-    where('householdId', '==', householdId),
-    where('assetId', '==', assetId)
-  );
-
-  const snapshot = await getDocs(q);
-
-  let totalValue = 0;
-  let totalCostBasis = 0;
-
-  snapshot.docs.forEach((docSnap) => {
-    const data = docSnap.data();
-    const quantity = data.quantity || 0;
-    const avgPrice = data.avgPrice || 0;
-    const currentPrice = data.currentPrice || avgPrice;
-
-    totalValue += currentPrice * quantity;
-    totalCostBasis += avgPrice * quantity;
-  });
-
-  await updateDoc(doc(db, ASSETS_COLLECTION, assetId), {
-    currentBalance: Math.round(totalValue),
-    costBasis: Math.round(totalCostBasis),
-    updatedAt: Timestamp.now(),
-  });
 }
 
 /**
  * 주식 보유 종목 추가
  */
 export async function addStockHolding(input: StockHoldingInput): Promise<string> {
-  const householdId = getHouseholdId();
-  const now = Timestamp.now();
-
-  const cleanInput = Object.fromEntries(
-    Object.entries(input).filter(([, value]) => value !== undefined)
-  );
-
-  const docRef = await addDoc(collection(db, HOLDINGS_COLLECTION), {
-    ...cleanInput,
-    householdId,
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  // 자산 총액 업데이트
-  await updateAssetBalanceFromHoldings(input.assetId);
-
-  return docRef.id;
+  return portfolioCommands.addPosition(getHouseholdId(), 'stock', input);
 }
 
 export async function addCryptoHolding(input: CryptoHoldingInput): Promise<string> {
-  const householdId = getHouseholdId();
-  const now = Timestamp.now();
-
-  const cleanInput = Object.fromEntries(
-    Object.entries(input).filter(([, value]) => value !== undefined)
-  );
-
-  const docRef = await addDoc(collection(db, CRYPTO_HOLDINGS_COLLECTION), {
-    ...cleanInput,
-    householdId,
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  await updateAssetBalanceFromCryptoHoldings(input.assetId);
-
-  return docRef.id;
+  return portfolioCommands.addPosition(getHouseholdId(), 'crypto', input);
 }
 
 /**
  * 주식 보유 종목 수정
  */
 export async function updateStockHolding(id: string, assetId: string, data: Partial<StockHolding>): Promise<void> {
-  const docRef = doc(db, HOLDINGS_COLLECTION, id);
-
-  const cleanData = Object.fromEntries(
-    Object.entries(data).filter(([, value]) => value !== undefined)
-  );
-
-  await updateDoc(docRef, {
-    ...cleanData,
-    updatedAt: Timestamp.now(),
-  });
-
-  // 자산 총액 업데이트
-  await updateAssetBalanceFromHoldings(assetId);
+  await portfolioCommands.updatePosition(getHouseholdId(), 'stock', id, assetId, data);
 }
 
 export async function updateCryptoHolding(
@@ -1036,34 +525,18 @@ export async function updateCryptoHolding(
   assetId: string,
   data: Partial<CryptoHolding>
 ): Promise<void> {
-  const docRef = doc(db, CRYPTO_HOLDINGS_COLLECTION, id);
-
-  const cleanData = Object.fromEntries(
-    Object.entries(data).filter(([, value]) => value !== undefined)
-  );
-
-  await updateDoc(docRef, {
-    ...cleanData,
-    updatedAt: Timestamp.now(),
-  });
-
-  await updateAssetBalanceFromCryptoHoldings(assetId);
+  await portfolioCommands.updatePosition(getHouseholdId(), 'crypto', id, assetId, data);
 }
 
 /**
  * 주식 보유 종목 삭제
  */
 export async function deleteStockHolding(id: string, assetId: string): Promise<void> {
-  await deleteDoc(doc(db, HOLDINGS_COLLECTION, id));
-
-  // 자산 총액 업데이트
-  await updateAssetBalanceFromHoldings(assetId);
+  await portfolioCommands.deletePosition(getHouseholdId(), 'stock', id, assetId);
 }
 
 export async function deleteCryptoHolding(id: string, assetId: string): Promise<void> {
-  await deleteDoc(doc(db, CRYPTO_HOLDINGS_COLLECTION, id));
-
-  await updateAssetBalanceFromCryptoHoldings(assetId);
+  await portfolioCommands.deletePosition(getHouseholdId(), 'crypto', id, assetId);
 }
 
 /**
@@ -1265,88 +738,6 @@ export async function getDividendEventsByYear(year: number): Promise<DividendEve
 }
 
 /**
- * 연도별 배당금 스냅샷 저장 (변경 시에만)
- */
-export async function saveDividendSnapshot(
-  year: number,
-  monthlyData: number[],
-  events: Record<string, DividendSnapshotEventRecord> = {}
-): Promise<boolean> {
-  const householdId = getHouseholdId();
-  const docId = `${householdId}_${year}`;
-
-  try {
-    // 기존 데이터 조회
-    const existing = await getDividendSnapshot(year);
-    const normalizedMonthlyData = [...monthlyData, ...createEmptyDividendMonthlyData()]
-      .slice(0, 12)
-      .map((value) => {
-        const parsed = Number(value);
-        return Number.isFinite(parsed) ? parsed : 0;
-      });
-
-    // 비교: 같으면 skip
-    if (
-      existing &&
-      JSON.stringify(existing.monthlyData) === JSON.stringify(normalizedMonthlyData) &&
-      JSON.stringify(existing.events) === JSON.stringify(events)
-    ) {
-      return false; // 변경 없음
-    }
-
-    // 다르면 업데이트
-    await setDoc(doc(db, DIVIDEND_COLLECTION, docId), {
-      householdId,
-      year,
-      monthlyData: normalizedMonthlyData,
-      events,
-      updatedAt: Timestamp.now(),
-    });
-
-    return true; // 업데이트됨
-  } catch (error) {
-    console.error('배당금 스냅샷 저장 오류:', error);
-    return false;
-  }
-}
-
-export async function mergeDividendSnapshotEvents(
-  year: number,
-  newEvents: Record<string, DividendSnapshotEventRecord>
-): Promise<DividendSnapshotData | null> {
-  const householdId = getHouseholdId();
-  const docId = `${householdId}_${year}`;
-
-  try {
-    const existing = await getDividendSnapshot(year);
-    const mergedEvents = {
-      ...(existing?.events || {}),
-    };
-
-    Object.entries(newEvents).forEach(([eventKey, eventValue]) => {
-      if (!mergedEvents[eventKey]) {
-        mergedEvents[eventKey] = eventValue;
-      }
-    });
-
-    if (Object.keys(mergedEvents).length === 0) {
-      return existing;
-    }
-
-    const monthlyData = buildDividendMonthlyDataFromEvents(mergedEvents);
-    await saveDividendSnapshot(year, monthlyData, mergedEvents);
-
-    return {
-      monthlyData,
-      events: mergedEvents,
-    };
-  } catch (error) {
-    console.error('배당금 이벤트 병합 오류:', error);
-    return null;
-  }
-}
-
-/**
  * 모든 주식 보유 종목 조회 (배당금 계산용)
  */
 export async function getAllStockHoldings(): Promise<StockHolding[]> {
@@ -1361,235 +752,17 @@ export async function getAllStockHoldings(): Promise<StockHolding[]> {
   return snapshot.docs.map(mapDocToHolding);
 }
 
-/**
- * 모든 주식 보유종목의 실시간 가격 갱신
- * - 네이버 금융 API로 현재가 조회
- * - Firestore 업데이트
- * - 계좌별 총액 자동 갱신
- */
-export async function refreshAllStockPrices(): Promise<void> {
-  const holdings = (await getAllStockHoldings()).filter(
-    (holding) => (holding.holdingType || 'stock') === 'stock' && !!holding.stockCode
-  );
-  if (holdings.length === 0) return;
-
-  // 종목코드별로 그룹화 (중복 API 호출 방지)
-  const holdingsByCode: Record<string, StockHolding[]> = {};
-  holdings.forEach((h) => {
-    if (!holdingsByCode[h.stockCode]) {
-      holdingsByCode[h.stockCode] = [];
-    }
-    holdingsByCode[h.stockCode].push(h);
-  });
-
-  // 업데이트된 assetId 추적 (중복 계산 방지)
-  const updatedAssetIds = new Set<string>();
-
-  // 종목별로 가격 조회 및 업데이트
-  await Promise.all(
-    Object.entries(holdingsByCode).map(async ([stockCode, stockHoldings]) => {
-      try {
-        const response = await fetch(`/api/stock/price?code=${stockCode}`);
-        if (!response.ok) return;
-
-        const data = await response.json();
-        const newPrice = data.price;
-
-        // 해당 종목의 모든 보유 내역 업데이트
-        await Promise.all(
-          stockHoldings.map(async (holding) => {
-            const nextInstrumentType = data.instrumentType || holding.instrumentType || 'stock';
-            const nextPriceScale = data.priceScale || holding.priceScale || 1;
-            const shouldUpdate =
-              holding.currentPrice !== newPrice ||
-              holding.instrumentType !== nextInstrumentType ||
-              holding.priceScale !== nextPriceScale ||
-              (!!data.quoteAsOf && holding.quoteAsOf !== data.quoteAsOf);
-
-            if (shouldUpdate) {
-              await updateDoc(doc(db, HOLDINGS_COLLECTION, holding.id), {
-                currentPrice: newPrice,
-                instrumentType: nextInstrumentType,
-                priceScale: nextPriceScale,
-                ...(data.quoteAsOf ? { quoteAsOf: data.quoteAsOf } : {}),
-                updatedAt: Timestamp.now(),
-              });
-              updatedAssetIds.add(holding.assetId);
-            }
-          })
-        );
-      } catch (error) {
-        console.error(`가격 갱신 실패 (${stockCode}):`, error);
-      }
-    })
-  );
-
-  // 변경된 자산들의 총액 업데이트
-  await Promise.all(
-    Array.from(updatedAssetIds).map((assetId) => updateAssetBalanceFromHoldings(assetId))
-  );
+export async function refreshAllMarketValues(): Promise<void> {
+  await portfolioCommands.refreshMarketValues(getHouseholdId(), 'all');
 }
 
-export async function getAllCryptoHoldings(): Promise<CryptoHolding[]> {
-  const householdId = getHouseholdId();
-
-  const q = query(
-    collection(db, CRYPTO_HOLDINGS_COLLECTION),
-    where('householdId', '==', householdId)
-  );
-
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(mapDocToCryptoHolding);
-}
-
-export async function refreshAllCryptoPrices(): Promise<void> {
-  const holdings = await getAllCryptoHoldings();
-  if (holdings.length === 0) return;
-
-  const holdingsByMarket: Record<string, CryptoHolding[]> = {};
-  holdings.forEach((holding) => {
-    if (!holdingsByMarket[holding.marketCode]) {
-      holdingsByMarket[holding.marketCode] = [];
-    }
-    holdingsByMarket[holding.marketCode].push(holding);
-  });
-
-  const updatedAssetIds = new Set<string>();
-
-  await Promise.all(
-    Object.entries(holdingsByMarket).map(async ([marketCode, marketHoldings]) => {
-      try {
-        const response = await fetch(`/api/crypto/price?market=${encodeURIComponent(marketCode)}`);
-        if (!response.ok) return;
-
-        const data = await response.json();
-        const newPrice = data.price;
-
-        await Promise.all(
-          marketHoldings.map(async (holding) => {
-            if (holding.currentPrice !== newPrice) {
-              await updateDoc(doc(db, CRYPTO_HOLDINGS_COLLECTION, holding.id), {
-                currentPrice: newPrice,
-                updatedAt: Timestamp.now(),
-              });
-              updatedAssetIds.add(holding.assetId);
-            }
-          })
-        );
-      } catch (error) {
-        console.error(`코인 시세 갱신 실패 (${marketCode}):`, error);
-      }
-    })
-  );
-
-  await Promise.all(
-    Array.from(updatedAssetIds).map((assetId) => updateAssetBalanceFromCryptoHoldings(assetId))
-  );
+export async function refreshAssetMarketValues(
+  assetId: string,
+  assetClass: 'stock' | 'crypto' | 'physical-gold'
+): Promise<void> {
+  await portfolioCommands.refreshMarketValues(getHouseholdId(), assetClass, assetId);
 }
 
 export async function refreshAllPhysicalGoldValues(): Promise<void> {
-  const householdId = getHouseholdId();
-
-  const q = query(
-    collection(db, ASSETS_COLLECTION),
-    where('householdId', '==', householdId)
-  );
-
-  const snapshot = await getDocs(q);
-  const physicalGoldAssets = snapshot.docs
-    .map(mapDocToAsset)
-    .filter((asset) => asset.type === 'gold' && !isGoldEtfSubType(asset.subType));
-
-  if (physicalGoldAssets.length === 0) {
-    return;
-  }
-
-  let pricePerDon = 0;
-
-  try {
-    const response = await fetch('/api/gold/price');
-    if (!response.ok) {
-      return;
-    }
-
-    const payload = await response.json();
-    pricePerDon =
-      typeof payload?.pricePerDon === 'number'
-        ? payload.pricePerDon
-        : typeof payload?.sellPricePerDon === 'number'
-          ? payload.sellPricePerDon
-          : 0;
-  } catch (error) {
-    console.error('실물 금 시세 갱신 실패:', error);
-    return;
-  }
-
-  if (pricePerDon <= 0) {
-    return;
-  }
-
-  await Promise.all(
-    physicalGoldAssets.map(async (asset) => {
-      const quantity = extractPhysicalGoldQuantity(asset);
-      if (quantity <= 0) {
-        return;
-      }
-
-      const nextBalance = Math.round(pricePerDon * quantity);
-      if (nextBalance === asset.currentBalance) {
-        return;
-      }
-
-      await updateDoc(doc(db, ASSETS_COLLECTION, asset.id), {
-        currentBalance: nextBalance,
-        updatedAt: Timestamp.now(),
-      });
-    })
-  );
-}
-
-/**
- * 자산 삭제 시 연결된 보유 종목도 함께 삭제
- */
-export async function deleteAssetWithHoldings(assetId: string): Promise<void> {
-  const householdId = getHouseholdId();
-
-  // 관련 이력 조회
-  const historyQuery = query(
-    collection(db, HISTORY_COLLECTION),
-    where('householdId', '==', householdId),
-    where('assetId', '==', assetId)
-  );
-  const historySnapshot = await getDocs(historyQuery);
-
-  // 관련 보유 종목 조회
-  const holdingsQuery = query(
-    collection(db, HOLDINGS_COLLECTION),
-    where('householdId', '==', householdId),
-    where('assetId', '==', assetId)
-  );
-  const holdingsSnapshot = await getDocs(holdingsQuery);
-
-  const cryptoHoldingsQuery = query(
-    collection(db, CRYPTO_HOLDINGS_COLLECTION),
-    where('householdId', '==', householdId),
-    where('assetId', '==', assetId)
-  );
-  const cryptoHoldingsSnapshot = await getDocs(cryptoHoldingsQuery);
-
-  await runTransaction(db, async (transaction) => {
-    // 이력 삭제
-    historySnapshot.docs.forEach((docSnap) => {
-      transaction.delete(doc(db, HISTORY_COLLECTION, docSnap.id));
-    });
-    // 보유 종목 삭제
-    holdingsSnapshot.docs.forEach((docSnap) => {
-      transaction.delete(doc(db, HOLDINGS_COLLECTION, docSnap.id));
-    });
-    cryptoHoldingsSnapshot.docs.forEach((docSnap) => {
-      transaction.delete(doc(db, CRYPTO_HOLDINGS_COLLECTION, docSnap.id));
-    });
-    // 자산 삭제
-    transaction.delete(doc(db, ASSETS_COLLECTION, assetId));
-  });
+  await portfolioCommands.refreshMarketValues(getHouseholdId(), 'physical-gold');
 }

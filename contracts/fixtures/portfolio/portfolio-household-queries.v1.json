@@ -1,0 +1,111 @@
+{
+  "fixtureVersion": 1,
+  "validPayloads": [
+    {
+      "caseId": "stock-search",
+      "body": {
+        "query": "portfolio.search-instruments.v1",
+        "payload": { "assetClass": "stock", "query": "삼성", "limit": 10 }
+      }
+    },
+    {
+      "caseId": "crypto-quote",
+      "body": {
+        "query": "portfolio.get-instrument-quote.v1",
+        "payload": {
+          "market": "UPBIT_KRW",
+          "code": "KRW-BTC",
+          "name": "비트코인",
+          "instrumentType": "crypto",
+          "priceScale": 1
+        }
+      }
+    },
+    {
+      "caseId": "dividend-projection",
+      "body": {
+        "query": "portfolio.get-dividend-projection.v1",
+        "payload": { "instrumentCode": "005930" }
+      }
+    }
+  ],
+  "invalidPayloads": [
+    {
+      "caseId": "search-all-is-forbidden",
+      "body": {
+        "query": "portfolio.search-instruments.v1",
+        "payload": { "assetClass": "all", "query": "삼성" }
+      }
+    },
+    {
+      "caseId": "quote-market-is-required",
+      "body": {
+        "query": "portfolio.get-instrument-quote.v1",
+        "payload": { "code": "005930" }
+      }
+    },
+    {
+      "caseId": "identity-field-is-never-a-query-input",
+      "body": {
+        "query": "portfolio.get-dividend-projection.v1",
+        "payload": { "instrumentCode": "005930", "householdId": "forged" }
+      }
+    }
+  ],
+  "validResults": [
+    {
+      "caseId": "stock-search-result",
+      "body": {
+        "query": "portfolio.search-instruments.v1",
+        "value": {
+          "items": [
+            {
+              "market": "KRX",
+              "instrumentType": "stock",
+              "code": "005930",
+              "name": "삼성전자"
+            }
+          ],
+          "truncated": false,
+          "stale": false,
+          "catalogAsOf": "2026-07-21",
+          "catalogVersion": "v1"
+        }
+      }
+    },
+    {
+      "caseId": "quote-result",
+      "body": {
+        "query": "portfolio.get-instrument-quote.v1",
+        "value": {
+          "instrument": {
+            "market": "KRX",
+            "instrumentType": "stock",
+            "code": "005930",
+            "name": "삼성전자"
+          },
+          "priceInWon": 90000,
+          "observedAt": "2026-07-21T01:00:00.000Z",
+          "provider": "naver-domestic"
+        }
+      }
+    },
+    {
+      "caseId": "empty-dividend-projection",
+      "body": {
+        "query": "portfolio.get-dividend-projection.v1",
+        "value": {
+          "code": "005930",
+          "name": "005930",
+          "recentDividend": null,
+          "paymentDate": null,
+          "frequency": null,
+          "dividendYield": null,
+          "annualDividendPerShare": null,
+          "isEstimated": false,
+          "paymentEvents": []
+        }
+      }
+    }
+  ]
+}

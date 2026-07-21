@@ -1,0 +1,364 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://household-account.local/schemas/payment-capture/capture-envelope.v1.schema.json",
+  "title": "Capture Envelope V1",
+  "description": "Android 등록 패키지와 iOS Shortcut credential에서 생성한 결제·잔액 관찰을 Payment Intake로 전달하는 채널 중립 wire 계약입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "observationId",
+    "originChannel",
+    "sourceEvidence",
+    "observedAt",
+    "parser",
+    "rawPayloadHash"
+  ],
+  "properties": {
+    "contractVersion": {
+      "const": "capture-envelope.v1"
+    },
+    "observationId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "originChannel": {
+      "enum": [
+        "android-notification",
+        "ios-shortcut"
+      ]
+    },
+    "sourceEvidence": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/androidRegisteredPackageSource"
+        },
+        {
+          "$ref": "#/$defs/iosShortcutCredentialSource"
+        }
+      ]
+    },
+    "observedAt": {
+      "$ref": "#/$defs/instantWithOffset"
+    },
+    "parser": {
+      "$ref": "#/$defs/parserEvidence"
+    },
+    "rawPayloadHash": {
+      "$ref": "#/$defs/sha256Hash"
+    },
+    "paymentObservation": {
+      "$ref": "#/$defs/paymentObservation"
+    },
+    "balanceObservation": {
+      "$ref": "#/$defs/balanceObservation"
+    }
+  },
+  "allOf": [
+    {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "paymentObservation": {}
+          },
+          "required": [
+            "paymentObservation"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "balanceObservation": {}
+          },
+          "required": [
+            "balanceObservation"
+          ]
+        }
+      ]
+    },
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "originChannel",
+            "sourceEvidence"
+          ],
+          "properties": {
+            "originChannel": {
+              "const": "android-notification"
+            },
+            "sourceEvidence": {
+              "$ref": "#/$defs/androidRegisteredPackageSource"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "originChannel",
+            "sourceEvidence",
+            "paymentObservation"
+          ],
+          "properties": {
+            "originChannel": {
+              "const": "ios-shortcut"
+            },
+            "sourceEvidence": {
+              "$ref": "#/$defs/iosShortcutCredentialSource"
+            },
+            "paymentObservation": {
+              "type": "object",
+              "required": [
+                "observationType",
+                "cardEvidence"
+              ],
+              "properties": {
+                "observationType": {
+                  "const": "approval"
+                },
+                "cardEvidence": {}
+              }
+            }
+          },
+          "not": {
+            "type": "object",
+            "properties": {
+              "balanceObservation": {}
+            },
+            "required": [
+              "balanceObservation"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "nonBlankString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": ".*\\S.*"
+    },
+    "localDate": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "localTime": {
+      "type": "string",
+      "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+    },
+    "instantWithOffset": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?(?:Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "sha256Hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "androidRegisteredPackageSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "sourceType",
+        "packageName",
+        "registryVersion"
+      ],
+      "properties": {
+        "kind": {
+          "const": "android-registered-package"
+        },
+        "sourceType": {
+          "$ref": "#/$defs/stableId"
+        },
+        "packageName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+$"
+        },
+        "registryVersion": {
+          "$ref": "#/$defs/stableId"
+        }
+      }
+    },
+    "iosShortcutCredentialSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "sourceType",
+        "credentialIdHash"
+      ],
+      "properties": {
+        "kind": {
+          "const": "ios-shortcut-credential"
+        },
+        "sourceType": {
+          "const": "ios-shortcut"
+        },
+        "credentialIdHash": {
+          "$ref": "#/$defs/sha256Hash"
+        }
+      }
+    },
+    "parserEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "parserId",
+        "parserVersion"
+      ],
+      "properties": {
+        "parserId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "parserVersion": {
+          "$ref": "#/$defs/stableId"
+        }
+      }
+    },
+    "cardEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "companyLabel"
+      ],
+      "properties": {
+        "companyLabel": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "maskedToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      }
+    },
+    "paymentObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branchId",
+        "observationType",
+        "amountInWon",
+        "zoneId",
+        "merchantEvidence"
+      ],
+      "properties": {
+        "branchId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "observationType": {
+          "enum": [
+            "approval",
+            "cancellation"
+          ]
+        },
+        "amountInWon": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "occurredLocalDate": {
+          "$ref": "#/$defs/localDate"
+        },
+        "occurredLocalTime": {
+          "$ref": "#/$defs/localTime"
+        },
+        "zoneId": {
+          "const": "Asia/Seoul"
+        },
+        "merchantEvidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rawCandidate"
+          ],
+          "properties": {
+            "rawCandidate": {
+              "$ref": "#/$defs/nonBlankString"
+            }
+          }
+        },
+        "cardEvidence": {
+          "$ref": "#/$defs/cardEvidence"
+        },
+        "localCurrencyType": {
+          "$ref": "#/$defs/stableId"
+        },
+        "dueDate": {
+          "$ref": "#/$defs/localDate"
+        }
+      },
+      "dependencies": {
+        "occurredLocalDate": [
+          "occurredLocalTime"
+        ],
+        "occurredLocalTime": [
+          "occurredLocalDate"
+        ]
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "required": [
+              "observationType"
+            ],
+            "properties": {
+              "observationType": {
+                "const": "approval"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "required": [
+              "occurredLocalDate",
+              "occurredLocalTime"
+            ],
+            "properties": {
+              "occurredLocalDate": {},
+              "occurredLocalTime": {}
+            }
+          }
+        }
+      ]
+    },
+    "balanceObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branchId",
+        "currencyType",
+        "balanceInWon",
+        "observedAt"
+      ],
+      "properties": {
+        "branchId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "currencyType": {
+          "$ref": "#/$defs/stableId"
+        },
+        "balanceInWon": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "observedAt": {
+          "$ref": "#/$defs/instantWithOffset"
+        }
+      }
+    }
+  }
+}

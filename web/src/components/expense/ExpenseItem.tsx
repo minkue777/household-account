@@ -258,7 +258,9 @@ export default function ExpenseItem({
         onCancelSplitGroup={transactionType === 'expense' && expense.splitGroupId ? handleCancelSplitGroup : undefined}
         onUpdateSplitGroup={transactionType === 'expense' && expense.splitGroupId ? handleUpdateSplitGroup : undefined}
         onDelete={onDelete ? () => onDelete(expense.id) : undefined}
-        onNotifyPartner={transactionType === 'expense' ? () => notifyPartner(expense.id) : undefined}
+        onNotifyPartner={transactionType === 'expense'
+          ? () => notifyPartner(expense.id, expense.aggregateVersion)
+          : undefined}
       />
 
       {/* 분할 모달 */}

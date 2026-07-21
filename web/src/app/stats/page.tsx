@@ -11,10 +11,10 @@ import ExpenseEditModal from '@/components/expense/ExpenseEditModal';
 import { Expense, Category } from '@/types/expense';
 import { subscribeToDateRangeExpenses, updateExpense, deleteExpense } from '@/lib/expenseService';
 import { addMerchantRule } from '@/lib/merchantRuleService';
-import { getStoredHouseholdKey } from '@/lib/householdService';
 import { ExpenseUpdates } from '@/lib/utils/expenseForm';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useHousehold } from '@/contexts/HouseholdContext';
 
 const DEFAULT_CATEGORY_KEYS = ['food', 'living', 'childcare'];
 
@@ -36,6 +36,7 @@ export default function StatsPage() {
 
   const { activeCategories } = useCategoryContext();
   const { themeConfig } = useTheme();
+  const { householdKey } = useHousehold();
 
   useEffect(() => {
     if (hasInitializedCategories || activeCategories.length === 0) {
@@ -59,7 +60,7 @@ export default function StatsPage() {
 
   const handleSaveEdit = async (expense: Expense, updates: ExpenseUpdates) => {
     try {
-      await updateExpense(expense.id, updates);
+      await updateExpense(expense.id, updates, expense.aggregateVersion);
 
       if (updates.category && updates.category !== expense.category) {
         setSelectedCategoryExpenses((prev) => prev.filter((item) => item.id !== expense.id));
@@ -74,13 +75,14 @@ export default function StatsPage() {
   };
 
   const handleSaveMerchantRule = async (merchantName: string, category: string) => {
-    const householdId = getStoredHouseholdKey() || 'guest';
+    if (!householdKey) throw new Error('인증된 가구 세션이 필요합니다.');
+    const householdId = householdKey;
     await addMerchantRule(householdId, merchantName, category, true);
   };
 
   const handleDeleteExpense = async (expense: Expense) => {
     try {
-      await deleteExpense(expense.id);
+      await deleteExpense(expense.id, expense.aggregateVersion);
       setSelectedCategoryExpenses((prev) => prev.filter((item) => item.id !== expense.id));
     } finally {
       setEditingExpense(null);

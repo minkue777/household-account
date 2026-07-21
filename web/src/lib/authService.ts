@@ -1,26 +1,32 @@
 import {
   getAuth,
   signInWithPopup,
+  signInWithCustomToken,
   GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
   User,
 } from 'firebase/auth';
 import { app } from './firebase';
+import {
+  isAndroidHostAvailable,
+  requestAndroidHost,
+} from '@/platform/android-host/androidHostBridge';
 
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 
-// 허용된 관리자 이메일 (여러 개 가능)
-const ALLOWED_ADMIN_EMAILS = [
-  'minkue777@gmail.com', // 본인 이메일로 변경하세요
-];
 
 /**
  * 구글 로그인
  */
 export async function signInWithGoogle(): Promise<User | null> {
   try {
+    if (isAndroidHostAvailable()) {
+      const { customToken } = await requestAndroidHost('auth.sign-in', {});
+      const result = await signInWithCustomToken(auth, customToken);
+      return result.user;
+    }
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error) {
@@ -32,6 +38,9 @@ export async function signInWithGoogle(): Promise<User | null> {
  * 로그아웃
  */
 export async function logOut(): Promise<void> {
+  if (isAndroidHostAvailable()) {
+    await requestAndroidHost('auth.sign-out', {});
+  }
   await signOut(auth);
 }
 
@@ -47,12 +56,4 @@ export function getCurrentUser(): User | null {
  */
 export function onAuthChange(callback: (user: User | null) => void): () => void {
   return onAuthStateChanged(auth, callback);
-}
-
-/**
- * 관리자 권한 확인
- */
-export function isAdmin(user: User | null): boolean {
-  if (!user || !user.email) return false;
-  return ALLOWED_ADMIN_EMAILS.includes(user.email);
 }

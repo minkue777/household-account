@@ -1,0 +1,111 @@
+{
+  "fixtureVersion": 1,
+  "validRequests": [
+    {
+      "caseId": "household-ledger-command",
+      "body": {
+        "contractVersion": "household-command.v1",
+        "commandId": "command-ledger-001",
+        "idempotencyKey": "ledger-manual-001",
+        "householdId": "household-001",
+        "command": "ledger.record-manual-transaction.v1",
+        "payload": {
+          "amountInWon": 12000,
+          "merchant": "식료품점",
+          "occurredLocalDate": "2026-07-21"
+        }
+      }
+    },
+    {
+      "caseId": "principal-bootstrap-command",
+      "body": {
+        "contractVersion": "household-command.v1",
+        "commandId": "command-access-001",
+        "idempotencyKey": "access-bootstrap-001",
+        "command": "access.resolve-signed-in-user.v1",
+        "payload": {}
+      }
+    }
+  ],
+  "invalidRequests": [
+    {
+      "caseId": "missing-idempotency-key",
+      "body": {
+        "contractVersion": "household-command.v1",
+        "commandId": "command-ledger-002",
+        "householdId": "household-001",
+        "command": "ledger.record-manual-transaction.v1",
+        "payload": {}
+      }
+    },
+    {
+      "caseId": "client-supplied-actor",
+      "body": {
+        "contractVersion": "household-command.v1",
+        "commandId": "command-ledger-003",
+        "idempotencyKey": "ledger-manual-003",
+        "householdId": "household-001",
+        "command": "ledger.record-manual-transaction.v1",
+        "payload": {},
+        "actingMemberId": "member-forged"
+      }
+    },
+    {
+      "caseId": "unversioned-command-name",
+      "body": {
+        "contractVersion": "household-command.v1",
+        "commandId": "command-ledger-004",
+        "idempotencyKey": "ledger-manual-004",
+        "householdId": "household-001",
+        "command": "recordTransaction",
+        "payload": {}
+      }
+    }
+  ],
+  "validResponses": [
+    {
+      "caseId": "succeeded",
+      "body": {
+        "contractVersion": "household-command-response.v1",
+        "commandId": "command-ledger-001",
+        "result": {
+          "kind": "succeeded",
+          "value": {
+            "transactionId": "transaction-001"
+          }
+        }
+      }
+    },
+    {
+      "caseId": "rejected",
+      "body": {
+        "contractVersion": "household-command-response.v1",
+        "commandId": "command-ledger-003",
+        "result": {
+          "kind": "rejected",
+          "error": {
+            "code": "TENANT_MISMATCH",
+            "retryable": false
+          }
+        }
+      }
+    }
+  ],
+  "invalidResponses": [
+    {
+      "caseId": "firebase-error-leak",
+      "body": {
+        "contractVersion": "household-command-response.v1",
+        "commandId": "command-ledger-005",
+        "result": {
+          "kind": "rejected",
+          "error": {
+            "code": "INTERNAL",
+            "retryable": true,
+            "stack": "FirebaseError: internal details"
+          }
+        }
+      }
+    }
+  ]
+}

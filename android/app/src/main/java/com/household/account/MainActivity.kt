@@ -1,6 +1,7 @@
 package com.household.account
 
 import android.annotation.SuppressLint
+import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -8,22 +9,32 @@ import android.os.Bundle
 import android.provider.Settings
 import android.view.View
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.LinearLayout
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import com.household.account.util.FcmTokenManager
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
+import com.household.account.quickedit.QuickEditCoordinator
+import com.household.account.util.FidEndpointManager
 import com.household.account.util.HouseholdPreferences
+import com.household.account.paymentcapture.AndroidCaptureDelivery
+import com.household.account.webhost.AndroidHostBridge
+import com.household.account.webhost.TrustedWebOrigin
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
-    companion object {
-        private const val WEB_APP_URL = "https://household-account-app-demo-v1.vercel.app/"
-    }
-
     private lateinit var webView: WebView
     private lateinit var permissionLayout: LinearLayout
+    private val pushPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,15 +51,26 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         checkPermissionAndShowContent()
+        lifecycleScope.launch {
+            QuickEditCoordinator.resumePending(applicationContext)
+        }
     }
 
-    @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
+    @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
+        val hostBridge = AndroidHostBridge(this)
         webView.apply {
             webViewClient = object : WebViewClient() {
-                override fun onPageFinished(view: WebView?, url: String?) {
-                    super.onPageFinished(view, url)
-                    syncHouseholdKeyFromLocalStorage()
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): Boolean {
+                    val target = request?.url?.toString() ?: return true
+                    if (request.isForMainFrame && !TrustedWebOrigin.contains(target)) {
+                        runCatching { startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
+                        return true
+                    }
+                    return false
                 }
             }
             webChromeClient = WebChromeClient()
@@ -61,30 +83,25 @@ class MainActivity : AppCompatActivity() {
                 displayZoomControls = false
                 loadWithOverviewMode = true
                 useWideViewPort = true
+                allowFileAccess = false
+                allowContentAccess = false
+                mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                javaScriptCanOpenWindowsAutomatically = false
+                setSupportMultipleWindows(false)
             }
-
-            addJavascriptInterface(WebViewBridge(this@MainActivity), WebViewBridge.BRIDGE_NAME)
         }
-    }
-
-    private fun syncHouseholdKeyFromLocalStorage() {
-        val script = """
-            (function() {
-                var key = localStorage.getItem('householdKey');
-                if (key && key.length > 0) {
-                    AndroidBridge.setHouseholdKey(key);
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            WebViewCompat.addWebMessageListener(
+                webView,
+                AndroidHostBridge.OBJECT_NAME,
+                setOf(TrustedWebOrigin.APP_ORIGIN)
+            ) { _, message, sourceOrigin, isMainFrame, replyProxy ->
+                if (!isMainFrame || sourceOrigin.toString() != TrustedWebOrigin.APP_ORIGIN) return@addWebMessageListener
+                lifecycleScope.launch {
+                    replyProxy.postMessage(hostBridge.handle(message.data.orEmpty()))
                 }
-                var memberName = localStorage.getItem('currentMemberName');
-                if (memberName && memberName.length > 0) {
-                    AndroidBridge.setMemberName(memberName);
-                }
-                var partnerName = localStorage.getItem('partnerName');
-                if (partnerName && partnerName.length > 0) {
-                    AndroidBridge.setPartnerName(partnerName);
-                }
-            })();
-        """.trimIndent()
-        webView.evaluateJavascript(script, null)
+            }
+        }
     }
 
     private fun setupPermissionButtons() {
@@ -149,14 +166,30 @@ class MainActivity : AppCompatActivity() {
         webView.visibility = View.VISIBLE
 
         if (webView.url == null) {
-            webView.loadUrl(WEB_APP_URL)
+            webView.loadUrl(TrustedWebOrigin.APP_URL)
         }
+
+        requestPushPermissionOnceIfNeeded()
 
         if (HouseholdPreferences.hasHouseholdKey(this) &&
             HouseholdPreferences.getMemberName(this).isNotEmpty()
         ) {
-            FcmTokenManager.registerCurrentToken(this)
+            FidEndpointManager.registerCurrentInstallation(this)
+            AndroidCaptureDelivery.scheduleRetry(this)
         }
+    }
+
+    /** 푸시 권한은 편의 기능이므로 알림 수집/QuickEdit 필수 권한 판정과 분리합니다. */
+    private fun requestPushPermissionOnceIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) return
+        val preferences = getSharedPreferences("android_permission_prompts", MODE_PRIVATE)
+        if (preferences.getBoolean("postNotificationsRequested", false)) return
+        preferences.edit().putBoolean("postNotificationsRequested", true).apply()
+        pushPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
     private fun showPermissionScreen() {

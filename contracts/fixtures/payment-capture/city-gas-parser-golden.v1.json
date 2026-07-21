@@ -1,0 +1,107 @@
+{
+  "fixtureVersion": 1,
+  "zoneId": "Asia/Seoul",
+  "cases": [
+    {
+      "caseId": "billing-title-and-valid-due-date",
+      "requirementIds": ["T-CITYGAS-001", "PARSE-CITYGAS-001"],
+      "raw": {
+        "observedAtSeoul": "2026-04-02T08:30:00+09:00",
+        "title": "[2026년 3월 도시가스요금 청구서]",
+        "body": "도시가스요금 청구서\n납부하실 총 금액은 48,210원\n납부마감일은 2026년 4월 15일"
+      },
+      "expected": {
+        "kind": "Parsed",
+        "amountInWon": 48210,
+        "transactionType": "fixed",
+        "categoryKind": "bill",
+        "billingMonth": "2026-03",
+        "memoPolicy": "BillingTitle",
+        "accountingDate": "2026-04-15",
+        "accountingDateSource": "DueDate"
+      }
+    },
+    {
+      "caseId": "missing-billing-title",
+      "requirementIds": ["T-CITYGAS-001", "PARSE-CITYGAS-001"],
+      "raw": {
+        "observedAtSeoul": "2026-04-02T08:30:00+09:00",
+        "body": "도시가스요금 청구서\n납부하실 총 금액은 48,210원\n납부마감일은 2026년 4월 15일"
+      },
+      "expected": {
+        "kind": "Parsed",
+        "amountInWon": 48210,
+        "transactionType": "fixed",
+        "categoryKind": "bill",
+        "billingMonth": "2026-04",
+        "memoPolicy": "Empty",
+        "accountingDate": "2026-04-15",
+        "accountingDateSource": "DueDate"
+      }
+    },
+    {
+      "caseId": "missing-due-date",
+      "requirementIds": ["T-CITYGAS-001", "PARSE-CITYGAS-001"],
+      "raw": {
+        "observedAtSeoul": "2026-04-02T23:30:00+09:00",
+        "title": "[2026년 3월 도시가스요금 청구서]",
+        "body": "도시가스요금 청구서\n납부하실 총 금액은 48,210원"
+      },
+      "expected": {
+        "kind": "Parsed",
+        "amountInWon": 48210,
+        "transactionType": "fixed",
+        "categoryKind": "bill",
+        "billingMonth": "2026-03",
+        "memoPolicy": "BillingTitle",
+        "accountingDate": "2026-04-02",
+        "accountingDateSource": "ObservedDateFallback"
+      }
+    },
+    {
+      "caseId": "invalid-due-date",
+      "requirementIds": ["T-CITYGAS-001", "PARSE-CITYGAS-001"],
+      "raw": {
+        "observedAtSeoul": "2026-04-02T23:30:00+09:00",
+        "title": "[2026년 3월 도시가스요금 청구서]",
+        "body": "도시가스요금 청구서\n납부하실 총 금액은 48,210원\n납부마감일은 2026년 2월 30일"
+      },
+      "expected": {
+        "kind": "Parsed",
+        "amountInWon": 48210,
+        "transactionType": "fixed",
+        "categoryKind": "bill",
+        "billingMonth": "2026-03",
+        "memoPolicy": "BillingTitle",
+        "accountingDate": "2026-04-02",
+        "accountingDateSource": "ObservedDateFallback"
+      }
+    },
+    {
+      "caseId": "missing-total-amount",
+      "requirementIds": ["T-CITYGAS-001", "PARSE-CITYGAS-001"],
+      "raw": {
+        "observedAtSeoul": "2026-04-02T08:30:00+09:00",
+        "title": "[2026년 3월 도시가스요금 청구서]",
+        "body": "도시가스요금 청구서\n납부마감일은 2026년 4월 15일"
+      },
+      "expected": {
+        "kind": "Ignored",
+        "code": "TOTAL_AMOUNT_MISSING"
+      }
+    },
+    {
+      "caseId": "non-city-gas-notification",
+      "requirementIds": ["T-CITYGAS-001", "PARSE-CITYGAS-001"],
+      "raw": {
+        "observedAtSeoul": "2026-04-02T08:30:00+09:00",
+        "title": "정기 요금 안내",
+        "body": "생활 요금 청구 안내\n총액 48,210원\n납부마감일 2026.04.15"
+      },
+      "expected": {
+        "kind": "Ignored",
+        "code": "NOT_CITY_GAS_BILL"
+      }
+    }
+  ]
+}

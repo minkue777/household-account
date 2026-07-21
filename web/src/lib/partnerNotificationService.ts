@@ -1,18 +1,10 @@
-import { doc, Timestamp, updateDoc } from 'firebase/firestore';
-import { db } from './firebase';
-import { MemberStorage } from './storage/memberStorage';
-
-const COLLECTION_NAME = 'expenses';
+import { ledgerCommands } from '@/features/ledger/application/ledgerCommands';
+import { requireClientSessionScope } from '@/composition/clientSessionScope';
 
 /**
  * 지출 알림 전송 요청
  */
-export async function notifyPartner(id: string): Promise<void> {
-  const docRef = doc(db, COLLECTION_NAME, id);
-  const deviceOwner = MemberStorage.getMemberName();
-
-  await updateDoc(docRef, {
-    notifyPartnerAt: Timestamp.now(),
-    notifyPartnerBy: deviceOwner || null,
-  });
+export async function notifyPartner(id: string, expectedVersion: number): Promise<void> {
+  const householdId = requireClientSessionScope().householdId;
+  await ledgerCommands.requestNotification(householdId, id, expectedVersion);
 }

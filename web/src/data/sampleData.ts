@@ -1,6 +1,6 @@
 import { Expense } from '@/types/expense';
 
-export const sampleExpenses: Expense[] = [
+const sampleExpenseRows: Array<Omit<Expense, 'aggregateVersion'>> = [
   // 1월 1일
   {
     id: '1',
@@ -165,3 +165,8 @@ export const sampleExpenses: Expense[] = [
     cardType: 'family',
   },
 ];
+
+export const sampleExpenses: Expense[] = sampleExpenseRows.map((expense) => ({
+  ...expense,
+  aggregateVersion: 1,
+}));

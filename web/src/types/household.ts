@@ -2,6 +2,7 @@
 export interface HouseholdMember {
   id: string;
   name: string;
+  aggregateVersion: number;
 }
 
 export type HomeSummaryCardKey =
@@ -27,23 +28,4 @@ export interface Household {
   defaultCategoryKey?: string;
   homeSummaryConfig?: HomeSummaryConfig;
   members: HouseholdMember[];
-}
-
-export interface AndroidBridge {
-  setHouseholdKey: (key: string) => void;
-  getHouseholdKey: () => string;
-  clearHouseholdKey: () => void;
-  setMemberName: (name: string) => void;
-  setPartnerName: (name: string) => void;
-  getAppVersion?: () => string;
-  isQuickEditOverlayEnabled?: (householdId: string, memberName: string) => boolean;
-  setQuickEditOverlayEnabled?: (
-    householdId: string,
-    memberName: string,
-    enabled: boolean
-  ) => void;
-}
-
-export interface WindowWithBridge extends Window {
-  AndroidBridge?: AndroidBridge;
 }

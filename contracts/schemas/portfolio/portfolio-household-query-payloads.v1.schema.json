@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://household-account.local/schemas/portfolio/portfolio-household-query-payloads.v1.schema.json",
+  "title": "Portfolio Household Query Payloads V1",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "payload"],
+      "properties": {
+        "query": { "const": "portfolio.search-instruments.v1" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["assetClass", "query"],
+          "properties": {
+            "assetClass": { "enum": ["stock", "crypto"] },
+            "query": { "type": "string", "minLength": 1, "maxLength": 100 },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 10 }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "payload"],
+      "properties": {
+        "query": { "const": "portfolio.get-instrument-quote.v1" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["market", "code"],
+          "properties": {
+            "market": {
+              "enum": ["KRX", "US", "KOFIA_FUND", "UPBIT_KRW", "PHYSICAL_GOLD"]
+            },
+            "code": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "instrumentType": {
+              "enum": ["stock", "etf", "etn", "fund", "crypto", "gold"]
+            },
+            "priceScale": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "payload"],
+      "properties": {
+        "query": { "const": "portfolio.get-dividend-projection.v1" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["instrumentCode"],
+          "properties": {
+            "instrumentCode": { "type": "string", "minLength": 1, "maxLength": 64 }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,8 +1,9 @@
-import * as admin from 'firebase-admin';
+import { getApps, initializeApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+import { getMessaging } from 'firebase-admin/messaging';
 
-admin.initializeApp();
+const app = getApps()[0] ?? initializeApp();
 
-export const db = admin.firestore();
-export const messaging = admin.messaging();
+export const db = getFirestore(app);
+export const messaging = getMessaging(app);
 export const REGION = 'asia-northeast3';
-export const API_TOKEN = 'household-account-ios-shortcut-2024';

@@ -6,11 +6,13 @@ import { AndroidBridge } from '@/lib/bridges/androidBridge';
 
 interface QuickEditOverlaySettingsProps {
   householdId?: string | null;
+  memberId?: string | null;
   memberName?: string | null;
 }
 
 export default function QuickEditOverlaySettings({
   householdId,
+  memberId,
   memberName,
 }: QuickEditOverlaySettingsProps) {
   const [isAndroidApp, setIsAndroidApp] = useState(false);
@@ -21,21 +23,27 @@ export default function QuickEditOverlaySettings({
   }, []);
 
   useEffect(() => {
-    if (!isAndroidApp || !householdId || !memberName) {
+    if (!isAndroidApp || !householdId || !memberId) {
       return;
     }
+    let active = true;
+    void AndroidBridge.isQuickEditOverlayEnabled(householdId, memberId)
+      .then((enabled) => {
+        if (active) setIsEnabled(enabled);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [householdId, isAndroidApp, memberId]);
 
-    setIsEnabled(AndroidBridge.isQuickEditOverlayEnabled(householdId, memberName));
-  }, [householdId, isAndroidApp, memberName]);
-
-  if (!isAndroidApp || !householdId || !memberName) {
+  if (!isAndroidApp || !householdId || !memberId) {
     return null;
   }
 
   const handleToggle = () => {
     const nextEnabled = !isEnabled;
     setIsEnabled(nextEnabled);
-    AndroidBridge.setQuickEditOverlayEnabled(householdId, memberName, nextEnabled);
+    void AndroidBridge.setQuickEditOverlayEnabled(householdId, memberId, nextEnabled)
+      .catch(() => setIsEnabled(!nextEnabled));
   };
 
   return (
@@ -54,7 +62,7 @@ export default function QuickEditOverlaySettings({
           type="button"
           role="switch"
           aria-checked={isEnabled}
-          aria-label={`${memberName} 결제 후 바로 편집`}
+          aria-label={`${memberName || '본인'} 결제 후 바로 편집`}
           onClick={handleToggle}
           className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
             isEnabled ? 'bg-blue-500' : 'bg-slate-300'

@@ -1,18 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ChartPie } from 'lucide-react';
-import { Asset, AssetType, isGoldEtfSubType } from '@/types/asset';
+import { Asset, AssetOwnerOption, AssetType, isGoldEtfSubType } from '@/types/asset';
 import {
   subscribeToAssets,
   getRealtimeDailyAssetChangeByOwner,
   addSampleAssets,
-  processLoanAutoRepayments,
-  processSavingsAutoContributions,
-  refreshAllPhysicalGoldValues,
-  refreshAllCryptoPrices,
-  refreshAllStockPrices,
+  refreshAllMarketValues,
 } from '@/lib/assetService';
 import {
   AssetSummaryCard,
@@ -21,14 +17,16 @@ import {
   AssetEditModal,
   AssetHistoryModal,
   AssetBalanceChart,
+  AssetOwnerProfileModal,
 } from '@/components/assets';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import {
   ALL_MEMBERS_OPTION,
-  getAssetMemberOptions,
-  getAssetOwnerOptions,
+  HOUSEHOLD_OWNER_OPTION,
 } from '@/lib/assets/memberOptions';
+import { assetOwnerProfiles } from '@/features/access-household/application/assetOwnerProfiles';
+import type { AssetOwnerProfileWireView } from '@/platform/functions-api';
 
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
@@ -43,15 +41,49 @@ export default function AssetsPage() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showChartModal, setShowChartModal] = useState(false);
+  const [showOwnerModal, setShowOwnerModal] = useState(false);
   const [isAddingSample, setIsAddingSample] = useState(false);
   const [selectedMember, setSelectedMember] = useState<string>(ALL_MEMBERS_OPTION);
+  const [ownerProfiles, setOwnerProfiles] = useState<AssetOwnerProfileWireView[]>([]);
 
-  const memberNames = useMemo(
-    () => household?.members.map((member) => member.name) ?? [],
-    [household?.members]
+  const memberOptions = useMemo(
+    () => [
+      { key: ALL_MEMBERS_OPTION, label: '전체' },
+      ...ownerProfiles.map((profile) => ({
+        key: profile.profileId,
+        label: profile.displayName,
+      })),
+    ],
+    [ownerProfiles]
   );
-  const memberOptions = useMemo(() => getAssetMemberOptions(memberNames), [memberNames]);
-  const ownerOptions = useMemo(() => getAssetOwnerOptions(memberNames), [memberNames]);
+  const ownerOptions = useMemo<AssetOwnerOption[]>(
+    () => [
+      {
+        key: 'household',
+        label: HOUSEHOLD_OWNER_OPTION,
+        ownerRef: { kind: 'household' },
+      },
+      ...ownerProfiles.map((profile) => ({
+        key: profile.profileId,
+        label: profile.displayName,
+        ownerRef: { kind: 'profile' as const, profileId: profile.profileId },
+      })),
+    ],
+    [ownerProfiles]
+  );
+
+  const loadOwnerProfiles = useCallback(async () => {
+    if (!household?.id) {
+      setOwnerProfiles([]);
+      return;
+    }
+    try {
+      const result = await assetOwnerProfiles.list(household.id);
+      setOwnerProfiles(result.profiles);
+    } catch {
+      setOwnerProfiles([]);
+    }
+  }, [household?.id]);
 
   const handleAddSampleData = async () => {
     setIsAddingSample(true);
@@ -74,15 +106,15 @@ export default function AssetsPage() {
   }, []);
 
   useEffect(() => {
-    processSavingsAutoContributions().catch(console.error);
-    processLoanAutoRepayments().catch(console.error);
-    refreshAllPhysicalGoldValues().catch(console.error);
-    refreshAllStockPrices().catch(console.error);
-    refreshAllCryptoPrices().catch(console.error);
+    refreshAllMarketValues().catch(console.error);
   }, []);
 
   useEffect(() => {
-    if (!memberOptions.includes(selectedMember)) {
+    void loadOwnerProfiles();
+  }, [loadOwnerProfiles]);
+
+  useEffect(() => {
+    if (!memberOptions.some(({ key }) => key === selectedMember)) {
       setSelectedMember(ALL_MEMBERS_OPTION);
     }
   }, [memberOptions, selectedMember]);
@@ -97,7 +129,9 @@ export default function AssetsPage() {
 
     const syncDailySummary = async () => {
       try {
-        const change = await getRealtimeDailyAssetChangeByOwner(selectedMember, activeAssets);
+        const selectedLabel =
+          memberOptions.find(({ key }) => key === selectedMember)?.label ?? ALL_MEMBERS_OPTION;
+        const change = await getRealtimeDailyAssetChangeByOwner(selectedLabel, activeAssets);
         setDailyChange(change);
       } catch {
         setDailyChange(0);
@@ -105,7 +139,7 @@ export default function AssetsPage() {
     };
 
     void syncDailySummary();
-  }, [assets, selectedMember]);
+  }, [assets, memberOptions, selectedMember]);
 
   const handleAssetClick = (asset: Asset) => {
     setSelectedAsset(asset);
@@ -141,7 +175,13 @@ export default function AssetsPage() {
   const visibleAssets =
     selectedMember === ALL_MEMBERS_OPTION
       ? assets
-      : assets.filter((asset) => asset.owner === selectedMember);
+      : assets.filter((asset) => {
+          if (asset.ownerRef?.kind === 'profile') {
+            return asset.ownerRef.profileId === selectedMember;
+          }
+          const selectedLabel = memberOptions.find(({ key }) => key === selectedMember)?.label;
+          return asset.owner === selectedLabel;
+        });
 
   return (
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
@@ -203,6 +243,7 @@ export default function AssetsPage() {
               selectedMember={selectedMember}
               memberOptions={memberOptions}
               onMemberChange={setSelectedMember}
+              onAddOwner={() => setShowOwnerModal(true)}
             />
 
             <AssetList
@@ -217,8 +258,31 @@ export default function AssetsPage() {
           isOpen={showAddModal}
           onClose={() => setShowAddModal(false)}
           defaultType={addModalType}
-          defaultOwner={selectedMember}
+          defaultOwnerKey={
+            selectedMember === ALL_MEMBERS_OPTION ? 'household' : selectedMember
+          }
           ownerOptions={ownerOptions}
+        />
+
+        <AssetOwnerProfileModal
+          isOpen={showOwnerModal}
+          profiles={ownerProfiles}
+          onClose={() => setShowOwnerModal(false)}
+          onCreate={async (displayName) => {
+            if (!household?.id) return;
+            await assetOwnerProfiles.create(household.id, displayName);
+            await loadOwnerProfiles();
+          }}
+          onRename={async (profile, displayName) => {
+            if (!household?.id) return;
+            await assetOwnerProfiles.rename(
+              household.id,
+              profile.profileId,
+              displayName,
+              profile.aggregateVersion
+            );
+            await loadOwnerProfiles();
+          }}
         />
 
         <AssetEditModal

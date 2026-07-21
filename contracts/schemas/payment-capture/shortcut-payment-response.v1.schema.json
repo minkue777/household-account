@@ -1,0 +1,124 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://household-account.local/schemas/payment-capture/shortcut-payment-response.v1.schema.json",
+  "title": "Shortcut Payment Response V1",
+  "description": "거래 결과와 알림 전달 결과를 분리하고 원문·credential·내부 오류를 노출하지 않는 Shortcut HTTP 응답 계약입니다.",
+  "oneOf": [
+    { "$ref": "#/$defs/successResponse" },
+    { "$ref": "#/$defs/errorResponse" }
+  ],
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "successResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "commandId", "transaction", "notification"],
+      "properties": {
+        "contractVersion": {
+          "const": "shortcut-payment-response.v1"
+        },
+        "commandId": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "transaction": {
+          "$ref": "#/$defs/transactionResult"
+        },
+        "notification": {
+          "$ref": "#/$defs/notificationResult"
+        }
+      }
+    },
+    "transactionResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "transactionId"],
+          "properties": {
+            "kind": { "const": "created" },
+            "transactionId": { "$ref": "#/$defs/nonEmptyString" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "existingTransactionId"],
+          "properties": {
+            "kind": { "const": "duplicate" },
+            "existingTransactionId": { "$ref": "#/$defs/nonEmptyString" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "code"],
+          "properties": {
+            "kind": { "const": "rejected" },
+            "code": { "$ref": "#/$defs/nonEmptyString" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "candidates"],
+          "properties": {
+            "kind": { "const": "needsConfirmation" },
+            "candidates": {
+              "type": "array"
+            }
+          }
+        }
+      ]
+    },
+    "notificationResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state"],
+      "properties": {
+        "state": {
+          "enum": [
+            "queued",
+            "delivered",
+            "no-target",
+            "failed",
+            "unknown-provider-outcome",
+            "permanent-failure",
+            "not-requested"
+          ]
+        },
+        "targetMemberId": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "deliveryId": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "errorResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "error"],
+      "properties": {
+        "contractVersion": {
+          "const": "shortcut-payment-response.v1"
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "retryable"],
+          "properties": {
+            "code": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "retryable": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+  }
+}

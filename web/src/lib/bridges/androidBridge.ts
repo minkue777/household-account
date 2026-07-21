@@ -1,88 +1,37 @@
-import { WindowWithBridge } from '@/types/household';
+import {
+  isAndroidHostAvailable,
+  requestAndroidHost,
+} from '@/platform/android-host/androidHostBridge';
 
-/**
- * Android WebView 브리지 헬퍼
- */
+/** UI 호환 facade. Native transport 세부사항은 platform 경계에 격리합니다. */
 export const AndroidBridge = {
-  /**
-   * Android 브리지 사용 가능 여부
-   */
-  isAvailable: (): boolean => {
-    if (typeof window === 'undefined') return false;
-    const bridge = (window as WindowWithBridge).AndroidBridge;
-    return bridge !== undefined;
+  isAvailable: isAndroidHostAvailable,
+
+  async getAppVersion(): Promise<string | null> {
+    if (!isAndroidHostAvailable()) return null;
+    const result = await requestAndroidHost('app.get-version', {});
+    return result.version;
   },
 
-  /**
-   * 가구 키 설정 (SharedPreferences에 저장)
-   */
-  setHouseholdKey: (key: string): void => {
-    if (typeof window === 'undefined') return;
-    const bridge = (window as WindowWithBridge).AndroidBridge;
-    if (bridge && typeof bridge.setHouseholdKey === 'function') {
-      bridge.setHouseholdKey(key);
-    }
+  async isQuickEditOverlayEnabled(householdId: string, memberId: string): Promise<boolean> {
+    if (!isAndroidHostAvailable()) return true;
+    const result = await requestAndroidHost('quick-edit.get-overlay-enabled', {
+      householdId,
+      memberId,
+    });
+    return result.enabled;
   },
 
-  /**
-   * 가구 키 가져오기 (SharedPreferences에서)
-   */
-  getHouseholdKey: (): string | null => {
-    if (typeof window === 'undefined') return null;
-    const bridge = (window as WindowWithBridge).AndroidBridge;
-    if (bridge && typeof bridge.getHouseholdKey === 'function') {
-      return bridge.getHouseholdKey();
-    }
-    return null;
-  },
-
-  /**
-   * 가구 키 삭제 (SharedPreferences에서)
-   */
-  clearHouseholdKey: (): void => {
-    if (typeof window === 'undefined') return;
-    const bridge = (window as WindowWithBridge).AndroidBridge;
-    if (bridge && typeof bridge.clearHouseholdKey === 'function') {
-      bridge.clearHouseholdKey();
-    }
-  },
-
-  /**
-   * 현재 설치된 안드로이드 앱 버전 조회
-   */
-  getAppVersion: (): string | null => {
-    if (typeof window === 'undefined') return null;
-    const bridge = (window as WindowWithBridge).AndroidBridge;
-    if (bridge && typeof bridge.getAppVersion === 'function') {
-      return bridge.getAppVersion();
-    }
-    return null;
-  },
-
-  /**
-   * 현재 기기의 가구원별 퀵에딧 오버레이 사용 여부
-   */
-  isQuickEditOverlayEnabled: (householdId: string, memberName: string): boolean => {
-    if (typeof window === 'undefined') return true;
-    const bridge = (window as WindowWithBridge).AndroidBridge;
-    if (bridge && typeof bridge.isQuickEditOverlayEnabled === 'function') {
-      return bridge.isQuickEditOverlayEnabled(householdId, memberName);
-    }
-    return true;
-  },
-
-  /**
-   * 현재 기기의 가구원별 퀵에딧 오버레이 사용 여부 저장
-   */
-  setQuickEditOverlayEnabled: (
+  async setQuickEditOverlayEnabled(
     householdId: string,
-    memberName: string,
+    memberId: string,
     enabled: boolean
-  ): void => {
-    if (typeof window === 'undefined') return;
-    const bridge = (window as WindowWithBridge).AndroidBridge;
-    if (bridge && typeof bridge.setQuickEditOverlayEnabled === 'function') {
-      bridge.setQuickEditOverlayEnabled(householdId, memberName, enabled);
-    }
+  ): Promise<void> {
+    if (!isAndroidHostAvailable()) return;
+    await requestAndroidHost('quick-edit.set-overlay-enabled', {
+      householdId,
+      memberId,
+      enabled,
+    });
   },
 };

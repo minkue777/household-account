@@ -1,0 +1,41 @@
+{
+  "contractVersion": "household-query-manifest.v1",
+  "queries": [
+    {
+      "name": "ledger.get-transaction.v1",
+      "owner": "household-finance.ledger",
+      "scope": "household",
+      "clients": ["android"]
+    },
+    {
+      "name": "shortcut.get-credential-status.v1",
+      "owner": "payment-capture.shortcut-ingestion",
+      "scope": "household",
+      "clients": ["web"]
+    },
+    {
+      "name": "portfolio.search-instruments.v1",
+      "owner": "portfolio.holdings",
+      "scope": "household",
+      "clients": ["web"]
+    },
+    {
+      "name": "portfolio.get-instrument-quote.v1",
+      "owner": "portfolio.holdings",
+      "scope": "household",
+      "clients": ["web"]
+    },
+    {
+      "name": "portfolio.get-dividend-projection.v1",
+      "owner": "portfolio.dividends",
+      "scope": "household",
+      "clients": ["web"]
+    },
+    {
+      "name": "access.list-asset-owner-profiles.v1",
+      "owner": "access",
+      "scope": "household",
+      "clients": ["web"]
+    }
+  ]
+}

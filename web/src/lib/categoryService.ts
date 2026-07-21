@@ -1,65 +1,32 @@
 import {
   collection,
-  doc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
   onSnapshot,
   query,
   orderBy,
-  getDocs,
-  writeBatch,
   where,
-} from 'firebase/firestore';
-import { db } from './firebase';
+  db,
+} from '@/platform/read-model/firestoreReadModel';
 import { CategoryDocument } from '@/types/category';
+import { categoryCommands } from '@/features/category-budget/application/categoryCommands';
+import { requireClientSessionScope } from '@/composition/clientSessionScope';
 
 export type { CategoryDocument };
 
-// 기본 카테고리 정의 (householdId는 동적으로 추가)
-const DEFAULT_CATEGORIES: Omit<CategoryDocument, 'id' | 'householdId'>[] = [
-  { key: 'living', label: '생활비', color: '#4ADE80', budget: null, order: 0, isDefault: true, isActive: true },
-  { key: 'childcare', label: '육아비', color: '#F472B6', budget: null, order: 1, isDefault: true, isActive: true },
-  { key: 'fixed', label: '고정비', color: '#60A5FA', budget: null, order: 2, isDefault: true, isActive: true },
-  { key: 'food', label: '식비', color: '#FBBF24', budget: null, order: 3, isDefault: true, isActive: true },
-  { key: 'etc', label: '기타', color: '#9CA3AF', budget: null, order: 4, isDefault: true, isActive: true },
-];
-
 const COLLECTION_NAME = 'categories';
+
+function requireStoredHouseholdId(): string {
+  return requireClientSessionScope().householdId;
+}
 
 // 컬렉션 참조
 const categoriesRef = collection(db, COLLECTION_NAME);
-
-// 기본 카테고리 초기화 (첫 실행 시, householdId별로)
-export async function initializeDefaultCategories(householdId: string): Promise<void> {
-  if (!householdId) return;
-
-  const q = query(categoriesRef, where('householdId', '==', householdId));
-  const snapshot = await getDocs(q);
-
-  if (snapshot.empty) {
-    const batch = writeBatch(db);
-
-    for (const category of DEFAULT_CATEGORIES) {
-      const docRef = doc(categoriesRef);
-      batch.set(docRef, { ...category, householdId });
-    }
-
-    await batch.commit();
-  }
-}
 
 // 카테고리 추가
 export async function addCategory(
   category: Omit<CategoryDocument, 'id' | 'isDefault' | 'householdId'>,
   householdId: string
 ): Promise<string> {
-  const docRef = await addDoc(categoriesRef, {
-    ...category,
-    householdId,
-    isDefault: false,
-  });
-  return docRef.id;
+  return categoryCommands.create(householdId, category);
 }
 
 // 카테고리 수정
@@ -67,33 +34,28 @@ export async function updateCategory(
   id: string,
   data: Partial<Omit<CategoryDocument, 'id' | 'isDefault'>>
 ): Promise<void> {
-  const docRef = doc(db, COLLECTION_NAME, id);
-  await updateDoc(docRef, data);
+  const householdId = requireStoredHouseholdId();
+  await categoryCommands.update(householdId, id, data);
 }
 
 // 카테고리 삭제 (기본 카테고리는 삭제 불가)
 export async function deleteCategory(id: string): Promise<void> {
-  const docRef = doc(db, COLLECTION_NAME, id);
-  await deleteDoc(docRef);
+  const householdId = requireStoredHouseholdId();
+  await categoryCommands.archive(householdId, id);
 }
 
 // 예산 설정
 export async function setBudget(id: string, budget: number | null): Promise<void> {
-  await updateCategory(id, { budget });
+  const householdId = requireStoredHouseholdId();
+  await categoryCommands.setBudget(householdId, id, budget);
 }
 
 // 카테고리 순서 변경
 export async function reorderCategories(
   categories: { id: string; order: number }[]
 ): Promise<void> {
-  const batch = writeBatch(db);
-
-  for (const { id, order } of categories) {
-    const docRef = doc(db, COLLECTION_NAME, id);
-    batch.update(docRef, { order });
-  }
-
-  await batch.commit();
+  const householdId = requireStoredHouseholdId();
+  await categoryCommands.reorder(householdId, categories);
 }
 
 // 실시간 구독 (householdId별로)

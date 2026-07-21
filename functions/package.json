@@ -1,8 +1,27 @@
 {
   "name": "household-account-functions",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node ../tools/build/copy-functions-contracts.mjs",
     "build:watch": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:contract": "vitest run test/contexts test/contracts",
+    "test:architecture": "vitest run test/architecture",
+    "test:firestore-rules": "firebase --config ../firebase.json emulators:exec --only firestore --project demo-household-account-rules \"vitest run test/integration/firestore/firestore-rules.integration.test.ts\"",
+    "test:storage-rules": "firebase --config ../firebase.json emulators:exec --only storage --project demo-household-account-storage-rules \"vitest run test/integration/storage/storage-rules.integration.test.ts\"",
+    "test:firebase-access": "firebase --config ../firebase.json emulators:exec --only firestore --project demo-household-account-access-adapters \"vitest run test/integration/firebase/firebase-access-command-adapters.integration.test.ts\"",
+    "test:firebase-finance-commands": "firebase --config ../firebase.json emulators:exec --only firestore --project demo-household-account-finance-command-adapters \"vitest run test/integration/firebase/firebase-finance-command-adapters.integration.test.ts\"",
+    "test:firebase-dividends": "firebase --config ../firebase.json emulators:exec --only firestore --project demo-household-account-dividend-schedule \"vitest run test/integration/firebase/firebase-dividend-schedule.integration.test.ts\"",
+    "test:firebase-asset-automation": "firebase --config ../firebase.json emulators:exec --only firestore --project demo-household-account-asset-automation \"vitest run test/integration/firebase/firebase-asset-automation-schedule.integration.test.ts\"",
+    "test:firebase-asset-valuation": "firebase --config ../firebase.json emulators:exec --only firestore --project demo-household-account-asset-snapshot \"vitest run test/integration/firebase/firebase-asset-snapshot-projection.integration.test.ts\"",
+    "test:firebase-migration": "firebase --config ../firebase.json emulators:exec --only firestore --project demo-household-account-runtime-migration \"vitest run test/integration/firebase/firebase-runtime-migration.integration.test.ts\"",
+    "test:firebase-integration": "firebase --config ../firebase.json emulators:exec --only firestore --project demo-household-account-integration \"vitest run test/integration/firebase\"",
+    "test:runtime-boundaries": "node ../tools/release/gates/runtime-boundary-audit.mjs --check",
+    "test:types": "tsc -p tsconfig.test.json --noEmit",
+    "admin:system-claim": "node scripts/set-system-admin-claim.mjs",
+    "migrate:runtime": "npm run build && node scripts/migrate-runtime.mjs",
+    "reconcile:runtime": "node scripts/reconcile-runtime.mjs",
+    "backfill:firestore-ttl": "node scripts/backfill-firestore-ttl.mjs",
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
@@ -14,13 +33,17 @@
   },
   "main": "lib/index.js",
   "dependencies": {
-    "firebase-admin": "^13.7.0",
-    "firebase-functions": "^7.2.2"
+    "firebase-admin": "14.2.0",
+    "firebase-functions": "7.3.0"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@types/node": "^22.19.15",
     "@types/node-fetch": "^2.6.13",
-    "typescript": "^5.3.0"
+    "ajv": "^8.17.1",
+    "firebase": "^12.16.0",
+    "typescript": "^5.3.0",
+    "vitest": "^4.1.10"
   },
   "private": true
 }

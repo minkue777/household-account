@@ -1,11 +1,9 @@
 import { Expense } from '@/types/expense';
 import {
-  addExpense,
   cancelSplitGroup,
-  generateSplitGroupId,
+  splitExpenseMonthly,
   updateSplitGroup,
 } from '@/lib/expenseService';
-import { getMonthlySplitDate } from '@/lib/utils/monthlySplitDate';
 import { splitMonthsMinMessage } from '@/lib/utils/splitMonths';
 
 type AsyncVoid = void | Promise<void>;
@@ -26,7 +24,7 @@ interface SplitActionBaseOptions {
 
 interface RunSplitMonthsActionOptions extends SplitActionBaseOptions {
   months: number;
-  deleteExpense: (expenseId: string) => AsyncVoid;
+  deleteExpense: (expenseId: string, expectedVersion: number) => AsyncVoid;
 }
 
 interface RunUpdateSplitGroupActionOptions extends SplitActionBaseOptions {
@@ -40,7 +38,7 @@ function getAlertFn(alertFn?: AlertFn): AlertFn {
 export async function runSplitMonthsAction({
   expense,
   months,
-  deleteExpense,
+  deleteExpense: _deleteExpense,
   onSuccess,
   alertFn,
 }: RunSplitMonthsActionOptions): Promise<void> {
@@ -51,30 +49,9 @@ export async function runSplitMonthsAction({
     return;
   }
 
-  const monthlyAmount = Math.floor(expense.amount / months);
-  const splitGroupId = generateSplitGroupId();
-
   try {
-    for (let i = 0; i < months; i++) {
-      const dateStr = getMonthlySplitDate(expense.date, i);
-
-      await addExpense({
-        date: dateStr,
-        time: expense.time || '09:00',
-        merchant: `${expense.merchant} (${i + 1}/${months})`,
-        amount: monthlyAmount,
-        category: expense.category,
-        cardType: expense.cardType || 'main',
-        memo: expense.memo,
-        splitGroupId,
-        splitIndex: i + 1,
-        splitTotal: months,
-      }, {
-        notifyOnCreate: false,
-      });
-    }
-
-    await deleteExpense(expense.id);
+    void _deleteExpense;
+    await splitExpenseMonthly(expense, months);
     await onSuccess?.();
   } catch {
     showAlert(monthlySplitMessages.splitFailed);

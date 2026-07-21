@@ -1,0 +1,87 @@
+{
+  "fixtureVersion": 1,
+  "validRequests": [
+    {
+      "caseId": "quick-edit-latest-transaction",
+      "body": {
+        "contractVersion": "household-query.v1",
+        "queryId": "query-ledger-001",
+        "householdId": "household-001",
+        "query": "ledger.get-transaction.v1",
+        "payload": { "transactionId": "transaction-001" }
+      }
+    }
+  ],
+  "invalidRequests": [
+    {
+      "caseId": "missing-household",
+      "body": {
+        "contractVersion": "household-query.v1",
+        "queryId": "query-ledger-002",
+        "query": "ledger.get-transaction.v1",
+        "payload": { "transactionId": "transaction-001" }
+      }
+    },
+    {
+      "caseId": "client-supplied-actor",
+      "body": {
+        "contractVersion": "household-query.v1",
+        "queryId": "query-ledger-003",
+        "householdId": "household-001",
+        "query": "ledger.get-transaction.v1",
+        "payload": { "transactionId": "transaction-001" },
+        "actingMemberId": "member-forged"
+      }
+    }
+  ],
+  "validResponses": [
+    {
+      "caseId": "active-expense-snapshot",
+      "body": {
+        "contractVersion": "household-query-response.v1",
+        "queryId": "query-ledger-001",
+        "result": {
+          "kind": "succeeded",
+          "value": {
+            "transactionId": "transaction-001",
+            "aggregateVersion": 3,
+            "lifecycleState": "active",
+            "transactionType": "expense",
+            "amountInWon": 12000,
+            "accountingDate": "2026-07-21",
+            "merchant": "식료품점",
+            "categoryId": "category-food"
+          }
+        }
+      }
+    },
+    {
+      "caseId": "not-found",
+      "body": {
+        "contractVersion": "household-query-response.v1",
+        "queryId": "query-ledger-004",
+        "result": {
+          "kind": "rejected",
+          "error": { "code": "NOT_FOUND", "retryable": false }
+        }
+      }
+    }
+  ],
+  "invalidResponses": [
+    {
+      "caseId": "transport-detail-leak",
+      "body": {
+        "contractVersion": "household-query-response.v1",
+        "queryId": "query-ledger-005",
+        "result": {
+          "kind": "rejected",
+          "error": {
+            "code": "INTERNAL",
+            "retryable": true,
+            "details": "firestore document path"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -10,6 +10,7 @@ import {
   isFundHolding,
 } from '@/lib/assets/holdingValuation';
 import { StockHolding } from '@/types/asset';
+import { portfolioQueries } from '@/features/portfolio/application/portfolioQueries';
 
 interface DividendInfo {
   code: string;
@@ -383,14 +384,8 @@ export default function StockHoldingList({
 
       void (async () => {
         try {
-          const response = await fetch(
-            `/api/stock/dividend?code=${encodeURIComponent(holding.stockCode)}&name=${encodeURIComponent(holding.stockName)}`
-          );
-
-          if (response.ok) {
-            const data = (await response.json()) as DividendInfo;
-            setDividendInfoMap((prev) => ({ ...prev, [holding.stockCode]: data }));
-          }
+          const data = await portfolioQueries.getDividendProjection(holding.stockCode);
+          setDividendInfoMap((prev) => ({ ...prev, [holding.stockCode]: data }));
         } catch (error) {
           console.error('배당 조회 오류:', error);
         } finally {

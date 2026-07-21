@@ -4,3 +4,5 @@ export { default as MerchantRuleSettings } from './MerchantRuleSettings';
 export { default as QuickEditOverlaySettings } from './QuickEditOverlaySettings';
 export { default as RecurringExpenseSettings } from './RecurringExpenseSettings';
 export { default as ThemeSettings } from './ThemeSettings';
+export { default as InvitationSettings } from './InvitationSettings';
+export { default as ShortcutSettings } from './ShortcutSettings';

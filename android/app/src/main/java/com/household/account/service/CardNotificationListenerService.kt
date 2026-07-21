@@ -1,22 +1,16 @@
 package com.household.account.service
 
 import android.app.Notification
-import android.content.Intent
-import android.provider.Settings
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import com.household.account.QuickEditActivity
-import com.household.account.data.BalanceRepository
-import com.household.account.data.CategoryRepository
-import com.household.account.data.Expense
-import com.household.account.data.ExpenseRepository
-import com.household.account.data.MerchantRuleRepository
 import com.household.account.data.NotificationDebugLogRepository
-import com.household.account.data.RegisteredCardRepository
+import com.household.account.paymentcapture.AndroidCaptureDelivery
+import com.household.account.paymentcapture.CaptureEnvelopeFactory
+import com.household.account.paymentcapture.PaymentSourceRegistry
+import com.household.account.paymentcapture.RegisteredNotificationSource
 import com.household.account.parser.CityGasBillParser
 import com.household.account.parser.DaejeonLocalCurrencyParser
 import com.household.account.parser.DigitalOnnuriParser
-import com.household.account.parser.ExpenseEventType
 import com.household.account.parser.GyeonggiLocalCurrencyParser
 import com.household.account.parser.KakaoPayParser
 import com.household.account.parser.KBCardParser
@@ -30,8 +24,6 @@ import com.household.account.parser.SamsungCardParser
 import com.household.account.parser.SejongLocalCurrencyParser
 import com.household.account.parser.SmsNotificationParser
 import com.household.account.parser.TossBankParser
-import com.household.account.util.CardLabelFormatter
-import com.household.account.util.HouseholdPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -112,29 +104,7 @@ class CardNotificationListenerService : NotificationListenerService() {
         const val EXTRA_EXPENSE_JSON = "expense_json"
     }
 
-    private enum class NotificationSource {
-        KB,
-        NH,
-        NAVER_PAY,
-        TOSS_BANK,
-        KAKAOPAY,
-        DIGITAL_ONNURI,
-        PAYBOOC_ISP,
-        SMS,
-        SAMSUNG,
-        LOTTE,
-        GYEONGGI_LOCAL_CURRENCY,
-        DAEJEON_LOCAL_CURRENCY,
-        SEJONG_LOCAL_CURRENCY,
-        CITY_GAS_BILL
-    }
-
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val expenseRepository = ExpenseRepository()
-    private val ruleRepository = MerchantRuleRepository()
-    private val categoryRepository = CategoryRepository()
-    private val balanceRepository = BalanceRepository()
-    private val registeredCardRepository = RegisteredCardRepository()
     private val notificationDebugLogRepository = NotificationDebugLogRepository()
 
     private val recentNotifications = mutableMapOf<String, Long>()
@@ -186,7 +156,7 @@ class CardNotificationListenerService : NotificationListenerService() {
                 postedAtMillis = sbn.postTime
             )
 
-            val source = detectSource(packageName, fullText) ?: return
+            val source = detectSource(packageName) ?: return
 
             val notificationKey = "${packageName}_${fullText.hashCode()}"
             val now = System.currentTimeMillis()
@@ -195,34 +165,36 @@ class CardNotificationListenerService : NotificationListenerService() {
             }
 
             val result: ParseResult = when (source) {
-                NotificationSource.KB -> KBCardParser.parse(fullText, postedAtMillis = sbn.postTime)
-                NotificationSource.NH -> NHPayParser.parse(fullText)
-                NotificationSource.NAVER_PAY -> NaverPayParser.parse(fullText, sbn.postTime)
-                NotificationSource.TOSS_BANK -> TossBankParser.parse(fullText, sbn.postTime)
-                NotificationSource.KAKAOPAY -> KakaoPayParser.parse(fullText, sbn.postTime)
-                NotificationSource.DIGITAL_ONNURI -> DigitalOnnuriParser.parse(fullText, sbn.postTime)
-                NotificationSource.PAYBOOC_ISP -> PayboocISPParser.parse(fullText, sbn.postTime)
-                NotificationSource.SMS -> SmsNotificationParser.parse(fullText, sbn.postTime)
-                NotificationSource.SAMSUNG -> SamsungCardParser.parse(fullText)
-                NotificationSource.LOTTE -> LotteCardParser.parse(fullText)
-                NotificationSource.GYEONGGI_LOCAL_CURRENCY -> GyeonggiLocalCurrencyParser.parse(fullText)
-                NotificationSource.DAEJEON_LOCAL_CURRENCY -> DaejeonLocalCurrencyParser.parse(fullText)
-                NotificationSource.SEJONG_LOCAL_CURRENCY -> SejongLocalCurrencyParser.parse(fullText, sbn.postTime)
-                NotificationSource.CITY_GAS_BILL -> CityGasBillParser.parse(fullText, sbn.postTime)
+                RegisteredNotificationSource.KB -> KBCardParser.parse(fullText, postedAtMillis = sbn.postTime)
+                RegisteredNotificationSource.NH -> NHPayParser.parse(fullText)
+                RegisteredNotificationSource.NAVER_PAY -> NaverPayParser.parse(fullText, sbn.postTime)
+                RegisteredNotificationSource.TOSS_BANK -> TossBankParser.parse(fullText, sbn.postTime)
+                RegisteredNotificationSource.KAKAOPAY -> KakaoPayParser.parse(fullText, sbn.postTime)
+                RegisteredNotificationSource.DIGITAL_ONNURI -> DigitalOnnuriParser.parse(fullText, sbn.postTime)
+                RegisteredNotificationSource.PAYBOOC_ISP -> PayboocISPParser.parse(fullText, sbn.postTime)
+                RegisteredNotificationSource.SMS -> SmsNotificationParser.parse(fullText, sbn.postTime)
+                RegisteredNotificationSource.SAMSUNG -> SamsungCardParser.parse(fullText)
+                RegisteredNotificationSource.LOTTE -> LotteCardParser.parse(fullText)
+                RegisteredNotificationSource.GYEONGGI_LOCAL_CURRENCY -> GyeonggiLocalCurrencyParser.parse(fullText)
+                RegisteredNotificationSource.DAEJEON_LOCAL_CURRENCY -> DaejeonLocalCurrencyParser.parse(fullText)
+                RegisteredNotificationSource.SEJONG_LOCAL_CURRENCY -> SejongLocalCurrencyParser.parse(fullText, sbn.postTime)
+                RegisteredNotificationSource.CITY_GAS_BILL -> CityGasBillParser.parse(fullText, sbn.postTime)
             }
 
-            if (
-                source == NotificationSource.GYEONGGI_LOCAL_CURRENCY ||
-                source == NotificationSource.DAEJEON_LOCAL_CURRENCY ||
-                source == NotificationSource.SEJONG_LOCAL_CURRENCY
-            ) {
-                saveLocalCurrencyBalanceIfPresent(source, fullText)
-            }
+            val balanceResult = parseBalance(source, fullText)
+            val envelope = CaptureEnvelopeFactory.create(
+                packageName = packageName,
+                source = source,
+                postedAtMillis = sbn.postTime,
+                rawNotificationText = fullText,
+                expense = result.expense.takeIf { result.success },
+                eventType = result.eventType.takeIf { result.success },
+                balance = balanceResult
+            ) ?: return
 
-            if (result.success && result.expense != null) {
-                when (result.eventType) {
-                    ExpenseEventType.APPROVAL -> saveExpenseAndLaunchQuickEdit(result.expense)
-                    ExpenseEventType.CANCELLATION -> cancelMatchingExpense(result.expense)
+            serviceScope.launch {
+                runCatching {
+                    AndroidCaptureDelivery.enqueueAndFlush(applicationContext, envelope)
                 }
             }
         } catch (_: Exception) {
@@ -240,54 +212,8 @@ class CardNotificationListenerService : NotificationListenerService() {
         super.onListenerDisconnected()
     }
 
-    private fun detectSource(packageName: String, fullText: String): NotificationSource? {
-        return when {
-            packageName in knownKbPackages || KBCardParser.matches(fullText) -> NotificationSource.KB
-            packageName in knownNhPackages || NHPayParser.matches(fullText) -> NotificationSource.NH
-            packageName in knownNaverPayPackages || NaverPayParser.matches(fullText) ->
-                NotificationSource.NAVER_PAY
-            packageName in knownTossPackages || TossBankParser.matches(fullText) ->
-                NotificationSource.TOSS_BANK
-            packageName in knownKakaoPayPackages || KakaoPayParser.matches(fullText) ->
-                NotificationSource.KAKAOPAY
-            packageName in knownDigitalOnnuriPackages || DigitalOnnuriParser.matches(fullText) ->
-                NotificationSource.DIGITAL_ONNURI
-            packageName in knownPayboocPackages || PayboocISPParser.matches(fullText) ->
-                NotificationSource.PAYBOOC_ISP
-            SmsNotificationParser.matches(packageName, fullText) -> NotificationSource.SMS
-            SamsungCardParser.matches(fullText) -> NotificationSource.SAMSUNG
-            LotteCardParser.matches(fullText) -> NotificationSource.LOTTE
-            packageName in knownGyeonggiLocalCurrencyPackages || GyeonggiLocalCurrencyParser.matches(fullText) ->
-                NotificationSource.GYEONGGI_LOCAL_CURRENCY
-            packageName in knownDaejeonLocalCurrencyPackages || DaejeonLocalCurrencyParser.matches(fullText) ->
-                NotificationSource.DAEJEON_LOCAL_CURRENCY
-            packageName in knownSejongLocalCurrencyPackages || SejongLocalCurrencyParser.matches(fullText) ->
-                NotificationSource.SEJONG_LOCAL_CURRENCY
-            packageName == KAKAO_TALK_PACKAGE && CityGasBillParser.matches(fullText) ->
-                NotificationSource.CITY_GAS_BILL
-            else -> null
-        }
-    }
-
-    private fun detectSourceByPackage(packageName: String): NotificationSource? {
-        return when {
-            packageName in knownKbPackages -> NotificationSource.KB
-            packageName in knownNhPackages -> NotificationSource.NH
-            packageName in knownNaverPayPackages -> NotificationSource.NAVER_PAY
-            packageName in knownTossPackages -> NotificationSource.TOSS_BANK
-            packageName in knownKakaoPayPackages -> NotificationSource.KAKAOPAY
-            packageName in knownDigitalOnnuriPackages -> NotificationSource.DIGITAL_ONNURI
-            packageName in knownPayboocPackages -> NotificationSource.PAYBOOC_ISP
-            packageName in knownGyeonggiLocalCurrencyPackages ->
-                NotificationSource.GYEONGGI_LOCAL_CURRENCY
-            packageName in knownDaejeonLocalCurrencyPackages ->
-                NotificationSource.DAEJEON_LOCAL_CURRENCY
-            packageName in knownSejongLocalCurrencyPackages ->
-                NotificationSource.SEJONG_LOCAL_CURRENCY
-            SmsNotificationParser.isSupportedPackage(packageName) -> NotificationSource.SMS
-            else -> null
-        }
-    }
+    private fun detectSource(packageName: String): RegisteredNotificationSource? =
+        PaymentSourceRegistry.resolve(packageName)
 
     private fun saveRawNotificationLogIfNeeded(
         packageName: String,
@@ -302,7 +228,7 @@ class CardNotificationListenerService : NotificationListenerService() {
         val normalizedTitle = title.trim()
 
         if (
-            source == NotificationSource.TOSS_BANK.name &&
+            source == RegisteredNotificationSource.TOSS_BANK.name &&
             normalizedTitle.isNotEmpty() &&
             tossWalkingTitlePattern.matches(normalizedTitle)
         ) {
@@ -312,10 +238,7 @@ class CardNotificationListenerService : NotificationListenerService() {
         serviceScope.launch {
             try {
                 notificationDebugLogRepository.saveRawLog(
-                    householdId = HouseholdPreferences.getHouseholdKey(applicationContext),
-                    memberName = HouseholdPreferences.getMemberName(applicationContext),
                     packageName = packageName,
-                    source = source,
                     title = title,
                     text = text,
                     bigText = bigText,
@@ -329,208 +252,25 @@ class CardNotificationListenerService : NotificationListenerService() {
     }
 
     private fun resolveDebugLogSource(packageName: String, fullText: String): String? {
-        if (packageName == KAKAO_TALK_PACKAGE) {
-            return detectSource(packageName, fullText)?.name
+        if (packageName == KAKAO_TALK_PACKAGE && !CityGasBillParser.matches(fullText)) {
+            return null
         }
-
-        return detectSourceByPackage(packageName)?.name
+        return detectSource(packageName)?.name
             ?: debugOnlyNotificationPackages[packageName]
     }
 
-    private fun saveLocalCurrencyBalanceIfPresent(
-        source: NotificationSource,
+    private fun parseBalance(
+        source: RegisteredNotificationSource,
         fullText: String
-    ) {
-        val balanceResult: LocalCurrencyBalanceResult = when (source) {
-            NotificationSource.GYEONGGI_LOCAL_CURRENCY ->
+    ): LocalCurrencyBalanceResult? {
+        return when (source) {
+            RegisteredNotificationSource.GYEONGGI_LOCAL_CURRENCY ->
                 GyeonggiLocalCurrencyParser.parseBalance(fullText)
-            NotificationSource.DAEJEON_LOCAL_CURRENCY ->
+            RegisteredNotificationSource.DAEJEON_LOCAL_CURRENCY ->
                 DaejeonLocalCurrencyParser.parseBalance(fullText)
-            NotificationSource.SEJONG_LOCAL_CURRENCY ->
+            RegisteredNotificationSource.SEJONG_LOCAL_CURRENCY ->
                 SejongLocalCurrencyParser.parseBalance(fullText)
-            else -> return
-        }
-        val balance = balanceResult.balance ?: return
-
-        serviceScope.launch {
-            try {
-                val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
-                if (householdId.isNotEmpty()) {
-                    balanceRepository.saveLocalCurrencyBalance(
-                        householdId,
-                        balance,
-                        balanceResult.currencyType ?: "지역화폐"
-                    )
-                }
-            } catch (_: Exception) {
-            }
-        }
-    }
-
-    private fun saveExpenseAndLaunchQuickEdit(expense: Expense) {
-        serviceScope.launch {
-            try {
-                val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
-                if (householdId.isEmpty()) {
-                    return@launch
-                }
-
-                val mappingResult = ruleRepository.findMappingForMerchant(householdId, expense.merchant)
-
-                val isBillExpense = expense.cardType == CityGasBillParser.CARD_TYPE
-
-                val expenseToSave = if (mappingResult != null) {
-                    expense.copy(
-                        merchant = mappingResult.mappedMerchant,
-                        category = mappingResult.mappedCategoryKey,
-                        memo = mappingResult.mappedMemo.ifEmpty { expense.memo },
-                        householdId = householdId
-                    )
-                } else if (isBillExpense) {
-                    expense.copy(
-                        householdId = householdId,
-                        cardLastFour = ""
-                    )
-                } else {
-                    val defaultCategoryKey = categoryRepository.getDefaultCategoryKey(householdId)
-                    expense.copy(
-                        category = defaultCategoryKey,
-                        householdId = householdId
-                    )
-                }
-
-                val normalizedExpenseToSave = if (isBillExpense) {
-                    expenseToSave
-                } else {
-                    val memberName = HouseholdPreferences.getMemberName(applicationContext)
-                    val matchedRegisteredCard = registeredCardRepository.findMatchedRegisteredCard(
-                        householdId = householdId,
-                        owner = memberName,
-                        cardValue = expenseToSave.cardLastFour
-                    )
-                    if (matchedRegisteredCard == null) {
-                        return@launch
-                    }
-
-                    val normalizedExpenseToken = CardLabelFormatter.normalizeCardToken(expenseToSave.cardLastFour)
-                    val normalizedRegisteredToken = CardLabelFormatter.normalizeCardToken(
-                        matchedRegisteredCard.cardLastFour
-                    )
-
-                    if (
-                        matchedRegisteredCard.cardLastFour.isNotBlank() &&
-                        normalizedExpenseToken != null &&
-                        normalizedRegisteredToken != null &&
-                        normalizedExpenseToken != normalizedRegisteredToken
-                    ) {
-                        expenseToSave.copy(
-                            cardLastFour = CardLabelFormatter.formatCardLabel(
-                                matchedRegisteredCard.cardLabel,
-                                matchedRegisteredCard.cardLastFour
-                            )
-                        )
-                    } else {
-                        expenseToSave
-                    }
-                }
-
-                val duplicatedExpense = expenseRepository.findDuplicateExpenseForRegistration(
-                    householdId = householdId,
-                    expense = normalizedExpenseToSave
-                )
-                if (duplicatedExpense != null) {
-                    return@launch
-                }
-
-                val documentId = expenseRepository.addExpense(normalizedExpenseToSave)
-                if (documentId.isNotEmpty()) {
-                    launchQuickEditActivity(
-                        normalizedExpenseToSave.copy(
-                            id = documentId,
-                            category = normalizedExpenseToSave.category.lowercase()
-                        )
-                    )
-                }
-
-                sendBroadcast(Intent(ACTION_NOTIFICATION_RECEIVED))
-            } catch (_: Exception) {
-            }
-        }
-    }
-
-    private fun cancelMatchingExpense(expense: Expense) {
-        serviceScope.launch {
-            try {
-                val householdId = HouseholdPreferences.getHouseholdKey(applicationContext)
-                if (householdId.isEmpty()) {
-                    return@launch
-                }
-
-                val mappingResult = ruleRepository.findMappingForMerchant(householdId, expense.merchant)
-                val expenseToCancel = if (mappingResult != null) {
-                    expense.copy(
-                        merchant = mappingResult.mappedMerchant,
-                        householdId = householdId
-                    )
-                } else {
-                    expense.copy(householdId = householdId)
-                }
-
-                val matchedExpense = expenseRepository.findExpenseForCancellation(
-                    householdId = householdId,
-                    expense = expenseToCancel
-                )
-
-                val expensesToDelete = when {
-                    matchedExpense?.splitGroupId?.isNotBlank() == true -> {
-                        expenseRepository.getExpensesBySplitGroup(
-                            householdId = householdId,
-                            splitGroupId = matchedExpense.splitGroupId
-                        ).ifEmpty { listOf(matchedExpense) }
-                    }
-
-                    matchedExpense != null -> listOf(matchedExpense)
-                    else -> expenseRepository.findSplitGroupExpensesForCancellation(
-                        householdId = householdId,
-                        expense = expenseToCancel
-                    )
-                }
-
-                if (expensesToDelete.isEmpty()) {
-                    return@launch
-                }
-
-                expensesToDelete.forEach { expenseRepository.deleteExpense(it.id) }
-                sendBroadcast(Intent(ACTION_NOTIFICATION_RECEIVED))
-            } catch (_: Exception) {
-            }
-        }
-    }
-
-    private fun launchQuickEditActivity(expense: Expense) {
-        try {
-            if (!HouseholdPreferences.isQuickEditOverlayEnabled(applicationContext)) {
-                return
-            }
-
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M &&
-                !Settings.canDrawOverlays(applicationContext)
-            ) {
-                return
-            }
-
-            val intent = Intent(this, QuickEditActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                putExtra(QuickEditActivity.EXTRA_EXPENSE_ID, expense.id)
-                putExtra(QuickEditActivity.EXTRA_MERCHANT, expense.merchant)
-                putExtra(QuickEditActivity.EXTRA_AMOUNT, expense.amount)
-                putExtra(QuickEditActivity.EXTRA_DATE, expense.date)
-                putExtra(QuickEditActivity.EXTRA_TIME, expense.time)
-                putExtra(QuickEditActivity.EXTRA_CATEGORY, expense.category)
-                putExtra(QuickEditActivity.EXTRA_MEMO, expense.memo)
-            }
-            startActivity(intent)
-        } catch (_: Exception) {
+            else -> null
         }
     }
 

@@ -1,15 +1,11 @@
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-} from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { db } from './firebase';
+  db,
+  timestampToDate,
+} from '@/platform/read-model/firestoreReadModel';
 import {
   DEFAULT_HOME_SUMMARY_CONFIG,
   HomeSummaryCardKey,
@@ -17,8 +13,8 @@ import {
   Household,
   HouseholdMember,
 } from '@/types/household';
-import { HouseholdStorage } from './storage/householdStorage';
-import { app } from './firebase';
+import { householdCommands } from '@/features/access-household/application/householdCommands';
+import { categoryCommands } from '@/features/category-budget/application/categoryCommands';
 
 export type { Household };
 
@@ -29,15 +25,6 @@ const HOME_SUMMARY_CARD_KEYS: HomeSummaryCardKey[] = [
   'monthlySpent',
   'yearlySpent',
 ];
-
-function generateKey(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < 20; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return result;
-}
 
 function isHomeSummaryCardKey(value: unknown): value is HomeSummaryCardKey {
   return typeof value === 'string' && HOME_SUMMARY_CARD_KEYS.includes(value as HomeSummaryCardKey);
@@ -59,33 +46,6 @@ function resolveHomeSummaryConfig(value: unknown): HomeSummaryConfig {
   };
 }
 
-export async function createHousehold(name?: string, customKey?: string): Promise<string> {
-  let key = customKey || generateKey();
-
-  if (!customKey) {
-    let exists = await getDoc(doc(householdsCollection, key));
-    while (exists.exists()) {
-      key = generateKey();
-      exists = await getDoc(doc(householdsCollection, key));
-    }
-  }
-
-  await setDoc(doc(householdsCollection, key), {
-    name: name || key,
-    createdAt: serverTimestamp(),
-    defaultCategoryKey: 'etc',
-    homeSummaryConfig: DEFAULT_HOME_SUMMARY_CONFIG,
-  });
-
-  return key;
-}
-
-export async function validateHouseholdKey(key: string): Promise<boolean> {
-  const docRef = doc(householdsCollection, key);
-  const docSnap = await getDoc(docRef);
-  return docSnap.exists();
-}
-
 export async function getHousehold(key: string): Promise<Household | null> {
   const docRef = doc(householdsCollection, key);
   const docSnap = await getDoc(docRef);
@@ -96,10 +56,19 @@ export async function getHousehold(key: string): Promise<Household | null> {
   return {
     id: docSnap.id,
     name: data.name,
-    createdAt: data.createdAt?.toDate() || new Date(),
+    createdAt: timestampToDate(data.createdAt) || new Date(),
     defaultCategoryKey: data.defaultCategoryKey,
     homeSummaryConfig: resolveHomeSummaryConfig(data.homeSummaryConfig),
-    members: data.members || [],
+    members: Array.isArray(data.members)
+      ? data.members.map((member: Record<string, unknown>) => ({
+          id: String(member.id || ''),
+          name: String(member.name || ''),
+          aggregateVersion:
+            Number.isInteger(member.aggregateVersion) && Number(member.aggregateVersion) > 0
+              ? Number(member.aggregateVersion)
+              : 1,
+        }))
+      : [],
   };
 }
 
@@ -110,83 +79,39 @@ export async function getAllHouseholds(): Promise<Household[]> {
     return {
       id: docSnap.id,
       name: data.name,
-      createdAt: data.createdAt?.toDate() || new Date(),
+      createdAt: timestampToDate(data.createdAt) || new Date(),
       defaultCategoryKey: data.defaultCategoryKey,
       homeSummaryConfig: resolveHomeSummaryConfig(data.homeSummaryConfig),
-      members: data.members || [],
+      members: Array.isArray(data.members)
+        ? data.members.map((member: Record<string, unknown>) => ({
+            id: String(member.id || ''),
+            name: String(member.name || ''),
+            aggregateVersion:
+              Number.isInteger(member.aggregateVersion) && Number(member.aggregateVersion) > 0
+                ? Number(member.aggregateVersion)
+                : 1,
+          }))
+        : [],
     };
   });
 }
 
-export async function addHouseholdMember(
-  householdKey: string,
-  name: string
-): Promise<HouseholdMember> {
-  const docRef = doc(householdsCollection, householdKey);
-  const docSnap = await getDoc(docRef);
-
-  const id = `m_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-  const newMember: HouseholdMember = { id, name };
-
-  const currentMembers: HouseholdMember[] = docSnap.data()?.members || [];
-  await updateDoc(docRef, {
-    members: [...currentMembers, newMember],
-  });
-
-  return newMember;
-}
-
 export async function renameHouseholdMember(
   householdKey: string,
-  memberId: string,
-  newName: string
+  _memberId: string,
+  newName: string,
+  expectedVersion: number
 ): Promise<void> {
-  const functions = getFunctions(app, 'asia-northeast3');
-  const renameMemberCallable = httpsCallable(functions, 'renameHouseholdMember');
-  await renameMemberCallable({
-    householdId: householdKey,
-    memberId,
-    newName,
-  });
+  await householdCommands.renameSelf(householdKey, newName, expectedVersion);
 }
 
 export async function deleteHousehold(key: string): Promise<void> {
-  await deleteDoc(doc(householdsCollection, key));
+  await householdCommands.deleteHousehold(key);
 }
 
 export async function setDefaultCategoryKey(
   householdKey: string,
   categoryKey: string
 ): Promise<void> {
-  const docRef = doc(householdsCollection, householdKey);
-  await updateDoc(docRef, { defaultCategoryKey: categoryKey });
-}
-
-export function getStoredHouseholdKey(): string | null {
-  return HouseholdStorage.get();
-}
-
-export function setStoredHouseholdKey(key: string): void {
-  HouseholdStorage.set(key);
-}
-
-export function clearStoredHouseholdKey(): void {
-  HouseholdStorage.clear();
-}
-
-export async function migrateExpensesToHousehold(householdId: string): Promise<number> {
-  const expensesRef = collection(db, 'expenses');
-  const snapshot = await getDocs(expensesRef);
-
-  let migratedCount = 0;
-
-  for (const docSnap of snapshot.docs) {
-    const data = docSnap.data();
-    if (!data.householdId) {
-      await setDoc(doc(db, 'expenses', docSnap.id), { ...data, householdId });
-      migratedCount++;
-    }
-  }
-
-  return migratedCount;
+  await categoryCommands.setDefault(householdKey, categoryKey);
 }

@@ -1,0 +1,155 @@
+{
+  "fixtureVersion": 1,
+  "requirementIds": ["IOS-001", "IOS-010", "IOS-012", "T-IOS-003", "T-IOS-SEC-001"],
+  "validRequests": [
+    {
+      "caseId": "plain-payment-message",
+      "body": {
+        "contractVersion": "shortcut-payment.v1",
+        "message": "국민카드 10,000원 07/19 14:32 가맹점"
+      }
+    },
+    {
+      "caseId": "shortcut-rich-value",
+      "body": {
+        "contractVersion": "shortcut-payment.v1",
+        "message": ["국민카드", 10000, true]
+      }
+    }
+  ],
+  "invalidRequests": [
+    {
+      "caseId": "actor-fields-are-not-body-authority",
+      "body": {
+        "contractVersion": "shortcut-payment.v1",
+        "message": "결제 메시지",
+        "householdId": "household-forged",
+        "createdBy": "member-forged"
+      }
+    },
+    {
+      "caseId": "unknown-contract-version",
+      "body": {
+        "contractVersion": "shortcut-payment.v2",
+        "message": "결제 메시지"
+      }
+    },
+    {
+      "caseId": "missing-message",
+      "body": {
+        "contractVersion": "shortcut-payment.v1"
+      }
+    }
+  ],
+  "validResponses": [
+    {
+      "caseId": "created-and-delivered",
+      "body": {
+        "contractVersion": "shortcut-payment-response.v1",
+        "commandId": "command-001",
+        "transaction": {
+          "kind": "created",
+          "transactionId": "transaction-001"
+        },
+        "notification": {
+          "state": "delivered",
+          "targetMemberId": "member-001",
+          "deliveryId": "delivery-001"
+        }
+      }
+    },
+    {
+      "caseId": "duplicate-without-target",
+      "body": {
+        "contractVersion": "shortcut-payment-response.v1",
+        "commandId": "command-002",
+        "transaction": {
+          "kind": "duplicate",
+          "existingTransactionId": "transaction-001"
+        },
+        "notification": {
+          "state": "no-target"
+        }
+      }
+    },
+    {
+      "caseId": "rejected-transaction",
+      "body": {
+        "contractVersion": "shortcut-payment-response.v1",
+        "commandId": "command-003",
+        "transaction": {
+          "kind": "rejected",
+          "code": "OWNED_CARD_NOT_FOUND"
+        },
+        "notification": {
+          "state": "not-requested"
+        }
+      }
+    },
+    {
+      "caseId": "needs-confirmation",
+      "body": {
+        "contractVersion": "shortcut-payment-response.v1",
+        "commandId": "command-004",
+        "transaction": {
+          "kind": "needsConfirmation",
+          "candidates": [{ "kind": "merchant", "label": "가맹점" }]
+        },
+        "notification": {
+          "state": "not-requested"
+        }
+      }
+    },
+    {
+      "caseId": "retryable-error",
+      "body": {
+        "contractVersion": "shortcut-payment-response.v1",
+        "error": {
+          "code": "PROVIDER_TEMPORARILY_UNAVAILABLE",
+          "retryable": true
+        }
+      }
+    }
+  ],
+  "invalidResponses": [
+    {
+      "caseId": "queued-is-not-delivered-boolean",
+      "body": {
+        "contractVersion": "shortcut-payment-response.v1",
+        "commandId": "command-005",
+        "transaction": {
+          "kind": "created",
+          "transactionId": "transaction-005"
+        },
+        "notification": {
+          "state": "queued",
+          "notificationSent": true
+        }
+      }
+    },
+    {
+      "caseId": "response-must-not-echo-message",
+      "body": {
+        "contractVersion": "shortcut-payment-response.v1",
+        "commandId": "command-006",
+        "transaction": {
+          "kind": "created",
+          "transactionId": "transaction-006"
+        },
+        "notification": {
+          "state": "not-requested"
+        },
+        "message": "민감한 결제 원문"
+      }
+    },
+    {
+      "caseId": "error-must-declare-retryability",
+      "body": {
+        "contractVersion": "shortcut-payment-response.v1",
+        "error": {
+          "code": "INVALID_REQUEST"
+        }
+      }
+    }
+  ]
+}

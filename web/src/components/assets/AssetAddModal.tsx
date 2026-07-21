@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   AssetInput,
+  AssetOwnerOption,
   AssetType,
   ASSET_TYPE_CONFIG,
   CryptoSearchResult,
@@ -24,22 +25,24 @@ import StockSearchForm, { StockSearchState } from './StockSearchForm';
 import CryptoSearchForm, { CryptoSearchState } from './CryptoSearchForm';
 import { HOUSEHOLD_OWNER_OPTION } from '@/lib/assets/memberOptions';
 import { calculateHoldingValue } from '@/lib/assets/holdingValuation';
+import { portfolioQueries } from '@/features/portfolio/application/portfolioQueries';
 
 interface AssetAddModalProps {
   isOpen: boolean;
   onClose: () => void;
   defaultType?: AssetType;
-  defaultOwner?: string;
-  ownerOptions: string[];
+  defaultOwnerKey?: string;
+  ownerOptions: AssetOwnerOption[];
 }
 
 interface PendingStockHolding {
   stockCode: string;
   stockName: string;
+  market: 'KRX' | 'US' | 'KOFIA_FUND';
   quantity: number;
   avgPrice?: number;
   currentPrice?: number;
-  instrumentType?: 'stock' | 'etf' | 'fund';
+  instrumentType?: 'stock' | 'etf' | 'etn' | 'fund';
   priceScale?: number;
   quoteAsOf?: string;
 }
@@ -95,13 +98,13 @@ export default function AssetAddModal({
   isOpen,
   onClose,
   defaultType = 'savings',
-  defaultOwner,
+  defaultOwnerKey,
   ownerOptions,
 }: AssetAddModalProps) {
   const [name, setName] = useState('');
   const [type, setType] = useState<AssetType>(defaultType);
   const [subType, setSubType] = useState('');
-  const [owner, setOwner] = useState(ownerOptions[0] || HOUSEHOLD_OWNER_OPTION);
+  const [ownerKey, setOwnerKey] = useState(ownerOptions[0]?.key || HOUSEHOLD_OWNER_OPTION);
   const [balance, setBalance] = useState('');
   const [recurringContributionAmount, setRecurringContributionAmount] = useState('');
   const [recurringContributionDay, setRecurringContributionDay] = useState('');
@@ -192,12 +195,12 @@ export default function AssetAddModal({
     setType(defaultType);
     setSubType(ASSET_TYPE_CONFIG[defaultType].subTypes[0] || '');
 
-    const initialOwner =
-      defaultOwner && ownerOptions.includes(defaultOwner)
-        ? defaultOwner
-        : ownerOptions[0] || HOUSEHOLD_OWNER_OPTION;
+    const initialOwnerKey =
+      defaultOwnerKey && ownerOptions.some((option) => option.key === defaultOwnerKey)
+        ? defaultOwnerKey
+        : ownerOptions[0]?.key || HOUSEHOLD_OWNER_OPTION;
 
-    setOwner(initialOwner);
+    setOwnerKey(initialOwnerKey);
     setName('');
     setBalance('');
     setRecurringContributionAmount('');
@@ -211,7 +214,7 @@ export default function AssetAddModal({
     setPendingCryptoHoldings([]);
     resetStockForm();
     resetCryptoForm();
-  }, [defaultOwner, defaultType, isOpen, ownerOptions]);
+  }, [defaultOwnerKey, defaultType, isOpen, ownerOptions]);
 
   useEffect(() => {
     if (!isStockLikeAsset || searchQuery.length < 1) {
@@ -227,10 +230,8 @@ export default function AssetAddModal({
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const response = await fetch(`/api/stock/search?q=${encodeURIComponent(searchQuery)}`);
-        const data = await response.json();
+        const results = await portfolioQueries.searchStocks(searchQuery);
         if (!cancelled) {
-          const results: StockSearchResult[] = data.results || [];
           setSearchResults(
             isGoldEtf
               ? results.filter((item) => isGoldRelatedStockName(item.name))
@@ -269,10 +270,9 @@ export default function AssetAddModal({
     const timer = setTimeout(async () => {
       setIsCryptoSearching(true);
       try {
-        const response = await fetch(`/api/crypto/search?q=${encodeURIComponent(cryptoSearchQuery)}`);
-        const data = await response.json();
+        const results = await portfolioQueries.searchCrypto(cryptoSearchQuery);
         if (!cancelled) {
-          setCryptoSearchResults(data.results || []);
+          setCryptoSearchResults(results);
         }
       } catch (error) {
         if (!cancelled) {
@@ -299,18 +299,12 @@ export default function AssetAddModal({
     setIsLoadingPrice(true);
 
     try {
-      const response = await fetch(`/api/stock/price?code=${stock.code}`);
-      if (!response.ok) {
-        setCurrentPrice(null);
-        setCurrentPriceInfo(null);
-        return;
-      }
-
-      const data = (await response.json()) as StockPriceInfo;
+      const data = await portfolioQueries.getStockQuote(stock);
       setCurrentPrice(data.price);
       setCurrentPriceInfo(data);
     } catch (error) {
       setCurrentPrice(null);
+      setCurrentPriceInfo(null);
       console.error('주가 조회 오류:', error);
     } finally {
       setIsLoadingPrice(false);
@@ -329,6 +323,7 @@ export default function AssetAddModal({
         {
           stockCode: selectedStock.code,
           stockName: selectedStock.name,
+          market: selectedStock.market,
           quantity: Number(quantity),
           avgPrice: avgPrice ? Number(avgPrice) : undefined,
           currentPrice: currentPrice || undefined,
@@ -351,13 +346,7 @@ export default function AssetAddModal({
     setIsLoadingCoinPrice(true);
 
     try {
-      const response = await fetch(`/api/crypto/price?market=${encodeURIComponent(coin.code)}`);
-      if (!response.ok) {
-        setCoinCurrentPrice(null);
-        return;
-      }
-
-      const data = await response.json();
+      const data = await portfolioQueries.getCryptoQuote(coin);
       setCoinCurrentPrice(data.price);
     } catch (error) {
       setCoinCurrentPrice(null);
@@ -405,11 +394,14 @@ export default function AssetAddModal({
 
     setIsSubmitting(true);
     try {
+      const selectedOwner =
+        ownerOptions.find((option) => option.key === ownerKey) ?? ownerOptions[0];
       const input: AssetInput = {
         name: name.trim(),
         type,
         subType: subType || undefined,
-        owner,
+        owner: selectedOwner?.label ?? HOUSEHOLD_OWNER_OPTION,
+        ownerRef: selectedOwner?.ownerRef ?? { kind: 'household' },
         currentBalance: isStockLikeAsset || type === 'crypto' ? 0 : parseInt(balance, 10) || 0,
         recurringContributionAmount: isSavingsInstallment
           ? parseInt(recurringContributionAmount, 10) || 0
@@ -452,6 +444,7 @@ export default function AssetAddModal({
               assetId,
               stockCode: holding.stockCode,
               stockName: holding.stockName,
+              market: holding.market,
               quantity: holding.quantity,
               avgPrice: holding.avgPrice,
               currentPrice: holding.currentPrice,
@@ -610,16 +603,16 @@ export default function AssetAddModal({
             <div className="flex flex-wrap gap-2">
               {ownerOptions.map((ownerOption) => (
                 <button
-                  key={ownerOption}
+                  key={ownerOption.key}
                   type="button"
-                  onClick={() => setOwner(ownerOption)}
+                  onClick={() => setOwnerKey(ownerOption.key)}
                   className={`rounded-full px-3 py-1.5 text-sm transition-all ${
-                    owner === ownerOption
+                    ownerKey === ownerOption.key
                       ? 'bg-blue-500 text-white'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  {ownerOption}
+                  {ownerOption.label}
                 </button>
               ))}
             </div>

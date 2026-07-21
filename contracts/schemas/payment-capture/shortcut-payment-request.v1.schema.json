@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://household-account.local/schemas/payment-capture/shortcut-payment-request.v1.schema.json",
+  "title": "Shortcut Payment Request V1",
+  "description": "인증된 iOS Shortcut이 결제 원문 후보만 전달하는 최소 HTTP body 계약입니다. Actor와 가구는 credential claim에서 결정합니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "message"],
+  "properties": {
+    "contractVersion": {
+      "const": "shortcut-payment.v1"
+    },
+    "message": {}
+  }
+}

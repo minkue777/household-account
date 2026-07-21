@@ -63,8 +63,10 @@ export function useExpenses({ year, month }: UseExpensesOptions): UseExpensesRet
     expenseId: string,
     data: { amount?: number; memo?: string; category?: string; merchant?: string }
   ) => {
-    await updateExpenseService(expenseId, data);
-  }, []);
+    const expense = expenses.find((item) => item.id === expenseId);
+    if (!expense) throw new Error('수정할 거래의 최신 버전을 찾을 수 없습니다.');
+    await updateExpenseService(expenseId, data, expense.aggregateVersion);
+  }, [expenses]);
 
   // 지출 추가
   const addExpense = useCallback(async (
@@ -79,8 +81,10 @@ export function useExpenses({ year, month }: UseExpensesOptions): UseExpensesRet
 
   // 지출 삭제
   const deleteExpense = useCallback(async (expenseId: string) => {
-    await deleteExpenseService(expenseId);
-  }, []);
+    const expense = expenses.find((item) => item.id === expenseId);
+    if (!expense) throw new Error('삭제할 거래의 최신 버전을 찾을 수 없습니다.');
+    await deleteExpenseService(expenseId, expense.aggregateVersion);
+  }, [expenses]);
 
   // 지출 분할
   const splitExpense = useCallback(async (expense: Expense, splits: SplitItem[]) => {

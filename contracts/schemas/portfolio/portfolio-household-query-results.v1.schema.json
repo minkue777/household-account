@@ -1,0 +1,115 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://household-account.local/schemas/portfolio/portfolio-household-query-results.v1.schema.json",
+  "title": "Portfolio Household Query Results V1",
+  "$defs": {
+    "instrument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["market", "instrumentType", "code", "name"],
+      "properties": {
+        "market": {
+          "enum": ["KRX", "US", "KOFIA_FUND", "UPBIT_KRW", "PHYSICAL_GOLD"]
+        },
+        "instrumentType": {
+          "enum": ["stock", "etf", "etn", "fund", "crypto", "gold"]
+        },
+        "code": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "priceScale": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "value"],
+      "properties": {
+        "query": { "const": "portfolio.search-instruments.v1" },
+        "value": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["items", "truncated", "stale"],
+          "properties": {
+            "items": { "type": "array", "maxItems": 10, "items": { "$ref": "#/$defs/instrument" } },
+            "truncated": { "type": "boolean" },
+            "stale": { "type": "boolean" },
+            "catalogAsOf": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+            "catalogVersion": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "value"],
+      "properties": {
+        "query": { "const": "portfolio.get-instrument-quote.v1" },
+        "value": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["instrument", "priceInWon", "observedAt", "provider"],
+          "properties": {
+            "instrument": { "$ref": "#/$defs/instrument" },
+            "priceInWon": { "type": "number", "minimum": 0 },
+            "observedAt": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T" },
+            "provider": { "type": "string", "minLength": 1 },
+            "quoteAsOf": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "value"],
+      "properties": {
+        "query": { "const": "portfolio.get-dividend-projection.v1" },
+        "value": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "name",
+            "recentDividend",
+            "paymentDate",
+            "frequency",
+            "dividendYield",
+            "annualDividendPerShare",
+            "isEstimated",
+            "paymentEvents"
+          ],
+          "properties": {
+            "code": { "type": "string", "minLength": 1 },
+            "name": { "type": "string", "minLength": 1 },
+            "recentDividend": { "type": ["number", "null"], "minimum": 0 },
+            "paymentDate": {
+              "anyOf": [
+                { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+                { "type": "null" }
+              ]
+            },
+            "frequency": { "type": ["integer", "null"], "minimum": 0 },
+            "dividendYield": { "type": ["number", "null"], "minimum": 0 },
+            "annualDividendPerShare": { "type": ["number", "null"], "minimum": 0 },
+            "isEstimated": { "const": false },
+            "paymentEvents": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["paymentDate", "dividend"],
+                "properties": {
+                  "paymentDate": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+                  "dividend": { "type": "number", "minimum": 0 }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

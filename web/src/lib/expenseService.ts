@@ -1,23 +1,16 @@
 import {
   collection,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
   query,
   where,
   onSnapshot,
-  Timestamp,
   getDocs,
-  runTransaction,
   QueryDocumentSnapshot,
   DocumentData,
-} from 'firebase/firestore';
-import { db } from './firebase';
-import { Expense, MergedExpenseInfo, TransactionType } from '@/types/expense';
-import { getStoredHouseholdKey } from './householdService';
-import { MemberStorage } from './storage/memberStorage';
-import { getMonthlySplitDate } from '@/lib/utils/monthlySplitDate';
+  db,
+} from '@/platform/read-model/firestoreReadModel';
+import { Expense, TransactionType } from '@/types/expense';
+import { ledgerCommands } from '@/features/ledger/application/ledgerCommands';
+import { requireClientSessionScope } from '@/composition/clientSessionScope';
 
 const COLLECTION_NAME = 'expenses';
 const DEFAULT_TRANSACTION_TYPE: TransactionType = 'expense';
@@ -67,11 +60,7 @@ const EXACT_CARD_KEYWORD_PATTERN = /^(.+?)\s*\(\s*([0-9*xX＊]{4})\s*\)$/;
  * 현재 가구 키 가져오기
  */
 function getHouseholdId(): string {
-  const key = getStoredHouseholdKey();
-  if (!key) {
-    throw new Error('가구 키가 없습니다. 다시 로그인해주세요.');
-  }
-  return key;
+  return requireClientSessionScope().householdId;
 }
 
 /**
@@ -81,6 +70,9 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
   const data = docSnap.data();
   return {
     id: docSnap.id,
+    aggregateVersion: Number.isInteger(data.aggregateVersion) && data.aggregateVersion > 0
+      ? data.aggregateVersion
+      : 1,
     date: data.date,
     time: data.time,
     merchant: data.merchant,
@@ -257,36 +249,33 @@ function matchesCardSearch(expense: Expense, keyword: string): boolean {
  * 지출 추가
  */
 export async function addExpense(
-  expense: Omit<Expense, 'id'>,
+  expense: Omit<Expense, 'id' | 'aggregateVersion'>,
   options: AddExpenseOptions = {}
 ): Promise<string> {
   const householdId = getHouseholdId();
-  const { notifyOnCreate = true } = options;
-  const createdBy = notifyOnCreate ? MemberStorage.getMemberName() : null;
-  const docRef = await addDoc(collection(db, COLLECTION_NAME), {
+  void options;
+  return ledgerCommands.record(householdId, {
     ...expense,
     transactionType: expense.transactionType || DEFAULT_TRANSACTION_TYPE,
-    householdId,
-    createdAt: Timestamp.now(),
-    ...(createdBy && { createdBy }),
   });
-  return docRef.id;
 }
 
 /**
  * 지출 수정
  */
-export async function updateExpense(id: string, data: Partial<Expense>): Promise<void> {
-  const docRef = doc(db, COLLECTION_NAME, id);
-  await updateDoc(docRef, data);
+export async function updateExpense(
+  id: string,
+  data: Partial<Expense>,
+  expectedVersion: number
+): Promise<void> {
+  await ledgerCommands.update(getHouseholdId(), id, expectedVersion, data);
 }
 
 /**
  * 지출 삭제
  */
-export async function deleteExpense(id: string): Promise<void> {
-  const docRef = doc(db, COLLECTION_NAME, id);
-  await deleteDoc(docRef);
+export async function deleteExpense(id: string, expectedVersion: number): Promise<void> {
+  await ledgerCommands.delete(getHouseholdId(), id, expectedVersion);
 }
 
 /**
@@ -328,9 +317,12 @@ export function subscribeToMonthlyExpenses(
 /**
  * 지출의 카테고리 업데이트
  */
-export async function updateExpenseCategory(id: string, category: string): Promise<void> {
-  const docRef = doc(db, COLLECTION_NAME, id);
-  await updateDoc(docRef, { category });
+export async function updateExpenseCategory(
+  id: string,
+  category: string,
+  expectedVersion: number
+): Promise<void> {
+  await ledgerCommands.changeCategory(getHouseholdId(), id, category, expectedVersion);
 }
 
 /**
@@ -380,7 +372,7 @@ export async function addManualExpense(
   const now = new Date();
   const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-  const docRef = await addDoc(collection(db, COLLECTION_NAME), {
+  return ledgerCommands.record(householdId, {
     date,
     time,
     merchant,
@@ -390,46 +382,26 @@ export async function addManualExpense(
     cardType: 'manual',
     cardLastFour: '수동',
     memo: memo || '',
-    householdId,
-    createdAt: Timestamp.now(),
   });
-  return docRef.id;
 }
 
-/**
- * 잘못된 카테고리 일괄 수정
- */
-export async function fixInvalidCategories(
-  validCategories: string[]
-): Promise<number> {
-  const householdId = getHouseholdId();
-  const categoryMap: Record<string, string> = {
-    'baby': 'childcare',
-    'transport': 'living',
-    'medical': 'living',
-  };
-
-  const q = query(
-    collection(db, COLLECTION_NAME),
-    where('householdId', '==', householdId)
-  );
-  const snapshot = await getDocs(q);
-
-  let fixedCount = 0;
-
-  for (const docSnap of snapshot.docs) {
-    const data = docSnap.data();
-    const category = (data.category || '').toLowerCase();
-
-    // 유효한 카테고리가 아닌 경우
-    if (!validCategories.includes(category)) {
-      const newCategory = categoryMap[category] || 'etc';
-      await updateDoc(doc(db, COLLECTION_NAME, docSnap.id), { category: newCategory });
-      fixedCount++;
-    }
-  }
-
-  return fixedCount;
+export async function addManualMonthlySplit(
+  merchant: string,
+  amount: number,
+  category: string,
+  date: string,
+  months: number,
+  memo?: string
+): Promise<string[]> {
+  const result = await ledgerCommands.recordMonthlySplit(getHouseholdId(), {
+    merchant,
+    amountInWon: amount,
+    categoryId: category,
+    accountingDate: date,
+    ...(memo !== undefined ? { memo } : {}),
+    months,
+  });
+  return result.transactionIds;
 }
 
 /**
@@ -447,36 +419,25 @@ export async function splitExpense(
   originalExpense: Expense,
   splits: SplitItem[]
 ): Promise<string[]> {
-  const householdId = getHouseholdId();
+  return ledgerCommands.split(
+    getHouseholdId(),
+    originalExpense.id,
+    originalExpense.aggregateVersion,
+    splits
+  );
+}
 
-  return runTransaction(db, async (transaction) => {
-    // 원본 지출 삭제
-    const originalRef = doc(db, COLLECTION_NAME, originalExpense.id);
-    transaction.delete(originalRef);
-
-    // 분할된 지출들 추가
-    const newIds: string[] = [];
-    for (const split of splits) {
-      const newDocRef = doc(collection(db, COLLECTION_NAME));
-      const expenseData: Record<string, unknown> = {
-        date: originalExpense.date,
-        time: originalExpense.time,
-        merchant: split.merchant,
-        amount: split.amount,
-        transactionType: originalExpense.transactionType || DEFAULT_TRANSACTION_TYPE,
-        category: split.category,
-        cardType: originalExpense.cardType,
-        cardLastFour: originalExpense.cardLastFour,
-        memo: split.memo || '',
-        householdId,
-        createdAt: Timestamp.now(),
-      };
-      transaction.set(newDocRef, expenseData);
-      newIds.push(newDocRef.id);
-    }
-
-    return newIds;
-  });
+export async function splitExpenseMonthly(
+  expense: Expense,
+  months: number
+): Promise<string[]> {
+  const result = await ledgerCommands.splitExistingMonthly(
+    getHouseholdId(),
+    expense.id,
+    expense.aggregateVersion,
+    months
+  );
+  return result.transactionIds;
 }
 
 /**
@@ -488,38 +449,13 @@ export async function mergeExpenses(
   targetExpense: Expense,
   sourceExpense: Expense
 ): Promise<void> {
-  return runTransaction(db, async (transaction) => {
-    // 타겟 지출의 금액을 합산
-    const newAmount = targetExpense.amount + sourceExpense.amount;
-
-    // 원본 정보 저장 (되돌리기용)
-    const existingMerged = targetExpense.mergedFrom || [];
-    const mergedFrom: MergedExpenseInfo[] = [
-      ...existingMerged,
-      // 타겟이 아직 합쳐진 적 없으면 타겟 정보도 저장
-      ...(existingMerged.length === 0 ? [{
-        merchant: targetExpense.merchant,
-        amount: targetExpense.amount,
-        category: targetExpense.category,
-        memo: targetExpense.memo || '',
-      }] : []),
-      // 소스 정보 저장
-      {
-        merchant: sourceExpense.merchant,
-        amount: sourceExpense.amount,
-        category: sourceExpense.category,
-        memo: sourceExpense.memo || '',
-      },
-    ];
-
-    // 타겟 지출 업데이트
-    const targetRef = doc(db, COLLECTION_NAME, targetExpense.id);
-    transaction.update(targetRef, { amount: newAmount, mergedFrom });
-
-    // 소스 지출 삭제
-    const sourceRef = doc(db, COLLECTION_NAME, sourceExpense.id);
-    transaction.delete(sourceRef);
-  });
+  await ledgerCommands.merge(
+    getHouseholdId(),
+    targetExpense.id,
+    targetExpense.aggregateVersion,
+    sourceExpense.id,
+    sourceExpense.aggregateVersion
+  );
 }
 
 /**
@@ -530,38 +466,7 @@ export async function unmergeExpense(expense: Expense): Promise<string[]> {
   if (!expense.mergedFrom || expense.mergedFrom.length === 0) {
     return [];
   }
-
-  const householdId = getHouseholdId();
-
-  return runTransaction(db, async (transaction) => {
-    const newIds: string[] = [];
-
-    // 원본 지출들 다시 생성
-    for (const original of expense.mergedFrom!) {
-      const newDocRef = doc(collection(db, COLLECTION_NAME));
-      const expenseData: Record<string, unknown> = {
-        date: expense.date,
-        time: expense.time,
-        merchant: original.merchant,
-        amount: original.amount,
-        transactionType: expense.transactionType || DEFAULT_TRANSACTION_TYPE,
-        category: original.category,
-        cardType: expense.cardType,
-        cardLastFour: expense.cardLastFour,
-        memo: original.memo || '',
-        householdId,
-        createdAt: Timestamp.now(),
-      };
-      transaction.set(newDocRef, expenseData);
-      newIds.push(newDocRef.id);
-    }
-
-    // 합쳐진 지출 삭제
-    const expenseRef = doc(db, COLLECTION_NAME, expense.id);
-    transaction.delete(expenseRef);
-
-    return newIds;
-  });
+  return ledgerCommands.unmerge(getHouseholdId(), expense.id, expense.aggregateVersion);
 }
 
 /**
@@ -629,40 +534,22 @@ export async function getSplitGroupExpenses(splitGroupId: string): Promise<Expen
  * 월별 분할 취소 (합치기)
  * 분할된 지출들을 삭제하고 원래 금액의 단일 지출로 복원
  */
-export async function cancelSplitGroup(splitGroupId: string): Promise<void> {
-  const expenses = await getSplitGroupExpenses(splitGroupId);
-  if (expenses.length === 0) return;
+function expectedVersionsOf(expenses: readonly Expense[]): Record<string, number> {
+  return Object.fromEntries(
+    expenses.map((expense) => [expense.id, expense.aggregateVersion])
+  );
+}
 
-  const householdId = getHouseholdId();
-  const firstExpense = expenses[0];
-  const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0);
-  // 가맹점명에서 분할 표시 제거 (예: "스타벅스 (1/3)" -> "스타벅스")
-  const baseMerchant = firstExpense.merchant.replace(/\s*\(\d+\/\d+\)$/, '');
-
-  await runTransaction(db, async (transaction) => {
-    // 분할된 지출 모두 삭제
-    for (const expense of expenses) {
-      const docRef = doc(db, COLLECTION_NAME, expense.id);
-      transaction.delete(docRef);
-    }
-
-    // 원래 금액의 단일 지출 생성 (첫 번째 항목의 메모 유지)
-    const cardType = firstExpense.cardType || 'main';
-    const newDocRef = doc(collection(db, COLLECTION_NAME));
-    const expenseData: Record<string, unknown> = {
-      date: firstExpense.date,
-      time: firstExpense.time || '09:00',
-      merchant: baseMerchant,
-      amount: totalAmount,
-      transactionType: firstExpense.transactionType || DEFAULT_TRANSACTION_TYPE,
-      category: firstExpense.category,
-      cardType,
-      memo: firstExpense.memo || '',
-      householdId,
-      createdAt: Timestamp.now(),
-    };
-    transaction.set(newDocRef, expenseData);
-  });
+export async function cancelSplitGroup(
+  splitGroupId: string,
+  groupSnapshot?: readonly Expense[]
+): Promise<void> {
+  const snapshot = groupSnapshot ?? await getSplitGroupExpenses(splitGroupId);
+  await ledgerCommands.cancelMonthlySplit(
+    getHouseholdId(),
+    splitGroupId,
+    expectedVersionsOf(snapshot)
+  );
 }
 
 /**
@@ -671,55 +558,14 @@ export async function cancelSplitGroup(splitGroupId: string): Promise<void> {
  */
 export async function updateSplitGroup(
   splitGroupId: string,
-  newMonths: number
+  newMonths: number,
+  groupSnapshot?: readonly Expense[]
 ): Promise<string> {
-  const expenses = await getSplitGroupExpenses(splitGroupId);
-  if (expenses.length === 0) {
-    throw new Error('분할 그룹을 찾을 수 없습니다.');
-  }
-
-  // 원본 정보 계산
-  const firstExpense = expenses[0];
-  const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0);
-  const monthlyAmount = Math.floor(totalAmount / newMonths);
-  // 가맹점명에서 기존 분할 표시 제거 (예: "스타벅스 (1/3)" -> "스타벅스")
-  const baseMerchant = firstExpense.merchant.replace(/\s*\(\d+\/\d+\)$/, '');
-
-  // 새 그룹 ID 생성
-  const newGroupId = generateSplitGroupId();
-  const householdId = getHouseholdId();
-
-  await runTransaction(db, async (transaction) => {
-    // 기존 그룹 삭제
-    for (const expense of expenses) {
-      const docRef = doc(db, COLLECTION_NAME, expense.id);
-      transaction.delete(docRef);
-    }
-
-    // 새로운 분할 지출 생성
-    const cardType = firstExpense.cardType || 'main';
-    for (let i = 0; i < newMonths; i++) {
-      const dateStr = getMonthlySplitDate(firstExpense.date, i);
-
-      const newDocRef = doc(collection(db, COLLECTION_NAME));
-      const expenseData: Record<string, unknown> = {
-        date: dateStr,
-        time: firstExpense.time || '09:00',
-        merchant: `${baseMerchant} (${i + 1}/${newMonths})`,
-        amount: monthlyAmount,
-        transactionType: firstExpense.transactionType || DEFAULT_TRANSACTION_TYPE,
-        category: firstExpense.category,
-        cardType,
-        memo: firstExpense.memo || '',
-        splitGroupId: newGroupId,
-        splitIndex: i + 1,
-        splitTotal: newMonths,
-        householdId,
-        createdAt: Timestamp.now(),
-      };
-      transaction.set(newDocRef, expenseData);
-    }
-  });
-
-  return newGroupId;
+  const snapshot = groupSnapshot ?? await getSplitGroupExpenses(splitGroupId);
+  return ledgerCommands.reconfigureMonthlySplit(
+    getHouseholdId(),
+    splitGroupId,
+    newMonths,
+    expectedVersionsOf(snapshot)
+  );
 }

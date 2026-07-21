@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://household-account.local/schemas/operations/scheduled-job-definitions.v1.schema.json",
+  "title": "Scheduled Job Definitions V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "timezone", "definitions"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "timezone": { "const": "Asia/Seoul" },
+    "definitions": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": { "$ref": "#/$defs/definition" }
+    }
+  },
+  "$defs": {
+    "positiveSeconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 86400
+    },
+    "scheduledExecutionSeconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 480
+    },
+    "definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jobName",
+        "cron",
+        "startGraceSeconds",
+        "executionDeadlineSeconds",
+        "heartbeatTimeoutSeconds",
+        "leaseDurationSeconds",
+        "pageSize",
+        "maxPagesPerOccurrence"
+      ],
+      "properties": {
+        "jobName": {
+          "enum": [
+            "recurring-daily",
+            "asset-automation-daily",
+            "instrument-catalog-daily",
+            "dividend-hourly",
+            "asset-valuation-daily",
+            "scheduled-job-monitor"
+          ]
+        },
+        "cron": { "type": "string", "minLength": 9, "maxLength": 40 },
+        "startGraceSeconds": { "$ref": "#/$defs/positiveSeconds" },
+        "executionDeadlineSeconds": { "$ref": "#/$defs/scheduledExecutionSeconds" },
+        "heartbeatTimeoutSeconds": { "$ref": "#/$defs/positiveSeconds" },
+        "leaseDurationSeconds": { "$ref": "#/$defs/positiveSeconds" },
+        "pageSize": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "maxPagesPerOccurrence": { "type": "integer", "minimum": 1, "maximum": 10000 }
+      }
+    }
+  }
+}
