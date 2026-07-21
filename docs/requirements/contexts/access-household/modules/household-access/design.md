@@ -200,7 +200,7 @@ Value Object는 `HouseholdName`, `MemberDisplayName`, `AssetOwnerProfileName`, `
 4. 가입자는 Google 로그인 뒤 코드와 자기 표시 이름을 제출합니다. 다른 memberId·principalUid 입력은 받지 않습니다.
 5. 서버는 코드 hash, 5분 만료, unused, household active, 호출자 미가입을 검증합니다.
 6. Invitation used 전이, 호출자 자기 Member, member 명의자 프로필, Membership, receipt, `MemberJoined.v1`을 한 transaction에서 생성합니다.
-6. 만료·재사용·경합·이미 가입은 Member를 만들지 않고 typed 실패를 반환합니다.
+7. 만료·재사용·경합·이미 가입은 Member를 만들지 않고 typed 실패를 반환합니다.
 
 ### 5.4 RenameSelf
 
