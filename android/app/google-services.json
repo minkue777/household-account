@@ -12,7 +12,12 @@
           "package_name": "com.household.account"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "530451947649-65mlgv756ul4ehk2u389jnhsvgk0oat6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyD0_ogGV9mIYO7WaASAh7eVpQgm3lOHP_c"
@@ -20,7 +25,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "530451947649-65mlgv756ul4ehk2u389jnhsvgk0oat6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
