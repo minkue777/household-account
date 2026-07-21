@@ -160,6 +160,7 @@ export function resolveMember(input: {
   raw: string;
   documentId: string;
   explicitByDocument?: Readonly<Record<string, string>>;
+  missingRawFallback?: string;
   mappings: RuntimeMigrationMappingManifest;
   memberIds: ReadonlySet<string>;
 }): string | undefined {
@@ -167,7 +168,12 @@ export function resolveMember(input: {
   if (explicit !== undefined && input.memberIds.has(explicit)) return explicit;
   if (input.raw !== "" && input.memberIds.has(input.raw)) return input.raw;
   const mapped = input.mappings.memberReferences?.[input.raw];
-  return mapped !== undefined && input.memberIds.has(mapped) ? mapped : undefined;
+  if (mapped !== undefined && input.memberIds.has(mapped)) return mapped;
+  return input.raw === "" &&
+    input.missingRawFallback !== undefined &&
+    input.memberIds.has(input.missingRawFallback)
+    ? input.missingRawFallback
+    : undefined;
 }
 
 export function createdAndUpdated(

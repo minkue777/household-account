@@ -434,17 +434,9 @@ export function collectPaymentConfigurationRuntimeMigration(
       );
       continue;
     }
-    if (matchType === "exact" && Number.isFinite(rawPriority)) {
-      unresolved.push(
-        migrationIssue({
-          code: "SOURCE_DOCUMENT_INVALID",
-          sourceCollection: "merchant_rules",
-          reference: snapshot.ref.path,
-          detailCode: "EXACT_PRIORITY_NOT_ALLOWED",
-        }),
-      );
-      continue;
-    }
+    // 구형 문서는 모든 규칙에 priority를 저장했습니다. exact 규칙의 priority는
+    // 당시에도 선택 결과에 영향을 주지 않은 호환 필드이므로 canonical 문서로
+    // 옮기지 않습니다. 신규 Command 경계에서는 exact+priority 입력을 계속 거부합니다.
     const rawMapping = objectValue(data, "mapping");
     const merchant = text(rawMapping, "merchant");
     const categoryId =

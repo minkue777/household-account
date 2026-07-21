@@ -88,6 +88,7 @@ export function collectFinanceRuntimeMigration(
       raw: rawCreator,
       documentId: snapshot.id,
       explicitByDocument: input.mappings.ledgerCreators,
+      missingRawFallback: input.mappings.missingCreatorMemberId,
       mappings: input.mappings,
       memberIds: input.memberIds,
     });
@@ -415,6 +416,7 @@ export function collectFinanceRuntimeMigration(
       raw: rawCreator,
       documentId: snapshot.id,
       explicitByDocument: input.mappings.recurringCreators,
+      missingRawFallback: input.mappings.missingCreatorMemberId,
       mappings: input.mappings,
       memberIds: input.memberIds,
     });

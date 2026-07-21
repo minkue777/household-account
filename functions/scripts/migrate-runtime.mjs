@@ -94,6 +94,8 @@ function validManifest(value) {
     typeof value.householdIdHash === "string" &&
     /^[a-f0-9]{64}$/u.test(value.householdIdHash) &&
     optionalRecord(value.memberReferences, isNonEmptyString) &&
+    (value.missingCreatorMemberId === undefined ||
+      isNonEmptyString(value.missingCreatorMemberId)) &&
     optionalRecord(value.ledgerCreators, isNonEmptyString) &&
     optionalRecord(value.ledgerNotificationRequesters, isNonEmptyString) &&
     optionalRecord(value.recurringCreators, isNonEmptyString) &&

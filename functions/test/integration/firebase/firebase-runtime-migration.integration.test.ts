@@ -193,6 +193,7 @@ async function seedFullScope() {
       householdId: HOUSEHOLD_ID,
       merchantKeyword: "Coffee, Cafe",
       exactMatch: true,
+      priority: 999,
       category: "food",
       isActive: true,
       schemaVersion: 1,
@@ -387,6 +388,7 @@ describeWithFirestoreEmulator("Firebase runtime migration operations boundary", 
       normalizedKeywords: ["coffee", "cafe"],
       mapping: { categoryId: "food" },
     });
+    expect((await household.collection("merchantRules").doc("rule-1").get()).data()).not.toHaveProperty("priority");
     expect((await household.collection("merchantRules").doc("rule-contains").get()).data()).toMatchObject({
       matchType: "contains",
       priority: 10,
@@ -459,6 +461,79 @@ describeWithFirestoreEmulator("Firebase runtime migration operations boundary", 
       code: "MIGRATION_UNRESOLVED_REFERENCES",
     });
     expect((await household.collection("recurringPlans").get()).size).toBe(0);
+  });
+
+  it("확인된 가구 단위 기본 creator는 빈 과거 기록에만 적용하고 기존 creator는 보존한다", async () => {
+    const household = database.collection("households").doc(HOUSEHOLD_ID);
+    await Promise.all([
+      household.set({ lifecycleState: "active" }),
+      household.collection("members").doc("member-a").set({
+        memberId: "member-a",
+        displayName: "민규",
+      }),
+      household.collection("members").doc("member-b").set({
+        memberId: "member-b",
+        displayName: "진선",
+      }),
+      database.collection("expenses").doc("expense-no-creator").set({
+        householdId: HOUSEHOLD_ID,
+        merchant: "생성자 없는 지출",
+        amount: 10_000,
+        category: "etc",
+        date: "2026-07-20",
+      }),
+      database.collection("expenses").doc("expense-existing-creator").set({
+        householdId: HOUSEHOLD_ID,
+        merchant: "생성자 있는 지출",
+        amount: 20_000,
+        category: "etc",
+        date: "2026-07-20",
+        createdBy: "진선",
+      }),
+      database.collection("recurring_expenses").doc("recurring-no-creator").set({
+        householdId: HOUSEHOLD_ID,
+        merchant: "생성자 없는 정기 거래",
+        amount: 30_000,
+        category: "etc",
+        dayOfMonth: 1,
+      }),
+    ]);
+    const migration = subject();
+    const dryRun = await migration.dryRun({
+      scope: scope("household-missing-creator"),
+      mappings: mappings({
+        memberReferences: { "진선": "member-b" },
+        missingCreatorMemberId: "member-a",
+        recurringCreators: {},
+        assetOwners: {},
+        positionMarkets: {},
+      }),
+      plannedAt: "2026-07-21T01:30:00.000Z",
+    });
+    expect(dryRun.unresolved).toEqual([]);
+
+    const applied = await migration.apply({
+      scope: scope("household-missing-creator"),
+      expectedPlanHash: dryRun.planHash,
+      confirmation: "APPLY",
+      checkpoint: dryRun.checkpoint,
+      pageSize: 50,
+      maxPages: 100,
+      appliedAt: "2026-07-21T01:31:00.000Z",
+    });
+    expect(applied).toMatchObject({
+      kind: "applied",
+      reconciliation: { status: "MATCH" },
+    });
+    expect(
+      (await household.collection("ledgerTransactions").doc("expense-no-creator").get()).data(),
+    ).toMatchObject({ creatorMemberId: "member-a" });
+    expect(
+      (await household.collection("ledgerTransactions").doc("expense-existing-creator").get()).data(),
+    ).toMatchObject({ creatorMemberId: "member-b" });
+    expect(
+      (await household.collection("recurringPlans").doc("recurring-no-creator").get()).data(),
+    ).toMatchObject({ creatorMemberId: "member-a" });
   });
 
   it("카드 소유자와 중복 지역화폐 선택이 불명확하면 임의 추정 없이 전체 apply를 차단한다", async () => {

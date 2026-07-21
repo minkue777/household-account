@@ -19,6 +19,12 @@ export interface RuntimeMigrationMappingManifest {
   /** SHA-256 of the raw household id. The raw id must not be copied into a file. */
   readonly householdIdHash: string;
   readonly memberReferences?: Readonly<Record<string, string>>;
+  /**
+   * Operator-confirmed member used only when a legacy ledger transaction or
+   * recurring plan has no creator value at all. Existing creator values are
+   * never replaced by this fallback.
+   */
+  readonly missingCreatorMemberId?: string;
   readonly ledgerCreators?: Readonly<Record<string, string>>;
   readonly ledgerNotificationRequesters?: Readonly<Record<string, string>>;
   readonly recurringCreators?: Readonly<Record<string, string>>;
