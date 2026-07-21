@@ -5,7 +5,8 @@
 ## 비밀과 설치 템플릿
 
 - `SHORTCUT_CREDENTIAL_PEPPER`는 Firebase Secret으로 주입하며 32바이트 이상의 임의값이어야 합니다. 원문 자격 증명은 Firestore·명령 receipt·로그에 저장하지 않고 `HMAC-SHA-256` 결과만 `shortcutCredentials`에 저장합니다.
-- `SHORTCUT_INSTALL_URL`은 endpoint·POST·JSON·Authorization·typed 응답 처리가 미리 구성된 공개 iCloud Shortcut URL이어야 합니다.
+- `SHORTCUT_INSTALL_URL`은 endpoint·POST·JSON·Authorization·typed 응답 처리가 미리 구성된 공개 iCloud Shortcut URL이어야 합니다. 운영 프로젝트는 `https://www.icloud.com/shortcuts/6d8f2e82d1424763bb3b7cdada1b95da`를 사용합니다.
+- Web은 가져오기 질문이 `Authorization` 헤더 전체를 복원할 수 있도록 최초 발급값을 `Bearer <shortcutCredential>` 형식으로 클립보드에 복사합니다. 원문 재조회는 제공하지 않습니다.
 - `SHORTCUT_CREDENTIAL_KEY_VERSION`은 현재 hash key 운용 버전을 식별합니다.
 
 배포 전 Secret은 다음과 같이 별도로 등록합니다. 값 자체는 저장소나 명령 기록에 남기지 않습니다.

@@ -1,6 +1,10 @@
 import { getHouseholdCommandClient } from '@/composition/webCommandRuntime';
 import { getHouseholdQueryClient } from '@/composition/webQueryRuntime';
 
+export function shortcutAuthorizationValue(rawCredential: string): string {
+  return `Bearer ${rawCredential}`;
+}
+
 export const shortcutCredentials = {
   status() {
     return getHouseholdQueryClient().execute('shortcut.get-credential-status.v1', {});

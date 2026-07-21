@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Copy, ExternalLink, KeyRound, RefreshCw, Trash2 } from 'lucide-react';
-import { shortcutCredentials } from '@/features/payment-capture/application/shortcutCredentials';
+import {
+  shortcutAuthorizationValue,
+  shortcutCredentials,
+} from '@/features/payment-capture/application/shortcutCredentials';
 import type { ShortcutCredentialIssueResult } from '@/platform/functions-api';
 
 type CredentialStatus = Awaited<ReturnType<typeof shortcutCredentials.status>>;
@@ -52,7 +55,7 @@ export default function ShortcutSettings() {
       },
     });
     try {
-      await navigator.clipboard.writeText(result.rawCredential);
+      await navigator.clipboard.writeText(shortcutAuthorizationValue(result.rawCredential));
       setCopied(true);
       window.open(result.installUrl, '_blank', 'noopener,noreferrer');
     } catch {
@@ -123,7 +126,9 @@ export default function ShortcutSettings() {
   const copyCredential = async () => {
     if (!oneTimeCredential) return;
     try {
-      await navigator.clipboard.writeText(oneTimeCredential.rawCredential);
+      await navigator.clipboard.writeText(
+        shortcutAuthorizationValue(oneTimeCredential.rawCredential)
+      );
       setCopied(true);
     } catch {
       setError('클립보드에 복사하지 못했습니다. 키를 길게 눌러 직접 복사해 주세요.');
@@ -205,7 +210,7 @@ export default function ShortcutSettings() {
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
           <p className="text-sm font-medium text-amber-800">이 키는 지금 한 번만 확인할 수 있습니다.</p>
           <code className="mt-2 block break-all rounded-lg bg-white p-2 text-xs text-slate-700">
-            {oneTimeCredential.rawCredential}
+            {shortcutAuthorizationValue(oneTimeCredential.rawCredential)}
           </code>
           <div className="mt-2 flex flex-wrap gap-2">
             <button
