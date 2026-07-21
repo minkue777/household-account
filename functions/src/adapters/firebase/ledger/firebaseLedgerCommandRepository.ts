@@ -262,6 +262,7 @@ export class FirebaseLedgerCommandRepository
           legacyTransactionReference,
           {
             ...transactionDocument(input.transaction, !legacySnapshot.exists),
+            cardLastFour: input.transaction.cardDisplay,
             schemaVersion: 1,
           },
           { merge: true },

@@ -295,7 +295,7 @@ Firestore write limit을 넘을 가능성이 있으면 transaction 시작 전에
 
 1. 새 Application이 기존 `expenses`를 쓰는 Legacy Mapper 뒤에서 동작합니다.
 2. transactionType 누락을 expense로 읽는 호환 fixture를 유지합니다.
-3. Canonical `cardDisplay`는 `삼성(1876)`처럼 사용자에게 보일 완성 문자열입니다. 기존 Web Read Model이 `expenses.cardLastFour`를 카드 표시 슬롯으로 사용하므로 Legacy Projection은 전환 기간에 같은 완성 문자열을 `cardLastFour`에도 기록합니다. 이는 끝 네 자리만 뜻하는 Domain 필드가 아니며 Canonical 모델로 역유입하지 않습니다.
+3. Canonical `cardDisplay`는 `삼성(1876)` 또는 `수동`처럼 사용자에게 보일 완성 문자열입니다. Web Read Adapter는 이를 우선 읽고, 기존 문서는 `expenses.cardLastFour` 표시 슬롯으로 fallback합니다. Legacy Projection도 전환 기간에 같은 완성 문자열을 `cardLastFour`에 기록합니다. 이는 끝 네 자리만 뜻하는 Domain 필드가 아니며 Canonical 모델로 역유입하지 않습니다. `cardType=manual` 또는 `source=manual`이면 오래된 호환 필드가 없거나 잘못 남아 있어도 표시 결과는 항상 `수동`입니다.
 4. lifecycleState가 없는 문서는 active로 읽되 `lifecycleState=deleted` 또는 legacy `deletedAt`이 있으면 일반 Read Model에서 제외합니다.
 5. source, originChannel, creatorMemberId, localCurrencyType, schemaVersion, aggregateVersion을 근거가 있는 범위에서 backfill하고 불명확한 legacy 값은 명시적인 unknown 채널로 격리합니다. localCurrencyType은 parser/capture 근거가 없으면 추정하지 않습니다.
 6. legacy `notifyPartnerAt/notifyPartnerBy` 변경은 전환 Mapper가 `requestedAt/requesterMemberId`와 `HouseholdNotificationRequested.v1`로 변환하되 특정 partner 수신자를 만들지 않습니다.

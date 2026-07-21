@@ -19,8 +19,8 @@ export interface Expense {
   amount: number;         // 금액
   transactionType?: TransactionType;
   category: Category;     // 카테고리 (동적)
-  cardType?: string;  // 'main' | 'family' | undefined (iOS 단축어는 없음)
-  cardLastFour?: string;  // 카드 마지막 4자리
+  cardType?: string;  // 'manual' | 'captured' | 'local_currency' | legacy type
+  cardLastFour?: string;  // 기존 UI 호환용 카드 표시 문자열(예: 수동, 삼성(1840))
   memo?: string;          // 메모 (선택)
   mergedFrom?: MergedExpenseInfo[];  // 합쳐진 원본 지출들 (되돌리기용)
   splitGroupId?: string;  // 월별 분할 그룹 ID (같은 ID면 같은 분할 그룹)

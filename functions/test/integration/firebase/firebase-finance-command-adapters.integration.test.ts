@@ -87,6 +87,43 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     if (app !== undefined) await deleteApp(app);
   });
 
+  it("수동 거래의 canonical·legacy 카드 표시를 모두 수동으로 기록한다", async () => {
+    await database.collection("categories").doc("food").set({
+      householdId: HOUSEHOLD_ID,
+      key: "food",
+      label: "식비",
+      isActive: true,
+    });
+    const handlers = createLedgerHouseholdCommandHandlers(database);
+    const result = (await execute(
+      handlers,
+      "ledger.record-manual-transaction.v1",
+      "manual-card-display-1",
+      {
+        transactionType: "expense",
+        merchant: "수동 가맹점",
+        amountInWon: 10_000,
+        categoryId: "food",
+        accountingDate: "2026-07-22",
+      },
+    )) as { transactionId: string };
+
+    const canonical = await database
+      .collection("households")
+      .doc(HOUSEHOLD_ID)
+      .collection("ledgerTransactions")
+      .doc(result.transactionId)
+      .get();
+    const legacy = await database.collection("expenses").doc(result.transactionId).get();
+
+    expect(canonical.data()).toMatchObject({ cardType: "manual", cardDisplay: "수동" });
+    expect(legacy.data()).toMatchObject({
+      cardType: "manual",
+      cardDisplay: "수동",
+      cardLastFour: "수동",
+    });
+  });
+
   it("카테고리 6개 command가 같은 catalog 계약과 projection을 원자적으로 갱신한다", async () => {
     const handlers = createCategoryHouseholdCommandHandlers(database);
     const first = (await execute(handlers, "category.create.v1", "category-create-1", {

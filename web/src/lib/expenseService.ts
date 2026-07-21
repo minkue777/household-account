@@ -29,6 +29,13 @@ interface ExactCardSearchKeyword {
   token: string;
 }
 
+interface LedgerCardReadFields {
+  cardType?: unknown;
+  cardDisplay?: unknown;
+  cardLastFour?: unknown;
+  source?: unknown;
+}
+
 const CARD_LABEL_ALIAS_GROUPS = [
   ['국민', '국민카드', 'KB', 'KB국민', 'KB국민카드'],
   ['삼성', '삼성카드'],
@@ -64,11 +71,29 @@ function getHouseholdId(): string {
   return requireClientSessionScope().householdId;
 }
 
+/** Canonical cardDisplay와 legacy cardLastFour를 Web의 기존 표시 필드로 변환합니다. */
+export function resolveExpenseCardDisplay(data: LedgerCardReadFields): string | undefined {
+  const cardType = typeof data.cardType === 'string' ? data.cardType.trim().toLowerCase() : '';
+  const source = typeof data.source === 'string' ? data.source.trim().toLowerCase() : '';
+  if (cardType === 'manual' || source === 'manual') {
+    return '수동';
+  }
+
+  const canonicalDisplay = typeof data.cardDisplay === 'string' ? data.cardDisplay.trim() : '';
+  if (canonicalDisplay) {
+    return canonicalDisplay;
+  }
+
+  const legacyDisplay = typeof data.cardLastFour === 'string' ? data.cardLastFour.trim() : '';
+  return legacyDisplay || undefined;
+}
+
 /**
  * Firestore 문서를 Expense 객체로 변환 (DRY 원칙)
  */
 function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense {
   const data = docSnap.data();
+  const cardDisplay = resolveExpenseCardDisplay(data);
   return {
     id: docSnap.id,
     aggregateVersion: Number.isInteger(data.aggregateVersion) && data.aggregateVersion > 0
@@ -81,8 +106,8 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
     transactionType: (data.transactionType || DEFAULT_TRANSACTION_TYPE) as TransactionType,
     // Android는 대문자로 저장하므로 소문자로 변환
     category: (data.category || 'etc').toLowerCase(),
-    cardType: data.cardType?.toLowerCase() || (data.cardLastFour === '1876' ? 'sam' : 'main'),
-    cardLastFour: data.cardLastFour,
+    cardType: data.cardType?.toLowerCase() || (data.source === 'manual' ? 'manual' : 'main'),
+    cardLastFour: cardDisplay,
     memo: data.memo,
     mergedFrom: data.mergedFrom,
     splitGroupId: data.splitGroupId,
