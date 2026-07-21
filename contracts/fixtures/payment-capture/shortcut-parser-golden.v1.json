@@ -10,6 +10,13 @@
       "expected": { "kind": "Parsed", "amountInWon": 10000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "08:50", "merchant": "가맹점가", "cardEvidence": { "companyLabel": "삼성", "maskedToken": "1234" } }
     },
     {
+      "caseId": "samsung-with-web-sender-marker",
+      "requirementIds": ["T-PARSE-004", "IOS-003"],
+      "receivedAt": "2026-07-31T17:41:00+09:00",
+      "message": "[Web발신]\n삼성1234승인 김*원\n20,300원 일시불\n07/31 17:40 가맹점가\n누적881,545원",
+      "expected": { "kind": "Parsed", "amountInWon": 20300, "occurredLocalDate": "2026-07-31", "occurredLocalTime": "17:40", "merchant": "가맹점가", "cardEvidence": { "companyLabel": "삼성", "maskedToken": "1234" } }
+    },
+    {
       "caseId": "shinhan",
       "requirementIds": ["T-PARSE-004", "IOS-003"],
       "receivedAt": "2026-07-19T08:51:00+09:00",

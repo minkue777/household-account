@@ -114,10 +114,14 @@ export function parseShortcutCardMessage(input: {
   readonly command: ParseShortcutCardMessageInput;
   readonly resolveOccurrenceYear: ShortcutOccurrenceYearResolver;
 }): ShortcutCardMessageParseResult {
-  const lines = input.command.message
+  const normalizedLines = input.command.message
     .split(/\r?\n/u)
     .map((line) => line.trim())
     .filter((line) => line !== "");
+  const lines =
+    normalizedLines[0] === "[Web발신]"
+      ? normalizedLines.slice(1)
+      : normalizedLines;
   if (lines.length < 3) {
     return { kind: "Rejected", code: "UNSUPPORTED_MESSAGE" };
   }
