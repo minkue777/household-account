@@ -85,11 +85,14 @@ describe("Firebase Capture → Ledger transaction adapter", () => {
       captureLineageId: first.captureLineageId,
       suppressAutomaticNotification: true,
       notificationPolicy: "android-quick-edit-only",
+      cardDisplay: "국민(1234)",
       aggregateVersion: 1,
     });
     expect(memory.document(`expenses/${first.transactionId}`)).toMatchObject({
       householdId: "house-1",
       creatorMemberId: "member-1",
+      cardDisplay: "국민(1234)",
+      cardLastFour: "국민(1234)",
       schemaVersion: 1,
     });
     expect(memory.paths("households/house-1/captureRecords/")).toHaveLength(1);

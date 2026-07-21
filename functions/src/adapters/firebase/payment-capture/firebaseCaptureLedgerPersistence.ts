@@ -384,7 +384,12 @@ export class FirebaseCaptureLedgerPersistence
           updatedAt: FieldValue.serverTimestamp(),
         };
         transaction.create(canonical, common);
-        transaction.create(legacy, { ...common, schemaVersion: 1 });
+        transaction.create(legacy, {
+          ...common,
+          // 기존 Web read model은 카드 표시 문자열을 cardLastFour에서 읽습니다.
+          cardLastFour: display,
+          schemaVersion: 1,
+        });
         transaction.create(captureRecord, {
           householdId: command.householdId,
           captureId: ids.captureId,
