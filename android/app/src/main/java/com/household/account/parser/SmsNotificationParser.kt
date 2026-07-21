@@ -24,16 +24,17 @@ object SmsNotificationParser {
 
     fun parse(
         notificationText: String,
-        postedAtMillis: Long? = null
+        postedAtMillis: Long? = null,
+        clockNowMillis: Long? = null
     ): ParseResult {
         val candidates = buildCandidates(notificationText)
         for (candidate in candidates) {
-            val result = parseWithKnownParsers(candidate, postedAtMillis)
+            val result = parseWithKnownParsers(candidate, postedAtMillis, clockNowMillis)
             if (result.success) {
                 return result
             }
 
-            val smsResult = SmsCardMessageParser.parse(candidate, postedAtMillis)
+            val smsResult = SmsCardMessageParser.parse(candidate, postedAtMillis, clockNowMillis)
             if (smsResult.success) {
                 return smsResult
             }
@@ -84,20 +85,21 @@ object SmsNotificationParser {
 
     private fun parseWithKnownParsers(
         notificationText: String,
-        postedAtMillis: Long?
+        postedAtMillis: Long?,
+        clockNowMillis: Long?
     ): ParseResult {
         val parsers = listOf(
-            { text: String -> KBCardParser.parse(text, postedAtMillis = postedAtMillis) },
-            { text: String -> NHPayParser.parse(text) },
-            { text: String -> NaverPayParser.parse(text, postedAtMillis) },
-            { text: String -> TossBankParser.parse(text, postedAtMillis) },
-            { text: String -> KakaoPayParser.parse(text, postedAtMillis) },
-            { text: String -> DigitalOnnuriParser.parse(text, postedAtMillis) },
-            { text: String -> PayboocISPParser.parse(text, postedAtMillis) },
-            { text: String -> SamsungCardParser.parse(text) },
-            { text: String -> LotteCardParser.parse(text) },
-            { text: String -> GyeonggiLocalCurrencyParser.parse(text) },
-            { text: String -> DaejeonLocalCurrencyParser.parse(text) }
+            { text: String -> KBCardParser.parse(text, postedAtMillis = postedAtMillis, clockNowMillis = clockNowMillis) },
+            { text: String -> NHPayParser.parse(text, postedAtMillis = postedAtMillis, clockNowMillis = clockNowMillis) },
+            { text: String -> NaverPayParser.parse(text, postedAtMillis, clockNowMillis) },
+            { text: String -> TossBankParser.parse(text, postedAtMillis, clockNowMillis) },
+            { text: String -> KakaoPayParser.parse(text, postedAtMillis, clockNowMillis) },
+            { text: String -> DigitalOnnuriParser.parse(text, postedAtMillis, clockNowMillis) },
+            { text: String -> PayboocISPParser.parse(text, postedAtMillis, clockNowMillis) },
+            { text: String -> SamsungCardParser.parse(text, postedAtMillis = postedAtMillis, clockNowMillis = clockNowMillis) },
+            { text: String -> LotteCardParser.parse(text, postedAtMillis = postedAtMillis, clockNowMillis = clockNowMillis) },
+            { text: String -> GyeonggiLocalCurrencyParser.parse(text, postedAtMillis, clockNowMillis) },
+            { text: String -> DaejeonLocalCurrencyParser.parse(text, postedAtMillis, clockNowMillis) }
         )
 
         for (parser in parsers) {

@@ -27,7 +27,11 @@ object GyeonggiLocalCurrencyParser {
         return hasHint && (hasPayment || hasBalance)
     }
 
-    fun parse(notificationText: String): ParseResult {
+    fun parse(
+        notificationText: String,
+        postedAtMillis: Long? = null,
+        clockNowMillis: Long? = null
+    ): ParseResult {
         return try {
             val paymentMatch = LocalCurrencyParsingSupport.paymentPatterns.firstNotNullOfOrNull {
                 it.find(notificationText)
@@ -41,7 +45,12 @@ object GyeonggiLocalCurrencyParser {
 
             val lines = LocalCurrencyParsingSupport.splitLines(notificationText)
             val merchant = extractMerchant(lines)
-            val dateTime = LocalCurrencyParsingSupport.extractDateTime(notificationText, dateTimePattern)
+            val dateTime = LocalCurrencyParsingSupport.extractDateTime(
+                notificationText,
+                dateTimePattern,
+                postedAtMillis,
+                clockNowMillis
+            )
 
             ParseResult(
                 success = true,

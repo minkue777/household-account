@@ -80,7 +80,7 @@ export function receivedLocalTime(
 
 export function bodyLines(body: string): readonly string[] {
   return body
-    .split(/\r?\n/u)
+    .split(/\r\n|\n|\r/u)
     .map((line) => line.trim())
     .filter((line) => line !== "");
 }
@@ -93,7 +93,9 @@ export function amountInWon(value: string): number | undefined {
   const normalized = value.replace(/,/gu, "").trim();
   if (!/^\d+$/u.test(normalized)) return undefined;
   const amount = Number(normalized);
-  return Number.isSafeInteger(amount) ? amount : undefined;
+  return Number.isSafeInteger(amount) && amount <= 2_147_483_647
+    ? amount
+    : undefined;
 }
 
 export function embeddedOccurrence(input: {

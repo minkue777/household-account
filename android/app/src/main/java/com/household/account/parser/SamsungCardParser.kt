@@ -4,8 +4,6 @@ import com.household.account.data.CardType
 import com.household.account.data.Category
 import com.household.account.data.Expense
 import com.household.account.util.CardLabelFormatter
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 object SamsungCardParser {
 
@@ -21,7 +19,9 @@ object SamsungCardParser {
 
     fun parse(
         notificationText: String,
-        mainCardToken: String? = null
+        mainCardToken: String? = null,
+        postedAtMillis: Long? = null,
+        clockNowMillis: Long? = null
     ): ParseResult {
         return try {
             val cardMatch = cardPattern.find(notificationText)
@@ -39,12 +39,18 @@ object SamsungCardParser {
             }
             val amount = amountMatch.groupValues[1].replace(",", "").toIntOrNull()
                 ?: return ParseResult(false, errorMessage = "Invalid amount")
+            val occurrence = ParserTimeSupport.resolveOccurrence(
+                dateTimeMatch.groupValues[1],
+                dateTimeMatch.groupValues[2],
+                postedAtMillis,
+                clockNowMillis
+            )
 
             ParseResult(
                 success = true,
                 expense = Expense(
-                    date = resolveDate(dateTimeMatch.groupValues[1]),
-                    time = dateTimeMatch.groupValues[2],
+                    date = occurrence.date,
+                    time = occurrence.time,
                     merchant = dateTimeMatch.groupValues[3].trim(),
                     amount = amount,
                     category = Category.ETC.name,
@@ -70,10 +76,4 @@ object SamsungCardParser {
         }
     }
 
-    private fun resolveDate(dateValue: String): String {
-        val currentYear = LocalDate.now().year
-        val (month, day) = dateValue.split("/").map { it.toInt() }
-        val date = LocalDate.of(currentYear, month, day)
-        return date.format(DateTimeFormatter.ISO_LOCAL_DATE)
-    }
 }

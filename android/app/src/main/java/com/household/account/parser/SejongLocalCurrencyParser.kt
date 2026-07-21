@@ -2,9 +2,7 @@ package com.household.account.parser
 
 import com.household.account.data.Category
 import com.household.account.data.Expense
-import java.time.Instant
 import java.time.LocalDateTime
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 object SejongLocalCurrencyParser {
@@ -24,7 +22,8 @@ object SejongLocalCurrencyParser {
 
     fun parse(
         notificationText: String,
-        postedAtMillis: Long? = null
+        postedAtMillis: Long? = null,
+        clockNowMillis: Long? = null
     ): ParseResult {
         return try {
             val paymentMatch = paymentPattern.find(notificationText)
@@ -32,7 +31,7 @@ object SejongLocalCurrencyParser {
             val amount = paymentMatch.groupValues[1].replace(",", "").toIntOrNull()
                 ?: return ParseResult(false, errorMessage = "Invalid amount")
             val merchant = extractMerchant(notificationText)
-            val occurredAt = resolveDateTime(postedAtMillis)
+            val occurredAt = resolveDateTime(postedAtMillis, clockNowMillis)
 
             ParseResult(
                 success = true,
@@ -87,13 +86,7 @@ object SejongLocalCurrencyParser {
         return value.length in 2..60
     }
 
-    private fun resolveDateTime(postedAtMillis: Long?): LocalDateTime {
-        return if (postedAtMillis != null && postedAtMillis > 0L) {
-            Instant.ofEpochMilli(postedAtMillis)
-                .atZone(ZoneId.systemDefault())
-                .toLocalDateTime()
-        } else {
-            LocalDateTime.now()
-        }
+    private fun resolveDateTime(postedAtMillis: Long?, clockNowMillis: Long?): LocalDateTime {
+        return ParserTimeSupport.receivedAt(postedAtMillis, clockNowMillis)
     }
 }

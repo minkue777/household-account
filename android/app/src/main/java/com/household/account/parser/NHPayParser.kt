@@ -4,8 +4,6 @@ import com.household.account.data.CardType
 import com.household.account.data.Category
 import com.household.account.data.Expense
 import com.household.account.util.CardLabelFormatter
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 object NHPayParser {
 
@@ -25,7 +23,9 @@ object NHPayParser {
 
     fun parse(
         notificationText: String,
-        mainCardToken: String? = null
+        mainCardToken: String? = null,
+        postedAtMillis: Long? = null,
+        clockNowMillis: Long? = null
     ): ParseResult {
         return try {
             if (!nhCardKeyword.containsMatchIn(notificationText) ||
@@ -48,14 +48,20 @@ object NHPayParser {
                 ?: return ParseResult(false, errorMessage = "Date/time not found")
             val dateValue = dateMatch.groupValues[1]
             val timeValue = dateMatch.groupValues[2]
+            val occurrence = ParserTimeSupport.resolveOccurrence(
+                dateValue,
+                timeValue,
+                postedAtMillis,
+                clockNowMillis
+            )
 
             val merchant = extractMerchant(notificationText, dateValue)
 
             ParseResult(
                 success = true,
                 expense = Expense(
-                    date = resolveDate(dateValue),
-                    time = timeValue,
+                    date = occurrence.date,
+                    time = occurrence.time,
                     merchant = merchant,
                     amount = amount,
                     category = Category.ETC.name,
@@ -138,10 +144,4 @@ object NHPayParser {
         }
     }
 
-    private fun resolveDate(dateValue: String): String {
-        val currentYear = LocalDate.now().year
-        val (month, day) = dateValue.split("/").map { it.toInt() }
-        val date = LocalDate.of(currentYear, month, day)
-        return date.format(DateTimeFormatter.ISO_LOCAL_DATE)
-    }
 }

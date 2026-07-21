@@ -1,7 +1,5 @@
 package com.household.account.parser
 
-import java.time.LocalDate
-import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 data class LocalCurrencyBalanceResult(
@@ -41,21 +39,39 @@ internal object LocalCurrencyParsingSupport {
             .filter { it.isNotEmpty() }
     }
 
-    fun extractDateTime(notificationText: String, dateTimePattern: Regex): Pair<String, String> {
+    fun extractDateTime(
+        notificationText: String,
+        dateTimePattern: Regex,
+        postedAtMillis: Long? = null,
+        clockNowMillis: Long? = null
+    ): Pair<String, String> {
         val match = dateTimePattern.find(notificationText)
         if (match != null) {
-            return resolveDate(match.groupValues[1]) to match.groupValues[2]
+            val occurrence = ParserTimeSupport.resolveOccurrence(
+                match.groupValues[1],
+                match.groupValues[2],
+                postedAtMillis,
+                clockNowMillis
+            )
+            return occurrence.date to occurrence.time
         }
 
-        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-        val now = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
-        return today to now
+        val receivedAt = ParserTimeSupport.receivedAt(postedAtMillis, clockNowMillis)
+        val time = receivedAt.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))
+        return receivedAt.toLocalDate().toString() to time
     }
 
-    fun resolveDate(dateValue: String): String {
-        val currentYear = LocalDate.now().year
-        val (month, day) = dateValue.split("/").map { it.toInt() }
-        val date = LocalDate.of(currentYear, month, day)
-        return date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+    fun resolveDate(
+        dateValue: String,
+        timeValue: String,
+        postedAtMillis: Long? = null,
+        clockNowMillis: Long? = null
+    ): String {
+        return ParserTimeSupport.resolveOccurrence(
+            dateValue,
+            timeValue,
+            postedAtMillis,
+            clockNowMillis
+        ).date
     }
 }

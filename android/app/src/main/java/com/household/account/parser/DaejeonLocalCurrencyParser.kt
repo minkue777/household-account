@@ -27,9 +27,13 @@ object DaejeonLocalCurrencyParser {
         return hasHint && hasPayment
     }
 
-    fun parse(notificationText: String): ParseResult {
-        parseDetailedFormat(notificationText)?.let { return it }
-        return parseFallbackFormat(notificationText)
+    fun parse(
+        notificationText: String,
+        postedAtMillis: Long? = null,
+        clockNowMillis: Long? = null
+    ): ParseResult {
+        parseDetailedFormat(notificationText, postedAtMillis, clockNowMillis)?.let { return it }
+        return parseFallbackFormat(notificationText, postedAtMillis, clockNowMillis)
     }
 
     fun parseBalance(notificationText: String): LocalCurrencyBalanceResult {
@@ -52,7 +56,11 @@ object DaejeonLocalCurrencyParser {
         return LocalCurrencyBalanceResult(null, currencyType)
     }
 
-    private fun parseDetailedFormat(notificationText: String): ParseResult? {
+    private fun parseDetailedFormat(
+        notificationText: String,
+        postedAtMillis: Long?,
+        clockNowMillis: Long?
+    ): ParseResult? {
         val normalized = LocalCurrencyParsingSupport.normalizeInline(notificationText)
         val match = detailedPaymentPattern.find(normalized) ?: return null
 
@@ -60,15 +68,19 @@ object DaejeonLocalCurrencyParser {
         val cardLastFour = match.groupValues[2]
         val amount = match.groupValues[3].replace(",", "").toIntOrNull()
             ?: return ParseResult(false, errorMessage = "Invalid amount")
-        val date = LocalCurrencyParsingSupport.resolveDate(match.groupValues[4])
-        val time = match.groupValues[5]
+        val occurrence = ParserTimeSupport.resolveOccurrence(
+            match.groupValues[4],
+            match.groupValues[5],
+            postedAtMillis,
+            clockNowMillis
+        )
         val merchant = match.groupValues[6].trim()
 
         return ParseResult(
             success = true,
             expense = Expense(
-                date = date,
-                time = time,
+                date = occurrence.date,
+                time = occurrence.time,
                 merchant = merchant,
                 amount = amount,
                 category = Category.ETC.name,
@@ -78,7 +90,11 @@ object DaejeonLocalCurrencyParser {
         )
     }
 
-    private fun parseFallbackFormat(notificationText: String): ParseResult {
+    private fun parseFallbackFormat(
+        notificationText: String,
+        postedAtMillis: Long?,
+        clockNowMillis: Long?
+    ): ParseResult {
         return try {
             val paymentMatch = LocalCurrencyParsingSupport.paymentPatterns.firstNotNullOfOrNull {
                 it.find(notificationText)
@@ -93,7 +109,12 @@ object DaejeonLocalCurrencyParser {
             val lines = LocalCurrencyParsingSupport.splitLines(notificationText)
             val merchant = extractMerchant(lines, notificationText)
             val cardLastFour = cardLastFourPattern.find(notificationText)?.groupValues?.get(1)
-            val dateTime = LocalCurrencyParsingSupport.extractDateTime(notificationText, dateTimePattern)
+            val dateTime = LocalCurrencyParsingSupport.extractDateTime(
+                notificationText,
+                dateTimePattern,
+                postedAtMillis,
+                clockNowMillis
+            )
 
             ParseResult(
                 success = true,

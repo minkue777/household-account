@@ -4,10 +4,6 @@ import com.household.account.data.CardType
 import com.household.account.data.Category
 import com.household.account.data.Expense
 import com.household.account.util.CardLabelFormatter
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 data class ParseResult(
     val success: Boolean,
@@ -39,16 +35,29 @@ object KBCardParser {
     fun parse(
         notificationText: String,
         mainCardLastFour: String? = null,
-        postedAtMillis: Long? = null
+        postedAtMillis: Long? = null,
+        clockNowMillis: Long? = null
     ): ParseResult {
-        parseDetailFormat(notificationText, mainCardLastFour)?.let { return it }
-        parseSummaryFormat(notificationText, mainCardLastFour, postedAtMillis)?.let { return it }
+        parseDetailFormat(
+            notificationText,
+            mainCardLastFour,
+            postedAtMillis,
+            clockNowMillis
+        )?.let { return it }
+        parseSummaryFormat(
+            notificationText,
+            mainCardLastFour,
+            postedAtMillis,
+            clockNowMillis
+        )?.let { return it }
         return ParseResult(false, errorMessage = "KB card format not found")
     }
 
     private fun parseDetailFormat(
         notificationText: String,
-        mainCardLastFour: String?
+        mainCardLastFour: String?,
+        postedAtMillis: Long?,
+        clockNowMillis: Long?
     ): ParseResult? {
         return try {
             val cardMatch = cardPattern.find(notificationText) ?: return null
@@ -62,7 +71,9 @@ object KBCardParser {
                 amountValue = amountMatch.groupValues[1],
                 merchant = extractMerchantAfterLine(notificationText, dateMatch.value),
                 mainCardLastFour = mainCardLastFour,
-                eventType = resolveEventType(cardMatch.groupValues[2])
+                eventType = resolveEventType(cardMatch.groupValues[2]),
+                postedAtMillis = postedAtMillis,
+                clockNowMillis = clockNowMillis
             )
         } catch (e: Exception) {
             ParseResult(false, errorMessage = "KB detail parse failed: ${e.message}")
@@ -72,7 +83,8 @@ object KBCardParser {
     private fun parseSummaryFormat(
         notificationText: String,
         mainCardLastFour: String?,
-        postedAtMillis: Long?
+        postedAtMillis: Long?,
+        clockNowMillis: Long?
     ): ParseResult? {
         return try {
             val cardMatch = cardPattern.find(notificationText) ?: return null
@@ -98,7 +110,9 @@ object KBCardParser {
                 amountValue = amountDateMatch.groupValues[1],
                 merchant = merchant,
                 mainCardLastFour = mainCardLastFour,
-                eventType = resolveEventType(cardMatch.groupValues[2])
+                eventType = resolveEventType(cardMatch.groupValues[2]),
+                postedAtMillis = postedAtMillis,
+                clockNowMillis = clockNowMillis
             )
         } catch (e: Exception) {
             ParseResult(false, errorMessage = "KB summary parse failed: ${e.message}")
@@ -150,17 +164,26 @@ object KBCardParser {
         amountValue: String,
         merchant: String,
         mainCardLastFour: String?,
-        eventType: ExpenseEventType = ExpenseEventType.APPROVAL
+        eventType: ExpenseEventType = ExpenseEventType.APPROVAL,
+        postedAtMillis: Long?,
+        clockNowMillis: Long?
     ): ParseResult {
         return try {
             val amount = amountValue.replace(",", "").toIntOrNull()
                 ?: return ParseResult(false, errorMessage = "Invalid amount: $amountValue")
 
+            val occurrence = ParserTimeSupport.resolveOccurrence(
+                dateValue,
+                timeValue,
+                postedAtMillis,
+                clockNowMillis
+            )
+
             ParseResult(
                 success = true,
                 expense = Expense(
-                    date = resolveDate(dateValue),
-                    time = timeValue,
+                    date = occurrence.date,
+                    time = occurrence.time,
                     merchant = merchant,
                     amount = amount,
                     category = Category.ETC.name,
@@ -197,20 +220,7 @@ object KBCardParser {
         }
     }
 
-    private fun resolveDate(dateValue: String): String {
-        val currentYear = LocalDate.now().year
-        val (month, day) = dateValue.split("/").map { it.toInt() }
-        return LocalDate.of(currentYear, month, day).format(DateTimeFormatter.ISO_LOCAL_DATE)
-    }
-
     private fun resolvePostedTime(postedAtMillis: Long?): String {
-        if (postedAtMillis == null || postedAtMillis <= 0L) {
-            return "00:00"
-        }
-
-        return Instant.ofEpochMilli(postedAtMillis)
-            .atZone(ZoneId.systemDefault())
-            .toLocalTime()
-            .format(DateTimeFormatter.ofPattern("HH:mm"))
+        return ParserTimeSupport.postedTime(postedAtMillis) ?: "00:00"
     }
 }

@@ -3,9 +3,6 @@ package com.household.account.parser
 import com.household.account.data.CardType
 import com.household.account.data.Category
 import com.household.account.data.Expense
-import java.time.Instant
-import java.time.LocalDateTime
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 object SmsCardMessageParser {
@@ -21,10 +18,11 @@ object SmsCardMessageParser {
 
     fun parse(
         notificationText: String,
-        postedAtMillis: Long? = null
+        postedAtMillis: Long? = null,
+        clockNowMillis: Long? = null
     ): ParseResult {
         val lines = normalizeLines(notificationText)
-        parseNhBilling(lines, postedAtMillis)?.let { return it }
+        parseNhBilling(lines, postedAtMillis, clockNowMillis)?.let { return it }
 
         return ParseResult(false, errorMessage = "SMS card message format not supported")
     }
@@ -37,7 +35,8 @@ object SmsCardMessageParser {
 
     private fun parseNhBilling(
         lines: List<String>,
-        postedAtMillis: Long?
+        postedAtMillis: Long?,
+        clockNowMillis: Long?
     ): ParseResult? {
         if (!matchesNhBilling(lines)) {
             return null
@@ -65,7 +64,7 @@ object SmsCardMessageParser {
                 .trim()
                 .ifBlank { billingLabel }
         }
-        val occurredAt = resolveDateTime(postedAtMillis)
+        val occurredAt = ParserTimeSupport.receivedAt(postedAtMillis, clockNowMillis)
 
         return ParseResult(
             success = true,
@@ -89,13 +88,4 @@ object SmsCardMessageParser {
             .filter { it.isNotEmpty() }
     }
 
-    private fun resolveDateTime(postedAtMillis: Long?): LocalDateTime {
-        return if (postedAtMillis != null && postedAtMillis > 0L) {
-            Instant.ofEpochMilli(postedAtMillis)
-                .atZone(ZoneId.systemDefault())
-                .toLocalDateTime()
-        } else {
-            LocalDateTime.now()
-        }
-    }
 }

@@ -36,6 +36,14 @@ android {
     buildFeatures {
         buildConfig = true
     }
+    testOptions {
+        unitTests.all {
+            it.systemProperty(
+                "contractFixturesDir",
+                rootProject.file("../contracts/fixtures").absolutePath
+            )
+        }
+    }
 
     signingConfigs {
         if (keystorePropertiesFile.exists()) {
@@ -103,6 +111,7 @@ dependencies {
 
     // Testing
     testImplementation("junit:junit:4.13.2")
+    testImplementation("com.google.code.gson:gson:2.11.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")

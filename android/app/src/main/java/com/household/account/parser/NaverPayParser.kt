@@ -3,9 +3,7 @@ package com.household.account.parser
 import com.household.account.data.CardType
 import com.household.account.data.Category
 import com.household.account.data.Expense
-import java.time.Instant
 import java.time.LocalDateTime
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 object NaverPayParser {
@@ -32,7 +30,8 @@ object NaverPayParser {
 
     fun parse(
         notificationText: String,
-        postedAtMillis: Long? = null
+        postedAtMillis: Long? = null,
+        clockNowMillis: Long? = null
     ): ParseResult {
         return try {
             val lines = normalizeLines(notificationText)
@@ -55,7 +54,7 @@ object NaverPayParser {
             val amount = paymentMatch.groupValues[2].replace(",", "").toIntOrNull()
                 ?: return ParseResult(false, errorMessage = "Invalid amount")
 
-            val occurredAt = resolveDateTime(postedAtMillis)
+            val occurredAt = resolveDateTime(postedAtMillis, clockNowMillis)
 
             ParseResult(
                 success = true,
@@ -87,13 +86,7 @@ object NaverPayParser {
             .trim()
     }
 
-    private fun resolveDateTime(postedAtMillis: Long?): LocalDateTime {
-        return if (postedAtMillis != null && postedAtMillis > 0L) {
-            Instant.ofEpochMilli(postedAtMillis)
-                .atZone(ZoneId.systemDefault())
-                .toLocalDateTime()
-        } else {
-            LocalDateTime.now()
-        }
+    private fun resolveDateTime(postedAtMillis: Long?, clockNowMillis: Long?): LocalDateTime {
+        return ParserTimeSupport.receivedAt(postedAtMillis, clockNowMillis)
     }
 }

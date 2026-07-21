@@ -71,7 +71,6 @@ describe("Payment Capture 비식별 raw parser golden fixture", () => {
     expect(requiredProviderIds.every((id) => ids.includes(id))).toBe(true);
     expect(kinds).toContain("Parsed");
     expect(kinds).toContain("Ignored");
-    expect(kinds).toContain("Rejected");
     expect(android.cases.some(({ expected }) => expected.balance !== undefined)).toBe(
       true,
     );

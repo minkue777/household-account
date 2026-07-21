@@ -70,8 +70,12 @@ function parseTotalAmount(value: string): number | undefined {
     const match = pattern.exec(value);
     if (match === null) continue;
 
-    const amount = Number(match[1].replace(/,/g, ""));
-    return Number.isSafeInteger(amount) && amount >= 0 ? amount : undefined;
+    const normalized = match[1].replace(/,/g, "");
+    if (!/^\d+$/.test(normalized)) return undefined;
+    const amount = Number(normalized);
+    return Number.isSafeInteger(amount) && amount >= 0 && amount <= 2_147_483_647
+      ? amount
+      : undefined;
   }
   return undefined;
 }
@@ -107,7 +111,7 @@ export function parseCityGasBill(
   }
 
   const observedDate = observedDateAtSeoul(input.observedAtSeoul);
-  const billingMonth = parseBillingMonth(input.title);
+  const billingMonth = parseBillingMonth(normalizedNotification);
   const dueDate = parseDueDate(normalizedNotification);
 
   return {

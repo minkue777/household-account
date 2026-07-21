@@ -166,17 +166,17 @@ class CardNotificationListenerService : NotificationListenerService() {
 
             val result: ParseResult = when (source) {
                 RegisteredNotificationSource.KB -> KBCardParser.parse(fullText, postedAtMillis = sbn.postTime)
-                RegisteredNotificationSource.NH -> NHPayParser.parse(fullText)
+                RegisteredNotificationSource.NH -> NHPayParser.parse(fullText, postedAtMillis = sbn.postTime)
                 RegisteredNotificationSource.NAVER_PAY -> NaverPayParser.parse(fullText, sbn.postTime)
                 RegisteredNotificationSource.TOSS_BANK -> TossBankParser.parse(fullText, sbn.postTime)
                 RegisteredNotificationSource.KAKAOPAY -> KakaoPayParser.parse(fullText, sbn.postTime)
                 RegisteredNotificationSource.DIGITAL_ONNURI -> DigitalOnnuriParser.parse(fullText, sbn.postTime)
                 RegisteredNotificationSource.PAYBOOC_ISP -> PayboocISPParser.parse(fullText, sbn.postTime)
                 RegisteredNotificationSource.SMS -> SmsNotificationParser.parse(fullText, sbn.postTime)
-                RegisteredNotificationSource.SAMSUNG -> SamsungCardParser.parse(fullText)
-                RegisteredNotificationSource.LOTTE -> LotteCardParser.parse(fullText)
-                RegisteredNotificationSource.GYEONGGI_LOCAL_CURRENCY -> GyeonggiLocalCurrencyParser.parse(fullText)
-                RegisteredNotificationSource.DAEJEON_LOCAL_CURRENCY -> DaejeonLocalCurrencyParser.parse(fullText)
+                RegisteredNotificationSource.SAMSUNG -> SamsungCardParser.parse(fullText, postedAtMillis = sbn.postTime)
+                RegisteredNotificationSource.LOTTE -> LotteCardParser.parse(fullText, postedAtMillis = sbn.postTime)
+                RegisteredNotificationSource.GYEONGGI_LOCAL_CURRENCY -> GyeonggiLocalCurrencyParser.parse(fullText, sbn.postTime)
+                RegisteredNotificationSource.DAEJEON_LOCAL_CURRENCY -> DaejeonLocalCurrencyParser.parse(fullText, sbn.postTime)
                 RegisteredNotificationSource.SEJONG_LOCAL_CURRENCY -> SejongLocalCurrencyParser.parse(fullText, sbn.postTime)
                 RegisteredNotificationSource.CITY_GAS_BILL -> CityGasBillParser.parse(fullText, sbn.postTime)
             }

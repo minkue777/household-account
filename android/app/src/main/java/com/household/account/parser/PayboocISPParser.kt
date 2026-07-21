@@ -4,9 +4,7 @@ import com.household.account.data.CardType
 import com.household.account.data.Category
 import com.household.account.data.Expense
 import com.household.account.util.CardLabelFormatter
-import java.time.Instant
 import java.time.LocalDateTime
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 object PayboocISPParser {
@@ -23,7 +21,8 @@ object PayboocISPParser {
 
     fun parse(
         notificationText: String,
-        postedAtMillis: Long? = null
+        postedAtMillis: Long? = null,
+        clockNowMillis: Long? = null
     ): ParseResult {
         return try {
             val lines = normalizeLines(notificationText)
@@ -31,7 +30,7 @@ object PayboocISPParser {
                 ?: return ParseResult(false, errorMessage = "Card number not found")
             val paymentEvent = extractPaymentEvent(lines)
                 ?: return ParseResult(false, errorMessage = "Paybooc payment format not found")
-            val occurredAt = resolveDateTime(postedAtMillis)
+            val occurredAt = resolveDateTime(postedAtMillis, clockNowMillis)
 
             ParseResult(
                 success = true,
@@ -158,14 +157,8 @@ object PayboocISPParser {
         }
     }
 
-    private fun resolveDateTime(postedAtMillis: Long?): LocalDateTime {
-        return if (postedAtMillis != null && postedAtMillis > 0L) {
-            Instant.ofEpochMilli(postedAtMillis)
-                .atZone(ZoneId.systemDefault())
-                .toLocalDateTime()
-        } else {
-            LocalDateTime.now()
-        }
+    private fun resolveDateTime(postedAtMillis: Long?, clockNowMillis: Long?): LocalDateTime {
+        return ParserTimeSupport.receivedAt(postedAtMillis, clockNowMillis)
     }
 
     private data class CardInfo(

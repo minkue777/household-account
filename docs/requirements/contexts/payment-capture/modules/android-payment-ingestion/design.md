@@ -20,7 +20,7 @@ Functions Payment Intake
   → Ledger/Local Currency 공개 Port → typed Capture result
 ```
 
-Android parser를 TypeScript로 복제하거나 서버 Intake가 금융 알림 원문을 다시 parse하지 않습니다. 반대로 Android는 Payment Configuration, Ledger, Local Currency 저장소를 직접 읽거나 쓰지 않습니다. 이 책임 분리가 [목표 SSOT](../../../../../architecture/target-clean-architecture.md#122-typescriptkotlin-사이의-공유)입니다.
+목표 운영 경로에서 서버 Intake는 금융 알림 원문을 다시 parse하지 않으며 Android가 정규화한 `CaptureEnvelope.v1`만 처리합니다. 마이그레이션 기간의 TypeScript parser는 기존 Kotlin parser와 동일한 입력 계약을 검증하기 위한 실행 가능한 호환성 기준이며 서버 Intake의 원문 parsing 책임이 아닙니다. 반대로 Android는 Payment Configuration, Ledger, Local Currency 저장소를 직접 읽거나 쓰지 않습니다. 이 책임 분리가 [목표 SSOT](../../../../../architecture/target-clean-architecture.md#122-typescriptkotlin-사이의-공유)입니다.
 
 11절은 이 모듈이 소유한 38개 요구사항 ID를 모두 포함하며 Canonical `T-*`에 연결합니다.
 
@@ -324,7 +324,7 @@ Capture receipt와 Ledger Transaction·Local Currency Balance는 서로 다른 C
 - Notifications는 Ledger Event를 소비하고 [DEC-013](../../../../governance/decisions.md#dec-013)의 `TransactionCreatedNotificationPolicy`로 Android 자동 등록을 푸시 대상 없음으로 판정합니다. Android/Intake는 FCM endpoint를 조회하지 않습니다.
 - Local Currency 결과와 거래 결과는 한 response에서 별도 필드이며 한쪽 실패가 다른 쪽 성공을 되돌리지 않습니다.
 - Diagnostic 원문은 Event, Projection, Capture receipt, Outbox로 전달하지 않습니다.
-- parser fixture는 개인정보를 제거한 파일이며 Kotlin parser와 생성 DTO contract test에서 사용합니다. 서버가 parser 구현을 공유하지는 않습니다.
+- parser fixture는 개인정보를 제거한 단일 파일이며 Kotlin parser와 마이그레이션용 TypeScript 호환성 parser가 각각 직접 소비합니다. 두 구현의 공개 정규화 결과가 모두 일치해야 하며, 운영 서버 Intake가 이 호환성 parser로 원문을 다시 해석하지는 않습니다.
 
 ## 9. 오류·보안·관측성
 
@@ -391,7 +391,7 @@ Android `NotificationListenerService`와 WorkManager는 얇은 Adapter입니다.
 
 ## 11. 테스트 설계
 
-parser golden fixture에는 정상 승인, 지원 취소, 빈 필드, 0원·음수, 연말·연초, 마스킹 변형을 포함합니다. 공통 Fake는 `FixedClock`, `SequenceIdGenerator`, callback을 두 번 실행하는 UoW, Queue/API Fake, receipt Repository Conformance Suite, Ledger/Configuration/Local Currency Port Spy입니다.
+parser golden fixture에는 정상 승인, 지원 취소, 빈 필드, 0원·음수, 연말·연초, 마스킹 변형을 포함합니다. Kotlin과 TypeScript 호환성 suite는 같은 fixture 파일을 독립적으로 읽어 parser 선택, 승인·취소, 금액, 가맹점, 카드 라벨·토큰, 발생 일시, 지역화폐 잔액의 공개 결과를 비교합니다. 공통 Fake는 `FixedClock`, `SequenceIdGenerator`, callback을 두 번 실행하는 UoW, Queue/API Fake, receipt Repository Conformance Suite, Ledger/Configuration/Local Currency Port Spy입니다.
 
 | 요구사항 ID | 테스트 수준 | 테스트 대상 | 핵심 fixture/경계값 | 관찰 결과 | Canonical 테스트 ID |
 |---|---|---|---|---|---|
