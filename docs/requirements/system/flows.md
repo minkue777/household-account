@@ -57,6 +57,34 @@ Access & Household
 - Web은 Canonical `expenses`를 직접 쓰지 않는다.
 - 모든 신규 거래는 검증된 creatorMemberId, 업무 source, originChannel을 기록하며, 자동 알림과 명시적 `알림 보내기` 수신자는 [DEC-013](../governance/decisions.md#dec-013)에 따라 Notifications가 별도로 결정한다.
 
+### 2.1 일반 거래 논리 삭제·운영 복구·수동 영구 정리
+
+```text
+일반 사용자 Delete
+  → Ledger가 active·expectedVersion 검증
+  → 같은 UoW에서 Transaction deleted 전이 + receipt + TransactionDeleted.v1
+  → 목록·검색·합계는 active 집합으로 수렴
+
+실수 삭제 복구 요청
+  → 운영자/Agent가 대상·감사 사유 확인
+  → Ledger RestoreDeletedTransaction
+  → 같은 transactionId·provenance를 active로 복구
+
+별도 영구 삭제 요청
+  → 운영자/Agent가 종속 lineage·snapshot·dedup 자료 확인
+  → Ledger PurgeDeletedTransaction
+  → 필요한 재등록 방지 tombstone을 제외한 소유 데이터 원자 정리
+```
+
+교정 불변식:
+
+- 일반 삭제는 문서 물리 삭제가 아니며 deleted 상태로 전환한 직후 모든 일반 조회·검색·집계에서 제외된다.
+- deleted 거래는 자동 만료하지 않고 일반 사용자가 조회·복구할 수 없다.
+- 복구·영구 정리는 일반 Web Command가 아니라 사용자의 명시적 요청을 확인한 운영자/Agent 작업이다.
+- capture lineage가 있는 거래는 단일 `expenses` 문서만 지워 dedup·취소 계보를 끊지 않는다. 결제 취소 자체는 [DEC-041](../governance/decisions.md#dec-041)의 별도 흐름을 따른다.
+
+관련 요구사항: LED-001, LED-005, LED-006, LED-009, SEA-001~004, DEC-065.
+
 ## 3. Android 승인 알림
 
 ### 참여 경계

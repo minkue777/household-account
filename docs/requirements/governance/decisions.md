@@ -1520,3 +1520,28 @@ Scheduler가 만든 거래도 실제로 그 일정을 등록한 가구원에게 
 현재 운영 규모에서 복잡한 예외 승인 권한과 우회 경로를 추가하지 않고, 배포 안전성의 의미를 “필수 검증 전체 통과” 하나로 유지한다. 긴급성을 이유로 검증 실패를 성공으로 재해석해 더 큰 운영 장애를 만드는 것을 막는다.
 
 영향 요구사항: REL-001, T-REL-001.
+
+<a id="dec-065"></a>
+## DEC-065 일반 거래는 논리 삭제하고 영구 정리는 운영 작업으로 분리
+
+> 상태: Accepted  
+> 결정일: 2026-07-22  
+> 정책 소유 영역: [Household Finance / Ledger](../contexts/household-finance/modules/ledger/requirements.md)  
+> 영향 기능: 거래 삭제, 원장 조회·검색·집계, 운영 복구·영구 정리
+
+결정:
+
+- 이 결정은 사용자가 원장 화면에서 수행하는 일반 거래 삭제에 적용한다. 결제 취소로 capture lineage 전체를 제거하는 동작은 DEC-041의 별도 정책을 따른다.
+- 일반 `DeleteTransaction`은 Transaction을 물리 삭제하지 않고 `lifecycleState=deleted`, `deletedAt`, 증가한 aggregateVersion으로 전환한다. 본문, 생성자, source·originChannel, 카드 증거, split·merge·capture lineage는 그대로 보존한다.
+- deleted 거래는 전환 commit 직후 일반 월·일 목록, 검색, 월·연·카테고리 합계와 알림 요청 대상에서 제외한다. lifecycleState가 없는 legacy 거래는 active로 호환하되 `deletedAt`이 있으면 deleted로 취급한다.
+- deleted 거래의 일반 Update·Delete·Split·Merge는 `NotFound`로 처리한다. 일반 사용자에게 삭제 목록, 복구 UI/API, 물리 삭제 API를 제공하지 않는다.
+- deleted 거래에는 TTL이나 보존 기간을 두지 않으며 시간 경과로 자동 영구 삭제하지 않는다.
+- 실수 삭제 복구는 사용자의 요청을 확인한 운영자/Agent가 transactionId, expectedVersion, 감사 사유를 명시한 전용 작업으로만 수행한다. 복구는 새 거래를 생성하지 않고 보존된 같은 ID와 provenance를 active로 되돌린다.
+- 영구 삭제도 사용자가 대상을 명시해 별도로 요청했을 때만 운영자/Agent가 수행한다. capture claim·lineage, split·merge snapshot, receipt·projection 등 소유 종속 자료를 확인하지 않은 채 `expenses` 또는 Canonical Transaction 한 문서만 직접 지우지 않는다. 재등록 방지 자료가 필요한 capture는 DEC-041의 최소 tombstone을 유지한다.
+- 가구 전체 영구 purge가 실행되면 DEC-016·DEC-040의 가구 단위 Process가 이 보존 정책보다 우선하여 해당 가구의 Ledger 데이터를 정리한다.
+
+의도:
+
+사용자의 실수로 금융 기록을 복구 불가능하게 잃지 않으면서도 삭제 직후 화면과 통계에서는 완전히 사라지게 한다. 복구와 최종 정리를 일상 UI에서 분리하여 사용자가 삭제·복구를 상태 토글처럼 사용하거나 부분 물리 삭제로 원장 계보와 중복 방지가 깨지는 일을 막는다.
+
+영향 요구사항: LED-001, LED-005, LED-006, LED-008, LED-009, SEA-001~004, T-LED-001, T-LED-008.

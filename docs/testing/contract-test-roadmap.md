@@ -72,6 +72,8 @@
 
 Q-006은 [DEC-064](../requirements/governance/decisions.md#dec-064)로 확정했습니다. 필수 release gate가 하나라도 실패하면 waiver가 있어도 `EvaluateReleaseCandidate`는 rejected를 반환하고 deploy authorization을 만들지 않으며, 실패 후보를 승인으로 바꾸는 별도 override Port도 두지 않습니다. 이 결과는 `T-REL-001` Implemented 계약에 명시되어 있습니다. 현재 남은 제품 결정 `test.todo`와 미결정 질문은 모두 0개입니다.
 
+2026-07-22 운영 확인에서 발견한 세 호환 경계도 계약 문서에 환류했습니다. Shortcut parser는 정확한 선두 `[Web발신]`만 제거하는 golden fixture로, 자동 수집 거래는 Canonical `cardDisplay`와 legacy `cardLastFour` 표시 Projection의 동등성으로, 일반 거래 삭제는 [DEC-065](../requirements/governance/decisions.md#dec-065)의 논리 삭제·active-only 조회 계약으로 고정했습니다. 현재 활성 `T-PARSE-004`, Firebase capture persistence Adapter test, `T-LED-001`·`T-LED-008` 및 Web `ledgerReadVisibility` 계약이 각각 회귀를 막습니다. 운영자 전용 삭제 거래 복구·영구 정리는 일반 사용자 기능이 아니며, 실제 운영 도구를 구현할 때 별도 감사·종속 lineage 계약을 추가합니다.
+
 ## 6. 다음 테스트 계층
 
 계약 본문을 더 늘리기보다 아래 계층을 Vertical Slice마다 추가합니다.

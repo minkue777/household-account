@@ -90,11 +90,11 @@
 
 | ID | 상태 | 사전조건 / 행동 / 결과 | 경계·예외 | 근거 | 테스트 |
 |---|---|---|---|---|---|
-| LED-001 | 현재 명세 | 선택 월과 거래 유형별 거래를 구독하고 날짜 내림차순으로 제공한다. | transactionType 누락 문서는 지출로 간주한다. | [expenseService](../../../../../../web/src/lib/expenseService.ts) | U, I, E2E |
+| LED-001 | 현재 명세·목표 보완 | 선택 월과 거래 유형별로 일반 조회 가능한 거래만 구독하고 날짜 내림차순으로 제공한다. | transactionType 누락 문서는 지출, lifecycleState 누락 문서는 active로 호환한다. `superseded`, `deleted` 또는 legacy `deletedAt`이 있는 문서는 목록·검색·합계에서 제외한다. | [expenseService](../../../../../../web/src/lib/expenseService.ts), [DEC-065](../../../../governance/decisions.md#dec-065) | U, I, E2E |
 | LED-002 | 현재 명세 | 수동 지출은 가맹점, 양의 정수 금액, 카테고리, 날짜를 입력해 생성한다. | 가맹점 공백은 거부한다. | [expenseForm](../../../../../../web/src/lib/utils/expenseForm.ts), [AddExpenseModal](../../../../../../web/src/components/expense/AddExpenseModal.tsx) | U, UI, E2E |
 | LED-003 | 현재 명세 | 수입은 양의 금액과 필수 항목명으로 생성한다. | 저장 시 가맹점은 수입, 카테고리는 etc, 항목명은 memo에 둔다. | [AddExpenseModal](../../../../../../web/src/components/expense/AddExpenseModal.tsx), [ledgerDisplay](../../../../../../web/src/lib/utils/ledgerDisplay.ts) | U, UI, E2E |
 | LED-004 | 현재 명세 | 단건 수동 거래는 현재 시각을 HH:mm, 카드 유형을 manual, 카드 표시를 수동으로 저장한다. | 거래 날짜와 생성 시각은 서로 다를 수 있다. 신규 월 분할 경로에는 이 규칙이 적용되지 않는다. | [expenseService](../../../../../../web/src/lib/expenseService.ts) | I |
-| LED-005 | 현재 명세 | 거래의 금액, 메모, 카테고리, 가맹점, 날짜를 수정하거나 거래를 삭제할 수 있다. | 금액은 0보다 커야 한다. 목표 Command 경계에서는 expectedVersion을 필수로 검증하여 다른 사용자의 선행 변경을 마지막 저장으로 덮어쓰지 않는다. | [expenseForm](../../../../../../web/src/lib/utils/expenseForm.ts), [expenseService](../../../../../../web/src/lib/expenseService.ts), [DEC-055](../../../../governance/decisions.md#dec-055) | U, I, E2E |
+| LED-005 | 현재 명세·목표 보완 | active 거래의 금액, 메모, 카테고리, 가맹점, 날짜를 수정할 수 있다. 일반 사용자의 삭제는 본문·출처·lineage를 보존한 채 `deleted` 상태와 `deletedAt`으로 전환하는 논리 삭제이며 즉시 일반 조회·검색·집계에서 제외한다. | 금액은 0보다 커야 하고 expectedVersion을 필수로 검증한다. deleted 거래는 일반 Update·Delete·Split 대상에서 NotFound로 취급하며 일반 사용자 복구 UI/API와 자동 hard purge를 제공하지 않는다. 실수 삭제 복구와 영구 삭제는 명시적 요청을 받은 운영자/Agent 전용 작업으로만 수행한다. 결제 취소에 의한 lineage 삭제는 DEC-041의 별도 정책을 따른다. | [expenseForm](../../../../../../web/src/lib/utils/expenseForm.ts), [expenseService](../../../../../../web/src/lib/expenseService.ts), [DEC-055](../../../../governance/decisions.md#dec-055), [DEC-065](../../../../governance/decisions.md#dec-065) | U, I, E2E |
 | LED-006 | 현재 명세 | 선택 날짜 목록, 월·연 합계, 카테고리별 합계를 제공한다. | 연 합계는 필요한 화면에서만 구독한다. | [LedgerPage](../../../../../../web/src/components/home/LedgerPage.tsx), [CategorySummary](../../../../../../web/src/components/CategorySummary.tsx) | U, I, E2E |
 | LED-007 | 목표 명세 | 지출에서 `알림 보내기`를 요청하면 요청 시각과 인증된 requesterMemberId를 기록한다. | 수입에서는 이 기능을 제공하지 않는다. 실제 수신자는 Notifications가 단일 partner 없이 요청자를 제외한 활성 가구원 전체로 계산한다. | [ExpenseItem](../../../../../../web/src/components/expense/ExpenseItem.tsx), [partnerNotificationService](../../../../../../web/src/lib/partnerNotificationService.ts), [DEC-013](../../../../governance/decisions.md#dec-013), [DEC-022](../../../../governance/decisions.md#dec-022) | U, I, E2E |
 | LED-008 | 결함 | 원본을 교체하거나 여러 문서를 변경하는 split·reconfigure·collapse·merge·unmerge·capture lineage cancel은 서버 Application의 단일 Unit of Work에서 대상 전체를 다시 읽고 expected version map을 검증한 뒤 전부 commit하거나 전부 rollback한다. | 중간 실패·누락·타 가구 ID·한 문서 version 불일치가 있으면 write 0건과 typed `NotFound`·`Forbidden`·`Conflict`를 반환한다. 일반 Update와 구조 변경이 경합해도 서버 transaction에서 먼저 version 검증·commit한 하나만 성공하고 stale 요청은 자동 병합·덮어쓰기하지 않는다. 취소 시 다른 lineage 복원도 같은 UoW에 포함한다. 현재 Web 경로 일부는 client snapshot으로 계획하거나 여러 create 뒤 원본을 삭제해 부분 성공이 가능하다. | [expenseService](../../../../../../web/src/lib/expenseService.ts), [monthlySplitActions](../../../../../../web/src/lib/utils/monthlySplitActions.ts), [DEC-041](../../../../governance/decisions.md#dec-041), [DEC-055](../../../../governance/decisions.md#dec-055) | Application, Emulator, E2E |
@@ -147,6 +147,7 @@ DEC-001의 의도적인 월 분할 나머지 미반영은 결함이 아닙니다
 - [DEC-041: 결제 취소 시 원본과 모든 파생 지출 자동 삭제](../../../../governance/decisions.md#dec-041) — 구조 변경 원본은 취소 전까지 superseded로 보존하고 완전 일치 취소 시 대상 lineage 전체를 원자 삭제하며 다른 lineage는 복원합니다.
 - [DEC-056: 재병합 merge 계보 평탄화](../../../../governance/decisions.md#dec-056) — merge ancestry는 non-merge leaf 원본까지 펼치고 중간 merge node는 감사 이력으로만 보존합니다.
 - [DEC-057: 선택 지역화폐 상세 범위](../../../../governance/decisions.md#dec-057) — 홈 카드가 선택한 한 유형만 상세 조회하고 별도 전환 UI와 legacy 임의 귀속을 두지 않습니다.
+- [DEC-065: 일반 거래 논리 삭제와 운영 정리](../../../../governance/decisions.md#dec-065) — 일반 삭제는 복구 가능한 `deleted` 전이이며 정상 조회에서 즉시 제외하고, 자동 영구 삭제와 일반 사용자 복구를 두지 않습니다.
 
 ## 8. 모듈 테스트 시나리오
 
@@ -159,7 +160,7 @@ DEC-001의 의도적인 월 분할 나머지 미반영은 결함이 아닙니다
 | T-LED-005 | 목표 | 정상 수동 지출과 공백 가맹점·0/음수/소수 금액·비활성 카테고리 / 생성 / 정상 입력만 한 거래와 Event를 만들고 잘못된 입력은 write 0건 | LED-002, SYS-004 |
 | T-LED-006 | 목표 | 정상·빈 수입 항목명과 양의·잘못된 금액 / 수입 생성 / 정상 입력은 merchant=수입·category=etc·memo=항목명으로 정규화하고 잘못된 입력은 write 0건 | LED-003, SYS-004 |
 | T-LED-007 | 목표 | 회계일과 다른 FixedClock 시각, 인증된 Actor / 수동 거래 생성 / localTime=현재 HH:mm, manual 카드 metadata와 creatorMemberId를 서버에서 저장 | LED-004, SYS-005 |
-| T-LED-008 | 목표 | 모든 허용 필드 정상 patch와 정상 delete, 대상 없음·타 가구·0원·stale version·저장 실패 / Update·Delete / 성공은 전체 필드·상태·version·Event를 확정하고 나머지는 NotFound·Conflict·ValidationError·RetryableFailure와 write 0건 | LED-005, SYS-007 |
+| T-LED-008 | 목표 | 모든 허용 필드 정상 patch와 active 거래 delete, 대상 없음·타 가구·0원·stale version·이미 deleted·저장 실패 / Update·Delete / 정상 삭제는 본문·provenance를 유지한 deleted 상태·deletedAt·version·Event를 확정하고 즉시 목록·검색·집계에서 사라지며, 나머지는 NotFound·Conflict·ValidationError·RetryableFailure와 write 0건 | LED-001, LED-005, SYS-007, DEC-065 |
 | T-LED-009 | 목표 | 여러 날짜·월·연·카테고리의 active/inactive 거래와 원천 실패 / 합계 조회 / 선택 범위 목록·월·연·카테고리 합계가 일치하고 실패를 0원 성공으로 축약하지 않음 | LED-006 |
 | T-LED-010 | 목표 | expense·income, 인증 requester와 creator 동일·상이, 중복 key / 알림 요청 / expense에 requester·시각과 Event를 한 번 기록하고 income은 거부하며 실제 대상·전달 결과는 저장 성공과 분리 | LED-007, DEC-013, DEC-022 |
 | T-SPL-001 | 특성화 | 10,000원과 3개월 / 월 분할 / 각 3,333원이고 합계 9,999원으로 나머지 1원 미반영 | SPL-002, SPL-005, DEC-001 |

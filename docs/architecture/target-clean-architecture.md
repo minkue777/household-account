@@ -586,6 +586,8 @@ Ledger UI
 - 푸시 후속 처리 실패는 거래 생성을 롤백하지 않는다. 예산·지출 통계는 저장된 View를 갱신하지 않고 다음 조회에서 Canonical 거래를 다시 계산한다.
 - 후속 Handler의 상태는 별도의 Delivery 또는 실제 영속 Projection 상태로 관측한다.
 
+일반 거래 삭제도 Ledger가 단독 소유한다. `DeleteTransaction`은 active·expectedVersion을 확인하고 본문과 provenance를 보존한 채 `deleted` 전이, receipt, `TransactionDeleted.v1`을 한 UoW로 commit한다. 모든 일반 Query와 Projection은 active 집합만 노출하므로 삭제 결과가 목록·검색·집계에서 즉시 사라진다. deleted 거래에는 TTL이 없고 일반 사용자의 복구·물리 삭제 Port를 두지 않는다. 사용자가 실수 복구나 최종 삭제를 별도로 요청한 경우에만 운영자/Agent 전용 Workflow가 감사 사유와 종속 lineage를 확인하여 같은 ID 복구 또는 소유 데이터 정리를 수행한다. capture 취소와 가구 전체 purge는 각각 DEC-041과 HouseholdPurgeProcess 경계를 따른다.
+
 ### 8.2 Android·Shortcut 결제 승인
 
 두 채널은 서로 다른 parser를 가지지만 최종 판정은 하나의 서버 유스케이스를 사용한다.
@@ -860,7 +862,7 @@ Portfolio의 `PositionChanged.v1`과 `AssetValuationChanged.v1`도 역할을 나
 - 분할·합치기·취소에는 `aggregateVersion` 또는 precondition을 사용해 동시 편집의 lost update를 막는다.
 - 재병합은 서버가 merge ancestry를 non-merge leaf 원본까지 평탄화한다. 최종 Unmerge·lineage 취소는 평탄한 leaf 집합을 사용하고 중간 merge node는 superseded 감사 이력으로만 보존한다.
 - transaction callback은 여러 번 실행될 수 있으므로 그 안에서 외부 호출, FCM, UI broadcast, 비멱등 로그를 실행하지 않는다.
-- 가구·자산 일반 삭제는 데이터 보존형 논리 삭제로 처리하고, 사용자가 별도로 영구 삭제를 요청했을 때만 수동 purge Process Manager를 사용한다.
+- 가구·자산·일반 거래 삭제는 데이터 보존형 논리 삭제로 처리하고 자동 hard purge하지 않는다. 사용자가 별도로 영구 삭제를 요청했을 때만 소유 경계의 운영자/Agent Workflow 또는 수동 purge Process Manager를 사용한다.
 
 ## 10. 쓰기·멱등성 설계 행렬
 
@@ -869,6 +871,8 @@ Portfolio의 `PositionChanged.v1`과 `AssetValuationChanged.v1`도 역할을 나
 | 수동 거래 생성 | Ledger | transaction, command receipt, outbox | client operation key | 예산·통계·알림 Event |
 | 결제 Observation 접수 | Payment Capture | `CaptureSubmissionReceipt`의 payload hash·typed result | observation ID + transport idempotency key | Ledger·Local Currency 동기 공개 Port 호출 |
 | 자동 결제 생성 | Ledger | fingerprint claim, transaction, receipt, outbox | fingerprint + transport key | QuickEdit 결과, Event |
+| 일반 거래 논리 삭제 | Ledger | Transaction deleted 전이, receipt, outbox | command key + aggregateVersion | 일반 조회·검색·집계 즉시 제외 |
+| 삭제 거래 운영 복구·영구 정리 | Ledger operator workflow | 같은 ID active 복구 또는 종속 lineage·snapshot을 포함한 정리, 감사 기록 | 명시 transaction ID + expectedVersion + operation key | 일반 사용자 capability 없음, 자동 실행 없음 |
 | 분할·재구성 | Ledger | 원본과 새 그룹 전체, outbox | operation key + aggregateVersion | Projection rebuild |
 | 합치기·해제 | Ledger | 대상·원본 snapshot 전체, outbox | operation key + aggregateVersion | Projection rebuild |
 | 취소 | Ledger | 대상 lineage 원본·파생 전체 삭제, 공유 merge의 다른 원본 복원, canceled tombstone, receipt, outbox | cancellation observation key + lineage version map | Projection 조정 |
@@ -1012,6 +1016,8 @@ market-catalog/v1/snapshots/{asOfDate}/{version}.json.gz  # Holdings; 최근 성
 | 공급자 원문 DTO | Adapter 내부 DTO | 외부 형식 변경이 Domain schema로 전파되지 않게 한다. |
 | `notification_debug_logs` | V2로 이관하지 않음 | [DEC-002](../requirements/governance/decisions.md#dec-002)의 제거 대상이다. |
 | 분할·합치기 과정에서 유실되는 `createdBy/source/card` | Ledger의 stable memberId·origin·capture lineage | 표시 변경과 출처·취소 증거의 수명주기를 분리한다. |
+| 거래의 legacy `cardLastFour` 표시 슬롯 | Ledger `cardDisplay` + immutable card evidence | `삼성(1876)` 같은 완성 표시값과 실제 끝 네 자리 Domain 사실을 분리한다. 전환 중 Legacy Projection만 같은 완성 표시값을 기존 슬롯에 복제한다. |
+| 거래의 legacy `deletedAt` 또는 혼재 lifecycle | Ledger `lifecycleState(active/superseded/deleted)` | 일반 Query는 active만 노출하고 삭제 호환 필드를 한 Lifecycle Policy에서 해석한다. |
 
 ### 11.3 물리 schema 전환 순서
 
@@ -1353,8 +1359,9 @@ adapters/
 | [DEC-062](../requirements/governance/decisions.md#dec-062) 배당 시간별 갱신 | Dividends `RefreshDividendEvents`, Operations Scheduler·JobRun | 매일 09:00~20:00 매시 discovery·lifecycle sweep, 시간별 execution key, 늦은 공시는 다음 정각 반영 |
 | [DEC-063](../requirements/governance/decisions.md#dec-063) 정기 거래 creator | Recurring `RecurringCreatorPolicy`, immutable Plan creator, migration receipt, Ledger posting participant | 최초 등록자 고정, Scheduler SystemActor 대입 금지, legacy 명시 mapping 전 posting 차단, 기존 거래 불변 |
 | [DEC-064](../requirements/governance/decisions.md#dec-064) release gate 우회 금지 | Delivery Assurance `EvaluateReleaseCandidate`, audit-only waiver, deploy authorization | 필수 gate 비통과 시 항상 rejected, waiver는 감사 근거만 보존, override Port·긴급 deploy capability 없음 |
+| [DEC-065](../requirements/governance/decisions.md#dec-065) 일반 거래 논리 삭제 | Ledger `TransactionLifecyclePolicy`, active-only Query, operator restore/purge workflow | 일반 삭제는 deleted 보존·즉시 일반 조회 제외, TTL·일반 사용자 복구 없음, 명시 요청 시만 같은 ID 운영 복구 또는 종속 자료 포함 영구 정리 |
 
-Human in the loop 항목은 [미결정 사항 단일 목록](../requirements/governance/pending-decisions.md)에서 관리하며 현재 남은 항목은 없다. 정기 거래 creator는 DEC-063으로 확정했고 기존 자산의 자동화 최초 월은 기존 DEC-011의 최초 활성화 정책에 이미 포함된 것으로 정리했다. 삭제 자산은 일반 사용자가 복구하지 못하며 운영 복구일 기준 재개로 DEC-017·DEC-052에 확정했다. Shortcut credential 발급 재전송은 DEC-033의 비밀 없는 `AlreadyIssued`로 확정했다. 별도 카드별 통계 화면은 현재 목표에 추가하지 않지만 Ledger 검색은 거래에 보존된 표준 카드사·끝 번호 증거로 결과를 찾고 전체·월별 합계를 반환한다. release gate는 DEC-064에 따라 긴급 override 없이 필수 gate 전체 통과만 승인한다. 새 질문은 소유 Policy 뒤에 격리하고 중앙 목록에 한 번만 추가한다. 환경 수치·보존 기간은 Config로 격리한다.
+Human in the loop 항목은 [미결정 사항 단일 목록](../requirements/governance/pending-decisions.md)에서 관리하며 현재 남은 항목은 없다. 정기 거래 creator는 DEC-063으로 확정했고 기존 자산의 자동화 최초 월은 기존 DEC-011의 최초 활성화 정책에 이미 포함된 것으로 정리했다. 삭제 자산은 일반 사용자가 복구하지 못하며 운영 복구일 기준 재개로 DEC-017·DEC-052에 확정했다. 일반 거래 삭제도 DEC-065에 따라 일반 조회에서 즉시 제외하되 자동 영구 삭제하지 않고 일반 사용자 복구를 제공하지 않는다. Shortcut credential 발급 재전송은 DEC-033의 비밀 없는 `AlreadyIssued`로 확정했다. 별도 카드별 통계 화면은 현재 목표에 추가하지 않지만 Ledger 검색은 거래에 보존된 표준 카드사·끝 번호 증거로 결과를 찾고 전체·월별 합계를 반환한다. release gate는 DEC-064에 따라 긴급 override 없이 필수 gate 전체 통과만 승인한다. 새 질문은 소유 Policy 뒤에 격리하고 중앙 목록에 한 번만 추가한다. 환경 수치·보존 기간은 Config로 격리한다.
 
 ## 16. 테스트와 아키텍처 강제
 
