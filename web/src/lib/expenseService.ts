@@ -10,6 +10,7 @@ import {
 } from '@/platform/read-model/firestoreReadModel';
 import { Expense, TransactionType } from '@/types/expense';
 import { ledgerCommands } from '@/features/ledger/application/ledgerCommands';
+import { isVisibleLedgerReadDocument } from '@/features/ledger/application/ledgerReadVisibility';
 import { requireClientSessionScope } from '@/composition/clientSessionScope';
 
 const COLLECTION_NAME = 'expenses';
@@ -298,7 +299,9 @@ export function subscribeToMonthlyExpenses(
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
-    const allExpenses = snapshot.docs.map(mapDocToExpense);
+    const allExpenses = snapshot.docs
+      .filter((document) => isVisibleLedgerReadDocument(document.data()))
+      .map(mapDocToExpense);
 
     // 클라이언트에서 날짜 필터링 및 정렬
     const filtered = allExpenses
@@ -342,7 +345,9 @@ export function subscribeToDateRangeExpenses(
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
-    const allExpenses = snapshot.docs.map(mapDocToExpense);
+    const allExpenses = snapshot.docs
+      .filter((document) => isVisibleLedgerReadDocument(document.data()))
+      .map(mapDocToExpense);
 
     const filtered = allExpenses
       .filter((e) => e.date >= startDate && e.date <= endDate)
