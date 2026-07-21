@@ -194,11 +194,12 @@ Value Object는 `HouseholdName`, `MemberDisplayName`, `AssetOwnerProfileName`, `
 
 ### 5.3 초대 코드 생성·JoinHouseholdAsSelf
 
-1. 활성 Membership과 invite capability를 확인하고 CSPRNG로 추측하기 어려운 코드를 생성합니다.
-2. code hash, householdId, `expiresAt=issuedAt+5분`, unused 상태를 저장하고 원문은 생성 응답에 한 번만 반환합니다.
-3. 가입자는 Google 로그인 뒤 코드와 자기 표시 이름을 제출합니다. 다른 memberId·principalUid 입력은 받지 않습니다.
-4. 서버는 코드 hash, 5분 만료, unused, household active, 호출자 미가입을 검증합니다.
-5. Invitation used 전이, 호출자 자기 Member, member 명의자 프로필, Membership, receipt, `MemberJoined.v1`을 한 transaction에서 생성합니다.
+1. 설정 Presentation Adapter는 `테마` 카드 바로 다음에 `가구원 초대` 카드를 배치하고 `5분간 유효한 초대 코드`라는 보조 문구와 생성 동작을 제공합니다. 이 문구는 표시를 간결하게 한 것이며 서버의 일회용 정책은 유지합니다.
+2. 활성 Membership과 invite capability를 확인하고 CSPRNG로 추측하기 어려운 코드를 생성합니다.
+3. code hash, householdId, `expiresAt=issuedAt+5분`, unused 상태를 저장하고 원문은 생성 응답에 한 번만 반환합니다.
+4. 가입자는 Google 로그인 뒤 코드와 자기 표시 이름을 제출합니다. 다른 memberId·principalUid 입력은 받지 않습니다.
+5. 서버는 코드 hash, 5분 만료, unused, household active, 호출자 미가입을 검증합니다.
+6. Invitation used 전이, 호출자 자기 Member, member 명의자 프로필, Membership, receipt, `MemberJoined.v1`을 한 transaction에서 생성합니다.
 6. 만료·재사용·경합·이미 가입은 Member를 만들지 않고 typed 실패를 반환합니다.
 
 ### 5.4 RenameSelf
@@ -493,7 +494,7 @@ android/core/auth-session/
 | HH-010 | Contract·Application·Client | 공개 Command allowlist·LogoutHouseholdSession·RestoreSignedInSession | 탈퇴 요청, 로그아웃·재로그인, 가구 논리 삭제·복구 | LeaveHousehold 없음, Membership·Member 불변, 같은 memberId 복원 | T-HH-005 |
 | HH-011 | Domain·Application·Client·보안 E2E | AssetOwnerProfilePolicy·일반 자산 UI·관리자 UI | Member 프로필, dependent, 일반/관리자 archive, archived 참조 | 일반 삭제 surface·권한 없음, 관리자만 dependent archive, profileId·과거 이름 유지 | T-HH-006 |
 | HH-012 | Domain·Application·Outbox·보안 E2E | AdminMemberRemovalPolicy·Remove/RestoreHouseholdMember | 생성자/초대 가입자/전체 관리자, 마지막 Member, 기존 업무 기록, UID claim 경합, 중복 Event | 관리자만 모든 Member에 동일한 제거·복구 적용, 빈 가구·기록 보존, 즉시 actor 차단, claim 해제/재획득, 같은 ID 유지 | T-HH-007 |
-| HH-JOIN-001 | Domain·Contract·E2E | CreateInvitationCode·JoinHouseholdAsSelf | 발급 직후·5분 경계·만료·재사용·동시 사용·UID의 기존 다른 Membership | 유효 코드와 미가입 UID만 한 번 소비하고 UID claim·자기 Member·Membership 원자 생성, 기존 가입자는 Invitation·데이터 무변경 | T-HH-JOIN-001 |
+| HH-JOIN-001 | Client·Domain·Contract·E2E | SettingsPage·InvitationSettings·CreateInvitationCode·JoinHouseholdAsSelf | 설정 카드 순서·보조 문구, 발급 직후·5분 경계·만료·재사용·동시 사용·UID의 기존 다른 Membership | 테마 다음에 초대 카드와 간결한 5분 안내를 표시하고, 유효 코드와 미가입 UID만 한 번 소비해 UID claim·자기 Member·Membership을 원자 생성하며 기존 가입자는 Invitation·데이터 무변경 | T-HH-JOIN-001 |
 | ADM-001 | Contract·E2E | Admin ports | 허용/비허용 관리자, 최신순 cursor, 삭제 확인 | 조회·생성·복사 UI·삭제 상태 관찰 | T-ADM-001 |
 | ADM-002 | Emulator·보안 E2E | Rules와 server Handler | 무인증·동일 가구·타 가구·관리자 | 최소 권한만 허용하고 거부 시 변경 없음 | T-HH-RULES-001, T-HH-SEC-001 |
 | ADM-003 | Domain·Application·Contract·E2E·동시성 | RequestHouseholdDeletion·RestoreDeletedHousehold·HouseholdPurgeProcess·PurgeClaimFinalizationPolicy | 다중 Context 성공/실패, 다중 claim, snapshot·finalization page 중단, absent·stale claim, 재시도 | snapshot 완료 전 Context 호출 0건, Context 미완료 중 claim 0건 해제, 완료 뒤 일치 claim만 page 해제, 모든 checkpoint 완료 뒤 purged Event 한 번, 재가입 가능 | T-ADM-002 |
