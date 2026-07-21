@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 
 import ShortcutSettings from '@/components/settings/ShortcutSettings';
 
@@ -22,7 +22,7 @@ describe('iPhone 결제 자동 등록 설정', () => {
     jest.clearAllMocks();
   });
 
-  it('활성 키가 있으면 강조된 재발급 버튼만 표시하고 폐기·시간 정보는 숨긴다', async () => {
+  it('활성 키가 있으면 제목 영역 오른쪽에 재발급 버튼만 표시하고 폐기·시간 정보는 숨긴다', async () => {
     mockStatus.mockResolvedValue({
       kind: 'found',
       credential: {
@@ -37,7 +37,8 @@ describe('iPhone 결제 자동 등록 설정', () => {
 
     render(<ShortcutSettings />);
 
-    expect(await screen.findByRole('button', { name: '키 재발급' })).toBeInTheDocument();
+    const header = screen.getByTestId('shortcut-settings-header');
+    expect(await within(header).findByRole('button', { name: '재발급' })).toBeInTheDocument();
     expect(screen.getAllByRole('button')).toHaveLength(1);
     expect(screen.queryByText('폐기')).not.toBeInTheDocument();
     expect(screen.queryByText(/최근 사용/)).not.toBeInTheDocument();
@@ -52,6 +53,6 @@ describe('iPhone 결제 자동 등록 설정', () => {
     expect(
       await screen.findByRole('button', { name: '키 발급 및 설치' })
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '키 재발급' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '재발급' })).not.toBeInTheDocument();
   });
 });
