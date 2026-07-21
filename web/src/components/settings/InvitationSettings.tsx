@@ -46,7 +46,7 @@ export default function InvitationSettings() {
         </div>
         <div className="flex-1">
           <div className="font-semibold text-slate-800">가구원 초대</div>
-          <div className="text-sm text-slate-500">한 번만 사용할 수 있는 5분 초대 코드</div>
+          <div className="text-sm text-slate-500">5분간 유효한 초대 코드</div>
         </div>
         <button
           type="button"
