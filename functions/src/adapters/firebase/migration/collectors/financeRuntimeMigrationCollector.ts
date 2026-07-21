@@ -449,6 +449,11 @@ export function collectFinanceRuntimeMigration(
     const amountInWon = nonNegativeWon(
       numberValue(data, 0, "amountInWon", "amount"),
     );
+    const legacyLastProcessedMonth = text(
+      data,
+      "lastProcessedMonth",
+      "lastRegisteredMonth",
+    );
     const timestamps = createdAndUpdated(data, input.plannedAt);
     const version = Math.max(
       1,
@@ -472,6 +477,9 @@ export function collectFinanceRuntimeMigration(
             firstApplicableMonth:
               text(data, "firstApplicableMonth") ||
               timestamps.createdAt.slice(0, 7),
+            ...(legacyLastProcessedMonth === ""
+              ? {}
+              : { lastProcessedMonth: legacyLastProcessedMonth }),
             lifecycleState: lifecycle(data),
             version,
             aggregateVersion: version,
@@ -484,17 +492,41 @@ export function collectFinanceRuntimeMigration(
           logicalCollection: "recurring",
         }),
       );
-    } else if (existingCreator === "") {
-      drafts.push(
-        candidateDraft(snapshot, {
-          targetPath: `${input.householdPath}/recurringPlans/${snapshot.id}`,
-          targetData: { creatorMemberId: creator },
-          action: "merge-missing",
-          amountInWon,
-          sourceAmountInWon: amountInWon,
-          logicalCollection: "recurring",
-        }),
-      );
+    } else {
+      const existingLastProcessedMonth = text(existing, "lastProcessedMonth");
+      if (
+        legacyLastProcessedMonth !== "" &&
+        existingLastProcessedMonth !== "" &&
+        existingLastProcessedMonth !== legacyLastProcessedMonth
+      ) {
+        unresolved.push(
+          migrationIssue({
+            code: "CANONICAL_TARGET_CONFLICT",
+            sourceCollection: "recurring_expenses",
+            reference: snapshot.ref.path,
+            detailCode: "RECURRING_LAST_PROCESSED_MONTH_ALREADY_DIFFERS",
+          }),
+        );
+        continue;
+      }
+      const missingFields = {
+        ...(existingCreator === "" ? { creatorMemberId: creator } : {}),
+        ...(legacyLastProcessedMonth !== "" && existingLastProcessedMonth === ""
+          ? { lastProcessedMonth: legacyLastProcessedMonth }
+          : {}),
+      };
+      if (Object.keys(missingFields).length > 0) {
+        drafts.push(
+          candidateDraft(snapshot, {
+            targetPath: `${input.householdPath}/recurringPlans/${snapshot.id}`,
+            targetData: missingFields,
+            action: "merge-missing",
+            amountInWon,
+            sourceAmountInWon: amountInWon,
+            logicalCollection: "recurring",
+          }),
+        );
+      }
     }
     if (explicitCreator !== undefined || rawCreator === "") {
       const receiptId = runtimeMigrationHash({

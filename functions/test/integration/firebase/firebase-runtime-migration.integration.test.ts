@@ -166,6 +166,7 @@ async function seedFullScope() {
       amount: 80_000,
       category: "food",
       dayOfMonth: 10,
+      lastRegisteredMonth: "2026-06",
       isActive: true,
       schemaVersion: 1,
       createdAt: "2026-01-10T00:00:00.000Z",
@@ -372,6 +373,7 @@ describeWithFirestoreEmulator("Firebase runtime migration operations boundary", 
       defaultCategoryId: "food",
     });
     expect((await household.collection("recurringPlans").doc("recurring-1").get()).data()?.creatorMemberId).toBe("member-b");
+    expect((await household.collection("recurringPlans").doc("recurring-1").get()).data()?.lastProcessedMonth).toBe("2026-06");
     expect((await household.collection("recurringCreatorMigrationReceipts").get()).size).toBe(1);
     expect((await household.collection("assets").doc("asset-1").collection("positions").doc("holding-1").get()).data()).toMatchObject({
       market: "KRX",
@@ -581,6 +583,67 @@ describeWithFirestoreEmulator("Firebase runtime migration operations boundary", 
     expect(
       (await household.collection("categorySettings").doc("default").get()).data(),
     ).toMatchObject({ defaultCategoryId: "custom-default-key" });
+  });
+
+  it("이미 이관된 정기 거래에 마지막 처리 월만 없으면 기존 값을 merge-missing으로 보완한다", async () => {
+    const household = database.collection("households").doc(HOUSEHOLD_ID);
+    await Promise.all([
+      household.set({ lifecycleState: "active" }),
+      household.collection("members").doc("member-a").set({
+        memberId: "member-a",
+        displayName: "민규",
+      }),
+      household.collection("recurringPlans").doc("recurring-checkpoint").set({
+        householdId: HOUSEHOLD_ID,
+        planId: "recurring-checkpoint",
+        creatorMemberId: "member-a",
+        merchant: "정기 거래",
+        amountInWon: 10_000,
+        categoryId: "etc",
+        dayOfMonth: 1,
+      }),
+      database.collection("recurring_expenses").doc("recurring-checkpoint").set({
+        householdId: HOUSEHOLD_ID,
+        merchant: "정기 거래",
+        amount: 10_000,
+        category: "etc",
+        dayOfMonth: 1,
+        lastRegisteredMonth: "2026-07",
+      }),
+    ]);
+    const migration = subject();
+    const dryRun = await migration.dryRun({
+      scope: scope("recurring-checkpoint"),
+      mappings: mappings({
+        memberReferences: {},
+        missingCreatorMemberId: "member-a",
+        recurringCreators: {},
+        assetOwners: {},
+        positionMarkets: {},
+      }),
+      plannedAt: "2026-07-21T01:50:00.000Z",
+    });
+    expect(dryRun.unresolved).toEqual([]);
+
+    const applied = await migration.apply({
+      scope: scope("recurring-checkpoint"),
+      expectedPlanHash: dryRun.planHash,
+      confirmation: "APPLY",
+      checkpoint: dryRun.checkpoint,
+      pageSize: 50,
+      maxPages: 100,
+      appliedAt: "2026-07-21T01:51:00.000Z",
+    });
+    expect(applied).toMatchObject({
+      kind: "applied",
+      reconciliation: { status: "MATCH" },
+    });
+    expect(
+      (await household.collection("recurringPlans").doc("recurring-checkpoint").get()).data(),
+    ).toMatchObject({
+      creatorMemberId: "member-a",
+      lastProcessedMonth: "2026-07",
+    });
   });
 
   it("카드 소유자와 중복 지역화폐 선택이 불명확하면 임의 추정 없이 전체 apply를 차단한다", async () => {

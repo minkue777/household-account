@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { applicationDefault, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
@@ -36,7 +38,7 @@ function stable(value) {
 function text(data, ...fields) {
   for (const field of fields) {
     const value = data?.[field];
-    if (typeof value === "string") return value.trim();
+    if (typeof value === "string" && value.trim() !== "") return value.trim();
   }
   return "";
 }
@@ -54,6 +56,7 @@ function lifecycle(data) {
     data?.deletedAt !== undefined ||
     data?.lifecycleState === "deleted" ||
     data?.lifecycleState === "purging" ||
+    data?.state === "archived" ||
     data?.isActive === false
   ) {
     return "deleted";
@@ -61,18 +64,7 @@ function lifecycle(data) {
   return "active";
 }
 
-function owner(data) {
-  const ref = data?.ownerRef;
-  if (ref && typeof ref === "object" && !Array.isArray(ref)) {
-    if (ref.kind === "household") return "household";
-    if (ref.kind === "profile" && typeof ref.profileId === "string") {
-      return `profile:${ref.profileId}`;
-    }
-  }
-  return `legacy:${text(data, "owner") || "가구"}`;
-}
-
-const normalizers = {
+export const normalizers = {
   ledger(id, data) {
     return {
       id,
@@ -83,8 +75,7 @@ const normalizers = {
       localTime: text(data, "localTime", "time"),
       categoryId: text(data, "categoryId", "category"),
       memo: text(data, "memo"),
-      creatorMemberId: text(data, "creatorMemberId", "createdBy"),
-      source: text(data, "source", "originChannel", "cardType"),
+      source: text(data, "source") || "legacy-migration",
     };
   },
   asset(id, data) {
@@ -93,8 +84,6 @@ const normalizers = {
       lifecycle: lifecycle(data),
       name: text(data, "name"),
       type: text(data, "type"),
-      subType: text(data, "subType"),
-      owner: owner(data),
       currentBalance: number(data, "currentBalance"),
       currency: text(data, "currency") || "KRW",
       order: number(data, "order"),
@@ -104,12 +93,11 @@ const normalizers = {
     return {
       id,
       lifecycle: lifecycle(data),
-      name: text(data, "name"),
+      name: text(data, "name", "label"),
       color: text(data, "color"),
       icon: text(data, "icon"),
-      order: number(data, "order"),
+      order: number(data, "sortOrder", "order"),
       budgetInWon: number(data, "budgetInWon", "budget"),
-      isDefault: data?.isDefault === true,
     };
   },
   recurring(id, data) {
@@ -121,8 +109,6 @@ const normalizers = {
       amountInWon: number(data, "amountInWon", "amount"),
       categoryId: text(data, "categoryId", "category"),
       dayOfMonth: number(data, "dayOfMonth"),
-      creatorMemberId: text(data, "creatorMemberId", "createdBy"),
-      firstApplicableMonth: text(data, "firstApplicableMonth"),
       lastProcessedMonth: text(data, "lastProcessedMonth", "lastRegisteredMonth"),
     };
   },
@@ -161,7 +147,7 @@ function summary(rows) {
   };
 }
 
-function comparison(name, legacyRows, canonicalRows) {
+export function comparison(name, legacyRows, canonicalRows) {
   const legacy = summary(legacyRows);
   const canonical = summary(canonicalRows);
   return {
@@ -205,7 +191,7 @@ async function canonicalPositions(household) {
   return pages.flat();
 }
 
-async function main() {
+export async function main() {
   if (process.argv.includes("--help") || process.argv.includes("-h")) {
     console.log(usage());
     return;
@@ -257,6 +243,15 @@ async function main() {
   ];
   const report = {
     mode: "READ_ONLY_RECONCILIATION",
+    comparisonMode: "PRESERVED_BUSINESS_FACTS",
+    transformedFieldsVerifiedByPlan: [
+      "ledger.creatorMemberId",
+      "asset.ownerRef",
+      "asset.subType",
+      "category.defaultCategoryId",
+      "recurring.creatorMemberId",
+      "recurring.firstApplicableMonth",
+    ],
     projectId,
     householdIdHash: sha256(householdId).slice(0, 20),
     checkedAt: new Date().toISOString(),
@@ -269,4 +264,9 @@ async function main() {
   if (report.status !== "MATCH") process.exitCode = 2;
 }
 
-await main();
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
+  await main();
+}
