@@ -103,6 +103,54 @@ describe("AssetOwnerProfile household/dependent identity 공개 계약", () => {
     ).toHaveLength(1);
   });
 
+  it("[T-HH-006][HH-011/DEC-037] 자산 명의자는 profile ID나 유형이 아니라 가구에 들어온 순서로 제공한다", async () => {
+    const subject = createSubject(
+      baseFixture({
+        members: [
+          {
+            principalUid: memberActor.principalUid,
+            memberId,
+            displayName: "민규",
+            profileId: "profile-z-min-gyu",
+            aggregateVersion: 1,
+            enteredAt: "2026-07-21T14:02:28.926Z",
+          },
+          {
+            principalUid: "google-jin-seon",
+            memberId: "member-jin-seon",
+            displayName: "진선",
+            profileId: "profile-y-jin-seon",
+            aggregateVersion: 1,
+            enteredAt: "2026-07-21T14:09:58.222Z",
+          },
+        ],
+        dependentProfiles: [
+          {
+            profileId: "profile-a-jia",
+            householdId,
+            displayName: "지아",
+            profileType: "dependent",
+            lifecycleState: "active",
+            aggregateVersion: 1,
+            enteredAt: "2026-07-21T14:20:15.621Z",
+          },
+        ],
+      }),
+    );
+
+    const result = await subject.listAssetOwnerProfiles(memberActor, {});
+
+    expect(result.kind).toBe("success");
+    if (result.kind === "success") {
+      expect(result.profiles.map(({ displayName }) => displayName)).toEqual([
+        "민규",
+        "진선",
+        "지아",
+      ]);
+      expect(result.profiles[0]).not.toHaveProperty("createdAt");
+    }
+  });
+
   it("[T-HH-006][HH-011/DEC-037] dependent 생성은 로그인·Membership·권한 identity를 만들지 않는다", async () => {
     const subject = createSubject(baseFixture());
     const before = await subject.snapshot();

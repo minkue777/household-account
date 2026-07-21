@@ -14,6 +14,7 @@ import {
   ACCESS_SCHEMA_VERSION,
   accessEventId,
   accessReceiptReference,
+  isoString,
   numberField,
   stringField,
   terminalReceiptFields,
@@ -49,12 +50,14 @@ function mapProfile(
     return undefined;
   }
   const linkedMemberId = stringField(data, "linkedMemberId");
+  const createdAt = isoString(data.createdAt);
   return {
     profileId: snapshot.id,
     householdId,
     displayName,
     profileType,
     ...(linkedMemberId === undefined ? {} : { linkedMemberId }),
+    ...(createdAt === undefined ? {} : { createdAt }),
     lifecycleState,
     aggregateVersion: numberField(data, "aggregateVersion", 1),
   };
@@ -171,7 +174,6 @@ export class FirebaseAssetOwnerProfileStore
           lifecycleState: profile.lifecycleState,
           aggregateVersion: profile.aggregateVersion,
           schemaVersion: ACCESS_SCHEMA_VERSION,
-          createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
         };
         const previous = loaded.profilesById.get(profile.profileId);

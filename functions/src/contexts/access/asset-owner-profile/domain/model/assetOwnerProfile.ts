@@ -4,6 +4,11 @@ export interface AssetOwnerProfile {
   displayName: string;
   profileType: "member" | "dependent";
   linkedMemberId?: string;
+  /**
+   * 가구의 자산 명의자 목록에 들어온 시각입니다. 공개 응답에는 노출하지 않고
+   * 목록의 안정적인 등록 순서를 결정할 때만 사용합니다.
+   */
+  createdAt?: string;
   lifecycleState: "active" | "archived";
   aggregateVersion: number;
 }

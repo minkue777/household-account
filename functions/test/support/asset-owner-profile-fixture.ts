@@ -21,8 +21,11 @@ export interface AssetOwnerProfileFixture {
     displayName: string;
     profileId: string;
     aggregateVersion: number;
+    enteredAt?: string;
   }[];
-  dependentProfiles?: readonly AssetOwnerProfileView[];
+  dependentProfiles?: readonly (AssetOwnerProfileView & {
+    enteredAt?: string;
+  })[];
   ownerReferences?: readonly {
     referenceId: string;
     profileId: string;
@@ -83,12 +86,25 @@ class FixtureAssetOwnerProfileStore implements AssetOwnerProfileStorePort {
           displayName: member.displayName,
           profileType: "member" as const,
           linkedMemberId: member.memberId,
+          ...(member.enteredAt === undefined
+            ? {}
+            : { createdAt: member.enteredAt }),
           lifecycleState: "active" as const,
           aggregateVersion: member.aggregateVersion,
         })),
         ...(fixture.dependentProfiles ?? [])
           .filter((profile) => profile.profileType === "dependent")
-          .map((profile) => ({ ...profile })),
+          .map((profile) => ({
+            profileId: profile.profileId,
+            householdId: profile.householdId,
+            displayName: profile.displayName,
+            profileType: "dependent" as const,
+            ...(profile.enteredAt === undefined
+              ? {}
+              : { createdAt: profile.enteredAt }),
+            lifecycleState: profile.lifecycleState,
+            aggregateVersion: profile.aggregateVersion,
+          })),
       ],
       members: fixture.members.map((member) => ({ ...member })),
       memberships: fixture.members.map((member) => ({

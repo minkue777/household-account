@@ -39,6 +39,19 @@ function toView(profile: AssetOwnerProfile): AssetOwnerProfileView {
   };
 }
 
+function compareByEntryOrder(
+  left: AssetOwnerProfile,
+  right: AssetOwnerProfile,
+): number {
+  if (left.createdAt !== undefined && right.createdAt !== undefined) {
+    return left.createdAt.localeCompare(right.createdAt);
+  }
+  if (left.createdAt !== undefined) return -1;
+  if (right.createdAt !== undefined) return 1;
+  // createdAt이 없는 레거시·테스트 상태는 stable sort의 기존 배열 순서를 유지합니다.
+  return 0;
+}
+
 function hasCapability(
   actor: VerifiedProfileActor,
   capability:
@@ -376,7 +389,7 @@ class DefaultAssetOwnerProfileApplication
             profile.lifecycleState === "active"),
       )
       .slice()
-      .sort((left, right) => left.profileId.localeCompare(right.profileId))
+      .sort(compareByEntryOrder)
       .map(toView);
     return profiles.length === 0
       ? { kind: "no-data" }
