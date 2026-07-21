@@ -1,50 +1,24 @@
 package com.household.account.paymentcapture
 
-enum class RegisteredNotificationSource(
-    val sourceType: String,
-    val parserId: String,
-    val parserVersion: String,
-    val companyLabel: String,
-    val localCurrencyType: String? = null
-) {
-    KB("kb-card", "kb-card-parser", "2.0.0", "국민"),
-    NH("nh-card", "nh-pay-parser", "1.0.0", "농협"),
-    NAVER_PAY("naver-pay", "naver-pay-parser", "1.0.0", "네이버페이"),
-    TOSS_BANK("toss-bank", "toss-bank-parser", "1.0.0", "토스뱅크"),
-    KAKAOPAY("kakao-pay", "kakao-pay-parser", "1.0.0", "카카오페이"),
-    DIGITAL_ONNURI("digital-onnuri", "digital-onnuri-parser", "1.0.0", "디지털온누리"),
-    PAYBOOC_ISP("paybooc-isp", "paybooc-isp-parser", "1.0.0", "BC"),
-    SMS("sms-card-message", "sms-card-message-parser", "1.0.0", "카드"),
-    SAMSUNG("samsung-card", "samsung-card-parser", "1.0.0", "삼성"),
-    LOTTE("lotte-card", "lotte-card-parser", "1.0.0", "롯데"),
-    GYEONGGI_LOCAL_CURRENCY(
-        "gyeonggi-local-currency",
-        "gyeonggi-local-currency-parser",
-        "1.0.0",
-        "경기지역화폐",
-        "gyeonggi"
-    ),
-    DAEJEON_LOCAL_CURRENCY(
-        "daejeon-local-currency",
-        "daejeon-local-currency-parser",
-        "1.0.0",
-        "대전사랑카드",
-        "daejeon"
-    ),
-    SEJONG_LOCAL_CURRENCY(
-        "sejong-local-currency",
-        "sejong-local-currency-parser",
-        "1.0.0",
-        "세종지역화폐",
-        "sejong"
-    ),
-    CITY_GAS_BILL("city-gas-bill", "city-gas-bill-parser", "1.0.0", "도시가스")
+enum class RegisteredNotificationSource {
+    KB,
+    NH,
+    NAVER_PAY,
+    TOSS_BANK,
+    KAKAOPAY,
+    DIGITAL_ONNURI,
+    PAYBOOC_ISP,
+    SMS,
+    SAMSUNG,
+    LOTTE,
+    GYEONGGI_LOCAL_CURRENCY,
+    DAEJEON_LOCAL_CURRENCY,
+    SEJONG_LOCAL_CURRENCY,
+    CITY_GAS_BILL
 }
 
 /** 본문이 아니라 등록 package만으로 parser 하나를 선택하는 Source Registry입니다. */
 object PaymentSourceRegistry {
-    const val VERSION = "source-registry.v1"
-
     private val sourcesByPackage = mapOf(
         "com.kbcard.cxh.appcard" to RegisteredNotificationSource.KB,
         "com.kbcard.kbkookmincard" to RegisteredNotificationSource.KB,

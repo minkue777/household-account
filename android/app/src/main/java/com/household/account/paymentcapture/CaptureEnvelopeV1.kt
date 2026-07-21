@@ -76,21 +76,21 @@ data class BalanceObservationV1(
 
 /** 원문을 포함하지 않는 Android → Payment Intake wire 계약입니다. */
 data class CaptureEnvelopeV1(
-    val observationId: String,
+    override val observationId: String,
     val sourceEvidence: AndroidRegisteredPackageEvidence,
     val observedAt: String,
     val parser: ParserEvidenceV1,
     val rawPayloadHash: String,
     val paymentObservation: PaymentObservationV1? = null,
     val balanceObservation: BalanceObservationV1? = null
-) {
+) : CaptureDeliveryEnvelope {
     init {
         require(paymentObservation != null || balanceObservation != null) {
             "CaptureEnvelope requires at least one branch"
         }
     }
 
-    fun toMap(): Map<String, Any> = buildMap {
+    override fun toMap(): Map<String, Any> = buildMap {
         put("contractVersion", CONTRACT_VERSION)
         put("observationId", observationId)
         put("originChannel", "android-notification")
@@ -102,7 +102,7 @@ data class CaptureEnvelopeV1(
         balanceObservation?.let { put("balanceObservation", it.toMap()) }
     }
 
-    fun toJson(): String = JSONObject(toMap()).toString()
+    override fun toJson(): String = JSONObject(toMap()).toString()
 
     companion object {
         const val CONTRACT_VERSION = "capture-envelope.v1"

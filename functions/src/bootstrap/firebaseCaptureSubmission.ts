@@ -14,11 +14,22 @@ import {
   CaptureEnvelopeValidationError,
   decodeCaptureEnvelope,
 } from "../adapters/firebase/payment-capture/captureEnvelopeDecoder";
+import {
+  AndroidRawNotificationValidationError,
+  decodeAndroidRawNotification,
+} from "../adapters/firebase/payment-capture/androidRawNotificationDecoder";
+import { Sha256AndroidRawNotificationHasher } from "../adapters/crypto/payment-capture/sha256AndroidRawNotificationHasher";
 import { FirebaseLocalCurrencyBalanceStore } from "../adapters/firebase/local-currency/firebaseLocalCurrencyBalanceStore";
 import { createTenantAuthorizationApplication } from "../contexts/access/tenant-authorization/application/tenantAuthorizationApplication";
 import { createCaptureBranchSubmissionApplication } from "../contexts/payment-capture/android-payment-ingestion/application/captureBranchSubmissionApplication";
 import { createCaptureSubmissionApplication } from "../contexts/payment-capture/android-payment-ingestion/application/captureSubmissionApplication";
 import { createCaptureTransactionGatewayApplication } from "../contexts/payment-capture/android-payment-ingestion/application/captureTransactionGatewayApplication";
+import { createAndroidProviderParserApplication } from "../contexts/payment-capture/android-payment-ingestion/application/androidProviderParserApplication";
+import { createAndroidRawNotificationSubmissionApplication } from "../contexts/payment-capture/android-payment-ingestion/application/androidRawNotificationSubmissionApplication";
+import type {
+  AndroidRawNotificationInput,
+  AndroidRawNotificationSubmissionInputPort,
+} from "../contexts/payment-capture/android-payment-ingestion/application/ports/in/androidRawNotificationSubmissionInputPort";
 import type {
   CaptureEnvelopeInput,
   CaptureSubmissionInputPort,
@@ -27,6 +38,7 @@ import type {
 import { validateAndroidCaptureSource } from "../contexts/payment-capture/android-payment-ingestion/application/validateAndroidCaptureSource";
 import { createBalanceObservationIntakeApplication } from "../contexts/household-finance/local-currency/application/balanceObservationIntakeApplication";
 import { createLocalCurrencyBalanceApplication } from "../contexts/household-finance/local-currency/application/localCurrencyBalanceApplication";
+import { resolvePaymentOccurrenceYear } from "../contexts/payment-capture/intake/public";
 import { db, REGION } from "../config";
 
 export type CaptureCallableErrorCode =
@@ -57,6 +69,31 @@ export interface CaptureSubmissionCallableHandler {
     readonly principalUid?: string;
     readonly data: unknown;
   }): Promise<CaptureSubmissionWireResponse>;
+}
+
+export interface AndroidRawNotificationCallableHandler {
+  handle(input: {
+    readonly principalUid?: string;
+    readonly data: unknown;
+  }): Promise<CaptureSubmissionWireResponse>;
+}
+
+function responseFromOutcome(
+  outcome: Awaited<ReturnType<CaptureSubmissionInputPort["submit"]>>,
+): CaptureSubmissionWireResponse {
+  if (outcome.kind === "conflict") {
+    throw new CaptureCallableRejection("already-exists", outcome.code);
+  }
+  if (outcome.kind === "Unauthenticated") {
+    throw new CaptureCallableRejection("unauthenticated", outcome.code);
+  }
+  if (outcome.kind === "Forbidden") {
+    throw new CaptureCallableRejection("permission-denied", outcome.code);
+  }
+  return {
+    contractVersion: "capture-submission-response.v1",
+    result: outcome.value,
+  };
 }
 
 function rejectedBySource(
@@ -122,19 +159,49 @@ export function createCaptureSubmissionCallableHandler(input: {
         rootIdempotencyKey: envelope.observationId,
         envelope,
       });
-      if (outcome.kind === "conflict") {
-        throw new CaptureCallableRejection("already-exists", outcome.code);
+      return responseFromOutcome(outcome);
+    },
+  };
+}
+
+export function createAndroidRawNotificationCallableHandler(input: {
+  readonly memberships: CaptureMembershipResolver;
+  readonly submissions: AndroidRawNotificationSubmissionInputPort;
+  readonly decode?: (data: unknown) => AndroidRawNotificationInput;
+}): AndroidRawNotificationCallableHandler {
+  return {
+    async handle(request): Promise<CaptureSubmissionWireResponse> {
+      const membership = await input.memberships.resolve(request.principalUid);
+      if (membership.kind === "unauthenticated") {
+        throw new CaptureCallableRejection("unauthenticated", membership.code);
       }
-      if (outcome.kind === "Unauthenticated") {
-        throw new CaptureCallableRejection("unauthenticated", outcome.code);
+      if (membership.kind === "forbidden") {
+        throw new CaptureCallableRejection("permission-denied", membership.code);
       }
-      if (outcome.kind === "Forbidden") {
-        throw new CaptureCallableRejection("permission-denied", outcome.code);
+
+      let raw: AndroidRawNotificationInput;
+      try {
+        raw = (input.decode ?? decodeAndroidRawNotification)(request.data);
+      } catch (error) {
+        if (error instanceof AndroidRawNotificationValidationError) {
+          throw new CaptureCallableRejection("invalid-argument", error.code, {
+            path: error.path,
+          });
+        }
+        throw error;
       }
-      return {
-        contractVersion: "capture-submission-response.v1",
-        result: outcome.value,
-      };
+
+      return responseFromOutcome(
+        await input.submissions.submit({
+          actor: {
+            principalId: membership.principalUid,
+            householdId: membership.householdId,
+            actingMemberId: membership.memberId,
+            capabilities: ["paymentCapture:submit"],
+          },
+          input: raw,
+        }),
+      );
     },
   };
 }
@@ -168,6 +235,19 @@ const captureSubmissionHandler = createCaptureSubmissionCallableHandler({
   submissions: createFirebaseCaptureSubmissionPort(),
 });
 
+const rawNotificationSubmissionHandler =
+  createAndroidRawNotificationCallableHandler({
+    memberships: new FirebaseCaptureMembershipResolver(db),
+    submissions: createAndroidRawNotificationSubmissionApplication({
+      parser: createAndroidProviderParserApplication({
+        resolveOccurrenceYear: resolvePaymentOccurrenceYear,
+      }),
+      submissions: createFirebaseCaptureSubmissionPort(),
+      payloads: new Sha256AndroidRawNotificationHasher(),
+      clock: { now: () => new Date().toISOString() },
+    }),
+  });
+
 export const submitCaptureEnvelope = functions
   .region(REGION)
   .runWith({ enforceAppCheck: true })
@@ -190,6 +270,32 @@ export const submitCaptureEnvelope = functions
       throw new functions.https.HttpsError(
         "internal",
         "CAPTURE_SUBMISSION_UNAVAILABLE",
+      );
+    }
+  });
+
+export const submitAndroidRawNotification = functions
+  .region(REGION)
+  .runWith({ enforceAppCheck: true })
+  .https.onCall(async (data, context): Promise<CaptureSubmissionWireResponse> => {
+    try {
+      return await rawNotificationSubmissionHandler.handle({
+        ...(context.auth?.uid === undefined
+          ? {}
+          : { principalUid: context.auth.uid }),
+        data,
+      });
+    } catch (error) {
+      if (error instanceof CaptureCallableRejection) {
+        throw new functions.https.HttpsError(
+          error.callableCode,
+          error.domainCode,
+          error.details,
+        );
+      }
+      throw new functions.https.HttpsError(
+        "internal",
+        "RAW_NOTIFICATION_SUBMISSION_UNAVAILABLE",
       );
     }
   });

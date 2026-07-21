@@ -11,6 +11,7 @@ export {
   instrumentCatalogDaily,
   recurringDaily,
   scheduledJobMonitor,
+  submitAndroidRawNotification,
   submitCaptureEnvelope,
   submitNotificationDiagnostic,
 } from "./bootstrap/firebaseFunctionFacade";

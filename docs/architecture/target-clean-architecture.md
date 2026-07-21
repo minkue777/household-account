@@ -180,7 +180,8 @@ flowchart LR
     subgraph Capture[Payment Capture]
       Config[Payment Configuration]
       Intake[Channel-neutral Intake]
-      AndroidParser[Android Parser]
+      AndroidRaw[Android Raw Inbound]
+      ServerParser[Android Server Parser]
       ShortcutParser[Shortcut Parser]
     end
 
@@ -201,7 +202,8 @@ flowchart LR
     Capture -->|ActorContext / Membership| Access
     Wealth -->|ActorContext / Membership| Access
     Notify -->|ActorContext / Membership| Access
-    AndroidParser --> Intake
+    AndroidRaw --> ServerParser
+    ServerParser --> Intake
     ShortcutParser --> Intake
     Intake --> Config
     Intake --> Ledger
@@ -257,7 +259,7 @@ flowchart LR
 | [정기 거래](../requirements/contexts/household-finance/modules/recurring-transactions/requirements.md) | Domain + Workflow | Household Finance | RecurringPlan, 월 처리 checkpoint |
 | [결제 설정](../requirements/contexts/payment-capture/modules/payment-configuration/requirements.md) | 기준정보 Domain | Payment Capture | Card Registry, MerchantRuleSet |
 | [지역화폐](../requirements/contexts/household-finance/modules/local-currency/requirements.md) | 독립 Aggregate | Household Finance | LocalCurrencyBalance |
-| [Android 결제 수집](../requirements/contexts/payment-capture/modules/android-payment-ingestion/requirements.md) | Edge parser + Intake Adapter | Payment Capture (Android Adapter) | 출처·parser·후보, 임시 Diagnostic Adapter |
+| [Android 결제 수집](../requirements/contexts/payment-capture/modules/android-payment-ingestion/requirements.md) | Android Raw Adapter + Functions parser/Application | Payment Capture | raw 전달·서버 출처/parser·후보, 임시 Diagnostic Adapter |
 | [Shortcut 결제 수집](../requirements/contexts/payment-capture/modules/shortcut-ingestion/requirements.md) | HTTP Inbound Adapter + parser | Payment Capture (Functions Adapter) | 요청·응답·Shortcut parser 계약 |
 | [알림](../requirements/contexts/notifications/modules/notifications/requirements.md) | 지원 Domain/Application | Notifications | Member Notification Endpoint, Delivery |
 | [Android Host](../requirements/supporting-platform/modules/android-host/requirements.md) | 플랫폼 Shell/Inbound Adapter | 지원·플랫폼 (Android Delivery) | 권한, WebView, Bridge, QuickEdit UI |
@@ -590,18 +592,20 @@ Ledger UI
 
 ### 8.2 Android·Shortcut 결제 승인
 
-두 채널은 서로 다른 parser를 가지지만 최종 판정은 하나의 서버 유스케이스를 사용한다.
+Android 원문과 Shortcut message는 서로 다른 Functions parser Adapter를 가지지만 최종 판정은 하나의 서버 유스케이스를 사용한다.
 
 ```mermaid
 sequenceDiagram
-    participant C as Android / Shortcut Adapter
+    participant C as Android Raw / Shortcut Adapter
+    participant SP as Functions Parser
     participant P as Payment Capture
     participant PC as Payment Configuration
     participant L as Ledger
     participant B as Local Currency
     participant O as Outbox
 
-    C->>P: CaptureEnvelope.v1 + idempotencyKey
+    C->>SP: AndroidRawNotification.v1 또는 Shortcut message
+    SP->>P: 내부 CaptureEnvelope.v1 + idempotencyKey
     P->>P: receipt claim; present branch 확인
     par payment branch가 있을 때
       P->>PC: ResolveCard / ResolveMerchantMapping
@@ -619,9 +623,10 @@ sequenceDiagram
 
 핵심 규칙:
 
-- Android는 OS 알림 접근, 출처 선택, 공급자별 parser만 소유한다.
+- Android는 OS 알림 접근, 등록 package allowlist, 다목적 앱의 개인정보 최소화 admission, 암호화 Queue만 소유한다. 공급자별 정규식과 parser ID/version은 소유하지 않는다.
+- Functions Android Raw Adapter는 strict raw schema를 검증하고 서버 Source Registry로 출처·parser를 확정한 뒤 공급자 TypeScript parser를 실행한다. 클라이언트 `householdId`, creator, source, parser 주장은 받지 않는다.
 - Shortcut HTTP Adapter는 요청 인증과 Shortcut message parser를 소유한다.
-- 두 채널은 결제 후보와 잔액 관찰 중 하나 이상을 가진 동일한 `CaptureEnvelope.v1`으로 서버 Payment Capture에 들어온다. balance-only 입력을 정상 계약으로 허용한다.
+- Android는 `AndroidRawNotification.v1`으로 Functions에 들어오고 서버 parser가 결제 후보와 잔액 관찰 중 하나 이상을 가진 내부 `CaptureEnvelope.v1`을 만든다. Shortcut parser도 같은 내부 Intake 계약을 만든다. balance-only 입력을 정상 계약으로 허용한다.
 - `CaptureEnvelope.v1.sourceEvidence`는 channel-discriminated union이다. Android는 등록 package·Registry version, Shortcut은 검증된 credential 식별 hash를 보존하며 Shortcut에 가짜 package를 채우거나 Android evidence에 credential을 섞지 않는다.
 - 두 채널 parser는 DEC-029의 연도 Policy 계약을 공유해 미래 연도의 결제일을 만들지 않는다. 채널별 현재월 휴리스틱은 Legacy Adapter에만 둔다.
 - 카드 eligibility·가맹점 mapping은 Payment Configuration이 한 번만 판정한다. 카드 조회는 `ActorContext.actingMemberId` 범위로 먼저 제한하며 본인 카드가 하나 이상 일치하면 허용한다.
@@ -664,7 +669,7 @@ rawPayloadHash
 parserId / parserVersion
 ```
 
-`paymentObservation`과 `balanceObservation`이 모두 없으면 `ValidationError(EMPTY_CAPTURE)`다. Shortcut은 `paymentObservation`만 채우고 Android는 둘 중 하나 이상을 채운다. 알림 원문은 Wire Contract, Domain Event, Outbox에 포함하지 않는다. [DEC-002](../requirements/governance/decisions.md#dec-002)와 [DEC-047](../requirements/governance/decisions.md#dec-047)에 따라 기존 원문 저장은 등록 source와 인증된 활성 SessionScope를 만족하는 별도 best-effort Diagnostic Adapter에만 둔다. 진단 문서는 기능 제거 전까지 TTL 없이 전부 보존하고, 제거 시 Writer·Rules·index·컬렉션을 함께 없앤다. 진단 실패는 결제·잔액 branch 결과를 바꾸지 않는다.
+내부 `paymentObservation`과 `balanceObservation`이 모두 없으면 Capture Intake에 진입하지 않고 raw 호출을 terminal ignored로 종료한다. Shortcut은 `paymentObservation`만 만들고 Android server parser는 둘 중 하나 이상을 만들 수 있다. Android raw 원문은 암호화 Queue와 callable Wire에는 존재하지만 요청 처리 뒤 Capture receipt, Ledger, Domain Event, Outbox, 일반 로그에 저장하지 않는다. [DEC-002](../requirements/governance/decisions.md#dec-002)와 [DEC-047](../requirements/governance/decisions.md#dec-047)의 별도 best-effort Diagnostic Adapter만 기능 제거 전까지 원문을 보존하며 업무 결과와 결합하지 않는다.
 
 ### 8.3 Android 오프라인 Queue
 
@@ -675,10 +680,11 @@ queued → submitting → confirmed | duplicate | rejected | needs-review
                  └── retryable-failure → queued
 ```
 
-- Android는 알림 원문을 제외한 최소 `CaptureEnvelope.v1`과 안정적인 `idempotencyKey`를 Android Keystore 키 기반 AES-256-GCM 로컬 Queue에 저장한다.
+- Android는 `AndroidRawNotification.v1`과 안정적인 observation ID를 Android Keystore 키 기반 AES-256-GCM 로컬 Queue에 저장한다.
 - WorkManager 재시도는 같은 key를 사용한다.
 - 인증 만료는 재인증 대기 상태와 영구 거부를 구분한다.
-- Queue entry는 생성 후 72시간까지만 재시도한다. terminal 결과·로그아웃·멤버/가구 변경·만료·복호화 실패 시 즉시 삭제하고 다른 Actor로 재연결하지 않는다.
+- Queue entry는 생성 후 72시간까지만 재시도한다. parser 무결과를 포함한 `completion=terminal`, 로그아웃·멤버/가구 변경·만료·복호화 실패 시 삭제하고 다른 Actor로 재연결하지 않는다. `partial-retryable`이면 같은 raw envelope를 재전송하되 서버 receipt가 terminal branch를 재실행하지 않는다.
+- 전환 전 `CaptureEnvelope.v1` Queue entry는 contractVersion으로 구분해 레거시 callable에 보내며 새 raw 계약으로 재해석하거나 삭제하지 않는다.
 - `confirmed` 전에는 성공 broadcast와 QuickEdit을 실행하지 않는다.
 
 ### 8.4 취소
@@ -1061,7 +1067,7 @@ Accepted 제품 결정 / 요구사항
 - OpenAPI 3.1 또는 JSON Schema 기반 Command/Event/Read Model
 - 생성된 TypeScript·Kotlin DTO
 - enum과 오류 코드
-- 개인정보를 제거한 parser·card·merchant fixture
+- 개인정보를 제거한 parser·card·merchant fixture는 Functions parser 테스트의 정본으로 사용
 - producer/consumer contract test
 
 공유하지 않을 것:
@@ -1070,9 +1076,9 @@ Accepted 제품 결정 / 요구사항
 - React hook 또는 Android ViewModel
 - Domain Entity
 - 서버 최종 판정 로직의 Kotlin 복사본
-- Android parser의 TypeScript 재구현
+- Functions parser의 Kotlin 재구현
 
-Android 금융 알림 원문 형식은 Android parser만 해석하고 Payment Intake는 이를 다시 parse하지 않는다. Shortcut message 형식은 Functions의 Shortcut Adapter parser가 별도로 소유한다. 서버 Payment Intake는 두 채널이 만든 후보 계약과 업무 조건만 검증한다.
+Android 금융 알림 원문 형식은 Functions의 Android Raw Adapter parser만 해석합니다. Android는 raw DTO와 Queue 계약만 공유하며 parser 구현을 복제하지 않습니다. Shortcut message 형식은 Functions의 Shortcut Adapter parser가 별도로 소유합니다. 두 parser는 채널별 후보를 같은 내부 Capture Intake 계약으로 바꾸고, Payment Intake는 카드·가맹점·중복·취소 업무 조건을 한 번만 검증합니다.
 
 ### 12.3 Shared Kernel 허용 범위
 
@@ -1273,18 +1279,16 @@ android/
     testing/
   feature/
     web-shell/
-    payment-parser/
-    payment-ingestion/
+    payment-capture-delivery/
     quick-edit/
     push-notifications/
 ```
 
-Android Payment Parser 내부:
+Android Payment Capture Delivery 내부:
 
 ```text
-domain/          # 순수 envelope, parser, candidate
-application/     # source selection, parse/queue/submit use cases
-ports/           # API client, Clock, Queue, Diagnostic sink
+application/     # package/admission, raw queue/submit use cases
+ports/           # API client, Queue, Diagnostic sink
 adapters/
   notification/  # NotificationListenerService
   api/
@@ -1301,7 +1305,7 @@ adapters/
 | 결정 | 격리 지점 | 데이터 손실 방지용 기본 설계 |
 |---|---|---|
 | [DEC-004](../requirements/governance/decisions.md#dec-004) QuickEdit 권한 | Android `OverlayPermissionPolicy` | QuickEdit capability와 앱 필수 권한을 분리 |
-| [DEC-005](../requirements/governance/decisions.md#dec-005) 출처 허용 | `PaymentSourceRegistry`, `AllowedPaymentSourcePolicy` | 등록 package만 전용 parser에 연결하고 미등록 package를 거부 |
+| [DEC-005](../requirements/governance/decisions.md#dec-005) 출처 허용 | 서버 `PaymentSourceRegistry`, `AllowedPaymentSourcePolicy` | 등록 package만 전용 parser에 연결하고 client source/parser 주장과 미등록 package를 거부 |
 | [DEC-019](../requirements/governance/decisions.md#dec-019), [DEC-020](../requirements/governance/decisions.md#dec-020) 다중 FID 알림 endpoint | `EndpointRegistrationPolicy`, `NotificationEndpoint`, FCM FID Adapter | 설치별 endpoint 등록, 로그아웃 삭제, 404 조건부 inactive, 활성 endpoint fan-out; 데스크톱 제외 |
 | [DEC-007](../requirements/governance/decisions.md#dec-007) 도시가스 일자 | `AccountingDatePolicy` | due date를 회계일로 선택하고 observed timestamp를 별도 보존 |
 | [DEC-008](../requirements/governance/decisions.md#dec-008) 잔액 단위 | `BalanceIdentityPolicy`, Home Preferences 선택 | 가구·currencyType별 잔액을 분리하고 홈은 선택된 유형만 조회 |
@@ -1323,10 +1327,11 @@ adapters/
 | [DEC-026](../requirements/governance/decisions.md#dec-026) 알림 설정 단순화 | OS Notification Capability Adapter, Recipient Policy | 앱 내부 Subscription 없이 OS 권한이 설치 전체 푸시 표시를 제어하고 QuickEdit 설정은 별도 유지 |
 | [DEC-027](../requirements/governance/decisions.md#dec-027) 알림 기록 보존 | Notifications TTL Adapter, ExpiredEventPolicy | active endpoint 유지, inactive endpoint·terminal 처리 기록 30일, 만료 Event 재전송 차단 |
 | [DEC-028](../requirements/governance/decisions.md#dec-028) 본인 소유 등록 카드만 자동 입력 | Payment Configuration `ResolveCard`, Payment Intake actor gate | Actor 본인 카드만 조회, 한 건 이상 일치 시 허용, 타 멤버 상태 무관, 복수 일치 시 임의 카드 선택 금지 |
-| [DEC-029](../requirements/governance/decisions.md#dec-029) 연도 없는 결제일 추론 | `PaymentOccurrenceYearPolicyV1`, Android·Shortcut parser contract fixture | 서울 수신 시각보다 미래가 아닌 가장 가까운 유효 연도, 같은 날짜의 미래 시각도 전년 처리 |
+| [DEC-029](../requirements/governance/decisions.md#dec-029) 연도 없는 결제일 추론 | `PaymentOccurrenceYearPolicyV1`, Functions Android·Shortcut parser contract fixture | 서울 수신 시각보다 미래가 아닌 가장 가까운 유효 연도, 같은 날짜의 미래 시각도 전년 처리 |
 | [DEC-030](../requirements/governance/decisions.md#dec-030) Shortcut 카드사 헤더 필수 | `ShortcutCardMessageParserV2`, typed parse error | 헤더 누락·미지원은 입력 거부, 삼성·등록 카드 기반 추정 금지 |
 | [DEC-031](../requirements/governance/decisions.md#dec-031) 원거래 없는 취소 | `CancellationMatchPolicy`, Capture receipt | 무변경 `NotFound`, 대기·tombstone·승인 억제 없음, 후속 승인은 일반 등록 |
 | [DEC-032](../requirements/governance/decisions.md#dec-032) Android Queue 72시간 암호화 보존 | Keystore Crypto Adapter, `ObservationQueuePort`, WorkManager | AES-256-GCM, 동일 key 재시도, 72시간·terminal·session 전환·키 오류 삭제 |
+| [DEC-066](../requirements/governance/decisions.md#dec-066) Android server parsing | Android Raw Adapter, Functions Source Registry/parser, legacy router | Kotlin parser 복제 제거, server-selected parser, 원문 비영속, 이전 Queue 호환 |
 | [DEC-033](../requirements/governance/decisions.md#dec-033) Shortcut 반자동 credential 설치 | `ShortcutCredentialVerifierPort`, 발급·폐기 Application, 공유 Shortcut 설치 Adapter | 최초 원문 1회·hash 저장, 같은 발급 key는 비밀 없는 `AlreadyIssued`, 응답 유실은 명시적 재발급, claim에서 Actor·가구 결정, 완성 Shortcut에 붙여넣기 1회 |
 | [DEC-034](../requirements/governance/decisions.md#dec-034) Google 계정당 단일 가계부 | `MembershipCardinalityPolicy`, UID 전역 `PrincipalMembershipClaim` | 생성·초대 가입·legacy 연결의 전역 유일 claim, 로그인 시 유일 Membership 즉시 복원, 일반 전환 UI 없음 |
 | [DEC-035](../requirements/governance/decisions.md#dec-035) 종목 카탈로그 snapshot·cache | `PublishInstrumentCatalog`, Cloud Storage Snapshot Adapter, instance-memory Cache Decorator | 최근 성공 3일치 immutable snapshot, 5분 generation 확인 cache, `stocks.json` fallback 없음 |
@@ -1374,7 +1379,7 @@ Human in the loop 항목은 [미결정 사항 단일 목록](../requirements/gov
 | Contract | TS/Kotlin 직렬화, producer/consumer, 이전 event version 읽기 |
 | Repository Conformance | 같은 재사용 suite로 Fake와 Firestore Adapter 검증 |
 | Emulator Integration | Rules, transaction 경합, Outbox/Inbox, index, migration mapper |
-| Client | Web controller/component, Android parser/queue/ViewModel, WebView bridge |
+| Client | Web controller/component, Android raw DTO/queue/ViewModel, WebView bridge |
 | E2E | Web·Android·Shortcut의 핵심 사용자 흐름과 가구 격리 |
 
 ### 16.2 반드시 포함할 경합·재시도 테스트
@@ -1445,7 +1450,7 @@ TypeScript는 ESLint 경계 규칙 또는 dependency graph 도구, Kotlin은 Gra
 
 - 요구사항 ID와 데이터의 소유 모듈을 한 곳에서 찾을 수 있는가?
 - 월 분할 정책 변경이 Ledger 밖의 코드 변경을 요구하지 않는가?
-- 새 Android parser가 Ledger·Firestore·Web을 수정하지 않고 추가되는가?
+- 새 Android 알림 parser가 Functions Payment Capture 내부에만 추가되고 Android·Ledger·Firestore·Web을 수정하지 않는가?
 - Android와 Shortcut이 같은 영속 중복·카드·가맹점 결정을 재구현하지 않는가?
 - Web과 Android가 Canonical collection을 직접 쓰지 않는가?
 - 모든 Command가 ActorContext, 인가, idempotency를 가지는가?

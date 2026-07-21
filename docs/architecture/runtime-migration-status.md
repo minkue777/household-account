@@ -1,6 +1,6 @@
 # 서버 권위형 런타임 전환 상태
 
-> 기준일: 2026-07-21  
+> 기준일: 2026-07-22  
 > 목표 설계: [목표 Clean Architecture](target-clean-architecture.md)  
 > 원칙: 로컬 구현 완료, 운영 배포, 운영 데이터 전환을 서로 다른 상태로 추적한다.
 
@@ -24,6 +24,7 @@
 - `functions/src/index.ts`는 Context별 bootstrap과 Firebase Adapter가 조립된 실제 callable·HTTP·scheduled entry point를 export한다.
 - Access가 Google 인증, Membership, `ActorContext`, `systemAdmin` capability를 소유한다. 관리자 이메일이나 클라이언트 payload는 권한 근거가 아니다.
 - Web·Android·Shortcut은 공유 wire 계약을 사용하고 Ledger·Category·Recurring·Portfolio·Notifications의 변경을 서버 Command로 보낸다.
+- Android 결제 수집은 등록 package의 `AndroidRawNotification.v1`만 Keystore 암호화 Queue로 보내고, Functions가 서버 Source Registry와 단일 TypeScript parser로 내부 Capture 후보를 만든다. 전환 전 `CaptureEnvelope.v1` Queue는 레거시 callable로 계속 전달한다.
 - Portfolio의 자산, Position, 자동화 계획, 평가, 시세 갱신은 독립 Application으로 분리되고 얇은 facade에서만 조립된다. Firebase Adapter도 state loader, mapper, encoder, mutation writer, refresh lease로 나뉜다.
 - Firestore Rules는 일반 클라이언트 쓰기를 막고 활성 Membership 기반 읽기만 허용한다. Storage Rules는 시장 카탈로그 읽기만 공개하고 모든 클라이언트 쓰기를 막는다.
 - 운영 migration은 배포 Functions에 노출하지 않고 별도 CLI에서만 실행한다. source drift, target 충돌, 미해결 명의·creator가 있으면 추정하거나 덮어쓰지 않는다.
@@ -31,10 +32,10 @@
 
 ## 3. 검증 근거
 
-- Functions: 241개 파일, 2,299개 테스트 통과; 타입 검사, 아키텍처 33개, 런타임 경계 위반 0건, 빌드와 bootstrap 로딩 통과
+- Functions: 246개 테스트 파일, 2,322개 테스트 통과; 타입 검사, 아키텍처 33개, 런타임 경계 위반 0건, 빌드 통과
 - Firebase Emulator: Firestore Rules 7개, Storage Rules 3개, Firebase Adapter·migration·TTL 통합 36개 통과
 - Web: 7개 suite, 28개 테스트와 Next.js production build 통과
-- Android: 단위 테스트 25개와 Debug APK 조립 통과
+- Android: 단위 테스트 29개와 Debug APK 조립 통과
 
 일반 `npm test`에서 비실행되는 항목은 Emulator 환경에서 별도로 실행하는 통합 suite와 교체 전 PWA 동작을 기록한 의도적 legacy characterization뿐이다. 제품 결정을 기다리는 `test.todo`는 없다.
 

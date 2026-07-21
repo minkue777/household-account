@@ -16,15 +16,19 @@ data class CaptureSubmissionReceipt(
 )
 
 interface CaptureSubmissionClient {
-    suspend fun submit(envelope: CaptureEnvelopeV1): CaptureSubmissionReceipt
+    suspend fun submit(envelope: CaptureDeliveryEnvelope): CaptureSubmissionReceipt
 }
 
 class CallableCaptureSubmissionClient(
     private val gateway: AuthenticatedCallableGateway
 ) : CaptureSubmissionClient {
 
-    override suspend fun submit(envelope: CaptureEnvelopeV1): CaptureSubmissionReceipt {
-        val response = gateway.call(FUNCTION_NAME, envelope.toMap())
+    override suspend fun submit(envelope: CaptureDeliveryEnvelope): CaptureSubmissionReceipt {
+        val functionName = when (envelope) {
+            is RawNotificationEnvelopeV1 -> RAW_NOTIFICATION_FUNCTION_NAME
+            is CaptureEnvelopeV1 -> LEGACY_ENVELOPE_FUNCTION_NAME
+        }
+        val response = gateway.call(functionName, envelope.toMap())
         val result = response.objectValue("result") ?: response
         val transaction = result.objectValue("transactionResult")?.toReceipt(transactionBranch = true)
         val balance = result.objectValue("balanceResult")?.toReceipt(transactionBranch = false)
@@ -73,7 +77,8 @@ class CallableCaptureSubmissionClient(
         this[key] as? Map<String, Any?>
 
     companion object {
-        const val FUNCTION_NAME = "submitCaptureEnvelope"
+        const val RAW_NOTIFICATION_FUNCTION_NAME = "submitAndroidRawNotification"
+        const val LEGACY_ENVELOPE_FUNCTION_NAME = "submitCaptureEnvelope"
     }
 }
 

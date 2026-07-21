@@ -1,0 +1,28 @@
+{
+  "fixtureVersion": 1,
+  "contractVersion": "android-raw-notification.v1",
+  "cases": [
+    {
+      "caseId": "samsung-sms-approval-raw",
+      "requirementIds": ["ING-001", "ING-002", "PARSE-SAMSUNG-001", "DEC-066"],
+      "input": {
+        "contractVersion": "android-raw-notification.v1",
+        "observationId": "observation.android.rawfixture001",
+        "packageName": "com.samsung.android.messaging",
+        "notification": {
+          "postedAt": "2026-07-31T17:41:00+09:00",
+          "title": "문자 메시지",
+          "text": "",
+          "bigText": "",
+          "textLines": [
+            "[Web발신]",
+            "삼성1876승인 이*선",
+            "20,300원 일시불",
+            "07/31 17:40 롯데쇼핑동탄",
+            "누적881,545원"
+          ]
+        }
+      }
+    }
+  ]
+}

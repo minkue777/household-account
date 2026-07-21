@@ -27,7 +27,7 @@ object AndroidCaptureDelivery {
 
     suspend fun enqueueAndFlush(
         context: Context,
-        envelope: CaptureEnvelopeV1
+        envelope: CaptureDeliveryEnvelope
     ): CaptureFlushOutcome? {
         val scope = resolveScope(context)
         if (!queue(context).enqueue(scope, envelope)) return null

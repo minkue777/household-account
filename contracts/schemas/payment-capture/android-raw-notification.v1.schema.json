@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://household-account.local/schemas/payment-capture/android-raw-notification.v1.schema.json",
+  "title": "Android Raw Notification V1",
+  "description": "Android가 등록 package의 원문 알림을 Functions server parser로 전달하는 계약입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "observationId", "packageName", "notification"],
+  "properties": {
+    "contractVersion": { "const": "android-raw-notification.v1" },
+    "observationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "packageName": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 255,
+      "pattern": "^[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+$"
+    },
+    "notification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["postedAt"],
+      "properties": {
+        "postedAt": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?(?:Z|[+-]\\d{2}:\\d{2})$"
+        },
+        "title": { "type": "string", "maxLength": 4096 },
+        "text": { "type": "string", "maxLength": 32768 },
+        "bigText": { "type": "string", "maxLength": 65536 },
+        "textLines": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "type": "string", "maxLength": 4096 }
+        }
+      }
+    }
+  }
+}

@@ -1,13 +1,13 @@
 # Android 결제 알림 수집 모듈 요구사항
 
 > 상위 Bounded Context: [Payment Capture](../../requirements.md)  
-> 아키텍처 역할: Android Edge Parser / Inbound Adapter / Application  
+> 아키텍처 역할: Android Raw Inbound Adapter + Functions Server Parser / Application  
 > 상세 설계: [모듈 상세 설계](design.md)  
 > 상태와 테스트 수준 표기는 [공통 문서 규칙](../../../../governance/conventions.md)을 따릅니다.
 
 ## 1. 독립 모듈 책임
 
-이 모듈은 Android 시스템 알림을 결제 입력으로 변환하는 단일 유스케이스 경계를 소유합니다. 알림 envelope 생성, 출처 선택, 공급자별 파싱, 승인 저장 결정, 취소 대상 탐색까지 담당하며 UI, Firestore SDK, FCM 전송 방식과 분리되어야 합니다.
+이 모듈은 Android 시스템 알림을 서버 권위의 결제 입력으로 변환하는 단일 유스케이스 경계를 소유합니다. Android는 등록 패키지 확인, 다목적 앱의 최소 전송 admission, 원문 envelope 생성·암호화 Queue만 담당합니다. Functions가 서버 Source Registry로 출처·parser를 선택하고 공급자별 파싱, 승인 저장 결정, 취소 대상 탐색을 수행하며 UI, Firestore SDK, FCM 전송 방식과 분리되어야 합니다.
 
 핵심 출력은 선택적인 승인·취소 후보와 선택적인 지역화폐 잔액 후보입니다. 한 알림에 두 후보가 함께 있거나 잔액만 있어도 각각 독립 branch로 제출하며, 실제 거래와 잔액 변경은 거래 원장·지역화폐 모듈의 공개 포트를 통해 요청합니다. 파서 개선용 원문 수집은 운영 Domain 규칙이 아니라 교체·제거 가능한 Diagnostic Adapter입니다.
 
@@ -15,14 +15,15 @@
 
 포함 범위:
 
-- Android 알림 필드에서 정규화된 입력 envelope 생성
-- 등록된 패키지와 그 패키지에 연결된 전용 parser에 따른 출처 선택
-- 카드·간편결제·지역화폐·청구 공급자별 승인/취소 파싱
+- Android 알림 필드에서 `AndroidRawNotification.v1` 생성과 72시간 암호화 Queue 전송
+- Android의 등록 패키지 allowlist와 문자·카카오톡 원문 최소화 admission
+- Functions Source Registry가 등록 package에 연결한 전용 parser 선택
+- Functions의 카드·간편결제·지역화폐·청구 공급자별 승인/취소 파싱
 - 30초 메모리 중복과 영속 거래 중복 판정
 - 가맹점 규칙, 기본 카테고리, 등록 카드 일치 결과를 조합한 승인 저장 결정
 - 취소 원거래 탐색과 일반 거래·월 분할 그룹 취소 명령 생성
 - 저장 성공이 확인된 뒤 QuickEdit 및 완료 event에 결과 전달
-- 원문 없는 수집 observation과 거래·잔액 branch key를 암호화 로컬 Queue에 보관하고 branch별 같은 idempotency key로 서버 전송 재시도
+- 원문 알림 envelope와 observation ID를 암호화 로컬 Queue에 보관하고 같은 idempotency key로 서버 전송 재시도
 - 자동 등록 원본의 불변 capture provenance와 이후 분할·합치기까지 이어지는 lineage 계약 생성
 - 파서 개선 기간에 한정된 진단 원문 Adapter 호출
 
@@ -39,7 +40,7 @@
 
 | 데이터 | 이 모듈의 권한 | 비고 |
 |---|---|---|
-| 지원 출처 순서와 공급자별 파서 | 소유 | 코드와 골든 fixture가 함께 변경되어야 합니다. |
+| 서버 Source Registry와 공급자별 TypeScript parser | 소유 | Functions 코드와 골든 fixture가 함께 변경되어야 합니다. Android에는 parser ID·version을 복제하지 않습니다. |
 | 30초 알림 중복 cache | 소유 | 프로세스 수명 안의 일시 상태입니다. |
 | 파싱 결과 DTO | 소유 | 선택적인 승인·취소 후보와 잔액 후보, 금액, 일시, 가맹점, 카드, parser 메타데이터를 표현합니다. |
 | Capture provenance·lineage 입력 계약 | 소유 | 원 알림에서 추출한 불변 결제 증거와 observation ID를 Ledger 공개 Port에 전달합니다. 파생 거래 자체는 Ledger가 소유합니다. |
@@ -51,7 +52,7 @@
 
 ## 4. 공개 계약·의존 모듈
 
-공개 입력 계약은 알림 패키지명, 게시 시각, 제목, `text`, `bigText`, `textLines`를 담은 `NotificationEnvelope`입니다. 공개 출력 계약은 거래 branch와 잔액 branch의 생성·중복·무시·거부·재시도 결과를 각각 구분하며, 한쪽 결과로 다른 쪽 결과를 성공 또는 실패로 축약하지 않습니다. 성공한 거래 결과에만 거래 문서 ID 또는 원자적 취소 결과를 포함합니다.
+Android→Functions 공개 입력 계약은 observation ID, 알림 패키지명, 게시 시각, 제목, `text`, `bigText`, `textLines`만 담은 `AndroidRawNotification.v1`입니다. `householdId`, `createdBy`, `sourceType`, `parserId`, 카드·거래 후보를 클라이언트 입력으로 받지 않습니다. Functions가 인증 Membership과 서버 Registry를 사용해 내부 `CaptureEnvelope.v1`을 만든 뒤, 공개 출력 계약에서 거래 branch와 잔액 branch의 생성·중복·무시·거부·재시도 결과를 각각 구분합니다.
 
 의존 모듈:
 
@@ -66,23 +67,24 @@
 
 ### 4.1 출처 패키지 계약
 
-현재 구현은 KB → NH → 네이버페이 → 토스 → 카카오페이 → 온누리 → Paybooc → SMS → 삼성 → 롯데 → 경기 → 대전 → 세종 → 도시가스 순으로 package 또는 본문을 평가하고 첫 일치에서 멈춘다. 아래 표의 `본문만으로 선택`은 현재 구현을 특성화한 것이며 목표 정책이 아니다.
+현재 구현은 Android에서 package allowlist를 먼저 확인한 뒤 원문을 서버에 전송하고, Functions가 같은 package의 활성 Registry 항목 하나로 parser를 확정합니다. 미등록 package의 본문은 검사하지 않으며, 등록 package의 전용 parser가 실패해도 다른 source parser로 fallback하지 않습니다.
 
-| 출처 | 알려진 패키지 | 본문만으로 선택 |
+| 출처 | 등록 패키지 | Android 전송 admission |
 |---|---|---|
-| KB | com.kbcard.cxh.appcard, com.kbcard.kbkookmincard | 가능 |
-| NH | nh.smart.nhallonepay | 가능 |
-| 네이버페이 | com.naverfin.payapp | 가능 |
-| 토스 | viva.republica.toss | 가능 |
-| 카카오페이 | com.kakaopay.app | 가능 |
-| 디지털 온누리 | com.komsco.kpay | 가능 |
-| Paybooc/ISP | kvp.jjy.MispAndroid320 | 가능 |
-| 경기지역화폐 | com.mobiletoong.gpay, com.coocon.chakwallet, gov.gyeonggi.ggcard | 가능 |
-| 대전사랑카드 | kr.co.nmcs.daejeonpay | 가능 |
-| 세종 여민전 | gov.sejong.yeominpay | 가능 |
-| 삼성·롯데 | parser용 고정 패키지 없음 | 가능 |
-| 도시가스 | com.kakao.talk | 패키지와 본문이 모두 일치해야 함 |
-| SMS | com.google.android.apps.messaging, com.samsung.android.messaging, com.android.mms | 지원 결제 본문도 일치해야 함 |
+| KB | com.kbcard.cxh.appcard, com.kbcard.kbkookmincard | 전용 앱이므로 원문 후보 전달 |
+| NH | nh.smart.nhallonepay | 전용 앱이므로 원문 후보 전달 |
+| 네이버페이 | com.naverfin.payapp | 전용 앱이므로 원문 후보 전달 |
+| 토스 | viva.republica.toss | 걸음 수 알림 제외 후 전달 |
+| 카카오페이 | com.kakaopay.app | 전용 앱이므로 원문 후보 전달 |
+| 디지털 온누리 | com.komsco.kpay | 전용 앱이므로 원문 후보 전달 |
+| Paybooc/ISP | kvp.jjy.MispAndroid320 | 전용 앱이므로 원문 후보 전달 |
+| 삼성 | com.samsung.android.spay, kr.co.samsungcard.mpocket | 전용 앱이므로 원문 후보 전달 |
+| 롯데 | com.lcacApp | 전용 앱이므로 원문 후보 전달 |
+| 경기지역화폐 | com.mobiletoong.gpay, com.coocon.chakwallet, gov.gyeonggi.ggcard | 전용 앱이므로 원문 후보 전달 |
+| 대전사랑카드 | kr.co.nmcs.daejeonpay | 전용 앱이므로 원문 후보 전달 |
+| 세종 여민전 | gov.sejong.yeominpay | 전용 앱이므로 원문 후보 전달 |
+| 도시가스 | com.kakao.talk | 도시가스 청구·금액 marker가 있는 후보만 전달 |
+| SMS | com.google.android.apps.messaging, com.samsung.android.messaging, com.android.mms | 지원 금융 marker가 있는 후보만 전달 |
 
 신한·삼성·현대·롯데·하나·우리·IBK·은행 앱 일부는 debug-only 패키지로 등록되어 있다. 이 목록은 지출 parser 지원 목록이 아니라 원문 로그 수집 목록이다. 토스 제목이 숫자와 걸음 형식이면 원문 로그에서 제외한다.
 
@@ -94,37 +96,37 @@
 
 | ID | 상태 | 요구사항 | 경계·예외 | 근거 | 테스트 |
 |---|---|---|---|---|---|
-| ING-001 | 현재 명세 | 알림에서 제목, 기본 본문, 확장 본문, text lines를 추출하고 text lines, bigText, text 순으로 본문을 선택한다. | 최종 문자열이 비면 처리하지 않는다. | [CardNotificationListenerService](../../../../../../android/app/src/main/java/com/household/account/service/CardNotificationListenerService.kt) | U, UI |
-| ING-002 | 목표 명세 | Source Registry에 등록된 package의 알림만 수용하고 그 package에 매핑된 전용 parser만 실행한다. | 미등록 package는 본문이 지원 형식과 일치해도 무시한다. 등록 package의 parser가 실패해도 다른 source parser로 fallback하지 않는다. | [CardNotificationListenerService](../../../../../../android/app/src/main/java/com/household/account/service/CardNotificationListenerService.kt), [DEC-005](../../../../governance/decisions.md#dec-005) | U |
-| ING-003 | 현재 명세 | parser가 승인 결과를 만들면 등록 흐름, 취소 결과를 만들면 취소 흐름을 실행한다. | parser 실패 또는 거래 없음이면 저장하지 않는다. | 같은 근거 | U, I |
+| ING-001 | 현재 명세 | Android는 알림의 제목, 기본 본문, 확장 본문, text lines와 게시 시각을 `AndroidRawNotification.v1`으로 복사한다. Functions parser는 text lines, bigText, text 순으로 본문을 선택한다. | wire 총 본문은 65,536자로 제한하고 parser 우선순위가 높은 제목·text lines·bigText·text 순으로 보존한다. 최종 문자열이 비면 서버가 terminal ignored로 종료한다. | [Android raw envelope](../../../../../../android/app/src/main/java/com/household/account/paymentcapture/RawNotificationEnvelopeV1.kt), [서버 envelope builder](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/buildNotificationEnvelope.ts) | U, I |
+| ING-002 | 현재 명세 | Source Registry에 등록된 package의 알림만 수용하고 Functions가 그 package에 매핑된 전용 parser만 실행한다. | 클라이언트는 parser·source를 지정할 수 없다. 미등록 package는 지원 본문이어도 무시하고 parser 실패 뒤 다른 source로 fallback하지 않는다. | [Android package allowlist](../../../../../../android/app/src/main/java/com/household/account/paymentcapture/PaymentSourceRegistry.kt), [서버 Source Registry](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/model/defaultPaymentSourceRegistry.ts), [DEC-005](../../../../governance/decisions.md#dec-005), [DEC-066](../../../../governance/decisions.md#dec-066) | U, I |
+| ING-003 | 현재 명세 | Functions parser가 승인 결과를 만들면 등록 흐름, 취소 결과를 만들면 취소 흐름을 실행한다. | parser 실패 또는 거래 없음이면 Canonical 저장 없이 terminal로 응답한다. | [서버 원문 제출 Application](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/application/androidRawNotificationSubmissionApplication.ts) | U, I |
 | ING-004 | 특성화 | 동일 패키지·전체 본문 hash를 30초 동안 메모리 중복으로 보고 재처리를 막는다. | 30,000ms까지 중복이고 30,001ms부터 다시 처리한다. 프로세스 재시작 시 기록이 사라진다. | 같은 근거 | U |
 | ING-005 | 결함 | `notification_debug_logs`는 파서 개선 기간에만 활성화하는 교체 가능한 Diagnostic Adapter이며, 인증된 household·member가 있는 등록 source 입력의 package·source·title·text·bigText·textLines·fullText·시각을 관리자 전용 ACL과 함께 best-effort로 저장한다. | 시간 TTL·자동 개별 삭제·중복 표본 삭제 없이 기능 제거 전까지 기존·신규 문서를 전부 보존한다. 진단 실패는 업무 결과를 바꾸지 않고 원문을 Domain·Queue·receipt·Event로 전달하지 않는다. 파서 안정화 뒤 Writer·Rules·index·collection을 함께 제거한다. | [알림 수집 Service](../../../../../../android/app/src/main/java/com/household/account/service/CardNotificationListenerService.kt), [NotificationDebugLogRepository](../../../../../../android/app/src/main/java/com/household/account/data/NotificationDebugLogRepository.kt), [DEC-002](../../../../governance/decisions.md#dec-002), [DEC-047](../../../../governance/decisions.md#dec-047) | I, 보안 E2E |
-| ING-006 | 현재 명세 | Google 메시지, Samsung 메시지, Android MMS는 지원 결제 형식과 일치할 때 SMS 입력으로 처리한다. | 후보는 전체, 첫 행 제거, 첫 두 행 제거 순이다. | [SmsNotificationParser](../../../../../../android/app/src/main/java/com/household/account/parser/SmsNotificationParser.kt) | U |
-| ING-007 | 현재 명세 | 각 SMS 후보는 KB → NH → 네이버페이 → 토스 → 카카오페이 → 온누리 → Paybooc → 삼성 → 롯데 → 경기 → 대전 순으로 시도하고, 모두 실패하면 문자 청구 parser를 마지막에 시도한다. | 후보별 첫 성공 결과만 사용한다. 세종·도시가스 parser는 현재 SMS 내부 순서에 포함되지 않는다. | 같은 근거 | U |
-| ING-008 | 목표 명세 | Android는 원문 없는 최소 수집 observation과 존재하는 거래·잔액 branch key를 Android Keystore 키 기반 AES-256-GCM 로컬 Queue에 먼저 저장하고 같은 idempotency key로 서버 전송을 재시도한다. | 최대 보존은 `queuedAt`부터 72시간이다. 모든 존재 branch의 terminal 서버 결과, 로그아웃·멤버·가구 변경, 만료, 키 무효화·복호화 실패 시 즉시 삭제한다. 한 branch가 성공하고 다른 branch가 retryable이면 entry와 미완료 branch key를 유지하며 성공 branch를 다시 실행하지 않는다. | [DEC-032](../../../../governance/decisions.md#dec-032) | U, I, 보안 E2E |
+| ING-006 | 현재 명세 | Google 메시지, Samsung 메시지, Android MMS는 넓은 금융 marker admission을 통과한 원문만 서버 SMS parser 입력으로 처리한다. | Android admission은 개인정보 전송 최소화만 담당하고 승인·취소·금액·가맹점을 해석하지 않는다. 서버 후보는 전체, 첫 행 제거, 첫 두 행 제거 순이다. | [Android admission](../../../../../../android/app/src/main/java/com/household/account/paymentcapture/RawNotificationForwardingPolicy.kt), [서버 SMS parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/smsBillProviderParser.ts) | U, I |
+| ING-007 | 현재 명세 | 서버의 각 SMS 후보는 KB → NH → 네이버페이 → 토스 → 카카오페이 → 온누리 → Paybooc → 삼성 → 롯데 → 경기 → 대전 순으로 시도하고, 모두 실패하면 문자 청구 parser를 마지막에 시도한다. | 후보별 첫 성공 결과만 사용한다. 세종·도시가스 parser는 SMS 내부 순서에 포함되지 않는다. | [서버 SMS parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/smsBillProviderParser.ts) | U |
+| ING-008 | 현재 명세 | Android는 `AndroidRawNotification.v1`과 observation ID를 Android Keystore 키 기반 AES-256-GCM 로컬 Queue에 먼저 저장하고 같은 idempotency key로 서버 전송을 재시도한다. | 최대 보존은 `queuedAt`부터 72시간이다. `completion=terminal`, 로그아웃·멤버·가구 변경, 만료, 키 무효화·복호화 실패 시 삭제한다. 부분 retryable이면 entry를 유지하고 이미 생성된 거래의 QuickEdit 후속 효과는 반복하지 않는다. 전환 전 `CaptureEnvelope.v1` Queue entry도 기존 callable로 전달해 유실하지 않는다. | [Android Queue](../../../../../../android/app/src/main/java/com/household/account/paymentcapture/CaptureDeliveryQueue.kt), [DEC-032](../../../../governance/decisions.md#dec-032), [DEC-066](../../../../governance/decisions.md#dec-066) | U, I, 보안 E2E |
 | ING-009 | 목표 명세 | 한 알림에서 거래 후보와 잔액 후보를 독립 branch로 만들고 서버 receipt에 각 branch의 상태·결과·downstream key를 따로 보존한다. | balance-only는 Payment Configuration·Ledger를 호출하지 않는다. 카드 미등록·거래 parse 실패·Ledger 실패가 유효한 잔액 제출을 막지 않고, 잔액 실패도 이미 확정된 거래를 되돌리거나 실패로 바꾸지 않는다. 지역화폐 payment branch에는 parser가 검증한 localCurrencyType만 전달하고 홈 선택값으로 추정하지 않는다. | [알림 수집 Service](../../../../../../android/app/src/main/java/com/household/account/service/CardNotificationListenerService.kt), [지역화폐 잔액 요구사항](../../../household-finance/modules/local-currency/requirements.md#5-요구사항), [DEC-057](../../../../governance/decisions.md#dec-057) | U, I, C |
 
 ### 5.2 지원 입력 형식
 
 | ID | 상태 | 출처 | 현재 지원 동작 | 근거 | 테스트 |
 |---|---|---|---|---|---|
-| PARSE-KB-001 | 현재 명세 | KB국민카드 | 승인·취소, MM/DD HH:mm 형식과 금액·일시 요약 형식, 국민(번호), 가맹점 추출. 요약형 시간은 게시 시각, 없으면 00:00 | [KBCardParser](../../../../../../android/app/src/main/java/com/household/account/parser/KBCardParser.kt) | U |
-| PARSE-NH-001 | 현재 명세 | NH Pay | 승인·승인취소, 금액·M/D HH:mm·가맹점·농협 카드 토큰 추출 | [NHPayParser](../../../../../../android/app/src/main/java/com/household/account/parser/NHPayParser.kt) | U |
-| PARSE-NAVER-001 | 현재 명세 | 네이버페이 | 가맹점에서 금액을 결제했다는 승인 문장을 처리하고 게시 시각, 없으면 현재 시각을 거래 시각으로 사용 | [NaverPayParser](../../../../../../android/app/src/main/java/com/household/account/parser/NaverPayParser.kt) | U |
-| PARSE-TOSS-001 | 현재 명세 | 토스 | 승인·취소, 체크카드·페이스페이 형식, 가승인 제외, 승인 시 max(총액-캐시백, 0), 취소는 총액 사용 | [TossBankParser](../../../../../../android/app/src/main/java/com/household/account/parser/TossBankParser.kt) | U |
-| PARSE-KAKAO-001 | 현재 명세 | 카카오페이 | 결제 완료 제목과 본문의 가맹점·금액을 승인으로 처리하고 게시 시각, 없으면 현재 시각 사용 | [KakaoPayParser](../../../../../../android/app/src/main/java/com/household/account/parser/KakaoPayParser.kt) | U |
-| PARSE-ONNURI-001 | 현재 명세 | 디지털 온누리 | 상품권 결제 문장의 가맹점·금액을 승인으로 처리하고 게시 시각, 없으면 현재 시각 사용 | [DigitalOnnuriParser](../../../../../../android/app/src/main/java/com/household/account/parser/DigitalOnnuriParser.kt) | U |
-| PARSE-PAYBOOC-001 | 현재 명세 | Paybooc/ISP | 인라인·분리형 승인과 매출취소, 양수 금액·비어 있지 않은 가맹점, 카드 라벨·마스킹 번호 정규화 | [PayboocISPParser](../../../../../../android/app/src/main/java/com/household/account/parser/PayboocISPParser.kt) | U |
-| PARSE-SAMSUNG-001 | 현재 명세 | 삼성카드 | 승인·취소, 금액, MM/DD HH:mm, 가맹점, 삼성 카드 번호 추출 | [SamsungCardParser](../../../../../../android/app/src/main/java/com/household/account/parser/SamsungCardParser.kt) | U |
-| PARSE-LOTTE-001 | 현재 명세 | 롯데카드 | 승인·취소, 금액, 카드 토큰, 일시불·할부 메타데이터와 가맹점 추출 | [LotteCardParser](../../../../../../android/app/src/main/java/com/household/account/parser/LotteCardParser.kt) | U |
-| PARSE-GYEONGGI-001 | 현재 명세 | 경기지역화폐 | 결제 지출과 잔액을 별도로 추출하고 local_currency로 분류 | [GyeonggiLocalCurrencyParser](../../../../../../android/app/src/main/java/com/household/account/parser/GyeonggiLocalCurrencyParser.kt) | U, I |
-| PARSE-DAEJEON-001 | 현재 명세 | 대전사랑카드 | 상세·fallback 승인 형식, 카드 번호, 가맹점, 잔액 추출 | [DaejeonLocalCurrencyParser](../../../../../../android/app/src/main/java/com/household/account/parser/DaejeonLocalCurrencyParser.kt) | U, I |
-| PARSE-SEJONG-001 | 현재 명세 | 세종 여민전 | 결제 완료와 보유 잔액을 각각 추출하고 local_currency로 분류 | [SejongLocalCurrencyParser](../../../../../../android/app/src/main/java/com/household/account/parser/SejongLocalCurrencyParser.kt) | U, I |
-| PARSE-CITYGAS-001 | 결함 | KakaoTalk 도시가스 청구 | 도시가스 청구 문구와 총액이 있으면 fixed·bill 지출을 만든다. 제목이 일치하면 청구 월과 memo를 사용하고, 제목이 없으면 알림 수신 월로 가맹점명을 만들며 memo는 빈 값이다. 유효한 납부마감일은 지출 날짜이고 문구가 없으면 알림 수신일을 사용한다. 현재 마감일 문구가 있으나 유효하지 않으면 전체 parse가 실패하는 결함은 목표에서 알림 수신일 fallback으로 교정한다. | [CityGasBillParser](../../../../../../android/app/src/main/java/com/household/account/parser/CityGasBillParser.kt), [DEC-007](../../../../governance/decisions.md#dec-007) | U |
-| PARSE-SMSBILL-001 | 현재 명세 | NH 문자 청구 | 월별 관리비 등 카드 정상 납부 완료 메시지를 승인 지출로 만든다. | [SmsCardMessageParser](../../../../../../android/app/src/main/java/com/household/account/parser/SmsCardMessageParser.kt) | U |
-| PARSE-COMMON-001 | 목표 명세 | 모든 Android parser 공통 계약 | `NotificationEnvelope.postedAt`을 `Asia/Seoul`로 변환해 수신 시각·날짜 추론 기준으로 사용하고, 유효한 게시 시각이 없을 때만 주입 `Clock`을 사용한다. 기기 기본 timezone과 처리 실행 시각을 직접 읽지 않는다. 마이그레이션 중에는 기존 Kotlin parser와 TypeScript 호환성 parser가 동일한 비식별 원문 fixture를 소비하고 공개 정규화 결과가 일치해야 한다. | [KB parser](../../../../../../android/app/src/main/java/com/household/account/parser/KBCardParser.kt), [LocalCurrencyParsingSupport](../../../../../../android/app/src/main/java/com/household/account/parser/LocalCurrencyParsingSupport.kt), [CityGas parser](../../../../../../android/app/src/main/java/com/household/account/parser/CityGasBillParser.kt), [공통 parser fixture](../../../../../../contracts/fixtures/payment-capture/android-provider-parser-golden.v1.json), [DEC-023](../../../../governance/decisions.md#dec-023), [DEC-029](../../../../governance/decisions.md#dec-029) | U, C |
+| PARSE-KB-001 | 현재 명세 | KB국민카드 | 승인·취소, MM/DD HH:mm 형식과 금액·일시 요약 형식, 국민(번호), 가맹점 추출. 요약형 시간은 게시 시각, 없으면 00:00 | [서버 카드 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/cardProviderParsers.ts) | U |
+| PARSE-NH-001 | 현재 명세 | NH Pay | 승인·승인취소, 금액·M/D HH:mm·가맹점·농협 카드 토큰 추출 | [서버 카드 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/cardProviderParsers.ts) | U |
+| PARSE-NAVER-001 | 현재 명세 | 네이버페이 | 가맹점에서 금액을 결제했다는 승인 문장을 처리하고 게시 시각, 없으면 현재 시각을 거래 시각으로 사용 | [서버 wallet parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/walletProviderParsers.ts) | U |
+| PARSE-TOSS-001 | 현재 명세 | 토스 | 승인·취소, 체크카드·페이스페이 형식, 가승인 제외, 승인 시 max(총액-캐시백, 0), 취소는 총액 사용 | [서버 wallet parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/walletProviderParsers.ts) | U |
+| PARSE-KAKAO-001 | 현재 명세 | 카카오페이 | 결제 완료 제목과 본문의 가맹점·금액을 승인으로 처리하고 게시 시각, 없으면 현재 시각 사용 | [서버 wallet parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/walletProviderParsers.ts) | U |
+| PARSE-ONNURI-001 | 현재 명세 | 디지털 온누리 | 상품권 결제 문장의 가맹점·금액을 승인으로 처리하고 게시 시각, 없으면 현재 시각 사용 | [서버 wallet parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/walletProviderParsers.ts) | U |
+| PARSE-PAYBOOC-001 | 현재 명세 | Paybooc/ISP | 인라인·분리형 승인과 매출취소, 양수 금액·비어 있지 않은 가맹점, 카드 라벨·마스킹 번호 정규화 | [서버 카드 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/cardProviderParsers.ts) | U |
+| PARSE-SAMSUNG-001 | 현재 명세 | 삼성카드 | 승인·취소, 금액, MM/DD HH:mm, 가맹점, 삼성 카드 번호 추출 | [서버 카드 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/cardProviderParsers.ts) | U |
+| PARSE-LOTTE-001 | 현재 명세 | 롯데카드 | 승인·취소, 금액, 카드 토큰, 일시불·할부 메타데이터와 가맹점 추출 | [서버 카드 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/cardProviderParsers.ts) | U |
+| PARSE-GYEONGGI-001 | 현재 명세 | 경기지역화폐 | 결제 지출과 잔액을 별도로 추출하고 local_currency로 분류 | [서버 지역화폐 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/localCurrencyProviderParsers.ts) | U, I |
+| PARSE-DAEJEON-001 | 현재 명세 | 대전사랑카드 | 상세·fallback 승인 형식, 카드 번호, 가맹점, 잔액 추출 | [서버 지역화폐 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/localCurrencyProviderParsers.ts) | U, I |
+| PARSE-SEJONG-001 | 현재 명세 | 세종 여민전 | 결제 완료와 보유 잔액을 각각 추출하고 local_currency로 분류 | [서버 지역화폐 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/localCurrencyProviderParsers.ts) | U, I |
+| PARSE-CITYGAS-001 | 현재 명세 | KakaoTalk 도시가스 청구 | 도시가스 청구 문구와 총액이 있으면 fixed·bill 지출을 만든다. 제목이 일치하면 청구 월을 사용하고, 제목이 없으면 알림 수신 월로 가맹점명을 만든다. 유효한 납부마감일은 지출 날짜이고 없거나 유효하지 않으면 알림 수신일을 사용한다. | [서버 도시가스 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/parseCityGasBill.ts), [DEC-007](../../../../governance/decisions.md#dec-007) | U |
+| PARSE-SMSBILL-001 | 현재 명세 | NH 문자 청구 | 월별 관리비 등 카드 정상 납부 완료 메시지를 승인 지출로 만든다. | [서버 SMS parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/smsBillProviderParser.ts) | U |
+| PARSE-COMMON-001 | 현재 명세 | 모든 Android server parser 공통 계약 | `NotificationEnvelope.postedAt`을 `Asia/Seoul`로 변환해 수신 시각·날짜 추론 기준으로 사용하고, 유효한 게시 시각이 없을 때만 주입 `Clock`을 사용한다. Functions process timezone과 처리 실행 시각을 직접 읽지 않는다. TypeScript parser 하나가 비식별 원문 fixture의 정본 구현이며 Android Kotlin parser 복사본은 두지 않는다. | [서버 parser support](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/providerParsingSupport.ts), [공통 parser fixture](../../../../../../contracts/fixtures/payment-capture/android-provider-parser-golden.v1.json), [DEC-023](../../../../governance/decisions.md#dec-023), [DEC-029](../../../../governance/decisions.md#dec-029), [DEC-066](../../../../governance/decisions.md#dec-066) | U, C |
 
-각 parser의 골든 샘플, 현재 ParseResult/Expense 출력, 승인·취소 여부, 날짜 추론, 카드 정규화는 별도 Fixture로 관리한다. 장차 공통 입력 DTO를 만들더라도 현재 구현 명세와 혼동하지 않도록 별도 이름을 사용한다. 현재 연도·기기 기본 timezone·처리 시점의 `now`를 직접 사용하는 동작은 레거시 결함으로 두고, 목표 parser는 PARSE-COMMON-001과 DEC-029의 `PaymentOccurrenceYearPolicyV1`으로 서울 수신 시각보다 미래가 아닌 가장 가까운 유효 연도를 선택한다. 토스 캐시백 승인·취소 금액 불일치는 별도 결함이다.
+각 parser의 골든 샘플, 승인·취소 여부, 날짜 추론, 카드 정규화는 비식별 Fixture로 관리하고 Functions TypeScript parser에 직접 적용합니다. Android는 같은 정규표현식을 복제하지 않습니다. 모든 연도 없는 날짜는 PARSE-COMMON-001과 DEC-029의 `PaymentOccurrenceYearPolicyV1`으로 서울 수신 시각보다 미래가 아닌 가장 가까운 유효 연도를 선택합니다.
 
 ### 5.3 승인 저장
 
@@ -208,9 +210,10 @@
 | [DEC-028](../../../../governance/decisions.md#dec-028) | 확정 | 현재 멤버의 등록 카드만 조회하고 하나 이상 일치하면 저장합니다. 타 멤버 카드의 일치 여부는 무시하고 본인 카드 여러 건 일치도 허용합니다. |
 | [DEC-029](../../../../governance/decisions.md#dec-029) | 확정 | 연도 없는 결제 시각은 서울 수신 시각보다 미래가 아닌 가장 가까운 연도로 추론하며 Shortcut과 같은 Policy·fixture를 사용합니다. |
 | [DEC-031](../../../../governance/decisions.md#dec-031) | 확정 | 원거래 없는 취소는 무변경 종료하고 보류·억제 기록을 만들지 않으며 이후 승인은 일반 입력으로 등록합니다. |
-| [DEC-032](../../../../governance/decisions.md#dec-032) | 확정 | 원문 없는 observation을 Keystore 키 기반 AES-256-GCM으로 암호화해 최대 72시간 Queue에 보관하고 terminal·로그아웃·가구 변경·만료 시 삭제합니다. |
+| [DEC-032](../../../../governance/decisions.md#dec-032) | 확정 | raw notification observation을 Keystore 키 기반 AES-256-GCM으로 암호화해 최대 72시간 Queue에 보관하고 terminal·로그아웃·가구 변경·만료 시 삭제합니다. |
 | [DEC-041](../../../../governance/decisions.md#dec-041) | 확정 | 완전 일치하는 유일한 capture lineage는 원본·모든 파생 지출을 자동 원자 삭제하고 다른 결제 lineage는 보존합니다. |
 | [DEC-047](../../../../governance/decisions.md#dec-047) | 확정 | 임시 진단 문서는 TTL 없이 전부 보존하며 파서 진단 기능 제거 시 Writer·Rules·index·컬렉션을 함께 제거합니다. |
+| [DEC-066](../../../../governance/decisions.md#dec-066) | 확정 | Android는 원문 전달만 담당하고 Functions의 Source Registry·TypeScript parser를 단일 정본으로 사용합니다. |
 
 ## 9. 모듈 테스트 시나리오
 
@@ -221,14 +224,14 @@
 | T-CAN-004 | 현재 명세 | actor 가구 없음, 가맹점 규칙 있음·없음 / 취소 후보 조회 준비 / actor 없으면 조회·변경 없음, 규칙이 있으면 mapped 가맹점, 없으면 정규 원 가맹점으로 같은 가구를 조회 | CAN-001 |
 | T-CAN-006 | 현재 명세 | 월 분할 개수 1·2·12와 취소액 차이 `count-1`·`count` / 취소 일치 판정 / `count-1`까지 허용하고 `count`부터 불일치 | CAN-006, DEC-001 |
 | T-DUP-001 | 특성화 | 같은 가구·날짜·분·금액·정규 가맹점의 다른 카드·Android/Shortcut source와 날짜·분·금액·가맹점 중 하나씩 다른 쌍 / 승인 두 건 / 완전 동일 tuple의 두 번째만 중복으로 버리고 한 요소라도 다르면 별도 거래 생성 | ING-SAVE-005, IOS-006, DEC-003 |
-| T-ING-001 | 특성화 | text·bigText·textLines와 제목 / envelope 생성 / textLines 우선이며 제목이 첫 줄 | ING-001 |
+| T-ING-001 | 현재 명세 | text·bigText·textLines와 제목, 65,536자 초과 / Android raw DTO 생성 후 서버 envelope 구성 / 계약 한도 안에서 전달되고 초과 시 parser 우선순위 순으로 보존되며 서버에서 textLines 우선·제목이 첫 줄 | ING-001 |
 | T-ING-002 | 특성화 | 같은 package·본문을 29,999ms·30,000ms·30,001ms 간격으로 입력 / 처리 / 앞 둘 중복, 마지막 재처리 | ING-004 |
-| T-ING-003 | 목표 | 등록 KB package+KB 본문, 등록 KB package+토스 본문, 미등록 package+KB 본문 / 출처 판별·parse / 첫 입력만 KB 처리, 둘째는 KB 실패 후 fallback 없음, 셋째는 parser 실행 없이 무시 | ING-002, DEC-005 |
-| T-QUEUE-001 | 목표 | offline·앱 재시작·72시간 경계·terminal 결과·로그아웃·멤버/가구 변경·키 무효화 / Queue·WorkManager 처리 / 암호문만 저장, 같은 key 재시도, 72시간 미만만 전송, 삭제 조건 뒤 entry·전송 없음 | ING-008, DEC-032 |
+| T-ING-003 | 현재 명세 | 등록 KB package+KB 본문, 등록 KB package+토스 본문, 미등록 package+KB 본문, client parser/source 주입 / 서버 출처 판별·parse / 첫 입력만 KB 처리, 둘째 fallback 없음, 셋째 parser 미실행, spoof 필드 계약 거부 | ING-002, DEC-005, DEC-066 |
+| T-QUEUE-001 | 현재 명세 | offline·앱 재시작·72시간 경계·terminal·partial 결과·레거시 entry·로그아웃·키 무효화 / Queue·WorkManager 처리 / raw 암호문과 같은 observation 재시도, terminal 삭제, partial 유지, QuickEdit 중복 없음, 레거시 callable 호환 | ING-008, DEC-032, DEC-066 |
 | T-DIAG-001 | 목표 | actor 없음·미등록 source·비관리자 읽기·동일 원문 반복·저장 실패·장기 경과 / 진단 수집·조회 / gate 밖 미수집·접근 거부, 등록 입력의 모든 진단 문서 유지, 별도 Secret 비수집, 업무 결과 불변 | ING-005, DEC-047 |
 | T-ING-BAL-001 | 목표 | balance-only, 카드 미등록+유효 잔액, 거래 성공+잔액 일시 실패, 거래 실패+잔액 성공, retry / submit / branch별 stable key·result 재생, 성공 branch 재호출·거짓 rollback 없음 | ING-008, ING-009 |
-| T-PARSE-001 | 특성화 | 각 공급자 승인 골든 메시지와 Google·Samsung·MMS 후보 / parse·승인 분기 / 현재 ParseResult와 Expense snapshot 일치, 승인 Port만 선택 | ING-003, ING-006, PARSE-KB-001, PARSE-NH-001, PARSE-NAVER-001, PARSE-TOSS-001, PARSE-KAKAO-001, PARSE-ONNURI-001, PARSE-PAYBOOC-001, PARSE-SAMSUNG-001, PARSE-LOTTE-001, PARSE-GYEONGGI-001, PARSE-DAEJEON-001, PARSE-SEJONG-001, PARSE-CITYGAS-001, PARSE-SMSBILL-001 |
-| T-PARSE-002 | 특성화 | 각 지원 취소 메시지와 Google·Samsung·MMS 후보 / parse·취소 분기 / 취소와 원 금액·카드·가맹점 추출, 취소 Port만 선택 | ING-003, ING-006, PARSE-KB-001, PARSE-NH-001, PARSE-TOSS-001, PARSE-PAYBOOC-001, PARSE-SAMSUNG-001, PARSE-LOTTE-001 |
+| T-PARSE-001 | 현재 명세 | 각 공급자 승인 골든 원문과 Google·Samsung·MMS 후보 / Functions parse·승인 분기 / 공개 정규화 결과와 내부 Capture 입력 일치, 승인 Port만 선택 | ING-003, ING-006, PARSE-KB-001, PARSE-NH-001, PARSE-NAVER-001, PARSE-TOSS-001, PARSE-KAKAO-001, PARSE-ONNURI-001, PARSE-PAYBOOC-001, PARSE-SAMSUNG-001, PARSE-LOTTE-001, PARSE-GYEONGGI-001, PARSE-DAEJEON-001, PARSE-SEJONG-001, PARSE-CITYGAS-001, PARSE-SMSBILL-001 |
+| T-PARSE-002 | 현재 명세 | 각 지원 취소 원문과 Google·Samsung·MMS 후보 / Functions parse·취소 분기 / 취소와 원 금액·카드·가맹점 추출, 취소 Port만 선택 | ING-003, ING-006, PARSE-KB-001, PARSE-NH-001, PARSE-TOSS-001, PARSE-PAYBOOC-001, PARSE-SAMSUNG-001, PARSE-LOTTE-001 |
 | T-PARSE-TIME-001 | 목표 | 기기 timezone이 서울과 다름, 게시 시각 있음·없음, 지연 재처리, 연말·연초 / 모든 parser 실행 / 서울 postedAt 또는 주입 Clock 기준의 동일 결과 | PARSE-COMMON-001, DEC-023, DEC-029 |
 | T-SMS-ORDER-001 | 특성화 | 둘 이상의 parser가 동시에 성공 가능한 SMS 후보와 세종·청구 후보 / parse / 명시 순서의 첫 성공, 청구는 마지막, 세종은 내부 후보 아님 | ING-007 |
 | T-CITYGAS-001 | 목표 | 제목·마감일 모두 있음, 제목 없음, 마감일 없음, 형식은 맞지만 유효하지 않은 마감일 / parse / 청구 월·memo 또는 수신 월·빈 memo, 유효 마감일 또는 수신일 fallback | PARSE-CITYGAS-001 |
@@ -239,15 +242,18 @@
 | T-CAN-LINEAGE-001 | 목표 | 미변경·수정·분할·다른 승인과 합쳐진 lineage, 불완전 legacy, 후보 0·1·복수, commit 실패 / 취소 / 유일 대상의 원본·파생 삭제와 다른 lineage 복원·receipt·dedup tombstone을 원자 확정하고 0건은 NotFound, 복수는 NeedsConfirmation, legacy 불완전은 typed 실패 | CAN-003, CAN-005, CAN-007, DEC-041 |
 | T-CAN-003 | 목표 | 취소 1~30일 전 월 분할 그룹이며 취소 당일 seed 없음 / 후보 검색 / 그룹을 범위 안에서 발견하고 31일 전은 제외 | CAN-002 |
 
-추가로 Diagnostic Adapter는 Domain 테스트에서 fake로 대체하고, 원문 저장 실패가 승인·취소 결과를 바꾸지 않는지 검증합니다. 공급자별 비식별 원문과 전체 공개 ParseResult의 단일 fixture는 [`android-provider-parser-golden.v1.json`](../../../../../../contracts/fixtures/payment-capture/android-provider-parser-golden.v1.json)이며 정상 승인, 지원 취소, 빈 필드, 0원·음수, 연말·연초, 마스킹 카드 변형을 포함합니다. 기존 Kotlin parser와 마이그레이션용 TypeScript 호환성 parser는 이 파일을 각각 직접 읽어 같은 공개 정규화 결과를 검증해야 하며, 어느 한쪽 테스트만 통과해서는 parser 변경을 완료한 것으로 보지 않습니다. parser 선택 테스트는 성공 parser ID 목록 같은 합성 입력으로 이 fixture를 대체할 수 없습니다.
+추가로 Diagnostic Adapter는 Domain 테스트에서 fake로 대체하고, 원문 저장 실패가 승인·취소 결과를 바꾸지 않는지 검증합니다. 공급자별 비식별 원문과 전체 공개 ParseResult의 단일 fixture는 [`android-provider-parser-golden.v1.json`](../../../../../../contracts/fixtures/payment-capture/android-provider-parser-golden.v1.json)이며 정상 승인, 지원 취소, 빈 필드, 0원·음수, 연말·연초, 마스킹 카드 변형을 포함합니다. 운영 Functions TypeScript parser가 이 파일을 직접 소비하며 Android Kotlin parser 복사본은 두지 않습니다. parser 선택 테스트는 성공 parser ID 목록 같은 합성 입력으로 fixture를 대체할 수 없습니다.
 
 등록 카드 매칭의 공유 시나리오 T-CARD-001은 [결제 설정 모듈 테스트 시나리오](../payment-configuration/requirements.md#8-모듈-테스트-시나리오)가 소유합니다. 이 모듈은 해당 계약 fixture를 소비합니다.
 
-연도 추론의 공유 시나리오 T-PARSE-003은 [Shortcut 모듈 테스트 시나리오](../shortcut-ingestion/requirements.md#9-모듈-테스트-시나리오)가 소유합니다. Android parser도 같은 `FixedClock` JSON fixture를 소비합니다.
+연도 추론의 공유 시나리오 T-PARSE-003은 [Shortcut 모듈 테스트 시나리오](../shortcut-ingestion/requirements.md#9-모듈-테스트-시나리오)가 소유합니다. Android 원문을 처리하는 Functions parser도 같은 `FixedClock` JSON fixture를 소비합니다.
 
 ## 10. 코드 근거
 
 - [알림 수집 Service](../../../../../../android/app/src/main/java/com/household/account/service/CardNotificationListenerService.kt)
+- [Android raw Envelope](../../../../../../android/app/src/main/java/com/household/account/paymentcapture/RawNotificationEnvelopeV1.kt)
+- [Android 전송 admission](../../../../../../android/app/src/main/java/com/household/account/paymentcapture/RawNotificationForwardingPolicy.kt)
+- [서버 원문 제출 Application](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/application/androidRawNotificationSubmissionApplication.ts)
 - [Capture 제출 Application](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/application/captureSubmissionApplication.ts)
 - [진단 로그 Repository](../../../../../../android/app/src/main/java/com/household/account/data/NotificationDebugLogRepository.kt)
 - [진단 Callable](../../../../../../functions/src/bootstrap/firebaseNotificationDiagnostic.ts)
@@ -255,18 +261,9 @@
 - [본인 카드 판정 정책](../../../../../../functions/src/contexts/payment-capture/configuration/domain/policies/ownCardResolution.ts)
 - [가맹점 규칙 선택 정책](../../../../../../functions/src/contexts/payment-capture/configuration/domain/policies/merchantRuleSelection.ts)
 - [카테고리 Repository](../../../../../../android/app/src/main/java/com/household/account/data/CategoryRepository.kt)
-- [SMS parser](../../../../../../android/app/src/main/java/com/household/account/parser/SmsNotificationParser.kt)
-- [KB parser](../../../../../../android/app/src/main/java/com/household/account/parser/KBCardParser.kt)
-- [NH parser](../../../../../../android/app/src/main/java/com/household/account/parser/NHPayParser.kt)
-- [네이버페이 parser](../../../../../../android/app/src/main/java/com/household/account/parser/NaverPayParser.kt)
-- [토스 parser](../../../../../../android/app/src/main/java/com/household/account/parser/TossBankParser.kt)
-- [카카오페이 parser](../../../../../../android/app/src/main/java/com/household/account/parser/KakaoPayParser.kt)
-- [디지털 온누리 parser](../../../../../../android/app/src/main/java/com/household/account/parser/DigitalOnnuriParser.kt)
-- [Paybooc parser](../../../../../../android/app/src/main/java/com/household/account/parser/PayboocISPParser.kt)
-- [삼성카드 parser](../../../../../../android/app/src/main/java/com/household/account/parser/SamsungCardParser.kt)
-- [롯데카드 parser](../../../../../../android/app/src/main/java/com/household/account/parser/LotteCardParser.kt)
-- [경기지역화폐 parser](../../../../../../android/app/src/main/java/com/household/account/parser/GyeonggiLocalCurrencyParser.kt)
-- [대전사랑카드 parser](../../../../../../android/app/src/main/java/com/household/account/parser/DaejeonLocalCurrencyParser.kt)
-- [세종 여민전 parser](../../../../../../android/app/src/main/java/com/household/account/parser/SejongLocalCurrencyParser.kt)
-- [도시가스 parser](../../../../../../android/app/src/main/java/com/household/account/parser/CityGasBillParser.kt)
-- [문자 청구 parser](../../../../../../android/app/src/main/java/com/household/account/parser/SmsCardMessageParser.kt)
+- [서버 parser catalog](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/androidProviderParserCatalog.ts)
+- [서버 카드 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/cardProviderParsers.ts)
+- [서버 wallet parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/walletProviderParsers.ts)
+- [서버 지역화폐 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/localCurrencyProviderParsers.ts)
+- [서버 SMS parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/smsBillProviderParser.ts)
+- [서버 도시가스 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/parseCityGasBill.ts)

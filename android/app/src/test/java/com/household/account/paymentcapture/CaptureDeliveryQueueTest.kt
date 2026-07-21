@@ -26,7 +26,7 @@ class CaptureDeliveryQueueTest {
         queue.enqueue(scope, combinedEnvelope())
 
         val partial = object : CaptureSubmissionClient {
-            override suspend fun submit(envelope: CaptureEnvelopeV1) = CaptureSubmissionReceipt(
+            override suspend fun submit(envelope: CaptureDeliveryEnvelope) = CaptureSubmissionReceipt(
                 completion = "partial-retryable",
                 transaction = CaptureBranchReceipt("created", "transaction-1", 2, false),
                 balance = CaptureBranchReceipt("retryableFailure", retryable = true)
@@ -48,7 +48,7 @@ class CaptureDeliveryQueueTest {
         queue.enqueue(scope, combinedEnvelope())
         var calls = 0
         val terminal = object : CaptureSubmissionClient {
-            override suspend fun submit(envelope: CaptureEnvelopeV1): CaptureSubmissionReceipt {
+            override suspend fun submit(envelope: CaptureDeliveryEnvelope): CaptureSubmissionReceipt {
                 calls++
                 return CaptureSubmissionReceipt(
                     "terminal",
@@ -74,7 +74,7 @@ class CaptureDeliveryQueueTest {
         var calls = 0
 
         queue.flush(scope, object : CaptureSubmissionClient {
-            override suspend fun submit(envelope: CaptureEnvelopeV1): CaptureSubmissionReceipt {
+            override suspend fun submit(envelope: CaptureDeliveryEnvelope): CaptureSubmissionReceipt {
                 calls++
                 error("호출되면 안 됩니다")
             }
@@ -82,6 +82,41 @@ class CaptureDeliveryQueueTest {
 
         assertEquals(0, calls)
         assertTrue(store.entries.isEmpty())
+    }
+
+    @Test
+    fun `원문 envelope는 서버 completion이 terminal이면 parser 결과가 없어도 제거한다`() = runTest {
+        val store = MemoryStore()
+        val queue = CaptureDeliveryQueue(store) { 1_000L }
+        queue.enqueue(scope, rawEnvelope())
+
+        queue.flush(scope, object : CaptureSubmissionClient {
+            override suspend fun submit(envelope: CaptureDeliveryEnvelope) =
+                CaptureSubmissionReceipt("terminal", null, null)
+        })
+
+        assertTrue(store.entries.isEmpty())
+    }
+
+    @Test
+    fun `원문 envelope의 일부 branch가 재시도 가능하면 유지하고 Quick Edit은 한 번만 만든다`() = runTest {
+        val store = MemoryStore()
+        val queue = CaptureDeliveryQueue(store) { 1_000L }
+        queue.enqueue(scope, rawEnvelope())
+        val partial = object : CaptureSubmissionClient {
+            override suspend fun submit(envelope: CaptureDeliveryEnvelope) = CaptureSubmissionReceipt(
+                completion = "partial-retryable",
+                transaction = CaptureBranchReceipt("created", "transaction-raw", 4),
+                balance = CaptureBranchReceipt("retryableFailure", retryable = true)
+            )
+        }
+
+        val first = queue.flush(scope, partial)
+        val second = queue.flush(scope, partial)
+
+        assertEquals(listOf("transaction-raw"), first.followUps.map { it.transactionId })
+        assertTrue(second.followUps.isEmpty())
+        assertEquals(1, store.entries.size)
     }
 
     private fun combinedEnvelope() = CaptureEnvelopeV1(
@@ -108,6 +143,16 @@ class CaptureDeliveryQueueTest {
             "gyeonggi",
             83_000,
             "2026-07-19T11:01:00+09:00"
+        )
+    )
+
+    private fun rawEnvelope() = RawNotificationEnvelopeV1(
+        observationId = "observation.android.rawtest",
+        packageName = "com.samsung.android.messaging",
+        notification = RawNotificationContentV1(
+            postedAt = "2026-07-22T17:41:00+09:00",
+            title = "문자 메시지",
+            textLines = listOf("삼성1876승인", "20,300원")
         )
     )
 }

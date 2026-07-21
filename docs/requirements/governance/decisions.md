@@ -1545,3 +1545,28 @@ Scheduler가 만든 거래도 실제로 그 일정을 등록한 가구원에게 
 사용자의 실수로 금융 기록을 복구 불가능하게 잃지 않으면서도 삭제 직후 화면과 통계에서는 완전히 사라지게 한다. 복구와 최종 정리를 일상 UI에서 분리하여 사용자가 삭제·복구를 상태 토글처럼 사용하거나 부분 물리 삭제로 원장 계보와 중복 방지가 깨지는 일을 막는다.
 
 영향 요구사항: LED-001, LED-005, LED-006, LED-008, LED-009, SEA-001~004, T-LED-001, T-LED-008.
+
+<a id="dec-066"></a>
+## DEC-066 Android 금융 알림은 Functions의 단일 서버 parser가 해석
+
+> 상태: Accepted  
+> 결정일: 2026-07-22  
+> 정책 소유 Context: [Payment Capture](../contexts/payment-capture/requirements.md)  
+> 영향 기능: [Android 결제 알림 수집](../contexts/payment-capture/modules/android-payment-ingestion/requirements.md)
+
+결정:
+
+- Android `NotificationListenerService`는 등록된 package의 제목, `text`, `bigText`, `textLines`, 게시 시각을 `AndroidRawNotification.v1`으로 만들고 Android Keystore AES-256-GCM Queue에 최대 72시간 저장해 인증·App Check가 적용된 Functions callable로 보낸다.
+- Android는 공급자 정규표현식, parser ID/version, 금액·일시·가맹점·카드·잔액 추출을 소유하지 않는다. 기존 Kotlin 공급자 parser와 변환 Factory는 운영 코드에서 제거하고 Functions TypeScript parser와 비식별 golden fixture를 정본으로 사용한다.
+- 클라이언트 요청에는 `householdId`, `createdBy`, `sourceType`, `parserId`, 카드·거래 후보를 받지 않는다. Functions가 Firebase 인증의 활성 Membership으로 가구와 생성자를, 서버 Source Registry의 정확한 package 일치로 source와 parser를 확정한다.
+- 등록되지 않은 package는 본문이 지원 형식과 같아도 parser와 저장에 진입하지 않는다. 등록 package의 parser 실패도 다른 source parser로 fallback하지 않고 Canonical 변경 없는 terminal 결과로 끝난다.
+- 문자 앱과 카카오톡은 결제 외 개인정보가 많은 다목적 앱이므로 Android에 넓은 금융/도시가스 marker admission을 둔다. 이는 서버 전송 최소화만 담당하며 거래 필드를 해석하거나 서버 parser 판정을 대체하지 않는다. 전용 금융 앱은 package gate 뒤 원문 후보를 그대로 보낸다.
+- Functions는 원문을 요청 처리 중에만 사용하고 원문 자체를 Capture receipt, Ledger, Domain Event, Outbox, 일반 로그에 저장하지 않는다. 결정적인 원문 hash, 서버가 선택한 source/parser metadata와 파싱된 최소 provenance만 기존 `CaptureEnvelope.v1` 내부 경계로 넘긴다. DEC-047의 임시 진단 Adapter 보존은 별도이며 업무 성공과 결합하지 않는다.
+- 새 APK는 `submitAndroidRawNotification`을 사용한다. 배포 전 기기의 암호화 Queue에 남은 `CaptureEnvelope.v1`은 `submitCaptureEnvelope`로 계속 전송해 유실하지 않으며, Functions는 전환 기간 동안 두 callable을 함께 제공한다.
+- Functions를 새 APK보다 먼저 배포한다. rollback 시 새 raw callable은 유지한 채 이전 APK를 배포할 수 있으며, 서버 parser의 수정은 APK 재배포 없이 Functions와 golden fixture만 변경한다.
+
+의도:
+
+서로 다른 Android 설치본에 parser 버전이 남아 발생하는 동작 차이와 Kotlin·TypeScript 중복을 제거하고, 패키지 검증·파싱·카드 소유 확인·저장을 한 서버 경계에서 일관되게 변경하기 위함입니다. Android에는 OS 알림 접근과 오프라인 전달이라는 기기 고유 책임만 남겨 Clean Architecture의 단일 책임과 서버 권위를 강화합니다.
+
+영향 요구사항: ING-001~009, PARSE-KB-001~PARSE-COMMON-001, ING-SAVE-001~007, T-ING-001, T-ING-003, T-PARSE-001~004, T-QUEUE-001.

@@ -8,7 +8,10 @@ export { executeHouseholdCommand } from "./firebaseHouseholdCommand";
 export { executeHouseholdQuery } from "./firebaseHouseholdQuery";
 export { executeAdminAccess } from "./firebaseAdminAccess";
 export { createWebViewSessionToken } from "./firebaseWebViewSession";
-export { submitCaptureEnvelope } from "./firebaseCaptureSubmission";
+export {
+  submitAndroidRawNotification,
+  submitCaptureEnvelope,
+} from "./firebaseCaptureSubmission";
 export { submitNotificationDiagnostic } from "./firebaseNotificationDiagnostic";
 export { consumeNotificationOutbox } from "./firebaseNotificationOutbox";
 export {

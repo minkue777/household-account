@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://household-account.local/schemas/payment-capture/capture-envelope.v1.schema.json",
   "title": "Capture Envelope V1",
-  "description": "Android 등록 패키지와 iOS Shortcut credential에서 생성한 결제·잔액 관찰을 Payment Intake로 전달하는 채널 중립 wire 계약입니다.",
+  "description": "Functions Android server parser와 iOS Shortcut Adapter가 생성한 결제·잔액 관찰을 Payment Intake로 전달하는 내부 채널 중립 계약입니다.",
   "type": "object",
   "additionalProperties": false,
   "required": [

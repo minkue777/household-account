@@ -9,7 +9,7 @@
         "T-PARSE-001"
       ],
       "description": "등록된 Android package의 승인 관찰을 payment branch 하나로 전달한다",
-      "producer": "android-edge",
+      "producer": "android-server-parser",
       "envelope": {
         "contractVersion": "capture-envelope.v1",
         "observationId": "observation.android.approval.001",
@@ -56,7 +56,7 @@
         "T-PARSE-002"
       ],
       "description": "등록된 Android package의 취소 관찰을 cancellation payment branch로 전달한다",
-      "producer": "android-edge",
+      "producer": "android-server-parser",
       "envelope": {
         "contractVersion": "capture-envelope.v1",
         "observationId": "observation.android.cancellation.001",
@@ -102,7 +102,7 @@
         "T-ING-BAL-001"
       ],
       "description": "등록된 지역화폐 Android package의 잔액만 유효해도 balance branch를 전달한다",
-      "producer": "android-edge",
+      "producer": "android-server-parser",
       "envelope": {
         "contractVersion": "capture-envelope.v1",
         "observationId": "observation.android.balance.001",
@@ -140,7 +140,7 @@
         "T-PARSE-001"
       ],
       "description": "한 Android 관찰의 결제와 잔액을 독립된 두 branch로 함께 전달한다",
-      "producer": "android-edge",
+      "producer": "android-server-parser",
       "envelope": {
         "contractVersion": "capture-envelope.v1",
         "observationId": "observation.android.combined.001",

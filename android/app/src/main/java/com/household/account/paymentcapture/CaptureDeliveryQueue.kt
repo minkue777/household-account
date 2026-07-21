@@ -16,7 +16,7 @@ enum class CaptureBranch { PAYMENT, BALANCE }
 
 data class QueuedCapture(
     val scope: CaptureSessionScope,
-    val envelope: CaptureEnvelopeV1,
+    val envelope: CaptureDeliveryEnvelope,
     val queuedAtEpochMillis: Long,
     val terminalBranches: Set<CaptureBranch> = emptySet()
 )
@@ -29,8 +29,7 @@ interface CaptureQueueStore {
 
 data class CaptureDeliveryFollowUp(
     val transactionId: String,
-    val aggregateVersion: Int,
-    val envelope: CaptureEnvelopeV1
+    val aggregateVersion: Int
 )
 
 data class CaptureFlushOutcome(
@@ -39,8 +38,8 @@ data class CaptureFlushOutcome(
 )
 
 /**
- * 원문 없는 CaptureEnvelope만 저장하며, 성공한 branch는 재실행 후속 효과에서 제외합니다.
- * 서버 receipt의 retryable branch만 최대 72시간 유지합니다.
+ * 새 APK의 raw notification과 전환 전 APK의 CaptureEnvelope를 같은 암호화 Queue에서 전달합니다.
+ * 서버에서 이미 성공한 branch는 재실행 후속 효과에서 제외하고 retryable entry만 최대 72시간 유지합니다.
  */
 class CaptureDeliveryQueue(
     private val store: CaptureQueueStore,
@@ -48,7 +47,7 @@ class CaptureDeliveryQueue(
 ) {
     private val mutex = Mutex()
 
-    suspend fun enqueue(scope: CaptureSessionScope, envelope: CaptureEnvelopeV1): Boolean =
+    suspend fun enqueue(scope: CaptureSessionScope, envelope: CaptureDeliveryEnvelope): Boolean =
         mutex.withLock {
             if (!scope.isUsable) return@withLock false
             val entries = store.load().filterNot { isExpired(it) }.toMutableList()
@@ -92,8 +91,7 @@ class CaptureDeliveryQueue(
                         transactionId = transaction.resourceId,
                         aggregateVersion = checkNotNull(transaction.aggregateVersion) {
                             "created transaction receipt must include aggregateVersion"
-                        },
-                        envelope = entry.envelope
+                        }
                     )
                 }
             }
@@ -101,11 +99,17 @@ class CaptureDeliveryQueue(
                 terminal += CaptureBranch.BALANCE
             }
 
-            val required = buildSet {
-                if (entry.envelope.paymentObservation != null) add(CaptureBranch.PAYMENT)
-                if (entry.envelope.balanceObservation != null) add(CaptureBranch.BALANCE)
+            val isCompleted = when (val envelope = entry.envelope) {
+                is RawNotificationEnvelopeV1 -> receipt.completion == "terminal"
+                is CaptureEnvelopeV1 -> {
+                    val required = buildSet {
+                        if (envelope.paymentObservation != null) add(CaptureBranch.PAYMENT)
+                        if (envelope.balanceObservation != null) add(CaptureBranch.BALANCE)
+                    }
+                    terminal.containsAll(required)
+                }
             }
-            if (!terminal.containsAll(required)) {
+            if (!isCompleted) {
                 retained += entry.copy(terminalBranches = terminal)
             }
         }

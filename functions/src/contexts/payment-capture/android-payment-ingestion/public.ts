@@ -8,6 +8,10 @@ import type { NotificationIngressInputPort } from "./application/ports/in/notifi
 import { createAndroidProviderParserApplication } from "./application/androidProviderParserApplication";
 import type { AndroidProviderParserInputPort } from "./application/ports/in/androidProviderParserInputPort";
 import { resolvePaymentOccurrenceYear } from "../intake/public";
+export {
+  createAndroidRawNotificationSubmissionApplication,
+  type AndroidRawNotificationSubmissionDependencies,
+} from "./application/androidRawNotificationSubmissionApplication";
 
 export type {
   CityGasNotificationInput,
@@ -76,6 +80,12 @@ export type {
 } from "./domain/model/androidProviderParser";
 
 export type { AndroidProviderParserInputPort } from "./application/ports/in/androidProviderParserInputPort";
+
+export type {
+  AndroidRawNotificationInput,
+  AndroidRawNotificationSubmissionInputPort,
+  SubmitAndroidRawNotificationCommand,
+} from "./application/ports/in/androidRawNotificationSubmissionInputPort";
 
 export function createAndroidProviderParser(): AndroidProviderParserInputPort {
   return createAndroidProviderParserApplication({

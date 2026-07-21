@@ -5,25 +5,10 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.household.account.data.NotificationDebugLogRepository
 import com.household.account.paymentcapture.AndroidCaptureDelivery
-import com.household.account.paymentcapture.CaptureEnvelopeFactory
 import com.household.account.paymentcapture.PaymentSourceRegistry
+import com.household.account.paymentcapture.RawNotificationEnvelopeV1
+import com.household.account.paymentcapture.RawNotificationForwardingPolicy
 import com.household.account.paymentcapture.RegisteredNotificationSource
-import com.household.account.parser.CityGasBillParser
-import com.household.account.parser.DaejeonLocalCurrencyParser
-import com.household.account.parser.DigitalOnnuriParser
-import com.household.account.parser.GyeonggiLocalCurrencyParser
-import com.household.account.parser.KakaoPayParser
-import com.household.account.parser.KBCardParser
-import com.household.account.parser.LocalCurrencyBalanceResult
-import com.household.account.parser.LotteCardParser
-import com.household.account.parser.NHPayParser
-import com.household.account.parser.NaverPayParser
-import com.household.account.parser.PayboocISPParser
-import com.household.account.parser.ParseResult
-import com.household.account.parser.SamsungCardParser
-import com.household.account.parser.SejongLocalCurrencyParser
-import com.household.account.parser.SmsNotificationParser
-import com.household.account.parser.TossBankParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,45 +17,6 @@ import kotlinx.coroutines.launch
 class CardNotificationListenerService : NotificationListenerService() {
 
     companion object {
-        private const val KB_PAY_PACKAGE = "com.kbcard.cxh.appcard"
-        private const val KB_CARD_PACKAGE = "com.kbcard.kbkookmincard"
-        private const val NH_PAY_PACKAGE = "nh.smart.nhallonepay"
-        private const val NAVER_PAY_PACKAGE = "com.naverfin.payapp"
-        private const val TOSS_PACKAGE = "viva.republica.toss"
-        private const val KAKAOPAY_PACKAGE = "com.kakaopay.app"
-        private const val KAKAO_TALK_PACKAGE = "com.kakao.talk"
-        private const val DIGITAL_ONNURI_PACKAGE = "com.komsco.kpay"
-        private const val PAYBOOC_ISP_PACKAGE = "kvp.jjy.MispAndroid320"
-
-        private const val HWASEONG_LOCAL_CURRENCY = "com.mobiletoong.gpay"
-        private const val CHAK_WALLET = "com.coocon.chakwallet"
-        private const val GYEONGGI_LOCAL_CURRENCY = "gov.gyeonggi.ggcard"
-        private const val DAEJEON_LOVE_CARD = "kr.co.nmcs.daejeonpay"
-        private const val SEJONG_YEOMINPAY = "gov.sejong.yeominpay"
-
-        private val knownKbPackages = setOf(
-            KB_PAY_PACKAGE,
-            KB_CARD_PACKAGE
-        )
-
-        private val knownNhPackages = setOf(NH_PAY_PACKAGE)
-        private val knownNaverPayPackages = setOf(NAVER_PAY_PACKAGE)
-        private val knownTossPackages = setOf(TOSS_PACKAGE)
-        private val knownKakaoPayPackages = setOf(KAKAOPAY_PACKAGE)
-        private val knownDigitalOnnuriPackages = setOf(DIGITAL_ONNURI_PACKAGE)
-        private val knownPayboocPackages = setOf(PAYBOOC_ISP_PACKAGE)
-        private val knownGyeonggiLocalCurrencyPackages = setOf(
-            HWASEONG_LOCAL_CURRENCY,
-            CHAK_WALLET,
-            GYEONGGI_LOCAL_CURRENCY
-        )
-        private val knownDaejeonLocalCurrencyPackages = setOf(
-            DAEJEON_LOVE_CARD
-        )
-        private val knownSejongLocalCurrencyPackages = setOf(
-            SEJONG_YEOMINPAY
-        )
-
         private val debugOnlyNotificationPackages = mapOf(
             "com.shcard.smartpay" to "SHINHAN_CARD",
             "kr.co.samsungcard.mpocket" to "SAMSUNG_CARD",
@@ -146,6 +92,21 @@ class CardNotificationListenerService : NotificationListenerService() {
                 return
             }
 
+            val source = detectSource(packageName)
+            if (source == null) {
+                saveRawNotificationLogIfNeeded(
+                    packageName = packageName,
+                    title = title,
+                    text = text,
+                    bigText = bigText,
+                    textLines = textLines,
+                    fullText = fullText,
+                    postedAtMillis = sbn.postTime
+                )
+                return
+            }
+            if (!RawNotificationForwardingPolicy.shouldForward(source, title, fullText)) return
+
             saveRawNotificationLogIfNeeded(
                 packageName = packageName,
                 title = title,
@@ -156,41 +117,20 @@ class CardNotificationListenerService : NotificationListenerService() {
                 postedAtMillis = sbn.postTime
             )
 
-            val source = detectSource(packageName) ?: return
-
             val notificationKey = "${packageName}_${fullText.hashCode()}"
             val now = System.currentTimeMillis()
             if (rememberRecentKey(recentNotifications, notificationKey, now, duplicateWindowMs)) {
                 return
             }
 
-            val result: ParseResult = when (source) {
-                RegisteredNotificationSource.KB -> KBCardParser.parse(fullText, postedAtMillis = sbn.postTime)
-                RegisteredNotificationSource.NH -> NHPayParser.parse(fullText, postedAtMillis = sbn.postTime)
-                RegisteredNotificationSource.NAVER_PAY -> NaverPayParser.parse(fullText, sbn.postTime)
-                RegisteredNotificationSource.TOSS_BANK -> TossBankParser.parse(fullText, sbn.postTime)
-                RegisteredNotificationSource.KAKAOPAY -> KakaoPayParser.parse(fullText, sbn.postTime)
-                RegisteredNotificationSource.DIGITAL_ONNURI -> DigitalOnnuriParser.parse(fullText, sbn.postTime)
-                RegisteredNotificationSource.PAYBOOC_ISP -> PayboocISPParser.parse(fullText, sbn.postTime)
-                RegisteredNotificationSource.SMS -> SmsNotificationParser.parse(fullText, sbn.postTime)
-                RegisteredNotificationSource.SAMSUNG -> SamsungCardParser.parse(fullText, postedAtMillis = sbn.postTime)
-                RegisteredNotificationSource.LOTTE -> LotteCardParser.parse(fullText, postedAtMillis = sbn.postTime)
-                RegisteredNotificationSource.GYEONGGI_LOCAL_CURRENCY -> GyeonggiLocalCurrencyParser.parse(fullText, sbn.postTime)
-                RegisteredNotificationSource.DAEJEON_LOCAL_CURRENCY -> DaejeonLocalCurrencyParser.parse(fullText, sbn.postTime)
-                RegisteredNotificationSource.SEJONG_LOCAL_CURRENCY -> SejongLocalCurrencyParser.parse(fullText, sbn.postTime)
-                RegisteredNotificationSource.CITY_GAS_BILL -> CityGasBillParser.parse(fullText, sbn.postTime)
-            }
-
-            val balanceResult = parseBalance(source, fullText)
-            val envelope = CaptureEnvelopeFactory.create(
+            val envelope = RawNotificationEnvelopeV1.create(
                 packageName = packageName,
-                source = source,
                 postedAtMillis = sbn.postTime,
-                rawNotificationText = fullText,
-                expense = result.expense.takeIf { result.success },
-                eventType = result.eventType.takeIf { result.success },
-                balance = balanceResult
-            ) ?: return
+                title = title,
+                text = text,
+                bigText = bigText,
+                textLines = textLines
+            )
 
             serviceScope.launch {
                 runCatching {
@@ -252,26 +192,13 @@ class CardNotificationListenerService : NotificationListenerService() {
     }
 
     private fun resolveDebugLogSource(packageName: String, fullText: String): String? {
-        if (packageName == KAKAO_TALK_PACKAGE && !CityGasBillParser.matches(fullText)) {
-            return null
-        }
-        return detectSource(packageName)?.name
+        val source = detectSource(packageName)
+        if (
+            source != null &&
+            !RawNotificationForwardingPolicy.shouldForward(source, "", fullText)
+        ) return null
+        return source?.name
             ?: debugOnlyNotificationPackages[packageName]
-    }
-
-    private fun parseBalance(
-        source: RegisteredNotificationSource,
-        fullText: String
-    ): LocalCurrencyBalanceResult? {
-        return when (source) {
-            RegisteredNotificationSource.GYEONGGI_LOCAL_CURRENCY ->
-                GyeonggiLocalCurrencyParser.parseBalance(fullText)
-            RegisteredNotificationSource.DAEJEON_LOCAL_CURRENCY ->
-                DaejeonLocalCurrencyParser.parseBalance(fullText)
-            RegisteredNotificationSource.SEJONG_LOCAL_CURRENCY ->
-                SejongLocalCurrencyParser.parseBalance(fullText)
-            else -> null
-        }
     }
 
     private fun rememberRecentKey(

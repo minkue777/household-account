@@ -61,7 +61,9 @@ class AndroidKeystoreCaptureQueueStore(context: Context) : CaptureQueueStore {
                             memberId = item.getString("memberId"),
                             sessionGeneration = item.getLong("sessionGeneration")
                         ),
-                        envelope = CaptureEnvelopeV1.fromJson(item.getJSONObject("envelope").toString()),
+                        envelope = decodeCaptureDeliveryEnvelope(
+                            item.getJSONObject("envelope").toString()
+                        ),
                         queuedAtEpochMillis = item.getLong("queuedAtEpochMillis"),
                         terminalBranches = buildSet {
                             for (branchIndex in 0 until branches.length()) {

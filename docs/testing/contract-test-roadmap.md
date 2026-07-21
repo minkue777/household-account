@@ -28,6 +28,7 @@
 | Cloud 예약 작업 | `ScheduledJobManifest.v1` schema·fixture | 4 | T-JOB-001, T-DIV-003, T-REC-005, AUTO-003 |
 | 연도 없는 결제 시각 | 공용 year fixture·schema | 3 | T-PARSE-003, T-PARSE-TIME-001 |
 | 채널 중립 Capture 입력 | `CaptureEnvelope.v1` schema·Android/Shortcut fixture | 7 | ING-001, ING-002, IOS-001, Capture Intake |
+| Android raw server parsing 입력 | `AndroidRawNotification.v1` schema·fixture·strict decoder | 2 | ING-001, ING-002, DEC-066 |
 | Shortcut HTTP wire | request/response schema·비식별 fixture | 3 | IOS-001, IOS-008~010, IOS-012 |
 | 비식별 raw parser golden fixture | Android 등록 package 13종과 Shortcut 지원 카드사의 승인·취소·잔액·거부 원문 fixture | 4 | T-PARSE-001, T-PARSE-002, T-PARSE-004 |
 
@@ -80,10 +81,10 @@ Q-006은 [DEC-064](../requirements/governance/decisions.md#dec-064)로 확정했
 
 비식별 raw golden fixture는 active 상태로 작성했습니다. 다음 계층은 fixture를 실제 목표 parser에 적용하는 conformance부터 아래 순서로 연결합니다.
 
-1. Provider parser conformance: active raw golden fixture를 목표 Android·Shortcut parser에 공통 적용
+1. Provider parser conformance: active raw golden fixture를 Functions Android·Shortcut parser에 적용하고 Android에는 공급자 parser 복사본을 두지 않음
 2. Repository Conformance: 같은 suite를 In-memory와 Firestore Adapter에 공통 적용
 3. Firebase Emulator: Rules, transaction 경합, receipt·fingerprint, Outbox/Inbox 원자성 검증
-4. Producer/consumer conformance: Android DTO, Shortcut HTTP Adapter, Functions Intake가 공유 JSON schema를 왕복
+4. Producer/consumer conformance: Android `AndroidRawNotification.v1`, Shortcut HTTP Adapter, Functions raw decoder/Intake가 각 공개 JSON schema를 왕복
 5. Android instrumentation: Keystore AES-256-GCM, process 복구, backup 제외, QuickEdit Activity lifecycle
 6. Browser/UI: PWA worker update, SessionScope 전환, 미저장 form 보존, 접근성
 7. Release pipeline: requirement ID·상대 링크·Rules/index·smoke를 실제 gate evidence로 연결

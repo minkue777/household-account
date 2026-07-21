@@ -54,7 +54,7 @@ interface CaptureEnvelopeGoldenCase {
   caseId: string;
   requirementIds: string[];
   description: string;
-  producer: "android-edge" | "shortcut-adapter";
+  producer: "android-server-parser" | "shortcut-adapter";
   envelope: CaptureEnvelopeFixture;
   expectedConsumer: {
     consumer: "payment-intake";
