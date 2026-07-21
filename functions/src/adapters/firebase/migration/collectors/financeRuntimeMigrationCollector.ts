@@ -354,7 +354,9 @@ export function collectFinanceRuntimeMigration(
         : legacyDefaultCategoryId);
     const selected = input.legacyCategories.find(
       (snapshot) =>
-        snapshot.id === selectedId && legacySchemaInScope(snapshot.data()),
+        legacySchemaInScope(snapshot.data()) &&
+        (snapshot.id === selectedId ||
+          text(snapshot.data(), "categoryId", "key") === selectedId),
     );
     if (
       selected === undefined ||

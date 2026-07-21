@@ -90,8 +90,10 @@ Member ID가 있는 기록은 덮어쓰지 않습니다. 문서별 예외는 `le
 apply가 중단됩니다.
 
 기본 카테고리는 manifest의 `defaultCategoryId`, 기존 가구 문서의
-`defaultCategoryKey`, 유일한 legacy `isDefault=true` 순서로 결정합니다. 어느
-근거로도 하나를 확정할 수 없으면 임의 선택하지 않고 manifest 입력을 요구합니다.
+`defaultCategoryKey`, 유일한 legacy `isDefault=true` 순서로 결정합니다. legacy
+`defaultCategoryKey`와 manifest 값은 Firestore 문서 ID뿐 아니라 카테고리의 안정적인
+`categoryId`/`key`로도 확인합니다. 어느 근거로도 하나를 확정할 수 없으면 임의
+선택하지 않고 manifest 입력을 요구합니다.
 
 카드 owner는 `registeredCardOwners` 또는 확인된 `memberReferences`로만 연결합니다.
 카드 identity가 중복되거나 가맹점 규칙의 exact token/non-exact priority claim이

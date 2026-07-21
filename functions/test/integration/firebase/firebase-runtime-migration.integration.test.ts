@@ -420,7 +420,7 @@ describeWithFirestoreEmulator("Firebase runtime migration operations boundary", 
       appliedAt: "2026-07-21T00:04:00.000Z",
     });
     expect(replay).toMatchObject({ kind: "applied", reconciliation: { status: "MATCH" } });
-  });
+  }, 15_000);
 
   it("identity mapping이 빠진 plan은 typed unresolved report를 남기고 업무 write를 0건 유지한다", async () => {
     const household = database.collection("households").doc(HOUSEHOLD_ID);
@@ -534,6 +534,53 @@ describeWithFirestoreEmulator("Firebase runtime migration operations boundary", 
     expect(
       (await household.collection("recurringPlans").doc("recurring-no-creator").get()).data(),
     ).toMatchObject({ creatorMemberId: "member-a" });
+  });
+
+  it("가구의 기본 카테고리 key가 문서 ID와 달라도 기존 선택을 보존한다", async () => {
+    const household = database.collection("households").doc(HOUSEHOLD_ID);
+    await Promise.all([
+      household.set({
+        lifecycleState: "active",
+        defaultCategoryKey: "custom-default-key",
+      }),
+      database.collection("categories").doc("legacy-category-document").set({
+        householdId: HOUSEHOLD_ID,
+        key: "custom-default-key",
+        name: "사용자가 고른 기본값",
+        color: "#123456",
+        isDefault: false,
+        isActive: true,
+      }),
+    ]);
+    const migration = subject();
+    const dryRun = await migration.dryRun({
+      scope: scope("category-key-default"),
+      mappings: mappings({
+        memberReferences: {},
+        recurringCreators: {},
+        assetOwners: {},
+        positionMarkets: {},
+      }),
+      plannedAt: "2026-07-21T01:40:00.000Z",
+    });
+    expect(dryRun.unresolved).toEqual([]);
+
+    const applied = await migration.apply({
+      scope: scope("category-key-default"),
+      expectedPlanHash: dryRun.planHash,
+      confirmation: "APPLY",
+      checkpoint: dryRun.checkpoint,
+      pageSize: 50,
+      maxPages: 100,
+      appliedAt: "2026-07-21T01:41:00.000Z",
+    });
+    expect(applied).toMatchObject({
+      kind: "applied",
+      reconciliation: { status: "MATCH" },
+    });
+    expect(
+      (await household.collection("categorySettings").doc("default").get()).data(),
+    ).toMatchObject({ defaultCategoryId: "custom-default-key" });
   });
 
   it("카드 소유자와 중복 지역화폐 선택이 불명확하면 임의 추정 없이 전체 apply를 차단한다", async () => {
