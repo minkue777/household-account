@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Copy, ExternalLink, KeyRound, RefreshCw, Trash2 } from 'lucide-react';
+import { Copy, ExternalLink, KeyRound, RefreshCw } from 'lucide-react';
 import {
   shortcutAuthorizationValue,
   shortcutCredentials,
@@ -104,25 +104,6 @@ export default function ShortcutSettings() {
     }
   };
 
-  const revoke = async () => {
-    if (status?.kind !== 'found') return;
-    if (!window.confirm('이 단축어의 결제 등록을 중지할까요?')) return;
-    setWorking(true);
-    setError(null);
-    try {
-      await shortcutCredentials.revoke(
-        status.credential.credentialId,
-        status.credential.credentialVersion
-      );
-      setOneTimeCredential(null);
-      await refresh();
-    } catch (caught) {
-      setError(messageOf(caught));
-    } finally {
-      setWorking(false);
-    }
-  };
-
   const copyCredential = async () => {
     if (!oneTimeCredential) return;
     try {
@@ -166,44 +147,17 @@ export default function ShortcutSettings() {
             </button>
           )}
           {active && (
-            <>
-              <button
-                type="button"
-                disabled={working}
-                onClick={() => void reissue()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:text-slate-300"
-              >
-                <RefreshCw className="h-4 w-4" /> 재발급
-              </button>
-              <button
-                type="button"
-                disabled={working}
-                onClick={() => void revoke()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-red-100 px-3 py-2 text-sm text-red-500 hover:bg-red-50 disabled:text-slate-300"
-              >
-                <Trash2 className="h-4 w-4" /> 폐기
-              </button>
-            </>
+            <button
+              type="button"
+              disabled={working}
+              onClick={() => void reissue()}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-violet-700 disabled:bg-slate-300"
+            >
+              <RefreshCw className={`h-4 w-4 ${working ? 'animate-spin' : ''}`} />
+              {working ? '재발급 중…' : '키 재발급'}
+            </button>
           )}
         </div>
-      )}
-
-      {active && !oneTimeCredential && (
-        <div className="mt-3 text-xs text-slate-400">
-          <p>키가 발급되어 있습니다. 보안을 위해 기존 키의 원문은 다시 표시하지 않습니다.</p>
-          {status?.kind === 'found' && (
-            <p className="mt-1">
-              발급 {new Date(status.credential.issuedAt).toLocaleString('ko-KR')}
-              {status.credential.lastUsedAt
-                ? ` · 최근 사용 ${new Date(status.credential.lastUsedAt).toLocaleString('ko-KR')}`
-                : ' · 아직 사용되지 않음'}
-            </p>
-          )}
-        </div>
-      )}
-
-      {status?.kind === 'found' && status.credential.status === 'revoked' && (
-        <p className="mt-3 text-xs text-slate-400">기존 단축어 키가 폐기되었습니다.</p>
       )}
 
       {oneTimeCredential && (

@@ -118,10 +118,10 @@ request body에는 householdId·createdBy·memberName·deviceOwner·owner를 넣
 1. Google 로그인과 활성 Membership을 검증한 설정 화면이 `IssueShortcutCredential`을 호출합니다.
 2. Application은 CSPRNG로 충분한 엔트로피의 원문을 만들고 강한 단방향 hash만 저장합니다. 같은 uid/member/household의 기존 활성 credential은 같은 원자적 경계에서 `revoked`로 바꿉니다.
 3. 최초 발급 응답만 원문을 반환합니다. 동일 idempotency key가 재전송되면 발급 receipt의 credentialId·credentialVersion으로 `AlreadyIssued`를 반환하고 원문·설치 URL은 재생하지 않으며 새 credential도 만들지 않습니다. receipt에는 원문이나 복호화 가능한 값을 저장하지 않습니다.
-4. UI는 `iPhone 단축어 연결` 동작에서 최초 원문을 클립보드로 복사하고 고정된 공유 Shortcut 설치 URL을 엽니다. 최초 응답을 잃어 `AlreadyIssued`를 받으면 자동으로 새 자격을 만들지 않고 명시적 재발급 안내를 표시합니다. 다시 조회하면 마스킹 상태와 발급·최근 사용 시각만 보여줍니다.
+4. UI는 설정의 가구원 초대 바로 다음에 배치합니다. `iPhone 단축어 연결` 동작에서 최초 원문을 클립보드로 복사하고 고정된 공유 Shortcut 설치 URL을 엽니다. 최초 응답을 잃어 `AlreadyIssued`를 받으면 자동으로 새 자격을 만들지 않고 명시적 재발급 안내를 표시합니다. 활성 자격을 다시 조회한 화면에는 발급·최근 사용 시각, 상태 설명, 별도 폐기 버튼을 노출하지 않고 강조된 재발급 버튼만 표시합니다.
 5. 공유 Shortcut은 안정된 endpoint, POST·JSON, contract version, Authorization header, Shortcut Input의 message 전달, 성공·오류 분기를 미리 포함합니다. 사용자는 Apple 가져오기 질문의 credential 칸에 한 번 붙여넣습니다.
 6. 제품은 별도 안내에서 iPhone 개인용 자동화를 `메시지를 받을 때 → 즉시 실행 → 설치된 가계부 Shortcut 실행`으로 한 번 연결하게 합니다. 개인용 자동화를 서버나 PWA가 설치했다고 표시하지 않습니다.
-7. 설치 실패·분실·기기 변경은 로그인 설정에서 `폐기` 또는 새 idempotency key의 명시적 `재발급`으로 복구합니다. PWA 로그아웃만으로는 Shortcut credential을 폐기하지 않습니다.
+7. 설치 실패·분실·기기 변경은 로그인 설정의 새 idempotency key를 사용하는 명시적 `재발급`으로 복구합니다. 재발급은 기존 자격을 서버에서 원자 폐기하지만 사용자가 별도로 누르는 폐기 UI는 제공하지 않습니다. PWA 로그아웃만으로는 Shortcut credential을 폐기하지 않습니다.
 
 `IssueShortcutCredential`, `RevokeShortcutCredential`, `GetShortcutCredentialStatus`는 Access의 인증된 SessionScope를 요구합니다. 원문 재조회 API는 두지 않습니다. Shortcut 자체는 편집 가능한 사용자 영역이므로 키를 별도 보안 저장소라고 표현하지 않으며, 한 사용자·가구·capability 범위와 즉시 폐기로 노출 반경을 제한합니다.
 
@@ -332,7 +332,7 @@ contracts/
 | [IOS-010](requirements.md#5-요구사항) | Contract, Security, Emulator | 인증·가구·금액·달력 검증 | 무인증·타 가구·0·NaN·overflow·2/30·24:00·임의 owner | 권한/field 오류와 모든 저장소 변경 없음 | `T-IOS-002`, `T-IOS-SEC-001` |
 | [IOS-011](requirements.md#5-요구사항) | Emulator, Concurrency | Intake receipt·Ledger claim | 동일 요청 동시 2회, callback retry, receipt 완료 전 중단 | 거래 한 건·같은 결과 재생·알림 멱등 | `T-IOS-001` |
 | [IOS-012](requirements.md#5-요구사항) | Contract, Security I | HTTP Adapter·Ingress limit | POST/GET/OPTIONS, JSON/기타, version, byte/field/key 경계, CORS-only, rate/quota 병렬 경합 | 허용 POST만 Application 한 번, 나머지는 안정 status/code와 downstream 0회 | `T-IOS-003`, `T-IOS-SEC-002` |
-| [IOS-013](requirements.md#5-요구사항) | Contract, Security, UI | ShortcutCredential 발급·검증·설치·폐기 | 최초 발급, 같은 idempotency key 재전송, 응답 유실 뒤 명시적 재발급, 재발급 경합, revoked/replaced, Membership 상실, body 위조 owner/household, 원문 재조회·로그, 설치 중단 | 최초 원문 1회, 재전송은 `AlreadyIssued` 메타데이터만, 명시적 재발급은 이전 키 원자 폐기, hash 저장, claim Actor만 사용, endpoint·POST·JSON·Authorization·typed 응답이 완성된 Shortcut+붙여넣기 1회, 개인 자동화 안내 | `T-IOS-SEC-002`, `T-IOS-INSTALL-001` |
+| [IOS-013](requirements.md#5-요구사항) | Contract, Security, UI | ShortcutCredential 발급·검증·설치·재발급 | 최초 발급, 같은 idempotency key 재전송, 응답 유실 뒤 명시적 재발급, 재발급 경합, revoked/replaced, Membership 상실, body 위조 owner/household, 원문 재조회·로그, 설치 중단, 활성 자격 설정 화면 | 최초 원문 1회, 재전송은 `AlreadyIssued` 메타데이터만, 명시적 재발급은 이전 키 원자 폐기, hash 저장, claim Actor만 사용, endpoint·POST·JSON·Authorization·typed 응답이 완성된 Shortcut+붙여넣기 1회, 가구원 초대 다음 배치·활성 화면은 강조된 재발급 버튼만 표시 | `T-IOS-SEC-002`, `T-IOS-INSTALL-001` |
 
 공통 contract suite는 같은 key의 동일·상이 payload, method/content type/version/body/field/key/rate/quota 경계, CORS와 credential 독립성, Created/Duplicate response schema, 원문 비노출, Android와 Shortcut이 만든 `CaptureEnvelope.v1`의 producer/consumer 호환을 검증합니다. Cross-cutting 전체 보안 행렬은 [`T-SEC-002`](../../../../cross-cutting/security-privacy.md#7-보안-테스트-행렬)가 소유하고 이 모듈은 `T-IOS-SEC-001`, `T-IOS-SEC-002`에서 Shortcut 입력 경계를 검증합니다.
 

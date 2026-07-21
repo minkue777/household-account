@@ -92,12 +92,12 @@ export default function SettingsPage() {
             householdId={household?.id}
             ownerName={currentMember?.name}
           />
-          {isIOSDevice && <ShortcutSettings />}
           <CategorySettings />
           <MerchantRuleSettings />
           <RecurringExpenseSettings />
           <ThemeSettings />
           <InvitationSettings />
+          {isIOSDevice && <ShortcutSettings />}
 
           {isIOSDevice && (
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
