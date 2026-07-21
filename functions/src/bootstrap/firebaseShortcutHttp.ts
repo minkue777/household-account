@@ -7,6 +7,7 @@ import {
   FirebaseShortcutIngressGateAdapter,
   Sha256ShortcutHttpHashAdapter,
 } from "../adapters/firebase/payment-capture/firebaseShortcutHttpInfrastructure";
+import { HmacShortcutCredentialSecretAdapter } from "../adapters/firebase/payment-capture/firebaseShortcutCredentialInfrastructure";
 import { createShortcutHttpRequestProcessorApplication } from "../contexts/payment-capture/shortcut-ingestion/application/shortcutHttpRequestProcessorApplication";
 import {
   createShortcutCardMessageParser,
@@ -101,6 +102,20 @@ function rawBodyBytes(request: functions.https.Request): number {
   }
 }
 
+function authorizationShape(
+  authorization: string | undefined,
+): "missing" | "malformed" | "credential-format-valid" {
+  if (authorization === undefined) return "missing";
+  const match = authorization.match(/^Bearer\s+([^\s]+)$/u);
+  if (
+    match?.[1] === undefined ||
+    HmacShortcutCredentialSecretAdapter.credentialId(match[1]) === undefined
+  ) {
+    return "malformed";
+  }
+  return "credential-format-valid";
+}
+
 function setCorsHeaders(
   response: { set(field: string, value?: string): unknown },
   origin: string,
@@ -141,6 +156,9 @@ export const addExpenseFromMessage = functions
     const authorization = request.get("authorization");
     const contentType = request.get("content-type");
     const idempotencyKey = request.get("idempotency-key");
+    functions.logger.info("shortcut_http_authorization", {
+      shape: authorizationShape(authorization),
+    });
     let result: Awaited<ReturnType<typeof inbound.handle>>;
     try {
       result = await inbound.handle({
@@ -167,6 +185,12 @@ export const addExpenseFromMessage = functions
       });
       return;
     }
+    functions.logger.info("shortcut_http_result", {
+      status: result.status,
+      ...(result.body !== null && "error" in result.body
+        ? { errorCode: result.body.error.code }
+        : {}),
+    });
     if (result.status === 204) {
       response.status(204).send("");
       return;
