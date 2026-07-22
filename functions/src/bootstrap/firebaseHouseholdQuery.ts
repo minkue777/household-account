@@ -3,6 +3,7 @@ import { getStorage } from "firebase-admin/storage";
 
 import { FirebaseHouseholdCommandMembershipAdapter } from "../adapters/firebase/commands/firebaseHouseholdCommandInfrastructure";
 import { FirebaseLedgerCommandRepository } from "../adapters/firebase/ledger/firebaseLedgerCommandRepository";
+import { FirebaseLedgerTransactionRangeQuery } from "../adapters/firebase/ledger/firebaseLedgerTransactionRangeQuery";
 import {
   FirebaseInstrumentCatalogStorage,
   RemoteInstrumentCatalogRunSource,
@@ -23,6 +24,7 @@ import { createShortcutCredentialHouseholdQueryHandlers } from "./queries/shortc
 import { createManifestBackedHouseholdQueryRegistry } from "./queries/householdQueryManifest";
 import { createPortfolioMarketHouseholdQueryHandlers } from "./queries/portfolioMarketHouseholdQueryHandlers";
 import { createAccessHouseholdQueryHandlers } from "./queries/accessHouseholdQueryHandlers";
+import { createLedgerHouseholdQueryHandlers } from "./queries/ledgerHouseholdQueryHandlers";
 import { verifiedSystemAdministrator } from "./verifiedSystemAdministrator";
 
 export interface HouseholdQueryWireResponse {
@@ -113,6 +115,9 @@ const handlers = createManifestBackedHouseholdQueryRegistry([
       },
     },
   ],
+  ...createLedgerHouseholdQueryHandlers(
+    new FirebaseLedgerTransactionRangeQuery(db),
+  ),
   ...createShortcutCredentialHouseholdQueryHandlers(
     createFirebaseShortcutCredentialLifecycle(db),
   ),

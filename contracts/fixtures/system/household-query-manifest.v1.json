@@ -8,6 +8,12 @@
       "clients": ["android"]
     },
     {
+      "name": "ledger.list-transactions.v1",
+      "owner": "household-finance.ledger",
+      "scope": "household",
+      "clients": ["web", "android"]
+    },
+    {
       "name": "shortcut.get-credential-status.v1",
       "owner": "payment-capture.shortcut-ingestion",
       "scope": "household",

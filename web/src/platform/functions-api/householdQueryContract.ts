@@ -5,6 +5,11 @@ export const HOUSEHOLD_QUERY_RESPONSE_CONTRACT_VERSION =
   'household-query-response.v1' as const;
 
 export interface HouseholdQueryPayloads {
+  'ledger.list-transactions.v1': {
+    startDate: string;
+    endDate: string;
+    transactionType: 'expense' | 'income';
+  };
   'shortcut.get-credential-status.v1': Record<string, never>;
   'portfolio.search-instruments.v1': {
     assetClass: 'stock' | 'crypto';
@@ -22,6 +27,29 @@ export interface HouseholdQueryPayloads {
     instrumentCode: string;
   };
   'access.list-asset-owner-profiles.v1': { includeArchived?: boolean };
+}
+
+export interface LedgerRangeQueryTransaction {
+  id: string;
+  aggregateVersion: number;
+  date: string;
+  time?: string;
+  merchant: string;
+  amount: number;
+  transactionType: 'expense' | 'income';
+  category: string;
+  cardType?: string;
+  cardDisplay?: string;
+  memo?: string;
+  mergedFrom?: Array<{
+    merchant: string;
+    amount: number;
+    category: string;
+    memo?: string;
+  }>;
+  splitGroupId?: string;
+  splitIndex?: number;
+  splitTotal?: number;
 }
 
 export type PortfolioQueryMarket =
@@ -68,6 +96,9 @@ export interface PortfolioDividendProjectionQueryResult {
 }
 
 export interface HouseholdQueryResults {
+  'ledger.list-transactions.v1': {
+    transactions: LedgerRangeQueryTransaction[];
+  };
   'shortcut.get-credential-status.v1':
     | {
         kind: 'found';

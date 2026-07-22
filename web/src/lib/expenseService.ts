@@ -10,11 +10,18 @@ import {
 } from '@/platform/read-model/firestoreReadModel';
 import { Expense, TransactionType } from '@/types/expense';
 import { ledgerCommands } from '@/features/ledger/application/ledgerCommands';
+import { ledgerQueries } from '@/features/ledger/application/ledgerQueries';
 import { isVisibleLedgerReadDocument } from '@/features/ledger/application/ledgerReadVisibility';
 import { requireClientSessionScope } from '@/composition/clientSessionScope';
+import { isAndroidHostAvailable } from '@/platform/android-host/androidHostBridge';
+import { withinDeadline } from '@/platform/network/operationDeadline';
+import type { LedgerRangeQueryTransaction } from '@/platform/functions-api/householdQueryContract';
 
 const COLLECTION_NAME = 'expenses';
 const DEFAULT_TRANSACTION_TYPE: TransactionType = 'expense';
+const SERVER_READ_TIMEOUT_MS = 20_000;
+const SERVER_READ_POLL_INTERVAL_MS = 30_000;
+const activeServerReadRefreshes = new Set<() => void>();
 
 interface AddExpenseOptions {
   notifyOnCreate?: boolean;
@@ -113,6 +120,88 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
     splitGroupId: data.splitGroupId,
     splitIndex: data.splitIndex,
     splitTotal: data.splitTotal,
+  };
+}
+
+function mapServerTransaction(item: LedgerRangeQueryTransaction): Expense {
+  return {
+    id: item.id,
+    aggregateVersion: item.aggregateVersion,
+    date: item.date,
+    time: item.time,
+    merchant: item.merchant,
+    amount: item.amount,
+    transactionType: item.transactionType,
+    category: item.category,
+    cardType: item.cardType,
+    cardLastFour: item.cardDisplay,
+    memo: item.memo,
+    mergedFrom: item.mergedFrom,
+    splitGroupId: item.splitGroupId,
+    splitIndex: item.splitIndex,
+    splitTotal: item.splitTotal,
+  };
+}
+
+function refreshServerLedgerReads(): void {
+  activeServerReadRefreshes.forEach((refresh) => refresh());
+}
+
+async function invalidateAfter<T>(operation: Promise<T>): Promise<T> {
+  const result = await operation;
+  refreshServerLedgerReads();
+  return result;
+}
+
+function subscribeToServerDateRange(
+  startDate: string,
+  endDate: string,
+  callback: (expenses: Expense[]) => void,
+  transactionType: TransactionType
+): () => void {
+  let disposed = false;
+  let running = false;
+  let delivered = false;
+
+  const refresh = () => {
+    if (disposed || running) return;
+    running = true;
+    void withinDeadline(
+      ledgerQueries.listTransactions(startDate, endDate, transactionType),
+      SERVER_READ_TIMEOUT_MS,
+      'LEDGER_RANGE_READ_TIMEOUT'
+    )
+      .then(({ transactions }) => {
+        if (disposed) return;
+        delivered = true;
+        callback(transactions.map(mapServerTransaction));
+      })
+      .catch(() => {
+        if (!disposed && !delivered) {
+          delivered = true;
+          callback([]);
+        }
+      })
+      .finally(() => {
+        running = false;
+      });
+  };
+
+  const onVisibilityChange = () => {
+    if (document.visibilityState === 'visible') refresh();
+  };
+  const intervalId = window.setInterval(refresh, SERVER_READ_POLL_INTERVAL_MS);
+  window.addEventListener('focus', refresh);
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  activeServerReadRefreshes.add(refresh);
+  refresh();
+
+  return () => {
+    disposed = true;
+    window.clearInterval(intervalId);
+    window.removeEventListener('focus', refresh);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    activeServerReadRefreshes.delete(refresh);
   };
 }
 
@@ -280,10 +369,10 @@ export async function addExpense(
 ): Promise<string> {
   const householdId = getHouseholdId();
   void options;
-  return ledgerCommands.record(householdId, {
+  return invalidateAfter(ledgerCommands.record(householdId, {
     ...expense,
     transactionType: expense.transactionType || DEFAULT_TRANSACTION_TYPE,
-  });
+  }));
 }
 
 /**
@@ -294,14 +383,14 @@ export async function updateExpense(
   data: Partial<Expense>,
   expectedVersion: number
 ): Promise<void> {
-  await ledgerCommands.update(getHouseholdId(), id, expectedVersion, data);
+  await invalidateAfter(ledgerCommands.update(getHouseholdId(), id, expectedVersion, data));
 }
 
 /**
  * 지출 삭제
  */
 export async function deleteExpense(id: string, expectedVersion: number): Promise<void> {
-  await ledgerCommands.delete(getHouseholdId(), id, expectedVersion);
+  await invalidateAfter(ledgerCommands.delete(getHouseholdId(), id, expectedVersion));
 }
 
 /**
@@ -316,6 +405,11 @@ export function subscribeToMonthlyExpenses(
   const householdId = getHouseholdId();
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+  const transactionType = options.transactionType ?? DEFAULT_TRANSACTION_TYPE;
+
+  if (isAndroidHostAvailable()) {
+    return subscribeToServerDateRange(startDate, endDate, callback, transactionType);
+  }
 
   // householdId로 필터링 (인덱스 없이 클라이언트에서 정렬)
   const q = query(
@@ -331,7 +425,7 @@ export function subscribeToMonthlyExpenses(
     // 클라이언트에서 날짜 필터링 및 정렬
     const filtered = allExpenses
       .filter((e) => e.date >= startDate && e.date <= endDate)
-      .filter((e) => matchesTransactionType(e, options.transactionType))
+      .filter((e) => matchesTransactionType(e, transactionType))
       .sort((a, b) => b.date.localeCompare(a.date));
 
     callback(filtered);
@@ -350,7 +444,9 @@ export async function updateExpenseCategory(
   category: string,
   expectedVersion: number
 ): Promise<void> {
-  await ledgerCommands.changeCategory(getHouseholdId(), id, category, expectedVersion);
+  await invalidateAfter(
+    ledgerCommands.changeCategory(getHouseholdId(), id, category, expectedVersion)
+  );
 }
 
 /**
@@ -363,6 +459,11 @@ export function subscribeToDateRangeExpenses(
   options: ExpenseQueryOptions = { transactionType: DEFAULT_TRANSACTION_TYPE }
 ): () => void {
   const householdId = getHouseholdId();
+  const transactionType = options.transactionType ?? DEFAULT_TRANSACTION_TYPE;
+
+  if (isAndroidHostAvailable()) {
+    return subscribeToServerDateRange(startDate, endDate, callback, transactionType);
+  }
 
   const q = query(
     collection(db, COLLECTION_NAME),
@@ -376,7 +477,7 @@ export function subscribeToDateRangeExpenses(
 
     const filtered = allExpenses
       .filter((e) => e.date >= startDate && e.date <= endDate)
-      .filter((e) => matchesTransactionType(e, options.transactionType))
+      .filter((e) => matchesTransactionType(e, transactionType))
       .sort((a, b) => b.date.localeCompare(a.date));
 
     callback(filtered);
@@ -402,7 +503,7 @@ export async function addManualExpense(
   const now = new Date();
   const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-  return ledgerCommands.record(householdId, {
+  return invalidateAfter(ledgerCommands.record(householdId, {
     date,
     time,
     merchant,
@@ -412,7 +513,7 @@ export async function addManualExpense(
     cardType: 'manual',
     cardLastFour: '수동',
     memo: memo || '',
-  });
+  }));
 }
 
 export async function addManualMonthlySplit(
@@ -423,14 +524,14 @@ export async function addManualMonthlySplit(
   months: number,
   memo?: string
 ): Promise<string[]> {
-  const result = await ledgerCommands.recordMonthlySplit(getHouseholdId(), {
+  const result = await invalidateAfter(ledgerCommands.recordMonthlySplit(getHouseholdId(), {
     merchant,
     amountInWon: amount,
     categoryId: category,
     accountingDate: date,
     ...(memo !== undefined ? { memo } : {}),
     months,
-  });
+  }));
   return result.transactionIds;
 }
 
@@ -449,24 +550,24 @@ export async function splitExpense(
   originalExpense: Expense,
   splits: SplitItem[]
 ): Promise<string[]> {
-  return ledgerCommands.split(
+  return invalidateAfter(ledgerCommands.split(
     getHouseholdId(),
     originalExpense.id,
     originalExpense.aggregateVersion,
     splits
-  );
+  ));
 }
 
 export async function splitExpenseMonthly(
   expense: Expense,
   months: number
 ): Promise<string[]> {
-  const result = await ledgerCommands.splitExistingMonthly(
+  const result = await invalidateAfter(ledgerCommands.splitExistingMonthly(
     getHouseholdId(),
     expense.id,
     expense.aggregateVersion,
     months
-  );
+  ));
   return result.transactionIds;
 }
 
@@ -479,13 +580,13 @@ export async function mergeExpenses(
   targetExpense: Expense,
   sourceExpense: Expense
 ): Promise<void> {
-  await ledgerCommands.merge(
+  await invalidateAfter(ledgerCommands.merge(
     getHouseholdId(),
     targetExpense.id,
     targetExpense.aggregateVersion,
     sourceExpense.id,
     sourceExpense.aggregateVersion
-  );
+  ));
 }
 
 /**
@@ -496,7 +597,9 @@ export async function unmergeExpense(expense: Expense): Promise<string[]> {
   if (!expense.mergedFrom || expense.mergedFrom.length === 0) {
     return [];
   }
-  return ledgerCommands.unmerge(getHouseholdId(), expense.id, expense.aggregateVersion);
+  return invalidateAfter(
+    ledgerCommands.unmerge(getHouseholdId(), expense.id, expense.aggregateVersion)
+  );
 }
 
 /**
@@ -575,11 +678,11 @@ export async function cancelSplitGroup(
   groupSnapshot?: readonly Expense[]
 ): Promise<void> {
   const snapshot = groupSnapshot ?? await getSplitGroupExpenses(splitGroupId);
-  await ledgerCommands.cancelMonthlySplit(
+  await invalidateAfter(ledgerCommands.cancelMonthlySplit(
     getHouseholdId(),
     splitGroupId,
     expectedVersionsOf(snapshot)
-  );
+  ));
 }
 
 /**
@@ -592,10 +695,10 @@ export async function updateSplitGroup(
   groupSnapshot?: readonly Expense[]
 ): Promise<string> {
   const snapshot = groupSnapshot ?? await getSplitGroupExpenses(splitGroupId);
-  return ledgerCommands.reconfigureMonthlySplit(
+  return invalidateAfter(ledgerCommands.reconfigureMonthlySplit(
     getHouseholdId(),
     splitGroupId,
     newMonths,
     expectedVersionsOf(snapshot)
-  );
+  ));
 }

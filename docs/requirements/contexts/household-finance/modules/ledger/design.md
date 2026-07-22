@@ -319,11 +319,12 @@ Event payload는 projection 조정에 필요한 최소 금액·날짜·category 
 
 ### 8.2 조회와 Projection
 
-- 단순 월 원장 목록은 Ledger 소유 공개 Firestore Read Contract로 제공할 수 있습니다.
+- 브라우저 Web의 단순 월 원장 목록은 Ledger 소유 공개 Firestore Read Contract로 제공할 수 있습니다. Android WebView는 Firestore 실시간 stream 대신 인증된 `ledger.list-transactions.v1` Query Port를 사용하며, 요청에 household scope를 임의 입력하지 않고 검증된 SessionScope와 시작일·종료일·거래 유형만 전달합니다.
+- Android WebView의 목록은 최초 조회, 성공한 원장 mutation 직후, 앱 focus/visible 복귀, 30초 주기 조회로 수렴합니다. 이전 조회가 진행 중이면 중복 호출하지 않고, 구독 해제 뒤 도착한 응답은 폐기하며, 각 조회에는 20초 deadline을 둡니다.
 - Budget와 Reporting은 Event 소비 Projection이며 Ledger Repository를 import하지 않습니다.
 - Read Contract는 schemaVersion, index, 결정 정렬, Membership Rules를 명시합니다.
 - `TransactionDeleted.v1`을 반영한 Projection과 직접 조회 Adapter 모두 deleted 거래를 제거하며, 다음 조회에서 Canonical active 집합으로 수렴합니다.
-- 실시간 listener 오류는 stream의 `failed` 상태로 전달하며 빈 snapshot으로 변환하지 않습니다.
+- 브라우저 실시간 listener와 Android 서버 조회 오류는 무한 loading으로 남기지 않고 client의 failed 상태로 전달합니다. 이미 성공한 snapshot이 있으면 일시 실패로 기존 화면을 지우지 않습니다.
 
 ### 8.3 외부 연동
 

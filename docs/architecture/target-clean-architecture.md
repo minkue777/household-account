@@ -153,8 +153,9 @@ flowchart LR
 - Functions 모듈끼리 자기 HTTP endpoint를 다시 호출하지 않고 메모리 안의 공개 Port로 호출한다.
 - 현재 함수 이름과 배포 지역은 전환 중 Facade로 유지할 수 있다.
 - Gen1→Gen2, TypeScript target 변경, 폴더 재구성, 업무 로직 이전을 한 변경에 묶지 않는다.
-- Web의 Firestore 직접 접근은 명시적으로 공개한 읽기 계약에만 허용한다.
-- Android WebView의 공개 Firestore 읽기는 WebView 전용 long-polling 전송 정책을 사용하고, 최초 세션·가계부 복원에는 유한 deadline을 두어 플랫폼 transport 장애가 무한 loading으로 노출되지 않게 한다.
+- 브라우저 Web의 Firestore 직접 접근은 명시적으로 공개한 읽기 계약에만 허용한다.
+- Android WebView의 월·연 원장 목록은 Firestore 실시간 stream에 직접 의존하지 않고 인증된 `ledger.list-transactions.v1` Query Port에서 요청 기간·거래 유형으로 제한해 읽는다. 성공한 mutation 직후, 앱이 다시 visible/focus 상태가 될 때, 최대 30초 주기로 재조회해 수렴한다.
+- Android WebView에 남아 있는 공개 Firestore 읽기는 WebView 전용 long-polling 전송 정책을 사용한다. 최초 세션·가계부 복원과 서버 원장 조회에는 각각 유한 deadline을 두어 platform transport 장애가 무한 loading으로 노출되지 않게 한다.
 - Android의 Domain 컬렉션 직접 읽기·쓰기는 최종적으로 제거한다.
 - 운영 artifact는 [배포 안전성](../requirements/supporting-platform/modules/delivery-assurance/requirements.md) gate가 명시적 Firebase project, 계약 호환 순서, Rules·index·test·smoke를 검증한 뒤에만 배포한다.
 
