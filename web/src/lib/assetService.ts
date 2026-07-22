@@ -25,6 +25,12 @@ import {
 } from '@/types/asset';
 import { requireClientSessionScope } from '@/composition/clientSessionScope';
 import { portfolioCommands } from '@/features/portfolio/application/portfolioCommands';
+import {
+  cryptoHoldingOptimisticProjection,
+  portfolioOptimisticProjection,
+  stockHoldingOptimisticProjection,
+} from '@/features/portfolio/application/portfolioOptimisticProjection';
+import { createHouseholdCommandId } from '@/platform/functions-api/householdCommandClient';
 import { formatLocalDate } from './utils/date';
 import { ALL_MEMBERS_OPTION } from './assets/memberOptions';
 import {
@@ -48,6 +54,25 @@ function getHouseholdId(): string {
   return requireClientSessionScope().householdId;
 }
 
+function valuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (left instanceof Date && right instanceof Date) {
+    return left.getTime() === right.getTime();
+  }
+  if (
+    typeof left === 'object' && left !== null
+    && typeof right === 'object' && right !== null
+  ) {
+    return JSON.stringify(left) === JSON.stringify(right);
+  }
+  return false;
+}
+
+function hasPatchChanges<Entity extends object>(current: Entity, patch: Partial<Entity>): boolean {
+  const currentRecord = current as Record<string, unknown>;
+  return Object.entries(patch).some(([key, value]) => !valuesEqual(currentRecord[key], value));
+}
+
 /**
  * Firestore 문서를 Asset 객체로 변환
  */
@@ -55,6 +80,10 @@ function mapDocToAsset(docSnap: QueryDocumentSnapshot<DocumentData>): Asset {
   const data = docSnap.data();
   return {
     id: docSnap.id,
+    aggregateVersion:
+      Number.isSafeInteger(data.aggregateVersion) && data.aggregateVersion > 0
+        ? data.aggregateVersion
+        : 1,
     householdId: data.householdId,
     name: data.name,
     type: data.type,
@@ -125,28 +154,119 @@ function mapDocToHistory(docSnap: QueryDocumentSnapshot<DocumentData>): AssetHis
  * 자산 추가
  */
 export async function addAsset(input: AssetInput): Promise<string> {
-  return portfolioCommands.createAsset(getHouseholdId(), input);
+  const householdId = getHouseholdId();
+  const commandId = createHouseholdCommandId('portfolio-create');
+  const assetId = `asset-${householdId}-${commandId}`;
+  const now = new Date();
+  const optimisticAsset: Asset = {
+    ...input,
+    id: assetId,
+    aggregateVersion: 1,
+    householdId,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const mutationId = portfolioOptimisticProjection.beginCreate(optimisticAsset);
+  try {
+    const confirmedAssetId = await portfolioCommands.createAsset(
+      householdId,
+      input,
+      commandId
+    );
+    if (confirmedAssetId !== assetId) throw new Error('ASSET_ID_CONTRACT_MISMATCH');
+    portfolioOptimisticProjection.commitCreate(mutationId, optimisticAsset);
+    return confirmedAssetId;
+  } catch (error) {
+    portfolioOptimisticProjection.rollback(mutationId);
+    throw error;
+  }
 }
 
 /**
  * 자산 수정
  */
-export async function updateAsset(id: string, data: Partial<Asset>): Promise<void> {
-  await portfolioCommands.updateAsset(getHouseholdId(), id, data);
+export async function updateAsset(
+  id: string,
+  data: Partial<Asset>,
+  expectedVersion: number
+): Promise<void> {
+  const current = portfolioOptimisticProjection.current(id);
+  if (!current) throw new Error('ASSET_READ_MODEL_REQUIRED');
+  if (!hasPatchChanges(current, data)) return;
+  const mutationId = portfolioOptimisticProjection.beginUpdate(id, data);
+  try {
+    await portfolioCommands.updateAsset(
+      getHouseholdId(),
+      id,
+      data,
+      expectedVersion
+    );
+    portfolioOptimisticProjection.commitUpdate(mutationId, {
+      ...current,
+      ...data,
+      aggregateVersion: expectedVersion + 1,
+      updatedAt: new Date(),
+    });
+  } catch (error) {
+    portfolioOptimisticProjection.rollback(mutationId);
+    throw error;
+  }
 }
 
 /**
  * 자산 순서 일괄 업데이트
  */
 export async function updateAssetOrders(assetOrders: { id: string; order: number }[]): Promise<void> {
-  await portfolioCommands.reorderAssets(getHouseholdId(), assetOrders);
+  const normalized = assetOrders.map(({ id }, order) => ({ id, order }));
+  const planned = normalized.map((update) => {
+    const current = portfolioOptimisticProjection.current(update.id);
+    if (!current) throw new Error('ASSET_READ_MODEL_REQUIRED');
+    return { current, update };
+  });
+  const changed = planned.filter(({ current, update }) => current.order !== update.order);
+  if (changed.length === 0) return;
+  const mutations: Array<{
+    current: Asset;
+    update: { id: string; order: number };
+    mutationId: string;
+  }> = [];
+  try {
+    changed.forEach(({ current, update }) => {
+      mutations.push({
+        current,
+        update,
+        mutationId: portfolioOptimisticProjection.beginUpdate(update.id, { order: update.order }),
+      });
+    });
+    await portfolioCommands.reorderAssets(getHouseholdId(), normalized);
+    mutations.forEach(({ current, update, mutationId }) => {
+      portfolioOptimisticProjection.commitUpdate(mutationId, {
+        ...current,
+        order: update.order,
+        aggregateVersion: current.aggregateVersion + 1,
+        updatedAt: new Date(),
+      });
+    });
+  } catch (error) {
+    mutations.forEach(({ mutationId }) => portfolioOptimisticProjection.rollback(mutationId));
+    throw error;
+  }
 }
 
 /**
  * 자산 논리 삭제 (이력과 보유 내역은 운영 복구를 위해 보존)
  */
-export async function deleteAsset(id: string): Promise<void> {
-  await portfolioCommands.deleteAsset(getHouseholdId(), id);
+export async function deleteAsset(id: string, expectedVersion: number): Promise<void> {
+  const current = portfolioOptimisticProjection.current(id);
+  if (!current) throw new Error('ASSET_READ_MODEL_REQUIRED');
+  const mutationId = portfolioOptimisticProjection.beginDelete(id);
+  try {
+    await portfolioCommands.deleteAsset(getHouseholdId(), id, expectedVersion);
+    portfolioOptimisticProjection.commitDelete(mutationId);
+  } catch (error) {
+    portfolioOptimisticProjection.rollback(mutationId);
+    throw error;
+  }
 }
 
 /**
@@ -156,6 +276,7 @@ export function subscribeToAssets(
   callback: (assets: Asset[]) => void
 ): () => void {
   const householdId = getHouseholdId();
+  const projection = portfolioOptimisticProjection.subscribe(callback, householdId);
 
   const q = query(
     collection(db, ASSETS_COLLECTION),
@@ -171,15 +292,18 @@ export function subscribeToAssets(
         if (a.order !== b.order) return a.order - b.order;
         return a.name.localeCompare(b.name);
       });
-      callback(assets);
+      projection.publish(assets);
     },
     (error) => {
       console.error('자산 구독 오류:', error);
-      callback([]);
+      projection.publish([]);
     }
   );
 
-  return unsubscribe;
+  return () => {
+    unsubscribe();
+    projection.dispose();
+  };
 }
 
 /**
@@ -464,6 +588,10 @@ function mapDocToHolding(docSnap: QueryDocumentSnapshot<DocumentData>): StockHol
   const data = docSnap.data();
   return {
     id: docSnap.id,
+    aggregateVersion:
+      Number.isSafeInteger(data.aggregateVersion) && data.aggregateVersion > 0
+        ? data.aggregateVersion
+        : 1,
     assetId: data.assetId,
     householdId: data.householdId,
     holdingType: data.holdingType || 'stock',
@@ -490,6 +618,10 @@ function mapDocToCryptoHolding(docSnap: QueryDocumentSnapshot<DocumentData>): Cr
   const data = docSnap.data();
   return {
     id: docSnap.id,
+    aggregateVersion:
+      Number.isSafeInteger(data.aggregateVersion) && data.aggregateVersion > 0
+        ? data.aggregateVersion
+        : 1,
     assetId: data.assetId,
     householdId: data.householdId,
     marketCode: data.marketCode,
@@ -506,37 +638,164 @@ function mapDocToCryptoHolding(docSnap: QueryDocumentSnapshot<DocumentData>): Cr
  * 주식 보유 종목 추가
  */
 export async function addStockHolding(input: StockHoldingInput): Promise<string> {
-  return portfolioCommands.addPosition(getHouseholdId(), 'stock', input);
+  const householdId = getHouseholdId();
+  const commandId = createHouseholdCommandId('portfolio-position-create');
+  const positionId = `position-${householdId}-${commandId}`;
+  const now = new Date();
+  const optimisticHolding: StockHolding = {
+    ...input,
+    id: positionId,
+    aggregateVersion: 1,
+    householdId,
+    holdingType: input.holdingType ?? 'stock',
+    createdAt: now,
+    updatedAt: now,
+  };
+  const mutationId = stockHoldingOptimisticProjection.beginCreate(optimisticHolding);
+  try {
+    const confirmedPositionId = await portfolioCommands.addPosition(
+      householdId,
+      'stock',
+      input,
+      commandId
+    );
+    if (confirmedPositionId !== positionId) throw new Error('POSITION_ID_CONTRACT_MISMATCH');
+    stockHoldingOptimisticProjection.commitCreate(mutationId, optimisticHolding);
+    return confirmedPositionId;
+  } catch (error) {
+    stockHoldingOptimisticProjection.rollback(mutationId);
+    throw error;
+  }
 }
 
 export async function addCryptoHolding(input: CryptoHoldingInput): Promise<string> {
-  return portfolioCommands.addPosition(getHouseholdId(), 'crypto', input);
+  const householdId = getHouseholdId();
+  const commandId = createHouseholdCommandId('portfolio-position-create');
+  const positionId = `position-${householdId}-${commandId}`;
+  const now = new Date();
+  const optimisticHolding: CryptoHolding = {
+    ...input,
+    id: positionId,
+    aggregateVersion: 1,
+    householdId,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const mutationId = cryptoHoldingOptimisticProjection.beginCreate(optimisticHolding);
+  try {
+    const confirmedPositionId = await portfolioCommands.addPosition(
+      householdId,
+      'crypto',
+      input,
+      commandId
+    );
+    if (confirmedPositionId !== positionId) throw new Error('POSITION_ID_CONTRACT_MISMATCH');
+    cryptoHoldingOptimisticProjection.commitCreate(mutationId, optimisticHolding);
+    return confirmedPositionId;
+  } catch (error) {
+    cryptoHoldingOptimisticProjection.rollback(mutationId);
+    throw error;
+  }
 }
 
 /**
  * 주식 보유 종목 수정
  */
-export async function updateStockHolding(id: string, assetId: string, data: Partial<StockHolding>): Promise<void> {
-  await portfolioCommands.updatePosition(getHouseholdId(), 'stock', id, assetId, data);
+export async function updateStockHolding(
+  id: string,
+  assetId: string,
+  data: Partial<StockHolding>,
+  expectedVersion: number
+): Promise<void> {
+  const current = stockHoldingOptimisticProjection.current(id);
+  if (!current) throw new Error('STOCK_POSITION_READ_MODEL_REQUIRED');
+  if (current.assetId !== assetId) throw new Error('ASSET_SCOPE_MISMATCH');
+  if (!hasPatchChanges(current, data)) return;
+  const mutationId = stockHoldingOptimisticProjection.beginUpdate(id, data);
+  try {
+    await portfolioCommands.updatePosition(
+      getHouseholdId(), 'stock', id, assetId, data, expectedVersion
+    );
+    stockHoldingOptimisticProjection.commitUpdate(mutationId, {
+      ...current,
+      ...data,
+      aggregateVersion: expectedVersion + 1,
+      updatedAt: new Date(),
+    });
+  } catch (error) {
+    stockHoldingOptimisticProjection.rollback(mutationId);
+    throw error;
+  }
 }
 
 export async function updateCryptoHolding(
   id: string,
   assetId: string,
-  data: Partial<CryptoHolding>
+  data: Partial<CryptoHolding>,
+  expectedVersion: number
 ): Promise<void> {
-  await portfolioCommands.updatePosition(getHouseholdId(), 'crypto', id, assetId, data);
+  const current = cryptoHoldingOptimisticProjection.current(id);
+  if (!current) throw new Error('CRYPTO_POSITION_READ_MODEL_REQUIRED');
+  if (current.assetId !== assetId) throw new Error('ASSET_SCOPE_MISMATCH');
+  if (!hasPatchChanges(current, data)) return;
+  const mutationId = cryptoHoldingOptimisticProjection.beginUpdate(id, data);
+  try {
+    await portfolioCommands.updatePosition(
+      getHouseholdId(), 'crypto', id, assetId, data, expectedVersion
+    );
+    cryptoHoldingOptimisticProjection.commitUpdate(mutationId, {
+      ...current,
+      ...data,
+      aggregateVersion: expectedVersion + 1,
+      updatedAt: new Date(),
+    });
+  } catch (error) {
+    cryptoHoldingOptimisticProjection.rollback(mutationId);
+    throw error;
+  }
 }
 
 /**
  * 주식 보유 종목 삭제
  */
-export async function deleteStockHolding(id: string, assetId: string): Promise<void> {
-  await portfolioCommands.deletePosition(getHouseholdId(), 'stock', id, assetId);
+export async function deleteStockHolding(
+  id: string,
+  assetId: string,
+  expectedVersion: number
+): Promise<void> {
+  const current = stockHoldingOptimisticProjection.current(id);
+  if (!current) throw new Error('STOCK_POSITION_READ_MODEL_REQUIRED');
+  if (current.assetId !== assetId) throw new Error('ASSET_SCOPE_MISMATCH');
+  const mutationId = stockHoldingOptimisticProjection.beginDelete(id);
+  try {
+    await portfolioCommands.deletePosition(
+      getHouseholdId(), 'stock', id, assetId, expectedVersion
+    );
+    stockHoldingOptimisticProjection.commitDelete(mutationId);
+  } catch (error) {
+    stockHoldingOptimisticProjection.rollback(mutationId);
+    throw error;
+  }
 }
 
-export async function deleteCryptoHolding(id: string, assetId: string): Promise<void> {
-  await portfolioCommands.deletePosition(getHouseholdId(), 'crypto', id, assetId);
+export async function deleteCryptoHolding(
+  id: string,
+  assetId: string,
+  expectedVersion: number
+): Promise<void> {
+  const current = cryptoHoldingOptimisticProjection.current(id);
+  if (!current) throw new Error('CRYPTO_POSITION_READ_MODEL_REQUIRED');
+  if (current.assetId !== assetId) throw new Error('ASSET_SCOPE_MISMATCH');
+  const mutationId = cryptoHoldingOptimisticProjection.beginDelete(id);
+  try {
+    await portfolioCommands.deletePosition(
+      getHouseholdId(), 'crypto', id, assetId, expectedVersion
+    );
+    cryptoHoldingOptimisticProjection.commitDelete(mutationId);
+  } catch (error) {
+    cryptoHoldingOptimisticProjection.rollback(mutationId);
+    throw error;
+  }
 }
 
 /**
@@ -547,6 +806,10 @@ export function subscribeToStockHoldings(
   callback: (holdings: StockHolding[]) => void
 ): () => void {
   const householdId = getHouseholdId();
+  const projection = stockHoldingOptimisticProjection.subscribe(
+    callback,
+    (holding) => holding.assetId === assetId
+  );
 
   const q = query(
     collection(db, HOLDINGS_COLLECTION),
@@ -559,15 +822,18 @@ export function subscribeToStockHoldings(
     (snapshot) => {
       const holdings = snapshot.docs.map(mapDocToHolding);
       holdings.sort((a, b) => a.stockName.localeCompare(b.stockName));
-      callback(holdings);
+      projection.publish(holdings);
     },
     (error) => {
       console.error('보유 종목 구독 오류:', error);
-      callback([]);
+      projection.publish([]);
     }
   );
 
-  return unsubscribe;
+  return () => {
+    unsubscribe();
+    projection.dispose();
+  };
 }
 
 export function subscribeToCryptoHoldings(
@@ -575,6 +841,10 @@ export function subscribeToCryptoHoldings(
   callback: (holdings: CryptoHolding[]) => void
 ): () => void {
   const householdId = getHouseholdId();
+  const projection = cryptoHoldingOptimisticProjection.subscribe(
+    callback,
+    (holding) => holding.assetId === assetId
+  );
 
   const q = query(
     collection(db, CRYPTO_HOLDINGS_COLLECTION),
@@ -587,15 +857,18 @@ export function subscribeToCryptoHoldings(
     (snapshot) => {
       const holdings = snapshot.docs.map(mapDocToCryptoHolding);
       holdings.sort((a, b) => a.coinName.localeCompare(b.coinName));
-      callback(holdings);
+      projection.publish(holdings);
     },
     (error) => {
       console.error('코인 보유내역 구독 오류:', error);
-      callback([]);
+      projection.publish([]);
     }
   );
 
-  return unsubscribe;
+  return () => {
+    unsubscribe();
+    projection.dispose();
+  };
 }
 
 // ============================================
@@ -752,8 +1025,23 @@ export async function getAllStockHoldings(): Promise<StockHolding[]> {
   return snapshot.docs.map(mapDocToHolding);
 }
 
-export async function refreshAllMarketValues(): Promise<void> {
-  await portfolioCommands.refreshMarketValues(getHouseholdId(), 'all');
+const refreshAllMarketValuesInFlight = new Map<string, Promise<void>>();
+
+export function refreshAllMarketValues(): Promise<void> {
+  const householdId = getHouseholdId();
+  const existing = refreshAllMarketValuesInFlight.get(householdId);
+  if (existing) return existing;
+
+  const inFlight = portfolioCommands
+    .refreshMarketValues(householdId, 'all')
+    .then(() => undefined)
+    .finally(() => {
+      if (refreshAllMarketValuesInFlight.get(householdId) === inFlight) {
+        refreshAllMarketValuesInFlight.delete(householdId);
+      }
+    });
+  refreshAllMarketValuesInFlight.set(householdId, inFlight);
+  return inFlight;
 }
 
 export async function refreshAssetMarketValues(

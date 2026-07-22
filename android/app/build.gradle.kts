@@ -26,8 +26,8 @@ android {
         applicationId = "com.household.account"
         minSdk = 26
         targetSdk = 34
-        versionCode = 13
-        versionName = "1.2.11"
+        versionCode = 14
+        versionName = "1.2.12"
 
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
 
@@ -102,6 +102,7 @@ dependencies {
 
     // Testing
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")

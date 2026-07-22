@@ -38,6 +38,8 @@ class AndroidKeystoreEncryptedStore(
         }
     }
 
+    fun containsValue(): Boolean = preferences.contains(KEY_CIPHERTEXT)
+
     fun write(plaintext: String) {
         check(preferences.edit().putString(KEY_CIPHERTEXT, encrypt(plaintext)).commit()) {
             "Encrypted store commit failed"

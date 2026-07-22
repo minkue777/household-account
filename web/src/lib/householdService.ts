@@ -2,9 +2,12 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromCache,
   getDocs,
   db,
   timestampToDate,
+  type DocumentData,
+  type DocumentSnapshot,
 } from '@/platform/read-model/firestoreReadModel';
 import {
   DEFAULT_HOME_SUMMARY_CONFIG,
@@ -17,6 +20,13 @@ import { householdCommands } from '@/features/access-household/application/house
 import { categoryCommands } from '@/features/category-budget/application/categoryCommands';
 
 export type { Household };
+
+export class HouseholdReadNotFoundError extends Error {
+  constructor(readonly householdId: string) {
+    super('HOUSEHOLD_READ_NOT_FOUND');
+    this.name = 'HouseholdReadNotFoundError';
+  }
+}
 
 const householdsCollection = collection(db, 'households');
 const HOME_SUMMARY_CARD_KEYS: HomeSummaryCardKey[] = [
@@ -46,10 +56,7 @@ function resolveHomeSummaryConfig(value: unknown): HomeSummaryConfig {
   };
 }
 
-export async function getHousehold(key: string): Promise<Household | null> {
-  const docRef = doc(householdsCollection, key);
-  const docSnap = await getDoc(docRef);
-
+function mapHouseholdSnapshot(docSnap: DocumentSnapshot<DocumentData>): Household | null {
   if (!docSnap.exists()) return null;
 
   const data = docSnap.data();
@@ -70,6 +77,21 @@ export async function getHousehold(key: string): Promise<Household | null> {
         }))
       : [],
   };
+}
+
+export async function getHousehold(key: string): Promise<Household> {
+  const household = mapHouseholdSnapshot(await getDoc(doc(householdsCollection, key)));
+  if (!household) throw new HouseholdReadNotFoundError(key);
+  return household;
+}
+
+/** Android의 영속 read cache에 있는 마지막 확인 가구를 네트워크보다 먼저 읽습니다. */
+export async function getCachedHousehold(key: string): Promise<Household | null> {
+  try {
+    return mapHouseholdSnapshot(await getDocFromCache(doc(householdsCollection, key)));
+  } catch {
+    return null;
+  }
 }
 
 export async function getAllHouseholds(): Promise<Household[]> {

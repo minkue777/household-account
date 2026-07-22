@@ -13,7 +13,7 @@ describe('비동기 작업 deadline 계약', () => {
       .resolves.toBe('ready');
   });
 
-  it('완료되지 않는 작업을 무한 대기하지 않고 안정적인 오류 코드로 종료한다', async () => {
+  it('[T-WEBVIEW-004][AND-012] 캐시 없는 최초 가계부 read는 20초 무응답을 안정적인 오류 코드로 종료한다', async () => {
     jest.useFakeTimers();
     const result = withinDeadline(new Promise<never>(() => {}), 20_000, 'HOUSEHOLD_READ_TIMEOUT');
 

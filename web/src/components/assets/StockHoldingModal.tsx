@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Asset } from '@/types/asset';
+import { Asset, StockHolding } from '@/types/asset';
 import { ConfirmDialog, ModalOverlay } from '@/components/common';
 import { X, Plus, Trash2, Loader2 } from 'lucide-react';
 import { useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
@@ -15,7 +15,7 @@ interface StockHoldingModalProps {
 
 export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldingModalProps) {
   const [showAddForm, setShowAddForm] = useState(false);
-  const [pendingDeleteHoldingId, setPendingDeleteHoldingId] = useState<string | null>(null);
+  const [pendingDeleteHolding, setPendingDeleteHolding] = useState<StockHolding | null>(null);
 
   const {
     holdings,
@@ -42,20 +42,27 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
   useEffect(() => {
     if (!isOpen) {
       setShowAddForm(false);
-      setPendingDeleteHoldingId(null);
+      setPendingDeleteHolding(null);
     }
   }, [isOpen]);
 
   const handleAddHolding = async () => {
-    const added = await addHolding();
-    if (added) {
-      setShowAddForm(false);
+    const pendingAdd = addHolding();
+    setShowAddForm(false);
+    const added = await pendingAdd;
+    if (!added) {
+      setShowAddForm(true);
     }
   };
 
-  const handleDeleteHolding = async (holdingId: string) => {
-    await deleteHolding(holdingId);
-    setPendingDeleteHoldingId(null);
+  const handleDeleteHolding = async (holding: StockHolding) => {
+    // The optimistic delete already removes the row. Close the confirmation in the same tick;
+    // a rejected command restores the row and is surfaced to the user.
+    setPendingDeleteHolding(null);
+    const deleted = await deleteHolding(holding.id, holding.aggregateVersion);
+    if (!deleted) {
+      alert('보유 종목 삭제에 실패했습니다. 다시 시도해 주세요.');
+    }
   };
 
   const handleCancelAddForm = () => {
@@ -66,8 +73,6 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
   if (!isOpen || !asset) {
     return null;
   }
-
-  const pendingDeleteHolding = holdings.find((holding) => holding.id === pendingDeleteHoldingId) ?? null;
 
   return (
     <>
@@ -121,7 +126,8 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
                       {calculateHoldingValue(holding).toLocaleString()}원
                     </p>
                     <button
-                      onClick={() => setPendingDeleteHoldingId(holding.id)}
+                      onClick={() => setPendingDeleteHolding(holding)}
+                      aria-label={`${holding.stockName} 삭제`}
                       className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -288,10 +294,10 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
         variant="danger"
         onConfirm={() => {
           if (pendingDeleteHolding) {
-            void handleDeleteHolding(pendingDeleteHolding.id);
+            void handleDeleteHolding(pendingDeleteHolding);
           }
         }}
-        onCancel={() => setPendingDeleteHoldingId(null)}
+        onCancel={() => setPendingDeleteHolding(null)}
       />
     </>
   );

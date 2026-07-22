@@ -182,23 +182,37 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     }
 
     setIsAddingHolding(true);
+    const submitted = {
+      selectedStock,
+      quantity,
+      avgPrice,
+      currentPrice,
+      currentPriceInfo,
+    };
+    const pendingAdd = addStockHolding({
+      assetId,
+      stockCode: selectedStock.code,
+      stockName: selectedStock.name,
+      market: selectedStock.market,
+      quantity: Number(quantity),
+      avgPrice: avgPrice ? Number(avgPrice) : undefined,
+      currentPrice: currentPriceInfo?.price || currentPrice || undefined,
+      instrumentType:
+        currentPriceInfo?.instrumentType || selectedStock.instrumentType || 'stock',
+      priceScale: currentPriceInfo?.priceScale || selectedStock.priceScale || 1,
+      quoteAsOf: currentPriceInfo?.quoteAsOf,
+    });
+    resetStockForm();
     try {
-      await addStockHolding({
-        assetId,
-        stockCode: selectedStock.code,
-        stockName: selectedStock.name,
-        market: selectedStock.market,
-        quantity: Number(quantity),
-        avgPrice: avgPrice ? Number(avgPrice) : undefined,
-        currentPrice: currentPriceInfo?.price || currentPrice || undefined,
-        instrumentType:
-          currentPriceInfo?.instrumentType || selectedStock.instrumentType || 'stock',
-        priceScale: currentPriceInfo?.priceScale || selectedStock.priceScale || 1,
-        quoteAsOf: currentPriceInfo?.quoteAsOf,
-      });
-      resetStockForm();
+      await pendingAdd;
       return true;
     } catch (error) {
+      setSelectedStock(submitted.selectedStock);
+      setSearchQuery(submitted.selectedStock.name);
+      setQuantity(submitted.quantity);
+      setAvgPrice(submitted.avgPrice);
+      setCurrentPrice(submitted.currentPrice);
+      setCurrentPriceInfo(submitted.currentPriceInfo);
       console.error('Failed to add stock holding:', error);
       return false;
     } finally {
@@ -222,23 +236,26 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     }
 
     setIsAddingManualHolding(true);
+    const submitted = { manualName, manualCurrentValue };
+    const trimmedName = manualName.trim();
+    const inferredManualType: ManualHoldingType =
+      trimmedName.includes('예수금') ? 'cash' : 'manual';
+    const pendingAdd = addStockHolding({
+      assetId,
+      holdingType: inferredManualType,
+      stockCode: '',
+      stockName: trimmedName,
+      market: 'UNRESOLVED',
+      quantity: 1,
+      currentPrice: parseInt(manualCurrentValue, 10),
+    });
+    resetManualForm();
     try {
-      const trimmedName = manualName.trim();
-      const inferredManualType: ManualHoldingType =
-        trimmedName.includes('예수금') ? 'cash' : 'manual';
-
-      await addStockHolding({
-        assetId,
-        holdingType: inferredManualType,
-        stockCode: '',
-        stockName: trimmedName,
-        market: 'UNRESOLVED',
-        quantity: 1,
-        currentPrice: parseInt(manualCurrentValue, 10),
-      });
-      resetManualForm();
+      await pendingAdd;
       return true;
     } catch (error) {
+      setManualName(submitted.manualName);
+      setManualCurrentValue(submitted.manualCurrentValue);
       console.error('Failed to add manual holding:', error);
       return false;
     } finally {
@@ -253,13 +270,13 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     resetManualForm,
   ]);
 
-  const deleteHolding = useCallback(async (holdingId: string) => {
+  const deleteHolding = useCallback(async (holdingId: string, expectedVersion: number) => {
     if (!assetId || !isStockAsset) {
       return false;
     }
 
     try {
-      await deleteStockHolding(holdingId, assetId);
+      await deleteStockHolding(holdingId, assetId, expectedVersion);
       return true;
     } catch (error) {
       console.error('Failed to delete stock holding:', error);

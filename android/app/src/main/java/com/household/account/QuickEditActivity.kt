@@ -20,12 +20,12 @@ import androidx.appcompat.app.AppCompatActivity
 import com.google.android.flexbox.FlexboxLayout
 import com.household.account.data.CategoryData
 import com.household.account.data.CategoryRepository
-import com.household.account.ledger.CallableHouseholdCommandClient
 import com.household.account.ledger.HouseholdCommandEnvelopeV1
 import com.household.account.ledger.HouseholdCommandKind
-import com.household.account.ledger.HouseholdCommandResult
-import com.household.account.server.FirebaseAuthenticatedCallableGateway
+import com.household.account.quickedit.QuickEditCommandDelivery
+import com.household.account.quickedit.QuickEditCommandEnqueueResult
 import com.household.account.quickedit.QuickEditCoordinator
+import com.household.account.quickedit.buildQuickEditUpdatePatch
 import com.household.account.util.HouseholdPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -55,9 +55,7 @@ class QuickEditActivity : AppCompatActivity() {
 
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val categoryRepository = CategoryRepository()
-    private val commandClient by lazy {
-        CallableHouseholdCommandClient(FirebaseAuthenticatedCallableGateway())
-    }
+    private var commandSubmissionInProgress = false
 
     // 원본 데이터
     private var expenseId: String = ""
@@ -292,21 +290,13 @@ class QuickEditActivity : AppCompatActivity() {
             return
         }
 
-        activityScope.launch {
-            val result = executeCommand(
-                kind = HouseholdCommandKind.REQUEST_HOUSEHOLD_NOTIFICATION,
-                payload = mapOf(
-                    "transactionId" to expenseId,
-                    "expectedVersion" to originalVersion
-                )
+        submitCommand(
+            kind = HouseholdCommandKind.REQUEST_HOUSEHOLD_NOTIFICATION,
+            payload = mapOf(
+                "transactionId" to expenseId,
+                "expectedVersion" to originalVersion
             )
-            if (result is HouseholdCommandResult.Succeeded) {
-                Toast.makeText(this@QuickEditActivity, "알림을 보냈습니다", Toast.LENGTH_SHORT).show()
-                completeCurrentQuickEdit()
-            } else {
-                showCommandFailure(result, "알림 보내기에 실패했습니다")
-            }
-        }
+        )
     }
 
     private fun saveChanges() {
@@ -330,28 +320,29 @@ class QuickEditActivity : AppCompatActivity() {
             return
         }
 
-        activityScope.launch {
-            val result = executeCommand(
-                kind = HouseholdCommandKind.UPDATE,
-                payload = mapOf(
-                    "transactionId" to expenseId,
-                    "expectedVersion" to originalVersion,
-                    "patch" to mapOf(
-                        "merchant" to merchant,
-                        "amountInWon" to amount,
-                        "categoryId" to selectedCategoryKey,
-                        // 빈 문자열은 memo의 명시적 삭제 값입니다.
-                        "memo" to memo
-                    )
-                )
-            )
-            if (result is HouseholdCommandResult.Succeeded) {
-                Toast.makeText(this@QuickEditActivity, "저장되었습니다", Toast.LENGTH_SHORT).show()
-                completeCurrentQuickEdit()
-            } else {
-                showCommandFailure(result, "저장에 실패했습니다")
-            }
+        val patch = buildQuickEditUpdatePatch(
+            originalMerchant = originalMerchant,
+            originalAmountInWon = originalAmount,
+            originalCategoryId = originalCategory,
+            originalMemo = originalMemo,
+            merchant = merchant,
+            amountInWon = amount,
+            categoryId = selectedCategoryKey,
+            memo = memo
+        )
+        if (patch.isEmpty()) {
+            activityScope.launch { completeCurrentQuickEdit() }
+            return
         }
+
+        submitCommand(
+            kind = HouseholdCommandKind.UPDATE,
+            payload = mapOf(
+                "transactionId" to expenseId,
+                "expectedVersion" to originalVersion,
+                "patch" to patch
+            )
+        )
     }
 
     private fun showDeleteConfirmation() {
@@ -371,21 +362,13 @@ class QuickEditActivity : AppCompatActivity() {
             return
         }
 
-        activityScope.launch {
-            val result = executeCommand(
-                kind = HouseholdCommandKind.DELETE,
-                payload = mapOf(
-                    "transactionId" to expenseId,
-                    "expectedVersion" to originalVersion
-                )
+        submitCommand(
+            kind = HouseholdCommandKind.DELETE,
+            payload = mapOf(
+                "transactionId" to expenseId,
+                "expectedVersion" to originalVersion
             )
-            if (result is HouseholdCommandResult.Succeeded) {
-                Toast.makeText(this@QuickEditActivity, "삭제되었습니다", Toast.LENGTH_SHORT).show()
-                completeCurrentQuickEdit()
-            } else {
-                showCommandFailure(result, "삭제에 실패했습니다")
-            }
-        }
+        )
     }
 
     private fun showSplitDialog() {
@@ -530,40 +513,32 @@ class QuickEditActivity : AppCompatActivity() {
             }
 
             // 분할 실행
-            activityScope.launch {
-                val result = executeCommand(
-                    kind = HouseholdCommandKind.SPLIT,
-                    payload = mapOf(
-                        "transactionId" to expenseId,
-                        "expectedVersion" to originalVersion,
-                        "operation" to mapOf(
-                            "kind" to "items",
-                            // 분할 버튼을 누른 시점의 미저장 form을 immutable baseDraft로 보냅니다.
-                            "baseDraft" to mapOf(
-                                "merchant" to currentMerchant,
-                                "amountInWon" to currentAmount,
-                                "categoryId" to selectedCategoryKey,
-                                "memo" to etMemo.text.toString().trim()
-                            ),
-                            "items" to splits.map { split ->
-                                mapOf(
-                                    "merchant" to split.merchant.trim(),
-                                    "amountInWon" to split.amount,
-                                    "categoryId" to split.category,
-                                    "memo" to split.memo.trim()
-                                )
-                            }
-                        )
+            submitCommand(
+                kind = HouseholdCommandKind.SPLIT,
+                payload = mapOf(
+                    "transactionId" to expenseId,
+                    "expectedVersion" to originalVersion,
+                    "operation" to mapOf(
+                        "kind" to "items",
+                        // 분할 버튼을 누른 시점의 미저장 form을 immutable baseDraft로 보냅니다.
+                        "baseDraft" to mapOf(
+                            "merchant" to currentMerchant,
+                            "amountInWon" to currentAmount,
+                            "categoryId" to selectedCategoryKey,
+                            "memo" to etMemo.text.toString().trim()
+                        ),
+                        "items" to splits.map { split ->
+                            mapOf(
+                                "merchant" to split.merchant.trim(),
+                                "amountInWon" to split.amount,
+                                "categoryId" to split.category,
+                                "memo" to split.memo.trim()
+                            )
+                        }
                     )
-                )
-                if (result is HouseholdCommandResult.Succeeded) {
-                    Toast.makeText(this@QuickEditActivity, "분할되었습니다", Toast.LENGTH_SHORT).show()
-                    dialog.dismiss()
-                    completeCurrentQuickEdit()
-                } else {
-                    showCommandFailure(result, "분할에 실패했습니다")
-                }
-            }
+                ),
+                onAccepted = dialog::dismiss
+            )
         }
 
         renderSplitItems()
@@ -577,51 +552,66 @@ class QuickEditActivity : AppCompatActivity() {
         )
     }
 
-    private suspend fun executeCommand(
+    private fun submitCommand(
         kind: HouseholdCommandKind,
-        payload: Map<String, Any?>
-    ): HouseholdCommandResult {
-        val householdId = HouseholdPreferences.getHouseholdKey(this)
-        if (householdId.isBlank()) {
-            return HouseholdCommandResult.Rejected("HOUSEHOLD_SESSION_REQUIRED")
-        }
+        payload: Map<String, Any?>,
+        onAccepted: () -> Unit = {}
+    ) {
+        if (commandSubmissionInProgress) return
+        commandSubmissionInProgress = true
 
-        val stablePayload = payload.toString()
-        val operationId = UUID.nameUUIDFromBytes(
-            "$expenseId|$originalVersion|${kind.wireName}|$stablePayload"
-                .toByteArray(Charsets.UTF_8)
-        ).toString()
-        val envelope = HouseholdCommandEnvelopeV1.create(
-            householdId = householdId,
-            command = kind,
-            payload = payload,
-            operationId = operationId
-        )
-        return withContext(Dispatchers.IO) { commandClient.execute(envelope) }
-    }
-
-    private fun showCommandFailure(result: HouseholdCommandResult, fallback: String) {
-        val message = when (result) {
-            is HouseholdCommandResult.Conflict ->
-                "다른 곳에서 먼저 변경되었습니다. 최신 내역을 다시 열어주세요"
-            is HouseholdCommandResult.RetryableFailure ->
-                "서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요"
-            is HouseholdCommandResult.ContractFailure ->
-                "앱과 서버의 응답 형식이 맞지 않습니다. 앱을 업데이트한 뒤 다시 시도해주세요"
-            is HouseholdCommandResult.Rejected -> when (result.code) {
-                "FORBIDDEN" -> "이 지출을 변경할 권한이 없습니다"
-                "NOT_FOUND" -> "이미 삭제되었거나 존재하지 않는 지출입니다"
-                else -> fallback
+        activityScope.launch {
+            val householdId = HouseholdPreferences.getHouseholdKey(this@QuickEditActivity)
+            if (householdId.isBlank()) {
+                commandSubmissionInProgress = false
+                Toast.makeText(
+                    this@QuickEditActivity,
+                    "가계부 연결을 확인해 주세요",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@launch
             }
-            is HouseholdCommandResult.Succeeded -> return
+
+            val stablePayload = payload.toString()
+            val operationId = UUID.nameUUIDFromBytes(
+                "$expenseId|$originalVersion|${kind.wireName}|$stablePayload"
+                    .toByteArray(Charsets.UTF_8)
+            ).toString()
+            val envelope = HouseholdCommandEnvelopeV1.create(
+                householdId = householdId,
+                command = kind,
+                payload = payload,
+                operationId = operationId
+            )
+
+            when (
+                QuickEditCommandDelivery.enqueueAndDispatch(
+                    context = applicationContext,
+                    transactionId = expenseId,
+                    envelope = envelope
+                )
+            ) {
+                QuickEditCommandEnqueueResult.Accepted -> {
+                    onAccepted()
+                    completeCurrentQuickEdit()
+                }
+                is QuickEditCommandEnqueueResult.Rejected -> {
+                    commandSubmissionInProgress = false
+                    Toast.makeText(
+                        this@QuickEditActivity,
+                        "빠른 편집을 안전하게 저장하지 못했습니다. 다시 시도해 주세요",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
         }
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 
     private suspend fun completeCurrentQuickEdit() {
         val completedTransactionId = expenseId
+        QuickEditCoordinator.completeCurrent(applicationContext, completedTransactionId)
         finish()
-        QuickEditCoordinator.completeAndAdvance(applicationContext, completedTransactionId)
+        QuickEditCoordinator.presentNextAsync(applicationContext)
     }
 
     private fun dismissCurrentQuickEdit() {

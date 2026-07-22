@@ -132,7 +132,7 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
   }, [goldPrice, quantity]);
 
   const saveGoldHolding = useCallback(async () => {
-    if (!assetId || !isPhysicalGoldAsset || !goldPrice || !quantity || isSaving) {
+    if (!asset || !assetId || !isPhysicalGoldAsset || !goldPrice || !quantity || isSaving) {
       return false;
     }
 
@@ -145,7 +145,7 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
       await updateAsset(assetId, {
         currentBalance: totalValue,
         quantity: parseFloat(quantity) || 0,
-      });
+      }, asset.aggregateVersion);
       return true;
     } catch (error) {
       console.error('Failed to save gold holding:', error);
@@ -153,7 +153,7 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
     } finally {
       setIsSaving(false);
     }
-  }, [assetId, goldPrice, isPhysicalGoldAsset, isSaving, quantity, totalValue]);
+  }, [asset, assetId, goldPrice, isPhysicalGoldAsset, isSaving, quantity, totalValue]);
 
   return {
     quantity,

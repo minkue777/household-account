@@ -319,12 +319,17 @@ Event payload는 projection 조정에 필요한 최소 금액·날짜·category 
 
 ### 8.2 조회와 Projection
 
-- 브라우저 Web의 단순 월 원장 목록은 Ledger 소유 공개 Firestore Read Contract로 제공할 수 있습니다. Android WebView는 Firestore 실시간 stream 대신 인증된 `ledger.list-transactions.v1` Query Port를 사용하며, 요청에 household scope를 임의 입력하지 않고 검증된 SessionScope와 시작일·종료일·거래 유형만 전달합니다.
-- Android WebView의 목록은 최초 조회, 성공한 원장 mutation 직후, 앱 focus/visible 복귀, 30초 주기 조회로 수렴합니다. 이전 조회가 진행 중이면 중복 호출하지 않고, 구독 해제 뒤 도착한 응답은 폐기하며, 각 조회에는 20초 deadline을 둡니다.
+- 브라우저 Web·PWA·Android WebView의 월·연 원장 목록은 Ledger가 소유한 같은 공개 Firestore Read Contract를 실시간 구독합니다. 검증된 SessionScope의 `householdId`와 시작일·종료일을 `householdId + date` 복합 index에 전달하고, 거래 유형과 lifecycle 가시성은 같은 Read Adapter가 적용합니다.
+- 생성·수정·삭제 Command를 보내는 순간 client의 Ledger 낙관적 Projection에 변경을 반영합니다. 서버의 Canonical Command 결과와 이어지는 실시간 snapshot으로 확정·수렴하며, typed rejection 또는 version conflict이면 해당 mutation만 rollback합니다. 성공 뒤 기간 목록을 별도 조회하거나 focus·visible 이벤트 및 30초 polling으로 재조회하지 않습니다.
+- Ledger 낙관적 Projection은 `householdId` scope별로 격리합니다. 월·연간·통계·검색처럼 같은 가구에서 동시에 열린 모든 구독은 같은 mutation을 관찰하되, 다른 가구의 pending·committed overlay는 절대 합성하지 않습니다.
+- 로그아웃·가구 전환으로 `SessionScope`를 해제할 때 모든 Ledger base와 pending·committed overlay를 폐기합니다. 이전 session의 늦은 Command 응답은 폐기된 mutation ID에만 귀속되며 새 session Projection에 다시 주입하지 않습니다.
+- 날짜·검색어 등 query 경계를 이동하는 수정은 원래 query에서 즉시 제거하고 새 query에 즉시 추가합니다. 원래 범위와 목적 범위의 실시간 snapshot이 각각 새 version 또는 범위 이탈을 확인할 때까지 Canonical overlay를 유지합니다.
+- Update·Category 성공 응답에 없는 카드 출처, local currency 표시, split group, merge 복원 snapshot 같은 Read Model 필드는 직전 projected entity에서 보존합니다. 서버가 반환한 수정 필드와 version을 우선 적용하고, 전체 실시간 snapshot을 받은 뒤 그 snapshot으로 수렴합니다.
+- 검색 refresh는 요청 revision을 사용하여 keyword·scope 변경 전의 늦은 응답을 폐기합니다. 검색 화면도 서비스가 확정한 Canonical overlay를 사용하며 client에서 version이나 성공 결과를 추측해 base snapshot으로 기록하지 않습니다.
 - Budget와 Reporting은 Event 소비 Projection이며 Ledger Repository를 import하지 않습니다.
 - Read Contract는 schemaVersion, index, 결정 정렬, Membership Rules를 명시합니다.
 - `TransactionDeleted.v1`을 반영한 Projection과 직접 조회 Adapter 모두 deleted 거래를 제거하며, 다음 조회에서 Canonical active 집합으로 수렴합니다.
-- 브라우저 실시간 listener와 Android 서버 조회 오류는 무한 loading으로 남기지 않고 client의 failed 상태로 전달합니다. 이미 성공한 snapshot이 있으면 일시 실패로 기존 화면을 지우지 않습니다.
+- 공유 실시간 listener 오류는 무한 loading으로 남기지 않고 client의 failed 상태로 전달합니다. 이미 성공한 snapshot이 있으면 일시 실패로 기존 화면을 지우지 않습니다.
 
 ### 8.3 외부 연동
 

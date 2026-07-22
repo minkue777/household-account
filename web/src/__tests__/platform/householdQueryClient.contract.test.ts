@@ -63,34 +63,4 @@ describe('Household Query Client 계약', () => {
     ).rejects.toEqual(new HouseholdQueryError('QUERY_UNAVAILABLE', true));
   });
 
-  it('ledger 기간 조회는 구현 상세 없이 날짜와 거래 유형 계약만 전송한다', async () => {
-    let captured: HouseholdQueryEnvelope | undefined;
-    const client = new HouseholdQueryClient(
-      {
-        async send<Name extends HouseholdQueryName>(envelope: HouseholdQueryEnvelope<Name>) {
-          captured = envelope;
-          return {
-            kind: 'succeeded',
-            value: { transactions: [] },
-          } as HouseholdQueryOutcome<HouseholdQueryResults[Name]>;
-        },
-      },
-      () => 'household-session'
-    );
-
-    await expect(client.execute('ledger.list-transactions.v1', {
-      startDate: '2026-07-01',
-      endDate: '2026-07-31',
-      transactionType: 'expense',
-    })).resolves.toEqual({ transactions: [] });
-    expect(captured).toMatchObject({
-      householdId: 'household-session',
-      query: 'ledger.list-transactions.v1',
-      payload: {
-        startDate: '2026-07-01',
-        endDate: '2026-07-31',
-        transactionType: 'expense',
-      },
-    });
-  });
 });

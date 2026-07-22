@@ -3,7 +3,6 @@ import type { HouseholdQueryHandler } from "./householdQuery";
 /** contracts/fixtures/system/household-query-manifest.v1.json의 런타임 사본입니다. */
 export const HOUSEHOLD_QUERY_NAMES = Object.freeze([
   "ledger.get-transaction.v1",
-  "ledger.list-transactions.v1",
   "shortcut.get-credential-status.v1",
   "portfolio.search-instruments.v1",
   "portfolio.get-instrument-quote.v1",

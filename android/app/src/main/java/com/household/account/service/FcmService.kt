@@ -24,6 +24,7 @@ class FcmService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
+        if (!FidEndpointManager.shouldDisplayIncomingNotification(applicationContext)) return
         // notification 페이로드가 있으면 포그라운드에서 알림 표시
         // (백그라운드에서는 시스템이 notification 기반으로 자동 표시)
         message.notification?.let { notification ->

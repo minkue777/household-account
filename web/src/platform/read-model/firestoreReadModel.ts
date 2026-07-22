@@ -9,12 +9,14 @@ export {
   collection,
   doc,
   getDoc,
+  getDocFromCache,
   getDocs,
   onSnapshot,
   orderBy,
   query,
   where,
   type DocumentData,
+  type DocumentSnapshot,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 

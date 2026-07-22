@@ -153,11 +153,11 @@ flowchart LR
 - Functions 모듈끼리 자기 HTTP endpoint를 다시 호출하지 않고 메모리 안의 공개 Port로 호출한다.
 - 현재 함수 이름과 배포 지역은 전환 중 Facade로 유지할 수 있다.
 - Gen1→Gen2, TypeScript target 변경, 폴더 재구성, 업무 로직 이전을 한 변경에 묶지 않는다.
-- 브라우저 Web의 Firestore 직접 접근은 명시적으로 공개한 읽기 계약에만 허용한다.
-- Android WebView의 월·연 원장 목록은 Firestore 실시간 stream에 직접 의존하지 않고 인증된 `ledger.list-transactions.v1` Query Port에서 요청 기간·거래 유형으로 제한해 읽는다. 성공한 mutation 직후, 앱이 다시 visible/focus 상태가 될 때, 최대 30초 주기로 재조회해 수렴한다.
-- Android WebView에 남아 있는 공개 Firestore 읽기는 WebView 전용 long-polling 전송 정책을 사용한다. 최초 세션·가계부 복원과 서버 원장 조회에는 각각 유한 deadline을 두어 platform transport 장애가 무한 loading으로 노출되지 않게 한다.
-- Android에서는 Native Firebase Principal이 인증 권위이며 WebView 시작마다 짧은 custom-token exchange로 in-memory Web 인증 세션을 다시 만든다. WebView IndexedDB의 장기 Firebase Auth 상태와 auth observer 응답 여부를 세션 권위로 사용하지 않으며, exchange 자체에도 유한 deadline을 적용한다.
-- Android의 Domain 컬렉션 직접 읽기·쓰기는 최종적으로 제거한다.
+- 브라우저 Web·PWA·Android WebView의 Firestore 직접 접근은 명시적으로 공개한 읽기 계약에만 허용한다.
+- 모든 Web runtime의 월·연 원장 목록은 Ledger가 소유한 같은 Firestore Read Contract를 사용한다. 검증된 SessionScope의 `householdId`와 날짜 범위로 복합 index를 사용하는 실시간 listener를 열고, 거래 유형과 lifecycle 가시성은 Ledger Read Adapter가 동일하게 적용한다.
+- 원장 변경은 인증된 Functions Command를 통과시키되 client는 Command 전송과 동시에 낙관적 Projection을 화면에 반영한다. 서버가 반환한 Canonical 결과와 실시간 snapshot으로 확정·수렴하고 typed rejection이나 version conflict에서는 해당 변경만 rollback한다. 변경 뒤 별도 기간 Query를 호출하거나 30초 polling으로 화면을 갱신하지 않는다.
+- Android에서는 Native Firebase Principal이 인증 권위이며 WebView 시작마다 짧은 custom-token exchange로 in-memory Web 인증 세션을 다시 만든다. 서버는 같은 인증 UID로 해석한 authoritative Membership 결과를 token 응답에 함께 싣고, Web은 custom token 로그인 결과 UID가 응답 UID와 일치할 때만 이를 최초 SessionScope에 재사용한다. 결과가 없는 구버전·일시 조회 실패만 별도 Membership Command로 fallback한다. WebView IndexedDB의 장기 Firebase Auth 상태와 auth observer 응답 여부를 세션 권위로 사용하지 않으며, exchange 자체에도 유한 deadline을 적용한다.
+- Native Android 코드의 Domain 컬렉션 직접 읽기·쓰기는 최종적으로 제거한다. Android WebView 안의 Web runtime은 다른 Web runtime과 같은 공개 Firestore Read Contract만 사용한다.
 - 운영 artifact는 [배포 안전성](../requirements/supporting-platform/modules/delivery-assurance/requirements.md) gate가 명시적 Firebase project, 계약 호환 순서, Rules·index·test·smoke를 검증한 뒤에만 배포한다.
 
 ## 5. Bounded Context와 기능 모듈
@@ -639,7 +639,8 @@ sequenceDiagram
 - 유효한 지역화폐 잔액 관찰은 결제 parse·카드 매칭·거래 생성의 성공, 중복, 거부, 실패와 독립적으로 한 번 처리한다. 결제 branch 실패가 balance branch를 억제하거나 그 반대가 되어서는 안 된다.
 - 지역화폐 결제 거래는 검증된 capture의 `localCurrencyType`을 immutable하게 보존한다. 홈 카드 상세는 클릭 시 선택 type 하나를 Ledger Query에 고정 전달하고 내부 전체·유형 전환 UI를 두지 않으며, legacy unknown은 일반 원장에서만 조회한다.
 - Android QuickEdit은 `Created` 또는 편집 가능한 확정 ID를 받은 뒤에만 연다.
-- 연속 QuickEdit은 Android Host의 Keystore 암호화 FIFO에 최소 session scope·거래 ID·sequence만 저장한다. 한 번에 하나만 표시하고 성공 완료·명시 닫기 뒤 다음 항목으로 진행하며, 표시 전 Ledger 최신 snapshot과 Actor 권한을 다시 검증한다.
+- 연속 QuickEdit은 Android Host의 Keystore 암호화 표시 FIFO에 최소 session scope·거래 ID·sequence만 저장한다. 한 번에 하나만 표시하고 명시 닫기 또는 별도 command outbox의 영속 접수 뒤 다음 항목으로 진행하며, 표시 전 Ledger 최신 snapshot과 Actor 권한을 다시 검증한다.
+- QuickEdit은 별도 Domain 기능이 아니라 일반 Ledger Update·Delete·Split·알림 요청 use case의 Android 입력·전달 Adapter다. 고정 commandId·idempotencyKey와 versioned payload를 별도 Keystore 암호화 command outbox에 commit하고 WorkManager 영속 예약까지 완료한 뒤 Activity에서 분리한다. commit부터 영속 예약·접수 판정까지는 session purge와 같은 짧은 lifecycle 임계 구역으로 보호하되 서버 왕복은 그 밖에서 실행하여 다음 QuickEdit 접수를 막지 않는다. WorkManager가 같은 envelope로 접수 후 정확히 72시간 전까지 FIFO 재시도하며 앞 명령을 뒤 명령이 추월하지 않는다. Success·AlreadyProcessed는 즉시 삭제하고, 충돌·영구 거부·계약 실패·만료는 Command 자동 재시도 없이 실패 알림 전달 전까지만 needs-attention으로 보존한 뒤 민감값 없는 알림 성공 시 payload를 삭제한다. 알림 차단은 Worker 재시도를 유지하고, 복호화·codec 손상은 payload를 fail-closed 삭제하되 비민감 손상 신호를 남긴다. Activity 종료를 업무 성공 Toast나 완료 event로 해석하지 않는다.
 - QuickEdit 분할은 화면의 현재 미저장 form을 immutable base draft로 고정해 expectedVersion과 함께 Ledger `Split` 한 번으로 보낸다. 서버는 provenance를 원본에서 보존하고, 다른 사용자의 Update·Split이 먼저 commit되어 version이 바뀌면 stale 요청 전체를 Conflict로 거부한다.
 - 모든 채널은 검증된 creatorMemberId, 업무 source, 명시적 originChannel을 Ledger에 전달한다. creator 유무를 알림 전송 gate로 사용하거나 source 하나에 업무 출처와 입력 채널 의미를 겹치지 않는다.
 - Android 자동 등록은 로컬 QuickEdit만 실행하고 푸시를 만들지 않으며, iPhone Shortcut 자동 등록은 creator 본인의 iPhone endpoint에 편집 링크 푸시를 만든다.
@@ -689,6 +690,8 @@ queued → submitting → confirmed | duplicate | rejected | needs-review
 - Queue entry는 생성 후 72시간까지만 재시도한다. parser 무결과를 포함한 `completion=terminal`, 로그아웃·멤버/가구 변경·만료·복호화 실패 시 삭제하고 다른 Actor로 재연결하지 않는다. `partial-retryable`이면 같은 raw envelope를 재전송하되 서버 receipt가 terminal branch를 재실행하지 않는다.
 - 전환 전 `CaptureEnvelope.v1` Queue entry는 contractVersion으로 구분해 레거시 callable에 보내며 새 raw 계약으로 재해석하거나 삭제하지 않는다.
 - `confirmed` 전에는 성공 broadcast와 QuickEdit을 실행하지 않는다.
+
+QuickEdit command outbox는 위 결제 원문 Queue와 저장소·entry·완료 조건을 공유하지 않는다. QuickEdit 화면의 client 검증을 통과한 Ledger Command를 암호화 commit하고, 이 로컬 접수 성공까지만 UI가 기다린다. 표시 FIFO에는 command payload를 넣지 않고 command outbox에는 표시 sequence를 넣지 않는다. 로그아웃·가구·멤버 전환에서는 두 QuickEdit 저장소를 모두 지운 뒤 새 session을 활성화한다.
 
 ### 8.4 취소
 
@@ -1005,6 +1008,7 @@ market-catalog/v1/snapshots/{asOfDate}/{version}.json.gz  # Holdings; 최근 성
 - [DEC-020](../requirements/governance/decisions.md#dec-020)에 따라 한 멤버는 Android·iPhone 홈 화면 PWA endpoint를 여러 개 가질 수 있고, endpoint 하나는 현재 household/member 하나에만 연결한다. 데스크톱은 등록하지 않는다.
 - [DEC-038](../requirements/governance/decisions.md#dec-038)에 따라 제거된 Membership은 endpoint cleanup 지연과 무관하게 recipient 계산과 FCM 호출 직전 모두 제외하고, 복구해도 과거 endpoint를 되살리지 않는다.
 - device identity와 주 기기 개념은 Canonical 모델에 넣지 않는다. 같은 FID 등록은 endpoint를 갱신하고 새 FID는 별도 endpoint로 추가한다. 멤버 변경은 로그아웃 삭제와 새 로그인 등록으로 이루어지며, 등록 시 낡은 binding 교체는 삭제 유실을 복구하는 무결성 안전장치다.
+- Android 로그아웃은 서버 endpoint 삭제보다 먼저 `FcmService` component를 비활성화하고 기존 알림을 취소한다. 원격 삭제·Firebase Messaging unregister·로컬 억제 상태 저장은 유한 시간 best-effort이며 실패해도 로그아웃을 막지 않는다. 세션 없는 process 시작은 component를 비활성화하고, 재로그인은 필요한 stale unregister 뒤 component를 활성화하되 현재 binding 등록 확인 전 foreground 표시를 허용하지 않는다.
 - 모든 Canonical 문서에 `schemaVersion`, 서버 `createdAt/updatedAt`을 둔다.
 - 영속 Projection에는 `sourceVersion`, `lastEventId`, `projectedAt` 또는 동등한 재구축 metadata를 둔다. 요청 시 계산하는 Budget·Home·지출 통계에는 Projection freshness를 두지 않는다.
 - Card·Merchant claim을 별도 문서로 둘 필요가 없도록 결정적 본문 ID를 사용한다면 위 claim 경로를 제거하고 그 ID 자체가 uniqueness reservation임을 계약에 기록한다.
@@ -1358,6 +1362,7 @@ adapters/
 | [DEC-053](../requirements/governance/decisions.md#dec-053) 외화 평가 관측 조합 | Holdings `ForeignCurrencyValuationPolicy`, 원 Quote·ExchangeRateObservation 저장 | 각 최신 사용 가능 관측을 skew 제한 없이 결합, 두 observedAt·provider 보존, 환율 최초 부재 NoData |
 | [DEC-054](../requirements/governance/decisions.md#dec-054) QuickEdit FIFO | Android Host `QuickEditPresentationPolicy`, `QuickEditPendingQueuePort` | 현재 편집을 덮어쓰지 않고 고유 sequence FIFO로 하나씩 표시, process 복구·session 격리, Ledger 최신 snapshot 재조회 |
 | [DEC-055](../requirements/governance/decisions.md#dec-055) QuickEdit 현재 form 분할 | Android `SplitDraftSourcePolicy`, Ledger `Split` UoW·aggregateVersion | 미저장 form 전체를 단일 immutable draft로 제출, provenance 서버 보존, 동시 stale 요청 write 0건 Conflict |
+| [DEC-067](../requirements/governance/decisions.md#dec-067) QuickEdit 비동기 Command 전달 | 일반 Ledger Command의 Android Adapter, `QuickEditCommandOutbox`, versioned codec, Keystore Crypto Adapter, WorkManager | 암호화 commit·영속 예약 뒤 Activity 종료, 같은 envelope 최대 72시간 FIFO 재시도, terminal·만료는 실패 알림 성공 전까지 보존, 손상 비민감 신호, session 격리 |
 | [DEC-056](../requirements/governance/decisions.md#dec-056) 재병합 계보 평탄화 | Ledger `NestedMergePolicy`, 평탄 leaf snapshot·중간 history ref | merge ancestry만 non-merge leaf까지 펼침, 중복 leaf·순환 전체 거부, Unmerge·취소는 leaf 집합 사용 |
 | [DEC-057](../requirements/governance/decisions.md#dec-057) 선택 지역화폐 상세 | Ledger `LocalCurrencyTransactionPolicy`·단일 type Query, Home detail navigation | 홈 선택 type만 표시, 상세 내부 전환 없음, legacy 임의 귀속 없음, split type 유지·모호한 merge 거부 |
 | [DEC-058](../requirements/governance/decisions.md#dec-058) 과거 자산 통계 dimension | Portfolio `AssetHistoryView.dimensions`, Reporting `HistoricalAssetScopeVisibilityPolicy`, Access historical display | 기간 Snapshot·baseline의 type·ownerRef 필터 보존, 현재 목록과 분리, 기간 변경 시 없는 선택은 전체 초기화 |

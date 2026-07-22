@@ -14,8 +14,26 @@ interface AndroidBridgeRequestMap {
   };
 }
 
+export type AndroidSignedInUserResolution =
+  | {
+      kind: 'membership-found';
+      membership: {
+        householdId: string;
+        memberId: string;
+        displayName: string;
+        aggregateVersion: number;
+        status: 'active';
+        capabilities: string[];
+      };
+    }
+  | { kind: 'first-visit-required'; choices: Array<'create' | 'join'> };
+
 interface AndroidBridgeResultMap {
-  'auth.sign-in': { customToken: string };
+  'auth.sign-in': {
+    customToken: string;
+    principalUid?: string;
+    signedInUserResolution?: AndroidSignedInUserResolution;
+  };
   'auth.sign-out': Record<string, never>;
   'session.refresh': { householdId: string; memberId: string; sessionGeneration: number };
   'app.get-version': { version: string | null };

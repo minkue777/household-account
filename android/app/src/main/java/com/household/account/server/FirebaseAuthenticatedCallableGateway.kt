@@ -17,10 +17,9 @@ class FirebaseAuthenticatedCallableGateway(
         functionName: String,
         payload: Map<String, Any?>
     ): Map<String, Any?> {
-        val user = auth.currentUser ?: throw UnauthenticatedCommandException()
+        if (auth.currentUser == null) throw UnauthenticatedCommandException()
 
         try {
-            user.getIdToken(false).await()
             val data = functions
                 .getHttpsCallable(functionName)
                 .call(payload)

@@ -49,7 +49,7 @@ export default function AssetList({
     // order 값 재계산
     const updates = newOrder.map((asset, index) => ({
       id: asset.id,
-      order: index * 1000, // 간격을 두어 나중에 중간 삽입 가능하도록
+      order: index,
     }));
 
     try {

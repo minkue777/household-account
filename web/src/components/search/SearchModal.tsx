@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { Expense, TransactionType } from '@/types/expense';
-import { searchExpenses, SplitItem } from '@/lib/expenseService';
+import {
+  expenseMatchesSearch,
+  searchExpenses,
+  subscribeToExpenseProjection,
+  SplitItem,
+} from '@/lib/expenseService';
 import {
   runSplitMonthsAction,
   runCancelSplitGroupAction,
@@ -19,8 +24,8 @@ interface SearchModalProps {
   onExpenseUpdate?: (
     expenseId: string,
     data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string }
-  ) => void;
-  onDelete?: (expenseId: string) => void;
+  ) => Promise<void> | void;
+  onDelete?: (expenseId: string) => Promise<void> | void;
   onSplitExpense?: (expense: Expense, splits: SplitItem[]) => void;
   transactionType: TransactionType;
 }
@@ -42,6 +47,8 @@ export default function SearchModal({
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+  const projectionRef = useRef<ReturnType<typeof subscribeToExpenseProjection> | null>(null);
+  const searchRequestIdRef = useRef(0);
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
@@ -62,9 +69,15 @@ export default function SearchModal({
   }, [isOpen]);
 
   const refreshSearch = async () => {
-    if (!keyword.trim()) return;
+    const projection = projectionRef.current;
+    if (!projection || !keyword.trim()) return;
+    const requestId = ++searchRequestIdRef.current;
     const searchResults = await searchExpenses(keyword, { transactionType });
-    setResults(searchResults);
+    if (
+      requestId !== searchRequestIdRef.current
+      || projectionRef.current !== projection
+    ) return;
+    projection.publish(searchResults);
   };
 
   const handleSaveEdit = async (updates: {
@@ -76,13 +89,13 @@ export default function SearchModal({
   }) => {
     if (!selectedExpense || !onExpenseUpdate) return;
     await onExpenseUpdate(selectedExpense.id, updates);
-    await refreshSearch();
+    void refreshSearch();
   };
 
   const handleDelete = async (id: string) => {
     if (!onDelete) return;
     await onDelete(id);
-    await refreshSearch();
+    void refreshSearch();
   };
 
   const handleSplitExpense = (expense: Expense, splits: SplitItem[]) => {
@@ -130,23 +143,39 @@ export default function SearchModal({
     }
 
     if (!keyword.trim()) {
+      setIsSearching(false);
       setResults([]);
       setExpandedMonth(null);
       return;
     }
 
+    const projection = subscribeToExpenseProjection(
+      setResults,
+      (expense) =>
+        expense.transactionType === transactionType
+        && expenseMatchesSearch(expense, keyword)
+    );
+    projectionRef.current = projection;
+
     debounceTimer.current = setTimeout(async () => {
+      const requestId = ++searchRequestIdRef.current;
       setIsSearching(true);
       try {
         const searchResults = await searchExpenses(keyword, { transactionType });
-        setResults(searchResults);
+        if (
+          requestId !== searchRequestIdRef.current
+          || projectionRef.current !== projection
+        ) return;
+        projection.publish(searchResults);
         if (searchResults.length > 0) {
           setExpandedMonth(searchResults[0].date.substring(0, 7));
         } else {
           setExpandedMonth(null);
         }
       } finally {
-        setIsSearching(false);
+        if (requestId === searchRequestIdRef.current) {
+          setIsSearching(false);
+        }
       }
     }, 300);
 
@@ -154,6 +183,9 @@ export default function SearchModal({
       if (debounceTimer.current) {
         clearTimeout(debounceTimer.current);
       }
+      searchRequestIdRef.current += 1;
+      if (projectionRef.current === projection) projectionRef.current = null;
+      projection.dispose();
     };
   }, [keyword, transactionType]);
 

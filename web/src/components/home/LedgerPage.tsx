@@ -51,7 +51,6 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const [selectedCategoryExpenses, setSelectedCategoryExpenses] = useState<Expense[]>([]);
   const [showLocalCurrencyModal, setShowLocalCurrencyModal] = useState(false);
   const [localCurrencyExpenses, setLocalCurrencyExpenses] = useState<Expense[]>([]);
   const [autoEditExpenseId, setAutoEditExpenseId] = useState<string | null>(null);
@@ -107,6 +106,12 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
       return undefined;
     }
 
+    // 첫 화면에 필요한 월간 원장을 먼저 표시한 뒤 연간 합계를 구독합니다.
+    // 두 범위 조회를 동시에 시작해 Android WebView의 초기 네트워크를 경합시키지 않습니다.
+    if (isLoading) {
+      return undefined;
+    }
+
     const startDate = `${currentYear}-01-01`;
     const endDate = `${currentYear}-12-31`;
 
@@ -121,7 +126,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     );
 
     return () => unsubscribe();
-  }, [currentYear, needsYearlyTotal, transactionType]);
+  }, [currentYear, isLoading, needsYearlyTotal, transactionType]);
 
   useEffect(() => {
     const editId = searchParams.get('edit');
@@ -187,11 +192,15 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     setSelectedDate(null);
   };
 
-  const handleCategoryClick = (category: Category, categoryExpenses: Expense[]) => {
+  const selectedCategoryExpenses = useMemo(() => {
+    if (!selectedCategory) return [];
+    return expenses
+      .filter((expense) => expense.category === selectedCategory)
+      .sort((left, right) => right.date.localeCompare(left.date));
+  }, [expenses, selectedCategory]);
+
+  const handleCategoryClick = (category: Category) => {
     setSelectedCategory(category);
-    setSelectedCategoryExpenses(
-      [...categoryExpenses].sort((a, b) => b.date.localeCompare(a.date))
-    );
   };
 
   const handleLocalCurrencyClick = (items: Expense[]) => {

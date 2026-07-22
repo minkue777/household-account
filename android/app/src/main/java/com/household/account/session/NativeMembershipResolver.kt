@@ -22,6 +22,12 @@ sealed interface NativeMembershipResolution {
 object NativeMembershipResolver {
     private val mutex = Mutex()
 
+    /** 같은 Native Firebase principal로 서버가 함께 반환한 해석 결과를 mirror에 반영합니다. */
+    fun acceptAuthoritative(
+        context: Context,
+        rawValue: Map<String, Any?>
+    ): NativeMembershipResolution = decodeAndPersist(context, rawValue)
+
     suspend fun refresh(context: Context): NativeMembershipResolution = mutex.withLock {
         val result = CallableHouseholdCommandClient(
             FirebaseAuthenticatedCallableGateway()

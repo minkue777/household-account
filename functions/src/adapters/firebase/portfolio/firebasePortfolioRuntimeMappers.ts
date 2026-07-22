@@ -222,11 +222,23 @@ export function mapPosition(input: {
   const merged = { ...(input.legacy ?? {}), ...(input.canonical ?? {}) };
   const positionKind = text(merged, "positionKind", input.sourceKind);
   if (positionKind !== "stock" && positionKind !== "crypto") return undefined;
-  const instrumentCode = text(
+  const rawHoldingType = text(merged, "holdingType");
+  const holdingType = ["stock", "bond", "cash", "manual"].includes(
+    rawHoldingType,
+  )
+    ? (rawHoldingType as PortfolioRuntimePosition["holdingType"])
+    : undefined;
+  const storedInstrumentCode = text(
     merged,
     "instrumentCode",
     text(merged, positionKind === "stock" ? "stockCode" : "marketCode"),
   );
+  const instrumentCode =
+    positionKind === "stock" &&
+    storedInstrumentCode === "" &&
+    (holdingType === "bond" || holdingType === "cash" || holdingType === "manual")
+      ? `LEGACY:${holdingType.toLocaleUpperCase("en-US")}:${input.positionId}`
+      : storedInstrumentCode;
   const instrumentName = text(
     merged,
     "instrumentName",
@@ -236,7 +248,7 @@ export function mapPosition(input: {
   const rawInstrumentType = text(
     merged,
     "instrumentType",
-    positionKind === "crypto" ? "crypto" : "stock",
+    positionKind === "crypto" ? "crypto" : holdingType ?? "stock",
   );
   const instrumentType = [
     "stock",
@@ -252,12 +264,6 @@ export function mapPosition(input: {
     : positionKind === "crypto"
       ? "crypto"
       : "stock";
-  const rawHoldingType = text(merged, "holdingType");
-  const holdingType = ["stock", "bond", "cash", "manual"].includes(
-    rawHoldingType,
-  )
-    ? (rawHoldingType as PortfolioRuntimePosition["holdingType"])
-    : undefined;
   const lifecycle = text(merged, "lifecycleState", "active");
   const instrument = record(merged.instrument);
   const rawMarket =

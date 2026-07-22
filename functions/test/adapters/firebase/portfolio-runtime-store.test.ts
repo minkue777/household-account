@@ -542,6 +542,60 @@ describe("Firebase portfolio runtime store", () => {
     });
   });
 
+  it("[T-HOLD-001][HOLD-001] updates a legacy cash position that has an empty code and no instrument type", async () => {
+    const memory = new InMemoryFirestore();
+    const assetId = await createStockAsset(memory);
+    memory.seed("stock_holdings/legacy-cash-1", {
+      householdId: "house-1",
+      assetId,
+      holdingType: "cash",
+      stockCode: "",
+      stockName: "예수금",
+      quantity: 1,
+      currentPrice: 1_000_000,
+      aggregateVersion: 3,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    expect(
+      await application(memory).updatePosition({
+        metadata: command(2, "portfolio.update-position.v1"),
+        assetId,
+        positionId: "legacy-cash-1",
+        positionKind: "stock",
+        expectedVersion: 3,
+        changes: {
+          stockName: "예수금",
+          quantity: 1,
+          currentPrice: 1_500_000,
+        },
+      }),
+    ).toEqual({ kind: "success", value: {} });
+
+    expect(memory.document("stock_holdings/legacy-cash-1")).toMatchObject({
+      holdingType: "cash",
+      stockName: "예수금",
+      instrumentType: "cash",
+      currentPrice: 1_500_000,
+      aggregateVersion: 4,
+    });
+    expect(
+      memory.document(
+        `households/house-1/assets/${assetId}/positions/legacy-cash-1`,
+      ),
+    ).toMatchObject({
+      instrumentCode: "LEGACY:CASH:LEGACY-CASH-1",
+      instrumentType: "cash",
+      lastQuote: { priceInWon: 1_500_000 },
+      aggregateVersion: 4,
+    });
+    expect(memory.document(`households/house-1/assets/${assetId}`)).toMatchObject({
+      currentBalance: 1_500_000,
+      aggregateVersion: 2,
+    });
+  });
+
   it("refreshes every supported active target and retains the last successful quote when a provider fails", async () => {
     const memory = new InMemoryFirestore();
     const assetId = await createStockAsset(memory);

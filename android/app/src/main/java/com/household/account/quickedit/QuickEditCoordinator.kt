@@ -19,8 +19,13 @@ import com.household.account.paymentcapture.CaptureSessionScope
 import com.household.account.server.FirebaseAuthenticatedCallableGateway
 import com.household.account.util.HouseholdPreferences
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 object QuickEditCoordinator {
     @Volatile
@@ -28,6 +33,7 @@ object QuickEditCoordinator {
     @Volatile
     private var processRecovered = false
     private val recoveryMutex = Mutex()
+    private val presentationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private fun queue(context: Context): QuickEditPendingQueue =
         queueInstance ?: synchronized(this) {
@@ -50,14 +56,21 @@ object QuickEditCoordinator {
         presentNext(context)
     }
 
-    suspend fun completeAndAdvance(context: Context, transactionId: String) {
-        val scope = currentScope(context)
-        queue(context).complete(scope, transactionId)
-        presentNext(context)
+    suspend fun completeCurrent(context: Context, transactionId: String) {
+        withContext(Dispatchers.IO) {
+            val scope = currentScope(context)
+            queue(context).complete(scope, transactionId)
+        }
+    }
+
+    fun presentNextAsync(context: Context) {
+        val applicationContext = context.applicationContext
+        presentationScope.launch { presentNext(applicationContext) }
     }
 
     suspend fun purgeForSessionTransition(context: Context) {
         queue(context).purge()
+        QuickEditCommandDelivery.purgeForSessionTransition(context)
         WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
     }
 

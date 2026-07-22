@@ -31,7 +31,7 @@ export class HouseholdCommandError extends Error {
   }
 }
 
-function createRequestId(prefix: string): string {
+export function createHouseholdCommandId(prefix = 'web-command'): string {
   const id = globalThis.crypto?.randomUUID?.();
   if (id) return `${prefix}-${id}`;
 
@@ -75,7 +75,7 @@ export class HouseholdCommandClient {
       : sessionHouseholdId ?? options.householdId;
     assertTenant(command, householdId);
 
-    const commandId = options.commandId ?? createRequestId('web-command');
+    const commandId = options.commandId ?? createHouseholdCommandId();
     const envelope: HouseholdCommandEnvelope<Name> = {
       contractVersion: HOUSEHOLD_COMMAND_CONTRACT_VERSION,
       commandId,

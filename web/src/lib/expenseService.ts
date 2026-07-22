@@ -10,18 +10,14 @@ import {
 } from '@/platform/read-model/firestoreReadModel';
 import { Expense, TransactionType } from '@/types/expense';
 import { ledgerCommands } from '@/features/ledger/application/ledgerCommands';
-import { ledgerQueries } from '@/features/ledger/application/ledgerQueries';
+import { ledgerOptimisticProjection } from '@/features/ledger/application/ledgerOptimisticProjection';
 import { isVisibleLedgerReadDocument } from '@/features/ledger/application/ledgerReadVisibility';
 import { requireClientSessionScope } from '@/composition/clientSessionScope';
-import { isAndroidHostAvailable } from '@/platform/android-host/androidHostBridge';
-import { withinDeadline } from '@/platform/network/operationDeadline';
-import type { LedgerRangeQueryTransaction } from '@/platform/functions-api/householdQueryContract';
+import type { LedgerTransactionCommandResult } from '@/platform/functions-api/householdCommandContract';
+import { createHouseholdCommandId } from '@/platform/functions-api/householdCommandClient';
 
 const COLLECTION_NAME = 'expenses';
 const DEFAULT_TRANSACTION_TYPE: TransactionType = 'expense';
-const SERVER_READ_TIMEOUT_MS = 20_000;
-const SERVER_READ_POLL_INTERVAL_MS = 30_000;
-const activeServerReadRefreshes = new Set<() => void>();
 
 interface AddExpenseOptions {
   notifyOnCreate?: boolean;
@@ -123,86 +119,37 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
   };
 }
 
-function mapServerTransaction(item: LedgerRangeQueryTransaction): Expense {
+function mapCommandTransaction(
+  transaction: LedgerTransactionCommandResult,
+  previous?: Expense
+): Expense {
   return {
-    id: item.id,
-    aggregateVersion: item.aggregateVersion,
-    date: item.date,
-    time: item.time,
-    merchant: item.merchant,
-    amount: item.amount,
-    transactionType: item.transactionType,
-    category: item.category,
-    cardType: item.cardType,
-    cardLastFour: item.cardDisplay,
-    memo: item.memo,
-    mergedFrom: item.mergedFrom,
-    splitGroupId: item.splitGroupId,
-    splitIndex: item.splitIndex,
-    splitTotal: item.splitTotal,
+    ...previous,
+    id: transaction.transactionId,
+    aggregateVersion: transaction.aggregateVersion,
+    date: transaction.accountingDate,
+    time: transaction.localTime,
+    merchant: transaction.merchant,
+    amount: transaction.amountInWon,
+    transactionType: transaction.transactionType,
+    category: transaction.categoryId.toLowerCase(),
+    cardType: previous?.cardType ?? transaction.cardType,
+    cardLastFour: previous?.cardLastFour ?? transaction.cardDisplay,
+    memo: transaction.memo,
   };
 }
 
-function refreshServerLedgerReads(): void {
-  activeServerReadRefreshes.forEach((refresh) => refresh());
-}
-
-async function invalidateAfter<T>(operation: Promise<T>): Promise<T> {
-  const result = await operation;
-  refreshServerLedgerReads();
-  return result;
-}
-
-function subscribeToServerDateRange(
-  startDate: string,
-  endDate: string,
-  callback: (expenses: Expense[]) => void,
-  transactionType: TransactionType
-): () => void {
-  let disposed = false;
-  let running = false;
-  let delivered = false;
-
-  const refresh = () => {
-    if (disposed || running) return;
-    running = true;
-    void withinDeadline(
-      ledgerQueries.listTransactions(startDate, endDate, transactionType),
-      SERVER_READ_TIMEOUT_MS,
-      'LEDGER_RANGE_READ_TIMEOUT'
-    )
-      .then(({ transactions }) => {
-        if (disposed) return;
-        delivered = true;
-        callback(transactions.map(mapServerTransaction));
-      })
-      .catch(() => {
-        if (!disposed && !delivered) {
-          delivered = true;
-          callback([]);
-        }
-      })
-      .finally(() => {
-        running = false;
-      });
-  };
-
-  const onVisibilityChange = () => {
-    if (document.visibilityState === 'visible') refresh();
-  };
-  const intervalId = window.setInterval(refresh, SERVER_READ_POLL_INTERVAL_MS);
-  window.addEventListener('focus', refresh);
-  document.addEventListener('visibilitychange', onVisibilityChange);
-  activeServerReadRefreshes.add(refresh);
-  refresh();
-
-  return () => {
-    disposed = true;
-    window.clearInterval(intervalId);
-    window.removeEventListener('focus', refresh);
-    document.removeEventListener('visibilitychange', onVisibilityChange);
-    activeServerReadRefreshes.delete(refresh);
-  };
+function deterministicLedgerTransactionId(commandId: string): string {
+  const bytes = new TextEncoder().encode(commandId);
+  let binary = '';
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  const encoded = globalThis.btoa(binary)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+  return `ledger-${encoded.slice(0, 80)}`;
 }
 
 function matchesTransactionType(
@@ -360,6 +307,21 @@ function matchesCardSearch(expense: Expense, keyword: string): boolean {
   );
 }
 
+export function expenseMatchesSearch(expense: Expense, keyword: string): boolean {
+  const normalizedKeyword = normalizeSearchText(keyword);
+  if (!normalizedKeyword) return false;
+  return normalizeSearchText(expense.merchant).includes(normalizedKeyword)
+    || normalizeSearchText(expense.memo).includes(normalizedKeyword)
+    || matchesCardSearch(expense, keyword);
+}
+
+export function subscribeToExpenseProjection(
+  callback: (expenses: Expense[]) => void,
+  accept: (expense: Expense) => boolean
+) {
+  return ledgerOptimisticProjection.subscribe(callback, accept, getHouseholdId());
+}
+
 /**
  * 지출 추가
  */
@@ -369,10 +331,25 @@ export async function addExpense(
 ): Promise<string> {
   const householdId = getHouseholdId();
   void options;
-  return invalidateAfter(ledgerCommands.record(householdId, {
+  const transaction = {
     ...expense,
     transactionType: expense.transactionType || DEFAULT_TRANSACTION_TYPE,
-  }));
+  };
+  const commandId = createHouseholdCommandId('ledger-record');
+  const optimistic: Expense = {
+    ...transaction,
+    id: deterministicLedgerTransactionId(commandId),
+    aggregateVersion: 1,
+  };
+  const mutationId = ledgerOptimisticProjection.beginCreate(optimistic, householdId);
+  try {
+    const confirmed = await ledgerCommands.record(householdId, transaction, commandId);
+    ledgerOptimisticProjection.commitCreate(mutationId, mapCommandTransaction(confirmed));
+    return confirmed.transactionId;
+  } catch (error) {
+    ledgerOptimisticProjection.rollback(mutationId);
+    throw error;
+  }
 }
 
 /**
@@ -383,14 +360,31 @@ export async function updateExpense(
   data: Partial<Expense>,
   expectedVersion: number
 ): Promise<void> {
-  await invalidateAfter(ledgerCommands.update(getHouseholdId(), id, expectedVersion, data));
+  const householdId = getHouseholdId();
+  const current = ledgerOptimisticProjection.current(id, householdId);
+  const mutationId = ledgerOptimisticProjection.beginUpdate(id, data, householdId);
+  try {
+    const updated = await ledgerCommands.update(householdId, id, expectedVersion, data);
+    ledgerOptimisticProjection.commitUpdate(mutationId, mapCommandTransaction(updated, current));
+  } catch (error) {
+    ledgerOptimisticProjection.rollback(mutationId);
+    throw error;
+  }
 }
 
 /**
  * 지출 삭제
  */
 export async function deleteExpense(id: string, expectedVersion: number): Promise<void> {
-  await invalidateAfter(ledgerCommands.delete(getHouseholdId(), id, expectedVersion));
+  const householdId = getHouseholdId();
+  const mutationId = ledgerOptimisticProjection.beginDelete(id, householdId);
+  try {
+    await ledgerCommands.delete(householdId, id, expectedVersion);
+    ledgerOptimisticProjection.commitDelete(mutationId);
+  } catch (error) {
+    ledgerOptimisticProjection.rollback(mutationId);
+    throw error;
+  }
 }
 
 /**
@@ -406,15 +400,21 @@ export function subscribeToMonthlyExpenses(
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
   const transactionType = options.transactionType ?? DEFAULT_TRANSACTION_TYPE;
+  const projection = ledgerOptimisticProjection.subscribe(
+    callback,
+    (expense) =>
+      expense.date >= startDate
+      && expense.date <= endDate
+      && matchesTransactionType(expense, transactionType),
+    householdId
+  );
 
-  if (isAndroidHostAvailable()) {
-    return subscribeToServerDateRange(startDate, endDate, callback, transactionType);
-  }
-
-  // householdId로 필터링 (인덱스 없이 클라이언트에서 정렬)
+  // 동일한 공개 read model을 모든 Web runtime에서 실시간 구독합니다.
   const q = query(
     collection(db, COLLECTION_NAME),
-    where('householdId', '==', householdId)
+    where('householdId', '==', householdId),
+    where('date', '>=', startDate),
+    where('date', '<=', endDate)
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -423,17 +423,16 @@ export function subscribeToMonthlyExpenses(
       .map(mapDocToExpense);
 
     // 클라이언트에서 날짜 필터링 및 정렬
-    const filtered = allExpenses
-      .filter((e) => e.date >= startDate && e.date <= endDate)
-      .filter((e) => matchesTransactionType(e, transactionType))
-      .sort((a, b) => b.date.localeCompare(a.date));
-
-    callback(filtered);
+    projection.publish(allExpenses);
   }, (error) => {
-    callback([]);
+    void error;
+    projection.publish([]);
   });
 
-  return unsubscribe;
+  return () => {
+    unsubscribe();
+    projection.dispose();
+  };
 }
 
 /**
@@ -444,9 +443,21 @@ export async function updateExpenseCategory(
   category: string,
   expectedVersion: number
 ): Promise<void> {
-  await invalidateAfter(
-    ledgerCommands.changeCategory(getHouseholdId(), id, category, expectedVersion)
-  );
+  const householdId = getHouseholdId();
+  const current = ledgerOptimisticProjection.current(id, householdId);
+  const mutationId = ledgerOptimisticProjection.beginUpdate(id, { category }, householdId);
+  try {
+    const updated = await ledgerCommands.changeCategory(
+      householdId,
+      id,
+      category,
+      expectedVersion
+    );
+    ledgerOptimisticProjection.commitUpdate(mutationId, mapCommandTransaction(updated, current));
+  } catch (error) {
+    ledgerOptimisticProjection.rollback(mutationId);
+    throw error;
+  }
 }
 
 /**
@@ -460,14 +471,20 @@ export function subscribeToDateRangeExpenses(
 ): () => void {
   const householdId = getHouseholdId();
   const transactionType = options.transactionType ?? DEFAULT_TRANSACTION_TYPE;
-
-  if (isAndroidHostAvailable()) {
-    return subscribeToServerDateRange(startDate, endDate, callback, transactionType);
-  }
+  const projection = ledgerOptimisticProjection.subscribe(
+    callback,
+    (expense) =>
+      expense.date >= startDate
+      && expense.date <= endDate
+      && matchesTransactionType(expense, transactionType),
+    householdId
+  );
 
   const q = query(
     collection(db, COLLECTION_NAME),
-    where('householdId', '==', householdId)
+    where('householdId', '==', householdId),
+    where('date', '>=', startDate),
+    where('date', '<=', endDate)
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -475,17 +492,16 @@ export function subscribeToDateRangeExpenses(
       .filter((document) => isVisibleLedgerReadDocument(document.data()))
       .map(mapDocToExpense);
 
-    const filtered = allExpenses
-      .filter((e) => e.date >= startDate && e.date <= endDate)
-      .filter((e) => matchesTransactionType(e, transactionType))
-      .sort((a, b) => b.date.localeCompare(a.date));
-
-    callback(filtered);
+    projection.publish(allExpenses);
   }, (error) => {
-    callback([]);
+    void error;
+    projection.publish([]);
   });
 
-  return unsubscribe;
+  return () => {
+    unsubscribe();
+    projection.dispose();
+  };
 }
 
 /**
@@ -499,11 +515,10 @@ export async function addManualExpense(
   memo?: string,
   transactionType: TransactionType = DEFAULT_TRANSACTION_TYPE
 ): Promise<string> {
-  const householdId = getHouseholdId();
   const now = new Date();
   const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-  return invalidateAfter(ledgerCommands.record(householdId, {
+  return addExpense({
     date,
     time,
     merchant,
@@ -513,7 +528,7 @@ export async function addManualExpense(
     cardType: 'manual',
     cardLastFour: '수동',
     memo: memo || '',
-  }));
+  });
 }
 
 export async function addManualMonthlySplit(
@@ -524,14 +539,14 @@ export async function addManualMonthlySplit(
   months: number,
   memo?: string
 ): Promise<string[]> {
-  const result = await invalidateAfter(ledgerCommands.recordMonthlySplit(getHouseholdId(), {
+  const result = await ledgerCommands.recordMonthlySplit(getHouseholdId(), {
     merchant,
     amountInWon: amount,
     categoryId: category,
     accountingDate: date,
     ...(memo !== undefined ? { memo } : {}),
     months,
-  }));
+  });
   return result.transactionIds;
 }
 
@@ -550,25 +565,42 @@ export async function splitExpense(
   originalExpense: Expense,
   splits: SplitItem[]
 ): Promise<string[]> {
-  return invalidateAfter(ledgerCommands.split(
-    getHouseholdId(),
-    originalExpense.id,
-    originalExpense.aggregateVersion,
-    splits
-  ));
+  const householdId = getHouseholdId();
+  const mutationId = ledgerOptimisticProjection.beginDelete(originalExpense.id, householdId);
+  try {
+    const transactionIds = await ledgerCommands.split(
+      householdId,
+      originalExpense.id,
+      originalExpense.aggregateVersion,
+      splits
+    );
+    ledgerOptimisticProjection.commitDelete(mutationId);
+    return transactionIds;
+  } catch (error) {
+    ledgerOptimisticProjection.rollback(mutationId);
+    throw error;
+  }
 }
 
 export async function splitExpenseMonthly(
   expense: Expense,
   months: number
 ): Promise<string[]> {
-  const result = await invalidateAfter(ledgerCommands.splitExistingMonthly(
-    getHouseholdId(),
-    expense.id,
-    expense.aggregateVersion,
-    months
-  ));
-  return result.transactionIds;
+  const householdId = getHouseholdId();
+  const mutationId = ledgerOptimisticProjection.beginDelete(expense.id, householdId);
+  try {
+    const result = await ledgerCommands.splitExistingMonthly(
+      householdId,
+      expense.id,
+      expense.aggregateVersion,
+      months
+    );
+    ledgerOptimisticProjection.commitDelete(mutationId);
+    return result.transactionIds;
+  } catch (error) {
+    ledgerOptimisticProjection.rollback(mutationId);
+    throw error;
+  }
 }
 
 /**
@@ -580,13 +612,36 @@ export async function mergeExpenses(
   targetExpense: Expense,
   sourceExpense: Expense
 ): Promise<void> {
-  await invalidateAfter(ledgerCommands.merge(
-    getHouseholdId(),
-    targetExpense.id,
-    targetExpense.aggregateVersion,
-    sourceExpense.id,
-    sourceExpense.aggregateVersion
-  ));
+  const householdId = getHouseholdId();
+  const targetMutationId = ledgerOptimisticProjection.beginUpdate(targetExpense.id, {
+    amount: targetExpense.amount + sourceExpense.amount,
+  }, householdId);
+  let sourceMutationId: string;
+  try {
+    sourceMutationId = ledgerOptimisticProjection.beginDelete(sourceExpense.id, householdId);
+  } catch (error) {
+    ledgerOptimisticProjection.rollback(targetMutationId);
+    throw error;
+  }
+  try {
+    await ledgerCommands.merge(
+      householdId,
+      targetExpense.id,
+      targetExpense.aggregateVersion,
+      sourceExpense.id,
+      sourceExpense.aggregateVersion
+    );
+    ledgerOptimisticProjection.commitUpdate(targetMutationId, {
+      ...targetExpense,
+      amount: targetExpense.amount + sourceExpense.amount,
+      aggregateVersion: targetExpense.aggregateVersion + 1,
+    });
+    ledgerOptimisticProjection.commitDelete(sourceMutationId);
+  } catch (error) {
+    ledgerOptimisticProjection.rollback(targetMutationId);
+    ledgerOptimisticProjection.rollback(sourceMutationId);
+    throw error;
+  }
 }
 
 /**
@@ -597,9 +652,7 @@ export async function unmergeExpense(expense: Expense): Promise<string[]> {
   if (!expense.mergedFrom || expense.mergedFrom.length === 0) {
     return [];
   }
-  return invalidateAfter(
-    ledgerCommands.unmerge(getHouseholdId(), expense.id, expense.aggregateVersion)
-  );
+  return ledgerCommands.unmerge(getHouseholdId(), expense.id, expense.aggregateVersion);
 }
 
 /**
@@ -622,17 +675,10 @@ export async function searchExpenses(
   );
 
   const snapshot = await getDocs(q);
-  const lowerKeyword = normalizeSearchText(keyword);
-
   const results = snapshot.docs
     .map(mapDocToExpense)
     .filter((expense) => matchesTransactionType(expense, options.transactionType))
-    .filter((expense) => {
-      const merchantMatch = normalizeSearchText(expense.merchant).includes(lowerKeyword);
-      const memoMatch = normalizeSearchText(expense.memo).includes(lowerKeyword);
-      const cardMatch = matchesCardSearch(expense, keyword);
-      return merchantMatch || memoMatch || cardMatch;
-    })
+    .filter((expense) => expenseMatchesSearch(expense, keyword))
     .sort((a, b) => b.date.localeCompare(a.date));
 
   return results;
@@ -678,11 +724,11 @@ export async function cancelSplitGroup(
   groupSnapshot?: readonly Expense[]
 ): Promise<void> {
   const snapshot = groupSnapshot ?? await getSplitGroupExpenses(splitGroupId);
-  await invalidateAfter(ledgerCommands.cancelMonthlySplit(
+  await ledgerCommands.cancelMonthlySplit(
     getHouseholdId(),
     splitGroupId,
     expectedVersionsOf(snapshot)
-  ));
+  );
 }
 
 /**
@@ -695,10 +741,10 @@ export async function updateSplitGroup(
   groupSnapshot?: readonly Expense[]
 ): Promise<string> {
   const snapshot = groupSnapshot ?? await getSplitGroupExpenses(splitGroupId);
-  return invalidateAfter(ledgerCommands.reconfigureMonthlySplit(
+  return ledgerCommands.reconfigureMonthlySplit(
     getHouseholdId(),
     splitGroupId,
     newMonths,
     expectedVersionsOf(snapshot)
-  ));
+  );
 }

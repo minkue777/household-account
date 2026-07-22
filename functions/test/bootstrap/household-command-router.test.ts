@@ -15,6 +15,9 @@ import type {
 } from "../../src/bootstrap/commands/householdCommandPorts";
 
 class ReceiptMemory implements HouseholdCommandReceiptPort {
+  claimCount = 0;
+  completeCount = 0;
+
   private readonly values = new Map<
     string,
     { payloadHash: string; result?: HouseholdCommandResult }
@@ -24,6 +27,7 @@ class ReceiptMemory implements HouseholdCommandReceiptPort {
     receiptId: string;
     payloadHash: string;
   }): Promise<HouseholdCommandReceiptClaim> {
+    this.claimCount += 1;
     const existing = this.values.get(input.receiptId);
     if (existing === undefined) {
       this.values.set(input.receiptId, { payloadHash: input.payloadHash });
@@ -42,6 +46,7 @@ class ReceiptMemory implements HouseholdCommandReceiptPort {
     payloadHash: string;
     result: HouseholdCommandResult;
   }): Promise<void> {
+    this.completeCount += 1;
     this.values.set(input.receiptId, {
       payloadHash: input.payloadHash,
       result: input.result,
@@ -110,7 +115,7 @@ function subject(customExecute?: HouseholdCommandHandler["execute"]) {
     command: "ledger.record-manual-transaction.v1",
     payload: { merchant: "가맹점", amountInWon: 10_000 },
   };
-  return { router, request, executions: () => executions };
+  return { router, request, receipts, executions: () => executions };
 }
 
 describe("Household command bootstrap boundary", () => {
@@ -170,6 +175,8 @@ describe("Household command bootstrap boundary", () => {
       kind: "error",
       code: "HOUSEHOLD_ID_REQUIRED",
     });
+    expect(fixture.receipts.claimCount).toBe(0);
+    expect(fixture.receipts.completeCount).toBe(0);
   });
 
   it("replays a completed result and rejects idempotency payload mismatch", async () => {

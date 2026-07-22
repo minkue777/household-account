@@ -87,13 +87,13 @@ Portfolio ──valuation·dividend Outbox Event──▶ Read Side
 
 | 역할 | 기능 모듈 | 요구사항 | 개수 | 책임 |
 |---|---|---|---:|---|
-| Android Delivery | [Android Host](supporting-platform/modules/android-host/requirements.md) | AND-*, QE-* | 22 | 권한, WebView, Bridge, QuickEdit |
+| Android Delivery | [Android Host](supporting-platform/modules/android-host/requirements.md) | AND-*, QE-* | 24 | 권한, WebView, Bridge, QuickEdit |
 | Web Delivery | [PWA](supporting-platform/modules/pwa/requirements.md) | PWA-* | 8 | 설치, cache/messaging worker |
 | Read Side | [통계](supporting-platform/modules/reporting/requirements.md) | STAT-*, STAT-AST-* | 9 | 거래·자산 Projection |
 | Preferences | [홈 환경설정](supporting-platform/modules/home-preferences/requirements.md) | HOME-*, THEME-* | 5 | 홈 카드·표시 지역화폐 구성과 Web theme |
 | Operations | [외부 운영](supporting-platform/modules/external-operations/requirements.md) | JOB-ERR-*, EXT-* | 5 | Scheduler·retry·오류 분류·관측 |
 | Delivery Assurance | [배포 안전성](supporting-platform/modules/delivery-assurance/requirements.md) | REL-* | 4 | release gate, 환경·project, 호환 배포·smoke |
-| 합계 | 6개 기능 모듈 |  | 53 |  |
+| 합계 | 6개 기능 모듈 |  | 55 |  |
 
 지원 모듈은 업무 Aggregate를 직접 수정하지 않고 해당 Context의 공개 Command·Query·Event를 사용한다.
 
@@ -199,6 +199,7 @@ Portfolio ──valuation·dividend Outbox Event──▶ Read Side
 | [DEC-062](governance/decisions.md#dec-062) | Portfolio·지원 플랫폼 | 배당 공시 discovery와 lifecycle sweep을 매일 09:00~20:00 매시 정각 실행해 늦은 공시를 다음 시간에 반영한다. |
 | [DEC-063](governance/decisions.md#dec-063) | Household Finance | 정기 거래 Plan의 최초 등록자를 immutable creator로 보존하고 Scheduler 거래에 사용하며 creator 없는 legacy Plan은 명시 mapping 전 처리하지 않는다. |
 | [DEC-064](governance/decisions.md#dec-064) | 지원·플랫폼 | 필수 release gate 실패는 waiver나 긴급 권한으로 우회하지 않고, 전체 gate를 통과한 후보에만 deploy authorization을 발급한다. |
+| [DEC-067](governance/decisions.md#dec-067) | 지원·플랫폼 | QuickEdit은 일반 Ledger Command의 Android Adapter이며, Keystore 암호화 outbox commit과 WorkManager 영속 예약 뒤 화면에서 분리하고 고정 멱등 key로 비동기 전달한다. |
 
 코드 감사에서 발견한 Human in the loop 정책은 DEC-064까지 모두 처리했습니다. 중복 질문이던 Q-002는 DEC-011에 통합했고, Q-003은 일반 사용자 복구 금지와 운영 복구일 기준 자동화 재개로 DEC-017·DEC-052에 반영했으며, Q-004는 Shortcut credential 원문 최초 응답 1회와 `AlreadyIssued` 재전송으로 DEC-033에 반영했습니다. Q-005는 별도 카드 통계가 아닌 Ledger 검색 계약으로 정리했고, Q-006은 release gate 우회 금지로 DEC-064에 확정했습니다. [미결정 사항 단일 목록](governance/pending-decisions.md)의 현재 항목은 0개입니다.
 

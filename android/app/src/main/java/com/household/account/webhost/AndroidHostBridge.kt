@@ -9,6 +9,7 @@ import com.household.account.paymentcapture.AndroidCaptureDelivery
 import com.household.account.session.NativeMembershipResolution
 import com.household.account.util.FidEndpointManager
 import com.household.account.util.HouseholdPreferences
+import kotlinx.coroutines.CoroutineScope
 import org.json.JSONObject
 
 /** 정확한 허용 origin에서만 노출되는 versioned Android host contract입니다. */
@@ -16,6 +17,10 @@ class AndroidHostBridge(
     private val context: Activity,
     private val authCoordinator: NativeAuthCoordinator = NativeAuthCoordinator(context)
 ) {
+    fun prewarmSignedInSession(scope: CoroutineScope) {
+        authCoordinator.prewarmSignedInSession(scope)
+    }
+
     suspend fun handle(rawMessage: String): String {
         val request = runCatching { JSONObject(rawMessage) }.getOrNull()
             ?: return rejected("invalid-request", "INVALID_JSON")
@@ -48,10 +53,21 @@ class AndroidHostBridge(
                 JSONObject()
             }
             "auth.sign-in" -> when (val result = authCoordinator.signIn()) {
-                is NativeAuthResult.SignedIn -> succeeded(
-                    requestId,
-                    JSONObject().put("customToken", result.customToken)
-                )
+                is NativeAuthResult.SignedIn -> {
+                    val value = JSONObject().put("customToken", result.customToken)
+                    if (
+                        result.principalUid != null &&
+                        result.signedInUserResolution != null
+                    ) {
+                        value
+                            .put("principalUid", result.principalUid)
+                            .put(
+                                "signedInUserResolution",
+                                JSONObject(result.signedInUserResolution)
+                            )
+                    }
+                    succeeded(requestId, value)
+                }
                 is NativeAuthResult.Rejected -> rejected(requestId, result.code)
                 NativeAuthResult.SignedOut -> rejected(requestId, "AUTH_RESULT_INVALID")
             }

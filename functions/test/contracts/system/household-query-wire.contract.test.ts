@@ -72,7 +72,6 @@ describe("Household Query 공개 wire 계약", () => {
     expect(validateManifest(manifest), JSON.stringify(validateManifest.errors)).toBe(true);
     expect(manifest.queries.map(({ name }) => name)).toEqual([
       "ledger.get-transaction.v1",
-      "ledger.list-transactions.v1",
       "shortcut.get-credential-status.v1",
       "portfolio.search-instruments.v1",
       "portfolio.get-instrument-quote.v1",

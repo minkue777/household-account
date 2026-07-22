@@ -1,6 +1,6 @@
 'use client';
 
-import { Asset } from '@/types/asset';
+import { Asset, isGoldEtfSubType } from '@/types/asset';
 import { ModalOverlay } from '@/components/common';
 import { X, Loader2, RefreshCw } from 'lucide-react';
 import { getGoldPricePerDon, useGoldHolding } from '@/lib/utils/useGoldHolding';
@@ -24,11 +24,17 @@ export default function GoldHoldingModal({ isOpen, onClose, asset }: GoldHolding
   } = useGoldHolding({ isOpen, asset });
 
   const parsedQuantity = quantity ? parseFloat(quantity) : 0;
+  const isPhysicalGold = asset?.type === 'gold' && !isGoldEtfSubType(asset.subType);
+  const canSave = isPhysicalGold && !!quantity && !!goldPrice && totalValue > 0 && !isSaving;
 
   const handleSave = async () => {
-    const saved = await saveGoldHolding();
-    if (saved) {
-      onClose();
+    // Do not dismiss the form when the command cannot even be accepted locally.
+    if (!canSave) return;
+    const pendingSave = saveGoldHolding();
+    onClose();
+    const saved = await pendingSave;
+    if (!saved) {
+      alert('금 보유량 저장에 실패했습니다. 다시 시도해 주세요.');
     }
   };
 
@@ -128,7 +134,7 @@ export default function GoldHoldingModal({ isOpen, onClose, asset }: GoldHolding
               onClick={() => {
                 void handleSave();
               }}
-              disabled={!quantity || !goldPrice || isSaving}
+              disabled={!canSave}
               className="flex-1 py-2.5 px-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
             >
               {isSaving ? '저장 중..' : '저장'}

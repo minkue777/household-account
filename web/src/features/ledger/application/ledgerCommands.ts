@@ -1,5 +1,6 @@
 import { getHouseholdCommandClient } from '@/composition/webCommandRuntime';
 import type { Expense } from '@/types/expense';
+import type { LedgerTransactionCommandResult } from '@/platform/functions-api/householdCommandContract';
 
 export interface LedgerSplitItem {
   merchant: string;
@@ -29,8 +30,9 @@ function toTransactionPatch(changes: Partial<Expense>): LedgerTransactionPatch {
 export const ledgerCommands = {
   async record(
     householdId: string,
-    transaction: Omit<Expense, 'id' | 'aggregateVersion'>
-  ): Promise<string> {
+    transaction: Omit<Expense, 'id' | 'aggregateVersion'>,
+    commandId?: string
+  ): Promise<LedgerTransactionCommandResult> {
     const common = {
       amountInWon: transaction.amount,
       accountingDate: transaction.date,
@@ -47,9 +49,9 @@ export const ledgerCommands = {
     const result = await getHouseholdCommandClient().execute(
       'ledger.record-manual-transaction.v1',
       payload,
-      { householdId }
+      { householdId, ...(commandId ? { commandId, idempotencyKey: commandId } : {}) }
     );
-    return result.transactionId;
+    return result;
   },
 
   async update(
@@ -57,8 +59,8 @@ export const ledgerCommands = {
     transactionId: string,
     expectedVersion: number,
     changes: Partial<Expense>
-  ): Promise<void> {
-    await getHouseholdCommandClient().execute(
+  ): Promise<LedgerTransactionCommandResult> {
+    return getHouseholdCommandClient().execute(
       'ledger.update-transaction.v1',
       { transactionId, expectedVersion, patch: toTransactionPatch(changes) },
       { householdId }
@@ -108,8 +110,12 @@ export const ledgerCommands = {
     );
   },
 
-  async delete(householdId: string, transactionId: string, expectedVersion: number): Promise<void> {
-    await getHouseholdCommandClient().execute(
+  async delete(
+    householdId: string,
+    transactionId: string,
+    expectedVersion: number
+  ): Promise<LedgerTransactionCommandResult> {
+    return getHouseholdCommandClient().execute(
       'ledger.delete-transaction.v1',
       { transactionId, expectedVersion },
       { householdId }
@@ -121,8 +127,8 @@ export const ledgerCommands = {
     transactionId: string,
     categoryId: string,
     expectedVersion: number
-  ): Promise<void> {
-    await getHouseholdCommandClient().execute(
+  ): Promise<LedgerTransactionCommandResult> {
+    return getHouseholdCommandClient().execute(
       'ledger.change-transaction-category.v1',
       { transactionId, categoryId, expectedVersion },
       { householdId }

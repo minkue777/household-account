@@ -67,7 +67,7 @@
 
 | ID | 상태 | 요구사항 | 경계·예외 | 근거 | 테스트 |
 |---|---|---|---|---|---|
-| HOLD-001 | 현재 명세 | 국내·미국 주식과 수동·현금 보유종목을 수량, 평균단가, 현재가로 관리한다. | 현재가가 없으면 평균단가를 평가가로 사용한다. | [stock holding manager](../../../../../../web/src/lib/utils/useStockHoldingManager.ts), [assetService](../../../../../../web/src/lib/assetService.ts) | U, I, E2E |
+| HOLD-001 | 현재 명세 | 국내·미국 주식과 수동·현금 보유종목을 수량, 평균단가, 현재가로 추가·수정·삭제한다. | 현재가가 없으면 평균단가를 평가가로 사용한다. 수정 patch에서 생략한 필드는 기존 값을 유지하며, 종목 코드와 instrumentType이 없던 레거시 수동·현금 항목도 내부의 안정적인 식별자와 holdingType으로 정규화하여 수정할 수 있어야 한다. | [stock holding manager](../../../../../../web/src/lib/utils/useStockHoldingManager.ts), [assetService](../../../../../../web/src/lib/assetService.ts) | U, I, E2E |
 | HOLD-002 | 현재 명세 | Upbit KRW 코인을 수량, 평균단가, 현재가로 평가하고 계좌 합계와 원가를 정수 반올림해 저장한다. | 외부 시세 실패를 데이터 0과 구분해야 한다. | [crypto holding manager](../../../../../../web/src/lib/utils/useCryptoHoldingManager.ts), [assetService](../../../../../../web/src/lib/assetService.ts) | U, I, E2E |
 | HOLD-003 | 현재 명세 | 보유종목 변경과 시세 갱신 후 부모 계좌 currentBalance와 costBasis를 재계산한다. | 같은 계산을 Web과 예약 작업이 다르게 구현하면 안 된다. Position과 부모 Asset 갱신은 Portfolio Command의 같은 원자 경계에서 처리하며 강한 일관성은 `HOLD-004`가 소유한다. | [assetService](../../../../../../web/src/lib/assetService.ts), [Portfolio Command handler](../../../../../../functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts) | U, C, I |
 | HOLD-004 | 결함 | Position 추가·수정·삭제와 그 결과인 부모 Asset의 currentBalance·costBasis·두 Aggregate version·receipt·Outbox는 서버 `RevalueAssetWorkflow`의 한 Portfolio Unit of Work로 commit한다. | 외부 Quote 조회는 transaction 밖에서 끝내고 성공 Quote와 기존 정상 Quote로 평가 intent를 만든다. Position 또는 Asset version이 하나라도 다르거나 저장 하나가 실패하면 전체 write 0건과 `Conflict`·typed failure를 반환한다. | [AssetAddModal](../../../../../../web/src/components/assets/AssetAddModal.tsx), [assetService](../../../../../../web/src/lib/assetService.ts) | Application, Emulator, E2E |
@@ -115,7 +115,7 @@
 | T-MARKET-001 | 목표 | 마지막 성공 금·주식 Quote와 서로 다른 실패 결과 / 예약 갱신 3회 실패 후 성공 / 평가액과 observedAt은 마지막 성공값을 유지하고 매 시도 log·health가 누적되며 즉시·연속 실패 경보가 열리고 성공 시 해제됨 | MARKET-004, EXT-001, JOB-ERR-001, DEC-018 |
 | T-MARKET-002 | 목표 | 서로 다른 정상 snapshot 성공일 4개와 같은 날짜 재실행, 갱신 실패, 동일·변경 generation, warm/cold cache / catalog publish·검색 / 서로 다른 최근 성공일 3개, 원자 latest, 5분 재사용, 변경 때만 reload, warm stale 제공, cold 실패, `stocks.json` 접근 0회 | MARKET-005, EXT-001, JOB-ERR-001, DEC-035 |
 | T-MARKET-003 | 목표 | Frankfurter 정상 JSON의 USD/KRW 1,400·rateDate, 어제 100 USD Quote, 주말 같은 rateDate, 더 오래된 응답, timeout·schema drift·0/음수, 장기 실패, 환율 최초 실패, 이전 정상 환산 / Web·23:55 평가 / 140,000원과 Quote·환율 provenance 보존, skew·stale 거부 없음, 더 오래된 응답은 무변경, 최초 환율 부재만 NoData, 장기 실패는 마지막 성공값 유지·Health 경보, 네이버·보조 공급자 호출 0회 | MARKET-001, MARKET-004, MARKET-006, DEC-053, DEC-060 |
-| T-HOLD-001 | 목표 | 같은 Asset에 Position 두 건을 동시에 추가하거나 부모 Asset write 직전 실패·version 경합 / RevalueAssetWorkflow / Position·부모 평가·receipt·Outbox가 모두 한 번 commit되거나 모두 이전 상태 | HOLD-003, HOLD-004 |
+| T-HOLD-001 | 목표 | 같은 Asset에 Position 두 건을 동시에 추가하거나 코드·instrumentType이 없는 레거시 예수금을 수정하고, 부모 Asset write 직전 실패·version 경합 / ManagePosition·RevalueAssetWorkflow / 레거시 예수금은 현재가와 version이 갱신되고 Position·부모 평가·receipt·Outbox가 모두 한 번 commit되거나 모두 이전 상태 | HOLD-001, HOLD-003, HOLD-004 |
 | T-JOB-AST-001 | 목표 | 국내·미국 주식·ETF·펀드·코인·실물 금과 전날 마지막 owner·type 자산, 100개 초과 종목, 일부 timeout / 페이지 진입·23:55 전체 평가와 snapshot intent / 모든 내부 page를 처리하고 성공 Quote와 실패 대상 마지막 Quote로 평가하며 사라진 scope는 0원, 중복 run 없음 | JOB-AST-001, JOB-AST-002, AST-008, DEC-049 |
 | T-HOLD-002 | 목표 | 동일한 국내·미국 주식·펀드·코인 Position fixture / Web 진입과 23:55 job의 공통 계좌 평가 / currentBalance·costBasis가 같은 정책과 반올림으로 동일 | HOLD-003 |
 | T-HOLD-003 | 목표 | Quote 미관측·성공 0원·실패 뒤 마지막 Quote·소수 코인 합계 / Position·계좌 평가 / 미관측만 평균단가를 쓰고 0원과 실패를 구분하며 계좌 최종 합계를 원 단위 반올림 | HOLD-001, HOLD-002 |
@@ -131,6 +131,7 @@
 | 시나리오 | 수준 | 연결 요구사항 |
 |---|---|---|
 | 현재가가 없는 주식은 평균단가로 평가하고 현금 보유종목도 같은 계좌 합계에 포함한다. | U | HOLD-001 |
+| 코드·instrumentType이 없는 레거시 예수금의 금액을 수정하면 생략한 평균단가는 보존하고 새 현재가·Position version·부모 계좌 합계를 한 번에 반영한다. | UI, C, I | HOLD-001, HOLD-003, HOLD-004 |
 | 국민성장펀드 C-e 30,000,000좌와 기준가 1,001.19원을 입력하면 평가액은 30,035,700원이며 주식 계좌 합계와 예약 평가가 같은 값을 만든다. | U, C, I | FUND-001, HOLD-003 |
 | 코인 평가액과 원가는 계산 뒤 정수로 반올림하며 시세 조회 실패를 0원 시세와 구분한다. | U, C | HOLD-002 |
 | 같은 fixture를 Web 경로와 예약 작업 경로에 입력하면 계좌 `currentBalance`와 `costBasis`가 동일하다. | U, C | HOLD-003 |

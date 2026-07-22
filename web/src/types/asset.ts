@@ -72,6 +72,7 @@ export const ASSET_TYPE_CONFIG: Record<
 
 export interface Asset {
   id: string;
+  aggregateVersion: number;
   householdId: string;
   name: string;
   type: AssetType;
@@ -154,6 +155,7 @@ export interface AssetHistoryEntry {
 
 export interface StockHolding {
   id: string;
+  aggregateVersion: number;
   assetId: string;
   householdId: string;
   holdingType?: 'stock' | 'bond' | 'cash' | 'manual';
@@ -172,6 +174,7 @@ export interface StockHolding {
 
 export interface CryptoHolding {
   id: string;
+  aggregateVersion: number;
   assetId: string;
   householdId: string;
   marketCode: string;
@@ -183,10 +186,10 @@ export interface CryptoHolding {
   updatedAt: Date;
 }
 
-export type AssetInput = Omit<Asset, 'id' | 'householdId' | 'createdAt' | 'updatedAt'>;
+export type AssetInput = Omit<Asset, 'id' | 'aggregateVersion' | 'householdId' | 'createdAt' | 'updatedAt'>;
 export type AssetHistoryInput = Omit<AssetHistoryEntry, 'id' | 'householdId' | 'createdAt'>;
-export type StockHoldingInput = Omit<StockHolding, 'id' | 'householdId' | 'createdAt' | 'updatedAt'>;
-export type CryptoHoldingInput = Omit<CryptoHolding, 'id' | 'householdId' | 'createdAt' | 'updatedAt'>;
+export type StockHoldingInput = Omit<StockHolding, 'id' | 'aggregateVersion' | 'householdId' | 'createdAt' | 'updatedAt'>;
+export type CryptoHoldingInput = Omit<CryptoHolding, 'id' | 'aggregateVersion' | 'householdId' | 'createdAt' | 'updatedAt'>;
 
 function normalizeSubTypeValue(value?: string) {
   return (value || '').toLowerCase().replace(/\s+/g, '');

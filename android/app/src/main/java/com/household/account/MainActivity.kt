@@ -21,7 +21,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.household.account.quickedit.QuickEditCoordinator
-import com.household.account.util.FidEndpointManager
 import com.household.account.util.HouseholdPreferences
 import com.household.account.paymentcapture.AndroidCaptureDelivery
 import com.household.account.webhost.AndroidHostBridge
@@ -32,6 +31,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var permissionLayout: LinearLayout
+    private lateinit var hostBridge: AndroidHostBridge
     private val pushPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
@@ -58,7 +58,7 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
-        val hostBridge = AndroidHostBridge(this)
+        hostBridge = AndroidHostBridge(this)
         webView.apply {
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(
@@ -166,6 +166,9 @@ class MainActivity : AppCompatActivity() {
         webView.visibility = View.VISIBLE
 
         if (webView.url == null) {
+            // 이미 인증된 사용자의 서버 session 발급을 page 다운로드·hydration과
+            // 병렬 실행합니다. currentUser가 없으면 로그인 UI를 열지 않습니다.
+            hostBridge.prewarmSignedInSession(lifecycleScope)
             webView.loadUrl(TrustedWebOrigin.APP_URL)
         }
 
@@ -174,7 +177,6 @@ class MainActivity : AppCompatActivity() {
         if (HouseholdPreferences.hasHouseholdKey(this) &&
             HouseholdPreferences.getMemberName(this).isNotEmpty()
         ) {
-            FidEndpointManager.registerCurrentInstallation(this)
             AndroidCaptureDelivery.scheduleRetry(this)
         }
     }

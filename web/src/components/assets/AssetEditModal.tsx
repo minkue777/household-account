@@ -212,8 +212,13 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
         }
       }
 
-      await updateAsset(asset.id, updateData as Partial<Asset>);
+      const pendingUpdate = updateAsset(
+        asset.id,
+        updateData as Partial<Asset>,
+        asset.aggregateVersion
+      );
       onClose();
+      await pendingUpdate;
     } catch (error) {
       console.error('자산 수정 오류:', error);
       alert('자산 수정에 실패했습니다. 다시 시도해주세요.');
@@ -229,10 +234,12 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
 
     setIsSubmitting(true);
     try {
-      await deleteAsset(asset.id);
+      const pendingDelete = deleteAsset(asset.id, asset.aggregateVersion);
       onClose();
+      await pendingDelete;
     } catch (error) {
       console.error('자산 삭제 오류:', error);
+      alert('자산 삭제에 실패했습니다. 다시 시도해주세요.');
     } finally {
       setIsSubmitting(false);
       setShowDeleteConfirm(false);

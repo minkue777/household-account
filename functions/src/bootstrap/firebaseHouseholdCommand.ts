@@ -5,6 +5,10 @@ import {
   FirebaseHouseholdCommandReceiptAdapter,
   Sha256HouseholdCommandHashAdapter,
 } from "../adapters/firebase/commands/firebaseHouseholdCommandInfrastructure";
+import {
+  resolveFirebaseSignedInUser,
+  SignedInUserResolutionError,
+} from "../adapters/firebase/access/firebaseSignedInUserResolver";
 import { db, REGION } from "../config";
 import {
   HouseholdCommandRejection,
@@ -88,82 +92,14 @@ function accessReadHandlers(): ReadonlyMap<string, HouseholdCommandHandler> {
       "access.resolve-signed-in-user.v1",
       {
         async execute({ principalUid }) {
-          const snapshot = await db
-            .collection("users")
-            .doc(principalUid)
-            .collection("householdMembershipViews")
-            .where("lifecycleState", "==", "active")
-            .limit(2)
-            .get();
-          if (snapshot.size !== 1) {
-            return { kind: "first-visit-required", choices: ["create", "join"] };
+          try {
+            return await resolveFirebaseSignedInUser(db, principalUid);
+          } catch (error) {
+            if (error instanceof SignedInUserResolutionError) {
+              throw new HouseholdCommandRejection(error.code);
+            }
+            throw error;
           }
-          const membership = snapshot.docs[0].data();
-          const householdId =
-            typeof membership.householdId === "string"
-              ? membership.householdId
-              : snapshot.docs[0].id;
-          if (typeof membership.memberId !== "string") {
-            return { kind: "first-visit-required", choices: ["create", "join"] };
-          }
-          const [canonicalMembership, member, household] = await Promise.all([
-            db
-              .collection("households")
-              .doc(householdId)
-              .collection("memberships")
-              .doc(principalUid)
-              .get(),
-            db
-              .collection("households")
-              .doc(householdId)
-              .collection("members")
-              .doc(membership.memberId)
-              .get(),
-            db.collection("households").doc(householdId).get(),
-          ]);
-          if (
-            !household.exists ||
-            household.data()?.lifecycleState === "deleted" ||
-            household.data()?.deletedAt !== undefined
-          ) {
-            throw new HouseholdCommandRejection("HOUSEHOLD_NOT_ACTIVE");
-          }
-          const membershipData = canonicalMembership.data() ?? membership;
-          const memberData = member.data();
-          const displayName =
-            typeof memberData?.displayName === "string"
-              ? memberData.displayName
-              : typeof membershipData.displayName === "string"
-                ? membershipData.displayName
-                : undefined;
-          const aggregateVersion =
-            typeof memberData?.aggregateVersion === "number"
-              ? memberData.aggregateVersion
-              : typeof membershipData.aggregateVersion === "number"
-                ? membershipData.aggregateVersion
-                : undefined;
-          if (
-            displayName === undefined ||
-            displayName.trim() === "" ||
-            aggregateVersion === undefined
-          ) {
-            throw new HouseholdCommandRejection(
-              "MEMBER_PROFILE_INVARIANT_BROKEN",
-            );
-          }
-          return {
-            kind: "membership-found",
-            membership: {
-              householdId,
-              memberId: membership.memberId,
-              displayName,
-              aggregateVersion,
-              status: "active",
-              capabilities: Array.isArray(membershipData.capabilities)
-                ? membershipData.capabilities
-                : [],
-            },
-          };
         },
       },
     ],

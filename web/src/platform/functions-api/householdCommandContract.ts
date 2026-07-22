@@ -2,6 +2,23 @@ import type { AssetOwnerProfileWireView } from './accessContractTypes';
 
 export const HOUSEHOLD_COMMAND_CONTRACT_VERSION = 'household-command.v1' as const;
 
+export interface LedgerTransactionCommandResult {
+  transactionId: string;
+  householdId: string;
+  transactionType: 'expense' | 'income';
+  merchant: string;
+  memo: string;
+  amountInWon: number;
+  categoryId: string;
+  accountingDate: string;
+  localTime: string;
+  cardDisplay: string;
+  cardType: 'manual' | 'captured';
+  creatorMemberId: string;
+  lifecycleState: 'active' | 'deleted';
+  aggregateVersion: number;
+}
+
 export const TENANTLESS_COMMANDS = [
   'access.resolve-signed-in-user.v1',
   'access.claim-legacy-membership.v1',
@@ -110,12 +127,12 @@ export interface HouseholdCommandPayloads {
   'home.select-local-currency.v1': { localCurrencyTypeId: string };
 
   'portfolio.create-asset.v1': { asset: Record<string, unknown> };
-  'portfolio.update-asset.v1': { assetId: string; changes: Record<string, unknown>; expectedVersion?: number };
+  'portfolio.update-asset.v1': { assetId: string; changes: Record<string, unknown>; expectedVersion: number };
   'portfolio.reorder-assets.v1': { assets: ReadonlyArray<{ assetId: string; order: number }> };
-  'portfolio.delete-asset.v1': { assetId: string; expectedVersion?: number };
+  'portfolio.delete-asset.v1': { assetId: string; expectedVersion: number };
   'portfolio.add-position.v1': { assetId: string; positionKind: 'stock' | 'crypto'; position: Record<string, unknown> };
-  'portfolio.update-position.v1': { assetId: string; positionId: string; positionKind: 'stock' | 'crypto'; changes: Record<string, unknown>; expectedVersion?: number };
-  'portfolio.delete-position.v1': { assetId: string; positionId: string; positionKind: 'stock' | 'crypto'; expectedVersion?: number };
+  'portfolio.update-position.v1': { assetId: string; positionId: string; positionKind: 'stock' | 'crypto'; changes: Record<string, unknown>; expectedVersion: number };
+  'portfolio.delete-position.v1': { assetId: string; positionId: string; positionKind: 'stock' | 'crypto'; expectedVersion: number };
   'portfolio.refresh-market-values.v1': { assetClass: 'stock' | 'crypto' | 'physical-gold' | 'all' };
 
   'payment-configuration.create-merchant-rule.v1': { rule: Record<string, unknown> };
@@ -172,18 +189,18 @@ export interface HouseholdCommandResults {
   'access.rename-asset-owner-profile.v1': AssetOwnerProfileWireView;
   'access.archive-asset-owner-profile.v1': AssetOwnerProfileWireView;
 
-  'ledger.record-manual-transaction.v1': { transactionId: string };
+  'ledger.record-manual-transaction.v1': LedgerTransactionCommandResult;
   'ledger.record-manual-monthly-split.v1': { transactionIds: string[]; splitGroupId: string };
   'ledger.split-existing-transaction-monthly.v1': { transactionIds: string[]; splitGroupId: string };
-  'ledger.update-transaction.v1': Record<string, never>;
-  'ledger.delete-transaction.v1': Record<string, never>;
-  'ledger.change-transaction-category.v1': Record<string, never>;
+  'ledger.update-transaction.v1': LedgerTransactionCommandResult;
+  'ledger.delete-transaction.v1': LedgerTransactionCommandResult;
+  'ledger.change-transaction-category.v1': LedgerTransactionCommandResult;
   'ledger.split-transaction.v1': { transactionIds: string[] };
   'ledger.merge-transactions.v1': Record<string, never>;
   'ledger.unmerge-transaction.v1': { transactionIds: string[] };
   'ledger.cancel-monthly-split.v1': Record<string, never>;
   'ledger.reconfigure-monthly-split.v1': { splitGroupId: string };
-  'ledger.request-notification.v1': Record<string, never>;
+  'ledger.request-notification.v1': LedgerTransactionCommandResult;
 
   'category.create.v1': { categoryId: string };
   'category.update.v1': Record<string, never>;

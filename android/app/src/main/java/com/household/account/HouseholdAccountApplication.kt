@@ -4,6 +4,8 @@ import android.app.Application
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
+import com.household.account.quickedit.QuickEditCommandDelivery
+import com.household.account.util.FidEndpointManager
 
 /** Callable 요청 전에 Play Integrity 기반 Firebase App Check를 설치합니다. */
 class HouseholdAccountApplication : Application() {
@@ -13,5 +15,7 @@ class HouseholdAccountApplication : Application() {
         FirebaseAppCheck.getInstance().installAppCheckProviderFactory(
             PlayIntegrityAppCheckProviderFactory.getInstance()
         )
+        FidEndpointManager.enforceDeliveryGateForCurrentSession(this)
+        QuickEditCommandDelivery.resumePending(this)
     }
 }

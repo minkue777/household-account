@@ -22,6 +22,17 @@ const TENANTLESS_COMMANDS = new Set([
   "access.join-household-as-self.v1",
 ]);
 
+/**
+ * 인증된 현재 상태를 조회하기만 하는 명령은 멱등 receipt를 만들지 않습니다.
+ *
+ * 이 조회는 매 앱 시작마다 새로운 commandId로 호출되므로 receipt가 재실행을
+ * 막아 주지 못하고, 오히려 Firestore claim/complete 왕복만 추가합니다. 쓰기
+ * 명령은 계속 아래의 공통 receipt 경계를 통과합니다.
+ */
+const RECEIPTLESS_READ_COMMANDS = new Set([
+  "access.resolve-signed-in-user.v1",
+]);
+
 const ADMINISTRATOR_COMMANDS = new Set([
   "access.archive-asset-owner-profile.v1",
 ]);
@@ -196,6 +207,33 @@ export function createHouseholdCommandRouter(input: {
       }
       if (actor?.kind === "household-not-active") {
         return error("HOUSEHOLD_NOT_ACTIVE", { commandId: parsed.commandId });
+      }
+
+      if (RECEIPTLESS_READ_COMMANDS.has(parsed.command)) {
+        try {
+          const data = await handler.execute({
+            envelope: parsed,
+            principalUid: request.principalUid.trim(),
+            requestedAt: request.requestedAt,
+          });
+          return {
+            kind: "success",
+            commandId: parsed.commandId,
+            data,
+          };
+        } catch (caught) {
+          if (caught instanceof HouseholdCommandRejection) {
+            return error("COMMAND_FAILED", {
+              commandId: parsed.commandId,
+              retryable: caught.retryable,
+              details: { domainCode: caught.code },
+            });
+          }
+          return error("COMMAND_FAILED", {
+            commandId: parsed.commandId,
+            retryable: true,
+          });
+        }
       }
 
       const payloadHash = input.hashes.hash(canonicalJson(parsed));

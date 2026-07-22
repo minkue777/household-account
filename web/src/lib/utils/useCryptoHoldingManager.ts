@@ -151,18 +151,25 @@ export function useCryptoHoldingManager({ isOpen, asset }: UseCryptoHoldingManag
     }
 
     setIsAddingHolding(true);
+    const submitted = { selectedCoin, quantity, avgPrice, currentPrice };
+    const pendingAdd = addCryptoHolding({
+      assetId,
+      marketCode: selectedCoin.code,
+      coinName: selectedCoin.name,
+      quantity: parseFloat(quantity),
+      avgPrice: avgPrice ? parseInt(avgPrice, 10) : undefined,
+      currentPrice: currentPrice || undefined,
+    });
+    resetCryptoForm();
     try {
-      await addCryptoHolding({
-        assetId,
-        marketCode: selectedCoin.code,
-        coinName: selectedCoin.name,
-        quantity: parseFloat(quantity),
-        avgPrice: avgPrice ? parseInt(avgPrice, 10) : undefined,
-        currentPrice: currentPrice || undefined,
-      });
-      resetCryptoForm();
+      await pendingAdd;
       return true;
     } catch (error) {
+      setSelectedCoin(submitted.selectedCoin);
+      setSearchQuery(submitted.selectedCoin.name);
+      setQuantity(submitted.quantity);
+      setAvgPrice(submitted.avgPrice);
+      setCurrentPrice(submitted.currentPrice);
       console.error('Failed to add crypto holding:', error);
       return false;
     } finally {
@@ -170,13 +177,13 @@ export function useCryptoHoldingManager({ isOpen, asset }: UseCryptoHoldingManag
     }
   }, [assetId, avgPrice, currentPrice, isAddingHolding, isCryptoAsset, quantity, resetCryptoForm, selectedCoin]);
 
-  const deleteHolding = useCallback(async (holdingId: string) => {
+  const deleteHolding = useCallback(async (holdingId: string, expectedVersion: number) => {
     if (!assetId || !isCryptoAsset) {
       return false;
     }
 
     try {
-      await deleteCryptoHolding(holdingId, assetId);
+      await deleteCryptoHolding(holdingId, assetId, expectedVersion);
       return true;
     } catch (error) {
       console.error('Failed to delete crypto holding:', error);

@@ -435,7 +435,9 @@ export default function AssetAddModal({
         order: Date.now(),
       };
 
-      const assetId = await addAsset(input);
+      const pendingAsset = addAsset(input);
+      onClose();
+      const assetId = await pendingAsset;
 
       if (isStockLikeAsset && pendingHoldings.length > 0) {
         await Promise.all(
@@ -470,10 +472,9 @@ export default function AssetAddModal({
           )
         );
       }
-
-      onClose();
     } catch (error) {
       console.error('자산 추가 오류:', error);
+      alert('자산 추가에 실패했습니다. 다시 시도해 주세요.');
     } finally {
       setIsSubmitting(false);
     }

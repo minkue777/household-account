@@ -59,11 +59,12 @@ export default function CryptoHoldingList({
 
     setIsSubmitting(true);
     try {
-      await updateCryptoHolding(editingHolding.id, assetId, {
+      const pendingUpdate = updateCryptoHolding(editingHolding.id, assetId, {
         quantity: parseFloat(editQuantity),
         avgPrice: editAvgPrice ? parseInt(editAvgPrice, 10) : undefined,
-      });
+      }, editingHolding.aggregateVersion);
       setEditingHolding(null);
+      await pendingUpdate;
     } catch (error) {
       console.error('코인 수정 오류:', error);
       alert('코인 수정에 실패했습니다.');
@@ -78,11 +79,17 @@ export default function CryptoHoldingList({
     }
 
     try {
-      await deleteCryptoHolding(pendingDeleteHolding.id, assetId);
+      const pendingDelete = deleteCryptoHolding(
+        pendingDeleteHolding.id,
+        assetId,
+        pendingDeleteHolding.aggregateVersion
+      );
       setEditingHolding(null);
       setPendingDeleteHolding(null);
+      await pendingDelete;
     } catch (error) {
       console.error('코인 삭제 오류:', error);
+      alert('코인 삭제에 실패했습니다.');
     }
   };
 

@@ -135,18 +135,23 @@ async function activeCategories(
   );
 }
 
-async function commandsFor(
+function commandsFor(
   database: firestore.Firestore,
   context: HouseholdCommandExecutionContext,
+  categories?: ReadonlySet<string>,
 ) {
   const verifiedActor = actor(context);
-  const categories = await activeCategories(database, verifiedActor.householdId);
   return createBasicLedgerCommands({
     repository: new FirebaseLedgerCommandRepository(
       database,
       verifiedActor.householdId,
     ),
-    categories: { isUsable: (categoryId) => categories.has(categoryId) },
+    // categoryId가 명령 payload에 없으면 domain policy도 이 포트를 호출하지
+    // 않습니다. 메모/금액 수정과 삭제가 카테고리 전체 조회를 선행하지 않도록
+    // 카탈로그를 생략하되, 예상 밖 호출은 허용하지 않는 보수적 policy를 둡니다.
+    categories: {
+      isUsable: (categoryId) => categories?.has(categoryId) ?? false,
+    },
     clock: { now: () => context.requestedAt },
     idGenerator: {
       next: (commandId) =>
@@ -164,8 +169,12 @@ export function createLedgerHouseholdCommandHandlers(
       {
         async execute(context) {
           const payload = record(context.envelope.payload);
-          const commands = await commandsFor(database, context);
           const transactionType = stringValue(payload, "transactionType");
+          const categories =
+            transactionType === "income"
+              ? undefined
+              : await activeCategories(database, actor(context).householdId);
+          const commands = commandsFor(database, context, categories);
           const amountInWon = numberValue(payload, "amountInWon");
           const accountingDate = stringValue(payload, "accountingDate");
           const memo = optionalString(payload, "memo");
@@ -198,7 +207,11 @@ export function createLedgerHouseholdCommandHandlers(
         async execute(context) {
           const payload = record(context.envelope.payload);
           const patch = record(payload.patch);
-          const commands = await commandsFor(database, context);
+          const categories =
+            patch.categoryId === undefined
+              ? undefined
+              : await activeCategories(database, actor(context).householdId);
+          const commands = commandsFor(database, context, categories);
           return resultValue(
             await commands.update({
               commandId: context.envelope.commandId,
@@ -216,7 +229,11 @@ export function createLedgerHouseholdCommandHandlers(
       {
         async execute(context) {
           const payload = record(context.envelope.payload);
-          const commands = await commandsFor(database, context);
+          const commands = commandsFor(
+            database,
+            context,
+            await activeCategories(database, actor(context).householdId),
+          );
           return resultValue(
             await commands.update({
               commandId: context.envelope.commandId,
@@ -234,7 +251,7 @@ export function createLedgerHouseholdCommandHandlers(
       {
         async execute(context) {
           const payload = record(context.envelope.payload);
-          const commands = await commandsFor(database, context);
+          const commands = commandsFor(database, context);
           return resultValue(
             await commands.delete({
               commandId: context.envelope.commandId,
@@ -251,7 +268,7 @@ export function createLedgerHouseholdCommandHandlers(
       {
         async execute(context) {
           const payload = record(context.envelope.payload);
-          const commands = await commandsFor(database, context);
+          const commands = commandsFor(database, context);
           return resultValue(
             await commands.requestNotification({
               commandId: context.envelope.commandId,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ChartPie } from 'lucide-react';
 import { Asset, AssetOwnerOption, AssetType, isGoldEtfSubType } from '@/types/asset';
@@ -45,6 +45,7 @@ export default function AssetsPage() {
   const [isAddingSample, setIsAddingSample] = useState(false);
   const [selectedMember, setSelectedMember] = useState<string>(ALL_MEMBERS_OPTION);
   const [ownerProfiles, setOwnerProfiles] = useState<AssetOwnerProfileWireView[]>([]);
+  const didScheduleMarketRefresh = useRef(false);
 
   const memberOptions = useMemo(
     () => [
@@ -106,8 +107,30 @@ export default function AssetsPage() {
   }, []);
 
   useEffect(() => {
-    refreshAllMarketValues().catch(console.error);
-  }, []);
+    if (isLoading || didScheduleMarketRefresh.current) return;
+    didScheduleMarketRefresh.current = true;
+
+    let idleCallbackId: number | undefined;
+    let cancelled = false;
+    const delayId = window.setTimeout(() => {
+      const refresh = () => {
+        if (!cancelled) void refreshAllMarketValues().catch(console.error);
+      };
+      if (typeof window.requestIdleCallback === 'function') {
+        idleCallbackId = window.requestIdleCallback(refresh, { timeout: 2_000 });
+      } else {
+        refresh();
+      }
+    }, 750);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(delayId);
+      if (idleCallbackId !== undefined && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleCallbackId);
+      }
+    };
+  }, [isLoading]);
 
   useEffect(() => {
     void loadOwnerProfiles();

@@ -231,6 +231,10 @@ function HoldingEditorCard({
 }: HoldingEditorCardProps) {
   const holdingType = getHoldingType(holding);
   const isFund = isFundHolding(holding);
+  const nameInputId = `stock-holding-name-${holding.id}`;
+  const quantityInputId = `stock-holding-quantity-${holding.id}`;
+  const avgPriceInputId = `stock-holding-average-price-${holding.id}`;
+  const amountInputId = `stock-holding-amount-${holding.id}`;
   const topRightLabel =
     holdingType === 'stock'
       ? holding.currentPrice
@@ -252,8 +256,11 @@ function HoldingEditorCard({
 
       <div className="space-y-3" onClick={(event) => event.stopPropagation()}>
         <div>
-          <label className="mb-1 block text-xs text-slate-500">종목명</label>
+          <label htmlFor={nameInputId} className="mb-1 block text-xs text-slate-500">
+            종목명
+          </label>
           <input
+            id={nameInputId}
             type="text"
             value={editName}
             onChange={(event) => onChangeName(event.target.value)}
@@ -264,10 +271,14 @@ function HoldingEditorCard({
         {holdingType === 'stock' ? (
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="mb-1 block text-xs text-slate-500">
+              <label
+                htmlFor={quantityInputId}
+                className="mb-1 block text-xs text-slate-500"
+              >
                 {isFund ? '보유 좌수' : '수량'}
               </label>
               <input
+                id={quantityInputId}
                 type="text"
                 inputMode={isFund ? 'decimal' : 'numeric'}
                 value={formatEditableNumber(editQuantity, isFund ? 4 : 0)}
@@ -282,10 +293,11 @@ function HoldingEditorCard({
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-slate-500">
+              <label htmlFor={avgPriceInputId} className="mb-1 block text-xs text-slate-500">
                 {isFund ? '매입 기준가' : '평단'}
               </label>
               <input
+                id={avgPriceInputId}
                 type="text"
                 inputMode={isFund ? 'decimal' : 'numeric'}
                 value={formatEditableNumber(editAvgPrice, isFund ? 4 : 0)}
@@ -303,8 +315,11 @@ function HoldingEditorCard({
           </div>
         ) : (
           <div>
-            <label className="mb-1 block text-xs text-slate-500">금액</label>
+            <label htmlFor={amountInputId} className="mb-1 block text-xs text-slate-500">
+              금액
+            </label>
             <input
+              id={amountInputId}
               type="text"
               inputMode="numeric"
               value={editQuantity ? parseInt(editQuantity, 10).toLocaleString() : ''}
@@ -433,22 +448,23 @@ export default function StockHoldingList({
     setIsSubmitting(true);
 
     try {
+      let pendingUpdate: Promise<void>;
       if (getHoldingType(editingHolding) === 'stock') {
-        await updateStockHolding(editingHolding.id, assetId, {
+        pendingUpdate = updateStockHolding(editingHolding.id, assetId, {
           stockName: editName.trim(),
           quantity: Number(editQuantity),
-          avgPrice: editAvgPrice ? Number(editAvgPrice) : undefined,
-        });
+          avgPrice: editAvgPrice ? Number(editAvgPrice) : 0,
+        }, editingHolding.aggregateVersion);
       } else {
-        await updateStockHolding(editingHolding.id, assetId, {
+        pendingUpdate = updateStockHolding(editingHolding.id, assetId, {
           stockName: editName.trim(),
           quantity: 1,
-          avgPrice: undefined,
           currentPrice: parseInt(editQuantity, 10),
-        });
+        }, editingHolding.aggregateVersion);
       }
 
       resetEditingState();
+      await pendingUpdate;
     } catch (error) {
       console.error('보유 항목 수정 오류:', error);
       alert('보유 항목 수정에 실패했습니다.');
@@ -463,9 +479,14 @@ export default function StockHoldingList({
     }
 
     try {
-      await deleteStockHolding(pendingDeleteHolding.id, assetId);
+      const pendingDelete = deleteStockHolding(
+        pendingDeleteHolding.id,
+        assetId,
+        pendingDeleteHolding.aggregateVersion
+      );
       resetEditingState();
       setPendingDeleteHolding(null);
+      await pendingDelete;
     } catch (error) {
       console.error('보유 항목 삭제 오류:', error);
       alert('보유 항목 삭제에 실패했습니다.');

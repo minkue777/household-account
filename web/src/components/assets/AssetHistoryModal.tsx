@@ -71,10 +71,15 @@ export default function AssetHistoryModal({
   const isCrypto = asset.type === 'crypto';
   const isGoldEtf = asset.type === 'gold' && isGoldEtfSubType(asset.subType);
   const isHoldingManaged = isStock || isCrypto || isGoldEtf;
-  const signedBalance = getAssetSignedBalance(asset);
+  const signedBalance =
+    (isStock || isGoldEtf) && !stockManager.isLoadingHoldings
+      ? stockManager.totalHoldingValue
+      : isCrypto && !cryptoManager.isLoadingHoldings
+        ? cryptoManager.totalHoldingValue
+        : getAssetSignedBalance(asset);
   const investmentBase = asset.initialInvestment || asset.costBasis || 0;
   const holdingProfitLoss =
-    isHoldingManaged && investmentBase > 0 ? asset.currentBalance - investmentBase : 0;
+    isHoldingManaged && investmentBase > 0 ? signedBalance - investmentBase : 0;
   const holdingProfitLossRate =
     isHoldingManaged && investmentBase > 0 ? (holdingProfitLoss / investmentBase) * 100 : 0;
   const showHoldingProfitLoss = isHoldingManaged && investmentBase > 0;

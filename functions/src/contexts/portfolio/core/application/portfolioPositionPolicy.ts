@@ -36,6 +36,16 @@ export const POSITION_FIELDS: ReadonlySet<string> = new Set([
   "currency",
 ]);
 
+function isManualValuationInstrument(
+  instrumentType: PortfolioRuntimePosition["instrumentType"] | undefined,
+): boolean {
+  return (
+    instrumentType === "bond" ||
+    instrumentType === "cash" ||
+    instrumentType === "manual"
+  );
+}
+
 function positionInstrumentType(
   positionKind: PortfolioPositionKind,
   value: unknown,
@@ -97,7 +107,7 @@ export function createPositionFromRaw(input: {
   );
   const rawCode = input.positionKind === "stock" ? raw.stockCode : raw.marketCode;
   const code = requiredText(
-    (instrumentType === "manual" || instrumentType === "cash") && rawCode === ""
+    isManualValuationInstrument(instrumentType) && rawCode === ""
       ? `MANUAL:${input.positionId}`
       : rawCode,
     "POSITION_INSTRUMENT_REQUIRED",
@@ -179,8 +189,7 @@ export function createPositionFromRaw(input: {
   }
   if (
     input.positionKind === "stock" &&
-    instrumentType !== "manual" &&
-    instrumentType !== "cash" &&
+    !isManualValuationInstrument(instrumentType) &&
     market === "UNRESOLVED"
   ) {
     return { kind: "error", code: "INSTRUMENT_MARKET_REQUIRED" };

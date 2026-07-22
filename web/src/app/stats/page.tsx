@@ -31,7 +31,6 @@ export default function StatsPage() {
   const [enabledCategories, setEnabledCategories] = useState<Set<string>>(new Set(DEFAULT_CATEGORY_KEYS));
   const [hasInitializedCategories, setHasInitializedCategories] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const [selectedCategoryExpenses, setSelectedCategoryExpenses] = useState<Expense[]>([]);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
 
   const { activeCategories } = useCategoryContext();
@@ -53,25 +52,21 @@ export default function StatsPage() {
     setHasInitializedCategories(true);
   }, [activeCategories, hasInitializedCategories]);
 
-  const handleCategoryClick = (category: Category, categoryExpenses: Expense[]) => {
+  const handleCategoryClick = (category: Category) => {
     setSelectedCategory(category);
-    setSelectedCategoryExpenses([...categoryExpenses].sort((a, b) => b.date.localeCompare(a.date)));
   };
 
-  const handleSaveEdit = async (expense: Expense, updates: ExpenseUpdates) => {
-    try {
-      await updateExpense(expense.id, updates, expense.aggregateVersion);
+  const selectedCategoryExpenses = useMemo(() => {
+    if (!selectedCategory) return [];
+    return expenses
+      .filter((expense) => expense.category === selectedCategory)
+      .sort((left, right) => right.date.localeCompare(left.date));
+  }, [expenses, selectedCategory]);
 
-      if (updates.category && updates.category !== expense.category) {
-        setSelectedCategoryExpenses((prev) => prev.filter((item) => item.id !== expense.id));
-      } else {
-        setSelectedCategoryExpenses((prev) =>
-          prev.map((item) => (item.id === expense.id ? { ...item, ...updates } : item))
-        );
-      }
-    } finally {
-      setEditingExpense(null);
-    }
+  const handleSaveEdit = async (expense: Expense, updates: ExpenseUpdates) => {
+    const operation = updateExpense(expense.id, updates, expense.aggregateVersion);
+    setEditingExpense(null);
+    await operation;
   };
 
   const handleSaveMerchantRule = async (merchantName: string, category: string) => {
@@ -81,12 +76,9 @@ export default function StatsPage() {
   };
 
   const handleDeleteExpense = async (expense: Expense) => {
-    try {
-      await deleteExpense(expense.id, expense.aggregateVersion);
-      setSelectedCategoryExpenses((prev) => prev.filter((item) => item.id !== expense.id));
-    } finally {
-      setEditingExpense(null);
-    }
+    const operation = deleteExpense(expense.id, expense.aggregateVersion);
+    setEditingExpense(null);
+    await operation;
   };
 
   const { startDate, endDate } = useMemo(() => {
