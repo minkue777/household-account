@@ -3,7 +3,7 @@ import {
   type FirestoreRuntimeEnvironment,
 } from '@/platform/read-model/firestoreTransportPolicy';
 
-describe('Firestore WebView 전송 계약', () => {
+describe('T-WEBVIEW-004 AND-012 Firestore WebView 전송 계약', () => {
   const browser: FirestoreRuntimeEnvironment = {
     androidHostBridgeAvailable: false,
     userAgent: 'Mozilla/5.0 Chrome/140.0.0.0 Safari/537.36',

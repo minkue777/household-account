@@ -2,7 +2,7 @@
 
 > 문서 유형: Supporting / Read Side / Delivery Map  
 > 소유 기능 모듈: Android Host, PWA, Reporting, Home Preferences, External Operations, Delivery Assurance  
-> 소유 요구사항: 53개  
+> 소유 요구사항: 54개  
 > 업무 Context: [5개 Bounded Context 인덱스](../README.md#2-5개-업무-bounded-context)
 
 ## 1. 목적
@@ -19,13 +19,13 @@
 
 | 분류 | 기능 모듈 | 요구사항 | 개수 | 책임 |
 |---|---|---|---:|---|
-| Delivery / Android | [Android Host](modules/android-host/requirements.md) | AND-*, QE-* | 22 | 권한, WebView, Bridge, QuickEdit UI |
+| Delivery / Android | [Android Host](modules/android-host/requirements.md) | AND-*, QE-* | 23 | 권한, WebView, Bridge, QuickEdit UI |
 | Delivery / Web | [PWA](modules/pwa/requirements.md) | PWA-* | 8 | 설치, cache/messaging worker 수명주기 |
 | Read Side | [통계](modules/reporting/requirements.md) | STAT-*, STAT-AST-* | 9 | 거래·자산 통계 Projection |
 | Read Side / Preferences | [홈 환경설정](modules/home-preferences/requirements.md) | HOME-*, THEME-* | 5 | 홈 카드·표시 지역화폐 구성과 Web local theme |
 | Operations | [외부 운영](modules/external-operations/requirements.md) | JOB-ERR-*, EXT-* | 5 | 외부 오류 분류, job 결과, retry·관측 |
 | Delivery Assurance | [배포 안전성](modules/delivery-assurance/requirements.md) | REL-* | 4 | test·Rules·환경·계약 호환 release gate |
-| 합계 | 6개 기능 모듈 |  | 53 |  |
+| 합계 | 6개 기능 모듈 |  | 54 |  |
 
 ## 3. Delivery Adapter 경계
 

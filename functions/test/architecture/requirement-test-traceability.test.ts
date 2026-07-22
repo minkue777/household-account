@@ -5,7 +5,10 @@ import { describe, expect, it } from "vitest";
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const requirementsRoot = join(workspaceRoot, "docs", "requirements");
-const testRoot = join(workspaceRoot, "functions", "test");
+const testRoots = [
+  join(workspaceRoot, "functions", "test"),
+  join(workspaceRoot, "web", "src", "__tests__"),
+];
 
 function listFiles(root: string, extension: string): string[] {
   return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
@@ -123,16 +126,23 @@ function requirementTestMappingLines(): string[] {
   );
 }
 
+function executableTestFiles(): string[] {
+  return testRoots.flatMap((root) => [
+    ...listFiles(root, ".ts"),
+    ...listFiles(root, ".tsx"),
+  ]);
+}
+
 function contractTestCorpus(): string {
-  return listFiles(testRoot, ".ts")
+  return executableTestFiles()
     .filter((file) => !file.endsWith("requirement-test-traceability.test.ts"))
     .map((file) => readFileSync(file, "utf8"))
     .join("\n");
 }
 
 function contractTestReferenceLines(): string[] {
-  return listFiles(testRoot, ".ts")
-    .filter((file) => !file.includes(`${join("test", "architecture")}`))
+  return executableTestFiles()
+    .filter((file) => !/[\\/]architecture[\\/]/.test(file))
     .flatMap((file) => readFileSync(file, "utf8").split(/\r?\n/));
 }
 
