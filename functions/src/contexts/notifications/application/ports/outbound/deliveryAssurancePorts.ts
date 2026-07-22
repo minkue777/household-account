@@ -4,6 +4,7 @@ import type {
   NotificationProviderOutcome,
 } from "../../../domain/model/deliveryAssurance";
 import type { MobileNotificationEndpoint } from "../../../domain/model/mobileNotificationEndpoint";
+import type { NotificationTarget } from "../../../domain/model/notificationTarget";
 
 export type DeliveryMembershipStatus = "active" | "removed" | "unavailable";
 
@@ -40,6 +41,7 @@ export interface StoredAssuredDelivery {
   householdId: string;
   recipientMemberId: string;
   endpointId: string;
+  payload: NotificationTarget["payload"];
   expectedRegistrationVersion: number;
   expectedBindingVersion: number;
   status: "queued" | "sending" | DeliveryTerminalStatus;
@@ -102,6 +104,7 @@ export interface DeliveryAssuranceProviderPort {
     deliveryId: string;
     endpointId: string;
     fid: string;
+    payload: NotificationTarget["payload"];
   }): Promise<NotificationProviderOutcome>;
 }
 

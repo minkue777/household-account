@@ -24,6 +24,7 @@ import type {
   ShortcutTransactionNotificationProvider,
   ShortcutTransactionNotificationStore,
 } from "../../../contexts/notifications/application/ports/outbound/shortcutTransactionNotificationPorts";
+import type { NotificationTarget } from "../../../contexts/notifications/domain/model/notificationTarget";
 import { mapFirebaseMobileEndpoint } from "./firebaseMobileEndpointRegistrationStore";
 import { decideEndpointInactivation } from "../../../contexts/notifications/domain/policies/endpointInactivationPolicy";
 import {
@@ -397,20 +398,38 @@ export class FirebaseFidDeliveryProvider
 {
   constructor(private readonly messaging: Messaging) {}
 
-  async sendOne(input: { deliveryId: string; endpointId: string; fid: string }) {
+  async sendOne(input: {
+    deliveryId: string;
+    endpointId: string;
+    fid: string;
+    payload: NotificationTarget["payload"];
+  }) {
     try {
+      const notificationData = {
+        payloadVersion: input.payload.payloadVersion,
+        type: input.payload.type,
+        clickTarget: input.payload.clickTarget,
+        expenseId: input.payload.expenseId,
+        deliveryId: input.deliveryId,
+        endpointId: input.endpointId,
+      };
       await this.messaging.send({
         fid: input.fid,
         notification: {
           title: "가계부 알림",
           body: "새 지출 내역을 확인해 주세요.",
         },
-        data: {
-          payloadVersion: "notification-payload.v1",
-          deliveryId: input.deliveryId,
-          endpointId: input.endpointId,
+        data: notificationData,
+        webpush: {
+          notification: {
+            icon: "/icons/icon-192x192.png",
+            badge: "/icons/icon-72x72.png",
+            data: notificationData,
+          },
+          fcmOptions: {
+            link: `/?edit=${encodeURIComponent(input.payload.expenseId)}`,
+          },
         },
-        webpush: { fcmOptions: { link: "/" } },
       });
       return { kind: "success" } as const;
     } catch (error) {
@@ -571,11 +590,17 @@ export class FirebaseShortcutFidProvider
 {
   constructor(private readonly messaging: Messaging) {}
 
-  async sendOne(input: { eventId: string; endpointId: string; fid: string }) {
+  async sendOne(input: {
+    eventId: string;
+    endpointId: string;
+    fid: string;
+    payload: NotificationTarget["payload"];
+  }) {
     const result = await new FirebaseFidDeliveryProvider(this.messaging).sendOne({
       deliveryId: input.eventId,
       endpointId: input.endpointId,
       fid: input.fid,
+      payload: input.payload,
     });
     switch (result.kind) {
       case "success":

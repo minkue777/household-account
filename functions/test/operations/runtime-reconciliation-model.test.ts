@@ -91,4 +91,30 @@ describe("runtime reconciliation 보존 업무 사실 비교", () => {
       ).status,
     ).toBe("MISMATCH");
   });
+
+  it("manifest로 보완한 market과 수동 보유 synthetic code는 원문 동일성 대상에서 제외한다", () => {
+    expect(
+      comparison(
+        "position",
+        [normalizers.position("cash-1", {
+          assetId: "asset-1",
+          stockCode: "",
+          stockName: "예수금",
+          holdingType: "cash",
+          quantity: 1,
+          currentPrice: 100_000,
+        })],
+        [normalizers.position("cash-1", {
+          assetId: "asset-1",
+          positionKind: "stock",
+          instrumentCode: "LEGACY:CASH:cash-1",
+          instrumentName: "예수금",
+          holdingType: "cash",
+          market: "UNRESOLVED",
+          quantity: 1,
+          lastQuote: { priceInWon: 100_000 },
+        })],
+      ).status,
+    ).toBe("MATCH");
+  });
 });

@@ -261,4 +261,54 @@ describeWithFirestoreEmulator("서버 권위형 Firestore Rules", () => {
       }),
     );
   });
+
+  it("[T-ADM-003][ADM-004] 시스템 관리자는 다른 가구의 업무 데이터를 조회하지만 수정하지 못한다", async () => {
+    const firestore = environment
+      .authenticatedContext("uid-admin", { systemAdmin: true })
+      .firestore();
+
+    await assertSucceeds(getDoc(doc(firestore, "households", HOUSEHOLD_ID)));
+    await assertSucceeds(
+      getDoc(
+        doc(
+          firestore,
+          "households",
+          HOUSEHOLD_ID,
+          "ledgerTransactions",
+          "transaction-a",
+        ),
+      ),
+    );
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(firestore, "expenses"),
+          where("householdId", "==", HOUSEHOLD_ID),
+        ),
+      ),
+    );
+    await assertFails(
+      getDoc(
+        doc(
+          firestore,
+          "households",
+          HOUSEHOLD_ID,
+          "memberships",
+          MEMBER_UID,
+        ),
+      ),
+    );
+    await assertFails(
+      setDoc(
+        doc(
+          firestore,
+          "households",
+          HOUSEHOLD_ID,
+          "ledgerTransactions",
+          "admin-write",
+        ),
+        { householdId: HOUSEHOLD_ID },
+      ),
+    );
+  });
 });

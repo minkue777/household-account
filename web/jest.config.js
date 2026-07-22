@@ -18,8 +18,6 @@ const customJestConfig = {
     '!src/**/*.d.ts',
     '!src/app/**', // 페이지는 E2E 테스트로
     '!src/components/**', // 컴포넌트는 별도 설정 필요
-    '!src/types/index.ts', // 타입 re-export
-    '!src/hooks/index.ts', // 훅 re-export
     '!src/data/**', // 샘플 데이터
   ],
   coverageThreshold: {

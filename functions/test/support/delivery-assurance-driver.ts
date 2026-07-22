@@ -14,6 +14,10 @@ import type {
 import type { NotificationProviderOutcome } from "../../src/contexts/notifications/domain/model/deliveryAssurance";
 import type { MobileNotificationEndpoint } from "../../src/contexts/notifications/domain/model/mobileNotificationEndpoint";
 import {
+  NOTIFICATION_PAYLOAD_VERSION,
+  type NotificationTarget,
+} from "../../src/contexts/notifications/domain/model/notificationTarget";
+import {
   createNotificationTargetPlanner,
   type DeliveryAssuranceInputPort,
 } from "../../src/contexts/notifications/public";
@@ -36,6 +40,7 @@ export interface DeliverySeed {
   householdId: string;
   recipientMemberId: string;
   endpointId: string;
+  payload?: NotificationTarget["payload"];
   expectedRegistrationVersion: number;
   expectedBindingVersion: number;
   status: "queued";
@@ -47,6 +52,7 @@ export interface ProviderSendCallView {
   deliveryId: string;
   endpointId: string;
   fid: string;
+  payload: NotificationTarget["payload"];
   operation: "sendOne";
 }
 
@@ -91,7 +97,16 @@ function cloneIntent(
 }
 
 function cloneDelivery(delivery: StoredAssuredDelivery): StoredAssuredDelivery {
-  return { ...delivery };
+  return { ...delivery, payload: { ...delivery.payload } };
+}
+
+function defaultPayload(expenseId = "expense-1"): NotificationTarget["payload"] {
+  return {
+    payloadVersion: NOTIFICATION_PAYLOAD_VERSION,
+    type: "household-notification-requested",
+    clickTarget: "expense-edit",
+    expenseId,
+  };
 }
 
 function isTerminal(delivery: StoredAssuredDelivery): boolean {
@@ -193,7 +208,11 @@ class FixtureDeliveryAssuranceStore implements DeliveryAssuranceStore {
     this.deliveries = new Map(
       deliverySeeds.map((delivery) => [
         delivery.deliveryId,
-        { ...delivery, providerAttemptCount: 0 },
+        {
+          ...delivery,
+          payload: delivery.payload ?? defaultPayload(),
+          providerAttemptCount: 0,
+        },
       ]),
     );
     this.intents = new Map();
@@ -434,8 +453,9 @@ class FixtureDeliveryProvider implements DeliveryAssuranceProviderPort {
     deliveryId: string;
     endpointId: string;
     fid: string;
+    payload: NotificationTarget["payload"];
   }): Promise<ProviderOutcome> {
-    this.calls.push({ ...input, operation: "sendOne" });
+    this.calls.push({ ...input, payload: { ...input.payload }, operation: "sendOne" });
     const change = this.endpointChanges[input.deliveryId];
     if (change !== undefined) {
       await this.store.changeEndpointVersions(input.endpointId, change);
@@ -444,7 +464,7 @@ class FixtureDeliveryProvider implements DeliveryAssuranceProviderPort {
   }
 
   sentCalls(): readonly ProviderSendCallView[] {
-    return this.calls.map((call) => ({ ...call }));
+    return this.calls.map((call) => ({ ...call, payload: { ...call.payload } }));
   }
 }
 

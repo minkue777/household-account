@@ -52,3 +52,21 @@ export function requireHouseholdQueryActor(
   }
   return context.actor;
 }
+
+export function requireHouseholdReadScope(
+  context: HouseholdQueryExecutionContext,
+): { readonly householdId: string; readonly actingMemberId?: string } {
+  if (context.actor !== undefined) {
+    return {
+      householdId: context.actor.householdId,
+      actingMemberId: context.actor.actingMemberId,
+    };
+  }
+  if (
+    context.administrator?.capabilities.includes("admin.household-data.read") ===
+    true
+  ) {
+    return { householdId: context.envelope.householdId };
+  }
+  throw new HouseholdQueryRejection("FORBIDDEN");
+}

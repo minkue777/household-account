@@ -149,6 +149,12 @@ describe("알림 Delivery 멱등성과 결과 분류 공개 계약", () => {
         deliveryId,
         endpointId: "endpoint-recipient",
         fid: "FID-endpoint-recipient",
+        payload: {
+          payloadVersion: "notification-payload.v1",
+          type: "household-notification-requested",
+          clickTarget: "expense-edit",
+          expenseId: "expense-1",
+        },
         operation: "sendOne",
       },
     ]);
@@ -329,6 +335,12 @@ describe("알림 Delivery 멱등성과 결과 분류 공개 계약", () => {
         deliveryId: "delivery-b",
         endpointId: "endpoint-b",
         fid: "FID-endpoint-b",
+        payload: {
+          payloadVersion: "notification-payload.v1",
+          type: "household-notification-requested",
+          clickTarget: "expense-edit",
+          expenseId: "expense-1",
+        },
         operation: "sendOne",
       },
     ]);

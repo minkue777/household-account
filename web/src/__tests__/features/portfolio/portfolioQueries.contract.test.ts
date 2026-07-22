@@ -1,29 +1,33 @@
 import { getHouseholdQueryClient } from '@/composition/webQueryRuntime';
+import { getStockInstrumentCatalog } from '@/composition/stockInstrumentCatalogRuntime';
 import { portfolioQueries } from '@/features/portfolio/application/portfolioQueries';
 
 jest.mock('@/composition/webQueryRuntime', () => ({
   getHouseholdQueryClient: jest.fn(),
 }));
 
+jest.mock('@/composition/stockInstrumentCatalogRuntime', () => ({
+  getStockInstrumentCatalog: jest.fn(),
+}));
+
 const mockedGetClient = getHouseholdQueryClient as jest.MockedFunction<
   typeof getHouseholdQueryClient
 >;
+const mockedGetStockCatalog = getStockInstrumentCatalog as jest.MockedFunction<
+  typeof getStockInstrumentCatalog
+>;
 
 describe('portfolio query contract', () => {
-  test('uses the authenticated household query boundary for stock catalog search', async () => {
-    const execute = jest.fn().mockResolvedValue({
-      items: [
-        {
-          market: 'US',
-          instrumentType: 'etf',
-          code: 'US:SPY',
-          name: 'SPDR S&P 500 ETF Trust',
-        },
-      ],
-      truncated: false,
-      stale: false,
-    });
-    mockedGetClient.mockReturnValue({ execute } as never);
+  test('uses the device catalog instead of a household Cloud Function for stock search', async () => {
+    const search = jest.fn().mockResolvedValue([
+      {
+        market: 'US',
+        instrumentType: 'etf',
+        code: 'US:SPY',
+        name: 'SPDR S&P 500 ETF Trust',
+      },
+    ]);
+    mockedGetStockCatalog.mockReturnValue({ search } as never);
 
     await expect(portfolioQueries.searchStocks('SPY')).resolves.toEqual([
       {
@@ -33,11 +37,8 @@ describe('portfolio query contract', () => {
         name: 'SPDR S&P 500 ETF Trust',
       },
     ]);
-    expect(execute).toHaveBeenCalledWith('portfolio.search-instruments.v1', {
-      assetClass: 'stock',
-      query: 'SPY',
-      limit: 10,
-    });
+    expect(search).toHaveBeenCalledWith('SPY', 10);
+    expect(mockedGetClient).not.toHaveBeenCalled();
   });
 
   test('sends the selected market explicitly when requesting a quote', async () => {

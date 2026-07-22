@@ -484,6 +484,17 @@ describeWithFirestoreEmulator("Firebase runtime migration operations boundary", 
         category: "etc",
         date: "2026-07-20",
       }),
+      household.collection("ledgerTransactions").doc("expense-no-creator").set({
+        householdId: HOUSEHOLD_ID,
+        transactionId: "expense-no-creator",
+        transactionType: "expense",
+        merchant: "생성자 없는 지출",
+        amountInWon: 10_000,
+        categoryId: "etc",
+        accountingDate: "2026-07-20",
+        creatorMemberId: "",
+        source: "legacy-migration",
+      }),
       database.collection("expenses").doc("expense-existing-creator").set({
         householdId: HOUSEHOLD_ID,
         merchant: "생성자 있는 지출",
@@ -712,6 +723,89 @@ describeWithFirestoreEmulator("Firebase runtime migration operations boundary", 
     });
     expect((await household.collection("registeredCards").get()).size).toBe(0);
     expect((await household.collection("localCurrencyBalances").get()).size).toBe(0);
+  });
+
+  it("코드 없는 수동 보유 항목을 보존하고 지역화폐가 하나면 홈 선택값으로 사용한다", async () => {
+    const household = database.collection("households").doc(HOUSEHOLD_ID);
+    await Promise.all([
+      household.set({
+        lifecycleState: "active",
+        homeSummaryConfig: {
+          leftCard: "monthlySpent",
+          rightCard: "monthlyRemainingBudget",
+        },
+      }),
+      household.collection("assetOwnerProfiles").doc("profile-a").set({
+        profileId: "profile-a",
+        displayName: "민규",
+        profileType: "member",
+        lifecycleState: "active",
+      }),
+      database.collection("assets").doc("asset-manual").set({
+        householdId: HOUSEHOLD_ID,
+        name: "증권계좌",
+        type: "stock",
+        owner: "민규",
+        currentBalance: 100_000,
+      }),
+      database.collection("stock_holdings").doc("cash-1").set({
+        householdId: HOUSEHOLD_ID,
+        assetId: "asset-manual",
+        stockCode: "",
+        stockName: "예수금",
+        holdingType: "cash",
+        quantity: 1,
+        currentPrice: 100_000,
+      }),
+      database.collection("balances").doc("balance-daejeon").set({
+        householdId: HOUSEHOLD_ID,
+        type: "localCurrency",
+        balance: 12_345,
+      }),
+    ]);
+
+    const migration = subject();
+    const dryRun = await migration.dryRun({
+      scope: scope("manual-position-and-single-currency"),
+      mappings: mappings({
+        positionMarkets: { "cash-1": "UNRESOLVED" },
+        localCurrencyTypes: { "balance-daejeon": "daejeon" },
+      }),
+      plannedAt: "2026-07-21T01:40:00.000Z",
+    });
+    expect(dryRun.unresolved).toEqual([]);
+
+    const applied = await migration.apply({
+      scope: scope("manual-position-and-single-currency"),
+      expectedPlanHash: dryRun.planHash,
+      confirmation: "APPLY",
+      checkpoint: dryRun.checkpoint,
+      pageSize: 50,
+      maxPages: 100,
+      appliedAt: "2026-07-21T01:41:00.000Z",
+    });
+    expect(applied).toMatchObject({
+      kind: "applied",
+      reconciliation: { status: "MATCH" },
+    });
+    expect(
+      (
+        await household
+          .collection("assets")
+          .doc("asset-manual")
+          .collection("positions")
+          .doc("cash-1")
+          .get()
+      ).data(),
+    ).toMatchObject({
+      instrumentCode: "LEGACY:CASH:cash-1",
+      instrumentType: "cash",
+      holdingType: "cash",
+      market: "UNRESOLVED",
+    });
+    expect(
+      (await household.collection("homePreferences").doc("home").get()).data(),
+    ).toMatchObject({ selectedLocalCurrencyType: "daejeon" });
   });
 
   it("dry-run 뒤 source가 바뀌면 해당 page 전체를 rollback한다", async () => {

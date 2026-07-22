@@ -11,6 +11,7 @@ import {
   createNotificationTargetPlanner,
   type ShortcutTransactionNotificationInputPort,
 } from "../../src/contexts/notifications/public";
+import type { NotificationTarget } from "../../src/contexts/notifications/domain/model/notificationTarget";
 
 export interface ShortcutCreatorEndpoint {
   endpointId: string;
@@ -41,6 +42,7 @@ export interface ShortcutProviderSendCall {
   eventId: string;
   endpointId: string;
   fid: string;
+  payload: NotificationTarget["payload"];
   operation: "sendOne";
 }
 
@@ -96,7 +98,7 @@ interface CompletionWaiter {
 }
 
 function cloneDelivery(record: ShortcutDeliveryRecord): ShortcutDeliveryRecord {
-  return { ...record };
+  return { ...record, payload: { ...record.payload } };
 }
 
 class FixtureShortcutTransactionNotificationStore
@@ -242,13 +244,14 @@ class FixtureShortcutTransactionNotificationProvider
     eventId: string;
     endpointId: string;
     fid: string;
+    payload: NotificationTarget["payload"];
   }): Promise<ShortcutProviderOutcome> {
-    this.calls.push({ ...input, operation: "sendOne" });
+    this.calls.push({ ...input, payload: { ...input.payload }, operation: "sendOne" });
     return this.outcome;
   }
 
   sentCalls(): readonly ShortcutProviderSendCall[] {
-    return this.calls.map((call) => ({ ...call }));
+    return this.calls.map((call) => ({ ...call, payload: { ...call.payload } }));
   }
 }
 

@@ -1,5 +1,8 @@
 import type { MobileNotificationEndpoint } from "../../../domain/model/mobileNotificationEndpoint";
-import type { MemberFact } from "../../../domain/model/notificationTarget";
+import type {
+  MemberFact,
+  NotificationTarget,
+} from "../../../domain/model/notificationTarget";
 
 export type ShortcutProviderOutcome =
   | "delivered"
@@ -22,6 +25,7 @@ export interface ShortcutDeliveryRecord {
   transactionId: string;
   endpointId: string;
   fid: string;
+  payload: NotificationTarget["payload"];
   expectedRegistrationVersion: number;
   expectedBindingVersion: number;
   status: "queued" | ShortcutProviderOutcome;
@@ -51,5 +55,6 @@ export interface ShortcutTransactionNotificationProvider {
     eventId: string;
     endpointId: string;
     fid: string;
+    payload: NotificationTarget["payload"];
   }): Promise<ShortcutProviderOutcome>;
 }

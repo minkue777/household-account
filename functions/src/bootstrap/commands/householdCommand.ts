@@ -25,6 +25,7 @@ export interface HouseholdAdministratorActor {
   readonly capabilities: readonly (
     | "admin.households.read"
     | "admin.households.write"
+    | "admin.household-data.read"
     | "household.delete"
     | "household.restore"
     | "admin.asset-owner-profile.archive"

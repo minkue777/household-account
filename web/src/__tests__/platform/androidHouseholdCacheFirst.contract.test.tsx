@@ -40,6 +40,7 @@ jest.mock('@/composition/clientSessionScope', () => ({
 }));
 
 jest.mock('@/platform/pwa/fidEndpointLifecycle', () => ({
+  activatePwaFidEndpoint: jest.fn().mockResolvedValue(false),
   removePwaFidEndpointForLogout: jest.fn(),
 }));
 
@@ -60,16 +61,31 @@ import {
 } from '@/lib/householdService';
 import { onAuthChange, restoreAndroidHostAuth } from '@/lib/authService';
 import { householdCommands } from '@/features/access-household/application/householdCommands';
+import { activatePwaFidEndpoint } from '@/platform/pwa/fidEndpointLifecycle';
+import { setClientSessionScope } from '@/composition/clientSessionScope';
+import {
+  clearAdminHouseholdViewSelection,
+  selectAdminHouseholdView,
+} from '@/features/access-household/application/adminHouseholdViewSelection';
 
 const mockGetCachedHousehold = jest.mocked(getCachedHousehold);
 const mockGetHousehold = jest.mocked(getHousehold);
 const mockOnAuthChange = jest.mocked(onAuthChange);
 const mockRestoreAndroidHostAuth = jest.mocked(restoreAndroidHostAuth);
 const mockResolveSignedInUser = jest.mocked(householdCommands.resolveSignedInUser);
+const mockActivatePwaFidEndpoint = jest.mocked(activatePwaFidEndpoint);
+const mockSetClientSessionScope = jest.mocked(setClientSessionScope);
 
 function SessionProbe() {
   const { household, sessionState } = useHousehold();
   return <div>{`${sessionState}:${household?.name ?? 'none'}`}</div>;
+}
+
+function AdminSessionProbe() {
+  const { household, sessionState, adminHouseholdView, currentMember } = useHousehold();
+  return (
+    <div>{`${sessionState}:${household?.name ?? 'none'}:${adminHouseholdView?.householdId ?? 'member'}:${currentMember?.id ?? 'no-member'}`}</div>
+  );
 }
 
 const household = (name: string) => ({
@@ -82,8 +98,45 @@ const household = (name: string) => ({
 describe('Android 가구 cache-first 복원 계약', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    window.history.replaceState({}, '', '/');
+    clearAdminHouseholdViewSelection();
     mockAndroidHostAvailable = false;
     mockOnAuthChange.mockImplementation(() => jest.fn());
+  });
+
+  it('[T-ADM-003][ADM-004] systemAdmin은 대상 가구를 실제 가구원으로 가장하지 않고 조회 전용으로 연다', async () => {
+    selectAdminHouseholdView({
+      householdId: 'household-1',
+      householdName: '선택 가계부',
+    });
+    mockOnAuthChange.mockImplementation((listener) => {
+      listener({
+        uid: 'uid-admin',
+        getIdTokenResult: jest.fn().mockResolvedValue({
+          claims: { systemAdmin: true },
+        }),
+      } as unknown as User);
+      return jest.fn();
+    });
+    mockGetHousehold.mockResolvedValue(household('관리 대상 가계부'));
+
+    render(
+      <HouseholdProvider>
+        <AdminSessionProbe />
+      </HouseholdProvider>,
+    );
+
+    expect(
+      await screen.findByText('ready:관리 대상 가계부:household-1:no-member')
+    ).toBeInTheDocument();
+    expect(mockResolveSignedInUser).not.toHaveBeenCalled();
+    expect(mockActivatePwaFidEndpoint).not.toHaveBeenCalled();
+    expect(mockSetClientSessionScope).toHaveBeenCalledWith(expect.objectContaining({
+      principalUid: 'uid-admin',
+      householdId: 'household-1',
+      memberId: 'system-administrator',
+      accessMode: 'administrator-readonly',
+    }));
   });
 
   it('[T-WEBVIEW-004][AND-012] 검증된 Membership의 cache snapshot을 먼저 표시한 뒤 서버 snapshot으로 갱신한다', async () => {
@@ -122,6 +175,7 @@ describe('Android 가구 cache-first 복원 계약', () => {
     await waitFor(() => {
       expect(screen.getByText('ready:서버 가계부')).toBeInTheDocument();
     });
+    expect(mockActivatePwaFidEndpoint).toHaveBeenCalledTimes(1);
   });
 
   it('Android prefetched Membership은 별도 Membership 왕복 없이 cache 화면을 먼저 연다', async () => {

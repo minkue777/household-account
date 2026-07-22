@@ -2,19 +2,34 @@ import type { MessagePayload, Unsubscribe } from 'firebase/messaging';
 import { Platform } from './utils/platform';
 import {
   activatePwaFidEndpoint,
+  getPwaFidEndpointRegistrationState,
   isPwaPushEligible,
   notificationPermission,
   requestAndActivatePwaFidEndpoint,
   setupPwaForegroundMessageListener,
+  subscribePwaFidEndpointRegistrationState,
+  type PwaFidEndpointRegistrationState,
 } from '@/platform/pwa/fidEndpointLifecycle';
+
+export type { PwaFidEndpointRegistrationState };
 
 export async function requestNotificationPermission(): Promise<boolean> {
   return requestAndActivatePwaFidEndpoint();
 }
 
 /** 이미 허용된 iOS 홈 화면 PWA endpoint를 FID 방식으로 재확인합니다. */
-export async function refreshFcmToken(): Promise<void> {
-  await activatePwaFidEndpoint();
+export async function refreshFcmToken(): Promise<boolean> {
+  return activatePwaFidEndpoint();
+}
+
+export function getFidEndpointRegistrationState(): PwaFidEndpointRegistrationState {
+  return getPwaFidEndpointRegistrationState();
+}
+
+export function subscribeFidEndpointRegistrationState(
+  listener: (state: PwaFidEndpointRegistrationState) => void
+): Unsubscribe {
+  return subscribePwaFidEndpointRegistrationState(listener);
 }
 
 export async function setupForegroundMessageListener(

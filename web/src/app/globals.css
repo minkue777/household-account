@@ -28,6 +28,12 @@ body {
   transition: background 0.3s ease, color 0.3s ease;
 }
 
+/* iOS Safari는 date input의 내부 값에 중앙 정렬을 적용하므로 좌측 정렬을 명시합니다. */
+input[type='date'],
+input[type='date']::-webkit-date-and-time-value {
+  text-align: left;
+}
+
 /* 모던 카드 스타일 */
 .card-modern {
   background: var(--theme-card-bg);

@@ -3,6 +3,7 @@ import type { HouseholdAdministratorActor } from "./commands/householdCommand";
 export const SYSTEM_ADMINISTRATOR_CAPABILITIES = Object.freeze([
   "admin.households.read",
   "admin.households.write",
+  "admin.household-data.read",
   "household.delete",
   "household.restore",
   "admin.asset-owner-profile.archive",

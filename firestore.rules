@@ -16,9 +16,13 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/households/$(householdId)/memberships/$(request.auth.uid)).data.lifecycleState == 'active';
     }
 
+    function canReadHousehold(householdId) {
+      return activeMembership(householdId) || isSystemAdministrator();
+    }
+
     function canReadLegacyHouseholdDocument() {
       return resource.data.householdId is string
-        && activeMembership(resource.data.householdId);
+        && canReadHousehold(resource.data.householdId);
     }
 
     // Firebase Admin SDK를 사용하는 Functions만 Canonical 데이터를 씁니다.
@@ -35,11 +39,11 @@ service cloud.firestore {
     }
 
     match /households/{householdId} {
-      allow read: if activeMembership(householdId);
+      allow read: if canReadHousehold(householdId);
       allow write: if false;
 
       match /members/{memberId} {
-        allow read: if activeMembership(householdId);
+        allow read: if canReadHousehold(householdId);
         allow write: if false;
       }
 
@@ -51,77 +55,77 @@ service cloud.firestore {
       }
 
       match /assetOwnerProfiles/{profileId} {
-        allow read: if activeMembership(householdId);
+        allow read: if canReadHousehold(householdId);
         allow write: if false;
       }
 
       match /categories/{categoryId} {
-        allow read: if activeMembership(householdId);
+        allow read: if canReadHousehold(householdId);
         allow write: if false;
       }
 
       match /categorySettings/{settingId} {
-        allow read: if activeMembership(householdId);
+        allow read: if canReadHousehold(householdId);
         allow write: if false;
       }
 
       match /ledgerTransactions/{transactionId} {
-        allow read: if activeMembership(householdId);
+        allow read: if canReadHousehold(householdId);
         allow write: if false;
       }
 
       match /recurringPlans/{planId} {
-        allow read: if activeMembership(householdId);
+        allow read: if canReadHousehold(householdId);
         allow write: if false;
       }
 
       match /localCurrencyBalances/{currencyType} {
-        allow read: if activeMembership(householdId);
+        allow read: if canReadHousehold(householdId);
         allow write: if false;
       }
 
       match /registeredCards/{cardId} {
-        allow read: if activeMembership(householdId);
+        allow read: if canReadHousehold(householdId);
         allow write: if false;
       }
 
       match /merchantRules/{ruleId} {
-        allow read: if activeMembership(householdId);
+        allow read: if canReadHousehold(householdId);
         allow write: if false;
       }
 
       match /assets/{assetId} {
-        allow read: if activeMembership(householdId);
+        allow read: if canReadHousehold(householdId);
         allow write: if false;
 
         match /positions/{positionId} {
-          allow read: if activeMembership(householdId);
+          allow read: if canReadHousehold(householdId);
           allow write: if false;
         }
 
         match /positionHistory/{snapshotId} {
-          allow read: if activeMembership(householdId);
+          allow read: if canReadHousehold(householdId);
           allow write: if false;
         }
       }
 
       match /assetSnapshots/{localDate} {
-        allow read: if activeMembership(householdId);
+        allow read: if canReadHousehold(householdId);
         allow write: if false;
       }
 
       match /dividendEvents/{eventId} {
-        allow read: if activeMembership(householdId);
+        allow read: if canReadHousehold(householdId);
         allow write: if false;
       }
 
       match /dividendAnnualViews/{year} {
-        allow read: if activeMembership(householdId);
+        allow read: if canReadHousehold(householdId);
         allow write: if false;
       }
 
       match /homePreferences/{scopeId} {
-        allow read: if activeMembership(householdId);
+        allow read: if canReadHousehold(householdId);
         allow write: if false;
       }
 

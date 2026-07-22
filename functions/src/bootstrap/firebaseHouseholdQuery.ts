@@ -14,7 +14,7 @@ import { db, REGION } from "../config";
 import { createInstrumentCatalogApplication } from "../contexts/portfolio/holdings/application/instrumentCatalogApplication";
 import {
   HouseholdQueryRejection,
-  requireHouseholdQueryActor,
+  requireHouseholdReadScope,
   type HouseholdQueryResult,
 } from "./queries/householdQuery";
 import { createHouseholdQueryRouter } from "./queries/householdQueryRouter";
@@ -98,10 +98,10 @@ const handlers = createManifestBackedHouseholdQueryRegistry([
         ) {
           throw new HouseholdQueryRejection("INVALID_PAYLOAD");
         }
-        const actor = requireHouseholdQueryActor(context);
+        const scope = requireHouseholdReadScope(context);
         const found = await new FirebaseLedgerCommandRepository(
           db,
-          actor.householdId,
+          scope.householdId,
         ).findTransaction(transactionId);
         if (found.kind === "retryable-failure") {
           throw new HouseholdQueryRejection(found.code, true);

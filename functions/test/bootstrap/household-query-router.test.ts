@@ -80,6 +80,24 @@ describe("household query bootstrap boundary", () => {
     ).resolves.toMatchObject({ kind: "error", code: "FORBIDDEN" });
   });
 
+  it("검증된 시스템 관리자는 가구원이 아니어도 조회 허용 목록만 실행한다", async () => {
+    const subject = fixture();
+    const handler = subject.router.execute({
+      principalUid: "uid-admin",
+      administrator: {
+        principalRef: "uid-admin",
+        capabilities: ["admin.household-data.read"],
+      },
+      request: { ...subject.request, householdId: "house-b" },
+    });
+
+    await expect(handler).resolves.toEqual({
+      kind: "success",
+      queryId: "query-1",
+      data: { transactionId: "transaction-1", aggregateVersion: 3 },
+    });
+  });
+
   it("domain rejection을 transport detail 없이 전달한다", async () => {
     const subject = fixture({
       async execute() {

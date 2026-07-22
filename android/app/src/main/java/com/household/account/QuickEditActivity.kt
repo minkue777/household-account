@@ -16,6 +16,7 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.flexbox.FlexboxLayout
 import com.household.account.data.CategoryData
@@ -103,6 +104,14 @@ class QuickEditActivity : AppCompatActivity() {
         setupUI()
         loadCategories()
         setupButtons()
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    dismissCurrentQuickEdit()
+                }
+            }
+        )
     }
 
     private fun setupWindowStyle() {
@@ -618,11 +627,6 @@ class QuickEditActivity : AppCompatActivity() {
         activityScope.launch {
             completeCurrentQuickEdit()
         }
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        dismissCurrentQuickEdit()
     }
 
     private fun createSmallCategoryButton(category: CategoryData, isSelected: Boolean): LinearLayout {

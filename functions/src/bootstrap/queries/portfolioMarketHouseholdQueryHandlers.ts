@@ -4,7 +4,7 @@ import type {
 } from "../../contexts/portfolio/core/application/ports/out/portfolioRuntimeStorePort";
 import {
   HouseholdQueryRejection,
-  requireHouseholdQueryActor,
+  requireHouseholdReadScope,
   type HouseholdQueryHandler,
 } from "./householdQuery";
 
@@ -286,9 +286,9 @@ export function createPortfolioMarketHouseholdQueryHandlers(input: {
           if (instrumentCode === undefined) {
             throw new HouseholdQueryRejection("INVALID_PAYLOAD");
           }
-          const actor = requireHouseholdQueryActor(context);
+          const scope = requireHouseholdReadScope(context);
           return input.dividends.read({
-            householdId: actor.householdId,
+            householdId: scope.householdId,
             instrumentCode,
             asOfDate: seoulDate(now()),
           });

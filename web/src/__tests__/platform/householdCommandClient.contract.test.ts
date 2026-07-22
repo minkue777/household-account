@@ -48,6 +48,21 @@ describe('Web Household Command 계약', () => {
     expect(transport.send).not.toHaveBeenCalled();
   });
 
+  test('관리자 조회 전용 세션은 tenant 변경 명령을 전송 전에 거부한다', async () => {
+    const transport = transportReturning({ kind: 'succeeded', value: {} });
+    const client = new HouseholdCommandClient(
+      transport,
+      () => 'observed-household',
+      () => 'administrator-readonly'
+    );
+
+    await expect(client.execute(
+      'ledger.delete-transaction.v1',
+      { transactionId: 'expense-1', expectedVersion: 1 }
+    )).rejects.toMatchObject({ code: 'ADMIN_VIEW_READ_ONLY' });
+    expect(transport.send).not.toHaveBeenCalled();
+  });
+
   test('principal scope 명령에는 client householdId를 싣지 않는다', async () => {
     const resolution = { kind: 'first-visit-required' as const, choices: ['create' as const, 'join' as const] };
     const transport = transportReturning({ kind: 'succeeded', value: resolution });

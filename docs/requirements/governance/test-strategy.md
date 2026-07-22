@@ -63,12 +63,12 @@
 
 | Bounded Context | 요구사항 | Test ID 개수 | 테스트 소유 기능 문서 |
 |---|---:|---:|---|
-| [Access & Household](../contexts/access-household/requirements.md) | 16 | 12 | [가구와 접근](../contexts/access-household/modules/household-access/requirements.md#8-모듈-테스트-시나리오) |
+| [Access & Household](../contexts/access-household/requirements.md) | 17 | 13 | [가구와 접근](../contexts/access-household/modules/household-access/requirements.md#8-모듈-테스트-시나리오) |
 | [Household Finance](../contexts/household-finance/requirements.md) | 39 | 44 | [원장](../contexts/household-finance/modules/ledger/requirements.md#8-모듈-테스트-시나리오), [카테고리·예산](../contexts/household-finance/modules/categories-budget/requirements.md#8-모듈-테스트-시나리오), [정기 거래](../contexts/household-finance/modules/recurring-transactions/requirements.md#8-모듈-테스트-시나리오), [지역화폐](../contexts/household-finance/modules/local-currency/requirements.md#8-모듈-테스트-시나리오) |
 | [Payment Capture](../contexts/payment-capture/requirements.md) | 63 | 47 | [결제 설정](../contexts/payment-capture/modules/payment-configuration/requirements.md#8-모듈-테스트-시나리오), [Android 수집](../contexts/payment-capture/modules/android-payment-ingestion/requirements.md#9-모듈-테스트-시나리오), [Shortcut](../contexts/payment-capture/modules/shortcut-ingestion/requirements.md#9-모듈-테스트-시나리오) |
 | [Portfolio](../contexts/portfolio/requirements.md) | 38 | 35 | [포트폴리오](../contexts/portfolio/modules/portfolio/requirements.md#8-모듈-테스트-시나리오), [보유종목·시세](../contexts/portfolio/modules/holdings-market-data/requirements.md#8-모듈-테스트-시나리오), [자동화](../contexts/portfolio/modules/asset-automation/requirements.md#8-모듈-테스트-시나리오), [배당](../contexts/portfolio/modules/dividends/requirements.md#8-모듈-테스트-시나리오) |
 | [Notifications](../contexts/notifications/requirements.md) | 13 | 12 | [푸시 알림](../contexts/notifications/modules/notifications/requirements.md#9-모듈-테스트-시나리오) |
-| 합계 | 169 | 150 | 13개 기능 모듈 |
+| 합계 | 170 | 151 | 13개 기능 모듈 |
 
 모든 업무 Context 요구사항은 이름이 부여된 Canonical 테스트와 실제 계약 assertion 본문에 연결되어 있습니다. Architecture traceability gate가 이 연결을 양방향으로 검사합니다.
 
@@ -91,19 +91,16 @@
 
 Architecture traceability gate가 Canonical ID의 중복 선언, 요구사항 연결 누락과 테스트 소스 누락을 자동으로 거부합니다.
 
-## 5. 리팩터링 착수 전 테스트 기준선
+## 5. 현재 검증 기준
 
-기준일: 2026-07-19.
+테스트 개수처럼 구현과 함께 바뀌는 숫자는 문서에 고정하지 않습니다. 현재 상태는 다음 검증 관문을 모두 통과했는지로 판단합니다.
 
-- Web: 테스트 파일 17개, 총 207개 중 198개 통과·9개 실패
-- Functions: 이 기준선 시점에는 자동 테스트 파일이 없고 TypeScript build만 통과했습니다.
-- Android: Paybooc parser 승인·취소·분리형 3개만 존재, JVM 테스트 통과
-- Web production build 통과
-- Web 전체 TypeScript 검사 실패: jest-dom type과 오래된 updateCategory·regex 기대
+- Functions: 계약 테스트, Architecture gate, runtime boundary, TypeScript build
+- Web: 단위·통합 테스트와 production build
+- Android: JVM 테스트, lint와 APK build
+- Firebase: Firestore·Storage Rules emulator 테스트와 배포 전 검증
 
-기존 실패 테스트는 구현을 되돌려 무조건 맞추지 않습니다. 기능 모듈의 현재 명세·호환·결정 상태에 따라 수정 또는 삭제합니다.
-
-위 수치는 2026-07-19의 역사적 기준선입니다. 2026-07-20 현재 Functions 공유 계약·Architecture gate 38개와 목표 구현 계약 196개, 합계 234개가 통과합니다. 남은 161개 Ready 파일의 1,384개 시나리오는 목표 Input Port에 연결되지 않은 skip 상태이므로 아직 release pass가 아닙니다. Web 기준선 실패와 Rules Emulator·CI 부재도 [코드 감사 기록](code-audit-2026-07-15.md)과 `REL-001`의 교정 대상으로 남습니다.
+정확한 명령과 테스트 구성은 [Functions 테스트 안내](../../../functions/test/README.md), 자동 실행 기준은 [quality-gates workflow](../../../.github/workflows/quality-gates.yml)를 단일 실행 근거로 사용합니다. 실패한 기존 테스트는 구현을 되돌려 억지로 통과시키지 않고 현재 요구사항·호환 정책에 따라 수정하거나 제거합니다.
 
 ## 6. 테스트를 가능하게 하는 최소 seam
 

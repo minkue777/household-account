@@ -113,23 +113,25 @@ export const normalizers = {
     };
   },
   position(id, data) {
-    const instrument =
-      data?.instrument && typeof data.instrument === "object"
-        ? data.instrument
-        : {};
     const lastQuote =
       data?.lastQuote && typeof data.lastQuote === "object"
         ? data.lastQuote
         : {};
+    const holdingType = text(data, "holdingType");
+    const storedCode = text(data, "instrumentCode", "stockCode", "marketCode")
+      .toUpperCase();
     return {
       id,
       lifecycle: lifecycle(data),
       assetId: text(data, "assetId"),
       kind: text(data, "positionKind") ||
         (text(data, "marketCode") ? "crypto" : "stock"),
-      code: text(data, "instrumentCode", "stockCode", "marketCode").toUpperCase(),
+      // 수동·현금·채권의 synthetic code와 명시 market은 migration 결정 hash로
+      // 검증한다. 원문 reconciliation에서는 사용자가 보던 이름과 금액만 비교한다.
+      code: ["bond", "cash", "manual"].includes(holdingType)
+        ? ""
+        : storedCode,
       name: text(data, "instrumentName", "stockName", "coinName"),
-      market: text(data, "market") || text(instrument, "market") || "UNRESOLVED",
       quantity: number(data, "quantity"),
       averagePriceInWon: number(data, "averagePriceInWon", "avgPrice"),
       currentPrice: number(data, "currentPrice") || number(lastQuote, "priceInWon"),
@@ -248,10 +250,12 @@ export async function main() {
       "ledger.creatorMemberId",
       "asset.ownerRef",
       "asset.subType",
-      "category.defaultCategoryId",
-      "recurring.creatorMemberId",
-      "recurring.firstApplicableMonth",
-    ],
+    "category.defaultCategoryId",
+    "recurring.creatorMemberId",
+    "recurring.firstApplicableMonth",
+    "position.market",
+    "position.syntheticInstrumentCode",
+  ],
     projectId,
     householdIdHash: sha256(householdId).slice(0, 20),
     checkedAt: new Date().toISOString(),

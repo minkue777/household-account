@@ -17,7 +17,8 @@ import {
   type RuntimeMigrationCollectorScope,
 } from "./runtimeMigrationCollectorContract";
 
-const VALID_MARKETS = new Set(["KRX", "US", "KOFIA_FUND"]);
+const VALID_MARKETS = new Set(["KRX", "US", "KOFIA_FUND", "UNRESOLVED"]);
+const MANUAL_HOLDING_TYPES = new Set(["bond", "cash", "manual"]);
 
 export interface PortfolioPositionRuntimeMigrationCollectorInput
   extends RuntimeMigrationCollectorScope {
@@ -119,11 +120,18 @@ export async function collectPortfolioPositionRuntimeMigration(
       );
       continue;
     }
-    const code = text(
+    const storedCode = text(
       data,
       kind === "stock" ? "stockCode" : "marketCode",
     ).toUpperCase();
     const name = text(data, kind === "stock" ? "stockName" : "coinName");
+    const holdingType = text(data, "holdingType");
+    const code =
+      storedCode !== ""
+        ? storedCode
+        : kind === "stock" && MANUAL_HOLDING_TYPES.has(holdingType)
+          ? `LEGACY:${holdingType.toUpperCase()}:${snapshot.id}`
+          : "";
     if (code === "" || name === "") {
       unresolved.push(
         migrationIssue({
@@ -149,6 +157,8 @@ export async function collectPortfolioPositionRuntimeMigration(
     const instrumentType =
       kind === "crypto"
         ? "crypto"
+        : MANUAL_HOLDING_TYPES.has(holdingType)
+          ? holdingType
         : ["stock", "etf", "etn", "fund"].includes(
               text(data, "instrumentType"),
             )
@@ -168,7 +178,7 @@ export async function collectPortfolioPositionRuntimeMigration(
           market,
           currency,
           ...(kind === "stock"
-            ? { holdingType: text(data, "holdingType") || "stock" }
+            ? { holdingType: holdingType || "stock" }
             : {}),
           instrument: {
             market,

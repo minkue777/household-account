@@ -149,6 +149,12 @@ describeWithFirestoreEmulator("Firestore TTL adapter boundary", () => {
           householdId: "household-1",
           recipientMemberId: "member-1",
           endpointId: "endpoint-1",
+          payload: {
+            payloadVersion: "notification-payload.v1",
+            type: "expense-created",
+            clickTarget: "expense-edit",
+            expenseId: "expense-1",
+          },
           expectedRegistrationVersion: 1,
           expectedBindingVersion: 1,
           status: "delivered",

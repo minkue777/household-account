@@ -103,6 +103,7 @@ class DefaultShortcutTransactionNotificationConsumer
           transactionId: event.transactionId,
           endpointId: endpoint.endpointId,
           fid: endpoint.fid,
+          payload: target.payload,
           expectedRegistrationVersion: endpoint.registrationVersion,
           expectedBindingVersion: endpoint.bindingVersion,
           status: "queued",
@@ -132,6 +133,7 @@ class DefaultShortcutTransactionNotificationConsumer
           eventId: delivery.eventId,
           endpointId: delivery.endpointId,
           fid: delivery.fid,
+          payload: delivery.payload,
         }),
       })),
     );

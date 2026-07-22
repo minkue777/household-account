@@ -9,6 +9,10 @@ import {
 import type { HouseholdAdministratorActor } from "../commands/householdCommand";
 
 const ADMINISTRATOR_OR_MEMBER_QUERIES = new Set([
+  "ledger.get-transaction.v1",
+  "portfolio.search-instruments.v1",
+  "portfolio.get-instrument-quote.v1",
+  "portfolio.get-dividend-projection.v1",
   "access.list-asset-owner-profiles.v1",
 ]);
 

@@ -37,6 +37,7 @@ describe("systemAdmin 전용 관리자 callable 경계", () => {
       capabilities: [
         "admin.households.read",
         "admin.households.write",
+        "admin.household-data.read",
         "household.delete",
         "household.restore",
         "admin.asset-owner-profile.archive",

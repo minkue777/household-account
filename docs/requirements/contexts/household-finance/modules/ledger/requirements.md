@@ -106,7 +106,7 @@
 | ID | 상태 | 요구사항 | 경계·예외 | 근거 | 테스트 |
 |---|---|---|---|---|---|
 | SPL-001 | 결함 | 하나의 지출을 둘 이상의 항목으로 분할하고 원본은 `superseded` 상태로 보존한다. | 모든 항목의 금액은 양수이고 합계는 원금과 같아야 한다. 가맹점·카테고리는 항목별로 달라도 되며 명시적으로 바꾸지 않은 생성 출처·카드·capture lineage는 `LED-009`에 따라 보존한다. 원복은 파생 항목을 제거하고 같은 원본 ID를 재활성화한다. 현재 분할은 원본을 물리 삭제하고 provenance 일부를 누락한다. | [ExpenseSplitModal](../../../../../../web/src/components/expense/ExpenseSplitModal.tsx), [expenseService](../../../../../../web/src/lib/expenseService.ts), [DEC-041](../../../../governance/decisions.md#dec-041) | U, I, E2E |
-| SPL-002 | 현재 명세 | 월 분할은 2개월 이상을 입력받아 원 거래일부터 월 단위 거래를 만들고 가맹점에 순번/전체를 표시한다. | 29~31일은 대상 월 말일로 보정한다. | [splitMonths](../../../../../../web/src/lib/utils/splitMonths.ts), [monthlySplitDate](../../../../../../web/src/lib/utils/monthlySplitDate.ts) | U, I, E2E |
+| SPL-002 | 현재 명세 | 월 분할은 2개월 이상을 입력받아 원 거래일부터 월 단위 거래를 만들고 가맹점에 순번/전체를 표시한다. | 29~31일은 대상 월 말일로 보정한다. | [splitMonths](../../../../../../web/src/lib/utils/splitMonths.ts), [월 분할 Domain Policy](../../../../../../functions/src/contexts/household-finance/ledger/domain/policies/monthlySplit.ts) | U, I, E2E |
 | SPL-003 | 결함 | 월 분할 항목은 그룹 ID, 순번, 전체 개월 수로 연결하고 원본 거래는 `superseded`로 보존해 그룹 전체를 같은 원본으로 원복할 수 있다. | immutable capture lineage와 source·origin·creator·카드 증거는 `LED-009`에 따라 보존한다. 결제 취소는 원본과 그룹 전체를 삭제한다. 현재 복원은 분할 항목에서 새 거래를 추정 생성하여 원본 ID와 provenance 일부를 잃는다. | [expenseService](../../../../../../web/src/lib/expenseService.ts), [DEC-041](../../../../governance/decisions.md#dec-041) | U, I, E2E |
 | SPL-004 | 현재 명세 | 월 분할 그룹의 개월 수를 변경하면 기존 그룹을 새 그룹으로 재구성한다. | UI는 2개월 이상을 검증하지만 서비스 경계에는 같은 검증이 없다. | [expenseService](../../../../../../web/src/lib/expenseService.ts) | U, I |
 | SPL-005 | 현재 명세 | 월 분할의 각 항목 금액은 원금을 개월 수로 나눈 값을 내림해 동일하게 저장한다. | 나머지 0~개월 수-1원은 의미 없는 오차로 보고 의도적으로 반영하지 않으므로 분할 합계가 원금보다 작을 수 있다. DEC-001에서 현 로직 유지를 확정했다. | [monthlySplitActions](../../../../../../web/src/lib/utils/monthlySplitActions.ts), [expenseService](../../../../../../web/src/lib/expenseService.ts) | U, I |
@@ -183,7 +183,7 @@ DEC-001의 의도적인 월 분할 나머지 미반영은 결함이 아닙니다
 - [거래 폼 규칙](../../../../../../web/src/lib/utils/expenseForm.ts)
 - [거래 표시 규칙](../../../../../../web/src/lib/utils/ledgerDisplay.ts)
 - [월 분할 동작](../../../../../../web/src/lib/utils/monthlySplitActions.ts)
-- [월 분할 날짜](../../../../../../web/src/lib/utils/monthlySplitDate.ts)
+- [월 분할 Domain Policy](../../../../../../functions/src/contexts/household-finance/ledger/domain/policies/monthlySplit.ts)
 - [월 분할 계산](../../../../../../web/src/lib/utils/splitMonths.ts)
 - [원장 화면](../../../../../../web/src/components/home/LedgerPage.tsx)
 - [거래 추가 화면](../../../../../../web/src/components/expense/AddExpenseModal.tsx)

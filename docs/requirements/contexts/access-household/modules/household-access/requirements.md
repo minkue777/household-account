@@ -123,6 +123,7 @@
 | ADM-001 | 현재 명세 | 관리자는 Google로 로그인하고 허용된 계정이면 전체 가구를 최신순으로 조회하며 가구 생성·키 복사·삭제를 수행한다. | 생성 키는 클립보드에 복사하고 삭제 전 확인을 받는다. | [admin page](../../../../../../web/src/app/admin/page.tsx), [authService](../../../../../../web/src/lib/authService.ts) | UI, I, E2E |
 | ADM-002 | 목표 명세 | 관리자 권한과 가구 관리 쓰기는 서버와 Firestore Rules에서 검증해야 한다. | 클라이언트 이메일 목록·payload role·payload capability는 권한 근거로 사용하지 않는다. Firebase가 검증한 ID token의 `systemAdmin: true` custom claim만 서버에서 고정 capability로 변환하고, 관리자 작업은 일반 household command manifest와 분리한 전용 callable에서만 제공한다. | [admin callable](../../../../../../functions/src/bootstrap/firebaseAdminAccess.ts), [Firestore Rules](../../../../../../firestore.rules) | I, 보안 E2E |
 | ADM-003 | 목표 명세 | 관리자 가구 삭제는 모든 가구 범위 데이터를 보존한 채 가구를 `deleted`로 전환하고 일반 접근을 차단하며, 관리자·운영 복구 명령은 이를 `active`로 되돌린다. | 자동 hard purge는 없다. 영구 삭제는 별도 요청과 복구 불가능 확인을 받은 `RequestPermanentHouseholdPurge`만 시작한다. `purging` 뒤 Membership·claim 변경을 차단하고 UID claim snapshot부터 page 단위로 완성한 뒤 Context purge를 시작한다. 모든 Context purge 완료 전 UID claim을 유지하고, 완료 후 조건부 page 해제를 모두 마친 뒤에만 `purged`와 `HouseholdPurged.v1`을 확정한다. `purging` 이후에는 복구할 수 없다. | [householdService](../../../../../../web/src/lib/householdService.ts), [DEC-016](../../../../governance/decisions.md#dec-016), [DEC-040](../../../../governance/decisions.md#dec-040) | U, I, 동시성, 보안 E2E |
+| ADM-004 | 현재 명세 | `systemAdmin` 관리자는 `/admin`의 가구 목록에서 대상을 선택해 일반 가계부 화면을 조회할 수 있다. | 관리자 조회는 탭 단위의 별도 `administrator-readonly` SessionScope이며 대상 가구의 Membership·Member를 생성하거나 가장하지 않는다. Firestore Rules와 서버 Query가 `admin.household-data.read`를 다시 검증하고 업무 데이터 쓰기, 시세 자동 갱신, 알림 endpoint 등록을 금지한다. 화면에는 관리자 조회 상태와 관리자 화면 복귀 동선을 계속 표시한다. | [admin page](../../../../../../web/src/app/admin/page.tsx), [HouseholdContext](../../../../../../web/src/contexts/HouseholdContext.tsx), [Firestore Rules](../../../../../../firestore.rules) | UI, I, 보안 E2E |
 
 ## 6. 모듈 결함
 
@@ -166,6 +167,7 @@
 | T-HH-JOIN-001 | 목표 | 설정 카드 순서·보조 문구, Google 로그인한 미가입 사용자와 이미 다른 Membership이 있는 사용자가 유효·만료·사용된 5분 초대 코드와 자기 이름 입력 / 초대 생성·참여 / `테마` 다음에 `가구원 초대`와 `5분간 유효한 초대 코드`를 표시하고, 미가입자의 유효 코드만 한 번 소비되어 자기 Member·Membership·UID claim 생성, 기존 가입자는 코드·데이터 무변경 충돌 | HH-003, HH-006, HH-008, HH-JOIN-001, DEC-021, DEC-034 |
 | T-ADM-001 | 현재 명세 | 허용된 관리자 계정 / 로그인 / 가구 조회·생성·키 복사·확인 후 삭제 가능 | ADM-001 |
 | T-ADM-002 | 목표·동시성 | 거래·자산·카드와 다중 UID claim이 있는 가구 / 논리 삭제·복구, 영구 purge의 snapshot·Context·finalization page 실패와 재시도 / snapshot 완료 전 Context 호출 0건, 논리 삭제·Context 미완료 동안 claim과 데이터 보존, 모든 Context 완료 뒤 대상 claim만 조건부 해제, 다른 값 claim 보존, 전 page 완료 뒤 purged Event 한 번, 승인 전 물리 삭제 0건 | ADM-003, DEC-016, DEC-040 |
+| T-ADM-003 | 현재·보안 | systemAdmin·일반 사용자, 대상 가구 Membership 없음, active·deleted 가구 / 관리자 목록에서 가구 열기와 수정 시도 / systemAdmin만 일반 가계부 데이터를 조회하고 관리자 조회 배너를 보며 Member·endpoint 생성 없이 화면을 탐색하고, 모든 업무 쓰기는 전송 전 또는 서버·Rules에서 거부된다. 관리자 화면 복귀 뒤 대상 선택은 해제된다. | ADM-002, ADM-004 |
 | T-HH-RULES-001 | 목표 | 인증 없음·같은 가구·다른 가구·관리자별 컬렉션 CRUD / Rules / 권한 행렬과 householdId 불변식 적용 | ADM-002 |
 | T-HH-SEC-001 | 목표 | 무인증 rename 호출 / 실행 / 권한 오류이며 어떤 모듈 데이터도 변경되지 않음 | ADM-002, HH-009 |
 

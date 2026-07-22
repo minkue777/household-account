@@ -23,10 +23,10 @@ function FirebaseSecurityBoundary({ children }: { children: React.ReactNode }) {
 }
 
 function AuthenticatedPlatformEffects() {
-  const { sessionState } = useHousehold();
+  const { sessionState, adminHouseholdView } = useHousehold();
 
   useEffect(() => {
-    if (sessionState !== 'ready') return;
+    if (sessionState !== 'ready' || adminHouseholdView !== null) return;
     const scope = getClientSessionScope();
     if (scope) {
       refreshAndroidHostSession({
@@ -35,9 +35,57 @@ function AuthenticatedPlatformEffects() {
       }).catch(() => {});
     }
     refreshFcmToken().catch(() => {});
-  }, [sessionState]);
+  }, [adminHouseholdView, sessionState]);
+
+  useEffect(() => {
+    if (sessionState !== 'ready' || adminHouseholdView !== null) return;
+
+    let idleCallbackId: number | undefined;
+    let cancelled = false;
+    const delayId = window.setTimeout(() => {
+      const warmCatalog = () => {
+        if (cancelled) return;
+        void import('@/composition/stockInstrumentCatalogRuntime')
+          .then(({ warmStockInstrumentCatalog }) => warmStockInstrumentCatalog())
+          .catch(() => {});
+      };
+      if (typeof window.requestIdleCallback === 'function') {
+        idleCallbackId = window.requestIdleCallback(warmCatalog, { timeout: 2_000 });
+      } else {
+        warmCatalog();
+      }
+    }, 1_000);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(delayId);
+      if (idleCallbackId !== undefined && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleCallbackId);
+      }
+    };
+  }, [adminHouseholdView, sessionState]);
 
   return null;
+}
+
+function AdminHouseholdViewBanner() {
+  const { adminHouseholdView } = useHousehold();
+  if (adminHouseholdView === null) return null;
+  return (
+    <div className="sticky top-0 z-[70] border-b border-amber-300 bg-amber-50 px-4 py-2 text-amber-950 shadow-sm">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 text-sm">
+        <span className="min-w-0 truncate">
+          관리자 조회 전용 · <strong>{adminHouseholdView.householdName}</strong>
+        </span>
+        <a
+          href="/admin"
+          className="shrink-0 rounded-lg border border-amber-400 bg-white px-3 py-1 font-medium"
+        >
+          관리자 화면
+        </a>
+      </div>
+    </div>
+  );
 }
 
 export default function AppProviders({ children }: { children: React.ReactNode }) {
@@ -45,6 +93,7 @@ export default function AppProviders({ children }: { children: React.ReactNode }
     <FirebaseSecurityBoundary>
       <HouseholdProvider>
         <AuthenticatedPlatformEffects />
+        <AdminHouseholdViewBanner />
         <HouseholdGuard>
           <ThemeProvider>
             <CategoryProvider>

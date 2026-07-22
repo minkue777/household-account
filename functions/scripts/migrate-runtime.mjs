@@ -81,7 +81,10 @@ const isNonEmptyString = (value) =>
 const isPositiveInteger = (value) =>
   Number.isSafeInteger(value) && value > 0;
 const isPositionMarket = (value) =>
-  value === "KRX" || value === "US" || value === "KOFIA_FUND";
+  value === "KRX" ||
+  value === "US" ||
+  value === "KOFIA_FUND" ||
+  value === "UNRESOLVED";
 const isLocalCurrencyType = (value) =>
   value === "gyeonggi" || value === "daejeon" || value === "sejong";
 

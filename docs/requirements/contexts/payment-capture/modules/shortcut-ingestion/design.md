@@ -5,6 +5,7 @@
 > 공통 형식: [모듈 상세 설계 규약](../../../../governance/module-design-standard.md)  
 > 종단 흐름: [iOS Shortcut](../../../../system/flows.md#5-ios-shortcut)  
 > 목표 아키텍처: [목표 Clean Architecture 설계](../../../../../architecture/target-clean-architecture.md#82-androidshortcut-결제-승인)
+> 운영 구성: [Shortcut 런타임 구성](runtime-configuration.md)
 
 ## 1. 설계 목적과 추적성
 

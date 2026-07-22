@@ -3,6 +3,7 @@ export interface ClientSessionScope {
   principalUid: string;
   householdId: string;
   memberId: string;
+  accessMode?: 'member' | 'administrator-readonly';
 }
 
 let activeScope: ClientSessionScope | undefined;

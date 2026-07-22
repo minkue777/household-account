@@ -99,6 +99,12 @@ describe("Shortcut TransactionRecorded Notifications consumer 공개 계약", ()
           eventId: "shortcut-transaction-recorded-1",
           endpointId: "creator-ios",
           fid: "FID-CREATOR-IOS",
+          payload: {
+            payloadVersion: "notification-payload.v1",
+            type: "expense-created",
+            clickTarget: "expense-edit",
+            expenseId: "transaction-1",
+          },
           operation: "sendOne",
         },
       ]);

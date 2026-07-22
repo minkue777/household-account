@@ -269,6 +269,10 @@ Value Object는 `HouseholdName`, `MemberDisplayName`, `AssetOwnerProfileName`, `
 3. 목록은 opaque cursor와 결정 정렬을 사용합니다.
 4. 키 복사는 Presentation 책임이며 API가 clipboard를 다루지 않습니다.
 5. 논리 삭제 확인은 UI가 수행하되 서버 인가와 idempotency를 대체하지 않습니다. 영구 purge 확인은 일반 삭제 확인과 별개의 운영 계약입니다.
+6. 가구 목록의 `가계부 열기`는 현재 탭의 `sessionStorage`에 대상 ID·표시 이름만 보관하고 일반 화면으로 이동합니다. Google ID token의 `systemAdmin: true`를 강제 재확인한 뒤에만 `administrator-readonly` ClientSessionScope를 만들며 Membership과 `actingMemberId`를 생성하지 않습니다.
+7. 관리자 조회 SessionScope는 Firestore의 공개 업무 Read Model과 관리자 허용 Query만 읽습니다. 일반 Household Command, 시세 자동 갱신과 Notification endpoint 등록은 실행하지 않으며 Shortcut credential 같은 서버 전용 자료는 일반 조회 화면에 공개하지 않습니다.
+8. Firestore Rules는 `systemAdmin`에 명시한 업무 컬렉션의 read만 허용하고 client write는 계속 전부 거부합니다. 서버 Query는 별도의 `admin.household-data.read` capability allowlist를 적용하며 임의 Query가 관리자 권한을 상속하지 않습니다.
+9. 화면 상단에 관리자 조회 상태와 대상 가구 이름을 고정 표시합니다. `/admin`으로 돌아오거나 로그아웃하면 탭의 선택값과 관리자 조회 SessionScope를 제거하고, 이후 일반 화면은 관리자의 실제 Membership을 다시 해석합니다.
 
 ## 6. Port 설계
 
@@ -499,6 +503,7 @@ android/core/auth-session/
 | ADM-001 | Contract·E2E | Admin ports | 허용/비허용 관리자, 최신순 cursor, 삭제 확인 | 조회·생성·복사 UI·삭제 상태 관찰 | T-ADM-001 |
 | ADM-002 | Emulator·보안 E2E | Rules와 server Handler | 무인증·동일 가구·타 가구·관리자 | 최소 권한만 허용하고 거부 시 변경 없음 | T-HH-RULES-001, T-HH-SEC-001 |
 | ADM-003 | Domain·Application·Contract·E2E·동시성 | RequestHouseholdDeletion·RestoreDeletedHousehold·HouseholdPurgeProcess·PurgeClaimFinalizationPolicy | 다중 Context 성공/실패, 다중 claim, snapshot·finalization page 중단, absent·stale claim, 재시도 | snapshot 완료 전 Context 호출 0건, Context 미완료 중 claim 0건 해제, 완료 뒤 일치 claim만 page 해제, 모든 checkpoint 완료 뒤 purged Event 한 번, 재가입 가능 | T-ADM-002 |
+| ADM-004 | Client·Query·Rules·보안 E2E | AdminHouseholdViewSelection·administrator-readonly SessionScope·공개 Read Model | 관리자/일반 사용자, 타 가구 Membership 없음, 탭 전환, 가구 탐색·쓰기·endpoint 등록 시도 | systemAdmin만 선택 가구 조회, Member 가장·업무 쓰기·알림 binding 0건, 관리자 배너와 복귀 시 선택 해제 | T-ADM-003 |
 
 `T-HH-RULES-001`/`T-HH-SEC-001`과 공통 `T-SEC-001`/`T-SEC-002`의 중복 실행은 통합 전에 한 Canonical suite가 공유 fixture를 제공하도록 정리합니다. 새 ID는 이 문서에서 만들지 않습니다.
 

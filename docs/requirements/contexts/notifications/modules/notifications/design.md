@@ -181,7 +181,8 @@ Notifications가 선택적으로 발행하는 `NotificationDelivered.v1`, `Notif
 Client Adapter의 `NotificationCapabilityController`는 플랫폼별로 다음을 수행합니다.
 
 - iOS Web은 홈 화면 설치 PWA에서만 초기화하고 데스크톱은 권한 요청·등록·endpoint 생성을 하지 않습니다.
-- Web/PWA는 서비스 워커와 VAPID 설정을 준비하고 `onRegistered` listener를 연결한 뒤 로그인 완료 시 `register()`를 호출합니다. callback의 FID를 서버에 등록하고 `onUnregistered(fid)`는 현재 registrationVersion 조건으로 inactive 처리를 요청합니다.
+- Web/PWA는 서비스 워커와 VAPID 설정을 준비하고 `onRegistered` listener를 연결한 뒤 로그인 세션이 `ready`가 될 때마다, 이미 알림 권한이 허용된 경우에도 `register()`를 호출합니다. 같은 FID를 다시 받은 경우에도 서버 `RegisterEndpoint`를 호출하므로 과거 전송의 `UNREGISTERED` 결과로 inactive가 된 endpoint가 현재 설치의 재접속만으로 다시 active에 수렴합니다. callback의 FID를 서버에 등록하고 `onUnregistered(fid)`는 현재 registrationVersion 조건으로 inactive 처리를 요청합니다.
+- endpoint 재등록은 로그인 화면 표시를 막지 않는 백그라운드 작업입니다. 다만 설정 UI는 브라우저 `Notification.permission`만으로 활성 상태를 표시하지 않고 서버 `RegisterEndpoint` 성공을 확인한 뒤에만 `활성화됨`을 표시합니다. 실패 시 `서버 연결 필요`와 명시적 `재연결` 동작을 제공하고, 같은 로그인 세션의 cache·server household snapshot 이중 적용은 등록을 한 번만 시작합니다.
 - Android는 Manifest에서 `firebase_messaging_installation_id_enabled=true`를 활성화하고 `FirebaseMessagingService.onRegistered(installationId)`의 FID를 서버에 등록합니다. 자동 초기화의 최초 시작·정기 동기화·FID 변경 callback을 사용하며 수동 초기화를 선택한 경우에만 앱 시작 시 `register()`를 호출합니다.
 - Web/PWA와 Android에서 deprecated `getToken`·`onNewToken` registration token 경로를 함께 사용하지 않습니다. Android의 FID 등록은 POST_NOTIFICATIONS 표시 권한과 별개이며 iOS PWA는 Web Push 권한 허용 후 등록합니다.
 - OS 권한 거부·철회만으로 서버 endpoint를 삭제하거나 inactive로 전환하지 않습니다. 권한 재허용 시 같은 endpoint를 계속 사용할 수 있고 로그아웃만 `RemoveEndpoint`를 호출합니다.

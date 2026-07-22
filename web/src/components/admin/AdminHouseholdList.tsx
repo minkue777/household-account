@@ -21,6 +21,7 @@ interface AdminHouseholdListProps {
   profiles: AssetOwnerProfileWireView[];
   deletedAssets: AdminDeletedAssetWireView[];
   onCopy(householdId: string): Promise<void>;
+  onOpenHousehold(household: AdminHouseholdWireView): void;
   onLoadDetails(householdId: string): Promise<void>;
   onCloseDetails(): void;
   onDelete(household: AdminHouseholdWireView): void;
@@ -41,6 +42,7 @@ export function AdminHouseholdList({
   profiles,
   deletedAssets,
   onCopy,
+  onOpenHousehold,
   onLoadDetails,
   onCloseDetails,
   onDelete,
@@ -78,6 +80,9 @@ export function AdminHouseholdList({
                   </p>
                 </div>
                 <div className="flex flex-wrap justify-end gap-2">
+                  <ActionButton onClick={() => onOpenHousehold(household)}>
+                    가계부 열기
+                  </ActionButton>
                   <ActionButton onClick={() => void onCopy(household.householdId)}>
                     {copiedKey === household.householdId ? '복사됨' : '키 복사'}
                   </ActionButton>

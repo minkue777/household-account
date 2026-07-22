@@ -28,10 +28,11 @@ import {
 import { assetOwnerProfiles } from '@/features/access-household/application/assetOwnerProfiles';
 import type { AssetOwnerProfileView } from '@/features/access-household/domain/assetOwnerProfile';
 import { getAssetOwnerProfileQueries } from '@/composition/assetOwnerProfileReadRuntime';
+import { warmStockInstrumentCatalog } from '@/composition/stockInstrumentCatalogRuntime';
 
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
-  const { household } = useHousehold();
+  const { household, adminHouseholdView } = useHousehold();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [dailyChange, setDailyChange] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,6 +87,12 @@ export default function AssetsPage() {
   };
 
   useEffect(() => {
+    void warmStockInstrumentCatalog().catch((error) =>
+      console.error('종목 카탈로그 준비 오류:', error)
+    );
+  }, []);
+
+  useEffect(() => {
     setIsLoading(true);
     const unsubscribe = subscribeToAssets((newAssets) => {
       setAssets(newAssets);
@@ -95,7 +102,7 @@ export default function AssetsPage() {
   }, []);
 
   useEffect(() => {
-    if (isLoading || didScheduleMarketRefresh.current) return;
+    if (isLoading || adminHouseholdView !== null || didScheduleMarketRefresh.current) return;
     didScheduleMarketRefresh.current = true;
 
     let idleCallbackId: number | undefined;
@@ -118,7 +125,7 @@ export default function AssetsPage() {
         window.cancelIdleCallback(idleCallbackId);
       }
     };
-  }, [isLoading]);
+  }, [adminHouseholdView, isLoading]);
 
   useEffect(() => {
     const householdId = household?.id;

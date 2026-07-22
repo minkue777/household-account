@@ -52,10 +52,17 @@ node scripts/set-system-admin-claim.mjs `
 - 발급용 credential 서명·해시 key version은 Secret Manager에서 관리하고 원문을 환경 파일·로그·Firestore에 두지 않습니다.
 - 설치 화면에서 원문은 최초 발급 응답에만 표시되며, 응답을 잃은 사용자는 기존 키 조회가 아니라 명시적 재발급을 사용합니다.
 
+## 종목 카탈로그 Storage CORS
+
+- `market-catalog/v1/**`는 공개 시장 기준정보이므로 `storage.rules`에서 읽기만 공개하고 쓰기는 거부합니다.
+- Web의 기기 카탈로그 동기화를 위해 버킷 CORS를 루트 [storage.cors.json](../../storage.cors.json)과 일치시킵니다. 허용 범위는 `GET`·`HEAD`뿐입니다.
+- 새 Firebase 프로젝트나 Storage 버킷으로 이전할 때는 Rules 배포와 별도로 CORS 설정을 적용해야 합니다. Firebase CLI의 `deploy --only storage`는 Storage Rules만 배포하며 버킷 CORS를 적용하지 않습니다.
+- 적용 뒤 Web Origin을 붙인 manifest 요청에 `Access-Control-Allow-Origin`이 반환되는지 확인합니다.
+
 ## 배포 직전 확인
 
 - Functions, Web, Android 품질 게이트와 Firestore Emulator 테스트가 모두 통과해야 합니다.
-- `firestore.indexes.json`, `firestore.rules`, `storage.rules`를 함께 검토합니다.
+- `firestore.indexes.json`, `firestore.rules`, `storage.rules`, `storage.cors.json`을 함께 검토합니다.
 - 기존 사용자 legacy claim reconciliation을 먼저 수행하고, canonical·legacy 결과가 일치하기 전에는 compatibility reader와 flat collection을 제거하지 않습니다.
 
 운영 전환은 다음 순서를 바꾸지 않습니다.

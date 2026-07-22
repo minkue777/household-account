@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["*"],
+    "method": ["GET", "HEAD"],
+    "responseHeader": ["Content-Type", "ETag", "x-goog-generation"],
+    "maxAgeSeconds": 3600
+  }
+]

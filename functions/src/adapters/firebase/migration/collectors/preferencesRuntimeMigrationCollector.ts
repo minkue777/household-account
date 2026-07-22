@@ -206,9 +206,13 @@ export function collectPreferencesRuntimeMigration(
     "selectedLocalCurrencyType",
     "selectedLocalCurrencyTypeId",
   );
+  const onlyResolvedType =
+    resolvedBalanceTypes.size === 1
+      ? [...resolvedBalanceTypes][0]
+      : undefined;
   const selectedLocalCurrencyType =
     rawSelectedType === ""
-      ? undefined
+      ? input.mappings.homeSelectedLocalCurrencyType ?? onlyResolvedType
       : SUPPORTED_LOCAL_CURRENCY_TYPES.has(rawSelectedType)
         ? rawSelectedType
         : input.mappings.homeSelectedLocalCurrencyType;

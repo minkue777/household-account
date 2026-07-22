@@ -102,6 +102,10 @@ priority가 없으면 `merchantRulePriorities`로 고유 값을 지정합니다.
 `localCurrencyTypes`로 명시하고, 같은 유형의 문서가 여러 개면
 `localCurrencyPreferredDocuments`로 보존할 문서 하나를 지정해야 합니다. 홈 화면의
 기존 선택값이 지원 유형이 아니면 `homeSelectedLocalCurrencyType`을 명시합니다.
+지역화폐 잔액 유형이 하나뿐이고 기존 선택값이 비어 있으면 그 유형을 자동 선택합니다.
+종목 코드가 없는 예수금·채권·수동 보유 항목은 `positionMarkets`에
+`UNRESOLVED`를 명시하며, migration은 외부 시세 조회에 사용하지 않는 안정적인
+synthetic code를 부여해 항목과 평가액을 보존합니다.
 
 ## 3. Dry-run
 

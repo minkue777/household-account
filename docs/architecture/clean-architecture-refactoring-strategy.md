@@ -107,12 +107,12 @@
 | 배당 스냅샷 저장 | assetService와 Next dividend/save API가 같은 문서를 서로 다른 형태로 저장 |
 | 금 수량 해석 | assetService, useGoldHolding, AssetEditModal |
 | 날짜·월말 보정 | Web 유틸·화면과 Android 파서별 구현 |
-| 월 이동·지출 구독 | hooks와 LedgerPage |
+| 월 이동·지출 구독 | LedgerPage와 실제 Session/Expense composition |
 | 멤버 이름 기반 소유권 | Web, Android, Functions 전반 |
 
 중복은 코드 모양이 같은 것보다 **결정 권한이 여러 곳에 있는 것**이 더 위험하다.
 
-웹에는 테스트가 있는 useExpenses와 useMonthNavigation이 존재하지만 실제 LedgerPage는 같은 상태와 구독을 다시 구현한다. 배당금도 [assetService.ts](../../web/src/lib/assetService.ts)와 [dividend/save route](../../web/src/app/api/dividend/save/route.ts)가 같은 dividend_snapshots 문서의 Writer 역할을 공유한다.
+웹에서 실제 화면이 사용하지 않던 `useExpenses`와 `useMonthNavigation`은 제거하고, 월 이동·지출 구독 경로는 `LedgerPage`의 실제 composition으로 수렴했습니다. 배당금도 [assetService.ts](../../web/src/lib/assetService.ts)와 [dividend/save route](../../web/src/app/api/dividend/save/route.ts)가 같은 dividend_snapshots 문서의 Writer 역할을 공유한다.
 
 전환 전 Android의 [CardNotificationListenerService.kt](../../android/app/src/main/java/com/household/account/service/CardNotificationListenerService.kt)는 알림 추출부터 Parser 선택·저장·QuickEdit까지 담당했습니다. DEC-066 전환 뒤에는 등록 package/admission, raw DTO 생성과 암호화 Queue만 수행하고 공급자 정규식은 [Functions Android parser Application](../../functions/src/contexts/payment-capture/android-payment-ingestion/application/androidProviderParserApplication.ts)으로 이동했습니다. Kotlin parser 복사본은 제거하고 [Android 공급자 Parser Golden 계약](../../functions/test/contexts/payment-capture/android-payment-ingestion/android-provider-parser-golden.contract.test.ts)이 서버 parser의 시간·연도·승인·취소 동작을 고정합니다.
 

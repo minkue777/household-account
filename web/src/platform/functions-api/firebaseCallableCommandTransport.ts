@@ -1,5 +1,4 @@
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app } from '@/lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 import {
   HouseholdCommandEnvelope,
   HouseholdCommandName,
@@ -8,8 +7,8 @@ import {
   parseHouseholdCommandWireResponse,
 } from './householdCommandContract';
 import type { HouseholdCommandTransport } from './householdCommandClient';
+import { getFidSafeFirebaseFunctions } from './fidSafeFirebaseFunctions';
 
-const REGION = 'asia-northeast3';
 const ENDPOINT = 'executeHouseholdCommand';
 
 export class FirebaseCallableCommandTransport implements HouseholdCommandTransport {
@@ -19,7 +18,7 @@ export class FirebaseCallableCommandTransport implements HouseholdCommandTranspo
     const callable = httpsCallable<
       HouseholdCommandEnvelope<Name>,
       unknown
-    >(getFunctions(app, REGION), ENDPOINT);
+    >(getFidSafeFirebaseFunctions(), ENDPOINT);
     const response = await callable(envelope);
     return parseHouseholdCommandWireResponse<HouseholdCommandResults[Name]>(
       response.data,

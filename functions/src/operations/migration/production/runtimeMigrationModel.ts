@@ -33,7 +33,7 @@ export interface RuntimeMigrationMappingManifest {
   readonly assetOwners?: Readonly<Record<string, string>>;
   readonly positionAssets?: Readonly<Record<string, string>>;
   readonly positionMarkets?: Readonly<
-    Record<string, "KRX" | "US" | "KOFIA_FUND">
+    Record<string, "KRX" | "US" | "KOFIA_FUND" | "UNRESOLVED">
   >;
   readonly assetAutomationFirstApplicableMonths?: Readonly<
     Record<string, string>

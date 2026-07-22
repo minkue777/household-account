@@ -190,6 +190,16 @@ function matchesExpected(
   );
 }
 
+function isMissingMergeValue(actual: unknown, expected: unknown): boolean {
+  return (
+    actual === undefined ||
+    (typeof actual === "string" &&
+      actual.trim() === "" &&
+      typeof expected === "string" &&
+      expected.trim() !== "")
+  );
+}
+
 function validateSourcePath(path: string): boolean {
   const segments = path.split("/");
   return segments.length === 2 && ALLOWED_SOURCE_COLLECTIONS.has(segments[0]);
@@ -498,7 +508,7 @@ export class FirebaseRuntimeMigrationPersistence
           }
           for (const [field, expected] of Object.entries(candidate.targetData)) {
             if (
-              actual[field] !== undefined &&
+              !isMissingMergeValue(actual[field], expected) &&
               stableMigrationMaterial(actual[field]) !==
                 stableMigrationMaterial(expected)
             ) {

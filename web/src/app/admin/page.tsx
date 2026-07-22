@@ -6,6 +6,10 @@ import type { User } from 'firebase/auth';
 import { AdminHouseholdList } from '@/components/admin/AdminHouseholdList';
 import { ConfirmDialog } from '@/components/common';
 import { adminHouseholds } from '@/features/access-household/application/adminHouseholds';
+import {
+  clearAdminHouseholdViewSelection,
+  selectAdminHouseholdView,
+} from '@/features/access-household/application/adminHouseholdViewSelection';
 import { assetOwnerProfiles } from '@/features/access-household/application/assetOwnerProfiles';
 import { logOut, onAuthChange, signInWithGoogle } from '@/lib/authService';
 import {
@@ -32,6 +36,10 @@ export default function AdminPage() {
   const [members, setMembers] = useState<AdminMemberWireView[]>([]);
   const [profiles, setProfiles] = useState<AssetOwnerProfileWireView[]>([]);
   const [deletedAssets, setDeletedAssets] = useState<AdminDeletedAssetWireView[]>([]);
+
+  useEffect(() => {
+    clearAdminHouseholdViewSelection();
+  }, []);
 
   useEffect(
     () =>
@@ -128,6 +136,14 @@ export default function AdminPage() {
     } catch {
       setErrorMessage('가구 키를 복사하지 못했습니다.');
     }
+  };
+
+  const handleOpenHousehold = (household: AdminHouseholdWireView) => {
+    selectAdminHouseholdView({
+      householdId: household.householdId,
+      householdName: household.name,
+    });
+    window.location.assign('/');
   };
 
   const handleDelete = async () => {
@@ -288,6 +304,7 @@ export default function AdminPage() {
           profiles={profiles}
           deletedAssets={deletedAssets}
           onCopy={handleCopy}
+          onOpenHousehold={handleOpenHousehold}
           onLoadDetails={loadDetails}
           onCloseDetails={() => setDetailHouseholdId(null)}
           onDelete={setPendingDelete}

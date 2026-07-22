@@ -1,24 +1,20 @@
 ---
 name: etf-stock-sync
-description: Household-account 프로젝트의 국내 ETF 종목 데이터를 최신화한다. 사용자가 "ETF 목록 최신화", "누락 ETF 추가", "신규 상장 ETF 반영", "KODEX/TIGER/RISE/ACE 등 ETF가 검색에 안 보인다", "stocks.json ETF 동기화"처럼 한국 ETF 검색 데이터 갱신을 요청할 때 사용한다.
+description: Household-account 프로젝트의 국내 ETF·ETN·주식 검색 목록을 최신 상장 종목과 동기화하고 미국 주식·ETF 실시간 심볼 공급자를 검증한다. 사용자가 "ETF 목록 최신화", "신규 상장 주식 반영", "국내/미국 종목이 검색되지 않는다", "stocks.json 동기화", "주식 목록 전체 업데이트"처럼 종목 검색 데이터 갱신을 요청할 때 사용한다.
 ---
 
-# ETF Stock Sync
-
-## Overview
-
-`web/src/data/stocks.json`을 네이버 금융 ETF 전체 목록 기준으로 동기화한다. 코드 기준 누락 ETF를 추가하고, 이미 있는 ETF의 이름이 바뀐 경우 최신명으로 맞춘다.
+# Stock Catalog Sync
 
 ## Workflow
 
-1. 작업 전 `git status --short`로 변경 파일을 확인한다. 사용자 변경이 있으면 덮어쓰지 말고 이번 작업 파일과 충돌하는지만 판단한다.
-2. repo root에서 동기화 스크립트를 실행한다.
+1. `git status --short`로 사용자 변경과 `web/src/data/stocks.json` 충돌 여부를 확인한다.
+2. 저장소 루트에서 동기화한다.
 
 ```bash
 node .codex/skills/etf-stock-sync/scripts/sync-etfs.mjs
 ```
 
-3. 출력의 `missing before`, `renamed before`, `added`, `renamed`를 확인한다.
+3. 출력의 국내 source 수, 미국 live source 수, `added`, `renamed`, `removed`를 확인한다.
 4. 다음 검증을 실행한다.
 
 ```bash
@@ -26,19 +22,15 @@ node .codex/skills/etf-stock-sync/scripts/sync-etfs.mjs --check
 npm --prefix web run build
 ```
 
-5. 변경 파일은 보통 `web/src/data/stocks.json` 하나여야 한다. diff를 확인한다.
-6. 사용자가 푸시를 원하거나 이 프로젝트의 일반 작업 흐름상 바로 반영해야 하면 커밋 후 푸시한다.
+5. `web/src/data/stocks.json`, 스킬 변경과 기존 사용자 변경을 구분해 diff를 검토한다.
+6. 사용자가 명시적으로 요청한 경우에만 한국어 메시지로 커밋하고 푸시한다.
 
-```bash
-git add web/src/data/stocks.json
-git commit -m "ETF 종목 목록 최신화"
-git push
-```
+## Data contract
 
-## Notes
-
-- 기준 데이터는 `https://finance.naver.com/api/sise/etfItemList.nhn?etfType=0&targetColumn=market_sum&sortOrder=desc`이다.
-- API 응답은 EUC-KR로 디코딩한다. Node.js 내장 `TextDecoder('euc-kr')`를 사용하므로 별도 npm 패키지가 필요 없다.
-- `stocks.json`의 `KRXGOLD` 항목은 맨 앞에 유지하고, 나머지는 종목코드 오름차순으로 정렬한다.
-- Android 네이티브 코드를 바꾸지 않으므로 일반적으로 APK 재빌드는 필요 없다. 웹 검색 데이터 배포만 필요하다.
-- 특정 ETF의 공식 상장일이나 상품 상세를 답해야 하면 최신 정보이므로 웹 검색으로 KODEX/TIGER/RISE/ACE 등 운용사 공식 페이지나 네이버 금융 페이지를 확인해 출처를 남긴다.
+- KOSPI·KOSDAQ 주식/ETF/ETN은 네이버 모바일 증권 전체 시장 목록을 사용한다.
+- KONEX 주식은 KRX KIND 상장법인 목록을 사용한다.
+- 네이버 ETF 전체 목록으로 KOSPI ETF 누락과 이름 불일치를 교차 검증한다.
+- `stocks.json`은 현재 상장 snapshot이다. 신규 종목을 추가하고 이름을 갱신하며 source에서 사라진 상장폐지·만기 종목은 검색 목록에서 제거한다.
+- `KRXGOLD*` 항목은 파일 맨 앞에 유지하고 나머지는 코드 오름차순으로 정렬한다.
+- 미국 주식·ETF는 정적 JSON에 저장하지 않는다. 런타임이 NASDAQ Trader의 `nasdaqlisted.txt`와 `otherlisted.txt`를 12시간 cache로 읽으므로 스크립트는 두 공급자의 응답·최소 개수·중복 제거 결과를 검증한다.
+- 동기화 실패나 비정상적으로 작은 응답에서는 파일을 쓰지 않는다.

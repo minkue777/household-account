@@ -9,7 +9,8 @@ let commandClient: HouseholdCommandClient | undefined;
 export function getHouseholdCommandClient(): HouseholdCommandClient {
   commandClient ??= new HouseholdCommandClient(
     new FirebaseCallableCommandTransport(),
-    () => getClientSessionScope()?.householdId
+    () => getClientSessionScope()?.householdId,
+    () => getClientSessionScope()?.accessMode
   );
   return commandClient;
 }

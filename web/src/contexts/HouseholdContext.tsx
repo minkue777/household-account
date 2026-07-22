@@ -30,11 +30,19 @@ import {
   type LegacySessionCandidate,
 } from '@/features/access-household/application/legacySessionCandidate';
 import {
+  clearAdminHouseholdViewSelection,
+  readAdminHouseholdViewSelection,
+  type AdminHouseholdViewSelection,
+} from '@/features/access-household/application/adminHouseholdViewSelection';
+import {
   clearClientSessionScope,
   setClientSessionScope,
 } from '@/composition/clientSessionScope';
 import { resetClientOptimisticProjections } from '@/composition/resetClientOptimisticProjections';
-import { removePwaFidEndpointForLogout } from '@/platform/pwa/fidEndpointLifecycle';
+import {
+  activatePwaFidEndpoint,
+  removePwaFidEndpointForLogout,
+} from '@/platform/pwa/fidEndpointLifecycle';
 import { clearPwaRuntimeCaches } from '@/platform/pwa/sessionCache';
 import {
   OperationDeadlineExceededError,
@@ -66,6 +74,7 @@ interface HouseholdContextType {
   sessionState: HouseholdSessionState;
   sessionError: string | null;
   legacyCandidate: LegacySessionCandidate | null;
+  adminHouseholdView: AdminHouseholdViewSelection | null;
   signIn: () => Promise<void>;
   retrySession: () => Promise<void>;
   confirmLegacyMembership: () => Promise<void>;
@@ -107,9 +116,12 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   const [sessionState, setSessionState] = useState<HouseholdSessionState>('resolving');
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [legacyCandidate, setLegacyCandidate] = useState<LegacySessionCandidate | null>(null);
+  const [adminHouseholdView, setAdminHouseholdView] =
+    useState<AdminHouseholdViewSelection | null>(null);
   const activeUserRef = useRef<User | null>(null);
   const resolutionGenerationRef = useRef(0);
   const sessionGenerationRef = useRef(0);
+  const endpointRegistrationGenerationRef = useRef(0);
 
   const clearResolvedSession = useCallback(() => {
     resetClientOptimisticProjections();
@@ -117,7 +129,54 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     setHousehold(null);
     setHouseholdKey(null);
     setCurrentMember(null);
+    setAdminHouseholdView(null);
   }, []);
+
+  const restoreAdministratorHouseholdView = useCallback(async (
+    user: User,
+    selection: AdminHouseholdViewSelection,
+  ) => {
+    const resolutionGeneration = ++resolutionGenerationRef.current;
+    setSessionState('resolving');
+    setSessionError(null);
+    clearResolvedSession();
+
+    try {
+      const token = await user.getIdTokenResult(true);
+      if (token.claims.systemAdmin !== true) {
+        throw new Error('서버에서 확인된 관리자 권한이 없습니다.');
+      }
+      const loadedHousehold = await withinDeadline(
+        getHousehold(selection.householdId),
+        HOUSEHOLD_READ_TIMEOUT_MS,
+        'HOUSEHOLD_READ_TIMEOUT'
+      );
+      if (resolutionGeneration !== resolutionGenerationRef.current) return;
+
+      setClientSessionScope({
+        sessionGeneration: ++sessionGenerationRef.current,
+        principalUid: user.uid,
+        householdId: selection.householdId,
+        memberId: 'system-administrator',
+        accessMode: 'administrator-readonly',
+      });
+      setHousehold(loadedHousehold);
+      setHouseholdKey(selection.householdId);
+      setCurrentMember(null);
+      setLegacyCandidate(null);
+      setAdminHouseholdView({
+        householdId: selection.householdId,
+        householdName: loadedHousehold.name || selection.householdName,
+      });
+      setSessionState('ready');
+    } catch (error) {
+      if (resolutionGeneration !== resolutionGenerationRef.current) return;
+      clearAdminHouseholdViewSelection();
+      clearResolvedSession();
+      setSessionError(errorMessage(error));
+      setSessionState('error');
+    }
+  }, [clearResolvedSession]);
 
   const restoreSignedInUser = useCallback(async (
     user: User,
@@ -171,6 +230,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         principalUid: user.uid,
         householdId: membership.householdId,
         memberId: membership.memberId,
+        accessMode: 'member',
       });
 
       const applyHousehold = (loadedHousehold: Household) => {
@@ -184,6 +244,13 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         setLegacyCandidate(null);
         clearLegacySessionCandidate();
         setSessionState('ready');
+        if (endpointRegistrationGenerationRef.current !== sessionGeneration) {
+          endpointRegistrationGenerationRef.current = sessionGeneration;
+          void activatePwaFidEndpoint().catch(() => {
+            // 알림 endpoint 등록 실패는 로그인과 가계부 사용을 막지 않습니다.
+            // 설정 화면에서 실제 서버 등록 상태와 재연결 동작을 제공합니다.
+          });
+        }
       };
 
       const cachedHousehold = await getCachedHousehold(membership.householdId);
@@ -237,6 +304,11 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         setSessionState('signed-out');
         return;
       }
+      const adminSelection = readAdminHouseholdViewSelection();
+      if (adminSelection !== null && !isAndroidHostAvailable()) {
+        void restoreAdministratorHouseholdView(user, adminSelection);
+        return;
+      }
       void restoreSignedInUser(
         user,
         captureLegacySessionCandidate(),
@@ -275,7 +347,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       disposed = true;
       unsubscribe();
     };
-  }, [clearResolvedSession, restoreSignedInUser]);
+  }, [clearResolvedSession, restoreAdministratorHouseholdView, restoreSignedInUser]);
 
   const signIn = useCallback(async () => {
     const candidate = captureLegacySessionCandidate();
@@ -292,12 +364,17 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         return;
       }
       activeUserRef.current = user;
-      await restoreSignedInUser(user, candidate, session?.signedInUserResolution);
+      const adminSelection = readAdminHouseholdViewSelection();
+      if (adminSelection !== null && !isAndroidHostAvailable()) {
+        await restoreAdministratorHouseholdView(user, adminSelection);
+      } else {
+        await restoreSignedInUser(user, candidate, session?.signedInUserResolution);
+      }
     } catch (error) {
       setSessionError(errorMessage(error));
       setSessionState('signed-out');
     }
-  }, [restoreSignedInUser]);
+  }, [restoreAdministratorHouseholdView, restoreSignedInUser]);
 
   const retrySession = useCallback(async () => {
     const user = activeUserRef.current;
@@ -305,8 +382,13 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       await signIn();
       return;
     }
+    const adminSelection = readAdminHouseholdViewSelection();
+    if (adminSelection !== null && !isAndroidHostAvailable()) {
+      await restoreAdministratorHouseholdView(user, adminSelection);
+      return;
+    }
     await restoreSignedInUser(user, legacyCandidate ?? captureLegacySessionCandidate());
-  }, [legacyCandidate, restoreSignedInUser, signIn]);
+  }, [legacyCandidate, restoreAdministratorHouseholdView, restoreSignedInUser, signIn]);
 
   const confirmLegacyMembership = useCallback(async () => {
     const user = activeUserRef.current;
@@ -376,6 +458,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       activeUserRef.current = null;
       clearResolvedSession();
       clearLegacySessionCandidate();
+      clearAdminHouseholdViewSelection();
       setLegacyCandidate(null);
       setSessionError(null);
       setSessionState('signed-out');
@@ -420,6 +503,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       sessionState,
       sessionError,
       legacyCandidate,
+      adminHouseholdView,
       signIn,
       retrySession,
       confirmLegacyMembership,

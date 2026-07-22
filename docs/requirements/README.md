@@ -35,12 +35,11 @@ System Contract
 | [모듈 상세 설계 규약](governance/module-design-standard.md) | 공개 API, Domain·Port·저장 경계, 요구사항별 테스트 설계 형식 |
 | [시스템 컨텍스트](system/context.md) | 행위자, 공통 용어, SYS-* 공통 계약 |
 | [공통 시스템 계약 상세 설계](system/design.md) | tenant·Money·날짜·호환 mapper·Unit of Work의 SYS-* 테스트 기준 |
-| [제품 결정 기록](governance/decisions.md) | DEC-001~064의 단일 정책 소유 Context와 영향 모듈 |
+| [제품 결정 기록](governance/decisions.md) | DEC-001~067의 단일 정책 소유 Context와 영향 모듈 |
 | [데이터 소유권](cross-cutting/data-ownership.md) | 논리 데이터·컬렉션·필드별 Context와 최종 Writer |
 | [Context 간 종단 흐름](system/flows.md) | 둘 이상 Context 또는 Context+지원 계층의 현재 흐름과 교정 불변식 |
 | [보안과 개인정보](cross-cutting/security-privacy.md) | 가구 격리, 서버 권한, 민감 데이터, 기기 경계 |
 | [테스트 전략](governance/test-strategy.md) | Context별 카탈로그, 우선순위, CI 기준 |
-| [코드 감사 기록](governance/code-audit-2026-07-15.md) | Android·Web·Functions·Rules·배포 설정과 요구사항 대조 근거 |
 | [미결정 사항](governance/pending-decisions.md) | 코드 감사에서 발견한 제품·운영 질문의 해소 상태와 결정 이력 연결 |
 
 ## 2. 5개 업무 Bounded Context
@@ -49,12 +48,12 @@ System Contract
 
 | Bounded Context | 책임 | 내부 기능 모듈 | 요구사항 | 개수 | 주요 Aggregate·데이터 |
 |---|---|---|---|---:|---|
-| [Access & Household](contexts/access-household/requirements.md) | Principal·가구·멤버·Membership·명의자 프로필·초대·권한 | [가구와 접근](contexts/access-household/modules/household-access/requirements.md) | HH-*, HH-JOIN-*, ADM-* | 16 | Household, Member, Membership, AssetOwnerProfile, Invitation |
+| [Access & Household](contexts/access-household/requirements.md) | Principal·가구·멤버·Membership·명의자 프로필·초대·권한 | [가구와 접근](contexts/access-household/modules/household-access/requirements.md) | HH-*, HH-JOIN-*, ADM-* | 17 | Household, Member, Membership, AssetOwnerProfile, Invitation |
 | [Household Finance](contexts/household-finance/requirements.md) | 거래·분류·예산·정기 계획·지역화폐 | [원장](contexts/household-finance/modules/ledger/requirements.md), [카테고리·예산](contexts/household-finance/modules/categories-budget/requirements.md), [정기 거래](contexts/household-finance/modules/recurring-transactions/requirements.md), [지역화폐](contexts/household-finance/modules/local-currency/requirements.md) | LED-*, SPL-*, MRG-*, SEA-*, CAT-*, BUD-*, REC-*, BAL-* | 39 | Transaction, CategoryCatalog, RecurringPlan, LocalCurrencyBalance |
 | [Payment Capture](contexts/payment-capture/requirements.md) | 카드·가맹점 설정과 Android·Shortcut 결제·잔액 관찰 수렴 | [결제 설정](contexts/payment-capture/modules/payment-configuration/requirements.md), [Android 수집](contexts/payment-capture/modules/android-payment-ingestion/requirements.md), [Shortcut 수집](contexts/payment-capture/modules/shortcut-ingestion/requirements.md) | CARD-*, MER-*, ING-*, PARSE-*, ING-SAVE-*, CAN-*, IOS-* | 63 | CardRegistry, MerchantRuleSet, CaptureEnvelope |
 | [Portfolio](contexts/portfolio/requirements.md) | 자산·명의 참조·Position·평가·자동화·배당 | [포트폴리오](contexts/portfolio/modules/portfolio/requirements.md), [보유종목·시세](contexts/portfolio/modules/holdings-market-data/requirements.md), [자동화](contexts/portfolio/modules/asset-automation/requirements.md), [배당](contexts/portfolio/modules/dividends/requirements.md) | AST-*, HOLD-*, GOLD-*, MARKET-*, JOB-AST-*, AUTO-*, LOAN-*, DIV-*, JOB-DIV-* | 38 | AssetAccount, Position, InstrumentCatalog, AutomationPlan, DividendEvent |
 | [Notifications](contexts/notifications/requirements.md) | endpoint·대상·payload·delivery·가구 purge | [푸시 알림](contexts/notifications/modules/notifications/requirements.md) | PUSH-* | 13 | NotificationEndpoint, NotificationDelivery |
-| 합계 |  | 13개 기능 모듈 |  | 169 |  |
+| 합계 |  | 13개 기능 모듈 |  | 170 |  |
 
 ### 2.1 Context 의존 방향
 
@@ -210,11 +209,11 @@ Portfolio ──valuation·dividend Outbox Event──▶ Read Side
 - 기능 모듈: 19개
 - 업무 Context 소속 기능 모듈: 13개
 - 지원·플랫폼 기능 모듈: 6개
-- 전체 요구사항 ID: 231개
-- 업무 Context 요구사항: 169개
+- 전체 요구사항 ID: 232개
+- 업무 Context 요구사항: 170개
 - 지원·플랫폼 요구사항: 53개
 - 공통 SYS 요구사항: 9개
-- Canonical 테스트 ID: 210개
+- Canonical 테스트 ID: 211개
 - 중앙 Human in the loop 미결정 질문: 0개 (`결정 대기` 요구사항 0개)
 - 요구사항·테스트 ID 누락과 중복 소유: 0개
 
@@ -232,7 +231,7 @@ Portfolio ──valuation·dividend Outbox Event──▶ Read Side
 - 호환·목표 명세 1개
 - 결함 51개
 
-모든 231개 요구사항은 210개 Canonical 테스트 ID와 실제 계약 assertion 본문에 연결되어 있습니다. 현재 실행 상태는 [목표 계약 테스트 구현 로드맵](../testing/contract-test-roadmap.md)을 단일 기준으로 사용합니다.
+모든 231개 요구사항은 210개 Canonical 테스트 ID와 실제 계약 assertion 본문에 연결되어 있습니다. 현재 검증 기준과 실행 방법은 [테스트 전략](governance/test-strategy.md)과 [Functions 테스트 안내](../../functions/test/README.md)를 사용합니다.
 
 요구사항을 추가·이동할 때 [요구사항 문서 규약](governance/conventions.md)의 Context 배치와 단일 소유 검사를 다시 수행한다.
 

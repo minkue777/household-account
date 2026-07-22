@@ -50,7 +50,8 @@ function assertTenant(command: HouseholdCommandName, householdId: string | undef
 export class HouseholdCommandClient {
   constructor(
     private readonly transport: HouseholdCommandTransport,
-    private readonly resolveSessionHouseholdId?: () => string | undefined
+    private readonly resolveSessionHouseholdId?: () => string | undefined,
+    private readonly resolveSessionAccessMode?: () => 'member' | 'administrator-readonly' | undefined
   ) {}
 
   async execute<Name extends HouseholdCommandName>(
@@ -58,6 +59,15 @@ export class HouseholdCommandClient {
     payload: HouseholdCommandPayloads[Name],
     options: ExecuteHouseholdCommandOptions = {}
   ): Promise<HouseholdCommandResults[Name]> {
+    if (
+      !isTenantlessCommand(command)
+      && this.resolveSessionAccessMode?.() === 'administrator-readonly'
+    ) {
+      throw new HouseholdCommandError(
+        'ADMIN_VIEW_READ_ONLY',
+        '관리자 가계부 조회에서는 데이터를 변경할 수 없습니다.'
+      );
+    }
     const sessionHouseholdId = this.resolveSessionHouseholdId?.();
     if (
       !isTenantlessCommand(command) &&

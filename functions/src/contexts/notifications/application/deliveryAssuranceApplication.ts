@@ -274,6 +274,7 @@ class DefaultDeliveryAssuranceApplication implements DeliveryAssuranceInputPort 
               householdId: event.householdId,
               recipientMemberId: target.recipientMemberId,
               endpointId: endpoint.endpointId,
+              payload: target.payload,
               expectedRegistrationVersion: endpoint.registrationVersion,
               expectedBindingVersion: endpoint.bindingVersion,
               status: "queued",
@@ -398,6 +399,7 @@ class DefaultDeliveryAssuranceApplication implements DeliveryAssuranceInputPort 
       deliveryId: claim.delivery.deliveryId,
       endpointId: claim.endpoint.endpointId,
       fid: claim.endpoint.fid,
+      payload: claim.delivery.payload,
     });
     return toDeliveryResult(
       await this.completeDelivery(

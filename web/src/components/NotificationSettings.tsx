@@ -1,39 +1,48 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, Bell, CheckCircle2 } from 'lucide-react';
 import {
-  isPushNotificationSupported,
+  getFidEndpointRegistrationState,
   getNotificationPermissionStatus,
-  requestNotificationPermission,
   isIOSPWA,
+  isPushNotificationSupported,
+  refreshFcmToken,
+  requestNotificationPermission,
+  subscribeFidEndpointRegistrationState,
+  type PwaFidEndpointRegistrationState,
 } from '@/lib/pushNotificationService';
 
 export default function NotificationSettings() {
   const [isSupported, setIsSupported] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission | null>(null);
+  const [endpointState, setEndpointState] = useState<PwaFidEndpointRegistrationState>({
+    status: 'idle',
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [isIOSPWAMode, setIsIOSPWAMode] = useState(false);
+
   useEffect(() => {
     setIsSupported(isPushNotificationSupported());
     setPermission(getNotificationPermissionStatus());
     setIsIOSPWAMode(isIOSPWA());
+    setEndpointState(getFidEndpointRegistrationState());
+    return subscribeFidEndpointRegistrationState(setEndpointState);
   }, []);
 
   const handleEnableNotifications = async () => {
     setIsLoading(true);
     try {
-      const registered = await requestNotificationPermission();
-      if (registered) {
-        setPermission('granted');
-      }
-    } catch (err) {
+      if (permission === 'granted') await refreshFcmToken();
+      else await requestNotificationPermission();
+      setPermission(getNotificationPermissionStatus());
+    } catch {
+      setPermission(getNotificationPermissionStatus());
     } finally {
       setIsLoading(false);
     }
   };
 
-  // PWA가 아니면 홈 화면 추가 안내
   if (!isIOSPWAMode) {
     return (
       <div className="p-4 flex items-center gap-3">
@@ -42,16 +51,26 @@ export default function NotificationSettings() {
         </div>
         <div className="flex-1">
           <div className="font-semibold text-slate-800">홈 화면에 추가 필요</div>
-          <div className="text-sm text-slate-500">Safari 공유 → 홈 화면에 추가</div>
+          <div className="text-sm text-slate-500">Safari 공유 메뉴에서 홈 화면에 추가해 주세요</div>
         </div>
       </div>
     );
   }
 
-  // 지원하지 않는 브라우저
-  if (!isSupported) {
-    return null;
-  }
+  if (!isSupported) return null;
+
+  const isActive = permission === 'granted' && endpointState.status === 'active';
+  const isRegistering = isLoading || endpointState.status === 'registering';
+  const isUnavailable = endpointState.status === 'unsupported';
+
+  const statusLabel = (() => {
+    if (permission === 'denied') return '브라우저에서 알림 권한이 거부됨';
+    if (isUnavailable) return '이 환경에서는 알림을 지원하지 않음';
+    if (isRegistering) return '알림 연결 확인 중';
+    if (isActive) return '활성화됨';
+    if (permission === 'granted') return '서버 연결 필요';
+    return '결제 등록 알림 받기';
+  })();
 
   return (
     <div className="p-4 flex items-center gap-3">
@@ -60,23 +79,27 @@ export default function NotificationSettings() {
       </div>
       <div className="flex-1">
         <div className="font-semibold text-slate-800">알림 설정</div>
-        <div className="text-sm text-slate-500">
-          {permission === 'granted' ? '활성화됨' : '결제 시 알림 받기'}
-        </div>
+        <div className="text-sm text-slate-500">{statusLabel}</div>
       </div>
-      {permission === 'granted' ? (
-        <CheckCircle2 className="h-6 w-6 text-green-500" />
+      {isActive ? (
+        <CheckCircle2 className="h-6 w-6 text-green-500" aria-label="알림 연결 완료" />
       ) : (
         <button
           onClick={handleEnableNotifications}
-          disabled={isLoading || permission === 'denied'}
+          disabled={isRegistering || isUnavailable || permission === 'denied'}
           className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-            permission === 'denied'
+            isUnavailable || permission === 'denied'
               ? 'bg-slate-100 text-slate-400'
               : 'bg-blue-500 text-white hover:bg-blue-600'
           }`}
         >
-          {isLoading ? '...' : permission === 'denied' ? '거부됨' : '활성화'}
+          {isRegistering
+            ? '...'
+            : permission === 'denied'
+              ? '거부됨'
+              : permission === 'granted'
+                ? '재연결'
+                : '활성화'}
         </button>
       )}
     </div>

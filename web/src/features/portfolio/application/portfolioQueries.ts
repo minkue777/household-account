@@ -1,7 +1,7 @@
 import { getHouseholdQueryClient } from '@/composition/webQueryRuntime';
+import { getStockInstrumentCatalog } from '@/composition/stockInstrumentCatalogRuntime';
 import type {
   PortfolioDividendProjectionQueryResult,
-  PortfolioQueryInstrument,
   PortfolioQuoteQueryResult,
 } from '@/platform/functions-api';
 import type {
@@ -10,23 +10,6 @@ import type {
   StockPriceInfo,
   StockSearchResult,
 } from '@/types/asset';
-
-function isStockInstrument(
-  instrument: PortfolioQueryInstrument
-): instrument is PortfolioQueryInstrument & {
-  market: 'KRX' | 'US' | 'KOFIA_FUND';
-  instrumentType: 'stock' | 'etf' | 'etn' | 'fund';
-} {
-  return (
-    (instrument.market === 'KRX' ||
-      instrument.market === 'US' ||
-      instrument.market === 'KOFIA_FUND') &&
-    (instrument.instrumentType === 'stock' ||
-      instrument.instrumentType === 'etf' ||
-      instrument.instrumentType === 'etn' ||
-      instrument.instrumentType === 'fund')
-  );
-}
 
 function stockPriceInfo(result: PortfolioQuoteQueryResult): StockPriceInfo {
   const instrumentType =
@@ -53,17 +36,7 @@ function stockPriceInfo(result: PortfolioQuoteQueryResult): StockPriceInfo {
 
 export const portfolioQueries = {
   async searchStocks(query: string): Promise<StockSearchResult[]> {
-    const result = await getHouseholdQueryClient().execute(
-      'portfolio.search-instruments.v1',
-      { assetClass: 'stock', query, limit: 10 }
-    );
-    return result.items.filter(isStockInstrument).map((instrument) => ({
-      code: instrument.code,
-      name: instrument.name,
-      market: instrument.market,
-      instrumentType: instrument.instrumentType,
-      priceScale: instrument.priceScale,
-    }));
+    return getStockInstrumentCatalog().search(query, 10);
   },
 
   async searchCrypto(query: string): Promise<CryptoSearchResult[]> {
