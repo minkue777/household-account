@@ -1,5 +1,9 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
+import {
+  currentFirestoreRuntimeEnvironment,
+  firestoreTransportSettings,
+} from '@/platform/read-model/firestoreTransportPolicy';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCyjcqLX9Gs-yIghFsq9v-vC6K91ZhMuYM",
@@ -13,6 +17,9 @@ const firebaseConfig = {
 
 // Initialize Firebase (prevent re-initialization)
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-const db = getFirestore(app);
+const db = initializeFirestore(
+  app,
+  firestoreTransportSettings(currentFirestoreRuntimeEnvironment())
+);
 
 export { app, db };

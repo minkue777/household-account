@@ -135,6 +135,8 @@ Client 검증은 즉시 피드백용이다. Ledger가 같은 불변식과 원자
 3. `SecureBridgeAdapter`를 등록하고 navigation마다 origin capability를 재계산한다.
 4. 저장된 URL이 없을 때만 시작 URL을 load한다.
 5. 허용하지 않은 navigation에서는 Bridge를 비활성화하고 보안 event를 기록한다.
+6. Web application은 Android Host bridge 또는 Android WebView user agent를 감지하면 첫 Firestore 인스턴스를 만들기 전에 `WebReadTransportPolicy`로 long-polling을 강제한다. 일반 브라우저에는 이 설정을 적용하지 않는다.
+7. 인증 Principal 복원과 최초 가계부 Read Contract는 각각 20초 deadline을 적용한다. deadline을 넘기면 loading을 유지하지 않고 안정적인 오류 code와 재시도 action을 반환한다.
 
 ### 5.3 `SynchronizeSessionMirror`
 
@@ -194,6 +196,7 @@ Client 검증은 즉시 피드백용이다. Ledger가 같은 불변식과 원자
 | `StartUrlPolicy` | 내부 Policy | BuildConfig-backed policy | 고정 environment |
 | `WebViewPort` | out | Android WebView | navigation Fake |
 | `AllowedWebOriginPolicy` | 내부 Policy | allowlist config | table fixture |
+| `WebReadTransportPolicy` | 내부 Policy | Web Firestore 초기화 설정 | Android bridge·WebView UA·일반 브라우저 table fixture |
 | `SessionMirrorStore` | out | 보호된 local storage | in-memory conformance Fake |
 | `SessionTransitionPort` | out | session 범위 Payment·QuickEdit Queue purge coordinator | Queue별 성공·실패 Spy |
 | `NativeGoogleAuthPort` | out | Credential Manager + Firebase Auth | 인증 성공·취소·실패 Fake |

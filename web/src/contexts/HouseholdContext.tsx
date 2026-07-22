@@ -25,6 +25,10 @@ import {
 } from '@/composition/clientSessionScope';
 import { removePwaFidEndpointForLogout } from '@/platform/pwa/fidEndpointLifecycle';
 import { clearPwaRuntimeCaches } from '@/platform/pwa/sessionCache';
+import { withinDeadline } from '@/platform/network/operationDeadline';
+
+const SESSION_RESOLUTION_TIMEOUT_MS = 20_000;
+const HOUSEHOLD_READ_TIMEOUT_MS = 20_000;
 
 export type HouseholdSessionState =
   | 'resolving'
@@ -86,7 +90,11 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     clearResolvedSession();
 
     try {
-      const resolution = await householdCommands.resolveSignedInUser();
+      const resolution = await withinDeadline(
+        householdCommands.resolveSignedInUser(),
+        SESSION_RESOLUTION_TIMEOUT_MS,
+        'SESSION_RESOLUTION_TIMEOUT'
+      );
       if (resolutionGeneration !== resolutionGenerationRef.current) return;
 
       if (resolution.kind === 'first-visit-required') {
@@ -111,7 +119,11 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         throw new Error('서버가 완전한 본인 Membership을 반환하지 않았습니다.');
       }
 
-      const loadedHousehold = await getHousehold(membership.householdId);
+      const loadedHousehold = await withinDeadline(
+        getHousehold(membership.householdId),
+        HOUSEHOLD_READ_TIMEOUT_MS,
+        'HOUSEHOLD_READ_TIMEOUT'
+      );
       if (!loadedHousehold) throw new Error('연결된 가계부 Read Model을 찾을 수 없습니다.');
       if (resolutionGeneration !== resolutionGenerationRef.current) return;
 

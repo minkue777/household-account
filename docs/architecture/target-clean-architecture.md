@@ -154,6 +154,7 @@ flowchart LR
 - 현재 함수 이름과 배포 지역은 전환 중 Facade로 유지할 수 있다.
 - Gen1→Gen2, TypeScript target 변경, 폴더 재구성, 업무 로직 이전을 한 변경에 묶지 않는다.
 - Web의 Firestore 직접 접근은 명시적으로 공개한 읽기 계약에만 허용한다.
+- Android WebView의 공개 Firestore 읽기는 WebView 전용 long-polling 전송 정책을 사용하고, 최초 세션·가계부 복원에는 유한 deadline을 두어 플랫폼 transport 장애가 무한 loading으로 노출되지 않게 한다.
 - Android의 Domain 컬렉션 직접 읽기·쓰기는 최종적으로 제거한다.
 - 운영 artifact는 [배포 안전성](../requirements/supporting-platform/modules/delivery-assurance/requirements.md) gate가 명시적 Firebase project, 계약 호환 순서, Rules·index·test·smoke를 검증한 뒤에만 배포한다.
 
