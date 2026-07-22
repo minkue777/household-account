@@ -2,7 +2,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import StockHoldingList from '@/components/assets/StockHoldingList';
-import { updateStockHolding } from '@/lib/assetService';
+import { deleteStockHolding, updateStockHolding } from '@/lib/assetService';
 import type { StockHolding } from '@/types/asset';
 
 jest.mock('@/lib/assetService', () => ({
@@ -18,6 +18,9 @@ jest.mock('@/features/portfolio/application/portfolioQueries', () => ({
 
 const mockedUpdateStockHolding = updateStockHolding as jest.MockedFunction<
   typeof updateStockHolding
+>;
+const mockedDeleteStockHolding = deleteStockHolding as jest.MockedFunction<
+  typeof deleteStockHolding
 >;
 
 function deferred<T>() {
@@ -83,6 +86,45 @@ describe('StockHoldingList 수동 보유 항목 수정 계약', () => {
         quantity: 1,
         currentPrice: 1_500_000,
       },
+      3
+    );
+    expect(screen.queryByLabelText('금액')).not.toBeInTheDocument();
+
+    await act(async () => {
+      command.resolve();
+      await command.promise;
+    });
+  });
+
+  test('[T-HOLD-002][HOLD-001] 예수금 삭제는 읽은 버전으로 삭제 명령을 보내고 목록에서 즉시 제거한다', async () => {
+    const command = deferred<void>();
+    mockedDeleteStockHolding.mockReturnValue(command.promise);
+    const user = userEvent.setup();
+
+    render(
+      <StockHoldingList
+        holdings={[legacyCashHolding()]}
+        isLoading={false}
+        isRefreshing={false}
+        onRefresh={jest.fn()}
+        assetId="asset-1"
+      />
+    );
+
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: /예수금/ }));
+    });
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: '삭제' }));
+    });
+    const deleteButtons = screen.getAllByRole('button', { name: '삭제' });
+    await act(async () => {
+      await user.click(deleteButtons[deleteButtons.length - 1]);
+    });
+
+    expect(mockedDeleteStockHolding).toHaveBeenCalledWith(
+      'legacy-cash-1',
+      'asset-1',
       3
     );
     expect(screen.queryByLabelText('금액')).not.toBeInTheDocument();

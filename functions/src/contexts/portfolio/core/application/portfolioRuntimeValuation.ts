@@ -123,7 +123,9 @@ export function positionEvent(input: {
       previousQuantity: input.before?.quantity ?? 0,
       currentQuantity: input.after?.quantity ?? 0,
       evaluatedAmountInWon: valuation.currentBalance,
-      quoteObservedAt: input.after?.lastQuote?.observedAt,
+      ...(input.after?.lastQuote === undefined
+        ? {}
+        : { quoteObservedAt: input.after.lastQuote.observedAt }),
       changedAt: input.occurredAt,
     },
   };
