@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ChartPie } from 'lucide-react';
 import { Asset, AssetOwnerOption, AssetType, isGoldEtfSubType } from '@/types/asset';
@@ -26,7 +26,8 @@ import {
   HOUSEHOLD_OWNER_OPTION,
 } from '@/lib/assets/memberOptions';
 import { assetOwnerProfiles } from '@/features/access-household/application/assetOwnerProfiles';
-import type { AssetOwnerProfileWireView } from '@/platform/functions-api';
+import type { AssetOwnerProfileView } from '@/features/access-household/domain/assetOwnerProfile';
+import { getAssetOwnerProfileQueries } from '@/composition/assetOwnerProfileReadRuntime';
 
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
@@ -44,7 +45,7 @@ export default function AssetsPage() {
   const [showOwnerModal, setShowOwnerModal] = useState(false);
   const [isAddingSample, setIsAddingSample] = useState(false);
   const [selectedMember, setSelectedMember] = useState<string>(ALL_MEMBERS_OPTION);
-  const [ownerProfiles, setOwnerProfiles] = useState<AssetOwnerProfileWireView[]>([]);
+  const [ownerProfiles, setOwnerProfiles] = useState<AssetOwnerProfileView[]>([]);
   const didScheduleMarketRefresh = useRef(false);
 
   const memberOptions = useMemo(
@@ -72,19 +73,6 @@ export default function AssetsPage() {
     ],
     [ownerProfiles]
   );
-
-  const loadOwnerProfiles = useCallback(async () => {
-    if (!household?.id) {
-      setOwnerProfiles([]);
-      return;
-    }
-    try {
-      const result = await assetOwnerProfiles.list(household.id);
-      setOwnerProfiles(result.profiles);
-    } catch {
-      setOwnerProfiles([]);
-    }
-  }, [household?.id]);
 
   const handleAddSampleData = async () => {
     setIsAddingSample(true);
@@ -133,8 +121,17 @@ export default function AssetsPage() {
   }, [isLoading]);
 
   useEffect(() => {
-    void loadOwnerProfiles();
-  }, [loadOwnerProfiles]);
+    const householdId = household?.id;
+    if (!householdId) {
+      setOwnerProfiles([]);
+      return;
+    }
+    return getAssetOwnerProfileQueries().subscribeActive(
+      householdId,
+      setOwnerProfiles,
+      (error) => console.error('자산 명의자 구독 오류:', error)
+    );
+  }, [household?.id]);
 
   useEffect(() => {
     if (!memberOptions.some(({ key }) => key === selectedMember)) {
@@ -294,7 +291,6 @@ export default function AssetsPage() {
           onCreate={async (displayName) => {
             if (!household?.id) return;
             await assetOwnerProfiles.create(household.id, displayName);
-            await loadOwnerProfiles();
           }}
           onRename={async (profile, displayName) => {
             if (!household?.id) return;
@@ -304,7 +300,6 @@ export default function AssetsPage() {
               displayName,
               profile.aggregateVersion
             );
-            await loadOwnerProfiles();
           }}
         />
 

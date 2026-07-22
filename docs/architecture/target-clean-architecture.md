@@ -155,6 +155,7 @@ flowchart LR
 - Gen1→Gen2, TypeScript target 변경, 폴더 재구성, 업무 로직 이전을 한 변경에 묶지 않는다.
 - 브라우저 Web·PWA·Android WebView의 Firestore 직접 접근은 명시적으로 공개한 읽기 계약에만 허용한다.
 - 모든 Web runtime의 월·연 원장 목록은 Ledger가 소유한 같은 Firestore Read Contract를 사용한다. 검증된 SessionScope의 `householdId`와 날짜 범위로 복합 index를 사용하는 실시간 listener를 열고, 거래 유형과 lifecycle 가시성은 Ledger Read Adapter가 동일하게 적용한다.
+- 일반 자산 화면의 활성 명의자 디렉터리는 Access가 공개한 `assetOwnerProfiles` Firestore Read Contract를 사용한다. 로컬 캐시를 먼저 내보내는 실시간 listener로 표시하고, 생성·이름 변경·보관은 Access Command를 통과시키며 관리자·과거 해석용 archived 포함 조회만 서버 Query를 사용한다.
 - 원장 변경은 인증된 Functions Command를 통과시키되 client는 Command 전송과 동시에 낙관적 Projection을 화면에 반영한다. 서버가 반환한 Canonical 결과와 실시간 snapshot으로 확정·수렴하고 typed rejection이나 version conflict에서는 해당 변경만 rollback한다. 변경 뒤 별도 기간 Query를 호출하거나 30초 polling으로 화면을 갱신하지 않는다.
 - Android에서는 Native Firebase Principal이 인증 권위이며 WebView 시작마다 짧은 custom-token exchange로 in-memory Web 인증 세션을 다시 만든다. 서버는 같은 인증 UID로 해석한 authoritative Membership 결과를 token 응답에 함께 싣고, Web은 custom token 로그인 결과 UID가 응답 UID와 일치할 때만 이를 최초 SessionScope에 재사용한다. 결과가 없는 구버전·일시 조회 실패만 별도 Membership Command로 fallback한다. WebView IndexedDB의 장기 Firebase Auth 상태와 auth observer 응답 여부를 세션 권위로 사용하지 않으며, exchange 자체에도 유한 deadline을 적용한다.
 - Native Android 코드의 Domain 컬렉션 직접 읽기·쓰기는 최종적으로 제거한다. Android WebView 안의 Web runtime은 다른 Web runtime과 같은 공개 Firestore Read Contract만 사용한다.

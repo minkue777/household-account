@@ -219,6 +219,7 @@ Value Object는 `HouseholdName`, `MemberDisplayName`, `AssetOwnerProfileName`, `
 4. 관리자는 dependent 프로필만 archived로 전이할 수 있습니다. member 프로필은 `RenameSelf` 결과에 따라 같은 Access UoW에서 표시 이름만 맞추고 관리자 archive도 거부합니다.
 5. archived dependent 프로필은 기본 목록과 신규 자산 선택에서 제외합니다. `includeArchived` 조회는 기존 Asset과 과거 Snapshot의 profileId를 표시 이름으로 해석하는 용도로만 허용합니다.
 6. 이름 변경·보관 Event에는 profileId와 상태만 전달하며 Portfolio Asset·Snapshot을 순회 수정하지 않습니다.
+7. 일반 자산 화면의 활성 명의자 목록은 `households/{householdId}/assetOwnerProfiles` Firestore Read Model을 직접 구독합니다. Android WebView에서는 영속 로컬 캐시 값을 먼저 표시하고 같은 listener가 서버 상태로 수렴하며, 일시적인 구독 오류가 이미 표시한 목록을 빈 값으로 덮지 않습니다. 생성·이름 변경·보관은 기존 Access Command 경계를 유지하고 관리자·과거 해석용 `includeArchived` 조회는 서버 Query를 사용합니다.
 
 ### 5.6 관리자 가구원 제거·복구
 

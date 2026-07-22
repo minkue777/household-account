@@ -56,6 +56,23 @@ beforeAll(async () => {
         firestore,
         "households",
         HOUSEHOLD_ID,
+        "assetOwnerProfiles",
+        "profile-member-a",
+      ),
+      {
+        householdId: HOUSEHOLD_ID,
+        profileId: "profile-member-a",
+        displayName: "민규",
+        profileType: "member",
+        lifecycleState: "active",
+        aggregateVersion: 1,
+      },
+    );
+    await setDoc(
+      doc(
+        firestore,
+        "households",
+        HOUSEHOLD_ID,
         "ledgerTransactions",
         "transaction-a",
       ),
@@ -119,6 +136,16 @@ describeWithFirestoreEmulator("서버 권위형 Firestore Rules", () => {
       ),
     );
     await assertSucceeds(
+      getDocs(
+        collection(
+          firestore,
+          "households",
+          HOUSEHOLD_ID,
+          "assetOwnerProfiles",
+        ),
+      ),
+    );
+    await assertSucceeds(
       getDoc(doc(firestore, "expenses", "legacy-expense-a")),
     );
   });
@@ -129,6 +156,16 @@ describeWithFirestoreEmulator("서버 권위형 Firestore Rules", () => {
       .firestore();
 
     await assertFails(getDoc(doc(firestore, "households", HOUSEHOLD_ID)));
+    await assertFails(
+      getDocs(
+        collection(
+          firestore,
+          "households",
+          HOUSEHOLD_ID,
+          "assetOwnerProfiles",
+        ),
+      ),
+    );
     await assertFails(getDoc(doc(firestore, "expenses", "legacy-expense-a")));
   });
 
@@ -147,6 +184,23 @@ describeWithFirestoreEmulator("서버 권위형 Firestore Rules", () => {
           "transaction-client-write",
         ),
         { householdId: HOUSEHOLD_ID },
+      ),
+    );
+    await assertFails(
+      setDoc(
+        doc(
+          firestore,
+          "households",
+          HOUSEHOLD_ID,
+          "assetOwnerProfiles",
+          "profile-client-write",
+        ),
+        {
+          householdId: HOUSEHOLD_ID,
+          displayName: "클라이언트 생성",
+          profileType: "dependent",
+          lifecycleState: "active",
+        },
       ),
     );
     await assertFails(

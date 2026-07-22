@@ -288,11 +288,12 @@ Role에서 Capability로의 매핑은 Access Context가 소유합니다. 이 모
 
 ### 5.6 자산 명의자 필터 UI
 
-1. Presentation은 `ListAssetOwnerProfiles(active)`와 `QueryPortfolio` 결과를 조합해 도넛 위에 `전체`, 활성 명의자 프로필, `+` 순서의 필터를 렌더링합니다. 공동 자산 scope가 필요하면 `가구 공동`을 typed household 항목으로 표시합니다.
+1. Presentation은 Access의 활성 `AssetOwnerProfile` Firestore Read Model 구독과 `QueryPortfolio` 결과를 조합해 도넛 위에 `전체`, 활성 명의자 프로필, `+` 순서의 필터를 렌더링합니다. 공동 자산 scope가 필요하면 `가구 공동`을 typed household 항목으로 표시합니다.
 2. `+`는 Access의 `CreateAssetOwnerProfile`을 호출하는 이름 입력 modal만 열며 Member·초대·로그인 설정을 함께 노출하지 않습니다.
-3. 생성 성공 뒤 목록을 갱신해 같은 profileId를 자산 생성·수정 명의자 선택지와 필터에 사용합니다. 실패하면 임시 이름 chip이나 로컬 전용 profile을 만들지 않습니다.
+3. 생성·이름 변경 성공 뒤 별도 목록 재조회나 Cloud Function 응답을 기다리지 않고 listener가 같은 profileId의 최신 상태를 자산 생성·수정 명의자 선택지와 필터에 반영합니다. 실패하면 임시 이름 chip이나 로컬 전용 profile을 만들지 않습니다.
 4. 일반 자산 UI에는 이름 변경만 제공하고 삭제 버튼이나 archive API 호출을 두지 않습니다. 삭제는 관리자 화면이 Access의 관리자 전용 Command를 호출하며, archived profile은 활성 필터·신규 선택에서 빠지지만 기존 Asset이나 조회 기간의 과거 Snapshot이 참조하면 archived 포함 Query로 표시 이름을 해석합니다.
 5. UI 문구와 시각적 `+` 아이콘의 접근성 이름은 `자산 명의자 추가`로 고정합니다.
+6. Android WebView는 영속 Firestore 캐시의 명의자를 먼저 렌더링하고 같은 listener가 서버 상태로 수렴합니다. 일시적인 구독 오류는 이미 표시한 명의자 목록을 빈 값으로 덮지 않으며, 관리자·과거 화면만 archived 포함 서버 Query를 사용합니다.
 
 ### 5.7 Web 낙관적 Projection과 충돌 처리
 

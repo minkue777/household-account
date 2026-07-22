@@ -1,12 +1,6 @@
-export interface AssetOwnerProfileWireView {
-  profileId: string;
-  householdId: string;
-  displayName: string;
-  profileType: 'member' | 'dependent';
-  linkedMemberId?: string;
-  lifecycleState: 'active' | 'archived';
-  aggregateVersion: number;
-}
+import type { AssetOwnerProfileView } from '@/features/access-household/domain/assetOwnerProfile';
+
+export type AssetOwnerProfileWireView = AssetOwnerProfileView;
 
 export interface AdminHouseholdWireView {
   householdId: string;
