@@ -69,7 +69,7 @@ sealed interface BridgeResultV1 {
 
 Bridge 호출은 현재 top-level document의 실제 origin이 `AllowedWebOriginPolicy`에 포함될 때만 처리한다. origin 변경, redirect, subframe, 불명확한 origin은 `Rejected(ORIGIN_NOT_ALLOWED)`다. 가구 키는 호환 입력으로만 받고 인증 증명으로 사용하지 않는다.
 
-Google 로그인 UI는 embedded WebView에서 실행하지 않습니다. Android `NativeGoogleAuthAdapter`가 Credential Manager와 Firebase Auth를 사용하고, 서버 Membership Query가 인증 Principal에 귀속된 active Membership을 조회한 뒤에만 Native mirror와 WebView exchange를 준비합니다. caller가 보낸 householdId·memberId·status는 Membership 증거로 신뢰하지 않습니다. WebView에는 서버가 검증·소비하는 최대 5분의 짧은 일회성 exchange handle만 전달합니다. exchange의 최종 token/cookie 형태는 Infrastructure 상세이지만 Google credential·장기 Firebase ID token·legacy householdKey를 범용 Bridge 메서드로 반환하는 구현은 금지합니다.
+Google 로그인 UI는 embedded WebView에서 실행하지 않습니다. Android `NativeGoogleAuthAdapter`가 Credential Manager와 Firebase Auth를 사용하고, 서버 Membership Query가 인증 Principal에 귀속된 active Membership을 조회한 뒤에만 Native mirror와 WebView exchange를 준비합니다. caller가 보낸 householdId·memberId·status는 Membership 증거로 신뢰하지 않습니다. WebView에는 서버가 검증·소비하는 최대 5분의 짧은 일회성 exchange handle만 전달합니다. 앱/WebView 시작 때 Native Firebase Principal이 남아 있으면 사용자 입력 없이 새 exchange를 발급해 WebView의 in-memory Firebase Auth 세션으로 교환합니다. WebView IndexedDB의 과거 Firebase Auth 상태는 Android 세션 권위로 사용하지 않습니다. exchange의 최종 token/cookie 형태는 Infrastructure 상세이지만 Google credential·장기 Firebase ID token·legacy householdKey를 범용 Bridge 메서드로 반환하는 구현은 금지합니다.
 
 ### 3.3 QuickEdit Client 계약
 
@@ -136,7 +136,7 @@ Client 검증은 즉시 피드백용이다. Ledger가 같은 불변식과 원자
 4. 저장된 URL이 없을 때만 시작 URL을 load한다.
 5. 허용하지 않은 navigation에서는 Bridge를 비활성화하고 보안 event를 기록한다.
 6. Web application은 Android Host bridge 또는 Android WebView user agent를 감지하면 첫 Firestore 인스턴스를 만들기 전에 `WebReadTransportPolicy`로 long-polling을 강제한다. 일반 브라우저에는 이 설정을 적용하지 않는다.
-7. 인증 Principal 복원과 최초 가계부 Read Contract는 각각 20초 deadline을 적용한다. deadline을 넘기면 loading을 유지하지 않고 안정적인 오류 code와 재시도 action을 반환한다.
+7. Native→Web 인증 교환에는 60초, Membership 복원과 최초 가계부 Read Contract에는 각각 20초 deadline을 적용한다. 최초 Web auth observer의 null은 Native 교환 중에는 무시하며, 교환 성공 뒤 동일 Principal callback 또는 명시적 결과로 복원을 계속한다. deadline을 넘기면 loading을 유지하지 않고 안정적인 오류 code와 재시도 action을 반환한다.
 
 ### 5.3 `SynchronizeSessionMirror`
 

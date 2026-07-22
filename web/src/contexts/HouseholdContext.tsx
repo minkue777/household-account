@@ -11,7 +11,12 @@ import {
 } from 'react';
 import type { User } from 'firebase/auth';
 import { getHousehold, renameHouseholdMember } from '@/lib/householdService';
-import { logOut, onAuthChange, signInWithGoogle } from '@/lib/authService';
+import {
+  logOut,
+  onAuthChange,
+  restoreAndroidHostAuth,
+  signInWithGoogle,
+} from '@/lib/authService';
 import type { Household, HouseholdMember } from '@/types/household';
 import { householdCommands } from '@/features/access-household/application/householdCommands';
 import {
@@ -26,7 +31,9 @@ import {
 import { removePwaFidEndpointForLogout } from '@/platform/pwa/fidEndpointLifecycle';
 import { clearPwaRuntimeCaches } from '@/platform/pwa/sessionCache';
 import { withinDeadline } from '@/platform/network/operationDeadline';
+import { isAndroidHostAvailable } from '@/platform/android-host/androidHostBridge';
 
+const AUTH_BOOTSTRAP_TIMEOUT_MS = 60_000;
 const SESSION_RESOLUTION_TIMEOUT_MS = 20_000;
 const HOUSEHOLD_READ_TIMEOUT_MS = 20_000;
 
@@ -158,18 +165,55 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     }
   }, [clearResolvedSession]);
 
-  useEffect(() => onAuthChange((user) => {
-    activeUserRef.current = user;
-    if (!user) {
-      resolutionGenerationRef.current += 1;
-      clearResolvedSession();
-      setLegacyCandidate(null);
-      setSessionError(null);
-      setSessionState('signed-out');
-      return;
+  useEffect(() => {
+    let disposed = false;
+    let androidBootstrapPending = isAndroidHostAvailable();
+    let restoredUserHandled = false;
+
+    const applyUser = (user: User | null) => {
+      if (disposed) return;
+      activeUserRef.current = user;
+      if (!user) {
+        resolutionGenerationRef.current += 1;
+        clearResolvedSession();
+        setLegacyCandidate(null);
+        setSessionError(null);
+        setSessionState('signed-out');
+        return;
+      }
+      restoredUserHandled = true;
+      void restoreSignedInUser(user, captureLegacySessionCandidate());
+    };
+
+    const unsubscribe = onAuthChange((user) => {
+      // Android는 native Firebase 세션이 권위입니다. WebView의 빈/오래된
+      // persistence callback보다 native custom-token 교환을 먼저 완료합니다.
+      if (androidBootstrapPending && !user) return;
+      applyUser(user);
+    });
+
+    if (androidBootstrapPending) {
+      void withinDeadline(
+        restoreAndroidHostAuth(),
+        AUTH_BOOTSTRAP_TIMEOUT_MS,
+        'ANDROID_AUTH_BOOTSTRAP_TIMEOUT'
+      ).then((user) => {
+        androidBootstrapPending = false;
+        if (!restoredUserHandled) applyUser(user);
+      }).catch((error) => {
+        androidBootstrapPending = false;
+        if (disposed) return;
+        clearResolvedSession();
+        setSessionError(errorMessage(error));
+        setSessionState('error');
+      });
     }
-    void restoreSignedInUser(user, captureLegacySessionCandidate());
-  }), [clearResolvedSession, restoreSignedInUser]);
+
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, [clearResolvedSession, restoreSignedInUser]);
 
   const signIn = useCallback(async () => {
     const candidate = captureLegacySessionCandidate();
