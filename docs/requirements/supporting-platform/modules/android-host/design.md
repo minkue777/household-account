@@ -137,9 +137,12 @@ Client 검증은 즉시 피드백용이다. Ledger가 같은 불변식과 원자
 3. `SecureBridgeAdapter`를 등록하고 navigation마다 origin capability를 재계산한다.
 4. 저장된 URL이 없을 때만 시작 URL을 load한다.
 5. 허용하지 않은 navigation에서는 Bridge를 비활성화하고 보안 event를 기록한다.
-6. Web application은 기본 Firestore realtime 전송을 유지한다. Android Host bridge가 있으면 첫 Firestore 인스턴스를 만들기 전에 single-tab IndexedDB `persistentLocalCache`를 활성화하고, 검증된 Membership의 가계부 cache snapshot을 서버 read보다 먼저 표시한다. 일반 브라우저에는 Android 전용 persistent cache 설정을 적용하지 않는다. authoritative household 부재·권한·계약·불변식 오류는 cache fallback 대상이 아니며 SessionScope를 폐기한다.
-7. Native Firebase `currentUser`가 있으면 URL load 직전에 session exchange prewarm을 등록하고 WebView load와 병렬 실행한다. Bridge의 첫 로그인은 완료 여부와 무관하게 그 in-flight 결과를 정확히 한 번 소비한다. `currentUser`가 없으면 prewarm하지 않고 명시적 로그인 action에서만 Credential Manager를 연다.
-8. Native→Web 인증 교환에는 60초, fallback Membership 복원과 최초 가계부 Read Contract에는 각각 20초 deadline을 적용한다. 정상 Android bootstrap은 교환 응답에 함께 온 UID-bound Membership 결과를 재사용해 별도 Membership 왕복을 만들지 않는다. 최초 Web auth observer callback은 Native 교환 중에는 모두 보류하고, 교환 성공 뒤 명시적 결과를 한 번 적용한다. deadline을 넘기면 loading을 유지하지 않고 안정적인 오류 code와 재시도 action을 반환한다.
+6. Web application은 기본 Firestore realtime 전송을 유지한다. Android는 single-tab, 일반 브라우저와 PWA는 multiple-tab IndexedDB `persistentLocalCache`를 활성화하고 cache snapshot을 서버 read보다 먼저 표시한다. authoritative household 부재·권한·계약·불변식 오류는 cache fallback 대상이 아니며 SessionScope를 폐기한다.
+7. WebView Firebase Auth는 local persistence를 사용하고 마지막 서버 검증 Membership과 화면 표시용 가구 read model을 Firebase UID와 함께 localStorage의 versioned cache로 보존한다. 앱 재실행 때 Auth UID와 cache UID가 같으면 IndexedDB 초기화도 기다리지 않고 localStorage 가구 snapshot부터 렌더링한다. 평문 화면 cache 노출 위험보다 소수의 신뢰된 사용자 환경에서 재접속 속도를 우선하며, 이 값은 권한 증거로 사용하지 않는다.
+8. 영속 Web Auth가 복원되면 Native session exchange를 생략하고 Firebase SDK token refresh와 서버 Rules로 수렴한다. Web Auth가 없는 최초 설치·명시적 로그아웃 뒤 로그인에서만 Native→Web custom-token 교환을 요청한다. Native SessionMirror 갱신도 첫 화면과 경쟁하지 않도록 인증 완료 5초 뒤 idle task로 실행하고 같은 UID·가구·멤버에서는 최대 하루 한 번만 수행한다.
+9. Native→Web 인증 교환에는 60초, fallback Membership 복원과 최초 가계부 Read Contract에는 각각 20초 deadline을 적용한다. cache 없이 deadline을 넘기면 loading을 유지하지 않고 안정적인 오류 code와 재시도 action을 반환한다. cache 화면이 이미 열렸다면 일시적인 Native 교환 실패만 UI 차단으로 승격하지 않는다.
+10. 같은 로그인 세대의 월 원장·자산 query snapshot은 조회 key별 메모리 projection에 남겨 route 재진입 시 즉시 방출하고, 자산 query는 인증 완료 뒤 idle callback에서 미리 시작한다. 세션 전환은 retained projection 전체를 초기화한다. 숨겨진 모달·차트·검색 컴포넌트는 실제 열릴 때 동적 로드한다.
+11. 사용자 데이터가 포함되지 않은 정적 Next.js navigation shell은 Service Worker가 `StaleWhileRevalidate`로 최대 7일 보존한다. 재실행은 cached HTML을 즉시 사용하고 배포된 최신 shell은 백그라운드에서 받아 다음 navigation에 반영한다.
 
 ### 5.3 `SynchronizeSessionMirror`
 

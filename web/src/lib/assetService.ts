@@ -808,7 +808,8 @@ export function subscribeToStockHoldings(
   const householdId = getHouseholdId();
   const projection = stockHoldingOptimisticProjection.subscribe(
     callback,
-    (holding) => holding.assetId === assetId
+    (holding) => holding.assetId === assetId,
+    `stock-holdings:${householdId}:${assetId}`
   );
 
   const q = query(
@@ -843,7 +844,8 @@ export function subscribeToCryptoHoldings(
   const householdId = getHouseholdId();
   const projection = cryptoHoldingOptimisticProjection.subscribe(
     callback,
-    (holding) => holding.assetId === assetId
+    (holding) => holding.assetId === assetId,
+    `crypto-holdings:${householdId}:${assetId}`
   );
 
   const q = query(

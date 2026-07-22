@@ -34,6 +34,13 @@ jest.mock('@/features/access-household/application/legacySessionCandidate', () =
   clearLegacySessionCandidate: jest.fn(),
 }));
 
+jest.mock('@/features/access-household/application/signedInMembershipCache', () => ({
+  readSignedInHouseholdCache: jest.fn(),
+  readSignedInMembershipCache: jest.fn(),
+  writeSignedInMembershipCache: jest.fn(),
+  clearSignedInMembershipCache: jest.fn(),
+}));
+
 jest.mock('@/composition/clientSessionScope', () => ({
   clearClientSessionScope: jest.fn(),
   setClientSessionScope: jest.fn(),
@@ -67,6 +74,10 @@ import {
   clearAdminHouseholdViewSelection,
   selectAdminHouseholdView,
 } from '@/features/access-household/application/adminHouseholdViewSelection';
+import {
+  readSignedInHouseholdCache,
+  readSignedInMembershipCache,
+} from '@/features/access-household/application/signedInMembershipCache';
 
 const mockGetCachedHousehold = jest.mocked(getCachedHousehold);
 const mockGetHousehold = jest.mocked(getHousehold);
@@ -75,6 +86,8 @@ const mockRestoreAndroidHostAuth = jest.mocked(restoreAndroidHostAuth);
 const mockResolveSignedInUser = jest.mocked(householdCommands.resolveSignedInUser);
 const mockActivatePwaFidEndpoint = jest.mocked(activatePwaFidEndpoint);
 const mockSetClientSessionScope = jest.mocked(setClientSessionScope);
+const mockReadSignedInHouseholdCache = jest.mocked(readSignedInHouseholdCache);
+const mockReadSignedInMembershipCache = jest.mocked(readSignedInMembershipCache);
 
 function SessionProbe() {
   const { household, sessionState } = useHousehold();
@@ -101,6 +114,8 @@ describe('Android 가구 cache-first 복원 계약', () => {
     window.history.replaceState({}, '', '/');
     clearAdminHouseholdViewSelection();
     mockAndroidHostAvailable = false;
+    mockReadSignedInHouseholdCache.mockReturnValue(undefined);
+    mockReadSignedInMembershipCache.mockReturnValue(undefined);
     mockOnAuthChange.mockImplementation(() => jest.fn());
   });
 
@@ -216,6 +231,39 @@ describe('Android 가구 cache-first 복원 계약', () => {
     await waitFor(() => {
       expect(screen.getByText('ready:서버 가계부')).toBeInTheDocument();
     });
+  });
+
+  it('Android 재실행은 영속 Auth와 검증 Membership cache로 Native 재교환보다 먼저 화면을 연다', async () => {
+    mockAndroidHostAvailable = true;
+    const cachedResolution = {
+      kind: 'membership-found' as const,
+      membership: {
+        householdId: 'household-1',
+        memberId: 'member-1',
+        displayName: '민규',
+        aggregateVersion: 3,
+        status: 'active' as const,
+        capabilities: ['household.read'],
+      },
+    };
+    mockReadSignedInMembershipCache.mockReturnValue(cachedResolution);
+    mockOnAuthChange.mockImplementation((listener) => {
+      listener({ uid: 'uid-1' } as User);
+      return jest.fn();
+    });
+    mockReadSignedInHouseholdCache.mockReturnValue(household('즉시 복원 가계부'));
+    mockGetHousehold.mockReturnValue(new Promise(() => {}));
+
+    render(
+      <HouseholdProvider>
+        <SessionProbe />
+      </HouseholdProvider>,
+    );
+
+    expect(await screen.findByText('ready:즉시 복원 가계부')).toBeInTheDocument();
+    expect(mockResolveSignedInUser).not.toHaveBeenCalled();
+    expect(mockRestoreAndroidHostAuth).not.toHaveBeenCalled();
+    expect(mockGetCachedHousehold).not.toHaveBeenCalled();
   });
 
   it('authoritative household not-found는 cache로 숨기지 않는다', async () => {

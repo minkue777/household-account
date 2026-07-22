@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { ChartPie } from 'lucide-react';
 import { Asset, AssetOwnerOption, AssetType, isGoldEtfSubType } from '@/types/asset';
 import {
@@ -10,15 +11,8 @@ import {
   addSampleAssets,
   refreshAllMarketValues,
 } from '@/lib/assetService';
-import {
-  AssetSummaryCard,
-  AssetList,
-  AssetAddModal,
-  AssetEditModal,
-  AssetHistoryModal,
-  AssetBalanceChart,
-  AssetOwnerProfileModal,
-} from '@/components/assets';
+import AssetSummaryCard from '@/components/assets/AssetSummaryCard';
+import AssetList from '@/components/assets/AssetList';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import {
@@ -29,6 +23,14 @@ import { assetOwnerProfiles } from '@/features/access-household/application/asse
 import type { AssetOwnerProfileView } from '@/features/access-household/domain/assetOwnerProfile';
 import { getAssetOwnerProfileQueries } from '@/composition/assetOwnerProfileReadRuntime';
 import { warmStockInstrumentCatalog } from '@/composition/stockInstrumentCatalogRuntime';
+
+const AssetAddModal = dynamic(() => import('@/components/assets/AssetAddModal'));
+const AssetEditModal = dynamic(() => import('@/components/assets/AssetEditModal'));
+const AssetHistoryModal = dynamic(() => import('@/components/assets/AssetHistoryModal'));
+const AssetBalanceChart = dynamic(() => import('@/components/assets/AssetBalanceChart'));
+const AssetOwnerProfileModal = dynamic(
+  () => import('@/components/assets/AssetOwnerProfileModal')
+);
 
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
@@ -281,64 +283,74 @@ export default function AssetsPage() {
           </div>
         )}
 
-        <AssetAddModal
-          isOpen={showAddModal}
-          onClose={() => setShowAddModal(false)}
-          defaultType={addModalType}
-          defaultOwnerKey={
-            selectedMember === ALL_MEMBERS_OPTION ? 'household' : selectedMember
-          }
-          ownerOptions={ownerOptions}
-        />
+        {showAddModal && (
+          <AssetAddModal
+            isOpen={true}
+            onClose={() => setShowAddModal(false)}
+            defaultType={addModalType}
+            defaultOwnerKey={
+              selectedMember === ALL_MEMBERS_OPTION ? 'household' : selectedMember
+            }
+            ownerOptions={ownerOptions}
+          />
+        )}
 
-        <AssetOwnerProfileModal
-          isOpen={showOwnerModal}
-          profiles={ownerProfiles}
-          onClose={() => setShowOwnerModal(false)}
-          onCreate={async (displayName) => {
-            if (!household?.id) return;
-            await assetOwnerProfiles.create(household.id, displayName);
-          }}
-          onRename={async (profile, displayName) => {
-            if (!household?.id) return;
-            await assetOwnerProfiles.rename(
-              household.id,
-              profile.profileId,
-              displayName,
-              profile.aggregateVersion
-            );
-          }}
-        />
+        {showOwnerModal && (
+          <AssetOwnerProfileModal
+            isOpen={true}
+            profiles={ownerProfiles}
+            onClose={() => setShowOwnerModal(false)}
+            onCreate={async (displayName) => {
+              if (!household?.id) return;
+              await assetOwnerProfiles.create(household.id, displayName);
+            }}
+            onRename={async (profile, displayName) => {
+              if (!household?.id) return;
+              await assetOwnerProfiles.rename(
+                household.id,
+                profile.profileId,
+                displayName,
+                profile.aggregateVersion
+              );
+            }}
+          />
+        )}
 
-        <AssetEditModal
-          isOpen={showEditModal}
-          onClose={() => {
-            setShowEditModal(false);
-            setSelectedAsset(null);
-          }}
-          asset={selectedAsset}
-        />
+        {showEditModal && (
+          <AssetEditModal
+            isOpen={true}
+            onClose={() => {
+              setShowEditModal(false);
+              setSelectedAsset(null);
+            }}
+            asset={selectedAsset}
+          />
+        )}
 
-        <AssetHistoryModal
-          isOpen={showHistoryModal}
-          onClose={() => {
-            setShowHistoryModal(false);
-            setSelectedAsset(null);
-          }}
-          asset={selectedAsset}
-          onEditAsset={handleEditAsset}
-          onViewChart={handleViewChart}
-        />
+        {showHistoryModal && (
+          <AssetHistoryModal
+            isOpen={true}
+            onClose={() => {
+              setShowHistoryModal(false);
+              setSelectedAsset(null);
+            }}
+            asset={selectedAsset}
+            onEditAsset={handleEditAsset}
+            onViewChart={handleViewChart}
+          />
+        )}
 
-        <AssetBalanceChart
-          isOpen={showChartModal}
-          onClose={() => {
-            setShowChartModal(false);
-            setSelectedAsset(null);
-          }}
-          asset={selectedAsset}
-          assets={assets}
-        />
+        {showChartModal && (
+          <AssetBalanceChart
+            isOpen={true}
+            onClose={() => {
+              setShowChartModal(false);
+              setSelectedAsset(null);
+            }}
+            asset={selectedAsset}
+            assets={assets}
+          />
+        )}
       </div>
     </main>
   );

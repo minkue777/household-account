@@ -1,7 +1,7 @@
 import {
   getAuth,
   initializeAuth,
-  inMemoryPersistence,
+  browserLocalPersistence,
   signInWithPopup,
   signInWithCustomToken,
   GoogleAuthProvider,
@@ -24,9 +24,10 @@ export interface AuthenticatedWebSession {
 function createAuth() {
   if (!isAndroidHostAvailable()) return getAuth(app);
   try {
-    // Android native 인증을 매 실행마다 WebView에 다시 교환하므로 오래된
-    // IndexedDB 인증 상태를 WebView의 세션 권위로 사용하지 않습니다.
-    return initializeAuth(app, { persistence: inMemoryPersistence });
+    // 검증된 WebView 세션을 영속화하여 앱 프로세스 재시작마다 custom-token
+    // 교환을 첫 화면의 선행 조건으로 반복하지 않습니다. Native 세션 검증은
+    // 백그라운드에서 계속 수행하고 실제 권한은 서버 rules가 확인합니다.
+    return initializeAuth(app, { persistence: browserLocalPersistence });
   } catch {
     return getAuth(app);
   }

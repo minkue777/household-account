@@ -36,6 +36,21 @@ function holding(overrides: Partial<StockHolding> = {}): StockHolding {
 }
 
 describe('portfolio optimistic projection contract', () => {
+  test('같은 화면에 재진입하면 마지막 snapshot을 Firestore 재응답 전에 즉시 표시한다', () => {
+    const projection = new OptimisticEntityProjection<Asset>(
+      'portfolio-test',
+      (left, right) => left.order - right.order
+    );
+    const first = projection.subscribe(jest.fn(), () => true, 'assets:house-1');
+    first.publish([asset()]);
+    first.dispose();
+
+    const restored = jest.fn();
+    projection.subscribe(restored, () => true, 'assets:house-1');
+
+    expect(restored).toHaveBeenCalledWith([asset()]);
+  });
+
   test('수정·삭제는 서버 응답 전 같은 tick에 반영되고 실패하면 최신 read model로 rollback된다', () => {
     const projection = new OptimisticEntityProjection<Asset>(
       'portfolio-test',

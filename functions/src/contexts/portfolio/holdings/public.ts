@@ -51,6 +51,7 @@ export type {
   MarketRouteResult,
   NormalizedMarketQuote,
 } from "./domain/model/marketRouting";
+export { isKrxGoldSpotCode } from "./domain/policies/marketRoutingPolicy";
 
 export type { HoldingValuation } from "./application/ports/in/holdingValuation";
 export type {

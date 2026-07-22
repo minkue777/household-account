@@ -9,7 +9,6 @@ import com.household.account.paymentcapture.AndroidCaptureDelivery
 import com.household.account.session.NativeMembershipResolution
 import com.household.account.util.FidEndpointManager
 import com.household.account.util.HouseholdPreferences
-import kotlinx.coroutines.CoroutineScope
 import org.json.JSONObject
 
 /** 정확한 허용 origin에서만 노출되는 versioned Android host contract입니다. */
@@ -17,10 +16,6 @@ class AndroidHostBridge(
     private val context: Activity,
     private val authCoordinator: NativeAuthCoordinator = NativeAuthCoordinator(context)
 ) {
-    fun prewarmSignedInSession(scope: CoroutineScope) {
-        authCoordinator.prewarmSignedInSession(scope)
-    }
-
     suspend fun handle(rawMessage: String): String {
         val request = runCatching { JSONObject(rawMessage) }.getOrNull()
             ?: return rejected("invalid-request", "INVALID_JSON")

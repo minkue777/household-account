@@ -1,11 +1,19 @@
 import type { MarketInstrumentRef } from "../model/marketRouting";
 
+const KRX_GOLD_SPOT_CODES = new Set(["KRXGOLD1KG", "KRXGOLD100G"]);
+
+export function isKrxGoldSpotCode(code: string): boolean {
+  return KRX_GOLD_SPOT_CODES.has(code.trim().toLocaleUpperCase("en-US"));
+}
+
 export function quoteProvidersFor(
   instrument: MarketInstrumentRef,
 ): readonly string[] {
   switch (instrument.market) {
     case "KRX":
-      return ["naver-domestic"];
+      return isKrxGoldSpotCode(instrument.code)
+        ? ["naver-krx-gold-market"]
+        : ["naver-domestic"];
     case "US":
       return ["nasdaq-us", "frankfurter-v2"];
     case "UPBIT_KRW":

@@ -262,6 +262,7 @@ Position에 Quote가 한 번도 없으면 평가가는 평균단가를 사용합
 - 펀드: `quantity × (lastQuote.price ?? averagePrice) ÷ priceScale`; 국민성장펀드 C-e의 `priceScale`은 기준가 공시 단위인 1,000좌입니다.
 - 코인: 같은 식을 적용하되 Position 중간값의 정밀도를 보존합니다.
 - 실물 금: 정규화한 돈 단위 수량 × 원/돈 금 시세입니다.
+- KRX 금현물 Position(`KRXGOLD1KG`, `KRXGOLD100G`): g 단위 수량 × Naver KRX 금시장 원/g 종가입니다. 같은 원천을 쓰더라도 실물 금의 돈 환산 배수 3.75를 적용하지 않습니다.
 - 금 ETF: KRX 주식 Position과 같은 방식을 사용합니다.
 - cost basis: 일반 종목은 `quantity × averagePrice`, 펀드는 `quantity × averagePrice ÷ priceScale`; 값이 없으면 0으로 명시하되 잘못된 숫자와 0 이하 `priceScale`은 거부합니다.
 
@@ -273,7 +274,7 @@ Position에 Quote가 한 번도 없으면 평가가는 평균단가를 사용합
 
 ### 4.3 검색·routing Policy
 
-`MarketRoutingPolicy`는 KRX→Naver 국내, US→미국 종목 Quote Adapter+USD/KRW, KOFIA_FUND→해당 운용사 기준가 Adapter, UPBIT_KRW→Upbit, PHYSICAL_GOLD→Gold provider로 라우팅합니다. 현재 미국 Adapter 구현·공급자 이름이 Nasdaq이더라도 `exchange=NYSE|NASDAQ|AMEX`인 미국 종목 전체를 `market=US`로 다루며 Provider 이름을 종목 market으로 저장하지 않습니다. 금 ETF는 PHYSICAL_GOLD가 아니라 KRX instrument입니다. Quote routing과 종목 검색 catalog는 분리하며 검색 요청에서 거래소 공급자를 실시간 fan-out하지 않습니다.
+`MarketRoutingPolicy`는 일반 KRX 종목→Naver 국내 주식 API, KRX 금현물 코드(`KRXGOLD1KG`, `KRXGOLD100G`)→Naver KRX 금시장 페이지, US→미국 종목 Quote Adapter+USD/KRW, KOFIA_FUND→해당 운용사 기준가 Adapter, UPBIT_KRW→Upbit, PHYSICAL_GOLD→Gold provider로 라우팅합니다. 현재 미국 Adapter 구현·공급자 이름이 Nasdaq이더라도 `exchange=NYSE|NASDAQ|AMEX`인 미국 종목 전체를 `market=US`로 다루며 Provider 이름을 종목 market으로 저장하지 않습니다. 금 ETF는 PHYSICAL_GOLD가 아니라 KRX instrument입니다. Quote routing과 종목 검색 catalog는 분리하며 검색 요청에서 거래소 공급자를 실시간 fan-out하지 않습니다.
 
 주식·ETF·ETN 검색은 DEC-035의 정규화된 최신 성공 `InstrumentCatalogSnapshot`만 입력으로 사용합니다. exact code, code prefix, name prefix, name contains 순으로 점수를 매기고 market·code로 안정 tie-break하여 최대 10개를 반환합니다. 응답에는 `catalogAsOf`, `catalogVersion`, `stale`을 포함할 수 있으며 오래된 snapshot을 빈 결과로 바꾸지 않습니다. 코인은 별도 Upbit catalog에서 `KRW-` market만 허용합니다.
 
@@ -526,9 +527,9 @@ Domain은 Firebase·node-fetch·HTML parser를 import하지 않습니다. `publi
 | HOLD-002 | Domain Unit, Contract | 코인 평가·Upbit ACL | 소수 quantity, 정수 경계 .49/.5, 성공 0원, timeout | 합계·원가는 최종 `Math.round`; 0원과 실패 결과가 다름 | T-HOLD-003, T-MARKET-001 |
 | HOLD-003 | Domain Unit, Contract | 공통 `CalculateAccountValuationPolicy` | 동일 Position fixture를 Web/자산 job 경계에서 호출 | 동일 currentBalance·costBasis 계산 결과 | T-HOLD-002 |
 | HOLD-004 | Application, Emulator, E2E | ManagePosition·PortfolioRevaluationUnitOfWork | Position 동시 추가, Asset/Position version 경합, 부모 write 실패, callback 2회 | 두 Aggregate·receipt·Outbox가 한 번 commit되거나 write 0건 | T-HOLD-001 |
-| GOLD-001 | Domain Unit, Mapper Conformance | 금 subtype·LegacyGoldQuantityMapper | `3돈`, `3 돈`, 정규 quantity, 금 ETF | 실물 금은 돈 시세, ETF는 KRX 주식; 정규 필드 우선 | T-GOLD-001 |
+| GOLD-001 | Domain Unit, Mapper Conformance, Adapter Contract | 금 subtype·LegacyGoldQuantityMapper·금현물 route | `3돈`, `3 돈`, 정규 quantity, `KRXGOLD1KG` 171g, 금 ETF | 실물 금은 원/돈, KRX 금현물은 원/g, ETF는 일반 KRX 주식; 정규 필드 우선 | T-GOLD-001 |
 | GOLD-002 | Contract, Application, Emulator | GoldMarketPort·RefreshAccountPrices | timeout, 5xx, schema drift, 고정 fallback fixture | Asset/Position 미변경, 실패 분류 반환, 추정값 성공 없음 | T-GOLD-002 |
-| MARKET-001 | Contract | 시장별 ACL과 routing | KRX, US(NASDAQ·NYSE·AMEX)+USD/KRW, UPBIT_KRW, 금, 배당 disclosure fixture | 정확한 Adapter 한 개 호출, 공급자 이름과 종목 market 분리, 공급자 DTO 비노출 | T-MARKET-004 |
+| MARKET-001 | Contract | 시장별 ACL과 routing | 일반 KRX, KRX 금현물, US(NASDAQ·NYSE·AMEX)+USD/KRW, UPBIT_KRW, 실물 금, 배당 disclosure fixture | KRX 금현물은 일반 주식 API를 호출하지 않고 정확한 Adapter 한 개 호출, 공급자 이름과 종목 market 분리, 공급자 DTO 비노출 | T-MARKET-004 |
 | MARKET-002 | Domain Unit, Application | MarketRoutingPolicy·daily job | 동일 code를 가진 KRX/US instrument | US는 Nasdaq+환율, 국내는 Naver; 시장 혼선 없음 | T-MARKET-004 |
 | MARKET-003 | Domain Unit, Contract | 기기 검색 ranking·filter와 서버 코인 검색 | 국내 주식·ETF·ETN+미국 catalog 중복, exact/code prefix/name prefix/name contains 동률, 11건, 빈 query, 비-KRW 코인 | 네 단계 관련도 뒤 market·code tie-break로 결정적 최대 10, 주식 빈 query는 빈 결과와 원격 호출 0회, KRW 코인만 반환하고 코인 빈 query는 typed error | T-MARKET-005 |
 | MARKET-004 | Domain Unit, Contract, Application, Operations Integration | Quote fallback·ProviderHealthRecorder | 마지막 성공 뒤 retryable 10회, NoData 3회, contract/invalid 1회, 이후 성공, 오래된 observedAt | 마지막 가격·observedAt 불변, 매 시도 log, health 누적, 즉시·3회 경보, 성공 시 해제 | T-MARKET-001 |

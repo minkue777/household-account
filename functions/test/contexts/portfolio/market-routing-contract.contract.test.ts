@@ -43,6 +43,15 @@ describe("시장별 Provider ACL routing 계약", () => {
     ],
     [
       {
+        market: "KRX",
+        instrumentType: "STOCK",
+        code: "KRXGOLD1KG",
+        currency: "KRW",
+      },
+      ["naver-krx-gold-market"],
+    ],
+    [
+      {
         market: "US",
         exchange: "NASDAQ",
         instrumentType: "STOCK",

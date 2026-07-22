@@ -84,6 +84,12 @@ describe("Firebase portfolio market-data adapter", () => {
       kind: "success",
       quote: { priceInWon: 70_000, provider: "naver-domestic" },
     });
+    await expect(
+      adapter.getQuote(target("KRX", "KRXGOLD1KG")),
+    ).resolves.toMatchObject({
+      kind: "success",
+      quote: { priceInWon: 100_000, provider: "naver-krx-gold-market" },
+    });
     await expect(adapter.getQuote(target("US", "US:AAPL"))).resolves.toMatchObject({
       kind: "success",
       quote: {
@@ -111,6 +117,9 @@ describe("Firebase portfolio market-data adapter", () => {
     });
 
     expect(requested.some((url) => url.includes("/api/stock/005930/basic"))).toBe(true);
+    expect(
+      requested.some((url) => url.includes("/api/stock/KRXGOLD1KG/basic")),
+    ).toBe(false);
     expect(requested.some((url) => url.includes("api.nasdaq.com"))).toBe(true);
     expect(requested.some((url) => url.includes("frankfurter.dev"))).toBe(true);
     expect(requested.some((url) => url.includes("api.upbit.com"))).toBe(true);

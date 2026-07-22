@@ -39,10 +39,6 @@ import {
   setClientSessionScope,
 } from '@/composition/clientSessionScope';
 import { resetClientOptimisticProjections } from '@/composition/resetClientOptimisticProjections';
-import {
-  activatePwaFidEndpoint,
-  removePwaFidEndpointForLogout,
-} from '@/platform/pwa/fidEndpointLifecycle';
 import { clearPwaRuntimeCaches } from '@/platform/pwa/sessionCache';
 import {
   OperationDeadlineExceededError,
@@ -50,8 +46,14 @@ import {
 } from '@/platform/network/operationDeadline';
 import {
   isAndroidHostAvailable,
-  type AndroidSignedInUserResolution,
 } from '@/platform/android-host/androidHostBridge';
+import {
+  clearSignedInMembershipCache,
+  readSignedInHouseholdCache,
+  readSignedInMembershipCache,
+  writeSignedInMembershipCache,
+  type SignedInUserResolution,
+} from '@/features/access-household/application/signedInMembershipCache';
 
 const AUTH_BOOTSTRAP_TIMEOUT_MS = 60_000;
 const SESSION_RESOLUTION_TIMEOUT_MS = 20_000;
@@ -181,7 +183,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   const restoreSignedInUser = useCallback(async (
     user: User,
     candidate?: LegacySessionCandidate,
-    prefetchedResolution?: AndroidSignedInUserResolution
+    prefetchedResolution?: SignedInUserResolution
   ) => {
     const resolutionGeneration = ++resolutionGenerationRef.current;
     setSessionState('resolving');
@@ -197,6 +199,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       if (resolutionGeneration !== resolutionGenerationRef.current) return;
 
       if (resolution.kind === 'first-visit-required') {
+        clearSignedInMembershipCache();
         if (candidate) {
           setLegacyCandidate(candidate);
           setSessionState('legacy-confirmation');
@@ -218,7 +221,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         throw new Error('서버가 완전한 본인 Membership을 반환하지 않았습니다.');
       }
 
-      const self: HouseholdMember = {
+      const resolvedSelf: HouseholdMember = {
         id: membership.memberId,
         name: membership.displayName,
         aggregateVersion: membership.aggregateVersion,
@@ -235,6 +238,13 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
 
       const applyHousehold = (loadedHousehold: Household) => {
         if (resolutionGeneration !== resolutionGenerationRef.current) return;
+        const readModelSelf = loadedHousehold.members.find(
+          (member) => member.id === resolvedSelf.id
+        );
+        const self = readModelSelf
+          && readModelSelf.aggregateVersion >= resolvedSelf.aggregateVersion
+          ? readModelSelf
+          : resolvedSelf;
         const members = loadedHousehold.members.some((member) => member.id === self.id)
           ? loadedHousehold.members.map((member) => member.id === self.id ? self : member)
           : [...loadedHousehold.members, self];
@@ -243,18 +253,35 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         setCurrentMember(self);
         setLegacyCandidate(null);
         clearLegacySessionCandidate();
+        const normalizedHousehold = { ...loadedHousehold, members };
+        writeSignedInMembershipCache(user.uid, {
+          kind: 'membership-found',
+          membership: {
+            ...membership,
+            displayName: self.name,
+            aggregateVersion: self.aggregateVersion,
+          },
+        }, normalizedHousehold);
         setSessionState('ready');
         if (endpointRegistrationGenerationRef.current !== sessionGeneration) {
           endpointRegistrationGenerationRef.current = sessionGeneration;
-          void activatePwaFidEndpoint().catch(() => {
-            // 알림 endpoint 등록 실패는 로그인과 가계부 사용을 막지 않습니다.
-            // 설정 화면에서 실제 서버 등록 상태와 재연결 동작을 제공합니다.
-          });
+          void import('@/platform/pwa/fidEndpointLifecycle')
+            .then(({ activatePwaFidEndpoint }) => activatePwaFidEndpoint())
+            .catch(() => {
+              // 알림 endpoint 등록 실패는 로그인과 가계부 사용을 막지 않습니다.
+              // 설정 화면에서 실제 서버 등록 상태와 재연결 동작을 제공합니다.
+            });
         }
       };
 
-      const cachedHousehold = await getCachedHousehold(membership.householdId);
-      if (cachedHousehold) applyHousehold(cachedHousehold);
+      // localStorage bootstrap snapshot은 IndexedDB 초기화도 기다리지 않고 동기식으로
+      // 화면을 엽니다. 실제 권한과 최신 값은 이어지는 Firestore read가 확정합니다.
+      const fastHousehold = readSignedInHouseholdCache(user.uid, membership.householdId);
+      if (fastHousehold) applyHousehold(fastHousehold);
+
+      const cachedHousehold = fastHousehold
+        ?? await getCachedHousehold(membership.householdId);
+      if (!fastHousehold && cachedHousehold) applyHousehold(cachedHousehold);
 
       try {
         const loadedHousehold = await withinDeadline(
@@ -276,6 +303,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       if (resolutionGeneration !== resolutionGenerationRef.current) return;
+      clearSignedInMembershipCache();
       clearResolvedSession();
       setSessionError(errorMessage(error));
       setSessionState('error');
@@ -285,16 +313,30 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let disposed = false;
     let androidBootstrapPending = isAndroidHostAvailable();
+    let androidBootstrapStarted = false;
+    let androidBootstrapFallbackId: number | undefined;
     let appliedAuthUid: string | null | undefined;
+    let appliedResolutionKey: string | undefined;
+    let restoredFromCache = false;
+
+    const resolutionKey = (resolution?: SignedInUserResolution): string | undefined =>
+      resolution?.kind === 'membership-found'
+        ? `${resolution.membership.householdId}\u0000${resolution.membership.memberId}`
+        : resolution?.kind;
 
     const applyUser = (
       user: User | null,
-      prefetchedResolution?: AndroidSignedInUserResolution
+      prefetchedResolution?: SignedInUserResolution
     ) => {
       if (disposed) return;
       const nextUid = user?.uid ?? null;
-      if (appliedAuthUid === nextUid) return;
+      const nextResolutionKey = resolutionKey(prefetchedResolution);
+      if (
+        appliedAuthUid === nextUid
+        && (nextResolutionKey === undefined || appliedResolutionKey === nextResolutionKey)
+      ) return;
       appliedAuthUid = nextUid;
+      appliedResolutionKey = nextResolutionKey;
       activeUserRef.current = user;
       if (!user) {
         resolutionGenerationRef.current += 1;
@@ -316,20 +358,23 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       );
     };
 
-    const unsubscribe = onAuthChange((user) => {
-      // Android는 native Firebase 세션이 권위입니다. WebView의 빈/오래된
-      // persistence callback보다 native custom-token 교환을 먼저 완료합니다.
-      if (androidBootstrapPending) return;
-      applyUser(user);
-    });
-
-    if (androidBootstrapPending) {
+    const startAndroidBootstrap = () => {
+      if (disposed || !androidBootstrapPending || androidBootstrapStarted) return;
+      androidBootstrapStarted = true;
       void withinDeadline(
         restoreAndroidHostAuth(),
         AUTH_BOOTSTRAP_TIMEOUT_MS,
         'ANDROID_AUTH_BOOTSTRAP_TIMEOUT'
       ).then((session) => {
         androidBootstrapPending = false;
+        if (session?.signedInUserResolution?.kind === 'membership-found') {
+          writeSignedInMembershipCache(
+            session.user.uid,
+            session.signedInUserResolution
+          );
+        } else if (session?.signedInUserResolution?.kind === 'first-visit-required') {
+          clearSignedInMembershipCache();
+        }
         applyUser(
           session?.user ?? null,
           session?.signedInUserResolution
@@ -337,14 +382,44 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       }).catch((error) => {
         androidBootstrapPending = false;
         if (disposed) return;
+        if (restoredFromCache) return;
         clearResolvedSession();
         setSessionError(errorMessage(error));
         setSessionState('error');
       });
+    };
+
+    const unsubscribe = onAuthChange((user) => {
+      const cachedResolution = user
+        ? readSignedInMembershipCache(user.uid)
+        : undefined;
+      if (androidBootstrapPending) {
+        // 영속 Web Auth가 복원되면 매 실행마다 Native custom-token을 다시
+        // 발급하지 않습니다. Firebase SDK의 token refresh와 서버 rules가 실제
+        // read/write 권한을 계속 검증합니다.
+        if (user && !androidBootstrapStarted) {
+          androidBootstrapPending = false;
+          restoredFromCache = cachedResolution !== undefined;
+          applyUser(user, cachedResolution);
+        } else if (!user) {
+          startAndroidBootstrap();
+        }
+        return;
+      }
+      applyUser(user, cachedResolution);
+    });
+
+    if (androidBootstrapPending) {
+      // Firebase auth observer는 persistence 복원 후 반드시 한 번 호출됩니다.
+      // 비정상적으로 지연될 때만 Native 경로를 fallback으로 시작합니다.
+      androidBootstrapFallbackId = window.setTimeout(startAndroidBootstrap, 500);
     }
 
     return () => {
       disposed = true;
+      if (androidBootstrapFallbackId !== undefined) {
+        window.clearTimeout(androidBootstrapFallbackId);
+      }
       unsubscribe();
     };
   }, [clearResolvedSession, restoreAdministratorHouseholdView, restoreSignedInUser]);
@@ -444,6 +519,9 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     let logoutError: unknown;
     try {
+      const { removePwaFidEndpointForLogout } = await import(
+        '@/platform/pwa/fidEndpointLifecycle'
+      );
       await removePwaFidEndpointForLogout();
     } catch {
       // 원격 endpoint 정리는 다음 로그인 binding 교체로 수렴시킵니다.
@@ -459,6 +537,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       clearResolvedSession();
       clearLegacySessionCandidate();
       clearAdminHouseholdViewSelection();
+      clearSignedInMembershipCache();
       setLegacyCandidate(null);
       setSessionError(null);
       setSessionState('signed-out');

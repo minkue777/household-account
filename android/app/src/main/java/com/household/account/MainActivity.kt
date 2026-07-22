@@ -166,9 +166,9 @@ class MainActivity : AppCompatActivity() {
         webView.visibility = View.VISIBLE
 
         if (webView.url == null) {
-            // 이미 인증된 사용자의 서버 session 발급을 page 다운로드·hydration과
-            // 병렬 실행합니다. currentUser가 없으면 로그인 UI를 열지 않습니다.
-            hostBridge.prewarmSignedInSession(lifecycleScope)
+            // WebView Firebase Auth가 남아 있으면 그 세션을 즉시 재사용합니다.
+            // 세션이 없는 경우에만 Web이 Native bridge에 교환을 요청하므로 앱을
+            // 열 때마다 Cloud Function을 선행 호출하지 않습니다.
             webView.loadUrl(TrustedWebOrigin.APP_URL)
         }
 

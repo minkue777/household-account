@@ -14,7 +14,8 @@ export class PortfolioOptimisticProjection {
   subscribe(callback: (assets: Asset[]) => void, householdId?: string) {
     return this.projection.subscribe(
       callback,
-      householdId === undefined ? undefined : (asset) => asset.householdId === householdId
+      householdId === undefined ? undefined : (asset) => asset.householdId === householdId,
+      householdId === undefined ? undefined : `assets:${householdId}`
     );
   }
 

@@ -2,16 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import Calendar from '@/components/Calendar';
 import CategorySummary from '@/components/CategorySummary';
-import { ExpenseDetail, AddExpenseModal, IncomeSummaryModal } from '@/components/expense';
-import { SearchModal } from '@/components/search';
 import { Expense, Category, TransactionType } from '@/types/expense';
 import { DEFAULT_HOME_SUMMARY_CONFIG } from '@/types/household';
 import BalanceCards from '@/components/BalanceCards';
 import HomeHeader from '@/components/HomeHeader';
-import CategoryDetailModal from '@/components/CategoryDetailModal';
-import LocalCurrencyModal from '@/components/LocalCurrencyModal';
 import {
   subscribeToMonthlyExpenses,
   subscribeToDateRangeExpenses,
@@ -26,6 +23,13 @@ import {
 } from '@/lib/expenseService';
 import { addMerchantRule } from '@/lib/merchantRuleService';
 import { useHousehold } from '@/contexts/HouseholdContext';
+
+const ExpenseDetail = dynamic(() => import('@/components/expense/ExpenseDetail'));
+const AddExpenseModal = dynamic(() => import('@/components/expense/AddExpenseModal'));
+const IncomeSummaryModal = dynamic(() => import('@/components/expense/IncomeSummaryModal'));
+const SearchModal = dynamic(() => import('@/components/search/SearchModal'));
+const CategoryDetailModal = dynamic(() => import('@/components/CategoryDetailModal'));
+const LocalCurrencyModal = dynamic(() => import('@/components/LocalCurrencyModal'));
 
 interface LedgerPageProps {
   transactionType: TransactionType;
@@ -287,22 +291,26 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
           transactionType={transactionType}
         />
 
-        <AddExpenseModal
-          isOpen={showAddModal}
-          onClose={() => setShowAddModal(false)}
-          onAdd={handleAddExpense}
-          selectedDate={selectedDate}
-          transactionType={transactionType}
-        />
+        {showAddModal && (
+          <AddExpenseModal
+            isOpen={true}
+            onClose={() => setShowAddModal(false)}
+            onAdd={handleAddExpense}
+            selectedDate={selectedDate}
+            transactionType={transactionType}
+          />
+        )}
 
-        <SearchModal
-          isOpen={showSearchModal}
-          onClose={() => setShowSearchModal(false)}
-          onExpenseUpdate={handleExpenseUpdate}
-          onDelete={handleDeleteExpense}
-          onSplitExpense={handleSplitExpense}
-          transactionType={transactionType}
-        />
+        {showSearchModal && (
+          <SearchModal
+            isOpen={true}
+            onClose={() => setShowSearchModal(false)}
+            onExpenseUpdate={handleExpenseUpdate}
+            onDelete={handleDeleteExpense}
+            onSplitExpense={handleSplitExpense}
+            transactionType={transactionType}
+          />
+        )}
 
         <BalanceCards
           currentYear={currentYear}

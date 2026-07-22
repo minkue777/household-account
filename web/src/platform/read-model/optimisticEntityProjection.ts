@@ -37,6 +37,7 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
   private nextSubscriptionId = 1;
   private readonly subscriptions = new Map<number, ProjectionSubscription<Entity>>();
   private readonly pending = new Map<string, PendingMutation<Entity>>();
+  private readonly retainedSnapshots = new Map<string, Entity[]>();
 
   constructor(
     private readonly prefix: string,
@@ -45,21 +46,29 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
 
   subscribe(
     callback: (entities: Entity[]) => void,
-    accept: (entity: Entity) => boolean = () => true
+    accept: (entity: Entity) => boolean = () => true,
+    retentionKey?: string
   ): OptimisticProjectionSubscription<Entity> {
     const subscriptionId = this.nextSubscriptionId++;
+    const retained = retentionKey === undefined
+      ? undefined
+      : this.retainedSnapshots.get(retentionKey);
     this.subscriptions.set(subscriptionId, {
-      base: [],
-      hasPublished: false,
+      base: retained === undefined ? [] : [...retained],
+      hasPublished: retained !== undefined,
       revision: 0,
       accept,
       callback,
     });
+    if (retained !== undefined) this.emitAll();
     return {
       publish: (entities) => {
         const subscription = this.subscriptions.get(subscriptionId);
         if (!subscription) return;
         subscription.base = [...entities];
+        if (retentionKey !== undefined) {
+          this.retainedSnapshots.set(retentionKey, [...entities]);
+        }
         subscription.hasPublished = true;
         subscription.revision += 1;
         this.reconcile();
@@ -133,6 +142,7 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
   reset(): void {
     this.pending.clear();
     this.subscriptions.clear();
+    this.retainedSnapshots.clear();
     this.nextSubscriptionId = 1;
   }
 

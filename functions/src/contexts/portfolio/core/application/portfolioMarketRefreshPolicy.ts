@@ -8,6 +8,7 @@ import type {
   PortfolioRuntimePosition,
   PortfolioRuntimeState,
 } from "./ports/out/portfolioRuntimeStorePort";
+import { isKrxGoldSpotCode } from "../../holdings/public";
 
 function targetKeyForPosition(position: PortfolioRuntimePosition): string {
   return `position:${position.positionId}`;
@@ -130,7 +131,14 @@ function providerRoutes(target: PortfolioMarketTarget): readonly {
 }[] {
   switch (target.market) {
     case "KRX":
-      return [{ provider: "naver-domestic", operation: "market-quote" }];
+      return [
+        {
+          provider: isKrxGoldSpotCode(target.instrumentCode)
+            ? "naver-krx-gold-market"
+            : "naver-domestic",
+          operation: "market-quote",
+        },
+      ];
     case "US":
       return [
         { provider: "nasdaq-us", operation: "market-quote" },

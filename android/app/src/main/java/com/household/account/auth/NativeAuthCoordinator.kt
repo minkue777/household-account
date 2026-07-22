@@ -19,7 +19,6 @@ import com.household.account.session.NativeMembershipResolver
 import com.household.account.util.FidEndpointManager
 import com.household.account.util.HouseholdPreferences
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.tasks.await
 
 sealed interface NativeAuthResult {
@@ -41,19 +40,8 @@ class NativeAuthCoordinator(
 ) {
     @Volatile
     private var bootstrappedMembership: NativeMembershipResolution.Ready? = null
-    private val sessionPrewarmer = SingleUseSessionPrewarmer<NativeAuthResult>()
-
-    /**
-     * 이미 복원된 Native Firebase principal만 세션 교환을 미리 시작합니다.
-     * currentUser가 없으면 Credential Manager를 열지 않고 아무 일도 하지 않습니다.
-     */
-    fun prewarmSignedInSession(scope: CoroutineScope) {
-        if (firebaseAuth.currentUser == null) return
-        sessionPrewarmer.prepare(scope) { exchangeCurrentSignedInSession() }
-    }
-
     suspend fun signIn(): NativeAuthResult {
-        return sessionPrewarmer.consumeOr { signInAndExchange() }
+        return signInAndExchange()
     }
 
     private suspend fun signInAndExchange(): NativeAuthResult {
@@ -139,8 +127,6 @@ class NativeAuthCoordinator(
         val context = activity.applicationContext
         val householdId = HouseholdPreferences.getHouseholdKey(context)
         val memberId = HouseholdPreferences.getMemberId(context)
-        sessionPrewarmer.clear()
-
         // 원격 endpoint 삭제가 실패해도 FcmService component를 먼저 끄고 로컬
         // unregister를 별도로 시도하여 로그아웃 설치의 OS 자동 표시 경로를 닫습니다.
         try {

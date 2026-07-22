@@ -1,7 +1,7 @@
 jest.mock('firebase/auth', () => ({
   getAuth: jest.fn(() => ({ runtime: 'default-auth' })),
-  initializeAuth: jest.fn(() => ({ runtime: 'android-memory-auth' })),
-  inMemoryPersistence: { type: 'NONE' },
+  initializeAuth: jest.fn(() => ({ runtime: 'android-persistent-auth' })),
+  browserLocalPersistence: { type: 'LOCAL' },
   signInWithPopup: jest.fn(),
   signInWithCustomToken: jest.fn(),
   GoogleAuthProvider: jest.fn(),
@@ -24,7 +24,7 @@ import { requestAndroidHost } from '@/platform/android-host/androidHostBridge';
 import { logOut, restoreAndroidHostAuth } from '@/lib/authService';
 
 describe('Android WebView auth bootstrap contract', () => {
-  it('native 세션을 custom token으로 교환하고 WebView에는 메모리 persistence를 사용한다', async () => {
+  it('native 세션을 custom token으로 교환하고 다음 실행을 위해 WebView 세션을 영속화한다', async () => {
     const user = { uid: 'uid-1' };
     const signedInUserResolution = {
       kind: 'membership-found' as const,
@@ -51,12 +51,12 @@ describe('Android WebView auth bootstrap contract', () => {
 
     expect(initializeAuth).toHaveBeenCalledWith(
       { name: 'web-app' },
-      { persistence: { type: 'NONE' } }
+      { persistence: { type: 'LOCAL' } }
     );
     expect(getAuth).not.toHaveBeenCalled();
     expect(requestAndroidHost).toHaveBeenCalledWith('auth.sign-in', {});
     expect(signInWithCustomToken).toHaveBeenCalledWith(
-      { runtime: 'android-memory-auth' },
+      { runtime: 'android-persistent-auth' },
       'custom-token'
     );
   });
@@ -84,16 +84,16 @@ describe('Android WebView auth bootstrap contract', () => {
     await expect(restoreAndroidHostAuth()).rejects.toThrow(
       'Android 인증 세션과 Membership 해석 결과가 일치하지 않습니다.'
     );
-    expect(signOut).toHaveBeenCalledWith({ runtime: 'android-memory-auth' });
+    expect(signOut).toHaveBeenCalledWith({ runtime: 'android-persistent-auth' });
   });
 
-  it('Native endpoint 정리 실패와 무관하게 Web 메모리 인증을 제거한다', async () => {
+  it('Native endpoint 정리 실패와 무관하게 Web 영속 인증을 제거한다', async () => {
     jest.mocked(requestAndroidHost).mockRejectedValueOnce(new Error('endpoint unavailable'));
     jest.mocked(signOut).mockResolvedValueOnce(undefined);
 
     await expect(logOut()).rejects.toThrow('endpoint unavailable');
 
     expect(requestAndroidHost).toHaveBeenCalledWith('auth.sign-out', {});
-    expect(signOut).toHaveBeenCalledWith({ runtime: 'android-memory-auth' });
+    expect(signOut).toHaveBeenCalledWith({ runtime: 'android-persistent-auth' });
   });
 });

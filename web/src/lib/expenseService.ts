@@ -406,7 +406,8 @@ export function subscribeToMonthlyExpenses(
       expense.date >= startDate
       && expense.date <= endDate
       && matchesTransactionType(expense, transactionType),
-    householdId
+    householdId,
+    `transactions:${startDate}:${endDate}:${transactionType}`
   );
 
   // 동일한 공개 read model을 모든 Web runtime에서 실시간 구독합니다.
@@ -477,7 +478,8 @@ export function subscribeToDateRangeExpenses(
       expense.date >= startDate
       && expense.date <= endDate
       && matchesTransactionType(expense, transactionType),
-    householdId
+    householdId,
+    `transactions:${startDate}:${endDate}:${transactionType}`
   );
 
   const q = query(

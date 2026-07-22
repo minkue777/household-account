@@ -20,9 +20,10 @@ export class LedgerOptimisticProjection {
   subscribe(
     callback: (expenses: Expense[]) => void,
     accept: (expense: Expense) => boolean,
-    scope = 'default'
+    scope = 'default',
+    retentionKey?: string
   ) {
-    return this.projectionFor(scope).subscribe(callback, accept);
+    return this.projectionFor(scope).subscribe(callback, accept, retentionKey);
   }
 
   current(transactionId: string, scope = 'default'): Expense | undefined {

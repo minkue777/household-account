@@ -9,6 +9,7 @@ const mockInitializeFirestore = jest.fn(
 );
 const mockGetFirestore = jest.fn(() => ({ runtime: 'default-firestore' }));
 const mockPersistentSingleTabManager = jest.fn(() => mockTabManager);
+const mockPersistentMultipleTabManager = jest.fn(() => ({ kind: 'multiple-tab' }));
 const mockPersistentLocalCache = jest.fn(() => mockLocalCache);
 
 jest.mock('firebase/app', () => ({
@@ -19,15 +20,23 @@ jest.mock('firebase/app', () => ({
 jest.mock('firebase/firestore', () => ({
   initializeFirestore: mockInitializeFirestore,
   getFirestore: mockGetFirestore,
+  persistentMultipleTabManager: mockPersistentMultipleTabManager,
   persistentSingleTabManager: mockPersistentSingleTabManager,
   persistentLocalCache: mockPersistentLocalCache,
 }));
 
+let mockAndroidHostAvailable = true;
 jest.mock('@/platform/android-host/androidHostBridge', () => ({
-  isAndroidHostAvailable: () => true,
+  isAndroidHostAvailable: () => mockAndroidHostAvailable,
 }));
 
 describe('Android Firestore runtime 계약', () => {
+  beforeEach(() => {
+    jest.resetModules();
+    jest.clearAllMocks();
+    mockAndroidHostAvailable = true;
+  });
+
   it('[T-WEBVIEW-004][AND-012] 기본 realtime 전송을 유지하고 Android에만 single-tab persistent cache를 설정한다', async () => {
     await import('@/lib/firebase');
 
@@ -42,5 +51,22 @@ describe('Android Firestore runtime 계약', () => {
     expect(settings).not.toHaveProperty('experimentalForceLongPolling');
     expect(settings).not.toHaveProperty('experimentalAutoDetectLongPolling');
     expect(mockGetFirestore).not.toHaveBeenCalled();
+  });
+
+  it('[AND-012] 브라우저와 iPhone PWA도 multiple-tab persistent cache를 사용한다', async () => {
+    mockAndroidHostAvailable = false;
+    const multipleTabManager = { kind: 'multiple-tab' };
+    mockPersistentMultipleTabManager.mockReturnValue(multipleTabManager);
+
+    await import('@/lib/firebase');
+
+    expect(mockPersistentMultipleTabManager).toHaveBeenCalledTimes(1);
+    expect(mockPersistentSingleTabManager).not.toHaveBeenCalled();
+    expect(mockPersistentLocalCache).toHaveBeenCalledWith({
+      tabManager: multipleTabManager,
+    });
+    expect(mockInitializeFirestore).toHaveBeenCalledWith(mockApp, {
+      localCache: mockLocalCache,
+    });
   });
 });

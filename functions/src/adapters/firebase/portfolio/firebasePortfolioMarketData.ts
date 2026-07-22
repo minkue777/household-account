@@ -9,6 +9,7 @@ import type {
   SafeExternalTextHttpInputPort,
   SafeExternalTextHttpResult,
 } from "../../../platform/external-operations/application/ports/in/safeExternalTextHttpInputPort";
+import { isKrxGoldSpotCode } from "../../../contexts/portfolio/holdings/public";
 
 const NATIONAL_GROWTH_FUND_CODES = new Set([
   "FUND:K55301EW0012",
@@ -206,7 +207,9 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
   ): Promise<PortfolioMarketQuoteResult> {
     switch (target.market) {
       case "KRX":
-        return this.domesticStock(target.instrumentCode);
+        return isKrxGoldSpotCode(target.instrumentCode)
+          ? this.krxGoldSpot()
+          : this.domesticStock(target.instrumentCode);
       case "US":
         return this.usStock(target.instrumentCode);
       case "KOFIA_FUND":
@@ -295,6 +298,16 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
   }
 
   private async physicalGold(): Promise<PortfolioMarketQuoteResult> {
+    return this.goldMarketQuote(DON_TO_GRAM);
+  }
+
+  private async krxGoldSpot(): Promise<PortfolioMarketQuoteResult> {
+    return this.goldMarketQuote(1);
+  }
+
+  private async goldMarketQuote(
+    gramMultiplier: number,
+  ): Promise<PortfolioMarketQuoteResult> {
     const response = await this.http.execute({
       provider: "naver-krx-gold-market",
       operation: "market-quote",
@@ -311,7 +324,7 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
     return pricePerGram === undefined
       ? failure("MARKET_SCHEMA_CHANGED", false, "naver-krx-gold-market")
       : successQuote({
-          priceInWon: Math.round(pricePerGram * DON_TO_GRAM),
+          priceInWon: Math.round(pricePerGram * gramMultiplier),
           provider: "naver-krx-gold-market",
         });
   }
