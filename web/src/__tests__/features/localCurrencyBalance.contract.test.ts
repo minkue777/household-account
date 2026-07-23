@@ -82,7 +82,7 @@ describe('지역화폐 잔액 읽기 계약', () => {
     consoleError.mockRestore();
   });
 
-  it('권한이 없는 레거시 root가 아니라 가구 하위 canonical balance를 구독한다', () => {
+  it('[T-BAL-004][BAL-004] 권한이 없는 레거시 root가 아니라 가구 하위 canonical balance를 구독한다', () => {
     const callback = jest.fn();
     const unsubscribe = subscribeToLocalCurrencyBalance(callback);
 
@@ -112,7 +112,7 @@ describe('지역화폐 잔액 읽기 계약', () => {
     expect(unsubscribePreference).toHaveBeenCalledTimes(1);
   });
 
-  it('마지막 성공 잔액을 다음 구독에서 즉시 표시하고 일시 오류에는 지우지 않는다', () => {
+  it('[T-BAL-006][BAL-004] 마지막 성공 잔액을 다음 구독에서 즉시 표시하고 일시 오류에는 지우지 않는다', () => {
     const firstCallback = jest.fn();
     subscribeToLocalCurrencyBalance(firstCallback);
     listeners.get('balances')?.next({
@@ -134,7 +134,7 @@ describe('지역화폐 잔액 읽기 계약', () => {
     expect(nextCallback).not.toHaveBeenCalledWith(null);
   });
 
-  it('여러 지역화폐가 있으면 Home Preferences가 선택한 유형만 표시한다', () => {
+  it('[T-BAL-004][BAL-004] 여러 지역화폐가 있으면 Home Preferences가 선택한 유형만 표시한다', () => {
     const callback = jest.fn();
     subscribeToLocalCurrencyBalance(callback);
 

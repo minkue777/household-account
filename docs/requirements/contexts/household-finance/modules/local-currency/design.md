@@ -328,7 +328,7 @@ Android는 생성된 observation DTO만 공유하고 LocalCurrencyBalance Domain
 | BAL-001 | Consumer Contract·Application | BalanceObservation.v1 intake | Payment Capture가 생성한 경기·대전·세종 DTO, household 없음, 비정수·지원하지 않는 type/version·원문 혼입 | 검증된 정수/type DTO만 Balance·receipt·Event로 commit하며 parser 재실행 없음 | T-BAL-001; producer는 T-PARSE-001 |
 | BAL-002 | Policy·Repository·Emulator | BalanceIdentity/upsert | 없음·있음, 경기·대전·세종, 같은/다른 유형 동시 observation, legacy 중복 | 가구·유형 identity별 결정 문서 하나와 독립 최신값 | T-BAL-002, T-BAL-005, T-BAL-007 |
 | BAL-003 | Contract·Repository | persistence Mapper | currencyType 있음/누락, 양수·0·음수 정수, observed/updatedAt | 모든 필드와 정수 부호 보존, 누락 type은 legacy-unknown/지역화폐, 음수 전용 상태 없음 | T-BAL-003, T-BAL-007 |
-| BAL-004 | Read Contract·Client | GetBalance/SubscribeBalance | 선택 type, 유형 하나, 최신 변경, 선택 없음, NoData, listener/Repository 실패, 마지막 성공 캐시, 여러 문서 | Canonical 가구 하위 경로만 사용하고 캐시를 즉시 표시한 뒤 권위값으로 수렴하며 transient 오류에는 마지막 성공값을 보존 | T-BAL-004, T-BAL-006, T-BAL-009, T-BAL-010 |
+| BAL-004 | Read Contract·Client | GetBalance/SubscribeBalance | 선택 type, 유형 하나, 최신 변경, 선택 없음, NoData, listener/Repository 실패, 마지막 성공 캐시, 여러 문서 | Canonical 가구 하위 경로만 사용하고 캐시를 즉시 표시한 뒤 권위값으로 수렴하며 transient 오류에는 마지막 성공값을 보존 | T-BAL-004, T-BAL-006 |
 | BAL-005 | Application·Context Contract·Emulator | 독립 RecordBalanceObservation receipt와 branch 종단 fixture | balance-only, 거래 거부/실패+잔액 성공, 거래 성공+잔액 retry, 같은 key replay | 성공 branch rollback·재호출 없이 실패 branch만 재시도하고 version/Event 중복 없음 | T-BAL-008; coordinator는 T-ING-BAL-001 |
 
 `T-BAL-005`는 DEC-008의 유형별 identity를 Canonical 동작으로 검증합니다. household singleton 구현은 신규 Writer의 Conformance 대상에서 제외하고 migration fixture로만 검증합니다.

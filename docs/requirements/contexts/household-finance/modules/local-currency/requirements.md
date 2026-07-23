@@ -98,13 +98,11 @@ Android 알림의 package·title·body 판별과 경기·대전·세종 원문 p
 | T-BAL-001 | 목표 | Payment Capture가 생성한 경기·대전·세종 `BalanceObservation.v1`, 가구 scope 없음, 지원하지 않는 type/version·비정수 금액 / intake / 유효 DTO만 Balance·receipt·Event로 commit하고 원문은 받거나 재parse하지 않음 | BAL-001, T-PARSE-001 |
 | T-BAL-002 | 목표 | 같은 가구·같은 유형의 잔액 문서 없음·있음 / 저장 / 유형 identity 문서 생성·최신값 갱신 | BAL-002 |
 | T-BAL-003 | 호환 | 통화 유형이 없는 기존 잔액 문서와 부호 있는 정수 관찰값 / 저장·조회 / 누락 유형은 `legacy-unknown`·표시명 `지역화폐`로 읽고 특정 유형으로 추정하지 않으며, 금액은 음수 전용 보정·경고 없이 동일 정수로 유지 | BAL-003, DEC-044, DEC-057 |
-| T-BAL-004 | 현재 | 선택 유형의 최신 잔액 변경, 유형 하나, 여러 유형·선택 없음, 문서 없음 / Web Canonical 구독 / 선택 유형 또는 유일 유형의 read field를 반영하고 여러 유형의 임의 첫 문서를 표시하지 않음 | BAL-004 |
+| T-BAL-004 | 현재 | 선택 유형의 최신 잔액 변경, 유형 하나, 여러 유형·선택 없음, 문서 없음, 마지막 성공 캐시 / Web Canonical 구독 / 가구 하위 경로만 사용하고 선택 유형 또는 유일 유형을 반영하며 캐시를 즉시 표시한 뒤 권위값으로 교체 | BAL-004 |
 | T-BAL-005 | 목표 | 한 가구에 경기·대전·세종 잔액 알림 / 저장·유형별 조회 / 세 유형의 최신값을 독립 유지하고 서로 덮어쓰지 않음 | BAL-002, DEC-008 |
-| T-BAL-006 | 목표 | Balance Repository 조회 실패 / Web·Android 조회 / 잔액 없음과 구분되는 오류이며 Web은 transient 오류만으로 마지막 성공 표시값을 지우지 않음 | BAL-004 |
+| T-BAL-006 | 목표 | Balance Repository·listener 조회 실패 / Web·Android 조회 / 잔액 없음과 구분되는 오류이며 Web은 transient 오류만으로 마지막 성공 표시값을 지우지 않음 | BAL-004 |
 | T-BAL-007 | 목표 | 같은 가구·통화 잔액을 동시에 두 번 upsert / 저장 / 유일 문서 하나에 마지막 정책의 값 반영 | BAL-002, BAL-003 |
 | T-BAL-008 | 목표 | balance-only, 거래 거부·실패+유효 잔액, 거래 성공+잔액 retry, terminal observation 재생 / Payment Capture branch coordinator와 RecordBalanceObservation / 성공 branch rollback·재호출 없이 실패 branch만 같은 key로 재시도하고 Balance version·Event 중복 증가 없음 | BAL-005, ING-009, T-ING-BAL-001 |
-| T-BAL-009 | 현재 | Firestore Rules가 최상위 Legacy `balances` 직접 읽기를 허용하지 않는 상태 / Web 구독 / `households/{householdId}/localCurrencyBalances`만 사용하고 Legacy root를 조회하지 않음 | BAL-004 |
-| T-BAL-010 | 현재 | 가구·사용자 범위의 마지막 성공값이 있는 재진입 / 첫 렌더와 권위 구독 / 캐시값을 즉시 표시하고 Canonical snapshot 도착 후 최신값으로 교체 | BAL-004 |
 
 ## 9. 코드 근거
 
