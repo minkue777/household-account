@@ -49,6 +49,7 @@ jest.mock('@/composition/clientSessionScope', () => ({
 }));
 
 import { subscribeToLocalCurrencyBalance } from '@/lib/balanceService';
+import { readLocalCurrencyBalanceSnapshot } from '@/features/local-currency/application/localCurrencyBalanceSnapshot';
 
 function balanceDocument(
   id: string,
@@ -106,6 +107,11 @@ describe('지역화폐 잔액 읽기 계약', () => {
       currencyType: 'gyeonggi',
       updatedAt: new Date('2026-07-23T08:02:15.234Z'),
     });
+    expect(readLocalCurrencyBalanceSnapshot('household-1')).toEqual({
+      balance: 1_153_429,
+      currencyType: 'gyeonggi',
+      updatedAt: new Date('2026-07-23T08:02:15.234Z'),
+    });
 
     unsubscribe();
     expect(unsubscribeBalances).toHaveBeenCalledTimes(1);
@@ -128,6 +134,9 @@ describe('지역화폐 잔액 읽기 계약', () => {
     listeners.get('balances')?.error(new Error('temporarily unavailable'));
     listeners.get('preference')?.error(new Error('temporarily unavailable'));
     expect(callback).toHaveBeenCalledTimes(1);
+    expect(readLocalCurrencyBalanceSnapshot('household-1')).toEqual(
+      expect.objectContaining({ balance: 1_153_429 })
+    );
   });
 
   it('[T-BAL-004][BAL-004] 여러 지역화폐가 있으면 Home Preferences가 선택한 유형만 표시한다', () => {

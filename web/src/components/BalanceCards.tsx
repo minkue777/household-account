@@ -1,9 +1,10 @@
 'use client';
 
-import { ComponentType, useEffect, useMemo, useState } from 'react';
+import { ComponentType, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Calendar, CalendarDays, CircleDollarSign, CreditCard, Wallet } from 'lucide-react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
+import { readLocalCurrencyBalanceSnapshot } from '@/features/local-currency/application/localCurrencyBalanceSnapshot';
 import type { LocalCurrencyBalance } from '@/lib/balanceService';
 import { Expense, TransactionType } from '@/types/expense';
 import { HomeSummaryCardKey, HomeSummaryConfig } from '@/types/household';
@@ -46,7 +47,9 @@ export default function BalanceCards({
   const isIncome = transactionType === 'income';
   const { activeCategories } = useCategoryContext();
   const { householdKey } = useHousehold();
-  const [localCurrencyBalance, setLocalCurrencyBalance] = useState<LocalCurrencyBalance | null>(null);
+  const [localCurrencyBalance, setLocalCurrencyBalance] = useState<LocalCurrencyBalance | null>(
+    () => householdKey ? readLocalCurrencyBalanceSnapshot(householdKey) : null
+  );
 
   const needsLocalCurrencyBalance = useMemo(() => {
     if (isIncome) {
@@ -58,6 +61,12 @@ export default function BalanceCards({
       summaryConfig.rightCard === 'localCurrencyBalance'
     );
   }, [isIncome, summaryConfig.leftCard, summaryConfig.rightCard]);
+
+  useLayoutEffect(() => {
+    setLocalCurrencyBalance(
+      householdKey ? readLocalCurrencyBalanceSnapshot(householdKey) : null
+    );
+  }, [householdKey]);
 
   useEffect(() => {
     if (!needsLocalCurrencyBalance || !householdKey) {
