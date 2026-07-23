@@ -23,6 +23,8 @@ import com.household.account.data.CategoryData
 import com.household.account.data.CategoryRepository
 import com.household.account.ledger.HouseholdCommandEnvelopeV1
 import com.household.account.ledger.HouseholdCommandKind
+import com.household.account.paymentcapture.AndroidCaptureLatencyTelemetry
+import com.household.account.paymentcapture.CaptureLatencyStage
 import com.household.account.quickedit.QuickEditCommandDelivery
 import com.household.account.quickedit.QuickEditCommandEnqueueResult
 import com.household.account.quickedit.QuickEditCoordinator
@@ -52,11 +54,14 @@ class QuickEditActivity : AppCompatActivity() {
         const val EXTRA_CATEGORY = "category"
         const val EXTRA_MEMO = "memo"
         const val EXTRA_VERSION = "aggregate_version"
+        const val EXTRA_CAPTURE_OBSERVATION_ID = "capture_observation_id"
     }
 
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val categoryRepository = CategoryRepository()
     private var commandSubmissionInProgress = false
+    private var captureObservationId: String? = null
+    private var quickEditShownRecorded = false
 
     // 원본 데이터
     private var expenseId: String = ""
@@ -96,6 +101,7 @@ class QuickEditActivity : AppCompatActivity() {
         originalCategory = intent.getStringExtra(EXTRA_CATEGORY) ?: "etc"
         originalMemo = intent.getStringExtra(EXTRA_MEMO) ?: ""
         originalVersion = intent.getIntExtra(EXTRA_VERSION, 1).coerceAtLeast(1)
+        captureObservationId = intent.getStringExtra(EXTRA_CAPTURE_OBSERVATION_ID)
 
         // 카테고리 키 정규화 (대문자 -> 소문자)
         selectedCategoryKey = originalCategory.lowercase()
@@ -113,6 +119,17 @@ class QuickEditActivity : AppCompatActivity() {
                     dismissCurrentQuickEdit()
                 }
             }
+        )
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus || quickEditShownRecorded) return
+        val observationId = captureObservationId ?: return
+        quickEditShownRecorded = true
+        AndroidCaptureLatencyTelemetry.mark(
+            observationId = observationId,
+            stage = CaptureLatencyStage.QUICK_EDIT_SHOWN
         )
     }
 

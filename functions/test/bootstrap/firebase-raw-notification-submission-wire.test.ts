@@ -1,11 +1,19 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import type { CaptureMembershipResolver } from "../../src/adapters/firebase/payment-capture/firebaseCaptureMembershipResolver";
 import {
   CaptureCallableRejection,
+  correlationIdForAndroidRawNotificationRequest,
   createAndroidRawNotificationCallableHandler,
 } from "../../src/bootstrap/firebaseCaptureSubmission";
 import type { AndroidRawNotificationSubmissionInputPort } from "../../src/contexts/payment-capture/android-payment-ingestion/application/ports/in/androidRawNotificationSubmissionInputPort";
+import {
+  setCurrentInteractiveLatencyOperation,
+  startInteractiveLatencyInvocation,
+  type InteractiveLatencyLogEntry,
+} from "../../src/observability/interactiveLatency";
 
 function membership(): CaptureMembershipResolver {
   return {
@@ -69,6 +77,73 @@ describe("submitAndroidRawNotification callable wire", () => {
         capabilities: ["paymentCapture:submit"],
       },
     });
+  });
+
+  it("membership과 handler 지연을 raw notification correlation으로 계측한다", async () => {
+    const entries: InteractiveLatencyLogEntry[] = [];
+    const correlationId =
+      correlationIdForAndroidRawNotificationRequest(raw());
+    const latency = startInteractiveLatencyInvocation(
+      "submitAndroidRawNotification",
+      {
+        correlationId,
+        sink: { write: (entry) => entries.push(entry) },
+      },
+    );
+    const handler = createAndroidRawNotificationCallableHandler({
+      memberships: membership(),
+      submissions: {
+        submit: async (command) => ({
+          kind: "success",
+          value: {
+            observationId: command.input.observationId,
+            completion: "terminal",
+          },
+        }),
+      },
+    });
+
+    await latency.run(async () => {
+      setCurrentInteractiveLatencyOperation(
+        "payment-capture.submit-android-raw-notification.v1",
+      );
+      await handler.handle({ principalUid: "firebase-uid", data: raw() });
+      latency.complete("succeeded");
+    });
+
+    expect(entries.map((entry) => entry.stage)).toEqual([
+      "capture-membership",
+      "handler",
+      "total",
+    ]);
+    expect(
+      new Set(entries.map((entry) => entry.correlationId)),
+    ).toEqual(new Set([correlationId]));
+    expect(correlationId).toBe(
+      createHash("sha256")
+        .update(raw().observationId, "utf8")
+        .digest("hex")
+        .slice(0, 16),
+    );
+    expect(JSON.stringify(entries)).not.toContain(raw().observationId);
+  });
+
+  it("검증 가능한 opaque observationId만 correlation hash로 사용한다", () => {
+    expect(
+      correlationIdForAndroidRawNotificationRequest({
+        observationId: "observation.android.valid-1",
+      }),
+    ).toMatch(/^[a-f0-9]{16}$/u);
+    expect(
+      correlationIdForAndroidRawNotificationRequest({
+        observationId: "사용자 이름이 포함된 값",
+      }),
+    ).toBeUndefined();
+    expect(
+      correlationIdForAndroidRawNotificationRequest({
+        observationId: "x".repeat(129),
+      }),
+    ).toBeUndefined();
   });
 
   it("비인증 요청은 payload를 해석하기 전에 거부한다", async () => {

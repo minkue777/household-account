@@ -79,6 +79,25 @@ class QuickEditPendingQueueTest {
         assertEquals(2L, store.state.nextSequence)
     }
 
+    @Test
+    fun `observation id is retained when an existing entry is enriched`() = runTest {
+        val store = MemoryStore()
+        val queue = QuickEditPendingQueue(store)
+
+        queue.enqueue(scope, "transaction-a")
+        queue.enqueue(
+            scope = scope,
+            transactionId = "transaction-a",
+            observationId = "observation.android.queue"
+        )
+
+        assertEquals(
+            "observation.android.queue",
+            queue.acquireHead(scope)?.observationId
+        )
+        assertEquals(1, store.state.entries.size)
+    }
+
     private fun snapshot(transactionId: String) = CaptureQuickEditSnapshot(
         transactionId = transactionId,
         merchant = "가맹점",

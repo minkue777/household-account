@@ -13,6 +13,10 @@ import type {
   HouseholdCommandReceiptClaim,
   HouseholdCommandReceiptPort,
 } from "../../src/bootstrap/commands/householdCommandPorts";
+import {
+  startInteractiveLatencyInvocation,
+  type InteractiveLatencyLogEntry,
+} from "../../src/observability/interactiveLatency";
 
 class ReceiptMemory implements HouseholdCommandReceiptPort {
   claimCount = 0;
@@ -258,5 +262,39 @@ describe("Household command bootstrap boundary", () => {
       replayed: true,
       data: { kind: "invitation-already-issued" },
     });
+  });
+
+  it("actor, receipt, handler 단계를 요청 데이터 없이 구조화 계측한다", async () => {
+    const fixture = subject();
+    const entries: InteractiveLatencyLogEntry[] = [];
+    const latency = startInteractiveLatencyInvocation(
+      "executeHouseholdCommand",
+      { sink: { write: (entry) => entries.push(entry) } },
+    );
+
+    const result = await latency.run(() =>
+      fixture.router.execute({
+        principalUid: "uid-a",
+        request: fixture.request,
+        requestedAt: "2026-07-21T09:00:00+09:00",
+      }),
+    );
+    latency.complete(result.kind === "success" ? "succeeded" : "rejected");
+
+    expect(entries.map((entry) => entry.stage)).toEqual([
+      "actor-membership",
+      "command-receipt-claim",
+      "handler",
+      "command-receipt-complete",
+      "total",
+    ]);
+    expect(
+      new Set(entries.map((entry) => entry.operation)),
+    ).toEqual(new Set(["ledger.record-manual-transaction.v1"]));
+    const serialized = JSON.stringify(entries);
+    expect(serialized).not.toContain("uid-a");
+    expect(serialized).not.toContain("household-a");
+    expect(serialized).not.toContain("command-a");
+    expect(serialized).not.toContain("amountInWon");
   });
 });

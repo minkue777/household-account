@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { ChartPie } from 'lucide-react';
@@ -22,7 +22,12 @@ import {
 import { assetOwnerProfiles } from '@/features/access-household/application/assetOwnerProfiles';
 import type { AssetOwnerProfileView } from '@/features/access-household/domain/assetOwnerProfile';
 import { getAssetOwnerProfileQueries } from '@/composition/assetOwnerProfileReadRuntime';
-import { warmStockInstrumentCatalog } from '@/composition/stockInstrumentCatalogRuntime';
+import {
+  readAssetOwnerProfileSnapshot,
+  readAssetSnapshot,
+  writeAssetOwnerProfileSnapshot,
+  writeAssetSnapshot,
+} from '@/features/portfolio/application/portfolioReadSnapshot';
 
 const AssetAddModal = dynamic(() => import('@/components/assets/AssetAddModal'));
 const AssetEditModal = dynamic(() => import('@/components/assets/AssetEditModal'));
@@ -50,6 +55,7 @@ export default function AssetsPage() {
   const [selectedMember, setSelectedMember] = useState<string>(ALL_MEMBERS_OPTION);
   const [ownerProfiles, setOwnerProfiles] = useState<AssetOwnerProfileView[]>([]);
   const didScheduleMarketRefresh = useRef(false);
+  const cachedAssetsRef = useRef<Asset[] | undefined>(undefined);
 
   const memberOptions = useMemo(
     () => [
@@ -88,21 +94,75 @@ export default function AssetsPage() {
     }
   };
 
+  useLayoutEffect(() => {
+    const householdId = household?.id;
+    if (!householdId) {
+      cachedAssetsRef.current = undefined;
+      return;
+    }
+    const cachedAssets = readAssetSnapshot(householdId);
+    const cachedProfiles = readAssetOwnerProfileSnapshot(householdId);
+    cachedAssetsRef.current = cachedAssets;
+    if (cachedAssets !== undefined) {
+      setAssets(cachedAssets);
+      setIsLoading(false);
+    } else {
+      setAssets([]);
+      setIsLoading(true);
+    }
+    if (cachedProfiles !== undefined) {
+      setOwnerProfiles(cachedProfiles);
+    } else {
+      setOwnerProfiles([]);
+    }
+  }, [household?.id]);
+
   useEffect(() => {
-    void warmStockInstrumentCatalog().catch((error) =>
-      console.error('종목 카탈로그 준비 오류:', error)
-    );
+    let cancelled = false;
+    let frameId: number | undefined;
+    let delayId: number | undefined;
+    let fallbackId: number | undefined;
+    let started = false;
+
+    const warm = () => {
+      if (cancelled || started) return;
+      started = true;
+      if (frameId !== undefined) window.cancelAnimationFrame(frameId);
+      if (delayId !== undefined) window.clearTimeout(delayId);
+      if (fallbackId !== undefined) window.clearTimeout(fallbackId);
+      void import('@/composition/stockInstrumentCatalogRuntime')
+        .then(({ warmStockInstrumentCatalog }) => warmStockInstrumentCatalog())
+        .catch((error) => console.error('종목 카탈로그 준비 오류:', error));
+    };
+
+    if (typeof window.requestAnimationFrame === 'function') {
+      frameId = window.requestAnimationFrame(() => {
+        frameId = undefined;
+        delayId = window.setTimeout(warm, 0);
+      });
+      fallbackId = window.setTimeout(warm, 1_000);
+    } else {
+      delayId = window.setTimeout(warm, 0);
+    }
+
+    return () => {
+      cancelled = true;
+      if (frameId !== undefined) window.cancelAnimationFrame(frameId);
+      if (delayId !== undefined) window.clearTimeout(delayId);
+      if (fallbackId !== undefined) window.clearTimeout(fallbackId);
+    };
   }, []);
 
   useEffect(() => {
-    setIsLoading(true);
-    if (!isSessionVerified) return undefined;
+    if (!isSessionVerified || !household?.id) return undefined;
+    if (cachedAssetsRef.current === undefined) setIsLoading(true);
     const unsubscribe = subscribeToAssets((newAssets) => {
       setAssets(newAssets);
       setIsLoading(false);
-    });
+      if (household?.id) writeAssetSnapshot(household.id, newAssets);
+    }, cachedAssetsRef.current);
     return () => unsubscribe();
-  }, [isSessionVerified]);
+  }, [household?.id, isSessionVerified]);
 
   useEffect(() => {
     if (isLoading || adminHouseholdView !== null || didScheduleMarketRefresh.current) return;
@@ -138,7 +198,10 @@ export default function AssetsPage() {
     }
     return getAssetOwnerProfileQueries().subscribeActive(
       householdId,
-      setOwnerProfiles,
+      (profiles) => {
+        setOwnerProfiles(profiles);
+        writeAssetOwnerProfileSnapshot(householdId, profiles);
+      },
       (error) => console.error('자산 명의자 구독 오류:', error)
     );
   }, [household?.id, isSessionVerified]);

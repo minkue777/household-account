@@ -273,10 +273,14 @@ export async function deleteAsset(id: string, expectedVersion: number): Promise<
  * 자산 목록 실시간 구독
  */
 export function subscribeToAssets(
-  callback: (assets: Asset[]) => void
+  callback: (assets: Asset[]) => void,
+  initialAssets?: readonly Asset[]
 ): () => void {
   const householdId = getHouseholdId();
   const projection = portfolioOptimisticProjection.subscribe(callback, householdId);
+  if (initialAssets !== undefined) {
+    projection.publish(initialAssets);
+  }
 
   const q = query(
     collection(db, ASSETS_COLLECTION),
@@ -296,7 +300,9 @@ export function subscribeToAssets(
     },
     (error) => {
       console.error('자산 구독 오류:', error);
-      projection.publish([]);
+      if (initialAssets === undefined) {
+        projection.publish([]);
+      }
     }
   );
 

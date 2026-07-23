@@ -29,17 +29,17 @@ class QuickEditPendingQueueJsonCodecTest {
                     transactionId = "transaction-1",
                     sequence = 1L,
                     enqueuedAtEpochMillis = 100L,
-                    snapshot = snapshot
+                    snapshot = snapshot,
+                    observationId = "observation.android.codec"
                 )
             )
         )
 
-        assertEquals(
-            snapshot,
-            QuickEditPendingQueueJsonCodec.decode(
-                QuickEditPendingQueueJsonCodec.encode(state)
-            ).entries.single().snapshot
-        )
+        val decoded = QuickEditPendingQueueJsonCodec.decode(
+            QuickEditPendingQueueJsonCodec.encode(state)
+        ).entries.single()
+        assertEquals(snapshot, decoded.snapshot)
+        assertEquals("observation.android.codec", decoded.observationId)
     }
 
     @Test
@@ -63,5 +63,6 @@ class QuickEditPendingQueueJsonCodecTest {
 
         assertEquals("transaction-1", entry.transactionId)
         assertNull(entry.snapshot)
+        assertNull(entry.observationId)
     }
 }

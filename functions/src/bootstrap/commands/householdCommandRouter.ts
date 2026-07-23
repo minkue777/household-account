@@ -14,6 +14,10 @@ import type {
   HouseholdCommandMembershipPort,
   HouseholdCommandReceiptPort,
 } from "./householdCommandPorts";
+import {
+  measureCurrentInteractiveLatency,
+  setCurrentInteractiveLatencyOperation,
+} from "../../observability/interactiveLatency";
 
 const TENANTLESS_COMMANDS = new Set([
   "access.resolve-signed-in-user.v1",
@@ -168,6 +172,7 @@ export function createHouseholdCommandRouter(input: {
       if (!nonEmptyString(request.principalUid, 256)) {
         return error("AUTH_REQUIRED");
       }
+      const principalUid = request.principalUid.trim();
       const parsed = parseEnvelope(request.request);
       if ("kind" in parsed) return parsed;
 
@@ -185,23 +190,29 @@ export function createHouseholdCommandRouter(input: {
       if (handler === undefined) {
         return error("COMMAND_NOT_AVAILABLE", { commandId: parsed.commandId });
       }
+      setCurrentInteractiveLatencyOperation(parsed.command);
 
       const requiresAdministrator = ADMINISTRATOR_COMMANDS.has(parsed.command);
       if (
         requiresAdministrator &&
         (request.administrator === undefined ||
-          request.administrator.principalRef !== request.principalUid.trim())
+          request.administrator.principalRef !== principalUid)
       ) {
         return error("HOUSEHOLD_FORBIDDEN", { commandId: parsed.commandId });
       }
 
+      const householdId = parsed.householdId;
       const actor =
-        parsed.householdId === undefined || requiresAdministrator
+        householdId === undefined || requiresAdministrator
           ? undefined
-          : await input.memberships.resolveActor({
-              principalUid: request.principalUid.trim(),
-              householdId: parsed.householdId,
-            });
+          : await measureCurrentInteractiveLatency(
+              "actor-membership",
+              () =>
+                input.memberships.resolveActor({
+                  principalUid,
+                  householdId,
+                }),
+            );
       if (actor?.kind === "forbidden") {
         return error("HOUSEHOLD_FORBIDDEN", { commandId: parsed.commandId });
       }
@@ -211,11 +222,13 @@ export function createHouseholdCommandRouter(input: {
 
       if (RECEIPTLESS_READ_COMMANDS.has(parsed.command)) {
         try {
-          const data = await handler.execute({
-            envelope: parsed,
-            principalUid: request.principalUid.trim(),
-            requestedAt: request.requestedAt,
-          });
+          const data = await measureCurrentInteractiveLatency("handler", () =>
+            handler.execute({
+              envelope: parsed,
+              principalUid,
+              requestedAt: request.requestedAt,
+            }),
+          );
           return {
             kind: "success",
             commandId: parsed.commandId,
@@ -238,15 +251,19 @@ export function createHouseholdCommandRouter(input: {
 
       const payloadHash = input.hashes.hash(canonicalJson(parsed));
       const receiptId = input.hashes.hash(
-        `${request.principalUid.trim()}\u0000${parsed.idempotencyKey}`,
+        `${principalUid}\u0000${parsed.idempotencyKey}`,
       );
-      const claim = await input.receipts.claim({
-        receiptId,
-        principalUid: request.principalUid.trim(),
-        command: parsed.command,
-        payloadHash,
-        requestedAt: request.requestedAt,
-      });
+      const claim = await measureCurrentInteractiveLatency(
+        "command-receipt-claim",
+        () =>
+          input.receipts.claim({
+            receiptId,
+            principalUid,
+            command: parsed.command,
+            payloadHash,
+            requestedAt: request.requestedAt,
+          }),
+      );
       if (claim.kind === "payload-mismatch") {
         return error("IDEMPOTENCY_PAYLOAD_MISMATCH", {
           commandId: parsed.commandId,
@@ -265,29 +282,35 @@ export function createHouseholdCommandRouter(input: {
       }
 
       try {
-        const data = await handler.execute({
-          envelope: parsed,
-          principalUid: request.principalUid.trim(),
-          ...(actor?.kind === "active" ? { actor: actor.actor } : {}),
-          ...(requiresAdministrator && request.administrator !== undefined
-            ? { administrator: request.administrator }
-            : {}),
-          requestedAt: request.requestedAt,
-        });
+        const data = await measureCurrentInteractiveLatency("handler", () =>
+          handler.execute({
+            envelope: parsed,
+            principalUid,
+            ...(actor?.kind === "active" ? { actor: actor.actor } : {}),
+            ...(requiresAdministrator && request.administrator !== undefined
+              ? { administrator: request.administrator }
+              : {}),
+            requestedAt: request.requestedAt,
+          }),
+        );
         const result: HouseholdCommandResult = {
           kind: "success",
           commandId: parsed.commandId,
           data,
         };
-        await input.receipts.complete({
-          receiptId,
-          payloadHash,
-          result: {
-            ...result,
-            data: householdCommandReceiptValue(data),
-          },
-          completedAt: request.requestedAt,
-        });
+        await measureCurrentInteractiveLatency(
+          "command-receipt-complete",
+          () =>
+            input.receipts.complete({
+              receiptId,
+              payloadHash,
+              result: {
+                ...result,
+                data: householdCommandReceiptValue(data),
+              },
+              completedAt: request.requestedAt,
+            }),
+        );
         return result;
       } catch (caught) {
         if (caught instanceof HouseholdCommandRejection) {
@@ -297,18 +320,28 @@ export function createHouseholdCommandRouter(input: {
             details: { domainCode: caught.code },
           });
           if (caught.retryable) {
-            await input.receipts.abandon({ receiptId, payloadHash });
+            await measureCurrentInteractiveLatency(
+              "command-receipt-abandon",
+              () => input.receipts.abandon({ receiptId, payloadHash }),
+            );
             return result;
           }
-          await input.receipts.complete({
-            receiptId,
-            payloadHash,
-            result,
-            completedAt: request.requestedAt,
-          });
+          await measureCurrentInteractiveLatency(
+            "command-receipt-complete",
+            () =>
+              input.receipts.complete({
+                receiptId,
+                payloadHash,
+                result,
+                completedAt: request.requestedAt,
+              }),
+          );
           return result;
         }
-        await input.receipts.abandon({ receiptId, payloadHash });
+        await measureCurrentInteractiveLatency(
+          "command-receipt-abandon",
+          () => input.receipts.abandon({ receiptId, payloadHash }),
+        );
         return error("COMMAND_FAILED", {
           commandId: parsed.commandId,
           retryable: true,

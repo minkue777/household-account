@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { createHouseholdQueryRouter } from "../../src/bootstrap/queries/householdQueryRouter";
 import { HouseholdQueryRejection } from "../../src/bootstrap/queries/householdQuery";
+import {
+  startInteractiveLatencyInvocation,
+  type InteractiveLatencyLogEntry,
+} from "../../src/observability/interactiveLatency";
 
 function fixture(handler: { execute(context: never): Promise<unknown> } = {
   async execute() {
@@ -113,5 +117,34 @@ describe("household query bootstrap boundary", () => {
       code: "NOT_FOUND",
       retryable: false,
     });
+  });
+
+  it("membership과 handler 단계를 query 종류와 같은 correlation으로 계측한다", async () => {
+    const subject = fixture();
+    const entries: InteractiveLatencyLogEntry[] = [];
+    const latency = startInteractiveLatencyInvocation(
+      "executeHouseholdQuery",
+      { sink: { write: (entry) => entries.push(entry) } },
+    );
+
+    const result = await latency.run(() =>
+      subject.router.execute({
+        principalUid: "uid-a",
+        request: subject.request,
+      }),
+    );
+    latency.complete(result.kind === "success" ? "succeeded" : "rejected");
+
+    expect(entries.map((entry) => entry.stage)).toEqual([
+      "actor-membership",
+      "handler",
+      "total",
+    ]);
+    expect(
+      new Set(entries.map((entry) => entry.operation)),
+    ).toEqual(new Set(["ledger.get-transaction.v1"]));
+    expect(
+      new Set(entries.map((entry) => entry.correlationId)),
+    ).toEqual(new Set([latency.correlationId]));
   });
 });

@@ -15,6 +15,7 @@ import type {
 } from "../../../contexts/household-finance/categories-budget/domain/model/categoryCatalog";
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
+import { invalidateCaptureConfigurationProjection } from "../payment-capture/firebaseCaptureConfigurationProjection";
 
 const RECEIPT_CONTEXT = "household-finance-category-catalog";
 const SCHEMA_VERSION = 2;
@@ -365,6 +366,11 @@ export class FirebaseCategoryCatalogStore implements CategoryCatalogStorePort {
       const catalogChanged =
         loaded.state.catalogVersion !== mutation.state.catalogVersion;
       if (catalogChanged || defaultChanged || changedCategoryIds.length > 0) {
+        invalidateCaptureConfigurationProjection(
+          transaction,
+          this.database,
+          this.input.householdId,
+        );
         new FirebaseTransactionalOutbox(this.database).append(transaction, {
           eventId: hash(`${this.input.commandId}\u0000category-catalog`),
           eventType: "CategoryCatalogChanged.v1",

@@ -37,6 +37,8 @@ jest.mock('@/features/access-household/application/legacySessionCandidate', () =
 }));
 
 jest.mock('@/features/access-household/application/signedInMembershipCache', () => ({
+  getSignedInMembershipRevalidationDelay: jest.fn(),
+  invalidateSignedInMembershipVerification: jest.fn(),
   readLastSignedInSessionCache: jest.fn(),
   readSignedInHouseholdCache: jest.fn(),
   readSignedInMembershipCache: jest.fn(),
@@ -78,10 +80,12 @@ import {
   selectAdminHouseholdView,
 } from '@/features/access-household/application/adminHouseholdViewSelection';
 import {
+  getSignedInMembershipRevalidationDelay,
   readLastSignedInSessionCache,
   readSignedInHouseholdCache,
   readSignedInMembershipCache,
 } from '@/features/access-household/application/signedInMembershipCache';
+import { markWebFirstLedgerPaint } from '@/platform/performance/webStartupPerformance';
 
 const mockGetCachedHousehold = jest.mocked(getCachedHousehold);
 const mockGetHousehold = jest.mocked(getHousehold);
@@ -93,6 +97,9 @@ const mockSetClientSessionScope = jest.mocked(setClientSessionScope);
 const mockReadSignedInHouseholdCache = jest.mocked(readSignedInHouseholdCache);
 const mockReadSignedInMembershipCache = jest.mocked(readSignedInMembershipCache);
 const mockReadLastSignedInSessionCache = jest.mocked(readLastSignedInSessionCache);
+const mockGetSignedInMembershipRevalidationDelay = jest.mocked(
+  getSignedInMembershipRevalidationDelay
+);
 
 function SessionProbe() {
   const { household, sessionState } = useHousehold();
@@ -122,7 +129,12 @@ describe('Android 가구 cache-first 복원 계약', () => {
     mockReadLastSignedInSessionCache.mockReturnValue(undefined);
     mockReadSignedInHouseholdCache.mockReturnValue(undefined);
     mockReadSignedInMembershipCache.mockReturnValue(undefined);
+    mockGetSignedInMembershipRevalidationDelay.mockReturnValue(undefined);
     mockOnAuthChange.mockImplementation(() => jest.fn());
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it('[T-WEBVIEW-004][AND-012] last complete session paints before Firebase Auth restoration', async () => {
@@ -357,6 +369,61 @@ describe('Android 가구 cache-first 복원 계약', () => {
     expect(mockResolveSignedInUser).not.toHaveBeenCalled();
     expect(mockRestoreAndroidHostAuth).not.toHaveBeenCalled();
     expect(mockGetCachedHousehold).not.toHaveBeenCalled();
+  });
+
+  it('같은 UID의 complete session은 Membership callable을 첫 paint 뒤 주기 재검증으로 옮긴다', async () => {
+    jest.useFakeTimers();
+    const cachedResolution = {
+      kind: 'membership-found' as const,
+      membership: {
+        householdId: 'household-1',
+        memberId: 'member-1',
+        displayName: '민규',
+        aggregateVersion: 3,
+        status: 'active' as const,
+        capabilities: ['household.read'],
+      },
+    };
+    mockReadLastSignedInSessionCache.mockReturnValue({
+      principalUid: 'uid-1',
+      resolution: cachedResolution,
+      household: household('즉시 표시 가계부'),
+    });
+    mockReadSignedInMembershipCache.mockReturnValue(cachedResolution);
+    mockReadSignedInHouseholdCache.mockReturnValue(household('즉시 표시 가계부'));
+    mockGetHousehold.mockReturnValue(new Promise(() => {}));
+    mockGetSignedInMembershipRevalidationDelay
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValue(undefined);
+    mockResolveSignedInUser.mockResolvedValue(cachedResolution);
+    mockOnAuthChange.mockImplementation((listener) => {
+      listener({ uid: 'uid-1' } as User);
+      return jest.fn();
+    });
+
+    render(
+      <HouseholdProvider>
+        <SessionProbe />
+      </HouseholdProvider>,
+    );
+
+    expect(screen.getByText('ready:즉시 표시 가계부')).toBeInTheDocument();
+    expect(mockResolveSignedInUser).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(mockOnAuthChange).toHaveBeenCalledTimes(1);
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(0);
+      markWebFirstLedgerPaint();
+      jest.advanceTimersByTime(5_000);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockResolveSignedInUser).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('authoritative household not-found는 cache로 숨기지 않는다', async () => {

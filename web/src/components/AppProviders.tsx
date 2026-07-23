@@ -8,6 +8,7 @@ import HouseholdGuard from './HouseholdGuard';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { getClientSessionScope } from '@/composition/clientSessionScope';
 import { refreshAndroidHostSession } from '@/platform/android-host/androidHostBridge';
+import { scheduleAfterWebFirstLedgerPaint } from '@/platform/performance/webStartupPerformance';
 
 function DeferredFirebaseSecurityInitialization() {
   // App Check SDK는 첫 화면 렌더링과 경쟁하지 않도록 브라우저가 한가해진 뒤 준비합니다.
@@ -100,95 +101,16 @@ function AuthenticatedPlatformEffects() {
   useEffect(() => {
     if (sessionState !== 'ready' || !isSessionVerified || adminHouseholdView !== null) return;
 
-    let cancelled = false;
-    let idleCallbackId: number | undefined;
     const prefetchMutationCommands = () => {
-      if (cancelled) return;
       void Promise.all([
         import('@/features/ledger/application/ledgerCommands'),
         import('@/features/category-budget/application/categoryCommands'),
       ]).catch(() => {});
     };
-    const delayId = window.setTimeout(() => {
-      if (typeof window.requestIdleCallback === 'function') {
-        idleCallbackId = window.requestIdleCallback(prefetchMutationCommands, {
-          timeout: 2_000,
-        });
-      } else {
-        prefetchMutationCommands();
-      }
-    }, 750);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(delayId);
-      if (idleCallbackId !== undefined && typeof window.cancelIdleCallback === 'function') {
-        window.cancelIdleCallback(idleCallbackId);
-      }
-    };
-  }, [adminHouseholdView, isSessionVerified, sessionState]);
-
-  useEffect(() => {
-    if (sessionState !== 'ready' || !isSessionVerified || adminHouseholdView !== null) return;
-
-    let unsubscribe: (() => void) | undefined;
-    let cancelled = false;
-    let idleCallbackId: number | undefined;
-    const warmAssets = () => {
-      if (cancelled) return;
-      void import('@/lib/assetService')
-        .then(({ subscribeToAssets }) => {
-          if (cancelled) return;
-          // 자산 화면을 열기 전에 read model과 Firestore local cache를 유지합니다.
-          // 실제 화면 구독과 동일 query이므로 SDK가 원격 listen을 공유합니다.
-          unsubscribe = subscribeToAssets(() => {});
-        })
-        .catch(() => {});
-    };
-    const delayId = window.setTimeout(() => {
-      if (typeof window.requestIdleCallback === 'function') {
-        idleCallbackId = window.requestIdleCallback(warmAssets, { timeout: 2_000 });
-      } else {
-        warmAssets();
-      }
-    }, 1_500);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(delayId);
-      unsubscribe?.();
-      if (idleCallbackId !== undefined && typeof window.cancelIdleCallback === 'function') {
-        window.cancelIdleCallback(idleCallbackId);
-      }
-    };
-  }, [adminHouseholdView, isSessionVerified, sessionState]);
-
-  useEffect(() => {
-    if (sessionState !== 'ready' || !isSessionVerified || adminHouseholdView !== null) return;
-
-    let idleCallbackId: number | undefined;
-    let cancelled = false;
-    const delayId = window.setTimeout(() => {
-      const warmCatalog = () => {
-        if (cancelled) return;
-        void import('@/composition/stockInstrumentCatalogRuntime')
-          .then(({ warmStockInstrumentCatalog }) => warmStockInstrumentCatalog())
-          .catch(() => {});
-      };
-      if (typeof window.requestIdleCallback === 'function') {
-        idleCallbackId = window.requestIdleCallback(warmCatalog, { timeout: 2_000 });
-      } else {
-        warmCatalog();
-      }
-    }, 1_000);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(delayId);
-      if (idleCallbackId !== undefined && typeof window.cancelIdleCallback === 'function') {
-        window.cancelIdleCallback(idleCallbackId);
-      }
-    };
+    return scheduleAfterWebFirstLedgerPaint(prefetchMutationCommands, {
+      delayAfterPaintMs: 5_000,
+      idleTimeoutMs: 5_000,
+    });
   }, [adminHouseholdView, isSessionVerified, sessionState]);
 
   return null;

@@ -11,6 +11,11 @@ import type {
   MerchantMatchType,
   MerchantRuleCandidate,
 } from "../../../contexts/payment-capture/configuration/domain/policies/merchantRuleSelection";
+import {
+  captureConfigurationProjectionReference,
+  decodeCaptureConfigurationProjection,
+  encodeCaptureConfigurationProjection,
+} from "./firebaseCaptureConfigurationProjection";
 
 function text(
   data: FirebaseFirestore.DocumentData | undefined,
@@ -81,8 +86,7 @@ function mapRule(
 function mapCard(
   document: firestore.QueryDocumentSnapshot,
   householdId: string,
-  actingMemberId: string,
-  ownerAliases: ReadonlySet<string>,
+  memberIdByAlias: ReadonlyMap<string, string>,
 ): CaptureConfigurationCard | undefined {
   const data = document.data();
   if (text(data, "householdId") !== undefined && text(data, "householdId") !== householdId) {
@@ -97,7 +101,7 @@ function mapCard(
   );
   const owner = text(data, "ownerMemberId", "ownerId", "owner");
   if (companyLabel === undefined || owner === undefined) return undefined;
-  const canonicalOwner = ownerAliases.has(owner) ? actingMemberId : owner;
+  const canonicalOwner = memberIdByAlias.get(owner) ?? owner;
   return {
     cardId: document.id,
     ownerMemberId: canonicalOwner,
@@ -135,99 +139,149 @@ export class FirebaseCaptureConfigurationQuery
   }) {
     try {
       const household = this.database.collection("households").doc(input.householdId);
-      const [
-        householdSnapshot,
-        memberSnapshot,
-        categorySetting,
-        canonicalCards,
-        legacyCards,
-        canonicalRules,
-        legacyRules,
-        canonicalCategories,
-        legacyCategories,
-      ] = await Promise.all([
-        household.get(),
-        household.collection("members").doc(input.actingMemberId).get(),
-        household.collection("categorySettings").doc("default").get(),
-        household.collection("registeredCards").get(),
-        this.database
-          .collection("registered_cards")
-          .where("householdId", "==", input.householdId)
-          .get(),
-        household.collection("merchantRules").get(),
-        this.database
-          .collection("merchant_rules")
-          .where("householdId", "==", input.householdId)
-          .get(),
-        household.collection("categories").get(),
-        this.database
-          .collection("categories")
-          .where("householdId", "==", input.householdId)
-          .get(),
-      ]);
-
-      const ownerAliases = new Set<string>([input.actingMemberId]);
-      const displayName = text(memberSnapshot.data(), "displayName", "name");
-      if (displayName !== undefined) ownerAliases.add(displayName);
-
-      const cards = unionById(
-        legacyCards.docs.flatMap((document) => {
-          const value = mapCard(
-            document,
-            input.householdId,
-            input.actingMemberId,
-            ownerAliases,
-          );
-          return value === undefined ? [] : [[document.id, value] as const];
-        }),
-        canonicalCards.docs.flatMap((document) => {
-          const value = mapCard(
-            document,
-            input.householdId,
-            input.actingMemberId,
-            ownerAliases,
-          );
-          return value === undefined ? [] : [[document.id, value] as const];
-        }),
+      const projection = captureConfigurationProjectionReference(
+        this.database,
+        input.householdId,
       );
-      const merchantRules = unionById(
-        legacyRules.docs.flatMap((document) => {
-          const value = mapRule(document, input.householdId);
-          return value === undefined ? [] : [[document.id, value] as const];
-        }),
-        canonicalRules.docs.flatMap((document) => {
-          const value = mapRule(document, input.householdId);
-          return value === undefined ? [] : [[document.id, value] as const];
-        }),
+      const projected = decodeCaptureConfigurationProjection(
+        input.householdId,
+        (await projection.get()).data(),
       );
-
-      const activeCategoryIds = new Set<string>();
-      for (const document of [...legacyCategories.docs, ...canonicalCategories.docs]) {
-        const data = document.data();
-        if (
-          data.lifecycleState === "archived" ||
-          data.lifecycleState === "deleted" ||
-          data.lifecycle === "archived" ||
-          data.lifecycle === "deleted" ||
-          data.isActive === false
-        ) {
-          continue;
-        }
-        activeCategoryIds.add(document.id);
-        const id = text(data, "categoryId", "key");
-        if (id !== undefined) activeCategoryIds.add(id);
+      if (projected !== undefined) {
+        return { kind: "available" as const, value: projected };
       }
 
-      const defaultCategoryId =
-        text(categorySetting.data(), "defaultCategoryId", "categoryId", "value") ??
-        text(householdSnapshot.data(), "defaultCategoryId", "defaultCategoryKey") ??
-        (activeCategoryIds.has("etc") ? "etc" : undefined);
-      const value: CaptureConfigurationSnapshot = {
-        cards,
-        merchantRules,
-        activeCategoryIds,
-        ...(defaultCategoryId === undefined ? {} : { defaultCategoryId }),
-      };
+      const value = await this.database.runTransaction(
+        async (transaction): Promise<CaptureConfigurationSnapshot> => {
+          const concurrentProjection = decodeCaptureConfigurationProjection(
+            input.householdId,
+            (await transaction.get(projection)).data(),
+          );
+          if (concurrentProjection !== undefined) return concurrentProjection;
+
+          const [
+            householdSnapshot,
+            memberSnapshots,
+            categorySetting,
+            canonicalCards,
+            legacyCards,
+            canonicalRules,
+            legacyRules,
+            canonicalCategories,
+            legacyCategories,
+          ] = await Promise.all([
+            transaction.get(household),
+            transaction.get(household.collection("members")),
+            transaction.get(
+              household.collection("categorySettings").doc("default"),
+            ),
+            transaction.get(household.collection("registeredCards")),
+            transaction.get(
+              this.database
+                .collection("registered_cards")
+                .where("householdId", "==", input.householdId),
+            ),
+            transaction.get(household.collection("merchantRules")),
+            transaction.get(
+              this.database
+                .collection("merchant_rules")
+                .where("householdId", "==", input.householdId),
+            ),
+            transaction.get(household.collection("categories")),
+            transaction.get(
+              this.database
+                .collection("categories")
+                .where("householdId", "==", input.householdId),
+            ),
+          ]);
+
+          const memberIdByAlias = new Map<string, string>();
+          for (const member of memberSnapshots.docs) {
+            memberIdByAlias.set(member.id, member.id);
+            const displayName = text(member.data(), "displayName", "name");
+            if (displayName !== undefined) {
+              memberIdByAlias.set(displayName, member.id);
+            }
+          }
+          memberIdByAlias.set(input.actingMemberId, input.actingMemberId);
+
+          const cards = unionById(
+            legacyCards.docs.flatMap((document) => {
+              const card = mapCard(
+                document,
+                input.householdId,
+                memberIdByAlias,
+              );
+              return card === undefined ? [] : [[document.id, card] as const];
+            }),
+            canonicalCards.docs.flatMap((document) => {
+              const card = mapCard(
+                document,
+                input.householdId,
+                memberIdByAlias,
+              );
+              return card === undefined ? [] : [[document.id, card] as const];
+            }),
+          );
+          const merchantRules = unionById(
+            legacyRules.docs.flatMap((document) => {
+              const rule = mapRule(document, input.householdId);
+              return rule === undefined ? [] : [[document.id, rule] as const];
+            }),
+            canonicalRules.docs.flatMap((document) => {
+              const rule = mapRule(document, input.householdId);
+              return rule === undefined ? [] : [[document.id, rule] as const];
+            }),
+          );
+
+          const activeCategoryIds = new Set<string>();
+          for (const document of [
+            ...legacyCategories.docs,
+            ...canonicalCategories.docs,
+          ]) {
+            const data = document.data();
+            if (
+              data.lifecycleState === "archived" ||
+              data.lifecycleState === "deleted" ||
+              data.lifecycle === "archived" ||
+              data.lifecycle === "deleted" ||
+              data.isActive === false
+            ) {
+              continue;
+            }
+            activeCategoryIds.add(document.id);
+            const id = text(data, "categoryId", "key");
+            if (id !== undefined) activeCategoryIds.add(id);
+          }
+
+          const defaultCategoryId =
+            text(
+              categorySetting.data(),
+              "defaultCategoryId",
+              "categoryId",
+              "value",
+            ) ??
+            text(
+              householdSnapshot.data(),
+              "defaultCategoryId",
+              "defaultCategoryKey",
+            ) ??
+            (activeCategoryIds.has("etc") ? "etc" : undefined);
+          const rebuilt: CaptureConfigurationSnapshot = {
+            cards,
+            merchantRules,
+            activeCategoryIds,
+            ...(defaultCategoryId === undefined
+              ? {}
+              : { defaultCategoryId }),
+          };
+          transaction.set(
+            projection,
+            encodeCaptureConfigurationProjection(input.householdId, rebuilt),
+          );
+          return rebuilt;
+        },
+      );
       return { kind: "available" as const, value };
     } catch {
       return {

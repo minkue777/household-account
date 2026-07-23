@@ -24,6 +24,7 @@ import { createManifestBackedHouseholdQueryRegistry } from "./queries/householdQ
 import { createPortfolioMarketHouseholdQueryHandlers } from "./queries/portfolioMarketHouseholdQueryHandlers";
 import { createAccessHouseholdQueryHandlers } from "./queries/accessHouseholdQueryHandlers";
 import { verifiedSystemAdministrator } from "./verifiedSystemAdministrator";
+import { startInteractiveLatencyInvocation } from "../observability/interactiveLatency";
 
 export interface HouseholdQueryWireResponse {
   readonly contractVersion: "household-query-response.v1";
@@ -135,13 +136,25 @@ export const executeHouseholdQuery = functions
   .region(REGION)
   .runWith({ enforceAppCheck: true })
   .https.onCall(async (data, context): Promise<HouseholdQueryWireResponse> => {
-    const result = await router.execute({
-      principalUid: context.auth?.uid,
-      administrator: verifiedSystemAdministrator(
-        context.auth?.uid,
-        context.auth?.token,
-      ),
-      request: data,
+    const latency = startInteractiveLatencyInvocation("executeHouseholdQuery");
+    return latency.run(async () => {
+      try {
+        const result = await router.execute({
+          principalUid: context.auth?.uid,
+          administrator: verifiedSystemAdministrator(
+            context.auth?.uid,
+            context.auth?.token,
+          ),
+          request: data,
+        });
+        const response = toHouseholdQueryWireResponse(data, result);
+        latency.complete(
+          result.kind === "success" ? "succeeded" : "rejected",
+        );
+        return response;
+      } catch (error) {
+        latency.complete("failed");
+        throw error;
+      }
     });
-    return toHouseholdQueryWireResponse(data, result);
   });

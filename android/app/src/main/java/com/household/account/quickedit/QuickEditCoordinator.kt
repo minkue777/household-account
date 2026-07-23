@@ -15,7 +15,10 @@ import com.household.account.QuickEditActivity
 import com.household.account.ledger.CallableLedgerTransactionQueryClient
 import com.household.account.ledger.LedgerTransactionQueryResult
 import com.household.account.ledger.LedgerTransactionSnapshot
+import com.household.account.paymentcapture.AndroidCaptureLatencyTelemetry
 import com.household.account.paymentcapture.CaptureDeliveryFollowUp
+import com.household.account.paymentcapture.CaptureLatencyOutcome
+import com.household.account.paymentcapture.CaptureLatencyStage
 import com.household.account.paymentcapture.CaptureQuickEditSnapshot
 import com.household.account.paymentcapture.CaptureSessionScope
 import com.household.account.server.FirebaseAuthenticatedCallableGateway
@@ -58,9 +61,14 @@ object QuickEditCoordinator {
             !queue(context).enqueue(
                 scope = scope,
                 transactionId = followUp.transactionId,
-                snapshot = followUp.quickEditSnapshot
+                snapshot = followUp.quickEditSnapshot,
+                observationId = followUp.observationId
             )
         ) return
+        AndroidCaptureLatencyTelemetry.mark(
+            observationId = followUp.observationId,
+            stage = CaptureLatencyStage.FOLLOW_UP_PERSISTED
+        )
     }
 
     suspend fun resumePending(context: Context) {
@@ -100,7 +108,11 @@ object QuickEditCoordinator {
         while (true) {
             val entry = queue(applicationContext).acquireHead(scope) ?: return
             entry.snapshot?.let { snapshot ->
-                val launched = launchQuickEdit(applicationContext, snapshot.toLedgerSnapshot())
+                val launched = launchQuickEdit(
+                    context = applicationContext,
+                    snapshot = snapshot.toLedgerSnapshot(),
+                    observationId = entry.observationId
+                )
                 if (!launched) {
                     queue(applicationContext).releaseLease(scope, entry.transactionId)
                     scheduleRecovery(applicationContext)
@@ -121,7 +133,11 @@ object QuickEditCoordinator {
                         queue(applicationContext).complete(scope, entry.transactionId)
                         continue
                     }
-                    val launched = launchQuickEdit(applicationContext, snapshot)
+                    val launched = launchQuickEdit(
+                        context = applicationContext,
+                        snapshot = snapshot,
+                        observationId = entry.observationId
+                    )
                     if (!launched) {
                         queue(applicationContext).releaseLease(scope, entry.transactionId)
                         scheduleRecovery(applicationContext)
@@ -149,7 +165,8 @@ object QuickEditCoordinator {
 
     private fun launchQuickEdit(
         context: Context,
-        snapshot: LedgerTransactionSnapshot
+        snapshot: LedgerTransactionSnapshot,
+        observationId: String?
     ): Boolean {
         val intent = Intent(context, QuickEditActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
@@ -161,8 +178,25 @@ object QuickEditCoordinator {
             putExtra(QuickEditActivity.EXTRA_CATEGORY, snapshot.categoryId)
             putExtra(QuickEditActivity.EXTRA_MEMO, snapshot.memo)
             putExtra(QuickEditActivity.EXTRA_VERSION, snapshot.aggregateVersion)
+            observationId?.let {
+                putExtra(QuickEditActivity.EXTRA_CAPTURE_OBSERVATION_ID, it)
+            }
         }
-        return runCatching { context.startActivity(intent) }.isSuccess
+        observationId?.let {
+            AndroidCaptureLatencyTelemetry.mark(
+                observationId = it,
+                stage = CaptureLatencyStage.QUICK_EDIT_LAUNCH
+            )
+        }
+        val launched = runCatching { context.startActivity(intent) }.isSuccess
+        if (!launched) observationId?.let {
+            AndroidCaptureLatencyTelemetry.mark(
+                observationId = it,
+                stage = CaptureLatencyStage.QUICK_EDIT_LAUNCH,
+                outcome = CaptureLatencyOutcome.FAILURE
+            )
+        }
+        return launched
     }
 
     private fun CaptureQuickEditSnapshot.toLedgerSnapshot() = LedgerTransactionSnapshot(

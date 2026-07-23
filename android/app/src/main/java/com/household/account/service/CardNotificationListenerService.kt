@@ -5,6 +5,8 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.household.account.data.NotificationDebugLogRepository
 import com.household.account.paymentcapture.AndroidCaptureDelivery
+import com.household.account.paymentcapture.AndroidCaptureLatencyTelemetry
+import com.household.account.paymentcapture.CaptureLatencyStage
 import com.household.account.paymentcapture.PaymentSourceRegistry
 import com.household.account.paymentcapture.RawNotificationEnvelopeV1
 import com.household.account.paymentcapture.RawNotificationForwardingPolicy
@@ -60,6 +62,7 @@ class CardNotificationListenerService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
+        val receivedAtElapsedRealtime = AndroidCaptureLatencyTelemetry.elapsedRealtimeMillis()
 
         try {
             val packageName = sbn.packageName
@@ -122,6 +125,11 @@ class CardNotificationListenerService : NotificationListenerService() {
                 text = text,
                 bigText = bigText,
                 textLines = textLines
+            )
+            AndroidCaptureLatencyTelemetry.mark(
+                observationId = envelope.observationId,
+                stage = CaptureLatencyStage.NOTIFICATION_RECEIVED,
+                atElapsedRealtimeMillis = receivedAtElapsedRealtime
             )
 
             serviceScope.launch {

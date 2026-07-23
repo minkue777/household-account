@@ -12,6 +12,10 @@ import HomeHeader from '@/components/HomeHeader';
 import type { SplitItem } from '@/lib/expenseService';
 import { readMonthlyExpenseSnapshot } from '@/features/ledger/application/monthlyExpenseSnapshot';
 import { useHousehold } from '@/contexts/HouseholdContext';
+import {
+  markWebFirstLedgerPaint,
+  markWebLedgerCacheResult,
+} from '@/platform/performance/webStartupPerformance';
 
 const ExpenseDetail = dynamic(() => import('@/components/expense/ExpenseDetail'));
 const AddExpenseModal = dynamic(() => import('@/components/expense/AddExpenseModal'));
@@ -78,9 +82,31 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
 
   useLayoutEffect(() => {
     const cached = readMonthlyExpenseSnapshot(currentYear, currentMonth, transactionType);
+    markWebLedgerCacheResult(cached !== undefined);
     setExpenses(cached ?? []);
     setIsLoading(cached === undefined);
   }, [currentYear, currentMonth, transactionType]);
+
+  useEffect(() => {
+    if (isLoading) return undefined;
+
+    let firstFrameId: number | undefined;
+    let paintFrameId: number | undefined;
+    let fallbackId: number | undefined;
+    if (typeof window.requestAnimationFrame === 'function') {
+      firstFrameId = window.requestAnimationFrame(() => {
+        paintFrameId = window.requestAnimationFrame(markWebFirstLedgerPaint);
+      });
+    } else {
+      fallbackId = window.setTimeout(markWebFirstLedgerPaint, 0);
+    }
+
+    return () => {
+      if (firstFrameId !== undefined) window.cancelAnimationFrame(firstFrameId);
+      if (paintFrameId !== undefined) window.cancelAnimationFrame(paintFrameId);
+      if (fallbackId !== undefined) window.clearTimeout(fallbackId);
+    };
+  }, [isLoading]);
 
   useEffect(() => {
     if (!isSessionVerified) return;

@@ -43,6 +43,9 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webView)
         permissionLayout = findViewById(R.id.permissionLayout)
 
+        if (BuildConfig.DEBUG) {
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
         setupWebView()
         setupPermissionButtons()
         checkPermissionAndShowContent()

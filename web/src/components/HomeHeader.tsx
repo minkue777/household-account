@@ -5,6 +5,7 @@ import { ChartPie, Search, Settings } from 'lucide-react';
 import { TransactionType } from '@/types/expense';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
+import { warmAssetNavigationIntent } from '@/composition/assetNavigationPrewarm';
 
 interface HomeHeaderProps {
   onSearchClick: () => void;
@@ -13,10 +14,14 @@ interface HomeHeaderProps {
 
 export default function HomeHeader({ onSearchClick, transactionType }: HomeHeaderProps) {
   const { themeConfig } = useTheme();
-  const { household } = useHousehold();
+  const { household, isSessionVerified } = useHousehold();
   const isIncome = transactionType === 'income';
   const titleHref = isIncome ? '/' : '/income';
   const subtitle = isIncome ? '수입' : '지출';
+  const handleAssetNavigationIntent = () => {
+    if (!isSessionVerified) return;
+    void warmAssetNavigationIntent().catch(() => {});
+  };
 
   return (
     <header className="mb-6 flex items-center justify-between gap-4">
@@ -37,7 +42,12 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
           </h1>
         </Link>
 
-        <Link href="/assets" className="cursor-pointer transition-opacity hover:opacity-80">
+        <Link
+          href="/assets"
+          className="cursor-pointer transition-opacity hover:opacity-80"
+          onPointerDown={handleAssetNavigationIntent}
+          onFocus={handleAssetNavigationIntent}
+        >
           <img
             src="/bear-removebg-preview.png"
             alt="자산으로 이동"

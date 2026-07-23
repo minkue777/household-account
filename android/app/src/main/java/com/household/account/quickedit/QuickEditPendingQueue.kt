@@ -10,7 +10,8 @@ data class QuickEditQueueEntry(
     val transactionId: String,
     val sequence: Long,
     val enqueuedAtEpochMillis: Long,
-    val snapshot: CaptureQuickEditSnapshot? = null
+    val snapshot: CaptureQuickEditSnapshot? = null,
+    val observationId: String? = null
 )
 
 data class QuickEditQueueState(
@@ -41,16 +42,23 @@ class QuickEditPendingQueue(
     suspend fun enqueue(
         scope: CaptureSessionScope,
         transactionId: String,
-        snapshot: CaptureQuickEditSnapshot? = null
+        snapshot: CaptureQuickEditSnapshot? = null,
+        observationId: String? = null
     ): Boolean = mutex.withLock {
         if (!scope.isUsable || transactionId.isBlank()) return@withLock false
         val acceptedSnapshot = snapshot?.takeIf { it.transactionId == transactionId }
+        val acceptedObservationId = observationId?.takeIf { it.isNotBlank() }
         val state = sanitizeScope(store.load(), scope)
         val existingIndex = state.entries.indexOfFirst { it.transactionId == transactionId }
         if (existingIndex >= 0) {
-            if (acceptedSnapshot != null && state.entries[existingIndex].snapshot == null) {
+            val existing = state.entries[existingIndex]
+            val updatedEntry = existing.copy(
+                snapshot = existing.snapshot ?: acceptedSnapshot,
+                observationId = existing.observationId ?: acceptedObservationId
+            )
+            if (updatedEntry != existing) {
                 val updated = state.entries.toMutableList()
-                updated[existingIndex] = updated[existingIndex].copy(snapshot = acceptedSnapshot)
+                updated[existingIndex] = updatedEntry
                 store.replace(state.copy(entries = updated))
             }
             return@withLock true
@@ -60,7 +68,8 @@ class QuickEditPendingQueue(
             transactionId = transactionId,
             sequence = state.nextSequence,
             enqueuedAtEpochMillis = nowEpochMillis(),
-            snapshot = acceptedSnapshot
+            snapshot = acceptedSnapshot,
+            observationId = acceptedObservationId
         )
         store.replace(
             state.copy(

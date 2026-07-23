@@ -30,6 +30,7 @@ import {
   createShortcutCredentialHouseholdCommandHandlers,
 } from "./commands/shortcutCredentialHouseholdCommandHandlers";
 import { verifiedSystemAdministrator } from "./verifiedSystemAdministrator";
+import { startInteractiveLatencyInvocation } from "../observability/interactiveLatency";
 
 export interface HouseholdCommandWireResponse {
   readonly contractVersion: "household-command-response.v1";
@@ -135,14 +136,28 @@ export const executeHouseholdCommand = functions
     secrets: ["SHORTCUT_CREDENTIAL_PEPPER"],
   })
   .https.onCall(async (data, context): Promise<HouseholdCommandWireResponse> => {
-    const result = await router.execute({
-      principalUid: context.auth?.uid,
-      administrator: verifiedSystemAdministrator(
-        context.auth?.uid,
-        context.auth?.token,
-      ),
-      request: data,
-      requestedAt: new Date().toISOString(),
+    const latency = startInteractiveLatencyInvocation(
+      "executeHouseholdCommand",
+    );
+    return latency.run(async () => {
+      try {
+        const result = await router.execute({
+          principalUid: context.auth?.uid,
+          administrator: verifiedSystemAdministrator(
+            context.auth?.uid,
+            context.auth?.token,
+          ),
+          request: data,
+          requestedAt: new Date().toISOString(),
+        });
+        const response = toHouseholdCommandWireResponse(data, result);
+        latency.complete(
+          result.kind === "success" ? "succeeded" : "rejected",
+        );
+        return response;
+      } catch (error) {
+        latency.complete("failed");
+        throw error;
+      }
     });
-    return toHouseholdCommandWireResponse(data, result);
   });

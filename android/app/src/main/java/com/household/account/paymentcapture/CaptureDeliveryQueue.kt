@@ -28,6 +28,7 @@ interface CaptureQueueStore {
 }
 
 data class CaptureDeliveryFollowUp(
+    val observationId: String,
     val transactionId: String,
     val aggregateVersion: Int,
     val quickEditSnapshot: CaptureQuickEditSnapshot? = null
@@ -71,6 +72,7 @@ internal fun evaluateCaptureReceipt(
             !transaction.resourceId.isNullOrBlank()
         ) {
             followUps += CaptureDeliveryFollowUp(
+                observationId = envelope.observationId,
                 transactionId = transaction.resourceId,
                 aggregateVersion = checkNotNull(transaction.aggregateVersion) {
                     "created transaction receipt must include aggregateVersion"

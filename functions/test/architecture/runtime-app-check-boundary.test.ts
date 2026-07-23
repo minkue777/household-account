@@ -35,19 +35,20 @@ describe("배포 callable App Check 경계", () => {
     const value = source(
       "functions/src/bootstrap/firebaseCaptureSubmission.ts",
     );
-    expect(value).toContain(
-      ".runWith({ enforceAppCheck: true, minInstances: 1 })",
+    expect(value).toMatch(
+      /\.runWith\(\{[\s\S]*?enforceAppCheck:\s*true[\s\S]*?\}\)/u,
     );
+    expect(value).not.toMatch(/minInstances\s*:/u);
   });
 
   it("소규모 운영의 공용 Command와 Query callable은 각각 warm instance 하나를 유지한다", () => {
-    expect(
-      source("functions/src/bootstrap/firebaseHouseholdCommand.ts"),
-    ).toMatch(/enforceAppCheck:\s*true,[\s\S]*?minInstances:\s*1/u);
-    expect(
-      source("functions/src/bootstrap/firebaseHouseholdQuery.ts"),
-    ).toContain(
-      ".runWith({ enforceAppCheck: true, minInstances: 1 })",
-    );
+    for (const path of [
+      "functions/src/bootstrap/firebaseHouseholdCommand.ts",
+      "functions/src/bootstrap/firebaseHouseholdQuery.ts",
+    ]) {
+      const value = source(path);
+      expect(value).toMatch(/enforceAppCheck:\s*true/u);
+      expect(value).not.toMatch(/minInstances\s*:/u);
+    }
   });
 });

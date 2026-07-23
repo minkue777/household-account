@@ -43,6 +43,7 @@ internal object QuickEditPendingQueueJsonCodec {
                     put("transactionId", entry.transactionId)
                     put("sequence", entry.sequence)
                     put("enqueuedAtEpochMillis", entry.enqueuedAtEpochMillis)
+                    entry.observationId?.let { put("observationId", it) }
                     entry.snapshot?.let { snapshot ->
                         put("quickEditSnapshot", JSONObject().apply {
                             put("transactionId", snapshot.transactionId)
@@ -81,6 +82,8 @@ internal object QuickEditPendingQueueJsonCodec {
                             transactionId = transactionId,
                             sequence = item.getLong("sequence"),
                             enqueuedAtEpochMillis = item.getLong("enqueuedAtEpochMillis"),
+                            observationId = item.optString("observationId")
+                                .takeIf { it.isNotBlank() && it != "null" },
                             snapshot = item.optJSONObject("quickEditSnapshot")
                                 ?.toQuickEditSnapshot()
                                 ?.takeIf { it.transactionId == transactionId }

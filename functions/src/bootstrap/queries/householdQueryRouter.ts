@@ -7,6 +7,10 @@ import {
   type HouseholdQueryResult,
 } from "./householdQuery";
 import type { HouseholdAdministratorActor } from "../commands/householdCommand";
+import {
+  measureCurrentInteractiveLatency,
+  setCurrentInteractiveLatencyOperation,
+} from "../../observability/interactiveLatency";
 
 const ADMINISTRATOR_OR_MEMBER_QUERIES = new Set([
   "ledger.get-transaction.v1",
@@ -117,39 +121,49 @@ export function createHouseholdQueryRouter(input: {
       ) {
         return failure("AUTH_REQUIRED");
       }
+      const principalUid = request.principalUid.trim();
       const parsed = parseEnvelope(request.request);
       if ("kind" in parsed) return parsed;
       const handler = input.handlers.get(parsed.query);
       if (handler === undefined) {
         return failure("QUERY_NOT_AVAILABLE", { queryId: parsed.queryId });
       }
+      setCurrentInteractiveLatencyOperation(parsed.query);
       const permitsAdministrator = ADMINISTRATOR_OR_MEMBER_QUERIES.has(
         parsed.query,
       );
       const verifiedAdministrator =
         request.administrator !== undefined &&
-        request.administrator.principalRef === request.principalUid.trim()
+        request.administrator.principalRef === principalUid
           ? request.administrator
           : undefined;
       const membership =
         permitsAdministrator && verifiedAdministrator !== undefined
           ? undefined
-          : await input.memberships.resolveActor({
-              principalUid: request.principalUid.trim(),
-              householdId: parsed.householdId,
-            });
+          : await measureCurrentInteractiveLatency(
+              "actor-membership",
+              () =>
+                input.memberships.resolveActor({
+                  principalUid,
+                  householdId: parsed.householdId,
+                }),
+            );
       if (membership !== undefined && membership.kind !== "active") {
         return failure("FORBIDDEN", { queryId: parsed.queryId });
       }
       try {
-        const data = await handler.execute({
-          envelope: parsed,
-          principalUid: request.principalUid.trim(),
-          ...(membership?.kind === "active" ? { actor: membership.actor } : {}),
-          ...(verifiedAdministrator !== undefined && permitsAdministrator
-            ? { administrator: verifiedAdministrator }
-            : {}),
-        });
+        const data = await measureCurrentInteractiveLatency("handler", () =>
+          handler.execute({
+            envelope: parsed,
+            principalUid,
+            ...(membership?.kind === "active"
+              ? { actor: membership.actor }
+              : {}),
+            ...(verifiedAdministrator !== undefined && permitsAdministrator
+              ? { administrator: verifiedAdministrator }
+              : {}),
+          }),
+        );
         return { kind: "success", queryId: parsed.queryId, data };
       } catch (caught) {
         if (caught instanceof HouseholdQueryRejection) {

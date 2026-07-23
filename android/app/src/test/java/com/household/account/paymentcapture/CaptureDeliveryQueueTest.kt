@@ -150,6 +150,10 @@ class CaptureDeliveryQueueTest {
         )
 
         assertEquals(snapshot, decision.followUps.single().quickEditSnapshot)
+        assertEquals(
+            "observation.android.rawtest",
+            decision.followUps.single().observationId
+        )
         assertEquals(setOf(CaptureBranch.PAYMENT), decision.terminalBranches)
         assertTrue(!decision.completed)
     }

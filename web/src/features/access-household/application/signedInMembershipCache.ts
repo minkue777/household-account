@@ -12,12 +12,14 @@ export type MembershipFoundResolution = Extract<
 >;
 
 const STORAGE_KEY = 'household-account.signed-in-membership.v1';
+export const SIGNED_IN_MEMBERSHIP_REVALIDATION_INTERVAL_MS = 30 * 60 * 1_000;
 
 interface StoredMembership {
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   principalUid: string;
   resolution: MembershipFoundResolution;
   household?: StoredHousehold;
+  verifiedAt?: number;
 }
 
 interface StoredHousehold {
@@ -109,7 +111,7 @@ function decodeStoredHousehold(value: unknown): StoredHousehold | undefined {
 function decode(value: unknown): StoredMembership | undefined {
   if (
     !isRecord(value)
-    || (value.version !== 1 && value.version !== 2)
+    || (value.version !== 1 && value.version !== 2 && value.version !== 3)
     || typeof value.principalUid !== 'string'
   ) {
     return undefined;
@@ -149,6 +151,11 @@ function decode(value: unknown): StoredMembership | undefined {
       },
     },
     ...(household ? { household } : {}),
+    ...(typeof value.verifiedAt === 'number'
+      && Number.isFinite(value.verifiedAt)
+      && value.verifiedAt > 0
+      ? { verifiedAt: value.verifiedAt }
+      : {}),
   };
 }
 
@@ -191,10 +198,45 @@ export function readSignedInMembershipCache(
 }
 
 /**
+ * Returns when the cached Membership should converge with the authoritative command again.
+ * Legacy cache records have no timestamp and are therefore revalidated after first paint.
+ */
+export function getSignedInMembershipRevalidationDelay(
+  principalUid: string,
+  now = Date.now()
+): number | undefined {
+  if (typeof window === 'undefined' || principalUid.trim() === '') return undefined;
+  const stored = readStoredMembership();
+  if (stored?.principalUid !== principalUid) return undefined;
+  if (stored.verifiedAt === undefined) return 0;
+  return Math.min(
+    SIGNED_IN_MEMBERSHIP_REVALIDATION_INTERVAL_MS,
+    Math.max(
+      0,
+      stored.verifiedAt + SIGNED_IN_MEMBERSHIP_REVALIDATION_INTERVAL_MS - now
+    )
+  );
+}
+
+export function invalidateSignedInMembershipVerification(
+  principalUid: string
+): void {
+  if (typeof window === 'undefined' || principalUid.trim() === '') return;
+  const stored = readStoredMembership();
+  if (stored?.principalUid !== principalUid) return;
+  const { verifiedAt: _verifiedAt, ...retained } = stored;
+  window.localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({ ...retained, version: 3 })
+  );
+}
+
+/**
  * Returns the last fully rendered member session without waiting for Firebase Auth persistence.
  *
- * This is only a paint-time hint. Firebase Auth, App Check, Firestore rules, and the
- * authoritative membership command still validate every remote operation in the background.
+ * This is only a paint-time hint. Firebase Auth, App Check, and Firestore rules still
+ * validate remote operations; the authoritative Membership command periodically converges
+ * the cached association after the first useful paint.
  */
 export function readLastSignedInSessionCache(): LastSignedInSessionCache | undefined {
   const stored = readStoredMembership();
@@ -261,7 +303,8 @@ export function readSignedInHouseholdCache(
 export function writeSignedInMembershipCache(
   principalUid: string,
   resolution: MembershipFoundResolution,
-  household?: Household
+  household?: Household,
+  options: { preserveVerificationTime?: boolean } = {}
 ): void {
   if (typeof window === 'undefined' || principalUid.trim() === '') return;
   const current = readStoredMembership();
@@ -273,11 +316,19 @@ export function writeSignedInMembershipCache(
         ? current.household
         : undefined
     );
+  const retainedVerifiedAt =
+    current?.principalUid === principalUid
+    && current.resolution.membership.householdId === resolution.membership.householdId
+      ? current.verifiedAt
+      : undefined;
   const stored: StoredMembership = {
-    version: 2,
+    version: 3,
     principalUid,
     resolution,
     ...(retainedHousehold ? { household: retainedHousehold } : {}),
+    ...(options.preserveVerificationTime
+      ? (retainedVerifiedAt !== undefined ? { verifiedAt: retainedVerifiedAt } : {})
+      : { verifiedAt: Date.now() }),
   };
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
 }

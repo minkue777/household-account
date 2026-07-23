@@ -24,6 +24,7 @@ import { buildMerchantRuleCommandState } from "../../../contexts/payment-capture
 import { normalizedMerchantKeywordTokens } from "../../../contexts/payment-capture/configuration/domain/value-objects/merchantKeyword";
 import { normalizeCardCompanyKey } from "../../../contexts/payment-capture/configuration/domain/value-objects/cardIdentity";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
+import { invalidateCaptureConfigurationProjection } from "../payment-capture/firebaseCaptureConfigurationProjection";
 
 const RECEIPT_CONTEXT = "payment-configuration";
 const RECEIPT_RETENTION_MILLIS = 30 * 24 * 60 * 60 * 1_000;
@@ -497,6 +498,11 @@ export class FirebasePaymentConfigurationAtomicStore
             },
             { merge: true },
           );
+          invalidateCaptureConfigurationProjection(
+            transaction,
+            this.database,
+            metadata.householdId,
+          );
         }
         transaction.create(receipt, receiptDocument(metadata, mutation.value));
         return { kind: "committed", value: mutation.value } as const;
@@ -609,6 +615,11 @@ export class FirebasePaymentConfigurationAtomicStore
               updatedAt: FieldValue.serverTimestamp(),
             },
             { merge: true },
+          );
+          invalidateCaptureConfigurationProjection(
+            transaction,
+            this.database,
+            metadata.householdId,
           );
         }
         transaction.create(receipt, receiptDocument(metadata, mutation.value));

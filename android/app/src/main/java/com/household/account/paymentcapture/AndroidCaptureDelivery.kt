@@ -34,10 +34,12 @@ object AndroidCaptureDelivery {
         // 원격 호출 중 process가 종료되어도 알림이 유실되지 않도록 먼저 암호화
         // journal에 기록합니다. 정상 경로에서는 WorkManager를 예약하지 않고 즉시 호출합니다.
         if (!queue(context).enqueue(scope, envelope)) return null
+        AndroidCaptureLatencyTelemetry.mark(
+            observationId = envelope.observationId,
+            stage = CaptureLatencyStage.JOURNAL_PERSISTED
+        )
         val receipt = try {
-            CallableCaptureSubmissionClient(
-                FirebaseAuthenticatedCallableGateway()
-            ).submit(envelope)
+            submissionClient().submit(envelope)
         } catch (_: Exception) {
             scheduleRetry(context)
             return CaptureFlushOutcome(emptyList(), retainedCount = 1)
@@ -74,7 +76,7 @@ object AndroidCaptureDelivery {
         val scope = resolveScope(context)
         val outcome = queue(context).flush(
             currentScope = scope,
-            client = CallableCaptureSubmissionClient(FirebaseAuthenticatedCallableGateway()),
+            client = submissionClient(),
             beforeCommitFollowUps = { followUps ->
                 enqueueFollowUps(context, scope, followUps)
             }
@@ -131,6 +133,37 @@ object AndroidCaptureDelivery {
     ) {
         followUps.forEach { followUp ->
             QuickEditCoordinator.enqueue(context, expectedScope, followUp)
+        }
+    }
+
+    private fun submissionClient(): CaptureSubmissionClient {
+        val delegate = CallableCaptureSubmissionClient(
+            FirebaseAuthenticatedCallableGateway()
+        )
+        return object : CaptureSubmissionClient {
+            override suspend fun submit(
+                envelope: CaptureDeliveryEnvelope
+            ): CaptureSubmissionReceipt {
+                AndroidCaptureLatencyTelemetry.mark(
+                    observationId = envelope.observationId,
+                    stage = CaptureLatencyStage.CALLABLE_START
+                )
+                return try {
+                    delegate.submit(envelope).also {
+                        AndroidCaptureLatencyTelemetry.mark(
+                            observationId = envelope.observationId,
+                            stage = CaptureLatencyStage.CALLABLE_END
+                        )
+                    }
+                } catch (exception: Exception) {
+                    AndroidCaptureLatencyTelemetry.mark(
+                        observationId = envelope.observationId,
+                        stage = CaptureLatencyStage.CALLABLE_END,
+                        outcome = CaptureLatencyOutcome.FAILURE
+                    )
+                    throw exception
+                }
+            }
         }
     }
 

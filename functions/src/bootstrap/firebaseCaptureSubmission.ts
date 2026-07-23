@@ -44,6 +44,17 @@ import { createBalanceObservationIntakeApplication } from "../contexts/household
 import { createLocalCurrencyBalanceApplication } from "../contexts/household-finance/local-currency/application/localCurrencyBalanceApplication";
 import { resolvePaymentOccurrenceYear } from "../contexts/payment-capture/intake/public";
 import { db, REGION } from "../config";
+import {
+  correlationIdFromOpaqueValue,
+  measureCurrentInteractiveLatency,
+  setCurrentInteractiveLatencyOperation,
+  startInteractiveLatencyInvocation,
+} from "../observability/interactiveLatency";
+import {
+  withCaptureConfigurationLatency,
+  withCapturePersistenceLatency,
+  withCaptureReceiptLatency,
+} from "./captureInteractiveLatency";
 
 export type CaptureCallableErrorCode =
   | "unauthenticated"
@@ -80,6 +91,26 @@ export interface AndroidRawNotificationCallableHandler {
     readonly principalUid?: string;
     readonly data: unknown;
   }): Promise<CaptureSubmissionWireResponse>;
+}
+
+const RAW_NOTIFICATION_CORRELATION_ID_PATTERN =
+  /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+
+export function correlationIdForAndroidRawNotificationRequest(
+  data: unknown,
+): string | undefined {
+  try {
+    if (typeof data !== "object" || data === null || Array.isArray(data)) {
+      return undefined;
+    }
+    const observationId = (data as Record<string, unknown>).observationId;
+    return typeof observationId === "string" &&
+      RAW_NOTIFICATION_CORRELATION_ID_PATTERN.test(observationId)
+      ? correlationIdFromOpaqueValue(observationId)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function responseFromOutcome(
@@ -123,7 +154,10 @@ export function createCaptureSubmissionCallableHandler(input: {
 }): CaptureSubmissionCallableHandler {
   return {
     async handle(request): Promise<CaptureSubmissionWireResponse> {
-      const membership = await input.memberships.resolve(request.principalUid);
+      const membership = await measureCurrentInteractiveLatency(
+        "capture-membership",
+        () => input.memberships.resolve(request.principalUid),
+      );
       if (membership.kind === "unauthenticated") {
         throw new CaptureCallableRejection("unauthenticated", membership.code);
       }
@@ -175,7 +209,10 @@ export function createAndroidRawNotificationCallableHandler(input: {
 }): AndroidRawNotificationCallableHandler {
   return {
     async handle(request): Promise<CaptureSubmissionWireResponse> {
-      const membership = await input.memberships.resolve(request.principalUid);
+      const membership = await measureCurrentInteractiveLatency(
+        "capture-membership",
+        () => input.memberships.resolve(request.principalUid),
+      );
       if (membership.kind === "unauthenticated") {
         throw new CaptureCallableRejection("unauthenticated", membership.code);
       }
@@ -195,8 +232,8 @@ export function createAndroidRawNotificationCallableHandler(input: {
         throw error;
       }
 
-      return responseFromOutcome(
-        await input.submissions.submit({
+      const outcome = await measureCurrentInteractiveLatency("handler", () =>
+        input.submissions.submit({
           actor: {
             principalId: membership.principalUid,
             householdId: membership.householdId,
@@ -206,6 +243,7 @@ export function createAndroidRawNotificationCallableHandler(input: {
           input: raw,
         }),
       );
+      return responseFromOutcome(outcome);
     },
   };
 }
@@ -221,13 +259,19 @@ export function createFirebaseCaptureSubmissionPort(): CaptureSubmissionInputPor
   return createCaptureSubmissionApplication({
     tenantAuthorization,
     branches: createCaptureBranchSubmissionApplication({
-      receipts: new FirebaseCaptureSubmissionReceiptStore(db),
+      receipts: withCaptureReceiptLatency(
+        new FirebaseCaptureSubmissionReceiptStore(db),
+      ),
       payloads: new Sha256CapturePayloadFingerprint(),
       transactions: createCaptureTransactionGatewayApplication({
-        configuration: new CachedCaptureConfigurationQuery(
-          new FirebaseCaptureConfigurationQuery(db),
+        configuration: withCaptureConfigurationLatency(
+          new CachedCaptureConfigurationQuery(
+            new FirebaseCaptureConfigurationQuery(db),
+          ),
         ),
-        ledger: new FirebaseCaptureLedgerPersistence(db),
+        ledger: withCapturePersistenceLatency(
+          new FirebaseCaptureLedgerPersistence(db),
+        ),
       }),
       balances: createBalanceObservationIntakeApplication({
         balances: localCurrencyBalances,
@@ -288,24 +332,37 @@ export const submitAndroidRawNotification = functions
   .region(REGION)
   .runWith({ enforceAppCheck: true })
   .https.onCall(async (data, context): Promise<CaptureSubmissionWireResponse> => {
-    try {
-      return await rawNotificationSubmissionHandler.handle({
-        ...(context.auth?.uid === undefined
-          ? {}
-          : { principalUid: context.auth.uid }),
-        data,
-      });
-    } catch (error) {
-      if (error instanceof CaptureCallableRejection) {
+    const latency = startInteractiveLatencyInvocation(
+      "submitAndroidRawNotification",
+      { correlationId: correlationIdForAndroidRawNotificationRequest(data) },
+    );
+    return latency.run(async () => {
+      setCurrentInteractiveLatencyOperation(
+        "payment-capture.submit-android-raw-notification.v1",
+      );
+      try {
+        const response = await rawNotificationSubmissionHandler.handle({
+          ...(context.auth?.uid === undefined
+            ? {}
+            : { principalUid: context.auth.uid }),
+          data,
+        });
+        latency.complete("succeeded");
+        return response;
+      } catch (error) {
+        if (error instanceof CaptureCallableRejection) {
+          latency.complete("rejected");
+          throw new functions.https.HttpsError(
+            error.callableCode,
+            error.domainCode,
+            error.details,
+          );
+        }
+        latency.complete("failed");
         throw new functions.https.HttpsError(
-          error.callableCode,
-          error.domainCode,
-          error.details,
+          "internal",
+          "RAW_NOTIFICATION_SUBMISSION_UNAVAILABLE",
         );
       }
-      throw new functions.https.HttpsError(
-        "internal",
-        "RAW_NOTIFICATION_SUBMISSION_UNAVAILABLE",
-      );
-    }
+    });
   });

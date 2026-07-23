@@ -327,8 +327,11 @@ Capture receipt와 Ledger Transaction·Local Currency Balance는 서로 다른 C
 
 ### 7.3 소규모 운영 저지연 Adapter
 
-- `submitAndroidRawNotification`, `executeHouseholdCommand`, `executeHouseholdQuery`는 `minInstances=1`을 사용해 결제 수집·QuickEdit Command·구버전 Query fallback의 cold start를 줄이되 Firebase Auth와 App Check 검증을 유지합니다.
+- `submitAndroidRawNotification`, `executeHouseholdCommand`, `executeHouseholdQuery`는 현재 소규모·비용 우선 운영에서 `minInstances=0`을 사용합니다. process-local cache는 warm process에서만 best-effort로 동작하고 cache hit를 보장하지 않습니다. 단계별 latency 계측과 hot-path 단순화 뒤에도 cold start가 목표 지연을 지배한다고 확인될 때에만 특정 Function의 warm instance를 재검토하며 Firebase Auth와 App Check 검증은 유지합니다.
 - warm Functions instance는 성공한 활성 Membership을 UID별 최대 5분·64개, 성공한 결제 설정 snapshot을 household/member별 최대 1분·32개만 process-local LRU/TTL cache에 보존합니다. 거부·실패 결과는 cache하지 않으며 instance 종료 시 사라집니다.
+- process-local cache miss에서는 가구별 `runtimeProjections/payment-capture-configuration-v1` 한 문서로 카드·가맹점 규칙·활성 카테고리를 읽습니다. projection 자체가 없을 때만 원본 collection을 동일 transaction에서 조합해 다시 저장합니다.
+- Registered Card·Merchant Rule·Category Catalog 변경 Writer는 자신의 변경 transaction 안에서 위 projection을 삭제합니다. 재생성 transaction도 projection을 먼저 읽으므로 변경과 재생성이 경합하면 Firestore가 재시도하여 변경 뒤 오래된 projection이 복원되는 경쟁 조건을 막습니다.
+- Android와 Functions의 capture latency 로그는 원 observation ID를 저장하지 않고 동일한 SHA-256 앞 16자리 `correlationId`만 공유합니다. Android는 알림 수신부터 Quick Edit 표시까지, Functions는 Membership·receipt·configuration·persistence 단계를 각각 기록합니다.
 - cache는 UID를 다른 가구로 바꾸거나 클라이언트가 주장한 householdId를 수용하지 않습니다. 모든 raw 요청은 여전히 인증된 UID를 입력으로 사용하고 cache miss에서는 권위 저장소를 읽습니다.
 - 활성 Membership 제거·연결 변경은 기존 warm instance에서 최대 5분 늦게 반영될 수 있습니다. Firebase Auth·App Check는 매 요청 유지하며 이 제한된 회수 지연은 현재 소규모·속도 우선 운영에서 명시적으로 수용합니다.
 - 현재 두 가구와 향후 소수 가구를 기준으로 별도 Redis, 분산 invalidation, 요청 fan-out Queue를 대화형 경로에 두지 않습니다. 외부 Provider와 Scheduler의 page·rate limit은 이 결정과 무관하게 유지합니다.
