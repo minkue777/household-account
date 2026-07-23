@@ -12,6 +12,7 @@ export interface LedgerTransactionView {
   localTime: string;
   cardDisplay: string;
   cardType: "manual" | "captured";
+  source?: string;
   creatorMemberId: string;
   lifecycleState: "active" | "deleted";
   aggregateVersion: number;

@@ -74,18 +74,31 @@ function digits(value: string | undefined): string {
   return (value ?? "").replace(/\D/gu, "").slice(-4);
 }
 
+function displayToken(value: string | undefined): string {
+  const token = (value ?? "")
+    .replace(/[xX＊]/gu, "*")
+    .replace(/[^0-9*]/gu, "")
+    .slice(-4);
+  return token.length === 4 ? token : digits(value);
+}
+
 function normalizeCompany(value: string): string {
   return value.normalize("NFC").trim().replace(/\s+/gu, " ").toLowerCase();
 }
 
 function cardDisplay(
   card: CaptureApprovalPersistenceCommand["branch"]["cardEvidence"],
+  resolved:
+    CaptureApprovalPersistenceCommand["branch"]["resolvedCardEvidence"],
 ): string {
+  if (resolved !== undefined) {
+    return `${resolved.companyLabel}(${resolved.lastFour})`;
+  }
   if (card === undefined) return "자동 수집";
-  const lastFour = digits(card.maskedToken);
-  return lastFour === ""
+  const token = displayToken(card.maskedToken);
+  return token === ""
     ? card.companyLabel
-    : `${card.companyLabel}(${lastFour})`;
+    : `${card.companyLabel}(${token})`;
 }
 
 function receiptReference(
@@ -341,7 +354,10 @@ export class FirebaseCaptureLedgerPersistence
           .collection("captureRecords")
           .doc(ids.captureId);
         const localTime = command.branch.occurredAt.slice(11, 16);
-        const display = cardDisplay(command.branch.cardEvidence);
+        const display = cardDisplay(
+          command.branch.cardEvidence,
+          command.branch.resolvedCardEvidence,
+        );
         const common = {
           householdId: command.householdId,
           transactionType: "expense",
@@ -406,6 +422,7 @@ export class FirebaseCaptureLedgerPersistence
           cardEvidence: {
             companyLabel: command.branch.cardEvidence?.companyLabel ?? "",
             lastFour: digits(command.branch.cardEvidence?.maskedToken),
+            maskedToken: displayToken(command.branch.cardEvidence?.maskedToken),
           },
           ...(command.branch.canonicalCardId === undefined
             ? {}

@@ -14,12 +14,33 @@ describe('ledger read card display contract', () => {
         cardLastFour: '삼성(1840)',
       })
     ).toBe('수동');
+    expect(
+      resolveExpenseCardDisplay({
+        cardType: 'main',
+        source: 'manual',
+        cardDisplay: '수동',
+      })
+    ).toBe('수동');
   });
 
   it('자동 수집 거래는 canonical 표시를 사용하고 legacy 필드도 호환한다', () => {
     expect(
       resolveExpenseCardDisplay({ cardType: 'captured', cardDisplay: '삼성(1840)' })
     ).toBe('삼성(1840)');
+    expect(
+      resolveExpenseCardDisplay({
+        cardType: 'captured',
+        source: 'manual',
+        cardDisplay: '국민(0027)',
+      })
+    ).toBe('국민(0027)');
+    expect(
+      resolveExpenseCardDisplay({
+        cardType: 'main',
+        source: 'manual',
+        cardDisplay: '국민(0027)',
+      })
+    ).toBe('국민(0027)');
     expect(resolveExpenseCardDisplay({ cardLastFour: '국민(1234)' })).toBe('국민(1234)');
   });
 });

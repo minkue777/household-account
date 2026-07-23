@@ -141,6 +141,72 @@ describe("Firebase Capture → Ledger transaction adapter", () => {
     expect(memory.paths("outboxEvents/")).toHaveLength(1);
   });
 
+  it("원 알림의 마스킹 증거는 보존하고 거래 표시에는 확정된 등록 카드 네 자리를 사용한다", async () => {
+    const memory = new InMemoryFirestore();
+    const persistence = new FirebaseCaptureLedgerPersistence(
+      memory as unknown as firestore.Firestore,
+    );
+    const command = approval({
+      downstreamKey: "approval-masked-card",
+      branch: {
+        ...approval().branch,
+        cardEvidence: { companyLabel: "농협", maskedToken: "2*4*" },
+        resolvedCardEvidence: {
+          companyLabel: "농협",
+          lastFour: "2546",
+        },
+        canonicalCardId: "nh-card-1",
+      },
+    });
+
+    const result = await persistence.recordApproval(command);
+    if (result.kind !== "recorded") throw new Error("승인 생성이 필요합니다.");
+
+    expect(
+      memory.document(
+        `households/house-1/ledgerTransactions/${result.transactionId}`,
+      ),
+    ).toMatchObject({
+      cardDisplay: "농협(2546)",
+      canonicalCardId: "nh-card-1",
+    });
+    expect(
+      memory.document("households/house-1/captureRecords/capture-record-" +
+        result.captureLineageId.replace("capture-lineage-", "")),
+    ).toMatchObject({
+      cardEvidence: {
+        companyLabel: "농협",
+        lastFour: "24",
+        maskedToken: "2*4*",
+      },
+      canonicalCardId: "nh-card-1",
+    });
+  });
+
+  it("등록 카드 번호를 확정할 수 없으면 네 자리 마스킹 모양을 줄이지 않고 표시한다", async () => {
+    const memory = new InMemoryFirestore();
+    const persistence = new FirebaseCaptureLedgerPersistence(
+      memory as unknown as firestore.Firestore,
+    );
+
+    const result = await persistence.recordApproval(
+      approval({
+        downstreamKey: "approval-unresolved-mask",
+        branch: {
+          ...approval().branch,
+          cardEvidence: { companyLabel: "농협", maskedToken: "2*6*" },
+          canonicalCardId: undefined,
+        },
+      }),
+    );
+    if (result.kind !== "recorded") throw new Error("승인 생성이 필요합니다.");
+
+    expect(memory.document(`expenses/${result.transactionId}`)).toMatchObject({
+      cardDisplay: "농협(2*6*)",
+      cardLastFour: "농협(2*6*)",
+    });
+  });
+
   it("30일 내 유일 승인 취소는 원본·파생을 모두 논리 삭제하고 claim을 tombstone으로 전환한다", async () => {
     const memory = new InMemoryFirestore();
     const persistence = new FirebaseCaptureLedgerPersistence(

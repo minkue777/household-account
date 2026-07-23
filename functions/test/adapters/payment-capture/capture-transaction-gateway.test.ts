@@ -161,6 +161,34 @@ describe("Capture configuration → Ledger application boundary", () => {
     ]);
   });
 
+  it("마스킹된 카드 알림이 등록 카드 하나와 일치하면 표시용 끝 네 자리를 복원한다", async () => {
+    const subject = createSubject();
+
+    await subject.record({
+      householdId: "house-1",
+      downstreamKey: "payment-masked-card",
+      branch: branch({
+        captureContext: {
+          ...branch().captureContext,
+          cardEvidence: { companyLabel: "국민", maskedToken: "12**" },
+        },
+      }),
+    });
+
+    expect(subject.approvals).toEqual([
+      expect.objectContaining({
+        branch: expect.objectContaining({
+          cardEvidence: { companyLabel: "국민", maskedToken: "12**" },
+          resolvedCardEvidence: {
+            companyLabel: "국민",
+            lastFour: "1234",
+          },
+          canonicalCardId: "card-own",
+        }),
+      }),
+    ]);
+  });
+
   it("다른 가구원에게만 등록된 카드는 거래를 만들지 않는다", async () => {
     const subject = createSubject();
 

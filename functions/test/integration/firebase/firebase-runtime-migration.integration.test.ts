@@ -135,6 +135,32 @@ async function seedFullScope() {
       createdAt: "2026-07-20T03:30:00.000Z",
       updatedAt: "2026-07-20T03:30:00.000Z",
     }),
+    database.collection("expenses").doc("expense-legacy-card").set({
+      householdId: HOUSEHOLD_ID,
+      merchant: "과거 카드 결제",
+      amount: 12_000,
+      category: "food",
+      date: "2026-07-20",
+      time: "13:30",
+      createdBy: "민규",
+      cardType: "main",
+      cardLastFour: "국민(0027)",
+      source: "manual",
+      schemaVersion: 1,
+    }),
+    database.collection("expenses").doc("expense-legacy-main-manual").set({
+      householdId: HOUSEHOLD_ID,
+      merchant: "과거 수동 지출",
+      amount: 8_000,
+      category: "food",
+      date: "2026-07-20",
+      time: "14:00",
+      createdBy: "민규",
+      cardType: "main",
+      cardDisplay: "수동",
+      source: "manual",
+      schemaVersion: 1,
+    }),
     database.collection("assets").doc("asset-1").set({
       householdId: HOUSEHOLD_ID,
       name: "적금",
@@ -359,6 +385,29 @@ describeWithFirestoreEmulator("Firebase runtime migration operations boundary", 
       mergeLeafIds: ["expense-leaf-1", "expense-leaf-2"],
       intermediateMergeHistoryIds: ["expense-merge-0"],
       derivedFromTransactionId: "expense-original-1",
+    });
+    expect(
+      (
+        await household
+          .collection("ledgerTransactions")
+          .doc("expense-legacy-card")
+          .get()
+      ).data(),
+    ).toMatchObject({
+      cardType: "captured",
+      cardDisplay: "국민(0027)",
+      cardLastFour: "국민(0027)",
+    });
+    expect(
+      (
+        await household
+          .collection("ledgerTransactions")
+          .doc("expense-legacy-main-manual")
+          .get()
+      ).data(),
+    ).toMatchObject({
+      cardType: "manual",
+      cardDisplay: "수동",
     });
     expect((await household.collection("assets").doc("asset-1").get()).data()).toMatchObject({
       currentBalance: 1_000_000,

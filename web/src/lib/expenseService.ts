@@ -70,6 +70,27 @@ const CARD_TYPE_SEARCH_TERMS: Record<string, string[]> = {
 };
 
 const EXACT_CARD_KEYWORD_PATTERN = /^(.+?)\s*\(\s*([0-9*xX＊]{4})\s*\)$/;
+const LEGACY_CAPTURED_CARD_TYPES = new Set([
+  'captured',
+  'family',
+  'kb',
+  'sam',
+  'local_currency',
+  '지역화폐',
+  'bill',
+]);
+const LEGACY_CARD_TOKEN_SUFFIX_PATTERN = /[0-9*xX＊]{4}\)?$/;
+
+function isLegacyCardDisplayEvidence(value: string): boolean {
+  const normalized = value.replace(/\s+/g, '');
+  return (
+    normalized !== '' &&
+    normalized !== '수동' &&
+    normalized !== '자동등록' &&
+    normalized !== '정기지출' &&
+    LEGACY_CARD_TOKEN_SUFFIX_PATTERN.test(normalized)
+  );
+}
 
 /**
  * 현재 가구 키 가져오기
@@ -82,17 +103,17 @@ function getHouseholdId(): string {
 export function resolveExpenseCardDisplay(data: LedgerCardReadFields): string | undefined {
   const cardType = typeof data.cardType === 'string' ? data.cardType.trim().toLowerCase() : '';
   const source = typeof data.source === 'string' ? data.source.trim().toLowerCase() : '';
-  if (cardType === 'manual' || source === 'manual') {
-    return '수동';
-  }
-
   const canonicalDisplay = typeof data.cardDisplay === 'string' ? data.cardDisplay.trim() : '';
-  if (canonicalDisplay) {
-    return canonicalDisplay;
-  }
-
   const legacyDisplay = typeof data.cardLastFour === 'string' ? data.cardLastFour.trim() : '';
-  return legacyDisplay || undefined;
+  const display = canonicalDisplay || legacyDisplay;
+
+  if (cardType === 'manual') return '수동';
+  if (LEGACY_CAPTURED_CARD_TYPES.has(cardType)) return display || undefined;
+  if (cardType === 'main' && isLegacyCardDisplayEvidence(display)) {
+    return display;
+  }
+  if (source === 'manual') return '수동';
+  return display || undefined;
 }
 
 /**

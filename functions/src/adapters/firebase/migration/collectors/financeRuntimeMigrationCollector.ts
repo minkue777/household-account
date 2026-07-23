@@ -51,6 +51,60 @@ function ledgerLifecycle(
   return data.lifecycleState === "superseded" ? "superseded" : lifecycle(data);
 }
 
+const LEGACY_CAPTURED_CARD_TYPES = new Set([
+  "captured",
+  "family",
+  "kb",
+  "sam",
+  "local_currency",
+  "지역화폐",
+  "bill",
+]);
+
+const LEGACY_MANUAL_SOURCES = new Set([
+  "",
+  "manual",
+  "web-manual",
+  "recurring",
+  "legacy-migration",
+]);
+
+function isMeaningfulLegacyCardDisplay(value: string): boolean {
+  const normalized = value.replace(/\s+/g, "");
+  return (
+    normalized !== "" &&
+    normalized !== "수동" &&
+    normalized !== "자동등록" &&
+    normalized !== "정기지출" &&
+    /[0-9xX*＊]{4}\)?$/u.test(normalized)
+  );
+}
+
+function legacyCardType(data: MigrationDocumentData): "captured" | "manual" {
+  const rawCardType = text(data, "cardType").trim().toLowerCase();
+  const rawSource = text(data, "source").trim().toLowerCase();
+  const rawCardDisplay = text(
+    data,
+    "cardDisplay",
+    "cardName",
+    "cardLastFour",
+    "lastFour",
+  );
+  const hasCapturedSource = !LEGACY_MANUAL_SOURCES.has(rawSource);
+
+  if (rawCardType === "manual") return "manual";
+  if (LEGACY_CAPTURED_CARD_TYPES.has(rawCardType)) return "captured";
+  if (rawCardType === "main") {
+    return isMeaningfulLegacyCardDisplay(rawCardDisplay) || hasCapturedSource
+      ? "captured"
+      : "manual";
+  }
+  if (rawCardType === "") return hasCapturedSource ? "captured" : "manual";
+
+  // 알 수 없는 과거 값은 카드 결제로 오인하지 않도록 수동 입력으로 둔다.
+  return "manual";
+}
+
 export interface FinanceRuntimeMigrationCollectorInput
   extends RuntimeMigrationCollectorScope {
   readonly memberIds: ReadonlySet<string>;
@@ -155,7 +209,10 @@ export function collectFinanceRuntimeMigration(
     const transactionType =
       data.transactionType === "income" ? "income" : "expense";
     const timestamps = createdAndUpdated(data, input.plannedAt);
-    const cardDisplay = text(data, "cardDisplay", "cardName") || "수동";
+    const cardType = legacyCardType(data);
+    const cardDisplay =
+      text(data, "cardDisplay", "cardName", "cardLastFour", "lastFour") ||
+      (cardType === "manual" ? "수동" : "자동 수집");
     const nestedSplitGroup = recordValue(data.splitGroup);
     const splitGroupId = text(data, "splitGroupId");
     const splitGroup =
@@ -202,7 +259,7 @@ export function collectFinanceRuntimeMigration(
       localTime: text(data, "localTime", "time") || "00:00",
       time: text(data, "localTime", "time") || "00:00",
       cardDisplay,
-      cardType: data.cardType === "captured" ? "captured" : "manual",
+      cardType,
       creatorMemberId: creator,
       lifecycleState: ledgerLifecycle(data),
       aggregateVersion: Math.max(

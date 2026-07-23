@@ -21,6 +21,10 @@ export interface CaptureApprovalPersistenceCommand {
       readonly companyLabel: string;
       readonly maskedToken?: string;
     };
+    readonly resolvedCardEvidence?: {
+      readonly companyLabel: string;
+      readonly lastFour: string;
+    };
     readonly canonicalCardId?: string;
     readonly localCurrencyType?: "gyeonggi" | "daejeon" | "sejong";
   };

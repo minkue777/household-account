@@ -44,6 +44,9 @@ export function createCaptureTransactionGatewayApplication(input: {
       const cityGas = command.branch.sourceType === "city-gas-bill";
 
       let canonicalCardId: string | undefined;
+      let resolvedCardEvidence:
+        | { readonly companyLabel: string; readonly lastFour: string }
+        | undefined;
       if (!cityGas) {
         if (context.cardEvidence === undefined) {
           return { kind: "rejected", code: "CARD_EVIDENCE_REQUIRED" };
@@ -63,6 +66,13 @@ export function createCaptureTransactionGatewayApplication(input: {
           return { kind: "rejected", code: card.reason };
         }
         canonicalCardId = card.canonicalEvidence?.cardId;
+        resolvedCardEvidence =
+          card.canonicalEvidence === undefined
+            ? undefined
+            : {
+                companyLabel: card.canonicalEvidence.companyLabel,
+                lastFour: card.canonicalEvidence.lastFour,
+              };
       }
 
       const rule = merchantRulePolicy.resolve({
@@ -164,6 +174,9 @@ export function createCaptureTransactionGatewayApplication(input: {
           ...(context.cardEvidence === undefined
             ? {}
             : { cardEvidence: context.cardEvidence }),
+          ...(resolvedCardEvidence === undefined
+            ? {}
+            : { resolvedCardEvidence }),
           ...(canonicalCardId === undefined ? {} : { canonicalCardId }),
           ...(command.branch.localCurrencyType === undefined
             ? {}

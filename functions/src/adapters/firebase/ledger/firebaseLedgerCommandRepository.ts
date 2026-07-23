@@ -61,6 +61,7 @@ function mapTransaction(
     data.lifecycleState === "deleted" || data.deletedAt !== undefined
       ? "deleted"
       : "active";
+  const cardType = data.cardType === "captured" ? "captured" : "manual";
   return {
     transactionId: snapshot.id,
     householdId,
@@ -72,7 +73,8 @@ function mapTransaction(
     accountingDate: text(data, "accountingDate", "date"),
     localTime: text(data, "localTime", "time") || "00:00",
     cardDisplay: text(data, "cardDisplay") || "수동",
-    cardType: data.cardType === "captured" ? "captured" : "manual",
+    cardType,
+    source: text(data, "source") || (cardType === "manual" ? "manual" : "captured"),
     creatorMemberId: text(data, "creatorMemberId", "createdBy"),
     lifecycleState,
     aggregateVersion: Math.max(1, numberValue(data, 1, "aggregateVersion")),
@@ -109,7 +111,9 @@ function transactionDocument(
     creatorMemberId: transaction.creatorMemberId,
     lifecycleState: transaction.lifecycleState,
     aggregateVersion: transaction.aggregateVersion,
-    source: "manual",
+    source:
+      transaction.source ??
+      (transaction.cardType === "manual" ? "manual" : "captured"),
     schemaVersion: 2,
     updatedAt: FieldValue.serverTimestamp(),
     ...(includeCreatedAt ? { createdAt: FieldValue.serverTimestamp() } : {}),

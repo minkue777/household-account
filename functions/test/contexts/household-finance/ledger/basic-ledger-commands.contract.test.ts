@@ -15,6 +15,7 @@ interface LedgerTransactionView {
   localTime: string;
   cardDisplay: string;
   cardType: "manual" | "captured";
+  source?: string;
   creatorMemberId: string;
   lifecycleState: "active" | "deleted";
   aggregateVersion: number;
@@ -263,6 +264,37 @@ describe("Ledger 기본 Command·Query 공개 계약", () => {
       kind: "success",
       value: { merchant: "변경", amountInWon: 20_000, aggregateVersion: 2 },
     });
+  });
+
+  it("[T-LED-008][LED-009] 자동 수집 거래 수정은 원래 수집 출처와 카드 표시를 보존한다", async () => {
+    const subject = createSubject({
+      now: "2026-07-20T12:34:56+09:00",
+      transactions: [
+        transaction("captured-1", {
+          cardType: "captured",
+          cardDisplay: "국민(0027)",
+          source: "kb-card",
+        }),
+      ],
+      activeCategoryIds: ["food"],
+    });
+
+    await subject.update({
+      commandId: "update-captured",
+      actor,
+      transactionId: "captured-1",
+      expectedVersion: 1,
+      patch: { categoryId: "food" },
+    });
+
+    expect(subject.state().transactions).toEqual([
+      expect.objectContaining({
+        cardType: "captured",
+        cardDisplay: "국민(0027)",
+        source: "kb-card",
+        aggregateVersion: 2,
+      }),
+    ]);
   });
 
   it.each([
