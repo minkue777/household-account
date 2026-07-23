@@ -8,7 +8,7 @@ jest.mock('firebase/auth', () => ({
   signOut: jest.fn(async () => undefined),
   onAuthStateChanged: jest.fn(),
 }));
-jest.mock('@/lib/firebase', () => ({ app: { name: 'web-app' } }));
+jest.mock('@/lib/firebaseApp', () => ({ app: { name: 'web-app' } }));
 jest.mock('@/platform/android-host/androidHostBridge', () => ({
   isAndroidHostAvailable: () => true,
   requestAndroidHost: jest.fn(),

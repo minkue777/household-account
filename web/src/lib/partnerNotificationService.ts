@@ -1,4 +1,3 @@
-import { ledgerCommands } from '@/features/ledger/application/ledgerCommands';
 import { requireClientSessionScope } from '@/composition/clientSessionScope';
 
 /**
@@ -6,5 +5,6 @@ import { requireClientSessionScope } from '@/composition/clientSessionScope';
  */
 export async function notifyPartner(id: string, expectedVersion: number): Promise<void> {
   const householdId = requireClientSessionScope().householdId;
+  const { ledgerCommands } = await import('@/features/ledger/application/ledgerCommands');
   await ledgerCommands.requestNotification(householdId, id, expectedVersion);
 }

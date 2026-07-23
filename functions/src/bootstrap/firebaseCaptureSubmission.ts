@@ -1,9 +1,13 @@
 import * as functions from "firebase-functions/v1";
 
-import { FirebaseCaptureConfigurationQuery } from "../adapters/firebase/payment-capture/firebaseCaptureConfigurationQuery";
+import {
+  CachedCaptureConfigurationQuery,
+  FirebaseCaptureConfigurationQuery,
+} from "../adapters/firebase/payment-capture/firebaseCaptureConfigurationQuery";
 import { FirebaseCaptureLedgerPersistence } from "../adapters/firebase/payment-capture/firebaseCaptureLedgerPersistence";
 import {
   FirebaseCaptureMembershipResolver,
+  CachedCaptureMembershipResolver,
   type CaptureMembershipResolver,
 } from "../adapters/firebase/payment-capture/firebaseCaptureMembershipResolver";
 import {
@@ -220,7 +224,9 @@ export function createFirebaseCaptureSubmissionPort(): CaptureSubmissionInputPor
       receipts: new FirebaseCaptureSubmissionReceiptStore(db),
       payloads: new Sha256CapturePayloadFingerprint(),
       transactions: createCaptureTransactionGatewayApplication({
-        configuration: new FirebaseCaptureConfigurationQuery(db),
+        configuration: new CachedCaptureConfigurationQuery(
+          new FirebaseCaptureConfigurationQuery(db),
+        ),
         ledger: new FirebaseCaptureLedgerPersistence(db),
       }),
       balances: createBalanceObservationIntakeApplication({
@@ -230,14 +236,18 @@ export function createFirebaseCaptureSubmissionPort(): CaptureSubmissionInputPor
   });
 }
 
+const captureMemberships = new CachedCaptureMembershipResolver(
+  new FirebaseCaptureMembershipResolver(db),
+);
+
 const captureSubmissionHandler = createCaptureSubmissionCallableHandler({
-  memberships: new FirebaseCaptureMembershipResolver(db),
+  memberships: captureMemberships,
   submissions: createFirebaseCaptureSubmissionPort(),
 });
 
 const rawNotificationSubmissionHandler =
   createAndroidRawNotificationCallableHandler({
-    memberships: new FirebaseCaptureMembershipResolver(db),
+    memberships: captureMemberships,
     submissions: createAndroidRawNotificationSubmissionApplication({
       parser: createAndroidProviderParserApplication({
         resolveOccurrenceYear: resolvePaymentOccurrenceYear,
@@ -276,7 +286,7 @@ export const submitCaptureEnvelope = functions
 
 export const submitAndroidRawNotification = functions
   .region(REGION)
-  .runWith({ enforceAppCheck: true })
+  .runWith({ enforceAppCheck: true, minInstances: 1 })
   .https.onCall(async (data, context): Promise<CaptureSubmissionWireResponse> => {
     try {
       return await rawNotificationSubmissionHandler.handle({

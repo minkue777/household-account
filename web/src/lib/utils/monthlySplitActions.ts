@@ -1,9 +1,4 @@
-import { Expense } from '@/types/expense';
-import {
-  cancelSplitGroup,
-  splitExpenseMonthly,
-  updateSplitGroup,
-} from '@/lib/expenseService';
+import type { Expense } from '@/types/expense';
 import { splitMonthsMinMessage } from '@/lib/utils/splitMonths';
 
 type AsyncVoid = void | Promise<void>;
@@ -51,6 +46,7 @@ export async function runSplitMonthsAction({
 
   try {
     void _deleteExpense;
+    const { splitExpenseMonthly } = await import('@/lib/expenseService');
     await splitExpenseMonthly(expense, months);
     await onSuccess?.();
   } catch {
@@ -68,6 +64,7 @@ export async function runCancelSplitGroupAction({
   const showAlert = getAlertFn(alertFn);
 
   try {
+    const { cancelSplitGroup } = await import('@/lib/expenseService');
     await cancelSplitGroup(expense.splitGroupId);
     await onSuccess?.();
   } catch {
@@ -86,6 +83,7 @@ export async function runUpdateSplitGroupAction({
   const showAlert = getAlertFn(alertFn);
 
   try {
+    const { updateSplitGroup } = await import('@/lib/expenseService');
     await updateSplitGroup(expense.splitGroupId, newMonths);
     await onSuccess?.();
   } catch {

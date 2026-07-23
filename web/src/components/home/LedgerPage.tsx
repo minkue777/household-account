@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Calendar from '@/components/Calendar';
@@ -9,19 +9,8 @@ import { Expense, Category, TransactionType } from '@/types/expense';
 import { DEFAULT_HOME_SUMMARY_CONFIG } from '@/types/household';
 import BalanceCards from '@/components/BalanceCards';
 import HomeHeader from '@/components/HomeHeader';
-import {
-  subscribeToMonthlyExpenses,
-  subscribeToDateRangeExpenses,
-  updateExpense,
-  addManualExpense,
-  deleteExpense,
-  splitExpense,
-  mergeExpenses,
-  unmergeExpense,
-  SplitItem,
-  addManualMonthlySplit,
-} from '@/lib/expenseService';
-import { addMerchantRule } from '@/lib/merchantRuleService';
+import type { SplitItem } from '@/lib/expenseService';
+import { readMonthlyExpenseSnapshot } from '@/features/ledger/application/monthlyExpenseSnapshot';
 import { useHousehold } from '@/contexts/HouseholdContext';
 
 const ExpenseDetail = dynamic(() => import('@/components/expense/ExpenseDetail'));
@@ -41,7 +30,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const { household, householdKey } = useHousehold();
+  const { household, householdKey, isSessionVerified = true } = useHousehold();
 
   const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
   const [currentMonth, setCurrentMonth] = useState(() => new Date().getMonth() + 1);
@@ -87,26 +76,43 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
-  useEffect(() => {
-    setIsLoading(true);
-
-    const unsubscribe = subscribeToMonthlyExpenses(
-      currentYear,
-      currentMonth,
-      (newExpenses) => {
-        setExpenses(newExpenses);
-        setIsLoading(false);
-      },
-      { transactionType }
-    );
-
-    return () => unsubscribe();
+  useLayoutEffect(() => {
+    const cached = readMonthlyExpenseSnapshot(currentYear, currentMonth, transactionType);
+    setExpenses(cached ?? []);
+    setIsLoading(cached === undefined);
   }, [currentYear, currentMonth, transactionType]);
+
+  useEffect(() => {
+    if (!isSessionVerified) return;
+
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+    void import('@/lib/expenseService').then(({ subscribeToMonthlyExpenses }) => {
+      if (cancelled) return;
+      unsubscribe = subscribeToMonthlyExpenses(
+        currentYear,
+        currentMonth,
+        (newExpenses) => {
+          setExpenses(newExpenses);
+          setIsLoading(false);
+        },
+        { transactionType }
+      );
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [currentYear, currentMonth, isSessionVerified, transactionType]);
 
   useEffect(() => {
     if (!needsYearlyTotal) {
       setYearlyTotal(null);
       setYearlyExpenses([]);
+      return undefined;
+    }
+    if (!isSessionVerified) {
       return undefined;
     }
 
@@ -119,18 +125,26 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     const startDate = `${currentYear}-01-01`;
     const endDate = `${currentYear}-12-31`;
 
-    const unsubscribe = subscribeToDateRangeExpenses(
-      startDate,
-      endDate,
-      (yearExpenses) => {
-        setYearlyExpenses(yearExpenses);
-        setYearlyTotal(yearExpenses.reduce((sum, expense) => sum + expense.amount, 0));
-      },
-      { transactionType }
-    );
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+    void import('@/lib/expenseService').then(({ subscribeToDateRangeExpenses }) => {
+      if (cancelled) return;
+      unsubscribe = subscribeToDateRangeExpenses(
+        startDate,
+        endDate,
+        (yearExpenses) => {
+          setYearlyExpenses(yearExpenses);
+          setYearlyTotal(yearExpenses.reduce((sum, expense) => sum + expense.amount, 0));
+        },
+        { transactionType }
+      );
+    });
 
-    return () => unsubscribe();
-  }, [currentYear, isLoading, needsYearlyTotal, transactionType]);
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [currentYear, isLoading, isSessionVerified, needsYearlyTotal, transactionType]);
 
   useEffect(() => {
     const editId = searchParams.get('edit');
@@ -235,6 +249,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     const expense = expenses.find((item) => item.id === expenseId)
       ?? yearlyExpenses.find((item) => item.id === expenseId);
     if (!expense) throw new Error('수정할 거래의 최신 버전을 찾을 수 없습니다.');
+    const { updateExpense } = await import('@/lib/expenseService');
     await updateExpense(expenseId, data, expense.aggregateVersion);
   };
 
@@ -245,6 +260,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
 
     if (!householdKey) throw new Error('인증된 가구 세션이 필요합니다.');
     const householdId = householdKey;
+    const { addMerchantRule } = await import('@/lib/merchantRuleService');
     await addMerchantRule(householdId, merchantName, category, true);
   };
 
@@ -257,10 +273,12 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     splitMonths?: number
   ) => {
     if (splitMonths && splitMonths > 1) {
+      const { addManualMonthlySplit } = await import('@/lib/expenseService');
       await addManualMonthlySplit(merchant, amount, category, date, splitMonths, memo);
       return;
     }
 
+    const { addManualExpense } = await import('@/lib/expenseService');
     await addManualExpense(merchant, amount, category, date, memo, transactionType);
   };
 
@@ -268,18 +286,22 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     const expense = expenses.find((item) => item.id === expenseId)
       ?? yearlyExpenses.find((item) => item.id === expenseId);
     if (!expense) throw new Error('삭제할 거래의 최신 버전을 찾을 수 없습니다.');
+    const { deleteExpense } = await import('@/lib/expenseService');
     await deleteExpense(expenseId, expense.aggregateVersion);
   };
 
   const handleSplitExpense = async (expense: Expense, splits: SplitItem[]) => {
+    const { splitExpense } = await import('@/lib/expenseService');
     await splitExpense(expense, splits);
   };
 
   const handleMergeExpenses = async (targetExpense: Expense, sourceExpense: Expense) => {
+    const { mergeExpenses } = await import('@/lib/expenseService');
     await mergeExpenses(targetExpense, sourceExpense);
   };
 
   const handleUnmergeExpense = async (expense: Expense) => {
+    const { unmergeExpense } = await import('@/lib/expenseService');
     await unmergeExpense(expense);
   };
 

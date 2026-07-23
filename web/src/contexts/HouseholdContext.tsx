@@ -5,17 +5,12 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
 import type { User } from 'firebase/auth';
-import {
-  getCachedHousehold,
-  getHousehold,
-  HouseholdReadNotFoundError,
-  renameHouseholdMember,
-} from '@/lib/householdService';
 import {
   logOut,
   onAuthChange,
@@ -23,7 +18,6 @@ import {
   signInWithGoogleSession,
 } from '@/lib/authService';
 import type { Household, HouseholdMember } from '@/types/household';
-import { householdCommands } from '@/features/access-household/application/householdCommands';
 import {
   captureLegacySessionCandidate,
   clearLegacySessionCandidate,
@@ -49,6 +43,7 @@ import {
 } from '@/platform/android-host/androidHostBridge';
 import {
   clearSignedInMembershipCache,
+  readLastSignedInSessionCache,
   readSignedInHouseholdCache,
   readSignedInMembershipCache,
   writeSignedInMembershipCache,
@@ -72,6 +67,7 @@ interface HouseholdContextType {
   householdKey: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isSessionVerified: boolean;
   currentMember: HouseholdMember | null;
   sessionState: HouseholdSessionState;
   sessionError: string | null;
@@ -111,11 +107,21 @@ function isTransientHouseholdReadFailure(error: unknown): boolean {
   return TRANSIENT_FIRESTORE_READ_CODES.has(String((error as { code: unknown }).code));
 }
 
+function isHouseholdReadNotFound(error: unknown): boolean {
+  return error instanceof Error
+    && (
+      error.name === 'HouseholdReadNotFoundError'
+      || error.message === 'HOUSEHOLD_READ_NOT_FOUND'
+    );
+}
+
 export function HouseholdProvider({ children }: { children: ReactNode }) {
+  const paintBootstrapRef = useRef<ReturnType<typeof readLastSignedInSessionCache>>(undefined);
   const [household, setHousehold] = useState<Household | null>(null);
   const [householdKey, setHouseholdKey] = useState<string | null>(null);
   const [currentMember, setCurrentMember] = useState<HouseholdMember | null>(null);
   const [sessionState, setSessionState] = useState<HouseholdSessionState>('resolving');
+  const [isSessionVerified, setIsSessionVerified] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [legacyCandidate, setLegacyCandidate] = useState<LegacySessionCandidate | null>(null);
   const [adminHouseholdView, setAdminHouseholdView] =
@@ -125,6 +131,28 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   const sessionGenerationRef = useRef(0);
   const endpointRegistrationGenerationRef = useRef(0);
 
+  useLayoutEffect(() => {
+    const cached = readLastSignedInSessionCache();
+    paintBootstrapRef.current = cached;
+    if (!cached) return;
+    const member = cached.household.members.find(
+      (candidate) => candidate.id === cached.resolution.membership.memberId
+    );
+    if (!member) return;
+    sessionGenerationRef.current = 1;
+    setClientSessionScope({
+      sessionGeneration: 1,
+      principalUid: cached.principalUid,
+      householdId: cached.resolution.membership.householdId,
+      memberId: cached.resolution.membership.memberId,
+      accessMode: 'member',
+    });
+    setHousehold(cached.household);
+    setHouseholdKey(cached.resolution.membership.householdId);
+    setCurrentMember(member);
+    setSessionState('ready');
+  }, []);
+
   const clearResolvedSession = useCallback(() => {
     resetClientOptimisticProjections();
     clearClientSessionScope();
@@ -132,6 +160,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     setHouseholdKey(null);
     setCurrentMember(null);
     setAdminHouseholdView(null);
+    setIsSessionVerified(false);
   }, []);
 
   const restoreAdministratorHouseholdView = useCallback(async (
@@ -144,6 +173,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     clearResolvedSession();
 
     try {
+      const { getHousehold } = await import('@/lib/householdService');
       const token = await user.getIdTokenResult(true);
       if (token.claims.systemAdmin !== true) {
         throw new Error('서버에서 확인된 관리자 권한이 없습니다.');
@@ -183,23 +213,37 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   const restoreSignedInUser = useCallback(async (
     user: User,
     candidate?: LegacySessionCandidate,
-    prefetchedResolution?: SignedInUserResolution
+    prefetchedResolution?: SignedInUserResolution,
+    options: { preservePaintBootstrap?: boolean } = {}
   ) => {
     const resolutionGeneration = ++resolutionGenerationRef.current;
-    setSessionState('resolving');
     setSessionError(null);
-    clearResolvedSession();
+    if (!options.preservePaintBootstrap) {
+      setSessionState('resolving');
+      clearResolvedSession();
+    }
 
     try {
-      const resolution = prefetchedResolution ?? await withinDeadline(
-        householdCommands.resolveSignedInUser(),
-        SESSION_RESOLUTION_TIMEOUT_MS,
-        'SESSION_RESOLUTION_TIMEOUT'
-      );
+      const resolution = prefetchedResolution ?? await (async () => {
+        const [
+          { initializeFirebaseAppCheck },
+          { householdCommands },
+        ] = await Promise.all([
+          import('@/platform/security/firebaseAppCheck'),
+          import('@/features/access-household/application/householdCommands'),
+        ]);
+        initializeFirebaseAppCheck();
+        return withinDeadline(
+          householdCommands.resolveSignedInUser(),
+          SESSION_RESOLUTION_TIMEOUT_MS,
+          'SESSION_RESOLUTION_TIMEOUT'
+        );
+      })();
       if (resolutionGeneration !== resolutionGenerationRef.current) return;
 
       if (resolution.kind === 'first-visit-required') {
         clearSignedInMembershipCache();
+        clearResolvedSession();
         if (candidate) {
           setLegacyCandidate(candidate);
           setSessionState('legacy-confirmation');
@@ -227,6 +271,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         aggregateVersion: membership.aggregateVersion,
       };
       const sessionGeneration = ++sessionGenerationRef.current;
+      setIsSessionVerified(true);
 
       setClientSessionScope({
         sessionGeneration,
@@ -279,6 +324,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       const fastHousehold = readSignedInHouseholdCache(user.uid, membership.householdId);
       if (fastHousehold) applyHousehold(fastHousehold);
 
+      const { getCachedHousehold, getHousehold } = await import('@/lib/householdService');
       const cachedHousehold = fastHousehold
         ?? await getCachedHousehold(membership.householdId);
       if (!fastHousehold && cachedHousehold) applyHousehold(cachedHousehold);
@@ -294,7 +340,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         // 검증된 membership과 캐시로 이미 화면을 복구했다면 일시적인 read
         // 장애 때문에 다시 전체 화면을 막지 않습니다.
         if (
-          error instanceof HouseholdReadNotFoundError
+          isHouseholdReadNotFound(error)
           || !cachedHousehold
           || !isTransientHouseholdReadFailure(error)
         ) {
@@ -303,6 +349,16 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       if (resolutionGeneration !== resolutionGenerationRef.current) return;
+      if (
+        options.preservePaintBootstrap
+        && !isHouseholdReadNotFound(error)
+      ) {
+        // The cached UI remains useful during a transient background verification failure.
+        // Remote reads and writes are still rejected by Firebase until Auth/App Check recover.
+        setIsSessionVerified(false);
+        setSessionState('ready');
+        return;
+      }
       clearSignedInMembershipCache();
       clearResolvedSession();
       setSessionError(errorMessage(error));
@@ -314,10 +370,8 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     let disposed = false;
     let androidBootstrapPending = isAndroidHostAvailable();
     let androidBootstrapStarted = false;
-    let androidBootstrapFallbackId: number | undefined;
     let appliedAuthUid: string | null | undefined;
     let appliedResolutionKey: string | undefined;
-    let restoredFromCache = false;
 
     const resolutionKey = (resolution?: SignedInUserResolution): string | undefined =>
       resolution?.kind === 'membership-found'
@@ -326,7 +380,8 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
 
     const applyUser = (
       user: User | null,
-      prefetchedResolution?: SignedInUserResolution
+      prefetchedResolution?: SignedInUserResolution,
+      preservePaintBootstrap = false
     ) => {
       if (disposed) return;
       const nextUid = user?.uid ?? null;
@@ -346,6 +401,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         setSessionState('signed-out');
         return;
       }
+      setIsSessionVerified(true);
       const adminSelection = readAdminHouseholdViewSelection();
       if (adminSelection !== null && !isAndroidHostAvailable()) {
         void restoreAdministratorHouseholdView(user, adminSelection);
@@ -354,7 +410,8 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       void restoreSignedInUser(
         user,
         captureLegacySessionCandidate(),
-        prefetchedResolution
+        prefetchedResolution,
+        { preservePaintBootstrap }
       );
     };
 
@@ -366,6 +423,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         AUTH_BOOTSTRAP_TIMEOUT_MS,
         'ANDROID_AUTH_BOOTSTRAP_TIMEOUT'
       ).then((session) => {
+        if (disposed || !androidBootstrapPending) return;
         androidBootstrapPending = false;
         if (session?.signedInUserResolution?.kind === 'membership-found') {
           writeSignedInMembershipCache(
@@ -377,12 +435,13 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         }
         applyUser(
           session?.user ?? null,
-          session?.signedInUserResolution
+          session?.signedInUserResolution,
+          session?.user.uid === paintBootstrapRef.current?.principalUid
         );
       }).catch((error) => {
+        if (disposed || !androidBootstrapPending) return;
         androidBootstrapPending = false;
-        if (disposed) return;
-        if (restoredFromCache) return;
+        if (paintBootstrapRef.current !== undefined) return;
         clearResolvedSession();
         setSessionError(errorMessage(error));
         setSessionState('error');
@@ -397,32 +456,42 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         // 영속 Web Auth가 복원되면 매 실행마다 Native custom-token을 다시
         // 발급하지 않습니다. Firebase SDK의 token refresh와 서버 rules가 실제
         // read/write 권한을 계속 검증합니다.
-        if (user && !androidBootstrapStarted) {
+        if (user) {
           androidBootstrapPending = false;
-          restoredFromCache = cachedResolution !== undefined;
-          applyUser(user, cachedResolution);
+          const preservesPaint = user.uid === paintBootstrapRef.current?.principalUid;
+          applyUser(
+            user,
+            preservesPaint ? undefined : cachedResolution,
+            preservesPaint
+          );
         } else if (!user) {
           startAndroidBootstrap();
         }
         return;
       }
-      applyUser(user, cachedResolution);
+      const preservesPaint = user?.uid === paintBootstrapRef.current?.principalUid;
+      applyUser(
+        user,
+        preservesPaint ? undefined : cachedResolution,
+        preservesPaint
+      );
     });
 
-    if (androidBootstrapPending) {
-      // Firebase auth observer는 persistence 복원 후 반드시 한 번 호출됩니다.
-      // 비정상적으로 지연될 때만 Native 경로를 fallback으로 시작합니다.
-      androidBootstrapFallbackId = window.setTimeout(startAndroidBootstrap, 500);
+    // 마지막 화면 캐시가 없는 Android 첫 실행은 Auth observer와 Native 세션 복구를
+    // 병렬로 시작합니다. 기존의 고정 500ms 대기는 두 경로 모두에 불필요한 지연이었습니다.
+    if (androidBootstrapPending && paintBootstrapRef.current === undefined) {
+      startAndroidBootstrap();
     }
 
     return () => {
       disposed = true;
-      if (androidBootstrapFallbackId !== undefined) {
-        window.clearTimeout(androidBootstrapFallbackId);
-      }
       unsubscribe();
     };
-  }, [clearResolvedSession, restoreAdministratorHouseholdView, restoreSignedInUser]);
+  }, [
+    clearResolvedSession,
+    restoreAdministratorHouseholdView,
+    restoreSignedInUser,
+  ]);
 
   const signIn = useCallback(async () => {
     const candidate = captureLegacySessionCandidate();
@@ -471,6 +540,9 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     setSessionState('resolving');
     setSessionError(null);
     try {
+      const { householdCommands } = await import(
+        '@/features/access-household/application/householdCommands'
+      );
       await householdCommands.claimLegacyMembership(legacyCandidate);
       await restoreSignedInUser(user);
     } catch (error) {
@@ -489,6 +561,9 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     setSessionState('resolving');
     setSessionError(null);
     try {
+      const { householdCommands } = await import(
+        '@/features/access-household/application/householdCommands'
+      );
       await householdCommands.createWithSelf(householdName.trim(), memberName.trim());
       await restoreSignedInUser(user);
     } catch (error) {
@@ -507,6 +582,9 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     setSessionState('resolving');
     setSessionError(null);
     try {
+      const { householdCommands } = await import(
+        '@/features/access-household/application/householdCommands'
+      );
       await householdCommands.joinAsSelf(invitationCode.trim(), memberName.trim());
       await restoreSignedInUser(user);
     } catch (error) {
@@ -554,6 +632,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     if (!trimmedName) throw new Error('이름을 입력해 주세요.');
     if (trimmedName === currentMember.name) return;
 
+    const { renameHouseholdMember } = await import('@/lib/householdService');
     await renameHouseholdMember(
       household.id,
       currentMember.id,
@@ -578,6 +657,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       householdKey,
       isLoading: sessionState === 'resolving',
       isAuthenticated: sessionState === 'ready',
+      isSessionVerified,
       currentMember,
       sessionState,
       sessionError,

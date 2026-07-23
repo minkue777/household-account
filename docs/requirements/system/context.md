@@ -84,7 +84,7 @@ Android Host, PWA, Reporting, Home Preferences, External Operations, Delivery As
 | SYS-005 | 목표 명세 | 날짜는 YYYY-MM-DD, 시간은 HH:mm 형태로 교환하고 모든 업무 LocalDate·LocalTime·YearMonth·오늘·월 경계는 `Asia/Seoul`로 해석한다. 절대 시각은 UTC Instant로 저장한다. | 가구별 timezone 설정은 없으며 서버·브라우저·기기 기본 timezone에 의존하지 않는다. 연도 없는 결제 시각은 DEC-029에 따라 서울 수신 시각보다 미래가 아닌 가장 가까운 연도로 추론한다. | U, C |
 | SYS-006 | 호환·목표 명세 | 신규 멤버 소유권과 알림 대상은 안정적인 memberId를 사용하고 표시 이름은 snapshot으로만 보존한다. 이름만 저장된 레거시 참조는 같은 가구에서 유일하게 일치할 때만 memberId로 연결하며 원문을 보존한다. | 이름이 없거나 동명이인으로 모호하면 임의 연결하지 않고 수동 reconciliation을 요구한다. 연결 후 이름 변경은 소유권·알림 대상을 바꾸지 않는다. | U, I, migration |
 | SYS-007 | 결함 | 쓰기 작업은 성공과 실패를 구분할 수 있어야 하며 부분 성공으로 완료를 알리면 안 된다. | 여러 현 구현이 예외를 삼키거나 순차 저장한다. 잘못된 현재 결과가 아니라 이 무결성 불변식을 테스트한다. | I, E2E |
-| SYS-008 | 결함 | 보호된 client 상태·cache·실시간 구독·비동기 요청은 인증 완료 후 UID의 유일한 Membership에서 생성한 `SessionScope(sessionGeneration, principalUid, householdId, memberId)`에 귀속되어야 한다. 로그아웃·legacy 전환·승인된 Membership 교정은 이전 상태와 구독을 동기 폐기하고, 세대가 다른 늦은 응답을 무시해야 한다. | DEC-034에 따라 일반 가계부·멤버 선택은 없다. 현재 여러 Web 서비스·Context가 localStorage를 독립적으로 읽고 `guest`를 fallback tenant로 사용하여 같은 탭의 세션 변경 중 이전 가구 데이터가 남거나 쓰기가 발생할 수 있다. localStorage·Native mirror는 권위가 아니다. | C, UI, E2E |
+| SYS-008 | 현재 명세 | 보호된 원격 요청·실시간 구독·Canonical 변경은 인증 완료 후 UID의 유일한 Membership에서 생성한 `SessionScope(sessionGeneration, principalUid, householdId, memberId)`에 귀속되어야 한다. DEC-068에 따라 마지막으로 서버 검증된 UID·SessionScope와 가구·현재 월 원장·가구별 카테고리 local snapshot은 첫 paint 표시 hint로 인증 복원 전에 사용할 수 있으나 원격 권한 근거가 아니다. 로그아웃·legacy 전환·승인된 Membership 교정은 이전 상태와 구독을 폐기하고, 세대가 다른 늦은 응답을 무시해야 한다. | DEC-034에 따라 일반 가계부·멤버 선택은 없다. localStorage·Native mirror는 서버 tenant 권위가 아니며 `guest` fallback을 허용하지 않는다. 복원 UID 불일치·first visit·권한·authoritative household 부재가 확인되면 선표시 hint와 SessionScope를 폐기한다. Auth·App Check·Rules·Functions 인가는 계속 모든 보호 작업을 검증한다. | C, UI, E2E |
 | SYS-009 | 결함 | tenant/schema migration·backfill·repair는 승인된 서버·운영 경계에서 대상 scope, dry-run, checkpoint, 멱등성, reconciliation 결과를 갖고 실행해야 하며 일반 client bundle은 전역 조회나 누락 tenant 필드 보정을 수행할 수 없다. | 현재 Web의 `migrateExpensesToHousehold`는 전체 거래를 읽어 householdId 누락 문서에 현재 가구를 기록할 수 있어 가구 오염 위험이 있다. 정상 사용자 요청과 운영 보정을 같은 API로 노출하지 않는다. | C, I, 운영 계약 |
 
 ## 7. Context 간 공통 원칙
@@ -94,7 +94,7 @@ Android Host, PWA, Reporting, Home Preferences, External Operations, Delivery As
 - 같은 Context 내부 기능도 데이터 소유 기능의 공개 Port를 사용하며 명시적 Context Unit of Work만 강한 원자성 예외가 된다.
 - 같은 업무 규칙을 Web, Android, Functions가 각각 최종 판정하지 않는다.
 - 날짜·시간, ID, 외부 시세, 현재 사용자 정보는 주입 가능한 Port로 제공한다.
-- client Adapter는 localStorage를 업무 Query의 tenant 출처로 사용하지 않고 검증된 SessionScope를 명시적으로 전달한다.
+- client Adapter는 localStorage를 서버 업무 Query의 tenant 권위로 사용하지 않고 검증된 SessionScope를 명시적으로 전달한다. DEC-068의 마지막 검증 snapshot은 composition 경계의 선표시 hint로만 읽는다.
 - migration·repair는 사용자 UI/브라우저 bundle과 분리된 승인된 운영 Application만 실행한다.
 - 호환 읽기와 신규 쓰기 계약을 분리한다.
 - Context를 넘는 비동기 효과는 Canonical 변경과 함께 Durable Outbox에 기록한다.

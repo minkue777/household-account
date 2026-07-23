@@ -90,6 +90,7 @@ export interface CaptureSubmissionContractState {
   }[];
   readonly receipts: readonly CaptureReceiptView[];
   readonly events: readonly PublishedEventView[];
+  readonly receiptSaveCount: number;
   readonly downstreamAttempts: {
     readonly transaction: number;
     readonly balance: number;
@@ -307,6 +308,16 @@ class CaptureLedgerFixture implements CaptureTransactionGatewayPort {
       editable: true as const,
       captureLineageId,
       aggregateVersion: 1,
+      quickEditSnapshot: {
+        transactionId,
+        merchant: input.branch.merchant,
+        amountInWon: input.branch.amountInWon,
+        accountingDate: occurred.occurredLocalDate,
+        localTime: occurred.occurredLocalTime,
+        categoryId: "etc",
+        memo: "",
+        aggregateVersion: 1,
+      },
     };
     this.terminalResults.set(input.downstreamKey, result);
     this.publish("TransactionRecorded.v1", transactionId);
@@ -487,6 +498,7 @@ export function createCaptureSubmissionReceiptDriver(
           : { balanceBranch: balanceBranchView(receipt.balance) }),
       })),
       events: [...ledger.eventViews(), ...balances.eventViews()],
+      receiptSaveCount: receipts.saveCount(),
       downstreamAttempts: {
         transaction: ledger.attempts(),
         balance: balances.attempts(),

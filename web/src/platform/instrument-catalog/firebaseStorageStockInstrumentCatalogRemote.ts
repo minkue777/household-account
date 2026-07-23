@@ -1,4 +1,4 @@
-import { app } from '@/lib/firebase';
+import { app } from '@/lib/firebaseApp';
 import type { StockInstrumentCatalogRemote } from '@/features/portfolio/instrument-catalog/application/stockInstrumentCatalogPorts';
 import {
   parseStockCatalogManifest,

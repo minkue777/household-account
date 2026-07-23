@@ -31,4 +31,23 @@ describe("배포 callable App Check 경계", () => {
       ),
     ).toContain("PlayIntegrityAppCheckProviderFactory");
   });
+  it("Android raw notification callable은 warm instance 하나를 유지하면서 App Check를 강제한다", () => {
+    const value = source(
+      "functions/src/bootstrap/firebaseCaptureSubmission.ts",
+    );
+    expect(value).toContain(
+      ".runWith({ enforceAppCheck: true, minInstances: 1 })",
+    );
+  });
+
+  it("소규모 운영의 공용 Command와 Query callable은 각각 warm instance 하나를 유지한다", () => {
+    expect(
+      source("functions/src/bootstrap/firebaseHouseholdCommand.ts"),
+    ).toMatch(/enforceAppCheck:\s*true,[\s\S]*?minInstances:\s*1/u);
+    expect(
+      source("functions/src/bootstrap/firebaseHouseholdQuery.ts"),
+    ).toContain(
+      ".runWith({ enforceAppCheck: true, minInstances: 1 })",
+    );
+  });
 });

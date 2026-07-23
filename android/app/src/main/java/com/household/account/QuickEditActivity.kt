@@ -102,6 +102,8 @@ class QuickEditActivity : AppCompatActivity() {
 
         initViews()
         setupUI()
+        categories = CategoryRepository.DEFAULT_CATEGORIES
+        setupCategoryButtons()
         loadCategories()
         setupButtons()
         onBackPressedDispatcher.addCallback(

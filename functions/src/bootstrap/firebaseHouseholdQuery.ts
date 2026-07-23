@@ -133,7 +133,7 @@ const router = createHouseholdQueryRouter({
 
 export const executeHouseholdQuery = functions
   .region(REGION)
-  .runWith({ enforceAppCheck: true })
+  .runWith({ enforceAppCheck: true, minInstances: 1 })
   .https.onCall(async (data, context): Promise<HouseholdQueryWireResponse> => {
     const result = await router.execute({
       principalUid: context.auth?.uid,

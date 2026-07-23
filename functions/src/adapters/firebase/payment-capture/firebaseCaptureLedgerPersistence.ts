@@ -462,6 +462,16 @@ export class FirebaseCaptureLedgerPersistence
           editable: true,
           captureLineageId: ids.captureLineageId,
           aggregateVersion: 1,
+          quickEditSnapshot: {
+            transactionId: ids.transactionId,
+            merchant: common.merchant,
+            amountInWon: common.amountInWon,
+            accountingDate: common.accountingDate,
+            localTime,
+            categoryId: common.categoryId,
+            memo: common.memo,
+            aggregateVersion: 1,
+          },
         };
         transaction.create(
           receipt,

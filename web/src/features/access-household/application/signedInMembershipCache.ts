@@ -36,6 +36,12 @@ interface StoredHousehold {
   }>;
 }
 
+export interface LastSignedInSessionCache {
+  readonly principalUid: string;
+  readonly resolution: MembershipFoundResolution;
+  readonly household: Household;
+}
+
 const HOME_SUMMARY_CARD_KEYS = new Set<HomeSummaryCardKey>([
   'localCurrencyBalance',
   'monthlyRemainingBudget',
@@ -182,6 +188,42 @@ export function readSignedInMembershipCache(
   if (typeof window === 'undefined' || principalUid.trim() === '') return undefined;
   const stored = readStoredMembership();
   return stored?.principalUid === principalUid ? stored.resolution : undefined;
+}
+
+/**
+ * Returns the last fully rendered member session without waiting for Firebase Auth persistence.
+ *
+ * This is only a paint-time hint. Firebase Auth, App Check, Firestore rules, and the
+ * authoritative membership command still validate every remote operation in the background.
+ */
+export function readLastSignedInSessionCache(): LastSignedInSessionCache | undefined {
+  const stored = readStoredMembership();
+  const household = stored?.household;
+  if (!stored || !household) return undefined;
+  if (household.id !== stored.resolution.membership.householdId) return undefined;
+  if (
+    !household.members.some(
+      (member) => member.id === stored.resolution.membership.memberId
+    )
+  ) {
+    return undefined;
+  }
+  return {
+    principalUid: stored.principalUid,
+    resolution: stored.resolution,
+    household: {
+      id: household.id,
+      name: household.name,
+      createdAt: new Date(household.createdAt),
+      ...(household.defaultCategoryKey !== undefined
+        ? { defaultCategoryKey: household.defaultCategoryKey }
+        : {}),
+      ...(household.homeSummaryConfig
+        ? { homeSummaryConfig: { ...household.homeSummaryConfig } }
+        : {}),
+      members: household.members.map((member) => ({ ...member })),
+    },
+  };
 }
 
 /**

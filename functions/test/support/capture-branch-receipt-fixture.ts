@@ -37,6 +37,7 @@ export class InMemoryCaptureSubmissionReceiptStore
   implements CaptureSubmissionReceiptPort
 {
   private readonly receipts = new Map<string, CaptureSubmissionReceipt>();
+  private saves = 0;
 
   async claim(input: {
     readonly envelope: CaptureBranchEnvelope;
@@ -78,6 +79,7 @@ export class InMemoryCaptureSubmissionReceiptStore
   }
 
   async save(receipt: CaptureSubmissionReceipt): Promise<void> {
+    this.saves += 1;
     this.receipts.set(
       receiptKey(receipt.householdId, receipt.rootIdempotencyKey),
       cloneReceipt(receipt),
@@ -86,6 +88,10 @@ export class InMemoryCaptureSubmissionReceiptStore
 
   list(): readonly CaptureSubmissionReceipt[] {
     return [...this.receipts.values()].map(cloneReceipt);
+  }
+
+  saveCount(): number {
+    return this.saves;
   }
 }
 

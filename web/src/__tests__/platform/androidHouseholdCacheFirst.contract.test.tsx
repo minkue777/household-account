@@ -1,6 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import type { User } from 'firebase/auth';
+import { renderToString } from 'react-dom/server.node';
+import { hydrateRoot, type Root } from 'react-dom/client';
 
 jest.mock('@/lib/householdService', () => ({
   getCachedHousehold: jest.fn(),
@@ -35,6 +37,7 @@ jest.mock('@/features/access-household/application/legacySessionCandidate', () =
 }));
 
 jest.mock('@/features/access-household/application/signedInMembershipCache', () => ({
+  readLastSignedInSessionCache: jest.fn(),
   readSignedInHouseholdCache: jest.fn(),
   readSignedInMembershipCache: jest.fn(),
   writeSignedInMembershipCache: jest.fn(),
@@ -75,6 +78,7 @@ import {
   selectAdminHouseholdView,
 } from '@/features/access-household/application/adminHouseholdViewSelection';
 import {
+  readLastSignedInSessionCache,
   readSignedInHouseholdCache,
   readSignedInMembershipCache,
 } from '@/features/access-household/application/signedInMembershipCache';
@@ -88,6 +92,7 @@ const mockActivatePwaFidEndpoint = jest.mocked(activatePwaFidEndpoint);
 const mockSetClientSessionScope = jest.mocked(setClientSessionScope);
 const mockReadSignedInHouseholdCache = jest.mocked(readSignedInHouseholdCache);
 const mockReadSignedInMembershipCache = jest.mocked(readSignedInMembershipCache);
+const mockReadLastSignedInSessionCache = jest.mocked(readLastSignedInSessionCache);
 
 function SessionProbe() {
   const { household, sessionState } = useHousehold();
@@ -114,9 +119,97 @@ describe('Android 가구 cache-first 복원 계약', () => {
     window.history.replaceState({}, '', '/');
     clearAdminHouseholdViewSelection();
     mockAndroidHostAvailable = false;
+    mockReadLastSignedInSessionCache.mockReturnValue(undefined);
     mockReadSignedInHouseholdCache.mockReturnValue(undefined);
     mockReadSignedInMembershipCache.mockReturnValue(undefined);
     mockOnAuthChange.mockImplementation(() => jest.fn());
+  });
+
+  it('[T-WEBVIEW-004][AND-012] last complete session paints before Firebase Auth restoration', async () => {
+    mockAndroidHostAvailable = true;
+    const cachedResolution = {
+      kind: 'membership-found' as const,
+      membership: {
+        householdId: 'household-1',
+        memberId: 'member-1',
+        displayName: '민규',
+        aggregateVersion: 3,
+        status: 'active' as const,
+        capabilities: ['household.read'],
+      },
+    };
+    mockReadLastSignedInSessionCache.mockReturnValue({
+      principalUid: 'uid-1',
+      resolution: cachedResolution,
+      household: household('즉시 표시 가계부'),
+    });
+
+    render(
+      <HouseholdProvider>
+        <SessionProbe />
+      </HouseholdProvider>,
+    );
+
+    expect(await screen.findByText('ready:즉시 표시 가계부')).toBeInTheDocument();
+    expect(mockRestoreAndroidHostAuth).not.toHaveBeenCalled();
+    expect(mockSetClientSessionScope).toHaveBeenCalledWith(expect.objectContaining({
+      principalUid: 'uid-1',
+      householdId: 'household-1',
+      memberId: 'member-1',
+    }));
+  });
+
+  it('server/client 첫 state는 같고 cache는 hydration 뒤 paint 전에 적용한다', async () => {
+    const cachedResolution = {
+      kind: 'membership-found' as const,
+      membership: {
+        householdId: 'household-1',
+        memberId: 'member-1',
+        displayName: '민규',
+        aggregateVersion: 3,
+        status: 'active' as const,
+        capabilities: ['household.read'],
+      },
+    };
+    mockReadLastSignedInSessionCache.mockReturnValue({
+      principalUid: 'uid-1',
+      resolution: cachedResolution,
+      household: household('hydration cache'),
+    });
+
+    const tree = (
+      <HouseholdProvider>
+        <SessionProbe />
+      </HouseholdProvider>
+    );
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const serverHtml = renderToString(tree);
+    expect(serverHtml).toContain('resolving:none');
+
+    const container = document.createElement('div');
+    container.innerHTML = serverHtml;
+    document.body.appendChild(container);
+    let root: Root | undefined;
+    try {
+      await act(async () => {
+        root = hydrateRoot(container, tree);
+      });
+      expect(await screen.findByText('ready:hydration cache')).toBeInTheDocument();
+      const hydrationErrors = consoleError.mock.calls
+        .flat()
+        .filter((message) => typeof message === 'string')
+        .filter((message) =>
+          message.includes('Hydration failed')
+          || message.includes('did not match')
+        );
+      expect(hydrationErrors).toEqual([]);
+    } finally {
+      if (root) {
+        await act(async () => root?.unmount());
+      }
+      consoleError.mockRestore();
+      container.remove();
+    }
   });
 
   it('[T-ADM-003][ADM-004] systemAdmin은 대상 가구를 실제 가구원으로 가장하지 않고 조회 전용으로 연다', async () => {

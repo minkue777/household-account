@@ -69,6 +69,16 @@ describe("submitCaptureEnvelope callable wire", () => {
               editable: true,
               captureLineageId: "lineage-1",
               aggregateVersion: 1,
+              quickEditSnapshot: {
+                transactionId: "transaction-1",
+                merchant: "가맹점 A",
+                amountInWon: 12_000,
+                accountingDate: "2026-07-21",
+                localTime: "10:05",
+                categoryId: "etc",
+                memo: "",
+                aggregateVersion: 1,
+              },
             },
             completion: "terminal",
           },
@@ -104,6 +114,16 @@ describe("submitCaptureEnvelope callable wire", () => {
           editable: true,
           captureLineageId: "lineage-1",
           aggregateVersion: 1,
+          quickEditSnapshot: {
+            transactionId: "transaction-1",
+            merchant: "가맹점 A",
+            amountInWon: 12_000,
+            accountingDate: "2026-07-21",
+            localTime: "10:05",
+            categoryId: "etc",
+            memo: "",
+            aggregateVersion: 1,
+          },
         },
         completion: "terminal",
       },
@@ -133,6 +153,48 @@ describe("submitCaptureEnvelope callable wire", () => {
       domainCode: "AUTH_REQUIRED",
     });
     expect(decoded).toBe(false);
+  });
+
+  it("구버전 receipt replay의 created 결과는 Quick Edit snapshot 없이도 호환 응답한다", async () => {
+    const handler = createCaptureSubmissionCallableHandler({
+      memberships: activeMembership(),
+      submissions: {
+        submit: async (command) => ({
+          kind: "success",
+          value: {
+            observationId: command.envelope.observationId,
+            transactionResult: {
+              kind: "created",
+              transactionId: "legacy-transaction",
+              editable: true,
+              captureLineageId: "legacy-lineage",
+              aggregateVersion: 1,
+            },
+            completion: "terminal",
+          },
+        }),
+      },
+    });
+
+    expect(
+      await handler.handle({
+        principalUid: "firebase-uid",
+        data: envelope(),
+      }),
+    ).toEqual({
+      contractVersion: "capture-submission-response.v1",
+      result: {
+        observationId: "observation-wire-1",
+        transactionResult: {
+          kind: "created",
+          transactionId: "legacy-transaction",
+          editable: true,
+          captureLineageId: "legacy-lineage",
+          aggregateVersion: 1,
+        },
+        completion: "terminal",
+      },
+    });
   });
 
   it("미등록 package는 거래 저장소를 호출하지 않고 terminal rejected receipt로 응답한다", async () => {

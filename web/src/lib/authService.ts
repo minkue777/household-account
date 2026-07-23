@@ -9,7 +9,7 @@ import {
   onAuthStateChanged,
   User,
 } from 'firebase/auth';
-import { app } from './firebase';
+import { app } from './firebaseApp';
 import {
   type AndroidSignedInUserResolution,
   isAndroidHostAvailable,

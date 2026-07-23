@@ -81,10 +81,7 @@ class DefaultCaptureBranchSubmissionApplication
     if (claim.kind === "conflict") return claim;
 
     let receipt = claim.receipt;
-    if (hasIncompleteBranch(receipt)) {
-      receipt = { ...receipt, state: "processing" };
-      await this.dependencies.receipts.save(receipt);
-    }
+    const shouldProcess = hasIncompleteBranch(receipt);
 
     const transactionReceipt = receipt.transaction;
     if (
@@ -105,7 +102,6 @@ class DefaultCaptureBranchSubmissionApplication
           isRetryable(transactionResult),
         ),
       };
-      await this.dependencies.receipts.save(receipt);
     }
 
     const balanceReceipt = receipt.balance;
@@ -147,7 +143,6 @@ class DefaultCaptureBranchSubmissionApplication
           isRetryable(balanceResult),
         ),
       };
-      await this.dependencies.receipts.save(receipt);
     }
 
     const completion = completionOf(receipt);
@@ -156,7 +151,10 @@ class DefaultCaptureBranchSubmissionApplication
       state:
         completion === "terminal" ? "completed" : "partial-retryable",
     };
-    if (terminalReceipt.state !== receipt.state) {
+    // Downstream ledger/balance는 각자의 idempotency key로 재생할 수 있습니다.
+    // 따라서 중간 processing/branch 상태를 매번 직렬 transaction으로 저장하지 않고,
+    // 이번 실행의 모든 branch 결과를 마지막에 한 번만 root receipt에 반영합니다.
+    if (shouldProcess || terminalReceipt.state !== claim.receipt.state) {
       await this.dependencies.receipts.save(terminalReceipt);
     }
 

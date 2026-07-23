@@ -28,7 +28,7 @@ jest.mock('firebase/messaging', () => ({
   unregister: jest.fn(async () => undefined),
 }));
 
-jest.mock('@/lib/firebase', () => ({ app: {} }));
+jest.mock('@/lib/firebaseApp', () => ({ app: {} }));
 
 jest.mock('@/features/notifications/application/notificationCommands', () => ({
   notificationCommands: {

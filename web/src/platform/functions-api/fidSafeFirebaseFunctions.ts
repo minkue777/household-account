@@ -1,6 +1,6 @@
 import { getFunctions, type Functions } from 'firebase/functions';
 
-import { app } from '@/lib/firebase';
+import { app } from '@/lib/firebaseApp';
 
 const REGION = 'asia-northeast3';
 

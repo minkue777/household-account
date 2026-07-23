@@ -12,6 +12,7 @@ import com.household.account.paymentcapture.RegisteredNotificationSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class CardNotificationListenerService : NotificationListenerService() {
@@ -48,6 +49,7 @@ class CardNotificationListenerService : NotificationListenerService() {
 
         const val ACTION_NOTIFICATION_RECEIVED = "com.household.account.NOTIFICATION_RECEIVED"
         const val EXTRA_EXPENSE_JSON = "expense_json"
+        private const val DIAGNOSTIC_DELIVERY_DELAY_MILLIS = 5_000L
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -107,16 +109,6 @@ class CardNotificationListenerService : NotificationListenerService() {
             }
             if (!RawNotificationForwardingPolicy.shouldForward(source, title, fullText)) return
 
-            saveRawNotificationLogIfNeeded(
-                packageName = packageName,
-                title = title,
-                text = text,
-                bigText = bigText,
-                textLines = textLines,
-                fullText = fullText,
-                postedAtMillis = sbn.postTime
-            )
-
             val notificationKey = "${packageName}_${fullText.hashCode()}"
             val now = System.currentTimeMillis()
             if (rememberRecentKey(recentNotifications, notificationKey, now, duplicateWindowMs)) {
@@ -136,6 +128,17 @@ class CardNotificationListenerService : NotificationListenerService() {
                 runCatching {
                     AndroidCaptureDelivery.enqueueAndFlush(applicationContext, envelope)
                 }
+                // 임시 parser 진단은 QuickEdit 표시가 끝난 뒤 보내 네트워크와
+                // App Check token을 결제 저장의 빠른 경로와 경쟁시키지 않습니다.
+                saveRawNotificationLogIfNeeded(
+                    packageName = packageName,
+                    title = title,
+                    text = text,
+                    bigText = bigText,
+                    textLines = textLines,
+                    fullText = fullText,
+                    postedAtMillis = sbn.postTime
+                )
             }
         } catch (_: Exception) {
         }
@@ -177,6 +180,9 @@ class CardNotificationListenerService : NotificationListenerService() {
 
         serviceScope.launch {
             try {
+                // 임시 진단 전송이 결제 저장과 App Check token·네트워크 연결을
+                // 경쟁하지 않도록 정상 결제 경로가 끝난 뒤에 best-effort로 보냅니다.
+                delay(DIAGNOSTIC_DELIVERY_DELAY_MILLIS)
                 notificationDebugLogRepository.saveRawLog(
                     packageName = packageName,
                     title = title,

@@ -55,6 +55,21 @@ describe("Android 원문 알림 서버 파싱 제출 계약", () => {
     const captured = subject.state().captured;
 
     expect(result.kind).toBe("success");
+    expect(result).toMatchObject({
+      kind: "success",
+      value: {
+        transactionResult: {
+          kind: "created",
+          quickEditSnapshot: {
+            transactionId: "transaction-1",
+            amountInWon: 20_300,
+            accountingDate: "2026-07-31",
+            localTime: "17:40",
+            aggregateVersion: 1,
+          },
+        },
+      },
+    });
     expect(captured).toHaveLength(1);
     expect(captured[0]).toMatchObject({
       actor,

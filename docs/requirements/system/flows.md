@@ -91,7 +91,7 @@ Access & Household
 
 ```text
 Android Delivery
-  → Payment Capture [Android Parser → Intake → Payment Configuration]
+  → Payment Capture [raw write-ahead journal → Functions Server Parser → Intake → Payment Configuration]
   → Household Finance [Ledger + 선택 Local Currency]
   → Notifications / QuickEdit Adapter
 ```
@@ -100,7 +100,7 @@ Android Delivery
 
 [Android Host](../supporting-platform/modules/android-host/requirements.md) → [Android 결제 수집](../contexts/payment-capture/modules/android-payment-ingestion/requirements.md) → [결제 설정](../contexts/payment-capture/modules/payment-configuration/requirements.md) → [거래 원장](../contexts/household-finance/modules/ledger/requirements.md) → 선택 [지역화폐](../contexts/household-finance/modules/local-currency/requirements.md)
 
-현재 흐름:
+전환 전 기준선 흐름:
 
 1. 알림 제목과 본문 후보를 조합한다.
 2. 원문 로그 대상이면 parsing·중복 검사 전에 비동기 저장을 시도한다.
@@ -111,19 +111,19 @@ Android Delivery
 7. Android가 `expenses`를 직접 저장하고 ID를 받으면 QuickEdit을 시작한다.
 8. 저장 실패 여부와 무관하게 완료 broadcast를 보낼 수 있다.
 
-목표 Context 흐름:
+현재 목표 Context 흐름:
 
-1. Android Parser가 DEC-029의 공통 연도 Policy로 미래가 아닌 결제일을 확정하고 원문을 제외한 `CaptureEnvelope.v1`을 만든다. 결제 후보와 잔액 관찰 중 하나 이상이 있으면 되며 balance-only를 허용한다.
-2. DEC-032의 Keystore 키 기반 AES-256-GCM Queue가 같은 idempotencyKey로 최대 72시간 서버 전송을 재시도한다.
-3. Payment Intake가 ActorContext와 source Policy를 검증한다.
-4. CaptureSubmissionReceipt가 idempotencyKey와 payloadHash를 claim한다.
+1. Android가 등록 package의 `AndroidRawNotification.v1`과 안정 observation ID를 만들고 Keystore 키 기반 AES-256-GCM write-ahead journal에 먼저 기록한다.
+2. 정상 경로는 WorkManager를 예약하지 않고 인증·App Check가 적용된 Functions에 즉시 제출한다. 임시 진단 원문은 이 경로와 경쟁하지 않도록 5초 뒤 best-effort로 전송한다.
+3. Functions Server Parser가 DEC-029의 공통 연도 Policy로 미래가 아닌 결제일을 확정하고 원문을 제외한 내부 `CaptureEnvelope.v1`을 만든다. 결제 후보와 잔액 관찰 중 하나 이상이 있으면 되며 balance-only를 허용한다.
+4. Payment Intake가 활성 Membership의 ActorContext와 source Policy를 검증하고 CaptureSubmissionReceipt가 idempotencyKey와 payloadHash를 claim한다.
 5. 결제 branch가 있으면 Payment Configuration이 인증된 현재 멤버의 카드만 조회해 한 건 이상 일치하는지 판정하고 Category Catalog로 mapping 참조를 검증한 뒤 가맹점 mapping을 결정한다.
 6. 결제 branch에서 Payment Capture가 DEC-003 fingerprint와 immutable CaptureProvenance를 생성한다.
 7. Ledger가 Android 현재 멤버를 creatorMemberId로 기록하고 fingerprint claim, Transaction, capture lineage, Outbox를 한 transaction으로 commit한다.
 8. 잔액 branch가 있으면 결제 parse·카드·Ledger 결과와 무관하게 Local Currency가 같은 observation key로 독립 반영한다.
-9. CaptureSubmissionReceipt가 payment/balance branch별 stage·typed result와 안정적인 downstream command key를 기록한다.
-10. 존재하는 모든 branch가 terminal 결과를 받은 뒤 Queue를 확정하고 실패한 branch만 같은 key로 재시도한다.
-11. payment branch의 새 거래 ID가 확정된 경우에만 해당 Android 기기에서 QuickEdit을 시작하며 자동 푸시는 생성하지 않는다.
+9. 모든 branch 실행 결과를 안정적인 downstream command key와 함께 root receipt에 마지막 한 번 저장한다. 최종 저장 전 중단은 하위 idempotency receipt로 결과를 재생한다.
+10. payment branch의 새 거래가 확정되면 응답의 `quickEditSnapshot`을 expected SessionScope의 암호화 QuickEdit FIFO에 먼저 내구화하고 capture journal을 ack/delete한 뒤 Activity를 연다. 구버전 ID-only entry만 별도 Query를 사용한다.
+11. 직접 호출 실패, 일부 branch retryable 또는 follow-up enqueue 실패에서는 journal entry를 남기고 `APPEND_OR_REPLACE` WorkManager로 같은 idempotencyKey를 최대 72시간 재시도한다. Android 자동 푸시는 생성하지 않는다.
 
 관련 요구사항: ING-001~008, PARSE-*, MER-001~006, CARD-004, ING-SAVE-001~006, BAL-*, QE-001.
 
@@ -131,7 +131,7 @@ Android Delivery
 
 - 원문 로그는 [DEC-002](../governance/decisions.md#dec-002)의 임시 Diagnostic Adapter다. 등록 source와 인증된 활성 SessionScope가 있을 때만 현재 파서 진단 필드를 best-effort 저장하고 진단 실패를 결제·잔액 실패로 바꾸지 않는다. [DEC-047](../governance/decisions.md#dec-047)에 따라 기능 제거 전까지 TTL 없이 전부 보존하고 제거 시 Writer·Rules·index·컬렉션을 함께 없앤다.
 - 연도 없는 결제 시각은 [DEC-029](../governance/decisions.md#dec-029)에 따라 서울 수신 시각보다 미래가 아닌 가장 가까운 유효 연도이며 Shortcut과 같은 fixture로 검증한다.
-- 로컬 Queue는 [DEC-032](../governance/decisions.md#dec-032)에 따라 원문 없이 암호화하고 terminal·session 전환·72시간 만료·키 오류에서 삭제한다.
+- 로컬 write-ahead journal은 [DEC-032](../governance/decisions.md#dec-032)에 따라 암호화하고 원격 호출 전에 commit한다. terminal follow-up을 QuickEdit FIFO에 내구화한 뒤 삭제하며, 실패·partial entry만 WorkManager로 재시도하고 session 전환·72시간 만료·키 오류에서 삭제한다.
 - Android는 Ledger·Payment Configuration 컬렉션을 직접 읽거나 쓰지 않는다.
 - 중복 tuple은 [DEC-003](../governance/decisions.md#dec-003)을 따르고 Ledger가 원자 강제한다.
 - 같은 idempotencyKey·payloadHash는 같은 결과를 재생하고, 같은 key의 다른 payloadHash는 `IdempotencyConflict`이며 어떤 downstream Command도 실행하지 않는다.

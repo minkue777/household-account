@@ -68,6 +68,65 @@ class CaptureSubmissionClientTest {
         assertEquals(7, client.submit(envelope()).transaction?.aggregateVersion)
     }
 
+    @Test
+    fun `created receipt의 Quick Edit snapshot을 전체 필드와 함께 보존한다`() = runTest {
+        val client = CallableCaptureSubmissionClient(gateway(mapOf(
+            "result" to mapOf(
+                "completion" to "terminal",
+                "transactionResult" to mapOf(
+                    "kind" to "created",
+                    "transactionId" to "transaction-1",
+                    "aggregateVersion" to 7,
+                    "quickEditSnapshot" to mapOf(
+                        "transactionId" to "transaction-1",
+                        "merchant" to "동탄상점",
+                        "amountInWon" to 20_300,
+                        "accountingDate" to "2026-07-23",
+                        "localTime" to "18:20",
+                        "categoryId" to "etc",
+                        "memo" to "",
+                        "aggregateVersion" to 7
+                    )
+                )
+            )
+        )))
+
+        assertEquals(
+            CaptureQuickEditSnapshot(
+                transactionId = "transaction-1",
+                merchant = "동탄상점",
+                amountInWon = 20_300,
+                accountingDate = "2026-07-23",
+                localTime = "18:20",
+                categoryId = "etc",
+                memo = "",
+                aggregateVersion = 7
+            ),
+            client.submit(envelope()).transaction?.quickEditSnapshot
+        )
+    }
+
+    @Test
+    fun `없거나 불완전한 Quick Edit snapshot은 거래 접수를 실패시키지 않고 조회 fallback을 사용한다`() =
+        runTest {
+            val client = CallableCaptureSubmissionClient(gateway(mapOf(
+                "result" to mapOf(
+                    "completion" to "terminal",
+                    "transactionResult" to mapOf(
+                        "kind" to "created",
+                        "transactionId" to "transaction-1",
+                        "aggregateVersion" to 1,
+                        "quickEditSnapshot" to mapOf(
+                            "transactionId" to "transaction-1",
+                            "merchant" to "가맹점"
+                        )
+                    )
+                )
+            )))
+
+            assertEquals(null, client.submit(envelope()).transaction?.quickEditSnapshot)
+        }
+
     private fun gateway(response: Map<String, Any?>) = object : AuthenticatedCallableGateway {
         override suspend fun call(
             functionName: String,

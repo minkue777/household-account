@@ -3,7 +3,8 @@
 import { ComponentType, useEffect, useMemo, useState } from 'react';
 import { Calendar, CalendarDays, CircleDollarSign, CreditCard, Wallet } from 'lucide-react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
-import { subscribeToLocalCurrencyBalance, LocalCurrencyBalance } from '@/lib/balanceService';
+import { useHousehold } from '@/contexts/HouseholdContext';
+import type { LocalCurrencyBalance } from '@/lib/balanceService';
 import { Expense, TransactionType } from '@/types/expense';
 import { HomeSummaryCardKey, HomeSummaryConfig } from '@/types/household';
 
@@ -44,6 +45,7 @@ export default function BalanceCards({
 }: BalanceCardsProps) {
   const isIncome = transactionType === 'income';
   const { activeCategories } = useCategoryContext();
+  const { isSessionVerified = true } = useHousehold();
   const [localCurrencyBalance, setLocalCurrencyBalance] = useState<LocalCurrencyBalance | null>(null);
 
   const needsLocalCurrencyBalance = useMemo(() => {
@@ -58,14 +60,22 @@ export default function BalanceCards({
   }, [isIncome, summaryConfig.leftCard, summaryConfig.rightCard]);
 
   useEffect(() => {
-    if (!needsLocalCurrencyBalance) {
+    if (!needsLocalCurrencyBalance || !isSessionVerified) {
       setLocalCurrencyBalance(null);
       return undefined;
     }
 
-    const unsubscribe = subscribeToLocalCurrencyBalance(setLocalCurrencyBalance);
-    return () => unsubscribe();
-  }, [needsLocalCurrencyBalance]);
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+    void import('@/lib/balanceService').then(({ subscribeToLocalCurrencyBalance }) => {
+      if (cancelled) return;
+      unsubscribe = subscribeToLocalCurrencyBalance(setLocalCurrencyBalance);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [isSessionVerified, needsLocalCurrencyBalance]);
 
   const { remaining, isOverBudget, monthlySpent } = useMemo(() => {
     const budgetedCategoryKeys = new Set<string>();

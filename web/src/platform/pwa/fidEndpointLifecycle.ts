@@ -10,7 +10,7 @@ import {
   type Messaging,
   type Unsubscribe,
 } from 'firebase/messaging';
-import { app } from '@/lib/firebase';
+import { app } from '@/lib/firebaseApp';
 import { notificationCommands } from '@/features/notifications/application/notificationCommands';
 import {
   getClientSessionScope,

@@ -132,6 +132,7 @@ export const executeHouseholdCommand = functions
   .region(REGION)
   .runWith({
     enforceAppCheck: true,
+    minInstances: 1,
     secrets: ["SHORTCUT_CREDENTIAL_PEPPER"],
   })
   .https.onCall(async (data, context): Promise<HouseholdCommandWireResponse> => {

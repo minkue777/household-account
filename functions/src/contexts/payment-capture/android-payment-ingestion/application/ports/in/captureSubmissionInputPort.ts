@@ -1,4 +1,5 @@
 import type { CaptureApprovalActor } from "./captureAuthorizationInputPort";
+import type { CaptureQuickEditSnapshot } from "./captureBranchSubmissionInputPort";
 
 export type CaptureOriginChannel = "android-notification" | "ios-shortcut";
 
@@ -66,6 +67,8 @@ export type CaptureSubmittedTransactionResult =
       readonly editable: true;
       readonly captureLineageId: string;
       readonly aggregateVersion: number;
+      /** 구버전 receipt replay는 Android의 단일 Query fallback을 사용합니다. */
+      readonly quickEditSnapshot?: CaptureQuickEditSnapshot;
     }
   | {
       readonly kind: "duplicate";

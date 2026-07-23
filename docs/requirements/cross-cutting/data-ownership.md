@@ -24,6 +24,7 @@
 | `households`의 멤버 이름 배열 | Web, Functions | 대부분 기능 | [Access & Household](../contexts/access-household/requirements.md) | [가구와 접근](../contexts/access-household/modules/household-access/requirements.md) | `members/{memberId}`와 role 없는 Google UID Membership; 신규 자기 Member만 생성, legacy Member만 전환 전 미연결; 생성자·초대 가입자 동일 권한; 전체 관리자 제거는 `removed` 보존·claim 해제, 복구는 같은 ID 재활성화; 이름 외래 키 제거 |
 | 자산 명의자 프로필 | 신규 목표 Writer | Portfolio, Web | [Access & Household](../contexts/access-household/requirements.md) | [가구와 접근](../contexts/access-household/modules/household-access/requirements.md) | `assetOwnerProfiles/{profileId}`; Member 연결형과 비로그인 dependent를 구분하고 일반 삭제 금지·관리자 논리 보관·profileId와 보관된 표시 이름 유지를 강제; Portfolio는 공개 Query로만 검증·표시 |
 | localStorage `householdKey/currentMemberId/currentMemberName` | Web legacy session | Web | [Access & Household](../contexts/access-household/requirements.md) | [가구와 접근](../contexts/access-household/modules/household-access/requirements.md) | householdKey+currentMemberId 완전 후보만 첫 Google 로그인의 `LegacySessionCandidate`로 읽고 기존 householdId·memberId Membership claim 뒤 key 로그인 상태 제거; 값이 없거나 불완전하면 신규 사용자; 업무 데이터 복사 없음 |
+| localStorage 마지막 검증 session·가구·현재 월 원장·가구별 카테고리 표시 snapshot | Web Auth/Firestore Read Adapter | Web 첫 화면 | 공통 시스템·Access·Household Finance Read Model | [Android Host](../supporting-platform/modules/android-host/requirements.md) 표시 cache Adapter | DEC-068의 비권위·재구축 가능한 표시 hint; 마지막 검증 UID·household·월·거래 유형 또는 household category 범위로 묶고 Auth·App Check·Rules·Membership을 대체하지 않음; 불일치·권위 거부에서는 화면 사용 중단 |
 | 5분 초대 코드와 Invitation 상태 | 목표 서버 Writer | 가입 온보딩 | [Access & Household](../contexts/access-household/requirements.md) | [가구와 접근](../contexts/access-household/modules/household-access/requirements.md) | code hash·expiresAt·usedAt만 저장; 소비와 호출자 자기 Member·Membership 원자 생성 |
 | `households.defaultCategoryKey` | Web | Web, Android | [Household Finance](../contexts/household-finance/requirements.md) | [카테고리·예산](../contexts/household-finance/modules/categories-budget/requirements.md) | Category Catalog 설정으로 분리 |
 | `households.homeSummaryConfig` | Web | Web | [지원·플랫폼](../supporting-platform/requirements.md) | [홈 환경설정](../supporting-platform/modules/home-preferences/requirements.md) | Home Preferences 소유 문서로 분리 |
@@ -63,11 +64,11 @@
 | 상태 | 소유 영역 | 권위 여부 | 규칙 |
 |---|---|---|---|
 | Web/Android 현재 가구·멤버 세션 | Access Session Adapter | 비권위 mirror | DEC-034의 유일한 Membership에서 검증된 `SessionScope(sessionGeneration, householdId, memberId)` 한 record로 교체·삭제하며 서버 ActorContext를 대체하지 않음; 일반 가계부 선택값은 두지 않음 |
-| Android Payment Queue | Payment Capture Android Adapter | 전송 대기 상태 | 원문 제외 최소 후보, 암호화, 같은 idempotencyKey |
-| Android QuickEdit FIFO | Android Host | 비권위 표시 대기 상태 | DEC-054에 따라 session scope·transaction ID·고유 sequence만 Keystore 암호화 저장하고 최신 거래는 Ledger에서 재조회; Payment Queue와 lifecycle 분리 |
+| Android Payment write-ahead journal·실패 Queue | Payment Capture Android Adapter | 전송 대기 상태 | 원격 호출 전 `AndroidRawNotification.v1`을 Keystore 암호화 선기록; terminal follow-up을 QuickEdit FIFO에 내구화한 뒤 ack/delete; 실패·partial만 같은 idempotencyKey로 최대 72시간 WorkManager 재시도 |
+| Android QuickEdit FIFO | Android Host | 비권위 표시 대기 상태 | DEC-054·068에 따라 session scope·transaction ID·고유 sequence와 선택적 서버 확정 `quickEditSnapshot`을 Keystore 암호화 저장; 새 snapshot은 즉시 표시하고 ID-only legacy만 Ledger 재조회; Capture journal·Command outbox와 lifecycle 분리 |
 | Android QuickEdit Command Outbox | Android Host | 일반 Ledger Command의 비권위 전달 상태 | DEC-067에 따라 session scope·transaction ID·고정 commandId·idempotencyKey·versioned payload를 별도 Keystore 암호화 저장하고 WorkManager 영속 예약; Success·AlreadyProcessed는 즉시 삭제하고 terminal·72시간 만료는 실패 알림 전달 전까지만 needs-attention 보존한 뒤 알림 성공 시 payload 삭제, 복호화·codec 손상은 payload fail-closed 삭제와 비민감 진단 플래그로 분리 |
 | Android WebView·권한·QuickEdit 설정 | Android Host | 플랫폼 로컬 상태 | 업무 Aggregate에 포함하지 않음 |
-| PWA cache·worker version | PWA | 플랫폼 cache | Canonical 업무 저장소가 아니며 인증·가구·금융·API·navigation 응답을 cache하지 않음. 현재 build precache와 공개 아이콘·폰트·이미지만 최대 7일 보존하고 session 종료 시 파생 상태 폐기 |
+| PWA cache·worker version | PWA | 플랫폼 cache | Canonical 업무 저장소가 아니며 인증·가구·금융 API 응답을 cache하지 않음. 현재 build의 정적 navigation shell과 공개 아이콘·폰트·이미지만 최대 7일 보존하고 session 종료 시 파생 상태 폐기 |
 | 종목 catalog 인스턴스 메모리 cache | Market Data 서버 Adapter | 비권위 성능 cache | 5분마다 latest manifest generation을 확인하고 변경 때만 snapshot을 교체; 인스턴스 종료 시 유실 가능, Storage snapshot이 단일 원본 |
 | Web theme | Home Preferences Web Adapter | 사용자 로컬 표현 | 거래·가구 Domain에 영향 없음 |
 

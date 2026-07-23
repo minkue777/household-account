@@ -47,6 +47,17 @@ export interface CaptureBranchEnvelope {
   readonly balanceBranch?: CaptureBalanceBranch;
 }
 
+export interface CaptureQuickEditSnapshot {
+  readonly transactionId: string;
+  readonly merchant: string;
+  readonly amountInWon: number;
+  readonly accountingDate: string;
+  readonly localTime: string;
+  readonly categoryId: string;
+  readonly memo: string;
+  readonly aggregateVersion: number;
+}
+
 export type CaptureTransactionBranchResult =
   | {
       readonly kind: "recorded";
@@ -54,6 +65,8 @@ export type CaptureTransactionBranchResult =
       readonly editable: true;
       readonly captureLineageId: string;
       readonly aggregateVersion: number;
+      /** 새 receipt에는 존재하며, 배포 전 저장된 receipt replay에서는 없을 수 있습니다. */
+      readonly quickEditSnapshot?: CaptureQuickEditSnapshot;
     }
   | {
       readonly kind: "duplicate";

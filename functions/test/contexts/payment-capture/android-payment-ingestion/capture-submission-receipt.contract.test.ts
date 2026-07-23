@@ -163,6 +163,28 @@ describe("Capture receipt·fingerprint·동시성 공개 계약", () => {
       downstreamAttempts: { transaction: 0, balance: 0 },
     });
   });
+  it("정상 payment-only 제출은 root receipt를 최종 결과로 한 번만 저장한다", async () => {
+    const subject = createSubject();
+
+    const result = await subject.submit(
+      approvalCommand({
+        rootIdempotencyKey: "single-receipt-save",
+        originChannel: "android-notification",
+      }),
+    );
+
+    expect(requiredTransactionResult(result)).toMatchObject({
+      kind: "created",
+      quickEditSnapshot: {
+        amountInWon: 12_000,
+        accountingDate: "2026-07-19",
+        localTime: "10:05",
+        categoryId: "etc",
+        aggregateVersion: 1,
+      },
+    });
+    expect(subject.state().receiptSaveCount).toBe(1);
+  });
   it("[T-IOS-001][IOS-011] 같은 root key·payload의 동시 승인은 같은 Created 결과를 재생하고 거래와 Event를 한 건만 만든다", async () => {
     const subject = createSubject();
     const command = approvalCommand({
@@ -269,6 +291,7 @@ describe("Capture receipt·fingerprint·동시성 공개 계약", () => {
       transaction: 1,
       balance: 1,
     });
+    expect(afterFirst.receiptSaveCount).toBe(1);
 
     const replay = await subject.submit(command);
     const completed = subject.state();
@@ -296,6 +319,7 @@ describe("Capture receipt·fingerprint·동시성 공개 계약", () => {
       transaction: 1,
       balance: 2,
     });
+    expect(completed.receiptSaveCount).toBe(2);
     expect(transactionRecordedEvents(completed)).toHaveLength(1);
   });
 

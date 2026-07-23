@@ -8,23 +8,45 @@ import HouseholdGuard from './HouseholdGuard';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { getClientSessionScope } from '@/composition/clientSessionScope';
 import { refreshAndroidHostSession } from '@/platform/android-host/androidHostBridge';
-import { initializeFirebaseAppCheck } from '@/platform/security/firebaseAppCheck';
 
-function FirebaseSecurityBoundary({ children }: { children: React.ReactNode }) {
-  // App Check 설치는 동기식이므로 첫 paint를 한 번 비우지 않고 바로 진행합니다.
-  // 실제 callable의 token 발급·검증은 Firebase SDK가 계속 담당합니다.
-  initializeFirebaseAppCheck();
-  return children;
+function DeferredFirebaseSecurityInitialization() {
+  // App Check SDK는 첫 화면 렌더링과 경쟁하지 않도록 브라우저가 한가해진 뒤 준비합니다.
+  // 권한 검증은 Firebase Auth, App Check 강제 설정, Firestore rules가 계속 담당합니다.
+  useEffect(() => {
+    let cancelled = false;
+    let idleCallbackId: number | undefined;
+    const initialize = () => {
+      if (cancelled) return;
+      void import('@/platform/security/firebaseAppCheck')
+        .then(({ initializeFirebaseAppCheck }) => initializeFirebaseAppCheck())
+        .catch(() => {});
+    };
+    const delayId = window.setTimeout(() => {
+      if (typeof window.requestIdleCallback === 'function') {
+        idleCallbackId = window.requestIdleCallback(initialize, { timeout: 2_000 });
+      } else {
+        initialize();
+      }
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(delayId);
+      if (idleCallbackId !== undefined && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleCallbackId);
+      }
+    };
+  }, []);
+  return null;
 }
 
 const NATIVE_SESSION_REFRESH_KEY = 'household-account.native-session-refresh.v1';
 const NATIVE_SESSION_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1_000;
 
 function AuthenticatedPlatformEffects() {
-  const { sessionState, adminHouseholdView } = useHousehold();
+  const { sessionState, isSessionVerified, adminHouseholdView } = useHousehold();
 
   useEffect(() => {
-    if (sessionState !== 'ready' || adminHouseholdView !== null) return;
+    if (sessionState !== 'ready' || !isSessionVerified || adminHouseholdView !== null) return;
     const scope = getClientSessionScope();
     if (!scope) return;
 
@@ -73,10 +95,41 @@ function AuthenticatedPlatformEffects() {
         window.cancelIdleCallback(idleCallbackId);
       }
     };
-  }, [adminHouseholdView, sessionState]);
+  }, [adminHouseholdView, isSessionVerified, sessionState]);
 
   useEffect(() => {
-    if (sessionState !== 'ready' || adminHouseholdView !== null) return;
+    if (sessionState !== 'ready' || !isSessionVerified || adminHouseholdView !== null) return;
+
+    let cancelled = false;
+    let idleCallbackId: number | undefined;
+    const prefetchMutationCommands = () => {
+      if (cancelled) return;
+      void Promise.all([
+        import('@/features/ledger/application/ledgerCommands'),
+        import('@/features/category-budget/application/categoryCommands'),
+      ]).catch(() => {});
+    };
+    const delayId = window.setTimeout(() => {
+      if (typeof window.requestIdleCallback === 'function') {
+        idleCallbackId = window.requestIdleCallback(prefetchMutationCommands, {
+          timeout: 2_000,
+        });
+      } else {
+        prefetchMutationCommands();
+      }
+    }, 750);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(delayId);
+      if (idleCallbackId !== undefined && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleCallbackId);
+      }
+    };
+  }, [adminHouseholdView, isSessionVerified, sessionState]);
+
+  useEffect(() => {
+    if (sessionState !== 'ready' || !isSessionVerified || adminHouseholdView !== null) return;
 
     let unsubscribe: (() => void) | undefined;
     let cancelled = false;
@@ -92,23 +145,26 @@ function AuthenticatedPlatformEffects() {
         })
         .catch(() => {});
     };
-    if (typeof window.requestIdleCallback === 'function') {
-      idleCallbackId = window.requestIdleCallback(warmAssets, { timeout: 1_000 });
-    } else {
-      warmAssets();
-    }
+    const delayId = window.setTimeout(() => {
+      if (typeof window.requestIdleCallback === 'function') {
+        idleCallbackId = window.requestIdleCallback(warmAssets, { timeout: 2_000 });
+      } else {
+        warmAssets();
+      }
+    }, 1_500);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(delayId);
       unsubscribe?.();
       if (idleCallbackId !== undefined && typeof window.cancelIdleCallback === 'function') {
         window.cancelIdleCallback(idleCallbackId);
       }
     };
-  }, [adminHouseholdView, sessionState]);
+  }, [adminHouseholdView, isSessionVerified, sessionState]);
 
   useEffect(() => {
-    if (sessionState !== 'ready' || adminHouseholdView !== null) return;
+    if (sessionState !== 'ready' || !isSessionVerified || adminHouseholdView !== null) return;
 
     let idleCallbackId: number | undefined;
     let cancelled = false;
@@ -133,7 +189,7 @@ function AuthenticatedPlatformEffects() {
         window.cancelIdleCallback(idleCallbackId);
       }
     };
-  }, [adminHouseholdView, sessionState]);
+  }, [adminHouseholdView, isSessionVerified, sessionState]);
 
   return null;
 }
@@ -160,18 +216,17 @@ function AdminHouseholdViewBanner() {
 
 export default function AppProviders({ children }: { children: React.ReactNode }) {
   return (
-    <FirebaseSecurityBoundary>
-      <HouseholdProvider>
-        <AuthenticatedPlatformEffects />
-        <AdminHouseholdViewBanner />
-        <HouseholdGuard>
-          <ThemeProvider>
-            <CategoryProvider>
-              {children}
-            </CategoryProvider>
-          </ThemeProvider>
-        </HouseholdGuard>
-      </HouseholdProvider>
-    </FirebaseSecurityBoundary>
+    <HouseholdProvider>
+      <DeferredFirebaseSecurityInitialization />
+      <AuthenticatedPlatformEffects />
+      <AdminHouseholdViewBanner />
+      <HouseholdGuard>
+        <ThemeProvider>
+          <CategoryProvider>
+            {children}
+          </CategoryProvider>
+        </ThemeProvider>
+      </HouseholdGuard>
+    </HouseholdProvider>
   );
 }

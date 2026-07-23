@@ -1,8 +1,8 @@
 'use client';
 
 import { Plus } from 'lucide-react';
-import { Expense, TransactionType } from '@/types/expense';
-import { SplitItem } from '@/lib/expenseService';
+import type { Expense, TransactionType } from '@/types/expense';
+import type { SplitItem } from '@/lib/expenseService';
 import ExpenseItem from './ExpenseItem';
 import { useDragAndDrop } from './hooks/useDragAndDrop';
 

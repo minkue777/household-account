@@ -80,6 +80,16 @@ describe("Firebase Capture root receipt adapter", () => {
           editable: true,
           captureLineageId: "lineage-1",
           aggregateVersion: 1,
+          quickEditSnapshot: {
+            transactionId: "transaction-1",
+            merchant: "가맹점 A",
+            amountInWon: 12_000,
+            accountingDate: "2026-07-21",
+            localTime: "10:05",
+            categoryId: "etc",
+            memo: "",
+            aggregateVersion: 1,
+          },
         },
       },
     });

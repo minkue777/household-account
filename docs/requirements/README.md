@@ -165,7 +165,7 @@ Portfolio ──valuation·dividend Outbox Event──▶ Read Side
 | [DEC-029](governance/decisions.md#dec-029) | Payment Capture | 연도 없는 결제 시각은 서울 수신 시각보다 미래가 아닌 후보 중 가장 최근 연도로 추론하며 Android·Shortcut이 같은 정책을 사용한다. |
 | [DEC-030](governance/decisions.md#dec-030) | Payment Capture | Shortcut 메시지에 카드사 헤더가 없거나 지원하지 않는 카드사이면 추정하지 않고 입력을 거부한다. |
 | [DEC-031](governance/decisions.md#dec-031) | Payment Capture | 원거래 없는 취소는 무변경 종료하고 보류·억제 기록을 만들지 않으며 이후 도착한 승인은 일반 입력으로 등록한다. |
-| [DEC-032](governance/decisions.md#dec-032) | Payment Capture | Android `CaptureEnvelope.v1`은 Keystore 키 기반 AES-256-GCM으로 암호화해 최대 72시간만 Queue에 보관한다. |
+| [DEC-032](governance/decisions.md#dec-032) | Payment Capture | Android raw 알림은 원격 호출 전 Keystore 암호화 write-ahead journal에 기록하고, 정상 terminal은 QuickEdit 후속 효과 내구화 뒤 즉시 지우며 실패·partial만 최대 72시간 재시도한다. |
 | [DEC-033](governance/decisions.md#dec-033) | Payment Capture·Access | iPhone Shortcut은 로그인 사용자의 가구·멤버에 묶인 전용 credential을 반자동으로 설치하고, 원문은 최초 발급 응답에서만 제공하며 동일 요청 재전송에는 비밀 없는 `AlreadyIssued`만 반환한다. |
 | [DEC-034](governance/decisions.md#dec-034) | Access & Household | Google UID 하나에는 동시에 하나의 종료되지 않은 가계부 Membership만 허용하며 일반 가계부 전환 UI를 두지 않는다. |
 | [DEC-035](governance/decisions.md#dec-035) | Portfolio·지원 플랫폼 | 종목 카탈로그는 매일 생성해 Cloud Storage에 최근 성공 3일치를 유지하고, 검색 함수는 버전 확인이 있는 5분 인스턴스 메모리 캐시를 사용하며 `stocks.json` fallback을 두지 않는다. |
@@ -198,7 +198,10 @@ Portfolio ──valuation·dividend Outbox Event──▶ Read Side
 | [DEC-062](governance/decisions.md#dec-062) | Portfolio·지원 플랫폼 | 배당 공시 discovery와 lifecycle sweep을 매일 09:00~20:00 매시 정각 실행해 늦은 공시를 다음 시간에 반영한다. |
 | [DEC-063](governance/decisions.md#dec-063) | Household Finance | 정기 거래 Plan의 최초 등록자를 immutable creator로 보존하고 Scheduler 거래에 사용하며 creator 없는 legacy Plan은 명시 mapping 전 처리하지 않는다. |
 | [DEC-064](governance/decisions.md#dec-064) | 지원·플랫폼 | 필수 release gate 실패는 waiver나 긴급 권한으로 우회하지 않고, 전체 gate를 통과한 후보에만 deploy authorization을 발급한다. |
+| [DEC-065](governance/decisions.md#dec-065) | Household Finance | 일반 거래 삭제는 복구 가능한 논리 삭제로 처리하고 사용자 복구 UI 없이 운영자/Agent의 명시 작업으로만 복구·영구 정리한다. |
+| [DEC-066](governance/decisions.md#dec-066) | Payment Capture | Android는 raw 알림을 암호화 journal에 선기록한 뒤 전달하고 Functions parser를 단일 정본으로 사용하며, created snapshot을 QuickEdit FIFO에 내구화한 뒤 journal을 ack한다. |
 | [DEC-067](governance/decisions.md#dec-067) | 지원·플랫폼 | QuickEdit은 일반 Ledger Command의 Android Adapter이며, Keystore 암호화 outbox commit과 WorkManager 영속 예약 뒤 화면에서 분리하고 고정 멱등 key로 비동기 전달한다. |
+| [DEC-068](governance/decisions.md#dec-068) | 공통 시스템·Payment Capture·지원 플랫폼 | 현재 두 가구와 향후 소수 가구의 대화형 경로는 첫 paint·결제·QuickEdit 저지연을 우선하고 대규모 분산 장치를 배제하되 Auth·App Check·가구 격리·중복 방지·72시간 실패 복구를 유지한다. |
 
 코드 감사에서 발견한 Human in the loop 정책은 DEC-064까지 모두 처리했습니다. 중복 질문이던 Q-002는 DEC-011에 통합했고, Q-003은 일반 사용자 복구 금지와 운영 복구일 기준 자동화 재개로 DEC-017·DEC-052에 반영했으며, Q-004는 Shortcut credential 원문 최초 응답 1회와 `AlreadyIssued` 재전송으로 DEC-033에 반영했습니다. Q-005는 별도 카드 통계가 아닌 Ledger 검색 계약으로 정리했고, Q-006은 release gate 우회 금지로 DEC-064에 확정했습니다. [미결정 사항 단일 목록](governance/pending-decisions.md)의 현재 항목은 0개입니다.
 

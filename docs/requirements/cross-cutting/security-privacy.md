@@ -16,8 +16,8 @@
 | 지출·수입 | expenses | [Household Finance](../contexts/household-finance/requirements.md) | [거래 원장](../contexts/household-finance/modules/ledger/requirements.md) |
 | 등록 카드·가맹점 규칙 | registered_cards, merchant_rules | [Payment Capture](../contexts/payment-capture/requirements.md) | [결제 설정](../contexts/payment-capture/modules/payment-configuration/requirements.md) |
 | 금융 알림 원문 | notification_debug_logs | [Payment Capture](../contexts/payment-capture/requirements.md) | Android Diagnostic Adapter — 임시 |
-| Android 결제 대기 후보 | Android 로컬 Observation Queue | [Payment Capture](../contexts/payment-capture/requirements.md) | [Android 결제 수집](../contexts/payment-capture/modules/android-payment-ingestion/requirements.md), DEC-032 |
-| Client session cache·구독·Native mirror | Web memory/localStorage, Android preferences/WebView | 공통 시스템·Access | [SYS-008](../system/context.md#6-공통-요구사항), Android Host |
+| Android 결제 원문 write-ahead journal·실패 대기 후보 | Android 로컬 암호화 Observation Queue | [Payment Capture](../contexts/payment-capture/requirements.md) | [Android 결제 수집](../contexts/payment-capture/modules/android-payment-ingestion/requirements.md), DEC-032·068 |
+| Client session cache·구독·Native mirror·현재 월 원장·가구별 카테고리 표시 snapshot | Web memory/localStorage/IndexedDB, Android preferences/WebView | 공통 시스템·Access·Ledger·Category Read Model | [SYS-008](../system/context.md#6-공통-요구사항), Android Host, DEC-068 |
 | 자산·보유종목·배당 | assets, holdings, dividend collections | [Portfolio](../contexts/portfolio/requirements.md) | [Portfolio 내부 기능](../contexts/portfolio/requirements.md#4-aggregate와-소유-데이터) |
 | FCM 전달 주소·subscription | 현재 `fcmTokens` registration token, 목표 `notificationEndpoints` FID | [Notifications](../contexts/notifications/requirements.md) | [푸시 알림](../contexts/notifications/modules/notifications/requirements.md) |
 | WebView 세션 Bridge | AndroidBridge, localStorage | [지원·플랫폼](../supporting-platform/requirements.md) | [Android Host](../supporting-platform/modules/android-host/requirements.md) |
@@ -74,7 +74,7 @@
 ## 6. 기기와 클라이언트 경계
 
 - AndroidBridge는 허용된 제품 origin에서만 민감 API를 노출해야 한다.
-- 인증·Membership 검증이 완료되기 전에는 보호 Query·기본 데이터 write·FID endpoint 등록을 시작하지 않는다. 로그아웃·가구/멤버 전환은 이전 session의 구독·cache·늦은 callback을 폐기한다.
+- 인증·Membership 검증이 완료되기 전에는 보호 원격 Query·기본 데이터 write·FID endpoint 등록을 시작하지 않는다. DEC-068의 마지막 서버 검증 가구·현재 월 원장·가구별 카테고리 local snapshot은 비권위 표시 hint로 먼저 그릴 수 있으며, Auth UID 불일치·first visit·권한·authoritative household 부재가 확인되면 폐기한다. 로그아웃·가구/멤버 전환은 이전 session의 구독·cache·늦은 callback을 폐기한다.
 - legacy householdKey·currentMemberId는 첫 Google 로그인의 일회성 claim에만 사용한다. 연결 성공 뒤 key 기반 로그인 상태를 제거하고 신규 입력 UI를 제공하지 않는다.
 - 초대 코드는 5분·일회 사용이며 원문을 저장·로그하지 않는다. Invitation 소비와 호출자 자기 Member·Membership 생성을 한 서버 transaction에서 처리한다.
 - 사용자가 보낸 principalUid·타인 memberId는 Member 생성·이름 변경 입력으로 받지 않고 Google token과 Membership에서 자기 identity를 도출한다.
@@ -92,8 +92,8 @@
 - Android cloud backup·device transfer는 legacy key, 인증/session mirror, WebView 보호 저장소, Firebase Installation persistence, 암호화 Queue와 그 key material을 기본 제외한다. 복원된 설치가 이전 Actor나 FID binding을 자동 상속하지 않게 한다.
 - QuickEdit은 DEC-024에 따라 잠금 화면 위에 현재 편집 정보를 표시할 수 있지만 keyguard를 해제하지 않고 non-exported Activity·유효 거래 ID·현재 session을 강제한다. DEC-045에 따라 화면 캡처와 시스템 최근 앱 미리보기는 별도 차단하지 않되 앱 로그에는 QuickEdit 민감값을 기록하지 않는다.
 - Android 13 이상에서는 알림 표시 런타임 권한을 요청하고 거부 상태를 처리한다.
-- Android 결제 Queue에는 원문을 넣지 않고 Android Keystore의 non-exportable 설치 키를 사용하는 AES-256-GCM 암호문만 저장한다. entry는 최대 72시간이며 terminal·로그아웃·멤버/가구 변경·키 오류에서 삭제한다.
-- PWA/브라우저 cache는 인증 응답, 가구·금융 API, navigation HTML과 session 데이터를 저장하지 않는다. build-versioned precache와 공개 비민감 아이콘·폰트·이미지의 최대 7일 runtime cache만 허용하고 임의 cross-origin 응답은 저장하지 않는다. logout/session 전환과 worker upgrade에서 session-scoped cache를 제거한다. ([DEC-051](../governance/decisions.md#dec-051))
+- Android 결제 journal은 원격 호출 중 process 종료 유실을 막기 위해 raw DTO를 Android Keystore의 non-exportable 설치 키로 AES-256-GCM 암호화해 저장한다. 정상 terminal은 QuickEdit follow-up 내구화 뒤 즉시 삭제하고 WorkManager를 만들지 않으며, 실패·partial entry만 최대 72시간 보존한다. 로그아웃·멤버/가구 변경·키 오류에서도 삭제한다.
+- PWA/CDN cache는 인증 응답과 가구·금융 API를 저장하지 않는다. build-versioned 정적 navigation shell과 공개 비민감 아이콘·폰트·이미지의 최대 7일 runtime cache만 허용하고 임의 cross-origin 응답은 저장하지 않는다. DEC-068의 first-party localStorage 가구·현재 월 원장·가구별 카테고리 표시 snapshot은 이 공개 cache 금지와 별개이며 서버 권한 근거로 사용하지 않는다. ([DEC-051](../governance/decisions.md#dec-051), [DEC-068](../governance/decisions.md#dec-068))
 - 운영 migration·repair는 browser bundle에서 실행할 수 없고 승인된 서버 job이 명시적 scope·dry-run·checkpoint·reconciliation을 남긴다.
 - 외부 Provider를 대신 호출하는 Web/Functions API는 인증·Membership을 검증하고 App Check, schema/body/batch/concurrency/rate 상한을 적용한다. 외부 URL은 HTTPS allowlist, redirect 재검증, timeout과 응답 크기 상한을 통과해야 한다.
 - 클라이언트 UI의 권한 분기는 서버 권한 검증을 대체하지 않는다.
@@ -123,9 +123,9 @@ Canonical 보안 테스트 ID:
 | 진단 로그 | 비관리자 조회, 미등록 source, 장기 경과, 별도 Secret 혼입 | 조회·수집 거부, 기능 제거 전 문서 유지, 인증 token·FID·가구 접근 자격 비수집 |
 | Provider Health | 비관리자 Query·직접 write, 민감 field 포함 시도 | 조회·쓰기 거부, 서버 Adapter만 최소 redacted schema 저장 |
 | 잠금 화면 | 잠금 상태 QuickEdit 표시·캡처 | DEC-024의 표시 허용·keyguard 유지·외부 진입 차단과 DEC-045의 캡처 허용·앱 로그 금지 준수 |
-| Android 결제 Queue | 로컬 DB 탈취, entry 변조, 72시간 경계, 로그아웃·멤버/가구 변경, Keystore 키 무효화 | 평문 비노출·GCM 인증 실패 전송 차단·조건별 entry 삭제·다른 Actor 재연결 없음 |
+| Android 결제 journal·실패 Queue | 원격 호출 중 process 종료, 로컬 DB 탈취, entry 변조, follow-up enqueue 실패, 72시간 경계, 로그아웃·멤버/가구 변경, Keystore 키 무효화 | 원격 전 암호문 선기록, 평문 비노출·GCM 인증 실패 전송 차단, QuickEdit FIFO 선내구화 뒤 ack, 조건별 entry 삭제·다른 Actor 재연결 없음 |
 | Android backup/restore | 같은 기기 재설치·새 기기 이전·backup restore | legacy key·session·Queue·FID가 복원되지 않고 새 설치가 이전 Actor에 자동 연결되지 않음 |
-| Client session | A 가구 구독 중 B로 전환, A의 늦은 callback, guest/admin route 진입 | A cache·render·write 0건, 보호 구독·자동 초기화 없음 |
+| Client session | 마지막 검증 A snapshot 뒤 Auth UID 불일치·first visit·권한 거부, A→B 전환, A의 늦은 callback, guest/admin route 진입 | 초기 hint 외 A의 보호 구독·write 0건, 불일치 확정 뒤 A render·cache 사용 중단, B에 A callback 반영 없음 |
 | 외부 API ingress | 무인증·App Check 실패·빈 정규화 검색·초과 body/batch/quota | 외부 공급자 호출 0회, 안정적인 401/403/413/429 또는 typed error |
 | 외부 URL fetch | 사설 IP·metadata host·악성 redirect·초과 응답 | allowlist 경계에서 차단하고 응답 원문·credential을 log하지 않음 |
 | 운영 migration | 일반 client 호출, 범위 밖 문서, page 재실행 | API 비노출, 변경 0건 또는 멱등 재생, reconciliation 불일치 시 중단 |
@@ -141,6 +141,6 @@ Canonical 보안 테스트 ID:
 5. WebView Bridge origin과 배포 URL을 제한한다.
 6. 가구 간 읽기·쓰기·삭제·query 보안 E2E가 통과한다.
 7. 기존 localStorage 사용자의 legacy claim 경합·충돌·멱등 테스트와 신규 가구 키 입력 차단이 통과한다.
-8. 인증·가구·금융 응답이 PWA/CDN 공개 cache와 Android backup에 남지 않는다.
+8. 인증·가구·금융 API 응답이 PWA/CDN 공개 cache와 Android backup에 남지 않는다. DEC-068의 first-party 비권위 표시 snapshot은 별도 허용 범위와 불일치 폐기 테스트를 가진다.
 9. 공개 Provider proxy에 인증·입력 상한·rate limit·SSRF 방어가 적용된다.
 10. 사용자 앱 bundle에서 migration·repair·운영 샘플 writer를 실행할 수 없다.

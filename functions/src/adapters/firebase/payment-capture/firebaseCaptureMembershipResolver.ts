@@ -1,5 +1,7 @@
 import type * as firestore from "firebase-admin/firestore";
 
+import { BoundedTtlCache } from "../../memory/boundedTtlCache";
+
 export type CaptureMembershipResolution =
   | {
       readonly kind: "active";
@@ -16,6 +18,9 @@ export type CaptureMembershipResolution =
 export interface CaptureMembershipResolver {
   resolve(principalUid: string | undefined): Promise<CaptureMembershipResolution>;
 }
+
+export const CAPTURE_MEMBERSHIP_CACHE_TTL_MILLIS = 5 * 60 * 1_000;
+export const CAPTURE_MEMBERSHIP_CACHE_MAX_ENTRIES = 64;
 
 function active(data: FirebaseFirestore.DocumentData | undefined): boolean {
   return (
@@ -91,5 +96,50 @@ export class FirebaseCaptureMembershipResolver
     }
 
     return { kind: "active", principalUid, householdId, memberId };
+  }
+}
+
+/**
+ * 활성 membership만 짧게 캐시합니다. 거부 결과를 저장하지 않으므로 신규 가입이나
+ * 복구는 다음 요청에서 즉시 다시 확인하고, 삭제/전환의 최대 stale 시간은 5분입니다.
+ */
+export class CachedCaptureMembershipResolver
+  implements CaptureMembershipResolver
+{
+  private readonly cache: BoundedTtlCache<
+    string,
+    Extract<CaptureMembershipResolution, { readonly kind: "active" }>
+  >;
+
+  constructor(
+    private readonly delegate: CaptureMembershipResolver,
+    options: {
+      readonly ttlMillis?: number;
+      readonly maxEntries?: number;
+      readonly now?: () => number;
+    } = {},
+  ) {
+    this.cache = new BoundedTtlCache({
+      ttlMillis: options.ttlMillis ?? CAPTURE_MEMBERSHIP_CACHE_TTL_MILLIS,
+      maxEntries:
+        options.maxEntries ?? CAPTURE_MEMBERSHIP_CACHE_MAX_ENTRIES,
+      ...(options.now === undefined ? {} : { now: options.now }),
+    });
+  }
+
+  async resolve(
+    principalUid: string | undefined,
+  ): Promise<CaptureMembershipResolution> {
+    const normalizedUid = principalUid?.trim();
+    if (normalizedUid === undefined || normalizedUid === "") {
+      return this.delegate.resolve(principalUid);
+    }
+
+    const cached = this.cache.get(normalizedUid);
+    if (cached !== undefined) return cached;
+
+    const resolved = await this.delegate.resolve(normalizedUid);
+    if (resolved.kind === "active") this.cache.set(normalizedUid, resolved);
+    return resolved;
   }
 }

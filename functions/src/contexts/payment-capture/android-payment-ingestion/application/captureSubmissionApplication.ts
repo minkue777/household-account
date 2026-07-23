@@ -130,6 +130,9 @@ export function toCaptureSubmittedTransactionResult(
         editable: result.editable,
         captureLineageId: result.captureLineageId,
         aggregateVersion: result.aggregateVersion,
+        ...(result.quickEditSnapshot === undefined
+          ? {}
+          : { quickEditSnapshot: result.quickEditSnapshot }),
       };
     case "duplicate":
     case "cancelled":

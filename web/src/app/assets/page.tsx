@@ -34,7 +34,7 @@ const AssetOwnerProfileModal = dynamic(
 
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
-  const { household, adminHouseholdView } = useHousehold();
+  const { household, adminHouseholdView, isSessionVerified = true } = useHousehold();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [dailyChange, setDailyChange] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -96,12 +96,13 @@ export default function AssetsPage() {
 
   useEffect(() => {
     setIsLoading(true);
+    if (!isSessionVerified) return undefined;
     const unsubscribe = subscribeToAssets((newAssets) => {
       setAssets(newAssets);
       setIsLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [isSessionVerified]);
 
   useEffect(() => {
     if (isLoading || adminHouseholdView !== null || didScheduleMarketRefresh.current) return;
@@ -131,7 +132,7 @@ export default function AssetsPage() {
 
   useEffect(() => {
     const householdId = household?.id;
-    if (!householdId) {
+    if (!householdId || !isSessionVerified) {
       setOwnerProfiles([]);
       return;
     }
@@ -140,7 +141,7 @@ export default function AssetsPage() {
       setOwnerProfiles,
       (error) => console.error('자산 명의자 구독 오류:', error)
     );
-  }, [household?.id]);
+  }, [household?.id, isSessionVerified]);
 
   useEffect(() => {
     if (!memberOptions.some(({ key }) => key === selectedMember)) {

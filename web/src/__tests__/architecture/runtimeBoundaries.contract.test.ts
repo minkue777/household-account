@@ -30,6 +30,21 @@ describe('Web runtime architecture boundary', () => {
     expect(violations).toEqual([]);
   });
 
+  test('App Check와 Functions·Storage adapter는 Firestore 초기화를 선행하지 않는다', () => {
+    const lightweightFirebaseConsumers = [
+      'platform/security/firebaseAppCheck.ts',
+      'platform/functions-api/fidSafeFirebaseFunctions.ts',
+      'platform/pwa/fidEndpointLifecycle.ts',
+      'platform/instrument-catalog/firebaseStorageStockInstrumentCatalogRemote.ts',
+    ];
+
+    for (const relativePath of lightweightFirebaseConsumers) {
+      const source = fs.readFileSync(path.join(srcRoot, relativePath), 'utf8');
+      expect(source).toContain("@/lib/firebaseApp");
+      expect(source).not.toMatch(/from ['"]@\/lib\/firebase['"]/);
+    }
+  });
+
   test('Web production source는 Firestore writer API와 legacy guest tenant를 사용하지 않는다', () => {
     const violations: string[] = [];
     for (const file of sourceFiles(srcRoot)) {

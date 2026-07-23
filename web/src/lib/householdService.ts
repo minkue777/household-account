@@ -16,8 +16,6 @@ import {
   Household,
   HouseholdMember,
 } from '@/types/household';
-import { householdCommands } from '@/features/access-household/application/householdCommands';
-import { categoryCommands } from '@/features/category-budget/application/categoryCommands';
 
 export type { Household };
 
@@ -124,10 +122,16 @@ export async function renameHouseholdMember(
   newName: string,
   expectedVersion: number
 ): Promise<void> {
+  const { householdCommands } = await import(
+    '@/features/access-household/application/householdCommands'
+  );
   await householdCommands.renameSelf(householdKey, newName, expectedVersion);
 }
 
 export async function deleteHousehold(key: string): Promise<void> {
+  const { householdCommands } = await import(
+    '@/features/access-household/application/householdCommands'
+  );
   await householdCommands.deleteHousehold(key);
 }
 
@@ -135,5 +139,8 @@ export async function setDefaultCategoryKey(
   householdKey: string,
   categoryKey: string
 ): Promise<void> {
+  const { categoryCommands } = await import(
+    '@/features/category-budget/application/categoryCommands'
+  );
   await categoryCommands.setDefault(householdKey, categoryKey);
 }

@@ -6,7 +6,8 @@ data class CaptureBranchReceipt(
     val kind: String,
     val resourceId: String? = null,
     val aggregateVersion: Int? = null,
-    val retryable: Boolean = false
+    val retryable: Boolean = false,
+    val quickEditSnapshot: CaptureQuickEditSnapshot? = null
 )
 
 data class CaptureSubmissionReceipt(
@@ -69,12 +70,63 @@ class CallableCaptureSubmissionClient(
             throw CaptureSubmissionContractException("CREATED_TRANSACTION_RECEIPT_INVALID")
         }
 
-        return CaptureBranchReceipt(kind, resourceId, version, retryable)
+        val quickEditSnapshot = if (
+            transactionBranch &&
+            kind.equals("created", ignoreCase = true)
+        ) {
+            objectValue("quickEditSnapshot")
+                ?.toQuickEditSnapshot()
+                ?.takeIf {
+                    it.transactionId == resourceId &&
+                        it.aggregateVersion == version
+                }
+        } else {
+            null
+        }
+
+        return CaptureBranchReceipt(
+            kind = kind,
+            resourceId = resourceId,
+            aggregateVersion = version,
+            retryable = retryable,
+            quickEditSnapshot = quickEditSnapshot
+        )
     }
 
     @Suppress("UNCHECKED_CAST")
     private fun Map<String, Any?>.objectValue(key: String): Map<String, Any?>? =
         this[key] as? Map<String, Any?>
+
+    private fun Map<String, Any?>.toQuickEditSnapshot(): CaptureQuickEditSnapshot? {
+        val transactionId = this["transactionId"] as? String ?: return null
+        val merchant = this["merchant"] as? String ?: return null
+        val amount = (this["amountInWon"] as? Number)?.toInt() ?: return null
+        val accountingDate = this["accountingDate"] as? String ?: return null
+        val localTime = this["localTime"] as? String ?: return null
+        val categoryId = this["categoryId"] as? String ?: return null
+        val memo = this["memo"] as? String ?: return null
+        val aggregateVersion = (this["aggregateVersion"] as? Number)?.toInt() ?: return null
+        if (
+            transactionId.isBlank() ||
+            merchant.isBlank() ||
+            amount <= 0 ||
+            accountingDate.isBlank() ||
+            categoryId.isBlank() ||
+            aggregateVersion < 1
+        ) {
+            return null
+        }
+        return CaptureQuickEditSnapshot(
+            transactionId = transactionId,
+            merchant = merchant,
+            amountInWon = amount,
+            accountingDate = accountingDate,
+            localTime = localTime,
+            categoryId = categoryId,
+            memo = memo,
+            aggregateVersion = aggregateVersion
+        )
+    }
 
     companion object {
         const val RAW_NOTIFICATION_FUNCTION_NAME = "submitAndroidRawNotification"

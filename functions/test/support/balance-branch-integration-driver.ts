@@ -136,6 +136,16 @@ class ScriptedTransactionGateway implements CaptureTransactionGatewayPort {
       editable: true as const,
       captureLineageId: `capture-lineage-${this.transactionSequence}`,
       aggregateVersion: 1,
+      quickEditSnapshot: {
+        transactionId,
+        merchant: input.branch.merchant,
+        amountInWon: input.branch.amountInWon,
+        accountingDate: input.branch.accountingDate,
+        localTime: input.branch.occurredAt.slice(11, 16),
+        categoryId: "etc",
+        memo: "",
+        aggregateVersion: 1,
+      },
     };
     this.terminalResults.set(input.downstreamKey, result);
     this.transactions.push({

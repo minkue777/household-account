@@ -4,7 +4,7 @@ jest.mock('firebase/functions', () => ({
   getFunctions: (...args: unknown[]) => mockGetFunctions(...args),
 }));
 
-jest.mock('@/lib/firebase', () => ({ app: { name: 'web-app' } }));
+jest.mock('@/lib/firebaseApp', () => ({ app: { name: 'web-app' } }));
 
 import { getFidSafeFirebaseFunctions } from '@/platform/functions-api/fidSafeFirebaseFunctions';
 

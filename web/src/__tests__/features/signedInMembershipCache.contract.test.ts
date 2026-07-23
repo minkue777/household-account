@@ -1,5 +1,6 @@
 import {
   clearSignedInMembershipCache,
+  readLastSignedInSessionCache,
   readSignedInHouseholdCache,
   readSignedInMembershipCache,
   writeSignedInMembershipCache,
@@ -69,5 +70,21 @@ describe('signed-in Membership cache contract', () => {
     });
 
     expect(readSignedInHouseholdCache('uid-1', 'household-1')?.name).toBe('보존 가계부');
+  });
+
+  it('complete last session can be restored before Firebase Auth persistence resolves', () => {
+    const household = {
+      id: 'household-1',
+      name: '즉시 표시 가계부',
+      createdAt: new Date('2026-07-23T00:00:00+09:00'),
+      members: [{ id: 'member-1', name: '민규', aggregateVersion: 3 }],
+    };
+    writeSignedInMembershipCache('uid-1', resolution, household);
+
+    expect(readLastSignedInSessionCache()).toEqual({
+      principalUid: 'uid-1',
+      resolution,
+      household,
+    });
   });
 });

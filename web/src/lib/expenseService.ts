@@ -9,12 +9,12 @@ import {
   db,
 } from '@/platform/read-model/firestoreReadModel';
 import { Expense, TransactionType } from '@/types/expense';
-import { ledgerCommands } from '@/features/ledger/application/ledgerCommands';
 import { ledgerOptimisticProjection } from '@/features/ledger/application/ledgerOptimisticProjection';
 import { isVisibleLedgerReadDocument } from '@/features/ledger/application/ledgerReadVisibility';
 import { requireClientSessionScope } from '@/composition/clientSessionScope';
 import type { LedgerTransactionCommandResult } from '@/platform/functions-api/householdCommandContract';
 import { createHouseholdCommandId } from '@/platform/functions-api/householdCommandClient';
+import { writeMonthlyExpenseSnapshot } from '@/features/ledger/application/monthlyExpenseSnapshot';
 
 const COLLECTION_NAME = 'expenses';
 const DEFAULT_TRANSACTION_TYPE: TransactionType = 'expense';
@@ -30,6 +30,10 @@ interface ExpenseQueryOptions {
 interface ExactCardSearchKeyword {
   label: string;
   token: string;
+}
+
+async function loadLedgerCommands() {
+  return (await import('@/features/ledger/application/ledgerCommands')).ledgerCommands;
 }
 
 interface LedgerCardReadFields {
@@ -343,6 +347,7 @@ export async function addExpense(
   };
   const mutationId = ledgerOptimisticProjection.beginCreate(optimistic, householdId);
   try {
+    const ledgerCommands = await loadLedgerCommands();
     const confirmed = await ledgerCommands.record(householdId, transaction, commandId);
     ledgerOptimisticProjection.commitCreate(mutationId, mapCommandTransaction(confirmed));
     return confirmed.transactionId;
@@ -364,6 +369,7 @@ export async function updateExpense(
   const current = ledgerOptimisticProjection.current(id, householdId);
   const mutationId = ledgerOptimisticProjection.beginUpdate(id, data, householdId);
   try {
+    const ledgerCommands = await loadLedgerCommands();
     const updated = await ledgerCommands.update(householdId, id, expectedVersion, data);
     ledgerOptimisticProjection.commitUpdate(mutationId, mapCommandTransaction(updated, current));
   } catch (error) {
@@ -379,6 +385,7 @@ export async function deleteExpense(id: string, expectedVersion: number): Promis
   const householdId = getHouseholdId();
   const mutationId = ledgerOptimisticProjection.beginDelete(id, householdId);
   try {
+    const ledgerCommands = await loadLedgerCommands();
     await ledgerCommands.delete(householdId, id, expectedVersion);
     ledgerOptimisticProjection.commitDelete(mutationId);
   } catch (error) {
@@ -422,12 +429,19 @@ export function subscribeToMonthlyExpenses(
     const allExpenses = snapshot.docs
       .filter((document) => isVisibleLedgerReadDocument(document.data()))
       .map(mapDocToExpense);
+    writeMonthlyExpenseSnapshot(
+      householdId,
+      year,
+      month,
+      transactionType,
+      allExpenses.filter((expense) => matchesTransactionType(expense, transactionType))
+    );
 
     // 클라이언트에서 날짜 필터링 및 정렬
     projection.publish(allExpenses);
   }, (error) => {
     void error;
-    projection.publish([]);
+    // Keep the last valid local snapshot visible until Auth/network reconnects.
   });
 
   return () => {
@@ -448,6 +462,7 @@ export async function updateExpenseCategory(
   const current = ledgerOptimisticProjection.current(id, householdId);
   const mutationId = ledgerOptimisticProjection.beginUpdate(id, { category }, householdId);
   try {
+    const ledgerCommands = await loadLedgerCommands();
     const updated = await ledgerCommands.changeCategory(
       householdId,
       id,
@@ -541,6 +556,7 @@ export async function addManualMonthlySplit(
   months: number,
   memo?: string
 ): Promise<string[]> {
+  const ledgerCommands = await loadLedgerCommands();
   const result = await ledgerCommands.recordMonthlySplit(getHouseholdId(), {
     merchant,
     amountInWon: amount,
@@ -570,6 +586,7 @@ export async function splitExpense(
   const householdId = getHouseholdId();
   const mutationId = ledgerOptimisticProjection.beginDelete(originalExpense.id, householdId);
   try {
+    const ledgerCommands = await loadLedgerCommands();
     const transactionIds = await ledgerCommands.split(
       householdId,
       originalExpense.id,
@@ -591,6 +608,7 @@ export async function splitExpenseMonthly(
   const householdId = getHouseholdId();
   const mutationId = ledgerOptimisticProjection.beginDelete(expense.id, householdId);
   try {
+    const ledgerCommands = await loadLedgerCommands();
     const result = await ledgerCommands.splitExistingMonthly(
       householdId,
       expense.id,
@@ -626,6 +644,7 @@ export async function mergeExpenses(
     throw error;
   }
   try {
+    const ledgerCommands = await loadLedgerCommands();
     await ledgerCommands.merge(
       householdId,
       targetExpense.id,
@@ -654,6 +673,7 @@ export async function unmergeExpense(expense: Expense): Promise<string[]> {
   if (!expense.mergedFrom || expense.mergedFrom.length === 0) {
     return [];
   }
+  const ledgerCommands = await loadLedgerCommands();
   return ledgerCommands.unmerge(getHouseholdId(), expense.id, expense.aggregateVersion);
 }
 
@@ -726,6 +746,7 @@ export async function cancelSplitGroup(
   groupSnapshot?: readonly Expense[]
 ): Promise<void> {
   const snapshot = groupSnapshot ?? await getSplitGroupExpenses(splitGroupId);
+  const ledgerCommands = await loadLedgerCommands();
   await ledgerCommands.cancelMonthlySplit(
     getHouseholdId(),
     splitGroupId,
@@ -743,6 +764,7 @@ export async function updateSplitGroup(
   groupSnapshot?: readonly Expense[]
 ): Promise<string> {
   const snapshot = groupSnapshot ?? await getSplitGroupExpenses(splitGroupId);
+  const ledgerCommands = await loadLedgerCommands();
   return ledgerCommands.reconfigureMonthlySplit(
     getHouseholdId(),
     splitGroupId,

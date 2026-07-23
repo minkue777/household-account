@@ -14,7 +14,6 @@ import {
   AppliedRule,
   MATCH_TYPE_LABELS,
 } from '@/types/merchant';
-import { paymentConfigurationCommands } from '@/features/payment-configuration/application/paymentConfigurationCommands';
 import { requireClientSessionScope } from '@/composition/clientSessionScope';
 
 export type { MerchantRule, MatchType, MerchantRuleMapping, CreateMerchantRuleInput, AppliedRule };
@@ -129,6 +128,9 @@ export async function addMerchantRuleV2(
     return '';
   }
 
+  const { paymentConfigurationCommands } = await import(
+    '@/features/payment-configuration/application/paymentConfigurationCommands'
+  );
   return paymentConfigurationCommands.createMerchantRule(householdId, input);
 }
 
@@ -156,6 +158,9 @@ export async function updateMerchantRuleV2(
   id: string,
   updates: Partial<Pick<MerchantRule, 'merchantKeyword' | 'matchType' | 'mapping' | 'priority' | 'isActive'>>
 ): Promise<void> {
+  const { paymentConfigurationCommands } = await import(
+    '@/features/payment-configuration/application/paymentConfigurationCommands'
+  );
   await paymentConfigurationCommands.updateMerchantRule(requireHouseholdId(), id, updates);
 }
 
@@ -176,6 +181,9 @@ export async function updateMerchantRule(
  * 규칙 삭제
  */
 export async function deleteMerchantRule(id: string): Promise<void> {
+  const { paymentConfigurationCommands } = await import(
+    '@/features/payment-configuration/application/paymentConfigurationCommands'
+  );
   await paymentConfigurationCommands.deleteMerchantRule(requireHouseholdId(), id);
 }
 

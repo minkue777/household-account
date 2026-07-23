@@ -7,7 +7,6 @@ import {
   db,
 } from '@/platform/read-model/firestoreReadModel';
 import { CategoryDocument } from '@/types/category';
-import { categoryCommands } from '@/features/category-budget/application/categoryCommands';
 import { requireClientSessionScope } from '@/composition/clientSessionScope';
 
 export type { CategoryDocument };
@@ -26,6 +25,9 @@ export async function addCategory(
   category: Omit<CategoryDocument, 'id' | 'isDefault' | 'householdId'>,
   householdId: string
 ): Promise<string> {
+  const { categoryCommands } = await import(
+    '@/features/category-budget/application/categoryCommands'
+  );
   return categoryCommands.create(householdId, category);
 }
 
@@ -35,18 +37,27 @@ export async function updateCategory(
   data: Partial<Omit<CategoryDocument, 'id' | 'isDefault'>>
 ): Promise<void> {
   const householdId = requireStoredHouseholdId();
+  const { categoryCommands } = await import(
+    '@/features/category-budget/application/categoryCommands'
+  );
   await categoryCommands.update(householdId, id, data);
 }
 
 // 카테고리 삭제 (기본 카테고리는 삭제 불가)
 export async function deleteCategory(id: string): Promise<void> {
   const householdId = requireStoredHouseholdId();
+  const { categoryCommands } = await import(
+    '@/features/category-budget/application/categoryCommands'
+  );
   await categoryCommands.archive(householdId, id);
 }
 
 // 예산 설정
 export async function setBudget(id: string, budget: number | null): Promise<void> {
   const householdId = requireStoredHouseholdId();
+  const { categoryCommands } = await import(
+    '@/features/category-budget/application/categoryCommands'
+  );
   await categoryCommands.setBudget(householdId, id, budget);
 }
 
@@ -55,13 +66,17 @@ export async function reorderCategories(
   categories: { id: string; order: number }[]
 ): Promise<void> {
   const householdId = requireStoredHouseholdId();
+  const { categoryCommands } = await import(
+    '@/features/category-budget/application/categoryCommands'
+  );
   await categoryCommands.reorder(householdId, categories);
 }
 
 // 실시간 구독 (householdId별로)
 export function subscribeToCategories(
   householdId: string,
-  callback: (categories: CategoryDocument[]) => void
+  callback: (categories: CategoryDocument[]) => void,
+  onError?: (error: unknown) => void
 ): () => void {
   if (!householdId) {
     callback([]);
@@ -82,8 +97,8 @@ export function subscribeToCategories(
 
     callback(categories);
   }, (error) => {
-    // 인덱스 오류 시 링크가 에러 메시지에 포함됨
-    callback([]);
+    // 일시 오류가 마지막으로 확인한 카테고리 화면을 지우지 않도록 유지합니다.
+    onError?.(error);
   });
 
   return unsubscribe;

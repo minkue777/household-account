@@ -72,6 +72,14 @@ describe("Firebase Capture → Ledger transaction adapter", () => {
       kind: "recorded",
       editable: true,
       aggregateVersion: 1,
+      quickEditSnapshot: {
+        amountInWon: 12_000,
+        accountingDate: "2026-07-21",
+        localTime: "10:05",
+        categoryId: "etc",
+        memo: "",
+        aggregateVersion: 1,
+      },
     });
     if (first.kind !== "recorded") return;
     expect(

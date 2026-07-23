@@ -98,6 +98,16 @@ function ledgerSpy() {
         editable: true,
         captureLineageId: "lineage-1",
         aggregateVersion: 1,
+        quickEditSnapshot: {
+          transactionId: "transaction-1",
+          merchant: command.branch.merchant,
+          amountInWon: command.branch.amountInWon,
+          accountingDate: command.branch.accountingDate,
+          localTime: command.branch.occurredAt.slice(11, 16),
+          categoryId: command.branch.categoryId,
+          memo: command.branch.memo,
+          aggregateVersion: 1,
+        },
       };
     },
     cancel: async (command) => {

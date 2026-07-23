@@ -14,7 +14,9 @@ import androidx.work.WorkerParameters
 import com.household.account.QuickEditActivity
 import com.household.account.ledger.CallableLedgerTransactionQueryClient
 import com.household.account.ledger.LedgerTransactionQueryResult
+import com.household.account.ledger.LedgerTransactionSnapshot
 import com.household.account.paymentcapture.CaptureDeliveryFollowUp
+import com.household.account.paymentcapture.CaptureQuickEditSnapshot
 import com.household.account.paymentcapture.CaptureSessionScope
 import com.household.account.server.FirebaseAuthenticatedCallableGateway
 import com.household.account.util.HouseholdPreferences
@@ -42,13 +44,23 @@ object QuickEditCoordinator {
             ).also { queueInstance = it }
         }
 
-    suspend fun enqueueAndPresent(context: Context, followUp: CaptureDeliveryFollowUp) {
+    suspend fun enqueue(
+        context: Context,
+        expectedScope: CaptureSessionScope,
+        followUp: CaptureDeliveryFollowUp
+    ) {
         if (!HouseholdPreferences.isQuickEditOverlayEnabled(context)) return
         if (!Settings.canDrawOverlays(context)) return
         ensureProcessRecovered(context)
         val scope = currentScope(context)
-        if (!queue(context).enqueue(scope, followUp.transactionId)) return
-        presentNext(context)
+        if (scope != expectedScope) return
+        if (
+            !queue(context).enqueue(
+                scope = scope,
+                transactionId = followUp.transactionId,
+                snapshot = followUp.quickEditSnapshot
+            )
+        ) return
     }
 
     suspend fun resumePending(context: Context) {
@@ -87,6 +99,14 @@ object QuickEditCoordinator {
 
         while (true) {
             val entry = queue(applicationContext).acquireHead(scope) ?: return
+            entry.snapshot?.let { snapshot ->
+                val launched = launchQuickEdit(applicationContext, snapshot.toLedgerSnapshot())
+                if (!launched) {
+                    queue(applicationContext).releaseLease(scope, entry.transactionId)
+                    scheduleRecovery(applicationContext)
+                }
+                return
+            }
             val result = CallableLedgerTransactionQueryClient(
                 FirebaseAuthenticatedCallableGateway()
             ).get(scope.householdId, entry.transactionId)
@@ -101,18 +121,7 @@ object QuickEditCoordinator {
                         queue(applicationContext).complete(scope, entry.transactionId)
                         continue
                     }
-                    val intent = Intent(applicationContext, QuickEditActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                        putExtra(QuickEditActivity.EXTRA_EXPENSE_ID, snapshot.transactionId)
-                        putExtra(QuickEditActivity.EXTRA_MERCHANT, snapshot.merchant)
-                        putExtra(QuickEditActivity.EXTRA_AMOUNT, snapshot.amountInWon)
-                        putExtra(QuickEditActivity.EXTRA_DATE, snapshot.accountingDate)
-                        putExtra(QuickEditActivity.EXTRA_TIME, snapshot.localTime)
-                        putExtra(QuickEditActivity.EXTRA_CATEGORY, snapshot.categoryId)
-                        putExtra(QuickEditActivity.EXTRA_MEMO, snapshot.memo)
-                        putExtra(QuickEditActivity.EXTRA_VERSION, snapshot.aggregateVersion)
-                    }
-                    val launched = runCatching { applicationContext.startActivity(intent) }.isSuccess
+                    val launched = launchQuickEdit(applicationContext, snapshot)
                     if (!launched) {
                         queue(applicationContext).releaseLease(scope, entry.transactionId)
                         scheduleRecovery(applicationContext)
@@ -137,6 +146,37 @@ object QuickEditCoordinator {
             }
         }
     }
+
+    private fun launchQuickEdit(
+        context: Context,
+        snapshot: LedgerTransactionSnapshot
+    ): Boolean {
+        val intent = Intent(context, QuickEditActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+            putExtra(QuickEditActivity.EXTRA_EXPENSE_ID, snapshot.transactionId)
+            putExtra(QuickEditActivity.EXTRA_MERCHANT, snapshot.merchant)
+            putExtra(QuickEditActivity.EXTRA_AMOUNT, snapshot.amountInWon)
+            putExtra(QuickEditActivity.EXTRA_DATE, snapshot.accountingDate)
+            putExtra(QuickEditActivity.EXTRA_TIME, snapshot.localTime)
+            putExtra(QuickEditActivity.EXTRA_CATEGORY, snapshot.categoryId)
+            putExtra(QuickEditActivity.EXTRA_MEMO, snapshot.memo)
+            putExtra(QuickEditActivity.EXTRA_VERSION, snapshot.aggregateVersion)
+        }
+        return runCatching { context.startActivity(intent) }.isSuccess
+    }
+
+    private fun CaptureQuickEditSnapshot.toLedgerSnapshot() = LedgerTransactionSnapshot(
+        transactionId = transactionId,
+        aggregateVersion = aggregateVersion,
+        lifecycleState = "active",
+        transactionType = "expense",
+        amountInWon = amountInWon,
+        accountingDate = accountingDate,
+        localTime = localTime,
+        merchant = merchant,
+        categoryId = categoryId,
+        memo = memo
+    )
 
     private fun scheduleRecovery(context: Context) {
         val request = OneTimeWorkRequestBuilder<QuickEditRecoveryWorker>()

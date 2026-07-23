@@ -1,6 +1,7 @@
 package com.household.account.quickedit
 
 import com.household.account.paymentcapture.CaptureSessionScope
+import com.household.account.paymentcapture.CaptureQuickEditSnapshot
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -8,7 +9,8 @@ data class QuickEditQueueEntry(
     val scope: CaptureSessionScope,
     val transactionId: String,
     val sequence: Long,
-    val enqueuedAtEpochMillis: Long
+    val enqueuedAtEpochMillis: Long,
+    val snapshot: CaptureQuickEditSnapshot? = null
 )
 
 data class QuickEditQueueState(
@@ -36,11 +38,30 @@ class QuickEditPendingQueue(
         }
     }
 
-    suspend fun enqueue(scope: CaptureSessionScope, transactionId: String): Boolean = mutex.withLock {
+    suspend fun enqueue(
+        scope: CaptureSessionScope,
+        transactionId: String,
+        snapshot: CaptureQuickEditSnapshot? = null
+    ): Boolean = mutex.withLock {
         if (!scope.isUsable || transactionId.isBlank()) return@withLock false
+        val acceptedSnapshot = snapshot?.takeIf { it.transactionId == transactionId }
         val state = sanitizeScope(store.load(), scope)
-        if (state.entries.any { it.transactionId == transactionId }) return@withLock true
-        val entry = QuickEditQueueEntry(scope, transactionId, state.nextSequence, nowEpochMillis())
+        val existingIndex = state.entries.indexOfFirst { it.transactionId == transactionId }
+        if (existingIndex >= 0) {
+            if (acceptedSnapshot != null && state.entries[existingIndex].snapshot == null) {
+                val updated = state.entries.toMutableList()
+                updated[existingIndex] = updated[existingIndex].copy(snapshot = acceptedSnapshot)
+                store.replace(state.copy(entries = updated))
+            }
+            return@withLock true
+        }
+        val entry = QuickEditQueueEntry(
+            scope = scope,
+            transactionId = transactionId,
+            sequence = state.nextSequence,
+            enqueuedAtEpochMillis = nowEpochMillis(),
+            snapshot = acceptedSnapshot
+        )
         store.replace(
             state.copy(
                 nextSequence = state.nextSequence + 1L,

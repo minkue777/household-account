@@ -1,6 +1,7 @@
 package com.household.account.quickedit
 
 import com.household.account.paymentcapture.CaptureSessionScope
+import com.household.account.paymentcapture.CaptureQuickEditSnapshot
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -63,4 +64,29 @@ class QuickEditPendingQueueTest {
         assertNull(queue.acquireHead(nextScope))
         assertTrue(store.state.entries.isEmpty())
     }
+
+    @Test
+    fun `서버 snapshot을 FIFO entry에 보존하고 기존 ID 전용 entry도 나중에 보강한다`() = runTest {
+        val store = MemoryStore()
+        val queue = QuickEditPendingQueue(store)
+        val snapshot = snapshot("transaction-a")
+
+        queue.enqueue(scope, "transaction-a")
+        queue.enqueue(scope, "transaction-a", snapshot)
+
+        assertEquals(snapshot, queue.acquireHead(scope)?.snapshot)
+        assertEquals(1, store.state.entries.size)
+        assertEquals(2L, store.state.nextSequence)
+    }
+
+    private fun snapshot(transactionId: String) = CaptureQuickEditSnapshot(
+        transactionId = transactionId,
+        merchant = "가맹점",
+        amountInWon = 10_000,
+        accountingDate = "2026-07-23",
+        localTime = "19:00",
+        categoryId = "etc",
+        memo = "",
+        aggregateVersion = 1
+    )
 }

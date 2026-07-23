@@ -2,13 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
-import { Expense, TransactionType } from '@/types/expense';
-import {
-  expenseMatchesSearch,
-  searchExpenses,
-  subscribeToExpenseProjection,
-  SplitItem,
-} from '@/lib/expenseService';
+import type { Expense, TransactionType } from '@/types/expense';
+import type { SplitItem } from '@/lib/expenseService';
 import {
   runSplitMonthsAction,
   runCancelSplitGroupAction,
@@ -30,6 +25,10 @@ interface SearchModalProps {
   transactionType: TransactionType;
 }
 
+type ExpenseProjectionSubscription = ReturnType<
+  (typeof import('@/lib/expenseService'))['subscribeToExpenseProjection']
+>;
+
 export default function SearchModal({
   isOpen,
   onClose,
@@ -47,7 +46,7 @@ export default function SearchModal({
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
-  const projectionRef = useRef<ReturnType<typeof subscribeToExpenseProjection> | null>(null);
+  const projectionRef = useRef<ExpenseProjectionSubscription | null>(null);
   const searchRequestIdRef = useRef(0);
 
   useEffect(() => {
@@ -72,6 +71,7 @@ export default function SearchModal({
     const projection = projectionRef.current;
     if (!projection || !keyword.trim()) return;
     const requestId = ++searchRequestIdRef.current;
+    const { searchExpenses } = await import('@/lib/expenseService');
     const searchResults = await searchExpenses(keyword, { transactionType });
     if (
       requestId !== searchRequestIdRef.current
@@ -149,43 +149,53 @@ export default function SearchModal({
       return;
     }
 
-    const projection = subscribeToExpenseProjection(
-      setResults,
-      (expense) =>
-        expense.transactionType === transactionType
-        && expenseMatchesSearch(expense, keyword)
-    );
-    projectionRef.current = projection;
+    let cancelled = false;
+    let projection: ExpenseProjectionSubscription | undefined;
+    void import('@/lib/expenseService').then(({
+      expenseMatchesSearch,
+      searchExpenses,
+      subscribeToExpenseProjection,
+    }) => {
+      if (cancelled) return;
+      projection = subscribeToExpenseProjection(
+        setResults,
+        (expense) =>
+          expense.transactionType === transactionType
+          && expenseMatchesSearch(expense, keyword)
+      );
+      projectionRef.current = projection;
 
-    debounceTimer.current = setTimeout(async () => {
-      const requestId = ++searchRequestIdRef.current;
-      setIsSearching(true);
-      try {
-        const searchResults = await searchExpenses(keyword, { transactionType });
-        if (
-          requestId !== searchRequestIdRef.current
-          || projectionRef.current !== projection
-        ) return;
-        projection.publish(searchResults);
-        if (searchResults.length > 0) {
-          setExpandedMonth(searchResults[0].date.substring(0, 7));
-        } else {
-          setExpandedMonth(null);
+      debounceTimer.current = setTimeout(async () => {
+        const requestId = ++searchRequestIdRef.current;
+        setIsSearching(true);
+        try {
+          const searchResults = await searchExpenses(keyword, { transactionType });
+          if (
+            requestId !== searchRequestIdRef.current
+            || projectionRef.current !== projection
+          ) return;
+          projection.publish(searchResults);
+          if (searchResults.length > 0) {
+            setExpandedMonth(searchResults[0].date.substring(0, 7));
+          } else {
+            setExpandedMonth(null);
+          }
+        } finally {
+          if (requestId === searchRequestIdRef.current) {
+            setIsSearching(false);
+          }
         }
-      } finally {
-        if (requestId === searchRequestIdRef.current) {
-          setIsSearching(false);
-        }
-      }
-    }, 300);
+      }, 300);
+    });
 
     return () => {
+      cancelled = true;
       if (debounceTimer.current) {
         clearTimeout(debounceTimer.current);
       }
       searchRequestIdRef.current += 1;
       if (projectionRef.current === projection) projectionRef.current = null;
-      projection.dispose();
+      projection?.dispose();
     };
   }, [keyword, transactionType]);
 

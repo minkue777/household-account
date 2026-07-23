@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Expense, TransactionType } from '@/types/expense';
-import { SplitItem } from '@/lib/expenseService';
-import { notifyPartner } from '@/lib/partnerNotificationService';
+import type { Expense, TransactionType } from '@/types/expense';
+import type { SplitItem } from '@/lib/expenseService';
 import {
   runSplitMonthsAction,
   runCancelSplitGroupAction,
@@ -259,7 +258,10 @@ export default function ExpenseItem({
         onUpdateSplitGroup={transactionType === 'expense' && expense.splitGroupId ? handleUpdateSplitGroup : undefined}
         onDelete={onDelete ? () => onDelete(expense.id) : undefined}
         onNotifyPartner={transactionType === 'expense'
-          ? () => notifyPartner(expense.id, expense.aggregateVersion)
+          ? async () => {
+            const { notifyPartner } = await import('@/lib/partnerNotificationService');
+            await notifyPartner(expense.id, expense.aggregateVersion);
+          }
           : undefined}
       />
 

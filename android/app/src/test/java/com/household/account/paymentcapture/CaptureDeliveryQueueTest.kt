@@ -119,6 +119,118 @@ class CaptureDeliveryQueueTest {
         assertEquals(1, store.entries.size)
     }
 
+    @Test
+    fun `직접 제출 receipt는 Quick Edit snapshot을 전달하고 partial branch만 재시도 대상으로 판정한다`() {
+        val snapshot = CaptureQuickEditSnapshot(
+            transactionId = "transaction-fast",
+            merchant = "빠른가맹점",
+            amountInWon = 12_000,
+            accountingDate = "2026-07-23",
+            localTime = "19:10",
+            categoryId = "food",
+            memo = "",
+            aggregateVersion = 3
+        )
+
+        val decision = evaluateCaptureReceipt(
+            envelope = rawEnvelope(),
+            receipt = CaptureSubmissionReceipt(
+                completion = "partial-retryable",
+                transaction = CaptureBranchReceipt(
+                    kind = "created",
+                    resourceId = "transaction-fast",
+                    aggregateVersion = 3,
+                    quickEditSnapshot = snapshot
+                ),
+                balance = CaptureBranchReceipt(
+                    kind = "retryableFailure",
+                    retryable = true
+                )
+            )
+        )
+
+        assertEquals(snapshot, decision.followUps.single().quickEditSnapshot)
+        assertEquals(setOf(CaptureBranch.PAYMENT), decision.terminalBranches)
+        assertTrue(!decision.completed)
+    }
+
+    @Test
+    fun `terminal 직접 제출은 암호화 재시도 Queue가 필요하지 않다`() {
+        val decision = evaluateCaptureReceipt(
+            envelope = rawEnvelope(),
+            receipt = CaptureSubmissionReceipt(
+                completion = "terminal",
+                transaction = CaptureBranchReceipt(
+                    kind = "created",
+                    resourceId = "transaction-fast",
+                    aggregateVersion = 1
+                ),
+                balance = null
+            )
+        )
+
+        assertTrue(decision.completed)
+        assertEquals(listOf("transaction-fast"), decision.followUps.map { it.transactionId })
+    }
+
+    @Test
+    fun `Quick Edit 후속효과를 내구화한 뒤에만 terminal capture를 제거한다`() = runTest {
+        val store = MemoryStore()
+        val queue = CaptureDeliveryQueue(store) { 1_000L }
+        queue.enqueue(scope, rawEnvelope())
+        var callbackObservedJournal = false
+
+        queue.flush(
+            currentScope = scope,
+            client = object : CaptureSubmissionClient {
+                override suspend fun submit(envelope: CaptureDeliveryEnvelope) =
+                    CaptureSubmissionReceipt(
+                        completion = "terminal",
+                        transaction = CaptureBranchReceipt(
+                            kind = "created",
+                            resourceId = "transaction-fast",
+                            aggregateVersion = 1
+                        ),
+                        balance = null
+                    )
+            },
+            beforeCommitFollowUps = {
+                callbackObservedJournal = store.entries.isNotEmpty()
+            }
+        )
+
+        assertTrue(callbackObservedJournal)
+        assertTrue(store.entries.isEmpty())
+    }
+
+    @Test
+    fun `Quick Edit 후속효과 내구화가 실패하면 capture journal을 보존한다`() = runTest {
+        val store = MemoryStore()
+        val queue = CaptureDeliveryQueue(store) { 1_000L }
+        queue.enqueue(scope, rawEnvelope())
+
+        runCatching {
+            queue.flush(
+                currentScope = scope,
+                client = object : CaptureSubmissionClient {
+                    override suspend fun submit(envelope: CaptureDeliveryEnvelope) =
+                        CaptureSubmissionReceipt(
+                            completion = "terminal",
+                            transaction = CaptureBranchReceipt(
+                                kind = "created",
+                                resourceId = "transaction-fast",
+                                aggregateVersion = 1
+                            ),
+                            balance = null
+                        )
+                },
+                beforeCommitFollowUps = { error("QUICK_EDIT_QUEUE_UNAVAILABLE") }
+            )
+        }
+
+        assertEquals(1, store.entries.size)
+    }
+
     private fun combinedEnvelope() = CaptureEnvelopeV1(
         observationId = "observation.android.test",
         sourceEvidence = AndroidRegisteredPackageEvidence(

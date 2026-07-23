@@ -6,7 +6,7 @@ import {
   type AppCheck,
 } from 'firebase/app-check';
 
-import { app } from '@/lib/firebase';
+import { app } from '@/lib/firebaseApp';
 
 let initialized: AppCheck | undefined;
 

@@ -164,6 +164,7 @@ export type {
   CaptureBranchSubmissionInputPort,
   CaptureBranchSubmissionOutcome,
   CaptureBranchSubmissionResult,
+  CaptureQuickEditSnapshot,
   CaptureTransactionBranch,
   CaptureTransactionBranchResult,
 } from "./application/ports/in/captureBranchSubmissionInputPort";
