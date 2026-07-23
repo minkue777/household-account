@@ -5,6 +5,7 @@ import { renderToString } from 'react-dom/server.node';
 import AssetEditModal from '@/components/assets/AssetEditModal';
 import { ASSET_TYPE_CONFIG, type Asset } from '@/types/asset';
 
+// T-AST-010: 자산 수정 모달은 선택한 자산 종류와 세부 유형으로 첫 화면을 그린다.
 jest.mock('@/lib/assetService', () => ({
   deleteAsset: jest.fn(),
   updateAsset: jest.fn(),
