@@ -21,7 +21,7 @@ body {
   color: var(--theme-text-primary);
   background: var(--theme-background);
   background-attachment: fixed;
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
   min-height: 100vh;
   transition: background 0.3s ease, color 0.3s ease;
 }

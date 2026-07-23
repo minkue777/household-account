@@ -4,7 +4,10 @@ import { ComponentType, useEffect, useMemo, useState } from 'react';
 import { Calendar, CalendarDays, CircleDollarSign, CreditCard, Wallet } from 'lucide-react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
-import type { LocalCurrencyBalance } from '@/lib/balanceService';
+import {
+  readCachedLocalCurrencyBalance,
+  type LocalCurrencyBalance,
+} from '@/features/local-currency/application/localCurrencyBalanceCache';
 import { Expense, TransactionType } from '@/types/expense';
 import { HomeSummaryCardKey, HomeSummaryConfig } from '@/types/household';
 
@@ -45,8 +48,9 @@ export default function BalanceCards({
 }: BalanceCardsProps) {
   const isIncome = transactionType === 'income';
   const { activeCategories } = useCategoryContext();
-  const { isSessionVerified = true } = useHousehold();
-  const [localCurrencyBalance, setLocalCurrencyBalance] = useState<LocalCurrencyBalance | null>(null);
+  const { householdKey, isSessionVerified = true } = useHousehold();
+  const [localCurrencyBalance, setLocalCurrencyBalance] =
+    useState<LocalCurrencyBalance | null>(() => readCachedLocalCurrencyBalance());
 
   const needsLocalCurrencyBalance = useMemo(() => {
     if (isIncome) {
@@ -60,22 +64,29 @@ export default function BalanceCards({
   }, [isIncome, summaryConfig.leftCard, summaryConfig.rightCard]);
 
   useEffect(() => {
-    if (!needsLocalCurrencyBalance || !isSessionVerified) {
+    if (!needsLocalCurrencyBalance || !householdKey) {
       setLocalCurrencyBalance(null);
       return undefined;
     }
+
+    const cached = readCachedLocalCurrencyBalance();
+    if (cached !== null) setLocalCurrencyBalance(cached);
 
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
     void import('@/lib/balanceService').then(({ subscribeToLocalCurrencyBalance }) => {
       if (cancelled) return;
       unsubscribe = subscribeToLocalCurrencyBalance(setLocalCurrencyBalance);
+    }).catch((error) => {
+      // 기존 PWA 청크가 남아 있는 동안에도 캐시 값은 유지합니다.
+      console.error('지역화폐 잔액 모듈 로드 오류:', error);
     });
+
     return () => {
       cancelled = true;
       unsubscribe?.();
     };
-  }, [isSessionVerified, needsLocalCurrencyBalance]);
+  }, [householdKey, isSessionVerified, needsLocalCurrencyBalance]);
 
   const { remaining, isOverBudget, monthlySpent } = useMemo(() => {
     const budgetedCategoryKeys = new Set<string>();
@@ -231,7 +242,7 @@ export default function BalanceCards({
               </div>
               <span className="text-xs font-semibold text-slate-600">{card.label}</span>
             </div>
-            <div className="flex items-center font-['Pretendard'] text-lg font-bold tracking-tight text-slate-800">
+            <div className="flex items-center text-lg font-bold tracking-tight text-slate-800">
               {card.valueText}
               <CircleDollarSign className={`ml-1 h-4 w-4 ${card.iconClassName}`} />
             </div>

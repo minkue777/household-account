@@ -42,7 +42,7 @@
 
 | 데이터 | 소유 범위 | 비고 |
 |---|---|---|
-| `balances` | 가구, `localCurrency` 유형, 정수 잔액, 통화 유형, 갱신 시각 | 현재 Android가 쓰고 Web이 읽습니다. |
+| `households/{householdId}/localCurrencyBalances/{localCurrencyType}` | 가구, `localCurrency` 유형, 정수 잔액, 관찰·갱신 시각 | 현재 Writer와 Web이 사용하는 Canonical 경로입니다. 최상위 `balances`는 migration·reconciliation 전용 Legacy 데이터이며 Web이 직접 읽지 않습니다. |
 | 잔액 식별자 | 가구와 통화 유형의 유일 조합 | 서로 다른 지역화폐 유형은 독립된 최신 문서를 가집니다. |
 | 최신 잔액 조회 모델 | 잔액, 통화 유형, 갱신 시각, 없음·오류 상태 | UI가 저장소 문서 순서에 의존하지 않도록 합니다. |
 
@@ -76,15 +76,12 @@ Android 알림의 package·title·body 판별과 경기·대전·세종 원문 p
 | BAL-001 | 목표 명세 | 검증된 경기·대전·세종 `BalanceObservation.v1`을 받으면 contract version, 확정 localCurrencyType, 정수 잔액, 관찰 시각, source·parser metadata와 SystemActor의 가구 scope를 검증한 뒤 저장한다. | 알림 원문과 package 판별 결과를 입력받거나 서버에서 재parse하지 않는다. 가구 scope가 없거나 지원하지 않는 type/version, 정수가 아닌 잔액은 Balance·receipt·Event를 만들지 않는다. 원문 parsing 결과의 Canonical 검증은 Payment Capture의 `T-PARSE-001`이다. | [Android 결제 수집 상세 설계](../../../payment-capture/modules/android-payment-ingestion/design.md#41-sourceparser-domain), [지역화폐 상세 설계](design.md#32-balanceobservationv1) | C, I |
 | BAL-002 | 목표 명세 | 가구 ID와 지역화폐 유형을 유일 identity로 사용하여 유형별 최신 잔액 문서를 원자적으로 upsert한다. | 한 가구의 경기·대전·세종 잔액은 서로 덮어쓰지 않는다. 현재 가구당 첫 문서를 갱신하는 동작은 결함이다. | [AndroidCaptureDelivery](../../../../../../android/app/src/main/java/com/household/account/paymentcapture/AndroidCaptureDelivery.kt), [DEC-008](../../../../governance/decisions.md#dec-008) | I |
 | BAL-003 | 현재 명세 | 잔액 문서에는 가구, localCurrency 유형, 정수 잔액, 통화 유형, 관찰·갱신 시각을 저장한다. | 레거시 통화 유형 누락은 `legacy-unknown`·표시명 `지역화폐`로 읽고 특정 지역화폐 유형으로 추정하지 않는다. 음수 전용 거부·0원 보정·마지막 정상값 대체는 하지 않고 정수 관찰값을 그대로 저장한다. | 같은 근거, [DEC-044](../../../../governance/decisions.md#dec-044), [DEC-057](../../../../governance/decisions.md#dec-057) | I |
-| BAL-004 | 목표 명세 | Web은 Home Preferences가 선택한 지역화폐 유형을 명시해 해당 최신 잔액·통화 유형·갱신 시각을 구독한다. | 선택 없이 임의의 첫 문서를 표시하지 않으며 조회 실패와 잔액 없음·선택 필요를 구분한다. | [balanceService](../../../../../../web/src/lib/balanceService.ts), [DEC-008](../../../../governance/decisions.md#dec-008) | I, UI |
+| BAL-004 | 현재 명세 | Web은 Canonical 가구 하위 경로에서 Home Preferences가 선택한 지역화폐 유형의 최신 잔액·통화 유형·갱신 시각을 구독한다. 유형이 하나뿐이면 그 유형을 자동 표시한다. 가구·사용자 범위의 마지막 성공값은 첫 화면 표시용 기기 캐시에 보관하고 권위 구독값으로 수렴시킨다. | 여러 유형인데 선택이 없을 때 임의의 첫 문서를 표시하지 않는다. 캐시는 권위 저장소가 아니며 transient Auth·네트워크·listener 오류만으로 마지막 성공 표시값을 지우지 않는다. 권위 구독이 정상적으로 잔액 없음 또는 선택 문서 부재를 확인하면 해당 상태로 전환한다. | [balanceService](../../../../../../web/src/lib/balanceService.ts), [localCurrencyBalanceCache](../../../../../../web/src/features/local-currency/application/localCurrencyBalanceCache.ts), [DEC-008](../../../../governance/decisions.md#dec-008) | I, UI |
 | BAL-005 | 목표 명세 | `RecordBalanceObservation`은 거래 생성·카드 매칭·가맹점 mapping을 입력으로 요구하지 않고 독립된 balance branch key와 receipt로 commit하며 balance-only 입력을 허용한다. | 거래·잔액 branch의 호출 순서·부분 재시도는 Payment Capture `ING-009`가 소유한다. 거래 branch가 없거나 거부·실패해도 유효한 잔액은 독립 commit되고, 잔액 일시 실패는 이미 확정된 거래를 되돌리지 않는다. 같은 observation 재생은 저장된 결과를 반환하고 잔액 version·Event를 중복 증가시키지 않는다. | [Android 결제 수집 ING-009](../../../payment-capture/modules/android-payment-ingestion/requirements.md#51-수집출처-선택중복-처리), [DEC-008](../../../../governance/decisions.md#dec-008) | U, I, C |
 
 ## 6. 모듈 결함
 
-- 같은 가구·`localCurrency` 유형의 중복 문서가 있으면 Android는 첫 문서만 갱신하고 Web도 첫 문서만 표시합니다.
-- 저장소 조회에 명시적인 정렬·유일 키가 없어 어떤 문서가 첫 문서인지 안정적으로 정의되지 않습니다.
-- 현재 저장소가 가구당 첫 지역화폐 문서를 갱신하여 다른 유형의 잔액을 덮어쓸 수 있습니다.
-- Web 구독 실패가 잔액 없음 `null`로 축약되어 장애와 미등록 상태를 구분하지 못합니다.
+- 최상위 Legacy `balances`에는 과거 중복·유형 누락 문서가 남아 있어 reconciliation 후 운영 Agent가 정리해야 합니다. Web 읽기 경로에서는 이미 제외했습니다.
 - Android Repository 오류가 호출자에게 일관된 실패로 전달되지 않을 수 있습니다.
 - 잔액 파싱과 저장 호출이 Android 알림 Service에 결합되어 독립 계약 테스트가 어렵습니다.
 
@@ -101,11 +98,13 @@ Android 알림의 package·title·body 판별과 경기·대전·세종 원문 p
 | T-BAL-001 | 목표 | Payment Capture가 생성한 경기·대전·세종 `BalanceObservation.v1`, 가구 scope 없음, 지원하지 않는 type/version·비정수 금액 / intake / 유효 DTO만 Balance·receipt·Event로 commit하고 원문은 받거나 재parse하지 않음 | BAL-001, T-PARSE-001 |
 | T-BAL-002 | 목표 | 같은 가구·같은 유형의 잔액 문서 없음·있음 / 저장 / 유형 identity 문서 생성·최신값 갱신 | BAL-002 |
 | T-BAL-003 | 호환 | 통화 유형이 없는 기존 잔액 문서와 부호 있는 정수 관찰값 / 저장·조회 / 누락 유형은 `legacy-unknown`·표시명 `지역화폐`로 읽고 특정 유형으로 추정하지 않으며, 금액은 음수 전용 보정·경고 없이 동일 정수로 유지 | BAL-003, DEC-044, DEC-057 |
-| T-BAL-004 | 목표 | 선택 유형의 최신 잔액 변경·선택 없음·문서 없음 / Web 구독 / loading 뒤 data의 전체 read field 반영, 선택 필요·NoData를 구분하고 임의 첫 문서를 표시하지 않음 | BAL-004 |
+| T-BAL-004 | 현재 | 선택 유형의 최신 잔액 변경, 유형 하나, 여러 유형·선택 없음, 문서 없음 / Web Canonical 구독 / 선택 유형 또는 유일 유형의 read field를 반영하고 여러 유형의 임의 첫 문서를 표시하지 않음 | BAL-004 |
 | T-BAL-005 | 목표 | 한 가구에 경기·대전·세종 잔액 알림 / 저장·유형별 조회 / 세 유형의 최신값을 독립 유지하고 서로 덮어쓰지 않음 | BAL-002, DEC-008 |
-| T-BAL-006 | 목표 | Balance Repository 조회 실패 / Web·Android 조회 / 잔액 없음과 구분되는 오류 | BAL-004 |
+| T-BAL-006 | 목표 | Balance Repository 조회 실패 / Web·Android 조회 / 잔액 없음과 구분되는 오류이며 Web은 transient 오류만으로 마지막 성공 표시값을 지우지 않음 | BAL-004 |
 | T-BAL-007 | 목표 | 같은 가구·통화 잔액을 동시에 두 번 upsert / 저장 / 유일 문서 하나에 마지막 정책의 값 반영 | BAL-002, BAL-003 |
 | T-BAL-008 | 목표 | balance-only, 거래 거부·실패+유효 잔액, 거래 성공+잔액 retry, terminal observation 재생 / Payment Capture branch coordinator와 RecordBalanceObservation / 성공 branch rollback·재호출 없이 실패 branch만 같은 key로 재시도하고 Balance version·Event 중복 증가 없음 | BAL-005, ING-009, T-ING-BAL-001 |
+| T-BAL-009 | 현재 | Firestore Rules가 최상위 Legacy `balances` 직접 읽기를 허용하지 않는 상태 / Web 구독 / `households/{householdId}/localCurrencyBalances`만 사용하고 Legacy root를 조회하지 않음 | BAL-004 |
+| T-BAL-010 | 현재 | 가구·사용자 범위의 마지막 성공값이 있는 재진입 / 첫 렌더와 권위 구독 / 캐시값을 즉시 표시하고 Canonical snapshot 도착 후 최신값으로 교체 | BAL-004 |
 
 ## 9. 코드 근거
 

@@ -219,9 +219,10 @@ Balance persistence DTO는 identityPolicyVersion, localCurrencyType, balanceInWo
 3. 모든 Android write를 `RecordBalanceObservation`으로 통합합니다.
 4. `BalanceIdentityPolicy`와 V2 유형별 결정 key를 활성화합니다.
 5. backfill 결과의 문서 수·최신 금액·시각을 legacy와 비교합니다.
-6. Web read를 V2 Read Contract로 전환한 뒤 root direct write/read와 first-document 동작을 제거합니다.
+6. **완료:** Web read를 V2 Read Contract로 전환하고 root direct read와 first-document 동작을 제거했습니다.
+7. Legacy root는 migration·reconciliation 도구에서만 읽고, 정리 검증 후 운영 Agent가 별도로 삭제합니다.
 
-V2 physical migration은 유형별 backfill 검증과 Web 선택 유형 기반 read 전환이 끝난 뒤에만 완료된 것으로 간주합니다.
+Web read 전환은 완료됐지만 V2 physical migration 전체는 유형별 backfill·중복 reconciliation 검증이 끝난 뒤에만 완료된 것으로 간주합니다.
 
 ## 8. Event·Projection·외부 연동
 
@@ -239,6 +240,10 @@ Event는 실제 최신값이 created/updated일 때만 Canonical write와 같은
 - Home은 별도 Projection을 만들지 않고 이 모듈의 최신 Balance Query를 직접 사용합니다.
 - Web 직접 구독은 Local Currency가 공개한 읽기 전용 schema/Rules를 사용할 수 있습니다.
 - 구독은 schemaVersion, observedAt, updatedAt을 제공하되 UI용 Projection freshness 상태를 만들지 않습니다.
+- Web은 `households/{householdId}/localCurrencyBalances`와 `homePreferences/home`만 구독하며 최상위 Legacy `balances`를 직접 읽지 않습니다.
+- Home Preferences가 선택한 유형을 표시하고, 관찰된 유형이 하나뿐이면 그 유형을 자동 표시합니다. 여러 유형인데 선택이 없으면 임의의 첫 문서를 고르지 않습니다.
+- 가구·로그인 사용자 범위의 마지막 성공값은 localStorage에 첫 표시용 힌트로 보관합니다. 이 값은 권위 데이터가 아니며 Canonical snapshot이 도착하면 즉시 교체합니다.
+- transient Auth·네트워크·listener 오류는 마지막 성공 표시값을 지우지 않습니다. 정상 snapshot이 잔액 없음 또는 선택 대상 부재를 확인한 경우에만 `NoData`로 수렴합니다.
 
 ### 8.3 Producer contract
 
@@ -323,7 +328,7 @@ Android는 생성된 observation DTO만 공유하고 LocalCurrencyBalance Domain
 | BAL-001 | Consumer Contract·Application | BalanceObservation.v1 intake | Payment Capture가 생성한 경기·대전·세종 DTO, household 없음, 비정수·지원하지 않는 type/version·원문 혼입 | 검증된 정수/type DTO만 Balance·receipt·Event로 commit하며 parser 재실행 없음 | T-BAL-001; producer는 T-PARSE-001 |
 | BAL-002 | Policy·Repository·Emulator | BalanceIdentity/upsert | 없음·있음, 경기·대전·세종, 같은/다른 유형 동시 observation, legacy 중복 | 가구·유형 identity별 결정 문서 하나와 독립 최신값 | T-BAL-002, T-BAL-005, T-BAL-007 |
 | BAL-003 | Contract·Repository | persistence Mapper | currencyType 있음/누락, 양수·0·음수 정수, observed/updatedAt | 모든 필드와 정수 부호 보존, 누락 type은 legacy-unknown/지역화폐, 음수 전용 상태 없음 | T-BAL-003, T-BAL-007 |
-| BAL-004 | Read Contract·Client | GetBalance/SubscribeBalance | 선택 type, 최신 변경, 선택 없음, NoData, listener/Repository 실패, 여러 문서 | loading/data/noData/failed와 선택 필요를 구분하고 값·type·observedAt·updatedAt·schemaVersion 반영 | T-BAL-004, T-BAL-006 |
+| BAL-004 | Read Contract·Client | GetBalance/SubscribeBalance | 선택 type, 유형 하나, 최신 변경, 선택 없음, NoData, listener/Repository 실패, 마지막 성공 캐시, 여러 문서 | Canonical 가구 하위 경로만 사용하고 캐시를 즉시 표시한 뒤 권위값으로 수렴하며 transient 오류에는 마지막 성공값을 보존 | T-BAL-004, T-BAL-006, T-BAL-009, T-BAL-010 |
 | BAL-005 | Application·Context Contract·Emulator | 독립 RecordBalanceObservation receipt와 branch 종단 fixture | balance-only, 거래 거부/실패+잔액 성공, 거래 성공+잔액 retry, 같은 key replay | 성공 branch rollback·재호출 없이 실패 branch만 재시도하고 version/Event 중복 없음 | T-BAL-008; coordinator는 T-ING-BAL-001 |
 
 `T-BAL-005`는 DEC-008의 유형별 identity를 Canonical 동작으로 검증합니다. household singleton 구현은 신규 Writer의 Conformance 대상에서 제외하고 migration fixture로만 검증합니다.
@@ -345,4 +350,4 @@ Android는 생성된 observation DTO만 공유하고 LocalCurrencyBalance Domain
 4. NoData/Failure가 분리된 `GetBalance`·`SubscribeBalance` contract를 활성화합니다.
 5. receipt·latest observation·동시 upsert·Outbox Emulator test를 활성화합니다.
 6. 유형별 V2 key로 duplicate reconciliation/backfill/shadow read를 수행합니다.
-7. Web read를 선택 유형 기반으로 전환하고 root `balances` direct access와 first-document 동작을 제거합니다.
+7. **완료:** Web read를 선택 유형 기반 Canonical 경로로 전환하고 root `balances` direct access와 first-document 동작을 제거합니다. 마지막 성공값의 즉시 표시 캐시와 transient 오류 보존 계약을 함께 적용합니다.

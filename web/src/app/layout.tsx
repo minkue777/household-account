@@ -1,12 +1,7 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter } from 'next/font/google'
+import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css'
 import './globals.css'
 import AppProviders from '@/components/AppProviders'
-
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-})
 
 export const metadata: Metadata = {
   title: '가계부',
@@ -40,7 +35,7 @@ export default function RootLayout({
       <head>
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
       </head>
-      <body className={`min-h-screen ${inter.variable}`}>
+      <body className="min-h-screen">
         <AppProviders>
           {children}
         </AppProviders>

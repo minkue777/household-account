@@ -6,6 +6,7 @@ export const loadIncomeSummaryModal = () => import('@/components/expense/IncomeS
 export const loadSearchModal = () => import('@/components/search/SearchModal');
 export const loadCategoryDetailModal = () => import('@/components/CategoryDetailModal');
 export const loadLocalCurrencyModal = () => import('@/components/LocalCurrencyModal');
+export const loadLocalCurrencyBalanceService = () => import('@/lib/balanceService');
 
 export const loadAssetAddModal = () => import('@/components/assets/AssetAddModal');
 export const loadAssetEditModal = () => import('@/components/assets/AssetEditModal');
@@ -33,6 +34,7 @@ export function preloadLedgerInteractions(): Promise<void> {
     loadSearchModal,
     loadCategoryDetailModal,
     loadLocalCurrencyModal,
+    loadLocalCurrencyBalanceService,
     () => import('@/lib/expenseService'),
     () => import('@/lib/merchantRuleService'),
     () => import('@/lib/partnerNotificationService'),
