@@ -269,7 +269,7 @@ Value Object는 `HouseholdName`, `MemberDisplayName`, `AssetOwnerProfileName`, `
 3. 목록은 opaque cursor와 결정 정렬을 사용합니다.
 4. 키 복사는 Presentation 책임이며 API가 clipboard를 다루지 않습니다.
 5. 논리 삭제 확인은 UI가 수행하되 서버 인가와 idempotency를 대체하지 않습니다. 영구 purge 확인은 일반 삭제 확인과 별개의 운영 계약입니다.
-6. 가구 목록의 `가계부 열기`는 현재 탭의 `sessionStorage`에 대상 ID·표시 이름만 보관하고 일반 화면으로 이동합니다. Google ID token의 `systemAdmin: true`를 강제 재확인한 뒤에만 `administrator-readonly` ClientSessionScope를 만들며 Membership과 `actingMemberId`를 생성하지 않습니다.
+6. 가구 목록의 `가계부 열기`는 현재 탭의 `sessionStorage`에 대상 ID·표시 이름만 보관하고 일반 화면으로 이동합니다. Google ID token의 `systemAdmin: true`와 대상 가구 조회를 강제 재확인한 뒤에만 `administrator-readonly` ClientSessionScope를 만들고 세션을 검증 완료 상태로 전환해 공개 업무 Read Model 구독을 시작하며, Membership과 `actingMemberId`를 생성하지 않습니다.
 7. 관리자 조회 SessionScope는 Firestore의 공개 업무 Read Model과 관리자 허용 Query만 읽습니다. 일반 Household Command, 시세 자동 갱신과 Notification endpoint 등록은 실행하지 않으며 Shortcut credential 같은 서버 전용 자료는 일반 조회 화면에 공개하지 않습니다.
 8. Firestore Rules는 `systemAdmin`에 명시한 업무 컬렉션의 read만 허용하고 client write는 계속 전부 거부합니다. 서버 Query는 별도의 `admin.household-data.read` capability allowlist를 적용하며 임의 Query가 관리자 권한을 상속하지 않습니다.
 9. 화면 상단에 관리자 조회 상태와 대상 가구 이름을 고정 표시합니다. `/admin`으로 돌아오거나 로그아웃하면 탭의 선택값과 관리자 조회 SessionScope를 제거하고, 이후 일반 화면은 관리자의 실제 Membership을 다시 해석합니다.

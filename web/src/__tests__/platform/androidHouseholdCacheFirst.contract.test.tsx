@@ -107,9 +107,15 @@ function SessionProbe() {
 }
 
 function AdminSessionProbe() {
-  const { household, sessionState, adminHouseholdView, currentMember } = useHousehold();
+  const {
+    household,
+    sessionState,
+    adminHouseholdView,
+    currentMember,
+    isSessionVerified,
+  } = useHousehold();
   return (
-    <div>{`${sessionState}:${household?.name ?? 'none'}:${adminHouseholdView?.householdId ?? 'member'}:${currentMember?.id ?? 'no-member'}`}</div>
+    <div>{`${sessionState}:${household?.name ?? 'none'}:${adminHouseholdView?.householdId ?? 'member'}:${currentMember?.id ?? 'no-member'}:${isSessionVerified ? 'verified' : 'unverified'}`}</div>
   );
 }
 
@@ -247,7 +253,7 @@ describe('Android 가구 cache-first 복원 계약', () => {
     );
 
     expect(
-      await screen.findByText('ready:관리 대상 가계부:household-1:no-member')
+      await screen.findByText('ready:관리 대상 가계부:household-1:no-member:verified')
     ).toBeInTheDocument();
     expect(mockResolveSignedInUser).not.toHaveBeenCalled();
     expect(mockActivatePwaFidEndpoint).not.toHaveBeenCalled();

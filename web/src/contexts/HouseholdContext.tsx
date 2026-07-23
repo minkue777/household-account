@@ -275,6 +275,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         memberId: 'system-administrator',
         accessMode: 'administrator-readonly',
       });
+      setIsSessionVerified(true);
       setHousehold(loadedHousehold);
       setHouseholdKey(selection.householdId);
       setCurrentMember(null);
