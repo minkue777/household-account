@@ -286,7 +286,7 @@ export const submitCaptureEnvelope = functions
 
 export const submitAndroidRawNotification = functions
   .region(REGION)
-  .runWith({ enforceAppCheck: true, minInstances: 1 })
+  .runWith({ enforceAppCheck: true })
   .https.onCall(async (data, context): Promise<CaptureSubmissionWireResponse> => {
     try {
       return await rawNotificationSubmissionHandler.handle({
