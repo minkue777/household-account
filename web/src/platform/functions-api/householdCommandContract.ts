@@ -177,6 +177,21 @@ export interface HouseholdCommandResults {
           status: 'active';
           capabilities: string[];
         };
+        household?: {
+          id: string;
+          name: string;
+          createdAt: string;
+          defaultCategoryKey?: string;
+          homeSummaryConfig?: {
+            leftCard: string;
+            rightCard: string;
+          };
+          members: Array<{
+            id: string;
+            name: string;
+            aggregateVersion: number;
+          }>;
+        };
       }
     | { kind: 'first-visit-required'; choices: Array<'create' | 'join'> };
   'access.claim-legacy-membership.v1': { householdId: string; memberId: string };

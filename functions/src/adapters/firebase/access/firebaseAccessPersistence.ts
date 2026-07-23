@@ -173,6 +173,8 @@ export function writeCanonicalAccessBinding(
     memberId: input.memberId,
     membershipId,
     lifecycleState: "active",
+    householdLifecycleState: "active",
+    capabilities: [...input.capabilities],
     aggregateVersion: input.claimVersion ?? 1,
     schemaVersion: ACCESS_SCHEMA_VERSION,
     createdAt: FieldValue.serverTimestamp(),

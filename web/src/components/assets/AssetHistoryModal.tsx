@@ -1,8 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Asset, ASSET_TYPE_CONFIG, isGoldEtfSubType } from '@/types/asset';
-import { ModalOverlay } from '@/components/common';
+import {
+  Asset,
+  ASSET_TYPE_CONFIG,
+  CryptoHolding,
+  StockHolding,
+  isGoldEtfSubType,
+} from '@/types/asset';
+import ModalOverlay from '@/components/common/ModalOverlay';
 import { X, Edit2 } from 'lucide-react';
 import { useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
 import { useCryptoHoldingManager } from '@/lib/utils/useCryptoHoldingManager';
@@ -20,6 +26,10 @@ interface AssetHistoryModalProps {
   asset: Asset | null;
   onEditAsset: () => void;
   onViewChart: () => void;
+  stockHoldings: readonly StockHolding[];
+  cryptoHoldings: readonly CryptoHolding[];
+  stockHoldingsReady: boolean;
+  cryptoHoldingsReady: boolean;
 }
 
 export default function AssetHistoryModal({
@@ -27,10 +37,23 @@ export default function AssetHistoryModal({
   onClose,
   asset,
   onEditAsset,
+  stockHoldings,
+  cryptoHoldings,
+  stockHoldingsReady,
+  cryptoHoldingsReady,
 }: AssetHistoryModalProps) {
-  const stockManager = useStockHoldingManager({ isOpen, asset });
-  const cryptoManager = useCryptoHoldingManager({ isOpen, asset });
-  const isGoldEtfAsset = asset?.type === 'gold' && isGoldEtfSubType(asset?.subType);
+  const stockManager = useStockHoldingManager({
+    isOpen,
+    asset,
+    holdingsSnapshot: stockHoldings,
+    holdingsReady: stockHoldingsReady,
+  });
+  const cryptoManager = useCryptoHoldingManager({
+    isOpen,
+    asset,
+    holdingsSnapshot: cryptoHoldings,
+    holdingsReady: cryptoHoldingsReady,
+  });
   const [stockInputMode, setStockInputMode] = useState<'search' | 'manual'>('search');
 
   useEffect(() => {
@@ -38,30 +61,6 @@ export default function AssetHistoryModal({
       setStockInputMode('search');
     }
   }, [asset?.id, isOpen]);
-
-  useEffect(() => {
-    if (
-      isOpen &&
-      (asset?.type === 'stock' || isGoldEtfAsset) &&
-      stockManager.holdings.length > 0 &&
-      !stockManager.isLoadingHoldings
-    ) {
-      void stockManager.refreshHoldingPrices();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, asset?.type, asset?.subType, isGoldEtfAsset, stockManager.isLoadingHoldings]);
-
-  useEffect(() => {
-    if (
-      isOpen &&
-      asset?.type === 'crypto' &&
-      cryptoManager.holdings.length > 0 &&
-      !cryptoManager.isLoadingHoldings
-    ) {
-      void cryptoManager.refreshHoldingPrices();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, asset?.type, cryptoManager.isLoadingHoldings]);
 
   if (!isOpen || !asset) return null;
 

@@ -16,13 +16,37 @@ import {
   markWebFirstLedgerPaint,
   markWebLedgerCacheResult,
 } from '@/platform/performance/webStartupPerformance';
+import {
+  loadAddExpenseModal,
+  loadCategoryDetailModal,
+  loadExpenseDetail,
+  loadIncomeSummaryModal,
+  loadLocalCurrencyModal,
+  loadSearchModal,
+} from '@/composition/interactiveUiPreload';
+import {
+  ModalInteractionLoadingFallback,
+  PanelInteractionLoadingFallback,
+} from '@/components/common/InteractionLoadingFallback';
 
-const ExpenseDetail = dynamic(() => import('@/components/expense/ExpenseDetail'));
-const AddExpenseModal = dynamic(() => import('@/components/expense/AddExpenseModal'));
-const IncomeSummaryModal = dynamic(() => import('@/components/expense/IncomeSummaryModal'));
-const SearchModal = dynamic(() => import('@/components/search/SearchModal'));
-const CategoryDetailModal = dynamic(() => import('@/components/CategoryDetailModal'));
-const LocalCurrencyModal = dynamic(() => import('@/components/LocalCurrencyModal'));
+const ExpenseDetail = dynamic(loadExpenseDetail, {
+  loading: PanelInteractionLoadingFallback,
+});
+const AddExpenseModal = dynamic(loadAddExpenseModal, {
+  loading: ModalInteractionLoadingFallback,
+});
+const IncomeSummaryModal = dynamic(loadIncomeSummaryModal, {
+  loading: ModalInteractionLoadingFallback,
+});
+const SearchModal = dynamic(loadSearchModal, {
+  loading: ModalInteractionLoadingFallback,
+});
+const CategoryDetailModal = dynamic(loadCategoryDetailModal, {
+  loading: ModalInteractionLoadingFallback,
+});
+const LocalCurrencyModal = dynamic(loadLocalCurrencyModal, {
+  loading: ModalInteractionLoadingFallback,
+});
 
 interface LedgerPageProps {
   transactionType: TransactionType;
@@ -45,7 +69,6 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
-  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [showLocalCurrencyModal, setShowLocalCurrencyModal] = useState(false);
@@ -205,7 +228,6 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   }, [selectedDate, expenses]);
 
   const handlePrevMonth = () => {
-    setSlideDirection('right');
     if (currentMonth === 1) {
       setCurrentYear(currentYear - 1);
       setCurrentMonth(12);
@@ -216,7 +238,6 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   };
 
   const handleNextMonth = () => {
-    setSlideDirection('left');
     if (currentMonth === 12) {
       setCurrentYear(currentYear + 1);
       setCurrentMonth(1);
@@ -374,16 +395,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
         />
 
         <div className="space-y-6 lg:hidden">
-          <div
-            key={`${transactionType}-${currentYear}-${currentMonth}`}
-            className={
-              slideDirection === 'left'
-                ? 'animate-slideLeft'
-                : slideDirection === 'right'
-                  ? 'animate-slideRight'
-                  : ''
-            }
-          >
+          <div key={`${transactionType}-${currentYear}-${currentMonth}`}>
             <Calendar
               year={currentYear}
               month={currentMonth}
@@ -469,16 +481,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
               onYearlyIncomeClick={isIncome ? handleYearlyIncomeClick : undefined}
             />
 
-            <div
-              key={`desktop-${transactionType}-${currentYear}-${currentMonth}`}
-              className={
-                slideDirection === 'left'
-                  ? 'animate-slideLeft'
-                  : slideDirection === 'right'
-                    ? 'animate-slideRight'
-                    : ''
-              }
-            >
+            <div key={`desktop-${transactionType}-${currentYear}-${currentMonth}`}>
               <Calendar
                 year={currentYear}
                 month={currentMonth}
@@ -521,7 +524,8 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
           onExpenseClick={(expense) => {
             setSelectedCategory(null);
             setSelectedDate(expense.date);
-            setEditExpenseId(expense.id);
+            // 이미 메모리에 있는 항목은 URL/deep-link 해석 effect를 다시 거치지 않습니다.
+            setAutoEditExpenseId(expense.id);
           }}
           transactionType={transactionType}
         />
@@ -535,7 +539,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
           onExpenseClick={(expense) => {
             setShowLocalCurrencyModal(false);
             setSelectedDate(expense.date);
-            setEditExpenseId(expense.id);
+            setAutoEditExpenseId(expense.id);
           }}
         />
       )}

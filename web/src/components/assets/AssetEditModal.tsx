@@ -10,7 +10,8 @@ import {
   normalizeGoldSubType,
 } from '@/types/asset';
 import { deleteAsset, updateAsset } from '@/lib/assetService';
-import { ConfirmDialog, ModalOverlay } from '@/components/common';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
+import ModalOverlay from '@/components/common/ModalOverlay';
 import { X, Trash2 } from 'lucide-react';
 import {
   AssetMemoField,

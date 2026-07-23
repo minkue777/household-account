@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 
-import { ModalOverlay } from '@/components/common';
+import ModalOverlay from '@/components/common/ModalOverlay';
 import type { AssetOwnerProfileWireView } from '@/platform/functions-api';
 
 export default function AssetOwnerProfileModal({

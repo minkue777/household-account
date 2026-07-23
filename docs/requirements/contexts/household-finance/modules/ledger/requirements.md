@@ -122,6 +122,7 @@
 | SEA-002 | 현재 명세 | 지원하는 모든 카드사·결제수단에 대해 거래 생성 당시 보존한 표준 라벨·카드 유형·마지막 네 자리 증거를 검색 대상으로 포함한다. 카드사명·별칭·끝 네 자리 단독 검색, `카드사(4자리)` 형식과 x·별표 마스킹 검색을 지원한다. | 특정 카드사를 하드코딩하지 않는다. `국민카드(2972)`는 카드사와 네 자리가 모두 일치해야 하고, `삼성카드(3***)`는 카드사와 번호 패턴이 모두 일치해야 한다. 이후 카드 설정의 끝 번호 수정·퇴역은 과거 거래의 검색 증거를 바꾸지 않는다. | [expenseService](../../../../../../web/src/lib/expenseService.ts), [DEC-059](../../../../governance/decisions.md#dec-059) | U |
 | SEA-003 | 결함 | 검색 화면은 `Actor session generation + householdId + transactionType + normalized query + request revision`이 현재 값과 일치하는 최신 응답만 표시하고, cursor와 page limit으로 결과를 제한한다. | 검색어·유형 변경, 닫기, logout·가구 변경 뒤 도착한 응답은 폐기한다. 검색 결과에서 mutation 후에는 Command 성공을 기다린 뒤 새 revision으로 재조회한다. | [SearchModal](../../../../../../web/src/components/search/SearchModal.tsx), [expenseService](../../../../../../web/src/lib/expenseService.ts) | U, C, UI, E2E |
 | SEA-004 | 현재 명세·목표 보완 | 검색 결과의 전체 건수·금액과 월별 건수·금액을 표시한다. 목표 Query가 page를 반환하더라도 합계는 현재 page만이 아니라 동일한 가구·거래 유형·검색어·기간에 일치하는 전체 결과를 기준으로 계산한다. | 검색 원천 실패·안전 조회 한도 초과·source window 변경은 부분 합계를 성공으로 표시하지 않고 typed failure로 반환한다. 이 합계는 별도 카드별 통계 화면이 아니라 사용자가 입력한 검색 조건의 결과 요약이다. | [SearchResultList](../../../../../../web/src/components/search/SearchResultList.tsx) | U, C, I, UI |
+| SEA-005 | 목표 명세 | 사용자가 검색어를 입력하면 UI가 임의의 고정 debounce 시간을 추가하지 않고 즉시 현재 검색 계약을 실행한다. | 이전 요청 폐기와 최신 revision 판정은 `SEA-003`대로 유지한다. 공급자 rate limit이 필요한 원격 검색과 달리 원장 검색에는 인위적인 300ms 대기를 두지 않는다. | [SearchModal](../../../../../../web/src/components/search/SearchModal.tsx) | U, UI |
 
 ## 6. 모듈 결함
 
@@ -174,6 +175,7 @@ DEC-001의 의도적인 월 분할 나머지 미반영은 결함이 아닙니다
 | T-SEA-001 | 현재 명세 | 대소문자·공백이 다른 가맹점, 메모, 설정 기반 모든 카드사 별칭·유형·끝 네 자리·정확/별표/x 마스킹, 빈 query, 기간 양끝, 타 가구·유형·상태 / 검색 / 같은 범위 일치만 날짜·시각·ID 최신순, 빈 query는 NoData, 카드사+번호 조건은 모두 일치 | SEA-001, SEA-002 |
 | T-SEA-002 | 목표 | limit·opaque cursor 두 page와 scope 변경, 느린 A→빠른 B, modal close·logout, 검색 결과 mutation 실패·성공 / paging·응답 처리 / 중복·누락 없는 bounded page, 다른 scope cursor 거부, 최신 revision만 표시, Command 성공 뒤 새 revision 재조회 | SEA-003 |
 | T-SEA-003 | 현재 명세·목표 | `삼성카드(3***)`에 여러 월의 일치·불일치 거래와 여러 page가 존재 / 검색 / 카드사·마스킹 번호가 모두 일치한 전체 결과의 총 건수·금액과 월별 건수·금액을 반환하고 현재 page 부분 합계를 전체 합계로 표시하지 않음 | SEA-002, SEA-004 |
+| T-PERF-SEARCH-001 | 목표 | 검색 모달과 입력 가능한 검색어 / 검색어 입력 / 300ms 같은 고정 timer 없이 즉시 최신 request revision의 검색을 시작하고 이전 결과는 표시하지 않음 | SEA-003, SEA-005 |
 
 ## 9. 코드 근거
 

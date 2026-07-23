@@ -42,6 +42,8 @@ class MemoryQuery {
   constructor(
     readonly collectionPath: string,
     readonly filters: readonly QueryFilter[],
+    protected readonly database?: InMemoryFirestore,
+    readonly maximum?: number,
   ) {}
 
   where(field: string, operator: string, value: unknown): MemoryQuery {
@@ -49,7 +51,39 @@ class MemoryQuery {
     return new MemoryQuery(this.collectionPath, [
       ...this.filters,
       { field, value },
-    ]);
+    ], this.database, this.maximum);
+  }
+
+  limit(maximum: number): MemoryQuery {
+    return new MemoryQuery(
+      this.collectionPath,
+      this.filters,
+      this.database,
+      maximum,
+    );
+  }
+
+  async get(): Promise<MemoryQuerySnapshot> {
+    if (this.database === undefined) {
+      throw new Error("MEMORY_QUERY_DATABASE_NOT_BOUND");
+    }
+    const docs = this.database
+      .documentsInCollection(this.collectionPath)
+      .filter(({ value: document }) =>
+        this.filters.every(
+          ({ field, value: expected }) =>
+            expected === valueAt(document, field),
+        ),
+      )
+      .slice(0, this.maximum)
+      .map(
+        ({ path, value }) =>
+          new MemoryDocumentSnapshot(
+            new MemoryDocumentReference(path, this.database),
+            value,
+          ),
+      );
+    return new MemoryQuerySnapshot(docs);
   }
 }
 
@@ -58,9 +92,9 @@ class MemoryCollectionReference extends MemoryQuery {
 
   constructor(
     readonly path: string,
-    private readonly database?: InMemoryFirestore,
+    database?: InMemoryFirestore,
   ) {
-    super(path, []);
+    super(path, [], database);
   }
 
   doc(id: string): MemoryDocumentReference {
@@ -89,6 +123,28 @@ class MemoryDocumentReference {
       throw new Error("MEMORY_DOCUMENT_DATABASE_NOT_BOUND");
     }
     return new MemoryDocumentSnapshot(this, this.database.document(this.path));
+  }
+
+  async create(value: StoredDocument): Promise<void> {
+    if (this.database === undefined) {
+      throw new Error("MEMORY_DOCUMENT_DATABASE_NOT_BOUND");
+    }
+    if (this.database.has(this.path)) {
+      const error = new Error(`ALREADY_EXISTS:${this.path}`) as Error & {
+        code?: number;
+      };
+      error.code = 6;
+      throw error;
+    }
+    this.database.write(this.path, value, false);
+  }
+
+  async update(value: StoredDocument): Promise<void> {
+    if (this.database === undefined) {
+      throw new Error("MEMORY_DOCUMENT_DATABASE_NOT_BOUND");
+    }
+    if (!this.database.has(this.path)) throw new Error("NOT_FOUND");
+    this.database.write(this.path, value, true);
   }
 }
 
@@ -124,6 +180,7 @@ class MemoryTransaction {
             expected === valueAt(document, field),
         ),
       )
+      .slice(0, target.maximum)
       .map(
         ({ path, value }) =>
           new MemoryDocumentSnapshot(new MemoryDocumentReference(path), value),

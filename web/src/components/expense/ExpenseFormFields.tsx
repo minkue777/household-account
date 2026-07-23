@@ -1,5 +1,6 @@
 import { ChevronDown } from 'lucide-react';
-import { AmountInput, CategorySelector } from '@/components/common';
+import AmountInput from '@/components/common/AmountInput';
+import CategorySelector from '@/components/common/CategorySelector';
 import MonthlySplitAmountControl from '@/components/expense/MonthlySplitAmountControl';
 
 interface MonthlySplitControlProps {

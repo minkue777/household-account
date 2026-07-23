@@ -125,7 +125,9 @@ export function createBasicLedgerCommands(input: {
       event,
       result,
     });
-    return committed.kind === "success" ? result : committed;
+    return committed.kind === "success"
+      ? committed.replayedResult ?? result
+      : committed;
   }
 
   async function existingOrLoad(

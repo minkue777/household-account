@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { CategoryProvider } from '@/contexts/CategoryContext';
 import { HouseholdProvider } from '@/contexts/HouseholdContext';
@@ -8,7 +9,12 @@ import HouseholdGuard from './HouseholdGuard';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { getClientSessionScope } from '@/composition/clientSessionScope';
 import { refreshAndroidHostSession } from '@/platform/android-host/androidHostBridge';
-import { scheduleAfterWebFirstLedgerPaint } from '@/platform/performance/webStartupPerformance';
+import { onWebFirstLedgerPaint } from '@/platform/performance/webStartupPerformance';
+import {
+  preloadAssetInteractions,
+  preloadLedgerInteractions,
+} from '@/composition/interactiveUiPreload';
+import { warmAssetNavigationIntent } from '@/composition/assetNavigationPrewarm';
 
 function DeferredFirebaseSecurityInitialization() {
   // App Check SDK는 첫 화면 렌더링과 경쟁하지 않도록 브라우저가 한가해진 뒤 준비합니다.
@@ -40,11 +46,12 @@ function DeferredFirebaseSecurityInitialization() {
   return null;
 }
 
-const NATIVE_SESSION_REFRESH_KEY = 'household-account.native-session-refresh.v1';
+const NATIVE_SESSION_REFRESH_KEY = 'household-account.native-session-refresh.v2';
 const NATIVE_SESSION_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1_000;
 
 function AuthenticatedPlatformEffects() {
   const { sessionState, isSessionVerified, adminHouseholdView } = useHousehold();
+  const router = useRouter();
 
   useEffect(() => {
     if (sessionState !== 'ready' || !isSessionVerified || adminHouseholdView !== null) return;
@@ -99,17 +106,25 @@ function AuthenticatedPlatformEffects() {
   }, [adminHouseholdView, isSessionVerified, sessionState]);
 
   useEffect(() => {
-    if (sessionState !== 'ready' || !isSessionVerified || adminHouseholdView !== null) return;
+    if (sessionState !== 'ready' || adminHouseholdView !== null) return;
 
-    const prefetchMutationCommands = () => {
+    return onWebFirstLedgerPaint(() => {
+      router.prefetch('/income');
+      router.prefetch('/assets');
+      router.prefetch('/settings');
+      router.prefetch('/stats');
       void Promise.all([
-        import('@/features/ledger/application/ledgerCommands'),
+        preloadLedgerInteractions(),
+        preloadAssetInteractions(),
         import('@/features/category-budget/application/categoryCommands'),
       ]).catch(() => {});
-    };
-    return scheduleAfterWebFirstLedgerPaint(prefetchMutationCommands, {
-      delayAfterPaintMs: 5_000,
-      idleTimeoutMs: 5_000,
+    });
+  }, [adminHouseholdView, router, sessionState]);
+
+  useEffect(() => {
+    if (sessionState !== 'ready' || !isSessionVerified || adminHouseholdView !== null) return;
+    return onWebFirstLedgerPaint(() => {
+      void warmAssetNavigationIntent().catch(() => {});
     });
   }, [adminHouseholdView, isSessionVerified, sessionState]);
 

@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
 import type { Expense } from '@/types/expense';
 import type { SplitItem } from '@/lib/expenseService';
-import { Portal, CategorySelector } from '../common';
+import Portal from '../common/Portal';
+import CategorySelector from '../common/CategorySelector';
 
 interface ExpenseSplitModalProps {
   expense: Expense;

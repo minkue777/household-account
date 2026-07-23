@@ -28,14 +28,32 @@ import {
   writeAssetOwnerProfileSnapshot,
   writeAssetSnapshot,
 } from '@/features/portfolio/application/portfolioReadSnapshot';
+import { useHouseholdHoldingSnapshots } from '@/lib/utils/useHouseholdHoldingSnapshots';
+import {
+  loadAssetAddModal,
+  loadAssetBalanceChart,
+  loadAssetEditModal,
+  loadAssetHistoryModal,
+  loadAssetOwnerProfileModal,
+  preloadAssetInteractions,
+} from '@/composition/interactiveUiPreload';
+import { ModalInteractionLoadingFallback } from '@/components/common/InteractionLoadingFallback';
 
-const AssetAddModal = dynamic(() => import('@/components/assets/AssetAddModal'));
-const AssetEditModal = dynamic(() => import('@/components/assets/AssetEditModal'));
-const AssetHistoryModal = dynamic(() => import('@/components/assets/AssetHistoryModal'));
-const AssetBalanceChart = dynamic(() => import('@/components/assets/AssetBalanceChart'));
-const AssetOwnerProfileModal = dynamic(
-  () => import('@/components/assets/AssetOwnerProfileModal')
-);
+const AssetAddModal = dynamic(loadAssetAddModal, {
+  loading: ModalInteractionLoadingFallback,
+});
+const AssetEditModal = dynamic(loadAssetEditModal, {
+  loading: ModalInteractionLoadingFallback,
+});
+const AssetHistoryModal = dynamic(loadAssetHistoryModal, {
+  loading: ModalInteractionLoadingFallback,
+});
+const AssetBalanceChart = dynamic(loadAssetBalanceChart, {
+  loading: ModalInteractionLoadingFallback,
+});
+const AssetOwnerProfileModal = dynamic(loadAssetOwnerProfileModal, {
+  loading: ModalInteractionLoadingFallback,
+});
 
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
@@ -56,6 +74,10 @@ export default function AssetsPage() {
   const [ownerProfiles, setOwnerProfiles] = useState<AssetOwnerProfileView[]>([]);
   const didScheduleMarketRefresh = useRef(false);
   const cachedAssetsRef = useRef<Asset[] | undefined>(undefined);
+  const holdingSnapshots = useHouseholdHoldingSnapshots(
+    household?.id,
+    isSessionVerified
+  );
 
   const memberOptions = useMemo(
     () => [
@@ -124,6 +146,12 @@ export default function AssetsPage() {
     let fallbackId: number | undefined;
     let started = false;
 
+    // 첫 paint 직후 모달 코드를 가장 먼저 요청합니다. 다음 animation frame까지
+    // 미루면 사용자가 즉시 계좌를 누른 경우 그 한 프레임만큼 chunk 시작도 늦어집니다.
+    void preloadAssetInteractions().catch((error) => {
+      console.error('자산 상호작용 준비 오류:', error);
+    });
+
     const warm = () => {
       if (cancelled || started) return;
       started = true;
@@ -179,7 +207,7 @@ export default function AssetsPage() {
       } else {
         refresh();
       }
-    }, 750);
+    }, 5_000);
 
     return () => {
       cancelled = true;
@@ -215,23 +243,44 @@ export default function AssetsPage() {
   useEffect(() => {
     if (assets.length === 0) {
       setDailyChange(0);
-      return;
+      return undefined;
     }
 
     const activeAssets = assets.filter((asset) => asset.isActive);
+    let cancelled = false;
+    let idleCallbackId: number | undefined;
 
     const syncDailySummary = async () => {
       try {
         const selectedLabel =
           memberOptions.find(({ key }) => key === selectedMember)?.label ?? ALL_MEMBERS_OPTION;
         const change = await getRealtimeDailyAssetChangeByOwner(selectedLabel, activeAssets);
-        setDailyChange(change);
+        if (!cancelled) setDailyChange(change);
       } catch {
-        setDailyChange(0);
+        if (!cancelled) setDailyChange(0);
       }
     };
 
-    void syncDailySummary();
+    // 일간 변동은 참고 정보이며 계좌 모달의 첫 클릭보다 우선하지 않습니다.
+    // 자산 화면과 상호작용 코드가 먼저 그려진 뒤 유휴 시간에 조회합니다.
+    const delayId = window.setTimeout(() => {
+      if (typeof window.requestIdleCallback === 'function') {
+        idleCallbackId = window.requestIdleCallback(
+          () => void syncDailySummary(),
+          { timeout: 2_000 }
+        );
+      } else {
+        void syncDailySummary();
+      }
+    }, 1_000);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(delayId);
+      if (idleCallbackId !== undefined && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleCallbackId);
+      }
+    };
   }, [assets, memberOptions, selectedMember]);
 
   const handleAssetClick = (asset: Asset) => {
@@ -401,6 +450,10 @@ export default function AssetsPage() {
             asset={selectedAsset}
             onEditAsset={handleEditAsset}
             onViewChart={handleViewChart}
+            stockHoldings={holdingSnapshots.stockHoldings}
+            cryptoHoldings={holdingSnapshots.cryptoHoldings}
+            stockHoldingsReady={holdingSnapshots.stockHoldingsReady}
+            cryptoHoldingsReady={holdingSnapshots.cryptoHoldingsReady}
           />
         )}
 

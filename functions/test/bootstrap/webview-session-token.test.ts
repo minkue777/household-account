@@ -4,7 +4,10 @@ import { issueWebViewSessionToken } from "../../src/bootstrap/firebaseWebViewSes
 
 describe("WebView Firebase session bridge", () => {
   it("native Firebase Auth의 동일 uid에 대해서만 custom token을 발급한다", async () => {
-    const issue = vi.fn(async (uid: string) => `token-for:${uid}`);
+    const issue = vi.fn(
+      async (uid: string, claims: Readonly<Record<string, unknown>>) =>
+        `token-for:${uid}:${String(claims.hcaClient)}`,
+    );
     const resolveSignedInUser = vi.fn(async () => ({
       kind: "membership-found" as const,
       membership: {
@@ -25,7 +28,8 @@ describe("WebView Firebase session bridge", () => {
       }),
     ).resolves.toEqual({
       contractVersion: "webview-session-token.v1",
-      customToken: "token-for:uid-a",
+      customToken: "token-for:uid-a:web",
+      nativeCustomToken: "token-for:uid-a:native",
       principalUid: "uid-a",
       signedInUserResolution: {
         kind: "membership-found",
@@ -39,7 +43,26 @@ describe("WebView Firebase session bridge", () => {
         },
       },
     });
-    expect(issue).toHaveBeenCalledWith("uid-a");
+    expect(issue).toHaveBeenNthCalledWith(
+      1,
+      "uid-a",
+      expect.objectContaining({
+        hcaClient: "web",
+        hcaCaptureMember: true,
+        hcaCaptureHouseholdId: "household-1",
+        hcaCaptureMemberId: "member-1",
+      }),
+    );
+    expect(issue).toHaveBeenNthCalledWith(
+      2,
+      "uid-a",
+      expect.objectContaining({
+        hcaClient: "native",
+        hcaCaptureMember: true,
+        hcaCaptureHouseholdId: "household-1",
+        hcaCaptureMemberId: "member-1",
+      }),
+    );
     expect(resolveSignedInUser).toHaveBeenCalledWith("uid-a");
   });
 
@@ -54,7 +77,7 @@ describe("WebView Firebase session bridge", () => {
         },
       }),
     ).rejects.toThrow("temporary-read-failure");
-    expect(issue).toHaveBeenCalledWith("uid-a");
+    expect(issue).not.toHaveBeenCalled();
   });
 
   it("인증되지 않은 호출에는 token issuer를 호출하지 않는다", async () => {

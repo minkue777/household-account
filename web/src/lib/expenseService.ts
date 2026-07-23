@@ -18,6 +18,7 @@ import { writeMonthlyExpenseSnapshot } from '@/features/ledger/application/month
 
 const COLLECTION_NAME = 'expenses';
 const DEFAULT_TRANSACTION_TYPE: TransactionType = 'expense';
+const TRANSACTION_TYPES: readonly TransactionType[] = ['expense', 'income'];
 
 interface AddExpenseOptions {
   notifyOnCreate?: boolean;
@@ -450,13 +451,17 @@ export function subscribeToMonthlyExpenses(
     const allExpenses = snapshot.docs
       .filter((document) => isVisibleLedgerReadDocument(document.data()))
       .map(mapDocToExpense);
-    writeMonthlyExpenseSnapshot(
-      householdId,
-      year,
-      month,
-      transactionType,
-      allExpenses.filter((expense) => matchesTransactionType(expense, transactionType))
-    );
+    // Firestore 조회는 이미 수입·지출을 함께 반환합니다. 같은 결과를 두 로컬
+    // 스냅샷에 나눠 저장해 다음 탭의 첫 화면도 네트워크 없이 바로 복원합니다.
+    TRANSACTION_TYPES.forEach((snapshotType) => {
+      writeMonthlyExpenseSnapshot(
+        householdId,
+        year,
+        month,
+        snapshotType,
+        allExpenses.filter((expense) => matchesTransactionType(expense, snapshotType))
+      );
+    });
 
     // 클라이언트에서 날짜 필터링 및 정렬
     projection.publish(allExpenses);

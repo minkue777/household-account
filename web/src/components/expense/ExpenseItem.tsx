@@ -1,30 +1,15 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useRef, useState } from 'react';
 import type { Expense, TransactionType } from '@/types/expense';
-import type { SplitItem } from '@/lib/expenseService';
-import {
-  runSplitMonthsAction,
-  runCancelSplitGroupAction,
-  runUpdateSplitGroupAction,
-} from '@/lib/utils/monthlySplitActions';
 import { getLedgerPrimaryText, getLedgerSecondaryText } from '@/lib/utils/ledgerDisplay';
 import { useCategoryContext } from '@/contexts/CategoryContext';
-import ExpenseEditModal from './ExpenseEditModal';
-import ExpenseSplitModal from './ExpenseSplitModal';
 
 interface ExpenseItemProps {
   expense: Expense;
   allExpenses: Expense[];
-  onExpenseUpdate?: (
-    expenseId: string,
-    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string }
-  ) => void;
-  onSaveMerchantRule?: (merchantName: string, category: string) => void;
-  onDelete?: (expenseId: string) => void;
-  onSplitExpense?: (expense: Expense, splits: SplitItem[]) => void;
+  onEdit: (expense: Expense) => void;
   onMergeExpenses?: (targetExpense: Expense, sourceExpense: Expense) => void;
-  onUnmergeExpense?: (expense: Expense) => void;
   // 드래그 앤 드롭 props
   draggingExpenseId: string | null;
   setDraggingExpenseId: (id: string | null) => void;
@@ -33,21 +18,14 @@ interface ExpenseItemProps {
   findItemAtPosition: (x: number, y: number) => string | null;
   handleTouchDragEnd: (sourceId: string, targetId: string | null) => void;
   registerItemRef: (id: string, element: HTMLDivElement | null) => void;
-  // 자동 편집 모달 열기
-  autoEdit?: boolean;
-  onAutoEditHandled?: () => void;
   transactionType: TransactionType;
 }
 
 export default function ExpenseItem({
   expense,
   allExpenses,
-  onExpenseUpdate,
-  onSaveMerchantRule,
-  onDelete,
-  onSplitExpense,
+  onEdit,
   onMergeExpenses,
-  onUnmergeExpense,
   draggingExpenseId,
   setDraggingExpenseId,
   dragOverExpenseId,
@@ -55,14 +33,10 @@ export default function ExpenseItem({
   findItemAtPosition,
   handleTouchDragEnd,
   registerItemRef,
-  autoEdit,
-  onAutoEditHandled,
   transactionType,
 }: ExpenseItemProps) {
   const { getCategoryLabel, getCategoryColor } = useCategoryContext();
 
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showSplitModal, setShowSplitModal] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
   // 터치 드래그 상태
@@ -75,14 +49,6 @@ export default function ExpenseItem({
   const expenseLabel = getCategoryLabel(expense.category);
   const primaryText = getLedgerPrimaryText(expense, transactionType);
   const secondaryText = getLedgerSecondaryText(expense, transactionType);
-
-  // 자동 편집 모달 열기 (푸시 알림 클릭 시)
-  useEffect(() => {
-    if (autoEdit && !showEditModal) {
-      setShowEditModal(true);
-      onAutoEditHandled?.();
-    }
-  }, [autoEdit, showEditModal, onAutoEditHandled]);
 
   // 데스크톱 드래그 앤 드롭 핸들러
   const handleDragStart = (e: React.DragEvent) => {
@@ -163,40 +129,6 @@ export default function ExpenseItem({
     touchStartPos.current = null;
   };
 
-  const handleSaveEdit = (
-    updates: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string }
-  ) => {
-    if (onExpenseUpdate && Object.keys(updates).length > 0) {
-      onExpenseUpdate(expense.id, updates);
-    }
-  };
-
-  const handleSplitExpense = (splits: SplitItem[]) => {
-    if (onSplitExpense) {
-      onSplitExpense(expense, splits);
-    }
-  };
-
-  // 월별 분할 처리 (여러 달에 걸쳐 분할)
-  const handleSplitMonths = async (months: number) => {
-    if (!onDelete) return;
-    await runSplitMonthsAction({
-      expense,
-      months,
-      deleteExpense: onDelete,
-    });
-  };
-
-  // 월별 분할 취소 (합치기)
-  const handleCancelSplitGroup = async () => {
-    await runCancelSplitGroupAction({ expense });
-  };
-
-  // 월별 분할 그룹 개월 수 변경
-  const handleUpdateSplitGroup = async (newMonths: number) => {
-    await runUpdateSplitGroupAction({ expense, newMonths });
-  };
-
   return (
     <div className="relative" ref={(el) => registerItemRef(expense.id, el)}>
       <div
@@ -208,7 +140,7 @@ export default function ExpenseItem({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        onClick={isDragging ? undefined : () => setShowEditModal(true)}
+        onClick={isDragging ? undefined : () => onEdit(expense)}
         style={{ touchAction: isDragging || draggingExpenseId ? 'none' : 'auto' }}
         className={`flex items-center justify-between p-3 rounded-xl transition-all cursor-pointer select-none ${
           isDragging
@@ -243,35 +175,6 @@ export default function ExpenseItem({
         </div>
       </div>
 
-      {/* 편집 모달 */}
-      <ExpenseEditModal
-        expense={expense}
-        isOpen={showEditModal}
-        onClose={() => setShowEditModal(false)}
-        transactionType={transactionType}
-        onSave={handleSaveEdit}
-        onSaveMerchantRule={onSaveMerchantRule}
-        onUnmerge={onUnmergeExpense ? () => onUnmergeExpense(expense) : undefined}
-        onOpenSplit={transactionType === 'expense' && onSplitExpense ? () => setShowSplitModal(true) : undefined}
-        onSplitMonths={transactionType === 'expense' && onDelete ? handleSplitMonths : undefined}
-        onCancelSplitGroup={transactionType === 'expense' && expense.splitGroupId ? handleCancelSplitGroup : undefined}
-        onUpdateSplitGroup={transactionType === 'expense' && expense.splitGroupId ? handleUpdateSplitGroup : undefined}
-        onDelete={onDelete ? () => onDelete(expense.id) : undefined}
-        onNotifyPartner={transactionType === 'expense'
-          ? async () => {
-            const { notifyPartner } = await import('@/lib/partnerNotificationService');
-            await notifyPartner(expense.id, expense.aggregateVersion);
-          }
-          : undefined}
-      />
-
-      {/* 분할 모달 */}
-      <ExpenseSplitModal
-        expense={expense}
-        isOpen={showSplitModal}
-        onClose={() => setShowSplitModal(false)}
-        onSave={handleSplitExpense}
-      />
     </div>
   );
 }

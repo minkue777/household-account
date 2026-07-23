@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type * as firestore from "firebase-admin/firestore";
 
 import { FirebaseLedgerCommandRepository } from "../../adapters/firebase/ledger/firebaseLedgerCommandRepository";
@@ -94,6 +96,29 @@ function actor(context: HouseholdCommandExecutionContext) {
   };
 }
 
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value) ?? "null";
+  }
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, entry]) => `${JSON.stringify(key)}:${stable(entry)}`)
+    .join(",")}}`;
+}
+
+function receiptPayloadHash(context: HouseholdCommandExecutionContext): string {
+  return createHash("sha256")
+    .update(
+      stable({
+        command: context.envelope.command,
+        payload: context.envelope.payload,
+      }),
+      "utf8",
+    )
+    .digest("hex");
+}
+
 function resultValue(result: LedgerCommandResult): unknown {
   if (result.kind === "success") return result.value;
   if (result.kind === "retryable-failure") {
@@ -145,6 +170,7 @@ function commandsFor(
     repository: new FirebaseLedgerCommandRepository(
       database,
       verifiedActor.householdId,
+      receiptPayloadHash(context),
     ),
     // categoryId가 명령 payload에 없으면 domain policy도 이 포트를 호출하지
     // 않습니다. 메모/금액 수정과 삭제가 카테고리 전체 조회를 선행하지 않도록
@@ -167,6 +193,7 @@ export function createLedgerHouseholdCommandHandlers(
     [
       "ledger.record-manual-transaction.v1",
       {
+        idempotencyBoundary: "domain-command-id",
         async execute(context) {
           const payload = record(context.envelope.payload);
           const transactionType = stringValue(payload, "transactionType");
@@ -204,6 +231,7 @@ export function createLedgerHouseholdCommandHandlers(
     [
       "ledger.update-transaction.v1",
       {
+        idempotencyBoundary: "domain-command-id",
         async execute(context) {
           const payload = record(context.envelope.payload);
           const patch = record(payload.patch);
@@ -227,6 +255,7 @@ export function createLedgerHouseholdCommandHandlers(
     [
       "ledger.change-transaction-category.v1",
       {
+        idempotencyBoundary: "domain-command-id",
         async execute(context) {
           const payload = record(context.envelope.payload);
           const commands = commandsFor(
@@ -249,6 +278,7 @@ export function createLedgerHouseholdCommandHandlers(
     [
       "ledger.delete-transaction.v1",
       {
+        idempotencyBoundary: "domain-command-id",
         async execute(context) {
           const payload = record(context.envelope.payload);
           const commands = commandsFor(database, context);

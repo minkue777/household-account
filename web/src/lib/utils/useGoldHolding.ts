@@ -96,16 +96,11 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
   }, [assetId, isPhysicalGoldAsset]);
 
   useEffect(() => {
-    if (!isOpen || !assetId || !isPhysicalGoldAsset) {
+    if (!isOpen || !asset || !isPhysicalGoldAsset) {
       setQuantity('');
       setGoldPrice(null);
       return;
     }
-    void refreshGoldPrice();
-  }, [assetId, isOpen, isPhysicalGoldAsset, refreshGoldPrice]);
-
-  useEffect(() => {
-    if (!isOpen || !asset || !isPhysicalGoldAsset) return;
     setQuantity(extractGoldQuantity(asset));
     setGoldPrice(observedGoldPrice(asset));
   }, [

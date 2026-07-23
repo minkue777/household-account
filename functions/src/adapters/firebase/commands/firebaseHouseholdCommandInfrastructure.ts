@@ -11,6 +11,8 @@ import type {
   ResolveHouseholdActorResult,
 } from "../../../bootstrap/commands/householdCommandPorts";
 import type { HouseholdCommandResult } from "../../../bootstrap/commands/householdCommand";
+import { STANDARD_MEMBER_CAPABILITIES } from "../../../contexts/access/google-onboarding/domain/policies/googleOnboardingPolicy";
+import { principalClaimId } from "../access/firebasePrincipalMembershipClaim";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
 
 const RECEIPT_CONTEXT = "household-command";
@@ -56,6 +58,45 @@ export class FirebaseHouseholdCommandMembershipAdapter
     readonly principalUid: string;
     readonly householdId: string;
   }): Promise<ResolveHouseholdActorResult> {
+    const claimSnapshot = await this.database
+      .collection("principalMembershipClaims")
+      .doc(principalClaimId(input.principalUid))
+      .get();
+    if (claimSnapshot.exists) {
+      const claim = claimSnapshot.data();
+      const claimHouseholdId = stringField(claim, "householdId");
+      const memberId = stringField(claim, "memberId");
+      const lifecycleState = stringField(claim, "lifecycleState");
+      if (
+        claimHouseholdId !== input.householdId ||
+        stringField(claim, "principalUid") !== input.principalUid ||
+        memberId === undefined ||
+        lifecycleState !== "active"
+      ) {
+        return { kind: "forbidden" };
+      }
+      if (
+        stringField(claim, "householdLifecycleState") === "deleted" ||
+        claim?.deletedAt !== undefined
+      ) {
+        return { kind: "household-not-active" };
+      }
+      const capabilities = stringArrayField(claim, "capabilities");
+      return {
+        kind: "active",
+        actor: {
+          principalUid: input.principalUid,
+          householdId: input.householdId,
+          actingMemberId: memberId,
+          capabilities:
+            capabilities.length === 0
+              ? [...STANDARD_MEMBER_CAPABILITIES]
+              : capabilities,
+        },
+      };
+    }
+
+    // 전역 claim이 없는 마이그레이션 이전 사용자만 canonical 문서를 확인합니다.
     const [membershipSnapshot, householdSnapshot] = await Promise.all([
       this.database
         .collection(HOUSEHOLD_COLLECTION)

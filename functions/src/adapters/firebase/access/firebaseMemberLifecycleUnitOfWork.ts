@@ -411,6 +411,11 @@ export class FirebaseMemberLifecycleUnitOfWork
         memberId: after.memberId,
         membershipId,
         lifecycleState: "active",
+        householdLifecycleState: "active",
+        capabilities:
+          capabilities.length === 0
+            ? [...STANDARD_MEMBER_CAPABILITIES]
+            : [...capabilities],
         aggregateVersion: membership?.version ?? 1,
         schemaVersion: ACCESS_SCHEMA_VERSION,
         createdAt: FieldValue.serverTimestamp(),

@@ -25,6 +25,21 @@ function terminalExpiry(now: string) {
   return firestoreTtlAfter(now);
 }
 
+function alreadyExists(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const candidate = error as {
+    readonly code?: unknown;
+    readonly message?: unknown;
+  };
+  return (
+    candidate.code === 6 ||
+    candidate.code === "6" ||
+    candidate.code === "already-exists" ||
+    (typeof candidate.message === "string" &&
+      candidate.message.includes("ALREADY_EXISTS"))
+  );
+}
+
 function canonicalEnvelope(envelope: CaptureBranchEnvelope): unknown {
   const transaction = envelope.transactionBranch;
   const context = transaction?.captureContext;
@@ -133,45 +148,47 @@ export class FirebaseCaptureSubmissionReceiptStore
           input.envelope.rootIdempotencyKey,
         ),
       );
-    return this.database.runTransaction(async (transaction) => {
-      const snapshot = await transaction.get(reference);
-      if (snapshot.exists) {
-        const existing = fromData(snapshot.data() ?? {});
-        return existing.payloadFingerprint === input.payloadFingerprint
-          ? ({ kind: "existing", receipt: existing } as const)
-          : ({
-              kind: "conflict",
-              code: "IDEMPOTENCY_PAYLOAD_MISMATCH",
-            } as const);
-      }
-      const receipt: CaptureSubmissionReceipt = {
-        householdId: input.envelope.householdId,
-        rootIdempotencyKey: input.envelope.rootIdempotencyKey,
-        payloadFingerprint: input.payloadFingerprint,
-        state: "claimed",
-        transaction:
-          input.envelope.transactionBranch === undefined
-            ? { stage: "absent" }
-            : {
-                stage: "pending",
-                downstreamKey: input.envelope.transactionBranch.branchKey,
-              },
-        balance:
-          input.envelope.balanceBranch === undefined
-            ? { stage: "absent" }
-            : {
-                stage: "pending",
-                downstreamKey: input.envelope.balanceBranch.branchKey,
-              },
-      };
-      transaction.create(reference, {
+    const receipt: CaptureSubmissionReceipt = {
+      householdId: input.envelope.householdId,
+      rootIdempotencyKey: input.envelope.rootIdempotencyKey,
+      payloadFingerprint: input.payloadFingerprint,
+      state: "claimed",
+      transaction:
+        input.envelope.transactionBranch === undefined
+          ? { stage: "absent" }
+          : {
+              stage: "pending",
+              downstreamKey: input.envelope.transactionBranch.branchKey,
+            },
+      balance:
+        input.envelope.balanceBranch === undefined
+          ? { stage: "absent" }
+          : {
+              stage: "pending",
+              downstreamKey: input.envelope.balanceBranch.branchKey,
+            },
+    };
+    try {
+      await reference.create({
         ...receipt,
         schemaVersion: 1,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
       return { kind: "claimed", receipt } as const;
-    });
+    } catch (error) {
+      if (!alreadyExists(error)) throw error;
+    }
+
+    const snapshot = await reference.get();
+    if (!snapshot.exists) throw new Error("CAPTURE_RECEIPT_CONCURRENTLY_REMOVED");
+    const existing = fromData(snapshot.data() ?? {});
+    return existing.payloadFingerprint === input.payloadFingerprint
+      ? ({ kind: "existing", receipt: existing } as const)
+      : ({
+          kind: "conflict",
+          code: "IDEMPOTENCY_PAYLOAD_MISMATCH",
+        } as const);
   }
 
   async save(receipt: CaptureSubmissionReceipt): Promise<void> {
@@ -180,6 +197,18 @@ export class FirebaseCaptureSubmissionReceiptStore
       .doc(receipt.householdId)
       .collection("captureSubmissionReceipts")
       .doc(receiptId(receipt.householdId, receipt.rootIdempotencyKey));
+    if (receipt.state === "completed") {
+      const now = this.now();
+      await reference.update({
+        state: "completed",
+        transaction: receipt.transaction,
+        balance: receipt.balance,
+        updatedAt: FieldValue.serverTimestamp(),
+        terminalAt: now,
+        expiresAt: terminalExpiry(now),
+      });
+      return;
+    }
     await this.database.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(reference);
       if (!snapshot.exists) throw new Error("CAPTURE_RECEIPT_NOT_CLAIMED");

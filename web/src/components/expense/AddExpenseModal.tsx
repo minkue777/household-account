@@ -2,7 +2,8 @@
 
 import { useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { AmountInput, ModalOverlay } from '@/components/common';
+import AmountInput from '@/components/common/AmountInput';
+import ModalOverlay from '@/components/common/ModalOverlay';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { TransactionType } from '@/types/expense';
 import { useMonthlySplitInput } from '@/lib/utils/useMonthlySplitInput';

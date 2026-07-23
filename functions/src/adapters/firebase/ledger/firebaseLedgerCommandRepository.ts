@@ -129,6 +129,7 @@ export class FirebaseLedgerCommandRepository
   constructor(
     private readonly database: firestore.Firestore,
     private readonly householdId: string,
+    private readonly receiptPayloadHash?: string,
   ) {}
 
   async findReceipt(commandId: string): Promise<LedgerCommandResult | undefined> {
@@ -138,9 +139,19 @@ export class FirebaseLedgerCommandRepository
       .collection("receipts")
       .doc(receiptId(this.householdId, commandId))
       .get();
-    return snapshot.exists
-      ? (snapshot.data()?.result as LedgerCommandResult | undefined)
-      : undefined;
+    if (!snapshot.exists) return undefined;
+    const storedHash = snapshot.data()?.payloadHash;
+    if (
+      this.receiptPayloadHash !== undefined &&
+      typeof storedHash === "string" &&
+      storedHash !== this.receiptPayloadHash
+    ) {
+      return {
+        kind: "validation-error",
+        code: "IDEMPOTENCY_PAYLOAD_MISMATCH",
+      };
+    }
+    return snapshot.data()?.result as LedgerCommandResult | undefined;
   }
 
   async findTransaction(
@@ -233,7 +244,24 @@ export class FirebaseLedgerCommandRepository
           unitOfWork.get(canonicalTransactionReference),
           unitOfWork.get(legacyTransactionReference),
         ]);
-        if (receiptSnapshot.exists) return { kind: "success" } as const;
+        if (receiptSnapshot.exists) {
+          const storedHash = receiptSnapshot.data()?.payloadHash;
+          const replayedResult =
+            this.receiptPayloadHash !== undefined &&
+            typeof storedHash === "string" &&
+            storedHash !== this.receiptPayloadHash
+              ? ({
+                  kind: "validation-error",
+                  code: "IDEMPOTENCY_PAYLOAD_MISMATCH",
+                } as const)
+              : (receiptSnapshot.data()?.result as
+                  | LedgerCommandResult
+                  | undefined);
+          return {
+            kind: "success",
+            ...(replayedResult === undefined ? {} : { replayedResult }),
+          } as const;
+        }
 
         const current =
           mapTransaction(canonicalSnapshot) ?? mapTransaction(legacySnapshot);
@@ -289,6 +317,9 @@ export class FirebaseLedgerCommandRepository
         unitOfWork.create(receiptReference, {
           householdId: this.householdId,
           commandId: input.commandId,
+          ...(this.receiptPayloadHash === undefined
+            ? {}
+            : { payloadHash: this.receiptPayloadHash }),
           result: input.result,
           status: "completed",
           terminalAt: input.occurredAt,

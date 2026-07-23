@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { CalendarDays, Check, ChevronDown, Info, Share2, Split, Trash2, Undo2, X } from 'lucide-react';
-import { AmountInput, ConfirmDialog, Portal } from '@/components/common';
+import AmountInput from '@/components/common/AmountInput';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
+import Portal from '@/components/common/Portal';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { Expense, TransactionType } from '@/types/expense';
 import { useMonthlySplitInput } from '@/lib/utils/useMonthlySplitInput';

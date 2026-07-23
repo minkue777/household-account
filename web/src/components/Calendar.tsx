@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
-import { Portal } from './common';
+import Portal from './common/Portal';
 import { getTodayLocalDate } from '@/lib/utils/date';
 import { getLedgerPrimaryText } from '@/lib/utils/ledgerDisplay';
 

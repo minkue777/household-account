@@ -163,7 +163,7 @@ describe("Capture receipt·fingerprint·동시성 공개 계약", () => {
       downstreamAttempts: { transaction: 0, balance: 0 },
     });
   });
-  it("정상 payment-only 제출은 root receipt를 최종 결과로 한 번만 저장한다", async () => {
+  it("정상 Android payment-only 제출은 ledger의 원자 receipt만 사용하고 중복 root receipt를 저장하지 않는다", async () => {
     const subject = createSubject();
 
     const result = await subject.submit(
@@ -183,7 +183,8 @@ describe("Capture receipt·fingerprint·동시성 공개 계약", () => {
         aggregateVersion: 1,
       },
     });
-    expect(subject.state().receiptSaveCount).toBe(1);
+    expect(subject.state().receiptSaveCount).toBe(0);
+    expect(subject.state().receipts).toEqual([]);
   });
   it("[T-IOS-001][IOS-011] 같은 root key·payload의 동시 승인은 같은 Created 결과를 재생하고 거래와 Event를 한 건만 만든다", async () => {
     const subject = createSubject();
@@ -356,7 +357,9 @@ describe("Capture receipt·fingerprint·동시성 공개 계약", () => {
     }
     const state = subject.state();
     expect(state.transactions).toHaveLength(1);
-    expect(state.receipts).toHaveLength(2);
+    // Shortcut의 multi-branch root receipt만 남고 Android payment-only는
+    // ledger의 원자 receipt로 멱등성을 보장합니다.
+    expect(state.receipts).toHaveLength(1);
     expect(transactionRecordedEvents(state)).toHaveLength(1);
   });
 

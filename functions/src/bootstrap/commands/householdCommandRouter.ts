@@ -220,12 +220,20 @@ export function createHouseholdCommandRouter(input: {
         return error("HOUSEHOLD_NOT_ACTIVE", { commandId: parsed.commandId });
       }
 
-      if (RECEIPTLESS_READ_COMMANDS.has(parsed.command)) {
+      const domainOwnsReceipt =
+        handler.idempotencyBoundary === "domain-idempotency-key" ||
+        (handler.idempotencyBoundary === "domain-command-id" &&
+          parsed.commandId === parsed.idempotencyKey);
+      if (RECEIPTLESS_READ_COMMANDS.has(parsed.command) || domainOwnsReceipt) {
         try {
           const data = await measureCurrentInteractiveLatency("handler", () =>
             handler.execute({
               envelope: parsed,
               principalUid,
+              ...(actor?.kind === "active" ? { actor: actor.actor } : {}),
+              ...(requiresAdministrator && request.administrator !== undefined
+                ? { administrator: request.administrator }
+                : {}),
               requestedAt: request.requestedAt,
             }),
           );

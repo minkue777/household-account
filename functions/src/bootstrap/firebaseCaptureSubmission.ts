@@ -86,6 +86,7 @@ export interface CaptureSubmissionWireResponse {
 export interface CaptureSubmissionCallableHandler {
   handle(input: {
     readonly principalUid?: string;
+    readonly authToken?: Readonly<Record<string, unknown>>;
     readonly data: unknown;
   }): Promise<CaptureSubmissionWireResponse>;
 }
@@ -93,6 +94,7 @@ export interface CaptureSubmissionCallableHandler {
 export interface AndroidRawNotificationCallableHandler {
   handle(input: {
     readonly principalUid?: string;
+    readonly authToken?: Readonly<Record<string, unknown>>;
     readonly data: unknown;
   }): Promise<CaptureSubmissionWireResponse>;
 }
@@ -160,7 +162,7 @@ export function createCaptureSubmissionCallableHandler(input: {
     async handle(request): Promise<CaptureSubmissionWireResponse> {
       const membership = await measureCurrentInteractiveLatency(
         "capture-membership",
-        () => input.memberships.resolve(request.principalUid),
+        () => input.memberships.resolve(request.principalUid, request.authToken),
       );
       if (membership.kind === "unauthenticated") {
         throw new CaptureCallableRejection("unauthenticated", membership.code);
@@ -215,7 +217,7 @@ export function createAndroidRawNotificationCallableHandler(input: {
     async handle(request): Promise<CaptureSubmissionWireResponse> {
       const membership = await measureCurrentInteractiveLatency(
         "capture-membership",
-        () => input.memberships.resolve(request.principalUid),
+        () => input.memberships.resolve(request.principalUid, request.authToken),
       );
       if (membership.kind === "unauthenticated") {
         throw new CaptureCallableRejection("unauthenticated", membership.code);
@@ -328,6 +330,9 @@ export const submitCaptureEnvelope = functions
         ...(context.auth?.uid === undefined
           ? {}
           : { principalUid: context.auth.uid }),
+        ...(context.auth?.token === undefined
+          ? {}
+          : { authToken: context.auth.token }),
         data,
       });
     } catch (error) {
@@ -362,6 +367,9 @@ export const submitAndroidRawNotification = functions
           ...(context.auth?.uid === undefined
             ? {}
             : { principalUid: context.auth.uid }),
+          ...(context.auth?.token === undefined
+            ? {}
+            : { authToken: context.auth.token }),
           data,
         });
         latency.complete("succeeded");

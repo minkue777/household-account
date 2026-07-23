@@ -67,7 +67,10 @@ class ReceiptMemory implements HouseholdCommandReceiptPort {
   }
 }
 
-function subject(customExecute?: HouseholdCommandHandler["execute"]) {
+function subject(
+  customExecute?: HouseholdCommandHandler["execute"],
+  idempotencyBoundary?: HouseholdCommandHandler["idempotencyBoundary"],
+) {
   let executions = 0;
   const receipts = new ReceiptMemory();
   const router = createHouseholdCommandRouter({
@@ -75,6 +78,9 @@ function subject(customExecute?: HouseholdCommandHandler["execute"]) {
       [
         "ledger.record-manual-transaction.v1",
         {
+          ...(idempotencyBoundary === undefined
+            ? {}
+            : { idempotencyBoundary }),
           async execute(context) {
             executions += 1;
             if (customExecute !== undefined) return customExecute(context);
@@ -206,6 +212,37 @@ describe("Household command bootstrap boundary", () => {
       code: "IDEMPOTENCY_PAYLOAD_MISMATCH",
     });
     expect(fixture.executions()).toBe(1);
+  });
+
+  it("도메인 원자 receipt가 같은 wire key를 소유하면 router receipt I/O를 생략한다", async () => {
+    const fixture = subject(undefined, "domain-command-id");
+    const result = await fixture.router.execute({
+      principalUid: "uid-a",
+      request: {
+        ...fixture.request,
+        idempotencyKey: fixture.request.commandId,
+      },
+      requestedAt: "2026-07-21T09:00:00+09:00",
+    });
+
+    expect(result).toMatchObject({
+      kind: "success",
+      data: { actor: "member-a" },
+    });
+    expect(fixture.receipts.claimCount).toBe(0);
+    expect(fixture.receipts.completeCount).toBe(0);
+  });
+
+  it("domain commandId receipt와 wire idempotency key가 다르면 router receipt를 유지한다", async () => {
+    const fixture = subject(undefined, "domain-command-id");
+    await fixture.router.execute({
+      principalUid: "uid-a",
+      request: fixture.request,
+      requestedAt: "2026-07-21T09:00:00+09:00",
+    });
+
+    expect(fixture.receipts.claimCount).toBe(1);
+    expect(fixture.receipts.completeCount).toBe(1);
   });
 
   it("retryable rejection은 receipt를 버려 같은 idempotency key로 재시도할 수 있다", async () => {

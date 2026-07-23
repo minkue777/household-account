@@ -1,8 +1,10 @@
 'use client';
 
 import { useHousehold } from '@/contexts/HouseholdContext';
-import HouseholdLogin from './HouseholdLogin';
 import { usePathname } from 'next/navigation';
+import dynamic from 'next/dynamic';
+
+const HouseholdLogin = dynamic(() => import('./HouseholdLogin'));
 
 export default function HouseholdGuard({ children }: { children: React.ReactNode }) {
   const { isLoading, isAuthenticated } = useHousehold();

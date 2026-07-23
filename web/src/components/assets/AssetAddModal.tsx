@@ -13,7 +13,7 @@ import {
   isGoldEtfSubType,
 } from '@/types/asset';
 import { addAsset, addCryptoHolding, addStockHolding } from '@/lib/assetService';
-import { ModalOverlay } from '@/components/common';
+import ModalOverlay from '@/components/common/ModalOverlay';
 import { X, Trash2 } from 'lucide-react';
 import {
   AssetMemoField,
@@ -227,7 +227,7 @@ export default function AssetAddModal({
     }
 
     let cancelled = false;
-    const timer = setTimeout(async () => {
+    void (async () => {
       setIsSearching(true);
       try {
         const results = await portfolioQueries.searchStocks(searchQuery);
@@ -248,11 +248,10 @@ export default function AssetAddModal({
           setIsSearching(false);
         }
       }
-    }, 150);
+    })();
 
     return () => {
       cancelled = true;
-      clearTimeout(timer);
     };
   }, [isGoldEtf, isStockLikeAsset, searchQuery, selectedStock]);
 
@@ -267,7 +266,7 @@ export default function AssetAddModal({
     }
 
     let cancelled = false;
-    const timer = setTimeout(async () => {
+    void (async () => {
       setIsCryptoSearching(true);
       try {
         const results = await portfolioQueries.searchCrypto(cryptoSearchQuery);
@@ -284,11 +283,10 @@ export default function AssetAddModal({
           setIsCryptoSearching(false);
         }
       }
-    }, 150);
+    })();
 
     return () => {
       cancelled = true;
-      clearTimeout(timer);
     };
   }, [cryptoSearchQuery, selectedCoin, type]);
 

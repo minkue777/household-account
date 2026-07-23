@@ -35,6 +35,22 @@ describe("Portfolio household command registration", () => {
     expect([...handlers.values()].every(({ execute }) => typeof execute === "function")).toBe(
       true,
     );
+    expect(
+      [
+        "portfolio.create-asset.v1",
+        "portfolio.update-asset.v1",
+        "portfolio.delete-asset.v1",
+        "portfolio.add-position.v1",
+        "portfolio.update-position.v1",
+        "portfolio.delete-position.v1",
+      ].map((command) => handlers.get(command)?.idempotencyBoundary),
+    ).toEqual(Array(6).fill("domain-idempotency-key"));
+    expect(handlers.get("portfolio.reorder-assets.v1")?.idempotencyBoundary).toBe(
+      undefined,
+    );
+    expect(
+      handlers.get("portfolio.refresh-market-values.v1")?.idempotencyBoundary,
+    ).toBe(undefined);
   });
 
   it("[T-HOLD-001][HOLD-001] routes a legacy cash amount edit through the authoritative command handler", async () => {

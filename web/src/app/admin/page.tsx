@@ -4,7 +4,7 @@ import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import type { User } from 'firebase/auth';
 
 import { AdminHouseholdList } from '@/components/admin/AdminHouseholdList';
-import { ConfirmDialog } from '@/components/common';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { adminHouseholds } from '@/features/access-household/application/adminHouseholds';
 import {
   clearAdminHouseholdViewSelection,

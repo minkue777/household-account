@@ -4,7 +4,6 @@ import {
   addCryptoHolding,
   deleteCryptoHolding,
   refreshAssetMarketValues,
-  subscribeToCryptoHoldings,
 } from '@/lib/assetService';
 import { portfolioQueries } from '@/features/portfolio/application/portfolioQueries';
 
@@ -29,12 +28,16 @@ export function calculateCryptoHoldingValue(
 interface UseCryptoHoldingManagerOptions {
   isOpen: boolean;
   asset: Asset | null;
+  holdingsSnapshot?: readonly CryptoHolding[];
+  holdingsReady?: boolean;
 }
 
-export function useCryptoHoldingManager({ isOpen, asset }: UseCryptoHoldingManagerOptions) {
-  const [holdings, setHoldings] = useState<CryptoHolding[]>([]);
-  const [isLoadingHoldings, setIsLoadingHoldings] = useState(false);
-
+export function useCryptoHoldingManager({
+  isOpen,
+  asset,
+  holdingsSnapshot = [],
+  holdingsReady = true,
+}: UseCryptoHoldingManagerOptions) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<CryptoSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -48,6 +51,15 @@ export function useCryptoHoldingManager({ isOpen, asset }: UseCryptoHoldingManag
 
   const isCryptoAsset = asset?.type === 'crypto';
   const assetId = asset?.id;
+  const holdings = useMemo(
+    () => (
+      assetId && isCryptoAsset
+        ? holdingsSnapshot.filter((holding) => holding.assetId === assetId)
+        : []
+    ),
+    [assetId, holdingsSnapshot, isCryptoAsset]
+  );
+  const isLoadingHoldings = Boolean(isOpen && isCryptoAsset && !holdingsReady);
 
   const resetCryptoForm = useCallback(() => {
     setSearchQuery('');
@@ -60,21 +72,11 @@ export function useCryptoHoldingManager({ isOpen, asset }: UseCryptoHoldingManag
 
   useEffect(() => {
     if (!isOpen || !assetId || !isCryptoAsset) {
-      setHoldings([]);
-      setIsLoadingHoldings(false);
       resetCryptoForm();
       return;
     }
 
     resetCryptoForm();
-    setIsLoadingHoldings(true);
-
-    const unsubscribe = subscribeToCryptoHoldings(assetId, (newHoldings) => {
-      setHoldings(newHoldings);
-      setIsLoadingHoldings(false);
-    });
-
-    return () => unsubscribe();
   }, [assetId, isCryptoAsset, isOpen, resetCryptoForm]);
 
   useEffect(() => {
@@ -84,7 +86,7 @@ export function useCryptoHoldingManager({ isOpen, asset }: UseCryptoHoldingManag
     }
 
     let cancelled = false;
-    const timer = setTimeout(async () => {
+    void (async () => {
       setIsSearching(true);
       try {
         const results = await portfolioQueries.searchCrypto(searchQuery);
@@ -101,11 +103,10 @@ export function useCryptoHoldingManager({ isOpen, asset }: UseCryptoHoldingManag
           setIsSearching(false);
         }
       }
-    }, 150);
+    })();
 
     return () => {
       cancelled = true;
-      clearTimeout(timer);
     };
   }, [searchQuery]);
 

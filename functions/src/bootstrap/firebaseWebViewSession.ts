@@ -11,13 +11,39 @@ import { db, REGION } from "../config";
 export interface WebViewSessionTokenResponse {
   readonly contractVersion: "webview-session-token.v1";
   readonly customToken: string;
+  readonly nativeCustomToken: string;
   readonly principalUid?: string;
   readonly signedInUserResolution?: SignedInUserResolution;
 }
 
+type SessionTokenClaims = Readonly<Record<string, string | number | boolean>>;
+
+function membershipClaims(
+  resolution: SignedInUserResolution,
+  client: "native" | "web",
+): SessionTokenClaims {
+  if (resolution.kind !== "membership-found") {
+    return {
+      hcaClient: client,
+      hcaCaptureMembershipVersion: 1,
+      hcaCaptureMember: false,
+    };
+  }
+  return {
+    hcaClient: client,
+    hcaCaptureMembershipVersion: 1,
+    hcaCaptureMember: true,
+    hcaCaptureHouseholdId: resolution.membership.householdId,
+    hcaCaptureMemberId: resolution.membership.memberId,
+  };
+}
+
 export async function issueWebViewSessionToken(input: {
   readonly principalUid: string | undefined;
-  readonly issue: (principalUid: string) => Promise<string>;
+  readonly issue: (
+    principalUid: string,
+    claims: SessionTokenClaims,
+  ) => Promise<string>;
   readonly resolveSignedInUser: (
     principalUid: string,
   ) => Promise<SignedInUserResolution>;
@@ -29,13 +55,15 @@ export async function issueWebViewSessionToken(input: {
     );
   }
   const principalUid = input.principalUid.trim();
-  const [customToken, resolution] = await Promise.all([
-    input.issue(principalUid),
-    input.resolveSignedInUser(principalUid),
+  const resolution = await input.resolveSignedInUser(principalUid);
+  const [customToken, nativeCustomToken] = await Promise.all([
+    input.issue(principalUid, membershipClaims(resolution, "web")),
+    input.issue(principalUid, membershipClaims(resolution, "native")),
   ]);
   return {
     contractVersion: "webview-session-token.v1",
     customToken,
+    nativeCustomToken,
     principalUid,
     signedInUserResolution: resolution,
   };
@@ -48,7 +76,8 @@ export const createWebViewSessionToken = functions
     try {
       return await issueWebViewSessionToken({
         principalUid: context.auth?.uid,
-        issue: (principalUid) => getAuth().createCustomToken(principalUid),
+        issue: (principalUid, claims) =>
+          getAuth().createCustomToken(principalUid, claims),
         resolveSignedInUser: (principalUid) =>
           resolveFirebaseSignedInUser(db, principalUid),
       });

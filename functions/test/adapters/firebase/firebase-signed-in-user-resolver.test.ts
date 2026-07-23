@@ -215,4 +215,40 @@ describe("Firebase signed-in user resolver", () => {
       },
     });
   });
+
+  it("이미 읽은 가구 read model을 함께 반환해 클라이언트의 중복 조회를 없앤다", async () => {
+    await expect(
+      resolveFirebaseSignedInUser(
+        database(activeFixture({
+          household: {
+            lifecycleState: "active",
+            name: "또니망고네 가계부",
+            createdAt: { toDate: () => new Date("2026-07-23T00:00:00.000Z") },
+            defaultCategoryKey: "etc",
+            homeSummaryConfig: {
+              leftCard: "monthlySpent",
+              rightCard: "yearlySpent",
+            },
+            members: [
+              { id: memberId, name: "민규", aggregateVersion: 3 },
+              { id: "member-2", name: "진선", aggregateVersion: 2 },
+            ],
+          },
+        })),
+        principalUid,
+      ),
+    ).resolves.toMatchObject({
+      kind: "membership-found",
+      household: {
+        id: householdId,
+        name: "또니망고네 가계부",
+        createdAt: "2026-07-23T00:00:00.000Z",
+        defaultCategoryKey: "etc",
+        members: [
+          { id: memberId, name: "민규", aggregateVersion: 3 },
+          { id: "member-2", name: "진선", aggregateVersion: 2 },
+        ],
+      },
+    });
+  });
 });

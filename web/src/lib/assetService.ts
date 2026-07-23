@@ -805,23 +805,21 @@ export async function deleteCryptoHolding(
 }
 
 /**
- * 특정 자산(계좌)의 보유 종목 실시간 구독
+ * 현재 가구의 모든 주식 보유 종목 실시간 구독
  */
-export function subscribeToStockHoldings(
-  assetId: string,
+export function subscribeToHouseholdStockHoldings(
   callback: (holdings: StockHolding[]) => void
 ): () => void {
   const householdId = getHouseholdId();
   const projection = stockHoldingOptimisticProjection.subscribe(
     callback,
-    (holding) => holding.assetId === assetId,
-    `stock-holdings:${householdId}:${assetId}`
+    (holding) => holding.householdId === householdId,
+    `stock-holdings:${householdId}`
   );
 
   const q = query(
     collection(db, HOLDINGS_COLLECTION),
-    where('householdId', '==', householdId),
-    where('assetId', '==', assetId)
+    where('householdId', '==', householdId)
   );
 
   const unsubscribe = onSnapshot(
@@ -843,21 +841,22 @@ export function subscribeToStockHoldings(
   };
 }
 
-export function subscribeToCryptoHoldings(
-  assetId: string,
+/**
+ * 현재 가구의 모든 코인 보유 종목 실시간 구독
+ */
+export function subscribeToHouseholdCryptoHoldings(
   callback: (holdings: CryptoHolding[]) => void
 ): () => void {
   const householdId = getHouseholdId();
   const projection = cryptoHoldingOptimisticProjection.subscribe(
     callback,
-    (holding) => holding.assetId === assetId,
-    `crypto-holdings:${householdId}:${assetId}`
+    (holding) => holding.householdId === householdId,
+    `crypto-holdings:${householdId}`
   );
 
   const q = query(
     collection(db, CRYPTO_HOLDINGS_COLLECTION),
-    where('householdId', '==', householdId),
-    where('assetId', '==', assetId)
+    where('householdId', '==', householdId)
   );
 
   const unsubscribe = onSnapshot(

@@ -9,7 +9,7 @@ import {
   runCancelSplitGroupAction,
   runUpdateSplitGroupAction,
 } from '@/lib/utils/monthlySplitActions';
-import { Portal } from '../common';
+import Portal from '../common/Portal';
 import { ExpenseEditModal, ExpenseSplitModal } from '../expense';
 import SearchResultList from './SearchResultList';
 
@@ -45,13 +45,12 @@ export default function SearchModal({
   const [splitExpense, setSplitExpense] = useState<Expense | null>(null);
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
   const projectionRef = useRef<ExpenseProjectionSubscription | null>(null);
   const searchRequestIdRef = useRef(0);
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
-      setTimeout(() => inputRef.current?.focus(), 100);
+      inputRef.current.focus();
     }
   }, [isOpen]);
 
@@ -138,10 +137,6 @@ export default function SearchModal({
   };
 
   useEffect(() => {
-    if (debounceTimer.current) {
-      clearTimeout(debounceTimer.current);
-    }
-
     if (!keyword.trim()) {
       setIsSearching(false);
       setResults([]);
@@ -165,7 +160,7 @@ export default function SearchModal({
       );
       projectionRef.current = projection;
 
-      debounceTimer.current = setTimeout(async () => {
+      void (async () => {
         const requestId = ++searchRequestIdRef.current;
         setIsSearching(true);
         try {
@@ -185,14 +180,11 @@ export default function SearchModal({
             setIsSearching(false);
           }
         }
-      }, 300);
+      })();
     });
 
     return () => {
       cancelled = true;
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
-      }
       searchRequestIdRef.current += 1;
       if (projectionRef.current === projection) projectionRef.current = null;
       projection?.dispose();

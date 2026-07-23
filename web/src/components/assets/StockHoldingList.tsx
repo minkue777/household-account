@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { ConfirmDialog } from '@/components/common';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { deleteStockHolding, updateStockHolding } from '@/lib/assetService';
 import {
   calculateHoldingProfitLoss,
@@ -381,38 +381,30 @@ export default function StockHoldingList({
     [manualHoldings, stockHoldings]
   );
 
-  useEffect(() => {
-    if (holdings.length === 0) {
+  const loadDividendInfo = async (holding: StockHolding) => {
+    const stockCode = holding.stockCode;
+    if (
+      !supportsDividendInfo(holding)
+      || dividendInfoMap[stockCode]
+      || loadingDividends.has(stockCode)
+    ) {
       return;
     }
 
-    holdings.forEach((holding) => {
-      if (!supportsDividendInfo(holding)) {
-        return;
-      }
-
-      if (dividendInfoMap[holding.stockCode] || loadingDividends.has(holding.stockCode)) {
-        return;
-      }
-
-      setLoadingDividends((prev) => new Set(prev).add(holding.stockCode));
-
-      void (async () => {
-        try {
-          const data = await portfolioQueries.getDividendProjection(holding.stockCode);
-          setDividendInfoMap((prev) => ({ ...prev, [holding.stockCode]: data }));
-        } catch (error) {
-          console.error('배당 조회 오류:', error);
-        } finally {
-          setLoadingDividends((prev) => {
-            const next = new Set(prev);
-            next.delete(holding.stockCode);
-            return next;
-          });
-        }
-      })();
-    });
-  }, [dividendInfoMap, holdings, loadingDividends]);
+    setLoadingDividends((prev) => new Set(prev).add(stockCode));
+    try {
+      const data = await portfolioQueries.getDividendProjection(stockCode);
+      setDividendInfoMap((prev) => ({ ...prev, [stockCode]: data }));
+    } catch (error) {
+      console.error('배당 조회 오류:', error);
+    } finally {
+      setLoadingDividends((prev) => {
+        const next = new Set(prev);
+        next.delete(stockCode);
+        return next;
+      });
+    }
+  };
 
   const resetEditingState = () => {
     setEditingHolding(null);
@@ -433,11 +425,14 @@ export default function StockHoldingList({
     if (getHoldingType(holding) === 'stock') {
       setEditQuantity(holding.quantity.toString());
       setEditAvgPrice(holding.avgPrice?.toString() || '');
-      return;
+    } else {
+      setEditQuantity((holding.currentPrice || 0).toString());
+      setEditAvgPrice('');
     }
 
-    setEditQuantity((holding.currentPrice || 0).toString());
-    setEditAvgPrice('');
+    // 편집 UI 상태를 먼저 확정한 뒤 배당 부가정보를 뒤에서 요청합니다.
+    // 네트워크 시작이 행의 첫 표시보다 앞서지 않게 합니다.
+    void loadDividendInfo(holding);
   };
 
   const handleSaveHolding = async () => {

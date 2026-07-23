@@ -65,9 +65,6 @@ object AndroidCaptureDelivery {
             ) return null
             1
         }
-        if (decision.followUps.isNotEmpty()) {
-            QuickEditCoordinator.presentNextAsync(context)
-        }
         if (retainedCount > 0) scheduleRetry(context)
         return CaptureFlushOutcome(decision.followUps, retainedCount)
     }
@@ -132,7 +129,7 @@ object AndroidCaptureDelivery {
         followUps: List<CaptureDeliveryFollowUp>
     ) {
         followUps.forEach { followUp ->
-            QuickEditCoordinator.enqueue(context, expectedScope, followUp)
+            QuickEditCoordinator.enqueueAndPresent(context, expectedScope, followUp)
         }
     }
 

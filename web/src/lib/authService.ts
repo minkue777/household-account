@@ -40,6 +40,70 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+const HOME_SUMMARY_CARD_KEYS = new Set([
+  'localCurrencyBalance',
+  'monthlyRemainingBudget',
+  'monthlySpent',
+  'yearlySpent',
+]);
+
+function parseHouseholdView(
+  value: unknown
+): Extract<AndroidSignedInUserResolution, { kind: 'membership-found' }>['household'] {
+  if (
+    !isRecord(value)
+    || typeof value.id !== 'string'
+    || value.id.trim() === ''
+    || typeof value.name !== 'string'
+    || typeof value.createdAt !== 'string'
+    || Number.isNaN(Date.parse(value.createdAt))
+    || !Array.isArray(value.members)
+  ) {
+    return undefined;
+  }
+  const members = value.members.map((candidate) => {
+    if (
+      !isRecord(candidate)
+      || typeof candidate.id !== 'string'
+      || candidate.id.trim() === ''
+      || typeof candidate.name !== 'string'
+      || !Number.isInteger(candidate.aggregateVersion)
+      || Number(candidate.aggregateVersion) < 1
+    ) {
+      return undefined;
+    }
+    return {
+      id: candidate.id,
+      name: candidate.name,
+      aggregateVersion: Number(candidate.aggregateVersion),
+    };
+  });
+  if (members.some((member) => member === undefined)) return undefined;
+
+  const rawSummary = value.homeSummaryConfig;
+  const homeSummaryConfig =
+    isRecord(rawSummary)
+    && HOME_SUMMARY_CARD_KEYS.has(String(rawSummary.leftCard))
+    && HOME_SUMMARY_CARD_KEYS.has(String(rawSummary.rightCard))
+      ? {
+          leftCard: String(rawSummary.leftCard),
+          rightCard: String(rawSummary.rightCard),
+        }
+      : undefined;
+  return {
+    id: value.id,
+    name: value.name,
+    createdAt: new Date(value.createdAt).toISOString(),
+    ...(typeof value.defaultCategoryKey === 'string'
+      ? { defaultCategoryKey: value.defaultCategoryKey }
+      : {}),
+    ...(homeSummaryConfig ? { homeSummaryConfig } : {}),
+    members: members as NonNullable<
+      Extract<AndroidSignedInUserResolution, { kind: 'membership-found' }>['household']
+    >['members'],
+  };
+}
+
 function parseSignedInUserResolution(value: unknown): AndroidSignedInUserResolution | null {
   if (!isRecord(value)) return null;
   if (value.kind === 'first-visit-required') {
@@ -71,6 +135,7 @@ function parseSignedInUserResolution(value: unknown): AndroidSignedInUserResolut
   ) {
     return null;
   }
+  const household = parseHouseholdView(value.household);
   return {
     kind: 'membership-found',
     membership: {
@@ -81,6 +146,7 @@ function parseSignedInUserResolution(value: unknown): AndroidSignedInUserResolut
       status: 'active',
       capabilities: membership.capabilities as string[],
     },
+    ...(household ? { household } : {}),
   };
 }
 

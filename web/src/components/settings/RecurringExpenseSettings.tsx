@@ -10,7 +10,7 @@ import {
   updateRecurringExpense,
   deleteRecurringExpense,
 } from '@/lib/recurringExpenseService';
-import { ConfirmDialog } from '@/components/common';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { Check, ChevronDown, Circle, Clock, Edit2, Plus, Trash2 } from 'lucide-react';
 
 export default function RecurringExpenseSettings() {
@@ -78,9 +78,9 @@ export default function RecurringExpenseSettings() {
     setRecurringDay(expense.dayOfMonth.toString());
     setRecurringMemo(expense.memo || '');
     setShowAddRecurringForm(false);
-    setTimeout(() => {
-      recurringFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 100);
+    requestAnimationFrame(() => {
+      recurringFormRef.current?.scrollIntoView({ behavior: 'auto', block: 'start' });
+    });
   };
 
   const handleSaveRecurring = async () => {

@@ -1,7 +1,7 @@
 'use client';
 
 import { Asset, isGoldEtfSubType } from '@/types/asset';
-import { ModalOverlay } from '@/components/common';
+import ModalOverlay from '@/components/common/ModalOverlay';
 import { X, Loader2, RefreshCw } from 'lucide-react';
 import { getGoldPricePerDon, useGoldHolding } from '@/lib/utils/useGoldHolding';
 

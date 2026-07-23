@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
-import { Doughnut } from 'react-chartjs-2';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { Asset, ASSET_TYPE_CONFIG, AssetType } from '@/types/asset';
 import { ALL_MEMBERS_OPTION } from '@/lib/assets/memberOptions';
 import { getAssetSignedBalance, sumSignedAssetBalances } from '@/lib/assets/assetMath';
-
-ChartJS.register(ArcElement, Tooltip, Legend);
 
 function formatKoreanUnit(num: number): string {
   if (num === 0) return '0';
@@ -54,7 +55,6 @@ export default function AssetSummaryCard({
   onMemberChange,
   onAddOwner,
 }: AssetSummaryCardProps) {
-  const chartWrapRef = useRef<HTMLDivElement | null>(null);
   const [tooltipState, setTooltipState] = useState<TooltipState>({
     visible: false,
     left: 0,
@@ -163,86 +163,44 @@ export default function AssetSummaryCard({
     loan: '#EF4444',
   };
 
-  const chartData = useMemo(() => {
-    if (typeData.length === 0) {
-      return {
-        labels: ['자산 없음'],
-        datasets: [
-          {
-            data: [1],
-            backgroundColor: ['#E2E8F0'],
-            borderWidth: 0,
-          },
-        ],
-      };
-    }
-
-    return {
-      labels: typeData.map((item) => ASSET_TYPE_CONFIG[item.type].label),
-      datasets: [
-        {
-          data: typeData.map((item) => item.balance),
-          backgroundColor: typeData.map((item) => chartColors[item.type]),
-          borderWidth: 0,
-          cutout: '65%',
-        },
-      ],
-    };
+  const chartSegments = useMemo(() => {
+    let start = 0;
+    return typeData.map((item) => {
+      const segment = { ...item, start };
+      start += item.percentage;
+      return segment;
+    });
   }, [typeData]);
 
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    layout: {
-      padding: 10,
-    },
-    plugins: {
-      legend: {
-        display: false,
-      },
-      tooltip: {
-        enabled: false,
-        external: (context: any) => {
-          const tooltip = context.tooltip;
-          const chart = context.chart;
+  const showTypeTooltip = (
+    event: ReactPointerEvent<SVGCircleElement>,
+    item: (typeof typeData)[number]
+  ) => {
+    const chartRect = event.currentTarget.ownerSVGElement?.getBoundingClientRect();
+    const desiredLeft =
+      event.clientX || (chartRect ? chartRect.left + chartRect.width / 2 : window.innerWidth / 2);
+    const desiredTop =
+      event.clientY || (chartRect ? chartRect.top + chartRect.height / 2 : 80);
+    const tooltipHalfWidth = 110;
+    const viewportPadding = 12;
 
-          if (!chartWrapRef.current) {
-            return;
-          }
+    setTooltipState({
+      visible: true,
+      left: Math.min(
+        Math.max(desiredLeft, tooltipHalfWidth + viewportPadding),
+        window.innerWidth - tooltipHalfWidth - viewportPadding
+      ),
+      top: Math.max(desiredTop - 16, 56),
+      title: ASSET_TYPE_CONFIG[item.type].label,
+      value: `${item.balance.toLocaleString()}원 (${item.percentage.toFixed(1)}%)`,
+      color: chartColors[item.type],
+    });
+  };
 
-          if (!tooltip || tooltip.opacity === 0 || !tooltip.dataPoints?.length) {
-            setTooltipState((prev) => (prev.visible ? { ...prev, visible: false } : prev));
-            return;
-          }
-
-          const dataPoint = tooltip.dataPoints[0];
-          const item = typeData[dataPoint.dataIndex];
-          if (!item) {
-            return;
-          }
-
-          const chartRect = chart.canvas.getBoundingClientRect();
-          const tooltipHalfWidth = 110;
-          const viewportPadding = 12;
-          const desiredLeft = chartRect.left + tooltip.caretX;
-          const desiredTop = chartRect.top + tooltip.caretY - 16;
-          const clampedLeft = Math.min(
-            Math.max(desiredLeft, tooltipHalfWidth + viewportPadding),
-            window.innerWidth - tooltipHalfWidth - viewportPadding
-          );
-          const clampedTop = Math.max(desiredTop, 56);
-
-          setTooltipState({
-            visible: true,
-            left: clampedLeft,
-            top: clampedTop,
-            title: ASSET_TYPE_CONFIG[item.type].label,
-            value: `${item.balance.toLocaleString()}원 (${item.percentage.toFixed(1)}%)`,
-            color: chartColors[item.type],
-          });
-        },
-      },
-    },
+  const hideTypeTooltip = () => {
+    setTooltipState((previous) =>
+      previous.visible ? { ...previous, visible: false } : previous
+    );
   };
 
   const isPositive = dailyChange > 0;
@@ -293,8 +251,47 @@ export default function AssetSummaryCard({
 
       <div className="p-5">
         <div className="flex items-center">
-          <div ref={chartWrapRef} className="relative -m-[10px] h-[140px] w-[140px] flex-shrink-0 overflow-visible">
-            <Doughnut data={chartData} options={chartOptions} />
+          <div className="relative -m-[10px] h-[140px] w-[140px] flex-shrink-0 overflow-visible">
+            <svg
+              viewBox="0 0 100 100"
+              className="h-full w-full -rotate-90"
+              role="img"
+              aria-label="자산 유형별 구성"
+            >
+              {chartSegments.length === 0 ? (
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="36"
+                  fill="none"
+                  stroke="#E2E8F0"
+                  strokeWidth="18"
+                />
+              ) : (
+                chartSegments.map((item) => (
+                  <circle
+                    key={item.type}
+                    cx="50"
+                    cy="50"
+                    r="36"
+                    pathLength="100"
+                    fill="none"
+                    stroke={chartColors[item.type]}
+                    strokeWidth="18"
+                    strokeDasharray={`${item.percentage} ${100 - item.percentage}`}
+                    strokeDashoffset={-item.start}
+                    tabIndex={0}
+                    aria-label={`${ASSET_TYPE_CONFIG[item.type].label} ${item.percentage.toFixed(1)}%`}
+                    className="cursor-pointer outline-none"
+                    onPointerEnter={(event) => showTypeTooltip(event, item)}
+                    onPointerMove={(event) => showTypeTooltip(event, item)}
+                    onPointerDown={(event) => showTypeTooltip(event, item)}
+                    onPointerLeave={hideTypeTooltip}
+                    onBlur={hideTypeTooltip}
+                  />
+                ))
+              )}
+            </svg>
             {tooltipState.visible && (
               <div
                 className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg"

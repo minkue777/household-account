@@ -1,7 +1,7 @@
 'use client';
 
 import { CreditCard, X } from 'lucide-react';
-import { Portal } from '@/components/common';
+import Portal from '@/components/common/Portal';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 

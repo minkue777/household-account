@@ -9,10 +9,27 @@ export interface SignedInUserMembershipView {
   readonly capabilities: readonly string[];
 }
 
+export interface SignedInUserHouseholdView {
+  readonly id: string;
+  readonly name: string;
+  readonly createdAt: string;
+  readonly defaultCategoryKey?: string;
+  readonly homeSummaryConfig?: {
+    readonly leftCard: string;
+    readonly rightCard: string;
+  };
+  readonly members: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly aggregateVersion: number;
+  }[];
+}
+
 export type SignedInUserResolution =
   | {
       readonly kind: "membership-found";
       readonly membership: SignedInUserMembershipView;
+      readonly household?: SignedInUserHouseholdView;
     }
   | {
       readonly kind: "first-visit-required";
@@ -41,6 +58,75 @@ function stringField(
   return typeof candidate === "string" && candidate.trim() !== ""
     ? candidate
     : undefined;
+}
+
+function isoDate(value: unknown): string | undefined {
+  if (typeof value === "string" && !Number.isNaN(Date.parse(value))) {
+    return new Date(value).toISOString();
+  }
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString();
+  }
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof (value as { toDate?: unknown }).toDate === "function"
+  ) {
+    const date = (value as { toDate(): Date }).toDate();
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+  }
+  return undefined;
+}
+
+function householdView(
+  householdId: string,
+  data: FirebaseFirestore.DocumentData | undefined,
+): SignedInUserHouseholdView | undefined {
+  const name = stringField(data, "name");
+  const createdAt = isoDate(data?.createdAt);
+  if (name === undefined || createdAt === undefined || !Array.isArray(data?.members)) {
+    return undefined;
+  }
+  const members = data.members.map((candidate: unknown) => {
+    if (typeof candidate !== "object" || candidate === null) return undefined;
+    const value = candidate as Record<string, unknown>;
+    const id = typeof value.id === "string" ? value.id.trim() : "";
+    const memberName = typeof value.name === "string" ? value.name.trim() : "";
+    const aggregateVersion = value.aggregateVersion;
+    if (
+      id === "" ||
+      memberName === "" ||
+      !Number.isInteger(aggregateVersion) ||
+      Number(aggregateVersion) < 1
+    ) {
+      return undefined;
+    }
+    return { id, name: memberName, aggregateVersion: Number(aggregateVersion) };
+  });
+  if (members.some((member: unknown) => member === undefined)) return undefined;
+
+  const homeSummary = data.homeSummaryConfig;
+  const homeSummaryConfig =
+    typeof homeSummary === "object" &&
+    homeSummary !== null &&
+    typeof homeSummary.leftCard === "string" &&
+    typeof homeSummary.rightCard === "string"
+      ? {
+          leftCard: homeSummary.leftCard,
+          rightCard: homeSummary.rightCard,
+        }
+      : undefined;
+  const defaultCategoryKey = stringField(data, "defaultCategoryKey");
+
+  return {
+    id: householdId,
+    name,
+    createdAt,
+    ...(defaultCategoryKey === undefined ? {} : { defaultCategoryKey }),
+    ...(homeSummaryConfig === undefined ? {} : { homeSummaryConfig }),
+    members: members as SignedInUserHouseholdView["members"],
+  };
 }
 
 /**
@@ -106,6 +192,7 @@ export async function resolveFirebaseSignedInUser(
 
   const membershipData = canonicalMembership.data();
   const memberData = member.data();
+  const resolvedHousehold = householdView(householdId, household.data());
   if (
     !canonicalMembership.exists ||
     membershipData?.lifecycleState !== "active" ||
@@ -152,5 +239,6 @@ export async function resolveFirebaseSignedInUser(
           )
         : [],
     },
+    ...(resolvedHousehold === undefined ? {} : { household: resolvedHousehold }),
   };
 }

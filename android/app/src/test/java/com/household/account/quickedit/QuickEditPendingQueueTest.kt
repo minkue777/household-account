@@ -11,8 +11,10 @@ import org.junit.Test
 class QuickEditPendingQueueTest {
     private class MemoryStore : QuickEditQueueStore {
         var state = QuickEditQueueState()
+        var replaceCount = 0
         override fun load(): QuickEditQueueState = state
         override fun replace(state: QuickEditQueueState) {
+            replaceCount += 1
             this.state = state
         }
         override fun clear() {
@@ -21,6 +23,26 @@ class QuickEditPendingQueueTest {
     }
 
     private val scope = CaptureSessionScope("household-1", "member-1", 7L)
+
+    @Test
+    fun `새 snapshot을 저장하면서 idle head를 한 번의 저장으로 획득한다`() = runTest {
+        val store = MemoryStore()
+        val queue = QuickEditPendingQueue(store)
+        val snapshot = snapshot("transaction-fast")
+
+        val result = queue.enqueueAndAcquireIfIdle(
+            scope = scope,
+            transactionId = "transaction-fast",
+            snapshot = snapshot,
+            observationId = "observation.android.fast"
+        )
+
+        assertTrue(result.accepted)
+        assertEquals("transaction-fast", result.acquiredHead?.transactionId)
+        assertEquals(snapshot, result.acquiredHead?.snapshot)
+        assertEquals("transaction-fast", store.state.activeTransactionId)
+        assertEquals(1, store.replaceCount)
+    }
 
     @Test
     fun `같은 거래를 중복 없이 FIFO로 한 개씩 lease한다`() = runTest {

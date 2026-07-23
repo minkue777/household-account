@@ -17,7 +17,10 @@ export type CaptureMembershipResolution =
     };
 
 export interface CaptureMembershipResolver {
-  resolve(principalUid: string | undefined): Promise<CaptureMembershipResolution>;
+  resolve(
+    principalUid: string | undefined,
+    authToken?: Readonly<Record<string, unknown>>,
+  ): Promise<CaptureMembershipResolution>;
 }
 
 export const CAPTURE_MEMBERSHIP_CACHE_TTL_MILLIS = 5 * 60 * 1_000;
@@ -34,6 +37,38 @@ function active(data: FirebaseFirestore.DocumentData | undefined): boolean {
   );
 }
 
+function tokenMembership(
+  principalUid: string | undefined,
+  authToken: Readonly<Record<string, unknown>> | undefined,
+): Extract<CaptureMembershipResolution, { readonly kind: "active" }> | undefined {
+  const normalizedUid = principalUid?.trim();
+  if (
+    normalizedUid === undefined ||
+    normalizedUid === "" ||
+    authToken?.hcaClient !== "native" ||
+    authToken.hcaCaptureMembershipVersion !== 1 ||
+    authToken.hcaCaptureMember !== true
+  ) {
+    return undefined;
+  }
+  const householdId =
+    typeof authToken.hcaCaptureHouseholdId === "string"
+      ? authToken.hcaCaptureHouseholdId.trim()
+      : "";
+  const memberId =
+    typeof authToken.hcaCaptureMemberId === "string"
+      ? authToken.hcaCaptureMemberId.trim()
+      : "";
+  return householdId === "" || memberId === ""
+    ? undefined
+    : {
+        kind: "active",
+        principalUid: normalizedUid,
+        householdId,
+        memberId,
+      };
+}
+
 export class FirebaseCaptureMembershipResolver
   implements CaptureMembershipResolver
 {
@@ -41,7 +76,10 @@ export class FirebaseCaptureMembershipResolver
 
   async resolve(
     principalUid: string | undefined,
+    authToken?: Readonly<Record<string, unknown>>,
   ): Promise<CaptureMembershipResolution> {
+    const token = tokenMembership(principalUid, authToken);
+    if (token !== undefined) return token;
     if (principalUid === undefined || principalUid.trim() === "") {
       return { kind: "unauthenticated", code: "AUTH_REQUIRED" };
     }
@@ -59,20 +97,12 @@ export class FirebaseCaptureMembershipResolver
       if (
         active(claim) &&
         claim?.lifecycleState === "active" &&
+        claim?.householdLifecycleState !== "deleted" &&
         claim?.principalUid === principalUid &&
         householdId !== "" &&
         memberId !== ""
       ) {
-        const householdSnapshot = await this.database
-          .collection("households")
-          .doc(householdId)
-          .get();
-        if (
-          householdSnapshot.exists &&
-          active(householdSnapshot.data())
-        ) {
-          return { kind: "active", principalUid, householdId, memberId };
-        }
+        return { kind: "active", principalUid, householdId, memberId };
       }
       return {
         kind: "forbidden",
@@ -137,10 +167,6 @@ export class FirebaseCaptureMembershipResolver
   }
 }
 
-/**
- * 활성 membership만 짧게 캐시합니다. 거부 결과를 저장하지 않으므로 신규 가입이나
- * 복구는 다음 요청에서 즉시 다시 확인하고, 삭제/전환의 최대 stale 시간은 5분입니다.
- */
 export class CachedCaptureMembershipResolver
   implements CaptureMembershipResolver
 {
@@ -167,16 +193,19 @@ export class CachedCaptureMembershipResolver
 
   async resolve(
     principalUid: string | undefined,
+    authToken?: Readonly<Record<string, unknown>>,
   ): Promise<CaptureMembershipResolution> {
+    const token = tokenMembership(principalUid, authToken);
+    if (token !== undefined) return token;
     const normalizedUid = principalUid?.trim();
     if (normalizedUid === undefined || normalizedUid === "") {
-      return this.delegate.resolve(principalUid);
+      return this.delegate.resolve(principalUid, authToken);
     }
 
     const cached = this.cache.get(normalizedUid);
     if (cached !== undefined) return cached;
 
-    const resolved = await this.delegate.resolve(normalizedUid);
+    const resolved = await this.delegate.resolve(normalizedUid, authToken);
     if (resolved.kind === "active") this.cache.set(normalizedUid, resolved);
     return resolved;
   }

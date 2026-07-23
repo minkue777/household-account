@@ -11,7 +11,12 @@ import {
   type ReactNode,
 } from 'react';
 import type { User } from 'firebase/auth';
-import type { Household, HouseholdMember } from '@/types/household';
+import {
+  DEFAULT_HOME_SUMMARY_CONFIG,
+  type HomeSummaryCardKey,
+  type Household,
+  type HouseholdMember,
+} from '@/types/household';
 import {
   captureLegacySessionCandidate,
   clearLegacySessionCandidate,
@@ -143,6 +148,53 @@ function isHouseholdReadNotFound(error: unknown): boolean {
       error.name === 'HouseholdReadNotFoundError'
       || error.message === 'HOUSEHOLD_READ_NOT_FOUND'
     );
+}
+
+const HOME_SUMMARY_CARD_KEYS = new Set<HomeSummaryCardKey>([
+  'localCurrencyBalance',
+  'monthlyRemainingBudget',
+  'monthlySpent',
+  'yearlySpent',
+]);
+
+function householdFromResolution(
+  resolution: Extract<SignedInUserResolution, { kind: 'membership-found' }>
+): Household | undefined {
+  const value = resolution.household;
+  if (
+    !value
+    || value.id !== resolution.membership.householdId
+    || value.name.trim() === ''
+    || Number.isNaN(Date.parse(value.createdAt))
+    || value.members.some(
+      (member) =>
+        member.id.trim() === ''
+        || member.name.trim() === ''
+        || !Number.isInteger(member.aggregateVersion)
+        || member.aggregateVersion < 1
+    )
+  ) {
+    return undefined;
+  }
+  const summary = value.homeSummaryConfig;
+  return {
+    id: value.id,
+    name: value.name,
+    createdAt: new Date(value.createdAt),
+    ...(value.defaultCategoryKey === undefined
+      ? {}
+      : { defaultCategoryKey: value.defaultCategoryKey }),
+    homeSummaryConfig:
+      summary
+      && HOME_SUMMARY_CARD_KEYS.has(summary.leftCard as HomeSummaryCardKey)
+      && HOME_SUMMARY_CARD_KEYS.has(summary.rightCard as HomeSummaryCardKey)
+        ? {
+            leftCard: summary.leftCard as HomeSummaryCardKey,
+            rightCard: summary.rightCard as HomeSummaryCardKey,
+          }
+        : DEFAULT_HOME_SUMMARY_CONFIG,
+    members: value.members.map((member) => ({ ...member })),
+  };
 }
 
 export function HouseholdProvider({ children }: { children: ReactNode }) {
@@ -376,6 +428,13 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
             });
         }
       };
+
+      const authoritativeHousehold = householdFromResolution(resolution);
+      if (authoritativeHousehold) {
+        markWebHouseholdCacheResult(true);
+        applyHousehold(authoritativeHousehold);
+        return;
+      }
 
       // localStorage bootstrap snapshot은 IndexedDB 초기화도 기다리지 않고 동기식으로
       // 화면을 엽니다. 실제 권한과 최신 값은 이어지는 Firestore read가 확정합니다.

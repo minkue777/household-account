@@ -15,7 +15,7 @@ import {
 import { Line } from 'react-chartjs-2';
 import { Asset, AssetHistoryEntry, ASSET_TYPE_CONFIG } from '@/types/asset';
 import { getAssetHistoryByPeriod } from '@/lib/assetService';
-import { ModalOverlay } from '@/components/common';
+import ModalOverlay from '@/components/common/ModalOverlay';
 import { X, Calendar } from 'lucide-react';
 import { formatLocalDate } from '@/lib/utils/date';
 

@@ -30,6 +30,7 @@ export interface FirebaseHouseholdLifecycleUnitOfWorkInput {
 interface LoadedLifecycleState {
   readonly state: HouseholdLifecycleState;
   readonly receiptReference: firestore.DocumentReference;
+  readonly membershipClaims: firestore.QuerySnapshot;
 }
 
 export class FirebaseHouseholdLifecycleUnitOfWork
@@ -52,9 +53,13 @@ export class FirebaseHouseholdLifecycleUnitOfWork
       this.input.principalUid,
       this.input.idempotencyKey,
     );
-    const [householdSnapshot, receiptSnapshot] = await Promise.all([
+    const membershipClaimsQuery = this.database
+      .collection("principalMembershipClaims")
+      .where("householdId", "==", this.input.householdId);
+    const [householdSnapshot, receiptSnapshot, membershipClaims] = await Promise.all([
       transaction.get(householdReference),
       transaction.get(receiptReference),
+      transaction.get(membershipClaimsQuery),
     ]);
     if (!householdSnapshot.exists) throw new Error("Household not found");
     const household = householdSnapshot.data();
@@ -90,6 +95,7 @@ export class FirebaseHouseholdLifecycleUnitOfWork
         events: [],
       },
       receiptReference,
+      membershipClaims,
     };
   }
 
@@ -122,6 +128,13 @@ export class FirebaseHouseholdLifecycleUnitOfWork
           schemaVersion: ACCESS_SCHEMA_VERSION,
           updatedAt: FieldValue.serverTimestamp(),
         });
+        for (const claim of loaded.membershipClaims.docs) {
+          transaction.update(claim.ref, {
+            householdLifecycleState:
+              household.lifecycleState === "active" ? "active" : "deleted",
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
       }
 
       const receipt = mutation.state.receipts.find(

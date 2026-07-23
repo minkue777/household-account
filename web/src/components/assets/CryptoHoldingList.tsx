@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { CryptoHolding } from '@/types/asset';
-import { ConfirmDialog } from '@/components/common';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { deleteCryptoHolding, updateCryptoHolding } from '@/lib/assetService';
 import { calculateCryptoHoldingValue } from '@/lib/utils/useCryptoHoldingManager';
 

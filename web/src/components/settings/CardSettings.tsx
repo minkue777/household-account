@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ConfirmDialog, ModalOverlay } from '@/components/common';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
+import ModalOverlay from '@/components/common/ModalOverlay';
 import { ChevronDown, CreditCard, Plus, X } from 'lucide-react';
 import {
   addRegisteredCard,

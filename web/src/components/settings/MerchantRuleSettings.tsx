@@ -12,7 +12,7 @@ import {
   MATCH_TYPE_LABELS,
 } from '@/lib/merchantRuleService';
 import { useHousehold } from '@/contexts/HouseholdContext';
-import { ConfirmDialog } from '@/components/common';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { Building2, ChevronDown, Edit2, Plus, Trash2 } from 'lucide-react';
 
 export default function MerchantRuleSettings() {
@@ -79,10 +79,10 @@ export default function MerchantRuleSettings() {
     setRuleCategory(rule.mapping?.category || rule.category || '');
     setRuleMemo(rule.mapping?.memo || '');
     setShowAddRuleForm(false);
-    // 폼으로 스크롤
-    setTimeout(() => {
-      ruleFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 100);
+    // 다음 paint에서 이미 열린 폼으로 이동합니다. 고정 대기 시간은 두지 않습니다.
+    requestAnimationFrame(() => {
+      ruleFormRef.current?.scrollIntoView({ behavior: 'auto', block: 'start' });
+    });
   };
 
   const handleSaveRule = async () => {

@@ -47,7 +47,7 @@ object QuickEditCoordinator {
             ).also { queueInstance = it }
         }
 
-    suspend fun enqueue(
+    suspend fun enqueueAndPresent(
         context: Context,
         expectedScope: CaptureSessionScope,
         followUp: CaptureDeliveryFollowUp
@@ -57,18 +57,33 @@ object QuickEditCoordinator {
         ensureProcessRecovered(context)
         val scope = currentScope(context)
         if (scope != expectedScope) return
-        if (
-            !queue(context).enqueue(
-                scope = scope,
-                transactionId = followUp.transactionId,
-                snapshot = followUp.quickEditSnapshot,
-                observationId = followUp.observationId
-            )
-        ) return
+        val result = queue(context).enqueueAndAcquireIfIdle(
+            scope = scope,
+            transactionId = followUp.transactionId,
+            snapshot = followUp.quickEditSnapshot,
+            observationId = followUp.observationId
+        )
+        if (!result.accepted) return
         AndroidCaptureLatencyTelemetry.mark(
             observationId = followUp.observationId,
             stage = CaptureLatencyStage.FOLLOW_UP_PERSISTED
         )
+        val head = result.acquiredHead ?: return
+        val snapshot = head.snapshot
+        if (snapshot == null) {
+            queue(context).releaseLease(scope, head.transactionId)
+            presentNextAsync(context)
+            return
+        }
+        val launched = launchQuickEdit(
+            context = context.applicationContext,
+            snapshot = snapshot.toLedgerSnapshot(),
+            observationId = head.observationId
+        )
+        if (!launched) {
+            queue(context).releaseLease(scope, head.transactionId)
+            scheduleRecovery(context.applicationContext)
+        }
     }
 
     suspend fun resumePending(context: Context) {

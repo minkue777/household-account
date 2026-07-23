@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { CategoryDocument } from '@/lib/categoryService';
-import { ColorPicker, ConfirmDialog } from '@/components/common';
+import ColorPicker from '@/components/common/ColorPicker';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { COLOR_PALETTE } from '@/lib/categoryService';
 import { setDefaultCategoryKey } from '@/lib/householdService';
 import { useHousehold } from '@/contexts/HouseholdContext';

@@ -1,4 +1,5 @@
 import { OptimisticEntityProjection } from '@/platform/read-model/optimisticEntityProjection';
+import { registerClientSessionReset } from '@/composition/clientSessionResetRegistry';
 import type { Expense } from '@/types/expense';
 
 type LedgerPatch = Partial<Pick<
@@ -89,3 +90,5 @@ export class LedgerOptimisticProjection {
 }
 
 export const ledgerOptimisticProjection = new LedgerOptimisticProjection();
+
+registerClientSessionReset(() => ledgerOptimisticProjection.reset());

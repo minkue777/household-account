@@ -11,7 +11,7 @@ import {
   getDividendEventsByYear,
   getDividendSnapshot,
 } from '@/lib/assetService';
-import { ModalOverlay } from '@/components/common';
+import ModalOverlay from '@/components/common/ModalOverlay';
 import { formatLocalDate } from '@/lib/utils/date';
 
 interface DividendSnapshotEvent {

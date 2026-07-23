@@ -10,7 +10,6 @@ import {
   addStockHolding,
   deleteStockHolding,
   refreshAssetMarketValues,
-  subscribeToStockHoldings,
 } from '@/lib/assetService';
 import { calculateHoldingValue } from '@/lib/assets/holdingValuation';
 import { portfolioQueries } from '@/features/portfolio/application/portfolioQueries';
@@ -35,12 +34,16 @@ export { calculateHoldingValue } from '@/lib/assets/holdingValuation';
 interface UseStockHoldingManagerOptions {
   isOpen: boolean;
   asset: Asset | null;
+  holdingsSnapshot?: readonly StockHolding[];
+  holdingsReady?: boolean;
 }
 
-export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManagerOptions) {
-  const [holdings, setHoldings] = useState<StockHolding[]>([]);
-  const [isLoadingHoldings, setIsLoadingHoldings] = useState(false);
-
+export function useStockHoldingManager({
+  isOpen,
+  asset,
+  holdingsSnapshot = [],
+  holdingsReady = true,
+}: UseStockHoldingManagerOptions) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<StockSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -59,6 +62,15 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
   const isStockAsset =
     asset?.type === 'stock' || (asset?.type === 'gold' && isGoldEtfSubType(asset?.subType));
   const assetId = asset?.id;
+  const holdings = useMemo(
+    () => (
+      assetId && isStockAsset
+        ? holdingsSnapshot.filter((holding) => holding.assetId === assetId)
+        : []
+    ),
+    [assetId, holdingsSnapshot, isStockAsset]
+  );
+  const isLoadingHoldings = Boolean(isOpen && isStockAsset && !holdingsReady);
 
   const resetStockForm = useCallback(() => {
     setSearchQuery('');
@@ -77,8 +89,6 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
 
   useEffect(() => {
     if (!isOpen || !assetId || !isStockAsset) {
-      setHoldings([]);
-      setIsLoadingHoldings(false);
       resetStockForm();
       resetManualForm();
       return;
@@ -86,14 +96,6 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
 
     resetStockForm();
     resetManualForm();
-    setIsLoadingHoldings(true);
-
-    const unsubscribe = subscribeToStockHoldings(assetId, (newHoldings) => {
-      setHoldings(newHoldings);
-      setIsLoadingHoldings(false);
-    });
-
-    return () => unsubscribe();
   }, [assetId, isOpen, isStockAsset, resetManualForm, resetStockForm]);
 
   useEffect(() => {
@@ -103,7 +105,7 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
     }
 
     let cancelled = false;
-    const timer = setTimeout(async () => {
+    void (async () => {
       setIsSearching(true);
       try {
         const results = await portfolioQueries.searchStocks(searchQuery);
@@ -120,11 +122,10 @@ export function useStockHoldingManager({ isOpen, asset }: UseStockHoldingManager
           setIsSearching(false);
         }
       }
-    }, 150);
+    })();
 
     return () => {
       cancelled = true;
-      clearTimeout(timer);
     };
   }, [searchQuery]);
 

@@ -81,6 +81,26 @@ function subject() {
 }
 
 describe("Ledger command category lookup boundary", () => {
+  it("기본 CRUD만 도메인 command receipt fast path를 선언한다", () => {
+    const database = {} as firestore.Firestore;
+    const handlers = createLedgerHouseholdCommandHandlers(database);
+
+    expect(
+      [
+        "ledger.record-manual-transaction.v1",
+        "ledger.update-transaction.v1",
+        "ledger.change-transaction-category.v1",
+        "ledger.delete-transaction.v1",
+      ].map((command) => handlers.get(command)?.idempotencyBoundary),
+    ).toEqual(Array(4).fill("domain-command-id"));
+    expect(
+      handlers.get("ledger.request-notification.v1")?.idempotencyBoundary,
+    ).toBe(undefined);
+    expect(
+      handlers.get("ledger.split-transaction.v1")?.idempotencyBoundary,
+    ).toBe(undefined);
+  });
+
   it.each([
     [
       "memo update",

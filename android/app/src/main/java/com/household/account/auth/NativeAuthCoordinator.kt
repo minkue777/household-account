@@ -90,7 +90,8 @@ class NativeAuthCoordinator(
             return NativeAuthResult.Rejected("WEBVIEW_SESSION_CONTRACT_INVALID")
         }
         val customToken = response["customToken"]?.toString().orEmpty()
-        if (customToken.isBlank()) {
+        val nativeCustomToken = response["nativeCustomToken"]?.toString().orEmpty()
+        if (customToken.isBlank() || nativeCustomToken.isBlank()) {
             return NativeAuthResult.Rejected("WEBVIEW_SESSION_TOKEN_INVALID")
         }
 
@@ -119,6 +120,14 @@ class NativeAuthCoordinator(
             NativeMembershipResolution.FirstVisit -> bootstrappedMembership = null
             is NativeMembershipResolution.Failed ->
                 return NativeAuthResult.Rejected(nativeResolution.code)
+        }
+        // 서버가 검증한 가구·가구원 claim이 포함된 세션으로 Native Auth도
+        // 교체합니다. 이후 결제 알림 수집은 매번 Firestore membership을 다시
+        // 읽지 않고 검증된 ID token만으로 바로 처리할 수 있습니다.
+        try {
+            firebaseAuth.signInWithCustomToken(nativeCustomToken).await()
+        } catch (_: Exception) {
+            return NativeAuthResult.Rejected("NATIVE_CAPTURE_SESSION_FAILED")
         }
         return NativeAuthResult.SignedIn(customToken, principalUid, resolution)
     }

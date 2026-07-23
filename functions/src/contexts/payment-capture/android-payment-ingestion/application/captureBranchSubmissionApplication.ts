@@ -74,6 +74,40 @@ class DefaultCaptureBranchSubmissionApplication
   async submit(
     envelope: CaptureBranchEnvelope,
   ): Promise<CaptureBranchSubmissionOutcome> {
+    const transactionBranch = envelope.transactionBranch;
+    const isAndroidApprovalOnly =
+      transactionBranch?.captureContext?.originChannel ===
+        "android-notification" &&
+      transactionBranch.captureContext.observationType === "approval" &&
+      envelope.balanceBranch === undefined;
+
+    if (isAndroidApprovalOnly) {
+      // 일반 Android 승인은 ledger가 거래·dedup·outbox·멱등 receipt를 하나의
+      // Firestore transaction으로 확정합니다. 같은 의미의 root receipt를 앞뒤로
+      // 한 번씩 더 쓰면 Quick Edit 표시만 늦어지므로 이 hot path에서는 생략합니다.
+      const transactionResult = await this.dependencies.transactions.record({
+        householdId: envelope.householdId,
+        downstreamKey: envelope.rootIdempotencyKey,
+        branch: transactionBranch,
+      });
+      if (
+        transactionResult.kind === "rejected" &&
+        transactionResult.code === "IDEMPOTENCY_PAYLOAD_MISMATCH"
+      ) {
+        return {
+          kind: "conflict",
+          code: "IDEMPOTENCY_PAYLOAD_MISMATCH",
+        };
+      }
+      return {
+        kind: "accepted",
+        completion: transactionResult.kind === "retryable-failure"
+          ? "partial-retryable"
+          : "terminal",
+        transactionResult,
+      };
+    }
+
     const claim = await this.dependencies.receipts.claim({
       envelope,
       payloadFingerprint: this.dependencies.payloads.fingerprint(envelope),

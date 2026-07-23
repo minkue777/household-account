@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { Asset, StockHolding } from '@/types/asset';
-import { ConfirmDialog, ModalOverlay } from '@/components/common';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
+import ModalOverlay from '@/components/common/ModalOverlay';
 import { X, Plus, Trash2, Loader2 } from 'lucide-react';
 import { useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
 import { calculateHoldingValue, isFundHolding } from '@/lib/assets/holdingValuation';

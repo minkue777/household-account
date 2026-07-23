@@ -110,6 +110,7 @@ export function createPortfolioHouseholdCommandHandlers(
     [
       "portfolio.create-asset.v1",
       {
+        idempotencyBoundary: "domain-idempotency-key",
         async execute(context) {
           const payload = record(context.envelope.payload);
           exactFields(payload, ["asset"]);
@@ -125,6 +126,7 @@ export function createPortfolioHouseholdCommandHandlers(
     [
       "portfolio.update-asset.v1",
       {
+        idempotencyBoundary: "domain-idempotency-key",
         async execute(context) {
           const payload = record(context.envelope.payload);
           exactFields(payload, ["assetId", "changes", "expectedVersion"]);
@@ -173,6 +175,7 @@ export function createPortfolioHouseholdCommandHandlers(
     [
       "portfolio.delete-asset.v1",
       {
+        idempotencyBoundary: "domain-idempotency-key",
         async execute(context) {
           const payload = record(context.envelope.payload);
           exactFields(payload, ["assetId", "expectedVersion"]);
@@ -190,6 +193,7 @@ export function createPortfolioHouseholdCommandHandlers(
     [
       "portfolio.add-position.v1",
       {
+        idempotencyBoundary: "domain-idempotency-key",
         async execute(context) {
           const payload = record(context.envelope.payload);
           exactFields(payload, ["assetId", "positionKind", "position"]);
@@ -207,6 +211,7 @@ export function createPortfolioHouseholdCommandHandlers(
     [
       "portfolio.update-position.v1",
       {
+        idempotencyBoundary: "domain-idempotency-key",
         async execute(context) {
           const payload = record(context.envelope.payload);
           exactFields(payload, [
@@ -233,6 +238,7 @@ export function createPortfolioHouseholdCommandHandlers(
     [
       "portfolio.delete-position.v1",
       {
+        idempotencyBoundary: "domain-idempotency-key",
         async execute(context) {
           const payload = record(context.envelope.payload);
           exactFields(payload, [

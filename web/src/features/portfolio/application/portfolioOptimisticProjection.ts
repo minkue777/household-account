@@ -1,4 +1,5 @@
 import { OptimisticEntityProjection } from '@/platform/read-model/optimisticEntityProjection';
+import { registerClientSessionReset } from '@/composition/clientSessionResetRegistry';
 import type { Asset, CryptoHolding, StockHolding } from '@/types/asset';
 
 function compareAssets(left: Asset, right: Asset): number {
@@ -71,3 +72,9 @@ export const stockHoldingOptimisticProjection =
 
 export const cryptoHoldingOptimisticProjection =
   new OptimisticEntityProjection<CryptoHolding>('crypto-position', compareCryptoHoldings);
+
+registerClientSessionReset(() => {
+  portfolioOptimisticProjection.reset();
+  stockHoldingOptimisticProjection.reset();
+  cryptoHoldingOptimisticProjection.reset();
+});

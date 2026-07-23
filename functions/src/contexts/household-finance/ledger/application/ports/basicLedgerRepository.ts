@@ -24,7 +24,7 @@ export interface LedgerCommandRepository {
     event: LedgerEvent;
     result: Extract<LedgerCommandResult, { kind: "success" }>;
   }): Promise<
-    | { kind: "success" }
+    | { kind: "success"; replayedResult?: LedgerCommandResult }
     | { kind: "retryable-failure"; code: string }
   >;
 }
