@@ -2,6 +2,7 @@ import * as functions from "firebase-functions/v1";
 
 import {
   CachedCaptureConfigurationQuery,
+  CoalescingCaptureConfigurationQuery,
   FirebaseCaptureConfigurationQuery,
 } from "../adapters/firebase/payment-capture/firebaseCaptureConfigurationQuery";
 import { FirebaseCaptureLedgerPersistence } from "../adapters/firebase/payment-capture/firebaseCaptureLedgerPersistence";
@@ -30,6 +31,9 @@ import { createCaptureSubmissionApplication } from "../contexts/payment-capture/
 import { createCaptureTransactionGatewayApplication } from "../contexts/payment-capture/android-payment-ingestion/application/captureTransactionGatewayApplication";
 import { createAndroidProviderParserApplication } from "../contexts/payment-capture/android-payment-ingestion/application/androidProviderParserApplication";
 import { createAndroidRawNotificationSubmissionApplication } from "../contexts/payment-capture/android-payment-ingestion/application/androidRawNotificationSubmissionApplication";
+import type {
+  CaptureConfigurationQueryPort,
+} from "../contexts/payment-capture/android-payment-ingestion/application/ports/out/captureConfigurationQueryPort";
 import type {
   AndroidRawNotificationInput,
   AndroidRawNotificationSubmissionInputPort,
@@ -251,7 +255,20 @@ export function createAndroidRawNotificationCallableHandler(input: {
 const tenantAuthorization = createTenantAuthorizationApplication({
   memberships: { findByPrincipalUid: async () => undefined },
 });
-export function createFirebaseCaptureSubmissionPort(): CaptureSubmissionInputPort {
+function createFirebaseCaptureConfigurationQuery(): CoalescingCaptureConfigurationQuery {
+  return new CoalescingCaptureConfigurationQuery(
+    new CachedCaptureConfigurationQuery(
+      withCaptureConfigurationLatency(
+        new FirebaseCaptureConfigurationQuery(db),
+      ),
+    ),
+  );
+}
+
+export function createFirebaseCaptureSubmissionPort(
+  configuration: CaptureConfigurationQueryPort =
+    createFirebaseCaptureConfigurationQuery(),
+): CaptureSubmissionInputPort {
   const localCurrencyBalances = createLocalCurrencyBalanceApplication(
     new FirebaseLocalCurrencyBalanceStore(db),
     { now: () => new Date().toISOString() },
@@ -264,11 +281,7 @@ export function createFirebaseCaptureSubmissionPort(): CaptureSubmissionInputPor
       ),
       payloads: new Sha256CapturePayloadFingerprint(),
       transactions: createCaptureTransactionGatewayApplication({
-        configuration: withCaptureConfigurationLatency(
-          new CachedCaptureConfigurationQuery(
-            new FirebaseCaptureConfigurationQuery(db),
-          ),
-        ),
+        configuration,
         ledger: withCapturePersistenceLatency(
           new FirebaseCaptureLedgerPersistence(db),
         ),
@@ -283,10 +296,13 @@ export function createFirebaseCaptureSubmissionPort(): CaptureSubmissionInputPor
 const captureMemberships = new CachedCaptureMembershipResolver(
   new FirebaseCaptureMembershipResolver(db),
 );
+const captureConfiguration = createFirebaseCaptureConfigurationQuery();
+const captureSubmissions =
+  createFirebaseCaptureSubmissionPort(captureConfiguration);
 
 const captureSubmissionHandler = createCaptureSubmissionCallableHandler({
   memberships: captureMemberships,
-  submissions: createFirebaseCaptureSubmissionPort(),
+  submissions: captureSubmissions,
 });
 
 const rawNotificationSubmissionHandler =
@@ -296,9 +312,10 @@ const rawNotificationSubmissionHandler =
       parser: createAndroidProviderParserApplication({
         resolveOccurrenceYear: resolvePaymentOccurrenceYear,
       }),
-      submissions: createFirebaseCaptureSubmissionPort(),
+      submissions: captureSubmissions,
       payloads: new Sha256AndroidRawNotificationHasher(),
       clock: { now: () => new Date().toISOString() },
+      configurationPrefetch: captureConfiguration,
     }),
   });
 

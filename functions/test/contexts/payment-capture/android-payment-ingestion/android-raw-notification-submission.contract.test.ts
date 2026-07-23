@@ -11,7 +11,13 @@ export interface AndroidRawNotificationSubmissionContractSubject {
     readonly actor: typeof actor;
     readonly input: AndroidRawNotificationInput;
   }): ReturnType<ReturnType<typeof createAndroidRawNotificationSubmissionDriver>["submit"]>;
-  state(): { readonly captured: readonly CaptureSubmissionCommand[] };
+  state(): {
+    readonly captured: readonly CaptureSubmissionCommand[];
+    readonly prefetched: readonly {
+      readonly householdId: string;
+      readonly actingMemberId: string;
+    }[];
+  };
 }
 
 export function createSubject(): AndroidRawNotificationSubmissionContractSubject {
@@ -99,6 +105,9 @@ describe("Android 원문 알림 서버 파싱 제출 계약", () => {
     });
     expect(captured[0].envelope.rawPayloadHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
     expect(JSON.stringify(captured[0].envelope)).not.toContain("이*선");
+    expect(subject.state().prefetched).toEqual([
+      { householdId: "household-1", actingMemberId: "member-1" },
+    ]);
   });
 
   it("미등록 패키지와 파싱 불가 알림은 저장을 호출하지 않고 terminal로 소비한다", async () => {
@@ -117,6 +126,7 @@ describe("Android 원문 알림 서버 파싱 제출 계약", () => {
       });
     }
     expect(subject.state().captured).toHaveLength(0);
+    expect(subject.state().prefetched).toHaveLength(0);
   });
 
   it("지역화폐 거래와 잔액을 한 번 파싱하되 독립 branch로 제출한다", async () => {

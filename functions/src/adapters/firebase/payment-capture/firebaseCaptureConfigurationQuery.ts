@@ -3,6 +3,7 @@ import type * as firestore from "firebase-admin/firestore";
 import { BoundedTtlCache } from "../../memory/boundedTtlCache";
 import type {
   CaptureConfigurationCard,
+  CaptureConfigurationPrefetchPort,
   CaptureConfigurationQueryPort,
   CaptureConfigurationQueryResult,
   CaptureConfigurationSnapshot,
@@ -127,6 +128,13 @@ function unionById<T>(
 
 export const CAPTURE_CONFIGURATION_CACHE_TTL_MILLIS = 60 * 1_000;
 export const CAPTURE_CONFIGURATION_CACHE_MAX_ENTRIES = 32;
+
+function configurationKey(input: {
+  readonly householdId: string;
+  readonly actingMemberId: string;
+}): string {
+  return `${input.householdId}\u0000${input.actingMemberId}`;
+}
 
 export class FirebaseCaptureConfigurationQuery
   implements CaptureConfigurationQueryPort
@@ -325,12 +333,56 @@ export class CachedCaptureConfigurationQuery
     readonly householdId: string;
     readonly actingMemberId: string;
   }): Promise<CaptureConfigurationQueryResult> {
-    const key = `${input.householdId}\u0000${input.actingMemberId}`;
+    const key = configurationKey(input);
     const cached = this.cache.get(key);
     if (cached !== undefined) return cached;
 
     const loaded = await this.delegate.load(input);
     if (loaded.kind === "available") this.cache.set(key, loaded);
     return loaded;
+  }
+}
+
+/**
+ * 같은 인스턴스에서 동시에 시작된 동일 설정 조회를 한 Promise로 합칩니다.
+ * Android raw parser가 먼저 조회를 시작하고 transaction gateway가 같은 결과를
+ * 기다리므로 receipt claim과 설정 조회가 병렬로 진행됩니다.
+ */
+export class CoalescingCaptureConfigurationQuery
+  implements CaptureConfigurationQueryPort, CaptureConfigurationPrefetchPort
+{
+  private readonly inFlight = new Map<
+    string,
+    Promise<CaptureConfigurationQueryResult>
+  >();
+
+  constructor(private readonly delegate: CaptureConfigurationQueryPort) {}
+
+  prefetch(input: {
+    readonly householdId: string;
+    readonly actingMemberId: string;
+  }): void {
+    void this.load(input).catch(() => undefined);
+  }
+
+  load(input: {
+    readonly householdId: string;
+    readonly actingMemberId: string;
+  }): Promise<CaptureConfigurationQueryResult> {
+    const key = configurationKey(input);
+    const existing = this.inFlight.get(key);
+    if (existing !== undefined) return existing;
+
+    const started = this.delegate.load(input);
+    this.inFlight.set(key, started);
+    void started.then(
+      () => {
+        if (this.inFlight.get(key) === started) this.inFlight.delete(key);
+      },
+      () => {
+        if (this.inFlight.get(key) === started) this.inFlight.delete(key);
+      },
+    );
+    return started;
   }
 }

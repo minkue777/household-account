@@ -16,7 +16,7 @@
 
 구체적으로 다음을 채택한다.
 
-1. `web`, `functions`, `android`의 세 배포 단위는 유지한다.
+1. `web`, `functions`, `android`의 세 런타임 계열은 유지하고, Functions는 같은 모듈러 모놀리스 소스에서 지연 민감도별 codebase로 배포한다.
 2. 업무 상태를 바꾸는 모든 Command의 최종 실행 지점은 Firebase Functions로 통일한다.
 3. Functions 내부는 업무 경계별 모듈러 모놀리스로 구성하고, 각 모듈 안에서 Domain → Application → Adapter 방향을 강제한다.
 4. Web과 Android는 업무 의도를 전달하고 읽기 계약을 소비하는 Client/Inbound Adapter가 된다.
@@ -51,7 +51,7 @@ Pending 제품 결정은 이 문서가 임의로 확정하지 않는다. 대신 
 
 | 경계 | 의미 | 이 시스템에서의 예 |
 |---|---|---|
-| 배포 단위 | 독립적으로 빌드·배포되는 런타임 | Web/PWA, Firebase Functions, Android APK |
+| 배포 단위 | 독립적으로 빌드·배포되는 런타임 또는 서버리스 codebase | Web/PWA, Functions `default`·`payment-capture`·`access-session`, Android APK |
 | Bounded Context | 같은 언어와 일관성 규칙을 공유하는 업무 경계 | Access, Household Finance, Payment Capture, Portfolio, Notifications |
 | 기능 모듈 | 요구사항·테스트·데이터 또는 정책의 변경 소유 단위 | 거래 원장, 정기 거래, 결제 설정, 배당, 배포 안전성 등 19개 문서 |
 | Application Workflow | 둘 이상의 기능 모듈을 공개 Port로 조정하는 유스케이스 | 결제 승인 반영, 가구 삭제, 자산 일일 갱신 |
@@ -151,6 +151,7 @@ flowchart LR
 배포 원칙:
 
 - Functions 모듈끼리 자기 HTTP endpoint를 다시 호출하지 않고 메모리 안의 공개 Port로 호출한다.
+- Functions의 Domain·Application·Firebase Adapter 소스는 하나의 모듈러 모놀리스로 유지한다. 배포 entry만 `default`(일반 Command·Query·관리·예약 작업), `payment-capture`(Android raw·전환 envelope·Shortcut), `access-session`(Android 최초 WebView custom-token 교환)으로 나눠 scale-to-zero 뒤 대화형 호출이 관련 없는 Scheduler·Provider graph를 초기화하지 않게 한다.
 - 현재 함수 이름과 배포 지역은 전환 중 Facade로 유지할 수 있다.
 - Gen1→Gen2, TypeScript target 변경, 폴더 재구성, 업무 로직 이전을 한 변경에 묶지 않는다.
 - 브라우저 Web·PWA·Android WebView의 Firestore 직접 접근은 명시적으로 공개한 읽기 계약에만 허용한다.
@@ -649,8 +650,9 @@ sequenceDiagram
 - 명시적 `알림 보내기`는 requester를 제외한 활성 가구원 전체를 대상으로 하며 자동 거래 생성 알림과 별도 Policy로 처리한다.
 - Payment Capture는 `observationId + idempotencyKey`의 payload hash와 branch별 stable downstream key·typed 결과를 `CaptureSubmissionReceipt`로 보존한다. root claim 뒤 정상 한 실행에서는 중간 processing/branch 상태를 매번 직렬 저장하지 않고 모든 branch 결과를 마지막에 한 번 저장한다. 최종 `partial-retryable`에 이미 기록된 terminal branch는 다음 시도에서 건너뛴다.
 - Ledger·Local Currency commit 뒤 최종 `CaptureSubmissionReceipt` 저장 전에 중단되어도 재시도는 같은 fingerprint·downstream key로 각 Context의 멱등 결과를 복구한 뒤 receipt를 완성한다. 이때 같은 branch Adapter가 다시 호출될 수는 있지만 두 번째 업무 변경을 만들지 않는다.
-- `submitAndroidRawNotification`, `executeHouseholdCommand`, `executeHouseholdQuery`는 현재 소규모·비용 우선 운영에서 `minInstances=0`을 사용한다. process가 warm인 동안에는 성공한 활성 Membership을 최대 5분·64개, 성공한 결제 설정 snapshot을 최대 1분·32개만 bounded process-local cache로 재사용하고 거부·실패는 cache하지 않는다. cache hit는 보장하지 않으며 Auth·App Check와 tenant 도출은 계속 서버 경계에서 검증한다. 단계별 latency 계측과 hot-path 단순화 뒤 cold start가 목표 지연을 지배한다고 확인될 때에만 특정 Function의 warm instance를 재검토한다.
+- `submitAndroidRawNotification`, `executeHouseholdCommand`, `executeHouseholdQuery`는 현재 소규모·비용 우선 운영에서 `minInstances=0`을 사용한다. 마이그레이션된 Android capture의 tenant는 UID 전역 `PrincipalMembershipClaim`과 Household lifecycle 두 문서를 직접 읽고, claim이 없는 전환 데이터만 기존 Membership view·canonical 검증으로 fallback한다. process가 warm인 동안에는 성공한 활성 Membership을 최대 5분·64개, 성공한 결제 설정 snapshot을 최대 1분·32개만 bounded process-local cache로 재사용하고 거부·실패는 cache하지 않는다. cache hit는 보장하지 않으며 Auth·App Check와 tenant 도출은 계속 서버 경계에서 검증한다. 단계별 latency 계측과 hot-path 단순화 뒤 cold start가 목표 지연을 지배한다고 확인될 때에만 특정 Function의 warm instance를 재검토한다.
 - Android capture의 카드·가맹점 규칙·활성 카테고리는 `runtimeProjections/payment-capture-configuration-v1` 단일 문서로 조합한다. projection miss는 원본과 projection을 한 transaction에서 읽고 쓰며, Payment Configuration·Category Catalog Writer가 변경 transaction에서 projection을 삭제한다. 따라서 cold instance도 정상 steady state에서는 설정 문서 하나만 읽고, 변경과 재생성이 겹쳐도 오래된 projection이 변경 뒤 다시 살아나지 않는다.
+- 서버 parser가 결제 branch를 만든 직후 설정 projection prefetch를 시작해 root receipt claim과 병렬 실행한다. transaction gateway가 같은 in-flight 조회를 재사용하므로 이 병렬화가 설정을 이중 조회하거나 Domain 판정 순서를 바꾸지 않는다.
 - 대화형 경계는 Web Performance mark/measure, Functions 구조화 `interactive-latency`, Android `HHCaptureLatency`를 사용한다. 사용자·가구·거래·금액·원문은 기록하지 않으며 Android와 Functions는 `SHA-256(observationId).slice(0, 16)`만 상관키로 공유한다.
 - 승인 후보의 원 금액, 정규화 전후 가맹점 증거, 카드 증거, 발생 시각, source·parser version, observation/capture ID는 immutable `CaptureProvenance`로 보존한다. Ledger의 사용자가 편집하는 표시 필드와 분리하고 split·merge 파생 거래가 같은 capture lineage를 잃지 않게 한다.
 

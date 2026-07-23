@@ -11,6 +11,8 @@ build/
 !tools/build/**
 dist/
 /functions/lib/
+/functions-payment-capture/lib/
+/functions-access-session/lib/
 
 # Android
 android/.gradle/

@@ -397,3 +397,12 @@ Clean Architecture가 요구하는 것은 “모든 요청이 Function을 통과
 - `minInstances=0` 결정은 유지합니다.
 
 로컬 측정 절차는 [로컬 대화형 지연 계측](../operations/local-interactive-latency-measurement.md)을 따릅니다. 앱 모듈 평가 뒤의 내부 measure뿐 아니라 Navigation Timing부터 첫 원장 paint까지를 함께 봐야 정적 JS 다운로드·파싱 시간이 빠지지 않습니다. 실제 Cloud cold start와 통신망을 포함한 전후 비교는 배포 뒤 같은 `revision`·cache 조건으로 수행해야 합니다.
+
+## 11. 2026-07-23 2차 적용 결과
+
+- 마이그레이션된 Android 사용자의 결제 수집 Membership 해석을 collection query와 Household·Membership·Member 재검증에서 `PrincipalMembershipClaim` 직접 조회와 Household lifecycle 확인으로 축소했습니다. claim이 없는 전환 데이터에는 기존 경로를 남겼습니다.
+- 서버 parser가 결제 후보를 만든 즉시 설정 projection 조회를 시작하고 root receipt claim과 겹쳐 실행합니다. 실제 transaction gateway는 같은 in-flight Promise를 재사용하므로 Firestore 조회 횟수는 늘지 않습니다.
+- Functions 소스와 내부 Port는 하나로 유지하면서 배포 entry를 `default`, `payment-capture`, `access-session` 세 codebase로 분리했습니다. 로컬 fresh process의 module evaluation은 기존 공통 index 약 833~858ms, 결제 codebase 약 695~708ms, 세션 codebase 약 655~659ms였습니다. 이 값은 Cloud platform provisioning과 Firestore 연결 시간을 포함하지 않으므로 실제 요청 지연 감소량으로 그대로 해석하지 않습니다.
+- Firebase 전체 Functions dry-run에서 세 codebase의 함수 이름·region·trigger가 기존 공개 계약과 동일하게 발견되는 것을 확인했습니다.
+- 첫 화면은 마지막 검증 SessionScope·Household·원장 snapshot이 있으면 계속 원격 검증보다 먼저 표시합니다. 이번 서버 codebase 분리는 cache가 없는 Android 최초 WebView custom-token 교환의 불필요한 초기화 graph를 줄이는 보완책입니다.
+- `minInstances=0`은 유지하므로 고정 비용을 추가하지 않습니다.

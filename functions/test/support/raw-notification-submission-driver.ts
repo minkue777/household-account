@@ -15,6 +15,10 @@ export type {
 
 export interface AndroidRawNotificationSubmissionState {
   readonly captured: readonly CaptureSubmissionCommand[];
+  readonly prefetched: readonly {
+    readonly householdId: string;
+    readonly actingMemberId: string;
+  }[];
 }
 
 export interface AndroidRawNotificationSubmissionDriver {
@@ -27,6 +31,10 @@ export interface AndroidRawNotificationSubmissionDriver {
 
 export function createAndroidRawNotificationSubmissionDriver(): AndroidRawNotificationSubmissionDriver {
   const captured: CaptureSubmissionCommand[] = [];
+  const prefetched: {
+    householdId: string;
+    actingMemberId: string;
+  }[] = [];
   const application = createAndroidRawNotificationSubmissionApplication({
     parser: createAndroidProviderParser(),
     submissions: {
@@ -60,9 +68,12 @@ export function createAndroidRawNotificationSubmissionDriver(): AndroidRawNotifi
     },
     payloads: { hash: () => `sha256:${"a".repeat(64)}` },
     clock: { now: () => "2026-07-31T17:42:00+09:00" },
+    configurationPrefetch: {
+      prefetch: (scope) => prefetched.push(scope),
+    },
   });
   return {
     submit: (input) => application.submit(input),
-    state: () => ({ captured: [...captured] }),
+    state: () => ({ captured: [...captured], prefetched: [...prefetched] }),
   };
 }

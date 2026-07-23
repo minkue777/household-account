@@ -4,6 +4,9 @@ import type * as firestore from "firebase-admin/firestore";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
+import { principalClaimId } from "./firebasePrincipalMembershipClaim";
+
+export { principalClaimId } from "./firebasePrincipalMembershipClaim";
 
 export const ACCESS_SCHEMA_VERSION = 2;
 export const ACCESS_RECEIPT_TTL_MILLIS = 30 * 24 * 60 * 60 * 1_000;
@@ -28,10 +31,6 @@ export function dependentOwnerProfileId(
   idempotencyKey: string,
 ): string {
   return stableAccessId("profile-dependent", householdId, idempotencyKey);
-}
-
-export function principalClaimId(principalUid: string): string {
-  return sha256(principalUid);
 }
 
 export function accessReceiptId(

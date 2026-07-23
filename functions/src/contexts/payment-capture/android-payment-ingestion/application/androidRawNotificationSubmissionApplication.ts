@@ -17,6 +17,7 @@ import type {
   CaptureSubmissionOutcome,
 } from "./ports/in/captureSubmissionInputPort";
 import type { AndroidRawNotificationHashPort } from "./ports/out/androidRawNotificationHashPort";
+import type { CaptureConfigurationPrefetchPort } from "./ports/out/captureConfigurationQueryPort";
 
 export interface AndroidRawNotificationSubmissionDependencies {
   readonly parser: AndroidProviderParserInputPort;
@@ -24,6 +25,7 @@ export interface AndroidRawNotificationSubmissionDependencies {
   readonly payloads: AndroidRawNotificationHashPort;
   readonly clock: { readonly now: () => string };
   readonly registry?: readonly AndroidPaymentSourceRegistryEntry[];
+  readonly configurationPrefetch?: CaptureConfigurationPrefetchPort;
 }
 
 function terminalIgnored(observationId: string): CaptureSubmissionOutcome {
@@ -248,6 +250,16 @@ class DefaultAndroidRawNotificationSubmissionApplication
     );
     if (envelope === undefined) {
       return terminalIgnored(command.input.observationId);
+    }
+    if (
+      envelope.paymentObservation !== undefined &&
+      command.actor.householdId !== undefined &&
+      command.actor.actingMemberId !== undefined
+    ) {
+      this.dependencies.configurationPrefetch?.prefetch({
+        householdId: command.actor.householdId,
+        actingMemberId: command.actor.actingMemberId,
+      });
     }
     return this.dependencies.submissions.submit({
       actor: command.actor,

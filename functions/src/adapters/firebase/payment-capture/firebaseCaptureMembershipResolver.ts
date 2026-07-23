@@ -1,6 +1,7 @@
 import type * as firestore from "firebase-admin/firestore";
 
 import { BoundedTtlCache } from "../../memory/boundedTtlCache";
+import { principalClaimId } from "../access/firebasePrincipalMembershipClaim";
 
 export type CaptureMembershipResolution =
   | {
@@ -45,6 +46,43 @@ export class FirebaseCaptureMembershipResolver
       return { kind: "unauthenticated", code: "AUTH_REQUIRED" };
     }
 
+    const claimSnapshot = await this.database
+      .collection("principalMembershipClaims")
+      .doc(principalClaimId(principalUid))
+      .get();
+    if (claimSnapshot.exists) {
+      const claim = claimSnapshot.data();
+      const householdId =
+        typeof claim?.householdId === "string" ? claim.householdId.trim() : "";
+      const memberId =
+        typeof claim?.memberId === "string" ? claim.memberId.trim() : "";
+      if (
+        active(claim) &&
+        claim?.lifecycleState === "active" &&
+        claim?.principalUid === principalUid &&
+        householdId !== "" &&
+        memberId !== ""
+      ) {
+        const householdSnapshot = await this.database
+          .collection("households")
+          .doc(householdId)
+          .get();
+        if (
+          householdSnapshot.exists &&
+          active(householdSnapshot.data())
+        ) {
+          return { kind: "active", principalUid, householdId, memberId };
+        }
+      }
+      return {
+        kind: "forbidden",
+        code: "ACTIVE_HOUSEHOLD_MEMBERSHIP_REQUIRED",
+      };
+    }
+
+    // Migration 호환 경로입니다. 전역 claim이 없는 기존 데이터만 canonical
+    // membership과 member를 확인하고, 정상 마이그레이션된 사용자는 위의 단일
+    // 문서 조회에서 종료합니다.
     const views = await this.database
       .collection("users")
       .doc(principalUid)

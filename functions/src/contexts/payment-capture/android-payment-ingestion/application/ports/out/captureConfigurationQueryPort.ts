@@ -28,3 +28,14 @@ export interface CaptureConfigurationQueryPort {
     readonly actingMemberId: string;
   }): Promise<CaptureConfigurationQueryResult>;
 }
+
+/**
+ * 실제 사용 시점보다 조금 먼저 설정 조회를 시작해 서로 독립적인 receipt
+ * 확인과 겹쳐 실행합니다. 결과의 권위와 오류 처리는 QueryPort.load가 담당합니다.
+ */
+export interface CaptureConfigurationPrefetchPort {
+  prefetch(input: {
+    readonly householdId: string;
+    readonly actingMemberId: string;
+  }): void;
+}
