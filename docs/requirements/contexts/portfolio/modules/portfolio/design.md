@@ -398,6 +398,7 @@ Event는 Asset 변경과 같은 transaction의 Outbox에 추가합니다. Positi
 - 중복: `(eventId, handlerName)` Inbox claim 후 동일 문서 upsert
 - 순서 역전: asset aggregateVersion이 checkpoint보다 작으면 no-op, gap이면 해당 날짜 전체 rebuild
 - rebuild: Canonical Asset Query에서 연도·기간을 다시 계산하며 Scheduler·Reporting은 물리 저장소를 쓰지 않음
+- 전환 첫날: 직전 Canonical Snapshot이 없으면 같은 가구의 가장 최근 Legacy `asset_history` 날짜를 한 번 읽어 호환 문서의 `changeAmount` 기준으로 사용합니다. Canonical 현재 합계와 안정 dimension key는 Legacy 값을 원천으로 삼지 않습니다.
 
 이 모듈에는 외부 HTTP Port가 없습니다. 통화·시세 실패를 해석하거나 Provider fallback을 만들지 않습니다.
 
@@ -482,7 +483,7 @@ Domain은 Firebase·React와 다른 기능 Entity를 import하지 않습니다. 
 | AST-005 | Domain Unit, Client | QueryAssetHistory·오늘 point 합성 | 저장 마지막 날짜=오늘/어제, 기간 시작 이력 없음, 중간 gap, 명시적 0원 | 오늘 point 중복 없음; 최초 Snapshot 전은 빈 값, 이후 gap은 직전 값 유지 | T-AST-009 |
 | AST-006 | Domain·Application·Emulator·보안 E2E | DeleteAsset·RestoreAssetWorkflow·ListDeletedAssets·RequestPermanentAssetPurge | 레거시 isActive=false, Position·자동화·paid 배당 이력, 일반/관리자 Actor, 삭제 전 overdue·삭제 기간·복구일 경계, 감사 사유 없음, purge page 실패 | false→deleted, 삭제 시 종속 write 0·처리 제외, 일반 사용자 목록·복구 0건, 운영 복구 후 active·이력 재사용과 삭제 기간 비소급, 별도 승인 전 purge 0건, purging 복구 거부, 영구 purge 후 paid Event·연간 합계 불변 | T-AST-002, T-AUTO-003 |
 | AST-007 | Contract·Build·보안 E2E | production composition·DemoAssetFixturePort | 실제 빈 가구, production/demo artifact, seed 중간 실패, dataset 제거 | production seed surface/write 0건, demo만 표식 있는 원자 seed·remove | T-AST-003 |
-| AST-008 | Domain·Projector·E2E | AssetSnapshotProjector | 전날만 존재한 owner/type, 오늘 자산 0개, 유효 0원 | 직전·현재 scope 합집합의 명시적 0 snapshot, NoData와 구분 | T-AST-004 |
+| AST-008 | Domain·Projector·E2E | AssetSnapshotProjector | 전날만 존재한 owner/type, 오늘 자산 0개, 유효 0원, 직전 Canonical 없이 Legacy만 있는 첫 전환일 | 직전·현재 scope 합집합의 명시적 0 snapshot이며 첫날 호환 변동액은 Legacy 직전 잔액 대비 실제 차이 | T-AST-004 |
 | AST-009 | Domain·Contract·Client·보안 E2E | AssetOwnerRef·ProfileReferencePort·자산 도넛 필터 | household/member/dependent, 일반/관리자 archive, 다른 가구·archived profile, `+` 추가 | 일반 삭제 surface 없음, 안정 ownerRef 집계, 신규 archived 선택 거부, 기존·과거 조회 보존 | T-AST-005 |
 
 추가 공통 suite는 새 테스트 ID를 만들지 않고 제공 fixture에 연결합니다.

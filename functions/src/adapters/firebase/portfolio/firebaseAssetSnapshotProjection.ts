@@ -100,28 +100,36 @@ interface LegacySnapshotTarget {
   readonly previousBalance: number;
 }
 
+type LegacyBalanceByAssetId = Readonly<Record<string, number>>;
+
 function legacyTargets(input: {
   readonly snapshot: AssetSnapshotProjectionView;
   readonly previous?: PreviousAssetSnapshotView;
+  readonly previousLegacyBalances?: LegacyBalanceByAssetId;
 }): readonly LegacySnapshotTarget[] {
   const targets: LegacySnapshotTarget[] = [
     {
       documentId: `${input.snapshot.householdId}_total_${input.snapshot.localDate}`,
       assetId: "TOTAL",
       balance: input.snapshot.total,
-      previousBalance: input.previous?.total ?? 0,
+      previousBalance:
+        input.previous?.total ?? input.previousLegacyBalances?.TOTAL ?? 0,
     },
     {
       documentId: `${input.snapshot.householdId}_financial_${input.snapshot.localDate}`,
       assetId: "FINANCIAL",
       balance: input.snapshot.financial,
-      previousBalance: input.previous?.financial ?? 0,
+      previousBalance:
+        input.previous?.financial ?? input.previousLegacyBalances?.FINANCIAL ?? 0,
     },
     ...Object.entries(input.snapshot.byType).map(([type, balance]) => ({
       documentId: `${input.snapshot.householdId}_type_${type}_${input.snapshot.localDate}`,
       assetId: `TYPE_${type}`,
       balance,
-      previousBalance: input.previous?.byType[type] ?? 0,
+      previousBalance:
+        input.previous?.byType[type] ??
+        input.previousLegacyBalances?.[`TYPE_${type}`] ??
+        0,
     })),
     ...Object.entries(input.snapshot.byOwnerRefKey).map(([key, balance]) => {
       const displayName = input.snapshot.ownerDisplayNames[key] ?? key;
@@ -129,13 +137,53 @@ function legacyTargets(input: {
         documentId: `${input.snapshot.householdId}_owner_${encodeURIComponent(displayName)}_${input.snapshot.localDate}`,
         assetId: `OWNER_${displayName}`,
         balance,
-        previousBalance: input.previous?.byOwnerRefKey[key] ?? 0,
+        previousBalance:
+          input.previous?.byOwnerRefKey[key] ??
+          input.previousLegacyBalances?.[`OWNER_${displayName}`] ??
+          0,
       };
     }),
   ];
   // The legacy projection is display-name keyed. A duplicate display name therefore
   // remains one compatibility point, while the canonical snapshot keeps stable keys.
   return [...new Map(targets.map((target) => [target.documentId, target])).values()];
+}
+
+async function latestLegacyBalancesBefore(
+  database: firestore.Firestore,
+  input: {
+    readonly householdId: string;
+    readonly localDate: string;
+  },
+): Promise<LegacyBalanceByAssetId> {
+  const snapshot = await database
+    .collection("asset_history")
+    .where("householdId", "==", input.householdId)
+    .get();
+  const records = snapshot.docs.flatMap((document) => {
+    const data = document.data();
+    return typeof data.date === "string" &&
+      data.date < input.localDate &&
+      typeof data.assetId === "string" &&
+      typeof data.balance === "number" &&
+      Number.isFinite(data.balance)
+      ? [{ date: data.date, assetId: data.assetId, balance: data.balance }]
+      : [];
+  });
+  const totalDates = records
+    .filter(({ assetId }) => assetId === "TOTAL")
+    .map(({ date }) => date);
+  const candidateDates =
+    totalDates.length > 0 ? totalDates : records.map(({ date }) => date);
+  const latestDate = candidateDates.sort((left, right) =>
+    right.localeCompare(left),
+  )[0];
+  if (latestDate === undefined) return {};
+  return Object.fromEntries(
+    records
+      .filter(({ date }) => date === latestDate)
+      .map(({ assetId, balance }) => [assetId, balance]),
+  );
 }
 
 export class FirebaseAssetSnapshotProjectionSource
@@ -192,12 +240,23 @@ export class FirebaseAssetSnapshotProjectionStore
       householdId: snapshot.householdId,
       localDate: snapshot.localDate,
     });
+    const previousLegacyBalances =
+      previous === undefined
+        ? await latestLegacyBalancesBefore(this.database, {
+            householdId: snapshot.householdId,
+            localDate: snapshot.localDate,
+          })
+        : undefined;
     const canonicalReference = this.database
       .collection("households")
       .doc(snapshot.householdId)
       .collection("assetSnapshots")
       .doc(snapshot.localDate);
-    const targets = legacyTargets({ snapshot, previous });
+    const targets = legacyTargets({
+      snapshot,
+      previous,
+      previousLegacyBalances,
+    });
     const legacyReferences = targets.map(({ documentId }) =>
       this.database.collection("asset_history").doc(documentId),
     );

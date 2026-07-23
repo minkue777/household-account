@@ -190,6 +190,76 @@ describeWithFirestoreEmulator("Firebase AssetSnapshot projector", () => {
     ).toMatchObject({ assetId: "OWNER_과거 명의자", balance: 0 });
   });
 
+  it("[T-AST-004][AST-008] 첫 canonical snapshot은 직전 legacy snapshot을 변동액 기준으로 사용합니다", async () => {
+    await seedAsset({
+      assetId: "asset-stock",
+      type: "stock",
+      balance: 120,
+      ownerRef: { kind: "profile", profileId: "child" },
+      ownerDisplayName: "아이",
+    });
+    const previousDate = "2026-07-20";
+    const previousDocuments = [
+      { suffix: "total", assetId: "TOTAL", balance: 100 },
+      { suffix: "financial", assetId: "FINANCIAL", balance: 100 },
+      { suffix: "type_stock", assetId: "TYPE_stock", balance: 100 },
+      {
+        suffix: `owner_${encodeURIComponent("아이")}`,
+        assetId: "OWNER_아이",
+        balance: 100,
+      },
+    ];
+    await Promise.all(
+      previousDocuments.map(({ suffix, assetId, balance }) =>
+        database
+          .collection("asset_history")
+          .doc(`${HOUSEHOLD_ID}_${suffix}_${previousDate}`)
+          .set({
+            householdId: HOUSEHOLD_ID,
+            assetId,
+            balance,
+            changeAmount: 0,
+            date: previousDate,
+          }),
+      ),
+    );
+
+    const subject = createAssetSnapshotProjectionApplication({
+      source: new FirebaseAssetSnapshotProjectionSource(
+        new FirebasePortfolioRuntimeStore(database),
+      ),
+      store: new FirebaseAssetSnapshotProjectionStore(database),
+    });
+    const result = await subject.project({
+      householdId: HOUSEHOLD_ID,
+      localDate: "2026-07-21",
+      sourceCheckpoint: "asset-valuation-daily:2026-07-21:first-canonical",
+      calculatedAt: "2026-07-21T14:55:00.000Z",
+    });
+
+    expect(result.kind).toBe("projected");
+    for (const suffix of ["total", "financial", "type_stock"]) {
+      expect(
+        (
+          await database
+            .collection("asset_history")
+            .doc(`${HOUSEHOLD_ID}_${suffix}_2026-07-21`)
+            .get()
+        ).data(),
+      ).toMatchObject({ changeAmount: 20 });
+    }
+    expect(
+      (
+        await database
+          .collection("asset_history")
+          .doc(
+            `${HOUSEHOLD_ID}_owner_${encodeURIComponent("아이")}_2026-07-21`,
+          )
+          .get()
+      ).data(),
+    ).toMatchObject({ changeAmount: 20 });
+  });
+
   it("tracked refresh phase 완료 뒤 snapshot phase로 전이해 JobRun을 terminal 완료합니다", async () => {
     const scheduledFor = new Date().toISOString();
     const result = await runTrackedScheduledJob({
