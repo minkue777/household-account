@@ -19,8 +19,10 @@ import {
   type AdminMemberWireView,
   type AssetOwnerProfileWireView,
 } from '@/platform/functions-api';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 
 export default function AdminPage() {
+  const { showConfirm, showPrompt } = useAppDialog();
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [households, setHouseholds] = useState<AdminHouseholdWireView[]>([]);
@@ -158,7 +160,12 @@ export default function AdminPage() {
   };
 
   const handleRestoreHousehold = async (household: AdminHouseholdWireView) => {
-    const reason = window.prompt('가구 복구 사유를 입력해 주세요.');
+    const reason = await showPrompt({
+      title: '가구 복구',
+      message: '가구 복구 사유를 입력해 주세요.',
+      placeholder: '복구 사유',
+      confirmLabel: '복구',
+    });
     if (!reason?.trim()) return;
     try {
       await adminHouseholds.restore(household.householdId, household.aggregateVersion, reason);
@@ -170,7 +177,13 @@ export default function AdminPage() {
 
   const handleRemoveMember = async (member: AdminMemberWireView) => {
     if (!detailHouseholdId) return;
-    const reason = window.prompt(`${member.displayName} 가구원 제거 사유를 입력해 주세요.`);
+    const reason = await showPrompt({
+      title: '가구원 제거',
+      message: `${member.displayName} 가구원 제거 사유를 입력해 주세요.`,
+      placeholder: '제거 사유',
+      confirmLabel: '제거',
+      variant: 'danger',
+    });
     if (!reason?.trim()) return;
     try {
       await adminHouseholds.removeMember(
@@ -186,7 +199,13 @@ export default function AdminPage() {
   };
 
   const handleRestoreMember = async (member: AdminMemberWireView) => {
-    if (!detailHouseholdId || !window.confirm(`${member.displayName} 가구원을 복구할까요?`)) return;
+    if (!detailHouseholdId) return;
+    const confirmed = await showConfirm({
+      title: '가구원 복구',
+      message: `${member.displayName} 가구원을 복구할까요?`,
+      confirmLabel: '복구',
+    });
+    if (!confirmed) return;
     try {
       await adminHouseholds.restoreMember(
         detailHouseholdId,
@@ -215,7 +234,12 @@ export default function AdminPage() {
 
   const handleRestoreAsset = async (asset: AdminDeletedAssetWireView) => {
     if (!detailHouseholdId) return;
-    const reason = window.prompt(`${asset.name} 자산 복구 사유를 입력해 주세요.`);
+    const reason = await showPrompt({
+      title: '자산 복구',
+      message: `${asset.name} 자산 복구 사유를 입력해 주세요.`,
+      placeholder: '복구 사유',
+      confirmLabel: '복구',
+    });
     if (!reason?.trim()) return;
     try {
       await adminHouseholds.restoreDeletedAsset(

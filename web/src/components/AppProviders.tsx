@@ -12,6 +12,7 @@ import { refreshAndroidHostSession } from '@/platform/android-host/androidHostBr
 import { onWebFirstLedgerPaint } from '@/platform/performance/webStartupPerformance';
 import { preloadLedgerMutationRuntime } from '@/composition/ledgerMutationRuntimePreload';
 import { warmAssetNavigationIntent } from '@/composition/assetNavigationPrewarm';
+import { AppDialogProvider } from '@/contexts/AppDialogContext';
 
 function DeferredFirebaseSecurityInitialization() {
   // App Check SDK는 첫 화면 렌더링과 경쟁하지 않도록 브라우저가 한가해진 뒤 준비합니다.
@@ -149,17 +150,19 @@ function AdminHouseholdViewBanner() {
 
 export default function AppProviders({ children }: { children: React.ReactNode }) {
   return (
-    <HouseholdProvider>
-      <DeferredFirebaseSecurityInitialization />
-      <AuthenticatedPlatformEffects />
-      <AdminHouseholdViewBanner />
-      <HouseholdGuard>
-        <ThemeProvider>
-          <CategoryProvider>
-            {children}
-          </CategoryProvider>
-        </ThemeProvider>
-      </HouseholdGuard>
-    </HouseholdProvider>
+    <AppDialogProvider>
+      <HouseholdProvider>
+        <DeferredFirebaseSecurityInitialization />
+        <AuthenticatedPlatformEffects />
+        <AdminHouseholdViewBanner />
+        <HouseholdGuard>
+          <ThemeProvider>
+            <CategoryProvider>
+              {children}
+            </CategoryProvider>
+          </ThemeProvider>
+        </HouseholdGuard>
+      </HouseholdProvider>
+    </AppDialogProvider>
   );
 }

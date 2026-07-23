@@ -7,6 +7,7 @@ import ModalOverlay from '@/components/common/ModalOverlay';
 import { X, Plus, Trash2, Loader2 } from 'lucide-react';
 import { useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
 import { calculateHoldingValue, isFundHolding } from '@/lib/assets/holdingValuation';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 
 interface StockHoldingModalProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ interface StockHoldingModalProps {
 }
 
 export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldingModalProps) {
+  const { showAlert } = useAppDialog();
   const [showAddForm, setShowAddForm] = useState(false);
   const [pendingDeleteHolding, setPendingDeleteHolding] = useState<StockHolding | null>(null);
 
@@ -62,7 +64,7 @@ export default function StockHoldingModal({ isOpen, onClose, asset }: StockHoldi
     setPendingDeleteHolding(null);
     const deleted = await deleteHolding(holding.id, holding.aggregateVersion);
     if (!deleted) {
-      alert('보유 종목 삭제에 실패했습니다. 다시 시도해 주세요.');
+      void showAlert('보유 종목 삭제에 실패했습니다. 다시 시도해 주세요.');
     }
   };
 

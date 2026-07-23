@@ -6,6 +6,7 @@ import { CryptoHolding } from '@/types/asset';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { deleteCryptoHolding, updateCryptoHolding } from '@/lib/assetService';
 import { calculateCryptoHoldingValue } from '@/lib/utils/useCryptoHoldingManager';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 
 interface CryptoHoldingListProps {
   holdings: CryptoHolding[];
@@ -40,6 +41,7 @@ export default function CryptoHoldingList({
   onRefresh,
   assetId,
 }: CryptoHoldingListProps) {
+  const { showAlert } = useAppDialog();
   const [editingHolding, setEditingHolding] = useState<CryptoHolding | null>(null);
   const [editQuantity, setEditQuantity] = useState('');
   const [editAvgPrice, setEditAvgPrice] = useState('');
@@ -67,7 +69,7 @@ export default function CryptoHoldingList({
       await pendingUpdate;
     } catch (error) {
       console.error('코인 수정 오류:', error);
-      alert('코인 수정에 실패했습니다.');
+      void showAlert('코인 수정에 실패했습니다.');
     } finally {
       setIsSubmitting(false);
     }
@@ -89,7 +91,7 @@ export default function CryptoHoldingList({
       await pendingDelete;
     } catch (error) {
       console.error('코인 삭제 오류:', error);
-      alert('코인 삭제에 실패했습니다.');
+      void showAlert('코인 삭제에 실패했습니다.');
     }
   };
 

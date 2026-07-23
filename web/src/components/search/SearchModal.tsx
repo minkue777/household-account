@@ -12,6 +12,7 @@ import {
 import Portal from '../common/Portal';
 import { ExpenseEditModal, ExpenseSplitModal } from '../expense';
 import SearchResultList from './SearchResultList';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -37,6 +38,7 @@ export default function SearchModal({
   onSplitExpense,
   transactionType,
 }: SearchModalProps) {
+  const { showAlert } = useAppDialog();
   const transactionLabel = transactionType === 'income' ? '수입' : '지출';
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState<Expense[]>([]);
@@ -110,6 +112,7 @@ export default function SearchModal({
       months,
       deleteExpense: onDelete,
       onSuccess: refreshSearch,
+      alertFn: (message) => void showAlert(message),
     });
   };
 
@@ -118,6 +121,7 @@ export default function SearchModal({
     await runCancelSplitGroupAction({
       expense: selectedExpense,
       onSuccess: refreshSearch,
+      alertFn: (message) => void showAlert(message),
     });
   };
 
@@ -127,6 +131,7 @@ export default function SearchModal({
       expense: selectedExpense,
       newMonths,
       onSuccess: refreshSearch,
+      alertFn: (message) => void showAlert(message),
     });
   };
 

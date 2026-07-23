@@ -244,6 +244,7 @@ describe('ExpenseDetail 모달 소유권 계약', () => {
       expense: firstExpense,
       months: 3,
       deleteExpense: onDelete,
+      alertFn: expect.any(Function),
     });
 
     rerender(
@@ -257,10 +258,14 @@ describe('ExpenseDetail 모달 소유권 계약', () => {
     fireEvent.click(screen.getByRole('button', { name: '월 분할 취소' }));
     fireEvent.click(screen.getByRole('button', { name: '월 분할 재구성' }));
 
-    expect(mockRunCancelSplitGroupAction).toHaveBeenCalledWith({ expense: splitExpense });
+    expect(mockRunCancelSplitGroupAction).toHaveBeenCalledWith({
+      expense: splitExpense,
+      alertFn: expect.any(Function),
+    });
     expect(mockRunUpdateSplitGroupAction).toHaveBeenCalledWith({
       expense: splitExpense,
       newMonths: 4,
+      alertFn: expect.any(Function),
     });
   });
 

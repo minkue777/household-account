@@ -5,6 +5,7 @@ import {
   sanitizeSplitMonthsInput,
   splitMonthsMinMessage,
 } from '@/lib/utils/splitMonths';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 
 interface GetValidSplitMonthsOptions {
   alertOnError?: boolean;
@@ -14,6 +15,7 @@ interface GetValidSplitMonthsOptions {
 const DEFAULT_SPLIT_MONTHS_INPUT = '2';
 
 export function useMonthlySplitInput() {
+  const { showAlert } = useAppDialog();
   const [splitMonthsInput, setSplitMonthsInput] = useState(DEFAULT_SPLIT_MONTHS_INPUT);
   const [showSplitInput, setShowSplitInput] = useState(false);
   const [splitMonthsError, setSplitMonthsError] = useState(false);
@@ -49,12 +51,13 @@ export function useMonthlySplitInput() {
     setSplitMonthsError(true);
 
     if (options?.alertOnError) {
-      const showAlert = options.alertFn ?? ((message: string) => alert(message));
-      showAlert(splitMonthsMinMessage);
+      const alertFn =
+        options.alertFn ?? ((message: string) => void showAlert(message, '분할 개월 확인'));
+      alertFn(splitMonthsMinMessage);
     }
 
     return null;
-  }, [splitMonthsInput]);
+  }, [showAlert, splitMonthsInput]);
 
   return {
     splitMonthsInput,

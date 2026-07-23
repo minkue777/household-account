@@ -4,6 +4,7 @@ import { Asset, isGoldEtfSubType } from '@/types/asset';
 import ModalOverlay from '@/components/common/ModalOverlay';
 import { X, Loader2, RefreshCw } from 'lucide-react';
 import { getGoldPricePerDon, useGoldHolding } from '@/lib/utils/useGoldHolding';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 
 interface GoldHoldingModalProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ interface GoldHoldingModalProps {
 }
 
 export default function GoldHoldingModal({ isOpen, onClose, asset }: GoldHoldingModalProps) {
+  const { showAlert } = useAppDialog();
   const {
     quantity,
     setQuantityInput,
@@ -34,7 +36,7 @@ export default function GoldHoldingModal({ isOpen, onClose, asset }: GoldHolding
     onClose();
     const saved = await pendingSave;
     if (!saved) {
-      alert('금 보유량 저장에 실패했습니다. 다시 시도해 주세요.');
+      void showAlert('금 보유량 저장에 실패했습니다. 다시 시도해 주세요.');
     }
   };
 

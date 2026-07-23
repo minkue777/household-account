@@ -26,6 +26,7 @@ import CryptoSearchForm, { CryptoSearchState } from './CryptoSearchForm';
 import { HOUSEHOLD_OWNER_OPTION } from '@/lib/assets/memberOptions';
 import { calculateHoldingValue } from '@/lib/assets/holdingValuation';
 import { portfolioQueries } from '@/features/portfolio/application/portfolioQueries';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 
 interface AssetAddModalProps {
   isOpen: boolean;
@@ -101,6 +102,7 @@ export default function AssetAddModal({
   defaultOwnerKey,
   ownerOptions,
 }: AssetAddModalProps) {
+  const { showAlert } = useAppDialog();
   const [name, setName] = useState('');
   const [type, setType] = useState<AssetType>(defaultType);
   const [subType, setSubType] = useState('');
@@ -472,7 +474,7 @@ export default function AssetAddModal({
       }
     } catch (error) {
       console.error('자산 추가 오류:', error);
-      alert('자산 추가에 실패했습니다. 다시 시도해 주세요.');
+      void showAlert('자산 추가에 실패했습니다. 다시 시도해 주세요.');
     } finally {
       setIsSubmitting(false);
     }

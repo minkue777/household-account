@@ -13,6 +13,7 @@ import ExpenseItem from './ExpenseItem';
 import ExpenseEditModal from './ExpenseEditModal';
 import ExpenseSplitModal from './ExpenseSplitModal';
 import { useDragAndDrop } from './hooks/useDragAndDrop';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 
 interface ExpenseDetailProps {
   date: string;
@@ -46,6 +47,7 @@ export default function ExpenseDetail({
   onAutoEditHandled,
   transactionType,
 }: ExpenseDetailProps) {
+  const { showAlert } = useAppDialog();
   const transactionLabel = transactionType === 'income' ? '수입' : '지출';
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [splittingExpenseId, setSplittingExpenseId] = useState<string | null>(null);
@@ -105,6 +107,7 @@ export default function ExpenseDetail({
       expense,
       months,
       deleteExpense: onDelete,
+      alertFn: (message) => void showAlert(message),
     });
   };
 
@@ -201,13 +204,21 @@ export default function ExpenseDetail({
           }
           onCancelSplitGroup={
             transactionType === 'expense' && editingExpense.splitGroupId
-              ? () => runCancelSplitGroupAction({ expense: editingExpense })
+              ? () =>
+                  runCancelSplitGroupAction({
+                    expense: editingExpense,
+                    alertFn: (message) => void showAlert(message),
+                  })
               : undefined
           }
           onUpdateSplitGroup={
             transactionType === 'expense' && editingExpense.splitGroupId
               ? (newMonths) =>
-                  runUpdateSplitGroupAction({ expense: editingExpense, newMonths })
+                  runUpdateSplitGroupAction({
+                    expense: editingExpense,
+                    newMonths,
+                    alertFn: (message) => void showAlert(message),
+                  })
               : undefined
           }
           onDelete={onDelete ? () => onDelete(editingExpense.id) : undefined}

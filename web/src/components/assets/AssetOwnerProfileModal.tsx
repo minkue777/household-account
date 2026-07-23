@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 
 import ModalOverlay from '@/components/common/ModalOverlay';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 import type { AssetOwnerProfileWireView } from '@/platform/functions-api';
 
 export default function AssetOwnerProfileModal({
@@ -19,6 +20,7 @@ export default function AssetOwnerProfileModal({
   onCreate(displayName: string): Promise<void>;
   onRename(profile: AssetOwnerProfileWireView, displayName: string): Promise<void>;
 }) {
+  const { showPrompt } = useAppDialog();
   const [displayName, setDisplayName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +43,14 @@ export default function AssetOwnerProfileModal({
   };
 
   const rename = async (profile: AssetOwnerProfileWireView) => {
-    const name = window.prompt('새 명의자 이름을 입력해 주세요.', profile.displayName)?.trim();
+    const name = (
+      await showPrompt({
+        title: '명의자 이름 변경',
+        message: '새 명의자 이름을 입력해 주세요.',
+        initialValue: profile.displayName,
+        confirmLabel: '변경',
+      })
+    )?.trim();
     if (!name || name === profile.displayName) return;
     setError(null);
     try {

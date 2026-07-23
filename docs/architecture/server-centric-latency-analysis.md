@@ -376,6 +376,7 @@ Native Membership claim은 Functions와 APK가 함께 바뀌므로 다음 순서
 - Signed-in Household read model: [`firebaseSignedInUserResolver.ts`](../../functions/src/adapters/firebase/access/firebaseSignedInUserResolver.ts)
 - 로드된 기능만 초기화하는 registry: [`clientSessionResetRegistry.ts`](../../web/src/composition/clientSessionResetRegistry.ts)
 - 즉시 Portal: [`Portal.tsx`](../../web/src/components/common/Portal.tsx)
+- 앱 내부 오류·확인·입력 대화상자: [`AppDialogContext.tsx`](../../web/src/contexts/AppDialogContext.tsx)
 - 원장 모달 단일 소유: [`ExpenseDetail.tsx`](../../web/src/components/expense/ExpenseDetail.tsx)
 - 즉시 검색: [`SearchModal.tsx`](../../web/src/components/search/SearchModal.tsx)
 - 가구 단위 보유 snapshot: [`useHouseholdHoldingSnapshots.ts`](../../web/src/lib/utils/useHouseholdHoldingSnapshots.ts)

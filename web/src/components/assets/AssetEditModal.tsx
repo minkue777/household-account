@@ -22,6 +22,7 @@ import {
   StockInitialInvestmentField,
 } from './AssetFormFields';
 import { useGoldHolding } from '@/lib/utils/useGoldHolding';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 
 interface AssetEditModalProps {
   isOpen: boolean;
@@ -75,6 +76,7 @@ function resolveAssetSubType(asset: Asset): string {
 }
 
 export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModalProps) {
+  const { showAlert } = useAppDialog();
   // 선택한 자산값으로 첫 렌더를 완성합니다. 빈 예금 폼을 그린 뒤 effect로
   // 교체하면 유형 테두리와 세부 유형 선택이 한 프레임 늦게 나타납니다.
   const [name, setName] = useState(() => asset?.name ?? '');
@@ -248,7 +250,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
       await pendingUpdate;
     } catch (error) {
       console.error('자산 수정 오류:', error);
-      alert('자산 수정에 실패했습니다. 다시 시도해주세요.');
+      void showAlert('자산 수정에 실패했습니다. 다시 시도해 주세요.');
     } finally {
       setIsSubmitting(false);
     }
@@ -266,7 +268,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
       await pendingDelete;
     } catch (error) {
       console.error('자산 삭제 오류:', error);
-      alert('자산 삭제에 실패했습니다. 다시 시도해주세요.');
+      void showAlert('자산 삭제에 실패했습니다. 다시 시도해 주세요.');
     } finally {
       setIsSubmitting(false);
       setShowDeleteConfirm(false);

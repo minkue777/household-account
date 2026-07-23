@@ -7,6 +7,7 @@ import {
   shortcutCredentials,
 } from '@/features/payment-capture/application/shortcutCredentials';
 import type { ShortcutCredentialIssueResult } from '@/platform/functions-api';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 
 type CredentialStatus = Awaited<ReturnType<typeof shortcutCredentials.status>>;
 type IssuedCredential = Extract<ShortcutCredentialIssueResult, { kind: 'issued' }>;
@@ -18,6 +19,7 @@ function messageOf(error: unknown): string {
 }
 
 export default function ShortcutSettings() {
+  const { showConfirm } = useAppDialog();
   const [status, setStatus] = useState<CredentialStatus | null>(null);
   const [oneTimeCredential, setOneTimeCredential] = useState<IssuedCredential | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,7 +85,13 @@ export default function ShortcutSettings() {
 
   const reissue = async () => {
     if (status?.kind !== 'found') return;
-    if (!window.confirm('기존 단축어 키는 즉시 사용할 수 없게 됩니다. 새로 발급할까요?')) return;
+    const confirmed = await showConfirm({
+      title: '단축어 키 재발급',
+      message: '기존 단축어 키는 즉시 사용할 수 없게 됩니다. 새로 발급할까요?',
+      confirmLabel: '재발급',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     setWorking(true);
     setError(null);
     try {

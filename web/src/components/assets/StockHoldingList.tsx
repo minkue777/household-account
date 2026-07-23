@@ -11,6 +11,7 @@ import {
 } from '@/lib/assets/holdingValuation';
 import { StockHolding } from '@/types/asset';
 import { portfolioQueries } from '@/features/portfolio/application/portfolioQueries';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 
 interface DividendInfo {
   code: string;
@@ -359,6 +360,7 @@ export default function StockHoldingList({
   onRefresh,
   assetId,
 }: StockHoldingListProps) {
+  const { showAlert } = useAppDialog();
   const [editingHolding, setEditingHolding] = useState<StockHolding | null>(null);
   const [editName, setEditName] = useState('');
   const [editQuantity, setEditQuantity] = useState('');
@@ -462,7 +464,7 @@ export default function StockHoldingList({
       await pendingUpdate;
     } catch (error) {
       console.error('보유 항목 수정 오류:', error);
-      alert('보유 항목 수정에 실패했습니다.');
+      void showAlert('보유 항목 수정에 실패했습니다.');
     } finally {
       setIsSubmitting(false);
     }
@@ -484,7 +486,7 @@ export default function StockHoldingList({
       await pendingDelete;
     } catch (error) {
       console.error('보유 항목 삭제 오류:', error);
-      alert('보유 항목 삭제에 실패했습니다.');
+      void showAlert('보유 항목 삭제에 실패했습니다.');
     }
   };
 

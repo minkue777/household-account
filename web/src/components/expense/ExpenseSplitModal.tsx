@@ -6,6 +6,7 @@ import type { Expense } from '@/types/expense';
 import type { SplitItem } from '@/lib/expenseService';
 import Portal from '../common/Portal';
 import CategorySelector from '../common/CategorySelector';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 
 interface ExpenseSplitModalProps {
   expense: Expense;
@@ -20,6 +21,7 @@ export default function ExpenseSplitModal({
   onClose,
   onSave,
 }: ExpenseSplitModalProps) {
+  const { showAlert } = useAppDialog();
   const [splits, setSplits] = useState<SplitItem[]>([]);
   const [splitAmountInputs, setSplitAmountInputs] = useState<Record<number, string>>({});
 
@@ -89,11 +91,14 @@ export default function ExpenseSplitModal({
   const handleSaveSplit = () => {
     const totalSplit = splits.reduce((sum, s) => sum + s.amount, 0);
     if (totalSplit !== expense.amount) {
-      alert(`분할 금액의 합(${totalSplit.toLocaleString()}원)이 원래 금액(${expense.amount.toLocaleString()}원)과 일치하지 않습니다.`);
+      void showAlert(
+        `분할 금액의 합(${totalSplit.toLocaleString()}원)이 원래 금액(${expense.amount.toLocaleString()}원)과 일치하지 않습니다.`,
+        '분할 금액 확인'
+      );
       return;
     }
     if (splits.some((s) => s.amount <= 0)) {
-      alert('모든 분할 항목의 금액은 0보다 커야 합니다.');
+      void showAlert('모든 분할 항목의 금액은 0보다 커야 합니다.', '분할 금액 확인');
       return;
     }
     onSave(splits);

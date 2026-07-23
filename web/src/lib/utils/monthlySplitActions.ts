@@ -14,7 +14,7 @@ export const monthlySplitMessages = {
 interface SplitActionBaseOptions {
   expense: Expense;
   onSuccess?: () => AsyncVoid;
-  alertFn?: AlertFn;
+  alertFn: AlertFn;
 }
 
 interface RunSplitMonthsActionOptions extends SplitActionBaseOptions {
@@ -26,10 +26,6 @@ interface RunUpdateSplitGroupActionOptions extends SplitActionBaseOptions {
   newMonths: number;
 }
 
-function getAlertFn(alertFn?: AlertFn): AlertFn {
-  return alertFn ?? ((message) => alert(message));
-}
-
 export async function runSplitMonthsAction({
   expense,
   months,
@@ -37,10 +33,8 @@ export async function runSplitMonthsAction({
   onSuccess,
   alertFn,
 }: RunSplitMonthsActionOptions): Promise<void> {
-  const showAlert = getAlertFn(alertFn);
-
   if (months < 2) {
-    showAlert(monthlySplitMessages.invalidMonths);
+    alertFn(monthlySplitMessages.invalidMonths);
     return;
   }
 
@@ -50,7 +44,7 @@ export async function runSplitMonthsAction({
     await splitExpenseMonthly(expense, months);
     await onSuccess?.();
   } catch {
-    showAlert(monthlySplitMessages.splitFailed);
+    alertFn(monthlySplitMessages.splitFailed);
   }
 }
 
@@ -61,14 +55,12 @@ export async function runCancelSplitGroupAction({
 }: SplitActionBaseOptions): Promise<void> {
   if (!expense.splitGroupId) return;
 
-  const showAlert = getAlertFn(alertFn);
-
   try {
     const { cancelSplitGroup } = await import('@/lib/expenseService');
     await cancelSplitGroup(expense.splitGroupId);
     await onSuccess?.();
   } catch {
-    showAlert(monthlySplitMessages.cancelFailed);
+    alertFn(monthlySplitMessages.cancelFailed);
   }
 }
 
@@ -80,13 +72,11 @@ export async function runUpdateSplitGroupAction({
 }: RunUpdateSplitGroupActionOptions): Promise<void> {
   if (!expense.splitGroupId) return;
 
-  const showAlert = getAlertFn(alertFn);
-
   try {
     const { updateSplitGroup } = await import('@/lib/expenseService');
     await updateSplitGroup(expense.splitGroupId, newMonths);
     await onSuccess?.();
   } catch {
-    showAlert(monthlySplitMessages.updateFailed);
+    alertFn(monthlySplitMessages.updateFailed);
   }
 }
