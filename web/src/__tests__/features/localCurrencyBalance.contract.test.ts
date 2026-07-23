@@ -112,26 +112,22 @@ describe('지역화폐 잔액 읽기 계약', () => {
     expect(unsubscribePreference).toHaveBeenCalledTimes(1);
   });
 
-  it('[T-BAL-006][BAL-004] 마지막 성공 잔액을 다음 구독에서 즉시 표시하고 일시 오류에는 지우지 않는다', () => {
-    const firstCallback = jest.fn();
-    subscribeToLocalCurrencyBalance(firstCallback);
+  it('[T-BAL-006][BAL-004] 일시적인 구독 오류가 이미 표시한 DB 값을 지우지 않는다', () => {
+    const callback = jest.fn();
+    subscribeToLocalCurrencyBalance(callback);
     listeners.get('balances')?.next({
       docs: [balanceDocument('gyeonggi', 1_153_429)],
     });
 
-    listeners.clear();
-    const nextCallback = jest.fn();
-    subscribeToLocalCurrencyBalance(nextCallback);
-
-    expect(nextCallback).toHaveBeenCalledTimes(1);
-    expect(nextCallback).toHaveBeenLastCalledWith(expect.objectContaining({
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenLastCalledWith(expect.objectContaining({
       balance: 1_153_429,
       currencyType: 'gyeonggi',
     }));
 
     listeners.get('balances')?.error(new Error('temporarily unavailable'));
     listeners.get('preference')?.error(new Error('temporarily unavailable'));
-    expect(nextCallback).not.toHaveBeenCalledWith(null);
+    expect(callback).toHaveBeenCalledTimes(1);
   });
 
   it('[T-BAL-004][BAL-004] 여러 지역화폐가 있으면 Home Preferences가 선택한 유형만 표시한다', () => {

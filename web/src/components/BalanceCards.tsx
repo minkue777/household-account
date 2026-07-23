@@ -4,10 +4,7 @@ import { ComponentType, useEffect, useMemo, useState } from 'react';
 import { Calendar, CalendarDays, CircleDollarSign, CreditCard, Wallet } from 'lucide-react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
-import {
-  readCachedLocalCurrencyBalance,
-  type LocalCurrencyBalance,
-} from '@/features/local-currency/application/localCurrencyBalanceCache';
+import type { LocalCurrencyBalance } from '@/lib/balanceService';
 import { Expense, TransactionType } from '@/types/expense';
 import { HomeSummaryCardKey, HomeSummaryConfig } from '@/types/household';
 
@@ -48,9 +45,8 @@ export default function BalanceCards({
 }: BalanceCardsProps) {
   const isIncome = transactionType === 'income';
   const { activeCategories } = useCategoryContext();
-  const { householdKey, isSessionVerified = true } = useHousehold();
-  const [localCurrencyBalance, setLocalCurrencyBalance] =
-    useState<LocalCurrencyBalance | null>(() => readCachedLocalCurrencyBalance());
+  const { householdKey } = useHousehold();
+  const [localCurrencyBalance, setLocalCurrencyBalance] = useState<LocalCurrencyBalance | null>(null);
 
   const needsLocalCurrencyBalance = useMemo(() => {
     if (isIncome) {
@@ -69,16 +65,12 @@ export default function BalanceCards({
       return undefined;
     }
 
-    const cached = readCachedLocalCurrencyBalance();
-    if (cached !== null) setLocalCurrencyBalance(cached);
-
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
     void import('@/lib/balanceService').then(({ subscribeToLocalCurrencyBalance }) => {
       if (cancelled) return;
       unsubscribe = subscribeToLocalCurrencyBalance(setLocalCurrencyBalance);
     }).catch((error) => {
-      // 기존 PWA 청크가 남아 있는 동안에도 캐시 값은 유지합니다.
       console.error('지역화폐 잔액 모듈 로드 오류:', error);
     });
 
@@ -86,7 +78,7 @@ export default function BalanceCards({
       cancelled = true;
       unsubscribe?.();
     };
-  }, [householdKey, isSessionVerified, needsLocalCurrencyBalance]);
+  }, [householdKey, needsLocalCurrencyBalance]);
 
   const { remaining, isOverBudget, monthlySpent } = useMemo(() => {
     const budgetedCategoryKeys = new Set<string>();
