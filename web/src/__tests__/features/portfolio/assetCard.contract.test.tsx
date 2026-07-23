@@ -4,7 +4,7 @@ import AssetCard from '@/components/assets/AssetCard';
 import type { Asset } from '@/types/asset';
 
 describe('AssetCard 금액 표시 계약', () => {
-  test('자릿수 구성과 무관하게 금액은 고정폭 숫자와 한 줄 정렬을 사용한다', () => {
+  test('금액은 이전과 같은 비례폭 숫자를 사용하면서 한 줄 정렬을 유지한다', () => {
     const asset: Asset = {
       id: 'housing-subscription',
       aggregateVersion: 1,
@@ -23,8 +23,9 @@ describe('AssetCard 금액 표시 계약', () => {
 
     const amount = screen
       .getByRole('button', { name: /주택청약종합저축/ })
-      .querySelector('p.tabular-nums');
-    expect(amount).toHaveClass('tabular-nums', 'whitespace-nowrap');
+      .querySelector('p.whitespace-nowrap');
+    expect(amount).not.toHaveClass('tabular-nums');
+    expect(amount).toHaveClass('whitespace-nowrap');
     expect(amount).toHaveTextContent('31,100,000원');
   });
 });

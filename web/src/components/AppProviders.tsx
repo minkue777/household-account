@@ -10,10 +10,7 @@ import { useHousehold } from '@/contexts/HouseholdContext';
 import { getClientSessionScope } from '@/composition/clientSessionScope';
 import { refreshAndroidHostSession } from '@/platform/android-host/androidHostBridge';
 import { onWebFirstLedgerPaint } from '@/platform/performance/webStartupPerformance';
-import {
-  preloadAssetInteractions,
-  preloadLedgerInteractions,
-} from '@/composition/interactiveUiPreload';
+import { preloadLedgerMutationRuntime } from '@/composition/ledgerMutationRuntimePreload';
 import { warmAssetNavigationIntent } from '@/composition/assetNavigationPrewarm';
 
 function DeferredFirebaseSecurityInitialization() {
@@ -114,8 +111,7 @@ function AuthenticatedPlatformEffects() {
       router.prefetch('/settings');
       router.prefetch('/stats');
       void Promise.all([
-        preloadLedgerInteractions(),
-        preloadAssetInteractions(),
+        preloadLedgerMutationRuntime(),
         import('@/features/category-budget/application/categoryCommands'),
       ]).catch(() => {});
     });

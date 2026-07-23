@@ -25,7 +25,6 @@ interface AssetHistoryModalProps {
   onClose: () => void;
   asset: Asset | null;
   onEditAsset: () => void;
-  onViewChart: () => void;
   stockHoldings: readonly StockHolding[];
   cryptoHoldings: readonly CryptoHolding[];
   stockHoldingsReady: boolean;

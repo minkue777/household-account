@@ -68,20 +68,51 @@ function getEffectiveContributionDay(dayOfMonth: number) {
   return Math.min(dayOfMonth, lastDayOfMonth);
 }
 
+function resolveAssetSubType(asset: Asset): string {
+  return asset.type === 'gold'
+    ? normalizeGoldSubType(asset.subType) || ASSET_TYPE_CONFIG[asset.type].subTypes[0] || ''
+    : asset.subType || ASSET_TYPE_CONFIG[asset.type].subTypes[0] || '';
+}
+
 export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModalProps) {
-  const [name, setName] = useState('');
-  const [type, setType] = useState<AssetType>('savings');
-  const [subType, setSubType] = useState('');
-  const [balance, setBalance] = useState('');
-  const [recurringContributionAmount, setRecurringContributionAmount] = useState('');
-  const [recurringContributionDay, setRecurringContributionDay] = useState('');
-  const [loanInterestRate, setLoanInterestRate] = useState('');
-  const [loanRepaymentMethod, setLoanRepaymentMethod] = useState<LoanRepaymentMethod | ''>('');
-  const [loanMonthlyPaymentAmount, setLoanMonthlyPaymentAmount] = useState('');
-  const [loanPaymentDay, setLoanPaymentDay] = useState('');
-  const [initialInvestment, setInitialInvestment] = useState('');
-  const [memo, setMemo] = useState('');
-  const [goldQuantity, setGoldQuantity] = useState('');
+  // 선택한 자산값으로 첫 렌더를 완성합니다. 빈 예금 폼을 그린 뒤 effect로
+  // 교체하면 유형 테두리와 세부 유형 선택이 한 프레임 늦게 나타납니다.
+  const [name, setName] = useState(() => asset?.name ?? '');
+  const [type, setType] = useState<AssetType>(() => asset?.type ?? 'savings');
+  const [subType, setSubType] = useState(() => asset ? resolveAssetSubType(asset) : '');
+  const [balance, setBalance] = useState(() =>
+    asset ? Math.abs(asset.currentBalance || 0).toString() : ''
+  );
+  const [recurringContributionAmount, setRecurringContributionAmount] = useState(() =>
+    asset?.recurringContributionAmount?.toString() ?? ''
+  );
+  const [recurringContributionDay, setRecurringContributionDay] = useState(() =>
+    asset?.recurringContributionDay?.toString() ?? ''
+  );
+  const [loanInterestRate, setLoanInterestRate] = useState(() =>
+    asset?.loanInterestRate?.toString() ?? ''
+  );
+  const [loanRepaymentMethod, setLoanRepaymentMethod] = useState<LoanRepaymentMethod | ''>(
+    () => asset?.loanRepaymentMethod ?? ''
+  );
+  const [loanMonthlyPaymentAmount, setLoanMonthlyPaymentAmount] = useState(() =>
+    asset?.loanMonthlyPaymentAmount?.toString() ?? ''
+  );
+  const [loanPaymentDay, setLoanPaymentDay] = useState(() =>
+    asset?.loanPaymentDay?.toString() ?? ''
+  );
+  const [initialInvestment, setInitialInvestment] = useState(() =>
+    asset?.initialInvestment?.toString() ?? ''
+  );
+  const [memo, setMemo] = useState(() => {
+    if (!asset) return '';
+    return asset.type === 'gold' && !isGoldEtfSubType(asset.subType)
+      ? extractGoldMemoFromAsset(asset)
+      : asset.memo || '';
+  });
+  const [goldQuantity, setGoldQuantity] = useState(() =>
+    asset ? extractGoldQuantityFromAsset(asset) : ''
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const goldHolding = useGoldHolding({ isOpen, asset });
@@ -91,14 +122,9 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
       return;
     }
 
-    const resolvedSubType =
-      asset.type === 'gold'
-        ? normalizeGoldSubType(asset.subType) || ASSET_TYPE_CONFIG[asset.type].subTypes[0] || ''
-        : asset.subType || ASSET_TYPE_CONFIG[asset.type].subTypes[0] || '';
-
     setName(asset.name);
     setType(asset.type);
-    setSubType(resolvedSubType);
+    setSubType(resolveAssetSubType(asset));
     setBalance(Math.abs(asset.currentBalance || 0).toString());
     setRecurringContributionAmount(
       asset.recurringContributionAmount ? asset.recurringContributionAmount.toString() : ''

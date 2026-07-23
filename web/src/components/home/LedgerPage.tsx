@@ -2,13 +2,18 @@
 
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import dynamic from 'next/dynamic';
 import Calendar from '@/components/Calendar';
 import CategorySummary from '@/components/CategorySummary';
+import CategoryDetailModal from '@/components/CategoryDetailModal';
+import LocalCurrencyModal from '@/components/LocalCurrencyModal';
 import { Expense, Category, TransactionType } from '@/types/expense';
 import { DEFAULT_HOME_SUMMARY_CONFIG } from '@/types/household';
 import BalanceCards from '@/components/BalanceCards';
 import HomeHeader from '@/components/HomeHeader';
+import AddExpenseModal from '@/components/expense/AddExpenseModal';
+import ExpenseDetail from '@/components/expense/ExpenseDetail';
+import IncomeSummaryModal from '@/components/expense/IncomeSummaryModal';
+import SearchModal from '@/components/search/SearchModal';
 import type { SplitItem } from '@/lib/expenseService';
 import { readMonthlyExpenseSnapshot } from '@/features/ledger/application/monthlyExpenseSnapshot';
 import { useHousehold } from '@/contexts/HouseholdContext';
@@ -16,38 +21,6 @@ import {
   markWebFirstLedgerPaint,
   markWebLedgerCacheResult,
 } from '@/platform/performance/webStartupPerformance';
-import {
-  loadAddExpenseModal,
-  loadCategoryDetailModal,
-  loadExpenseDetail,
-  loadIncomeSummaryModal,
-  loadLocalCurrencyModal,
-  loadSearchModal,
-} from '@/composition/interactiveUiPreload';
-import {
-  ModalInteractionLoadingFallback,
-  PanelInteractionLoadingFallback,
-} from '@/components/common/InteractionLoadingFallback';
-
-const ExpenseDetail = dynamic(loadExpenseDetail, {
-  loading: PanelInteractionLoadingFallback,
-});
-const AddExpenseModal = dynamic(loadAddExpenseModal, {
-  loading: ModalInteractionLoadingFallback,
-});
-const IncomeSummaryModal = dynamic(loadIncomeSummaryModal, {
-  loading: ModalInteractionLoadingFallback,
-});
-const SearchModal = dynamic(loadSearchModal, {
-  loading: ModalInteractionLoadingFallback,
-});
-const CategoryDetailModal = dynamic(loadCategoryDetailModal, {
-  loading: ModalInteractionLoadingFallback,
-});
-const LocalCurrencyModal = dynamic(loadLocalCurrencyModal, {
-  loading: ModalInteractionLoadingFallback,
-});
-
 interface LedgerPageProps {
   transactionType: TransactionType;
 }

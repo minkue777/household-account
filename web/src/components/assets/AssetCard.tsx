@@ -81,7 +81,7 @@ export default function AssetCard({ asset, onClick }: AssetCardProps) {
 
       {/* 금액 & 수익률 (주식만) */}
       <div className="text-right flex-shrink-0">
-        <p className="whitespace-nowrap font-semibold tabular-nums text-slate-900">
+        <p className="whitespace-nowrap font-semibold text-slate-900">
           {signedBalance.toLocaleString()}
           <span className="text-xs font-normal text-slate-400 ml-0.5">원</span>
         </p>

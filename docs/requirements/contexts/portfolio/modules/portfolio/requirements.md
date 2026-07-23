@@ -67,7 +67,7 @@
 
 | ID | 상태 | 요구사항 | 경계·예외 | 근거 | 테스트 |
 |---|---|---|---|---|---|
-| AST-001 | 현재 명세 | 예적금, 주식, 코인, 부동산, 금, 대출 자산을 이름, 소유자, 통화, 잔액, 메모, 순서와 함께 관리한다. | 이름은 필수이다. 잘못된 숫자를 0으로 바꾸는 현재 UI는 검증 개선 대상이다. | [asset types](../../../../../../web/src/types/asset.ts), [AssetAddModal](../../../../../../web/src/components/assets/AssetAddModal.tsx) | U, I, E2E |
+| AST-001 | 현재 명세 | 예적금, 주식, 코인, 부동산, 금, 대출 자산을 이름, 소유자, 통화, 잔액, 메모, 순서와 함께 관리한다. 자산 수정 UI는 선택 자산의 유형·세부 유형·입력값으로 첫 렌더를 완성하며 기본 예금 폼을 먼저 표시하지 않는다. | 이름은 필수이다. 잘못된 숫자를 0으로 바꾸는 현재 UI는 검증 개선 대상이다. 자산 목록 금액은 고정폭 숫자로 자간을 넓히지 않고 한 줄 표시한다. | [asset types](../../../../../../web/src/types/asset.ts), [AssetAddModal](../../../../../../web/src/components/assets/AssetAddModal.tsx), [AssetEditModal](../../../../../../web/src/components/assets/AssetEditModal.tsx), [AssetCard](../../../../../../web/src/components/assets/AssetCard.tsx) | U, UI, I, E2E |
 | AST-002 | 현재 명세 | 활성 자산만 합계에 포함하고 대출은 절댓값을 음수로 계산한다. | 소유자는 현재 멤버 이름 문자열이다. | [assetMath](../../../../../../web/src/lib/assets/assetMath.ts) | U |
 | AST-003 | 현재 명세·결함 | 자산 순서를 결정적으로 저장한다. 현재 삭제 경로가 이력·주식·코인 보유내역을 함께 물리 삭제하는 동작은 특성화할 레거시 결함이며 목표 계약으로 유지하지 않는다. | 목표 삭제·복구·영구 purge 경계는 AST-006만 따른다. 순서 변경은 대상의 중복·누락과 version 경합을 거부하고 전체 성공 또는 전체 실패여야 한다. | [AssetList](../../../../../../web/src/components/assets/AssetList.tsx), [assetService](../../../../../../web/src/lib/assetService.ts), [DEC-017](../../../../governance/decisions.md#dec-017) | I, E2E |
 | AST-004 | 현재 명세 | 날짜별 총자산, 금융자산, 유형별, 소유자별 스냅샷을 조회하고 선택 기간과 시작 baseline에 존재한 안정적인 유형·ownerRef dimension key를 함께 반환한다. | 금융자산은 부동산과 대출을 제외한다. 과거 dimension은 현재 active Asset·Profile 목록으로 제한하지 않고 명시적 0원도 유효하게 포함하며, 표시 이름은 별도 historical-display 조회로 해석한다. | [assetService](../../../../../../web/src/lib/assetService.ts), [asset stats](../../../../../../web/src/app/assets/stats/page.tsx), [DEC-058](../../../../governance/decisions.md#dec-058) | U, I, E2E |
@@ -112,6 +112,7 @@
 | T-AST-007 | 목표 | 지원하는 6개 자산 유형·허용 세부 유형·활성 동일 가구 명의자·통화·잔액·메모·순서와 빈 이름·NaN·Infinity·숫자 문자열·잘못된 유형·통화·순서·archived/타 가구 명의자 / 자산 생성 / 정상 값은 손실 없이 생성하고 잘못된 값은 0이나 기본값으로 보정하지 않는 ValidationError와 write 0건 | AST-001, AST-009 |
 | T-AST-008 | 특성화·목표 | 중복·누락 자산 ID 순서, stale version과 정상 전체 순서, 종속 Position 삭제 실패 / 재정렬과 레거시 물리 삭제 / 잘못된 순서·stale version은 원자 거부하고 정상 순서는 version과 함께 한 번 변경하며 레거시 삭제의 부분 실패 위험을 기록한다. 목표 Writer는 논리 삭제만 수행하고 물리 삭제를 호출하지 않는다. | AST-003, AST-006 |
 | T-AST-009 | 목표 | 오늘 저장 snapshot·실시간 잔액, 시작 전 이력 없음, 중간 gap, 명시적 0원 / 자산 이력 조회 / 오늘 점은 live 값 하나이며 최초 snapshot 전은 비우고 이후 gap은 0원을 포함한 직전 성공값을 유지 | AST-005, AST-008, DEC-048 |
+| T-AST-010 | 현재 UI | 예금·부동산 등 서로 다른 유형과 허용 세부 유형의 자산 / 수정 모달 첫 렌더·자산 목록·요약 도넛 렌더 / effect 전부터 실제 유형과 세부 유형이 선택되고 금액은 비례폭 한 줄이며 도넛은 12시 경계가 겹치는 점선 원 없이 연속 원형으로 표시 | AST-001, AST-009, DEC-068 |
 
 ### 상세 시나리오
 

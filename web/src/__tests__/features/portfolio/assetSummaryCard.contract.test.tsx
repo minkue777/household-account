@@ -26,7 +26,7 @@ function asset(
 
 describe('자산 요약 구성 차트 계약', () => {
   test('초기 자산 화면에서 유형별 비중과 합계를 즉시 표시한다', () => {
-    render(
+    const { container } = render(
       <AssetSummaryCard
         assets={[
           asset('예금', 'savings', 3_000_000),
@@ -40,7 +40,10 @@ describe('자산 요약 구성 차트 계약', () => {
       />
     );
 
-    expect(screen.getByRole('img', { name: '자산 유형별 구성' })).toBeInTheDocument();
+    const chart = screen.getByRole('img', { name: '자산 유형별 구성' });
+    expect(chart).toBeInTheDocument();
+    expect(chart).toHaveAttribute('data-renderer', 'conic-gradient');
+    expect(container.querySelector('circle[stroke-dasharray]')).toBeNull();
     expect(
       screen.getByLabelText(`${ASSET_TYPE_CONFIG.savings.label} 75.0%`)
     ).toBeInTheDocument();

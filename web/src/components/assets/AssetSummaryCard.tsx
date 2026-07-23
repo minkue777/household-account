@@ -46,6 +46,15 @@ interface TooltipState {
   color: string;
 }
 
+const ASSET_CHART_COLORS: Record<AssetType, string> = {
+  savings: '#3B82F6',
+  stock: '#10B981',
+  crypto: '#F97316',
+  property: '#8B5CF6',
+  gold: '#F59E0B',
+  loan: '#EF4444',
+};
+
 export default function AssetSummaryCard({
   assets,
   dailyChange,
@@ -154,15 +163,6 @@ export default function AssetSummaryCard({
       .sort((a, b) => b.balance - a.balance);
   }, [filteredAssets]);
 
-  const chartColors: Record<AssetType, string> = {
-    savings: '#3B82F6',
-    stock: '#10B981',
-    crypto: '#F97316',
-    property: '#8B5CF6',
-    gold: '#F59E0B',
-    loan: '#EF4444',
-  };
-
   const chartSegments = useMemo(() => {
     let start = 0;
     return typeData.map((item) => {
@@ -172,15 +172,27 @@ export default function AssetSummaryCard({
     });
   }, [typeData]);
 
+  const chartBackground = useMemo(() => {
+    if (chartSegments.length === 0) return '#E2E8F0';
+
+    const stops = chartSegments.map((item, index) => {
+      const end =
+        index === chartSegments.length - 1
+          ? 100
+          : item.start + item.percentage;
+      return `${ASSET_CHART_COLORS[item.type]} ${item.start.toFixed(6)}% ${end.toFixed(6)}%`;
+    });
+    return `conic-gradient(${stops.join(', ')})`;
+  }, [chartSegments]);
+
   const showTypeTooltip = (
-    event: ReactPointerEvent<SVGCircleElement>,
+    event: ReactPointerEvent<HTMLDivElement>,
     item: (typeof typeData)[number]
   ) => {
-    const chartRect = event.currentTarget.ownerSVGElement?.getBoundingClientRect();
+    const chartRect = event.currentTarget.getBoundingClientRect();
     const desiredLeft =
-      event.clientX || (chartRect ? chartRect.left + chartRect.width / 2 : window.innerWidth / 2);
-    const desiredTop =
-      event.clientY || (chartRect ? chartRect.top + chartRect.height / 2 : 80);
+      event.clientX || chartRect.left + chartRect.width / 2;
+    const desiredTop = event.clientY || chartRect.top + chartRect.height / 2;
     const tooltipHalfWidth = 110;
     const viewportPadding = 12;
 
@@ -193,8 +205,36 @@ export default function AssetSummaryCard({
       top: Math.max(desiredTop - 16, 56),
       title: ASSET_TYPE_CONFIG[item.type].label,
       value: `${item.balance.toLocaleString()}원 (${item.percentage.toFixed(1)}%)`,
-      color: chartColors[item.type],
+      color: ASSET_CHART_COLORS[item.type],
     });
+  };
+
+  const handleChartPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (chartSegments.length === 0) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - (rect.left + rect.width / 2);
+    const y = event.clientY - (rect.top + rect.height / 2);
+    const normalizedRadius = Math.hypot(x, y) / (rect.width / 2);
+
+    if (normalizedRadius < 0.6 || normalizedRadius > 1) {
+      hideTypeTooltip();
+      return;
+    }
+
+    // CSS conic-gradient는 12시에서 시작해 시계 방향으로 진행합니다.
+    const percentage = (
+      (Math.atan2(y, x) * 180) / Math.PI + 90 + 360
+    ) % 360 / 3.6;
+    const item = chartSegments.find((segment, index) => {
+      const end =
+        index === chartSegments.length - 1
+          ? 100
+          : segment.start + segment.percentage;
+      return percentage >= segment.start && percentage < end;
+    });
+
+    if (item) showTypeTooltip(event, item);
   };
 
   const hideTypeTooltip = () => {
@@ -252,46 +292,26 @@ export default function AssetSummaryCard({
       <div className="p-5">
         <div className="flex items-center">
           <div className="relative -m-[10px] h-[140px] w-[140px] flex-shrink-0 overflow-visible">
-            <svg
-              viewBox="0 0 100 100"
-              className="h-full w-full -rotate-90"
+            <div
+              className="absolute inset-[7px] cursor-pointer rounded-full"
               role="img"
               aria-label="자산 유형별 구성"
+              data-renderer="conic-gradient"
+              style={{ background: chartBackground }}
+              onPointerEnter={handleChartPointer}
+              onPointerMove={handleChartPointer}
+              onPointerDown={handleChartPointer}
+              onPointerLeave={hideTypeTooltip}
             >
-              {chartSegments.length === 0 ? (
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="36"
-                  fill="none"
-                  stroke="#E2E8F0"
-                  strokeWidth="18"
+              <div className="pointer-events-none absolute inset-[25px] rounded-full bg-white" />
+              {chartSegments.map((item) => (
+                <span
+                  key={item.type}
+                  className="sr-only"
+                  aria-label={`${ASSET_TYPE_CONFIG[item.type].label} ${item.percentage.toFixed(1)}%`}
                 />
-              ) : (
-                chartSegments.map((item) => (
-                  <circle
-                    key={item.type}
-                    cx="50"
-                    cy="50"
-                    r="36"
-                    pathLength="100"
-                    fill="none"
-                    stroke={chartColors[item.type]}
-                    strokeWidth="18"
-                    strokeDasharray={`${item.percentage} ${100 - item.percentage}`}
-                    strokeDashoffset={-item.start}
-                    tabIndex={0}
-                    aria-label={`${ASSET_TYPE_CONFIG[item.type].label} ${item.percentage.toFixed(1)}%`}
-                    className="cursor-pointer outline-none"
-                    onPointerEnter={(event) => showTypeTooltip(event, item)}
-                    onPointerMove={(event) => showTypeTooltip(event, item)}
-                    onPointerDown={(event) => showTypeTooltip(event, item)}
-                    onPointerLeave={hideTypeTooltip}
-                    onBlur={hideTypeTooltip}
-                  />
-                ))
-              )}
-            </svg>
+              ))}
+            </div>
             {tooltipState.visible && (
               <div
                 className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg"
@@ -320,7 +340,7 @@ export default function AssetSummaryCard({
                   <div className="flex items-center gap-2">
                     <div
                       className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
-                      style={{ backgroundColor: chartColors[item.type] }}
+                      style={{ backgroundColor: ASSET_CHART_COLORS[item.type] }}
                     />
                     <span className="text-sm text-slate-600">{config.label}</span>
                   </div>

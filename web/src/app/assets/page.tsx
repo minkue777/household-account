@@ -2,7 +2,6 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
 import { ChartPie } from 'lucide-react';
 import { Asset, AssetOwnerOption, AssetType, isGoldEtfSubType } from '@/types/asset';
 import {
@@ -13,6 +12,10 @@ import {
 } from '@/lib/assetService';
 import AssetSummaryCard from '@/components/assets/AssetSummaryCard';
 import AssetList from '@/components/assets/AssetList';
+import AssetAddModal from '@/components/assets/AssetAddModal';
+import AssetEditModal from '@/components/assets/AssetEditModal';
+import AssetHistoryModal from '@/components/assets/AssetHistoryModal';
+import AssetOwnerProfileModal from '@/components/assets/AssetOwnerProfileModal';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import {
@@ -29,31 +32,6 @@ import {
   writeAssetSnapshot,
 } from '@/features/portfolio/application/portfolioReadSnapshot';
 import { useHouseholdHoldingSnapshots } from '@/lib/utils/useHouseholdHoldingSnapshots';
-import {
-  loadAssetAddModal,
-  loadAssetBalanceChart,
-  loadAssetEditModal,
-  loadAssetHistoryModal,
-  loadAssetOwnerProfileModal,
-  preloadAssetInteractions,
-} from '@/composition/interactiveUiPreload';
-import { ModalInteractionLoadingFallback } from '@/components/common/InteractionLoadingFallback';
-
-const AssetAddModal = dynamic(loadAssetAddModal, {
-  loading: ModalInteractionLoadingFallback,
-});
-const AssetEditModal = dynamic(loadAssetEditModal, {
-  loading: ModalInteractionLoadingFallback,
-});
-const AssetHistoryModal = dynamic(loadAssetHistoryModal, {
-  loading: ModalInteractionLoadingFallback,
-});
-const AssetBalanceChart = dynamic(loadAssetBalanceChart, {
-  loading: ModalInteractionLoadingFallback,
-});
-const AssetOwnerProfileModal = dynamic(loadAssetOwnerProfileModal, {
-  loading: ModalInteractionLoadingFallback,
-});
 
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
@@ -67,7 +45,6 @@ export default function AssetsPage() {
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showChartModal, setShowChartModal] = useState(false);
   const [showOwnerModal, setShowOwnerModal] = useState(false);
   const [isAddingSample, setIsAddingSample] = useState(false);
   const [selectedMember, setSelectedMember] = useState<string>(ALL_MEMBERS_OPTION);
@@ -145,12 +122,6 @@ export default function AssetsPage() {
     let delayId: number | undefined;
     let fallbackId: number | undefined;
     let started = false;
-
-    // 첫 paint 직후 모달 코드를 가장 먼저 요청합니다. 다음 animation frame까지
-    // 미루면 사용자가 즉시 계좌를 누른 경우 그 한 프레임만큼 chunk 시작도 늦어집니다.
-    void preloadAssetInteractions().catch((error) => {
-      console.error('자산 상호작용 준비 오류:', error);
-    });
 
     const warm = () => {
       if (cancelled || started) return;
@@ -309,11 +280,6 @@ export default function AssetsPage() {
     setShowEditModal(true);
   };
 
-  const handleViewChart = () => {
-    setShowHistoryModal(false);
-    setShowChartModal(true);
-  };
-
   const visibleAssets =
     selectedMember === ALL_MEMBERS_OPTION
       ? assets
@@ -431,6 +397,7 @@ export default function AssetsPage() {
 
         {showEditModal && (
           <AssetEditModal
+            key={selectedAsset?.id}
             isOpen={true}
             onClose={() => {
               setShowEditModal(false);
@@ -449,7 +416,6 @@ export default function AssetsPage() {
             }}
             asset={selectedAsset}
             onEditAsset={handleEditAsset}
-            onViewChart={handleViewChart}
             stockHoldings={holdingSnapshots.stockHoldings}
             cryptoHoldings={holdingSnapshots.cryptoHoldings}
             stockHoldingsReady={holdingSnapshots.stockHoldingsReady}
@@ -457,17 +423,6 @@ export default function AssetsPage() {
           />
         )}
 
-        {showChartModal && (
-          <AssetBalanceChart
-            isOpen={true}
-            onClose={() => {
-              setShowChartModal(false);
-              setSelectedAsset(null);
-            }}
-            asset={selectedAsset}
-            assets={assets}
-          />
-        )}
       </div>
     </main>
   );
