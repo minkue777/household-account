@@ -308,7 +308,7 @@ Position write가 성공하고 Asset write가 실패한 상태, 또는 그 반�
 
 transaction callback 재실행은 Provider를 다시 호출하지 않습니다. 공급자 실패가 전부이면 Position·Asset Canonical write 없이 실패 결과만 반환하지만, transaction 밖의 운영 log·Health 상태·필요한 경보는 반드시 남깁니다.
 
-`RefreshAccountPrices`는 개별 자산 수동 갱신, `RefreshHouseholdPrices`는 자산 메인 페이지 진입 시 전체 갱신입니다. 페이지 진입 갱신은 최초 자산 Read Model을 먼저 렌더링한 뒤 짧은 지연과 browser idle 시점에 background로 시작하며, 최초 로딩 표시나 자산 입력을 기다리게 하지 않습니다. 같은 화면의 중복 mount는 client single-flight로 한 요청에 합치고, 서버에서도 같은 가구·범위의 30초 내 요청을 실행 중이거나 직전에 완료된 동일 run으로 재사용합니다. 전체 갱신은 target 총수 상한 없이 서로 다른 Quote target을 50개씩 page 처리하고, 한 run에서 외부 호출 최대 5개·요청당 timeout 10초·retryable 결과 총 3회 제한을 적용합니다.
+`RefreshAccountPrices`는 개별 자산 수동 갱신, `RefreshHouseholdPrices`는 다른 화면에서 자산 메인 페이지로 진입할 때의 전체 갱신입니다. 화면은 마지막 자산 Read Model과 같은 날짜의 가구별 일간 변동 snapshot을 먼저 렌더링하고, 진입 갱신은 이를 막지 않는 background 작업으로 한 번만 시작합니다. 페이지 체류 중 30초 반복과 visibility 복귀 갱신은 하지 않습니다. 같은 화면의 중복 mount는 client single-flight로 한 요청에 합치고, 서버에서도 같은 가구·범위의 30초 내 요청을 실행 중이거나 직전에 완료된 동일 run으로 재사용합니다. 이 30초 window는 반복 주기가 아니라 중복 Provider fan-out 방지 경계입니다. 전체 갱신은 target 총수 상한 없이 서로 다른 Quote target을 50개씩 page 처리하고, 한 run에서 외부 호출 최대 5개·요청당 timeout 10초·retryable 결과 총 3회 제한을 적용합니다.
 
 ### 5.3 `RunDailyAssetValuation`
 

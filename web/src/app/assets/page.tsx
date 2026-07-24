@@ -26,14 +26,14 @@ import { assetOwnerProfiles } from '@/features/access-household/application/asse
 import type { AssetOwnerProfileView } from '@/features/access-household/domain/assetOwnerProfile';
 import { getAssetOwnerProfileQueries } from '@/composition/assetOwnerProfileReadRuntime';
 import {
+  readDailyAssetChangeSnapshot,
   readAssetOwnerProfileSnapshot,
   readAssetSnapshot,
+  writeDailyAssetChangeSnapshot,
   writeAssetOwnerProfileSnapshot,
   writeAssetSnapshot,
 } from '@/features/portfolio/application/portfolioReadSnapshot';
 import { useHouseholdHoldingSnapshots } from '@/lib/utils/useHouseholdHoldingSnapshots';
-
-const MARKET_REFRESH_INTERVAL_MS = 30_000;
 
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
@@ -108,6 +108,7 @@ export default function AssetsPage() {
     }
     const cachedAssets = readAssetSnapshot(householdId);
     const cachedProfiles = readAssetOwnerProfileSnapshot(householdId);
+    const cachedDailyChanges = readDailyAssetChangeSnapshot(householdId);
     cachedAssetsRef.current = cachedAssets;
     if (cachedAssets !== undefined) {
       setAssets(cachedAssets);
@@ -121,6 +122,10 @@ export default function AssetsPage() {
     } else {
       setOwnerProfiles([]);
     }
+    setDailyChanges({
+      householdId,
+      amounts: cachedDailyChanges ?? {},
+    });
   }, [household?.id]);
 
   useEffect(() => {
@@ -177,35 +182,8 @@ export default function AssetsPage() {
       || adminHouseholdView !== null
     ) return undefined;
 
-    let disposed = false;
-    let lastStartedAt = 0;
-
-    const refreshMarketValues = (force = false) => {
-      if (
-        disposed
-        || document.visibilityState !== 'visible'
-        || (!force && Date.now() - lastStartedAt < MARKET_REFRESH_INTERVAL_MS)
-      ) return;
-
-      lastStartedAt = Date.now();
-      void refreshAllMarketValues().catch(console.error);
-    };
-
-    refreshMarketValues(true);
-    const intervalId = window.setInterval(
-      refreshMarketValues,
-      MARKET_REFRESH_INTERVAL_MS
-    );
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') refreshMarketValues();
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      disposed = true;
-      window.clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
+    void refreshAllMarketValues().catch(console.error);
+    return undefined;
   }, [adminHouseholdView, household?.id, isSessionVerified]);
 
   useEffect(() => {
@@ -237,11 +215,15 @@ export default function AssetsPage() {
       return undefined;
     }
 
+    if (isLoading) return undefined;
+
     if (assets.length === 0) {
+      const amounts = Object.fromEntries(memberOptions.map(({ key }) => [key, 0]));
       setDailyChanges({
         householdId,
-        amounts: Object.fromEntries(memberOptions.map(({ key }) => [key, 0])),
+        amounts,
       });
+      writeDailyAssetChangeSnapshot(householdId, amounts);
       return undefined;
     }
 
@@ -260,7 +242,9 @@ export default function AssetsPage() {
         })
       );
       if (!cancelled) {
-        setDailyChanges({ householdId, amounts: Object.fromEntries(entries) });
+        const amounts = Object.fromEntries(entries);
+        setDailyChanges({ householdId, amounts });
+        writeDailyAssetChangeSnapshot(householdId, amounts);
       }
     };
     void syncDailySummary();
@@ -268,7 +252,7 @@ export default function AssetsPage() {
     return () => {
       cancelled = true;
     };
-  }, [assets, household?.id, isSessionVerified, memberOptions]);
+  }, [assets, household?.id, isLoading, isSessionVerified, memberOptions]);
 
   const handleAssetClick = (asset: Asset) => {
     setSelectedAsset(asset);

@@ -37,11 +37,9 @@ describe('즉시 상호작용 UI 계약', () => {
     );
   });
 
-  test('자산 페이지는 진입 즉시와 화면이 보이는 동안 30초마다 시세를 갱신한다', () => {
+  test('자산 페이지는 진입할 때만 시세를 한 번 갱신하고 직전 일간 변동을 먼저 표시한다', () => {
     const assetsPage = source('app/assets/page.tsx');
-    const marketRefreshStart = assetsPage.indexOf(
-      'const refreshMarketValues = (force = false) => {'
-    );
+    const marketRefreshStart = assetsPage.indexOf('void refreshAllMarketValues()');
     const marketRefreshEnd = assetsPage.indexOf(
       'useEffect(() => {',
       marketRefreshStart + 1
@@ -54,20 +52,17 @@ describe('즉시 상호작용 UI 계약', () => {
     );
     const dailyRefreshEffect = assetsPage.slice(dailyRefreshStart, dailyRefreshEnd);
 
-    expect(assetsPage).toContain('const MARKET_REFRESH_INTERVAL_MS = 30_000;');
     expect(marketRefreshEffect).toContain('void refreshAllMarketValues()');
-    expect(marketRefreshEffect).toContain('refreshMarketValues(true);');
-    expect(marketRefreshEffect).toContain(
-      'window.setInterval(\n      refreshMarketValues,\n      MARKET_REFRESH_INTERVAL_MS'
-    );
-    expect(marketRefreshEffect).toContain(
-      "document.addEventListener('visibilitychange', handleVisibilityChange)"
-    );
-    expect(marketRefreshEffect).toContain(
-      "document.visibilityState !== 'visible'"
+    expect(marketRefreshEffect).not.toContain('window.setInterval');
+    expect(marketRefreshEffect).not.toContain(
+      "document.addEventListener('visibilitychange'"
     );
     expect(marketRefreshEffect).not.toContain('setTimeout');
     expect(marketRefreshEffect).not.toContain('requestIdleCallback');
+    expect(assetsPage).toContain('readDailyAssetChangeSnapshot(householdId)');
+    expect(dailyRefreshEffect).toContain(
+      'writeDailyAssetChangeSnapshot(householdId, amounts)'
+    );
     expect(dailyRefreshEffect).toContain('Promise.all(');
     expect(dailyRefreshEffect).toContain('memberOptions.map(async ({ key, label }) =>');
     expect(dailyRefreshEffect).toContain('void syncDailySummary();');

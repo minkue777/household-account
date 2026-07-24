@@ -1,6 +1,8 @@
 import {
+  readDailyAssetChangeSnapshot,
   readAssetOwnerProfileSnapshot,
   readAssetSnapshot,
+  writeDailyAssetChangeSnapshot,
   writeAssetOwnerProfileSnapshot,
   writeAssetSnapshot,
 } from '@/features/portfolio/application/portfolioReadSnapshot';
@@ -54,6 +56,21 @@ describe('portfolio first-paint snapshot contract', () => {
     writeAssetOwnerProfileSnapshot('house-1', profiles);
 
     expect(readAssetOwnerProfileSnapshot('house-1')).toEqual(profiles);
+  });
+
+  it('오늘 변동은 페이지 재진입 시 마지막 계산값을 먼저 복원하고 날짜가 바뀌면 폐기한다', () => {
+    writeDailyAssetChangeSnapshot(
+      'house-1',
+      { all: 12_345, 'profile-1': -500 },
+      '2026-07-24'
+    );
+
+    expect(readDailyAssetChangeSnapshot('house-1', '2026-07-24')).toEqual({
+      all: 12_345,
+      'profile-1': -500,
+    });
+    expect(readDailyAssetChangeSnapshot('house-1', '2026-07-25')).toBeUndefined();
+    expect(readDailyAssetChangeSnapshot('house-2', '2026-07-24')).toBeUndefined();
   });
 
   it('손상되거나 다른 가구의 snapshot은 화면에 사용하지 않는다', () => {

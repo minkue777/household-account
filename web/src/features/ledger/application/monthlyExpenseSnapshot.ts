@@ -1,4 +1,5 @@
 import { requireClientSessionScope } from '@/composition/clientSessionScope';
+import { orderLedgerTransactions } from '@/features/ledger/domain/ledgerTransactionOrder';
 import type { Expense, TransactionType } from '@/types/expense';
 
 const DEFAULT_TRANSACTION_TYPE: TransactionType = 'expense';
@@ -75,7 +76,9 @@ export function readMonthlyExpenseSnapshot(
     ) {
       return undefined;
     }
-    return stored.items.map((item) => ({ ...(item as Expense) }));
+    return orderLedgerTransactions(
+      stored.items.map((item) => ({ ...(item as Expense) }))
+    );
   } catch {
     return undefined;
   }
@@ -96,7 +99,7 @@ export function writeMonthlyExpenseSnapshot(
         version: MONTHLY_SNAPSHOT_VERSION,
         householdId,
         writtenAt: Date.now(),
-        items,
+        items: orderLedgerTransactions(items),
       })
     );
   } catch {

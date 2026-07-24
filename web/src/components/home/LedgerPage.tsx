@@ -16,6 +16,7 @@ import IncomeSummaryModal from '@/components/expense/IncomeSummaryModal';
 import SearchModal from '@/components/search/SearchModal';
 import type { SplitItem } from '@/lib/expenseService';
 import { readMonthlyExpenseSnapshot } from '@/features/ledger/application/monthlyExpenseSnapshot';
+import { orderLedgerTransactions } from '@/features/ledger/domain/ledgerTransactionOrder';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import {
   markWebFirstLedgerPaint,
@@ -197,7 +198,9 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
 
   const selectedDateExpenses = useMemo(() => {
     if (!selectedDate) return [];
-    return expenses.filter((expense) => expense.date === selectedDate);
+    return orderLedgerTransactions(
+      expenses.filter((expense) => expense.date === selectedDate)
+    );
   }, [selectedDate, expenses]);
 
   const handlePrevMonth = () => {

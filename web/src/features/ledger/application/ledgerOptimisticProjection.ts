@@ -1,17 +1,12 @@
 import { OptimisticEntityProjection } from '@/platform/read-model/optimisticEntityProjection';
 import { registerClientSessionReset } from '@/composition/clientSessionResetRegistry';
+import { compareLedgerTransactions } from '@/features/ledger/domain/ledgerTransactionOrder';
 import type { Expense } from '@/types/expense';
 
 type LedgerPatch = Partial<Pick<
   Expense,
   'merchant' | 'memo' | 'amount' | 'category' | 'date'
 >>;
-
-function compareExpenses(left: Expense, right: Expense): number {
-  return right.date.localeCompare(left.date)
-    || (right.time || '').localeCompare(left.time || '')
-    || right.id.localeCompare(left.id);
-}
 
 /** Ledger가 허용하는 patch만 공통 optimistic projection에 노출합니다. */
 export class LedgerOptimisticProjection {
@@ -68,7 +63,10 @@ export class LedgerOptimisticProjection {
   private projectionFor(scope: string): OptimisticEntityProjection<Expense> {
     const existing = this.projections.get(scope);
     if (existing) return existing;
-    const projection = new OptimisticEntityProjection<Expense>('ledger', compareExpenses);
+    const projection = new OptimisticEntityProjection<Expense>(
+      'ledger',
+      compareLedgerTransactions
+    );
     this.projections.set(scope, projection);
     return projection;
   }

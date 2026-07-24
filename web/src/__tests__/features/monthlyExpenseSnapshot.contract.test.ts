@@ -54,4 +54,30 @@ describe('monthly expense snapshot contract', () => {
     ]);
     expect(readMonthlyExpenseSnapshot(2026, 7, 'expense')).toBeUndefined();
   });
+
+  it('기존 기기에 순서 없이 저장된 같은 날짜 지출도 첫 화면부터 시간 역순으로 복원한다', () => {
+    useHousehold('household-1');
+    window.localStorage.setItem(
+      'household-account.monthly-ledger.v1:household-1:2026-07:expense',
+      JSON.stringify({
+        version: 1,
+        householdId: 'household-1',
+        items: [
+          { ...expense, id: 'emart', time: '13:10', merchant: '이마트 동탄점' },
+          { ...expense, id: 'third', time: '16:20', merchant: '세 번째 지출' },
+          { ...expense, id: 'local-tax', time: '19:30', merchant: '지자체세입금(앱카드)' },
+          { ...expense, id: 'second', time: '17:40', merchant: '두 번째 지출' },
+        ],
+      })
+    );
+
+    expect(
+      readMonthlyExpenseSnapshot(2026, 7, 'expense')?.map(({ merchant }) => merchant)
+    ).toEqual([
+      '지자체세입금(앱카드)',
+      '두 번째 지출',
+      '세 번째 지출',
+      '이마트 동탄점',
+    ]);
+  });
 });

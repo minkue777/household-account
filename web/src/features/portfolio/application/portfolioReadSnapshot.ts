@@ -1,15 +1,24 @@
 import type { AssetOwnerProfileView } from '@/features/access-household/domain/assetOwnerProfile';
+import { getTodayLocalDate } from '@/lib/utils/date';
 import type { Asset } from '@/types/asset';
 
 const SNAPSHOT_VERSION = 1;
 const ASSET_STORAGE_PREFIX = 'household-account.assets.v1.';
 const OWNER_STORAGE_PREFIX = 'household-account.asset-owner-profiles.v1.';
+const DAILY_CHANGE_STORAGE_PREFIX = 'household-account.asset-daily-change.v1.';
 const ASSET_TYPES = new Set(['savings', 'stock', 'crypto', 'property', 'gold', 'loan']);
 
 interface StoredSnapshot<T> {
   version: number;
   householdId: string;
   values: T[];
+}
+
+interface StoredDailyChangeSnapshot {
+  version: number;
+  householdId: string;
+  calendarDate: string;
+  amounts: Record<string, number>;
 }
 
 function key(prefix: string, householdId: string): string {
@@ -159,4 +168,55 @@ export function writeAssetOwnerProfileSnapshot(
   profiles: readonly AssetOwnerProfileView[]
 ): void {
   writeValues(OWNER_STORAGE_PREFIX, householdId, profiles);
+}
+
+export function readDailyAssetChangeSnapshot(
+  householdId: string,
+  calendarDate = getTodayLocalDate()
+): Record<string, number> | undefined {
+  if (typeof window === 'undefined' || householdId.trim() === '') return undefined;
+  try {
+    const parsed = record(
+      JSON.parse(
+        window.localStorage.getItem(key(DAILY_CHANGE_STORAGE_PREFIX, householdId)) ?? 'null'
+      )
+    );
+    const amounts = record(parsed?.amounts);
+    if (
+      parsed?.version !== SNAPSHOT_VERSION
+      || parsed.householdId !== householdId
+      || parsed.calendarDate !== calendarDate
+      || amounts === undefined
+      || Object.values(amounts).some(
+        (amount) => typeof amount !== 'number' || !Number.isFinite(amount)
+      )
+    ) {
+      return undefined;
+    }
+    return amounts as Record<string, number>;
+  } catch {
+    return undefined;
+  }
+}
+
+export function writeDailyAssetChangeSnapshot(
+  householdId: string,
+  amounts: Readonly<Record<string, number>>,
+  calendarDate = getTodayLocalDate()
+): void {
+  if (typeof window === 'undefined' || householdId.trim() === '') return;
+  const stored: StoredDailyChangeSnapshot = {
+    version: SNAPSHOT_VERSION,
+    householdId,
+    calendarDate,
+    amounts: { ...amounts },
+  };
+  try {
+    window.localStorage.setItem(
+      key(DAILY_CHANGE_STORAGE_PREFIX, householdId),
+      JSON.stringify(stored)
+    );
+  } catch {
+    // 저장소가 차단되어도 Firestore 권위 조회는 계속 동작합니다.
+  }
 }
