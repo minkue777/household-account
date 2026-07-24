@@ -53,7 +53,7 @@ describe('자산 요약 구성 차트 계약', () => {
     expect(screen.getByText(/4,000,000/)).toBeInTheDocument();
   });
 
-  test('가구원 전환 중에는 직전 가구원의 일간 변동값을 표시하지 않는다', () => {
+  test('[T-AST-011] 가구원 전환 중에는 직전 가구원의 일간 변동값을 표시하지 않는다', () => {
     const memberOptions = [
       { key: 'member-a', label: '민규' },
       { key: 'member-b', label: '진선' },
