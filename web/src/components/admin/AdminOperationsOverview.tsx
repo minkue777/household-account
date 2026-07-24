@@ -23,7 +23,7 @@ interface AdminOperationsOverviewProps {
 }
 
 const JOB_LABELS: Record<string, string> = {
-  'recurring-daily': '정기 거래',
+  'recurring-daily': '고정비 등록',
   'asset-automation-daily': '자산 자동 처리',
   'instrument-catalog-daily': '종목 목록',
   'dividend-hourly': '배당 공시',
@@ -107,6 +107,29 @@ export function AdminOperationsOverview({
     1,
     ...dashboard.dailyAccess.map(({ count }) => count)
   );
+  const activeUsers = dashboard.households
+    .flatMap((household) =>
+      household.members
+        .filter(
+          (member) =>
+            household.lifecycleState === 'active'
+            && member.lifecycleState === 'active'
+            && member.linkedPrincipal
+        )
+        .map((member) => ({
+          ...member,
+          householdId: household.householdId,
+          householdName: household.name,
+        }))
+    )
+    .sort(
+      (left, right) =>
+        right.todayAccessCount - left.todayAccessCount
+        || right.totalAccessCount - left.totalAccessCount
+        || (right.lastAccessAt ?? '').localeCompare(left.lastAccessAt ?? '')
+        || left.householdName.localeCompare(right.householdName, 'ko')
+        || left.displayName.localeCompare(right.displayName, 'ko')
+    );
 
   return (
     <>
@@ -151,6 +174,53 @@ export function AdminOperationsOverview({
           tone="violet"
         />
       </section>
+
+      <Panel
+        title="사용자별 접속"
+        description="현재 가구에 연결된 활성 로그인 사용자별 앱 실행 완료 횟수"
+      >
+        {activeUsers.length === 0 ? (
+          <EmptyState>접속 통계를 집계할 활성 사용자가 없습니다.</EmptyState>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[620px] text-left text-xs">
+              <thead className="border-b border-slate-800 text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 font-medium">사용자</th>
+                  <th className="px-4 py-3 font-medium">가계부</th>
+                  <th className="px-4 py-3 text-right font-medium">오늘 접속</th>
+                  <th className="px-4 py-3 text-right font-medium">누적 접속</th>
+                  <th className="px-4 py-3 text-right font-medium">최근 접속</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/80">
+                {activeUsers.map((user) => (
+                  <tr
+                    key={`${user.householdId}:${user.memberId}`}
+                    className="text-slate-300"
+                  >
+                    <td className="px-4 py-3 font-medium text-slate-100">
+                      {user.displayName}
+                    </td>
+                    <td className="px-4 py-3 text-slate-500">
+                      {user.householdName}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-semibold text-sky-300">
+                      {user.todayAccessCount.toLocaleString('ko-KR')}회
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-slate-300">
+                      {user.totalAccessCount.toLocaleString('ko-KR')}회
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-500">
+                      {formatDateTime(user.lastAccessAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
 
       <section className="grid gap-3 lg:grid-cols-[1.7fr_1fr]">
         <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-5 shadow-xl shadow-black/10">
