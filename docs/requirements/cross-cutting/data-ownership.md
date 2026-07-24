@@ -68,7 +68,7 @@
 | Android QuickEdit FIFO | Android Host | 비권위 표시 대기 상태 | DEC-054·068에 따라 session scope·transaction ID·고유 sequence와 선택적 서버 확정 `quickEditSnapshot`을 Keystore 암호화 저장; 새 snapshot은 즉시 표시하고 ID-only legacy만 Ledger 재조회; Capture journal·Command outbox와 lifecycle 분리 |
 | Android QuickEdit Command Outbox | Android Host | 일반 Ledger Command의 비권위 전달 상태 | DEC-067에 따라 session scope·transaction ID·고정 commandId·idempotencyKey·versioned payload를 별도 Keystore 암호화 저장하고 WorkManager 영속 예약; Success·AlreadyProcessed는 즉시 삭제하고 terminal·72시간 만료는 실패 알림 전달 전까지만 needs-attention 보존한 뒤 알림 성공 시 payload 삭제, 복호화·codec 손상은 payload fail-closed 삭제와 비민감 진단 플래그로 분리 |
 | Android WebView·권한·QuickEdit 설정 | Android Host | 플랫폼 로컬 상태 | 업무 Aggregate에 포함하지 않음 |
-| PWA cache·worker version | PWA | 플랫폼 cache | Canonical 업무 저장소가 아니며 인증·가구·금융 API 응답을 cache하지 않음. 현재 build의 정적 navigation shell과 공개 아이콘·폰트·이미지만 최대 7일 보존하고 session 종료 시 파생 상태 폐기 |
+| PWA cache·worker version | PWA | 플랫폼 cache | Canonical 업무 저장소가 아니며 navigation HTML, 인증·가구·금융 API 응답을 cache하지 않음. 현재 build hash 정적 asset과 공개 아이콘·폰트·이미지만 최대 7일 보존하고 session 종료 시 파생 상태 폐기 |
 | 종목 catalog 인스턴스 메모리 cache | Market Data 서버 Adapter | 비권위 성능 cache | 5분마다 latest manifest generation을 확인하고 변경 때만 snapshot을 교체; 인스턴스 종료 시 유실 가능, Storage snapshot이 단일 원본 |
 | Web theme | Home Preferences Web Adapter | 사용자 로컬 표현 | 거래·가구 Domain에 영향 없음 |
 

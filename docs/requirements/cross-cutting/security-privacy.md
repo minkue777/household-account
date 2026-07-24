@@ -93,7 +93,7 @@
 - QuickEdit은 DEC-024에 따라 잠금 화면 위에 현재 편집 정보를 표시할 수 있지만 keyguard를 해제하지 않고 non-exported Activity·유효 거래 ID·현재 session을 강제한다. DEC-045에 따라 화면 캡처와 시스템 최근 앱 미리보기는 별도 차단하지 않되 앱 로그에는 QuickEdit 민감값을 기록하지 않는다.
 - Android 13 이상에서는 알림 표시 런타임 권한을 요청하고 거부 상태를 처리한다.
 - Android 결제 journal은 원격 호출 중 process 종료 유실을 막기 위해 raw DTO를 Android Keystore의 non-exportable 설치 키로 AES-256-GCM 암호화해 저장한다. 정상 terminal은 QuickEdit follow-up 내구화 뒤 즉시 삭제하고 WorkManager를 만들지 않으며, 실패·partial entry만 최대 72시간 보존한다. 로그아웃·멤버/가구 변경·키 오류에서도 삭제한다.
-- PWA/CDN cache는 인증 응답과 가구·금융 API를 저장하지 않는다. build-versioned 정적 navigation shell과 공개 비민감 아이콘·폰트·이미지의 최대 7일 runtime cache만 허용하고 임의 cross-origin 응답은 저장하지 않는다. DEC-068의 first-party localStorage 가구·현재 월 원장·가구별 카테고리 표시 snapshot은 이 공개 cache 금지와 별개이며 서버 권한 근거로 사용하지 않는다. ([DEC-051](../governance/decisions.md#dec-051), [DEC-068](../governance/decisions.md#dec-068))
+- PWA/CDN cache는 navigation HTML, 인증 응답과 가구·금융 API를 저장하지 않는다. build-versioned 정적 asset과 공개 비민감 아이콘·폰트·이미지의 최대 7일 cache만 허용하고 임의 cross-origin 응답은 저장하지 않는다. DEC-068의 first-party localStorage 가구·현재 월 원장·가구별 카테고리 표시 snapshot은 이 공개 cache 금지와 별개이며 서버 권한 근거로 사용하지 않는다. ([DEC-051](../governance/decisions.md#dec-051), [DEC-068](../governance/decisions.md#dec-068))
 - 운영 migration·repair는 browser bundle에서 실행할 수 없고 승인된 서버 job이 명시적 scope·dry-run·checkpoint·reconciliation을 남긴다.
 - 외부 Provider를 대신 호출하는 Web/Functions API는 인증·Membership을 검증하고 App Check, schema/body/batch/concurrency/rate 상한을 적용한다. 외부 URL은 HTTPS allowlist, redirect 재검증, timeout과 응답 크기 상한을 통과해야 한다.
 - 클라이언트 UI의 권한 분기는 서버 권한 검증을 대체하지 않는다.

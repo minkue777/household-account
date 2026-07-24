@@ -177,6 +177,23 @@ export async function restoreAndroidHostAuth(): Promise<AuthenticatedWebSession 
   return isAndroidHostAvailable() ? signInFromAndroidHost() : null;
 }
 
+/**
+ * Android WebView의 영속 Web Auth 토큰을 서버에서 다시 검증합니다.
+ * Web refresh token이 더 이상 유효하지 않을 때만 Native 세션으로 교환합니다.
+ */
+export async function refreshAndroidWebAuth(
+  existingUser: User
+): Promise<AuthenticatedWebSession> {
+  try {
+    await existingUser.getIdToken(true);
+    return { user: existingUser };
+  } catch {
+    const restored = await restoreAndroidHostAuth();
+    if (!restored) throw new Error('ANDROID_AUTH_RESTORE_REQUIRED');
+    return restored;
+  }
+}
+
 /** 로그인과 함께 서버가 같은 Principal에서 확정한 Membership 해석 결과를 반환합니다. */
 export async function signInWithGoogleSession(): Promise<AuthenticatedWebSession | null> {
   try {

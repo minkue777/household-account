@@ -21,7 +21,11 @@ import {
   signInWithCustomToken,
 } from 'firebase/auth';
 import { requestAndroidHost } from '@/platform/android-host/androidHostBridge';
-import { logOut, restoreAndroidHostAuth } from '@/lib/authService';
+import {
+  logOut,
+  refreshAndroidWebAuth,
+  restoreAndroidHostAuth,
+} from '@/lib/authService';
 
 describe('Android WebView auth bootstrap contract', () => {
   it('native 세션을 custom token으로 교환하고 다음 실행을 위해 WebView 세션을 영속화한다', async () => {
@@ -59,6 +63,37 @@ describe('Android WebView auth bootstrap contract', () => {
       { runtime: 'android-persistent-auth' },
       'custom-token'
     );
+  });
+
+  it('영속 Web Auth 토큰이 유효하면 Native 교환 없이 갱신한다', async () => {
+    const nativeRequestCount = jest.mocked(requestAndroidHost).mock.calls.length;
+    const user = {
+      uid: 'uid-1',
+      getIdToken: jest.fn().mockResolvedValue('fresh-id-token'),
+    };
+
+    await expect(refreshAndroidWebAuth(user as never)).resolves.toEqual({ user });
+
+    expect(user.getIdToken).toHaveBeenCalledWith(true);
+    expect(requestAndroidHost).toHaveBeenCalledTimes(nativeRequestCount);
+  });
+
+  it('영속 Web Auth 토큰 갱신이 실패하면 Native 세션으로 자동 복구한다', async () => {
+    const user = {
+      uid: 'uid-1',
+      getIdToken: jest.fn().mockRejectedValue(new Error('expired refresh token')),
+    };
+    jest.mocked(requestAndroidHost).mockResolvedValue({
+      customToken: 'custom-token',
+    });
+    jest.mocked(signInWithCustomToken).mockResolvedValue({
+      user: { uid: 'uid-1' },
+    } as never);
+
+    await expect(refreshAndroidWebAuth(user as never)).resolves.toEqual({
+      user: { uid: 'uid-1' },
+    });
+    expect(requestAndroidHost).toHaveBeenCalledWith('auth.sign-in', {});
   });
 
   it('구버전 token-only 응답은 Membership 별도 조회를 위한 fallback 세션으로 허용한다', async () => {

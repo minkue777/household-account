@@ -3,19 +3,11 @@ const withPWA = require('next-pwa')({
   register: true,
   skipWaiting: true,
   disable: process.env.NODE_ENV === 'development',
-  cacheStartUrl: true,
+  // The app is online-first. Caching a rendered page here can combine an old
+  // client bundle with newly deployed Functions/Firestore contracts.
+  cacheStartUrl: false,
   dynamicStartUrl: false,
   runtimeCaching: [
-    {
-      urlPattern: ({ request, url }) =>
-        request.mode === 'navigate' && url.origin === self.location.origin,
-      handler: 'StaleWhileRevalidate',
-      options: {
-        cacheName: 'household-app-shell-pages',
-        cacheableResponse: { statuses: [0, 200] },
-        expiration: { maxEntries: 12, maxAgeSeconds: 7 * 24 * 60 * 60 },
-      },
-    },
     {
       urlPattern: /\/_next\/static\/.*/i,
       handler: 'CacheFirst',

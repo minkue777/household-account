@@ -8,7 +8,10 @@ import { HouseholdProvider } from '@/contexts/HouseholdContext';
 import HouseholdGuard from './HouseholdGuard';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { getClientSessionScope } from '@/composition/clientSessionScope';
-import { refreshAndroidHostSession } from '@/platform/android-host/androidHostBridge';
+import {
+  isAndroidHostAvailable,
+  refreshAndroidHostSession,
+} from '@/platform/android-host/androidHostBridge';
 import { onWebFirstLedgerPaint } from '@/platform/performance/webStartupPerformance';
 import { preloadLedgerMutationRuntime } from '@/composition/ledgerMutationRuntimePreload';
 import { warmAssetNavigationIntent } from '@/composition/assetNavigationPrewarm';
@@ -46,6 +49,7 @@ function DeferredFirebaseSecurityInitialization() {
 
 const NATIVE_SESSION_REFRESH_KEY = 'household-account.native-session-refresh.v2';
 const NATIVE_SESSION_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1_000;
+const ANDROID_WEB_AUTH_REFRESH_INTERVAL_MS = 15 * 60 * 1_000;
 
 function AuthenticatedPlatformEffects() {
   const { sessionState, isSessionVerified, adminHouseholdView } = useHousehold();
@@ -100,6 +104,45 @@ function AuthenticatedPlatformEffects() {
       if (idleCallbackId !== undefined && typeof window.cancelIdleCallback === 'function') {
         window.cancelIdleCallback(idleCallbackId);
       }
+    };
+  }, [adminHouseholdView, isSessionVerified, sessionState]);
+
+  useEffect(() => {
+    if (
+      sessionState !== 'ready'
+      || !isSessionVerified
+      || adminHouseholdView !== null
+      || !isAndroidHostAvailable()
+    ) return;
+
+    let cancelled = false;
+    let inFlight = false;
+    let lastRefreshedAt = Date.now();
+
+    const refreshAfterResume = () => {
+      if (
+        cancelled
+        || inFlight
+        || document.visibilityState !== 'visible'
+        || Date.now() - lastRefreshedAt < ANDROID_WEB_AUTH_REFRESH_INTERVAL_MS
+      ) return;
+      inFlight = true;
+      lastRefreshedAt = Date.now();
+      void import('@/lib/authService')
+        .then(async ({ getCurrentUser, refreshAndroidWebAuth }) => {
+          const user = getCurrentUser();
+          if (user) await refreshAndroidWebAuth(user);
+        })
+        .catch(() => {})
+        .finally(() => {
+          inFlight = false;
+        });
+    };
+
+    document.addEventListener('visibilitychange', refreshAfterResume);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', refreshAfterResume);
     };
   }, [adminHouseholdView, isSessionVerified, sessionState]);
 

@@ -16,6 +16,7 @@ jest.mock('@/lib/householdService', () => ({
 }));
 
 jest.mock('@/lib/authService', () => ({
+  refreshAndroidWebAuth: jest.fn(),
   logOut: jest.fn(),
   onAuthChange: jest.fn(),
   restoreAndroidHostAuth: jest.fn(),
@@ -71,7 +72,11 @@ import {
   getHousehold,
   HouseholdReadNotFoundError,
 } from '@/lib/householdService';
-import { onAuthChange, restoreAndroidHostAuth } from '@/lib/authService';
+import {
+  onAuthChange,
+  refreshAndroidWebAuth,
+  restoreAndroidHostAuth,
+} from '@/lib/authService';
 import { householdCommands } from '@/features/access-household/application/householdCommands';
 import { activatePwaFidEndpoint } from '@/platform/pwa/fidEndpointLifecycle';
 import { setClientSessionScope } from '@/composition/clientSessionScope';
@@ -90,6 +95,7 @@ import { markWebFirstLedgerPaint } from '@/platform/performance/webStartupPerfor
 const mockGetCachedHousehold = jest.mocked(getCachedHousehold);
 const mockGetHousehold = jest.mocked(getHousehold);
 const mockOnAuthChange = jest.mocked(onAuthChange);
+const mockRefreshAndroidWebAuth = jest.mocked(refreshAndroidWebAuth);
 const mockRestoreAndroidHostAuth = jest.mocked(restoreAndroidHostAuth);
 const mockResolveSignedInUser = jest.mocked(householdCommands.resolveSignedInUser);
 const mockActivatePwaFidEndpoint = jest.mocked(activatePwaFidEndpoint);
@@ -137,6 +143,7 @@ describe('Android 가구 cache-first 복원 계약', () => {
     mockReadSignedInMembershipCache.mockReturnValue(undefined);
     mockGetSignedInMembershipRevalidationDelay.mockReturnValue(undefined);
     mockOnAuthChange.mockImplementation(() => jest.fn());
+    mockRefreshAndroidWebAuth.mockImplementation(async (user) => ({ user }));
   });
 
   afterEach(() => {
@@ -373,6 +380,9 @@ describe('Android 가구 cache-first 복원 계약', () => {
 
     expect(await screen.findByText('ready:즉시 복원 가계부')).toBeInTheDocument();
     expect(mockResolveSignedInUser).not.toHaveBeenCalled();
+    expect(mockRefreshAndroidWebAuth).toHaveBeenCalledWith(expect.objectContaining({
+      uid: 'uid-1',
+    }));
     expect(mockRestoreAndroidHostAuth).not.toHaveBeenCalled();
     expect(mockGetCachedHousehold).not.toHaveBeenCalled();
   });

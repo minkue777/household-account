@@ -506,6 +506,8 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     let unsubscribeAuth: (() => void) | undefined;
     let androidBootstrapPending = isAndroidHostAvailable();
     let androidBootstrapStarted = false;
+    let androidBootstrapRetryAttempt = 0;
+    let androidBootstrapRetryId: number | undefined;
     let appliedAuthUid: string | null | undefined;
     let appliedResolutionKey: string | undefined;
     let membershipRevalidationDelayId: number | undefined;
@@ -619,38 +621,66 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       });
     };
 
-    const startAndroidBootstrap = () => {
+    const startAndroidBootstrap = (
+      existingUser?: User,
+      existingResolution?: SignedInUserResolution
+    ) => {
       if (disposed || !androidBootstrapPending || androidBootstrapStarted) return;
       androidBootstrapStarted = true;
-      void loadAuthService().then(({ restoreAndroidHostAuth }) => withinDeadline(
-        restoreAndroidHostAuth(),
+      void loadAuthService().then(({
+        refreshAndroidWebAuth,
+        restoreAndroidHostAuth,
+      }) => withinDeadline(
+        existingUser
+          ? refreshAndroidWebAuth(existingUser)
+          : restoreAndroidHostAuth(),
         AUTH_BOOTSTRAP_TIMEOUT_MS,
         'ANDROID_AUTH_BOOTSTRAP_TIMEOUT'
       )).then((session) => {
         if (disposed || !androidBootstrapPending) return;
         androidBootstrapPending = false;
+        androidBootstrapRetryAttempt = 0;
+        if (androidBootstrapRetryId !== undefined) {
+          window.clearTimeout(androidBootstrapRetryId);
+          androidBootstrapRetryId = undefined;
+        }
         markWebAuthCompleted(true);
-        if (session?.signedInUserResolution?.kind === 'membership-found') {
+        const resolvedMembership = session?.signedInUserResolution ?? existingResolution;
+        if (session?.user && resolvedMembership?.kind === 'membership-found') {
           writeSignedInMembershipCache(
             session.user.uid,
-            session.signedInUserResolution
+            resolvedMembership
           );
-        } else if (session?.signedInUserResolution?.kind === 'first-visit-required') {
+        } else if (resolvedMembership?.kind === 'first-visit-required') {
           clearSignedInMembershipCache();
         }
         applyUser(
           session?.user ?? null,
-          session?.signedInUserResolution,
+          resolvedMembership,
           session?.user.uid === paintBootstrapRef.current?.principalUid,
-          session?.signedInUserResolution === undefined
+          resolvedMembership === undefined
             ? undefined
-            : 'authoritative-prefetch'
+            : session?.signedInUserResolution === undefined
+              ? 'last-verified-cache'
+              : 'authoritative-prefetch'
         );
       }).catch((error) => {
         if (disposed || !androidBootstrapPending) return;
-        androidBootstrapPending = false;
         markWebAuthCompleted(false);
-        if (paintBootstrapRef.current !== undefined) return;
+        if (paintBootstrapRef.current !== undefined) {
+          androidBootstrapStarted = false;
+          const retryDelayMs = Math.min(
+            5_000 * (2 ** androidBootstrapRetryAttempt),
+            60_000
+          );
+          androidBootstrapRetryAttempt += 1;
+          androidBootstrapRetryId = window.setTimeout(() => {
+            androidBootstrapRetryId = undefined;
+            startAndroidBootstrap(existingUser, existingResolution);
+          }, retryDelayMs);
+          return;
+        }
+        androidBootstrapPending = false;
         clearResolvedSession();
         setSessionError(errorMessage(error));
         setSessionState('error');
@@ -665,18 +695,10 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         markWebAuthCompleted(true);
       }
       if (androidBootstrapPending) {
-        // 영속 Web Auth가 복원되면 매 실행마다 Native custom-token을 다시
-        // 발급하지 않습니다. Firebase SDK의 token refresh와 서버 rules가 실제
-        // read/write 권한을 계속 검증합니다.
         if (user) {
-          androidBootstrapPending = false;
-          const preservesPaint = user.uid === paintBootstrapRef.current?.principalUid;
-          applyUser(
-            user,
-            cachedResolution,
-            preservesPaint,
-            cachedResolution ? 'last-verified-cache' : undefined
-          );
+          // 캐시 화면은 이미 그려져 있습니다. 원격 구독을 열기 전 Web Auth를
+          // 강제 갱신하고, 실패하면 Native 세션으로 자동 복구합니다.
+          startAndroidBootstrap(user, cachedResolution);
         } else if (!user) {
           startAndroidBootstrap();
         }
@@ -744,6 +766,9 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       if (authStartFrameId !== undefined) window.cancelAnimationFrame(authStartFrameId);
       if (authStartDelayId !== undefined) window.clearTimeout(authStartDelayId);
       if (authStartFallbackId !== undefined) window.clearTimeout(authStartFallbackId);
+      if (androidBootstrapRetryId !== undefined) {
+        window.clearTimeout(androidBootstrapRetryId);
+      }
       unsubscribeAuth?.();
     };
   }, [
