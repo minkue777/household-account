@@ -26,6 +26,7 @@ import {
   subscribeToAssets,
 } from '@/lib/assetService';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useHousehold } from '@/contexts/HouseholdContext';
 import AssetProfitChart from '@/components/assets/AssetProfitChart';
 import AssetDividendChart from '@/components/assets/AssetDividendChart';
 import { formatLocalDate } from '@/lib/utils/date';
@@ -161,6 +162,7 @@ function getPeriodRange(period: PeriodType, now = new Date()) {
 
 export default function AssetStatsPage() {
   const { themeConfig } = useTheme();
+  const { isSessionVerified, adminHouseholdView } = useHousehold();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [allHistory, setAllHistory] = useState<AssetHistoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -170,18 +172,27 @@ export default function AssetStatsPage() {
   const trendChartRef = useRef<ChartJS<'line', Array<number | null>, string> | null>(null);
 
   useEffect(() => {
-    const unsubscribe = subscribeToAssets((nextAssets) => {
-      setAssets(nextAssets);
-    });
+    if (!isSessionVerified) return undefined;
 
-    return () => unsubscribe();
-  }, []);
+    try {
+      const unsubscribe = subscribeToAssets((nextAssets) => {
+        setAssets(nextAssets);
+      });
+      return () => unsubscribe();
+    } catch (error) {
+      console.error('자산 통계의 자산 목록을 불러오지 못했습니다.', error);
+      return undefined;
+    }
+  }, [isSessionVerified]);
 
   useEffect(() => {
+    if (!isSessionVerified || adminHouseholdView !== null) return;
     refreshAllPhysicalGoldValues().catch(console.error);
-  }, []);
+  }, [adminHouseholdView, isSessionVerified]);
 
   useEffect(() => {
+    if (!isSessionVerified) return;
+
     const fetchHistory = async () => {
       setIsLoading(true);
 
@@ -196,7 +207,7 @@ export default function AssetStatsPage() {
     };
 
     void fetchHistory();
-  }, []);
+  }, [isSessionVerified]);
 
   const activeAssets = useMemo(() => assets.filter((asset) => asset.isActive), [assets]);
   const visibleAssets = useMemo(

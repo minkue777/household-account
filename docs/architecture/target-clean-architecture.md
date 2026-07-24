@@ -99,7 +99,7 @@ Pending 제품 결정은 이 문서가 임의로 확정하지 않는다. 대신 
 - Google 계정이 없는 아이 등은 Member가 아니라 Access의 `dependent AssetOwnerProfile`로만 추가한다. Member에는 연결된 `member` 프로필 하나를 제공하되 Asset은 memberId가 아닌 profileId를 참조한다.
 - 기존 사용자는 localStorage의 householdKey·currentMemberId를 첫 로그인 migration 단서로 사용해 기존 householdId·memberId를 같은 UID Membership에 연결한다. 데이터는 복사하지 않는다.
 - 모든 Command는 서버가 만든 `ActorContext`로 인가한다.
-- Web·Android의 보호된 요청·cache·구독은 서버 검증을 마친 `SessionScope(sessionGeneration, principalUid, householdId, memberId)`를 명시적으로 받는다. 다음 첫 paint에서는 마지막 검증 SessionScope와 화면 snapshot을 localStorage 표시 hint로 먼저 복원할 수 있지만, 이를 tenant 권위나 Command ActorContext로 사용하지 않고 Firebase Auth·App Check·Rules·Membership 결과로 배경 수렴한다. `guest` fallback은 허용하지 않는다.
+- Web·Android의 보호된 요청·cache·구독은 서버 검증을 마친 `SessionScope(sessionGeneration, principalUid, householdId, memberId)`를 명시적으로 받는다. 다음 첫 paint에서는 마지막 검증 SessionScope와 화면 snapshot을 localStorage 표시 hint로 먼저 복원할 수 있지만, 이를 tenant 권위나 Command ActorContext로 사용하지 않는다. 같은 UID의 Firebase Auth가 복원되면 Firestore Rules가 active Membership을 매 요청 검증하는 읽기 Query·listener를 재개하고, 백그라운드 Membership 재검증의 일시적 transport 실패는 이 읽기 준비 상태를 취소하지 않는다. 권위 거부·UID 불일치·first visit은 scope와 구독을 폐기하며, Command와 endpoint 등록은 계속 Auth·App Check·서버 Membership 인가에 수렴한다. `guest` fallback은 허용하지 않는다.
 - 로그아웃·가구/멤버 전환은 이전 listener·요청·cache를 먼저 폐기하며 세대가 다른 늦은 callback은 화면·저장·endpoint 등록에 반영하지 않는다.
 
 ### 3.4 원자성·재시도·부분 실패

@@ -212,7 +212,7 @@ export default function AssetsPage() {
   }, [memberOptions, selectedMember]);
 
   useEffect(() => {
-    if (assets.length === 0) {
+    if (!isSessionVerified || assets.length === 0) {
       setDailyChange(0);
       return undefined;
     }
@@ -252,7 +252,7 @@ export default function AssetsPage() {
         window.cancelIdleCallback(idleCallbackId);
       }
     };
-  }, [assets, memberOptions, selectedMember]);
+  }, [assets, isSessionVerified, memberOptions, selectedMember]);
 
   const handleAssetClick = (asset: Asset) => {
     setSelectedAsset(asset);

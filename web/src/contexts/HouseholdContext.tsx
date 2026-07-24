@@ -486,9 +486,11 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         options.preservePaintBootstrap
         && !isHouseholdReadNotFound(error)
       ) {
-        // The cached UI remains useful during a transient background verification failure.
-        // Remote reads and writes are still rejected by Firebase until Auth/App Check recover.
-        setIsSessionVerified(false);
+        // Firebase Auth가 복원된 뒤의 백그라운드 Membership 재검증 실패는
+        // 마지막으로 검증된 세션의 읽기 준비 상태를 취소하지 않습니다.
+        // 실제 가구 접근 권한은 계속 Firestore rules와 Functions에서 검증합니다.
+        // 여기서 false로 내리면 캐시 화면만 남고 자산·보유 종목 구독이 영구
+        // 중단되어, 일시적인 네트워크 오류가 전체 읽기 장애로 확대됩니다.
         setSessionState('ready');
         return;
       }

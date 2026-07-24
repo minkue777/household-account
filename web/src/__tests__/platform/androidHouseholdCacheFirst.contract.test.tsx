@@ -432,6 +432,62 @@ describe('Android 가구 cache-first 복원 계약', () => {
     });
   });
 
+  it('인증 복원 뒤 일시적인 Membership 재검증 실패가 원격 읽기 준비 상태를 취소하지 않는다', async () => {
+    jest.useFakeTimers();
+    const cachedResolution = {
+      kind: 'membership-found' as const,
+      membership: {
+        householdId: 'household-1',
+        memberId: 'member-1',
+        displayName: '민규',
+        aggregateVersion: 3,
+        status: 'active' as const,
+        capabilities: ['household.read'],
+      },
+    };
+    mockReadLastSignedInSessionCache.mockReturnValue({
+      principalUid: 'uid-1',
+      resolution: cachedResolution,
+      household: household('즉시 표시 가계부'),
+    });
+    mockReadSignedInMembershipCache.mockReturnValue(cachedResolution);
+    mockReadSignedInHouseholdCache.mockReturnValue(household('즉시 표시 가계부'));
+    mockGetHousehold.mockReturnValue(new Promise(() => {}));
+    mockGetSignedInMembershipRevalidationDelay
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValue(undefined);
+    mockResolveSignedInUser.mockRejectedValue(
+      Object.assign(new Error('temporary offline'), { code: 'unavailable' })
+    );
+    mockOnAuthChange.mockImplementation((listener) => {
+      listener({ uid: 'uid-1' } as User);
+      return jest.fn();
+    });
+
+    render(
+      <HouseholdProvider>
+        <AdminSessionProbe />
+      </HouseholdProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/:verified$/)).toBeInTheDocument();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(0);
+      markWebFirstLedgerPaint();
+      jest.advanceTimersByTime(5_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockResolveSignedInUser).toHaveBeenCalledTimes(1);
+      expect(screen.getByText(/:verified$/)).toBeInTheDocument();
+    });
+  });
+
   it('authoritative household not-found는 cache로 숨기지 않는다', async () => {
     mockAndroidHostAvailable = true;
     mockRestoreAndroidHostAuth.mockResolvedValue({

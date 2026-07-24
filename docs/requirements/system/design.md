@@ -106,7 +106,7 @@ Command envelope와 typed Result는 [모듈 상세 설계 규약](../governance/
 
 ### 5.3 Client session 전환
 
-1. 인증·Membership 검증 전에는 보호 Query, 기본 데이터 생성, FID endpoint 등록을 시작하지 않는다.
+1. Firebase 인증 복원 전에는 보호 Query, 기본 데이터 생성, FID endpoint 등록을 시작하지 않는다. 같은 UID의 마지막 서버 검증 SessionScope를 복원한 뒤에는 Firestore Rules가 매 요청의 active Membership을 다시 검증하는 읽기 Query·listener를 시작할 수 있다. 이후 백그라운드 Membership 재검증의 일시적 transport 실패만으로 이 읽기 준비 상태를 취소하지 않으며, Command·FID 등록은 계속 서버 인가를 통과해야 한다.
 2. 새 `ClientSessionScope`를 발급하기 전에 이전 요청을 cancel하고 실시간 listener를 unsubscribe한다.
 3. 이전 세대 cache와 화면 state를 동기적으로 비운다.
 4. 모든 async callback은 시작할 때의 generation과 현재 generation을 비교한다.
