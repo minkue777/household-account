@@ -164,30 +164,15 @@ export default function AssetsPage() {
   }, [household?.id, isSessionVerified]);
 
   useEffect(() => {
-    if (isLoading || adminHouseholdView !== null || didScheduleMarketRefresh.current) return;
+    if (
+      !isSessionVerified
+      || !household?.id
+      || adminHouseholdView !== null
+      || didScheduleMarketRefresh.current
+    ) return;
     didScheduleMarketRefresh.current = true;
-
-    let idleCallbackId: number | undefined;
-    let cancelled = false;
-    const delayId = window.setTimeout(() => {
-      const refresh = () => {
-        if (!cancelled) void refreshAllMarketValues().catch(console.error);
-      };
-      if (typeof window.requestIdleCallback === 'function') {
-        idleCallbackId = window.requestIdleCallback(refresh, { timeout: 2_000 });
-      } else {
-        refresh();
-      }
-    }, 5_000);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(delayId);
-      if (idleCallbackId !== undefined && typeof window.cancelIdleCallback === 'function') {
-        window.cancelIdleCallback(idleCallbackId);
-      }
-    };
-  }, [adminHouseholdView, isLoading]);
+    void refreshAllMarketValues().catch(console.error);
+  }, [adminHouseholdView, household?.id, isSessionVerified]);
 
   useEffect(() => {
     const householdId = household?.id;
@@ -219,7 +204,6 @@ export default function AssetsPage() {
 
     const activeAssets = assets.filter((asset) => asset.isActive);
     let cancelled = false;
-    let idleCallbackId: number | undefined;
 
     const syncDailySummary = async () => {
       try {
@@ -231,26 +215,10 @@ export default function AssetsPage() {
         if (!cancelled) setDailyChange(0);
       }
     };
-
-    // 일간 변동은 참고 정보이며 계좌 모달의 첫 클릭보다 우선하지 않습니다.
-    // 자산 화면과 상호작용 코드가 먼저 그려진 뒤 유휴 시간에 조회합니다.
-    const delayId = window.setTimeout(() => {
-      if (typeof window.requestIdleCallback === 'function') {
-        idleCallbackId = window.requestIdleCallback(
-          () => void syncDailySummary(),
-          { timeout: 2_000 }
-        );
-      } else {
-        void syncDailySummary();
-      }
-    }, 1_000);
+    void syncDailySummary();
 
     return () => {
       cancelled = true;
-      window.clearTimeout(delayId);
-      if (idleCallbackId !== undefined && typeof window.cancelIdleCallback === 'function') {
-        window.cancelIdleCallback(idleCallbackId);
-      }
     };
   }, [assets, isSessionVerified, memberOptions, selectedMember]);
 

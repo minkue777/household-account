@@ -37,6 +37,31 @@ describe('즉시 상호작용 UI 계약', () => {
     );
   });
 
+  test('자산 페이지 진입과 자산 snapshot 변경은 고정 지연 없이 시세와 변동을 갱신한다', () => {
+    const assetsPage = source('app/assets/page.tsx');
+    const marketRefreshStart = assetsPage.indexOf(
+      'didScheduleMarketRefresh.current = true;'
+    );
+    const marketRefreshEnd = assetsPage.indexOf(
+      'useEffect(() => {',
+      marketRefreshStart + 1
+    );
+    const marketRefreshEffect = assetsPage.slice(marketRefreshStart, marketRefreshEnd);
+    const dailyRefreshStart = assetsPage.indexOf('const syncDailySummary = async () =>');
+    const dailyRefreshEnd = assetsPage.indexOf(
+      'const handleAssetClick',
+      dailyRefreshStart
+    );
+    const dailyRefreshEffect = assetsPage.slice(dailyRefreshStart, dailyRefreshEnd);
+
+    expect(marketRefreshEffect).toContain('void refreshAllMarketValues()');
+    expect(marketRefreshEffect).not.toContain('setTimeout');
+    expect(marketRefreshEffect).not.toContain('requestIdleCallback');
+    expect(dailyRefreshEffect).toContain('void syncDailySummary();');
+    expect(dailyRefreshEffect).not.toContain('setTimeout');
+    expect(dailyRefreshEffect).not.toContain('requestIdleCallback');
+  });
+
   test('사용자 클릭 뒤 표시되는 화면 준비 문구를 제품 코드에 두지 않는다', () => {
     const productFiles = [
       'components/home/LedgerPage.tsx',
