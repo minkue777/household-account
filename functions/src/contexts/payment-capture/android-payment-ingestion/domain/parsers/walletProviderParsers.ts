@@ -26,7 +26,7 @@ const KAKAO_APP_PREFIX_PATTERN = /^카카오페이\s*/u;
 const KAKAO_TITLE_PREFIX_PATTERN = /^결제가\s*완료되었어요\s*/u;
 
 const ONNURI_PAYMENT_PATTERN =
-  /\[디지털온누리상품권\]\s*(?:[^,\n]+님,\s*)?(.+?)에서\s*([\d,]+)원이\s*결제/u;
+  /(?:\[디지털온누리상품권\]\s*)?(?:결제되었어요\s*)?(?:[^,\n]+님,\s*)?(.+?)에서\s*([\d,]+)원이\s*결제(?:되었습니다|되었어요)/u;
 
 function parseNaver(context: ProviderParserContext): AndroidProviderParseResult {
   const lines = bodyLines(context.body);

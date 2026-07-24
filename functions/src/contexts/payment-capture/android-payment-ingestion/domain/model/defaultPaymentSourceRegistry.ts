@@ -42,7 +42,7 @@ export const ANDROID_PAYMENT_SOURCE_REGISTRY: readonly AndroidPaymentSourceRegis
     entry("com.naverfin.payapp", "naver-pay", "naver-pay-parser", "1.0.0"),
     entry("viva.republica.toss", "toss-bank", "toss-bank-parser", "1.0.0"),
     entry("com.kakaopay.app", "kakao-pay", "kakao-pay-parser", "1.0.0"),
-    entry("com.komsco.kpay", "digital-onnuri", "digital-onnuri-parser", "1.0.0"),
+    entry("com.komsco.kpay", "digital-onnuri", "digital-onnuri-parser", "1.1.0"),
     entry("kvp.jjy.MispAndroid320", "paybooc-isp", "paybooc-isp-parser", "1.0.0"),
     entry("com.google.android.apps.messaging", "sms-card-message", "sms-card-message-parser", "1.0.0"),
     entry("com.samsung.android.messaging", "sms-card-message", "sms-card-message-parser", "1.0.0"),

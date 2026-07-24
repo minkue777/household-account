@@ -108,6 +108,13 @@
       "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 11000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "15:00", "merchant": "가맹점자", "cardCompany": "온누리상품권", "timeSource": "postedAt" } }
     },
     {
+      "caseId": "onnuri-current-app-title-body-approval",
+      "requirementIds": ["T-PARSE-001", "PARSE-ONNURI-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "com.komsco.kpay", "parserId": "digital-onnuri-parser" },
+      "raw": { "postedAt": "2026-07-24T14:06:42.617+09:00", "title": "결제되었어요", "text": "이민규님, 금촌샤브칼국수에서 31,000원이 결제되었어요." },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 31000, "occurredLocalDate": "2026-07-24", "occurredLocalTime": "14:06", "merchant": "금촌샤브칼국수", "cardCompany": "온누리상품권", "timeSource": "postedAt" } }
+    },
+    {
       "caseId": "paybooc-inline-approval",
       "requirementIds": ["T-PARSE-001", "PARSE-PAYBOOC-001"],
       "source": { "packageName": "kvp.jjy.MispAndroid320", "parserId": "paybooc-isp-parser" },
