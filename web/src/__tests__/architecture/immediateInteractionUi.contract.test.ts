@@ -68,6 +68,8 @@ describe('즉시 상호작용 UI 계약', () => {
     );
     expect(marketRefreshEffect).not.toContain('setTimeout');
     expect(marketRefreshEffect).not.toContain('requestIdleCallback');
+    expect(dailyRefreshEffect).toContain('Promise.all(');
+    expect(dailyRefreshEffect).toContain('memberOptions.map(async ({ key, label }) =>');
     expect(dailyRefreshEffect).toContain('void syncDailySummary();');
     expect(dailyRefreshEffect).not.toContain('setTimeout');
     expect(dailyRefreshEffect).not.toContain('requestIdleCallback');

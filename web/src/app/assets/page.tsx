@@ -39,9 +39,12 @@ export default function AssetsPage() {
   const { themeConfig } = useTheme();
   const { household, adminHouseholdView, isSessionVerified = true } = useHousehold();
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [dailyChange, setDailyChange] = useState({
-    memberKey: ALL_MEMBERS_OPTION,
-    amount: 0,
+  const [dailyChanges, setDailyChanges] = useState<{
+    householdId: string | null;
+    amounts: Record<string, number>;
+  }>({
+    householdId: null,
+    amounts: {},
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -228,23 +231,36 @@ export default function AssetsPage() {
   }, [memberOptions, selectedMember]);
 
   useEffect(() => {
-    if (!isSessionVerified || assets.length === 0) {
-      setDailyChange({ memberKey: selectedMember, amount: 0 });
+    const householdId = household?.id;
+    if (!isSessionVerified || !householdId) {
+      setDailyChanges({ householdId: null, amounts: {} });
+      return undefined;
+    }
+
+    if (assets.length === 0) {
+      setDailyChanges({
+        householdId,
+        amounts: Object.fromEntries(memberOptions.map(({ key }) => [key, 0])),
+      });
       return undefined;
     }
 
     const activeAssets = assets.filter((asset) => asset.isActive);
-    const memberKey = selectedMember;
     let cancelled = false;
 
     const syncDailySummary = async () => {
-      try {
-        const selectedLabel =
-          memberOptions.find(({ key }) => key === memberKey)?.label ?? ALL_MEMBERS_OPTION;
-        const change = await getRealtimeDailyAssetChangeByOwner(selectedLabel, activeAssets);
-        if (!cancelled) setDailyChange({ memberKey, amount: change });
-      } catch {
-        if (!cancelled) setDailyChange({ memberKey, amount: 0 });
+      const entries = await Promise.all(
+        memberOptions.map(async ({ key, label }) => {
+          try {
+            const amount = await getRealtimeDailyAssetChangeByOwner(label, activeAssets);
+            return [key, amount] as const;
+          } catch {
+            return [key, 0] as const;
+          }
+        })
+      );
+      if (!cancelled) {
+        setDailyChanges({ householdId, amounts: Object.fromEntries(entries) });
       }
     };
     void syncDailySummary();
@@ -252,7 +268,7 @@ export default function AssetsPage() {
     return () => {
       cancelled = true;
     };
-  }, [assets, isSessionVerified, memberOptions, selectedMember]);
+  }, [assets, household?.id, isSessionVerified, memberOptions]);
 
   const handleAssetClick = (asset: Asset) => {
     setSelectedAsset(asset);
@@ -347,7 +363,13 @@ export default function AssetsPage() {
           <div className="space-y-4">
             <AssetSummaryCard
               assets={assets}
-              dailyChange={dailyChange}
+              dailyChange={{
+                memberKey: selectedMember,
+                amount:
+                  dailyChanges.householdId === household?.id
+                    ? dailyChanges.amounts[selectedMember] ?? 0
+                    : 0,
+              }}
               selectedMember={selectedMember}
               memberOptions={memberOptions}
               onMemberChange={setSelectedMember}
