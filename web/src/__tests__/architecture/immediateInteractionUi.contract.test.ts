@@ -37,10 +37,10 @@ describe('즉시 상호작용 UI 계약', () => {
     );
   });
 
-  test('자산 페이지 진입과 자산 snapshot 변경은 고정 지연 없이 시세와 변동을 갱신한다', () => {
+  test('자산 페이지는 진입 즉시와 화면이 보이는 동안 30초마다 시세를 갱신한다', () => {
     const assetsPage = source('app/assets/page.tsx');
     const marketRefreshStart = assetsPage.indexOf(
-      'didScheduleMarketRefresh.current = true;'
+      'const refreshMarketValues = (force = false) => {'
     );
     const marketRefreshEnd = assetsPage.indexOf(
       'useEffect(() => {',
@@ -54,7 +54,18 @@ describe('즉시 상호작용 UI 계약', () => {
     );
     const dailyRefreshEffect = assetsPage.slice(dailyRefreshStart, dailyRefreshEnd);
 
+    expect(assetsPage).toContain('const MARKET_REFRESH_INTERVAL_MS = 30_000;');
     expect(marketRefreshEffect).toContain('void refreshAllMarketValues()');
+    expect(marketRefreshEffect).toContain('refreshMarketValues(true);');
+    expect(marketRefreshEffect).toContain(
+      'window.setInterval(\n      refreshMarketValues,\n      MARKET_REFRESH_INTERVAL_MS'
+    );
+    expect(marketRefreshEffect).toContain(
+      "document.addEventListener('visibilitychange', handleVisibilityChange)"
+    );
+    expect(marketRefreshEffect).toContain(
+      "document.visibilityState !== 'visible'"
+    );
     expect(marketRefreshEffect).not.toContain('setTimeout');
     expect(marketRefreshEffect).not.toContain('requestIdleCallback');
     expect(dailyRefreshEffect).toContain('void syncDailySummary();');

@@ -175,7 +175,7 @@ Disclosure Adapter
 | [DEC-043](../../governance/decisions.md#dec-043) | Dividends | 미지급 배당 최신 공시 덮어쓰기·이전 값 미보관, 지급 전 명시 취소 제거, paid 불변 |
 | [DEC-046](../../governance/decisions.md#dec-046) | Asset Automation·공통 UoW | 일반 terminal receipt 30일, AutomationExecution은 관련 Asset·가구 수동 영구 purge까지 보존 |
 | [DEC-048](../../governance/decisions.md#dec-048) | Holdings·Portfolio·Reporting | Position history 수동 purge 전 보존, 자산 Snapshot 중간 공백은 직전값 유지, 최초 Snapshot 전은 빈 값 |
-| [DEC-049](../../governance/decisions.md#dec-049) | Holdings·External Operations | 개별·자산 페이지·23:55 전체 시세 갱신, 전체 종목 수 무제한과 내부 50개 page·병렬 5·10초 timeout·총 3회 시도 |
+| [DEC-049](../../governance/decisions.md#dec-049) | Holdings·External Operations | 개별·자산 페이지 진입 및 visible 동안 30초 주기·23:55 전체 시세 갱신, 전체 종목 수 무제한과 내부 50개 page·병렬 5·10초 timeout·총 3회 시도 |
 | [DEC-052](../../governance/decisions.md#dec-052) | Asset Automation·External Operations | 매일 00:00 due 계획 조회, nextDueDate 기반 누락 월 멱등 복구, 과거 execution 불변 |
 | [DEC-053](../../governance/decisions.md#dec-053) | Holdings·Portfolio Core | 최신 사용 가능 외화 Quote·환율의 skew 제한 없는 조합과 관측 provenance 보존 |
 | [DEC-058](../../governance/decisions.md#dec-058) | Portfolio Core·Reporting | 선택 기간 Snapshot의 type·ownerRef dimension을 현재 자산·프로필 상태와 무관하게 과거 필터에 제공 |

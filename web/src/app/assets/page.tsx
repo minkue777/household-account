@@ -33,6 +33,8 @@ import {
 } from '@/features/portfolio/application/portfolioReadSnapshot';
 import { useHouseholdHoldingSnapshots } from '@/lib/utils/useHouseholdHoldingSnapshots';
 
+const MARKET_REFRESH_INTERVAL_MS = 30_000;
+
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
   const { household, adminHouseholdView, isSessionVerified = true } = useHousehold();
@@ -49,7 +51,6 @@ export default function AssetsPage() {
   const [isAddingSample, setIsAddingSample] = useState(false);
   const [selectedMember, setSelectedMember] = useState<string>(ALL_MEMBERS_OPTION);
   const [ownerProfiles, setOwnerProfiles] = useState<AssetOwnerProfileView[]>([]);
-  const didScheduleMarketRefresh = useRef(false);
   const cachedAssetsRef = useRef<Asset[] | undefined>(undefined);
   const holdingSnapshots = useHouseholdHoldingSnapshots(
     household?.id,
@@ -168,10 +169,37 @@ export default function AssetsPage() {
       !isSessionVerified
       || !household?.id
       || adminHouseholdView !== null
-      || didScheduleMarketRefresh.current
-    ) return;
-    didScheduleMarketRefresh.current = true;
-    void refreshAllMarketValues().catch(console.error);
+    ) return undefined;
+
+    let disposed = false;
+    let lastStartedAt = 0;
+
+    const refreshMarketValues = (force = false) => {
+      if (
+        disposed
+        || document.visibilityState !== 'visible'
+        || (!force && Date.now() - lastStartedAt < MARKET_REFRESH_INTERVAL_MS)
+      ) return;
+
+      lastStartedAt = Date.now();
+      void refreshAllMarketValues().catch(console.error);
+    };
+
+    refreshMarketValues(true);
+    const intervalId = window.setInterval(
+      refreshMarketValues,
+      MARKET_REFRESH_INTERVAL_MS
+    );
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refreshMarketValues();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [adminHouseholdView, household?.id, isSessionVerified]);
 
   useEffect(() => {
