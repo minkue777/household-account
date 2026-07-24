@@ -32,7 +32,7 @@ describe('자산 요약 구성 차트 계약', () => {
           asset('예금', 'savings', 3_000_000),
           asset('주식', 'stock', 1_000_000),
         ]}
-        dailyChange={0}
+        dailyChange={{ memberKey: ALL_MEMBERS_OPTION, amount: 0 }}
         selectedMember={ALL_MEMBERS_OPTION}
         memberOptions={[{ key: ALL_MEMBERS_OPTION, label: ALL_MEMBERS_OPTION }]}
         onMemberChange={jest.fn()}
@@ -51,5 +51,62 @@ describe('자산 요약 구성 차트 계약', () => {
       screen.getByLabelText(`${ASSET_TYPE_CONFIG.stock.label} 25.0%`)
     ).toBeInTheDocument();
     expect(screen.getByText(/4,000,000/)).toBeInTheDocument();
+  });
+
+  test('가구원 전환 중에는 직전 가구원의 일간 변동값을 표시하지 않는다', () => {
+    const memberOptions = [
+      { key: 'member-a', label: '민규' },
+      { key: 'member-b', label: '진선' },
+    ];
+    const assets = [
+      {
+        ...asset('민규 자산', 'savings', 3_000_000),
+        owner: '민규',
+        ownerRef: { kind: 'profile' as const, profileId: 'member-a' },
+      },
+      {
+        ...asset('진선 자산', 'savings', 2_000_000),
+        owner: '진선',
+        ownerRef: { kind: 'profile' as const, profileId: 'member-b' },
+      },
+    ];
+    const { rerender } = render(
+      <AssetSummaryCard
+        assets={assets}
+        dailyChange={{ memberKey: 'member-a', amount: 123_456 }}
+        selectedMember="member-a"
+        memberOptions={memberOptions}
+        onMemberChange={jest.fn()}
+        onAddOwner={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText(/123,456원/)).toBeInTheDocument();
+
+    rerender(
+      <AssetSummaryCard
+        assets={assets}
+        dailyChange={{ memberKey: 'member-a', amount: 123_456 }}
+        selectedMember="member-b"
+        memberOptions={memberOptions}
+        onMemberChange={jest.fn()}
+        onAddOwner={jest.fn()}
+      />
+    );
+
+    expect(screen.queryByText(/123,456원/)).not.toBeInTheDocument();
+
+    rerender(
+      <AssetSummaryCard
+        assets={assets}
+        dailyChange={{ memberKey: 'member-b', amount: 234_567 }}
+        selectedMember="member-b"
+        memberOptions={memberOptions}
+        onMemberChange={jest.fn()}
+        onAddOwner={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText(/234,567원/)).toBeInTheDocument();
   });
 });

@@ -39,7 +39,10 @@ export default function AssetsPage() {
   const { themeConfig } = useTheme();
   const { household, adminHouseholdView, isSessionVerified = true } = useHousehold();
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [dailyChange, setDailyChange] = useState(0);
+  const [dailyChange, setDailyChange] = useState({
+    memberKey: ALL_MEMBERS_OPTION,
+    amount: 0,
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -226,21 +229,22 @@ export default function AssetsPage() {
 
   useEffect(() => {
     if (!isSessionVerified || assets.length === 0) {
-      setDailyChange(0);
+      setDailyChange({ memberKey: selectedMember, amount: 0 });
       return undefined;
     }
 
     const activeAssets = assets.filter((asset) => asset.isActive);
+    const memberKey = selectedMember;
     let cancelled = false;
 
     const syncDailySummary = async () => {
       try {
         const selectedLabel =
-          memberOptions.find(({ key }) => key === selectedMember)?.label ?? ALL_MEMBERS_OPTION;
+          memberOptions.find(({ key }) => key === memberKey)?.label ?? ALL_MEMBERS_OPTION;
         const change = await getRealtimeDailyAssetChangeByOwner(selectedLabel, activeAssets);
-        if (!cancelled) setDailyChange(change);
+        if (!cancelled) setDailyChange({ memberKey, amount: change });
       } catch {
-        if (!cancelled) setDailyChange(0);
+        if (!cancelled) setDailyChange({ memberKey, amount: 0 });
       }
     };
     void syncDailySummary();

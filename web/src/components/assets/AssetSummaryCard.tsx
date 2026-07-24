@@ -29,7 +29,10 @@ function formatKoreanUnit(num: number): string {
 
 interface AssetSummaryCardProps {
   assets: Asset[];
-  dailyChange: number;
+  dailyChange: {
+    memberKey: string;
+    amount: number;
+  };
   previousMonthTotal?: number;
   selectedMember: string;
   memberOptions: Array<{ key: string; label: string }>;
@@ -109,21 +112,23 @@ export default function AssetSummaryCard({
   }, [assets, memberOptions, selectedMember]);
 
   const totalBalance = sumSignedAssetBalances(filteredAssets);
+  const visibleDailyChange =
+    dailyChange.memberKey === selectedMember ? dailyChange.amount : 0;
 
   const changeRate = useMemo(() => {
     if (previousMonthTotal && previousMonthTotal > 0) {
       return ((totalBalance - previousMonthTotal) / previousMonthTotal) * 100;
     }
 
-    if (totalBalance > 0 && dailyChange !== 0) {
-      const previousTotal = totalBalance - dailyChange;
+    if (totalBalance > 0 && visibleDailyChange !== 0) {
+      const previousTotal = totalBalance - visibleDailyChange;
       if (previousTotal > 0) {
-        return (dailyChange / previousTotal) * 100;
+        return (visibleDailyChange / previousTotal) * 100;
       }
     }
 
     return 0;
-  }, [dailyChange, previousMonthTotal, totalBalance]);
+  }, [previousMonthTotal, totalBalance, visibleDailyChange]);
 
   const typeData = useMemo(() => {
     const balances: { type: AssetType; balance: number; percentage: number }[] = [];
@@ -243,7 +248,7 @@ export default function AssetSummaryCard({
     );
   };
 
-  const isPositive = dailyChange > 0;
+  const isPositive = visibleDailyChange > 0;
 
   return (
     <div className="overflow-visible rounded-2xl border border-slate-100 bg-white shadow-sm">
@@ -254,10 +259,10 @@ export default function AssetSummaryCard({
           <span className="ml-1 text-base font-medium text-slate-400">원</span>
         </p>
         <p className="mt-0.5 text-sm text-slate-400">({formatKoreanUnit(totalBalance)}원)</p>
-        {dailyChange !== 0 && (
+        {visibleDailyChange !== 0 && (
           <p className={`mt-1 text-sm ${isPositive ? 'text-red-500' : 'text-blue-500'}`}>
             {isPositive ? '+' : ''}
-            {changeRate.toFixed(2)}% ({Math.abs(dailyChange).toLocaleString()}원)
+            {changeRate.toFixed(2)}% ({Math.abs(visibleDailyChange).toLocaleString()}원)
           </p>
         )}
       </div>
