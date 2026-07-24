@@ -2,7 +2,7 @@
 
 > 문서 유형: Business Bounded Context  
 > 소유 기능 모듈: [가구와 접근](modules/household-access/requirements.md)  
-> 소유 요구사항: `HH-*`, `HH-JOIN-*`, `ADM-*` — 17개  
+> 소유 요구사항: `HH-*`, `HH-JOIN-*`, `ADM-*` — 19개  
 > 목표 구조: [목표 Clean Architecture 설계](../../../architecture/target-clean-architecture.md#5-bounded-context와-기능-모듈)
 
 ## 1. 책임과 경계
@@ -36,9 +36,9 @@ Access & Household Context는 **누가 어느 가구에서 어떤 멤버 자격�
 |---|---|---:|---|
 | 가구·멤버 세션, 명의자 프로필과 생명주기 | HH-001~012 | 12 | [가구와 접근](modules/household-access/requirements.md#5-요구사항) |
 | 초대 참여 | HH-JOIN-001 | 1 | [가구와 접근](modules/household-access/requirements.md#5-요구사항) |
-| 관리자 기능과 권한 | ADM-001~004 | 4 | [가구와 접근](modules/household-access/requirements.md#5-요구사항) |
+| 관리자 기능과 권한·운영 대시보드 | ADM-001~006 | 6 | [가구와 접근](modules/household-access/requirements.md#5-요구사항) |
 
-합계는 17개이며 이 Context 밖에서 동일 ID를 다시 정의하지 않는다.
+합계는 19개이며 이 Context 밖에서 동일 ID를 다시 정의하지 않는다.
 
 ## 3. 공통 언어
 

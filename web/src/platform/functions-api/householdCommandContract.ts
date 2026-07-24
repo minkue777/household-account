@@ -30,6 +30,10 @@ export type TenantlessHouseholdCommand = (typeof TENANTLESS_COMMANDS)[number];
 
 export interface HouseholdCommandPayloads {
   'access.resolve-signed-in-user.v1': Record<string, never>;
+  'access.record-app-visit.v1': {
+    visitId: string;
+    platform: 'android' | 'ios-pwa' | 'web';
+  };
   'access.claim-legacy-membership.v1': {
     legacyHouseholdId: string;
     legacyMemberId: string;
@@ -194,6 +198,10 @@ export interface HouseholdCommandResults {
         };
       }
     | { kind: 'first-visit-required'; choices: Array<'create' | 'join'> };
+  'access.record-app-visit.v1': {
+    kind: 'recorded' | 'already-recorded';
+    totalAccessCount: number;
+  };
   'access.claim-legacy-membership.v1': { householdId: string; memberId: string };
   'access.create-household-with-self.v1': { householdId: string; memberId: string };
   'access.join-household-as-self.v1': { householdId: string; memberId: string };

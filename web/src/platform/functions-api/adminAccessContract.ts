@@ -1,5 +1,6 @@
 import type {
   AdminDeletedAssetWireView,
+  AdminOperationsDashboardWireView,
   AdminHouseholdWireView,
   AdminMemberWireView,
 } from './accessContractTypes';
@@ -8,6 +9,7 @@ export const ADMIN_ACCESS_CONTRACT_VERSION = 'admin-access.v1' as const;
 export const ADMIN_ACCESS_RESPONSE_VERSION = 'admin-access-response.v1' as const;
 
 export interface AdminAccessPayloads {
+  'get-dashboard': { rangeDays?: number };
   'list-households': { cursor?: string; limit?: number };
   'create-household': { name: string };
   'get-legacy-share-key': { householdId: string };
@@ -43,6 +45,7 @@ export interface AdminAccessPayloads {
 }
 
 export interface AdminAccessResults {
+  'get-dashboard': AdminOperationsDashboardWireView;
   'list-households': {
     items: AdminHouseholdWireView[];
     nextCursor?: string;

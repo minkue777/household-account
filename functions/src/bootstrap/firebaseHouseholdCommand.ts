@@ -25,6 +25,7 @@ import { createRecurringHouseholdCommandHandlers } from "./commands/recurringHou
 import { createPaymentConfigurationHouseholdCommandHandlers } from "./commands/paymentConfigurationHouseholdCommandHandlers";
 import { createHomeHouseholdCommandHandlers } from "./commands/homeHouseholdCommandHandlers";
 import { createPortfolioHouseholdCommandHandlers } from "./commands/portfolioHouseholdCommandHandlers";
+import { createMemberAccessHouseholdCommandHandlers } from "./commands/memberAccessHouseholdCommandHandlers";
 import {
   createFirebaseShortcutCredentialLifecycle,
   createShortcutCredentialHouseholdCommandHandlers,
@@ -109,6 +110,7 @@ function accessReadHandlers(): ReadonlyMap<string, HouseholdCommandHandler> {
 
 const handlers = createManifestBackedHouseholdCommandRegistry([
   ...accessReadHandlers(),
+  ...createMemberAccessHouseholdCommandHandlers(db),
   ...createAccessHouseholdCommandHandlers(db),
   ...createLedgerHouseholdCommandHandlers(db),
   ...createCategoryHouseholdCommandHandlers(db),

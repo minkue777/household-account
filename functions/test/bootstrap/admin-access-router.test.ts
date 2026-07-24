@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ADMIN_ACCESS_OPERATIONS,
   createAdminAccessRouter,
   type AdminAccessHandler,
 } from "../../src/bootstrap/admin/adminAccess";
@@ -31,6 +32,11 @@ function fixture() {
 }
 
 describe("systemAdmin 전용 관리자 callable 경계", () => {
+  // ADM-005, T-ADM-004
+  it("운영 대시보드는 일반 가구 명령과 분리된 관리자 operation이다", () => {
+    expect(ADMIN_ACCESS_OPERATIONS).toContain("get-dashboard");
+  });
+
   it("Firebase가 검증한 systemAdmin claim만 고정 capability로 변환한다", () => {
     expect(verifiedSystemAdministrator("uid-admin", { systemAdmin: true })).toEqual({
       principalRef: "uid-admin",

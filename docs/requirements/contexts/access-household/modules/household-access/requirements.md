@@ -58,6 +58,7 @@
 | Invitation | householdId, 5분 만료, 일회 소비 상태, code hash | 원문 코드는 생성 응답에서 한 번만 노출합니다. |
 | AssetOwnerProfile | householdId, profileId, 표시 이름, member/dependent 유형, linkedMemberId?, active/archived 상태 | 로그인 Member와 분리한 자산 명의자 디렉터리입니다. Member 프로필은 1:1로 연결되고 dependent에는 로그인·권한·알림 의미가 없습니다. |
 | 관리자 주체 | 인증된 사용자와 관리자 권한 판정 결과 | OAuth 계정 정보는 외부 인증 Adapter가 소유합니다. |
+| 사용자 접속 통계 | householdId, memberId, 누적·최근 30일 일별 횟수, 최근 접속, 최근 visitId | 앱 사용의 운영 Read Model이며 인증·과금·권한 판정 근거로 사용하지 않습니다. |
 
 이 모듈은 `assets.owner`, `registered_cards.owner`, Notifications의 `NotificationEndpoint`, `expenses.createdBy`를 소유하지 않습니다. 현재 legacy `fcmTokens`도 Access의 소유 데이터가 아닙니다. 멤버 변경 시 해당 모듈에 안정적인 멤버 ID 기반 명령이나 이벤트를 전달해야 합니다.
 
@@ -85,6 +86,8 @@
 | `RequestPermanentHouseholdPurge` | 승인된 관리자·운영 주체, 삭제된 가구 ID, 확인 정보 | 수동 영구 삭제 Process 시작 결과 |
 | `RepairLegacyMembershipClaim` | 신원 확인을 마친 운영자·Agent, 정확한 UID·householdId·memberId | 기존 단일 UID claim의 원자 교정과 감사 결과 |
 | `AuthorizeHouseholdAction` | 주체, 가구 ID, 작업 | 허용 또는 권한 오류 |
+| `RecordAppVisit` | 현재 Membership, 앱 생명주기 visitId, 플랫폼 | 중복 없는 사용자 접속 집계 결과 |
+| `GetAdminOperationsDashboard` | `systemAdmin`, 조회 일수 | 서버·예약 작업·공급자·가구·사용자 활동의 관리자 전용 snapshot |
 
 ### 내부 System Process 계약
 
@@ -124,6 +127,8 @@
 | ADM-002 | 목표 명세 | 관리자 권한과 가구 관리 쓰기는 서버와 Firestore Rules에서 검증해야 한다. | 클라이언트 이메일 목록·payload role·payload capability는 권한 근거로 사용하지 않는다. Firebase가 검증한 ID token의 `systemAdmin: true` custom claim만 서버에서 고정 capability로 변환하고, 관리자 작업은 일반 household command manifest와 분리한 전용 callable에서만 제공한다. | [admin callable](../../../../../../functions/src/bootstrap/firebaseAdminAccess.ts), [Firestore Rules](../../../../../../firestore.rules) | I, 보안 E2E |
 | ADM-003 | 목표 명세 | 관리자 가구 삭제는 모든 가구 범위 데이터를 보존한 채 가구를 `deleted`로 전환하고 일반 접근을 차단하며, 관리자·운영 복구 명령은 이를 `active`로 되돌린다. | 자동 hard purge는 없다. 영구 삭제는 별도 요청과 복구 불가능 확인을 받은 `RequestPermanentHouseholdPurge`만 시작한다. `purging` 뒤 Membership·claim 변경을 차단하고 UID claim snapshot부터 page 단위로 완성한 뒤 Context purge를 시작한다. 모든 Context purge 완료 전 UID claim을 유지하고, 완료 후 조건부 page 해제를 모두 마친 뒤에만 `purged`와 `HouseholdPurged.v1`을 확정한다. `purging` 이후에는 복구할 수 없다. | [householdService](../../../../../../web/src/lib/householdService.ts), [DEC-016](../../../../governance/decisions.md#dec-016), [DEC-040](../../../../governance/decisions.md#dec-040) | U, I, 동시성, 보안 E2E |
 | ADM-004 | 현재 명세 | `systemAdmin` 관리자는 `/admin`의 가구 목록에서 대상을 선택해 일반 가계부 화면을 조회할 수 있다. | 관리자 조회는 탭 단위의 별도 `administrator-readonly` SessionScope이며 대상 가구의 Membership·Member를 생성하거나 가장하지 않는다. 관리자 ID token과 대상 가구 조회가 검증되면 조회 세션을 검증 완료 상태로 전환해 지출·카테고리·자산 등 공개 업무 Read Model 구독을 시작한다. Firestore Rules와 서버 Query가 `admin.household-data.read`를 다시 검증하고 업무 데이터 쓰기, 시세 자동 갱신, 알림 endpoint 등록을 금지한다. 화면에는 관리자 조회 상태와 관리자 화면 복귀 동선을 계속 표시한다. | [admin page](../../../../../../web/src/app/admin/page.tsx), [HouseholdContext](../../../../../../web/src/contexts/HouseholdContext.tsx), [Firestore Rules](../../../../../../firestore.rules) | UI, I, 보안 E2E |
+| ADM-005 | 목표 명세 | `systemAdmin` 관리자는 `/admin` 한 화면에서 관리자 API 응답 상태·배포 리비전, 예약 작업별 최신 실행, 열린 장애, 외부 공급자 상태와 활성/삭제 가구·가구원 현황을 조회한다. | 별도 Grafana 서버나 Cloud Logging 원문 조회를 전제하지 않고 서버가 이미 보존하는 Operations Read Model만 읽는다. 관리자 조회 실패를 정상으로 표시하지 않으며 공급자·예약 작업의 기록 없음도 `degraded`로 구분한다. | [admin dashboard](../../../../../../web/src/components/admin/AdminOperationsOverview.tsx), [admin dashboard reader](../../../../../../functions/src/adapters/firebase/admin/firebaseAdminDashboardReader.ts) | C, UI, I |
+| ADM-006 | 목표 명세 | 사용자별 접속 횟수는 Google 재인증 횟수가 아니라 인증된 Membership으로 앱 화면 준비가 완료된 문서 생명주기당 1회로 집계한다. | 첫 화면 표시 후 비동기로 기록하여 사용자 화면을 기다리게 하지 않는다. 서버가 검증한 householdId·memberId만 사용하고 같은 visitId 재전송은 중복 집계하지 않는다. 일별 상세는 최근 30일, 누적 횟수와 최근 접속 시각은 계속 보존하며 관리자 화면은 최근 14일 추이를 표시한다. 집계 도입 전 과거 접속 횟수는 추정하지 않는다. | [member access policy](../../../../../../functions/src/platform/usage-observability/domain/memberAccessStats.ts), [member access telemetry](../../../../../../web/src/platform/usage/memberAccessTelemetry.ts) | U, C, I |
 
 ## 6. 모듈 결함
 
@@ -168,6 +173,8 @@
 | T-ADM-001 | 현재 명세 | 허용된 관리자 계정 / 로그인 / 가구 조회·생성·키 복사·확인 후 삭제 가능 | ADM-001 |
 | T-ADM-002 | 목표·동시성 | 거래·자산·카드와 다중 UID claim이 있는 가구 / 논리 삭제·복구, 영구 purge의 snapshot·Context·finalization page 실패와 재시도 / snapshot 완료 전 Context 호출 0건, 논리 삭제·Context 미완료 동안 claim과 데이터 보존, 모든 Context 완료 뒤 대상 claim만 조건부 해제, 다른 값 claim 보존, 전 page 완료 뒤 purged Event 한 번, 승인 전 물리 삭제 0건 | ADM-003, DEC-016, DEC-040 |
 | T-ADM-003 | 현재·보안 | systemAdmin·일반 사용자, 대상 가구 Membership 없음, active·deleted 가구 / 관리자 목록에서 가구 열기와 수정 시도 / systemAdmin만 일반 가계부 데이터를 조회하고 관리자 조회 배너를 보며 Member·endpoint 생성 없이 화면을 탐색하고, 모든 업무 쓰기는 전송 전 또는 서버·Rules에서 거부된다. 관리자 화면 복귀 뒤 대상 선택은 해제된다. | ADM-002, ADM-004 |
+| T-ADM-004 | 목표·운영 | systemAdmin과 일반 사용자, 정상·실패·기록 없음 예약 작업, 정상·저하·중단 공급자와 열린 장애 / 운영 대시보드 조회 / systemAdmin만 현재 배포·가구·활동·운영 상태 snapshot을 받고 실패·기록 없음은 정상으로 숨기지 않음 | ADM-005 |
+| T-ADM-005 | 목표·성능·멱등 | 같은 앱 문서의 동일 visitId 재전송, Android·iPhone PWA·일반 Web, 서울 날짜 경계 / 첫 화면 표시 후 접속 기록 / 화면 표시를 기다리게 하지 않고 사용자·일별·플랫폼 횟수를 한 번만 증가시키며 최근 30일 상세과 누적 횟수를 보존 | ADM-006 |
 | T-HH-RULES-001 | 목표 | 인증 없음·같은 가구·다른 가구·관리자별 컬렉션 CRUD / Rules / 권한 행렬과 householdId 불변식 적용 | ADM-002 |
 | T-HH-SEC-001 | 목표 | 무인증 rename 호출 / 실행 / 권한 오류이며 어떤 모듈 데이터도 변경되지 않음 | ADM-002, HH-009 |
 

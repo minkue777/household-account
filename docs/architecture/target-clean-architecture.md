@@ -300,7 +300,7 @@ flowchart LR
 
 | 제공 모듈 | 공개 Command·Query | 주요 소비자 |
 |---|---|---|
-| Access | `ResolveActorContext`, `AuthorizeHouseholdAction`, `ResolveSignedInUser`, `ClaimLegacyMembership`, `CreateHouseholdWithSelf`, `CreateInvitationCode`, `JoinHouseholdAsSelf`, `RenameSelf`, `Create/RenameAssetOwnerProfile`, 관리자 전용 `ArchiveAssetOwnerProfile`, `RemoveHouseholdMember`, `RestoreRemovedHouseholdMember`, `ListAssetOwnerProfiles`, `RequestHouseholdDeletion`, `RestoreDeletedHousehold`, `RequestPermanentHouseholdPurge`, `GetMembership`, `ListHouseholds` | 모든 가구 범위 Command와 Session Adapter, Portfolio·자산 UI, 승인된 관리자·운영 도구 |
+| Access | `ResolveActorContext`, `AuthorizeHouseholdAction`, `ResolveSignedInUser`, `ClaimLegacyMembership`, `CreateHouseholdWithSelf`, `CreateInvitationCode`, `JoinHouseholdAsSelf`, `RenameSelf`, `Create/RenameAssetOwnerProfile`, 관리자 전용 `ArchiveAssetOwnerProfile`, `RemoveHouseholdMember`, `RestoreRemovedHouseholdMember`, `ListAssetOwnerProfiles`, `RequestHouseholdDeletion`, `RestoreDeletedHousehold`, `RequestPermanentHouseholdPurge`, `RecordAppVisit`, `GetAdminOperationsDashboard`, `GetMembership`, `ListHouseholds` | 모든 가구 범위 Command와 Session Adapter, Portfolio·자산 UI, 승인된 관리자·운영 도구 |
 | Category/Budget | `GetCategoryReference`, `ListActiveCategories`, `UpdateCategoryCatalog`, `ContinueCategoryArchiveProcess`, `SetDefaultCategory`, `GetMonthlyBudget`, `GetBudgetStatus` | Ledger, Recurring, Payment Configuration, archive worker, Home·Reporting read adapter |
 | Ledger | `RecordManualTransaction`, `RecordCapturedTransaction`, `RecordRecurringTransaction`, `Update`, `Delete`, `Split`, `Merge`, `Unmerge`, `FindCancellationCandidates`, `CancelCapturedLineage`, `SearchLedger`, `SubscribeLedger`, `ListLocalCurrencyTransactions` | Web, QuickEdit, Payment Capture, Recurring, Reporting, Home 지역화폐 상세 |
 | Recurring | `ManageRecurringPlan`, `ProcessDueRecurringPlans`, `ProcessRecurringMonth`, `RemapRecurringCategoryReferences` | Web, 일일 Scheduler, Category Archive Process |
@@ -995,6 +995,7 @@ operations/runtime/jobRuns/{runId}              # Operations
 operations/runtime/deadLetters/{deliveryId}      # Operations, server-only
 operations/runtime/providerHealth/{provider_operation} # Operations 최신 장애·복구 상태
 operations/runtime/providerHealthReceipts/{executionKeyHash} # run별 Health 멱등 receipt
+operations/runtime/memberAccessStats/{household_member_hash} # Access 운영 Read Model; 누적·최근 30일 앱 접속
 operations/releases/{releaseId}                 # Delivery Assurance; manifest/gate/deployment hash
 ```
 
@@ -1238,6 +1239,8 @@ functions/src/
     web-api-ingress/
     operations/
     observability/
+    usage-observability/
+    admin-operations/
     config/
   shared/
     kernel/

@@ -2,6 +2,7 @@
   "contractVersion": "household-command-manifest.v1",
   "commands": [
     { "name": "access.resolve-signed-in-user.v1", "owner": "access", "scope": "principal", "clients": ["web", "android"] },
+    { "name": "access.record-app-visit.v1", "owner": "access", "scope": "household", "clients": ["web"] },
     { "name": "access.claim-legacy-membership.v1", "owner": "access", "scope": "principal", "clients": ["web", "android"] },
     { "name": "access.create-household-with-self.v1", "owner": "access", "scope": "principal", "clients": ["web"] },
     { "name": "access.join-household-as-self.v1", "owner": "access", "scope": "principal", "clients": ["web"] },

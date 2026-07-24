@@ -5,6 +5,17 @@ export const householdCommands = {
     return getHouseholdCommandClient().execute('access.resolve-signed-in-user.v1', {});
   },
 
+  recordAppVisit(input: {
+    visitId: string;
+    platform: 'android' | 'ios-pwa' | 'web';
+  }) {
+    return getHouseholdCommandClient().execute(
+      'access.record-app-visit.v1',
+      input,
+      { commandId: input.visitId, idempotencyKey: input.visitId }
+    );
+  },
+
   claimLegacyMembership(candidate: {
     legacyHouseholdId: string;
     legacyMemberId: string;

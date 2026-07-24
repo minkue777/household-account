@@ -6,6 +6,7 @@ import type { HouseholdCommandHandler } from "./householdCommand";
  */
 export const HOUSEHOLD_COMMAND_NAMES = Object.freeze([
   "access.resolve-signed-in-user.v1",
+  "access.record-app-visit.v1",
   "access.claim-legacy-membership.v1",
   "access.create-household-with-self.v1",
   "access.join-household-as-self.v1",

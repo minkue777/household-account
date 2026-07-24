@@ -165,6 +165,9 @@ function AuthenticatedPlatformEffects() {
     if (sessionState !== 'ready' || !isSessionVerified || adminHouseholdView !== null) return;
     return onWebFirstLedgerPaint(() => {
       void warmAssetNavigationIntent().catch(() => {});
+      void import('@/platform/usage/memberAccessTelemetry')
+        .then(({ recordCurrentAppVisit }) => recordCurrentAppVisit())
+        .catch(() => {});
     });
   }, [adminHouseholdView, isSessionVerified, sessionState]);
 
