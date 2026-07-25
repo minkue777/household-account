@@ -190,7 +190,7 @@ legacy `lastRegisteredMonth`는 전환 호환 필드이고 목표 중복 방지 
 
 ### 5.8 source=recurring
 
-Ledger posting intent에 source=recurring과 planId/targetMonth를 서버가 설정합니다. 일반 client는 이 source를 선택할 수 없습니다. `TransactionRecorded.v1` consumer인 Notifications는 recurring source를 일반 새 지출 자동 푸시에서 제외하고, 사용자가 별도 요청한 `HouseholdNotificationRequested.v1`은 독립 처리합니다.
+Ledger posting intent에 source=recurring과 planId/targetMonth를 서버가 설정합니다. 저장 문서는 `cardType=recurring`, `cardDisplay=정기지출`을 사용하고 조회 Adapter는 과거 문서의 `cardType=manual`보다 `source=recurring`을 우선하여 `정기지출`로 표시합니다. 일반 client는 이 source를 선택할 수 없습니다. `TransactionRecorded.v1` consumer인 Notifications는 recurring source를 일반 새 지출 자동 푸시에서 제외하고, 사용자가 별도 요청한 `HouseholdNotificationRequested.v1`은 독립 처리합니다.
 
 ## 6. Port 설계
 

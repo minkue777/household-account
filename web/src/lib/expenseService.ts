@@ -108,6 +108,9 @@ export function resolveExpenseCardDisplay(data: LedgerCardReadFields): string | 
   const legacyDisplay = typeof data.cardLastFour === 'string' ? data.cardLastFour.trim() : '';
   const display = canonicalDisplay || legacyDisplay;
 
+  // source가 원장의 실제 생성 경로입니다. 과거 정기지출 문서에
+  // cardType=manual이 남아 있어도 수동 입력으로 오인하지 않습니다.
+  if (source === 'recurring') return '정기지출';
   if (cardType === 'manual') return '수동';
   if (LEGACY_CAPTURED_CARD_TYPES.has(cardType)) return display || undefined;
   if (cardType === 'main' && isLegacyCardDisplayEvidence(display)) {

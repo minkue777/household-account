@@ -9,8 +9,9 @@ import {
 } from "./providerParsingSupport";
 
 const NAVER_PAYMENT_PATTERN =
-  /(.+?)에서\s*([\d,]+)원을?\s*결제(?:했습니다|했어요|됐어요)/u;
+  /(.+?)에서\s*([\d,]+)원을?\s*결제(?:되었습니다|되었어요|됐어요|했습니다|했어요)/u;
 const NAVER_TITLE_PATTERN = /^네이버페이\s*/u;
+const DIRECTIONAL_FORMATTING_PATTERN = /[\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu;
 
 const TOSS_AMOUNT_EVENT_PATTERN = /([\d,]+)원\s*(결제(?:\s*취소)?)/u;
 const TOSS_MERCHANT_PATTERN =
@@ -29,7 +30,9 @@ const ONNURI_PAYMENT_PATTERN =
   /(?:\[디지털온누리상품권\]\s*)?(?:결제되었어요\s*)?(?:[^,\n]+님,\s*)?(.+?)에서\s*([\d,]+)원이\s*결제(?:되었습니다|되었어요)/u;
 
 function parseNaver(context: ProviderParserContext): AndroidProviderParseResult {
-  const lines = bodyLines(context.body);
+  const lines = bodyLines(context.body).map((line) =>
+    line.replace(DIRECTIONAL_FORMATTING_PATTERN, ""),
+  );
   const hasMarker = lines.some((line) => NAVER_TITLE_PATTERN.test(line)) ||
     context.body.includes("네이버페이");
   if (!hasMarker) return ignoredParseFailure();

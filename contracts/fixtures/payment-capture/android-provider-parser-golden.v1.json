@@ -59,6 +59,13 @@
       "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 6700, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "12:04", "merchant": "가맹점라", "cardCompany": "네이버페이", "timeSource": "postedAt" } }
     },
     {
+      "caseId": "naver-production-formal-ending",
+      "requirementIds": ["T-PARSE-001", "PARSE-NAVER-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "com.naverfin.payapp", "parserId": "naver-pay-parser" },
+      "raw": { "postedAt": "2026-07-25T09:37:01.008+09:00", "title": "\u200e네이버페이", "text": "\u200e메가MGC커피 대전용문더샵점에서 2,000원 결제되었습니다. (결제 수단: 네이버페이 포인트·머니)" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 2000, "occurredLocalDate": "2026-07-25", "occurredLocalTime": "09:37", "merchant": "메가MGC커피 대전용문더샵점", "cardCompany": "네이버페이", "timeSource": "postedAt" } }
+    },
+    {
       "caseId": "toss-check-card-cashback",
       "requirementIds": ["T-PARSE-001", "PARSE-TOSS-001", "PARSE-COMMON-001"],
       "source": { "packageName": "viva.republica.toss", "parserId": "toss-bank-parser" },

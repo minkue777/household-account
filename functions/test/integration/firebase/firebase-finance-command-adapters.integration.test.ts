@@ -432,6 +432,18 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       recurringTargetMonth: "2026-07",
       creatorMemberId: actor.actingMemberId,
       amountInWon: 33_000,
+      source: "recurring",
+      cardType: "recurring",
+      cardDisplay: "정기지출",
+      cardLastFour: "정기지출",
+    });
+    expect(
+      (await database.collection("expenses").doc(first.ledgerTransactionId).get()).data(),
+    ).toMatchObject({
+      source: "recurring",
+      cardType: "recurring",
+      cardDisplay: "정기지출",
+      cardLastFour: "정기지출",
     });
     expect((await household.collection("recurringPlans").doc(planId).get()).data()).toMatchObject({
       lastProcessedMonth: "2026-07",

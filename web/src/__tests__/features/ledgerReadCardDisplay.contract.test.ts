@@ -1,6 +1,23 @@
 import { resolveExpenseCardDisplay } from '@/lib/expenseService';
 
 describe('ledger read card display contract', () => {
+  it('정기지출은 과거 문서에 manual 카드 유형이 남아 있어도 정기지출로 표시한다', () => {
+    expect(
+      resolveExpenseCardDisplay({
+        source: 'recurring',
+        cardType: 'manual',
+        cardDisplay: '자동등록',
+      })
+    ).toBe('정기지출');
+    expect(
+      resolveExpenseCardDisplay({
+        source: 'recurring',
+        cardType: 'recurring',
+        cardDisplay: '정기지출',
+      })
+    ).toBe('정기지출');
+  });
+
   it('canonical 수동 거래는 legacy cardLastFour가 없어도 수동으로 표시한다', () => {
     expect(resolveExpenseCardDisplay({ cardType: 'manual', cardDisplay: '수동' })).toBe('수동');
     expect(resolveExpenseCardDisplay({ source: 'manual' })).toBe('수동');
