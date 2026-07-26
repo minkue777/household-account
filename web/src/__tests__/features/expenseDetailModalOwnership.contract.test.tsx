@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
 import type { SplitItem } from '@/lib/expenseService';
@@ -8,6 +8,7 @@ const mockRunSplitMonthsAction = jest.fn().mockResolvedValue(undefined);
 const mockRunCancelSplitGroupAction = jest.fn().mockResolvedValue(undefined);
 const mockRunUpdateSplitGroupAction = jest.fn().mockResolvedValue(undefined);
 const mockNotifyPartner = jest.fn().mockResolvedValue(undefined);
+const mockShowAlert = jest.fn().mockResolvedValue(undefined);
 
 const mockExpenseEditModal = jest.fn((props: {
   expense: Expense;
@@ -65,6 +66,10 @@ jest.mock('@/contexts/CategoryContext', () => ({
   }),
 }));
 
+jest.mock('@/contexts/AppDialogContext', () => ({
+  useAppDialog: () => ({ showAlert: mockShowAlert }),
+}));
+
 jest.mock('@/lib/utils/monthlySplitActions', () => ({
   runSplitMonthsAction: (...args: unknown[]) => mockRunSplitMonthsAction(...args),
   runCancelSplitGroupAction: (...args: unknown[]) => mockRunCancelSplitGroupAction(...args),
@@ -110,6 +115,8 @@ const defaultProps = {
 describe('ExpenseDetail 모달 소유권 계약', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockShowAlert.mockResolvedValue(undefined);
+    document.body.style.overflow = '';
   });
 
   test('행 수와 무관하게 닫힌 모달을 만들지 않고 선택된 항목의 모달 하나만 연다', () => {
@@ -269,8 +276,8 @@ describe('ExpenseDetail 모달 소유권 계약', () => {
     });
   });
 
-  test('행 간 합치기는 기존 대상·원본 순서를 유지한다', () => {
-    const onMergeExpenses = jest.fn();
+  test('행 간 합치기는 기존 대상·원본 순서를 유지한다', async () => {
+    const onMergeExpenses = jest.fn().mockResolvedValue(undefined);
     render(
       <ExpenseDetail
         {...defaultProps}
@@ -284,6 +291,74 @@ describe('ExpenseDetail 모달 소유권 계약', () => {
       },
     });
 
-    expect(onMergeExpenses).toHaveBeenCalledWith(secondExpense, firstExpense);
+    await waitFor(() => {
+      expect(onMergeExpenses).toHaveBeenCalledWith(secondExpense, firstExpense);
+    });
+  });
+
+  test('합치기 진행 중 중복 drop을 막고 실패를 AppDialog로 안내한다', async () => {
+    let rejectMerge: (reason?: unknown) => void = () => undefined;
+    const onMergeExpenses = jest.fn(() => new Promise<void>((_resolve, reject) => {
+      rejectMerge = reject;
+    }));
+    render(
+      <ExpenseDetail
+        {...defaultProps}
+        onMergeExpenses={onMergeExpenses}
+      />
+    );
+    const target = screen.getByText('둘째 상점');
+    const drop = () => fireEvent.drop(target, {
+      dataTransfer: { getData: () => firstExpense.id },
+    });
+
+    drop();
+    drop();
+
+    expect(onMergeExpenses).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('지출을 합치는 중입니다')).toBeInTheDocument();
+
+    await act(async () => {
+      rejectMerge(new Error('VERSION_MISMATCH'));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockShowAlert).toHaveBeenCalledWith(
+        expect.stringContaining('VERSION_MISMATCH'),
+        '합치기 실패'
+      );
+    });
+    expect(screen.queryByText('지출을 합치는 중입니다')).not.toBeInTheDocument();
+  });
+
+  test('Android touchcancel은 drag 상태와 body scroll 잠금을 즉시 해제한다', () => {
+    jest.useFakeTimers();
+    try {
+      render(
+        <ExpenseDetail
+          {...defaultProps}
+          onMergeExpenses={jest.fn().mockResolvedValue(undefined)}
+        />
+      );
+      const row = screen.getByText('첫째 상점').closest('[draggable]');
+      expect(row).not.toBeNull();
+
+      fireEvent.touchStart(row!, {
+        touches: [{ clientX: 10, clientY: 10 }],
+      });
+      act(() => {
+        jest.advanceTimersByTime(500);
+      });
+
+      expect(document.body.style.overflow).toBe('hidden');
+      fireEvent.touchCancel(row!);
+      expect(document.body.style.overflow).toBe('');
+      expect(screen.queryByText('다른 항목 위에 놓으면 합쳐집니다'))
+        .not.toBeInTheDocument();
+    } finally {
+      jest.runOnlyPendingTimers();
+      jest.useRealTimers();
+    }
   });
 });

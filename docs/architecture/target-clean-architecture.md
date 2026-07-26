@@ -886,6 +886,7 @@ Portfolio의 `PositionChanged.v1`과 `AssetValuationChanged.v1`도 역할을 나
 
 - Firestore transaction 쓰기 한도보다 커질 수 있는 작업은 사전에 최대 그룹 크기를 검증한다.
 - 분할·합치기·취소에는 `aggregateVersion` 또는 precondition을 사용해 동시 편집의 lost update를 막는다.
+- 합치기는 기존 target ID를 재사용하지 않고 operation key로 새 aggregate ID를 생성해 반환한다. Client는 target/source 제거와 새 ID 생성을 하나의 낙관적 변경으로 투영하고 그 ID·version으로 연속 합치기를 수행한다.
 - 재병합은 서버가 merge ancestry를 non-merge leaf 원본까지 평탄화한다. 최종 Unmerge·lineage 취소는 평탄한 leaf 집합을 사용하고 중간 merge node는 superseded 감사 이력으로만 보존한다.
 - transaction callback은 여러 번 실행될 수 있으므로 그 안에서 외부 호출, FCM, UI broadcast, 비멱등 로그를 실행하지 않는다.
 - 가구·자산·일반 거래 삭제는 데이터 보존형 논리 삭제로 처리하고 자동 hard purge하지 않는다. 사용자가 별도로 영구 삭제를 요청했을 때만 소유 경계의 운영자/Agent Workflow 또는 수동 purge Process Manager를 사용한다.

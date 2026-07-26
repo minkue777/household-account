@@ -418,8 +418,8 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
                 onDelete={handleDeleteExpense}
                 onAddExpense={() => setShowAddModal(true)}
                 onSplitExpense={handleSplitExpense}
-                onMergeExpenses={handleMergeExpenses}
-                onUnmergeExpense={handleUnmergeExpense}
+                onMergeExpenses={isIncome ? undefined : handleMergeExpenses}
+                onUnmergeExpense={isIncome ? undefined : handleUnmergeExpense}
                 autoEditExpenseId={autoEditExpenseId}
                 onAutoEditHandled={() => setAutoEditExpenseId(null)}
                 transactionType={transactionType}

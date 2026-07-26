@@ -3,13 +3,23 @@ import { Expense } from '@/types/expense';
 
 interface UseDragAndDropOptions {
   expenses: Expense[];
-  onMergeExpenses?: (targetExpense: Expense, sourceExpense: Expense) => void;
+  onMergeExpenses?: (
+    targetExpense: Expense,
+    sourceExpense: Expense
+  ) => void | Promise<void>;
+  onMergeError?: (error: unknown) => void;
 }
 
-export function useDragAndDrop({ expenses, onMergeExpenses }: UseDragAndDropOptions) {
+export function useDragAndDrop({
+  expenses,
+  onMergeExpenses,
+  onMergeError,
+}: UseDragAndDropOptions) {
   const [draggingExpenseId, setDraggingExpenseId] = useState<string | null>(null);
   const [dragOverExpenseId, setDragOverExpenseId] = useState<string | null>(null);
+  const [isMergePending, setIsMergePending] = useState(false);
   const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const mergeInFlightRef = useRef(false);
 
   // 터치 이동 중 어떤 항목 위에 있는지 확인
   const findItemAtPosition = useCallback((x: number, y: number): string | null => {
@@ -25,18 +35,49 @@ export function useDragAndDrop({ expenses, onMergeExpenses }: UseDragAndDropOpti
     return null;
   }, [draggingExpenseId]);
 
-  // 터치 드래그 종료 시 합치기
-  const handleTouchDragEnd = useCallback((sourceId: string, targetId: string | null) => {
-    if (targetId && sourceId !== targetId && onMergeExpenses) {
-      const sourceExpense = expenses.find(e => e.id === sourceId);
-      const targetExpense = expenses.find(e => e.id === targetId);
-      if (sourceExpense && targetExpense) {
-        onMergeExpenses(targetExpense, sourceExpense);
-      }
-    }
+  const cancelTouchDrag = useCallback(() => {
     setDraggingExpenseId(null);
     setDragOverExpenseId(null);
-  }, [expenses, onMergeExpenses]);
+  }, []);
+
+  const requestMerge = useCallback(async (
+    targetExpense: Expense,
+    sourceExpense: Expense
+  ): Promise<void> => {
+    if (
+      !onMergeExpenses
+      || targetExpense.id === sourceExpense.id
+      || mergeInFlightRef.current
+    ) {
+      return;
+    }
+
+    mergeInFlightRef.current = true;
+    setIsMergePending(true);
+    try {
+      await onMergeExpenses(targetExpense, sourceExpense);
+    } catch (error) {
+      onMergeError?.(error);
+    } finally {
+      mergeInFlightRef.current = false;
+      setIsMergePending(false);
+    }
+  }, [onMergeError, onMergeExpenses]);
+
+  // 터치 드래그 종료 시 합치기
+  const handleTouchDragEnd = useCallback(async (
+    sourceId: string,
+    targetId: string | null
+  ): Promise<void> => {
+    const sourceExpense = expenses.find((expense) => expense.id === sourceId);
+    const targetExpense = targetId === null
+      ? undefined
+      : expenses.find((expense) => expense.id === targetId);
+    cancelTouchDrag();
+    if (sourceExpense && targetExpense) {
+      await requestMerge(targetExpense, sourceExpense);
+    }
+  }, [cancelTouchDrag, expenses, requestMerge]);
 
   const registerItemRef = useCallback((id: string, element: HTMLDivElement | null) => {
     if (element) {
@@ -55,11 +96,12 @@ export function useDragAndDrop({ expenses, onMergeExpenses }: UseDragAndDropOpti
     };
 
     // 드래그 중일 때 body에 스크롤 방지
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     document.addEventListener('touchmove', preventScroll, { passive: false });
 
     return () => {
-      document.body.style.overflow = '';
+      document.body.style.overflow = previousOverflow;
       document.removeEventListener('touchmove', preventScroll);
     };
   }, [draggingExpenseId]);
@@ -71,6 +113,9 @@ export function useDragAndDrop({ expenses, onMergeExpenses }: UseDragAndDropOpti
     setDragOverExpenseId,
     findItemAtPosition,
     handleTouchDragEnd,
+    cancelTouchDrag,
+    requestMerge,
+    isMergePending,
     registerItemRef,
   };
 }

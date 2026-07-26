@@ -23,6 +23,7 @@ export interface Expense {
   cardLastFour?: string;  // 기존 UI 호환용 카드 표시 문자열(예: 수동, 삼성(1840))
   memo?: string;          // 메모 (선택)
   mergedFrom?: MergedExpenseInfo[];  // 합쳐진 원본 지출들 (되돌리기용)
+  mergeLeafIds?: string[]; // 서버가 보존한 합치기 원본 aggregate ID
   splitGroupId?: string;  // 월별 분할 그룹 ID (같은 ID면 같은 분할 그룹)
   splitIndex?: number;    // 분할 순서 (1, 2, 3...)
   splitTotal?: number;    // 총 분할 개월 수

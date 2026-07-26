@@ -60,7 +60,7 @@
 | `Update` Command v1 | Web·QuickEdit | transactionId, patch, expectedVersion | `Success<TransactionView>`, `ValidationError`, `NotFound`, `Conflict`, `Forbidden` | `ledger.write` | Transaction·receipt·Outbox 한 UoW | envelope key + version |
 | `Delete` Command v1 | Web | transactionId, expectedVersion | `Success<LogicallyDeleted>`, `NotFound`, `Conflict`, `Forbidden` | `ledger.write` | Transaction의 deleted 전이·receipt·Outbox 한 UoW | envelope key + version |
 | `Split` Command v1 | Web·QuickEdit | item/monthly/reconfigure operation | `Success<SplitResult>`, `ValidationError`, `NotFound`, `Conflict`, `Forbidden` | `ledger.write` | 원본·새 그룹·receipt·Outbox 한 UoW | operation key + group versions |
-| `Merge` Command v1 | Web | targetId, sourceIds, expectedVersions | `Success<MergedResult>`, `ValidationError`, `NotFound`, `Conflict` | `ledger.write` | 대상·원본 snapshot·receipt·Outbox 한 UoW | operation key + 모든 version |
+| `Merge` Command v1 | Web | targetId, sourceIds, expectedVersions | `Success<MergedResult { transactionId, transaction.aggregateVersion }>`, `ValidationError`, `NotFound`, `Conflict` | `ledger.write` | 대상·원본 snapshot·receipt·Outbox 한 UoW | operation key + 모든 version |
 | `Unmerge` Command v1 | Web | mergedTransactionId, expectedVersion | `Success<UnmergedResult>`, `NeedsConfirmation`, `NotFound`, `Conflict` | `ledger.write` | 합친 거래·복원 집합·receipt·Outbox 한 UoW | operation key + version |
 | `CancelCapturedLineage` Command v1 | Payment Capture | cancellationKey, captureLineageId, expectedLineageVersion | `Success<CancelledLineageResult>`, `NotFound`, `Conflict`, `ValidationError` | `ledger.cancel` | 대상 lineage 원본·파생 삭제, 다른 lineage 복원, receipt·Outbox 한 UoW | cancellation key |
 | `RequestHouseholdNotification` Command v1 | Web·QuickEdit | transactionId, expectedVersion | `Success<NotificationRequestRecorded>`, `ValidationError`, `NotFound`, `AlreadyProcessed` | `ledger.notify.request` | Transaction metadata·receipt·Outbox 한 UoW | envelope key |
@@ -189,14 +189,14 @@ DEC-013의 알림 수신자는 Ledger가 확정하지 않습니다. Ledger는 �
 
 ### 5.5 Merge·Unmerge
 
-1. 같은 household의 서로 다른 expense와 모든 version을 확인합니다.
-2. `NestedMergePolicy`가 각 merge 입력의 서버 저장 ancestry를 재귀 탐색하여 non-merge leaf snapshot, 중간 merge history ref와 모든 immutable lineage ref를 반환합니다. item/monthly split 파생 거래는 merge가 아니므로 그 자리에서 leaf입니다.
-3. 두 입력 graph에 같은 leaf ID가 있거나 cycle·누락·불완전 legacy snapshot이 있으면 `Conflict(MERGE_SOURCE_OVERLAP)` 또는 typed contract failure로 끝내고 쓰지 않습니다.
+1. 같은 household의 서로 다른 expense와 모든 version을 확인합니다. 저장소는 먼저 target/source ID만 읽고, 각 입력의 `mergeLeafIds`에서 아직 읽지 않은 leaf ID만 추가로 읽으며 가구 전체 canonical·legacy 컬렉션을 스캔하지 않습니다.
+2. `NestedMergePolicy`가 각 merge 입력의 서버 저장 ancestry를 non-merge leaf snapshot까지 평탄화하여 중간 merge history ref와 모든 immutable lineage ref를 반환합니다. item/monthly split 파생 거래는 merge가 아니므로 그 자리에서 leaf입니다.
+3. 두 입력 graph에 같은 leaf ID가 있거나 cycle·누락·불완전 legacy snapshot이 있으면 `Conflict(MERGE_LEAF_OVERLAP)` 또는 typed contract failure로 끝내고 쓰지 않습니다.
 4. `LocalCurrencyTransactionPolicy`가 모든 leaf·active 입력의 localCurrencyType 집합을 검사합니다. 서로 다른 type 또는 typed/untyped 혼합이면 `Conflict(LOCAL_CURRENCY_TYPE_MISMATCH)`로 쓰지 않습니다.
-5. `MergePolicy`가 이번 active 입력의 현재 금액 합계와 target 공통 필드, 평탄한 leaf 복원 snapshot을 만듭니다.
-6. 대상·원본과 중간 merge node의 `superseded` 전이, 새 합친 거래, lineage current refs, receipt와 Event를 원자 commit합니다.
-7. Unmerge는 평탄한 leaf만 `UnmergeRestorationPolicy`에 전달합니다. 중간 merge node는 복원하지 않습니다.
-8. 확정 계획만 합친 거래 제거와 leaf 원본 복원을 한 UoW로 commit합니다.
+5. `MergePolicy`가 이번 active 입력의 현재 금액 합계와 target 공통 필드, 평탄한 leaf 복원 snapshot을 만들고 operation key로 새 merged aggregate ID를 결정합니다.
+6. UoW는 commit transaction 안에서 동일한 선택 집합과 새 ID의 부재, 모든 expected version을 다시 확인합니다. 대상·원본과 중간 merge node의 `superseded` 전이, 새 합친 거래, lineage current refs, receipt와 Event를 원자 commit하고 새 ID·version을 반환합니다.
+7. Unmerge는 merged ID와 그 `mergeLeafIds`만 선택 조회하여 평탄한 leaf만 `UnmergeRestorationPolicy`에 전달합니다. 중간 merge node는 복원하지 않습니다.
+8. 확정 계획은 합친 거래를 제거하고 같은 leaf ID를 재활성화합니다. merchant·amount·category·memo와 숨은 provenance는 leaf 값을 유지하고, accountingDate·localTime·transactionType·cardType·cardDisplay은 DEC-010에 따라 merged 거래의 공통 값을 적용한 뒤 한 UoW로 commit합니다.
 
 ### 5.6 FindCancellationCandidates·CancelCapturedLineage
 
@@ -227,6 +227,7 @@ DEC-013의 알림 수신자는 Ledger가 확정하지 않습니다. Ledger는 �
 | Port | 책임 | Conformance 핵심 |
 |---|---|---|
 | `LedgerRepository` | 단건·그룹·기간·검색 후보 조회와 persistence mapping | tenant 강제, legacy transactionType=expense, 오류/NoData 구분 |
+| `TransformationLineageStore` | Merge·Unmerge·lineage cancel의 선택 조회와 원자 commit | Merge·Unmerge는 명시된 transaction/capture-lineage/merge-leaf ID만 조회하고 canonical 우선·legacy fallback과 commit 안의 동일 선택 집합·새 aggregate ID 재검증을 적용한다. Cancellation만 ID가 없는 구형 `mergedFrom` 계보의 존재 여부를 가구 범위에서 검사하고 commit 안에서 다시 확인해 불완전 계보를 무변경 거부한다. |
 | `LedgerUnitOfWork` | Transaction, claim, receipt, Outbox 원자 commit | callback 2회, create 경합, rollback |
 | `CategoryReferencePort` | categoryId 활성·사용 가능 상태 확인 | NotFound/Inactive/RetryableFailure 구분 |
 | `Clock` / `IdGenerator` | manual time, ID, occurredAt | 고정·순차 fixture |
@@ -257,7 +258,7 @@ Recurring 쪽 `ProcessRecurringPlanParticipant`, Ledger 쪽 `RecordRecurringTran
 
 | 데이터 | 목표 key | 비고 |
 |---|---|---|
-| Transaction | `households/{householdId}/ledgerTransactions/{transactionId}` | schemaVersion, lifecycleState(active/superseded/deleted), deletedAt?, optional localCurrencyType, aggregateVersion, server timestamps; deleted에는 자동 TTL 없음 |
+| Transaction | `households/{householdId}/ledgerTransactions/{transactionId}` | schemaVersion, lifecycleState(active/superseded/deleted), deletedAt?, optional localCurrencyType, aggregateVersion, server timestamps; merged 거래는 평탄한 `mergeLeafIds`, `intermediateMergeHistoryIds`와 원본 표시 snapshot을 보존; deleted에는 자동 TTL 없음 |
 | Capture lineage | `households/{householdId}/ledgerCaptureLineages/{lineageId}` | immutable origin/capture evidence, active·superseded transaction refs, aggregateVersion; 취소 뒤 최소 tombstone |
 | Capture claim | `households/{householdId}/ledgerDedupKeys/{fingerprintHash}` | fingerprintVersion, lineageId, claimedAt, canceledAt?; 취소 뒤에도 재생성 차단 |
 | Command receipt | context별 receipt 경로 | payloadHash, typed result, expiresAt |
@@ -321,7 +322,7 @@ Event payload는 projection 조정에 필요한 최소 금액·날짜·category 
 
 - 브라우저 Web·PWA·Android WebView의 월·연 원장 목록은 Ledger가 소유한 같은 공개 Firestore Read Contract를 실시간 구독합니다. 검증된 SessionScope의 `householdId`와 시작일·종료일을 `householdId + date` 복합 index에 전달하고, 거래 유형과 lifecycle 가시성은 같은 Read Adapter가 적용합니다.
 - 앱 첫 가계부 화면은 월 원장 localStorage snapshot을 읽거나 쓰지 않습니다. Firestore listener는 metadata 변경을 포함해 구독하고 최초 `fromCache=true` 결과를 건너뛴 뒤 서버 snapshot부터 `accountingDate DESC, localTime DESC, transactionId DESC` 정렬 Policy로 표시합니다.
-- 생성·수정·삭제 Command를 보내는 순간 client의 Ledger 낙관적 Projection에 변경을 반영합니다. 서버의 Canonical Command 결과와 이어지는 실시간 snapshot으로 확정·수렴하며, typed rejection 또는 version conflict이면 해당 mutation만 rollback합니다. 성공 뒤 기간 목록을 별도 조회하거나 focus·visible 이벤트 및 30초 polling으로 재조회하지 않습니다.
+- 생성·수정·삭제 Command를 보내는 순간 client의 Ledger 낙관적 Projection에 변경을 반영합니다. Merge는 기존 target을 update하지 않고 target/source delete overlay와 operation key로 결정한 새 merged ID의 create overlay를 함께 적용합니다. 서버의 Canonical Command 결과와 이어지는 실시간 snapshot으로 확정·수렴하며, 응답 ID 불일치·typed rejection·version conflict이면 해당 구조 변경의 overlay 전체를 rollback하고 `AppDialogProvider`로 안내합니다. 성공 뒤 기간 목록을 별도 조회하거나 focus·visible 이벤트 및 30초 polling으로 재조회하지 않습니다.
 - Ledger 낙관적 Projection은 `householdId` scope별로 격리합니다. 월·연간·통계·검색처럼 같은 가구에서 동시에 열린 모든 구독은 같은 mutation을 관찰하되, 다른 가구의 pending·committed overlay는 절대 합성하지 않습니다.
 - 로그아웃·가구 전환으로 `SessionScope`를 해제할 때 모든 Ledger base와 pending·committed overlay를 폐기합니다. 이전 session의 늦은 Command 응답은 폐기된 mutation ID에만 귀속되며 새 session Projection에 다시 주입하지 않습니다.
 - 날짜·검색어 등 query 경계를 이동하는 수정은 원래 query에서 즉시 제거하고 새 query에 즉시 추가합니다. 원래 범위와 목적 범위의 실시간 snapshot이 각각 새 version 또는 범위 이탈을 확인할 때까지 Canonical overlay를 유지합니다.
@@ -344,8 +345,8 @@ FCM·Android broadcast·QuickEdit·HTTP Provider는 Ledger transaction에서 호
 |---|---|
 | 입력 | `AMOUNT_NOT_POSITIVE_INTEGER`, `MERCHANT_REQUIRED`, `INCOME_ITEM_REQUIRED`, `MONTHS_BELOW_TWO` |
 | 참조 | `CATEGORY_NOT_FOUND`, `CATEGORY_INACTIVE`, `TRANSACTION_NOT_FOUND` |
-| 그룹 | `SPLIT_SUM_MISMATCH`, `GROUP_TOO_LARGE`, `LINEAGE_TOO_LARGE`, `GROUP_VERSION_MISMATCH`, `MERGE_SOURCE_DUPLICATE`, `LINEAGE_VERSION_MISMATCH` |
-| 정책 | `UNMERGE_POLICY_UNDECIDED`, `RESTORATION_SNAPSHOT_INCOMPLETE` |
+| 그룹 | `SPLIT_SUM_MISMATCH`, `GROUP_TOO_LARGE`, `LINEAGE_TOO_LARGE`, `GROUP_VERSION_MISMATCH`, `MERGE_LEAF_OVERLAP`, `MERGE_ANCESTRY_CYCLE`, `LINEAGE_VERSION_MISMATCH` |
+| 정책 | `MERGE_EXPENSE_ONLY`, `RESTORATION_SNAPSHOT_INCOMPLETE` |
 | 충돌 | `VERSION_MISMATCH`, `IDEMPOTENCY_PAYLOAD_MISMATCH` |
 | 계약 | `UNSUPPORTED_CONTRACT_VERSION`, `UNSUPPORTED_FINGERPRINT_VERSION` |
 
@@ -431,8 +432,9 @@ Domain은 Firebase·React를 import하지 않습니다. 다른 기능은 `ledger
 | SPL-004 | Domain·Emulator | reconfigure monthly | 1개월, 새 개월 수, 원본·기존 파생의 전체 필드·상태, 기존 group 경합 | 기존 항목과 원본 superseded, 새 active group의 증거 보존과 원자 재구성 | T-SPL-005 |
 | SPL-005 | Domain Unit | MonthlySplitPolicy | 10,000원/3개월, 나머지 0·1·n-1 | 각 3,333원, 1원 의도적 미반영 | T-SPL-001 |
 | SPL-006 | Application·Emulator | monthly-new-manual | memo, creator, manual card metadata, 중간 실패 | 입력 metadata 유지와 한 UoW | T-SPL-006 |
-| MRG-001 | Domain·Emulator | Merge·NestedMergePolicy | 대상·leaf 전체 snapshot, `A+B=M` 뒤 `M+C`, 겹치는 leaf, cycle, 불완전 graph, version map, UoW 실패·lineage 취소 | 대상 표시·합산, leaf 전체 복원 snapshot·평탄 lineage·중간 history; graph/contract/UoW 오류 rollback; 취소 시 비대상 leaf 복원 | T-MRG-001 |
-| MRG-002 | Domain·Application | UnmergeRestorationPolicy | 날짜·시각·카드가 다른 leaf 전체 필드, 정상/ID·lineage 없는 legacy snapshot | 같은 leaf ID·원본별 표시/capture 필드와 merged 공통 date·time·type·display card 적용 또는 ContractFailure·무변경 | T-MRG-002 |
+| MRG-001 | Domain·Adapter·Emulator | Merge·NestedMergePolicy·TransformationLineageStore·handler | 대상·leaf 전체 snapshot, 서버 반환 ID, `A+B=M` 직후 `M+C`, unrelated 대량 거래, 겹치는 leaf, cycle, 불완전 graph, version map, UoW 실패·lineage 취소 | 선택 ID만 조회, 새 merged ID·version 반환, 대상 표시·합산, leaf 전체 복원 snapshot·평탄 lineage·중간 history; graph/contract/UoW 오류 rollback; 반환 ID로 연속 merge; 취소 시 비대상 leaf 복원 | T-MRG-001 |
+| MRG-002 | Domain·Application·Emulator | 실제 runtime Unmerge·UnmergeRestorationPolicy | 날짜·시각·유형·카드가 다른 leaf 전체 필드, 정상/ID·lineage 없는 legacy snapshot | 같은 leaf ID·원본별 표시/capture 필드와 merged 공통 date·time·type·card type·display card 적용 또는 ContractFailure·무변경 | T-MRG-002 |
+| MRG-001·002 | Client·UI | Web optimistic projection·drag/touch coordinator | pending merge, snapshot 전 연속 merge, 성공·Conflict·RetryableFailure, touchcancel | 새 ID 한 건으로 즉시 치환, 중복 drop 차단, 실패 overlay 전체 rollback·AppDialog, drag/scroll 상태 정리 | T-MRG-003 |
 | SEA-001 | Domain·Query | SearchLedger | merchant 대소문자·공백, memo, 카드 증거 변형, 빈 query, 기간 양끝, 타 가구/type/state, 정렬 동률 | 빈 query NoData, 같은 범위 일치만 날짜·시각·ID 최신순 | T-SEA-001 |
 | SEA-002 | Domain Unit | LedgerSearchPolicy | 설정 기반 모든 카드사 alias·유형, 끝 4자리, 카드사+정확 번호, x/별표 마스킹 | 특정 카드사 하드코딩 없이 복합 조건 모두 일치 | T-SEA-001 |
 | SEA-003 | Query Contract·Client | SearchLedger·LedgerSearchController | cursor/limit 두 page·scope 변경, A slow→B fast, close, logout·가구 변경, mutation 실패·성공 | bounded page 중복·누락 없음, cursor scope 고정, obsolete 응답 폐기, 성공 mutation 뒤 새 revision 재조회 | T-SEA-002 |

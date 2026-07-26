@@ -84,4 +84,35 @@ describe('Ledger Web command DTO', () => {
       { householdId: 'household-1' }
     );
   });
+
+  test('합치기는 commandId에서 새 aggregate ID를 고정하고 같은 멱등 키로 전송한다', async () => {
+    execute.mockResolvedValue({});
+
+    const result = await ledgerCommands.merge(
+      'household-1',
+      'expense-target',
+      4,
+      'expense-source',
+      7,
+      'merge-command-1'
+    );
+
+    expect(execute).toHaveBeenCalledWith(
+      'ledger.merge-transactions.v1',
+      {
+        targetTransactionId: 'expense-target',
+        sourceTransactionId: 'expense-source',
+        expectedVersions: {
+          'expense-target': 4,
+          'expense-source': 7,
+        },
+      },
+      {
+        householdId: 'household-1',
+        commandId: 'merge-command-1',
+        idempotencyKey: 'merge-command-1',
+      }
+    );
+    expect(result).toEqual({ transactionId: 'merged:merge-command-1' });
+  });
 });

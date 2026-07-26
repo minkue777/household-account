@@ -19,6 +19,21 @@ export interface LedgerTransactionCommandResult {
   aggregateVersion: number;
 }
 
+/**
+ * 병합 저장소는 commandId에서 새 aggregate ID를 결정합니다.
+ *
+ * 현재 배포된 v1 handler는 빈 객체를 반환하지만, 롤링 배포 중 새 handler가
+ * authoritative ID를 함께 반환할 수 있도록 두 응답 모양을 모두 허용합니다.
+ */
+export interface LedgerMergeCommandWireResult {
+  transactionId?: string;
+  transactionIds?: string[];
+}
+
+export function ledgerMergedTransactionId(commandId: string): string {
+  return `merged:${commandId}`;
+}
+
 export const TENANTLESS_COMMANDS = [
   'access.resolve-signed-in-user.v1',
   'access.claim-legacy-membership.v1',
@@ -219,7 +234,7 @@ export interface HouseholdCommandResults {
   'ledger.delete-transaction.v1': LedgerTransactionCommandResult;
   'ledger.change-transaction-category.v1': LedgerTransactionCommandResult;
   'ledger.split-transaction.v1': { transactionIds: string[] };
-  'ledger.merge-transactions.v1': Record<string, never>;
+  'ledger.merge-transactions.v1': LedgerMergeCommandWireResult;
   'ledger.unmerge-transaction.v1': { transactionIds: string[] };
   'ledger.cancel-monthly-split.v1': Record<string, never>;
   'ledger.reconfigure-monthly-split.v1': { splitGroupId: string };

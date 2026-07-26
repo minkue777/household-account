@@ -1,11 +1,21 @@
 import { ledgerCommands } from '@/features/ledger/application/ledgerCommands';
 import { ledgerOptimisticProjection } from '@/features/ledger/application/ledgerOptimisticProjection';
-import { updateExpense, updateExpenseCategory } from '@/lib/expenseService';
+import {
+  mergeExpenses,
+  unmergeExpense,
+  updateExpense,
+  updateExpenseCategory,
+} from '@/lib/expenseService';
+import { createHouseholdCommandId } from '@/platform/functions-api/householdCommandClient';
 import type { LedgerTransactionCommandResult } from '@/platform/functions-api/householdCommandContract';
 import type { Expense } from '@/types/expense';
 
 jest.mock('@/composition/clientSessionScope', () => ({
   requireClientSessionScope: () => ({ householdId: 'house-1', memberId: 'member-1' }),
+}));
+
+jest.mock('@/platform/functions-api/householdCommandClient', () => ({
+  createHouseholdCommandId: jest.fn(),
 }));
 
 jest.mock('@/features/ledger/application/ledgerCommands', () => ({
@@ -26,6 +36,9 @@ jest.mock('@/features/ledger/application/ledgerCommands', () => ({
 }));
 
 const mockedCommands = ledgerCommands as jest.Mocked<typeof ledgerCommands>;
+const mockedCreateCommandId = createHouseholdCommandId as jest.MockedFunction<
+  typeof createHouseholdCommandId
+>;
 
 function expense(overrides: Partial<Expense> = {}): Expense {
   return {
@@ -71,6 +84,7 @@ function commandResult(overrides: Partial<LedgerTransactionCommandResult> = {}) 
 describe('ledger expense service optimistic canonical contract', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockedCreateCommandId.mockReturnValue('merge-command-default');
     ledgerOptimisticProjection.reset();
   });
 
@@ -125,5 +139,144 @@ describe('ledger expense service optimistic canonical contract', () => {
       splitIndex: 1,
       splitTotal: 3,
     });
+  });
+
+  test('merge는 old target을 갱신하지 않고 두 원본을 새 merged aggregate로 교체한다', async () => {
+    const rendered: Expense[][] = [];
+    const subscription = ledgerOptimisticProjection.subscribe(
+      (items) => rendered.push(items),
+      () => true,
+      'house-1'
+    );
+    const target = expense({
+      id: 'target',
+      amount: 10_000,
+      aggregateVersion: 3,
+      mergedFrom: undefined,
+    });
+    const source = expense({
+      id: 'source',
+      merchant: 'source merchant',
+      amount: 4_000,
+      aggregateVersion: 5,
+      mergedFrom: undefined,
+    });
+    subscription.publish([target, source]);
+    mockedCreateCommandId.mockReturnValue('merge-command-1');
+    mockedCommands.merge.mockResolvedValue({
+      transactionId: 'merged:merge-command-1',
+    });
+
+    const mergedId = await mergeExpenses(target, source);
+
+    expect(mergedId).toBe('merged:merge-command-1');
+    expect(rendered.at(-1)).toEqual([
+      expect.objectContaining({
+        id: 'merged:merge-command-1',
+        aggregateVersion: 1,
+        amount: 14_000,
+        mergeLeafIds: ['target', 'source'],
+      }),
+    ]);
+    expect(rendered.at(-1)?.some(({ id }) => id === 'target')).toBe(false);
+    expect(mockedCommands.merge).toHaveBeenCalledWith(
+      'house-1',
+      'target',
+      3,
+      'source',
+      5,
+      'merge-command-1'
+    );
+    subscription.dispose();
+  });
+
+  test('서버 snapshot 전 연속 합치기도 optimistic merged ID를 다음 target으로 사용한다', async () => {
+    const rendered: Expense[][] = [];
+    const subscription = ledgerOptimisticProjection.subscribe(
+      (items) => rendered.push(items),
+      () => true,
+      'house-1'
+    );
+    const target = expense({ id: 'target', amount: 10_000, mergedFrom: undefined });
+    const source = expense({ id: 'source', amount: 4_000, mergedFrom: undefined });
+    const third = expense({
+      id: 'third',
+      aggregateVersion: 2,
+      amount: 6_000,
+      mergedFrom: undefined,
+    });
+    subscription.publish([target, source, third]);
+    mockedCreateCommandId
+      .mockReturnValueOnce('merge-command-1')
+      .mockReturnValueOnce('merge-command-2');
+    mockedCommands.merge
+      .mockResolvedValueOnce({ transactionId: 'merged:merge-command-1' })
+      .mockResolvedValueOnce({ transactionId: 'merged:merge-command-2' });
+
+    await mergeExpenses(target, source);
+    expect(rendered.at(-1)?.map(({ id }) => id)).toEqual(
+      expect.arrayContaining(['merged:merge-command-1', 'third'])
+    );
+    expect(rendered.at(-1)?.some(({ id }) => id === 'target')).toBe(false);
+    const firstMerged = rendered.at(-1)?.find(
+      ({ id }) => id === 'merged:merge-command-1'
+    );
+    expect(firstMerged).toBeDefined();
+
+    await mergeExpenses(firstMerged!, third);
+
+    expect(mockedCommands.merge).toHaveBeenNthCalledWith(
+      2,
+      'house-1',
+      'merged:merge-command-1',
+      1,
+      'third',
+      2,
+      'merge-command-2'
+    );
+    expect(rendered.at(-1)?.map(({ id }) => id)).toEqual([
+      'merged:merge-command-2',
+    ]);
+    subscription.dispose();
+  });
+
+  test('merge command 거부 시 target/source 삭제와 새 merged 생성 overlay를 모두 rollback한다', async () => {
+    const rendered: Expense[][] = [];
+    const subscription = ledgerOptimisticProjection.subscribe(
+      (items) => rendered.push(items),
+      () => true,
+      'house-1'
+    );
+    const target = expense({ id: 'target', amount: 10_000, mergedFrom: undefined });
+    const source = expense({ id: 'source', amount: 4_000, mergedFrom: undefined });
+    subscription.publish([target, source]);
+    mockedCreateCommandId.mockReturnValue('merge-command-rejected');
+    mockedCommands.merge.mockRejectedValue(new Error('VERSION_MISMATCH'));
+
+    await expect(mergeExpenses(target, source)).rejects.toThrow('VERSION_MISMATCH');
+
+    expect(rendered.at(-1)?.map(({ id }) => id).sort()).toEqual([
+      'source',
+      'target',
+    ]);
+    expect(rendered.at(-1)?.some(({ id }) => id.startsWith('merged:'))).toBe(false);
+    subscription.dispose();
+  });
+
+  test('mergeLeafIds만 있는 서버 병합 거래도 되돌리기 command를 실행한다', async () => {
+    const merged = expense({
+      id: 'merged:server-command',
+      aggregateVersion: 1,
+      mergedFrom: undefined,
+      mergeLeafIds: ['target', 'source'],
+    });
+    mockedCommands.unmerge.mockResolvedValue(['target', 'source']);
+
+    await expect(unmergeExpense(merged)).resolves.toEqual(['target', 'source']);
+    expect(mockedCommands.unmerge).toHaveBeenCalledWith(
+      'house-1',
+      'merged:server-command',
+      1
+    );
   });
 });

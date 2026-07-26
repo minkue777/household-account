@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import type { Expense, TransactionType } from '@/types/expense';
 import type { SplitItem } from '@/lib/expenseService';
@@ -26,8 +26,11 @@ interface ExpenseDetailProps {
   onDelete?: (expenseId: string) => void;
   onAddExpense?: () => void;
   onSplitExpense?: (expense: Expense, splits: SplitItem[]) => void;
-  onMergeExpenses?: (targetExpense: Expense, sourceExpense: Expense) => void;
-  onUnmergeExpense?: (expense: Expense) => void;
+  onMergeExpenses?: (
+    targetExpense: Expense,
+    sourceExpense: Expense
+  ) => void | Promise<void>;
+  onUnmergeExpense?: (expense: Expense) => void | Promise<void>;
   autoEditExpenseId?: string | null;
   onAutoEditHandled?: () => void;
   transactionType: TransactionType;
@@ -51,6 +54,15 @@ export default function ExpenseDetail({
   const transactionLabel = transactionType === 'income' ? '수입' : '지출';
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [splittingExpenseId, setSplittingExpenseId] = useState<string | null>(null);
+  const handleMergeError = useCallback((error: unknown) => {
+    const detail = error instanceof Error && error.message.trim() !== ''
+      ? `\n\n${error.message}`
+      : '';
+    void showAlert(
+      `합치기 작업을 완료하지 못했습니다. 최신 내역을 확인한 뒤 다시 시도해 주세요.${detail}`,
+      '합치기 실패'
+    );
+  }, [showAlert]);
   const {
     draggingExpenseId,
     setDraggingExpenseId,
@@ -58,8 +70,15 @@ export default function ExpenseDetail({
     setDragOverExpenseId,
     findItemAtPosition,
     handleTouchDragEnd,
+    cancelTouchDrag,
+    requestMerge,
+    isMergePending,
     registerItemRef,
-  } = useDragAndDrop({ expenses, onMergeExpenses });
+  } = useDragAndDrop({
+    expenses,
+    onMergeExpenses,
+    onMergeError: handleMergeError,
+  });
   const editingExpense = expenses.find((expense) => expense.id === editingExpenseId);
   const splittingExpense = expenses.find((expense) => expense.id === splittingExpenseId);
 
@@ -157,6 +176,11 @@ export default function ExpenseDetail({
           다른 항목 위에 놓으면 합쳐집니다
         </div>
       )}
+      {isMergePending && (
+        <div className="mb-2 rounded-lg bg-amber-100 px-3 py-1.5 text-center text-xs text-amber-700">
+          지출을 합치는 중입니다
+        </div>
+      )}
 
       <div className="space-y-3">
         {expenses.map((expense) => (
@@ -165,13 +189,15 @@ export default function ExpenseDetail({
             expense={expense}
             allExpenses={expenses}
             onEdit={openExpenseEditor}
-            onMergeExpenses={onMergeExpenses}
+            onMergeExpenses={requestMerge}
             draggingExpenseId={draggingExpenseId}
             setDraggingExpenseId={setDraggingExpenseId}
             dragOverExpenseId={dragOverExpenseId}
             setDragOverExpenseId={setDragOverExpenseId}
             findItemAtPosition={findItemAtPosition}
             handleTouchDragEnd={handleTouchDragEnd}
+            cancelTouchDrag={cancelTouchDrag}
+            mergeDisabled={isMergePending || !onMergeExpenses}
             registerItemRef={registerItemRef}
             transactionType={transactionType}
           />
@@ -187,7 +213,12 @@ export default function ExpenseDetail({
           onSave={(updates) => handleSaveEdit(editingExpense, updates)}
           onSaveMerchantRule={onSaveMerchantRule}
           onUnmerge={
-            onUnmergeExpense ? () => onUnmergeExpense(editingExpense) : undefined
+            onUnmergeExpense
+              ? () => {
+                  void (async () => onUnmergeExpense(editingExpense))()
+                    .catch(handleMergeError);
+                }
+              : undefined
           }
           onOpenSplit={
             transactionType === 'expense' && onSplitExpense

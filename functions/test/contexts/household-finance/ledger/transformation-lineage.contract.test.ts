@@ -12,6 +12,7 @@ interface CaptureProvenance {
 
 interface LedgerTransactionState {
   transactionId: string;
+  transactionType: "expense" | "income";
   lifecycleState: "active" | "superseded" | "deleted";
   amountInWon: number;
   merchant: string;
@@ -20,10 +21,17 @@ interface LedgerTransactionState {
   accountingDate: string;
   localTime: string;
   cardDisplay: string;
+  cardType: string;
   aggregateVersion: number;
   provenance: CaptureProvenance;
+  legacyMergeSnapshotPresent?: boolean;
   mergeLeafIds?: readonly string[];
   intermediateMergeHistoryIds?: readonly string[];
+  splitGroupId?: string;
+  splitIndex?: number;
+  splitTotal?: number;
+  splitOriginalId?: string;
+  derivedFromTransactionId?: string;
 }
 
 interface LedgerContractState {
@@ -42,7 +50,11 @@ interface LedgerContractState {
 }
 
 type LedgerMutationResult =
-  | { kind: "success"; transactionIds: readonly string[] }
+  | {
+      kind: "success";
+      transactionIds: readonly string[];
+      transactions?: readonly LedgerTransactionState[];
+    }
   | { kind: "conflict"; code: string }
   | { kind: "contract-failure"; code: string }
   | { kind: "retryable-failure"; code: string };
@@ -88,6 +100,11 @@ export interface LedgerTransformationSubject {
   }): Promise<LedgerMutationResult>;
   failNextCommitAtBoundary(): void;
   state(): LedgerContractState;
+  loadSelections(): readonly {
+    transactionIds?: readonly string[];
+    captureLineageIds?: readonly string[];
+    mergeLeafIds?: readonly string[];
+  }[];
 }
 
 export function createSubject(
@@ -104,6 +121,7 @@ function captured(
 ): LedgerTransactionState {
   return {
     transactionId,
+    transactionType: "expense",
     lifecycleState: "active",
     amountInWon,
     merchant: `merchant-${transactionId}`,
@@ -112,6 +130,7 @@ function captured(
     accountingDate: "2026-07-19",
     localTime: "10:00",
     cardDisplay: "국민(1234)",
+    cardType: "captured",
     aggregateVersion: 1,
     provenance: {
       source: "android-notification",
@@ -407,5 +426,372 @@ describe("Ledger 구조 변경·capture lineage 공개 계약", () => {
     expect(JSON.stringify(state.cancelledLineages)).not.toMatch(
       /merchant|amount|card|memo/i,
     );
+  });
+
+  it("병합은 대상과 원본 ID만 선택 조회하고 무관한 거래를 읽지 않는다", async () => {
+    const unrelated = Array.from({ length: 50 }, (_, index) =>
+      captured(`unrelated-${index}`, index + 1, `lineage-unrelated-${index}`),
+    );
+    const subject = createSubject(
+      fixture([
+        captured("A", 1_000, "lineage-a"),
+        captured("B", 2_000, "lineage-b"),
+        ...unrelated,
+      ]),
+    );
+
+    const result = await subject.merge({
+      operationKey: "targeted-merge",
+      targetId: "A",
+      sourceIds: ["B"],
+      expectedVersions: { A: 1, B: 1 },
+    });
+
+    expect(result.kind).toBe("success");
+    expect(subject.loadSelections()).toEqual([
+      { transactionIds: ["A", "B"] },
+    ]);
+  });
+
+  it("수입 거래가 하나라도 포함된 병합은 쓰기 없이 거절한다", async () => {
+    const income = captured("income", 1_000, "lineage-income", {
+      transactionType: "income",
+    });
+    const expense = captured("expense", 2_000, "lineage-expense");
+    const initial = fixture([income, expense]);
+    const subject = createSubject(initial);
+
+    const result = await subject.merge({
+      operationKey: "merge-income",
+      targetId: "income",
+      sourceIds: ["expense"],
+      expectedVersions: { income: 1, expense: 1 },
+    });
+
+    expect(result).toEqual({ kind: "conflict", code: "MERGE_EXPENSE_ONLY" });
+    expect(subject.state().transactions).toEqual(initial.transactions);
+  });
+
+  it("mergedFrom은 있지만 mergeLeafIds가 없는 legacy 병합 입력은 fail-closed로 거절한다", async () => {
+    const legacyMerged = captured("legacy-merged", 3_000, "lineage-a", {
+      legacyMergeSnapshotPresent: true,
+    });
+    const source = captured("source", 2_000, "lineage-b");
+    const initial = fixture([legacyMerged, source]);
+    const subject = createSubject(initial);
+
+    const result = await subject.merge({
+      operationKey: "legacy-incomplete-merge",
+      targetId: "legacy-merged",
+      sourceIds: ["source"],
+      expectedVersions: { "legacy-merged": 1, source: 1 },
+    });
+
+    expect(result).toEqual({
+      kind: "contract-failure",
+      code: "RESTORATION_SNAPSHOT_INCOMPLETE",
+    });
+    expect(subject.state().transactions).toEqual(initial.transactions);
+  });
+
+  it("병합 leaf가 자기 자신이나 중간 병합 aggregate를 가리키면 cycle conflict로 무변경 종료한다", async () => {
+    const selfCycle = fixture([
+      captured("M", 1_000, "lineage-m", { mergeLeafIds: ["M"] }),
+      captured("X", 2_000, "lineage-x"),
+    ]);
+    const selfCycleSubject = createSubject(selfCycle);
+
+    expect(
+      await selfCycleSubject.merge({
+        operationKey: "self-cycle",
+        targetId: "M",
+        sourceIds: ["X"],
+        expectedVersions: { M: 1, X: 1 },
+      }),
+    ).toEqual({ kind: "conflict", code: "MERGE_ANCESTRY_CYCLE" });
+    expect(selfCycleSubject.state().transactions).toEqual(
+      selfCycle.transactions,
+    );
+
+    const intermediateCycle = fixture([
+      captured("A", 1_000, "lineage-a"),
+      captured("B", 2_000, "lineage-b"),
+      captured("C", 3_000, "lineage-c"),
+      captured("N", 5_000, "lineage-n", { mergeLeafIds: ["B", "C"] }),
+      captured("M", 6_000, "lineage-m", { mergeLeafIds: ["A", "N"] }),
+      captured("X", 4_000, "lineage-x"),
+    ]);
+    const intermediateSubject = createSubject(intermediateCycle);
+
+    expect(
+      await intermediateSubject.merge({
+        operationKey: "intermediate-cycle",
+        targetId: "M",
+        sourceIds: ["X"],
+        expectedVersions: { M: 1, X: 1 },
+      }),
+    ).toEqual({ kind: "conflict", code: "MERGE_ANCESTRY_CYCLE" });
+    expect(intermediateSubject.state().transactions).toEqual(
+      intermediateCycle.transactions,
+    );
+  });
+
+  it.each(["intermediate", "legacy", "duplicate"] as const)(
+    "병합 해제 leaf가 $caseKind이면 restoration snapshot 불완전으로 무변경 거절한다",
+    async (caseKind) => {
+      const leafA = captured("A", 1_000, "lineage-a", {
+        lifecycleState: "superseded",
+      });
+      const suspect = captured("S", 2_000, "lineage-s", {
+        lifecycleState: "superseded",
+        ...(caseKind === "intermediate"
+          ? { mergeLeafIds: ["B", "C"] }
+          : caseKind === "legacy"
+            ? { legacyMergeSnapshotPresent: true }
+            : {}),
+      });
+      const merged = captured("M", 3_000, "lineage-m", {
+        mergeLeafIds:
+          caseKind === "duplicate" ? ["A", "A"] : ["A", "S"],
+      });
+      const initial = fixture([leafA, suspect, merged]);
+      const subject = createSubject(initial);
+
+      const result = await subject.unmerge({
+        operationKey: `unmerge-invalid-${caseKind}`,
+        mergedTransactionId: "M",
+        expectedVersion: 1,
+      });
+
+      expect(result).toEqual({
+        kind: "contract-failure",
+        code: "RESTORATION_SNAPSHOT_INCOMPLETE",
+      });
+      expect(subject.state().transactions).toEqual(initial.transactions);
+    },
+  );
+
+  it("[DEC-010] 병합 해제는 원본 상세와 병합 거래의 공통 표시 필드를 함께 복원한다", async () => {
+    const leafA = captured("A", 1_000, "lineage-a", {
+      lifecycleState: "superseded",
+      merchant: "원본 A",
+      categoryId: "food",
+      memo: "메모 A",
+      accountingDate: "2026-01-01",
+      localTime: "01:00",
+      transactionType: "income",
+      cardType: "old-a",
+      cardDisplay: "이전 A",
+    });
+    const leafB = captured("B", 2_000, "lineage-b", {
+      lifecycleState: "superseded",
+      merchant: "원본 B",
+      categoryId: "etc",
+      memo: "메모 B",
+      accountingDate: "2026-02-02",
+      localTime: "02:00",
+      cardType: "old-b",
+      cardDisplay: "이전 B",
+    });
+    const merged = captured("M", 3_000, "lineage-merged", {
+      accountingDate: "2026-07-25",
+      localTime: "21:35",
+      transactionType: "expense",
+      cardType: "local_currency",
+      cardDisplay: "지역화폐(9876)",
+      mergeLeafIds: ["A", "B"],
+    });
+    const subject = createSubject(fixture([leafA, leafB, merged]));
+
+    const result = await subject.unmerge({
+      operationKey: "unmerge-common-fields",
+      mergedTransactionId: "M",
+      expectedVersion: 1,
+    });
+
+    expect(result).toEqual({
+      kind: "success",
+      transactionIds: ["A", "B"],
+    });
+    const restored = subject
+      .state()
+      .transactions.filter(({ transactionId }) => ["A", "B"].includes(transactionId));
+    expect(restored).toEqual([
+      expect.objectContaining({
+        transactionId: "A",
+        merchant: "원본 A",
+        categoryId: "food",
+        memo: "메모 A",
+        accountingDate: "2026-07-25",
+        localTime: "21:35",
+        transactionType: "expense",
+        cardType: "local_currency",
+        cardDisplay: "지역화폐(9876)",
+      }),
+      expect.objectContaining({
+        transactionId: "B",
+        merchant: "원본 B",
+        categoryId: "etc",
+        memo: "메모 B",
+        accountingDate: "2026-07-25",
+        localTime: "21:35",
+        transactionType: "expense",
+        cardType: "local_currency",
+        cardDisplay: "지역화폐(9876)",
+      }),
+    ]);
+  });
+
+  it.each([
+    { captureLineageId: "lineage-b", restoredIds: ["A", "C"] },
+    { captureLineageId: "lineage-c", restoredIds: ["A", "B"] },
+  ])(
+    "$captureLineageId 취소는 해당 source leaf를 참조하는 병합 거래를 찾아 제거하고 나머지 leaf를 복원한다",
+    async ({ captureLineageId, restoredIds }) => {
+      const subject = createSubject(
+        fixture([
+          captured("A", 1_000, "lineage-a"),
+          captured("B", 2_000, "lineage-b"),
+          captured("C", 3_000, "lineage-c"),
+        ]),
+      );
+      const first = await subject.merge({
+        operationKey: "merge-ab-for-cancel",
+        targetId: "A",
+        sourceIds: ["B"],
+        expectedVersions: { A: 1, B: 1 },
+      });
+      const mergedAB = first.kind === "success" ? first.transactionIds[0] : "";
+      await subject.merge({
+        operationKey: "merge-abc-for-cancel",
+        targetId: mergedAB,
+        sourceIds: ["C"],
+        expectedVersions: { [mergedAB]: 1, C: 1 },
+      });
+
+      const result = await subject.cancelCapturedLineage({
+        cancellationKey: `cancel-${captureLineageId}`,
+        captureLineageId,
+        expectedLineageVersion: 2,
+      });
+
+      expect(result).toEqual({
+        kind: "success",
+        transactionIds: restoredIds,
+      });
+      const activeIds = subject
+        .state()
+        .transactions.filter(({ lifecycleState }) => lifecycleState === "active")
+        .map(({ transactionId }) => transactionId)
+        .sort();
+      expect(activeIds).toEqual([...restoredIds].sort());
+    },
+  );
+
+  it("취소 대상 병합의 비취소 leaf가 없으면 전체 취소를 fail-closed로 무변경 종료한다", async () => {
+    const leaf = captured("A", 1_000, "lineage-a", {
+      lifecycleState: "superseded",
+    });
+    const merged = captured("M", 3_000, "lineage-a", {
+      mergeLeafIds: ["A", "missing-B"],
+    });
+    const initial = fixture([leaf, merged]);
+    const subject = createSubject(initial);
+
+    const result = await subject.cancelCapturedLineage({
+      cancellationKey: "cancel-missing-leaf",
+      captureLineageId: "lineage-a",
+      expectedLineageVersion: 1,
+    });
+
+    expect(result).toEqual({
+      kind: "contract-failure",
+      code: "RESTORATION_SNAPSHOT_INCOMPLETE",
+    });
+    expect(subject.state().transactions).toEqual(initial.transactions);
+    expect(subject.state().dedupClaims).toEqual(initial.dedupClaims);
+  });
+
+  it("가구의 활성 legacy 병합 복원 정보가 하나라도 불완전하면 취소 전체를 막는다", async () => {
+    const initial = fixture([
+      captured("A", 1_000, "lineage-a"),
+      captured("legacy-M", 2_000, "lineage-legacy", {
+        lifecycleState: "superseded",
+        legacyMergeSnapshotPresent: true,
+      }),
+    ]);
+    const subject = createSubject(initial);
+
+    const result = await subject.cancelCapturedLineage({
+      cancellationKey: "cancel-with-incomplete-household-merge",
+      captureLineageId: "lineage-a",
+      expectedLineageVersion: 1,
+    });
+
+    expect(result).toEqual({
+      kind: "contract-failure",
+      code: "RESTORATION_SNAPSHOT_INCOMPLETE",
+    });
+    expect(subject.state().transactions).toEqual(initial.transactions);
+    expect(subject.state().dedupClaims).toEqual(initial.dedupClaims);
+    expect(subject.loadSelections()).toEqual([]);
+  });
+
+  it("삭제된 과거 병합은 일반 삭제된 leaf를 취소 복원하지 않는다", async () => {
+    const subject = createSubject(
+      fixture([
+        captured("A", 1_000, "lineage-a", { aggregateVersion: 3 }),
+        captured("B", 2_000, "lineage-b", {
+          lifecycleState: "deleted",
+          aggregateVersion: 4,
+        }),
+        captured("M", 3_000, "lineage-a", {
+          lifecycleState: "deleted",
+          aggregateVersion: 2,
+          mergeLeafIds: ["A", "B"],
+        }),
+      ]),
+    );
+
+    const result = await subject.cancelCapturedLineage({
+      cancellationKey: "cancel-after-unmerge-and-manual-delete",
+      captureLineageId: "lineage-a",
+      expectedLineageVersion: 3,
+    });
+
+    expect(result).toEqual({ kind: "success", transactionIds: [] });
+    expect(subject.state().transactions).toEqual([
+      expect.objectContaining({
+        transactionId: "B",
+        lifecycleState: "deleted",
+        aggregateVersion: 4,
+      }),
+    ]);
+  });
+
+  it("삭제된 불완전 legacy 병합 이력은 현재 취소를 과잉 차단하지 않는다", async () => {
+    const subject = createSubject(
+      fixture([
+        captured("A", 1_000, "lineage-a"),
+        captured("legacy-deleted-M", 2_000, "lineage-legacy", {
+          lifecycleState: "deleted",
+          legacyMergeSnapshotPresent: true,
+        }),
+      ]),
+    );
+
+    const result = await subject.cancelCapturedLineage({
+      cancellationKey: "cancel-with-deleted-incomplete-history",
+      captureLineageId: "lineage-a",
+      expectedLineageVersion: 1,
+    });
+
+    expect(result).toEqual({ kind: "success", transactionIds: [] });
+    expect(subject.state().transactions).toEqual([
+      expect.objectContaining({
+        transactionId: "legacy-deleted-M",
+        lifecycleState: "deleted",
+      }),
+    ]);
   });
 });

@@ -9,14 +9,22 @@ interface ExpenseItemProps {
   expense: Expense;
   allExpenses: Expense[];
   onEdit: (expense: Expense) => void;
-  onMergeExpenses?: (targetExpense: Expense, sourceExpense: Expense) => void;
+  onMergeExpenses?: (
+    targetExpense: Expense,
+    sourceExpense: Expense
+  ) => void | Promise<void>;
   // 드래그 앤 드롭 props
   draggingExpenseId: string | null;
   setDraggingExpenseId: (id: string | null) => void;
   dragOverExpenseId: string | null;
   setDragOverExpenseId: (id: string | null) => void;
   findItemAtPosition: (x: number, y: number) => string | null;
-  handleTouchDragEnd: (sourceId: string, targetId: string | null) => void;
+  handleTouchDragEnd: (
+    sourceId: string,
+    targetId: string | null
+  ) => Promise<void>;
+  cancelTouchDrag: () => void;
+  mergeDisabled: boolean;
   registerItemRef: (id: string, element: HTMLDivElement | null) => void;
   transactionType: TransactionType;
 }
@@ -32,6 +40,8 @@ export default function ExpenseItem({
   setDragOverExpenseId,
   findItemAtPosition,
   handleTouchDragEnd,
+  cancelTouchDrag,
+  mergeDisabled,
   registerItemRef,
   transactionType,
 }: ExpenseItemProps) {
@@ -52,6 +62,10 @@ export default function ExpenseItem({
 
   // 데스크톱 드래그 앤 드롭 핸들러
   const handleDragStart = (e: React.DragEvent) => {
+    if (mergeDisabled) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.setData('expense-id', expense.id);
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -69,21 +83,27 @@ export default function ExpenseItem({
     setIsDragOver(false);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
+    if (mergeDisabled) return;
     const sourceId = e.dataTransfer.getData('expense-id');
 
     if (sourceId && sourceId !== expense.id && onMergeExpenses) {
       const sourceExpense = allExpenses.find((exp) => exp.id === sourceId);
       if (sourceExpense) {
-        onMergeExpenses(expense, sourceExpense);
+        try {
+          await onMergeExpenses(expense, sourceExpense);
+        } catch {
+          // 상위 merge coordinator가 실패 안내와 rollback을 담당합니다.
+        }
       }
     }
   };
 
   // 모바일 터치 핸들러
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (mergeDisabled) return;
     const touch = e.touches[0];
     touchStartPos.current = { x: touch.clientX, y: touch.clientY };
 
@@ -116,23 +136,37 @@ export default function ExpenseItem({
     }
   };
 
-  const handleTouchEnd = () => {
+  const clearLongPress = () => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
+  };
+
+  const handleTouchEnd = async () => {
+    clearLongPress();
 
     if (isDragging) {
-      handleTouchDragEnd(expense.id, dragOverExpenseId);
+      try {
+        await handleTouchDragEnd(expense.id, dragOverExpenseId);
+      } catch {
+        cancelTouchDrag();
+      }
     }
 
     touchStartPos.current = null;
   };
 
+  const handleTouchCancel = () => {
+    clearLongPress();
+    touchStartPos.current = null;
+    cancelTouchDrag();
+  };
+
   return (
     <div className="relative" ref={(el) => registerItemRef(expense.id, el)}>
       <div
-        draggable
+        draggable={!mergeDisabled}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -140,6 +174,7 @@ export default function ExpenseItem({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchCancel}
         onClick={isDragging ? undefined : () => onEdit(expense)}
         style={{ touchAction: isDragging || draggingExpenseId ? 'none' : 'auto' }}
         className={`flex items-center justify-between p-3 rounded-xl transition-all cursor-pointer select-none ${

@@ -1,6 +1,10 @@
 import { getHouseholdCommandClient } from '@/composition/webCommandRuntime';
 import type { Expense } from '@/types/expense';
-import type { LedgerTransactionCommandResult } from '@/platform/functions-api/householdCommandContract';
+import {
+  ledgerMergedTransactionId,
+  type LedgerTransactionCommandResult,
+} from '@/platform/functions-api/householdCommandContract';
+import { createHouseholdCommandId } from '@/platform/functions-api/householdCommandClient';
 
 export interface LedgerSplitItem {
   merchant: string;
@@ -163,9 +167,10 @@ export const ledgerCommands = {
     targetTransactionId: string,
     targetExpectedVersion: number,
     sourceTransactionId: string,
-    sourceExpectedVersion: number
-  ): Promise<void> {
-    await getHouseholdCommandClient().execute(
+    sourceExpectedVersion: number,
+    commandId = createHouseholdCommandId('ledger-merge')
+  ): Promise<{ transactionId: string }> {
+    const result = await getHouseholdCommandClient().execute(
       'ledger.merge-transactions.v1',
       {
         targetTransactionId,
@@ -175,8 +180,14 @@ export const ledgerCommands = {
           [sourceTransactionId]: sourceExpectedVersion,
         },
       },
-      { householdId }
+      { householdId, commandId, idempotencyKey: commandId }
     );
+    const deterministicId = ledgerMergedTransactionId(commandId);
+    const authoritativeId = result.transactionId ?? result.transactionIds?.[0];
+    if (authoritativeId !== undefined && authoritativeId !== deterministicId) {
+      throw new Error('LEDGER_MERGED_TRANSACTION_ID_MISMATCH');
+    }
+    return { transactionId: authoritativeId ?? deterministicId };
   },
 
   async unmerge(

@@ -10,7 +10,10 @@ import { createBasicLedgerCommands } from "../../contexts/household-finance/ledg
 import { createMonthlySplitLifecycleCommands } from "../../contexts/household-finance/ledger/application/commands/monthlySplitLifecycleService";
 import { createItemSplitRestorationCommands } from "../../contexts/household-finance/ledger/application/commands/itemSplitRestorationService";
 import { createLedgerTransformationCommands } from "../../contexts/household-finance/ledger/application/commands/transformationLineageService";
-import type { LedgerTransformationResult } from "../../contexts/household-finance/ledger/domain/model/transformationLineage";
+import type {
+  LedgerTransformationResult,
+  LedgerTransformationTransaction,
+} from "../../contexts/household-finance/ledger/domain/model/transformationLineage";
 import type { LedgerCommandResult } from "../../contexts/household-finance/ledger/domain/model/ledgerTransaction";
 import {
   HouseholdCommandRejection,
@@ -139,6 +142,43 @@ function transformationResultValue(result: LedgerTransformationResult) {
     result.code,
     result.kind === "retryable-failure",
   );
+}
+
+function transformationSuccess(
+  result: LedgerTransformationResult,
+): Extract<LedgerTransformationResult, { kind: "success" }> {
+  if (result.kind === "success") return result;
+  throw new HouseholdCommandRejection(
+    result.code,
+    result.kind === "retryable-failure",
+  );
+}
+
+function transformationTransactionValue(
+  householdId: string,
+  transaction: LedgerTransformationTransaction,
+) {
+  return {
+    transactionId: transaction.transactionId,
+    householdId,
+    transactionType: transaction.transactionType,
+    merchant: transaction.merchant,
+    memo: transaction.memo,
+    amountInWon: transaction.amountInWon,
+    categoryId: transaction.categoryId,
+    accountingDate: transaction.accountingDate,
+    localTime: transaction.localTime,
+    cardDisplay: transaction.cardDisplay,
+    cardType: transaction.cardType,
+    source: transaction.provenance.source,
+    creatorMemberId: transaction.provenance.creatorMemberId,
+    lifecycleState:
+      transaction.lifecycleState === "deleted" ? "deleted" : "active",
+    aggregateVersion: transaction.aggregateVersion,
+    ...(transaction.mergeLeafIds === undefined
+      ? {}
+      : { mergeLeafIds: [...transaction.mergeLeafIds] }),
+  };
 }
 
 async function activeCategories(
@@ -547,15 +587,16 @@ export function createLedgerHouseholdCommandHandlers(
           if (targetTransactionId === sourceTransactionId) {
             throw new HouseholdCommandRejection("MERGE_LEAF_OVERLAP");
           }
+          const store = new FirebaseTransformationLineageStore(
+            database,
+            verifiedActor.householdId,
+            context.requestedAt,
+          );
           const commands = createLedgerTransformationCommands({
-            store: new FirebaseTransformationLineageStore(
-              database,
-              verifiedActor.householdId,
-              context.requestedAt,
-            ),
+            store,
             clock: { now: () => context.requestedAt },
           });
-          transformationResultValue(
+          const result = transformationSuccess(
             await commands.merge({
               operationKey: context.envelope.commandId,
               targetId: targetTransactionId,
@@ -563,7 +604,37 @@ export function createLedgerHouseholdCommandHandlers(
               expectedVersions: versionMap(payload.expectedVersions),
             }),
           );
-          return {};
+          const mergedTransactionId = result.transactionIds[0];
+          if (mergedTransactionId === undefined) {
+            throw new HouseholdCommandRejection(
+              "MERGED_TRANSACTION_RESULT_MISSING",
+              true,
+            );
+          }
+          const transaction =
+            result.transactions?.find(
+              (candidate) =>
+                candidate.transactionId === mergedTransactionId,
+            ) ??
+            (
+              await store.load({ transactionIds: [mergedTransactionId] })
+            ).transactions.find(
+              (candidate) =>
+                candidate.transactionId === mergedTransactionId,
+            );
+          if (transaction === undefined) {
+            throw new HouseholdCommandRejection(
+              "MERGED_TRANSACTION_RESULT_MISSING",
+              true,
+            );
+          }
+          return {
+            transactionId: mergedTransactionId,
+            transaction: transformationTransactionValue(
+              verifiedActor.householdId,
+              transaction,
+            ),
+          };
         },
       },
     ],

@@ -9,6 +9,7 @@ export interface CaptureProvenance {
 
 export interface LedgerTransformationTransaction {
   transactionId: string;
+  transactionType: "expense" | "income";
   lifecycleState: "active" | "superseded" | "deleted";
   amountInWon: number;
   merchant: string;
@@ -17,10 +18,17 @@ export interface LedgerTransformationTransaction {
   accountingDate: string;
   localTime: string;
   cardDisplay: string;
+  cardType: string;
   aggregateVersion: number;
   provenance: CaptureProvenance;
+  legacyMergeSnapshotPresent?: boolean;
   mergeLeafIds?: readonly string[];
   intermediateMergeHistoryIds?: readonly string[];
+  splitGroupId?: string;
+  splitIndex?: number;
+  splitTotal?: number;
+  splitOriginalId?: string;
+  derivedFromTransactionId?: string;
 }
 
 export interface LedgerTransformationState {
@@ -39,7 +47,11 @@ export interface LedgerTransformationState {
 }
 
 export type LedgerTransformationResult =
-  | { kind: "success"; transactionIds: readonly string[] }
+  | {
+      kind: "success";
+      transactionIds: readonly string[];
+      transactions?: readonly LedgerTransformationTransaction[];
+    }
   | { kind: "conflict"; code: string }
   | { kind: "contract-failure"; code: string }
   | { kind: "retryable-failure"; code: string };

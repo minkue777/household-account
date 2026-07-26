@@ -91,6 +91,9 @@ export default function ExpenseEditModal({
   const [showEditSplitGroup, setShowEditSplitGroup] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingActionConfirm, setPendingActionConfirm] = useState<ExpenseActionConfirmType | null>(null);
+  const mergedItemCount = expense.mergeLeafIds?.length
+    ?? expense.mergedFrom?.length
+    ?? 0;
 
   const displayCardLabel = (() => {
     if (!expense.cardLastFour) {
@@ -292,19 +295,25 @@ export default function ExpenseEditModal({
         </label>
       )}
 
-      {expense.mergedFrom && expense.mergedFrom.length > 0 && onUnmerge && (
+      {mergedItemCount > 0 && onUnmerge && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
           <div className="mb-2 flex items-center gap-2">
             <Info className="h-4 w-4 text-amber-600" />
             <span className="text-sm font-medium text-amber-800">
-              {expense.mergedFrom.length}개의 항목이 합쳐져 있습니다
+              {mergedItemCount}개의 항목이 합쳐져 있습니다
             </span>
           </div>
-          <div className="mb-2 space-y-1 text-xs text-amber-700">
-            {expense.mergedFrom.map((item, index) => (
-              <div key={index}>· {item.merchant} {item.amount.toLocaleString()}원</div>
-            ))}
-          </div>
+          {expense.mergedFrom && expense.mergedFrom.length > 0 ? (
+            <div className="mb-2 space-y-1 text-xs text-amber-700">
+              {expense.mergedFrom.map((item, index) => (
+                <div key={index}>· {item.merchant} {item.amount.toLocaleString()}원</div>
+              ))}
+            </div>
+          ) : (
+            <p className="mb-2 text-xs text-amber-700">
+              원본 항목은 서버에 안전하게 보존되어 있습니다.
+            </p>
+          )}
           <button
             onClick={() => setPendingActionConfirm('unmerge')}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-white transition-colors hover:bg-amber-600"

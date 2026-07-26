@@ -57,6 +57,135 @@ function cancellation(): CaptureCancellationPersistenceCommand {
   };
 }
 
+function lineageApproval(
+  label: "A" | "B" | "C",
+  amountInWon: number,
+  minute: string,
+): CaptureApprovalPersistenceCommand {
+  const base = approval();
+  return {
+    ...base,
+    downstreamKey: `approval-${label}`,
+    branch: {
+      ...base.branch,
+      observationId: `observation-approval-${label}`,
+      occurredAt: `2026-07-21T10:${minute}:00+09:00`,
+      amountInWon,
+      originalMerchant: `merchant-${label}`,
+      merchant: `merchant-${label}`,
+      categoryId: `category-${label}`,
+      memo: `memo-${label}`,
+      canonicalCardId: `card-${label}`,
+    },
+  };
+}
+
+function lineageCancellation(
+  command: CaptureApprovalPersistenceCommand,
+  label: string,
+): CaptureCancellationPersistenceCommand {
+  const base = cancellation();
+  return {
+    ...base,
+    downstreamKey: `cancellation-${label}`,
+    branch: {
+      ...base.branch,
+      observationId: `observation-cancellation-${label}`,
+      amountInWon: command.branch.amountInWon,
+      merchant: command.branch.merchant,
+      cardEvidence: command.branch.cardEvidence,
+      canonicalCardId: command.branch.canonicalCardId,
+    },
+  };
+}
+
+async function mergedCaptureFixture() {
+  const memory = new InMemoryFirestore();
+  const persistence = new FirebaseCaptureLedgerPersistence(
+    memory as unknown as firestore.Firestore,
+  );
+  const commands = {
+    A: lineageApproval("A", 10_000, "01"),
+    B: lineageApproval("B", 20_000, "02"),
+    C: lineageApproval("C", 30_000, "03"),
+  };
+  const recordedA = await persistence.recordApproval(commands.A);
+  const recordedB = await persistence.recordApproval(commands.B);
+  const recordedC = await persistence.recordApproval(commands.C);
+  if (
+    recordedA.kind !== "recorded" ||
+    recordedB.kind !== "recorded" ||
+    recordedC.kind !== "recorded"
+  ) {
+    throw new Error("CAPTURE_FIXTURE_RECORDING_FAILED");
+  }
+  const records = { A: recordedA, B: recordedB, C: recordedC };
+  const originals = new Map<string, Record<string, unknown>>();
+  for (const record of Object.values(records)) {
+    const path = `households/house-1/ledgerTransactions/${record.transactionId}`;
+    const stored = memory.document(path);
+    if (stored === undefined) throw new Error("CAPTURE_FIXTURE_LEAF_MISSING");
+    originals.set(record.transactionId, stored);
+    memory.seed(path, {
+      ...stored,
+      lifecycleState: "superseded",
+      aggregateVersion: 2,
+    });
+    memory.remove(`expenses/${record.transactionId}`);
+  }
+
+  const mergedABId = "merged-AB";
+  const mergedABCId = "merged-ABC";
+  const target = originals.get(recordedA.transactionId);
+  if (target === undefined) throw new Error("CAPTURE_FIXTURE_TARGET_MISSING");
+  const mergedAB = {
+    ...target,
+    lifecycleState: "superseded",
+    amountInWon: 30_000,
+    amount: 30_000,
+    aggregateVersion: 2,
+    captureLineageId: recordedA.captureLineageId,
+    mergeLeafIds: [recordedA.transactionId, recordedB.transactionId],
+  };
+  const mergedABC = {
+    ...target,
+    lifecycleState: "active",
+    amountInWon: 60_000,
+    amount: 60_000,
+    aggregateVersion: 1,
+    captureLineageId: recordedA.captureLineageId,
+    mergeLeafIds: [
+      recordedA.transactionId,
+      recordedB.transactionId,
+      recordedC.transactionId,
+    ],
+    intermediateMergeHistoryIds: [mergedABId],
+  };
+  memory.seed(
+    `households/house-1/ledgerTransactions/${mergedABId}`,
+    mergedAB,
+  );
+  memory.seed(
+    `households/house-1/ledgerTransactions/${mergedABCId}`,
+    mergedABC,
+  );
+  memory.seed(`expenses/${mergedABCId}`, {
+    ...mergedABC,
+    cardLastFour: target.cardDisplay,
+    schemaVersion: 1,
+  });
+
+  return {
+    memory,
+    persistence,
+    commands,
+    records,
+    originals,
+    mergedABId,
+    mergedABCId,
+  };
+}
+
 describe("Firebase Capture → Ledger transaction adapter", () => {
   it("승인·dedup claim·immutable evidence·canonical/legacy·Outbox·receipt를 한 번만 commit한다", async () => {
     const memory = new InMemoryFirestore();
@@ -240,10 +369,12 @@ describe("Firebase Capture → Ledger transaction adapter", () => {
       memory.document(
         `households/house-1/ledgerTransactions/${created.transactionId}`,
       ),
-    ).toMatchObject({ lifecycleState: "deleted", aggregateVersion: 2 });
+    ).toBeUndefined();
     expect(
       memory.document("households/house-1/ledgerTransactions/derived-1"),
-    ).toMatchObject({ lifecycleState: "deleted", aggregateVersion: 3 });
+    ).toBeUndefined();
+    expect(memory.document(`expenses/${created.transactionId}`)).toBeUndefined();
+    expect(memory.document("expenses/derived-1")).toBeUndefined();
     const claimPath = memory.paths("households/house-1/ledgerDedupKeys/")[0];
     expect(memory.document(claimPath)).toMatchObject({
       state: "cancelled",
@@ -251,6 +382,153 @@ describe("Firebase Capture → Ledger transaction adapter", () => {
       cancellationReceiptId: expect.any(String),
     });
     expect(memory.paths("outboxEvents/")).toHaveLength(3);
+  });
+
+  it.each([
+    {
+      label: "A" as const,
+      restoredLabels: ["B", "C"] as const,
+      deletesMergedAB: true,
+    },
+    {
+      label: "B" as const,
+      restoredLabels: ["A", "C"] as const,
+      deletesMergedAB: true,
+    },
+    {
+      label: "C" as const,
+      restoredLabels: ["A", "B"] as const,
+      deletesMergedAB: false,
+    },
+  ])(
+    "평탄 병합에서 $label lineage 취소는 영향 병합만 삭제하고 비취소 leaf의 전체 projection을 복원한다",
+    async ({ label, restoredLabels, deletesMergedAB }) => {
+      const fixture = await mergedCaptureFixture();
+      const cancelled = fixture.records[label];
+      const expectedDeleted = [cancelled.transactionId, fixture.mergedABCId];
+      if (deletesMergedAB) expectedDeleted.push(fixture.mergedABId);
+
+      const result = await fixture.persistence.cancel(
+        lineageCancellation(fixture.commands[label], label),
+      );
+
+      expect(result).toEqual({
+        kind: "cancelled",
+        transactionIds: expectedDeleted.sort((left, right) =>
+          left.localeCompare(right, "en"),
+        ),
+      });
+      for (const transactionId of expectedDeleted) {
+        expect(
+          fixture.memory.document(
+            `households/house-1/ledgerTransactions/${transactionId}`,
+          ),
+        ).toBeUndefined();
+        expect(
+          fixture.memory.document(`expenses/${transactionId}`),
+        ).toBeUndefined();
+      }
+
+      for (const restoredLabel of restoredLabels) {
+        const record = fixture.records[restoredLabel];
+        const original = fixture.originals.get(record.transactionId);
+        if (original === undefined) throw new Error("RESTORED_FIXTURE_MISSING");
+        const expectedProjection = {
+          householdId: "house-1",
+          transactionType: "expense",
+          lifecycleState: "active",
+          merchant: original.merchant,
+          amountInWon: original.amountInWon,
+          amount: original.amount,
+          categoryId: original.categoryId,
+          category: original.category,
+          memo: original.memo,
+          accountingDate: original.accountingDate,
+          date: original.date,
+          localTime: original.localTime,
+          time: original.time,
+          cardType: original.cardType,
+          cardDisplay: original.cardDisplay,
+          captureLineageId: record.captureLineageId,
+          source: original.source,
+          originChannel: original.originChannel,
+          creatorMemberId: original.creatorMemberId,
+          aggregateVersion: 3,
+        };
+        expect(
+          fixture.memory.document(
+            `households/house-1/ledgerTransactions/${record.transactionId}`,
+          ),
+        ).toMatchObject({ ...expectedProjection, schemaVersion: 2 });
+        expect(
+          fixture.memory.document(`expenses/${record.transactionId}`),
+        ).toMatchObject({
+          ...expectedProjection,
+          cardLastFour: original.cardDisplay,
+          schemaVersion: 1,
+        });
+      }
+
+      if (!deletesMergedAB) {
+        expect(
+          fixture.memory.document(
+            `households/house-1/ledgerTransactions/${fixture.mergedABId}`,
+          ),
+        ).toMatchObject({ lifecycleState: "superseded", aggregateVersion: 2 });
+        expect(
+          fixture.memory.document(`expenses/${fixture.mergedABId}`),
+        ).toBeUndefined();
+      }
+    },
+  );
+
+  it("영향 병합의 비취소 leaf snapshot이 없으면 취소 전체를 typed 무변경으로 거절한다", async () => {
+    const fixture = await mergedCaptureFixture();
+    const missing = fixture.records.B.transactionId;
+    fixture.memory.remove(
+      `households/house-1/ledgerTransactions/${missing}`,
+    );
+    fixture.memory.remove(`expenses/${missing}`);
+    const outboxCount = fixture.memory.paths("outboxEvents/").length;
+    const receiptCount = fixture.memory.paths(
+      "commandReceipts/payment-capture-ledger/receipts/",
+    ).length;
+
+    const result = await fixture.persistence.cancel(
+      lineageCancellation(fixture.commands.A, "missing-leaf"),
+    );
+
+    expect(result).toEqual({
+      kind: "rejected",
+      code: "RESTORATION_SNAPSHOT_INCOMPLETE",
+    });
+    expect(
+      fixture.memory.document(
+        `households/house-1/ledgerTransactions/${fixture.records.A.transactionId}`,
+      ),
+    ).toMatchObject({ lifecycleState: "superseded", aggregateVersion: 2 });
+    expect(
+      fixture.memory.document(
+        `households/house-1/ledgerTransactions/${fixture.mergedABId}`,
+      ),
+    ).toMatchObject({ lifecycleState: "superseded", aggregateVersion: 2 });
+    expect(
+      fixture.memory.document(
+        `households/house-1/ledgerTransactions/${fixture.mergedABCId}`,
+      ),
+    ).toMatchObject({ lifecycleState: "active", aggregateVersion: 1 });
+    expect(fixture.memory.paths("outboxEvents/")).toHaveLength(outboxCount);
+    expect(
+      fixture.memory.paths("commandReceipts/payment-capture-ledger/receipts/"),
+    ).toHaveLength(receiptCount);
+    const targetClaim = fixture.memory
+      .paths("households/house-1/ledgerDedupKeys/")
+      .map((path) => fixture.memory.document(path))
+      .find(
+        (claim) =>
+          claim?.captureLineageId === fixture.records.A.captureLineageId,
+      );
+    expect(targetClaim).toMatchObject({ state: "active" });
   });
 
   it("원거래가 없는 취소는 NotFound receipt만 남기고 dedup tombstone을 만들지 않는다", async () => {

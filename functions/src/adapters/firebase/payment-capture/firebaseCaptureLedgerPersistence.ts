@@ -10,6 +10,7 @@ import type {
 } from "../../../contexts/payment-capture/android-payment-ingestion/application/ports/out/captureLedgerPersistencePort";
 import type { CaptureTransactionBranchResult } from "../../../contexts/payment-capture/android-payment-ingestion/application/ports/in/captureBranchSubmissionInputPort";
 import { normalizeCancellationMerchant } from "../../../contexts/payment-capture/android-payment-ingestion/domain/value-objects/cancellationEvidence";
+import { planCaptureLineageCancellation } from "../../../contexts/household-finance/ledger/domain/policies/captureLineageCancellationGraph";
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
 
@@ -138,7 +139,11 @@ function lineageIds(data: FirebaseFirestore.DocumentData): readonly string[] {
     typeof data.provenance === "object" && data.provenance !== null
       ? (data.provenance as FirebaseFirestore.DocumentData)
       : undefined;
-  const values = [data.captureLineageId, provenance?.captureLineageId];
+  const values = [
+    data.captureLineageId,
+    data.sourceFingerprint,
+    provenance?.captureLineageId,
+  ];
   if (Array.isArray(data.captureLineageIds)) values.push(...data.captureLineageIds);
   return values.filter(
     (value): value is string => typeof value === "string" && value !== "",
@@ -155,6 +160,34 @@ function derivedParents(data: FirebaseFirestore.DocumentData): readonly string[]
     data.splitOriginalId,
     splitGroup?.originalId,
   ].filter((value): value is string => typeof value === "string" && value !== "");
+}
+
+function mergeLeafIds(data: FirebaseFirestore.DocumentData): readonly string[] {
+  return Array.isArray(data.mergeLeafIds)
+    ? data.mergeLeafIds.filter(
+        (value): value is string => typeof value === "string" && value !== "",
+      )
+    : [];
+}
+
+function transactionLifecycleState(
+  data: FirebaseFirestore.DocumentData,
+): "active" | "superseded" | "deleted" {
+  if (data.lifecycleState === "deleted" || data.deletedAt !== undefined) {
+    return "deleted";
+  }
+  return data.lifecycleState === "superseded" ? "superseded" : "active";
+}
+
+function hasIncompleteLegacyMergeSnapshot(
+  data: FirebaseFirestore.DocumentData,
+): boolean {
+  return (
+    transactionLifecycleState(data) !== "deleted" &&
+    Array.isArray(data.mergedFrom) &&
+    data.mergedFrom.length > 0 &&
+    mergeLeafIds(data).length === 0
+  );
 }
 
 function transactionVersion(data: FirebaseFirestore.DocumentData): number {
@@ -572,55 +605,133 @@ export class FirebaseCaptureLedgerPersistence
         for (const document of legacy.docs) all.set(document.id, document);
         for (const document of canonical.docs) all.set(document.id, document);
 
-        const affected = new Set<string>();
-        for (const [id, document] of all) {
-          if (lineageIds(document.data()).includes(captureLineageId)) affected.add(id);
+        const original = all.get(matchedCapture.transactionId);
+        if (
+          original === undefined ||
+          !lineageIds(original.data()).includes(captureLineageId)
+        ) {
+          const result: CaptureTransactionBranchResult = {
+            kind: "notFound",
+            resource: "cancellationTarget",
+          };
+          transaction.create(
+            receipt,
+            receiptDocument({
+              householdId: command.householdId,
+              downstreamKey: command.downstreamKey,
+              result,
+              terminalAt: command.branch.observedAt,
+              payloadFingerprint,
+            }),
+          );
+          return result;
         }
-        let changed = true;
-        while (changed) {
-          changed = false;
-          for (const [id, document] of all) {
-            if (
-              !affected.has(id) &&
-              derivedParents(document.data()).some((parent) => affected.has(parent))
-            ) {
-              affected.add(id);
-              changed = true;
-            }
-          }
+        if (
+          [...all.values()].some((document) =>
+            hasIncompleteLegacyMergeSnapshot(document.data()),
+          )
+        ) {
+          return {
+            kind: "rejected" as const,
+            code: "RESTORATION_SNAPSHOT_INCOMPLETE",
+          };
+        }
+
+        const cancellationPlan = planCaptureLineageCancellation({
+          captureLineageId,
+          transactions: [...all].map(([transactionId, document]) => ({
+            transactionId,
+            lifecycleState: transactionLifecycleState(document.data()),
+            captureLineageIds: lineageIds(document.data()),
+            parentTransactionIds: derivedParents(document.data()),
+            mergeLeafIds: mergeLeafIds(document.data()),
+          })),
+        });
+        const affected = new Set(cancellationPlan.affectedTransactionIds);
+        const restorable = new Set(cancellationPlan.restorableLeafIds);
+        if (
+          cancellationPlan.invalidGraph ||
+          cancellationPlan.restorableLeafIds.some(
+            (transactionId) => !all.has(transactionId),
+          )
+        ) {
+          return {
+            kind: "rejected" as const,
+            code: "RESTORATION_SNAPSHOT_INCOMPLETE",
+          };
         }
 
         for (const transactionId of affected) {
           const document = all.get(transactionId);
-          if (document === undefined) continue;
+          if (document === undefined) {
+            throw new Error("AFFECTED_TRANSACTION_INVARIANT_BROKEN");
+          }
           const version = transactionVersion(document.data()) + 1;
-          const deletion = {
-            lifecycleState: "deleted",
-            deletedAt: command.branch.observedAt,
-            deletedByMemberId: command.branch.creatorMemberId,
-            cancellationObservationId: command.branch.observationId,
-            cancellationReceiptId: commandReceiptId(
-              command.householdId,
-              command.downstreamKey,
-            ),
-            aggregateVersion: version,
-            updatedAt: FieldValue.serverTimestamp(),
-          };
-          transaction.set(
+          transaction.delete(
             household.collection("ledgerTransactions").doc(transactionId),
-            { householdId: command.householdId, ...deletion, schemaVersion: 2 },
-            { merge: true },
           );
-          transaction.set(
+          transaction.delete(
             this.database.collection("expenses").doc(transactionId),
-            { householdId: command.householdId, ...deletion, schemaVersion: 1 },
-            { merge: true },
           );
           new FirebaseTransactionalOutbox(this.database).append(transaction, {
             eventId: hash(
               `${command.householdId}\u0000${command.downstreamKey}\u0000TransactionDeleted.v1\u0000${transactionId}`,
             ),
             eventType: "TransactionDeleted.v1",
+            householdId: command.householdId,
+            aggregateId: transactionId,
+            aggregateVersion: version,
+            occurredAt: command.branch.observedAt,
+            correlationId: command.downstreamKey,
+            causationId: command.branch.observationId,
+            payload: { transactionId, captureLineageId },
+          });
+        }
+
+        for (const transactionId of restorable) {
+          const document = all.get(transactionId);
+          if (document === undefined) {
+            throw new Error("RESTORATION_SNAPSHOT_INVARIANT_BROKEN");
+          }
+          const stored = document.data();
+          if (transactionLifecycleState(stored) === "active") continue;
+          const version = transactionVersion(stored) + 1;
+          const cardDisplay =
+            typeof stored.cardDisplay === "string"
+              ? stored.cardDisplay
+              : typeof stored.cardLastFour === "string"
+                ? stored.cardLastFour
+                : "";
+          const restoration = {
+            ...stored,
+            householdId: command.householdId,
+            lifecycleState: "active",
+            aggregateVersion: version,
+            deletedAt: FieldValue.delete(),
+            deletedByMemberId: FieldValue.delete(),
+            cancellationObservationId: FieldValue.delete(),
+            cancellationReceiptId: FieldValue.delete(),
+            updatedAt: FieldValue.serverTimestamp(),
+          };
+          transaction.set(
+            household.collection("ledgerTransactions").doc(transactionId),
+            { ...restoration, schemaVersion: 2 },
+            { merge: true },
+          );
+          transaction.set(
+            this.database.collection("expenses").doc(transactionId),
+            {
+              ...restoration,
+              cardLastFour: cardDisplay,
+              schemaVersion: 1,
+            },
+            { merge: true },
+          );
+          new FirebaseTransactionalOutbox(this.database).append(transaction, {
+            eventId: hash(
+              `${command.householdId}\u0000${command.downstreamKey}\u0000TransactionChanged.v1\u0000${transactionId}`,
+            ),
+            eventType: "TransactionChanged.v1",
             householdId: command.householdId,
             aggregateId: transactionId,
             aggregateVersion: version,

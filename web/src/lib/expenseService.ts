@@ -8,11 +8,14 @@ import {
   DocumentData,
   db,
 } from '@/platform/read-model/firestoreReadModel';
-import { Expense, TransactionType } from '@/types/expense';
+import { Expense, MergedExpenseInfo, TransactionType } from '@/types/expense';
 import { ledgerOptimisticProjection } from '@/features/ledger/application/ledgerOptimisticProjection';
 import { isVisibleLedgerReadDocument } from '@/features/ledger/application/ledgerReadVisibility';
 import { requireClientSessionScope } from '@/composition/clientSessionScope';
-import type { LedgerTransactionCommandResult } from '@/platform/functions-api/householdCommandContract';
+import {
+  ledgerMergedTransactionId,
+  type LedgerTransactionCommandResult,
+} from '@/platform/functions-api/householdCommandContract';
 import { createHouseholdCommandId } from '@/platform/functions-api/householdCommandClient';
 
 const COLLECTION_NAME = 'expenses';
@@ -125,6 +128,11 @@ export function resolveExpenseCardDisplay(data: LedgerCardReadFields): string | 
 function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense {
   const data = docSnap.data();
   const cardDisplay = resolveExpenseCardDisplay(data);
+  const mergeLeafIds = Array.isArray(data.mergeLeafIds)
+    ? data.mergeLeafIds.filter(
+        (value: unknown): value is string => typeof value === 'string' && value !== ''
+      )
+    : undefined;
   return {
     id: docSnap.id,
     aggregateVersion: Number.isInteger(data.aggregateVersion) && data.aggregateVersion > 0
@@ -141,6 +149,7 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
     cardLastFour: cardDisplay,
     memo: data.memo,
     mergedFrom: data.mergedFrom,
+    ...(mergeLeafIds === undefined ? {} : { mergeLeafIds }),
     splitGroupId: data.splitGroupId,
     splitIndex: data.splitIndex,
     splitTotal: data.splitTotal,
@@ -650,38 +659,98 @@ export async function splitExpenseMonthly(
 export async function mergeExpenses(
   targetExpense: Expense,
   sourceExpense: Expense
-): Promise<void> {
+): Promise<string> {
   const householdId = getHouseholdId();
-  const targetMutationId = ledgerOptimisticProjection.beginUpdate(targetExpense.id, {
+  const commandId = createHouseholdCommandId('ledger-merge');
+  const mergedTransactionId = ledgerMergedTransactionId(commandId);
+  const leafIds = [
+    ...(targetExpense.mergeLeafIds ?? [targetExpense.id]),
+    ...(sourceExpense.mergeLeafIds ?? [sourceExpense.id]),
+  ];
+  const restorationDetails = mergeRestorationDetails(
+    targetExpense,
+    sourceExpense
+  );
+  const mergedExpense: Expense = {
+    ...targetExpense,
+    id: mergedTransactionId,
+    aggregateVersion: 1,
     amount: targetExpense.amount + sourceExpense.amount,
-  }, householdId);
-  let sourceMutationId: string;
+    mergeLeafIds: leafIds,
+    ...(restorationDetails === undefined
+      ? { mergedFrom: undefined }
+      : { mergedFrom: restorationDetails }),
+  };
+
+  const mutationIds: string[] = [];
   try {
-    sourceMutationId = ledgerOptimisticProjection.beginDelete(sourceExpense.id, householdId);
+    mutationIds.push(
+      ledgerOptimisticProjection.beginDelete(targetExpense.id, householdId)
+    );
+    mutationIds.push(
+      ledgerOptimisticProjection.beginDelete(sourceExpense.id, householdId)
+    );
+    mutationIds.push(
+      ledgerOptimisticProjection.beginCreate(mergedExpense, householdId)
+    );
   } catch (error) {
-    ledgerOptimisticProjection.rollback(targetMutationId);
+    mutationIds.forEach((mutationId) => {
+      ledgerOptimisticProjection.rollback(mutationId);
+    });
     throw error;
   }
+
   try {
     const ledgerCommands = await loadLedgerCommands();
-    await ledgerCommands.merge(
+    const result = await ledgerCommands.merge(
       householdId,
       targetExpense.id,
       targetExpense.aggregateVersion,
       sourceExpense.id,
-      sourceExpense.aggregateVersion
+      sourceExpense.aggregateVersion,
+      commandId
     );
-    ledgerOptimisticProjection.commitUpdate(targetMutationId, {
-      ...targetExpense,
-      amount: targetExpense.amount + sourceExpense.amount,
-      aggregateVersion: targetExpense.aggregateVersion + 1,
-    });
-    ledgerOptimisticProjection.commitDelete(sourceMutationId);
+    if (result.transactionId !== mergedTransactionId) {
+      throw new Error('LEDGER_MERGED_TRANSACTION_ID_MISMATCH');
+    }
+    ledgerOptimisticProjection.commitDelete(mutationIds[0]);
+    ledgerOptimisticProjection.commitDelete(mutationIds[1]);
+    ledgerOptimisticProjection.commitCreate(mutationIds[2], mergedExpense);
+    return mergedTransactionId;
   } catch (error) {
-    ledgerOptimisticProjection.rollback(targetMutationId);
-    ledgerOptimisticProjection.rollback(sourceMutationId);
+    mutationIds.forEach((mutationId) => {
+      ledgerOptimisticProjection.rollback(mutationId);
+    });
     throw error;
   }
+}
+
+function mergeRestorationDetails(
+  targetExpense: Expense,
+  sourceExpense: Expense
+): MergedExpenseInfo[] | undefined {
+  const detailsFor = (expense: Expense): MergedExpenseInfo[] | undefined => {
+    if (expense.mergeLeafIds && expense.mergeLeafIds.length > 0) {
+      return expense.mergedFrom?.length === expense.mergeLeafIds.length
+        ? expense.mergedFrom.map((item) => ({ ...item }))
+        : undefined;
+    }
+    if (expense.mergedFrom && expense.mergedFrom.length > 0) {
+      return expense.mergedFrom.map((item) => ({ ...item }));
+    }
+    return [{
+      merchant: expense.merchant,
+      amount: expense.amount,
+      category: expense.category,
+      ...(expense.memo === undefined ? {} : { memo: expense.memo }),
+    }];
+  };
+
+  const targetDetails = detailsFor(targetExpense);
+  const sourceDetails = detailsFor(sourceExpense);
+  return targetDetails === undefined || sourceDetails === undefined
+    ? undefined
+    : [...targetDetails, ...sourceDetails];
 }
 
 /**
@@ -689,7 +758,10 @@ export async function mergeExpenses(
  * 원본 지출들을 다시 생성하고 합쳐진 지출 삭제
  */
 export async function unmergeExpense(expense: Expense): Promise<string[]> {
-  if (!expense.mergedFrom || expense.mergedFrom.length === 0) {
+  if (
+    (!expense.mergeLeafIds || expense.mergeLeafIds.length === 0)
+    && (!expense.mergedFrom || expense.mergedFrom.length === 0)
+  ) {
     return [];
   }
   const ledgerCommands = await loadLedgerCommands();

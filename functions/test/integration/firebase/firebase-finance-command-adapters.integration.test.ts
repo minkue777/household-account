@@ -321,9 +321,13 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
         merchant: transactionId === "expense-a" ? "대상" : "원본",
         categoryId: "etc",
         memo: "",
-        accountingDate: "2026-07-21",
-        localTime: "12:00",
-        cardDisplay: "카드(1234)",
+        accountingDate:
+          transactionId === "expense-a" ? "2026-07-21" : "2026-07-20",
+        localTime: transactionId === "expense-a" ? "12:00" : "09:30",
+        cardDisplay:
+          transactionId === "expense-a" ? "target-card" : "source-card",
+        cardType:
+          transactionId === "expense-a" ? "local_currency" : "captured",
         aggregateVersion: 1,
         source: "manual",
         originChannel: "web",
@@ -333,18 +337,59 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       });
     }
     const handlers = createLedgerHouseholdCommandHandlers(database);
-    await execute(handlers, "ledger.merge-transactions.v1", "merge-command-1", {
-      targetTransactionId: "expense-a",
-      sourceTransactionId: "expense-b",
-      expectedVersions: { "expense-a": 1, "expense-b": 1 },
-    });
+    const mergedResponse = (await execute(
+      handlers,
+      "ledger.merge-transactions.v1",
+      "merge-command-1",
+      {
+        targetTransactionId: "expense-a",
+        sourceTransactionId: "expense-b",
+        expectedVersions: { "expense-a": 1, "expense-b": 1 },
+      },
+    )) as {
+      transactionId: string;
+      transaction: Record<string, unknown>;
+    };
     const mergedId = "merged:merge-command-1";
+    expect(mergedResponse).toMatchObject({
+      transactionId: mergedId,
+      transaction: {
+        transactionId: mergedId,
+        householdId: HOUSEHOLD_ID,
+        transactionType: "expense",
+        amountInWon: 100_000,
+        accountingDate: "2026-07-21",
+        localTime: "12:00",
+        cardDisplay: "target-card",
+        cardType: "local_currency",
+        lifecycleState: "active",
+        aggregateVersion: 1,
+        mergeLeafIds: ["expense-a", "expense-b"],
+      },
+    });
     expect((await household.collection("ledgerTransactions").doc(mergedId).get()).data()).toMatchObject({
+      transactionType: "expense",
       amountInWon: 100_000,
+      accountingDate: "2026-07-21",
+      localTime: "12:00",
+      cardDisplay: "target-card",
+      cardType: "local_currency",
       lifecycleState: "active",
       aggregateVersion: 1,
       mergeLeafIds: ["expense-a", "expense-b"],
     });
+    const mergedLegacy = (
+      await database.collection("expenses").doc(mergedId).get()
+    ).data();
+    expect(mergedLegacy).toMatchObject({
+      transactionType: "expense",
+      cardType: "local_currency",
+      mergeLeafIds: ["expense-a", "expense-b"],
+    });
+    expect(mergedLegacy?.mergedFrom).toEqual([
+      expect.objectContaining({ amount: 40_000, category: "etc" }),
+      expect.objectContaining({ amount: 60_000, category: "etc" }),
+    ]);
     expect(await database.collection("expenses").doc("expense-a").get()).toMatchObject({
       exists: false,
     });
@@ -362,10 +407,20 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     expect((await household.collection("ledgerTransactions").doc("expense-a").get()).data()).toMatchObject({
       lifecycleState: "active",
       aggregateVersion: 3,
+      transactionType: "expense",
+      accountingDate: "2026-07-21",
+      localTime: "12:00",
+      cardDisplay: "target-card",
+      cardType: "local_currency",
     });
     expect((await household.collection("ledgerTransactions").doc("expense-b").get()).data()).toMatchObject({
       lifecycleState: "active",
       aggregateVersion: 3,
+      transactionType: "expense",
+      accountingDate: "2026-07-21",
+      localTime: "12:00",
+      cardDisplay: "target-card",
+      cardType: "local_currency",
     });
     expect((await household.collection("ledgerTransactions").doc(mergedId).get()).data()).toMatchObject({
       lifecycleState: "deleted",
@@ -380,6 +435,404 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     expect(await database.collection("expenses").doc(mergedId).get()).toMatchObject({
       exists: false,
     });
+  });
+
+  it("연속 병합은 leaf ID와 표시 snapshot을 평탄화하고 최종 병합 해제에서 원본을 복원한다", async () => {
+    const household = database.collection("households").doc(HOUSEHOLD_ID);
+    const batch = database.batch();
+    for (const [transactionId, amountInWon] of [
+      ["A", 1_000],
+      ["B", 2_000],
+      ["C", 3_000],
+    ] as const) {
+      batch.set(household.collection("ledgerTransactions").doc(transactionId), {
+        householdId: HOUSEHOLD_ID,
+        transactionType: "expense",
+        lifecycleState: "active",
+        amountInWon,
+        merchant: `merchant-${transactionId}`,
+        categoryId: `category-${transactionId}`,
+        memo: `memo-${transactionId}`,
+        accountingDate: transactionId === "A" ? "2026-07-25" : "2026-07-20",
+        localTime: transactionId === "A" ? "20:30" : "09:00",
+        cardDisplay: transactionId === "A" ? "target-card" : "source-card",
+        cardType: transactionId === "A" ? "local_currency" : "captured",
+        aggregateVersion: 1,
+        source: "android-notification",
+        originChannel: "android",
+        creatorMemberId: actor.actingMemberId,
+        cardEvidence: `evidence-${transactionId}`,
+        captureLineageId: `lineage-${transactionId}`,
+      });
+    }
+    await batch.commit();
+    const handlers = createLedgerHouseholdCommandHandlers(database);
+
+    const first = (await execute(
+      handlers,
+      "ledger.merge-transactions.v1",
+      "merge-ab-integration",
+      {
+        targetTransactionId: "A",
+        sourceTransactionId: "B",
+        expectedVersions: { A: 1, B: 1 },
+      },
+    )) as { transactionId: string };
+    expect(first.transactionId).toBe("merged:merge-ab-integration");
+
+    const second = (await execute(
+      handlers,
+      "ledger.merge-transactions.v1",
+      "merge-abc-integration",
+      {
+        targetTransactionId: first.transactionId,
+        sourceTransactionId: "C",
+        expectedVersions: { [first.transactionId]: 1, C: 1 },
+      },
+    )) as {
+      transactionId: string;
+      transaction: Record<string, unknown>;
+    };
+    const finalMergedId = "merged:merge-abc-integration";
+    expect(second).toMatchObject({
+      transactionId: finalMergedId,
+      transaction: {
+        transactionId: finalMergedId,
+        amountInWon: 6_000,
+        mergeLeafIds: ["A", "B", "C"],
+      },
+    });
+    expect(
+      (
+        await household
+          .collection("ledgerTransactions")
+          .doc(first.transactionId)
+          .get()
+      ).data(),
+    ).toMatchObject({
+      lifecycleState: "superseded",
+      aggregateVersion: 2,
+      mergeLeafIds: ["A", "B"],
+    });
+    const finalLegacy = (
+      await database.collection("expenses").doc(finalMergedId).get()
+    ).data();
+    expect(finalLegacy).toMatchObject({
+      amountInWon: 6_000,
+      mergeLeafIds: ["A", "B", "C"],
+      intermediateMergeHistoryIds: [first.transactionId],
+    });
+    expect(finalLegacy?.mergedFrom).toEqual([
+      {
+        merchant: "merchant-A",
+        amount: 1_000,
+        category: "category-A",
+        memo: "memo-A",
+      },
+      {
+        merchant: "merchant-B",
+        amount: 2_000,
+        category: "category-B",
+        memo: "memo-B",
+      },
+      {
+        merchant: "merchant-C",
+        amount: 3_000,
+        category: "category-C",
+        memo: "memo-C",
+      },
+    ]);
+
+    const restored = (await execute(
+      handlers,
+      "ledger.unmerge-transaction.v1",
+      "unmerge-abc-integration",
+      { transactionId: finalMergedId, expectedVersion: 1 },
+    )) as { transactionIds: string[] };
+    expect(restored.transactionIds).toEqual(["A", "B", "C"]);
+    for (const transactionId of restored.transactionIds) {
+      expect(
+        (
+          await household
+            .collection("ledgerTransactions")
+            .doc(transactionId)
+            .get()
+        ).data(),
+      ).toMatchObject({
+        lifecycleState: "active",
+        aggregateVersion: 3,
+        merchant: `merchant-${transactionId}`,
+        accountingDate: "2026-07-25",
+        localTime: "20:30",
+        cardDisplay: "target-card",
+        cardType: "local_currency",
+      });
+    }
+  });
+
+  it("자기 자신을 leaf로 가진 비정상 병합은 MERGE_ANCESTRY_CYCLE로 쓰기 전에 거절한다", async () => {
+    const household = database.collection("households").doc(HOUSEHOLD_ID);
+    const batch = database.batch();
+    for (const transactionId of ["M", "X"] as const) {
+      batch.set(household.collection("ledgerTransactions").doc(transactionId), {
+        householdId: HOUSEHOLD_ID,
+        transactionType: "expense",
+        lifecycleState: "active",
+        amountInWon: 1_000,
+        merchant: transactionId,
+        categoryId: "etc",
+        memo: "",
+        accountingDate: "2026-07-25",
+        localTime: "10:00",
+        cardDisplay: "card",
+        cardType: "captured",
+        aggregateVersion: 1,
+        source: "manual",
+        originChannel: "web",
+        creatorMemberId: actor.actingMemberId,
+        cardEvidence: "card",
+        captureLineageId: `lineage-${transactionId}`,
+        ...(transactionId === "M" ? { mergeLeafIds: ["M"] } : {}),
+      });
+    }
+    await batch.commit();
+    const handlers = createLedgerHouseholdCommandHandlers(database);
+
+    await expect(
+      execute(
+        handlers,
+        "ledger.merge-transactions.v1",
+        "merge-cycle-integration",
+        {
+          targetTransactionId: "M",
+          sourceTransactionId: "X",
+          expectedVersions: { M: 1, X: 1 },
+        },
+      ),
+    ).rejects.toMatchObject({ code: "MERGE_ANCESTRY_CYCLE" });
+    expect(
+      (
+        await household.collection("ledgerTransactions").doc("M").get()
+      ).data(),
+    ).toMatchObject({ lifecycleState: "active", aggregateVersion: 1 });
+    expect(
+      await household
+        .collection("ledgerTransactions")
+        .doc("merged:merge-cycle-integration")
+        .get(),
+    ).toMatchObject({ exists: false });
+  });
+
+  it("mergedFrom은 있지만 mergeLeafIds가 없는 legacy 병합 거래는 재병합을 fail-closed로 거절한다", async () => {
+    const household = database.collection("households").doc(HOUSEHOLD_ID);
+    await database.collection("expenses").doc("legacy-merged").set({
+      householdId: HOUSEHOLD_ID,
+      transactionType: "expense",
+      lifecycleState: "active",
+      amountInWon: 3_000,
+      amount: 3_000,
+      merchant: "legacy-merged",
+      categoryId: "etc",
+      category: "etc",
+      memo: "",
+      accountingDate: "2026-07-25",
+      date: "2026-07-25",
+      localTime: "10:00",
+      time: "10:00",
+      cardDisplay: "legacy-card",
+      cardType: "captured",
+      aggregateVersion: 1,
+      source: "legacy",
+      originChannel: "web",
+      creatorMemberId: actor.actingMemberId,
+      captureLineageId: "lineage-legacy-merged",
+      mergedFrom: [
+        { merchant: "leaf-a", amount: 1_000, category: "etc" },
+        { merchant: "leaf-b", amount: 2_000, category: "etc" },
+      ],
+    });
+    await household.collection("ledgerTransactions").doc("source").set({
+      householdId: HOUSEHOLD_ID,
+      transactionType: "expense",
+      lifecycleState: "active",
+      amountInWon: 2_000,
+      merchant: "source",
+      categoryId: "etc",
+      memo: "",
+      accountingDate: "2026-07-25",
+      localTime: "11:00",
+      cardDisplay: "source-card",
+      cardType: "captured",
+      aggregateVersion: 1,
+      source: "manual",
+      originChannel: "web",
+      creatorMemberId: actor.actingMemberId,
+      captureLineageId: "lineage-source",
+    });
+    const handlers = createLedgerHouseholdCommandHandlers(database);
+
+    await expect(
+      execute(
+        handlers,
+        "ledger.merge-transactions.v1",
+        "legacy-incomplete-merge-command",
+        {
+          targetTransactionId: "legacy-merged",
+          sourceTransactionId: "source",
+          expectedVersions: { "legacy-merged": 1, source: 1 },
+        },
+      ),
+    ).rejects.toMatchObject({ code: "RESTORATION_SNAPSHOT_INCOMPLETE" });
+    expect(
+      (await database.collection("expenses").doc("legacy-merged").get()).data(),
+    ).toMatchObject({ lifecycleState: "active", aggregateVersion: 1 });
+    expect(
+      (await household.collection("ledgerTransactions").doc("source").get()).data(),
+    ).toMatchObject({ lifecycleState: "active", aggregateVersion: 1 });
+    expect(
+      await household
+        .collection("ledgerTransactions")
+        .doc("merged:legacy-incomplete-merge-command")
+        .get(),
+    ).toMatchObject({ exists: false });
+  });
+
+  it("legacy-only 및 canonical 불완전 split leaf는 병합과 해제 후 구조 metadata를 양쪽 projection에 보존한다", async () => {
+    const household = database.collection("households").doc(HOUSEHOLD_ID);
+    const splitA = {
+      householdId: HOUSEHOLD_ID,
+      transactionType: "expense",
+      lifecycleState: "active",
+      amountInWon: 1_000,
+      amount: 1_000,
+      merchant: "split-A",
+      categoryId: "food",
+      category: "food",
+      memo: "memo-A",
+      accountingDate: "2026-07-25",
+      date: "2026-07-25",
+      localTime: "12:00",
+      time: "12:00",
+      cardDisplay: "split-card-A",
+      cardLastFour: "split-card-A",
+      cardType: "captured",
+      aggregateVersion: 1,
+      source: "android-notification",
+      originChannel: "android",
+      creatorMemberId: actor.actingMemberId,
+      captureLineageId: "lineage-split-A",
+      splitGroupId: "split-group-A",
+      splitIndex: 1,
+      splitTotal: 3,
+      splitOriginalId: "split-original-A",
+      derivedFromTransactionId: "split-original-A",
+      schemaVersion: 1,
+    };
+    const splitB = {
+      ...splitA,
+      amountInWon: 2_000,
+      amount: 2_000,
+      merchant: "split-B",
+      memo: "memo-B",
+      cardDisplay: "split-card-B",
+      cardLastFour: "split-card-B",
+      captureLineageId: "lineage-split-B",
+      splitGroupId: "split-group-B",
+      splitIndex: 2,
+      splitTotal: 4,
+      splitOriginalId: "split-original-B",
+      derivedFromTransactionId: "split-original-B",
+    };
+    await database.collection("expenses").doc("split-A").set(splitA);
+    await database.collection("expenses").doc("split-B").set(splitB);
+    const {
+      splitGroupId: _splitGroupId,
+      splitIndex: _splitIndex,
+      splitTotal: _splitTotal,
+      splitOriginalId: _splitOriginalId,
+      derivedFromTransactionId: _derivedFromTransactionId,
+      ...canonicalB
+    } = splitB;
+    await household
+      .collection("ledgerTransactions")
+      .doc("split-B")
+      .set({ ...canonicalB, schemaVersion: 2 });
+    const handlers = createLedgerHouseholdCommandHandlers(database);
+
+    const merged = (await execute(
+      handlers,
+      "ledger.merge-transactions.v1",
+      "merge-legacy-split-leaves",
+      {
+        targetTransactionId: "split-A",
+        sourceTransactionId: "split-B",
+        expectedVersions: { "split-A": 1, "split-B": 1 },
+      },
+    )) as { transactionId: string };
+    expect(
+      (
+        await household
+          .collection("ledgerTransactions")
+          .doc(merged.transactionId)
+          .get()
+      ).data(),
+    ).toMatchObject({
+      splitGroupId: "split-group-A",
+      splitIndex: 1,
+      splitTotal: 3,
+      splitOriginalId: "split-original-A",
+      derivedFromTransactionId: "split-original-A",
+    });
+
+    const restored = (await execute(
+      handlers,
+      "ledger.unmerge-transaction.v1",
+      "unmerge-legacy-split-leaves",
+      { transactionId: merged.transactionId, expectedVersion: 1 },
+    )) as { transactionIds: string[] };
+    expect(restored.transactionIds).toEqual(["split-A", "split-B"]);
+    for (const [transactionId, metadata] of [
+      [
+        "split-A",
+        {
+          splitGroupId: "split-group-A",
+          splitIndex: 1,
+          splitTotal: 3,
+          splitOriginalId: "split-original-A",
+          derivedFromTransactionId: "split-original-A",
+        },
+      ],
+      [
+        "split-B",
+        {
+          splitGroupId: "split-group-B",
+          splitIndex: 2,
+          splitTotal: 4,
+          splitOriginalId: "split-original-B",
+          derivedFromTransactionId: "split-original-B",
+        },
+      ],
+    ] as const) {
+      expect(
+        (
+          await household
+            .collection("ledgerTransactions")
+            .doc(transactionId)
+            .get()
+        ).data(),
+      ).toMatchObject({
+        lifecycleState: "active",
+        aggregateVersion: 3,
+        ...metadata,
+      });
+      expect(
+        (await database.collection("expenses").doc(transactionId).get()).data(),
+      ).toMatchObject({
+        lifecycleState: "active",
+        aggregateVersion: 3,
+        ...metadata,
+      });
+    }
   });
 
   it("00:00 정기지출 UoW는 planId:YYYY-MM 단위로 원장·checkpoint·receipt·Outbox를 한 번만 commit한다", async () => {
