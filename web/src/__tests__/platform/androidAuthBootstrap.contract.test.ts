@@ -96,6 +96,33 @@ describe('Android WebView auth bootstrap contract', () => {
     expect(requestAndroidHost).toHaveBeenCalledWith('auth.sign-in', {});
   });
 
+  it('영속 Web Auth 토큰 갱신이 멈추면 기다리기만 하지 않고 Native 세션으로 복구한다', async () => {
+    jest.useFakeTimers();
+    try {
+      const user = {
+        uid: 'uid-1',
+        getIdToken: jest.fn(() => new Promise<string>(() => {})),
+      };
+      jest.mocked(requestAndroidHost).mockResolvedValue({
+        customToken: 'custom-token',
+      });
+      jest.mocked(signInWithCustomToken).mockResolvedValue({
+        user: { uid: 'uid-1' },
+      } as never);
+
+      const restoration = refreshAndroidWebAuth(user as never);
+      jest.advanceTimersByTime(5_000);
+      await Promise.resolve();
+
+      await expect(restoration).resolves.toEqual({
+        user: { uid: 'uid-1' },
+      });
+      expect(requestAndroidHost).toHaveBeenCalledWith('auth.sign-in', {});
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('구버전 token-only 응답은 Membership 별도 조회를 위한 fallback 세션으로 허용한다', async () => {
     const user = { uid: 'uid-1' };
     jest.mocked(requestAndroidHost).mockResolvedValue({ customToken: 'custom-token' });

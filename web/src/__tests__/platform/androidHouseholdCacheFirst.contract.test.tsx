@@ -387,6 +387,46 @@ describe('Android 가구 cache-first 복원 계약', () => {
     expect(mockGetCachedHousehold).not.toHaveBeenCalled();
   });
 
+  it('Android persistent auth refresh가 멈춰도 검증된 마지막 세션의 원격 구독을 막지 않는다', async () => {
+    mockAndroidHostAvailable = true;
+    const cachedResolution = {
+      kind: 'membership-found' as const,
+      membership: {
+        householdId: 'household-1',
+        memberId: 'member-1',
+        displayName: '민규',
+        aggregateVersion: 3,
+        status: 'active' as const,
+        capabilities: ['household.read'],
+      },
+    };
+    mockReadLastSignedInSessionCache.mockReturnValue({
+      principalUid: 'uid-1',
+      resolution: cachedResolution,
+      household: household('즉시 복원 가계부'),
+    });
+    mockReadSignedInMembershipCache.mockReturnValue(cachedResolution);
+    mockReadSignedInHouseholdCache.mockReturnValue(household('즉시 복원 가계부'));
+    mockOnAuthChange.mockImplementation((listener) => {
+      listener({ uid: 'uid-1' } as User);
+      return jest.fn();
+    });
+    mockRefreshAndroidWebAuth.mockReturnValue(new Promise(() => {}));
+
+    render(
+      <HouseholdProvider>
+        <AdminSessionProbe />
+      </HouseholdProvider>,
+    );
+
+    expect(await screen.findByText(
+      'ready:즉시 복원 가계부:member:member-1:verified'
+    )).toBeInTheDocument();
+    expect(mockRefreshAndroidWebAuth).toHaveBeenCalledWith(expect.objectContaining({
+      uid: 'uid-1',
+    }));
+  });
+
   it('같은 UID의 complete session은 Membership callable을 첫 paint 뒤 주기 재검증으로 옮긴다', async () => {
     jest.useFakeTimers();
     const cachedResolution = {

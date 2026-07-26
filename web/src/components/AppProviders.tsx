@@ -110,14 +110,14 @@ function AuthenticatedPlatformEffects() {
   useEffect(() => {
     if (
       sessionState !== 'ready'
-      || !isSessionVerified
       || adminHouseholdView !== null
       || !isAndroidHostAvailable()
     ) return;
 
     let cancelled = false;
     let inFlight = false;
-    let lastRefreshedAt = Date.now();
+    let retryId: number | undefined;
+    let lastRefreshedAt = isSessionVerified ? Date.now() : 0;
 
     const refreshAfterResume = () => {
       if (
@@ -126,14 +126,31 @@ function AuthenticatedPlatformEffects() {
         || document.visibilityState !== 'visible'
         || Date.now() - lastRefreshedAt < ANDROID_WEB_AUTH_REFRESH_INTERVAL_MS
       ) return;
+      if (retryId !== undefined) {
+        window.clearTimeout(retryId);
+        retryId = undefined;
+      }
       inFlight = true;
-      lastRefreshedAt = Date.now();
       void import('@/lib/authService')
-        .then(async ({ getCurrentUser, refreshAndroidWebAuth }) => {
+        .then(async ({
+          getCurrentUser,
+          refreshAndroidWebAuth,
+          restoreAndroidHostAuth,
+        }) => {
           const user = getCurrentUser();
-          if (user) await refreshAndroidWebAuth(user);
+          if (user) {
+            await refreshAndroidWebAuth(user);
+          } else {
+            await restoreAndroidHostAuth();
+          }
+          lastRefreshedAt = Date.now();
         })
-        .catch(() => {})
+        .catch(() => {
+          lastRefreshedAt = 0;
+          if (!cancelled && document.visibilityState === 'visible') {
+            retryId = window.setTimeout(refreshAfterResume, 5_000);
+          }
+        })
         .finally(() => {
           inFlight = false;
         });
@@ -142,6 +159,7 @@ function AuthenticatedPlatformEffects() {
     document.addEventListener('visibilitychange', refreshAfterResume);
     return () => {
       cancelled = true;
+      if (retryId !== undefined) window.clearTimeout(retryId);
       document.removeEventListener('visibilitychange', refreshAfterResume);
     };
   }, [adminHouseholdView, isSessionVerified, sessionState]);

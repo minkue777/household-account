@@ -696,9 +696,23 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       }
       if (androidBootstrapPending) {
         if (user) {
-          // 캐시 화면은 이미 그려져 있습니다. 원격 구독을 열기 전 Web Auth를
-          // 강제 갱신하고, 실패하면 Native 세션으로 자동 복구합니다.
-          startAndroidBootstrap(user, cachedResolution);
+          const paintResolution =
+            paintBootstrapRef.current?.principalUid === user.uid
+              ? paintBootstrapRef.current.resolution
+              : undefined;
+          const immediatelyUsableResolution = cachedResolution ?? paintResolution;
+          if (immediatelyUsableResolution !== undefined) {
+            // Firebase가 영속 사용자를 복원했고 마지막으로 검증된 Membership도
+            // 같은 principal에 속하면 원격 구독을 즉시 엽니다. 강제 token refresh는
+            // 복구 작업이지 화면과 Firestore 구독을 막는 선행 조건이 아닙니다.
+            applyUser(
+              user,
+              immediatelyUsableResolution,
+              user.uid === paintBootstrapRef.current?.principalUid,
+              'last-verified-cache'
+            );
+          }
+          startAndroidBootstrap(user, immediatelyUsableResolution);
         } else if (!user) {
           startAndroidBootstrap();
         }

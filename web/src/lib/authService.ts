@@ -15,6 +15,7 @@ import {
   isAndroidHostAvailable,
   requestAndroidHost,
 } from '@/platform/android-host/androidHostBridge';
+import { withinDeadline } from '@/platform/network/operationDeadline';
 
 export interface AuthenticatedWebSession {
   user: User;
@@ -35,6 +36,7 @@ function createAuth() {
 
 const auth = createAuth();
 const googleProvider = new GoogleAuthProvider();
+const ANDROID_WEB_AUTH_REFRESH_TIMEOUT_MS = 5_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -185,7 +187,11 @@ export async function refreshAndroidWebAuth(
   existingUser: User
 ): Promise<AuthenticatedWebSession> {
   try {
-    await existingUser.getIdToken(true);
+    await withinDeadline(
+      existingUser.getIdToken(true),
+      ANDROID_WEB_AUTH_REFRESH_TIMEOUT_MS,
+      'ANDROID_WEB_AUTH_REFRESH_TIMEOUT'
+    );
     return { user: existingUser };
   } catch {
     const restored = await restoreAndroidHostAuth();

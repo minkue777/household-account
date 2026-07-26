@@ -121,7 +121,7 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 ### 5.3 자산과 주식계좌
 
 - 주식·가상자산 보유내역은 자산별 모달이 각각 구독하지 않고, 자산 페이지가 가구 단위 listener 하나씩을 유지합니다.
-- Android WebView는 마지막 검증 화면 snapshot을 먼저 표시하되 원격 구독 전에 영속 Web Auth 토큰을 강제 갱신합니다. refresh token이 무효면 Native 로그인 세션으로 자동 교환하고, 15분 이상 백그라운드에 있다가 복귀해도 다시 확인합니다. 이후 백그라운드 Membership 재검증의 일시 실패가 보유내역 listener·전일 변동·통계 이력 조회를 영구 중단시키지 않으며, 인증 복원 전에 시작하지 못한 조회는 복원 직후 다시 실행합니다.
+- Android WebView는 마지막 검증 화면 snapshot을 먼저 표시하고, 같은 UID의 영속 Web Auth가 복원되면 마지막 검증 Membership 범위의 원격 구독도 즉시 재개합니다. Web Auth 강제 갱신은 구독을 막는 선행 gate가 아니라 백그라운드 복구 작업이며, 실패하거나 5초 동안 끝나지 않으면 Native 로그인 세션으로 자동 교환합니다. 15분 이상 백그라운드에 있다가 복귀해도 다시 확인합니다. 이후 백그라운드 Membership 재검증의 일시 실패나 token refresh 무응답이 보유내역 listener·전일 변동·통계 이력 조회를 영구 중단시키지 않으며, 인증 복원 전에 시작하지 못한 조회는 복원 직후 다시 실행합니다.
 - navigation HTML을 `StaleWhileRevalidate`로 장기 보존하면 낮의 Web 배포 뒤 이전 client와 새 서버 계약이 섞일 수 있으므로 network-only로 고정합니다. build hash가 붙은 JS·CSS 등 정적 asset만 캐시합니다.
 - 같은 브라우저 세션에서 마지막 household snapshot을 즉시 재사용합니다.
 - 계좌 모달은 이미 받은 보유 snapshot을 asset ID로 필터링할 뿐, 열릴 때 새 listener를 만들지 않습니다.
