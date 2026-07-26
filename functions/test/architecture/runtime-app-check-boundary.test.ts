@@ -31,6 +31,15 @@ describe("배포 callable App Check 경계", () => {
       ),
     ).toContain("PlayIntegrityAppCheckProviderFactory");
   });
+
+  it("관리자 callable은 검증된 systemAdmin claim을 경계로 사용하고 App Check를 중복 강제하지 않는다", () => {
+    const value = source(
+      "functions/src/bootstrap/firebaseAdminAccess.ts",
+    );
+    expect(value).toContain("verifiedSystemAdministrator(");
+    expect(value).not.toMatch(/enforceAppCheck:\s*true/u);
+  });
+
   it("Android raw notification callable은 warm instance 하나를 유지하면서 App Check를 강제한다", () => {
     const value = source(
       "functions/src/bootstrap/firebaseCaptureSubmission.ts",

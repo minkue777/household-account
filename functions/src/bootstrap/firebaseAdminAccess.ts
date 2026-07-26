@@ -56,7 +56,6 @@ export function toAdminAccessWireResponse(
 
 export const executeAdminAccess = functions
   .region(REGION)
-  .runWith({ enforceAppCheck: true })
   .https.onCall(async (data, context): Promise<AdminAccessWireResponse> => {
     const result = await router.execute({
       principalUid: context.auth?.uid,
