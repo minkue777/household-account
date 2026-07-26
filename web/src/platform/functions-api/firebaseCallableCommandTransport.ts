@@ -8,6 +8,7 @@ import {
 } from './householdCommandContract';
 import type { HouseholdCommandTransport } from './householdCommandClient';
 import { getFidSafeFirebaseFunctions } from './fidSafeFirebaseFunctions';
+import { withFirebaseCallableRecovery } from './firebaseCallableRecovery';
 
 const ENDPOINT = 'executeHouseholdCommand';
 
@@ -19,7 +20,7 @@ export class FirebaseCallableCommandTransport implements HouseholdCommandTranspo
       HouseholdCommandEnvelope<Name>,
       unknown
     >(getFidSafeFirebaseFunctions(), ENDPOINT);
-    const response = await callable(envelope);
+    const response = await withFirebaseCallableRecovery(() => callable(envelope));
     return parseHouseholdCommandWireResponse<HouseholdCommandResults[Name]>(
       response.data,
       envelope.commandId

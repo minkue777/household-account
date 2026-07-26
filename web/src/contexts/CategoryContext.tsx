@@ -47,7 +47,11 @@ const UNKNOWN_CATEGORY = {
 export function CategoryProvider({ children }: { children: React.ReactNode }) {
   const [categories, setCategories] = useState<CategoryDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { householdKey, isSessionVerified = true } = useHousehold();
+  const {
+    householdKey,
+    isSessionVerified = true,
+    remoteReadEpoch = 0,
+  } = useHousehold();
   const householdId = householdKey ?? '';
 
   useLayoutEffect(() => {
@@ -92,7 +96,7 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
       unsubscribe?.();
     };
-  }, [householdId, isSessionVerified]);
+  }, [householdId, isSessionVerified, remoteReadEpoch]);
 
   // 카테고리 조회 헬퍼
   const getCategoryByKey = useCallback(

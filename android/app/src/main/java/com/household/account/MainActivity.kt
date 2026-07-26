@@ -54,6 +54,12 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         checkPermissionAndShowContent()
+        if (::webView.isInitialized && webView.url != null) {
+            webView.evaluateJavascript(
+                "window.dispatchEvent(new Event('household-account:android-resume'))",
+                null
+            )
+        }
         lifecycleScope.launch {
             QuickEditCoordinator.resumePending(applicationContext)
         }

@@ -16,6 +16,7 @@ import {
   REGISTERED_CARD_LABELS,
   RegisteredCardLabel,
 } from '@/types/registeredCard';
+import { useHousehold } from '@/contexts/HouseholdContext';
 
 interface CardSettingsProps {
   householdId?: string | null;
@@ -274,6 +275,7 @@ function getCardStyle(cardLabel: string) {
 }
 
 export default function CardSettings({ householdId, ownerName }: CardSettingsProps) {
+  const { remoteReadEpoch = 0 } = useHousehold();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedTab, setSelectedTab] = useState<CardTab>('credit');
   const [isAdding, setIsAdding] = useState(false);
@@ -307,7 +309,7 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
       );
       setIsLoading(false);
     });
-  }, [householdId, ownerName]);
+  }, [householdId, ownerName, remoteReadEpoch]);
 
   useEffect(() => {
     cardsRef.current = cards;

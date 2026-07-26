@@ -77,7 +77,7 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 
 | 사용자 동작 | 리팩토링 전 | 최적화 전 서버 권위형 구조 | 최신 작업 트리 |
 |---|---|---|---|
-| 캐시 있는 첫 화면 | localStorage 가구 키와 Firestore cache로 표시 | 큰 root bundle 평가와 Membership·가구 확인이 첫 구독과 경쟁 | 작은 root bundle, 검증 snapshot 선표시, 첫 paint 후 상호작용 준비 |
+| 캐시 있는 첫 화면 | localStorage 가구 키와 Firestore cache로 표시 | 큰 root bundle 평가와 Membership·가구 확인이 첫 구독과 경쟁 | 작은 root bundle, 마지막 검증 localStorage snapshot 선표시, Android Firestore는 memory cache로 매 프로세스 원격 연결 재생성 |
 | 캐시 없는 로그인 | 가구 키 확인 후 가구 read | Auth → Membership 해석 → Web의 별도 Household read → 화면 구독 | Membership 해석 응답에 최소 Household read model 포함, Web의 중복 read 제거 |
 | 일반 모달 첫 클릭 | 컴포넌트가 이미 bundle에 있어 즉시 표시 | 클릭 후 동적 chunk 다운로드·평가, `Portal` effect 뒤 표시 | route에 완성 모달을 정적으로 포함하고 `Portal`은 같은 React commit에서 표시 |
 | 검색 | 입력 즉시 로컬 조회 | 100ms focus timer + 300ms 고정 debounce | 즉시 focus, 입력 즉시 검색 계약 실행 |
@@ -121,7 +121,7 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 ### 5.3 자산과 주식계좌
 
 - 주식·가상자산 보유내역은 자산별 모달이 각각 구독하지 않고, 자산 페이지가 가구 단위 listener 하나씩을 유지합니다.
-- Android WebView는 마지막 검증 화면 snapshot을 먼저 표시하고, 같은 UID의 영속 Web Auth가 복원되면 마지막 검증 Membership 범위의 원격 구독도 즉시 재개합니다. Web Auth 강제 갱신은 구독을 막는 선행 gate가 아니라 백그라운드 복구 작업이며, 실패하거나 5초 동안 끝나지 않으면 Native 로그인 세션으로 자동 교환합니다. 15분 이상 백그라운드에 있다가 복귀해도 다시 확인합니다. 이후 백그라운드 Membership 재검증의 일시 실패나 token refresh 무응답이 보유내역 listener·전일 변동·통계 이력 조회를 영구 중단시키지 않으며, 인증 복원 전에 시작하지 못한 조회는 복원 직후 다시 실행합니다.
+- Android WebView는 마지막 검증 화면 snapshot을 먼저 표시하고, 같은 UID의 영속 Web Auth가 복원되면 마지막 검증 Membership 범위의 원격 구독도 즉시 재개합니다. Web Auth 강제 갱신은 구독을 막는 선행 gate가 아니라 백그라운드 복구 작업이며, 실패하거나 5초 동안 끝나지 않으면 Native 로그인 세션으로 자동 교환합니다. `onIdTokenChanged`, Activity resume, Web focus·online, 15분 안전 확인, callable/listener 인증 오류를 같은 복구 경로로 처리합니다. 성공할 때마다 원격 read epoch를 전진시켜 이미 종료된 원장·카테고리·지역화폐·자산·명의자·보유 종목 listener를 다시 생성합니다. Android Firestore는 별도 localStorage 표시 snapshot과 중복되는 IndexedDB 영속 cache를 사용하지 않으므로 앱 삭제 전까지 cache-only 상태가 고착되는 경로가 없습니다.
 - navigation HTML을 `StaleWhileRevalidate`로 장기 보존하면 낮의 Web 배포 뒤 이전 client와 새 서버 계약이 섞일 수 있으므로 network-only로 고정합니다. build hash가 붙은 JS·CSS 등 정적 asset만 캐시합니다.
 - 같은 브라우저 세션에서 마지막 household snapshot을 즉시 재사용합니다.
 - 계좌 모달은 이미 받은 보유 snapshot을 asset ID로 필터링할 뿐, 열릴 때 새 listener를 만들지 않습니다.

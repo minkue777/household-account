@@ -14,6 +14,7 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.household.account.BuildConfig
 import com.household.account.paymentcapture.AndroidCaptureDelivery
 import com.household.account.server.FirebaseAuthenticatedCallableGateway
+import com.household.account.server.UnauthenticatedCommandException
 import com.household.account.session.NativeMembershipResolution
 import com.household.account.session.NativeMembershipResolver
 import com.household.account.util.FidEndpointManager
@@ -41,7 +42,18 @@ class NativeAuthCoordinator(
     @Volatile
     private var bootstrappedMembership: NativeMembershipResolution.Ready? = null
     suspend fun signIn(): NativeAuthResult {
-        return signInAndExchange()
+        val firstAttempt = signInAndExchange()
+        if (
+            firstAttempt is NativeAuthResult.Rejected &&
+            firstAttempt.code == WEBVIEW_SESSION_AUTH_EXPIRED
+        ) {
+            // Android FirebaseAuth 객체만 남고 refresh token이 폐기된 경우 같은
+            // currentUser로 callable을 무한 재시도하지 않습니다. 로컬 세션을 한 번
+            // 재인증한 뒤 새 ID token으로 WebView custom token을 다시 교환합니다.
+            firebaseAuth.signOut()
+            return signInAndExchange()
+        }
+        return firstAttempt
     }
 
     private suspend fun signInAndExchange(): NativeAuthResult {
@@ -83,6 +95,8 @@ class NativeAuthCoordinator(
         }
         val response = try {
             callableGateway.call(WEBVIEW_SESSION_FUNCTION, emptyMap())
+        } catch (_: UnauthenticatedCommandException) {
+            return NativeAuthResult.Rejected(WEBVIEW_SESSION_AUTH_EXPIRED)
         } catch (_: Exception) {
             return NativeAuthResult.Rejected("WEBVIEW_SESSION_TOKEN_FAILED")
         }
@@ -201,5 +215,6 @@ class NativeAuthCoordinator(
     companion object {
         const val WEBVIEW_SESSION_FUNCTION = "createWebViewSessionToken"
         const val WEBVIEW_SESSION_CONTRACT = "webview-session-token.v1"
+        const val WEBVIEW_SESSION_AUTH_EXPIRED = "WEBVIEW_SESSION_AUTH_EXPIRED"
     }
 }

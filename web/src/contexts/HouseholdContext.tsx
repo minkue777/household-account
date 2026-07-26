@@ -64,8 +64,10 @@ import {
   markWebMembershipStarted,
   scheduleAfterWebFirstLedgerPaint,
 } from '@/platform/performance/webStartupPerformance';
+import { REMOTE_SESSION_RECOVERED_EVENT } from '@/platform/functions-api/firebaseCallableRecovery';
 
-const AUTH_BOOTSTRAP_TIMEOUT_MS = 60_000;
+const CACHED_AUTH_BOOTSTRAP_TIMEOUT_MS = 10_000;
+const INTERACTIVE_AUTH_BOOTSTRAP_TIMEOUT_MS = 180_000;
 const SESSION_RESOLUTION_TIMEOUT_MS = 20_000;
 const HOUSEHOLD_READ_TIMEOUT_MS = 20_000;
 const MEMBERSHIP_REVALIDATION_FALLBACK_MS = 15_000;
@@ -97,12 +99,16 @@ export type HouseholdSessionState =
   | 'ready'
   | 'error';
 
+export type RemoteSessionStatus = 'connecting' | 'ready' | 'degraded';
+
 interface HouseholdContextType {
   household: Household | null;
   householdKey: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   isSessionVerified: boolean;
+  remoteSessionStatus: RemoteSessionStatus;
+  remoteReadEpoch: number;
   currentMember: HouseholdMember | null;
   sessionState: HouseholdSessionState;
   sessionError: string | null;
@@ -110,6 +116,7 @@ interface HouseholdContextType {
   adminHouseholdView: AdminHouseholdViewSelection | null;
   signIn: () => Promise<void>;
   retrySession: () => Promise<void>;
+  recoverRemoteSession: () => Promise<void>;
   confirmLegacyMembership: () => Promise<void>;
   createHouseholdForSelf: (householdName: string, memberName: string) => Promise<void>;
   joinHouseholdAsSelf: (invitationCode: string, memberName: string) => Promise<void>;
@@ -204,6 +211,9 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   const [currentMember, setCurrentMember] = useState<HouseholdMember | null>(null);
   const [sessionState, setSessionState] = useState<HouseholdSessionState>('resolving');
   const [isSessionVerified, setIsSessionVerified] = useState(false);
+  const [remoteSessionStatus, setRemoteSessionStatus] =
+    useState<RemoteSessionStatus>('connecting');
+  const [remoteReadEpoch, setRemoteReadEpoch] = useState(0);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [legacyCandidate, setLegacyCandidate] = useState<LegacySessionCandidate | null>(null);
   const [adminHouseholdView, setAdminHouseholdView] =
@@ -212,6 +222,28 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   const resolutionGenerationRef = useRef(0);
   const sessionGenerationRef = useRef(0);
   const endpointRegistrationGenerationRef = useRef(0);
+
+  const activateRemoteSession = useCallback(() => {
+    setIsSessionVerified(true);
+    setRemoteSessionStatus('ready');
+    setSessionError(null);
+    // Token 복구 뒤 이미 error callback으로 종료된 Firestore listener도 새로 엽니다.
+    setRemoteReadEpoch((current) => current + 1);
+  }, []);
+
+  useEffect(() => {
+    const handleRecoveredSession = () => activateRemoteSession();
+    window.addEventListener(
+      REMOTE_SESSION_RECOVERED_EVENT,
+      handleRecoveredSession
+    );
+    return () => {
+      window.removeEventListener(
+        REMOTE_SESSION_RECOVERED_EVENT,
+        handleRecoveredSession
+      );
+    };
+  }, [activateRemoteSession]);
 
   useLayoutEffect(() => {
     const cached = readLastSignedInSessionCache();
@@ -244,6 +276,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     setCurrentMember(null);
     setAdminHouseholdView(null);
     setIsSessionVerified(false);
+    setRemoteSessionStatus('connecting');
   }, []);
 
   const restoreAdministratorHouseholdView = useCallback(async (
@@ -275,7 +308,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         memberId: 'system-administrator',
         accessMode: 'administrator-readonly',
       });
-      setIsSessionVerified(true);
+      activateRemoteSession();
       setHousehold(loadedHousehold);
       setHouseholdKey(selection.householdId);
       setCurrentMember(null);
@@ -292,7 +325,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       setSessionError(errorMessage(error));
       setSessionState('error');
     }
-  }, [clearResolvedSession]);
+  }, [activateRemoteSession, clearResolvedSession]);
 
   const restoreSignedInUser = useCallback(async (
     user: User,
@@ -382,7 +415,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         aggregateVersion: membership.aggregateVersion,
       };
       const sessionGeneration = ++sessionGenerationRef.current;
-      setIsSessionVerified(true);
+      activateRemoteSession();
 
       setClientSessionScope({
         sessionGeneration,
@@ -499,7 +532,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       setSessionError(errorMessage(error));
       setSessionState('error');
     }
-  }, [clearResolvedSession]);
+  }, [activateRemoteSession, clearResolvedSession]);
 
   useEffect(() => {
     let disposed = false;
@@ -516,6 +549,8 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     let authStartDelayId: number | undefined;
     let authStartFallbackId: number | undefined;
     let authObserverStartRequested = false;
+    let authObserverRetryAttempt = 0;
+    let authObserverRetryId: number | undefined;
 
     const resolutionKey = (resolution?: SignedInUserResolution): string | undefined =>
       resolution?.kind === 'membership-found'
@@ -578,7 +613,8 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       user: User | null,
       prefetchedResolution?: SignedInUserResolution,
       preservePaintBootstrap = false,
-      membershipSource?: 'last-verified-cache' | 'authoritative-prefetch'
+      membershipSource?: 'last-verified-cache' | 'authoritative-prefetch',
+      activateWhenAlreadyApplied = true
     ) => {
       if (disposed) return;
       const nextUid = user?.uid ?? null;
@@ -586,7 +622,12 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       if (
         appliedAuthUid === nextUid
         && (nextResolutionKey === undefined || appliedResolutionKey === nextResolutionKey)
-      ) return;
+      ) {
+        // 같은 UID의 ID token 갱신도 원격 연결 복구 신호입니다. 인증 오류로
+        // 종료된 listener가 다시 구독할 수 있도록 epoch를 반드시 전진시킵니다.
+        if (user && activateWhenAlreadyApplied) activateRemoteSession();
+        return;
+      }
       appliedAuthUid = nextUid;
       appliedResolutionKey = nextResolutionKey;
       activeUserRef.current = user;
@@ -599,7 +640,6 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         setSessionState('signed-out');
         return;
       }
-      setIsSessionVerified(true);
       const adminSelection = readAdminHouseholdViewSelection();
       if (adminSelection !== null && !isAndroidHostAvailable()) {
         void restoreAdministratorHouseholdView(user, adminSelection);
@@ -634,7 +674,9 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         existingUser
           ? refreshAndroidWebAuth(existingUser)
           : restoreAndroidHostAuth(),
-        AUTH_BOOTSTRAP_TIMEOUT_MS,
+        paintBootstrapRef.current === undefined
+          ? INTERACTIVE_AUTH_BOOTSTRAP_TIMEOUT_MS
+          : CACHED_AUTH_BOOTSTRAP_TIMEOUT_MS,
         'ANDROID_AUTH_BOOTSTRAP_TIMEOUT'
       )).then((session) => {
         if (disposed || !androidBootstrapPending) return;
@@ -662,12 +704,15 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
             ? undefined
             : session?.signedInUserResolution === undefined
               ? 'last-verified-cache'
-              : 'authoritative-prefetch'
+              : 'authoritative-prefetch',
+          false
         );
       }).catch((error) => {
         if (disposed || !androidBootstrapPending) return;
         markWebAuthCompleted(false);
         if (paintBootstrapRef.current !== undefined) {
+          setRemoteSessionStatus('degraded');
+          setSessionError(errorMessage(error));
           androidBootstrapStarted = false;
           const retryDelayMs = Math.min(
             5_000 * (2 ** androidBootstrapRetryAttempt),
@@ -741,6 +786,10 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       void loadAuthService().then(({ onAuthChange }) => {
         if (disposed) return;
         unsubscribeAuth = onAuthChange(handleAuthChange);
+        authObserverRetryAttempt = 0;
+        setRemoteSessionStatus((current) =>
+          current === 'degraded' ? 'connecting' : current
+        );
 
         // 마지막 화면 캐시가 없는 Android 첫 실행은 Auth observer와 Native 세션 복구를
         // 병렬로 시작합니다. 기존의 고정 500ms 대기는 두 경로 모두에 불필요한 지연이었습니다.
@@ -751,7 +800,21 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       .catch((error) => {
         if (disposed) return;
         markWebAuthCompleted(false);
-        if (paintBootstrapRef.current !== undefined) return;
+        if (paintBootstrapRef.current !== undefined) {
+          setRemoteSessionStatus('degraded');
+          setSessionError(errorMessage(error));
+          authObserverStartRequested = false;
+          const retryDelayMs = Math.min(
+            1_000 * (2 ** authObserverRetryAttempt),
+            30_000
+          );
+          authObserverRetryAttempt += 1;
+          authObserverRetryId = window.setTimeout(() => {
+            authObserverRetryId = undefined;
+            startAuthObserver();
+          }, retryDelayMs);
+          return;
+        }
         clearResolvedSession();
         setSessionError(errorMessage(error));
         setSessionState('error');
@@ -780,12 +843,14 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       if (authStartFrameId !== undefined) window.cancelAnimationFrame(authStartFrameId);
       if (authStartDelayId !== undefined) window.clearTimeout(authStartDelayId);
       if (authStartFallbackId !== undefined) window.clearTimeout(authStartFallbackId);
+      if (authObserverRetryId !== undefined) window.clearTimeout(authObserverRetryId);
       if (androidBootstrapRetryId !== undefined) {
         window.clearTimeout(androidBootstrapRetryId);
       }
       unsubscribeAuth?.();
     };
   }, [
+    activateRemoteSession,
     clearResolvedSession,
     restoreAdministratorHouseholdView,
     restoreSignedInUser,
@@ -818,6 +883,52 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       setSessionState('signed-out');
     }
   }, [restoreAdministratorHouseholdView, restoreSignedInUser]);
+
+  const recoverRemoteSession = useCallback(async () => {
+    setRemoteSessionStatus('connecting');
+    try {
+      const {
+        getCurrentUser,
+        refreshAndroidWebAuth,
+        restoreAndroidHostAuth,
+      } = await loadAuthService();
+      const currentUser = getCurrentUser();
+      const session = currentUser
+        ? await refreshAndroidWebAuth(currentUser)
+        : await restoreAndroidHostAuth();
+      if (!session?.user) throw new Error('ANDROID_AUTH_RESTORE_REQUIRED');
+
+      const user = session.user;
+      activeUserRef.current = user;
+      const cachedResolution =
+        session.signedInUserResolution
+        ?? readSignedInMembershipCache(user.uid)
+        ?? (
+          paintBootstrapRef.current?.principalUid === user.uid
+            ? paintBootstrapRef.current.resolution
+            : undefined
+        );
+      await restoreSignedInUser(
+        user,
+        captureLegacySessionCandidate(),
+        cachedResolution,
+        {
+          preservePaintBootstrap:
+            paintBootstrapRef.current?.principalUid === user.uid,
+          membershipSource:
+            cachedResolution === undefined
+              ? undefined
+              : session.signedInUserResolution === undefined
+                ? 'last-verified-cache'
+                : 'authoritative-prefetch',
+        }
+      );
+    } catch (error) {
+      setRemoteSessionStatus('degraded');
+      setSessionError(errorMessage(error));
+      throw error;
+    }
+  }, [restoreSignedInUser]);
 
   const retrySession = useCallback(async () => {
     const user = activeUserRef.current;
@@ -958,6 +1069,8 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       isLoading: sessionState === 'resolving',
       isAuthenticated: sessionState === 'ready',
       isSessionVerified,
+      remoteSessionStatus,
+      remoteReadEpoch,
       currentMember,
       sessionState,
       sessionError,
@@ -965,6 +1078,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       adminHouseholdView,
       signIn,
       retrySession,
+      recoverRemoteSession,
       confirmLegacyMembership,
       createHouseholdForSelf,
       joinHouseholdAsSelf,

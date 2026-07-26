@@ -2,6 +2,7 @@ package com.household.account.server
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.functions.FirebaseFunctionsException
 import kotlinx.coroutines.tasks.await
 
 /**
@@ -33,6 +34,11 @@ class FirebaseAuthenticatedCallableGateway(
             throw error
         } catch (error: RemoteCommandException) {
             throw error
+        } catch (error: FirebaseFunctionsException) {
+            if (error.code == FirebaseFunctionsException.Code.UNAUTHENTICATED) {
+                throw UnauthenticatedCommandException()
+            }
+            throw RemoteCommandException("Callable request failed", error)
         } catch (error: Exception) {
             throw RemoteCommandException("Callable request failed", error)
         }

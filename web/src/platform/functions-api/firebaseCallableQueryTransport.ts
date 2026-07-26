@@ -8,6 +8,7 @@ import {
   parseHouseholdQueryWireResponse,
 } from './householdQueryContract';
 import { getFidSafeFirebaseFunctions } from './fidSafeFirebaseFunctions';
+import { withFirebaseCallableRecovery } from './firebaseCallableRecovery';
 
 export class FirebaseCallableQueryTransport implements HouseholdQueryTransport {
   async send<Name extends HouseholdQueryName>(
@@ -17,7 +18,7 @@ export class FirebaseCallableQueryTransport implements HouseholdQueryTransport {
       getFidSafeFirebaseFunctions(),
       'executeHouseholdQuery'
     );
-    const response = await callable(envelope);
+    const response = await withFirebaseCallableRecovery(() => callable(envelope));
     return parseHouseholdQueryWireResponse<HouseholdQueryResults[Name]>(
       response.data,
       envelope.queryId

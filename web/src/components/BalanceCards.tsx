@@ -46,7 +46,7 @@ export default function BalanceCards({
 }: BalanceCardsProps) {
   const isIncome = transactionType === 'income';
   const { activeCategories } = useCategoryContext();
-  const { householdKey } = useHousehold();
+  const { householdKey, remoteReadEpoch = 0 } = useHousehold();
   const [localCurrencyBalance, setLocalCurrencyBalance] = useState<LocalCurrencyBalance | null>(
     () => householdKey ? readLocalCurrencyBalanceSnapshot(householdKey) : null
   );
@@ -87,7 +87,7 @@ export default function BalanceCards({
       cancelled = true;
       unsubscribe?.();
     };
-  }, [householdKey, needsLocalCurrencyBalance]);
+  }, [householdKey, needsLocalCurrencyBalance, remoteReadEpoch]);
 
   const { remaining, isOverBudget, monthlySpent } = useMemo(() => {
     const budgetedCategoryKeys = new Set<string>();

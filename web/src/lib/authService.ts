@@ -6,7 +6,7 @@ import {
   signInWithCustomToken,
   GoogleAuthProvider,
   signOut,
-  onAuthStateChanged,
+  onIdTokenChanged,
   User,
 } from 'firebase/auth';
 import { app } from './firebaseApp';
@@ -251,5 +251,8 @@ export function getCurrentUser(): User | null {
  * 인증 상태 변경 구독
  */
 export function onAuthChange(callback: (user: User | null) => void): () => void {
-  return onAuthStateChanged(auth, callback);
+  // onAuthStateChanged는 같은 사용자의 ID token 갱신을 알리지 않습니다.
+  // 장시간 열린 Android WebView에서 token이 교체된 뒤 종료된 Firestore listener를
+  // 다시 연결할 수 있도록 token lifecycle까지 포함하는 observer를 사용합니다.
+  return onIdTokenChanged(auth, callback);
 }

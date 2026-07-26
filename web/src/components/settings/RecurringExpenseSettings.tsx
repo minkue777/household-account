@@ -19,7 +19,7 @@ export default function RecurringExpenseSettings() {
     getCategoryLabel,
     getCategoryColor,
   } = useCategoryContext();
-  const { householdKey } = useHousehold();
+  const { householdKey, remoteReadEpoch = 0 } = useHousehold();
 
   // 섹션 펼침/접힘 상태
   const [isRecurringOpen, setIsRecurringOpen] = useState(false);
@@ -57,7 +57,7 @@ export default function RecurringExpenseSettings() {
     return () => {
       unsubscribeRecurring();
     };
-  }, [householdKey]);
+  }, [householdKey, remoteReadEpoch]);
 
   // 정기 지출 핸들러
   const resetRecurringForm = () => {

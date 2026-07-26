@@ -37,7 +37,12 @@ import { useHouseholdHoldingSnapshots } from '@/lib/utils/useHouseholdHoldingSna
 
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
-  const { household, adminHouseholdView, isSessionVerified = true } = useHousehold();
+  const {
+    household,
+    adminHouseholdView,
+    isSessionVerified = true,
+    remoteReadEpoch = 0,
+  } = useHousehold();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [dailyChanges, setDailyChanges] = useState<{
     householdId: string | null;
@@ -60,7 +65,8 @@ export default function AssetsPage() {
   const cachedAssetsRef = useRef<Asset[] | undefined>(undefined);
   const holdingSnapshots = useHouseholdHoldingSnapshots(
     household?.id,
-    isSessionVerified
+    isSessionVerified,
+    remoteReadEpoch
   );
 
   const memberOptions = useMemo(
@@ -173,7 +179,7 @@ export default function AssetsPage() {
       if (household?.id) writeAssetSnapshot(household.id, newAssets);
     }, cachedAssetsRef.current);
     return () => unsubscribe();
-  }, [household?.id, isSessionVerified]);
+  }, [household?.id, isSessionVerified, remoteReadEpoch]);
 
   useEffect(() => {
     if (
@@ -200,7 +206,7 @@ export default function AssetsPage() {
       },
       (error) => console.error('자산 명의자 구독 오류:', error)
     );
-  }, [household?.id, isSessionVerified]);
+  }, [household?.id, isSessionVerified, remoteReadEpoch]);
 
   useEffect(() => {
     if (!memberOptions.some(({ key }) => key === selectedMember)) {
@@ -252,7 +258,14 @@ export default function AssetsPage() {
     return () => {
       cancelled = true;
     };
-  }, [assets, household?.id, isLoading, isSessionVerified, memberOptions]);
+  }, [
+    assets,
+    household?.id,
+    isLoading,
+    isSessionVerified,
+    memberOptions,
+    remoteReadEpoch,
+  ]);
 
   const handleAssetClick = (asset: Asset) => {
     setSelectedAsset(asset);

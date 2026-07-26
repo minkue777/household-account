@@ -32,7 +32,12 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const { household, householdKey, isSessionVerified = true } = useHousehold();
+  const {
+    household,
+    householdKey,
+    isSessionVerified = true,
+    remoteReadEpoch = 0,
+  } = useHousehold();
 
   const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
   const [currentMonth, setCurrentMonth] = useState(() => new Date().getMonth() + 1);
@@ -119,15 +124,26 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
           setExpenses(newExpenses);
           setIsLoading(false);
         },
-        { transactionType }
+        {
+          transactionType,
+          onError: () => setIsLoading(false),
+        }
       );
+    }).catch(() => {
+      if (!cancelled) setIsLoading(false);
     });
 
     return () => {
       cancelled = true;
       unsubscribe?.();
     };
-  }, [currentYear, currentMonth, isSessionVerified, transactionType]);
+  }, [
+    currentYear,
+    currentMonth,
+    isSessionVerified,
+    remoteReadEpoch,
+    transactionType,
+  ]);
 
   useEffect(() => {
     if (!needsYearlyTotal) {
@@ -159,15 +175,33 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
           setYearlyExpenses(yearExpenses);
           setYearlyTotal(yearExpenses.reduce((sum, expense) => sum + expense.amount, 0));
         },
-        { transactionType }
+        {
+          transactionType,
+          onError: () => {
+            setYearlyExpenses([]);
+            setYearlyTotal(0);
+          },
+        }
       );
+    }).catch(() => {
+      if (!cancelled) {
+        setYearlyExpenses([]);
+        setYearlyTotal(0);
+      }
     });
 
     return () => {
       cancelled = true;
       unsubscribe?.();
     };
-  }, [currentYear, isLoading, isSessionVerified, needsYearlyTotal, transactionType]);
+  }, [
+    currentYear,
+    isLoading,
+    isSessionVerified,
+    needsYearlyTotal,
+    remoteReadEpoch,
+    transactionType,
+  ]);
 
   useEffect(() => {
     const editId = searchParams.get('edit');

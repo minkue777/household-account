@@ -26,8 +26,8 @@ android {
         applicationId = "com.household.account"
         minSdk = 26
         targetSdk = 34
-        versionCode = 19
-        versionName = "1.2.17"
+        versionCode = 20
+        versionName = "1.2.18"
 
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
 

@@ -26,6 +26,7 @@ interface AddExpenseOptions {
 
 interface ExpenseQueryOptions {
   transactionType?: TransactionType;
+  onError?: (error: unknown) => void;
 }
 
 interface ExactCardSearchKeyword {
@@ -469,8 +470,8 @@ export function subscribeToMonthlyExpenses(
     // 클라이언트에서 날짜 필터링 및 정렬
     projection.publish(allExpenses);
   }, (error) => {
-    void error;
     // Keep the last valid local snapshot visible until Auth/network reconnects.
+    options.onError?.(error);
   });
 
   return () => {
@@ -540,7 +541,7 @@ export function subscribeToDateRangeExpenses(
 
     projection.publish(allExpenses);
   }, (error) => {
-    void error;
+    options.onError?.(error);
     projection.publish([]);
   });
 

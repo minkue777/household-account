@@ -1,16 +1,16 @@
 const mockApp = { name: 'web-app' };
-const mockDb = { runtime: 'android-persistent-firestore' };
-const mockTabManager = { kind: 'single-tab' };
+const mockDb = { runtime: 'configured-firestore' };
 const mockLocalCache = { kind: 'persistent-local-cache' };
+const mockMemoryCache = { kind: 'memory-local-cache' };
 const mockInitializeApp = jest.fn(() => mockApp);
 const mockGetApps = jest.fn((): unknown[] => []);
 const mockInitializeFirestore = jest.fn(
   (_app: unknown, _settings: Record<string, unknown>) => mockDb,
 );
 const mockGetFirestore = jest.fn(() => ({ runtime: 'default-firestore' }));
-const mockPersistentSingleTabManager = jest.fn(() => mockTabManager);
 const mockPersistentMultipleTabManager = jest.fn(() => ({ kind: 'multiple-tab' }));
 const mockPersistentLocalCache = jest.fn(() => mockLocalCache);
+const mockMemoryLocalCache = jest.fn(() => mockMemoryCache);
 
 jest.mock('firebase/app', () => ({
   initializeApp: mockInitializeApp,
@@ -20,8 +20,8 @@ jest.mock('firebase/app', () => ({
 jest.mock('firebase/firestore', () => ({
   initializeFirestore: mockInitializeFirestore,
   getFirestore: mockGetFirestore,
+  memoryLocalCache: mockMemoryLocalCache,
   persistentMultipleTabManager: mockPersistentMultipleTabManager,
-  persistentSingleTabManager: mockPersistentSingleTabManager,
   persistentLocalCache: mockPersistentLocalCache,
 }));
 
@@ -40,12 +40,10 @@ describe('Android Firestore runtime 계약', () => {
   it('[T-WEBVIEW-004][AND-012] 기본 realtime 전송을 유지하고 Android에만 single-tab persistent cache를 설정한다', async () => {
     await import('@/lib/firebase');
 
-    expect(mockPersistentSingleTabManager).toHaveBeenCalledWith(undefined);
-    expect(mockPersistentLocalCache).toHaveBeenCalledWith({
-      tabManager: mockTabManager,
-    });
+    expect(mockMemoryLocalCache).toHaveBeenCalledTimes(1);
+    expect(mockPersistentLocalCache).not.toHaveBeenCalled();
     expect(mockInitializeFirestore).toHaveBeenCalledWith(mockApp, {
-      localCache: mockLocalCache,
+      localCache: mockMemoryCache,
     });
     const settings = mockInitializeFirestore.mock.calls[0]?.[1];
     expect(settings).not.toHaveProperty('experimentalForceLongPolling');
@@ -61,7 +59,7 @@ describe('Android Firestore runtime 계약', () => {
     await import('@/lib/firebase');
 
     expect(mockPersistentMultipleTabManager).toHaveBeenCalledTimes(1);
-    expect(mockPersistentSingleTabManager).not.toHaveBeenCalled();
+    expect(mockMemoryLocalCache).not.toHaveBeenCalled();
     expect(mockPersistentLocalCache).toHaveBeenCalledWith({
       tabManager: multipleTabManager,
     });

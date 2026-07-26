@@ -162,7 +162,11 @@ function getPeriodRange(period: PeriodType, now = new Date()) {
 
 export default function AssetStatsPage() {
   const { themeConfig } = useTheme();
-  const { isSessionVerified, adminHouseholdView } = useHousehold();
+  const {
+    isSessionVerified,
+    adminHouseholdView,
+    remoteReadEpoch = 0,
+  } = useHousehold();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [allHistory, setAllHistory] = useState<AssetHistoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -183,7 +187,7 @@ export default function AssetStatsPage() {
       console.error('자산 통계의 자산 목록을 불러오지 못했습니다.', error);
       return undefined;
     }
-  }, [isSessionVerified]);
+  }, [isSessionVerified, remoteReadEpoch]);
 
   useEffect(() => {
     if (!isSessionVerified || adminHouseholdView !== null) return;
@@ -207,7 +211,7 @@ export default function AssetStatsPage() {
     };
 
     void fetchHistory();
-  }, [isSessionVerified]);
+  }, [isSessionVerified, remoteReadEpoch]);
 
   const activeAssets = useMemo(() => assets.filter((asset) => asset.isActive), [assets]);
   const visibleAssets = useMemo(

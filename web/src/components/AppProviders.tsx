@@ -16,32 +16,64 @@ import { onWebFirstLedgerPaint } from '@/platform/performance/webStartupPerforma
 import { preloadLedgerMutationRuntime } from '@/composition/ledgerMutationRuntimePreload';
 import { warmAssetNavigationIntent } from '@/composition/assetNavigationPrewarm';
 import { AppDialogProvider } from '@/contexts/AppDialogContext';
+import { REMOTE_SESSION_RECOVERY_REQUESTED_EVENT } from '@/platform/functions-api/firebaseCallableRecovery';
 
 function DeferredFirebaseSecurityInitialization() {
-  // App Check SDK는 첫 화면 렌더링과 경쟁하지 않도록 브라우저가 한가해진 뒤 준비합니다.
-  // 권한 검증은 Firebase Auth, App Check 강제 설정, Firestore rules가 계속 담당합니다.
+  // App Check SDK는 동적으로 불러 첫 화면 bundle에서는 분리하되 idle까지 미루지
+  // 않습니다. 첫 화면 직후 실행되는 보호 callable보다 먼저 초기화를 시작합니다.
   useEffect(() => {
     let cancelled = false;
-    let idleCallbackId: number | undefined;
-    const initialize = () => {
-      if (cancelled) return;
-      void import('@/platform/security/firebaseAppCheck')
-        .then(({ initializeFirebaseAppCheck }) => initializeFirebaseAppCheck())
-        .catch(() => {});
-    };
-    const delayId = window.setTimeout(() => {
-      if (typeof window.requestIdleCallback === 'function') {
-        idleCallbackId = window.requestIdleCallback(initialize, { timeout: 2_000 });
-      } else {
-        initialize();
-      }
-    }, 0);
+    void import('@/platform/security/firebaseAppCheck')
+      .then(({ initializeFirebaseAppCheck }) => {
+        if (!cancelled) initializeFirebaseAppCheck();
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
-      window.clearTimeout(delayId);
-      if (idleCallbackId !== undefined && typeof window.cancelIdleCallback === 'function') {
-        window.cancelIdleCallback(idleCallbackId);
-      }
+    };
+  }, []);
+  return null;
+}
+
+function WebRuntimeUpdateRecovery() {
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return undefined;
+    let reloading = false;
+    let lastCheckedAt = 0;
+    const reloadForNewController = () => {
+      if (reloading) return;
+      reloading = true;
+      window.location.reload();
+    };
+    const checkForUpdate = () => {
+      if (Date.now() - lastCheckedAt < 15 * 60 * 1_000) return;
+      lastCheckedAt = Date.now();
+      void navigator.serviceWorker
+        .getRegistration()
+        .then((registration) => registration?.update())
+        .catch(() => {});
+    };
+
+    navigator.serviceWorker.addEventListener(
+      'controllerchange',
+      reloadForNewController
+    );
+    window.addEventListener('focus', checkForUpdate);
+    window.addEventListener('pageshow', checkForUpdate);
+    window.addEventListener('household-account:android-resume', checkForUpdate);
+    checkForUpdate();
+
+    return () => {
+      navigator.serviceWorker.removeEventListener(
+        'controllerchange',
+        reloadForNewController
+      );
+      window.removeEventListener('focus', checkForUpdate);
+      window.removeEventListener('pageshow', checkForUpdate);
+      window.removeEventListener(
+        'household-account:android-resume',
+        checkForUpdate
+      );
     };
   }, []);
   return null;
@@ -50,9 +82,15 @@ function DeferredFirebaseSecurityInitialization() {
 const NATIVE_SESSION_REFRESH_KEY = 'household-account.native-session-refresh.v2';
 const NATIVE_SESSION_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1_000;
 const ANDROID_WEB_AUTH_REFRESH_INTERVAL_MS = 15 * 60 * 1_000;
+const ANDROID_NATIVE_RESUME_EVENT = 'household-account:android-resume';
 
 function AuthenticatedPlatformEffects() {
-  const { sessionState, isSessionVerified, adminHouseholdView } = useHousehold();
+  const {
+    sessionState,
+    isSessionVerified,
+    adminHouseholdView,
+    recoverRemoteSession,
+  } = useHousehold();
   const router = useRouter();
 
   useEffect(() => {
@@ -117,32 +155,26 @@ function AuthenticatedPlatformEffects() {
     let cancelled = false;
     let inFlight = false;
     let retryId: number | undefined;
+    let refreshIntervalId: number | undefined;
     let lastRefreshedAt = isSessionVerified ? Date.now() : 0;
 
-    const refreshAfterResume = () => {
+    const refreshAfterResume = (force = false) => {
       if (
         cancelled
         || inFlight
         || document.visibilityState !== 'visible'
-        || Date.now() - lastRefreshedAt < ANDROID_WEB_AUTH_REFRESH_INTERVAL_MS
+        || (
+          !force
+          && Date.now() - lastRefreshedAt < ANDROID_WEB_AUTH_REFRESH_INTERVAL_MS
+        )
       ) return;
       if (retryId !== undefined) {
         window.clearTimeout(retryId);
         retryId = undefined;
       }
       inFlight = true;
-      void import('@/lib/authService')
-        .then(async ({
-          getCurrentUser,
-          refreshAndroidWebAuth,
-          restoreAndroidHostAuth,
-        }) => {
-          const user = getCurrentUser();
-          if (user) {
-            await refreshAndroidWebAuth(user);
-          } else {
-            await restoreAndroidHostAuth();
-          }
+      void recoverRemoteSession()
+        .then(() => {
           lastRefreshedAt = Date.now();
         })
         .catch(() => {
@@ -156,13 +188,49 @@ function AuthenticatedPlatformEffects() {
         });
     };
 
-    document.addEventListener('visibilitychange', refreshAfterResume);
+    const handleResume = () => refreshAfterResume(!isSessionVerified);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') handleResume();
+    };
+    const handleRecoveryRequest = () => refreshAfterResume(true);
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleResume);
+    window.addEventListener('pageshow', handleResume);
+    window.addEventListener('online', handleResume);
+    window.addEventListener(ANDROID_NATIVE_RESUME_EVENT, handleResume);
+    window.addEventListener(
+      REMOTE_SESSION_RECOVERY_REQUESTED_EVENT,
+      handleRecoveryRequest
+    );
+    // WebView가 visibility/focus 이벤트를 누락해도 장시간 열린 세션은 유한 시간 안에
+    // token을 확인합니다. Firestore나 업무 데이터를 polling하는 작업은 아닙니다.
+    refreshIntervalId = window.setInterval(
+      handleResume,
+      ANDROID_WEB_AUTH_REFRESH_INTERVAL_MS
+    );
+    if (!isSessionVerified) queueMicrotask(() => refreshAfterResume(true));
+
     return () => {
       cancelled = true;
       if (retryId !== undefined) window.clearTimeout(retryId);
-      document.removeEventListener('visibilitychange', refreshAfterResume);
+      if (refreshIntervalId !== undefined) window.clearInterval(refreshIntervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleResume);
+      window.removeEventListener('pageshow', handleResume);
+      window.removeEventListener('online', handleResume);
+      window.removeEventListener(ANDROID_NATIVE_RESUME_EVENT, handleResume);
+      window.removeEventListener(
+        REMOTE_SESSION_RECOVERY_REQUESTED_EVENT,
+        handleRecoveryRequest
+      );
     };
-  }, [adminHouseholdView, isSessionVerified, sessionState]);
+  }, [
+    adminHouseholdView,
+    isSessionVerified,
+    recoverRemoteSession,
+    sessionState,
+  ]);
 
   useEffect(() => {
     if (sessionState !== 'ready' || adminHouseholdView !== null) return;
@@ -217,6 +285,7 @@ export default function AppProviders({ children }: { children: React.ReactNode }
     <AppDialogProvider>
       <HouseholdProvider>
         <DeferredFirebaseSecurityInitialization />
+        <WebRuntimeUpdateRecovery />
         <AuthenticatedPlatformEffects />
         <AdminHouseholdViewBanner />
         <HouseholdGuard>

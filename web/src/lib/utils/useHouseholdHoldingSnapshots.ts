@@ -42,7 +42,8 @@ function currentSnapshot(householdId: string): HouseholdHoldingSnapshot {
  */
 export function useHouseholdHoldingSnapshots(
   householdId: string | undefined,
-  enabled: boolean
+  enabled: boolean,
+  remoteReadEpoch = 0
 ): HouseholdHoldingSnapshots {
   const [snapshot, setSnapshot] = useState<HouseholdHoldingSnapshot>(() =>
     householdId ? currentSnapshot(householdId) : emptySnapshot('')
@@ -53,30 +54,45 @@ export function useHouseholdHoldingSnapshots(
 
     setSnapshot(currentSnapshot(householdId));
 
-    const unsubscribeStock = subscribeToHouseholdStockHoldings((stockHoldings) => {
-      const next = {
-        ...currentSnapshot(householdId),
-        stockHoldings,
+    let unsubscribeStock = () => {};
+    let unsubscribeCrypto = () => {};
+    try {
+      unsubscribeStock = subscribeToHouseholdStockHoldings((stockHoldings) => {
+        const next = {
+          ...currentSnapshot(householdId),
+          stockHoldings,
+          stockHoldingsReady: true,
+        };
+        snapshotsByHousehold.set(householdId, next);
+        setSnapshot(next);
+      });
+      unsubscribeCrypto = subscribeToHouseholdCryptoHoldings((cryptoHoldings) => {
+        const next = {
+          ...currentSnapshot(householdId),
+          cryptoHoldings,
+          cryptoHoldingsReady: true,
+        };
+        snapshotsByHousehold.set(householdId, next);
+        setSnapshot(next);
+      });
+    } catch {
+      // 인증 복구 epoch가 바뀌면 다시 구독합니다. 그때까지 모달이 영원히
+      // loading으로 남지 않도록 현재 cache를 읽기 완료 상태로 정착시킵니다.
+      const current = currentSnapshot(householdId);
+      const settled = {
+        ...current,
         stockHoldingsReady: true,
-      };
-      snapshotsByHousehold.set(householdId, next);
-      setSnapshot(next);
-    });
-    const unsubscribeCrypto = subscribeToHouseholdCryptoHoldings((cryptoHoldings) => {
-      const next = {
-        ...currentSnapshot(householdId),
-        cryptoHoldings,
         cryptoHoldingsReady: true,
       };
-      snapshotsByHousehold.set(householdId, next);
-      setSnapshot(next);
-    });
+      snapshotsByHousehold.set(householdId, settled);
+      setSnapshot(settled);
+    }
 
     return () => {
       unsubscribeStock();
       unsubscribeCrypto();
     };
-  }, [enabled, householdId]);
+  }, [enabled, householdId, remoteReadEpoch]);
 
   if (!householdId || snapshot.householdId !== householdId) {
     return emptySnapshot(householdId ?? '');
