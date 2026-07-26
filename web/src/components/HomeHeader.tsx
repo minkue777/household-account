@@ -1,11 +1,12 @@
 'use client';
 
+import { useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ChartPie, Search, Settings } from 'lucide-react';
 import { TransactionType } from '@/types/expense';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
-import { warmAssetNavigationIntent } from '@/composition/assetNavigationPrewarm';
 
 interface HomeHeaderProps {
   onSearchClick: () => void;
@@ -14,19 +15,26 @@ interface HomeHeaderProps {
 
 export default function HomeHeader({ onSearchClick, transactionType }: HomeHeaderProps) {
   const { themeConfig } = useTheme();
-  const { household, isSessionVerified } = useHousehold();
+  const { household } = useHousehold();
+  const router = useRouter();
+  const assetRoutePrefetchStarted = useRef(false);
   const isIncome = transactionType === 'income';
   const titleHref = isIncome ? '/' : '/income';
   const subtitle = isIncome ? '수입' : '지출';
   const handleAssetNavigationIntent = () => {
-    if (!isSessionVerified) return;
-    void warmAssetNavigationIntent().catch(() => {});
+    if (assetRoutePrefetchStarted.current) return;
+    assetRoutePrefetchStarted.current = true;
+    router.prefetch('/assets');
   };
 
   return (
     <header className="mb-6 flex items-center justify-between gap-4">
       <div className="flex min-w-0 items-center gap-3">
-        <Link href={titleHref} className="min-w-0 transition-opacity hover:opacity-80">
+        <Link
+          href={titleHref}
+          prefetch={false}
+          className="min-w-0 transition-opacity hover:opacity-80"
+        >
           <h1
             className="text-lg font-bold leading-tight md:text-2xl"
             style={{
@@ -44,6 +52,7 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
 
         <Link
           href="/assets"
+          prefetch={false}
           className="cursor-pointer transition-opacity hover:opacity-80"
           onPointerDown={handleAssetNavigationIntent}
           onFocus={handleAssetNavigationIntent}
@@ -68,6 +77,7 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
         </button>
         <Link
           href="/settings"
+          prefetch={false}
           className="rounded-xl border border-slate-200/70 bg-white/95 p-2 text-slate-600 shadow-sm transition-all hover:bg-white hover:shadow md:px-4 md:py-2"
         >
           <span className="flex items-center gap-2">
@@ -77,6 +87,7 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
         </Link>
         <Link
           href="/stats"
+          prefetch={false}
           className="rounded-xl border border-slate-200/70 bg-white/95 p-2 text-slate-600 shadow-sm transition-all hover:bg-white hover:shadow md:px-4 md:py-2"
         >
           <span className="flex items-center gap-2">

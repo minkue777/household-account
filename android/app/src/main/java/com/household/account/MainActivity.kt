@@ -23,6 +23,8 @@ import androidx.webkit.WebViewFeature
 import com.household.account.quickedit.QuickEditCoordinator
 import com.household.account.util.HouseholdPreferences
 import com.household.account.paymentcapture.AndroidCaptureDelivery
+import com.household.account.startup.FirstResumeRefreshGate
+import com.household.account.startup.OneShotExecutionGate
 import com.household.account.webhost.AndroidHostBridge
 import com.household.account.webhost.TrustedWebOrigin
 import kotlinx.coroutines.launch
@@ -32,6 +34,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var permissionLayout: LinearLayout
     private lateinit var hostBridge: AndroidHostBridge
+    private val resumeRefreshGate = FirstResumeRefreshGate()
+    private val webStartupGate = OneShotExecutionGate()
     private val pushPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
@@ -53,12 +57,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        checkPermissionAndShowContent()
-        if (::webView.isInitialized && webView.url != null) {
-            webView.evaluateJavascript(
-                "window.dispatchEvent(new Event('household-account:android-resume'))",
-                null
-            )
+        if (resumeRefreshGate.shouldRefreshContent()) {
+            checkPermissionAndShowContent()
+            if (::webView.isInitialized && webView.url != null) {
+                webView.evaluateJavascript(
+                    "window.dispatchEvent(new Event('household-account:android-resume'))",
+                    null
+                )
+            }
         }
         lifecycleScope.launch {
             QuickEditCoordinator.resumePending(applicationContext)
@@ -173,6 +179,8 @@ class MainActivity : AppCompatActivity() {
     private fun showWebView() {
         permissionLayout.visibility = View.GONE
         webView.visibility = View.VISIBLE
+
+        if (!webStartupGate.tryEnter()) return
 
         if (webView.url == null) {
             // WebView Firebase Auth가 남아 있으면 그 세션을 즉시 재사용합니다.

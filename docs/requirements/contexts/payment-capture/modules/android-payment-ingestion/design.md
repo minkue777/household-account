@@ -414,6 +414,8 @@ contracts/fixtures/payment-notifications/                    # 비식별 golden 
 
 Android `NotificationListenerService`와 WorkManager는 얇은 Adapter입니다. Functions HTTP/callable handler는 schema·transport 변환만 하고 업무 계산은 Intake Application에 두며 `public.ts`만 외부 import를 허용합니다.
 
+Android 프로세스 시작 Adapter는 Firebase 기본 Provider가 수행한 초기화를 반복하지 않습니다. FID delivery gate, 암호화 캡처 큐 확인, Quick Edit pending·command outbox 복구는 IO scope에서 수행하고 첫 WebView 표시와 직렬화하지 않습니다. `onCreate` 직후 첫 `onResume`은 같은 권한·WebView 초기화를 반복하지 않으며, WebView load와 캡처 재시도 예약은 Activity instance당 한 번만 수행합니다. 이는 Intake·FIFO·72시간 내구성 계약을 바꾸지 않고 실행 스레드와 시작 순서만 조정합니다.
+
 ## 11. 테스트 설계
 
 parser golden fixture에는 정상 승인, 지원 취소, 빈 필드, 0원·음수, 연말·연초, 마스킹 변형을 포함합니다. Functions parser conformance suite가 fixture를 직접 읽어 parser 선택, 승인·취소, 금액, 가맹점, 카드 라벨·토큰, 발생 일시, 지역화폐 잔액을 검증합니다. 별도 raw submission 계약은 client source/parser 주입 거부, 등록 package의 서버 parser 선택, parser 무결과 terminal, 원문 비영속, 지역화폐 독립 branch와 도시가스를 검증합니다. Android 테스트는 raw DTO, package/admission, Queue 72시간·세션·레거시 계약 라우팅과 QuickEdit 단일 후속 효과만 검증합니다.

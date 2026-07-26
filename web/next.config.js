@@ -1,8 +1,14 @@
 const withPWA = require('next-pwa')({
   dest: 'public',
-  register: true,
+  // AppProviders registers this worker after the first useful ledger paint.
+  // Android WebView must not install the web worker or start its precache.
+  register: false,
   skipWaiting: true,
   disable: process.env.NODE_ENV === 'development',
+  // Keep install/update lightweight. Immutable Next assets are populated only
+  // when actually requested through the CacheFirst runtime rule below.
+  additionalManifestEntries: [],
+  buildExcludes: [/.*/],
   // The app is online-first. Caching a rendered page here can combine an old
   // client bundle with newly deployed Functions/Firestore contracts.
   cacheStartUrl: false,

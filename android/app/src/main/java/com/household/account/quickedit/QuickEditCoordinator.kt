@@ -86,7 +86,7 @@ object QuickEditCoordinator {
         }
     }
 
-    suspend fun resumePending(context: Context) {
+    suspend fun resumePending(context: Context) = withContext(Dispatchers.IO) {
         ensureProcessRecovered(context)
         presentNext(context)
     }

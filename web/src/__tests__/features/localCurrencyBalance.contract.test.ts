@@ -107,14 +107,16 @@ describe('지역화폐 잔액 읽기 계약', () => {
       currencyType: 'gyeonggi',
       updatedAt: new Date('2026-07-23T08:02:15.234Z'),
     });
+    expect(docMock).not.toHaveBeenCalled();
     unsubscribe();
     expect(unsubscribeBalances).toHaveBeenCalledTimes(1);
-    expect(unsubscribePreference).toHaveBeenCalledTimes(1);
+    expect(unsubscribePreference).not.toHaveBeenCalled();
   });
 
   it('[T-BAL-006][BAL-004] 일시적인 구독 오류가 이미 표시한 DB 값을 지우지 않는다', () => {
     const callback = jest.fn();
-    subscribeToLocalCurrencyBalance(callback);
+    const onError = jest.fn();
+    subscribeToLocalCurrencyBalance(callback, { onError });
     listeners.get('balances')?.next({
       metadata: { fromCache: false },
       docs: [balanceDocument('gyeonggi', 1_153_429)],
@@ -127,8 +129,9 @@ describe('지역화폐 잔액 읽기 계약', () => {
     }));
 
     listeners.get('balances')?.error(new Error('temporarily unavailable'));
-    listeners.get('preference')?.error(new Error('temporarily unavailable'));
+    expect(listeners.has('preference')).toBe(false);
     expect(callback).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledTimes(1);
   });
 
   it('[T-BAL-004][BAL-004] 여러 지역화폐가 있으면 Home Preferences가 선택한 유형만 표시한다', () => {
@@ -143,6 +146,13 @@ describe('지역화폐 잔액 읽기 계약', () => {
       ],
     });
     expect(callback).not.toHaveBeenCalled();
+    expect(docMock).toHaveBeenCalledWith(
+      { kind: 'db' },
+      'households',
+      'household-1',
+      'homePreferences',
+      'home'
+    );
 
     listeners.get('preference')?.next({
       metadata: { fromCache: false },

@@ -13,33 +13,71 @@ export interface LocalCurrencyBalance {
   updatedAt: Date | null;
 }
 
+interface LocalCurrencyBalanceSubscriptionOptions {
+  onError?: (error: unknown) => void;
+}
+
 /**
  * 선택된 지역화폐의 최신 잔액을 구독합니다.
  */
 export function subscribeToLocalCurrencyBalance(
-  callback: (balance: LocalCurrencyBalance | null) => void
+  callback: (balance: LocalCurrencyBalance | null) => void,
+  options: LocalCurrencyBalanceSubscriptionOptions = {}
 ): () => void {
   const scope = requireClientSessionScope();
   let balances = new Map<string, LocalCurrencyBalance>();
   let balancesLoaded = false;
   let preferenceLoaded = false;
   let selectedType: string | undefined;
+  let unsubscribePreference: (() => void) | undefined;
+
+  const ensurePreferenceSubscription = () => {
+    if (unsubscribePreference !== undefined) return;
+    const preferenceReference = doc(
+      db,
+      'households',
+      scope.householdId,
+      'homePreferences',
+      'home'
+    );
+    unsubscribePreference = onSnapshot(
+      preferenceReference,
+      { includeMetadataChanges: true },
+      (snapshot) => {
+        if (!preferenceLoaded && snapshot.metadata.fromCache) return;
+        const data = snapshot.exists() ? snapshot.data() : undefined;
+        selectedType =
+          typeof data?.selectedLocalCurrencyType === 'string'
+          && data.selectedLocalCurrencyType.trim() !== ''
+            ? data.selectedLocalCurrencyType.trim()
+            : undefined;
+        preferenceLoaded = true;
+        emitCanonicalSelection();
+      },
+      (error) => {
+        console.error('지역화폐 선택 설정 구독 오류:', error);
+        options.onError?.(error);
+      }
+    );
+  };
 
   const emitCanonicalSelection = () => {
     if (!balancesLoaded) return;
+
+    if (balances.size <= 1) {
+      callback(balances.values().next().value ?? null);
+      return;
+    }
+
+    ensurePreferenceSubscription();
+    if (!preferenceLoaded) return;
 
     if (selectedType !== undefined) {
       callback(balances.get(selectedType) ?? null);
       return;
     }
 
-    if (balances.size === 1) {
-      callback(balances.values().next().value ?? null);
-      return;
-    }
-
-    // 여러 유형이 있으면 Home Preferences의 명시적 선택을 기다립니다.
-    if (preferenceLoaded) callback(null);
+    callback(null);
   };
 
   const balancesReference = collection(
@@ -48,14 +86,6 @@ export function subscribeToLocalCurrencyBalance(
     scope.householdId,
     'localCurrencyBalances'
   );
-  const preferenceReference = doc(
-    db,
-    'households',
-    scope.householdId,
-    'homePreferences',
-    'home'
-  );
-
   const unsubscribeBalances = onSnapshot(
     balancesReference,
     { includeMetadataChanges: true },
@@ -95,30 +125,12 @@ export function subscribeToLocalCurrencyBalance(
     },
     (error) => {
       console.error('지역화폐 잔액 구독 오류:', error);
-    }
-  );
-
-  const unsubscribePreference = onSnapshot(
-    preferenceReference,
-    { includeMetadataChanges: true },
-    (snapshot) => {
-      if (!preferenceLoaded && snapshot.metadata.fromCache) return;
-      const data = snapshot.exists() ? snapshot.data() : undefined;
-      selectedType =
-        typeof data?.selectedLocalCurrencyType === 'string'
-        && data.selectedLocalCurrencyType.trim() !== ''
-          ? data.selectedLocalCurrencyType.trim()
-          : undefined;
-      preferenceLoaded = true;
-      emitCanonicalSelection();
-    },
-    (error) => {
-      console.error('지역화폐 선택 설정 구독 오류:', error);
+      options.onError?.(error);
     }
   );
 
   return () => {
     unsubscribeBalances();
-    unsubscribePreference();
+    unsubscribePreference?.();
   };
 }

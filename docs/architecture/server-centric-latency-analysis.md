@@ -1,6 +1,6 @@
 # 서버 중심 리팩토링 전후 지연 분석
 
-- 분석일: 2026-07-23
+- 분석일: 2026-07-26
 - 상태: 최신 성능 최적화가 반영된 **로컬 작업 트리 기준**이며, 배포 후 실단말 수치는 아직 측정 전이다.
 - 비교 기준
   - 리팩토링 전: `1ffdc70800d5d6b6fa7071b2e8bfda0b43a25692`
@@ -56,7 +56,7 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 | 리팩토링 전 기준 커밋 | 약 230kB | 약 305kB | 기능이 적고 직접 연결이 많았던 기준 |
 | 서버 권위형 구조의 회귀 정점 | 약 315kB | 약 393kB | 인증·공통 barrel·기능 projection이 root까지 유입 |
 | 이번 전체 상호작용 최적화 직전 | 약 292kB | 약 368kB | 1차 route 분리 후에도 root 결합이 큼 |
-| 2026-07-24 즉시 모달 작업 트리 | 약 129kB | 약 316kB | 완성 모달을 route에 포함해 첫 클릭 chunk 대기를 제거하되 회귀 정점보다 작게 유지 |
+| 2026-07-26 첫 실행 경로 정리 작업 트리 | 약 130kB | 약 318kB | 완성 모달을 유지하면서 초기 인증·읽기 경합과 중복 홈 렌더를 제거 |
 
 `/`가 크게 줄어든 직접 원인은 다음과 같습니다.
 
@@ -67,7 +67,7 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 
 `/assets`는 요약 도넛 하나 때문에 초기 경로에 포함되던 Chart.js를 브라우저 기본 원형 그라데이션으로 교체했습니다. 여러 점선 SVG 원을 겹치던 방식은 12시 경계에서 화살표 모양의 렌더링 결함을 만들 수 있어 사용하지 않습니다. 자산 추가·수정·계좌 내역 모달을 route에 정적으로 포함한 뒤에도 약 316kB이며, 사용 경로가 없던 별도 `AssetBalanceChart`는 제거했습니다. 이와 함께 다음 방식으로 계좌 클릭 비용도 줄였습니다.
 
-- 홈 첫 paint 직후 `/assets` route를 prefetch
+- 사용자가 자산 링크를 누르거나 focus한 시점에만 `/assets` route code 준비를 시작하고 원격 read는 실제 화면이 소유
 - 자산 추가·수정·계좌 내역 모달을 route 번들에 정적으로 포함
 - 계좌 클릭 순간 listener·배당 N건·시세 전체 갱신을 시작하지 않음
 
@@ -91,20 +91,18 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 
 ### 5.1 첫 화면
 
-1. Signed-in Membership 해석 결과에 가구 이름, 생성일, 가구원, 홈 요약 설정을 포함한 최소 Household read model을 함께 반환합니다.
-2. Web은 해당 응답이 유효하면 별도 Household Firestore read를 생략합니다.
-3. 마지막 검증 Membership 연결 정보는 인증 왕복 단축에만 사용하고, Household·월 원장·카테고리·지역화폐의 로컬 표시 snapshot은 제거했습니다.
-4. signed-out 로그인 UI와 실제 사용 기능의 projection을 root bundle에서 분리했습니다.
-5. 원장·자산 route의 클릭 UI는 각 route 번들에 포함하고, 첫 원장 paint가 완료된 뒤에는 다음 route와 저장 명령 runtime을 준비합니다.
-   - `/income`
-   - `/assets`
-   - `/settings`
-   - `/stats`
-   - 원장 저장·삭제·가맹점 규칙 등 mutation runtime
-6. Pretendard는 외부 CDN을 기다리지 않는 자체 호스팅 dynamic subset으로 제공합니다. 시스템 글꼴로 바꿔 시각을 달라지게 하지는 않습니다.
-7. 지역화폐는 가구 하위 Canonical balance를 직접 구독하고 최초 Firestore cache 결과를 건너뛴 뒤 서버 잔액부터 표시합니다. 별도 localStorage snapshot·스케줄·background projection은 없습니다.
+1. Membership cache miss에서는 Signed-in Membership 해석 결과에 가구 이름, 생성일, 가구원, 홈 요약 설정을 포함한 최소 Household read model을 함께 반환합니다.
+2. 마지막 검증 Membership cache가 있으면 이를 화면 데이터로 쓰지 않고, 가구 서버 read를 시작하는 연결 정보로만 사용합니다.
+3. Membership이 확정되는 즉시 SessionScope·householdId·본인 member를 먼저 적용합니다. Household read가 끝날 때까지 기다리지 않고 월 원장·카테고리·지역화폐 서버 구독을 병렬로 시작합니다.
+4. Household·월 원장·카테고리·지역화폐의 로컬 표시 snapshot은 제거했습니다.
+5. signed-out 로그인 UI와 실제 사용 기능의 projection을 root bundle에서 분리했습니다.
+6. 원장·자산 route의 클릭 UI는 각 route 번들에 포함합니다. 자동 route prefetch와 자산·종목 catalog 자동 warm은 제거하고, 첫 원장 paint 뒤 원장 mutation runtime만 idle에 준비합니다.
+7. 모바일·데스크톱 홈을 동시에 mount하던 두 벌의 UI를 반응형 한 벌로 합쳤습니다. 월 원장과 지역화폐 listener도 화면 크기와 무관하게 각각 하나만 엽니다.
+8. Pretendard는 외부 CDN을 기다리지 않는 자체 호스팅 dynamic subset으로 제공합니다. 시스템 글꼴로 바꿔 시각을 달라지게 하지는 않습니다.
+9. 지역화폐는 가구 하위 Canonical balance를 직접 구독하고 최초 Firestore cache 결과를 건너뛴 뒤 서버 잔액부터 표시합니다. 지역화폐가 하나뿐이면 별도 Home Preferences listener도 열지 않습니다.
+10. root service worker는 첫 원장 서버 paint 뒤에만 등록·갱신하고 install precache는 0건으로 줄였습니다. 필요한 build hash 정적 파일만 실제 요청 시 runtime cache하며 Android WebView는 worker를 등록하지 않습니다.
 
-첫 가계부 화면은 최신성 혼동을 피하기 위해 서버 원장 준비 전 과거 화면을 그리지 않습니다. 첫 화면 이후의 모달·route는 미리 준비해 클릭 지연을 줄입니다.
+첫 가계부 화면은 최신성 혼동을 피하기 위해 서버 원장 준비 전 과거 화면을 그리지 않습니다. 첫 화면 이후에는 원장 mutation runtime만 idle에 준비하고, 다른 route의 원격 준비는 실제 navigation intent가 있을 때 시작합니다.
 
 ### 5.2 모든 클릭·모달·검색
 
@@ -121,9 +119,10 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 ### 5.3 자산과 주식계좌
 
 - 주식·가상자산 보유내역은 자산별 모달이 각각 구독하지 않고, 자산 페이지가 가구 단위 listener 하나씩을 유지합니다.
-- Android WebView는 같은 UID의 영속 Web Auth와 Membership 연결 정보를 복원한 뒤 서버 우선 가구 read와 원격 구독을 시작합니다. Web Auth 강제 갱신이 실패하거나 5초 동안 끝나지 않으면 Native 로그인 세션으로 자동 교환합니다. `onIdTokenChanged`, Activity resume, Web focus·online, 15분 안전 확인, callable/listener 인증 오류를 같은 복구 경로로 처리합니다. 성공할 때마다 원격 read epoch를 전진시켜 이미 종료된 원장·카테고리·지역화폐·자산·명의자·보유 종목 listener를 다시 생성합니다. Android Firestore는 IndexedDB 영속 cache를 사용하지 않고 첫 원장·카테고리·지역화폐 cache snapshot도 표시하지 않습니다.
+- Android WebView는 Auth observer의 첫 결과를 먼저 기다립니다. 영속 Web Auth 사용자가 있으면 강제 token refresh나 Native custom-token 교환을 첫 화면의 선행 조건으로 두지 않고 Membership 복원을 한 번만 시작합니다. 사용자가 없을 때만 Native 로그인으로 fallback하며, custom-token 교환 중 observer가 먼저 깨어도 같은 Membership을 중복 조회하지 않습니다. 이후 `onIdTokenChanged`, Activity resume, Web focus·online, 15분 안전 확인, callable/listener 인증 오류를 같은 복구 경로로 처리합니다. 성공할 때마다 원격 read epoch를 전진시켜 이미 종료된 원장·카테고리·지역화폐·자산·명의자·보유 종목 listener를 다시 생성합니다. Android Firestore는 IndexedDB 영속 cache를 사용하지 않고 첫 원장·카테고리·지역화폐 cache snapshot도 표시하지 않습니다.
+- Android Native 세션 mirror·FID 재등록·결제 재전송 예약을 위한 일일 동기화는 첫 원장 paint 뒤 30초와 idle 조건을 모두 지난 후 실행합니다. 이는 화면 권한 확인이 아니라 Native 수집 경로의 보조 복구이므로 첫 화면 read와 경쟁시키지 않습니다.
 - navigation HTML을 `StaleWhileRevalidate`로 장기 보존하면 낮의 Web 배포 뒤 이전 client와 새 서버 계약이 섞일 수 있으므로 network-only로 고정합니다. build hash가 붙은 JS·CSS 등 정적 asset만 캐시합니다.
-- 같은 브라우저 세션에서 마지막 household snapshot을 즉시 재사용합니다.
+- 자산 화면 내부에서는 같은 브라우저 세션의 마지막 자산·보유 read model을 재사용하되, 첫 가계부 화면의 Household·원장 데이터를 로컬 화면 snapshot으로 대체하지 않습니다.
 - 계좌 모달은 이미 받은 보유 snapshot을 asset ID로 필터링할 뿐, 열릴 때 새 listener를 만들지 않습니다.
 - 계좌를 열 때 모든 보유 종목의 배당 API를 호출하지 않습니다. 사용자가 실제로 선택한 종목만 조회합니다.
 - 계좌를 열 때 전체 주식·가상자산 시세를 자동 갱신하지 않습니다. 사용자가 요청한 수동 갱신과 별도 background 갱신 경로를 사용합니다.
@@ -163,6 +162,10 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 8. payment-capture codebase는 실제 `FUNCTION_TARGET`에 해당하는 bootstrap만 로드해 Android 수집이 Shortcut 초기화 graph를 함께 평가하지 않게 했습니다.
 9. Android Quick Edit FIFO는 enqueue와 idle head lease를 한 번의 암호화 저장으로 합칩니다.
 10. 서버 응답에 포함된 snapshot을 queue에서 다시 읽지 않고 즉시 Activity에 전달합니다.
+11. Android의 Firebase 기본 Provider가 이미 수행하는 초기화를 Application에서 반복하지 않습니다.
+12. Application 시작 시 FID delivery gate와 Quick Edit command outbox 복구를 IO scope로 옮기고, 화면 표시와 경합하지 않도록 outbox 복구를 지연합니다.
+13. 첫 `onResume`에서 `onCreate`와 같은 권한·WebView 표시를 반복하지 않으며 WebView 최초 load와 캡처 재시도 예약은 Activity당 한 번만 수행합니다.
+14. 암호화 캡처 큐 확인과 Quick Edit pending 복구는 메인 스레드 밖에서 실행합니다.
 
 서버 parser는 그대로 유일한 권위입니다. 빠르게 보이기 위해 Kotlin parser를 다시 권위 경로에 넣거나, 서버가 거부할 수 있는 임시 지출을 먼저 확정 표시하지는 않았습니다.
 
@@ -172,7 +175,7 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 
 | 경로 | 최적화 전 | 최신 작업 트리 |
 |---|---|---|
-| 로그인 직후 Household | Membership Function 응답 뒤 Web이 Household를 다시 read | Function이 이미 확인한 Household 최소 read model을 반환, Web의 중복 read 없음 |
+| 로그인 직후 Household | Membership Function 응답 뒤 Web이 Household를 다시 read | cache miss는 Function의 Household read model을 재사용하고, cache hit는 서버 Household read와 화면 구독을 병렬 시작 |
 | 일반 Command actor | Membership + Household 확인 | `principalMembershipClaims` 1문서 |
 | 단순 Ledger·Portfolio | Router receipt claim → Domain transaction → Router receipt complete | Domain transaction의 receipt만 사용 |
 | Android capture actor | capture마다 claim/Household 또는 canonical membership 확인 | 최신 Native claim 정상 경로는 Firestore 0회 |
@@ -214,7 +217,7 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 
 ### 8.2 `/assets` 직접 진입
 
-자산 route의 First Load JS는 완성 모달을 포함해 약 316kB입니다. 리팩토링 전 기준 약 305kB보다 11kB 크지만 첫 클릭 chunk 대기를 없애기 위한 의도적 교환이며, 회귀 정점 약 393kB보다는 작습니다. 홈을 먼저 거치면 route prefetch 효과를 받지만 새 브라우저에서 `/assets`로 직접 진입하면 이 다운로드·parse 비용은 남습니다.
+자산 route의 First Load JS는 완성 모달을 포함해 약 318kB입니다. 리팩토링 전 기준 약 305kB보다 크지만 첫 클릭 chunk 대기를 없애기 위한 의도적 교환이며, 회귀 정점 약 393kB보다는 작습니다. 초기 홈과 네트워크를 경합시키는 자동 route prefetch는 제거했으므로 `/assets`에 처음 진입할 때 route 다운로드·parse 비용은 남습니다. 실제 pointer/focus 의도가 발생하면 route code만 준비하고, 빈 callback의 임시 Firestore listener나 종목 catalog 다운로드는 시작하지 않습니다.
 
 ### 8.3 Android 첫 결제의 Function cold start
 
@@ -222,7 +225,7 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 
 ### 8.4 선로딩의 비용
 
-자주 쓰는 모달을 route에 포함하므로 `/`는 약 12kB, `/assets`는 약 16kB 증가했습니다. 현재 가구 수와 “첫 클릭에 준비 화면을 보이지 않는다”는 요구를 반영한 의도적 선택이며, route prefetch는 유지하지만 별도 모달 preload 네트워크 경쟁은 제거했습니다.
+자주 쓰는 모달을 route에 포함하므로 route 자체 크기는 늘었습니다. 현재 가구 수와 “첫 클릭에 준비 화면을 보이지 않는다”는 요구를 반영한 의도적 선택입니다. 자동 route·자산·종목 preload는 제거하고, 첫 paint 뒤 idle 원장 mutation runtime과 사용자의 명시적 navigation intent만 준비 신호로 사용합니다.
 
 ### 8.5 서버 확정시간과 표시시간
 
@@ -372,6 +375,8 @@ Native Membership claim은 Functions와 APK가 함께 바뀌므로 다음 순서
 ## 13. 주요 코드 근거
 
 - 첫 화면과 route·명령 runtime preload: [`AppProviders.tsx`](../../web/src/components/AppProviders.tsx)
+- 가구 확인과 병렬로 시작하는 홈 read model: [`LedgerReadModelContext.tsx`](../../web/src/contexts/LedgerReadModelContext.tsx)
+- 단일 지역화폐의 불필요한 preference read 제거: [`balanceService.ts`](../../web/src/lib/balanceService.ts)
 - 원장 mutation runtime preload: [`ledgerMutationRuntimePreload.ts`](../../web/src/composition/ledgerMutationRuntimePreload.ts)
 - 첫 화면 Session·Household 적용: [`HouseholdContext.tsx`](../../web/src/contexts/HouseholdContext.tsx)
 - Signed-in Household read model: [`firebaseSignedInUserResolver.ts`](../../functions/src/adapters/firebase/access/firebaseSignedInUserResolver.ts)
@@ -391,3 +396,5 @@ Native Membership claim은 Functions와 APK가 함께 바뀌므로 다음 순서
 - capture target별 bootstrap: [`functions-payment-capture/index.js`](../../functions-payment-capture/index.js)
 - Quick Edit enqueue·lease: [`QuickEditPendingQueue.kt`](../../android/app/src/main/java/com/household/account/quickedit/QuickEditPendingQueue.kt)
 - Quick Edit 즉시 표시: [`QuickEditCoordinator.kt`](../../android/app/src/main/java/com/household/account/quickedit/QuickEditCoordinator.kt)
+- Android 시작 후 지연 복구: [`ApplicationStartupTasks.kt`](../../android/app/src/main/java/com/household/account/startup/ApplicationStartupTasks.kt)
+- 캡처 재시도 비동기 예약: [`CaptureRetryWorkScheduler.kt`](../../android/app/src/main/java/com/household/account/paymentcapture/CaptureRetryWorkScheduler.kt)

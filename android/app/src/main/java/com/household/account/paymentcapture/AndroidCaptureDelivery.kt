@@ -13,10 +13,16 @@ import com.household.account.session.NativeMembershipResolution
 import com.household.account.session.NativeMembershipResolver
 import com.household.account.util.HouseholdPreferences
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 object AndroidCaptureDelivery {
     @Volatile
     private var queueInstance: CaptureDeliveryQueue? = null
+    private val retryWorkScheduler = CaptureRetryWorkScheduler(
+        CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    )
 
     private fun queue(context: Context): CaptureDeliveryQueue =
         queueInstance ?: synchronized(this) {
@@ -91,7 +97,16 @@ object AndroidCaptureDelivery {
     }
 
     fun scheduleRetry(context: Context) {
-        if (queue(context).snapshot().isEmpty()) return
+        val applicationContext = context.applicationContext
+        retryWorkScheduler.schedule(
+            hasPendingCaptures = {
+                queue(applicationContext).snapshot().isNotEmpty()
+            },
+            enqueueRetryWork = { enqueueRetryWork(applicationContext) }
+        )
+    }
+
+    private fun enqueueRetryWork(context: Context) {
         val request = OneTimeWorkRequestBuilder<CaptureDeliveryWorker>()
             .setConstraints(
                 Constraints.Builder()

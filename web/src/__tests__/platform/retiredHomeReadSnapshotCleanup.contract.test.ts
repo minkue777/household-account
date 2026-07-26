@@ -40,4 +40,35 @@ describe('폐기된 가계부 첫 화면 캐시 정리 계약', () => {
     )).toBe('membership');
     expect(window.localStorage.getItem('theme')).toBe('dark');
   });
+
+  it('마이그레이션을 한 번 완료한 뒤에는 localStorage 전체를 다시 순회하지 않는다', () => {
+    const firstRetiredKey =
+      'household-account.monthly-ledger.v1:household-1:2026-07:expense';
+    const laterRetiredKey =
+      'household-account.categories.v1:household-1';
+    window.localStorage.setItem(firstRetiredKey, 'ledger');
+
+    clearRetiredHomeReadSnapshots();
+    window.localStorage.setItem(laterRetiredKey, 'categories');
+    clearRetiredHomeReadSnapshots();
+
+    expect(window.localStorage.getItem(firstRetiredKey)).toBeNull();
+    expect(window.localStorage.getItem(laterRetiredKey)).toBe('categories');
+  });
+
+  it('브라우저가 저장소 접근을 거부해도 첫 화면 초기화를 중단하지 않는다', () => {
+    const deniedStorage = {
+      get length() {
+        throw new Error('storage denied');
+      },
+      getItem: () => {
+        throw new Error('storage denied');
+      },
+      key: () => null,
+      removeItem: () => undefined,
+      setItem: () => undefined,
+    };
+
+    expect(() => clearRetiredHomeReadSnapshots(deniedStorage)).not.toThrow();
+  });
 });

@@ -1,9 +1,8 @@
 'use client';
 
-import { ComponentType, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { ComponentType, useMemo } from 'react';
 import { Calendar, CalendarDays, CircleDollarSign, CreditCard, Wallet } from 'lucide-react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
-import { useHousehold } from '@/contexts/HouseholdContext';
 import type { LocalCurrencyBalance } from '@/lib/balanceService';
 import { Expense, TransactionType } from '@/types/expense';
 import { HomeSummaryCardKey, HomeSummaryConfig } from '@/types/household';
@@ -15,6 +14,7 @@ interface BalanceCardsProps {
   yearlySpent: number | null;
   summaryConfig: HomeSummaryConfig;
   transactionType: TransactionType;
+  localCurrencyBalance: LocalCurrencyBalance | null;
   className?: string;
   onLocalCurrencyClick?: (expenses: Expense[]) => void;
   onMonthlyIncomeClick?: (expenses: Expense[]) => void;
@@ -38,6 +38,7 @@ export default function BalanceCards({
   yearlySpent,
   summaryConfig,
   transactionType,
+  localCurrencyBalance,
   className = '',
   onLocalCurrencyClick,
   onMonthlyIncomeClick,
@@ -45,45 +46,6 @@ export default function BalanceCards({
 }: BalanceCardsProps) {
   const isIncome = transactionType === 'income';
   const { activeCategories } = useCategoryContext();
-  const { householdKey, remoteReadEpoch = 0 } = useHousehold();
-  const [localCurrencyBalance, setLocalCurrencyBalance] =
-    useState<LocalCurrencyBalance | null>(null);
-
-  const needsLocalCurrencyBalance = useMemo(() => {
-    if (isIncome) {
-      return false;
-    }
-
-    return (
-      summaryConfig.leftCard === 'localCurrencyBalance' ||
-      summaryConfig.rightCard === 'localCurrencyBalance'
-    );
-  }, [isIncome, summaryConfig.leftCard, summaryConfig.rightCard]);
-
-  useLayoutEffect(() => {
-    setLocalCurrencyBalance(null);
-  }, [householdKey]);
-
-  useEffect(() => {
-    if (!needsLocalCurrencyBalance || !householdKey) {
-      setLocalCurrencyBalance(null);
-      return undefined;
-    }
-
-    let cancelled = false;
-    let unsubscribe: (() => void) | undefined;
-    void import('@/lib/balanceService').then(({ subscribeToLocalCurrencyBalance }) => {
-      if (cancelled) return;
-      unsubscribe = subscribeToLocalCurrencyBalance(setLocalCurrencyBalance);
-    }).catch((error) => {
-      console.error('지역화폐 잔액 모듈 로드 오류:', error);
-    });
-
-    return () => {
-      cancelled = true;
-      unsubscribe?.();
-    };
-  }, [householdKey, needsLocalCurrencyBalance, remoteReadEpoch]);
 
   const { remaining, isOverBudget, monthlySpent } = useMemo(() => {
     const budgetedCategoryKeys = new Set<string>();

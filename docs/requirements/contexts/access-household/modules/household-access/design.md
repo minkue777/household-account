@@ -194,6 +194,15 @@ Value Object는 `HouseholdName`, `MemberDisplayName`, `AssetOwnerProfileName`, `
 5. 같은 UID·Member 조합은 멱등 성공하고 다른 UID 또는 다른 Member가 이미 점유했으면 변경 없이 충돌로 종료합니다.
 6. 거래·자산·카드·배당·알림 이력은 수정하거나 복사하지 않습니다. 수동 DB 편집이 필요하더라도 이 작업 단위를 빠뜨린 부분 갱신은 금지합니다.
 
+#### 5.2.2 반복 실행의 Session 복원 순서
+
+1. Android WebView도 Firebase Auth observer의 첫 결과를 먼저 기다립니다. 영속 Web Auth 사용자가 있으면 해당 사용자를 사용하고, 첫 화면 선행 단계에서 강제 token refresh나 Native custom-token 교환을 반복하지 않습니다.
+2. observer가 사용자를 반환하지 않은 Android WebView만 Native 로그인 세션으로 fallback합니다. custom-token 교환 중 observer가 먼저 같은 사용자를 반환해도 Native 응답의 Membership 해석이 끝날 때까지 별도 `ResolveSignedInUser`를 시작하지 않습니다.
+3. Membership이 확정되면 `SessionScope`, householdId와 자기 member를 먼저 원자 적용합니다. Household 화면 read와 월 원장·카테고리·지역화폐 read model은 서로 기다리지 않고 같은 검증 generation에서 병렬로 시작합니다.
+4. Membership cache는 householdId·memberId 연결 힌트일 뿐 Household·원장 화면 snapshot이 아닙니다. 화면 데이터는 서버 read 또는 서버 snapshot으로만 확정하고 이전 generation callback은 무시합니다.
+5. Android가 아닌 iPhone standalone PWA만 첫 원장 서버 paint 뒤 idle 시점에 Notifications endpoint 등록 모듈을 불러옵니다. endpoint 실패는 Access Session 복원을 취소하지 않으며 설정 화면의 재연결 경로로 분리합니다.
+6. Android Native 세션 mirror의 일일 재검증은 첫 원장 paint를 막지 않습니다. 첫 paint 뒤 30초와 idle 조건을 지난 후 수행하며 성공 시 FID endpoint 등록과 결제 재전송 예약을 보조적으로 갱신합니다.
+
 ### 5.3 초대 코드 생성·JoinHouseholdAsSelf
 
 1. 설정 Presentation Adapter는 `테마` 카드 바로 다음에 `가구원 초대` 카드를 배치하고 `5분간 유효한 초대 코드`라는 보조 문구와 생성 동작을 제공합니다. 이 문구는 표시를 간결하게 한 것이며 서버의 일회용 정책은 유지합니다.

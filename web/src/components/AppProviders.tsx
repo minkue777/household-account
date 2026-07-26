@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { CategoryProvider } from '@/contexts/CategoryContext';
 import { HouseholdProvider } from '@/contexts/HouseholdContext';
+import { LedgerReadModelProvider } from '@/contexts/LedgerReadModelContext';
 import HouseholdGuard from './HouseholdGuard';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { getClientSessionScope } from '@/composition/clientSessionScope';
@@ -12,12 +12,23 @@ import {
   isAndroidHostAvailable,
   refreshAndroidHostSession,
 } from '@/platform/android-host/androidHostBridge';
-import { onWebFirstLedgerPaint } from '@/platform/performance/webStartupPerformance';
+import { scheduleAfterWebFirstLedgerPaint } from '@/platform/performance/webStartupPerformance';
 import { preloadLedgerMutationRuntime } from '@/composition/ledgerMutationRuntimePreload';
-import { warmAssetNavigationIntent } from '@/composition/assetNavigationPrewarm';
 import { AppDialogProvider } from '@/contexts/AppDialogContext';
 import { REMOTE_SESSION_RECOVERY_REQUESTED_EVENT } from '@/platform/functions-api/firebaseCallableRecovery';
 import { clearRetiredHomeReadSnapshots } from '@/platform/read-model/retiredHomeReadSnapshotCleanup';
+
+const PWA_SERVICE_WORKER_PATH = '/sw.js';
+const PWA_UPDATE_DELAY_AFTER_LEDGER_MS = 10_000;
+const PWA_UPDATE_IDLE_TIMEOUT_MS = 10_000;
+const ANDROID_WORKER_CLEANUP_DELAY_AFTER_LEDGER_MS = 2_000;
+const ANDROID_WORKER_CLEANUP_FALLBACK_MS = 15_000;
+const MUTATION_PRELOAD_DELAY_AFTER_LEDGER_MS = 3_000;
+const MUTATION_PRELOAD_IDLE_TIMEOUT_MS = 15_000;
+const NATIVE_SESSION_SYNC_DELAY_AFTER_LEDGER_MS = 30_000;
+const NATIVE_SESSION_SYNC_IDLE_TIMEOUT_MS = 30_000;
+const VISIT_TELEMETRY_DELAY_AFTER_LEDGER_MS = 30_000;
+const VISIT_TELEMETRY_IDLE_TIMEOUT_MS = 30_000;
 
 function RetiredHomeReadSnapshotCleanup() {
   useEffect(() => {
@@ -26,62 +37,119 @@ function RetiredHomeReadSnapshotCleanup() {
   return null;
 }
 
-function DeferredFirebaseSecurityInitialization() {
-  // App Check SDK는 동적으로 불러 첫 화면 bundle에서는 분리하되 idle까지 미루지
-  // 않습니다. 첫 화면 직후 실행되는 보호 callable보다 먼저 초기화를 시작합니다.
-  useEffect(() => {
-    let cancelled = false;
-    void import('@/platform/security/firebaseAppCheck')
-      .then(({ initializeFirebaseAppCheck }) => {
-        if (!cancelled) initializeFirebaseAppCheck();
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return null;
+function isManagedPwaWorker(worker: ServiceWorker | null | undefined): boolean {
+  if (!worker) return false;
+  try {
+    return new URL(worker.scriptURL, window.location.origin).pathname === PWA_SERVICE_WORKER_PATH;
+  } catch {
+    return false;
+  }
+}
+
+function isManagedPwaRegistration(
+  registration: ServiceWorkerRegistration | undefined
+): registration is ServiceWorkerRegistration {
+  return registration !== undefined && [
+    registration.active,
+    registration.waiting,
+    registration.installing,
+  ].some(isManagedPwaWorker);
 }
 
 function WebRuntimeUpdateRecovery() {
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return undefined;
+
+    let cancelled = false;
     let reloading = false;
     let lastCheckedAt = 0;
+    let reloadForManagedController = false;
+    let listenersAttached = false;
+
     const reloadForNewController = () => {
-      if (reloading) return;
+      if (!reloadForManagedController || reloading) return;
       reloading = true;
       window.location.reload();
     };
+
     const checkForUpdate = () => {
       if (Date.now() - lastCheckedAt < 15 * 60 * 1_000) return;
       lastCheckedAt = Date.now();
       void navigator.serviceWorker
-        .getRegistration()
-        .then((registration) => registration?.update())
+        .getRegistration('/')
+        .then(async (registration) => {
+          if (cancelled) return;
+          if (!registration) {
+            await navigator.serviceWorker.register(PWA_SERVICE_WORKER_PATH, {
+              scope: '/',
+            });
+            return;
+          }
+          if (!isManagedPwaRegistration(registration)) return;
+          reloadForManagedController = isManagedPwaWorker(
+            navigator.serviceWorker.controller
+          );
+          await registration.update();
+        })
         .catch(() => {});
     };
 
-    navigator.serviceWorker.addEventListener(
-      'controllerchange',
-      reloadForNewController
+    if (isAndroidHostAvailable()) {
+      // Remove a worker left by an older auto-registration build. Its current
+      // controller can finish this page, but it will not control future loads.
+      const cancelCleanup = scheduleAfterWebFirstLedgerPaint(
+        () => {
+          void navigator.serviceWorker
+            .getRegistration('/')
+            .then((registration) => {
+              if (!cancelled && isManagedPwaRegistration(registration)) {
+                return registration.unregister();
+              }
+              return undefined;
+            })
+            .catch(() => {});
+        },
+        {
+          delayAfterPaintMs: ANDROID_WORKER_CLEANUP_DELAY_AFTER_LEDGER_MS,
+          fallbackMs: ANDROID_WORKER_CLEANUP_FALLBACK_MS,
+          idleTimeoutMs: PWA_UPDATE_IDLE_TIMEOUT_MS,
+        }
+      );
+      return () => {
+        cancelled = true;
+        cancelCleanup();
+      };
+    }
+
+    const cancelScheduledUpdate = scheduleAfterWebFirstLedgerPaint(
+      () => {
+        if (cancelled) return;
+        listenersAttached = true;
+        navigator.serviceWorker.addEventListener(
+          'controllerchange',
+          reloadForNewController
+        );
+        window.addEventListener('focus', checkForUpdate);
+        window.addEventListener('pageshow', checkForUpdate);
+        checkForUpdate();
+      },
+      {
+        delayAfterPaintMs: PWA_UPDATE_DELAY_AFTER_LEDGER_MS,
+        idleTimeoutMs: PWA_UPDATE_IDLE_TIMEOUT_MS,
+      }
     );
-    window.addEventListener('focus', checkForUpdate);
-    window.addEventListener('pageshow', checkForUpdate);
-    window.addEventListener('household-account:android-resume', checkForUpdate);
-    checkForUpdate();
 
     return () => {
-      navigator.serviceWorker.removeEventListener(
-        'controllerchange',
-        reloadForNewController
-      );
-      window.removeEventListener('focus', checkForUpdate);
-      window.removeEventListener('pageshow', checkForUpdate);
-      window.removeEventListener(
-        'household-account:android-resume',
-        checkForUpdate
-      );
+      cancelled = true;
+      cancelScheduledUpdate();
+      if (listenersAttached) {
+        navigator.serviceWorker.removeEventListener(
+          'controllerchange',
+          reloadForNewController
+        );
+        window.removeEventListener('focus', checkForUpdate);
+        window.removeEventListener('pageshow', checkForUpdate);
+      }
     };
   }, []);
   return null;
@@ -99,10 +167,14 @@ function AuthenticatedPlatformEffects() {
     adminHouseholdView,
     recoverRemoteSession,
   } = useHousehold();
-  const router = useRouter();
 
   useEffect(() => {
-    if (sessionState !== 'ready' || !isSessionVerified || adminHouseholdView !== null) return;
+    if (
+      sessionState !== 'ready'
+      || !isSessionVerified
+      || adminHouseholdView !== null
+      || !isAndroidHostAvailable()
+    ) return;
     const scope = getClientSessionScope();
     if (!scope) return;
 
@@ -122,35 +194,26 @@ function AuthenticatedPlatformEffects() {
       // 손상된 성능 힌트는 무시하고 아래에서 다시 동기화합니다.
     }
 
-    let cancelled = false;
-    let idleCallbackId: number | undefined;
     const refresh = () => {
-      if (cancelled) return;
       void refreshAndroidHostSession({
         householdId: scope.householdId,
         memberId: scope.memberId,
       }).then(() => {
-        window.localStorage.setItem(NATIVE_SESSION_REFRESH_KEY, JSON.stringify({
-          bindingKey,
-          refreshedAt: Date.now(),
-        }));
+        try {
+          window.localStorage.setItem(NATIVE_SESSION_REFRESH_KEY, JSON.stringify({
+            bindingKey,
+            refreshedAt: Date.now(),
+          }));
+        } catch {
+          // 저장소가 차단되어도 네이티브 세션 동기화 성공 자체는 유지합니다.
+        }
       }).catch(() => {});
     };
-    const delayId = window.setTimeout(() => {
-      if (typeof window.requestIdleCallback === 'function') {
-        idleCallbackId = window.requestIdleCallback(refresh, { timeout: 5_000 });
-      } else {
-        refresh();
-      }
-    }, 5_000);
 
-    return () => {
-      cancelled = true;
-      window.clearTimeout(delayId);
-      if (idleCallbackId !== undefined && typeof window.cancelIdleCallback === 'function') {
-        window.cancelIdleCallback(idleCallbackId);
-      }
-    };
+    return scheduleAfterWebFirstLedgerPaint(refresh, {
+      delayAfterPaintMs: NATIVE_SESSION_SYNC_DELAY_AFTER_LEDGER_MS,
+      idleTimeoutMs: NATIVE_SESSION_SYNC_IDLE_TIMEOUT_MS,
+    });
   }, [adminHouseholdView, isSessionVerified, sessionState]);
 
   useEffect(() => {
@@ -243,26 +306,30 @@ function AuthenticatedPlatformEffects() {
   useEffect(() => {
     if (sessionState !== 'ready' || adminHouseholdView !== null) return;
 
-    return onWebFirstLedgerPaint(() => {
-      router.prefetch('/income');
-      router.prefetch('/assets');
-      router.prefetch('/settings');
-      router.prefetch('/stats');
-      void Promise.all([
-        preloadLedgerMutationRuntime(),
-        import('@/features/category-budget/application/categoryCommands'),
-      ]).catch(() => {});
-    });
-  }, [adminHouseholdView, router, sessionState]);
+    return scheduleAfterWebFirstLedgerPaint(
+      () => {
+        void preloadLedgerMutationRuntime().catch(() => {});
+      },
+      {
+        delayAfterPaintMs: MUTATION_PRELOAD_DELAY_AFTER_LEDGER_MS,
+        idleTimeoutMs: MUTATION_PRELOAD_IDLE_TIMEOUT_MS,
+      }
+    );
+  }, [adminHouseholdView, sessionState]);
 
   useEffect(() => {
     if (sessionState !== 'ready' || !isSessionVerified || adminHouseholdView !== null) return;
-    return onWebFirstLedgerPaint(() => {
-      void warmAssetNavigationIntent().catch(() => {});
-      void import('@/platform/usage/memberAccessTelemetry')
-        .then(({ recordCurrentAppVisit }) => recordCurrentAppVisit())
-        .catch(() => {});
-    });
+    return scheduleAfterWebFirstLedgerPaint(
+      () => {
+        void import('@/platform/usage/memberAccessTelemetry')
+          .then(({ recordCurrentAppVisit }) => recordCurrentAppVisit())
+          .catch(() => {});
+      },
+      {
+        delayAfterPaintMs: VISIT_TELEMETRY_DELAY_AFTER_LEDGER_MS,
+        idleTimeoutMs: VISIT_TELEMETRY_IDLE_TIMEOUT_MS,
+      }
+    );
   }, [adminHouseholdView, isSessionVerified, sessionState]);
 
   return null;
@@ -293,17 +360,18 @@ export default function AppProviders({ children }: { children: React.ReactNode }
     <AppDialogProvider>
       <HouseholdProvider>
         <RetiredHomeReadSnapshotCleanup />
-        <DeferredFirebaseSecurityInitialization />
         <WebRuntimeUpdateRecovery />
         <AuthenticatedPlatformEffects />
         <AdminHouseholdViewBanner />
-        <HouseholdGuard>
-          <ThemeProvider>
-            <CategoryProvider>
-              {children}
-            </CategoryProvider>
-          </ThemeProvider>
-        </HouseholdGuard>
+        <ThemeProvider>
+          <CategoryProvider>
+            <LedgerReadModelProvider>
+              <HouseholdGuard>
+                {children}
+              </HouseholdGuard>
+            </LedgerReadModelProvider>
+          </CategoryProvider>
+        </ThemeProvider>
       </HouseholdProvider>
     </AppDialogProvider>
   );

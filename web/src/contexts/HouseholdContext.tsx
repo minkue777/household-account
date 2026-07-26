@@ -39,6 +39,7 @@ import {
 import {
   isAndroidHostAvailable,
 } from '@/platform/android-host/androidHostBridge';
+import { Platform } from '@/lib/utils/platform';
 import {
   clearSignedInMembershipCache,
   getSignedInMembershipRevalidationDelay,
@@ -215,6 +216,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   const resolutionGenerationRef = useRef(0);
   const sessionGenerationRef = useRef(0);
   const endpointRegistrationGenerationRef = useRef(0);
+  const cancelEndpointRegistrationRef = useRef<(() => void) | undefined>();
 
   const activateRemoteSession = useCallback(() => {
     setIsSessionVerified(true);
@@ -239,6 +241,8 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   }, [activateRemoteSession]);
 
   const clearResolvedSession = useCallback(() => {
+    cancelEndpointRegistrationRef.current?.();
+    cancelEndpointRegistrationRef.current = undefined;
     resetClientOptimisticProjections();
     clearClientSessionScope();
     setHousehold(null);
@@ -384,7 +388,6 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         aggregateVersion: membership.aggregateVersion,
       };
       const sessionGeneration = ++sessionGenerationRef.current;
-      activateRemoteSession();
 
       setClientSessionScope({
         sessionGeneration,
@@ -393,6 +396,9 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         memberId: membership.memberId,
         accessMode: 'member',
       });
+      setHouseholdKey(membership.householdId);
+      setCurrentMember(resolvedSelf);
+      activateRemoteSession();
 
       const applyHousehold = (loadedHousehold: Household) => {
         if (resolutionGeneration !== resolutionGenerationRef.current) return;
@@ -420,14 +426,33 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
           },
         }, { preserveVerificationTime: true });
         setSessionState('ready');
-        if (endpointRegistrationGenerationRef.current !== sessionGeneration) {
+        if (
+          Platform.isIOSPWA()
+          && endpointRegistrationGenerationRef.current !== sessionGeneration
+        ) {
           endpointRegistrationGenerationRef.current = sessionGeneration;
-          void import('@/platform/pwa/fidEndpointLifecycle')
-            .then(({ activatePwaFidEndpoint }) => activatePwaFidEndpoint())
-            .catch(() => {
-              // 알림 endpoint 등록 실패는 로그인과 가계부 사용을 막지 않습니다.
-              // 설정 화면에서 실제 서버 등록 상태와 재연결 동작을 제공합니다.
-            });
+          cancelEndpointRegistrationRef.current?.();
+          cancelEndpointRegistrationRef.current = scheduleAfterWebFirstLedgerPaint(
+            () => {
+              cancelEndpointRegistrationRef.current = undefined;
+              if (
+                resolutionGeneration !== resolutionGenerationRef.current
+                || activeUserRef.current?.uid !== user.uid
+              ) {
+                return;
+              }
+              void import('@/platform/pwa/fidEndpointLifecycle')
+                .then(({ activatePwaFidEndpoint }) => activatePwaFidEndpoint())
+                .catch(() => {
+                  // 알림 endpoint 등록 실패는 로그인과 가계부 사용을 막지 않습니다.
+                  // 설정 화면에서 실제 서버 등록 상태와 재연결 동작을 제공합니다.
+                });
+            },
+            {
+              fallbackMs: MEMBERSHIP_REVALIDATION_FALLBACK_MS,
+              idleTimeoutMs: 5_000,
+            }
+          );
         }
       };
 
@@ -599,26 +624,18 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       });
     };
 
-    const startAndroidBootstrap = (
-      existingUser?: User,
-      existingResolution?: SignedInUserResolution
-    ) => {
+    const startAndroidBootstrap = () => {
       if (disposed || !androidBootstrapPending || androidBootstrapStarted) return;
       androidBootstrapStarted = true;
-      void loadAuthService().then(({
-        refreshAndroidWebAuth,
-        restoreAndroidHostAuth,
-      }) => withinDeadline(
-        existingUser
-          ? refreshAndroidWebAuth(existingUser)
-          : restoreAndroidHostAuth(),
+      void loadAuthService().then(({ restoreAndroidHostAuth }) => withinDeadline(
+        restoreAndroidHostAuth(),
         INTERACTIVE_AUTH_BOOTSTRAP_TIMEOUT_MS,
         'ANDROID_AUTH_BOOTSTRAP_TIMEOUT'
       )).then((session) => {
         if (disposed || !androidBootstrapPending) return;
         androidBootstrapPending = false;
         markWebAuthCompleted(true);
-        const resolvedMembership = session?.signedInUserResolution ?? existingResolution;
+        const resolvedMembership = session?.signedInUserResolution;
         if (session?.user && resolvedMembership?.kind === 'membership-found') {
           writeSignedInMembershipCache(
             session.user.uid,
@@ -631,11 +648,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
           session?.user ?? null,
           resolvedMembership,
           false,
-          resolvedMembership === undefined
-            ? undefined
-            : session?.signedInUserResolution === undefined
-              ? 'last-verified-cache'
-              : 'authoritative-prefetch',
+          resolvedMembership === undefined ? undefined : 'authoritative-prefetch',
           false
         );
       }).catch((error) => {
@@ -657,20 +670,21 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       }
       if (androidBootstrapPending) {
         if (user) {
+          // Native custom-token 교환 중 signInWithCustomToken이 observer를 먼저
+          // 깨울 수 있습니다. 이때 별도 Membership Command를 시작하면 곧 도착할
+          // Native의 authoritative resolution과 같은 원격 조회를 중복합니다.
+          if (androidBootstrapStarted) return;
+          androidBootstrapPending = false;
           const immediatelyUsableResolution = cachedResolution;
-          if (immediatelyUsableResolution !== undefined) {
-            // Firebase가 영속 사용자를 복원했고 마지막으로 검증된 Membership도
-            // 같은 principal에 속하면 원격 구독을 즉시 엽니다. 강제 token refresh는
-            // 복구 작업이지 화면과 Firestore 구독을 막는 선행 조건이 아닙니다.
-            applyUser(
-              user,
-              immediatelyUsableResolution,
-              false,
-              'last-verified-cache'
-            );
-          }
-          startAndroidBootstrap(user, immediatelyUsableResolution);
-        } else if (!user) {
+          applyUser(
+            user,
+            immediatelyUsableResolution,
+            false,
+            immediatelyUsableResolution === undefined
+              ? undefined
+              : 'last-verified-cache'
+          );
+        } else {
           startAndroidBootstrap();
         }
         return;
@@ -697,10 +711,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
           current === 'degraded' ? 'connecting' : current
         );
 
-        // Android 첫 실행은 Auth observer와 Native 세션 복구를 병렬로 시작합니다.
-        if (androidBootstrapPending) {
-          startAndroidBootstrap();
-        }
+        // 첫 observer 결과로 영속 Web Auth 여부를 확인한 뒤에만 Native fallback을 시작합니다.
       })
       .catch((error) => {
         if (disposed) return;
@@ -870,14 +881,16 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     let logoutError: unknown;
-    try {
-      const { removePwaFidEndpointForLogout } = await import(
-        '@/platform/pwa/fidEndpointLifecycle'
-      );
-      await removePwaFidEndpointForLogout();
-    } catch {
-      // 원격 endpoint 정리는 다음 로그인 binding 교체로 수렴시킵니다.
-      // 편의 알림 정리 실패가 로컬 로그아웃을 막지 않습니다.
+    if (Platform.isIOSPWA()) {
+      try {
+        const { removePwaFidEndpointForLogout } = await import(
+          '@/platform/pwa/fidEndpointLifecycle'
+        );
+        await removePwaFidEndpointForLogout();
+      } catch {
+        // 원격 endpoint 정리는 다음 로그인 binding 교체로 수렴시킵니다.
+        // 편의 알림 정리 실패가 로컬 로그아웃을 막지 않습니다.
+      }
     }
     try {
       const { logOut } = await loadAuthService();

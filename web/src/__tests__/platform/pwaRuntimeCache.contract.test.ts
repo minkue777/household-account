@@ -8,6 +8,9 @@ describe('PWA runtime cache contract', () => {
       'utf8'
     );
 
+    expect(nextConfig).toContain('register: false');
+    expect(nextConfig).toContain('additionalManifestEntries: []');
+    expect(nextConfig).toContain('buildExcludes: [/.*/]');
     expect(nextConfig).toContain('cacheStartUrl: false');
     expect(nextConfig).not.toContain('StaleWhileRevalidate');
     expect(nextConfig).not.toContain('household-app-shell-pages');

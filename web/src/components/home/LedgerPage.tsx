@@ -17,6 +17,8 @@ import SearchModal from '@/components/search/SearchModal';
 import type { SplitItem } from '@/lib/expenseService';
 import { orderLedgerTransactions } from '@/features/ledger/domain/ledgerTransactionOrder';
 import { useHousehold } from '@/contexts/HouseholdContext';
+import { useCategoryContext } from '@/contexts/CategoryContext';
+import { useLedgerReadModel } from '@/contexts/LedgerReadModelContext';
 import {
   markWebFirstLedgerPaint,
   markWebLedgerCacheResult,
@@ -37,14 +39,13 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     isSessionVerified = true,
     remoteReadEpoch = 0,
   } = useHousehold();
+  const { isLoading: categoriesLoading } = useCategoryContext();
 
   const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
   const [currentMonth, setCurrentMonth] = useState(() => new Date().getMonth() + 1);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [yearlyExpenses, setYearlyExpenses] = useState<Expense[]>([]);
   const [yearlyTotal, setYearlyTotal] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
@@ -53,42 +54,46 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   const [localCurrencyExpenses, setLocalCurrencyExpenses] = useState<Expense[]>([]);
   const [autoEditExpenseId, setAutoEditExpenseId] = useState<string | null>(null);
   const [incomeSummaryMode, setIncomeSummaryMode] = useState<'monthly' | 'yearly' | null>(null);
-  const [isDesktopLayout, setIsDesktopLayout] = useState(false);
+  const {
+    expenses,
+    isLoading,
+    serverSnapshotReady,
+    readError,
+    localCurrencyBalance,
+    localCurrencySettled,
+  } = useLedgerReadModel({
+    year: currentYear,
+    month: currentMonth,
+    transactionType,
+  });
 
   const homeSummaryConfig = household?.homeSummaryConfig || DEFAULT_HOME_SUMMARY_CONFIG;
+  const needsLocalCurrencyBalance =
+    !isIncome
+    && (
+      homeSummaryConfig.leftCard === 'localCurrencyBalance'
+      || homeSummaryConfig.rightCard === 'localCurrencyBalance'
+    );
+  const homeReadModelReady =
+    serverSnapshotReady
+    && !categoriesLoading
+    && (!needsLocalCurrencyBalance || localCurrencySettled);
   const needsYearlyTotal =
     isIncome ||
     homeSummaryConfig.leftCard === 'yearlySpent' ||
     homeSummaryConfig.rightCard === 'yearlySpent';
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return undefined;
-    }
-
-    const mediaQuery = window.matchMedia('(min-width: 1024px)');
-    const applyLayout = (matches: boolean) => {
-      setIsDesktopLayout(matches);
-    };
-
-    applyLayout(mediaQuery.matches);
-
-    const handleChange = (event: MediaQueryListEvent) => {
-      applyLayout(event.matches);
-    };
-
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
-  }, []);
-
   useLayoutEffect(() => {
     markWebLedgerCacheResult(false);
-    setExpenses([]);
-    setIsLoading(true);
   }, [currentYear, currentMonth, transactionType]);
 
+  useLayoutEffect(() => {
+    setYearlyExpenses([]);
+    setYearlyTotal(null);
+  }, [currentYear, transactionType]);
+
   useEffect(() => {
-    if (isLoading) return undefined;
+    if (!homeReadModelReady) return undefined;
 
     let firstFrameId: number | undefined;
     let paintFrameId: number | undefined;
@@ -106,42 +111,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
       if (paintFrameId !== undefined) window.cancelAnimationFrame(paintFrameId);
       if (fallbackId !== undefined) window.clearTimeout(fallbackId);
     };
-  }, [isLoading]);
-
-  useEffect(() => {
-    if (!isSessionVerified) return;
-
-    let cancelled = false;
-    let unsubscribe: (() => void) | undefined;
-    void import('@/lib/expenseService').then(({ subscribeToMonthlyExpenses }) => {
-      if (cancelled) return;
-      unsubscribe = subscribeToMonthlyExpenses(
-        currentYear,
-        currentMonth,
-        (newExpenses) => {
-          setExpenses(newExpenses);
-          setIsLoading(false);
-        },
-        {
-          transactionType,
-          onError: () => setIsLoading(false),
-        }
-      );
-    }).catch(() => {
-      if (!cancelled) setIsLoading(false);
-    });
-
-    return () => {
-      cancelled = true;
-      unsubscribe?.();
-    };
-  }, [
-    currentYear,
-    currentMonth,
-    isSessionVerified,
-    remoteReadEpoch,
-    transactionType,
-  ]);
+  }, [homeReadModelReady]);
 
   useEffect(() => {
     if (!needsYearlyTotal) {
@@ -155,7 +125,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
 
     // 첫 화면에 필요한 월간 원장을 먼저 표시한 뒤 연간 합계를 구독합니다.
     // 두 범위 조회를 동시에 시작해 Android WebView의 초기 네트워크를 경합시키지 않습니다.
-    if (isLoading) {
+    if (!homeReadModelReady) {
       return undefined;
     }
 
@@ -175,18 +145,12 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
         },
         {
           transactionType,
-          onError: () => {
-            setYearlyExpenses([]);
-            setYearlyTotal(0);
-          },
+          // 실패를 유효한 0원으로 축약하지 않습니다. 같은 연도의 마지막 성공값이
+          // 있으면 유지하고, 아직 성공값이 없으면 null 상태를 그대로 표시합니다.
+          onError: () => undefined,
         }
       );
-    }).catch(() => {
-      if (!cancelled) {
-        setYearlyExpenses([]);
-        setYearlyTotal(0);
-      }
-    });
+    }).catch(() => {});
 
     return () => {
       cancelled = true;
@@ -194,7 +158,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     };
   }, [
     currentYear,
-    isLoading,
+    homeReadModelReady,
     isSessionVerified,
     needsYearlyTotal,
     remoteReadEpoch,
@@ -212,7 +176,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   }, [searchParams, router, pathname]);
 
   useEffect(() => {
-    if (!editExpenseId || expenses.length === 0) {
+    if (!editExpenseId || !serverSnapshotReady) {
       return;
     }
 
@@ -226,7 +190,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
 
     setShowSearchModal(true);
     setEditExpenseId(null);
-  }, [editExpenseId, expenses]);
+  }, [editExpenseId, expenses, serverSnapshotReady]);
 
   const selectedDateExpenses = useMemo(() => {
     if (!selectedDate) return [];
@@ -360,6 +324,22 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     await unmergeExpense(expense);
   };
 
+  if (!homeReadModelReady) {
+    return (
+      <main className="min-h-screen p-4 md:p-6 lg:p-8">
+        <div className="mx-auto max-w-7xl">
+          <HomeHeader
+            onSearchClick={() => setShowSearchModal(true)}
+            transactionType={transactionType}
+          />
+          <div className="rounded-2xl border border-slate-200/70 bg-white/95 p-8 text-center text-slate-400 shadow-sm">
+            {readError ? '가계부를 불러오지 못했습니다.' : '가계부를 불러오는 중...'}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl">
@@ -389,21 +369,29 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
           />
         )}
 
-        <BalanceCards
-          currentYear={currentYear}
-          currentMonth={currentMonth}
-          expenses={expenses}
-          yearlySpent={yearlyTotal}
-          summaryConfig={homeSummaryConfig}
-          transactionType={transactionType}
-          className="mb-4 lg:hidden"
-          onLocalCurrencyClick={isIncome ? undefined : handleLocalCurrencyClick}
-          onMonthlyIncomeClick={isIncome ? () => handleMonthlyIncomeClick() : undefined}
-          onYearlyIncomeClick={isIncome ? handleYearlyIncomeClick : undefined}
-        />
+        <div className={`grid gap-6 ${isIncome ? '' : 'lg:grid-cols-4'}`}>
+          <BalanceCards
+            currentYear={currentYear}
+            currentMonth={currentMonth}
+            expenses={expenses}
+            yearlySpent={yearlyTotal}
+            summaryConfig={homeSummaryConfig}
+            transactionType={transactionType}
+            localCurrencyBalance={localCurrencyBalance}
+            className={isIncome
+              ? 'order-1'
+              : 'order-1 lg:col-span-3 lg:col-start-2 lg:row-start-1'}
+            onLocalCurrencyClick={isIncome ? undefined : handleLocalCurrencyClick}
+            onMonthlyIncomeClick={isIncome ? handleMonthlyIncomeClick : undefined}
+            onYearlyIncomeClick={isIncome ? handleYearlyIncomeClick : undefined}
+          />
 
-        <div className="space-y-6 lg:hidden">
-          <div key={`${transactionType}-${currentYear}-${currentMonth}`}>
+          <div
+            key={`${transactionType}-${currentYear}-${currentMonth}`}
+            className={isIncome
+              ? 'order-2'
+              : 'order-2 lg:col-span-3 lg:col-start-2 lg:row-start-2'}
+          >
             <Calendar
               year={currentYear}
               month={currentMonth}
@@ -417,94 +405,12 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
           </div>
 
           {selectedDate && (
-            <ExpenseDetail
-              key={`${transactionType}-${selectedDate}`}
-              date={selectedDate}
-              expenses={selectedDateExpenses}
-              onExpenseUpdate={handleExpenseUpdate}
-              onSaveMerchantRule={isIncome ? undefined : handleSaveMerchantRule}
-              onDelete={handleDeleteExpense}
-              onAddExpense={() => setShowAddModal(true)}
-              onSplitExpense={handleSplitExpense}
-              onMergeExpenses={handleMergeExpenses}
-              onUnmergeExpense={handleUnmergeExpense}
-              autoEditExpenseId={isDesktopLayout ? null : autoEditExpenseId}
-              onAutoEditHandled={() => setAutoEditExpenseId(null)}
-              transactionType={transactionType}
-            />
-          )}
-
-          {!isIncome && (
-            <div className="rounded-2xl border border-slate-200/70 bg-white/95 p-6 shadow-sm transition-all hover:shadow-md">
-              <h3 className="mb-4 text-sm font-semibold text-slate-700">
-                카테고리별 {transactionLabel}
-              </h3>
-              {expenses.length > 0 ? (
-                <CategorySummary
-                  expenses={expenses}
-                  onCategoryClick={handleCategoryClick}
-                  showBudgetProgress={!isIncome}
-                />
-              ) : (
-                <div className="py-4 text-center text-slate-400">
-                  {isLoading ? '로딩 중...' : '데이터가 없습니다'}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className={`hidden gap-6 lg:grid ${isIncome ? 'lg:grid-cols-1' : 'lg:grid-cols-4'}`}>
-          {!isIncome && (
-            <div className="space-y-6 lg:col-span-1">
-              <div className="rounded-2xl border border-slate-200/70 bg-white/95 p-6 shadow-sm transition-all hover:shadow-md">
-                <h3 className="mb-4 text-sm font-semibold text-slate-700">
-                  카테고리별 {transactionLabel}
-                </h3>
-                {expenses.length > 0 ? (
-                  <CategorySummary
-                    expenses={expenses}
-                    onCategoryClick={handleCategoryClick}
-                    showBudgetProgress={!isIncome}
-                  />
-                ) : (
-                  <div className="py-4 text-center text-slate-400">
-                    {isLoading ? '로딩 중...' : '데이터가 없습니다'}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className={`space-y-6 ${isIncome ? '' : 'lg:col-span-3'}`}>
-            <BalanceCards
-              currentYear={currentYear}
-              currentMonth={currentMonth}
-              expenses={expenses}
-              yearlySpent={yearlyTotal}
-              summaryConfig={homeSummaryConfig}
-              transactionType={transactionType}
-              onLocalCurrencyClick={isIncome ? undefined : handleLocalCurrencyClick}
-              onMonthlyIncomeClick={isIncome ? () => handleMonthlyIncomeClick() : undefined}
-              onYearlyIncomeClick={isIncome ? handleYearlyIncomeClick : undefined}
-            />
-
-            <div key={`desktop-${transactionType}-${currentYear}-${currentMonth}`}>
-              <Calendar
-                year={currentYear}
-                month={currentMonth}
-                expenses={expenses}
-                onDateClick={handleDateClick}
-                selectedDate={selectedDate}
-                onPrevMonth={handlePrevMonth}
-                onNextMonth={handleNextMonth}
-                onYearMonthChange={handleYearMonthChange}
-              />
-            </div>
-
-            {selectedDate && (
+            <div className={isIncome
+              ? 'order-3'
+              : 'order-3 lg:col-span-3 lg:col-start-2 lg:row-start-3'}
+            >
               <ExpenseDetail
-                key={`${transactionType}-desktop-${selectedDate}`}
+                key={`${transactionType}-${selectedDate}`}
                 date={selectedDate}
                 expenses={selectedDateExpenses}
                 onExpenseUpdate={handleExpenseUpdate}
@@ -514,12 +420,35 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
                 onSplitExpense={handleSplitExpense}
                 onMergeExpenses={handleMergeExpenses}
                 onUnmergeExpense={handleUnmergeExpense}
-                autoEditExpenseId={isDesktopLayout ? autoEditExpenseId : null}
+                autoEditExpenseId={autoEditExpenseId}
                 onAutoEditHandled={() => setAutoEditExpenseId(null)}
                 transactionType={transactionType}
               />
-            )}
-          </div>
+            </div>
+          )}
+
+          {!isIncome && (
+            <div className="order-4 rounded-2xl border border-slate-200/70 bg-white/95 p-6 shadow-sm transition-all hover:shadow-md lg:col-start-1 lg:row-span-3 lg:row-start-1">
+              <h3 className="mb-4 text-sm font-semibold text-slate-700">
+                카테고리별 {transactionLabel}
+              </h3>
+              {expenses.length > 0 ? (
+                <CategorySummary
+                  expenses={expenses}
+                  onCategoryClick={handleCategoryClick}
+                  showBudgetProgress={true}
+                />
+              ) : (
+                <div className="py-4 text-center text-slate-400">
+                  {readError
+                    ? '가계부를 불러오지 못했습니다.'
+                    : isLoading
+                      ? '로딩 중...'
+                      : '데이터가 없습니다'}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
