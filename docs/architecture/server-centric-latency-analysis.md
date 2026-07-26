@@ -77,7 +77,7 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 
 | 사용자 동작 | 리팩토링 전 | 최적화 전 서버 권위형 구조 | 최신 작업 트리 |
 |---|---|---|---|
-| 캐시 있는 첫 화면 | localStorage 가구 키와 Firestore cache로 표시 | 큰 root bundle 평가와 Membership·가구 확인이 첫 구독과 경쟁 | 작은 root bundle, 마지막 검증 localStorage snapshot 선표시, Android Firestore는 memory cache로 매 프로세스 원격 연결 재생성 |
+| 첫 가계부 화면 | localStorage 가구 키와 Firestore cache로 표시 | 큰 root bundle 평가와 Membership·가구 확인이 첫 구독과 경쟁 | 작은 root bundle과 Membership 연결 정보는 재사용하되 가구·원장·카테고리·지역화폐는 서버 snapshot 뒤 표시 |
 | 캐시 없는 로그인 | 가구 키 확인 후 가구 read | Auth → Membership 해석 → Web의 별도 Household read → 화면 구독 | Membership 해석 응답에 최소 Household read model 포함, Web의 중복 read 제거 |
 | 일반 모달 첫 클릭 | 컴포넌트가 이미 bundle에 있어 즉시 표시 | 클릭 후 동적 chunk 다운로드·평가, `Portal` effect 뒤 표시 | route에 완성 모달을 정적으로 포함하고 `Portal`은 같은 React commit에서 표시 |
 | 검색 | 입력 즉시 로컬 조회 | 100ms focus timer + 300ms 고정 debounce | 즉시 focus, 입력 즉시 검색 계약 실행 |
@@ -93,7 +93,7 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 
 1. Signed-in Membership 해석 결과에 가구 이름, 생성일, 가구원, 홈 요약 설정을 포함한 최소 Household read model을 함께 반환합니다.
 2. Web은 해당 응답이 유효하면 별도 Household Firestore read를 생략합니다.
-3. 마지막 검증 Session·Household·월 원장·카테고리 snapshot을 먼저 표시하는 기존 fast path는 유지합니다.
+3. 마지막 검증 Membership 연결 정보는 인증 왕복 단축에만 사용하고, Household·월 원장·카테고리·지역화폐의 로컬 표시 snapshot은 제거했습니다.
 4. signed-out 로그인 UI와 실제 사용 기능의 projection을 root bundle에서 분리했습니다.
 5. 원장·자산 route의 클릭 UI는 각 route 번들에 포함하고, 첫 원장 paint가 완료된 뒤에는 다음 route와 저장 명령 runtime을 준비합니다.
    - `/income`
@@ -102,9 +102,9 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
    - `/stats`
    - 원장 저장·삭제·가맹점 규칙 등 mutation runtime
 6. Pretendard는 외부 CDN을 기다리지 않는 자체 호스팅 dynamic subset으로 제공합니다. 시스템 글꼴로 바꿔 시각을 달라지게 하지는 않습니다.
-7. 지역화폐는 잔여예산과 같은 첫 화면 체감을 위해 가구별 마지막 정상 잔액 한 건을 첫 렌더 전에 표시하고, 가구 하위 Canonical balance 구독값으로 교체합니다. 별도 스케줄·background projection은 없으며 Firestore 모듈은 동적으로 불러와 작은 root bundle을 유지합니다.
+7. 지역화폐는 가구 하위 Canonical balance를 직접 구독하고 최초 Firestore cache 결과를 건너뛴 뒤 서버 잔액부터 표시합니다. 별도 localStorage snapshot·스케줄·background projection은 없습니다.
 
-이 구조는 “빈 화면을 오래 보여준 뒤 모든 것을 준비”하는 방식이 아닙니다. **현재 화면을 먼저 그린 뒤 다음 클릭 비용을 미리 지불**하는 방식입니다.
+첫 가계부 화면은 최신성 혼동을 피하기 위해 서버 원장 준비 전 과거 화면을 그리지 않습니다. 첫 화면 이후의 모달·route는 미리 준비해 클릭 지연을 줄입니다.
 
 ### 5.2 모든 클릭·모달·검색
 
@@ -121,7 +121,7 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 ### 5.3 자산과 주식계좌
 
 - 주식·가상자산 보유내역은 자산별 모달이 각각 구독하지 않고, 자산 페이지가 가구 단위 listener 하나씩을 유지합니다.
-- Android WebView는 마지막 검증 화면 snapshot을 먼저 표시하고, 같은 UID의 영속 Web Auth가 복원되면 마지막 검증 Membership 범위의 원격 구독도 즉시 재개합니다. Web Auth 강제 갱신은 구독을 막는 선행 gate가 아니라 백그라운드 복구 작업이며, 실패하거나 5초 동안 끝나지 않으면 Native 로그인 세션으로 자동 교환합니다. `onIdTokenChanged`, Activity resume, Web focus·online, 15분 안전 확인, callable/listener 인증 오류를 같은 복구 경로로 처리합니다. 성공할 때마다 원격 read epoch를 전진시켜 이미 종료된 원장·카테고리·지역화폐·자산·명의자·보유 종목 listener를 다시 생성합니다. Android Firestore는 별도 localStorage 표시 snapshot과 중복되는 IndexedDB 영속 cache를 사용하지 않으므로 앱 삭제 전까지 cache-only 상태가 고착되는 경로가 없습니다.
+- Android WebView는 같은 UID의 영속 Web Auth와 Membership 연결 정보를 복원한 뒤 서버 우선 가구 read와 원격 구독을 시작합니다. Web Auth 강제 갱신이 실패하거나 5초 동안 끝나지 않으면 Native 로그인 세션으로 자동 교환합니다. `onIdTokenChanged`, Activity resume, Web focus·online, 15분 안전 확인, callable/listener 인증 오류를 같은 복구 경로로 처리합니다. 성공할 때마다 원격 read epoch를 전진시켜 이미 종료된 원장·카테고리·지역화폐·자산·명의자·보유 종목 listener를 다시 생성합니다. Android Firestore는 IndexedDB 영속 cache를 사용하지 않고 첫 원장·카테고리·지역화폐 cache snapshot도 표시하지 않습니다.
 - navigation HTML을 `StaleWhileRevalidate`로 장기 보존하면 낮의 Web 배포 뒤 이전 client와 새 서버 계약이 섞일 수 있으므로 network-only로 고정합니다. build hash가 붙은 JS·CSS 등 정적 asset만 캐시합니다.
 - 같은 브라우저 세션에서 마지막 household snapshot을 즉시 재사용합니다.
 - 계좌 모달은 이미 받은 보유 snapshot을 asset ID로 필터링할 뿐, 열릴 때 새 listener를 만들지 않습니다.
@@ -289,12 +289,12 @@ Native Membership claim은 Functions와 APK가 함께 바뀌므로 다음 순서
 
 - Android WebView / iPhone PWA / 일반 브라우저
 - 첫 설치 / 새 배포 직후 / 같은 세션 재진입
-- local Session·Household·원장 snapshot hit / miss
-- `navigationStart → app module 평가 → Household cache 복원 → 첫 원장 paint`
+- local Auth·Membership 연결 정보 hit / miss
+- `navigationStart → app module 평가 → Household 서버 read → 첫 원장 서버 snapshot → paint`
 - root JS 다운로드·parse·hydration
 - 첫 paint 뒤 preload가 첫 화면의 CPU·네트워크와 경쟁했는지
 
-목표는 유효한 local snapshot이 있는 첫 원장 paint p95 500ms 이하입니다.
+목표는 Membership 연결 정보가 있는 일반 실행에서 첫 서버 원장 paint p95 1초 이하입니다.
 
 ### 11.2 모든 상호작용
 
@@ -358,7 +358,7 @@ Native Membership claim은 Functions와 APK가 함께 바뀌므로 다음 순서
 
 다음 조건을 모두 확인해야 성능 회귀가 해결된 것으로 봅니다.
 
-- 캐시가 있는 첫 화면 p95가 500ms 이하입니다.
+- Membership 연결 정보가 있는 첫 서버 원장 paint p95가 1초 이하입니다.
 - 지출뿐 아니라 주식계좌를 포함한 주요 첫 클릭 p95가 100ms 이하입니다.
 - 첫 검색에 의도적인 100~300ms timer가 없습니다.
 - 모달 표시 전에 전체 배당·전체 시세 갱신을 기다리지 않습니다.

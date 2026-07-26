@@ -17,7 +17,7 @@
 | 등록 카드·가맹점 규칙 | registered_cards, merchant_rules | [Payment Capture](../contexts/payment-capture/requirements.md) | [결제 설정](../contexts/payment-capture/modules/payment-configuration/requirements.md) |
 | 금융 알림 원문 | notification_debug_logs | [Payment Capture](../contexts/payment-capture/requirements.md) | Android Diagnostic Adapter — 임시 |
 | Android 결제 원문 write-ahead journal·실패 대기 후보 | Android 로컬 암호화 Observation Queue | [Payment Capture](../contexts/payment-capture/requirements.md) | [Android 결제 수집](../contexts/payment-capture/modules/android-payment-ingestion/requirements.md), DEC-032·068 |
-| Client session cache·구독·Native mirror·현재 월 원장·가구별 카테고리 표시 snapshot | Web memory/localStorage/IndexedDB, Android preferences/WebView | 공통 시스템·Access·Ledger·Category Read Model | [SYS-008](../system/context.md#6-공통-요구사항), Android Host, DEC-068 |
+| Client Membership 연결 cache·구독·Native mirror·자산 재진입 snapshot | Web memory/localStorage/IndexedDB, Android preferences/WebView | 공통 시스템·Access·Portfolio Read Model | [SYS-008](../system/context.md#6-공통-요구사항), Android Host, DEC-068 |
 | 자산·보유종목·배당 | assets, holdings, dividend collections | [Portfolio](../contexts/portfolio/requirements.md) | [Portfolio 내부 기능](../contexts/portfolio/requirements.md#4-aggregate와-소유-데이터) |
 | FCM 전달 주소·subscription | 현재 `fcmTokens` registration token, 목표 `notificationEndpoints` FID | [Notifications](../contexts/notifications/requirements.md) | [푸시 알림](../contexts/notifications/modules/notifications/requirements.md) |
 | WebView 세션 Bridge | AndroidBridge, localStorage | [지원·플랫폼](../supporting-platform/requirements.md) | [Android Host](../supporting-platform/modules/android-host/requirements.md) |
@@ -74,7 +74,7 @@
 ## 6. 기기와 클라이언트 경계
 
 - AndroidBridge는 허용된 제품 origin에서만 민감 API를 노출해야 한다.
-- 인증·Membership 검증이 완료되기 전에는 보호 원격 Query·기본 데이터 write·FID endpoint 등록을 시작하지 않는다. DEC-068의 마지막 서버 검증 가구·현재 월 원장·가구별 카테고리 local snapshot은 비권위 표시 hint로 먼저 그릴 수 있으며, Auth UID 불일치·first visit·권한·authoritative household 부재가 확인되면 폐기한다. 로그아웃·가구/멤버 전환은 이전 session의 구독·cache·늦은 callback을 폐기한다.
+- 인증·Membership 연결이 완료되기 전에는 보호 원격 Query·기본 데이터 write·FID endpoint 등록을 시작하지 않는다. DEC-068의 Membership cache는 반복 인증 왕복만 줄이며 가구·현재 월 원장·가구별 카테고리·지역화폐를 선표시하지 않는다. 로그아웃·가구/멤버 전환은 이전 session의 구독·cache·늦은 callback을 폐기한다.
 - legacy householdKey·currentMemberId는 첫 Google 로그인의 일회성 claim에만 사용한다. 연결 성공 뒤 key 기반 로그인 상태를 제거하고 신규 입력 UI를 제공하지 않는다.
 - 초대 코드는 5분·일회 사용이며 원문을 저장·로그하지 않는다. Invitation 소비와 호출자 자기 Member·Membership 생성을 한 서버 transaction에서 처리한다.
 - 사용자가 보낸 principalUid·타인 memberId는 Member 생성·이름 변경 입력으로 받지 않고 Google token과 Membership에서 자기 identity를 도출한다.
@@ -93,7 +93,7 @@
 - QuickEdit은 DEC-024에 따라 잠금 화면 위에 현재 편집 정보를 표시할 수 있지만 keyguard를 해제하지 않고 non-exported Activity·유효 거래 ID·현재 session을 강제한다. DEC-045에 따라 화면 캡처와 시스템 최근 앱 미리보기는 별도 차단하지 않되 앱 로그에는 QuickEdit 민감값을 기록하지 않는다.
 - Android 13 이상에서는 알림 표시 런타임 권한을 요청하고 거부 상태를 처리한다.
 - Android 결제 journal은 원격 호출 중 process 종료 유실을 막기 위해 raw DTO를 Android Keystore의 non-exportable 설치 키로 AES-256-GCM 암호화해 저장한다. 정상 terminal은 QuickEdit follow-up 내구화 뒤 즉시 삭제하고 WorkManager를 만들지 않으며, 실패·partial entry만 최대 72시간 보존한다. 로그아웃·멤버/가구 변경·키 오류에서도 삭제한다.
-- PWA/CDN cache는 navigation HTML, 인증 응답과 가구·금융 API를 저장하지 않는다. build-versioned 정적 asset과 공개 비민감 아이콘·폰트·이미지의 최대 7일 cache만 허용하고 임의 cross-origin 응답은 저장하지 않는다. DEC-068의 first-party localStorage 가구·현재 월 원장·가구별 카테고리 표시 snapshot은 이 공개 cache 금지와 별개이며 서버 권한 근거로 사용하지 않는다. ([DEC-051](../governance/decisions.md#dec-051), [DEC-068](../governance/decisions.md#dec-068))
+- PWA/CDN cache는 navigation HTML, 인증 응답과 가구·금융 API를 저장하지 않는다. build-versioned 정적 asset과 공개 비민감 아이콘·폰트·이미지의 최대 7일 cache만 허용하고 임의 cross-origin 응답은 저장하지 않는다. DEC-068의 first-party localStorage는 Membership 연결 정보와 별도 허용된 자산 재진입 snapshot만 보존하며 가계부 첫 화면 데이터를 저장하지 않는다. ([DEC-051](../governance/decisions.md#dec-051), [DEC-068](../governance/decisions.md#dec-068))
 - 운영 migration·repair는 browser bundle에서 실행할 수 없고 승인된 서버 job이 명시적 scope·dry-run·checkpoint·reconciliation을 남긴다.
 - 외부 Provider를 대신 호출하는 Web/Functions API는 인증·Membership을 검증하고 App Check, schema/body/batch/concurrency/rate 상한을 적용한다. 외부 URL은 HTTPS allowlist, redirect 재검증, timeout과 응답 크기 상한을 통과해야 한다.
 - 클라이언트 UI의 권한 분기는 서버 권한 검증을 대체하지 않는다.

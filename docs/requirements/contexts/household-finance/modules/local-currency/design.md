@@ -242,8 +242,8 @@ Event는 실제 최신값이 created/updated일 때만 Canonical write와 같은
 - 구독은 schemaVersion, observedAt, updatedAt을 제공하되 UI용 Projection freshness 상태를 만들지 않습니다.
 - Web은 `households/{householdId}/localCurrencyBalances`와 `homePreferences/home`만 구독하며 최상위 Legacy `balances`를 직접 읽지 않습니다.
 - Home Preferences가 선택한 유형을 표시하고, 관찰된 유형이 하나뿐이면 그 유형을 자동 표시합니다. 여러 유형인데 선택이 없으면 임의의 첫 문서를 고르지 않습니다.
-- 가구별 마지막 정상 잔액·유형·갱신 시각 한 건을 localStorage 표시 Snapshot으로 보관해 첫 렌더 전에 복원합니다. 별도 스케줄·Background Projection·다건 이력은 만들지 않습니다.
-- 표시 Snapshot은 권위 판정에 사용하지 않고 Canonical snapshot이 도착하면 즉시 교체합니다. transient Auth·네트워크·listener 오류는 이미 표시한 정상값을 지우지 않으며, 정상 snapshot이 잔액 없음 또는 선택 대상 부재를 확인한 경우에만 `NoData`로 수렴합니다.
+- 지역화폐 잔액은 localStorage 표시 Snapshot을 만들지 않습니다. 첫 렌더에서는 Firestore의 `fromCache=true` snapshot을 건너뛰고 Canonical 서버 snapshot부터 표시하며 별도 스케줄·Background Projection·다건 이력을 만들지 않습니다.
+- 최초 서버 read 실패는 과거 잔액이나 `NoData`로 축약하지 않습니다. 현재 세션에서 서버값을 한 번 표시한 뒤 발생한 transient Auth·네트워크·listener 오류는 이미 표시한 정상값을 지우지 않으며, 정상 서버 snapshot이 잔액 없음 또는 선택 대상 부재를 확인한 경우에만 `NoData`로 수렴합니다.
 
 ### 8.3 Producer contract
 

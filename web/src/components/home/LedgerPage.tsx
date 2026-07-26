@@ -15,7 +15,6 @@ import ExpenseDetail from '@/components/expense/ExpenseDetail';
 import IncomeSummaryModal from '@/components/expense/IncomeSummaryModal';
 import SearchModal from '@/components/search/SearchModal';
 import type { SplitItem } from '@/lib/expenseService';
-import { readMonthlyExpenseSnapshot } from '@/features/ledger/application/monthlyExpenseSnapshot';
 import { orderLedgerTransactions } from '@/features/ledger/domain/ledgerTransactionOrder';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import {
@@ -83,10 +82,9 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   }, []);
 
   useLayoutEffect(() => {
-    const cached = readMonthlyExpenseSnapshot(currentYear, currentMonth, transactionType);
-    markWebLedgerCacheResult(cached !== undefined);
-    setExpenses(cached ?? []);
-    setIsLoading(cached === undefined);
+    markWebLedgerCacheResult(false);
+    setExpenses([]);
+    setIsLoading(true);
   }, [currentYear, currentMonth, transactionType]);
 
   useEffect(() => {

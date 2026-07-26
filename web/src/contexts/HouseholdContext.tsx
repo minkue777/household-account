@@ -5,7 +5,6 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -44,8 +43,6 @@ import {
   clearSignedInMembershipCache,
   getSignedInMembershipRevalidationDelay,
   invalidateSignedInMembershipVerification,
-  readLastSignedInSessionCache,
-  readSignedInHouseholdCache,
   readSignedInMembershipCache,
   writeSignedInMembershipCache,
   type SignedInUserResolution,
@@ -53,9 +50,7 @@ import {
 import {
   markWebAuthCompleted,
   markWebAuthStarted,
-  markWebBootstrapCacheResult,
   markWebBootstrapStarted,
-  markWebHouseholdCacheResult,
   markWebHouseholdCompleted,
   markWebHouseholdStarted,
   markWebMembershipCacheUsed,
@@ -66,7 +61,6 @@ import {
 } from '@/platform/performance/webStartupPerformance';
 import { REMOTE_SESSION_RECOVERED_EVENT } from '@/platform/functions-api/firebaseCallableRecovery';
 
-const CACHED_AUTH_BOOTSTRAP_TIMEOUT_MS = 10_000;
 const INTERACTIVE_AUTH_BOOTSTRAP_TIMEOUT_MS = 180_000;
 const SESSION_RESOLUTION_TIMEOUT_MS = 20_000;
 const HOUSEHOLD_READ_TIMEOUT_MS = 20_000;
@@ -205,7 +199,6 @@ function householdFromResolution(
 }
 
 export function HouseholdProvider({ children }: { children: ReactNode }) {
-  const paintBootstrapRef = useRef<ReturnType<typeof readLastSignedInSessionCache>>(undefined);
   const [household, setHousehold] = useState<Household | null>(null);
   const [householdKey, setHouseholdKey] = useState<string | null>(null);
   const [currentMember, setCurrentMember] = useState<HouseholdMember | null>(null);
@@ -244,29 +237,6 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       );
     };
   }, [activateRemoteSession]);
-
-  useLayoutEffect(() => {
-    const cached = readLastSignedInSessionCache();
-    paintBootstrapRef.current = cached;
-    markWebBootstrapCacheResult(cached !== undefined);
-    if (!cached) return;
-    const member = cached.household.members.find(
-      (candidate) => candidate.id === cached.resolution.membership.memberId
-    );
-    if (!member) return;
-    sessionGenerationRef.current = 1;
-    setClientSessionScope({
-      sessionGeneration: 1,
-      principalUid: cached.principalUid,
-      householdId: cached.resolution.membership.householdId,
-      memberId: cached.resolution.membership.memberId,
-      accessMode: 'member',
-    });
-    setHousehold(cached.household);
-    setHouseholdKey(cached.resolution.membership.householdId);
-    setCurrentMember(member);
-    setSessionState('ready');
-  }, []);
 
   const clearResolvedSession = useCallback(() => {
     resetClientOptimisticProjections();
@@ -332,13 +302,13 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     candidate?: LegacySessionCandidate,
     prefetchedResolution?: SignedInUserResolution,
     options: {
-      preservePaintBootstrap?: boolean;
+      preserveResolvedSession?: boolean;
       membershipSource?: 'last-verified-cache' | 'authoritative-prefetch';
     } = {}
   ) => {
     const resolutionGeneration = ++resolutionGenerationRef.current;
     setSessionError(null);
-    if (!options.preservePaintBootstrap) {
+    if (!options.preserveResolvedSession) {
       setSessionState('resolving');
       clearResolvedSession();
     }
@@ -402,7 +372,6 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       writeSignedInMembershipCache(
         user.uid,
         resolution,
-        undefined,
         {
           preserveVerificationTime:
             options.membershipSource === 'last-verified-cache',
@@ -442,7 +411,6 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         setCurrentMember(self);
         setLegacyCandidate(null);
         clearLegacySessionCandidate();
-        const normalizedHousehold = { ...loadedHousehold, members };
         writeSignedInMembershipCache(user.uid, {
           kind: 'membership-found',
           membership: {
@@ -450,7 +418,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
             displayName: self.name,
             aggregateVersion: self.aggregateVersion,
           },
-        }, normalizedHousehold, { preserveVerificationTime: true });
+        }, { preserveVerificationTime: true });
         setSessionState('ready');
         if (endpointRegistrationGenerationRef.current !== sessionGeneration) {
           endpointRegistrationGenerationRef.current = sessionGeneration;
@@ -465,47 +433,25 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
 
       const authoritativeHousehold = householdFromResolution(resolution);
       if (authoritativeHousehold) {
-        markWebHouseholdCacheResult(true);
         applyHousehold(authoritativeHousehold);
         return;
       }
 
-      // localStorage bootstrap snapshot은 IndexedDB 초기화도 기다리지 않고 동기식으로
-      // 화면을 엽니다. 실제 권한과 최신 값은 이어지는 Firestore read가 확정합니다.
-      const fastHousehold = readSignedInHouseholdCache(user.uid, membership.householdId);
-      if (fastHousehold) applyHousehold(fastHousehold);
+      // Membership 연결 정보는 재사용하더라도 가구 화면은 서버 문서로 확정합니다.
+      const { getHousehold } = await import('@/lib/householdService');
 
-      const { getCachedHousehold, getHousehold } = await import('@/lib/householdService');
-      const cachedHousehold = fastHousehold
-        ?? await getCachedHousehold(membership.householdId);
-      markWebHouseholdCacheResult(cachedHousehold !== null && cachedHousehold !== undefined);
-      if (!fastHousehold && cachedHousehold) applyHousehold(cachedHousehold);
-
+      markWebHouseholdStarted();
       try {
-        markWebHouseholdStarted();
-        let loadedHousehold: Household;
-        try {
-          loadedHousehold = await withinDeadline(
-            getHousehold(membership.householdId),
-            HOUSEHOLD_READ_TIMEOUT_MS,
-            'HOUSEHOLD_READ_TIMEOUT'
-          );
-          markWebHouseholdCompleted(true);
-        } catch (error) {
-          markWebHouseholdCompleted(false);
-          throw error;
-        }
+        const loadedHousehold = await withinDeadline(
+          getHousehold(membership.householdId),
+          HOUSEHOLD_READ_TIMEOUT_MS,
+          'HOUSEHOLD_READ_TIMEOUT'
+        );
+        markWebHouseholdCompleted(true);
         applyHousehold(loadedHousehold);
       } catch (error) {
-        // 검증된 membership과 캐시로 이미 화면을 복구했다면 일시적인 read
-        // 장애 때문에 다시 전체 화면을 막지 않습니다.
-        if (
-          isHouseholdReadNotFound(error)
-          || !cachedHousehold
-          || !isTransientHouseholdReadFailure(error)
-        ) {
-          throw error;
-        }
+        markWebHouseholdCompleted(false);
+        throw error;
       }
     } catch (error) {
       if (resolutionGeneration !== resolutionGenerationRef.current) return;
@@ -516,18 +462,18 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         invalidateSignedInMembershipVerification(user.uid);
       }
       if (
-        options.preservePaintBootstrap
+        options.preserveResolvedSession
         && !isHouseholdReadNotFound(error)
       ) {
-        // Firebase Auth가 복원된 뒤의 백그라운드 Membership 재검증 실패는
-        // 마지막으로 검증된 세션의 읽기 준비 상태를 취소하지 않습니다.
+        // 이미 서버 화면을 표시한 세션의 백그라운드 Membership 재검증 실패는
+        // 현재 읽기 준비 상태를 취소하지 않습니다.
         // 실제 가구 접근 권한은 계속 Firestore rules와 Functions에서 검증합니다.
-        // 여기서 false로 내리면 캐시 화면만 남고 자산·보유 종목 구독이 영구
-        // 중단되어, 일시적인 네트워크 오류가 전체 읽기 장애로 확대됩니다.
         setSessionState('ready');
         return;
       }
-      clearSignedInMembershipCache();
+      if (!isTransientHouseholdReadFailure(error)) {
+        clearSignedInMembershipCache();
+      }
       clearResolvedSession();
       setSessionError(errorMessage(error));
       setSessionState('error');
@@ -539,18 +485,11 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     let unsubscribeAuth: (() => void) | undefined;
     let androidBootstrapPending = isAndroidHostAvailable();
     let androidBootstrapStarted = false;
-    let androidBootstrapRetryAttempt = 0;
-    let androidBootstrapRetryId: number | undefined;
     let appliedAuthUid: string | null | undefined;
     let appliedResolutionKey: string | undefined;
     let membershipRevalidationDelayId: number | undefined;
     let cancelPostPaintRevalidation: (() => void) | undefined;
-    let authStartFrameId: number | undefined;
-    let authStartDelayId: number | undefined;
-    let authStartFallbackId: number | undefined;
     let authObserverStartRequested = false;
-    let authObserverRetryAttempt = 0;
-    let authObserverRetryId: number | undefined;
 
     const resolutionKey = (resolution?: SignedInUserResolution): string | undefined =>
       resolution?.kind === 'membership-found'
@@ -593,7 +532,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
               user,
               undefined,
               undefined,
-              { preservePaintBootstrap: true }
+              { preserveResolvedSession: true }
             ).finally(() => {
               if (!disposed && activeUserRef.current?.uid === user.uid) {
                 scheduleMembershipRevalidation(user, MEMBERSHIP_REVALIDATION_RETRY_MS);
@@ -612,7 +551,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     const applyUser = (
       user: User | null,
       prefetchedResolution?: SignedInUserResolution,
-      preservePaintBootstrap = false,
+      preserveResolvedSession = false,
       membershipSource?: 'last-verified-cache' | 'authoritative-prefetch',
       activateWhenAlreadyApplied = true
     ) => {
@@ -649,10 +588,9 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         user,
         captureLegacySessionCandidate(),
         prefetchedResolution,
-        { preservePaintBootstrap, membershipSource }
+        { preserveResolvedSession, membershipSource }
       );
-      // 검증 시각이 있는 cache를 사용했다면 authoritative household read가 오래
-      // 걸리더라도 Membership 재검증 예약 자체는 지연시키지 않습니다.
+      // 검증 시각이 있는 Membership 연결 정보를 사용해도 재검증 예약은 유지합니다.
       scheduleMembershipRevalidation(user);
       void restoration.finally(() => {
         if (!disposed && activeUserRef.current?.uid === user.uid) {
@@ -674,18 +612,11 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         existingUser
           ? refreshAndroidWebAuth(existingUser)
           : restoreAndroidHostAuth(),
-        paintBootstrapRef.current === undefined
-          ? INTERACTIVE_AUTH_BOOTSTRAP_TIMEOUT_MS
-          : CACHED_AUTH_BOOTSTRAP_TIMEOUT_MS,
+        INTERACTIVE_AUTH_BOOTSTRAP_TIMEOUT_MS,
         'ANDROID_AUTH_BOOTSTRAP_TIMEOUT'
       )).then((session) => {
         if (disposed || !androidBootstrapPending) return;
         androidBootstrapPending = false;
-        androidBootstrapRetryAttempt = 0;
-        if (androidBootstrapRetryId !== undefined) {
-          window.clearTimeout(androidBootstrapRetryId);
-          androidBootstrapRetryId = undefined;
-        }
         markWebAuthCompleted(true);
         const resolvedMembership = session?.signedInUserResolution ?? existingResolution;
         if (session?.user && resolvedMembership?.kind === 'membership-found') {
@@ -699,7 +630,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         applyUser(
           session?.user ?? null,
           resolvedMembership,
-          session?.user.uid === paintBootstrapRef.current?.principalUid,
+          false,
           resolvedMembership === undefined
             ? undefined
             : session?.signedInUserResolution === undefined
@@ -710,21 +641,6 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       }).catch((error) => {
         if (disposed || !androidBootstrapPending) return;
         markWebAuthCompleted(false);
-        if (paintBootstrapRef.current !== undefined) {
-          setRemoteSessionStatus('degraded');
-          setSessionError(errorMessage(error));
-          androidBootstrapStarted = false;
-          const retryDelayMs = Math.min(
-            5_000 * (2 ** androidBootstrapRetryAttempt),
-            60_000
-          );
-          androidBootstrapRetryAttempt += 1;
-          androidBootstrapRetryId = window.setTimeout(() => {
-            androidBootstrapRetryId = undefined;
-            startAndroidBootstrap(existingUser, existingResolution);
-          }, retryDelayMs);
-          return;
-        }
         androidBootstrapPending = false;
         clearResolvedSession();
         setSessionError(errorMessage(error));
@@ -741,11 +657,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       }
       if (androidBootstrapPending) {
         if (user) {
-          const paintResolution =
-            paintBootstrapRef.current?.principalUid === user.uid
-              ? paintBootstrapRef.current.resolution
-              : undefined;
-          const immediatelyUsableResolution = cachedResolution ?? paintResolution;
+          const immediatelyUsableResolution = cachedResolution;
           if (immediatelyUsableResolution !== undefined) {
             // Firebase가 영속 사용자를 복원했고 마지막으로 검증된 Membership도
             // 같은 principal에 속하면 원격 구독을 즉시 엽니다. 강제 token refresh는
@@ -753,7 +665,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
             applyUser(
               user,
               immediatelyUsableResolution,
-              user.uid === paintBootstrapRef.current?.principalUid,
+              false,
               'last-verified-cache'
             );
           }
@@ -763,11 +675,10 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         }
         return;
       }
-      const preservesPaint = user?.uid === paintBootstrapRef.current?.principalUid;
       applyUser(
         user,
         cachedResolution,
-        preservesPaint,
+        false,
         cachedResolution ? 'last-verified-cache' : undefined
       );
     };
@@ -775,78 +686,35 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     const startAuthObserver = () => {
       if (disposed || authObserverStartRequested) return;
       authObserverStartRequested = true;
-      if (authStartFrameId !== undefined) window.cancelAnimationFrame(authStartFrameId);
-      if (authStartDelayId !== undefined) window.clearTimeout(authStartDelayId);
-      if (authStartFallbackId !== undefined) window.clearTimeout(authStartFallbackId);
       markWebAuthStarted();
 
-      // Firebase Auth SDK는 캐시된 첫 화면 표시의 선행 조건이 아닙니다. 인증 모듈을
-      // 별도 청크로 늦게 불러오되, 화면 표시 후에는 기존과 동일하게 Auth observer와
-      // Android native custom-token 복구를 시작합니다.
+      // 인증 모듈을 별도 청크로 불러오고 즉시 Auth observer와 Android
+      // native custom-token 복구를 시작합니다.
       void loadAuthService().then(({ onAuthChange }) => {
         if (disposed) return;
         unsubscribeAuth = onAuthChange(handleAuthChange);
-        authObserverRetryAttempt = 0;
         setRemoteSessionStatus((current) =>
           current === 'degraded' ? 'connecting' : current
         );
 
-        // 마지막 화면 캐시가 없는 Android 첫 실행은 Auth observer와 Native 세션 복구를
-        // 병렬로 시작합니다. 기존의 고정 500ms 대기는 두 경로 모두에 불필요한 지연이었습니다.
-        if (androidBootstrapPending && paintBootstrapRef.current === undefined) {
+        // Android 첫 실행은 Auth observer와 Native 세션 복구를 병렬로 시작합니다.
+        if (androidBootstrapPending) {
           startAndroidBootstrap();
         }
       })
       .catch((error) => {
         if (disposed) return;
         markWebAuthCompleted(false);
-        if (paintBootstrapRef.current !== undefined) {
-          setRemoteSessionStatus('degraded');
-          setSessionError(errorMessage(error));
-          authObserverStartRequested = false;
-          const retryDelayMs = Math.min(
-            1_000 * (2 ** authObserverRetryAttempt),
-            30_000
-          );
-          authObserverRetryAttempt += 1;
-          authObserverRetryId = window.setTimeout(() => {
-            authObserverRetryId = undefined;
-            startAuthObserver();
-          }, retryDelayMs);
-          return;
-        }
         clearResolvedSession();
         setSessionError(errorMessage(error));
         setSessionState('error');
       });
     };
-
-    if (
-      paintBootstrapRef.current !== undefined
-      && typeof window.requestAnimationFrame === 'function'
-    ) {
-      // useLayoutEffect가 cache state를 적용하면 React가 passive effect를 paint 전에
-      // 실행할 수도 있으므로 rAF 다음 task에서 Auth 청크를 시작합니다.
-      authStartFrameId = window.requestAnimationFrame(() => {
-        authStartFrameId = undefined;
-        authStartDelayId = window.setTimeout(startAuthObserver, 0);
-      });
-      // background tab처럼 rAF가 멈춘 환경에서도 인증 검증이 영구 정지하지 않습니다.
-      authStartFallbackId = window.setTimeout(startAuthObserver, 1_000);
-    } else {
-      startAuthObserver();
-    }
+    startAuthObserver();
 
     return () => {
       disposed = true;
       cancelMembershipRevalidation();
-      if (authStartFrameId !== undefined) window.cancelAnimationFrame(authStartFrameId);
-      if (authStartDelayId !== undefined) window.clearTimeout(authStartDelayId);
-      if (authStartFallbackId !== undefined) window.clearTimeout(authStartFallbackId);
-      if (authObserverRetryId !== undefined) window.clearTimeout(authObserverRetryId);
-      if (androidBootstrapRetryId !== undefined) {
-        window.clearTimeout(androidBootstrapRetryId);
-      }
       unsubscribeAuth?.();
     };
   }, [
@@ -899,22 +767,18 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       if (!session?.user) throw new Error('ANDROID_AUTH_RESTORE_REQUIRED');
 
       const user = session.user;
+      const preserveResolvedSession =
+        activeUserRef.current?.uid === user.uid && householdKey !== null;
       activeUserRef.current = user;
       const cachedResolution =
         session.signedInUserResolution
-        ?? readSignedInMembershipCache(user.uid)
-        ?? (
-          paintBootstrapRef.current?.principalUid === user.uid
-            ? paintBootstrapRef.current.resolution
-            : undefined
-        );
+        ?? readSignedInMembershipCache(user.uid);
       await restoreSignedInUser(
         user,
         captureLegacySessionCandidate(),
         cachedResolution,
         {
-          preservePaintBootstrap:
-            paintBootstrapRef.current?.principalUid === user.uid,
+          preserveResolvedSession,
           membershipSource:
             cachedResolution === undefined
               ? undefined
@@ -928,7 +792,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       setSessionError(errorMessage(error));
       throw error;
     }
-  }, [restoreSignedInUser]);
+  }, [householdKey, restoreSignedInUser]);
 
   const retrySession = useCallback(async () => {
     const user = activeUserRef.current;

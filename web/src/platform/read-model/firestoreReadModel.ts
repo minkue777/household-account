@@ -12,7 +12,7 @@ export {
   collection,
   doc,
   getDoc,
-  getDocFromCache,
+  getDocFromServer,
   getDocs,
   orderBy,
   query,

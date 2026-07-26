@@ -14,11 +14,9 @@ import { isVisibleLedgerReadDocument } from '@/features/ledger/application/ledge
 import { requireClientSessionScope } from '@/composition/clientSessionScope';
 import type { LedgerTransactionCommandResult } from '@/platform/functions-api/householdCommandContract';
 import { createHouseholdCommandId } from '@/platform/functions-api/householdCommandClient';
-import { writeMonthlyExpenseSnapshot } from '@/features/ledger/application/monthlyExpenseSnapshot';
 
 const COLLECTION_NAME = 'expenses';
 const DEFAULT_TRANSACTION_TYPE: TransactionType = 'expense';
-const TRANSACTION_TYPES: readonly TransactionType[] = ['expense', 'income'];
 
 interface AddExpenseOptions {
   notifyOnCreate?: boolean;
@@ -451,26 +449,17 @@ export function subscribeToMonthlyExpenses(
     where('date', '<=', endDate)
   );
 
-  const unsubscribe = onSnapshot(q, (snapshot) => {
+  let hasServerSnapshot = false;
+  const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+    if (!hasServerSnapshot && snapshot.metadata.fromCache) return;
+    hasServerSnapshot = true;
     const allExpenses = snapshot.docs
       .filter((document) => isVisibleLedgerReadDocument(document.data()))
       .map(mapDocToExpense);
-    // Firestore 조회는 이미 수입·지출을 함께 반환합니다. 같은 결과를 두 로컬
-    // 스냅샷에 나눠 저장해 다음 탭의 첫 화면도 네트워크 없이 바로 복원합니다.
-    TRANSACTION_TYPES.forEach((snapshotType) => {
-      writeMonthlyExpenseSnapshot(
-        householdId,
-        year,
-        month,
-        snapshotType,
-        allExpenses.filter((expense) => matchesTransactionType(expense, snapshotType))
-      );
-    });
 
     // 클라이언트에서 날짜 필터링 및 정렬
     projection.publish(allExpenses);
   }, (error) => {
-    // Keep the last valid local snapshot visible until Auth/network reconnects.
     options.onError?.(error);
   });
 

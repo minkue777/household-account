@@ -1,11 +1,9 @@
 import {
+  SIGNED_IN_MEMBERSHIP_REVALIDATION_INTERVAL_MS,
   clearSignedInMembershipCache,
   getSignedInMembershipRevalidationDelay,
   invalidateSignedInMembershipVerification,
-  readLastSignedInSessionCache,
-  readSignedInHouseholdCache,
   readSignedInMembershipCache,
-  SIGNED_IN_MEMBERSHIP_REVALIDATION_INTERVAL_MS,
   writeSignedInMembershipCache,
 } from '@/features/access-household/application/signedInMembershipCache';
 
@@ -21,135 +19,76 @@ const resolution = {
   },
 };
 
-describe('signed-in Membership cache contract', () => {
-  beforeEach(() => window.localStorage.clear());
+describe('로그인 Membership cache 계약', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    jest.spyOn(Date, 'now').mockReturnValue(10_000);
+  });
 
-  it('동일 Firebase principal만 마지막 검증 Membership을 재사용한다', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('화면 데이터 없이 UID에 귀속된 Membership 연결 정보만 저장한다', () => {
     writeSignedInMembershipCache('uid-1', resolution);
 
     expect(readSignedInMembershipCache('uid-1')).toEqual(resolution);
-    expect(readSignedInMembershipCache('uid-other')).toBeUndefined();
-  });
-
-  it('손상된 값은 사용하지 않고 로그아웃 시 제거한다', () => {
-    window.localStorage.setItem(
-      'household-account.signed-in-membership.v1',
-      JSON.stringify({ version: 1, principalUid: 'uid-1', resolution: {} })
-    );
-    expect(readSignedInMembershipCache('uid-1')).toBeUndefined();
-
-    writeSignedInMembershipCache('uid-1', resolution);
-    clearSignedInMembershipCache();
-    expect(readSignedInMembershipCache('uid-1')).toBeUndefined();
-  });
-
-  it('동일 principal의 마지막 가구 화면을 동기식으로 복원한다', () => {
-    const household = {
-      id: 'household-1',
-      name: '즉시 표시 가계부',
-      createdAt: new Date('2026-07-23T00:00:00+09:00'),
-      defaultCategoryKey: '기타',
-      members: [{ id: 'member-1', name: '민규', aggregateVersion: 3 }],
-    };
-
-    writeSignedInMembershipCache('uid-1', resolution, household);
-
-    expect(readSignedInHouseholdCache('uid-1', 'household-1')).toEqual(household);
-    expect(readSignedInHouseholdCache('uid-other', 'household-1')).toBeUndefined();
-    expect(readSignedInHouseholdCache('uid-1', 'household-other')).toBeUndefined();
-  });
-
-  it('Membership만 갱신해도 같은 가구의 화면 snapshot은 유지한다', () => {
-    const household = {
-      id: 'household-1',
-      name: '보존 가계부',
-      createdAt: new Date('2026-07-23T00:00:00+09:00'),
-      members: [{ id: 'member-1', name: '민규', aggregateVersion: 3 }],
-    };
-    writeSignedInMembershipCache('uid-1', resolution, household);
-    writeSignedInMembershipCache('uid-1', {
-      ...resolution,
-      membership: { ...resolution.membership, aggregateVersion: 4 },
-    });
-
-    expect(readSignedInHouseholdCache('uid-1', 'household-1')?.name).toBe('보존 가계부');
-  });
-
-  it('complete last session can be restored before Firebase Auth persistence resolves', () => {
-    const household = {
-      id: 'household-1',
-      name: '즉시 표시 가계부',
-      createdAt: new Date('2026-07-23T00:00:00+09:00'),
-      members: [{ id: 'member-1', name: '민규', aggregateVersion: 3 }],
-    };
-    writeSignedInMembershipCache('uid-1', resolution, household);
-
-    expect(readLastSignedInSessionCache()).toEqual({
+    expect(readSignedInMembershipCache('uid-2')).toBeUndefined();
+    expect(JSON.parse(
+      window.localStorage.getItem('household-account.signed-in-membership.v1') ?? '{}'
+    )).toEqual({
+      version: 4,
       principalUid: 'uid-1',
       resolution,
-      household,
+      verifiedAt: 10_000,
     });
   });
 
-  it('최근 검증한 같은 principal은 주기 안에서 Membership 재검증을 생략한다', () => {
-    const verifiedAt = 1_000_000;
-    const dateNow = jest.spyOn(Date, 'now').mockReturnValue(verifiedAt);
-    writeSignedInMembershipCache('uid-1', resolution);
-
-    expect(getSignedInMembershipRevalidationDelay('uid-1', verifiedAt)).toBe(
-      SIGNED_IN_MEMBERSHIP_REVALIDATION_INTERVAL_MS
+  it('기존 화면 snapshot이 들어 있는 저장값도 Membership만 읽고 다음 저장에서 화면 데이터를 제거한다', () => {
+    window.localStorage.setItem(
+      'household-account.signed-in-membership.v1',
+      JSON.stringify({
+        version: 3,
+        principalUid: 'uid-1',
+        resolution,
+        verifiedAt: 9_000,
+        household: {
+          id: 'household-1',
+          name: '이전 가계부',
+          createdAt: '2026-07-20T00:00:00.000Z',
+          members: [{ id: 'member-1', name: '민규', aggregateVersion: 3 }],
+        },
+      })
     );
-    expect(getSignedInMembershipRevalidationDelay('uid-other', verifiedAt)).toBeUndefined();
-    dateNow.mockRestore();
-  });
 
-  it('cache 화면 갱신은 마지막 권위 검증 시각을 연장하지 않는다', () => {
-    const verifiedAt = 1_000_000;
-    const elapsed = 5 * 60 * 1_000;
-    const dateNow = jest.spyOn(Date, 'now').mockReturnValue(verifiedAt);
-    writeSignedInMembershipCache('uid-1', resolution);
-
-    dateNow.mockReturnValue(verifiedAt + elapsed);
+    expect(readSignedInMembershipCache('uid-1')).toEqual(resolution);
     writeSignedInMembershipCache(
       'uid-1',
       resolution,
-      undefined,
       { preserveVerificationTime: true }
     );
 
-    expect(
-      getSignedInMembershipRevalidationDelay('uid-1', verifiedAt + elapsed)
-    ).toBe(SIGNED_IN_MEMBERSHIP_REVALIDATION_INTERVAL_MS - elapsed);
-    dateNow.mockRestore();
-  });
-
-  it('검증 시각이 없는 기존 cache는 첫 paint 뒤 background 재검증 대상이다', () => {
-    writeSignedInMembershipCache('uid-1', resolution);
     const stored = JSON.parse(
       window.localStorage.getItem('household-account.signed-in-membership.v1') ?? '{}'
     );
-    stored.version = 2;
-    delete stored.verifiedAt;
-    window.localStorage.setItem(
-      'household-account.signed-in-membership.v1',
-      JSON.stringify(stored)
-    );
-
-    expect(getSignedInMembershipRevalidationDelay('uid-1')).toBe(0);
+    expect(stored.version).toBe(4);
+    expect(stored.verifiedAt).toBe(9_000);
+    expect(stored).not.toHaveProperty('household');
   });
 
-  it('권한 read가 거절되면 화면 snapshot은 남기고 Membership 재검증만 앞당긴다', () => {
-    const household = {
-      id: 'household-1',
-      name: '마지막 화면',
-      createdAt: new Date('2026-07-23T00:00:00+09:00'),
-      members: [{ id: 'member-1', name: '민규', aggregateVersion: 3 }],
-    };
-    writeSignedInMembershipCache('uid-1', resolution, household);
+  it('검증 주기와 명시적 무효화는 화면 cache 없이 Membership에만 적용한다', () => {
+    writeSignedInMembershipCache('uid-1', resolution);
 
+    expect(getSignedInMembershipRevalidationDelay('uid-1', 10_000)).toBe(
+      SIGNED_IN_MEMBERSHIP_REVALIDATION_INTERVAL_MS
+    );
     invalidateSignedInMembershipVerification('uid-1');
+    expect(getSignedInMembershipRevalidationDelay('uid-1', 10_000)).toBe(0);
+  });
 
-    expect(getSignedInMembershipRevalidationDelay('uid-1')).toBe(0);
-    expect(readSignedInHouseholdCache('uid-1', 'household-1')).toEqual(household);
+  it('로그아웃 시 Membership 연결 정보도 제거한다', () => {
+    writeSignedInMembershipCache('uid-1', resolution);
+    clearSignedInMembershipCache();
+    expect(readSignedInMembershipCache('uid-1')).toBeUndefined();
   });
 });

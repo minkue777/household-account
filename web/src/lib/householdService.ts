@@ -1,8 +1,7 @@
 import {
   collection,
   doc,
-  getDoc,
-  getDocFromCache,
+  getDocFromServer,
   getDocs,
   db,
   timestampToDate,
@@ -78,18 +77,11 @@ function mapHouseholdSnapshot(docSnap: DocumentSnapshot<DocumentData>): Househol
 }
 
 export async function getHousehold(key: string): Promise<Household> {
-  const household = mapHouseholdSnapshot(await getDoc(doc(householdsCollection, key)));
+  const household = mapHouseholdSnapshot(
+    await getDocFromServer(doc(householdsCollection, key))
+  );
   if (!household) throw new HouseholdReadNotFoundError(key);
   return household;
-}
-
-/** Android의 영속 read cache에 있는 마지막 확인 가구를 네트워크보다 먼저 읽습니다. */
-export async function getCachedHousehold(key: string): Promise<Household | null> {
-  try {
-    return mapHouseholdSnapshot(await getDocFromCache(doc(householdsCollection, key)));
-  } catch {
-    return null;
-  }
 }
 
 export async function getAllHouseholds(): Promise<Household[]> {

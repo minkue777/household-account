@@ -11,10 +11,6 @@ import React, {
 } from 'react';
 import type { CategoryDocument } from '@/types/category';
 import { useHousehold } from '@/contexts/HouseholdContext';
-import {
-  readCategorySnapshot,
-  writeCategorySnapshot,
-} from '@/features/category-budget/application/categorySnapshot';
 
 interface CategoryContextType {
   categories: CategoryDocument[];
@@ -60,9 +56,8 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
       return;
     }
-    const cached = readCategorySnapshot(householdId);
-    setCategories(cached ?? []);
-    setIsLoading(cached === undefined);
+    setCategories([]);
+    setIsLoading(true);
   }, [householdId]);
 
   // 초기화 및 실시간 구독
@@ -82,7 +77,6 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         // 기본 카테고리는 HouseholdCreated 이벤트를 소비한 서버가 생성합니다.
         unsubscribe = subscribeToCategories(householdId, (cats) => {
-          writeCategorySnapshot(householdId, cats);
           setCategories(cats);
           setIsLoading(false);
         }, () => setIsLoading(false));

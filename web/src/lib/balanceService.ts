@@ -6,7 +6,6 @@ import {
   timestampToDate,
 } from '@/platform/read-model/firestoreReadModel';
 import { requireClientSessionScope } from '@/composition/clientSessionScope';
-import { writeLocalCurrencyBalanceSnapshot } from '@/features/local-currency/application/localCurrencyBalanceSnapshot';
 
 export interface LocalCurrencyBalance {
   balance: number;
@@ -26,26 +25,21 @@ export function subscribeToLocalCurrencyBalance(
   let preferenceLoaded = false;
   let selectedType: string | undefined;
 
-  const emit = (balance: LocalCurrencyBalance | null) => {
-    writeLocalCurrencyBalanceSnapshot(scope.householdId, balance);
-    callback(balance);
-  };
-
   const emitCanonicalSelection = () => {
     if (!balancesLoaded) return;
 
     if (selectedType !== undefined) {
-      emit(balances.get(selectedType) ?? null);
+      callback(balances.get(selectedType) ?? null);
       return;
     }
 
     if (balances.size === 1) {
-      emit(balances.values().next().value ?? null);
+      callback(balances.values().next().value ?? null);
       return;
     }
 
     // 여러 유형이 있으면 Home Preferences의 명시적 선택을 기다립니다.
-    if (preferenceLoaded) emit(null);
+    if (preferenceLoaded) callback(null);
   };
 
   const balancesReference = collection(
@@ -64,7 +58,9 @@ export function subscribeToLocalCurrencyBalance(
 
   const unsubscribeBalances = onSnapshot(
     balancesReference,
+    { includeMetadataChanges: true },
     (snapshot) => {
+      if (!balancesLoaded && snapshot.metadata.fromCache) return;
       balances = new Map(
         snapshot.docs.flatMap((balanceDocument) => {
           const data = balanceDocument.data();
@@ -104,7 +100,9 @@ export function subscribeToLocalCurrencyBalance(
 
   const unsubscribePreference = onSnapshot(
     preferenceReference,
+    { includeMetadataChanges: true },
     (snapshot) => {
+      if (!preferenceLoaded && snapshot.metadata.fromCache) return;
       const data = snapshot.exists() ? snapshot.data() : undefined;
       selectedType =
         typeof data?.selectedLocalCurrencyType === 'string'

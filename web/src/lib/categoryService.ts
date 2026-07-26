@@ -89,7 +89,10 @@ export function subscribeToCategories(
     orderBy('order', 'asc')
   );
 
-  const unsubscribe = onSnapshot(q, (snapshot) => {
+  let hasServerSnapshot = false;
+  const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+    if (!hasServerSnapshot && snapshot.metadata.fromCache) return;
+    hasServerSnapshot = true;
     const categories: CategoryDocument[] = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),

@@ -320,7 +320,7 @@ Event payload는 projection 조정에 필요한 최소 금액·날짜·category 
 ### 8.2 조회와 Projection
 
 - 브라우저 Web·PWA·Android WebView의 월·연 원장 목록은 Ledger가 소유한 같은 공개 Firestore Read Contract를 실시간 구독합니다. 검증된 SessionScope의 `householdId`와 시작일·종료일을 `householdId + date` 복합 index에 전달하고, 거래 유형과 lifecycle 가시성은 같은 Read Adapter가 적용합니다.
-- 첫 화면용 월 원장 local snapshot과 실시간 Projection은 동일한 `accountingDate DESC, localTime DESC, transactionId DESC` 정렬 Policy를 사용합니다. 저장 배열의 순서를 신뢰하지 않고 읽는 시점에도 다시 정렬하므로 기존 기기의 비정렬 cache가 실시간 결과 도착 전에 다른 항목을 맨 위에 표시하지 않습니다.
+- 앱 첫 가계부 화면은 월 원장 localStorage snapshot을 읽거나 쓰지 않습니다. Firestore listener는 metadata 변경을 포함해 구독하고 최초 `fromCache=true` 결과를 건너뛴 뒤 서버 snapshot부터 `accountingDate DESC, localTime DESC, transactionId DESC` 정렬 Policy로 표시합니다.
 - 생성·수정·삭제 Command를 보내는 순간 client의 Ledger 낙관적 Projection에 변경을 반영합니다. 서버의 Canonical Command 결과와 이어지는 실시간 snapshot으로 확정·수렴하며, typed rejection 또는 version conflict이면 해당 mutation만 rollback합니다. 성공 뒤 기간 목록을 별도 조회하거나 focus·visible 이벤트 및 30초 polling으로 재조회하지 않습니다.
 - Ledger 낙관적 Projection은 `householdId` scope별로 격리합니다. 월·연간·통계·검색처럼 같은 가구에서 동시에 열린 모든 구독은 같은 mutation을 관찰하되, 다른 가구의 pending·committed overlay는 절대 합성하지 않습니다.
 - 로그아웃·가구 전환으로 `SessionScope`를 해제할 때 모든 Ledger base와 pending·committed overlay를 폐기합니다. 이전 session의 늦은 Command 응답은 폐기된 mutation ID에만 귀속되며 새 session Projection에 다시 주입하지 않습니다.

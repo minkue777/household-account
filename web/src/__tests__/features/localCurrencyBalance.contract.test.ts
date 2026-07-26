@@ -22,6 +22,7 @@ jest.mock('@/platform/read-model/firestoreReadModel', () => ({
   doc: (...segments: unknown[]) => docMock(...segments),
   onSnapshot: (
     reference: { kind: string },
+    _options: { includeMetadataChanges: boolean },
     next: (snapshot: any) => void,
     error: (error: unknown) => void
   ) => {
@@ -49,7 +50,6 @@ jest.mock('@/composition/clientSessionScope', () => ({
 }));
 
 import { subscribeToLocalCurrencyBalance } from '@/lib/balanceService';
-import { readLocalCurrencyBalanceSnapshot } from '@/features/local-currency/application/localCurrencyBalanceSnapshot';
 
 function balanceDocument(
   id: string,
@@ -71,7 +71,6 @@ describe('지역화폐 잔액 읽기 계약', () => {
 
   beforeEach(() => {
     consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
-    localStorage.clear();
     listeners.clear();
     collectionMock.mockClear();
     docMock.mockClear();
@@ -99,6 +98,7 @@ describe('지역화폐 잔액 읽기 계약', () => {
     );
 
     listeners.get('balances')?.next({
+      metadata: { fromCache: false },
       docs: [balanceDocument('gyeonggi', 1_153_429)],
     });
 
@@ -107,12 +107,6 @@ describe('지역화폐 잔액 읽기 계약', () => {
       currencyType: 'gyeonggi',
       updatedAt: new Date('2026-07-23T08:02:15.234Z'),
     });
-    expect(readLocalCurrencyBalanceSnapshot('household-1')).toEqual({
-      balance: 1_153_429,
-      currencyType: 'gyeonggi',
-      updatedAt: new Date('2026-07-23T08:02:15.234Z'),
-    });
-
     unsubscribe();
     expect(unsubscribeBalances).toHaveBeenCalledTimes(1);
     expect(unsubscribePreference).toHaveBeenCalledTimes(1);
@@ -122,6 +116,7 @@ describe('지역화폐 잔액 읽기 계약', () => {
     const callback = jest.fn();
     subscribeToLocalCurrencyBalance(callback);
     listeners.get('balances')?.next({
+      metadata: { fromCache: false },
       docs: [balanceDocument('gyeonggi', 1_153_429)],
     });
 
@@ -134,9 +129,6 @@ describe('지역화폐 잔액 읽기 계약', () => {
     listeners.get('balances')?.error(new Error('temporarily unavailable'));
     listeners.get('preference')?.error(new Error('temporarily unavailable'));
     expect(callback).toHaveBeenCalledTimes(1);
-    expect(readLocalCurrencyBalanceSnapshot('household-1')).toEqual(
-      expect.objectContaining({ balance: 1_153_429 })
-    );
   });
 
   it('[T-BAL-004][BAL-004] 여러 지역화폐가 있으면 Home Preferences가 선택한 유형만 표시한다', () => {
@@ -144,6 +136,7 @@ describe('지역화폐 잔액 읽기 계약', () => {
     subscribeToLocalCurrencyBalance(callback);
 
     listeners.get('balances')?.next({
+      metadata: { fromCache: false },
       docs: [
         balanceDocument('gyeonggi', 20_000),
         balanceDocument('daejeon', 3_289),
@@ -152,12 +145,33 @@ describe('지역화폐 잔액 읽기 계약', () => {
     expect(callback).not.toHaveBeenCalled();
 
     listeners.get('preference')?.next({
+      metadata: { fromCache: false },
       exists: () => true,
       data: () => ({ selectedLocalCurrencyType: 'daejeon' }),
     });
     expect(callback).toHaveBeenLastCalledWith(expect.objectContaining({
       balance: 3_289,
       currencyType: 'daejeon',
+    }));
+  });
+
+  it('첫 화면에서는 로컬 Firestore cache 값을 무시하고 서버 snapshot부터 표시한다', () => {
+    const callback = jest.fn();
+    subscribeToLocalCurrencyBalance(callback);
+
+    listeners.get('balances')?.next({
+      metadata: { fromCache: true },
+      docs: [balanceDocument('gyeonggi', 10_000)],
+    });
+    expect(callback).not.toHaveBeenCalled();
+
+    listeners.get('balances')?.next({
+      metadata: { fromCache: false },
+      docs: [balanceDocument('gyeonggi', 20_000)],
+    });
+    expect(callback).toHaveBeenLastCalledWith(expect.objectContaining({
+      balance: 20_000,
+      currencyType: 'gyeonggi',
     }));
   });
 });

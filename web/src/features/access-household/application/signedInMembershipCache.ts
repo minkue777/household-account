@@ -1,8 +1,4 @@
 import type { HouseholdCommandResults } from '@/platform/functions-api/householdCommandContract';
-import {
-  type HomeSummaryCardKey,
-  type Household,
-} from '@/types/household';
 
 export type SignedInUserResolution =
   HouseholdCommandResults['access.resolve-signed-in-user.v1'];
@@ -15,103 +11,25 @@ const STORAGE_KEY = 'household-account.signed-in-membership.v1';
 export const SIGNED_IN_MEMBERSHIP_REVALIDATION_INTERVAL_MS = 30 * 60 * 1_000;
 
 interface StoredMembership {
-  version: 1 | 2 | 3;
+  version: 1 | 2 | 3 | 4;
   principalUid: string;
   resolution: MembershipFoundResolution;
-  household?: StoredHousehold;
   verifiedAt?: number;
 }
-
-interface StoredHousehold {
-  id: string;
-  name: string;
-  createdAt: string;
-  defaultCategoryKey?: string;
-  homeSummaryConfig?: {
-    leftCard: HomeSummaryCardKey;
-    rightCard: HomeSummaryCardKey;
-  };
-  members: Array<{
-    id: string;
-    name: string;
-    aggregateVersion: number;
-  }>;
-}
-
-export interface LastSignedInSessionCache {
-  readonly principalUid: string;
-  readonly resolution: MembershipFoundResolution;
-  readonly household: Household;
-}
-
-const HOME_SUMMARY_CARD_KEYS = new Set<HomeSummaryCardKey>([
-  'localCurrencyBalance',
-  'monthlyRemainingBudget',
-  'monthlySpent',
-  'yearlySpent',
-]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function decodeStoredHousehold(value: unknown): StoredHousehold | undefined {
-  if (
-    !isRecord(value)
-    || typeof value.id !== 'string'
-    || value.id.trim() === ''
-    || typeof value.name !== 'string'
-    || typeof value.createdAt !== 'string'
-    || Number.isNaN(Date.parse(value.createdAt))
-    || !Array.isArray(value.members)
-  ) {
-    return undefined;
-  }
-  const members = value.members.map((member) => {
-    if (
-      !isRecord(member)
-      || typeof member.id !== 'string'
-      || member.id.trim() === ''
-      || typeof member.name !== 'string'
-      || !Number.isInteger(member.aggregateVersion)
-      || Number(member.aggregateVersion) < 1
-    ) {
-      return undefined;
-    }
-    return {
-      id: member.id,
-      name: member.name,
-      aggregateVersion: Number(member.aggregateVersion),
-    };
-  });
-  if (members.some((member) => member === undefined)) return undefined;
-
-  const rawSummary = value.homeSummaryConfig;
-  const homeSummaryConfig = isRecord(rawSummary)
-    && HOME_SUMMARY_CARD_KEYS.has(rawSummary.leftCard as HomeSummaryCardKey)
-    && HOME_SUMMARY_CARD_KEYS.has(rawSummary.rightCard as HomeSummaryCardKey)
-    ? {
-        leftCard: rawSummary.leftCard as HomeSummaryCardKey,
-        rightCard: rawSummary.rightCard as HomeSummaryCardKey,
-      }
-    : undefined;
-
-  return {
-    id: value.id,
-    name: value.name,
-    createdAt: value.createdAt,
-    ...(typeof value.defaultCategoryKey === 'string'
-      ? { defaultCategoryKey: value.defaultCategoryKey }
-      : {}),
-    ...(homeSummaryConfig ? { homeSummaryConfig } : {}),
-    members: members as StoredHousehold['members'],
-  };
-}
-
 function decode(value: unknown): StoredMembership | undefined {
   if (
     !isRecord(value)
-    || (value.version !== 1 && value.version !== 2 && value.version !== 3)
+    || (
+      value.version !== 1
+      && value.version !== 2
+      && value.version !== 3
+      && value.version !== 4
+    )
     || typeof value.principalUid !== 'string'
   ) {
     return undefined;
@@ -135,7 +53,6 @@ function decode(value: unknown): StoredMembership | undefined {
   ) {
     return undefined;
   }
-  const household = decodeStoredHousehold(value.household);
   return {
     version: value.version,
     principalUid: value.principalUid,
@@ -150,27 +67,11 @@ function decode(value: unknown): StoredMembership | undefined {
         capabilities: [...membership.capabilities] as string[],
       },
     },
-    ...(household ? { household } : {}),
     ...(typeof value.verifiedAt === 'number'
       && Number.isFinite(value.verifiedAt)
       && value.verifiedAt > 0
       ? { verifiedAt: value.verifiedAt }
       : {}),
-  };
-}
-
-function serializeHousehold(household: Household): StoredHousehold {
-  return {
-    id: household.id,
-    name: household.name,
-    createdAt: household.createdAt.toISOString(),
-    ...(household.defaultCategoryKey !== undefined
-      ? { defaultCategoryKey: household.defaultCategoryKey }
-      : {}),
-    ...(household.homeSummaryConfig
-      ? { homeSummaryConfig: { ...household.homeSummaryConfig } }
-      : {}),
-    members: household.members.map((member) => ({ ...member })),
   };
 }
 
@@ -186,8 +87,8 @@ function readStoredMembership(): StoredMembership | undefined {
 
 /**
  * Firebase Auth가 복원한 동일 principal의 마지막 검증 Membership을 읽습니다.
- * 이 값은 첫 화면을 여는 cache hint일 뿐이며 Firestore rules와 Functions가
- * 모든 실제 read/write 권한을 다시 검증합니다.
+ * 이 값은 반복 인증 왕복을 줄이는 연결 hint일 뿐 화면 데이터가 아니며,
+ * Firestore rules와 Functions가 모든 실제 read/write 권한을 다시 검증합니다.
  */
 export function readSignedInMembershipCache(
   principalUid: string
@@ -227,105 +128,27 @@ export function invalidateSignedInMembershipVerification(
   const { verifiedAt: _verifiedAt, ...retained } = stored;
   window.localStorage.setItem(
     STORAGE_KEY,
-    JSON.stringify({ ...retained, version: 3 })
+    JSON.stringify({ ...retained, version: 4 })
   );
 }
 
-/**
- * Returns the last fully rendered member session without waiting for Firebase Auth persistence.
- *
- * This is only a paint-time hint. Firebase Auth, App Check, and Firestore rules still
- * validate remote operations; the authoritative Membership command periodically converges
- * the cached association after the first useful paint.
- */
-export function readLastSignedInSessionCache(): LastSignedInSessionCache | undefined {
-  const stored = readStoredMembership();
-  const household = stored?.household;
-  if (!stored || !household) return undefined;
-  if (household.id !== stored.resolution.membership.householdId) return undefined;
-  if (
-    !household.members.some(
-      (member) => member.id === stored.resolution.membership.memberId
-    )
-  ) {
-    return undefined;
-  }
-  return {
-    principalUid: stored.principalUid,
-    resolution: stored.resolution,
-    household: {
-      id: household.id,
-      name: household.name,
-      createdAt: new Date(household.createdAt),
-      ...(household.defaultCategoryKey !== undefined
-        ? { defaultCategoryKey: household.defaultCategoryKey }
-        : {}),
-      ...(household.homeSummaryConfig
-        ? { homeSummaryConfig: { ...household.homeSummaryConfig } }
-        : {}),
-      members: household.members.map((member) => ({ ...member })),
-    },
-  };
-}
-
-/**
- * 마지막으로 표시한 가구 read model을 동기식 localStorage에서 복원합니다.
- * 화면 선표시 전용이며 Firestore/Functions 권한 판정에는 사용하지 않습니다.
- */
-export function readSignedInHouseholdCache(
-  principalUid: string,
-  householdId: string
-): Household | undefined {
-  if (principalUid.trim() === '' || householdId.trim() === '') return undefined;
-  const stored = readStoredMembership();
-  if (
-    stored?.principalUid !== principalUid
-    || stored.resolution.membership.householdId !== householdId
-    || stored.household?.id !== householdId
-  ) {
-    return undefined;
-  }
-  const household = stored.household;
-  return {
-    id: household.id,
-    name: household.name,
-    createdAt: new Date(household.createdAt),
-    ...(household.defaultCategoryKey !== undefined
-      ? { defaultCategoryKey: household.defaultCategoryKey }
-      : {}),
-    ...(household.homeSummaryConfig
-      ? { homeSummaryConfig: { ...household.homeSummaryConfig } }
-      : {}),
-    members: household.members.map((member) => ({ ...member })),
-  };
-}
-
+/** 화면 데이터 없이 인증된 Membership 연결 정보만 보존합니다. */
 export function writeSignedInMembershipCache(
   principalUid: string,
   resolution: MembershipFoundResolution,
-  household?: Household,
   options: { preserveVerificationTime?: boolean } = {}
 ): void {
   if (typeof window === 'undefined' || principalUid.trim() === '') return;
   const current = readStoredMembership();
-  const retainedHousehold = household
-    ? serializeHousehold(household)
-    : (
-      current?.principalUid === principalUid
-      && current.resolution.membership.householdId === resolution.membership.householdId
-        ? current.household
-        : undefined
-    );
   const retainedVerifiedAt =
     current?.principalUid === principalUid
     && current.resolution.membership.householdId === resolution.membership.householdId
       ? current.verifiedAt
       : undefined;
   const stored: StoredMembership = {
-    version: 3,
+    version: 4,
     principalUid,
     resolution,
-    ...(retainedHousehold ? { household: retainedHousehold } : {}),
     ...(options.preserveVerificationTime
       ? (retainedVerifiedAt !== undefined ? { verifiedAt: retainedVerifiedAt } : {})
       : { verifiedAt: Date.now() }),

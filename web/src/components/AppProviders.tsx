@@ -17,6 +17,14 @@ import { preloadLedgerMutationRuntime } from '@/composition/ledgerMutationRuntim
 import { warmAssetNavigationIntent } from '@/composition/assetNavigationPrewarm';
 import { AppDialogProvider } from '@/contexts/AppDialogContext';
 import { REMOTE_SESSION_RECOVERY_REQUESTED_EVENT } from '@/platform/functions-api/firebaseCallableRecovery';
+import { clearRetiredHomeReadSnapshots } from '@/platform/read-model/retiredHomeReadSnapshotCleanup';
+
+function RetiredHomeReadSnapshotCleanup() {
+  useEffect(() => {
+    clearRetiredHomeReadSnapshots();
+  }, []);
+  return null;
+}
 
 function DeferredFirebaseSecurityInitialization() {
   // App Check SDK는 동적으로 불러 첫 화면 bundle에서는 분리하되 idle까지 미루지
@@ -284,6 +292,7 @@ export default function AppProviders({ children }: { children: React.ReactNode }
   return (
     <AppDialogProvider>
       <HouseholdProvider>
+        <RetiredHomeReadSnapshotCleanup />
         <DeferredFirebaseSecurityInitialization />
         <WebRuntimeUpdateRecovery />
         <AuthenticatedPlatformEffects />
