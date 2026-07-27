@@ -451,13 +451,13 @@ export default function StockHoldingList({
           stockName: editName.trim(),
           quantity: Number(editQuantity),
           avgPrice: editAvgPrice ? Number(editAvgPrice) : 0,
-        }, editingHolding.aggregateVersion);
+        }, editingHolding.aggregateVersion, editingHolding);
       } else {
         pendingUpdate = updateStockHolding(editingHolding.id, assetId, {
           stockName: editName.trim(),
           quantity: 1,
           currentPrice: parseInt(editQuantity, 10),
-        }, editingHolding.aggregateVersion);
+        }, editingHolding.aggregateVersion, editingHolding);
       }
 
       resetEditingState();
@@ -479,7 +479,8 @@ export default function StockHoldingList({
       const pendingDelete = deleteStockHolding(
         pendingDeleteHolding.id,
         assetId,
-        pendingDeleteHolding.aggregateVersion
+        pendingDeleteHolding.aggregateVersion,
+        pendingDeleteHolding
       );
       resetEditingState();
       setPendingDeleteHolding(null);

@@ -12,6 +12,7 @@ import {
   isAndroidHostAvailable,
   refreshAndroidHostSession,
 } from '@/platform/android-host/androidHostBridge';
+import { ANDROID_NATIVE_RESUME_EVENT } from '@/platform/android-host/androidLifecycleEvents';
 import { scheduleAfterWebFirstLedgerPaint } from '@/platform/performance/webStartupPerformance';
 import { preloadLedgerMutationRuntime } from '@/composition/ledgerMutationRuntimePreload';
 import { AppDialogProvider } from '@/contexts/AppDialogContext';
@@ -158,9 +159,8 @@ function WebRuntimeUpdateRecovery() {
 const NATIVE_SESSION_REFRESH_KEY = 'household-account.native-session-refresh.v2';
 const NATIVE_SESSION_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1_000;
 const ANDROID_WEB_AUTH_REFRESH_INTERVAL_MS = 15 * 60 * 1_000;
-const ANDROID_NATIVE_RESUME_EVENT = 'household-account:android-resume';
 
-function AuthenticatedPlatformEffects() {
+export function AuthenticatedPlatformEffects() {
   const {
     sessionState,
     isSessionVerified,

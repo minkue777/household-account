@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Asset,
   AssetType,
@@ -77,6 +77,7 @@ function resolveAssetSubType(asset: Asset): string {
 
 export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModalProps) {
   const { showAlert } = useAppDialog();
+  const editBaseRef = useRef<Asset | null>(asset);
   // 선택한 자산값으로 첫 렌더를 완성합니다. 빈 예금 폼을 그린 뒤 effect로
   // 교체하면 유형 테두리와 세부 유형 선택이 한 프레임 늦게 나타납니다.
   const [name, setName] = useState(() => asset?.name ?? '');
@@ -124,6 +125,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
       return;
     }
 
+    editBaseRef.current = asset;
     setName(asset.name);
     setType(asset.type);
     setSubType(resolveAssetSubType(asset));
@@ -150,7 +152,10 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
     );
     setGoldQuantity(extractGoldQuantityFromAsset(asset));
     setShowDeleteConfirm(false);
-  }, [asset]);
+    // 같은 자산의 시세·보유 종목 갱신은 최신 version만 전달하며 입력 중인
+    // 폼 값은 초기화하지 않습니다. 새 자산을 열 때만 편집 기준을 교체합니다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asset?.id]);
 
   useEffect(() => {
     if (type === 'gold' && !isGoldEtfSubType(subType)) {
@@ -241,10 +246,12 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
         }
       }
 
+      const editBase = editBaseRef.current ?? asset;
       const pendingUpdate = updateAsset(
         asset.id,
         updateData as Partial<Asset>,
-        asset.aggregateVersion
+        editBase.aggregateVersion,
+        editBase
       );
       onClose();
       await pendingUpdate;
@@ -263,7 +270,12 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
 
     setIsSubmitting(true);
     try {
-      const pendingDelete = deleteAsset(asset.id, asset.aggregateVersion);
+      const editBase = editBaseRef.current ?? asset;
+      const pendingDelete = deleteAsset(
+        asset.id,
+        editBase.aggregateVersion,
+        editBase
+      );
       onClose();
       await pendingDelete;
     } catch (error) {

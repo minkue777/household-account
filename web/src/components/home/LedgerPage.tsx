@@ -37,7 +37,6 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     household,
     householdKey,
     isSessionVerified = true,
-    remoteReadEpoch = 0,
   } = useHousehold();
   const { isLoading: categoriesLoading } = useCategoryContext();
 
@@ -61,6 +60,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     readError,
     localCurrencyBalance,
     localCurrencySettled,
+    readRefreshKey,
   } = useLedgerReadModel({
     year: currentYear,
     month: currentMonth,
@@ -161,7 +161,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     homeReadModelReady,
     isSessionVerified,
     needsYearlyTotal,
-    remoteReadEpoch,
+    readRefreshKey,
     transactionType,
   ]);
 
@@ -347,6 +347,15 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
           onSearchClick={() => setShowSearchModal(true)}
           transactionType={transactionType}
         />
+
+        {readError != null && serverSnapshotReady && (
+          <div
+            role="status"
+            className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+          >
+            최신 내역을 확인하지 못했습니다. 기존 내역을 유지한 채 연결을 복구하고 있습니다.
+          </div>
+        )}
 
         {showAddModal && (
           <AddExpenseModal

@@ -108,7 +108,8 @@ describe('StockHoldingList 수동 보유 항목 수정 계약', () => {
         quantity: 1,
         currentPrice: 1_500_000,
       },
-      3
+      3,
+      legacyCashHolding()
     );
     expect(screen.queryByLabelText('금액')).not.toBeInTheDocument();
 
@@ -147,7 +148,8 @@ describe('StockHoldingList 수동 보유 항목 수정 계약', () => {
     expect(mockedDeleteStockHolding).toHaveBeenCalledWith(
       'legacy-cash-1',
       'asset-1',
-      3
+      3,
+      legacyCashHolding()
     );
     expect(screen.queryByLabelText('금액')).not.toBeInTheDocument();
 

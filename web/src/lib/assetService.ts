@@ -49,11 +49,72 @@ const HOLDINGS_COLLECTION = 'stock_holdings';
 const CRYPTO_HOLDINGS_COLLECTION = 'crypto_holdings';
 
 const assetUpdateTails = new Map<string, Promise<void>>();
+const stockMutationTails = new Map<string, Promise<void>>();
+const cryptoMutationTails = new Map<string, Promise<void>>();
 let assetUpdateQueueGeneration = 0;
+const ASSET_AUTHORITATIVE_WAIT_TIMEOUT_MS = 20_000;
+
+interface VersionedPortfolioEntity {
+  readonly id: string;
+  readonly aggregateVersion: number;
+}
+
+interface AuthoritativeWaiter<Entity extends VersionedPortfolioEntity> {
+  readonly entityId: string;
+  readonly minimumVersionExclusive?: number;
+  readonly resolve: (entity: Entity) => void;
+  readonly reject: (error: Error) => void;
+  readonly timeoutId: ReturnType<typeof setTimeout>;
+}
+
+type AuthoritativeSubscriptionStatus = 'pending' | 'ready' | 'failed';
+
+interface AuthoritativeState<Entity extends VersionedPortfolioEntity> {
+  readonly generation: number;
+  readonly serverEntities: Map<string, Entity>;
+  readonly commandFloors: Map<string, Entity>;
+  readonly startupEntities: Map<string, Entity>;
+  readonly waiters: Set<AuthoritativeWaiter<Entity>>;
+  readonly subscriptions: Map<number, AuthoritativeSubscriptionStatus>;
+  failureCode?: string;
+  ready: boolean;
+}
+
+const assetAuthoritativeStates = new Map<string, AuthoritativeState<Asset>>();
+const stockAuthoritativeStates =
+  new Map<string, AuthoritativeState<StockHolding>>();
+const cryptoAuthoritativeStates =
+  new Map<string, AuthoritativeState<CryptoHolding>>();
+let nextAuthoritativeSubscriptionId = 1;
+
+function rejectAuthoritativeWaiters<Entity extends VersionedPortfolioEntity>(
+  state: AuthoritativeState<Entity>,
+  code: string
+): void {
+  const error = new Error(code);
+  state.waiters.forEach((waiter) => {
+    clearTimeout(waiter.timeoutId);
+    waiter.reject(error);
+  });
+  state.waiters.clear();
+}
 
 registerClientSessionReset(() => {
+  function resetStates<Entity extends VersionedPortfolioEntity>(
+    states: Map<string, AuthoritativeState<Entity>>
+  ): void {
+    states.forEach((state) => {
+      rejectAuthoritativeWaiters(state, 'CLIENT_SESSION_RESET');
+    });
+    states.clear();
+  }
+  resetStates(assetAuthoritativeStates);
+  resetStates(stockAuthoritativeStates);
+  resetStates(cryptoAuthoritativeStates);
   assetUpdateQueueGeneration += 1;
   assetUpdateTails.clear();
+  stockMutationTails.clear();
+  cryptoMutationTails.clear();
 });
 
 /**
@@ -80,6 +141,365 @@ function valuesEqual(left: unknown, right: unknown): boolean {
 function hasPatchChanges<Entity extends object>(current: Entity, patch: Partial<Entity>): boolean {
   const currentRecord = current as Record<string, unknown>;
   return Object.entries(patch).some(([key, value]) => !valuesEqual(currentRecord[key], value));
+}
+
+function changedPatch<Entity extends object>(
+  current: Entity,
+  patch: Partial<Entity>
+): Partial<Entity> {
+  const currentRecord = current as Record<string, unknown>;
+  return Object.fromEntries(
+    Object.entries(patch).filter(
+      ([key, value]) => !valuesEqual(currentRecord[key], value)
+    )
+  ) as Partial<Entity>;
+}
+
+/**
+ * A form can stay open while the authoritative read model advances in the
+ * background. Only values that differ both from the frozen edit base and from
+ * the current projection are actual user intent. This keeps system-updated
+ * fields out of a stale form submission without hiding a real user edit.
+ */
+function intendedPatch<Entity extends object>(
+  editBase: Entity,
+  current: Entity,
+  submitted: Partial<Entity>
+): Partial<Entity> {
+  return changedPatch(current, changedPatch(editBase, submitted));
+}
+
+function assetConflictPatch(
+  editBase: Asset,
+  submittedPatch: Partial<Asset>
+): Partial<Asset> {
+  const isPhysicalGold =
+    (submittedPatch.type ?? editBase.type) === 'gold'
+    && !isGoldEtfSubType(submittedPatch.subType ?? editBase.subType);
+  const quantityWasEdited =
+    Object.prototype.hasOwnProperty.call(submittedPatch, 'quantity');
+  if (!isPhysicalGold || !quantityWasEdited) {
+    return submittedPatch;
+  }
+
+  // Physical-gold balance is derived from quantity and the latest quote. A
+  // quote refresh may legitimately change currentBalance while the modal is
+  // open; quantity remains the user's conflict-bearing input.
+  const { currentBalance: _derivedBalance, ...conflictPatch } = submittedPatch;
+  return conflictPatch;
+}
+
+function intendedAssetPatch(
+  editBase: Asset,
+  current: Asset,
+  submitted: Partial<Asset>
+): Partial<Asset> {
+  const patch = intendedPatch(editBase, current, submitted);
+  const isPhysicalGold =
+    (patch.type ?? submitted.type ?? editBase.type) === 'gold'
+    && !isGoldEtfSubType(patch.subType ?? submitted.subType ?? editBase.subType);
+  const quantityWasEdited = Object.prototype.hasOwnProperty.call(
+    patch,
+    'quantity'
+  );
+  if (!isPhysicalGold || quantityWasEdited) {
+    return patch;
+  }
+
+  // currentBalance is not an independently editable field for physical gold.
+  // If quantity did not change, a balance difference came from a quote refresh.
+  const { currentBalance: _derivedBalance, ...userPatch } = patch;
+  return userPatch;
+}
+
+function createAuthoritativeState<
+  Entity extends VersionedPortfolioEntity,
+>(): AuthoritativeState<Entity> {
+  return {
+    generation: assetUpdateQueueGeneration,
+    serverEntities: new Map(),
+    commandFloors: new Map(),
+    startupEntities: new Map(),
+    waiters: new Set(),
+    subscriptions: new Map(),
+    ready: false,
+  };
+}
+
+function getOrCreateAuthoritativeState<
+  Entity extends VersionedPortfolioEntity,
+>(
+  states: Map<string, AuthoritativeState<Entity>>,
+  householdId: string
+): AuthoritativeState<Entity> {
+  const existing = states.get(householdId);
+  if (existing?.generation === assetUpdateQueueGeneration) return existing;
+
+  const created = createAuthoritativeState<Entity>();
+  states.set(householdId, created);
+  return created;
+}
+
+function authoritativeEntity<Entity extends VersionedPortfolioEntity>(
+  state: AuthoritativeState<Entity>,
+  entityId: string
+): Entity | undefined {
+  const serverEntity = state.serverEntities.get(entityId);
+  const commandFloor = state.commandFloors.get(entityId);
+  if (!serverEntity) return commandFloor;
+  if (!commandFloor) return serverEntity;
+  return commandFloor.aggregateVersion > serverEntity.aggregateVersion
+    ? commandFloor
+    : serverEntity;
+}
+
+function resolveAuthoritativeWaiters<Entity extends VersionedPortfolioEntity>(
+  state: AuthoritativeState<Entity>
+): void {
+  state.waiters.forEach((waiter) => {
+    const entity = authoritativeEntity(state, waiter.entityId);
+    if (
+      entity
+      && (
+        waiter.minimumVersionExclusive === undefined
+        || entity.aggregateVersion > waiter.minimumVersionExclusive
+      )
+    ) {
+      clearTimeout(waiter.timeoutId);
+      waiter.resolve(entity);
+      state.waiters.delete(waiter);
+    } else if (
+      entity === undefined
+      && waiter.minimumVersionExclusive === undefined
+    ) {
+      clearTimeout(waiter.timeoutId);
+      waiter.reject(new Error('ASSET_VERSION_MISMATCH'));
+      state.waiters.delete(waiter);
+    }
+  });
+}
+
+function publishAuthoritativeEntities<Entity extends VersionedPortfolioEntity>(
+  state: AuthoritativeState<Entity>,
+  subscriptionId: number,
+  entities: readonly Entity[]
+): void {
+  state.serverEntities.clear();
+  entities.forEach((entity) => state.serverEntities.set(entity.id, entity));
+  state.commandFloors.forEach((floor, entityId) => {
+    const serverEntity = state.serverEntities.get(entityId);
+    if (
+      serverEntity !== undefined
+      && serverEntity.aggregateVersion >= floor.aggregateVersion
+    ) {
+      state.commandFloors.delete(entityId);
+    }
+  });
+  state.subscriptions.set(subscriptionId, 'ready');
+  state.failureCode = undefined;
+  state.ready = true;
+  resolveAuthoritativeWaiters(state);
+}
+
+function waitForAuthoritativeEntity<Entity extends VersionedPortfolioEntity>(
+  state: AuthoritativeState<Entity>,
+  entityId: string,
+  queueGeneration: number,
+  minimumVersionExclusive?: number
+): Promise<Entity> {
+  if (
+    queueGeneration !== assetUpdateQueueGeneration
+    || state.generation !== queueGeneration
+  ) {
+    return Promise.reject(new Error('CLIENT_SESSION_RESET'));
+  }
+  const commandFloor = state.commandFloors.get(entityId);
+  if (commandFloor !== undefined || state.ready) {
+    const entity = authoritativeEntity(state, entityId);
+    if (
+      entity
+      && (
+        minimumVersionExclusive === undefined
+        || entity.aggregateVersion > minimumVersionExclusive
+      )
+    ) {
+      return Promise.resolve(entity);
+    }
+    if (entity === undefined && minimumVersionExclusive === undefined) {
+      return Promise.reject(new Error('ASSET_VERSION_MISMATCH'));
+    }
+  }
+  if (state.failureCode !== undefined) {
+    return Promise.reject(new Error(state.failureCode));
+  }
+
+  return new Promise<Entity>((resolve, reject) => {
+    const waiter: AuthoritativeWaiter<Entity> = {
+      entityId,
+      ...(minimumVersionExclusive === undefined
+        ? {}
+        : { minimumVersionExclusive }),
+      resolve,
+      reject,
+      timeoutId: setTimeout(() => {
+        state.waiters.delete(waiter);
+        reject(new Error('ASSET_AUTHORITATIVE_READ_TIMEOUT'));
+      }, ASSET_AUTHORITATIVE_WAIT_TIMEOUT_MS),
+    };
+    state.waiters.add(waiter);
+  });
+}
+
+function changedFieldsStillMatch<Entity extends VersionedPortfolioEntity>(
+  original: Entity,
+  fresh: Entity,
+  patch: Partial<Entity>
+): boolean {
+  const originalRecord = original as unknown as Record<string, unknown>;
+  const freshRecord = fresh as unknown as Record<string, unknown>;
+  return Object.keys(patch).every((key) =>
+    valuesEqual(originalRecord[key], freshRecord[key])
+  );
+}
+
+function recordCommandFloor<Entity extends VersionedPortfolioEntity>(
+  states: Map<string, AuthoritativeState<Entity>>,
+  householdId: string,
+  entity: Entity
+): void {
+  const state = states.get(householdId);
+  if (
+    state === undefined
+    || state.generation !== assetUpdateQueueGeneration
+  ) return;
+
+  const existing = state.commandFloors.get(entity.id);
+  const currentAuthority = authoritativeEntity(state, entity.id);
+  if (
+    currentAuthority !== undefined
+    && currentAuthority.aggregateVersion > entity.aggregateVersion
+  ) {
+    return;
+  }
+  if (
+    existing === undefined
+    || existing.aggregateVersion <= entity.aggregateVersion
+  ) {
+    state.commandFloors.set(entity.id, entity);
+  }
+}
+
+function startupEntityKey(entityId: string, aggregateVersion: number): string {
+  return `${entityId}:${aggregateVersion}`;
+}
+
+function captureStartupEntities<Entity extends VersionedPortfolioEntity>(
+  state: AuthoritativeState<Entity>,
+  entities: readonly Entity[]
+): void {
+  if (state.ready) return;
+  entities.forEach((entity) => {
+    state.startupEntities.set(
+      startupEntityKey(entity.id, entity.aggregateVersion),
+      entity
+    );
+  });
+}
+
+function capturedStartupEntity<Entity extends VersionedPortfolioEntity>(
+  state: AuthoritativeState<Entity> | undefined,
+  entityId: string,
+  aggregateVersion: number
+): Entity | undefined {
+  return state?.startupEntities.get(
+    startupEntityKey(entityId, aggregateVersion)
+  );
+}
+
+function hasNewerAuthoritativeEntity<Entity extends VersionedPortfolioEntity>(
+  state: AuthoritativeState<Entity> | undefined,
+  entityId: string,
+  aggregateVersion: number
+): boolean {
+  const entity = state === undefined
+    ? undefined
+    : authoritativeEntity(state, entityId);
+  return entity !== undefined && entity.aggregateVersion > aggregateVersion;
+}
+
+function registerAuthoritativeSubscription<
+  Entity extends VersionedPortfolioEntity,
+>(
+  state: AuthoritativeState<Entity>
+): number {
+  if (state.subscriptions.size === 0) {
+    state.ready = false;
+    state.failureCode = undefined;
+    state.startupEntities.clear();
+  }
+  const subscriptionId = nextAuthoritativeSubscriptionId++;
+  state.subscriptions.set(subscriptionId, 'pending');
+  return subscriptionId;
+}
+
+function failAuthoritativeSubscription<Entity extends VersionedPortfolioEntity>(
+  state: AuthoritativeState<Entity>,
+  subscriptionId: number,
+  code: string
+): void {
+  if (!state.subscriptions.has(subscriptionId)) return;
+  state.subscriptions.set(subscriptionId, 'failed');
+
+  const hasViableSubscription = Array.from(state.subscriptions.values())
+    .some((status) => status !== 'failed');
+  if (!hasViableSubscription) {
+    state.failureCode = code;
+    rejectAuthoritativeWaiters(state, code);
+  }
+}
+
+function unregisterAuthoritativeSubscription<
+  Entity extends VersionedPortfolioEntity,
+>(
+  state: AuthoritativeState<Entity>,
+  subscriptionId: number
+): void {
+  state.subscriptions.delete(subscriptionId);
+  if (state.subscriptions.size === 0) {
+    // React effect 재연결 사이의 짧은 listener 공백에서 진행 중인 저장을
+    // 취소하지 않습니다. 새 구독이 붙지 않으면 개별 waiter deadline이 종료합니다.
+    state.ready = false;
+    state.failureCode = undefined;
+  }
+}
+
+function sameEntityContent<Entity extends VersionedPortfolioEntity>(
+  left: Entity,
+  right: Entity
+): boolean {
+  const leftRecord = left as unknown as Record<string, unknown>;
+  const rightRecord = right as unknown as Record<string, unknown>;
+  const keys = new Set(Object.keys(leftRecord));
+  keys.delete('aggregateVersion');
+  keys.delete('updatedAt');
+  return Array.from(keys).every((key) =>
+    valuesEqual(leftRecord[key], rightRecord[key])
+  );
+}
+
+function commandErrorCode(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return undefined;
+  }
+  return typeof error.code === 'string' ? error.code : undefined;
+}
+
+function isAssetVersionMismatch(error: unknown): boolean {
+  return commandErrorCode(error) === 'ASSET_VERSION_MISMATCH';
+}
+
+function isPositionVersionMismatch(error: unknown): boolean {
+  return commandErrorCode(error) === 'POSITION_VERSION_MISMATCH';
 }
 
 /**
@@ -197,24 +617,32 @@ export async function addAsset(input: AssetInput): Promise<string> {
 export async function updateAsset(
   id: string,
   data: Partial<Asset>,
-  expectedVersion: number
+  expectedVersion: number,
+  editBase?: Asset
 ): Promise<void> {
   const current = portfolioOptimisticProjection.current(id);
   if (!current) throw new Error('ASSET_READ_MODEL_REQUIRED');
-  if (!hasPatchChanges(current, data)) return;
   const householdId = getHouseholdId();
+  const authoritativeState = assetAuthoritativeStates.get(householdId);
+  const capturedStartupBase = capturedStartupEntity(
+    authoritativeState,
+    id,
+    expectedVersion
+  );
+  const suppliedEditBase =
+    editBase?.id === id
+    && editBase.aggregateVersion === expectedVersion
+      ? editBase
+      : undefined;
+  const mutationBase = suppliedEditBase ?? capturedStartupBase ?? current;
+  const effectivePatch = intendedAssetPatch(mutationBase, current, data);
+  const conflictPatch = assetConflictPatch(mutationBase, effectivePatch);
+  if (!hasPatchChanges(current, effectivePatch)) return;
   const previousUpdate = assetUpdateTails.get(id);
-  if (
-    previousUpdate !== undefined
-    && expectedVersion !== current.aggregateVersion
-  ) {
-    throw new Error('ASSET_VERSION_MISMATCH');
-  }
-  const commandExpectedVersion = expectedVersion;
   const queueGeneration = assetUpdateQueueGeneration;
   const mutationId = previousUpdate === undefined
-    ? portfolioOptimisticProjection.beginUpdate(id, data)
-    : portfolioOptimisticProjection.beginQueuedUpdate(id, data);
+    ? portfolioOptimisticProjection.beginUpdate(id, effectivePatch)
+    : portfolioOptimisticProjection.beginQueuedUpdate(id, effectivePatch);
   const pendingUpdate = (async () => {
     try {
       if (previousUpdate !== undefined) {
@@ -223,18 +651,83 @@ export async function updateAsset(
       if (queueGeneration !== assetUpdateQueueGeneration) {
         throw new Error('CLIENT_SESSION_RESET');
       }
-      await portfolioCommands.updateAsset(
-        householdId,
-        id,
-        data,
-        commandExpectedVersion
-      );
-      portfolioOptimisticProjection.commitUpdate(mutationId, {
-        ...current,
-        ...data,
+
+      let commandBase = current;
+      let commandExpectedVersion =
+        previousUpdate === undefined
+          ? expectedVersion
+          : current.aggregateVersion;
+      const shouldUseAuthoritativeBase =
+        authoritativeState !== undefined
+        && (
+          previousUpdate !== undefined
+          || capturedStartupBase !== undefined
+          || !authoritativeState.ready
+          || hasNewerAuthoritativeEntity(
+            authoritativeState,
+            id,
+            expectedVersion
+          )
+        );
+      if (shouldUseAuthoritativeBase && authoritativeState !== undefined) {
+        const fresh = await waitForAuthoritativeEntity(
+          authoritativeState,
+          id,
+          queueGeneration
+        );
+        if (queueGeneration !== assetUpdateQueueGeneration) {
+          throw new Error('CLIENT_SESSION_RESET');
+        }
+
+        if (!changedFieldsStillMatch(mutationBase, fresh, conflictPatch)) {
+          throw new Error('ASSET_VERSION_MISMATCH');
+        }
+        commandBase = fresh;
+        commandExpectedVersion = fresh.aggregateVersion;
+      }
+
+      try {
+        await portfolioCommands.updateAsset(
+          householdId,
+          id,
+          effectivePatch,
+          commandExpectedVersion
+        );
+      } catch (error) {
+        if (
+          !isAssetVersionMismatch(error)
+          || authoritativeState === undefined
+        ) {
+          throw error;
+        }
+        const fresh = await waitForAuthoritativeEntity(
+          authoritativeState,
+          id,
+          queueGeneration,
+          commandExpectedVersion
+        );
+        if (!changedFieldsStillMatch(mutationBase, fresh, conflictPatch)) {
+          throw new Error('ASSET_VERSION_MISMATCH');
+        }
+        commandBase = fresh;
+        commandExpectedVersion = fresh.aggregateVersion;
+        await portfolioCommands.updateAsset(
+          householdId,
+          id,
+          effectivePatch,
+          commandExpectedVersion
+        );
+      }
+      const canonical = {
+        ...commandBase,
+        ...effectivePatch,
         aggregateVersion: commandExpectedVersion + 1,
         updatedAt: new Date(),
-      });
+      };
+      if (queueGeneration === assetUpdateQueueGeneration) {
+        recordCommandFloor(assetAuthoritativeStates, householdId, canonical);
+        portfolioOptimisticProjection.commitUpdate(mutationId, canonical);
+      }
     } catch (error) {
       portfolioOptimisticProjection.rollback(mutationId);
       throw error;
@@ -256,6 +749,11 @@ export async function updateAsset(
  */
 export async function updateAssetOrders(assetOrders: { id: string; order: number }[]): Promise<void> {
   const normalized = assetOrders.map(({ id }, order) => ({ id, order }));
+  const householdId = getHouseholdId();
+  const queueGeneration = assetUpdateQueueGeneration;
+  const previousById = new Map(
+    normalized.map(({ id }) => [id, assetUpdateTails.get(id)])
+  );
   const planned = normalized.map((update) => {
     const current = portfolioOptimisticProjection.current(update.id);
     if (!current) throw new Error('ASSET_READ_MODEL_REQUIRED');
@@ -273,38 +771,193 @@ export async function updateAssetOrders(assetOrders: { id: string; order: number
       mutations.push({
         current,
         update,
-        mutationId: portfolioOptimisticProjection.beginUpdate(update.id, { order: update.order }),
-      });
-    });
-    await portfolioCommands.reorderAssets(getHouseholdId(), normalized);
-    mutations.forEach(({ current, update, mutationId }) => {
-      portfolioOptimisticProjection.commitUpdate(mutationId, {
-        ...current,
-        order: update.order,
-        aggregateVersion: current.aggregateVersion + 1,
-        updatedAt: new Date(),
+        mutationId: previousById.get(update.id) === undefined
+          ? portfolioOptimisticProjection.beginUpdate(
+              update.id,
+              { order: update.order }
+            )
+          : portfolioOptimisticProjection.beginQueuedUpdate(
+              update.id,
+              { order: update.order }
+            ),
       });
     });
   } catch (error) {
-    mutations.forEach(({ mutationId }) => portfolioOptimisticProjection.rollback(mutationId));
+    mutations.forEach(({ mutationId }) =>
+      portfolioOptimisticProjection.rollback(mutationId)
+    );
     throw error;
   }
+
+  const priorMutations = Array.from(
+    new Set(
+      Array.from(previousById.values()).filter(
+        (pending): pending is Promise<void> => pending !== undefined
+      )
+    )
+  );
+  const pendingReorder = (async () => {
+    try {
+      await Promise.all(priorMutations);
+      if (queueGeneration !== assetUpdateQueueGeneration) {
+        throw new Error('CLIENT_SESSION_RESET');
+      }
+      // Freeze the command base before sending. A listener may observe a
+      // separate, newer write while this command is in flight; deriving the
+      // reorder version from that response-time snapshot would invent a
+      // version that this command never created.
+      const commandBases = new Map(
+        mutations.map(({ current, update }) => {
+          const authoritative = assetAuthoritativeStates.get(householdId);
+          return [
+            update.id,
+            authoritative === undefined
+              ? current
+              : authoritativeEntity(authoritative, update.id) ?? current,
+          ] as const;
+        })
+      );
+      await portfolioCommands.reorderAssets(householdId, normalized);
+      mutations.forEach(({ current, update, mutationId }) => {
+        const commandBase = commandBases.get(update.id) ?? current;
+        const canonical = {
+          ...commandBase,
+          order: update.order,
+          aggregateVersion: commandBase.aggregateVersion + 1,
+          updatedAt: new Date(),
+        };
+        recordCommandFloor(assetAuthoritativeStates, householdId, canonical);
+        portfolioOptimisticProjection.commitUpdate(mutationId, canonical);
+      });
+    } catch (error) {
+      mutations.forEach(({ mutationId }) =>
+        portfolioOptimisticProjection.rollback(mutationId)
+      );
+      throw error;
+    }
+  })();
+
+  normalized.forEach(({ id }) => assetUpdateTails.set(id, pendingReorder));
+  const clearTails = () => {
+    normalized.forEach(({ id }) => {
+      if (assetUpdateTails.get(id) === pendingReorder) {
+        assetUpdateTails.delete(id);
+      }
+    });
+  };
+  void pendingReorder.then(clearTails, clearTails);
+  await pendingReorder;
 }
 
 /**
  * 자산 논리 삭제 (이력과 보유 내역은 운영 복구를 위해 보존)
  */
-export async function deleteAsset(id: string, expectedVersion: number): Promise<void> {
+export async function deleteAsset(
+  id: string,
+  expectedVersion: number,
+  editBase?: Asset
+): Promise<void> {
   const current = portfolioOptimisticProjection.current(id);
   if (!current) throw new Error('ASSET_READ_MODEL_REQUIRED');
-  const mutationId = portfolioOptimisticProjection.beginDelete(id);
-  try {
-    await portfolioCommands.deleteAsset(getHouseholdId(), id, expectedVersion);
-    portfolioOptimisticProjection.commitDelete(mutationId);
-  } catch (error) {
-    portfolioOptimisticProjection.rollback(mutationId);
-    throw error;
-  }
+  const householdId = getHouseholdId();
+  const queueGeneration = assetUpdateQueueGeneration;
+  const previousMutation = assetUpdateTails.get(id);
+  const authoritativeState = assetAuthoritativeStates.get(householdId);
+  const capturedStartupBase = capturedStartupEntity(
+    authoritativeState,
+    id,
+    expectedVersion
+  );
+  const mutationBase =
+    editBase?.id === id
+    && editBase.aggregateVersion === expectedVersion
+      ? editBase
+      : capturedStartupBase ?? current;
+  const mutationId = previousMutation === undefined
+    ? portfolioOptimisticProjection.beginDelete(id)
+    : portfolioOptimisticProjection.beginQueuedDelete(id);
+  const pendingDelete = (async () => {
+    try {
+      if (previousMutation !== undefined) {
+        await previousMutation;
+      }
+      if (queueGeneration !== assetUpdateQueueGeneration) {
+        throw new Error('CLIENT_SESSION_RESET');
+      }
+
+      let commandExpectedVersion =
+        previousMutation === undefined
+          ? expectedVersion
+          : current.aggregateVersion;
+      if (
+        authoritativeState !== undefined
+        && (
+          previousMutation !== undefined
+          || capturedStartupBase !== undefined
+          || !authoritativeState.ready
+          || hasNewerAuthoritativeEntity(
+            authoritativeState,
+            id,
+            expectedVersion
+          )
+        )
+      ) {
+        const fresh = await waitForAuthoritativeEntity(
+          authoritativeState,
+          id,
+          queueGeneration
+        );
+        if (!sameEntityContent(mutationBase, fresh)) {
+          throw new Error('ASSET_VERSION_MISMATCH');
+        }
+        commandExpectedVersion = fresh.aggregateVersion;
+      }
+      try {
+        await portfolioCommands.deleteAsset(
+          householdId,
+          id,
+          commandExpectedVersion
+        );
+      } catch (error) {
+        if (
+          !isAssetVersionMismatch(error)
+          || authoritativeState === undefined
+        ) {
+          throw error;
+        }
+        const fresh = await waitForAuthoritativeEntity(
+          authoritativeState,
+          id,
+          queueGeneration,
+          commandExpectedVersion
+        );
+        if (!sameEntityContent(mutationBase, fresh)) {
+          throw new Error('ASSET_VERSION_MISMATCH');
+        }
+        commandExpectedVersion = fresh.aggregateVersion;
+        await portfolioCommands.deleteAsset(
+          householdId,
+          id,
+          commandExpectedVersion
+        );
+      }
+      if (queueGeneration === assetUpdateQueueGeneration) {
+        portfolioOptimisticProjection.commitDelete(mutationId);
+      }
+    } catch (error) {
+      portfolioOptimisticProjection.rollback(mutationId);
+      throw error;
+    }
+  })();
+
+  assetUpdateTails.set(id, pendingDelete);
+  const clearTail = () => {
+    if (assetUpdateTails.get(id) === pendingDelete) {
+      assetUpdateTails.delete(id);
+    }
+  };
+  void pendingDelete.then(clearTail, clearTail);
+  await pendingDelete;
 }
 
 /**
@@ -316,6 +969,14 @@ export function subscribeToAssets(
   onSourceSnapshot?: (assets: readonly Asset[]) => void
 ): () => void {
   const householdId = getHouseholdId();
+  const queueGeneration = assetUpdateQueueGeneration;
+  const authoritativeState = getOrCreateAuthoritativeState(
+    assetAuthoritativeStates,
+    householdId
+  );
+  const subscriptionId =
+    registerAuthoritativeSubscription(authoritativeState);
+  captureStartupEntities(authoritativeState, initialAssets ?? []);
   const projection = portfolioOptimisticProjection.subscribe(callback, householdId);
   if (initialAssets !== undefined) {
     projection.publish(initialAssets);
@@ -328,18 +989,42 @@ export function subscribeToAssets(
 
   const unsubscribe = onSnapshot(
     q,
+    { includeMetadataChanges: true },
     (snapshot) => {
+      if (
+        queueGeneration !== assetUpdateQueueGeneration
+        || assetAuthoritativeStates.get(householdId) !== authoritativeState
+      ) return;
       const assets = snapshot.docs.map(mapDocToAsset);
       // order 순으로 정렬, 같으면 이름순
       assets.sort((a, b) => {
         if (a.order !== b.order) return a.order - b.order;
         return a.name.localeCompare(b.name);
       });
+      if (snapshot.metadata.fromCache) {
+        captureStartupEntities(authoritativeState, assets);
+      } else {
+        publishAuthoritativeEntities(
+          authoritativeState,
+          subscriptionId,
+          assets
+        );
+      }
       onSourceSnapshot?.(assets);
       projection.publish(assets);
     },
     (error) => {
       console.error('자산 구독 오류:', error);
+      if (
+        queueGeneration === assetUpdateQueueGeneration
+        && assetAuthoritativeStates.get(householdId) === authoritativeState
+      ) {
+        failAuthoritativeSubscription(
+          authoritativeState,
+          subscriptionId,
+          'ASSET_AUTHORITATIVE_READ_FAILED'
+        );
+      }
       if (initialAssets === undefined) {
         projection.publish([]);
       }
@@ -349,6 +1034,11 @@ export function subscribeToAssets(
   return () => {
     unsubscribe();
     projection.dispose();
+    if (
+      queueGeneration !== assetUpdateQueueGeneration
+      || assetAuthoritativeStates.get(householdId) !== authoritativeState
+    ) return;
+    unregisterAuthoritativeSubscription(authoritativeState, subscriptionId);
   };
 }
 
@@ -751,54 +1441,252 @@ export async function updateStockHolding(
   id: string,
   assetId: string,
   data: Partial<StockHolding>,
-  expectedVersion: number
+  expectedVersion: number,
+  editBase?: StockHolding
 ): Promise<void> {
   const current = stockHoldingOptimisticProjection.current(id);
   if (!current) throw new Error('STOCK_POSITION_READ_MODEL_REQUIRED');
   if (current.assetId !== assetId) throw new Error('ASSET_SCOPE_MISMATCH');
-  if (!hasPatchChanges(current, data)) return;
-  const mutationId = stockHoldingOptimisticProjection.beginUpdate(id, data);
-  try {
-    await portfolioCommands.updatePosition(
-      getHouseholdId(), 'stock', id, assetId, data, expectedVersion
-    );
-    stockHoldingOptimisticProjection.commitUpdate(mutationId, {
-      ...current,
-      ...data,
-      aggregateVersion: expectedVersion + 1,
-      updatedAt: new Date(),
-    });
-  } catch (error) {
-    stockHoldingOptimisticProjection.rollback(mutationId);
-    throw error;
-  }
+  const householdId = getHouseholdId();
+  const queueGeneration = assetUpdateQueueGeneration;
+  const previousMutation = stockMutationTails.get(id);
+  const authoritativeState = stockAuthoritativeStates.get(householdId);
+  const capturedStartupBase = capturedStartupEntity(
+    authoritativeState,
+    id,
+    expectedVersion
+  );
+  const mutationBase =
+    editBase?.id === id
+    && editBase.aggregateVersion === expectedVersion
+      ? editBase
+      : capturedStartupBase ?? current;
+  const effectivePatch = intendedPatch(mutationBase, current, data);
+  if (!hasPatchChanges(current, effectivePatch)) return;
+  const mutationId = previousMutation === undefined
+    ? stockHoldingOptimisticProjection.beginUpdate(id, effectivePatch)
+    : stockHoldingOptimisticProjection.beginQueuedUpdate(id, effectivePatch);
+  const pendingUpdate = (async () => {
+    try {
+      if (previousMutation !== undefined) await previousMutation;
+      if (queueGeneration !== assetUpdateQueueGeneration) {
+        throw new Error('CLIENT_SESSION_RESET');
+      }
+      let commandBase = current;
+      let commandExpectedVersion =
+        previousMutation === undefined
+          ? expectedVersion
+          : current.aggregateVersion;
+    if (
+      authoritativeState !== undefined
+      && (
+        previousMutation !== undefined
+        ||
+        capturedStartupBase !== undefined
+        || !authoritativeState.ready
+        || hasNewerAuthoritativeEntity(
+          authoritativeState,
+          id,
+          expectedVersion
+        )
+      )
+    ) {
+      const fresh = await waitForAuthoritativeEntity(
+        authoritativeState,
+        id,
+        queueGeneration
+      );
+      if (!changedFieldsStillMatch(mutationBase, fresh, effectivePatch)) {
+        throw new Error('ASSET_VERSION_MISMATCH');
+      }
+      commandBase = fresh;
+      commandExpectedVersion = fresh.aggregateVersion;
+    }
+    try {
+      await portfolioCommands.updatePosition(
+        householdId,
+        'stock',
+        id,
+        assetId,
+        effectivePatch,
+        commandExpectedVersion
+      );
+    } catch (error) {
+      if (
+        !isPositionVersionMismatch(error)
+        || authoritativeState === undefined
+      ) {
+        throw error;
+      }
+      const fresh = await waitForAuthoritativeEntity(
+        authoritativeState,
+        id,
+        queueGeneration,
+        commandExpectedVersion
+      );
+      if (!changedFieldsStillMatch(mutationBase, fresh, effectivePatch)) {
+        throw new Error('ASSET_VERSION_MISMATCH');
+      }
+      commandBase = fresh;
+      commandExpectedVersion = fresh.aggregateVersion;
+      await portfolioCommands.updatePosition(
+        householdId,
+        'stock',
+        id,
+        assetId,
+        effectivePatch,
+        commandExpectedVersion
+      );
+    }
+      const canonical = {
+        ...commandBase,
+        ...effectivePatch,
+        aggregateVersion: commandExpectedVersion + 1,
+        updatedAt: new Date(),
+      };
+      if (queueGeneration === assetUpdateQueueGeneration) {
+        recordCommandFloor(stockAuthoritativeStates, householdId, canonical);
+        stockHoldingOptimisticProjection.commitUpdate(mutationId, canonical);
+      }
+    } catch (error) {
+      stockHoldingOptimisticProjection.rollback(mutationId);
+      throw error;
+    }
+  })();
+  stockMutationTails.set(id, pendingUpdate);
+  const clearTail = () => {
+    if (stockMutationTails.get(id) === pendingUpdate) {
+      stockMutationTails.delete(id);
+    }
+  };
+  void pendingUpdate.then(clearTail, clearTail);
+  await pendingUpdate;
 }
 
 export async function updateCryptoHolding(
   id: string,
   assetId: string,
   data: Partial<CryptoHolding>,
-  expectedVersion: number
+  expectedVersion: number,
+  editBase?: CryptoHolding
 ): Promise<void> {
   const current = cryptoHoldingOptimisticProjection.current(id);
   if (!current) throw new Error('CRYPTO_POSITION_READ_MODEL_REQUIRED');
   if (current.assetId !== assetId) throw new Error('ASSET_SCOPE_MISMATCH');
-  if (!hasPatchChanges(current, data)) return;
-  const mutationId = cryptoHoldingOptimisticProjection.beginUpdate(id, data);
-  try {
-    await portfolioCommands.updatePosition(
-      getHouseholdId(), 'crypto', id, assetId, data, expectedVersion
-    );
-    cryptoHoldingOptimisticProjection.commitUpdate(mutationId, {
-      ...current,
-      ...data,
-      aggregateVersion: expectedVersion + 1,
-      updatedAt: new Date(),
-    });
-  } catch (error) {
-    cryptoHoldingOptimisticProjection.rollback(mutationId);
-    throw error;
-  }
+  const householdId = getHouseholdId();
+  const queueGeneration = assetUpdateQueueGeneration;
+  const previousMutation = cryptoMutationTails.get(id);
+  const authoritativeState = cryptoAuthoritativeStates.get(householdId);
+  const capturedStartupBase = capturedStartupEntity(
+    authoritativeState,
+    id,
+    expectedVersion
+  );
+  const mutationBase =
+    editBase?.id === id
+    && editBase.aggregateVersion === expectedVersion
+      ? editBase
+      : capturedStartupBase ?? current;
+  const effectivePatch = intendedPatch(mutationBase, current, data);
+  if (!hasPatchChanges(current, effectivePatch)) return;
+  const mutationId = previousMutation === undefined
+    ? cryptoHoldingOptimisticProjection.beginUpdate(id, effectivePatch)
+    : cryptoHoldingOptimisticProjection.beginQueuedUpdate(id, effectivePatch);
+  const pendingUpdate = (async () => {
+    try {
+      if (previousMutation !== undefined) await previousMutation;
+      if (queueGeneration !== assetUpdateQueueGeneration) {
+        throw new Error('CLIENT_SESSION_RESET');
+      }
+      let commandBase = current;
+      let commandExpectedVersion =
+        previousMutation === undefined
+          ? expectedVersion
+          : current.aggregateVersion;
+    if (
+      authoritativeState !== undefined
+      && (
+        previousMutation !== undefined
+        ||
+        capturedStartupBase !== undefined
+        || !authoritativeState.ready
+        || hasNewerAuthoritativeEntity(
+          authoritativeState,
+          id,
+          expectedVersion
+        )
+      )
+    ) {
+      const fresh = await waitForAuthoritativeEntity(
+        authoritativeState,
+        id,
+        queueGeneration
+      );
+      if (!changedFieldsStillMatch(mutationBase, fresh, effectivePatch)) {
+        throw new Error('ASSET_VERSION_MISMATCH');
+      }
+      commandBase = fresh;
+      commandExpectedVersion = fresh.aggregateVersion;
+    }
+    try {
+      await portfolioCommands.updatePosition(
+        householdId,
+        'crypto',
+        id,
+        assetId,
+        effectivePatch,
+        commandExpectedVersion
+      );
+    } catch (error) {
+      if (
+        !isPositionVersionMismatch(error)
+        || authoritativeState === undefined
+      ) {
+        throw error;
+      }
+      const fresh = await waitForAuthoritativeEntity(
+        authoritativeState,
+        id,
+        queueGeneration,
+        commandExpectedVersion
+      );
+      if (!changedFieldsStillMatch(mutationBase, fresh, effectivePatch)) {
+        throw new Error('ASSET_VERSION_MISMATCH');
+      }
+      commandBase = fresh;
+      commandExpectedVersion = fresh.aggregateVersion;
+      await portfolioCommands.updatePosition(
+        householdId,
+        'crypto',
+        id,
+        assetId,
+        effectivePatch,
+        commandExpectedVersion
+      );
+    }
+      const canonical = {
+        ...commandBase,
+        ...effectivePatch,
+        aggregateVersion: commandExpectedVersion + 1,
+        updatedAt: new Date(),
+      };
+      if (queueGeneration === assetUpdateQueueGeneration) {
+        recordCommandFloor(cryptoAuthoritativeStates, householdId, canonical);
+        cryptoHoldingOptimisticProjection.commitUpdate(mutationId, canonical);
+      }
+    } catch (error) {
+      cryptoHoldingOptimisticProjection.rollback(mutationId);
+      throw error;
+    }
+  })();
+  cryptoMutationTails.set(id, pendingUpdate);
+  const clearTail = () => {
+    if (cryptoMutationTails.get(id) === pendingUpdate) {
+      cryptoMutationTails.delete(id);
+    }
+  };
+  void pendingUpdate.then(clearTail, clearTail);
+  await pendingUpdate;
 }
 
 /**
@@ -807,41 +1695,221 @@ export async function updateCryptoHolding(
 export async function deleteStockHolding(
   id: string,
   assetId: string,
-  expectedVersion: number
+  expectedVersion: number,
+  editBase?: StockHolding
 ): Promise<void> {
   const current = stockHoldingOptimisticProjection.current(id);
   if (!current) throw new Error('STOCK_POSITION_READ_MODEL_REQUIRED');
   if (current.assetId !== assetId) throw new Error('ASSET_SCOPE_MISMATCH');
-  const mutationId = stockHoldingOptimisticProjection.beginDelete(id);
-  try {
-    await portfolioCommands.deletePosition(
-      getHouseholdId(), 'stock', id, assetId, expectedVersion
-    );
-    stockHoldingOptimisticProjection.commitDelete(mutationId);
-  } catch (error) {
-    stockHoldingOptimisticProjection.rollback(mutationId);
-    throw error;
-  }
+  const householdId = getHouseholdId();
+  const queueGeneration = assetUpdateQueueGeneration;
+  const previousMutation = stockMutationTails.get(id);
+  const authoritativeState = stockAuthoritativeStates.get(householdId);
+  const capturedStartupBase = capturedStartupEntity(
+    authoritativeState,
+    id,
+    expectedVersion
+  );
+  const mutationBase =
+    editBase?.id === id
+    && editBase.aggregateVersion === expectedVersion
+      ? editBase
+      : capturedStartupBase ?? current;
+  const mutationId = previousMutation === undefined
+    ? stockHoldingOptimisticProjection.beginDelete(id)
+    : stockHoldingOptimisticProjection.beginQueuedDelete(id);
+  const pendingDelete = (async () => {
+    try {
+      if (previousMutation !== undefined) await previousMutation;
+      if (queueGeneration !== assetUpdateQueueGeneration) {
+        throw new Error('CLIENT_SESSION_RESET');
+      }
+      let commandExpectedVersion =
+        previousMutation === undefined
+          ? expectedVersion
+          : current.aggregateVersion;
+      if (
+        authoritativeState !== undefined
+        && (
+          previousMutation !== undefined
+          || capturedStartupBase !== undefined
+          || !authoritativeState.ready
+          || hasNewerAuthoritativeEntity(
+            authoritativeState,
+            id,
+            expectedVersion
+          )
+        )
+      ) {
+        const fresh = await waitForAuthoritativeEntity(
+          authoritativeState,
+          id,
+          queueGeneration
+        );
+        if (!sameEntityContent(mutationBase, fresh)) {
+          throw new Error('ASSET_VERSION_MISMATCH');
+        }
+        commandExpectedVersion = fresh.aggregateVersion;
+      }
+      try {
+        await portfolioCommands.deletePosition(
+          householdId,
+          'stock',
+          id,
+          assetId,
+          commandExpectedVersion
+        );
+      } catch (error) {
+        if (
+          !isPositionVersionMismatch(error)
+          || authoritativeState === undefined
+        ) {
+          throw error;
+        }
+        const fresh = await waitForAuthoritativeEntity(
+          authoritativeState,
+          id,
+          queueGeneration,
+          commandExpectedVersion
+        );
+        if (!sameEntityContent(mutationBase, fresh)) {
+          throw new Error('ASSET_VERSION_MISMATCH');
+        }
+        commandExpectedVersion = fresh.aggregateVersion;
+        await portfolioCommands.deletePosition(
+          householdId,
+          'stock',
+          id,
+          assetId,
+          commandExpectedVersion
+        );
+      }
+      if (queueGeneration === assetUpdateQueueGeneration) {
+        stockHoldingOptimisticProjection.commitDelete(mutationId);
+      }
+    } catch (error) {
+      stockHoldingOptimisticProjection.rollback(mutationId);
+      throw error;
+    }
+  })();
+  stockMutationTails.set(id, pendingDelete);
+  const clearTail = () => {
+    if (stockMutationTails.get(id) === pendingDelete) {
+      stockMutationTails.delete(id);
+    }
+  };
+  void pendingDelete.then(clearTail, clearTail);
+  await pendingDelete;
 }
 
 export async function deleteCryptoHolding(
   id: string,
   assetId: string,
-  expectedVersion: number
+  expectedVersion: number,
+  editBase?: CryptoHolding
 ): Promise<void> {
   const current = cryptoHoldingOptimisticProjection.current(id);
   if (!current) throw new Error('CRYPTO_POSITION_READ_MODEL_REQUIRED');
   if (current.assetId !== assetId) throw new Error('ASSET_SCOPE_MISMATCH');
-  const mutationId = cryptoHoldingOptimisticProjection.beginDelete(id);
-  try {
-    await portfolioCommands.deletePosition(
-      getHouseholdId(), 'crypto', id, assetId, expectedVersion
-    );
-    cryptoHoldingOptimisticProjection.commitDelete(mutationId);
-  } catch (error) {
-    cryptoHoldingOptimisticProjection.rollback(mutationId);
-    throw error;
-  }
+  const householdId = getHouseholdId();
+  const queueGeneration = assetUpdateQueueGeneration;
+  const previousMutation = cryptoMutationTails.get(id);
+  const authoritativeState = cryptoAuthoritativeStates.get(householdId);
+  const capturedStartupBase = capturedStartupEntity(
+    authoritativeState,
+    id,
+    expectedVersion
+  );
+  const mutationBase =
+    editBase?.id === id
+    && editBase.aggregateVersion === expectedVersion
+      ? editBase
+      : capturedStartupBase ?? current;
+  const mutationId = previousMutation === undefined
+    ? cryptoHoldingOptimisticProjection.beginDelete(id)
+    : cryptoHoldingOptimisticProjection.beginQueuedDelete(id);
+  const pendingDelete = (async () => {
+    try {
+      if (previousMutation !== undefined) await previousMutation;
+      if (queueGeneration !== assetUpdateQueueGeneration) {
+        throw new Error('CLIENT_SESSION_RESET');
+      }
+      let commandExpectedVersion =
+        previousMutation === undefined
+          ? expectedVersion
+          : current.aggregateVersion;
+      if (
+        authoritativeState !== undefined
+        && (
+          previousMutation !== undefined
+          || capturedStartupBase !== undefined
+          || !authoritativeState.ready
+          || hasNewerAuthoritativeEntity(
+            authoritativeState,
+            id,
+            expectedVersion
+          )
+        )
+      ) {
+        const fresh = await waitForAuthoritativeEntity(
+          authoritativeState,
+          id,
+          queueGeneration
+        );
+        if (!sameEntityContent(mutationBase, fresh)) {
+          throw new Error('ASSET_VERSION_MISMATCH');
+        }
+        commandExpectedVersion = fresh.aggregateVersion;
+      }
+      try {
+        await portfolioCommands.deletePosition(
+          householdId,
+          'crypto',
+          id,
+          assetId,
+          commandExpectedVersion
+        );
+      } catch (error) {
+        if (
+          !isPositionVersionMismatch(error)
+          || authoritativeState === undefined
+        ) {
+          throw error;
+        }
+        const fresh = await waitForAuthoritativeEntity(
+          authoritativeState,
+          id,
+          queueGeneration,
+          commandExpectedVersion
+        );
+        if (!sameEntityContent(mutationBase, fresh)) {
+          throw new Error('ASSET_VERSION_MISMATCH');
+        }
+        commandExpectedVersion = fresh.aggregateVersion;
+        await portfolioCommands.deletePosition(
+          householdId,
+          'crypto',
+          id,
+          assetId,
+          commandExpectedVersion
+        );
+      }
+      if (queueGeneration === assetUpdateQueueGeneration) {
+        cryptoHoldingOptimisticProjection.commitDelete(mutationId);
+      }
+    } catch (error) {
+      cryptoHoldingOptimisticProjection.rollback(mutationId);
+      throw error;
+    }
+  })();
+  cryptoMutationTails.set(id, pendingDelete);
+  const clearTail = () => {
+    if (cryptoMutationTails.get(id) === pendingDelete) {
+      cryptoMutationTails.delete(id);
+    }
+  };
+  void pendingDelete.then(clearTail, clearTail);
+  await pendingDelete;
 }
 
 /**
@@ -851,11 +1919,25 @@ export function subscribeToHouseholdStockHoldings(
   callback: (holdings: StockHolding[]) => void
 ): () => void {
   const householdId = getHouseholdId();
+  const queueGeneration = assetUpdateQueueGeneration;
+  const authoritativeState = getOrCreateAuthoritativeState(
+    stockAuthoritativeStates,
+    householdId
+  );
+  const subscriptionId =
+    registerAuthoritativeSubscription(authoritativeState);
+  let capturingRetainedSnapshot = true;
   const projection = stockHoldingOptimisticProjection.subscribe(
-    callback,
+    (holdings) => {
+      if (capturingRetainedSnapshot) {
+        captureStartupEntities(authoritativeState, holdings);
+      }
+      callback(holdings);
+    },
     (holding) => holding.householdId === householdId,
     `stock-holdings:${householdId}`
   );
+  capturingRetainedSnapshot = false;
 
   const q = query(
     collection(db, HOLDINGS_COLLECTION),
@@ -864,13 +1946,37 @@ export function subscribeToHouseholdStockHoldings(
 
   const unsubscribe = onSnapshot(
     q,
+    { includeMetadataChanges: true },
     (snapshot) => {
+      if (
+        queueGeneration !== assetUpdateQueueGeneration
+        || stockAuthoritativeStates.get(householdId) !== authoritativeState
+      ) return;
       const holdings = snapshot.docs.map(mapDocToHolding);
       holdings.sort((a, b) => a.stockName.localeCompare(b.stockName));
+      if (snapshot.metadata.fromCache) {
+        captureStartupEntities(authoritativeState, holdings);
+      } else {
+        publishAuthoritativeEntities(
+          authoritativeState,
+          subscriptionId,
+          holdings
+        );
+      }
       projection.publish(holdings);
     },
     (error) => {
       console.error('보유 종목 구독 오류:', error);
+      if (
+        queueGeneration === assetUpdateQueueGeneration
+        && stockAuthoritativeStates.get(householdId) === authoritativeState
+      ) {
+        failAuthoritativeSubscription(
+          authoritativeState,
+          subscriptionId,
+          'ASSET_AUTHORITATIVE_READ_FAILED'
+        );
+      }
       projection.publish([]);
     }
   );
@@ -878,6 +1984,15 @@ export function subscribeToHouseholdStockHoldings(
   return () => {
     unsubscribe();
     projection.dispose();
+    if (
+      queueGeneration === assetUpdateQueueGeneration
+      && stockAuthoritativeStates.get(householdId) === authoritativeState
+    ) {
+      unregisterAuthoritativeSubscription(
+        authoritativeState,
+        subscriptionId
+      );
+    }
   };
 }
 
@@ -888,11 +2003,25 @@ export function subscribeToHouseholdCryptoHoldings(
   callback: (holdings: CryptoHolding[]) => void
 ): () => void {
   const householdId = getHouseholdId();
+  const queueGeneration = assetUpdateQueueGeneration;
+  const authoritativeState = getOrCreateAuthoritativeState(
+    cryptoAuthoritativeStates,
+    householdId
+  );
+  const subscriptionId =
+    registerAuthoritativeSubscription(authoritativeState);
+  let capturingRetainedSnapshot = true;
   const projection = cryptoHoldingOptimisticProjection.subscribe(
-    callback,
+    (holdings) => {
+      if (capturingRetainedSnapshot) {
+        captureStartupEntities(authoritativeState, holdings);
+      }
+      callback(holdings);
+    },
     (holding) => holding.householdId === householdId,
     `crypto-holdings:${householdId}`
   );
+  capturingRetainedSnapshot = false;
 
   const q = query(
     collection(db, CRYPTO_HOLDINGS_COLLECTION),
@@ -901,13 +2030,37 @@ export function subscribeToHouseholdCryptoHoldings(
 
   const unsubscribe = onSnapshot(
     q,
+    { includeMetadataChanges: true },
     (snapshot) => {
+      if (
+        queueGeneration !== assetUpdateQueueGeneration
+        || cryptoAuthoritativeStates.get(householdId) !== authoritativeState
+      ) return;
       const holdings = snapshot.docs.map(mapDocToCryptoHolding);
       holdings.sort((a, b) => a.coinName.localeCompare(b.coinName));
+      if (snapshot.metadata.fromCache) {
+        captureStartupEntities(authoritativeState, holdings);
+      } else {
+        publishAuthoritativeEntities(
+          authoritativeState,
+          subscriptionId,
+          holdings
+        );
+      }
       projection.publish(holdings);
     },
     (error) => {
       console.error('코인 보유내역 구독 오류:', error);
+      if (
+        queueGeneration === assetUpdateQueueGeneration
+        && cryptoAuthoritativeStates.get(householdId) === authoritativeState
+      ) {
+        failAuthoritativeSubscription(
+          authoritativeState,
+          subscriptionId,
+          'ASSET_AUTHORITATIVE_READ_FAILED'
+        );
+      }
       projection.publish([]);
     }
   );
@@ -915,6 +2068,15 @@ export function subscribeToHouseholdCryptoHoldings(
   return () => {
     unsubscribe();
     projection.dispose();
+    if (
+      queueGeneration === assetUpdateQueueGeneration
+      && cryptoAuthoritativeStates.get(householdId) === authoritativeState
+    ) {
+      unregisterAuthoritativeSubscription(
+        authoritativeState,
+        subscriptionId
+      );
+    }
   };
 }
 

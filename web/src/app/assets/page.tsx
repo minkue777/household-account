@@ -296,9 +296,25 @@ export default function AssetsPage() {
   };
 
   const handleEditAsset = () => {
+    setSelectedAsset((current) => (
+      current === null
+        ? null
+        : assets.find((asset) => asset.id === current.id) ?? current
+    ));
     setShowHistoryModal(false);
     setShowEditModal(true);
   };
+
+  useEffect(() => {
+    if (selectedAsset === null) return;
+    const latest = assets.find((asset) => asset.id === selectedAsset.id);
+    if (
+      latest !== undefined
+      && latest.aggregateVersion !== selectedAsset.aggregateVersion
+    ) {
+      setSelectedAsset(latest);
+    }
+  }, [assets, selectedAsset]);
 
   const visibleAssets =
     selectedMember === ALL_MEMBERS_OPTION

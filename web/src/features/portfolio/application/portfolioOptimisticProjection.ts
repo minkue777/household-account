@@ -40,6 +40,10 @@ export class PortfolioOptimisticProjection {
     return this.projection.beginDelete(assetId);
   }
 
+  beginQueuedDelete(assetId: string): string {
+    return this.projection.beginQueuedDelete(assetId);
+  }
+
   commitUpdate(mutationId: string, canonical: Asset): void {
     this.projection.commitUpdate(mutationId, canonical);
   }

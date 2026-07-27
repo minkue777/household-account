@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Asset, CryptoHolding, CryptoSearchResult } from '@/types/asset';
 import {
   addCryptoHolding,
-  deleteCryptoHolding,
   refreshAssetMarketValues,
 } from '@/lib/assetService';
 import { portfolioQueries } from '@/features/portfolio/application/portfolioQueries';
@@ -178,20 +177,6 @@ export function useCryptoHoldingManager({
     }
   }, [assetId, avgPrice, currentPrice, isAddingHolding, isCryptoAsset, quantity, resetCryptoForm, selectedCoin]);
 
-  const deleteHolding = useCallback(async (holdingId: string, expectedVersion: number) => {
-    if (!assetId || !isCryptoAsset) {
-      return false;
-    }
-
-    try {
-      await deleteCryptoHolding(holdingId, assetId, expectedVersion);
-      return true;
-    } catch (error) {
-      console.error('Failed to delete crypto holding:', error);
-      return false;
-    }
-  }, [assetId, isCryptoAsset]);
-
   const refreshHoldingPrices = useCallback(async () => {
     if (!assetId || !isCryptoAsset) {
       return;
@@ -229,7 +214,6 @@ export function useCryptoHoldingManager({
     isLoadingPrice,
     isAddingHolding,
     addHolding,
-    deleteHolding,
     resetCryptoForm,
     isRefreshingPrices,
     refreshHoldingPrices,

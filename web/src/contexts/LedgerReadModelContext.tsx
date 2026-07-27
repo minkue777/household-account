@@ -13,6 +13,7 @@ import {
 } from 'react';
 import { usePathname } from 'next/navigation';
 import { useHousehold } from '@/contexts/HouseholdContext';
+import { ANDROID_NATIVE_RESUME_EVENT } from '@/platform/android-host/androidLifecycleEvents';
 import type { LocalCurrencyBalance } from '@/lib/balanceService';
 import type { Expense, TransactionType } from '@/types/expense';
 
@@ -32,6 +33,7 @@ interface LedgerReadModelContextValue {
   readonly error: unknown;
   readonly localCurrencyBalance: LocalCurrencyBalance | null;
   readonly localCurrencyStatus: LedgerReadStatus;
+  readonly readRefreshKey: string;
   selectQuery(query: LedgerQuery): void;
 }
 
@@ -42,6 +44,7 @@ interface LedgerReadModelView {
   readonly readError: unknown;
   readonly localCurrencyBalance: LocalCurrencyBalance | null;
   readonly localCurrencySettled: boolean;
+  readonly readRefreshKey: string;
 }
 
 const LedgerReadModelContext = createContext<LedgerReadModelContextValue | undefined>(
@@ -91,11 +94,14 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
     useState<LocalCurrencyBalance | null>(null);
   const [localCurrencyStatus, setLocalCurrencyStatus] =
     useState<LedgerReadStatus>('idle');
+  const [nativeResumeEpoch, setNativeResumeEpoch] = useState(0);
   const sourceHouseholdRef = useRef<string | null>(null);
+  const readyQueryRef = useRef<string | null>(null);
   const balanceHouseholdRef = useRef<string | null>(null);
 
   const selectQuery = useCallback((nextQuery: LedgerQuery) => {
     if (sameQuery(activeQuery, nextQuery)) return;
+    readyQueryRef.current = null;
     setExpenses([]);
     setStatus('loading');
     setError(null);
@@ -114,8 +120,27 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
       !isLedgerRoute(pathname)
       || !isSessionVerified
       || !householdKey
+    ) return undefined;
+
+    const handleNativeResume = () => {
+      setNativeResumeEpoch((current) => current + 1);
+    };
+    window.addEventListener(ANDROID_NATIVE_RESUME_EVENT, handleNativeResume);
+    return () => {
+      window.removeEventListener(ANDROID_NATIVE_RESUME_EVENT, handleNativeResume);
+    };
+  }, [householdKey, isSessionVerified, pathname]);
+
+  const readRefreshKey = `${remoteReadEpoch}:${nativeResumeEpoch}`;
+
+  useEffect(() => {
+    if (
+      !isLedgerRoute(pathname)
+      || !isSessionVerified
+      || !householdKey
     ) {
       sourceHouseholdRef.current = null;
+      readyQueryRef.current = null;
       setSourceHouseholdId(null);
       setExpenses([]);
       setStatus('idle');
@@ -126,10 +151,17 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
     const householdChanged = sourceHouseholdRef.current !== householdKey;
+    const readQueryKey = [
+      householdKey,
+      activeQuery.year,
+      activeQuery.month,
+      activeQuery.transactionType,
+    ].join('\u0000');
+    const preserveCurrentRead = readyQueryRef.current === readQueryKey;
     sourceHouseholdRef.current = householdKey;
     setSourceHouseholdId(householdKey);
     if (householdChanged) setExpenses([]);
-    setStatus('loading');
+    if (!preserveCurrentRead) setStatus('loading');
     setError(null);
 
     void import('@/lib/expenseService')
@@ -140,6 +172,7 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
           activeQuery.month,
           (nextExpenses) => {
             if (cancelled) return;
+            readyQueryRef.current = readQueryKey;
             setExpenses(nextExpenses);
             setStatus('ready');
             setError(null);
@@ -148,7 +181,7 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
             transactionType: activeQuery.transactionType,
             onError: (readError) => {
               if (cancelled) return;
-              setStatus('error');
+              if (!preserveCurrentRead) setStatus('error');
               setError(readError);
             },
           }
@@ -156,7 +189,7 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
       })
       .catch((readError) => {
         if (cancelled) return;
-        setStatus('error');
+        if (!preserveCurrentRead) setStatus('error');
         setError(readError);
       });
 
@@ -171,7 +204,7 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
     householdKey,
     isSessionVerified,
     pathname,
-    remoteReadEpoch,
+    readRefreshKey,
   ]);
 
   useEffect(() => {
@@ -219,7 +252,7 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       unsubscribe?.();
     };
-  }, [householdKey, isSessionVerified, pathname, remoteReadEpoch]);
+  }, [householdKey, isSessionVerified, pathname, readRefreshKey]);
 
   const value = useMemo<LedgerReadModelContextValue>(() => ({
     activeQuery,
@@ -229,6 +262,7 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
     error,
     localCurrencyBalance,
     localCurrencyStatus,
+    readRefreshKey,
     selectQuery,
   }), [
     activeQuery,
@@ -236,6 +270,7 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
     expenses,
     localCurrencyBalance,
     localCurrencyStatus,
+    readRefreshKey,
     selectQuery,
     sourceHouseholdId,
     status,
@@ -270,12 +305,13 @@ export function useLedgerReadModel(query: LedgerQuery): LedgerReadModelView {
     expenses: matches ? context.expenses : [],
     isLoading: !matches || context.status === 'idle' || context.status === 'loading',
     serverSnapshotReady: matches && context.status === 'ready',
-    readError: matches && context.status === 'error' ? context.error : null,
+    readError: matches ? context.error : null,
     localCurrencyBalance:
       query.transactionType === 'expense' ? context.localCurrencyBalance : null,
     localCurrencySettled:
       query.transactionType !== 'expense'
       || context.localCurrencyStatus === 'ready'
       || context.localCurrencyStatus === 'error',
+    readRefreshKey: context.readRefreshKey,
   };
 }

@@ -141,6 +141,18 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
     return this.begin({ entityId, kind: 'delete' });
   }
 
+  /**
+   * Projects a delete behind one or more in-flight updates for the same entity.
+   * The caller must serialize the corresponding commands.
+   */
+  beginQueuedDelete(entityId: string): string {
+    return this.begin({
+      entityId,
+      kind: 'delete',
+      allowPendingUpdate: true,
+    });
+  }
+
   commitUpdate(id: string, canonical: Entity): void {
     const mutation = this.pending.get(id);
     if (!mutation) return;
@@ -186,7 +198,7 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
     const hasPendingMutation = existingMutations.some(({ committed }) => !committed);
     const mayQueueAfterPendingUpdate =
       input.allowPendingUpdate === true
-      && input.kind === 'update'
+      && (input.kind === 'update' || input.kind === 'delete')
       && existingMutations
         .filter(({ committed }) => !committed)
         .every(({ kind }) => kind === 'update');
@@ -329,7 +341,19 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
       if (!source) return;
 
       const next = mutation.canonical === undefined
-        ? { ...source, ...mutation.patch }
+        ? {
+            ...source,
+            ...mutation.patch,
+            // A server snapshot can advance while a locally projected command is still
+            // waiting. Never let the older predicted version in the patch move the read
+            // model backwards; queued commands derive their floor after the predecessor.
+            aggregateVersion: Math.max(
+              source.aggregateVersion,
+              typeof mutation.patch?.aggregateVersion === 'number'
+                ? mutation.patch.aggregateVersion
+                : source.aggregateVersion
+            ),
+          }
         : current !== undefined
           && current.aggregateVersion > mutation.canonical.aggregateVersion
             ? current

@@ -8,7 +8,6 @@ import {
 } from '@/types/asset';
 import {
   addStockHolding,
-  deleteStockHolding,
   refreshAssetMarketValues,
 } from '@/lib/assetService';
 import { calculateHoldingValue } from '@/lib/assets/holdingValuation';
@@ -271,20 +270,6 @@ export function useStockHoldingManager({
     resetManualForm,
   ]);
 
-  const deleteHolding = useCallback(async (holdingId: string, expectedVersion: number) => {
-    if (!assetId || !isStockAsset) {
-      return false;
-    }
-
-    try {
-      await deleteStockHolding(holdingId, assetId, expectedVersion);
-      return true;
-    } catch (error) {
-      console.error('Failed to delete stock holding:', error);
-      return false;
-    }
-  }, [assetId, isStockAsset]);
-
   const refreshHoldingPrices = useCallback(async () => {
     if (!assetId || !isStockAsset) {
       return;
@@ -329,7 +314,6 @@ export function useStockHoldingManager({
     setManualCurrentValueInput,
     isAddingManualHolding,
     addManualHolding,
-    deleteHolding,
     resetStockForm,
     resetManualForm,
     isRefreshingPrices,

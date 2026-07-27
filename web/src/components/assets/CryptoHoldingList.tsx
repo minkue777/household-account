@@ -64,7 +64,7 @@ export default function CryptoHoldingList({
       const pendingUpdate = updateCryptoHolding(editingHolding.id, assetId, {
         quantity: parseFloat(editQuantity),
         avgPrice: editAvgPrice ? parseInt(editAvgPrice, 10) : undefined,
-      }, editingHolding.aggregateVersion);
+      }, editingHolding.aggregateVersion, editingHolding);
       setEditingHolding(null);
       await pendingUpdate;
     } catch (error) {
@@ -84,7 +84,8 @@ export default function CryptoHoldingList({
       const pendingDelete = deleteCryptoHolding(
         pendingDeleteHolding.id,
         assetId,
-        pendingDeleteHolding.aggregateVersion
+        pendingDeleteHolding.aggregateVersion,
+        pendingDeleteHolding
       );
       setEditingHolding(null);
       setPendingDeleteHolding(null);

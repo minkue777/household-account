@@ -81,13 +81,11 @@ function holding(overrides: Partial<StockHolding> = {}): StockHolding {
 describe('portfolio asset service optimistic contract', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    portfolioOptimisticProjection.reset();
-    stockHoldingOptimisticProjection.reset();
+    resetClientOptimisticProjections();
   });
 
   afterEach(() => {
-    portfolioOptimisticProjection.reset();
-    stockHoldingOptimisticProjection.reset();
+    resetClientOptimisticProjections();
   });
 
   test('자산 수정은 원격 command 완료 전 반영하고 read model의 버전을 expectedVersion으로 보낸다', async () => {
@@ -199,7 +197,7 @@ describe('portfolio asset service optimistic contract', () => {
     expect(rendered.at(-1)?.[0].memo).toBeUndefined();
   });
 
-  test('첫 수정 전에 열어 둔 stale 화면은 진행 중인 수정의 다음 버전을 빌리지 않는다', async () => {
+  test('첫 수정 전에 열린 stale 화면도 겹치지 않는 필드는 선행 수정 뒤 안전하게 이어 붙인다', async () => {
     const rendered: Asset[][] = [];
     const subscription = portfolioOptimisticProjection.subscribe(
       (items) => rendered.push(items),
@@ -207,25 +205,39 @@ describe('portfolio asset service optimistic contract', () => {
     );
     subscription.publish([asset({ aggregateVersion: 3 })]);
     const firstCommand = deferred<void>();
-    mockedCommands.updateAsset.mockReturnValueOnce(firstCommand.promise);
+    const secondCommand = deferred<void>();
+    mockedCommands.updateAsset
+      .mockReturnValueOnce(firstCommand.promise)
+      .mockReturnValueOnce(secondCommand.promise);
 
     const firstPending = updateAsset('asset-1', { memo: '최신 메모' }, 3);
-    await expect(
-      updateAsset('asset-1', { currentBalance: 1_000_002 }, 3)
-    ).rejects.toThrow('ASSET_VERSION_MISMATCH');
+    const secondPending = updateAsset(
+      'asset-1',
+      { currentBalance: 1_000_002 },
+      3
+    );
 
     expect(mockedCommands.updateAsset).toHaveBeenCalledTimes(1);
     expect(rendered.at(-1)?.[0]).toMatchObject({
-      aggregateVersion: 4,
+      aggregateVersion: 5,
       memo: '최신 메모',
-      currentBalance: 1_000_000,
+      currentBalance: 1_000_002,
     });
 
     firstCommand.resolve();
     await firstPending;
+    await Promise.resolve();
+    expect(mockedCommands.updateAsset).toHaveBeenLastCalledWith(
+      'house-1',
+      'asset-1',
+      { currentBalance: 1_000_002 },
+      4
+    );
+    secondCommand.resolve();
+    await secondPending;
   });
 
-  test('순서 변경 중인 자산 수정은 별도 FIFO로 오인해 병렬 전송하지 않는다', async () => {
+  test('순서 변경 중인 자산 수정은 같은 FIFO에서 재정렬 뒤 전송한다', async () => {
     const rendered: Asset[][] = [];
     const subscription = portfolioOptimisticProjection.subscribe(
       (items) => rendered.push(items),
@@ -236,7 +248,9 @@ describe('portfolio asset service optimistic contract', () => {
       asset({ id: 'asset-2', name: '둘째 자산', order: 1 }),
     ]);
     const reorderCommand = deferred<void>();
+    const updateCommand = deferred<void>();
     mockedCommands.reorderAssets.mockReturnValueOnce(reorderCommand.promise);
+    mockedCommands.updateAsset.mockReturnValueOnce(updateCommand.promise);
 
     const reorderPending = updateAssetOrders([
       { id: 'asset-2', order: 0 },
@@ -244,17 +258,24 @@ describe('portfolio asset service optimistic contract', () => {
     ]);
     const reorderedAsset = rendered.at(-1)?.find(({ id }) => id === 'asset-1');
 
-    await expect(
-      updateAsset(
-        'asset-1',
-        { memo: '순서 변경과 겹친 수정' },
-        reorderedAsset!.aggregateVersion
-      )
-    ).rejects.toThrow('PORTFOLIO_MUTATION_ALREADY_PENDING');
+    const updatePending = updateAsset(
+      'asset-1',
+      { memo: '순서 변경과 겹친 수정' },
+      reorderedAsset!.aggregateVersion
+    );
     expect(mockedCommands.updateAsset).not.toHaveBeenCalled();
 
     reorderCommand.resolve();
     await reorderPending;
+    await Promise.resolve();
+    expect(mockedCommands.updateAsset).toHaveBeenCalledWith(
+      'house-1',
+      'asset-1',
+      { memo: '순서 변경과 겹친 수정' },
+      4
+    );
+    updateCommand.resolve();
+    await updatePending;
   });
 
   test('session reset 뒤 같은 ID의 새 FIFO를 이전 요청 정리가 제거하지 않는다', async () => {

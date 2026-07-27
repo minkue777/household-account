@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { renderToString } from 'react-dom/server.node';
 
@@ -85,5 +85,33 @@ describe('자산 수정 모달 첫 화면 계약', () => {
 
     expect(screen.getByText('예금')).toHaveClass('bg-slate-800', 'text-white');
     expect(screen.getByDisplayValue('생활비 통장')).toBeInTheDocument();
+  });
+
+  test('같은 자산의 최신 version이 도착해도 입력 중인 폼 값은 초기화하지 않는다', () => {
+    document.body.innerHTML = '';
+    const { rerender } = render(
+      <AssetEditModal
+        isOpen
+        asset={savingsAsset}
+        onClose={jest.fn()}
+      />
+    );
+    const nameInput = screen.getByDisplayValue(savingsAsset.name);
+    fireEvent.change(nameInput, { target: { value: '사용자가 입력 중인 이름' } });
+
+    rerender(
+      <AssetEditModal
+        isOpen
+        asset={{
+          ...savingsAsset,
+          aggregateVersion: 2,
+          currentBalance: 11_000_000,
+          updatedAt: new Date('2026-07-27T00:00:00.000Z'),
+        }}
+        onClose={jest.fn()}
+      />
+    );
+
+    expect(screen.getByDisplayValue('사용자가 입력 중인 이름')).toBeInTheDocument();
   });
 });

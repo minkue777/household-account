@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Asset, isGoldEtfSubType } from '@/types/asset';
-import { refreshAssetMarketValues, updateAsset } from '@/lib/assetService';
+import { refreshAssetMarketValues } from '@/lib/assetService';
 
 export interface GoldPriceData {
   pricePerDon?: number;
@@ -69,7 +69,6 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
   const [quantity, setQuantity] = useState('');
   const [goldPrice, setGoldPrice] = useState<GoldPriceData | null>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
 
   const isGoldAsset = asset?.type === 'gold';
   const isPhysicalGoldAsset = isGoldAsset && !isGoldEtfSubType(asset?.subType);
@@ -98,15 +97,19 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
   useEffect(() => {
     if (!isOpen || !asset || !isPhysicalGoldAsset) {
       setQuantity('');
-      setGoldPrice(null);
       return;
     }
     setQuantity(extractGoldQuantity(asset));
+  }, [asset?.id, isOpen, isPhysicalGoldAsset]);
+
+  useEffect(() => {
+    if (!isOpen || !asset || !isPhysicalGoldAsset) {
+      setGoldPrice(null);
+      return;
+    }
     setGoldPrice(observedGoldPrice(asset));
   }, [
-    asset,
     asset?.currentBalance,
-    asset?.memo,
     asset?.quantity,
     asset?.updatedAt,
     isOpen,
@@ -126,30 +129,6 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
     return Math.round(getGoldPricePerDon(goldPrice) * parsedQuantity);
   }, [goldPrice, quantity]);
 
-  const saveGoldHolding = useCallback(async () => {
-    if (!asset || !assetId || !isPhysicalGoldAsset || !goldPrice || !quantity || isSaving) {
-      return false;
-    }
-
-    if (totalValue <= 0) {
-      return false;
-    }
-
-    setIsSaving(true);
-    try {
-      await updateAsset(assetId, {
-        currentBalance: totalValue,
-        quantity: parseFloat(quantity) || 0,
-      }, asset.aggregateVersion);
-      return true;
-    } catch (error) {
-      console.error('Failed to save gold holding:', error);
-      return false;
-    } finally {
-      setIsSaving(false);
-    }
-  }, [asset, assetId, goldPrice, isPhysicalGoldAsset, isSaving, quantity, totalValue]);
-
   return {
     quantity,
     setQuantityInput,
@@ -157,7 +136,5 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
     isLoadingPrice,
     refreshGoldPrice,
     totalValue,
-    isSaving,
-    saveGoldHolding,
   };
 }
