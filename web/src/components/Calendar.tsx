@@ -121,7 +121,7 @@ export default function Calendar({
   };
 
   return (
-    <div className="calendar-glass overflow-hidden">
+    <div className="calendar-glass overflow-hidden" aria-busy={isLoading}>
       {/* 월 선택 헤더 */}
       {onPrevMonth && onNextMonth && (
         <div className="flex items-center justify-center px-4 py-3">

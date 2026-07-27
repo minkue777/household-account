@@ -15,6 +15,8 @@ interface BalanceCardsProps {
   summaryConfig: HomeSummaryConfig;
   transactionType: TransactionType;
   localCurrencyBalance: LocalCurrencyBalance | null;
+  ledgerReady?: boolean;
+  categoriesReady?: boolean;
   className?: string;
   onLocalCurrencyClick?: (expenses: Expense[]) => void;
   onMonthlyIncomeClick?: (expenses: Expense[]) => void;
@@ -39,6 +41,8 @@ export default function BalanceCards({
   summaryConfig,
   transactionType,
   localCurrencyBalance,
+  ledgerReady = true,
+  categoriesReady = true,
   className = '',
   onLocalCurrencyClick,
   onMonthlyIncomeClick,
@@ -119,7 +123,10 @@ export default function BalanceCards({
         return {
           key,
           label: `${currentMonth}월 잔여 예산`,
-          valueText: `${isOverBudget ? '-' : ''}${Math.abs(remaining).toLocaleString()}`,
+          valueText:
+            ledgerReady && categoriesReady
+              ? `${isOverBudget ? '-' : ''}${Math.abs(remaining).toLocaleString()}`
+              : '-',
           accentClassName: isOverBudget
             ? 'bg-red-50 border-red-100 text-red-500'
             : 'bg-emerald-50 border-emerald-100 text-emerald-500',
@@ -130,7 +137,7 @@ export default function BalanceCards({
         return {
           key,
           label: `${currentMonth}월 지출`,
-          valueText: monthlySpent.toLocaleString(),
+          valueText: ledgerReady ? monthlySpent.toLocaleString() : '-',
           accentClassName: 'bg-blue-50 border-blue-100 text-blue-500',
           icon: Calendar,
           iconClassName: 'text-yellow-500',
@@ -151,7 +158,7 @@ export default function BalanceCards({
     {
       key: 'monthlyIncome',
       label: `${currentMonth}월 수입`,
-      valueText: monthlySpent.toLocaleString(),
+      valueText: ledgerReady ? monthlySpent.toLocaleString() : '-',
       accentClassName: 'bg-blue-50 border-blue-100 text-blue-500',
       icon: Calendar,
       iconClassName: 'text-pink-500',

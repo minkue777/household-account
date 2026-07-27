@@ -163,6 +163,17 @@ describe('즉시 상호작용 UI 계약', () => {
     expect(source(productFiles[0])).not.toContain('가계부를 불러오는 중');
   });
 
+  test('첫 가계부 화면은 원장·카테고리·지역화폐를 하나의 준비 조건으로 묶지 않는다', () => {
+    const ledgerPage = source('components/home/LedgerPage.tsx');
+
+    expect(ledgerPage).not.toContain('const homeReadModelReady');
+    expect(ledgerPage).not.toContain('if (!homeReadModelReady)');
+    expect(ledgerPage).toContain('ledgerReady={serverSnapshotReady}');
+    expect(ledgerPage).toContain('categoriesReady={!categoriesLoading}');
+    expect(ledgerPage).toContain('localCurrencyBalance={localCurrencyBalance}');
+    expect(ledgerPage).toContain('if (!serverSnapshotReady) return undefined;');
+  });
+
   test('모바일의 일반 클릭 대상은 double-tap 판정으로 지연되지 않는다', () => {
     const globalStyles = source('app/globals.css');
 

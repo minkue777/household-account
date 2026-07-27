@@ -59,7 +59,6 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     serverSnapshotReady,
     readError,
     localCurrencyBalance,
-    localCurrencySettled,
     readRefreshKey,
   } = useLedgerReadModel({
     year: currentYear,
@@ -68,16 +67,6 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   });
 
   const homeSummaryConfig = household?.homeSummaryConfig || DEFAULT_HOME_SUMMARY_CONFIG;
-  const needsLocalCurrencyBalance =
-    !isIncome
-    && (
-      homeSummaryConfig.leftCard === 'localCurrencyBalance'
-      || homeSummaryConfig.rightCard === 'localCurrencyBalance'
-    );
-  const homeReadModelReady =
-    serverSnapshotReady
-    && !categoriesLoading
-    && (!needsLocalCurrencyBalance || localCurrencySettled);
   const needsYearlyTotal =
     isIncome ||
     homeSummaryConfig.leftCard === 'yearlySpent' ||
@@ -93,7 +82,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   }, [currentYear, transactionType]);
 
   useEffect(() => {
-    if (!homeReadModelReady) return undefined;
+    if (!serverSnapshotReady) return undefined;
 
     let firstFrameId: number | undefined;
     let paintFrameId: number | undefined;
@@ -111,7 +100,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
       if (paintFrameId !== undefined) window.cancelAnimationFrame(paintFrameId);
       if (fallbackId !== undefined) window.clearTimeout(fallbackId);
     };
-  }, [homeReadModelReady]);
+  }, [serverSnapshotReady]);
 
   useEffect(() => {
     if (!needsYearlyTotal) {
@@ -125,7 +114,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
 
     // 첫 화면에 필요한 월간 원장을 먼저 표시한 뒤 연간 합계를 구독합니다.
     // 두 범위 조회를 동시에 시작해 Android WebView의 초기 네트워크를 경합시키지 않습니다.
-    if (!homeReadModelReady) {
+    if (!serverSnapshotReady) {
       return undefined;
     }
 
@@ -158,10 +147,10 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     };
   }, [
     currentYear,
-    homeReadModelReady,
     isSessionVerified,
     needsYearlyTotal,
     readRefreshKey,
+    serverSnapshotReady,
     transactionType,
   ]);
 
@@ -324,30 +313,6 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     await unmergeExpense(expense);
   };
 
-  if (!homeReadModelReady) {
-    return (
-      <main
-        className="min-h-screen p-4 md:p-6 lg:p-8"
-        aria-busy={readError == null}
-      >
-        <div className="mx-auto max-w-7xl">
-          <HomeHeader
-            onSearchClick={() => setShowSearchModal(true)}
-            transactionType={transactionType}
-          />
-          {readError != null && (
-            <div
-              role="alert"
-              className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-center text-sm text-rose-700"
-            >
-              가계부를 불러오지 못했습니다.
-            </div>
-          )}
-        </div>
-      </main>
-    );
-  }
-
   return (
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl">
@@ -395,6 +360,8 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
             summaryConfig={homeSummaryConfig}
             transactionType={transactionType}
             localCurrencyBalance={localCurrencyBalance}
+            ledgerReady={serverSnapshotReady}
+            categoriesReady={!categoriesLoading}
             className={isIncome
               ? 'order-1'
               : 'order-1 lg:col-span-3 lg:col-start-2 lg:row-start-1'}
@@ -417,6 +384,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
               selectedDate={selectedDate}
               onPrevMonth={handlePrevMonth}
               onNextMonth={handleNextMonth}
+              isLoading={isLoading}
               onYearMonthChange={handleYearMonthChange}
             />
           </div>
@@ -449,9 +417,10 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
               <h3 className="mb-4 text-sm font-semibold text-slate-700">
                 카테고리별 {transactionLabel}
               </h3>
-              {expenses.length > 0 ? (
+              {isLoading || categoriesLoading || expenses.length > 0 ? (
                 <CategorySummary
                   expenses={expenses}
+                  ledgerLoading={isLoading}
                   onCategoryClick={handleCategoryClick}
                   showBudgetProgress={true}
                 />
@@ -459,9 +428,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
                 <div className="py-4 text-center text-slate-400">
                   {readError
                     ? '가계부를 불러오지 못했습니다.'
-                    : isLoading
-                      ? '로딩 중...'
-                      : '데이터가 없습니다'}
+                    : '데이터가 없습니다'}
                 </div>
               )}
             </div>

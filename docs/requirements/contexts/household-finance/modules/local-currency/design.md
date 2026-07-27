@@ -243,7 +243,7 @@ Event는 실제 최신값이 created/updated일 때만 Canonical write와 같은
 - 물리 구독은 app shell이 `{sessionGeneration, householdId}` key로 소유합니다. 홈·자산·통계·설정 등 내부 route와 원장 연·월 변경은 이 listener를 해제하거나 다시 만들지 않으며, 로그아웃·SessionScope 변경에서 종료합니다. `permission-denied`로 종료된 listener는 같은-scope 권위 해석 뒤 read epoch로 다시 엽니다.
 - Web은 `households/{householdId}/localCurrencyBalances`와 `homePreferences/home`만 구독하며 최상위 Legacy `balances`를 직접 읽지 않습니다.
 - Home Preferences가 선택한 유형을 표시하고, 관찰된 유형이 하나뿐이면 그 유형을 자동 표시합니다. 여러 유형인데 선택이 없으면 임의의 첫 문서를 고르지 않습니다.
-- 지역화폐 잔액은 localStorage 표시 Snapshot을 만들지 않습니다. 첫 렌더에서는 Firestore의 `fromCache=true` snapshot을 건너뛰고 Canonical 서버 snapshot부터 표시하며 별도 스케줄·Background Projection·다건 이력을 만들지 않습니다. 서버 snapshot에 유형이 0개 또는 1개뿐이면 그 결과를 바로 사용하고 Home Preferences 문서를 추가로 읽지 않으며, 유형이 2개 이상일 때만 명시적으로 선택한 유형을 확인합니다.
+- 지역화폐 잔액은 localStorage 표시 Snapshot을 만들지 않습니다. 첫 렌더에서는 Firestore의 `fromCache=true` snapshot을 건너뛰고 Canonical 서버 snapshot부터 표시하며 별도 스케줄·Background Projection·다건 이력을 만들지 않습니다. 홈 화면은 월 원장이나 카테고리 완료 여부와 무관하게 이 서버 snapshot이 도착하는 즉시 지역화폐 카드만 채웁니다. 서버 snapshot에 유형이 0개 또는 1개뿐이면 그 결과를 바로 사용하고 Home Preferences 문서를 추가로 읽지 않으며, 유형이 2개 이상일 때만 명시적으로 선택한 유형을 확인합니다.
 - 최초 서버 read 실패는 과거 잔액이나 `NoData`로 축약하지 않습니다. 현재 세션에서 서버값을 한 번 표시한 뒤 발생한 transient Auth·네트워크·listener 오류는 이미 표시한 정상값을 지우지 않으며, 정상 서버 snapshot이 잔액 없음 또는 선택 대상 부재를 확인한 경우에만 `NoData`로 수렴합니다. `permission-denied`는 Session Application에 전달해 bootstrap cache를 지우고 권위 해석을 시작하되 마지막 in-memory 잔액은 유지합니다. 같은 scope이면 epoch 재연결하고 first visit·다른 scope이면 그때 값을 폐기합니다.
 
 ### 8.3 Producer contract

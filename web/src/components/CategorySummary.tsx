@@ -8,12 +8,14 @@ interface CategorySummaryProps {
   expenses: Expense[];
   onCategoryClick?: (category: Category, categoryExpenses: Expense[]) => void;
   showBudgetProgress?: boolean;
+  ledgerLoading?: boolean;
 }
 
 export default function CategorySummary({
   expenses,
   onCategoryClick,
   showBudgetProgress = true,
+  ledgerLoading = false,
 }: CategorySummaryProps) {
   const {
     categories,
@@ -44,7 +46,7 @@ export default function CategorySummary({
       });
   }, [expenses, categories]);
 
-  if (isLoading) {
+  if (isLoading || ledgerLoading) {
     return (
       <div className="space-y-2 animate-pulse">
         {[1, 2, 3].map((index) => (
