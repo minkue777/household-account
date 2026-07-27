@@ -28,7 +28,7 @@ describe('자산 일간 변동 Firestore 읽기 계약', () => {
     (query as jest.Mock).mockReturnValue('summary-query');
   });
 
-  test('명의자 수와 무관하게 전일 Canonical 요약을 최대 한 건만 조회한다', async () => {
+  test('[T-PERF-HOLD-002][JOB-AST-002] 명의자 수와 무관하게 전일 Canonical 요약을 최대 한 건만 조회한다', async () => {
     (getDocs as jest.Mock).mockResolvedValue({
       empty: false,
       docs: [

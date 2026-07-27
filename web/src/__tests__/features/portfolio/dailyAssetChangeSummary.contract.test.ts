@@ -6,7 +6,7 @@ describe('자산 일간 변동 단일 요약 계산 계약', () => {
     { profileId: 'profile-jin', displayName: '진선' },
   ];
 
-  test('전일 요약 한 건과 현재 자산으로 전체 및 모든 명의자의 변동을 함께 계산한다', () => {
+  test('[T-PERF-HOLD-002][JOB-AST-002] 전일 요약 한 건과 현재 자산으로 전체 및 모든 명의자의 변동을 함께 계산한다', () => {
     const result = calculateRealtimeDailyAssetChanges({
       ownerProfiles,
       assets: [
