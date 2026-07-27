@@ -358,11 +358,6 @@ export function createPortfolioAssetCommands(
         if (automationError !== undefined) {
           return noWrite(state, error(automationError));
         }
-        const comparableBefore = { ...current, aggregateVersion: 0, updatedAt: "" };
-        const comparableAfter = { ...updated, aggregateVersion: 0, updatedAt: "" };
-        if (stable(comparableBefore) === stable(comparableAfter)) {
-          return commit(state, [], success({}));
-        }
         const withAsset = replaceAsset(state, updated);
         const nextState: PortfolioRuntimeState = {
           ...withAsset,

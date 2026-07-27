@@ -113,7 +113,7 @@ describe('portfolio asset service optimistic contract', () => {
     await pending;
   });
 
-  test('첫 저장 직후 다시 연 수정 화면은 다음 버전으로 연속 저장한다', async () => {
+  test('첫 저장이 진행 중이어도 다시 연 화면의 수정은 다음 버전으로 직렬 저장한다', async () => {
     const rendered: Asset[][] = [];
     const subscription = portfolioOptimisticProjection.subscribe(
       (items) => rendered.push(items),
@@ -123,34 +123,79 @@ describe('portfolio asset service optimistic contract', () => {
     const firstCommand = deferred<void>();
     mockedCommands.updateAsset.mockReturnValueOnce(firstCommand.promise);
 
-    const firstPending = updateAsset('asset-1', { currentBalance: 1_000_001 }, 3);
+    const firstPending = updateAsset('asset-1', { memo: '임시 메모' }, 3);
     const reopenedAsset = rendered.at(-1)?.[0];
 
     expect(reopenedAsset).toMatchObject({
       aggregateVersion: 4,
-      currentBalance: 1_000_001,
+      memo: '임시 메모',
     });
-
-    firstCommand.resolve();
-    await firstPending;
 
     const secondCommand = deferred<void>();
     mockedCommands.updateAsset.mockReturnValueOnce(secondCommand.promise);
     const secondPending = updateAsset(
       'asset-1',
-      { currentBalance: 1_000_002 },
+      { memo: '', currentBalance: 1_000_002 },
       reopenedAsset!.aggregateVersion
     );
 
-    expect(mockedCommands.updateAsset).toHaveBeenLastCalledWith(
+    expect(rendered.at(-1)?.[0]).toMatchObject({
+      aggregateVersion: 5,
+      memo: '',
+      currentBalance: 1_000_002,
+    });
+    expect(mockedCommands.updateAsset).toHaveBeenCalledTimes(1);
+
+    firstCommand.resolve();
+    await firstPending;
+    await Promise.resolve();
+
+    expect(mockedCommands.updateAsset).toHaveBeenNthCalledWith(
+      2,
       'house-1',
       'asset-1',
-      { currentBalance: 1_000_002 },
+      { memo: '', currentBalance: 1_000_002 },
       4
     );
 
     secondCommand.resolve();
     await secondPending;
+  });
+
+  test('선행 자산 수정이 실패하면 대기 중인 후속 수정은 서버에 보내지 않고 모두 되돌린다', async () => {
+    const rendered: Asset[][] = [];
+    const subscription = portfolioOptimisticProjection.subscribe(
+      (items) => rendered.push(items),
+      'house-1'
+    );
+    subscription.publish([asset({ aggregateVersion: 3 })]);
+    const firstCommand = deferred<void>();
+    mockedCommands.updateAsset.mockReturnValueOnce(firstCommand.promise);
+
+    const firstPending = updateAsset('asset-1', { memo: '실패할 메모' }, 3);
+    const secondPending = updateAsset(
+      'asset-1',
+      { currentBalance: 1_000_002 },
+      4
+    );
+
+    expect(rendered.at(-1)?.[0]).toMatchObject({
+      aggregateVersion: 5,
+      memo: '실패할 메모',
+      currentBalance: 1_000_002,
+    });
+    expect(mockedCommands.updateAsset).toHaveBeenCalledTimes(1);
+
+    firstCommand.reject(new Error('ASSET_VERSION_MISMATCH'));
+    await expect(firstPending).rejects.toThrow('ASSET_VERSION_MISMATCH');
+    await expect(secondPending).rejects.toThrow('ASSET_VERSION_MISMATCH');
+
+    expect(mockedCommands.updateAsset).toHaveBeenCalledTimes(1);
+    expect(rendered.at(-1)?.[0]).toMatchObject({
+      aggregateVersion: 3,
+      currentBalance: 1_000_000,
+    });
+    expect(rendered.at(-1)?.[0].memo).toBeUndefined();
   });
 
   test('자산 수정 command가 실패하면 즉시 반영한 값을 rollback한다', async () => {

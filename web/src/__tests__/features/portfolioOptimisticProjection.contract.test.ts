@@ -394,6 +394,47 @@ describe('portfolio optimistic projection contract', () => {
     });
   });
 
+  test('queued updates compose in order while the first response is pending', () => {
+    const projection = new OptimisticEntityProjection<Asset>(
+      'portfolio-test',
+      (left, right) => left.order - right.order
+    );
+    const rendered: Asset[][] = [];
+    const subscription = projection.subscribe((items) => rendered.push(items));
+    subscription.publish([asset({ aggregateVersion: 3 })]);
+
+    const firstId = projection.beginQueuedUpdate('asset-1', {
+      memo: 'temporary memo',
+    });
+    const secondId = projection.beginQueuedUpdate('asset-1', {
+      memo: '',
+      currentBalance: 1_200_000,
+    });
+
+    expect(rendered.at(-1)?.[0]).toMatchObject({
+      aggregateVersion: 5,
+      memo: '',
+      currentBalance: 1_200_000,
+    });
+
+    projection.commitUpdate(
+      firstId,
+      asset({ aggregateVersion: 4, memo: 'temporary memo' })
+    );
+    expect(rendered.at(-1)?.[0]).toMatchObject({
+      aggregateVersion: 5,
+      memo: '',
+      currentBalance: 1_200_000,
+    });
+
+    projection.rollback(secondId);
+    expect(rendered.at(-1)?.[0]).toMatchObject({
+      aggregateVersion: 4,
+      memo: 'temporary memo',
+      currentBalance: 1_000_000,
+    });
+  });
+
   test('a delete after a committed create does not resurrect from an older empty snapshot', () => {
     const projection = new OptimisticEntityProjection<Asset>(
       'portfolio-test',

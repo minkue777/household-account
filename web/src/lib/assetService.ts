@@ -31,6 +31,7 @@ import {
   stockHoldingOptimisticProjection,
 } from '@/features/portfolio/application/portfolioOptimisticProjection';
 import { createHouseholdCommandId } from '@/platform/functions-api/householdCommandClient';
+import { registerClientSessionReset } from '@/composition/clientSessionResetRegistry';
 import { formatLocalDate } from './utils/date';
 import { ALL_MEMBERS_OPTION } from './assets/memberOptions';
 import {
@@ -46,6 +47,14 @@ const ASSETS_COLLECTION = 'assets';
 const HISTORY_COLLECTION = 'asset_history';
 const HOLDINGS_COLLECTION = 'stock_holdings';
 const CRYPTO_HOLDINGS_COLLECTION = 'crypto_holdings';
+
+const assetUpdateTails = new Map<string, Promise<void>>();
+let assetUpdateQueueGeneration = 0;
+
+registerClientSessionReset(() => {
+  assetUpdateQueueGeneration += 1;
+  assetUpdateTails.clear();
+});
 
 /**
  * 현재 가구 키 가져오기
@@ -193,24 +202,46 @@ export async function updateAsset(
   const current = portfolioOptimisticProjection.current(id);
   if (!current) throw new Error('ASSET_READ_MODEL_REQUIRED');
   if (!hasPatchChanges(current, data)) return;
-  const mutationId = portfolioOptimisticProjection.beginUpdate(id, data);
-  try {
-    await portfolioCommands.updateAsset(
-      getHouseholdId(),
-      id,
-      data,
-      expectedVersion
-    );
-    portfolioOptimisticProjection.commitUpdate(mutationId, {
-      ...current,
-      ...data,
-      aggregateVersion: expectedVersion + 1,
-      updatedAt: new Date(),
-    });
-  } catch (error) {
-    portfolioOptimisticProjection.rollback(mutationId);
-    throw error;
-  }
+  const householdId = getHouseholdId();
+  const previousUpdate = assetUpdateTails.get(id);
+  const commandExpectedVersion =
+    previousUpdate === undefined ? expectedVersion : current.aggregateVersion;
+  const queueGeneration = assetUpdateQueueGeneration;
+  const mutationId = portfolioOptimisticProjection.beginQueuedUpdate(id, data);
+  const pendingUpdate = (async () => {
+    try {
+      if (previousUpdate !== undefined) {
+        await previousUpdate;
+      }
+      if (queueGeneration !== assetUpdateQueueGeneration) {
+        throw new Error('CLIENT_SESSION_RESET');
+      }
+      await portfolioCommands.updateAsset(
+        householdId,
+        id,
+        data,
+        commandExpectedVersion
+      );
+      portfolioOptimisticProjection.commitUpdate(mutationId, {
+        ...current,
+        ...data,
+        aggregateVersion: commandExpectedVersion + 1,
+        updatedAt: new Date(),
+      });
+    } catch (error) {
+      portfolioOptimisticProjection.rollback(mutationId);
+      throw error;
+    }
+  })();
+
+  assetUpdateTails.set(id, pendingUpdate);
+  const clearTail = () => {
+    if (assetUpdateTails.get(id) === pendingUpdate) {
+      assetUpdateTails.delete(id);
+    }
+  };
+  void pendingUpdate.then(clearTail, clearTail);
+  await pendingUpdate;
 }
 
 /**

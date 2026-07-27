@@ -93,6 +93,46 @@ async function createStockAsset(
 }
 
 describe("Firebase portfolio runtime store", () => {
+  it("advances the aggregate version for every accepted asset update command", async () => {
+    const memory = new InMemoryFirestore();
+    const runtime = application(memory);
+    const created = await runtime.createAsset({
+      metadata: command(1, "portfolio.create-asset.v1"),
+      asset: {
+        name: "Savings",
+        type: "savings",
+        subType: "deposit",
+        ownerRef: { kind: "household" },
+        currency: "KRW",
+        currentBalance: 1_000_000,
+        memo: "",
+        order: 0,
+        isActive: true,
+      },
+    });
+    expect(created.kind).toBe("success");
+    if (created.kind !== "success") return;
+    const assetId = created.value.assetId as string;
+
+    await expect(
+      runtime.updateAsset({
+        metadata: command(2, "portfolio.update-asset.v1"),
+        assetId,
+        expectedVersion: 1,
+        changes: { memo: "" },
+      }),
+    ).resolves.toEqual({ kind: "success", value: {} });
+
+    expect(memory.document(`households/house-1/assets/${assetId}`)).toMatchObject({
+      aggregateVersion: 2,
+      memo: "",
+    });
+    expect(memory.document(`assets/${assetId}`)).toMatchObject({
+      aggregateVersion: 2,
+      memo: "",
+    });
+  });
+
   it("uses independent 30-second single-flight leases for household and asset scopes", async () => {
     const memory = new InMemoryFirestore();
     const store = new FirebasePortfolioRuntimeStore(

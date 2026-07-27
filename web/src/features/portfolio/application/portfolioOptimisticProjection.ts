@@ -28,6 +28,10 @@ export class PortfolioOptimisticProjection {
     return this.projection.beginUpdate(assetId, changes);
   }
 
+  beginQueuedUpdate(assetId: string, changes: Partial<Asset>): string {
+    return this.projection.beginQueuedUpdate(assetId, changes);
+  }
+
   beginCreate(asset: Asset): string {
     return this.projection.beginCreate(asset);
   }

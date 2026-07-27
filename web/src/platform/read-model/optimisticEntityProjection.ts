@@ -99,6 +99,22 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
   }
 
   beginUpdate(entityId: string, patch: Partial<Entity>): string {
+    return this.beginUpdateInternal(entityId, patch, false);
+  }
+
+  /**
+   * Projects another update while an earlier update for the same entity is
+   * still in flight. The caller must serialize the corresponding commands.
+   */
+  beginQueuedUpdate(entityId: string, patch: Partial<Entity>): string {
+    return this.beginUpdateInternal(entityId, patch, true);
+  }
+
+  private beginUpdateInternal(
+    entityId: string,
+    patch: Partial<Entity>,
+    allowPendingUpdate: boolean
+  ): string {
     const current = this.current(entityId);
     const optimisticPatch = current === undefined
       ? patch
@@ -106,7 +122,12 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
           ...patch,
           aggregateVersion: current.aggregateVersion + 1,
         };
-    return this.begin({ entityId, kind: 'update', patch: optimisticPatch });
+    return this.begin({
+      entityId,
+      kind: 'update',
+      patch: optimisticPatch,
+      allowPendingUpdate,
+    });
   }
 
   beginCreate(entity: Entity): string {
@@ -158,11 +179,19 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
     kind: PendingMutation<Entity>['kind'];
     patch?: Partial<Entity>;
     canonical?: Entity;
+    allowPendingUpdate?: boolean;
   }): string {
     const existingMutations = Array.from(this.pending.values())
       .filter(({ entityId }) => entityId === input.entityId);
+    const hasPendingMutation = existingMutations.some(({ committed }) => !committed);
+    const mayQueueAfterPendingUpdate =
+      input.allowPendingUpdate === true
+      && input.kind === 'update'
+      && existingMutations
+        .filter(({ committed }) => !committed)
+        .every(({ kind }) => kind === 'update');
     if (
-      existingMutations.some(({ committed }) => !committed)
+      (hasPendingMutation && !mayQueueAfterPendingUpdate)
       || existingMutations.at(-1)?.kind === 'delete'
     ) {
       throw new Error(`${this.prefix.toUpperCase()}_MUTATION_ALREADY_PENDING`);
