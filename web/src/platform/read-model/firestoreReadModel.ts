@@ -15,6 +15,7 @@ export {
   getDoc,
   getDocFromServer,
   getDocs,
+  getDocsFromServer,
   limit,
   orderBy,
   query,

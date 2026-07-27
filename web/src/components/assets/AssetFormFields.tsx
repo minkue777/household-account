@@ -321,7 +321,7 @@ export function PhysicalGoldFields({
         <div className="rounded-lg border border-amber-100 bg-white px-3 py-2">
           <p className="text-xs text-slate-500">KRX 금시장 기준가</p>
           <p className="mt-1 text-sm font-semibold text-amber-600">
-            {getGoldPricePerDon(goldPrice).toLocaleString()}원
+            {Math.round(getGoldPricePerDon(goldPrice)).toLocaleString()}원
           </p>
         </div>
       ) : (

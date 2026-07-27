@@ -1,4 +1,5 @@
 const mockOnSnapshot = jest.fn();
+const mockGetDocsFromServer = jest.fn();
 const mockGetDocFromServer = jest.fn();
 const mockWhere = jest.fn((...args: unknown[]) => ({ kind: 'where', args }));
 
@@ -6,6 +7,7 @@ jest.mock('@/platform/read-model/firestoreReadModel', () => ({
   db: { kind: 'db' },
   collection: jest.fn((...segments: unknown[]) => ({ kind: 'collection', segments })),
   doc: jest.fn((...segments: unknown[]) => ({ kind: 'document', segments })),
+  getDocsFromServer: (...args: unknown[]) => mockGetDocsFromServer(...args),
   getDocFromServer: (...args: unknown[]) => mockGetDocFromServer(...args),
   query: jest.fn((...constraints: unknown[]) => ({ kind: 'query', constraints })),
   where: (...args: unknown[]) => mockWhere(...args),
@@ -37,7 +39,10 @@ jest.mock('@/features/ledger/application/ledgerOptimisticProjection', () => ({
 }));
 
 import { subscribeToCategories } from '@/lib/categoryService';
-import { subscribeToMonthlyTransactions } from '@/lib/expenseService';
+import {
+  readMonthlyTransactionsForPrefetch,
+  subscribeToMonthlyTransactions,
+} from '@/lib/expenseService';
 import { getHousehold } from '@/lib/householdService';
 
 function listenerArguments() {
@@ -54,6 +59,7 @@ describe('가계부 첫 화면 server-first 조회 계약', () => {
   beforeEach(() => {
     mockOnSnapshot.mockReset();
     mockOnSnapshot.mockReturnValue(jest.fn());
+    mockGetDocsFromServer.mockReset();
     mockGetDocFromServer.mockReset();
     mockWhere.mockClear();
   });
@@ -139,6 +145,36 @@ describe('가계부 첫 화면 server-first 조회 계약', () => {
       expect.objectContaining({ id: 'household-1', name: '서버 가계부' })
     );
     expect(mockGetDocFromServer).toHaveBeenCalledTimes(1);
+  });
+
+  it('인접 월 사전 조회는 listener를 만들지 않는 일회성 조회다', async () => {
+    mockGetDocsFromServer.mockResolvedValue({
+      docs: [{
+        id: 'august-expense',
+        data: () => ({
+          householdId: 'household-1',
+          date: '2026-08-01',
+          time: '10:00',
+          merchant: '8월 거래',
+          amount: 2_000,
+          category: 'etc',
+        }),
+      }],
+    });
+
+    await expect(
+      readMonthlyTransactionsForPrefetch(2026, 8)
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: 'august-expense',
+        date: '2026-08-01',
+      }),
+    ]);
+
+    expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1);
+    expect(mockOnSnapshot).not.toHaveBeenCalled();
+    expect(mockWhere).toHaveBeenCalledWith('date', '>=', '2026-08-01');
+    expect(mockWhere).toHaveBeenCalledWith('date', '<=', '2026-08-31');
   });
 
   it('카테고리도 Firestore cache snapshot을 건너뛰고 서버 snapshot부터 방출한다', () => {

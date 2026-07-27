@@ -37,6 +37,7 @@ interface LedgerReadModelContextValue {
   readonly localCurrencyStatus: LedgerReadStatus;
   readonly readRefreshKey: string;
   selectPeriod(period: LedgerPeriod): void;
+  prefetchAdjacentPeriods(): () => void;
 }
 
 interface LedgerReadModelView {
@@ -47,6 +48,7 @@ interface LedgerReadModelView {
   readonly localCurrencyBalance: LocalCurrencyBalance | null;
   readonly localCurrencySettled: boolean;
   readonly readRefreshKey: string;
+  prefetchAdjacentPeriods(): () => void;
 }
 
 const LedgerReadModelContext = createContext<LedgerReadModelContextValue | undefined>(
@@ -64,6 +66,25 @@ function currentPeriod(): LedgerPeriod {
 function samePeriod(left: LedgerPeriod, right: LedgerPeriod): boolean {
   return left.year === right.year
     && left.month === right.month;
+}
+
+function shiftPeriod(period: LedgerPeriod, offset: number): LedgerPeriod {
+  const date = new Date(period.year, period.month - 1 + offset, 1);
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth() + 1,
+  };
+}
+
+function periodCacheKey(
+  householdId: string,
+  period: LedgerPeriod
+): string {
+  return [
+    householdId,
+    period.year,
+    period.month,
+  ].join('\u0000');
 }
 
 /**
@@ -91,15 +112,123 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
   const sourceHouseholdRef = useRef<string | null>(null);
   const readyQueryRef = useRef<string | null>(null);
   const balanceHouseholdRef = useRef<string | null>(null);
+  const activePeriodRef = useRef(activePeriod);
+  const periodCacheRef = useRef(new Map<string, Expense[]>());
+  const prefetchingPeriodKeysRef = useRef(new Set<string>());
+  activePeriodRef.current = activePeriod;
 
   const selectPeriod = useCallback((nextPeriod: LedgerPeriod) => {
     if (samePeriod(activePeriod, nextPeriod)) return;
-    readyQueryRef.current = null;
-    setTransactions([]);
-    setStatus('loading');
+    const nextQueryKey = householdKey
+      ? periodCacheKey(householdKey, nextPeriod)
+      : null;
+    const prefetchedTransactions = nextQueryKey
+      ? periodCacheRef.current.get(nextQueryKey)
+      : undefined;
+    if (prefetchedTransactions !== undefined) {
+      readyQueryRef.current = nextQueryKey;
+      setTransactions(prefetchedTransactions);
+      setStatus('ready');
+    } else {
+      readyQueryRef.current = null;
+      setTransactions([]);
+      setStatus('loading');
+    }
     setError(null);
     setActivePeriod(nextPeriod);
-  }, [activePeriod]);
+  }, [activePeriod, householdKey]);
+
+  const prefetchAdjacentPeriods = useCallback(() => {
+    if (
+      !isSessionVerified
+      || !householdKey
+      || status !== 'ready'
+    ) return () => {};
+
+    const targetHouseholdId = householdKey;
+    const candidates = [
+      shiftPeriod(activePeriod, -1),
+      shiftPeriod(activePeriod, 1),
+    ].filter((period) => {
+      const key = periodCacheKey(targetHouseholdId, period);
+      return !periodCacheRef.current.has(key)
+        && !prefetchingPeriodKeysRef.current.has(key);
+    });
+    if (candidates.length === 0) return () => {};
+
+    const candidateKeys = candidates.map((period) =>
+      periodCacheKey(targetHouseholdId, period)
+    );
+    candidateKeys.forEach((key) => prefetchingPeriodKeysRef.current.add(key));
+
+    let cancelled = false;
+    let idleCallbackId: number | undefined;
+    let fallbackId: number | undefined;
+
+    const run = () => {
+      void import('@/lib/expenseService')
+        .then(async ({ readMonthlyTransactionsForPrefetch }) => {
+          await Promise.all(candidates.map(async (period, index) => {
+            const key = candidateKeys[index];
+            if (
+              cancelled
+              || sourceHouseholdRef.current !== targetHouseholdId
+              || samePeriod(activePeriodRef.current, period)
+            ) {
+              prefetchingPeriodKeysRef.current.delete(key);
+              return;
+            }
+            try {
+              const prefetchedTransactions =
+                await readMonthlyTransactionsForPrefetch(period.year, period.month);
+              if (
+                !cancelled
+                && sourceHouseholdRef.current === targetHouseholdId
+                && !samePeriod(activePeriodRef.current, period)
+              ) {
+                periodCacheRef.current.set(key, prefetchedTransactions);
+              }
+            } catch {
+              // 선택 월의 권위 read와 무관한 선택적 최적화이므로 조용히 건너뜁니다.
+            } finally {
+              prefetchingPeriodKeysRef.current.delete(key);
+            }
+          }));
+        })
+        .catch(() => {
+          candidateKeys.forEach((key) =>
+            prefetchingPeriodKeysRef.current.delete(key)
+          );
+        });
+    };
+
+    if (typeof window.requestIdleCallback === 'function') {
+      idleCallbackId = window.requestIdleCallback(run, { timeout: 5_000 });
+    } else {
+      fallbackId = window.setTimeout(run, 0);
+    }
+
+    return () => {
+      cancelled = true;
+      candidateKeys.forEach((key) =>
+        prefetchingPeriodKeysRef.current.delete(key)
+      );
+      if (
+        idleCallbackId !== undefined
+        && typeof window.cancelIdleCallback === 'function'
+      ) {
+        window.cancelIdleCallback(idleCallbackId);
+      }
+      if (fallbackId !== undefined) {
+        window.clearTimeout(fallbackId);
+      }
+    };
+  }, [
+    activePeriod,
+    householdKey,
+    isSessionVerified,
+    status,
+  ]);
 
   useEffect(() => {
     if (
@@ -125,6 +254,8 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
     ) {
       sourceHouseholdRef.current = null;
       readyQueryRef.current = null;
+      periodCacheRef.current.clear();
+      prefetchingPeriodKeysRef.current.clear();
       setSourceHouseholdId(null);
       setTransactions([]);
       setStatus('idle');
@@ -135,12 +266,12 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
     const householdChanged = sourceHouseholdRef.current !== householdKey;
-    const readQueryKey = [
-      householdKey,
-      activePeriod.year,
-      activePeriod.month,
-    ].join('\u0000');
+    const readQueryKey = periodCacheKey(householdKey, activePeriod);
     const preserveCurrentRead = readyQueryRef.current === readQueryKey;
+    if (householdChanged) {
+      periodCacheRef.current.clear();
+      prefetchingPeriodKeysRef.current.clear();
+    }
     sourceHouseholdRef.current = householdKey;
     setSourceHouseholdId(householdKey);
     if (householdChanged) setTransactions([]);
@@ -156,6 +287,7 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
           (nextTransactions) => {
             if (cancelled) return;
             readyQueryRef.current = readQueryKey;
+            periodCacheRef.current.set(readQueryKey, nextTransactions);
             setTransactions(nextTransactions);
             setStatus('ready');
             setError(null);
@@ -243,6 +375,7 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
     localCurrencyStatus,
     readRefreshKey,
     selectPeriod,
+    prefetchAdjacentPeriods,
   }), [
     activePeriod,
     error,
@@ -251,6 +384,7 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
     localCurrencyStatus,
     readRefreshKey,
     selectPeriod,
+    prefetchAdjacentPeriods,
     sourceHouseholdId,
     status,
   ]);
@@ -301,5 +435,6 @@ export function useLedgerReadModel(query: LedgerQuery): LedgerReadModelView {
       || context.localCurrencyStatus === 'ready'
       || context.localCurrencyStatus === 'error',
     readRefreshKey: context.readRefreshKey,
+    prefetchAdjacentPeriods: context.prefetchAdjacentPeriods,
   };
 }

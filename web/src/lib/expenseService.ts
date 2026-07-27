@@ -4,6 +4,7 @@ import {
   where,
   onSnapshot,
   getDocs,
+  getDocsFromServer,
   QueryDocumentSnapshot,
   DocumentData,
   db,
@@ -493,6 +494,33 @@ export function subscribeToMonthlyTransactions(
     undefined,
     options.onError
   );
+}
+
+/**
+ * 인접 월 화면 전환을 위한 일회성 원장 조회입니다.
+ *
+ * listener를 유지하지 않으며 반환값은 현재 브라우저 세션의 메모리 힌트로만
+ * 사용합니다. 해당 월을 실제로 선택하면 실시간 구독이 권위 서버 snapshot으로
+ * 다시 수렴시킵니다.
+ */
+export async function readMonthlyTransactionsForPrefetch(
+  year: number,
+  month: number
+): Promise<Expense[]> {
+  const householdId = getHouseholdId();
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+  const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+  const q = query(
+    collection(db, COLLECTION_NAME),
+    where('householdId', '==', householdId),
+    where('date', '>=', startDate),
+    where('date', '<=', endDate)
+  );
+  const snapshot = await getDocsFromServer(q);
+
+  return snapshot.docs
+    .filter((document) => isVisibleLedgerReadDocument(document.data()))
+    .map(mapDocToExpense);
 }
 
 /**

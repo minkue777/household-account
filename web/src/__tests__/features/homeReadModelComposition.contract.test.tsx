@@ -1,10 +1,11 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
   LedgerReadModelProvider,
   useLedgerReadModel,
 } from '@/contexts/LedgerReadModelContext';
 
 const subscribeToMonthlyTransactions = jest.fn();
+const readMonthlyTransactionsForPrefetch = jest.fn();
 const subscribeToLocalCurrencyBalance = jest.fn();
 let mockPathname = '/';
 
@@ -23,6 +24,8 @@ jest.mock('@/contexts/HouseholdContext', () => ({
 jest.mock('@/lib/expenseService', () => ({
   subscribeToMonthlyTransactions: (...args: unknown[]) =>
     subscribeToMonthlyTransactions(...args),
+  readMonthlyTransactionsForPrefetch: (...args: unknown[]) =>
+    readMonthlyTransactionsForPrefetch(...args),
 }));
 
 jest.mock('@/lib/balanceService', () => ({
@@ -45,16 +48,25 @@ function ReadModelConsumer({
     transactionType,
   });
   return (
-    <output
-      data-testid={testId}
-      data-loading={String(model.isLoading)}
-      data-ready={String(model.serverSnapshotReady)}
-      data-count={String(model.expenses.length)}
-      data-ids={model.expenses.map(({ id }) => id).join(',')}
-      data-balance={String(model.localCurrencyBalance?.balance ?? '')}
-      data-error={String(model.readError != null)}
-      data-refresh-key={model.readRefreshKey}
-    />
+    <>
+      <output
+        data-testid={testId}
+        data-loading={String(model.isLoading)}
+        data-ready={String(model.serverSnapshotReady)}
+        data-count={String(model.expenses.length)}
+        data-ids={model.expenses.map(({ id }) => id).join(',')}
+        data-balance={String(model.localCurrencyBalance?.balance ?? '')}
+        data-error={String(model.readError != null)}
+        data-refresh-key={model.readRefreshKey}
+      />
+      <button
+        type="button"
+        data-testid={`${testId}-prefetch`}
+        onClick={() => model.prefetchAdjacentPeriods()}
+      >
+        인접 월 준비
+      </button>
+    </>
   );
 }
 
@@ -62,7 +74,9 @@ describe('홈 read model 합성 계약', () => {
   beforeEach(() => {
     mockPathname = '/';
     subscribeToMonthlyTransactions.mockReset();
+    readMonthlyTransactionsForPrefetch.mockReset();
     subscribeToLocalCurrencyBalance.mockReset();
+    readMonthlyTransactionsForPrefetch.mockResolvedValue([]);
     subscribeToMonthlyTransactions.mockImplementation(
       (
         _year: number,
@@ -366,6 +380,132 @@ describe('홈 read model 합성 계약', () => {
     await waitFor(() => {
       expect(screen.getByTestId('ledger-view')).toHaveAttribute('data-ids', 'august-expense');
       expect(screen.getByTestId('ledger-view')).toHaveAttribute('data-loading', 'false');
+    });
+  });
+
+  it('인접 월은 일회성 조회해 즉시 표시하고 이동 뒤 바깥쪽 한 달만 보충한다', async () => {
+    const callbacks: Array<(items: unknown[]) => void> = [];
+    const unsubscribes: jest.Mock[] = [];
+    subscribeToMonthlyTransactions.mockImplementation(
+      (
+        _year: number,
+        _month: number,
+        callback: (items: unknown[]) => void
+      ) => {
+        callbacks.push(callback);
+        const unsubscribe = jest.fn();
+        unsubscribes.push(unsubscribe);
+        if (callbacks.length === 1) {
+          callback([{
+            id: 'july-live',
+            date: '2026-07-26',
+            merchant: '7월 실시간 거래',
+            amount: 1_000,
+            category: 'etc',
+            transactionType: 'expense',
+            aggregateVersion: 1,
+          }]);
+        }
+        return unsubscribe;
+      }
+    );
+    readMonthlyTransactionsForPrefetch.mockImplementation(
+      async (_year: number, month: number) => [{
+        id: `${month}-prefetched`,
+        date: `2026-${String(month).padStart(2, '0')}-01`,
+        merchant: `${month}월 사전 조회`,
+        amount: month * 1_000,
+        category: 'etc',
+        transactionType: 'expense',
+        aggregateVersion: 1,
+      }]
+    );
+
+    const view = render(
+      <LedgerReadModelProvider>
+        <ReadModelConsumer testId="ledger-view" />
+      </LedgerReadModelProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ledger-view')).toHaveAttribute(
+        'data-ids',
+        'july-live'
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('ledger-view-prefetch'));
+
+    await waitFor(() => {
+      expect(readMonthlyTransactionsForPrefetch.mock.calls).toEqual([
+        [2026, 6],
+        [2026, 8],
+      ]);
+    });
+
+    view.rerender(
+      <LedgerReadModelProvider>
+        <ReadModelConsumer testId="ledger-view" month={8} />
+      </LedgerReadModelProvider>
+    );
+
+    await waitFor(() => {
+      expect(subscribeToMonthlyTransactions).toHaveBeenCalledTimes(2);
+      expect(unsubscribes[0]).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId('ledger-view')).toHaveAttribute(
+        'data-ids',
+        '8-prefetched'
+      );
+      expect(screen.getByTestId('ledger-view')).toHaveAttribute(
+        'data-loading',
+        'false'
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('ledger-view-prefetch'));
+
+    await waitFor(() => {
+      expect(readMonthlyTransactionsForPrefetch.mock.calls).toEqual([
+        [2026, 6],
+        [2026, 8],
+        [2026, 9],
+      ]);
+    });
+
+    act(() => {
+      callbacks[1]([{
+        id: 'august-live',
+        date: '2026-08-02',
+        merchant: '8월 최신 거래',
+        amount: 8_500,
+        category: 'etc',
+        transactionType: 'expense',
+        aggregateVersion: 1,
+      }]);
+    });
+
+    expect(screen.getByTestId('ledger-view')).toHaveAttribute(
+      'data-ids',
+      'august-live'
+    );
+
+    view.rerender(
+      <LedgerReadModelProvider>
+        <ReadModelConsumer testId="ledger-view" month={7} />
+      </LedgerReadModelProvider>
+    );
+
+    await waitFor(() => {
+      expect(subscribeToMonthlyTransactions).toHaveBeenCalledTimes(3);
+      expect(unsubscribes[1]).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId('ledger-view')).toHaveAttribute(
+        'data-ids',
+        'july-live'
+      );
+      expect(screen.getByTestId('ledger-view')).toHaveAttribute(
+        'data-loading',
+        'false'
+      );
     });
   });
 

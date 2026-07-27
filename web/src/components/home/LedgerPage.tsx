@@ -59,7 +59,9 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     serverSnapshotReady,
     readError,
     localCurrencyBalance,
+    localCurrencySettled,
     readRefreshKey,
+    prefetchAdjacentPeriods,
   } = useLedgerReadModel({
     year: currentYear,
     month: currentMonth,
@@ -71,6 +73,21 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     isIncome ||
     homeSummaryConfig.leftCard === 'yearlySpent' ||
     homeSummaryConfig.rightCard === 'yearlySpent';
+
+  useEffect(() => {
+    if (
+      !serverSnapshotReady
+      || categoriesLoading
+      || !localCurrencySettled
+    ) return undefined;
+
+    return prefetchAdjacentPeriods();
+  }, [
+    categoriesLoading,
+    localCurrencySettled,
+    prefetchAdjacentPeriods,
+    serverSnapshotReady,
+  ]);
 
   useLayoutEffect(() => {
     markWebLedgerCacheResult(false);

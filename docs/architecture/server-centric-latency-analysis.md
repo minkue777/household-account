@@ -103,7 +103,7 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 10. 지역화폐는 가구 하위 Canonical balance를 직접 구독하고 최초 Firestore cache 결과를 건너뛴 뒤 서버 잔액부터 표시합니다. 지역화폐가 하나뿐이면 별도 Home Preferences listener도 열지 않습니다.
 11. root service worker는 첫 원장 서버 paint 뒤에만 등록·갱신하고 install precache는 0건으로 줄였습니다. 필요한 build hash 정적 파일만 실제 요청 시 runtime cache하며 Android WebView는 worker를 등록하지 않습니다.
 
-첫 가계부 화면은 최신성 혼동을 피하기 위해 과거 원장·카테고리·지역화폐 값을 그리지 않습니다. 화면 골격은 즉시 만들고 각 최신 서버 결과를 도착 순서대로 반영합니다. 첫 원장 paint 이후에는 주요 내부 route code와 원장 mutation runtime만 idle에 준비하고, 다른 route의 Firestore 조회·외부 시세·종목 catalog 같은 원격 업무는 실제 navigation 뒤 시작합니다.
+첫 가계부 화면은 최신성 혼동을 피하기 위해 과거 원장·카테고리·지역화폐 값을 그리지 않습니다. 화면 골격은 즉시 만들고 각 최신 서버 결과를 도착 순서대로 반영합니다. 세 결과가 모두 정착한 뒤 idle 시점에는 현재 월의 앞뒤 한 달 원장을 일회성으로 읽어 SessionScope 메모리에만 보관합니다. 월 이동 시 보관값을 즉시 표시하면서 실시간 listener는 새 선택 월 하나로 교체하고, 이동 뒤에는 이미 가진 안쪽 월 대신 새 바깥쪽 한 달만 보충합니다. 첫 화면 준비 전에는 이 조회를 시작하지 않으며 인접 월 listener나 영속 화면 cache는 만들지 않습니다. 첫 원장 paint 이후에는 주요 내부 route code와 원장 mutation runtime만 idle에 준비하고, 다른 route의 외부 시세·종목 catalog 같은 원격 업무는 실제 navigation 뒤 시작합니다.
 
 ### 5.2 모든 클릭·모달·검색
 
