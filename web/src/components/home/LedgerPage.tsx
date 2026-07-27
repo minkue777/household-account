@@ -326,15 +326,23 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
 
   if (!homeReadModelReady) {
     return (
-      <main className="min-h-screen p-4 md:p-6 lg:p-8">
+      <main
+        className="min-h-screen p-4 md:p-6 lg:p-8"
+        aria-busy={readError == null}
+      >
         <div className="mx-auto max-w-7xl">
           <HomeHeader
             onSearchClick={() => setShowSearchModal(true)}
             transactionType={transactionType}
           />
-          <div className="rounded-2xl border border-slate-200/70 bg-white/95 p-8 text-center text-slate-400 shadow-sm">
-            {readError ? '가계부를 불러오지 못했습니다.' : '가계부를 불러오는 중...'}
-          </div>
+          {readError != null && (
+            <div
+              role="alert"
+              className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-center text-sm text-rose-700"
+            >
+              가계부를 불러오지 못했습니다.
+            </div>
+          )}
         </div>
       </main>
     );
