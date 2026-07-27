@@ -356,7 +356,7 @@ describe('portfolio optimistic projection contract', () => {
 
     const secondId = projection.beginUpdate('asset-1', { currentBalance: 2_000_000 });
     expect(rendered.at(-1)?.[0]).toMatchObject({
-      aggregateVersion: 4,
+      aggregateVersion: 5,
       name: 'first committed name',
       currentBalance: 2_000_000,
     });
@@ -365,6 +365,31 @@ describe('portfolio optimistic projection contract', () => {
     expect(rendered.at(-1)?.[0]).toMatchObject({
       aggregateVersion: 4,
       name: 'first committed name',
+      currentBalance: 1_000_000,
+    });
+  });
+
+  test('a reopened editor sees the next aggregate version before the first response arrives', () => {
+    const projection = new OptimisticEntityProjection<Asset>(
+      'portfolio-test',
+      (left, right) => left.order - right.order
+    );
+    const rendered: Asset[][] = [];
+    const subscription = projection.subscribe((items) => rendered.push(items));
+    subscription.publish([asset({ aggregateVersion: 3 })]);
+
+    const mutationId = projection.beginUpdate('asset-1', {
+      currentBalance: 1_200_000,
+    });
+
+    expect(rendered.at(-1)?.[0]).toMatchObject({
+      aggregateVersion: 4,
+      currentBalance: 1_200_000,
+    });
+
+    projection.rollback(mutationId);
+    expect(rendered.at(-1)?.[0]).toMatchObject({
+      aggregateVersion: 3,
       currentBalance: 1_000_000,
     });
   });

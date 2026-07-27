@@ -99,7 +99,14 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
   }
 
   beginUpdate(entityId: string, patch: Partial<Entity>): string {
-    return this.begin({ entityId, kind: 'update', patch });
+    const current = this.current(entityId);
+    const optimisticPatch = current === undefined
+      ? patch
+      : {
+          ...patch,
+          aggregateVersion: current.aggregateVersion + 1,
+        };
+    return this.begin({ entityId, kind: 'update', patch: optimisticPatch });
   }
 
   beginCreate(entity: Entity): string {

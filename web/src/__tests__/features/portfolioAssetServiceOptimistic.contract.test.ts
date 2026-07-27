@@ -113,6 +113,46 @@ describe('portfolio asset service optimistic contract', () => {
     await pending;
   });
 
+  test('첫 저장 직후 다시 연 수정 화면은 다음 버전으로 연속 저장한다', async () => {
+    const rendered: Asset[][] = [];
+    const subscription = portfolioOptimisticProjection.subscribe(
+      (items) => rendered.push(items),
+      'house-1'
+    );
+    subscription.publish([asset({ aggregateVersion: 3 })]);
+    const firstCommand = deferred<void>();
+    mockedCommands.updateAsset.mockReturnValueOnce(firstCommand.promise);
+
+    const firstPending = updateAsset('asset-1', { currentBalance: 1_000_001 }, 3);
+    const reopenedAsset = rendered.at(-1)?.[0];
+
+    expect(reopenedAsset).toMatchObject({
+      aggregateVersion: 4,
+      currentBalance: 1_000_001,
+    });
+
+    firstCommand.resolve();
+    await firstPending;
+
+    const secondCommand = deferred<void>();
+    mockedCommands.updateAsset.mockReturnValueOnce(secondCommand.promise);
+    const secondPending = updateAsset(
+      'asset-1',
+      { currentBalance: 1_000_002 },
+      reopenedAsset!.aggregateVersion
+    );
+
+    expect(mockedCommands.updateAsset).toHaveBeenLastCalledWith(
+      'house-1',
+      'asset-1',
+      { currentBalance: 1_000_002 },
+      4
+    );
+
+    secondCommand.resolve();
+    await secondPending;
+  });
+
   test('자산 수정 command가 실패하면 즉시 반영한 값을 rollback한다', async () => {
     const rendered: Asset[][] = [];
     const subscription = portfolioOptimisticProjection.subscribe(

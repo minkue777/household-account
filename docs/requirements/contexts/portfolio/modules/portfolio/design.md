@@ -298,7 +298,7 @@ Role에서 Capability로의 매핑은 Access Context가 소유합니다. 이 모
 ### 5.7 Web 낙관적 Projection과 충돌 처리
 
 1. 자산과 Position의 생성·수정·삭제·재정렬은 인증된 Portfolio Command를 Canonical writer로 유지합니다. Web은 Command를 보내는 같은 tick에 현재 Read Model 위에 낙관적 Projection을 합성해 목록과 합계를 먼저 갱신합니다.
-2. 수정·삭제 Command에는 화면이 읽은 `aggregateVersion`을 `expectedVersion`으로 반드시 전달합니다. 서버가 성공하면 예측한 다음 version과 이어지는 실시간 snapshot으로 확정하고, typed rejection·version conflict·transport 실패이면 해당 mutation만 최신 base snapshot으로 rollback합니다.
+2. 수정·삭제 Command에는 화면이 읽은 `aggregateVersion`을 `expectedVersion`으로 반드시 전달합니다. 수정 낙관적 Projection은 필드와 함께 다음 `aggregateVersion`도 같은 tick에 예측해, 저장 직후 다시 연 화면이 이미 성공 중인 자기 변경의 이전 version을 재사용하지 않게 합니다. 서버가 성공하면 이어지는 실시간 snapshot으로 확정하고, typed rejection·version conflict·transport 실패이면 해당 mutation만 최신 base snapshot으로 rollback합니다.
 3. 서버 응답보다 늦게 도착한 이전 version snapshot은 성공한 낙관 값을 덮어쓰지 않습니다. 같은 Aggregate를 보여 주는 모든 구독과 query 이동의 목적 구독이 동일하거나 더 최신 version snapshot을 관찰한 뒤에만 임시 Projection을 제거합니다.
 4. 자산 순서는 전체 active 집합을 중복 없이 `0..n-1`로 정규화합니다. 일부 항목의 낙관 변경을 시작한 뒤 다른 항목에서 precondition이 실패하면 시작한 변경을 모두 rollback하고 부분 순서를 남기지 않습니다.
 5. 로그아웃·가구 전환처럼 `SessionScope`가 해제되기 전에 Asset·Stock Position·Crypto Position의 base와 pending·committed overlay를 모두 폐기합니다. 이전 session의 Command가 뒤늦게 완료되어도 폐기된 mutation ID는 새 session Projection에 반영하지 않습니다.
