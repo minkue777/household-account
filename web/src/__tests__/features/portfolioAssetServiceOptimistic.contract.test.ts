@@ -9,6 +9,7 @@ import {
   deleteStockHolding,
   refreshAllMarketValues,
   updateAsset,
+  updateAssetOrders,
   updateStockHolding,
 } from '@/lib/assetService';
 import type { Asset, StockHolding } from '@/types/asset';
@@ -196,6 +197,125 @@ describe('portfolio asset service optimistic contract', () => {
       currentBalance: 1_000_000,
     });
     expect(rendered.at(-1)?.[0].memo).toBeUndefined();
+  });
+
+  test('첫 수정 전에 열어 둔 stale 화면은 진행 중인 수정의 다음 버전을 빌리지 않는다', async () => {
+    const rendered: Asset[][] = [];
+    const subscription = portfolioOptimisticProjection.subscribe(
+      (items) => rendered.push(items),
+      'house-1'
+    );
+    subscription.publish([asset({ aggregateVersion: 3 })]);
+    const firstCommand = deferred<void>();
+    mockedCommands.updateAsset.mockReturnValueOnce(firstCommand.promise);
+
+    const firstPending = updateAsset('asset-1', { memo: '최신 메모' }, 3);
+    await expect(
+      updateAsset('asset-1', { currentBalance: 1_000_002 }, 3)
+    ).rejects.toThrow('ASSET_VERSION_MISMATCH');
+
+    expect(mockedCommands.updateAsset).toHaveBeenCalledTimes(1);
+    expect(rendered.at(-1)?.[0]).toMatchObject({
+      aggregateVersion: 4,
+      memo: '최신 메모',
+      currentBalance: 1_000_000,
+    });
+
+    firstCommand.resolve();
+    await firstPending;
+  });
+
+  test('순서 변경 중인 자산 수정은 별도 FIFO로 오인해 병렬 전송하지 않는다', async () => {
+    const rendered: Asset[][] = [];
+    const subscription = portfolioOptimisticProjection.subscribe(
+      (items) => rendered.push(items),
+      'house-1'
+    );
+    subscription.publish([
+      asset({ id: 'asset-1', name: '첫 자산', order: 0 }),
+      asset({ id: 'asset-2', name: '둘째 자산', order: 1 }),
+    ]);
+    const reorderCommand = deferred<void>();
+    mockedCommands.reorderAssets.mockReturnValueOnce(reorderCommand.promise);
+
+    const reorderPending = updateAssetOrders([
+      { id: 'asset-2', order: 0 },
+      { id: 'asset-1', order: 1 },
+    ]);
+    const reorderedAsset = rendered.at(-1)?.find(({ id }) => id === 'asset-1');
+
+    await expect(
+      updateAsset(
+        'asset-1',
+        { memo: '순서 변경과 겹친 수정' },
+        reorderedAsset!.aggregateVersion
+      )
+    ).rejects.toThrow('PORTFOLIO_MUTATION_ALREADY_PENDING');
+    expect(mockedCommands.updateAsset).not.toHaveBeenCalled();
+
+    reorderCommand.resolve();
+    await reorderPending;
+  });
+
+  test('session reset 뒤 같은 ID의 새 FIFO를 이전 요청 정리가 제거하지 않는다', async () => {
+    const firstRendered: Asset[][] = [];
+    const firstSubscription = portfolioOptimisticProjection.subscribe(
+      (items) => firstRendered.push(items),
+      'house-1'
+    );
+    firstSubscription.publish([asset({ aggregateVersion: 3 })]);
+    const oldFirstCommand = deferred<void>();
+    const newFirstCommand = deferred<void>();
+    const newSecondCommand = deferred<void>();
+    mockedCommands.updateAsset
+      .mockReturnValueOnce(oldFirstCommand.promise)
+      .mockReturnValueOnce(newFirstCommand.promise)
+      .mockReturnValueOnce(newSecondCommand.promise);
+
+    const oldFirstPending = updateAsset('asset-1', { memo: '이전 session 1' }, 3);
+    const oldSecondPending = updateAsset(
+      'asset-1',
+      { currentBalance: 1_000_001 },
+      4
+    );
+    const oldSecondRejected = expect(oldSecondPending).rejects.toThrow(
+      'CLIENT_SESSION_RESET'
+    );
+
+    resetClientOptimisticProjections();
+    const newRendered: Asset[][] = [];
+    const newSubscription = portfolioOptimisticProjection.subscribe(
+      (items) => newRendered.push(items),
+      'house-1'
+    );
+    newSubscription.publish([asset({ aggregateVersion: 3 })]);
+    const newFirstPending = updateAsset('asset-1', { memo: '새 session 1' }, 3);
+
+    oldFirstCommand.resolve();
+    await oldFirstPending;
+    await oldSecondRejected;
+
+    const reopenedAsset = newRendered.at(-1)?.[0];
+    const newSecondPending = updateAsset(
+      'asset-1',
+      { currentBalance: 1_000_002 },
+      reopenedAsset!.aggregateVersion
+    );
+    expect(mockedCommands.updateAsset).toHaveBeenCalledTimes(2);
+
+    newFirstCommand.resolve();
+    await newFirstPending;
+    await Promise.resolve();
+    expect(mockedCommands.updateAsset).toHaveBeenCalledTimes(3);
+    expect(mockedCommands.updateAsset).toHaveBeenLastCalledWith(
+      'house-1',
+      'asset-1',
+      { currentBalance: 1_000_002 },
+      4
+    );
+
+    newSecondCommand.resolve();
+    await newSecondPending;
   });
 
   test('자산 수정 command가 실패하면 즉시 반영한 값을 rollback한다', async () => {

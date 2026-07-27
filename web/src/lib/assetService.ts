@@ -204,10 +204,17 @@ export async function updateAsset(
   if (!hasPatchChanges(current, data)) return;
   const householdId = getHouseholdId();
   const previousUpdate = assetUpdateTails.get(id);
-  const commandExpectedVersion =
-    previousUpdate === undefined ? expectedVersion : current.aggregateVersion;
+  if (
+    previousUpdate !== undefined
+    && expectedVersion !== current.aggregateVersion
+  ) {
+    throw new Error('ASSET_VERSION_MISMATCH');
+  }
+  const commandExpectedVersion = expectedVersion;
   const queueGeneration = assetUpdateQueueGeneration;
-  const mutationId = portfolioOptimisticProjection.beginQueuedUpdate(id, data);
+  const mutationId = previousUpdate === undefined
+    ? portfolioOptimisticProjection.beginUpdate(id, data)
+    : portfolioOptimisticProjection.beginQueuedUpdate(id, data);
   const pendingUpdate = (async () => {
     try {
       if (previousUpdate !== undefined) {
