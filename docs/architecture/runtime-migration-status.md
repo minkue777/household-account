@@ -11,7 +11,7 @@
 | 목표 계약·코어 | 완료 | 없음 |
 | 공통 Command·Query wire | 완료 | 배포 후 실제 앱 smoke test |
 | Functions 런타임 | 완료 | Functions 배포와 외부 secret·권한 설정 |
-| Web 런타임 | 완료 | Web 배포와 App Check site key 설정 |
+| Web 런타임 | 완료 | Web 배포와 Firebase Auth 설정 |
 | Android 런타임 | 완료 | OAuth 설정 갱신, App Check 등록, APK 배포 |
 | Firestore·Storage 보안 | 완료 | Rules·index·TTL 설정 배포 |
 | Legacy → Canonical 전환 도구 | 완료 | 가구별 dry-run 검토와 별도 승인된 apply |
@@ -43,7 +43,7 @@
 
 아래 항목은 로컬 코드가 임의로 수행할 수 없으며, 이 문서는 실행 승인이 아니다.
 
-1. [배포 전 외부 설정 체크리스트](../operations/deployment-prerequisites.md)에 따라 Android OAuth, Web·Android App Check, Shortcut secret, `systemAdmin` claim, Cloud Monitoring 이메일 channel을 설정한다.
+1. [배포 전 외부 설정 체크리스트](../operations/deployment-prerequisites.md)에 따라 Android OAuth, Native Android App Check, Shortcut secret, `systemAdmin` claim, Cloud Monitoring 이메일 channel을 설정한다.
 2. Functions, Firestore Rules·index·TTL, Storage Rules, Web, Android를 승인된 순서로 배포한다.
 3. [런타임 데이터 전환 Runbook](../operations/runtime-migration-runbook.md)의 가구별 dry-run을 검토한 뒤 별도 승인된 plan만 적용한다.
 4. [Firestore TTL 전환 Runbook](../operations/firestore-ttl-backfill.md)의 dry-run과 plan hash를 검토한 뒤 별도 승인된 백필만 적용한다.

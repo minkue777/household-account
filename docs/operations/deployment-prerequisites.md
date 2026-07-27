@@ -6,8 +6,7 @@
 
 - Android 앱을 Firebase App Check의 Play Integrity 공급자에 등록하고 배포 인증서 SHA-256을 등록합니다.
 - Play Console에서 같은 Google Cloud 프로젝트에 Play Integrity API를 연결합니다.
-- Web 앱을 권장되는 reCAPTCHA Enterprise 공급자에 등록하고 공개 site key를 배포 환경의 `NEXT_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY`로 제공합니다.
-- 정상 Android 앱과 iPhone 홈 화면 PWA의 App Check 요청 지표를 확인한 뒤 callable을 배포합니다. Shortcut HTTP endpoint는 App Check가 아니라 사용자별 Bearer credential로 인증합니다.
+- Android 앱의 Play Integrity App Check 요청 지표를 확인한 뒤 Native 결제 수집·세션 callable을 배포합니다. Android WebView와 iPhone 홈 화면 PWA의 공용 Command·Query는 Firebase Auth·활성 Membership으로 인가하며 Web reCAPTCHA App Check 설정을 요구하지 않습니다. Shortcut HTTP endpoint는 사용자별 Bearer credential로 인증합니다.
 
 ## Google 로그인
 

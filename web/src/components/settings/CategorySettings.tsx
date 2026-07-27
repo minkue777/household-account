@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { CategoryDocument } from '@/lib/categoryService';
 import ColorPicker from '@/components/common/ColorPicker';
@@ -8,10 +8,14 @@ import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { COLOR_PALETTE } from '@/lib/categoryService';
 import { setDefaultCategoryKey } from '@/lib/householdService';
 import { useHousehold } from '@/contexts/HouseholdContext';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 import { ChevronDown, Edit2, Plus, Star, Tags, Trash2 } from 'lucide-react';
+
+type CategoryMutation = 'add' | 'edit' | 'delete' | 'default' | 'reorder';
 
 export default function CategorySettings() {
   const { household } = useHousehold();
+  const { showAlert } = useAppDialog();
   const {
     categories,
     addCategory,
@@ -43,16 +47,47 @@ export default function CategorySettings() {
   const [editLabel, setEditLabel] = useState('');
   const [editColor, setEditColor] = useState('');
   const [editBudget, setEditBudget] = useState('');
+  const mutationInFlightRef = useRef(false);
+  const [pendingMutation, setPendingMutation] = useState<CategoryMutation | null>(null);
+  const isMutating = pendingMutation !== null;
 
   useEffect(() => {
     setDefaultCategory(household?.defaultCategoryKey ?? '');
   }, [household?.defaultCategoryKey]);
 
+  const runMutation = useCallback(async (
+    mutation: CategoryMutation,
+    operation: () => Promise<unknown>,
+    failureMessage: string
+  ): Promise<boolean> => {
+    if (mutationInFlightRef.current) return false;
+
+    mutationInFlightRef.current = true;
+    setPendingMutation(mutation);
+    try {
+      await operation();
+      return true;
+    } catch (error) {
+      console.error(`${failureMessage}:`, error);
+      void showAlert(failureMessage, '카테고리 변경 실패');
+      return false;
+    } finally {
+      mutationInFlightRef.current = false;
+      setPendingMutation(null);
+    }
+  }, [showAlert]);
+
   const handleAddCategory = async () => {
-    if (!newLabel.trim()) return;
+    const label = newLabel.trim();
+    if (!label || mutationInFlightRef.current) return;
 
     const budget = newBudget ? parseInt(newBudget, 10) : null;
-    await addCategory(newLabel.trim(), newColor, budget);
+    const completed = await runMutation(
+      'add',
+      () => addCategory(label, newColor, budget),
+      '카테고리를 추가하지 못했습니다. 다시 시도해 주세요.'
+    );
+    if (!completed) return;
 
     // 폼 초기화
     setNewLabel('');
@@ -62,6 +97,7 @@ export default function CategorySettings() {
   };
 
   const handleStartEdit = (category: CategoryDocument) => {
+    if (mutationInFlightRef.current) return;
     setEditingId(category.id);
     setEditLabel(category.label);
     setEditColor(category.color);
@@ -69,19 +105,27 @@ export default function CategorySettings() {
   };
 
   const handleSaveEdit = async () => {
-    if (!editingId || !editLabel.trim()) return;
+    const categoryId = editingId;
+    const label = editLabel.trim();
+    if (!categoryId || !label || mutationInFlightRef.current) return;
 
     const budget = editBudget ? parseInt(editBudget, 10) : null;
-    await updateCategory(editingId, {
-      label: editLabel.trim(),
-      color: editColor,
-      budget,
-    });
+    const completed = await runMutation(
+      'edit',
+      () => updateCategory(categoryId, {
+        label,
+        color: editColor,
+        budget,
+      }),
+      '카테고리를 수정하지 못했습니다. 다시 시도해 주세요.'
+    );
+    if (!completed) return;
 
     setEditingId(null);
   };
 
   const handleCancelEdit = () => {
+    if (mutationInFlightRef.current) return;
     setEditingId(null);
     setEditLabel('');
     setEditColor('');
@@ -89,27 +133,45 @@ export default function CategorySettings() {
   };
 
   const handleDelete = async () => {
-    if (!pendingDeleteCategory) return;
+    const category = pendingDeleteCategory;
+    if (!category || mutationInFlightRef.current) return;
 
-    await deleteCategory(pendingDeleteCategory.id);
+    const completed = await runMutation(
+      'delete',
+      () => deleteCategory(category.id),
+      '카테고리를 삭제하지 못했습니다. 다시 시도해 주세요.'
+    );
+    if (!completed) return;
     setPendingDeleteCategory(null);
   };
 
   // 기본 카테고리 변경
   const handleDefaultCategoryChange = async (categoryKey: string) => {
-    if (!household?.id) throw new Error('인증된 가구 세션이 필요합니다.');
-    const householdId = household.id;
-    await setDefaultCategoryKey(householdId, categoryKey);
+    if (mutationInFlightRef.current) return;
+    const completed = await runMutation(
+      'default',
+      async () => {
+        if (!household?.id) throw new Error('인증된 가구 세션이 필요합니다.');
+        await setDefaultCategoryKey(household.id, categoryKey);
+      },
+      '기본 카테고리를 변경하지 못했습니다. 다시 시도해 주세요.'
+    );
+    if (!completed) return;
     setDefaultCategory(categoryKey);
   };
 
   // 드래그 앤 드롭 핸들러
   const handleDragStart = (e: React.DragEvent, id: string) => {
+    if (mutationInFlightRef.current) {
+      e.preventDefault();
+      return;
+    }
     setDraggedId(id);
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleDragOver = (e: React.DragEvent, id: string) => {
+    if (mutationInFlightRef.current) return;
     e.preventDefault();
     if (draggedId && draggedId !== id) {
       setDragOverId(id);
@@ -122,7 +184,7 @@ export default function CategorySettings() {
 
   const handleDrop = async (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
-    if (!draggedId || draggedId === targetId) {
+    if (mutationInFlightRef.current || !draggedId || draggedId === targetId) {
       setDraggedId(null);
       setDragOverId(null);
       return;
@@ -142,10 +204,16 @@ export default function CategorySettings() {
     const [removed] = reordered.splice(draggedIndex, 1);
     reordered.splice(targetIndex, 0, removed);
 
-    await reorderCategories(reordered);
-
-    setDraggedId(null);
-    setDragOverId(null);
+    try {
+      await runMutation(
+        'reorder',
+        () => reorderCategories(reordered),
+        '카테고리 순서를 변경하지 못했습니다. 다시 시도해 주세요.'
+      );
+    } finally {
+      setDraggedId(null);
+      setDragOverId(null);
+    }
   };
 
   const handleDragEnd = () => {
@@ -179,7 +247,7 @@ export default function CategorySettings() {
             {categories.map((category) => (
               <div
                 key={category.id}
-                draggable={editingId !== category.id}
+                draggable={!isMutating && editingId !== category.id}
                 onDragStart={(e) => handleDragStart(e, category.id)}
                 onDragOver={(e) => handleDragOver(e, category.id)}
                 onDragLeave={handleDragLeave}
@@ -226,16 +294,17 @@ export default function CategorySettings() {
                     <div className="flex gap-2">
                       <button
                         onClick={handleCancelEdit}
+                        disabled={isMutating}
                         className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
                       >
                         취소
                       </button>
                       <button
                         onClick={handleSaveEdit}
-                        disabled={!editLabel.trim()}
+                        disabled={isMutating || !editLabel.trim()}
                         className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-slate-300"
                       >
-                        저장
+                        {pendingMutation === 'edit' ? '저장 중..' : '저장'}
                       </button>
                     </div>
                   </div>
@@ -268,7 +337,10 @@ export default function CategorySettings() {
                     <div className="flex items-center gap-1">
                       {/* 기본 카테고리 설정 버튼 */}
                       <button
-                        onClick={() => handleDefaultCategoryChange(category.key)}
+                        onClick={() => {
+                          void handleDefaultCategoryChange(category.key);
+                        }}
+                        disabled={isMutating}
                         className={`p-2 rounded-lg transition-colors ${
                           defaultCategory === category.key
                             ? 'text-blue-500 bg-blue-50'
@@ -283,6 +355,7 @@ export default function CategorySettings() {
                       </button>
                       <button
                         onClick={() => handleStartEdit(category)}
+                        disabled={isMutating}
                         className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                         aria-label={`${category.label} 수정`}
                         title="수정"
@@ -290,7 +363,10 @@ export default function CategorySettings() {
                         <Edit2 className="h-5 w-5" />
                       </button>
                       <button
-                        onClick={() => setPendingDeleteCategory(category)}
+                        onClick={() => {
+                          if (!mutationInFlightRef.current) setPendingDeleteCategory(category);
+                        }}
+                        disabled={isMutating}
                         className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                         aria-label={`${category.label} 삭제`}
                         title="삭제"
@@ -339,28 +415,35 @@ export default function CategorySettings() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => {
+                      if (mutationInFlightRef.current) return;
                       setShowAddForm(false);
                       setNewLabel('');
                       setNewColor(COLOR_PALETTE[0]);
                       setNewBudget('');
                     }}
+                    disabled={isMutating}
                     className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
                   >
                     취소
                   </button>
                   <button
-                    onClick={handleAddCategory}
-                    disabled={!newLabel.trim()}
+                    onClick={() => {
+                      void handleAddCategory();
+                    }}
+                    disabled={isMutating || !newLabel.trim()}
                     className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-slate-300"
                   >
-                    추가
+                    {pendingMutation === 'add' ? '추가 중..' : '추가'}
                   </button>
                 </div>
               </div>
             </div>
           ) : (
             <button
-              onClick={() => setShowAddForm(true)}
+              onClick={() => {
+                if (!mutationInFlightRef.current) setShowAddForm(true);
+              }}
+              disabled={isMutating}
               className="w-full p-4 border-t border-slate-200 flex items-center justify-center gap-2 text-blue-500 hover:bg-blue-50 transition-colors"
             >
               <Plus className="h-5 w-5" />

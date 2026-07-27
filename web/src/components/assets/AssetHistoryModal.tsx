@@ -19,6 +19,7 @@ import StockHoldingList from './StockHoldingList';
 import ManualHoldingForm from './ManualHoldingForm';
 import CryptoSearchForm from './CryptoSearchForm';
 import CryptoHoldingList from './CryptoHoldingList';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 
 interface AssetHistoryModalProps {
   isOpen: boolean;
@@ -41,6 +42,7 @@ export default function AssetHistoryModal({
   stockHoldingsReady,
   cryptoHoldingsReady,
 }: AssetHistoryModalProps) {
+  const { showAlert } = useAppDialog();
   const stockManager = useStockHoldingManager({
     isOpen,
     asset,
@@ -196,7 +198,9 @@ export default function AssetHistoryModal({
               isAddingHolding: stockManager.isAddingHolding,
             }}
             onAdd={async () => {
-              await stockManager.addHolding();
+              if (!await stockManager.addHolding()) {
+                await showAlert('보유 종목 추가에 실패했습니다.');
+              }
             }}
           />
         )}
@@ -209,7 +213,9 @@ export default function AssetHistoryModal({
             onCurrentValueChange={stockManager.setManualCurrentValueInput}
             isAdding={stockManager.isAddingManualHolding}
             onAdd={async () => {
-              await stockManager.addManualHolding();
+              if (!await stockManager.addManualHolding()) {
+                await showAlert('보유 항목 추가에 실패했습니다.');
+              }
             }}
           />
         )}
@@ -232,7 +238,9 @@ export default function AssetHistoryModal({
               isAddingHolding: cryptoManager.isAddingHolding,
             }}
             onAdd={async () => {
-              await cryptoManager.addHolding();
+              if (!await cryptoManager.addHolding()) {
+                await showAlert('코인 추가에 실패했습니다.');
+              }
             }}
           />
         )}

@@ -31,18 +31,11 @@ function isAuthenticationFailure(error: unknown): boolean {
 }
 
 async function recoverAndroidFirebaseSession(): Promise<void> {
-  const [
-    { initializeFirebaseAppCheck },
-    {
-      getCurrentUser,
-      refreshAndroidWebAuth,
-      restoreAndroidHostAuth,
-    },
-  ] = await Promise.all([
-    import('@/platform/security/firebaseAppCheck'),
-    import('@/lib/authService'),
-  ]);
-  initializeFirebaseAppCheck();
+  const {
+    getCurrentUser,
+    refreshAndroidWebAuth,
+    restoreAndroidHostAuth,
+  } = await import('@/lib/authService');
 
   const currentUser = getCurrentUser();
   const session = currentUser

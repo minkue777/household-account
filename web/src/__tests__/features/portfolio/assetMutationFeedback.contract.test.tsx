@@ -1,42 +1,39 @@
-import { act, render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import GoldHoldingModal from '@/components/assets/GoldHoldingModal';
-import StockHoldingModal from '@/components/assets/StockHoldingModal';
-import { useGoldHolding } from '@/lib/utils/useGoldHolding';
+import AssetHistoryModal from '@/components/assets/AssetHistoryModal';
+import { useAppDialog } from '@/contexts/AppDialogContext';
+import { useCryptoHoldingManager } from '@/lib/utils/useCryptoHoldingManager';
 import { useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
-import type { Asset, StockHolding } from '@/types/asset';
+import type { Asset } from '@/types/asset';
+
+jest.mock('@/contexts/AppDialogContext', () => ({
+  useAppDialog: jest.fn(),
+}));
 
 jest.mock('@/lib/utils/useStockHoldingManager', () => ({
   useStockHoldingManager: jest.fn(),
 }));
 
-jest.mock('@/lib/utils/useGoldHolding', () => ({
-  getGoldPricePerDon: jest.fn(() => 100_000),
-  useGoldHolding: jest.fn(),
+jest.mock('@/lib/utils/useCryptoHoldingManager', () => ({
+  useCryptoHoldingManager: jest.fn(),
 }));
 
-const mockedUseStockHoldingManager = useStockHoldingManager as jest.MockedFunction<
-  typeof useStockHoldingManager
->;
-const mockedUseGoldHolding = useGoldHolding as jest.MockedFunction<typeof useGoldHolding>;
+jest.mock('@/components/assets/StockHoldingList', () => () => null);
+jest.mock('@/components/assets/CryptoHoldingList', () => () => null);
 
-function deferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-  return { promise, resolve };
-}
+const mockedUseAppDialog = jest.mocked(useAppDialog);
+const mockedUseStockHoldingManager = jest.mocked(useStockHoldingManager);
+const mockedUseCryptoHoldingManager = jest.mocked(useCryptoHoldingManager);
 
 function asset(overrides: Partial<Asset> = {}): Asset {
   return {
     id: 'asset-1',
-    aggregateVersion: 7,
+    aggregateVersion: 3,
     householdId: 'house-1',
-    name: '투자 계좌',
+    name: '주식 계좌',
     type: 'stock',
-    currentBalance: 1_000_000,
+    currentBalance: 0,
     currency: 'KRW',
     isActive: true,
     order: 0,
@@ -46,110 +43,101 @@ function asset(overrides: Partial<Asset> = {}): Asset {
   };
 }
 
-function holding(): StockHolding {
+function stockManager(addHolding: jest.Mock) {
   return {
-    id: 'position-1',
-    aggregateVersion: 5,
-    assetId: 'asset-1',
-    householdId: 'house-1',
-    holdingType: 'cash',
-    stockCode: '',
-    stockName: '예수금',
-    market: 'UNRESOLVED',
-    quantity: 1,
-    currentPrice: 1_000_000,
-    createdAt: new Date('2026-07-01T00:00:00Z'),
-    updatedAt: new Date('2026-07-01T00:00:00Z'),
-  };
+    holdings: [],
+    isLoadingHoldings: false,
+    totalHoldingValue: 0,
+    searchQuery: '삼성전자',
+    setSearchQuery: jest.fn(),
+    searchResults: [],
+    isSearching: false,
+    selectedStock: {
+      code: '005930',
+      name: '삼성전자',
+      market: 'KRX',
+      instrumentType: 'stock',
+    },
+    selectStock: jest.fn(),
+    quantity: '1',
+    setQuantityInput: jest.fn(),
+    avgPrice: '',
+    setAvgPriceInput: jest.fn(),
+    currentPrice: 100_000,
+    currentPriceInfo: null,
+    isLoadingPrice: false,
+    isAddingHolding: false,
+    addHolding,
+    manualName: '',
+    setManualName: jest.fn(),
+    manualCurrentValue: '',
+    setManualCurrentValueInput: jest.fn(),
+    isAddingManualHolding: false,
+    addManualHolding: jest.fn(),
+    deleteHolding: jest.fn(),
+    resetStockForm: jest.fn(),
+    resetManualForm: jest.fn(),
+    isRefreshingPrices: false,
+    refreshHoldingPrices: jest.fn(),
+  } as unknown as ReturnType<typeof useStockHoldingManager>;
 }
 
-describe('portfolio optimistic mutation feedback contract', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+function cryptoManager() {
+  return {
+    holdings: [],
+    isLoadingHoldings: false,
+    totalHoldingValue: 0,
+    searchQuery: '',
+    setSearchQuery: jest.fn(),
+    searchResults: [],
+    isSearching: false,
+    selectedCoin: null,
+    selectCoin: jest.fn(),
+    quantity: '',
+    setQuantityInput: jest.fn(),
+    avgPrice: '',
+    setAvgPriceInput: jest.fn(),
+    currentPrice: null,
+    isLoadingPrice: false,
+    isAddingHolding: false,
+    addHolding: jest.fn(),
+    deleteHolding: jest.fn(),
+    resetCryptoForm: jest.fn(),
+    isRefreshingPrices: false,
+    refreshHoldingPrices: jest.fn(),
+  } as unknown as ReturnType<typeof useCryptoHoldingManager>;
+}
 
-  test('holding delete closes confirmation immediately and sends the version the user confirmed', async () => {
-    const command = deferred<boolean>();
-    const deleteHolding = jest.fn(() => command.promise);
-    mockedUseStockHoldingManager.mockReturnValue({
-      holdings: [holding()],
-      isLoadingHoldings: false,
-      totalHoldingValue: 1_000_000,
-      searchQuery: '',
-      setSearchQuery: jest.fn(),
-      searchResults: [],
-      isSearching: false,
-      selectedStock: null,
-      selectStock: jest.fn(),
-      quantity: '',
-      setQuantityInput: jest.fn(),
-      avgPrice: '',
-      setAvgPriceInput: jest.fn(),
-      currentPrice: null,
-      currentPriceInfo: null,
-      isLoadingPrice: false,
-      isAddingHolding: false,
-      addHolding: jest.fn(),
-      manualName: '',
-      setManualName: jest.fn(),
-      manualCurrentValue: '',
-      setManualCurrentValueInput: jest.fn(),
-      isAddingManualHolding: false,
-      addManualHolding: jest.fn(),
-      deleteHolding,
-      resetStockForm: jest.fn(),
-      resetManualForm: jest.fn(),
-      isRefreshingPrices: false,
-      refreshHoldingPrices: jest.fn(),
+describe('실제 자산 상세 mutation feedback 계약', () => {
+  test('보유 종목 추가가 실패하면 닫힌 Promise로 삼키지 않고 앱 알림을 표시한다', async () => {
+    const showAlert = jest.fn().mockResolvedValue(undefined);
+    const addHolding = jest.fn().mockResolvedValue(false);
+    mockedUseAppDialog.mockReturnValue({
+      showAlert,
+      showConfirm: jest.fn(),
+      showPrompt: jest.fn(),
     });
-    const user = userEvent.setup();
-
-    render(<StockHoldingModal isOpen onClose={jest.fn()} asset={asset()} />);
-    await act(async () => {
-      await user.click(screen.getByRole('button', { name: '예수금 삭제' }));
-    });
-    expect(screen.getByText('보유 종목 삭제')).toBeInTheDocument();
-
-    await act(async () => {
-      await user.click(screen.getByRole('button', { name: '삭제' }));
-    });
-
-    expect(deleteHolding).toHaveBeenCalledWith('position-1', 5);
-    expect(screen.queryByText('보유 종목 삭제')).not.toBeInTheDocument();
-
-    command.resolve(true);
-    await command.promise;
-  });
-
-  test('gold form stays open when local prevalidation rejects the save', async () => {
-    const saveGoldHolding = jest.fn();
-    mockedUseGoldHolding.mockReturnValue({
-      quantity: '0',
-      setQuantityInput: jest.fn(),
-      goldPrice: {
-        buyPricePerDon: 100_000,
-        sellPricePerDon: 100_000,
-        timestamp: '2026-07-22T00:00:00.000Z',
-      },
-      isLoadingPrice: false,
-      refreshGoldPrice: jest.fn(),
-      totalValue: 0,
-      isSaving: false,
-      saveGoldHolding,
-    });
-    const onClose = jest.fn();
+    mockedUseStockHoldingManager.mockReturnValue(stockManager(addHolding));
+    mockedUseCryptoHoldingManager.mockReturnValue(cryptoManager());
 
     render(
-      <GoldHoldingModal
+      <AssetHistoryModal
         isOpen
-        onClose={onClose}
-        asset={asset({ type: 'gold', subType: 'physical' })}
+        onClose={jest.fn()}
+        asset={asset()}
+        onEditAsset={jest.fn()}
+        stockHoldings={[]}
+        cryptoHoldings={[]}
+        stockHoldingsReady
+        cryptoHoldingsReady
       />
     );
 
-    const saveButton = screen.getByRole('button', { name: '저장' });
-    expect(saveButton).toBeDisabled();
-    expect(onClose).not.toHaveBeenCalled();
-    expect(saveGoldHolding).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: '종목 추가' }));
+
+    await waitFor(() => {
+      expect(addHolding).toHaveBeenCalledTimes(1);
+      expect(showAlert).toHaveBeenCalledWith('보유 종목 추가에 실패했습니다.');
+    });
   });
 });

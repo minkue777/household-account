@@ -95,7 +95,7 @@
 - Android 결제 journal은 원격 호출 중 process 종료 유실을 막기 위해 raw DTO를 Android Keystore의 non-exportable 설치 키로 AES-256-GCM 암호화해 저장한다. 정상 terminal은 QuickEdit follow-up 내구화 뒤 즉시 삭제하고 WorkManager를 만들지 않으며, 실패·partial entry만 최대 72시간 보존한다. 로그아웃·멤버/가구 변경·키 오류에서도 삭제한다.
 - PWA/CDN cache는 navigation HTML, 인증 응답과 가구·금융 API를 저장하지 않는다. build-versioned 정적 asset과 공개 비민감 아이콘·폰트·이미지의 최대 7일 cache만 허용하고 임의 cross-origin 응답은 저장하지 않는다. DEC-068의 first-party localStorage는 Membership 연결 정보와 별도 허용된 자산 재진입 snapshot만 보존하며 가계부 첫 화면 데이터를 저장하지 않는다. ([DEC-051](../governance/decisions.md#dec-051), [DEC-068](../governance/decisions.md#dec-068))
 - 운영 migration·repair는 browser bundle에서 실행할 수 없고 승인된 서버 job이 명시적 scope·dry-run·checkpoint·reconciliation을 남긴다.
-- 외부 Provider를 대신 호출하는 Web/Functions API는 인증·Membership을 검증하고 App Check, schema/body/batch/concurrency/rate 상한을 적용한다. 외부 URL은 HTTPS allowlist, redirect 재검증, timeout과 응답 크기 상한을 통과해야 한다.
+- 외부 Provider를 대신 호출하는 Web/Functions API는 인증·Membership과 schema/body/batch/concurrency/rate 상한을 검증한다. App Check는 호출 플랫폼이 증명을 안정적으로 공급하는 Native ingress에 추가 적용한다. 외부 URL은 HTTPS allowlist, redirect 재검증, timeout과 응답 크기 상한을 통과해야 한다.
 - 클라이언트 UI의 권한 분기는 서버 권한 검증을 대체하지 않는다.
 
 ## 7. 보안 테스트 행렬

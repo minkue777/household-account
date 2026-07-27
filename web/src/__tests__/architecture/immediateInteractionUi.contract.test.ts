@@ -70,6 +70,57 @@ describe('즉시 상호작용 UI 계약', () => {
     expect(dailyRefreshEffect).not.toContain('requestIdleCallback');
   });
 
+  test('자산 재진입 snapshot에는 optimistic 화면값이 아니라 source snapshot만 저장한다', () => {
+    const assetsPage = source('app/assets/page.tsx');
+    const subscriptionStart = assetsPage.indexOf('const unsubscribe = subscribeToAssets(');
+    const subscriptionEnd = assetsPage.indexOf(
+      'return () => unsubscribe();',
+      subscriptionStart
+    );
+    const subscription = assetsPage.slice(subscriptionStart, subscriptionEnd);
+    const optimisticCallbackEnd = subscription.indexOf('cachedAssetsRef.current');
+
+    expect(subscriptionStart).toBeGreaterThanOrEqual(0);
+    expect(subscription.slice(0, optimisticCallbackEnd)).not.toContain(
+      'writeAssetSnapshot'
+    );
+    expect(subscription.slice(optimisticCallbackEnd)).toContain(
+      'writeAssetSnapshot(household.id, nextSourceAssets)'
+    );
+  });
+
+  test('일일 자산 합계도 실패할 수 있는 optimistic 값 대신 source snapshot으로 계산한다', () => {
+    const assetsPage = source('app/assets/page.tsx');
+    const dailyRefreshStart = assetsPage.indexOf(
+      'const activeAssets = sourceAssets.filter'
+    );
+    const dailyRefreshEnd = assetsPage.indexOf(
+      'const handleAssetClick',
+      dailyRefreshStart
+    );
+    const dailyRefresh = assetsPage.slice(dailyRefreshStart, dailyRefreshEnd);
+
+    expect(dailyRefreshStart).toBeGreaterThanOrEqual(0);
+    expect(dailyRefresh).toContain('sourceAssets');
+    expect(dailyRefresh).not.toContain('assets.filter');
+  });
+
+  test('자산 생성 뒤 일부 보유 항목만 실패하면 전체 생성 실패로 오인시키지 않는다', () => {
+    const addModal = source('components/assets/AssetAddModal.tsx');
+    const submitStart = addModal.indexOf('const pendingAsset = addAsset(input)');
+    const submitEnd = addModal.indexOf(
+      '} catch (error) {',
+      submitStart
+    );
+    const submit = addModal.slice(submitStart, submitEnd);
+
+    expect(submitStart).toBeGreaterThanOrEqual(0);
+    expect(submit).toContain('Promise.allSettled(');
+    expect(submit).toContain("result.status === 'rejected'");
+    expect(submit).toContain('자산은 추가됐지만 보유 항목');
+    expect(submit).not.toContain('await Promise.all(');
+  });
+
   test('사용자 클릭 뒤 표시되는 화면 준비 문구를 제품 코드에 두지 않는다', () => {
     const productFiles = [
       'components/home/LedgerPage.tsx',

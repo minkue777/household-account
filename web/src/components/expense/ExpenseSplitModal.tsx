@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, X } from 'lucide-react';
 import type { Expense } from '@/types/expense';
 import type { SplitItem } from '@/lib/expenseService';
@@ -12,7 +12,7 @@ interface ExpenseSplitModalProps {
   expense: Expense;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (splits: SplitItem[]) => void;
+  onSave: (splits: SplitItem[]) => Promise<void> | void;
 }
 
 export default function ExpenseSplitModal({
@@ -24,6 +24,8 @@ export default function ExpenseSplitModal({
   const { showAlert } = useAppDialog();
   const [splits, setSplits] = useState<SplitItem[]>([]);
   const [splitAmountInputs, setSplitAmountInputs] = useState<Record<number, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   // 모달이 열릴 때 상태 초기화
   useEffect(() => {
@@ -88,7 +90,11 @@ export default function ExpenseSplitModal({
   };
 
   // 분할 저장
-  const handleSaveSplit = () => {
+  const handleSaveSplit = async () => {
+    if (isSubmittingRef.current) {
+      return;
+    }
+
     const totalSplit = splits.reduce((sum, s) => sum + s.amount, 0);
     if (totalSplit !== expense.amount) {
       void showAlert(
@@ -101,8 +107,23 @@ export default function ExpenseSplitModal({
       void showAlert('모든 분할 항목의 금액은 0보다 커야 합니다.', '분할 금액 확인');
       return;
     }
-    onSave(splits);
-    onClose();
+
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
+    try {
+      const pendingSave = onSave(splits);
+      onClose();
+      await pendingSave;
+    } catch (error) {
+      console.error('지출 분리 오류:', error);
+      await showAlert(
+        '지출을 나누지 못했습니다. 최신 내역을 확인한 뒤 다시 시도해 주세요.',
+        '지출 분리 실패'
+      );
+    } finally {
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -228,10 +249,11 @@ export default function ExpenseSplitModal({
               취소
             </button>
             <button
-              onClick={handleSaveSplit}
-              className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              onClick={() => void handleSaveSplit()}
+              disabled={isSubmitting}
+              className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-slate-300"
             >
-              나누기
+              {isSubmitting ? '나누는 중...' : '나누기'}
             </button>
           </div>
         </div>

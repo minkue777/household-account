@@ -5,6 +5,7 @@ import { Asset } from '@/types/asset';
 import { updateAssetOrders } from '@/lib/assetService';
 import AssetCard from './AssetCard';
 import { Plus } from 'lucide-react';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 
 interface AssetListProps {
   assets: Asset[];
@@ -17,6 +18,7 @@ export default function AssetList({
   onAssetClick,
   onAddClick,
 }: AssetListProps) {
+  const { showAlert } = useAppDialog();
   // 활성 자산만 필터링, order 순 정렬
   const activeAssets = assets
     .filter((a) => a.isActive)
@@ -26,15 +28,17 @@ export default function AssetList({
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [isLongPress, setIsLongPress] = useState(false);
+  const [isReordering, setIsReordering] = useState(false);
 
   // 롱프레스 타이머
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const touchStartY = useRef<number>(0);
   const draggedElement = useRef<HTMLDivElement | null>(null);
+  const reorderInFlightRef = useRef(false);
 
   // 순서 변경 적용
   const applyReorder = useCallback(async (fromId: string, toId: string) => {
-    if (fromId === toId) return;
+    if (fromId === toId || reorderInFlightRef.current) return;
 
     const fromIndex = activeAssets.findIndex((a) => a.id === fromId);
     const toIndex = activeAssets.findIndex((a) => a.id === toId);
@@ -52,15 +56,28 @@ export default function AssetList({
       order: index,
     }));
 
+    reorderInFlightRef.current = true;
+    setIsReordering(true);
     try {
       await updateAssetOrders(updates);
     } catch (error) {
       console.error('순서 변경 오류:', error);
+      void showAlert(
+        '자산 순서를 변경하지 못했습니다. 다시 시도해 주세요.',
+        '순서 변경 실패'
+      );
+    } finally {
+      reorderInFlightRef.current = false;
+      setIsReordering(false);
     }
-  }, [activeAssets]);
+  }, [activeAssets, showAlert]);
 
   // 데스크톱 드래그 시작
   const handleDragStart = (e: React.DragEvent, assetId: string) => {
+    if (reorderInFlightRef.current) {
+      e.preventDefault();
+      return;
+    }
     setDraggedId(assetId);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', assetId);
@@ -68,6 +85,7 @@ export default function AssetList({
 
   // 데스크톱 드래그 오버
   const handleDragOver = (e: React.DragEvent, assetId: string) => {
+    if (reorderInFlightRef.current) return;
     e.preventDefault();
     if (draggedId && draggedId !== assetId) {
       setDragOverId(assetId);
@@ -76,8 +94,8 @@ export default function AssetList({
 
   // 데스크톱 드래그 종료
   const handleDragEnd = () => {
-    if (draggedId && dragOverId) {
-      applyReorder(draggedId, dragOverId);
+    if (!reorderInFlightRef.current && draggedId && dragOverId) {
+      void applyReorder(draggedId, dragOverId);
     }
     setDraggedId(null);
     setDragOverId(null);
@@ -85,9 +103,11 @@ export default function AssetList({
 
   // 모바일 터치 시작 (롱프레스 감지)
   const handleTouchStart = (e: React.TouchEvent, assetId: string) => {
+    if (reorderInFlightRef.current) return;
     touchStartY.current = e.touches[0].clientY;
 
     longPressTimer.current = setTimeout(() => {
+      if (reorderInFlightRef.current) return;
       setIsLongPress(true);
       setDraggedId(assetId);
       // 햅틱 피드백 (지원하는 경우)
@@ -99,6 +119,7 @@ export default function AssetList({
 
   // 모바일 터치 이동
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (reorderInFlightRef.current) return;
     // 롱프레스 전 움직임 - 롱프레스 취소
     if (!isLongPress && longPressTimer.current) {
       const moveY = Math.abs(e.touches[0].clientY - touchStartY.current);
@@ -133,8 +154,8 @@ export default function AssetList({
       longPressTimer.current = null;
     }
 
-    if (isLongPress && draggedId && dragOverId) {
-      applyReorder(draggedId, dragOverId);
+    if (!reorderInFlightRef.current && isLongPress && draggedId && dragOverId) {
+      void applyReorder(draggedId, dragOverId);
     }
 
     setIsLongPress(false);
@@ -174,6 +195,7 @@ export default function AssetList({
       ) : (
         <div
           className="divide-y divide-slate-50"
+          aria-busy={isReordering}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
@@ -185,7 +207,7 @@ export default function AssetList({
               <div
                 key={asset.id}
                 data-asset-id={asset.id}
-                draggable
+                draggable={!isReordering}
                 onDragStart={(e) => handleDragStart(e, asset.id)}
                 onDragOver={(e) => handleDragOver(e, asset.id)}
                 onDragEnd={handleDragEnd}

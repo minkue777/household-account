@@ -329,14 +329,9 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       } else {
         markWebMembershipStarted();
         try {
-          const [
-            { initializeFirebaseAppCheck },
-            { householdCommands },
-          ] = await Promise.all([
-            import('@/platform/security/firebaseAppCheck'),
-            import('@/features/access-household/application/householdCommands'),
-          ]);
-          initializeFirebaseAppCheck();
+          const { householdCommands } = await import(
+            '@/features/access-household/application/householdCommands'
+          );
           resolution = await withinDeadline(
             householdCommands.resolveSignedInUser(),
             SESSION_RESOLUTION_TIMEOUT_MS,

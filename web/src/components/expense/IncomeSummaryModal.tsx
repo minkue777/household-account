@@ -229,10 +229,8 @@ export default function IncomeSummaryModal({
           expense={selectedExpense}
           isOpen={!!selectedExpense}
           onClose={() => setSelectedExpense(null)}
-          onSave={(updates) => {
-            void handleSaveEdit(updates);
-          }}
-          onDelete={onDelete ? () => void handleDeleteExpense() : undefined}
+          onSave={handleSaveEdit}
+          onDelete={onDelete ? handleDeleteExpense : undefined}
           transactionType="income"
         />
       )}

@@ -52,6 +52,7 @@ export default function AssetsPage() {
     amounts: {},
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [sourceAssets, setSourceAssets] = useState<Asset[] | null>(null);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [addModalType, setAddModalType] = useState<AssetType>('savings');
@@ -116,6 +117,7 @@ export default function AssetsPage() {
     const cachedProfiles = readAssetOwnerProfileSnapshot(householdId);
     const cachedDailyChanges = readDailyAssetChangeSnapshot(householdId);
     cachedAssetsRef.current = cachedAssets;
+    setSourceAssets(null);
     if (cachedAssets !== undefined) {
       setAssets(cachedAssets);
       setIsLoading(false);
@@ -173,11 +175,17 @@ export default function AssetsPage() {
   useEffect(() => {
     if (!isSessionVerified || !household?.id) return undefined;
     if (cachedAssetsRef.current === undefined) setIsLoading(true);
-    const unsubscribe = subscribeToAssets((newAssets) => {
-      setAssets(newAssets);
-      setIsLoading(false);
-      if (household?.id) writeAssetSnapshot(household.id, newAssets);
-    }, cachedAssetsRef.current);
+    const unsubscribe = subscribeToAssets(
+      (newAssets) => {
+        setAssets(newAssets);
+        setIsLoading(false);
+      },
+      cachedAssetsRef.current,
+      (nextSourceAssets) => {
+        setSourceAssets([...nextSourceAssets]);
+        writeAssetSnapshot(household.id, nextSourceAssets);
+      }
+    );
     return () => unsubscribe();
   }, [household?.id, isSessionVerified, remoteReadEpoch]);
 
@@ -221,9 +229,9 @@ export default function AssetsPage() {
       return undefined;
     }
 
-    if (isLoading) return undefined;
+    if (sourceAssets === null) return undefined;
 
-    if (assets.length === 0) {
+    if (sourceAssets.length === 0) {
       const amounts = Object.fromEntries(memberOptions.map(({ key }) => [key, 0]));
       setDailyChanges({
         householdId,
@@ -233,7 +241,7 @@ export default function AssetsPage() {
       return undefined;
     }
 
-    const activeAssets = assets.filter((asset) => asset.isActive);
+    const activeAssets = sourceAssets.filter((asset) => asset.isActive);
     let cancelled = false;
 
     const syncDailySummary = async () => {
@@ -259,12 +267,11 @@ export default function AssetsPage() {
       cancelled = true;
     };
   }, [
-    assets,
     household?.id,
-    isLoading,
     isSessionVerified,
     memberOptions,
     remoteReadEpoch,
+    sourceAssets,
   ]);
 
   const handleAssetClick = (asset: Asset) => {

@@ -30,9 +30,8 @@ describe('Web runtime architecture boundary', () => {
     expect(violations).toEqual([]);
   });
 
-  test('App Check와 Functions·Storage adapter는 Firestore 초기화를 선행하지 않는다', () => {
+  test('Functions·Storage adapter는 Firestore 초기화를 선행하지 않는다', () => {
     const lightweightFirebaseConsumers = [
-      'platform/security/firebaseAppCheck.ts',
       'platform/functions-api/fidSafeFirebaseFunctions.ts',
       'platform/pwa/fidEndpointLifecycle.ts',
       'platform/instrument-catalog/firebaseStorageStockInstrumentCatalogRemote.ts',

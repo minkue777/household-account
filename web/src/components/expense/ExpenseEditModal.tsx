@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CalendarDays, Check, ChevronDown, Info, Share2, Split, Trash2, Undo2, X } from 'lucide-react';
 import AmountInput from '@/components/common/AmountInput';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
@@ -17,20 +17,24 @@ import {
 import { useExpenseFormState } from '@/lib/utils/useExpenseFormState';
 import ExpenseFormFields from '@/components/expense/ExpenseFormFields';
 import ExpenseActionButtons from '@/components/expense/ExpenseActionButtons';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 
 interface ExpenseEditModalProps {
   expense: Expense;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (updates: ExpenseUpdates) => void;
-  onSaveMerchantRule?: (merchantName: string, category: string) => void;
+  onSave: (updates: ExpenseUpdates) => Promise<void> | void;
+  onSaveMerchantRule?: (
+    merchantName: string,
+    category: string
+  ) => Promise<void> | void;
   onUnmerge?: () => void;
   onOpenSplit?: () => void;
   onSplitMonths?: (months: number) => void;
   onCancelSplitGroup?: () => void;
   onUpdateSplitGroup?: (newMonths: number) => void;
-  onDelete?: () => void;
-  onNotifyPartner?: () => void;
+  onDelete?: () => Promise<void> | void;
+  onNotifyPartner?: () => Promise<void> | void;
   transactionType: TransactionType;
 }
 
@@ -52,6 +56,7 @@ export default function ExpenseEditModal({
   transactionType,
 }: ExpenseEditModalProps) {
   const { getCategoryLabel } = useCategoryContext();
+  const { showAlert } = useAppDialog();
   const isIncome = transactionType === 'income';
   const transactionLabel = isIncome ? '수입' : '지출';
 
@@ -91,6 +96,8 @@ export default function ExpenseEditModal({
   const [showEditSplitGroup, setShowEditSplitGroup] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingActionConfirm, setPendingActionConfirm] = useState<ExpenseActionConfirmType | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const mergedItemCount = expense.mergeLeafIds?.length
     ?? expense.mergedFrom?.length
     ?? 0;
@@ -142,7 +149,16 @@ export default function ExpenseEditModal({
     setPendingActionConfirm(null);
   }, [expense, isOpen, resetExpenseFormState, resetMonthlySplitInput]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (isSubmittingRef.current) {
+      return;
+    }
+
+    let updates: ExpenseUpdates;
+    let merchantRule:
+      | { merchantName: string; category: string }
+      | undefined;
+
     if (isIncome) {
       const item = memo.trim();
       const parsedAmount = parsePositiveExpenseAmount(amount);
@@ -150,7 +166,7 @@ export default function ExpenseEditModal({
         return;
       }
 
-      const updates: ExpenseUpdates = {};
+      updates = {};
       if (parsedAmount !== expense.amount) {
         updates.amount = parsedAmount;
       }
@@ -160,48 +176,128 @@ export default function ExpenseEditModal({
       if (date !== expense.date) {
         updates.date = date;
       }
+    } else {
+      const expenseUpdates = buildExpenseUpdates({
+        original: {
+          merchant: expense.merchant,
+          amount: expense.amount,
+          category: expense.category,
+          memo: expense.memo,
+          date: expense.date,
+        },
+        draft: {
+          merchant,
+          amountInput: amount,
+          category,
+          memo,
+          date,
+        },
+      });
 
-      if (Object.keys(updates).length > 0) {
-        onSave(updates);
+      if (expenseUpdates === null) {
+        return;
       }
+      updates = expenseUpdates;
+
+      if (
+        category !== expense.category &&
+        rememberMerchant &&
+        onSaveMerchantRule
+      ) {
+        merchantRule = {
+          merchantName: trimExpenseMerchant(merchant),
+          category,
+        };
+      }
+    }
+
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
+    let saveStage: 'transaction' | 'merchant-rule' = 'transaction';
+    try {
+      const pendingSave = Object.keys(updates).length > 0
+        ? onSave(updates)
+        : undefined;
       onClose();
+      await pendingSave;
+
+      if (merchantRule && onSaveMerchantRule) {
+        saveStage = 'merchant-rule';
+        await onSaveMerchantRule(
+          merchantRule.merchantName,
+          merchantRule.category
+        );
+      }
+    } catch (error) {
+      const detail = error instanceof Error && error.message.trim() !== ''
+        ? `\n\n${error.message}`
+        : '';
+      if (saveStage === 'merchant-rule') {
+        await showAlert(
+          `${transactionLabel} 수정은 저장됐지만 가맹점 분류 규칙을 저장하지 못했습니다. 설정에서 규칙을 다시 등록해 주세요.${detail}`,
+          '가맹점 규칙 저장 실패'
+        );
+      } else {
+        await showAlert(
+          `${transactionLabel} 수정을 저장하지 못했습니다. 최신 내역을 확인한 뒤 다시 시도해 주세요.${detail}`,
+          `${transactionLabel} 수정 실패`
+        );
+      }
+    } finally {
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!onDelete || isSubmittingRef.current) {
       return;
     }
 
-    const updates = buildExpenseUpdates({
-      original: {
-        merchant: expense.merchant,
-        amount: expense.amount,
-        category: expense.category,
-        memo: expense.memo,
-        date: expense.date,
-      },
-      draft: {
-        merchant,
-        amountInput: amount,
-        category,
-        memo,
-        date,
-      },
-    });
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
+    setShowDeleteConfirm(false);
+    try {
+      const pendingDelete = onDelete();
+      onClose();
+      await pendingDelete;
+    } catch (error) {
+      const detail = error instanceof Error && error.message.trim() !== ''
+        ? `\n\n${error.message}`
+        : '';
+      await showAlert(
+        `${transactionLabel}을 삭제하지 못했습니다. 최신 내역을 확인한 뒤 다시 시도해 주세요.${detail}`,
+        `${transactionLabel} 삭제 실패`
+      );
+    } finally {
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
+    }
+  };
 
-    if (updates === null) {
+  const handleNotifyPartner = async () => {
+    if (!onNotifyPartner || isSubmittingRef.current) {
       return;
     }
 
-    if (Object.keys(updates).length > 0) {
-      onSave(updates);
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
+    try {
+      const pendingNotification = onNotifyPartner();
+      onClose();
+      await pendingNotification;
+    } catch (error) {
+      const detail = error instanceof Error && error.message.trim() !== ''
+        ? `\n\n${error.message}`
+        : '';
+      await showAlert(
+        `다른 가구원에게 알림을 보내지 못했습니다. 다시 시도해 주세요.${detail}`,
+        '알림 전송 실패'
+      );
+    } finally {
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
     }
-
-    if (
-      category !== expense.category &&
-      rememberMerchant &&
-      onSaveMerchantRule
-    ) {
-      onSaveMerchantRule(trimExpenseMerchant(merchant), category);
-    }
-
-    onClose();
   };
 
   const handleActionConfirm = () => {
@@ -412,10 +508,8 @@ export default function ExpenseEditModal({
         )}
         {onNotifyPartner && (
           <button
-            onClick={() => {
-              onNotifyPartner();
-              onClose();
-            }}
+            onClick={() => void handleNotifyPartner()}
+            disabled={isSubmitting}
             className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-slate-200 px-4 py-2.5 font-medium text-slate-800 transition-colors hover:bg-slate-300"
           >
             <Share2 className="h-4 w-4" />
@@ -432,6 +526,7 @@ export default function ExpenseEditModal({
                 label: '삭제',
                 onClick: () => setShowDeleteConfirm(true),
                 variant: 'neutral',
+                disabled: isSubmitting,
                 icon: (
                   <Trash2 className="h-4 w-4" />
                 ),
@@ -453,9 +548,10 @@ export default function ExpenseEditModal({
                 variant: 'accent',
               }
             : {
-                label: '저장',
-                onClick: handleSave,
+                label: isSubmitting ? '저장 중...' : '저장',
+                onClick: () => void handleSave(),
                 variant: 'primary',
+                disabled: isSubmitting,
                 icon: (
                   <Check className="h-4 w-4" />
                 ),
@@ -531,13 +627,15 @@ export default function ExpenseEditModal({
                         label: '삭제',
                         onClick: () => setShowDeleteConfirm(true),
                         variant: 'neutral',
+                        disabled: isSubmitting,
                       }
                     : undefined
                 }
                 rightButton={{
-                  label: '저장',
-                  onClick: handleSave,
+                  label: isSubmitting ? '저장 중...' : '저장',
+                  onClick: () => void handleSave(),
                   variant: 'primary',
+                  disabled: isSubmitting,
                 }}
               />
             ) : (
@@ -554,10 +652,7 @@ export default function ExpenseEditModal({
         confirmLabel="삭제"
         cancelLabel="취소"
         variant="danger"
-        onConfirm={() => {
-          onDelete?.();
-          onClose();
-        }}
+        onConfirm={() => void handleDelete()}
         onCancel={() => setShowDeleteConfirm(false)}
       />
 

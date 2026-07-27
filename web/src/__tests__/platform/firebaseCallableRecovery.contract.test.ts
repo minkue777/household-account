@@ -2,10 +2,6 @@ jest.mock('@/platform/android-host/androidHostBridge', () => ({
   isAndroidHostAvailable: () => true,
 }));
 
-jest.mock('@/platform/security/firebaseAppCheck', () => ({
-  initializeFirebaseAppCheck: jest.fn(),
-}));
-
 jest.mock('@/lib/authService', () => ({
   getCurrentUser: jest.fn(),
   refreshAndroidWebAuth: jest.fn(),

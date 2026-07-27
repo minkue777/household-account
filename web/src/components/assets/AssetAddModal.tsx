@@ -439,8 +439,9 @@ export default function AssetAddModal({
       onClose();
       const assetId = await pendingAsset;
 
+      let positionResults: PromiseSettledResult<string>[] = [];
       if (isStockLikeAsset && pendingHoldings.length > 0) {
-        await Promise.all(
+        positionResults = await Promise.allSettled(
           pendingHoldings.map((holding) =>
             addStockHolding({
               assetId,
@@ -459,7 +460,7 @@ export default function AssetAddModal({
       }
 
       if (type === 'crypto' && pendingCryptoHoldings.length > 0) {
-        await Promise.all(
+        positionResults = await Promise.allSettled(
           pendingCryptoHoldings.map((holding) =>
             addCryptoHolding({
               assetId,
@@ -470,6 +471,16 @@ export default function AssetAddModal({
               currentPrice: holding.currentPrice,
             })
           )
+        );
+      }
+
+      const failedPositionCount = positionResults.filter(
+        (result) => result.status === 'rejected'
+      ).length;
+      if (failedPositionCount > 0) {
+        await showAlert(
+          `자산은 추가됐지만 보유 항목 ${failedPositionCount}개를 추가하지 못했습니다. `
+          + '같은 자산을 다시 만들지 말고, 추가된 자산을 열어 누락된 항목만 등록해 주세요.'
         );
       }
     } catch (error) {

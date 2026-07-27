@@ -164,7 +164,7 @@ flowchart LR
 - 브라우저 Web·PWA·Android WebView의 Firestore 직접 접근은 명시적으로 공개한 읽기 계약에만 허용한다.
 - 모든 Web runtime의 월·연 원장 목록은 Ledger가 소유한 같은 Firestore Read Contract를 사용한다. 검증된 SessionScope의 `householdId`와 날짜 범위로 복합 index를 사용하는 실시간 listener를 열고, 거래 유형과 lifecycle 가시성은 Ledger Read Adapter가 동일하게 적용한다.
 - 일반 자산 화면의 활성 명의자 디렉터리는 Access가 공개한 `assetOwnerProfiles` Firestore Read Contract를 사용한다. 로컬 캐시를 먼저 내보내는 실시간 listener로 표시하고, 생성·이름 변경·보관은 Access Command를 통과시키며 관리자·과거 해석용 archived 포함 조회만 서버 Query를 사용한다.
-- 원장 변경은 인증된 Functions Command를 통과시키되 client는 Command 전송과 동시에 낙관적 Projection을 화면에 반영한다. 서버가 반환한 Canonical 결과와 실시간 snapshot으로 확정·수렴하고 typed rejection이나 version conflict에서는 해당 변경만 rollback한다. 변경 뒤 별도 기간 Query를 호출하거나 30초 polling으로 화면을 갱신하지 않는다.
+- 원장·자산 변경은 인증된 Functions Command를 통과시키되 client는 Command 전송과 동시에 낙관적 Projection을 화면에 반영한다. 서버가 반환한 Canonical 결과와 실시간 snapshot으로 확정·수렴하고 typed rejection이나 version conflict에서는 해당 변경만 rollback한다. 낙관적 Projection은 화면 전용이며 재진입 snapshot·일일 합계 같은 영속 cache에는 서버 source snapshot만 기록한다. 변경 뒤 별도 기간 Query를 호출하거나 30초 polling으로 화면을 갱신하지 않는다.
 - Android에서는 Native Firebase Principal과 같은 UID의 Web Firebase Auth가 인증 권위다. 최초 설치·명시적 로그아웃 뒤에는 짧은 custom-token exchange를 사용하고, 이후 실행은 Web Auth local persistence와 마지막 검증 Membership 연결 정보를 복원해 반복 exchange·Membership callable을 줄인다. 가구·현재 월 원장·가구별 카테고리·지역화폐는 Auth observer 뒤 서버 read가 성공한 다음 표시하며 이전 화면 snapshot을 인증 대기 중 먼저 그리지 않는다. Command 모듈은 첫 화면의 정적 import에서 분리하고, App Check는 Native 결제 수집·세션 교환 callable 직전에 초기화한다.
 - Native Android 코드의 Domain 컬렉션 직접 읽기·쓰기는 최종적으로 제거한다. Android WebView 안의 Web runtime은 다른 Web runtime과 같은 공개 Firestore Read Contract만 사용한다.
 - 운영 artifact는 [배포 안전성](../requirements/supporting-platform/modules/delivery-assurance/requirements.md) gate가 명시적 Firebase project, 계약 호환 순서, Rules·index·test·smoke를 검증한 뒤에만 배포한다.
@@ -1138,7 +1138,7 @@ Android 금융 알림 원문 형식은 Functions의 Android Raw Adapter parser�
 - 전체 관리자의 타 가구 모니터링은 일반 Membership을 만들거나 특정 Member로 가장하지 않는 `administrator-readonly` SessionScope를 사용한다. 공개 업무 Read Model과 명시적인 관리자 Query allowlist만 읽고 Household Command·시세 갱신·Notification endpoint 등록을 실행하지 않는다.
 - Admin SDK는 Rules를 우회하므로 Application 인가를 반드시 거친다.
 - Scheduler/SystemActor는 필요한 Command만 허용하는 capability를 가진다.
-- Web API Ingress는 Firebase Auth·Membership을 필수로 검증하고 App Check를 보조 신호로 사용한다. schema, 문자열·body, batch, concurrency와 사용자/IP quota를 유한한 설정값으로 제한하며 검증 실패 시 외부 Provider를 호출하지 않는다.
+- Web API Ingress는 Firebase Auth·Membership을 필수로 검증한다. App Check는 호출 플랫폼이 증명을 안정적으로 공급하는 Native ingress에서만 추가 신호로 사용한다. schema, 문자열·body, batch, concurrency와 사용자/IP quota를 유한한 설정값으로 제한하며 검증 실패 시 외부 Provider를 호출하지 않는다.
 
 ### 13.2 Firestore Rules
 

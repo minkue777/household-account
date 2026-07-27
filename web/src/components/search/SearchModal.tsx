@@ -22,7 +22,10 @@ interface SearchModalProps {
     data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string }
   ) => Promise<void> | void;
   onDelete?: (expenseId: string) => Promise<void> | void;
-  onSplitExpense?: (expense: Expense, splits: SplitItem[]) => void;
+  onSplitExpense?: (
+    expense: Expense,
+    splits: SplitItem[]
+  ) => Promise<void> | void;
   transactionType: TransactionType;
 }
 
@@ -99,10 +102,10 @@ export default function SearchModal({
     void refreshSearch();
   };
 
-  const handleSplitExpense = (expense: Expense, splits: SplitItem[]) => {
+  const handleSplitExpense = async (expense: Expense, splits: SplitItem[]) => {
     if (!onSplitExpense) return;
-    onSplitExpense(expense, splits);
-    refreshSearch();
+    await onSplitExpense(expense, splits);
+    void refreshSearch();
   };
 
   const handleSplitMonths = async (months: number) => {
@@ -135,10 +138,9 @@ export default function SearchModal({
     });
   };
 
-  const handleSaveSplitFromModal = (splits: SplitItem[]) => {
+  const handleSaveSplitFromModal = (splits: SplitItem[]): Promise<void> | void => {
     if (!splitExpense) return;
-    handleSplitExpense(splitExpense, splits);
-    setSplitExpense(null);
+    return handleSplitExpense(splitExpense, splits);
   };
 
   useEffect(() => {
@@ -264,9 +266,7 @@ export default function SearchModal({
           expense={selectedExpense}
           isOpen={!!selectedExpense}
           onClose={() => setSelectedExpense(null)}
-          onSave={(updates) => {
-            void handleSaveEdit(updates);
-          }}
+          onSave={handleSaveEdit}
           onOpenSplit={
             transactionType === 'expense' && onSplitExpense ? () => setSplitExpense(selectedExpense) : undefined
           }
@@ -283,7 +283,7 @@ export default function SearchModal({
               ? (newMonths) => void handleUpdateSplitGroup(newMonths)
               : undefined
           }
-          onDelete={onDelete ? () => void handleDelete(selectedExpense.id) : undefined}
+          onDelete={onDelete ? () => handleDelete(selectedExpense.id) : undefined}
           transactionType={transactionType}
         />
       )}

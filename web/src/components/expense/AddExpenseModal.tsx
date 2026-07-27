@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import AmountInput from '@/components/common/AmountInput';
 import ModalOverlay from '@/components/common/ModalOverlay';
@@ -18,6 +18,7 @@ import {
 import { getTodayLocalDate } from '@/lib/utils/date';
 import ExpenseActionButtons from '@/components/expense/ExpenseActionButtons';
 import ExpenseFormFields from '@/components/expense/ExpenseFormFields';
+import { useAppDialog } from '@/contexts/AppDialogContext';
 
 interface AddExpenseModalProps {
   isOpen: boolean;
@@ -29,7 +30,7 @@ interface AddExpenseModalProps {
     date: string,
     memo?: string,
     splitMonths?: number
-  ) => void;
+  ) => Promise<void> | void;
   selectedDate?: string | null;
   transactionType: TransactionType;
 }
@@ -42,9 +43,12 @@ export default function AddExpenseModal({
   transactionType,
 }: AddExpenseModalProps) {
   const { activeCategories, isLoading } = useCategoryContext();
+  const { showAlert } = useAppDialog();
   const isIncome = transactionType === 'income';
   const defaultMerchant = isIncome ? '수입' : '';
   const defaultDate = selectedDate || getTodayLocalDate();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   const {
     merchant,
@@ -100,62 +104,78 @@ export default function AddExpenseModal({
     selectedDate,
   ]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isSubmittingRef.current) {
+      return;
+    }
+
     const parsedAmount = parsePositiveExpenseAmount(amount);
     if (parsedAmount === null) {
       return;
     }
 
+    let submission: Parameters<AddExpenseModalProps['onAdd']>;
+    let resetCategory: string;
     if (isIncome) {
       const item = memo.trim();
       if (!item) {
         return;
       }
 
-      onAdd('수입', parsedAmount, 'etc', date, item);
+      submission = ['수입', parsedAmount, 'etc', date, item];
+      resetCategory = 'etc';
+    } else {
+      const normalizedMerchant = trimExpenseMerchant(merchant);
+      if (!normalizedMerchant) {
+        return;
+      }
+
+      let splitMonths: number | undefined;
+      if (showSplitInput) {
+        const parsedMonths = getValidSplitMonths();
+        if (parsedMonths === null) {
+          return;
+        }
+        splitMonths = parsedMonths;
+      }
+
+      submission = [
+        normalizedMerchant,
+        parsedAmount,
+        category,
+        date,
+        toOptionalMemo(memo),
+        splitMonths,
+      ];
+      resetCategory = resolveDefaultCategoryKey(activeCategories);
+    }
+
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
+    try {
+      const pendingAdd = onAdd(...submission);
+
       resetExpenseFormState({
         merchant: defaultMerchant,
         amount: '',
-        category: 'etc',
+        category: resetCategory,
         memo: '',
         date,
       });
+      resetMonthlySplitInput();
       onClose();
-      return;
+      await pendingAdd;
+    } catch (error) {
+      console.error(`${transactionType === 'income' ? '수입' : '지출'} 추가 오류:`, error);
+      await showAlert(
+        `${transactionType === 'income' ? '수입' : '지출'}을 저장하지 못했습니다. `
+          + '최신 내역을 확인한 뒤 다시 시도해 주세요.',
+        `${transactionType === 'income' ? '수입' : '지출'} 추가 실패`
+      );
+    } finally {
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
     }
-
-    const normalizedMerchant = trimExpenseMerchant(merchant);
-    if (!normalizedMerchant) {
-      return;
-    }
-
-    let splitMonths: number | undefined;
-    if (showSplitInput) {
-      const parsedMonths = getValidSplitMonths();
-      if (parsedMonths === null) {
-        return;
-      }
-      splitMonths = parsedMonths;
-    }
-
-    onAdd(
-      normalizedMerchant,
-      parsedAmount,
-      category,
-      date,
-      toOptionalMemo(memo),
-      splitMonths
-    );
-
-    resetExpenseFormState({
-      merchant: defaultMerchant,
-      amount: '',
-      category: resolveDefaultCategoryKey(activeCategories),
-      memo: '',
-      date,
-    });
-    resetMonthlySplitInput();
-    onClose();
   };
 
   if (!isOpen) {
@@ -239,12 +259,12 @@ export default function AddExpenseModal({
             variant: 'outline',
           }}
           rightButton={{
-            label: '추가',
-            onClick: handleSubmit,
+            label: isSubmitting ? '추가 중...' : '추가',
+            onClick: () => void handleSubmit(),
             variant: 'primary',
-            disabled: isIncome
+            disabled: isSubmitting || (isIncome
               ? parsePositiveExpenseAmount(amount) === null || memo.trim().length === 0
-              : !isExpenseSubmitEnabled(merchant, amount),
+              : !isExpenseSubmitEnabled(merchant, amount)),
           }}
         />
       </div>

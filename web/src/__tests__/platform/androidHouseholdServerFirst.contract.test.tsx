@@ -62,10 +62,6 @@ jest.mock('@/platform/pwa/sessionCache', () => ({
   clearPwaRuntimeCaches: jest.fn(),
 }));
 
-jest.mock('@/platform/security/firebaseAppCheck', () => ({
-  initializeFirebaseAppCheck: jest.fn(),
-}));
-
 let androidHostAvailable = false;
 jest.mock('@/platform/android-host/androidHostBridge', () => ({
   isAndroidHostAvailable: () => androidHostAvailable,

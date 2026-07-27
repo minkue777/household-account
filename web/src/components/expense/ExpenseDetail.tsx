@@ -21,11 +21,17 @@ interface ExpenseDetailProps {
   onExpenseUpdate?: (
     expenseId: string,
     data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string }
-  ) => void;
-  onSaveMerchantRule?: (merchantName: string, category: string) => void;
-  onDelete?: (expenseId: string) => void;
+  ) => Promise<void> | void;
+  onSaveMerchantRule?: (
+    merchantName: string,
+    category: string
+  ) => Promise<void> | void;
+  onDelete?: (expenseId: string) => Promise<void> | void;
   onAddExpense?: () => void;
-  onSplitExpense?: (expense: Expense, splits: SplitItem[]) => void;
+  onSplitExpense?: (
+    expense: Expense,
+    splits: SplitItem[]
+  ) => Promise<void> | void;
   onMergeExpenses?: (
     targetExpense: Expense,
     sourceExpense: Expense
@@ -114,9 +120,9 @@ export default function ExpenseDetail({
   const handleSaveEdit = (
     expense: Expense,
     updates: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string }
-  ) => {
+  ): Promise<void> | void => {
     if (onExpenseUpdate && Object.keys(updates).length > 0) {
-      onExpenseUpdate(expense.id, updates);
+      return onExpenseUpdate(expense.id, updates);
     }
   };
 

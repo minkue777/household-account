@@ -274,7 +274,8 @@ export async function deleteAsset(id: string, expectedVersion: number): Promise<
  */
 export function subscribeToAssets(
   callback: (assets: Asset[]) => void,
-  initialAssets?: readonly Asset[]
+  initialAssets?: readonly Asset[],
+  onSourceSnapshot?: (assets: readonly Asset[]) => void
 ): () => void {
   const householdId = getHouseholdId();
   const projection = portfolioOptimisticProjection.subscribe(callback, householdId);
@@ -296,6 +297,7 @@ export function subscribeToAssets(
         if (a.order !== b.order) return a.order - b.order;
         return a.name.localeCompare(b.name);
       });
+      onSourceSnapshot?.(assets);
       projection.publish(assets);
     },
     (error) => {

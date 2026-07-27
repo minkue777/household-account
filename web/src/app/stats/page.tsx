@@ -64,9 +64,7 @@ export default function StatsPage() {
   }, [expenses, selectedCategory]);
 
   const handleSaveEdit = async (expense: Expense, updates: ExpenseUpdates) => {
-    const operation = updateExpense(expense.id, updates, expense.aggregateVersion);
-    setEditingExpense(null);
-    await operation;
+    await updateExpense(expense.id, updates, expense.aggregateVersion);
   };
 
   const handleSaveMerchantRule = async (merchantName: string, category: string) => {
@@ -230,15 +228,9 @@ export default function StatsPage() {
           expense={editingExpense}
           isOpen={!!editingExpense}
           onClose={() => setEditingExpense(null)}
-          onSave={(updates) => {
-            void handleSaveEdit(editingExpense, updates);
-          }}
-          onSaveMerchantRule={(merchantName, category) => {
-            void handleSaveMerchantRule(merchantName, category);
-          }}
-          onDelete={() => {
-            void handleDeleteExpense(editingExpense);
-          }}
+          onSave={(updates) => handleSaveEdit(editingExpense, updates)}
+          onSaveMerchantRule={handleSaveMerchantRule}
+          onDelete={() => handleDeleteExpense(editingExpense)}
           transactionType="expense"
         />
       ) : null}

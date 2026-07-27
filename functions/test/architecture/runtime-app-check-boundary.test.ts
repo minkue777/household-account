@@ -9,20 +9,43 @@ function source(relativePath: string): string {
   return readFileSync(resolve(root, relativePath), "utf8");
 }
 
+function exportedCallable(
+  relativePath: string,
+  exportName: string,
+): string {
+  const value = source(relativePath);
+  const start = value.indexOf(`export const ${exportName} =`);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const nextExport = value.indexOf("\nexport const ", start + 1);
+  return value.slice(start, nextExport < 0 ? undefined : nextExport);
+}
+
 describe("배포 callable App Check 경계", () => {
   it.each([
-    "functions/src/bootstrap/firebaseCaptureSubmission.ts",
-    "functions/src/bootstrap/firebaseWebViewSession.ts",
-  ])("%s는 인증과 별도로 App Check를 강제한다", (path) => {
-    const value = source(path);
+    [
+      "functions/src/bootstrap/firebaseCaptureSubmission.ts",
+      "submitCaptureEnvelope",
+    ],
+    [
+      "functions/src/bootstrap/firebaseCaptureSubmission.ts",
+      "submitAndroidRawNotification",
+    ],
+    [
+      "functions/src/bootstrap/firebaseNotificationDiagnostic.ts",
+      "submitNotificationDiagnostic",
+    ],
+    [
+      "functions/src/bootstrap/firebaseWebViewSession.ts",
+      "createWebViewSessionToken",
+    ],
+  ])("%s의 %s는 인증과 별도로 App Check를 강제한다", (path, exportName) => {
+    const value = exportedCallable(path, exportName);
     expect(value).toMatch(/\.runWith\(\{[\s\S]*?enforceAppCheck:\s*true[\s\S]*?\}\)/u);
     expect(value).toContain(".https.onCall(");
+    expect(value).not.toMatch(/minInstances\s*:/u);
   });
 
-  it("Web과 Android가 각 배포 플랫폼의 App Check 공급자를 설치한다", () => {
-    expect(
-      source("web/src/platform/security/firebaseAppCheck.ts"),
-    ).toContain("ReCaptchaEnterpriseProvider");
+  it("Native Android가 Play Integrity App Check 공급자를 설치한다", () => {
     expect(
       source(
         "android/app/src/main/java/com/household/account/HouseholdAccountApplication.kt",
@@ -36,16 +59,6 @@ describe("배포 callable App Check 경계", () => {
     );
     expect(value).toContain("verifiedSystemAdministrator(");
     expect(value).not.toMatch(/enforceAppCheck:\s*true/u);
-  });
-
-  it("Android raw notification callable은 warm instance 하나를 유지하면서 App Check를 강제한다", () => {
-    const value = source(
-      "functions/src/bootstrap/firebaseCaptureSubmission.ts",
-    );
-    expect(value).toMatch(
-      /\.runWith\(\{[\s\S]*?enforceAppCheck:\s*true[\s\S]*?\}\)/u,
-    );
-    expect(value).not.toMatch(/minInstances\s*:/u);
   });
 
   it("공용 Command와 Query callable은 Auth·Membership을 경계로 사용하고 불안정한 WebView App Check를 중복 강제하지 않는다", () => {
