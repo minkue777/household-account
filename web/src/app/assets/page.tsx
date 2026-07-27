@@ -6,7 +6,6 @@ import { ChartPie } from 'lucide-react';
 import { Asset, AssetOwnerOption, AssetType, isGoldEtfSubType } from '@/types/asset';
 import {
   subscribeToAssets,
-  getRealtimeDailyAssetChangeByOwner,
   addSampleAssets,
   refreshAllMarketValues,
 } from '@/lib/assetService';
@@ -34,6 +33,12 @@ import {
   writeAssetSnapshot,
 } from '@/features/portfolio/application/portfolioReadSnapshot';
 import { useHouseholdHoldingSnapshots } from '@/lib/utils/useHouseholdHoldingSnapshots';
+import {
+  calculateRealtimeDailyAssetChanges,
+  type PreviousAssetDailySummary,
+} from '@/features/portfolio/application/dailyAssetChangeSummary';
+import { readPreviousAssetDailySummary } from '@/platform/read-model/assetDailyChangeReadModel';
+import { formatLocalDate } from '@/lib/utils/date';
 
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
@@ -53,6 +58,15 @@ export default function AssetsPage() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [sourceAssets, setSourceAssets] = useState<Asset[] | null>(null);
+  const [serverAssetsReady, setServerAssetsReady] = useState(false);
+  const [previousDailySummary, setPreviousDailySummary] = useState<{
+    householdId: string | null;
+    ready: boolean;
+    value?: PreviousAssetDailySummary;
+  }>({
+    householdId: null,
+    ready: false,
+  });
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [addModalType, setAddModalType] = useState<AssetType>('savings');
@@ -111,6 +125,11 @@ export default function AssetsPage() {
     const householdId = household?.id;
     if (!householdId) {
       cachedAssetsRef.current = undefined;
+      setServerAssetsReady(false);
+      setPreviousDailySummary({
+        householdId: null,
+        ready: false,
+      });
       return;
     }
     const cachedAssets = readAssetSnapshot(householdId);
@@ -118,6 +137,11 @@ export default function AssetsPage() {
     const cachedDailyChanges = readDailyAssetChangeSnapshot(householdId);
     cachedAssetsRef.current = cachedAssets;
     setSourceAssets(null);
+    setServerAssetsReady(false);
+    setPreviousDailySummary({
+      householdId,
+      ready: false,
+    });
     if (cachedAssets !== undefined) {
       setAssets(cachedAssets);
       setIsLoading(false);
@@ -173,7 +197,11 @@ export default function AssetsPage() {
   }, []);
 
   useEffect(() => {
-    if (!isSessionVerified || !household?.id) return undefined;
+    if (!isSessionVerified || !household?.id) {
+      setServerAssetsReady(false);
+      return undefined;
+    }
+    setServerAssetsReady(false);
     if (cachedAssetsRef.current === undefined) setIsLoading(true);
     const unsubscribe = subscribeToAssets(
       (newAssets) => {
@@ -181,9 +209,12 @@ export default function AssetsPage() {
         setIsLoading(false);
       },
       cachedAssetsRef.current,
-      (nextSourceAssets) => {
+      (nextSourceAssets, metadata) => {
         setSourceAssets([...nextSourceAssets]);
         writeAssetSnapshot(household.id, nextSourceAssets);
+        if (!metadata.fromCache) {
+          setServerAssetsReady(true);
+        }
       }
     );
     return () => unsubscribe();
@@ -194,11 +225,17 @@ export default function AssetsPage() {
       !isSessionVerified
       || !household?.id
       || adminHouseholdView !== null
+      || !serverAssetsReady
     ) return undefined;
 
     void refreshAllMarketValues().catch(console.error);
     return undefined;
-  }, [adminHouseholdView, household?.id, isSessionVerified]);
+  }, [
+    adminHouseholdView,
+    household?.id,
+    isSessionVerified,
+    serverAssetsReady,
+  ]);
 
   useEffect(() => {
     const householdId = household?.id;
@@ -225,6 +262,39 @@ export default function AssetsPage() {
   useEffect(() => {
     const householdId = household?.id;
     if (!isSessionVerified || !householdId) {
+      setPreviousDailySummary({
+        householdId: null,
+        ready: false,
+      });
+      return undefined;
+    }
+
+    let cancelled = false;
+    void readPreviousAssetDailySummary(
+      householdId,
+      formatLocalDate(new Date())
+    )
+      .then((value) => {
+        if (!cancelled) {
+          setPreviousDailySummary({
+            householdId,
+            ready: true,
+            value,
+          });
+        }
+      })
+      .catch((error) => {
+        console.error('전일 자산 요약 조회 오류:', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [household?.id, isSessionVerified, remoteReadEpoch]);
+
+  useEffect(() => {
+    const householdId = household?.id;
+    if (!isSessionVerified || !householdId) {
       setDailyChanges({ householdId: null, amounts: {} });
       return undefined;
     }
@@ -241,36 +311,32 @@ export default function AssetsPage() {
       return undefined;
     }
 
+    if (
+      previousDailySummary.householdId !== householdId
+      || !previousDailySummary.ready
+    ) {
+      return undefined;
+    }
+
     const activeAssets = sourceAssets.filter((asset) => asset.isActive);
-    let cancelled = false;
-
-    const syncDailySummary = async () => {
-      const entries = await Promise.all(
-        memberOptions.map(async ({ key, label }) => {
-          try {
-            const amount = await getRealtimeDailyAssetChangeByOwner(label, activeAssets);
-            return [key, amount] as const;
-          } catch {
-            return [key, 0] as const;
-          }
-        })
-      );
-      if (!cancelled) {
-        const amounts = Object.fromEntries(entries);
-        setDailyChanges({ householdId, amounts });
-        writeDailyAssetChangeSnapshot(householdId, amounts);
-      }
+    const calculated = calculateRealtimeDailyAssetChanges({
+      assets: activeAssets,
+      ownerProfiles,
+      previous: previousDailySummary.value,
+    });
+    const amounts = {
+      [ALL_MEMBERS_OPTION]: calculated.total,
+      ...calculated.byProfileId,
     };
-    void syncDailySummary();
-
-    return () => {
-      cancelled = true;
-    };
+    setDailyChanges({ householdId, amounts });
+    writeDailyAssetChangeSnapshot(householdId, amounts);
+    return undefined;
   }, [
     household?.id,
     isSessionVerified,
     memberOptions,
-    remoteReadEpoch,
+    ownerProfiles,
+    previousDailySummary,
     sourceAssets,
   ]);
 

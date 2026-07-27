@@ -51,7 +51,7 @@ interface ClientSessionScope {
 
 Inbound Adapter는 인증 credential을 검증한 뒤 Access의 `ResolveActorContext`를 호출한다. payload의 uid, role, member name은 ActorContext 생성 근거로 신뢰하지 않는다. 모든 가구 범위 Command·Query는 `TenantScope`를 명시하며 Actor의 household와 일치하지 않으면 `Forbidden(TENANT_MISMATCH)`다.
 
-Web·Android composition root는 인증과 Membership 해결이 끝난 뒤에만 `ClientSessionScope`를 발급한다. `sessionGeneration`은 로그인·로그아웃·가구/멤버 전환마다 바뀌며 Repository 요청, 실시간 구독, cache key, UI controller가 함께 보존한다. `guest`나 localStorage 문자열로 보호 범위를 대신 만들지 않는다.
+Web·Android composition root는 Firebase Auth가 확정한 UID와 일치하는 마지막 검증 Session bootstrap cache가 있으면 그 scope를 즉시 발급하고, cache가 없을 때만 Membership 해결을 동기 완료한 뒤 `ClientSessionScope`를 발급한다. `sessionGeneration`은 로그인·로그아웃·Firebase UID·가구/멤버 scope 전환마다 바뀌며 Repository 요청, 실시간 구독, cache key, UI controller가 함께 보존한다. cache는 query 범위 복원용이며 `guest`나 임의 localStorage 문자열로 보호 범위를 만들거나 서버 권한을 대체하지 않는다.
 
 ### 3.2 Money·날짜·시간
 
@@ -106,12 +106,14 @@ Command envelope와 typed Result는 [모듈 상세 설계 규약](../governance/
 
 ### 5.3 Client session 전환
 
-1. Firebase 인증 복원 전에는 보호 Query, 기본 데이터 생성, FID endpoint 등록을 시작하지 않는다. 같은 UID의 마지막 서버 검증 SessionScope를 복원한 뒤에는 Firestore Rules가 매 요청의 active Membership을 다시 검증하는 읽기 Query·listener를 시작할 수 있다. 이후 백그라운드 Membership 재검증의 일시적 transport 실패만으로 이 읽기 준비 상태를 취소하지 않으며, Command·FID 등록은 계속 서버 인가를 통과해야 한다.
-2. 새 `ClientSessionScope`를 발급하기 전에 이전 요청을 cancel하고 실시간 listener를 unsubscribe한다.
-3. 이전 세대 cache와 화면 state를 동기적으로 비운다.
-4. 모든 async callback은 시작할 때의 generation과 현재 generation을 비교한다.
-5. 불일치 결과는 저장·render·후속 Command 없이 폐기한다.
-6. Native session mirror는 전체 scope를 versioned record 하나로 원자 교체하거나 모두 삭제한다.
+1. Firebase 인증 observer의 첫 UID가 확정되기 전에는 보호 Query, 기본 데이터 생성, FID endpoint 등록을 시작하지 않는다.
+2. 같은 UID의 마지막 검증 bootstrap cache가 있으면 Membership scope와 가구 metadata를 원자 복원하고 월 원장·카테고리·지역화폐 listener를 즉시 시작한다. 금융 read는 첫 서버 snapshot부터 표시하며 Firestore Rules가 active Membership을 권위 검증한다.
+3. cache가 없을 때만 `ResolveSignedInUser`를 동기 실행하고 성공 결과를 저장한 뒤 listener를 시작한다. 마지막 검증 시각의 경과를 이유로 30분·idle·background Membership 해석을 예약하지 않는다.
+4. cache hit 뒤 `households/{householdId}` 한 문서를 서버에서 병렬 갱신한다. 이 read는 listener 준비를 막지 않고 정규화된 metadata가 cache와 실제로 다를 때만 UI와 cache를 교체하며, transient 실패는 현재 scope를 취소하지 않는다.
+5. 보호 listener의 `permission-denied`는 bootstrap cache를 즉시 지우고 해당 오류 listener를 종료한 뒤 `ResolveSignedInUser`를 시작하는 복구 신호다. 같은 UID의 동시 오류는 권위 해석 하나로 병합하고 Android 인증 복구와 병렬 실행하지 않는다. 해석 중에는 마지막 in-memory 화면과 현재 scope를 저하 상태로 유지하되 Rules·Functions가 새 read·Command 권한을 계속 판정한다. 결과가 같은 scope이면 새 cache를 저장하고 `remoteReadEpoch`로 종료 listener를 다시 열며, first visit 또는 다른 scope이면 그때 이전 scope·화면·나머지 구독을 폐기한다. 권위 해석 자체가 transient transport 오류로 실패한 동안에만 2~30초 backoff로 재시도하며, 이것을 정상 세션의 시간 기반 Membership 재검증으로 사용하지 않는다. 다른 일반 네트워크 오류를 Membership 부재로 바꾸지 않는다.
+6. Firebase UID가 바뀌면 이전 요청과 listener를 먼저 cancel하고 이전 세대 cache·화면 state를 비운 뒤 새 UID의 cache hit/miss 절차를 적용한다. 로그아웃은 scope와 app-level 구독을 모두 끝낸다.
+7. 내부 route 전환은 app shell의 월 원장·카테고리·지역화폐 listener를 해제하지 않는다. 월 원장은 `{sessionGeneration, householdId, year, month}`가 바뀔 때만 교체하고, 지역화폐는 month와 무관하게 `{sessionGeneration, householdId}`가 바뀔 때만 교체한다.
+8. 모든 async callback은 시작할 때의 generation과 현재 generation을 비교하며 불일치 결과는 저장·render·후속 Command 없이 폐기한다. Native session mirror는 전체 scope를 versioned record 하나로 원자 교체하거나 모두 삭제한다.
 
 ### 5.4 Migration·backfill
 
@@ -199,7 +201,7 @@ Web·Android에는 생성 wire 타입과 각 플랫폼 mapper만 두며 서버 D
 | SYS-005 | U, C | 날짜·시간 Value Object | 윤년, 월말, 잘못된 날짜·시간 | strict canonical format | T-SYS-005 |
 | SYS-006 | Repository, migration I | Member reference mapper | 이름-only, 매핑 있음/없음, rename | 안정 memberId 전환과 원문 보존 | T-SYS-006 |
 | SYS-007 | Application, Emulator, E2E | Result·UnitOfWork | callback 2회, 중간 실패, 외부 side effect | rollback/typed failure, 거짓 완료 없음 | T-SYS-007 |
-| SYS-008 | C, UI, E2E | ClientSessionScope·subscription registry | A→B 전환, 늦은 A callback, guest/admin route, 같은 탭 logout | A state·write·render 0건, listener 해제 | T-SYS-008 |
+| SYS-008 | C, UI, E2E | ClientSessionScope·bootstrap cache·subscription registry | 같은 UID cache hit/miss, metadata 동일/변경/실패, `permission-denied` 뒤 같은/다른 scope, 내부 route·월 전환, A→B 전환, 늦은 A callback, guest/admin route, 같은 탭 logout | hit 즉시 구독·miss/권한 거부만 권위 해석, 해석 중 화면 유지, 같은 scope epoch 재연결·다른 scope 확정 뒤 폐기, route 구독 유지·월 원장만 교체 | T-SYS-008 |
 | SYS-009 | C, I, 운영 계약 | Migration runner | client 호출, dry-run, 범위 밖 문서, page 재실행, reconciliation 차이 | client API 없음, 범위·멱등·중단 보장 | T-SYS-009 |
 
 ### 11.1 공통 시스템 Canonical 테스트 시나리오
@@ -211,7 +213,7 @@ Web·Android에는 생성 wire 타입과 각 플랫폼 mapper만 두며 서버 D
 | T-SYS-005 | 윤년·잘못된 월말·비정규 날짜/시간과 UTC/서울 월 경계 / 날짜·시간 해석 / strict canonical format과 Asia/Seoul 결과 | SYS-005 |
 | T-SYS-006 | 유일·누락·동명이인 레거시 이름 참조와 이후 rename / memberId 전환 / 유일한 경우만 안정 ID로 연결하고 원문 보존, 나머지는 수동 reconciliation | SYS-006 |
 | T-SYS-007 | transaction callback 재실행과 본문·receipt·Outbox 중간 실패 / Command 실행 / 논리 결과 한 번 또는 전체 rollback, commit 전 외부 효과 없음 | SYS-007 |
-| T-SYS-008 | A→B session 전환·logout 뒤 늦은 Query/listener/write / client callback 처리 / 이전 cache·구독 폐기와 state·write·render 0건 | SYS-008 |
+| T-SYS-008 | 같은 UID cache hit/miss·metadata one-doc refresh·`permission-denied` 뒤 같은/다른 scope·내부 route/월 이동·A→B session 전환·logout 뒤 늦은 Query/listener/write / client bootstrap·callback 처리 / hit 즉시 업무 구독, 실제 metadata 차이만 반영, miss·권한 거부만 권위 해석, 권한 해석 중 in-memory 화면 유지, 같은 scope epoch 재연결·다른 scope 확정 뒤 이전 state·write·render 0건 | SYS-008 |
 | T-SYS-009 | client 호출, dry-run, scope 밖 문서, stale plan hash, page 실패 checkpoint / migration 실행 / 운영 경계·범위·멱등·reconciliation 보장 | SYS-009 |
 
 Cross-cutting 인증 진입점 검증은 [T-SEC-002](../cross-cutting/security-privacy.md#7-보안-테스트-행렬)가 단일 소유한다. 시스템 suite는 이 Canonical fixture를 재사용해 무인증 Functions·Shortcut·FCM·배당 쓰기가 모두 권한 오류와 변경 없음으로 수렴하는지만 확인하고 새 테스트 ID를 만들지 않는다.

@@ -66,7 +66,7 @@
 | `RequestHouseholdNotification` Command v1 | Web·QuickEdit | transactionId, expectedVersion | `Success<NotificationRequestRecorded>`, `ValidationError`, `NotFound`, `AlreadyProcessed` | `ledger.notify.request` | Transaction metadata·receipt·Outbox 한 UoW | envelope key |
 | `FindCancellationCandidates` Query | Payment Capture | date range, amount, optional stored fact filters, cursor | `Success<CancellationCandidatePage>`, `NoData`, `Forbidden`, `RetryableFailure` | `ledger.cancel.read` | 읽기 전용 | 해당 없음 |
 | `SearchLedger` Query | Web | transactionType, normalized query, 기간, opaque cursor, `limit≤configuredMax` | `Success<LedgerSearchResult>`, `NoData`, `Forbidden`, `RetryableFailure` | `ledger.read` | 읽기 전용 | 해당 없음 |
-| `SubscribeLedger` Read Contract | Web | transactionType, date range | `LedgerReadPage` stream 또는 명시적 오류 상태 | 같은 가구 `ledger.read` | 공개 read schema + Rules | 해당 없음 |
+| `SubscribeMonthlyLedgerSource` Read Contract | Web | date range | 지출·수입을 함께 포함한 `LedgerReadPage` stream 또는 명시적 오류 상태 | 같은 가구 `ledger.read` | 공개 read schema + Rules | 해당 없음 |
 | `GetLedgerSummary` Query | Web·Reporting | 기간, grouping | `Success<LedgerSummary>`, `NoData`, `RetryableFailure` | `ledger.read` | Canonical query 또는 소유 Projection | 해당 없음 |
 | `ListLocalCurrencyTransactions` Query | Home 지역화폐 상세 | householdId, localCurrencyType, 기간, opaque cursor | `Success<LedgerPage>`, `NoData`, `Forbidden`, `RetryableFailure` | `ledger.read` | 한 가구·한 지역화폐 유형의 active 거래만 | 해당 없음 |
 
@@ -210,7 +210,7 @@ DEC-013의 알림 수신자는 Ledger가 확정하지 않습니다. Ledger는 �
 
 ### 5.7 Query·알림 요청
 
-- `SubscribeLedger`와 `SearchLedger`는 빈 결과 `NoData`와 Repository failure를 구분합니다.
+- `SubscribeMonthlyLedgerSource`와 `SearchLedger`는 빈 결과 `NoData`와 Repository failure를 구분합니다.
 - 모든 일반 Ledger 목록·검색·합계 Query는 active 상태만 대상으로 합니다. lifecycleState가 없는 legacy 문서는 active로 호환하지만 `deleted`, `superseded` 또는 legacy `deletedAt`이 있는 문서는 Adapter 단계에서라도 반드시 제외합니다.
 - `SearchLedger`는 household·transactionType·기간을 저장소 query에 포함하고 opaque cursor와 page limit을 강제합니다. 반환 summary는 동일 `sourceCheckpoint`의 전체 검색 범위를 기준으로 계산하며, 집계 완료 전 source window가 바뀌거나 안전 한도를 넘으면 부분 합계를 반환하지 않습니다. Web Controller는 현재 request identity와 다른 늦은 응답을 view·cache·cursor에 쓰지 않습니다.
 - 카드 검색은 등록 카드의 현재 표시 설정을 다시 조회해 과거 거래를 재분류하지 않고, Ledger 거래에 보존된 표준 카드사 라벨·끝 번호 capture evidence를 사용합니다. 지원하는 모든 카드사·결제수단에 같은 규칙을 적용하며 카드사명·끝 네 자리 단독 검색과 `국민카드(2972)` 같은 정확 형식, `삼성카드(3***)` 같은 wildcard 형식은 각각 카드사 별칭과 번호 조건을 모두 만족해야 합니다.
@@ -321,6 +321,7 @@ Event payload는 projection 조정에 필요한 최소 금액·날짜·category 
 ### 8.2 조회와 Projection
 
 - 브라우저 Web·PWA·Android WebView의 월·연 원장 목록은 Ledger가 소유한 같은 공개 Firestore Read Contract를 실시간 구독합니다. 검증된 SessionScope의 `householdId`와 시작일·종료일을 `householdId + date` 복합 index에 전달하고, 거래 유형과 lifecycle 가시성은 같은 Read Adapter가 적용합니다.
+- 월 원장의 물리 구독과 낙관적 Projection scope는 app shell이 소유한 `{sessionGeneration, householdId, year, month}` 하나입니다. 이 원본은 지출과 수입을 함께 보관하고 각 화면은 `transactionType`으로 메모리 파생합니다. 같은 월에서 지출과 수입을 전환하거나 홈·자산·통계·설정 등 내부 route를 이동할 때 listener를 해제하거나 원본을 비우거나 서버 snapshot을 다시 기다리지 않습니다. 연도·월·가구·SessionScope가 바뀌거나 로그아웃할 때 기존 구독을 종료합니다. `permission-denied`로 listener가 종료되면 원본은 유지하고 Session 권위 해석이 같은 scope를 반환할 때 read epoch로 다시 열며, first visit·다른 scope가 확정될 때만 원본과 Projection을 폐기합니다.
 - 앱 첫 가계부 화면은 월 원장 localStorage snapshot을 읽거나 쓰지 않습니다. Firestore listener는 metadata 변경을 포함해 구독하고 최초 `fromCache=true` 결과를 건너뛴 뒤 서버 snapshot부터 `accountingDate DESC, localTime DESC, transactionId DESC` 정렬 Policy로 표시합니다.
 - Android QuickEdit나 다른 Activity에서 WebView로 복귀하면 인증 token 갱신 주기와 별개인 Ledger 전용 읽기 epoch를 즉시 증가시켜 현재 월 원장·연 원장·지역화폐 listener만 다시 엽니다. 자산·카테고리·통계 등 다른 Context의 조회는 이 복귀 이벤트 때문에 다시 실행하지 않습니다. 같은 가구·같은 조회 범위에서 재연결하는 동안에는 마지막 서버 snapshot과 `ready` 상태를 유지하고, 새 listener의 `fromCache=true` 결과로 화면을 비우지 않으며 다음 서버 snapshot에서 원자적으로 교체합니다. 재연결에 실패해도 기존 원장은 유지하되 최신 상태 확인에 실패했다는 저하 상태를 숨기지 않습니다.
 - 생성·수정·삭제 Command를 보내는 순간 client의 Ledger 낙관적 Projection에 변경을 반영합니다. Merge는 기존 target을 update하지 않고 target/source delete overlay와 operation key로 결정한 새 merged ID의 create overlay를 함께 적용합니다. 서버의 Canonical Command 결과와 이어지는 실시간 snapshot으로 확정·수렴하며, 응답 ID 불일치·typed rejection·version conflict이면 해당 구조 변경의 overlay 전체를 rollback하고 `AppDialogProvider`로 안내합니다. 성공 뒤 기간 목록을 별도 조회하거나 focus·visible 이벤트 및 30초 polling으로 재조회하지 않습니다.
@@ -332,7 +333,7 @@ Event payload는 projection 조정에 필요한 최소 금액·날짜·category 
 - Budget와 Reporting은 Event 소비 Projection이며 Ledger Repository를 import하지 않습니다.
 - Read Contract는 schemaVersion, index, 결정 정렬, Membership Rules를 명시합니다.
 - `TransactionDeleted.v1`을 반영한 Projection과 직접 조회 Adapter 모두 deleted 거래를 제거하며, 다음 조회에서 Canonical active 집합으로 수렴합니다.
-- 공유 실시간 listener 오류는 무한 loading으로 남기지 않고 client의 failed 상태로 전달합니다. 이미 성공한 snapshot이 있으면 일시 실패로 기존 화면을 지우지 않습니다.
+- 공유 실시간 listener 오류는 무한 loading으로 남기지 않고 client의 failed 상태로 전달합니다. 이미 성공한 snapshot이 있으면 일시 실패로 기존 화면을 지우지 않습니다. `permission-denied`는 일반 transient 오류로 축약하지 않고 Session Application의 cache 무효화·권위 재해석 경계로 전달하되, 같은 scope 여부가 확정될 때까지 마지막 in-memory 원장은 유지합니다.
 
 ### 8.3 외부 연동
 
@@ -417,7 +418,7 @@ Domain은 Firebase·React를 import하지 않습니다. 다른 기능은 `ledger
 
 | 요구사항 ID | 테스트 수준 | 테스트 대상 | 핵심 fixture/경계값 | 관찰 결과 | Canonical 테스트 ID |
 |---|---|---|---|---|---|
-| LED-001 | Contract·Repository | SubscribeLedger | transactionType·lifecycleState 누락, deletedAt legacy, 월·기간 양끝, superseded/deleted, 동일 시각 여러 ID, NoData·listener 실패 | legacy는 expense·active로 호환하되 deletedAt은 제외, active 가구·유형·기간 범위, 날짜·시각·ID 결정 정렬, 오류 분리 | T-LED-001 |
+| LED-001 | Contract·Repository·Client | SubscribeMonthlyLedgerSource | transactionType·lifecycleState 누락, deletedAt legacy, 월·기간 양끝, superseded/deleted, 동일 시각 여러 ID, 내부 route·월·scope 전환, NoData·transient/permission-denied listener 실패 | legacy는 expense·active로 호환하되 deletedAt은 제외, route 이동 중 같은 구독 유지, 월·scope 종료에서만 교체·해제, 권한 해석 중 원본 유지·같은 scope epoch 재연결, 날짜·시각·ID 결정 정렬 | T-LED-001 |
 | LED-002 | Domain·Application | RecordManualTransaction expense | 공백 merchant, 0/음수/소수, 유효 category | 검증 오류 또는 한 거래·Event | T-LED-005 |
 | LED-003 | Domain·Application | RecordManualTransaction income | 빈 itemName, 양의 금액 | merchant/category/memo 정규화 | T-LED-006 |
 | LED-004 | Application·Repository | manual metadata | FixedClock, 회계일과 현재 시각 차이 | HH:mm·manual metadata·서버 creator 저장 | T-LED-007 |

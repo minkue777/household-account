@@ -74,7 +74,7 @@
 ## 6. 기기와 클라이언트 경계
 
 - AndroidBridge는 허용된 제품 origin에서만 민감 API를 노출해야 한다.
-- 인증·Membership 연결이 완료되기 전에는 보호 원격 Query·기본 데이터 write·FID endpoint 등록을 시작하지 않는다. DEC-068의 Membership cache는 반복 인증 왕복만 줄이며 가구·현재 월 원장·가구별 카테고리·지역화폐를 선표시하지 않는다. 로그아웃·가구/멤버 전환은 이전 session의 구독·cache·늦은 callback을 폐기한다.
+- Firebase Auth UID가 확정되기 전에는 보호 원격 Query·기본 데이터 write·FID endpoint 등록을 시작하지 않는다. 같은 UID의 마지막 검증 Membership·Household metadata cache가 있으면 scope와 가구 표시 정보를 즉시 복원하고 Rules 보호 원장·카테고리·지역화폐 listener를 시작할 수 있다. 이 cache는 권한 증거가 아니며 금융 payload를 선표시하지 않는다. cache miss와 `permission-denied`만 Membership 권위 해석을 실행하고 주기적 재해석은 두지 않는다. 권한 거부 시 cache와 오류 listener는 즉시 제거하지만 권위 해석 중 in-memory 화면은 유지하고, 같은 scope는 epoch 재연결하며 first visit·scope 변경이 확정될 때만 이전 화면·scope를 폐기한다. 로그아웃·UID/가구/멤버 scope 전환은 이전 session을 즉시 폐기한다.
 - legacy householdKey·currentMemberId는 첫 Google 로그인의 일회성 claim에만 사용한다. 연결 성공 뒤 key 기반 로그인 상태를 제거하고 신규 입력 UI를 제공하지 않는다.
 - 초대 코드는 5분·일회 사용이며 원문을 저장·로그하지 않는다. Invitation 소비와 호출자 자기 Member·Membership 생성을 한 서버 transaction에서 처리한다.
 - 사용자가 보낸 principalUid·타인 memberId는 Member 생성·이름 변경 입력으로 받지 않고 Google token과 Membership에서 자기 identity를 도출한다.
@@ -93,7 +93,7 @@
 - QuickEdit은 DEC-024에 따라 잠금 화면 위에 현재 편집 정보를 표시할 수 있지만 keyguard를 해제하지 않고 non-exported Activity·유효 거래 ID·현재 session을 강제한다. DEC-045에 따라 화면 캡처와 시스템 최근 앱 미리보기는 별도 차단하지 않되 앱 로그에는 QuickEdit 민감값을 기록하지 않는다.
 - Android 13 이상에서는 알림 표시 런타임 권한을 요청하고 거부 상태를 처리한다.
 - Android 결제 journal은 원격 호출 중 process 종료 유실을 막기 위해 raw DTO를 Android Keystore의 non-exportable 설치 키로 AES-256-GCM 암호화해 저장한다. 정상 terminal은 QuickEdit follow-up 내구화 뒤 즉시 삭제하고 WorkManager를 만들지 않으며, 실패·partial entry만 최대 72시간 보존한다. 로그아웃·멤버/가구 변경·키 오류에서도 삭제한다.
-- PWA/CDN cache는 navigation HTML, 인증 응답과 가구·금융 API를 저장하지 않는다. build-versioned 정적 asset과 공개 비민감 아이콘·폰트·이미지의 최대 7일 cache만 허용하고 임의 cross-origin 응답은 저장하지 않는다. DEC-068의 first-party localStorage는 Membership 연결 정보와 별도 허용된 자산 재진입 snapshot만 보존하며 가계부 첫 화면 데이터를 저장하지 않는다. ([DEC-051](../governance/decisions.md#dec-051), [DEC-068](../governance/decisions.md#dec-068))
+- PWA/CDN cache는 navigation HTML, 인증 응답과 가구·금융 API를 저장하지 않는다. build-versioned 정적 asset과 공개 비민감 아이콘·폰트·이미지의 최대 7일 cache만 허용하고 임의 cross-origin 응답은 저장하지 않는다. DEC-068의 first-party localStorage는 같은 UID의 Membership 연결·Household 표시 metadata bootstrap과 별도 허용된 자산 재진입 snapshot만 보존하며 원장·카테고리·지역화폐 payload를 저장하지 않는다. ([DEC-051](../governance/decisions.md#dec-051), [DEC-068](../governance/decisions.md#dec-068))
 - 운영 migration·repair는 browser bundle에서 실행할 수 없고 승인된 서버 job이 명시적 scope·dry-run·checkpoint·reconciliation을 남긴다.
 - 외부 Provider를 대신 호출하는 Web/Functions API는 인증·Membership과 schema/body/batch/concurrency/rate 상한을 검증한다. App Check는 호출 플랫폼이 증명을 안정적으로 공급하는 Native ingress에 추가 적용한다. 외부 URL은 HTTPS allowlist, redirect 재검증, timeout과 응답 크기 상한을 통과해야 한다.
 - 클라이언트 UI의 권한 분기는 서버 권한 검증을 대체하지 않는다.
@@ -125,7 +125,7 @@ Canonical 보안 테스트 ID:
 | 잠금 화면 | 잠금 상태 QuickEdit 표시·캡처 | DEC-024의 표시 허용·keyguard 유지·외부 진입 차단과 DEC-045의 캡처 허용·앱 로그 금지 준수 |
 | Android 결제 journal·실패 Queue | 원격 호출 중 process 종료, 로컬 DB 탈취, entry 변조, follow-up enqueue 실패, 72시간 경계, 로그아웃·멤버/가구 변경, Keystore 키 무효화 | 원격 전 암호문 선기록, 평문 비노출·GCM 인증 실패 전송 차단, QuickEdit FIFO 선내구화 뒤 ack, 조건별 entry 삭제·다른 Actor 재연결 없음 |
 | Android backup/restore | 같은 기기 재설치·새 기기 이전·backup restore | legacy key·session·Queue·FID가 복원되지 않고 새 설치가 이전 Actor에 자동 연결되지 않음 |
-| Client session | 마지막 검증 A snapshot 뒤 Auth UID 불일치·first visit·권한 거부, A→B 전환, A의 늦은 callback, guest/admin route 진입 | 초기 hint 외 A의 보호 구독·write 0건, 불일치 확정 뒤 A render·cache 사용 중단, B에 A callback 반영 없음 |
+| Client session | 같은 UID cache hit/miss, metadata refresh 동일·변경·실패, Auth UID 불일치·first visit·`permission-denied` 뒤 같은/다른 scope, A→B 전환, A의 늦은 callback, 내부/guest/admin route 진입 | hit은 metadata 즉시 표시·Rules 보호 구독, miss·권한 거부만 권위 해석, 실제 metadata 차이만 반영, 권한 해석 중 화면 유지·같은 scope epoch 재연결·다른 scope 확정 뒤 폐기, 내부 route는 app 구독 유지, B에 A callback 반영 없음 |
 | 외부 API ingress | 무인증·App Check 실패·빈 정규화 검색·초과 body/batch/quota | 외부 공급자 호출 0회, 안정적인 401/403/413/429 또는 typed error |
 | 외부 URL fetch | 사설 IP·metadata host·악성 redirect·초과 응답 | allowlist 경계에서 차단하고 응답 원문·credential을 log하지 않음 |
 | 운영 migration | 일반 client 호출, 범위 밖 문서, page 재실행 | API 비노출, 변경 0건 또는 멱등 재생, reconciliation 불일치 시 중단 |

@@ -427,19 +427,16 @@ export async function deleteExpense(id: string, expectedVersion: number): Promis
   }
 }
 
-/**
- * 특정 월의 지출 목록 실시간 구독
- */
-export function subscribeToMonthlyExpenses(
+function subscribeToMonthlyTransactionSource(
   year: number,
   month: number,
-  callback: (expenses: Expense[]) => void,
-  options: ExpenseQueryOptions = { transactionType: DEFAULT_TRANSACTION_TYPE }
+  callback: (transactions: Expense[]) => void,
+  transactionType: TransactionType | undefined,
+  onError?: (error: unknown) => void
 ): () => void {
   const householdId = getHouseholdId();
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
-  const transactionType = options.transactionType ?? DEFAULT_TRANSACTION_TYPE;
   const projection = ledgerOptimisticProjection.subscribe(
     callback,
     (expense) =>
@@ -447,7 +444,7 @@ export function subscribeToMonthlyExpenses(
       && expense.date <= endDate
       && matchesTransactionType(expense, transactionType),
     householdId,
-    `transactions:${startDate}:${endDate}:${transactionType}`
+    `transactions:${startDate}:${endDate}:${transactionType ?? 'all'}`
   );
 
   // 동일한 공개 read model을 모든 Web runtime에서 실시간 구독합니다.
@@ -469,13 +466,33 @@ export function subscribeToMonthlyExpenses(
     // 클라이언트에서 날짜 필터링 및 정렬
     projection.publish(allExpenses);
   }, (error) => {
-    options.onError?.(error);
+    onError?.(error);
   });
 
   return () => {
     unsubscribe();
     projection.dispose();
   };
+}
+
+/**
+ * 특정 월의 지출과 수입을 하나의 실시간 원본으로 구독합니다.
+ *
+ * 화면의 거래 유형 전환은 이 원본을 다시 구독하지 않고 메모리에서 파생합니다.
+ */
+export function subscribeToMonthlyTransactions(
+  year: number,
+  month: number,
+  callback: (transactions: Expense[]) => void,
+  options: Pick<ExpenseQueryOptions, 'onError'> = {}
+): () => void {
+  return subscribeToMonthlyTransactionSource(
+    year,
+    month,
+    callback,
+    undefined,
+    options.onError
+  );
 }
 
 /**

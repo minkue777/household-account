@@ -99,8 +99,8 @@ Pending 제품 결정은 이 문서가 임의로 확정하지 않는다. 대신 
 - Google 계정이 없는 아이 등은 Member가 아니라 Access의 `dependent AssetOwnerProfile`로만 추가한다. Member에는 연결된 `member` 프로필 하나를 제공하되 Asset은 memberId가 아닌 profileId를 참조한다.
 - 기존 사용자는 localStorage의 householdKey·currentMemberId를 첫 로그인 migration 단서로 사용해 기존 householdId·memberId를 같은 UID Membership에 연결한다. 데이터는 복사하지 않는다.
 - 모든 Command는 서버가 만든 `ActorContext`로 인가한다.
-- Web·Android의 보호된 요청·cache·구독은 서버 검증을 마친 `SessionScope(sessionGeneration, principalUid, householdId, memberId)`를 명시적으로 받는다. 마지막 검증 UID·Membership 연결 정보는 인증 왕복을 줄이는 데만 재사용하고, 가계부 첫 화면의 가구·월 원장·카테고리·지역화폐는 서버 read 전 localStorage나 Firestore cache 값을 선표시하지 않는다. 같은 UID의 Firebase Auth가 복원되면 Firestore Rules가 active Membership을 매 요청 검증하는 서버 우선 Query·listener를 시작한다. 권위 거부·UID 불일치·first visit은 scope와 구독을 폐기하며, 공용 Command·Query와 endpoint 등록은 Auth·서버 Membership 인가에 수렴한다. App Check는 Native 결제 수집·세션 교환처럼 안정적으로 플랫폼 증명을 공급하는 진입점에서 추가 검증한다. `guest` fallback은 허용하지 않는다.
-- 로그아웃·가구/멤버 전환은 이전 listener·요청·cache를 먼저 폐기하며 세대가 다른 늦은 callback은 화면·저장·endpoint 등록에 반영하지 않는다.
+- Web·Android의 보호된 요청·cache·구독은 Firebase Auth UID와 일치하는 `SessionScope(sessionGeneration, principalUid, householdId, memberId)`를 명시적으로 받는다. 같은 UID의 마지막 검증 Membership·Household metadata bootstrap cache가 있으면 scope와 가구 표시 정보를 즉시 복원하고 월 원장·카테고리·지역화폐의 Rules 보호 listener를 시작한다. cache miss에서만 `ResolveSignedInUser`를 동기 실행한다. Household 한 문서의 최신 서버 read는 listener와 병렬인 비차단 갱신이며 정규화 결과가 실제로 다를 때만 UI·cache를 교체한다. 월 원장·카테고리·지역화폐는 localStorage나 Firestore cache 값을 선표시하지 않고 첫 서버 snapshot부터 표시한다. Firestore Rules가 매 read의 active Membership을 권위 판정한다. `permission-denied`이면 bootstrap cache를 즉시 지우고 오류 listener를 종료한 뒤 같은 UID의 Membership 권위 해석을 하나로 병합하되 마지막 in-memory 화면은 저하 상태로 유지한다. Android token 복구와 병렬 실행하지 않고, 이 권위 해석의 transient transport 실패 동안에만 2~30초 backoff로 재시도한다. 같은 scope가 확인되면 새 cache를 저장하고 read epoch로 재연결하며, first visit·다른 scope이면 그때 이전 scope·화면·나머지 구독을 폐기한다. 정상 세션의 시간 기반·주기적 Membership 해석은 두지 않고, 공용 Command·Query와 endpoint 등록은 Auth·서버 Membership 인가에 수렴한다. App Check는 Native 결제 수집·세션 교환처럼 안정적으로 플랫폼 증명을 공급하는 진입점에서 추가 검증하며 `guest` fallback은 허용하지 않는다.
+- 로그아웃·Firebase UID 변경·가구/멤버 scope 전환은 이전 listener·요청·cache를 먼저 폐기하며 세대가 다른 늦은 callback은 화면·저장·endpoint 등록에 반영하지 않는다. UID 변경 뒤에는 새 UID의 cache hit/miss 절차를 적용한다.
 
 ### 3.4 원자성·재시도·부분 실패
 
@@ -162,10 +162,11 @@ flowchart LR
 - 현재 함수 이름과 배포 지역은 전환 중 Facade로 유지할 수 있다.
 - Gen1→Gen2, TypeScript target 변경, 폴더 재구성, 업무 로직 이전을 한 변경에 묶지 않는다.
 - 브라우저 Web·PWA·Android WebView의 Firestore 직접 접근은 명시적으로 공개한 읽기 계약에만 허용한다.
-- 모든 Web runtime의 월·연 원장 목록은 Ledger가 소유한 같은 Firestore Read Contract를 사용한다. 검증된 SessionScope의 `householdId`와 날짜 범위로 복합 index를 사용하는 실시간 listener를 열고, 거래 유형과 lifecycle 가시성은 Ledger Read Adapter가 동일하게 적용한다. Android Activity에서 WebView로 복귀할 때는 인증 갱신 제한과 별도의 Ledger 전용 읽기 epoch로 월 원장·연 원장·지역화폐 listener만 즉시 다시 연다. 자산·카테고리·통계 등 다른 Context의 read model은 이 epoch를 구독하지 않는다. 같은 scope의 마지막 서버 snapshot을 유지하여 빈 화면이나 오래된 cache snapshot으로 되돌아가지 않되, 재연결 실패는 저하 상태로 사용자에게 알린다.
+- 모든 Web runtime의 월·연 원장 목록은 Ledger가 소유한 같은 Firestore Read Contract를 사용한다. app shell이 소유한 월 원장은 `{sessionGeneration, householdId, year, month}` 단위의 실시간 원본 listener 하나로 지출과 수입을 함께 받고, 화면별 거래 유형은 메모리에서 파생한다. 같은 월의 지출↔수입 전환과 홈·자산·통계·설정 등 내부 route 이동은 listener 재생성이나 서버 재조회를 유발하지 않는다. 연·월 또는 SessionScope가 바뀌거나 로그아웃으로 scope가 끝날 때 월 원장 listener를 교체·종료한다. `permission-denied`로 listener가 종료되면 in-memory 원본은 유지하고 Session 권위 해석 결과가 같은 scope일 때 read epoch로 다시 연다. 지역화폐 최신 잔액 listener도 app shell에서 내부 route와 연·월 변경을 넘어 유지하며 `{sessionGeneration, householdId}` 변경·로그아웃 또는 자체 권한 오류에서만 종료하고 같은-scope 복구에서는 재연결한다. SessionScope의 `householdId`와 날짜 범위로 복합 index를 사용하고 거래 유형과 lifecycle 가시성은 Ledger Read Adapter가 동일하게 적용한다. Android Activity에서 WebView로 복귀할 때는 인증 갱신 제한과 별도의 Ledger 전용 읽기 epoch로 월 원장·연 원장·지역화폐 listener만 즉시 다시 연다. 자산·카테고리·통계 등 다른 Context의 read model은 이 epoch를 구독하지 않는다. 같은 scope의 마지막 서버 snapshot을 유지하여 빈 화면이나 오래된 cache snapshot으로 되돌아가지 않되, 재연결 실패는 저하 상태로 사용자에게 알린다.
 - 일반 자산 화면의 활성 명의자 디렉터리는 Access가 공개한 `assetOwnerProfiles` Firestore Read Contract를 사용한다. 로컬 캐시를 먼저 내보내는 실시간 listener로 표시하고, 생성·이름 변경·보관은 Access Command를 통과시키며 관리자·과거 해석용 archived 포함 조회만 서버 Query를 사용한다.
+- 자산 화면의 당일 전체·명의자별 변동은 명의자 수만큼 별도 조회하지 않는다. Portfolio의 `assetSnapshots/{localDate}` Read Contract에서 오늘 이전 최신 Canonical 요약 한 건을 읽고, 현재 자산 source snapshot과의 전체·안정 `profileId`별 차이를 Web 메모리에서 한 번에 파생한다. 명의자 이름은 표시값일 뿐 조회 key로 사용하지 않으며, 같은 날짜 안의 자산 변경은 추가 전일 조회 없이 메모리에서 재계산한다.
 - 원장·자산 변경은 인증된 Functions Command를 통과시키되 client는 Command 전송과 동시에 변경 필드와 예상 다음 `aggregateVersion`을 낙관적 Projection에 반영한다. 이 version 예측은 저장 직후 다시 열린 화면이 이미 진행 중인 자기 변경의 이전 version을 재사용하는 경쟁 조건을 막는다. 동일 Client의 같은 자산 수정·삭제가 선행 응답 전에 연속되면 화면 Projection은 모두 즉시 합성하고 서버 Command만 자산별 FIFO로 직렬화한다. 후속 Command는 선행 성공 version을 사용하며 선행 실패 시 미전송 후속 변경도 함께 rollback한다. 자산 재진입 cache는 표시 전용이므로 첫 권위 서버 snapshot 전 편집은 UI에 즉시 Projection하되 전송을 대기한다. 서버 version이 달라도 사용자가 편집을 시작한 원본과 최신 권위 상태를 필드별로 비교하여, 사용자가 실제로 바꾼 필드가 서버에서 먼저 바뀌지 않았을 때만 최소 patch를 최신 version에 안전하게 이어 붙인다. 같은 필드가 먼저 바뀐 stale 요청과 삭제 대상 내용이 달라진 요청은 conflict로 거부한다. 서버가 반환한 Canonical 결과와 실시간 snapshot으로 확정·수렴하고 typed rejection이나 version conflict에서는 해당 변경만 rollback한다. 낙관적 Projection은 화면 전용이며 재진입 snapshot·일일 합계 같은 영속 cache에는 서버 source snapshot만 기록한다. 변경 뒤 별도 기간 Query를 호출하거나 30초 polling으로 화면을 갱신하지 않는다.
-- Android에서는 Native Firebase Principal과 같은 UID의 Web Firebase Auth가 인증 권위다. 최초 설치·명시적 로그아웃 뒤에는 짧은 custom-token exchange를 사용하고, 이후 실행은 Web Auth local persistence와 마지막 검증 Membership 연결 정보를 복원해 반복 exchange·Membership callable을 줄인다. 가구·현재 월 원장·가구별 카테고리·지역화폐는 Auth observer 뒤 서버 read가 성공한 다음 표시하며 이전 화면 snapshot을 인증 대기 중 먼저 그리지 않는다. Command 모듈은 첫 화면의 정적 import에서 분리하고, App Check는 Native 결제 수집·세션 교환 callable 직전에 초기화한다.
+- Android에서는 Native Firebase Principal과 같은 UID의 Web Firebase Auth가 인증 권위다. 최초 설치·명시적 로그아웃 뒤에는 짧은 custom-token exchange를 사용하고, 이후 실행은 Web Auth local persistence와 같은 UID의 마지막 검증 Membership·Household metadata를 복원해 반복 exchange·Membership callable을 줄인다. cache hit이면 가구 metadata를 즉시 표시하고 월 원장·가구별 카테고리·지역화폐 listener를 시작하며, Household 한 문서 서버 refresh는 이를 막지 않는다. cache miss와 Rules `permission-denied`만 Membership 권위 해석을 실행하고 주기적 background 해석은 두지 않는다. 월 원장·카테고리·지역화폐는 서버 snapshot부터 표시한다. Command 모듈은 첫 화면의 정적 import에서 분리하고, App Check는 Native 결제 수집·세션 교환 callable 직전에 초기화한다.
 - Native Android 코드의 Domain 컬렉션 직접 읽기·쓰기는 최종적으로 제거한다. Android WebView 안의 Web runtime은 다른 Web runtime과 같은 공개 Firestore Read Contract만 사용한다.
 - 운영 artifact는 [배포 안전성](../requirements/supporting-platform/modules/delivery-assurance/requirements.md) gate가 명시적 Firebase project, 계약 호환 순서, Rules·index·test·smoke를 검증한 뒤에만 배포한다.
 
@@ -494,7 +495,7 @@ Command 모델과 화면 모델을 분리하되 모든 조회를 처음부터 �
 4. 예산·지출 통계·홈 요약은 요청 시 Canonical Query에서 계산하고 별도 영속 Projection을 만들지 않는다. 일일 자산 Snapshot·연간 배당처럼 생성 시점과 Writer가 명확한 조회 모델만 물리화한다.
 5. 홈 카드 configuration은 Preferences의 versioned Aggregate다. 모든 활성 가구원은 서로 다른 left·right 유형만 저장할 수 있고, 기존 중복 구성은 읽기 호환하되 자동 보정하지 않는다. 카드 구성과 선택 지역화폐 유형은 독립 필드이며 한 Command가 다른 필드를 암묵적으로 바꾸지 않는다.
 6. 물리 Projection은 Canonical 데이터가 아니며 재구축 가능해야 한다.
-7. client Query·listener는 `SessionScope`와 명시적 householdId를 받고 `sessionGeneration`이 바뀌면 취소·폐기한다. localStorage는 composition 경계에서 legacy claim, Membership 연결 정보, 별도 허용된 자산 재진입·종목 검색 cache에만 사용하며 가계부 첫 화면 데이터, Repository의 tenant 선택 또는 서버 권한 근거로 사용하지 않는다.
+7. client Query·listener는 `SessionScope`와 명시적 householdId를 받고 `sessionGeneration`이 바뀌면 취소·폐기한다. localStorage는 composition 경계에서 legacy claim, 같은 UID의 Membership·Household metadata bootstrap, 별도 허용된 자산 재진입·종목 검색 cache에만 사용한다. Household metadata는 즉시 표시할 수 있지만 월 원장·카테고리·지역화폐 payload, Repository의 독자적인 tenant 선택 또는 서버 권한 근거로 사용하지 않는다.
 8. 목록·검색·이력 Query는 서버 조건, 결정적 정렬, opaque cursor와 최대 page 크기를 가지며 전체 가구 데이터를 내려 client에서 필터링하지 않는다.
 9. `NoData`, 유효한 0, `Forbidden`, provider/query 실패를 typed 결과로 구분한다. 물리 Projection에서만 필요할 때 stale/rebuilding metadata를 추가한다.
 
@@ -758,7 +759,7 @@ ProcessRecurringMonthWorkflow(planId, YYYY-MM)
 
 Portfolio Context 안에서 자산 계정, Position, 자동화, 배당 기능 모듈을 분리한다. Position과 화면에 표시할 Asset valuation은 strong consistency를 선택하며 `RevalueAssetWorkflow`가, 자동화 execution과 Asset 변경은 `ApplyAssetAutomationWorkflow`가 각각 유일한 Unit of Work 소유자가 된다.
 
-1. 개별 자산 화면은 `RefreshAccountPrices`, 자산 메인 페이지 진입은 현재 가구의 `RefreshHouseholdPrices`, Scheduler Adapter는 매일 23:55 `Asia/Seoul`에 전체 active 가구의 `RunDailyAssetValuation`을 호출한다.
+1. 개별 자산 화면은 `RefreshAccountPrices`, 자산 메인 페이지 진입은 현재 가구의 `RefreshHouseholdPrices`, Scheduler Adapter는 매일 23:55 `Asia/Seoul`에 전체 active 가구의 `RunDailyAssetValuation`을 호출한다. 자산 메인 페이지는 마지막 자산·시세 Read Snapshot을 먼저 렌더링하고 Firestore의 첫 비캐시 서버 snapshot을 반영한 뒤에만 `RefreshHouseholdPrices`를 background로 시작한다.
 2. 전체 갱신은 사용자 보유 종목 수를 제한하지 않고 Quote target을 결정적 cursor로 최대 50개씩 끝까지 처리한다. 같은 가구·범위의 30초 내 요청은 single-flight run을 재사용한다.
 3. Market Data Adapter가 외부 시세를 `Success`, `NoData`, `RetryableFailure`, `ContractFailure`, `InvalidData`로 정규화한다. 한 run의 Provider 동시 호출은 최대 5개, 요청 timeout은 10초, retryable 실패는 최대 2회 추가 재시도한다.
 4. 외화 Position의 원 통화 Quote와 통화쌍별 환율 관측은 독립적으로 최신 성공값을 보존한다. DEC-053·DEC-060의 `ForeignCurrencyValuationPolicy`는 Frankfurter v2의 마지막 성공 환율을 경과 기간과 두 관측 시각 차이 상한 없이 조합하며, 환율 최초 부재는 임의값 없이 NoData로 둔다. 네이버 HTML·보조 공급자 fallback은 두지 않는다.
@@ -1007,7 +1008,7 @@ market-catalog/v1/latest.json                              # Holdings; 검증 �
 market-catalog/v1/snapshots/{asOfDate}/{version}.json.gz  # Holdings; 최근 성공 3일치 immutable catalog
 ```
 
-[DEC-035](../requirements/governance/decisions.md#dec-035)에 따라 Web의 종목 검색 read model은 이 snapshot을 단일 원본으로 동기화해 IndexedDB와 기기 메모리에 캐시하고, 타이핑 검색을 로컬에서 수행한다. cache는 목표 데이터 모델이 아니며 삭제되더라도 Storage에서 다시 구성할 수 있어야 한다. 저장소 번들 `stocks.json`, Firestore 복제 catalog, Redis는 목표 구조에 두지 않는다. 시세 조회와 자산 변경은 계속 인증된 서버 Use Case를 통과한다.
+[DEC-035](../requirements/governance/decisions.md#dec-035)에 따라 Web의 종목 검색 read model은 이 snapshot을 단일 원본으로 동기화해 IndexedDB와 기기 메모리에 캐시하고, 타이핑 검색을 로컬에서 수행한다. 카탈로그 동기화는 앱 첫 화면의 선행 조건이 아니며 자산 페이지 첫 paint 뒤 background에서 시작한다. cache는 목표 데이터 모델이 아니며 삭제되더라도 Storage에서 다시 구성할 수 있어야 한다. 저장소 번들 `stocks.json`, Firestore 복제 catalog, Redis는 목표 구조에 두지 않는다. 시세 조회와 자산 변경은 계속 인증된 서버 Use Case를 통과한다.
 
 핵심 규칙:
 
@@ -1019,7 +1020,7 @@ market-catalog/v1/snapshots/{asOfDate}/{version}.json.gz  # Holdings; 최근 성
 - Asset의 `ownerRef`는 `{kind:'household'}` 또는 `{kind:'profile', profileId}`만 허용한다. 도넛 그래프 필터는 `전체 / 활성 명의자들 / +`를 표시하고 `+`는 dependent 프로필 생성으로 연결한다.
 - [DEC-021](../requirements/governance/decisions.md#dec-021)에 따라 신규 진입은 Google 로그인만 허용한다. 첫 방문자는 새 가계부+자기 Member를 만들거나 5분 일회용 코드로 가입하면서 자기 Member를 만든다.
 - 기존 localStorage householdKey·currentMemberId는 첫 로그인 `ClaimLegacyMembership`에만 사용하고 성공 뒤 legacy 로그인 상태를 제거한다. 기존 householdId·memberId와 모든 업무 데이터는 유지한다.
-- 인증 완료 뒤 Web·Android의 client state는 `SessionScope` 전체를 한 번에 교체·삭제한다. cache·listener·endpoint 등록에는 sessionGeneration을 포함하고 이전 세대 callback을 폐기한다.
+- 인증 완료 뒤 Web·Android의 client state는 `SessionScope` 전체를 한 번에 교체·삭제한다. app shell의 원장·카테고리·지역화폐 listener와 cache·endpoint 등록에는 sessionGeneration을 포함하고 이전 세대 callback을 폐기한다. 내부 route 이동은 이 세대를 바꾸지 않는다.
 - [DEC-019](../requirements/governance/decisions.md#dec-019)에 따라 Android·PWA는 FID 등록 API만 사용하고 FCM Adapter는 `fid`·`fids`로 직접 전송한다. registration token API와 fallback은 목표 구조에 두지 않는다.
 - [DEC-020](../requirements/governance/decisions.md#dec-020)에 따라 한 멤버는 Android·iPhone 홈 화면 PWA endpoint를 여러 개 가질 수 있고, endpoint 하나는 현재 household/member 하나에만 연결한다. 데스크톱은 등록하지 않는다.
 - [DEC-038](../requirements/governance/decisions.md#dec-038)에 따라 제거된 Membership은 endpoint cleanup 지연과 무관하게 recipient 계산과 FCM 호출 직전 모두 제외하고, 복구해도 과거 endpoint를 되살리지 않는다.
@@ -1157,7 +1158,7 @@ Android 금융 알림 원문 형식은 Functions의 Android Raw Adapter parser�
 - FCM FID와 금융 원문을 일반 로그에 남기지 않는다.
 - 잠금 화면 QuickEdit 정보 노출은 DEC-024의 `SensitiveOverlayPolicy`로 허용하되 keyguard 유지, Activity non-exported, 유효 거래 ID·현재 session 조건을 강제한다. DEC-045에 따라 `FLAG_SECURE`와 별도 최근 앱 마스킹은 적용하지 않아 사용자 화면 캡처를 허용하며, 앱 로그 민감값 금지는 유지한다.
 - Android cloud backup·device transfer는 Firebase Installation persistence, legacy 가구 키, 인증/session mirror, WebView 보호 저장소, 암호화 Queue와 key material을 제외한다. 복원된 앱은 이전 Actor/FID binding을 상속하지 않는다.
-- PWA·CDN runtime cache는 navigation HTML, 인증 응답, 가구·금융 API와 session 데이터를 저장하지 않는다. DEC-051에 따라 현재 build hash 정적 asset과 공개 비민감 아이콘·폰트·이미지만 최대 7일 허용하고 임의 cross-origin 응답은 cache하지 않는다. DEC-068의 first-party localStorage에는 UID·Membership 연결 정보와 별도 허용된 자산·자산 명의자 재진입 snapshot을 둘 수 있지만 가구·현재 월 원장·카테고리·지역화폐 첫 화면 snapshot은 두지 않는다. 어떤 cache도 서버 권한 근거로 사용하지 않으며 로그아웃·SessionScope 불일치·권위 거부 뒤 재사용하지 않는다.
+- PWA·CDN runtime cache는 navigation HTML, 인증 응답, 가구·금융 API와 session 데이터를 저장하지 않는다. DEC-051에 따라 현재 build hash 정적 asset과 공개 비민감 아이콘·폰트·이미지만 최대 7일 허용하고 임의 cross-origin 응답은 cache하지 않는다. DEC-068의 first-party localStorage에는 같은 UID의 Membership 연결·Household 표시 metadata bootstrap과 별도 허용된 자산·자산 명의자 재진입 snapshot을 둘 수 있지만 현재 월 원장·카테고리·지역화폐 payload는 두지 않는다. 어떤 cache도 서버 권한 근거로 사용하지 않으며 로그아웃·SessionScope 불일치·`permission-denied` 뒤 재사용하지 않는다.
 
 ### 13.4 외부 HTTP와 브라우저 경계
 
@@ -1446,7 +1447,7 @@ CI에서 자동으로 실패시킨다.
 - 하나의 Canonical collection에 둘 이상의 Command Writer 등록
 - 공통 `OutboxAppendPort`를 우회한 Outbox Firestore write 또는 append 뒤 Event envelope 수정
 - 하나의 `eventType + eventVersion`에 둘 이상의 producer 기능 등록
-- Web feature/service에서 localStorage·`getStoredHouseholdKey`로 서버 tenant를 직접 결정하거나 `guest` fallback 사용. composition 경계의 legacy claim, Membership 연결 정보와 별도 허용된 자산 재진입 cache는 예외지만, 가계부 첫 화면과 보호 요청은 반드시 서버 read·검증된 SessionScope를 사용한다.
+- Web feature/service에서 localStorage·`getStoredHouseholdKey`로 서버 tenant를 직접 결정하거나 `guest` fallback 사용. composition 경계의 legacy claim, Firebase UID와 일치하는 Membership·Household metadata bootstrap과 별도 허용된 자산 재진입 cache는 예외지만, 보호 read는 반드시 그 SessionScope와 Firestore Rules 검증을 사용하고 `permission-denied` 뒤 cache를 유지하지 않는다.
 - 일반 client bundle에서 migration·repair·sample canonical writer export
 - 공급자 Adapter가 `SafeExternalHttpClientPort`를 우회해 임의 URL fetch
 - 인증·가구·금융 응답을 PWA runtime cache 대상으로 등록하거나 Android backup 제외 규칙 누락

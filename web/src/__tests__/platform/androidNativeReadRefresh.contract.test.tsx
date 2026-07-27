@@ -1,6 +1,15 @@
 import { act, render } from '@testing-library/react';
 
 const recoverRemoteSession = jest.fn().mockResolvedValue(undefined);
+const mockRoutePrefetch = jest.fn();
+const mockScheduleAfterWebFirstLedgerPaint = jest.fn((
+  _task: () => void,
+  _options?: { delayAfterPaintMs?: number; idleTimeoutMs?: number }
+) => jest.fn());
+
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ prefetch: mockRoutePrefetch }),
+}));
 
 jest.mock('@/contexts/HouseholdContext', () => ({
   HouseholdProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -26,7 +35,10 @@ jest.mock('@/composition/clientSessionScope', () => ({
 }));
 
 jest.mock('@/platform/performance/webStartupPerformance', () => ({
-  scheduleAfterWebFirstLedgerPaint: () => jest.fn(),
+  scheduleAfterWebFirstLedgerPaint: (
+    task: () => void,
+    options?: { delayAfterPaintMs?: number; idleTimeoutMs?: number }
+  ) => mockScheduleAfterWebFirstLedgerPaint(task, options),
 }));
 
 jest.mock('@/composition/ledgerMutationRuntimePreload', () => ({
@@ -83,5 +95,26 @@ describe('Android native 복귀 원격 읽기 갱신 계약', () => {
       window.dispatchEvent(new Event('household-account:android-resume'));
     });
     expect(recoverRemoteSession).not.toHaveBeenCalled();
+  });
+
+  it('첫 원장 paint 이후 idle 작업으로 주요 내부 route를 미리 받는다', () => {
+    const view = render(<AuthenticatedPlatformEffects />);
+    const routePrefetchTask = mockScheduleAfterWebFirstLedgerPaint.mock.calls
+      .find(([, options]) => options?.idleTimeoutMs === 10_000)?.[0];
+
+    expect(routePrefetchTask).toBeDefined();
+    expect(mockRoutePrefetch).not.toHaveBeenCalled();
+
+    act(() => {
+      routePrefetchTask?.();
+    });
+    expect(mockRoutePrefetch.mock.calls.map(([route]) => route)).toEqual([
+      '/income',
+      '/assets',
+      '/settings',
+      '/stats',
+    ]);
+
+    view.unmount();
   });
 });

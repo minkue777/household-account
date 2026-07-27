@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { CategoryProvider } from '@/contexts/CategoryContext';
 import { HouseholdProvider } from '@/contexts/HouseholdContext';
@@ -30,6 +31,13 @@ const NATIVE_SESSION_SYNC_DELAY_AFTER_LEDGER_MS = 30_000;
 const NATIVE_SESSION_SYNC_IDLE_TIMEOUT_MS = 30_000;
 const VISIT_TELEMETRY_DELAY_AFTER_LEDGER_MS = 30_000;
 const VISIT_TELEMETRY_IDLE_TIMEOUT_MS = 30_000;
+const ROUTE_PREFETCH_IDLE_TIMEOUT_MS = 10_000;
+const POST_LEDGER_PREFETCH_ROUTES = [
+  '/income',
+  '/assets',
+  '/settings',
+  '/stats',
+] as const;
 
 function RetiredHomeReadSnapshotCleanup() {
   useEffect(() => {
@@ -161,6 +169,7 @@ const NATIVE_SESSION_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1_000;
 const ANDROID_WEB_AUTH_REFRESH_INTERVAL_MS = 15 * 60 * 1_000;
 
 export function AuthenticatedPlatformEffects() {
+  const router = useRouter();
   const {
     sessionState,
     isSessionVerified,
@@ -302,6 +311,21 @@ export function AuthenticatedPlatformEffects() {
     recoverRemoteSession,
     sessionState,
   ]);
+
+  useEffect(() => {
+    if (sessionState !== 'ready' || adminHouseholdView !== null) return;
+
+    return scheduleAfterWebFirstLedgerPaint(
+      () => {
+        for (const route of POST_LEDGER_PREFETCH_ROUTES) {
+          router.prefetch(route);
+        }
+      },
+      {
+        idleTimeoutMs: ROUTE_PREFETCH_IDLE_TIMEOUT_MS,
+      }
+    );
+  }, [adminHouseholdView, router, sessionState]);
 
   useEffect(() => {
     if (sessionState !== 'ready' || adminHouseholdView !== null) return;

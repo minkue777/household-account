@@ -1,5 +1,6 @@
 const mockOnSnapshot = jest.fn();
 const mockGetDocFromServer = jest.fn();
+const mockWhere = jest.fn((...args: unknown[]) => ({ kind: 'where', args }));
 
 jest.mock('@/platform/read-model/firestoreReadModel', () => ({
   db: { kind: 'db' },
@@ -7,7 +8,7 @@ jest.mock('@/platform/read-model/firestoreReadModel', () => ({
   doc: jest.fn((...segments: unknown[]) => ({ kind: 'document', segments })),
   getDocFromServer: (...args: unknown[]) => mockGetDocFromServer(...args),
   query: jest.fn((...constraints: unknown[]) => ({ kind: 'query', constraints })),
-  where: jest.fn((...args: unknown[]) => ({ kind: 'where', args })),
+  where: (...args: unknown[]) => mockWhere(...args),
   orderBy: jest.fn((...args: unknown[]) => ({ kind: 'orderBy', args })),
   onSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
   timestampToDate: (value: unknown) => value instanceof Date ? value : undefined,
@@ -26,16 +27,17 @@ jest.mock('@/composition/clientSessionScope', () => ({
 jest.mock('@/features/ledger/application/ledgerOptimisticProjection', () => ({
   ledgerOptimisticProjection: {
     subscribe: (
-      callback: (items: unknown[]) => void
+      callback: (items: unknown[]) => void,
+      predicate: (item: unknown) => boolean
     ) => ({
-      publish: callback,
+      publish: (items: unknown[]) => callback(items.filter(predicate)),
       dispose: jest.fn(),
     }),
   },
 }));
 
 import { subscribeToCategories } from '@/lib/categoryService';
-import { subscribeToMonthlyExpenses } from '@/lib/expenseService';
+import { subscribeToMonthlyTransactions } from '@/lib/expenseService';
 import { getHousehold } from '@/lib/householdService';
 
 function listenerArguments() {
@@ -53,11 +55,12 @@ describe('가계부 첫 화면 server-first 조회 계약', () => {
     mockOnSnapshot.mockReset();
     mockOnSnapshot.mockReturnValue(jest.fn());
     mockGetDocFromServer.mockReset();
+    mockWhere.mockClear();
   });
 
-  it('월 원장은 Firestore cache snapshot을 표시하지 않고 서버 snapshot부터 방출한다', () => {
+  it('월 원장은 지출과 수입을 하나로 구독하고 cache가 아닌 서버 snapshot부터 방출한다', () => {
     const callback = jest.fn();
-    subscribeToMonthlyExpenses(2026, 7, callback, { transactionType: 'expense' });
+    subscribeToMonthlyTransactions(2026, 7, callback);
     const { options, next } = listenerArguments();
 
     expect(options).toEqual({ includeMetadataChanges: true });
@@ -89,11 +92,36 @@ describe('가계부 첫 화면 server-first 조회 계약', () => {
           amount: 2_000,
           category: 'etc',
         }),
+      }, {
+        id: 'server-income',
+        data: () => ({
+          householdId: 'household-1',
+          date: '2026-07-25',
+          time: '09:00',
+          merchant: '급여',
+          amount: 3_000_000,
+          category: 'income',
+          transactionType: 'income',
+        }),
       }],
     });
     expect(callback).toHaveBeenLastCalledWith([
-      expect.objectContaining({ id: 'server-expense', merchant: '최신 값' }),
+      expect.objectContaining({
+        id: 'server-expense',
+        merchant: '최신 값',
+        transactionType: 'expense',
+      }),
+      expect.objectContaining({
+        id: 'server-income',
+        merchant: '급여',
+        transactionType: 'income',
+      }),
     ]);
+    expect(mockWhere).not.toHaveBeenCalledWith(
+      'transactionType',
+      '==',
+      expect.anything()
+    );
   });
 
   it('가구 이름과 구성도 cache가 아닌 서버 document에서 읽는다', async () => {

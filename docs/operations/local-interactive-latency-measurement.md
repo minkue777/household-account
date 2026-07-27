@@ -58,9 +58,9 @@ performance.getEntriesByType('mark')
 | `household-account:startup:duration:first-ledger-paint` | HouseholdContext 모듈 평가 뒤부터 원장 paint까지. 업무 bootstrap 구간 분리용 |
 | `household-account:startup:duration:auth` | Firebase Auth 복원 |
 | `household-account:startup:duration:membership` | cache를 쓰지 않은 Membership 권위 조회 |
-| `household-account:startup:duration:household` | 가구 read model 권위 조회 |
+| `household-account:startup:duration:household` | cache hit 뒤 업무 구독과 병렬인 Household one-doc metadata refresh |
 
-`membership-cache:hit`, `household-cache:hit`, `ledger-cache:hit`가 있으면 해당 화면은 로컬 표시 hint를 사용한 것입니다. 새 탭의 첫 실행, 완전 종료 뒤 재실행, localStorage 삭제 뒤 실행을 구분하여 각각 최소 10회 기록합니다. DevTools의 Disable cache는 정적 리소스 실험에만 사용하고 화면 snapshot cache 실험과 섞지 않습니다.
+`membership-cache:hit`와 `household-cache:hit`는 같은 UID의 Session bootstrap 및 Household metadata를 즉시 복원했다는 뜻입니다. `ledger-cache:hit`는 첫 화면 정책상 기대하지 않으며 원장·카테고리·지역화폐는 서버 snapshot부터 표시해야 합니다. 새 탭의 첫 실행, 완전 종료 뒤 재실행, localStorage 삭제 뒤 실행을 구분하여 각각 최소 10회 기록합니다. DevTools의 Disable cache는 정적 리소스 실험에만 사용하고 화면 snapshot cache 실험과 섞지 않습니다.
 
 Android 실제 단말의 WebView는 debug APK에서만 원격 디버깅을 허용합니다. USB 디버깅으로 단말을 연결하고 PC Chrome의 `chrome://inspect/#devices`에서 가계부 WebView를 선택한 뒤 같은 Console 식을 실행합니다. release APK에서는 이 경로를 열지 않습니다. iPhone PWA는 Mac의 Safari Web Inspector가 있어야 같은 방식으로 확인할 수 있으므로, Windows 로컬 계측만으로 iPhone 실기기 결과를 대신하지 않습니다.
 

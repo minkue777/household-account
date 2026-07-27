@@ -11,30 +11,32 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { usePathname } from 'next/navigation';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { ANDROID_NATIVE_RESUME_EVENT } from '@/platform/android-host/androidLifecycleEvents';
 import type { LocalCurrencyBalance } from '@/lib/balanceService';
 import type { Expense, TransactionType } from '@/types/expense';
 
-interface LedgerQuery {
+interface LedgerPeriod {
   readonly year: number;
   readonly month: number;
+}
+
+interface LedgerQuery extends LedgerPeriod {
   readonly transactionType: TransactionType;
 }
 
 type LedgerReadStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 interface LedgerReadModelContextValue {
-  readonly activeQuery: LedgerQuery;
+  readonly activePeriod: LedgerPeriod;
   readonly sourceHouseholdId: string | null;
-  readonly expenses: Expense[];
+  readonly transactions: Expense[];
   readonly status: LedgerReadStatus;
   readonly error: unknown;
   readonly localCurrencyBalance: LocalCurrencyBalance | null;
   readonly localCurrencyStatus: LedgerReadStatus;
   readonly readRefreshKey: string;
-  selectQuery(query: LedgerQuery): void;
+  selectPeriod(period: LedgerPeriod): void;
 }
 
 interface LedgerReadModelView {
@@ -51,23 +53,17 @@ const LedgerReadModelContext = createContext<LedgerReadModelContextValue | undef
   undefined
 );
 
-function currentQuery(pathname: string): LedgerQuery {
+function currentPeriod(): LedgerPeriod {
   const now = new Date();
   return {
     year: now.getFullYear(),
     month: now.getMonth() + 1,
-    transactionType: pathname === '/income' ? 'income' : 'expense',
   };
 }
 
-function sameQuery(left: LedgerQuery, right: LedgerQuery): boolean {
+function samePeriod(left: LedgerPeriod, right: LedgerPeriod): boolean {
   return left.year === right.year
-    && left.month === right.month
-    && left.transactionType === right.transactionType;
-}
-
-function isLedgerRoute(pathname: string): boolean {
-  return pathname === '/' || pathname === '/income';
+    && left.month === right.month;
 }
 
 /**
@@ -77,17 +73,14 @@ function isLedgerRoute(pathname: string): boolean {
  * snapshot을 표시하지 않으면서도 두 원격 왕복이 직렬화되지 않습니다.
  */
 export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
   const {
     householdKey,
     isSessionVerified,
     remoteReadEpoch = 0,
   } = useHousehold();
-  const [activeQuery, setActiveQuery] = useState<LedgerQuery>(() =>
-    currentQuery(pathname)
-  );
+  const [activePeriod, setActivePeriod] = useState<LedgerPeriod>(currentPeriod);
   const [sourceHouseholdId, setSourceHouseholdId] = useState<string | null>(null);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [transactions, setTransactions] = useState<Expense[]>([]);
   const [status, setStatus] = useState<LedgerReadStatus>('idle');
   const [error, setError] = useState<unknown>(null);
   const [localCurrencyBalance, setLocalCurrencyBalance] =
@@ -99,26 +92,18 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
   const readyQueryRef = useRef<string | null>(null);
   const balanceHouseholdRef = useRef<string | null>(null);
 
-  const selectQuery = useCallback((nextQuery: LedgerQuery) => {
-    if (sameQuery(activeQuery, nextQuery)) return;
+  const selectPeriod = useCallback((nextPeriod: LedgerPeriod) => {
+    if (samePeriod(activePeriod, nextPeriod)) return;
     readyQueryRef.current = null;
-    setExpenses([]);
+    setTransactions([]);
     setStatus('loading');
     setError(null);
-    setActiveQuery(nextQuery);
-  }, [activeQuery]);
-
-  useLayoutEffect(() => {
-    if (!isLedgerRoute(pathname)) return;
-    const expectedType: TransactionType = pathname === '/income' ? 'income' : 'expense';
-    if (activeQuery.transactionType === expectedType) return;
-    selectQuery({ ...activeQuery, transactionType: expectedType });
-  }, [activeQuery, pathname, selectQuery]);
+    setActivePeriod(nextPeriod);
+  }, [activePeriod]);
 
   useEffect(() => {
     if (
-      !isLedgerRoute(pathname)
-      || !isSessionVerified
+      !isSessionVerified
       || !householdKey
     ) return undefined;
 
@@ -129,20 +114,19 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener(ANDROID_NATIVE_RESUME_EVENT, handleNativeResume);
     };
-  }, [householdKey, isSessionVerified, pathname]);
+  }, [householdKey, isSessionVerified]);
 
   const readRefreshKey = `${remoteReadEpoch}:${nativeResumeEpoch}`;
 
   useEffect(() => {
     if (
-      !isLedgerRoute(pathname)
-      || !isSessionVerified
+      !isSessionVerified
       || !householdKey
     ) {
       sourceHouseholdRef.current = null;
       readyQueryRef.current = null;
       setSourceHouseholdId(null);
-      setExpenses([]);
+      setTransactions([]);
       setStatus('idle');
       setError(null);
       return undefined;
@@ -153,32 +137,30 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
     const householdChanged = sourceHouseholdRef.current !== householdKey;
     const readQueryKey = [
       householdKey,
-      activeQuery.year,
-      activeQuery.month,
-      activeQuery.transactionType,
+      activePeriod.year,
+      activePeriod.month,
     ].join('\u0000');
     const preserveCurrentRead = readyQueryRef.current === readQueryKey;
     sourceHouseholdRef.current = householdKey;
     setSourceHouseholdId(householdKey);
-    if (householdChanged) setExpenses([]);
+    if (householdChanged) setTransactions([]);
     if (!preserveCurrentRead) setStatus('loading');
     setError(null);
 
     void import('@/lib/expenseService')
-      .then(({ subscribeToMonthlyExpenses }) => {
+      .then(({ subscribeToMonthlyTransactions }) => {
         if (cancelled) return;
-        unsubscribe = subscribeToMonthlyExpenses(
-          activeQuery.year,
-          activeQuery.month,
-          (nextExpenses) => {
+        unsubscribe = subscribeToMonthlyTransactions(
+          activePeriod.year,
+          activePeriod.month,
+          (nextTransactions) => {
             if (cancelled) return;
             readyQueryRef.current = readQueryKey;
-            setExpenses(nextExpenses);
+            setTransactions(nextTransactions);
             setStatus('ready');
             setError(null);
           },
           {
-            transactionType: activeQuery.transactionType,
             onError: (readError) => {
               if (cancelled) return;
               if (!preserveCurrentRead) setStatus('error');
@@ -198,19 +180,16 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
       unsubscribe?.();
     };
   }, [
-    activeQuery.month,
-    activeQuery.transactionType,
-    activeQuery.year,
+    activePeriod.month,
+    activePeriod.year,
     householdKey,
     isSessionVerified,
-    pathname,
     readRefreshKey,
   ]);
 
   useEffect(() => {
     if (
-      pathname !== '/'
-      || !isSessionVerified
+      !isSessionVerified
       || !householdKey
     ) {
       balanceHouseholdRef.current = null;
@@ -252,26 +231,26 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       unsubscribe?.();
     };
-  }, [householdKey, isSessionVerified, pathname, readRefreshKey]);
+  }, [householdKey, isSessionVerified, readRefreshKey]);
 
   const value = useMemo<LedgerReadModelContextValue>(() => ({
-    activeQuery,
+    activePeriod,
     sourceHouseholdId,
-    expenses,
+    transactions,
     status,
     error,
     localCurrencyBalance,
     localCurrencyStatus,
     readRefreshKey,
-    selectQuery,
+    selectPeriod,
   }), [
-    activeQuery,
+    activePeriod,
     error,
-    expenses,
+    transactions,
     localCurrencyBalance,
     localCurrencyStatus,
     readRefreshKey,
-    selectQuery,
+    selectPeriod,
     sourceHouseholdId,
     status,
   ]);
@@ -292,17 +271,26 @@ export function useLedgerReadModel(query: LedgerQuery): LedgerReadModelView {
     );
   }
 
-  const { selectQuery } = context;
+  const { selectPeriod } = context;
   useLayoutEffect(() => {
-    selectQuery(query);
-  }, [query.month, query.transactionType, query.year, selectQuery]);
+    selectPeriod(query);
+  }, [query.month, query.year, selectPeriod]);
 
   const matches =
     context.sourceHouseholdId === householdKey
-    && sameQuery(context.activeQuery, query);
+    && samePeriod(context.activePeriod, query);
+  const expenses = useMemo(
+    () => matches
+      ? context.transactions.filter(
+          (transaction) =>
+            (transaction.transactionType ?? 'expense') === query.transactionType
+        )
+      : [],
+    [context.transactions, matches, query.transactionType]
+  );
 
   return {
-    expenses: matches ? context.expenses : [],
+    expenses,
     isLoading: !matches || context.status === 'idle' || context.status === 'loading',
     serverSnapshotReady: matches && context.status === 'ready',
     readError: matches ? context.error : null,

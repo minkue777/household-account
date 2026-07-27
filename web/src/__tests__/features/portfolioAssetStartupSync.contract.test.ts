@@ -159,6 +159,28 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
     jest.useRealTimers();
   });
 
+  test('자산 구독은 캐시와 서버 snapshot을 구분해 후속 시세 갱신 시점을 결정하게 한다', () => {
+    const sources: boolean[] = [];
+    const unsubscribe = subscribeToAssets(
+      () => undefined,
+      [asset()],
+      (_assets, metadata) => sources.push(metadata.fromCache)
+    );
+    const { next } = listenerArguments();
+
+    next({
+      metadata: { fromCache: true },
+      docs: [snapshotAsset(asset())],
+    });
+    next({
+      metadata: { fromCache: false },
+      docs: [snapshotAsset(asset())],
+    });
+
+    expect(sources).toEqual([true, false]);
+    unsubscribe();
+  });
+
   test('cached 자산은 즉시 보여주되 첫 server snapshot 전 수정 명령은 보내지 않고 안전하게 rebase한다', async () => {
     const rendered: Asset[][] = [];
     const unsubscribe = subscribeToAssets(

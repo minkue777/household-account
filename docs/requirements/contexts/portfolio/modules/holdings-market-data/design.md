@@ -308,7 +308,7 @@ Position write가 성공하고 Asset write가 실패한 상태, 또는 그 반�
 
 transaction callback 재실행은 Provider를 다시 호출하지 않습니다. 공급자 실패가 전부이면 Position·Asset Canonical write 없이 실패 결과만 반환하지만, transaction 밖의 운영 log·Health 상태·필요한 경보는 반드시 남깁니다.
 
-`RefreshAccountPrices`는 개별 자산 수동 갱신, `RefreshHouseholdPrices`는 다른 화면에서 자산 메인 페이지로 진입할 때의 전체 갱신입니다. 화면은 마지막 자산 Read Model과 같은 날짜의 가구별 일간 변동 snapshot을 먼저 렌더링하고, 진입 갱신은 이를 막지 않는 background 작업으로 한 번만 시작합니다. 페이지 체류 중 30초 반복과 visibility 복귀 갱신은 하지 않습니다. 같은 화면의 중복 mount는 client single-flight로 한 요청에 합치고, 서버에서도 같은 가구·범위의 30초 내 요청을 실행 중이거나 직전에 완료된 동일 run으로 재사용합니다. 이 30초 window는 반복 주기가 아니라 중복 Provider fan-out 방지 경계입니다. 전체 갱신은 target 총수 상한 없이 서로 다른 Quote target을 50개씩 page 처리하고, 한 run에서 외부 호출 최대 5개·요청당 timeout 10초·retryable 결과 총 3회 제한을 적용합니다.
+`RefreshAccountPrices`는 개별 자산 수동 갱신, `RefreshHouseholdPrices`는 다른 화면에서 자산 메인 페이지로 진입할 때의 전체 갱신입니다. 화면은 마지막 자산 Read Model과 같은 날짜의 가구별 일간 변동 snapshot을 먼저 렌더링합니다. Firestore listener의 캐시 응답은 즉시 표시할 수 있지만 진입 갱신의 시작 신호로 사용하지 않으며, 첫 비캐시 서버 snapshot이 화면 상태에 반영된 다음 `RefreshHouseholdPrices`를 막지 않는 background 작업으로 한 번만 시작합니다. 페이지 체류 중 30초 반복과 visibility 복귀 갱신은 하지 않습니다. 같은 화면의 중복 mount는 client single-flight로 한 요청에 합치고, 서버에서도 같은 가구·범위의 30초 내 요청을 실행 중이거나 직전에 완료된 동일 run으로 재사용합니다. 이 30초 window는 반복 주기가 아니라 중복 Provider fan-out 방지 경계입니다. 전체 갱신은 target 총수 상한 없이 서로 다른 Quote target을 50개씩 page 처리하고, 한 run에서 외부 호출 최대 5개·요청당 timeout 10초·retryable 결과 총 3회 제한을 적용합니다.
 
 ### 5.3 `RunDailyAssetValuation`
 
@@ -335,6 +335,15 @@ Application 내부에서 50개 page·동시성 5·retryable 결과 총 3회로 �
 
 `ListHoldings`는 `(instrument.market, instrument.code, positionId)`의 결정 정렬과 opaque cursor를 사용합니다. `QueryPositionHistory(aroundDate)`는 보존된 snapshot을 `snapshotDate ASC, observedAt ASC, sourceVersion ASC`로 page 조회하며 현재 Canonical Position도 조회 시점 날짜의 후보로 포함할 수 있습니다. Holdings는 과거 수량을 자체 추정하지 않고 날짜·수량·observedAt·source version 사실만 반환합니다. Dividends가 [DEC-014](../../../../governance/decisions.md#dec-014)의 최근접 날짜, 이전 날짜 동률 우선, 선택 날짜의 최종 관찰 규칙을 소유합니다.
 
+자산 메인 화면의 당일 변동 Read Adapter는
+`households/{householdId}/assetSnapshots`에서 `localDate < 오늘`인 최신 문서를
+`localDate DESC, limit 1`로 한 번만 읽습니다. 해당 Canonical 문서의 `total`과
+`byOwnerRefKey`를 전일 기준값으로 사용하고, 현재 활성 Asset source snapshot의
+전체·`profile:{profileId}`별 합계와의 차이는 Web Application에서 함께 계산합니다.
+명의자별 `asset_history` 조회, 표시 이름 기반 N회 조회, 같은 날짜의 자산 변경마다
+전일 문서를 다시 읽는 동작은 금지합니다. 전일 기준 문서가 없거나 새 명의자의
+전일 key가 없으면 해당 참고 변동값은 0원입니다.
+
 ### 5.5 `PublishInstrumentCatalog`와 기기 검색 read model
 
 1. 06:00 Scheduler가 국내·미국 catalog source를 호출하고 Provider DTO를 `InstrumentRefV1` 집합으로 정규화합니다.
@@ -342,7 +351,7 @@ Application 내부에서 50개 page·동시성 5·retryable 결과 총 3회로 �
 3. `market-catalog/v1/snapshots/{asOfDate}/{catalogVersion}.json.gz` immutable 객체를 업로드하고 다시 metadata·checksum을 검증합니다.
 4. 검증된 객체를 가리키는 `market-catalog/v1/latest.json` manifest를 generation precondition으로 교체합니다. 검색은 이 단계 전 snapshot을 보지 않습니다.
 5. manifest 교체 성공 뒤 서로 다른 최근 성공일 3개의 일별 snapshot만 남기고 이전 객체를 정리합니다. 같은 성공일의 멱등 재실행은 보존 개수를 늘리지 않습니다. 실패한 run은 기존 manifest와 snapshot을 유지합니다.
-6. Web의 `LocalStockInstrumentCatalog`는 IndexedDB의 검증된 마지막 snapshot을 먼저 읽어 검색 인덱스를 메모리에 구성합니다. 자산 페이지 진입 시 이를 미리 시작하며, cache hit 검색은 원격 manifest 응답을 기다리지 않습니다.
+6. Web의 `LocalStockInstrumentCatalog`는 IndexedDB의 검증된 마지막 snapshot을 먼저 읽어 검색 인덱스를 메모리에 구성합니다. 앱 첫 가계부 화면에서는 시작하지 않고, 자산 페이지가 첫 paint를 마친 뒤 background에서 미리 시작합니다. cache hit 검색은 원격 manifest 응답을 기다리지 않습니다.
 7. 원격 manifest는 최대 5분 간격으로 백그라운드 확인합니다. generation·checksum이 기존 snapshot과 같으면 다운로드하지 않고, 바뀐 경우에만 압축 snapshot을 받습니다.
 8. 새 snapshot은 허용된 `market-catalog/v1/snapshots/{date}/v1.json.gz` 경로, object generation, SHA-256, schemaVersion, catalogVersion, asOfDate, itemCount와 모든 instrument 필드를 검증한 뒤 IndexedDB와 메모리 reference를 교체합니다.
 9. 원격 갱신 실패 시 검증된 기기 cache가 있으면 그대로 검색합니다. 기기에 snapshot이 전혀 없는 최초 동기화 실패만 `INSTRUMENT_CATALOG_*` 실패이며 빈 성공으로 바꾸지 않습니다.

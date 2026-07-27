@@ -240,10 +240,11 @@ Event는 실제 최신값이 created/updated일 때만 Canonical write와 같은
 - Home은 별도 Projection을 만들지 않고 이 모듈의 최신 Balance Query를 직접 사용합니다.
 - Web 직접 구독은 Local Currency가 공개한 읽기 전용 schema/Rules를 사용할 수 있습니다.
 - 구독은 schemaVersion, observedAt, updatedAt을 제공하되 UI용 Projection freshness 상태를 만들지 않습니다.
+- 물리 구독은 app shell이 `{sessionGeneration, householdId}` key로 소유합니다. 홈·자산·통계·설정 등 내부 route와 원장 연·월 변경은 이 listener를 해제하거나 다시 만들지 않으며, 로그아웃·SessionScope 변경에서 종료합니다. `permission-denied`로 종료된 listener는 같은-scope 권위 해석 뒤 read epoch로 다시 엽니다.
 - Web은 `households/{householdId}/localCurrencyBalances`와 `homePreferences/home`만 구독하며 최상위 Legacy `balances`를 직접 읽지 않습니다.
 - Home Preferences가 선택한 유형을 표시하고, 관찰된 유형이 하나뿐이면 그 유형을 자동 표시합니다. 여러 유형인데 선택이 없으면 임의의 첫 문서를 고르지 않습니다.
 - 지역화폐 잔액은 localStorage 표시 Snapshot을 만들지 않습니다. 첫 렌더에서는 Firestore의 `fromCache=true` snapshot을 건너뛰고 Canonical 서버 snapshot부터 표시하며 별도 스케줄·Background Projection·다건 이력을 만들지 않습니다. 서버 snapshot에 유형이 0개 또는 1개뿐이면 그 결과를 바로 사용하고 Home Preferences 문서를 추가로 읽지 않으며, 유형이 2개 이상일 때만 명시적으로 선택한 유형을 확인합니다.
-- 최초 서버 read 실패는 과거 잔액이나 `NoData`로 축약하지 않습니다. 현재 세션에서 서버값을 한 번 표시한 뒤 발생한 transient Auth·네트워크·listener 오류는 이미 표시한 정상값을 지우지 않으며, 정상 서버 snapshot이 잔액 없음 또는 선택 대상 부재를 확인한 경우에만 `NoData`로 수렴합니다.
+- 최초 서버 read 실패는 과거 잔액이나 `NoData`로 축약하지 않습니다. 현재 세션에서 서버값을 한 번 표시한 뒤 발생한 transient Auth·네트워크·listener 오류는 이미 표시한 정상값을 지우지 않으며, 정상 서버 snapshot이 잔액 없음 또는 선택 대상 부재를 확인한 경우에만 `NoData`로 수렴합니다. `permission-denied`는 Session Application에 전달해 bootstrap cache를 지우고 권위 해석을 시작하되 마지막 in-memory 잔액은 유지합니다. 같은 scope이면 epoch 재연결하고 first visit·다른 scope이면 그때 값을 폐기합니다.
 
 ### 8.3 Producer contract
 
@@ -328,7 +329,7 @@ Android는 생성된 observation DTO만 공유하고 LocalCurrencyBalance Domain
 | BAL-001 | Consumer Contract·Application | BalanceObservation.v1 intake | Payment Capture가 생성한 경기·대전·세종 DTO, household 없음, 비정수·지원하지 않는 type/version·원문 혼입 | 검증된 정수/type DTO만 Balance·receipt·Event로 commit하며 parser 재실행 없음 | T-BAL-001; producer는 T-PARSE-001 |
 | BAL-002 | Policy·Repository·Emulator | BalanceIdentity/upsert | 없음·있음, 경기·대전·세종, 같은/다른 유형 동시 observation, legacy 중복 | 가구·유형 identity별 결정 문서 하나와 독립 최신값 | T-BAL-002, T-BAL-005, T-BAL-007 |
 | BAL-003 | Contract·Repository | persistence Mapper | currencyType 있음/누락, 양수·0·음수 정수, observed/updatedAt | 모든 필드와 정수 부호 보존, 누락 type은 legacy-unknown/지역화폐, 음수 전용 상태 없음 | T-BAL-003, T-BAL-007 |
-| BAL-004 | Read Contract·Client | GetBalance/SubscribeBalance | 마지막 정상 표시 Snapshot, 선택 type, 유형 하나, 최신 변경, 선택 없음, NoData, listener/Repository 실패, 여러 문서 | 가구별 표시값을 첫 렌더 전에 복원하고 Canonical 가구 하위 경로로 수렴하며 transient 오류에는 이미 표시한 정상값을 보존 | T-BAL-004, T-BAL-006 |
+| BAL-004 | Read Contract·Client | GetBalance/SubscribeBalance | 최초 cache/server snapshot, 선택 type, 유형 하나, 최신 변경, 선택 없음, NoData, 내부 route·연월·scope 전환, transient/permission-denied listener 실패, 여러 문서 | 첫 서버 snapshot부터 표시하고 route·연월 변경에는 같은 구독을 유지하며, 권한 해석 중 마지막 값을 보존하고 같은 scope epoch 재연결·다른 scope 확정 뒤 폐기 | T-BAL-004, T-BAL-006 |
 | BAL-005 | Application·Context Contract·Emulator | 독립 RecordBalanceObservation receipt와 branch 종단 fixture | balance-only, 거래 거부/실패+잔액 성공, 거래 성공+잔액 retry, 같은 key replay | 성공 branch rollback·재호출 없이 실패 branch만 재시도하고 version/Event 중복 없음 | T-BAL-008; coordinator는 T-ING-BAL-001 |
 
 `T-BAL-005`는 DEC-008의 유형별 identity를 Canonical 동작으로 검증합니다. household singleton 구현은 신규 Writer의 Conformance 대상에서 제외하고 migration fixture로만 검증합니다.
@@ -350,4 +351,4 @@ Android는 생성된 observation DTO만 공유하고 LocalCurrencyBalance Domain
 4. NoData/Failure가 분리된 `GetBalance`·`SubscribeBalance` contract를 활성화합니다.
 5. receipt·latest observation·동시 upsert·Outbox Emulator test를 활성화합니다.
 6. 유형별 V2 key로 duplicate reconciliation/backfill/shadow read를 수행합니다.
-7. **완료:** Web read를 선택 유형 기반 Canonical 경로로 전환하고 root `balances` direct access와 first-document 동작을 제거합니다. 가구별 마지막 정상값 한 건만 첫 표시용으로 복원하고 권위 구독으로 교체합니다.
+7. **완료:** Web read를 선택 유형 기반 Canonical 경로로 전환하고 root `balances` direct access와 first-document 동작을 제거합니다. app shell의 같은 SessionScope 안에서 마지막 서버값을 route 이동·transient 오류 동안만 메모리에 유지하며, 새 실행의 첫 표시는 권위 서버 snapshot으로 시작합니다.

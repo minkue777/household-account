@@ -33,7 +33,7 @@
 | Access Application | Actor 해석, 권한 판정, 가구·멤버 Command와 Query 조정 | 이 모듈 |
 | Household lifecycle | `active ↔ deleted` 논리 삭제·복구와 `deleted → purging → purged` 수동 영구 삭제 | 이 모듈 |
 | HouseholdPurgeProcess | 명시적으로 승인된 영구 삭제의 Context별 purge checkpoint | 이 모듈 |
-| Session Application | 유일한 Membership 복원, 서버 재검증, 현재 SessionScope 저장·삭제 | Web·Android의 비권위 Adapter |
+| Session Application | 동일 UID cache bootstrap, cache miss·권한 거부의 Membership 해석, 현재 SessionScope 저장·삭제 | Web·Android의 비권위 Adapter |
 | Admin Inbound Adapter | 인증된 관리자 Command/Query를 공개 Port로 변환 | 이 모듈의 Application을 호출 |
 
 ### 2.2 경계 밖 책임
@@ -93,7 +93,7 @@
 | Port | 단계 | 관찰 결과 |
 |---|---|---|
 | `CaptureLegacySessionCandidate` | Google 로그인 UI를 시작하기 전에 localStorage의 householdKey·currentMemberId·currentMemberName을 메모리 snapshot으로 읽음 | householdKey+currentMemberId가 모두 있을 때만 완전한 후보; 값 없음·불완전 후보는 `Absent`로 정규화하여 신규 사용자로 처리 |
-| `RestoreSignedInSession` | Google 로그인 → `ResolveSignedInUser` → Membership이 있으면 이전 listener·cache·요청을 폐기하고 서버 결과로 새 versioned SessionSnapshot을 원자 저장 | `Restored`, `LegacyConfirmationRequired`, `FirstVisitRequired`, `RetryableFailure`; 이전 generation callback은 무시 |
+| `RestoreSignedInSession` | Firebase Auth UID와 같은 마지막 검증 Membership·Household metadata cache가 있으면 즉시 원자 복원하고, cache miss에서만 `ResolveSignedInUser`를 동기 실행해 새 versioned SessionSnapshot을 저장 | `RestoredFromCache`, `RestoredFromAuthority`, `LegacyConfirmationRequired`, `FirstVisitRequired`, `RetryableFailure`; 이전 generation callback은 무시 |
 | `ClaimLegacySession` | 기존 가계부·멤버 확인 → `ClaimLegacyMembership` → 성공 후 legacy 로그인 key 제거·새 SessionSnapshot 저장 | 기존 householdId·memberId 유지; 다른 UID 선점이면 자동 변경 없음 |
 | `JoinWithInvitationCode` | Google 로그인 → 코드 trim·schema 검증 → 자기 이름 입력 → `JoinHouseholdAsSelf` → 성공 후 저장 | 실패 시 Member·Membership·세션 변경 없음 |
 | `CreateHouseholdForSelf` | Google 로그인 → 가구 이름·자기 이름 입력 → `CreateHouseholdWithSelf` → 성공 후 저장 | 다른 Member 입력 없음; 후속 endpoint 등록 실패는 생성 rollback 아님 |
@@ -114,6 +114,7 @@
 | `LegacySessionCandidate` | householdKey, currentMemberId, currentMemberName? | Web localStorage의 householdKey+memberId 완전 후보만 생성; currentMemberName은 확인 표시용; 어떤 값도 서버 인증·인가를 대체하지 않음 |
 | `PurgeStatusView` | processId, householdState, contextCheckpoints, retryableFailures, updatedAt | 수동 영구 purge의 opaque checkpoint를 UI가 해석하지 않음 |
 | `SessionSnapshot` | sessionGeneration, principalUid, householdId, actingMemberId, displayName, validatedAt, schemaVersion | 전체 record를 원자 교체·삭제하고 Role·capability를 권위 값으로 저장하지 않음 |
+| `SignedInSessionBootstrapCache` | principalUid, 마지막 검증 Membership 연결, Household 표시 metadata, schemaVersion | Firebase Auth UID가 정확히 일치할 때만 복원; 원장·카테고리·지역화폐 데이터와 권한 판정은 저장하지 않음 |
 
 Wire schema는 `contractVersion`으로 versioning하고, TypeScript·Kotlin DTO는 공통 schema에서 생성합니다.
 
@@ -198,10 +199,12 @@ Value Object는 `HouseholdName`, `MemberDisplayName`, `AssetOwnerProfileName`, `
 
 1. Android WebView도 Firebase Auth observer의 첫 결과를 먼저 기다립니다. 영속 Web Auth 사용자가 있으면 해당 사용자를 사용하고, 첫 화면 선행 단계에서 강제 token refresh나 Native custom-token 교환을 반복하지 않습니다.
 2. observer가 사용자를 반환하지 않은 Android WebView만 Native 로그인 세션으로 fallback합니다. custom-token 교환 중 observer가 먼저 같은 사용자를 반환해도 Native 응답의 Membership 해석이 끝날 때까지 별도 `ResolveSignedInUser`를 시작하지 않습니다.
-3. Membership이 확정되면 `SessionScope`, householdId와 자기 member를 먼저 원자 적용합니다. Household 화면 read와 월 원장·카테고리·지역화폐 read model은 서로 기다리지 않고 같은 검증 generation에서 병렬로 시작합니다.
-4. Membership cache는 householdId·memberId 연결 힌트일 뿐 Household·원장 화면 snapshot이 아닙니다. 화면 데이터는 서버 read 또는 서버 snapshot으로만 확정하고 이전 generation callback은 무시합니다.
-5. Android가 아닌 iPhone standalone PWA만 첫 원장 서버 paint 뒤 idle 시점에 Notifications endpoint 등록 모듈을 불러옵니다. endpoint 실패는 Access Session 복원을 취소하지 않으며 설정 화면의 재연결 경로로 분리합니다.
-6. Android Native 세션 mirror의 일일 재검증은 첫 원장 paint를 막지 않습니다. 첫 paint 뒤 30초와 idle 조건을 지난 후 수행하며 성공 시 FID endpoint 등록과 결제 재전송 예약을 보조적으로 갱신합니다.
+3. Auth UID와 `SignedInSessionBootstrapCache.principalUid`가 같고 Membership 연결과 Household metadata가 완전하면 cache hit입니다. 여기서 Household metadata는 `id`, 가계부 이름 `name`, 생성 시각 `createdAt`, 기본 카테고리 `defaultCategoryKey`, 홈의 좌·우 요약 카드 `homeSummaryConfig`, 가구원별 `id`·표시 이름·`aggregateVersion`만 뜻합니다. 원장·예산·지역화폐 잔액·자산·카드·알림 데이터는 포함하지 않습니다. SessionScope·자기 member·가구 표시 정보를 원자 적용하고 별도 Membership 또는 Household 응답을 기다리지 않은 채 월 원장·카테고리·지역화폐 listener를 같은 generation에서 시작합니다. 구버전 cache에 Membership만 있고 metadata가 없으면 scope와 업무 listener는 즉시 복원하되 최소 표시값을 사용하고 5번의 한 문서 read로 metadata를 한 번 보강합니다.
+4. cache miss에서만 `ResolveSignedInUser`를 동기 실행합니다. 성공 응답의 Membership·Household metadata를 함께 저장·적용한 뒤 같은 listener를 시작하며, first visit·legacy 전환·권위 실패는 typed 상태로 분기합니다.
+5. cache hit 직후 `households/{householdId}` 한 문서를 서버에서 비차단 갱신합니다. 정규화한 metadata가 cache와 실제로 다를 때만 관련 UI와 bootstrap cache를 교체합니다. 변경 가능한 화면 범위는 가계부 이름, 기본 카테고리, 홈 좌·우 요약 카드 종류, 가구원 이름·순서뿐이며 `createdAt`은 현재 일반 화면에 직접 표시하지 않습니다. 같은 값이나 transient 실패는 render와 업무 listener에 영향을 주지 않습니다.
+6. 월 원장·카테고리·지역화폐 payload는 bootstrap cache에 저장하지 않고 Firestore 서버 snapshot부터 표시합니다. Firestore Rules가 각 read의 active Membership을 권위 판정합니다. `permission-denied`이면 bootstrap cache와 오류 listener를 즉시 지우고 같은 UID의 동시 신호를 하나로 병합해 `ResolveSignedInUser`를 실행하되 현재 in-memory 화면과 scope는 저하 상태로 유지합니다. Android token 복구를 이 경로와 동시에 실행하지 않습니다. 같은 scope가 확인되면 새 cache를 저장하고 read epoch로 재연결하며 first visit·다른 scope이면 그때 이전 scope·화면·나머지 구독을 폐기합니다. 권위 해석의 transient transport 실패만 2~30초 backoff로 재시도하고, 일반 listener/network 오류는 Membership 부재로 해석하지 않습니다.
+7. 마지막 검증 시각이나 30분·idle·background timer를 근거로 Membership을 다시 해석하지 않습니다. Firebase UID가 바뀌면 이전 scope를 폐기하고 새 UID의 cache hit/miss 절차를 적용합니다.
+8. Android가 아닌 iPhone standalone PWA만 첫 원장 서버 paint 뒤 idle 시점에 Notifications endpoint 등록 모듈을 불러옵니다. endpoint 실패는 Access Session 복원을 취소하지 않으며 설정 화면의 재연결 경로로 분리합니다. Android Native SessionMirror credential 유지 절차도 Web Membership 재해석이나 첫 화면 선행 조건으로 사용하지 않습니다.
 
 ### 5.3 초대 코드 생성·JoinHouseholdAsSelf
 
@@ -489,7 +492,7 @@ android/core/auth-session/
 - Contract: Command/Result version fixture, TypeScript·Kotlin DTO, legacy invitation URL.
 - Repository Conformance: In-memory Fake와 Firestore Adapter의 version·NotFound·query 의미.
 - Emulator: Rules 권한 행렬, legacy member claim·invitation 경합, transaction callback 재실행, Outbox 원자성.
-- Client: 유효/무효/일시 실패 세션 복원, 성공 후에만 local/Bridge 갱신.
+- Client: 동일 UID cache hit/miss, Household metadata 동일·변경·일시 실패, `permission-denied`, UID 변경과 늦은 callback 세션 복원.
 - E2E: 초대 참여, 관리자 가구 관리, deleted 접근 차단·복구·데이터 불변, 별도 수동 purge 재시도.
 
 필수 fixture는 `FixedClock`, `SequenceIdGenerator`, `RetryingUnitOfWorkFake`, 초대 5분 경계, 같은 legacy Member의 서로 다른 UID 동시 claim, 같은 idempotency key의 동일/상이 payload, 가구 A Actor의 가구 B 접근을 포함합니다.
@@ -502,7 +505,7 @@ android/core/auth-session/
 | HH-002 | Domain·Emulator·E2E | ClaimLegacyMembership·RepairLegacyMembershipClaim | 유효·무효 memberId, 같은 UID 재시도, UID의 다른 Membership, 다른 UID 동시 claim, memberId 없음, 검증된 운영 복구·무권한 호출 | 기존 ID 연결·멱등 성공·UID/Member 선점 충돌·신규 사용자 전환을 구분하고, 운영 복구만 정확한 단일 claim과 감사 기록을 원자 생성하며 기존 업무 데이터 불변 | T-HH-001, T-HH-002 |
 | HH-003 | Client·E2E | FirstVisitController | Membership·legacy 후보 없음 | 초대 코드 또는 새 가계부 생성만 표시, 가구 키 입력 없음 | T-HH-JOIN-001 |
 | HH-004 | Client·Integration | LogoutHouseholdSession | endpoint 제거 성공·이미 없음·일시 실패, 가구·멤버·Bridge mirror 존재 | 성공·이미 없음 뒤에만 선택값 제거; 실패 시 세션 유지 | T-HH-005 |
-| HH-005 | Application·Client | RestoreSignedInSession | 자기 Membership, Bridge/Notification endpoint Adapter 실패 | 자기 memberId만 session에 반영하고 endpoint 결과 분리; 다른 Member 선택 없음 | T-HH-005 |
+| HH-005 | Application·Client | RestoreSignedInSession·SignedInSessionBootstrapCache·Household metadata refresh | 동일/다른 UID cache hit, cache miss, metadata 동일·변경·일시 실패, `permission-denied` 뒤 같은/다른 scope, 내부 route 이동, Bridge/Notification endpoint Adapter 실패 | hit은 즉시 scope·metadata 적용과 업무 구독, miss·권한 거부만 권위 해석, 실제 metadata 차이만 반영, 해석 중 화면 유지·같은 scope epoch 재연결·다른 scope 확정 뒤 폐기, route 이동 중 구독 유지 | T-HH-005 |
 | HH-006 | Domain·Emulator | SelfMemberCreationPolicy | 빈·중복 이름, 타인 UID/memberId 위조, 생성·가입 경합 | 호출자 자기 Member 하나만 생성, 위조·중복 거부 | T-HH-003 |
 | HH-007 | Application·Outbox | CreateHouseholdWithSelf | 가구·자기 이름, 기존 Membership, 생성·가입 동시 경합, 후속 초기화 실패 | UID claim·Household·자기 Member·일반 Membership 원자 생성, 생성자 특권 없음, 기존 가입·경합 loser는 부분 생성 0건, 후속 상태 별도 | T-HH-003 |
 | HH-008 | Client·E2E | Guard와 ResolveSignedInUser | Membership, legacy 후보, 첫 방문, admin, guest | 허용 상태만 표시하고 key/guest 우회 차단 | T-HH-001, T-HH-JOIN-001 |

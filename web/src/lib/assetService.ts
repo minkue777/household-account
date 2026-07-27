@@ -33,11 +33,7 @@ import {
 import { createHouseholdCommandId } from '@/platform/functions-api/householdCommandClient';
 import { registerClientSessionReset } from '@/composition/clientSessionResetRegistry';
 import { formatLocalDate } from './utils/date';
-import { ALL_MEMBERS_OPTION } from './assets/memberOptions';
-import {
-  getAssetSignedBalance,
-  sumSignedBalancesByAssetType,
-} from './assets/assetMath';
+import { sumSignedBalancesByAssetType } from './assets/assetMath';
 import {
   calculateHoldingCostBasis,
   calculateHoldingValue,
@@ -966,7 +962,10 @@ export async function deleteAsset(
 export function subscribeToAssets(
   callback: (assets: Asset[]) => void,
   initialAssets?: readonly Asset[],
-  onSourceSnapshot?: (assets: readonly Asset[]) => void
+  onSourceSnapshot?: (
+    assets: readonly Asset[],
+    metadata: { fromCache: boolean }
+  ) => void
 ): () => void {
   const householdId = getHouseholdId();
   const queueGeneration = assetUpdateQueueGeneration;
@@ -1010,7 +1009,9 @@ export function subscribeToAssets(
           assets
         );
       }
-      onSourceSnapshot?.(assets);
+      onSourceSnapshot?.(assets, {
+        fromCache: snapshot.metadata.fromCache,
+      });
       projection.publish(assets);
     },
     (error) => {
@@ -1113,120 +1114,6 @@ export async function getMonthlyAssetChange(currentTotal: number): Promise<numbe
   }
 
   return currentTotal - previousTotal;
-}
-
-async function getLatestSnapshotBeforeToday(assetId: string): Promise<number | null> {
-  const householdId = getHouseholdId();
-  const today = formatLocalDate(new Date());
-
-  try {
-    const q = query(
-      collection(db, HISTORY_COLLECTION),
-      where('householdId', '==', householdId),
-      where('assetId', '==', assetId),
-      where('date', '<', today),
-      orderBy('date', 'desc')
-    );
-
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) {
-      return null;
-    }
-
-    return snapshot.docs[0].data().balance || 0;
-  } catch (error) {
-    console.error('이전 일일 스냅샷 조회 오류:', error);
-    return null;
-  }
-}
-
-export async function getRealtimeDailyAssetChange(currentTotal: number): Promise<number> {
-  const previousTotal = await getLatestSnapshotBeforeToday('TOTAL');
-  if (previousTotal === null) {
-    return 0;
-  }
-
-  return currentTotal - previousTotal;
-}
-
-/**
- * 오늘 자산 변동액 계산 (저장된 changeAmount 사용)
- */
-export async function getDailyAssetChange(): Promise<number> {
-  const householdId = getHouseholdId();
-  const today = formatLocalDate(new Date());
-  const todayId = `${householdId}_total_${today}`;
-
-  try {
-    const todaySnap = await getDoc(doc(db, HISTORY_COLLECTION, todayId));
-
-    if (!todaySnap.exists()) {
-      return 0;
-    }
-
-    // 스냅샷 저장 시 계산된 changeAmount 사용
-    return todaySnap.data().changeAmount || 0;
-  } catch (error) {
-    console.error('일간 변동액 조회 오류:', error);
-    return 0;
-  }
-}
-
-function getOwnerSnapshotAssetId(owner: string): string {
-  return `OWNER_${owner}`;
-}
-
-function getOwnerSnapshotIdSuffix(owner: string): string {
-  return `owner_${encodeURIComponent(owner)}`;
-}
-
-export async function getRealtimeDailyAssetChangeByOwner(
-  owner: string,
-  assets: Array<Pick<Asset, 'type' | 'currentBalance' | 'owner'>>
-): Promise<number> {
-  if (!owner || owner === ALL_MEMBERS_OPTION) {
-    return getRealtimeDailyAssetChange(
-      assets.reduce((sum, asset) => sum + getAssetSignedBalance(asset), 0)
-    );
-  }
-
-  const currentOwnerTotal = assets.reduce((sum, asset) => {
-    if (asset.owner !== owner) {
-      return sum;
-    }
-
-    return sum + getAssetSignedBalance(asset);
-  }, 0);
-
-  const previousOwnerTotal = await getLatestSnapshotBeforeToday(getOwnerSnapshotAssetId(owner));
-  if (previousOwnerTotal === null) {
-    return 0;
-  }
-
-  return currentOwnerTotal - previousOwnerTotal;
-}
-
-export async function getDailyAssetChangeByOwner(owner: string): Promise<number> {
-  if (!owner || owner === ALL_MEMBERS_OPTION) {
-    return getDailyAssetChange();
-  }
-
-  const householdId = getHouseholdId();
-  const today = formatLocalDate(new Date());
-  const todayId = `${householdId}_${getOwnerSnapshotIdSuffix(owner)}_${today}`;
-
-  try {
-    const todaySnap = await getDoc(doc(db, HISTORY_COLLECTION, todayId));
-
-    if (!todaySnap.exists()) {
-      return 0;
-    }
-
-    return todaySnap.data().changeAmount || 0;
-  } catch (error) {
-    console.error('사용자별 자산 변동액 조회 오류:', error);
-    return 0;
-  }
 }
 
 /**

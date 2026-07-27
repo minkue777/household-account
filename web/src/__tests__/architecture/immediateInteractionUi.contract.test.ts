@@ -40,12 +40,21 @@ describe('즉시 상호작용 UI 계약', () => {
   test('자산 페이지는 진입할 때만 시세를 한 번 갱신하고 직전 일간 변동을 먼저 표시한다', () => {
     const assetsPage = source('app/assets/page.tsx');
     const marketRefreshStart = assetsPage.indexOf('void refreshAllMarketValues()');
+    const marketRefreshEffectStart = assetsPage.lastIndexOf(
+      'useEffect(() => {',
+      marketRefreshStart
+    );
     const marketRefreshEnd = assetsPage.indexOf(
       'useEffect(() => {',
       marketRefreshStart + 1
     );
-    const marketRefreshEffect = assetsPage.slice(marketRefreshStart, marketRefreshEnd);
-    const dailyRefreshStart = assetsPage.indexOf('const syncDailySummary = async () =>');
+    const marketRefreshEffect = assetsPage.slice(
+      marketRefreshEffectStart,
+      marketRefreshEnd
+    );
+    const dailyRefreshStart = assetsPage.indexOf(
+      'const activeAssets = sourceAssets.filter'
+    );
     const dailyRefreshEnd = assetsPage.indexOf(
       'const handleAssetClick',
       dailyRefreshStart
@@ -53,6 +62,7 @@ describe('즉시 상호작용 UI 계약', () => {
     const dailyRefreshEffect = assetsPage.slice(dailyRefreshStart, dailyRefreshEnd);
 
     expect(marketRefreshEffect).toContain('void refreshAllMarketValues()');
+    expect(marketRefreshEffect).toContain('!serverAssetsReady');
     expect(marketRefreshEffect).not.toContain('window.setInterval');
     expect(marketRefreshEffect).not.toContain(
       "document.addEventListener('visibilitychange'"
@@ -63,11 +73,24 @@ describe('즉시 상호작용 UI 계약', () => {
     expect(dailyRefreshEffect).toContain(
       'writeDailyAssetChangeSnapshot(householdId, amounts)'
     );
-    expect(dailyRefreshEffect).toContain('Promise.all(');
-    expect(dailyRefreshEffect).toContain('memberOptions.map(async ({ key, label }) =>');
-    expect(dailyRefreshEffect).toContain('void syncDailySummary();');
+    expect(assetsPage).toContain('readPreviousAssetDailySummary(');
+    expect(dailyRefreshEffect).toContain('calculateRealtimeDailyAssetChanges({');
+    expect(dailyRefreshEffect).not.toContain('Promise.all(');
+    expect(dailyRefreshEffect).not.toContain('memberOptions.map(async');
+    expect(assetsPage).not.toContain('getRealtimeDailyAssetChangeByOwner');
     expect(dailyRefreshEffect).not.toContain('setTimeout');
     expect(dailyRefreshEffect).not.toContain('requestIdleCallback');
+  });
+
+  test('종목 카탈로그는 앱 시작이 아니라 자산 페이지 첫 표시 뒤 백그라운드에서 준비한다', () => {
+    const appProviders = source('components/AppProviders.tsx');
+    const assetsPage = source('app/assets/page.tsx');
+    const catalogWarm = assetsPage.indexOf('warmStockInstrumentCatalog');
+
+    expect(appProviders).not.toContain('stockInstrumentCatalogRuntime');
+    expect(catalogWarm).toBeGreaterThanOrEqual(0);
+    expect(assetsPage).toContain('frameId = window.requestAnimationFrame(() =>');
+    expect(assetsPage).toContain('delayId = window.setTimeout(warm, 0)');
   });
 
   test('자산 재진입 snapshot에는 optimistic 화면값이 아니라 source snapshot만 저장한다', () => {

@@ -31,8 +31,6 @@ jest.mock('@/features/access-household/application/legacySessionCandidate', () =
 }));
 
 jest.mock('@/features/access-household/application/signedInMembershipCache', () => ({
-  getSignedInMembershipRevalidationDelay: jest.fn(() => undefined),
-  invalidateSignedInMembershipVerification: jest.fn(),
   readSignedInMembershipCache: jest.fn(),
   writeSignedInMembershipCache: jest.fn(),
   clearSignedInMembershipCache: jest.fn(),

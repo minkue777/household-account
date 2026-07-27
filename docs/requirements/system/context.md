@@ -84,7 +84,7 @@ Android Host, PWA, Reporting, Home Preferences, External Operations, Delivery As
 | SYS-005 | 목표 명세 | 날짜는 YYYY-MM-DD, 시간은 HH:mm 형태로 교환하고 모든 업무 LocalDate·LocalTime·YearMonth·오늘·월 경계는 `Asia/Seoul`로 해석한다. 절대 시각은 UTC Instant로 저장한다. | 가구별 timezone 설정은 없으며 서버·브라우저·기기 기본 timezone에 의존하지 않는다. 연도 없는 결제 시각은 DEC-029에 따라 서울 수신 시각보다 미래가 아닌 가장 가까운 연도로 추론한다. | U, C |
 | SYS-006 | 호환·목표 명세 | 신규 멤버 소유권과 알림 대상은 안정적인 memberId를 사용하고 표시 이름은 snapshot으로만 보존한다. 이름만 저장된 레거시 참조는 같은 가구에서 유일하게 일치할 때만 memberId로 연결하며 원문을 보존한다. | 이름이 없거나 동명이인으로 모호하면 임의 연결하지 않고 수동 reconciliation을 요구한다. 연결 후 이름 변경은 소유권·알림 대상을 바꾸지 않는다. | U, I, migration |
 | SYS-007 | 결함 | 쓰기 작업은 성공과 실패를 구분할 수 있어야 하며 부분 성공으로 완료를 알리면 안 된다. | 여러 현 구현이 예외를 삼키거나 순차 저장한다. 잘못된 현재 결과가 아니라 이 무결성 불변식을 테스트한다. | I, E2E |
-| SYS-008 | 현재 명세 | 보호된 원격 요청·실시간 구독·Canonical 변경은 인증 완료 후 UID의 유일한 Membership에서 생성한 `SessionScope(sessionGeneration, principalUid, householdId, memberId)`에 귀속되어야 한다. DEC-068에 따라 마지막으로 검증된 UID·Membership 연결 정보는 반복 인증 왕복을 줄이는 데만 사용하고 가계부 첫 화면의 가구·현재 월 원장·가구별 카테고리·지역화폐는 서버 read 전 선표시하지 않는다. 같은 UID의 Firebase 인증이 복원된 뒤에는 Firestore Rules가 active Membership을 검증하는 서버 우선 Query·listener를 시작한다. 로그아웃·legacy 전환·승인된 Membership 교정은 이전 상태와 구독을 폐기하고, 세대가 다른 늦은 응답을 무시해야 한다. | DEC-034에 따라 일반 가계부·멤버 선택은 없다. localStorage·Native mirror는 서버 tenant 권위가 아니며 `guest` fallback을 허용하지 않는다. 첫 서버 read 실패·복원 UID 불일치·first visit·권한·authoritative household 부재는 과거 화면으로 숨기지 않는다. 공용 Command·Query는 Auth·Membership·Functions 인가를, Firestore 접근은 Auth·Rules를 검증하며 Native 결제 수집·세션 교환은 App Check를 추가 검증한다. Command와 FID 등록은 서버 인가 성공 전 실행하지 않는다. | C, UI, E2E |
+| SYS-008 | 현재 명세 | 보호된 원격 요청·실시간 구독·Canonical 변경은 Firebase 인증 UID와 일치하는 `SessionScope(sessionGeneration, principalUid, householdId, memberId)`에 귀속되어야 한다. DEC-068에 따라 같은 UID의 마지막 검증 Membership·가구 metadata cache가 있으면 둘을 즉시 복원하고 월 원장·가구별 카테고리·지역화폐의 Rules 보호 listener를 시작한다. 가구 metadata 한 문서의 최신 서버 read는 병렬로 실행하며 실제 차이가 있을 때만 화면·cache를 갱신한다. cache가 없을 때와 보호 listener가 `permission-denied`를 반환할 때만 `ResolveSignedInUser`로 Membership을 권위 해석하고, 시간 기반·주기적 재해석은 하지 않는다. 로그아웃·Firebase UID 변경·legacy 전환·승인된 Membership 교정과 권위 결과로 확정된 first visit·scope 변경은 이전 상태와 구독을 폐기하고 세대가 다른 늦은 응답을 무시해야 한다. | cache는 Query 경로를 구성하는 bootstrap일 뿐 권한 근거가 아니며 Firestore Rules가 매 read의 active Membership을, Functions가 Command·Query의 Auth·Membership을 검증한다. 월 원장·카테고리·지역화폐는 첫 서버 snapshot 전 과거 값을 정상 데이터로 표시하지 않는다. `permission-denied`에서는 bootstrap cache와 오류 listener를 즉시 버리되 권위 해석 중 마지막 in-memory 화면은 저하 상태로 유지한다. 같은 scope가 다시 확인되면 read epoch로 재연결하고, first visit·scope 변경일 때만 기존 화면·scope를 폐기한다. DEC-034에 따라 일반 가계부·멤버 선택과 `guest` fallback은 없으며 Native 결제 수집·세션 교환은 App Check를 추가 검증한다. | C, UI, E2E |
 | SYS-009 | 결함 | tenant/schema migration·backfill·repair는 승인된 서버·운영 경계에서 대상 scope, dry-run, checkpoint, 멱등성, reconciliation 결과를 갖고 실행해야 하며 일반 client bundle은 전역 조회나 누락 tenant 필드 보정을 수행할 수 없다. | 현재 Web의 `migrateExpensesToHousehold`는 전체 거래를 읽어 householdId 누락 문서에 현재 가구를 기록할 수 있어 가구 오염 위험이 있다. 정상 사용자 요청과 운영 보정을 같은 API로 노출하지 않는다. | C, I, 운영 계약 |
 
 ## 7. Context 간 공통 원칙
@@ -94,7 +94,7 @@ Android Host, PWA, Reporting, Home Preferences, External Operations, Delivery As
 - 같은 Context 내부 기능도 데이터 소유 기능의 공개 Port를 사용하며 명시적 Context Unit of Work만 강한 원자성 예외가 된다.
 - 같은 업무 규칙을 Web, Android, Functions가 각각 최종 판정하지 않는다.
 - 날짜·시간, ID, 외부 시세, 현재 사용자 정보는 주입 가능한 Port로 제공한다.
-- client Adapter는 localStorage를 서버 업무 Query의 tenant 권위로 사용하지 않고 검증된 SessionScope를 명시적으로 전달한다. DEC-068의 마지막 검증 snapshot은 composition 경계의 선표시 hint로만 읽는다.
+- client Adapter는 localStorage를 서버 업무 Query의 tenant 권위로 사용하지 않는다. composition 경계만 Firebase UID와 일치하는 마지막 검증 Membership·가구 metadata snapshot으로 SessionScope와 초기 표시를 복원하며, 실제 read 권위는 Firestore Rules에 둔다.
 - migration·repair는 사용자 UI/브라우저 bundle과 분리된 승인된 운영 Application만 실행한다.
 - 호환 읽기와 신규 쓰기 계약을 분리한다.
 - Context를 넘는 비동기 효과는 Canonical 변경과 함께 Durable Outbox에 기록한다.
@@ -119,5 +119,7 @@ Android Host, PWA, Reporting, Home Preferences, External Operations, Delivery As
 | 금액·날짜·시간 DTO 계약 | 계약 | 모든 클라이언트가 같은 형식과 검증 오류를 사용한다. |
 | 부분 쓰기 실패 | 목표 | 완료 event를 내보내지 않고 재시도 가능한 오류를 반환한다. |
 | 가구 A→B session 전환 중 A의 늦은 응답 | 목표 | 모든 A 구독·cache를 폐기하고 B 화면·저장소에 반영하지 않는다. |
+| 같은 UID cache hit·cache miss·보호 listener `permission-denied` | 목표 | hit은 가구 metadata를 즉시 복원하고 업무 구독을 시작하며, miss와 권한 거부만 Membership을 권위 해석한다. 권한 거부 중 in-memory 화면은 유지하고 같은 scope면 epoch 재연결, scope 변경이면 그때 폐기하며 주기적 해석은 없다. |
+| 내부 route 이동과 월 변경 | 목표 | route 이동은 app scope의 원장·지역화폐 구독을 유지하고, 월 원장은 월 key가 바뀔 때만 교체하며 지역화폐는 유지한다. |
 | 무인증 guest/admin route 진입 | 목표 | 보호 데이터 구독·기본 카테고리 생성·endpoint 등록을 수행하지 않는다. |
 | client migration 호출·가구 범위 밖 fixture | 목표 | client bundle에 실행 API가 없고 승인된 운영 job만 dry-run·checkpoint·reconciliation을 남긴다. |

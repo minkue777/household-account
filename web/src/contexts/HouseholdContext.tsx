@@ -42,12 +42,15 @@ import {
 import { Platform } from '@/lib/utils/platform';
 import {
   clearSignedInMembershipCache,
-  getSignedInMembershipRevalidationDelay,
-  invalidateSignedInMembershipVerification,
   readSignedInMembershipCache,
   writeSignedInMembershipCache,
   type SignedInUserResolution,
 } from '@/features/access-household/application/signedInMembershipCache';
+import {
+  cancelQueuedAuthoritativeMembershipResolution,
+  MEMBERSHIP_RESOLUTION_REQUESTED_EVENT,
+  requestAuthoritativeMembershipResolution,
+} from '@/features/access-household/application/membershipResolutionRecovery';
 import {
   markWebAuthCompleted,
   markWebAuthStarted,
@@ -65,9 +68,9 @@ import { REMOTE_SESSION_RECOVERED_EVENT } from '@/platform/functions-api/firebas
 const INTERACTIVE_AUTH_BOOTSTRAP_TIMEOUT_MS = 180_000;
 const SESSION_RESOLUTION_TIMEOUT_MS = 20_000;
 const HOUSEHOLD_READ_TIMEOUT_MS = 20_000;
-const MEMBERSHIP_REVALIDATION_FALLBACK_MS = 15_000;
-const MEMBERSHIP_REVALIDATION_SETTLE_MS = 5_000;
-const MEMBERSHIP_REVALIDATION_RETRY_MS = 5 * 60 * 1_000;
+const PWA_ENDPOINT_REGISTRATION_FALLBACK_MS = 15_000;
+const MEMBERSHIP_RECOVERY_RETRY_BASE_MS = 2_000;
+const MEMBERSHIP_RECOVERY_RETRY_MAX_MS = 30_000;
 
 type AuthServiceModule = typeof import('@/lib/authService');
 
@@ -95,6 +98,7 @@ export type HouseholdSessionState =
   | 'error';
 
 export type RemoteSessionStatus = 'connecting' | 'ready' | 'degraded';
+type RestoreSignedInUserOutcome = 'preserved-transient-failure' | undefined;
 
 interface HouseholdContextType {
   household: Household | null;
@@ -136,20 +140,16 @@ const TRANSIENT_FIRESTORE_READ_CODES = new Set([
   'firestore/deadline-exceeded',
   'firestore/network-request-failed',
   'firestore/unavailable',
+  'functions/cancelled',
+  'functions/deadline-exceeded',
+  'functions/internal',
+  'functions/unavailable',
 ]);
 
 function isTransientHouseholdReadFailure(error: unknown): boolean {
   if (error instanceof OperationDeadlineExceededError) return true;
   if (typeof error !== 'object' || error === null || !('code' in error)) return false;
   return TRANSIENT_FIRESTORE_READ_CODES.has(String((error as { code: unknown }).code));
-}
-
-function isHouseholdReadNotFound(error: unknown): boolean {
-  return error instanceof Error
-    && (
-      error.name === 'HouseholdReadNotFoundError'
-      || error.message === 'HOUSEHOLD_READ_NOT_FOUND'
-    );
 }
 
 const HOME_SUMMARY_CARD_KEYS = new Set<HomeSummaryCardKey>([
@@ -199,6 +199,47 @@ function householdFromResolution(
   };
 }
 
+function householdToResolutionView(
+  household: Household
+): NonNullable<
+  Extract<SignedInUserResolution, { kind: 'membership-found' }>['household']
+> {
+  return {
+    id: household.id,
+    name: household.name,
+    createdAt: household.createdAt.toISOString(),
+    ...(household.defaultCategoryKey === undefined
+      ? {}
+      : { defaultCategoryKey: household.defaultCategoryKey }),
+    ...(household.homeSummaryConfig === undefined
+      ? {}
+      : { homeSummaryConfig: household.homeSummaryConfig }),
+    members: household.members.map((member) => ({ ...member })),
+  };
+}
+
+function sameHousehold(left: Household | null, right: Household): boolean {
+  if (
+    left === null
+    || left.id !== right.id
+    || left.name !== right.name
+    || left.createdAt.getTime() !== right.createdAt.getTime()
+    || left.defaultCategoryKey !== right.defaultCategoryKey
+    || left.homeSummaryConfig?.leftCard !== right.homeSummaryConfig?.leftCard
+    || left.homeSummaryConfig?.rightCard !== right.homeSummaryConfig?.rightCard
+    || left.members.length !== right.members.length
+  ) {
+    return false;
+  }
+
+  return left.members.every((member, index) => {
+    const nextMember = right.members[index];
+    return member.id === nextMember.id
+      && member.name === nextMember.name
+      && member.aggregateVersion === nextMember.aggregateVersion;
+  });
+}
+
 export function HouseholdProvider({ children }: { children: ReactNode }) {
   const [household, setHousehold] = useState<Household | null>(null);
   const [householdKey, setHouseholdKey] = useState<string | null>(null);
@@ -213,6 +254,8 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   const [adminHouseholdView, setAdminHouseholdView] =
     useState<AdminHouseholdViewSelection | null>(null);
   const activeUserRef = useRef<User | null>(null);
+  const householdRef = useRef<Household | null>(null);
+  const currentMemberRef = useRef<HouseholdMember | null>(null);
   const resolutionGenerationRef = useRef(0);
   const sessionGenerationRef = useRef(0);
   const endpointRegistrationGenerationRef = useRef(0);
@@ -245,6 +288,8 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     cancelEndpointRegistrationRef.current = undefined;
     resetClientOptimisticProjections();
     clearClientSessionScope();
+    householdRef.current = null;
+    currentMemberRef.current = null;
     setHousehold(null);
     setHouseholdKey(null);
     setCurrentMember(null);
@@ -283,6 +328,8 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         accessMode: 'administrator-readonly',
       });
       activateRemoteSession();
+      householdRef.current = loadedHousehold;
+      currentMemberRef.current = null;
       setHousehold(loadedHousehold);
       setHouseholdKey(selection.householdId);
       setCurrentMember(null);
@@ -309,7 +356,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       preserveResolvedSession?: boolean;
       membershipSource?: 'last-verified-cache' | 'authoritative-prefetch';
     } = {}
-  ) => {
+  ): Promise<RestoreSignedInUserOutcome> => {
     const resolutionGeneration = ++resolutionGenerationRef.current;
     setSessionError(null);
     if (!options.preserveResolvedSession) {
@@ -368,15 +415,6 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       ) {
         throw new Error('서버가 완전한 본인 Membership을 반환하지 않았습니다.');
       }
-      writeSignedInMembershipCache(
-        user.uid,
-        resolution,
-        {
-          preserveVerificationTime:
-            options.membershipSource === 'last-verified-cache',
-        }
-      );
-
       const resolvedSelf: HouseholdMember = {
         id: membership.memberId,
         name: membership.displayName,
@@ -392,34 +430,73 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         accessMode: 'member',
       });
       setHouseholdKey(membership.householdId);
+      currentMemberRef.current = resolvedSelf;
       setCurrentMember(resolvedSelf);
       activateRemoteSession();
 
-      const applyHousehold = (loadedHousehold: Household) => {
+      const applyHousehold = (
+        loadedHousehold: Household,
+        persist = true,
+        forcePersist = false
+      ) => {
         if (resolutionGeneration !== resolutionGenerationRef.current) return;
         const readModelSelf = loadedHousehold.members.find(
           (member) => member.id === resolvedSelf.id
         );
-        const self = readModelSelf
-          && readModelSelf.aggregateVersion >= resolvedSelf.aggregateVersion
-          ? readModelSelf
-          : resolvedSelf;
-        const members = loadedHousehold.members.some((member) => member.id === self.id)
-          ? loadedHousehold.members.map((member) => member.id === self.id ? self : member)
-          : [...loadedHousehold.members, self];
-        setHousehold({ ...loadedHousehold, members });
+        const currentSelf =
+          currentMemberRef.current?.id === resolvedSelf.id
+            ? currentMemberRef.current
+            : undefined;
+        const self = [resolvedSelf, readModelSelf, currentSelf]
+          .filter((member): member is HouseholdMember => member !== undefined)
+          .reduce((latest, member) =>
+            member.aggregateVersion >= latest.aggregateVersion ? member : latest
+          );
+        const currentHousehold =
+          householdRef.current?.id === loadedHousehold.id
+            ? householdRef.current
+            : null;
+        const currentMembersById = new Map(
+          currentHousehold?.members.map((member) => [member.id, member]) ?? []
+        );
+        const members = loadedHousehold.members.map((member) => {
+          const current = currentMembersById.get(member.id);
+          if (member.id === self.id) return self;
+          return current && current.aggregateVersion > member.aggregateVersion
+            ? current
+            : member;
+        });
+        if (!members.some((member) => member.id === self.id)) {
+          members.push(self);
+        }
+        const nextHousehold = { ...loadedHousehold, members };
+        const householdChanged = !sameHousehold(householdRef.current, nextHousehold);
+        if (householdChanged) {
+          householdRef.current = nextHousehold;
+          setHousehold(nextHousehold);
+        }
         setHouseholdKey(membership.householdId);
-        setCurrentMember(self);
+        currentMemberRef.current = self;
+        setCurrentMember((current) =>
+          current?.id === self.id
+          && current.name === self.name
+          && current.aggregateVersion === self.aggregateVersion
+            ? current
+            : self
+        );
         setLegacyCandidate(null);
         clearLegacySessionCandidate();
-        writeSignedInMembershipCache(user.uid, {
-          kind: 'membership-found',
-          membership: {
-            ...membership,
-            displayName: self.name,
-            aggregateVersion: self.aggregateVersion,
-          },
-        }, { preserveVerificationTime: true });
+        if (persist && (householdChanged || forcePersist)) {
+          writeSignedInMembershipCache(user.uid, {
+            kind: 'membership-found',
+            membership: {
+              ...membership,
+              displayName: self.name,
+              aggregateVersion: self.aggregateVersion,
+            },
+            household: householdToResolutionView(nextHousehold),
+          });
+        }
         setSessionState('ready');
         if (
           Platform.isIOSPWA()
@@ -444,52 +521,77 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
                 });
             },
             {
-              fallbackMs: MEMBERSHIP_REVALIDATION_FALLBACK_MS,
+              fallbackMs: PWA_ENDPOINT_REGISTRATION_FALLBACK_MS,
               idleTimeoutMs: 5_000,
             }
           );
         }
       };
 
-      const authoritativeHousehold = householdFromResolution(resolution);
-      if (authoritativeHousehold) {
-        applyHousehold(authoritativeHousehold);
-        return;
+      const resolvedHousehold = householdFromResolution(resolution);
+      const restoredFromCache =
+        options.membershipSource === 'last-verified-cache';
+      if (!restoredFromCache && resolvedHousehold === undefined) {
+        // 구형/축약 응답도 scope는 보존하고 표시 metadata는 아래 서버 read로 보강합니다.
+        writeSignedInMembershipCache(user.uid, resolution);
       }
-
-      // Membership 연결 정보는 재사용하더라도 가구 화면은 서버 문서로 확정합니다.
-      const { getHousehold } = await import('@/lib/householdService');
-
-      markWebHouseholdStarted();
-      try {
-        const loadedHousehold = await withinDeadline(
-          getHousehold(membership.householdId),
-          HOUSEHOLD_READ_TIMEOUT_MS,
-          'HOUSEHOLD_READ_TIMEOUT'
+      const initialHousehold = resolvedHousehold ?? {
+        id: membership.householdId,
+        name: '우리집',
+        createdAt: new Date(0),
+        homeSummaryConfig: DEFAULT_HOME_SUMMARY_CONFIG,
+        members: [resolvedSelf],
+      };
+      const keepResolvedScreenWhileRefreshing =
+        options.preserveResolvedSession
+        && resolvedHousehold === undefined
+        && householdRef.current?.id === membership.householdId;
+      if (!keepResolvedScreenWhileRefreshing) {
+        applyHousehold(
+          initialHousehold,
+          !restoredFromCache && resolvedHousehold !== undefined,
+          !restoredFromCache && resolvedHousehold !== undefined
         );
-        markWebHouseholdCompleted(true);
-        applyHousehold(loadedHousehold);
-      } catch (error) {
-        markWebHouseholdCompleted(false);
-        throw error;
       }
+
+      const needsBackgroundHouseholdRefresh =
+        options.membershipSource === 'last-verified-cache'
+        || resolvedHousehold === undefined;
+      if (!needsBackgroundHouseholdRefresh) return;
+
+      // 저장된 scope로 원장 읽기를 즉시 시작하고, 표시용 가구 메타데이터만 병렬 갱신합니다.
+      void import('@/lib/householdService')
+        .then(({ getHousehold }) => {
+          if (resolutionGeneration !== resolutionGenerationRef.current) return;
+          markWebHouseholdStarted();
+          return withinDeadline(
+            getHousehold(membership.householdId),
+            HOUSEHOLD_READ_TIMEOUT_MS,
+            'HOUSEHOLD_READ_TIMEOUT'
+          );
+        })
+        .then((loadedHousehold) => {
+          if (!loadedHousehold) return;
+          markWebHouseholdCompleted(true);
+          applyHousehold(loadedHousehold);
+        })
+        .catch((error) => {
+          if (resolutionGeneration !== resolutionGenerationRef.current) return;
+          markWebHouseholdCompleted(false);
+          if (isTransientHouseholdReadFailure(error)) return;
+          clearSignedInMembershipCache();
+          requestAuthoritativeMembershipResolution();
+        });
     } catch (error) {
       if (resolutionGeneration !== resolutionGenerationRef.current) return;
       if (
-        options.membershipSource === 'last-verified-cache'
-        && !isTransientHouseholdReadFailure(error)
-      ) {
-        invalidateSignedInMembershipVerification(user.uid);
-      }
-      if (
         options.preserveResolvedSession
-        && !isHouseholdReadNotFound(error)
+        && isTransientHouseholdReadFailure(error)
       ) {
-        // 이미 서버 화면을 표시한 세션의 백그라운드 Membership 재검증 실패는
-        // 현재 읽기 준비 상태를 취소하지 않습니다.
+        // 권한 오류 뒤 재해석이 일시적으로 실패해도 현재 화면은 유지합니다.
         // 실제 가구 접근 권한은 계속 Firestore rules와 Functions에서 검증합니다.
         setSessionState('ready');
-        return;
+        return 'preserved-transient-failure';
       }
       if (!isTransientHouseholdReadFailure(error)) {
         clearSignedInMembershipCache();
@@ -507,66 +609,25 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     let androidBootstrapStarted = false;
     let appliedAuthUid: string | null | undefined;
     let appliedResolutionKey: string | undefined;
-    let membershipRevalidationDelayId: number | undefined;
-    let cancelPostPaintRevalidation: (() => void) | undefined;
+    let membershipResolutionUidInFlight: string | null = null;
+    let membershipResolutionRetryId: number | undefined;
+    let membershipResolutionRetryAttempt = 0;
+    let membershipResolutionRetryUid: string | null = null;
     let authObserverStartRequested = false;
+
+    const cancelMembershipResolutionRetry = () => {
+      if (membershipResolutionRetryId !== undefined) {
+        window.clearTimeout(membershipResolutionRetryId);
+        membershipResolutionRetryId = undefined;
+      }
+      membershipResolutionRetryAttempt = 0;
+      membershipResolutionRetryUid = null;
+    };
 
     const resolutionKey = (resolution?: SignedInUserResolution): string | undefined =>
       resolution?.kind === 'membership-found'
         ? `${resolution.membership.householdId}\u0000${resolution.membership.memberId}`
         : resolution?.kind;
-
-    const cancelMembershipRevalidation = () => {
-      if (membershipRevalidationDelayId !== undefined) {
-        window.clearTimeout(membershipRevalidationDelayId);
-        membershipRevalidationDelayId = undefined;
-      }
-      cancelPostPaintRevalidation?.();
-      cancelPostPaintRevalidation = undefined;
-    };
-
-    const scheduleMembershipRevalidation = (
-      user: User,
-      minimumDelayMs = 0
-    ) => {
-      cancelMembershipRevalidation();
-      const cachedDelay = getSignedInMembershipRevalidationDelay(user.uid);
-      if (cachedDelay === undefined) return;
-
-      membershipRevalidationDelayId = window.setTimeout(() => {
-        membershipRevalidationDelayId = undefined;
-        if (disposed || activeUserRef.current?.uid !== user.uid) return;
-
-        const refreshedDelay = getSignedInMembershipRevalidationDelay(user.uid);
-        if (refreshedDelay === undefined) return;
-        if (refreshedDelay > 0) {
-          scheduleMembershipRevalidation(user);
-          return;
-        }
-
-        cancelPostPaintRevalidation = scheduleAfterWebFirstLedgerPaint(
-          () => {
-            cancelPostPaintRevalidation = undefined;
-            if (disposed || activeUserRef.current?.uid !== user.uid) return;
-            void restoreSignedInUser(
-              user,
-              undefined,
-              undefined,
-              { preserveResolvedSession: true }
-            ).finally(() => {
-              if (!disposed && activeUserRef.current?.uid === user.uid) {
-                scheduleMembershipRevalidation(user, MEMBERSHIP_REVALIDATION_RETRY_MS);
-              }
-            });
-          },
-          {
-            delayAfterPaintMs: MEMBERSHIP_REVALIDATION_SETTLE_MS,
-            fallbackMs: MEMBERSHIP_REVALIDATION_FALLBACK_MS,
-            idleTimeoutMs: 5_000,
-          }
-        );
-      }, Math.max(cachedDelay, minimumDelayMs));
-    };
 
     const applyUser = (
       user: User | null,
@@ -578,6 +639,10 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       if (disposed) return;
       const nextUid = user?.uid ?? null;
       const nextResolutionKey = resolutionKey(prefetchedResolution);
+      if (appliedAuthUid !== nextUid) {
+        cancelMembershipResolutionRetry();
+        cancelQueuedAuthoritativeMembershipResolution();
+      }
       if (
         appliedAuthUid === nextUid
         && (nextResolutionKey === undefined || appliedResolutionKey === nextResolutionKey)
@@ -591,7 +656,6 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       appliedResolutionKey = nextResolutionKey;
       activeUserRef.current = user;
       if (!user) {
-        cancelMembershipRevalidation();
         resolutionGenerationRef.current += 1;
         clearResolvedSession();
         setLegacyCandidate(null);
@@ -604,17 +668,81 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         void restoreAdministratorHouseholdView(user, adminSelection);
         return;
       }
-      const restoration = restoreSignedInUser(
+      void restoreSignedInUser(
         user,
         captureLegacySessionCandidate(),
         prefetchedResolution,
         { preserveResolvedSession, membershipSource }
       );
-      // 검증 시각이 있는 Membership 연결 정보를 사용해도 재검증 예약은 유지합니다.
-      scheduleMembershipRevalidation(user);
-      void restoration.finally(() => {
-        if (!disposed && activeUserRef.current?.uid === user.uid) {
-          scheduleMembershipRevalidation(user);
+    };
+
+    const scheduleMembershipResolutionRetry = (principalUid: string) => {
+      if (
+        disposed
+        || activeUserRef.current?.uid !== principalUid
+        || membershipResolutionRetryId !== undefined
+      ) {
+        return;
+      }
+      membershipResolutionRetryUid = principalUid;
+      const delay = Math.min(
+        MEMBERSHIP_RECOVERY_RETRY_MAX_MS,
+        MEMBERSHIP_RECOVERY_RETRY_BASE_MS
+          * (2 ** Math.min(membershipResolutionRetryAttempt, 4))
+      );
+      membershipResolutionRetryAttempt += 1;
+      membershipResolutionRetryId = window.setTimeout(() => {
+        membershipResolutionRetryId = undefined;
+        if (
+          disposed
+          || membershipResolutionRetryUid !== principalUid
+          || activeUserRef.current?.uid !== principalUid
+        ) {
+          return;
+        }
+        handleMembershipResolutionRequest();
+      }, delay);
+    };
+
+    const handleMembershipResolutionRequest = () => {
+      const user = activeUserRef.current;
+      if (
+        disposed
+        || !user
+        || membershipResolutionUidInFlight === user.uid
+      ) {
+        return;
+      }
+      if (readAdminHouseholdViewSelection() !== null && !isAndroidHostAvailable()) return;
+
+      if (membershipResolutionRetryUid === user.uid) {
+        if (membershipResolutionRetryId !== undefined) {
+          window.clearTimeout(membershipResolutionRetryId);
+          membershipResolutionRetryId = undefined;
+        }
+      } else {
+        membershipResolutionRetryAttempt = 0;
+      }
+      membershipResolutionRetryUid = user.uid;
+      membershipResolutionUidInFlight = user.uid;
+      cancelQueuedAuthoritativeMembershipResolution();
+      clearSignedInMembershipCache();
+      void restoreSignedInUser(
+        user,
+        captureLegacySessionCandidate(),
+        undefined,
+        { preserveResolvedSession: true }
+      ).then((outcome) => {
+        if (disposed || activeUserRef.current?.uid !== user.uid) return;
+        cancelQueuedAuthoritativeMembershipResolution();
+        if (outcome === 'preserved-transient-failure') {
+          scheduleMembershipResolutionRetry(user.uid);
+          return;
+        }
+        cancelMembershipResolutionRetry();
+      }).finally(() => {
+        if (membershipResolutionUidInFlight === user.uid) {
+          membershipResolutionUidInFlight = null;
         }
       });
     };
@@ -717,11 +845,20 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       });
     };
     startAuthObserver();
+    window.addEventListener(
+      MEMBERSHIP_RESOLUTION_REQUESTED_EVENT,
+      handleMembershipResolutionRequest
+    );
 
     return () => {
       disposed = true;
-      cancelMembershipRevalidation();
+      cancelMembershipResolutionRetry();
+      cancelQueuedAuthoritativeMembershipResolution();
       unsubscribeAuth?.();
+      window.removeEventListener(
+        MEMBERSHIP_RESOLUTION_REQUESTED_EVENT,
+        handleMembershipResolutionRequest
+      );
     };
   }, [
     activateRemoteSession,
@@ -927,11 +1064,35 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       name: trimmedName,
       aggregateVersion: currentMember.aggregateVersion + 1,
     };
+    currentMemberRef.current = updated;
     setCurrentMember(updated);
-    setHousehold({
+    const updatedHousehold = {
       ...household,
       members: household.members.map((member) => member.id === updated.id ? updated : member),
-    });
+    };
+    householdRef.current = updatedHousehold;
+    setHousehold(updatedHousehold);
+
+    const principalUid = activeUserRef.current?.uid;
+    const cachedResolution = principalUid
+      ? readSignedInMembershipCache(principalUid)
+      : undefined;
+    if (
+      principalUid
+      && cachedResolution?.kind === 'membership-found'
+      && cachedResolution.membership.householdId === household.id
+      && cachedResolution.membership.memberId === updated.id
+    ) {
+      writeSignedInMembershipCache(principalUid, {
+        ...cachedResolution,
+        membership: {
+          ...cachedResolution.membership,
+          displayName: updated.name,
+          aggregateVersion: updated.aggregateVersion,
+        },
+        household: householdToResolutionView(updatedHousehold),
+      });
+    }
   }, [currentMember, household]);
 
   return (

@@ -490,7 +490,33 @@ Firebase Scheduled Function
 
 ## 13. Google 로그인과 기존 가구 키 무중단 전환
 
-### 기존 사용자
+### 반복 실행 사용자
+
+```text
+Firebase Auth persistence → UID 확정
+  ├─ 같은 UID의 Membership + Household metadata cache hit
+  │    → SessionScope·가구 metadata 즉시 복원
+  │    → 월 원장·카테고리·지역화폐 Rules 보호 구독 시작
+  │    └─ Household 한 문서 서버 refresh 병렬 실행
+  └─ cache miss
+       → Access [ResolveSignedInUser]
+       → 결과 저장·SessionScope 발급
+       → 같은 업무 구독 시작
+
+보호 구독 permission-denied
+  → bootstrap cache 삭제 + 오류 listener 종료
+  → Access [ResolveSignedInUser] 한 번
+  ├─ 같은 scope → in-memory 화면 유지 + read epoch 재연결
+  └─ first visit / 다른 scope → 기존 scope·화면·구독 폐기
+```
+
+1. Firebase Auth observer가 반환한 UID와 cache의 principalUid가 정확히 일치할 때만 cache hit이다. hit에는 Membership 연결과 마지막 Household 표시 metadata가 함께 있어야 하며, 둘을 원자 적용한 뒤 별도 Membership·Household 왕복을 기다리지 않고 업무 구독을 시작한다.
+2. 월 원장·카테고리·지역화폐는 첫 서버 snapshot부터 표시하고 Firestore Rules가 active Membership을 매 read에서 권위 검증한다. cache는 Rules나 Functions의 ActorContext 근거가 아니다.
+3. Household 최신 정보는 `households/{householdId}` 한 문서의 비차단 refresh다. 정규화 결과가 cache와 다를 때만 화면·cache를 갱신하고, 일시 실패는 이미 시작한 업무 구독을 취소하지 않는다.
+4. cache miss와 `permission-denied`만 반복 실행 중 `ResolveSignedInUser`를 호출한다. 권한 거부 시 cache와 오류 listener는 즉시 지우되 해석 중 마지막 in-memory 화면은 유지한다. 같은 scope가 확인되면 read epoch로 재연결하고 first visit·다른 scope가 확인될 때만 기존 화면을 폐기한다. 마지막 검증 뒤 30분 같은 시간 조건이나 idle/background 주기 재검증은 두지 않는다.
+5. Firebase UID 변경은 이전 scope와 구독을 폐기한 뒤 새 UID의 cache hit/miss 절차를 적용한다. 내부 route 이동은 app-level 원장·지역화폐 구독을 유지하고, 월 원장만 선택 연·월 변경에서 교체한다.
+
+### 기존 가구 키 사용자
 
 ```text
 Web localStorage

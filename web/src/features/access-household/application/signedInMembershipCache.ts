@@ -8,17 +8,74 @@ export type MembershipFoundResolution = Extract<
 >;
 
 const STORAGE_KEY = 'household-account.signed-in-membership.v1';
-export const SIGNED_IN_MEMBERSHIP_REVALIDATION_INTERVAL_MS = 30 * 60 * 1_000;
 
 interface StoredMembership {
-  version: 1 | 2 | 3 | 4;
+  version: 1 | 2 | 3 | 4 | 5;
   principalUid: string;
   resolution: MembershipFoundResolution;
-  verifiedAt?: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function decodeHousehold(
+  value: unknown,
+  householdId: string
+): MembershipFoundResolution['household'] {
+  if (
+    !isRecord(value)
+    || value.id !== householdId
+    || typeof value.name !== 'string'
+    || value.name.trim() === ''
+    || typeof value.createdAt !== 'string'
+    || Number.isNaN(Date.parse(value.createdAt))
+    || !Array.isArray(value.members)
+  ) {
+    return undefined;
+  }
+
+  const members = value.members.map((candidate) => {
+    if (
+      !isRecord(candidate)
+      || typeof candidate.id !== 'string'
+      || candidate.id.trim() === ''
+      || typeof candidate.name !== 'string'
+      || candidate.name.trim() === ''
+      || !Number.isInteger(candidate.aggregateVersion)
+      || Number(candidate.aggregateVersion) < 1
+    ) {
+      return undefined;
+    }
+    return {
+      id: candidate.id,
+      name: candidate.name,
+      aggregateVersion: Number(candidate.aggregateVersion),
+    };
+  });
+  if (members.some((member) => member === undefined)) return undefined;
+
+  const rawSummary = value.homeSummaryConfig;
+  const homeSummaryConfig =
+    isRecord(rawSummary)
+    && typeof rawSummary.leftCard === 'string'
+    && typeof rawSummary.rightCard === 'string'
+      ? {
+          leftCard: rawSummary.leftCard,
+          rightCard: rawSummary.rightCard,
+        }
+      : undefined;
+
+  return {
+    id: householdId,
+    name: value.name,
+    createdAt: value.createdAt,
+    ...(typeof value.defaultCategoryKey === 'string'
+      ? { defaultCategoryKey: value.defaultCategoryKey }
+      : {}),
+    ...(homeSummaryConfig ? { homeSummaryConfig } : {}),
+    members: members as NonNullable<MembershipFoundResolution['household']>['members'],
+  };
 }
 
 function decode(value: unknown): StoredMembership | undefined {
@@ -29,6 +86,7 @@ function decode(value: unknown): StoredMembership | undefined {
       && value.version !== 2
       && value.version !== 3
       && value.version !== 4
+      && value.version !== 5
     )
     || typeof value.principalUid !== 'string'
   ) {
@@ -53,6 +111,7 @@ function decode(value: unknown): StoredMembership | undefined {
   ) {
     return undefined;
   }
+  const household = decodeHousehold(resolution.household, membership.householdId);
   return {
     version: value.version,
     principalUid: value.principalUid,
@@ -66,12 +125,8 @@ function decode(value: unknown): StoredMembership | undefined {
         status: 'active',
         capabilities: [...membership.capabilities] as string[],
       },
+      ...(household ? { household } : {}),
     },
-    ...(typeof value.verifiedAt === 'number'
-      && Number.isFinite(value.verifiedAt)
-      && value.verifiedAt > 0
-      ? { verifiedAt: value.verifiedAt }
-      : {}),
   };
 }
 
@@ -98,60 +153,16 @@ export function readSignedInMembershipCache(
   return stored?.principalUid === principalUid ? stored.resolution : undefined;
 }
 
-/**
- * Returns when the cached Membership should converge with the authoritative command again.
- * Legacy cache records have no timestamp and are therefore revalidated after first paint.
- */
-export function getSignedInMembershipRevalidationDelay(
-  principalUid: string,
-  now = Date.now()
-): number | undefined {
-  if (typeof window === 'undefined' || principalUid.trim() === '') return undefined;
-  const stored = readStoredMembership();
-  if (stored?.principalUid !== principalUid) return undefined;
-  if (stored.verifiedAt === undefined) return 0;
-  return Math.min(
-    SIGNED_IN_MEMBERSHIP_REVALIDATION_INTERVAL_MS,
-    Math.max(
-      0,
-      stored.verifiedAt + SIGNED_IN_MEMBERSHIP_REVALIDATION_INTERVAL_MS - now
-    )
-  );
-}
-
-export function invalidateSignedInMembershipVerification(
-  principalUid: string
-): void {
-  if (typeof window === 'undefined' || principalUid.trim() === '') return;
-  const stored = readStoredMembership();
-  if (stored?.principalUid !== principalUid) return;
-  const { verifiedAt: _verifiedAt, ...retained } = stored;
-  window.localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({ ...retained, version: 4 })
-  );
-}
-
-/** 화면 데이터 없이 인증된 Membership 연결 정보만 보존합니다. */
+/** 금융 화면 데이터 없이 인증된 Membership scope와 가구 표시 설정만 보존합니다. */
 export function writeSignedInMembershipCache(
   principalUid: string,
-  resolution: MembershipFoundResolution,
-  options: { preserveVerificationTime?: boolean } = {}
+  resolution: MembershipFoundResolution
 ): void {
   if (typeof window === 'undefined' || principalUid.trim() === '') return;
-  const current = readStoredMembership();
-  const retainedVerifiedAt =
-    current?.principalUid === principalUid
-    && current.resolution.membership.householdId === resolution.membership.householdId
-      ? current.verifiedAt
-      : undefined;
   const stored: StoredMembership = {
-    version: 4,
+    version: 5,
     principalUid,
     resolution,
-    ...(options.preserveVerificationTime
-      ? (retainedVerifiedAt !== undefined ? { verifiedAt: retainedVerifiedAt } : {})
-      : { verifiedAt: Date.now() }),
   };
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
 }

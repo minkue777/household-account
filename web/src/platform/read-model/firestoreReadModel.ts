@@ -6,6 +6,7 @@
  */
 import { onSnapshot as firebaseOnSnapshot } from 'firebase/firestore';
 import { requestRemoteSessionRecovery } from '@/platform/functions-api/firebaseCallableRecovery';
+import { requestMembershipResolution } from '@/features/access-household/application/membershipResolutionRecovery';
 
 export {
   Timestamp,
@@ -14,6 +15,7 @@ export {
   getDoc,
   getDocFromServer,
   getDocs,
+  limit,
   orderBy,
   query,
   where,
@@ -55,7 +57,9 @@ export const onSnapshot = ((...rawArguments: unknown[]) => {
     args[callbackIndex] = {
       ...observer,
       error: (error: unknown) => {
-        requestRemoteSessionRecovery();
+        if (!requestMembershipResolution(error)) {
+          requestRemoteSessionRecovery();
+        }
         observer.error?.(error);
       },
     };
@@ -63,7 +67,9 @@ export const onSnapshot = ((...rawArguments: unknown[]) => {
     const errorIndex = callbackIndex + 1;
     const originalError = args[errorIndex];
     args[errorIndex] = (error: unknown) => {
-      requestRemoteSessionRecovery();
+      if (!requestMembershipResolution(error)) {
+        requestRemoteSessionRecovery();
+      }
       if (typeof originalError === 'function') {
         (originalError as (value: unknown) => void)(error);
       }
