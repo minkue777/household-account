@@ -121,7 +121,7 @@ QuickEdit의 입력은 저장 완료된 거래 ID와 표시용 snapshot입니다
 | [DEC-054](../../../governance/decisions.md#dec-054) | 확정 | 연속 QuickEdit은 현재 편집을 보호하고 후속 거래를 내구성 있는 FIFO로 보존하여 하나씩 표시합니다. |
 | [DEC-055](../../../governance/decisions.md#dec-055) | 확정 | 미저장 QuickEdit form 전체를 분할 초안으로 사용하고 다른 변경과 경합하면 stale Command 전체를 거부합니다. |
 | [DEC-067](../../../governance/decisions.md#dec-067) | 확정 | QuickEdit은 일반 Ledger Command의 Android Adapter로서 암호화 outbox commit과 WorkManager 예약 뒤 화면에서 분리하고, 같은 멱등 key로 최대 3일 FIFO 전달하며 실패 알림 성공 전까지 terminal payload를 보존합니다. |
-| [DEC-068](../../../governance/decisions.md#dec-068) | 확정 | 소규모 운영에서는 첫 가계부 화면을 서버 우선으로 단순화하고 서버 `quickEditSnapshot` 직접 표시로 QuickEdit의 중복 대기를 제거하되 Auth·App Check·가구 격리·멱등성을 유지합니다. |
+| [DEC-068](../../../governance/decisions.md#dec-068) | 확정 | 소규모 운영에서는 첫 가계부 화면을 서버 우선으로 단순화하고 서버 `quickEditSnapshot` 직접 표시로 QuickEdit의 중복 대기를 제거합니다. WebView 공용 Command·Query는 Auth·Membership·가구 격리·멱등성을 유지하고, Native 결제 수집·세션 교환에는 App Check를 추가 유지합니다. |
 
 WebView URL·허용 origin은 배포 환경별 versioned 설정으로 고정하고 SessionMirror는 Android Keystore 기반으로 암호화하므로 별도 제품 결정을 요구하지 않습니다. 화면 캡처는 DEC-045, 연속 QuickEdit 표시는 DEC-054, 미저장 form 분할 원천은 DEC-055로 확정했습니다.
 

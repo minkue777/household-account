@@ -11,8 +11,6 @@ function source(relativePath: string): string {
 
 describe("배포 callable App Check 경계", () => {
   it.each([
-    "functions/src/bootstrap/firebaseHouseholdCommand.ts",
-    "functions/src/bootstrap/firebaseHouseholdQuery.ts",
     "functions/src/bootstrap/firebaseCaptureSubmission.ts",
     "functions/src/bootstrap/firebaseWebViewSession.ts",
   ])("%s는 인증과 별도로 App Check를 강제한다", (path) => {
@@ -50,13 +48,14 @@ describe("배포 callable App Check 경계", () => {
     expect(value).not.toMatch(/minInstances\s*:/u);
   });
 
-  it("소규모 운영의 공용 Command와 Query callable은 각각 warm instance 하나를 유지한다", () => {
+  it("공용 Command와 Query callable은 Auth·Membership을 경계로 사용하고 불안정한 WebView App Check를 중복 강제하지 않는다", () => {
     for (const path of [
       "functions/src/bootstrap/firebaseHouseholdCommand.ts",
       "functions/src/bootstrap/firebaseHouseholdQuery.ts",
     ]) {
       const value = source(path);
-      expect(value).toMatch(/enforceAppCheck:\s*true/u);
+      expect(value).toContain("principalUid: context.auth?.uid");
+      expect(value).not.toMatch(/enforceAppCheck:\s*true/u);
       expect(value).not.toMatch(/minInstances\s*:/u);
     }
   });

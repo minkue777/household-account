@@ -100,7 +100,7 @@ FID는 Write DTO와 FCM Output Port command에만 존재하며 사용자 identit
 
 | 이름·종류 | 호출자 | 입력 | 결과 | 권한 | 일관성·멱등성 |
 |---|---|---|---|---|---|
-| `RegisterEndpoint` Command | iPhone 홈 화면 PWA, Android | registration DTO | `Success<EndpointRegistered>`·`Conflict` | 인증 uid, App Check, 대상 가구 Membership | endpoint·receipt 한 transaction; 같은 command key 재생; 동일 FID의 낡은 binding은 현재 로그인으로 원자 교체 |
+| `RegisterEndpoint` Command | iPhone 홈 화면 PWA, Android | registration DTO | `Success<EndpointRegistered>`·`Conflict` | 인증 uid, 대상 가구 Membership | endpoint·receipt 한 transaction; 같은 command key 재생; 동일 FID의 낡은 binding은 현재 로그인으로 원자 교체 |
 | `RemoveEndpoint` Command | iPhone 홈 화면 PWA, Android | memberId, FID | `Removed`·`AlreadyAbsent` | 현재 binding의 해당 멤버 Actor | 로그아웃 때 현재 FID endpoint만 삭제; 다른 설치 endpoint 보존 |
 | `MarkEndpointInactive` Command | FCM result worker, SDK callback Adapter | endpointId, expected registrationVersion, reason | `Inactivated`·`StaleIgnored` | 내부 SystemActor 또는 검증된 현재 binding | 현재 FID/version 일치 시에만 inactive; inactiveAt+30일 expiresAt 설정 |
 | `AcceptNotificationIntent` Event Handler | Outbox Dispatcher | versioned 업무 Event | `Queued(count)`·`NoTarget`·`AlreadyProcessed` | 등록된 producer schema | Inbox + intent + delivery claims 한 transaction; `(eventId, handlerName)` |
@@ -192,7 +192,7 @@ Client Adapter의 `NotificationCapabilityController`는 플랫폼별로 다음�
 서버 `RegisterEndpoint`는 다음 순서입니다.
 
 1. Actor와 household 일치, 활성 Membership, `memberId`가 Actor에게 허용됐는지 확인합니다.
-2. App Check를 검증합니다. FID는 인증 증명이 아니므로 Actor·Membership 검증을 대신하지 않습니다.
+2. 활성 Membership과 대상 member binding을 검증합니다. FID는 인증 증명이 아니므로 Actor·Membership 검증을 대신하지 않습니다.
 3. 앞의 검증이 모두 성공한 뒤에만 FID·device metadata를 정규화하고 FID hash를 계산합니다. 실패 경로는 endpoint Repository의 read/write와 낡은 binding 교체를 한 번도 호출하지 않습니다.
 4. FID keyed hash로 endpointId를 만들고 Unit of Work에서 해당 endpoint를 읽어 `EndpointRegistrationPolicy`를 적용합니다.
 5. endpoint·command receipt를 같은 transaction에서 생성 또는 갱신하고 `EndpointRegistered`를 반환합니다. 낡은 다른 binding이 있으면 같은 transaction에서 현재 로그인 binding으로 교체합니다.
@@ -260,7 +260,6 @@ endpoint 정리는 Event 기반 비동기 cleanup이지만 접근·수신 차단
 | `DeliveryRepository` | intent·delivery 단일 시도 claim, result, status query | queued, claim contention, already-attempted, unknown, permanent, partial |
 | `NotificationsUnitOfWork` | registration 및 intent claim의 다중 문서 transaction | callback 2회, rollback, write limit |
 | `MembershipQueryPort` | Actor/member/household 상태 검증과 recipient 계산·provider 호출 직전 active 재확인 | active, removed, deleted, purging, missing, forbidden |
-| `AppAttestationPort` | App Check 검증 | valid, missing, wrong app, expired |
 | `FirebaseMessagingPort` | endpoint 하나의 provider-neutral `sendOne` | success, 404+UNREGISTERED, 404 other, invalid FID, quota, timeout, credential error |
 | `OutboxAppendPort` | Notifications 결과 Event 기록 | 현재 UoW 참여, immutable envelope |
 | `Clock`, `IdGenerator`, `HashingPort`, `ObservabilityPort` | 시간·ID·claim hash·trace | FID와 민감 payload 비노출 |
@@ -330,7 +329,7 @@ Notification delivery 상태는 운영 Read Model일 뿐 거래 Canonical 상태
 ### 9.2 보안·개인정보
 
 - FID, FID hash와 민감 payload는 server-only이고 공개 Read Model과 일반 로그에서 제외합니다.
-- `RegisterEndpoint`는 인증 uid, Membership, memberId와 App Check를 endpoint Repository 접근 전에 검증하며 FID 자체는 인증 수단으로 신뢰하지 않습니다.
+- `RegisterEndpoint`는 인증 uid, Membership과 memberId를 endpoint Repository 접근 전에 검증하며 FID 자체는 인증 수단으로 신뢰하지 않습니다.
 - 다른 가구 query·register·remove·status 조회를 차단하고 가구 존재 정보도 불필요하게 노출하지 않습니다.
 - 제거된 Membership은 endpoint가 아직 남아 있어도 recipient 계산과 provider 호출에서 모두 차단합니다. cleanup handler는 Access가 발행한 Event와 내부 SystemActor만 허용합니다.
 - Canonical endpoint·delivery 컬렉션의 client write를 Rules로 거부합니다.
@@ -389,7 +388,7 @@ Repository Fake와 Firestore Adapter는 같은 Conformance Suite를 사용하며
 | [PUSH-006](requirements.md#5-요구사항) | PWA E2E, Contract | worker click Adapter | expenseId 있음/없음, 같은/다른 origin 기존 창, dismiss | 유효 편집 URL만 같은 origin focus/open, dismiss no-op | `T-PUSH-SEC-002` |
 | [PUSH-007](requirements.md#5-요구사항) | Android UI, Contract | foreground Adapter·component gate | notification/data-only, Android 13 권한 허용/거부, 현재/다른/미확인 binding, 로그아웃·background payload | 현재 확인 binding의 notification만 지정 channel로 표시·MainActivity, 로그아웃 component 차단으로 foreground·background 모두 표시 0건 | `T-PUSH-009`, `T-PUSH-010` |
 | [PUSH-008](requirements.md#5-요구사항) | Domain, Emulator, Concurrency | EndpointRegistrationPolicy·등록/삭제 UoW·단일 Delivery 시도 | endpoint 없음, 같은 FID 재등록, FID A·B 등록, A 로그아웃, 로컬 차단 뒤 삭제 누락·새 로그인, 404+UNREGISTERED·404 other·500·timeout·quota·network·credential·stale 404 | A·B 독립 활성, 동일 FID 갱신, A만 삭제, 삭제 유실 중 로컬 표시 차단과 다음 등록 수렴, endpoint별 sendOne 한 번, 현재 404+UNREGISTERED만 awaited inactive, 다른 결과 보존·재전송 없음 | `T-PUSH-004`, `T-PUSH-006`, `T-PUSH-010` |
-| [PUSH-009](requirements.md#5-요구사항) | Contract, Security, Emulator | `RegisterEndpoint` 인가 | 무인증·타 가구·빈 member/FID·잘못된 App Check·다른 멤버 등록 | 권한/검증/Conflict와 endpoint Repository read/write 0회; FID를 인증으로 사용하지 않음 | `T-PUSH-SEC-001` |
+| [PUSH-009](requirements.md#5-요구사항) | Contract, Security, Emulator | `RegisterEndpoint` 인가 | 무인증·타 가구·빈 member/FID·다른 멤버 등록 | 권한/검증/Conflict와 endpoint Repository read/write 0회; FID를 인증으로 사용하지 않음 | `T-PUSH-SEC-001` |
 | [PUSH-010](requirements.md#5-요구사항) | Application, Emulator | Inbox·Delivery idempotency | 같은 Event 재전달·worker 경합·callback 2회·send 결과 뒤 재호출 | endpoint별 delivery claim과 Admin send 정확히 한 번 | `T-PUSH-003`, `T-PUSH-006` |
 | [PUSH-011](requirements.md#5-요구사항) | Domain, PWA E2E, Security | safe click Policy·worker Adapter | 절대 URL, javascript scheme, 외부 client, unknown target/version, ID 길이·문자 경계 | 외부 이동 없음, 유효 enum+ID만 URL API로 같은 origin 편집 경로 | `T-PUSH-SEC-002` |
 | [PUSH-012](requirements.md#5-요구사항) | Application, Emulator, Concurrency, Security | 제거 Event cleanup·recipient/Delivery Membership gate | endpoint A·B, 다른 멤버 C, queued delivery, 지연·중복 제거 Event, 제거 뒤 복구 | A·B만 멱등 삭제, C·terminal 기록 유지, cleanup 전후 provider 호출 없음, 복구 시 endpoint 자동 부활 없음 | `T-PUSH-007` |
@@ -402,4 +401,4 @@ Context contract suite는 대상 없음·전체 성공·failed·unknown·permane
 
 Notifications의 제품 정책 미결정 사항은 없습니다. 보존 기간은 DEC-027로 확정되었습니다.
 
-구현 순서는 (1) 현재 마지막 endpoint 덮어쓰기와 대상 계산·모든 오류 token 삭제·미완료 cleanup·PWA/Android payload characterization, (2) versioned payload schema·safe click consumer contract, (3) 최신 Firebase Client/Admin SDK와 FID 계약 적용, (4) Membership/App Check 선검증과 설치별 endpoint 등록·로그아웃 삭제·낡은 binding 복구 Command 및 동시성 test, (5) Ledger/Intake Event schema 및 Inbox, (6) 전체 originChannel Recipient Policy와 다중 endpoint delivery claim, (7) endpoint별 `sendOne(fid)` 한 번·awaited result transaction·현재 version의 404+UNREGISTERED 조건부 inactive·최종 status, (8) 제거 Event cleanup과 recipient·전송 직전 active Membership gate, (9) 기존 trigger를 Outbox consumer Facade로 전환, (10) FID Client와 서버를 함께 배포한 뒤 registration token writer·전송·multicast helper·`fcmTokens`를 제거, (11) paged purge 순입니다. 목표 운영 경로에는 provider 자동 retry, token fallback이나 dual-write를 남기지 않습니다.
+구현 순서는 (1) 현재 마지막 endpoint 덮어쓰기와 대상 계산·모든 오류 token 삭제·미완료 cleanup·PWA/Android payload characterization, (2) versioned payload schema·safe click consumer contract, (3) 최신 Firebase Client/Admin SDK와 FID 계약 적용, (4) Auth·Membership 선검증과 설치별 endpoint 등록·로그아웃 삭제·낡은 binding 복구 Command 및 동시성 test, (5) Ledger/Intake Event schema 및 Inbox, (6) 전체 originChannel Recipient Policy와 다중 endpoint delivery claim, (7) endpoint별 `sendOne(fid)` 한 번·awaited result transaction·현재 version의 404+UNREGISTERED 조건부 inactive·최종 status, (8) 제거 Event cleanup과 recipient·전송 직전 active Membership gate, (9) 기존 trigger를 Outbox consumer Facade로 전환, (10) FID Client와 서버를 함께 배포한 뒤 registration token writer·전송·multicast helper·`fcmTokens`를 제거, (11) paged purge 순입니다. 목표 운영 경로에는 provider 자동 retry, token fallback이나 dual-write를 남기지 않습니다.

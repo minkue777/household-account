@@ -201,7 +201,7 @@ Portfolio ──valuation·dividend Outbox Event──▶ Read Side
 | [DEC-065](governance/decisions.md#dec-065) | Household Finance | 일반 거래 삭제는 복구 가능한 논리 삭제로 처리하고 사용자 복구 UI 없이 운영자/Agent의 명시 작업으로만 복구·영구 정리한다. |
 | [DEC-066](governance/decisions.md#dec-066) | Payment Capture | Android는 raw 알림을 암호화 journal에 선기록한 뒤 전달하고 Functions parser를 단일 정본으로 사용하며, created snapshot을 QuickEdit FIFO에 내구화한 뒤 journal을 ack한다. |
 | [DEC-067](governance/decisions.md#dec-067) | 지원·플랫폼 | QuickEdit은 일반 Ledger Command의 Android Adapter이며, Keystore 암호화 outbox commit과 WorkManager 영속 예약 뒤 화면에서 분리하고 고정 멱등 key로 비동기 전달한다. |
-| [DEC-068](governance/decisions.md#dec-068) | 공통 시스템·Payment Capture·지원 플랫폼 | 현재 두 가구와 향후 소수 가구의 대화형 경로는 첫 paint·결제·QuickEdit 저지연을 우선하고 대규모 분산 장치를 배제하되 Auth·App Check·가구 격리·중복 방지·72시간 실패 복구를 유지한다. |
+| [DEC-068](governance/decisions.md#dec-068) | 공통 시스템·Payment Capture·지원 플랫폼 | 현재 두 가구와 향후 소수 가구의 대화형 경로는 첫 paint·결제·QuickEdit 저지연을 우선하고 대규모 분산 장치를 배제합니다. 공용 경로는 Auth·Membership·가구 격리·중복 방지·72시간 실패 복구를 유지하고, Native 결제 수집·세션 교환에는 App Check를 추가 유지합니다. |
 
 코드 감사에서 발견한 Human in the loop 정책은 DEC-064까지 모두 처리했습니다. 중복 질문이던 Q-002는 DEC-011에 통합했고, Q-003은 일반 사용자 복구 금지와 운영 복구일 기준 자동화 재개로 DEC-017·DEC-052에 반영했으며, Q-004는 Shortcut credential 원문 최초 응답 1회와 `AlreadyIssued` 재전송으로 DEC-033에 반영했습니다. Q-005는 별도 카드 통계가 아닌 Ledger 검색 계약으로 정리했고, Q-006은 release gate 우회 금지로 DEC-064에 확정했습니다. [미결정 사항 단일 목록](governance/pending-decisions.md)의 현재 항목은 0개입니다.
 

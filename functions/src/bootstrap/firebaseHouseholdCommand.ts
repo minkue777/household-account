@@ -134,7 +134,6 @@ const router = createHouseholdCommandRouter({
 export const executeHouseholdCommand = functions
   .region(REGION)
   .runWith({
-    enforceAppCheck: true,
     secrets: ["SHORTCUT_CREDENTIAL_PEPPER"],
   })
   .https.onCall(async (data, context): Promise<HouseholdCommandWireResponse> => {
