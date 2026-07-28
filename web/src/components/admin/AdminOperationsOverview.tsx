@@ -141,19 +141,19 @@ const FUNCTION_OPERATION_GROUPS = [
     ],
   },
   {
+    label: '지출 합치기',
+    operations: [
+      'ledger.merge-transactions.v1',
+      'ledger.unmerge-transaction.v1',
+    ],
+  },
+  {
     label: '월 분할',
     operations: [
       'ledger.record-manual-monthly-split.v1',
       'ledger.split-existing-transaction-monthly.v1',
       'ledger.reconfigure-monthly-split.v1',
       'ledger.cancel-monthly-split.v1',
-    ],
-  },
-  {
-    label: '지출 합치기',
-    operations: [
-      'ledger.merge-transactions.v1',
-      'ledger.unmerge-transaction.v1',
     ],
   },
   {

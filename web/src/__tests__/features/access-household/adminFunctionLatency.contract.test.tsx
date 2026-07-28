@@ -67,6 +67,17 @@ describe('admin Cloud Function latency contract', () => {
           },
           {
             endpoint: 'executeHouseholdCommand',
+            operation: 'ledger.split-transaction.v1',
+            sampleCount: 2,
+            succeededCount: 2,
+            failedCount: 0,
+            averageMs: 600,
+            p95Ms: 700,
+            maxMs: 800,
+            latestAt: '2026-07-28T00:09:00.000Z',
+          },
+          {
+            endpoint: 'executeHouseholdCommand',
             operation: 'ledger.update-transaction.v1',
             sampleCount: 5,
             succeededCount: 4,
@@ -100,6 +111,7 @@ describe('admin Cloud Function latency contract', () => {
 
     const updateRow = screen.getByText('ledger.update-transaction.v1').closest('tr');
     const deleteRow = screen.getByText('ledger.delete-transaction.v1').closest('tr');
+    const splitRow = screen.getByText('ledger.split-transaction.v1').closest('tr');
     const mergeRow = screen.getByText('ledger.merge-transactions.v1').closest('tr');
     const unmergeRow = screen.getByText('ledger.unmerge-transaction.v1').closest('tr');
 
@@ -108,7 +120,11 @@ describe('admin Cloud Function latency contract', () => {
       & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(
-      deleteRow!.compareDocumentPosition(mergeRow!)
+      deleteRow!.compareDocumentPosition(splitRow!)
+      & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      splitRow!.compareDocumentPosition(mergeRow!)
       & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(
