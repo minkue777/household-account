@@ -8,6 +8,20 @@ type LedgerPatch = Partial<Pick<
   'merchant' | 'memo' | 'amount' | 'category' | 'date'
 >>;
 
+/**
+ * 월 분할 취소 직후 원본 복구와 파생 항목 삭제가 서로 다른 read emission으로
+ * 관찰되더라도 같은 화면에 둘을 함께 노출하지 않습니다.
+ */
+export function reconcileRestoredMonthlySplit(
+  expenses: readonly Expense[]
+): Expense[] {
+  const visibleIds = new Set(expenses.map(({ id }) => id));
+  return expenses.filter(
+    ({ splitOriginalId }) =>
+      splitOriginalId === undefined || !visibleIds.has(splitOriginalId)
+  );
+}
+
 /** Ledger가 허용하는 patch만 공통 optimistic projection에 노출합니다. */
 export class LedgerOptimisticProjection {
   private readonly projections = new Map<string, OptimisticEntityProjection<Expense>>();
@@ -19,7 +33,11 @@ export class LedgerOptimisticProjection {
     scope = 'default',
     retentionKey?: string
   ) {
-    return this.projectionFor(scope).subscribe(callback, accept, retentionKey);
+    return this.projectionFor(scope).subscribe(
+      (expenses) => callback(reconcileRestoredMonthlySplit(expenses)),
+      accept,
+      retentionKey
+    );
   }
 
   current(transactionId: string, scope = 'default'): Expense | undefined {

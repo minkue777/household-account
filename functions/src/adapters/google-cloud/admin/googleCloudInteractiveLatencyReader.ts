@@ -64,11 +64,11 @@ const LATENCY_RESET_AT_BY_OPERATION = new Map<string, number>([
   ["ledger.split-transaction.v1", Date.parse("2026-07-28T14:28:00.794Z")],
   [
     "ledger.split-existing-transaction-monthly.v1",
-    Date.parse("2026-07-28T14:28:00.794Z"),
+    Date.parse("2026-07-28T15:10:24.296Z"),
   ],
   [
     "ledger.cancel-monthly-split.v1",
-    Date.parse("2026-07-28T14:28:00.794Z"),
+    Date.parse("2026-07-28T15:10:24.296Z"),
   ],
 ]);
 

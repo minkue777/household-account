@@ -190,4 +190,47 @@ describe('Ledger optimistic projection contract', () => {
     expect(firstHousehold).toHaveBeenLastCalledWith([expense()]);
     expect(secondHousehold).toHaveBeenLastCalledWith([]);
   });
+
+  it('월 분할 원본이 복구된 emission에서는 남아 있는 파생 항목을 함께 노출하지 않는다', () => {
+    const projection = new LedgerOptimisticProjection();
+    const callback = jest.fn();
+    const subscription = projection.subscribe(callback, () => true);
+    const restored = expense({
+      id: 'original-expense',
+      aggregateVersion: 4,
+      merchant: '테스트',
+      amount: 20_000,
+    });
+    const stalePart = expense({
+      id: 'split-part-1',
+      merchant: '테스트 (1/2)',
+      amount: 10_000,
+      splitGroupId: 'split-group-1',
+      splitOriginalId: restored.id,
+      splitIndex: 1,
+      splitTotal: 2,
+    });
+
+    subscription.publish([restored, stalePart]);
+
+    expect(callback).toHaveBeenLastCalledWith([restored]);
+  });
+
+  it('복구 원본이 아직 보이지 않으면 월 분할 파생 항목을 그대로 유지한다', () => {
+    const projection = new LedgerOptimisticProjection();
+    const callback = jest.fn();
+    const subscription = projection.subscribe(callback, () => true);
+    const part = expense({
+      id: 'split-part-1',
+      merchant: '테스트 (1/2)',
+      splitGroupId: 'split-group-1',
+      splitOriginalId: 'original-expense',
+      splitIndex: 1,
+      splitTotal: 2,
+    });
+
+    subscription.publish([part]);
+
+    expect(callback).toHaveBeenLastCalledWith([part]);
+  });
 });

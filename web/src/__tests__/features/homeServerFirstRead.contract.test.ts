@@ -109,6 +109,23 @@ describe('가계부 첫 화면 server-first 조회 계약', () => {
           category: 'income',
           transactionType: 'income',
         }),
+      }, {
+        id: 'server-split-part',
+        data: () => ({
+          householdId: 'household-1',
+          date: '2026-07-24',
+          time: '08:00',
+          merchant: '테스트 (1/2)',
+          amount: 1_000,
+          category: 'etc',
+          splitGroupId: 'split-group-1',
+          splitGroup: {
+            groupId: 'split-group-1',
+            index: 1,
+            total: 2,
+            originalId: 'server-split-original',
+          },
+        }),
       }],
     });
     expect(callback).toHaveBeenLastCalledWith([
@@ -121,6 +138,11 @@ describe('가계부 첫 화면 server-first 조회 계약', () => {
         id: 'server-income',
         merchant: '급여',
         transactionType: 'income',
+      }),
+      expect.objectContaining({
+        id: 'server-split-part',
+        splitGroupId: 'split-group-1',
+        splitOriginalId: 'server-split-original',
       }),
     ]);
     expect(mockWhere).not.toHaveBeenCalledWith(

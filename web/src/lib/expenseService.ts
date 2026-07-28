@@ -129,6 +129,15 @@ export function resolveExpenseCardDisplay(data: LedgerCardReadFields): string | 
 function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense {
   const data = docSnap.data();
   const cardDisplay = resolveExpenseCardDisplay(data);
+  const splitGroup = typeof data.splitGroup === 'object' && data.splitGroup !== null
+    ? data.splitGroup as Record<string, unknown>
+    : undefined;
+  const splitOriginalId =
+    typeof data.splitOriginalId === 'string' && data.splitOriginalId !== ''
+      ? data.splitOriginalId
+      : typeof splitGroup?.originalId === 'string' && splitGroup.originalId !== ''
+        ? splitGroup.originalId
+        : undefined;
   const mergeLeafIds = Array.isArray(data.mergeLeafIds)
     ? data.mergeLeafIds.filter(
         (value: unknown): value is string => typeof value === 'string' && value !== ''
@@ -152,6 +161,7 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
     mergedFrom: data.mergedFrom,
     ...(mergeLeafIds === undefined ? {} : { mergeLeafIds }),
     splitGroupId: data.splitGroupId,
+    ...(splitOriginalId === undefined ? {} : { splitOriginalId }),
     splitIndex: data.splitIndex,
     splitTotal: data.splitTotal,
   };

@@ -25,6 +25,7 @@ export interface Expense {
   mergedFrom?: MergedExpenseInfo[];  // 합쳐진 원본 지출들 (되돌리기용)
   mergeLeafIds?: string[]; // 서버가 보존한 합치기 원본 aggregate ID
   splitGroupId?: string;  // 월별 분할 그룹 ID (같은 ID면 같은 분할 그룹)
+  splitOriginalId?: string; // 월 분할 취소 시 복구되는 원본 거래 ID
   splitIndex?: number;    // 분할 순서 (1, 2, 3...)
   splitTotal?: number;    // 총 분할 개월 수
 }
