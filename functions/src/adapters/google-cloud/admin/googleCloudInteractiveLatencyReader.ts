@@ -58,6 +58,19 @@ const STATUSES = new Set<InteractiveLatencyObservation["status"]>([
 const MAX_ELAPSED_MS = 10 * 60 * 1_000;
 const MAX_PAGES = 4;
 const PAGE_SIZE = 250;
+const LATENCY_RESET_AT_BY_OPERATION = new Map<string, number>([
+  // 2026-07-28에 전체 원장 조회·재기록을 제거한 버전이 배포되었습니다.
+  // 개선 전 측정치는 현재 구현의 지연 통계를 오염시키므로 집계에서 제외합니다.
+  ["ledger.split-transaction.v1", Date.parse("2026-07-28T14:28:00.794Z")],
+  [
+    "ledger.split-existing-transaction-monthly.v1",
+    Date.parse("2026-07-28T14:28:00.794Z"),
+  ],
+  [
+    "ledger.cancel-monthly-split.v1",
+    Date.parse("2026-07-28T14:28:00.794Z"),
+  ],
+]);
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -120,6 +133,10 @@ export function summarizeInteractiveLatency(
 ): readonly AdminDashboardFunctionLatency[] {
   const groups = new Map<string, InteractiveLatencyObservation[]>();
   for (const item of observations) {
+    const resetAt = LATENCY_RESET_AT_BY_OPERATION.get(item.operation);
+    if (resetAt !== undefined && Date.parse(item.timestamp) < resetAt) {
+      continue;
+    }
     const key = `${item.endpoint}\u0000${item.operation}`;
     const values = groups.get(key) ?? [];
     values.push(item);

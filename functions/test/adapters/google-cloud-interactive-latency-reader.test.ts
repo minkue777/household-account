@@ -81,4 +81,46 @@ describe("Google Cloud interactive latency reader", () => {
       },
     ]);
   });
+
+  it("drops pre-fix latency samples for the three split operations", () => {
+    const operations = [
+      "ledger.split-transaction.v1",
+      "ledger.split-existing-transaction-monthly.v1",
+      "ledger.cancel-monthly-split.v1",
+    ] as const;
+    const observations: InteractiveLatencyObservation[] = operations.flatMap(
+      (operation) => [
+        {
+          endpoint: "executeHouseholdCommand",
+          operation,
+          elapsedMs: 20_000,
+          status: "succeeded",
+          timestamp: "2026-07-28T14:27:59.000Z",
+        },
+        {
+          endpoint: "executeHouseholdCommand",
+          operation,
+          elapsedMs: 300,
+          status: "succeeded",
+          timestamp: "2026-07-28T14:28:01.000Z",
+        },
+      ],
+    );
+
+    const summary = summarizeInteractiveLatency(observations);
+    expect(summary).toHaveLength(3);
+    expect(summary).toEqual(
+      expect.arrayContaining(operations.map((operation) => ({
+        endpoint: "executeHouseholdCommand",
+        operation,
+        sampleCount: 1,
+        succeededCount: 1,
+        failedCount: 0,
+        averageMs: 300,
+        p95Ms: 300,
+        maxMs: 300,
+        latestAt: "2026-07-28T14:28:01.000Z",
+      }))),
+    );
+  });
 });
