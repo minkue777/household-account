@@ -34,6 +34,39 @@ describe('admin Cloud Function latency contract', () => {
         operations: [
           {
             endpoint: 'executeHouseholdCommand',
+            operation: 'ledger.unmerge-transaction.v1',
+            sampleCount: 2,
+            succeededCount: 2,
+            failedCount: 0,
+            averageMs: 800,
+            p95Ms: 900,
+            maxMs: 1_000,
+            latestAt: '2026-07-28T00:09:00.000Z',
+          },
+          {
+            endpoint: 'executeHouseholdCommand',
+            operation: 'ledger.delete-transaction.v1',
+            sampleCount: 2,
+            succeededCount: 2,
+            failedCount: 0,
+            averageMs: 500,
+            p95Ms: 600,
+            maxMs: 700,
+            latestAt: '2026-07-28T00:09:00.000Z',
+          },
+          {
+            endpoint: 'executeHouseholdCommand',
+            operation: 'ledger.merge-transactions.v1',
+            sampleCount: 2,
+            succeededCount: 2,
+            failedCount: 0,
+            averageMs: 700,
+            p95Ms: 800,
+            maxMs: 900,
+            latestAt: '2026-07-28T00:09:00.000Z',
+          },
+          {
+            endpoint: 'executeHouseholdCommand',
             operation: 'ledger.update-transaction.v1',
             sampleCount: 5,
             succeededCount: 4,
@@ -64,5 +97,23 @@ describe('admin Cloud Function latency contract', () => {
     expect(screen.getByText('0.310초')).toBeInTheDocument();
     expect(screen.getByText('0.420초')).toBeInTheDocument();
     expect(screen.queryByText(/online.*ms/i)).not.toBeInTheDocument();
+
+    const updateRow = screen.getByText('ledger.update-transaction.v1').closest('tr');
+    const deleteRow = screen.getByText('ledger.delete-transaction.v1').closest('tr');
+    const mergeRow = screen.getByText('ledger.merge-transactions.v1').closest('tr');
+    const unmergeRow = screen.getByText('ledger.unmerge-transaction.v1').closest('tr');
+
+    expect(
+      updateRow!.compareDocumentPosition(deleteRow!)
+      & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      deleteRow!.compareDocumentPosition(mergeRow!)
+      & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      mergeRow!.compareDocumentPosition(unmergeRow!)
+      & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 });

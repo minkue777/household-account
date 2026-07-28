@@ -100,6 +100,186 @@ const FUNCTION_OPERATION_LABELS: Record<string, string> = {
   'payment-capture.submit-android-raw-notification.v1': 'Android 결제 알림 처리',
 };
 
+const FUNCTION_OPERATION_GROUPS = [
+  {
+    label: '접속·가계부',
+    operations: [
+      'access.resolve-signed-in-user.v1',
+      'access.record-app-visit.v1',
+      'access.claim-legacy-membership.v1',
+      'access.create-household-with-self.v1',
+      'access.join-household-as-self.v1',
+      'access.create-invitation.v1',
+      'access.rename-self.v1',
+      'access.request-household-deletion.v1',
+    ],
+  },
+  {
+    label: '자산 명의자',
+    operations: [
+      'access.list-asset-owner-profiles.v1',
+      'access.create-asset-owner-profile.v1',
+      'access.rename-asset-owner-profile.v1',
+      'access.archive-asset-owner-profile.v1',
+    ],
+  },
+  {
+    label: '지출·수입',
+    operations: [
+      'ledger.get-transaction.v1',
+      'ledger.record-manual-transaction.v1',
+      'ledger.update-transaction.v1',
+      'ledger.change-transaction-category.v1',
+      'ledger.delete-transaction.v1',
+      'ledger.request-notification.v1',
+    ],
+  },
+  {
+    label: '지출 나누기',
+    operations: [
+      'ledger.split-transaction.v1',
+    ],
+  },
+  {
+    label: '월 분할',
+    operations: [
+      'ledger.record-manual-monthly-split.v1',
+      'ledger.split-existing-transaction-monthly.v1',
+      'ledger.reconfigure-monthly-split.v1',
+      'ledger.cancel-monthly-split.v1',
+    ],
+  },
+  {
+    label: '지출 합치기',
+    operations: [
+      'ledger.merge-transactions.v1',
+      'ledger.unmerge-transaction.v1',
+    ],
+  },
+  {
+    label: '카테고리',
+    operations: [
+      'category.create.v1',
+      'category.update.v1',
+      'category.archive.v1',
+      'category.set-budget.v1',
+      'category.reorder.v1',
+      'category.set-default.v1',
+    ],
+  },
+  {
+    label: '첫 화면',
+    operations: [
+      'home.update-summary-preferences.v1',
+      'home.select-local-currency.v1',
+    ],
+  },
+  {
+    label: '자산',
+    operations: [
+      'portfolio.create-asset.v1',
+      'portfolio.update-asset.v1',
+      'portfolio.delete-asset.v1',
+      'portfolio.reorder-assets.v1',
+    ],
+  },
+  {
+    label: '보유 종목',
+    operations: [
+      'portfolio.add-position.v1',
+      'portfolio.update-position.v1',
+      'portfolio.delete-position.v1',
+      'portfolio.refresh-market-values.v1',
+    ],
+  },
+  {
+    label: '종목 조회',
+    operations: [
+      'portfolio.search-instruments.v1',
+      'portfolio.get-instrument-quote.v1',
+      'portfolio.get-dividend-projection.v1',
+    ],
+  },
+  {
+    label: '가맹점 규칙',
+    operations: [
+      'payment-configuration.create-merchant-rule.v1',
+      'payment-configuration.update-merchant-rule.v1',
+      'payment-configuration.delete-merchant-rule.v1',
+    ],
+  },
+  {
+    label: '카드',
+    operations: [
+      'payment-configuration.register-card.v1',
+      'payment-configuration.update-card.v1',
+      'payment-configuration.delete-card.v1',
+      'payment-configuration.reorder-cards.v1',
+    ],
+  },
+  {
+    label: 'iPhone 자동 등록',
+    operations: [
+      'shortcut.get-credential-status.v1',
+      'shortcut.issue-credential.v1',
+      'shortcut.reissue-credential.v1',
+      'shortcut.revoke-credential.v1',
+    ],
+  },
+  {
+    label: '고정비',
+    operations: [
+      'recurring.create-plan.v1',
+      'recurring.update-plan.v1',
+      'recurring.delete-plan.v1',
+    ],
+  },
+  {
+    label: '알림 기기',
+    operations: [
+      'notifications.register-endpoint.v1',
+      'notifications.remove-endpoint.v1',
+    ],
+  },
+  {
+    label: 'Android 결제 수집',
+    operations: [
+      'payment-capture.submit-android-raw-notification.v1',
+    ],
+  },
+] as const;
+
+const FUNCTION_OPERATION_ORDER: ReadonlyMap<
+  string,
+  { groupLabel: string; groupIndex: number; operationIndex: number }
+> = new Map(
+  FUNCTION_OPERATION_GROUPS.flatMap((group, groupIndex) =>
+    group.operations.map((operation, operationIndex) => [
+      operation,
+      { groupLabel: group.label, groupIndex, operationIndex },
+    ] as const)
+  )
+);
+
+function functionOperationMetadata(operation: string) {
+  return FUNCTION_OPERATION_ORDER.get(operation) ?? {
+    groupLabel: '기타',
+    groupIndex: FUNCTION_OPERATION_GROUPS.length,
+    operationIndex: Number.MAX_SAFE_INTEGER,
+  };
+}
+
+function compareFunctionOperations(
+  left: AdminOperationsDashboardWireView['functionLatency']['operations'][number],
+  right: AdminOperationsDashboardWireView['functionLatency']['operations'][number]
+): number {
+  const leftMetadata = functionOperationMetadata(left.operation);
+  const rightMetadata = functionOperationMetadata(right.operation);
+  return leftMetadata.groupIndex - rightMetadata.groupIndex
+    || leftMetadata.operationIndex - rightMetadata.operationIndex
+    || left.operation.localeCompare(right.operation);
+}
+
 const JOB_STATUS_LABELS: Record<string, string> = {
   UNKNOWN: '기록 없음',
   EXPECTED: '실행 대기',
@@ -187,6 +367,8 @@ export function AdminOperationsOverview({
     windowHours: 24,
     operations: [],
   };
+  const sortedFunctionOperations = [...functionLatency.operations]
+    .sort(compareFunctionOperations);
   const activeUsers = dashboard.households
     .flatMap((household) =>
       household.members
@@ -269,9 +451,10 @@ export function AdminOperationsOverview({
           </EmptyState>
         ) : (
           <div className="max-h-[420px] overflow-auto">
-            <table className="w-full min-w-[840px] text-left text-xs">
+            <table className="w-full min-w-[940px] text-left text-xs">
               <thead className="sticky top-0 z-10 border-b border-slate-800 bg-slate-900 text-slate-500">
                 <tr>
+                  <th className="px-4 py-3 font-medium">업무군</th>
                   <th className="px-4 py-3 font-medium">처리 업무</th>
                   <th className="px-4 py-3 font-medium">Function</th>
                   <th className="px-4 py-3 text-right font-medium">호출</th>
@@ -283,42 +466,55 @@ export function AdminOperationsOverview({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80">
-                {functionLatency.operations.map((operation) => (
-                  <tr
-                    key={`${operation.endpoint}:${operation.operation}`}
-                    className="text-slate-300"
-                  >
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-slate-100">
-                        {FUNCTION_OPERATION_LABELS[operation.operation] ?? '기타 내부 처리'}
-                      </p>
-                      <p className="mt-0.5 font-mono text-[10px] text-slate-600">
-                        {operation.operation}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3 text-slate-400">
-                      {FUNCTION_ENDPOINT_LABELS[operation.endpoint] ?? operation.endpoint}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono">
-                      {operation.sampleCount.toLocaleString('ko-KR')}
-                    </td>
-                    <td className={`px-4 py-3 text-right font-mono ${operation.failedCount > 0 ? 'text-amber-300' : 'text-emerald-300'}`}>
-                      {operation.succeededCount}/{operation.sampleCount}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-sky-300">
-                      {formatDuration(operation.averageMs)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-violet-300">
-                      {formatDuration(operation.p95Ms)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-400">
-                      {formatDuration(operation.maxMs)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-slate-500">
-                      {formatDateTime(operation.latestAt)}
-                    </td>
-                  </tr>
-                ))}
+                {sortedFunctionOperations.map((operation, index) => {
+                  const metadata = functionOperationMetadata(operation.operation);
+                  const previousMetadata = index === 0
+                    ? undefined
+                    : functionOperationMetadata(sortedFunctionOperations[index - 1].operation);
+                  return (
+                    <tr
+                      key={`${operation.endpoint}:${operation.operation}`}
+                      className={`text-slate-300 ${
+                        previousMetadata && previousMetadata.groupLabel !== metadata.groupLabel
+                          ? 'border-t-2 border-slate-700'
+                          : ''
+                      }`}
+                    >
+                      <td className="whitespace-nowrap px-4 py-3 font-medium text-sky-400">
+                        {metadata.groupLabel}
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-slate-100">
+                          {FUNCTION_OPERATION_LABELS[operation.operation] ?? '기타 내부 처리'}
+                        </p>
+                        <p className="mt-0.5 font-mono text-[10px] text-slate-600">
+                          {operation.operation}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3 text-slate-400">
+                        {FUNCTION_ENDPOINT_LABELS[operation.endpoint] ?? operation.endpoint}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono">
+                        {operation.sampleCount.toLocaleString('ko-KR')}
+                      </td>
+                      <td className={`px-4 py-3 text-right font-mono ${operation.failedCount > 0 ? 'text-amber-300' : 'text-emerald-300'}`}>
+                        {operation.succeededCount}/{operation.sampleCount}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-sky-300">
+                        {formatDuration(operation.averageMs)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-violet-300">
+                        {formatDuration(operation.p95Ms)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-400">
+                        {formatDuration(operation.maxMs)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-slate-500">
+                        {formatDateTime(operation.latestAt)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
