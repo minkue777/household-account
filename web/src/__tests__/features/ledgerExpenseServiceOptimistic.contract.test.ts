@@ -2,6 +2,8 @@ import { ledgerCommands } from '@/features/ledger/application/ledgerCommands';
 import { ledgerOptimisticProjection } from '@/features/ledger/application/ledgerOptimisticProjection';
 import {
   mergeExpenses,
+  splitExpense,
+  splitExpenseMonthly,
   unmergeExpense,
   updateExpense,
   updateExpenseCategory,
@@ -139,6 +141,85 @@ describe('ledger expense service optimistic canonical contract', () => {
       splitIndex: 1,
       splitTotal: 3,
     });
+  });
+
+  test('지출 나누기는 원본만 먼저 숨기지 않고 서버 snapshot에서 파생 항목으로 교체한다', async () => {
+    const rendered: Expense[][] = [];
+    const subscription = ledgerOptimisticProjection.subscribe(
+      (items) => rendered.push(items),
+      () => true,
+      'house-1'
+    );
+    const original = expense({ id: 'item-split-source' });
+    const derived = [
+      expense({
+        id: 'item-split-derived-1',
+        aggregateVersion: 1,
+        merchant: '첫 항목',
+        amount: 4_000,
+      }),
+      expense({
+        id: 'item-split-derived-2',
+        aggregateVersion: 1,
+        merchant: '둘째 항목',
+        amount: 6_000,
+      }),
+    ];
+    subscription.publish([original]);
+    mockedCommands.split.mockResolvedValue(derived.map(({ id }) => id));
+
+    await splitExpense(original, [
+      { merchant: '첫 항목', amount: 4_000, category: 'etc' },
+      { merchant: '둘째 항목', amount: 6_000, category: 'etc' },
+    ]);
+
+    expect(rendered.at(-1)).toEqual([original]);
+    expect(rendered).not.toContainEqual([]);
+
+    subscription.publish(derived);
+    expect(rendered.at(-1)).toHaveLength(2);
+    expect(rendered.at(-1)).toEqual(expect.arrayContaining(derived));
+    expect(rendered).not.toContainEqual([]);
+    subscription.dispose();
+  });
+
+  test('기존 지출 월 분할도 원본과 파생 항목 사이에 빈 목록을 만들지 않는다', async () => {
+    const rendered: Expense[][] = [];
+    const subscription = ledgerOptimisticProjection.subscribe(
+      (items) => rendered.push(items),
+      () => true,
+      'house-1'
+    );
+    const original = expense({ id: 'monthly-split-source' });
+    const firstInstallment = expense({
+      id: 'monthly-split-derived-1',
+      aggregateVersion: 1,
+      merchant: 'regional merchant (1/2)',
+      amount: 5_000,
+      splitGroupId: 'monthly-group:command-1',
+      splitIndex: 1,
+      splitTotal: 2,
+    });
+    subscription.publish([original]);
+    mockedCommands.splitExistingMonthly.mockResolvedValue({
+      transactionIds: [
+        'monthly-split-derived-1',
+        'monthly-split-derived-2',
+      ],
+      splitGroupId: 'monthly-group:command-1',
+    });
+
+    await splitExpenseMonthly(original, 2);
+
+    expect(rendered.at(-1)).toEqual([original]);
+    expect(rendered).not.toContainEqual([]);
+
+    // 현재 월 구독에는 첫 회차만 들어오며, Firestore transaction snapshot이
+    // superseded 원본과 active 파생 항목을 한 번에 교체합니다.
+    subscription.publish([firstInstallment]);
+    expect(rendered.at(-1)).toEqual([firstInstallment]);
+    expect(rendered).not.toContainEqual([]);
+    subscription.dispose();
   });
 
   test('merge는 old target을 갱신하지 않고 두 원본을 새 merged aggregate로 교체한다', async () => {

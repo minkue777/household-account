@@ -186,6 +186,7 @@ DEC-013의 알림 수신자는 Ledger가 확정하지 않습니다. Ledger는 �
 8. UoW가 원본 제거/tombstone, 새 항목, lineage ref 갱신, receipt와 Event 집합을 한 번에 commit합니다.
 9. 한 쓰기라도 실패하면 원본·lineage와 모든 새 항목이 이전 상태를 유지합니다.
 10. retry는 동일 groupId·transactionIds와 결과를 재생합니다.
+11. Web read projection은 item split과 기존 지출 monthly split에서 원본의 optimistic delete를 먼저 만들지 않습니다. 명령 처리 중에는 기존 원본을 유지하고, 동일 Firestore transaction에서 도착한 권위 snapshot으로 `원본 -> 파생 항목`을 직접 교체하여 선택 날짜 목록이 잠시 비는 상태를 방지합니다.
 
 ### 5.5 Merge·Unmerge
 

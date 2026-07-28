@@ -657,21 +657,13 @@ export async function splitExpense(
   splits: SplitItem[]
 ): Promise<string[]> {
   const householdId = getHouseholdId();
-  const mutationId = ledgerOptimisticProjection.beginDelete(originalExpense.id, householdId);
-  try {
-    const ledgerCommands = await loadLedgerCommands();
-    const transactionIds = await ledgerCommands.split(
-      householdId,
-      originalExpense.id,
-      originalExpense.aggregateVersion,
-      splits
-    );
-    ledgerOptimisticProjection.commitDelete(mutationId);
-    return transactionIds;
-  } catch (error) {
-    ledgerOptimisticProjection.rollback(mutationId);
-    throw error;
-  }
+  const ledgerCommands = await loadLedgerCommands();
+  return ledgerCommands.split(
+    householdId,
+    originalExpense.id,
+    originalExpense.aggregateVersion,
+    splits
+  );
 }
 
 export async function splitExpenseMonthly(
@@ -679,21 +671,14 @@ export async function splitExpenseMonthly(
   months: number
 ): Promise<string[]> {
   const householdId = getHouseholdId();
-  const mutationId = ledgerOptimisticProjection.beginDelete(expense.id, householdId);
-  try {
-    const ledgerCommands = await loadLedgerCommands();
-    const result = await ledgerCommands.splitExistingMonthly(
-      householdId,
-      expense.id,
-      expense.aggregateVersion,
-      months
-    );
-    ledgerOptimisticProjection.commitDelete(mutationId);
-    return result.transactionIds;
-  } catch (error) {
-    ledgerOptimisticProjection.rollback(mutationId);
-    throw error;
-  }
+  const ledgerCommands = await loadLedgerCommands();
+  const result = await ledgerCommands.splitExistingMonthly(
+    householdId,
+    expense.id,
+    expense.aggregateVersion,
+    months
+  );
+  return result.transactionIds;
 }
 
 /**
