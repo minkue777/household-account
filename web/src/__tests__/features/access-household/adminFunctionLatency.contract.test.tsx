@@ -34,7 +34,7 @@ describe('admin Cloud Function latency contract', () => {
         operations: [
           {
             endpoint: 'executeHouseholdCommand',
-            operation: 'ledger.transaction.update.v1',
+            operation: 'ledger.update-transaction.v1',
             sampleCount: 5,
             succeededCount: 4,
             failedCount: 1,
@@ -58,10 +58,11 @@ describe('admin Cloud Function latency contract', () => {
     expect(
       screen.getByText(`Cloud Functions ${'\uCC98\uB9AC \uC2DC\uAC04'}`)
     ).toBeInTheDocument();
-    expect(screen.getByText('ledger.transaction.update.v1')).toBeInTheDocument();
-    expect(screen.getByText('120.4ms')).toBeInTheDocument();
-    expect(screen.getByText('310ms')).toBeInTheDocument();
-    expect(screen.getByText('420ms')).toBeInTheDocument();
+    expect(screen.getByText('지출·수입 수정')).toBeInTheDocument();
+    expect(screen.getByText('ledger.update-transaction.v1')).toBeInTheDocument();
+    expect(screen.getByText('0.120초')).toBeInTheDocument();
+    expect(screen.getByText('0.310초')).toBeInTheDocument();
+    expect(screen.getByText('0.420초')).toBeInTheDocument();
     expect(screen.queryByText(/online.*ms/i)).not.toBeInTheDocument();
   });
 });

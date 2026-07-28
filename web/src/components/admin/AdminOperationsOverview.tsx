@@ -36,6 +36,70 @@ const FUNCTION_ENDPOINT_LABELS: Record<string, string> = {
   submitAndroidRawNotification: 'Android 결제 수집',
 };
 
+const FUNCTION_OPERATION_LABELS: Record<string, string> = {
+  'access.resolve-signed-in-user.v1': '로그인 사용자 확인',
+  'access.record-app-visit.v1': '앱 접속 기록',
+  'access.claim-legacy-membership.v1': '기존 가계부 연결',
+  'access.create-household-with-self.v1': '새 가계부 생성',
+  'access.join-household-as-self.v1': '초대 코드로 가계부 참여',
+  'access.create-invitation.v1': '가구원 초대 코드 생성',
+  'access.rename-self.v1': '가구원 이름 변경',
+  'access.request-household-deletion.v1': '가계부 삭제 요청',
+  'access.create-asset-owner-profile.v1': '자산 명의자 추가',
+  'access.rename-asset-owner-profile.v1': '자산 명의자 이름 변경',
+  'access.archive-asset-owner-profile.v1': '자산 명의자 삭제',
+  'access.list-asset-owner-profiles.v1': '자산 명의자 조회',
+  'ledger.get-transaction.v1': '지출·수입 상세 조회',
+  'ledger.record-manual-transaction.v1': '지출·수입 수동 등록',
+  'ledger.record-manual-monthly-split.v1': '월 분할 지출 등록',
+  'ledger.split-existing-transaction-monthly.v1': '기존 지출 월 분할',
+  'ledger.update-transaction.v1': '지출·수입 수정',
+  'ledger.delete-transaction.v1': '지출·수입 삭제',
+  'ledger.change-transaction-category.v1': '지출 카테고리 변경',
+  'ledger.split-transaction.v1': '지출 나누기',
+  'ledger.merge-transactions.v1': '지출 합치기',
+  'ledger.unmerge-transaction.v1': '지출 합치기 취소',
+  'ledger.cancel-monthly-split.v1': '월 분할 취소',
+  'ledger.reconfigure-monthly-split.v1': '월 분할 재설정',
+  'ledger.request-notification.v1': '가구원에게 지출 알림 보내기',
+  'category.create.v1': '카테고리 추가',
+  'category.update.v1': '카테고리 수정',
+  'category.archive.v1': '카테고리 삭제',
+  'category.set-budget.v1': '카테고리 예산 설정',
+  'category.reorder.v1': '카테고리 순서 변경',
+  'category.set-default.v1': '기본 카테고리 설정',
+  'home.update-summary-preferences.v1': '첫 화면 요약 카드 변경',
+  'home.select-local-currency.v1': '표시할 지역화폐 선택',
+  'portfolio.create-asset.v1': '자산 추가',
+  'portfolio.update-asset.v1': '자산 수정',
+  'portfolio.reorder-assets.v1': '자산 순서 변경',
+  'portfolio.delete-asset.v1': '자산 삭제',
+  'portfolio.add-position.v1': '주식·코인 종목 추가',
+  'portfolio.update-position.v1': '주식·코인 종목 수정',
+  'portfolio.delete-position.v1': '주식·코인 종목 삭제',
+  'portfolio.refresh-market-values.v1': '보유 자산 시세 갱신',
+  'portfolio.search-instruments.v1': '주식·코인 종목 검색',
+  'portfolio.get-instrument-quote.v1': '종목 시세 조회',
+  'portfolio.get-dividend-projection.v1': '예상 배당 조회',
+  'payment-configuration.create-merchant-rule.v1': '가맹점 분류 규칙 추가',
+  'payment-configuration.update-merchant-rule.v1': '가맹점 분류 규칙 수정',
+  'payment-configuration.delete-merchant-rule.v1': '가맹점 분류 규칙 삭제',
+  'payment-configuration.register-card.v1': '카드 등록',
+  'payment-configuration.update-card.v1': '카드 수정',
+  'payment-configuration.delete-card.v1': '카드 삭제',
+  'payment-configuration.reorder-cards.v1': '카드 순서 변경',
+  'shortcut.issue-credential.v1': 'iPhone 자동 등록 키 발급',
+  'shortcut.reissue-credential.v1': 'iPhone 자동 등록 키 재발급',
+  'shortcut.revoke-credential.v1': 'iPhone 자동 등록 키 폐기',
+  'shortcut.get-credential-status.v1': 'iPhone 자동 등록 키 확인',
+  'recurring.create-plan.v1': '고정비 추가',
+  'recurring.update-plan.v1': '고정비 수정',
+  'recurring.delete-plan.v1': '고정비 삭제',
+  'notifications.register-endpoint.v1': '알림 기기 등록',
+  'notifications.remove-endpoint.v1': '알림 기기 연결 해제',
+  'payment-capture.submit-android-raw-notification.v1': 'Android 결제 알림 처리',
+};
+
 const JOB_STATUS_LABELS: Record<string, string> = {
   UNKNOWN: '기록 없음',
   EXPECTED: '실행 대기',
@@ -60,10 +124,10 @@ function formatDateTime(value?: string): string {
 }
 
 function formatDuration(value: number): string {
-  if (value >= 1_000) {
-    return `${(value / 1_000).toFixed(value >= 10_000 ? 1 : 2)}초`;
-  }
-  return `${value.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}ms`;
+  return `${(value / 1_000).toLocaleString('ko-KR', {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  })}초`;
 }
 
 function shortDate(value: string): string {
@@ -208,7 +272,7 @@ export function AdminOperationsOverview({
             <table className="w-full min-w-[840px] text-left text-xs">
               <thead className="sticky top-0 z-10 border-b border-slate-800 bg-slate-900 text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 font-medium">로직</th>
+                  <th className="px-4 py-3 font-medium">처리 업무</th>
                   <th className="px-4 py-3 font-medium">Function</th>
                   <th className="px-4 py-3 text-right font-medium">호출</th>
                   <th className="px-4 py-3 text-right font-medium">성공</th>
@@ -224,8 +288,13 @@ export function AdminOperationsOverview({
                     key={`${operation.endpoint}:${operation.operation}`}
                     className="text-slate-300"
                   >
-                    <td className="px-4 py-3 font-mono text-[11px] text-slate-100">
-                      {operation.operation}
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-slate-100">
+                        {FUNCTION_OPERATION_LABELS[operation.operation] ?? '기타 내부 처리'}
+                      </p>
+                      <p className="mt-0.5 font-mono text-[10px] text-slate-600">
+                        {operation.operation}
+                      </p>
                     </td>
                     <td className="px-4 py-3 text-slate-400">
                       {FUNCTION_ENDPOINT_LABELS[operation.endpoint] ?? operation.endpoint}

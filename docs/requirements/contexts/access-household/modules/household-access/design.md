@@ -518,7 +518,7 @@ android/core/auth-session/
 | ADM-002 | Emulator·보안 E2E | Rules와 server Handler | 무인증·동일 가구·타 가구·관리자 | 최소 권한만 허용하고 거부 시 변경 없음 | T-HH-RULES-001, T-HH-SEC-001 |
 | ADM-003 | Domain·Application·Contract·E2E·동시성 | RequestHouseholdDeletion·RestoreDeletedHousehold·HouseholdPurgeProcess·PurgeClaimFinalizationPolicy | 다중 Context 성공/실패, 다중 claim, snapshot·finalization page 중단, absent·stale claim, 재시도 | snapshot 완료 전 Context 호출 0건, Context 미완료 중 claim 0건 해제, 완료 뒤 일치 claim만 page 해제, 모든 checkpoint 완료 뒤 purged Event 한 번, 재가입 가능 | T-ADM-002 |
 | ADM-004 | Client·Query·Rules·보안 E2E | AdminHouseholdViewSelection·administrator-readonly SessionScope·공개 Read Model | 관리자/일반 사용자, 타 가구 Membership 없음, 탭 전환, 가구 탐색·쓰기·endpoint 등록 시도 | systemAdmin만 선택 가구 조회, Member 가장·업무 쓰기·알림 binding 0건, 관리자 배너와 복귀 시 선택 해제 | T-ADM-003 |
-| ADM-005 | Admin Query·Operations Adapter·UI | GetAdminOperationsDashboard | 예약 작업 정상·실패·기록 없음, 공급자 정상·저하·중단, active/deleted 가구, 열린 장애 | systemAdmin에게만 서버·운영·가구·활동 snapshot과 허용 필드로 집계한 Functions 로직별 처리 시간을 반환하고 비정상을 구분 표시 | T-ADM-004 |
+| ADM-005 | Admin Query·Operations Adapter·UI | GetAdminOperationsDashboard | 예약 작업 정상·실패·기록 없음, 공급자 정상·저하·중단, active/deleted 가구, 열린 장애 | systemAdmin에게만 서버·운영·가구·활동 snapshot과 허용 필드로 집계한 Functions 로직별 처리 시간을 반환하고, UI는 업무명과 내부 ID를 병기하며 모든 처리 시간을 초 단위로 표시하고 비정상을 구분 표시 | T-ADM-004 |
 | ADM-006 | Domain·Command·Firebase Adapter·Client | RecordAppVisit·MemberAccessStats | 동일 visitId 재전송, 서울 날짜 경계, 플랫폼 3종, 30일 경계 | 첫 화면 후 비동기 호출, 사용자 범위 원자 집계, 동일 visitId 1회, 30일 일별 상세·누적 보존 | T-ADM-005 |
 
 `T-HH-RULES-001`/`T-HH-SEC-001`과 공통 `T-SEC-001`/`T-SEC-002`의 중복 실행은 통합 전에 한 Canonical suite가 공유 fixture를 제공하도록 정리합니다. 새 ID는 이 문서에서 만들지 않습니다.
