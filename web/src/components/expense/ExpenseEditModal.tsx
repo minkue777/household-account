@@ -300,21 +300,22 @@ export default function ExpenseEditModal({
     }
   };
 
-  const handleCancelSplitGroup = async () => {
+  const handleCancelSplitGroup = () => {
     if (!onCancelSplitGroup || isSubmittingRef.current) {
       return;
     }
 
     isSubmittingRef.current = true;
-    setIsSubmitting(true);
-    try {
-      await onCancelSplitGroup();
-      // 취소가 확정된 Firestore snapshot에서 현재 분할 항목이 사라지면
-      // ExpenseDetail이 편집 대상을 해제하며 모달을 닫습니다.
-    } finally {
-      isSubmittingRef.current = false;
-      setIsSubmitting(false);
-    }
+    // 네트워크 명령보다 모달 종료를 먼저 확정합니다. 원장 목록은 서버의
+    // 원자적 Firestore snapshot이 기존 분할 항목을 원본으로 한 번에 교체합니다.
+    onClose();
+    void (async () => {
+      try {
+        await onCancelSplitGroup();
+      } finally {
+        isSubmittingRef.current = false;
+      }
+    })();
   };
 
   const handleActionConfirm = () => {
@@ -492,11 +493,10 @@ export default function ExpenseEditModal({
               )}
               {onCancelSplitGroup && (
                 <button
-                  onClick={() => void handleCancelSplitGroup()}
-                  disabled={isSubmitting}
-                  className="flex-1 rounded-lg bg-amber-500 px-3 py-2 text-sm text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={handleCancelSplitGroup}
+                  className="flex-1 rounded-lg bg-amber-500 px-3 py-2 text-sm text-white hover:bg-amber-600"
                 >
-                  {isSubmitting ? '취소 중...' : '분할 취소'}
+                  분할 취소
                 </button>
               )}
             </div>

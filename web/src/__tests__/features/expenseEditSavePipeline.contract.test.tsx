@@ -238,7 +238,7 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
     });
   });
 
-  test('월 분할 취소는 권위 snapshot이 선택 항목을 제거할 때까지 모달을 유지한다', async () => {
+  test('월 분할 취소는 원격 명령을 기다리지 않고 모달부터 즉시 닫는다', async () => {
     const cancellation = deferred();
     const onCancelSplitGroup = jest.fn(() => cancellation.promise);
     const onClose = jest.fn();
@@ -267,15 +267,14 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
     fireEvent.click(cancelButton);
 
     expect(onCancelSplitGroup).toHaveBeenCalledTimes(1);
-    expect(onClose).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: '취소 중...' })).toBeDisabled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onClose.mock.invocationCallOrder[0]).toBeLessThan(
+      onCancelSplitGroup.mock.invocationCallOrder[0]
+    );
 
     await act(async () => {
       cancellation.resolve();
       await cancellation.promise;
     });
-
-    expect(onClose).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: '분할 취소' })).toBeEnabled();
   });
 });
