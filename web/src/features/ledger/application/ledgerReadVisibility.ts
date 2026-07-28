@@ -6,5 +6,7 @@ export interface LedgerReadLifecycleFields {
 export function isVisibleLedgerReadDocument(
   document: LedgerReadLifecycleFields
 ): boolean {
-  return document.lifecycleState !== 'deleted' && document.deletedAt === undefined;
+  return document.lifecycleState !== 'deleted'
+    && document.lifecycleState !== 'superseded'
+    && document.deletedAt === undefined;
 }
