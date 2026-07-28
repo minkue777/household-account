@@ -53,7 +53,7 @@ const FUNCTION_OPERATION_LABELS: Record<string, string> = {
   'ledger.get-transaction.v1': '지출·수입 상세 조회',
   'ledger.record-manual-transaction.v1': '지출·수입 수동 등록',
   'ledger.record-manual-monthly-split.v1': '월 분할 지출 등록',
-  'ledger.split-existing-transaction-monthly.v1': '기존 지출 월 분할',
+  'ledger.split-existing-transaction-monthly.v1': '지출 월 분할',
   'ledger.update-transaction.v1': '지출·수입 수정',
   'ledger.delete-transaction.v1': '지출·수입 삭제',
   'ledger.change-transaction-category.v1': '지출 카테고리 변경',

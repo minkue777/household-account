@@ -78,6 +78,17 @@ describe('admin Cloud Function latency contract', () => {
           },
           {
             endpoint: 'executeHouseholdCommand',
+            operation: 'ledger.split-existing-transaction-monthly.v1',
+            sampleCount: 1,
+            succeededCount: 1,
+            failedCount: 0,
+            averageMs: 650,
+            p95Ms: 650,
+            maxMs: 650,
+            latestAt: '2026-07-28T00:09:00.000Z',
+          },
+          {
+            endpoint: 'executeHouseholdCommand',
             operation: 'ledger.update-transaction.v1',
             sampleCount: 5,
             succeededCount: 4,
@@ -114,6 +125,8 @@ describe('admin Cloud Function latency contract', () => {
       screen.getByText(`Cloud Functions ${'\uCC98\uB9AC \uC2DC\uAC04'}`)
     ).toBeInTheDocument();
     expect(screen.getByText('지출·수입 수정')).toBeInTheDocument();
+    expect(screen.getByText('지출 월 분할')).toBeInTheDocument();
+    expect(screen.queryByText('기존 지출 월 분할')).not.toBeInTheDocument();
     expect(screen.getByText('ledger.update-transaction.v1')).toBeInTheDocument();
     expect(screen.getByText('0.120초')).toBeInTheDocument();
     expect(screen.getByText('0.310초')).toBeInTheDocument();
