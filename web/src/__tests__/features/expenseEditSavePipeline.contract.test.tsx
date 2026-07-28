@@ -237,4 +237,45 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
       );
     });
   });
+
+  test('월 분할 취소는 권위 snapshot이 선택 항목을 제거할 때까지 모달을 유지한다', async () => {
+    const cancellation = deferred();
+    const onCancelSplitGroup = jest.fn(() => cancellation.promise);
+    const onClose = jest.fn();
+    const splitExpense: Expense = {
+      ...expense,
+      id: 'split-expense-1',
+      merchant: '테스트 (1/2)',
+      splitGroupId: 'split-group-1',
+      splitIndex: 1,
+      splitTotal: 2,
+    };
+
+    render(
+      <ExpenseEditModal
+        expense={splitExpense}
+        isOpen
+        onClose={onClose}
+        onSave={jest.fn()}
+        onCancelSplitGroup={onCancelSplitGroup}
+        transactionType="expense"
+      />
+    );
+
+    const cancelButton = screen.getByRole('button', { name: '분할 취소' });
+    fireEvent.click(cancelButton);
+    fireEvent.click(cancelButton);
+
+    expect(onCancelSplitGroup).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: '취소 중...' })).toBeDisabled();
+
+    await act(async () => {
+      cancellation.resolve();
+      await cancellation.promise;
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: '분할 취소' })).toBeEnabled();
+  });
 });

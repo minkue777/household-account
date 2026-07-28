@@ -31,7 +31,7 @@ interface ExpenseEditModalProps {
   onUnmerge?: () => void;
   onOpenSplit?: () => void;
   onSplitMonths?: (months: number) => void;
-  onCancelSplitGroup?: () => void;
+  onCancelSplitGroup?: () => Promise<void> | void;
   onUpdateSplitGroup?: (newMonths: number) => void;
   onDelete?: () => Promise<void> | void;
   onNotifyPartner?: () => Promise<void> | void;
@@ -300,6 +300,23 @@ export default function ExpenseEditModal({
     }
   };
 
+  const handleCancelSplitGroup = async () => {
+    if (!onCancelSplitGroup || isSubmittingRef.current) {
+      return;
+    }
+
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
+    try {
+      await onCancelSplitGroup();
+      // 취소가 확정된 Firestore snapshot에서 현재 분할 항목이 사라지면
+      // ExpenseDetail이 편집 대상을 해제하며 모달을 닫습니다.
+    } finally {
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
+    }
+  };
+
   const handleActionConfirm = () => {
     if (pendingActionConfirm === 'unmerge' && onUnmerge) {
       setPendingActionConfirm(null);
@@ -475,13 +492,11 @@ export default function ExpenseEditModal({
               )}
               {onCancelSplitGroup && (
                 <button
-                  onClick={() => {
-                    onCancelSplitGroup();
-                    onClose();
-                  }}
-                  className="flex-1 rounded-lg bg-amber-500 px-3 py-2 text-sm text-white hover:bg-amber-600"
+                  onClick={() => void handleCancelSplitGroup()}
+                  disabled={isSubmitting}
+                  className="flex-1 rounded-lg bg-amber-500 px-3 py-2 text-sm text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  분할 취소
+                  {isSubmitting ? '취소 중...' : '분할 취소'}
                 </button>
               )}
             </div>

@@ -187,6 +187,7 @@ DEC-013의 알림 수신자는 Ledger가 확정하지 않습니다. Ledger는 �
 9. 한 쓰기라도 실패하면 원본·lineage와 모든 새 항목이 이전 상태를 유지합니다.
 10. retry는 동일 groupId·transactionIds와 결과를 재생합니다.
 11. Web read projection은 item split과 기존 지출 monthly split에서 원본의 optimistic delete를 먼저 만들지 않습니다. 명령 처리 중에는 기존 원본을 유지하고, 동일 Firestore transaction에서 도착한 권위 snapshot으로 `원본 -> 파생 항목`을 직접 교체하여 선택 날짜 목록이 잠시 비는 상태를 방지합니다.
+12. 월 분할 취소 UI는 Command 응답만으로 편집 모달을 닫지 않습니다. 선택한 파생 항목이 권위 Firestore snapshot에서 사라지면 `ExpenseDetail`이 편집 대상을 해제하며 모달을 닫습니다. 따라서 취소 중에는 모달이 원장 전환을 가리고, 원본과 파생 항목이 겹친 것처럼 보이는 중간 상태와 중복 취소 요청을 차단합니다.
 
 ### 5.5 Merge·Unmerge
 
