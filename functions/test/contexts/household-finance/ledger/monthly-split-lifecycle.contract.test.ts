@@ -123,6 +123,26 @@ describe("월 분할 lifecycle 공개 계약", () => {
     ]);
   });
 
+  it("[T-SPL-004][SPL-003][LED-009] UI에 보이는 파생 항목 version만으로 원본을 복원한다", async () => {
+    const subject = createSubject({
+      transactions: [original(), installment(1), installment(2), installment(3)],
+    });
+
+    const result = await subject.collapse({
+      operationKey: "collapse-visible-parts",
+      groupId: "group-1",
+      expectedVersions: { "part-1": 1, "part-2": 1, "part-3": 1 },
+    });
+
+    expect(result).toEqual({ kind: "success", transactionIds: ["original"] });
+    expect(subject.state()).toEqual([
+      expect.objectContaining({
+        transactionId: "original",
+        lifecycleState: "active",
+        aggregateVersion: 3,
+      }),
+    ]);
+  });
   it("[T-SPL-004][SPL-003][LED-008] 한 항목 version이 stale이면 collapse 전체를 거부한다", async () => {
     const initial = [original(), installment(1), installment(2), installment(3)];
     const subject = createSubject({ transactions: initial });

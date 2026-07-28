@@ -120,6 +120,7 @@ export class FirebaseMonthlySplitLifecycleStore
   implements MonthlySplitLifecycleStore
 {
   private loadedVersions = new Map<string, number>();
+  private loadedTransactions = new Map<string, SplitTransaction>();
 
   constructor(
     private readonly database: firestore.Firestore,
@@ -161,6 +162,9 @@ export class FirebaseMonthlySplitLifecycleStore
         (transaction): transaction is SplitTransaction =>
           transaction !== undefined && transaction.householdId === this.householdId,
       );
+    this.loadedTransactions = new Map(
+      transactions.map((transaction) => [transaction.transactionId, transaction]),
+    );
     this.loadedVersions = new Map(
       transactions.map((transaction) => [
         transaction.transactionId,
@@ -176,25 +180,64 @@ export class FirebaseMonthlySplitLifecycleStore
     const householdReference = this.database
       .collection("households")
       .doc(this.householdId);
+    const next = new Map(
+      input.transactions.map((value) => [value.transactionId, value]),
+    );
+    if (
+      [...next.values()].some(
+        (value) => value.householdId !== this.householdId,
+      )
+    ) {
+      return {
+        kind: "retryable-failure",
+        code: "LEDGER_TENANT_SCOPE_MISMATCH",
+      } as const;
+    }
+
+    const affectedIds = new Set<string>();
+    for (const transactionId of this.loadedTransactions.keys()) {
+      if (!next.has(transactionId)) affectedIds.add(transactionId);
+    }
+    for (const [transactionId, value] of next) {
+      const previous = this.loadedTransactions.get(transactionId);
+      if (
+        previous === undefined ||
+        previous.aggregateVersion !== value.aggregateVersion
+      ) {
+        affectedIds.add(transactionId);
+      }
+    }
+
     try {
       return await this.database.runTransaction(async (transaction) => {
         const receiptReference = this.receipt(input.operationKey);
-        const [receipt, canonical, legacy] = await Promise.all([
-          transaction.get(receiptReference),
-          transaction.get(householdReference.collection("ledgerTransactions")),
-          transaction.get(
-            this.database
-              .collection("expenses")
-              .where("householdId", "==", this.householdId),
-          ),
-        ]);
+        const receipt = await transaction.get(receiptReference);
         if (receipt.exists) return { kind: "success" } as const;
-        const current = new Map(
-          unionTransactions(canonical.docs, legacy.docs)
-            .map((value) => [value.transactionId, value]),
+
+        const affected = [...affectedIds];
+        const snapshots = await Promise.all(
+          affected.flatMap((transactionId) => [
+            transaction.get(
+              householdReference.collection("ledgerTransactions").doc(transactionId),
+            ),
+            transaction.get(this.database.collection("expenses").doc(transactionId)),
+          ]),
         );
-        for (const [transactionId, expectedVersion] of this.loadedVersions) {
-          if (current.get(transactionId)?.aggregateVersion !== expectedVersion) {
+        const currentAffected = new Map<string, SplitTransaction>();
+        affected.forEach((transactionId, index) => {
+          const canonical = mapTransaction(snapshots[index * 2]);
+          const legacy = mapTransaction(snapshots[index * 2 + 1]);
+          const current = mergeCanonicalLedgerTransactions({
+            canonical: canonical === undefined ? [] : [canonical],
+            legacy: legacy === undefined ? [] : [legacy],
+          })[0];
+          if (current !== undefined) currentAffected.set(transactionId, current);
+        });
+
+        for (const transactionId of affected) {
+          const expectedVersion = this.loadedVersions.get(transactionId);
+          const currentVersion = currentAffected.get(transactionId)?.aggregateVersion;
+          if (currentVersion !== expectedVersion) {
             return {
               kind: "retryable-failure",
               code: "LEDGER_CONCURRENT_WRITE",
@@ -202,51 +245,40 @@ export class FirebaseMonthlySplitLifecycleStore
           }
         }
 
-        const next = new Map(
-          input.transactions.map((value) => [value.transactionId, value]),
-        );
-        if (
-          [...next.values()].some(
-            (value) => value.householdId !== this.householdId,
-          )
-        ) {
-          return {
-            kind: "retryable-failure",
-            code: "LEDGER_TENANT_SCOPE_MISMATCH",
-          } as const;
-        }
-        for (const transactionId of current.keys()) {
-          if (next.has(transactionId)) continue;
-          transaction.delete(
-            householdReference.collection("ledgerTransactions").doc(transactionId),
-          );
-          transaction.delete(this.database.collection("expenses").doc(transactionId));
-        }
-        for (const value of next.values()) {
+        for (const transactionId of affected) {
+          const value = next.get(transactionId);
           const canonicalReference = householdReference
             .collection("ledgerTransactions")
-            .doc(value.transactionId);
+            .doc(transactionId);
           const legacyReference = this.database
             .collection("expenses")
-            .doc(value.transactionId);
+            .doc(transactionId);
+          if (value === undefined) {
+            transaction.delete(canonicalReference);
+            transaction.delete(legacyReference);
+            continue;
+          }
+          const isNew = !this.loadedTransactions.has(transactionId);
           transaction.set(
             canonicalReference,
-            documentData(value, !current.has(value.transactionId)),
+            documentData(value, isNew),
             { merge: true },
           );
           transaction.set(
             legacyReference,
             {
-              ...documentData(value, !current.has(value.transactionId)),
+              ...documentData(value, isNew),
               schemaVersion: 1,
             },
             { merge: true },
           );
         }
 
-        for (const value of next.values()) {
-          const previous = current.get(value.transactionId);
-          if (previous !== undefined) continue;
+        for (const transactionId of affected) {
+          const value = next.get(transactionId);
+          if (value === undefined || this.loadedTransactions.has(transactionId)) {
+            continue;
+          }
           const eventId = hash(
             `${this.householdId}\u0000${input.operationKey}\u0000${value.transactionId}`,
           );

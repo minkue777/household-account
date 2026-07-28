@@ -67,10 +67,24 @@ function groupMembers(
   const parts = transactions.filter(
     (transaction) => transaction.splitGroup?.groupId === groupId,
   );
-  const originalId = parts[0]?.splitGroup?.originalId;
-  if (originalId === undefined) return undefined;
+  const firstGroup = parts[0]?.splitGroup;
+  if (
+    firstGroup === undefined ||
+    !Number.isSafeInteger(firstGroup.total) ||
+    firstGroup.total < 2 ||
+    parts.length !== firstGroup.total ||
+    new Set(parts.map((transaction) => transaction.splitGroup?.index)).size !==
+      firstGroup.total ||
+    parts.some(
+      (transaction) =>
+        transaction.splitGroup?.originalId !== firstGroup.originalId ||
+        transaction.splitGroup?.total !== firstGroup.total,
+    )
+  ) {
+    return undefined;
+  }
   const original = transactions.find(
-    (transaction) => transaction.transactionId === originalId,
+    (transaction) => transaction.transactionId === firstGroup.originalId,
   );
   if (original === undefined) return undefined;
   return { original, parts };
@@ -80,7 +94,10 @@ function versionsMatch(
   members: { original: SplitTransaction; parts: readonly SplitTransaction[] },
   expected: Readonly<Record<string, number>>,
 ): boolean {
-  return [members.original, ...members.parts].every(
+  // 숨겨진 원본은 클라이언트 snapshot에 없으므로 서버 트랜잭션이
+  // load 시점의 version을 다시 검증합니다. 클라이언트는 보이는 파생 항목
+  // 전체의 version만 제출합니다.
+  return members.parts.every(
     (transaction) =>
       expected[transaction.transactionId] === transaction.aggregateVersion,
   );

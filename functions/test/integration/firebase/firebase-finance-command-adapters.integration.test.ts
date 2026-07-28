@@ -124,6 +124,93 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     });
   });
 
+  it("월 분할은 대량 원장에서도 변경 항목만 저장하고 보이는 파생 version만으로 취소한다", async () => {
+    const household = database.collection("households").doc(HOUSEHOLD_ID);
+    const canonical = household.collection("ledgerTransactions");
+    const seed = database.batch();
+    for (let index = 0; index < 260; index += 1) {
+      seed.set(canonical.doc(`unrelated-${index}`), {
+        householdId: HOUSEHOLD_ID,
+        transactionType: "expense",
+        lifecycleState: "active",
+        amountInWon: 1_000 + index,
+        accountingDate: "2026-07-01",
+        merchant: `무관 거래 ${index}`,
+        categoryId: "etc",
+        memo: "",
+        cardType: "manual",
+        cardDisplay: "수동",
+        creatorMemberId: actor.actingMemberId,
+        source: "manual",
+        originChannel: "web",
+        aggregateVersion: 1,
+      });
+    }
+    seed.set(canonical.doc("forest"), {
+      householdId: HOUSEHOLD_ID,
+      transactionType: "expense",
+      lifecycleState: "active",
+      amountInWon: 20_000,
+      accountingDate: "2026-07-28",
+      merchant: "포레스트",
+      categoryId: "etc",
+      memo: "",
+      cardType: "captured",
+      cardDisplay: "국민(0027)",
+      creatorMemberId: actor.actingMemberId,
+      source: "notification",
+      originChannel: "android",
+      aggregateVersion: 1,
+    });
+    await seed.commit();
+
+    const handlers = createLedgerHouseholdCommandHandlers(database);
+    const split = (await execute(
+      handlers,
+      "ledger.split-existing-transaction-monthly.v1",
+      "forest-split-2",
+      { transactionId: "forest", expectedVersion: 1, months: 2 },
+    )) as { transactionIds: string[]; splitGroupId: string };
+
+    expect(split.transactionIds).toHaveLength(2);
+    expect((await canonical.doc("forest").get()).data()).toMatchObject({
+      lifecycleState: "superseded",
+      aggregateVersion: 2,
+    });
+    const parts = await Promise.all(
+      split.transactionIds.map((transactionId) => canonical.doc(transactionId).get()),
+    );
+    expect(parts.every((part) => part.exists)).toBe(true);
+
+    await execute(
+      handlers,
+      "ledger.cancel-monthly-split.v1",
+      "forest-collapse",
+      {
+        splitGroupId: split.splitGroupId,
+        expectedVersions: Object.fromEntries(
+          parts.map((part) => [part.id, part.data()?.aggregateVersion]),
+        ),
+      },
+    );
+
+    expect((await canonical.doc("forest").get()).data()).toMatchObject({
+      lifecycleState: "active",
+      aggregateVersion: 3,
+      merchant: "포레스트",
+      amountInWon: 20_000,
+    });
+    for (const transactionId of split.transactionIds) {
+      expect((await canonical.doc(transactionId).get()).exists).toBe(false);
+      expect(
+        (await database.collection("expenses").doc(transactionId).get()).exists,
+      ).toBe(false);
+    }
+    expect((await canonical.doc("unrelated-259").get()).data()).toMatchObject({
+      aggregateVersion: 1,
+      merchant: "무관 거래 259",
+    });
+  });
   it("카테고리 6개 command가 같은 catalog 계약과 projection을 원자적으로 갱신한다", async () => {
     const handlers = createCategoryHouseholdCommandHandlers(database);
     const first = (await execute(handlers, "category.create.v1", "category-create-1", {
