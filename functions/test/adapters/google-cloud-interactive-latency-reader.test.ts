@@ -36,6 +36,13 @@ describe("Google Cloud interactive latency reader", () => {
         status: "succeeded",
         timestamp: "2026-07-28T00:03:00.000Z",
       },
+      {
+        endpoint: "addExpenseFromMessage",
+        operation: "payment-capture.submit-ios-shortcut-message.v1",
+        elapsedMs: 75,
+        status: "succeeded",
+        timestamp: "2026-07-28T00:04:00.000Z",
+      },
     ];
 
     expect(summarizeInteractiveLatency(observations)).toEqual([
@@ -49,6 +56,17 @@ describe("Google Cloud interactive latency reader", () => {
         p95Ms: 400,
         maxMs: 400,
         latestAt: "2026-07-28T00:02:00.000Z",
+      },
+      {
+        endpoint: "addExpenseFromMessage",
+        operation: "payment-capture.submit-ios-shortcut-message.v1",
+        sampleCount: 1,
+        succeededCount: 1,
+        failedCount: 0,
+        averageMs: 75,
+        p95Ms: 75,
+        maxMs: 75,
+        latestAt: "2026-07-28T00:04:00.000Z",
       },
       {
         endpoint: "executeHouseholdQuery",

@@ -48,6 +48,7 @@ const ENDPOINTS = new Set<AdminDashboardFunctionLatency["endpoint"]>([
   "executeHouseholdCommand",
   "executeHouseholdQuery",
   "submitAndroidRawNotification",
+  "addExpenseFromMessage",
 ]);
 const STATUSES = new Set<InteractiveLatencyObservation["status"]>([
   "succeeded",

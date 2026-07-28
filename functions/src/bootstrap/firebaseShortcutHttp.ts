@@ -17,6 +17,11 @@ import {
   createShortcutHttpInboundHandler,
   type ShortcutHttpInboundRequest,
 } from "../contexts/payment-capture/shortcut-ingestion/adapters/in/http/shortcutHttpInboundHandler";
+import {
+  setCurrentInteractiveLatencyOperation,
+  startInteractiveLatencyInvocation,
+  type InteractiveLatencyStatus,
+} from "../observability/interactiveLatency";
 import { db, REGION } from "../config";
 import { createFirebaseCaptureSubmissionPort } from "./firebaseCaptureSubmission";
 import { createFirebaseShortcutCredentialLifecycle } from "./commands/shortcutCredentialHouseholdCommandHandlers";
@@ -130,6 +135,12 @@ function setCorsHeaders(
   response.set("Access-Control-Max-Age", "600");
 }
 
+function shortcutLatencyStatus(status: number): InteractiveLatencyStatus {
+  if (status >= 500) return "failed";
+  if (status >= 400) return "rejected";
+  return "succeeded";
+}
+
 export const addExpenseFromMessage = functions
   .region(REGION)
   .runWith({
@@ -138,62 +149,78 @@ export const addExpenseFromMessage = functions
     memory: "256MB",
   })
   .https.onRequest(async (request, response) => {
-    response.set("Cache-Control", "no-store");
-    response.set("X-Content-Type-Options", "nosniff");
+    const latency = startInteractiveLatencyInvocation("addExpenseFromMessage");
+    return latency.run(async () => {
+      setCurrentInteractiveLatencyOperation(
+        "payment-capture.submit-ios-shortcut-message.v1",
+      );
+      try {
+        response.set("Cache-Control", "no-store");
+        response.set("X-Content-Type-Options", "nosniff");
 
-    const origin = request.get("origin")?.trim();
-    if (origin !== undefined) {
-      if (!allowedOrigins().has(origin)) {
-        response.status(403).json({
-          contractVersion: "shortcut-payment-response.v1",
-          error: { code: "ORIGIN_NOT_ALLOWED", retryable: false },
+        const origin = request.get("origin")?.trim();
+        if (origin !== undefined) {
+          if (!allowedOrigins().has(origin)) {
+            latency.complete("rejected");
+            response.status(403).json({
+              contractVersion: "shortcut-payment-response.v1",
+              error: { code: "ORIGIN_NOT_ALLOWED", retryable: false },
+            });
+            return;
+          }
+          setCorsHeaders(response, origin);
+        }
+
+        const authorization = request.get("authorization");
+        const contentType = request.get("content-type");
+        const idempotencyKey = request.get("idempotency-key");
+        functions.logger.info("shortcut_http_authorization", {
+          shape: authorizationShape(authorization),
         });
-        return;
+        let result: Awaited<ReturnType<typeof inbound.handle>>;
+        try {
+          result = await inbound.handle({
+            method: requestMethod(request.method),
+            headers: {
+              ...(authorization === undefined ? {} : { authorization }),
+              ...(contentType === undefined ? {} : { contentType }),
+              ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
+              ...(origin === undefined ? {} : { origin }),
+            },
+            rawBodyBytes: rawBodyBytes(request),
+            body: request.body,
+            receivedAt: new Date().toISOString(),
+            remoteAddress:
+              request.ip ||
+              request.socket.remoteAddress ||
+              "unknown-remote-address",
+          });
+        } catch {
+          latency.complete("failed");
+          response.status(503).json({
+            contractVersion: "shortcut-payment-response.v1",
+            error: {
+              code: "PAYMENT_INTAKE_TEMPORARILY_UNAVAILABLE",
+              retryable: true,
+            },
+          });
+          return;
+        }
+        functions.logger.info("shortcut_http_result", {
+          status: result.status,
+          ...(result.body !== null && "error" in result.body
+            ? { errorCode: result.body.error.code }
+            : {}),
+        });
+        latency.complete(shortcutLatencyStatus(result.status));
+        if (result.status === 204) {
+          response.status(204).send("");
+          return;
+        }
+        response.status(result.status).json(result.body);
+      } catch (error) {
+        latency.complete("failed");
+        throw error;
       }
-      setCorsHeaders(response, origin);
-    }
-
-    const authorization = request.get("authorization");
-    const contentType = request.get("content-type");
-    const idempotencyKey = request.get("idempotency-key");
-    functions.logger.info("shortcut_http_authorization", {
-      shape: authorizationShape(authorization),
     });
-    let result: Awaited<ReturnType<typeof inbound.handle>>;
-    try {
-      result = await inbound.handle({
-        method: requestMethod(request.method),
-        headers: {
-          ...(authorization === undefined ? {} : { authorization }),
-          ...(contentType === undefined ? {} : { contentType }),
-          ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
-          ...(origin === undefined ? {} : { origin }),
-        },
-        rawBodyBytes: rawBodyBytes(request),
-        body: request.body,
-        receivedAt: new Date().toISOString(),
-        remoteAddress:
-          request.ip || request.socket.remoteAddress || "unknown-remote-address",
-      });
-    } catch {
-      response.status(503).json({
-        contractVersion: "shortcut-payment-response.v1",
-        error: {
-          code: "PAYMENT_INTAKE_TEMPORARILY_UNAVAILABLE",
-          retryable: true,
-        },
-      });
-      return;
-    }
-    functions.logger.info("shortcut_http_result", {
-      status: result.status,
-      ...(result.body !== null && "error" in result.body
-        ? { errorCode: result.body.error.code }
-        : {}),
-    });
-    if (result.status === 204) {
-      response.status(204).send("");
-      return;
-    }
-    response.status(result.status).json(result.body);
   });

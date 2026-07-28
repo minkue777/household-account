@@ -155,6 +155,30 @@ describe("interactive latency telemetry", () => {
     expect(() => latency.complete("succeeded")).not.toThrow();
   });
 
+  it("iPhone Shortcut HTTP 요청을 별도 endpoint와 업무명으로 기록한다", async () => {
+    const logs = memorySink();
+    const latency = startInteractiveLatencyInvocation(
+      "addExpenseFromMessage",
+      { sink: logs.sink },
+    );
+
+    await latency.run(async () => {
+      setCurrentInteractiveLatencyOperation(
+        "payment-capture.submit-ios-shortcut-message.v1",
+      );
+      latency.complete("succeeded");
+    });
+
+    expect(logs.entries).toEqual([
+      expect.objectContaining({
+        endpoint: "addExpenseFromMessage",
+        operation: "payment-capture.submit-ios-shortcut-message.v1",
+        stage: "total",
+        status: "succeeded",
+      }),
+    ]);
+  });
+
   it("기본 sink는 emulator에서도 보이는 Firebase 구조화 logger를 사용한다", async () => {
     const info = vi.spyOn(logger, "info").mockImplementation(() => undefined);
     const latency = startInteractiveLatencyInvocation(

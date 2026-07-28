@@ -74,7 +74,8 @@ export interface AdminDashboardFunctionLatency {
   readonly endpoint:
     | "executeHouseholdCommand"
     | "executeHouseholdQuery"
-    | "submitAndroidRawNotification";
+    | "submitAndroidRawNotification"
+    | "addExpenseFromMessage";
   readonly operation: string;
   readonly sampleCount: number;
   readonly succeededCount: number;

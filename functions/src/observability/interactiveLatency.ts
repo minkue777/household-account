@@ -11,7 +11,8 @@ export const INTERACTIVE_LATENCY_SCHEMA_VERSION =
 export type InteractiveLatencyEndpoint =
   | "executeHouseholdCommand"
   | "executeHouseholdQuery"
-  | "submitAndroidRawNotification";
+  | "submitAndroidRawNotification"
+  | "addExpenseFromMessage";
 
 export type InteractiveLatencyStage =
   | "actor-membership"

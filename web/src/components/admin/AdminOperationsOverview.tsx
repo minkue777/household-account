@@ -34,6 +34,7 @@ const FUNCTION_ENDPOINT_LABELS: Record<string, string> = {
   executeHouseholdCommand: '가계부 명령',
   executeHouseholdQuery: '가계부 조회',
   submitAndroidRawNotification: 'Android 결제 수집',
+  addExpenseFromMessage: 'iPhone 결제 수집',
 };
 
 const FUNCTION_OPERATION_LABELS: Record<string, string> = {
@@ -98,6 +99,7 @@ const FUNCTION_OPERATION_LABELS: Record<string, string> = {
   'notifications.register-endpoint.v1': '알림 기기 등록',
   'notifications.remove-endpoint.v1': '알림 기기 연결 해제',
   'payment-capture.submit-android-raw-notification.v1': 'Android 결제 알림 처리',
+  'payment-capture.submit-ios-shortcut-message.v1': 'iPhone 결제 알림 처리',
 };
 
 const FUNCTION_OPERATION_GROUPS = [
@@ -242,9 +244,10 @@ const FUNCTION_OPERATION_GROUPS = [
     ],
   },
   {
-    label: 'Android 결제 수집',
+    label: '결제 알림 수집',
     operations: [
       'payment-capture.submit-android-raw-notification.v1',
+      'payment-capture.submit-ios-shortcut-message.v1',
     ],
   },
 ] as const;

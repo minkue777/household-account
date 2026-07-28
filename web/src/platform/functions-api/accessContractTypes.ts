@@ -116,7 +116,8 @@ export interface AdminOperationsDashboardWireView {
       endpoint:
         | 'executeHouseholdCommand'
         | 'executeHouseholdQuery'
-        | 'submitAndroidRawNotification';
+        | 'submitAndroidRawNotification'
+        | 'addExpenseFromMessage';
       operation: string;
       sampleCount: number;
       succeededCount: number;

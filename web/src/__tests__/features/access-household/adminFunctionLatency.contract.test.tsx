@@ -87,6 +87,17 @@ describe('admin Cloud Function latency contract', () => {
             maxMs: 420,
             latestAt: '2026-07-28T00:09:00.000Z',
           },
+          {
+            endpoint: 'addExpenseFromMessage',
+            operation: 'payment-capture.submit-ios-shortcut-message.v1',
+            sampleCount: 1,
+            succeededCount: 1,
+            failedCount: 0,
+            averageMs: 150,
+            p95Ms: 150,
+            maxMs: 150,
+            latestAt: '2026-07-28T00:09:00.000Z',
+          },
         ],
       },
     };
@@ -107,6 +118,8 @@ describe('admin Cloud Function latency contract', () => {
     expect(screen.getByText('0.120초')).toBeInTheDocument();
     expect(screen.getByText('0.310초')).toBeInTheDocument();
     expect(screen.getByText('0.420초')).toBeInTheDocument();
+    expect(screen.getByText('iPhone 결제 알림 처리')).toBeInTheDocument();
+    expect(screen.getByText('iPhone 결제 수집')).toBeInTheDocument();
     expect(screen.queryByText(/online.*ms/i)).not.toBeInTheDocument();
 
     const updateRow = screen.getByText('ledger.update-transaction.v1').closest('tr');
