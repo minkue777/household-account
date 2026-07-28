@@ -103,10 +103,10 @@ function documentData(transaction: SplitTransaction, isNew: boolean) {
 }
 
 function unionTransactions(
-  canonical: readonly firestore.QueryDocumentSnapshot[],
-  legacy: readonly firestore.QueryDocumentSnapshot[],
+  canonical: readonly firestore.DocumentSnapshot[],
+  legacy: readonly firestore.DocumentSnapshot[],
 ): readonly SplitTransaction[] {
-  const mapAll = (documents: readonly firestore.QueryDocumentSnapshot[]) =>
+  const mapAll = (documents: readonly firestore.DocumentSnapshot[]) =>
     documents
       .map(mapTransaction)
       .filter((value): value is SplitTransaction => value !== undefined);
@@ -145,19 +145,67 @@ export class FirebaseMonthlySplitLifecycleStore
       : undefined;
   }
 
-  async load(): Promise<readonly SplitTransaction[]> {
-    const [canonical, legacy] = await Promise.all([
-      this.database
-        .collection("households")
-        .doc(this.householdId)
-        .collection("ledgerTransactions")
-        .get(),
-      this.database
-        .collection("expenses")
-        .where("householdId", "==", this.householdId)
-        .get(),
-    ]);
-    const transactions = unionTransactions(canonical.docs, legacy.docs)
+  async load(
+    selection: Parameters<MonthlySplitLifecycleStore["load"]>[0],
+  ): Promise<readonly SplitTransaction[]> {
+    const householdReference = this.database
+      .collection("households")
+      .doc(this.householdId);
+    let transactions: readonly SplitTransaction[];
+    if (selection.kind === "empty") {
+      transactions = [];
+    } else if (selection.kind === "transaction") {
+      const [canonical, legacy] = await Promise.all([
+        householdReference
+          .collection("ledgerTransactions")
+          .doc(selection.transactionId)
+          .get(),
+        this.database.collection("expenses").doc(selection.transactionId).get(),
+      ]);
+      transactions = unionTransactions([canonical], [legacy]);
+    } else {
+      const [canonicalParts, legacyParts] = await Promise.all([
+        householdReference
+          .collection("ledgerTransactions")
+          .where("splitGroupId", "==", selection.groupId)
+          .get(),
+        this.database
+          .collection("expenses")
+          .where("splitGroupId", "==", selection.groupId)
+          .get(),
+      ]);
+      const parts = unionTransactions(canonicalParts.docs, legacyParts.docs)
+        .filter((transaction) => transaction.householdId === this.householdId);
+      const originalIds = [
+        ...new Set(
+          parts.flatMap((transaction) =>
+            transaction.splitGroup === undefined
+              ? []
+              : [transaction.splitGroup.originalId],
+          ),
+        ),
+      ];
+      const originalSnapshots = await Promise.all(
+        originalIds.flatMap((transactionId) => [
+          householdReference
+            .collection("ledgerTransactions")
+            .doc(transactionId)
+            .get(),
+          this.database.collection("expenses").doc(transactionId).get(),
+        ]),
+      );
+      const canonicalOriginals = originalSnapshots.filter(
+        (_snapshot, index) => index % 2 === 0,
+      );
+      const legacyOriginals = originalSnapshots.filter(
+        (_snapshot, index) => index % 2 === 1,
+      );
+      transactions = mergeCanonicalLedgerTransactions({
+        canonical: [...parts, ...unionTransactions(canonicalOriginals, [])],
+        legacy: unionTransactions([], legacyOriginals),
+      });
+    }
+    transactions = transactions
       .filter(
         (transaction): transaction is SplitTransaction =>
           transaction !== undefined && transaction.householdId === this.householdId,

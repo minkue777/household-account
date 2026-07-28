@@ -5,7 +5,10 @@ import type {
 
 export interface ItemSplitStore {
   findReceipt(operationKey: string): Promise<ItemSplitResult | undefined>;
-  load(): Promise<ItemSplitSnapshot>;
+  load(input: {
+    readonly sourceId: string;
+    readonly includeDerived: boolean;
+  }): Promise<ItemSplitSnapshot>;
   replaceAtomically(input: {
     operationKey: string;
     snapshot: ItemSplitSnapshot;

@@ -211,6 +211,100 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       merchant: "무관 거래 259",
     });
   });
+
+  it("지출 나누기는 대량 원장을 읽거나 재저장하지 않고 원본과 파생 항목만 변경한다", async () => {
+    await database.collection("categories").doc("food").set({
+      householdId: HOUSEHOLD_ID,
+      key: "food",
+      label: "식비",
+      isActive: true,
+    });
+    const household = database.collection("households").doc(HOUSEHOLD_ID);
+    const canonical = household.collection("ledgerTransactions");
+    const seed = database.batch();
+    for (let index = 0; index < 260; index += 1) {
+      seed.set(canonical.doc(`unrelated-item-${index}`), {
+        householdId: HOUSEHOLD_ID,
+        transactionType: "expense",
+        lifecycleState: "active",
+        amountInWon: 1_000 + index,
+        accountingDate: "2026-07-01",
+        localTime: "10:00",
+        merchant: `무관 항목 ${index}`,
+        categoryId: "food",
+        memo: "",
+        cardType: "manual",
+        cardDisplay: "수동",
+        creatorMemberId: actor.actingMemberId,
+        source: "manual",
+        originChannel: "web",
+        aggregateVersion: 1,
+      });
+    }
+    seed.set(canonical.doc("item-split-source"), {
+      householdId: HOUSEHOLD_ID,
+      transactionType: "expense",
+      lifecycleState: "active",
+      amountInWon: 20_000,
+      accountingDate: "2026-07-28",
+      localTime: "14:00",
+      merchant: "나누기 원본",
+      categoryId: "food",
+      memo: "",
+      cardType: "captured",
+      cardDisplay: "국민(0027)",
+      creatorMemberId: actor.actingMemberId,
+      source: "notification",
+      originChannel: "android",
+      aggregateVersion: 1,
+    });
+    await seed.commit();
+
+    const result = (await execute(
+      createLedgerHouseholdCommandHandlers(database),
+      "ledger.split-transaction.v1",
+      "item-split-large-ledger",
+      {
+        transactionId: "item-split-source",
+        expectedVersion: 1,
+        items: [
+          {
+            merchant: "첫 번째 항목",
+            amountInWon: 12_000,
+            categoryId: "food",
+            memo: "",
+          },
+          {
+            merchant: "두 번째 항목",
+            amountInWon: 8_000,
+            categoryId: "food",
+            memo: "",
+          },
+        ],
+      },
+    )) as { transactionIds: string[] };
+
+    expect(result.transactionIds).toHaveLength(2);
+    expect((await canonical.doc("item-split-source").get()).data()).toMatchObject({
+      lifecycleState: "superseded",
+      aggregateVersion: 2,
+    });
+    expect((await canonical.doc(result.transactionIds[0]).get()).data()).toMatchObject({
+      merchant: "첫 번째 항목",
+      amountInWon: 12_000,
+      derivedFromTransactionId: "item-split-source",
+    });
+    expect((await canonical.doc(result.transactionIds[1]).get()).data()).toMatchObject({
+      merchant: "두 번째 항목",
+      amountInWon: 8_000,
+      derivedFromTransactionId: "item-split-source",
+    });
+    expect((await canonical.doc("unrelated-item-259").get()).data()).toMatchObject({
+      aggregateVersion: 1,
+      merchant: "무관 항목 259",
+    });
+  });
+
   it("카테고리 6개 command가 같은 catalog 계약과 projection을 원자적으로 갱신한다", async () => {
     const handlers = createCategoryHouseholdCommandHandlers(database);
     const first = (await execute(handlers, "category.create.v1", "category-create-1", {

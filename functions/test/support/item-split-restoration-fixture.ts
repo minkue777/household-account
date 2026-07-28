@@ -16,12 +16,36 @@ export function createItemSplitRestorationFixtureSubject(
   fixture: ItemSplitSnapshot,
 ) {
   let snapshot = clone(fixture);
+  let loadedIds = new Set<string>();
   const receipts = new Map<string, ItemSplitResult>();
   const store: ItemSplitStore = {
     findReceipt: async (operationKey) => receipts.get(operationKey),
-    load: async () => clone(snapshot),
+    load: async ({ sourceId, includeDerived }) => {
+      const selected = snapshot.transactions.filter(
+        ({ transactionId, derivedFromTransactionId }) =>
+          transactionId === sourceId ||
+          (includeDerived && derivedFromTransactionId === sourceId),
+      );
+      loadedIds = new Set(selected.map(({ transactionId }) => transactionId));
+      return {
+        transactions: selected.map((transaction) => ({ ...transaction })),
+        dedupClaims: snapshot.dedupClaims.map((claim) => ({ ...claim })),
+      };
+    },
     replaceAtomically: async ({ operationKey, snapshot: next, result }) => {
-      snapshot = clone(next);
+      const nextIds = new Set(
+        next.transactions.map(({ transactionId }) => transactionId),
+      );
+      snapshot = {
+        transactions: [
+          ...snapshot.transactions.filter(
+            ({ transactionId }) =>
+              !loadedIds.has(transactionId) && !nextIds.has(transactionId),
+          ),
+          ...next.transactions.map((transaction) => ({ ...transaction })),
+        ],
+        dedupClaims: next.dedupClaims.map((claim) => ({ ...claim })),
+      };
       receipts.set(operationKey, result);
       return { kind: "success" };
     },

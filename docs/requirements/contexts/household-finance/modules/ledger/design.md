@@ -227,6 +227,8 @@ DEC-013의 알림 수신자는 Ledger가 확정하지 않습니다. Ledger는 �
 | Port | 책임 | Conformance 핵심 |
 |---|---|---|
 | `LedgerRepository` | 단건·그룹·기간·검색 후보 조회와 persistence mapping | tenant 강제, legacy transactionType=expense, 오류/NoData 구분 |
+| `ItemSplitStore` | 항목 분할 원본·직접 파생 항목의 선택 조회와 원자 교체 | split은 원본 ID 한 건, restore는 원본 ID와 `derivedFromTransactionId` 일치 항목만 읽고 같은 선택 집합의 version을 commit 안에서 재검증한다. |
+| `MonthlySplitLifecycleStore` | 월 분할 원본·그룹의 선택 조회와 원자 교체 | 신규·기존 분할은 원본 한 건 이하, 취소·재구성은 `splitGroupId` 일치 항목과 그 원본만 읽고 전체 원장과 무관한 거래는 조회·재저장하지 않는다. |
 | `TransformationLineageStore` | Merge·Unmerge·lineage cancel의 선택 조회와 원자 commit | Merge·Unmerge는 명시된 transaction/capture-lineage/merge-leaf ID만 조회하고 canonical 우선·legacy fallback과 commit 안의 동일 선택 집합·새 aggregate ID 재검증을 적용한다. Cancellation만 ID가 없는 구형 `mergedFrom` 계보의 존재 여부를 가구 범위에서 검사하고 commit 안에서 다시 확인해 불완전 계보를 무변경 거부한다. |
 | `LedgerUnitOfWork` | Transaction, claim, receipt, Outbox 원자 commit | callback 2회, create 경합, rollback |
 | `CategoryReferencePort` | categoryId 활성·사용 가능 상태 확인 | NotFound/Inactive/RetryableFailure 구분 |

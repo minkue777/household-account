@@ -44,7 +44,10 @@ export function createItemSplitRestorationCommands(input: {
     split: async (command) => {
       const replay = await input.store.findReceipt(command.operationKey);
       if (replay !== undefined) return replay;
-      const snapshot = await input.store.load();
+      const snapshot = await input.store.load({
+        sourceId: command.sourceId,
+        includeDerived: false,
+      });
       const source = snapshot.transactions.find(
         (transaction) =>
           transaction.transactionId === command.sourceId &&
@@ -131,7 +134,10 @@ export function createItemSplitRestorationCommands(input: {
     restore: async (command) => {
       const replay = await input.store.findReceipt(command.operationKey);
       if (replay !== undefined) return replay;
-      const snapshot = await input.store.load();
+      const snapshot = await input.store.load({
+        sourceId: command.sourceId,
+        includeDerived: true,
+      });
       const source = snapshot.transactions.find(
         (transaction) =>
           transaction.transactionId === command.sourceId &&

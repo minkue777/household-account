@@ -82,7 +82,7 @@ function metadata(
 }
 
 function mapped(
-  documents: readonly firestore.QueryDocumentSnapshot[],
+  documents: readonly firestore.DocumentSnapshot[],
 ): readonly ItemSplitTransaction[] {
   return documents
     .map(mapTransaction)
@@ -91,6 +91,8 @@ function mapped(
 
 export class FirebaseItemSplitStore implements ItemSplitStore {
   private loadedVersions = new Map<string, number>();
+  private loadedTransactions = new Map<string, ItemSplitTransaction>();
+  private loadedMetadata = new Map<string, TransactionMetadata>();
 
   constructor(
     private readonly database: firestore.Firestore,
@@ -113,53 +115,121 @@ export class FirebaseItemSplitStore implements ItemSplitStore {
       : undefined;
   }
 
-  async load() {
-    const [canonical, legacy] = await Promise.all([
-      this.database
-        .collection("households")
-        .doc(this.householdId)
-        .collection("ledgerTransactions")
-        .get(),
-      this.database
-        .collection("expenses")
-        .where("householdId", "==", this.householdId)
-        .get(),
+  async load(input: Parameters<ItemSplitStore["load"]>[0]) {
+    const household = this.database
+      .collection("households")
+      .doc(this.householdId);
+    const [
+      canonicalSource,
+      legacySource,
+      canonicalDerived,
+      legacyDerived,
+    ] = await Promise.all([
+      household.collection("ledgerTransactions").doc(input.sourceId).get(),
+      this.database.collection("expenses").doc(input.sourceId).get(),
+      input.includeDerived
+        ? household
+          .collection("ledgerTransactions")
+          .where("derivedFromTransactionId", "==", input.sourceId)
+          .get()
+        : Promise.resolve(undefined),
+      input.includeDerived
+        ? this.database
+          .collection("expenses")
+          .where("derivedFromTransactionId", "==", input.sourceId)
+          .get()
+        : Promise.resolve(undefined),
     ]);
+    const canonicalDocuments: firestore.DocumentSnapshot[] = [
+      canonicalSource,
+      ...(canonicalDerived?.docs ?? []),
+    ];
+    const legacyDocuments: firestore.DocumentSnapshot[] = [
+      legacySource,
+      ...(legacyDerived?.docs ?? []),
+    ];
     const transactions = mergeCanonicalLedgerTransactions({
-      canonical: mapped(canonical.docs),
-      legacy: mapped(legacy.docs),
+      canonical: mapped(canonicalDocuments),
+      legacy: mapped(legacyDocuments),
     }).filter((value) => value.householdId === this.householdId);
+    this.loadedTransactions = new Map(
+      transactions.map((value) => [value.transactionId, value]),
+    );
     this.loadedVersions = new Map(
       transactions.map((value) => [value.transactionId, value.aggregateVersion]),
     );
+    this.loadedMetadata = new Map();
+    for (const document of [...legacyDocuments, ...canonicalDocuments]) {
+      const value = metadata(document);
+      if (
+        value !== undefined &&
+        mapTransaction(document)?.householdId === this.householdId
+      ) {
+        this.loadedMetadata.set(document.id, value);
+      }
+    }
     return { transactions, dedupClaims: [] };
   }
 
   async replaceAtomically(input: Parameters<ItemSplitStore["replaceAtomically"]>[0]) {
     const household = this.database.collection("households").doc(this.householdId);
+    const next = new Map(
+      input.snapshot.transactions.map((value) => [value.transactionId, value]),
+    );
+    if (
+      [...next.values()].some(
+        (value) => value.householdId !== this.householdId,
+      )
+    ) {
+      return {
+        kind: "RetryableFailure",
+        code: "LEDGER_TENANT_SCOPE_MISMATCH",
+      } as const;
+    }
+    const affectedIds = new Set<string>();
+    for (const transactionId of this.loadedTransactions.keys()) {
+      if (!next.has(transactionId)) affectedIds.add(transactionId);
+    }
+    for (const [transactionId, value] of next) {
+      const previous = this.loadedTransactions.get(transactionId);
+      if (
+        previous === undefined ||
+        previous.aggregateVersion !== value.aggregateVersion
+      ) {
+        affectedIds.add(transactionId);
+      }
+    }
+
     try {
       return await this.database.runTransaction(async (unitOfWork) => {
         const receipt = this.receipt(input.operationKey);
-        const [receiptSnapshot, canonical, legacy] = await Promise.all([
-          unitOfWork.get(receipt),
-          unitOfWork.get(household.collection("ledgerTransactions")),
-          unitOfWork.get(
-            this.database
-              .collection("expenses")
-              .where("householdId", "==", this.householdId),
-          ),
-        ]);
+        const receiptSnapshot = await unitOfWork.get(receipt);
         if (receiptSnapshot.exists) return { kind: "success" } as const;
 
-        const current = mergeCanonicalLedgerTransactions({
-          canonical: mapped(canonical.docs),
-          legacy: mapped(legacy.docs),
-        });
-        const currentById = new Map(
-          current.map((value) => [value.transactionId, value]),
+        const affected = [...affectedIds];
+        const currentSnapshots = await Promise.all(
+          affected.flatMap((transactionId) => [
+            unitOfWork.get(
+              household.collection("ledgerTransactions").doc(transactionId),
+            ),
+            unitOfWork.get(
+              this.database.collection("expenses").doc(transactionId),
+            ),
+          ]),
         );
-        for (const [transactionId, expectedVersion] of this.loadedVersions) {
-          if (currentById.get(transactionId)?.aggregateVersion !== expectedVersion) {
+        const currentById = new Map<string, ItemSplitTransaction>();
+        affected.forEach((transactionId, index) => {
+          const current = mergeCanonicalLedgerTransactions({
+            canonical: mapped([currentSnapshots[index * 2]]),
+            legacy: mapped([currentSnapshots[index * 2 + 1]]),
+          })[0];
+          if (current !== undefined) currentById.set(transactionId, current);
+        });
+        for (const transactionId of affected) {
+          const expectedVersion = this.loadedVersions.get(transactionId);
+          const currentVersion =
+            currentById.get(transactionId)?.aggregateVersion;
+          if (currentVersion !== expectedVersion) {
             return {
               kind: "RetryableFailure",
               code: "LEDGER_CONCURRENT_WRITE",
@@ -167,23 +237,10 @@ export class FirebaseItemSplitStore implements ItemSplitStore {
           }
         }
 
-        const canonicalMetadata = new Map(
-          canonical.docs.flatMap((document) => {
-            const value = metadata(document);
-            return value === undefined ? [] : [[document.id, value] as const];
-          }),
-        );
-        const legacyMetadata = new Map(
-          legacy.docs.flatMap((document) => {
-            const value = metadata(document);
-            return value === undefined ? [] : [[document.id, value] as const];
-          }),
-        );
         const metadataFor = (value: ItemSplitTransaction) => {
           const sourceId = value.derivedFromTransactionId ?? value.transactionId;
           return (
-            canonicalMetadata.get(sourceId) ??
-            legacyMetadata.get(sourceId) ?? {
+            this.loadedMetadata.get(sourceId) ?? {
               transactionType: "expense" as const,
               accountingDate: "",
               localTime: "",
@@ -192,29 +249,19 @@ export class FirebaseItemSplitStore implements ItemSplitStore {
             }
           );
         };
-        const next = new Map(
-          input.snapshot.transactions.map((value) => [value.transactionId, value]),
-        );
-        if (
-          [...next.values()].some(
-            (value) => value.householdId !== this.householdId,
-          )
-        ) {
-          return {
-            kind: "RetryableFailure",
-            code: "LEDGER_TENANT_SCOPE_MISMATCH",
-          } as const;
-        }
-        for (const currentValue of current) {
-          if (next.has(currentValue.transactionId)) continue;
-          unitOfWork.delete(
-            household.collection("ledgerTransactions").doc(currentValue.transactionId),
-          );
-          unitOfWork.delete(
-            this.database.collection("expenses").doc(currentValue.transactionId),
-          );
-        }
-        for (const value of next.values()) {
+        for (const transactionId of affected) {
+          const value = next.get(transactionId);
+          const canonicalReference = household
+            .collection("ledgerTransactions")
+            .doc(transactionId);
+          const legacyReference = this.database
+            .collection("expenses")
+            .doc(transactionId);
+          if (value === undefined) {
+            unitOfWork.delete(canonicalReference);
+            unitOfWork.delete(legacyReference);
+            continue;
+          }
           const extra = metadataFor(value);
           const data = {
             householdId: value.householdId,
@@ -243,24 +290,24 @@ export class FirebaseItemSplitStore implements ItemSplitStore {
               : { derivedFromTransactionId: value.derivedFromTransactionId }),
             schemaVersion: 2,
             updatedAt: FieldValue.serverTimestamp(),
-            ...(currentById.has(value.transactionId)
+            ...(this.loadedTransactions.has(value.transactionId)
               ? {}
               : { createdAt: FieldValue.serverTimestamp() }),
           };
           unitOfWork.set(
-            household.collection("ledgerTransactions").doc(value.transactionId),
+            canonicalReference,
             data,
             { merge: true },
           );
           unitOfWork.set(
-            this.database.collection("expenses").doc(value.transactionId),
+            legacyReference,
             { ...data, schemaVersion: 1 },
             { merge: true },
           );
         }
         const outbox = new FirebaseTransactionalOutbox(this.database);
-        for (const currentValue of current) {
-          if (next.has(currentValue.transactionId)) continue;
+        for (const [transactionId, currentValue] of this.loadedTransactions) {
+          if (!affectedIds.has(transactionId) || next.has(transactionId)) continue;
           outbox.append(unitOfWork, {
             eventId: hash(
               `${this.householdId}\u0000${input.operationKey}\u0000deleted\u0000${currentValue.transactionId}`,
@@ -275,8 +322,10 @@ export class FirebaseItemSplitStore implements ItemSplitStore {
             payload: { transactionId: currentValue.transactionId },
           });
         }
-        for (const value of next.values()) {
-          const previous = currentById.get(value.transactionId);
+        for (const transactionId of affected) {
+          const value = next.get(transactionId);
+          if (value === undefined) continue;
+          const previous = this.loadedTransactions.get(transactionId);
           if (
             previous !== undefined &&
             previous.aggregateVersion === value.aggregateVersion

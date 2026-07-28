@@ -157,7 +157,10 @@ export function createMonthlySplitLifecycleCommands(input: {
     collapse: async (command) => {
       const prior = await replay(command.operationKey);
       if (prior !== undefined) return prior;
-      const transactions = await input.store.load();
+      const transactions = await input.store.load({
+        kind: "group",
+        groupId: command.groupId,
+      });
       const members = groupMembers(transactions, command.groupId);
       if (members === undefined || !versionsMatch(members, command.expectedVersions)) {
         return { kind: "conflict", code: "VERSION_MISMATCH" };
@@ -199,7 +202,10 @@ export function createMonthlySplitLifecycleCommands(input: {
           code: "MONTHLY_SPLIT_REQUIRES_AT_LEAST_TWO_MONTHS",
         };
       }
-      const transactions = await input.store.load();
+      const transactions = await input.store.load({
+        kind: "group",
+        groupId: command.groupId,
+      });
       const members = groupMembers(transactions, command.groupId);
       if (members === undefined || !versionsMatch(members, command.expectedVersions)) {
         return { kind: "conflict", code: "VERSION_MISMATCH" };
@@ -254,7 +260,10 @@ export function createMonthlySplitLifecycleCommands(input: {
           code: "MONTHLY_SPLIT_REQUIRES_AT_LEAST_TWO_MONTHS",
         };
       }
-      const transactions = await input.store.load();
+      const transactions = await input.store.load({
+        kind: "transaction",
+        transactionId: command.transactionId,
+      });
       const source = transactions.find(
         (transaction) => transaction.transactionId === command.transactionId,
       );
@@ -339,7 +348,7 @@ export function createMonthlySplitLifecycleCommands(input: {
       });
       if (created.kind !== "built") return created;
       const createdTransactions = created.transactions;
-      const existing = await input.store.load();
+      const existing = await input.store.load({ kind: "empty" });
       const result = {
         kind: "success" as const,
         transactionIds: createdTransactions.map(

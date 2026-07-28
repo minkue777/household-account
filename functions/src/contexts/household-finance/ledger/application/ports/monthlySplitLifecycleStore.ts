@@ -5,7 +5,12 @@ import type {
 
 export interface MonthlySplitLifecycleStore {
   findReceipt(operationKey: string): Promise<SplitLifecycleResult | undefined>;
-  load(): Promise<readonly SplitTransaction[]>;
+  load(
+    selection:
+      | { readonly kind: "transaction"; readonly transactionId: string }
+      | { readonly kind: "group"; readonly groupId: string }
+      | { readonly kind: "empty" },
+  ): Promise<readonly SplitTransaction[]>;
   replaceAtomically(input: {
     operationKey: string;
     transactions: readonly SplitTransaction[];
