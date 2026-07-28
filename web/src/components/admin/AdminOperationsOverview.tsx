@@ -17,7 +17,6 @@ import type { AdminOperationsDashboardWireView } from '@/platform/functions-api'
 
 interface AdminOperationsOverviewProps {
   dashboard: AdminOperationsDashboardWireView;
-  requestLatencyMs: number | null;
   refreshing: boolean;
   onRefresh(): void;
 }
@@ -29,6 +28,12 @@ const JOB_LABELS: Record<string, string> = {
   'dividend-hourly': '배당 공시',
   'asset-valuation-daily': '자산 스냅샷',
   'scheduled-job-monitor': '스케줄 감시',
+};
+
+const FUNCTION_ENDPOINT_LABELS: Record<string, string> = {
+  executeHouseholdCommand: '가계부 명령',
+  executeHouseholdQuery: '가계부 조회',
+  submitAndroidRawNotification: 'Android 결제 수집',
 };
 
 const JOB_STATUS_LABELS: Record<string, string> = {
@@ -52,6 +57,13 @@ function formatDateTime(value?: string): string {
     minute: '2-digit',
     hour12: false,
   }).format(new Date(value));
+}
+
+function formatDuration(value: number): string {
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(value >= 10_000 ? 1 : 2)}초`;
+  }
+  return `${value.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}ms`;
 }
 
 function shortDate(value: string): string {
@@ -98,7 +110,6 @@ function statusClasses(status: string): string {
 
 export function AdminOperationsOverview({
   dashboard,
-  requestLatencyMs,
   refreshing,
   onRefresh,
 }: AdminOperationsOverviewProps) {
@@ -107,6 +118,11 @@ export function AdminOperationsOverview({
     1,
     ...dashboard.dailyAccess.map(({ count }) => count)
   );
+  const functionLatency = dashboard.functionLatency ?? {
+    status: 'unavailable' as const,
+    windowHours: 24,
+    operations: [],
+  };
   const activeUsers = dashboard.households
     .flatMap((household) =>
       household.members
@@ -153,7 +169,7 @@ export function AdminOperationsOverview({
             <Meta label="리전" value={dashboard.service.region} mono />
             <Meta
               label="관리 API"
-              value={requestLatencyMs === null ? '온라인' : `온라인 · ${requestLatencyMs}ms`}
+              value="온라인"
             />
             <Meta label="확인 시각" value={formatDateTime(dashboard.generatedAt)} />
           </div>
@@ -174,6 +190,71 @@ export function AdminOperationsOverview({
           tone="violet"
         />
       </section>
+
+      <Panel
+        title="Cloud Functions 처리 시간"
+        description={`최근 ${functionLatency.windowHours}시간 로직별 total 구조화 로그 집계`}
+      >
+        {functionLatency.status === 'unavailable' ? (
+          <EmptyState>
+            Cloud Logging 처리 시간을 읽지 못했습니다.
+          </EmptyState>
+        ) : functionLatency.operations.length === 0 ? (
+          <EmptyState>
+            해당 기간에 수집된 Functions 호출 기록이 없습니다.
+          </EmptyState>
+        ) : (
+          <div className="max-h-[420px] overflow-auto">
+            <table className="w-full min-w-[840px] text-left text-xs">
+              <thead className="sticky top-0 z-10 border-b border-slate-800 bg-slate-900 text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 font-medium">로직</th>
+                  <th className="px-4 py-3 font-medium">Function</th>
+                  <th className="px-4 py-3 text-right font-medium">호출</th>
+                  <th className="px-4 py-3 text-right font-medium">성공</th>
+                  <th className="px-4 py-3 text-right font-medium">평균</th>
+                  <th className="px-4 py-3 text-right font-medium">P95</th>
+                  <th className="px-4 py-3 text-right font-medium">최대</th>
+                  <th className="px-4 py-3 text-right font-medium">최근 호출</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/80">
+                {functionLatency.operations.map((operation) => (
+                  <tr
+                    key={`${operation.endpoint}:${operation.operation}`}
+                    className="text-slate-300"
+                  >
+                    <td className="px-4 py-3 font-mono text-[11px] text-slate-100">
+                      {operation.operation}
+                    </td>
+                    <td className="px-4 py-3 text-slate-400">
+                      {FUNCTION_ENDPOINT_LABELS[operation.endpoint] ?? operation.endpoint}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono">
+                      {operation.sampleCount.toLocaleString('ko-KR')}
+                    </td>
+                    <td className={`px-4 py-3 text-right font-mono ${operation.failedCount > 0 ? 'text-amber-300' : 'text-emerald-300'}`}>
+                      {operation.succeededCount}/{operation.sampleCount}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-sky-300">
+                      {formatDuration(operation.averageMs)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-violet-300">
+                      {formatDuration(operation.p95Ms)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-slate-400">
+                      {formatDuration(operation.maxMs)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-500">
+                      {formatDateTime(operation.latestAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
 
       <Panel
         title="사용자별 접속"

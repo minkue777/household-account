@@ -109,4 +109,22 @@ export interface AdminOperationsDashboardWireView {
     reason: string;
     openedAt: string;
   }>;
+  functionLatency: {
+    status: 'available' | 'unavailable';
+    windowHours: number;
+    operations: Array<{
+      endpoint:
+        | 'executeHouseholdCommand'
+        | 'executeHouseholdQuery'
+        | 'submitAndroidRawNotification';
+      operation: string;
+      sampleCount: number;
+      succeededCount: number;
+      failedCount: number;
+      averageMs: number;
+      p95Ms: number;
+      maxMs: number;
+      latestAt: string;
+    }>;
+  };
 }

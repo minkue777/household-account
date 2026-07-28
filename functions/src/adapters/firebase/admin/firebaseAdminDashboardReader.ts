@@ -7,6 +7,7 @@ import type {
   AdminDashboardMemberActivity,
   AdminDashboardProviderHealth,
   AdminDashboardScheduledJob,
+  AdminFunctionLatencyReaderPort,
   AdminOperationsDashboard,
 } from "../../../platform/admin-operations/application/adminOperationsDashboard";
 import { loadScheduledJobDefinitions } from "../../../operations/scheduling/scheduledJobDefinitions";
@@ -109,6 +110,7 @@ export class FirebaseAdminDashboardReader {
       readonly revision: string;
       readonly region: string;
     },
+    private readonly functionLatencyReader?: AdminFunctionLatencyReaderPort,
   ) {}
 
   async read(input: {
@@ -123,6 +125,7 @@ export class FirebaseAdminDashboardReader {
       monitorReceiptSnapshot,
       providerSnapshot,
       incidentSnapshot,
+      functionLatency,
     ] =
       await Promise.all([
         this.database.collection("households").get(),
@@ -139,6 +142,21 @@ export class FirebaseAdminDashboardReader {
         operationsCollection(this.database, "scheduledJobIncidents")
           .where("state", "==", "OPEN")
           .get(),
+        this.functionLatencyReader
+          ?.read({
+            generatedAt: input.generatedAt,
+            windowHours: 24,
+          })
+          .catch(() => ({
+            status: "unavailable" as const,
+            windowHours: 24,
+            operations: [],
+          })) ??
+          Promise.resolve({
+            status: "unavailable" as const,
+            windowHours: 24,
+            operations: [],
+          }),
       ]);
 
     const memberSnapshots = await Promise.all(
@@ -402,6 +420,7 @@ export class FirebaseAdminDashboardReader {
       scheduledJobs,
       providerHealth,
       incidents,
+      functionLatency,
     };
   }
 }

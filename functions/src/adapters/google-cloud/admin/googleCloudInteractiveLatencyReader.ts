@@ -1,0 +1,266 @@
+import { applicationDefault } from "firebase-admin/app";
+
+import type {
+  AdminDashboardFunctionLatency,
+  AdminDashboardFunctionLatencyWindow,
+  AdminFunctionLatencyReaderPort,
+} from "../../../platform/admin-operations/application/adminOperationsDashboard";
+
+interface AccessTokenProvider {
+  getAccessToken(): Promise<{ readonly access_token: string }>;
+}
+
+interface LoggingFetchResponse {
+  readonly ok: boolean;
+  readonly status: number;
+  json(): Promise<unknown>;
+}
+
+type LoggingFetch = (
+  url: string,
+  init: {
+    readonly method: "POST";
+    readonly headers: Readonly<Record<string, string>>;
+    readonly body: string;
+    readonly signal: AbortSignal;
+  },
+) => Promise<LoggingFetchResponse>;
+
+interface LoggingEntry {
+  readonly timestamp?: unknown;
+  readonly jsonPayload?: unknown;
+}
+
+interface LoggingEntriesResponse {
+  readonly entries?: unknown;
+  readonly nextPageToken?: unknown;
+}
+
+export interface InteractiveLatencyObservation {
+  readonly endpoint: AdminDashboardFunctionLatency["endpoint"];
+  readonly operation: string;
+  readonly elapsedMs: number;
+  readonly status: "succeeded" | "rejected" | "failed";
+  readonly timestamp: string;
+}
+
+const ENDPOINTS = new Set<AdminDashboardFunctionLatency["endpoint"]>([
+  "executeHouseholdCommand",
+  "executeHouseholdQuery",
+  "submitAndroidRawNotification",
+]);
+const STATUSES = new Set<InteractiveLatencyObservation["status"]>([
+  "succeeded",
+  "rejected",
+  "failed",
+]);
+const MAX_ELAPSED_MS = 10 * 60 * 1_000;
+const MAX_PAGES = 4;
+const PAGE_SIZE = 250;
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function instant(value: unknown): string | undefined {
+  if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) {
+    return undefined;
+  }
+  return new Date(value).toISOString();
+}
+
+function observation(entry: LoggingEntry): InteractiveLatencyObservation | undefined {
+  const payload = record(entry.jsonPayload);
+  const endpoint = payload?.endpoint;
+  const operation = payload?.operation;
+  const elapsedMs = payload?.elapsedMs;
+  const status = payload?.status;
+  const timestamp = instant(entry.timestamp);
+  if (
+    typeof endpoint !== "string" ||
+    !ENDPOINTS.has(endpoint as AdminDashboardFunctionLatency["endpoint"]) ||
+    typeof operation !== "string" ||
+    operation.trim() === "" ||
+    operation.length > 120 ||
+    typeof elapsedMs !== "number" ||
+    !Number.isFinite(elapsedMs) ||
+    elapsedMs < 0 ||
+    elapsedMs > MAX_ELAPSED_MS ||
+    typeof status !== "string" ||
+    !STATUSES.has(status as InteractiveLatencyObservation["status"]) ||
+    timestamp === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    endpoint: endpoint as AdminDashboardFunctionLatency["endpoint"],
+    operation,
+    elapsedMs,
+    status: status as InteractiveLatencyObservation["status"],
+    timestamp,
+  };
+}
+
+function roundedTenth(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function percentile(values: readonly number[], fraction: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const index = Math.max(0, Math.ceil(sorted.length * fraction) - 1);
+  return sorted[index] ?? 0;
+}
+
+export function summarizeInteractiveLatency(
+  observations: readonly InteractiveLatencyObservation[],
+): readonly AdminDashboardFunctionLatency[] {
+  const groups = new Map<string, InteractiveLatencyObservation[]>();
+  for (const item of observations) {
+    const key = `${item.endpoint}\u0000${item.operation}`;
+    const values = groups.get(key) ?? [];
+    values.push(item);
+    groups.set(key, values);
+  }
+
+  return [...groups.values()]
+    .map((items) => {
+      const first = items[0];
+      const durations = items.map(({ elapsedMs }) => elapsedMs);
+      const total = durations.reduce((sum, value) => sum + value, 0);
+      return {
+        endpoint: first.endpoint,
+        operation: first.operation,
+        sampleCount: items.length,
+        succeededCount: items.filter(({ status }) => status === "succeeded").length,
+        failedCount: items.filter(({ status }) => status !== "succeeded").length,
+        averageMs: roundedTenth(total / items.length),
+        p95Ms: roundedTenth(percentile(durations, 0.95)),
+        maxMs: roundedTenth(Math.max(...durations)),
+        latestAt: items.reduce(
+          (latest, item) =>
+            Date.parse(item.timestamp) > Date.parse(latest)
+              ? item.timestamp
+              : latest,
+          first.timestamp,
+        ),
+      };
+    })
+    .sort(
+      (left, right) =>
+        right.sampleCount - left.sampleCount ||
+        right.p95Ms - left.p95Ms ||
+        left.operation.localeCompare(right.operation),
+    );
+}
+
+function projectIdFromEnvironment(): string | undefined {
+  const direct =
+    process.env.GCLOUD_PROJECT?.trim() ||
+    process.env.GOOGLE_CLOUD_PROJECT?.trim();
+  if (direct) return direct;
+  try {
+    const config = JSON.parse(process.env.FIREBASE_CONFIG ?? "{}") as {
+      readonly projectId?: unknown;
+    };
+    return typeof config.projectId === "string" && config.projectId.trim() !== ""
+      ? config.projectId.trim()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export class GoogleCloudInteractiveLatencyReader
+implements AdminFunctionLatencyReaderPort {
+  constructor(
+    private readonly projectId: string,
+    private readonly tokenProvider: AccessTokenProvider,
+    private readonly fetcher: LoggingFetch = globalThis.fetch as LoggingFetch,
+    private readonly timeoutMs = 4_000,
+  ) {}
+
+  async read(input: {
+    readonly generatedAt: string;
+    readonly windowHours: number;
+  }): Promise<AdminDashboardFunctionLatencyWindow> {
+    const until = new Date(input.generatedAt);
+    const since = new Date(
+      until.getTime() - input.windowHours * 60 * 60 * 1_000,
+    ).toISOString();
+    const token = await this.tokenProvider.getAccessToken();
+    const observations: InteractiveLatencyObservation[] = [];
+    let pageToken: string | undefined;
+
+    for (let page = 0; page < MAX_PAGES; page += 1) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+      let response: LoggingFetchResponse;
+      try {
+        response = await this.fetcher(
+          "https://logging.googleapis.com/v2/entries:list",
+          {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${token.access_token}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              resourceNames: [`projects/${this.projectId}`],
+              filter: [
+                `timestamp>=\"${since}\"`,
+                `timestamp<=\"${until.toISOString()}\"`,
+                'jsonPayload.message="interactive-latency"',
+                'jsonPayload.schemaVersion="interactive-latency.v1"',
+                'jsonPayload.stage="total"',
+              ].join(" AND "),
+              orderBy: "timestamp desc",
+              pageSize: PAGE_SIZE,
+              ...(pageToken === undefined ? {} : { pageToken }),
+            }),
+            signal: controller.signal,
+          },
+        );
+      } finally {
+        clearTimeout(timeout);
+      }
+      if (!response.ok) {
+        throw new Error(`Cloud Logging entries:list failed: HTTP ${response.status}`);
+      }
+      const body = record(await response.json()) as LoggingEntriesResponse | undefined;
+      const entries = Array.isArray(body?.entries)
+        ? body.entries as LoggingEntry[]
+        : [];
+      observations.push(
+        ...entries.flatMap((entry) => {
+          const parsed = observation(entry);
+          return parsed === undefined ? [] : [parsed];
+        }),
+      );
+      pageToken =
+        typeof body?.nextPageToken === "string" && body.nextPageToken !== ""
+          ? body.nextPageToken
+          : undefined;
+      if (pageToken === undefined) break;
+    }
+
+    return {
+      status: "available",
+      windowHours: input.windowHours,
+      operations: summarizeInteractiveLatency(observations),
+    };
+  }
+}
+
+export function createGoogleCloudInteractiveLatencyReader():
+AdminFunctionLatencyReaderPort | undefined {
+  const projectId = projectIdFromEnvironment();
+  return projectId === undefined
+    ? undefined
+    : new GoogleCloudInteractiveLatencyReader(
+      projectId,
+      applicationDefault(),
+    );
+}

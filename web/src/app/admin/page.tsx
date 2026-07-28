@@ -29,7 +29,6 @@ export default function AdminPage() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [dashboard, setDashboard] = useState<AdminOperationsDashboardWireView | null>(null);
-  const [requestLatencyMs, setRequestLatencyMs] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -61,11 +60,9 @@ export default function AdminPage() {
   const loadDashboard = useCallback(async () => {
     setIsLoading(true);
     setErrorMessage(null);
-    const startedAt = performance.now();
     try {
       const result = await adminHouseholds.dashboard(14);
       setDashboard(result);
-      setRequestLatencyMs(Math.max(1, Math.round(performance.now() - startedAt)));
       setAccessDenied(false);
     } catch (error) {
       if (
@@ -351,7 +348,6 @@ export default function AdminPage() {
         {dashboard ? (
           <AdminOperationsOverview
             dashboard={dashboard}
-            requestLatencyMs={requestLatencyMs}
             refreshing={isLoading}
             onRefresh={() => void loadDashboard()}
           />

@@ -1,6 +1,7 @@
 import type * as firestore from "firebase-admin/firestore";
 
 import { FirebaseAdminDashboardReader } from "../../../adapters/firebase/admin/firebaseAdminDashboardReader";
+import { createGoogleCloudInteractiveLatencyReader } from "../../../adapters/google-cloud/admin/googleCloudInteractiveLatencyReader";
 import {
   AdminAccessRejection,
   type AdminAccessHandler,
@@ -38,7 +39,7 @@ export function createAdminDashboardAccessHandlers(
               process.env.FUNCTION_REGION?.trim() ||
               process.env.GCLOUD_REGION?.trim() ||
               "asia-northeast3",
-          }).read({
+          }, createGoogleCloudInteractiveLatencyReader()).read({
             generatedAt: context.requestedAt,
             rangeDays,
           });

@@ -70,6 +70,34 @@ export interface AdminDashboardIncident {
   readonly openedAt: string;
 }
 
+export interface AdminDashboardFunctionLatency {
+  readonly endpoint:
+    | "executeHouseholdCommand"
+    | "executeHouseholdQuery"
+    | "submitAndroidRawNotification";
+  readonly operation: string;
+  readonly sampleCount: number;
+  readonly succeededCount: number;
+  readonly failedCount: number;
+  readonly averageMs: number;
+  readonly p95Ms: number;
+  readonly maxMs: number;
+  readonly latestAt: string;
+}
+
+export interface AdminDashboardFunctionLatencyWindow {
+  readonly status: "available" | "unavailable";
+  readonly windowHours: number;
+  readonly operations: readonly AdminDashboardFunctionLatency[];
+}
+
+export interface AdminFunctionLatencyReaderPort {
+  read(input: {
+    readonly generatedAt: string;
+    readonly windowHours: number;
+  }): Promise<AdminDashboardFunctionLatencyWindow>;
+}
+
 export interface AdminOperationsDashboard {
   readonly generatedAt: string;
   readonly service: {
@@ -93,4 +121,5 @@ export interface AdminOperationsDashboard {
   readonly scheduledJobs: readonly AdminDashboardScheduledJob[];
   readonly providerHealth: readonly AdminDashboardProviderHealth[];
   readonly incidents: readonly AdminDashboardIncident[];
+  readonly functionLatency: AdminDashboardFunctionLatencyWindow;
 }
