@@ -34,10 +34,10 @@ function hasForbiddenIdentityField(input: object): boolean {
 
 export function normalizeHouseholdName(input: string): string {
   const householdName = input.trim();
-  if (householdName.endsWith("네 가계부")) return householdName;
-  if (householdName.endsWith("네")) return `${householdName} 가계부`;
+  if (householdName.endsWith("네 가계부")) return householdName.slice(0, -4);
+  if (householdName.endsWith("네")) return householdName;
   if (householdName.endsWith("가계부")) return householdName;
-  return `${householdName}네 가계부`;
+  return `${householdName}네`;
 }
 
 export function validateCreateSelfInput(input: {

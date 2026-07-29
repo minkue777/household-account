@@ -110,7 +110,7 @@ describeWithFirestoreEmulator("Firebase Access command adapters", () => {
           .get(),
       ]);
     expect(household.data()).toMatchObject({
-      name: "테스트네 가계부",
+      name: "테스트네",
       lifecycleState: "active",
       aggregateVersion: 1,
       initializationStatus: "pending",

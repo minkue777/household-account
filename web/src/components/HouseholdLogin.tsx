@@ -183,7 +183,7 @@ export default function HouseholdLogin() {
                 autoFocus
               />
               <span className="flex shrink-0 items-center rounded-r-xl bg-slate-50 px-4 text-slate-600">
-                네 가계부
+                네
               </span>
             </div>
             <input

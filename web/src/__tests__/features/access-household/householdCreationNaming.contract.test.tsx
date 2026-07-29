@@ -10,7 +10,7 @@ jest.mock('@/contexts/HouseholdContext', () => ({
 const mockedUseHousehold = jest.mocked(useHousehold);
 
 describe('첫 방문 가계부 이름 입력 계약', () => {
-  it('사용자는 이름 부분만 입력하고 네 가계부 접미사를 확인한다', async () => {
+  it('사용자는 이름 부분만 입력하고 네 접미사를 확인한다', async () => {
     const createHouseholdForSelf = jest.fn().mockResolvedValue(undefined);
     mockedUseHousehold.mockReturnValue({
       sessionState: 'first-visit',
@@ -32,7 +32,7 @@ describe('첫 방문 가계부 이름 입력 계약', () => {
       'placeholder',
       '예: 장휘민지',
     );
-    expect(screen.getByText('네 가계부')).toBeInTheDocument();
+    expect(screen.getByText('네')).toBeInTheDocument();
 
     act(() => {
       fireEvent.change(screen.getByLabelText('가계부 이름'), {
