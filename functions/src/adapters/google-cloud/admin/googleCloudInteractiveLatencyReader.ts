@@ -74,7 +74,7 @@ const LATENCY_RESET_AT_BY_OPERATION = new Map<string, number>([
   // 분류하기 전 표본에는 중복 요청 거부가 실패로 섞여 있습니다.
   [
     "portfolio.refresh-market-values.v1",
-    Date.parse("2026-07-29T10:40:38.792Z"),
+    Date.parse("2026-07-29T10:45:28.395Z"),
   ],
 ]);
 

@@ -151,14 +151,14 @@ describe("Google Cloud interactive latency reader", () => {
         operation,
         elapsedMs: 120,
         status: "rejected",
-        timestamp: "2026-07-29T10:40:38.791Z",
+        timestamp: "2026-07-29T10:45:28.394Z",
       },
       {
         endpoint: "executeHouseholdCommand",
         operation,
         elapsedMs: 180,
         status: "succeeded",
-        timestamp: "2026-07-29T10:40:38.793Z",
+        timestamp: "2026-07-29T10:45:28.396Z",
       },
     ]);
 
@@ -172,7 +172,7 @@ describe("Google Cloud interactive latency reader", () => {
         averageMs: 180,
         p95Ms: 180,
         maxMs: 180,
-        latestAt: "2026-07-29T10:40:38.793Z",
+        latestAt: "2026-07-29T10:45:28.396Z",
       },
     ]);
   });
