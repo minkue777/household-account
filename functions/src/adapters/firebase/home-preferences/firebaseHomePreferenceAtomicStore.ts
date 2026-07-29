@@ -10,7 +10,10 @@ import type {
   HomePreferenceCommandState,
   HomePreferenceMutation,
 } from "../../../platform/home-preferences/application/ports/out/homePreferenceAtomicStorePort";
-import type { HomeCardType } from "../../../platform/home-preferences/domain/homeSummary";
+import {
+  DEFAULT_HOME_CONFIGURATION,
+  type HomeCardType,
+} from "../../../platform/home-preferences/domain/homeSummary";
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
 
@@ -92,11 +95,11 @@ function currentState(input: {
     householdId: input.householdId,
     left: canonicalCard(
       canonical?.left ?? legacyConfig.leftCard,
-      "LOCAL_CURRENCY_BALANCE",
+      DEFAULT_HOME_CONFIGURATION.left,
     ),
     right: canonicalCard(
       canonical?.right ?? legacyConfig.rightCard,
-      "MONTHLY_REMAINING_BUDGET",
+      DEFAULT_HOME_CONFIGURATION.right,
     ),
     ...(selected === undefined ? {} : { selectedLocalCurrencyType: selected }),
     aggregateVersion: number(

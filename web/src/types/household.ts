@@ -17,7 +17,7 @@ export interface HomeSummaryConfig {
 }
 
 export const DEFAULT_HOME_SUMMARY_CONFIG: HomeSummaryConfig = {
-  leftCard: 'localCurrencyBalance',
+  leftCard: 'monthlySpent',
   rightCard: 'monthlyRemainingBudget',
 };
 

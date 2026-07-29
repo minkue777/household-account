@@ -39,7 +39,9 @@ jobs:
         working-directory: functions
       - run: npm run test:runtime-boundaries
         working-directory: functions
-      - run: npm install --global firebase-tools
+      - run: npm install --global firebase-tools@15.4.0
+      - run: npm run test:callable-integration
+        working-directory: functions
       - run: npm run test:firestore-rules
         working-directory: functions
       - run: npm run test:storage-rules
@@ -64,6 +66,40 @@ jobs:
       - run: npm run build
         working-directory: web
 
+  web-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            functions/package-lock.json
+            web/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+        working-directory: functions
+      - run: npm ci
+        working-directory: web
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+      - run: npm run test:e2e
+        working-directory: web
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-e2e-failure
+          path: |
+            web/playwright-report
+            web/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -79,3 +115,25 @@ jobs:
         working-directory: android
       - run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
         working-directory: android
+
+  android-instrumentation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - run: chmod +x gradlew
+        working-directory: android
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          script: cd android && ./gradlew connectedDebugAndroidTest --stacktrace

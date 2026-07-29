@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  GoogleCloudInteractiveLatencyReader,
   summarizeInteractiveLatency,
   type InteractiveLatencyObservation,
 } from "../../src/adapters/google-cloud/admin/googleCloudInteractiveLatencyReader";
@@ -173,6 +174,122 @@ describe("Google Cloud interactive latency reader", () => {
         p95Ms: 180,
         maxMs: 180,
         latestAt: "2026-07-29T10:45:28.396Z",
+      },
+    ]);
+  });
+
+  it("사용자 체감과 무관한 요청 저장·관리자 보조 조회를 제외하고 실제 FCM 접수 시간을 집계한다", () => {
+    const summary = summarizeInteractiveLatency([
+      {
+        endpoint: "executeHouseholdCommand",
+        operation: "ledger.request-notification.v1",
+        elapsedMs: 90,
+        status: "succeeded",
+        timestamp: "2026-07-29T12:00:00.000Z",
+      },
+      {
+        endpoint: "executeHouseholdQuery",
+        operation: "access.list-asset-owner-profiles.v1",
+        elapsedMs: 140,
+        status: "succeeded",
+        timestamp: "2026-07-29T12:00:00.500Z",
+      },
+      {
+        endpoint: "consumeNotificationOutbox",
+        operation: "notifications.deliver-household-request.v1",
+        elapsedMs: 1_250,
+        status: "succeeded",
+        timestamp: "2026-07-29T12:00:01.000Z",
+      },
+    ]);
+
+    expect(summary).toEqual([
+      {
+        endpoint: "consumeNotificationOutbox",
+        operation: "notifications.deliver-household-request.v1",
+        sampleCount: 1,
+        succeededCount: 1,
+        failedCount: 0,
+        averageMs: 1_250,
+        p95Ms: 1_250,
+        maxMs: 1_250,
+        latestAt: "2026-07-29T12:00:01.000Z",
+      },
+    ]);
+  });
+
+  it("Android·iPhone 첫 화면과 긴 Outbox 대기를 허용 endpoint로 읽는다", async () => {
+    const reader = new GoogleCloudInteractiveLatencyReader(
+      "project-a",
+      {
+        getAccessToken: async () => ({ access_token: "token-a" }),
+      },
+      async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          entries: [
+            {
+              timestamp: "2026-07-29T12:00:00.000Z",
+              jsonPayload: {
+                endpoint: "clientStartup",
+                operation: "client.android-app-first-home-complete-paint.v1",
+                elapsedMs: 3_450,
+                status: "succeeded",
+              },
+            },
+            {
+              timestamp: "2026-07-29T12:00:00.500Z",
+              jsonPayload: {
+                endpoint: "clientStartup",
+                operation: "client.ios-pwa-first-home-complete-paint.v1",
+                elapsedMs: 2_850,
+                status: "succeeded",
+              },
+            },
+            {
+              timestamp: "2026-07-29T12:00:00.750Z",
+              jsonPayload: {
+                endpoint: "createWebViewSessionToken",
+                operation: "access.create-webview-session-token.v1",
+                elapsedMs: 450,
+                status: "succeeded",
+              },
+            },
+            {
+              timestamp: "2026-07-29T12:00:01.000Z",
+              jsonPayload: {
+                endpoint: "consumeNotificationOutbox",
+                operation: "notifications.deliver-ios-shortcut.v1",
+                elapsedMs: 15 * 60 * 1_000,
+                status: "succeeded",
+              },
+            },
+          ],
+        }),
+      }),
+    );
+
+    const result = await reader.read({
+      generatedAt: "2026-07-29T13:00:00.000Z",
+      windowHours: 24,
+    });
+
+    expect(result.operations.map(({ endpoint, operation }) => ({
+      endpoint,
+      operation,
+    }))).toEqual([
+      {
+        endpoint: "consumeNotificationOutbox",
+        operation: "notifications.deliver-ios-shortcut.v1",
+      },
+      {
+        endpoint: "clientStartup",
+        operation: "client.android-app-first-home-complete-paint.v1",
+      },
+      {
+        endpoint: "clientStartup",
+        operation: "client.ios-pwa-first-home-complete-paint.v1",
       },
     ]);
   });

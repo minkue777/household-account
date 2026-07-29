@@ -2,6 +2,8 @@ import {
   getAuth,
   initializeAuth,
   browserLocalPersistence,
+  connectAuthEmulator,
+  signInWithEmailAndPassword,
   signInWithPopup,
   signInWithCustomToken,
   GoogleAuthProvider,
@@ -16,6 +18,11 @@ import {
   requestAndroidHost,
 } from '@/platform/android-host/androidHostBridge';
 import { withinDeadline } from '@/platform/network/operationDeadline';
+import {
+  firebaseEmulatorHosts,
+  isFirebaseEmulatorTestLoginEnabled,
+  shouldConnectFirebaseEmulators,
+} from '@/platform/firebase/firebaseEmulatorConfig';
 
 export interface AuthenticatedWebSession {
   user: User;
@@ -35,6 +42,29 @@ function createAuth() {
 }
 
 const auth = createAuth();
+
+interface FirebaseEmulatorConnectionState {
+  auth?: boolean;
+}
+
+function connectConfiguredAuthEmulator(): void {
+  if (!shouldConnectFirebaseEmulators()) return;
+  const runtime = globalThis as typeof globalThis & {
+    __householdAccountFirebaseEmulators?: FirebaseEmulatorConnectionState;
+  };
+  runtime.__householdAccountFirebaseEmulators ??= {};
+  if (runtime.__householdAccountFirebaseEmulators.auth) return;
+
+  connectAuthEmulator(
+    auth,
+    `http://${firebaseEmulatorHosts.auth.host}:${firebaseEmulatorHosts.auth.port}`,
+    { disableWarnings: true }
+  );
+  runtime.__householdAccountFirebaseEmulators.auth = true;
+}
+
+connectConfiguredAuthEmulator();
+
 const googleProvider = new GoogleAuthProvider();
 const ANDROID_WEB_AUTH_REFRESH_TIMEOUT_MS = 5_000;
 
@@ -211,6 +241,27 @@ export async function signInWithGoogleSession(): Promise<AuthenticatedWebSession
   } catch (error) {
     return null;
   }
+}
+
+/**
+ * Playwright가 만든 Auth Emulator 계정으로 로그인합니다.
+ *
+ * demo 프로젝트 + loopback + 명시적인 E2E 모드가 모두 충족될 때만 실행되며,
+ * Firebase Auth를 거치므로 운영 인증을 우회하는 세션 주입 기능이 아닙니다.
+ */
+export async function signInWithEmulatorTestSession(): Promise<AuthenticatedWebSession> {
+  if (!isFirebaseEmulatorTestLoginEnabled()) {
+    throw new Error('Auth Emulator 테스트 로그인은 로컬 E2E 환경에서만 사용할 수 있습니다.');
+  }
+
+  const email = process.env.NEXT_PUBLIC_E2E_TEST_EMAIL?.trim() ?? '';
+  const password = process.env.NEXT_PUBLIC_E2E_TEST_PASSWORD ?? '';
+  if (!email || !password) {
+    throw new Error('E2E 테스트 계정 환경 변수가 설정되지 않았습니다.');
+  }
+
+  const result = await signInWithEmailAndPassword(auth, email, password);
+  return { user: result.user };
 }
 
 /**

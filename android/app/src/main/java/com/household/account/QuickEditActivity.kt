@@ -262,6 +262,7 @@ class QuickEditActivity : AppCompatActivity() {
     private fun updateCategorySelection() {
         categoryViews.forEach { (key, view) ->
             val isSelected = key == selectedCategoryKey
+            view.isSelected = isSelected
 
             val background = GradientDrawable().apply {
                 cornerRadius = 12 * resources.displayMetrics.density

@@ -47,6 +47,7 @@ interface LedgerReadModelView {
   readonly readError: unknown;
   readonly localCurrencyBalance: LocalCurrencyBalance | null;
   readonly localCurrencySettled: boolean;
+  readonly localCurrencyReady: boolean;
   readonly readRefreshKey: string;
   prefetchAdjacentPeriods(): () => void;
 }
@@ -434,6 +435,9 @@ export function useLedgerReadModel(query: LedgerQuery): LedgerReadModelView {
       query.transactionType !== 'expense'
       || context.localCurrencyStatus === 'ready'
       || context.localCurrencyStatus === 'error',
+    localCurrencyReady:
+      query.transactionType !== 'expense'
+      || context.localCurrencyStatus === 'ready',
     readRefreshKey: context.readRefreshKey,
     prefetchAdjacentPeriods: context.prefetchAdjacentPeriods,
   };

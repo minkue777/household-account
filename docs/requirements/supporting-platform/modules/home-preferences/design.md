@@ -53,7 +53,7 @@ type HomeCardState =
   | { kind: 'FAILED'; code: string };
 ```
 
-기본 구성은 왼쪽 `LOCAL_CURRENCY_BALANCE`, 오른쪽 `MONTHLY_REMAINING_BUDGET`다. 선택이 없고 관찰된 지역화폐가 정확히 하나면 해당 type을 조건부 저장해 자동 선택한다. 처음부터 여러 유형인데 선택이 없으면 임의 문서를 표시하지 않고 `NO_DATA(LOCAL_CURRENCY_SELECTION_REQUIRED)`를 반환한다. 원천 실패는 0원 `READY`로 바꾸지 않는다.
+기본 구성은 왼쪽 `MONTHLY_EXPENSE`(`X월 지출`), 오른쪽 `MONTHLY_REMAINING_BUDGET`(`X월 잔여 예산`)이다. 선택이 없고 관찰된 지역화폐가 정확히 하나면 해당 type을 조건부 저장해 자동 선택한다. 처음부터 여러 유형인데 선택이 없으면 임의 문서를 표시하지 않고 `NO_DATA(LOCAL_CURRENCY_SELECTION_REQUIRED)`를 반환한다. 원천 실패는 0원 `READY`로 바꾸지 않는다.
 
 ### 3.2 Theme 계약
 

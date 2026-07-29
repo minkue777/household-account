@@ -3,6 +3,10 @@ interface FakeEntry {
   readonly entryType: 'mark' | 'measure';
 }
 
+jest.mock('@/platform/performance/clientStartupObservation', () => ({
+  captureClientStartupObservation: jest.fn(async () => undefined),
+}));
+
 function installPerformanceDouble() {
   const entries: FakeEntry[] = [];
   const mark = jest.fn((name: string) => {
@@ -58,6 +62,7 @@ describe('Web startup performance contract', () => {
     telemetry.markWebHouseholdCompleted(true);
     telemetry.markWebLedgerCacheResult(true);
     telemetry.markWebFirstLedgerPaint();
+    telemetry.markWebFirstHomeCompletePaint();
 
     expect(performance.entries).toEqual(expect.arrayContaining([
       { name: telemetry.WEB_STARTUP_MARKS.bootstrapCacheHit, entryType: 'mark' },
@@ -66,6 +71,14 @@ describe('Web startup performance contract', () => {
       { name: telemetry.WEB_STARTUP_MARKS.householdCacheMiss, entryType: 'mark' },
       { name: telemetry.WEB_STARTUP_MARKS.firstLedgerPaint, entryType: 'mark' },
       { name: telemetry.WEB_STARTUP_MEASURES.firstLedgerPaint, entryType: 'measure' },
+      {
+        name: telemetry.WEB_STARTUP_MARKS.firstHomeCompletePaint,
+        entryType: 'mark',
+      },
+      {
+        name: telemetry.WEB_STARTUP_MEASURES.firstHomeCompletePaint,
+        entryType: 'measure',
+      },
     ]));
     expect(performance.mark.mock.calls.every((args) => args.length === 1)).toBe(true);
     expect(performance.measure.mock.calls.every((args) => args.length === 3)).toBe(true);
@@ -90,6 +103,25 @@ describe('Web startup performance contract', () => {
     jest.advanceTimersByTime(4_999);
     expect(task).not.toHaveBeenCalled();
     jest.advanceTimersByTime(1);
+    expect(task).toHaveBeenCalledTimes(1);
+  });
+
+  it('앱 사용량 진단은 첫 화면 전체 데이터 paint 전에는 실행하지 않는다', () => {
+    installPerformanceDouble();
+    const telemetry = require('@/platform/performance/webStartupPerformance') as typeof import(
+      '@/platform/performance/webStartupPerformance'
+    );
+    const task = jest.fn();
+
+    telemetry.scheduleAfterWebFirstHomeCompletePaint(task, {
+      idleTimeoutMs: 5_000,
+    });
+    telemetry.markWebFirstLedgerPaint();
+    jest.runAllTimers();
+    expect(task).not.toHaveBeenCalled();
+
+    telemetry.markWebFirstHomeCompletePaint();
+    jest.runAllTimers();
     expect(task).toHaveBeenCalledTimes(1);
   });
 });

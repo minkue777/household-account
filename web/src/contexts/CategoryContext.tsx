@@ -15,6 +15,8 @@ import { useHousehold } from '@/contexts/HouseholdContext';
 interface CategoryContextType {
   categories: CategoryDocument[];
   isLoading: boolean;
+  serverSnapshotReady: boolean;
+  readError: unknown;
   // 카테고리 조회 헬퍼
   getCategoryByKey: (key: string) => CategoryDocument | undefined;
   getCategoryLabel: (key: string) => string;
@@ -43,6 +45,8 @@ const UNKNOWN_CATEGORY = {
 export function CategoryProvider({ children }: { children: React.ReactNode }) {
   const [categories, setCategories] = useState<CategoryDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [serverSnapshotReady, setServerSnapshotReady] = useState(false);
+  const [readError, setReadError] = useState<unknown>(null);
   const {
     householdKey,
     isSessionVerified = true,
@@ -54,10 +58,14 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
     if (!householdId) {
       setCategories([]);
       setIsLoading(false);
+      setServerSnapshotReady(false);
+      setReadError(null);
       return;
     }
     setCategories([]);
     setIsLoading(true);
+    setServerSnapshotReady(false);
+    setReadError(null);
   }, [householdId]);
 
   // 초기화 및 실시간 구독
@@ -65,6 +73,8 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
     if (!householdId) {
       setCategories([]);
       setIsLoading(false);
+      setServerSnapshotReady(false);
+      setReadError(null);
       return;
     }
     if (!isSessionVerified) return;
@@ -75,15 +85,23 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
     void import('@/lib/categoryService')
       .then(({ subscribeToCategories }) => {
         if (cancelled) return;
-        // 기본 카테고리는 HouseholdCreated 이벤트를 소비한 서버가 생성합니다.
+        // 신규 가구의 기본 카테고리는 서버 온보딩 흐름이 별도 멱등 UoW로 생성합니다.
         unsubscribe = subscribeToCategories(householdId, (cats) => {
           setCategories(cats);
           setIsLoading(false);
-        }, () => setIsLoading(false));
+          setServerSnapshotReady(true);
+          setReadError(null);
+        }, (error) => {
+          setIsLoading(false);
+          setServerSnapshotReady(false);
+          setReadError(error);
+        });
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
         setIsLoading(false);
+        setServerSnapshotReady(false);
+        setReadError(error);
       });
 
     return () => {
@@ -184,6 +202,8 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
   const value: CategoryContextType = {
     categories,
     isLoading,
+    serverSnapshotReady,
+    readError,
     getCategoryByKey,
     getCategoryLabel,
     getCategoryColor,

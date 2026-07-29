@@ -39,6 +39,10 @@ jest.mock('@/platform/performance/webStartupPerformance', () => ({
     task: () => void,
     options?: { delayAfterPaintMs?: number; idleTimeoutMs?: number }
   ) => mockScheduleAfterWebFirstLedgerPaint(task, options),
+  scheduleAfterWebFirstHomeCompletePaint: (
+    task: () => void,
+    options?: { delayAfterPaintMs?: number; idleTimeoutMs?: number }
+  ) => mockScheduleAfterWebFirstLedgerPaint(task, options),
 }));
 
 jest.mock('@/composition/ledgerMutationRuntimePreload', () => ({

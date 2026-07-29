@@ -12,7 +12,9 @@ export type InteractiveLatencyEndpoint =
   | "executeHouseholdCommand"
   | "executeHouseholdQuery"
   | "submitAndroidRawNotification"
-  | "addExpenseFromMessage";
+  | "addExpenseFromMessage"
+  | "consumeNotificationOutbox"
+  | "clientStartup";
 
 export type InteractiveLatencyStage =
   | "actor-membership"
@@ -59,6 +61,7 @@ interface InteractiveLatencyContext {
   readonly processBootId: string;
   readonly invocationSequence: number;
   readonly startedAt: number;
+  readonly elapsedBeforeInvocationMs: number;
   readonly clock: MonotonicClock;
   readonly sink: InteractiveLatencyLogSink;
   operation: string;
@@ -112,6 +115,40 @@ function processRevision(): string {
 
 const PROCESS_REVISION = processRevision();
 
+export function recordCompletedInteractiveLatency(input: {
+  readonly endpoint: InteractiveLatencyEndpoint;
+  readonly operation: string;
+  readonly elapsedMs: number;
+  readonly status: InteractiveLatencyStatus;
+  readonly sink?: InteractiveLatencyLogSink;
+}): void {
+  if (
+    input.operation.length > 120 ||
+    !OPERATION_PATTERN.test(input.operation) ||
+    !Number.isFinite(input.elapsedMs) ||
+    input.elapsedMs < 0
+  ) {
+    return;
+  }
+  const entry: InteractiveLatencyLogEntry = {
+    schemaVersion: INTERACTIVE_LATENCY_SCHEMA_VERSION,
+    correlationId: randomUUID(),
+    endpoint: input.endpoint,
+    operation: input.operation,
+    revision: PROCESS_REVISION,
+    processBootId: PROCESS_BOOT_ID,
+    invocationSequence: ++invocationSequence,
+    stage: "total",
+    elapsedMs: Math.round(input.elapsedMs * 1_000) / 1_000,
+    status: input.status,
+  };
+  try {
+    (input.sink ?? defaultSink).write(entry);
+  } catch {
+    // Client telemetry must never change a completed user operation.
+  }
+}
+
 function elapsedMilliseconds(context: InteractiveLatencyContext, start: number) {
   const elapsed = Math.max(0, context.clock.now() - start);
   return Math.round(elapsed * 1_000) / 1_000;
@@ -132,7 +169,9 @@ function emit(
     processBootId: context.processBootId,
     invocationSequence: context.invocationSequence,
     stage,
-    elapsedMs: elapsedMilliseconds(context, start),
+    elapsedMs:
+      elapsedMilliseconds(context, start) +
+      (stage === "total" ? context.elapsedBeforeInvocationMs : 0),
     status,
   };
   try {
@@ -147,10 +186,21 @@ export function startInteractiveLatencyInvocation(
   options: {
     readonly clock?: MonotonicClock;
     readonly correlationId?: string;
+    /**
+     * 이벤트 큐 대기처럼 Function handler가 시작되기 전에 이미 경과한 시간입니다.
+     * 단계별 시간에는 더하지 않고 사용자 관점의 total에만 포함합니다.
+     */
+    readonly elapsedBeforeInvocationMs?: number;
     readonly sink?: InteractiveLatencyLogSink;
   } = {},
 ): InteractiveLatencyInvocation {
   const clock = options.clock ?? defaultClock;
+  const elapsedBeforeInvocationMs =
+    typeof options.elapsedBeforeInvocationMs === "number" &&
+    Number.isFinite(options.elapsedBeforeInvocationMs) &&
+    options.elapsedBeforeInvocationMs >= 0
+      ? Math.round(options.elapsedBeforeInvocationMs * 1_000) / 1_000
+      : 0;
   const context: InteractiveLatencyContext = {
     correlationId:
       options.correlationId !== undefined &&
@@ -163,6 +213,7 @@ export function startInteractiveLatencyInvocation(
     processBootId: PROCESS_BOOT_ID,
     invocationSequence: ++invocationSequence,
     startedAt: clock.now(),
+    elapsedBeforeInvocationMs,
     clock,
     sink: options.sink ?? defaultSink,
     completed: false,

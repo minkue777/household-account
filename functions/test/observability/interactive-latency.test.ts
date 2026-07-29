@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   measureCurrentInteractiveLatency,
+  recordCompletedInteractiveLatency,
   setCurrentInteractiveLatencyOperation,
   startInteractiveLatencyInvocation,
   type InteractiveLatencyLogEntry,
@@ -87,6 +88,35 @@ describe("interactive latency telemetry", () => {
       "rejected",
       "failed",
     ]);
+  });
+
+  it("Function 시작 전 이벤트 큐 대기는 total에만 포함한다", async () => {
+    let now = 1_000;
+    const logs = memorySink();
+    const latency = startInteractiveLatencyInvocation(
+      "consumeNotificationOutbox",
+      {
+        clock: { now: () => now },
+        elapsedBeforeInvocationMs: 275,
+        sink: logs.sink,
+      },
+    );
+
+    await latency.run(async () => {
+      setCurrentInteractiveLatencyOperation(
+        "notifications.deliver-household-request.v1",
+      );
+      await measureCurrentInteractiveLatency("handler", () => {
+        now += 125;
+      });
+      latency.complete("succeeded");
+    });
+
+    expect(logs.entries.map(({ stage, elapsedMs }) => ({ stage, elapsedMs })))
+      .toEqual([
+        { stage: "handler", elapsedMs: 125 },
+        { stage: "total", elapsedMs: 400 },
+      ]);
   });
 
   it("구조화 로그는 allowlist 필드만 기록하고 요청 원문·가구·금액을 포함하지 않는다", async () => {
@@ -177,6 +207,61 @@ describe("interactive latency telemetry", () => {
         status: "succeeded",
       }),
     ]);
+  });
+
+  it("클라이언트에서 이미 끝난 첫 화면 지연을 서버 실행 시간과 섞지 않고 기록한다", () => {
+    const logs = memorySink();
+
+    recordCompletedInteractiveLatency({
+      endpoint: "clientStartup",
+      operation: "client.android-app-first-home-complete-paint.v1",
+      elapsedMs: 3_245.6784,
+      status: "succeeded",
+      sink: logs.sink,
+    });
+
+    expect(logs.entries).toEqual([
+      expect.objectContaining({
+        endpoint: "clientStartup",
+        operation: "client.android-app-first-home-complete-paint.v1",
+        stage: "total",
+        elapsedMs: 3_245.678,
+        status: "succeeded",
+      }),
+    ]);
+  });
+
+  it("완료 표본의 잘못된 업무명·시간과 로그 실패를 사용자 기능 밖에서 흡수한다", () => {
+    const logs = memorySink();
+    recordCompletedInteractiveLatency({
+      endpoint: "clientStartup",
+      operation: "invalid operation",
+      elapsedMs: 1_000,
+      status: "succeeded",
+      sink: logs.sink,
+    });
+    recordCompletedInteractiveLatency({
+      endpoint: "clientStartup",
+      operation: "client.ios-pwa-first-home-complete-paint.v1",
+      elapsedMs: Number.NaN,
+      status: "succeeded",
+      sink: logs.sink,
+    });
+    expect(logs.entries).toEqual([]);
+
+    expect(() =>
+      recordCompletedInteractiveLatency({
+        endpoint: "clientStartup",
+        operation: "client.ios-pwa-first-home-complete-paint.v1",
+        elapsedMs: 2_000,
+        status: "succeeded",
+        sink: {
+          write() {
+            throw new Error("LOG_UNAVAILABLE");
+          },
+        },
+      }),
+    ).not.toThrow();
   });
 
   it("기본 sink는 emulator에서도 보이는 Firebase 구조화 logger를 사용한다", async () => {

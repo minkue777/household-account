@@ -49,15 +49,26 @@ const ENDPOINTS = new Set<AdminDashboardFunctionLatency["endpoint"]>([
   "executeHouseholdQuery",
   "submitAndroidRawNotification",
   "addExpenseFromMessage",
+  "consumeNotificationOutbox",
+  "clientStartup",
 ]);
 const STATUSES = new Set<InteractiveLatencyObservation["status"]>([
   "succeeded",
   "rejected",
   "failed",
 ]);
-const MAX_ELAPSED_MS = 10 * 60 * 1_000;
+const MAX_INTERACTIVE_ELAPSED_MS = 10 * 60 * 1_000;
+const MAX_NOTIFICATION_DELIVERY_ELAPSED_MS = 31 * 24 * 60 * 60 * 1_000;
 const MAX_PAGES = 4;
 const PAGE_SIZE = 250;
+const EXCLUDED_OPERATIONS = new Set([
+  // 실제 FCM 접수 시간은 consumeNotificationOutbox에서 별도로 집계합니다.
+  // 이 command는 알림 요청 문서를 저장하는 시간일 뿐 사용자 체감 지표가 아닙니다.
+  "ledger.request-notification.v1",
+  // 관리자 가구 상세 화면 자체에서만 사용하는 보조 조회입니다.
+  // 일반 사용자 기능의 체감 성능을 나타내지 않으므로 운영 성능 표에서 제외합니다.
+  "access.list-asset-owner-profiles.v1",
+]);
 const LATENCY_RESET_AT_BY_OPERATION = new Map<string, number>([
   // 2026-07-28에 전체 원장 조회·재기록을 제거한 버전이 배포되었습니다.
   // 개선 전 측정치는 현재 구현의 지연 통계를 오염시키므로 집계에서 제외합니다.
@@ -107,13 +118,17 @@ function observation(entry: LoggingEntry): InteractiveLatencyObservation | undef
     typeof elapsedMs !== "number" ||
     !Number.isFinite(elapsedMs) ||
     elapsedMs < 0 ||
-    elapsedMs > MAX_ELAPSED_MS ||
     typeof status !== "string" ||
     !STATUSES.has(status as InteractiveLatencyObservation["status"]) ||
     timestamp === undefined
   ) {
     return undefined;
   }
+  const maxElapsedMs =
+    endpoint === "consumeNotificationOutbox"
+      ? MAX_NOTIFICATION_DELIVERY_ELAPSED_MS
+      : MAX_INTERACTIVE_ELAPSED_MS;
+  if (elapsedMs > maxElapsedMs) return undefined;
   return {
     endpoint: endpoint as AdminDashboardFunctionLatency["endpoint"],
     operation,
@@ -139,6 +154,7 @@ export function summarizeInteractiveLatency(
 ): readonly AdminDashboardFunctionLatency[] {
   const groups = new Map<string, InteractiveLatencyObservation[]>();
   for (const item of observations) {
+    if (EXCLUDED_OPERATIONS.has(item.operation)) continue;
     const resetAt = LATENCY_RESET_AT_BY_OPERATION.get(item.operation);
     if (resetAt !== undefined && Date.parse(item.timestamp) < resetAt) {
       continue;

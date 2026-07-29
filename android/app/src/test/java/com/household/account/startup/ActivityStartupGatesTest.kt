@@ -1,6 +1,7 @@
 package com.household.account.startup
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -21,5 +22,25 @@ class ActivityStartupGatesTest {
         assertTrue(gate.tryEnter())
         assertFalse(gate.tryEnter())
         assertFalse(gate.tryEnter())
+    }
+
+    @Test
+    fun `앱 실행 시간은 Activity 생성부터 단조 시계로 한 번 이어서 잰다`() {
+        var now = 1_000L
+        val clock = AppLaunchDurationClock { now }
+
+        now = 1_275L
+        assertEquals(275L, clock.consumeElapsedMillis())
+        // 같은 Activity 안의 WebView reload는 새 앱 실행 표본이 아닙니다.
+        assertEquals(null, clock.consumeElapsedMillis())
+    }
+
+    @Test
+    fun `비정상 시계 구현에서도 음수 앱 실행 시간을 내보내지 않는다`() {
+        var now = 1_000L
+        val clock = AppLaunchDurationClock { now }
+
+        now = 900L
+        assertEquals(0L, clock.consumeElapsedMillis())
     }
 }

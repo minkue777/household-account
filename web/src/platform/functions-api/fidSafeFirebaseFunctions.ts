@@ -1,6 +1,14 @@
-import { getFunctions, type Functions } from 'firebase/functions';
+import {
+  connectFunctionsEmulator,
+  getFunctions,
+  type Functions,
+} from 'firebase/functions';
 
 import { app } from '@/lib/firebaseApp';
+import {
+  firebaseEmulatorHosts,
+  shouldConnectFirebaseEmulators,
+} from '@/platform/firebase/firebaseEmulatorConfig';
 
 const REGION = 'asia-northeast3';
 
@@ -21,6 +29,20 @@ type FunctionsWithContextProvider = Functions & {
  */
 export function getFidSafeFirebaseFunctions(): Functions {
   const functions = getFunctions(app, REGION) as FunctionsWithContextProvider;
+  if (shouldConnectFirebaseEmulators()) {
+    const runtime = globalThis as typeof globalThis & {
+      __householdAccountFirebaseEmulators?: { functions?: boolean };
+    };
+    runtime.__householdAccountFirebaseEmulators ??= {};
+    if (!runtime.__householdAccountFirebaseEmulators.functions) {
+      connectFunctionsEmulator(
+        functions,
+        firebaseEmulatorHosts.functions.host,
+        firebaseEmulatorHosts.functions.port
+      );
+      runtime.__householdAccountFirebaseEmulators.functions = true;
+    }
+  }
   const contextProvider = functions.contextProvider;
 
   if (contextProvider) {

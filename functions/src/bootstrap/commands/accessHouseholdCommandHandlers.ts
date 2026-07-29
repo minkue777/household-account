@@ -13,13 +13,16 @@ import { FirebaseGoogleOnboardingStore } from "../../adapters/firebase/access/fi
 import { FirebaseHouseholdLifecycleUnitOfWork } from "../../adapters/firebase/access/firebaseHouseholdLifecycleUnitOfWork";
 import { FirebaseLegacyMembershipStore } from "../../adapters/firebase/access/firebaseLegacyMembershipStore";
 import { FirebaseMemberRenameStore } from "../../adapters/firebase/access/firebaseMemberRenameStore";
+import { FirebaseCategoryCatalogStore } from "../../adapters/firebase/categories/firebaseCategoryCatalogStore";
 import { createAssetOwnerProfileApplication } from "../../contexts/access/asset-owner-profile/application/assetOwnerProfileApplication";
 import { createGoogleOnboardingApplication } from "../../contexts/access/google-onboarding/application/googleOnboardingApplication";
 import { createHouseholdLifecycleApplication } from "../../contexts/access/household-lifecycle/application/householdLifecycleApplication";
 import { createLegacyMembershipApplication } from "../../contexts/access/legacy-membership/application/legacyMembershipApplication";
 import { createMemberRenameApplication } from "../../contexts/access/member-rename/application/memberRenameApplication";
+import { createCategoryCatalogApplication } from "../../contexts/household-finance/categories-budget/application/categoryCatalogApplication";
 import {
   HouseholdCommandRejection,
+  type HouseholdCommandExecutionContext,
   type HouseholdCommandHandler,
   withHouseholdCommandReceiptValue,
 } from "./householdCommand";
@@ -53,6 +56,60 @@ function payloadFingerprint(...values: readonly unknown[]): string {
 
 function rejectDomainResult(result: { readonly code?: string }, fallback: string): never {
   throw new HouseholdCommandRejection(result.code ?? fallback, false);
+}
+
+function defaultCategoryInitializer(
+  database: firestore.Firestore,
+  context: HouseholdCommandExecutionContext,
+) {
+  return {
+    async initialize(householdId: string) {
+      const commandId =
+        `${context.envelope.commandId}:initialize-default-categories`;
+      const store = new FirebaseCategoryCatalogStore(database, {
+        householdId,
+        principalUid: context.principalUid,
+        commandId,
+        payloadFingerprint: payloadFingerprint(
+          "initialize-default-categories",
+          householdId,
+        ),
+        requestedAt: context.requestedAt,
+      });
+      const application = createCategoryCatalogApplication({
+        store,
+        ids: {
+          nextCategoryId: (commandKey) =>
+            stableAccessId("category", context.principalUid, commandKey),
+          archiveProcessId: (commandKey) =>
+            stableAccessId("category-archive", context.principalUid, commandKey),
+        },
+        referenceRemapper: {
+          async remapRecurringReferences() {
+            return {
+              kind: "retryable-failure" as const,
+              code: "INITIALIZATION_ONLY",
+            };
+          },
+          async remapMerchantRuleReferences() {
+            return {
+              kind: "retryable-failure" as const,
+              code: "INITIALIZATION_ONLY",
+            };
+          },
+        },
+      });
+
+      try {
+        const result = await application.initializeDefaults(commandId);
+        return result.kind === "success" || result.kind === "already-processed"
+          ? "completed" as const
+          : "failed" as const;
+      } catch {
+        return "failed" as const;
+      }
+    },
+  };
 }
 
 export function createAccessHouseholdCommandHandlers(
@@ -162,8 +219,10 @@ export function createAccessHouseholdCommandHandlers(
               issueCode: issueInvitationCode,
               hashCode: sha256,
             },
-            // HouseholdCreated outbox consumer가 각 Context 초기화를 수행합니다.
-            initializer: { initialize: async () => "pending" },
+            // 신규 가구가 첫 원장 명령을 즉시 사용할 수 있도록 기본 카탈로그를
+            // 같은 onboarding 흐름에서 생성합니다. initializeDefaults는 별도
+            // receipt를 가지므로 command 재시도와 향후 outbox 재처리에도 안전합니다.
+            initializer: defaultCategoryInitializer(database, context),
           });
           const result = await application.createHouseholdWithSelf(
             { uid: context.principalUid },

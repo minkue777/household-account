@@ -64,6 +64,7 @@ import {
   scheduleAfterWebFirstLedgerPaint,
 } from '@/platform/performance/webStartupPerformance';
 import { REMOTE_SESSION_RECOVERED_EVENT } from '@/platform/functions-api/firebaseCallableRecovery';
+import { isFirebaseEmulatorTestLoginEnabled } from '@/platform/firebase/firebaseEmulatorConfig';
 
 const INTERACTIVE_AUTH_BOOTSTRAP_TIMEOUT_MS = 180_000;
 const SESSION_RESOLUTION_TIMEOUT_MS = 20_000;
@@ -872,10 +873,15 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     setLegacyCandidate(candidate ?? null);
     setSessionError(null);
     try {
-      const { signInWithGoogleSession } = await loadAuthService();
+      const {
+        signInWithEmulatorTestSession,
+        signInWithGoogleSession,
+      } = await loadAuthService();
       const session = activeUserRef.current
         ? { user: activeUserRef.current, signedInUserResolution: undefined }
-        : await signInWithGoogleSession();
+        : isFirebaseEmulatorTestLoginEnabled()
+          ? await signInWithEmulatorTestSession()
+          : await signInWithGoogleSession();
       const user = session?.user ?? null;
       if (!user) {
         setSessionError('Google 로그인을 완료하지 못했습니다.');

@@ -213,9 +213,10 @@ archive 요청에서 target이 현재 default이면 `Conflict(CATEGORY_IS_DEFAUL
 |---|---|---|
 | Category | `households/{householdId}/categories/{categoryId}` | Category Catalog |
 | Catalog settings | `households/{householdId}/categorySettings/default` | Category Catalog |
+| Web 호환 Category Projection | `categories/{sha256("category\0" + householdId + "\0" + categoryId)}`; 기존 문서는 발견한 실제 ID 유지 | Category Catalog |
 | receipt/outbox | 공통 platform 경로 | 각 Category Command Port |
 
-Catalog settings는 catalogVersion, ordered IDs, defaultCategoryId를 갖습니다. Category 문서는 categoryVersion, schemaVersion, server timestamps를 갖습니다. `MonthlyBudgetView`는 요청 결과이므로 저장 경로가 없습니다.
+Catalog settings는 catalogVersion, ordered IDs, defaultCategoryId를 갖습니다. Category 문서는 categoryVersion, schemaVersion, server timestamps를 갖습니다. Web 호환 Projection의 물리 ID는 가구 범위를 포함해 서로 다른 가구의 `living`, `food` 같은 동일 업무 key가 충돌하지 않게 하며, 업무 식별자는 문서의 `key` 필드에 유지합니다. `MonthlyBudgetView`는 요청 결과이므로 저장 경로가 없습니다.
 
 ### 7.2 UoW와 경합
 

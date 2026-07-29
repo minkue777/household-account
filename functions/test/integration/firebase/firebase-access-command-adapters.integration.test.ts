@@ -113,7 +113,7 @@ describeWithFirestoreEmulator("Firebase Access command adapters", () => {
       name: "테스트네",
       lifecycleState: "active",
       aggregateVersion: 1,
-      initializationStatus: "pending",
+      initializationStatus: "completed",
     });
     expect(created.householdId).toMatch(/^[0-9a-f]{32}$/u);
     expect(member.data()).toMatchObject({
@@ -127,6 +127,26 @@ describeWithFirestoreEmulator("Firebase Access command adapters", () => {
       memberId: created.memberId,
     });
     expect(memberProfile.size).toBe(1);
+    const initializedCategories = await database
+      .collection("categories")
+      .where("householdId", "==", created.householdId)
+      .get();
+    expect(
+      initializedCategories.docs
+        .map((snapshot) => snapshot.data().key)
+        .sort(),
+    ).toEqual(["childcare", "etc", "fixed", "food", "living"]);
+    expect(
+      (
+        await householdReference
+          .collection("categorySettings")
+          .doc("default")
+          .get()
+      ).data(),
+    ).toMatchObject({
+      defaultCategoryId: "etc",
+      catalogVersion: 1,
+    });
 
     const invitation = (await handlers
       .get("access.create-invitation.v1")!
@@ -258,6 +278,7 @@ describeWithFirestoreEmulator("Firebase Access command adapters", () => {
     const outbox = await database.collection("outboxEvents").get();
     expect(outbox.docs.map((snapshot) => snapshot.data().eventType).sort()).toEqual([
       "AssetOwnerProfileChanged",
+      "CategoryCatalogChanged",
       "HouseholdCreated",
       "HouseholdDeleted",
       "MemberJoined",
@@ -343,5 +364,72 @@ describeWithFirestoreEmulator("Firebase Access command adapters", () => {
         }),
       ),
     ).rejects.toMatchObject({ code: "MEMBER_ALREADY_LINKED" });
+  });
+
+  it("여러 신규 가구의 같은 기본 카테고리는 서로 다른 legacy projection 문서로 보존한다", async () => {
+    const handlers = createAccessHouseholdCommandHandlers(database);
+    const households: Array<{ householdId: string; memberId: string }> = [];
+    for (const input of [
+      {
+        principalUid: "uid-default-category-a",
+        commandId: "create-default-category-household-a",
+        householdName: "첫 번째",
+        memberName: "첫째",
+      },
+      {
+        principalUid: "uid-default-category-b",
+        commandId: "create-default-category-household-b",
+        householdName: "두 번째",
+        memberName: "둘째",
+      },
+    ]) {
+      households.push(
+        (await handlers
+          .get("access.create-household-with-self.v1")!
+          .execute(
+            context({
+              principalUid: input.principalUid,
+              command: "access.create-household-with-self.v1",
+              commandId: input.commandId,
+              payload: {
+                householdName: input.householdName,
+                memberName: input.memberName,
+              },
+            }),
+          )) as { householdId: string; memberId: string },
+      );
+    }
+
+    const projections = await Promise.all(
+      households.map(({ householdId }) =>
+        database
+          .collection("categories")
+          .where("householdId", "==", householdId)
+          .get(),
+      ),
+    );
+    for (const [index, projection] of projections.entries()) {
+      expect(projection.size).toBe(5);
+      expect(
+        projection.docs.map((snapshot) => snapshot.data().key).sort(),
+      ).toEqual(["childcare", "etc", "fixed", "food", "living"]);
+      expect(
+        (
+          await database
+            .collection("households")
+            .doc(households[index]!.householdId)
+            .collection("categories")
+            .get()
+        ).size,
+      ).toBe(5);
+    }
+    expect(
+      projections[0]!.docs
+        .map((snapshot) => snapshot.id)
+        .filter((documentId) =>
+          projections[1]!.docs.some((snapshot) => snapshot.id === documentId),
+        ),
+    ).toEqual([]);
+    expect((await database.collection("categories").get()).size).toBe(10);
   });
 });

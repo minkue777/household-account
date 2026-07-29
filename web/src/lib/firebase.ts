@@ -1,12 +1,29 @@
 import {
   getFirestore,
+  connectFirestoreEmulator,
   initializeFirestore,
   memoryLocalCache,
   persistentLocalCache,
   persistentMultipleTabManager,
 } from 'firebase/firestore';
 import { isAndroidHostAvailable } from '@/platform/android-host/androidHostBridge';
+import {
+  firebaseEmulatorHosts,
+  shouldConnectFirebaseEmulators,
+} from '@/platform/firebase/firebaseEmulatorConfig';
 import { app } from './firebaseApp';
+
+interface FirebaseEmulatorConnectionState {
+  firestore?: boolean;
+}
+
+function emulatorConnectionState(): FirebaseEmulatorConnectionState {
+  const runtime = globalThis as typeof globalThis & {
+    __householdAccountFirebaseEmulators?: FirebaseEmulatorConnectionState;
+  };
+  runtime.__householdAccountFirebaseEmulators ??= {};
+  return runtime.__householdAccountFirebaseEmulators;
+}
 
 function createFirestore() {
   // Android WebView의 IndexedDB Firestore cache가 장시간 백그라운드 복귀 뒤
@@ -30,5 +47,17 @@ function createFirestore() {
 }
 
 const db = createFirestore();
+
+if (shouldConnectFirebaseEmulators()) {
+  const state = emulatorConnectionState();
+  if (!state.firestore) {
+    connectFirestoreEmulator(
+      db,
+      firebaseEmulatorHosts.firestore.host,
+      firebaseEmulatorHosts.firestore.port
+    );
+    state.firestore = true;
+  }
+}
 
 export { app, db };

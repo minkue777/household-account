@@ -1,8 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { issueWebViewSessionToken } from "../../src/bootstrap/firebaseWebViewSession";
+import { SignedInUserResolutionError } from "../../src/adapters/firebase/access/firebaseSignedInUserResolver";
+import {
+  handleCreateWebViewSessionToken,
+  issueWebViewSessionToken,
+} from "../../src/bootstrap/firebaseWebViewSession";
 
 describe("WebView Firebase session bridge", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("native Firebase Auth의 동일 uid에 대해서만 custom token을 발급한다", async () => {
     const issue = vi.fn(
       async (uid: string, claims: Readonly<Record<string, unknown>>) =>
@@ -93,5 +101,63 @@ describe("WebView Firebase session bridge", () => {
     ).rejects.toMatchObject({ code: "unauthenticated" });
     expect(issue).not.toHaveBeenCalled();
     expect(resolveSignedInUser).not.toHaveBeenCalled();
+  });
+
+  it("callable adapter는 발급 결과를 그대로 반환한다", async () => {
+    await expect(
+      handleCreateWebViewSessionToken({
+        principalUid: "uid-a",
+        issue: async (_principalUid, claims) =>
+          `token-for:${String(claims.hcaClient)}`,
+        resolveSignedInUser: async () => ({
+          kind: "first-visit-required",
+          choices: ["create", "join"],
+        }),
+      }),
+    ).resolves.toMatchObject({
+      customToken: "token-for:web",
+      nativeCustomToken: "token-for:native",
+    });
+  });
+
+  it("callable adapter도 인증되지 않은 요청을 거부한다", async () => {
+    await expect(
+      handleCreateWebViewSessionToken({
+        principalUid: undefined,
+        issue: async () => "must-not-be-issued",
+        resolveSignedInUser: async () => ({
+          kind: "first-visit-required",
+          choices: ["create", "join"],
+        }),
+      }),
+    ).rejects.toMatchObject({ code: "unauthenticated" });
+  });
+
+  it("회원 해석 불변식 오류와 예기치 않은 오류를 구분한다", async () => {
+    await expect(
+      handleCreateWebViewSessionToken({
+        principalUid: "uid-a",
+        issue: async () => "must-not-be-issued",
+        resolveSignedInUser: async () => {
+          throw new SignedInUserResolutionError("HOUSEHOLD_NOT_ACTIVE");
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "failed-precondition",
+      message: "HOUSEHOLD_NOT_ACTIVE",
+    });
+
+    await expect(
+      handleCreateWebViewSessionToken({
+        principalUid: "uid-a",
+        issue: async () => "must-not-be-issued",
+        resolveSignedInUser: async () => {
+          throw new Error("temporary-read-failure");
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "unavailable",
+      message: "SIGNED_IN_USER_RESOLUTION_FAILED",
+    });
   });
 });

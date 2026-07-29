@@ -1,5 +1,9 @@
+import { captureClientStartupObservation } from './clientStartupObservation';
+
 const STARTUP_PREFIX = 'household-account:startup';
 const FIRST_LEDGER_PAINT_EVENT = `${STARTUP_PREFIX}:first-ledger-paint`;
+const FIRST_HOME_COMPLETE_PAINT_EVENT =
+  `${STARTUP_PREFIX}:first-home-complete-paint`;
 
 export const WEB_STARTUP_MARKS = {
   bootstrapStarted: `${STARTUP_PREFIX}:bootstrap:started`,
@@ -21,6 +25,7 @@ export const WEB_STARTUP_MARKS = {
   ledgerCacheHit: `${STARTUP_PREFIX}:ledger-cache:hit`,
   ledgerCacheMiss: `${STARTUP_PREFIX}:ledger-cache:miss`,
   firstLedgerPaint: `${STARTUP_PREFIX}:ledger:first-paint`,
+  firstHomeCompletePaint: `${STARTUP_PREFIX}:home:first-complete-paint`,
 } as const;
 
 export const WEB_STARTUP_MEASURES = {
@@ -29,9 +34,12 @@ export const WEB_STARTUP_MEASURES = {
   membership: `${STARTUP_PREFIX}:duration:membership`,
   household: `${STARTUP_PREFIX}:duration:household`,
   firstLedgerPaint: `${STARTUP_PREFIX}:duration:first-ledger-paint`,
+  firstHomeCompletePaint:
+    `${STARTUP_PREFIX}:duration:first-home-complete-paint`,
 } as const;
 
 let firstLedgerPaintReached = false;
+let firstHomeCompletePaintReached = false;
 const recordedMarks = new Set<string>();
 const recordedMeasures = new Set<string>();
 
@@ -172,6 +180,22 @@ export function markWebFirstLedgerPaint(): void {
   }
 }
 
+export function markWebFirstHomeCompletePaint(): void {
+  if (firstHomeCompletePaintReached) return;
+  firstHomeCompletePaintReached = true;
+  markOnce(WEB_STARTUP_MARKS.firstHomeCompletePaint);
+  measureOnce(
+    WEB_STARTUP_MEASURES.firstHomeCompletePaint,
+    WEB_STARTUP_MARKS.bootstrapStarted,
+    WEB_STARTUP_MARKS.firstHomeCompletePaint
+  );
+  // 측정용 작업은 화면 표시가 끝난 뒤 시작하며 실패가 사용자 기능에 전파되지 않습니다.
+  void captureClientStartupObservation();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(FIRST_HOME_COMPLETE_PAINT_EVENT));
+  }
+}
+
 export function onWebFirstLedgerPaint(listener: () => void): () => void {
   if (typeof window === 'undefined') return () => {};
   if (firstLedgerPaintReached || hasEntry(WEB_STARTUP_MARKS.firstLedgerPaint, 'mark')) {
@@ -189,17 +213,42 @@ export function onWebFirstLedgerPaint(listener: () => void): () => void {
   return () => window.removeEventListener(FIRST_LEDGER_PAINT_EVENT, handleFirstPaint);
 }
 
+export function onWebFirstHomeCompletePaint(listener: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  if (
+    firstHomeCompletePaintReached
+    || hasEntry(WEB_STARTUP_MARKS.firstHomeCompletePaint, 'mark')
+  ) {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) listener();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }
+
+  const handleFirstPaint = () => listener();
+  window.addEventListener(
+    FIRST_HOME_COMPLETE_PAINT_EVENT,
+    handleFirstPaint,
+    { once: true }
+  );
+  return () =>
+    window.removeEventListener(
+      FIRST_HOME_COMPLETE_PAINT_EVENT,
+      handleFirstPaint
+    );
+}
+
 interface PostLedgerPaintTaskOptions {
   readonly delayAfterPaintMs?: number;
   readonly fallbackMs?: number;
   readonly idleTimeoutMs?: number;
 }
 
-/**
- * Keeps optional startup work behind the first useful ledger paint.
- * A fallback is opt-in for correctness work needed on routes that never render the ledger.
- */
-export function scheduleAfterWebFirstLedgerPaint(
+function scheduleAfterWebPaint(
+  subscribe: (listener: () => void) => () => void,
   task: () => void,
   options: PostLedgerPaintTaskOptions = {}
 ): () => void {
@@ -232,7 +281,7 @@ export function scheduleAfterWebFirstLedgerPaint(
     delayId = window.setTimeout(runWhenIdle, options.delayAfterPaintMs ?? 0);
   };
 
-  const unsubscribe = onWebFirstLedgerPaint(begin);
+  const unsubscribe = subscribe(begin);
   if (options.fallbackMs !== undefined) {
     fallbackId = window.setTimeout(begin, options.fallbackMs);
   }
@@ -249,4 +298,23 @@ export function scheduleAfterWebFirstLedgerPaint(
       window.cancelIdleCallback(idleCallbackId);
     }
   };
+}
+
+/**
+ * Keeps optional startup work behind the first useful ledger paint.
+ * A fallback is opt-in for correctness work needed on routes that never render the ledger.
+ */
+export function scheduleAfterWebFirstLedgerPaint(
+  task: () => void,
+  options: PostLedgerPaintTaskOptions = {}
+): () => void {
+  return scheduleAfterWebPaint(onWebFirstLedgerPaint, task, options);
+}
+
+/** 첫 화면의 모든 최신 데이터가 실제로 그려진 뒤에만 진단 작업을 시작합니다. */
+export function scheduleAfterWebFirstHomeCompletePaint(
+  task: () => void,
+  options: PostLedgerPaintTaskOptions = {}
+): () => void {
+  return scheduleAfterWebPaint(onWebFirstHomeCompletePaint, task, options);
 }

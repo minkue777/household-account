@@ -31,6 +31,8 @@ android/app/*.keystore
 # Test coverage
 coverage/
 web/coverage/
+web/playwright-report/
+web/test-results/
 *.apk
 *.aab
 
@@ -40,6 +42,7 @@ web/coverage/
 .env.development.local
 .env.test.local
 .env.production.local
+.secret.local
 
 # IDE
 .idea/

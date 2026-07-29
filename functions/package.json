@@ -16,6 +16,7 @@
     "test:firebase-asset-valuation": "firebase --config ../firebase.json emulators:exec --only firestore --project demo-household-account-asset-snapshot \"vitest run test/integration/firebase/firebase-asset-snapshot-projection.integration.test.ts\"",
     "test:firebase-migration": "firebase --config ../firebase.json emulators:exec --only firestore --project demo-household-account-runtime-migration \"vitest run test/integration/firebase/firebase-runtime-migration.integration.test.ts\"",
     "test:firebase-integration": "firebase --config ../firebase.json emulators:exec --only firestore --project demo-household-account-integration \"vitest run test/integration/firebase\"",
+    "test:callable-integration": "npm run build && node ../tools/build/prepare-functions-codebase.mjs functions-payment-capture && node ../tools/build/prepare-functions-codebase.mjs functions-access-session && node scripts/run-with-emulator-secret.mjs firebase --config ../firebase.json emulators:exec --only auth,firestore,functions --project demo-household-account-callable --log-verbosity QUIET \"vitest run test/integration/callable/firebase-callable-wire.integration.test.ts\"",
     "test:runtime-boundaries": "node ../tools/release/gates/runtime-boundary-audit.mjs --check",
     "test:types": "tsc -p tsconfig.test.json --noEmit",
     "admin:system-claim": "node scripts/set-system-admin-claim.mjs",

@@ -17,6 +17,6 @@ export function isHomeCardType(value: unknown): value is HomeCardType {
 }
 
 export const DEFAULT_HOME_CONFIGURATION = {
-  left: "LOCAL_CURRENCY_BALANCE",
+  left: "MONTHLY_EXPENSE",
   right: "MONTHLY_REMAINING_BUDGET",
 } as const;

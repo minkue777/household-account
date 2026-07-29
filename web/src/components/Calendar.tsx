@@ -247,6 +247,7 @@ export default function Calendar({
           return (
             <div
               key={day}
+              data-testid={`calendar-day-${dateStr}`}
               onClick={() => onDateClick(dateStr)}
               className={`h-12 md:h-28 p-0.5 md:p-1.5 cursor-pointer transition-all m-[1px] rounded-lg ${
                 isSelected

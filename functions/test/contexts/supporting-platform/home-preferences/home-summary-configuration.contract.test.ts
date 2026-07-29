@@ -70,7 +70,7 @@ describe("Home Preferences 홈 구성·요약 계약", () => {
   it("[T-HOME-003][HOME-001] 저장값이 없으면 기본 순서의 서로 다른 두 카드를 반환한다", async () => {
     const result = await createSubject({
       sources: {
-        LOCAL_CURRENCY_BALANCE: ready(50_000),
+        MONTHLY_EXPENSE: ready(50_000),
         MONTHLY_REMAINING_BUDGET: ready(120_000),
       },
       ledgerIncome: { monthlyInWon: 2_000_000, yearlyInWon: 14_000_000 },
@@ -83,7 +83,7 @@ describe("Home Preferences 홈 구성·요약 계약", () => {
         cards: [
           {
             slot: "left",
-            type: "LOCAL_CURRENCY_BALANCE",
+            type: "MONTHLY_EXPENSE",
             state: ready(50_000),
           },
           {
@@ -179,7 +179,7 @@ describe("Home Preferences 홈 구성·요약 계약", () => {
         source: "LEGACY",
       },
       sources: {
-        LOCAL_CURRENCY_BALANCE: ready(0),
+        MONTHLY_EXPENSE: ready(0),
         MONTHLY_REMAINING_BUDGET: ready(0),
       },
       ledgerIncome: { monthlyInWon: 0, yearlyInWon: 0 },
@@ -190,7 +190,7 @@ describe("Home Preferences 홈 구성·요약 계약", () => {
       value: expect.objectContaining({
         configurationSource: "DEFAULT",
         cards: [
-          expect.objectContaining({ type: "LOCAL_CURRENCY_BALANCE" }),
+          expect.objectContaining({ type: "MONTHLY_EXPENSE" }),
           expect.objectContaining({ type: "MONTHLY_REMAINING_BUDGET" }),
         ],
       }),

@@ -184,8 +184,16 @@ export default function AddExpenseModal({
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div className="m-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-        <h2 className="mb-6 text-xl font-bold text-slate-800">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-expense-modal-title"
+        className="m-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+      >
+        <h2
+          id="add-expense-modal-title"
+          className="mb-6 text-xl font-bold text-slate-800"
+        >
           {isIncome ? '수입 추가' : '지출 추가'}
         </h2>
 

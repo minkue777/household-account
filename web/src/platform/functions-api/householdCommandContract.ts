@@ -48,6 +48,7 @@ export interface HouseholdCommandPayloads {
   'access.record-app-visit.v1': {
     visitId: string;
     platform: 'android' | 'ios-pwa' | 'web';
+    clientStartupDurationMs?: number;
   };
   'access.claim-legacy-membership.v1': {
     legacyHouseholdId: string;

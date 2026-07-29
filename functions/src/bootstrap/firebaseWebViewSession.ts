@@ -69,26 +69,39 @@ export async function issueWebViewSessionToken(input: {
   };
 }
 
+export async function handleCreateWebViewSessionToken(input: {
+  readonly principalUid: string | undefined;
+  readonly issue: (
+    principalUid: string,
+    claims: SessionTokenClaims,
+  ) => Promise<string>;
+  readonly resolveSignedInUser: (
+    principalUid: string,
+  ) => Promise<SignedInUserResolution>;
+}): Promise<WebViewSessionTokenResponse> {
+  try {
+    return await issueWebViewSessionToken(input);
+  } catch (error) {
+    if (error instanceof functions.https.HttpsError) throw error;
+    if (error instanceof SignedInUserResolutionError) {
+      throw new functions.https.HttpsError("failed-precondition", error.code);
+    }
+    throw new functions.https.HttpsError(
+      "unavailable",
+      "SIGNED_IN_USER_RESOLUTION_FAILED",
+    );
+  }
+}
+
 export const createWebViewSessionToken = functions
   .region(REGION)
   .runWith({ enforceAppCheck: true })
   .https.onCall(async (_data, context): Promise<WebViewSessionTokenResponse> => {
-    try {
-      return await issueWebViewSessionToken({
-        principalUid: context.auth?.uid,
-        issue: (principalUid, claims) =>
-          getAuth().createCustomToken(principalUid, claims),
-        resolveSignedInUser: (principalUid) =>
-          resolveFirebaseSignedInUser(db, principalUid),
-      });
-    } catch (error) {
-      if (error instanceof functions.https.HttpsError) throw error;
-      if (error instanceof SignedInUserResolutionError) {
-        throw new functions.https.HttpsError("failed-precondition", error.code);
-      }
-      throw new functions.https.HttpsError(
-        "unavailable",
-        "SIGNED_IN_USER_RESOLUTION_FAILED",
-      );
-    }
+    return handleCreateWebViewSessionToken({
+      principalUid: context.auth?.uid,
+      issue: (principalUid, claims) =>
+        getAuth().createCustomToken(principalUid, claims),
+      resolveSignedInUser: (principalUid) =>
+        resolveFirebaseSignedInUser(db, principalUid),
+    });
   });

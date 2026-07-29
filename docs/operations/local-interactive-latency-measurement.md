@@ -24,19 +24,19 @@ performance.getEntriesByType('measure')
   .map(({ name, duration }) => ({ name, durationMs: Math.round(duration) }))
 ```
 
-위 measure는 앱 모듈이 평가된 뒤의 업무 구간을 나눕니다. 정적 JS 다운로드와 파싱까지 포함한 실제 첫 화면 시간은 Navigation Timing에서 원장 첫 paint mark까지 별도로 확인합니다.
+위 measure는 앱 모듈이 평가된 뒤의 업무 구간을 나눕니다. 정적 JS 다운로드와 파싱까지 포함한 실제 첫 화면 전체 표시 시간은 Navigation Timing에서 전체 홈 paint mark까지 별도로 확인합니다.
 
 ```js
 const navigation = performance.getEntriesByType('navigation')[0]
-const firstLedgerPaint = performance.getEntriesByName(
-  'household-account:startup:ledger:first-paint',
+const firstHomeCompletePaint = performance.getEntriesByName(
+  'household-account:startup:home:first-complete-paint',
   'mark'
 )[0]
 
 ({
-  navigationToFirstLedgerPaintMs: Math.round(firstLedgerPaint.startTime),
-  responseEndToFirstLedgerPaintMs: Math.round(
-    firstLedgerPaint.startTime - navigation.responseEnd
+  navigationToFirstHomeCompletePaintMs: Math.round(firstHomeCompletePaint.startTime),
+  responseEndToFirstHomeCompletePaintMs: Math.round(
+    firstHomeCompletePaint.startTime - navigation.responseEnd
   ),
   transferredBytes: navigation.transferSize,
 })
@@ -54,13 +54,14 @@ performance.getEntriesByType('mark')
 
 | measure | 의미 |
 | --- | --- |
-| `navigationToFirstLedgerPaintMs` | 탐색 시작부터 첫 월 원장 서버 snapshot이 반영된 화면이 실제 paint될 때까지. JS 다운로드·파싱 포함 |
+| `navigationToFirstHomeCompletePaintMs` | 탐색 시작부터 월 원장·카테고리·지역화폐와 현재 화면에 필요한 연간 합계가 최신 서버 결과로 성공한 뒤 실제 paint될 때까지. JS 다운로드·파싱 포함 |
+| `household-account:startup:duration:first-home-complete-paint` | HouseholdContext 모듈 평가 뒤부터 첫 화면 전체 데이터의 실제 paint까지. Android·iPhone 운영 시작 지표의 공통 종료점 |
 | `household-account:startup:duration:first-ledger-paint` | HouseholdContext 모듈 평가 뒤부터 첫 월 원장 서버 snapshot의 paint까지. 카테고리·지역화폐 완료는 기다리지 않음 |
 | `household-account:startup:duration:auth` | Firebase Auth 복원 |
 | `household-account:startup:duration:membership` | cache를 쓰지 않은 Membership 권위 조회 |
 | `household-account:startup:duration:household` | cache hit 뒤 업무 구독과 병렬인 Household one-doc metadata refresh |
 
-`membership-cache:hit`와 `household-cache:hit`는 같은 UID의 Session bootstrap 및 Household metadata를 즉시 복원했다는 뜻입니다. `ledger-cache:hit`는 첫 화면 정책상 기대하지 않으며 원장·카테고리·지역화폐는 각자 첫 서버 snapshot부터 도착 순서대로 표시해야 합니다. 세 조회를 모두 기다리는 합성 readiness는 사용하지 않습니다. 새 탭의 첫 실행, 완전 종료 뒤 재실행, localStorage 삭제 뒤 실행을 구분하여 각각 최소 10회 기록합니다. DevTools의 Disable cache는 정적 리소스 실험에만 사용하고 화면 snapshot cache 실험과 섞지 않습니다.
+`membership-cache:hit`와 `household-cache:hit`는 같은 UID의 Session bootstrap 및 Household metadata를 즉시 복원했다는 뜻입니다. `ledger-cache:hit`는 첫 화면 정책상 기대하지 않으며 원장·카테고리·지역화폐는 각자 첫 서버 snapshot부터 도착 순서대로 표시합니다. 표시 자체를 한꺼번에 막지는 않지만 운영 종료 지표인 `first-home-complete-paint`만 세 최신 데이터와 노출되는 연간 합계가 모두 성공한 뒤 기록합니다. 새 탭의 첫 실행, 완전 종료 뒤 재실행, localStorage 삭제 뒤 실행을 구분하여 각각 최소 10회 기록합니다. DevTools의 Disable cache는 정적 리소스 실험에만 사용하고 화면 snapshot cache 실험과 섞지 않습니다.
 
 Android 실제 단말의 WebView는 debug APK에서만 원격 디버깅을 허용합니다. USB 디버깅으로 단말을 연결하고 PC Chrome의 `chrome://inspect/#devices`에서 가계부 WebView를 선택한 뒤 같은 Console 식을 실행합니다. release APK에서는 이 경로를 열지 않습니다. iPhone PWA는 Mac의 Safari Web Inspector가 있어야 같은 방식으로 확인할 수 있으므로, Windows 로컬 계측만으로 iPhone 실기기 결과를 대신하지 않습니다.
 
@@ -111,5 +112,5 @@ release APK는 기본적으로 상세 단계 로그를 남기지 않고 요약�
 - cold와 warm, cache hit와 miss, WebView와 브라우저를 섞어 평균내지 않습니다.
 - 각 구간은 중앙값과 p95를 함께 기록합니다.
 - Functions는 `revision`과 `operation`별로 나눕니다.
-- 첫 화면 목표는 `first-ledger-paint`, Android 목표는 `totalMs`로 판단합니다.
+- 앱 첫 화면 목표는 `first-home-complete-paint`, Android 결제→Quick Edit 목표는 `totalMs`로 판단합니다.
 - 로컬 개선이 확인되어도 운영 배포 전후에 같은 표본 조건으로 다시 확인합니다.

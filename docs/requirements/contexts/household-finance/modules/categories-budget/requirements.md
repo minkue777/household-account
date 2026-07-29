@@ -76,7 +76,7 @@
 
 | ID | 상태 | 요구사항 | 경계·예외 | 근거 | 테스트 |
 |---|---|---|---|---|---|
-| CAT-001 | 현재 명세 | 가구에 카테고리가 하나도 없으면 생활비, 육아비, 고정비, 식비, 기타를 초기화한다. | 일부만 있으면 누락 기본값은 자동 보충하지 않는다. | [categoryService](../../../../../../web/src/lib/categoryService.ts) | I |
+| CAT-001 | 현재 명세 | 새 가구 온보딩에서 가구에 카테고리가 하나도 없으면 생활비, 육아비, 고정비, 식비, 기타를 지정 순서로 초기화하고 기타를 기본 카테고리로 설정한다. | 일부만 있으면 누락 기본값은 자동 보충하지 않는다. 초기화는 Category 소유 Application·Store의 별도 멱등 UoW이며, Canonical 문서와 Web 호환 Projection을 함께 기록한다. 여러 가구의 같은 업무 categoryId는 호환 Projection의 물리 문서 ID를 공유하지 않는다. | [Access command handler](../../../../../../functions/src/bootstrap/commands/accessHouseholdCommandHandlers.ts), [Category store](../../../../../../functions/src/adapters/firebase/categories/firebaseCategoryCatalogStore.ts) | I |
 | CAT-002 | 목표 명세 | 카테고리의 이름, 색상, 월 예산을 추가·수정하고 순서를 저장하며, 삭제 요청은 과거 참조를 보존하는 archive로 처리한다. | 예산 미입력은 null이고 음수·NaN은 거부한다. 과거 거래의 categoryId와 표시 정보는 변경하지 않는다. 설정 참조는 현재 기본 카테고리로 변경하고 archived 카테고리를 신규 선택 목록에서 제외한다. 재활성화와 hard delete는 제공하지 않는다. | [CategorySettings](../../../../../../web/src/components/settings/CategorySettings.tsx), [categoryService](../../../../../../web/src/lib/categoryService.ts), [DEC-015](../../../../governance/decisions.md#dec-015) | U, I, E2E |
 | CAT-003 | 목표 명세 | 가구 기본 카테고리를 설정할 수 있으며 현재 기본 카테고리는 삭제하거나 archive할 수 없다. | 기본 카테고리는 항상 active여야 한다. Web 수동 등록 폼도 이를 사용하며, 다른 카테고리 archive 시 정기지출·가맹점 규칙의 참조를 이 카테고리로 변경한다. | [CategorySettings](../../../../../../web/src/components/settings/CategorySettings.tsx), [expenseForm](../../../../../../web/src/lib/utils/expenseForm.ts), [DEC-015](../../../../governance/decisions.md#dec-015) | U, I, E2E |
 | CAT-004 | 특성화·목표 교정 | Legacy Android QuickEdit Adapter는 활성 카테고리 조회가 실패하거나 비면 표시 전용 기본 다섯 카테고리로 fallback하는 현재 동작을 배포 호환 기간에 특성화한다. 목표 `ListActiveCategories` 공개 Query는 `NoData`와 `RetryableFailure`를 구분하며 기본 카테고리를 임의 생성하거나 성공으로 위장하지 않는다. | fallback은 Legacy Adapter 밖으로 전파하지 않고 QuickEdit이 목표 Query로 전환되면 제거한다. 두 경계의 결과를 같은 테스트로 혼동하지 않는다. | [QuickEditActivity](../../../../../../android/app/src/main/java/com/household/account/QuickEditActivity.kt) | U, UI, I |
@@ -90,7 +90,6 @@
 - 카테고리 예산에 음수·`NaN`을 저장할 수 있는 경로가 있습니다.
 - 현재 카테고리 hard delete는 기존 거래의 분류 표시를 잃게 하고 `household.defaultCategoryKey` 같은 활성 참조를 깨뜨릴 수 있습니다.
 - 기본 카테고리 삭제 금지를 UI 설명에만 두고 서비스 경계에서 강제하지 않습니다.
-- 기본 카테고리 초기화가 check-then-write라 동시 요청에서 중복 문서를 만들 수 있습니다.
 - 일부 카테고리만 있는 경우 누락된 기본값을 자동 보충하지 않습니다. 이는 현재 명세지만 마이그레이션 정책이 필요할 수 있습니다.
 - Web 수동 거래는 가구 기본 카테고리를 사용하지 않지만 Android 자동 거래는 사용합니다.
 - Android QuickEdit은 조회 실패와 실제 빈 카테고리를 같은 기본 다섯 항목으로 표시합니다.

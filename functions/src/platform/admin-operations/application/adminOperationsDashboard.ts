@@ -75,7 +75,9 @@ export interface AdminDashboardFunctionLatency {
     | "executeHouseholdCommand"
     | "executeHouseholdQuery"
     | "submitAndroidRawNotification"
-    | "addExpenseFromMessage";
+    | "addExpenseFromMessage"
+    | "consumeNotificationOutbox"
+    | "clientStartup";
   readonly operation: string;
   readonly sampleCount: number;
   readonly succeededCount: number;

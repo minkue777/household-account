@@ -35,9 +35,15 @@ const FUNCTION_ENDPOINT_LABELS: Record<string, string> = {
   executeHouseholdQuery: '가계부 조회',
   submitAndroidRawNotification: 'Android 결제 수집',
   addExpenseFromMessage: 'iPhone 결제 수집',
+  consumeNotificationOutbox: 'FCM 알림 발송',
+  clientStartup: '클라이언트 앱',
 };
 
 const FUNCTION_OPERATION_LABELS: Record<string, string> = {
+  'client.android-app-first-home-complete-paint.v1':
+    'Android 앱 실행 → 첫 화면 전체 표시',
+  'client.ios-pwa-first-home-complete-paint.v1':
+    'iPhone 앱 실행 → 첫 화면 전체 표시',
   'access.resolve-signed-in-user.v1': '로그인 사용자 확인',
   'access.record-app-visit.v1': '앱 접속 기록',
   'access.claim-legacy-membership.v1': '기존 가계부 연결',
@@ -49,7 +55,6 @@ const FUNCTION_OPERATION_LABELS: Record<string, string> = {
   'access.create-asset-owner-profile.v1': '자산 명의자 추가',
   'access.rename-asset-owner-profile.v1': '자산 명의자 이름 변경',
   'access.archive-asset-owner-profile.v1': '자산 명의자 삭제',
-  'access.list-asset-owner-profiles.v1': '자산 명의자 조회',
   'ledger.get-transaction.v1': '지출·수입 상세 조회',
   'ledger.record-manual-transaction.v1': '지출·수입 수동 등록',
   'ledger.record-manual-monthly-split.v1': '월 분할 지출 등록',
@@ -62,7 +67,6 @@ const FUNCTION_OPERATION_LABELS: Record<string, string> = {
   'ledger.unmerge-transaction.v1': '지출 합치기 취소',
   'ledger.cancel-monthly-split.v1': '월 분할 취소',
   'ledger.reconfigure-monthly-split.v1': '월 분할 재설정',
-  'ledger.request-notification.v1': '가구원에게 지출 알림 보내기',
   'category.create.v1': '카테고리 추가',
   'category.update.v1': '카테고리 수정',
   'category.archive.v1': '카테고리 삭제',
@@ -98,11 +102,20 @@ const FUNCTION_OPERATION_LABELS: Record<string, string> = {
   'recurring.delete-plan.v1': '고정비 삭제',
   'notifications.register-endpoint.v1': '알림 기기 등록',
   'notifications.remove-endpoint.v1': '알림 기기 연결 해제',
+  'notifications.deliver-household-request.v1': '가구원 알림 FCM 접수',
+  'notifications.deliver-ios-shortcut.v1': 'iPhone 수정 알림 FCM 접수',
   'payment-capture.submit-android-raw-notification.v1': 'Android 결제 알림 처리',
   'payment-capture.submit-ios-shortcut-message.v1': 'iPhone 결제 알림 처리',
 };
 
 const FUNCTION_OPERATION_GROUPS = [
+  {
+    label: '앱 시작',
+    operations: [
+      'client.android-app-first-home-complete-paint.v1',
+      'client.ios-pwa-first-home-complete-paint.v1',
+    ],
+  },
   {
     label: '접속·가계부',
     operations: [
@@ -119,7 +132,6 @@ const FUNCTION_OPERATION_GROUPS = [
   {
     label: '자산 명의자',
     operations: [
-      'access.list-asset-owner-profiles.v1',
       'access.create-asset-owner-profile.v1',
       'access.rename-asset-owner-profile.v1',
       'access.archive-asset-owner-profile.v1',
@@ -133,7 +145,6 @@ const FUNCTION_OPERATION_GROUPS = [
       'ledger.update-transaction.v1',
       'ledger.change-transaction-category.v1',
       'ledger.delete-transaction.v1',
-      'ledger.request-notification.v1',
     ],
   },
   {
@@ -241,6 +252,13 @@ const FUNCTION_OPERATION_GROUPS = [
     operations: [
       'notifications.register-endpoint.v1',
       'notifications.remove-endpoint.v1',
+    ],
+  },
+  {
+    label: '알림 발송',
+    operations: [
+      'notifications.deliver-household-request.v1',
+      'notifications.deliver-ios-shortcut.v1',
     ],
   },
   {
@@ -441,8 +459,8 @@ export function AdminOperationsOverview({
       </section>
 
       <Panel
-        title="Cloud Functions 처리 시간"
-        description={`최근 ${functionLatency.windowHours}시간 로직별 total 구조화 로그 집계`}
+        title="사용자 체감·서버 처리 시간"
+        description={`최근 ${functionLatency.windowHours}시간 앱 첫 화면과 서버 로직별 total 구조화 로그 집계`}
       >
         {functionLatency.status === 'unavailable' ? (
           <EmptyState>
@@ -450,7 +468,7 @@ export function AdminOperationsOverview({
           </EmptyState>
         ) : functionLatency.operations.length === 0 ? (
           <EmptyState>
-            해당 기간에 수집된 Functions 호출 기록이 없습니다.
+            해당 기간에 수집된 처리 시간 기록이 없습니다.
           </EmptyState>
         ) : (
           <div className="max-h-[420px] overflow-auto">
@@ -459,7 +477,7 @@ export function AdminOperationsOverview({
                 <tr>
                   <th className="px-4 py-3 font-medium">업무군</th>
                   <th className="px-4 py-3 font-medium">처리 업무</th>
-                  <th className="px-4 py-3 font-medium">Function</th>
+                  <th className="px-4 py-3 font-medium">측정 경로</th>
                   <th className="px-4 py-3 text-right font-medium">호출</th>
                   <th className="px-4 py-3 text-right font-medium">성공</th>
                   <th className="px-4 py-3 text-right font-medium">평균</th>

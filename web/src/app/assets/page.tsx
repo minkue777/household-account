@@ -6,7 +6,6 @@ import { ChartPie } from 'lucide-react';
 import { Asset, AssetOwnerOption, AssetType, isGoldEtfSubType } from '@/types/asset';
 import {
   subscribeToAssets,
-  addSampleAssets,
   refreshAllMarketValues,
 } from '@/lib/assetService';
 import AssetSummaryCard from '@/components/assets/AssetSummaryCard';
@@ -74,7 +73,6 @@ export default function AssetsPage() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showOwnerModal, setShowOwnerModal] = useState(false);
-  const [isAddingSample, setIsAddingSample] = useState(false);
   const [selectedMember, setSelectedMember] = useState<string>(ALL_MEMBERS_OPTION);
   const [ownerProfiles, setOwnerProfiles] = useState<AssetOwnerProfileView[]>([]);
   const cachedAssetsRef = useRef<Asset[] | undefined>(undefined);
@@ -109,17 +107,6 @@ export default function AssetsPage() {
     ],
     [ownerProfiles]
   );
-
-  const handleAddSampleData = async () => {
-    setIsAddingSample(true);
-    try {
-      await addSampleAssets();
-    } catch (error) {
-      console.error('샘플 데이터 추가 오류:', error);
-    } finally {
-      setIsAddingSample(false);
-    }
-  };
 
   useLayoutEffect(() => {
     const householdId = household?.id;
@@ -424,16 +411,6 @@ export default function AssetsPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            {!isLoading && assets.length === 0 && (
-              <button
-                onClick={handleAddSampleData}
-                disabled={isAddingSample}
-                className="text-sm text-blue-500 hover:text-blue-600 disabled:text-slate-400"
-              >
-                {isAddingSample ? '추가 중...' : '샘플 데이터'}
-              </button>
-            )}
-
             <Link
               href="/assets/stats"
               className="rounded-xl border border-slate-200/70 bg-white/95 p-2 shadow-sm transition-all hover:bg-white hover:shadow"

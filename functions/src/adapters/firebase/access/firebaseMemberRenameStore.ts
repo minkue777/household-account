@@ -228,6 +228,27 @@ export class FirebaseMemberRenameStore implements MemberRenameStorePort {
           },
           { merge: true },
         );
+        for (const membership of mutation.state.memberships) {
+          if (
+            membership.status !== "active" ||
+            membership.memberId !== member.memberId
+          ) {
+            continue;
+          }
+          transaction.update(
+            this.database
+              .collection("users")
+              .doc(membership.principalUid)
+              .collection("householdMembershipViews")
+              .doc(this.householdId),
+            {
+              displayName: member.displayName,
+              memberAggregateVersion: member.aggregateVersion,
+              projectedAt: FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+          );
+        }
       }
       for (const profile of mutation.state.memberOwnerProfiles) {
         transaction.set(

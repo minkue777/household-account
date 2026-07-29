@@ -8,6 +8,7 @@ export const householdCommands = {
   recordAppVisit(input: {
     visitId: string;
     platform: 'android' | 'ios-pwa' | 'web';
+    clientStartupDurationMs?: number;
   }) {
     return getHouseholdCommandClient().execute(
       'access.record-app-visit.v1',

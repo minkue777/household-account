@@ -166,6 +166,7 @@ export default function ExpenseItem({
   return (
     <div className="relative" ref={(el) => registerItemRef(expense.id, el)}>
       <div
+        data-testid="expense-item"
         draggable={!mergeDisabled}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}

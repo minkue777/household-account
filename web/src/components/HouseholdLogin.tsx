@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { useHousehold } from '@/contexts/HouseholdContext';
+import { isFirebaseEmulatorTestLoginEnabled } from '@/platform/firebase/firebaseEmulatorConfig';
 
 type FirstVisitMode = 'choose' | 'create' | 'join';
 
@@ -27,9 +28,11 @@ export default function HouseholdLogin() {
   const [invitationCode, setInvitationCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [testLoginEnabled, setTestLoginEnabled] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    setTestLoginEnabled(isFirebaseEmulatorTestLoginEnabled());
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code') ?? params.get('invite');
     if (code?.trim()) {
@@ -75,7 +78,9 @@ export default function HouseholdLogin() {
         {sessionState === 'signed-out' && (
           <div>
             <p className="mb-5 text-center text-sm text-slate-500">
-              Google 계정으로 로그인하면 본인의 가계부가 바로 연결됩니다.
+              {testLoginEnabled
+                ? 'Auth Emulator의 테스트 계정으로 로그인합니다.'
+                : 'Google 계정으로 로그인하면 본인의 가계부가 바로 연결됩니다.'}
             </p>
             <button
               type="button"
@@ -83,7 +88,11 @@ export default function HouseholdLogin() {
               disabled={isSubmitting}
               className="w-full rounded-xl border border-slate-300 bg-white py-3 font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isSubmitting ? '로그인 중...' : 'Google로 로그인'}
+              {isSubmitting
+                ? '로그인 중...'
+                : testLoginEnabled
+                  ? '테스트 계정으로 로그인'
+                  : 'Google로 로그인'}
             </button>
           </div>
         )}

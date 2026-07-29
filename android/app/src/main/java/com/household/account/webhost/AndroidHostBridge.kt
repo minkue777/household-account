@@ -14,7 +14,8 @@ import org.json.JSONObject
 /** 정확한 허용 origin에서만 노출되는 versioned Android host contract입니다. */
 class AndroidHostBridge(
     private val context: Activity,
-    private val authCoordinator: NativeAuthCoordinator = NativeAuthCoordinator(context)
+    private val authCoordinator: NativeAuthCoordinator = NativeAuthCoordinator(context),
+    private val consumeAppLaunchDurationMillis: () -> Long?
 ) {
     suspend fun handle(rawMessage: String): String {
         val request = runCatching { JSONObject(rawMessage) }.getOrNull()
@@ -30,6 +31,13 @@ class AndroidHostBridge(
             "app.get-version" -> succeeded(
                 requestId,
                 JSONObject().put("version", appVersion() ?: JSONObject.NULL)
+            )
+            "performance.get-app-launch-duration" -> succeeded(
+                requestId,
+                JSONObject().put(
+                    "durationMs",
+                    consumeAppLaunchDurationMillis() ?: JSONObject.NULL
+                )
             )
             "quick-edit.get-overlay-enabled" -> scoped(requestId, payload) { householdId, memberId ->
                 JSONObject().put(

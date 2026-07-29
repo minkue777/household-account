@@ -49,7 +49,7 @@
 - `SelectHomeLocalCurrency(localCurrencyType)`, `ListAvailableLocalCurrencies`
 - `BuildHomeSummary(configuration, selectedBalance, budget, expenseTotals, incomeTotals)`
 - `LoadThemePreference`, `SetThemePreference`, `ApplyTheme`
-- 기본 카드 구성: 왼쪽 지역화폐 잔액, 오른쪽 월 잔여 예산
+- 기본 카드 구성: 왼쪽 `X월 지출`, 오른쪽 `X월 잔여 예산`
 
 ### 의존 모듈
 
@@ -66,10 +66,10 @@
 | HOME-001 | 현재 명세 | 홈 요약은 가구 문서에 저장된 구성 또는 기본값에 따라 지역화폐, 월 잔여 예산, 월 지출, 연 지출 중 두 항목을 표시한다. | 현재 저장된 구성을 읽지만 이를 변경하는 사용자 UI는 없다. 수입은 월·연 합계를 계산한다. | [BalanceCards](../../../../../web/src/components/BalanceCards.tsx), [household types](../../../../../web/src/types/household.ts) | U, UI |
 | HOME-002 | 목표 명세 | 처음 등록된 지역화폐가 하나뿐이고 선택값이 없으면 그 유형을 자동 선택한다. 여러 유형이 있으면 사용자가 홈에 표시할 하나를 선택하고 이후 홈 조회에서 그 선택을 유지한다. 지역화폐 카드 상세 진입에는 카드가 표시하던 선택 유형을 고정해 전달한다. | 선택값은 지원되는 현재 가구의 지역화폐 유형이어야 한다. 다른 유형의 추가·최근 갱신만으로 자동 전환하지 않는다. DEC-057에 따라 상세 화면에는 전체·다른 유형 전환 UI를 두지 않으며 다른 유형은 홈 선택을 먼저 바꾼 뒤 진입한다. | [DEC-008](../../../governance/decisions.md#dec-008), [DEC-057](../../../governance/decisions.md#dec-057), [BalanceCards](../../../../../web/src/components/BalanceCards.tsx) | U, I, UI |
 | HOME-003 | 결함 | 각 홈 카드 원천의 유효한 0원, `NoData`, 조회 failure를 보존하고 일부 원천이 실패해도 이를 0원·빈 성공으로 표시하지 않는다. | 홈 요약은 요청 시 Canonical Query 결과로 계산하며 별도 freshness 상태나 영속 Projection을 만들지 않는다. 실패한 카드와 정상 카드를 독립 표시하되 전체 조회의 partial 상태를 명시한다. | [BalanceCards](../../../../../web/src/components/BalanceCards.tsx), [balanceService](../../../../../web/src/lib/balanceService.ts), [expenseService](../../../../../web/src/lib/expenseService.ts), [DEC-048](../../../governance/decisions.md#dec-048) | U, C, UI |
-| HOME-004 | 목표 명세 | 설정의 홈 카드 구성 화면에서 모든 활성 가구원이 왼쪽·오른쪽 카드를 지역화폐 잔액·월 잔여 예산·월 지출·연 지출 중 서로 다른 두 유형으로 선택해 가구 공통 설정으로 저장할 수 있다. | 기본값은 왼쪽 지역화폐·오른쪽 월 잔여 예산이다. 같은 유형 두 개, 지원하지 않는 유형, stale version은 write 0건으로 거부한다. 기존에 저장된 중복 구성은 읽기 호환으로 그대로 표시하고 자동 보정하지 않지만, 다음 저장에서는 서로 다른 유형을 필수로 한다. 선택 지역화폐 유형은 별도 설정이며 카드 구성 저장으로 바꾸지 않는다. | [BalanceCards](../../../../../web/src/components/BalanceCards.tsx), [household types](../../../../../web/src/types/household.ts), [DEC-061](../../../governance/decisions.md#dec-061) | U, I, UI |
+| HOME-004 | 목표 명세 | 설정의 홈 카드 구성 화면에서 모든 활성 가구원이 왼쪽·오른쪽 카드를 지역화폐 잔액·월 잔여 예산·월 지출·연 지출 중 서로 다른 두 유형으로 선택해 가구 공통 설정으로 저장할 수 있다. | 기본값은 왼쪽 `X월 지출`·오른쪽 `X월 잔여 예산`이다. 같은 유형 두 개, 지원하지 않는 유형, stale version은 write 0건으로 거부한다. 기존에 저장된 중복 구성은 읽기 호환으로 그대로 표시하고 자동 보정하지 않지만, 다음 저장에서는 서로 다른 유형을 필수로 한다. 선택 지역화폐 유형은 별도 설정이며 카드 구성 저장으로 바꾸지 않는다. | [BalanceCards](../../../../../web/src/components/BalanceCards.tsx), [household types](../../../../../web/src/types/household.ts), [DEC-061](../../../governance/decisions.md#dec-061) | U, I, UI |
 | THEME-001 | 현재 명세 | default, warm, forest, ocean, mono 테마를 지원하고 유효한 저장값을 복원한다. | 잘못된 저장값은 무시한다. | [ThemeContext](../../../../../web/src/contexts/ThemeContext.tsx) | U, UI |
 
-홈 요약의 초기 왼쪽 카드는 지역화폐 잔액, 오른쪽 카드는 월 잔여 예산입니다.
+홈 요약의 초기 왼쪽 카드는 `X월 지출`, 오른쪽 카드는 `X월 잔여 예산`입니다.
 
 ## 6. 모듈 결함
 

@@ -37,7 +37,12 @@ export default function ConfirmDialog({
   return (
     <Portal>
       <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center z-[9999]">
-        <div className="bg-white rounded-2xl p-6 m-4 max-w-sm w-full shadow-xl">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={title}
+          className="bg-white rounded-2xl p-6 m-4 max-w-sm w-full shadow-xl"
+        >
           <h3 className="text-lg font-semibold text-slate-800 mb-3">
             {title}
           </h3>

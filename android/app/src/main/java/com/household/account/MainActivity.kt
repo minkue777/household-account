@@ -24,6 +24,7 @@ import com.household.account.quickedit.QuickEditCoordinator
 import com.household.account.util.HouseholdPreferences
 import com.household.account.paymentcapture.AndroidCaptureDelivery
 import com.household.account.startup.FirstResumeRefreshGate
+import com.household.account.startup.AppLaunchDurationClock
 import com.household.account.startup.OneShotExecutionGate
 import com.household.account.webhost.AndroidHostBridge
 import com.household.account.webhost.TrustedWebOrigin
@@ -31,6 +32,7 @@ import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
+    private val appLaunchDurationClock = AppLaunchDurationClock()
     private lateinit var webView: WebView
     private lateinit var permissionLayout: LinearLayout
     private lateinit var hostBridge: AndroidHostBridge
@@ -73,7 +75,11 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
-        hostBridge = AndroidHostBridge(this)
+        hostBridge = AndroidHostBridge(
+            context = this,
+            consumeAppLaunchDurationMillis =
+                appLaunchDurationClock::consumeElapsedMillis
+        )
         webView.apply {
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(

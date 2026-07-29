@@ -336,7 +336,7 @@ Notification delivery 상태는 운영 Read Model일 뿐 거래 Canonical 상태
 - payload에는 금융 알림 원문, 전체 카드 번호, 불필요한 멤버 표시 이름을 넣지 않습니다.
 - click navigation은 서버 생성 enum·opaque ID에서 같은 origin 상대 URL만 만들고 외부 URL 입력을 받지 않습니다.
 
-관측 필드는 event/delivery ID, producer/event version, household/member/endpoint의 비가역 hash, policy version, 대상·성공·실패·unknown count, provider class, attempt, latency입니다. `NoTarget`, partial, unknown-provider-outcome, permanent FID, contract drift, duplicate Inbox를 별도 metric으로 둡니다.
+관측 필드는 event/delivery ID, producer/event version, household/member/endpoint의 비가역 hash, policy version, 대상·성공·실패·unknown count, provider class, attempt, latency입니다. 관리자 성능의 알림 latency는 `ledger.request-notification.v1`의 Outbox append 시간이 아니라 Outbox 문서 생성 시각부터 trigger 대기, 대상·Membership 확인, endpoint별 FCM 응답, terminal 결과 저장이 끝날 때까지의 total입니다. FCM `send` 성공은 provider 접수 완료를 뜻할 뿐 OS의 실제 표시 완료 acknowledgement는 아닙니다. `NoTarget`, partial, unknown-provider-outcome, permanent FID, contract drift, duplicate Inbox를 별도 metric으로 둡니다.
 
 ## 10. 목표 패키지 구조
 

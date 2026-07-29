@@ -20,6 +20,7 @@ import { useHousehold } from '@/contexts/HouseholdContext';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useLedgerReadModel } from '@/contexts/LedgerReadModelContext';
 import {
+  markWebFirstHomeCompletePaint,
   markWebFirstLedgerPaint,
   markWebLedgerCacheResult,
 } from '@/platform/performance/webStartupPerformance';
@@ -38,7 +39,10 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     householdKey,
     isSessionVerified = true,
   } = useHousehold();
-  const { isLoading: categoriesLoading } = useCategoryContext();
+  const {
+    isLoading: categoriesLoading,
+    serverSnapshotReady: categoriesServerSnapshotReady,
+  } = useCategoryContext();
 
   const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
   const [currentMonth, setCurrentMonth] = useState(() => new Date().getMonth() + 1);
@@ -60,6 +64,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     readError,
     localCurrencyBalance,
     localCurrencySettled,
+    localCurrencyReady,
     readRefreshKey,
     prefetchAdjacentPeriods,
   } = useLedgerReadModel({
@@ -118,6 +123,41 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
       if (fallbackId !== undefined) window.clearTimeout(fallbackId);
     };
   }, [serverSnapshotReady]);
+
+  useEffect(() => {
+    const yearlySummaryReady = !needsYearlyTotal || yearlyTotal !== null;
+    if (
+      !serverSnapshotReady
+      || !categoriesServerSnapshotReady
+      || !localCurrencyReady
+      || !yearlySummaryReady
+    ) {
+      return undefined;
+    }
+
+    let firstFrameId: number | undefined;
+    let paintFrameId: number | undefined;
+    let fallbackId: number | undefined;
+    if (typeof window.requestAnimationFrame === 'function') {
+      firstFrameId = window.requestAnimationFrame(() => {
+        paintFrameId = window.requestAnimationFrame(markWebFirstHomeCompletePaint);
+      });
+    } else {
+      fallbackId = window.setTimeout(markWebFirstHomeCompletePaint, 0);
+    }
+
+    return () => {
+      if (firstFrameId !== undefined) window.cancelAnimationFrame(firstFrameId);
+      if (paintFrameId !== undefined) window.cancelAnimationFrame(paintFrameId);
+      if (fallbackId !== undefined) window.clearTimeout(fallbackId);
+    };
+  }, [
+    categoriesServerSnapshotReady,
+    localCurrencyReady,
+    needsYearlyTotal,
+    serverSnapshotReady,
+    yearlyTotal,
+  ]);
 
   useEffect(() => {
     if (!needsYearlyTotal) {

@@ -1,5 +1,8 @@
 import { getClientSessionScope } from '@/composition/clientSessionScope';
 import { isAndroidHostAvailable } from '@/platform/android-host/androidHostBridge';
+import {
+  readCapturedClientStartupObservation,
+} from '@/platform/performance/clientStartupObservation';
 
 let visitPromise: Promise<void> | undefined;
 
@@ -28,12 +31,16 @@ export function recordCurrentAppVisit(): Promise<void> {
   visitPromise ??= (async () => {
     const scope = getClientSessionScope();
     if (!scope || scope.accessMode !== 'member') return;
+    const startupObservation = await readCapturedClientStartupObservation();
     const { householdCommands } = await import(
       '@/features/access-household/application/householdCommands'
     );
     await householdCommands.recordAppVisit({
       visitId: currentVisitId,
       platform: platform(),
+      ...(startupObservation === undefined
+        ? {}
+        : { clientStartupDurationMs: startupObservation.durationMs }),
     });
   })().catch(() => {});
   return visitPromise;

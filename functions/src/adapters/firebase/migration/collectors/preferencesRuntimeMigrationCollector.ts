@@ -1,5 +1,6 @@
 import type * as firestore from "firebase-admin/firestore";
 
+import { DEFAULT_HOME_CONFIGURATION } from "../../../../platform/home-preferences/domain/homeSummary";
 import {
   candidateDraft,
   createdAndUpdated,
@@ -247,11 +248,11 @@ export function collectPreferencesRuntimeMigration(
       householdId: input.scope.householdId,
       left: canonicalHomeCard(
         legacyHome.leftCard,
-        "LOCAL_CURRENCY_BALANCE",
+        DEFAULT_HOME_CONFIGURATION.left,
       ),
       right: canonicalHomeCard(
         legacyHome.rightCard,
-        "MONTHLY_REMAINING_BUDGET",
+        DEFAULT_HOME_CONFIGURATION.right,
       ),
       ...(selectedLocalCurrencyType === undefined
         ? {}

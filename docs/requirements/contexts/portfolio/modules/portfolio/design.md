@@ -510,7 +510,7 @@ Domain은 Firebase·React와 다른 기능 Entity를 import하지 않습니다. 
 4. `RevalueAssetWorkflow`와 `ApplyAssetAutomationWorkflow` participant/UoW contract test를 먼저 작성합니다.
 5. 모든 Asset Writer를 서버 Application 뒤로 모은 뒤 직접 Firestore write를 차단합니다.
 6. `AssetSnapshotProjector`를 단일 Writer로 전환하고 사라진 scope 0 전이 `T-AST-004`와 중복·rebuild test를 활성화합니다.
-7. production navigation·service export에서 sample seed를 제거하고 demo fixture Adapter의 build 격리와 `T-AST-003`을 활성화합니다.
+7. production navigation·service export에는 sample seed가 없으며, demo fixture Adapter의 build 격리와 `T-AST-003` 검사를 유지합니다.
 8. 레거시 물리 Delete Writer를 논리 Delete로 교체하고, 일반 UI에 복구 surface가 없으며 운영 전용 `RestoreAssetWorkflow`만 존재하는 `isActive=false → deleted` migration과 `T-AST-002`를 활성화합니다.
 9. 일반 삭제와 분리된 수동 `RequestPermanentAssetPurge`·participant checkpoint를 구현합니다.
 10. Access 명의자 프로필 backfill manifest로 레거시 owner를 typed ownerRef로 전환하고 `T-AST-005`와 도넛 `+` UI 테스트를 활성화합니다.

@@ -87,6 +87,7 @@ import {
   selectAdminHouseholdView,
 } from '@/features/access-household/application/adminHouseholdViewSelection';
 import { markWebFirstLedgerPaint } from '@/platform/performance/webStartupPerformance';
+import { DEFAULT_HOME_SUMMARY_CONFIG } from '@/types/household';
 
 const mockGetHousehold = jest.mocked(getHousehold);
 const mockRenameHouseholdMember = jest.mocked(renameHouseholdMember);
@@ -125,10 +126,7 @@ function household(name: string) {
     id: 'household-1',
     name,
     createdAt: new Date('2026-07-20T00:00:00+09:00'),
-    homeSummaryConfig: {
-      leftCard: 'localCurrencyBalance' as const,
-      rightCard: 'monthlyRemainingBudget' as const,
-    },
+    homeSummaryConfig: { ...DEFAULT_HOME_SUMMARY_CONFIG },
     members: [{ id: 'member-1', name: '민규', aggregateVersion: 3 }],
   };
 }
@@ -630,10 +628,7 @@ describe('Android 가계부 server-first 복원 계약', () => {
             id: 'household-2',
             name: 'B 가계부',
             createdAt: new Date('2026-07-20T00:00:00.000Z'),
-            homeSummaryConfig: {
-              leftCard: 'localCurrencyBalance' as const,
-              rightCard: 'monthlyRemainingBudget' as const,
-            },
+            homeSummaryConfig: { ...DEFAULT_HOME_SUMMARY_CONFIG },
             members: [{ id: 'member-2', name: '진선', aggregateVersion: 1 }],
           }
     );

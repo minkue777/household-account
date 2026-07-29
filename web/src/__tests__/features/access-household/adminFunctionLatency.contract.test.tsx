@@ -109,6 +109,39 @@ describe('admin Cloud Function latency contract', () => {
             maxMs: 150,
             latestAt: '2026-07-28T00:09:00.000Z',
           },
+          {
+            endpoint: 'clientStartup',
+            operation: 'client.android-app-first-home-complete-paint.v1',
+            sampleCount: 1,
+            succeededCount: 1,
+            failedCount: 0,
+            averageMs: 3_200,
+            p95Ms: 3_200,
+            maxMs: 3_200,
+            latestAt: '2026-07-28T00:09:00.000Z',
+          },
+          {
+            endpoint: 'clientStartup',
+            operation: 'client.ios-pwa-first-home-complete-paint.v1',
+            sampleCount: 1,
+            succeededCount: 1,
+            failedCount: 0,
+            averageMs: 2_400,
+            p95Ms: 2_400,
+            maxMs: 2_400,
+            latestAt: '2026-07-28T00:09:00.000Z',
+          },
+          {
+            endpoint: 'consumeNotificationOutbox',
+            operation: 'notifications.deliver-household-request.v1',
+            sampleCount: 2,
+            succeededCount: 1,
+            failedCount: 1,
+            averageMs: 850,
+            p95Ms: 1_100,
+            maxMs: 1_100,
+            latestAt: '2026-07-28T00:09:00.000Z',
+          },
         ],
       },
     };
@@ -122,7 +155,7 @@ describe('admin Cloud Function latency contract', () => {
     );
 
     expect(
-      screen.getByText(`Cloud Functions ${'\uCC98\uB9AC \uC2DC\uAC04'}`)
+      screen.getByText('사용자 체감·서버 처리 시간')
     ).toBeInTheDocument();
     expect(screen.getByText('지출·수입 수정')).toBeInTheDocument();
     expect(screen.getByText('지출 월 분할')).toBeInTheDocument();
@@ -133,6 +166,16 @@ describe('admin Cloud Function latency contract', () => {
     expect(screen.getByText('0.420초')).toBeInTheDocument();
     expect(screen.getByText('iPhone 결제 알림 처리')).toBeInTheDocument();
     expect(screen.getByText('iPhone 결제 수집')).toBeInTheDocument();
+    expect(
+      screen.getByText('Android 앱 실행 → 첫 화면 전체 표시')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('iPhone 앱 실행 → 첫 화면 전체 표시')
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('클라이언트 앱')).toHaveLength(2);
+    expect(screen.queryByText('Android 초기 세션 생성')).not.toBeInTheDocument();
+    expect(screen.getByText('가구원 알림 FCM 접수')).toBeInTheDocument();
+    expect(screen.getByText('FCM 알림 발송')).toBeInTheDocument();
     expect(screen.queryByText(/online.*ms/i)).not.toBeInTheDocument();
 
     const updateRow = screen.getByText('ledger.update-transaction.v1').closest('tr');

@@ -24,6 +24,13 @@ function hash(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
+function legacyCategoryDocumentId(
+  householdId: string,
+  categoryId: string,
+): string {
+  return hash(`category\u0000${householdId}\u0000${categoryId}`);
+}
+
 function receiptExpiry(occurredAt: string) {
   return firestoreTtlAfter(occurredAt);
 }
@@ -276,7 +283,10 @@ export class FirebaseCategoryCatalogStore implements CategoryCatalogStorePort {
           .collection("categories")
           .doc(
             loaded.legacyDocumentIds.get(category.categoryId) ??
-              category.categoryId,
+              legacyCategoryDocumentId(
+                this.input.householdId,
+                category.categoryId,
+              ),
           );
         const common = {
           householdId: this.input.householdId,

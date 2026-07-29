@@ -37,6 +37,16 @@ describe('즉시 상호작용 UI 계약', () => {
     );
   });
 
+  test('[T-AST-003][AST-007] 운영 자산 화면과 서비스에는 샘플 자산 생성 진입점이 없다', () => {
+    const assetsPage = source('app/assets/page.tsx');
+    const assetService = source('lib/assetService.ts');
+    const productionAssetSurface = `${assetsPage}\n${assetService}`;
+
+    expect(productionAssetSurface).not.toContain('addSampleAssets');
+    expect(productionAssetSurface).not.toContain('handleAddSampleData');
+    expect(productionAssetSurface).not.toContain('샘플 데이터');
+  });
+
   test('자산 페이지는 진입할 때만 시세를 한 번 갱신하고 직전 일간 변동을 먼저 표시한다', () => {
     const assetsPage = source('app/assets/page.tsx');
     const marketRefreshStart = assetsPage.indexOf('void refreshAllMarketValues()');

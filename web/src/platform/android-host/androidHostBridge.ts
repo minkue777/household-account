@@ -6,6 +6,7 @@ interface AndroidBridgeRequestMap {
   'auth.sign-out': Record<string, never>;
   'session.refresh': Record<string, never>;
   'app.get-version': Record<string, never>;
+  'performance.get-app-launch-duration': Record<string, never>;
   'quick-edit.get-overlay-enabled': { householdId: string; memberId: string };
   'quick-edit.set-overlay-enabled': {
     householdId: string;
@@ -52,6 +53,7 @@ interface AndroidBridgeResultMap {
   'auth.sign-out': Record<string, never>;
   'session.refresh': { householdId: string; memberId: string; sessionGeneration: number };
   'app.get-version': { version: string | null };
+  'performance.get-app-launch-duration': { durationMs: number | null };
   'quick-edit.get-overlay-enabled': { enabled: boolean };
   'quick-edit.set-overlay-enabled': Record<string, never>;
 }

@@ -362,9 +362,17 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       state: "archive-pending",
       sortOrder: 0,
     });
-    expect(
-      (await database.collection("categories").doc(second.categoryId).get()).data(),
-    ).toMatchObject({ isActive: false, label: "여가", budget: 55_000 });
+    const legacyProjection = (
+      await database
+        .collection("categories")
+        .where("householdId", "==", HOUSEHOLD_ID)
+        .get()
+    ).docs.find((snapshot) => snapshot.data().key === second.categoryId);
+    expect(legacyProjection?.data()).toMatchObject({
+      isActive: false,
+      label: "여가",
+      budget: 55_000,
+    });
     expect((await household.collection("categoryArchiveProcesses").get()).size).toBe(1);
     expect(
       (

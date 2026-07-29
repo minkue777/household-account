@@ -14,7 +14,10 @@ import {
   refreshAndroidHostSession,
 } from '@/platform/android-host/androidHostBridge';
 import { ANDROID_NATIVE_RESUME_EVENT } from '@/platform/android-host/androidLifecycleEvents';
-import { scheduleAfterWebFirstLedgerPaint } from '@/platform/performance/webStartupPerformance';
+import {
+  scheduleAfterWebFirstHomeCompletePaint,
+  scheduleAfterWebFirstLedgerPaint,
+} from '@/platform/performance/webStartupPerformance';
 import { preloadLedgerMutationRuntime } from '@/composition/ledgerMutationRuntimePreload';
 import { AppDialogProvider } from '@/contexts/AppDialogContext';
 import { REMOTE_SESSION_RECOVERY_REQUESTED_EVENT } from '@/platform/functions-api/firebaseCallableRecovery';
@@ -29,8 +32,7 @@ const MUTATION_PRELOAD_DELAY_AFTER_LEDGER_MS = 3_000;
 const MUTATION_PRELOAD_IDLE_TIMEOUT_MS = 15_000;
 const NATIVE_SESSION_SYNC_DELAY_AFTER_LEDGER_MS = 30_000;
 const NATIVE_SESSION_SYNC_IDLE_TIMEOUT_MS = 30_000;
-const VISIT_TELEMETRY_DELAY_AFTER_LEDGER_MS = 30_000;
-const VISIT_TELEMETRY_IDLE_TIMEOUT_MS = 30_000;
+const VISIT_TELEMETRY_IDLE_TIMEOUT_MS = 5_000;
 const ROUTE_PREFETCH_IDLE_TIMEOUT_MS = 10_000;
 const POST_LEDGER_PREFETCH_ROUTES = [
   '/income',
@@ -343,14 +345,13 @@ export function AuthenticatedPlatformEffects() {
 
   useEffect(() => {
     if (sessionState !== 'ready' || !isSessionVerified || adminHouseholdView !== null) return;
-    return scheduleAfterWebFirstLedgerPaint(
+    return scheduleAfterWebFirstHomeCompletePaint(
       () => {
         void import('@/platform/usage/memberAccessTelemetry')
           .then(({ recordCurrentAppVisit }) => recordCurrentAppVisit())
           .catch(() => {});
       },
       {
-        delayAfterPaintMs: VISIT_TELEMETRY_DELAY_AFTER_LEDGER_MS,
         idleTimeoutMs: VISIT_TELEMETRY_IDLE_TIMEOUT_MS,
       }
     );

@@ -584,6 +584,9 @@ export default function ExpenseEditModal({
           onClick={onClose}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${transactionLabel} 수정`}
             className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
             onClick={(event) => event.stopPropagation()}
           >
