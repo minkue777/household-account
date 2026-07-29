@@ -475,7 +475,7 @@ Firebase의 최신 직접 전송 계약을 사용하고 폐기 예정인 registr
 
 - 일반 사용자는 Google 로그인으로만 앱에 접속한다. 가구 키를 입력해 로그인하는 신규 진입 경로는 제공하지 않는다.
 - Google UID에 연결된 Membership이 하나도 없는 첫 방문자는 `초대 코드 입력` 또는 `새 가계부 생성` 중 하나를 선택한다.
-- 새 가계부를 만드는 사용자는 가구 이름과 자기 표시 이름을 입력한다. 서버는 Household, 자기 Member, 일반 Membership을 한 transaction에서 생성한다. 생성자는 다른 활성 가구원보다 강한 household 권한을 갖지 않는다.
+- 새 가계부를 만드는 사용자는 가구 이름 부분과 자기 표시 이름을 입력한다. 서버는 가구 이름을 `입력 이름 + 네 가계부`로 정규화하고 의미 접두사 없는 안정적인 householdId를 생성한 뒤 Household, 자기 Member, 일반 Membership을 한 transaction에서 생성한다. 완성된 `네 가계부` 접미사는 중복하지 않으며 생성자는 다른 활성 가구원보다 강한 household 권한을 갖지 않는다.
 - 사용자는 다른 사람의 Member를 미리 생성할 수 없다. 각 Google Principal은 자기 Member만 생성하고 한 household 안에서 자기 Membership과 연결한다.
 - 활성 가구원은 서버에서 초대 코드를 생성할 수 있다. 코드는 특정 Member를 미리 만들거나 지정하지 않고 household 가입 권한만 나타낸다.
 - 초대 코드는 발급 후 5분 동안만 유효하고 한 Google Principal이 한 번 사용하면 즉시 만료된다. 서버는 충분히 추측하기 어려운 코드를 생성하고 원문 대신 hash, householdId, expiresAt, usedAt만 저장한다.

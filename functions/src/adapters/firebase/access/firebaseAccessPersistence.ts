@@ -19,6 +19,10 @@ export function stableAccessId(prefix: string, ...parts: readonly string[]): str
   return `${prefix}-${sha256(parts.join("\u0000")).slice(0, 32)}`;
 }
 
+export function stableHouseholdId(...parts: readonly string[]): string {
+  return sha256(parts.join("\u0000")).slice(0, 32);
+}
+
 export function memberOwnerProfileId(
   householdId: string,
   memberId: string,

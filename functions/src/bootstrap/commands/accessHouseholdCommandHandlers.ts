@@ -7,6 +7,7 @@ import {
   memberOwnerProfileId,
   sha256,
   stableAccessId,
+  stableHouseholdId,
 } from "../../adapters/firebase/access/firebaseAccessPersistence";
 import { FirebaseGoogleOnboardingStore } from "../../adapters/firebase/access/firebaseGoogleOnboardingStore";
 import { FirebaseHouseholdLifecycleUnitOfWork } from "../../adapters/firebase/access/firebaseHouseholdLifecycleUnitOfWork";
@@ -130,8 +131,7 @@ export function createAccessHouseholdCommandHandlers(
             payload.memberName,
             "SELF_DISPLAY_NAME_REQUIRED",
           );
-          const householdId = stableAccessId(
-            "household",
+          const householdId = stableHouseholdId(
             context.principalUid,
             context.envelope.idempotencyKey,
           );

@@ -5,6 +5,7 @@ import { FirebaseHouseholdLifecycleUnitOfWork } from "../../../adapters/firebase
 import {
   sha256,
   stableAccessId,
+  stableHouseholdId,
 } from "../../../adapters/firebase/access/firebaseAccessPersistence";
 import { createAdminHouseholdConsoleApplication } from "../../../contexts/access/admin-household-console/application/adminHouseholdConsoleApplication";
 import { createHouseholdLifecycleApplication } from "../../../contexts/access/household-lifecycle/application/householdLifecycleApplication";
@@ -32,8 +33,7 @@ function householdConsoleApplication(input: {
   readonly requestedAt: string;
   readonly requestId: string;
 }) {
-  const householdId = stableAccessId(
-    "household-admin",
+  const householdId = stableHouseholdId(
     input.principalRef,
     input.idempotencyKey,
   );

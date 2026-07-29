@@ -76,7 +76,7 @@ describeWithFirestoreEmulator("Firebase Access command adapters", () => {
           principalUid: creatorUid,
           command: "access.create-household-with-self.v1",
           commandId: "create-household-1",
-          payload: { householdName: "테스트 가계부", memberName: "민규" },
+          payload: { householdName: "테스트", memberName: "민규" },
         }),
       )) as { householdId: string; memberId: string };
 
@@ -110,10 +110,12 @@ describeWithFirestoreEmulator("Firebase Access command adapters", () => {
           .get(),
       ]);
     expect(household.data()).toMatchObject({
+      name: "테스트네 가계부",
       lifecycleState: "active",
       aggregateVersion: 1,
       initializationStatus: "pending",
     });
+    expect(created.householdId).toMatch(/^[0-9a-f]{32}$/u);
     expect(member.data()).toMatchObject({
       linkedPrincipalUid: creatorUid,
       displayName: "민규",

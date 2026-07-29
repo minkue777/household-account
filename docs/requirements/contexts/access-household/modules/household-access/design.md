@@ -170,7 +170,7 @@ Value Object는 `HouseholdName`, `MemberDisplayName`, `AssetOwnerProfileName`, `
 
 1. Inbound Adapter가 Google Principal을 인증하고 기존 Membership을 조회합니다.
 2. Membership도 유효한 legacy 후보도 없으면 `FirstVisitRequired(create|join)`을 반환합니다.
-3. 가구 생성 선택 시 가구 이름과 자기 표시 이름을 정규화하고 서버가 householdId·memberId를 생성합니다.
+3. 가구 생성 선택 시 이름 부분은 서버에서 `이름 + 네 가계부`로 정규화하되 완성된 `네 가계부` 접미사는 중복하지 않습니다. 서버는 householdId를 의미 접두사 없는 안정적인 32자리 소문자 16진수로, memberId를 의미 접두사가 있는 안정 ID로 생성합니다.
 4. Household, 호출자 UID에 연결된 자기 Member, 같은 memberId의 member 명의자 프로필, 일반 Membership을 생성합니다. 생성자 전용 role·capability는 저장하지 않고 다른 Member 입력도 받지 않습니다.
 5. 같은 UoW에 command receipt와 `HouseholdCreated.v1`, `MemberJoined.v1`을 기록합니다.
 6. `Success`는 commit된 householdId·memberId를 반환합니다. 후속 기본 설정·Notifications endpoint 등록은 별도 상태입니다.

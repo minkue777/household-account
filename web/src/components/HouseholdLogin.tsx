@@ -173,13 +173,19 @@ export default function HouseholdLogin() {
         {sessionState === 'first-visit' && mode === 'create' && (
           <form onSubmit={(event) => void submitCreate(event)} className="space-y-3">
             <h2 className="text-center font-semibold text-slate-800">새 가계부 만들기</h2>
-            <input
-              value={householdName}
-              onChange={(event) => setHouseholdName(event.target.value)}
-              placeholder="가계부 이름"
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              autoFocus
-            />
+            <div className="flex w-full rounded-xl border border-slate-300 bg-white focus-within:ring-2 focus-within:ring-blue-500">
+              <input
+                value={householdName}
+                onChange={(event) => setHouseholdName(event.target.value)}
+                placeholder="예: 장휘민지"
+                aria-label="가계부 이름"
+                className="min-w-0 flex-1 rounded-l-xl px-4 py-3 focus:outline-none"
+                autoFocus
+              />
+              <span className="flex shrink-0 items-center rounded-r-xl bg-slate-50 px-4 text-slate-600">
+                네 가계부
+              </span>
+            </div>
             <input
               value={memberName}
               onChange={(event) => setMemberName(event.target.value)}

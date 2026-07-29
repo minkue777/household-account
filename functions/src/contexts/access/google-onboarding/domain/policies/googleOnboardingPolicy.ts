@@ -32,6 +32,14 @@ function hasForbiddenIdentityField(input: object): boolean {
   );
 }
 
+export function normalizeHouseholdName(input: string): string {
+  const householdName = input.trim();
+  if (householdName.endsWith("네 가계부")) return householdName;
+  if (householdName.endsWith("네")) return `${householdName} 가계부`;
+  if (householdName.endsWith("가계부")) return householdName;
+  return `${householdName}네 가계부`;
+}
+
 export function validateCreateSelfInput(input: {
   householdName: string;
   selfDisplayName: string;
@@ -47,7 +55,11 @@ export function validateCreateSelfInput(input: {
   if (selfDisplayName.length === 0) {
     return { kind: "invalid", code: "SELF_DISPLAY_NAME_REQUIRED" };
   }
-  return { kind: "valid", householdName, selfDisplayName };
+  return {
+    kind: "valid",
+    householdName: normalizeHouseholdName(householdName),
+    selfDisplayName,
+  };
 }
 
 export function validateJoinSelfInput(input: {
