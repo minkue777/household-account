@@ -293,7 +293,7 @@ Operations / Disclosure Adapter
 목표 Context 흐름:
 
 1. Discovery 단계는 canonical instrument가 명시적으로 KRX ETF인 현재 추적 종목만 Provider Adapter로 보내고 원문을 내부 공시 계약으로 변환한다.
-2. Dividends가 `source + sourceDisclosureId`의 안정적인 결정 eventId로 DividendEvent를 upsert하고 Projection도 같은 eventId를 key로 사용한다. 기준일·지급일·주당금액은 정정 가능한 값이므로 identity에 넣지 않는다.
+2. Dividends가 `source + sourceDisclosureId + instrumentCode`의 안정적인 결정 eventId로 DividendEvent를 upsert하고 Projection도 같은 eventId를 key로 사용한다. 한 공시 문서의 여러 종목을 구분하기 위해 종목 코드는 포함하고, 기준일·지급일·주당금액은 정정 가능한 값이므로 identity에 넣지 않는다.
 3. 기준일 Position history Query에서 정확한 snapshot을 우선하고, 없으면 날짜 차이가 가장 작은 snapshot을 선택하되 동률이면 이전 날짜를 우선해 적격 수량을 고정한다.
 4. Lifecycle 단계는 신규 discovery 결과·현재 holding 목록과 독립적으로 기존 nonterminal Event를 page query한다. 모든 source Asset이 삭제되어도 announced는 Position history로 fixed를 시도하고, fixed는 provider NoData 뒤에도 저장된 최신 성공 값으로 지급일에 paid로 진행한다.
 5. Event 상태와 Outbox를 원자 commit한다.

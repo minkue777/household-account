@@ -38,8 +38,8 @@ export function createDividendRefreshJobApplication(dependencies: {
           continue;
         }
         const fresh = result.disclosures.filter(
-          ({ sourceDisclosureId }) =>
-            !dependencies.store.hasDisclosure(sourceDisclosureId),
+          ({ sourceDisclosureId, instrumentCode }) =>
+            !dependencies.store.hasDisclosure(sourceDisclosureId, instrumentCode),
         );
         if (fresh.length === 0) continue;
         succeededInstrumentCodes.push(instrumentCode);
@@ -85,8 +85,8 @@ export function createDividendRefreshJobApplication(dependencies: {
             totalAmount: disclosure.totalAmount,
           })),
         ),
-        eventIds: disclosures.map(({ sourceDisclosureId }) =>
-          createDividendEventId(sourceDisclosureId),
+        eventIds: disclosures.map(({ sourceDisclosureId, instrumentCode }) =>
+          createDividendEventId(sourceDisclosureId, instrumentCode),
         ),
       };
     },

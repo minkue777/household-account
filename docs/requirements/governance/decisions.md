@@ -1007,7 +1007,7 @@ Google 계정이 없는 아이도 자산 명의자가 될 수 있게 하면서 �
 결정:
 
 - 공급자가 같은 공시를 정정하면 `announced`와 `fixed` 상태의 미지급 `DividendEvent`는 날짜·주당금액 등 현재 공시 값을 최신 값으로 덮어쓴다. 이전 공시 값, revision 문서, superseding correction Event는 보관하지 않는다.
-- Event 식별자는 금액·기준일·지급일처럼 정정될 수 있는 값이 아니라 `source + sourceDisclosureId`의 안정적인 공급자 공시 식별자를 사용한다. 공급자가 새 공시 ID로 정정하더라도 원 공시를 가리키는 명시적 correction reference가 있을 때만 같은 Event로 연결하며, 연결 근거가 없으면 임의로 추정하지 않는다.
+- Event 식별자는 금액·기준일·지급일처럼 정정될 수 있는 값이 아니라 `source + sourceDisclosureId + instrumentCode`를 사용한다. 한 KIND 문서에 여러 종목 행이 포함될 수 있으므로 종목 코드를 포함하며, 공급자가 새 공시 ID로 정정하더라도 같은 종목의 원 공시를 가리키는 명시적 correction reference가 있을 때만 같은 Event로 연결한다. 연결 근거가 없으면 임의로 추정하지 않는다.
 - 기준일 또는 주당금액이 바뀐 `fixed` Event는 새 공시와 Position history를 기준으로 적격 수량·증거·총액을 다시 계산한 뒤 같은 Event를 원자적으로 교체한다. 재계산에 실패하면 기존 값을 부분 변경하지 않고 재시도한다.
 - 공급자가 지급 전에 공시의 취소·삭제 상태를 명시하면 해당 미지급 Event를 삭제하고 Annual Projection에서도 제거한다. 단순 `NoData`, timeout, HTML 변경 또는 공급자 실패를 취소로 간주하지 않는다.
 - `paid` Event는 지급 완료 시점의 금융 이력으로서 불변이다. 이후 정정·취소·삭제 공시가 관찰되어도 값이나 상태를 변경하거나 삭제하지 않는다.
@@ -1468,7 +1468,7 @@ Google 계정이 없는 아이도 자산 명의자가 될 수 있게 하면서 �
 - 배당 예약 작업은 `Asia/Seoul` cron `0 9-20 * * *`로 매일 09:00부터 20:00까지 매시 정각 실행한다. 시작·종료 시각을 모두 포함하여 하루 12개 occurrence가 생성된다.
 - 각 시간 occurrence는 `scheduledFor`가 포함된 별도 execution key와 runId를 사용한다. 같은 occurrence 안에서 공시 `DISCOVERY`와 기존 nonterminal Event `LIFECYCLE_SWEEP`을 각각 독립 checkpoint로 실행한다.
 - 17:30처럼 정각 이후 게시된 공시는 다음 18:00 occurrence에서 정상 수집한다. 20:00 이후 게시분은 다음 날 09:00 occurrence에서 수집하며 야간 별도 schedule은 두지 않는다.
-- 같은 날 공시와 상태를 반복 확인해도 `source + sourceDisclosureId`의 canonical Event ID, 상태 전이 receipt와 expected version으로 같은 Event·상태·Projection을 중복 반영하지 않는다.
+- 같은 날 공시와 상태를 반복 확인해도 `source + sourceDisclosureId + instrumentCode`의 canonical Event ID, 상태 전이 receipt와 expected version으로 같은 Event·상태·Projection을 중복 반영하지 않는다.
 - 한 instrument·phase 실패는 다른 성공을 rollback하지 않는다. KIND 호출은 결정적 page, 유한 timeout·retry와 Provider Health 관측을 적용하고 실패·NoData를 빈 성공이나 Event 삭제로 바꾸지 않는다.
 - 현재 `dailyDividendSnapshot`의 17:00 하루 1회 schedule은 전환 대상이다. 함수 이름에 `daily`를 남겨 목표 주기를 오해하지 않도록 목표 Scheduler Adapter와 JobRun 이름은 `dividend-hourly` 의미로 구성한다.
 

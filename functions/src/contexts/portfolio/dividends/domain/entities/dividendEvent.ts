@@ -3,6 +3,7 @@ export type DividendStatus = "announced" | "fixed" | "paid";
 export interface DividendEvent {
   eventId: string;
   sourceDisclosureId: string;
+  instrumentCode: string;
   recordDate: string;
   paymentDate: string;
   perShareAmount: number;
@@ -14,6 +15,7 @@ export interface DividendEvent {
 
 export interface DividendDisclosureInput {
   sourceDisclosureId: string;
+  instrumentCode: string;
   recordDate: string;
   paymentDate: string;
   perShareAmount: number;
@@ -62,10 +64,17 @@ function normalizeSourceDisclosureId(value: string): string {
   return normalized;
 }
 
-export function createDividendEventId(sourceDisclosureId: string): string {
-  return `dividend-event:v1:KIND:${encodeURIComponent(
+export function createDividendEventId(
+  sourceDisclosureId: string,
+  instrumentCode: string,
+): string {
+  const normalizedCode = instrumentCode.trim().toLocaleUpperCase("en-US");
+  if (normalizedCode === "") {
+    throw new Error("instrumentCode는 비어 있을 수 없습니다.");
+  }
+  return `dividend-event:v2:KIND:${encodeURIComponent(
     normalizeSourceDisclosureId(sourceDisclosureId),
-  )}`;
+  )}:${encodeURIComponent(normalizedCode)}`;
 }
 
 function changedEvent(event: DividendEvent): DividendChangedEvent {
@@ -92,6 +101,7 @@ function disclosureEquals(
 ): boolean {
   return (
     event.sourceDisclosureId === input.sourceDisclosureId &&
+    event.instrumentCode === input.instrumentCode &&
     event.recordDate === input.recordDate &&
     event.paymentDate === input.paymentDate &&
     event.perShareAmount === input.perShareAmount
@@ -104,10 +114,13 @@ export function upsertDividendAnnouncement(
 ): DividendUpsertOutcome {
   validateDisclosure(input);
   const sourceDisclosureId = normalizeSourceDisclosureId(input.sourceDisclosureId);
-  const normalizedInput = { ...input, sourceDisclosureId };
+  const instrumentCode = input.instrumentCode.trim().toLocaleUpperCase("en-US");
+  const normalizedInput = { ...input, sourceDisclosureId, instrumentCode };
 
   if (current) {
-    if (current.eventId !== createDividendEventId(sourceDisclosureId)) {
+    if (
+      current.eventId !== createDividendEventId(sourceDisclosureId, instrumentCode)
+    ) {
       throw new Error("공시 ID와 배당 Event identity가 일치하지 않습니다.");
     }
     if (current.status === "paid" || disclosureEquals(current, normalizedInput)) {
@@ -136,7 +149,7 @@ export function upsertDividendAnnouncement(
   }
 
   const event: DividendEvent = {
-    eventId: createDividendEventId(sourceDisclosureId),
+    eventId: createDividendEventId(sourceDisclosureId, instrumentCode),
     ...normalizedInput,
     status: "announced",
     aggregateVersion: 1,

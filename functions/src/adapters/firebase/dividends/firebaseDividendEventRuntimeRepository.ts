@@ -20,9 +20,13 @@ function hash(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
-function stableEventId(householdId: string, sourceDisclosureId: string): string {
-  return `dividend-event:v2:${hash(
-    `${householdId}\u0000KIND\u0000${sourceDisclosureId}`,
+function stableEventId(
+  householdId: string,
+  sourceDisclosureId: string,
+  instrumentCode: string,
+): string {
+  return `dividend-event:v3:${hash(
+    `${householdId}\u0000KIND\u0000${sourceDisclosureId}\u0000${instrumentCode.toLocaleUpperCase("en-US")}`,
   )}`;
 }
 
@@ -82,10 +86,14 @@ function sameDisclosureFact(
 function currentSourceMatches(
   data: FirebaseFirestore.DocumentData,
   sourceDisclosureId: string,
+  instrumentCode: string,
 ): boolean {
+  const storedInstrumentCode = text(data.instrumentCode ?? data.stockCode);
   return (
-    text(data.sourceDisclosureId) === sourceDisclosureId ||
-    strings(data.disclosureAliases).includes(sourceDisclosureId)
+    storedInstrumentCode?.toLocaleUpperCase("en-US") ===
+      instrumentCode.toLocaleUpperCase("en-US") &&
+    (text(data.sourceDisclosureId) === sourceDisclosureId ||
+      strings(data.disclosureAliases).includes(sourceDisclosureId))
   );
 }
 
@@ -212,12 +220,23 @@ export class FirebaseDividendEventRuntimeRepository
       .collection(EVENTS)
       .where("householdId", "==", input.target.householdId)
       .get();
-    const matching = events.docs.find((document) =>
-      currentSourceMatches(document.data(), input.disclosure.sourceDisclosureId),
-    ) ?? events.docs.find((document) => sameDisclosureFact(document.data(), input.disclosure));
+    const matching =
+      events.docs.find((document) =>
+        currentSourceMatches(
+          document.data(),
+          input.disclosure.sourceDisclosureId,
+          input.disclosure.instrumentCode,
+        ),
+      ) ??
+      events.docs.find(
+        (document) =>
+          text(document.data().sourceDisclosureId) === undefined &&
+          sameDisclosureFact(document.data(), input.disclosure),
+      );
     const canonicalEventId = stableEventId(
       input.target.householdId,
       input.disclosure.sourceDisclosureId,
+      input.disclosure.instrumentCode,
     );
     const reference =
       matching?.ref ?? this.database.collection(EVENTS).doc(hash(canonicalEventId));

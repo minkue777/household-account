@@ -41,9 +41,11 @@ export function createDividendRefreshJobFixture(seed: {
       const result = receipts.get(runId);
       return result === undefined ? undefined : structuredClone(result);
     },
-    hasDisclosure: (sourceDisclosureId) =>
+    hasDisclosure: (sourceDisclosureId, instrumentCode) =>
       disclosures.some(
-        (disclosure) => disclosure.sourceDisclosureId === sourceDisclosureId,
+        (disclosure) =>
+          disclosure.sourceDisclosureId === sourceDisclosureId &&
+          disclosure.instrumentCode === instrumentCode,
       ),
     commitOccurrence: (input) => {
       receipts.set(input.runId, structuredClone(input.result));

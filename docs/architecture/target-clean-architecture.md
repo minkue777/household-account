@@ -781,8 +781,8 @@ Portfolio Context 안에서 자산 계정, Position, 자동화, 배당 기능 �
 
 배당 예약 작업은 공급자 discovery와 기존 Event lifecycle을 같은 loop에 묶지 않는다. Scheduler는 `Asia/Seoul` cron `0 9-20 * * *`로 매일 09:00부터 20:00까지 매시 정각 실행하며, 각 시간 occurrence에서 두 phase를 독립 checkpoint로 처리한다.
 
-1. `DiscoverDividendDisclosures`는 canonical instrument가 명시적으로 `market=KRX`, `instrumentType=ETF`인 현재 추적 대상만 KIND ETF Adapter로 보낸다. 종목 코드 모양이나 `holdingType=stock`으로 ETF를 추정하지 않는다.
-2. 공급자 결과는 `source + sourceDisclosureId`의 안정적인 canonical `eventId`로 upsert한다. 기준일·지급일·주당금액은 정정 가능한 값이라 identity에 넣지 않으며, 공급자의 명시적 correction reference만 새 공시 ID를 기존 Event에 연결할 수 있다.
+1. `DiscoverDividendDisclosures`는 Holdings 또는 Instrument Master가 명시적으로 `market=KRX`, `instrumentType=ETF`로 분류한 현재 추적 대상만 KIND ETF Adapter로 보낸다. 이관 데이터의 잘못된 저장 타입은 Instrument Master로 정규화하되 종목 코드 모양이나 `holdingType=stock`으로 ETF를 추정하지 않는다.
+2. 공급자 결과는 `source + sourceDisclosureId + instrumentCode`의 안정적인 canonical `eventId`로 upsert한다. 한 KIND 문서에 여러 종목 행이 포함될 수 있으므로 종목 코드는 identity에 포함하고, 기준일·지급일·주당금액은 정정 가능한 값이라 제외한다. 공급자의 명시적 correction reference만 같은 종목의 새 공시 ID를 기존 Event에 연결할 수 있다.
 3. `SweepDueDividendEvents`는 provider 응답·현재 holding 목록과 별도로 nonterminal Event를 page query한다.
 4. 저장된 nonterminal Event는 종목 매도·Asset 논리 삭제와 무관하게 lifecycle을 계속한다. `announced`는 보존된 Position history로 fixed를 시도하고 `fixed`는 provider `NoData` 뒤에도 지급일이 되면 `paid`로 전이한다.
 5. [DEC-043](../requirements/governance/decisions.md#dec-043)에 따라 같은 공시의 미지급 정정은 현재 값과 필요한 적격 계산을 같은 Event에서 원자 교체하고 이전 값은 보관하지 않는다. 지급 전 명시적 취소는 Event와 Projection에서 제거하지만 Provider 실패는 제거 근거가 아니며 `paid`는 불변이다.

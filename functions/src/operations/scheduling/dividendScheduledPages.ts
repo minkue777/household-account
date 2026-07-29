@@ -1,10 +1,16 @@
 import type * as firestore from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 
 import { FirebaseDividendEventRuntimeRepository } from "../../adapters/firebase/dividends/firebaseDividendEventRuntimeRepository";
 import { FirebaseDividendProviderObservation } from "../../adapters/firebase/dividends/firebaseDividendProviderObservation";
+import {
+  FirebaseInstrumentCatalogStorage,
+  RemoteInstrumentCatalogRunSource,
+} from "../../adapters/firebase/portfolio/firebaseInstrumentCatalog";
 import { FirebaseDividendHoldingQuery } from "../../adapters/firebase/portfolio/firebaseDividendHoldingQuery";
 import { KindEtfDividendDisclosureSource } from "../../adapters/http/kindEtfDividendDisclosureSource";
 import { NodeExternalTextHttpTransport } from "../../adapters/http/nodeExternalTextHttpTransport";
+import { createInstrumentCatalogApplication } from "../../contexts/portfolio/holdings/application/instrumentCatalogApplication";
 import { createDividendScheduledRuntimeApplication } from "../../contexts/portfolio/dividends/application/dividendScheduledRuntimeApplication";
 import { createSafeExternalTextHttpApplication } from "../../platform/external-operations/application/safeExternalTextHttpApplication";
 import type {
@@ -77,10 +83,44 @@ export function createDividendScheduledPages(input: {
   readonly periodTo: string;
   readonly observedAt: string;
   readonly pageSize: number;
+  readonly resolveKrxEtfCodes?: () => Promise<ReadonlySet<string>>;
 }): ScheduledFeaturePagePort {
   const events = new FirebaseDividendEventRuntimeRepository(input.database);
+  const resolveKrxEtfCodes =
+    input.resolveKrxEtfCodes ??
+    (() => {
+      let cached: Promise<ReadonlySet<string>> | undefined;
+      return () => {
+        cached ??= (async () => {
+          const bucket = getStorage().bucket();
+          const storage = new FirebaseInstrumentCatalogStorage(
+            input.database,
+            bucket,
+          );
+          const catalog = createInstrumentCatalogApplication({
+            runSource: new RemoteInstrumentCatalogRunSource(bucket),
+            publicationStore: storage,
+            readStore: storage,
+            minimumSourceCounts: { domestic: 3_500, us: 9_000 },
+          });
+          const result = await catalog.read({ now: input.observedAt });
+          if (result.kind !== "success") {
+            throw new Error("DIVIDEND_ETF_CATALOG_UNAVAILABLE");
+          }
+          return new Set(
+            result.snapshot.items
+              .filter(
+                ({ market, instrumentType }) =>
+                  market === "KRX" && instrumentType === "ETF",
+              )
+              .map(({ code }) => code.toLocaleUpperCase("en-US")),
+          );
+        })();
+        return cached;
+      };
+    })();
   const application = createDividendScheduledRuntimeApplication({
-    holdings: new FirebaseDividendHoldingQuery(input.database),
+    holdings: new FirebaseDividendHoldingQuery(input.database, resolveKrxEtfCodes),
     disclosures: new KindEtfDividendDisclosureSource(
       createSafeExternalTextHttpApplication({
         policy: {

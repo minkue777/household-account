@@ -190,9 +190,10 @@ eventIdentityVersion
 householdId
 source
 sourceDisclosureId
+instrumentCode
 ```
 
-동일 `source + sourceDisclosureId`는 공시를 여러 번 수집하거나 날짜·금액이 정정되어도 같은 Event를 가리킵니다. Provider가 정정 공시에 새 ID를 부여한 경우 `correctsSourceDisclosureId`가 기존 공시를 명시적으로 가리킬 때만 기존 eventId로 해석합니다. 연결 근거가 없는 새 ID를 종목·날짜·금액 유사성으로 합치지 않습니다. `instrument`, `recordDate`, `paymentDate`, `perShareAmount`, `sourceReferenceHash`는 identity가 아닙니다.
+동일 `source + sourceDisclosureId + instrumentCode`는 공시를 여러 번 수집하거나 날짜·금액이 정정되어도 같은 Event를 가리킵니다. KIND 문서 하나에 여러 ETF 행이 포함될 수 있으므로 `instrumentCode`는 identity에 포함합니다. Provider가 정정 공시에 새 ID를 부여한 경우 `correctsSourceDisclosureId`가 같은 종목의 기존 공시를 명시적으로 가리킬 때만 기존 eventId로 해석합니다. 연결 근거가 없는 새 ID를 종목·날짜·금액 유사성으로 합치지 않습니다. `instrumentName`, `recordDate`, `paymentDate`, `perShareAmount`, `sourceReferenceHash`는 identity가 아닙니다.
 
 | 상태 | 필수 데이터 | 허용 전이 |
 |---|---|---|
@@ -250,7 +251,7 @@ ContractFailure(code)
 
 ### 4.4 예상 배당 Policy
 
-`asOf < recordDate`인 announced Event에 현재 Holdings 공개 Query의 수량과 perShareAmount를 곱합니다. 같은 안정 공시 ID의 Event가 이미 fixed/paid이면 예상에서 제외합니다. 예상액은 Canonical Event나 Annual Projection에 저장하지 않는 Read Model입니다.
+`asOf < recordDate`인 announced Event에 현재 Holdings 공개 Query의 수량과 perShareAmount를 곱합니다. 같은 종목·안정 공시 ID의 Event가 이미 fixed/paid이면 예상에서 제외합니다. 예상액은 Canonical Event나 Annual Projection에 저장하지 않는 Read Model입니다.
 
 ## 5. Application Use Case 상세
 
@@ -282,7 +283,7 @@ Position history 후보 없음이나 Query 실패를 수량 0으로 바꾸지 �
 
 Scheduler Adapter는 `Asia/Seoul` cron `0 9-20 * * *`로 매일 09:00부터 20:00까지 매시 정각에 실행합니다. 각 시간 occurrence는 `scheduledFor`를 포함한 별도 runId를 가지며, 같은 occurrence 아래 두 phase를 각각 checkpoint로 실행합니다. 하루 12회 반복하더라도 canonical Event ID와 상태 전이 receipt로 같은 공시·상태를 중복 반영하지 않습니다. 17:30에 게시된 공시는 정상 경로에서 18:00 occurrence가 수집하고, 20:00 이후 게시분은 다음 날 09:00 occurrence가 수집합니다.
 
-1. `DISCOVERY`는 Holdings의 공개 Query에서 `market=KRX && instrumentType=ETF`가 명시된 active instrument만 결정적 page로 읽습니다. `holdingType=stock`, 코드 형태나 종목명으로 ETF를 추정하지 않습니다.
+1. `DISCOVERY`는 Holdings의 공개 Query 또는 Instrument Master에서 `market=KRX && instrumentType=ETF`가 명시된 active instrument만 결정적 page로 읽습니다. 이전 이관 데이터의 저장 타입이 `stock`이어도 Instrument Master의 명시적 ETF 분류로 정규화할 수 있지만, `holdingType=stock`, 코드 형태나 종목명으로 ETF를 추정하지 않습니다.
 2. discovery instrument별 `DividendDisclosurePort`를 transaction 밖에서 호출하고 성공 disclosure를 eventId별 upsert합니다. 결과는 성공, NoData, retryable, permanent로 집계합니다.
 3. `LIFECYCLE_SWEEP`은 SystemActor가 DividendEvent Repository의 server-only index에서 전체 tenant의 `announced|fixed` Event를 `(householdId, status, dueDate, eventId)` 순서로 직접 page 조회합니다. 가구 목록을 현재 Holdings에서 만들거나 discovery 대상·Provider 성공 목록과 join하지 않습니다. 각 Event 처리 때 envelope household scope를 다시 고정합니다.
 4. sweep은 저장된 `sourceDisclosureId`로 현재 공시를 best-effort 재확인해 성공한 정정·취소를 5.1 규칙으로 먼저 반영한 뒤 Event별 `AdvanceDividendStatus`를 호출합니다. Provider 실패·NoData는 Event를 삭제하지도 lifecycle을 막지도 않습니다. fixed는 현재 Holding이 없어도 지급일이면 paid로 진행하고, announced는 모든 source 삭제 여부와 무관하게 저장된 Event와 Position history로 복구를 시도합니다.
@@ -322,7 +323,9 @@ Asset 논리 삭제·복구·영구 purge는 Dividends Command나 Repository wri
 
 `DividendDisclosurePort`는 Dividends가 정의하고 Market Data/KIND Adapter가 구현합니다. Adapter의 HTML selector, acceptance number와 raw DTO는 Port 바깥으로 나오지 않습니다.
 
-KIND 검색 결과의 접수번호는 서로 달라도 viewer에서 같은 공시 문서 번호를 가리킬 수 있습니다. 따라서 Adapter는 검색 접수번호를 조회용 alias로만 사용하고, viewer가 반환한 KIND document number를 안정적인 `sourceDisclosureId`로 정규화합니다. 같은 document number가 여러 검색 행에서 발견되면 공시 한 건으로 수렴하며, 정정된 기준일·지급일·금액은 같은 Event의 현재 값만 교체하고 과거 revision 문서를 만들지 않습니다.
+KIND 검색 결과의 접수번호는 서로 달라도 viewer에서 같은 공시 문서 번호를 가리킬 수 있습니다. 따라서 Adapter는 검색 접수번호를 조회용 alias로만 사용하고, viewer가 반환한 KIND document number를 안정적인 `sourceDisclosureId`로 정규화합니다. 같은 document number와 같은 instrumentCode가 여러 검색 행에서 발견되면 공시 한 건으로 수렴하고, 같은 문서의 서로 다른 instrumentCode는 별도 Event로 보존합니다. 정정된 기준일·지급일·금액은 같은 Event의 현재 값만 교체하고 과거 revision 문서를 만들지 않습니다.
+
+Position history는 이미 KIND ETF Event로 검증된 `householdId + sourceAssetId + instrumentCode` 범위에서만 읽습니다. 따라서 이전 이관 과정에서 history의 상품 타입이 `STOCK`으로 저장됐더라도 해당 범위와 KRX 시장이 일치하면 수량 증거로 사용할 수 있으며, 이 단계에서 상품 타입을 다시 eligibility gate로 사용하지 않습니다.
 
 ## 7. 저장·트랜잭션·동시성
 
@@ -335,7 +338,7 @@ KIND 검색 결과의 접수번호는 서로 달라도 viewer에서 같은 공�
 | command receipt | Portfolio Context receipt | Dividends Application | key + payload hash |
 | Inbox receipt | handler/event key | Annual Projector | `(eventId, handlerName)` |
 
-DividendEvent에는 `schemaVersion`, identityVersion, `source`, `sourceDisclosureId`, 현재 공시 필드, server timestamps, aggregateVersion을 둡니다. 정정 이전 값이나 revision collection은 두지 않습니다. Event state 변경·정정·삭제와 receipt, Outbox는 같은 transaction입니다. Projection은 별도 transaction에서 Inbox claim과 projection replace/checkpoint를 함께 commit하며 `events[eventId]`의 key와 value.eventId가 다르면 commit을 거부합니다.
+DividendEvent에는 `schemaVersion`, identityVersion, `source`, `sourceDisclosureId`, `instrumentCode`, 현재 공시 필드, server timestamps, aggregateVersion을 둡니다. 정정 이전 값이나 revision collection은 두지 않습니다. Event state 변경·정정·삭제와 receipt, Outbox는 같은 transaction입니다. Projection은 별도 transaction에서 Inbox claim과 projection replace/checkpoint를 함께 commit하며 `events[eventId]`의 key와 value.eventId가 다르면 commit을 거부합니다.
 
 DividendEvent는 내부적으로 공시를 발견한 `sourceAssetIds`와 fixed 시점의 `eligibilityContributions[{assetId, quantity, evidence}]`를 결정 순서로 보존합니다. 이는 같은 종목을 여러 Asset에서 보유할 때 논리 삭제가 다른 Asset의 신규 배당 처리를 막지 않게 하고, 원천 Asset이 나중에 없어져도 당시 배당 계산 근거를 재현할 수 있게 하는 역사 정보입니다.
 

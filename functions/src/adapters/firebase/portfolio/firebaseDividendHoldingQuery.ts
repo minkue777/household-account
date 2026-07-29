@@ -28,18 +28,21 @@ function iso(value: unknown): string {
 
 function explicitKrxEtfPosition(
   snapshot: firestore.QueryDocumentSnapshot,
+  catalogEtfCodes?: ReadonlySet<string>,
 ): DividendHoldingPositionView | undefined {
   const data = snapshot.data();
+  const instrumentCode = text(data.instrumentCode);
+  const normalizedCode = instrumentCode?.toLocaleUpperCase("en-US");
   if (
     data.market !== "KRX" ||
-    data.instrumentType !== "etf" ||
+    (data.instrumentType !== "etf" &&
+      (normalizedCode === undefined || !catalogEtfCodes?.has(normalizedCode))) ||
     data.lifecycleState !== "active"
   ) {
     return undefined;
   }
   const householdId = text(data.householdId);
   const assetId = text(data.assetId);
-  const instrumentCode = text(data.instrumentCode);
   const instrumentName = text(data.instrumentName);
   const quantity = Number(data.quantity);
   const aggregateVersion = Number(data.aggregateVersion);
@@ -70,6 +73,18 @@ function explicitKrxEtfPosition(
     aggregateVersion,
     updatedAt: iso(data.updatedAt),
   };
+}
+
+function needsCatalogClassification(
+  snapshot: firestore.QueryDocumentSnapshot,
+): boolean {
+  const data = snapshot.data();
+  return (
+    data.market === "KRX" &&
+    data.lifecycleState === "active" &&
+    data.instrumentType !== "etf" &&
+    text(data.instrumentCode) !== undefined
+  );
 }
 
 function groupTargets(
@@ -109,10 +124,7 @@ function historyView(
     typeof data.instrument === "object" && data.instrument !== null
       ? (data.instrument as Record<string, unknown>)
       : undefined;
-  if (
-    instrument?.market !== "KRX" ||
-    !["ETF", "etf"].includes(String(instrument.instrumentType))
-  ) {
+  if (instrument?.market !== "KRX") {
     return undefined;
   }
   const householdId = text(data.householdId);
@@ -158,16 +170,24 @@ function historyView(
  * canonical Position과 보존된 Position history를 읽습니다.
  */
 export class FirebaseDividendHoldingQuery implements DividendHoldingQuery {
-  constructor(private readonly database: firestore.Firestore) {}
+  constructor(
+    private readonly database: firestore.Firestore,
+    private readonly resolveKrxEtfCodes?: () => Promise<ReadonlySet<string>>,
+  ) {}
 
   async listActiveKrxEtfTargets(input: {
     readonly cursor?: string;
     readonly limit: number;
   }) {
     const snapshot = await this.database.collectionGroup("positions").get();
+    const catalogEtfCodes =
+      this.resolveKrxEtfCodes !== undefined &&
+      snapshot.docs.some(needsCatalogClassification)
+        ? await this.resolveKrxEtfCodes()
+        : undefined;
     const targets = groupTargets(
       snapshot.docs.flatMap((document) => {
-        const position = explicitKrxEtfPosition(document);
+        const position = explicitKrxEtfPosition(document, catalogEtfCodes);
         return position === undefined ? [] : [position];
       }),
     );

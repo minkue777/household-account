@@ -261,7 +261,7 @@ export class KindEtfDividendDisclosureSource
       const sourceDisclosureId = number;
       const sourceReferenceHash = createHash("sha256")
         .update(
-          `${sourceDisclosureId}\u0000${detail.recordDate}\u0000${detail.paymentDate}\u0000${detail.perShareAmount}`,
+          `${sourceDisclosureId}\u0000${input.instrumentCode.toLocaleUpperCase("en-US")}\u0000${detail.recordDate}\u0000${detail.paymentDate}\u0000${detail.perShareAmount}`,
           "utf8",
         )
         .digest("hex");

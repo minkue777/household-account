@@ -55,6 +55,7 @@ export function createDividendLifecycleApplication(dependencies: {
       const current = state.events.find(
         (event) =>
           event.householdId === command.householdId &&
+          event.instrumentCode === command.disclosure.instrumentCode &&
           event.disclosureAliases.includes(targetSourceId),
       );
       if (current?.status === "paid") {
@@ -103,6 +104,7 @@ export function createDividendLifecycleApplication(dependencies: {
           ? {
               eventId: createDividendEventId(
                 command.disclosure.sourceDisclosureId,
+                command.disclosure.instrumentCode,
               ),
               householdId: command.householdId,
               sourceDisclosureId: command.disclosure.sourceDisclosureId,

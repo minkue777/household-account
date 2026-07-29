@@ -10,6 +10,7 @@ import {
 interface DividendEventView {
   eventId: string;
   sourceDisclosureId: string;
+  instrumentCode: string;
   recordDate: string;
   paymentDate: string;
   perShareAmount: number;
@@ -34,6 +35,7 @@ interface DividendChangedEvent {
 export interface DividendStateTransitionContractSubject {
   upsertDisclosure(input: {
     sourceDisclosureId: string;
+    instrumentCode: string;
     recordDate: string;
     paymentDate: string;
     perShareAmount: number;
@@ -57,7 +59,10 @@ export function createSubject(): DividendStateTransitionContractSubject {
 
   return {
     async upsertDisclosure(input) {
-      const eventId = createDividendEventId(input.sourceDisclosureId);
+      const eventId = createDividendEventId(
+        input.sourceDisclosureId,
+        input.instrumentCode,
+      );
       const outcome = upsertDividendAnnouncement(events.get(eventId), input);
       events.set(outcome.event.eventId, outcome.event);
       outbox.push(...outcome.changedEvents);
@@ -100,6 +105,7 @@ describe("DividendEvent 상태 전이와 안정 identity 계약", () => {
     const subject = createSubject();
     const event = await subject.upsertDisclosure({
       sourceDisclosureId: "kind-disclosure-1",
+      instrumentCode: "102110",
       recordDate: "2026-07-10",
       paymentDate: "2026-07-20",
       perShareAmount: 100.4,
@@ -140,6 +146,7 @@ describe("DividendEvent 상태 전이와 안정 identity 계약", () => {
     const subject = createSubject();
     const input = {
       sourceDisclosureId: "kind-disclosure-1",
+      instrumentCode: "102110",
       recordDate: "2026-07-10",
       paymentDate: "2026-07-20",
       perShareAmount: 100,
@@ -156,6 +163,7 @@ describe("DividendEvent 상태 전이와 안정 identity 계약", () => {
     const subject = createSubject();
     const event = await subject.upsertDisclosure({
       sourceDisclosureId: "kind-disclosure-1",
+      instrumentCode: "102110",
       recordDate: "2026-07-10",
       paymentDate: "2026-07-20",
       perShareAmount: 100,
@@ -177,5 +185,27 @@ describe("DividendEvent 상태 전이와 안정 identity 계약", () => {
       code: "INVALID_DIVIDEND_STATE_TRANSITION",
     });
     expect(subject.listEvents()).toEqual(before);
+  });
+
+  it("[T-DIV-006][DIV-003] 같은 KIND 문서의 서로 다른 종목은 별도 Event다", async () => {
+    const subject = createSubject();
+    const common = {
+      sourceDisclosureId: "kind-shared-document",
+      recordDate: "2026-07-30",
+      paymentDate: "2026-08-03",
+      perShareAmount: 100,
+    };
+
+    const first = await subject.upsertDisclosure({
+      ...common,
+      instrumentCode: "102110",
+    });
+    const second = await subject.upsertDisclosure({
+      ...common,
+      instrumentCode: "069500",
+    });
+
+    expect(second.eventId).not.toBe(first.eventId);
+    expect(subject.listEvents()).toHaveLength(2);
   });
 });

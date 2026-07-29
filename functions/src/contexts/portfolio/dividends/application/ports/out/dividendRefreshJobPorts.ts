@@ -18,7 +18,7 @@ export interface DividendRefreshDisclosureSource {
 
 export interface DividendRefreshJobStore {
   receipt(runId: string): DividendRefreshJobResult | undefined;
-  hasDisclosure(sourceDisclosureId: string): boolean;
+  hasDisclosure(sourceDisclosureId: string, instrumentCode: string): boolean;
   commitOccurrence(input: {
     runId: string;
     result: DividendRefreshJobResult;

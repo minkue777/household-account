@@ -60,7 +60,7 @@ export function createDividendDiscoveryApplication(dependencies: {
           retryableFailed.push({ instrumentCode: code, code: result.code });
           continue;
         }
-        const eventId = createDividendEventId(result.sourceDisclosureId);
+        const eventId = createDividendEventId(result.sourceDisclosureId, code);
         succeeded.push({
           target: { kind: "INSTRUMENT", instrumentCode: code },
           changedEventIds: [eventId],

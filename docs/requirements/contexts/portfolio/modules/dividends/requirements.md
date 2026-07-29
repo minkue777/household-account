@@ -17,7 +17,7 @@ KIND HTML 구조, Firebase Scheduler, React 차트는 모듈 내부 업무 규�
 ### 포함
 
 - 국내 ETF 분배 공시를 내부 배당 공시 계약으로 변환
-- 가구·공급자·안정적인 공급자 공시 ID 기반의 결정적 이벤트 식별
+- 가구·공급자·종목 코드·안정적인 공급자 공시 ID 기반의 결정적 이벤트 식별
 - 발표(`announced`)에서 확정(`fixed`), 지급(`paid`)으로의 상태 전이
 - 기준일 적격 보유수량과 총 배당액 계산
 - 연도별 월 합계와 이벤트 조회
@@ -67,12 +67,12 @@ KIND HTML 구조, Firebase Scheduler, React 차트는 모듈 내부 업무 규�
 |---|---|---|---|---|---|
 | DIV-001 | 현재 명세 | 연도별 확정 배당을 12개월 합계와 개별 이벤트로 조회한다. | 월 배열은 12개로 정규화한다. 기존 DividendEvent와 Annual Projection은 가구 금융 이력으로 유지하며 원천 Asset의 논리·영구 삭제로 변경하지 않는다. | [assetService](../../../../../../web/src/lib/assetService.ts), [AssetDividendChart](../../../../../../web/src/components/assets/AssetDividendChart.tsx), [DEC-017](../../../../governance/decisions.md#dec-017) | U, I, E2E |
 | DIV-002 | 현재 명세 | 발표 상태이고 기준일 전인 배당은 현재 보유수량과 주당배당으로 예상액을 표시한다. | 같은 Canonical `eventId`의 fixed·paid 이벤트가 있으면 예상에서 제외한다. 코드·지급일·주당금액의 우연한 일치만으로 서로 다른 공시를 합치지 않는다. | [AssetDividendChart](../../../../../../web/src/components/assets/AssetDividendChart.tsx), [DEC-043](../../../../governance/decisions.md#dec-043) | U, I |
-| DIV-003 | 현재 명세 | 기준일 당일 보유수량과 totalAmount를 계산해 fixed로 전환하고, 지급일 당일부터 paid로 전환한다. 연간 스냅샷에는 fixed와 paid를 모두 지급 월에 포함한다. | 이벤트 ID는 정정될 수 있는 금액·날짜가 아니라 안정적인 공급자 공시 ID로 결정해 같은 공시가 항상 같은 문서를 가리켜야 한다. | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts), [DEC-043](../../../../governance/decisions.md#dec-043) | U, I |
+| DIV-003 | 현재 명세 | 기준일 당일 보유수량과 totalAmount를 계산해 fixed로 전환하고, 지급일 당일부터 paid로 전환한다. 연간 스냅샷에는 fixed와 paid를 모두 지급 월에 포함한다. | 이벤트 ID는 정정될 수 있는 금액·날짜가 아니라 공급자·안정 공시 ID·종목 코드로 결정해 같은 종목의 같은 공시가 항상 같은 문서를 가리키고, 한 공시 문서의 여러 종목은 서로 덮어쓰지 않아야 한다. | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts), [DEC-043](../../../../governance/decisions.md#dec-043) | U, I |
 | DIV-004 | 결함 | dividend_snapshots의 월 합계와 내장 events는 서로 다른 저장 경로에서 덮어쓰거나 불일치하면 안 된다. | Projection의 `events` map key는 반드시 Canonical `eventId`여야 하며 종목 코드·지급일·주당금액을 다시 조합한 별도 key를 사용하지 않는다. Canonical Event와 Projection의 활성 Writer는 Functions 배당 Application 하나이며 Web 저장 API는 두지 않는다. | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts) | I |
 | DIV-005 | 결함 | 기준일 당일 job 실패나 지연 공시가 있어도 기준일과 가장 가까운 보유 snapshot으로 적격 수량을 자동 복구해야 한다. | 정확한 기준일 snapshot을 우선하고, 없으면 날짜 차이가 최소인 snapshot을 사용하며 동률이면 기준일 이전을 우선한다. snapshot이 전혀 없거나 조회 실패이면 0으로 바꾸지 않는다. 추정 여부는 화면에 별도 표시하지 않는다. | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts), [DEC-014](../../../../governance/decisions.md#dec-014) | U, I |
 | DIV-006 | 결함 | 이미 저장된 `announced`·`fixed` 이벤트의 상태 진행과 최신 공시 반영은 당일 신규 discovery 결과와 분리해 각 시간별 예약 occurrence에서 독립적으로 처리해야 한다. | 기존 nonterminal Event는 모든 source Asset·Holding이 삭제되어도 저장된 Event와 Position history로 `announced → fixed → paid`를 진행한다. 같은 공시의 정정은 미지급 Event의 현재 값만 덮어쓰고 이전 값은 보관하지 않으며, 기준일·금액 변경 시 적격 수량·증거·총액을 원자 재계산한다. 지급 전 명시적 취소·삭제는 Event와 Projection에서 제거하고 `NoData`·실패는 삭제 근거로 쓰지 않는다. `paid`는 이후 정정·취소에도 불변이다. [DEC-062](../../../../governance/decisions.md#dec-062) | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts), [DEC-017](../../../../governance/decisions.md#dec-017), [DEC-043](../../../../governance/decisions.md#dec-043) | U, I |
 | JOB-DIV-001 | 목표 명세 | 매일 09:00부터 20:00까지 `Asia/Seoul` 매시 정각에 최근 1년 범위의 국내 ETF 분배 공시를 수집하고 기존 nonterminal Event 상태를 전이해 가구·종목별 이벤트와 연간 Projection을 갱신한다. | cron은 `0 9-20 * * *`이며 하루 12회 실행한다. 같은 날 반복 수집·상태 전이는 결정적 Event ID와 execution으로 중복 반영하지 않는다. 20:00 이후 공시는 다음 날 09:00에 수집한다. [DEC-062](../../../../governance/decisions.md#dec-062) | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts) | U, I, 운영 계약 |
-| JOB-DIV-002 | 결함 | 공시 discovery 대상은 Instrument Master 또는 Holdings 공개 Query가 `market=KRX`, `instrumentType=ETF`로 명시 분류한 활성 보유종목으로 제한해야 한다. | `holdingType=stock`이고 코드가 영숫자라는 사실만으로 국내 ETF로 추정하지 않는다. 국내 개별주식·미국주식·코인·실물 금과 분류 미확정 종목은 KIND ETF discovery에 보내지 않는다. | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts) | U, C, I |
+| JOB-DIV-002 | 결함 | 공시 discovery 대상은 Instrument Master 또는 Holdings 공개 Query가 `market=KRX`, `instrumentType=ETF`로 명시 분류한 활성 보유종목으로 제한해야 한다. | 이전 이관 데이터가 `stock`으로 저장됐더라도 Instrument Master가 같은 코드를 ETF로 분류하면 이를 정규화해 포함한다. `holdingType=stock`이나 코드 모양만으로 추정하지 않으며 국내 개별주식·미국주식·코인·실물 금과 분류 미확정 종목은 제외한다. | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts) | U, C, I |
 
 ## 6. 모듈 결함
 
@@ -113,7 +113,7 @@ KIND HTML 구조, Firebase Scheduler, React 차트는 모듈 내부 업무 규�
 | paid 배당이 있는 원천 Asset을 논리 삭제하거나 영구 purge해도 기존 이벤트와 해당 월·연간 합계가 동일하다. | I, E2E | DIV-001, AST-006, DEC-017 |
 | 발표 상태이고 기준일 전인 이벤트는 현재 보유수량으로 예상하며 동일 확정 이벤트가 있으면 제외한다. | U | DIV-002 |
 | 기준일 당일 수량을 고정해 총액을 계산하고 지급일부터 `paid`로 전환한다. | U, I | DIV-003 |
-| 같은 안정 공시 ID는 반복 수집과 지급 전 정정 뒤에도 같은 이벤트 문서 하나만 존재하며, 정정 전 값이나 별도 revision Event는 남지 않는다. | U, I | DIV-003, DIV-006, JOB-DIV-001, DEC-043 |
+| 같은 종목의 같은 안정 공시 ID는 반복 수집과 지급 전 정정 뒤에도 같은 이벤트 문서 하나만 존재하며, 한 KIND 문서에 포함된 서로 다른 종목은 각각 별도 이벤트로 보존한다. 정정 전 값이나 별도 revision Event는 남지 않는다. | U, I | DIV-003, DIV-006, JOB-DIV-001, DEC-043 |
 | `fixed`와 `paid` 이벤트만 지급 월 합계에 포함하고 Canonical eventId를 key로 한 이벤트 합계와 스냅샷 월 합계가 일치한다. | U, I | DIV-001, DIV-003, DIV-004 |
 | 모든 배당 쓰기가 단일 Application 명령을 거치며 별도 API가 스냅샷을 직접 덮어쓰지 못한다. | I | DIV-004 |
 | 기준일 snapshot이 없으면 날짜 차이가 가장 작은 snapshot을 선택하고, 9일·11일 동률이면 9일 수량으로 복구한다. | U, I | DIV-005 |

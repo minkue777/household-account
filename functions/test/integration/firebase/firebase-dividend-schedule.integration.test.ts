@@ -36,22 +36,24 @@ async function clearEmulator(): Promise<void> {
 
 async function seedPosition(input: {
   readonly positionId?: string;
+  readonly assetId?: string;
   readonly market: "KRX" | "US" | "UNRESOLVED";
   readonly instrumentType: "etf" | "stock";
   readonly code: string;
   readonly lifecycleState?: "active" | "deleted";
 }) {
   const positionId = input.positionId ?? POSITION_ID;
+  const assetId = input.assetId ?? ASSET_ID;
   await database
     .collection("households")
     .doc(HOUSEHOLD_ID)
     .collection("assets")
-    .doc(ASSET_ID)
+    .doc(assetId)
     .collection("positions")
     .doc(positionId)
     .set({
       householdId: HOUSEHOLD_ID,
-      assetId: ASSET_ID,
+      assetId,
       positionId,
       positionKind: "stock",
       market: input.market,
@@ -59,6 +61,13 @@ async function seedPosition(input: {
       instrumentType: input.instrumentType,
       instrumentCode: input.code,
       instrumentName: input.code === "102110" ? "TIGER 200" : input.code,
+      instrument: {
+        market: input.market,
+        instrumentType: input.instrumentType.toLocaleUpperCase("en-US"),
+        code: input.code,
+        name: input.code === "102110" ? "TIGER 200" : input.code,
+        currency: input.market === "US" ? "USD" : "KRW",
+      },
       quantity: 10,
       aggregateVersion: 1,
       lifecycleState: input.lifecycleState ?? "active",
@@ -66,7 +75,11 @@ async function seedPosition(input: {
     });
 }
 
-async function seedHistory(snapshotDate: string, quantity: number) {
+async function seedHistory(
+  snapshotDate: string,
+  quantity: number,
+  instrumentType: "ETF" | "STOCK" = "ETF",
+) {
   await database
     .collection("households")
     .doc(HOUSEHOLD_ID)
@@ -80,7 +93,7 @@ async function seedHistory(snapshotDate: string, quantity: number) {
       positionId: POSITION_ID,
       instrument: {
         market: "KRX",
-        instrumentType: "etf",
+        instrumentType,
         code: "102110",
         currency: "KRW",
       },
@@ -221,8 +234,8 @@ describeWithFirestoreEmulator("Firebase dividend hourly vertical slice", () => {
 
   it("holding 삭제 뒤에도 history의 동률 이전 날짜를 골라 fixed·paid로 진행하고 canonical 전체로 projection을 교체한다", async () => {
     await seedPosition({ market: "KRX", instrumentType: "etf", code: "102110" });
-    await seedHistory("2026-07-09", 9);
-    await seedHistory("2026-07-11", 11);
+    await seedHistory("2026-07-09", 9, "STOCK");
+    await seedHistory("2026-07-11", 11, "STOCK");
     const events = new FirebaseDividendEventRuntimeRepository(database);
     const runtime = createDividendScheduledRuntimeApplication({
       holdings: new FirebaseDividendHoldingQuery(database),
@@ -405,6 +418,7 @@ describeWithFirestoreEmulator("Firebase dividend hourly vertical slice", () => {
           periodTo: "2026-07-21",
           observedAt: "2026-07-21T00:00:00.000Z",
           pageSize: 50,
+          resolveKrxEtfCodes: async () => new Set(),
         }),
       },
     });
@@ -426,5 +440,144 @@ describeWithFirestoreEmulator("Firebase dividend hourly vertical slice", () => {
       status: "COMPLETE",
       checkpoint: "dividend:complete",
     });
+  });
+
+  it("종목 카탈로그가 ETF로 분류한 기존 stock 저장값을 배당 대상으로 복구한다", async () => {
+    await seedPosition({
+      positionId: "legacy-etf-position",
+      market: "KRX",
+      instrumentType: "stock",
+      code: "102110",
+    });
+    await seedPosition({
+      positionId: "ordinary-stock-position",
+      market: "KRX",
+      instrumentType: "stock",
+      code: "005930",
+    });
+
+    const page = await new FirebaseDividendHoldingQuery(
+      database,
+      async () => new Set(["102110"]),
+    ).listActiveKrxEtfTargets({ limit: 50 });
+
+    expect(page.items).toEqual([
+      expect.objectContaining({
+        targetId: `${HOUSEHOLD_ID}:102110`,
+        instrument: expect.objectContaining({
+          instrumentType: "ETF",
+          code: "102110",
+        }),
+      }),
+    ]);
+  });
+
+  it("같은 KIND 문서에 포함된 서로 다른 ETF 배당을 별도 이벤트로 보존한다", async () => {
+    const events = new FirebaseDividendEventRuntimeRepository(database);
+    const target = (code: string, assetId: string) => ({
+      targetId: `${HOUSEHOLD_ID}:${code}`,
+      householdId: HOUSEHOLD_ID,
+      instrument: {
+        market: "KRX" as const,
+        instrumentType: "ETF" as const,
+        code,
+        name: code,
+        currency: "KRW" as const,
+      },
+      sourceAssetIds: [assetId],
+    });
+    const disclosure = (code: string, amount: number, sourceId = "shared-document") => ({
+      source: "KIND" as const,
+      sourceDisclosureId: sourceId,
+      disclosureState: "active" as const,
+      instrumentCode: code,
+      instrumentName: code,
+      recordDate: "2026-07-30",
+      paymentDate: "2026-08-03",
+      perShareAmount: amount,
+      disclosedAt: "2026-07-29",
+      sourceReferenceHash: `${sourceId}-${code}-${amount}`,
+    });
+
+    await events.upsertAnnouncement({
+      target: target("102110", "asset-a"),
+      disclosure: disclosure("102110", 255),
+      observedAt: "2026-07-29T09:00:00+09:00",
+      idempotencyKey: "same-kind-document-a",
+    });
+    await events.upsertAnnouncement({
+      target: target("069500", "asset-b"),
+      disclosure: disclosure("069500", 83),
+      observedAt: "2026-07-29T09:00:00+09:00",
+      idempotencyKey: "same-kind-document-b",
+    });
+
+    let snapshot = await database.collection("dividend_events").get();
+    expect(snapshot.size).toBe(2);
+    expect(
+      snapshot.docs.map((document) => document.data().instrumentCode).sort(),
+    ).toEqual(["069500", "102110"]);
+
+    await events.upsertAnnouncement({
+      target: target("102110", "asset-a"),
+      disclosure: disclosure("102110", 260),
+      observedAt: "2026-07-29T10:00:00+09:00",
+      idempotencyKey: "same-kind-document-a-correction",
+    });
+    snapshot = await database.collection("dividend_events").get();
+    expect(snapshot.size).toBe(2);
+    expect(
+      snapshot.docs.find(
+        (document) => document.data().instrumentCode === "102110",
+      )?.data(),
+    ).toMatchObject({ perShareAmount: 260, aggregateVersion: 2 });
+  });
+
+  it("같은 종목과 같은 사실이어도 서로 다른 KIND 문서는 별도 이벤트다", async () => {
+    const events = new FirebaseDividendEventRuntimeRepository(database);
+    const target = {
+      targetId: `${HOUSEHOLD_ID}:102110`,
+      householdId: HOUSEHOLD_ID,
+      instrument: {
+        market: "KRX" as const,
+        instrumentType: "ETF" as const,
+        code: "102110",
+        name: "TIGER 200",
+        currency: "KRW" as const,
+      },
+      sourceAssetIds: [ASSET_ID],
+    };
+    const baseDisclosure = {
+      source: "KIND" as const,
+      disclosureState: "active" as const,
+      instrumentCode: "102110",
+      instrumentName: "TIGER 200",
+      recordDate: "2026-07-30",
+      paymentDate: "2026-08-03",
+      perShareAmount: 255,
+      disclosedAt: "2026-07-29",
+    };
+    await events.upsertAnnouncement({
+      target,
+      disclosure: {
+        ...baseDisclosure,
+        sourceDisclosureId: "kind-document-a",
+        sourceReferenceHash: "kind-document-a-hash",
+      },
+      observedAt: "2026-07-29T09:00:00+09:00",
+      idempotencyKey: "different-kind-document-a",
+    });
+    await events.upsertAnnouncement({
+      target,
+      disclosure: {
+        ...baseDisclosure,
+        sourceDisclosureId: "kind-document-b",
+        sourceReferenceHash: "kind-document-b-hash",
+      },
+      observedAt: "2026-07-29T10:00:00+09:00",
+      idempotencyKey: "different-kind-document-b",
+    });
+
+    expect((await database.collection("dividend_events").get()).size).toBe(2);
   });
 });
