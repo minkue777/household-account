@@ -118,6 +118,15 @@ function refreshOutcome(
       },
     };
   }
+  if (result.value.skippedReason === "MARKET_REFRESH_IN_PROGRESS") {
+    return {
+      targetId: targetId("refresh", householdId),
+      outcome: {
+        kind: "SKIPPED",
+        receipt: "MARKET_REFRESH_IN_PROGRESS",
+      },
+    };
+  }
   const refreshed = numericResultValue(result, "refreshedCount");
   const retained = numericResultValue(result, "retainedLastSuccessCount");
   const targets = numericResultValue(result, "targetCount");

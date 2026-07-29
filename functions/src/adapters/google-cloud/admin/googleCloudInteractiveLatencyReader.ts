@@ -70,6 +70,12 @@ const LATENCY_RESET_AT_BY_OPERATION = new Map<string, number>([
     "ledger.cancel-monthly-split.v1",
     Date.parse("2026-07-28T15:10:24.296Z"),
   ],
+  // 실행 중인 동일 범위의 시세 갱신 요청을 오류가 아닌 정상 생략으로
+  // 분류하기 전 표본에는 중복 요청 거부가 실패로 섞여 있습니다.
+  [
+    "portfolio.refresh-market-values.v1",
+    Date.parse("2026-07-29T10:40:38.792Z"),
+  ],
 ]);
 
 function record(value: unknown): Record<string, unknown> | undefined {

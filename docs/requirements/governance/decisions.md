@@ -1147,7 +1147,7 @@ Google 계정이 없는 아이도 자산 명의자가 될 수 있게 하면서 �
 - 한 전체 갱신에서 처리할 종목 수에는 제품 상한을 두지 않는다. 서버는 서로 다른 Quote target을 최대 50개씩 결정적 cursor page로 나누고 마지막 page까지 자동 처리한다.
 - 외부 Provider 호출의 동시 실행은 한 refresh run당 최대 5개다. 한 요청의 연결·응답 전체 timeout은 10초다.
 - timeout·network·HTTP 408·429·5xx처럼 retryable인 실패만 지수 backoff와 jitter로 최대 2회 추가 재시도하여 총 시도 횟수를 3회로 제한한다. `NoData`, 계약 실패, 잘못된 데이터는 같은 run에서 자동 재시도하지 않는다.
-- 동일 가구·갱신 범위의 실행은 single-flight로 합친다. 이미 실행 중이면 새 Provider fan-out을 만들지 않고 같은 run 결과를 사용한다. 수동·페이지 진입 갱신은 같은 actor·가구·범위에서 30초에 한 번만 새 외부 호출을 시작하며 그 안의 요청은 현재 실행 또는 직전 결과를 재사용한다. 이 30초 window는 화면의 반복 갱신 주기가 아니라 중복 진입·클릭으로 생기는 Provider 중복 호출 방지 장치다.
+- 동일 가구·갱신 범위의 실행은 single-flight로 합친다. 이미 실행 중이면 새 Provider fan-out을 만들지 않고 후속 요청을 `MARKET_REFRESH_IN_PROGRESS` 정상 생략으로 완료하며, 오류·재시도 대상이나 운영 실패 건수로 기록하지 않는다. 선행 run이 공유 자산 Read Model을 갱신하므로 후속 화면은 같은 실시간 결과로 수렴한다. 수동·페이지 진입 갱신은 같은 actor·가구·범위에서 30초에 한 번만 새 외부 호출을 시작한다. 이 30초 window는 화면의 반복 갱신 주기가 아니라 중복 진입·클릭으로 생기는 Provider 중복 호출 방지 장치다.
 - 일부 target이 끝내 실패해도 성공 target은 반영하고 `PartialFailure`로 실패 범위·마지막 성공 시각·재시도 key를 기록한다. 실패 target은 마지막 성공 Quote를 유지하며 다음 수동 또는 예약 실행에서 다시 대상이 된다.
 - 사용자 호출 진입점은 Firebase Auth·가구 권한·App Check를 검증하고 Scheduler는 지정 service account만 허용한다. page size 50, 병렬성 5, timeout 10초, 총 3회 시도, 30초 갱신 window는 환경 설정으로 주입하되 누락·0·무한 값이면 실행을 시작하지 않는다.
 

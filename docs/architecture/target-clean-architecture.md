@@ -761,7 +761,7 @@ ProcessRecurringMonthWorkflow(planId, YYYY-MM)
 Portfolio Context 안에서 자산 계정, Position, 자동화, 배당 기능 모듈을 분리한다. Position과 화면에 표시할 Asset valuation은 strong consistency를 선택하며 `RevalueAssetWorkflow`가, 자동화 execution과 Asset 변경은 `ApplyAssetAutomationWorkflow`가 각각 유일한 Unit of Work 소유자가 된다.
 
 1. 개별 자산 화면은 `RefreshAccountPrices`, 자산 메인 페이지 진입은 현재 가구의 `RefreshHouseholdPrices`, Scheduler Adapter는 매일 23:55 `Asia/Seoul`에 전체 active 가구의 `RunDailyAssetValuation`을 호출한다. 자산 메인 페이지는 마지막 자산·시세 Read Snapshot을 먼저 렌더링하고 Firestore의 첫 비캐시 서버 snapshot을 반영한 뒤에만 `RefreshHouseholdPrices`를 background로 시작한다.
-2. 전체 갱신은 사용자 보유 종목 수를 제한하지 않고 Quote target을 결정적 cursor로 최대 50개씩 끝까지 처리한다. 같은 가구·범위의 30초 내 요청은 single-flight run을 재사용한다.
+2. 전체 갱신은 사용자 보유 종목 수를 제한하지 않고 Quote target을 결정적 cursor로 최대 50개씩 끝까지 처리한다. 같은 가구·범위의 30초 내 선행 run이 실행 중이면 후속 요청은 single-flight 경계에서 정상 생략하고 Provider·상태 조회·write를 반복하지 않으며, 오류나 운영 실패로 집계하지 않는다.
 3. Market Data Adapter가 외부 시세를 `Success`, `NoData`, `RetryableFailure`, `ContractFailure`, `InvalidData`로 정규화한다. 한 run의 Provider 동시 호출은 최대 5개, 요청 timeout은 10초, retryable 실패는 최대 2회 추가 재시도한다.
 4. 외화 Position의 원 통화 Quote와 통화쌍별 환율 관측은 독립적으로 최신 성공값을 보존한다. DEC-053·DEC-060의 `ForeignCurrencyValuationPolicy`는 Frankfurter v2의 마지막 성공 환율을 경과 기간과 두 관측 시각 차이 상한 없이 조합하며, 환율 최초 부재는 임의값 없이 NoData로 둔다. 네이버 HTML·보조 공급자 fallback은 두지 않는다.
 5. 과거 자산 통계의 type·owner 필터 catalog는 같은 기간의 Snapshot window와 시작 baseline에서 수집한다. 현재 active Asset·Profile 목록은 현재 자산 UI에만 사용하고 과거 dimension을 제거하는 필터로 사용하지 않는다.

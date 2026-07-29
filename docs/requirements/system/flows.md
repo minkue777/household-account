@@ -478,7 +478,7 @@ Firebase Scheduled Function
 ```
 
 1. 개별 자산 화면은 해당 자산을 수동 갱신하고, 자산 메인 페이지 진입은 현재 가구 전체를 갱신하며, 별도 상시 서버 없이 Firebase 예약 함수가 매일 23:55 사용자 접속과 무관한 전체 시세 갱신과 Provider canary를 실행한다.
-2. 전체 target 수는 제한하지 않고 내부 50개 page로 끝까지 처리하며, Provider 호출은 최대 5개 동시 실행·10초 timeout·retryable 총 3회로 제한한다. 같은 가구·범위의 30초 내 중복 요청은 같은 run을 재사용한다.
+2. 전체 target 수는 제한하지 않고 내부 50개 page로 끝까지 처리하며, Provider 호출은 최대 5개 동시 실행·10초 timeout·retryable 총 3회로 제한한다. 같은 가구·범위의 30초 내 선행 run이 실행 중이면 후속 요청은 새 Provider 호출 없이 정상 생략하고 실패로 집계하지 않으며, 화면은 선행 run의 Canonical write를 구독해 수렴한다.
 3. 모든 HTTP 시도는 result kind·안정 오류 code·attempt·latency를 기록하지만 원문 응답·credential·가구 ID·보유수량은 남기지 않는다.
 4. 같은 예약 실행 내부 retry는 모두 log하되 provider+operation의 `consecutiveFailedRuns`는 최종 실패 한 번만 증가시킨다.
 5. 실패는 Position의 마지막 성공 Quote나 observedAt을 변경하지 않으며, 성공 이력이 없을 때만 평균단가를 사용한다.

@@ -170,6 +170,49 @@ describe("Firebase portfolio runtime store", () => {
     expect(memory.paths("households/house-1/operationLocks/")).toHaveLength(0);
   });
 
+  it("treats an overlapping market refresh as a successful no-op without reading state or calling providers", async () => {
+    const memory = new InMemoryFirestore();
+    const store = new FirebasePortfolioRuntimeStore(
+      memory as unknown as firestore.Firestore,
+    );
+    const running = command(1, "portfolio.refresh-market-values.v1");
+    const overlapping = {
+      ...command(2, "portfolio.refresh-market-values.v1"),
+      occurredAt: "2026-07-21T01:00:10.000Z",
+    };
+    const quotes = new FixedMarketQuotes(() => ({
+      kind: "success",
+      quote: {
+        priceInWon: 1,
+        observedAt: "2026-07-21T01:00:10.000Z",
+        provider: "must-not-run",
+      },
+    }));
+
+    await expect(store.acquireRefreshLease(running, "household")).resolves.toEqual({
+      kind: "acquired",
+    });
+    await expect(
+      application(memory, quotes).refreshMarketValues({
+        metadata: overlapping,
+        assetClass: "all",
+      }),
+    ).resolves.toEqual({
+      kind: "success",
+      value: {
+        refreshedCount: 0,
+        targetCount: 0,
+        retainedLastSuccessCount: 0,
+        skippedReason: "MARKET_REFRESH_IN_PROGRESS",
+      },
+    });
+
+    expect(quotes.calls.size).toBe(0);
+    expect(memory.paths("households/house-1/operationLocks/")).toHaveLength(1);
+    await store.releaseRefreshLease(running, "household");
+    expect(memory.paths("households/house-1/operationLocks/")).toHaveLength(0);
+  });
+
   it("creates canonical and legacy assets, owner references, plans, receipts and outbox atomically", async () => {
     const memory = new InMemoryFirestore();
     memory.seed("households/house-1/assetOwnerProfiles/profile-child", {

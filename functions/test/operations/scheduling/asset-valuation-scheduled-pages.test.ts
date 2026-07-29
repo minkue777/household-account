@@ -147,4 +147,53 @@ describe("asset-valuation-daily scheduled pages", () => {
       "ASSET_VALUATION_CHECKPOINT_INVALID",
     );
   });
+
+  it("진행 중인 동일 범위 갱신은 실패가 아니라 정상 생략으로 집계합니다", async () => {
+    const pages = createAssetValuationScheduledPages(
+      {
+        database: {} as firestore.Firestore,
+        executionKey: "asset-valuation-daily:2026-07-21",
+        scheduledFor: "2026-07-21T14:55:00.000Z",
+        asOfDate: "2026-07-21",
+      },
+      {
+        households: {
+          async next(after) {
+            return after === undefined
+              ? { householdId: "house-active", active: true }
+              : undefined;
+          },
+        },
+        refresh: {
+          async refreshMarketValues() {
+            return {
+              kind: "success",
+              value: {
+                refreshedCount: 0,
+                targetCount: 0,
+                retainedLastSuccessCount: 0,
+                skippedReason: "MARKET_REFRESH_IN_PROGRESS",
+              },
+            };
+          },
+        },
+        snapshots: {
+          async project() {
+            throw new Error("refresh phase에서는 실행하지 않습니다");
+          },
+        },
+      },
+    );
+
+    await expect(pages.nextPage(undefined)).resolves.toMatchObject({
+      targets: [
+        {
+          outcome: {
+            kind: "SKIPPED",
+            receipt: "MARKET_REFRESH_IN_PROGRESS",
+          },
+        },
+      ],
+    });
+  });
 });

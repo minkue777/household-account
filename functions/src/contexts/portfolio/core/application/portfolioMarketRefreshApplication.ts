@@ -50,7 +50,14 @@ export function createPortfolioMarketRefreshCommand(dependencies: {
       if (lease.kind === "payload-mismatch") {
         return error("IDEMPOTENCY_PAYLOAD_MISMATCH");
       }
-      if (lease.kind === "busy") return error("MARKET_REFRESH_IN_PROGRESS", true);
+      if (lease.kind === "busy") {
+        return success({
+          refreshedCount: 0,
+          targetCount: 0,
+          retainedLastSuccessCount: 0,
+          skippedReason: "MARKET_REFRESH_IN_PROGRESS",
+        });
+      }
       if (lease.kind === "failed") return error("PORTFOLIO_UOW_FAILED", true);
 
       try {

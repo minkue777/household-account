@@ -142,4 +142,38 @@ describe("Google Cloud interactive latency reader", () => {
       latestAt: "2026-07-28T14:28:01.000Z",
     });
   });
+
+  it("drops pre-fix market refresh rejections from the admin failure count", () => {
+    const operation = "portfolio.refresh-market-values.v1";
+    const summary = summarizeInteractiveLatency([
+      {
+        endpoint: "executeHouseholdCommand",
+        operation,
+        elapsedMs: 120,
+        status: "rejected",
+        timestamp: "2026-07-29T10:40:38.791Z",
+      },
+      {
+        endpoint: "executeHouseholdCommand",
+        operation,
+        elapsedMs: 180,
+        status: "succeeded",
+        timestamp: "2026-07-29T10:40:38.793Z",
+      },
+    ]);
+
+    expect(summary).toEqual([
+      {
+        endpoint: "executeHouseholdCommand",
+        operation,
+        sampleCount: 1,
+        succeededCount: 1,
+        failedCount: 0,
+        averageMs: 180,
+        p95Ms: 180,
+        maxMs: 180,
+        latestAt: "2026-07-29T10:40:38.793Z",
+      },
+    ]);
+  });
 });
