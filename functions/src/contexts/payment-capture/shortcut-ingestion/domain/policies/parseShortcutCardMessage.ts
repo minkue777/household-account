@@ -35,6 +35,13 @@ const SUPPORTED_COMPANIES = new Map<string, string>([
   ["NH", "농협"],
 ]);
 
+const NH_CARD_SMS_HEADER_PATTERN =
+  /^NH(?:농협)?카드([0-9＊*xX-]*)승인(?:\s|$)/u;
+const NH_CARD_HOLDER_PATTERN = /^[가-힣]{0,4}[＊*][가-힣]{0,4}$/u;
+const NH_SUMMARY_PATTERN = /^(?:총누적|누적|총\s*사용|잔액)/u;
+const OCCURRENCE_WITH_OPTIONAL_MERCHANT_PATTERN =
+  /^(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})(?:\s+(.+))?$/u;
+
 function normalizedMaskedToken(value: string): string | undefined {
   const normalized = value
     .replace(/[＊*]/gu, "x")
@@ -51,8 +58,20 @@ function parseHeader(
       readonly kind: "success";
       readonly companyLabel: string;
       readonly maskedToken?: string;
+      readonly layout: "standard" | "nh-card-sms";
     }
   | Extract<ShortcutCardMessageParseResult, { kind: "Rejected" }> {
+  const nhCardSms = header.match(NH_CARD_SMS_HEADER_PATTERN);
+  if (nhCardSms !== null) {
+    const maskedToken = normalizedMaskedToken(nhCardSms[1]);
+    return {
+      kind: "success",
+      companyLabel: "농협",
+      layout: "nh-card-sms",
+      ...(maskedToken === undefined ? {} : { maskedToken }),
+    };
+  }
+
   const supported = header.match(
     /^(삼성|신한|국민|현대|롯데|하나|우리|BC|NH)([0-9＊*xX-]*)승인(?:\s|$)/u,
   );
@@ -65,6 +84,7 @@ function parseHeader(
     return {
       kind: "success",
       companyLabel,
+      layout: "standard",
       ...(maskedToken === undefined ? {} : { maskedToken }),
     };
   }
@@ -110,6 +130,85 @@ function parseAmount(
   return { kind: "success", amountInWon: amount };
 }
 
+interface ShortcutPaymentFields {
+  readonly amountInWon: number;
+  readonly month: number;
+  readonly day: number;
+  readonly hour: number;
+  readonly minute: number;
+  readonly merchant: string;
+}
+
+type ShortcutPaymentFieldsResult =
+  | { readonly kind: "success"; readonly fields: ShortcutPaymentFields }
+  | Extract<ShortcutCardMessageParseResult, { kind: "Rejected" }>;
+
+function parsedPaymentFields(input: {
+  readonly amountLine: string | undefined;
+  readonly occurrenceLine: string | undefined;
+  readonly separateMerchantLine?: string;
+}): ShortcutPaymentFieldsResult {
+  if (input.amountLine === undefined || input.occurrenceLine === undefined) {
+    return { kind: "Rejected", code: "UNSUPPORTED_MESSAGE" };
+  }
+
+  const amount = parseAmount(input.amountLine);
+  if (amount.kind === "Rejected") return amount;
+
+  const occurrence = input.occurrenceLine.match(
+    OCCURRENCE_WITH_OPTIONAL_MERCHANT_PATTERN,
+  );
+  if (occurrence === null) {
+    return { kind: "Rejected", code: "UNSUPPORTED_MESSAGE" };
+  }
+
+  const inlineMerchant = occurrence[5]?.trim() ?? "";
+  const separateMerchant = input.separateMerchantLine?.trim() ?? "";
+  const merchant = inlineMerchant === "" ? separateMerchant : inlineMerchant;
+  if (
+    merchant === "" ||
+    (inlineMerchant === "" && NH_SUMMARY_PATTERN.test(merchant))
+  ) {
+    return { kind: "Rejected", code: "UNSUPPORTED_MESSAGE" };
+  }
+
+  return {
+    kind: "success",
+    fields: {
+      amountInWon: amount.amountInWon,
+      month: Number(occurrence[1]),
+      day: Number(occurrence[2]),
+      hour: Number(occurrence[3]),
+      minute: Number(occurrence[4]),
+      merchant,
+    },
+  };
+}
+
+function parseStandardPaymentFields(
+  lines: readonly string[],
+): ShortcutPaymentFieldsResult {
+  return parsedPaymentFields({
+    amountLine: lines[1],
+    occurrenceLine: lines[2],
+  });
+}
+
+function parseNhCardSmsPaymentFields(
+  lines: readonly string[],
+): ShortcutPaymentFieldsResult {
+  const hasSeparateCardHolder =
+    lines[1] !== undefined && NH_CARD_HOLDER_PATTERN.test(lines[1]);
+  const amountIndex = hasSeparateCardHolder ? 2 : 1;
+  const occurrenceIndex = amountIndex + 1;
+
+  return parsedPaymentFields({
+    amountLine: lines[amountIndex],
+    occurrenceLine: lines[occurrenceIndex],
+    separateMerchantLine: lines[occurrenceIndex + 1],
+  });
+}
+
 export function parseShortcutCardMessage(input: {
   readonly command: ParseShortcutCardMessageInput;
   readonly resolveOccurrenceYear: ShortcutOccurrenceYearResolver;
@@ -128,20 +227,18 @@ export function parseShortcutCardMessage(input: {
 
   const header = parseHeader(lines[0]);
   if (header.kind === "Rejected") return header;
-  const amount = parseAmount(lines[1]);
-  if (amount.kind === "Rejected") return amount;
+  const paymentFields =
+    header.layout === "nh-card-sms"
+      ? parseNhCardSmsPaymentFields(lines)
+      : parseStandardPaymentFields(lines);
+  if (paymentFields.kind === "Rejected") return paymentFields;
+  const fields = paymentFields.fields;
 
-  const occurrence = lines[2].match(
-    /^(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})\s+(.+)$/u,
-  );
-  if (occurrence === null || occurrence[5].trim() === "") {
-    return { kind: "Rejected", code: "UNSUPPORTED_MESSAGE" };
-  }
   const resolved = input.resolveOccurrenceYear({
-    month: Number(occurrence[1]),
-    day: Number(occurrence[2]),
-    hour: Number(occurrence[3]),
-    minute: Number(occurrence[4]),
+    month: fields.month,
+    day: fields.day,
+    hour: fields.hour,
+    minute: fields.minute,
     receivedAt: input.command.receivedAt,
     zoneId: input.command.zoneId,
   });
@@ -152,10 +249,10 @@ export function parseShortcutCardMessage(input: {
     resolved.occurredLocalDateTime.split("T");
   return {
     kind: "Parsed",
-    amountInWon: amount.amountInWon,
+    amountInWon: fields.amountInWon,
     occurredLocalDate,
     occurredLocalTime,
-    merchant: occurrence[5].trim(),
+    merchant: fields.merchant,
     cardEvidence: {
       companyLabel: header.companyLabel,
       ...(header.maskedToken === undefined

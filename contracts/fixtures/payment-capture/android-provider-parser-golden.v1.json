@@ -45,6 +45,13 @@
       "expected": { "kind": "Parsed", "payment": { "type": "cancellation", "amountInWon": 15000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "11:01", "merchant": "가맹점다", "cardCompany": "농협", "maskedCardToken": "56**" } }
     },
     {
+      "caseId": "nh-card-masked-multiline-sms",
+      "requirementIds": ["T-PARSE-001", "PARSE-NH-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "com.samsung.android.messaging", "parserId": "sms-card-message-parser" },
+      "raw": { "postedAt": "2026-07-30T19:10:00+09:00", "title": "메시지", "textLines": ["[Web발신]", "NH카드4*3*승인", "김*휘", "5,760원 일시불", "07/30 19:09", "진로마트 행신점", "총누적1,431,944원"] },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 5760, "occurredLocalDate": "2026-07-30", "occurredLocalTime": "19:09", "merchant": "진로마트 행신점", "cardCompany": "농협", "maskedCardToken": "4*3*" } }
+    },
+    {
       "caseId": "naver-approval-posted-time",
       "requirementIds": ["T-PARSE-001", "PARSE-NAVER-001", "PARSE-COMMON-001"],
       "source": { "packageName": "com.naverfin.payapp", "parserId": "naver-pay-parser" },

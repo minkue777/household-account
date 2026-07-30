@@ -160,8 +160,8 @@ HTTP response는 원문 message, 전체 token, 내부 parser stack을 포함하�
 
 - 비어 있지 않은 첫 줄이 문자 전송 표지 `[Web발신]`이면 결제 본문에 포함하지 않습니다. 그 외 임의의 선두 줄은 조용히 건너뛰지 않습니다.
 - `([0-9,]+)원` 금액과 선택 일시불·할부·체크 표기를 읽고 양의 안전 정수 원 단위로 검증합니다.
-- `M/D HH:mm merchant`를 읽으며 실제 달력 날짜, `00..23` 시, `00..59` 분과 비어 있지 않은 merchant를 검증합니다.
-- 지원 헤더는 삼성·신한·국민·현대·롯데·하나·우리·BC·NH와 선택 숫자 token입니다. BC→비씨, NH→농협으로 정규화합니다.
+- 기본 형식은 `M/D HH:mm merchant`를 읽으며 실제 달력 날짜, `00..23` 시, `00..59` 분과 비어 있지 않은 merchant를 검증합니다. NH 카드 문자 형식은 `NH카드{마스킹번호}승인` 뒤의 선택적인 명의자 한 행과 `M/D HH:mm`·가맹점 분리 행을 허용하며 후행 `총누적`은 거래 금액이나 가맹점으로 사용하지 않습니다. 명의자 행은 Actor·creator 근거가 아닙니다.
+- 지원 헤더는 삼성·신한·국민·현대·롯데·하나·우리·BC·NH와 선택 숫자 token이며, NH의 `NH카드`·`NH농협카드` 문자 표기도 포함합니다. BC→비씨, NH 계열→농협으로 정규화합니다.
 - 헤더가 없을 때 삼성으로 간주하는 현재 동작은 `LegacyShortcutCardMessageParserV1`에서만 characterization 합니다. 목표 parser는 DEC-030에 따라 카드사 헤더 누락을 `CARD_COMPANY_REQUIRED`, 미지원 헤더를 `UNSUPPORTED_CARD_COMPANY`로 거부하며 등록 카드·owner·FCM 정보로 카드사를 추정하지 않습니다.
 - 연도 없는 월이 `currentMonth + 1`보다 크면 전년으로 추론하는 현재 동작은 `LegacyShortcutYearPolicy`로만 특성화합니다. 목표 parser는 DEC-029의 공통 `PaymentOccurrenceYearPolicyV1`에 월·일·시·분, `Clock`, `Asia/Seoul`을 전달하고 수신 LocalDateTime보다 미래가 아닌 가장 가까운 유효 연도를 받습니다. 같은 날짜라도 원문 시각이 수신 시각보다 뒤면 전년으로 내리며 미래 허용 오차는 없습니다.
 - 카드 token은 `＊`, `*`를 `x`로 바꾸고 숫자·x만 남긴 마지막 네 자리입니다.
@@ -323,7 +323,7 @@ contracts/
 |---|---|---|---|---|---|
 | [IOS-001](requirements.md#5-요구사항) | Contract, Application | HTTP method·필수값·parse 분기 | POST/OPTIONS/GET, 빈 message, body의 legacy household/owner alias, 비지원 message | 입력·인증·parse 오류가 구분되고 body alias는 Actor를 바꾸지 않으며 저장 없음 | `T-IOS-002`, `T-IOS-003`, `T-IOS-SEC-002` |
 | [IOS-002](requirements.md#5-요구사항) | Domain Unit | value normalizer | string·number·boolean·nested array·known/unknown object·순환 객체 | 규칙별 결정 문자열 또는 빈 값 | `T-IOS-004` |
-| [IOS-003](requirements.md#5-요구사항) | Parser Golden | message parser | 지원 라벨·금액·M/D HH:mm·merchant, 헤더 누락·미지원 | 정상 evidence snapshot; 목표 parser는 누락·미지원 거부, legacy만 삼성 fallback | `T-PARSE-004` |
+| [IOS-003](requirements.md#5-요구사항) | Parser Golden | message parser | 지원 라벨·금액·M/D HH:mm·merchant, NH카드 마스킹 헤더·별도 명의자·일시·가맹점 행·총누적, 헤더 누락·미지원 | 정상 evidence snapshot; NH 명의자는 creator로 사용하지 않음; 목표 parser는 누락·미지원 거부, legacy만 삼성 fallback | `T-PARSE-004` |
 | [IOS-004](requirements.md#5-요구사항) | Domain, Contract | year Policy | 1월 clock+12월 message, 경계 current+1/current+2 | legacy/합의 Policy의 명시 결과 | `T-PARSE-003` |
 | [IOS-005](requirements.md#5-요구사항) | Domain, Application | owner Policy 전환 | 레거시 요청 owner 유효/무효, 타 멤버 wildcard 일치 | 레거시 결과는 특성화만 하고 목표 Writer는 Actor 범위만 사용 | `T-IOS-OWNER-LEGACY-001` |
 | [IOS-006](requirements.md#5-요구사항) | Domain, Context Contract | DEC-003 fingerprint | 같은 tuple 다른 카드/source·실제 동시 입력 | 후속 거래 `Duplicate`, 거래 한 건 | `T-DUP-001` |

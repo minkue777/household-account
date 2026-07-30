@@ -111,7 +111,7 @@ Android→Functions 공개 입력 계약은 observation ID, 알림 패키지명,
 | ID | 상태 | 출처 | 현재 지원 동작 | 근거 | 테스트 |
 |---|---|---|---|---|---|
 | PARSE-KB-001 | 현재 명세 | KB국민카드 | 승인·취소, MM/DD HH:mm 형식과 금액·일시 요약 형식, 국민(번호), 가맹점 추출. 요약형 시간은 게시 시각, 없으면 00:00 | [서버 카드 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/cardProviderParsers.ts) | U |
-| PARSE-NH-001 | 현재 명세 | NH Pay | 승인·승인취소, 금액·M/D HH:mm·가맹점·농협 카드 토큰 추출 | [서버 카드 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/cardProviderParsers.ts) | U |
+| PARSE-NH-001 | 현재 명세 | NH Pay·문자 앱 | 승인·승인취소, 금액·M/D HH:mm·가맹점·농협 카드 토큰을 추출한다. 문자 앱의 `[Web발신]`, `NH카드4*3*승인`, 별도 명의자·금액·일시·가맹점 행과 `총누적` 형식을 지원한다. | [서버 카드 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/cardProviderParsers.ts) | U |
 | PARSE-NAVER-001 | 현재 명세 | 네이버페이 | 가맹점에서 금액을 `결제했습니다`·`결제했어요`·`결제되었습니다`·`결제되었어요`·`결제됐어요`라고 알리는 승인 문장을 처리한다. Android가 제목·본문 앞에 붙인 Unicode 방향 제어 문자는 의미 없는 표시 문자로 제거하고 게시 시각, 없으면 현재 시각을 거래 시각으로 사용한다. | [서버 wallet parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/walletProviderParsers.ts) | U |
 | PARSE-TOSS-001 | 현재 명세 | 토스 | 승인·취소, 체크카드·페이스페이 형식, 가승인 제외, 승인 시 max(총액-캐시백, 0), 취소는 총액 사용 | [서버 wallet parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/walletProviderParsers.ts) | U |
 | PARSE-KAKAO-001 | 현재 명세 | 카카오페이 | 결제 완료 제목과 본문의 가맹점·금액을 승인으로 처리하고 게시 시각, 없으면 현재 시각 사용 | [서버 wallet parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/walletProviderParsers.ts) | U |

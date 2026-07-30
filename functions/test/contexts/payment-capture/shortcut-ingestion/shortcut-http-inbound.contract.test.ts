@@ -183,6 +183,8 @@ const memberACard: ShortcutOwnedCardFixture = {
 };
 
 const validMessage = "국민1234승인\n10,000원\n07/19 08:50 스타벅스";
+const nhCardMaskedMultilineMessage =
+  "[Web발신]\nNH카드4*3*승인\n김*휘\n5,760원 일시불\n07/30 19:09\n진로마트 행신점\n총누적1,431,944원";
 
 function fixture(
   overrides: Partial<ShortcutHttpInboundFixture> = {},
@@ -228,6 +230,53 @@ function expectNoCanonicalChange(subject: ShortcutHttpInboundContractSubject) {
 }
 
 describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
+  it("[T-PARSE-004][IOS-003][IOS-007] NH카드 분리형 문자를 인증된 본인 카드 지출로 저장한다", async () => {
+    const subject = createSubject(
+      fixture({
+        cards: [
+          {
+            householdId: "household-a",
+            ownerMemberId: "member-a",
+            cardCompany: "농협",
+            lastFour: "4139",
+            lifecycleState: "active",
+          },
+        ],
+      }),
+    );
+
+    const response = await subject.handle(
+      validRequest({
+        headers: {
+          ...validRequest().headers,
+          idempotencyKey: "shortcut-payment-nh-masked-20260730",
+        },
+        body: {
+          contractVersion: "shortcut-payment.v1",
+          message: nhCardMaskedMultilineMessage,
+        },
+        receivedAt: "2026-07-30T19:10:00+09:00",
+      }),
+    );
+
+    expect(response).toMatchObject({
+      status: 200,
+      body: {
+        contractVersion: "shortcut-payment-response.v1",
+        transaction: { kind: "created" },
+      },
+    });
+    expect(subject.snapshot().transactions).toEqual([
+      expect.objectContaining({
+        householdId: "household-a",
+        creatorMemberId: "member-a",
+        source: "ios-shortcut",
+        amountInWon: 5_760,
+        merchant: "진로마트 행신점",
+      }),
+    ]);
+  });
+
   it("[T-IOS-SEC-002] body의 householdId·createdBy·owner는 Actor와 저장 가구를 바꾸지 않는다", async () => {
     const subject = createSubject(fixture());
 

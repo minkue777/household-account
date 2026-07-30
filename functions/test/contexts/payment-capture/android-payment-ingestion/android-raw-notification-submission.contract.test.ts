@@ -54,6 +54,51 @@ function raw(
 }
 
 describe("Android 원문 알림 서버 파싱 제출 계약", () => {
+  it("NH카드 분리형 문자를 농협 결제 observation으로 변환한다", async () => {
+    const subject = createSubject();
+
+    await subject.submit({
+      actor,
+      input: raw({
+        observationId: "observation.android.nh-masked-1",
+        notification: {
+          postedAt: "2026-07-30T19:10:00+09:00",
+          title: "메시지",
+          textLines: [
+            "[Web발신]",
+            "NH카드4*3*승인",
+            "김*휘",
+            "5,760원 일시불",
+            "07/30 19:09",
+            "진로마트 행신점",
+            "총누적1,431,944원",
+          ],
+        },
+      }),
+    });
+
+    expect(subject.state().captured).toHaveLength(1);
+    expect(subject.state().captured[0]).toMatchObject({
+      actor,
+      rootIdempotencyKey: "observation.android.nh-masked-1",
+      envelope: {
+        sourceEvidence: {
+          packageName: "com.samsung.android.messaging",
+          sourceType: "sms-card-message",
+        },
+        parser: { parserId: "sms-card-message-parser" },
+        paymentObservation: {
+          observationType: "approval",
+          amountInWon: 5_760,
+          occurredLocalDate: "2026-07-30",
+          occurredLocalTime: "19:09",
+          merchantEvidence: { rawCandidate: "진로마트 행신점" },
+          cardEvidence: { companyLabel: "농협", maskedToken: "4*3*" },
+        },
+      },
+    });
+  });
+
   it("등록 패키지로 서버가 파서를 선택하고 삼성 문자 원문을 기존 저장 계약으로 변환한다", async () => {
     const subject = createSubject();
 

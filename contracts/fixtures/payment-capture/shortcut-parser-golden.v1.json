@@ -80,6 +80,13 @@
       "expected": { "kind": "Parsed", "amountInWon": 18000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "08:50", "merchant": "가맹점자", "cardEvidence": { "companyLabel": "농협", "maskedToken": "9012" } }
     },
     {
+      "caseId": "nh-card-masked-multiline-sms",
+      "requirementIds": ["T-PARSE-004", "IOS-003"],
+      "receivedAt": "2026-07-30T19:10:00+09:00",
+      "message": "[Web발신]\nNH카드4*3*승인\n김*휘\n5,760원 일시불\n07/30 19:09\n진로마트 행신점\n총누적1,431,944원",
+      "expected": { "kind": "Parsed", "amountInWon": 5760, "occurredLocalDate": "2026-07-30", "occurredLocalTime": "19:09", "merchant": "진로마트 행신점", "cardEvidence": { "companyLabel": "농협", "maskedToken": "4x3x" } }
+    },
+    {
       "caseId": "nearest-past-year",
       "requirementIds": ["T-PARSE-004", "T-PARSE-003", "IOS-004"],
       "receivedAt": "2026-01-01T00:01:00+09:00",

@@ -35,6 +35,21 @@ class RawNotificationForwardingPolicyTest {
                 "[NH농협카드] 07월분 아파트관리비 182,000원 카드 정상(승인)납부 완료"
             )
         )
+        assertTrue(
+            RawNotificationForwardingPolicy.shouldForward(
+                RegisteredNotificationSource.SMS,
+                "문자 메시지",
+                """
+                    [Web발신]
+                    NH카드4*3*승인
+                    김*휘
+                    5,760원 일시불
+                    07/30 19:09
+                    진로마트 행신점
+                    총누적1,431,944원
+                """.trimIndent()
+            )
+        )
         assertFalse(
             RawNotificationForwardingPolicy.shouldForward(
                 RegisteredNotificationSource.SMS,
