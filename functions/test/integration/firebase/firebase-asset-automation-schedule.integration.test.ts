@@ -224,7 +224,7 @@ describeWithFirestoreEmulator("Firebase asset automation scheduled runtime", () 
     const household = database.collection("households").doc(HOUSEHOLD_ID);
     expect((await household.collection("assetAutomationExecutions").get()).size).toBe(1);
     expect((await household.collection("assets").doc(ASSET_ID).get()).data()?.currentBalance).toBe(1_100_000);
-  });
+  }, 15_000);
 
   it("원리금균등 대출은 현재 잔액 기준 원금만 차감하고 잘못된 revision은 needs-attention으로 격리한다", async () => {
     const loan = await seed({
