@@ -90,6 +90,7 @@ export default function SettingsPage() {
 
           <CardSettings
             householdId={household?.id}
+            ownerMemberId={currentMember?.id}
             ownerName={currentMember?.name}
           />
           <CategorySettings />

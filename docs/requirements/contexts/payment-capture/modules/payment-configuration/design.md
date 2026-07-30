@@ -204,7 +204,7 @@ Repository Fake와 Firestore Adapter에는 같은 Conformance Suite를 적용합
 - 카드 생성은 active claim `create`와 본문 `create`, 끝 번호 수정은 새 claim `create`·본문 version update·이전 claim delete, 퇴역은 본문 state update·활성 claim delete를 같은 transaction에서 수행합니다. 카드 본문은 일반 삭제 Command에서 물리 삭제하지 않습니다.
 - `ReorderCards`는 한 멤버 카드 수가 Firestore transaction 한도를 넘지 않는지 사전 검증합니다.
 - `ReorderMerchantRules`도 해당 match type의 전체 규칙 수가 transaction 한도를 넘지 않는지 사전 검증하고, priority claim 교체와 모든 rule version 갱신을 한 번에 commit합니다.
-- 현재 이름 기반 `owner`는 Access가 제공한 member-name→memberId reconciliation으로 backfill한 뒤 read를 전환합니다. 전환 중 Legacy Mapper는 이름을 읽을 수 있지만 신규 Writer는 `ownerMemberId`만 기록합니다.
+- Web의 `ListMemberCards`는 `households/{householdId}/registeredCards`를 읽고 `ownerMemberId`와 `active` 상태로만 현재 멤버 목록을 결정합니다. 서버 응답 전 cache-only 빈 결과와 구독 장애를 빈 카드 목록으로 확정하지 않습니다. `ownerMemberId`가 없는 전환기 문서에 한해서만 Legacy Mapper가 현재 표시 이름을 보완 근거로 사용할 수 있으며, 신규 Writer는 `ownerMemberId`를 기록합니다.
 - 레거시 규칙은 먼저 호환 read와 shadow comparison을 배포하고 V2 backfill 후 legacy write를 중단합니다. 잔존 문서 0건과 fixture 통과 전에는 Mapper를 제거하지 않습니다.
 
 이 모듈의 변경은 다른 Context 비동기 효과를 요구하지 않으므로 기본적으로 Outbox Event를 만들지 않습니다.

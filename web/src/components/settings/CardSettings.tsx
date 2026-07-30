@@ -20,6 +20,7 @@ import { useHousehold } from '@/contexts/HouseholdContext';
 
 interface CardSettingsProps {
   householdId?: string | null;
+  ownerMemberId?: string | null;
   ownerName?: string | null;
 }
 
@@ -274,7 +275,11 @@ function getCardStyle(cardLabel: string) {
   }
 }
 
-export default function CardSettings({ householdId, ownerName }: CardSettingsProps) {
+export default function CardSettings({
+  householdId,
+  ownerMemberId,
+  ownerName,
+}: CardSettingsProps) {
   const { remoteReadEpoch = 0 } = useHousehold();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedTab, setSelectedTab] = useState<CardTab>('credit');
@@ -283,6 +288,7 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
   const [cardLastFour, setCardLastFour] = useState('');
   const [cards, setCards] = useState<CardItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [detailCardLastFour, setDetailCardLastFour] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -297,26 +303,39 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
 
   useEffect(() => {
     setIsLoading(true);
+    setLoadError('');
 
-    return subscribeToRegisteredCards(householdId, ownerName, (nextCards) => {
-      setCards(
-        nextCards.map((card) => ({
-          id: card.id,
-          cardLabel: card.cardLabel,
-          cardLastFour: card.cardLastFour,
-          orderIndex: card.orderIndex,
-        }))
-      );
-      setIsLoading(false);
-    });
-  }, [householdId, ownerName, remoteReadEpoch]);
+    return subscribeToRegisteredCards(
+      {
+        householdId,
+        ownerMemberId,
+        legacyOwnerName: ownerName,
+      },
+      (nextCards) => {
+        setCards(
+          nextCards.map((card) => ({
+            id: card.id,
+            cardLabel: card.cardLabel,
+            cardLastFour: card.cardLastFour,
+            orderIndex: card.orderIndex,
+          }))
+        );
+        setLoadError('');
+        setIsLoading(false);
+      },
+      () => {
+        setLoadError('카드 목록을 불러오지 못했습니다.');
+        setIsLoading(false);
+      }
+    );
+  }, [householdId, ownerMemberId, ownerName, remoteReadEpoch]);
 
   useEffect(() => {
     cardsRef.current = cards;
   }, [cards]);
 
   useEffect(() => {
-    if (!householdId || !ownerName || cards.length === 0) {
+    if (!householdId || !ownerMemberId || !ownerName || cards.length === 0) {
       return;
     }
 
@@ -325,7 +344,7 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
     }
 
     void updateRegisteredCardOrder(cards.map((card) => card.id));
-  }, [cards, householdId, ownerName]);
+  }, [cards, householdId, ownerMemberId, ownerName]);
 
   const hidesCardNumber = useMemo(
     () => NUMBERLESS_REGISTERED_CARD_LABELS.has(selectedLabel),
@@ -706,6 +725,8 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
 
               {isLoading ? (
                 <div className="p-6 text-center text-sm text-slate-400">불러오는 중입니다.</div>
+              ) : loadError && cards.length === 0 ? (
+                <div className="p-6 text-center text-sm text-red-500">{loadError}</div>
               ) : filteredCards.length === 0 && !isAdding ? (
                 <div className="p-6 text-center text-sm text-slate-400">
                   {cards.length === 0 ? '등록된 카드가 없습니다.' : '이 분류에 등록된 카드가 없습니다.'}
@@ -730,7 +751,7 @@ export default function CardSettings({ householdId, ownerName }: CardSettingsPro
                 </div>
               )}
 
-              {!isAdding && ownerName && (
+              {!isAdding && ownerMemberId && ownerName && !isLoading && !loadError && (
                 <button
                   onClick={() => setIsAdding(true)}
                   className="flex w-full items-center justify-center gap-2 border-t border-slate-200 p-4 font-medium text-violet-600 transition-colors hover:bg-violet-50"

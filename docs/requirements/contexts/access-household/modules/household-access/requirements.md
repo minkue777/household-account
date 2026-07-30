@@ -138,7 +138,7 @@
 - `guest` 경로는 로컬 저장소만 바꾸고 실행 중인 Context를 갱신하지 않습니다.
 - 멤버 추가는 중복 이름을 허용하고 비트랜잭션 read-modify-write라 동시 변경을 잃을 수 있습니다.
 - 사용자 지정 가구 키의 유일성을 원자적으로 보장하지 않습니다.
-- 멤버 이름 변경이 여러 컬렉션의 표시 이름 외래 키를 직접 수정하면서 `registered_cards.owner`는 누락합니다.
+- 레거시 `registered_cards.owner` 표시 이름은 이름 변경 뒤 남을 수 있으므로 다른 Context가 이를 소유권 외래 키로 사용해서는 안 됩니다. Payment Configuration의 Canonical `ownerMemberId` 참조는 이름 변경과 무관하게 유지합니다.
 - 관리자 가구 삭제가 `households` 문서를 즉시 물리 삭제해 복구 기준과 접근 차단 상태를 남기지 못하면서 거래·자산·카드 등 종속 데이터를 orphan으로 만듭니다.
 - `renameHouseholdMember` callable은 인증·인가 없이 Admin SDK로 여러 컬렉션을 변경할 수 있습니다.
 

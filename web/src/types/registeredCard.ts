@@ -1,10 +1,12 @@
 export interface RegisteredCard {
   id: string;
   householdId: string;
+  ownerMemberId: string;
   owner: string;
   cardLabel: string;
   cardLastFour: string;
   orderIndex?: number;
+  lifecycle: 'active' | 'retired';
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -69,13 +71,36 @@ export function mapRegisteredCardDocument(
   id: string,
   data: Record<string, unknown>
 ): RegisteredCard {
+  const lifecycleValue =
+    typeof data.lifecycle === 'string'
+      ? data.lifecycle
+      : typeof data.lifecycleState === 'string'
+        ? data.lifecycleState
+        : undefined;
+
   return {
     id,
     householdId: typeof data.householdId === 'string' ? data.householdId : '',
+    ownerMemberId: typeof data.ownerMemberId === 'string' ? data.ownerMemberId : '',
     owner: typeof data.owner === 'string' ? data.owner : '',
-    cardLabel: normalizeRegisteredCardLabel(data.cardLabel),
-    cardLastFour: typeof data.cardLastFour === 'string' ? data.cardLastFour : '',
-    orderIndex: typeof data.orderIndex === 'number' ? data.orderIndex : undefined,
+    cardLabel: normalizeRegisteredCardLabel(data.cardCompanyCode ?? data.cardLabel),
+    cardLastFour:
+      typeof data.lastFour === 'string'
+        ? data.lastFour
+        : typeof data.cardLastFour === 'string'
+          ? data.cardLastFour
+          : '',
+    orderIndex:
+      typeof data.order === 'number'
+        ? data.order
+        : typeof data.orderIndex === 'number'
+          ? data.orderIndex
+          : undefined,
+    lifecycle:
+      lifecycleValue === 'retired'
+      || (data.deletedAt !== undefined && data.deletedAt !== null)
+        ? 'retired'
+        : 'active',
     createdAt: timestampLikeToDate(data.createdAt),
     updatedAt: timestampLikeToDate(data.updatedAt),
   };

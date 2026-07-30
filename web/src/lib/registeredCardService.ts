@@ -1,9 +1,6 @@
 import {
   collection,
-  getDocs,
   onSnapshot,
-  query,
-  where,
   db,
 } from '@/platform/read-model/firestoreReadModel';
 import {
@@ -15,7 +12,6 @@ import {
 import { paymentConfigurationCommands } from '@/features/payment-configuration/application/paymentConfigurationCommands';
 import { requireClientSessionScope } from '@/composition/clientSessionScope';
 
-const COLLECTION_NAME = 'registered_cards';
 const NUMBERLESS_SORT_WEIGHT = 1000;
 
 function requireHouseholdId(): string {
@@ -61,31 +57,51 @@ function sortRegisteredCards(cards: RegisteredCard[]): RegisteredCard[] {
   });
 }
 
+export interface RegisteredCardSubscriptionScope {
+  householdId: string | null | undefined;
+  ownerMemberId: string | null | undefined;
+  legacyOwnerName: string | null | undefined;
+}
+
 export function subscribeToRegisteredCards(
-  householdId: string | null | undefined,
-  owner: string | null | undefined,
-  callback: (cards: RegisteredCard[]) => void
+  scope: RegisteredCardSubscriptionScope,
+  callback: (cards: RegisteredCard[]) => void,
+  onError?: (error: unknown) => void
 ): () => void {
-  if (!householdId || !owner) {
+  const { householdId, ownerMemberId, legacyOwnerName } = scope;
+
+  if (!householdId || !ownerMemberId) {
     callback([]);
     return () => {};
   }
 
-  const cardsQuery = query(
-    collection(db, COLLECTION_NAME),
-    where('householdId', '==', householdId)
+  const cardsCollection = collection(
+    db,
+    'households',
+    householdId,
+    'registeredCards'
   );
 
   return onSnapshot(
-    cardsQuery,
+    cardsCollection,
+    { includeMetadataChanges: true },
     (snapshot) => {
+      if (snapshot.metadata.fromCache) {
+        return;
+      }
+
       const cards = snapshot.docs
         .map((cardDoc) => mapRegisteredCardDocument(cardDoc.id, cardDoc.data()))
-        .filter((card) => card.owner === owner);
+        .filter((card) => card.lifecycle === 'active')
+        .filter((card) =>
+          card.ownerMemberId
+            ? card.ownerMemberId === ownerMemberId
+            : Boolean(legacyOwnerName && card.owner === legacyOwnerName)
+        );
 
       callback(sortRegisteredCards(cards));
     },
-    () => callback([])
+    (error) => onError?.(error)
   );
 }
 
@@ -138,19 +154,4 @@ export async function updateRegisteredCardOrder(cardIds: string[]): Promise<void
   }
 
   await paymentConfigurationCommands.reorderCards(requireHouseholdId(), cardIds);
-}
-
-async function getRegisteredCards(
-  householdId: string,
-  owner: string
-): Promise<RegisteredCard[]> {
-  const cardsQuery = query(
-    collection(db, COLLECTION_NAME),
-    where('householdId', '==', householdId)
-  );
-
-  const snapshot = await getDocs(cardsQuery);
-  return snapshot.docs
-    .map((cardDoc) => mapRegisteredCardDocument(cardDoc.id, cardDoc.data()))
-    .filter((card) => card.owner === owner);
 }

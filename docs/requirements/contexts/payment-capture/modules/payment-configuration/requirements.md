@@ -102,8 +102,7 @@
 ## 6. 모듈 결함
 
 - 카드와 가맹점 규칙의 중복 확인이 check-then-write라 동시 요청에서 중복 문서를 만들 수 있습니다.
-- 멤버 이름 변경 시 `registered_cards.owner`가 이동하지 않아 Web 카드 목록과 Android 자동 매칭이 이전 이름에 남습니다.
-- 카드 소유권이 안정적인 멤버 ID가 아니라 표시 이름에 결합되어 있습니다.
+- 레거시 `registered_cards.owner` 표시 이름은 멤버 이름 변경 뒤 남을 수 있으므로 권한·목록·자동 매칭 판단에 사용할 수 없습니다. Web 카드 목록과 Android 자동 매칭은 Canonical `ownerMemberId`만 소유권 기준으로 사용해야 합니다.
 - Web과 Android에 카드사 목록·정규화·가맹점 매칭 로직이 중복되어 회귀 가능성이 있습니다.
 - Android와 Web의 Repository 오류가 빈 목록·불일치로 축약되면 실제 장애와 설정 없음이 구분되지 않습니다.
 - 구형 규칙의 `exactMatch`·`category` 호환 종료 조건과 데이터 마이그레이션 시점이 아직 정의되지 않았습니다.
