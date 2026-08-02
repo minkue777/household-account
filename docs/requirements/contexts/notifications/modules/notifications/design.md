@@ -217,7 +217,7 @@ Client Adapter의 `NotificationCapabilityController`는 플랫폼별로 다음�
 3. Event 종류에 따라 `TransactionCreatedNotificationPolicy` 또는 `HouseholdNotificationRequestPolicy`가 recipient memberId와 허용 endpoint platform을 계산합니다.
 4. Access에서 각 recipient의 active Membership을 확인한 뒤 active `NotificationEndpoint`를 모두 읽고 채널과 platform 조건에 맞는 endpoint 집합으로 확장합니다. Membership 조회가 실패하면 `NoTarget`으로 축약하지 않고 Inbox를 retryable 상태로 남기며 endpoint·delivery를 만들지 않습니다. 데스크톱 endpoint는 저장되지 않으므로 대상에 포함되지 않습니다.
 5. payload factory가 type별 `NotificationPayloadV1`을 생성합니다.
-6. 같은 transaction에서 Inbox 완료, intent, delivery claims를 저장합니다. 대상이 없으면 명시 `NoTarget` terminal 결과를 저장하고 성공 반환하여 Firestore trigger 재시도를 만들지 않습니다.
+6. `HouseholdNotificationRequested`는 같은 transaction에서 Inbox 완료, intent, delivery claims를 저장합니다. iPhone 단축어 알림에 활성 endpoint가 없으면 빈 Delivery Inbox를 만들지 않고 원본 Outbox에 `notificationConsumerStatus=NoTarget` terminal 결과를 저장한 뒤 성공 반환하여 Firestore trigger 재시도를 만들지 않습니다.
 7. 외부 FCM 호출은 transaction 밖의 delivery worker에서만 실행합니다.
 
 ### 5.3 Delivery
