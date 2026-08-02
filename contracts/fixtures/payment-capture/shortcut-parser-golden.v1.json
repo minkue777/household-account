@@ -31,6 +31,13 @@
       "expected": { "kind": "Parsed", "amountInWon": 12000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "08:50", "merchant": "가맹점다", "cardEvidence": { "companyLabel": "국민", "maskedToken": "3456" } }
     },
     {
+      "caseId": "kb-check-multiline-sms",
+      "requirementIds": ["T-PARSE-004", "IOS-003"],
+      "receivedAt": "2026-07-31T10:58:00+09:00",
+      "message": "[Web발신]\nKB국민체크(1164)\n김*지님\n07/31 10:57\n4,800원\n카카오T일반택시_0 사용",
+      "expected": { "kind": "Parsed", "amountInWon": 4800, "occurredLocalDate": "2026-07-31", "occurredLocalTime": "10:57", "merchant": "카카오T일반택시_0", "cardEvidence": { "companyLabel": "국민", "maskedToken": "1164" } }
+    },
+    {
       "caseId": "hyundai",
       "requirementIds": ["T-PARSE-004", "IOS-003"],
       "receivedAt": "2026-07-19T08:51:00+09:00",
@@ -43,6 +50,13 @@
       "receivedAt": "2026-07-19T08:51:00+09:00",
       "message": "롯데5678승인 김*원\n14,000원 일시불\n07/19 08:50 가맹점마",
       "expected": { "kind": "Parsed", "amountInWon": 14000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "08:50", "merchant": "가맹점마", "cardEvidence": { "companyLabel": "롯데", "maskedToken": "5678" } }
+    },
+    {
+      "caseId": "lotte-masked-merchant-first-sms",
+      "requirementIds": ["T-PARSE-004", "IOS-003"],
+      "receivedAt": "2026-07-31T20:41:00+09:00",
+      "message": "[Web발신]\n빽다방 행신햇빛마을\n500원 승인\n김*지 롯데5*5*\n일시불 07/31 20:40\n누적2,521,340원",
+      "expected": { "kind": "Parsed", "amountInWon": 500, "occurredLocalDate": "2026-07-31", "occurredLocalTime": "20:40", "merchant": "빽다방 행신햇빛마을", "cardEvidence": { "companyLabel": "롯데", "maskedToken": "5x5x" } }
     },
     {
       "caseId": "hana",

@@ -41,6 +41,13 @@ const NH_CARD_HOLDER_PATTERN = /^[가-힣]{0,4}[＊*][가-힣]{0,4}$/u;
 const NH_SUMMARY_PATTERN = /^(?:총누적|누적|총\s*사용|잔액)/u;
 const OCCURRENCE_WITH_OPTIONAL_MERCHANT_PATTERN =
   /^(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})(?:\s+(.+))?$/u;
+const LOTTE_MERCHANT_FIRST_CARD_PATTERN =
+  /롯데(?:카드)?\s*\(?([0-9＊*xX]{4})\)?/u;
+const LOTTE_MERCHANT_FIRST_AMOUNT_PATTERN = /^([^\s]+원)\s+승인$/u;
+const LOTTE_MERCHANT_FIRST_DATE_PATTERN =
+  /^(?:일시불|(?:(?:\d+개월\s*)?할부))\s*,?\s*(\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2})$/u;
+const KB_CHECK_CARD_HEADER_PATTERN =
+  /^KB국민(?:카드)?(?:신용|체크)\s*\(?([0-9＊*xX]{4})\)?$/u;
 
 function normalizedMaskedToken(value: string): string | undefined {
   const normalized = value
@@ -209,6 +216,75 @@ function parseNhCardSmsPaymentFields(
   });
 }
 
+interface RecognizedShortcutLayout {
+  readonly header: {
+    readonly kind: "success";
+    readonly companyLabel: string;
+    readonly maskedToken?: string;
+    readonly layout: "standard";
+  };
+  readonly paymentFields: ShortcutPaymentFieldsResult;
+}
+
+function parseLotteMerchantFirstLayout(
+  lines: readonly string[],
+): RecognizedShortcutLayout | undefined {
+  const card = lines
+    .map((line) => LOTTE_MERCHANT_FIRST_CARD_PATTERN.exec(line))
+    .find((match) => match !== null);
+  const amount = LOTTE_MERCHANT_FIRST_AMOUNT_PATTERN.exec(lines[1] ?? "");
+  const date = lines
+    .map((line) => LOTTE_MERCHANT_FIRST_DATE_PATTERN.exec(line))
+    .find((match) => match !== null);
+  if (card === undefined || amount === null || date === undefined) {
+    return undefined;
+  }
+  const maskedToken = normalizedMaskedToken(card[1]);
+  return {
+    header: {
+      kind: "success",
+      companyLabel: "롯데",
+      layout: "standard",
+      ...(maskedToken === undefined ? {} : { maskedToken }),
+    },
+    paymentFields: parsedPaymentFields({
+      amountLine: amount[1],
+      occurrenceLine: date[1],
+      separateMerchantLine: lines[0],
+    }),
+  };
+}
+
+function parseKbCheckCardLayout(
+  lines: readonly string[],
+): RecognizedShortcutLayout | undefined {
+  const card = KB_CHECK_CARD_HEADER_PATTERN.exec(lines[0] ?? "");
+  if (card === null) return undefined;
+  const maskedToken = normalizedMaskedToken(card[1]);
+  const merchant = lines[4]?.replace(/\s*사용\s*$/u, "").trim();
+  return {
+    header: {
+      kind: "success",
+      companyLabel: "국민",
+      layout: "standard",
+      ...(maskedToken === undefined ? {} : { maskedToken }),
+    },
+    paymentFields: parsedPaymentFields({
+      amountLine: lines[3],
+      occurrenceLine: lines[2],
+      ...(merchant === undefined ? {} : { separateMerchantLine: merchant }),
+    }),
+  };
+}
+
+function parseRecognizedLayout(
+  lines: readonly string[],
+): RecognizedShortcutLayout | undefined {
+  return (
+    parseLotteMerchantFirstLayout(lines) ?? parseKbCheckCardLayout(lines)
+  );
+}
+
 export function parseShortcutCardMessage(input: {
   readonly command: ParseShortcutCardMessageInput;
   readonly resolveOccurrenceYear: ShortcutOccurrenceYearResolver;
@@ -225,12 +301,13 @@ export function parseShortcutCardMessage(input: {
     return { kind: "Rejected", code: "UNSUPPORTED_MESSAGE" };
   }
 
-  const header = parseHeader(lines[0]);
+  const recognizedLayout = parseRecognizedLayout(lines);
+  const header = recognizedLayout?.header ?? parseHeader(lines[0]);
   if (header.kind === "Rejected") return header;
-  const paymentFields =
-    header.layout === "nh-card-sms"
+  const paymentFields = recognizedLayout?.paymentFields ??
+    (header.layout === "nh-card-sms"
       ? parseNhCardSmsPaymentFields(lines)
-      : parseStandardPaymentFields(lines);
+      : parseStandardPaymentFields(lines));
   if (paymentFields.kind === "Rejected") return paymentFields;
   const fields = paymentFields.fields;
 

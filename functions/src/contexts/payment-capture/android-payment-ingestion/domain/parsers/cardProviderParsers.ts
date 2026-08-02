@@ -13,7 +13,8 @@ import {
   type ProviderParserDefinition,
 } from "./providerParsingSupport";
 
-const KB_CARD_PATTERN = /KB국민카드(\d{4})\s*(승인|취소)/u;
+const KB_CARD_PATTERN =
+  /KB국민(?:카드)?(?:신용|체크)?\s*\(?([0-9*xX＊]{4})\)?\s*(승인|취소)?/u;
 const KB_DETAIL_AMOUNT_PATTERN = /([\d,]+)원\s*(?:일시불|할부)?/u;
 const KB_DATE_TIME_PATTERN = /(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/u;
 const KB_SUMMARY_PATTERN =
@@ -39,9 +40,10 @@ const SAMSUNG_DATE_MERCHANT_PATTERN =
   /(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})\s+(.+)/u;
 
 const LOTTE_AMOUNT_PATTERN = /([\d,]+)원\s*(승인|취소)/u;
-const LOTTE_CARD_TOKEN_PATTERN = /\(([0-9*xX]{4})\)/u;
+const LOTTE_CARD_TOKEN_PATTERN =
+  /롯데(?:카드)?\s*\(?([0-9*xX＊]{4})\)?/u;
 const LOTTE_INSTALLMENT_DATE_PATTERN =
-  /(?:일시불|할부[^,]*)\s*,\s*(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/u;
+  /(?:일시불|(?:(?:\d+개월\s*)?할부))\s*,?\s*(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/u;
 
 function parsedPayment(
   payment: ParsedPaymentGolden,
@@ -60,11 +62,20 @@ function occurrence(input: {
 }
 
 function normalizeKbMerchant(value: string): string | undefined {
-  const normalized = value.replace(/\s*(승인|취소)\s*$/u, "").trim();
+  const normalized = value.replace(/\s*(승인|취소|사용)\s*$/u, "").trim();
   if (normalized === "" || normalized.startsWith("누적")) return undefined;
   if (/^[\d,\s/:원]+$/u.test(normalized)) return undefined;
   if (/^(신용|체크)\s+\d{4}.*$/u.test(normalized)) return undefined;
   return normalized;
+}
+
+function kbPaymentType(
+  explicitAction: string | undefined,
+  body: string,
+): "approval" | "cancellation" {
+  return explicitAction === "취소" || /(?:승인|사용)\s*취소/u.test(body)
+    ? "cancellation"
+    : "approval";
 }
 
 function kbMerchantAfter(
@@ -101,7 +112,7 @@ function parseKb(context: ProviderParserContext): AndroidProviderParseResult {
     }
     const markerIndex = lines.findIndex((line) => line.includes(dateTime[0]));
     return parsedPayment({
-      type: card[2] === "취소" ? "cancellation" : "approval",
+      type: kbPaymentType(card[2], context.body),
       amountInWon: amount,
       occurredLocalDate: occurred.occurredLocalDate,
       occurredLocalTime: occurred.occurredLocalTime,
@@ -136,7 +147,7 @@ function parseKb(context: ProviderParserContext): AndroidProviderParseResult {
   });
   if (occurred.kind === "failure") return ignoredParseFailure(occurred.code);
   return parsedPayment({
-    type: card[2] === "취소" ? "cancellation" : "approval",
+    type: kbPaymentType(card[2], context.body),
     amountInWon: amount,
     occurredLocalDate: occurred.occurredLocalDate,
     occurredLocalTime: time,
@@ -409,7 +420,7 @@ function parseLotte(context: ProviderParserContext): AndroidProviderParseResult 
     occurredLocalTime: occurred.occurredLocalTime,
     merchant,
     cardCompany: "롯데",
-    maskedCardToken: card[1],
+    maskedCardToken: card[1].replace(/＊/gu, "*").replace(/X/gu, "x"),
   });
 }
 

@@ -31,6 +31,13 @@
       "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 8800, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "00:00", "merchant": "가맹점나", "cardCompany": "국민", "maskedCardToken": "9876" } }
     },
     {
+      "caseId": "kb-check-multiline-sms",
+      "requirementIds": ["T-PARSE-001", "ING-006", "ING-007", "PARSE-KB-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "com.samsung.android.messaging", "parserId": "sms-card-message-parser" },
+      "raw": { "postedAt": "2026-07-31T10:58:00+09:00", "title": "메시지", "textLines": ["[Web발신]", "KB국민체크(1164)", "김*지님", "07/31 10:57", "4,800원", "카카오T일반택시_0 사용"] },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 4800, "occurredLocalDate": "2026-07-31", "occurredLocalTime": "10:57", "merchant": "카카오T일반택시_0", "cardCompany": "국민", "maskedCardToken": "1164" } }
+    },
+    {
       "caseId": "nh-approval",
       "requirementIds": ["T-PARSE-001", "PARSE-NH-001", "PARSE-COMMON-001"],
       "source": { "packageName": "nh.smart.nhallonepay", "parserId": "nh-pay-parser" },
@@ -197,6 +204,13 @@
       "source": { "packageName": "com.lcacApp", "parserId": "lotte-card-parser" },
       "raw": { "postedAt": "2026-07-20T17:01:00+09:00", "title": "롯데카드", "textLines": ["가맹점타", "90,000원 취소", "롯데카드(2468)", "일시불, 07/19 17:00"] },
       "expected": { "kind": "Parsed", "payment": { "type": "cancellation", "amountInWon": 90000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "17:00", "merchant": "가맹점타", "cardCompany": "롯데", "maskedCardToken": "2468" } }
+    },
+    {
+      "caseId": "lotte-masked-merchant-first-sms",
+      "requirementIds": ["T-PARSE-001", "ING-006", "ING-007", "PARSE-LOTTE-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "com.samsung.android.messaging", "parserId": "sms-card-message-parser" },
+      "raw": { "postedAt": "2026-07-31T20:41:00+09:00", "title": "메시지", "textLines": ["[Web발신]", "빽다방 행신햇빛마을", "500원 승인", "김*지 롯데5*5*", "일시불 07/31 20:40", "누적2,521,340원"] },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 500, "occurredLocalDate": "2026-07-31", "occurredLocalTime": "20:40", "merchant": "빽다방 행신햇빛마을", "cardCompany": "롯데", "maskedCardToken": "5*5*" } }
     },
     {
       "caseId": "gyeonggi-payment-and-balance",

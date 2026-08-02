@@ -431,7 +431,7 @@ parser golden fixture에는 정상 승인, 지원 취소, 빈 필드, 0원·음�
 | [ING-007](requirements.md#51-수집출처-선택중복-처리) | Parser Unit | SmsParserOrderPolicy | 여러 parser와 청구가 동시에 맞는 후보, 세종 후보 | 명시 순서의 첫 성공 하나, 청구는 마지막, 세종 미포함 | `T-SMS-ORDER-001` |
 | [ING-008](requirements.md#51-수집출처-선택중복-처리) | Android Integration, Security, Clock | write-ahead journal·direct delivery·WorkManager·contract router | online terminal, 원격 호출 중 process 종료, transport failure·재시작, 71:59:59·72:00:00, partial retry, follow-up enqueue 실패, parser 무결과 terminal, legacy entry, logout·키 무효화 | 원격 호출 전 ciphertext journal, terminal은 QuickEdit FIFO durable enqueue 뒤 journal 제거·Worker 없음, 실패는 같은 observation 재시도, QuickEdit 중복 없음, terminal·만료·session 전환 삭제, legacy 유실 없음 | `T-QUEUE-001`, `T-ING-BAL-001` |
 | [ING-009](requirements.md#51-수집출처-선택중복-처리) | Application, Context Contract | 독립 branch coordinator·receipt | balance-only, 카드 거부+잔액, 거래 성공+잔액 실패, 거래 실패+잔액 성공 | 결과·stage·key 독립, 성공 branch rollback·재호출 없음 | `T-ING-BAL-001` |
-| [PARSE-KB-001](requirements.md#52-지원-입력-형식) | Parser Golden | KB parser | 승인·취소·요약형·게시시각 없음 | 요구 Parse candidate snapshot | `T-PARSE-001`, `T-PARSE-002` |
+| [PARSE-KB-001](requirements.md#52-지원-입력-형식) | Parser Golden | KB parser | 승인·취소·요약형·게시시각 없음, `KB국민체크(1164)` 문자 분리형과 `가맹점 사용` | 명의자 무시, 사용 접미사 제거, 금액·일시·국민 token 추출 | `T-PARSE-001`, `T-PARSE-002` |
 | [PARSE-NH-001](requirements.md#52-지원-입력-형식) | Parser Golden | NH parser | 승인·승인취소·M/D·농협 token, 문자 앱의 `[Web발신]`·마스킹 헤더·별도 명의자/일시/가맹점·총누적 | 금액·일시·가맹점·카드·취소 구분, 명의자 행은 creator 결정에서 제외 | `T-PARSE-001`, `T-PARSE-002` |
 | [PARSE-NAVER-001](requirements.md#52-지원-입력-형식) | Parser Golden | Naver parser | 승인 문장·게시시각·clock fallback | 승인 후보와 결정 시각 | `T-PARSE-001` |
 | [PARSE-TOSS-001](requirements.md#52-지원-입력-형식) | Parser Golden | Toss parser | 승인·취소·가승인·캐시백이 총액 초과 | 승인 max(total-cashback,0), 취소 총액, 가승인 제외 | `T-PARSE-001`, `T-PARSE-002` |
@@ -439,7 +439,7 @@ parser golden fixture에는 정상 승인, 지원 취소, 빈 필드, 0원·음�
 | [PARSE-ONNURI-001](requirements.md#52-지원-입력-형식) | Parser Golden | Onnuri parser | 상품권 결제·시각 없음 | 승인과 시각 fallback | `T-PARSE-001` |
 | [PARSE-PAYBOOC-001](requirements.md#52-지원-입력-형식) | Parser Golden | Paybooc parser | 인라인·분리·취소·0원·빈 merchant | 유효 양수 승인/취소와 카드 정규화 | `T-PARSE-001`, `T-PARSE-002` |
 | [PARSE-SAMSUNG-001](requirements.md#52-지원-입력-형식) | Parser Golden | Samsung parser | 승인·취소·MM/DD HH:mm·번호 | 요구 evidence snapshot | `T-PARSE-001`, `T-PARSE-002` |
-| [PARSE-LOTTE-001](requirements.md#52-지원-입력-형식) | Parser Golden | Lotte parser | 승인·취소·일시불·할부 | 메타데이터·가맹점·카드·취소 구분 | `T-PARSE-001`, `T-PARSE-002` |
+| [PARSE-LOTTE-001](requirements.md#52-지원-입력-형식) | Parser Golden | Lotte parser | 승인·취소·일시불·할부, 가맹점 우선 문자·`롯데5*5*`·쉼표 없는 일시불 날짜 | 메타데이터·가맹점·카드·취소 구분, 누적액 제외 | `T-PARSE-001`, `T-PARSE-002` |
 | [PARSE-GYEONGGI-001](requirements.md#52-지원-입력-형식) | Parser Golden, Application | 경기 parser | 지출+잔액, 잔액만 | local_currency 승인과 독립 balance result | `T-PARSE-001` |
 | [PARSE-DAEJEON-001](requirements.md#52-지원-입력-형식) | Parser Golden, Application | 대전 parser | 상세·fallback·잔액 | 카드·가맹점·잔액 evidence | `T-PARSE-001` |
 | [PARSE-SEJONG-001](requirements.md#52-지원-입력-형식) | Parser Golden, Application | 세종 parser | 결제 완료·보유 잔액 | 승인과 독립 balance observation | `T-PARSE-001` |
