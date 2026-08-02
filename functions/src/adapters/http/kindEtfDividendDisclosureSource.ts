@@ -151,22 +151,36 @@ function detailUrl(html: string): string | undefined {
 
 function mapHttpFailure(result: Exclude<SafeExternalTextHttpResult, { kind: "success" }>) {
   if (result.kind === "retryable-failure") {
-    return { kind: "retryable-failure" as const, code: result.code, attempts: result.attempts };
+    return {
+      kind: "retryable-failure" as const,
+      code: result.code,
+      attempts: result.attempts,
+      ...(result.httpStatus === undefined
+        ? {}
+        : { httpStatus: result.httpStatus }),
+      ...(result.stage === undefined ? {} : { stage: result.stage }),
+    };
   }
   return {
     kind: "contract-failure" as const,
     code: result.code,
     attempts: result.attempts,
+    ...(result.httpStatus === undefined
+      ? {}
+      : { httpStatus: result.httpStatus }),
+    ...(result.stage === undefined ? {} : { stage: result.stage }),
   };
 }
 
 async function get(
   http: SafeExternalTextHttpInputPort,
   url: string,
+  stage: "viewer" | "contents" | "detail",
 ): Promise<SafeExternalTextHttpResult> {
   return http.execute({
     provider: "KIND",
     operation: "dividend-disclosure",
+    stage,
     url,
     headers: { "User-Agent": KIND_USER_AGENT },
   });
@@ -197,6 +211,7 @@ export class KindEtfDividendDisclosureSource
     const search = await this.http.execute({
       provider: "KIND",
       operation: "dividend-disclosure",
+      stage: "search",
       url: KIND_SEARCH_URL,
       method: "POST",
       headers: {
@@ -224,6 +239,7 @@ export class KindEtfDividendDisclosureSource
         `${KIND_VIEWER_URL}?method=search&acptno=${encodeURIComponent(
           row.sourceDisclosureId,
         )}&docno=&viewerhost=&viewerport=`,
+        "viewer",
       );
       attempts = Math.max(attempts, viewer.attempts);
       if (viewer.kind !== "success") {
@@ -235,6 +251,7 @@ export class KindEtfDividendDisclosureSource
       const contents = await get(
         this.http,
         `${KIND_VIEWER_URL}?method=searchContents&docNo=${encodeURIComponent(number)}`,
+        "contents",
       );
       attempts = Math.max(attempts, contents.attempts);
       if (contents.kind !== "success") {
@@ -243,7 +260,7 @@ export class KindEtfDividendDisclosureSource
       }
       const url = detailUrl(contents.body);
       if (url === undefined || !url.endsWith("/68659.htm")) continue;
-      const detailResponse = await get(this.http, url);
+      const detailResponse = await get(this.http, url, "detail");
       attempts = Math.max(attempts, detailResponse.attempts);
       if (detailResponse.kind !== "success") {
         lastFailure = mapHttpFailure(detailResponse);

@@ -71,7 +71,7 @@ KIND HTML 구조, Firebase Scheduler, React 차트는 모듈 내부 업무 규�
 | DIV-004 | 결함 | dividend_snapshots의 월 합계와 내장 events는 서로 다른 저장 경로에서 덮어쓰거나 불일치하면 안 된다. | Projection의 `events` map key는 반드시 Canonical `eventId`여야 하며 종목 코드·지급일·주당금액을 다시 조합한 별도 key를 사용하지 않는다. Canonical Event와 Projection의 활성 Writer는 Functions 배당 Application 하나이며 Web 저장 API는 두지 않는다. | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts) | I |
 | DIV-005 | 결함 | 기준일 당일 job 실패나 지연 공시가 있어도 기준일과 가장 가까운 보유 snapshot으로 적격 수량을 자동 복구해야 한다. | 정확한 기준일 snapshot을 우선하고, 없으면 날짜 차이가 최소인 snapshot을 사용하며 동률이면 기준일 이전을 우선한다. snapshot이 전혀 없거나 조회 실패이면 0으로 바꾸지 않는다. 추정 여부는 화면에 별도 표시하지 않는다. | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts), [DEC-014](../../../../governance/decisions.md#dec-014) | U, I |
 | DIV-006 | 결함 | 이미 저장된 `announced`·`fixed` 이벤트의 상태 진행과 최신 공시 반영은 당일 신규 discovery 결과와 분리해 각 시간별 예약 occurrence에서 독립적으로 처리해야 한다. | 기존 nonterminal Event는 모든 source Asset·Holding이 삭제되어도 저장된 Event와 Position history로 `announced → fixed → paid`를 진행한다. 같은 공시의 정정은 미지급 Event의 현재 값만 덮어쓰고 이전 값은 보관하지 않으며, 기준일·금액 변경 시 적격 수량·증거·총액을 원자 재계산한다. 지급 전 명시적 취소·삭제는 Event와 Projection에서 제거하고 `NoData`·실패는 삭제 근거로 쓰지 않는다. `paid`는 이후 정정·취소에도 불변이다. [DEC-062](../../../../governance/decisions.md#dec-062) | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts), [DEC-017](../../../../governance/decisions.md#dec-017), [DEC-043](../../../../governance/decisions.md#dec-043) | U, I |
-| JOB-DIV-001 | 목표 명세 | 매일 09:00부터 20:00까지 `Asia/Seoul` 매시 정각에 최근 1년 범위의 국내 ETF 분배 공시를 수집하고 기존 nonterminal Event 상태를 전이해 가구·종목별 이벤트와 연간 Projection을 갱신한다. | cron은 `0 9-20 * * *`이며 하루 12회 실행한다. 같은 날 반복 수집·상태 전이는 결정적 Event ID와 execution으로 중복 반영하지 않는다. 20:00 이후 공시는 다음 날 09:00에 수집한다. [DEC-062](../../../../governance/decisions.md#dec-062) | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts) | U, I, 운영 계약 |
+| JOB-DIV-001 | 목표 명세 | 매일 09:00부터 20:00까지 `Asia/Seoul` 매시 정각에 최근 1년 범위의 국내 ETF 분배 공시를 수집하고 기존 nonterminal Event 상태를 전이해 가구·종목별 이벤트와 연간 Projection을 갱신한다. | cron은 `0 9-20 * * *`이며 하루 12회 실행한다. 같은 날 반복 수집·상태 전이는 결정적 Event ID와 execution으로 중복 반영하지 않는다. KIND 호출은 최대 2개를 병렬 처리한다. 각 종목 결과가 아니라 occurrence 전체 결과를 한 번 집계하며 일부 종목 실패는 `degraded`·경보 닫힘, 모든 종목 실패가 3회 연속일 때만 `outage`·경보 열림으로 판정한다. 20:00 이후 공시는 다음 날 09:00에 수집한다. [DEC-062](../../../../governance/decisions.md#dec-062) | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts) | U, I, 운영 계약 |
 | JOB-DIV-002 | 결함 | 공시 discovery 대상은 Instrument Master 또는 Holdings 공개 Query가 `market=KRX`, `instrumentType=ETF`로 명시 분류한 활성 보유종목으로 제한해야 한다. | 이전 이관 데이터가 `stock`으로 저장됐더라도 Instrument Master가 같은 코드를 ETF로 분류하면 이를 정규화해 포함한다. `holdingType=stock`이나 코드 모양만으로 추정하지 않으며 국내 개별주식·미국주식·코인·실물 금과 분류 미확정 종목은 제외한다. | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts) | U, C, I |
 
 ## 6. 모듈 결함
@@ -103,7 +103,7 @@ KIND HTML 구조, Firebase Scheduler, React 차트는 모듈 내부 업무 규�
 | T-DIV-005 | 목표 | 기준일 전 announced Event와 현재 수량, 같은 canonical ID의 fixed·paid, Holdings 실패 / 예정 배당 조회 / 현재 수량으로 예상하고 확정 Event만 제외하며 원천 실패를 빈 성공으로 바꾸지 않음 | DIV-002 |
 | T-DIV-006 | 목표 | 기준일·지급일 경계, 소수 수량, 같은 공시 반복, paid 역전 요청 / 배당 상태 전이 / announced→fixed→paid 순서와 원 단위 총액을 보장하고 반복은 Event 하나, 역전은 Conflict | DIV-003 |
 | T-DIV-007 | 목표·아키텍처 | 같은 Event 중복·version gap·역순·미인증 직접 overwrite·stale projection / 연간 배당 Projection 갱신 / 단일 Writer만 eventId 한 건과 월 합계를 갱신하고 gap은 rebuild를 요구하며 직접 overwrite는 거부 | DIV-004, DIV-006 |
-| T-JOB-DIV-001 | 목표 | 09:00·20:00 경계와 17:30 신규 공시, instrument별 성공·timeout, 같은 occurrence 재실행 / 배당 예약 갱신 / 서울 09~20시 매시 실행하고 17:30 공시는 18시에 수집하며 부분 실패 범위와 멱등 Projection을 보장 | JOB-DIV-001, DEC-062 |
+| T-JOB-DIV-001 | 목표 | 09:00·20:00 경계와 17:30 신규 공시, instrument별 성공·timeout, 전체 실패 3회, 같은 occurrence 재실행 / 배당 예약 갱신 / 서울 09~20시 매시 실행하고 17:30 공시는 18시에 수집하며 부분 실패는 degraded·무경보, 전체 실패 3회째만 outage, 멱등 Projection을 보장 | JOB-DIV-001, DEC-062 |
 
 ### 상세 시나리오
 
@@ -118,6 +118,7 @@ KIND HTML 구조, Firebase Scheduler, React 차트는 모듈 내부 업무 규�
 | 모든 배당 쓰기가 단일 Application 명령을 거치며 별도 API가 스냅샷을 직접 덮어쓰지 못한다. | I | DIV-004 |
 | 기준일 snapshot이 없으면 날짜 차이가 가장 작은 snapshot을 선택하고, 9일·11일 동률이면 9일 수량으로 복구한다. | U, I | DIV-005 |
 | 최근 1년 KIND fixture를 두 번 처리해도 이벤트와 스냅샷 결과가 동일하다. | C, I | JOB-DIV-001 |
+| 한 occurrence의 KIND 대상 일부만 실패하면 성공 Event는 유지하고 Health는 `degraded`이되 장애 경보를 열지 않는다. 모든 대상이 실패한 occurrence가 3회 연속일 때만 경보를 열고, 이후 정상 또는 부분 성공 occurrence에서 닫는다. | U, I, 운영 계약 | JOB-DIV-001 |
 | discovery는 명시 분류된 KRX ETF만 조회하고 분류가 없거나 다른 시장·상품인 보유종목은 추정해 포함하지 않는다. | U, C, I | JOB-DIV-002 |
 | lifecycle sweep은 discovery 결과와 별도로 `announced`·`fixed` Event를 page 처리한다. 모든 source 삭제 뒤에도 상태를 진행하고, 명시적 취소만 미지급 Event를 제거하며, 공급자 실패와 paid 뒤 정정·취소는 기존 기록을 변경하지 않는다. | U, I | DIV-006, DEC-043 |
 

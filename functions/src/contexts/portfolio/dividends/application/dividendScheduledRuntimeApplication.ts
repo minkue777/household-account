@@ -117,12 +117,21 @@ export function createDividendScheduledRuntimeApplication(
                 periodFrom: input.periodFrom,
                 periodTo: input.periodTo,
               });
+              const failed =
+                result.kind === "retryable-failure" ||
+                result.kind === "contract-failure";
               await dependencies.providerObservations.record({
                 executionKey: input.executionKey,
                 targetId: `instrument:${target.instrument.code}`,
                 resultKind: providerResultKind(result),
                 ...(result.kind === "success" ? {} : { errorCode: result.code }),
                 attempts: result.attempts,
+                ...(!failed || result.httpStatus === undefined
+                  ? {}
+                  : { httpStatus: result.httpStatus }),
+                ...(!failed || result.stage === undefined
+                  ? {}
+                  : { stage: result.stage }),
                 observedAt: input.observedAt,
               });
               return result;
@@ -151,6 +160,12 @@ export function createDividendScheduledRuntimeApplication(
           return providerOutcome(target.targetId, result, changedEventIds);
         },
       );
+      if (page.nextCursor === undefined) {
+        await dependencies.providerObservations.finalizeRun({
+          executionKey: input.executionKey,
+          observedAt: input.observedAt,
+        });
+      }
       return {
         items,
         ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),

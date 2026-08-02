@@ -284,13 +284,15 @@ Position history 후보 없음이나 Query 실패를 수량 0으로 바꾸지 �
 Scheduler Adapter는 `Asia/Seoul` cron `0 9-20 * * *`로 매일 09:00부터 20:00까지 매시 정각에 실행합니다. 각 시간 occurrence는 `scheduledFor`를 포함한 별도 runId를 가지며, 같은 occurrence 아래 두 phase를 각각 checkpoint로 실행합니다. 하루 12회 반복하더라도 canonical Event ID와 상태 전이 receipt로 같은 공시·상태를 중복 반영하지 않습니다. 17:30에 게시된 공시는 정상 경로에서 18:00 occurrence가 수집하고, 20:00 이후 게시분은 다음 날 09:00 occurrence가 수집합니다.
 
 1. `DISCOVERY`는 Holdings의 공개 Query 또는 Instrument Master에서 `market=KRX && instrumentType=ETF`가 명시된 active instrument만 결정적 page로 읽습니다. 이전 이관 데이터의 저장 타입이 `stock`이어도 Instrument Master의 명시적 ETF 분류로 정규화할 수 있지만, `holdingType=stock`, 코드 형태나 종목명으로 ETF를 추정하지 않습니다.
-2. discovery instrument별 `DividendDisclosurePort`를 transaction 밖에서 호출하고 성공 disclosure를 eventId별 upsert합니다. 결과는 성공, NoData, retryable, permanent로 집계합니다.
+2. discovery instrument별 `DividendDisclosurePort`를 transaction 밖에서 최대 2개씩 병렬 호출하고 성공 disclosure를 eventId별 upsert합니다. 결과는 성공, NoData, retryable, permanent로 집계합니다.
 3. `LIFECYCLE_SWEEP`은 SystemActor가 DividendEvent Repository의 server-only index에서 전체 tenant의 `announced|fixed` Event를 `(householdId, status, dueDate, eventId)` 순서로 직접 page 조회합니다. 가구 목록을 현재 Holdings에서 만들거나 discovery 대상·Provider 성공 목록과 join하지 않습니다. 각 Event 처리 때 envelope household scope를 다시 고정합니다.
 4. sweep은 저장된 `sourceDisclosureId`로 현재 공시를 best-effort 재확인해 성공한 정정·취소를 5.1 규칙으로 먼저 반영한 뒤 Event별 `AdvanceDividendStatus`를 호출합니다. Provider 실패·NoData는 Event를 삭제하지도 lifecycle을 막지도 않습니다. fixed는 현재 Holding이 없어도 지급일이면 paid로 진행하고, announced는 모든 source 삭제 여부와 무관하게 저장된 Event와 Position history로 복구를 시도합니다.
 5. 두 phase는 각각 nextCursor·실패 child key·완료 여부를 저장합니다. 한 phase 또는 한 대상 실패가 다른 성공 Event를 rollback하지 않으며 재실행은 미완료 page만 수렴시킵니다.
 6. 성공 Event의 Outbox가 Annual Projector와 Reporting에 전달됩니다.
 
 전체 1년·전체 가구를 한 transaction에 넣지 않습니다. 한 instrument의 공시 실패가 다른 instrument의 성공 Event를 rollback하지 않으며 `PartialFailure`가 정확한 재시도 범위를 반환합니다.
+
+각 instrument 결과는 `executionKey + targetId` receipt로 독립 저장하고 마지막 discovery page에서 같은 executionKey의 receipt를 한 번 집계합니다. 일부 target 실패는 occurrence의 `PARTIAL_FAILURE`이며 Provider Health를 `degraded`, alert를 `closed`, 연속 전체 실패 수를 0으로 둡니다. 성공·NoData target이 하나도 없는 전체 실패 occurrence만 연속 실패 수를 1 증가시키며 3회째에 `outage`와 장애 경보를 엽니다. 같은 executionKey 재실행은 finalization receipt로 no-op 처리하고, 더 최신 occurrence 뒤에 도착한 이전 occurrence는 Health를 되돌리지 않습니다.
 
 ### 5.4 Query와 예상액
 
@@ -381,6 +383,8 @@ Reporting은 공개 Event·Projection만 소비하고 `dividendAnnualViews`를 �
 
 `DividendDisclosurePort`는 `Success<disclosures>`, `NoData`, `RetryableFailure`, `ContractFailure`, 내부 `InvalidData`를 구분합니다. HTML selector 변경은 빈 성공이 아니라 ContractFailure입니다. HTTP 429·5xx·timeout은 RetryableFailure, 정상 응답에 대상 공시가 없음은 NoData입니다. 일부 공시 detail만 실패하면 성공 disclosure와 실패 reference를 모두 가진 `PartialFailure`로 보존합니다.
 
+KIND의 contract 실패 한 건은 해당 target의 실패이지 곧바로 공급자 전체 장애가 아닙니다. Provider 장애 여부는 target 완료 순서와 무관하게 occurrence 전체를 집계한 뒤 판정합니다. 따라서 일부 실패는 진단 가능한 `degraded` 상태로 남기되 이메일 장애 경보를 열지 않습니다.
+
 ## 9. 오류·보안·관측성
 
 ### 9.1 안정 오류 코드
@@ -406,7 +410,7 @@ Reporting은 공개 Event·Projection만 소비하고 `dividendAnnualViews`를 �
 
 ### 9.3 관측성
 
-log에는 commandId, runId, phase, eventId, instrument code, status transition, result code, attempt, provider와 duration만 기록합니다. 가구 키, raw HTML, 공시 원문, 사용자 이름은 기록하지 않습니다. metric은 discovery 대상/제외 사유, disclosure success/NoData/retryable/contract drift, lifecycle sweep lag·announced age·fixed overdue age, fixed/paid transition, exact/nearest eligibility recovery, projection lag·rebuild·checksum mismatch를 구분합니다.
+log에는 commandId, runId, phase, eventId, target hash, status transition, result code, attempt, provider, 실제 HTTP status, 비민감 요청 단계와 duration만 기록합니다. URL·header·가구 키·raw HTML·공시 원문·사용자 이름은 기록하지 않습니다. metric은 discovery 대상/제외 사유, disclosure success/NoData/retryable/contract drift, occurrence 전체 성공·부분 실패·전체 실패, lifecycle sweep lag·announced age·fixed overdue age, fixed/paid transition, exact/nearest eligibility recovery, projection lag·rebuild·checksum mismatch를 구분합니다.
 
 ## 10. 목표 패키지 구조
 
@@ -455,7 +459,7 @@ Domain은 Firebase, node-fetch, HTML parser와 Holdings Entity를 import하지 �
 | DIV-004 | Emulator Integration, Architecture | Annual Projector·Rules·직접 write 금지 | 같은 Event 정정·fixed→paid, 미지급 취소, 중복·역순, 무인증 save route, stale 기존 map | 단일 Writer, 정정 교체·취소 제거, 중복 합산 없음, 월/event checksum 일치, 직접 overwrite 거부 | T-DIV-007 |
 | DIV-005 | Domain Unit, Contract, Application | PositionHistoryQueryPort·RecoveryPolicy | exact, 기준일 10일과 9일·11일 동률, 8일·11일, 한쪽만 존재, page 경계, NoData/retryable | exact 우선, 동률은 9일, 최소 날짜 차이 선택, 후보 없음·실패는 0 아님, 선택 뒤 수량 고정 | T-DIV-001 |
 | DIV-006 | Domain Unit, Application, Emulator | nonterminal Event sweep·정정·취소·상태 전이 | 모든 source 삭제, Provider NoData, 미지급 정정·취소, paid 뒤 정정·취소, page 재실행 | source 삭제와 무관하게 진행, 미지급 최신 값만 유지, 명시적 취소만 제거, NoData·paid는 무변경, revision 없음 | T-DIV-003 |
-| JOB-DIV-001 | Contract, Application, Emulator | KIND Adapter·Refresh job·Projection | 최근 1년 fixture, 동일 run 2회, instrument A 성공/B timeout, 09:00·20:00 경계, 17:30 신규 공시와 18:00 occurrence | 결정 Event 수렴, A만 commit, B retry 범위, 18:00 수집, Projection Event 처리 후 동일 | T-JOB-DIV-001 |
+| JOB-DIV-001 | Contract, Application, Emulator | KIND Adapter·Refresh job·Provider Health·Projection | 최근 1년 fixture, 동일 run 2회, instrument A 성공/B timeout, 전체 실패 3회, HTTP 403·503와 요청 단계, 09:00·20:00 경계, 17:30 신규 공시와 18:00 occurrence | 결정 Event 수렴, A만 commit, 부분 실패 degraded·무경보, 전체 실패 3회째 outage, 실제 status·단계 보존, 18:00 수집, Projection Event 처리 후 동일 | T-JOB-DIV-001 |
 | JOB-DIV-002 | Domain Unit, Contract, Architecture | discovery eligibility·Holdings public DTO | KRX ETF, KRX stock, US stock, crypto, 분류 없음, 영숫자 코드 | 명시 KRX ETF만 Provider 호출, Dividends의 형태 추정 없음 | T-DIV-002 |
 
 추가 공통 suite는 새 테스트 ID 없이 다음을 검증합니다.

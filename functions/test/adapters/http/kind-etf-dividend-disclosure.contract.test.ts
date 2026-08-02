@@ -8,6 +8,40 @@ import {
 import type { SafeExternalTextHttpInputPort } from "../../../src/platform/external-operations/application/ports/in/safeExternalTextHttpInputPort";
 
 describe("KIND ETF 배당 공시 adapter 계약", () => {
+  it("검색 단계의 실제 HTTP 상태를 공급자 실패 결과에 보존한다", async () => {
+    const requests: Array<{ stage?: string; url: string }> = [];
+    const http: SafeExternalTextHttpInputPort = {
+      async execute(request) {
+        requests.push({ stage: request.stage, url: request.url });
+        return {
+          kind: "contract-failure",
+          code: "HTTP_STATUS_NOT_SUPPORTED",
+          attempts: 1,
+          httpStatus: 403,
+          stage: request.stage,
+        };
+      },
+    };
+
+    await expect(
+      new KindEtfDividendDisclosureSource(http).discover({
+        instrumentCode: "102110",
+        instrumentName: "TIGER 200",
+        periodFrom: "2025-08-01",
+        periodTo: "2026-08-01",
+      }),
+    ).resolves.toEqual({
+      kind: "contract-failure",
+      code: "HTTP_STATUS_NOT_SUPPORTED",
+      attempts: 1,
+      httpStatus: 403,
+      stage: "search",
+    });
+    expect(requests).toEqual([
+      expect.objectContaining({ stage: "search" }),
+    ]);
+  });
+
   it("provider 공시번호를 안정 ID로 추출하고 다른 ETF와 다른 보고서는 제외한다", () => {
     const html = `
       <table>

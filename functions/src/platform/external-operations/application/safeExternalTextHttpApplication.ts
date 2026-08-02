@@ -19,8 +19,21 @@ export interface SafeExternalTextHttpPolicy {
 function securityFailure(
   code: "HTTPS_REQUIRED" | "PROVIDER_HOST_NOT_ALLOWED" | "PORT_NOT_ALLOWED",
   attempts: number,
+  stage: string | undefined,
 ): SafeExternalTextHttpResult {
-  return { kind: "security-policy-violation", code, attempts };
+  return {
+    kind: "security-policy-violation",
+    code,
+    attempts,
+    ...(stage === undefined ? {} : { stage }),
+  };
+}
+
+function diagnostics(stage: string | undefined, httpStatus?: number) {
+  return {
+    ...(stage === undefined ? {} : { stage }),
+    ...(httpStatus === undefined ? {} : { httpStatus }),
+  };
 }
 
 function retryableStatus(status: number):
@@ -42,10 +55,12 @@ export function createSafeExternalTextHttpApplication(dependencies: {
       ({ provider }) => provider === request.provider,
     );
     if (providerPolicy === undefined) {
-      return securityFailure("PROVIDER_HOST_NOT_ALLOWED", 0);
+      return securityFailure("PROVIDER_HOST_NOT_ALLOWED", 0, request.stage);
     }
     const initial = validateProviderUrl(providerPolicy, request.url);
-    if (initial.kind === "blocked") return securityFailure(initial.code, 0);
+    if (initial.kind === "blocked") {
+      return securityFailure(initial.code, 0, request.stage);
+    }
 
     for (let attempt = 1; attempt <= dependencies.policy.maxAttempts; attempt += 1) {
       let currentUrl = initial.canonicalUrl;
@@ -68,6 +83,7 @@ export function createSafeExternalTextHttpApplication(dependencies: {
             kind: "retryable-failure",
             code: result.kind === "timeout" ? "TIMEOUT" : "NETWORK_FAILURE",
             attempts: attempt,
+            ...diagnostics(request.stage),
           };
         }
         if (result.kind === "response-too-large") {
@@ -75,6 +91,7 @@ export function createSafeExternalTextHttpApplication(dependencies: {
             kind: "contract-failure",
             code: "RESPONSE_TOO_LARGE",
             attempts: attempt,
+            ...diagnostics(request.stage),
           };
         }
         if (result.status >= 300 && result.status < 400) {
@@ -83,6 +100,7 @@ export function createSafeExternalTextHttpApplication(dependencies: {
               kind: "security-policy-violation",
               code: "REDIRECT_NOT_ALLOWED",
               attempts: attempt,
+              ...diagnostics(request.stage, result.status),
             };
           }
           const resolved = new URL(result.location, currentUrl).href;
@@ -100,6 +118,7 @@ export function createSafeExternalTextHttpApplication(dependencies: {
                   ? validated.code
                   : "REDIRECT_NOT_ALLOWED",
               attempts: attempt,
+              ...diagnostics(request.stage, result.status),
             };
           }
           currentUrl = validated.canonicalUrl;
@@ -112,6 +131,7 @@ export function createSafeExternalTextHttpApplication(dependencies: {
             finalUrl: currentUrl,
             responseBytes: result.bodyBytes,
             attempts: attempt,
+            ...diagnostics(request.stage),
           };
         }
         const retryCode = retryableStatus(result.status);
@@ -121,16 +141,23 @@ export function createSafeExternalTextHttpApplication(dependencies: {
             kind: "retryable-failure",
             code: retryCode,
             attempts: attempt,
+            ...diagnostics(request.stage, result.status),
           };
         }
         return {
           kind: "contract-failure",
           code: "HTTP_STATUS_NOT_SUPPORTED",
           attempts: attempt,
+          ...diagnostics(request.stage, result.status),
         };
       }
     }
-    return { kind: "retryable-failure", code: "NETWORK_FAILURE", attempts: 0 };
+    return {
+      kind: "retryable-failure",
+      code: "NETWORK_FAILURE",
+      attempts: 0,
+      ...diagnostics(request.stage),
+    };
   }
 
   return { execute };

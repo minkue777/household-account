@@ -139,10 +139,13 @@ interface ProviderHealthStateV1 {
   lastSuccessAt?: string;
   consecutiveFailedRuns: number;
   failureStartedAt?: string;
-  lastResultKind: ProviderAttemptObservationV1['resultKind'];
+  lastResultKind: ProviderAttemptObservationV1['resultKind'] | 'PARTIAL_FAILURE';
   lastErrorCode?: string;
   alertState: 'closed' | 'open';
   recoveredAt?: string;
+  lastRunTargetCount?: number;
+  lastRunSucceededTargets?: number;
+  lastRunFailedTargets?: number;
   version: number;
 }
 ```
@@ -156,6 +159,8 @@ interface ProviderHealthStateV1 {
 HTTP retry 한 번마다 Attempt log는 남기지만 `consecutiveFailedRuns`는 같은 executionKey의 최종 실패에서 한 번만 증가합니다. 따라서 한 예약 실행의 내부 재시도 3회가 “예약 갱신 3회 연속 실패”로 잘못 계산되지 않습니다.
 
 `NO_DATA`는 `expectedData`로 의미를 구분합니다. `expectedData=true`의 예상 밖 NoData는 실패 run으로 계산하지만, `expectedData=false`의 정상 NoData는 Provider가 유효하게 응답한 성공 run으로 취급해 `consecutiveFailedRuns=0`으로 초기화하고 열린 장애가 있으면 같은 identity로 resolve합니다. 두 경우 모두 기존 Quote를 0이나 빈 값으로 덮어쓰지 않습니다.
+
+다중 target인 KIND 배당 discovery는 target별 receipt를 먼저 저장하고 마지막 page에서 executionKey 전체를 한 번 finalize합니다. 일부 target 실패는 `PARTIAL_FAILURE`·`degraded`로 관측하지만 장애 alert를 열지 않고 연속 전체 실패 수를 0으로 둡니다. 성공·NoData target이 하나도 없는 occurrence만 연속 전체 실패로 계산하며 3회째 `outage`를 엽니다. 이 정책은 시세 Provider의 contract·invalid 첫 run 경보 정책과 구분합니다.
 
 장애 open과 복구 resolve는 같은 alert identity를 사용합니다. 이메일 수신 주소는 코드·Firestore Health 문서·일반 환경 변수의 평문 값이 아니라 배포 환경이 관리하는 Cloud Monitoring notification channel resource reference로 주입합니다. Application은 channel 주소를 알지 않고 `ProviderAlertPort.open/resolve`만 호출합니다.
 
@@ -203,7 +208,7 @@ interface SafeHttpRequestV1 {
 }
 ```
 
-provider Adapter는 provider별 배포 config의 HTTPS host·port allowlist 안에서만 URL을 구성합니다. client는 최초 URL과 모든 redirect `Location`을 같은 정책으로 다시 검증하고 HTTP downgrade, userinfo, 비허용 host/port와 redirect hop 초과를 거부합니다. timeout은 연결·전체 응답 소비를 포함하며 `Content-Length`가 없더라도 읽은 byte가 상한을 넘는 즉시 stream을 중단합니다. 사용자 입력의 전체 URL을 그대로 전달하지 않으며 제한 위반은 `SECURITY_POLICY_VIOLATION` 또는 `CONTRACT_FAILURE`, timeout은 `RETRYABLE_FAILURE`로 분류합니다.
+provider Adapter는 provider별 배포 config의 HTTPS host·port allowlist 안에서만 URL을 구성합니다. client는 최초 URL과 모든 redirect `Location`을 같은 정책으로 다시 검증하고 HTTP downgrade, userinfo, 비허용 host/port와 redirect hop 초과를 거부합니다. timeout은 연결·전체 응답 소비를 포함하며 `Content-Length`가 없더라도 읽은 byte가 상한을 넘는 즉시 stream을 중단합니다. 사용자 입력의 전체 URL을 그대로 전달하지 않으며 제한 위반은 `SECURITY_POLICY_VIOLATION` 또는 `CONTRACT_FAILURE`, timeout은 `RETRYABLE_FAILURE`로 분류합니다. 실패 결과에는 실제 HTTP status와 Adapter가 지정한 비민감 단계만 진단 필드로 전달하고 URL·header·body는 전달하지 않습니다.
 
 ## 4. 플랫폼 모델과 불변식
 
@@ -263,7 +268,8 @@ provider Adapter는 provider별 배포 config의 HTTPS host·port allowlist 안�
 4. 성공과 `expectedData=false`인 정상 NoData는 `healthy`, 연속 실패 0, alert closed로 전환하고 이전 장애가 있었다면 복구 log를 남깁니다.
 5. contract·invalid·인증·설정 실패는 첫 run에 `outage`와 경보를 엽니다.
 6. 추적 Position의 예상 밖 NoData·retryable은 1~2회 `degraded`, 3회째 `outage`와 경보를 엽니다.
-7. Cloud Monitoring Adapter는 log-based metric 또는 custom metric에 경보 상태를 반영하고 배포 config의 notification channel resource로 장애 open·복구 resolve 이메일을 전달합니다. Alert 전달 실패는 Health 저장을 rollback하지 않고 별도 운영 실패로 재시도합니다.
+7. KIND 배당 discovery는 예외적으로 모든 target receipt를 occurrence 단위로 finalize합니다. 일부 실패는 `degraded`·alert closed이고, 전체 실패 occurrence가 3회 연속일 때만 `outage`를 엽니다.
+8. Cloud Monitoring Adapter는 log-based metric 또는 custom metric에 경보 상태를 반영하고 배포 config의 notification channel resource로 장애 open·복구 resolve 이메일을 전달합니다. Alert 전달 실패는 Health 저장을 rollback하지 않고 별도 운영 실패로 재시도합니다.
 
 이 흐름은 별도 상시 서버를 요구하지 않습니다. 기존 Firebase Scheduled Function이 canary와 실제 갱신을 실행하며 Next.js Route의 배포 위치별 console log는 보조 진단으로만 사용합니다.
 
@@ -315,6 +321,8 @@ operations/runtime/scheduledOccurrences/{occurrenceKey}
 operations/runtime/deadLetters/{deliveryId}
 operations/runtime/providerHealth/{provider_operation}
 operations/runtime/providerHealthReceipts/{executionKeyHash}
+operations/runtime/providerObservationReceipts/{execution_target_hash}
+operations/runtime/providerHealthRunReceipts/{provider_operation_execution_hash}
 ```
 
 - `runId`는 `jobName+executionKey` uniqueness claim과 연결한다.
@@ -324,7 +332,7 @@ operations/runtime/providerHealthReceipts/{executionKeyHash}
 - occurrence key는 `jobName+scheduledFor`의 versioned hash이며 Missing/Overdue와 recovery alert receipt를 한 상태 기계로 수렴시킨다.
 - 같은 target key와 다른 payload hash는 `Conflict`로 기록한다.
 - [DEC-046](../../../governance/decisions.md#dec-046)에 따라 완료 JobRun·target/execution receipt는 `terminalAt + 30일`의 `expiresAt`을 갖습니다. Firebase Adapter는 이를 Firestore `Timestamp`로 저장합니다. pending·partial·running run과 unresolved dead letter에는 TTL을 두지 않고 해결·폐기 승인으로 terminal이 된 뒤 30일을 계산합니다.
-- ProviderHealth는 최신 상태 한 건을 upsert하고 가격·가구·보유수량·응답 원문을 저장하지 않습니다. 문서 수·용량, unresolved age, TTL backlog를 metric으로 남깁니다.
+- ProviderHealth는 최신 상태 한 건을 upsert하고 가격·가구·보유수량·응답 원문을 저장하지 않습니다. KIND target receipt는 execution·target hash, 결과 종류, 안정 오류 code, 실제 HTTP status와 비민감 단계만 저장하며 finalization receipt가 같은 execution의 중복 집계를 막습니다. 문서 수·용량, unresolved age, TTL backlog를 metric으로 남깁니다.
 
 ## 8. Event·Projection·외부 연동
 

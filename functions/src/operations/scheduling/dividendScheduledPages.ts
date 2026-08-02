@@ -151,7 +151,7 @@ export function createDividendScheduledPages(input: {
         const result = await application.runDiscoveryPage({
           ...(current.cursor === undefined ? {} : { cursor: current.cursor }),
           limit: input.pageSize,
-          concurrency: 5,
+          concurrency: 2,
           periodFrom: input.periodFrom,
           periodTo: input.periodTo,
           executionKey: input.executionKey,

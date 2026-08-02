@@ -28,11 +28,15 @@ export type KindDividendDiscoveryResult =
       readonly kind: "retryable-failure";
       readonly code: string;
       readonly attempts: number;
+      readonly httpStatus?: number;
+      readonly stage?: string;
     }
   | {
       readonly kind: "contract-failure";
       readonly code: string;
       readonly attempts: number;
+      readonly httpStatus?: number;
+      readonly stage?: string;
     };
 
 export interface KindDividendDisclosurePort {
@@ -134,6 +138,13 @@ export interface DividendProviderObservationPort {
       | "CONTRACT_FAILURE";
     readonly errorCode?: string;
     readonly attempts: number;
+    readonly httpStatus?: number;
+    readonly stage?: string;
+    readonly observedAt: string;
+  }): Promise<void>;
+
+  finalizeRun(input: {
+    readonly executionKey: string;
     readonly observedAt: string;
   }): Promise<void>;
 }

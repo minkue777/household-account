@@ -158,7 +158,7 @@ cron은 `0 9-20 * * *`이며 하루 12회 실행합니다. 각 시간 occurrence
 
 1. Holdings 공개 Query가 `market=KRX && instrumentType=ETF`로 명시한 active instrument만 결정적 page로 읽습니다.
 2. 코드 모양, 종목명 또는 `holdingType=stock`으로 ETF를 추정하지 않습니다.
-3. KIND Adapter가 최근 1년 공시를 조회하고 성공·NoData·retryable·contract failure를 구분합니다.
+3. KIND Adapter가 최근 1년 공시를 최대 2개씩 병렬 조회하고 성공·NoData·retryable·contract failure를 구분합니다. 실패 결과에는 실제 HTTP status와 `search|viewer|contents|detail` 단계만 남기고 URL·header·원문은 기록하지 않습니다.
 4. 검색 접수번호가 달라도 KIND viewer의 document number가 같으면 동일 공시로 정규화하고, `source + sourceDisclosureId(document number)` 기반 canonical `eventId`로 upsert합니다. 정정 가능한 기준일·지급일·금액을 ID에 넣지 않습니다.
 5. 같은 미지급 공시의 정정은 동일 Event의 현재 값만 교체하며 이전 값을 별도 보관하지 않습니다.
 
@@ -172,6 +172,8 @@ cron은 `0 9-20 * * *`이며 하루 12회 실행합니다. 각 시간 occurrence
 6. Event 변경은 Outbox로 전달하고 `AnnualDividendProjector`만 연간 Projection을 갱신합니다.
 
 두 phase 중 하나 또는 일부 instrument/Event가 실패해도 다른 성공을 rollback하지 않습니다. 실패 child와 cursor만 재시도하며 전체 1년·전체 가구를 한 transaction으로 묶지 않습니다.
+
+Provider Health는 instrument 응답마다 바꾸지 않습니다. target receipt를 occurrence 전체로 finalize해 일부 실패는 `degraded`·무경보로 남기고, 모든 KIND target이 실패한 occurrence가 3회 연속일 때만 `outage`와 이메일 경보를 엽니다. 다음 정상 또는 부분 성공 occurrence는 같은 alert를 해제합니다.
 
 ### 4.5 `asset-valuation-daily` — 매일 23:55
 
@@ -213,10 +215,10 @@ Provider retry를 모두 소진한 target은 마지막 성공값 유지로 termi
 | job | Provider | 실패 시 업무값 | 경보 기준 |
 |---|---|---|---|
 | 종목 카탈로그 | 국내·미국 catalog source | 기존 `latest` 유지 | contract·invalid·설정 실패 즉시, retryable은 운영 Health 정책 |
-| 배당 | KIND | 기존 Event 유지, lifecycle은 가능한 범위에서 계속 | schema 변경 즉시, retryable/예상 밖 NoData 연속 실패 관측 |
+| 배당 | KIND | 기존 Event 유지, lifecycle은 가능한 범위에서 계속 | 일부 target 실패는 degraded·무경보, 모든 target 실패 occurrence 3회 연속 시 경보 |
 | 자산 평가 | Naver, Nasdaq, Frankfurter v2, Upbit, 펀드 NAV, 실물 금 | 각 Provider의 마지막 성공 관측 유지 | contract·invalid·인증·설정 첫 실패, 추적 대상 retryable·예상 밖 NoData는 예약 run 3회 연속 실패 |
 
-각 HTTP 시도는 `provider`, `operation`, execution key hash, target hash, result kind, stable error code, attempt, latency, observedAt만 구조화 로그로 남깁니다. API key, 응답 원문, 가구 ID 원문, 사용자 이름, 보유수량은 기록하지 않습니다.
+각 HTTP 시도는 `provider`, `operation`, execution key hash, target hash, result kind, stable error code, attempt, latency, 실제 HTTP status, 비민감 요청 단계, observedAt만 구조화 로그로 남깁니다. API key, URL·header, 응답 원문, 가구 ID 원문, 사용자 이름, 보유수량은 기록하지 않습니다.
 
 Provider별 최종 실행 결과는 `operations/runtime/providerHealth/{provider_operation}`에 저장합니다. 한 job 내부 HTTP 재시도 3회는 연속 실패 run 3회가 아니라 같은 execution key의 실패 1회로 계산합니다. 다음 성공과 `expectedData=false`인 정상 NoData는 연속 실패 수를 0으로 만들고 같은 Cloud Monitoring alert를 resolve합니다. `expectedData=true`의 예상 밖 NoData만 실패 run으로 계산합니다. 이메일 주소는 코드나 Firestore가 아니라 배포된 notification channel resource에만 둡니다.
 

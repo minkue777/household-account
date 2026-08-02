@@ -132,6 +132,7 @@ function disclosureSource(perShareAmount = 120): KindDividendDisclosurePort {
 
 const noOpObservations: DividendProviderObservationPort = {
   async record() {},
+  async finalizeRun() {},
 };
 
 describeWithFirestoreEmulator("Firebase dividend hourly vertical slice", () => {
@@ -352,23 +353,59 @@ describeWithFirestoreEmulator("Firebase dividend hourly vertical slice", () => {
   it("Provider health는 마지막 성공을 보존하고 구조화된 실패·복구 상태를 기록한다", async () => {
     const observations = new FirebaseDividendProviderObservation(database);
     await observations.record({
-      executionKey: "run-success",
-      targetId: `${HOUSEHOLD_ID}:102110`,
+      executionKey: "run-partial",
+      targetId: "instrument:102110",
       resultKind: "SUCCESS",
       attempts: 1,
       observedAt: "2026-07-21T09:00:00+09:00",
     });
+    await observations.record({
+      executionKey: "run-partial",
+      targetId: "instrument:069500",
+      resultKind: "CONTRACT_FAILURE",
+      errorCode: "HTTP_STATUS_NOT_SUPPORTED",
+      attempts: 1,
+      httpStatus: 403,
+      stage: "search",
+      observedAt: "2026-07-21T09:00:00+09:00",
+    });
+    await observations.finalizeRun({
+      executionKey: "run-partial",
+      observedAt: "2026-07-21T09:00:00+09:00",
+    });
+    let health = (await database
+      .collection("operations")
+      .doc("runtime")
+      .collection("providerHealth")
+      .get()).docs[0].data();
+    expect(health).toMatchObject({
+      provider: "KIND",
+      operation: "dividend-disclosure",
+      status: "degraded",
+      lastResultKind: "PARTIAL_FAILURE",
+      lastRunTargetCount: 2,
+      lastRunSucceededTargets: 1,
+      lastRunFailedTargets: 1,
+      consecutiveFailedRuns: 0,
+      alertState: "closed",
+    });
+
     for (let index = 1; index <= 3; index += 1) {
+      const observedAt = `2026-07-21T${String(9 + index).padStart(2, "0")}:00:00+09:00`;
       await observations.record({
         executionKey: `run-failure-${index}`,
-        targetId: `${HOUSEHOLD_ID}:102110`,
+        targetId: "instrument:102110",
         resultKind: "RETRYABLE_FAILURE",
         errorCode: "TIMEOUT",
         attempts: 3,
-        observedAt: `2026-07-21T${String(9 + index).padStart(2, "0")}:00:00+09:00`,
+        observedAt,
+      });
+      await observations.finalizeRun({
+        executionKey: `run-failure-${index}`,
+        observedAt,
       });
     }
-    let health = (await database
+    health = (await database
       .collection("operations")
       .doc("runtime")
       .collection("providerHealth")
@@ -384,10 +421,14 @@ describeWithFirestoreEmulator("Firebase dividend hourly vertical slice", () => {
     });
     await observations.record({
       executionKey: "run-recovered",
-      targetId: `${HOUSEHOLD_ID}:102110`,
+      targetId: "instrument:102110",
       resultKind: "NO_DATA",
       errorCode: "NO_DISCLOSURES",
       attempts: 1,
+      observedAt: "2026-07-21T13:00:00+09:00",
+    });
+    await observations.finalizeRun({
+      executionKey: "run-recovered",
       observedAt: "2026-07-21T13:00:00+09:00",
     });
     health = (await database
