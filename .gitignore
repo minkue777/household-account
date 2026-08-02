@@ -67,3 +67,6 @@ web/scripts/*.mjs
 # Misc
 *.log
 *.tsbuildinfo
+
+.vercel
+.env*.local

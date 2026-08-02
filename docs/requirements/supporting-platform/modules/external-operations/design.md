@@ -7,7 +7,7 @@
 
 ## 1. 설계 목적과 추적성
 
-이 설계는 `JOB-ERR-001~002`, `EXT-001~003`, `MARKET-004`의 운영 경계를 공통 Infrastructure로 구현하는 기준이다. 외부 공급자 장애를 빈 값·0·고정 추정 성공으로 숨기지 않고, 예약 occurrence의 미시작·정체와 다중 대상 job의 완료·실패·재시도 범위, 공급자별 연속 장애·복구를 영속 결과와 구조화 관측으로 남긴다. 공개 HTTP ingress와 outbound HTTP의 유한 보안 경계도 공통 Adapter로 강제한다. 이 모듈은 시세·배당·자산 업무 규칙을 소유하지 않는다.
+이 설계는 `JOB-ERR-001~002`, `EXT-001~004`, `MARKET-004`의 운영 경계를 공통 Infrastructure로 구현하는 기준이다. 외부 공급자 장애를 빈 값·0·고정 추정 성공으로 숨기지 않고, 예약 occurrence의 미시작·정체와 다중 대상 job의 완료·실패·재시도 범위, 공급자별 연속 장애·복구를 영속 결과와 구조화 관측으로 남긴다. 공개 HTTP ingress와 outbound HTTP의 유한 보안 경계도 공통 Adapter로 강제한다. 이 모듈은 시세·배당·자산 업무 규칙을 소유하지 않는다.
 
 ## 2. 모듈 경계와 책임
 
@@ -114,6 +114,16 @@ interface ScheduledOccurrenceStateV1 {
 정기 거래 job은 [DEC-009](../../../governance/decisions.md#dec-009)에 따라 `Asia/Seoul` timezone의 cron `0 0 * * *`로 `ProcessDueRecurringPlans(asOfDate, householdZoneId, cursor, limit)`을 호출합니다. Operations는 cron·SystemActor·checkpoint·재시도만 소유하고, due month와 복구 범위는 Recurring의 반환 결과를 그대로 사용합니다.
 
 각 배포 환경은 jobName, timezone/cron, grace, deadline, heartbeat interval을 가진 유한 `ScheduledJobDefinition`을 등록합니다. monitor는 실행 job과 분리된 occurrence에서 예상 시각별 run 존재 여부와 heartbeat를 검사합니다. 같은 Scheduler 장애 도메인 때문에 monitor까지 실행되지 않는 경우는 Cloud Monitoring의 별도 absence metric/alarm이 보완합니다.
+
+#### 3.3.1 Cloud Billing 비용 집계
+
+`billing-cost-refresh`는 `Asia/Seoul` 기준 cron `0 */6 * * *`로 `RefreshBillingCostSummary`를 호출하는 tracked job입니다. execution key는 예약 시각의 시간 단위로 고정하고 target은 현재 프로젝트 비용 요약 한 건뿐입니다.
+
+`BillingCostSourceReaderPort`는 환경 변수로 지정한 Google Cloud Standard Billing Export table을 Application Default Credentials로 읽습니다. 조회 범위는 이번 달 전체와 오늘을 제외한 최근 7개 완료일을 함께 포함하고, `project.id`로 현재 프로젝트만 제한합니다. 비용은 `cost + credits`의 순액으로 일자·서비스별 집계하며 원본의 최신 `export_time`을 `dataUpdatedAt`으로 전달합니다.
+
+Application은 이번 달 누적 순비용과 서비스별 순비용을 만들고, `이번 달 누적액 + 최근 7개 완료일 일평균 × 남은 온전한 날짜 수`로 월말 추정액을 계산합니다. 완료일 자료가 없으면 해당 일자는 0원이며 추정액은 누적액보다 작아지지 않습니다. 이 값은 Export 지연과 추정식을 포함한 참고값이고 확정 청구서가 아닙니다.
+
+성공 결과는 `BillingCostSummaryStorePort`를 통해 고정 경로의 단일 최신 Snapshot을 교체합니다. Admin Query는 BigQuery를 직접 호출하지 않고 이 Snapshot만 읽습니다. 조회·계산·저장 중 실패하면 tracked job을 실패로 끝내고 기존 성공 Snapshot을 덮어쓰지 않습니다.
 
 ### 3.4 Provider Health
 
@@ -307,6 +317,8 @@ provider Adapter는 provider별 배포 config의 HTTPS host·port allowlist 안�
 | `IngressAuthenticatorPort`, `AppAttestationPort` | Firebase Auth/service account/scoped credential, App Check | valid/expired/revoked/wrong-app Fake |
 | `IngressRateLimitPort`, `IngressQuotaPort` | server-side credential/IP window와 비용 quota | boundary/parallel Fake |
 | `DeadLetterStore` | Firestore server-only Adapter | in-memory Fake |
+| `BillingCostSourceReaderPort` | BigQuery Standard Billing Export Adapter | 일별·서비스별 순비용과 export 지연 fixture |
+| `BillingCostSummaryStorePort` | Firestore 단일 최신 Snapshot Adapter | 이전 성공본 보존을 포함한 in-memory Fake |
 
 Provider별 parser/mapper는 해당 Context가 정의한 Port contract suite를 통과해야 한다. 범용 `ExternalDataService`를 만들지 않는다.
 
@@ -323,6 +335,7 @@ operations/runtime/providerHealth/{provider_operation}
 operations/runtime/providerHealthReceipts/{executionKeyHash}
 operations/runtime/providerObservationReceipts/{execution_target_hash}
 operations/runtime/providerHealthRunReceipts/{provider_operation_execution_hash}
+operations/runtime/billingCostSnapshots/current
 ```
 
 - `runId`는 `jobName+executionKey` uniqueness claim과 연결한다.
@@ -333,6 +346,7 @@ operations/runtime/providerHealthRunReceipts/{provider_operation_execution_hash}
 - 같은 target key와 다른 payload hash는 `Conflict`로 기록한다.
 - [DEC-046](../../../governance/decisions.md#dec-046)에 따라 완료 JobRun·target/execution receipt는 `terminalAt + 30일`의 `expiresAt`을 갖습니다. Firebase Adapter는 이를 Firestore `Timestamp`로 저장합니다. pending·partial·running run과 unresolved dead letter에는 TTL을 두지 않고 해결·폐기 승인으로 terminal이 된 뒤 30일을 계산합니다.
 - ProviderHealth는 최신 상태 한 건을 upsert하고 가격·가구·보유수량·응답 원문을 저장하지 않습니다. KIND target receipt는 execution·target hash, 결과 종류, 안정 오류 code, 실제 HTTP status와 비민감 단계만 저장하며 finalization receipt가 같은 execution의 중복 집계를 막습니다. 문서 수·용량, unresolved age, TTL backlog를 metric으로 남깁니다.
+- Billing 비용 요약은 성공한 집계만 `current` 문서에 원자 교체합니다. 실패 run은 JobRun에 남기되 비용 Snapshot을 삭제하거나 0원으로 덮어쓰지 않습니다.
 
 ## 8. Event·Projection·외부 연동
 
@@ -343,6 +357,7 @@ operations/runtime/providerHealthRunReceipts/{provider_operation_execution_hash}
 - Outbox Dispatcher의 retry/dead letter infrastructure와 공통 관측을 공유할 수 있지만, Inbox 업무 handler를 실행하지 않는다.
 - Naver, Nasdaq, Frankfurter v2, Upbit, KIND, 금 시세 Adapter는 정상·NoData·timeout·형식 변경 fixture를 별도로 가진다. Frankfurter 환율 Adapter에는 base·quote·rateDate·rate 검증과 네이버·보조 Provider 호출 0회 fixture를 추가한다.
 - 시세 Provider canary는 기존 Firebase Scheduled Function에서 실행하며 Health 상태를 만들기 위해 Next.js Route에 의존하지 않는다.
+- Cloud Billing Adapter만 Standard Billing Export를 조회하며 Admin Dashboard는 Firestore의 최신 성공 비용 Snapshot만 읽는다.
 
 ## 9. 오류·보안·관측성
 
@@ -355,6 +370,7 @@ operations/runtime/providerHealthRunReceipts/{provider_operation_execution_hash}
 - 시세 alert 기준은 DEC-018에 따라 contract·invalid·인증·설정 첫 실패와 retryable·예상 밖 NoData의 예약 run 3회 연속 실패입니다. 그 밖의 job failure ratio, retry queue age, lease stuck, checkpoint 무진전 threshold는 별도 운영 설정입니다.
 - 장애·복구 이메일 주소는 소스나 Firestore에 저장하지 않고 환경별 배포 config의 Cloud Monitoring notification channel resource로 관리합니다.
 - `PartialFailure`를 HTTP 200의 무조건 성공 body로 숨기지 않는다. Scheduler 재시도와 운영 UI가 상태를 판별할 수 있어야 한다.
+- Billing Export table·location은 배포 환경 설정으로 주입하고 조회는 현재 project ID로 제한합니다. Snapshot에는 `calculatedAt`과 원본 `dataUpdatedAt`을 함께 보존하며 Admin에는 마지막 집계 시각인 `calculatedAt`을 노출합니다.
 
 ## 10. 목표 패키지 구조
 
@@ -392,6 +408,7 @@ functions/src/platform/operations/
 | EXT-002 | Contract, Security I | HardenedIngressAdapter·RefreshRunCoordinator | method/content/version, user/service/scoped credential의 만료·폐기·scope, active Actor, App Check, CORS origin, credential/IP quota, 101 targets, 30초 중복 | 모든 선검증 실패 Application 호출 0회, route별 Verified Context만 생성, 전체 target page 처리, 중복 run 1개 | T-EXT-002 |
 | EXT-003 | U, Contract, Security I | SafeExternalHttpClient·ConcurrencyLimiter | HTTPS/HTTP, provider별 host·port, 다른 provider host, redirect loop/hop, 10초 timeout, 429/5xx, 동시 6개, chunked 초과 body | 같은 provider ACL을 매 hop 재검증, 최대 병렬 5·retryable 총 3회와 bounded 종료 | T-EXT-003 |
 | MARKET-004 | Application, Store Conformance, Operations I | Provider Attempt·Run Outcome·Alert | 내부 retry 3회인 run 1개, 실패 run 3개, contract 1개, recovery, replay | attempt log 전부, failed run은 1씩 증가, 즉시·3회 경보, 성공 reset/resolve, 민감값 없음 | T-MARKET-001 |
+| EXT-004 | U, Adapter C, Store C, UI C, Operations I | Billing Cost Reader·Summary·Snapshot·Admin Dashboard | 월 중간 일별·서비스별 순비용, credit, 누락 완료일, Export 지연, 조회·저장 실패 | 6시간 occurrence, 누적·7일 평균 추정, 단일 성공 Snapshot, 실패 시 이전 성공본 유지와 갱신 시각 표시 | T-EXT-005 |
 
 필수 contract suite:
 
@@ -407,6 +424,7 @@ functions/src/platform/operations/
 - 배포 notification channel resource가 open·resolve에 사용되고 이메일 literal이 소스·상태·로그에 없는 config contract test
 - 공개 ingress의 CORS-only 거부, 인증·App Check·scope·유한 limit·rate/quota 경계와 실패 시 기능 Port 0회
 - outbound URL 최초·redirect별 HTTPS allowlist, timeout, Content-Length 유무별 최대 응답 byte contract suite
+- Standard Billing Export의 project scope·`cost + credits`·원본 갱신 시각, 최근 7개 완료일 평균과 단일 Snapshot 교체·실패 보존 contract suite
 
 ## 12. 확정 정책과 구현 순서
 

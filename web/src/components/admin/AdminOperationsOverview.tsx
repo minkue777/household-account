@@ -10,7 +10,9 @@ import {
   Home,
   RefreshCw,
   Server,
+  TrendingUp,
   Users,
+  WalletCards,
 } from 'lucide-react';
 
 import type { AdminOperationsDashboardWireView } from '@/platform/functions-api';
@@ -27,6 +29,7 @@ const JOB_LABELS: Record<string, string> = {
   'instrument-catalog-daily': '종목 목록',
   'dividend-hourly': '배당 공시',
   'asset-valuation-daily': '자산 스냅샷',
+  'billing-cost-refresh': 'Google Cloud 비용 집계',
   'scheduled-job-monitor': '스케줄 감시',
 };
 
@@ -331,6 +334,22 @@ function formatDuration(value: number): string {
   })}초`;
 }
 
+function formatCurrency(value: number, currency: string): string {
+  if (currency === 'KRW') {
+    return `${Math.round(value).toLocaleString('ko-KR')}원`;
+  }
+  try {
+    return new Intl.NumberFormat('ko-KR', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return `${value.toLocaleString('ko-KR')} ${currency}`;
+  }
+}
+
 function shortDate(value: string): string {
   return `${Number(value.slice(5, 7))}/${Number(value.slice(8, 10))}`;
 }
@@ -387,6 +406,9 @@ export function AdminOperationsOverview({
     status: 'unavailable' as const,
     windowHours: 24,
     operations: [],
+  };
+  const billingCost = dashboard.billingCost ?? {
+    status: 'unavailable' as const,
   };
   const sortedFunctionOperations = [...functionLatency.operations]
     .sort(compareFunctionOperations);
@@ -457,6 +479,82 @@ export function AdminOperationsOverview({
           tone="violet"
         />
       </section>
+
+      <Panel
+        title="Google Cloud 비용"
+        description="현재까지 집계된 사용액과 최근 7일 추세를 반영한 월말 예상"
+      >
+        {billingCost.status === 'unavailable' ? (
+          <EmptyState>비용 집계를 준비하고 있습니다.</EmptyState>
+        ) : (
+          <div className="grid gap-4 p-4 lg:grid-cols-[1fr_1fr_1.4fr]">
+            <div className="rounded-xl border border-slate-800 bg-slate-950/35 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-medium text-slate-500">
+                    이번 달 누적 비용(잠정)
+                  </p>
+                  <p className="mt-3 text-3xl font-semibold tracking-tight text-sky-300">
+                    {formatCurrency(
+                      billingCost.monthToDateAmount,
+                      billingCost.currency
+                    )}
+                  </p>
+                </div>
+                <WalletCards className="h-5 w-5 text-sky-400" />
+              </div>
+              <p className="mt-4 text-xs text-slate-600">
+                {billingCost.billingMonth.replace('-', '년 ')}월 사용액
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-slate-800 bg-slate-950/35 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-medium text-slate-500">
+                    월말 예상 비용
+                  </p>
+                  <p className="mt-3 text-3xl font-semibold tracking-tight text-violet-300">
+                    {formatCurrency(
+                      billingCost.estimatedMonthEndAmount,
+                      billingCost.currency
+                    )}
+                  </p>
+                </div>
+                <TrendingUp className="h-5 w-5 text-violet-400" />
+              </div>
+              <p className="mt-4 text-xs text-slate-600">
+                마지막 비용 집계 {formatDateTime(billingCost.calculatedAt)}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-slate-800 bg-slate-950/35 p-4">
+              <p className="text-xs font-medium text-slate-500">서비스별 비용</p>
+              {billingCost.serviceAmounts.length === 0 ? (
+                <p className="mt-6 text-center text-xs text-slate-600">
+                  집계된 서비스 비용이 없습니다.
+                </p>
+              ) : (
+                <div className="mt-3 max-h-36 space-y-2 overflow-y-auto pr-1">
+                  {billingCost.serviceAmounts.map((service) => (
+                    <div
+                      key={service.serviceId}
+                      className="flex items-center justify-between gap-3 text-xs"
+                    >
+                      <span className="truncate text-slate-400" title={service.serviceName}>
+                        {service.serviceName}
+                      </span>
+                      <span className="shrink-0 font-mono text-slate-200">
+                        {formatCurrency(service.amount, billingCost.currency)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Panel>
 
       <Panel
         title="사용자 체감·서버 처리 시간"

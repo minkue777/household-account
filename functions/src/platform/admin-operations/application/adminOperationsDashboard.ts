@@ -94,6 +94,23 @@ export interface AdminDashboardFunctionLatencyWindow {
   readonly operations: readonly AdminDashboardFunctionLatency[];
 }
 
+export type AdminDashboardBillingCost =
+  | { readonly status: "unavailable" }
+  | {
+      readonly status: "available";
+      readonly billingMonth: string;
+      readonly currency: string;
+      readonly monthToDateAmount: number;
+      readonly estimatedMonthEndAmount: number;
+      readonly calculatedAt: string;
+      readonly dataUpdatedAt: string;
+      readonly serviceAmounts: readonly {
+        readonly serviceId: string;
+        readonly serviceName: string;
+        readonly amount: number;
+      }[];
+    };
+
 export interface AdminFunctionLatencyReaderPort {
   read(input: {
     readonly generatedAt: string;
@@ -125,4 +142,5 @@ export interface AdminOperationsDashboard {
   readonly providerHealth: readonly AdminDashboardProviderHealth[];
   readonly incidents: readonly AdminDashboardIncident[];
   readonly functionLatency: AdminDashboardFunctionLatencyWindow;
+  readonly billingCost: AdminDashboardBillingCost;
 }

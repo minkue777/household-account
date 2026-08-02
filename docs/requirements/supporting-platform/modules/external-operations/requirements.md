@@ -8,7 +8,7 @@
 
 ## 1. 독립 모듈 책임
 
-외부 연동·운영 모듈은 시세·공시 등 외부 공급자 호출과 예약 작업에서 공통으로 필요한 결과 분류, 재시도, 관측 가능성을 제공합니다. 외부 호출의 `성공`, `데이터 없음`, `일시 실패`, `영구 계약 실패`, `잘못된 데이터`를 구분하고, 여러 대상을 처리하는 job은 부분 실패 범위와 재시도 가능성을 숨기지 않습니다.
+외부 연동·운영 모듈은 시세·공시·Cloud Billing Export 등 외부 플랫폼 조회와 예약 작업에서 공통으로 필요한 결과 분류, 재시도, 관측 가능성을 제공합니다. 외부 호출의 `성공`, `데이터 없음`, `일시 실패`, `영구 계약 실패`, `잘못된 데이터`를 구분하고, 여러 대상을 처리하는 job은 부분 실패 범위와 재시도 가능성을 숨기지 않습니다.
 
 이 모듈은 공급자별 업무 의미나 자산·배당 데이터를 소유하지 않습니다. 기능 모듈이 정의한 포트를 HTTP·HTML·Scheduler Adapter로 구현하고 표준 실행 결과를 반환합니다.
 
@@ -22,6 +22,7 @@
 - 예약 작업의 대상별 성공·실패 집계
 - 예약 시각별 시작 heartbeat, 실행 중 heartbeat, deadline·lease·checkpoint와 missing/overdue 감지
 - 정기 거래 등 기능별 예약 Input Port의 사용자 접속과 독립된 cron 호출
+- Google Cloud Standard Billing Export의 6시간 주기 집계와 관리자용 최신 비용 요약
 - 재시도 가능성, 멱등 키, 실행 시간과 실패 범위 관측
 - 최상위 예외의 실패 전파와 운영 지표
 - Firebase Scheduled Function의 공급자 상태 점검, Cloud Logging 구조화 로그, Firestore 최신 Health 상태와 Cloud Monitoring 경보
@@ -46,6 +47,7 @@
 | 예약 실행 상태 | job별 예상 예약 시각, 시작·최근 heartbeat·deadline, 현재 lease와 checkpoint를 저장해 미시작·정체 실행을 구분합니다. |
 | 운영 로그·지표 | 민감 원문을 포함하지 않고 공급자·작업·대상 범위·오류 분류를 구조화합니다. |
 | ProviderHealthState | provider+operation별 마지막 시도·성공, 연속 실패, 실패 시작, 마지막 오류, 경보 상태의 최신 요약입니다. 가격·가구·보유수량은 저장하지 않습니다. |
+| BillingCostSummary | Standard Billing Export에서 현재 프로젝트의 순비용을 집계한 최신 성공 요약 한 건입니다. 이번 달 누적액, 최근 7개 완료일 평균 기반 월말 추정액, 서비스별 금액과 원본 갱신·계산 시각만 저장하며 확정 청구서로 취급하지 않습니다. |
 | 공급자 fixture | 외부 HTML·JSON 형식의 계약 회귀 테스트 자료이며 사용자 금융 Domain 데이터가 아닙니다. |
 
 ## 4. 공개 계약·의존 모듈
@@ -61,6 +63,8 @@
 - `RecordProviderAttempt(provider, operation, result, metadata)`
 - `RecordProviderRunOutcome(provider, operation, executionKey, finalResult)`
 - `GetProviderHealth(provider?, operation?)` — 관리자·운영 전용
+- `RefreshBillingCostSummary(calculatedAt)` — 6시간 주기 SystemActor 전용
+- `GetBillingCostSummary()` — 관리자 전용 최신 성공 Snapshot 조회
 - 공급자 Adapter 공통 메타데이터: 공급자, 요청 종류, 관측 시각, 응답 신선도
 
 기능 모듈은 HTTP 응답이나 HTML parser를 직접 알지 않고 자신이 정의한 Provider port를 호출합니다. 이 모듈의 Adapter가 외부 형식을 기능 모듈 계약으로 변환합니다.
@@ -71,6 +75,7 @@
 - 보유종목·시장 데이터 모듈의 시장별 Provider port
 - 배당 모듈의 공시 Provider port
 - 자산 자동화 및 기타 예약 Application handler
+- Google Cloud BigQuery Standard Billing Export와 Application Default Credentials
 
 ## 5. 요구사항
 
@@ -81,6 +86,7 @@
 | EXT-001 | 결함 | 외부 공급자 Adapter는 성공, 데이터 없음, 일시 실패, 비정상 숫자, 형식 변경을 구분하고 시도별 구조화 로그와 공급자별 연속 실패·복구 상태를 남겨야 한다. | 현재 null·빈 배열·고정 금 시세 성공 응답 등으로 서로 다른 실패가 합쳐진다. HTML scraping은 fixture 계약 테스트와 관측 지표가 필요하다. 실패 로그에는 실제 HTTP status와 비민감 요청 단계를 보존하되 URL·header·원문은 남기지 않는다. 다중 target 공급자는 개별 완료 순서가 아니라 occurrence 전체를 한 번 집계한다. 특히 KIND 일부 실패는 degraded·무경보이며 전체 target 실패가 3회 연속일 때만 outage로 판정한다. Firebase Function이 Cloud Logging·Firestore Health 상태·Cloud Monitoring 경보를 연결한다. 장애 open·복구 resolve 이메일의 notification channel resource reference는 환경별 배포 config로 주입하며 이메일 주소를 소스나 업무 DB에 하드코딩하지 않는다. | Functions 외부 공급자 Adapter, [DEC-018](../../../governance/decisions.md#dec-018) | C, I, 운영 계약 |
 | EXT-002 | 결함 | 인터넷에 노출되는 HTTP Function·API Route는 호출 유형에 맞는 Firebase Auth·service account 또는 만료·폐기 가능한 scoped credential을 검증하고, 지원 앱 호출에는 App Check를 추가 검증해야 한다. | 시세 전체 갱신은 같은 가구·범위를 single-flight로 합치고 같은 actor·가구·범위에서 30초에 한 번만 새 외부 호출을 시작한다. 사용자 전체 종목 수는 제한하지 않고 내부 50개 page로 처리한다. 그 밖의 body·field·period 상한과 credential·IP 비용 quota도 Application 호출 전에 적용한다. | 인증된 Household Query·HTTP Functions, [DEC-049](../../../governance/decisions.md#dec-049) | C, I, 보안 E2E |
 | EXT-003 | 결함 | 모든 외부 HTTP Adapter는 공통 `SafeExternalHttpClient`를 통해 HTTPS와 provider별 host/port allowlist, redirect 목적지 재검증, 요청 timeout, 최대 응답 byte를 강제해야 한다. | 시세 Provider는 한 refresh run에서 최대 5개 동시 호출, 요청당 10초 timeout, retryable 결과의 최대 2회 추가 재시도를 강제한다. 사용자 입력 전체 URL, HTTP downgrade, allowlist 밖 redirect, 무제한 응답 stream을 허용하지 않는다. | Functions 외부 공급자 Adapter, [DEC-049](../../../governance/decisions.md#dec-049) | U, C, 보안 I |
+| EXT-004 | 현재 명세 | 운영 관리자는 Admin에서 현재 Google Cloud 프로젝트의 이번 달 순비용, 서비스별 순비용과 월말 추정액을 조회할 수 있어야 한다. | `billing-cost-refresh`가 `Asia/Seoul` 기준 6시간마다 Standard Billing Export의 `cost + credits`를 읽는다. 월말 추정액은 이번 달 누적액에 오늘을 제외한 최근 7개 완료일의 일평균과 남은 온전한 날짜 수를 곱해 더하며, 데이터가 없는 완료일은 0원으로 계산한다. 성공 시 고정 경로의 단일 Snapshot을 교체하고 실패 시 마지막 성공본을 유지한다. 표시 금액은 Export 지연과 추정식을 포함한 참고값이며 확정 청구액이 아니다. | Functions Billing Cost Adapter·Admin Dashboard | U, Adapter C, Store C, UI C, 운영 계약 |
 
 ## 6. 모듈 결함
 
@@ -114,6 +120,7 @@
 | T-EXT-002 | 목표 | 무인증·removed actor·잘못된 App Check·비허용 CORS origin, 유효/만료/폐기/scope 누락 credential·service account, credential/IP quota, 101개 시세 target·30초 내 중복 / 공개 API 호출 / 모든 선검증 실패는 Application 미호출, route별 검증 context만 생성하고 전체 target은 내부 page 처리하며 중복은 같은 run 재사용 | EXT-002, DEC-049 |
 | T-EXT-003 | 목표 | HTTP URL·provider별 host/비허용 port·다른 provider host·외부 redirect·redirect loop/hop 초과·10초 timeout·429·5xx·초과 응답 / Provider 호출 / 매 hop에서 같은 provider ACL을 재검증하고 최대 병렬 5, retryable만 총 3회, 나머지는 bounded security/contract 결과로 제한 | EXT-003, DEC-049 |
 | T-EXT-004 | 목표 | 유효 0원·명시적 부재·timeout·408·429·5xx·401·403·schema drift·NaN·Infinity와 금 공급자 실패 / 결과 매핑·재시도 / Success·NoData·Retryable·Contract·Invalid를 구분하고 retryable만 최대 3회 호출하며 가짜 금 시세 성공은 없음 | EXT-001 |
+| T-EXT-005 | 현재 | 월 중간의 Standard Billing Export 일별·서비스별 `cost + credits`, 누락 완료일, 갱신 시각과 이전 성공 Snapshot / 6시간 비용 집계·Admin 조회 / 이번 달 누적액과 서비스별 순비용, 최근 7개 완료일 평균 기반 월말 추정액을 계산하고 성공 시 단일 Snapshot을 교체하며 실패 시 이전 성공본을 유지 | EXT-004 |
 
 ### 상세 시나리오
 
@@ -138,6 +145,7 @@
 | CORS 허용 origin에서 호출해도 인증·App Check가 없으면 거부하고 body·page·기간·대상·호출량 한도를 넘으면 기능 Port를 호출하지 않는다. | C, I, 보안 E2E | EXT-002 |
 | 외부 HTTP는 HTTPS allowlist 밖 직접 URL·redirect를 거부하고 timeout과 최대 응답 byte를 초과하면 bounded 실패로 끝난다. | U, C, 보안 I | EXT-003 |
 | 장애 open과 복구 resolve 이메일은 배포 config의 notification channel로 전달되며 주소 literal이 소스·Firestore·일반 로그에 나타나지 않는다. | C, 운영 계약 | EXT-001 |
+| Standard Billing Export의 현재 프로젝트 자료를 집계하면 credit을 포함한 순비용과 원본 `export_time`을 보존하고, 최근 7개 완료일 중 자료가 없는 날은 0원으로 계산한 월말 추정치를 Admin에 표시한다. | U, Adapter C, Store C, UI C | EXT-004 |
 
 ## 9. 코드 근거
 
@@ -149,3 +157,7 @@
 - [인증된 Portfolio Query 경계](../../../../../functions/src/bootstrap/queries/portfolioMarketHouseholdQueryHandlers.ts)
 - [Web Portfolio Query Client](../../../../../web/src/features/portfolio/application/portfolioQueries.ts)
 - [배당 저장 API](../../../../../web/src/app/api/dividend/save/route.ts)
+- [Cloud Billing 비용 조회 Adapter](../../../../../functions/src/adapters/google-cloud/admin/googleCloudBillingCostReader.ts)
+- [Cloud Billing 비용 요약 Application](../../../../../functions/src/platform/admin-operations/application/billingCostSummary.ts)
+- [Cloud Billing 예약 작업](../../../../../functions/src/bootstrap/firebaseBillingCostScheduledJob.ts)
+- [Cloud Billing 최신 Snapshot Store](../../../../../functions/src/adapters/firebase/admin/firebaseBillingCostSummaryStore.ts)

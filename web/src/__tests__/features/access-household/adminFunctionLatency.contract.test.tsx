@@ -144,6 +144,7 @@ describe('admin Cloud Function latency contract', () => {
           },
         ],
       },
+      billingCost: { status: 'unavailable' },
     };
 
     render(

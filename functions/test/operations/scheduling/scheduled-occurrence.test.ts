@@ -16,6 +16,9 @@ describe("scheduled occurrence", () => {
       executionKeyFor("dividend-hourly", "2026-07-21T09:00:00.000Z"),
     ).toBe("dividend-hourly:2026-07-21T18");
     expect(
+      executionKeyFor("billing-cost-refresh", "2026-07-21T09:00:00.000Z"),
+    ).toBe("billing-cost-refresh:2026-07-21T18");
+    expect(
       occurrenceFor("instrument-catalog-daily", "2026-07-20T21:00:00+00:00"),
     ).toEqual({
       jobName: "instrument-catalog-daily",
@@ -44,8 +47,27 @@ describe("scheduled occurrence", () => {
       ),
     ).toHaveLength(12);
     expect(
+      occurrences.filter(({ jobName }) => jobName === "billing-cost-refresh"),
+    ).toHaveLength(0);
+    expect(
       occurrences.some(({ jobName }) => jobName === "scheduled-job-monitor"),
     ).toBe(false);
+  });
+
+  it("신규 업무는 모니터링 시작 시각 이전 실행을 누락으로 만들지 않는다", () => {
+    const occurrences = expectedBusinessOccurrences({
+      observedAt: "2026-08-03T21:01:00.000Z",
+      lookbackHours: 48,
+      definitions: loadScheduledJobDefinitions(),
+    }).filter(({ jobName }) => jobName === "billing-cost-refresh");
+
+    expect(occurrences).toHaveLength(5);
+    expect(occurrences.map(({ executionKey }) => executionKey)).not.toContain(
+      "billing-cost-refresh:2026-08-03T00",
+    );
+    expect(occurrences.map(({ executionKey }) => executionKey)).toContain(
+      "billing-cost-refresh:2026-08-03T06",
+    );
   });
 
   it("관찰 시각보다 미래인 당일 실행은 기대값에 포함하지 않는다", () => {

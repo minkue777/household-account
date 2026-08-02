@@ -1,7 +1,7 @@
 # Cloud 예약 작업 목표 설계와 운영 검증 기준
 
 > 상태: 운영 중 — 요구사항 구현·테스트·운영 배포 완료  
-> 기준일: 2026-07-22  
+> 기준일: 2026-08-02  
 > 대상 프로젝트: `household-account-6f300`  
 > 기준 시간대: `Asia/Seoul`  
 > 상위 설계: [목표 Clean Architecture](target-clean-architecture.md)  
@@ -9,9 +9,9 @@
 
 ## 1. 결론
 
-요구사항을 모두 반영한 목표 구조에는 **업무 예약 작업 5개**와 **독립 운영 감시 작업 1개**가 필요합니다.
+요구사항을 모두 반영한 목표 구조에는 **업무 예약 작업 5개**, **운영 비용 집계 작업 1개**와 **독립 운영 감시 작업 1개**가 필요합니다.
 
-2026-07-22 기준 아래 6개 작업을 모두 운영 프로젝트에 배포하고 Cloud Scheduler를 활성화했습니다. 구형 `dailyAssetSnapshot`과 `dailyDividendSnapshot` 함수 및 연결 Scheduler는 중복 실행을 방지하기 위해 제거했습니다.
+2026-08-02 기준 아래 7개 작업을 운영 프로젝트의 versioned schedule manifest로 관리합니다. 구형 `dailyAssetSnapshot`과 `dailyDividendSnapshot` 함수 및 연결 Scheduler는 중복 실행을 방지하기 위해 제거했습니다.
 
 | 서울 시각 | 목표 job | 소유 기능 | 호출할 Application Input Port | 핵심 결과 |
 |---|---|---|---|---|
@@ -20,6 +20,7 @@
 | 매일 06:00 | `instrument-catalog-daily` | Portfolio / Holdings·Market Data | `PublishInstrumentCatalog` | 국내·미국 주식·ETF·ETN 검색 snapshot 발행 |
 | 매일 09:00~20:00 매시 정각 | `dividend-hourly` | Portfolio / Dividends | `RefreshDividendEvents` | KRX ETF 공시 discovery와 기존 Event lifecycle sweep |
 | 매일 23:55 | `asset-valuation-daily` | Portfolio / Holdings·Market Data | `RunDailyAssetValuation` | 전체 시세 갱신·평가 후 당일 자산 Snapshot 요청 |
+| 6시간마다 | `billing-cost-refresh` | Supporting Platform / External Operations | `RefreshBillingCostSummary` | Standard Billing Export의 이번 달 누적·월말 추정·서비스별 비용 최신 Snapshot |
 | 기본 5분 간격 | `scheduled-job-monitor` | Supporting Platform / External Operations | `DetectMissingOrOverdueRuns` | 미시작 `Missing`, 정체 `Overdue`, 복구 감지와 경보 |
 
 `scheduled-job-monitor`의 5분 간격은 제품 정책이 아니라 최초 운영 기본값입니다. 기능 job의 cron은 요구사항으로 고정하지만, monitor 간격과 job별 grace·deadline·heartbeat timeout은 유한한 versioned 배포 설정으로 관리하고 실제 실행시간을 바탕으로 조정합니다.
@@ -34,6 +35,7 @@
 06:00  instrument-catalog-daily       │
 09~20  dividend-hourly (매시 정각)   │
 23:55  asset-valuation-daily ── 모든 page terminal ── AssetSnapshot 요청
+00/06/12/18 billing-cost-refresh ── Billing Export 집계·최신 성공 Snapshot 교체
 
 매 5분 scheduled-job-monitor ── 위 occurrence의 미시작·heartbeat 정체·복구 감시
 ```
@@ -72,6 +74,7 @@ Scheduler Adapter가 해서는 안 되는 일:
 | 종목 카탈로그 | `instrument-catalog:{asOfDate}:{schemaVersion}` | immutable snapshot generation·checksum |
 | 배당 | `dividend-hourly:{scheduledHour}` | `DISCOVERY`와 `LIFECYCLE_SWEEP`별 cursor, canonical `eventId` |
 | 자산 평가 | `asset-valuation-daily:{asOfDate}` | `runId:assetId:quoteBatchId`, 자산 cursor, 날짜·scope별 Snapshot ID |
+| 비용 집계 | `billing-cost-refresh:{scheduledHour}` | `billing-cost:current` |
 | 감시 | `scheduled-job-monitor:{scheduledMinute}` | `jobName:scheduledFor` occurrence key |
 
 같은 occurrence가 중복 전달되어도 `jobName + executionKey`는 JobRun 하나로 수렴합니다. lease 소유자만 heartbeat와 checkpoint를 갱신하며, lease가 만료된 뒤에만 다른 worker가 takeover합니다. 완료 target receipt가 있으면 Provider 호출이나 업무 반영을 반복하지 않습니다.
@@ -199,6 +202,17 @@ Provider retry를 모두 소진한 target은 마지막 성공값 유지로 termi
 구조화 로그에는 실패 run을 남깁니다. 이 구현 상태는 아래 2026-07-19의 실제 배포 상태 감사와
 별개이며, 배포 전에는 운영 함수가 바뀐 것으로 간주하지 않습니다.
 
+### 4.5.1 `billing-cost-refresh` — 6시간마다
+
+근거: [외부 운영 요구사항 EXT-004](../requirements/supporting-platform/modules/external-operations/requirements.md), [Cloud Billing 상세 설계](../requirements/supporting-platform/modules/external-operations/design.md#331-cloud-billing-비용-집계)
+
+1. tracked job이 `Asia/Seoul` 기준 00:00, 06:00, 12:00, 18:00에 `RefreshBillingCostSummary`를 호출합니다.
+2. 환경 변수로 지정한 Google Cloud Standard Billing Export table을 Application Default Credentials로 읽고 `project.id`를 현재 프로젝트로 제한합니다.
+3. 이번 달 전체와 오늘을 제외한 최근 7개 완료일의 `cost + credits` 순비용을 일자·서비스별로 집계하며 최신 `export_time`을 원본 갱신 시각으로 보존합니다.
+4. 월말 추정액은 `이번 달 누적액 + 최근 7개 완료일 일평균 × 남은 온전한 날짜 수`이며 자료가 없는 완료일은 0원으로 계산하고 누적액보다 작게 표시하지 않습니다.
+5. 성공 시 `operations/runtime/billingCostSnapshots/current` 한 문서를 교체합니다. Admin은 BigQuery를 직접 호출하지 않고 이 최신 성공 Snapshot만 읽습니다.
+6. 조회·계산·저장이 실패하면 JobRun을 실패로 남기고 기존 성공 Snapshot을 유지합니다. Snapshot에는 Export 갱신 시각과 계산 시각을 함께 보존하고 Admin에는 마지막 계산 시각을 표시합니다.
+
 ### 4.6 `scheduled-job-monitor` — 기본 5분 간격
 
 근거: [외부 운영 요구사항 JOB-ERR-002](../requirements/supporting-platform/modules/external-operations/requirements.md), [예약 누락·정체 상세 설계](../requirements/supporting-platform/modules/external-operations/design.md#55-예약-누락정체-감지)
@@ -217,6 +231,7 @@ Provider retry를 모두 소진한 target은 마지막 성공값 유지로 termi
 | 종목 카탈로그 | 국내·미국 catalog source | 기존 `latest` 유지 | contract·invalid·설정 실패 즉시, retryable은 운영 Health 정책 |
 | 배당 | KIND | 기존 Event 유지, lifecycle은 가능한 범위에서 계속 | 일부 target 실패는 degraded·무경보, 모든 target 실패 occurrence 3회 연속 시 경보 |
 | 자산 평가 | Naver, Nasdaq, Frankfurter v2, Upbit, 펀드 NAV, 실물 금 | 각 Provider의 마지막 성공 관측 유지 | contract·invalid·인증·설정 첫 실패, 추적 대상 retryable·예상 밖 NoData는 예약 run 3회 연속 실패 |
+| 비용 집계 | BigQuery Standard Billing Export | 마지막 성공 비용 Snapshot 유지 | 조회·계산·저장 실패를 tracked JobRun 실패로 기록 |
 
 각 HTTP 시도는 `provider`, `operation`, execution key hash, target hash, result kind, stable error code, attempt, latency, 실제 HTTP status, 비민감 요청 단계, observedAt만 구조화 로그로 남깁니다. API key, URL·header, 응답 원문, 가구 ID 원문, 사용자 이름, 보유수량은 기록하지 않습니다.
 
@@ -288,7 +303,7 @@ Firebase CLI로 실제 배포 상태와 최근 Cloud Logging을 읽기 전용 �
 
 ## 9. 구현·전환 순서
 
-예약 함수를 여섯 개 동시에 다시 쓰지 않고 공통 실행 뼈대를 먼저 검증한 뒤 기능별로 전환합니다.
+예약 함수를 일곱 개 동시에 다시 쓰지 않고 공통 실행 뼈대를 먼저 검증한 뒤 기능별로 전환합니다.
 
 아래 구현은 2026-07-21 로컬 소스에서 완료됐습니다. 운영에서는 migration dry-run·reconciliation과 외부 설정 확인 후 같은 순서로 Writer를 하나씩 활성화합니다.
 
@@ -299,7 +314,7 @@ Firebase CLI로 실제 배포 상태와 최근 Cloud Logging을 읽기 전용 �
 5. 00:00 정기지출 job을 추가하고 화면 방문 자동 처리를 제거합니다.
 6. 00:00 자산 자동화 job을 추가하고 화면 방문 자동 처리를 제거합니다.
 7. 06:00 종목 카탈로그 발행을 추가하고 shadow 검증 뒤 `stocks.json` reader와 파일을 제거합니다.
-8. 모든 job에서 최상위 성공 축약을 제거하고 Cloud Monitoring 장애·복구 이메일을 실제로 시험합니다.
+8. 6시간 간격 Cloud Billing 비용 집계를 추가하고, 모든 job에서 최상위 성공 축약을 제거해 Cloud Monitoring 장애·복구 이메일을 실제로 시험합니다.
 
 각 단계는 기존 Writer와 신규 Writer를 동시에 활성화하지 않습니다. 먼저 Characterization/목표 테스트와 shadow read로 결과를 비교하고, 한 기능의 단일 Writer를 전환한 뒤 다음 job으로 이동합니다.
 
@@ -317,6 +332,7 @@ Firebase CLI로 실제 배포 상태와 최근 Cloud Logging을 읽기 전용 �
 | job 부분 실패·중복 execution key | `T-JOB-001` |
 | Missing·Overdue·lease takeover·checkpoint 재개 | `T-JOB-002` |
 | 외부 HTTP timeout·retry·allowlist | `T-EXT-003` |
+| Billing Export 순비용·7일 평균 월말 추정·단일 성공 Snapshot | `T-EXT-005` |
 
 ### 10.2 Emulator 통합 검증
 
@@ -327,6 +343,7 @@ Firebase CLI로 실제 배포 상태와 최근 Cloud Logging을 읽기 전용 �
 - 23:55 job을 자정 이후 완료시켜도 전날 `asOfDate` Snapshot에 수렴하는지 확인
 - Projector Event를 중복·역순 전달해 중복은 no-op, gap은 rebuild 요청인지 확인
 - 로그·JobRun·Health 문서에 가구 ID 원문, 보유수량, 응답 원문, credential이 없는지 확인
+- Billing Export 조회·Snapshot 저장을 각각 실패시켜 Admin이 마지막 성공 비용 요약을 계속 읽는지 확인
 
 ### 10.3 배포 후 운영 검증
 
@@ -339,6 +356,7 @@ Firebase CLI로 실제 배포 상태와 최근 Cloud Logging을 읽기 전용 �
 7. 06:00 publish 실패에서도 이전 catalog `latest`가 검색되는지 확인합니다.
 8. 한 시간의 discovery 결과가 비어 있어도 기존 fixed Event만 있는 fixture에서 lifecycle sweep과 지급일 전이가 진행되는지 확인합니다.
 9. 23:55 일부 Quote 실패에서도 마지막 성공값으로 당일 Snapshot이 한 번만 만들어지는지 확인합니다.
+10. Billing Export의 원본 갱신 시각이 지연된 fixture에서도 Snapshot이 원본 갱신 시각과 계산 시각을 각각 보존하고 Admin이 마지막 계산 시각을 표시하는지 확인합니다.
 
 ## 11. 배포 전 남은 운영 설정
 
@@ -352,6 +370,7 @@ Firebase CLI로 실제 배포 상태와 최근 Cloud Logging을 읽기 전용 �
 | instrument-catalog-daily | 5분 | 8분 | 5분 | 5분 | 1,000 × 10 |
 | dividend-hourly | 5분 | 8분 | 5분 | 5분 | 50 × 200 |
 | asset-valuation-daily | 5분 | 8분 | 5분 | 5분 | 50 × 1,000 |
+| billing-cost-refresh | 5분 | 2분 | 1분 30초 | 3분 | 1 × 1 |
 | scheduled-job-monitor | 2분 | 4분 | 2분 | 5분 | 200 × 20 |
 
 현재 설치된 `firebase-functions` 7.x는 `onSchedule`을 event function으로 검증하며 배포 timeout 상한을 540초로 제한합니다. 따라서 업무 처리 deadline은 480초, 결과·checkpoint 저장을 포함한 함수 timeout은 510초로 둡니다. Google Cloud의 더 긴 플랫폼 상한에 기대어 SDK 검증을 우회하지 않습니다. 한 occurrence가 이 예산에 수렴하지 않으면 deadline을 늘리지 않고 checkpoint를 보존한 continuation으로 분리합니다. 실측 결과에 따라 다음 버전에서 조정할 수 있지만 0·무한값이나 코드 곳곳의 개별 하드코딩은 허용하지 않습니다. catalog/KIND/SafeExternalHttpClient의 최대 응답 byte와 provider별 rate quota도 같은 배포 설정 경계에서 관리합니다. Cloud Monitoring notification channel은 `minkue777@gmail.com`에 연결하되 주소를 애플리케이션 코드나 Firestore에 저장하지 않습니다.

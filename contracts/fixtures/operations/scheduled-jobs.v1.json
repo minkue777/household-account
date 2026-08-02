@@ -58,6 +58,17 @@
       "dependsOn": []
     },
     {
+      "jobName": "billing-cost-refresh",
+      "cron": "0 */6 * * *",
+      "publicInputPort": "RefreshBillingCostSummary",
+      "capability": "operations.job.billing-cost",
+      "idempotency": {
+        "executionKeyTemplate": "billing-cost-refresh:{scheduledHour}",
+        "targetKeyTemplate": "billing-cost:current"
+      },
+      "dependsOn": []
+    },
+    {
       "jobName": "scheduled-job-monitor",
       "cron": "*/5 * * * *",
       "publicInputPort": "DetectMissingOrOverdueRuns",

@@ -7,6 +7,7 @@ export const SCHEDULED_JOB_NAMES = [
   "instrument-catalog-daily",
   "dividend-hourly",
   "asset-valuation-daily",
+  "billing-cost-refresh",
   "scheduled-job-monitor",
 ] as const;
 
@@ -24,6 +25,7 @@ export const SCHEDULED_PERSISTENCE_BUFFER_SECONDS = 30;
 export interface ScheduledJobDefinition {
   readonly jobName: ScheduledJobName;
   readonly cron: string;
+  readonly monitoringStartsAt?: string;
   readonly startGraceSeconds: number;
   readonly executionDeadlineSeconds: number;
   readonly heartbeatTimeoutSeconds: number;
@@ -65,6 +67,9 @@ function parseDefinition(value: unknown): ScheduledJobDefinition {
     !SCHEDULED_JOB_NAMES.includes(input.jobName as ScheduledJobName) ||
     typeof input.cron !== "string" ||
     input.cron.trim() === "" ||
+    (input.monitoringStartsAt !== undefined &&
+      (typeof input.monitoringStartsAt !== "string" ||
+        !Number.isFinite(Date.parse(input.monitoringStartsAt)))) ||
     !positiveInteger(input.startGraceSeconds) ||
     !positiveInteger(input.executionDeadlineSeconds) ||
     !positiveInteger(input.heartbeatTimeoutSeconds) ||

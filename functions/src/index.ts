@@ -3,6 +3,7 @@
 // bootstrap adapter를 조립해 배포합니다.
 export { assetAutomationDaily } from "./bootstrap/firebaseAssetAutomationScheduledJob";
 export { assetValuationDaily } from "./bootstrap/firebaseAssetValuationScheduledJob";
+export { billingCostRefresh } from "./bootstrap/firebaseBillingCostScheduledJob";
 export { consumeNotificationOutbox } from "./bootstrap/firebaseNotificationOutbox";
 export { dividendHourly } from "./bootstrap/firebaseDividendScheduledJob";
 export { executeAdminAccess } from "./bootstrap/firebaseAdminAccess";

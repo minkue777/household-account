@@ -130,4 +130,20 @@ export interface AdminOperationsDashboardWireView {
       latestAt: string;
     }>;
   };
+  billingCost:
+    | { status: 'unavailable' }
+    | {
+        status: 'available';
+        billingMonth: string;
+        currency: string;
+        monthToDateAmount: number;
+        estimatedMonthEndAmount: number;
+        calculatedAt: string;
+        dataUpdatedAt: string;
+        serviceAmounts: Array<{
+          serviceId: string;
+          serviceName: string;
+          amount: number;
+        }>;
+      };
 }

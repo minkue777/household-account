@@ -57,6 +57,7 @@
 | 지출·자산 통계 | Web client 계산 | Web | [지원·플랫폼](../supporting-platform/requirements.md) | [통계](../supporting-platform/modules/reporting/requirements.md) | 원천 수정 권한 없는 재구축 가능 Read Model |
 | job run·dead letter·외부 오류 결과 | Functions log·암묵 결과 | 운영 | [지원·플랫폼](../supporting-platform/requirements.md) | [외부 운영](../supporting-platform/modules/external-operations/requirements.md) | 대상별 성공·실패·retry checkpoint와 구조화 관측 |
 | `operations/runtime/providerHealth`·run receipt | 명시 저장 없음 | 관리자·운영 도구·에이전트 | [지원·플랫폼](../supporting-platform/requirements.md) | [외부 운영](../supporting-platform/modules/external-operations/requirements.md) | provider+operation별 최신 장애·복구 상태와 run 멱등성; 가격·가구 ID·보유수량·원문 응답 저장 금지 |
+| `operations/runtime/billingCostSnapshots/current` | Cloud Billing 비용 예약 작업 | 관리자 운영 Dashboard | [지원·플랫폼](../supporting-platform/requirements.md) | [외부 운영](../supporting-platform/modules/external-operations/requirements.md) | Standard Billing Export에서 계산한 최근 성공 비용 요약의 단일 Snapshot; 현재 월 누적·월말 추정·서비스별 순비용과 원본 갱신·계산 시각만 저장하고 Admin은 읽기만 수행 |
 | release candidate·gate·deployment record | 현재 명시 저장 없음 | CI·승인된 운영 주체 | [지원·플랫폼](../supporting-platform/requirements.md) | [배포 안전성](../supporting-platform/modules/delivery-assurance/requirements.md) | commit·artifact·contract·Rules·index hash와 smoke 결과; Secret 원문 저장 금지 |
 
 ## 3. 비영속·플랫폼 상태
@@ -71,6 +72,7 @@
 | Web 자산 재진입·일일 합계 snapshot | Portfolio Web Read Adapter | 비권위 표시 cache | 서버 listener의 source snapshot으로만 갱신하며 아직 확정되지 않은 optimistic Projection은 저장하지 않음; SessionScope 불일치·로그아웃에서 폐기하고 서버 권한·업무 원본으로 사용하지 않음 |
 | PWA cache·worker version | PWA | 플랫폼 cache | Canonical 업무 저장소가 아니며 navigation HTML, 인증·가구·금융 API 응답을 cache하지 않음. 현재 build hash 정적 asset과 공개 아이콘·폰트·이미지만 최대 7일 보존하고 session 종료 시 파생 상태 폐기 |
 | 종목 catalog 인스턴스 메모리 cache | Market Data 서버 Adapter | 비권위 성능 cache | 5분마다 latest manifest generation을 확인하고 변경 때만 snapshot을 교체; 인스턴스 종료 시 유실 가능, Storage snapshot이 단일 원본 |
+| Google Cloud Standard Billing Export | Google Cloud Billing·BigQuery | 외부 권위 원본 | 외부 운영 Adapter는 현재 project ID 범위를 읽기만 하고 원본 table을 수정하지 않습니다. Firestore 비용 Snapshot은 Admin 표시용 최신 성공 파생값이며 확정 청구서를 대체하지 않습니다. |
 | Web theme | Home Preferences Web Adapter | 사용자 로컬 표현 | 거래·가구 Domain에 영향 없음 |
 
 ## 4. Context 제공·소비 계약

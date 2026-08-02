@@ -2,6 +2,7 @@ import type * as firestore from "firebase-admin/firestore";
 
 import type {
   AdminDashboardDailyAccess,
+  AdminDashboardBillingCost,
   AdminDashboardHealth,
   AdminDashboardHouseholdActivity,
   AdminDashboardMemberActivity,
@@ -10,6 +11,7 @@ import type {
   AdminFunctionLatencyReaderPort,
   AdminOperationsDashboard,
 } from "../../../platform/admin-operations/application/adminOperationsDashboard";
+import { BILLING_COST_SNAPSHOT_PATH } from "./firebaseBillingCostSummaryStore";
 import { loadScheduledJobDefinitions } from "../../../operations/scheduling/scheduledJobDefinitions";
 import { seoulCalendarDate } from "../../../platform/usage-observability/public";
 
@@ -43,6 +45,12 @@ function count(value: unknown): number {
     value >= 0
     ? value
     : 0;
+}
+
+function amount(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function instant(value: unknown): string | undefined {
@@ -102,6 +110,61 @@ function totals(value: unknown): AdminDashboardScheduledJob["totals"] {
   };
 }
 
+export function parseAdminDashboardBillingCost(
+  value: unknown,
+  generatedAt: string,
+): AdminDashboardBillingCost {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return { status: "unavailable" };
+  }
+  const data = value as Record<string, unknown>;
+  const billingMonth = string(data.billingMonth);
+  const currency = string(data.currency);
+  const monthToDateAmount = amount(data.monthToDateAmount);
+  const estimatedMonthEndAmount = amount(data.estimatedMonthEndAmount);
+  const calculatedAt = instant(data.calculatedAt);
+  const dataUpdatedAt = instant(data.dataUpdatedAt);
+  if (
+    data.schemaVersion !== 1 ||
+    data.status !== "available" ||
+    billingMonth === undefined ||
+    !/^\d{4}-\d{2}$/u.test(billingMonth) ||
+    billingMonth !== seoulCalendarDate(generatedAt).slice(0, 7) ||
+    currency === undefined ||
+    monthToDateAmount === undefined ||
+    estimatedMonthEndAmount === undefined ||
+    calculatedAt === undefined ||
+    dataUpdatedAt === undefined ||
+    !Array.isArray(data.serviceAmounts)
+  ) {
+    return { status: "unavailable" };
+  }
+  const serviceAmounts = data.serviceAmounts.flatMap((value) => {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      return [];
+    }
+    const service = value as Record<string, unknown>;
+    const serviceId = string(service.serviceId);
+    const serviceName = string(service.serviceName);
+    const serviceAmount = amount(service.amount);
+    return serviceId === undefined ||
+      serviceName === undefined ||
+      serviceAmount === undefined
+      ? []
+      : [{ serviceId, serviceName, amount: serviceAmount }];
+  });
+  return {
+    status: "available",
+    billingMonth,
+    currency,
+    monthToDateAmount,
+    estimatedMonthEndAmount,
+    calculatedAt,
+    dataUpdatedAt,
+    serviceAmounts,
+  };
+}
+
 export class FirebaseAdminDashboardReader {
   constructor(
     private readonly database: firestore.Firestore,
@@ -126,6 +189,7 @@ export class FirebaseAdminDashboardReader {
       providerSnapshot,
       incidentSnapshot,
       functionLatency,
+      billingCostSnapshot,
     ] =
       await Promise.all([
         this.database.collection("households").get(),
@@ -157,6 +221,7 @@ export class FirebaseAdminDashboardReader {
             windowHours: 24,
             operations: [],
           }),
+        this.database.doc(BILLING_COST_SNAPSHOT_PATH).get(),
       ]);
 
     const memberSnapshots = await Promise.all(
@@ -421,6 +486,10 @@ export class FirebaseAdminDashboardReader {
       providerHealth,
       incidents,
       functionLatency,
+      billingCost: parseAdminDashboardBillingCost(
+        billingCostSnapshot.data(),
+        input.generatedAt,
+      ),
     };
   }
 }

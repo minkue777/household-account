@@ -64,6 +64,13 @@ const expectedJobs = {
     executionKeyTemplate: "asset-valuation-daily:{asOfDate}",
     targetKeyTemplate: "runId:assetId:quoteBatchId",
   },
+  "billing-cost-refresh": {
+    cron: "0 */6 * * *",
+    publicInputPort: "RefreshBillingCostSummary",
+    capability: "operations.job.billing-cost",
+    executionKeyTemplate: "billing-cost-refresh:{scheduledHour}",
+    targetKeyTemplate: "billing-cost:current",
+  },
   "scheduled-job-monitor": {
     cron: "*/5 * * * *",
     publicInputPort: "DetectMissingOrOverdueRuns",
@@ -83,10 +90,10 @@ describe("예약 작업 공개 계약 manifest v1", () => {
     ).toBe(true);
   });
 
-  it("[T-JOB-001] Asia/Seoul의 확정된 6개 job과 공개 계약을 정확히 선언한다", () => {
+  it("[T-JOB-001] Asia/Seoul의 확정된 7개 job과 공개 계약을 정확히 선언한다", () => {
     expect(manifest.schemaVersion).toBe(1);
     expect(manifest.timezone).toBe("Asia/Seoul");
-    expect(manifest.jobs).toHaveLength(6);
+    expect(manifest.jobs).toHaveLength(7);
 
     const jobNames = manifest.jobs.map(({ jobName }) => jobName);
     expect(new Set(jobNames).size).toBe(jobNames.length);

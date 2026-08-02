@@ -2,6 +2,7 @@
 // bounded-context bootstrap adapters.
 export { addExpenseFromMessage } from "./firebaseShortcutHttp";
 export { assetValuationDaily } from "./firebaseAssetValuationScheduledJob";
+export { billingCostRefresh } from "./firebaseBillingCostScheduledJob";
 export { dividendHourly } from "./firebaseDividendScheduledJob";
 export { assetAutomationDaily } from "./firebaseAssetAutomationScheduledJob";
 export { executeHouseholdCommand } from "./firebaseHouseholdCommand";

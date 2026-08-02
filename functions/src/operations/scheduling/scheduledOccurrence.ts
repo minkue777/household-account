@@ -49,6 +49,14 @@ function localDateOffset(date: string, days: number): string {
     .slice(0, 10);
 }
 
+function monitoringActive(
+  definition: ScheduledJobDefinition,
+  scheduledInstant: number,
+): boolean {
+  return definition.monitoringStartsAt === undefined ||
+    scheduledInstant >= assertInstant(definition.monitoringStartsAt);
+}
+
 export function executionKeyFor(
   jobName: ScheduledJobName,
   scheduledFor: string,
@@ -65,6 +73,8 @@ export function executionKeyFor(
       return `dividend-hourly:${local.date}T${String(local.hour).padStart(2, "0")}`;
     case "asset-valuation-daily":
       return `asset-valuation-daily:${local.date}`;
+    case "billing-cost-refresh":
+      return `billing-cost-refresh:${local.date}T${String(local.hour).padStart(2, "0")}`;
     case "scheduled-job-monitor":
       return `scheduled-job-monitor:${local.date}T${String(local.hour).padStart(2, "0")}:${String(local.minute).padStart(2, "0")}`;
   }
@@ -129,7 +139,25 @@ export function expectedBusinessOccurrences(input: {
         for (let hour = 9; hour <= 20; hour += 1) {
           const scheduledFor = seoulInstant(date, hour, 0);
           const instant = assertInstant(scheduledFor);
-          if (instant >= cutoff && instant <= observed) {
+          if (
+            instant >= cutoff &&
+            instant <= observed &&
+            monitoringActive(definition, instant)
+          ) {
+            candidates.push(occurrenceFor(definition.jobName, scheduledFor));
+          }
+        }
+        continue;
+      }
+      if (definition.jobName === "billing-cost-refresh") {
+        for (const hour of [0, 6, 12, 18]) {
+          const scheduledFor = seoulInstant(date, hour, 0);
+          const instant = assertInstant(scheduledFor);
+          if (
+            instant >= cutoff &&
+            instant <= observed &&
+            monitoringActive(definition, instant)
+          ) {
             candidates.push(occurrenceFor(definition.jobName, scheduledFor));
           }
         }
@@ -138,7 +166,11 @@ export function expectedBusinessOccurrences(input: {
       const { hour, minute } = fixedTime(definition);
       const scheduledFor = seoulInstant(date, hour, minute);
       const instant = assertInstant(scheduledFor);
-      if (instant >= cutoff && instant <= observed) {
+      if (
+        instant >= cutoff &&
+        instant <= observed &&
+        monitoringActive(definition, instant)
+      ) {
         candidates.push(occurrenceFor(definition.jobName, scheduledFor));
       }
     }

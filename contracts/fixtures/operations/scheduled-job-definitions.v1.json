@@ -53,6 +53,17 @@
       "maxPagesPerOccurrence": 1000
     },
     {
+      "jobName": "billing-cost-refresh",
+      "cron": "0 */6 * * *",
+      "monitoringStartsAt": "2026-08-02T21:00:00.000Z",
+      "startGraceSeconds": 300,
+      "executionDeadlineSeconds": 120,
+      "heartbeatTimeoutSeconds": 90,
+      "leaseDurationSeconds": 180,
+      "pageSize": 1,
+      "maxPagesPerOccurrence": 1
+    },
+    {
       "jobName": "scheduled-job-monitor",
       "cron": "*/5 * * * *",
       "startGraceSeconds": 120,
