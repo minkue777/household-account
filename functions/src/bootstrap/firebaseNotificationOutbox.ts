@@ -22,6 +22,7 @@ import {
 import {
   HOUSEHOLD_NOTIFICATION_DELIVERY_OPERATION,
   householdNotificationDeliveryLatencyStatus,
+  notificationOutboxConsumerAlreadyTerminal,
   SHORTCUT_NOTIFICATION_DELIVERY_OPERATION,
   shortcutNotificationDeliveryLatencyStatus,
 } from "./notificationOutboxLatency";
@@ -66,6 +67,9 @@ export const consumeNotificationOutbox = onDocumentCreated(
   {
     document: "outboxEvents/{eventId}",
     region: REGION,
+    // provider 결과가 확정된 뒤에는 같은 알림을 다시 보내지 않되, FCM 호출 전
+    // Firestore 같은 기반 시설의 일시 장애는 기존 trigger 재시도로 복구합니다.
+    // NoTarget과 영구 실패는 typed terminal 결과로 반환하므로 재시도되지 않습니다.
     retry: true,
     timeoutSeconds: 120,
   },
@@ -81,6 +85,17 @@ export const consumeNotificationOutbox = onDocumentCreated(
       eventType === "TransactionRecorded.v1" &&
       text(payload.originChannel) === "ios-shortcut";
     if (!isHouseholdNotification && !isShortcutNotification) return;
+
+    // Firestore/Eventarc는 같은 created event를 다시 전달할 수 있습니다.
+    // live 문서가 이미 terminal이면 과거 snapshot을 재처리해 뒤늦은 FCM을
+    // 보내거나 동일 지연 표본을 다시 만드는 일을 막습니다.
+    const latestSnapshot = await snapshot.ref.get();
+    if (
+      latestSnapshot.exists &&
+      notificationOutboxConsumerAlreadyTerminal(record(latestSnapshot.data()))
+    ) {
+      return;
+    }
 
     const eventId = text(data.eventId) ?? event.params.eventId;
     const latency = startInteractiveLatencyInvocation(

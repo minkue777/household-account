@@ -218,6 +218,196 @@ describe("Google Cloud interactive latency reader", () => {
     ]);
   });
 
+  it("알림 재시도는 correlation별 최종 결과만 세고 실제 provider 성공 시간만 지연값에 반영한다", () => {
+    const operation = "notifications.deliver-ios-shortcut.v1";
+    const summary = summarizeInteractiveLatency([
+      {
+        correlationId: "event-a",
+        endpoint: "consumeNotificationOutbox",
+        operation,
+        elapsedMs: 20_000,
+        status: "failed",
+        timestamp: "2026-08-02T14:00:00.000Z",
+      },
+      {
+        correlationId: "event-a",
+        endpoint: "consumeNotificationOutbox",
+        operation,
+        elapsedMs: 8_000,
+        status: "failed",
+        timestamp: "2026-08-02T14:01:00.000Z",
+      },
+      {
+        correlationId: "event-a",
+        endpoint: "consumeNotificationOutbox",
+        operation,
+        elapsedMs: 1_250,
+        status: "succeeded",
+        timestamp: "2026-08-02T14:02:00.000Z",
+      },
+      {
+        correlationId: "event-b",
+        endpoint: "consumeNotificationOutbox",
+        operation,
+        elapsedMs: 900,
+        status: "failed",
+        timestamp: "2026-08-02T14:03:00.000Z",
+      },
+      {
+        correlationId: "event-without-target",
+        endpoint: "consumeNotificationOutbox",
+        operation,
+        elapsedMs: 100,
+        status: "rejected",
+        timestamp: "2026-08-02T14:04:00.000Z",
+      },
+    ]);
+
+    expect(summary).toEqual([
+      {
+        endpoint: "consumeNotificationOutbox",
+        operation,
+        sampleCount: 2,
+        succeededCount: 1,
+        failedCount: 1,
+        averageMs: 1_250,
+        p95Ms: 1_250,
+        maxMs: 1_250,
+        latestAt: "2026-08-02T14:03:00.000Z",
+      },
+    ]);
+  });
+
+  it("알림 provider 성공 표본이 없으면 실패 건수는 보존하고 지연값은 0으로 표시한다", () => {
+    const summary = summarizeInteractiveLatency([
+      {
+        correlationId: "failed-event",
+        endpoint: "consumeNotificationOutbox",
+        operation: "notifications.deliver-household-request.v1",
+        elapsedMs: 3_500,
+        status: "failed",
+        timestamp: "2026-08-02T10:00:00.000Z",
+      },
+    ]);
+
+    expect(summary).toEqual([
+      {
+        endpoint: "consumeNotificationOutbox",
+        operation: "notifications.deliver-household-request.v1",
+        sampleCount: 1,
+        succeededCount: 0,
+        failedCount: 1,
+        averageMs: 0,
+        p95Ms: 0,
+        maxMs: 0,
+        latestAt: "2026-08-02T10:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("알림 대상 없음으로 거부된 요청은 provider 호출 지표에서 제외한다", () => {
+    expect(summarizeInteractiveLatency([
+      {
+        correlationId: "event-without-target",
+        endpoint: "consumeNotificationOutbox",
+        operation: "notifications.deliver-household-request.v1",
+        elapsedMs: 100,
+        status: "rejected",
+        timestamp: "2026-08-02T10:00:00.000Z",
+      },
+    ])).toEqual([]);
+  });
+
+  it("같은 correlation을 공유해도 서로 다른 endpoint와 operation은 각각 보존한다", () => {
+    const summary = summarizeInteractiveLatency([
+      {
+        correlationId: "shared-correlation",
+        endpoint: "executeHouseholdCommand",
+        operation: "ledger.update-transaction.v1",
+        elapsedMs: 120,
+        status: "succeeded",
+        timestamp: "2026-08-02T10:00:00.000Z",
+      },
+      {
+        correlationId: "shared-correlation",
+        endpoint: "consumeNotificationOutbox",
+        operation: "notifications.deliver-household-request.v1",
+        elapsedMs: 450,
+        status: "succeeded",
+        timestamp: "2026-08-02T10:00:01.000Z",
+      },
+    ]);
+
+    expect(summary).toHaveLength(2);
+    expect(summary.map(({ endpoint, operation }) => ({ endpoint, operation })))
+      .toEqual(expect.arrayContaining([
+        {
+          endpoint: "executeHouseholdCommand",
+          operation: "ledger.update-transaction.v1",
+        },
+        {
+          endpoint: "consumeNotificationOutbox",
+          operation: "notifications.deliver-household-request.v1",
+        },
+      ]));
+  });
+
+  it("Cloud Logging correlationId를 읽어 같은 Outbox event의 재시도를 한 건으로 축약한다", async () => {
+    const reader = new GoogleCloudInteractiveLatencyReader(
+      "project-a",
+      {
+        getAccessToken: async () => ({ access_token: "token-a" }),
+      },
+      async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          entries: [
+            {
+              timestamp: "2026-08-02T14:01:00.000Z",
+              jsonPayload: {
+                correlationId: "same-outbox-event",
+                endpoint: "consumeNotificationOutbox",
+                operation: "notifications.deliver-ios-shortcut.v1",
+                elapsedMs: 700,
+                status: "succeeded",
+              },
+            },
+            {
+              timestamp: "2026-08-02T14:00:00.000Z",
+              jsonPayload: {
+                correlationId: "same-outbox-event",
+                endpoint: "consumeNotificationOutbox",
+                operation: "notifications.deliver-ios-shortcut.v1",
+                elapsedMs: 10_000,
+                status: "failed",
+              },
+            },
+          ],
+        }),
+      }),
+    );
+
+    const result = await reader.read({
+      generatedAt: "2026-08-02T15:00:00.000Z",
+      windowHours: 24,
+    });
+
+    expect(result.operations).toEqual([
+      {
+        endpoint: "consumeNotificationOutbox",
+        operation: "notifications.deliver-ios-shortcut.v1",
+        sampleCount: 1,
+        succeededCount: 1,
+        failedCount: 0,
+        averageMs: 700,
+        p95Ms: 700,
+        maxMs: 700,
+        latestAt: "2026-08-02T14:01:00.000Z",
+      },
+    ]);
+  });
+
   it("Android·iPhone 첫 화면과 긴 Outbox 대기를 허용 endpoint로 읽는다", async () => {
     const reader = new GoogleCloudInteractiveLatencyReader(
       "project-a",
@@ -230,7 +420,7 @@ describe("Google Cloud interactive latency reader", () => {
         json: async () => ({
           entries: [
             {
-              timestamp: "2026-07-29T12:00:00.000Z",
+              timestamp: "2026-08-02T14:00:00.000Z",
               jsonPayload: {
                 endpoint: "clientStartup",
                 operation: "client.android-app-first-home-complete-paint.v1",
@@ -239,7 +429,7 @@ describe("Google Cloud interactive latency reader", () => {
               },
             },
             {
-              timestamp: "2026-07-29T12:00:00.500Z",
+              timestamp: "2026-08-02T14:00:00.500Z",
               jsonPayload: {
                 endpoint: "clientStartup",
                 operation: "client.ios-pwa-first-home-complete-paint.v1",
@@ -248,7 +438,7 @@ describe("Google Cloud interactive latency reader", () => {
               },
             },
             {
-              timestamp: "2026-07-29T12:00:00.750Z",
+              timestamp: "2026-08-02T14:00:00.750Z",
               jsonPayload: {
                 endpoint: "createWebViewSessionToken",
                 operation: "access.create-webview-session-token.v1",
@@ -257,7 +447,7 @@ describe("Google Cloud interactive latency reader", () => {
               },
             },
             {
-              timestamp: "2026-07-29T12:00:01.000Z",
+              timestamp: "2026-08-02T14:00:01.000Z",
               jsonPayload: {
                 endpoint: "consumeNotificationOutbox",
                 operation: "notifications.deliver-ios-shortcut.v1",
@@ -271,7 +461,7 @@ describe("Google Cloud interactive latency reader", () => {
     );
 
     const result = await reader.read({
-      generatedAt: "2026-07-29T13:00:00.000Z",
+      generatedAt: "2026-08-02T15:00:00.000Z",
       windowHours: 24,
     });
 

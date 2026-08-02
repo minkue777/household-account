@@ -78,6 +78,18 @@ class DefaultShortcutTransactionNotificationConsumer
         status: endpoint.status,
       })),
     });
+    if (decision.kind === "NoTarget") {
+      if (decision.reason !== "NO_ACTIVE_ENDPOINT") {
+        throw new Error(
+          `Unexpected Shortcut notification no-target reason: ${decision.reason}`,
+        );
+      }
+      return {
+        kind: "NoTarget",
+        transactionId: event.transactionId,
+        reason: decision.reason,
+      };
+    }
     if (decision.kind !== "Recipients") {
       throw new Error(
         `Shortcut transaction notification target unavailable: ${decision.kind}`,

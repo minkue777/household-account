@@ -217,7 +217,7 @@ Client Adapter의 `NotificationCapabilityController`는 플랫폼별로 다음�
 3. Event 종류에 따라 `TransactionCreatedNotificationPolicy` 또는 `HouseholdNotificationRequestPolicy`가 recipient memberId와 허용 endpoint platform을 계산합니다.
 4. Access에서 각 recipient의 active Membership을 확인한 뒤 active `NotificationEndpoint`를 모두 읽고 채널과 platform 조건에 맞는 endpoint 집합으로 확장합니다. Membership 조회가 실패하면 `NoTarget`으로 축약하지 않고 Inbox를 retryable 상태로 남기며 endpoint·delivery를 만들지 않습니다. 데스크톱 endpoint는 저장되지 않으므로 대상에 포함되지 않습니다.
 5. payload factory가 type별 `NotificationPayloadV1`을 생성합니다.
-6. 같은 transaction에서 Inbox 완료, intent, delivery claims를 저장합니다. 대상이 없으면 명시 `NoTarget` 결과를 저장합니다.
+6. 같은 transaction에서 Inbox 완료, intent, delivery claims를 저장합니다. 대상이 없으면 명시 `NoTarget` terminal 결과를 저장하고 성공 반환하여 Firestore trigger 재시도를 만들지 않습니다.
 7. 외부 FCM 호출은 transaction 밖의 delivery worker에서만 실행합니다.
 
 ### 5.3 Delivery
@@ -234,6 +234,8 @@ Client Adapter의 `NotificationCapabilityController`는 플랫폼별로 다음�
 10. 필요 시 Notifications 소유 결과 Event를 Outbox로 기록합니다.
 
 동일 Outbox Event의 재전달은 기존 Inbox·Delivery를 재생하므로 두 번째 FCM 호출을 만들지 않습니다. FCM 응답을 받지 못한 timeout은 실제 전달 여부를 증명하지 않고 `unknown-provider-outcome`으로 최종 기록합니다. payload의 `deliveryId`는 서버 관측 식별자이며 PWA·Android에 별도 중복 제거 저장소를 요구하지 않습니다.
+
+운영 성능 집계에서 `NoTarget`은 provider 호출 수와 지연 표본에 포함하지 않습니다. 같은 Outbox event가 재전달되어 구조화 로그가 여러 개 생겨도 `(endpoint, operation, correlationId)`별 최신 terminal 결과 하나만 사용하며, FCM 평균·P95·최대 시간은 provider가 실제 접수한 `Delivered` 표본만으로 계산합니다. provider 호출 후 실패한 결과는 실패 건수에는 남기되 성공 지연 통계를 왜곡하지 않습니다.
 
 ### 5.4 가구원 제거 endpoint 정리
 

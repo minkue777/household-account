@@ -13,6 +13,14 @@ export const HOUSEHOLD_NOTIFICATION_DELIVERY_OPERATION =
 export const SHORTCUT_NOTIFICATION_DELIVERY_OPERATION =
   "notifications.deliver-ios-shortcut.v1";
 
+export function notificationOutboxConsumerAlreadyTerminal(
+  data: Readonly<Record<string, unknown>>,
+): boolean {
+  return [data.notificationConsumerProcessedAt, data.terminalAt].some(
+    (value) => typeof value === "string" && value.trim() !== "",
+  );
+}
+
 export function householdNotificationDeliveryLatencyStatus(
   result:
     | { readonly kind: "ExpiredEvent" }
@@ -34,5 +42,6 @@ export function householdNotificationDeliveryLatencyStatus(
 export function shortcutNotificationDeliveryLatencyStatus(
   result: ShortcutTransactionNotificationResult,
 ): InteractiveLatencyStatus {
+  if (result.kind === "NoTarget") return "rejected";
   return result.kind === "Delivered" ? "succeeded" : "failed";
 }

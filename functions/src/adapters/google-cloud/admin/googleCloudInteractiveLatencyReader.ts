@@ -37,6 +37,12 @@ interface LoggingEntriesResponse {
 }
 
 export interface InteractiveLatencyObservation {
+  /**
+   * 같은 사용자 요청이나 Outbox event의 재시도를 식별하는 값입니다.
+   * 구형·외부 표본에는 없을 수 있으므로 optional로 읽되, 값이 있으면
+   * 최신 1건만 운영 집계에 포함합니다.
+   */
+  readonly correlationId?: string;
   readonly endpoint: AdminDashboardFunctionLatency["endpoint"];
   readonly operation: string;
   readonly elapsedMs: number;
@@ -87,6 +93,12 @@ const LATENCY_RESET_AT_BY_OPERATION = new Map<string, number>([
     "portfolio.refresh-market-values.v1",
     Date.parse("2026-07-29T10:45:28.395Z"),
   ],
+  // NoTarget을 예외로 던지던 구 consumer가 같은 네 Outbox event를 반복해
+  // 실패 238건과 수 시간짜리 지연으로 오염시킨 표본을 제외합니다.
+  [
+    "notifications.deliver-ios-shortcut.v1",
+    Date.parse("2026-08-02T13:30:00.000Z"),
+  ],
 ]);
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -102,10 +114,21 @@ function instant(value: unknown): string | undefined {
   return new Date(value).toISOString();
 }
 
+function correlationId(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  return normalized !== "" &&
+    normalized.length <= 160 &&
+    /^[A-Za-z0-9][A-Za-z0-9._:-]*$/u.test(normalized)
+    ? normalized
+    : undefined;
+}
+
 function observation(entry: LoggingEntry): InteractiveLatencyObservation | undefined {
   const payload = record(entry.jsonPayload);
   const endpoint = payload?.endpoint;
   const operation = payload?.operation;
+  const parsedCorrelationId = correlationId(payload?.correlationId);
   const elapsedMs = payload?.elapsedMs;
   const status = payload?.status;
   const timestamp = instant(entry.timestamp);
@@ -130,12 +153,64 @@ function observation(entry: LoggingEntry): InteractiveLatencyObservation | undef
       : MAX_INTERACTIVE_ELAPSED_MS;
   if (elapsedMs > maxElapsedMs) return undefined;
   return {
+    ...(parsedCorrelationId === undefined
+      ? {}
+      : { correlationId: parsedCorrelationId }),
     endpoint: endpoint as AdminDashboardFunctionLatency["endpoint"],
     operation,
     elapsedMs,
     status: status as InteractiveLatencyObservation["status"],
     timestamp,
   };
+}
+
+function statusTieBreak(
+  left: InteractiveLatencyObservation,
+  right: InteractiveLatencyObservation,
+): InteractiveLatencyObservation {
+  // 동일 millisecond로 정규화된 재시도 로그가 겹치면 성공·명시 거부처럼
+  // 재시도가 끝난 결과를 단순 실행 실패보다 우선합니다.
+  const terminalRank = { failed: 0, rejected: 1, succeeded: 2 } as const;
+  return terminalRank[right.status] > terminalRank[left.status] ? right : left;
+}
+
+function latestCorrelatedObservations(
+  observations: readonly InteractiveLatencyObservation[],
+): readonly InteractiveLatencyObservation[] {
+  const latest = new Map<string, InteractiveLatencyObservation>();
+  const uncorrelated: InteractiveLatencyObservation[] = [];
+
+  for (const item of observations) {
+    if (item.correlationId === undefined) {
+      uncorrelated.push(item);
+      continue;
+    }
+    // 하나의 correlation이 여러 endpoint/operation을 통과할 수 있으므로
+    // 서로 다른 업무 표본까지 합치지 않고 같은 지표 안의 재시도만 축약합니다.
+    const correlationKey = [
+      item.endpoint,
+      item.operation,
+      item.correlationId,
+    ].join("\u0000");
+    const current = latest.get(correlationKey);
+    if (current === undefined) {
+      latest.set(correlationKey, item);
+      continue;
+    }
+    const itemTime = Date.parse(item.timestamp);
+    const currentTime = Date.parse(current.timestamp);
+    if (itemTime > currentTime) {
+      latest.set(correlationKey, item);
+    } else if (itemTime === currentTime) {
+      latest.set(correlationKey, statusTieBreak(current, item));
+    }
+  }
+
+  return [...uncorrelated, ...latest.values()];
+}
+
+function notificationDeliveryOperation(operation: string): boolean {
+  return operation.startsWith("notifications.deliver-");
 }
 
 function roundedTenth(value: number): number {
@@ -153,10 +228,21 @@ export function summarizeInteractiveLatency(
   observations: readonly InteractiveLatencyObservation[],
 ): readonly AdminDashboardFunctionLatency[] {
   const groups = new Map<string, InteractiveLatencyObservation[]>();
-  for (const item of observations) {
-    if (EXCLUDED_OPERATIONS.has(item.operation)) continue;
+  const eligible = observations.filter((item) => {
+    if (EXCLUDED_OPERATIONS.has(item.operation)) return false;
     const resetAt = LATENCY_RESET_AT_BY_OPERATION.get(item.operation);
     if (resetAt !== undefined && Date.parse(item.timestamp) < resetAt) {
+      return false;
+    }
+    return true;
+  });
+  for (const item of latestCorrelatedObservations(eligible)) {
+    // NoTarget 같은 rejected 결과에는 FCM provider 호출이 없습니다. 알림 행의
+    // 호출·성공 수는 provider에 실제 접수한 결과만 나타냅니다.
+    if (
+      notificationDeliveryOperation(item.operation) &&
+      item.status === "rejected"
+    ) {
       continue;
     }
     const key = `${item.endpoint}\u0000${item.operation}`;
@@ -168,7 +254,10 @@ export function summarizeInteractiveLatency(
   return [...groups.values()]
     .map((items) => {
       const first = items[0];
-      const durations = items.map(({ elapsedMs }) => elapsedMs);
+      const durationItems = notificationDeliveryOperation(first.operation)
+        ? items.filter(({ status }) => status === "succeeded")
+        : items;
+      const durations = durationItems.map(({ elapsedMs }) => elapsedMs);
       const total = durations.reduce((sum, value) => sum + value, 0);
       return {
         endpoint: first.endpoint,
@@ -176,9 +265,11 @@ export function summarizeInteractiveLatency(
         sampleCount: items.length,
         succeededCount: items.filter(({ status }) => status === "succeeded").length,
         failedCount: items.filter(({ status }) => status !== "succeeded").length,
-        averageMs: roundedTenth(total / items.length),
+        averageMs:
+          durations.length === 0 ? 0 : roundedTenth(total / durations.length),
         p95Ms: roundedTenth(percentile(durations, 0.95)),
-        maxMs: roundedTenth(Math.max(...durations)),
+        maxMs:
+          durations.length === 0 ? 0 : roundedTenth(Math.max(...durations)),
         latestAt: items.reduce(
           (latest, item) =>
             Date.parse(item.timestamp) > Date.parse(latest)

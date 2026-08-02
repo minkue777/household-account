@@ -24,7 +24,7 @@ export interface ShortcutCreatorEndpoint {
 
 export interface ShortcutTransactionConsumerFixture {
   sourceLedgerDigest: string;
-  creatorEndpoint: ShortcutCreatorEndpoint;
+  creatorEndpoint?: ShortcutCreatorEndpoint;
   providerOutcome: ShortcutProviderOutcome;
 }
 
@@ -55,10 +55,13 @@ export interface ShortcutTransactionConsumerFixtureSubject
 class FixtureShortcutNotificationFactsQuery
   implements ShortcutNotificationFactsQuery
 {
-  constructor(private readonly endpoint: ShortcutCreatorEndpoint) {}
+  constructor(private readonly endpoint?: ShortcutCreatorEndpoint) {}
 
   async load(householdId: string): Promise<ShortcutNotificationFacts> {
     const endpoint = this.endpoint;
+    if (endpoint === undefined) {
+      return { members: [], endpoints: [] };
+    }
     return {
       members:
         endpoint.householdId === householdId

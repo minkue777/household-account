@@ -10,6 +10,11 @@ export interface ShortcutTransactionRecordedEvent {
 
 export type ShortcutTransactionNotificationResult =
   | { kind: "Delivered"; transactionId: string }
+  | {
+      kind: "NoTarget";
+      transactionId: string;
+      reason: "NO_ACTIVE_ENDPOINT";
+    }
   | { kind: "Failed"; transactionId: string }
   | { kind: "UnknownProviderOutcome"; transactionId: string }
   | { kind: "PermanentFailure"; transactionId: string }

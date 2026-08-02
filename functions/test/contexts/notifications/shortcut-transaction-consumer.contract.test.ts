@@ -33,7 +33,7 @@ export interface ShortcutTransactionConsumerContractSubject
 
 export function createSubject(_fixture: {
   sourceLedgerDigest: string;
-  creatorEndpoint: ShortcutCreatorEndpoint;
+  creatorEndpoint?: ShortcutCreatorEndpoint;
   providerOutcome:
     | "delivered"
     | "failed"
@@ -110,4 +110,23 @@ describe("Shortcut TransactionRecorded Notifications consumer 공개 계약", ()
       ]);
     },
   );
+
+  it("[T-IOS-NOTIFY-001][IOS-008/PUSH-004] 생성자의 활성 iPhone endpoint가 없으면 재시도 실패가 아니라 NoTarget으로 종료한다", async () => {
+    const subject = createSubject({
+      sourceLedgerDigest: "ledger-with-transaction-1",
+      providerOutcome: "delivered",
+    });
+
+    await expect(subject.consume(event)).resolves.toEqual({
+      kind: "NoTarget",
+      transactionId: "transaction-1",
+      reason: "NO_ACTIVE_ENDPOINT",
+    });
+    expect(subject.snapshot()).toEqual({
+      sourceLedgerDigest: "ledger-with-transaction-1",
+      inboxEventIds: [],
+      deliveries: [],
+    });
+    expect(subject.providerSendCalls()).toEqual([]);
+  });
 });
