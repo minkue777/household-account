@@ -401,7 +401,7 @@ export default function ExpenseEditModal({
           />
           <div>
             <span className="text-sm font-medium text-slate-700">이 가맹점 기억하기</span>
-            <p className="text-xs text-slate-500">
+            <p className="break-words text-xs text-slate-500">
               다음에 &quot;{expense.merchant}&quot;에서 결제하면 자동으로 {getCategoryLabel(category)}로
               분류합니다.
             </p>
@@ -420,7 +420,9 @@ export default function ExpenseEditModal({
           {expense.mergedFrom && expense.mergedFrom.length > 0 ? (
             <div className="mb-2 space-y-1 text-xs text-amber-700">
               {expense.mergedFrom.map((item, index) => (
-                <div key={index}>· {item.merchant} {item.amount.toLocaleString()}원</div>
+                <div key={index} className="break-words">
+                  · {item.merchant} {item.amount.toLocaleString()}원
+                </div>
               ))}
             </div>
           ) : (
@@ -580,14 +582,14 @@ export default function ExpenseEditModal({
     <>
       <Portal>
         <div
-          className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-slate-900/30 px-4 pb-4 pt-16 backdrop-blur-sm"
+          className="fixed inset-0 z-[9999] flex items-start justify-center overflow-x-hidden overflow-y-auto bg-slate-900/30 px-4 pb-4 pt-16 backdrop-blur-sm"
           onClick={onClose}
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-label={`${transactionLabel} 수정`}
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+            className="min-w-0 w-full max-w-md overflow-x-hidden rounded-2xl bg-white p-6 shadow-xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between">

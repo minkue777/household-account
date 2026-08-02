@@ -448,8 +448,8 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
 
           {selectedDate && (
             <div className={isIncome
-              ? 'order-3'
-              : 'order-3 lg:col-span-3 lg:col-start-2 lg:row-start-3'}
+              ? 'order-3 min-w-0'
+              : 'order-3 min-w-0 lg:col-span-3 lg:col-start-2 lg:row-start-3'}
             >
               <ExpenseDetail
                 key={`${transactionType}-${selectedDate}`}
