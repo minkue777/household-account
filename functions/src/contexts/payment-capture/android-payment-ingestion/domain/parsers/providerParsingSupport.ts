@@ -80,8 +80,8 @@ export function receivedLocalTime(
 
 export function bodyLines(body: string): readonly string[] {
   return body
-    .split(/\r\n|\n|\r/u)
-    .map((line) => line.trim())
+    .split(/\r\n|[\n\r\u2028\u2029]/u)
+    .map((line) => line.replace(/[\u200B-\u200D\u2060\uFEFF]/gu, "").trim())
     .filter((line) => line !== "");
 }
 

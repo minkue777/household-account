@@ -44,6 +44,11 @@ const LOTTE_CARD_TOKEN_PATTERN =
   /롯데(?:카드)?\s*\(?([0-9*xX＊]{4})\)?/u;
 const LOTTE_INSTALLMENT_DATE_PATTERN =
   /(?:일시불|(?:(?:\d+개월\s*)?할부))\s*,?\s*(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/u;
+const LOTTE_MONTHLY_TRANSIT_HEADER_PATTERN = /^\[롯데카드\]$/u;
+const LOTTE_MONTHLY_TRANSIT_HOLDER_PATTERN =
+  /^[가-힣＊*]+님\s+(\d{1,2})월\s+이용$/u;
+const LOTTE_MONTHLY_TRANSIT_DETAIL_PATTERN =
+  /^(.+?)\s+(\d+)건\s+([\d,]+)원\s+승인$/u;
 
 function parsedPayment(
   payment: ParsedPaymentGolden,
@@ -378,6 +383,56 @@ function normalizeLotteMerchant(value: string): string | undefined {
 
 function parseLotte(context: ProviderParserContext): AndroidProviderParseResult {
   const lines = bodyLines(context.body);
+  const monthlyTransitHeader = lines.findIndex((line) =>
+    LOTTE_MONTHLY_TRANSIT_HEADER_PATTERN.test(line),
+  );
+  if (monthlyTransitHeader >= 0) {
+    const holder = LOTTE_MONTHLY_TRANSIT_HOLDER_PATTERN.exec(
+      lines[monthlyTransitHeader + 1] ?? "",
+    );
+    const detail = LOTTE_MONTHLY_TRANSIT_DETAIL_PATTERN.exec(
+      lines[monthlyTransitHeader + 2] ?? "",
+    );
+    const received = receivedLocalTime(context);
+    if (holder === null || detail === null || received === undefined) {
+      return ignoredParseFailure("INVALID_LOTTE_TRANSIT_SUMMARY");
+    }
+    const declaredMonth = Number(holder[1]);
+    const receivedYear = Number(received.localDate.slice(0, 4));
+    const receivedMonth = Number(received.localDate.slice(5, 7));
+    const declaredYear =
+      declaredMonth > receivedMonth ? receivedYear - 1 : receivedYear;
+    const lastDay = new Date(
+      Date.UTC(declaredYear, declaredMonth, 0),
+    ).getUTCDate();
+    const occurred = occurrence({
+      context,
+      month: String(declaredMonth),
+      day: String(lastDay),
+      hour: received.localTime.slice(0, 2),
+      minute: received.localTime.slice(3, 5),
+    });
+    const amount = amountInWon(detail[3]);
+    if (
+      amount === undefined ||
+      declaredMonth < 1 ||
+      declaredMonth > 12 ||
+      occurred.kind === "failure"
+    ) {
+      return ignoredParseFailure(
+        occurred.kind === "failure" ? occurred.code : "INVALID_AMOUNT",
+      );
+    }
+    return parsedPayment({
+      type: "approval",
+      amountInWon: amount,
+      occurredLocalDate: occurred.occurredLocalDate,
+      occurredLocalTime: occurred.occurredLocalTime,
+      merchant: `${detail[1].trim()} ${detail[2]}건`,
+      cardCompany: "롯데",
+      timeSource: received.timeSource,
+    });
+  }
   const amountIndex = lines.findIndex((line) => LOTTE_AMOUNT_PATTERN.test(line));
   const cardIndex = lines.findIndex((line) => LOTTE_CARD_TOKEN_PATTERN.test(line));
   const dateIndex = lines.findIndex((line) =>

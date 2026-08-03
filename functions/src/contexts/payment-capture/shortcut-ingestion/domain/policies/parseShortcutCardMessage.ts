@@ -48,6 +48,28 @@ const LOTTE_MERCHANT_FIRST_DATE_PATTERN =
   /^(?:일시불|(?:(?:\d+개월\s*)?할부))\s*,?\s*(\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2})$/u;
 const KB_CHECK_CARD_HEADER_PATTERN =
   /^KB국민(?:카드)?(?:신용|체크)\s*\(?([0-9＊*xX]{4})\)?$/u;
+const LOTTE_MONTHLY_TRANSIT_HEADER_PATTERN = /^\[롯데카드\]$/u;
+const LOTTE_MONTHLY_TRANSIT_HOLDER_PATTERN =
+  /^[가-힣＊*]+님\s+(\d{1,2})월\s+이용$/u;
+const LOTTE_MONTHLY_TRANSIT_DETAIL_PATTERN =
+  /^(.+?)\s+(\d+)건\s+([\d,]+)원\s+승인$/u;
+
+function receivedAtSeoulParts(receivedAt: string): {
+  readonly year: number;
+  readonly month: number;
+  readonly hour: number;
+  readonly minute: number;
+} | undefined {
+  const instant = new Date(receivedAt);
+  if (Number.isNaN(instant.getTime())) return undefined;
+  const seoul = new Date(instant.getTime() + 9 * 60 * 60 * 1_000);
+  return {
+    year: seoul.getUTCFullYear(),
+    month: seoul.getUTCMonth() + 1,
+    hour: seoul.getUTCHours(),
+    minute: seoul.getUTCMinutes(),
+  };
+}
 
 function normalizedMaskedToken(value: string): string | undefined {
   const normalized = value
@@ -277,11 +299,67 @@ function parseKbCheckCardLayout(
   };
 }
 
+function parseLotteMonthlyTransitLayout(
+  lines: readonly string[],
+  receivedAt: string,
+): RecognizedShortcutLayout | undefined {
+  if (!LOTTE_MONTHLY_TRANSIT_HEADER_PATTERN.test(lines[0] ?? "")) {
+    return undefined;
+  }
+  const holder = LOTTE_MONTHLY_TRANSIT_HOLDER_PATTERN.exec(lines[1] ?? "");
+  const detail = LOTTE_MONTHLY_TRANSIT_DETAIL_PATTERN.exec(lines[2] ?? "");
+  if (holder === null || detail === null) return undefined;
+
+  const received = receivedAtSeoulParts(receivedAt);
+  const declaredMonth = Number(holder[1]);
+  const amount = parseAmount(`${detail[3]}원`);
+  if (
+    received === undefined ||
+    !Number.isSafeInteger(declaredMonth) ||
+    declaredMonth < 1 ||
+    declaredMonth > 12
+  ) {
+    return {
+      header: { kind: "success", companyLabel: "롯데", layout: "standard" },
+      paymentFields: { kind: "Rejected", code: "INVALID_DATE" },
+    };
+  }
+  if (amount.kind === "Rejected") {
+    return {
+      header: { kind: "success", companyLabel: "롯데", layout: "standard" },
+      paymentFields: amount,
+    };
+  }
+
+  const declaredYear =
+    declaredMonth > received.month ? received.year - 1 : received.year;
+  const lastDay = new Date(
+    Date.UTC(declaredYear, declaredMonth, 0),
+  ).getUTCDate();
+  return {
+    header: { kind: "success", companyLabel: "롯데", layout: "standard" },
+    paymentFields: {
+      kind: "success",
+      fields: {
+        amountInWon: amount.amountInWon,
+        month: declaredMonth,
+        day: lastDay,
+        hour: received.hour,
+        minute: received.minute,
+        merchant: `${detail[1].trim()} ${detail[2]}건`,
+      },
+    },
+  };
+}
+
 function parseRecognizedLayout(
   lines: readonly string[],
+  receivedAt: string,
 ): RecognizedShortcutLayout | undefined {
   return (
-    parseLotteMerchantFirstLayout(lines) ?? parseKbCheckCardLayout(lines)
+    parseLotteMonthlyTransitLayout(lines, receivedAt) ??
+    parseLotteMerchantFirstLayout(lines) ??
+    parseKbCheckCardLayout(lines)
   );
 }
 
@@ -290,8 +368,8 @@ export function parseShortcutCardMessage(input: {
   readonly resolveOccurrenceYear: ShortcutOccurrenceYearResolver;
 }): ShortcutCardMessageParseResult {
   const normalizedLines = input.command.message
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
+    .split(/\r\n|[\n\r\u2028\u2029]/u)
+    .map((line) => line.replace(/[\u200B-\u200D\u2060\uFEFF]/gu, "").trim())
     .filter((line) => line !== "");
   const lines =
     normalizedLines[0] === "[Web발신]"
@@ -301,7 +379,10 @@ export function parseShortcutCardMessage(input: {
     return { kind: "Rejected", code: "UNSUPPORTED_MESSAGE" };
   }
 
-  const recognizedLayout = parseRecognizedLayout(lines);
+  const recognizedLayout = parseRecognizedLayout(
+    lines,
+    input.command.receivedAt,
+  );
   const header = recognizedLayout?.header ?? parseHeader(lines[0]);
   if (header.kind === "Rejected") return header;
   const paymentFields = recognizedLayout?.paymentFields ??

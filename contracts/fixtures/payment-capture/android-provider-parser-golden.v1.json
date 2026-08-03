@@ -213,6 +213,13 @@
       "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 500, "occurredLocalDate": "2026-07-31", "occurredLocalTime": "20:40", "merchant": "빽다방 행신햇빛마을", "cardCompany": "롯데", "maskedCardToken": "5*5*" } }
     },
     {
+      "caseId": "lotte-monthly-transit-summary-sms",
+      "requirementIds": ["T-PARSE-001", "ING-006", "ING-007", "PARSE-LOTTE-001", "PARSE-SMSBILL-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "com.samsung.android.messaging", "parserId": "sms-card-message-parser" },
+      "raw": { "postedAt": "2026-08-03T10:30:00+09:00", "title": "메시지", "textLines": ["[Web발신]", "[롯데카드]", "김*지님 07월 이용", "교통카드 3건 3,200원 승인"] },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 3200, "occurredLocalDate": "2026-07-31", "occurredLocalTime": "10:30", "merchant": "교통카드 3건", "cardCompany": "롯데", "timeSource": "postedAt" } }
+    },
+    {
       "caseId": "gyeonggi-payment-and-balance",
       "requirementIds": ["T-PARSE-001", "T-ING-BAL-001", "PARSE-GYEONGGI-001"],
       "source": { "packageName": "gov.gyeonggi.ggcard", "parserId": "gyeonggi-local-currency-parser" },

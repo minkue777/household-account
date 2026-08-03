@@ -63,16 +63,36 @@ export function resolveOwnCard(input: {
       normalizeCardCompanyKey(card.cardCompany) === evidenceCompany,
   );
 
-  const exactCandidates =
-    evidenceToken === undefined
-      ? []
-      : ownedCandidates.filter((card) => {
-          const lastFour = normalizeRegisteredLastFour(card.lastFour);
-          return (
-            lastFour !== undefined &&
-            maskedCardTokenMatches(lastFour, evidenceToken)
-          );
-        });
+  if (evidenceToken === undefined) {
+    if (ownedCandidates.length === 0) {
+      return {
+        kind: "unmatched",
+        reason: "CARD_NOT_REGISTERED_FOR_ACTOR",
+      };
+    }
+    if (ownedCandidates.length === 1) {
+      const only = ownedCandidates[0];
+      const lastFour = normalizeRegisteredLastFour(only.lastFour);
+      if (lastFour !== undefined) {
+        return {
+          kind: "eligible",
+          canonicalEvidence: {
+            cardId: only.cardId,
+            companyLabel: canonicalCardCompanyLabel(only.cardCompany),
+            lastFour,
+          },
+        };
+      }
+    }
+    return { kind: "eligible" };
+  }
+
+  const exactCandidates = ownedCandidates.filter((card) => {
+    const lastFour = normalizeRegisteredLastFour(card.lastFour);
+    return (
+      lastFour !== undefined && maskedCardTokenMatches(lastFour, evidenceToken)
+    );
+  });
   const topCandidates =
     exactCandidates.length > 0
       ? exactCandidates

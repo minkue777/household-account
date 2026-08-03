@@ -161,7 +161,7 @@ HTTP response는 원문 message, 전체 token, 내부 parser stack을 포함하�
 
 - 비어 있지 않은 첫 줄이 문자 전송 표지 `[Web발신]`이면 결제 본문에 포함하지 않습니다. 그 외 임의의 선두 줄은 조용히 건너뛰지 않습니다.
 - `([0-9,]+)원` 금액과 선택 일시불·할부·체크 표기를 읽고 양의 안전 정수 원 단위로 검증합니다.
-- 기본 형식은 `M/D HH:mm merchant`를 읽으며 실제 달력 날짜, `00..23` 시, `00..59` 분과 비어 있지 않은 merchant를 검증합니다. NH 카드 문자 형식은 `NH카드{마스킹번호}승인` 뒤의 선택적인 명의자 한 행과 `M/D HH:mm`·가맹점 분리 행을 허용합니다. 롯데는 가맹점 우선·`금액 승인`·`명의자 롯데5*5*`·쉼표 없는 일시불 날짜 형식을, KB는 `KB국민체크(1164)`·명의자·일시·금액·`가맹점 사용` 형식을 별도 layout으로 정규화합니다. 후행 누적액은 거래 금액이나 가맹점으로 사용하지 않으며 명의자 행은 Actor·creator 근거가 아닙니다.
+- 입력 행은 CRLF·LF·CR과 iOS의 U+2028·U+2029를 같은 줄 경계로 정규화하고 BOM·zero-width 표시 문자를 제거합니다. 기본 형식은 `M/D HH:mm merchant`를 읽으며 실제 달력 날짜, `00..23` 시, `00..59` 분과 비어 있지 않은 merchant를 검증합니다. NH 카드 문자 형식은 `NH카드{마스킹번호}승인` 뒤의 선택적인 명의자 한 행과 `M/D HH:mm`·가맹점 분리 행을 허용합니다. 롯데는 가맹점 우선·`금액 승인`·`명의자 롯데5*5*`·쉼표 없는 일시불 날짜 형식뿐 아니라 `[롯데카드]`·`명의자 07월 이용`·`교통카드 3건 3,200원 승인` 월 합계를 별도 layout으로 정규화합니다. 월 합계는 이용 월 마지막 날과 수신 시각으로 기록하고 가맹점에 건수를 남깁니다. KB는 `KB국민체크(1164)`·명의자·일시·금액·`가맹점 사용` 형식을 별도 layout으로 정규화합니다. 후행 누적액은 거래 금액이나 가맹점으로 사용하지 않으며 명의자 행은 Actor·creator 근거가 아닙니다. 바우처 이용·잔액 안내는 승인으로 해석하지 않습니다.
 - 지원 헤더는 삼성·신한·국민·현대·롯데·하나·우리·BC·NH와 선택 숫자 token이며, NH의 `NH카드`·`NH농협카드` 문자 표기도 포함합니다. BC→비씨, NH 계열→농협으로 정규화합니다.
 - 헤더가 없을 때 삼성으로 간주하는 현재 동작은 `LegacyShortcutCardMessageParserV1`에서만 characterization 합니다. 목표 parser는 DEC-030에 따라 카드사 헤더 누락을 `CARD_COMPANY_REQUIRED`, 미지원 헤더를 `UNSUPPORTED_CARD_COMPANY`로 거부하며 등록 카드·owner·FCM 정보로 카드사를 추정하지 않습니다.
 - 연도 없는 월이 `currentMonth + 1`보다 크면 전년으로 추론하는 현재 동작은 `LegacyShortcutYearPolicy`로만 특성화합니다. 목표 parser는 DEC-029의 공통 `PaymentOccurrenceYearPolicyV1`에 월·일·시·분, `Clock`, `Asia/Seoul`을 전달하고 수신 LocalDateTime보다 미래가 아닌 가장 가까운 유효 연도를 받습니다. 같은 날짜라도 원문 시각이 수신 시각보다 뒤면 전년으로 내리며 미래 허용 오차는 없습니다.
@@ -183,7 +183,7 @@ FCM endpoint와 요청 owner는 멤버 신원의 원본이 아니며 Firestore �
 - `Ineligible(CARD_NOT_REGISTERED_FOR_ACTOR)`: 본인 카드가 일치하지 않습니다. 타 멤버 카드의 존재 여부는 조회하거나 결과에 노출하지 않습니다.
 - `Failure`: Repository·계약 장애이며 불일치로 축약하지 않습니다.
 
-본인 카드가 여러 개 일치해도 `Eligible`이며 거래를 생성할 수 있습니다. 이때 특정 카드 하나를 저장 순서로 선택하지 않고 parser의 카드 증거를 유지합니다. 레거시 owner alias는 호환 요청을 읽는 용도일 뿐 `actingMemberId`나 카드 조회 범위를 변경하지 않습니다. 전환 전에는 `LegacyShortcutOwnerPolicy` 결과와 새 결과를 shadow 비교하되 실제 목표 Writer에는 새 Policy만 사용합니다.
+알림에 카드 번호가 없을 때 본인의 같은 카드사 카드가 한 장이면 그 카드를 canonical evidence로 확정합니다. 여러 장이면 `Eligible`이지만 특정 카드 하나를 저장 순서로 선택하지 않고 parser의 카드사 증거만 유지합니다. 번호가 있는 알림에서 본인 카드가 여러 개 일치하는 경우도 같은 원칙을 적용합니다. 레거시 owner alias는 호환 요청을 읽는 용도일 뿐 `actingMemberId`나 카드 조회 범위를 변경하지 않습니다. 전환 전에는 `LegacyShortcutOwnerPolicy` 결과와 새 결과를 shadow 비교하되 실제 목표 Writer에는 새 Policy만 사용합니다.
 
 ### 4.3 영속 중복
 

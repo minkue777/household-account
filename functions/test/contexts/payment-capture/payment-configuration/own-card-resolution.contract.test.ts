@@ -137,6 +137,39 @@ describe("본인 소유 카드 판정 공개 계약", () => {
     expect(result).toEqual({ kind: "eligible" });
   });
 
+  it("[T-CARD-001] 알림에 번호가 없어도 본인의 같은 카드사 카드가 한 장이면 그 카드를 확정한다", () => {
+    const result = createSubject().resolve({
+      actingMemberId: "member-a",
+      evidence: { companyLabel: "롯데" },
+      cards: [
+        card("lotte-card", "member-a", "롯데", "5759"),
+        card("partner-lotte", "member-b", "롯데", "1234"),
+      ],
+    });
+
+    expect(result).toEqual({
+      kind: "eligible",
+      canonicalEvidence: {
+        cardId: "lotte-card",
+        companyLabel: "롯데",
+        lastFour: "5759",
+      },
+    });
+  });
+
+  it("[T-CARD-001] 알림에 번호가 없고 본인의 같은 카드사 카드가 여러 장이면 등록은 허용하되 하나를 임의 선택하지 않는다", () => {
+    const result = createSubject().resolve({
+      actingMemberId: "member-a",
+      evidence: { companyLabel: "롯데" },
+      cards: [
+        card("lotte-a", "member-a", "롯데", "5759"),
+        card("lotte-b", "member-a", "롯데", "1234"),
+      ],
+    });
+
+    expect(result).toEqual({ kind: "eligible" });
+  });
+
   it("[T-CARD-001] 본인 최상위 후보가 여러 건이면 등록은 허용하되 특정 카드를 임의 선택하지 않는다", () => {
     const subject = createSubject();
     const cards = [
