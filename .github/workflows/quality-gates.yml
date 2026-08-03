@@ -121,6 +121,11 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+      - name: KVM 사용 권한 활성화
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -136,4 +141,25 @@ jobs:
           target: google_apis
           profile: pixel_6
           disable-animations: true
-          script: cd android && ./gradlew connectedDebugAndroidTest --stacktrace
+          script: |
+            adb shell svc power stayon true
+            adb shell settings put system screen_off_timeout 2147483647
+            adb shell input keyevent KEYCODE_WAKEUP
+            adb shell wm dismiss-keyguard
+            cd android
+            status=0
+            ./gradlew connectedDebugAndroidTest --stacktrace || status=$?
+            mkdir -p app/build/ci-diagnostics
+            adb logcat -d > app/build/ci-diagnostics/logcat.txt || true
+            adb exec-out screencap -p > app/build/ci-diagnostics/screen.png || true
+            exit "$status"
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-instrumentation-failure
+          path: |
+            android/app/build/reports/androidTests
+            android/app/build/outputs/androidTest-results
+            android/app/build/ci-diagnostics
+          if-no-files-found: ignore
+          retention-days: 7

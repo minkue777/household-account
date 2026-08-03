@@ -7,16 +7,10 @@ import android.provider.Settings
 import android.view.View
 import android.webkit.WebSettings
 import android.webkit.WebView
+import android.widget.Button
+import android.widget.LinearLayout
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
-import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.assertion.ViewAssertions.matches
-import androidx.test.espresso.matcher.ViewMatchers.Visibility.GONE
-import androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE
-import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withEffectiveVisibility
-import androidx.test.espresso.matcher.ViewMatchers.withId
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.household.account.service.CardNotificationListenerService
@@ -61,17 +55,21 @@ class MainActivityInstrumentationTest {
     @Test
     fun missingMandatoryPermissionsShowSetupWithoutStartingTheWebPage() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            onView(withId(R.id.permissionLayout)).check(matches(isDisplayed()))
-            onView(withId(R.id.permissionLayout))
-                .check(matches(withEffectiveVisibility(VISIBLE)))
-            onView(withId(R.id.webView))
-                .check(matches(withEffectiveVisibility(GONE)))
-            onView(withText("알림 접근 권한 설정")).check(matches(isDisplayed()))
-            onView(withText("다른 앱 위에 표시 권한 설정")).check(matches(isDisplayed()))
-
             scenario.onActivity { activity ->
+                val permissionLayout =
+                    activity.findViewById<LinearLayout>(R.id.permissionLayout)
                 val webView = activity.findViewById<WebView>(R.id.webView)
+                val notificationPermission =
+                    activity.findViewById<Button>(R.id.btnRequestPermission)
+                val overlayPermission =
+                    activity.findViewById<Button>(R.id.btnRequestOverlayPermission)
+
+                assertEquals(View.VISIBLE, permissionLayout.visibility)
                 assertEquals(View.GONE, webView.visibility)
+                assertEquals(View.VISIBLE, notificationPermission.visibility)
+                assertEquals(View.VISIBLE, overlayPermission.visibility)
+                assertTrue(notificationPermission.isEnabled)
+                assertTrue(overlayPermission.isEnabled)
                 assertEquals(null, webView.url)
                 assertTrue(webView.settings.javaScriptEnabled)
                 assertTrue(webView.settings.domStorageEnabled)
@@ -95,9 +93,13 @@ class MainActivityInstrumentationTest {
         }
 
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            onView(withId(R.id.webView)).check(matches(isDisplayed()))
-            onView(withId(R.id.permissionLayout))
-                .check(matches(withEffectiveVisibility(GONE)))
+            scenario.onActivity { activity ->
+                assertEquals(View.VISIBLE, activity.findViewById<WebView>(R.id.webView).visibility)
+                assertEquals(
+                    View.GONE,
+                    activity.findViewById<LinearLayout>(R.id.permissionLayout).visibility
+                )
+            }
 
             waitUntil("신뢰된 가계부 URL 로드") {
                 var loadedUrl: String? = null

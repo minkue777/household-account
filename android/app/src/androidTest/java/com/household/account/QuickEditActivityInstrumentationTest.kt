@@ -3,17 +3,13 @@ package com.household.account
 import android.content.Context
 import android.content.Intent
 import android.view.View
+import android.widget.Button
+import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.TextView
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
-import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.action.ViewActions.replaceText
-import androidx.test.espresso.assertion.ViewAssertions.matches
-import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withId
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.android.flexbox.FlexboxLayout
 import org.junit.After
@@ -56,16 +52,28 @@ class QuickEditActivityInstrumentationTest {
     @Test
     fun launchPaintsIntentSnapshotAndSelectedCategoryImmediately() {
         launchQuickEdit().use { scenario ->
-            onView(withId(R.id.etMerchant)).check(matches(withText("롯데쇼핑동탄")))
-            onView(withId(R.id.etAmount)).check(matches(withText("20300")))
-            onView(withId(R.id.etMemo)).check(matches(withText("테스트 메모")))
-            onView(withId(R.id.tvDateTime)).check(matches(withText("07/31 17:40")))
-            onView(withText("저장")).check(matches(isDisplayed()))
-            onView(withText("삭제")).check(matches(isDisplayed()))
-            onView(withText("분리")).check(matches(isDisplayed()))
-            onView(withText("알림 보내기")).check(matches(isDisplayed()))
-
             scenario.onActivity { activity ->
+                assertEquals(
+                    "롯데쇼핑동탄",
+                    activity.findViewById<EditText>(R.id.etMerchant).text.toString()
+                )
+                assertEquals(
+                    "20300",
+                    activity.findViewById<EditText>(R.id.etAmount).text.toString()
+                )
+                assertEquals(
+                    "테스트 메모",
+                    activity.findViewById<EditText>(R.id.etMemo).text.toString()
+                )
+                assertEquals(
+                    "07/31 17:40",
+                    activity.findViewById<TextView>(R.id.tvDateTime).text.toString()
+                )
+                listOf(R.id.btnSave, R.id.btnDelete, R.id.btnSplit, R.id.btnNotify)
+                    .forEach { buttonId ->
+                        assertEquals(View.VISIBLE, activity.findViewById<Button>(buttonId).visibility)
+                    }
+
                 val categories =
                     activity.findViewById<FlexboxLayout>(R.id.categoryContainer)
                 assertEquals(5, categories.childCount)
@@ -82,22 +90,24 @@ class QuickEditActivityInstrumentationTest {
     @Test
     fun invalidInputStaysOpenAndCloseButtonFinishesTheQuickEdit() {
         launchQuickEdit().use { scenario ->
-            onView(withId(R.id.etMerchant)).perform(replaceText(""))
-            onView(withId(R.id.btnSave)).perform(click())
             scenario.onActivity { activity ->
+                activity.findViewById<EditText>(R.id.etMerchant).setText("")
+                activity.findViewById<Button>(R.id.btnSave).performClick()
                 assertFalse(activity.isFinishing)
                 assertFalse(activity.isDestroyed)
             }
 
-            onView(withId(R.id.etMerchant)).perform(replaceText("롯데쇼핑동탄"))
-            onView(withId(R.id.etAmount)).perform(replaceText("0"))
-            onView(withId(R.id.btnSave)).perform(click())
             scenario.onActivity { activity ->
+                activity.findViewById<EditText>(R.id.etMerchant).setText("롯데쇼핑동탄")
+                activity.findViewById<EditText>(R.id.etAmount).setText("0")
+                activity.findViewById<Button>(R.id.btnSave).performClick()
                 assertFalse(activity.isFinishing)
                 assertFalse(activity.isDestroyed)
             }
 
-            onView(withId(R.id.btnClose)).perform(click())
+            scenario.onActivity { activity ->
+                activity.findViewById<ImageButton>(R.id.btnClose).performClick()
+            }
             waitUntil("Quick Edit 닫기") {
                 scenario.state == Lifecycle.State.DESTROYED
             }
