@@ -4,7 +4,7 @@ import {
   createShortcutHttpRequestProcessorApplication,
   type ShortcutHttpRequestProcessorDependencies,
 } from "../../src/contexts/payment-capture/shortcut-ingestion/application/shortcutHttpRequestProcessorApplication";
-import type { ShortcutRejectedMessageDiagnosticPort } from "../../src/contexts/payment-capture/shortcut-ingestion/application/ports/out/shortcutHttpInboundPorts";
+import type { ShortcutMessageDiagnosticPort } from "../../src/contexts/payment-capture/shortcut-ingestion/application/ports/out/shortcutHttpInboundPorts";
 import type { ShortcutHttpRequestProcessingResult } from "../../src/contexts/payment-capture/shortcut-ingestion/public";
 
 const actor = {
@@ -28,7 +28,7 @@ function createRejectedMessageSubject(options: {
   readonly diagnostics: "success" | "failure" | "absent";
 }) {
   const retained: Array<
-    Parameters<ShortcutRejectedMessageDiagnosticPort["retain"]>[0]
+    Parameters<ShortcutMessageDiagnosticPort["retain"]>[0]
   > = [];
   const completed: Array<{
     readonly receiptKey: string;
@@ -37,7 +37,7 @@ function createRejectedMessageSubject(options: {
   const abandoned: string[] = [];
   const intakeSubmissions: unknown[] = [];
 
-  const rejectedMessageDiagnostics: ShortcutRejectedMessageDiagnosticPort = {
+  const messageDiagnostics: ShortcutMessageDiagnosticPort = {
     async retain(input) {
       retained.push(input);
       if (options.diagnostics === "failure") {
@@ -91,7 +91,7 @@ function createRejectedMessageSubject(options: {
     },
     ...(options.diagnostics === "absent"
       ? {}
-      : { rejectedMessageDiagnostics }),
+      : { messageDiagnostics }),
   };
 
   return {
@@ -121,7 +121,10 @@ describe("Shortcut parser 거부 원문 진단", () => {
         payloadHash: `hash(${processorInput.normalizedMessage})`,
         rawMessage: processorInput.diagnosticRawMessage,
         normalizedMessage: processorInput.normalizedMessage,
-        rejectionCode: "UNSUPPORTED_CARD_COMPANY",
+        parserOutcome: {
+          kind: "rejected",
+          code: "UNSUPPORTED_CARD_COMPANY",
+        },
         requestedAt: processorInput.requestedAt,
       },
     ]);

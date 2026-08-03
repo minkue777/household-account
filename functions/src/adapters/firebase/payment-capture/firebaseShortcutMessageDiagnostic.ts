@@ -2,20 +2,21 @@ import { createHash } from "node:crypto";
 
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 
-import type { ShortcutRejectedMessageDiagnosticPort } from "../../../contexts/payment-capture/shortcut-ingestion/application/ports/out/shortcutHttpInboundPorts";
+import type { ShortcutMessageDiagnosticPort } from "../../../contexts/payment-capture/shortcut-ingestion/application/ports/out/shortcutHttpInboundPorts";
 
 const COLLECTION = "notification_debug_logs";
 
-function diagnosticId(input: {
-  readonly credentialIdHash: string;
-  readonly rawMessage: string;
-}): string {
+type DiagnosticInput = Parameters<ShortcutMessageDiagnosticPort["retain"]>[0];
+
+function diagnosticId(input: DiagnosticInput): string {
   const rawMessageHash = createHash("sha256")
     .update(input.rawMessage, "utf8")
     .digest("hex");
+  const outcomeKey =
+    input.parserOutcome.kind === "accepted" ? "accepted" : "rejection";
   return createHash("sha256")
     .update(
-      `ios-shortcut-parser-rejection\u0000${input.credentialIdHash}\u0000${rawMessageHash}`,
+      `ios-shortcut-parser-${outcomeKey}\u0000${input.credentialIdHash}\u0000${rawMessageHash}`,
       "utf8",
     )
     .digest("hex");
@@ -29,23 +30,27 @@ function diagnosticLines(value: string): readonly string[] {
 }
 
 /**
- * Parser 개선 기간에만 사용하는 서버 전용 원문 저장 Adapter입니다.
- * 같은 credential·payload는 한 문서로 합치고 Cloud Logging에는 원문을 남기지 않습니다.
+ * 인증된 iPhone Shortcut 원문을 파서 개선 기간에만 보존하는 서버 전용 Adapter입니다.
  */
-export class FirebaseShortcutRejectedMessageDiagnosticAdapter
-  implements ShortcutRejectedMessageDiagnosticPort
+export class FirebaseShortcutMessageDiagnosticAdapter
+  implements ShortcutMessageDiagnosticPort
 {
   constructor(private readonly database: Firestore) {}
 
-  async retain(
-    input: Parameters<ShortcutRejectedMessageDiagnosticPort["retain"]>[0],
-  ): Promise<void> {
+  async retain(input: DiagnosticInput): Promise<void> {
+    const accepted = input.parserOutcome.kind === "accepted";
     await this.database
       .collection(COLLECTION)
       .doc(diagnosticId(input))
       .set(
         {
-          diagnosticType: "ios-shortcut-parser-rejection",
+          diagnosticType: accepted
+            ? "ios-shortcut-parser-accepted"
+            : "ios-shortcut-parser-rejection",
+          parserOutcome: input.parserOutcome.kind,
+          ...(input.parserOutcome.kind === "rejected"
+            ? { parserRejectionCode: input.parserOutcome.code }
+            : {}),
           householdId: input.actor.householdId,
           memberId: input.actor.actingMemberId,
           packageName: "ios-shortcut",
@@ -57,7 +62,6 @@ export class FirebaseShortcutRejectedMessageDiagnosticAdapter
           textLines: diagnosticLines(input.normalizedMessage),
           fullText: input.rawMessage,
           normalizedText: input.normalizedMessage,
-          parserRejectionCode: input.rejectionCode,
           credentialIdHash: `sha256:${input.credentialIdHash}`,
           payloadHash: `sha256:${input.payloadHash}`,
           rawMessageLength: input.rawMessage.length,
@@ -66,7 +70,7 @@ export class FirebaseShortcutRejectedMessageDiagnosticAdapter
           observedAt: new Date(input.requestedAt),
           collectedAt: new Date().toISOString(),
           requestedAt: input.requestedAt,
-          schemaVersion: 1,
+          schemaVersion: 2,
           updatedAt: FieldValue.serverTimestamp(),
           createdAt: FieldValue.serverTimestamp(),
         },

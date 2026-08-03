@@ -6,7 +6,7 @@ import type {
   ShortcutHttpMessageParserPort,
   ShortcutHttpPaymentIntakePort,
   ShortcutHttpReceiptPort,
-  ShortcutRejectedMessageDiagnosticPort,
+  ShortcutMessageDiagnosticPort,
 } from "./ports/out/shortcutHttpInboundPorts";
 import type { ShortcutHttpRequestProcessingResult } from "../domain/model/shortcutHttpInbound";
 
@@ -17,7 +17,7 @@ export interface ShortcutHttpRequestProcessorDependencies {
   readonly intake: ShortcutHttpPaymentIntakePort;
   readonly receipts: ShortcutHttpReceiptPort;
   readonly hashes: ShortcutHttpHashPort;
-  readonly rejectedMessageDiagnostics?: ShortcutRejectedMessageDiagnosticPort;
+  readonly messageDiagnostics?: ShortcutMessageDiagnosticPort;
 }
 
 function processingError(
@@ -54,13 +54,13 @@ export function createShortcutHttpRequestProcessorApplication(
       }
 
       const payloadHash = dependencies.hashes.hash(input.normalizedMessage);
-      const retainRejectedMessage = async (
-        rejectionCode: Parameters<
-          ShortcutRejectedMessageDiagnosticPort["retain"]
-        >[0]["rejectionCode"],
+      const retainMessage = async (
+        parserOutcome: Parameters<
+          ShortcutMessageDiagnosticPort["retain"]
+        >[0]["parserOutcome"],
       ): Promise<void> => {
         try {
-          await dependencies.rejectedMessageDiagnostics?.retain({
+          await dependencies.messageDiagnostics?.retain({
             actor: authorization.credential.actor,
             credentialIdHash: dependencies.hashes.hash(
               authorization.credential.credentialId,
@@ -68,7 +68,7 @@ export function createShortcutHttpRequestProcessorApplication(
             payloadHash,
             rawMessage: input.diagnosticRawMessage,
             normalizedMessage: input.normalizedMessage,
-            rejectionCode,
+            parserOutcome,
             requestedAt: input.requestedAt,
           });
         } catch {
@@ -92,14 +92,24 @@ export function createShortcutHttpRequestProcessorApplication(
           claim.result.kind === "error" &&
           claim.result.code === "UNSUPPORTED_MESSAGE"
         ) {
-          await retainRejectedMessage("UNSUPPORTED_MESSAGE");
+          await retainMessage({
+            kind: "rejected",
+            code: "UNSUPPORTED_MESSAGE",
+          });
+        } else if (claim.result.kind === "success") {
+          await retainMessage({ kind: "accepted" });
         }
         return claim.result;
       }
       if (claim.kind === "in-progress") {
         const result = await dependencies.receipts.waitForCompletion(receiptKey);
         if (result.kind === "error" && result.code === "UNSUPPORTED_MESSAGE") {
-          await retainRejectedMessage("UNSUPPORTED_MESSAGE");
+          await retainMessage({
+            kind: "rejected",
+            code: "UNSUPPORTED_MESSAGE",
+          });
+        } else if (result.kind === "success") {
+          await retainMessage({ kind: "accepted" });
         }
         return result;
       }
@@ -114,19 +124,22 @@ export function createShortcutHttpRequestProcessorApplication(
           const result = processingError("UNSUPPORTED_MESSAGE");
           await Promise.all([
             dependencies.receipts.complete({ receiptKey, result }),
-            retainRejectedMessage(parsed.code),
+            retainMessage({ kind: "rejected", code: parsed.code }),
           ]);
           return result;
         }
 
-        const intake = await dependencies.intake.submit({
-          commandId,
-          credentialId: authorization.credential.credentialId,
-          payloadHash,
-          requestedAt: input.requestedAt,
-          actor: authorization.credential.actor,
-          parsed,
-        });
+        const [intake] = await Promise.all([
+          dependencies.intake.submit({
+            commandId,
+            credentialId: authorization.credential.credentialId,
+            payloadHash,
+            requestedAt: input.requestedAt,
+            actor: authorization.credential.actor,
+            parsed,
+          }),
+          retainMessage({ kind: "accepted" }),
+        ]);
         let result: ShortcutHttpRequestProcessingResult;
         if (intake.kind === "retryable-failure") {
           result = processingError(
