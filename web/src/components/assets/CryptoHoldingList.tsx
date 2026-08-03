@@ -7,6 +7,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { deleteCryptoHolding, updateCryptoHolding } from '@/lib/assetService';
 import { calculateCryptoHoldingValue } from '@/lib/utils/useCryptoHoldingManager';
 import { useAppDialog } from '@/contexts/AppDialogContext';
+import FormattedIntegerInput from '@/components/common/FormattedIntegerInput';
 
 interface CryptoHoldingListProps {
   holdings: CryptoHolding[];
@@ -153,11 +154,9 @@ export default function CryptoHoldingList({
                   </div>
                   <div>
                     <label className="mb-1 block text-xs text-slate-500">평단 매수가</label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={editAvgPrice ? parseInt(editAvgPrice, 10).toLocaleString() : ''}
-                      onChange={(e) => setEditAvgPrice(e.target.value.replace(/[^0-9]/g, ''))}
+                    <FormattedIntegerInput
+                      value={editAvgPrice}
+                      onValueChange={setEditAvgPrice}
                       placeholder="0"
                       className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
                     />

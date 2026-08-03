@@ -2,6 +2,7 @@
 
 import { Loader2 } from 'lucide-react';
 import type { CryptoSearchResult } from '@/types/asset';
+import FormattedIntegerInput from '@/components/common/FormattedIntegerInput';
 
 export interface CryptoSearchState {
   searchQuery: string;
@@ -107,11 +108,9 @@ export default function CryptoSearchForm({ state, onAdd }: CryptoSearchFormProps
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">평균 매수가 (선택)</label>
               <div className="relative">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={avgPrice ? parseInt(avgPrice, 10).toLocaleString() : ''}
-                  onChange={(e) => setAvgPriceInput(e.target.value.replace(/[^0-9]/g, ''))}
+                <FormattedIntegerInput
+                  value={avgPrice}
+                  onValueChange={setAvgPriceInput}
                   placeholder="0"
                   className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />

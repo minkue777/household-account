@@ -1,5 +1,7 @@
 'use client';
 
+import FormattedIntegerInput from '@/components/common/FormattedIntegerInput';
+
 interface ManualHoldingFormProps {
   name: string;
   onNameChange: (value: string) => void;
@@ -34,11 +36,9 @@ export default function ManualHoldingForm({
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">금액</label>
           <div className="relative">
-            <input
-              type="text"
-              inputMode="numeric"
-              value={currentValue ? parseInt(currentValue, 10).toLocaleString() : ''}
-              onChange={(e) => onCurrentValueChange(e.target.value)}
+            <FormattedIntegerInput
+              value={currentValue}
+              onValueChange={onCurrentValueChange}
               placeholder="0"
               className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />

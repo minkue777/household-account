@@ -12,6 +12,7 @@ import {
 import { StockHolding } from '@/types/asset';
 import { portfolioQueries } from '@/features/portfolio/application/portfolioQueries';
 import { useAppDialog } from '@/contexts/AppDialogContext';
+import FormattedIntegerInput from '@/components/common/FormattedIntegerInput';
 
 interface DividendInfo {
   code: string;
@@ -51,10 +52,6 @@ interface HoldingEditorCardProps {
   onClose: () => void;
   onDelete: () => void;
   onSave: () => void;
-}
-
-function sanitizeIntegerInput(rawValue: string) {
-  return rawValue.replace(/[^0-9]/g, '');
 }
 
 function sanitizeDecimalInput(rawValue: string) {
@@ -278,40 +275,51 @@ function HoldingEditorCard({
               >
                 {isFund ? '보유 좌수' : '수량'}
               </label>
-              <input
-                id={quantityInputId}
-                type="text"
-                inputMode={isFund ? 'decimal' : 'numeric'}
-                value={formatEditableNumber(editQuantity, isFund ? 4 : 0)}
-                onChange={(event) =>
-                  onChangeQuantity(
-                    isFund
-                      ? sanitizeDecimalInput(event.target.value)
-                      : sanitizeIntegerInput(event.target.value)
-                  )
-                }
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-              />
+              {isFund ? (
+                <input
+                  id={quantityInputId}
+                  type="text"
+                  inputMode="decimal"
+                  value={formatEditableNumber(editQuantity, 4)}
+                  onChange={(event) =>
+                    onChangeQuantity(sanitizeDecimalInput(event.target.value))
+                  }
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                />
+              ) : (
+                <FormattedIntegerInput
+                  id={quantityInputId}
+                  value={editQuantity}
+                  onValueChange={onChangeQuantity}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                />
+              )}
             </div>
             <div>
               <label htmlFor={avgPriceInputId} className="mb-1 block text-xs text-slate-500">
                 {isFund ? '매입 기준가' : '평단'}
               </label>
-              <input
-                id={avgPriceInputId}
-                type="text"
-                inputMode={isFund ? 'decimal' : 'numeric'}
-                value={formatEditableNumber(editAvgPrice, isFund ? 4 : 0)}
-                onChange={(event) =>
-                  onChangeAvgPrice(
-                    isFund
-                      ? sanitizeDecimalInput(event.target.value)
-                      : sanitizeIntegerInput(event.target.value)
-                  )
-                }
-                placeholder="0"
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-              />
+              {isFund ? (
+                <input
+                  id={avgPriceInputId}
+                  type="text"
+                  inputMode="decimal"
+                  value={formatEditableNumber(editAvgPrice, 4)}
+                  onChange={(event) =>
+                    onChangeAvgPrice(sanitizeDecimalInput(event.target.value))
+                  }
+                  placeholder="0"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                />
+              ) : (
+                <FormattedIntegerInput
+                  id={avgPriceInputId}
+                  value={editAvgPrice}
+                  onValueChange={onChangeAvgPrice}
+                  placeholder="0"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                />
+              )}
             </div>
           </div>
         ) : (
@@ -319,12 +327,10 @@ function HoldingEditorCard({
             <label htmlFor={amountInputId} className="mb-1 block text-xs text-slate-500">
               금액
             </label>
-            <input
+            <FormattedIntegerInput
               id={amountInputId}
-              type="text"
-              inputMode="numeric"
-              value={editQuantity ? parseInt(editQuantity, 10).toLocaleString() : ''}
-              onChange={(event) => onChangeQuantity(sanitizeIntegerInput(event.target.value))}
+              value={editQuantity}
+              onValueChange={onChangeQuantity}
               placeholder="0"
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
             />

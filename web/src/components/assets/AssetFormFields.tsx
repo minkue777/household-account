@@ -9,6 +9,7 @@ import {
   LoanRepaymentMethod,
 } from '@/types/asset';
 import { ASSET_TYPE_ICON_COMPONENTS } from './assetIcons';
+import FormattedIntegerInput from '@/components/common/FormattedIntegerInput';
 
 interface AssetTypeGridProps {
   value: AssetType;
@@ -79,11 +80,9 @@ export function StockInitialInvestmentField({ value, onChange }: StockInitialInv
         <span className="text-xs text-slate-400 ml-2">(선택)</span>
       </label>
       <div className="relative">
-        <input
-          type="text"
-          inputMode="numeric"
-          value={value ? parseInt(value, 10).toLocaleString() : ''}
-          onChange={(e) => onChange(e.target.value.replace(/[^0-9]/g, ''))}
+        <FormattedIntegerInput
+          value={value}
+          onValueChange={onChange}
           placeholder="0"
           className="w-full px-4 py-2 pr-8 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
@@ -115,11 +114,9 @@ export function SavingsRecurringFields({
           <span className="text-xs text-slate-400 ml-2">(선택)</span>
         </label>
         <div className="relative">
-          <input
-            type="text"
-            inputMode="numeric"
-            value={amountValue ? parseInt(amountValue, 10).toLocaleString() : ''}
-            onChange={(e) => onAmountChange(e.target.value.replace(/[^0-9]/g, ''))}
+          <FormattedIntegerInput
+            value={amountValue}
+            onValueChange={onAmountChange}
             placeholder="0"
             className="w-full px-4 py-2 pr-8 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
           />
@@ -240,11 +237,9 @@ export function LoanRepaymentFields({
               <span className="ml-2 text-xs text-slate-400">(선택)</span>
             </label>
             <div className="relative">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={monthlyPaymentValue ? parseInt(monthlyPaymentValue, 10).toLocaleString() : ''}
-                onChange={(e) => onMonthlyPaymentChange(e.target.value.replace(/[^0-9]/g, ''))}
+              <FormattedIntegerInput
+                value={monthlyPaymentValue}
+                onValueChange={onMonthlyPaymentChange}
                 placeholder="0"
                 className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-red-500"
               />

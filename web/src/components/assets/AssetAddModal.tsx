@@ -14,6 +14,7 @@ import {
 } from '@/types/asset';
 import { addAsset, addCryptoHolding, addStockHolding } from '@/lib/assetService';
 import ModalOverlay from '@/components/common/ModalOverlay';
+import FormattedIntegerInput from '@/components/common/FormattedIntegerInput';
 import { X, Trash2 } from 'lucide-react';
 import {
   AssetMemoField,
@@ -645,11 +646,9 @@ export default function AssetAddModal({
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">현재 금액</label>
               <div className="relative">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={balance ? parseInt(balance, 10).toLocaleString() : ''}
-                  onChange={(e) => setBalance(e.target.value.replace(/[^0-9]/g, ''))}
+                <FormattedIntegerInput
+                  value={balance}
+                  onValueChange={setBalance}
                   placeholder="0"
                   className="w-full rounded-lg border border-slate-300 px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
