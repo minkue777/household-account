@@ -8,6 +8,7 @@ import {
   Sha256ShortcutHttpHashAdapter,
 } from "../adapters/firebase/payment-capture/firebaseShortcutHttpInfrastructure";
 import { HmacShortcutCredentialSecretAdapter } from "../adapters/firebase/payment-capture/firebaseShortcutCredentialInfrastructure";
+import { FirebaseShortcutRejectedMessageDiagnosticAdapter } from "../adapters/firebase/payment-capture/firebaseShortcutRejectedMessageDiagnostic";
 import { createShortcutHttpRequestProcessorApplication } from "../contexts/payment-capture/shortcut-ingestion/application/shortcutHttpRequestProcessorApplication";
 import {
   createShortcutCardMessageParser,
@@ -85,6 +86,8 @@ const inbound = createShortcutHttpInboundHandler({
     ),
     receipts: new FirebaseShortcutHttpReceiptAdapter(db),
     hashes: new Sha256ShortcutHttpHashAdapter(),
+    rejectedMessageDiagnostics:
+      new FirebaseShortcutRejectedMessageDiagnosticAdapter(db),
   }),
 });
 

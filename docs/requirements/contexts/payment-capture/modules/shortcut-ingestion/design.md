@@ -34,6 +34,7 @@ Android 금융 알림 parser와 Shortcut message parser는 서로 다른 코드�
 - 동일 논리 HTTP retry에 안정적인 idempotency key 생성·전달
 - 신규·중복 거래 결과와 알림 접수·전달 결과를 별도 필드로 관측
 - Google 로그인 SessionScope 기반 Shortcut credential 발급·상태 조회·폐기와 공유 Shortcut 반자동 설치 계약
+- 인증된 parser 거부 요청만 `notification_debug_logs`에 원문·정규화 결과와 최소 진단 metadata를 best-effort로 보존하는 임시 Diagnostic Adapter
 
 ### 2.2 위임 책임
 
@@ -198,7 +199,7 @@ Shortcut parser와 HTTP Adapter는 영속 중복 query를 하지 않습니다. �
 4. credential 단위 rate limit과 비용 quota를 claim하고 초과하면 429로 종료합니다. 실패 경로는 Membership·parser·Payment Intake를 호출하지 않습니다.
 5. `message`와 `Idempotency-Key`의 field별 길이 상한을 검사한 뒤 정규화합니다. 빈 message는 `ValidationError`입니다. 목표 wire body에는 householdId·owner alias가 없고 가구는 credential claim에서만 결정합니다. 구형 alias는 이 Use Case 밖의 Compatibility Facade가 소비·폐기합니다.
 6. Access 공개 Port로 가구가 active이고 Actor membership이 유효하며 credential의 uid/member/household와 같은지 확인합니다.
-7. parser가 금액·날짜·시간·merchant·card evidence를 만듭니다. 원문은 이후 DTO와 오류 응답에서 버립니다.
+7. parser가 금액·날짜·시간·merchant·card evidence를 만듭니다. parser가 거부하면 5.2.1의 임시 Diagnostic Adapter에 best-effort 저장을 요청한 뒤 원래 typed 오류를 반환합니다. 정상 parse의 원문은 즉시 버리며 어떤 경로에서도 원문을 DTO나 오류 응답에 넣지 않습니다.
 8. Shortcut Adapter는 body 값으로 owner를 결정하지 않고 카드와 비교하거나 최종 owner를 선택하지 않습니다. 호환 진단이 필요하면 Facade가 비식별 parity metric만 남기고 alias 원문을 Application에 전달하지 않습니다.
 9. observation ID, `originChannel=ios-shortcut`, `sourceEvidence.kind=ios-shortcut-credential`과 credentialId의 비가역 hash, parser ID/version, `paymentObservation`을 넣어 Android 설계에 정의된 공통 `CaptureEnvelope.v1`으로 변환합니다. packageName·registryVersion을 꾸며내지 않으며 생성자 후보는 payload가 아니라 command의 `ActorContext`입니다.
 10. 같은 command envelope로 `SubmitCaptureEnvelopeV1`을 한 번 호출합니다. Payment Intake는 `ActorContext.actingMemberId` 범위로 Configuration의 `ResolveCard`를 호출하며 Shortcut Adapter는 Configuration/Ledger를 따로 호출하지 않습니다.
@@ -229,6 +230,25 @@ Shortcut parser와 HTTP Adapter는 영속 중복 query를 하지 않습니다. �
 | 같은 idempotency key의 다른 payload | `IDEMPOTENCY_PAYLOAD_MISMATCH` | 409 |
 | 일시 저장·provider 장애 | 제공 Port의 retryable code | 503 + 선택 Retry-After |
 
+### 5.2.1 인증된 parser 거부 원문 진단
+
+이 경로는 [DEC-002](../../../../governance/decisions.md#dec-002)와 [DEC-047](../../../../governance/decisions.md#dec-047)을 따르는 임시 Infrastructure Adapter입니다. Credential Adapter와 Membership Query가 모두 성공해 `ActorContext`가 확정된 뒤 parser가 typed rejection을 반환한 경우에만 호출합니다. 정상 parse, Created·Duplicate, 카드 eligibility 실패, 인증·인가 실패, ingress·wire schema 실패에는 호출하지 않습니다.
+
+`notification_debug_logs` 문서는 다음 최소 schema를 가집니다.
+
+| 필드 | 의미 |
+|---|---|
+| `source` | 고정값 `ios-shortcut` |
+| `fullText` | parser에 전달되기 전 요청의 exact raw message. 개행·제로폭 문자·비표준 공백을 정규화하지 않고 보존 |
+| `normalizedText` | 같은 요청에 `ShortcutValueNormalizer`와 parser 입력 정규화를 적용한 결과 |
+| `householdId`, `memberId` | 인증으로 확정된 Actor scope. 요청 body alias를 사용하지 않음 |
+| `payloadHash` | parser payload의 결정적 비가역 hash |
+| `credentialIdHash` | 원문 credential이 아닌 안정적인 비가역 credential 식별 hash |
+| `parserRejectionCode` | parser가 반환한 안정 typed code |
+| `collectedAt`, `requestedAt` | 서버 수집 시각과 요청 기준 시각 |
+
+저장은 `ShortcutRejectedMessageDiagnosticPort`를 통한 best-effort 작업입니다. 호출은 await해 기록 시도를 완료하되 실패를 흡수하고, 성공·실패를 HTTP status나 typed 결과에 반영하지 않습니다. 실패를 거래 재시도 사유로 만들거나 Payment Intake·Ledger·Notifications를 호출해서도 안 됩니다. 같은 `credentialIdHash + payloadHash`는 결정적 문서 ID의 한 문서로 merge합니다. Cloud Logging에는 rejection code와 비민감 correlation만 남기고 `fullText`·`normalizedText`·Actor 원문을 기록하지 않습니다. 문서는 관리자·진단 역할만 읽을 수 있고 시간 기반 TTL은 두지 않습니다. 진단 기능을 제거할 때 Shortcut Writer와 Android Writer, Rules, index, `notification_debug_logs` 데이터 전체를 같은 제거 범위로 정리합니다.
+
 ### 5.3 신규·중복 알림 결과
 
 거래 결과와 알림 결과는 독립 필드입니다. 신규 `Created`는 Ledger의 `TransactionRecorded.v1`이 commit되었으면 `queued`, Notifications 전달 완료를 조회했을 때만 `delivered`입니다. `Duplicate`는 공통 Capture 결과의 `followUp.outboxQueued(CaptureDuplicateObserved.v1, eventId)`를 `queued`로 매핑하며, 대상 없음·일시·영구 실패 같은 후속 상태는 Notifications의 `GetDeliveryStatus` 결과로만 갱신합니다. [DEC-013](../../../../governance/decisions.md#dec-013)의 iPhone 생성자 수신 정책은 Notifications의 `TransactionCreatedNotificationPolicy`가 소유하고 Shortcut은 endpoint를 계산하지 않습니다.
@@ -252,6 +272,7 @@ Domain과 `ProcessShortcutRequestV2`는 typed V2 결과만 반환합니다. 구�
 | `NotificationDeliveryStatusPort` | Capture/Ledger가 반환한 Event ID의 후속 전달 상태 조회 | no-target, queued, delivered, partial, failed, unknown, permanent; 알림 생성 명령은 제공하지 않음 |
 | `Clock`, `IdGenerator`, `HashingPort` | 연도, command/observation ID, legacy idempotency hash | timezone·연말 fixture |
 | `ObservabilityPort` | credential ID hash, parser version, result code | message·credential·token 원문 금지 |
+| `ShortcutRejectedMessageDiagnosticPort` | 인증된 parser 거부의 exact raw·normalized message와 actor scope·payload/credential hash·rejection code·수집 시각을 `notification_debug_logs`에 best-effort 저장 | 정상·인증 실패·parser 이전 거부는 미호출; unavailable·timeout·write failure가 HTTP·업무 결과를 변경하지 않음 |
 
 Application은 Firebase Admin, Express Request/Response, FCM SDK를 import하지 않습니다.
 
@@ -261,6 +282,7 @@ Shortcut 모듈 자체에는 Canonical 영속 Aggregate가 없습니다. 요청�
 
 - 같은 idempotency key·payload hash는 저장된 typed 결과와 같은 downstream key를 재생합니다.
 - Credential 발급 receipt는 `Issued`의 credentialId·credentialVersion·결과 code만 저장합니다. 같은 발급 key 재전송은 `AlreadyIssued`로 매핑하고 원문을 재생하거나 새 자격을 만들지 않습니다. 사용자가 새 key로 재발급할 때만 새 hash 저장과 기존 활성 credential 폐기를 한 transaction으로 수행합니다.
+- `notification_debug_logs`는 Canonical Aggregate나 receipt가 아닌 임시 진단 저장소입니다. 인증된 parser 거부의 `credentialIdHash + payloadHash`마다 결정적 진단 문서 한 건을 best-effort로 merge하며 업무 transaction·멱등 receipt와 결합하지 않습니다. 자동 TTL은 없고 DEC-002·047의 기능 제거 시 Writer·Rules·index·데이터를 함께 제거합니다.
 - 같은 key의 다른 payload는 parse 이후라도 Ledger와 Notifications를 호출하지 않습니다.
 - 같은 DEC-003 tuple의 Android·Shortcut 동시 요청은 Ledger fingerprint claim 경합으로 거래 한 건이 됩니다.
 - 알림 요청은 transaction 안에서 FCM을 호출하지 않습니다. duplicate 호환 Event ID와 Outbox append는 Payment Intake가 `captureReceiptId:duplicate-notification:targetMemberId`에서 결정적으로 만들고 receipt Unit of Work에 포함합니다.
@@ -272,7 +294,7 @@ Shortcut 모듈 자체에는 Canonical 영속 Aggregate가 없습니다. 요청�
 - `Created`의 거래 알림은 Ledger의 `TransactionRecorded.v1` Outbox를 Notifications Inbox가 소비하며 creator 본인의 iPhone endpoint에만 편집 링크를 보냅니다.
 - `CaptureDuplicateObserved.v1`의 유일 producer는 Payment Capture Intake입니다. Notifications는 이를 새 거래 Event로 해석하지 않고 duplicate template intent로 변환하며, 같은 receipt 재시도는 같은 Event·delivery key로 한 번만 전송됩니다.
 - HTTP 응답은 알림 delivery를 기다리느라 거래 성공을 실패로 바꾸지 않습니다. `GetDeliveryStatus`가 필요한 경우 `deliveryId`를 반환합니다.
-- Shortcut message 원문은 Event, Outbox, receipt, 알림 payload, 일반 로그에 포함하지 않습니다.
+- Shortcut message 원문은 Event, Outbox, receipt, 알림 payload, 일반 로그에 포함하지 않습니다. 유일한 예외는 IOS-014의 인증된 parser 거부를 위한 관리자 전용 임시 `notification_debug_logs`입니다.
 - parser contract fixture는 비식별 message와 예상 evidence를 소유하며 Android 금융 알림 fixture와 별도 디렉터리에 둡니다.
 
 ## 9. 오류·보안·관측성
@@ -288,6 +310,7 @@ Shortcut 모듈 자체에는 Canonical 영속 Aggregate가 없습니다. 요청�
 - 파싱 실패 응답에 원문을 echo하지 않습니다.
 - Admin SDK가 Rules를 우회하므로 모든 Application 경로에서 Membership을 검증합니다.
 - HTTP 인증 진단은 Authorization 원문·credential ID를 기록하지 않고 `missing`, `malformed`, `credential-format-valid` 형태와 최종 HTTP status·typed error code만 구조화 로그로 남깁니다.
+- 인증된 parser 거부의 exact 원문과 정규화 결과는 Cloud Logging이 아니라 관리자 전용 `notification_debug_logs`에만 저장합니다. 인증 실패나 정상 요청은 수집하지 않고 별도 Secret 원문은 기록하지 않습니다.
 
 관측 필드는 command ID, credential subject hash, household hash, parser/version, normalized input kind, transaction result, notification state, delivery attempt count, latency입니다. 인증 실패, schema 실패, parser 실패, duplicate, notification no-target/failed/unknown/permanent를 별도 metric으로 둡니다.
 
@@ -334,11 +357,12 @@ contracts/
 | [IOS-011](requirements.md#5-요구사항) | Emulator, Concurrency | Intake receipt·Ledger claim | 동일 요청 동시 2회, callback retry, receipt 완료 전 중단 | 거래 한 건·같은 결과 재생·알림 멱등 | `T-IOS-001` |
 | [IOS-012](requirements.md#5-요구사항) | Contract, Security I | HTTP Adapter·Ingress limit | POST/GET/OPTIONS, JSON/기타, version, byte/field/key 경계, CORS-only, rate/quota 병렬 경합 | 허용 POST만 Application 한 번, 나머지는 안정 status/code와 downstream 0회 | `T-IOS-003`, `T-IOS-SEC-002` |
 | [IOS-013](requirements.md#5-요구사항) | Contract, Security, UI | ShortcutCredential 발급·검증·설치·재발급 | 최초 발급, 같은 idempotency key 재전송, 응답 유실 뒤 명시적 재발급, 재발급 경합, revoked/replaced, Membership 상실, body 위조 owner/household, 원문 재조회·로그, 설치 중단, 활성 자격 설정 화면 | 최초 원문 1회, 재전송은 `AlreadyIssued` 메타데이터만, 명시적 재발급은 이전 키 원자 폐기, hash 저장, claim Actor만 사용, endpoint·POST·JSON·Authorization·typed 응답이 완성된 Shortcut+붙여넣기 1회, 가구원 초대 다음 배치·활성 화면은 제목 오른쪽의 작은 재발급 버튼만 표시 | `T-IOS-SEC-002`, `T-IOS-INSTALL-001` |
+| [IOS-014](requirements.md#5-요구사항) | Application, Adapter Integration, Security E2E | `ShortcutRejectedMessageDiagnosticPort`와 관리자 전용 저장소 | 인증+Membership 성공 뒤 parser 거부와 같은 요청 재전송, 정상 parse, 인증·schema 실패, CRLF·제로폭·비표준 공백, 저장 timeout·오류 | 허용 credential+payload마다 결정적 한 문서에 exact raw·normalized message와 actor scope·두 hash·code·시각; 일반 로그·응답 원문 0건; 저장 실패 전후 HTTP 결과와 downstream 호출 동일 | `T-IOS-DIAG-001` |
 
-공통 contract suite는 같은 key의 동일·상이 payload, method/content type/version/body/field/key/rate/quota 경계, CORS와 credential 독립성, Created/Duplicate response schema, 원문 비노출, Android와 Shortcut이 만든 `CaptureEnvelope.v1`의 producer/consumer 호환을 검증합니다. Cross-cutting 전체 보안 행렬은 [`T-SEC-002`](../../../../cross-cutting/security-privacy.md#7-보안-테스트-행렬)가 소유하고 이 모듈은 `T-IOS-SEC-001`, `T-IOS-SEC-002`에서 Shortcut 입력 경계를 검증합니다.
+공통 contract suite는 같은 key의 동일·상이 payload, method/content type/version/body/field/key/rate/quota 경계, CORS와 credential 독립성, Created/Duplicate response schema, 응답·Event·일반 로그의 원문 비노출, Android와 Shortcut이 만든 `CaptureEnvelope.v1`의 producer/consumer 호환을 검증합니다. IOS-014의 관리자 전용 임시 진단 저장은 이 비노출 규칙의 유일한 명시적 예외로 별도 suite에서 허용 분기와 best-effort 격리를 검증합니다. Cross-cutting 전체 보안 행렬은 [`T-SEC-002`](../../../../cross-cutting/security-privacy.md#7-보안-테스트-행렬)가 소유하고 이 모듈은 `T-IOS-SEC-001`, `T-IOS-SEC-002`, `T-IOS-DIAG-001`에서 Shortcut 입력 경계를 검증합니다.
 
 ## 12. 확정 정책과 구현 순서
 
 다중 FID endpoint는 [DEC-020](../../../../governance/decisions.md#dec-020), 카드사 헤더는 [DEC-030](../../../../governance/decisions.md#dec-030), Shortcut credential 발급·반자동 설치·폐기는 [DEC-033](../../../../governance/decisions.md#dec-033)으로 확정되었습니다.
 
-구현 순서는 (1) value normalizer·parser·owner·연도 legacy characterization, (2) DEC-029 공통 연도 Policy fixture 연결, (3) HTTP wrapper에서 순수 handler와 OPTIONS를 분리하고 유한 ingress limit을 먼저 적용, (4) DEC-033 scoped credential 발급·검증·폐기 Application과 반자동 설치 UI·공유 Shortcut·보안 목표 test, (5) `CaptureEnvelope.v1` 변환·공통 Intake Fake, (6) 실제 Intake 연결과 DEC-003 경합 test, (7) transaction/notification 분리 response, (8) duplicate 알림 멱등화, (9) Legacy Response Mapper와 직접 Firestore·FCM 접근 제거 순입니다.
+구현 순서는 (1) value normalizer·parser·owner·연도 legacy characterization, (2) DEC-029 공통 연도 Policy fixture 연결, (3) HTTP wrapper에서 순수 handler와 OPTIONS를 분리하고 유한 ingress limit을 먼저 적용, (4) DEC-033 scoped credential 발급·검증·폐기 Application과 반자동 설치 UI·공유 Shortcut·보안 목표 test, (5) 인증된 parser 거부에만 호출되는 IOS-014 Diagnostic Port와 best-effort 격리 test, (6) `CaptureEnvelope.v1` 변환·공통 Intake Fake, (7) 실제 Intake 연결과 DEC-003 경합 test, (8) transaction/notification 분리 response, (9) duplicate 알림 멱등화, (10) Legacy Response Mapper와 직접 Firestore·FCM 접근 제거 순입니다.

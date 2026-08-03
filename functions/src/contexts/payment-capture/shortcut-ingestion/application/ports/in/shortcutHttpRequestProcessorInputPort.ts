@@ -3,6 +3,7 @@ import type { ShortcutHttpRequestProcessingResult } from "../../../domain/model/
 export interface ShortcutHttpRequestProcessorInputPort {
   process(input: {
     readonly bearerCredential: string | null;
+    readonly diagnosticRawMessage: string;
     readonly normalizedMessage: string;
     readonly requestedAt: string;
     readonly idempotencyKey?: string;

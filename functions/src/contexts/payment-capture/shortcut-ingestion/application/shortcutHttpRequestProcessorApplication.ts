@@ -6,6 +6,7 @@ import type {
   ShortcutHttpMessageParserPort,
   ShortcutHttpPaymentIntakePort,
   ShortcutHttpReceiptPort,
+  ShortcutRejectedMessageDiagnosticPort,
 } from "./ports/out/shortcutHttpInboundPorts";
 import type { ShortcutHttpRequestProcessingResult } from "../domain/model/shortcutHttpInbound";
 
@@ -16,6 +17,7 @@ export interface ShortcutHttpRequestProcessorDependencies {
   readonly intake: ShortcutHttpPaymentIntakePort;
   readonly receipts: ShortcutHttpReceiptPort;
   readonly hashes: ShortcutHttpHashPort;
+  readonly rejectedMessageDiagnostics?: ShortcutRejectedMessageDiagnosticPort;
 }
 
 function processingError(
@@ -52,6 +54,27 @@ export function createShortcutHttpRequestProcessorApplication(
       }
 
       const payloadHash = dependencies.hashes.hash(input.normalizedMessage);
+      const retainRejectedMessage = async (
+        rejectionCode: Parameters<
+          ShortcutRejectedMessageDiagnosticPort["retain"]
+        >[0]["rejectionCode"],
+      ): Promise<void> => {
+        try {
+          await dependencies.rejectedMessageDiagnostics?.retain({
+            actor: authorization.credential.actor,
+            credentialIdHash: dependencies.hashes.hash(
+              authorization.credential.credentialId,
+            ),
+            payloadHash,
+            rawMessage: input.diagnosticRawMessage,
+            normalizedMessage: input.normalizedMessage,
+            rejectionCode,
+            requestedAt: input.requestedAt,
+          });
+        } catch {
+          // 임시 진단 저장 실패가 결제 요청의 업무 결과를 바꾸면 안 됩니다.
+        }
+      };
       const logicalKey =
         input.idempotencyKey === undefined || input.idempotencyKey === ""
           ? `derived:${payloadHash}`
@@ -64,9 +87,21 @@ export function createShortcutHttpRequestProcessorApplication(
       if (claim.kind === "payload-mismatch") {
         return processingError("IDEMPOTENCY_PAYLOAD_MISMATCH");
       }
-      if (claim.kind === "completed") return claim.result;
+      if (claim.kind === "completed") {
+        if (
+          claim.result.kind === "error" &&
+          claim.result.code === "UNSUPPORTED_MESSAGE"
+        ) {
+          await retainRejectedMessage("UNSUPPORTED_MESSAGE");
+        }
+        return claim.result;
+      }
       if (claim.kind === "in-progress") {
-        return dependencies.receipts.waitForCompletion(receiptKey);
+        const result = await dependencies.receipts.waitForCompletion(receiptKey);
+        if (result.kind === "error" && result.code === "UNSUPPORTED_MESSAGE") {
+          await retainRejectedMessage("UNSUPPORTED_MESSAGE");
+        }
+        return result;
       }
 
       try {
@@ -77,7 +112,10 @@ export function createShortcutHttpRequestProcessorApplication(
         });
         if (parsed.kind === "Rejected") {
           const result = processingError("UNSUPPORTED_MESSAGE");
-          await dependencies.receipts.complete({ receiptKey, result });
+          await Promise.all([
+            dependencies.receipts.complete({ receiptKey, result }),
+            retainRejectedMessage(parsed.code),
+          ]);
           return result;
         }
 

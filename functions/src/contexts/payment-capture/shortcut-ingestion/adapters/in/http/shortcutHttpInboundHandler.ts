@@ -226,6 +226,8 @@ export function createShortcutHttpInboundHandler(input: {
 
       const processed = await input.processor.process({
         bearerCredential: bearerValue(request.headers.authorization),
+        diagnosticRawMessage:
+          typeof rawMessage === "string" ? rawMessage : normalized.value,
         normalizedMessage: normalized.value,
         requestedAt: request.receivedAt,
         ...(idempotencyKey === undefined || idempotencyKey === ""

@@ -21,6 +21,25 @@ export interface ShortcutHttpMessageParserPort {
   }): ShortcutCardMessageParseResult;
 }
 
+/**
+ * Shortcut parser 개선을 위해 인증된 거부 요청의 원문을 임시 보존합니다.
+ * 업무 성공 여부와 독립된 best-effort 진단 경계입니다.
+ */
+export interface ShortcutRejectedMessageDiagnosticPort {
+  retain(input: {
+    readonly actor: ShortcutCredentialActor;
+    readonly credentialIdHash: string;
+    readonly payloadHash: string;
+    readonly rawMessage: string;
+    readonly normalizedMessage: string;
+    readonly rejectionCode: Extract<
+      ShortcutCardMessageParseResult,
+      { kind: "Rejected" }
+    >["code"] | "UNSUPPORTED_MESSAGE";
+    readonly requestedAt: string;
+  }): Promise<void>;
+}
+
 export interface ShortcutHttpPaymentIntakePort {
   submit(input: {
     readonly commandId: string;

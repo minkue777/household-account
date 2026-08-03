@@ -15,7 +15,7 @@
 | 가구·멤버·자산 명의자 프로필 정보와 공유 키 | households, assetOwnerProfiles, Web storage, Android SharedPreferences | [Access & Household](../contexts/access-household/requirements.md) | [가구와 접근](../contexts/access-household/modules/household-access/requirements.md) |
 | 지출·수입 | expenses | [Household Finance](../contexts/household-finance/requirements.md) | [거래 원장](../contexts/household-finance/modules/ledger/requirements.md) |
 | 등록 카드·가맹점 규칙 | registered_cards, merchant_rules | [Payment Capture](../contexts/payment-capture/requirements.md) | [결제 설정](../contexts/payment-capture/modules/payment-configuration/requirements.md) |
-| 금융 알림 원문 | notification_debug_logs | [Payment Capture](../contexts/payment-capture/requirements.md) | Android Diagnostic Adapter — 임시 |
+| 금융 알림 원문 | notification_debug_logs | [Payment Capture](../contexts/payment-capture/requirements.md) | Android·Shortcut Diagnostic Adapter — 임시 |
 | Android 결제 원문 write-ahead journal·실패 대기 후보 | Android 로컬 암호화 Observation Queue | [Payment Capture](../contexts/payment-capture/requirements.md) | [Android 결제 수집](../contexts/payment-capture/modules/android-payment-ingestion/requirements.md), DEC-032·068 |
 | Client Membership 연결 cache·구독·Native mirror·자산 재진입 snapshot | Web memory/localStorage/IndexedDB, Android preferences/WebView | 공통 시스템·Access·Portfolio Read Model | [SYS-008](../system/context.md#6-공통-요구사항), Android Host, DEC-068 |
 | 자산·보유종목·배당 | assets, holdings, dividend collections | [Portfolio](../contexts/portfolio/requirements.md) | [Portfolio 내부 기능](../contexts/portfolio/requirements.md#4-aggregate와-소유-데이터) |
@@ -50,7 +50,7 @@
 | Shortcut 호출자·가구 검증 | IOS-010 | [Payment Capture](../contexts/payment-capture/requirements.md) | [Shortcut 결제 수집](../contexts/payment-capture/modules/shortcut-ingestion/requirements.md) |
 | FCM FID endpoint 등록 권한 | PUSH-009 | [Notifications](../contexts/notifications/requirements.md) | [푸시 알림](../contexts/notifications/modules/notifications/requirements.md) |
 | WebView origin allowlist | AND-006 | [지원·플랫폼](../supporting-platform/requirements.md) | [Android Host](../supporting-platform/modules/android-host/requirements.md) |
-| 임시 알림 원문 | ING-005 | [Payment Capture](../contexts/payment-capture/requirements.md) | [Android 결제 수집](../contexts/payment-capture/modules/android-payment-ingestion/requirements.md) |
+| 임시 알림 원문 | ING-005, IOS-014 | [Payment Capture](../contexts/payment-capture/requirements.md) | [Android 결제 수집](../contexts/payment-capture/modules/android-payment-ingestion/requirements.md), [Shortcut 결제 수집](../contexts/payment-capture/modules/shortcut-ingestion/requirements.md) |
 | Android 결제 Queue 암호화·삭제 | ING-008, DEC-032 | [Payment Capture](../contexts/payment-capture/requirements.md) | [Android 결제 수집](../contexts/payment-capture/modules/android-payment-ingestion/requirements.md), [결정 기록](../governance/decisions.md#dec-032) |
 | 잠금 화면 거래 노출·화면 캡처 허용 | QE-008, QE-011, DEC-024, DEC-045 | [지원·플랫폼](../supporting-platform/requirements.md) | [Android Host](../supporting-platform/modules/android-host/requirements.md) |
 | 멤버별 다중 FID endpoint와 단일 binding 수명주기 | PUSH-003, PUSH-008, DEC-019, DEC-020 | [Notifications](../contexts/notifications/requirements.md) | [푸시 알림](../contexts/notifications/modules/notifications/requirements.md), [결정 기록](../governance/decisions.md#dec-020) |
@@ -64,10 +64,11 @@
 제거 전 임시 안전장치:
 
 1. 관리자 또는 진단 역할만 읽을 수 있다.
-2. DEC-047에 따라 파서 진단에 사용하는 현재 원문 필드는 기능 제거 전까지 전부 보존하되 인증 token·FCM FID·가구 접근 자격 같은 별도 Secret을 추가하지 않는다.
-3. 시간 TTL이나 자동 개별 삭제를 두지 않고 진단 기능 제거 시 Writer·Rules·index·컬렉션 전체를 함께 삭제한다.
-4. parser fixture로 채택한 원문은 개인정보를 제거한 별도 테스트 fixture로 옮긴다.
-5. 제거 조건을 만족하면 Android Writer, Rules, index, 컬렉션을 함께 제거한다.
+2. DEC-047에 따라 Android의 package·source·title·text·bigText·textLines·fullText·발생 시각·actor scope와 Shortcut의 exact raw message·normalized message·actor scope·payload/credential hash·rejection code·수집 시각을 기능 제거 전까지 전부 보존하되 인증 token·FCM FID·가구 접근 자격 같은 별도 Secret을 추가하지 않는다.
+3. Shortcut 원문은 credential과 현재 Membership 검증이 성공한 뒤 parser가 거부한 요청만 수집한다. 정상·중복·카드 불일치·인증/인가 실패·parser 이전 schema 실패는 수집하지 않는다.
+4. 원문은 Cloud Logging, Domain Event, receipt, Outbox, 응답에 기록하지 않으며 `notification_debug_logs`만 명시적 예외다. 진단 저장은 best-effort이고 실패가 결제·잔액·QuickEdit·HTTP 결과를 바꾸거나 재시도시키지 않는다.
+5. 시간 TTL이나 자동 개별 삭제를 두지 않고 진단 기능 제거 시 Android·Shortcut Writer, Rules, index, 컬렉션 전체를 함께 삭제한다.
+6. parser fixture로 채택한 원문은 개인정보를 제거한 별도 테스트 fixture로 옮긴다.
 
 이 데이터는 [DEC-047](../governance/decisions.md#dec-047)에 따라 기능 제거 전까지 보존하지만 목표 Domain Event나 영구 Audit Log로 마이그레이션하지 않는다.
 
@@ -120,7 +121,7 @@ Canonical 보안 테스트 ID:
 | 영구 purge claim finalization | Context purge 실패·claim page 중단·stale claim·중복 완료 요청 | 미완료 중 해제 0건, 현재 대상 claim만 조건부 해제, stale 보존·재개 가능, 모든 page 뒤 purged Event 한 번 |
 | HTTP API | Shortcut, dividend save의 무인증·비정상 입력 | 권한 또는 검증 오류이며 변경 없음 |
 | WebView | 허용하지 않은 origin에서 Bridge 접근 | 민감 API 비노출 |
-| 진단 로그 | 비관리자 조회, 미등록 source, 장기 경과, 별도 Secret 혼입 | 조회·수집 거부, 기능 제거 전 문서 유지, 인증 token·FID·가구 접근 자격 비수집 |
+| 진단 로그 | 비관리자 조회, 미등록 source, Shortcut 정상·인증 실패·schema 실패, parser 거부, 장기 경과, 별도 Secret 혼입, 진단 저장 장애 | 관리자 외 조회와 허용되지 않은 수집 거부, 인증된 parser 거부만 exact raw·normalized 값과 최소 metadata 저장, 기능 제거 전 문서 유지, 인증 token·FID·가구 접근 자격 비수집, 저장 장애에도 업무 결과 동일 |
 | Provider Health | 비관리자 Query·직접 write, 민감 field 포함 시도 | 조회·쓰기 거부, 서버 Adapter만 최소 redacted schema 저장 |
 | 잠금 화면 | 잠금 상태 QuickEdit 표시·캡처 | DEC-024의 표시 허용·keyguard 유지·외부 진입 차단과 DEC-045의 캡처 허용·앱 로그 금지 준수 |
 | Android 결제 journal·실패 Queue | 원격 호출 중 process 종료, 로컬 DB 탈취, entry 변조, follow-up enqueue 실패, 72시간 경계, 로그아웃·멤버/가구 변경, Keystore 키 무효화 | 원격 전 암호문 선기록, 평문 비노출·GCM 인증 실패 전송 차단, QuickEdit FIFO 선내구화 뒤 ack, 조건별 entry 삭제·다른 Actor 재연결 없음 |
