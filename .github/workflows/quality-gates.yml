@@ -146,13 +146,7 @@ jobs:
             adb shell settings put system screen_off_timeout 2147483647
             adb shell input keyevent KEYCODE_WAKEUP
             adb shell wm dismiss-keyguard
-            cd android
-            status=0
-            ./gradlew connectedDebugAndroidTest --stacktrace || status=$?
-            mkdir -p app/build/ci-diagnostics
-            adb logcat -d > app/build/ci-diagnostics/logcat.txt || true
-            adb exec-out screencap -p > app/build/ci-diagnostics/screen.png || true
-            exit "$status"
+            bash -c 'cd android; status=0; ./gradlew connectedDebugAndroidTest --stacktrace || status=$?; mkdir -p app/build/ci-diagnostics; adb logcat -d > app/build/ci-diagnostics/logcat.txt || true; adb exec-out screencap -p > app/build/ci-diagnostics/screen.png || true; exit "$status"'
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
