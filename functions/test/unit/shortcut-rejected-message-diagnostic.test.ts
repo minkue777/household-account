@@ -104,7 +104,7 @@ function createRejectedMessageSubject(options: {
 }
 
 describe("Shortcut parser 거부 원문 진단", () => {
-  it("인증된 actor와 해시, 원문, 정규화문, parser 거부 코드를 진단 port로 전달한다", async () => {
+  it("[T-IOS-DIAG-001][IOS-014] 인증된 actor와 해시, 원문, 정규화문, parser 거부 코드를 진단 port로 전달한다", async () => {
     const subject = createRejectedMessageSubject({ diagnostics: "success" });
 
     const result = await subject.processor.process(processorInput);

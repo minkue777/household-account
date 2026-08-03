@@ -4,7 +4,7 @@ import { createShortcutHttpRequestProcessorApplication } from "../../src/context
 import type { ShortcutMessageDiagnosticPort } from "../../src/contexts/payment-capture/shortcut-ingestion/application/ports/out/shortcutHttpInboundPorts";
 
 describe("Shortcut parser 성공 원문 진단", () => {
-  it("인증된 원문을 intake와 병렬로 accepted 진단 저장한다", async () => {
+  it("[T-IOS-DIAG-001][IOS-014] 인증된 원문을 intake와 병렬로 accepted 진단 저장한다", async () => {
     const retained: Array<
       Parameters<ShortcutMessageDiagnosticPort["retain"]>[0]
     > = [];

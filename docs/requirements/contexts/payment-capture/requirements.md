@@ -2,7 +2,7 @@
 
 > 문서 유형: Business Bounded Context  
 > 소유 기능 모듈: 결제 설정, Android 결제 수집, Shortcut 결제 수집  
-> 소유 요구사항: 63개  
+> 소유 요구사항: 64개  
 > 목표 구조: [목표 Clean Architecture 설계](../../../architecture/target-clean-architecture.md#5-bounded-context와-기능-모듈)
 
 ## 1. 책임과 경계
@@ -40,8 +40,8 @@ Payment Capture Context는 **외부 결제·잔액 관찰을 신뢰 가능한 �
 |---|---|---:|---|---|
 | 결제 설정 | CARD-*, MER-* | 12 | Card Registry, MerchantRuleSet, 카테고리 참조 변경 | [결제 설정](modules/payment-configuration/requirements.md) |
 | Android 결제 수집 | ING-*, PARSE-*, ING-SAVE-*, CAN-* | 38 | Android source·parser·암호화 Queue·승인·취소 후보 | [Android 결제 수집](modules/android-payment-ingestion/requirements.md) |
-| Shortcut 결제 수집 | IOS-* | 13 | HTTP 입력·정규화·Shortcut parser·응답 | [Shortcut 결제 수집](modules/shortcut-ingestion/requirements.md) |
-| 합계 |  | 63 |  |  |
+| Shortcut 결제 수집 | IOS-* | 14 | HTTP 입력·정규화·Shortcut parser·응답 | [Shortcut 결제 수집](modules/shortcut-ingestion/requirements.md) |
+| 합계 |  | 64 |  |  |
 
 ## 3. 공통 언어
 

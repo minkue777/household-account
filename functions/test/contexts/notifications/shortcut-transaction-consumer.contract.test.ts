@@ -130,7 +130,7 @@ describe("Shortcut TransactionRecorded Notifications consumer 공개 계약", ()
     expect(subject.providerSendCalls()).toEqual([]);
   });
 
-  it("[T-IOS-NOTIFY-001][IOS-008/PUSH-004] 생성자가 푸시 수신 제외 상태이면 활성 iPhone endpoint에도 보내지 않는다", async () => {
+  it("[T-IOS-NOTIFY-001/T-PUSH-011][IOS-008/PUSH-004/PUSH-014] 생성자가 푸시 수신 제외 상태이면 활성 iPhone endpoint에도 보내지 않는다", async () => {
     const subject = createSubject({
       sourceLedgerDigest: "ledger-with-transaction-1",
       creatorEndpoint: {

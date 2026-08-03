@@ -189,7 +189,7 @@ describe("거래 알림 수신 대상 공개 계약", () => {
     expect(result).toEqual({ kind: "NoTarget", reason: "NO_ACTIVE_ENDPOINT" });
   });
 
-  it("[T-PUSH-005][PUSH-005] 푸시 수신이 꺼진 멤버는 활성 endpoint가 있어도 명시적 알림 대상에서 제외한다", () => {
+  it("[T-PUSH-005/T-PUSH-011][PUSH-005/PUSH-014] 푸시 수신이 꺼진 멤버는 활성 endpoint가 있어도 명시적 알림 대상에서 제외한다", () => {
     const result = createSubject().forExplicitHouseholdRequest({
       eventId: "event-explicit-muted",
       householdId: "house-1",
@@ -204,7 +204,7 @@ describe("거래 알림 수신 대상 공개 계약", () => {
     expect(targetIds(result)).toContain("third-android");
   });
 
-  it("[T-IOS-NOTIFY-001][PUSH-004] iPhone Shortcut 생성자의 푸시 수신이 꺼져 있으면 편집 알림을 만들지 않는다", () => {
+  it("[T-IOS-NOTIFY-001/T-PUSH-011][PUSH-004/PUSH-014] iPhone Shortcut 생성자의 푸시 수신이 꺼져 있으면 편집 알림을 만들지 않는다", () => {
     const result = createSubject().forRecordedTransaction(
       transactionInput({
         originChannel: "ios-shortcut",

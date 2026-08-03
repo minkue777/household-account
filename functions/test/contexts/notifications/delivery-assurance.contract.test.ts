@@ -12,13 +12,15 @@ import type {
 import {
   createDeliveryAssuranceFixtureSubject,
   type DeliveryEndpointSeed as FixtureDeliveryEndpointSeed,
+  type DeliveryMembershipStatus as FixtureDeliveryMembershipStatus,
   type DeliverySeed as FixtureDeliverySeed,
   type ProviderOutcome as FixtureProviderOutcome,
   type ProviderSendCallView as FixtureProviderSendCallView,
 } from "../../support/delivery-assurance-driver";
-import type { DeliveryMembershipStatus } from "../../../src/contexts/notifications/application/ports/outbound/deliveryAssurancePorts";
 
 export type DeliveryEndpointSeed = FixtureDeliveryEndpointSeed;
+
+export type DeliveryMembershipStatus = FixtureDeliveryMembershipStatus;
 
 export type DeliverySeed = FixtureDeliverySeed;
 

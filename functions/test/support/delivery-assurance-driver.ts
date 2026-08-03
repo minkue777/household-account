@@ -6,7 +6,7 @@ import type {
   DeliveryAssuranceProviderPort,
   DeliveryAssuranceStore,
   DeliveryMembershipQueryPort,
-  DeliveryMembershipStatus,
+  DeliveryMembershipStatus as ApplicationDeliveryMembershipStatus,
   StoredAssuredDelivery,
   StoredDeliveryAssuranceInbox,
   StoredDeliveryAssuranceIntent,
@@ -21,6 +21,12 @@ import {
   createNotificationTargetPlanner,
   type DeliveryAssuranceInputPort,
 } from "../../src/contexts/notifications/public";
+
+/**
+ * Contract tests describe fixture membership facts through the driver instead of
+ * importing an application outbound port directly.
+ */
+export type DeliveryMembershipStatus = ApplicationDeliveryMembershipStatus;
 
 export interface DeliveryEndpointSeed {
   endpointId: string;

@@ -6,7 +6,7 @@ import {
 } from "../../../src/platform/admin-operations/application/billingCostSummary";
 
 describe("Google Cloud 비용 요약", () => {
-  it("이번 달 누적 순비용과 최근 완료 7일 평균으로 월말 비용을 추정한다", () => {
+  it("[T-EXT-005][EXT-004] 이번 달 누적 순비용과 최근 완료 7일 평균으로 월말 비용을 추정한다", () => {
     const result = summarizeBillingCost({
       calculatedAt: "2026-08-02T06:00:00.000Z",
       source: {
@@ -58,7 +58,7 @@ describe("Google Cloud 비용 요약", () => {
     expect(result.estimatedMonthEndAmount).toBe(0);
   });
 
-  it("원천 조회 뒤 요약을 한 번 저장한다", async () => {
+  it("[T-EXT-005][EXT-004] 원천 조회 뒤 요약을 한 번 저장한다", async () => {
     const saved: unknown[] = [];
     const result = await refreshBillingCost({
       projectId: "household-account-6f300",
