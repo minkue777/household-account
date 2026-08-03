@@ -20,6 +20,7 @@ export interface ShortcutCreatorEndpoint {
   platform: "ios-pwa";
   status: "active";
   fid: string;
+  pushDelivery?: "enabled" | "disabled";
 }
 
 export interface ShortcutTransactionConsumerFixture {
@@ -70,6 +71,7 @@ class FixtureShortcutNotificationFactsQuery
                 householdId: endpoint.householdId,
                 memberId: endpoint.memberId,
                 status: "active",
+                pushDelivery: endpoint.pushDelivery ?? "enabled",
               },
             ]
           : [],

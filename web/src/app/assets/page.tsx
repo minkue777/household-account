@@ -21,7 +21,10 @@ import {
   HOUSEHOLD_OWNER_OPTION,
 } from '@/lib/assets/memberOptions';
 import { assetOwnerProfiles } from '@/features/access-household/application/assetOwnerProfiles';
-import type { AssetOwnerProfileView } from '@/features/access-household/domain/assetOwnerProfile';
+import {
+  selectVisibleAssetOwnerProfiles,
+  type AssetOwnerProfileView,
+} from '@/features/access-household/domain/assetOwnerProfile';
 import { getAssetOwnerProfileQueries } from '@/composition/assetOwnerProfileReadRuntime';
 import {
   readDailyAssetChangeSnapshot,
@@ -81,16 +84,20 @@ export default function AssetsPage() {
     isSessionVerified,
     remoteReadEpoch
   );
+  const visibleOwnerProfiles = useMemo(
+    () => selectVisibleAssetOwnerProfiles(ownerProfiles),
+    [ownerProfiles]
+  );
 
   const memberOptions = useMemo(
     () => [
       { key: ALL_MEMBERS_OPTION, label: '전체' },
-      ...ownerProfiles.map((profile) => ({
+      ...visibleOwnerProfiles.map((profile) => ({
         key: profile.profileId,
         label: profile.displayName,
       })),
     ],
-    [ownerProfiles]
+    [visibleOwnerProfiles]
   );
   const ownerOptions = useMemo<AssetOwnerOption[]>(
     () => [
@@ -99,13 +106,13 @@ export default function AssetsPage() {
         label: HOUSEHOLD_OWNER_OPTION,
         ownerRef: { kind: 'household' },
       },
-      ...ownerProfiles.map((profile) => ({
+      ...visibleOwnerProfiles.map((profile) => ({
         key: profile.profileId,
         label: profile.displayName,
         ownerRef: { kind: 'profile' as const, profileId: profile.profileId },
       })),
     ],
-    [ownerProfiles]
+    [visibleOwnerProfiles]
   );
 
   useLayoutEffect(() => {
@@ -462,7 +469,7 @@ export default function AssetsPage() {
         {showOwnerModal && (
           <AssetOwnerProfileModal
             isOpen={true}
-            profiles={ownerProfiles}
+            profiles={visibleOwnerProfiles}
             onClose={() => setShowOwnerModal(false)}
             onCreate={async (displayName) => {
               if (!household?.id) return;

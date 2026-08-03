@@ -4,7 +4,7 @@ import type { Asset } from '@/types/asset';
 
 const SNAPSHOT_VERSION = 1;
 const ASSET_STORAGE_PREFIX = 'household-account.assets.v1.';
-const OWNER_STORAGE_PREFIX = 'household-account.asset-owner-profiles.v1.';
+const OWNER_STORAGE_PREFIX = 'household-account.asset-owner-profiles.v2.';
 const DAILY_CHANGE_STORAGE_PREFIX = 'household-account.asset-daily-change.v1.';
 const ASSET_TYPES = new Set(['savings', 'stock', 'crypto', 'property', 'gold', 'loan']);
 
@@ -123,6 +123,7 @@ function decodeOwnerProfile(
     || raw.householdId !== householdId
     || typeof raw.displayName !== 'string'
     || (raw.profileType !== 'member' && raw.profileType !== 'dependent')
+    || (raw.selectionVisibility !== 'visible' && raw.selectionVisibility !== 'hidden')
     || (raw.lifecycleState !== 'active' && raw.lifecycleState !== 'archived')
     || typeof raw.aggregateVersion !== 'number'
     || !Number.isSafeInteger(raw.aggregateVersion)

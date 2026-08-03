@@ -4,7 +4,7 @@ import { FirebaseShortcutMessageDiagnosticAdapter } from "../../src/adapters/fir
 
 describe("FirebaseShortcutMessageDiagnosticAdapter", () => {
   it("인증된 parser 성공 원문을 accepted 진단 문서로 보존한다", async () => {
-    const set = vi.fn(async () => undefined);
+    const set = vi.fn(async (_value: unknown, _options: unknown) => undefined);
     const adapter = new FirebaseShortcutMessageDiagnosticAdapter({
       collection: () => ({ doc: () => ({ set }) }),
     } as never);
@@ -37,7 +37,7 @@ describe("FirebaseShortcutMessageDiagnosticAdapter", () => {
   });
 
   it("인증된 iPhone parser 거부 원문을 관리자 전용 진단 문서로 보존한다", async () => {
-    const set = vi.fn(async () => undefined);
+    const set = vi.fn(async (_value: unknown, _options: unknown) => undefined);
     const doc = vi.fn(() => ({ set }));
     const collection = vi.fn(() => ({ doc }));
     const adapter = new FirebaseShortcutMessageDiagnosticAdapter({

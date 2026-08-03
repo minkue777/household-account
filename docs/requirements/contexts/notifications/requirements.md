@@ -2,7 +2,7 @@
 
 > 문서 유형: Business Bounded Context  
 > 소유 기능 모듈: [푸시 알림](modules/notifications/requirements.md)  
-> 소유 요구사항: `PUSH-*` — 13개  
+> 소유 요구사항: `PUSH-*` — 14개  
 > 목표 구조: [목표 Clean Architecture 설계](../../../architecture/target-clean-architecture.md#5-bounded-context와-기능-모듈)
 
 ## 1. 책임과 경계
@@ -20,6 +20,7 @@ Notifications Context는 **업무 Event를 올바른 가구 멤버의 활성 end
 - FCM 전송, 결과 분류, 영구 실패 endpoint 정리
 - Event 재전달에 안전한 delivery claim과 endpoint별 단일 전송 시도
 - 제거된 가구원의 endpoint 멱등 정리와 recipient·전송 직전 활성 Membership 재검증
+- 멤버별 푸시 수신 허용·제외 정책
 
 제외 범위:
 
@@ -34,9 +35,9 @@ Notifications Context는 **업무 Event를 올바른 가구 멤버의 활성 end
 | 기능 영역 | 요구사항 | 개수 | 상세 소유 문서 |
 |---|---|---:|---|
 | FCM FID endpoint 등록 | PUSH-001~003, PUSH-008~009 | 5 | [푸시 알림](modules/notifications/requirements.md#5-요구사항) |
-| 거래 생성·명시적 가구원 알림 대상과 전송·멤버 lifecycle | PUSH-004~007, PUSH-010~012 | 7 | [푸시 알림](modules/notifications/requirements.md#5-요구사항) |
+| 거래 생성·명시적 가구원 알림 대상과 전송·멤버 lifecycle | PUSH-004~007, PUSH-010~012, PUSH-014 | 8 | [푸시 알림](modules/notifications/requirements.md#5-요구사항) |
 | 가구 영구 purge 참여 | PUSH-013 | 1 | [푸시 알림](modules/notifications/requirements.md#5-요구사항) |
-| 합계 |  | 13 |  |
+| 합계 |  | 14 |  |
 
 ## 3. 공통 언어
 
@@ -58,6 +59,7 @@ Notifications Context는 **업무 Event를 올바른 가구 멤버의 활성 end
 | Aggregate·데이터 | 핵심 불변식 | 현재 저장 | 목표 소유 형태 |
 |---|---|---|---|
 | NotificationEndpoint | 설치 FID 하나와 현재 householdId·memberId binding, platform·metadata·상태 | 멤버 이름 기반 registration token 문서 | endpointId 기반 복수 FID endpoint |
+| NotificationRecipientPreference | 멤버별 pushDelivery enabled/disabled, 문서 부재는 enabled | 없음 | 가구 하위 Notifications 정책 문서 |
 | NotificationDelivery | event·recipient·endpoint 한 번, 단일 전송 시도와 최종 결과 | 명시 저장 없음 | delivery claim/status |
 | Payload Contract | version, type, 선택 expenseId, click target | Web/Android에 분산 | 생성 DTO와 contract test |
 
@@ -83,7 +85,7 @@ FID = 그 endpoint가 FCM에 사용하는 전달 주소
 4. 같은 FID 재등록은 같은 endpoint의 확인 시각·metadata·registration version을 갱신하며, 새 FID 등록은 별도 endpoint를 추가한다.
 5. 거래 생성 자동 알림과 사용자가 명시한 `알림 보내기` 요청을 서로 다른 수신자 정책으로 처리한다.
 6. Android 자동 등록은 푸시 없이 발생 기기의 QuickEdit만 사용하고, iPhone Shortcut 자동 등록은 생성자 본인의 모든 활성 iPhone PWA endpoint에 편집 푸시를 보낸다.
-7. 명시적 `알림 보내기`는 인증된 요청자를 제외한 활성 가구원 전체의 모든 활성 모바일 endpoint를 대상으로 한다.
+7. 명시적 `알림 보내기`는 인증된 요청자를 제외한 활성 가구원 중 멤버별 푸시 수신 정책이 허용한 대상의 모든 활성 모바일 endpoint를 대상으로 한다.
 8. 동일 업무 Event·수신자·endpoint 조합은 한 번만 전달한다.
 9. 대상 없음, 전체 성공, 일부 실패, 일반 실패, provider 결과 불명, 영구 FID 실패를 구분하며 자동 재전송하지 않는다.
 10. FCM 실패가 Ledger transaction을 롤백하지 않는다.
@@ -96,6 +98,7 @@ FID = 그 endpoint가 FCM에 사용하는 전달 주소
 17. 앱 내부 Subscription·알림 유형별 설정은 없으며 OS 알림 권한만 해당 설치의 전체 푸시 표시를 제어한다. QuickEdit 설정은 푸시와 분리한다.
 18. active endpoint는 TTL 없이 유지하고 inactive endpoint와 terminal Inbox·Intent·Delivery·command receipt는 30일 보존한다. 30일이 지난 Event는 새 delivery를 만들지 않는다.
 19. 제거된 Membership은 endpoint cleanup 완료 여부와 무관하게 recipient 계산과 provider 호출 직전 모두 제외하며, 복구 시 과거 endpoint를 되살리지 않는다.
+20. `pushDelivery=disabled` 멤버는 endpoint 상태와 무관하게 recipient 계산과 provider 호출 직전 모두 제외하며 로그인·카드 알림 수집은 유지한다.
 
 ## 6. 공개 계약과 의존 방향
 

@@ -161,8 +161,8 @@ describe("정기 거래 Event와 알림 consumer 공개 계약", () => {
 
   it("[T-IOS-NOTIFY-001][PUSH-004] iPhone cloud 등록 지출은 생성자 본인의 활성 iPhone endpoint에만 알린다", async () => {
     const members: readonly MemberFact[] = [
-      { householdId: "house-1", memberId: "member-creator", status: "active" },
-      { householdId: "house-1", memberId: "member-other", status: "active" },
+      { householdId: "house-1", memberId: "member-creator", status: "active", pushDelivery: "enabled" },
+      { householdId: "house-1", memberId: "member-other", status: "active", pushDelivery: "enabled" },
     ];
     const endpoints: readonly EndpointFact[] = [
       {
@@ -222,11 +222,11 @@ describe("정기 거래 Event와 알림 consumer 공개 계약", () => {
 
   it("[T-PUSH-005][PUSH-005] 명시적 알림은 거래 생성자가 아니라 현재 요청자만 제외하고 다른 활성 가구원의 모든 모바일 endpoint로 보낸다", async () => {
     const members: readonly MemberFact[] = [
-      { householdId: "house-1", memberId: "member-creator", status: "active" },
-      { householdId: "house-1", memberId: "member-requester", status: "active" },
-      { householdId: "house-1", memberId: "member-third", status: "active" },
-      { householdId: "house-1", memberId: "member-removed", status: "removed" },
-      { householdId: "house-2", memberId: "member-other-house", status: "active" },
+      { householdId: "house-1", memberId: "member-creator", status: "active", pushDelivery: "enabled" },
+      { householdId: "house-1", memberId: "member-requester", status: "active", pushDelivery: "enabled" },
+      { householdId: "house-1", memberId: "member-third", status: "active", pushDelivery: "enabled" },
+      { householdId: "house-1", memberId: "member-removed", status: "removed", pushDelivery: "enabled" },
+      { householdId: "house-2", memberId: "member-other-house", status: "active", pushDelivery: "enabled" },
     ];
     const endpoints: readonly EndpointFact[] = [
       {

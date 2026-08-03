@@ -13,6 +13,7 @@ jest.mock('@/platform/read-model/firestoreReadModel', () => ({
 
 import { collection, onSnapshot } from '@/platform/read-model/firestoreReadModel';
 import { FirestoreAssetOwnerProfileReadModel } from '@/platform/read-model/firestoreAssetOwnerProfileReadModel';
+import { selectVisibleAssetOwnerProfiles } from '@/features/access-household/domain/assetOwnerProfile';
 
 const mockCollection = collection as jest.MockedFunction<typeof collection>;
 const mockOnSnapshot = onSnapshot as jest.MockedFunction<typeof onSnapshot>;
@@ -70,6 +71,18 @@ describe('자산 명의자 Firestore 읽기 모델 계약', () => {
             createdAt: { toDate: () => new Date('2026-01-01T00:00:00.000Z') },
           }),
         },
+        {
+          id: 'profile-capture-only',
+          data: () => ({
+            displayName: '기조',
+            profileType: 'member',
+            linkedMemberId: 'member-capture-only',
+            lifecycleState: 'active',
+            selectionVisibility: 'hidden',
+            aggregateVersion: 1,
+            createdAt: { toDate: () => new Date('2026-03-01T00:00:00.000Z') },
+          }),
+        },
       ],
     });
 
@@ -85,6 +98,7 @@ describe('자산 명의자 Firestore 읽기 모델 계약', () => {
         householdId: 'house-1',
         displayName: '민규',
         profileType: 'member',
+        selectionVisibility: 'visible',
         linkedMemberId: 'member-1',
         lifecycleState: 'active',
         aggregateVersion: 4,
@@ -94,10 +108,27 @@ describe('자산 명의자 Firestore 읽기 모델 계약', () => {
         householdId: 'house-1',
         displayName: '지아',
         profileType: 'dependent',
+        selectionVisibility: 'visible',
         lifecycleState: 'active',
         aggregateVersion: 2,
       },
+      {
+        profileId: 'profile-capture-only',
+        householdId: 'house-1',
+        displayName: '기조',
+        profileType: 'member',
+        selectionVisibility: 'hidden',
+        linkedMemberId: 'member-capture-only',
+        lifecycleState: 'active',
+        aggregateVersion: 1,
+      },
     ]);
+
+    expect(selectVisibleAssetOwnerProfiles(listener.mock.calls[0][0])).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({ profileId: 'profile-capture-only' }),
+      ])
+    );
 
     dispose();
     expect(unsubscribe).toHaveBeenCalledTimes(1);

@@ -16,6 +16,7 @@ import {
   type ProviderOutcome as FixtureProviderOutcome,
   type ProviderSendCallView as FixtureProviderSendCallView,
 } from "../../support/delivery-assurance-driver";
+import type { DeliveryMembershipStatus } from "../../../src/contexts/notifications/application/ports/outbound/deliveryAssurancePorts";
 
 export type DeliveryEndpointSeed = FixtureDeliveryEndpointSeed;
 
@@ -50,7 +51,7 @@ export interface DeliveryAssuranceContractSubject
 export function createSubject(_fixture: {
   now: string;
   endpoints: readonly DeliveryEndpointSeed[];
-  memberships: Readonly<Record<string, "active" | "removed" | "unavailable">>;
+  memberships: Readonly<Record<string, DeliveryMembershipStatus>>;
   deliveries?: readonly DeliverySeed[];
   providerOutcomeByEndpointId?: Readonly<Record<string, ProviderOutcome>>;
   inboxEventIds?: readonly string[];
@@ -358,6 +359,12 @@ describe("알림 Delivery 멱등성과 결과 분류 공개 계약", () => {
       endpointSeed: endpoint("endpoint-a", "member-a"),
       memberships: { "member-a": "removed" as const },
       expected: { kind: "StaleTarget", code: "RECIPIENT_MEMBERSHIP_INACTIVE" },
+    },
+    {
+      name: "recipient 푸시 수신 제외",
+      endpointSeed: endpoint("endpoint-a", "member-a"),
+      memberships: { "member-a": "push-disabled" as const },
+      expected: { kind: "StaleTarget", code: "RECIPIENT_PUSH_DISABLED" },
     },
   ])(
     "[T-PUSH-007][PUSH-012] $name 상태는 provider 전달 없이 stale-target terminal 결과로 끝난다",

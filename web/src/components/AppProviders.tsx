@@ -30,8 +30,6 @@ const ANDROID_WORKER_CLEANUP_DELAY_AFTER_LEDGER_MS = 2_000;
 const ANDROID_WORKER_CLEANUP_FALLBACK_MS = 15_000;
 const MUTATION_PRELOAD_DELAY_AFTER_LEDGER_MS = 3_000;
 const MUTATION_PRELOAD_IDLE_TIMEOUT_MS = 15_000;
-const NATIVE_SESSION_SYNC_DELAY_AFTER_LEDGER_MS = 30_000;
-const NATIVE_SESSION_SYNC_IDLE_TIMEOUT_MS = 30_000;
 const VISIT_TELEMETRY_IDLE_TIMEOUT_MS = 5_000;
 const ROUTE_PREFETCH_IDLE_TIMEOUT_MS = 10_000;
 const POST_LEDGER_PREFETCH_ROUTES = [
@@ -166,8 +164,6 @@ function WebRuntimeUpdateRecovery() {
   return null;
 }
 
-const NATIVE_SESSION_REFRESH_KEY = 'household-account.native-session-refresh.v2';
-const NATIVE_SESSION_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1_000;
 const ANDROID_WEB_AUTH_REFRESH_INTERVAL_MS = 15 * 60 * 1_000;
 
 export function AuthenticatedPlatformEffects() {
@@ -176,6 +172,8 @@ export function AuthenticatedPlatformEffects() {
     sessionState,
     isSessionVerified,
     adminHouseholdView,
+    householdKey,
+    currentMember,
     recoverRemoteSession,
   } = useHousehold();
 
@@ -186,46 +184,46 @@ export function AuthenticatedPlatformEffects() {
       || adminHouseholdView !== null
       || !isAndroidHostAvailable()
     ) return;
-    const scope = getClientSessionScope();
-    if (!scope) return;
-
-    const bindingKey = `${scope.principalUid}\u0000${scope.householdId}\u0000${scope.memberId}`;
-    try {
-      const stored = JSON.parse(
-        window.localStorage.getItem(NATIVE_SESSION_REFRESH_KEY) ?? 'null'
-      ) as { bindingKey?: unknown; refreshedAt?: unknown } | null;
-      if (
-        stored?.bindingKey === bindingKey
-        && typeof stored.refreshedAt === 'number'
-        && Date.now() - stored.refreshedAt < NATIVE_SESSION_REFRESH_INTERVAL_MS
-      ) {
-        return;
-      }
-    } catch {
-      // 손상된 성능 힌트는 무시하고 아래에서 다시 동기화합니다.
-    }
-
+    let cancelled = false;
+    let inFlight = false;
     const refresh = () => {
+      if (cancelled || inFlight) return;
+      const scope = getClientSessionScope();
+      if (
+        !scope
+        || scope.householdId !== householdKey
+        || scope.memberId !== currentMember?.id
+      ) return;
+
+      inFlight = true;
       void refreshAndroidHostSession({
         householdId: scope.householdId,
         memberId: scope.memberId,
-      }).then(() => {
-        try {
-          window.localStorage.setItem(NATIVE_SESSION_REFRESH_KEY, JSON.stringify({
-            bindingKey,
-            refreshedAt: Date.now(),
-          }));
-        } catch {
-          // 저장소가 차단되어도 네이티브 세션 동기화 성공 자체는 유지합니다.
-        }
-      }).catch(() => {});
+      })
+        .catch(() => {
+          // FID endpoint 등록 실패는 가계부 사용을 막지 않습니다. 다음 online/resume에서 재시도합니다.
+        })
+        .finally(() => {
+          inFlight = false;
+        });
     };
 
-    return scheduleAfterWebFirstLedgerPaint(refresh, {
-      delayAfterPaintMs: NATIVE_SESSION_SYNC_DELAY_AFTER_LEDGER_MS,
-      idleTimeoutMs: NATIVE_SESSION_SYNC_IDLE_TIMEOUT_MS,
-    });
-  }, [adminHouseholdView, isSessionVerified, sessionState]);
+    // 첫 원장 paint를 기다리지 않고 화면 표시를 막지 않는 비동기 작업으로 시작합니다.
+    refresh();
+    window.addEventListener('online', refresh);
+    window.addEventListener(ANDROID_NATIVE_RESUME_EVENT, refresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('online', refresh);
+      window.removeEventListener(ANDROID_NATIVE_RESUME_EVENT, refresh);
+    };
+  }, [
+    adminHouseholdView,
+    currentMember?.id,
+    householdKey,
+    isSessionVerified,
+    sessionState,
+  ]);
 
   useEffect(() => {
     if (

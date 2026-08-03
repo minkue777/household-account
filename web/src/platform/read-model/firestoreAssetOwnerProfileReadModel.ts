@@ -24,6 +24,7 @@ function mapProfile(
   const displayName = typeof data.displayName === 'string' ? data.displayName : undefined;
   const profileType = data.profileType;
   const lifecycleState = data.lifecycleState ?? 'active';
+  const selectionVisibility = data.selectionVisibility === 'hidden' ? 'hidden' : 'visible';
   if (
     displayName === undefined ||
     displayName.trim() === '' ||
@@ -49,6 +50,7 @@ function mapProfile(
       householdId,
       displayName,
       profileType,
+      selectionVisibility,
       ...(linkedMemberId === undefined ? {} : { linkedMemberId }),
       lifecycleState,
       aggregateVersion,

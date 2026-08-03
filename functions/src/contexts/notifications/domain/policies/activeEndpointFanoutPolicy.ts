@@ -21,6 +21,7 @@ export function expandRecipientsToActiveEndpoints(input: {
         (member) =>
           member.householdId === input.householdId &&
           member.status === "active" &&
+          member.pushDelivery === "enabled" &&
           requestedMembers.has(member.memberId),
       )
       .map((member) => member.memberId),

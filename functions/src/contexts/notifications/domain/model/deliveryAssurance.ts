@@ -24,7 +24,8 @@ export type DeliveryErrorCode =
   | "PROVIDER_CREDENTIAL_INVALID"
   | "PROVIDER_RESPONSE_INVALID"
   | "ENDPOINT_CHANGED"
-  | "RECIPIENT_MEMBERSHIP_INACTIVE";
+  | "RECIPIENT_MEMBERSHIP_INACTIVE"
+  | "RECIPIENT_PUSH_DISABLED";
 
 export interface ClassifiedDeliveryOutcome {
   status: DeliveryTerminalStatus;

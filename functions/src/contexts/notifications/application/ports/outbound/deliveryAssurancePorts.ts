@@ -6,7 +6,11 @@ import type {
 import type { MobileNotificationEndpoint } from "../../../domain/model/mobileNotificationEndpoint";
 import type { NotificationTarget } from "../../../domain/model/notificationTarget";
 
-export type DeliveryMembershipStatus = "active" | "removed" | "unavailable";
+export type DeliveryMembershipStatus =
+  | "active"
+  | "push-disabled"
+  | "removed"
+  | "unavailable";
 
 export interface DeliveryMembershipQueryPort {
   status(

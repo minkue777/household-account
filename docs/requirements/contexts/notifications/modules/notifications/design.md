@@ -130,6 +130,10 @@ Notifications가 선택적으로 발행하는 `NotificationDelivered.v1`, `Notif
 
 `NotificationEndpoint`는 `endpointId`, householdId, memberId, platform, encrypted FID, FID hash, `active|inactive` 상태, device metadata, registeredAt, lastConfirmedAt, registrationVersion, bindingVersion을 가집니다.
 
+### 4.1.1 `NotificationRecipientPreference`
+
+`NotificationRecipientPreference`는 householdId·memberId와 `pushDelivery: enabled|disabled`를 가지는 Notifications 소유 정책입니다. `households/{householdId}/notificationRecipientPreferences/{memberId}`에 저장하며 문서가 없으면 `enabled`로 해석합니다. endpoint 등록·OS 표시 권한·카드 알림 수집과 독립이고 일반 사용자 설정 UI는 두지 않습니다.
+
 - endpointId는 FID의 keyed hash에서 결정적으로 만들며 FID 하나에 endpoint 문서 하나만 존재합니다. 원문 FID와 hash는 server-only입니다.
 - 한 멤버는 endpoint를 여러 개 가질 수 있지만 한 endpoint는 동시에 한 `(householdId, memberId)`에만 연결됩니다.
 - 표시 이름은 key나 외래 키가 아니므로 이름 변경 시 endpoint를 이동하지 않습니다.
@@ -161,7 +165,7 @@ Notifications가 선택적으로 발행하는 `NotificationDelivered.v1`, `Notif
 - `HouseholdNotificationRequestPolicy` 입력은 필수 `requesterMemberId`와 현재 활성 household members입니다. requester를 제외한 모든 memberId를 반환하며 대상이 없으면 `NoTarget(NO_OTHER_HOUSEHOLD_MEMBER)`입니다. 거래 creator는 이 제외 기준을 바꾸지 않습니다.
 - DEC-026에 따라 두 Policy는 앱 내부 Subscription이나 알림 유형별 사용자 설정을 조회하지 않습니다. OS 알림 권한은 각 Delivery Adapter가 전체 표시를 허용·차단하는 local capability이며 QuickEdit preference와도 분리합니다.
 - 두 Policy 모두 `creatorMemberId` 누락을 알림 없음으로 해석하지 않습니다. 필수 Event 계약 위반으로 분류해 producer를 교정하며, 이미 저장된 거래의 성공을 되돌리지는 않습니다.
-- recipient memberId를 계산한 뒤 허용 platform에 맞는 모든 active `NotificationEndpoint`로 확장합니다. Android 자동 등록은 endpoint 확장 전에 `NoTarget`이며, iPhone Shortcut은 생성자의 모든 active `ios-pwa` endpoint, 명시 요청은 요청자 외 멤버들의 모든 active Android·iPhone PWA endpoint로 fan-out합니다.
+- recipient memberId를 계산한 뒤 `pushDelivery=enabled`인 멤버의 허용 platform에 맞는 모든 active `NotificationEndpoint`로 확장합니다. Android 자동 등록은 endpoint 확장 전에 `NoTarget`이며, iPhone Shortcut은 수신 가능한 생성자의 모든 active `ios-pwa` endpoint, 명시 요청은 요청자 외 수신 가능한 멤버들의 모든 active Android·iPhone PWA endpoint로 fan-out합니다.
 - recipient 계산 시 Access의 active Membership만 허용합니다. endpoint 정리 Event가 아직 도착하지 않았더라도 제거된 Membership은 recipient가 될 수 없으며, Delivery 직전에도 같은 Membership을 다시 확인합니다.
 
 ### 4.4 `NotificationIntent`와 `NotificationDelivery`
@@ -215,7 +219,7 @@ Client Adapter의 `NotificationCapabilityController`는 플랫폼별로 다음�
 1. Dispatcher가 versioned Event를 handler에 전달합니다.
 2. Handler가 `(eventId, handlerName)` Inbox를 claim하고 producer/schema/version을 검증합니다.
 3. Event 종류에 따라 `TransactionCreatedNotificationPolicy` 또는 `HouseholdNotificationRequestPolicy`가 recipient memberId와 허용 endpoint platform을 계산합니다.
-4. Access에서 각 recipient의 active Membership을 확인한 뒤 active `NotificationEndpoint`를 모두 읽고 채널과 platform 조건에 맞는 endpoint 집합으로 확장합니다. Membership 조회가 실패하면 `NoTarget`으로 축약하지 않고 Inbox를 retryable 상태로 남기며 endpoint·delivery를 만들지 않습니다. 데스크톱 endpoint는 저장되지 않으므로 대상에 포함되지 않습니다.
+4. Access에서 각 recipient의 active Membership과 Notifications의 `NotificationRecipientPreference`를 확인한 뒤 수신 가능한 멤버의 active `NotificationEndpoint`를 모두 읽고 채널과 platform 조건에 맞는 endpoint 집합으로 확장합니다. Membership·수신 정책 조회가 실패하면 `NoTarget`으로 축약하지 않고 Inbox를 retryable 상태로 남기며 endpoint·delivery를 만들지 않습니다. accept 뒤 수신이 꺼지면 provider 호출 직전 `StaleTarget(RECIPIENT_PUSH_DISABLED)`로 종료합니다. 데스크톱 endpoint는 저장되지 않으므로 대상에 포함되지 않습니다.
 5. payload factory가 type별 `NotificationPayloadV1`을 생성합니다.
 6. `HouseholdNotificationRequested`는 같은 transaction에서 Inbox 완료, intent, delivery claims를 저장합니다. iPhone 단축어 알림에 활성 endpoint가 없으면 빈 Delivery Inbox를 만들지 않고 원본 Outbox에 `notificationConsumerStatus=NoTarget` terminal 결과를 저장한 뒤 성공 반환하여 Firestore trigger 재시도를 만들지 않습니다.
 7. 외부 FCM 호출은 transaction 밖의 delivery worker에서만 실행합니다.
@@ -274,6 +278,7 @@ FCM 오류 분류는 Adapter contract fixture가 소유합니다. HTTP `404`와 
 
 ```text
 notificationEndpoints/{endpointId}                         # FID 설치별 NotificationEndpoint; household/member binding 포함
+households/{householdId}/notificationRecipientPreferences/{memberId} # 멤버별 푸시 수신 정책
 households/{householdId}/notificationInboxes/{inboxKey}    # event handler claim
 households/{householdId}/notificationIntents/{intentId}
 households/{householdId}/notificationDeliveries/{deliveryKey}

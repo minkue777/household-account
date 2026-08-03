@@ -86,11 +86,13 @@ const DEFAULT_MEMBERS: readonly MemberFact[] = [
     householdId: "house-1",
     memberId: "member-plan-creator",
     status: "active",
+    pushDelivery: "enabled",
   },
   {
     householdId: "house-1",
     memberId: "member-requester",
     status: "active",
+    pushDelivery: "enabled",
   },
 ];
 

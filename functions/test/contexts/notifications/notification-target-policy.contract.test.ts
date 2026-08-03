@@ -16,11 +16,12 @@ export function createSubject(): NotificationTargetPolicyContractSubject {
 }
 
 const members: readonly MemberFact[] = [
-  { householdId: "house-1", memberId: "member-requester", status: "active" },
-  { householdId: "house-1", memberId: "member-creator", status: "active" },
-  { householdId: "house-1", memberId: "member-third", status: "active" },
-  { householdId: "house-1", memberId: "member-removed", status: "removed" },
-  { householdId: "house-2", memberId: "member-other-house", status: "active" },
+  { householdId: "house-1", memberId: "member-requester", status: "active", pushDelivery: "enabled" },
+  { householdId: "house-1", memberId: "member-creator", status: "active", pushDelivery: "enabled" },
+  { householdId: "house-1", memberId: "member-third", status: "active", pushDelivery: "enabled" },
+  { householdId: "house-1", memberId: "member-muted", status: "active", pushDelivery: "disabled" },
+  { householdId: "house-1", memberId: "member-removed", status: "removed", pushDelivery: "enabled" },
+  { householdId: "house-2", memberId: "member-other-house", status: "active", pushDelivery: "enabled" },
 ];
 
 const endpoints: readonly EndpointFact[] = [
@@ -31,6 +32,7 @@ const endpoints: readonly EndpointFact[] = [
   { endpointId: "creator-android", householdId: "house-1", memberId: "member-creator", platform: "android", status: "active" },
   { endpointId: "creator-inactive", householdId: "house-1", memberId: "member-creator", platform: "ios-pwa", status: "inactive" },
   { endpointId: "third-android", householdId: "house-1", memberId: "member-third", platform: "android", status: "active" },
+  { endpointId: "muted-android", householdId: "house-1", memberId: "member-muted", platform: "android", status: "active" },
   { endpointId: "removed-ios", householdId: "house-1", memberId: "member-removed", platform: "ios-pwa", status: "active" },
   { endpointId: "other-house-ios", householdId: "house-2", memberId: "member-other-house", platform: "ios-pwa", status: "active" },
 ];
@@ -164,6 +166,7 @@ describe("거래 알림 수신 대상 공개 계약", () => {
           householdId: "house-1",
           memberId: "member-requester",
           status: "active",
+          pushDelivery: "enabled",
         },
       ],
       endpoints: [endpoints[0]],
@@ -182,6 +185,32 @@ describe("거래 알림 수신 대상 공개 계약", () => {
       members: [members[0], members[1]],
       endpoints: [endpoints[0], { ...endpoints[2], status: "inactive" }],
     });
+
+    expect(result).toEqual({ kind: "NoTarget", reason: "NO_ACTIVE_ENDPOINT" });
+  });
+
+  it("[T-PUSH-005][PUSH-005] 푸시 수신이 꺼진 멤버는 활성 endpoint가 있어도 명시적 알림 대상에서 제외한다", () => {
+    const result = createSubject().forExplicitHouseholdRequest({
+      eventId: "event-explicit-muted",
+      householdId: "house-1",
+      transactionId: "expense-1",
+      creatorMemberId: "member-creator",
+      requesterMemberId: "member-requester",
+      members,
+      endpoints,
+    });
+
+    expect(targetIds(result)).not.toContain("muted-android");
+    expect(targetIds(result)).toContain("third-android");
+  });
+
+  it("[T-IOS-NOTIFY-001][PUSH-004] iPhone Shortcut 생성자의 푸시 수신이 꺼져 있으면 편집 알림을 만들지 않는다", () => {
+    const result = createSubject().forRecordedTransaction(
+      transactionInput({
+        originChannel: "ios-shortcut",
+        creatorMemberId: "member-muted",
+      }),
+    );
 
     expect(result).toEqual({ kind: "NoTarget", reason: "NO_ACTIVE_ENDPOINT" });
   });

@@ -90,7 +90,8 @@ function toDeliveryResult(
     case "stale-target":
       if (
         delivery.errorCode === "ENDPOINT_CHANGED" ||
-        delivery.errorCode === "RECIPIENT_MEMBERSHIP_INACTIVE"
+        delivery.errorCode === "RECIPIENT_MEMBERSHIP_INACTIVE" ||
+        delivery.errorCode === "RECIPIENT_PUSH_DISABLED"
       ) {
         return { kind: "StaleTarget", code: delivery.errorCode };
       }
@@ -240,9 +241,14 @@ class DefaultDeliveryAssuranceApplication implements DeliveryAssuranceInputPort 
         householdId: event.householdId,
         memberId,
         status:
-          membershipByMemberId.get(memberId) === "active"
+          membershipByMemberId.get(memberId) === "active" ||
+          membershipByMemberId.get(memberId) === "push-disabled"
             ? "active"
             : "removed",
+        pushDelivery:
+          membershipByMemberId.get(memberId) === "push-disabled"
+            ? "disabled"
+            : "enabled",
       })),
       endpoints: endpoints.map((endpoint) => ({
         endpointId: endpoint.endpointId,
@@ -377,6 +383,18 @@ class DefaultDeliveryAssuranceApplication implements DeliveryAssuranceInputPort 
           {
             status: "stale-target",
             errorCode: "RECIPIENT_MEMBERSHIP_INACTIVE",
+          },
+          0,
+        ),
+      );
+    }
+    if (membershipStatus === "push-disabled") {
+      return toDeliveryResult(
+        await this.completeDelivery(
+          claim.delivery,
+          {
+            status: "stale-target",
+            errorCode: "RECIPIENT_PUSH_DISABLED",
           },
           0,
         ),

@@ -40,7 +40,10 @@ export type DeliverNotificationResult =
     }
   | {
       kind: "StaleTarget";
-      code: "ENDPOINT_CHANGED" | "RECIPIENT_MEMBERSHIP_INACTIVE";
+      code:
+        | "ENDPOINT_CHANGED"
+        | "RECIPIENT_MEMBERSHIP_INACTIVE"
+        | "RECIPIENT_PUSH_DISABLED";
     };
 
 export interface DeliveryItemView {

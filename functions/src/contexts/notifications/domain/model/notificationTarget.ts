@@ -6,6 +6,7 @@ export interface MemberFact {
   householdId: string;
   memberId: string;
   status: "active" | "removed" | "deleted";
+  pushDelivery: "enabled" | "disabled";
 }
 
 export interface EndpointFact {

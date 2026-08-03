@@ -38,6 +38,13 @@ const INTENTS = "notificationIntents";
 const DELIVERIES = "notificationDeliveries";
 const ENDPOINTS = "notificationEndpoints";
 const SHORTCUT_INBOXES = "shortcutNotificationInboxes";
+const RECIPIENT_PREFERENCES = "notificationRecipientPreferences";
+
+function pushDeliveryFrom(
+  data: firestore.DocumentData | undefined,
+): "enabled" | "disabled" {
+  return data?.pushDelivery === "disabled" ? "disabled" : "enabled";
+}
 
 function documentId(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -109,16 +116,18 @@ export class FirebaseDeliveryMembershipQuery
 
   async status(householdId: string, memberId: string) {
     try {
-      const member = await this.database
-        .collection("households")
-        .doc(householdId)
-        .collection("members")
-        .doc(memberId)
-        .get();
+      const household = this.database.collection("households").doc(householdId);
+      const [member, preference] = await Promise.all([
+        household.collection("members").doc(memberId).get(),
+        household.collection(RECIPIENT_PREFERENCES).doc(memberId).get(),
+      ]);
       if (!member.exists) return "removed" as const;
       const data = member.data();
-      return data?.lifecycleState === "removed" || data?.status === "removed"
-        ? ("removed" as const)
+      if (data?.lifecycleState === "removed" || data?.status === "removed") {
+        return "removed" as const;
+      }
+      return pushDeliveryFrom(preference.data()) === "disabled"
+        ? ("push-disabled" as const)
         : ("active" as const);
     } catch (_error) {
       return "unavailable" as const;
@@ -444,17 +453,21 @@ export class FirebaseShortcutNotificationFactsQuery
   constructor(private readonly database: firestore.Firestore) {}
 
   async load(householdId: string): Promise<ShortcutNotificationFacts> {
-    const [members, endpoints] = await Promise.all([
-      this.database
-        .collection("households")
-        .doc(householdId)
-        .collection("members")
-        .get(),
+    const household = this.database.collection("households").doc(householdId);
+    const [members, endpoints, preferences] = await Promise.all([
+      household.collection("members").get(),
       this.database
         .collection(ENDPOINTS)
         .where("householdId", "==", householdId)
         .get(),
+      household.collection(RECIPIENT_PREFERENCES).get(),
     ]);
+    const pushDeliveryByMemberId = new Map(
+      preferences.docs.map((document) => [
+        document.id,
+        pushDeliveryFrom(document.data()),
+      ]),
+    );
     return {
       members: members.docs.map((document) => ({
         householdId,
@@ -464,6 +477,7 @@ export class FirebaseShortcutNotificationFactsQuery
           document.data().status === "removed"
             ? ("removed" as const)
             : ("active" as const),
+        pushDelivery: pushDeliveryByMemberId.get(document.id) ?? "enabled",
       })),
       endpoints: endpoints.docs
         .map(mapFirebaseMobileEndpoint)

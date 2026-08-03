@@ -256,9 +256,9 @@ Android 앱의 최초 권한 화면에서는 알림 접근 권한과 다른 앱 
 
 - Android·iPhone Shortcut·Web 등 모든 신규 거래는 검증된 `creatorMemberId`, 업무 출처 `source`, 입력 채널 `originChannel`을 기록한다. 생성자 존재 여부를 알림 전송 여부의 우회 조건으로 사용하지 않는다.
 - Android 자동 등록 지출은 생성자 본인의 Android 기기에서 QuickEdit만 실행한다. 생성자 본인과 다른 가구원 모두에게 자동 푸시를 보내지 않는다.
-- iPhone Shortcut이 Cloud Function을 통해 등록한 지출은 QuickEdit을 사용할 수 없으므로 생성자 본인의 iPhone 알림 endpoint에 편집 링크 푸시를 보낸다. 다른 가구원에게는 자동 전송하지 않는다.
+- iPhone Shortcut이 Cloud Function을 통해 등록한 지출은 QuickEdit을 사용할 수 없으므로 생성자 본인이 푸시 수신 가능 상태일 때 iPhone 알림 endpoint에 편집 링크 푸시를 보낸다. 다른 가구원에게는 자동 전송하지 않는다.
 - Web 수동 입력, 정기 거래, import·migration·scheduler 등 그 밖의 origin은 거래 생성만으로 자동 푸시를 만들지 않는다. 타 가구원 전달은 아래의 명시적 `알림 보내기`만 사용한다.
-- 사용자가 지출의 `알림 보내기`를 명시적으로 실행하면 요청자를 제외한 활성 가구원 모두에게 알림을 보낸다. 거래 생성자와 요청자가 달라도 제외 기준은 현재 요청자다.
+- 사용자가 지출의 `알림 보내기`를 명시적으로 실행하면 요청자를 제외한 활성 가구원 중 Notifications의 멤버별 수신 정책이 허용한 대상 모두에게 알림을 보낸다. 거래 생성자와 요청자가 달라도 제외 기준은 현재 요청자다.
 - 거래 저장 성공과 QuickEdit·푸시 전달 성공은 별도 결과다. 알림 실패가 거래를 롤백하지 않는다.
 
 설계 원칙:
@@ -1632,3 +1632,25 @@ Cloud Function 왕복 시간 때문에 빠른 편집 화면이 0.5~1초 동안 �
 현재 사용 규모에서 체감 지연의 대부분을 만든 불필요한 직렬 왕복, 항상 거치는 로컬 Queue, cold start와 첫 paint 전 무거운 초기화를 제거한다. 확장성을 미리 가정한 복잡성보다 빠른 첫 화면과 결제 후 QuickEdit을 우선하되, 실제 금융 데이터의 서버 권위·가구 격리·중복 방지와 장애 시 유실 방지는 유지한다.
 
 영향 요구사항: SYS-008, ING-005, ING-008, ING-SAVE-006, AND-005, AND-012, QE-001, QE-009, T-QUEUE-001, T-ING-FOLLOWUP-001, T-WEBVIEW-004.
+
+<a id="dec-069"></a>
+## DEC-069 결제 알림 수집 전용 멤버는 일반 표시와 푸시 수신에서 분리
+
+> 상태: Accepted  
+> 결정일: 2026-08-03  
+> 정책 소유 Context: [Access & Household](../contexts/access-household/requirements.md)·[Notifications](../contexts/notifications/requirements.md)  
+> 영향 기능: 다중 기기 결제 알림 수집·자산 명의자 표시·푸시 수신자 계산
+
+결정:
+
+- 가족 소유의 별도 Android에서 카드 알림만 수집해야 하지만 기존 가구원 Google 계정을 사용할 수 없는 경우, 해당 Google 로그인 Member를 삭제하거나 다른 사람으로 가장하지 않고 `memberKind=capture-only`인 활성 수집 전용 멤버로 유지한다.
+- 수집 전용 멤버도 Firebase Auth·Membership 검증을 거쳐 자신의 등록 카드 알림을 같은 가구에 제출할 수 있다. 카드 소유·결제 생성자와 과거 원장 식별자는 그대로 유지한다.
+- 수집 전용 멤버는 Household의 일반 표시용 가구원 배열에 넣지 않는다. 연결 `AssetOwnerProfile`은 삭제·archive하지 않고 `selectionVisibility=hidden`으로 두어 자산 명의자 필터·신규 선택에서만 제외하며, 안정 ID와 과거 참조 해석은 보존한다.
+- Notifications는 이름이나 memberId를 하드코딩하지 않고 `NotificationRecipientPreference.pushDelivery=disabled`로 수집 전용 멤버를 자동·명시적 푸시 대상에서 제외한다. 이 설정은 FID endpoint 등록, Android OS 알림 권한, 카드 알림 수집과 별개다.
+- 일반 Member는 preference 문서가 없으면 기존 호환을 위해 `pushDelivery=enabled`로 해석한다. 현재 수집 전용 전환은 운영자가 수행하며 일반 사용자용 역할 변경·푸시 유형별 설정 UI는 제공하지 않는다.
+
+의도:
+
+결제 알림이 도착하는 별도 가족 기기를 지원하면서도 로그인 주체를 다른 가구원으로 가장하거나, 자산 명의자와 알림 수신자 목록에 실제 사용 목적과 다른 사람을 노출하지 않기 위함입니다. Access, Portfolio 표시, Notifications 수신 정책을 각각의 소유 경계에서 분리해 카드 수집을 유지한 채 독립적으로 숨김·수신 제외할 수 있습니다.
+
+영향 요구사항: HH-011, AST-009, PUSH-003, PUSH-004, PUSH-005, PUSH-014.

@@ -18,6 +18,7 @@ import com.household.account.notifications.detachFidForLogout
 import com.household.account.notifications.startFidRegistration
 import com.household.account.server.FirebaseAuthenticatedCallableGateway
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,41 +29,47 @@ import kotlinx.coroutines.tasks.await
 /** FCM이 등록 완료한 FID를 현재 인증 Membership에 연결하는 Android endpoint Adapter입니다. */
 object FidEndpointManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val registrationInFlight = AtomicBoolean(false)
 
     fun registerCurrentInstallation(context: Context) {
         val householdId = HouseholdPreferences.getHouseholdKey(context)
         val memberId = HouseholdPreferences.getMemberId(context)
         if (householdId.isBlank() || memberId.isBlank()) return
+        if (!registrationInFlight.compareAndSet(false, true)) return
         val appContext = context.applicationContext
         scope.launch {
-            val before = FidRegistrationStateStore.current(appContext)
-            val staleCleanupRequired =
-                FidRegistrationStateStore.notificationsSuppressed(appContext) ||
-                    before?.let {
-                        it.householdId != householdId || it.memberId != memberId
-                    } == true
-            val staleFid = before?.fid
-            startFidRegistration(
-                staleCleanupRequired = staleCleanupRequired,
-                timeoutMillis = LOGOUT_DETACH_TIMEOUT_MILLIS,
-                unregisterStaleInstallation = {
-                    FirebaseMessaging.getInstance().unregister().await()
-                    staleFid?.let {
-                        FidRegistrationStateStore.clearIfCurrent(appContext, it)
+            try {
+                val before = FidRegistrationStateStore.current(appContext)
+                val staleCleanupRequired =
+                    FidRegistrationStateStore.notificationsSuppressed(appContext) ||
+                        before?.let {
+                            it.householdId != householdId || it.memberId != memberId
+                        } == true
+                val staleFid = before?.fid
+                startFidRegistration(
+                    staleCleanupRequired = staleCleanupRequired,
+                    timeoutMillis = LOGOUT_DETACH_TIMEOUT_MILLIS,
+                    unregisterStaleInstallation = {
+                        FirebaseMessaging.getInstance().unregister().await()
+                        staleFid?.let {
+                            FidRegistrationStateStore.clearIfCurrent(appContext, it)
+                        }
+                    },
+                    enableLocalDelivery = {
+                        FcmServiceComponentGate.enableForRegistration(appContext)
+                    },
+                    registerInstallation = {
+                        // 성공하면 FcmService.onRegistered(fid)가 호출됩니다.
+                        FirebaseMessaging.getInstance().register().await()
+                    },
+                    disableAfterFailure = {
+                        FidRegistrationStateStore.suppressNotifications(appContext)
+                        FcmServiceComponentGate.disableForLogout(appContext)
                     }
-                },
-                enableLocalDelivery = {
-                    FcmServiceComponentGate.enableForRegistration(appContext)
-                },
-                registerInstallation = {
-                    // 성공하면 FcmService.onRegistered(fid)가 호출됩니다.
-                    FirebaseMessaging.getInstance().register().await()
-                },
-                disableAfterFailure = {
-                    FidRegistrationStateStore.suppressNotifications(appContext)
-                    FcmServiceComponentGate.disableForLogout(appContext)
-                }
-            )
+                )
+            } finally {
+                registrationInFlight.set(false)
+            }
         }
     }
 
