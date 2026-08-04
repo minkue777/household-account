@@ -1,11 +1,18 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Asset } from '@/types/asset';
 import { updateAssetOrders } from '@/lib/assetService';
 import AssetCard from './AssetCard';
 import { Plus } from 'lucide-react';
 import { useAppDialog } from '@/contexts/AppDialogContext';
+import {
+  lockDocumentTouchScroll,
+  LONG_PRESS_CLICK_SUPPRESSION_MS,
+  LONG_PRESS_DELAY_MS,
+  movedBeyondLongPressTolerance,
+  type GesturePoint,
+} from '@/platform/interaction/longPressGesture';
 
 interface AssetListProps {
   assets: Asset[];
@@ -27,14 +34,60 @@ export default function AssetList({
   // 드래그 상태
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
-  const [isLongPress, setIsLongPress] = useState(false);
   const [isReordering, setIsReordering] = useState(false);
+  const [touchGestureActive, setTouchGestureActive] = useState(false);
 
-  // 롱프레스 타이머
-  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
-  const touchStartY = useRef<number>(0);
-  const draggedElement = useRef<HTMLDivElement | null>(null);
+  interface TouchGesture {
+    readonly sourceId: string;
+    readonly start: GesturePoint;
+    active: boolean;
+    targetId: string | null;
+  }
+
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clickSuppressionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchGesture = useRef<TouchGesture | null>(null);
+  const releaseScrollLock = useRef<(() => void) | null>(null);
+  const suppressNextClick = useRef(false);
   const reorderInFlightRef = useRef(false);
+
+  const clearLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const clearClickSuppressionTimer = () => {
+    if (clickSuppressionTimer.current) {
+      clearTimeout(clickSuppressionTimer.current);
+      clickSuppressionTimer.current = null;
+    }
+  };
+
+  const releaseGestureResources = () => {
+    clearLongPress();
+    releaseScrollLock.current?.();
+    releaseScrollLock.current = null;
+    touchGesture.current = null;
+    setTouchGestureActive(false);
+  };
+
+  const suppressFollowingClick = () => {
+    suppressNextClick.current = true;
+    clearClickSuppressionTimer();
+    clickSuppressionTimer.current = setTimeout(() => {
+      suppressNextClick.current = false;
+      clickSuppressionTimer.current = null;
+    }, LONG_PRESS_CLICK_SUPPRESSION_MS);
+  };
+
+  useEffect(() => () => {
+    clearLongPress();
+    clearClickSuppressionTimer();
+    releaseScrollLock.current?.();
+    releaseScrollLock.current = null;
+  }, []);
 
   // 순서 변경 적용
   const applyReorder = useCallback(async (fromId: string, toId: string) => {
@@ -74,7 +127,7 @@ export default function AssetList({
 
   // 데스크톱 드래그 시작
   const handleDragStart = (e: React.DragEvent, assetId: string) => {
-    if (reorderInFlightRef.current) {
+    if (reorderInFlightRef.current || touchGesture.current !== null) {
       e.preventDefault();
       return;
     }
@@ -103,64 +156,99 @@ export default function AssetList({
 
   // 모바일 터치 시작 (롱프레스 감지)
   const handleTouchStart = (e: React.TouchEvent, assetId: string) => {
-    if (reorderInFlightRef.current) return;
-    touchStartY.current = e.touches[0].clientY;
+    if (reorderInFlightRef.current || e.touches.length !== 1) return;
+    clearLongPress();
+    releaseScrollLock.current?.();
+    releaseScrollLock.current = null;
+
+    const touch = e.touches[0];
+    const gesture: TouchGesture = {
+      sourceId: assetId,
+      start: { x: touch.clientX, y: touch.clientY },
+      active: false,
+      targetId: null,
+    };
+    touchGesture.current = gesture;
+    setTouchGestureActive(true);
 
     longPressTimer.current = setTimeout(() => {
-      if (reorderInFlightRef.current) return;
-      setIsLongPress(true);
+      if (reorderInFlightRef.current || touchGesture.current !== gesture) return;
+      longPressTimer.current = null;
+      gesture.active = true;
+      releaseScrollLock.current = lockDocumentTouchScroll();
+      suppressNextClick.current = true;
       setDraggedId(assetId);
       // 햅틱 피드백 (지원하는 경우)
       if (navigator.vibrate) {
         navigator.vibrate(50);
       }
-    }, 500); // 500ms 롱프레스
+    }, LONG_PRESS_DELAY_MS);
   };
 
   // 모바일 터치 이동
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (reorderInFlightRef.current) return;
-    // 롱프레스 전 움직임 - 롱프레스 취소
-    if (!isLongPress && longPressTimer.current) {
-      const moveY = Math.abs(e.touches[0].clientY - touchStartY.current);
-      if (moveY > 10) {
-        clearTimeout(longPressTimer.current);
-        longPressTimer.current = null;
+    const gesture = touchGesture.current;
+    if (reorderInFlightRef.current || !gesture || e.touches.length !== 1) return;
+
+    const touch = e.touches[0];
+    if (!gesture.active) {
+      if (movedBeyondLongPressTolerance(gesture.start, {
+        x: touch.clientX,
+        y: touch.clientY,
+      })) {
+        clearLongPress();
       }
       return;
     }
 
-    if (!isLongPress || !draggedId) return;
-
     e.preventDefault();
 
-    // 현재 터치 위치에서 어떤 요소 위에 있는지 확인
-    const touch = e.touches[0];
     const elements = document.elementsFromPoint(touch.clientX, touch.clientY);
+    let targetId: string | null = null;
 
     for (const el of elements) {
-      const assetEl = el.closest('[data-asset-id]') as HTMLElement;
-      if (assetEl && assetEl.dataset.assetId !== draggedId) {
-        setDragOverId(assetEl.dataset.assetId || null);
+      const assetEl = el.closest('[data-asset-id]') as HTMLElement | null;
+      if (assetEl && assetEl.dataset.assetId !== gesture.sourceId) {
+        targetId = assetEl.dataset.assetId || null;
         break;
       }
     }
+    gesture.targetId = targetId;
+    setDragOverId(targetId);
   };
 
   // 모바일 터치 종료
   const handleTouchEnd = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
+    const gesture = touchGesture.current;
+    const activated = gesture?.active === true;
+    const sourceId = gesture?.sourceId ?? null;
+    const targetId = gesture?.targetId ?? null;
+    releaseGestureResources();
+
+    if (!reorderInFlightRef.current && activated && sourceId && targetId) {
+      void applyReorder(sourceId, targetId);
     }
 
-    if (!reorderInFlightRef.current && isLongPress && draggedId && dragOverId) {
-      void applyReorder(draggedId, dragOverId);
-    }
-
-    setIsLongPress(false);
+    if (activated) suppressFollowingClick();
     setDraggedId(null);
     setDragOverId(null);
+  };
+
+  const handleTouchCancel = () => {
+    const activated = touchGesture.current?.active === true;
+    releaseGestureResources();
+    if (activated) suppressFollowingClick();
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
+  const handleAssetClick = (asset: Asset) => {
+    if (suppressNextClick.current) {
+      suppressNextClick.current = false;
+      clearClickSuppressionTimer();
+      return;
+    }
+    onAssetClick(asset);
   };
 
   return (
@@ -198,6 +286,7 @@ export default function AssetList({
           aria-busy={isReordering}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchCancel}
         >
           {activeAssets.map((asset) => {
             const isDragging = draggedId === asset.id;
@@ -207,13 +296,16 @@ export default function AssetList({
               <div
                 key={asset.id}
                 data-asset-id={asset.id}
-                draggable={!isReordering}
+                draggable={!isReordering && !touchGestureActive}
                 onDragStart={(e) => handleDragStart(e, asset.id)}
                 onDragOver={(e) => handleDragOver(e, asset.id)}
                 onDragEnd={handleDragEnd}
                 onDragLeave={() => setDragOverId(null)}
                 onTouchStart={(e) => handleTouchStart(e, asset.id)}
-                className={`relative transition-all ${
+                onContextMenu={(event) => {
+                  if (touchGesture.current !== null) event.preventDefault();
+                }}
+                className={`relative transition-all select-none ${
                   isDragging ? 'opacity-50 scale-95' : ''
                 } ${isDragOver ? 'bg-blue-50' : ''}`}
                 style={{ touchAction: 'pan-y' }}
@@ -226,11 +318,7 @@ export default function AssetList({
                 {/* 자산 카드 */}
                 <AssetCard
                   asset={asset}
-                  onClick={() => {
-                    if (!isLongPress) {
-                      onAssetClick(asset);
-                    }
-                  }}
+                  onClick={() => handleAssetClick(asset)}
                 />
               </div>
             );

@@ -1,9 +1,16 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Expense, TransactionType } from '@/types/expense';
 import { getLedgerPrimaryText, getLedgerSecondaryText } from '@/lib/utils/ledgerDisplay';
 import { useCategoryContext } from '@/contexts/CategoryContext';
+import {
+  lockDocumentTouchScroll,
+  LONG_PRESS_CLICK_SUPPRESSION_MS,
+  LONG_PRESS_DELAY_MS,
+  movedBeyondLongPressTolerance,
+  type GesturePoint,
+} from '@/platform/interaction/longPressGesture';
 
 interface ExpenseItemProps {
   expense: Expense;
@@ -48,10 +55,19 @@ export default function ExpenseItem({
   const { getCategoryLabel, getCategoryColor } = useCategoryContext();
 
   const [isDragOver, setIsDragOver] = useState(false);
+  const [touchGestureActive, setTouchGestureActive] = useState(false);
 
-  // 터치 드래그 상태
-  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
-  const touchStartPos = useRef<{ x: number; y: number } | null>(null);
+  interface TouchGesture {
+    readonly start: GesturePoint;
+    active: boolean;
+    targetId: string | null;
+  }
+
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clickSuppressionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchGesture = useRef<TouchGesture | null>(null);
+  const releaseScrollLock = useRef<(() => void) | null>(null);
+  const suppressNextClick = useRef(false);
   const isDragging = draggingExpenseId === expense.id;
   const isDropTarget = dragOverExpenseId === expense.id && draggingExpenseId !== expense.id;
 
@@ -60,9 +76,47 @@ export default function ExpenseItem({
   const primaryText = getLedgerPrimaryText(expense, transactionType);
   const secondaryText = getLedgerSecondaryText(expense, transactionType);
 
+  const clearLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const clearClickSuppressionTimer = () => {
+    if (clickSuppressionTimer.current) {
+      clearTimeout(clickSuppressionTimer.current);
+      clickSuppressionTimer.current = null;
+    }
+  };
+
+  const releaseGestureResources = () => {
+    clearLongPress();
+    releaseScrollLock.current?.();
+    releaseScrollLock.current = null;
+    touchGesture.current = null;
+    setTouchGestureActive(false);
+  };
+
+  const suppressFollowingClick = () => {
+    suppressNextClick.current = true;
+    clearClickSuppressionTimer();
+    clickSuppressionTimer.current = setTimeout(() => {
+      suppressNextClick.current = false;
+      clickSuppressionTimer.current = null;
+    }, LONG_PRESS_CLICK_SUPPRESSION_MS);
+  };
+
+  useEffect(() => () => {
+    clearLongPress();
+    clearClickSuppressionTimer();
+    releaseScrollLock.current?.();
+    releaseScrollLock.current = null;
+  }, []);
+
   // 데스크톱 드래그 앤 드롭 핸들러
   const handleDragStart = (e: React.DragEvent) => {
-    if (mergeDisabled) {
+    if (mergeDisabled || touchGesture.current !== null) {
       e.preventDefault();
       return;
     }
@@ -103,71 +157,94 @@ export default function ExpenseItem({
 
   // 모바일 터치 핸들러
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (mergeDisabled) return;
+    if (mergeDisabled || e.touches.length !== 1) return;
+    clearLongPress();
+    releaseScrollLock.current?.();
+    releaseScrollLock.current = null;
+
     const touch = e.touches[0];
-    touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+    const gesture: TouchGesture = {
+      start: { x: touch.clientX, y: touch.clientY },
+      active: false,
+      targetId: null,
+    };
+    touchGesture.current = gesture;
+    setTouchGestureActive(true);
 
     longPressTimer.current = setTimeout(() => {
+      if (touchGesture.current !== gesture) return;
+      longPressTimer.current = null;
+      gesture.active = true;
+      releaseScrollLock.current = lockDocumentTouchScroll();
+      suppressNextClick.current = true;
       setDraggingExpenseId(expense.id);
       if (navigator.vibrate) {
         navigator.vibrate(50);
       }
-    }, 500);
+    }, LONG_PRESS_DELAY_MS);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchStartPos.current) return;
+    const gesture = touchGesture.current;
+    if (!gesture || e.touches.length !== 1) return;
 
     const touch = e.touches[0];
-    const moveX = Math.abs(touch.clientX - touchStartPos.current.x);
-    const moveY = Math.abs(touch.clientY - touchStartPos.current.y);
-
-    if (!isDragging && (moveX > 10 || moveY > 10)) {
-      if (longPressTimer.current) {
-        clearTimeout(longPressTimer.current);
-        longPressTimer.current = null;
+    if (!gesture.active) {
+      if (movedBeyondLongPressTolerance(gesture.start, {
+        x: touch.clientX,
+        y: touch.clientY,
+      })) {
+        clearLongPress();
       }
+      return;
     }
 
-    if (isDragging) {
-      e.preventDefault();
-      const targetId = findItemAtPosition(touch.clientX, touch.clientY);
-      setDragOverExpenseId(targetId);
-    }
-  };
-
-  const clearLongPress = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
+    e.preventDefault();
+    const candidateId = findItemAtPosition(touch.clientX, touch.clientY);
+    const targetId = candidateId === expense.id ? null : candidateId;
+    gesture.targetId = targetId;
+    setDragOverExpenseId(targetId);
   };
 
   const handleTouchEnd = async () => {
-    clearLongPress();
+    const gesture = touchGesture.current;
+    const activated = gesture?.active === true;
+    const targetId = gesture?.targetId ?? null;
+    releaseGestureResources();
 
-    if (isDragging) {
+    if (activated) {
+      suppressFollowingClick();
       try {
-        await handleTouchDragEnd(expense.id, dragOverExpenseId);
+        await handleTouchDragEnd(expense.id, targetId);
       } catch {
         cancelTouchDrag();
       }
     }
-
-    touchStartPos.current = null;
   };
 
   const handleTouchCancel = () => {
-    clearLongPress();
-    touchStartPos.current = null;
+    const activated = touchGesture.current?.active === true;
+    releaseGestureResources();
+    if (activated) suppressFollowingClick();
     cancelTouchDrag();
+  };
+
+  const handleClick = (event: React.MouseEvent) => {
+    if (suppressNextClick.current) {
+      suppressNextClick.current = false;
+      clearClickSuppressionTimer();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    onEdit(expense);
   };
 
   return (
     <div className="relative" ref={(el) => registerItemRef(expense.id, el)}>
       <div
         data-testid="expense-item"
-        draggable={!mergeDisabled}
+        draggable={!mergeDisabled && !touchGestureActive}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -176,8 +253,11 @@ export default function ExpenseItem({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchCancel}
-        onClick={isDragging ? undefined : () => onEdit(expense)}
-        style={{ touchAction: isDragging || draggingExpenseId ? 'none' : 'auto' }}
+        onClick={handleClick}
+        onContextMenu={(event) => {
+          if (touchGesture.current !== null) event.preventDefault();
+        }}
+        style={{ touchAction: isDragging || draggingExpenseId ? 'none' : 'pan-y' }}
         className={`flex items-center justify-between p-3 rounded-xl transition-all cursor-pointer select-none ${
           isDragging
             ? 'bg-blue-200 border-2 border-blue-500 scale-105 shadow-lg opacity-90'

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
 import type { SplitItem } from '@/lib/expenseService';
@@ -110,6 +110,35 @@ const defaultProps = {
   date: '2026-07-22',
   expenses: [firstExpense, secondExpense],
   transactionType: 'expense' as const,
+};
+
+const getExpenseRow = (merchant: string): HTMLElement => {
+  const row = screen.getByText(merchant).closest('[data-testid="expense-item"]');
+  if (!(row instanceof HTMLElement)) {
+    throw new Error(`${merchant} 지출 행을 찾지 못했습니다.`);
+  }
+  return row;
+};
+
+const touchPoint = (clientX: number, clientY: number) => ({ clientX, clientY });
+
+const mockExpenseRowRect = (
+  row: HTMLElement,
+  rect: Pick<DOMRect, 'left' | 'top' | 'right' | 'bottom'>
+) => {
+  const container = row.parentElement;
+  if (!(container instanceof HTMLElement)) {
+    throw new Error('지출 행 컨테이너를 찾지 못했습니다.');
+  }
+
+  jest.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+    ...rect,
+    x: rect.left,
+    y: rect.top,
+    width: rect.right - rect.left,
+    height: rect.bottom - rect.top,
+    toJSON: () => ({}),
+  });
 };
 
 describe('ExpenseDetail 모달 소유권 계약', () => {
@@ -341,23 +370,175 @@ describe('ExpenseDetail 모달 소유권 계약', () => {
           onMergeExpenses={jest.fn().mockResolvedValue(undefined)}
         />
       );
-      const row = screen.getByText('첫째 상점').closest('[draggable]');
-      expect(row).not.toBeNull();
+      const row = getExpenseRow('첫째 상점');
 
-      fireEvent.touchStart(row!, {
-        touches: [{ clientX: 10, clientY: 10 }],
+      fireEvent.touchStart(row, {
+        touches: [touchPoint(10, 10)],
       });
       act(() => {
         jest.advanceTimersByTime(500);
       });
 
       expect(document.body.style.overflow).toBe('hidden');
-      fireEvent.touchCancel(row!);
+      fireEvent.touchCancel(row);
       expect(document.body.style.overflow).toBe('');
+      expect(row).toHaveAttribute('draggable', 'true');
       expect(screen.queryByText('다른 항목 위에 놓으면 합쳐집니다'))
         .not.toBeInTheDocument();
     } finally {
-      jest.runOnlyPendingTimers();
+      jest.clearAllTimers();
+      jest.useRealTimers();
+    }
+  });
+
+  test('touchstart 즉시 native drag를 끄고 dragstart 기본 동작을 막는다', () => {
+    jest.useFakeTimers();
+    try {
+      render(
+        <ExpenseDetail
+          {...defaultProps}
+          onMergeExpenses={jest.fn().mockResolvedValue(undefined)}
+        />
+      );
+      const row = getExpenseRow('첫째 상점');
+
+      fireEvent.touchStart(row, {
+        touches: [touchPoint(10, 10)],
+      });
+
+      expect(row).toHaveAttribute('draggable', 'false');
+
+      const dataTransfer = {
+        setData: jest.fn(),
+        effectAllowed: 'none',
+      };
+      const dragStartEvent = createEvent.dragStart(row, { dataTransfer });
+      fireEvent(row, dragStartEvent);
+
+      expect(dragStartEvent.defaultPrevented).toBe(true);
+      expect(dataTransfer.setData).not.toHaveBeenCalled();
+
+      fireEvent.touchEnd(row);
+      expect(row).toHaveAttribute('draggable', 'true');
+    } finally {
+      jest.clearAllTimers();
+      jest.useRealTimers();
+    }
+  });
+
+  test('12px 미세 이동은 롱프레스를 유지하고 500ms 경계의 touchend도 ref 상태로 합친다', async () => {
+    jest.useFakeTimers();
+    try {
+      const onMergeExpenses = jest.fn().mockResolvedValue(undefined);
+      render(
+        <ExpenseDetail
+          {...defaultProps}
+          onMergeExpenses={onMergeExpenses}
+        />
+      );
+      const sourceRow = getExpenseRow('첫째 상점');
+      const targetRow = getExpenseRow('둘째 상점');
+      mockExpenseRowRect(targetRow, {
+        left: 0,
+        top: 100,
+        right: 200,
+        bottom: 200,
+      });
+
+      fireEvent.touchStart(sourceRow, {
+        touches: [touchPoint(10, 10)],
+      });
+      fireEvent.touchMove(sourceRow, {
+        touches: [touchPoint(22, 10)],
+      });
+
+      act(() => {
+        jest.advanceTimersByTime(499);
+      });
+      expect(screen.queryByText('다른 항목 위에 놓으면 합쳐집니다'))
+        .not.toBeInTheDocument();
+
+      await act(async () => {
+        jest.advanceTimersByTime(1);
+        fireEvent.touchMove(sourceRow, {
+          touches: [touchPoint(50, 150)],
+        });
+        fireEvent.touchEnd(sourceRow);
+        await Promise.resolve();
+      });
+
+      expect(onMergeExpenses).toHaveBeenCalledWith(secondExpense, firstExpense);
+      expect(sourceRow).toHaveAttribute('draggable', 'true');
+    } finally {
+      jest.clearAllTimers();
+      jest.useRealTimers();
+    }
+  });
+
+  test('롱프레스 전에 16px 임계값을 넘으면 합치기 모드를 시작하지 않는다', () => {
+    jest.useFakeTimers();
+    try {
+      const onMergeExpenses = jest.fn().mockResolvedValue(undefined);
+      render(
+        <ExpenseDetail
+          {...defaultProps}
+          onMergeExpenses={onMergeExpenses}
+        />
+      );
+      const row = getExpenseRow('첫째 상점');
+
+      fireEvent.touchStart(row, {
+        touches: [touchPoint(10, 10)],
+      });
+      fireEvent.touchMove(row, {
+        touches: [touchPoint(27, 10)],
+      });
+      act(() => {
+        jest.advanceTimersByTime(500);
+      });
+
+      expect(screen.queryByText('다른 항목 위에 놓으면 합쳐집니다'))
+        .not.toBeInTheDocument();
+      expect(document.body.style.overflow).toBe('');
+      expect(onMergeExpenses).not.toHaveBeenCalled();
+
+      fireEvent.touchEnd(row);
+      expect(row).toHaveAttribute('draggable', 'true');
+    } finally {
+      jest.clearAllTimers();
+      jest.useRealTimers();
+    }
+  });
+
+  test('롱프레스 뒤 합성 click 한 번만 막고 다음 일반 click은 편집을 연다', () => {
+    jest.useFakeTimers();
+    try {
+      render(
+        <ExpenseDetail
+          {...defaultProps}
+          onMergeExpenses={jest.fn().mockResolvedValue(undefined)}
+        />
+      );
+      const row = getExpenseRow('첫째 상점');
+
+      fireEvent.touchStart(row, {
+        touches: [touchPoint(10, 10)],
+      });
+      act(() => {
+        jest.advanceTimersByTime(500);
+      });
+      fireEvent.touchEnd(row);
+
+      fireEvent.click(row);
+      expect(screen.queryByTestId('expense-edit-modal')).not.toBeInTheDocument();
+
+      fireEvent.click(row);
+      expect(screen.getByTestId('expense-edit-modal')).toHaveAttribute(
+        'data-expense-id',
+        firstExpense.id
+      );
+    } finally {
+      jest.clearAllTimers();
       jest.useRealTimers();
     }
   });

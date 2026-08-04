@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Expense } from '@/types/expense';
 
 interface UseDragAndDropOptions {
@@ -86,25 +86,6 @@ export function useDragAndDrop({
       itemRefs.current.delete(id);
     }
   }, []);
-
-  // 드래그 중일 때 스크롤 방지
-  useEffect(() => {
-    if (!draggingExpenseId) return;
-
-    const preventScroll = (e: TouchEvent) => {
-      e.preventDefault();
-    };
-
-    // 드래그 중일 때 body에 스크롤 방지
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    document.addEventListener('touchmove', preventScroll, { passive: false });
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener('touchmove', preventScroll);
-    };
-  }, [draggingExpenseId]);
 
   return {
     draggingExpenseId,
