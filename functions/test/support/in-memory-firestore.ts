@@ -5,6 +5,11 @@ interface QueryFilter {
   readonly value: unknown;
 }
 
+export interface InMemoryTransactionReadTarget {
+  readonly kind: "document" | "query";
+  readonly path: string;
+}
+
 class MemoryDocumentSnapshot {
   constructor(
     readonly reference: MemoryDocumentReference,
@@ -163,15 +168,37 @@ class MemoryTransaction {
 
   constructor(private readonly database: InMemoryFirestore) {}
 
+  async getAll(
+    ...targets: readonly MemoryDocumentReference[]
+  ): Promise<readonly MemoryDocumentSnapshot[]> {
+    return Promise.all(
+      targets.map(async (target) => {
+        const snapshot = await this.get(target);
+        if (!(snapshot instanceof MemoryDocumentSnapshot)) {
+          throw new Error("MEMORY_GET_ALL_DOCUMENT_REQUIRED");
+        }
+        return snapshot;
+      }),
+    );
+  }
+
   async get(
     target: MemoryDocumentReference | MemoryCollectionReference | MemoryQuery,
   ): Promise<MemoryDocumentSnapshot | MemoryQuerySnapshot> {
     if (target instanceof MemoryDocumentReference) {
+      this.database.recordTransactionRead({
+        kind: "document",
+        path: target.path,
+      });
       return new MemoryDocumentSnapshot(
         target,
         this.database.document(target.path),
       );
     }
+    this.database.recordTransactionRead({
+      kind: "query",
+      path: target.collectionPath,
+    });
     const docs = this.database
       .documentsInCollection(target.collectionPath)
       .filter(({ value: document }) =>
@@ -252,6 +279,7 @@ function valueAt(value: StoredDocument, field: string): unknown {
 
 export class InMemoryFirestore {
   private readonly documents = new Map<string, StoredDocument>();
+  private readonly reads: InMemoryTransactionReadTarget[] = [];
 
   collection(path: string): MemoryCollectionReference {
     return new MemoryCollectionReference(path, this);
@@ -268,6 +296,18 @@ export class InMemoryFirestore {
 
   seed(path: string, value: StoredDocument): void {
     this.documents.set(path, structuredClone(value));
+  }
+
+  recordTransactionRead(target: InMemoryTransactionReadTarget): void {
+    this.reads.push(target);
+  }
+
+  clearTransactionReads(): void {
+    this.reads.length = 0;
+  }
+
+  transactionReads(): readonly InMemoryTransactionReadTarget[] {
+    return this.reads.map((target) => ({ ...target }));
   }
 
   document(path: string): StoredDocument | undefined {

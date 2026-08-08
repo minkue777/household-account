@@ -478,8 +478,9 @@ export function createPaymentConfigurationRuntimeApplication(
         typeof changes.cardLastFour === "string"
           ? changes.cardLastFour
           : undefined;
-      const atomic = await store.transactRegisteredCards(
+      const atomic = await store.transactRegisteredCardUpdate(
         metadata(input),
+        input.cardId,
         (current) =>
           cardMutation(current, input.actor.householdId, (application) => {
             const target = current.cards.find(({ cardId }) => cardId === input.cardId);

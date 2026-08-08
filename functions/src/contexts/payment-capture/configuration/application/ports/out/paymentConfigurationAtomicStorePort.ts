@@ -53,4 +53,15 @@ export interface PaymentConfigurationAtomicStorePort {
       RegisteredCardCommandResult
     >,
   ): Promise<PaymentConfigurationAtomicResult<RegisteredCardCommandResult>>;
+
+  transactRegisteredCardUpdate(
+    metadata: PaymentConfigurationCommandMetadata,
+    cardId: string,
+    decide: (
+      current: RegisteredCardCommandState,
+    ) => AtomicPaymentConfigurationMutation<
+      RegisteredCardCommandState,
+      RegisteredCardCommandResult
+    >,
+  ): Promise<PaymentConfigurationAtomicResult<RegisteredCardCommandResult>>;
 }

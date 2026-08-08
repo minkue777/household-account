@@ -188,6 +188,7 @@ describe("Firebase payment configuration atomic adapter", () => {
       memory.document(`households/house-1/registeredCards/${cardId}`),
     ).toMatchObject({ lastFour: "4321", aggregateVersion: 2 });
 
+    memory.clearTransactionReads();
     expect(
       await application.updateCard({
         ...command(22, "payment-configuration.update-card.v1"),
@@ -202,5 +203,112 @@ describe("Firebase payment configuration atomic adapter", () => {
       cardLastFour: "",
       aggregateVersion: 3,
     });
+    expect(memory.transactionReads()).toEqual(
+      expect.arrayContaining([
+        {
+          kind: "document",
+          path: `households/house-1/registeredCards/${cardId}`,
+        },
+        { kind: "document", path: `registered_cards/${cardId}` },
+        {
+          kind: "document",
+          path: "households/house-1/members/member-1",
+        },
+      ]),
+    );
+    expect(
+      memory.transactionReads().every(({ kind }) => kind === "document"),
+    ).toBe(true);
+    expect(
+      memory.transactionReads().some(({ path }) =>
+        path.includes("paymentConfigurationMeta"),
+      ),
+    ).toBe(false);
+  });
+
+  it("카드 수정 receipt를 재생하고 다른 payload는 상태 변경 없이 거부한다", async () => {
+    const memory = new InMemoryFirestore();
+    memory.seed("households/house-1/members/member-1", {
+      householdId: "house-1",
+      displayName: "이민규",
+    });
+    const application = createPaymentConfigurationRuntimeApplication(
+      new FirebasePaymentConfigurationAtomicStore(
+        memory as unknown as firestore.Firestore,
+      ),
+    );
+    const created = await application.registerCard({
+      ...command(30, "payment-configuration.register-card.v1"),
+      card: { cardLabel: "삼성", cardLastFour: "1234" },
+    });
+    expect(created.kind).toBe("success");
+    if (created.kind !== "success") return;
+    const cardId = created.value.cardId as string;
+    const update = {
+      ...command(31, "payment-configuration.update-card.v1"),
+      cardId,
+      changes: { cardLastFour: "4321" },
+    };
+
+    expect(await application.updateCard(update)).toEqual({
+      kind: "success",
+      value: {},
+    });
+    expect(await application.updateCard(update)).toEqual({
+      kind: "success",
+      value: {},
+    });
+    expect(
+      await application.updateCard({
+        ...update,
+        payloadFingerprint: "different-payload",
+        changes: { cardLastFour: "9999" },
+      }),
+    ).toEqual({
+      kind: "rejected",
+      code: "IDEMPOTENCY_PAYLOAD_MISMATCH",
+    });
+    expect(
+      memory.document(`households/house-1/registeredCards/${cardId}`),
+    ).toMatchObject({ lastFour: "4321", aggregateVersion: 2 });
+  });
+
+  it("단건 claim 조회로 다른 카드와 겹치는 끝 4자리 수정을 거부한다", async () => {
+    const memory = new InMemoryFirestore();
+    memory.seed("households/house-1/members/member-1", {
+      householdId: "house-1",
+      displayName: "이민규",
+    });
+    const application = createPaymentConfigurationRuntimeApplication(
+      new FirebasePaymentConfigurationAtomicStore(
+        memory as unknown as firestore.Firestore,
+      ),
+    );
+    const first = await application.registerCard({
+      ...command(40, "payment-configuration.register-card.v1"),
+      card: { cardLabel: "삼성", cardLastFour: "1234" },
+    });
+    const second = await application.registerCard({
+      ...command(41, "payment-configuration.register-card.v1"),
+      card: { cardLabel: "삼성", cardLastFour: "5678" },
+    });
+    expect(first.kind).toBe("success");
+    expect(second.kind).toBe("success");
+    if (second.kind !== "success") return;
+    const secondId = second.value.cardId as string;
+
+    expect(
+      await application.updateCard({
+        ...command(42, "payment-configuration.update-card.v1"),
+        cardId: secondId,
+        changes: { cardLastFour: "1234" },
+      }),
+    ).toEqual({ kind: "rejected", code: "DUPLICATE_CARD" });
+    expect(
+      memory.document(`households/house-1/registeredCards/${secondId}`),
+    ).toMatchObject({ lastFour: "5678", aggregateVersion: 1 });
+    expect(
+      memory.paths("households/house-1/registeredCardClaims/"),
+    ).toHaveLength(2);
   });
 });

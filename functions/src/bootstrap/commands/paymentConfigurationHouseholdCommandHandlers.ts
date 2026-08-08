@@ -193,6 +193,7 @@ export function createPaymentConfigurationHouseholdCommandHandlers(
     [
       "payment-configuration.update-card.v1",
       {
+        idempotencyBoundary: "domain-command-id",
         async execute(context) {
           const payload = record(context.envelope.payload);
           exactFields(payload, ["cardId", "changes"]);

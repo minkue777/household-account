@@ -7,8 +7,10 @@ import { createPaymentConfigurationHouseholdCommandHandlers } from "../../src/bo
 describe("Payment Configuration / Home household command 등록", () => {
   it("공개 manifest의 9개 command를 placeholder가 아닌 handler로 제공한다", () => {
     const database = {} as firestore.Firestore;
+    const paymentHandlers =
+      createPaymentConfigurationHouseholdCommandHandlers(database);
     expect([
-      ...createPaymentConfigurationHouseholdCommandHandlers(database).keys(),
+      ...paymentHandlers.keys(),
       ...createHomeHouseholdCommandHandlers(database).keys(),
     ]).toEqual([
       "payment-configuration.create-merchant-rule.v1",
@@ -21,5 +23,9 @@ describe("Payment Configuration / Home household command 등록", () => {
       "home.update-summary-preferences.v1",
       "home.select-local-currency.v1",
     ]);
+    expect(
+      paymentHandlers.get("payment-configuration.update-card.v1")
+        ?.idempotencyBoundary,
+    ).toBe("domain-command-id");
   });
 });

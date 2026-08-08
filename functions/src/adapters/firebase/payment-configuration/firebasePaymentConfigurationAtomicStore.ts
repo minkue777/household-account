@@ -512,6 +512,175 @@ export class FirebasePaymentConfigurationAtomicStore
     }
   }
 
+  async transactRegisteredCardUpdate(
+    metadata: PaymentConfigurationCommandMetadata,
+    cardId: string,
+    decide: (
+      current: RegisteredCardCommandState,
+    ) => AtomicPaymentConfigurationMutation<
+      RegisteredCardCommandState,
+      RegisteredCardCommandResult
+    >,
+  ): Promise<PaymentConfigurationAtomicResult<RegisteredCardCommandResult>> {
+    const household = this.database.collection("households").doc(metadata.householdId);
+    const canonical = household.collection("registeredCards");
+    const legacy = this.database.collection("registered_cards");
+    const claims = household.collection("registeredCardClaims");
+    const members = household.collection("members");
+    const receipt = receiptReference(this.database, metadata);
+    const canonicalCard = canonical.doc(cardId);
+    const legacyCard = legacy.doc(cardId);
+    try {
+      return await this.database.runTransaction(async (transaction) => {
+        const [
+          receiptSnapshot,
+          canonicalSnapshot,
+          legacySnapshot,
+          actorMemberSnapshot,
+        ] = await transaction.getAll(
+          receipt,
+          canonicalCard,
+          legacyCard,
+          members.doc(metadata.actorMemberId),
+        );
+        if (receiptSnapshot.exists) {
+          if (receiptSnapshot.data()?.payloadFingerprint !== metadata.payloadFingerprint) {
+            return { kind: "payload-mismatch" } as const;
+          }
+          return {
+            kind: "replayed",
+            value: receiptSnapshot.data()?.result as RegisteredCardCommandResult,
+          } as const;
+        }
+
+        const actorDisplayName = text(
+          actorMemberSnapshot.data(),
+          "displayName",
+          "name",
+        );
+        const memberIdByDisplayName = new Map<string, string>();
+        if (actorDisplayName !== undefined) {
+          memberIdByDisplayName.set(actorDisplayName, metadata.actorMemberId);
+        }
+        let currentCards = mergeCards({
+          canonical: [canonicalSnapshot],
+          legacy: [legacySnapshot],
+          householdId: metadata.householdId,
+          memberIdByDisplayName,
+        });
+        if (
+          currentCards.length === 0 &&
+          !canonicalSnapshot.exists &&
+          legacySnapshot.exists &&
+          text(legacySnapshot.data(), "ownerMemberId") === undefined
+        ) {
+          const legacyMembers = await transaction.get(members);
+          for (const member of legacyMembers.docs) {
+            const displayName = text(member.data(), "displayName", "name");
+            if (displayName !== undefined) {
+              memberIdByDisplayName.set(displayName, member.id);
+            }
+          }
+          currentCards = mergeCards({
+            canonical: [canonicalSnapshot],
+            legacy: [legacySnapshot],
+            householdId: metadata.householdId,
+            memberIdByDisplayName,
+          });
+        }
+        const current: RegisteredCardCommandState = {
+          cards: currentCards,
+          claims: currentCards
+            .filter(({ lifecycle }) => lifecycle === "active")
+            .map((card) => ({
+              householdId: card.householdId,
+              ownerMemberId: card.ownerMemberId,
+              cardCompanyCode: card.cardCompanyCode,
+              ...(card.lastFour === undefined ? {} : { lastFour: card.lastFour }),
+              cardId: card.cardId,
+            })),
+          historicalEvidence: [],
+          collectionVersions: {},
+        };
+        const mutation = decide(current);
+        let value = mutation.value;
+
+        if (mutation.writes) {
+          const previous = current.cards.find((card) => card.cardId === cardId);
+          const updated = mutation.state.cards.find((card) => card.cardId === cardId);
+          if (
+            previous === undefined ||
+            updated === undefined ||
+            mutation.state.cards.some((card) => card.cardId !== cardId)
+          ) {
+            throw new Error("TARGETED_CARD_MUTATION_SCOPE_VIOLATION");
+          }
+
+          const beforeClaims = cardClaims(current);
+          const afterClaims = cardClaims(mutation.state);
+          const beforeClaim = [...beforeClaims.entries()][0];
+          const afterClaim = [...afterClaims.entries()][0];
+          let nextClaimSnapshot: firestore.DocumentSnapshot | undefined;
+          if (afterClaim !== undefined && afterClaim[0] !== beforeClaim?.[0]) {
+            nextClaimSnapshot = await transaction.get(claims.doc(afterClaim[0]));
+            if (
+              nextClaimSnapshot.exists &&
+              text(nextClaimSnapshot.data(), "cardId") !== cardId
+            ) {
+              value = { kind: "Conflict", code: "DUPLICATE_CARD" };
+              transaction.create(receipt, receiptDocument(metadata, value));
+              return { kind: "committed", value } as const;
+            }
+          }
+
+          const ownerDisplayName =
+            actorDisplayName ??
+            text(legacySnapshot.data(), "owner") ??
+            updated.ownerMemberId;
+          const documents = cardDocument(updated, ownerDisplayName, false);
+          transaction.set(canonicalCard, documents.canonical, { merge: true });
+          if (updated.lifecycle === "active") {
+            transaction.set(legacyCard, documents.legacy, { merge: true });
+          } else {
+            transaction.delete(legacyCard);
+          }
+
+          if (beforeClaim !== undefined && beforeClaim[0] !== afterClaim?.[0]) {
+            transaction.delete(claims.doc(beforeClaim[0]));
+          }
+          if (afterClaim !== undefined && afterClaim[0] !== beforeClaim?.[0]) {
+            const reference = claims.doc(afterClaim[0]);
+            const claimDocument = {
+              ...afterClaim[1],
+              schemaVersion: 1,
+            };
+            if (nextClaimSnapshot?.exists === true) {
+              transaction.set(
+                reference,
+                { ...claimDocument, updatedAt: FieldValue.serverTimestamp() },
+                { merge: true },
+              );
+            } else {
+              transaction.create(reference, {
+                ...claimDocument,
+                createdAt: FieldValue.serverTimestamp(),
+              });
+            }
+          }
+          invalidateCaptureConfigurationProjection(
+            transaction,
+            this.database,
+            metadata.householdId,
+          );
+        }
+        transaction.create(receipt, receiptDocument(metadata, value));
+        return { kind: "committed", value } as const;
+      });
+    } catch (_error) {
+      return { kind: "commit-failed" };
+    }
+  }
+
   async transactRegisteredCards(
     metadata: PaymentConfigurationCommandMetadata,
     decide: (
