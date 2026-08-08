@@ -156,4 +156,51 @@ describe("Firebase payment configuration atomic adapter", () => {
     expect(memory.has(`registered_cards/${firstId}`)).toBe(false);
     expect(memory.paths("households/house-1/registeredCardClaims/")).toHaveLength(1);
   });
+
+  it("등록 카드의 끝 4자리를 빈 값으로 저장해 모든 같은 카드사 결제를 허용한다", async () => {
+    const memory = new InMemoryFirestore();
+    memory.seed("households/house-1/members/member-1", {
+      householdId: "house-1",
+      displayName: "민규",
+    });
+    const application = createPaymentConfigurationRuntimeApplication(
+      new FirebasePaymentConfigurationAtomicStore(
+        memory as unknown as firestore.Firestore,
+      ),
+    );
+
+    const created = await application.registerCard({
+      ...command(20, "payment-configuration.register-card.v1"),
+      card: { cardLabel: "삼성", cardLastFour: "1234" },
+    });
+    expect(created.kind).toBe("success");
+    if (created.kind !== "success") return;
+    const cardId = created.value.cardId as string;
+
+    expect(
+      await application.updateCard({
+        ...command(21, "payment-configuration.update-card.v1"),
+        cardId,
+        changes: { cardLastFour: "4321" },
+      }),
+    ).toEqual({ kind: "success", value: {} });
+    expect(
+      memory.document(`households/house-1/registeredCards/${cardId}`),
+    ).toMatchObject({ lastFour: "4321", aggregateVersion: 2 });
+
+    expect(
+      await application.updateCard({
+        ...command(22, "payment-configuration.update-card.v1"),
+        cardId,
+        changes: { cardLastFour: "" },
+      }),
+    ).toEqual({ kind: "success", value: {} });
+    expect(
+      memory.document(`households/house-1/registeredCards/${cardId}`),
+    ).toMatchObject({ lastFour: "", aggregateVersion: 3 });
+    expect(memory.document(`registered_cards/${cardId}`)).toMatchObject({
+      cardLastFour: "",
+      aggregateVersion: 3,
+    });
+  });
 });
