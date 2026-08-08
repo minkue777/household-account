@@ -36,6 +36,22 @@ describe("Android raw notification Firebase decoder", () => {
     expect(decodeAndroidRawNotification(validInput())).toEqual(validInput());
   });
 
+  it("카카오톡 current text와 누적 표시 필드를 원문 계약 그대로 보존한다", () => {
+    const input = {
+      ...validInput(),
+      packageName: "com.kakao.talk",
+      notification: {
+        postedAt: "2026-08-08T14:49:00+09:00",
+        title: "삼성카드",
+        text: "삼성8481승인 이*규",
+        bigText: "삼성8481승인 이*규\n78,120원 일시불",
+        textLines: ["삼성8481승인 이*규", "78,120원 일시불"],
+      },
+    };
+
+    expect(decodeAndroidRawNotification(input)).toEqual(input);
+  });
+
   it("전체 원문 크기와 textLines 개수를 제한한다", () => {
     expect(() =>
       decodeAndroidRawNotification({

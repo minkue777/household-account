@@ -13,19 +13,52 @@ object RawNotificationForwardingPolicy {
     private val smsMoneyMarker = Regex("""\d[\d,]*\s*원""")
     private val smsTransactionMarker = Regex("""(승인|취소|결제|사용|납부|잔액|캐시백)""")
     private val cityGasMarker = Regex("""도시가스(?:\s*요금)?\s*청구""")
+    private val kakaoCardEventMarker = Regex(
+        """(?:KB(?:국민)?(?:카드)?(?:신용|체크)?|NH(?:농협)?(?:카드)?|농협(?:카드)?|삼성(?:카드)?|롯데(?:카드)?|신한(?:카드)?|현대(?:카드)?|하나(?:카드)?|우리(?:카드)?|IBK(?:기업)?(?:카드)?|BC(?:카드)?|비씨(?:카드)?|씨티(?:카드)?)\s*\(?[0-9*xX＊]{4}\)?\s*(?:승인(?:\s*취소)?|취소)""",
+        RegexOption.IGNORE_CASE
+    )
+    private val kakaoCardDateTimeMarker = Regex(
+        """(?:0[1-9]|1[0-2])/(?:0[1-9]|[12]\d|3[01])\s+(?:[01]\d|2[0-3]):[0-5]\d(?=$|[ \t\r\n])"""
+    )
+    private val kakaoPromotionMarker = Regex(
+        """(?:^|[\s\[(])광고(?:$|[\s\]):：])|신청\s*마감|이벤트\s*(?:안내|응모)|쿠폰\s*(?:받기|도착|안내)|혜택\s*(?:안내|받기)""",
+        RegexOption.IGNORE_CASE
+    )
 
     fun shouldForward(
         source: RegisteredNotificationSource,
         title: String,
-        fullText: String
+        candidateText: String
     ): Boolean = when (source) {
         RegisteredNotificationSource.SMS ->
-            smsFinancialMarker.containsMatchIn(fullText) &&
-                smsMoneyMarker.containsMatchIn(fullText) &&
-                smsTransactionMarker.containsMatchIn(fullText)
-        RegisteredNotificationSource.CITY_GAS_BILL ->
-            cityGasMarker.containsMatchIn(fullText) && fullText.contains("원")
+            smsFinancialMarker.containsMatchIn(candidateText) &&
+                smsMoneyMarker.containsMatchIn(candidateText) &&
+                smsTransactionMarker.containsMatchIn(candidateText)
+        RegisteredNotificationSource.KAKAO_TALK_FINANCIAL ->
+            classifyKakaoFinancialCandidate(candidateText) != null
         RegisteredNotificationSource.TOSS_BANK -> !tossWalkingTitlePattern.matches(title.trim())
         else -> true
     }
+
+    fun classifyKakaoFinancialCandidate(
+        candidateText: String
+    ): KakaoFinancialCandidateKind? = when {
+        isStrictKakaoCardCandidate(candidateText) -> KakaoFinancialCandidateKind.CARD
+        isStrictCityGasCandidate(candidateText) -> KakaoFinancialCandidateKind.CITY_GAS
+        else -> null
+    }
+
+    private fun isStrictCityGasCandidate(fullText: String): Boolean =
+        cityGasMarker.containsMatchIn(fullText) && smsMoneyMarker.containsMatchIn(fullText)
+
+    private fun isStrictKakaoCardCandidate(fullText: String): Boolean =
+        kakaoCardEventMarker.containsMatchIn(fullText) &&
+            smsMoneyMarker.containsMatchIn(fullText) &&
+            kakaoCardDateTimeMarker.containsMatchIn(fullText) &&
+            !kakaoPromotionMarker.containsMatchIn(fullText)
+}
+
+enum class KakaoFinancialCandidateKind {
+    CARD,
+    CITY_GAS
 }

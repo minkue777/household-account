@@ -75,6 +75,43 @@ object AndroidCaptureDelivery {
         return CaptureFlushOutcome(decision.followUps, retainedCount)
     }
 
+    suspend fun enqueueBatchAndFlush(
+        context: Context,
+        envelopes: List<CaptureDeliveryEnvelope>
+    ): CaptureFlushOutcome? {
+        if (envelopes.isEmpty()) return null
+        val scope = resolveScope(context)
+        if (!scope.isUsable) return null
+
+        val outcome = try {
+            enqueueAndSubmitCaptureBatch(
+                queue = queue(context),
+                scope = scope,
+                envelopes = envelopes,
+                client = submissionClient(),
+                afterJournalPersisted = { persisted ->
+                    persisted.forEach { envelope ->
+                        AndroidCaptureLatencyTelemetry.mark(
+                            observationId = envelope.observationId,
+                            stage = CaptureLatencyStage.JOURNAL_PERSISTED
+                        )
+                    }
+                },
+                beforeCommitFollowUps = { followUps ->
+                    enqueueFollowUps(context, scope, followUps)
+                }
+            )
+        } catch (_: Exception) {
+            scheduleRetry(context)
+            return CaptureFlushOutcome(
+                followUps = emptyList(),
+                retainedCount = queue(context).snapshot().count { it.scope == scope }
+            )
+        } ?: return null
+        if (outcome.retainedCount > 0) scheduleRetry(context)
+        return outcome
+    }
+
     suspend fun flush(context: Context): CaptureFlushOutcome {
         val scope = resolveScope(context)
         val outcome = queue(context).flush(

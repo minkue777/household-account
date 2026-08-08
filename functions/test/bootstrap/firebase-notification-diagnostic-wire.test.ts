@@ -168,11 +168,18 @@ describe("submitNotificationDiagnostic callable wire", () => {
     expect(
       resolveRegisteredDiagnosticSource({
         ...payload("com.kakao.talk"),
+        fullText:
+          "삼성8481승인 이*규\n78,120원 일시불\n08/08 13:33 신세계사우스시티",
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveRegisteredDiagnosticSource({
+        ...payload("com.kakao.talk"),
         fullText: "도시가스 요금 청구 안내",
       }),
     ).toEqual({
       packageName: "com.kakao.talk",
-      sourceType: "city-gas-bill",
+      sourceType: "kakao-talk-financial-message",
     });
   });
 

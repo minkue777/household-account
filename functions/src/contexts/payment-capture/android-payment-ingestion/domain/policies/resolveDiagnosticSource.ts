@@ -68,7 +68,10 @@ export function resolveRegisteredDiagnosticSource(
       candidate.parserState === "active",
   );
   if (paymentSource !== undefined) {
-    if (paymentSource.cityGas && !isCityGasNotification(input)) return undefined;
+    if (
+      paymentSource.supportsCityGasBill &&
+      !isCityGasNotification(input)
+    ) return undefined;
     return {
       packageName: paymentSource.packageName,
       sourceType: paymentSource.sourceType,

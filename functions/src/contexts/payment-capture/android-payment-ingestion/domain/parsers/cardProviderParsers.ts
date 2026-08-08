@@ -34,8 +34,10 @@ const PAYBOOC_INLINE_APPROVAL_PATTERN =
 const PAYBOOC_INLINE_CANCELLATION_PATTERN =
   /^\[매출취소\]\s*(.+?)\s*에서\s*([\d,]+)원(?:\([^)]*\))?.*/u;
 
-const SAMSUNG_CARD_PATTERN = /삼성([0-9*xX]{4})\s*(승인|취소)/u;
-const SAMSUNG_AMOUNT_PATTERN = /([\d,]+)원\s*(일시불|할부)?/u;
+const SAMSUNG_CARD_PATTERN = /삼성([0-9*xX]{4})\s*(승인\s*취소|승인|취소)/u;
+const SAMSUNG_AMOUNT_LINE_PATTERN =
+  /^([\d,]+)원(?:\s*(?:일시불|(?:\d{1,2}개월\s*)?할부))?$/u;
+const SAMSUNG_CUMULATIVE_LINE_PATTERN = /^(?:누적|총누적)/u;
 const SAMSUNG_DATE_MERCHANT_PATTERN =
   /(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})\s+(.+)/u;
 
@@ -341,9 +343,12 @@ function parseSamsung(
   context: ProviderParserContext,
 ): AndroidProviderParseResult {
   const card = SAMSUNG_CARD_PATTERN.exec(context.body);
-  const amountMatch = SAMSUNG_AMOUNT_PATTERN.exec(context.body);
+  const amountMatch = bodyLines(context.body)
+    .filter((line) => !SAMSUNG_CUMULATIVE_LINE_PATTERN.test(line))
+    .map((line) => SAMSUNG_AMOUNT_LINE_PATTERN.exec(line))
+    .find((match): match is RegExpExecArray => match !== null);
   const dateMerchant = SAMSUNG_DATE_MERCHANT_PATTERN.exec(context.body);
-  if (card === null || amountMatch === null || dateMerchant === null) {
+  if (card === null || amountMatch === undefined || dateMerchant === null) {
     return ignoredParseFailure();
   }
   const amount = amountInWon(amountMatch[1]);
@@ -360,7 +365,7 @@ function parseSamsung(
     );
   }
   return parsedPayment({
-    type: card[2] === "취소" ? "cancellation" : "approval",
+    type: card[2] === "승인" ? "approval" : "cancellation",
     amountInWon: amount,
     occurredLocalDate: occurred.occurredLocalDate,
     occurredLocalTime: occurred.occurredLocalTime,

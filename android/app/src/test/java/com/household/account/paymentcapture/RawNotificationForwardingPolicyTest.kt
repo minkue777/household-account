@@ -60,19 +60,68 @@ class RawNotificationForwardingPolicyTest {
     }
 
     @Test
-    fun `카카오톡은 도시가스 청구 후보만 서버로 보낸다`() {
+    fun `카카오톡은 엄격한 카드 거래와 도시가스 후보만 서버로 보낸다`() {
         assertTrue(
             RawNotificationForwardingPolicy.shouldForward(
-                RegisteredNotificationSource.CITY_GAS_BILL,
+                RegisteredNotificationSource.KAKAO_TALK_FINANCIAL,
+                "이민규",
+                """
+                    삼성8481승인 이*규
+                    198,000원 일시불
+                    08/08 13:23 신세계사우스시티
+                    누적198,000원
+                """.trimIndent()
+            )
+        )
+        assertTrue(
+            RawNotificationForwardingPolicy.shouldForward(
+                RegisteredNotificationSource.KAKAO_TALK_FINANCIAL,
                 "도시가스",
                 "도시가스요금 청구서 납부하실 총 금액은 48,210원"
             )
         )
+        assertTrue(
+            RawNotificationForwardingPolicy.shouldForward(
+                RegisteredNotificationSource.KAKAO_TALK_FINANCIAL,
+                "이민규",
+                "삼성8481승인취소 198,000원 08/08 14:01 신세계사우스시티"
+            )
+        )
+        listOf("할인마트", "혜택상점").forEach { merchant ->
+            assertTrue(
+                merchant,
+                RawNotificationForwardingPolicy.shouldForward(
+                    RegisteredNotificationSource.KAKAO_TALK_FINANCIAL,
+                    "이민규",
+                    "삼성8481승인 198,000원 08/08 13:23 $merchant"
+                )
+            )
+        }
+        listOf(
+            "오늘 저녁에 만나요",
+            "신세계에서 쓴 돈은 198,000원이야",
+            "삼성카드 승인 고객께 10,000원 혜택, 08/08까지",
+            "삼성카드 승인됐고 198,000원이야. 08/08 13:23 만나자",
+            "삼성카드 8481 승인 이벤트 10,000원 혜택 08/08 13:23 신청 마감",
+            "삼성카드 8481을 쓰며 승인 이야기를 했다 198,000원 08/08 13:23",
+            "[광고] 삼성8481승인 198,000원 08/08 13:23 할인마트",
+            "이벤트 안내 삼성8481승인 198,000원 08/08 13:23 혜택상점",
+            "삼성8481승인 198,000원 신세계사우스시티"
+        ).forEach { message ->
+            assertFalse(
+                message,
+                RawNotificationForwardingPolicy.shouldForward(
+                    RegisteredNotificationSource.KAKAO_TALK_FINANCIAL,
+                    "가족",
+                    message
+                )
+            )
+        }
         assertFalse(
             RawNotificationForwardingPolicy.shouldForward(
-                RegisteredNotificationSource.CITY_GAS_BILL,
-                "가족",
-                "일반 카카오톡 대화"
+                RegisteredNotificationSource.KAKAO_TALK_FINANCIAL,
+                "삼성8481승인 198,000원 08/08 13:23 신세계사우스시티",
+                "오늘 저녁에 만나요"
             )
         )
     }

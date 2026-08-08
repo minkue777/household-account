@@ -283,6 +283,69 @@
       "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 20300, "occurredLocalDate": "2026-07-31", "occurredLocalTime": "17:40", "merchant": "롯데쇼핑동탄", "cardCompany": "삼성", "maskedCardToken": "1876" } }
     },
     {
+      "caseId": "sms-samsung-cumulative-only-ignored",
+      "requirementIds": ["T-PARSE-001", "ING-006", "ING-007", "PARSE-SAMSUNG-001"],
+      "source": { "packageName": "com.samsung.android.messaging", "parserId": "sms-card-message-parser" },
+      "raw": { "postedAt": "2026-08-08T14:49:00+09:00", "title": "문자 메시지", "textLines": ["삼성8481승인 이*규", "08/08 13:33 신세계사우스시티", "누적280,170원"] },
+      "expected": { "kind": "Ignored", "code": "NOT_COMPLETED_PAYMENT" }
+    },
+    {
+      "caseId": "kakao-talk-current-text-priority",
+      "requirementIds": ["T-PARSE-001", "ING-006", "PARSE-SAMSUNG-001"],
+      "source": { "packageName": "com.kakao.talk", "parserId": "kakao-talk-financial-message-parser" },
+      "raw": { "postedAt": "2026-08-08T14:49:00+09:00", "title": "삼성카드", "text": "[이민규] [오후 2:49] 삼성8481승인 이*규\n78,120원 일시불\n08/08 13:33 신세계사우스시티\n누적280,170원", "bigText": "[이민규] [오후 2:48] 삼성8481승인 이*규\n198,000원 일시불\n08/08 13:23 신세계사우스시티\n누적198,000원\n[이민규] [오후 2:48] 삼성8481승인 이*규\n4,050원 일시불\n08/08 13:26 신세계사우스시티\n누적202,050원", "textLines": ["삼성8481승인 이*규", "198,000원 일시불", "08/08 13:23 신세계사우스시티", "누적198,000원"] },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 78120, "occurredLocalDate": "2026-08-08", "occurredLocalTime": "13:33", "merchant": "신세계사우스시티", "cardCompany": "삼성", "maskedCardToken": "8481" } }
+    },
+    {
+      "caseId": "kakao-talk-samsung-cumulative-only-ignored",
+      "requirementIds": ["T-PARSE-001", "ING-006", "PARSE-SAMSUNG-001"],
+      "source": { "packageName": "com.kakao.talk", "parserId": "kakao-talk-financial-message-parser" },
+      "raw": { "postedAt": "2026-08-08T14:49:00+09:00", "title": "삼성카드", "text": "[이민규] [오후 2:49] 삼성8481승인 이*규\n08/08 13:33 신세계사우스시티\n누적280,170원" },
+      "expected": { "kind": "Ignored", "code": "PARSE_FAILED" }
+    },
+    {
+      "caseId": "kakao-talk-accumulated-latest-complete-block",
+      "requirementIds": ["T-PARSE-001", "ING-006", "PARSE-SAMSUNG-001"],
+      "source": { "packageName": "com.kakao.talk", "parserId": "kakao-talk-financial-message-parser" },
+      "raw": { "postedAt": "2026-08-08T14:49:00+09:00", "title": "삼성카드", "bigText": "[이민규] [오후 2:48] 삼성8481승인 이*규\n198,000원 일시불\n08/08 13:23 신세계사우스시티\n누적198,000원\n[이민규] [오후 2:48] 삼성8481승인 이*규\n4,050원 일시불\n08/08 13:26 신세계사우스시티\n누적202,050원\n[이민규] [오후 2:49] 삼성8481승인 이*규\n78,120원 일시불\n08/08 13:33 신세계사우스시티\n누적280,170원" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 78120, "occurredLocalDate": "2026-08-08", "occurredLocalTime": "13:33", "merchant": "신세계사우스시티", "cardCompany": "삼성", "maskedCardToken": "8481" } }
+    },
+    {
+      "caseId": "kakao-talk-export-blocks-do-not-borrow-fields",
+      "requirementIds": ["T-PARSE-001", "ING-006", "PARSE-SAMSUNG-001"],
+      "source": { "packageName": "com.kakao.talk", "parserId": "kakao-talk-financial-message-parser" },
+      "raw": { "postedAt": "2026-08-08T14:49:00+09:00", "title": "삼성카드", "bigText": "[이민규] [오후 2:48] 삼성8481승인 이*규\n198,000원 일시불\n[이민규] [오후 2:49] 08/08 13:33 신세계사우스시티\n누적280,170원" },
+      "expected": { "kind": "Ignored", "code": "PARSE_FAILED" }
+    },
+    {
+      "caseId": "kakao-talk-latest-complete-skips-incomplete-tail",
+      "requirementIds": ["T-PARSE-001", "ING-006", "PARSE-SAMSUNG-001"],
+      "source": { "packageName": "com.kakao.talk", "parserId": "kakao-talk-financial-message-parser" },
+      "raw": { "postedAt": "2026-08-08T14:49:00+09:00", "title": "삼성카드", "bigText": "[이민규] [오후 2:48] 삼성8481승인 이*규\n198,000원 일시불\n08/08 13:23 신세계사우스시티\n누적198,000원\n[이민규] [오후 2:49] 삼성8481승인 이*규\n4,050원 일시불" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 198000, "occurredLocalDate": "2026-08-08", "occurredLocalTime": "13:23", "merchant": "신세계사우스시티", "cardCompany": "삼성", "maskedCardToken": "8481" } }
+    },
+    {
+      "caseId": "kakao-talk-title-does-not-complete-card-body",
+      "requirementIds": ["T-PARSE-001", "ING-006", "PARSE-SAMSUNG-001"],
+      "source": { "packageName": "com.kakao.talk", "parserId": "kakao-talk-financial-message-parser" },
+      "raw": { "postedAt": "2026-08-08T14:49:00+09:00", "title": "삼성8481승인 이*규", "text": "78,120원 일시불\n08/08 13:33 신세계사우스시티\n누적280,170원" },
+      "expected": { "kind": "Ignored", "code": "PARSE_FAILED" }
+    },
+    {
+      "caseId": "kakao-talk-samsung-approval-cancellation",
+      "requirementIds": ["T-PARSE-002", "ING-006", "PARSE-SAMSUNG-001"],
+      "source": { "packageName": "com.kakao.talk", "parserId": "kakao-talk-financial-message-parser" },
+      "raw": { "postedAt": "2026-08-08T15:10:00+09:00", "title": "삼성카드", "text": "[이민규] [오후 3:10] 삼성8481승인취소 이*규\n78,120원 일시불\n08/08 15:09 신세계사우스시티\n누적202,050원" },
+      "expected": { "kind": "Parsed", "payment": { "type": "cancellation", "amountInWon": 78120, "occurredLocalDate": "2026-08-08", "occurredLocalTime": "15:09", "merchant": "신세계사우스시티", "cardCompany": "삼성", "maskedCardToken": "8481" } }
+    },
+    {
+      "caseId": "sms-samsung-spaced-approval-cancellation",
+      "requirementIds": ["T-PARSE-002", "ING-006", "ING-007", "PARSE-SAMSUNG-001"],
+      "source": { "packageName": "com.samsung.android.messaging", "parserId": "sms-card-message-parser" },
+      "raw": { "postedAt": "2026-08-08T15:11:00+09:00", "title": "문자 메시지", "textLines": ["삼성8481승인 취소 이*규", "78,120원 일시불", "08/08 15:10 신세계사우스시티", "누적202,050원"] },
+      "expected": { "kind": "Parsed", "payment": { "type": "cancellation", "amountInWon": 78120, "occurredLocalDate": "2026-08-08", "occurredLocalTime": "15:10", "merchant": "신세계사우스시티", "cardCompany": "삼성", "maskedCardToken": "8481" } }
+    },
+    {
       "caseId": "sms-bill-similar-message-ignored",
       "requirementIds": ["T-PARSE-001", "PARSE-SMSBILL-001"],
       "source": { "packageName": "com.android.mms", "parserId": "sms-card-message-parser" },

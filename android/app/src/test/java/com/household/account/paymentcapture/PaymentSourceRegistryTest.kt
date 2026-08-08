@@ -15,6 +15,10 @@ class PaymentSourceRegistryTest {
             RegisteredNotificationSource.SAMSUNG,
             PaymentSourceRegistry.resolve("com.samsung.android.spay")
         )
+        assertEquals(
+            RegisteredNotificationSource.KAKAO_TALK_FINANCIAL,
+            PaymentSourceRegistry.resolve("com.kakao.talk")
+        )
         assertNull(PaymentSourceRegistry.resolve("com.unknown.card"))
     }
 

@@ -8,8 +8,10 @@ import org.junit.Test
 class CaptureDeliveryQueueTest {
     private class MemoryStore : CaptureQueueStore {
         var entries = emptyList<QueuedCapture>()
+        var replaceCalls = 0
         override fun load(): List<QueuedCapture> = entries
         override fun replace(entries: List<QueuedCapture>) {
+            replaceCalls++
             this.entries = entries
         }
         override fun clear() {
@@ -18,6 +20,166 @@ class CaptureDeliveryQueueTest {
     }
 
     private val scope = CaptureSessionScope("household-1", "member-1", 3L)
+
+    @Test
+    fun `batch 후보는 첫 네트워크 제출 전에 한 번의 journal 쓰기로 모두 내구화한다`() = runTest {
+        val store = MemoryStore()
+        val queue = CaptureDeliveryQueue(store) { 1_000L }
+        val envelopes = listOf(rawEnvelope(".1"), rawEnvelope(".2"), rawEnvelope(".3"))
+        var journalCallbackIds = emptyList<String>()
+        var journalAtFirstSubmission = emptyList<String>()
+        val submitted = mutableListOf<String>()
+        enqueueAndSubmitCaptureBatch(
+            queue = queue,
+            scope = scope,
+            envelopes = envelopes,
+            client = object : CaptureSubmissionClient {
+                override suspend fun submit(
+                    envelope: CaptureDeliveryEnvelope
+                ): CaptureSubmissionReceipt {
+                    if (submitted.isEmpty()) {
+                        journalAtFirstSubmission = store.entries.map {
+                            it.envelope.observationId
+                        }
+                    }
+                    submitted += envelope.observationId
+                    return CaptureSubmissionReceipt("terminal", null, null)
+                }
+            },
+            afterJournalPersisted = {
+                assertEquals(1, store.replaceCalls)
+                journalCallbackIds = store.entries.map { entry ->
+                    entry.envelope.observationId
+                }
+            }
+        )
+
+        assertEquals(envelopes.map { it.observationId }, journalCallbackIds)
+        assertEquals(envelopes.map { it.observationId }, journalAtFirstSubmission)
+        assertEquals(envelopes.map { it.observationId }, submitted)
+        assertTrue(store.entries.isEmpty())
+    }
+
+    @Test
+    fun `enqueueAll은 기존 entry를 보존하고 중복 ID를 한 번만 단일 저장한다`() = runTest {
+        val existing = rawEnvelope(".existing")
+        val duplicate = rawEnvelope(".duplicate")
+        val fresh = rawEnvelope(".fresh")
+        val store = MemoryStore().apply {
+            entries = listOf(QueuedCapture(scope, existing, 500L))
+        }
+        val queue = CaptureDeliveryQueue(store) { 1_000L }
+
+        val result = queue.enqueueAll(
+            scope,
+            listOf(existing, duplicate, duplicate, fresh)
+        )
+
+        assertEquals(1, store.replaceCalls)
+        assertTrue(result is CaptureBatchEnqueueResult.Accepted)
+        assertEquals(
+            listOf(duplicate, fresh),
+            (result as CaptureBatchEnqueueResult.Accepted).persistedEnvelopes
+        )
+        assertEquals(
+            listOf(existing, duplicate, fresh).map { it.observationId },
+            store.entries.map { it.envelope.observationId }
+        )
+    }
+
+    @Test
+    fun `같은 ID와 같은 payload가 journal에 있으면 다시 저장하거나 제출하지 않는다`() = runTest {
+        val existing = rawEnvelope(".same")
+        val store = MemoryStore().apply {
+            entries = listOf(QueuedCapture(scope, existing, 500L))
+        }
+        val queue = CaptureDeliveryQueue(store) { 1_000L }
+        var submissions = 0
+
+        val outcome = enqueueAndSubmitCaptureBatch(
+            queue = queue,
+            scope = scope,
+            envelopes = listOf(existing, existing),
+            client = object : CaptureSubmissionClient {
+                override suspend fun submit(
+                    envelope: CaptureDeliveryEnvelope
+                ): CaptureSubmissionReceipt {
+                    submissions++
+                    return CaptureSubmissionReceipt("terminal", null, null)
+                }
+            }
+        )
+
+        assertEquals(null, outcome)
+        assertEquals(0, submissions)
+        assertEquals(0, store.replaceCalls)
+        assertEquals(listOf(existing), store.entries.map { it.envelope })
+    }
+
+    @Test
+    fun `단건 enqueue는 같은 payload가 이미 있으면 저장 없이 성공으로 처리한다`() = runTest {
+        val existing = rawEnvelope(".already-queued")
+        val store = MemoryStore().apply {
+            entries = listOf(QueuedCapture(scope, existing, 500L))
+        }
+        val queue = CaptureDeliveryQueue(store) { 1_000L }
+
+        assertTrue(queue.enqueue(scope, existing))
+        assertEquals(0, store.replaceCalls)
+        assertEquals(listOf(existing), store.entries.map { it.envelope })
+    }
+
+    @Test
+    fun `같은 ID의 title postedAt body가 다르면 batch 전체를 저장 제출하지 않는다`() = runTest {
+        val existing = rawEnvelope(".conflict")
+        val mutations = listOf(
+            existing.copy(
+                notification = existing.notification.copy(title = "다른 제목")
+            ),
+            existing.copy(
+                notification = existing.notification.copy(
+                    postedAt = "2026-07-22T17:42:00+09:00"
+                )
+            ),
+            existing.copy(
+                notification = existing.notification.copy(
+                    textLines = listOf("삼성1876승인", "99,900원")
+                )
+            )
+        )
+
+        mutations.forEachIndexed { index, conflicting ->
+            val store = MemoryStore().apply {
+                entries = listOf(QueuedCapture(scope, existing, 500L))
+            }
+            val queue = CaptureDeliveryQueue(store) { 1_000L }
+            val fresh = rawEnvelope(".fresh-$index")
+            var submissions = 0
+
+            val attempt = runCatching {
+                enqueueAndSubmitCaptureBatch(
+                    queue = queue,
+                    scope = scope,
+                    envelopes = listOf(fresh, conflicting),
+                    client = object : CaptureSubmissionClient {
+                        override suspend fun submit(
+                            envelope: CaptureDeliveryEnvelope
+                        ): CaptureSubmissionReceipt {
+                            submissions++
+                            return CaptureSubmissionReceipt("terminal", null, null)
+                        }
+                    }
+                )
+            }
+
+            assertTrue(
+                attempt.exceptionOrNull() is CaptureIdempotencyPayloadMismatchException
+            )
+            assertEquals(0, submissions)
+            assertEquals(0, store.replaceCalls)
+            assertEquals(listOf(existing), store.entries.map { it.envelope })
+        }
+    }
 
     @Test
     fun `payment 성공과 balance 재시도는 성공 후속효과를 한번만 만들고 entry를 유지한다`() = runTest {
@@ -262,8 +424,8 @@ class CaptureDeliveryQueueTest {
         )
     )
 
-    private fun rawEnvelope() = RawNotificationEnvelopeV1(
-        observationId = "observation.android.rawtest",
+    private fun rawEnvelope(idSuffix: String = "") = RawNotificationEnvelopeV1(
+        observationId = "observation.android.rawtest$idSuffix",
         packageName = "com.samsung.android.messaging",
         notification = RawNotificationContentV1(
             postedAt = "2026-07-22T17:41:00+09:00",

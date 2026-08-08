@@ -11,6 +11,7 @@ import {
   sejongLocalCurrencyProviderParser,
 } from "./localCurrencyProviderParsers";
 import type { ProviderParserDefinition } from "./providerParsingSupport";
+import { kakaoTalkFinancialMessageProviderParser } from "./kakaoTalkFinancialMessageProviderParser";
 import { smsBillProviderParser } from "./smsBillProviderParser";
 import {
   digitalOnnuriProviderParser,
@@ -32,6 +33,7 @@ const PROVIDER_PARSERS: readonly ProviderParserDefinition[] = [
   gyeonggiLocalCurrencyProviderParser,
   daejeonLocalCurrencyProviderParser,
   sejongLocalCurrencyProviderParser,
+  kakaoTalkFinancialMessageProviderParser,
   smsBillProviderParser,
 ];
 

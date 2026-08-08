@@ -1561,11 +1561,13 @@ Scheduler가 만든 거래도 실제로 그 일정을 등록한 가구원에게 
 
 결정:
 
-- Android `NotificationListenerService`는 등록된 package의 제목, `text`, `bigText`, `textLines`, 게시 시각을 `AndroidRawNotification.v1`으로 만들고 원격 호출 직전 Android Keystore AES-256-GCM write-ahead journal에 먼저 기록한 뒤 인증·App Check가 적용된 Functions callable에 즉시 제출한다. 정상 terminal은 QuickEdit follow-up 내구화 뒤 journal을 ack/delete하고 WorkManager를 예약하지 않으며, 네트워크·일시 서버 오류·`partial-retryable`·follow-up enqueue 실패에서만 entry를 남겨 최대 72시간 재시도한다.
+- Android `NotificationListenerService`는 등록된 package의 제목, `text`, `bigText`, `textLines`, 게시 시각을 `AndroidRawNotification.v1`으로 만들고 원격 호출 직전 Android Keystore AES-256-GCM write-ahead journal에 먼저 기록한 뒤 인증·App Check가 적용된 Functions callable에 즉시 제출한다. 카카오톡 `MessagingStyle`은 현재 메시지를 각각 별도 raw observation으로 만들고 과거 메시지는 제외한다. 정상 terminal은 QuickEdit follow-up 내구화 뒤 journal을 ack/delete하고 WorkManager를 예약하지 않으며, 네트워크·일시 서버 오류·`partial-retryable`·follow-up enqueue 실패에서만 entry를 남겨 최대 72시간 재시도한다.
 - Android는 공급자 정규표현식, parser ID/version, 금액·일시·가맹점·카드·잔액 추출을 소유하지 않는다. 기존 Kotlin 공급자 parser와 변환 Factory는 운영 코드에서 제거하고 Functions TypeScript parser와 비식별 golden fixture를 정본으로 사용한다.
 - 클라이언트 요청에는 `householdId`, `createdBy`, `sourceType`, `parserId`, 카드·거래 후보를 받지 않는다. Functions가 Firebase 인증의 활성 Membership으로 가구와 생성자를, 서버 Source Registry의 정확한 package 일치로 source와 parser를 확정한다.
 - 등록되지 않은 package는 본문이 지원 형식과 같아도 parser와 저장에 진입하지 않는다. 등록 package의 parser 실패도 다른 source parser로 fallback하지 않고 Canonical 변경 없는 terminal 결과로 끝난다.
-- 문자 앱과 카카오톡은 결제 외 개인정보가 많은 다목적 앱이므로 Android에 넓은 금융/도시가스 marker admission을 둔다. 이는 서버 전송 최소화만 담당하며 거래 필드를 해석하거나 서버 parser 판정을 대체하지 않는다. 전용 금융 앱은 package gate 뒤 원문 후보를 그대로 보낸다.
+- 문자 앱과 카카오톡은 결제 외 개인정보가 많은 다목적 앱이므로 Android에 원문 최소화 admission을 둔다. 문자 앱은 넓은 금융 marker를 사용하고, 카카오톡은 분리된 현재 메시지마다 엄격한 카드 승인·취소 또는 도시가스 고지서 marker를 적용해 일반 대화와 과거 메시지를 서버로 보내지 않는다. 이는 채팅 transport 경계와 전송 최소화만 담당하며 거래 필드를 해석하거나 서버 parser 판정을 대체하지 않는다. 전용 금융 앱은 package gate 뒤 원문 후보를 그대로 보낸다.
+- `com.kakao.talk`은 서버 Source Registry에서 `sourceType=kakao-talk-financial-message`, `parserId=kakao-talk-financial-message-parser`인 활성 항목 하나에만 대응한다. 같은 package에 카드·도시가스 parser를 중복 등록하지 않고, 이 단일 복합 parsing 경계가 엄격한 카드 승인·취소 parser 결과와 같은 source의 도시가스 고지서 정책을 구분하며 일반 대화에는 fallback하지 않는다.
+- 카카오톡 복합 source의 카드 결과는 등록 카드 확인과 일반 승인·취소 downstream을 거치고, 도시가스 고지서로 분류한 결과만 카드 확인 예외·fixed category·납부마감일 회계일 정책을 사용한다. 서버 Raw Application이 parser 결과로 내부 `paymentKind=card|bill`을 정하며 Android·Shortcut 공개 wire에서는 이 값을 받지 않는다. 복합 sourceType 자체를 도시가스 판정이나 카드 검증 생략 근거로 사용하지 않는다.
 - Functions는 원문을 요청 처리 중에만 사용하고 원문 자체를 Capture receipt, Ledger, Domain Event, Outbox, 일반 로그에 저장하지 않는다. 결정적인 원문 hash, 서버가 선택한 source/parser metadata와 파싱된 최소 provenance만 기존 `CaptureEnvelope.v1` 내부 경계로 넘긴다. DEC-047의 임시 진단 Adapter 보존은 별도이며 업무 성공과 결합하지 않는다.
 - 새 거래를 확정한 응답에는 서버가 실제 저장한 거래의 최소 `quickEditSnapshot`을 포함한다. Android는 expected SessionScope의 암호화 표시 FIFO에 snapshot을 먼저 내구화하고 capture journal을 ack/delete한 뒤 QuickEdit을 열며, snapshot이 없는 전환 전 Queue entry만 별도 Ledger Query로 복구한다.
 - 새 APK는 `submitAndroidRawNotification`을 사용한다. 배포 전 기기의 암호화 Queue에 남은 `CaptureEnvelope.v1`은 `submitCaptureEnvelope`로 계속 전송해 유실하지 않으며, Functions는 전환 기간 동안 두 callable을 함께 제공한다.

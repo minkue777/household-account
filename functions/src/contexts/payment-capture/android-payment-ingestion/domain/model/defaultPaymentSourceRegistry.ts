@@ -3,7 +3,7 @@ import type { PaymentSourceRegistryEntry } from "./paymentSourceRegistry";
 export interface AndroidPaymentSourceRegistryEntry
   extends PaymentSourceRegistryEntry {
   readonly localCurrencyType?: "gyeonggi" | "daejeon" | "sejong";
-  readonly cityGas: boolean;
+  readonly supportsCityGasBill: boolean;
 }
 
 const ACTIVE = "active" as const;
@@ -16,7 +16,7 @@ function entry(
   parserVersion: string,
   options: {
     readonly localCurrencyType?: "gyeonggi" | "daejeon" | "sejong";
-    readonly cityGas?: boolean;
+    readonly supportsCityGasBill?: boolean;
   } = {},
 ): AndroidPaymentSourceRegistryEntry {
   return {
@@ -30,7 +30,7 @@ function entry(
     ...(options.localCurrencyType === undefined
       ? {}
       : { localCurrencyType: options.localCurrencyType }),
-    cityGas: options.cityGas === true,
+    supportsCityGasBill: options.supportsCityGasBill === true,
   };
 }
 
@@ -44,11 +44,36 @@ export const ANDROID_PAYMENT_SOURCE_REGISTRY: readonly AndroidPaymentSourceRegis
     entry("com.kakaopay.app", "kakao-pay", "kakao-pay-parser", "1.0.0"),
     entry("com.komsco.kpay", "digital-onnuri", "digital-onnuri-parser", "1.1.0"),
     entry("kvp.jjy.MispAndroid320", "paybooc-isp", "paybooc-isp-parser", "1.0.0"),
-    entry("com.google.android.apps.messaging", "sms-card-message", "sms-card-message-parser", "1.0.0"),
-    entry("com.samsung.android.messaging", "sms-card-message", "sms-card-message-parser", "1.0.0"),
-    entry("com.android.mms", "sms-card-message", "sms-card-message-parser", "1.0.0"),
-    entry("com.samsung.android.spay", "samsung-card", "samsung-card-parser", "1.0.0"),
-    entry("kr.co.samsungcard.mpocket", "samsung-card", "samsung-card-parser", "1.0.0"),
+    entry(
+      "com.google.android.apps.messaging",
+      "sms-card-message",
+      "sms-card-message-parser",
+      "1.1.0",
+    ),
+    entry(
+      "com.samsung.android.messaging",
+      "sms-card-message",
+      "sms-card-message-parser",
+      "1.1.0",
+    ),
+    entry(
+      "com.android.mms",
+      "sms-card-message",
+      "sms-card-message-parser",
+      "1.1.0",
+    ),
+    entry(
+      "com.samsung.android.spay",
+      "samsung-card",
+      "samsung-card-parser",
+      "1.1.0",
+    ),
+    entry(
+      "kr.co.samsungcard.mpocket",
+      "samsung-card",
+      "samsung-card-parser",
+      "1.1.0",
+    ),
     entry("com.lcacApp", "lotte-card", "lotte-card-parser", "1.0.0"),
     entry(
       "com.mobiletoong.gpay",
@@ -85,7 +110,11 @@ export const ANDROID_PAYMENT_SOURCE_REGISTRY: readonly AndroidPaymentSourceRegis
       "1.0.0",
       { localCurrencyType: "sejong" },
     ),
-    entry("com.kakao.talk", "city-gas-bill", "city-gas-bill-parser", "1.0.0", {
-      cityGas: true,
-    }),
+    entry(
+      "com.kakao.talk",
+      "kakao-talk-financial-message",
+      "kakao-talk-financial-message-parser",
+      "1.0.0",
+      { supportsCityGasBill: true },
+    ),
   ]);

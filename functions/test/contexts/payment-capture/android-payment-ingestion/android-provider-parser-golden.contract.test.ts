@@ -292,4 +292,55 @@ describe("Android 공급자별 비식별 raw parser 공개 계약", () => {
       code: "NOT_COMPLETED_PAYMENT",
     });
   });
+
+  it("카카오톡은 current text와 누적 본문의 최신 완전 카드 블록만 선택한다", () => {
+    expect(caseById("kakao-talk-current-text-priority").expected).toMatchObject({
+      kind: "Parsed",
+      payment: { amountInWon: 78_120, occurredLocalTime: "13:33" },
+    });
+    expect(
+      caseById("kakao-talk-accumulated-latest-complete-block").expected,
+    ).toMatchObject({
+      kind: "Parsed",
+      payment: { amountInWon: 78_120, occurredLocalTime: "13:33" },
+    });
+    expect(
+      caseById("kakao-talk-export-blocks-do-not-borrow-fields").expected,
+    ).toEqual({ kind: "Ignored", code: "PARSE_FAILED" });
+    expect(
+      caseById("kakao-talk-latest-complete-skips-incomplete-tail").expected,
+    ).toMatchObject({
+      kind: "Parsed",
+      payment: { amountInWon: 198_000, occurredLocalTime: "13:23" },
+    });
+    expect(
+      caseById("kakao-talk-title-does-not-complete-card-body").expected,
+    ).toEqual({ kind: "Ignored", code: "PARSE_FAILED" });
+    expect(
+      caseById("kakao-talk-samsung-cumulative-only-ignored").expected,
+    ).toEqual({ kind: "Ignored", code: "PARSE_FAILED" });
+    expect(
+      caseById("sms-samsung-cumulative-only-ignored").expected,
+    ).toEqual({ kind: "Ignored", code: "NOT_COMPLETED_PAYMENT" });
+    expect(
+      caseById("kakao-talk-samsung-approval-cancellation").expected,
+    ).toMatchObject({
+      kind: "Parsed",
+      payment: {
+        type: "cancellation",
+        amountInWon: 78_120,
+        maskedCardToken: "8481",
+      },
+    });
+    expect(
+      caseById("sms-samsung-spaced-approval-cancellation").expected,
+    ).toMatchObject({
+      kind: "Parsed",
+      payment: {
+        type: "cancellation",
+        amountInWon: 78_120,
+        maskedCardToken: "8481",
+      },
+    });
+  });
 });

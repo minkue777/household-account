@@ -16,6 +16,8 @@ export interface CaptureTransactionBranch {
   readonly captureContext?: {
     readonly observationId: string;
     readonly observationType: "approval" | "cancellation";
+    readonly paymentKind?: "card" | "bill";
+    readonly billDueDate?: string;
     readonly originChannel: "android-notification" | "ios-shortcut";
     readonly creatorMemberId: string;
     readonly cardEvidence?: {

@@ -50,6 +50,18 @@ data class CaptureFlushOutcome(
     val retainedCount: Int
 )
 
+internal sealed interface CaptureBatchEnqueueResult {
+    data class Accepted(
+        val persistedEnvelopes: List<CaptureDeliveryEnvelope>
+    ) : CaptureBatchEnqueueResult
+
+    data class PayloadConflict(
+        val observationId: String
+    ) : CaptureBatchEnqueueResult
+
+    data object Rejected : CaptureBatchEnqueueResult
+}
+
 internal data class CaptureReceiptDecision(
     val followUps: List<CaptureDeliveryFollowUp>,
     val terminalBranches: Set<CaptureBranch>,
@@ -108,17 +120,60 @@ class CaptureDeliveryQueue(
 ) {
     private val mutex = Mutex()
 
-    suspend fun enqueue(scope: CaptureSessionScope, envelope: CaptureDeliveryEnvelope): Boolean =
-        mutex.withLock {
-            if (!scope.isUsable) return@withLock false
-            val entries = store.load().filterNot { isExpired(it) }.toMutableList()
-            if (entries.any { it.envelope.observationId == envelope.observationId }) {
-                return@withLock true
-            }
-            entries += QueuedCapture(scope, envelope, nowEpochMillis())
-            store.replace(entries)
-            true
+    suspend fun enqueue(
+        scope: CaptureSessionScope,
+        envelope: CaptureDeliveryEnvelope
+    ): Boolean = when (enqueueAll(scope, listOf(envelope))) {
+        is CaptureBatchEnqueueResult.Accepted -> true
+        is CaptureBatchEnqueueResult.PayloadConflict,
+        CaptureBatchEnqueueResult.Rejected -> false
+    }
+
+    /** 모든 후보를 한 번의 암호화 store 교체로 기록한 뒤에만 원격 제출을 허용합니다. */
+    internal suspend fun enqueueAll(
+        scope: CaptureSessionScope,
+        envelopes: List<CaptureDeliveryEnvelope>
+    ): CaptureBatchEnqueueResult = mutex.withLock {
+        if (!scope.isUsable || envelopes.isEmpty()) {
+            return@withLock CaptureBatchEnqueueResult.Rejected
         }
+        val entries = store.load().filterNot { isExpired(it) }
+        val existingByObservationId = linkedMapOf<String, CaptureDeliveryEnvelope>()
+        entries.forEach { entry ->
+            val observationId = entry.envelope.observationId
+            val existing = existingByObservationId[observationId]
+            if (existing != null && existing.toMap() != entry.envelope.toMap()) {
+                return@withLock CaptureBatchEnqueueResult.PayloadConflict(observationId)
+            }
+            existingByObservationId.putIfAbsent(observationId, entry.envelope)
+        }
+
+        val uniqueNewEnvelopes = linkedMapOf<String, CaptureDeliveryEnvelope>()
+        envelopes.forEach { envelope ->
+            val observationId = envelope.observationId
+            val canonical = existingByObservationId[observationId]
+                ?: uniqueNewEnvelopes[observationId]
+            if (canonical != null) {
+                if (canonical.toMap() != envelope.toMap()) {
+                    return@withLock CaptureBatchEnqueueResult.PayloadConflict(observationId)
+                }
+                return@forEach
+            }
+            uniqueNewEnvelopes[observationId] = envelope
+        }
+        val persistedEnvelopes = uniqueNewEnvelopes.values.toList()
+        if (persistedEnvelopes.isEmpty()) {
+            return@withLock CaptureBatchEnqueueResult.Accepted(emptyList())
+        }
+
+        val queuedAtEpochMillis = nowEpochMillis()
+        store.replace(
+            entries + persistedEnvelopes.map { envelope ->
+                QueuedCapture(scope, envelope, queuedAtEpochMillis)
+            }
+        )
+        CaptureBatchEnqueueResult.Accepted(persistedEnvelopes)
+    }
 
     suspend fun flush(
         currentScope: CaptureSessionScope,

@@ -13,6 +13,7 @@
 ```text
 Android Edge
   OS 알림 → package allowlist / 다목적 앱 admission
+  → KakaoTalk MessagingStyle 현재 메시지별 분리 / 과거 메시지 제외
   → AndroidRawNotification.v1 → Keystore 암호화 write-ahead journal
   → Functions direct submit
   → 실패·partial-retryable만 journal 유지 / WorkManager
@@ -32,7 +33,8 @@ Functions Raw Inbound + Payment Intake
 ### 2.1 Android Edge 책임
 
 - Android 알림 필드에서 결정적인 `AndroidRawNotification.v1`을 만듭니다.
-- 등록 package만 허용하고 문자 앱·카카오톡은 넓은 금융/도시가스 marker admission으로 무관한 원문 전송을 줄입니다.
+- 등록 package만 허용하고 문자 앱에는 금융 marker admission을, 카카오톡에는 현재 메시지별 엄격한 카드 승인·취소 또는 도시가스 고지서 admission을 적용해 일반 대화 원문 전송을 차단합니다.
+- 카카오톡 `MessagingStyle`은 현재 메시지를 각각 독립 raw 후보로 분리하고 과거 메시지는 제외합니다. 이 분리는 채팅 transport 경계만 다루며 거래 필드를 해석하지 않습니다.
 - admission은 거래 필드를 해석하거나 parser를 선택하지 않습니다.
 - 프로세스 수명 30초 중복 cache를 소유하되 이를 영속 거래 중복으로 사용하지 않습니다.
 - 안정 observation ID와 원문 envelope를 원격 호출 직전 암호화 journal에 먼저 기록하고 정상 경로를 즉시 제출합니다. 정상 terminal은 Worker 없이 journal을 제거하며, 네트워크·일시 서버 실패와 부분 retryable만 entry를 남겨 재전송합니다.
@@ -43,7 +45,7 @@ Functions Raw Inbound + Payment Intake
 ### 2.2 Functions Payment Intake 책임
 
 - 인증 자격을 서버 `ActorContext`로 바꾸고 가구 범위와 [DEC-005](../../../../governance/decisions.md#dec-005) source Policy를 검증합니다.
-- 서버 Source Registry의 package 정확 일치로 source·parser를 선택하고 TypeScript parser로 승인·취소·잔액 후보를 만듭니다. 클라이언트 source/parser 주장은 받지 않습니다.
+- 서버 Source Registry의 package 정확 일치로 source·parser를 선택하고 TypeScript parser로 승인·취소·잔액 후보를 만듭니다. `com.kakao.talk`은 `sourceType=kakao-talk-financial-message`, `parserId=kakao-talk-financial-message-parser`인 단일 복합 금융 source 하나로만 선택합니다. 클라이언트 source/parser 주장은 받지 않습니다.
 - 파싱한 원문에서 결정적인 hash를 만들고 원문을 제외한 내부 `CaptureEnvelope.v1`으로 정규화합니다.
 - `CaptureSubmissionReceipt`로 transport 멱등성과 payload 충돌을 판정하고 거래·잔액 branch의 stage와 typed result를 독립 보존합니다.
 - Payment Configuration의 공개 Port로 카드·가맹점 mapping을 한 번만 판정합니다.
@@ -75,7 +77,7 @@ data class RawNotificationEnvelopeV1(
 )
 ```
 
-wire에는 `householdId`, `createdBy`, `sourceType`, `parserId`, 금액·가맹점·카드·잔액 후보가 없습니다. Android factory가 제목 → text lines → bigText → text 순으로 parser 우선 입력을 보존하면서 총 65,536자로 제한하고, callable Adapter도 같은 strict schema·개별 길이·총 길이 제한을 다시 검증한 뒤 인증 Membership으로 Actor를 만듭니다. Functions envelope builder가 `textLines.join("\n")` → `bigText` → `text` 순으로 본문을 선택하고 제목을 첫 줄에 둡니다. 모두 비면 `Ignored(EMPTY_NOTIFICATION)`으로 terminal 종료합니다.
+wire에는 `householdId`, `createdBy`, `sourceType`, `parserId`, `paymentKind`, 금액·가맹점·카드·잔액 후보가 없습니다. Android factory가 제목 → text lines → bigText → text 순으로 parser 우선 입력을 보존하면서 총 65,536자로 제한하고, callable Adapter도 같은 strict schema·개별 길이·총 길이 제한을 다시 검증한 뒤 인증 Membership으로 Actor를 만듭니다. Functions envelope builder가 `textLines.join("\n")` → `bigText` → `text` 순으로 본문을 선택하고 제목을 첫 줄에 둡니다. 모두 비면 `Ignored(EMPTY_NOTIFICATION)`으로 terminal 종료합니다. 카카오톡이 표준 `MessagingStyle`을 제공하면 Android Adapter는 `messages`의 현재 항목마다 별도 envelope와 observation ID를 만들고 `historicMessages`는 복사하지 않습니다. 구조화 메시지가 없으면 현재 `text`를 누적 `bigText`·`textLines`보다 우선하고, `[보낸이] [오전|오후 h:mm]` 경계가 있는 대화 본문은 메시지별 후보로 나눕니다. 따라서 여러 승인이 한 OS 알림에 함께 표시돼도 기존 단일 payment wire를 확장하지 않고 메시지별 Queue·멱등·QuickEdit 수명을 유지합니다.
 
 ### 3.2 서버 내부 `CaptureEnvelope.v1`
 
@@ -126,12 +128,12 @@ interface CaptureEnvelopeV1 {
 
 | 이름·종류 | 호출자 | 입력 | 결과 | 권한 | 일관성·멱등성 |
 |---|---|---|---|---|---|
-| `AdmitRawNotification` Android Policy | Notification Listener Adapter | package·title·fullText | forward 또는 ignore | OS listener capability | package allowlist와 다목적 앱 최소화만 수행; 거래 해석 금지 |
+| `AdmitRawNotification` Android Policy | Notification Listener Adapter | package·title·fullText 또는 분리된 현재 메시지 | forward 또는 ignore | OS listener capability | package allowlist와 다목적 앱 최소화만 수행; 카카오톡 일반·과거 대화 차단, 거래 해석 금지 |
 | `SubmitRawNotification` Android Use Case | Notification Listener Adapter | `AndroidRawNotification.v1` | terminal·partial-retryable·transport failure | Android authenticated session | 암호화 write-ahead journal commit 뒤 즉시 호출; 정상 경로는 Worker 미예약; observation ID 고정 |
 | `QueueRawNotification` Android Command | direct submission coordinator | `AndroidRawNotification.v1`과 terminal branch marker | `Queued(queueEntryId)`·`AlreadyQueued`·local failure | Android authenticated session | 모든 원격 호출 전 journal commit; 실패·partial만 entry 유지; `observationId` 유일 |
 | `SubmitQueuedObservation` Android Use Case | WorkManager | queue entry | confirmed·duplicate·rejected·needs-review·retryable | 유효 API credential | 최초 key를 모든 retry에서 재사용; Queue가 비었으면 Worker를 예약하지 않음 |
 | `SubmitAndroidRawNotification` Server Command | Android direct/Queue delivery | raw envelope | `CaptureSubmissionResult` | `paymentCapture:submit`와 같은 가구 Actor | Auth·App Check 뒤 서버 source/parser 선택; parser 무결과도 terminal; created에 표시 snapshot 포함 |
-| `SubmitCaptureEnvelopeV1` Server Command | 서버 raw Application·Shortcut Adapter·전환 전 APK Queue | 내부/레거시 envelope + 선택 payment/balance branch | `CaptureSubmissionResult` | 같은 가구 Actor | receipt claim·branch별 downstream stable key·결과 재생 |
+| `SubmitCaptureEnvelopeV1` Server Command | 서버 raw Application·Shortcut Adapter·전환 전 APK Queue | 내부/레거시 envelope + 선택 payment/balance branch + 서버 내부 선택 `paymentKind=card|bill` | `CaptureSubmissionResult` | 같은 가구 Actor | `paymentKind`는 공개 wire에서 받지 않음; receipt claim·branch별 downstream stable key·결과 재생 |
 
 ### 3.4 Capture 결과
 
@@ -190,6 +192,10 @@ type BalanceBranchResult =
 
 Functions의 `SourceSelector`는 서버 `PaymentSourceRegistry`에서 package를 조회합니다. 활성 항목이 정확히 하나면 서버가 소유한 source와 전용 parser 하나를 반환하고, 없거나 중복이면 본문을 검사하지 않고 `UnsupportedPackage`로 terminal 종료합니다. 등록 package의 parser가 실패해도 다른 source parser로 fallback하지 않습니다. Android allowlist는 전송 gate일 뿐 sourceType·parser metadata의 권위가 아닙니다.
 
+`com.kakao.talk`도 이 단일 항목 불변식을 예외로 만들지 않습니다. Registry에는 `sourceType=kakao-talk-financial-message`, `parserId=kakao-talk-financial-message-parser`인 항목 하나만 두고, 카드용·도시가스용 항목을 같은 package에 중복 등록하지 않습니다. 이 단일 복합 parsing 경계는 전용 parser의 완전한 카드 승인·취소 결과를 먼저 판정하고, 카드 결과가 없을 때에만 같은 source가 허용한 도시가스 고지서 정책을 적용합니다. 둘 다 아니거나 일반 대화이면 다른 공급자 parser로 넘기지 않고 stable ignored 결과를 반환합니다.
+
+복합 sourceType은 transport와 parser 선택의 증거이고 downstream 업무 종류를 대신하지 않습니다. Raw Application이 parser 결과로 서버 내부 `paymentKind=card|bill`을 정하고 Capture transaction branch까지 전달합니다. 카드 결과는 card evidence를 포함해 일반 승인·취소와 owner-scoped 카드 확인으로 보내고, 도시가스 고지서인 `bill` 결과만 card evidence 없는 경로와 fixed category·due-date 정책으로 보냅니다. 따라서 `sourceType=kakao-talk-financial-message`라는 사실만으로 카드 확인을 생략하거나 모든 입력을 도시가스로 취급하지 않으며, Android·Shortcut 공개 wire의 `paymentKind` 주장은 받지 않습니다.
+
 `AllowedPaymentSourcePolicy`는 [DEC-005](../../../../governance/decisions.md#dec-005)에 따라 서버가 받은 package만으로 `Allowed(source, parserId)` 또는 `Denied(UnsupportedPackage)`를 반환합니다. content evidence는 package 허용을 우회할 수 없고 클라이언트가 Registry version·source·parser를 보낼 수 없습니다. 내부 observation에는 서버가 확정한 `sourceEvidence.kind=android-registered-package`, 원래 package와 Registry version을 보존합니다. Shortcut은 서버가 검증한 credential의 비가역 식별 hash를 가진 `ios-shortcut-credential` evidence를 사용합니다.
 
 각 Functions `PaymentParser`는 순수 함수이며 `parserId`, `parserVersion`, 지원 source, `parse(envelope, Clock)`를 가집니다. 유효한 `envelope.postedAt`을 `Asia/Seoul`로 변환한 값을 모든 수신 날짜·시간·연도 추론의 기준으로 사용하고, 게시 시각이 없거나 유효하지 않을 때만 주입 `Clock`을 사용합니다. process 전역 timezone·현재 시각 직접 접근은 금지합니다. 등록 source의 parser 실패는 다른 source로 fallback하지 않고 `Ignored(stableReasonCode)`로 종료하며 receipt·Canonical 변경은 만들지 않습니다.
@@ -198,18 +204,20 @@ Functions의 `SourceSelector`는 서버 `PaymentSourceRegistry`에서 package를
 
 SMS Adapter는 후보마다 KB → NH → NaverPay → Toss → KakaoPay → DigitalOnnuri → Paybooc → Samsung → Lotte → Gyeonggi → Daejeon 순으로 첫 성공을 선택하고, 모두 실패하면 `SmsCardMessageParser`를 마지막에 실행합니다. Sejong과 CityGas는 이 내부 순서에 포함하지 않습니다. 순서는 이름으로 발견한 parser 목록이나 DI 등록 순서에 맡기지 않고 versioned `SmsParserOrderPolicy`와 `T-SMS-ORDER-001` fixture로 고정합니다.
 
+KakaoTalk Adapter는 `MessagingStyle.messages`의 현재 메시지를 표시 순서대로 독립 후보로 만들고 `historicMessages`는 후보에 넣지 않습니다. 후보별 admission·30초 claim·observation ID·암호화 Queue entry를 따로 만들기 때문에 `A` 알림이 `A+B`로 갱신돼도 A의 중복 여부와 새 B의 처리가 분리됩니다. 구조화 메시지가 없는 fallback은 기존 raw 필드 계약을 사용하되, 여러 거래의 필드를 서로 빌려 하나의 결과를 합성하지 않습니다.
+
 CityGas parser의 최소 성공 조건은 도시가스 청구 문구와 총액입니다. 청구 제목은 선택이며 없으면 서울 수신 월과 빈 memo를 사용합니다. 납부마감일은 accounting date 후보이고 없거나 유효하지 않을 때 서울 수신일로 fallback합니다. 현재 구현은 마감일 문구가 없을 때만 fallback하고 형식은 맞지만 유효하지 않은 날짜에서 전체 parse가 실패하므로 `T-CITYGAS-001`로 교정합니다.
 
 ### 4.2 30초 process 중복
 
-`RecentNotificationCache` key는 versioned hash `(packageName, parseText)`입니다. 최초 처리 시각부터 30,000ms 이하 재입력은 중복이고 30,001ms부터 다시 처리합니다. cache는 process 재시작 때 사라지며 서버 fingerprint나 Queue idempotency를 대체하지 않습니다.
+`RecentNotificationCache` key는 versioned hash `(packageName, candidateParseText)`입니다. 최초 처리 시각부터 30,000ms 이하 재입력은 중복이고 30,001ms부터 다시 처리합니다. 카카오톡은 분리된 현재 메시지 하나가 candidate 단위이므로 누적 알림 전체가 아니라 메시지별로 claim합니다. cache는 process 재시작 때 사라지며 서버 fingerprint나 Queue idempotency를 대체하지 않습니다.
 
 ### 4.3 Payment Intake Policy
 
 - `MerchantNormalizationPolicyV1`은 Unicode NFC, 앞뒤 공백 제거, 연속 공백 축약, locale-neutral 소문자화를 적용합니다.
 - `PaymentFingerprintPolicyV1`은 `householdId`, `occurredLocalDate`, `occurredLocalTime`, `amountInWon`, `normalizedMerchant`를 version과 함께 hash합니다. 카드, source, parser는 포함하지 않습니다.
 - 카드·가맹점 결과는 Payment Configuration의 공개 결과를 그대로 사용합니다. Intake에 복사한 matching 함수는 금지합니다.
-- 도시가스 외 승인은 `ActorContext.actingMemberId`를 필수 owner 범위로 전달한 `ResolveCard`가 `Eligible`이어야 합니다. 본인 카드가 하나 이상 일치하면 충분하고 타 멤버 카드는 조회하지 않습니다. 본인 카드가 여러 건 일치해도 승인하되 canonical card를 임의 선택하지 않습니다. 도시가스는 카드 match 없이 진행할 수 있습니다.
+- 도시가스 고지서 외 승인은 `ActorContext.actingMemberId`를 필수 owner 범위로 전달한 `ResolveCard`가 `Eligible`이어야 합니다. 본인 카드가 하나 이상 일치하면 충분하고 타 멤버 카드는 조회하지 않습니다. 본인 카드가 여러 건 일치해도 승인하되 canonical card를 임의 선택하지 않습니다. 카카오톡 복합 parser의 카드 결과에도 같은 정책을 적용하고, 명시적으로 분류된 도시가스 고지서만 카드 match 없이 진행할 수 있습니다.
 - 가맹점 mapping이 있으면 merchant/category/memo의 `replace` 항목만 반영합니다. 규칙이 없으면 도시가스는 parser의 fixed category를 유지하고 그 외는 Category Catalog의 기본 참조를 사용합니다.
 - `AccountingDatePolicy`는 [DEC-007](../../../../governance/decisions.md#dec-007)에 따라 도시가스의 파싱된 due date를 accounting date로 선택합니다. due date가 없을 때만 observed date를 fallback으로 사용하며, 원래 observed timestamp는 추적 정보로 별도 보존합니다.
 
@@ -239,11 +247,11 @@ CityGas parser의 최소 성공 조건은 도시가스 청구 문구와 총액�
 
 ### 5.1 알림 parse·Queue
 
-1. Android Notification Adapter가 등록 package인지 확인하고 빈 알림을 제외합니다. 문자 앱·카카오톡은 `RawNotificationForwardingPolicy`의 넓은 marker admission을 추가 적용합니다.
-2. Android가 동일 package·전체 표시 본문의 30초 cache를 claim하고 observation ID를 한 번 생성합니다.
-3. 제목, `text`, `bigText`, `textLines`, 게시 시각을 계약 한도 내에서 `AndroidRawNotification.v1`으로 복사합니다. 총 65,536자를 넘으면 parser가 먼저 소비하는 제목·text lines·bigText·text 순으로 보존하며, 기기에서는 승인·취소·금액·가맹점·카드·잔액을 파싱하지 않습니다.
+1. Android Notification Adapter가 등록 package인지 확인하고 빈 알림을 제외합니다. 문자 앱은 금융 marker admission을 적용합니다. 카카오톡은 `MessagingStyle`의 현재 메시지를 각각 후보로 분리하고 과거 메시지는 제외한 뒤, 각 후보에 엄격한 카드 승인·취소 또는 도시가스 고지서 marker admission을 적용하여 일반 대화를 차단합니다.
+2. Android가 동일 package·후보 본문의 30초 cache를 메시지별로 claim하고 후보마다 observation ID를 생성합니다. 한 OS 알림에서 현재 메시지 세 개가 수용되면 서로 독립된 raw observation 세 개가 됩니다.
+3. 후보의 제목, `text`, `bigText`, `textLines`, 게시 시각을 계약 한도 내에서 `AndroidRawNotification.v1`으로 복사합니다. 총 65,536자를 넘으면 parser가 먼저 소비하는 제목·text lines·bigText·text 순으로 보존하며, 기기에서는 승인·취소·금액·가맹점·카드·잔액을 파싱하지 않습니다.
 4. Android가 raw DTO를 암호화 write-ahead journal에 원자 저장한 뒤 callable을 즉시 호출합니다. journal commit 실패는 서버 submit을 시작하지 않습니다. Functions callable은 매 요청의 Firebase Auth·App Check와 strict raw schema를 검증하고, 서버 Source Registry의 package로 parser를 선택합니다.
-5. 선택 parser가 거래·잔액 후보를 만든 뒤 Functions가 원문 hash와 내부 `CaptureEnvelope.v1`을 구성합니다. parser 무결과는 Canonical 변경 없는 `completion=terminal`입니다.
+5. 선택 parser가 거래·잔액 후보를 만든 뒤 Functions가 원문 hash와 내부 `CaptureEnvelope.v1`을 구성합니다. 카카오톡은 `kakao-talk-financial-message-parser`로 등록된 단일 복합 parsing 경계가 카드 승인·취소 또는 도시가스 고지서로 엄격히 분류하고 일반 대화에는 무결과를 반환합니다. parser 무결과는 Canonical 변경 없는 `completion=terminal`입니다.
 6. terminal 응답의 QuickEdit follow-up은 expected SessionScope를 재검증해 암호화 표시 FIFO에 먼저 enqueue하고, 성공한 뒤 capture journal entry를 ack/delete합니다. 그 다음에만 Activity 표시를 시작합니다. 직접 호출이 throw되거나 `completion=partial-retryable` 또는 follow-up enqueue가 실패하면 entry를 남기고 `APPEND_OR_REPLACE` unique WorkManager를 예약합니다.
 7. Android `DiagnosticSink`는 결제 submit·QuickEdit이 먼저 끝나도록 5초 뒤 별도 best-effort 경계에서 원문을 보냅니다. 진단 실패는 Queue·submit 결과와 분리합니다.
 
@@ -252,7 +260,7 @@ CityGas parser의 최소 성공 조건은 도시가스 청구 문구와 총액�
 1. callable Adapter가 raw schema·Firebase Auth·App Check와 서버 발급 Native membership claim을 검증해 `ActorContext`를 생성합니다. claim이 없는 전환 세션만 `PrincipalMembershipClaim` 단일 read와 legacy canonical 검증으로 fallback합니다.
 2. Raw Application이 source·parser를 서버에서 확정해 내부 envelope를 만든 뒤 Intake가 household 일치, source Policy, parser metadata와 최소 한 branch 존재를 검증합니다.
 3. 단일 Android 승인 branch는 `rootIdempotencyKey`를 Ledger downstream key로 사용하고 Ledger의 원자 receipt가 같은 payload를 재생하며 다른 payload를 `Conflict`로 반환합니다. balance가 함께 있거나 취소·Shortcut인 envelope만 canonical payload hash로 root receipt를 claim하고 존재 branch별 stable downstream key와 `pending` stage를 기록합니다.
-4. transaction branch가 있으면 금액·날짜·시간을 검증하고 `ResolveCard(ownerMemberId=ActorContext.actingMemberId)`, `ResolveMerchantMapping`, 필요 시 기본 Category Query를 호출해 거래 초안을 만듭니다. 도시가스 외 입력에서 본인 카드가 하나도 일치하지 않으면 transaction branch만 `rejected(CARD_NOT_REGISTERED_FOR_ACTOR)`로 완료합니다.
+4. transaction branch가 있으면 금액·날짜·시간을 검증하고 `ResolveCard(ownerMemberId=ActorContext.actingMemberId)`, `ResolveMerchantMapping`, 필요 시 기본 Category Query를 호출해 거래 초안을 만듭니다. parser가 도시가스 고지서로 분류하지 않은 입력에서 본인 카드가 하나도 일치하지 않으면 transaction branch만 `rejected(CARD_NOT_REGISTERED_FOR_ACTOR)`로 완료합니다. 카카오톡 카드 결과도 이 검증을 우회하지 않으며, 도시가스 고지서 결과만 fixed category·due-date 경로를 사용합니다.
 5. 승인 transaction branch는 Fingerprint V1, `CaptureProvenanceV1`, 안정적인 downstream command key를 계산하고 creatorMemberId와 함께 Ledger `RecordCapturedTransaction`을 호출합니다. Ledger는 fingerprint claim, Transaction, lineage, receipt, Outbox를 자기 transaction에서 원자 commit합니다.
 6. balance branch가 있으면 transaction branch 결과와 무관하게 Local Currency `RecordBalanceObservation`을 branch key로 호출합니다. balance-only이면 Payment Configuration과 Ledger를 호출하지 않습니다.
 7. 한 branch가 terminal이고 다른 branch가 retryable이면 실행 마지막에 terminal 결과를 receipt에 보존하고 미완료 branch만 같은 key로 재시도합니다. 최종 root 저장 전 process가 중단되면 같은 downstream key로 branch를 다시 호출할 수 있지만 Ledger·Local Currency가 결과를 멱등 재생하므로 두 번째 업무 변경을 만들지 않습니다.
@@ -418,16 +426,16 @@ Android 프로세스 시작 Adapter는 Firebase 기본 Provider가 수행한 초
 
 ## 11. 테스트 설계
 
-parser golden fixture에는 정상 승인, 지원 취소, 빈 필드, 0원·음수, 연말·연초, 마스킹 변형을 포함합니다. Functions parser conformance suite가 fixture를 직접 읽어 parser 선택, 승인·취소, 금액, 가맹점, 카드 라벨·토큰, 발생 일시, 지역화폐 잔액을 검증합니다. 별도 raw submission 계약은 client source/parser 주입 거부, 등록 package의 서버 parser 선택, parser 무결과 terminal, 원문 비영속, 지역화폐 독립 branch와 도시가스를 검증합니다. Android 테스트는 raw DTO, package/admission, Queue 72시간·세션·레거시 계약 라우팅과 QuickEdit 단일 후속 효과만 검증합니다.
+parser golden fixture에는 정상 승인, 지원 취소, 빈 필드, 0원·음수, 연말·연초, 마스킹 변형을 포함합니다. Functions parser conformance suite가 fixture를 직접 읽어 parser 선택, 승인·취소, 금액, 가맹점, 카드 라벨·토큰, 발생 일시, 지역화폐 잔액을 검증합니다. 별도 raw submission 계약은 client source/parser 주입 거부, 등록 package의 서버 parser 선택, parser 무결과 terminal, 원문 비영속, 지역화폐 독립 branch와 도시가스를 검증합니다. 카카오톡 계약은 단일 Registry 항목과 확정 source/parser 명칭, 일반 대화 거부, 카드·고지서 downstream 구분을 함께 검증합니다. Android 테스트는 raw DTO, package/admission, `MessagingStyle` 현재 메시지별 분리·과거 메시지 제외, Queue 72시간·세션·레거시 계약 라우팅과 QuickEdit 단일 후속 효과를 검증합니다.
 
 | 요구사항 ID | 테스트 수준 | 테스트 대상 | 핵심 fixture/경계값 | 관찰 결과 | Canonical 테스트 ID |
 |---|---|---|---|---|---|
-| [ING-001](requirements.md#51-수집출처-선택중복-처리) | Android Unit + Functions Application | raw DTO·envelope builder | text·bigText·textLines·title·모두 빈 값 | Android 필드 손실 없음, 서버 textLines 우선·빈 입력 terminal | `T-ING-001` |
-| [ING-002](requirements.md#51-수집출처-선택중복-처리) | Functions Application/Wire | Source Registry와 strict decoder | 등록 KB package+KB 본문, 등록 KB package+토스 본문, 미등록 package+KB 본문, client parser/source 필드 | 서버 registry만 source/parser 확정; fallback·client spoof 없음 | `T-ING-003` |
+| [ING-001](requirements.md#51-수집출처-선택중복-처리) | Android Unit + Functions Application | raw DTO·envelope builder·KakaoTalk 메시지 추출 | text·bigText·textLines·title·모두 빈 값, `MessagingStyle` 현재 3개·과거 메시지 | Android 필드 손실 없음, 카카오 현재 메시지는 envelope 3개·과거 메시지는 0개, 서버 textLines 우선·빈 입력 terminal | `T-ING-001` |
+| [ING-002](requirements.md#51-수집출처-선택중복-처리) | Functions Application/Wire | Source Registry와 strict decoder | 등록 KB package+KB 본문, 등록 KB package+토스 본문, 미등록 package+KB 본문, `com.kakao.talk` 단일 항목, client parser/source 필드 | 서버 registry만 source/parser 확정; 카카오톡은 `kakao-talk-financial-message`/`kakao-talk-financial-message-parser` 한 쌍, 중복 항목·fallback·client spoof 없음 | `T-ING-003` |
 | [ING-003](requirements.md#51-수집출처-선택중복-처리) | Application | parse 분기 | 승인·취소·실패·거래 없음 | 승인/취소 Port만 호출, 실패 시 Canonical 변경 없음 | `T-PARSE-001`, `T-PARSE-002` |
-| [ING-004](requirements.md#51-수집출처-선택중복-처리) | Domain Unit | recent cache | 29,999·30,000·30,001ms, process restart | 앞 둘 중복, 마지막·재시작 후 재처리 | `T-ING-002` |
+| [ING-004](requirements.md#51-수집출처-선택중복-처리) | Domain Unit | recent cache | 29,999·30,000·30,001ms, process restart, 카카오 알림 `A → A+B` 갱신 | 앞 둘 중복, 마지막·재시작 후 재처리, A는 후보 중복·B는 새 후보 수용 | `T-ING-002` |
 | [ING-005](requirements.md#51-수집출처-선택중복-처리) | Adapter Integration, Security | DiagnosticSink | actor 없음, 등록·미등록 source, 같은 원문 반복, 쓰기 실패, 비관리자, 장기 경과 | gate 밖 미수집·업무 결과 불변·접근 거부·기능 제거 전 모든 진단 문서 유지·별도 Secret 비수집 | `T-DIAG-001` |
-| [ING-006](requirements.md#51-수집출처-선택중복-처리) | Android Admission + Server Parser Unit | 다목적 앱 전송 gate·SMS 후보 생성 | 일반 대화, Google·Samsung·MMS, 0·1·2행 제거 | 일반 대화 미전송, 금융 후보만 server parser 실행 | `T-PARSE-001`, `T-PARSE-002` |
+| [ING-006](requirements.md#51-수집출처-선택중복-처리) | Android Admission + Server Parser Unit | 다목적 앱 전송 gate·SMS 후보·KakaoTalk 현재 메시지 분리 | 일반 대화, Google·Samsung·MMS, 0·1·2행 제거, 카카오 현재 승인 3개·과거 메시지·도시가스 고지서 | 일반·과거 대화 미전송, 카카오 현재 메시지별 독립 후보, 카드·고지서 후보만 자기 server parser 실행 | `T-PARSE-001`, `T-PARSE-002` |
 | [ING-007](requirements.md#51-수집출처-선택중복-처리) | Parser Unit | SmsParserOrderPolicy | 여러 parser와 청구가 동시에 맞는 후보, 세종 후보 | 명시 순서의 첫 성공 하나, 청구는 마지막, 세종 미포함 | `T-SMS-ORDER-001` |
 | [ING-008](requirements.md#51-수집출처-선택중복-처리) | Android Integration, Security, Clock | write-ahead journal·direct delivery·WorkManager·contract router | online terminal, 원격 호출 중 process 종료, transport failure·재시작, 71:59:59·72:00:00, partial retry, follow-up enqueue 실패, parser 무결과 terminal, legacy entry, logout·키 무효화 | 원격 호출 전 ciphertext journal, terminal은 QuickEdit FIFO durable enqueue 뒤 journal 제거·Worker 없음, 실패는 같은 observation 재시도, QuickEdit 중복 없음, terminal·만료·session 전환 삭제, legacy 유실 없음 | `T-QUEUE-001`, `T-ING-BAL-001` |
 | [ING-009](requirements.md#51-수집출처-선택중복-처리) | Application, Context Contract | 독립 branch coordinator·receipt | balance-only, 카드 거부+잔액, 거래 성공+잔액 실패, 거래 실패+잔액 성공 | 결과·stage·key 독립, 성공 branch rollback·재호출 없음 | `T-ING-BAL-001` |
@@ -438,17 +446,17 @@ parser golden fixture에는 정상 승인, 지원 취소, 빈 필드, 0원·음�
 | [PARSE-KAKAO-001](requirements.md#52-지원-입력-형식) | Parser Golden | KakaoPay parser | 완료 제목·가맹점·금액·시각 없음 | 게시시각 또는 clock으로 승인 | `T-PARSE-001` |
 | [PARSE-ONNURI-001](requirements.md#52-지원-입력-형식) | Parser Golden | Onnuri parser | 상품권 결제·시각 없음 | 승인과 시각 fallback | `T-PARSE-001` |
 | [PARSE-PAYBOOC-001](requirements.md#52-지원-입력-형식) | Parser Golden | Paybooc parser | 인라인·분리·취소·0원·빈 merchant | 유효 양수 승인/취소와 카드 정규화 | `T-PARSE-001`, `T-PARSE-002` |
-| [PARSE-SAMSUNG-001](requirements.md#52-지원-입력-형식) | Parser Golden | Samsung parser | 승인·취소·MM/DD HH:mm·번호 | 요구 evidence snapshot | `T-PARSE-001`, `T-PARSE-002` |
+| [PARSE-SAMSUNG-001](requirements.md#52-지원-입력-형식) | Parser Golden | Samsung parser·KakaoTalk composite parser | 승인·취소·MM/DD HH:mm·번호, 보낸이/카카오 수신 시각 접두사, 후행 누적 | 카드 본문 금액·시각·가맹점·번호 사용, 카카오 접두사·누적액 제외 | `T-PARSE-001`, `T-PARSE-002` |
 | [PARSE-LOTTE-001](requirements.md#52-지원-입력-형식) | Parser Golden | Lotte parser | 승인·취소·일시불·할부, 가맹점 우선 문자·`롯데5*5*`·쉼표 없는 일시불 날짜 | 메타데이터·가맹점·카드·취소 구분, 누적액 제외 | `T-PARSE-001`, `T-PARSE-002` |
 | [PARSE-GYEONGGI-001](requirements.md#52-지원-입력-형식) | Parser Golden, Application | 경기 parser | 지출+잔액, 잔액만 | local_currency 승인과 독립 balance result | `T-PARSE-001` |
 | [PARSE-DAEJEON-001](requirements.md#52-지원-입력-형식) | Parser Golden, Application | 대전 parser | 상세·fallback·잔액 | 카드·가맹점·잔액 evidence | `T-PARSE-001` |
 | [PARSE-SEJONG-001](requirements.md#52-지원-입력-형식) | Parser Golden, Application | 세종 parser | 결제 완료·보유 잔액 | 승인과 독립 balance observation | `T-PARSE-001` |
-| [PARSE-CITYGAS-001](requirements.md#52-지원-입력-형식) | Parser Golden, Policy | 도시가스 parser | 제목 있음/없음, 마감일 정상/없음/유효하지 않음, 총액 없음 | 월·memo fallback과 observed/due date 보존, invalid due date는 수신일 fallback, 총액 없음 실패 | `T-CITYGAS-001`, `T-PARSE-001` |
+| [PARSE-CITYGAS-001](requirements.md#52-지원-입력-형식) | Parser Golden, Policy | KakaoTalk composite·도시가스 parser | 제목 있음/없음, 마감일 정상/없음/유효하지 않음, 총액 없음, 카드 승인과 일반 대화 | 고지서만 bill로 분류해 월·memo fallback과 observed/due date 보존·카드 예외/fixed 적용, 카드 승인은 일반 카드 downstream, 일반 대화·총액 없음 실패 | `T-CITYGAS-001`, `T-PARSE-001` |
 | [PARSE-SMSBILL-001](requirements.md#52-지원-입력-형식) | Parser Golden | NH 문자 청구 parser | 정상 납부·유사 비결제 문장 | 정상 납부만 승인 | `T-PARSE-001` |
 | [PARSE-COMMON-001](requirements.md#52-지원-입력-형식) | Parser Contract, Clock | 모든 parser 시간 Adapter | 서울/타 timezone, postedAt 있음·없음, 지연 재처리, 연말·연초 | 서울 postedAt 우선·주입 Clock fallback, 기기 timezone·실행 시각 무관 | `T-PARSE-TIME-001`, `T-PARSE-003` |
 | [ING-SAVE-001](requirements.md#53-승인-저장) | Application, Security | submit authorization | 가구 없음·타 가구·유효 Actor | 저장 없음과 구분된 오류 | `T-ING-AUTH-001` |
 | [ING-SAVE-002](requirements.md#53-승인-저장) | Application Contract | merchant/default category 조정 | mapping 있음·없음·도시가스·invalid category | mapping 우선, 도시가스 fixed, 그 외 default | `T-MER-ENRICH-001` |
-| [ING-SAVE-003](requirements.md#53-승인-저장) | Application Contract | owner-scoped card resolve 소비 | 도시가스, 본인 0·1·여러 건, 타 멤버 동일 카드, wildcard, 라벨 호환 | 도시가스 외 본인 `Eligible`만 Ledger 호출; 타 멤버 상태 무관 | `T-CARD-001` |
+| [ING-SAVE-003](requirements.md#53-승인-저장) | Application Contract | owner-scoped card resolve 소비 | 도시가스 고지서, 카카오톡 카드 승인, 본인 0·1·여러 건, 타 멤버 동일 카드, wildcard, 라벨 호환 | parser가 분류한 고지서만 카드 예외; 카카오톡 카드 결과를 포함한 나머지는 본인 `Eligible`일 때만 Ledger 호출, 타 멤버 상태 무관 | `T-CARD-001`, `T-CITYGAS-001` |
 | [ING-SAVE-004](requirements.md#53-승인-저장) | Contract | 정규 카드 번호 반영 | 양쪽 token 있음·없음·wildcard·본인 최상위 후보 여러 건 | canonical evidence가 유일할 때 거래 표시에는 등록 카드의 끝 네 자리를 반영하고 원 마스킹 증거는 provenance에 유지한다. 확정할 수 없으면 `2*6*` 같은 네 자리 mask를 축약하지 않는다. | `T-CARD-001` |
 | [ING-SAVE-005](requirements.md#53-승인-저장) | Domain, Emulator | fingerprint·Ledger 경합 | 같은 tuple 다른 카드/source, 동시 2회 | 카드/source 무관 거래 한 건 | `T-DUP-001` |
 | [ING-SAVE-006](requirements.md#53-승인-저장) | Application, Client, Context Contract | creator 원자 저장·result 후속 효과 | creator 있음·없음, Created·editable Duplicate·Rejected·network 실패, Ledger Event 소비 | creator 없으면 Ledger write 없음, 거래와 creator가 함께 확정된 편집 ID에서만 QuickEdit/broadcast, Android 자동 푸시 `NoTarget` | `T-ING-FOLLOWUP-001`, `T-ING-PROV-001` |

@@ -1,4 +1,5 @@
 import type {
+  AndroidRawNotification,
   AndroidProviderParseResult,
   ParsedPaymentGolden,
 } from "../model/androidProviderParser";
@@ -28,6 +29,11 @@ export type PaymentOccurrenceYearResolver = (
 export interface ProviderParserContext {
   readonly title: string;
   readonly body: string;
+  /**
+   * 다목적 알림 앱처럼 표시 필드마다 서로 다른 메시지 범위를 담을 수 있는
+   * source가 전용 후보 선택을 수행할 때만 사용합니다.
+   */
+  readonly notification?: AndroidRawNotification;
   readonly postedAt?: string;
   readonly clockNow: string;
   readonly resolveOccurrenceYear: PaymentOccurrenceYearResolver;

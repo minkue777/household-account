@@ -45,6 +45,30 @@ function envelope(): CaptureBranchEnvelope {
 }
 
 describe("Firebase Capture root receipt adapter", () => {
+  it("내부 card/bill discriminator를 payload fingerprint에서 구분한다", () => {
+    const payloads = new Sha256CapturePayloadFingerprint();
+    const input = envelope();
+    const withKind = (
+      paymentKind: "card" | "bill",
+    ): CaptureBranchEnvelope => ({
+      ...input,
+      transactionBranch: {
+        ...input.transactionBranch!,
+        captureContext: {
+          ...input.transactionBranch!.captureContext!,
+          paymentKind,
+        },
+      },
+    });
+
+    expect(payloads.fingerprint(withKind("card"))).not.toBe(
+      payloads.fingerprint(input),
+    );
+    expect(payloads.fingerprint(withKind("bill"))).not.toBe(
+      payloads.fingerprint(withKind("card")),
+    );
+  });
+
   it("동일 root·payload는 branch 종단 결과를 재생하고 payload 변경은 충돌시킨다", async () => {
     const memory = new InMemoryFirestore();
     const store = new FirebaseCaptureSubmissionReceiptStore(

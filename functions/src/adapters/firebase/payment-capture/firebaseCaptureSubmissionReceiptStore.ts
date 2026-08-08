@@ -70,6 +70,12 @@ function canonicalEnvelope(envelope: CaptureBranchEnvelope): unknown {
                 context.creatorMemberId,
                 context.cardEvidence?.companyLabel ?? null,
                 context.cardEvidence?.maskedToken ?? null,
+                ...(context.paymentKind === undefined
+                  ? []
+                  : [context.paymentKind]),
+                ...(context.billDueDate === undefined
+                  ? []
+                  : [context.billDueDate]),
               ],
         ],
     balance === undefined ? null : balance,

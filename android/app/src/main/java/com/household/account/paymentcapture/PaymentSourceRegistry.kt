@@ -14,7 +14,7 @@ enum class RegisteredNotificationSource {
     GYEONGGI_LOCAL_CURRENCY,
     DAEJEON_LOCAL_CURRENCY,
     SEJONG_LOCAL_CURRENCY,
-    CITY_GAS_BILL
+    KAKAO_TALK_FINANCIAL
 }
 
 /** 본문이 아니라 등록 package만으로 parser 하나를 선택하는 Source Registry입니다. */
@@ -39,7 +39,7 @@ object PaymentSourceRegistry {
         "gov.gyeonggi.ggcard" to RegisteredNotificationSource.GYEONGGI_LOCAL_CURRENCY,
         "kr.co.nmcs.daejeonpay" to RegisteredNotificationSource.DAEJEON_LOCAL_CURRENCY,
         "gov.sejong.yeominpay" to RegisteredNotificationSource.SEJONG_LOCAL_CURRENCY,
-        "com.kakao.talk" to RegisteredNotificationSource.CITY_GAS_BILL
+        "com.kakao.talk" to RegisteredNotificationSource.KAKAO_TALK_FINANCIAL
     )
 
     fun resolve(packageName: String): RegisteredNotificationSource? = sourcesByPackage[packageName]

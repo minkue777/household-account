@@ -40,6 +40,7 @@ class DefaultAndroidProviderParserApplication
     return parser.parse({
       title: input.notification.title?.trim() ?? "",
       body: envelope.envelope.parseText,
+      notification: input.notification,
       postedAt: input.notification.postedAt,
       clockNow: input.clockNow,
       resolveOccurrenceYear: this.dependencies.resolveOccurrenceYear,

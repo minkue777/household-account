@@ -14,6 +14,10 @@ import type {
   CaptureSubmittedTransactionResult,
 } from "./ports/in/captureSubmissionInputPort";
 import { authorizeCaptureSubmission } from "./captureSubmissionAuthorization";
+import {
+  validateExplicitPaymentKind,
+  type ExplicitPaymentKindValidation,
+} from "../domain/policies/kakaoTalkPaymentKindPolicy";
 
 export interface CaptureSubmissionDependencies {
   readonly tenantAuthorization: TenantAuthorizationInputPort;
@@ -42,6 +46,31 @@ function seoulDate(instant: string): string {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date(instant));
+}
+
+function validatePaymentKind(
+  command: CaptureSubmissionCommand,
+): ExplicitPaymentKindValidation {
+  const envelope = command.envelope;
+  const payment = envelope.paymentObservation;
+  const source = envelope.sourceEvidence;
+  return validateExplicitPaymentKind({
+    paymentKind: command.paymentKind,
+    ...(source.kind === "android-registered-package"
+      ? { packageName: source.packageName }
+      : {}),
+    sourceType: source.sourceType,
+    parserId: envelope.parser.parserId,
+    parserVersion: envelope.parser.parserVersion,
+    observationType: payment?.observationType,
+    amountInWon: payment?.amountInWon,
+    occurredLocalDate: payment?.occurredLocalDate,
+    merchant: payment?.merchantEvidence.rawCandidate,
+    cardEvidence: payment?.cardEvidence,
+    localCurrencyType: payment?.localCurrencyType,
+    dueDate: payment?.dueDate,
+    hasBalance: envelope.balanceObservation !== undefined,
+  });
 }
 
 function branchEnvelope(
@@ -91,6 +120,12 @@ function branchEnvelope(
             captureContext: {
               observationId: envelope.observationId,
               observationType: payment.observationType,
+              ...(command.paymentKind === undefined
+                ? {}
+                : { paymentKind: command.paymentKind }),
+              ...(command.paymentKind !== "bill" || payment.dueDate === undefined
+                ? {}
+                : { billDueDate: payment.dueDate }),
               originChannel: envelope.originChannel,
               creatorMemberId,
               ...(payment.cardEvidence === undefined
@@ -166,6 +201,21 @@ class DefaultCaptureSubmissionApplication implements CaptureSubmissionInputPort 
       envelopeHouseholdId: command.actor.householdId,
     });
     if (authorization.kind !== "Authorized") return authorization;
+
+    const paymentKindValidation = validatePaymentKind(command);
+    if (paymentKindValidation.kind === "rejected") {
+      return {
+        kind: "success",
+        value: {
+          observationId: command.envelope.observationId,
+          transactionResult: {
+            kind: "rejected",
+            code: paymentKindValidation.code,
+          },
+          completion: "terminal",
+        },
+      };
+    }
 
     const result = await this.dependencies.branches.submit(
       branchEnvelope(

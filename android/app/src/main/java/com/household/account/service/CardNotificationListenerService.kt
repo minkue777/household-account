@@ -8,9 +8,15 @@ import com.household.account.paymentcapture.AndroidCaptureDelivery
 import com.household.account.paymentcapture.AndroidCaptureLatencyTelemetry
 import com.household.account.paymentcapture.CaptureLatencyStage
 import com.household.account.paymentcapture.PaymentSourceRegistry
+import com.household.account.paymentcapture.RawNotificationCandidate
+import com.household.account.paymentcapture.RawNotificationCandidateFactory
 import com.household.account.paymentcapture.RawNotificationEnvelopeV1
 import com.household.account.paymentcapture.RawNotificationForwardingPolicy
+import com.household.account.paymentcapture.RawNotificationGroupSummaryPolicy
+import com.household.account.paymentcapture.RawNotificationObservationId
+import com.household.account.paymentcapture.RawNotificationSnapshot
 import com.household.account.paymentcapture.RegisteredNotificationSource
+import com.household.account.paymentcapture.StructuredNotificationMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -62,91 +68,102 @@ class CardNotificationListenerService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
+        val notification = sbn.notification
         val receivedAtElapsedRealtime = AndroidCaptureLatencyTelemetry.elapsedRealtimeMillis()
 
         try {
             val packageName = sbn.packageName
-            val extras = sbn.notification.extras
+            val source = detectSource(packageName)
+            if (
+                RawNotificationGroupSummaryPolicy.shouldSkip(
+                    source = source,
+                    isGroupSummary = (
+                        notification.flags and Notification.FLAG_GROUP_SUMMARY
+                    ) != 0
+                )
+            ) return
+            val extras = notification.extras
 
-            val title = extras.getString(Notification.EXTRA_TITLE) ?: ""
+            val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
             val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
             val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
             val textLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
                 ?.map { it?.toString().orEmpty().trim() }
                 ?.filter { it.isNotEmpty() }
                 ?: emptyList()
-
-            val bodyText = when {
-                textLines.isNotEmpty() -> textLines.joinToString("\n")
-                bigText.isNotBlank() -> bigText
-                text.isNotBlank() -> text
-                else -> ""
-            }
-
-            val fullText = buildString {
-                if (title.isNotBlank()) {
-                    append(title)
-                    append("\n")
-                }
-                if (bodyText.isNotBlank()) {
-                    append(bodyText)
-                }
-            }.trim()
-
-            if (fullText.isEmpty()) {
-                return
-            }
-
-            val source = detectSource(packageName)
-            if (source == null) {
-                saveRawNotificationLogIfNeeded(
-                    packageName = packageName,
+            val candidates = RawNotificationCandidateFactory.create(
+                source = source,
+                snapshot = RawNotificationSnapshot(
+                    postedAtMillis = sbn.postTime,
                     title = title,
                     text = text,
                     bigText = bigText,
                     textLines = textLines,
-                    fullText = fullText,
-                    postedAtMillis = sbn.postTime
+                    structuredMessages = if (
+                        source == RegisteredNotificationSource.KAKAO_TALK_FINANCIAL
+                    ) {
+                        extractCurrentMessagingStyleMessages(notification)
+                    } else {
+                        emptyList()
+                    }
                 )
+            )
+            if (candidates.isEmpty()) return
+
+            if (source == null) {
+                candidates.forEach { candidate ->
+                    saveRawNotificationLogIfNeeded(packageName, candidate)
+                }
                 return
             }
-            if (!RawNotificationForwardingPolicy.shouldForward(source, title, fullText)) return
-
-            val notificationKey = "${packageName}_${fullText.hashCode()}"
             val now = System.currentTimeMillis()
-            if (rememberRecentKey(recentNotifications, notificationKey, now, duplicateWindowMs)) {
-                return
-            }
+            val deliveries = candidates.mapNotNull { candidate ->
+                if (
+                    !RawNotificationForwardingPolicy.shouldForward(
+                        source,
+                        candidate.title,
+                        forwardingCandidateText(source, candidate)
+                    )
+                ) return@mapNotNull null
 
-            val envelope = RawNotificationEnvelopeV1.create(
-                packageName = packageName,
-                postedAtMillis = sbn.postTime,
-                title = title,
-                text = text,
-                bigText = bigText,
-                textLines = textLines
-            )
-            AndroidCaptureLatencyTelemetry.mark(
-                observationId = envelope.observationId,
-                stage = CaptureLatencyStage.NOTIFICATION_RECEIVED,
-                atElapsedRealtimeMillis = receivedAtElapsedRealtime
-            )
+                val notificationKey = if (
+                    source == RegisteredNotificationSource.KAKAO_TALK_FINANCIAL
+                ) {
+                    RawNotificationObservationId.forKakaoCandidate(packageName, candidate)
+                } else {
+                    "${packageName}_${candidate.fullText.hashCode()}"
+                }
+                if (
+                    rememberRecentKey(
+                        recentNotifications,
+                        notificationKey,
+                        now,
+                        duplicateWindowMs
+                    )
+                ) return@mapNotNull null
+
+                val envelope = createRawEnvelope(packageName, source, candidate)
+                AndroidCaptureLatencyTelemetry.mark(
+                    observationId = envelope.observationId,
+                    stage = CaptureLatencyStage.NOTIFICATION_RECEIVED,
+                    atElapsedRealtimeMillis = receivedAtElapsedRealtime
+                )
+                candidate to envelope
+            }
+            if (deliveries.isEmpty()) return
 
             serviceScope.launch {
                 runCatching {
-                    AndroidCaptureDelivery.enqueueAndFlush(applicationContext, envelope)
+                    AndroidCaptureDelivery.enqueueBatchAndFlush(
+                        applicationContext,
+                        deliveries.map { (_, envelope) -> envelope }
+                    )
                 }
-                // 임시 parser 진단은 QuickEdit 표시가 끝난 뒤 보내 네트워크와
-                // App Check token을 결제 저장의 빠른 경로와 경쟁시키지 않습니다.
-                saveRawNotificationLogIfNeeded(
-                    packageName = packageName,
-                    title = title,
-                    text = text,
-                    bigText = bigText,
-                    textLines = textLines,
-                    fullText = fullText,
-                    postedAtMillis = sbn.postTime
-                )
+                deliveries.forEach { (candidate, _) ->
+                    // 임시 parser 진단은 QuickEdit 표시가 끝난 뒤 보내 네트워크와
+                    // App Check token을 결제 저장의 빠른 경로와 경쟁시키지 않습니다.
+                    saveRawNotificationLogIfNeeded(packageName, candidate)
+                }
             }
         } catch (_: Exception) {
         }
@@ -166,16 +183,77 @@ class CardNotificationListenerService : NotificationListenerService() {
     private fun detectSource(packageName: String): RegisteredNotificationSource? =
         PaymentSourceRegistry.resolve(packageName)
 
+    private fun forwardingCandidateText(
+        source: RegisteredNotificationSource,
+        candidate: RawNotificationCandidate
+    ): String = if (source == RegisteredNotificationSource.KAKAO_TALK_FINANCIAL) {
+        candidate.bodyText
+    } else {
+        candidate.fullText
+    }
+
+    private fun createRawEnvelope(
+        packageName: String,
+        source: RegisteredNotificationSource,
+        candidate: RawNotificationCandidate
+    ): RawNotificationEnvelopeV1 = if (
+        source == RegisteredNotificationSource.KAKAO_TALK_FINANCIAL
+    ) {
+        RawNotificationObservationId.createKakaoEnvelope(
+            packageName = packageName,
+            candidate = candidate
+        )
+    } else {
+        RawNotificationEnvelopeV1.create(
+            packageName = packageName,
+            postedAtMillis = candidate.postedAtMillis,
+            title = candidate.title,
+            text = candidate.text,
+            bigText = candidate.bigText,
+            textLines = candidate.textLines
+        )
+    }
+
+    @Suppress("DEPRECATION")
+    private fun extractCurrentMessagingStyleMessages(
+        notification: Notification
+    ): List<StructuredNotificationMessage> = runCatching {
+        val bundles = notification.extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+            ?: return@runCatching emptyList()
+        Notification.MessagingStyle.Message.getMessagesFromBundleArray(bundles)
+            .map { message ->
+                StructuredNotificationMessage(
+                    text = message.text?.toString().orEmpty(),
+                    postedAtMillis = message.timestamp
+                )
+            }
+    }.getOrDefault(emptyList())
+
+    private fun saveRawNotificationLogIfNeeded(
+        packageName: String,
+        candidate: RawNotificationCandidate
+    ) = saveRawNotificationLogIfNeeded(
+        packageName = packageName,
+        title = candidate.title,
+        text = candidate.text,
+        bigText = candidate.bigText,
+        textLines = candidate.textLines,
+        bodyText = candidate.bodyText,
+        fullText = candidate.fullText,
+        postedAtMillis = candidate.postedAtMillis
+    )
+
     private fun saveRawNotificationLogIfNeeded(
         packageName: String,
         title: String,
         text: String,
         bigText: String,
         textLines: List<String>,
+        bodyText: String,
         fullText: String,
         postedAtMillis: Long
     ) {
-        val source = resolveDebugLogSource(packageName, fullText) ?: return
+        val source = resolveDebugLogSource(packageName, title, bodyText, fullText) ?: return
         val normalizedTitle = title.trim()
 
         if (
@@ -205,11 +283,24 @@ class CardNotificationListenerService : NotificationListenerService() {
         }
     }
 
-    private fun resolveDebugLogSource(packageName: String, fullText: String): String? {
+    private fun resolveDebugLogSource(
+        packageName: String,
+        title: String,
+        bodyText: String,
+        fullText: String
+    ): String? {
         val source = detectSource(packageName)
         if (
             source != null &&
-            !RawNotificationForwardingPolicy.shouldForward(source, "", fullText)
+            !RawNotificationForwardingPolicy.shouldForward(
+                source,
+                title,
+                if (source == RegisteredNotificationSource.KAKAO_TALK_FINANCIAL) {
+                    bodyText
+                } else {
+                    fullText
+                }
+            )
         ) return null
         return source?.name
             ?: debugOnlyNotificationPackages[packageName]

@@ -7,6 +7,7 @@ import {
 import type { CaptureTransactionGatewayPort } from "./ports/out/captureTransactionGatewayPort";
 import type { CaptureConfigurationQueryPort } from "./ports/out/captureConfigurationQueryPort";
 import type { CaptureLedgerPersistencePort } from "./ports/out/captureLedgerPersistencePort";
+import { validateExplicitPaymentKind } from "../domain/policies/kakaoTalkPaymentKindPolicy";
 
 function mappedValue(
   field: MerchantMappingDecision["merchant"] | MerchantMappingDecision["memo"],
@@ -33,6 +34,23 @@ export function createCaptureTransactionGatewayApplication(input: {
       if (context === undefined) {
         return { kind: "rejected", code: "CAPTURE_CONTEXT_REQUIRED" };
       }
+      const paymentKindValidation = validateExplicitPaymentKind({
+        paymentKind: context.paymentKind,
+        sourceType: command.branch.sourceType,
+        parserId: command.branch.parser.parserId,
+        parserVersion: command.branch.parser.parserVersion,
+        observationType: context.observationType,
+        amountInWon: command.branch.amountInWon,
+        occurredLocalDate: command.branch.occurredAt.slice(0, 10),
+        merchant: command.branch.merchant,
+        cardEvidence: context.cardEvidence,
+        localCurrencyType: command.branch.localCurrencyType,
+        dueDate: context.billDueDate,
+        hasBalance: false,
+      });
+      if (paymentKindValidation.kind === "rejected") {
+        return paymentKindValidation;
+      }
       const loaded = await input.configuration.load({
         householdId: command.householdId,
         actingMemberId: context.creatorMemberId,
@@ -41,13 +59,16 @@ export function createCaptureTransactionGatewayApplication(input: {
         return { kind: "retryable-failure", code: "LEDGER_UNAVAILABLE" };
       }
       const configuration = loaded.value;
-      const cityGas = command.branch.sourceType === "city-gas-bill";
+      const bill =
+        context.paymentKind === "bill" ||
+        (context.paymentKind === undefined &&
+          command.branch.sourceType === "city-gas-bill");
 
       let canonicalCardId: string | undefined;
       let resolvedCardEvidence:
         | { readonly companyLabel: string; readonly lastFour: string }
         | undefined;
-      if (!cityGas) {
+      if (!bill) {
         if (context.cardEvidence === undefined) {
           return { kind: "rejected", code: "CARD_EVIDENCE_REQUIRED" };
         }
@@ -123,9 +144,9 @@ export function createCaptureTransactionGatewayApplication(input: {
 
       const enrichment = enrichmentBoundary.enrich({
         parsed: {
-          sourceKind: cityGas ? "city-gas" : "payment",
+          sourceKind: bill ? "city-gas" : "payment",
           merchant: command.branch.merchant,
-          categoryId: cityGas ? "fixed" : undefined,
+          categoryId: bill ? "fixed" : undefined,
           memo: "",
         },
         merchantRuleLookup:

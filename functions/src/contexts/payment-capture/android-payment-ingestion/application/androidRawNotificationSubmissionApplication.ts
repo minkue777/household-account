@@ -114,17 +114,107 @@ function cityGasPayment(
   };
 }
 
+interface ParsedAndroidCapture {
+  readonly envelope: CaptureEnvelopeInput;
+  readonly paymentKind?: "card" | "bill";
+}
+
 function parsedEnvelope(
   input: AndroidRawNotificationInput,
   source: AndroidPaymentSourceRegistryEntry,
   parser: AndroidProviderParserInputPort,
   payloads: AndroidRawNotificationHashPort,
   clockNow: string,
-): CaptureEnvelopeInput | undefined {
-  if (source.cityGas) {
-    const paymentObservation = cityGasPayment(input);
-    if (paymentObservation === undefined) return undefined;
-    return {
+): ParsedAndroidCapture | undefined {
+  // 다목적 Kakao source도 등록된 전용 parser 하나만 실행합니다. 그 parser가
+  // 완전한 카드 블록을 찾지 못한 경우에만 같은 source의 도시가스 정책을 봅니다.
+  const result = parser.parse({
+    source: { packageName: source.packageName, parserId: source.parserId },
+    notification: input.notification,
+    clockNow,
+  });
+  if (result.kind === "Parsed") {
+    const parsedCurrency = currencyType(result.payment?.localCurrencyType);
+    const balanceCurrency = currencyType(result.balance?.localCurrencyType);
+    if (
+      (result.payment?.localCurrencyType !== undefined &&
+        parsedCurrency !== source.localCurrencyType) ||
+      (result.balance?.localCurrencyType !== undefined &&
+        balanceCurrency !== source.localCurrencyType)
+    ) {
+      return undefined;
+    }
+
+    const payment = result.payment;
+    const paymentObservation =
+      payment === undefined ||
+      payment.amountInWon <= 0 ||
+      payment.merchant.trim() === "" ||
+      payment.cardCompany.trim() === ""
+        ? undefined
+        : {
+            branchId: branchId(input.observationId, "payment"),
+            observationType: payment.type,
+            amountInWon: payment.amountInWon,
+            occurredLocalDate: payment.occurredLocalDate,
+            occurredLocalTime: payment.occurredLocalTime,
+            zoneId: "Asia/Seoul" as const,
+            merchantEvidence: { rawCandidate: payment.merchant.trim() },
+            cardEvidence: {
+              companyLabel: payment.cardCompany.trim(),
+              ...(payment.maskedCardToken === undefined ||
+              payment.maskedCardToken.trim() === ""
+                ? {}
+                : { maskedToken: payment.maskedCardToken.trim() }),
+            },
+            ...(parsedCurrency === undefined
+              ? {}
+              : { localCurrencyType: parsedCurrency }),
+          };
+    const balanceObservation =
+      result.balance === undefined || balanceCurrency === undefined
+        ? undefined
+        : {
+            branchId: branchId(input.observationId, "balance"),
+            currencyType: balanceCurrency,
+            balanceInWon: result.balance.amountInWon,
+            observedAt: input.notification.postedAt,
+          };
+    if (paymentObservation !== undefined || balanceObservation !== undefined) {
+      return {
+        envelope: {
+          contractVersion: "capture-envelope.v1",
+          observationId: input.observationId,
+          originChannel: "android-notification",
+          sourceEvidence: {
+            kind: "android-registered-package",
+            sourceType: source.sourceType,
+            packageName: source.packageName,
+            registryVersion: source.registryVersion,
+          },
+          observedAt: input.notification.postedAt,
+          parser: {
+            parserId: source.parserId,
+            parserVersion: source.parserVersion,
+          },
+          rawPayloadHash: payloads.hash(input),
+          ...(paymentObservation === undefined ? {} : { paymentObservation }),
+          ...(balanceObservation === undefined ? {} : { balanceObservation }),
+        },
+        ...(paymentObservation === undefined ||
+        !source.supportsCityGasBill
+          ? {}
+          : { paymentKind: "card" as const }),
+      };
+    }
+  }
+
+  if (!source.supportsCityGasBill) return undefined;
+  const paymentObservation = cityGasPayment(input);
+  if (paymentObservation === undefined) return undefined;
+  return {
+    paymentKind: "bill",
+    envelope: {
       contractVersion: "capture-envelope.v1",
       observationId: input.observationId,
       originChannel: "android-notification",
@@ -141,84 +231,7 @@ function parsedEnvelope(
       },
       rawPayloadHash: payloads.hash(input),
       paymentObservation,
-    };
-  }
-
-  const result = parser.parse({
-    source: { packageName: source.packageName, parserId: source.parserId },
-    notification: input.notification,
-    clockNow,
-  });
-  if (result.kind !== "Parsed") return undefined;
-
-  const parsedCurrency = currencyType(result.payment?.localCurrencyType);
-  const balanceCurrency = currencyType(result.balance?.localCurrencyType);
-  if (
-    (result.payment?.localCurrencyType !== undefined &&
-      parsedCurrency !== source.localCurrencyType) ||
-    (result.balance?.localCurrencyType !== undefined &&
-      balanceCurrency !== source.localCurrencyType)
-  ) {
-    return undefined;
-  }
-
-  const payment = result.payment;
-  const paymentObservation =
-    payment === undefined ||
-    payment.amountInWon <= 0 ||
-    payment.merchant.trim() === "" ||
-    payment.cardCompany.trim() === ""
-      ? undefined
-      : {
-          branchId: branchId(input.observationId, "payment"),
-          observationType: payment.type,
-          amountInWon: payment.amountInWon,
-          occurredLocalDate: payment.occurredLocalDate,
-          occurredLocalTime: payment.occurredLocalTime,
-          zoneId: "Asia/Seoul" as const,
-          merchantEvidence: { rawCandidate: payment.merchant.trim() },
-          cardEvidence: {
-            companyLabel: payment.cardCompany.trim(),
-            ...(payment.maskedCardToken === undefined ||
-            payment.maskedCardToken.trim() === ""
-              ? {}
-              : { maskedToken: payment.maskedCardToken.trim() }),
-          },
-          ...(parsedCurrency === undefined
-            ? {}
-            : { localCurrencyType: parsedCurrency }),
-        };
-  const balanceObservation =
-    result.balance === undefined || balanceCurrency === undefined
-      ? undefined
-      : {
-          branchId: branchId(input.observationId, "balance"),
-          currencyType: balanceCurrency,
-          balanceInWon: result.balance.amountInWon,
-          observedAt: input.notification.postedAt,
-        };
-  if (paymentObservation === undefined && balanceObservation === undefined) {
-    return undefined;
-  }
-
-  return {
-    contractVersion: "capture-envelope.v1",
-    observationId: input.observationId,
-    originChannel: "android-notification",
-    sourceEvidence: {
-      kind: "android-registered-package",
-      sourceType: source.sourceType,
-      packageName: source.packageName,
-      registryVersion: source.registryVersion,
     },
-    observedAt: input.notification.postedAt,
-    parser: {
-      parserId: source.parserId,
-      parserVersion: source.parserVersion,
-    },
-    rawPayloadHash: payloads.hash(input),
-    ...(paymentObservation === undefined ? {} : { paymentObservation }),
-    ...(balanceObservation === undefined ? {} : { balanceObservation }),
   };
 }
 
@@ -241,18 +254,18 @@ class DefaultAndroidRawNotificationSubmissionApplication
     if (source === undefined) {
       return terminalIgnored(command.input.observationId);
     }
-    const envelope = parsedEnvelope(
+    const parsed = parsedEnvelope(
       command.input,
       source,
       this.dependencies.parser,
       this.dependencies.payloads,
       this.dependencies.clock.now(),
     );
-    if (envelope === undefined) {
+    if (parsed === undefined) {
       return terminalIgnored(command.input.observationId);
     }
     if (
-      envelope.paymentObservation !== undefined &&
+      parsed.envelope.paymentObservation !== undefined &&
       command.actor.householdId !== undefined &&
       command.actor.actingMemberId !== undefined
     ) {
@@ -264,7 +277,10 @@ class DefaultAndroidRawNotificationSubmissionApplication
     return this.dependencies.submissions.submit({
       actor: command.actor,
       rootIdempotencyKey: command.input.observationId,
-      envelope,
+      envelope: parsed.envelope,
+      ...(parsed.paymentKind === undefined
+        ? {}
+        : { paymentKind: parsed.paymentKind }),
     });
   }
 }
