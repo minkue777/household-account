@@ -278,6 +278,32 @@ describe("등록 카드 Command 권한·CRUD·원자 재정렬 공개 계약", (
     expect(subject.state()).toEqual(before);
   });
 
+  it("끝 번호를 지우면 undefined를 남기지 않고 필드를 완전히 제거한다", () => {
+    const original = card("card-0001", 0, { lastFour: "1234" });
+    const subject = createSubject({ cards: [original] });
+
+    const result = subject.updateLastFour({
+      actor,
+      cardId: original.cardId,
+      rawLastFour: "",
+      expectedVersion: 1,
+    });
+
+    expect(result).toMatchObject({ kind: "Updated", card: { version: 2 } });
+    if (result.kind === "Updated") {
+      expect(result.card).not.toHaveProperty("lastFour");
+    }
+    expect(subject.state().cards[0]).not.toHaveProperty("lastFour");
+    expect(subject.state().claims).toEqual([
+      {
+        householdId: "household-a",
+        ownerMemberId: "member-a",
+        cardCompanyCode: "kb",
+        cardId: "card-0001",
+      },
+    ]);
+  });
+
   it.each([
     {
       name: "stale version",

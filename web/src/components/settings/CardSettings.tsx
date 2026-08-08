@@ -291,6 +291,7 @@ export default function CardSettings({
   const [loadError, setLoadError] = useState('');
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [detailCardLastFour, setDetailCardLastFour] = useState('');
+  const [isSavingDetail, setIsSavingDetail] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [formError, setFormError] = useState('');
   const [detailError, setDetailError] = useState('');
@@ -427,25 +428,32 @@ export default function CardSettings({
   };
 
   const handleSaveDetail = async () => {
-    if (!householdId || !ownerName || !selectedCard) {
+    if (!householdId || !ownerName || !selectedCard || isSavingDetail) {
       return;
     }
 
-    const updated = await updateRegisteredCard({
-      cardId: selectedCard.id,
-      householdId,
-      owner: ownerName,
-      cardLabel: selectedCard.cardLabel,
-      cardLastFour: detailHidesCardNumber ? '' : detailCardLastFour,
-    });
+    setIsSavingDetail(true);
+    try {
+      const updated = await updateRegisteredCard({
+        cardId: selectedCard.id,
+        householdId,
+        owner: ownerName,
+        cardLabel: selectedCard.cardLabel,
+        cardLastFour: detailHidesCardNumber ? '' : detailCardLastFour,
+      });
 
-    if (!updated) {
-      setDetailError('이미 등록된 카드입니다.');
-      return;
+      if (!updated) {
+        setDetailError('이미 등록된 카드입니다.');
+        return;
+      }
+
+      setSelectedCardId(null);
+      setDetailError('');
+    } catch {
+      setDetailError('카드 정보를 저장하지 못했습니다. 다시 시도해 주세요.');
+    } finally {
+      setIsSavingDetail(false);
     }
-
-    setSelectedCardId(null);
-    setDetailError('');
   };
 
   const handleDelete = async () => {
@@ -841,10 +849,10 @@ export default function CardSettings({
                   onClick={() => {
                     void handleSaveDetail();
                   }}
-                  disabled={!canSaveDetail}
+                  disabled={!canSaveDetail || isSavingDetail}
                   className="flex-1 rounded-2xl bg-violet-500 px-4 py-3 font-medium text-white transition-colors hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  저장
+                  {isSavingDetail ? '저장 중...' : '저장'}
                 </button>
               </div>
             </div>

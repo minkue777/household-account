@@ -20,6 +20,14 @@ const cloneCard = (
   card: RegisteredCardCommandRecord,
 ): RegisteredCardCommandRecord => ({ ...card });
 
+const withoutLastFour = (
+  card: RegisteredCardCommandRecord,
+): RegisteredCardCommandRecord => {
+  const { lastFour, ...copy } = card;
+  void lastFour;
+  return copy;
+};
+
 const claimFor = (card: RegisteredCardCommandRecord): CardClaim => ({
   householdId: card.householdId,
   ownerMemberId: card.ownerMemberId,
@@ -151,10 +159,9 @@ export function createRegisteredCardCommandBoundaryApplication(options: {
         return { kind: "Rejected", code: "INVALID_LAST_FOUR" };
       }
       const updated: RegisteredCardCommandRecord = {
-        ...current,
         ...(normalized.lastFour === undefined
-          ? { lastFour: undefined }
-          : { lastFour: normalized.lastFour }),
+          ? withoutLastFour(current)
+          : { ...current, lastFour: normalized.lastFour }),
         version: current.version + 1,
       };
       const newClaim = claimFor(updated);
