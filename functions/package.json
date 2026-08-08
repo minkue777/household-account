@@ -1,10 +1,13 @@
 {
   "name": "household-account-functions",
   "scripts": {
+    "prebuild": "npm run test:architecture",
     "build": "tsc && node ../tools/build/copy-functions-contracts.mjs",
     "build:watch": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:requirement-traceability": "vitest run test/architecture/requirement-test-traceability.test.ts",
+    "test:quality-gate": "npm test && npm run test:types && npm run test:runtime-boundaries && npm run build",
     "test:contract": "vitest run test/contexts test/contracts",
     "test:architecture": "vitest run test/architecture",
     "test:firestore-rules": "firebase --config ../firebase.json emulators:exec --only firestore --project demo-household-account-rules \"vitest run test/integration/firestore/firestore-rules.integration.test.ts\"",

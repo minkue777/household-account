@@ -86,7 +86,7 @@ function touchMove(element: Element, x: number, y: number) {
   });
 }
 
-describe('AssetList 모바일 롱프레스 순서 변경 계약', () => {
+describe('[T-AST-012][AST-003] AssetList 모바일 롱프레스 순서 변경 계약', () => {
   const originalElementsFromPoint = document.elementsFromPoint;
 
   beforeAll(() => {
