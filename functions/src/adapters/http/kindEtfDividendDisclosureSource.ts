@@ -3,12 +3,17 @@ import { createHash } from "node:crypto";
 import type { KindDividendDisclosurePort } from "../../contexts/portfolio/dividends/application/ports/out/dividendScheduledRuntimePorts";
 import type {
   SafeExternalTextHttpInputPort,
+  SafeExternalTextHttpRequest,
   SafeExternalTextHttpResult,
 } from "../../platform/external-operations/application/ports/in/safeExternalTextHttpInputPort";
 
 const KIND_SEARCH_URL =
   "https://kind.krx.co.kr/disclosure/disclosurebystocktype.do";
 const KIND_VIEWER_URL = "https://kind.krx.co.kr/common/disclsviewer.do";
+const KIND_DIVIDEND_REPORT_CODE = "68659";
+const KIND_DIVIDEND_REPORT_NAME =
+  "ETF\uC774\uC775\uAE08\uBD84\uBC30\uC2E0\uACE0(\uBD84\uBC30\uAE08\uC548\uB0B4)(\uC77C\uAD04\uACF5\uC2DC)";
+const KIND_SEARCH_PAGE_SIZE = 10_000;
 const KIND_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
@@ -149,6 +154,17 @@ function detailUrl(html: string): string | undefined {
   return raw.startsWith("https://") ? raw : new URL(raw, "https://kind.krx.co.kr").href;
 }
 
+function searchResultCount(html: string): number | undefined {
+  const raw = /<em\b[^>]*>\s*([\d,]+)\s*<\/em>/iu.exec(html)?.[1];
+  if (raw === undefined) return undefined;
+  const count = Number(raw.replace(/,/gu, ""));
+  return Number.isSafeInteger(count) && count >= 0 ? count : undefined;
+}
+
+function searchRowCount(html: string): number {
+  return [...html.matchAll(/openDisclsViewer\(\s*['"]\d+['"]/giu)].length;
+}
+
 function mapHttpFailure(result: Exclude<SafeExternalTextHttpResult, { kind: "success" }>) {
   if (result.kind === "retryable-failure") {
     return {
@@ -172,24 +188,183 @@ function mapHttpFailure(result: Exclude<SafeExternalTextHttpResult, { kind: "suc
   };
 }
 
-async function get(
-  http: SafeExternalTextHttpInputPort,
-  url: string,
-  stage: "viewer" | "contents" | "detail",
-): Promise<SafeExternalTextHttpResult> {
-  return http.execute({
-    provider: "KIND",
-    operation: "dividend-disclosure",
-    stage,
-    url,
-    headers: { "User-Agent": KIND_USER_AGENT },
-  });
-}
-
 export class KindEtfDividendDisclosureSource
   implements KindDividendDisclosurePort
 {
+  private readonly cookies = new Map<string, string>();
+  private requestQueue: Promise<void> = Promise.resolve();
+  private readonly searchByPeriod = new Map<
+    string,
+    Promise<SafeExternalTextHttpResult>
+  >();
+  private readonly viewerByAcceptNumber = new Map<
+    string,
+    Promise<SafeExternalTextHttpResult>
+  >();
+  private readonly contentsByDocumentNumber = new Map<
+    string,
+    Promise<SafeExternalTextHttpResult>
+  >();
+  private readonly detailByUrl = new Map<
+    string,
+    Promise<SafeExternalTextHttpResult>
+  >();
+
   constructor(private readonly http: SafeExternalTextHttpInputPort) {}
+
+  private absorbCookies(headers: readonly string[] | undefined): void {
+    for (const header of headers ?? []) {
+      const semicolon = header.indexOf(";");
+      const pair = header.slice(0, semicolon < 0 ? header.length : semicolon);
+      const separator = pair.indexOf("=");
+      if (separator <= 0) continue;
+      const name = pair.slice(0, separator).trim();
+      const value = pair.slice(separator + 1).trim();
+      if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/u.test(name)) continue;
+      if (value.length === 0) {
+        this.cookies.delete(name);
+      } else {
+        this.cookies.set(name, value);
+      }
+    }
+  }
+
+  private cookieHeader(): string | undefined {
+    if (this.cookies.size === 0) return undefined;
+    return [...this.cookies.entries()]
+      .map(([name, value]) => `${name}=${value}`)
+      .join("; ");
+  }
+
+  private execute(
+    request: SafeExternalTextHttpRequest,
+  ): Promise<SafeExternalTextHttpResult> {
+    const pending = this.requestQueue.then(async () => {
+      const cookie = this.cookieHeader();
+      const result = await this.http.execute({
+        ...request,
+        headers: {
+          ...(request.headers ?? {}),
+          ...(cookie === undefined ? {} : { Cookie: cookie }),
+        },
+        captureSetCookies: true,
+      });
+      if (result.kind === "success") {
+        this.absorbCookies(result.setCookieHeaders);
+      }
+      return result;
+    });
+    this.requestQueue = pending.then(
+      () => undefined,
+      () => undefined,
+    );
+    return pending;
+  }
+
+  private get(
+    url: string,
+    stage: "viewer" | "contents" | "detail",
+  ): Promise<SafeExternalTextHttpResult> {
+    return this.execute({
+      provider: "KIND",
+      operation: "dividend-disclosure",
+      stage,
+      url,
+      headers: {
+        "User-Agent": KIND_USER_AGENT,
+        Accept: "text/html,application/xhtml+xml",
+        Referer: KIND_SEARCH_URL,
+      },
+    });
+  }
+
+  private search(input: {
+    readonly periodFrom: string;
+    readonly periodTo: string;
+  }): Promise<SafeExternalTextHttpResult> {
+    const key = `${input.periodFrom}\u0000${input.periodTo}`;
+    const cached = this.searchByPeriod.get(key);
+    if (cached !== undefined) return cached;
+    const pending = (async (): Promise<SafeExternalTextHttpResult> => {
+      const parameters = new URLSearchParams({
+        method: "searchDisclosureByStockTypeEtfSub",
+        forward: "disclosurebystocktype_etf_sub",
+        currentPageSize: String(KIND_SEARCH_PAGE_SIZE),
+        pageIndex: "1",
+        orderMode: "1",
+        orderStat: "D",
+        etfIsuSrtCd: "",
+        etfIsuSrtNm: "",
+        reportCd: KIND_DIVIDEND_REPORT_CODE,
+        reportTmp: KIND_DIVIDEND_REPORT_NAME,
+        reportNm: KIND_DIVIDEND_REPORT_NAME,
+        fromDate: input.periodFrom,
+        toDate: input.periodTo,
+      });
+      const result = await this.execute({
+        provider: "KIND",
+        operation: "dividend-disclosure",
+        stage: "search",
+        url: KIND_SEARCH_URL,
+        method: "POST",
+        headers: {
+          "User-Agent": KIND_USER_AGENT,
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          Referer:
+            "https://kind.krx.co.kr/disclosure/disclosurebystocktype.do?method=searchDisclosureByStockTypeEtf",
+        },
+        body: parameters.toString(),
+      });
+      if (result.kind !== "success") return result;
+      const declaredCount = searchResultCount(result.body);
+      const receivedCount = searchRowCount(result.body);
+      if (declaredCount === undefined || declaredCount !== receivedCount) {
+        return {
+          kind: "contract-failure",
+          code: "RESPONSE_BODY_INVALID",
+          attempts: result.attempts,
+          stage: "search",
+        };
+      }
+      return result;
+    })();
+    this.searchByPeriod.set(key, pending);
+    return pending;
+  }
+
+  private viewer(acceptNumber: string): Promise<SafeExternalTextHttpResult> {
+    const cached = this.viewerByAcceptNumber.get(acceptNumber);
+    if (cached !== undefined) return cached;
+    const pending = this.get(
+      `${KIND_VIEWER_URL}?method=search&acptno=${encodeURIComponent(
+        acceptNumber,
+      )}&docno=&viewerhost=&viewerport=`,
+      "viewer",
+    );
+    this.viewerByAcceptNumber.set(acceptNumber, pending);
+    return pending;
+  }
+
+  private contents(documentNumberValue: string): Promise<SafeExternalTextHttpResult> {
+    const cached = this.contentsByDocumentNumber.get(documentNumberValue);
+    if (cached !== undefined) return cached;
+    const pending = this.get(
+      `${KIND_VIEWER_URL}?method=searchContents&docNo=${encodeURIComponent(
+        documentNumberValue,
+      )}`,
+      "contents",
+    );
+    this.contentsByDocumentNumber.set(documentNumberValue, pending);
+    return pending;
+  }
+
+  private detail(url: string): Promise<SafeExternalTextHttpResult> {
+    const cached = this.detailByUrl.get(url);
+    if (cached !== undefined) return cached;
+    const pending = this.get(url, "detail");
+    this.detailByUrl.set(url, pending);
+    return pending;
+  }
 
   async discover(input: {
     readonly instrumentCode: string;
@@ -197,30 +372,9 @@ export class KindEtfDividendDisclosureSource
     readonly periodFrom: string;
     readonly periodTo: string;
   }) {
-    const parameters = new URLSearchParams({
-      method: "searchDisclosureByStockTypeEtfSub",
-      forward: "disclosurebystocktype_etf_sub",
-      currentPageSize: "3000",
-      pageIndex: "1",
-      orderMode: "1",
-      orderStat: "D",
-      etfIsuSrtNm: input.instrumentName,
-      fromDate: input.periodFrom,
-      toDate: input.periodTo,
-    });
-    const search = await this.http.execute({
-      provider: "KIND",
-      operation: "dividend-disclosure",
-      stage: "search",
-      url: KIND_SEARCH_URL,
-      method: "POST",
-      headers: {
-        "User-Agent": KIND_USER_AGENT,
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        Referer:
-          "https://kind.krx.co.kr/disclosure/disclosurebystocktype.do?method=searchDisclosureByStockTypeEtf",
-      },
-      body: parameters.toString(),
+    const search = await this.search({
+      periodFrom: input.periodFrom,
+      periodTo: input.periodTo,
     });
     if (search.kind !== "success") return mapHttpFailure(search);
     const rows = parseKindEtfDisclosureRows(search.body, input.instrumentName);
@@ -234,13 +388,7 @@ export class KindEtfDividendDisclosureSource
       | ReturnType<typeof mapHttpFailure>
       | undefined;
     for (const row of rows) {
-      const viewer = await get(
-        this.http,
-        `${KIND_VIEWER_URL}?method=search&acptno=${encodeURIComponent(
-          row.sourceDisclosureId,
-        )}&docno=&viewerhost=&viewerport=`,
-        "viewer",
-      );
+      const viewer = await this.viewer(row.sourceDisclosureId);
       attempts = Math.max(attempts, viewer.attempts);
       if (viewer.kind !== "success") {
         lastFailure = mapHttpFailure(viewer);
@@ -248,11 +396,7 @@ export class KindEtfDividendDisclosureSource
       }
       const number = documentNumber(viewer.body);
       if (number === undefined) continue;
-      const contents = await get(
-        this.http,
-        `${KIND_VIEWER_URL}?method=searchContents&docNo=${encodeURIComponent(number)}`,
-        "contents",
-      );
+      const contents = await this.contents(number);
       attempts = Math.max(attempts, contents.attempts);
       if (contents.kind !== "success") {
         lastFailure = mapHttpFailure(contents);
@@ -260,7 +404,7 @@ export class KindEtfDividendDisclosureSource
       }
       const url = detailUrl(contents.body);
       if (url === undefined || !url.endsWith("/68659.htm")) continue;
-      const detailResponse = await get(this.http, url, "detail");
+      const detailResponse = await this.detail(url);
       attempts = Math.max(attempts, detailResponse.attempts);
       if (detailResponse.kind !== "success") {
         lastFailure = mapHttpFailure(detailResponse);

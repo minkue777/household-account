@@ -76,6 +76,7 @@ export function createSafeExternalTextHttpApplication(dependencies: {
           ...(request.body === undefined ? {} : { body: request.body }),
           timeoutMs: dependencies.policy.timeoutMs,
           maxResponseBytes: dependencies.policy.maxResponseBytes,
+          captureSetCookies: request.captureSetCookies === true,
         });
         if (result.kind === "timeout" || result.kind === "network-failure") {
           if (attempt < dependencies.policy.maxAttempts) break;
@@ -131,6 +132,10 @@ export function createSafeExternalTextHttpApplication(dependencies: {
             finalUrl: currentUrl,
             responseBytes: result.bodyBytes,
             attempts: attempt,
+            ...(request.captureSetCookies === true &&
+            result.setCookieHeaders !== undefined
+              ? { setCookieHeaders: result.setCookieHeaders }
+              : {}),
             ...diagnostics(request.stage),
           };
         }

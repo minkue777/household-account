@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)]
     [string]$ProjectId,
 
@@ -27,7 +27,7 @@ $metrics = @(
     },
     @{
         Name = "household_scheduled_job_monitor_heartbeat"
-        Description = "Successful five-minute scheduled job monitor heartbeats."
+        Description = "Successful hourly scheduled job monitor heartbeats."
         Filter = 'resource.type="cloud_run_revision" AND jsonPayload.eventType="SCHEDULED_JOB_MONITOR_HEARTBEAT"'
     }
 )
@@ -119,10 +119,10 @@ $policies = @(
         Name = "Household Account - 예약 감시기 중단"
         File = "scheduled-monitor-absence.json"
         Condition = @{
-            displayName = "No monitor heartbeat for ten minutes"
+            displayName = "No monitor heartbeat for two hours and ten minutes"
             conditionAbsent = @{
                 filter = 'resource.type="cloud_run_revision" AND metric.type="logging.googleapis.com/user/household_scheduled_job_monitor_heartbeat"'
-                duration = "600s"
+                duration = "7800s"
                 aggregations = @(@{
                     alignmentPeriod = "300s"
                     perSeriesAligner = "ALIGN_SUM"

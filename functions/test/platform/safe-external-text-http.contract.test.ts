@@ -149,4 +149,33 @@ describe("SafeExternalTextHttp 계약", () => {
     });
     expect(result).not.toHaveProperty("httpStatus");
   });
+
+  it("명시적으로 요청한 성공 응답에만 Set-Cookie 헤더를 전달한다", async () => {
+    const response = {
+      kind: "response" as const,
+      status: 200,
+      body: "ok",
+      bodyBytes: 2,
+      setCookieHeaders: ["JSESSIONID=session; Path=/; HttpOnly"],
+    };
+
+    await expect(
+      subject([response]).execute({
+        provider: "KIND",
+        operation: "dividend-disclosure",
+        url: "https://kind.krx.co.kr/path",
+      }),
+    ).resolves.not.toHaveProperty("setCookieHeaders");
+    await expect(
+      subject([response]).execute({
+        provider: "KIND",
+        operation: "dividend-disclosure",
+        url: "https://kind.krx.co.kr/path",
+        captureSetCookies: true,
+      }),
+    ).resolves.toMatchObject({
+      kind: "success",
+      setCookieHeaders: ["JSESSIONID=session; Path=/; HttpOnly"],
+    });
+  });
 });

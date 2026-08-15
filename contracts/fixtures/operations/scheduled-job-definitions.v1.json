@@ -65,7 +65,7 @@
     },
     {
       "jobName": "scheduled-job-monitor",
-      "cron": "*/5 * * * *",
+      "cron": "0 * * * *",
       "startGraceSeconds": 120,
       "executionDeadlineSeconds": 240,
       "heartbeatTimeoutSeconds": 120,

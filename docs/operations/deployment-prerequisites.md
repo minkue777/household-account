@@ -43,7 +43,7 @@ node scripts/set-system-admin-claim.mjs `
   -NotificationChannelResource projects/household-account-6f300/notificationChannels/CHANNEL_ID
 ```
 
-이 설정은 Provider 장애, 예약 작업 `MISSING/OVERDUE`, 5분 감시기 자체의 10분 heartbeat 부재를 감지합니다. 경보 정책은 incident 종료 알림도 켭니다.
+이 설정은 Provider 장애, 예약 작업 `MISSING/OVERDUE`, 매시간 실행되는 감시기 자체의 2시간 10분 heartbeat 부재를 감지합니다. 경보 정책은 incident 종료 알림도 켭니다.
 
 ## Shortcut
 

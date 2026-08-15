@@ -72,7 +72,7 @@ const expectedJobs = {
     targetKeyTemplate: "billing-cost:current",
   },
   "scheduled-job-monitor": {
-    cron: "*/5 * * * *",
+    cron: "0 * * * *",
     publicInputPort: "DetectMissingOrOverdueRuns",
     capability: "operations.job.monitor",
     executionKeyTemplate: "scheduled-job-monitor:{scheduledMinute}",

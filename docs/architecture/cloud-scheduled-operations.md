@@ -21,9 +21,9 @@
 | 매일 09:00~20:00 매시 정각 | `dividend-hourly` | Portfolio / Dividends | `RefreshDividendEvents` | KRX ETF 공시 discovery와 기존 Event lifecycle sweep |
 | 매일 23:55 | `asset-valuation-daily` | Portfolio / Holdings·Market Data | `RunDailyAssetValuation` | 전체 시세 갱신·평가 후 당일 자산 Snapshot 요청 |
 | 6시간마다 | `billing-cost-refresh` | Supporting Platform / External Operations | `RefreshBillingCostSummary` | Standard Billing Export의 이번 달 누적·월말 추정·서비스별 비용 최신 Snapshot |
-| 기본 5분 간격 | `scheduled-job-monitor` | Supporting Platform / External Operations | `DetectMissingOrOverdueRuns` | 미시작 `Missing`, 정체 `Overdue`, 복구 감지와 경보 |
+| 매시간 정각 | `scheduled-job-monitor` | Supporting Platform / External Operations | `DetectMissingOrOverdueRuns` | 미시작 `Missing`, 정체 `Overdue`, 복구 감지와 경보 |
 
-`scheduled-job-monitor`의 5분 간격은 제품 정책이 아니라 최초 운영 기본값입니다. 기능 job의 cron은 요구사항으로 고정하지만, monitor 간격과 job별 grace·deadline·heartbeat timeout은 유한한 versioned 배포 설정으로 관리하고 실제 실행시간을 바탕으로 조정합니다.
+`scheduled-job-monitor`는 현재 소규모 운영 규모와 비용을 고려해 매시간 정각 실행합니다. 기능 job의 cron과 monitor 간격, job별 grace·deadline·heartbeat timeout은 유한한 versioned 배포 설정으로 관리하고 실제 실행시간을 바탕으로 조정합니다.
 
 같은 00:00에 시작하는 정기지출과 자산 자동화는 하나의 함수로 합치지 않습니다. 서로 다른 기능의 공개 Port를 호출하는 독립 job이며, 어느 한쪽의 실패·재시도·배포가 다른 쪽의 실행 상태를 바꾸지 않아야 합니다.
 
@@ -37,7 +37,7 @@
 23:55  asset-valuation-daily ── 모든 page terminal ── AssetSnapshot 요청
 00/06/12/18 billing-cost-refresh ── Billing Export 집계·최신 성공 Snapshot 교체
 
-매 5분 scheduled-job-monitor ── 위 occurrence의 미시작·heartbeat 정체·복구 감시
+매시간 정각 scheduled-job-monitor ── 위 occurrence의 미시작·heartbeat 정체·복구 감시
 ```
 
 모든 업무 날짜는 함수가 실제로 끝난 시각이 아니라 Scheduler occurrence의 `scheduledFor`를 `Asia/Seoul` LocalDate로 변환해 얻습니다. 예를 들어 23:55 평가가 자정을 넘어 끝나도 Snapshot의 `asOfDate`는 시작 occurrence의 날짜입니다.
@@ -161,7 +161,7 @@ cron은 `0 9-20 * * *`이며 하루 12회 실행합니다. 각 시간 occurrence
 
 1. Holdings 공개 Query가 `market=KRX && instrumentType=ETF`로 명시한 active instrument만 결정적 page로 읽습니다.
 2. 코드 모양, 종목명 또는 `holdingType=stock`으로 ETF를 추정하지 않습니다.
-3. KIND Adapter가 최근 1년 공시를 최대 2개씩 병렬 조회하고 성공·NoData·retryable·contract failure를 구분합니다. 실패 결과에는 실제 HTTP status와 `search|viewer|contents|detail` 단계만 남기고 URL·header·원문은 기록하지 않습니다.
+3. KIND Adapter가 배당 보고서로 제한한 최근 1년 검색을 occurrence당 한 번 공유하고, 접수번호·문서번호·상세 URL별 응답을 그 실행 안에서만 재사용합니다. 외부 HTTP는 단일 큐로 순차 실행하고 검색 세션 쿠키는 메모리에서만 후속 요청에 전달합니다. 검색이 선언한 전체 건수와 실제 수신 행 수가 다르면 contract failure로 처리하며, 성공·NoData·retryable·contract failure를 구분합니다. 실패 결과에는 실제 HTTP status와 `search|viewer|contents|detail` 단계만 남기고 URL·header·원문·쿠키는 기록하지 않습니다.
 4. 검색 접수번호가 달라도 KIND viewer의 document number가 같으면 동일 공시로 정규화하고, `source + sourceDisclosureId(document number)` 기반 canonical `eventId`로 upsert합니다. 정정 가능한 기준일·지급일·금액을 ID에 넣지 않습니다.
 5. 같은 미지급 공시의 정정은 동일 Event의 현재 값만 교체하며 이전 값을 별도 보관하지 않습니다.
 
@@ -213,7 +213,7 @@ Provider retry를 모두 소진한 target은 마지막 성공값 유지로 termi
 5. 성공 시 `operations/runtime/billingCostSnapshots/current` 한 문서를 교체합니다. Admin은 BigQuery를 직접 호출하지 않고 이 최신 성공 Snapshot만 읽습니다.
 6. 조회·계산·저장이 실패하면 JobRun을 실패로 남기고 기존 성공 Snapshot을 유지합니다. Snapshot에는 Export 갱신 시각과 계산 시각을 함께 보존하고 Admin에는 마지막 계산 시각을 표시합니다.
 
-### 4.6 `scheduled-job-monitor` — 기본 5분 간격
+### 4.6 `scheduled-job-monitor` — 매시간 정각
 
 근거: [외부 운영 요구사항 JOB-ERR-002](../requirements/supporting-platform/modules/external-operations/requirements.md), [예약 누락·정체 상세 설계](../requirements/supporting-platform/modules/external-operations/design.md#55-예약-누락정체-감지)
 
@@ -222,7 +222,7 @@ Provider retry를 모두 소진한 target은 마지막 성공값 유지로 termi
 3. 실행 중 heartbeat timeout 또는 deadline을 넘으면 `OVERDUE`를 기록합니다.
 4. 만료 lease의 run은 재개 후보로 표시하지만 monitor가 업무 handler나 업무 Repository를 직접 호출하지 않습니다.
 5. 이후 정상 완료되면 같은 alert identity에 `recoveredAt`을 기록하고 복구 알림을 보냅니다.
-6. monitor 자체가 실행되지 않는 장애는 Cloud Monitoring의 별도 absence metric/alarm으로 감지합니다.
+6. monitor 자체가 2회 연속 실행되지 않아 2시간 10분 동안 heartbeat가 없으면 Cloud Monitoring의 별도 absence metric/alarm으로 감지합니다. 정각 실행과 경보 평가가 겹치는 오탐을 피하기 위해 10분 여유를 둡니다.
 
 ## 5. 외부 Provider와 장애 경보
 

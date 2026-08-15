@@ -154,7 +154,7 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
     amount: data.amount,
     transactionType: (data.transactionType || DEFAULT_TRANSACTION_TYPE) as TransactionType,
     // Android는 대문자로 저장하므로 소문자로 변환
-    category: (data.category || 'etc').toLowerCase(),
+    category: (data.categoryId || data.category || 'etc').toLowerCase(),
     cardType: data.cardType?.toLowerCase() || (data.source === 'manual' ? 'manual' : 'main'),
     cardLastFour: cardDisplay,
     memo: data.memo,
@@ -829,6 +829,7 @@ export async function searchExpenses(
 
   const snapshot = await getDocs(q);
   const results = snapshot.docs
+    .filter((document) => isVisibleLedgerReadDocument(document.data()))
     .map(mapDocToExpense)
     .filter((expense) => matchesTransactionType(expense, options.transactionType))
     .filter((expense) => expenseMatchesSearch(expense, keyword))

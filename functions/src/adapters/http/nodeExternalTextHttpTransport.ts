@@ -19,7 +19,17 @@ function decoderFor(contentType: string | null): TextDecoder {
 async function readBoundedBody(
   response: Response,
   maxResponseBytes: number,
+  captureSetCookies: boolean,
 ): Promise<ExternalTextHttpTransportResult> {
+  const setCookieHeaders = captureSetCookies
+    ? response.headers.getSetCookie()
+    : [];
+  const responseMetadata = {
+    ...(response.headers.get("location") === null
+      ? {}
+      : { location: response.headers.get("location")! }),
+    ...(setCookieHeaders.length === 0 ? {} : { setCookieHeaders }),
+  };
   const declared = Number(response.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > maxResponseBytes) {
     return { kind: "response-too-large", bodyBytes: declared };
@@ -30,9 +40,7 @@ async function readBoundedBody(
       status: response.status,
       body: "",
       bodyBytes: 0,
-      ...(response.headers.get("location") === null
-        ? {}
-        : { location: response.headers.get("location")! }),
+      ...responseMetadata,
     };
   }
 
@@ -60,9 +68,7 @@ async function readBoundedBody(
     status: response.status,
     body: decoderFor(response.headers.get("content-type")).decode(combined),
     bodyBytes: bytes,
-    ...(response.headers.get("location") === null
-      ? {}
-      : { location: response.headers.get("location")! }),
+    ...responseMetadata,
   };
 }
 
@@ -82,7 +88,11 @@ export class NodeExternalTextHttpTransport
         redirect: "manual",
         signal: abort.signal,
       });
-      return await readBoundedBody(response, request.maxResponseBytes);
+      return await readBoundedBody(
+        response,
+        request.maxResponseBytes,
+        request.captureSetCookies === true,
+      );
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {
         return { kind: "timeout" };

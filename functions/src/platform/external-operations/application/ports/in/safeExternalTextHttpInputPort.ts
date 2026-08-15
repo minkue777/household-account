@@ -7,6 +7,11 @@ export interface SafeExternalTextHttpRequest {
   readonly method?: "GET" | "POST";
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: string;
+  /**
+   * Opts in to receiving raw Set-Cookie response headers. The caller must keep
+   * them in process memory only and must never persist or log them.
+   */
+  readonly captureSetCookies?: boolean;
 }
 
 export type SafeExternalTextHttpResult =
@@ -17,6 +22,7 @@ export type SafeExternalTextHttpResult =
       readonly responseBytes: number;
       readonly attempts: number;
       readonly stage?: string;
+      readonly setCookieHeaders?: readonly string[];
     }
   | {
       readonly kind: "retryable-failure";

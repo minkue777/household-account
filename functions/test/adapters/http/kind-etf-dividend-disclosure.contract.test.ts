@@ -93,7 +93,7 @@ describe("KIND ETF 배당 공시 adapter 계약", () => {
     const http: SafeExternalTextHttpInputPort = {
       async execute(request) {
         const body = request.url.includes("disclosurebystocktype.do")
-          ? `<table>${row("20260428000772")}${row("20260428001484")}</table>`
+          ? `<em>2</em><table>${row("20260428000772")}${row("20260428001484")}</table>`
           : request.url.includes("method=search&")
             ? "<select><option value='20260428003174|Y'>문서</option></select>"
             : request.url.includes("method=searchContents")
@@ -124,6 +124,130 @@ describe("KIND ETF 배당 공시 adapter 계약", () => {
           perShareAmount: 450,
         },
       ],
+    });
+  });
+
+  it("한 실행의 배당 검색과 동일 문서 조회를 공유하고 검색 세션 쿠키를 순차 요청에 전달한다", async () => {
+    const calls: Array<{
+      stage?: string;
+      headers?: Readonly<Record<string, string>>;
+      body?: string;
+    }> = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const row = (name: string, acceptNumber: string) => `
+      <tr><td class="txc">2026-08-01</td>
+      <td><a onclick="etfisusummary_open('A'); return false;" title="${name}">${name}</a></td>
+      <td><a onclick="openDisclsViewer('${acceptNumber}','');" title="ETF이익금분배신고(분배금안내)(일괄공시)">공시</a></td></tr>`;
+    const detail = `
+      <table>
+        <tr><td><span>102110</span></td><td><span>TIGER 200</span></td><td><span>2026-08-01</span></td><td><span>2026-08-08</span></td><td><span>120원</span></td></tr>
+        <tr><td><span>069500</span></td><td><span>KODEX 200</span></td><td><span>2026-08-01</span></td><td><span>2026-08-08</span></td><td><span>130원</span></td></tr>
+      </table>`;
+    const http: SafeExternalTextHttpInputPort = {
+      async execute(request) {
+        calls.push({
+          stage: request.stage,
+          headers: request.headers,
+          body: request.body,
+        });
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await Promise.resolve();
+        inFlight -= 1;
+        const body =
+          request.stage === "search"
+            ? `<em>2</em><table>${row("TIGER 200", "20260801000001")}${row("KODEX 200", "20260801000001")}</table>`
+            : request.stage === "viewer"
+              ? "<select><option value='DOC1|Y'>문서</option></select>"
+              : request.stage === "contents"
+                ? "setPath('','https://kind.krx.co.kr/external/68659.htm')"
+                : detail;
+        return {
+          kind: "success",
+          body,
+          finalUrl: request.url,
+          responseBytes: Buffer.byteLength(body),
+          attempts: 1,
+          ...(request.stage === "search"
+            ? {
+                setCookieHeaders: [
+                  "__smVisitorID=old; Path=/",
+                  "__smVisitorID=new; Path=/",
+                  "JSESSIONID=value=with=equals; Path=/; HttpOnly",
+                ],
+              }
+            : {}),
+        };
+      },
+    };
+    const source = new KindEtfDividendDisclosureSource(http);
+
+    const [tiger, kodex] = await Promise.all([
+      source.discover({
+        instrumentCode: "102110",
+        instrumentName: "TIGER 200",
+        periodFrom: "2025-08-01",
+        periodTo: "2026-08-01",
+      }),
+      source.discover({
+        instrumentCode: "069500",
+        instrumentName: "KODEX 200",
+        periodFrom: "2025-08-01",
+        periodTo: "2026-08-01",
+      }),
+    ]);
+
+    expect(tiger).toMatchObject({
+      kind: "success",
+      disclosures: [{ instrumentCode: "102110", perShareAmount: 120 }],
+    });
+    expect(kodex).toMatchObject({
+      kind: "success",
+      disclosures: [{ instrumentCode: "069500", perShareAmount: 130 }],
+    });
+    expect(calls.filter(({ stage }) => stage === "search")).toHaveLength(1);
+    expect(calls.filter(({ stage }) => stage === "viewer")).toHaveLength(1);
+    expect(calls.filter(({ stage }) => stage === "contents")).toHaveLength(1);
+    expect(calls.filter(({ stage }) => stage === "detail")).toHaveLength(1);
+    expect(calls.find(({ stage }) => stage === "search")?.body).toContain(
+      "reportCd=68659",
+    );
+    expect(calls.find(({ stage }) => stage === "viewer")?.headers?.Cookie).toBe(
+      "__smVisitorID=new; JSESSIONID=value=with=equals",
+    );
+    expect(maxInFlight).toBe(1);
+  });
+
+  it("KIND가 선언한 전체 건수보다 검색 행이 적으면 조용히 누락하지 않는다", async () => {
+    const http: SafeExternalTextHttpInputPort = {
+      async execute(request) {
+        const body = `<em>2</em><table>
+          <tr><td class="txc">2026-08-01</td><td><a onclick="etfisusummary_open('A')" title="TIGER 200">TIGER 200</a></td>
+          <td><a onclick="openDisclsViewer('20260801000001','')" title="ETF이익금분배신고">공시</a></td></tr>
+        </table>`;
+        return {
+          kind: "success",
+          body,
+          finalUrl: request.url,
+          responseBytes: Buffer.byteLength(body),
+          attempts: 1,
+        };
+      },
+    };
+
+    await expect(
+      new KindEtfDividendDisclosureSource(http).discover({
+        instrumentCode: "102110",
+        instrumentName: "TIGER 200",
+        periodFrom: "2025-08-01",
+        periodTo: "2026-08-01",
+      }),
+    ).resolves.toEqual({
+      kind: "contract-failure",
+      code: "RESPONSE_BODY_INVALID",
+      attempts: 1,
+      stage: "search",
     });
   });
 });

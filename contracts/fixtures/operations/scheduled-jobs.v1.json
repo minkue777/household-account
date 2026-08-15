@@ -70,7 +70,7 @@
     },
     {
       "jobName": "scheduled-job-monitor",
-      "cron": "*/5 * * * *",
+      "cron": "0 * * * *",
       "publicInputPort": "DetectMissingOrOverdueRuns",
       "capability": "operations.job.monitor",
       "idempotency": {

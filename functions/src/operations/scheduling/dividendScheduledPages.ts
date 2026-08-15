@@ -134,7 +134,7 @@ export function createDividendScheduledPages(input: {
           ],
           timeoutMs: 10_000,
           maxAttempts: 3,
-          maxResponseBytes: 2 * 1024 * 1024,
+          maxResponseBytes: 8 * 1024 * 1024,
         },
         transport: new NodeExternalTextHttpTransport(),
       }),

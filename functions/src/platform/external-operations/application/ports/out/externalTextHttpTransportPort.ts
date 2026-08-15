@@ -5,6 +5,7 @@ export interface ExternalTextHttpTransportRequest {
   readonly body?: string;
   readonly timeoutMs: number;
   readonly maxResponseBytes: number;
+  readonly captureSetCookies?: boolean;
 }
 
 export type ExternalTextHttpTransportResult =
@@ -14,6 +15,7 @@ export type ExternalTextHttpTransportResult =
       readonly body: string;
       readonly bodyBytes: number;
       readonly location?: string;
+      readonly setCookieHeaders?: readonly string[];
     }
   | { readonly kind: "timeout" }
   | { readonly kind: "network-failure"; readonly code: string }
