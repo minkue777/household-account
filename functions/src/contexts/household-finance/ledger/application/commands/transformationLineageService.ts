@@ -150,7 +150,6 @@ export function createLedgerTransformationCommands(input: {
     state: LedgerTransformationState,
     transactionIds: readonly string[],
     transactions?: readonly LedgerTransformationTransaction[],
-    requireCompleteMergeLineage = false,
   ): Promise<LedgerTransformationResult> {
     const result = {
       kind: "success" as const,
@@ -166,9 +165,6 @@ export function createLedgerTransformationCommands(input: {
       baseline,
       state,
       result,
-      ...(requireCompleteMergeLineage
-        ? { requireCompleteMergeLineage: true }
-        : {}),
     });
     return committed.kind === "success" ? result : committed;
   }
@@ -490,12 +486,6 @@ export function createLedgerTransformationCommands(input: {
     cancelCapturedLineage: async (command) => {
       const replay = await input.store.findReceipt(command.cancellationKey);
       if (replay !== undefined) return replay;
-      if (await input.store.hasIncompleteLegacyMergeSnapshot()) {
-        return {
-          kind: "contract-failure",
-          code: "RESTORATION_SNAPSHOT_INCOMPLETE",
-        };
-      }
       const lineageSelection = {
         captureLineageIds: [command.captureLineageId],
       };
@@ -541,6 +531,8 @@ export function createLedgerTransformationCommands(input: {
               transaction.splitOriginalId,
             ].filter((value): value is string => value !== undefined),
             mergeLeafIds: transaction.mergeLeafIds ?? [],
+            legacyMergeSnapshotPresent:
+              transaction.legacyMergeSnapshotPresent,
           })),
         });
       let plan = cancellationPlan();
@@ -615,8 +607,6 @@ export function createLedgerTransformationCommands(input: {
         nextTransactions
           .filter((transaction) => restorableLeafIds.has(transaction.transactionId))
           .map((transaction) => transaction.transactionId),
-        undefined,
-        true,
       );
     },
   };

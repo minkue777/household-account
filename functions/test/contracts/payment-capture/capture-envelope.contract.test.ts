@@ -126,6 +126,7 @@ describe("CaptureEnvelope.v1 producer·consumer 공유 계약", () => {
       "android-cancellation-only",
       "android-payment-and-balance",
       "ios-shortcut-approval-only",
+      "ios-shortcut-cancellation-only",
     ];
     const caseIds = fixture.cases.map(({ caseId }) => caseId);
 
@@ -207,10 +208,13 @@ describe("CaptureEnvelope.v1 producer·consumer 공유 계약", () => {
     });
   });
 
-  it("[T-ING-BAL-001][IOS-001] branch가 하나도 없는 입력과 Shortcut의 balance·cancellation 입력을 거부한다", () => {
+  it("[T-ING-BAL-001][T-CAN-003][IOS-001] branch가 없거나 Shortcut에 balance가 섞인 입력은 거부하고 Shortcut cancellation은 허용한다", () => {
     const validate = compileSchema();
     const android = caseById("android-approval-only").envelope;
     const shortcut = caseById("ios-shortcut-approval-only").envelope;
+    const shortcutCancellation = caseById(
+      "ios-shortcut-cancellation-only",
+    ).envelope;
     const {
       paymentObservation: _paymentObservation,
       balanceObservation: _balanceObservation,
@@ -223,13 +227,7 @@ describe("CaptureEnvelope.v1 producer·consumer 공유 계약", () => {
       balanceObservation: caseById("android-balance-only").envelope
         .balanceObservation,
     });
-    expectInvalid(validate, {
-      ...shortcut,
-      paymentObservation: {
-        ...shortcut.paymentObservation,
-        observationType: "cancellation",
-      },
-    });
+    expectValid(validate, shortcutCancellation);
   });
 
   it("[T-CAN-003] Android 취소는 발생 날짜·시각을 함께 생략해 관찰 시각 fallback을 요청할 수 있다", () => {

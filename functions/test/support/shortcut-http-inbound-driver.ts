@@ -60,7 +60,13 @@ export interface ShortcutHttpInboundDriverFixture {
     | "ip-rate-limited"
     | "credential-rate-limited"
     | "quota-exceeded";
-  readonly intakeOutcome?: "success" | "duplicate" | "retryable-failure";
+  readonly intakeOutcome?:
+    | "success"
+    | "duplicate"
+    | "cancelled"
+    | "cancellation-not-found"
+    | "needs-confirmation"
+    | "retryable-failure";
 }
 
 export interface ShortcutHttpInboundDriverSnapshot {
@@ -91,6 +97,7 @@ export interface ShortcutHttpInboundDriver {
     requests: readonly ShortcutHttpInboundRequest[],
   ): Promise<readonly ShortcutHttpInboundResponse[]>;
   snapshot(): ShortcutHttpInboundDriverSnapshot;
+  intakeSubmissionCount(): number;
 }
 
 class FixtureShortcutHttpCredentialAuthorizationPort
@@ -288,8 +295,31 @@ export function createShortcutHttpInboundDriver(
   const recording = createShortcutPaymentRecordingDriver({
     commitAvailable: fixture.intakeOutcome !== "retryable-failure",
   });
+  let intakeSubmissionCount = 0;
   const intake: ShortcutHttpPaymentIntakePort = {
     async submit(input) {
+      intakeSubmissionCount += 1;
+      if (input.parsed.observationType === "cancellation") {
+        if (fixture.intakeOutcome === "retryable-failure") {
+          return { kind: "retryable-failure" };
+        }
+        if (fixture.intakeOutcome === "cancellation-not-found") {
+          return { kind: "cancellation-not-found" };
+        }
+        if (fixture.intakeOutcome === "needs-confirmation") {
+          return {
+            kind: "needs-confirmation",
+            captureLineageIds: [
+              "capture-lineage-candidate-a",
+              "capture-lineage-candidate-b",
+            ],
+          };
+        }
+        return {
+          kind: "cancelled",
+          transactionIds: ["transaction-cancelled-original"],
+        };
+      }
       if (fixture.intakeOutcome === "duplicate") {
         duplicateEvents.push({
           eventName: "CaptureDuplicateObserved.v1",
@@ -362,6 +392,7 @@ export function createShortcutHttpInboundDriver(
     handle: (request) => handler.handle(request),
     handleConcurrently: (requests) =>
       Promise.all(requests.map((request) => handler.handle(request))),
+    intakeSubmissionCount: () => intakeSubmissionCount,
     snapshot() {
       const state = recording.state();
       const transactions = state.transactions.map((transaction) => ({

@@ -6,6 +6,7 @@ import { createShortcutCardMessageParserDriver } from "../../../support/shortcut
 type ShortcutParseResult =
   | {
       kind: "Parsed";
+      observationType: "approval" | "cancellation";
       amountInWon: number;
       occurredLocalDate: string;
       occurredLocalTime: string;

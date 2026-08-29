@@ -45,7 +45,13 @@ export interface ShortcutHttpInboundFixture {
     | "ip-rate-limited"
     | "credential-rate-limited"
     | "quota-exceeded";
-  intakeOutcome?: "success" | "duplicate" | "retryable-failure";
+  intakeOutcome?:
+    | "success"
+    | "duplicate"
+    | "cancelled"
+    | "cancellation-not-found"
+    | "needs-confirmation"
+    | "retryable-failure";
 }
 
 export interface ShortcutHttpRequest {
@@ -68,8 +74,15 @@ export interface ShortcutPaymentResponseV1 {
   transaction:
     | { kind: "created"; transactionId: string }
     | { kind: "duplicate"; existingTransactionId: string }
+    | { kind: "cancelled"; transactionIds: readonly string[] }
     | { kind: "rejected"; code: string }
-    | { kind: "needsConfirmation"; candidateIds: readonly string[] };
+    | {
+        kind: "needsConfirmation";
+        candidates: readonly {
+          kind: "captureLineage";
+          captureLineageId: string;
+        }[];
+      };
   notification: {
     state:
       | "queued"
@@ -147,6 +160,7 @@ export interface ShortcutHttpInboundContractSubject {
   ): Promise<readonly ShortcutHttpResponse[]>;
 
   snapshot(): ShortcutInboundPublicSnapshot;
+  intakeSubmissionCount(): number;
 }
 
 export function createSubject(
@@ -185,6 +199,8 @@ const memberACard: ShortcutOwnedCardFixture = {
 const validMessage = "국민1234승인\n10,000원\n07/19 08:50 스타벅스";
 const nhCardMaskedMultilineMessage =
   "[Web발신]\nNH카드4*3*승인\n김*휘\n5,760원 일시불\n07/30 19:09\n진로마트 행신점\n총누적1,431,944원";
+const nhCardMaskedCancellationMessage =
+  "[Web발신]\nNH카드4*3*승인취소\n김*휘\n140,000원\n08/12 17:53\n덕양주유소\n총누적1,043,227원";
 
 function fixture(
   overrides: Partial<ShortcutHttpInboundFixture> = {},
@@ -276,6 +292,75 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
       }),
     ]);
   });
+
+  it.each([
+    {
+      name: "유일 원거래 취소",
+      intakeOutcome: "cancelled" as const,
+      transaction: {
+        kind: "cancelled" as const,
+        transactionIds: ["transaction-cancelled-original"],
+      },
+    },
+    {
+      name: "원거래 없음",
+      intakeOutcome: "cancellation-not-found" as const,
+      transaction: {
+        kind: "rejected" as const,
+        code: "CANCELLATION_TARGET_NOT_FOUND",
+      },
+    },
+    {
+      name: "완전 일치 lineage 복수",
+      intakeOutcome: "needs-confirmation" as const,
+      transaction: {
+        kind: "needsConfirmation" as const,
+        candidates: [
+          {
+            kind: "captureLineage" as const,
+            captureLineageId: "capture-lineage-candidate-a",
+          },
+          {
+            kind: "captureLineage" as const,
+            captureLineageId: "capture-lineage-candidate-b",
+          },
+        ],
+      },
+    },
+  ])(
+    "[T-IOS-CANCEL-001][IOS-015] $name 결과는 편집 알림 없이 typed 응답과 receipt로 재생된다",
+    async ({ intakeOutcome, transaction }) => {
+      const subject = createSubject(fixture({ intakeOutcome }));
+      const request = validRequest({
+        headers: {
+          ...validRequest().headers,
+          idempotencyKey: `shortcut-cancellation-${intakeOutcome}`,
+        },
+        rawBodyBytes: 220,
+        body: {
+          contractVersion: "shortcut-payment.v1",
+          message: nhCardMaskedCancellationMessage,
+        },
+        receivedAt: "2026-08-12T17:53:09+09:00",
+      });
+
+      const first = await subject.handle(request);
+      const replay = await subject.handle(request);
+
+      expect(first).toEqual({
+        status: 200,
+        body: {
+          contractVersion: "shortcut-payment-response.v1",
+          commandId: expect.stringMatching(/^shortcut-command-/u),
+          transaction,
+          notification: { state: "not-requested" },
+        },
+      });
+      expect(replay).toEqual(first);
+      expect(subject.intakeSubmissionCount()).toBe(1);
+      expectNoCanonicalChange(subject);
+    },
+  );
 
   it("[T-IOS-SEC-002] body의 householdId·createdBy·owner는 Actor와 저장 가구를 바꾸지 않는다", async () => {
     const subject = createSubject(fixture());

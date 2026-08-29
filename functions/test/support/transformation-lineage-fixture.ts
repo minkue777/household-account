@@ -94,14 +94,6 @@ export function createTransformationLineageFixtureSubject(fixture: {
 
   const store: TransformationLineageStore = {
     findReceipt: async (operationKey) => receipts.get(operationKey),
-    hasIncompleteLegacyMergeSnapshot: async () =>
-      state.transactions.some(
-        (transaction) =>
-          transaction.lifecycleState !== "deleted" &&
-          transaction.legacyMergeSnapshotPresent === true &&
-          (transaction.mergeLeafIds === undefined ||
-            transaction.mergeLeafIds.length === 0),
-      ),
     load: async (selection) => {
       selections.push({
         ...(selection.transactionIds === undefined
@@ -123,7 +115,6 @@ export function createTransformationLineageFixtureSubject(fixture: {
       baseline,
       state: next,
       result,
-      requireCompleteMergeLineage,
     }) => {
       let outcome:
         | { kind: "success" }
@@ -141,22 +132,6 @@ export function createTransformationLineageFixtureSubject(fixture: {
           outcome = {
             kind: "retryable-failure",
             code: "LEDGER_UOW_COMMIT_FAILED",
-          };
-          return;
-        }
-        if (
-          requireCompleteMergeLineage === true &&
-          state.transactions.some(
-            (transaction) =>
-              transaction.lifecycleState !== "deleted" &&
-              transaction.legacyMergeSnapshotPresent === true &&
-              (transaction.mergeLeafIds === undefined ||
-                transaction.mergeLeafIds.length === 0),
-          )
-        ) {
-          outcome = {
-            kind: "contract-failure",
-            code: "RESTORATION_SNAPSHOT_INCOMPLETE",
           };
           return;
         }

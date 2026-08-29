@@ -39,11 +39,28 @@ export type ShortcutHttpRequestProcessingResult =
         | {
             readonly kind: "duplicate";
             readonly existingTransactionId: string;
+          }
+        | {
+            readonly kind: "cancelled";
+            readonly transactionIds: readonly string[];
+          }
+        | {
+            readonly kind: "needsConfirmation";
+            readonly candidates: readonly {
+              readonly kind: "captureLineage";
+              readonly captureLineageId: string;
+            }[];
+          }
+        | {
+            readonly kind: "rejected";
+            readonly code: "CANCELLATION_TARGET_NOT_FOUND";
           };
-      readonly notification: {
-        readonly state: "queued";
-        readonly targetMemberId: string;
-      };
+      readonly notification:
+        | {
+            readonly state: "queued";
+            readonly targetMemberId: string;
+          }
+        | { readonly state: "not-requested" };
     }
   | {
       readonly kind: "error";
@@ -54,5 +71,11 @@ export type ShortcutHttpRequestProcessingResult =
 export type ShortcutHttpPaymentIntakeResult =
   | { readonly kind: "created"; readonly transactionId: string }
   | { readonly kind: "duplicate"; readonly existingTransactionId: string }
+  | { readonly kind: "cancelled"; readonly transactionIds: readonly string[] }
+  | {
+      readonly kind: "needs-confirmation";
+      readonly captureLineageIds: readonly string[];
+    }
+  | { readonly kind: "cancellation-not-found" }
   | { readonly kind: "rejected"; readonly code: "CARD_NOT_REGISTERED_FOR_ACTOR" }
   | { readonly kind: "retryable-failure" };

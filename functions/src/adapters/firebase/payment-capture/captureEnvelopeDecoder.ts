@@ -382,7 +382,7 @@ export function decodeCaptureEnvelope(value: unknown): CaptureEnvelopeInput {
   }
   if (
     originChannel === "ios-shortcut" &&
-    (paymentObservation?.observationType !== "approval" ||
+    (paymentObservation === undefined ||
       paymentObservation.cardEvidence === undefined ||
       balanceObservation !== undefined)
   ) {

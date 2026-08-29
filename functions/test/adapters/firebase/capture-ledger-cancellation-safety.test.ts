@@ -158,7 +158,42 @@ describe("Firebase capture cancellation safety", () => {
     });
   });
 
-  it("authoritative 활성 병합의 복원 ID가 없으면 취소 전체를 막는다", async () => {
+  it("[T-CAN-003][CAN-004] 무관한 active legacy merge는 승인 취소를 막지 않고 그대로 보존한다", async () => {
+    const memory = new InMemoryFirestore();
+    const persistence = subject(memory);
+    const command = approval();
+    const created = await persistence.recordApproval(command);
+    if (created.kind !== "recorded") throw new Error("APPROVAL_REQUIRED");
+    const unrelatedId = "unrelated-incomplete-legacy-merge";
+    const unrelatedMerge = {
+      householdId: "house-1",
+      lifecycleState: "active",
+      aggregateVersion: 1,
+      mergedFrom: [{ merchant: "legacy leaf", amount: 1_000 }],
+    };
+    memory.seed(
+      `households/house-1/ledgerTransactions/${unrelatedId}`,
+      unrelatedMerge,
+    );
+    memory.seed(`expenses/${unrelatedId}`, unrelatedMerge);
+
+    const result = await persistence.cancel(
+      cancellationFor(command, "unrelated-incomplete-legacy-merge"),
+    );
+
+    expect(result).toEqual({
+      kind: "cancelled",
+      transactionIds: [created.transactionId],
+    });
+    expect(
+      memory.document(
+        `households/house-1/ledgerTransactions/${unrelatedId}`,
+      ),
+    ).toEqual(unrelatedMerge);
+    expect(memory.document(`expenses/${unrelatedId}`)).toEqual(unrelatedMerge);
+  });
+
+  it("대상 lineage에 연결된 active 병합의 복원 ID가 없으면 취소 전체를 막는다", async () => {
     const memory = new InMemoryFirestore();
     const persistence = subject(memory);
     const command = approval();
@@ -167,6 +202,7 @@ describe("Firebase capture cancellation safety", () => {
     memory.seed("households/house-1/ledgerTransactions/incomplete-merge", {
       householdId: "house-1",
       lifecycleState: "active",
+      captureLineageId: created.captureLineageId,
       mergedFrom: [{ merchant: "legacy leaf", amount: 1_000 }],
       mergeLeafIds: [],
     });

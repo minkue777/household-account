@@ -4,6 +4,7 @@ export interface CaptureLineageCancellationNode {
   readonly captureLineageIds: readonly string[];
   readonly parentTransactionIds: readonly string[];
   readonly mergeLeafIds: readonly string[];
+  readonly legacyMergeSnapshotPresent?: boolean;
 }
 
 export interface CaptureLineageCancellationPlan {
@@ -57,6 +58,8 @@ export function planCaptureLineageCancellation(input: {
       continue;
     }
     if (
+      (transaction.legacyMergeSnapshotPresent === true &&
+        transaction.mergeLeafIds.length === 0) ||
       new Set(transaction.mergeLeafIds).size !==
         transaction.mergeLeafIds.length ||
       transaction.mergeLeafIds.includes(transaction.transactionId)

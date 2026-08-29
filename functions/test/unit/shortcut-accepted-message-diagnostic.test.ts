@@ -36,6 +36,7 @@ describe("Shortcut parser 성공 원문 진단", () => {
         parse() {
           return {
             kind: "Parsed",
+            observationType: "approval",
             amountInWon: 6_480,
             occurredLocalDate: "2026-08-03",
             occurredLocalTime: "12:02",
@@ -128,6 +129,7 @@ describe("Shortcut parser 성공 원문 진단", () => {
         parse() {
           return {
             kind: "Parsed",
+            observationType: "approval",
             amountInWon: 500,
             occurredLocalDate: "2026-08-03",
             occurredLocalTime: "10:00",

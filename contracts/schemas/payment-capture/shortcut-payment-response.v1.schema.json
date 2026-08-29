@@ -54,6 +54,20 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["kind", "transactionIds"],
+          "properties": {
+            "kind": { "const": "cancelled" },
+            "transactionIds": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/nonEmptyString" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["kind", "code"],
           "properties": {
             "kind": { "const": "rejected" },
@@ -67,7 +81,18 @@
           "properties": {
             "kind": { "const": "needsConfirmation" },
             "candidates": {
-              "type": "array"
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "captureLineageId"],
+                "properties": {
+                  "kind": { "const": "captureLineage" },
+                  "captureLineageId": { "$ref": "#/$defs/nonEmptyString" }
+                }
+              }
             }
           }
         }

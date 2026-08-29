@@ -1,6 +1,7 @@
 export type ShortcutCardMessageParseResult =
   | {
       readonly kind: "Parsed";
+      readonly observationType: "approval" | "cancellation";
       readonly amountInWon: number;
       readonly occurredLocalDate: string;
       readonly occurredLocalTime: string;

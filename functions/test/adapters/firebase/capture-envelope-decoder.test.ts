@@ -31,6 +31,37 @@ function validEnvelope(): Record<string, unknown> {
   };
 }
 
+function validShortcutCancellationEnvelope(): Record<string, unknown> {
+  return {
+    contractVersion: "capture-envelope.v1",
+    observationId: "observation-ios-cancellation-1",
+    originChannel: "ios-shortcut",
+    sourceEvidence: {
+      kind: "ios-shortcut-credential",
+      sourceType: "ios-shortcut",
+      credentialIdHash:
+        "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    },
+    observedAt: "2026-08-12T17:53:09+09:00",
+    parser: {
+      parserId: "shortcut-card-message-parser",
+      parserVersion: "1.3.0",
+    },
+    rawPayloadHash:
+      "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+    paymentObservation: {
+      branchId: "payment-ios-cancellation-1",
+      observationType: "cancellation",
+      amountInWon: 140_000,
+      occurredLocalDate: "2026-08-12",
+      occurredLocalTime: "17:53",
+      zoneId: "Asia/Seoul",
+      merchantEvidence: { rawCandidate: "덕양주유소" },
+      cardEvidence: { companyLabel: "농협", maskedToken: "4x3x" },
+    },
+  };
+}
+
 function legacyKakaoBillEnvelope(): Record<string, unknown> {
   const input = validEnvelope();
   Object.assign(input.sourceEvidence as Record<string, unknown>, {
@@ -84,6 +115,26 @@ describe("Firebase Capture envelope inbound adapter", () => {
     expect(validateAndroidCaptureSource(decoded)).toMatchObject({
       kind: "allowed",
       entry: { sourceType: "kb-card", parserId: "kb-card-parser" },
+    });
+  });
+
+  it("iOS Shortcut cancellation envelope의 유형과 카드 증거를 손실 없이 decode한다", () => {
+    const decoded = decodeCaptureEnvelope(validShortcutCancellationEnvelope());
+
+    expect(decoded).toMatchObject({
+      originChannel: "ios-shortcut",
+      parser: {
+        parserId: "shortcut-card-message-parser",
+        parserVersion: "1.3.0",
+      },
+      paymentObservation: {
+        observationType: "cancellation",
+        amountInWon: 140_000,
+        occurredLocalDate: "2026-08-12",
+        occurredLocalTime: "17:53",
+        merchantEvidence: { rawCandidate: "덕양주유소" },
+        cardEvidence: { companyLabel: "농협", maskedToken: "4x3x" },
+      },
     });
   });
 

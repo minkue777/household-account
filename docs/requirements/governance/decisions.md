@@ -962,7 +962,7 @@ Google 계정이 없는 아이도 자산 명의자가 될 수 있게 하면서 �
 
 - 자동 등록 승인 거래는 사용자 수정·항목 분할·월 분할·합치기 전후에도 immutable `captureLineageId`와 원본 거래를 보존한다. 구조 변경 중 원본 지출은 물리 삭제하지 않고 일반 조회·집계에서 제외되는 `superseded` 상태로 남겨 원복과 취소 추적에 사용한다.
 - 취소 알림이 DEC-012의 금액·정규 가맹점·카드 완전 일치와 후보 유일성 검증을 통과하면 별도 사용자 확인 없이 해당 승인 lineage의 원본, 현재 활성 지출, 중간 변환 snapshot과 모든 분할·수정·합치기 파생 지출을 한 Ledger Unit of Work에서 삭제한다.
-- 취소 대상 lineage가 다른 승인 lineage와 합쳐진 파생 거래에 포함되어 있으면 합쳐진 파생 거래를 제거하되, 취소 대상이 아닌 원본·lineage는 삭제하지 않고 같은 Unit of Work에서 유효한 거래 형태로 복원한다. 한 승인 취소가 다른 결제까지 삭제해서는 안 된다.
+- 취소 대상 lineage가 다른 승인 lineage와 합쳐진 파생 거래에 포함되어 있으면 합쳐진 파생 거래를 제거하되, 취소 대상이 아닌 원본·lineage는 삭제하지 않고 같은 Unit of Work에서 유효한 거래 형태로 복원한다. 이때 복원 가능성 검증은 대상 lineage에서 도달 가능한 현재 active 영향 graph로 한정한다. graph 밖의 관련 없는 합치기와 deleted·superseded 과거 merge 감사 이력은 snapshot이 불완전해도 취소를 거부하는 근거가 아니다. 한 승인 취소가 다른 결제까지 삭제해서는 안 된다.
 - 취소 삭제는 전부 성공하거나 전부 실패한다. 대상 중 하나라도 누락되거나 version이 바뀌었거나 원자 처리 한도를 넘으면 어떤 지출도 삭제·복원하지 않고 typed 실패를 반환한다.
 - 취소 완료 뒤에는 해당 지출 계보를 사용자 원복 대상으로 제공하지 않는다. 다만 같은 취소 재전송과 같은 승인 재수집이 지출을 다시 만들지 않도록 금융 내역이 아닌 최소 cancellation receipt와 dedup tombstone은 보존한다. tombstone에는 lineageId·fingerprint hash/version·canceledAt·receipt reference만 두고 금액·가맹점·카드·메모·원본 또는 파생 snapshot은 남기지 않는다.
 - 완전 일치하는 원거래가 없으면 DEC-031처럼 아무 작업도 하지 않는다. 완전 일치 후보가 여러 개여서 유일하지 않으면 임의 삭제하지 않고 `NeedsConfirmation`을 유지한다.

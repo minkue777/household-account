@@ -712,11 +712,10 @@ describe("Ledger 구조 변경·capture lineage 공개 계약", () => {
     expect(subject.state().dedupClaims).toEqual(initial.dedupClaims);
   });
 
-  it("가구의 활성 legacy 병합 복원 정보가 하나라도 불완전하면 취소 전체를 막는다", async () => {
+  it("취소 lineage와 무관한 활성 legacy 병합의 복원 정보는 취소를 막지 않는다", async () => {
     const initial = fixture([
       captured("A", 1_000, "lineage-a"),
       captured("legacy-M", 2_000, "lineage-legacy", {
-        lifecycleState: "superseded",
         legacyMergeSnapshotPresent: true,
       }),
     ]);
@@ -728,13 +727,71 @@ describe("Ledger 구조 변경·capture lineage 공개 계약", () => {
       expectedLineageVersion: 1,
     });
 
+    expect(result).toEqual({ kind: "success", transactionIds: [] });
+    expect(subject.state().transactions).toEqual([
+      expect.objectContaining({
+        transactionId: "legacy-M",
+        lifecycleState: "active",
+        legacyMergeSnapshotPresent: true,
+      }),
+    ]);
+    expect(subject.state().dedupClaims).toEqual([
+      expect.objectContaining({
+        captureLineageId: "lineage-a",
+        state: "cancelled",
+      }),
+      expect.objectContaining({
+        captureLineageId: "lineage-legacy",
+        state: "active",
+      }),
+    ]);
+    expect(subject.loadSelections()).toContainEqual({
+      captureLineageIds: ["lineage-a"],
+    });
+  });
+
+  it("취소 영향 그래프의 활성 legacy 병합 복원 정보가 불완전하면 무변경으로 거부한다", async () => {
+    const initial = fixture([
+      captured("A", 1_000, "lineage-a"),
+      captured("legacy-M", 2_000, "lineage-a", {
+        legacyMergeSnapshotPresent: true,
+      }),
+    ]);
+    const subject = createSubject(initial);
+
+    const result = await subject.cancelCapturedLineage({
+      cancellationKey: "cancel-with-relevant-incomplete-merge",
+      captureLineageId: "lineage-a",
+      expectedLineageVersion: 1,
+    });
+
     expect(result).toEqual({
       kind: "contract-failure",
       code: "RESTORATION_SNAPSHOT_INCOMPLETE",
     });
     expect(subject.state().transactions).toEqual(initial.transactions);
     expect(subject.state().dedupClaims).toEqual(initial.dedupClaims);
-    expect(subject.loadSelections()).toEqual([]);
+  });
+
+  it("취소 영향 그래프의 superseded legacy 병합은 과거 이력이므로 취소를 막지 않는다", async () => {
+    const subject = createSubject(
+      fixture([
+        captured("A", 1_000, "lineage-a"),
+        captured("legacy-M", 2_000, "lineage-a", {
+          lifecycleState: "superseded",
+          legacyMergeSnapshotPresent: true,
+        }),
+      ]),
+    );
+
+    const result = await subject.cancelCapturedLineage({
+      cancellationKey: "cancel-with-superseded-incomplete-merge",
+      captureLineageId: "lineage-a",
+      expectedLineageVersion: 1,
+    });
+
+    expect(result).toEqual({ kind: "success", transactionIds: [] });
+    expect(subject.state().transactions).toEqual([]);
   });
 
   it("삭제된 과거 병합은 일반 삭제된 leaf를 취소 복원하지 않는다", async () => {

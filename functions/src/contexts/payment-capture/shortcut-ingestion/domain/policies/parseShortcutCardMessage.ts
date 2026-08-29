@@ -36,7 +36,7 @@ const SUPPORTED_COMPANIES = new Map<string, string>([
 ]);
 
 const NH_CARD_SMS_HEADER_PATTERN =
-  /^NH(?:농협)?카드([0-9＊*xX-]*)승인(?:\s|$)/u;
+  /^NH(?:농협)?카드([0-9＊*xX-]*)(승인취소|취소|승인)(?:\s|$)/u;
 const NH_CARD_HOLDER_PATTERN = /^[가-힣]{0,4}[＊*][가-힣]{0,4}$/u;
 const NH_SUMMARY_PATTERN = /^(?:총누적|누적|총\s*사용|잔액)/u;
 const OCCURRENCE_WITH_OPTIONAL_MERCHANT_PATTERN =
@@ -88,6 +88,7 @@ function parseHeader(
       readonly companyLabel: string;
       readonly maskedToken?: string;
       readonly layout: "standard" | "nh-card-sms";
+      readonly observationType: "approval" | "cancellation";
     }
   | Extract<ShortcutCardMessageParseResult, { kind: "Rejected" }> {
   const nhCardSms = header.match(NH_CARD_SMS_HEADER_PATTERN);
@@ -97,12 +98,15 @@ function parseHeader(
       kind: "success",
       companyLabel: "농협",
       layout: "nh-card-sms",
+      observationType: nhCardSms[2].endsWith("취소")
+        ? "cancellation"
+        : "approval",
       ...(maskedToken === undefined ? {} : { maskedToken }),
     };
   }
 
   const supported = header.match(
-    /^(삼성|신한|국민|현대|롯데|하나|우리|BC|NH)([0-9＊*xX-]*)승인(?:\s|$)/u,
+    /^(삼성|신한|국민|현대|롯데|하나|우리|BC|NH)([0-9＊*xX-]*)(승인취소|취소|승인)(?:\s|$)/u,
   );
   if (supported !== null) {
     const companyLabel = SUPPORTED_COMPANIES.get(supported[1]);
@@ -114,6 +118,9 @@ function parseHeader(
       kind: "success",
       companyLabel,
       layout: "standard",
+      observationType: supported[3].endsWith("취소")
+        ? "cancellation"
+        : "approval",
       ...(maskedToken === undefined ? {} : { maskedToken }),
     };
   }
@@ -244,6 +251,7 @@ interface RecognizedShortcutLayout {
     readonly companyLabel: string;
     readonly maskedToken?: string;
     readonly layout: "standard";
+    readonly observationType: "approval";
   };
   readonly paymentFields: ShortcutPaymentFieldsResult;
 }
@@ -267,6 +275,7 @@ function parseLotteMerchantFirstLayout(
       kind: "success",
       companyLabel: "롯데",
       layout: "standard",
+      observationType: "approval",
       ...(maskedToken === undefined ? {} : { maskedToken }),
     },
     paymentFields: parsedPaymentFields({
@@ -289,6 +298,7 @@ function parseKbCheckCardLayout(
       kind: "success",
       companyLabel: "국민",
       layout: "standard",
+      observationType: "approval",
       ...(maskedToken === undefined ? {} : { maskedToken }),
     },
     paymentFields: parsedPaymentFields({
@@ -320,13 +330,23 @@ function parseLotteMonthlyTransitLayout(
     declaredMonth > 12
   ) {
     return {
-      header: { kind: "success", companyLabel: "롯데", layout: "standard" },
+      header: {
+        kind: "success",
+        companyLabel: "롯데",
+        layout: "standard",
+        observationType: "approval",
+      },
       paymentFields: { kind: "Rejected", code: "INVALID_DATE" },
     };
   }
   if (amount.kind === "Rejected") {
     return {
-      header: { kind: "success", companyLabel: "롯데", layout: "standard" },
+      header: {
+        kind: "success",
+        companyLabel: "롯데",
+        layout: "standard",
+        observationType: "approval",
+      },
       paymentFields: amount,
     };
   }
@@ -337,7 +357,12 @@ function parseLotteMonthlyTransitLayout(
     Date.UTC(declaredYear, declaredMonth, 0),
   ).getUTCDate();
   return {
-    header: { kind: "success", companyLabel: "롯데", layout: "standard" },
+    header: {
+      kind: "success",
+      companyLabel: "롯데",
+      layout: "standard",
+      observationType: "approval",
+    },
     paymentFields: {
       kind: "success",
       fields: {
@@ -407,6 +432,7 @@ export function parseShortcutCardMessage(input: {
     resolved.occurredLocalDateTime.split("T");
   return {
     kind: "Parsed",
+    observationType: header.observationType,
     amountInWon: fields.amountInWon,
     occurredLocalDate,
     occurredLocalTime,

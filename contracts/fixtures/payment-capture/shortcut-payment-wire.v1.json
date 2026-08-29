@@ -73,6 +73,20 @@
       }
     },
     {
+      "caseId": "cancelled-without-notification",
+      "body": {
+        "contractVersion": "shortcut-payment-response.v1",
+        "commandId": "command-cancel-001",
+        "transaction": {
+          "kind": "cancelled",
+          "transactionIds": ["transaction-approval-001"]
+        },
+        "notification": {
+          "state": "not-requested"
+        }
+      }
+    },
+    {
       "caseId": "rejected-transaction",
       "body": {
         "contractVersion": "shortcut-payment-response.v1",
@@ -87,13 +101,36 @@
       }
     },
     {
-      "caseId": "needs-confirmation",
+      "caseId": "cancelled-target-not-found",
+      "body": {
+        "contractVersion": "shortcut-payment-response.v1",
+        "commandId": "command-cancel-not-found-001",
+        "transaction": {
+          "kind": "rejected",
+          "code": "CANCELLATION_TARGET_NOT_FOUND"
+        },
+        "notification": {
+          "state": "not-requested"
+        }
+      }
+    },
+    {
+      "caseId": "capture-lineage-needs-confirmation",
       "body": {
         "contractVersion": "shortcut-payment-response.v1",
         "commandId": "command-004",
         "transaction": {
           "kind": "needsConfirmation",
-          "candidates": [{ "kind": "merchant", "label": "가맹점" }]
+          "candidates": [
+            {
+              "kind": "captureLineage",
+              "captureLineageId": "capture-lineage-001"
+            },
+            {
+              "kind": "captureLineage",
+              "captureLineageId": "capture-lineage-002"
+            }
+          ]
         },
         "notification": {
           "state": "not-requested"
@@ -148,6 +185,48 @@
         "contractVersion": "shortcut-payment-response.v1",
         "error": {
           "code": "INVALID_REQUEST"
+        }
+      }
+    },
+    {
+      "caseId": "cancelled-transaction-ids-must-not-be-empty",
+      "body": {
+        "contractVersion": "shortcut-payment-response.v1",
+        "commandId": "command-cancel-empty",
+        "transaction": {
+          "kind": "cancelled",
+          "transactionIds": []
+        },
+        "notification": {
+          "state": "not-requested"
+        }
+      }
+    },
+    {
+      "caseId": "cancelled-transaction-ids-must-be-unique",
+      "body": {
+        "contractVersion": "shortcut-payment-response.v1",
+        "commandId": "command-cancel-duplicate",
+        "transaction": {
+          "kind": "cancelled",
+          "transactionIds": ["transaction-001", "transaction-001"]
+        },
+        "notification": {
+          "state": "not-requested"
+        }
+      }
+    },
+    {
+      "caseId": "legacy-merchant-candidate-is-not-capture-lineage",
+      "body": {
+        "contractVersion": "shortcut-payment-response.v1",
+        "commandId": "command-needs-confirmation-legacy",
+        "transaction": {
+          "kind": "needsConfirmation",
+          "candidates": [{ "kind": "merchant", "label": "가맹점" }]
+        },
+        "notification": {
+          "state": "not-requested"
         }
       }
     }

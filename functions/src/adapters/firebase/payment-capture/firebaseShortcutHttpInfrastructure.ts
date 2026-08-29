@@ -330,12 +330,12 @@ export class FirebaseShortcutCaptureIntakeAdapter
         observedAt: input.requestedAt,
         parser: {
           parserId: "shortcut-card-message-parser",
-          parserVersion: "1.2.0",
+          parserVersion: "1.3.0",
         },
         rawPayloadHash: `sha256:${input.payloadHash}`,
         paymentObservation: {
           branchId: `${input.commandId}:payment`,
-          observationType: "approval",
+          observationType: input.parsed.observationType,
           amountInWon: input.parsed.amountInWon,
           occurredLocalDate: input.parsed.occurredLocalDate,
           occurredLocalTime: input.parsed.occurredLocalTime,
@@ -355,6 +355,21 @@ export class FirebaseShortcutCaptureIntakeAdapter
         kind: "duplicate" as const,
         existingTransactionId: transaction.existingTransactionId,
       };
+    }
+    if (transaction?.kind === "cancelled") {
+      return {
+        kind: "cancelled" as const,
+        transactionIds: transaction.transactionIds,
+      };
+    }
+    if (transaction?.kind === "needsConfirmation") {
+      return {
+        kind: "needs-confirmation" as const,
+        captureLineageIds: transaction.captureLineageIds,
+      };
+    }
+    if (transaction?.kind === "notFound") {
+      return { kind: "cancellation-not-found" as const };
     }
     if (
       transaction?.kind === "rejected" &&

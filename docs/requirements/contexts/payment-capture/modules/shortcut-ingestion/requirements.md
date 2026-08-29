@@ -7,7 +7,7 @@
 
 ## 1. 독립 모듈 책임
 
-이 모듈은 iOS Shortcut HTTP 요청을 검증·정규화하고 카드 승인 메시지를 지출 생성 명령으로 변환합니다. 입력 채널의 인증, 카드 메시지 파싱, 거래 소유자 결정, 중복 방지, 응답 계약을 소유하며 거래 원장 저장과 알림 전송 구현은 각각 독립 모듈의 포트에 위임합니다.
+이 모듈은 iOS Shortcut HTTP 요청을 검증·정규화하고 카드 승인·취소 메시지를 결제 observation 명령으로 변환합니다. 입력 채널의 인증, 카드 메시지 파싱, 거래 소유자 결정, 승인 중복 방지, 응답 계약을 소유하며 거래 생성·취소와 알림 전송 구현은 각각 공통 Capture·거래 원장·알림 모듈의 포트에 위임합니다.
 
 ## 2. 포함·제외 범위
 
@@ -15,7 +15,7 @@
 
 - Shortcut HTTP 요청 method·인증·필수 필드 검증
 - 다양한 JSON 값 형태의 문자열 정규화
-- 카드 라벨·금액·일시·가맹점·카드 번호 파싱
+- 승인·취소 종류와 카드 라벨·금액·일시·가맹점·카드 번호 파싱
 - scoped credential에서 Actor·가구를 결정하고 현재 멤버의 등록 카드 증거를 검증
 - 의도적으로 넓은 거래 중복 정책 적용
 - 신규·중복 경로별 HTTP 응답 작성과 알림 요청 결과 관측
@@ -48,7 +48,8 @@
 의존 모듈:
 
 - [가구·접근](../../../access-household/modules/household-access/requirements.md): 가구 존재와 호출자 멤버십 검증
-- [거래 원장](../../../household-finance/modules/ledger/requirements.md): 중복에 안전한 지출 생성
+- [Payment Capture](../../requirements.md): 승인 observation은 공통 생성 경로로, 취소 observation은 공통 cancellation Port로 분기
+- [거래 원장](../../../household-finance/modules/ledger/requirements.md): 중복에 안전한 지출 생성과 확정된 capture lineage의 원자 취소
 - [결제 설정](../payment-configuration/requirements.md): 인증된 현재 멤버 범위의 등록 카드 일치 여부 조회
 - [푸시 알림](../../../notifications/modules/notifications/requirements.md): owner 대상 알림 명령과 전달 결과
 - Clock·ID 생성기·Transaction boundary: 동시 요청 멱등성과 날짜 추론 테스트를 위해 주입
@@ -59,18 +60,19 @@
 |---|---|---|---|---|---|
 | IOS-001 | 호환·목표 | 목표 Shortcut API는 POST `application/json` body의 contractVersion·message만 받고 householdId·owner는 credential claim과 현재 Membership에서 결정한다. | 필수값·credential 불일치·파싱 실패는 구분된 typed 오류다. 구형 household·owner alias는 명시적 호환 창의 HTTP Facade에서만 소비·폐기하며 Actor·가구·Domain Command를 바꾸지 않는다. | [Shortcut HTTP Adapter](../../../../../../functions/src/bootstrap/firebaseShortcutHttp.ts) | U, C, I |
 | IOS-002 | 현재 명세 | 문자열·숫자·불리언·배열·객체로 들어오는 Shortcut 값을 정규화한다. | 객체는 알려진 우선 키를 사용한다. | 같은 근거 | U |
-| IOS-003 | 목표 명세 | 선두의 문자 전송 표지 `[Web발신]`은 결제 정보가 아니므로 제거한 뒤 지원 카드사 헤더와 금액, MM/DD HH:mm, 가맹점을 추출하며 카드사 증거를 필수로 검증한다. NH 문자는 `NH카드{마스킹번호}승인`, 선택적인 별도 명의자 행, 금액 행, 별도 일시·가맹점 행과 후행 `총누적`을 지원한다. 롯데의 가맹점 우선·`명의자 롯데5*5*`·쉼표 없는 일시불 형식과 `[롯데카드]`·`명의자 07월 이용`·`교통카드 3건 3,200원 승인` 월 합계 형식, KB의 `KB국민체크(1164)`·별도 명의자·일시·금액·`가맹점 사용` 형식도 지원한다. CR·LF뿐 아니라 iOS Unicode 줄 구분자를 같은 행 경계로 정규화한다. | 롯데 교통카드 월 합계는 명시된 이용 월의 마지막 날과 문자 수신 시각으로 한 건을 만들고 가맹점에 건수를 보존한다. 바우처 이용·잔액 안내는 결제 승인이 아니므로 거부한다. 표지를 제거한 본문에서 지원 카드사 증거를 찾지 못하면 `CARD_COMPANY_REQUIRED` 또는 `UNSUPPORTED_CARD_COMPANY`로 거부하고 거래·알림을 만들지 않는다. 명의자 행은 생성자 판단에 사용하지 않고 생성자는 credential의 현재 가구원 ID로만 결정한다. 후행 누적액은 결제액으로 사용하지 않으며 삼성 fallback은 레거시 특성화에만 남긴다. | 같은 근거와 [DEC-030](../../../../governance/decisions.md#dec-030) | U |
+| IOS-003 | 목표 명세 | 선두의 문자 전송 표지 `[Web발신]`은 결제 정보가 아니므로 제거한 뒤 지원 카드사 승인·취소 헤더와 금액, MM/DD HH:mm, 가맹점을 추출하며 카드사 증거를 필수로 검증한다. NH 문자는 `NH카드{마스킹번호}승인`과 `NH카드{마스킹번호}승인취소`, 선택적인 별도 명의자 행, 금액 행, 별도 일시·가맹점 행과 후행 `총누적`을 지원하고 `승인취소`를 cancellation observation으로 분류한다. 롯데의 가맹점 우선·`명의자 롯데5*5*`·쉼표 없는 일시불 형식과 `[롯데카드]`·`명의자 07월 이용`·`교통카드 3건 3,200원 승인` 월 합계 형식, KB의 `KB국민체크(1164)`·별도 명의자·일시·금액·`가맹점 사용` 형식도 지원한다. CR·LF뿐 아니라 iOS Unicode 줄 구분자를 같은 행 경계로 정규화한다. | NH 취소에서도 누적액이 아닌 취소 금액·발생 일시·가맹점·카드 증거를 보존한다. 롯데 교통카드 월 합계는 명시된 이용 월의 마지막 날과 문자 수신 시각으로 한 건을 만들고 가맹점에 건수를 보존한다. 바우처 이용·잔액 안내는 결제 승인·취소가 아니므로 거부한다. 표지를 제거한 본문에서 지원 카드사 증거를 찾지 못하면 `CARD_COMPANY_REQUIRED` 또는 `UNSUPPORTED_CARD_COMPANY`로 거부하고 거래·알림을 만들지 않는다. 명의자 행은 생성자 판단에 사용하지 않고 생성자는 credential의 현재 가구원 ID로만 결정한다. 후행 누적액은 거래 금액으로 사용하지 않으며 삼성 fallback은 레거시 특성화에만 남긴다. | 같은 근거와 [DEC-030](../../../../governance/decisions.md#dec-030) | U |
 | IOS-004 | 목표 명세 | 연도 없는 결제 시각은 서울 수신 시각보다 미래가 아닌 가장 가까운 연도로 추론한다. | 수신 연도의 월·일·시·분 후보가 미래면 전년으로 내리고, 윤년처럼 유효하지 않으면 유효한 가장 가까운 과거 연도를 사용한다. 미래 허용 오차는 두지 않으며 Android와 같은 versioned Policy·fixture를 사용한다. | 같은 근거와 [DEC-029](../../../../governance/decisions.md#dec-029) | U, C |
 | IOS-005 | 특성화 | 현재 구현은 요청값이 같은 가구의 FCM owner이면 즉시 채택하고, 아니면 카드 라벨·wildcard 번호가 맞는 첫 등록 카드 owner, 해당 카드사의 유일 owner, 비어 있지 않은 요청 owner, null 순으로 결정한다. | Firestore 반환 순서와 타 멤버 카드에 결과가 의존하는 레거시 동작이며 목표 정책으로 유지하지 않는다. DEC-028 전환 전 회귀 비교에만 사용한다. | 같은 근거와 [DEC-028](../../../../governance/decisions.md#dec-028) | U, I |
 | IOS-006 | 현재 명세 | 같은 가구·날짜·시간·금액·가맹점 거래가 이미 있으면 중복으로 판정해 새 문서를 만들지 않는다. | 카드·source는 의도적으로 기준에 포함하지 않는다. 같은 조건의 실제 재결제보다 parser 중복 오동작을 차단하는 것을 우선한다. | 같은 근거 | U, I |
-| IOS-007 | 목표 명세 | 신규 지출은 인증된 현재 멤버의 등록 카드가 하나 이상 일치할 때만 expense, 가구 기본 카테고리, 빈 memo, `ios-shortcut` source, 현재 멤버의 필수 `creatorMemberId`와 파싱된 카드 증거를 저장한다. Canonical `cardDisplay`에는 카드사와 번호를 조합한 완성 표시값을 둔다. | 타 멤버 카드는 조회 후보에서 제외한다. 알림에 번호가 없으면 본인이 소유한 같은 카드사 카드가 한 장일 때 그 카드를 확정하고, 여러 장이면 생성은 허용하되 하나를 임의 선택하지 않는다. 본인 카드가 일치하지 않으면 거래·알림을 만들지 않는다. Legacy Projection은 기존 Web 호환 기간에 완성 `cardDisplay`를 `cardLastFour` 표시 슬롯에도 기록하며, 번호 1876의 별도 cardType 규칙은 레거시 특성화이다. | 같은 근거와 [DEC-013](../../../../governance/decisions.md#dec-013), [DEC-028](../../../../governance/decisions.md#dec-028) | U, I |
-| IOS-008 | 목표 명세 | 신규 지출을 Ledger와 함께 확정한 `TransactionRecorded.v1` Outbox event는 생성자 멤버와 `ios-pwa-push` capability만 지정하고, Notifications가 생성자 본인의 모든 활성 iPhone PWA endpoint에 편집 링크 푸시를 비동기로 보낸다. | Payment Capture는 물리 endpoint를 선택하거나 FCM을 직접 호출하지 않는다. QuickEdit을 사용할 수 없는 iPhone의 편집 진입을 대체하며 다른 가구원·Android·desktop endpoint에는 자동 전송하지 않는다. HTTP 거래 성공은 푸시 성공을 보장하지 않는다. | [Shortcut HTTP Adapter](../../../../../../functions/src/bootstrap/firebaseShortcutHttp.ts), [Notification Outbox consumer](../../../../../../functions/src/bootstrap/firebaseNotificationOutbox.ts), [DEC-013](../../../../governance/decisions.md#dec-013) | I, E2E |
+| IOS-007 | 목표 명세 | 신규 승인은 인증된 현재 멤버의 등록 카드가 하나 이상 일치할 때만 expense, 가구 기본 카테고리, 빈 memo, `ios-shortcut` source, 현재 멤버의 필수 `creatorMemberId`와 파싱된 카드 증거를 저장한다. Canonical `cardDisplay`에는 카드사와 번호를 조합한 완성 표시값을 둔다. | 타 멤버 카드는 조회 후보에서 제외한다. 알림에 번호가 없으면 본인이 소유한 같은 카드사 카드가 한 장일 때 그 카드를 확정하고, 여러 장이면 생성은 허용하되 하나를 임의 선택하지 않는다. 본인 카드가 일치하지 않으면 거래·알림을 만들지 않는다. Legacy Projection은 기존 Web 호환 기간에 완성 `cardDisplay`를 `cardLastFour` 표시 슬롯에도 기록하며, 번호 1876의 별도 cardType 규칙은 레거시 특성화이다. | 같은 근거와 [DEC-013](../../../../governance/decisions.md#dec-013), [DEC-028](../../../../governance/decisions.md#dec-028) | U, I |
+| IOS-008 | 목표 명세 | 신규 승인을 Ledger와 함께 확정한 `TransactionRecorded.v1` Outbox event는 생성자 멤버와 `ios-pwa-push` capability만 지정하고, Notifications가 생성자 본인의 모든 활성 iPhone PWA endpoint에 편집 링크 푸시를 비동기로 보낸다. | Payment Capture는 물리 endpoint를 선택하거나 FCM을 직접 호출하지 않는다. QuickEdit을 사용할 수 없는 iPhone의 편집 진입을 대체하며 다른 가구원·Android·desktop endpoint에는 자동 전송하지 않는다. HTTP 거래 성공은 푸시 성공을 보장하지 않는다. | [Shortcut HTTP Adapter](../../../../../../functions/src/bootstrap/firebaseShortcutHttp.ts), [Notification Outbox consumer](../../../../../../functions/src/bootstrap/firebaseNotificationOutbox.ts), [DEC-013](../../../../governance/decisions.md#dec-013) | I, E2E |
 | IOS-009 | 호환·목표 | 중복이면 새 거래 없이 기존 거래를 가리키는 `CaptureDuplicateObserved.v1` Outbox event를 한 번 만들고, Domain·Application은 거래 결과와 알림 상태를 분리한 typed V2 결과만 사용한다. | 구형 `duplicate`·`notificationSent`·`targetOwner` 응답은 명시적 호환 창 동안 최외곽 outbound compatibility mapper에서만 만든다. mapper는 `delivered`만 `notificationSent=true`로 표현하며 Domain·Application 모델이나 저장 상태에 legacy 필드를 넣지 않는다. | [Shortcut HTTP Adapter](../../../../../../functions/src/bootstrap/firebaseShortcutHttp.ts) | U, I |
 | IOS-010 | 결함 | Shortcut은 credential claim이 가리키는 존재하는 가구와 권한 있는 호출자, 양의 정수 금액, 실제 달력 날짜, 유효한 시간을 검증해야 한다. | 현재 레거시 body의 존재하지 않는 householdId, 일부 0·NaN 가능 입력, 비정상 날짜·시간, 임의 owner를 충분히 막지 못한다. 목표 body에는 householdId·owner가 없고 서버 claim과 Membership만 신뢰한다. | 같은 근거 | U, C, I |
 | IOS-011 | 결함 | IOS-006의 중복 방지는 동시 요청에도 원자적·멱등이어야 한다. | 현재 query 후 add가 트랜잭션이 아니어서 같은 요청이 동시에 도착하면 둘 다 저장될 수 있다. 넓은 중복 기준 자체는 의도한 정책이다. | 같은 근거 | U, I |
 | IOS-012 | 결함 | Shortcut HTTP ingress는 POST `application/json`과 지원 contract version만 허용하고 body·field·idempotency key에 유한 상한을 두며 credential·IP별 rate limit과 비용 quota를 Application 호출 전에 적용해야 한다. | OPTIONS는 preflight만 처리하고 거래 Application을 호출하지 않는다. CORS allowlist는 인증이 아니므로 허용 origin이어도 credential·Membership 검증을 생략하지 않는다. 한도 값은 양의 유한 배포 config이며 초과 요청은 저장·파싱·알림 없이 413·429 또는 안정 검증 오류로 끝낸다. | [Shortcut HTTP Adapter](../../../../../../functions/src/bootstrap/firebaseShortcutHttp.ts) | C, I, 보안 E2E |
-| IOS-013 | 목표 명세 | Google 로그인과 활성 Membership으로 사용자·가구·`paymentCapture:submit` 범위의 Shortcut 전용 credential을 발급하고 완성된 공유 Shortcut에 반자동으로 설치한다. | 웹은 가구원 초대 바로 다음에 이 설정을 배치한다. 원문은 최초 발급 응답에서 한 번만 보여주고 복사한 뒤 설치 링크를 열며 사용자는 가져오기 질문에 한 번 붙여넣는다. 활성 credential이 있으면 발급·최근 사용 시각이나 별도 폐기 버튼을 표시하지 않고 제목 오른쪽에 가구원 초대의 코드 생성 버튼과 같은 크기의 재발급 버튼만 제공한다. 동일 idempotency key 재전송은 원문 없이 `AlreadyIssued(credentialId, credentialVersion)`만 반환하고 새 자격을 만들지 않는다. 재발급은 새 자격 저장과 기존 자격 폐기를 원자 처리한다. endpoint·POST·JSON·Authorization·응답 처리는 미리 구성한다. 정기 자동 만료는 두지 않되 서버의 폐기·재발급·Membership 상실·가구 삭제 검증은 유지한다. 서버에는 원문 대신 강한 hash와 credentialId·scope·keyVersion·상태·issuedAt·lastUsedAt만 저장한다. PWA 로그아웃만으로는 폐기하지 않으며 개인용 문자 자동화는 기기에서 한 번 직접 연결한다. | [Shortcut credential Command](../../../../../../functions/src/bootstrap/commands/shortcutCredentialHouseholdCommandHandlers.ts), [DEC-033](../../../../governance/decisions.md#dec-033) | C, UI, 보안 E2E |
+| IOS-013 | 목표 명세 | Google 로그인과 활성 Membership으로 사용자·가구·`paymentCapture:submit` 범위의 Shortcut 전용 credential을 발급하고 완성된 공유 Shortcut에 반자동으로 설치한다. | 웹은 가구원 초대 바로 다음에 이 설정을 배치한다. 원문은 최초 발급 응답에서 한 번만 보여주고 복사한 뒤 설치 링크를 열며 사용자는 가져오기 질문에 한 번 붙여넣는다. 활성 credential이 있으면 발급·최근 사용 시각이나 별도 폐기 버튼을 표시하지 않고 제목 오른쪽에 가구원 초대의 코드 생성 버튼과 같은 크기의 재발급 버튼만 제공한다. 동일 idempotency key 재전송은 원문 없이 `AlreadyIssued(credentialId, credentialVersion)`만 반환하고 새 자격을 만들지 않는다. 재발급은 새 자격 저장과 기존 자격 폐기를 원자 처리한다. endpoint·POST·JSON·Authorization·응답 처리는 미리 구성한다. 정기 자동 만료는 두지 않되 서버의 폐기·재발급·Membership 상실·가구 삭제 검증은 유지한다. 서버에는 원문 대신 강한 hash와 credentialId·scope·keyVersion·상태·issuedAt·lastUsedAt만 저장한다. PWA 로그아웃만으로는 폐기하지 않으며 개인용 문자 자동화는 승인 문자와 취소 문자를 모두 `메시지를 받을 때` 조건으로 같은 가계부 Shortcut에 전달하도록 기기에서 한 번 직접 연결한다. | [Shortcut credential Command](../../../../../../functions/src/bootstrap/commands/shortcutCredentialHouseholdCommandHandlers.ts), [DEC-033](../../../../governance/decisions.md#dec-033) | C, UI, 보안 E2E |
 | IOS-014 | 임시 진단 | Shortcut credential과 현재 Membership 검증에 성공해 ActorContext가 확정된 요청은 parser 성공·거부 모두 `notification_debug_logs`에 exact raw message와 normalized message, actor scope, payload hash, 비가역 credential hash, parser outcome, 거부 시 안정 rejection code와 수집 시각을 best-effort로 보존한다. | 같은 credential·원문·parser outcome은 결정적 문서 ID의 한 문서로 합친다. 성공 원문 저장은 Payment Intake와 병렬 시작하고, 모든 진단 실패는 흡수한다. 인증·인가 실패 또는 parser 이전 schema 실패는 저장하지 않는다. Cloud Logging, Domain Event, receipt, Outbox, 응답에는 원문을 넣지 않으며 진단 저장 실패가 HTTP 결과·거래·알림을 바꾸거나 재시도시키지 않는다. 자동 TTL 없이 보존하고 DEC-002·047의 진단 기능 제거 시 Writer·Rules·index·데이터를 함께 제거한다. | [DEC-002](../../../../governance/decisions.md#dec-002), [DEC-047](../../../../governance/decisions.md#dec-047) | U, I, 보안 E2E |
+| IOS-015 | 목표 명세 | parser가 cancellation observation을 만들면 Shortcut은 신규 지출 생성이나 승인 중복 경로를 직접 호출하지 않고 `CaptureEnvelope.v1`을 공통 Payment Intake에 한 번 제출해 공통 Capture cancellation Port로 위임한다. | 인증된 현재 멤버의 카드 증거를 검증한 뒤 DEC-012의 금액·정규 가맹점·카드 완전 일치와 후보 유일성, DEC-031의 원거래 부재 무변경, DEC-041의 capture lineage 전체 원자 취소 정책을 Android와 그대로 공유한다. 완전 일치 없음은 `NotFound`, 복수는 `NeedsConfirmation`이며 Shortcut이 후속 실승인 금액만 보고 앞선 가승인을 추정 삭제하거나 별도 취소 정책을 만들지 않는다. | [Android 취소 설계](../android-payment-ingestion/design.md#53-취소-submit), [DEC-012](../../../../governance/decisions.md#dec-012), [DEC-031](../../../../governance/decisions.md#dec-031), [DEC-041](../../../../governance/decisions.md#dec-041) | U, C, I |
 
 ## 6. 현재 흐름
 
@@ -82,7 +84,9 @@
 
 교정할 불변식은 호출자·가구·입력을 검증하고, 동시 요청에도 한 문서만 만들며, 거래 성공과 알림 전달 결과를 분리해 관측하는 것이다.
 
-연결 요구사항: IOS-001~014, PUSH-002, PUSH-004, PUSH-010.
+목표 흐름은 parser가 승인·취소를 먼저 분류한 뒤 승인은 기존 생성·중복 경로로, 취소는 공통 Capture cancellation Port로 보냅니다. 두 분기 모두 같은 credential Actor와 카드 증거를 사용합니다.
+
+연결 요구사항: IOS-001~015, PUSH-002, PUSH-004, PUSH-010.
 
 ## 7. 정상 요구사항으로 고정하지 않을 결함
 
@@ -92,6 +96,7 @@
 - 카드사 헤더가 없으면 삼성으로 간주하는 현재 동작은 DEC-030에 따라 목표 parser에서 제거해야 합니다.
 - 레거시 owner 판정은 Firestore 반환 순서와 타 멤버 카드에 결과가 의존하며, DEC-028 목표 정책으로 제거해야 합니다.
 - 현재 Android와 Shortcut의 연도 추론 정책이 다르므로 DEC-029의 공통 Policy로 교체해야 합니다.
+- 현재 iPhone 개인용 자동화와 Shortcut parser가 승인 문자만 대상으로 해 `NH카드{마스킹번호}승인취소`가 공통 Capture 취소 경로에 도달하지 않습니다.
 - 신규 거래는 trigger, 중복 거래는 HTTP 함수가 직접 푸시를 보내 전달 보장과 응답 의미가 서로 다릅니다.
 - HTTP 저장 성공은 비동기 푸시 성공을 보장하지 않지만 현재 관측·재시도 계약이 명확하지 않습니다.
 - 공개 함수가 wildcard CORS와 정적 token에 의존하며 method·content type·version·body·field·호출량의 공통 유한 경계가 없습니다. (`IOS-012`, `IOS-013`)
@@ -101,6 +106,7 @@
 | 결정 | 상태 | 이 모듈에 미치는 영향 |
 |---|---|---|
 | [DEC-003](../../../../governance/decisions.md#dec-003) | 확정 | 같은 가구·날짜·시간·금액·가맹점 거래를 카드·source와 무관하게 중복으로 버립니다. 동시 요청에도 이 정책을 원자적으로 보장해야 합니다. |
+| [DEC-012](../../../../governance/decisions.md#dec-012) | 확정 | Shortcut 취소도 금액·정규 가맹점·카드가 모두 일치하는 유일한 원거래만 공통 Capture 취소 경로로 처리합니다. |
 | [DEC-020](../../../../governance/decisions.md#dec-020) | 확정 | 생성자 본인의 모든 활성 iPhone 홈 화면 PWA endpoint로 전달합니다. Android endpoint에는 보내지 않으며 endpoint 유무를 생성자 신원의 근거로 사용하지 않습니다. |
 | [DEC-013](../../../../governance/decisions.md#dec-013) | 확정 | creatorMemberId는 필수이며 신규 지출 편집 푸시는 생성자 본인의 iPhone endpoint에만 보냅니다. |
 | [DEC-023](../../../../governance/decisions.md#dec-023) | 확정 | 현재 날짜·연말·회계일의 timezone은 Asia/Seoul로 고정하며 기기·서버 기본 timezone을 사용하지 않습니다. |
@@ -108,6 +114,8 @@
 | [DEC-029](../../../../governance/decisions.md#dec-029) | 확정 | 연도 없는 월·일·시·분은 서울 수신 시각보다 미래가 아닌 가장 가까운 연도로 선택하며 Android와 같은 Policy·fixture를 사용합니다. |
 | [DEC-030](../../../../governance/decisions.md#dec-030) | 확정 | 카드사 헤더 누락·미지원 입력은 추정하지 않고 거부하며 거래·알림을 만들지 않습니다. |
 | [DEC-033](../../../../governance/decisions.md#dec-033) | 확정 | 사용자·가구 범위의 무기한·폐기 가능 credential을 완성된 Shortcut에 한 번 붙여넣고, body의 householdId·owner 대신 credential claim으로 Actor와 가구를 결정합니다. 발급 원문은 최초 응답에서만 제공하고 동일 발급 요청 재전송에는 비밀 없는 `AlreadyIssued`만 반환합니다. |
+| [DEC-031](../../../../governance/decisions.md#dec-031) | 확정 | Shortcut 취소도 완전 일치 원거래가 없으면 무변경 종료하고 이후 승인을 억제하지 않습니다. |
+| [DEC-041](../../../../governance/decisions.md#dec-041) | 확정 | 완전 일치하는 유일한 Shortcut 취소는 공통 Capture·Ledger 경로에서 같은 capture lineage의 원본·파생 거래를 원자 취소합니다. |
 | [DEC-002](../../../../governance/decisions.md#dec-002), [DEC-047](../../../../governance/decisions.md#dec-047) | 확정 | parser 개선용 임시 진단 원문은 자동 TTL 없이 기능 제거 전까지 보존하고, 업무 결과와 분리한 best-effort Writer·Rules·index·데이터를 진단 기능 제거 시 함께 없앱니다. Shortcut은 인증된 parser 성공·거부 요청에 이 정책을 적용합니다. |
 
 연도 추론 정책은 DEC-029로 확정되었습니다.
@@ -124,14 +132,15 @@
 | T-IOS-NOTIFY-001 | 현재·목표 | 신규 Created, 생성자의 iOS·Android·desktop endpoint와 타 멤버 iOS endpoint, 전달 성공·지연·실패 / 편집 알림 / 생성자 활성 iPhone PWA만 대상이며 거래와 delivery 상태를 분리하고 실패해도 거래를 롤백하지 않음 | IOS-008, DEC-013, DEC-020 |
 | T-IOS-NOTIFY-002 | 현재·목표 | Duplicate, 생성자 endpoint 0·1, 전달 성공·failed·unknown·permanent와 같은 요청 재실행 / 중복 알림 / 새 거래 없이 기존 거래용 event·대상·결과를 구분하고 동일 요청은 event·delivery 하나 | IOS-009, DEC-020 |
 | T-PARSE-003 | 목표 | 1월 수신 `12/31`, 같은 날의 몇 분 뒤 시각, 12월 수신 `01/01`, 윤년 `02/29`, 불가능한 날짜·시각 / Android·Shortcut parse / 미래 후보는 전년, 가장 가까운 유효 과거 연도, 불가능한 값은 오류 | SYS-005, IOS-004, DEC-029 |
-| T-PARSE-004 | 목표 | 정상 카드사 헤더·헤더 누락·미지원 헤더 / Shortcut parse / 정상만 observation 생성, 누락·미지원은 typed 오류이며 거래·알림 없음 | IOS-003, IOS-010, DEC-030 |
+| T-PARSE-004 | 목표 | 정상 승인 헤더, NH `승인취소` 헤더, 헤더 누락·미지원 헤더 / Shortcut parse / 승인은 approval, NH 승인취소는 cancellation observation을 만들고 누락·미지원은 typed 오류이며 거래·알림 없음 | IOS-003, IOS-010, IOS-015, DEC-030 |
 | T-IOS-SEC-001 | 목표 | 무인증 RegisterEndpoint·rename·Shortcut·dividend save / 호출 / 모두 권한 오류와 변경 없음 | ADM-002, IOS-010, PUSH-009 |
 | T-IOS-SEC-002 | 목표 | CORS 허용 origin이지만 credential 없음·폐기·교체된 이전 키·Membership 상실·타 capability·body의 위조 household/owner, 동일 발급 idempotency key 재전송 / Shortcut 호출·발급 / claim의 현재 Actor·가구만 사용하거나 Membership·Application·저장소 호출 전 권한 오류이며, 발급 재전송은 새 자격·원문 없이 `AlreadyIssued` 메타데이터만 반환 | IOS-001, IOS-012, IOS-013, DEC-033 |
 | T-IOS-INSTALL-001 | 목표 | 최초 발급·설치 중단·동일 발급 재전송·명시적 재발급과 경합 / credential 저장·공유 Shortcut 설치 / 서버는 강한 hash·메타데이터만 저장하고 원문은 최초 한 번, endpoint·POST·JSON·Authorization·typed 응답이 구성된 Shortcut에서 secret 질문 한 번만 제공 | IOS-013, DEC-033 |
 | T-IOS-COMPAT-001 | 호환 | Created·Duplicate의 queued·delivered·no-target·failed·unknown·permanent V2 결과 / legacy HTTP outbound 변환 / 호환 mapper만 구형 필드를 만들고 delivered만 notificationSent=true이며 Domain·Application·저장소에는 legacy payload가 없음 | IOS-008, IOS-009 |
 | T-IOS-DIAG-001 | 임시 진단 | 인증·Membership 성공 뒤 parser 성공·거부와 동일 요청 재전송, 인증 실패, schema 실패, 진단 저장소 장애 / Shortcut 호출 / 허용된 credential·원문·outcome 조합만 결정적 한 문서에 exact raw·normalized message와 actor scope·두 hash·outcome·수집 시각을 남기며 거부만 rejection code를 가진다. 진단 장애에도 원래 HTTP 결과와 downstream 호출 수가 같고 성공 진단은 Intake와 병렬 시작한다. | IOS-014, DEC-002, DEC-047 |
+| T-IOS-CANCEL-001 | 목표 | 같은 카드·가맹점의 140,000원 승인, 같은 금액의 NH 승인취소, 후속 78,000원 승인과 원거래 없음·완전 일치 복수 / iPhone 자동화·Shortcut·공통 Intake / 개인 자동화가 승인·취소 원문을 모두 전달하고 명시적 140,000원 취소만 공통 cancellation Port에서 해당 lineage를 취소하며 78,000원 승인은 별도 생성, 없음은 무변경, 복수는 확인 필요 | IOS-003, IOS-013, IOS-015, DEC-012, DEC-031, DEC-041 |
 
-추가 계약 테스트에서는 입력 값의 문자열·숫자·불리언·배열·객체 행렬, method/content type/version/body/field/idempotency key/rate/quota 경계, CORS와 인증의 독립성, 카드사 헤더 누락, 본인 카드 0·1·여러 건 일치, 타 멤버의 동일 카드사 등록, 신규·중복 알림 실패를 각각 분리해 검증합니다. 임시 진단 계약은 원문에 CRLF·제로폭 문자·비표준 공백을 넣어 exact raw와 normalized 값이 서로 보존되는지, 수집 허용·금지 분기와 best-effort 실패 격리를 별도로 검증합니다. Shortcut parser의 비식별 원문과 전체 evidence·typed 오류 단일 fixture는 [`shortcut-parser-golden.v1.json`](../../../../../../contracts/fixtures/payment-capture/shortcut-parser-golden.v1.json)입니다. 카드 매칭은 결제 설정의 `T-CARD-001` fixture를 Android와 함께 소비합니다.
+추가 계약 테스트에서는 입력 값의 문자열·숫자·불리언·배열·객체 행렬, method/content type/version/body/field/idempotency key/rate/quota 경계, CORS와 인증의 독립성, 승인·취소 카드사 헤더 누락, 본인 카드 0·1·여러 건 일치, 타 멤버의 동일 카드사 등록, 신규·중복 알림 실패를 각각 분리해 검증합니다. iPhone 개인용 자동화 계약은 승인과 취소 조건이 모두 같은 Shortcut을 호출하는지 검증합니다. 임시 진단 계약은 원문에 CRLF·제로폭 문자·비표준 공백을 넣어 exact raw와 normalized 값이 서로 보존되는지, 수집 허용·금지 분기와 best-effort 실패 격리를 별도로 검증합니다. Shortcut parser의 비식별 원문과 전체 evidence·typed 오류 단일 fixture는 [`shortcut-parser-golden.v1.json`](../../../../../../contracts/fixtures/payment-capture/shortcut-parser-golden.v1.json)입니다. 카드 매칭은 결제 설정의 `T-CARD-001` fixture를 Android와 함께 소비합니다.
 
 ## 10. 코드 근거
 

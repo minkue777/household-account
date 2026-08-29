@@ -204,7 +204,7 @@ DEC-013의 알림 수신자는 Ledger가 확정하지 않습니다. Ledger는 �
 
 1. Query는 household, 기간, 원 승인 amount를 필수 범위로 사용해 capture lineage의 불변 원장 사실만 반환합니다.
 2. Payment Capture가 완전 일치·후보 유일성 정책을 적용한 뒤 확정 captureLineageId와 version을 `CancelCapturedLineage`에 보냅니다.
-3. Ledger는 대상 lineage의 superseded 원본, active 거래, item/monthly split과 merge 파생 graph를 모두 다시 읽고 version map을 검증합니다.
+3. Ledger는 대상 lineage의 current transaction ref를 seed로 superseded 원본, active 거래, item/monthly split과 현재 active 공유 merge로 이어지는 영향 graph만 선택 조회하고 version map을 검증합니다. 대상 graph에 속하지 않는 거래·합치기와 deleted·superseded 과거 merge 감사 이력은 읽기·복원·snapshot 완전성 precondition에서 제외합니다. 영향 graph 안의 active 공유 merge를 복원하는 데 필요한 leaf ID·lineage snapshot이 불완전할 때만 `RESTORATION_SNAPSHOT_INCOMPLETE`를 반환하고 write는 0건이어야 합니다.
 4. 파생 merge가 다른 lineage도 포함하면 해당 파생 거래를 제거하고 취소되지 않은 원본을 유효한 active 거래로 복원하는 계획을 `CapturedLineageCancellationPolicy`로 계산합니다.
 5. 대상 lineage의 모든 Transaction·group/merge snapshot과 capture evidence는 삭제하고 fingerprint claim과 lineage는 같은 승인 재수집을 막는 최소 canceled tombstone으로 전환합니다. tombstone은 lineageId·fingerprint hash/version·canceledAt·receipt reference만 가지며 금액·가맹점·카드·메모를 저장하지 않습니다. cancellation receipt와 Outbox에도 금융 표시 원문을 복제하지 않습니다.
 6. 삭제·복원·tombstone·receipt·Outbox를 한 UoW로 commit하며, 완료 뒤 해당 lineage의 사용자 원복 Command는 `NotFound`입니다.
@@ -231,7 +231,7 @@ DEC-013의 알림 수신자는 Ledger가 확정하지 않습니다. Ledger는 �
 | `LedgerRepository` | 단건·그룹·기간·검색 후보 조회와 persistence mapping | tenant 강제, legacy transactionType=expense, 오류/NoData 구분 |
 | `ItemSplitStore` | 항목 분할 원본·직접 파생 항목의 선택 조회와 원자 교체 | split은 원본 ID 한 건, restore는 원본 ID와 `derivedFromTransactionId` 일치 항목만 읽고 같은 선택 집합의 version을 commit 안에서 재검증한다. |
 | `MonthlySplitLifecycleStore` | 월 분할 원본·그룹의 선택 조회와 원자 교체 | 신규·기존 분할은 원본 한 건 이하, 취소·재구성은 `splitGroupId` 일치 항목과 그 원본만 읽고 전체 원장과 무관한 거래는 조회·재저장하지 않는다. |
-| `TransformationLineageStore` | Merge·Unmerge·lineage cancel의 선택 조회와 원자 commit | Merge·Unmerge는 명시된 transaction/capture-lineage/merge-leaf ID만 조회하고 canonical 우선·legacy fallback과 commit 안의 동일 선택 집합·새 aggregate ID 재검증을 적용한다. Cancellation만 ID가 없는 구형 `mergedFrom` 계보의 존재 여부를 가구 범위에서 검사하고 commit 안에서 다시 확인해 불완전 계보를 무변경 거부한다. |
+| `TransformationLineageStore` | Merge·Unmerge·lineage cancel의 선택 조회와 원자 commit | Merge·Unmerge는 명시된 transaction/capture-lineage/merge-leaf ID만 조회하고 canonical 우선·legacy fallback과 commit 안의 동일 선택 집합·새 aggregate ID 재검증을 적용한다. Cancellation도 대상 captureLineageId의 current transaction ref에서 도달 가능한 활성 영향 graph만 선택 조회하고 commit 안에서 같은 graph를 재검증한다. 이 graph의 active 공유 merge에 ID·lineage snapshot이 부족하면 무변경 거부하되, graph 밖의 관련 없는 거래와 deleted·superseded 과거 `mergedFrom` 감사 이력은 취소 precondition으로 사용하지 않는다. |
 | `LedgerUnitOfWork` | Transaction, claim, receipt, Outbox 원자 commit | callback 2회, create 경합, rollback |
 | `CategoryReferencePort` | categoryId 활성·사용 가능 상태 확인 | NotFound/Inactive/RetryableFailure 구분 |
 | `Clock` / `IdGenerator` | manual time, ID, occurredAt | 고정·순차 fixture |

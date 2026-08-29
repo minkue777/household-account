@@ -179,15 +179,10 @@ function transactionLifecycleState(
   return data.lifecycleState === "superseded" ? "superseded" : "active";
 }
 
-function hasIncompleteLegacyMergeSnapshot(
+function hasLegacyMergeSnapshot(
   data: FirebaseFirestore.DocumentData,
 ): boolean {
-  return (
-    transactionLifecycleState(data) !== "deleted" &&
-    Array.isArray(data.mergedFrom) &&
-    data.mergedFrom.length > 0 &&
-    mergeLeafIds(data).length === 0
-  );
+  return Array.isArray(data.mergedFrom) && data.mergedFrom.length > 0;
 }
 
 function transactionVersion(data: FirebaseFirestore.DocumentData): number {
@@ -626,17 +621,6 @@ export class FirebaseCaptureLedgerPersistence
           );
           return result;
         }
-        if (
-          [...all.values()].some((document) =>
-            hasIncompleteLegacyMergeSnapshot(document.data()),
-          )
-        ) {
-          return {
-            kind: "rejected" as const,
-            code: "RESTORATION_SNAPSHOT_INCOMPLETE",
-          };
-        }
-
         const cancellationPlan = planCaptureLineageCancellation({
           captureLineageId,
           transactions: [...all].map(([transactionId, document]) => ({
@@ -645,6 +629,9 @@ export class FirebaseCaptureLedgerPersistence
             captureLineageIds: lineageIds(document.data()),
             parentTransactionIds: derivedParents(document.data()),
             mergeLeafIds: mergeLeafIds(document.data()),
+            legacyMergeSnapshotPresent: hasLegacyMergeSnapshot(
+              document.data(),
+            ),
           })),
         });
         const affected = new Set(cancellationPlan.affectedTransactionIds);

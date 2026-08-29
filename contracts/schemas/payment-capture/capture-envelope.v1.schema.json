@@ -115,7 +115,10 @@
               ],
               "properties": {
                 "observationType": {
-                  "const": "approval"
+                  "enum": [
+                    "approval",
+                    "cancellation"
+                  ]
                 },
                 "cardEvidence": {}
               }

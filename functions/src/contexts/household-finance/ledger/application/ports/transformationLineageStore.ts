@@ -11,7 +11,6 @@ export interface TransformationLineageSelection {
 
 export interface TransformationLineageStore {
   findReceipt(operationKey: string): Promise<LedgerTransformationResult | undefined>;
-  hasIncompleteLegacyMergeSnapshot(): Promise<boolean>;
   load(selection: TransformationLineageSelection): Promise<LedgerTransformationState>;
   commit(input: {
     operationKey: string;
@@ -20,7 +19,6 @@ export interface TransformationLineageStore {
     baseline: LedgerTransformationState;
     state: LedgerTransformationState;
     result: Extract<LedgerTransformationResult, { kind: "success" }>;
-    requireCompleteMergeLineage?: boolean;
   }): Promise<
     | { kind: "success" }
     | { kind: "conflict"; code: "VERSION_MISMATCH" }

@@ -81,31 +81,6 @@ function stringList(value: unknown): readonly string[] | undefined {
   return values.length === 0 ? undefined : values;
 }
 
-function hasIncompleteLegacyMergeSnapshot(
-  snapshot: firestore.DocumentSnapshot,
-): boolean {
-  if (!snapshot.exists) return false;
-  const data = snapshot.data();
-  return (
-    data !== undefined &&
-    data.lifecycleState !== "deleted" &&
-    data.deletedAt === undefined &&
-    Array.isArray(data.mergedFrom) &&
-    data.mergedFrom.length > 0 &&
-    stringList(data.mergeLeafIds) === undefined
-  );
-}
-
-function authoritativeTransactionSnapshots(
-  canonical: readonly firestore.DocumentSnapshot[],
-  legacy: readonly firestore.DocumentSnapshot[],
-): readonly firestore.DocumentSnapshot[] {
-  const byId = new Map<string, firestore.DocumentSnapshot>();
-  for (const snapshot of legacy) byId.set(snapshot.id, snapshot);
-  for (const snapshot of canonical) byId.set(snapshot.id, snapshot);
-  return [...byId.values()];
-}
-
 function mapTransaction(
   householdId: string,
   snapshot: firestore.DocumentSnapshot,
@@ -601,19 +576,6 @@ export class FirebaseTransformationLineageStore
       : undefined;
   }
 
-  async hasIncompleteLegacyMergeSnapshot(): Promise<boolean> {
-    const [canonical, legacy] = await Promise.all([
-      this.canonicalTransactions().get(),
-      this.legacyTransactions()
-        .where("householdId", "==", this.householdId)
-        .get(),
-    ]);
-    return authoritativeTransactionSnapshots(
-      canonical.docs,
-      legacy.docs,
-    ).some((snapshot) => hasIncompleteLegacyMergeSnapshot(snapshot));
-  }
-
   async load(
     selection: TransformationLineageSelection,
   ): Promise<LedgerTransformationState> {
@@ -626,30 +588,6 @@ export class FirebaseTransformationLineageStore
         const receipt = this.receipt(input.operationKey);
         const receiptSnapshot = await unitOfWork.get(receipt);
         if (receiptSnapshot.exists) return { kind: "success" as const };
-
-        if (input.requireCompleteMergeLineage === true) {
-          const [canonical, legacy] = await Promise.all([
-            unitOfWork.get(this.canonicalTransactions()),
-            unitOfWork.get(
-              this.legacyTransactions().where(
-                "householdId",
-                "==",
-                this.householdId,
-              ),
-            ),
-          ]);
-          if (
-            authoritativeTransactionSnapshots(
-              canonical.docs,
-              legacy.docs,
-            ).some((snapshot) => hasIncompleteLegacyMergeSnapshot(snapshot))
-          ) {
-            return {
-              kind: "contract-failure" as const,
-              code: "RESTORATION_SNAPSHOT_INCOMPLETE" as const,
-            };
-          }
-        }
 
         const baselineIds = new Set(
           input.baseline.transactions.map((transaction) => transaction.transactionId),

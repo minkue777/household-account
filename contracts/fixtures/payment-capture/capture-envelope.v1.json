@@ -207,7 +207,7 @@
         "observedAt": "2026-07-19T12:00:01+09:00",
         "parser": {
           "parserId": "shortcut-card-message-parser",
-          "parserVersion": "1.0.0"
+          "parserVersion": "1.3.0"
         },
         "rawPayloadHash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
         "paymentObservation": {
@@ -230,6 +230,53 @@
         "consumer": "payment-intake",
         "originChannel": "ios-shortcut",
         "transactionBranch": "approval",
+        "balanceBranch": "absent"
+      }
+    },
+    {
+      "caseId": "ios-shortcut-cancellation-only",
+      "requirementIds": [
+        "T-IOS-001",
+        "T-CAN-003",
+        "T-PARSE-004"
+      ],
+      "description": "Shortcut credential 증거와 명시적 취소 유형을 cancellation payment branch로 전달한다",
+      "producer": "shortcut-adapter",
+      "envelope": {
+        "contractVersion": "capture-envelope.v1",
+        "observationId": "observation.ios.cancellation.001",
+        "originChannel": "ios-shortcut",
+        "sourceEvidence": {
+          "kind": "ios-shortcut-credential",
+          "sourceType": "ios-shortcut",
+          "credentialIdHash": "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+        },
+        "observedAt": "2026-08-12T17:53:09+09:00",
+        "parser": {
+          "parserId": "shortcut-card-message-parser",
+          "parserVersion": "1.3.0"
+        },
+        "rawPayloadHash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "paymentObservation": {
+          "branchId": "branch.ios.cancellation.001",
+          "observationType": "cancellation",
+          "amountInWon": 140000,
+          "occurredLocalDate": "2026-08-12",
+          "occurredLocalTime": "17:53",
+          "zoneId": "Asia/Seoul",
+          "merchantEvidence": {
+            "rawCandidate": "덕양주유소"
+          },
+          "cardEvidence": {
+            "companyLabel": "농협",
+            "maskedToken": "4x3x"
+          }
+        }
+      },
+      "expectedConsumer": {
+        "consumer": "payment-intake",
+        "originChannel": "ios-shortcut",
+        "transactionBranch": "cancellation",
         "balanceBranch": "absent"
       }
     }

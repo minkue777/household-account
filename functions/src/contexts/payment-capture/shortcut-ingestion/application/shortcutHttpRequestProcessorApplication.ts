@@ -152,20 +152,53 @@ export function createShortcutHttpRequestProcessorApplication(
         if (intake.kind === "rejected") {
           result = processingError(intake.code);
         } else {
+          const transaction = (() => {
+            switch (intake.kind) {
+              case "created":
+                return {
+                  kind: "created" as const,
+                  transactionId: intake.transactionId,
+                };
+              case "duplicate":
+                return {
+                  kind: "duplicate" as const,
+                  existingTransactionId: intake.existingTransactionId,
+                };
+              case "cancelled":
+                return {
+                  kind: "cancelled" as const,
+                  transactionIds: intake.transactionIds,
+                };
+              case "needs-confirmation":
+                return {
+                  kind: "needsConfirmation" as const,
+                  candidates: intake.captureLineageIds.map(
+                    (captureLineageId) => ({
+                      kind: "captureLineage" as const,
+                      captureLineageId,
+                    }),
+                  ),
+                };
+              case "cancellation-not-found":
+                return {
+                  kind: "rejected" as const,
+                  code: "CANCELLATION_TARGET_NOT_FOUND" as const,
+                };
+            }
+          })();
+          const notification =
+            intake.kind === "created" || intake.kind === "duplicate"
+              ? {
+                  state: "queued" as const,
+                  targetMemberId:
+                    authorization.credential.actor.actingMemberId,
+                }
+              : { state: "not-requested" as const };
           result = {
             kind: "success",
             commandId,
-            transaction:
-              intake.kind === "created"
-                ? { kind: "created", transactionId: intake.transactionId }
-                : {
-                    kind: "duplicate",
-                    existingTransactionId: intake.existingTransactionId,
-                  },
-            notification: {
-              state: "queued",
-              targetMemberId: authorization.credential.actor.actingMemberId,
-            },
+            transaction,
+            notification,
           };
         }
         await dependencies.receipts.complete({ receiptKey, result });
