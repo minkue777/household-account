@@ -124,6 +124,65 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     });
   });
 
+  it("지역화폐 거래 수정은 응답과 canonical·legacy 문서에 지역화폐 유형을 보존한다", async () => {
+    const transactionId = "local-currency-update";
+    const source = {
+      householdId: HOUSEHOLD_ID,
+      transactionType: "expense",
+      lifecycleState: "active",
+      amountInWon: 12_000,
+      accountingDate: "2026-07-22",
+      localTime: "12:34",
+      merchant: "지역화폐 가맹점",
+      categoryId: "etc",
+      memo: "수정 전",
+      cardType: "captured",
+      cardDisplay: "경기지역화폐",
+      creatorMemberId: actor.actingMemberId,
+      source: "android-notification",
+      originChannel: "android",
+      localCurrencyType: "gyeonggi",
+      aggregateVersion: 1,
+    };
+    await database
+      .collection("households")
+      .doc(HOUSEHOLD_ID)
+      .collection("ledgerTransactions")
+      .doc(transactionId)
+      .set(source);
+
+    const result = (await execute(
+      createLedgerHouseholdCommandHandlers(database),
+      "ledger.update-transaction.v1",
+      "local-currency-update-command",
+      {
+        transactionId,
+        expectedVersion: 1,
+        patch: { memo: "수정 후" },
+      },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      transactionId,
+      memo: "수정 후",
+      localCurrencyType: "gyeonggi",
+      aggregateVersion: 2,
+    });
+    expect(
+      (
+        await database
+          .collection("households")
+          .doc(HOUSEHOLD_ID)
+          .collection("ledgerTransactions")
+          .doc(transactionId)
+          .get()
+      ).data(),
+    ).toMatchObject({ localCurrencyType: "gyeonggi", memo: "수정 후" });
+    expect(
+      (await database.collection("expenses").doc(transactionId).get()).data(),
+    ).toMatchObject({ localCurrencyType: "gyeonggi", memo: "수정 후" });
+  });
+
   it("월 분할은 대량 원장에서도 변경 항목만 저장하고 보이는 파생 version만으로 취소한다", async () => {
     const household = database.collection("households").doc(HOUSEHOLD_ID);
     const canonical = household.collection("ledgerTransactions");
@@ -160,6 +219,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       creatorMemberId: actor.actingMemberId,
       source: "notification",
       originChannel: "android",
+      localCurrencyType: "gyeonggi",
       aggregateVersion: 1,
     });
     await seed.commit();
@@ -181,6 +241,10 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       split.transactionIds.map((transactionId) => canonical.doc(transactionId).get()),
     );
     expect(parts.every((part) => part.exists)).toBe(true);
+    expect(parts.map((part) => part.data()?.localCurrencyType)).toEqual([
+      "gyeonggi",
+      "gyeonggi",
+    ]);
 
     await execute(
       handlers,
@@ -199,6 +263,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       aggregateVersion: 3,
       merchant: "포레스트",
       amountInWon: 20_000,
+      localCurrencyType: "gyeonggi",
     });
     for (const transactionId of split.transactionIds) {
       expect((await canonical.doc(transactionId).get()).exists).toBe(false);
@@ -256,6 +321,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       creatorMemberId: actor.actingMemberId,
       source: "notification",
       originChannel: "android",
+      localCurrencyType: "gyeonggi",
       aggregateVersion: 1,
     });
     await seed.commit();
@@ -293,11 +359,13 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       merchant: "첫 번째 항목",
       amountInWon: 12_000,
       derivedFromTransactionId: "item-split-source",
+      localCurrencyType: "gyeonggi",
     });
     expect((await canonical.doc(result.transactionIds[1]).get()).data()).toMatchObject({
       merchant: "두 번째 항목",
       amountInWon: 8_000,
       derivedFromTransactionId: "item-split-source",
+      localCurrencyType: "gyeonggi",
     });
     expect((await canonical.doc("unrelated-item-259").get()).data()).toMatchObject({
       aggregateVersion: 1,
@@ -523,6 +591,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
         creatorMemberId: actor.actingMemberId,
         cardEvidence: "카드(1234)",
         captureLineageId: `lineage-${transactionId}`,
+        localCurrencyType: "gyeonggi",
       });
     }
     const handlers = createLedgerHouseholdCommandHandlers(database);
@@ -554,6 +623,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
         lifecycleState: "active",
         aggregateVersion: 1,
         mergeLeafIds: ["expense-a", "expense-b"],
+        localCurrencyType: "gyeonggi",
       },
     });
     expect((await household.collection("ledgerTransactions").doc(mergedId).get()).data()).toMatchObject({
@@ -566,6 +636,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       lifecycleState: "active",
       aggregateVersion: 1,
       mergeLeafIds: ["expense-a", "expense-b"],
+      localCurrencyType: "gyeonggi",
     });
     const mergedLegacy = (
       await database.collection("expenses").doc(mergedId).get()
@@ -574,6 +645,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       transactionType: "expense",
       cardType: "local_currency",
       mergeLeafIds: ["expense-a", "expense-b"],
+      localCurrencyType: "gyeonggi",
     });
     expect(mergedLegacy?.mergedFrom).toEqual([
       expect.objectContaining({ amount: 40_000, category: "etc" }),
@@ -601,6 +673,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       localTime: "12:00",
       cardDisplay: "target-card",
       cardType: "local_currency",
+      localCurrencyType: "gyeonggi",
     });
     expect((await household.collection("ledgerTransactions").doc("expense-b").get()).data()).toMatchObject({
       lifecycleState: "active",
@@ -610,6 +683,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       localTime: "12:00",
       cardDisplay: "target-card",
       cardType: "local_currency",
+      localCurrencyType: "gyeonggi",
     });
     expect((await household.collection("ledgerTransactions").doc(mergedId).get()).data()).toMatchObject({
       lifecycleState: "deleted",

@@ -129,6 +129,10 @@ export function resolveExpenseCardDisplay(data: LedgerCardReadFields): string | 
 function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense {
   const data = docSnap.data();
   const cardDisplay = resolveExpenseCardDisplay(data);
+  const localCurrencyType =
+    typeof data.localCurrencyType === 'string' && data.localCurrencyType.trim() !== ''
+      ? data.localCurrencyType.trim()
+      : undefined;
   const splitGroup = typeof data.splitGroup === 'object' && data.splitGroup !== null
     ? data.splitGroup as Record<string, unknown>
     : undefined;
@@ -157,6 +161,7 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
     category: (data.categoryId || data.category || 'etc').toLowerCase(),
     cardType: data.cardType?.toLowerCase() || (data.source === 'manual' ? 'manual' : 'main'),
     cardLastFour: cardDisplay,
+    ...(localCurrencyType === undefined ? {} : { localCurrencyType }),
     memo: data.memo,
     mergedFrom: data.mergedFrom,
     ...(mergeLeafIds === undefined ? {} : { mergeLeafIds }),
@@ -183,6 +188,7 @@ function mapCommandTransaction(
     category: transaction.categoryId.toLowerCase(),
     cardType: previous?.cardType ?? transaction.cardType,
     cardLastFour: previous?.cardLastFour ?? transaction.cardDisplay,
+    localCurrencyType: previous?.localCurrencyType ?? transaction.localCurrencyType,
     memo: transaction.memo,
   };
 }

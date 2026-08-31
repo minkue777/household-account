@@ -14,6 +14,7 @@ export interface ItemSplitTransaction {
   creatorMemberId: string;
   cardEvidence: string;
   captureLineageId: string;
+  localCurrencyType?: string;
   aggregateVersion: number;
   derivedFromTransactionId?: string;
 }
@@ -81,6 +82,7 @@ const original: ItemSplitTransaction = {
   creatorMemberId: "member-1",
   cardEvidence: "KB:1234",
   captureLineageId: "lineage-1",
+  localCurrencyType: "gyeonggi",
   aggregateVersion: 1,
 };
 
@@ -201,6 +203,7 @@ describe("Ledger 항목 분할 검증·원복 공개 계약", () => {
           creatorMemberId,
           cardEvidence,
           captureLineageId,
+          localCurrencyType,
         }) => ({
           merchant,
           amountInWon,
@@ -211,6 +214,7 @@ describe("Ledger 항목 분할 검증·원복 공개 계약", () => {
           creatorMemberId,
           cardEvidence,
           captureLineageId,
+          localCurrencyType,
         }),
       ),
     ).toEqual([
@@ -224,6 +228,7 @@ describe("Ledger 항목 분할 검증·원복 공개 계약", () => {
         creatorMemberId: original.creatorMemberId,
         cardEvidence: original.cardEvidence,
         captureLineageId: original.captureLineageId,
+        localCurrencyType: "gyeonggi",
       },
       {
         merchant: "생활",
@@ -235,6 +240,7 @@ describe("Ledger 항목 분할 검증·원복 공개 계약", () => {
         creatorMemberId: original.creatorMemberId,
         cardEvidence: original.cardEvidence,
         captureLineageId: original.captureLineageId,
+        localCurrencyType: "gyeonggi",
       },
     ]);
     expect(state.dedupClaims).toEqual(initial.dedupClaims);

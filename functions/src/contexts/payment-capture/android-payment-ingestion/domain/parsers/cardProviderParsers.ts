@@ -69,7 +69,10 @@ function occurrence(input: {
 }
 
 function normalizeKbMerchant(value: string): string | undefined {
-  const normalized = value.replace(/\s*(승인|취소|사용)\s*$/u, "").trim();
+  const normalized = value
+    .replace(/\s*(?:총)?누적(?:금액)?\s*[\d,]*원?.*$/u, "")
+    .replace(/\s*(승인|취소|사용)\s*$/u, "")
+    .trim();
   if (normalized === "" || normalized.startsWith("누적")) return undefined;
   if (/^[\d,\s/:원]+$/u.test(normalized)) return undefined;
   if (/^(신용|체크)\s+\d{4}.*$/u.test(normalized)) return undefined;
@@ -96,6 +99,21 @@ function kbMerchantAfter(
   return "알수없음";
 }
 
+function kbMerchantAtDate(
+  lines: readonly string[],
+  dateValue: string,
+): string {
+  const markerIndex = lines.findIndex((line) => line.includes(dateValue));
+  if (markerIndex < 0) return "알수없음";
+
+  const markerLine = lines[markerIndex];
+  const dateOffset = markerLine.indexOf(dateValue);
+  const inlineMerchant = normalizeKbMerchant(
+    markerLine.slice(dateOffset + dateValue.length),
+  );
+  return inlineMerchant ?? kbMerchantAfter(lines, markerIndex + 1);
+}
+
 function parseKb(context: ProviderParserContext): AndroidProviderParseResult {
   const card = KB_CARD_PATTERN.exec(context.body);
   if (card === null) return ignoredParseFailure();
@@ -117,13 +135,12 @@ function parseKb(context: ProviderParserContext): AndroidProviderParseResult {
         occurred.kind === "failure" ? occurred.code : "INVALID_AMOUNT",
       );
     }
-    const markerIndex = lines.findIndex((line) => line.includes(dateTime[0]));
     return parsedPayment({
       type: kbPaymentType(card[2], context.body),
       amountInWon: amount,
       occurredLocalDate: occurred.occurredLocalDate,
       occurredLocalTime: occurred.occurredLocalTime,
-      merchant: markerIndex < 0 ? "알수없음" : kbMerchantAfter(lines, markerIndex + 1),
+      merchant: kbMerchantAtDate(lines, dateTime[0]),
       cardCompany: "국민",
       maskedCardToken: card[1],
     });
@@ -158,7 +175,7 @@ function parseKb(context: ProviderParserContext): AndroidProviderParseResult {
     amountInWon: amount,
     occurredLocalDate: occurred.occurredLocalDate,
     occurredLocalTime: time,
-    merchant: kbMerchantAfter(lines, summaryIndex + 1),
+    merchant: kbMerchantAtDate(lines, summary[0]),
     cardCompany: "국민",
     maskedCardToken: card[1],
     ...(summary[4] === "" || summary[4] === undefined

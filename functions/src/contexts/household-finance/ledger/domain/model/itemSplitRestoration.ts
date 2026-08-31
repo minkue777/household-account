@@ -11,6 +11,7 @@ export interface ItemSplitTransaction {
   creatorMemberId: string;
   cardEvidence: string;
   captureLineageId: string;
+  localCurrencyType?: string;
   aggregateVersion: number;
   derivedFromTransactionId?: string;
 }

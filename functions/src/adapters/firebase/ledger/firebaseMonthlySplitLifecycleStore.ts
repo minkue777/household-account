@@ -47,6 +47,11 @@ function mapTransaction(
             originalId: String(data.splitOriginalId ?? ""),
           }
         : undefined;
+  const localCurrencyType =
+    typeof data.localCurrencyType === "string" &&
+    data.localCurrencyType.trim() !== ""
+      ? data.localCurrencyType.trim()
+      : undefined;
   return {
     transactionId: snapshot.id,
     householdId: data.householdId,
@@ -63,6 +68,7 @@ function mapTransaction(
     creatorMemberId: String(data.creatorMemberId ?? data.createdBy ?? ""),
     source: String(data.source ?? "manual"),
     originChannel: String(data.originChannel ?? "web"),
+    ...(localCurrencyType === undefined ? {} : { localCurrencyType }),
     aggregateVersion: Number(data.aggregateVersion ?? 1),
     ...(splitGroup === undefined ? {} : { splitGroup }),
   };
@@ -86,6 +92,9 @@ function documentData(transaction: SplitTransaction, isNew: boolean) {
     creatorMemberId: transaction.creatorMemberId,
     source: transaction.source,
     originChannel: transaction.originChannel,
+    ...(transaction.localCurrencyType === undefined
+      ? {}
+      : { localCurrencyType: transaction.localCurrencyType }),
     aggregateVersion: transaction.aggregateVersion,
     ...(transaction.splitGroup === undefined
       ? {}

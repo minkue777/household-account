@@ -62,6 +62,7 @@ function mapTransaction(
       ? "deleted"
       : "active";
   const cardType = data.cardType === "captured" ? "captured" : "manual";
+  const localCurrencyType = text(data, "localCurrencyType");
   return {
     transactionId: snapshot.id,
     householdId,
@@ -74,6 +75,7 @@ function mapTransaction(
     localTime: text(data, "localTime", "time") || "00:00",
     cardDisplay: text(data, "cardDisplay") || "수동",
     cardType,
+    ...(localCurrencyType === "" ? {} : { localCurrencyType }),
     source: text(data, "source") || (cardType === "manual" ? "manual" : "captured"),
     creatorMemberId: text(data, "creatorMemberId", "createdBy"),
     lifecycleState,
@@ -108,6 +110,9 @@ function transactionDocument(
     time: transaction.localTime,
     cardDisplay: transaction.cardDisplay,
     cardType: transaction.cardType,
+    ...(transaction.localCurrencyType === undefined
+      ? {}
+      : { localCurrencyType: transaction.localCurrencyType }),
     creatorMemberId: transaction.creatorMemberId,
     lifecycleState: transaction.lifecycleState,
     aggregateVersion: transaction.aggregateVersion,

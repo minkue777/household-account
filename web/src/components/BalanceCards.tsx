@@ -87,7 +87,13 @@ export default function BalanceCards({
       return;
     }
 
-    const localCurrencyExpenses = expenses.filter((expense) => expense.cardType === 'local_currency');
+    const selectedLocalCurrencyType = localCurrencyBalance?.currencyType;
+    const localCurrencyExpenses = selectedLocalCurrencyType === undefined
+      || selectedLocalCurrencyType === 'legacy-unknown'
+      ? []
+      : expenses.filter(
+          (expense) => expense.localCurrencyType === selectedLocalCurrencyType
+        );
     onLocalCurrencyClick(localCurrencyExpenses);
   };
 

@@ -15,6 +15,7 @@ interface LedgerTransactionView {
   localTime: string;
   cardDisplay: string;
   cardType: "manual" | "captured";
+  localCurrencyType?: string;
   source?: string;
   creatorMemberId: string;
   lifecycleState: "active" | "deleted";
@@ -273,13 +274,14 @@ describe("Ledger 기본 Command·Query 공개 계약", () => {
         transaction("captured-1", {
           cardType: "captured",
           cardDisplay: "국민(0027)",
+          localCurrencyType: "gyeonggi",
           source: "kb-card",
         }),
       ],
       activeCategoryIds: ["food"],
     });
 
-    await subject.update({
+    const result = await subject.update({
       commandId: "update-captured",
       actor,
       transactionId: "captured-1",
@@ -287,10 +289,16 @@ describe("Ledger 기본 Command·Query 공개 계약", () => {
       patch: { categoryId: "food" },
     });
 
+    expect(result).toMatchObject({
+      kind: "success",
+      value: { localCurrencyType: "gyeonggi" },
+    });
+
     expect(subject.state().transactions).toEqual([
       expect.objectContaining({
         cardType: "captured",
         cardDisplay: "국민(0027)",
+        localCurrencyType: "gyeonggi",
         source: "kb-card",
         aggregateVersion: 2,
       }),

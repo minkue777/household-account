@@ -135,6 +135,9 @@ function buildParts(input: {
       creatorMemberId: input.source.creatorMemberId,
       source: input.source.source,
       originChannel: input.source.originChannel,
+      ...(input.source.localCurrencyType === undefined
+        ? {}
+        : { localCurrencyType: input.source.localCurrencyType }),
       aggregateVersion: 1,
       splitGroup: {
         groupId: input.groupId,

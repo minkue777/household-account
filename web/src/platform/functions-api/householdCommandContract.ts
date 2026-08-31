@@ -14,6 +14,7 @@ export interface LedgerTransactionCommandResult {
   localTime: string;
   cardDisplay: string;
   cardType: 'manual' | 'captured';
+  localCurrencyType?: string;
   creatorMemberId: string;
   lifecycleState: 'active' | 'deleted';
   aggregateVersion: number;

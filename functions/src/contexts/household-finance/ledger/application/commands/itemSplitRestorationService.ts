@@ -106,6 +106,9 @@ export function createItemSplitRestorationCommands(input: {
         creatorMemberId: splitSource.creatorMemberId,
         cardEvidence: splitSource.cardEvidence,
         captureLineageId: splitSource.captureLineageId,
+        ...(splitSource.localCurrencyType === undefined
+          ? {}
+          : { localCurrencyType: splitSource.localCurrencyType }),
         aggregateVersion: 1,
         derivedFromTransactionId: source.transactionId,
       }));

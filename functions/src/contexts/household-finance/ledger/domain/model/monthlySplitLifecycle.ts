@@ -13,6 +13,7 @@ export interface SplitTransaction {
   creatorMemberId: string;
   source: string;
   originChannel: string;
+  localCurrencyType?: string;
   aggregateVersion: number;
   splitGroup?: {
     groupId: string;

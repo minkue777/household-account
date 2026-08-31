@@ -170,6 +170,9 @@ function transformationTransactionValue(
     localTime: transaction.localTime,
     cardDisplay: transaction.cardDisplay,
     cardType: transaction.cardType,
+    ...(transaction.provenance.localCurrencyType === undefined
+      ? {}
+      : { localCurrencyType: transaction.provenance.localCurrencyType }),
     source: transaction.provenance.source,
     creatorMemberId: transaction.provenance.creatorMemberId,
     lifecycleState:

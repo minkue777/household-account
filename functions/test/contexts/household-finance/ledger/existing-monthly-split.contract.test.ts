@@ -17,6 +17,7 @@ interface SplitTransaction {
   creatorMemberId: string;
   source: string;
   originChannel: string;
+  localCurrencyType?: string;
   aggregateVersion: number;
   splitGroup?: {
     groupId: string;
@@ -59,6 +60,7 @@ function activeOriginal(): SplitTransaction {
     creatorMemberId: "member-a",
     source: "notification",
     originChannel: "android",
+    localCurrencyType: "gyeonggi",
     aggregateVersion: 4,
   };
 }
@@ -90,6 +92,7 @@ describe("기존 거래 월 분할 계약", () => {
           lifecycleState: "active",
           cardDisplay: "국민카드(1234)",
           source: "notification",
+          localCurrencyType: "gyeonggi",
           splitGroup: expect.objectContaining({
             groupId: "monthly-group:split-existing-3",
             originalId: "transaction-1",

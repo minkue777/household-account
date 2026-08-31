@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import BalanceCards from '@/components/BalanceCards';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import type { Expense } from '@/types/expense';
@@ -100,5 +100,65 @@ describe('첫 가계부 요약의 독립 점진 렌더링 계약', () => {
 
     expect(card('지역화폐 잔액').getByText('12,345')).toBeInTheDocument();
     expect(card('7월 지출').getByText('-')).toBeInTheDocument();
+  });
+
+  test('[T-LED-004][LED-010][DEC-057] 선택한 지역화폐 유형의 production-shaped 거래만 상세에 표시한다', () => {
+    const onLocalCurrencyClick = jest.fn();
+    const gyeonggiExpenses = Array.from({ length: 41 }, (_, index): Expense => ({
+      id: `gyeonggi-${index + 1}`,
+      aggregateVersion: 1,
+      amount: 1_000 + index,
+      merchant: `경기 가맹점 ${index + 1}`,
+      category: 'etc',
+      date: '2026-08-31',
+      transactionType: 'expense',
+      cardType: 'captured',
+      localCurrencyType: 'gyeonggi',
+    }));
+    const nonSelectedAndLegacyExpenses: Expense[] = [
+      {
+        ...gyeonggiExpenses[0],
+        id: 'daejeon-1',
+        localCurrencyType: 'daejeon',
+      },
+      {
+        ...gyeonggiExpenses[0],
+        id: 'legacy-local-currency',
+        cardType: 'local_currency',
+        localCurrencyType: undefined,
+      },
+    ];
+
+    render(
+      <BalanceCards
+        currentYear={2026}
+        currentMonth={8}
+        expenses={[...gyeonggiExpenses, ...nonSelectedAndLegacyExpenses]}
+        yearlySpent={null}
+        summaryConfig={{
+          leftCard: 'localCurrencyBalance',
+          rightCard: 'monthlySpent',
+        }}
+        transactionType="expense"
+        localCurrencyBalance={{
+          currencyType: 'gyeonggi',
+          balance: 972_229,
+          updatedAt: new Date('2026-08-31T20:28:00.000Z'),
+        }}
+        onLocalCurrencyClick={onLocalCurrencyClick}
+      />
+    );
+
+    fireEvent.click(screen.getByText('지역화폐 잔액').closest('.balance-card-glass')!);
+
+    expect(onLocalCurrencyClick).toHaveBeenCalledTimes(1);
+    const selectedExpenses = onLocalCurrencyClick.mock.calls[0][0] as Expense[];
+    expect(selectedExpenses).toHaveLength(41);
+    expect(selectedExpenses.every(
+      ({ cardType, localCurrencyType }) =>
+        cardType === 'captured' && localCurrencyType === 'gyeonggi'
+    )).toBe(true);
+    expect(selectedExpenses.map(({ id }) => id)).not.toContain('legacy-local-currency');
+    expect(selectedExpenses.map(({ id }) => id)).not.toContain('daejeon-1');
   });
 });

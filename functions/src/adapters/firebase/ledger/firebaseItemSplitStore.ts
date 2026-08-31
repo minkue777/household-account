@@ -43,6 +43,11 @@ function mapTransaction(
   ) {
     return undefined;
   }
+  const localCurrencyType =
+    typeof data.localCurrencyType === "string" &&
+    data.localCurrencyType.trim() !== ""
+      ? data.localCurrencyType.trim()
+      : undefined;
   return {
     transactionId: snapshot.id,
     householdId: data.householdId,
@@ -59,6 +64,7 @@ function mapTransaction(
     captureLineageId: String(
       data.captureLineageId ?? data.sourceFingerprint ?? "",
     ),
+    ...(localCurrencyType === undefined ? {} : { localCurrencyType }),
     aggregateVersion: Number(data.aggregateVersion ?? 1),
     ...(typeof data.derivedFromTransactionId === "string"
       ? { derivedFromTransactionId: data.derivedFromTransactionId }
@@ -284,6 +290,9 @@ export class FirebaseItemSplitStore implements ItemSplitStore {
             originChannel: value.originChannel,
             cardEvidence: value.cardEvidence,
             captureLineageId: value.captureLineageId,
+            ...(value.localCurrencyType === undefined
+              ? {}
+              : { localCurrencyType: value.localCurrencyType }),
             aggregateVersion: value.aggregateVersion,
             ...(value.derivedFromTransactionId === undefined
               ? {}

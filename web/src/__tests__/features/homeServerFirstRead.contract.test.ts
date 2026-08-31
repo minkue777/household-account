@@ -126,6 +126,18 @@ describe('가계부 첫 화면 server-first 조회 계약', () => {
             originalId: 'server-split-original',
           },
         }),
+      }, {
+        id: 'server-local-currency-expense',
+        data: () => ({
+          householdId: 'household-1',
+          date: '2026-07-23',
+          time: '18:00',
+          merchant: '지역화폐 가맹점',
+          amount: 5_000,
+          category: 'etc',
+          cardType: 'captured',
+          localCurrencyType: 'gyeonggi',
+        }),
       }],
     });
     expect(callback).toHaveBeenLastCalledWith([
@@ -144,12 +156,51 @@ describe('가계부 첫 화면 server-first 조회 계약', () => {
         splitGroupId: 'split-group-1',
         splitOriginalId: 'server-split-original',
       }),
+      expect.objectContaining({
+        id: 'server-local-currency-expense',
+        cardType: 'captured',
+        localCurrencyType: 'gyeonggi',
+      }),
     ]);
     expect(mockWhere).not.toHaveBeenCalledWith(
       'transactionType',
       '==',
       expect.anything()
     );
+  });
+
+  it('[T-LED-004][LED-010] production-shaped 지역화폐 거래 41건의 유형을 read model에 보존한다', () => {
+    const callback = jest.fn();
+    subscribeToMonthlyTransactions(2026, 8, callback);
+    const { next } = listenerArguments();
+    const documents = Array.from({ length: 41 }, (_, index) => ({
+      id: `gyeonggi-${index + 1}`,
+      data: () => ({
+        householdId: 'household-1',
+        transactionType: 'expense',
+        date: '2026-08-31',
+        time: '20:28',
+        merchant: `경기 가맹점 ${index + 1}`,
+        amount: 1_000 + index,
+        categoryId: 'etc',
+        cardType: 'captured',
+        localCurrencyType: 'gyeonggi',
+        lifecycleState: 'active',
+        aggregateVersion: 1,
+      }),
+    }));
+
+    next({ metadata: { fromCache: false }, docs: documents });
+
+    const mapped = callback.mock.calls.at(-1)?.[0] as Array<{
+      cardType?: string;
+      localCurrencyType?: string;
+    }>;
+    expect(mapped).toHaveLength(41);
+    expect(mapped.every(
+      ({ cardType, localCurrencyType }) =>
+        cardType === 'captured' && localCurrencyType === 'gyeonggi'
+    )).toBe(true);
   });
 
   it('가구 이름과 구성도 cache가 아닌 서버 document에서 읽는다', async () => {

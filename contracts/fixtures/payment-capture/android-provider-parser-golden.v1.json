@@ -17,6 +17,20 @@
       "expected": { "kind": "Parsed", "payment": { "type": "cancellation", "amountInWon": 12300, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "10:15", "merchant": "가맹점가", "cardCompany": "국민", "maskedCardToken": "1234" } }
     },
     {
+      "caseId": "kb-inline-approval-mega-mgc",
+      "requirementIds": ["T-PARSE-001", "PARSE-KB-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "com.kbcard.cxh.appcard", "parserId": "kb-card-parser" },
+      "raw": { "postedAt": "2026-08-31T13:17:14+09:00", "text": "KB국민카드0027승인 이*규님 2,600원 일시불 08/31 13:17 메가MGC커피 누적8,363,513원" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 2600, "occurredLocalDate": "2026-08-31", "occurredLocalTime": "13:17", "merchant": "메가MGC커피", "cardCompany": "국민", "maskedCardToken": "0027" } }
+    },
+    {
+      "caseId": "kb-inline-approval-coupang-eats",
+      "requirementIds": ["T-PARSE-001", "PARSE-KB-001", "PARSE-COMMON-001"],
+      "source": { "packageName": "com.kbcard.cxh.appcard", "parserId": "kb-card-parser" },
+      "raw": { "postedAt": "2026-08-31T13:40:12+09:00", "text": "KB국민카드4858승인 이*선님 18,500원 일시불 08/31 13:40 쿠팡이츠 누적8,382,013원" },
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 18500, "occurredLocalDate": "2026-08-31", "occurredLocalTime": "13:40", "merchant": "쿠팡이츠", "cardCompany": "국민", "maskedCardToken": "4858" } }
+    },
+    {
       "caseId": "kb-summary-posted-time",
       "requirementIds": ["T-PARSE-001", "PARSE-KB-001", "PARSE-COMMON-001"],
       "source": { "packageName": "com.kbcard.kbkookmincard", "parserId": "kb-card-parser" },
