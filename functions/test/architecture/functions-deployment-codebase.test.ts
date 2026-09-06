@@ -92,9 +92,10 @@ describe("Functions 대화형 배포 codebase 경계", () => {
     };
     expect(firebase.functions).not.toHaveLength(0);
     for (const deployment of firebase.functions) {
-      expect(deployment.predeploy).toContain(
+      expect(deployment.predeploy).toEqual([
         'npm --prefix "$RESOURCE_DIR" run build',
-      );
+        'node "$PROJECT_DIR/functions/scripts/deploy-firebase.mjs" --guard',
+      ]);
     }
   });
 });

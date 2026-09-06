@@ -265,7 +265,7 @@ class DefaultHouseholdPurgeProcessApplication
         ),
         releasedClaimCount: process.releasedClaimCount,
         absentClaimCount: process.absentClaimCount,
-        claimConflictCount: process.claimConflicts.length,
+        claimConflictCount: process.claimConflictCount ?? process.claimConflicts.length,
       },
     };
   }
@@ -341,6 +341,7 @@ class DefaultHouseholdPurgeProcessApplication
           phase: hasMore ? "claim-snapshot" : "context-purge",
           claimSnapshotCheckpoint: nextCheckpoint,
           claimSnapshotEntries: entries,
+          claimSnapshotEntryCount: (process.claimSnapshotEntryCount ?? process.claimSnapshotEntries.length) + page.length,
         };
         return {
           state: {
@@ -586,8 +587,8 @@ class DefaultHouseholdPurgeProcessApplication
 
         const offset = finalizationOffset(checkpoint);
         const page = process.claimSnapshotEntries.slice(
-          offset,
-          offset + process.claimPageSize,
+          offset - (process.claimSnapshotPageOffset ?? 0),
+          offset - (process.claimSnapshotPageOffset ?? 0) + process.claimPageSize,
         );
         const claims = state.currentClaims.slice();
         let releasedClaimCount = process.releasedClaimCount;
@@ -622,7 +623,7 @@ class DefaultHouseholdPurgeProcessApplication
 
         const nextOffset = offset + page.length;
         const allFinalized =
-          nextOffset >= process.claimSnapshotEntries.length;
+          nextOffset >= (process.claimSnapshotEntryCount ?? process.claimSnapshotEntries.length);
         const nextCheckpoint = allFinalized
           ? "finalization:complete"
           : `finalization:${nextOffset}`;
@@ -633,6 +634,7 @@ class DefaultHouseholdPurgeProcessApplication
           releasedClaimCount,
           absentClaimCount,
           claimConflicts,
+          claimConflictCount: (process.claimConflictCount ?? process.claimConflicts.length) + claimConflicts.length - process.claimConflicts.length,
         };
         if (!allFinalized) {
           return {

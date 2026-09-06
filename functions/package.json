@@ -23,13 +23,14 @@
     "test:runtime-boundaries": "node ../tools/release/gates/runtime-boundary-audit.mjs --check",
     "test:types": "tsc -p tsconfig.test.json --noEmit",
     "admin:system-claim": "node scripts/set-system-admin-claim.mjs",
+    "admin:access-operations": "npm run build && node scripts/access-operations.mjs",
     "migrate:runtime": "npm run build && node scripts/migrate-runtime.mjs",
     "reconcile:runtime": "node scripts/reconcile-runtime.mjs",
     "backfill:firestore-ttl": "node scripts/backfill-firestore-ttl.mjs",
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
-    "deploy": "firebase deploy --only functions",
+    "deploy": "node scripts/deploy-firebase.mjs",
     "logs": "firebase functions:log"
   },
   "engines": {

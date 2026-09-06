@@ -18,6 +18,8 @@ export {
   getDocsFromServer,
   limit,
   orderBy,
+  startAfter,
+  documentId,
   query,
   where,
   type DocumentData,

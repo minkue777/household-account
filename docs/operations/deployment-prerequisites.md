@@ -2,6 +2,13 @@
 
 애플리케이션 코드와 로컬 테스트로 만들 수 없는 Firebase·Google Cloud 리소스만 관리합니다. 이 문서는 배포 승인이 아니며 운영 데이터 변경도 수행하지 않습니다.
 
+준비가 끝난 후보의 manifest·정확한 HEAD의 CI·배포 잠금·smoke·provenance 검증은 [Firebase release 실행 절차](firebase-release-runbook.md)를 따릅니다.
+
+## Web·Android 배포 순서
+
+- Web은 `web/vercel.json`의 `git.deploymentEnabled=false`로 push 직후 자동 배포를 막습니다. 같은 HEAD의 `quality-gates.yml` 다섯 job 성공을 확인한 뒤 연결된 Vercel 프로젝트에 `vercel deploy --prod`로 배포합니다. [Vercel Git 설정](https://vercel.com/docs/project-configuration/git-configuration)을 따릅니다.
+- Android는 같은 CI 성공 확인 후 서명된 release APK를 GitHub Releases에 올립니다. 버전·서명·태그는 프로젝트의 `github-release-deploy` 스킬을 따릅니다.
+
 ## App Check
 
 - Android 앱을 Firebase App Check의 Play Integrity 공급자에 등록하고 배포 인증서 SHA-256을 등록합니다.

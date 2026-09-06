@@ -11,6 +11,7 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.await
 import com.household.account.QuickEditActivity
 import com.household.account.ledger.CallableLedgerTransactionQueryClient
 import com.household.account.ledger.LedgerTransactionQueryResult
@@ -103,10 +104,15 @@ object QuickEditCoordinator {
         presentationScope.launch { presentNext(applicationContext) }
     }
 
-    suspend fun purgeForSessionTransition(context: Context) {
-        queue(context).purge()
-        QuickEditCommandDelivery.purgeForSessionTransition(context)
-        WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+    suspend fun purgeForSessionTransition(context: Context, previousScope: CaptureSessionScope? = currentScope(context)) {
+        queue(context).purge(previousScope)
+        QuickEditCommandDelivery.purgeForSessionTransition(context, previousScope)
+        WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME).await()
+    }
+
+    suspend fun resumeAfterFailedTransition(context: Context, scope: CaptureSessionScope) {
+        queue(context).resumeAfterFailedTransition(scope)
+        QuickEditCommandDelivery.resumeAfterFailedTransition(scope)
     }
 
     private suspend fun ensureProcessRecovered(context: Context) = recoveryMutex.withLock {
@@ -117,6 +123,8 @@ object QuickEditCoordinator {
 
     private suspend fun presentNext(context: Context) {
         val applicationContext = context.applicationContext
+        if (!HouseholdPreferences.isQuickEditOverlayEnabled(applicationContext) ||
+            !Settings.canDrawOverlays(applicationContext)) return
         val scope = currentScope(applicationContext)
         if (!scope.isUsable) return
 
@@ -183,6 +191,8 @@ object QuickEditCoordinator {
         snapshot: LedgerTransactionSnapshot,
         observationId: String?
     ): Boolean {
+        if (!HouseholdPreferences.isQuickEditOverlayEnabled(context) ||
+            !Settings.canDrawOverlays(context)) return false
         val intent = Intent(context, QuickEditActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
             putExtra(QuickEditActivity.EXTRA_EXPENSE_ID, snapshot.transactionId)
@@ -241,11 +251,7 @@ object QuickEditCoordinator {
         )
     }
 
-    private fun currentScope(context: Context) = CaptureSessionScope(
-        HouseholdPreferences.getHouseholdKey(context),
-        HouseholdPreferences.getMemberId(context),
-        HouseholdPreferences.getSessionGeneration(context)
-    )
+    private fun currentScope(context: Context) = HouseholdPreferences.currentScope(context)
 
     private const val WORK_NAME = "quick-edit-presentation.v1"
 }

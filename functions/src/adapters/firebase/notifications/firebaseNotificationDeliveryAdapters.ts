@@ -46,6 +46,12 @@ function pushDeliveryFrom(
   return data?.pushDelivery === "disabled" ? "disabled" : "enabled";
 }
 
+function registeredAfterRemoval(endpoint: MobileNotificationEndpoint, member: firestore.DocumentData | undefined): boolean {
+  if (member?.removedAt === undefined) return true;
+  const removedAt = firestoreInstantAsIso(member.removedAt);
+  return removedAt !== undefined && Date.parse(endpoint.lastConfirmedAt) > Date.parse(removedAt);
+}
+
 function documentId(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
@@ -218,14 +224,15 @@ export class FirebaseDeliveryAssuranceStore implements DeliveryAssuranceStore {
   async listEndpoints(
     householdId: string,
   ): Promise<readonly MobileNotificationEndpoint[]> {
-    const snapshot = await this.database
-      .collection(ENDPOINTS)
-      .where("householdId", "==", householdId)
-      .get();
+    const [snapshot, members] = await Promise.all([
+      this.database.collection(ENDPOINTS).where("householdId", "==", householdId).get(),
+      this.database.collection("households").doc(householdId).collection("members").get(),
+    ]);
+    const memberById = new Map(members.docs.map((member) => [member.id, member.data()]));
     return snapshot.docs
       .map(mapFirebaseMobileEndpoint)
       .filter(
-        (endpoint): endpoint is MobileNotificationEndpoint => endpoint !== null,
+        (endpoint): endpoint is MobileNotificationEndpoint => endpoint !== null && registeredAfterRemoval(endpoint, memberById.get(endpoint.memberId)),
       );
   }
 
@@ -247,6 +254,12 @@ export class FirebaseDeliveryAssuranceStore implements DeliveryAssuranceStore {
         endpointReference === undefined
           ? undefined
           : await transaction.get(endpointReference);
+      const loadedEndpoint = endpointSnapshot === undefined ? null : mapFirebaseMobileEndpoint(endpointSnapshot);
+      const recipient = loadedEndpoint === null ? undefined : this.database.collection("households").doc(loadedEndpoint.householdId);
+      const [memberSnapshot, preferenceSnapshot] = recipient === undefined || loadedEndpoint === null ? [undefined, undefined] : await Promise.all([
+        transaction.get(recipient.collection("members").doc(loadedEndpoint.memberId)),
+        transaction.get(recipient.collection(RECIPIENT_PREFERENCES).doc(loadedEndpoint.memberId)),
+      ]);
       let nextDelivery: StoredAssuredDelivery | undefined;
       let nextEndpoint: MobileNotificationEndpoint | undefined;
       const result = await operation({
@@ -262,7 +275,8 @@ export class FirebaseDeliveryAssuranceStore implements DeliveryAssuranceStore {
           ) {
             return null;
           }
-          return mapFirebaseMobileEndpoint(endpointSnapshot);
+          const member = memberSnapshot?.data();
+          return loadedEndpoint !== null && memberSnapshot?.exists && member?.status !== "removed" && member?.lifecycleState !== "removed" && pushDeliveryFrom(preferenceSnapshot?.data()) !== "disabled" && registeredAfterRemoval(loadedEndpoint, member) ? loadedEndpoint : null;
         },
         saveEndpoint: async (endpoint) => {
           nextEndpoint = endpoint;

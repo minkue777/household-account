@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { providerObservations } from "../../../src/contexts/portfolio/core/application/portfolioMarketRefreshPolicy";
+import { providerObservations, quoteWithRetries } from "../../../src/contexts/portfolio/core/application/portfolioMarketRefreshPolicy";
 import type {
   PortfolioCommandMetadata,
   PortfolioMarketTarget,
@@ -29,6 +29,16 @@ const krxGoldTarget: PortfolioMarketTarget = {
 };
 
 describe("portfolio market refresh provider observations", () => {
+  it("backs off between retryable quote attempts and never retries contract failures", async () => {
+    const delays: number[] = [];
+    let calls = 0;
+    const result = await quoteWithRetries({ async getQuote() { calls++; return { kind: "failure", code: "TIMEOUT", retryable: true }; } }, krxGoldTarget, { async sleep(delay) { delays.push(delay); }, random: () => 0.5 });
+    expect(calls).toBe(3);
+    expect(delays).toEqual([250, 500]);
+    expect(result.attempts).toHaveLength(3);
+    await quoteWithRetries({ async getQuote() { return { kind: "failure", code: "CONTRACT_FAILURE", retryable: false }; } }, krxGoldTarget, { async sleep() { throw new Error("contract failure must not retry"); }, random: () => 0.5 });
+  });
+
   it("attributes a KRX gold spot quote to the Naver gold-market provider", () => {
     const observations = providerObservations({
       metadata,

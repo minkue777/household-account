@@ -36,6 +36,12 @@ function stringField(payload: Record<string, unknown>, field: string): string {
   return value.trim();
 }
 
+function versionField(payload: Record<string, unknown>, field: "expectedVersion" | "expectedCollectionVersion"): number {
+  const value = payload[field];
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < (field === "expectedVersion" ? 1 : 0)) throw new HouseholdCommandRejection("EXPECTED_VERSION_REQUIRED");
+  return value;
+}
+
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
   if (value === null || typeof value !== "object") {
@@ -128,6 +134,17 @@ export function createPaymentConfigurationHouseholdCommandHandlers(
   const references = new FirebasePaymentConfigurationReferenceReader(database);
   return new Map<string, HouseholdCommandHandler>([
     [
+      "payment-configuration.reorder-merchant-rules.v1",
+      { async execute(context) {
+        const payload = record(context.envelope.payload);
+        exactFields(payload, ["matchType", "orderedRuleIds", "expectedCollectionVersion"]);
+        const matchType = stringField(payload, "matchType");
+        if (matchType !== "startsWith" && matchType !== "endsWith" && matchType !== "contains") throw new HouseholdCommandRejection("MATCH_TYPE_MISMATCH");
+        if (!Array.isArray(payload.orderedRuleIds) || payload.orderedRuleIds.some((id) => typeof id !== "string" || id.trim() === "")) throw new HouseholdCommandRejection("RULE_IDS_INVALID");
+        return value(await application.reorderMerchantRules({ ...runtimeInput(context), matchType, orderedRuleIds: payload.orderedRuleIds, expectedCollectionVersion: versionField(payload, "expectedCollectionVersion") }));
+      } },
+    ],
+    [
       "payment-configuration.create-merchant-rule.v1",
       {
         async execute(context) {
@@ -148,13 +165,14 @@ export function createPaymentConfigurationHouseholdCommandHandlers(
       {
         async execute(context) {
           const payload = record(context.envelope.payload);
-          exactFields(payload, ["ruleId", "changes"]);
+          exactFields(payload, ["ruleId", "changes", "expectedVersion"]);
           await assertCategoryReference(references, context, payload.changes);
           return value(
             await application.updateMerchantRule({
               ...runtimeInput(context),
               ruleId: stringField(payload, "ruleId"),
               changes: payload.changes,
+              expectedVersion: versionField(payload, "expectedVersion"),
             }),
           );
         },
@@ -165,11 +183,12 @@ export function createPaymentConfigurationHouseholdCommandHandlers(
       {
         async execute(context) {
           const payload = record(context.envelope.payload);
-          exactFields(payload, ["ruleId"]);
+          exactFields(payload, ["ruleId", "expectedVersion"]);
           return value(
             await application.deleteMerchantRule({
               ...runtimeInput(context),
               ruleId: stringField(payload, "ruleId"),
+              expectedVersion: versionField(payload, "expectedVersion"),
             }),
           );
         },
@@ -196,12 +215,13 @@ export function createPaymentConfigurationHouseholdCommandHandlers(
         idempotencyBoundary: "domain-command-id",
         async execute(context) {
           const payload = record(context.envelope.payload);
-          exactFields(payload, ["cardId", "changes"]);
+          exactFields(payload, ["cardId", "changes", "expectedVersion"]);
           return value(
             await application.updateCard({
               ...runtimeInput(context),
               cardId: stringField(payload, "cardId"),
               changes: payload.changes,
+              expectedVersion: versionField(payload, "expectedVersion"),
             }),
           );
         },
@@ -212,11 +232,12 @@ export function createPaymentConfigurationHouseholdCommandHandlers(
       {
         async execute(context) {
           const payload = record(context.envelope.payload);
-          exactFields(payload, ["cardId"]);
+          exactFields(payload, ["cardId", "expectedVersion"]);
           return value(
             await application.deleteCard({
               ...runtimeInput(context),
               cardId: stringField(payload, "cardId"),
+              expectedVersion: versionField(payload, "expectedVersion"),
             }),
           );
         },
@@ -227,7 +248,7 @@ export function createPaymentConfigurationHouseholdCommandHandlers(
       {
         async execute(context) {
           const payload = record(context.envelope.payload);
-          exactFields(payload, ["cardIds"]);
+          exactFields(payload, ["cardIds", "expectedCollectionVersion"]);
           if (
             !Array.isArray(payload.cardIds) ||
             payload.cardIds.some(
@@ -240,6 +261,7 @@ export function createPaymentConfigurationHouseholdCommandHandlers(
             await application.reorderCards({
               ...runtimeInput(context),
               cardIds: payload.cardIds.map((cardId) => cardId.trim()),
+              expectedCollectionVersion: versionField(payload, "expectedCollectionVersion"),
             }),
           );
         },

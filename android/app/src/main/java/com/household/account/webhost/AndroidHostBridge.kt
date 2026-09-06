@@ -105,10 +105,10 @@ class AndroidHostBridge(
     ): String {
         val householdId = payload.optString("householdId")
         val memberId = payload.optString("memberId")
+        val session = HouseholdPreferences.snapshot(context)
         if (
             householdId.isBlank() || memberId.isBlank() ||
-            HouseholdPreferences.getHouseholdKey(context) != householdId ||
-            HouseholdPreferences.getMemberId(context) != memberId
+            session?.householdId != householdId || session.memberId != memberId
         ) {
             return rejected(requestId, "SESSION_SCOPE_MISMATCH")
         }

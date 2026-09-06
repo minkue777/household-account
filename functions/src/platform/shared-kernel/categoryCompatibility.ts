@@ -13,7 +13,11 @@ export function mapStoredCategory(input: {
   }
 
   const raw = input.storedValue.trim();
-  const categoryId = input.source === "android" ? raw.toLowerCase() : raw;
+  const androidCategoryEnums: Readonly<Record<string, string>> = {
+    LIVING: "living", CHILDCARE: "childcare", FIXED: "fixed", FOOD: "food", ETC: "etc",
+  };
+  const categoryId = input.source === "android" && Object.prototype.hasOwnProperty.call(androidCategoryEnums, raw)
+    ? androidCategoryEnums[raw]! : raw;
   return {
     categoryId,
     displayState: input.knownCategoryIds.includes(categoryId)

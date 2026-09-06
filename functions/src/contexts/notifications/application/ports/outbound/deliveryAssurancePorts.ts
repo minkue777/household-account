@@ -21,6 +21,7 @@ export interface DeliveryMembershipQueryPort {
 
 export interface StoredDeliveryAssuranceInbox {
   eventId: string;
+  householdId?: string;
   status: "accepted" | "retryable" | "terminal";
   code?: string;
   intentId?: string;
@@ -50,6 +51,7 @@ export interface StoredAssuredDelivery {
   expectedBindingVersion: number;
   status: "queued" | "sending" | DeliveryTerminalStatus;
   providerAttemptCount: 0 | 1;
+  providerAttemptStartedAt?: string;
   errorCode?: DeliveryErrorCode;
   terminalAt?: string;
   expiresAt?: string;

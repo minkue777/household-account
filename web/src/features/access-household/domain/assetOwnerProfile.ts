@@ -12,5 +12,5 @@ export interface AssetOwnerProfileView {
 export function selectVisibleAssetOwnerProfiles(
   profiles: readonly AssetOwnerProfileView[]
 ): AssetOwnerProfileView[] {
-  return profiles.filter((profile) => profile.selectionVisibility === 'visible');
+  return profiles.filter((profile) => profile.lifecycleState === 'active' && profile.selectionVisibility === 'visible');
 }

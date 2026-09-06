@@ -75,13 +75,17 @@ async function readBoundedBody(
 export class NodeExternalTextHttpTransport
   implements ExternalTextHttpTransportPort
 {
+  constructor(private readonly fetcher: (url: string, init: {
+    method: "GET" | "POST"; headers: Readonly<Record<string, string>>; body?: string;
+    redirect: "manual"; signal: AbortSignal;
+  }) => Promise<Response> = globalThis.fetch) {}
   async execute(
     request: ExternalTextHttpTransportRequest,
   ): Promise<ExternalTextHttpTransportResult> {
     const abort = new AbortController();
     const timeout = setTimeout(() => abort.abort(), request.timeoutMs);
     try {
-      const response = await fetch(request.url, {
+      const response = await this.fetcher(request.url, {
         method: request.method,
         headers: request.headers,
         ...(request.body === undefined ? {} : { body: request.body }),

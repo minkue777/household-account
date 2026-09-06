@@ -195,6 +195,12 @@ firebase/
 
 ## 12. 확정 정책과 구현 순서
 
+현재 운영 Adapter는 `functions/scripts/deploy-firebase.mjs`입니다. [운영 실행 절차](../../../../operations/firebase-release-runbook.md)와 [manifest 예시](../../../../operations/firebase-release-manifest.example.json)에 CLI 입력을 정의합니다. CI의 정확한 HEAD·필수 job 및 실제 보고서를 집계하고, 세 Functions codebase의 build 산출물·lock·계약·Rules·index hash를 승인합니다. Firebase predeploy는 build 이후 guard를 실행하며 같은 후보와 잠금 소유자를 다시 검증합니다.
+
+`deploymentLeases/{projectId}`는 한 운영 배포만 허용합니다. 성공한 smoke와 provenance 기록 뒤에 해제하고, 실패·중단된 배포는 잠금을 보존합니다. 자동 만료로 진행 중인 Cloud 작업과 재배포가 겹치지 않게 하며 운영자가 기존 작업 종료를 확인한 후 복구합니다. 승인과 provenance 저장소에는 자동 TTL을 두지 않습니다.
+
+인증된 `household-query.v1` 성공 응답은 선택적인 `deployment` metadata(`releaseId`, `commitSha`, `artifactSha256`)를 포함할 수 있습니다. wrapper는 이 metadata를 승인 후보와 비교합니다. metadata를 담은 생성 JSON 자체만 artifact hash에서 제외하여 자기 참조를 피하고, 이를 읽는 실행 코드와 나머지 산출물은 hash에 포함합니다. 이 smoke의 현재 범위는 인증·가구 Query이며 Native App Check·수집·bridge의 전체 경로는 CI/Emulator/E2E와 외부 설정 검증이 담당합니다.
+
 [DEC-046](../../../governance/decisions.md#dec-046)에 따라 release manifest와 artifact·contract·Rules·index hash, 배포 대상·smoke·rollback provenance는 자동 TTL 없이 장기 보존합니다. Secret 원문은 보존 대상에 포함하지 않습니다. [DEC-050](../../../governance/decisions.md#dec-050)에 따라 Cloud binding은 `household-account-6f300` 하나만 허용하고 자동 검증은 Emulator를 사용합니다. `ProjectBindingPort`는 단일 project라도 누락·불일치·암묵적 default를 거부합니다. [DEC-064](../../../governance/decisions.md#dec-064)에 따라 waiver는 감사 기록으로만 보존하고 필수 gate 실패를 승인으로 바꾸는 긴급 override 경로는 구현하지 않습니다.
 
 구현 순서:

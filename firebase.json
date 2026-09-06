@@ -10,7 +10,8 @@
         "firebase-debug.*.log"
       ],
       "predeploy": [
-        "npm --prefix \"$RESOURCE_DIR\" run build"
+        "npm --prefix \"$RESOURCE_DIR\" run build",
+        "node \"$PROJECT_DIR/functions/scripts/deploy-firebase.mjs\" --guard"
       ]
     },
     {
@@ -23,7 +24,8 @@
         "firebase-debug.*.log"
       ],
       "predeploy": [
-        "npm --prefix \"$RESOURCE_DIR\" run build"
+        "npm --prefix \"$RESOURCE_DIR\" run build",
+        "node \"$PROJECT_DIR/functions/scripts/deploy-firebase.mjs\" --guard"
       ]
     },
     {
@@ -36,15 +38,22 @@
         "firebase-debug.*.log"
       ],
       "predeploy": [
-        "npm --prefix \"$RESOURCE_DIR\" run build"
+        "npm --prefix \"$RESOURCE_DIR\" run build",
+        "node \"$PROJECT_DIR/functions/scripts/deploy-firebase.mjs\" --guard"
       ]
     }
   ],
   "firestore": {
+    "predeploy": [
+      "node \"$PROJECT_DIR/functions/scripts/deploy-firebase.mjs\" --guard"
+    ],
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
   "storage": {
+    "predeploy": [
+      "node \"$PROJECT_DIR/functions/scripts/deploy-firebase.mjs\" --guard"
+    ],
     "rules": "storage.rules"
   },
   "emulators": {

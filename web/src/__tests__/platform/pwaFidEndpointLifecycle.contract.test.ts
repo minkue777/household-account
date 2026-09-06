@@ -7,10 +7,13 @@ let mockForegroundHandler: ((payload: {
   data?: Record<string, string>;
 }) => void) | undefined;
 const mockShowNotification = jest.fn(async () => undefined);
-const mockRegister = jest.fn(async () => {
+const mockRegister = jest.fn(async (..._args: unknown[]) => {
   mockRegisteredHandler?.('fid-current-installation');
 });
 const mockRegisterEndpoint = jest.fn();
+const mockRemoveEndpoint = jest.fn(async (..._args: unknown[]) => undefined);
+jest.mock('firebase/installations', () => ({ getInstallations: jest.fn(() => ({})), getId: jest.fn(async () => 'fid-current-installation') }));
+jest.mock('@/platform/pwa/browserServiceWorker', () => ({ ensurePwaServiceWorker: jest.fn(async () => ({ scope: '/', showNotification: mockShowNotification })) }));
 
 jest.mock('firebase/messaging', () => ({
   getMessaging: jest.fn(() => mockMessaging),
@@ -33,7 +36,7 @@ jest.mock('@/lib/firebaseApp', () => ({ app: {} }));
 jest.mock('@/features/notifications/application/notificationCommands', () => ({
   notificationCommands: {
     registerEndpoint: (...args: unknown[]) => mockRegisterEndpoint(...args),
-    removeEndpointForLogout: jest.fn(async () => undefined),
+    removeEndpointForLogout: (...args: unknown[]) => mockRemoveEndpoint(...args),
     removeEndpointForSdkUnregistered: jest.fn(async () => undefined),
   },
 }));
@@ -63,6 +66,8 @@ import {
   activatePwaFidEndpoint,
   getPwaFidEndpointRegistrationState,
   subscribePwaFidEndpointRegistrationState,
+  removePwaFidEndpointForLogout,
+  completePwaSessionCleanup,
 } from '@/platform/pwa/fidEndpointLifecycle';
 
 describe('iPhone PWA FID endpoint 등록 계약', () => {
@@ -88,6 +93,7 @@ describe('iPhone PWA FID endpoint 등록 계약', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    completePwaSessionCleanup();
   });
 
   it('[T-PUSH-008] 권한 허용만으로 활성 처리하지 않고 같은 FID도 서버 재등록 성공 뒤 활성 처리한다', async () => {
@@ -176,5 +182,30 @@ describe('iPhone PWA FID endpoint 등록 계약', () => {
     await Promise.resolve();
 
     expect(mockShowNotification).not.toHaveBeenCalled();
+  });
+
+  it('삭제 실패와 후속 purge 대기 중에는 등록을 차단하고 재시도 뒤에만 연다', async () => {
+    mockRemoveEndpoint.mockRejectedValueOnce(new Error('OFFLINE'));
+    await expect(removePwaFidEndpointForLogout()).rejects.toThrow('OFFLINE');
+    await expect(activatePwaFidEndpoint()).rejects.toThrow('PWA_SESSION_CLEANUP_REQUIRED');
+    expect(mockRegisterEndpoint).not.toHaveBeenCalled();
+    await removePwaFidEndpointForLogout();
+    await expect(activatePwaFidEndpoint()).rejects.toThrow('PWA_SESSION_CLEANUP_REQUIRED');
+    completePwaSessionCleanup();
+    mockRegisterEndpoint.mockResolvedValueOnce({ registrationVersion: 14 });
+    await expect(activatePwaFidEndpoint()).resolves.toBe(true);
+  });
+
+  it('actor가 바뀐 뒤 늦게 도착한 등록 callback과 foreground는 새 actor에 전달하지 않는다', async () => {
+    mockSessionScope.sessionGeneration++;
+    mockSessionScope.memberId = 'member-2';
+    mockRegisteredHandler?.('late-fid');
+    mockForegroundHandler?.({ data: {
+      payloadVersion: 'notification-payload.v1', type: 'expense-created', clickTarget: 'expense-edit', expenseId: 'expense-1',
+    } });
+    await Promise.resolve();
+    expect(mockRegisterEndpoint).not.toHaveBeenCalled();
+    expect(mockShowNotification).not.toHaveBeenCalled();
+    await expect(activatePwaFidEndpoint()).rejects.toThrow('PWA_SESSION_CLEANUP_REQUIRED');
   });
 });

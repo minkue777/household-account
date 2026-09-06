@@ -55,7 +55,7 @@
 
 | ID | 상태 | 요구사항 | 현재 근거·예외 | 테스트 |
 |---|---|---|---|---|
-| REL-001 | 결함 | 운영 배포 후보는 Web·Functions·Android build, 활성 unit/contract test, Firestore Rules Emulator, 요구사항 ID·상대 링크 검사, Architecture Fitness Function을 모두 실제로 통과해야 한다. 실패·누락·skip·known failure가 하나라도 있으면 deploy authorization을 발급하지 않으며 waiver는 감사 기록일 뿐 실패를 pass로 바꾸거나 긴급 배포를 승인할 수 없다. | 현재 Web test 202개 중 9개가 실패하고 Functions 자동 test와 Rules Emulator gate·CI workflow가 없으며 Firebase predeploy는 Functions compile만 수행한다. 별도 release override Input Port는 제공하지 않고 실패 원인을 해결한 뒤 전체 필수 gate를 재실행한다. | T-REL-001, [DEC-064](../../../governance/decisions.md#dec-064) |
+| REL-001 | 목표 명세 | 운영 배포 후보는 Web·Functions·Android build, 활성 unit/contract test, Firestore Rules Emulator, 요구사항 ID·상대 링크 검사, Architecture Fitness Function을 모두 실제로 통과해야 한다. 실패·누락·skip·known failure가 하나라도 있으면 deploy authorization을 발급하지 않으며 waiver는 감사 기록일 뿐 실패를 pass로 바꾸거나 긴급 배포를 승인할 수 없다. | `quality-gates.yml`의 정확한 push HEAD와 다섯 필수 job 성공, 실제 Functions/Web JSON·Android unit XML 보고서를 wrapper가 확인한다. 로컬 Functions 필수 gate와 Firebase predeploy guard도 연결하며 build 이후 artifact를 재검증한다. 현재 실행 결과는 각 후보의 보고서로 판단하고 과거 고정 테스트 수를 승인 근거로 사용하지 않는다. 별도 release override Input Port는 제공하지 않는다. | T-REL-001, [DEC-064](../../../governance/decisions.md#dec-064) |
 | REL-002 | 목표 명세 | Cloud Firebase는 기존 `household-account-6f300` 단일 프로젝트를 유지하되 배포는 production project ID를 명시적으로 선택하고 URL, Rules, index, Secret, Monitoring notification channel을 검증해야 한다. | 별도 dev·staging project는 만들지 않고 로컬 자동 검증은 Emulator에서 수행한다. `.firebaserc`의 암묵적 default나 하드코딩된 운영 스크립트만으로 대상을 승인하지 않는다. | T-REL-002, [DEC-050](../../../governance/decisions.md#dec-050) |
 | REL-003 | 목표 명세 | Web·Android·Functions·Rules 중 둘 이상이 공유하는 계약 변경은 expand → 호환 client/server 배포 → migration·관측 → contract 순으로 배포하고, 구·신 버전 호환 창과 rollback 조건을 release manifest에 명시해야 한다. | Google Auth/legacy claim/Rules 전환과 FCM token→FID 전환을 부분 배포하면 기존 사용자 또는 전체 알림이 중단될 수 있다. | T-REL-003 |
 | REL-004 | 목표 명세 | 운영 artifact와 배포 기록은 commit·dependency lock·contract·Rules·index hash를 추적할 수 있어야 하며, Secret 원문을 소스·artifact·로그에 포함하지 않고 배포 후 핵심 smoke와 경보 channel 연결을 검증해야 한다. | Firebase client config처럼 공개 식별자인 값과 server Secret을 구분한다. 실패한 smoke는 자동 성공으로 축약하지 않는다. release manifest와 배포 provenance에는 자동 TTL을 두지 않고 장기 보존한다. | T-REL-004, [DEC-046](../../../governance/decisions.md#dec-046) |
@@ -88,9 +88,9 @@
 
 ## 9. 코드 근거
 
-- `firebase.json`: Functions predeploy가 build에만 연결됨
-- `.firebaserc`: 단일 default production project
-- `functions/package.json`: build 외 자동 test/lint script 부재
-- `.github/workflows`: 현재 workflow 부재
-- `firestore.rules`: 운영 Rules에 대한 Emulator gate 부재
-- `web` test 기준선: 202개 중 193개 통과, 9개 실패
+- [Firebase 설정](../../../../../firebase.json): 세 Functions codebase의 build → guard, Firestore/Storage guard 연결
+- [Functions 실행 명령](../../../../../functions/package.json): 활성 test·형식·runtime boundary·architecture를 포함한 `test:quality-gate`
+- [품질 CI](../../../../../.github/workflows/quality-gates.yml): Functions/Web/Android build·unit·contract·Rules/Storage/Firebase integration·Web E2E·Android instrumentation
+- [배포 wrapper](../../../../../functions/scripts/deploy-firebase.mjs)와 [보고서 집계](../../../../../functions/scripts/release-evidence.mjs): 정확한 HEAD, 실제 보고서, immutable hash, 명시적 production·actor·Secret·Monitoring 검증
+- [실제 Firebase 배포 기록](../../../../../functions/src/adapters/firebase/operations/firebaseDeploymentProvenance.ts): 승인·provenance 장기 보존과 project별 배포 잠금
+- [운영 실행 절차와 manifest](../../../../operations/firebase-release-runbook.md): 배포 없는 검증, 승인된 실행, 실제 서버 artifact marker smoke, 실패 복구 절차

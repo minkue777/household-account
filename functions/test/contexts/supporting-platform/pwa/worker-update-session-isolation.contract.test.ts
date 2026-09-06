@@ -54,7 +54,7 @@ describe("PWA worker update·SessionScope 격리 공개 계약", () => {
     );
   });
 
-  it("[T-PWA-006][PWA-008][DEC-051] 새 worker는 정적 asset 준비 뒤 waiting하고 열린 client를 즉시 장악하거나 reload하지 않는다", async () => {
+  it("[T-PWA-006][PWA-002][PWA-008][DEC-051] 새 worker는 정적 asset 준비 뒤 waiting하고 열린 client를 즉시 장악하거나 reload하지 않는다", async () => {
     const subject = createSubject({
       activeWorkerVersion: "worker-v1",
       activeCacheVersion: "cache-v1",

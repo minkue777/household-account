@@ -2,6 +2,9 @@ package com.household.account
 
 import android.content.ComponentName
 import android.content.Context
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.provider.Settings
 import android.view.View
@@ -15,11 +18,13 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.household.account.service.CardNotificationListenerService
 import com.household.account.webhost.TrustedWebOrigin
+import com.household.account.webhost.NotificationListenerAccess
 import java.io.FileInputStream
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -115,6 +120,38 @@ class MainActivityInstrumentationTest {
         }
     }
 
+    @Test
+    fun deniedPushPermissionDoesNotBlockWebAndIsNotRequestedAgainAfterRecreation() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+        executeShellCommand("pm revoke ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}")
+        executeShellCommand("pm set-permission-flags ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS} user-set")
+        grantMandatoryPermissions()
+        waitUntil("필수 권한 허용") {
+            Settings.canDrawOverlays(context) && isNotificationListenerEnabled()
+        }
+
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            assertEquals(PackageManager.PERMISSION_DENIED,
+                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS))
+            assertTrue(context.getSharedPreferences("android_permission_prompts", Context.MODE_PRIVATE)
+                .getBoolean("postNotificationsRequested", false))
+
+            scenario.recreate()
+            scenario.onActivity { activity ->
+                assertEquals(View.VISIBLE, activity.findViewById<WebView>(R.id.webView).visibility)
+                assertEquals(View.GONE, activity.findViewById<LinearLayout>(R.id.permissionLayout).visibility)
+                activity.findViewById<Button>(R.id.btnCheckPermission).performClick()
+            }
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            assertEquals(PackageManager.PERMISSION_DENIED,
+                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS))
+            assertTrue(context.getSharedPreferences("android_permission_prompts", Context.MODE_PRIVATE)
+                .getBoolean("postNotificationsRequested", false))
+            assertTrue(Settings.canDrawOverlays(context))
+            assertTrue(isNotificationListenerEnabled())
+        }
+    }
+
     private fun grantMandatoryPermissions() {
         executeShellCommand(
             "appops set ${context.packageName} SYSTEM_ALERT_WINDOW allow"
@@ -138,8 +175,7 @@ class MainActivityInstrumentationTest {
             context.contentResolver,
             "enabled_notification_listeners"
         )
-        return enabled?.contains(notificationListener.flattenToString()) == true ||
-            enabled?.contains(context.packageName) == true
+        return NotificationListenerAccess.isEnabled(enabled, notificationListener)
     }
 
     private fun executeShellCommand(command: String) {

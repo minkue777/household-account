@@ -108,12 +108,14 @@ function parseEnvelope(raw: unknown): HouseholdQueryEnvelope | HouseholdQueryRes
 export function createHouseholdQueryRouter(input: {
   readonly handlers: ReadonlyMap<string, HouseholdQueryHandler>;
   readonly memberships: HouseholdCommandMembershipPort;
+  readonly externalQueryQuota?: { allow(input: { principalUid: string; householdId: string; sourceIp?: string }): Promise<boolean> };
 }) {
   return {
     async execute(request: {
       readonly principalUid: string | undefined;
       readonly request: unknown;
       readonly administrator?: HouseholdAdministratorActor;
+      readonly sourceIp?: string;
     }): Promise<HouseholdQueryResult> {
       if (
         typeof request.principalUid !== "string" ||
@@ -152,6 +154,11 @@ export function createHouseholdQueryRouter(input: {
         return failure("FORBIDDEN", { queryId: parsed.queryId });
       }
       try {
+        if ((parsed.query === "portfolio.search-instruments.v1" || parsed.query === "portfolio.get-instrument-quote.v1")
+          && input.externalQueryQuota !== undefined
+          && !await input.externalQueryQuota.allow({ principalUid, householdId: parsed.householdId, sourceIp: request.sourceIp })) {
+          return failure("EXTERNAL_QUERY_RATE_LIMITED", { queryId: parsed.queryId, retryable: true });
+        }
         const data = await measureCurrentInteractiveLatency("handler", () =>
           handler.execute({
             envelope: parsed,

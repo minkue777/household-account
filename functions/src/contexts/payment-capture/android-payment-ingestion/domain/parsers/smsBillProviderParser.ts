@@ -93,8 +93,8 @@ function parseSms(context: ProviderParserContext): AndroidProviderParseResult {
     const candidateContext = { ...context, body: candidate };
     for (const parser of SMS_PAYMENT_PARSERS) {
       const result = parser.parse(candidateContext);
-      if (result.kind === "Parsed" && result.payment !== undefined) {
-        return { kind: "Parsed", payment: result.payment };
+      if (result.kind === "Parsed") {
+        return result;
       }
     }
     const bill = parseNhBill(candidateContext);

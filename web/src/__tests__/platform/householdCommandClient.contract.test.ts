@@ -23,7 +23,7 @@ describe('Web Household Command 계약', () => {
 
     await client.execute(
       'category.archive.v1',
-      { categoryId: 'category-1' },
+      { categoryId: 'category-1', expectedVersion: 1 },
       { householdId: 'household-session', commandId: 'cmd-1' }
     );
 
@@ -42,7 +42,7 @@ describe('Web Household Command 계약', () => {
 
     await expect(client.execute(
       'category.archive.v1',
-      { categoryId: 'category-1' },
+      { categoryId: 'category-1', expectedVersion: 1 },
       { householdId: 'other-household' }
     )).rejects.toMatchObject({ code: 'HOUSEHOLD_SCOPE_MISMATCH' });
     expect(transport.send).not.toHaveBeenCalled();

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { getSeoulCalendarParts } from '@/lib/utils/date';
 import {
   Asset,
   AssetType,
@@ -60,13 +61,13 @@ function extractGoldMemoFromAsset(asset: Asset) {
 }
 
 function getCurrentYearMonth() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const now = getSeoulCalendarParts();
+  return `${now.year}-${String(now.month).padStart(2, '0')}`;
 }
 
 function getEffectiveContributionDay(dayOfMonth: number) {
-  const now = new Date();
-  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const now = getSeoulCalendarParts();
+  const lastDayOfMonth = new Date(now.year, now.month, 0).getDate();
   return Math.min(dayOfMonth, lastDayOfMonth);
 }
 
@@ -207,7 +208,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
             ? asset.lastAutoContributionMonth
             : recurringAmount > 0 &&
                 recurringDay > 0 &&
-                new Date().getDate() >= getEffectiveContributionDay(recurringDay)
+                getSeoulCalendarParts().day >= getEffectiveContributionDay(recurringDay)
               ? getCurrentYearMonth()
               : asset.lastAutoContributionMonth || '',
         loanInterestRate: isLoanAsset ? parseFloat(loanInterestRate) || 0 : 0,
@@ -222,7 +223,7 @@ export default function AssetEditModal({ isOpen, onClose, asset }: AssetEditModa
               : (parseFloat(loanInterestRate) || 0) > 0 &&
                   (parseInt(loanMonthlyPaymentAmount, 10) || 0) > 0 &&
                   normalizedLoanPaymentDay > 0 &&
-                  new Date().getDate() >= getEffectiveContributionDay(normalizedLoanPaymentDay)
+                  getSeoulCalendarParts().day >= getEffectiveContributionDay(normalizedLoanPaymentDay)
                 ? getCurrentYearMonth()
                 : asset.lastAutoRepaymentMonth || '',
       };

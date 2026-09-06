@@ -192,5 +192,7 @@ export type {
 export { createMerchantRuleCategoryRemapApplication } from "./application/merchantRuleCategoryRemapApplication";
 export { createMerchantRulePersistenceApplication } from "./application/merchantRulePersistenceApplication";
 export { createRememberExistingTransactionApplication } from "./application/rememberExistingTransactionApplication";
+export { rememberExistingTransactionMutation } from "./application/rememberExistingTransactionMutation";
 export { createRememberMerchantRuleApplication } from "./application/rememberMerchantRuleApplication";
 export { createRegisteredCardCommandBoundaryApplication } from "./application/registeredCardCommandBoundaryApplication";
+export { createMerchantRuleCategoryArchiveApplication } from "./application/merchantRuleCategoryArchiveApplication";

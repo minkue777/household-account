@@ -18,7 +18,7 @@ interface LedgerTransactionView {
   localCurrencyType?: string;
   source?: string;
   creatorMemberId: string;
-  lifecycleState: "active" | "deleted";
+  lifecycleState: "active" | "superseded" | "deleted";
   aggregateVersion: number;
   notificationRequest?: { requesterMemberId: string; requestedAt: string };
 }
@@ -146,7 +146,10 @@ describe("Ledger 기본 Command·Query 공개 계약", () => {
     });
     expect(subject.state().transactions).toHaveLength(1);
     expect(subject.state().events).toEqual([
-      { type: "TransactionRecorded.v1", transactionId: expect.any(String) },
+      {
+        type: "TransactionRecorded.v1", transactionId: expect.any(String),
+        originChannel: "web-manual", creatorMemberId: actor.actingMemberId,
+      },
     ]);
   });
 

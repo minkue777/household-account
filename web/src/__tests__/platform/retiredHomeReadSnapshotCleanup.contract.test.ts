@@ -58,7 +58,7 @@ describe('폐기된 가계부 첫 화면 캐시 정리 계약', () => {
 
   it('브라우저가 저장소 접근을 거부해도 첫 화면 초기화를 중단하지 않는다', () => {
     const deniedStorage = {
-      get length() {
+      get length(): number {
         throw new Error('storage denied');
       },
       getItem: () => {

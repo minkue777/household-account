@@ -102,7 +102,7 @@ class CardNotificationListenerService : NotificationListenerService() {
                     structuredMessages = if (
                         source == RegisteredNotificationSource.KAKAO_TALK_FINANCIAL
                     ) {
-                        extractCurrentMessagingStyleMessages(notification)
+                        NotificationMessageExtractor.extract(notification)
                     } else {
                         emptyList()
                     }
@@ -213,21 +213,6 @@ class CardNotificationListenerService : NotificationListenerService() {
             textLines = candidate.textLines
         )
     }
-
-    @Suppress("DEPRECATION")
-    private fun extractCurrentMessagingStyleMessages(
-        notification: Notification
-    ): List<StructuredNotificationMessage> = runCatching {
-        val bundles = notification.extras.getParcelableArray(Notification.EXTRA_MESSAGES)
-            ?: return@runCatching emptyList()
-        Notification.MessagingStyle.Message.getMessagesFromBundleArray(bundles)
-            .map { message ->
-                StructuredNotificationMessage(
-                    text = message.text?.toString().orEmpty(),
-                    postedAtMillis = message.timestamp
-                )
-            }
-    }.getOrDefault(emptyList())
 
     private fun saveRawNotificationLogIfNeeded(
         packageName: String,

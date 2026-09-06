@@ -9,6 +9,7 @@ import {
   updateMerchantRuleV2,
   deleteMerchantRule,
   addMerchantRuleV2,
+  reorderMerchantRules,
   MATCH_TYPE_LABELS,
 } from '@/lib/merchantRuleService';
 import { useHousehold } from '@/contexts/HouseholdContext';
@@ -30,8 +31,11 @@ export default function MerchantRuleSettings() {
   const [merchantRules, setMerchantRules] = useState<MerchantRule[]>([]);
   const [rulesLoading, setRulesLoading] = useState(true);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [editingRuleVersion, setEditingRuleVersion] = useState(1);
   const [showAddRuleForm, setShowAddRuleForm] = useState(false);
   const [pendingDeleteRule, setPendingDeleteRule] = useState<MerchantRule | null>(null);
+  const [ruleError, setRuleError] = useState<string | null>(null);
+  const [reordering, setReordering] = useState(false);
   const ruleFormRef = useRef<HTMLDivElement>(null);
 
   // 규칙 폼 상태 (추가/편집 공용)
@@ -73,6 +77,7 @@ export default function MerchantRuleSettings() {
 
   const handleStartEditRule = (rule: MerchantRule) => {
     setEditingRuleId(rule.id);
+    setEditingRuleVersion(rule.version ?? 1);
     setRuleKeyword(rule.merchantKeyword);
     setRuleMatchType(rule.matchType || (rule.exactMatch ? 'exact' : 'contains'));
     setRuleMappedMerchant(rule.mapping?.merchant || '');
@@ -102,7 +107,7 @@ export default function MerchantRuleSettings() {
         merchantKeyword: ruleKeyword.trim(),
         matchType: ruleMatchType,
         mapping,
-      });
+      }, editingRuleVersion);
     } else {
       // 추가
       await addMerchantRuleV2(householdId, {
@@ -118,8 +123,24 @@ export default function MerchantRuleSettings() {
   const handleDeleteRule = async () => {
     if (!pendingDeleteRule) return;
 
-    await deleteMerchantRule(pendingDeleteRule.id);
+    await deleteMerchantRule(pendingDeleteRule.id, pendingDeleteRule.version ?? 1);
     setPendingDeleteRule(null);
+  };
+
+  const moveRule = async (rule: MerchantRule, offset: -1 | 1) => {
+    if (!householdKey || rule.matchType === 'exact' || reordering) return;
+    const matchType = rule.matchType ?? (rule.exactMatch ? 'exact' : 'contains');
+    const ordered = merchantRules.filter((item) => (item.matchType ?? (item.exactMatch ? 'exact' : 'contains')) === matchType)
+      .sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0));
+    const index = ordered.findIndex((item) => item.id === rule.id);
+    const next = index + offset;
+    if (index < 0 || next < 0 || next >= ordered.length) return;
+    [ordered[index], ordered[next]] = [ordered[next], ordered[index]];
+    setReordering(true);
+    setRuleError(null);
+    try { await reorderMerchantRules(householdKey, matchType, ordered); }
+    catch (error) { setRuleError(error instanceof Error ? error.message : '규칙 순서를 저장하지 못했습니다. 목록을 확인해 주세요.'); }
+    finally { setReordering(false); }
   };
 
   return (
@@ -146,6 +167,7 @@ export default function MerchantRuleSettings() {
 
       {isRulesOpen && (
         <div className="border-t border-slate-100">
+          {ruleError && <p role="alert" className="p-3 text-sm text-red-600">{ruleError}</p>}
           {/* 규칙 추가/편집 폼 */}
           {(showAddRuleForm || editingRuleId) && (
             <div ref={ruleFormRef} className="scroll-mt-24 p-4 bg-slate-50 border-b border-slate-200">
@@ -283,7 +305,7 @@ export default function MerchantRuleSettings() {
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
-              {merchantRules.map((rule) => (
+              {[...merchantRules].sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0)).map((rule) => (
                 <div key={rule.id} className={`p-4 ${editingRuleId === rule.id ? 'hidden' : ''}`}>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -323,6 +345,10 @@ export default function MerchantRuleSettings() {
                       >
                         <Edit2 className="h-5 w-5" />
                       </button>
+                      {(rule.matchType ?? (rule.exactMatch ? 'exact' : 'contains')) !== 'exact' && <>
+                        <button disabled={reordering} onClick={() => void moveRule(rule, -1)} aria-label={`${rule.merchantKeyword} 우선순위 올리기`} className="p-2">↑</button>
+                        <button disabled={reordering} onClick={() => void moveRule(rule, 1)} aria-label={`${rule.merchantKeyword} 우선순위 내리기`} className="p-2">↓</button>
+                      </>}
                       <button
                         onClick={() => setPendingDeleteRule(rule)}
                         className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"

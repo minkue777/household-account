@@ -10,6 +10,7 @@ import type {
   HouseholdLifecycleState,
 } from "../../../contexts/access/household-lifecycle/domain/model/householdLifecycle";
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
+import { writeHouseholdClaimLifecycle } from "./firebaseHouseholdClaimLifecycle";
 import {
   ACCESS_SCHEMA_VERSION,
   accessEventId,
@@ -128,13 +129,7 @@ export class FirebaseHouseholdLifecycleUnitOfWork
           schemaVersion: ACCESS_SCHEMA_VERSION,
           updatedAt: FieldValue.serverTimestamp(),
         });
-        for (const claim of loaded.membershipClaims.docs) {
-          transaction.update(claim.ref, {
-            householdLifecycleState:
-              household.lifecycleState === "active" ? "active" : "deleted",
-            updatedAt: FieldValue.serverTimestamp(),
-          });
-        }
+        writeHouseholdClaimLifecycle(transaction, loaded.membershipClaims, household.lifecycleState);
       }
 
       const receipt = mutation.state.receipts.find(

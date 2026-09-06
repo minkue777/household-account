@@ -10,7 +10,8 @@ import type {
   HouseholdCommandReceiptPort,
   ResolveHouseholdActorResult,
 } from "../../../bootstrap/commands/householdCommandPorts";
-import type { HouseholdCommandResult } from "../../../bootstrap/commands/householdCommand";
+import type { HouseholdCommandEnvelope, HouseholdCommandResult } from "../../../bootstrap/commands/householdCommand";
+import { canonicalJson } from '../../../platform/shared-kernel/canonicalJson';
 import { STANDARD_MEMBER_CAPABILITIES } from "../../../contexts/access/google-onboarding/domain/policies/googleOnboardingPolicy";
 import { principalClaimId } from "../access/firebasePrincipalMembershipClaim";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
@@ -168,6 +169,8 @@ export class FirebaseHouseholdCommandReceiptAdapter
     readonly principalUid: string;
     readonly command: string;
     readonly payloadHash: string;
+    readonly householdId?: string;
+    readonly legacyEnvelope?: HouseholdCommandEnvelope;
     readonly requestedAt: string;
   }): Promise<HouseholdCommandReceiptClaim> {
     const reference = this.database
@@ -181,7 +184,12 @@ export class FirebaseHouseholdCommandReceiptAdapter
       const current = snapshot.data() as StoredReceipt | undefined;
       if (current !== undefined) {
         if (current.payloadHash !== input.payloadHash) {
-          return { kind: "payload-mismatch" } as const;
+          const originalCommandId = (current.result as HouseholdCommandResult | undefined)?.commandId ?? input.legacyEnvelope?.commandId;
+          const legacyHash = input.legacyEnvelope && originalCommandId
+            ? createHash('sha256').update(canonicalJson({ ...input.legacyEnvelope, commandId: originalCommandId })).digest('hex') : undefined;
+          if (current.payloadHash !== legacyHash) return { kind: "payload-mismatch" } as const;
+          transaction.update(reference, { payloadHash: input.payloadHash, schemaVersion: 2,
+            ...(input.householdId === undefined ? {} : { householdId: input.householdId }) });
         }
         if (current.status === "completed" && current.result !== undefined) {
           return {
@@ -199,6 +207,7 @@ export class FirebaseHouseholdCommandReceiptAdapter
       transaction.set(reference, {
         principalUid: input.principalUid,
         command: input.command,
+        ...(input.householdId === undefined ? {} : { householdId: input.householdId }),
         payloadHash: input.payloadHash,
         status: "processing",
         requestedAt: input.requestedAt,

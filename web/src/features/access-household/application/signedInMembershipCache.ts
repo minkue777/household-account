@@ -74,6 +74,11 @@ function decodeHousehold(
       ? { defaultCategoryKey: value.defaultCategoryKey }
       : {}),
     ...(homeSummaryConfig ? { homeSummaryConfig } : {}),
+    categoryCatalogVersion: Number.isInteger(value.categoryCatalogVersion) ? Number(value.categoryCatalogVersion) : 0,
+    homeSummaryConfigVersion: Number.isInteger(value.homeSummaryConfigVersion) ? Number(value.homeSummaryConfigVersion) : 0,
+    ...(typeof value.selectedLocalCurrencyType === 'string' ? { selectedLocalCurrencyType: value.selectedLocalCurrencyType } : {}),
+    ...(value.initializationStatus === 'pending' || value.initializationStatus === 'failed' || value.initializationStatus === 'completed'
+      ? { initializationStatus: value.initializationStatus } : {}),
     members: members as NonNullable<MembershipFoundResolution['household']>['members'],
   };
 }

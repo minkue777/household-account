@@ -12,7 +12,7 @@ import {
   getDividendSnapshot,
 } from '@/lib/assetService';
 import ModalOverlay from '@/components/common/ModalOverlay';
-import { formatLocalDate } from '@/lib/utils/date';
+import { getSeoulCalendarParts, getTodayLocalDate } from '@/lib/utils/date';
 
 interface DividendSnapshotEvent {
   stockCode: string;
@@ -25,7 +25,7 @@ interface DividendSnapshotEvent {
   isEstimated?: boolean;
 }
 
-const CURRENT_YEAR = new Date().getFullYear();
+const CURRENT_YEAR = getSeoulCalendarParts().year;
 
 function supportsDividendInfo(holding: StockHolding) {
   return (
@@ -45,14 +45,18 @@ export default function AssetDividendChart() {
     null
   );
   const [dividendEvents, setDividendEvents] = useState<DividendEventRecord[]>([]);
-  const [isDividendLoading, setIsDividendLoading] = useState(false);
+  const [isDividendLoading, setIsDividendLoading] = useState(true);
+  const [dividendFailed, setDividendFailed] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
 
   useEffect(() => {
     let isCancelled = false;
+    let revision = 0;
 
     const loadDividendData = async () => {
+      const requestRevision = ++revision;
       setIsDividendLoading(true);
+      setDividendFailed(false);
 
       try {
         const [allHoldings, snapshot, events] = await Promise.all([
@@ -61,7 +65,7 @@ export default function AssetDividendChart() {
           getDividendEventsByYear(dividendYear),
         ]);
 
-        if (isCancelled) {
+        if (isCancelled || revision !== requestRevision) {
           return;
         }
 
@@ -69,9 +73,10 @@ export default function AssetDividendChart() {
         setCachedDividendSnapshot(snapshot);
         setDividendEvents(events);
       } catch (error) {
+        if (!isCancelled && revision === requestRevision) setDividendFailed(true);
         console.error('배당금 현황 조회 오류:', error);
       } finally {
-        if (!isCancelled) {
+        if (!isCancelled && revision === requestRevision) {
           setIsDividendLoading(false);
         }
       }
@@ -97,7 +102,7 @@ export default function AssetDividendChart() {
   }, [dividendYear]);
 
   const isCurrentYear = dividendYear === CURRENT_YEAR;
-  const today = formatLocalDate(new Date());
+  const today = getTodayLocalDate();
 
   const holdingQuantityByCode = useMemo(() => {
     return stockHoldings.reduce<Record<string, number>>((accumulator, holding) => {
@@ -109,9 +114,7 @@ export default function AssetDividendChart() {
 
   const projectedDividendEvents = useMemo<DividendSnapshotEvent[]>(() => {
     const confirmedEventKeys = new Set(
-      Object.values(cachedDividendSnapshot?.events || {}).map((event) =>
-        `${event.stockCode}_${event.paymentDate}_${event.perShareAmount}`
-      )
+      Object.keys(cachedDividendSnapshot?.events || {})
     );
 
     return dividendEvents
@@ -120,12 +123,11 @@ export default function AssetDividendChart() {
           return false;
         }
 
-        if (!event.recordDate || event.recordDate < today) {
+        if (!event.recordDate || event.recordDate <= today) {
           return false;
         }
 
-        const eventKey = `${event.stockCode}_${event.paymentDate}_${event.perShareAmount}`;
-        if (confirmedEventKeys.has(eventKey)) {
+        if (confirmedEventKeys.has(event.eventId)) {
           return false;
         }
 
@@ -335,7 +337,7 @@ export default function AssetDividendChart() {
         </div>
 
         <div className="mb-4 h-[180px]">
-          <Bar data={dividendChartData} options={dividendChartOptions} />
+          {!dividendFailed && !isDividendLoading && <Bar data={dividendChartData} options={dividendChartOptions} />}
         </div>
 
         <div className="flex items-center justify-between border-t border-slate-100 pt-3">
@@ -343,7 +345,7 @@ export default function AssetDividendChart() {
             {isCurrentYear ? '올해 누적 배당금' : '연간 배당금'}
           </span>
           <span className="text-lg font-bold text-red-500">
-            {Math.round(totalDividend + totalEstimatedDividend).toLocaleString()}원
+            {isDividendLoading ? '조회 중' : dividendFailed ? '조회 실패' : cachedDividendSnapshot === null && dividendEvents.length === 0 ? '데이터 없음' : `${Math.round(totalDividend + totalEstimatedDividend).toLocaleString()}원`}
           </span>
         </div>
 
@@ -351,7 +353,7 @@ export default function AssetDividendChart() {
           <p className="mt-2 text-center text-xs text-slate-400">
             배당금 정보를 불러오는 중입니다.
           </p>
-        ) : totalDividend + totalEstimatedDividend === 0 ? (
+        ) : dividendFailed ? <p role="alert" className="mt-2 text-sm text-red-600">배당금 정보를 불러오지 못했습니다.</p> : totalDividend + totalEstimatedDividend === 0 ? (
           <p className="mt-2 text-center text-xs text-slate-400">
             {stockHoldings.length === 0
               ? '배당을 지원하는 국내 ETF 보유 종목이 없습니다'

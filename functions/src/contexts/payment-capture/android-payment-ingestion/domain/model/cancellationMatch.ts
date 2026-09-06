@@ -14,13 +14,10 @@ export interface CancellationObservation {
 export interface CancellationCandidateFact {
   readonly captureLineageId: string;
   readonly approvalDate: string;
+  /** 불변 승인 기록에서 확인한 원승인 금액이며 분할 합계가 아닙니다. */
   readonly amountInWon: number;
   readonly merchant: string;
   readonly card: CancellationCardEvidence;
-  readonly monthlySplit?: {
-    readonly groupTotalInWon: number;
-    readonly splitCount: number;
-  };
 }
 
 export interface CancellationSearchWindow {

@@ -111,6 +111,35 @@ const describeWithFirestoreEmulator = process.env.FIRESTORE_EMULATOR_HOST
   : describe.skip;
 
 describeWithFirestoreEmulator("서버 권위형 Firestore Rules", () => {
+  it.each(["deleted", "purging", "purged"])("[ADM-003][HH-008][SYS-001] %s 가구는 Membership을 보존해도 일반 읽기를 막고 관리자 조회와 복구를 허용한다", async (lifecycleState) => {
+    const householdId = `lifecycle-${lifecycleState}`;
+    const legacyId = `expense-${lifecycleState}`;
+    await environment.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "households", householdId), { lifecycleState, name: "삭제된 가구" });
+      await setDoc(doc(db, "households", householdId, "memberships", MEMBER_UID), { lifecycleState: "active" });
+      await setDoc(doc(db, "households", householdId, "ledgerTransactions", "transaction"), { householdId, amountInWon: 1000 });
+      await setDoc(doc(db, "expenses", legacyId), { householdId, amount: 1000 });
+    });
+    const db = environment.authenticatedContext(MEMBER_UID).firestore();
+    const adminDb = environment.authenticatedContext("rules-admin", { systemAdmin: true }).firestore();
+    const paths = [
+      `households/${householdId}`,
+      `households/${householdId}/ledgerTransactions/transaction`,
+      `expenses/${legacyId}`,
+    ];
+    for (const path of paths) {
+      await assertFails(getDoc(doc(db, path)));
+      await assertSucceeds(getDoc(doc(adminDb, path)));
+    }
+    await assertFails(getDocs(query(collection(db, "expenses"), where("householdId", "==", householdId))));
+    if (lifecycleState === "deleted") {
+      await environment.withSecurityRulesDisabled((context) =>
+        setDoc(doc(context.firestore(), "households", householdId), { lifecycleState: "active", name: "복구된 가구" }));
+      for (const path of paths) await assertSucceeds(getDoc(doc(db, path)));
+    }
+  });
+
   it("[T-SEC-001][SYS-001] 인증되지 않은 사용자는 가구와 legacy 금융 데이터를 읽을 수 없다", async () => {
     const firestore = environment.unauthenticatedContext().firestore();
 

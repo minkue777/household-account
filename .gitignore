@@ -67,6 +67,8 @@ web/scripts/*.mjs
 # Misc
 *.log
 *.tsbuildinfo
+functions/quality-functions.json
+web/quality-web.json
 
 .vercel
 .env*.local

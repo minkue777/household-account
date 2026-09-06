@@ -36,7 +36,7 @@ describe("취소 가구 범위·가맹점 mapping 후보 조회 준비 공개 �
     expect(subject.state()).toEqual({ candidateQueries: [], ledgerWrites: [] });
   });
 
-  it("[T-CAN-004][CAN-001/CAN-002] 가맹점 mapping과 카드 증거를 정규화해 같은 가구의 안전한 날짜 범위를 준비한다", () => {
+  it("[T-CAN-004][CAN-001/CAN-002] 현재 가맹점 mapping을 무시하고 원 증거와 같은 가구의 안전한 날짜 범위를 준비한다", () => {
     const subject = createSubject();
 
     const result = subject.prepare({
@@ -54,7 +54,7 @@ describe("취소 가구 범위·가맹점 mapping 후보 조회 준비 공개 �
           cancellationDate: "2026-07-20",
           observedDate: "2026-07-20",
           amountInWon: 10_000,
-          merchant: "mapped shop",
+          merchant: "original shop",
           card: { companyLabel: "국민", lastFour: "1234" },
         },
         searchWindow: {

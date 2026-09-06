@@ -11,6 +11,8 @@ export interface MerchantRuleMapping {
 
 export interface MerchantRule {
   id: string;
+  version?: number;
+  collectionVersion?: number;
   householdId: string;
 
   // 매칭 조건

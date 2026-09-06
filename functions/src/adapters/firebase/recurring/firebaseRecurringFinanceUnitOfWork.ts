@@ -73,8 +73,14 @@ function mapPlan(
     active: data?.active === false || data?.isActive === false ? false : true,
     creatorMemberId,
     firstApplicableMonth,
+    ...(text(data, "processedThroughMonth") === undefined ? {} : { processedThroughMonth: text(data, "processedThroughMonth") }),
     version: Math.max(1, numberValue(data, 1, "version", "aggregateVersion")),
   };
+}
+
+function nextMonth(value: string): string {
+  const [year, month] = value.split("-").map(Number);
+  return month === 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, "0")}`;
 }
 
 function mapExecution(
@@ -184,6 +190,28 @@ export class FirebaseRecurringFinanceUnitOfWork
     return emptyState([...plans.values()]);
   }
 
+  async readPlanPage(input: { readonly afterPlanId?: string; readonly limit: number }) {
+    let canonicalQuery = this.database.collectionGroup("recurringPlans").orderBy("planId").limit(input.limit);
+    let legacyQuery = this.database.collection("recurring_expenses").orderBy("__name__").limit(input.limit);
+    if (input.afterPlanId !== undefined) {
+      canonicalQuery = canonicalQuery.startAfter(input.afterPlanId);
+      legacyQuery = legacyQuery.startAfter(input.afterPlanId);
+    }
+    const [canonical, legacy] = await Promise.all([canonicalQuery.get(), legacyQuery.get()]);
+    const documents = new Map(canonical.docs.map(document => [text(document.data(), "planId") ?? document.id, document as firestore.DocumentSnapshot]));
+    await Promise.all(legacy.docs.map(async document => {
+      if (documents.has(document.id)) return;
+      const householdId = text(document.data(), "householdId");
+      const current = householdId === undefined ? undefined : await this.database.collection("households").doc(householdId).collection("recurringPlans").doc(document.id).get();
+      documents.set(document.id, current?.exists ? current : document);
+    }));
+    const page = [...documents].sort(([left], [right]) => left.localeCompare(right)).slice(0, input.limit);
+    return {
+      plans: page.flatMap(([, document]) => { const plan = mapPlan(document); return plan === undefined ? [] : [plan]; }),
+      ...(page.length === input.limit ? { nextCursor: page.at(-1)![0] } : {}),
+    };
+  }
+
   async transact(
     executionKey: string,
     decide: (state: RecurringProcessingState) => RecurringProcessingDecision,
@@ -240,7 +268,7 @@ export class FirebaseRecurringFinanceUnitOfWork
             transaction.get(execution),
             transaction.get(receipt),
           ]);
-        const plan = mapPlan(canonicalSnapshot) ?? mapPlan(legacySnapshot);
+        const plan = canonicalSnapshot.exists ? mapPlan(canonicalSnapshot) : mapPlan(legacySnapshot);
         const priorExecution = mapExecution(executionSnapshot);
         const priorReceipt = mapReceipt(receiptSnapshot);
         const state: RecurringProcessingState = {
@@ -249,7 +277,14 @@ export class FirebaseRecurringFinanceUnitOfWork
           receipts: priorReceipt === undefined ? [] : [priorReceipt],
         };
         const decision = decide(state);
+        const previousThrough = plan?.processedThroughMonth;
+        const expectedNext = previousThrough === undefined ? plan?.firstApplicableMonth : nextMonth(previousThrough);
+        const advancesThrough = plan !== undefined && parts.targetMonth === expectedNext && (decision.result.kind === "created" || decision.result.kind === "already-processed");
         if (decision.kind === "return") {
+          if (advancesThrough) {
+            if (canonicalSnapshot.exists) transaction.set(canonicalPlan, { processedThroughMonth: parts.targetMonth }, { merge: true });
+            if (legacySnapshot.exists) transaction.set(legacyPlan, { processedThroughMonth: parts.targetMonth }, { merge: true });
+          }
           return { result: decision.result, committedEvents: [] };
         }
         const createdLedger = decision.nextState.ledgerTransactions.find(
@@ -344,6 +379,7 @@ export class FirebaseRecurringFinanceUnitOfWork
             version: plan.version,
             aggregateVersion: plan.version,
             lastProcessedMonth: latestMonth,
+            ...(advancesThrough ? { processedThroughMonth: parts.targetMonth } : {}),
             lastExecutionKey: executionKey,
             processingCheckpointVersion: FieldValue.increment(1),
             schemaVersion: 2,
@@ -369,6 +405,7 @@ export class FirebaseRecurringFinanceUnitOfWork
             lifecycleState: "active",
             aggregateVersion: plan.version,
             lastRegisteredMonth: latestMonth,
+            ...(advancesThrough ? { processedThroughMonth: parts.targetMonth } : {}),
             lastExecutionKey: executionKey,
             schemaVersion: 1,
             updatedAt: FieldValue.serverTimestamp(),
@@ -396,6 +433,12 @@ export class FirebaseRecurringFinanceUnitOfWork
               planId: event.planId,
               targetMonth: event.targetMonth,
               transactionId: event.transactionId,
+              ...(event.eventType === "TransactionRecorded.v1"
+                ? {
+                    originChannel: createdLedger.originChannel,
+                    creatorMemberId: createdLedger.creatorMemberId,
+                  }
+                : {}),
             },
           });
         }

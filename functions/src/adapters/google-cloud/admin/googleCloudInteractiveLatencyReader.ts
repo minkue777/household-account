@@ -378,7 +378,7 @@ implements AdminFunctionLatencyReaderPort {
     }
 
     return {
-      status: "available",
+      status: pageToken === undefined ? "available" : "partial",
       windowHours: input.windowHours,
       operations: summarizeInteractiveLatency(observations),
     };

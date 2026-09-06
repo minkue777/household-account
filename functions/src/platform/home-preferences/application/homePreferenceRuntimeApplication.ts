@@ -12,6 +12,7 @@ export interface HomePreferenceRuntimeCommand {
   readonly commandName: string;
   readonly payloadFingerprint: string;
   readonly occurredAt: string;
+  readonly expectedVersion: number;
 }
 
 export type HomePreferenceRuntimeResult =
@@ -92,29 +93,25 @@ export function createHomePreferenceRuntimeApplication(
         return { kind: "rejected", code: "DUPLICATE_HOME_CARD_TYPE" };
       }
       return finalResult(
-        await store.transact(metadata(input), (current, availableTypes) => {
-          const automatic = autoSelectFirstLocalCurrency(current, availableTypes);
+        await store.transact(metadata(input), (current) => {
+          if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0 || input.expectedVersion !== current.aggregateVersion) {
+            return { kind: "rejected", code: "HOME_CONFIGURATION_VERSION_MISMATCH" };
+          }
           const changed =
             current.left !== left ||
-            current.right !== right ||
-            automatic.changed;
+            current.right !== right;
           return {
             state: {
               ...current,
               left,
               right,
-              ...(automatic.selectedType === undefined
-                ? {}
-                : { selectedLocalCurrencyType: automatic.selectedType }),
               aggregateVersion: changed
                 ? current.aggregateVersion + 1
                 : current.aggregateVersion,
             },
             value: {},
             writes: changed,
-            ...(automatic.changed
-              ? { changedField: "auto-local-currency" as const }
-              : { changedField: "summary-cards" as const }),
+            changedField: "summary-cards" as const,
           };
         }),
       );
@@ -132,6 +129,9 @@ export function createHomePreferenceRuntimeApplication(
       const selected = input.localCurrencyTypeId.trim();
       return finalResult(
         await store.transact(metadata(input), (current, availableTypes) => {
+          if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0 || input.expectedVersion !== current.aggregateVersion) {
+            return { kind: "rejected", code: "HOME_CONFIGURATION_VERSION_MISMATCH" };
+          }
           if (!availableTypes.has(selected)) {
             return {
               kind: "rejected",

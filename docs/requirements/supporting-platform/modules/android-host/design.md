@@ -18,7 +18,7 @@
 | Host Gate | OS 권한 상태를 capability로 변환하고 표시 화면 결정 | 결제 알림 출처 허용 정책 |
 | Web Shell | 시작 URL, navigation, 뒤로가기, lifecycle | Web 업무 화면과 PWA worker |
 | Secure Bridge | 허용 origin의 Web과 Native 기능 연결 | 가구 인증·인가의 최종 판정 |
-| Native Auth Adapter | Credential Manager·Firebase Auth로 Google Principal 획득, 일회성 WebView session exchange 시작 | embedded WebView OAuth·Membership 판정 |
+| Native Auth Adapter | Credential Manager·Firebase Auth로 Google Principal 획득, Firebase custom token으로 WebView 로그인 연결 | embedded WebView OAuth·Membership 판정 |
 | Session Mirror | Web session을 Android 입력 기능에 전달하는 비권위 cache | Household·Member 원본 |
 | QuickEdit | 저장 완료 거래의 편집 UI와 Command 호출 | 거래 분할·삭제의 서버 불변식 |
 | Host Notification Adapter | foreground 알림 표시와 QuickEdit 진입 | 수신자 계산·FCM 전송 |
@@ -34,10 +34,10 @@
 | `EvaluateHostAccess` Query | `MainActivity.onCreate/onResume` | OS capability snapshot, QuickEdit 설정 | `ShowPermissionGuide` 또는 `ShowWebShell` | 로컬 조회; 쓰기 없음 |
 | `InitializeWebShell` Command | Activity | environment, saved navigation state | `WebShellReady(startUrl, bridgeState)` | 허용 URL 정책 검증 후 한 번만 load |
 | `HandleBackNavigation` Command | Activity | 현재 화면, `canGoBack` | `NavigateWebHistory` 또는 `DelegateToActivity` | 로컬 상태 전이 |
-| `SynchronizeSessionMirror` Command | 허용 origin Web page | versioned Web session snapshot | `Applied(changedKeys)` 또는 typed 거부 | 단일 local-store commit |
+| `SynchronizeSessionMirror` Command | 허용 origin Web page의 `session.refresh` | Native 인증 세션으로 권위 조회한 Membership 결과 | scope 또는 typed 거부 | caller의 가구·멤버 ID를 신뢰하지 않고 단일 local-store commit |
 | `RequestNotificationDisplayPermission` Command | Host 안내 UI | API level, 현재 표시 capability, 사용자 action | `Granted`·`Denied`·`NotRequired` | API 33+에서만 OS dialog; 앱 진입 gate와 분리 |
 | `BeginGoogleSignIn` Command | Android 로그인 화면 | Credential Manager 결과 | `Authenticated(principalRef)`·`Cancelled`·typed 실패 | Native Firebase Auth; Google credential 비노출 |
-| `ExchangeWebViewSession` Command | 허용 origin top-level WebView | Native 인증과 Principal-bound Membership 조회 뒤 발급한 일회성 exchange handle | `SessionEstablished`·`Expired`·`AlreadyUsed` | 최대 5분 TTL·한 번 사용; householdKey나 장기 token 전달 금지 |
+| `ExchangeWebViewSession` Command | 허용 origin top-level WebView의 `auth.sign-in` | Native Firebase Auth UID로 `createWebViewSessionToken` 호출 | `webview-session-token.v1`의 Web용 custom token·principalUid·Membership 해석 결과 또는 typed 거부 | Native App Check·Auth 검증, 동일 UID 확인; 자체 handle·5분 TTL·소비 저장소 없음(DEC-073) |
 | `OpenQuickEdit` Command | 결제 수집 Client Adapter | 저장된 transaction ID와 표시 snapshot | `Opened`, `Queued` 또는 `Suppressed(reason)` | QuickEdit capability 판정 뒤 session 범위 FIFO에 멱등 등록 |
 
 [DEC-004](../../../governance/decisions.md#dec-004)에 따라 Host Gate는 최초 진입과 resume 시 알림 접근·overlay capability를 모두 요구한다. 두 권한이 준비된 뒤 Web Shell을 표시한다. API 33+ 알림 표시 권한은 편의 capability일 뿐 이 gate에 포함하지 않는다. `OpenQuickEdit`은 이 OS capability와 별도로 사용자 QuickEdit 설정을 확인하며, 설정이 꺼져 있으면 `Suppressed(UserDisabled)`를 반환한다.
@@ -62,14 +62,19 @@ sealed interface BridgeResultV1 {
 
 지원 operation:
 
-- `SYNC_SESSION_MIRROR`: 서버가 발급한 짧은 일회성 Principal-bound Membership receipt를 검증·소비해 receipt의 `householdId/memberId` 동기화
-- `CLEAR_HOUSEHOLD_MIRROR`: mirror 삭제 정책 실행
-- `GET_QUICK_EDIT_PREFERENCE`, `SET_QUICK_EDIT_PREFERENCE`
-- `GET_APP_VERSION`
+- `auth.sign-in`: Native 로그인과 서버 custom token 발급을 거쳐 Web 로그인 정보 반환
+- `auth.sign-out`: Native 인증·mirror·endpoint 정리
+- `session.refresh`: Native가 서버에서 권위 조회한 Membership으로 mirror 동기화
+- `quick-edit.get-overlay-enabled`, `quick-edit.set-overlay-enabled`: 현재 mirror와 일치하는 scope의 표시 설정 조회·변경
+- `app.get-version`, `performance.get-app-launch-duration`
 
 Bridge 호출은 현재 top-level document의 실제 origin이 `AllowedWebOriginPolicy`에 포함될 때만 처리한다. origin 변경, redirect, subframe, 불명확한 origin은 `Rejected(ORIGIN_NOT_ALLOWED)`다. 가구 키는 호환 입력으로만 받고 인증 증명으로 사용하지 않는다.
 
-Google 로그인 UI는 embedded WebView에서 실행하지 않습니다. Android `NativeGoogleAuthAdapter`가 Credential Manager와 Firebase Auth를 사용하고, 서버 Membership Query가 인증 Principal에 귀속된 active Membership을 조회한 뒤에만 Native mirror와 WebView exchange를 준비합니다. caller가 보낸 householdId·memberId·status와 사용자별 view projection은 Membership 증거로 신뢰하지 않습니다. view가 가리킨 canonical Membership·Member의 존재, active 상태와 Principal/가구/멤버 일치가 모두 확인되어야 하며 여러 active view나 불일치는 typed invariant 오류로 fail-closed 처리합니다. WebView에는 서버가 검증·소비하는 최대 5분의 짧은 일회성 exchange handle만 전달합니다. 서버는 같은 요청에서 custom token과 authoritative Membership resolution 및 그 principal UID를 함께 반환하고, Native와 Web은 token으로 확정된 UID가 응답 UID와 같을 때만 resolution을 mirror와 최초 SessionScope에 사용합니다. 결과가 없는 실제 구버전 응답만 기존 Membership Command로 fallback하며 현재 서버의 resolution 실패는 token-only 성공으로 바꾸지 않습니다. 앱/WebView 시작 때 Native Firebase Principal이 남아 있으면 사용자 입력 없이 새 exchange를 발급하고, 이 작업을 WebView URL load·hydration과 병렬 prewarm하여 Bridge가 같은 단일 사용 결과를 소비합니다. Native Principal이 없으면 prewarm은 Google UI를 열지 않습니다. WebView IndexedDB의 과거 Firebase Auth 상태는 Android 세션 권위로 사용하지 않습니다. exchange의 최종 token/cookie 형태는 Infrastructure 상세이지만 Google credential·장기 Firebase ID token·legacy householdKey를 범용 Bridge 메서드로 반환하는 구현은 금지합니다.
+Google 로그인 UI는 embedded WebView에서 실행하지 않습니다. 실제 `NativeAuthCoordinator`가 Credential Manager와 Firebase Auth를 사용합니다. `createWebViewSessionToken` callable은 Native App Check와 Firebase Auth를 검증하고, 인증 UID의 Membership을 권위 해석한 뒤 Web·Native용 custom token을 발급합니다. caller가 보낸 householdId·memberId·status와 사용자별 view projection은 Membership 증거로 신뢰하지 않습니다. canonical Membership·Member의 존재, active 상태와 Principal/가구/멤버 일치를 확인하며 여러 active view나 불일치는 typed invariant 오류로 거부합니다. 최초 방문자는 가구 생성·참여로 안내할 수 있도록 가구 권한 claim 없이 로그인합니다.
+
+[DEC-073](../../../governance/decisions.md#dec-073)에 따라 응답 계약은 `webview-session-token.v1`을 유지합니다. 서버는 `customToken`, `nativeCustomToken`, `principalUid`, `signedInUserResolution`을 함께 반환합니다. Native는 현재 인증 UID와 응답 UID를 확인하고 Native용 토큰으로 세션을 갱신합니다. Web bridge는 Web용 `customToken`과 UID·해석 결과만 전달하며 Web은 `signInWithCustomToken`으로 로그인한 UID가 응답 UID와 일치할 때만 resolution을 최초 SessionScope에 사용합니다. 결과가 없는 실제 구버전 응답만 기존 Membership Command로 fallback하며 현재 서버의 resolution 실패나 어느 한쪽 토큰 발급 실패를 부분 성공으로 바꾸지 않습니다. 별도 exchange handle·Membership receipt 저장소와 최대 5분·1회 소비 보장은 두지 않습니다. 토큰 검증·만료는 [Firebase SDK 계약](https://firebase.google.com/docs/auth/admin/create-custom-tokens)을 따르며 로그인 후 세션 유지 시간과 구분합니다.
+
+DEC-068에 따라 정상 영속 Web Auth를 우선 재사용합니다. Web Auth가 없거나 갱신 실패·5초 무응답일 때 Native 교환을 요청하고 매 시작마다 prewarm 교환을 수행하지 않습니다. Native callable의 `UNAUTHENTICATED`는 Native Auth를 한 번 재인증한 뒤 재시도합니다. local Membership·Household metadata는 표시용 cache이며 실제 read/write는 Rules·Functions가 검증합니다. Google credential·Firebase ID/refresh token·legacy householdKey를 범용 Bridge 메서드로 반환하지 않습니다.
 
 ### 3.3 QuickEdit Client 계약
 
@@ -147,8 +152,8 @@ Client 검증은 즉시 피드백용이다. Ledger가 같은 불변식과 원자
 ### 5.3 `SynchronizeSessionMirror`
 
 1. Bridge Adapter가 main-frame origin과 contract version을 검증한다.
-2. 서버가 발급한 일회성 Membership receipt의 서명·만료·미사용 상태와 인증 Principal 귀속을 검증하고, caller payload의 householdId·memberId·status는 사용하지 않는다.
-3. 현재 snapshot과 receipt의 householdId/memberId가 다르면 `SessionTransitionPort`로 이전 actor Queue 삭제를 먼저 요청한다.
+2. `NativeAuthCoordinator.refreshMembership`이 같은 Native 인증 세션의 bootstrap 결과 또는 서버 권위 조회 결과를 `NativeMembershipResolver`로 전달한다. caller payload의 householdId·memberId·status는 Membership 증거로 사용하지 않으며 별도 receipt 서명·만료·소비 프로토콜은 없다.
+3. 현재 snapshot과 권위 결과의 householdId/memberId가 다르면 `SessionTransitionPort`로 이전 actor Queue 삭제를 먼저 요청한다.
 4. Queue 삭제 실패 시 `Rejected(SESSION_TRANSITION_BLOCKED)`로 끝내고 현재 mirror를 유지한다.
 5. `SessionMirrorStore`가 schemaVersion·householdId·memberId 전체를 한 commit으로 교체한다. 부분 setter는 공개하지 않는다.
 6. 결제 수집 기능에는 한 번에 읽은 ID snapshot만 제공하고 권한 여부를 의미하지 않는다.
@@ -158,9 +163,9 @@ Client 검증은 즉시 피드백용이다. Ledger가 같은 불변식과 원자
 ### 5.4 알림 표시 capability
 
 1. `PermissionStatePort`는 알림 접근, overlay, `POST_NOTIFICATIONS`를 서로 다른 capability로 반환한다.
-2. API 32 이하는 `NotRequired`, API 33 이상은 사용자 action에서만 runtime permission을 요청한다.
+2. [DEC-072](../../../governance/decisions.md#dec-072)에 따라 API 32 이하는 요청하지 않는다. API 33 이상은 필수 알림 접근·overlay 권한을 확보한 뒤 가계부 최초 진입 시 표시 권한이 없고 이전 요청 이력도 없는 경우에만 한 번 자동 요청한다. `android_permission_prompts.postNotificationsRequested`를 dialog 실행 전에 저장하며 Activity 재생성·재실행 시에도 이 이력을 유지한다.
 3. 거부 결과는 저장하되 Web Shell, 결제 알림 Listener, QuickEdit, FID 등록 capability를 거짓으로 비활성화하지 않는다.
-4. 시스템 정책상 다시 물을 수 없거나 사용자가 거부한 상태에서는 dialog를 반복 실행하지 않고 설정 화면 action만 제공합니다.
+4. 이미 요청했거나 거부한 경우 dialog를 반복 실행하지 않는다. 이후 허용·거부 변경은 사용자가 Android 시스템 설정에서 수행하며 앱 내 푸시 설정·토글·설정 이동 메뉴는 추가하지 않는다. 기존 ‘결제 후 바로 편집’ 토글은 편집창 자동 표시만 제어한다.
 5. 로컬 session이 없으면 Application 시작 시 `FcmService` component를 비활성화합니다. 이는 foreground callback뿐 아니라 notification payload의 OS background 자동 표시도 차단합니다.
 6. 로그인 등록은 억제 또는 다른 binding 흔적이 있으면 stale Firebase Messaging registration을 먼저 unregister하고 component를 활성화한 뒤 새 등록을 시작합니다. unregister·component enable·등록 실패는 component를 다시 비활성화합니다.
 7. foreground 수신은 현재 SessionMirror와 서버 등록이 확인된 `(householdId, memberId, registrationVersion)`이 정확히 일치하고 로그아웃 억제 상태가 아닐 때만 표시합니다.
@@ -209,7 +214,7 @@ Client 검증은 즉시 피드백용이다. Ledger가 같은 불변식과 원자
 | `SessionMirrorStore` | out | 보호된 local storage | in-memory conformance Fake |
 | `SessionTransitionPort` | out | session 범위 Payment·QuickEdit Queue purge coordinator | Queue별 성공·실패 Spy |
 | `NativeGoogleAuthPort` | out | Credential Manager + Firebase Auth | 인증 성공·취소·실패 Fake |
-| `WebViewSessionExchangePort` | out | 서버 일회성 session exchange API | 만료·재사용·origin Stub |
+| `WebViewSessionExchangePort` | out | Native 인증을 사용하는 Firebase custom token 발급 callable | 실제 발급 함수의 UID·Membership·실패 응답 검증, Web SDK 경계 대역 |
 | `QuickEditPreferencePort` | out | local preferences | Fake |
 | `QuickEditPendingQueuePort` | out | Keystore-backed encrypted local queue; optional server-confirmed display snapshot | ordering·dedup·snapshot codec·ID-only 호환·crash conformance Fake |
 | `QuickEditCommandOutboxPort` | out | 별도 Keystore-backed encrypted command outbox | commit 실패·동일 envelope FIFO 재시도·terminal 알림 전 보존과 알림 후 삭제 Fake |
@@ -293,12 +298,12 @@ Activity는 화면 event를 Input Port에 전달하고 상태를 render만 한�
 | AND-002 | U, UI | Permission Adapter | 유사 문자열 component와 정확한 component | 오탐 없이 상태·설정 action 반환 | `T-ANDROID-HOST-001` |
 | AND-003 | UI, Build Conformance | Web Shell·EnvironmentConfig | fresh/saved URL, prod/dev build, URL-origin 설정 불일치 | 같은 versioned 설정의 허용 HTTPS URL만 1회 load, 오설정 빌드 실패 | `T-WEBVIEW-002` |
 | AND-004 | U, UI | Back Controller | guide, canGoBack true/false | history 또는 Activity 위임 | `T-WEBVIEW-003` |
-| AND-005 | U, C, 보안 UI, E2E | Native Google Auth·Principal-bound Membership receipt·일회성 Session Exchange·Legacy Candidate | 인증 성공·취소·실패, Principal 불일치·caller ID 조작, handle 최대 5분·만료·재사용·다른 origin, legacy 후보 있음·없음, Membership 확정·로그아웃 | caller 값이 아닌 서버 receipt의 동일 Principal session, Google credential 비노출, 기존 householdId·memberId 유지, mirror 원자 sync·clear | T-HH-001, T-HH-002, T-WEBVIEW-001 |
+| AND-005 | U, C, 보안 UI, E2E | Native Google Auth·서버 Membership 조회·Firebase custom token·Legacy Candidate | 동일 UID 발급, 최초 방문 권한 부재, 조회·한쪽 발급 실패, Web UID 불일치, 영속 세션 재사용·실패 복구·로그아웃; 실제 계정 선택·취소는 기기 검증 대상 | 서버가 검증한 동일 Principal session, Google credential 비노출, 기존 householdId·memberId 유지, mirror 원자 sync·clear; 테스트용 handle 모델은 구현 증거에서 제외 | T-HH-001, T-HH-002, T-WEBVIEW-001, T-WEBVIEW-004 |
 | AND-006 | 보안 UI, E2E | Secure Bridge | 허용 origin, redirect, subframe, 유사 host | 민감 operation 차단 | T-WEBVIEW-001 |
 | AND-007 | U, UI | Version Presenter | 정상 versionName, package 조회 실패 | 계약 문자열 또는 unknown | `T-ANDROID-VERSION-001` |
 | AND-008 | U, 보안 E2E | Redacting logger | 가구·멤버·FID·token·원문·memo가 포함된 성공/실패 | 원문 0건, 허용된 hash·오류 code만 기록 | T-ANDROID-LOG-001 |
 | AND-009 | Build Conformance, 보안 E2E | BackupPolicyVerifier | cloud backup·device transfer·새 설치 restore | actor·credential·legacy·WebView 민감 상태·Queue 복원 없음 | T-ANDROID-BACKUP-001 |
-| AND-010 | UI, E2E | Permission Adapter | API 32/33, 허용·거부·재요청 불가 | 33+만 요청, 거부와 앱 진입·수집·QuickEdit·FID 독립 | T-ANDROID-NOTIFICATION-PERMISSION-001 |
+| AND-010 | UI, E2E | Permission Adapter | API 32/33+, 허용·거부·미요청·기존 요청·Activity 재생성 | 33+의 최초 가계부 진입에서 미허용·미요청일 때만 요청, 이력 이후 재요청 없음, 거부와 앱 진입·수집·QuickEdit·FID 독립 | T-ANDROID-NOTIFICATION-PERMISSION-001 |
 | AND-011 | U, I, 보안 E2E | KeystoreSessionMirrorStore·SessionTransitionPort·PreferencePort | actor 변경, Queue purge 실패, purge 뒤 process 중단, 이름 변경, legacy preference 반복 이관, key export·backup 시도 | 암호화 원자 snapshot, 중단 복구는 fail-closed, 실패 시 이전 actor 유지, stable memberId 설정 1회 이관·유지, key 비복원 | T-SESSION-MIRROR-001 |
 | AND-013 | U, I, 보안 E2E | FCM component gate·FID detach/registration controller | component·preference·remote remove·unregister 실패/timeout, 로그아웃·process 재시작·같은/다른 멤버 재로그인 | component 차단·알림 취소 선행, 나머지 정리 독립 시도와 로그아웃 완료, 세션 없는 시작 차단, stale unregister 뒤 등록, 현재 확인 binding만 표시 | T-ANDROID-FCM-LOGOUT-001, T-PUSH-010 |
 | AND-014 | U, UI, 성능 E2E | Activity launch monotonic clock·trusted Bridge·Web first-home-complete mark·clientStartup log | 신규 Activity, 같은 Activity WebView reload, 원장·카테고리·지역화폐·연간 합계의 도착 순서·실패, 구 APK, 2분 경계 | Activity/Navigation 시작부터 최신 홈 데이터 성공 paint까지 플랫폼별 한 번 측정하고 일반 Web·세션 교환·실패 초기화를 제외하며 계측 실패가 화면을 막지 않음 | T-ANDROID-STARTUP-001, T-ADM-004 |

@@ -1,4 +1,5 @@
 import type * as firestore from "firebase-admin/firestore";
+import { GoogleOnboardingPayloadConflict } from "../../../contexts/access/google-onboarding/application/ports/out/googleOnboardingStorePort";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import type {
@@ -271,7 +272,7 @@ export class FirebaseGoogleOnboardingStore implements GoogleOnboardingStorePort 
         const receipt = await transaction.get(receiptReference);
         if (receipt.exists) {
           if (receipt.data()?.payloadFingerprint !== this.input.payloadFingerprint) {
-            throw new Error("Access onboarding idempotency payload mismatch");
+            throw new GoogleOnboardingPayloadConflict();
           }
           return receipt.data()?.result as T;
         }
@@ -328,6 +329,13 @@ export class FirebaseGoogleOnboardingStore implements GoogleOnboardingStorePort 
       const initializationStatus = state.initializations.find(
         (candidate) => candidate.householdId === household.householdId,
       )?.status;
+      if (!persistIdentityGraph) {
+        if (existing?.exists === true && household.lifecycleState === "active" &&
+          existing.data()?.initializationStatus !== "completed" && initializationStatus !== undefined) {
+          transaction.update(reference, { initializationStatus, updatedAt: FieldValue.serverTimestamp() });
+        }
+        continue;
+      }
       const fields = {
         householdId: household.householdId,
         name: household.name,

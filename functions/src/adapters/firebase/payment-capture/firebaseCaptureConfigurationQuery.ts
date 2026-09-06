@@ -17,6 +17,9 @@ import {
   decodeCaptureConfigurationProjection,
   encodeCaptureConfigurationProjection,
 } from "./firebaseCaptureConfigurationProjection";
+import { readLegacyMerchantRule } from "../../../contexts/payment-capture/configuration/adapters/persistence/merchantRuleLegacyAdapter";
+
+class CaptureConfigurationContractError extends Error {}
 
 function text(
   data: FirebaseFirestore.DocumentData | undefined,
@@ -39,6 +42,7 @@ function matchType(data: FirebaseFirestore.DocumentData): MerchantMatchType {
   ) {
     return value;
   }
+  if (value !== undefined) throw new CaptureConfigurationContractError("REGEX_NOT_SUPPORTED");
   return data.exactMatch === true ? "exact" : "contains";
 }
 
@@ -51,12 +55,20 @@ function mapRule(
     return undefined;
   }
   const keyword = text(data, "keyword", "merchantKeyword");
-  if (keyword === undefined) return undefined;
+  if (keyword === undefined) throw new CaptureConfigurationContractError("EMPTY_KEYWORD");
+  if (keyword.split(",").some((token) => token.trim() === "")) throw new CaptureConfigurationContractError("EMPTY_OR_TOKEN");
   const mappingValue =
     typeof data.mapping === "object" && data.mapping !== null
       ? (data.mapping as FirebaseFirestore.DocumentData)
       : {};
   const type = matchType(data);
+  const category = mappingValue.categoryId ?? mappingValue.category ?? data.categoryId ?? data.category;
+  if (category !== undefined && (typeof category !== "string" || category.trim() === "")) throw new CaptureConfigurationContractError("INVALID_CATEGORY_REFERENCE");
+  if (data.priority !== undefined && (!Number.isSafeInteger(data.priority) || data.priority <= 0)) throw new CaptureConfigurationContractError("INVALID_PRIORITY");
+  if (type === "exact" || type === "contains") {
+    const legacy = readLegacyMerchantRule({ ...data, keyword, category, matchType: type });
+    if (legacy.kind === "ContractFailure") throw new CaptureConfigurationContractError(legacy.code);
+  }
   const priority =
     typeof data.priority === "number" && Number.isSafeInteger(data.priority)
       ? data.priority
@@ -231,8 +243,9 @@ export class FirebaseCaptureConfigurationQuery
               return card === undefined ? [] : [[document.id, card] as const];
             }),
           );
+          const canonicalRuleIds = new Set(canonicalRules.docs.map((document) => document.id));
           const merchantRules = unionById(
-            legacyRules.docs.flatMap((document) => {
+            legacyRules.docs.filter((document) => !canonicalRuleIds.has(document.id)).flatMap((document) => {
               const rule = mapRule(document, input.householdId);
               return rule === undefined ? [] : [[document.id, rule] as const];
             }),
@@ -291,7 +304,8 @@ export class FirebaseCaptureConfigurationQuery
         },
       );
       return { kind: "available" as const, value };
-    } catch {
+    } catch (error) {
+      if (error instanceof CaptureConfigurationContractError) return { kind: "contract-failure" as const, code: error.message };
       return {
         kind: "retryable-failure" as const,
         code: "PAYMENT_CONFIGURATION_UNAVAILABLE" as const,

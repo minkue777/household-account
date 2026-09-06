@@ -151,14 +151,17 @@ object QuickEditCommandDelivery {
         }
     }
 
-    suspend fun purgeForSessionTransition(context: Context) =
+    suspend fun purgeForSessionTransition(context: Context, previousScope: CaptureSessionScope? = currentScope(context)) =
         deliveryLifecycle.purge(
-            currentScope = { currentScope(context) },
+            currentScope = { previousScope ?: currentScope(context) },
             clearOutbox = { outbox(context).purgeForSessionTransition() },
             cancelDelivery = {
                 WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME).await()
             }
         )
+
+    suspend fun resumeAfterFailedTransition(scope: CaptureSessionScope) =
+        deliveryLifecycle.resumeAfterFailedTransition(scope)
 
     private suspend fun scheduleRetry(context: Context) {
         WorkManager.getInstance(context).enqueueUniqueWork(
@@ -216,11 +219,7 @@ object QuickEditCommandDelivery {
         return terminalFailures + storageFailure
     }
 
-    private fun currentScope(context: Context) = CaptureSessionScope(
-        householdId = HouseholdPreferences.getHouseholdKey(context),
-        memberId = HouseholdPreferences.getMemberId(context),
-        sessionGeneration = HouseholdPreferences.getSessionGeneration(context)
-    )
+    private fun currentScope(context: Context) = HouseholdPreferences.currentScope(context)
 
     private const val WORK_NAME = "quick-edit-command-delivery.v1"
 }

@@ -1,3 +1,4 @@
+import { getSeoulLocalTime } from '@/lib/utils/date';
 import {
   collection,
   query,
@@ -5,6 +6,9 @@ import {
   onSnapshot,
   getDocs,
   getDocsFromServer,
+  limit,
+  orderBy,
+  documentId,
   QueryDocumentSnapshot,
   DocumentData,
   db,
@@ -18,6 +22,7 @@ import {
   type LedgerTransactionCommandResult,
 } from '@/platform/functions-api/householdCommandContract';
 import { createHouseholdCommandId } from '@/platform/functions-api/householdCommandClient';
+import { normalizeStoredCategoryId } from '@/lib/categoryCompatibility';
 
 const COLLECTION_NAME = 'expenses';
 const DEFAULT_TRANSACTION_TYPE: TransactionType = 'expense';
@@ -126,7 +131,7 @@ export function resolveExpenseCardDisplay(data: LedgerCardReadFields): string | 
 /**
  * Firestore 문서를 Expense 객체로 변환 (DRY 원칙)
  */
-function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense {
+export function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense {
   const data = docSnap.data();
   const cardDisplay = resolveExpenseCardDisplay(data);
   const localCurrencyType =
@@ -157,10 +162,11 @@ function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense 
     merchant: data.merchant,
     amount: data.amount,
     transactionType: (data.transactionType || DEFAULT_TRANSACTION_TYPE) as TransactionType,
-    // Android는 대문자로 저장하므로 소문자로 변환
-    category: (data.categoryId || data.category || 'etc').toLowerCase(),
+    category: normalizeStoredCategoryId(data.categoryId || data.category),
     cardType: data.cardType?.toLowerCase() || (data.source === 'manual' ? 'manual' : 'main'),
     cardLastFour: cardDisplay,
+    ...(typeof data.derivedFromTransactionId === 'string' ? { derivedFromTransactionId: data.derivedFromTransactionId } : {}),
+    ...(typeof data.cardEvidence === 'string' ? { cardEvidence: data.cardEvidence } : {}),
     ...(localCurrencyType === undefined ? {} : { localCurrencyType }),
     memo: data.memo,
     mergedFrom: data.mergedFrom,
@@ -185,7 +191,7 @@ function mapCommandTransaction(
     merchant: transaction.merchant,
     amount: transaction.amountInWon,
     transactionType: transaction.transactionType,
-    category: transaction.categoryId.toLowerCase(),
+    category: normalizeStoredCategoryId(transaction.categoryId),
     cardType: previous?.cardType ?? transaction.cardType,
     cardLastFour: previous?.cardLastFour ?? transaction.cardDisplay,
     localCurrencyType: previous?.localCurrencyType ?? transaction.localCurrencyType,
@@ -313,7 +319,7 @@ function matchesCardLabel(leftLabel: string, rightLabel: string): boolean {
 }
 
 function getExpenseCardSearchTexts(expense: Expense): string[] {
-  const cardValue = expense.cardLastFour || '';
+  const cardValue = expense.cardEvidence || expense.cardLastFour || '';
   const cardLabel = extractCardLabel(cardValue);
   const cardToken = normalizeCardToken(cardValue);
   const cardType = expense.cardType || '';
@@ -339,7 +345,7 @@ function getExpenseCardSearchTexts(expense: Expense): string[] {
 
 function matchesCardSearch(expense: Expense, keyword: string): boolean {
   const exactCardKeyword = parseExactCardSearchKeyword(keyword);
-  const cardValue = expense.cardLastFour || '';
+  const cardValue = expense.cardEvidence || expense.cardLastFour || '';
 
   if (exactCardKeyword) {
     const cardLabel = extractCardLabel(cardValue);
@@ -413,14 +419,15 @@ export async function addExpense(
 export async function updateExpense(
   id: string,
   data: Partial<Expense>,
-  expectedVersion: number
+  expectedVersion: number,
+  rememberForNextTime = false
 ): Promise<void> {
   const householdId = getHouseholdId();
   const current = ledgerOptimisticProjection.current(id, householdId);
   const mutationId = ledgerOptimisticProjection.beginUpdate(id, data, householdId);
   try {
     const ledgerCommands = await loadLedgerCommands();
-    const updated = await ledgerCommands.update(householdId, id, expectedVersion, data);
+    const updated = await ledgerCommands.update(householdId, id, expectedVersion, data, rememberForNextTime);
     ledgerOptimisticProjection.commitUpdate(mutationId, mapCommandTransaction(updated, current));
   } catch (error) {
     ledgerOptimisticProjection.rollback(mutationId);
@@ -601,7 +608,6 @@ export function subscribeToDateRangeExpenses(
     projection.publish(allExpenses);
   }, (error) => {
     options.onError?.(error);
-    projection.publish([]);
   });
 
   return () => {
@@ -621,8 +627,7 @@ export async function addManualExpense(
   memo?: string,
   transactionType: TransactionType = DEFAULT_TRANSACTION_TYPE
 ): Promise<string> {
-  const now = new Date();
-  const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const time = getSeoulLocalTime();
 
   return addExpense({
     date,
@@ -814,6 +819,17 @@ export async function unmergeExpense(expense: Expense): Promise<string[]> {
   return ledgerCommands.unmerge(getHouseholdId(), expense.id, expense.aggregateVersion);
 }
 
+export async function restoreItemSplit(expense: Expense): Promise<void> {
+  const sourceId = expense.derivedFromTransactionId;
+  if (!sourceId) throw new Error('항목 분할 원본을 찾을 수 없습니다.');
+  const householdId = getHouseholdId();
+  const siblings = await getDocs(query(collection(db, COLLECTION_NAME), where('householdId', '==', householdId), where('derivedFromTransactionId', '==', sourceId)));
+  const versions = Object.fromEntries(siblings.docs.filter(doc => isVisibleLedgerReadDocument(doc.data())).map(doc => [doc.id, Number(doc.data().aggregateVersion ?? 1)]));
+  versions[expense.id] = expense.aggregateVersion;
+  const commands = await loadLedgerCommands();
+  await commands.restoreItemSplit(householdId, sourceId, versions);
+}
+
 /**
  * 키워드로 지출 검색
  * 가맹점명, 메모, 카드 정보에서 키워드 검색
@@ -822,26 +838,65 @@ export async function searchExpenses(
   keyword: string,
   options: ExpenseQueryOptions = { transactionType: DEFAULT_TRANSACTION_TYPE }
 ): Promise<Expense[]> {
-  if (!keyword.trim()) {
-    return [];
+  return (await searchExpensePage(keyword, options)).items;
+}
+
+export interface ExpenseSearchSummary { count: number; amount: number; months: Record<string, { count: number; amount: number }> }
+export interface ExpenseSearchCursor { windowId: string; scope: string; offset: number }
+export class ExpenseSearchFailure extends Error {
+  constructor(readonly code: 'SOURCE_LIMIT_EXCEEDED' | 'SOURCE_WINDOW_CHANGED' | 'INVALID_PERIOD' | 'SOURCE_UNAVAILABLE') {
+    super(code === 'SOURCE_LIMIT_EXCEEDED' ? '검색할 거래가 많습니다. 검색 기간을 줄여 주세요.' : code === 'SOURCE_WINDOW_CHANGED' ? '검색 중 세션이 변경되었거나 검색 조건이 변경되었습니다. 다시 검색해 주세요.' : code === 'INVALID_PERIOD' ? '검색 시작일과 종료일을 확인해 주세요.' : '검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.');
   }
+}
+let searchWindowSequence = 0;
+let searchWindow: { key: string; id: string; source: Promise<Expense[]> } | undefined;
+export function closeExpenseSearchWindow(windowId: string): void {
+  if (searchWindow?.id === windowId) searchWindow = undefined;
+}
 
-  const householdId = getHouseholdId();
-
-  const q = query(
-    collection(db, COLLECTION_NAME),
-    where('householdId', '==', householdId)
-  );
-
-  const snapshot = await getDocs(q);
-  const results = snapshot.docs
-    .filter((document) => isVisibleLedgerReadDocument(document.data()))
-    .map(mapDocToExpense)
-    .filter((expense) => matchesTransactionType(expense, options.transactionType))
-    .filter((expense) => expenseMatchesSearch(expense, keyword))
-    .sort((a, b) => b.date.localeCompare(a.date));
-
-  return results;
+export async function searchExpensePage(
+  keyword: string,
+  options: ExpenseQueryOptions & { cursor?: ExpenseSearchCursor; startDate?: string; endDate?: string; sourceWindow?: string } = { transactionType: DEFAULT_TRANSACTION_TYPE }
+): Promise<{ items: Expense[]; summary: ExpenseSearchSummary; nextCursor?: ExpenseSearchCursor }> {
+  const empty: ExpenseSearchSummary = { count: 0, amount: 0, months: {} };
+  if (!keyword.trim()) return { items: [], summary: empty };
+  const scope = requireClientSessionScope();
+  const period = { startDate: options.startDate || '0001-01-01', endDate: options.endDate || '9999-12-31' };
+  if (period.startDate > period.endDate) throw new ExpenseSearchFailure('INVALID_PERIOD');
+  const windowId = options.sourceWindow ?? options.cursor?.windowId ?? `search-window-${++searchWindowSequence}`;
+  const key = JSON.stringify([scope.principalUid, scope.sessionGeneration, scope.householdId, period, windowId]);
+  const queryScope = JSON.stringify([key, keyword.trim().toLocaleLowerCase(), options.transactionType]);
+  const cursor = options.cursor;
+  if (cursor && (cursor.scope !== queryScope || searchWindow?.key !== key || cursor.offset < 0 || !Number.isSafeInteger(cursor.offset))) throw new ExpenseSearchFailure('SOURCE_WINDOW_CHANGED');
+  if (searchWindow?.key !== key) {
+    const source = (async () => {
+      // Every keystroke and result page shares one bounded server snapshot.
+      // A source exceeding the safety limit never produces partial totals.
+      const snapshot = await getDocsFromServer(query(collection(db, COLLECTION_NAME),
+        where('householdId', '==', scope.householdId), where('date', '>=', period.startDate), where('date', '<=', period.endDate),
+        orderBy('date', 'desc'), orderBy(documentId(), 'desc'), limit(10_001)));
+      if (snapshot.docs.length > 10_000) throw new ExpenseSearchFailure('SOURCE_LIMIT_EXCEEDED');
+      return snapshot.docs.filter(document => isVisibleLedgerReadDocument(document.data())).map(mapDocToExpense);
+    })().catch(error => {
+      if (searchWindow?.key === key) searchWindow = undefined;
+      throw error instanceof ExpenseSearchFailure ? error : new ExpenseSearchFailure('SOURCE_UNAVAILABLE');
+    });
+    searchWindow = { key, id: windowId, source };
+  }
+  const source = await searchWindow.source;
+  const current = requireClientSessionScope();
+  if (current.householdId !== scope.householdId || current.sessionGeneration !== scope.sessionGeneration || current.principalUid !== scope.principalUid || searchWindow?.key !== key) throw new ExpenseSearchFailure('SOURCE_WINDOW_CHANGED');
+  const matched = source.filter(expense => matchesTransactionType(expense, options.transactionType) && expenseMatchesSearch(expense, keyword))
+    .sort((a, b) => b.date.localeCompare(a.date) || (b.time ?? '').localeCompare(a.time ?? '') || b.id.localeCompare(a.id));
+  const summary = matched.reduce<ExpenseSearchSummary>((value, expense) => {
+    value.count += 1; value.amount += expense.amount;
+    const month = value.months[expense.date.slice(0, 7)] ??= { count: 0, amount: 0 };
+    month.count += 1; month.amount += expense.amount;
+    return value;
+  }, empty);
+  const offset = cursor?.offset ?? 0;
+  const items = matched.slice(offset, offset + 50);
+  return { items, summary, ...(offset + items.length < matched.length ? { nextCursor: { windowId, scope: queryScope, offset: offset + items.length } } : {}) };
 }
 
 /**

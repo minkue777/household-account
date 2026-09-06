@@ -4,6 +4,7 @@ import { ChevronRight, Search } from 'lucide-react';
 import { Expense, TransactionType } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { getLedgerPrimaryText, getLedgerSecondaryText } from '@/lib/utils/ledgerDisplay';
+import type { ExpenseSearchSummary } from '@/lib/expenseService';
 
 interface MonthlyGroup {
   yearMonth: string;
@@ -20,6 +21,7 @@ interface SearchResultListProps {
   onExpandedMonthChange: (month: string | null) => void;
   onExpenseClick: (expense: Expense) => void;
   transactionType: TransactionType;
+  summary?: ExpenseSearchSummary;
 }
 
 export default function SearchResultList({
@@ -30,6 +32,7 @@ export default function SearchResultList({
   onExpandedMonthChange,
   onExpenseClick,
   transactionType,
+  summary,
 }: SearchResultListProps) {
   const { getCategoryLabel, getCategoryColor } = useCategoryContext();
   const transactionLabel = transactionType === 'income' ? '수입' : '지출';
@@ -58,7 +61,14 @@ export default function SearchResultList({
     return groups;
   }, [] as MonthlyGroup[]);
 
-  const totalAmount = results.reduce((sum, expense) => sum + expense.amount, 0);
+  const totalAmount = summary?.amount ?? results.reduce((sum, expense) => sum + expense.amount, 0);
+  for (const yearMonth of Object.keys(summary?.months ?? {})) {
+    if (!groupedResults.some(group => group.yearMonth === yearMonth)) {
+      const [year, month] = yearMonth.split('-');
+      groupedResults.push({ yearMonth, label: `${year}년 ${Number(month)}월`, expenses: [], total: 0 });
+    }
+  }
+  groupedResults.sort((left, right) => right.yearMonth.localeCompare(left.yearMonth));
 
   if (isSearching) {
     return (
@@ -92,7 +102,7 @@ export default function SearchResultList({
         <div className="flex items-center justify-between">
           <span className="font-medium text-blue-800">&quot;{keyword}&quot; 검색 결과</span>
           <span className="text-blue-600">
-            {results.length}건 · {totalAmount.toLocaleString()}원
+            {summary?.count ?? results.length}건 · {totalAmount.toLocaleString()}원
           </span>
         </div>
       </div>
@@ -112,9 +122,9 @@ export default function SearchResultList({
                 }`}
               />
               <span className="font-semibold text-slate-800">{group.label}</span>
-              <span className="text-sm text-slate-500">{group.expenses.length}건</span>
+              <span className="text-sm text-slate-500">{summary?.months[group.yearMonth]?.count ?? group.expenses.length}건</span>
             </div>
-            <span className="font-semibold text-slate-800">{group.total.toLocaleString()}원</span>
+            <span className="font-semibold text-slate-800">{(summary?.months[group.yearMonth]?.amount ?? group.total).toLocaleString()}원</span>
           </button>
 
           {expandedMonth === group.yearMonth && (

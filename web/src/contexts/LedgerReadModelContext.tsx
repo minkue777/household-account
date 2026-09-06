@@ -15,6 +15,7 @@ import { useHousehold } from '@/contexts/HouseholdContext';
 import { ANDROID_NATIVE_RESUME_EVENT } from '@/platform/android-host/androidLifecycleEvents';
 import type { LocalCurrencyBalance } from '@/lib/balanceService';
 import type { Expense, TransactionType } from '@/types/expense';
+import { getSeoulCalendarParts } from '@/lib/utils/date';
 
 interface LedgerPeriod {
   readonly year: number;
@@ -57,11 +58,8 @@ const LedgerReadModelContext = createContext<LedgerReadModelContextValue | undef
 );
 
 function currentPeriod(): LedgerPeriod {
-  const now = new Date();
-  return {
-    year: now.getFullYear(),
-    month: now.getMonth() + 1,
-  };
+  const { year, month } = getSeoulCalendarParts();
+  return { year, month };
 }
 
 function samePeriod(left: LedgerPeriod, right: LedgerPeriod): boolean {

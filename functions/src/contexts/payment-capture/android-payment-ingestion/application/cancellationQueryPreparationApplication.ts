@@ -43,7 +43,7 @@ class DefaultCancellationQueryPreparationApplication
         ? null
         : (parseLocalDate(input.observation.cancellationDate)?.value ?? null);
     const normalizedMerchant = normalizeCancellationMerchant(
-      input.merchantMapping?.replacementMerchant ?? input.observation.merchant,
+      input.observation.merchant,
     );
     const normalizedCard = normalizeCancellationCard(input.observation.card);
     const observation = {

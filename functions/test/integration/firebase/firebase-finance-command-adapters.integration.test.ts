@@ -4,6 +4,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createCategoryHouseholdCommandHandlers } from "../../../src/bootstrap/commands/categoryHouseholdCommandHandlers";
 import { createLedgerHouseholdCommandHandlers } from "../../../src/bootstrap/commands/ledgerHouseholdCommandHandlers";
+import { createAndroidProviderParser, createAndroidRawNotificationSubmissionApplication } from "../../../src/contexts/payment-capture/android-payment-ingestion/public";
+import { createCaptureSubmissionApplication } from "../../../src/contexts/payment-capture/android-payment-ingestion/application/captureSubmissionApplication";
+import { createCaptureBranchSubmissionApplication } from "../../../src/contexts/payment-capture/android-payment-ingestion/application/captureBranchSubmissionApplication";
+import { createCaptureTransactionGatewayApplication } from "../../../src/contexts/payment-capture/android-payment-ingestion/application/captureTransactionGatewayApplication";
+import { FirebaseCaptureConfigurationQuery } from "../../../src/adapters/firebase/payment-capture/firebaseCaptureConfigurationQuery";
+import { FirebaseCaptureLedgerPersistence } from "../../../src/adapters/firebase/payment-capture/firebaseCaptureLedgerPersistence";
+import { FirebaseCaptureSubmissionReceiptStore, Sha256CapturePayloadFingerprint } from "../../../src/adapters/firebase/payment-capture/firebaseCaptureSubmissionReceiptStore";
+import { Sha256AndroidRawNotificationHasher } from "../../../src/adapters/crypto/payment-capture/sha256AndroidRawNotificationHasher";
 import { createRecurringHouseholdCommandHandlers } from "../../../src/bootstrap/commands/recurringHouseholdCommandHandlers";
 import { FirebaseRecurringFinanceUnitOfWork } from "../../../src/adapters/firebase/recurring/firebaseRecurringFinanceUnitOfWork";
 import { createRecurringSchedulerWorkflowApplication } from "../../../src/contexts/household-finance/recurring/application/recurringSchedulerWorkflowApplication";
@@ -85,6 +93,75 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
 
   afterAll(async () => {
     if (app !== undefined) await deleteApp(app);
+  });
+
+  it.each([
+    { transformation: "edit", gross: 10_000, cashback: 500 },
+    { transformation: "monthly-split", gross: 10_000, cashback: 500 },
+    { transformation: "monthly-split", gross: 10_001, cashback: 0 },
+  ])("[PARSE-TOSS-001][CAN-003][T-CAN-006][T-CAN-LINEAGE-001] $gross원 승인·$cashback원 캐시백을 $transformation한 뒤에도 원본·모든 파생을 취소한다", async ({ transformation, gross, cashback }) => {
+    const net = gross - cashback;
+    const household = database.collection("households").doc(HOUSEHOLD_ID);
+    await household.collection("registeredCards").doc("toss").set({ ownerMemberId: actor.actingMemberId, companyLabel: "토스", lifecycleState: "active" });
+    await household.collection("categories").doc("etc").set({ lifecycleState: "active" });
+    const raw = createAndroidRawNotificationSubmissionApplication({
+      parser: createAndroidProviderParser(),
+      payloads: new Sha256AndroidRawNotificationHasher(),
+      clock: { now: () => REQUESTED_AT },
+      submissions: createCaptureSubmissionApplication({
+        tenantAuthorization: {
+          resolveActorContext: () => { throw new Error("Actor already resolved"); },
+          authorizeHouseholdAction: () => ({ kind: "allowed" }),
+        },
+        branches: createCaptureBranchSubmissionApplication({
+          receipts: new FirebaseCaptureSubmissionReceiptStore(database),
+          payloads: new Sha256CapturePayloadFingerprint(),
+          transactions: createCaptureTransactionGatewayApplication({ configuration: new FirebaseCaptureConfigurationQuery(database), ledger: new FirebaseCaptureLedgerPersistence(database) }),
+          balances: { recordBalanceObservation: async () => { throw new Error("Toss has no balance branch"); } },
+        }),
+      }),
+    });
+    const submit = (cancel: boolean) => raw.submit({
+      actor: { principalId: actor.principalUid, householdId: HOUSEHOLD_ID, actingMemberId: actor.actingMemberId, capabilities: ["paymentCapture:submit"] },
+      input: {
+        contractVersion: "android-raw-notification.v1",
+        observationId: `observation.toss.${cancel ? "cancel" : "approval"}`,
+        packageName: "viva.republica.toss",
+        notification: { postedAt: cancel ? "2026-07-22T10:00:00+09:00" : "2026-07-21T10:00:00+09:00", title: "토스", textLines: ["토스뱅크 체크카드 | 원래 가맹점", `${gross}원 결제${cancel ? " 취소" : ""}`, `${cashback}원 캐시백`] },
+      },
+    });
+    const approved = await submit(false);
+    if (approved.kind !== "success" || approved.value.transactionResult?.kind !== "created") throw new Error(`Approval required: ${JSON.stringify(approved)}`);
+    const transactionId = approved.value.transactionResult.transactionId;
+    const canonical = household.collection("ledgerTransactions");
+    expect(approved.value.transactionResult.quickEditSnapshot?.amountInWon).toBe(net);
+    expect((await canonical.doc(transactionId).get()).data()?.amountInWon).toBe(net);
+    expect((await database.collection("expenses").doc(transactionId).get()).data()?.amount).toBe(net);
+    const evidence = (await household.collection("captureRecords").get()).docs[0];
+    expect(evidence.data()).toMatchObject({ amountInWon: net, approvalAmountInWon: gross });
+    const handlers = createLedgerHouseholdCommandHandlers(database);
+    let derivedIds: string[] = [];
+    if (transformation === "edit") {
+      const edited = await execute(handlers, "ledger.update-transaction.v1", "edit-toss", { transactionId, expectedVersion: 1, patch: { amountInWon: 7_500, merchant: "바꾼 가맹점" } });
+      expect(edited).toMatchObject({ amountInWon: 7_500, merchant: "바꾼 가맹점", aggregateVersion: 2 });
+    } else {
+      const split = await execute(handlers, "ledger.split-existing-transaction-monthly.v1", "split-toss", { transactionId, expectedVersion: 1, months: 2 }) as { transactionIds: string[] };
+      derivedIds = split.transactionIds;
+      expect(derivedIds).toHaveLength(2);
+      for (const id of derivedIds) expect((await canonical.doc(id).get()).data()?.amountInWon).toBe(Math.floor(net / 2));
+      expect((await canonical.doc(derivedIds[1]).get()).data()?.accountingDate).toBe("2026-08-21");
+    }
+    expect((await evidence.ref.get()).data()).toEqual(evidence.data());
+    const cancelled = await submit(true);
+    expect(cancelled).toMatchObject({ kind: "success", value: { transactionResult: { kind: "cancelled", transactionIds: expect.arrayContaining([transactionId, ...derivedIds]) } } });
+    for (const id of [transactionId, ...derivedIds]) {
+      expect((await canonical.doc(id).get()).exists).toBe(false);
+      expect((await database.collection("expenses").doc(id).get()).exists).toBe(false);
+    }
+    expect((await evidence.ref.get()).data()).not.toHaveProperty("approvalAmountInWon");
+    const outboxCount = (await database.collection("outboxEvents").get()).size;
+    expect(await submit(true)).toEqual(cancelled);
+    expect((await database.collection("outboxEvents").get()).size).toBe(outboxCount);
   });
 
   it("수동 거래의 canonical·legacy 카드 표시를 모두 수동으로 기록한다", async () => {
@@ -397,23 +474,28 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     })) as { categoryId: string };
 
     await execute(handlers, "category.set-default.v1", "category-default-1", {
+      expectedCatalogVersion: 2,
       categoryId: first.categoryId,
     });
     await execute(handlers, "category.update.v1", "category-update-1", {
+      expectedVersion: 1,
       categoryId: second.categoryId,
       changes: { label: "여가", color: "#ABCDEF" },
     });
     await execute(handlers, "category.set-budget.v1", "category-budget-1", {
+      expectedVersion: 2,
       categoryId: second.categoryId,
       budget: 55_000,
     });
     await execute(handlers, "category.reorder.v1", "category-reorder-1", {
+      expectedCatalogVersion: 5,
       categories: [
         { categoryId: second.categoryId, order: 0 },
         { categoryId: first.categoryId, order: 1 },
       ],
     });
     await execute(handlers, "category.archive.v1", "category-archive-1", {
+      expectedVersion: 4,
       categoryId: second.categoryId,
     });
 
@@ -427,7 +509,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       name: "여가",
       color: "#ABCDEF",
       budgetInWon: 55_000,
-      state: "archive-pending",
+      state: "archived",
       sortOrder: 0,
     });
     const legacyProjection = (
@@ -450,7 +532,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
           .collection("receipts")
           .get()
       ).size,
-    ).toBe(7);
+    ).toBe(8);
   });
 
   it("기존 legacy category의 문서 ID와 업무 key가 달라도 중복 문서 없이 canonical로 확장한다", async () => {
@@ -470,6 +552,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     );
     const handlers = createCategoryHouseholdCommandHandlers(database);
     await execute(handlers, "category.update.v1", "legacy-category-update", {
+      expectedVersion: 1,
       categoryId: "legacy-category-document",
       changes: { label: "바뀐 이름" },
     });
@@ -521,10 +604,12 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       },
     )) as { planId: string };
     await execute(handlers, "recurring.update-plan.v1", "recurring-update-1", {
+      expectedVersion: 1,
       planId: created.planId,
       changes: { amount: 55_000, dayOfMonth: 27, isActive: true },
     });
     await execute(handlers, "recurring.delete-plan.v1", "recurring-delete-1", {
+      expectedVersion: 2,
       planId: created.planId,
     });
 
@@ -1185,12 +1270,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     const replayPage = await pages.nextPage();
     expect(replayPage).toMatchObject({
       checkpointAfter: "recurring:complete",
-      targets: [
-        {
-          targetId: `${planId}:2026-07`,
-          outcome: { kind: "SKIPPED", receipt: first.ledgerTransactionId },
-        },
-      ],
+      targets: [],
     });
     expect(await pages.nextPage("recurring:complete")).toBeUndefined();
   });

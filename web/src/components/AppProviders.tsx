@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { PwaRuntimeUpdate } from '@/platform/pwa/PwaRuntimeUpdate';
 import { useRouter } from 'next/navigation';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { CategoryProvider } from '@/contexts/CategoryContext';
@@ -23,11 +24,6 @@ import { AppDialogProvider } from '@/contexts/AppDialogContext';
 import { REMOTE_SESSION_RECOVERY_REQUESTED_EVENT } from '@/platform/functions-api/firebaseCallableRecovery';
 import { clearRetiredHomeReadSnapshots } from '@/platform/read-model/retiredHomeReadSnapshotCleanup';
 
-const PWA_SERVICE_WORKER_PATH = '/sw.js';
-const PWA_UPDATE_DELAY_AFTER_LEDGER_MS = 10_000;
-const PWA_UPDATE_IDLE_TIMEOUT_MS = 10_000;
-const ANDROID_WORKER_CLEANUP_DELAY_AFTER_LEDGER_MS = 2_000;
-const ANDROID_WORKER_CLEANUP_FALLBACK_MS = 15_000;
 const MUTATION_PRELOAD_DELAY_AFTER_LEDGER_MS = 3_000;
 const MUTATION_PRELOAD_IDLE_TIMEOUT_MS = 15_000;
 const VISIT_TELEMETRY_IDLE_TIMEOUT_MS = 5_000;
@@ -46,123 +42,6 @@ function RetiredHomeReadSnapshotCleanup() {
   return null;
 }
 
-function isManagedPwaWorker(worker: ServiceWorker | null | undefined): boolean {
-  if (!worker) return false;
-  try {
-    return new URL(worker.scriptURL, window.location.origin).pathname === PWA_SERVICE_WORKER_PATH;
-  } catch {
-    return false;
-  }
-}
-
-function isManagedPwaRegistration(
-  registration: ServiceWorkerRegistration | undefined
-): registration is ServiceWorkerRegistration {
-  return registration !== undefined && [
-    registration.active,
-    registration.waiting,
-    registration.installing,
-  ].some(isManagedPwaWorker);
-}
-
-function WebRuntimeUpdateRecovery() {
-  useEffect(() => {
-    if (!('serviceWorker' in navigator)) return undefined;
-
-    let cancelled = false;
-    let reloading = false;
-    let lastCheckedAt = 0;
-    let reloadForManagedController = false;
-    let listenersAttached = false;
-
-    const reloadForNewController = () => {
-      if (!reloadForManagedController || reloading) return;
-      reloading = true;
-      window.location.reload();
-    };
-
-    const checkForUpdate = () => {
-      if (Date.now() - lastCheckedAt < 15 * 60 * 1_000) return;
-      lastCheckedAt = Date.now();
-      void navigator.serviceWorker
-        .getRegistration('/')
-        .then(async (registration) => {
-          if (cancelled) return;
-          if (!registration) {
-            await navigator.serviceWorker.register(PWA_SERVICE_WORKER_PATH, {
-              scope: '/',
-            });
-            return;
-          }
-          if (!isManagedPwaRegistration(registration)) return;
-          reloadForManagedController = isManagedPwaWorker(
-            navigator.serviceWorker.controller
-          );
-          await registration.update();
-        })
-        .catch(() => {});
-    };
-
-    if (isAndroidHostAvailable()) {
-      // Remove a worker left by an older auto-registration build. Its current
-      // controller can finish this page, but it will not control future loads.
-      const cancelCleanup = scheduleAfterWebFirstLedgerPaint(
-        () => {
-          void navigator.serviceWorker
-            .getRegistration('/')
-            .then((registration) => {
-              if (!cancelled && isManagedPwaRegistration(registration)) {
-                return registration.unregister();
-              }
-              return undefined;
-            })
-            .catch(() => {});
-        },
-        {
-          delayAfterPaintMs: ANDROID_WORKER_CLEANUP_DELAY_AFTER_LEDGER_MS,
-          fallbackMs: ANDROID_WORKER_CLEANUP_FALLBACK_MS,
-          idleTimeoutMs: PWA_UPDATE_IDLE_TIMEOUT_MS,
-        }
-      );
-      return () => {
-        cancelled = true;
-        cancelCleanup();
-      };
-    }
-
-    const cancelScheduledUpdate = scheduleAfterWebFirstLedgerPaint(
-      () => {
-        if (cancelled) return;
-        listenersAttached = true;
-        navigator.serviceWorker.addEventListener(
-          'controllerchange',
-          reloadForNewController
-        );
-        window.addEventListener('focus', checkForUpdate);
-        window.addEventListener('pageshow', checkForUpdate);
-        checkForUpdate();
-      },
-      {
-        delayAfterPaintMs: PWA_UPDATE_DELAY_AFTER_LEDGER_MS,
-        idleTimeoutMs: PWA_UPDATE_IDLE_TIMEOUT_MS,
-      }
-    );
-
-    return () => {
-      cancelled = true;
-      cancelScheduledUpdate();
-      if (listenersAttached) {
-        navigator.serviceWorker.removeEventListener(
-          'controllerchange',
-          reloadForNewController
-        );
-        window.removeEventListener('focus', checkForUpdate);
-        window.removeEventListener('pageshow', checkForUpdate);
-      }
-    };
-  }, []);
-  return null;
-}
 
 const ANDROID_WEB_AUTH_REFRESH_INTERVAL_MS = 15 * 60 * 1_000;
 
@@ -383,7 +262,7 @@ export default function AppProviders({ children }: { children: React.ReactNode }
     <AppDialogProvider>
       <HouseholdProvider>
         <RetiredHomeReadSnapshotCleanup />
-        <WebRuntimeUpdateRecovery />
+        <PwaRuntimeUpdate />
         <AuthenticatedPlatformEffects />
         <AdminHouseholdViewBanner />
         <ThemeProvider>

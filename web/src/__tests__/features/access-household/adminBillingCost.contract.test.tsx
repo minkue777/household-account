@@ -39,6 +39,15 @@ function dashboard(
 }
 
 describe('admin Google Cloud billing cost contract', () => {
+  test('unobserved providers are labeled without inventing attempt or success timestamps', () => {
+    const model = dashboard({ status: 'unavailable' });
+    model.providerHealth = [{ provider: 'KIND', operation: 'dividend-disclosure', status: 'unknown', consecutiveFailedRuns: 0, lastResultKind: 'NOT_OBSERVED', alertState: 'closed' }];
+    model.summary.unhealthyProviders = 1;
+    render(<AdminOperationsOverview dashboard={model} refreshing={false} onRefresh={jest.fn()} />);
+    expect(screen.getByText('미관측')).toBeInTheDocument();
+    expect(screen.getByText('관측 기록 없음')).toBeInTheDocument();
+    expect(screen.queryByText('중단')).not.toBeInTheDocument();
+  });
   test('[T-ADM-005] renders accrued, estimated, service, and aggregation values', () => {
     render(
       <AdminOperationsOverview

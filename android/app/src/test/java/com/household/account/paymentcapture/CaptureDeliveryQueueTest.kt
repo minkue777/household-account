@@ -21,6 +21,30 @@ class CaptureDeliveryQueueTest {
 
     private val scope = CaptureSessionScope("household-1", "member-1", 3L)
 
+    @Test fun `purge 뒤 늦은 응답과 enqueue는 이전 세대를 복구하지 못한다`() = runTest {
+        val store = MemoryStore()
+        val queue = CaptureDeliveryQueue(store) { 1_000L }
+        val envelope = rawEnvelope(".late")
+        queue.enqueue(scope, envelope)
+        queue.purgeForSessionTransition(scope)
+        assertEquals(false, queue.retainAfterAttempt(scope, envelope, emptySet()))
+        assertEquals(false, queue.enqueue(scope, envelope))
+        val next = scope.copy(sessionGeneration = scope.sessionGeneration + 1)
+        assertTrue(queue.enqueue(next, envelope))
+        queue.flush(scope, object : CaptureSubmissionClient {
+            override suspend fun submit(envelope: CaptureDeliveryEnvelope): CaptureSubmissionReceipt =
+                error("old scope cannot submit")
+        })
+        assertEquals(next, store.entries.single().scope)
+    }
+
+    @Test fun `실패한 전환은 이전 세대의 새 로컬 입력을 다시 허용한다`() = runTest {
+        val queue = CaptureDeliveryQueue(MemoryStore()) { 1_000L }
+        queue.purgeForSessionTransition(scope)
+        queue.resumeAfterFailedTransition(scope)
+        assertTrue(queue.enqueue(scope, rawEnvelope(".retry")))
+    }
+
     @Test
     fun `batch 후보는 첫 네트워크 제출 전에 한 번의 journal 쓰기로 모두 내구화한다`() = runTest {
         val store = MemoryStore()

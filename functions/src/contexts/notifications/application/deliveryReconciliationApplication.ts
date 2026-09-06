@@ -19,10 +19,10 @@ class DefaultDeliveryReconciliationApplication
       if (delivery === null) {
         throw new Error(`Notification delivery not found: ${deliveryId}`);
       }
-      if (delivery.status === "unknown-provider-outcome") {
+      if (delivery.status !== "sending") {
         return {
           kind: "AlreadyTerminal",
-          status: "unknown-provider-outcome",
+          status: delivery.status,
         };
       }
 

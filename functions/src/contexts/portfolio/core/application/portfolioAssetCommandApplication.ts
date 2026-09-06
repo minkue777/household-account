@@ -43,6 +43,7 @@ export interface PortfolioAssetCommands {
   }): Promise<PortfolioCommandResult>;
   reorderAssets(input: {
     readonly metadata: PortfolioCommandMetadata;
+    readonly expectedVersions: Readonly<Record<string, number>>;
     readonly assets: readonly {
       readonly assetId: string;
       readonly order: number;
@@ -207,7 +208,7 @@ export function createPortfolioAssetCommands(
           ],
           success({ assetId }),
         );
-      });
+      }, { positions: false, automationPlans: false });
     },
 
     async updateAsset({ metadata, assetId, changes, expectedVersion }) {
@@ -386,14 +387,15 @@ export function createPortfolioAssetCommands(
             : [],
           success({}),
         );
-      });
+      }, { assetId, positions: false });
     },
 
-    async reorderAssets({ metadata, assets }) {
+    async reorderAssets({ metadata, assets, expectedVersions }) {
       return atomic(metadata, (state) => {
         const active = state.assets.filter(
           ({ lifecycleState }) => lifecycleState === "active",
         );
+        if (Object.keys(expectedVersions).length !== active.length || active.some(asset => expectedVersions[asset.assetId] !== asset.aggregateVersion)) return noWrite(state, error("ASSET_VERSION_MISMATCH"));
         const requestedIds = new Set(assets.map(({ assetId }) => assetId));
         const currentIds = new Set(active.map(({ assetId }) => assetId));
         const orders = new Set(assets.map(({ order }) => order));
@@ -422,7 +424,7 @@ export function createPortfolioAssetCommands(
               };
         });
         return commit({ ...state, assets: nextAssets }, [], success({}));
-      });
+      }, { positions: false, automationPlans: false });
     },
 
     async deleteAsset({ metadata, assetId, expectedVersion }) {
@@ -468,7 +470,7 @@ export function createPortfolioAssetCommands(
           ],
           success({}),
         );
-      });
+      }, { assetId, positions: false, automationPlans: false });
     },
   };
 }

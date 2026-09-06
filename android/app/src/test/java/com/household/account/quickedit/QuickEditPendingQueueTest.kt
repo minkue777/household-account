@@ -24,6 +24,20 @@ class QuickEditPendingQueueTest {
 
     private val scope = CaptureSessionScope("household-1", "member-1", 7L)
 
+    @Test fun `이전 세대의 늦은 FIFO 작업은 새 세대 항목을 삭제하거나 재삽입하지 못한다`() = runTest {
+        val store = MemoryStore()
+        val queue = QuickEditPendingQueue(store)
+        queue.enqueue(scope, "old")
+        queue.purge(scope)
+        assertEquals(false, queue.enqueue(scope, "old"))
+        val next = scope.copy(sessionGeneration = scope.sessionGeneration + 1)
+        assertTrue(queue.enqueue(next, "new"))
+        queue.complete(scope, "old")
+        queue.releaseLease(scope, "old")
+        assertNull(queue.acquireHead(scope))
+        assertEquals("new", store.state.entries.single().transactionId)
+    }
+
     @Test
     fun `새 snapshot을 저장하면서 idle head를 한 번의 저장으로 획득한다`() = runTest {
         val store = MemoryStore()

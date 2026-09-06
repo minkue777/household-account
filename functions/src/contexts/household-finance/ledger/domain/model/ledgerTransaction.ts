@@ -15,7 +15,8 @@ export interface LedgerTransactionView {
   localCurrencyType?: string;
   source?: string;
   creatorMemberId: string;
-  lifecycleState: "active" | "deleted";
+  lifecycleState: "active" | "superseded" | "deleted";
+  deletedAt?: string;
   aggregateVersion: number;
   notificationRequest?: {
     requesterMemberId: string;
@@ -26,6 +27,8 @@ export interface LedgerTransactionView {
 export interface LedgerEvent {
   type: string;
   transactionId: string;
+  originChannel?: "web-manual";
+  creatorMemberId?: string;
   requesterMemberId?: string;
 }
 

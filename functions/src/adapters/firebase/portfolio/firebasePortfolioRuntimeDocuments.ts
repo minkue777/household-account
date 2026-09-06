@@ -187,6 +187,8 @@ export function planDocument(
     operation: plan.operation,
     kind: plan.kind,
     status: plan.status,
+    ...optionalWriteField(created, "stopEffectiveAt", plan.stopEffectiveAt),
+    ...optionalWriteField(created, "statusAfterRecovery", plan.statusAfterRecovery),
     amountInWon: plan.amountInWon,
     configuredDay: plan.configuredDay,
     firstActivatedOn: plan.firstActivatedOn,

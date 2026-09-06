@@ -24,10 +24,10 @@ interface CategoryContextType {
   getCategoryBudget: (key: string) => number | null;
   // CRUD 작업
   addCategory: (label: string, color: string, budget?: number | null) => Promise<string>;
-  updateCategory: (id: string, data: { label?: string; color?: string; budget?: number | null }) => Promise<void>;
-  deleteCategory: (id: string) => Promise<void>;
-  setBudget: (id: string, budget: number | null) => Promise<void>;
-  reorderCategories: (categories: CategoryDocument[]) => Promise<void>;
+  updateCategory: (id: string, data: { label?: string; color?: string; budget?: number | null }, expectedVersion: number) => Promise<void>;
+  deleteCategory: (id: string, expectedVersion: number) => Promise<void>;
+  setBudget: (id: string, budget: number | null, expectedVersion: number) => Promise<void>;
+  reorderCategories: (categories: CategoryDocument[], expectedCatalogVersion: number) => Promise<void>;
   // 호환성 헬퍼 (기존 CATEGORY_LABELS, CATEGORY_COLORS 대체)
   categoryLabels: Record<string, string>;
   categoryColors: Record<string, string>;
@@ -155,27 +155,27 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateCategory = useCallback(
-    async (id: string, data: { label?: string; color?: string; budget?: number | null }): Promise<void> => {
+    async (id: string, data: { label?: string; color?: string; budget?: number | null }, expectedVersion: number): Promise<void> => {
       const { updateCategory: updateCategoryService } = await import('@/lib/categoryService');
-      await updateCategoryService(id, data);
+      await updateCategoryService(id, data, expectedVersion);
     },
     []
   );
 
-  const deleteCategory = useCallback(async (id: string): Promise<void> => {
+  const deleteCategory = useCallback(async (id: string, expectedVersion: number): Promise<void> => {
     const { deleteCategory: deleteCategoryService } = await import('@/lib/categoryService');
-    await deleteCategoryService(id);
+    await deleteCategoryService(id, expectedVersion);
   }, []);
 
-  const setBudget = useCallback(async (id: string, budget: number | null): Promise<void> => {
+  const setBudget = useCallback(async (id: string, budget: number | null, expectedVersion: number): Promise<void> => {
     const { setBudget: setBudgetService } = await import('@/lib/categoryService');
-    await setBudgetService(id, budget);
+    await setBudgetService(id, budget, expectedVersion);
   }, []);
 
-  const reorderCategories = useCallback(async (reorderedCategories: CategoryDocument[]): Promise<void> => {
+  const reorderCategories = useCallback(async (reorderedCategories: CategoryDocument[], expectedCatalogVersion: number): Promise<void> => {
     const updates = reorderedCategories.map((cat, index) => ({ id: cat.id, order: index }));
     const { reorderCategories: reorderCategoriesService } = await import('@/lib/categoryService');
-    await reorderCategoriesService(updates);
+    await reorderCategoriesService(updates, expectedCatalogVersion);
   }, []);
 
   // 호환성 헬퍼 (기존 코드와의 호환성을 위해)

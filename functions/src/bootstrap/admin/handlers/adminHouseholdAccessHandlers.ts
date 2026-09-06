@@ -32,6 +32,8 @@ function householdConsoleApplication(input: {
   readonly payloadFingerprint: string;
   readonly requestedAt: string;
   readonly requestId: string;
+  readonly targetHouseholdId?: string;
+  readonly list?: boolean;
 }) {
   const householdId = stableHouseholdId(
     input.principalRef,
@@ -44,6 +46,7 @@ function householdConsoleApplication(input: {
       payloadFingerprint: input.payloadFingerprint,
       requestedAt: input.requestedAt,
       commandId: input.requestId,
+      ...(input.list ? {} : { householdId: input.targetHouseholdId ?? householdId }),
     }),
     identities: {
       nextHouseholdId: () => householdId,
@@ -101,6 +104,7 @@ export function createAdminHouseholdAccessHandlers(
             throw new AdminAccessRejection("INVALID_PAYLOAD");
           }
           const result = await householdConsoleApplication({
+            list: true,
             database,
             principalRef: context.administrator.principalRef,
             idempotencyKey: context.envelope.idempotencyKey,
@@ -170,6 +174,7 @@ export function createAdminHouseholdAccessHandlers(
           );
           const result = await householdConsoleApplication({
             database,
+            targetHouseholdId: householdId,
             principalRef: context.administrator.principalRef,
             idempotencyKey: context.envelope.idempotencyKey,
             payloadFingerprint: context.envelope.requestId,
@@ -214,6 +219,7 @@ export function createAdminHouseholdAccessHandlers(
           const expectedVersion = requiredVersion(payload.expectedVersion);
           const result = await householdConsoleApplication({
             database,
+            targetHouseholdId: householdId,
             principalRef: context.administrator.principalRef,
             idempotencyKey: context.envelope.idempotencyKey,
             payloadFingerprint: sha256(

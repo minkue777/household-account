@@ -61,10 +61,10 @@ describe('앱 내부 대화상자 계약', () => {
     const violations = productionSources(SOURCE_ROOT).flatMap((filePath) => {
       const source = fs.readFileSync(filePath, 'utf8');
       const calls = [
-        ...source.matchAll(/\b(?:alert|confirm|prompt)\s*\(/g),
-        ...source.matchAll(
+        ...Array.from(source.matchAll(/\b(?:alert|confirm|prompt)\s*\(/g)),
+        ...Array.from(source.matchAll(
           /\b(?:window|globalThis|self)(?:\.(?:alert|confirm|prompt)\b|\s*\[\s*['"`](?:alert|confirm|prompt)['"`]\s*\])/g
-        ),
+        )),
       ];
       return calls.map((match) => ({
         filePath: path.relative(SOURCE_ROOT, filePath),

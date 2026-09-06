@@ -11,12 +11,25 @@ jest.mock('@/platform/read-model/firestoreReadModel', () => ({
       : undefined,
 }));
 
-import { collection, onSnapshot } from '@/platform/read-model/firestoreReadModel';
+import type { DocumentData, QueryDocumentSnapshot } from '@/platform/read-model/firestoreReadModel';
 import { FirestoreAssetOwnerProfileReadModel } from '@/platform/read-model/firestoreAssetOwnerProfileReadModel';
 import { selectVisibleAssetOwnerProfiles } from '@/features/access-household/domain/assetOwnerProfile';
 
-const mockCollection = collection as jest.MockedFunction<typeof collection>;
-const mockOnSnapshot = onSnapshot as jest.MockedFunction<typeof onSnapshot>;
+type ProfileReference = { path: string };
+type ProfileSnapshot = {
+  docs: Array<Pick<QueryDocumentSnapshot<DocumentData>, 'id' | 'data'>>;
+};
+// 이 adapter가 사용하는 collection + next/error callback overload만 모델링합니다.
+const { collection: mockCollection, onSnapshot: mockOnSnapshot } = jest.requireMock<{
+  collection: jest.MockedFunction<(
+    parent: unknown, path: string, ...segments: string[]
+  ) => ProfileReference>;
+  onSnapshot: jest.MockedFunction<(
+    reference: ProfileReference,
+    next: (snapshot: ProfileSnapshot) => void,
+    error: (error: Error) => void,
+  ) => () => void>;
+}>('@/platform/read-model/firestoreReadModel');
 
 describe('자산 명의자 Firestore 읽기 모델 계약', () => {
   beforeEach(() => {
@@ -26,7 +39,7 @@ describe('자산 명의자 Firestore 읽기 모델 계약', () => {
   test('[T-HH-006][HH-011] 활성 명의자를 서버 함수 없이 생성 순서대로 구독한다', () => {
     const reference = { path: 'households/house-1/assetOwnerProfiles' };
     const unsubscribe = jest.fn();
-    let publish: ((snapshot: { docs: unknown[] }) => void) | undefined;
+    let publish: ((snapshot: ProfileSnapshot) => void) | undefined;
     mockCollection.mockReturnValue(reference);
     mockOnSnapshot.mockImplementation((_reference, next) => {
       publish = next;
@@ -137,7 +150,7 @@ describe('자산 명의자 Firestore 읽기 모델 계약', () => {
   test('[T-HH-006][HH-011] 일시적인 구독 오류가 이미 표시한 명의자를 빈 목록으로 덮지 않는다', () => {
     const errorListener = jest.fn();
     let reject: ((error: Error) => void) | undefined;
-    mockCollection.mockReturnValue({});
+    mockCollection.mockReturnValue({ path: 'households/house-1/assetOwnerProfiles' });
     mockOnSnapshot.mockImplementation((_reference, _next, error) => {
       reject = error;
       return jest.fn();

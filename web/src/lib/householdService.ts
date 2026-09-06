@@ -62,7 +62,12 @@ function mapHouseholdSnapshot(docSnap: DocumentSnapshot<DocumentData>): Househol
     name: data.name,
     createdAt: timestampToDate(data.createdAt) || new Date(),
     defaultCategoryKey: data.defaultCategoryKey,
+    categoryCatalogVersion: Number.isInteger(data.categoryCatalogVersion) ? data.categoryCatalogVersion : 0,
+    ...(['pending', 'failed', 'completed'].includes(data.initializationStatus)
+      ? { initializationStatus: data.initializationStatus } : {}),
     homeSummaryConfig: resolveHomeSummaryConfig(data.homeSummaryConfig),
+    homeSummaryConfigVersion: Number.isInteger(data.homeSummaryConfigVersion) ? data.homeSummaryConfigVersion : 0,
+    selectedLocalCurrencyType: typeof data.selectedLocalCurrencyType === 'string' ? data.selectedLocalCurrencyType : undefined,
     members: Array.isArray(data.members)
       ? data.members.map((member: Record<string, unknown>) => ({
           id: String(member.id || ''),
@@ -86,26 +91,7 @@ export async function getHousehold(key: string): Promise<Household> {
 
 export async function getAllHouseholds(): Promise<Household[]> {
   const snapshot = await getDocs(householdsCollection);
-  return snapshot.docs.map((docSnap) => {
-    const data = docSnap.data();
-    return {
-      id: docSnap.id,
-      name: data.name,
-      createdAt: timestampToDate(data.createdAt) || new Date(),
-      defaultCategoryKey: data.defaultCategoryKey,
-      homeSummaryConfig: resolveHomeSummaryConfig(data.homeSummaryConfig),
-      members: Array.isArray(data.members)
-        ? data.members.map((member: Record<string, unknown>) => ({
-            id: String(member.id || ''),
-            name: String(member.name || ''),
-            aggregateVersion:
-              Number.isInteger(member.aggregateVersion) && Number(member.aggregateVersion) > 0
-                ? Number(member.aggregateVersion)
-                : 1,
-          }))
-        : [],
-    };
-  });
+  return snapshot.docs.map(mapHouseholdSnapshot).filter((value): value is Household => value !== null);
 }
 
 export async function renameHouseholdMember(
@@ -120,19 +106,13 @@ export async function renameHouseholdMember(
   await householdCommands.renameSelf(householdKey, newName, expectedVersion);
 }
 
-export async function deleteHousehold(key: string): Promise<void> {
-  const { householdCommands } = await import(
-    '@/features/access-household/application/householdCommands'
-  );
-  await householdCommands.deleteHousehold(key);
-}
-
 export async function setDefaultCategoryKey(
   householdKey: string,
-  categoryKey: string
+  categoryKey: string,
+  expectedCatalogVersion: number
 ): Promise<void> {
   const { categoryCommands } = await import(
     '@/features/category-budget/application/categoryCommands'
   );
-  await categoryCommands.setDefault(householdKey, categoryKey);
+  await categoryCommands.setDefault(householdKey, categoryKey, expectedCatalogVersion);
 }

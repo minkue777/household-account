@@ -62,6 +62,10 @@ function asset(overrides: Partial<Asset> = {}): Asset {
 }
 
 function holding(overrides: Partial<StockHolding> = {}): StockHolding {
+  if (!portfolioOptimisticProjection.current(overrides.assetId ?? 'asset-1')) {
+    const parents = portfolioOptimisticProjection.subscribe(() => {}, 'house-1');
+    parents.publish([asset({ id: overrides.assetId ?? 'asset-1', type: 'stock' })]);
+  }
   return {
     id: 'position-1',
     aggregateVersion: 5,
@@ -460,7 +464,8 @@ describe('portfolio asset service optimistic contract', () => {
       'position-1',
       'asset-1',
       { quantity: 20 },
-      5
+      5,
+      3
     );
     updateCommand.reject(new Error('UPDATE_FAILED'));
     await expect(updatePending).rejects.toThrow('UPDATE_FAILED');

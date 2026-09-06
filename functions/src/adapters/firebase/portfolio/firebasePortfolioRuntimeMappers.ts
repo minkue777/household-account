@@ -196,6 +196,13 @@ function mapQuote(
         priceInWon: quote.priceInWon,
         observedAt: quote.observedAt,
         provider: quote.provider,
+        ...(typeof quote.sourcePrice === "number" ? { sourcePrice: quote.sourcePrice } : {}),
+        ...(quote.sourceCurrency === "USD" ? { sourceCurrency: "USD" as const } : {}),
+        ...(typeof quote.quoteProvider === "string" ? { quoteProvider: quote.quoteProvider } : {}),
+        ...(typeof quote.quoteObservedAt === "string" ? { quoteObservedAt: quote.quoteObservedAt } : {}),
+        ...(typeof quote.exchangeRateDate === "string" ? { exchangeRateDate: quote.exchangeRateDate } : {}),
+        ...(typeof quote.exchangeRateObservedAt === "string" ? { exchangeRateObservedAt: quote.exchangeRateObservedAt } : {}),
+        ...(quote.exchangeRateProvider === "frankfurter-v2" ? { exchangeRateProvider: "frankfurter-v2" as const } : {}),
       };
     }
   }
@@ -325,7 +332,7 @@ export function mapPlan(
     assetId === undefined ||
     (operation !== "savings-contribution" && operation !== "loan-repayment") ||
     (kind !== "savings-deposit" && kind !== "loan-repayment") ||
-    (status !== "active" && status !== "suspended" && status !== "needs-attention")
+    (status !== "active" && status !== "suspended" && status !== "needs-attention" && status !== "recovering-before-stop")
   ) {
     return undefined;
   }
@@ -340,6 +347,8 @@ export function mapPlan(
     operation,
     kind,
     status,
+    ...(typeof data.stopEffectiveAt === "string" ? { stopEffectiveAt: data.stopEffectiveAt } : {}),
+    ...(data.statusAfterRecovery === "suspended" ? { statusAfterRecovery: "suspended" as const } : {}),
     amountInWon: safeWon(data, "amountInWon"),
     configuredDay: Math.max(1, Math.round(finite(data, "configuredDay", 1))),
     firstActivatedOn: text(data, "firstActivatedOn", "1970-01-01"),

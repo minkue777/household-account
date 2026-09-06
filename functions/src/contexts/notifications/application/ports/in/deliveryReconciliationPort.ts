@@ -5,7 +5,7 @@ export type ReconcileDeliveryResult =
     }
   | {
       kind: "AlreadyTerminal";
-      status: "unknown-provider-outcome";
+      status: "delivered" | "failed" | "unknown-provider-outcome" | "permanent-failure" | "contract-failure" | "stale-target";
     };
 
 /** 운영 worker가 provider 호출 후 중단된 delivery를 재전송 없이 종결합니다. */

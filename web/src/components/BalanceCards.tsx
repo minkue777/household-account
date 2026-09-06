@@ -17,6 +17,8 @@ interface BalanceCardsProps {
   localCurrencyBalance: LocalCurrencyBalance | null;
   ledgerReady?: boolean;
   categoriesReady?: boolean;
+  sourceErrors?: Partial<Record<HomeSummaryCardKey | 'monthlyIncome' | 'yearlyIncome', boolean>>;
+  localCurrencyReady?: boolean;
   className?: string;
   onLocalCurrencyClick?: (expenses: Expense[]) => void;
   onMonthlyIncomeClick?: (expenses: Expense[]) => void;
@@ -43,6 +45,8 @@ export default function BalanceCards({
   localCurrencyBalance,
   ledgerReady = true,
   categoriesReady = true,
+  sourceErrors = {},
+  localCurrencyReady = true,
   className = '',
   onLocalCurrencyClick,
   onMonthlyIncomeClick,
@@ -119,11 +123,11 @@ export default function BalanceCards({
         return {
           key,
           label: '지역화폐 잔액',
-          valueText: localCurrencyBalance ? localCurrencyBalance.balance.toLocaleString() : '-',
+          valueText: localCurrencyBalance ? localCurrencyBalance.balance.toLocaleString() : localCurrencyReady ? '데이터 없음' : '-',
           accentClassName: 'bg-blue-50 border-blue-100 text-blue-500',
           icon: CreditCard,
           iconClassName: 'text-yellow-500',
-          clickable: true,
+          clickable: localCurrencyBalance !== null && localCurrencyReady,
         };
       case 'monthlyRemainingBudget':
         return {
@@ -187,7 +191,8 @@ export default function BalanceCards({
 
   return (
     <div className={`grid grid-cols-2 gap-2 ${className}`}>
-      {cards.map((card) => {
+      {cards.some(card => sourceErrors[card.key]) && <p role="status" className="col-span-2 text-xs text-red-600">일부 카드 정보를 불러오지 못했습니다.</p>}
+      {cards.map((card, index) => {
         const Icon = card.icon;
         const handleCardClick =
           card.key === 'localCurrencyBalance'
@@ -200,11 +205,11 @@ export default function BalanceCards({
 
         return (
           <div
-            key={card.key}
+            key={`${index}:${card.key}`}
             className={`balance-card-glass p-2.5 ${
               card.clickable ? 'cursor-pointer transition-shadow hover:shadow-lg' : ''
             }`}
-            onClick={handleCardClick}
+            onClick={card.clickable && !sourceErrors[card.key] ? handleCardClick : undefined}
           >
             <div className="mb-1 flex items-center gap-1.5">
               <div
@@ -215,7 +220,7 @@ export default function BalanceCards({
               <span className="text-xs font-semibold text-slate-600">{card.label}</span>
             </div>
             <div className="flex items-center text-lg font-bold tracking-tight text-slate-800">
-              {card.valueText}
+              {sourceErrors[card.key] ? '조회 실패' : card.valueText}
               <CircleDollarSign className={`ml-1 h-4 w-4 ${card.iconClassName}`} />
             </div>
           </div>

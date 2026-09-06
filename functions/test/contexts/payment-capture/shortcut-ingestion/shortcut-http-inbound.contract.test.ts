@@ -98,6 +98,13 @@ export interface ShortcutPaymentResponseV1 {
 }
 
 export type ShortcutHttpErrorCode =
+  | "CARD_COMPANY_REQUIRED"
+  | "UNSUPPORTED_CARD_COMPANY"
+  | "AMOUNT_NOT_POSITIVE"
+  | "AMOUNT_NOT_FINITE"
+  | "AMOUNT_OUT_OF_RANGE"
+  | "INVALID_DATE"
+  | "INVALID_TIME"
   | "INVALID_CONTRACT"
   | "REQUIRED_FIELD"
   | "UNSUPPORTED_CONTRACT_VERSION"

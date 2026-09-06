@@ -2,6 +2,7 @@ import type * as firestore from "firebase-admin/firestore";
 
 import type {
   PortfolioRuntimeState,
+  PortfolioRuntimeReadScope,
 } from "../../../contexts/portfolio/core/application/ports/out/portfolioRuntimeStorePort";
 import {
   mapAsset,
@@ -27,17 +28,16 @@ export class FirebasePortfolioRuntimeStateLoader {
   async load(
     transaction: firestore.Transaction,
     householdId: string,
+    scope: PortfolioRuntimeReadScope = {},
   ): Promise<LoadedState> {
     const household = this.database.collection("households").doc(householdId);
     const canonicalAssets = household.collection("assets");
     const [canonicalAssetSnapshot, legacyAssetSnapshot, profileSnapshot, planSnapshot] =
       await Promise.all([
-        transaction.get(canonicalAssets),
-        transaction.get(
-          this.database.collection("assets").where("householdId", "==", householdId),
-        ),
+        scope.assetId === undefined ? transaction.get(canonicalAssets) : transaction.get(canonicalAssets.doc(scope.assetId)).then(snapshot => ({ docs: snapshot.exists ? [snapshot] : [] })),
+        scope.assetId === undefined ? transaction.get(this.database.collection("assets").where("householdId", "==", householdId)) : transaction.get(this.database.collection("assets").doc(scope.assetId)).then(snapshot => ({ docs: snapshot.exists && snapshot.data()?.householdId === householdId ? [snapshot] : [] })),
         transaction.get(household.collection("assetOwnerProfiles")),
-        transaction.get(household.collection("assetAutomationPlans")),
+        scope.automationPlans === false ? Promise.resolve({ docs: [] }) : transaction.get(scope.assetId === undefined ? household.collection("assetAutomationPlans") : household.collection("assetAutomationPlans").where("assetId", "==", scope.assetId)),
       ]);
     const ownerProfiles = mapOwnerProfiles(householdId, profileSnapshot.docs);
     const canonicalById = new Map(
@@ -60,17 +60,9 @@ export class FirebasePortfolioRuntimeStateLoader {
 
     const [legacyStockSnapshot, legacyCryptoSnapshot, ...canonicalPositionSnapshots] =
       await Promise.all([
-        transaction.get(
-          this.database
-            .collection("stock_holdings")
-            .where("householdId", "==", householdId),
-        ),
-        transaction.get(
-          this.database
-            .collection("crypto_holdings")
-            .where("householdId", "==", householdId),
-        ),
-        ...assets.map((asset) =>
+        scope.positions === false ? Promise.resolve({ docs: [] }) : transaction.get(scope.assetId === undefined ? this.database.collection("stock_holdings").where("householdId", "==", householdId) : this.database.collection("stock_holdings").where("householdId", "==", householdId).where("assetId", "==", scope.assetId)),
+        scope.positions === false ? Promise.resolve({ docs: [] }) : transaction.get(scope.assetId === undefined ? this.database.collection("crypto_holdings").where("householdId", "==", householdId) : this.database.collection("crypto_holdings").where("householdId", "==", householdId).where("assetId", "==", scope.assetId)),
+        ...(scope.positions === false ? [] : assets).map((asset) =>
           transaction.get(canonicalAssets.doc(asset.assetId).collection("positions")),
         ),
       ]);

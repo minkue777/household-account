@@ -1,5 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   resolveFirebaseSignedInUser,
@@ -127,12 +127,15 @@ function activeFixture(
 }
 
 describe("Firebase signed-in user resolver", () => {
-  it("active view가 없을 때만 first visit으로 해석한다", async () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it.each([true, false])("active view가 없으면 first visit과 legacy 전환 허용=%s를 반환한다", async enabled => {
+    vi.stubEnv('LEGACY_MEMBERSHIP_CLAIM_ENABLED', String(enabled));
     await expect(
       resolveFirebaseSignedInUser(database({ views: [] }), principalUid),
     ).resolves.toEqual({
       kind: "first-visit-required",
       choices: ["create", "join"],
+      legacyClaimEnabled: enabled,
     });
 
     await expect(

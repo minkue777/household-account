@@ -1,0 +1,12 @@
+{
+  "cases": [
+    { "storedValue": "FOOD", "categoryId": "food" },
+    { "storedValue": "LIVING", "categoryId": "living" },
+    { "storedValue": "CHILDCARE", "categoryId": "childcare" },
+    { "storedValue": "FIXED", "categoryId": "fixed" },
+    { "storedValue": "ETC", "categoryId": "etc" },
+    { "storedValue": "Custom_FAMILY", "categoryId": "Custom_FAMILY" },
+    { "storedValue": "FUTURE_CATEGORY", "categoryId": "FUTURE_CATEGORY" },
+    { "storedValue": "", "categoryId": "etc" }
+  ]
+}

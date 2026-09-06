@@ -57,10 +57,10 @@ export interface HouseholdCommandPayloads {
     legacyMemberName?: string;
   };
   'access.create-household-with-self.v1': { householdName: string; memberName: string };
+  'access.retry-household-initialization.v1': Record<string, never>;
   'access.join-household-as-self.v1': { invitationCode: string; memberName: string };
   'access.create-invitation.v1': Record<string, never>;
   'access.rename-self.v1': { displayName: string; expectedVersion: number };
-  'access.request-household-deletion.v1': Record<string, never>;
   'access.create-asset-owner-profile.v1': { displayName: string };
   'access.rename-asset-owner-profile.v1': {
     profileId: string;
@@ -105,6 +105,7 @@ export interface HouseholdCommandPayloads {
   'ledger.update-transaction.v1': {
     transactionId: string;
     expectedVersion: number;
+    rememberForNextTime?: boolean;
     patch: {
       merchant?: string;
       memo?: string;
@@ -114,7 +115,8 @@ export interface HouseholdCommandPayloads {
     };
   };
   'ledger.delete-transaction.v1': { transactionId: string; expectedVersion: number };
-  'ledger.change-transaction-category.v1': { transactionId: string; categoryId: string; expectedVersion: number };
+  'ledger.change-transaction-category.v1': { transactionId: string; categoryId: string; expectedVersion: number; rememberForNextTime?: boolean };
+  'ledger.restore-item-split.v1': { sourceId: string; expectedVersions: Record<string, number> };
   'ledger.split-transaction.v1': {
     transactionId: string;
     items: ReadonlyArray<{
@@ -139,30 +141,31 @@ export interface HouseholdCommandPayloads {
   'ledger.request-notification.v1': { transactionId: string; expectedVersion: number };
 
   'category.create.v1': { category: Record<string, unknown> };
-  'category.update.v1': { categoryId: string; changes: Record<string, unknown> };
-  'category.archive.v1': { categoryId: string };
-  'category.set-budget.v1': { categoryId: string; budget: number | null };
-  'category.reorder.v1': { categories: ReadonlyArray<{ categoryId: string; order: number }> };
-  'category.set-default.v1': { categoryId: string };
-  'home.update-summary-preferences.v1': { leftCard: string; rightCard: string };
-  'home.select-local-currency.v1': { localCurrencyTypeId: string };
+  'category.update.v1': { categoryId: string; changes: Record<string, unknown>; expectedVersion: number };
+  'category.archive.v1': { categoryId: string; expectedVersion: number };
+  'category.set-budget.v1': { categoryId: string; budget: number | null; expectedVersion: number };
+  'category.reorder.v1': { categories: ReadonlyArray<{ categoryId: string; order: number }>; expectedCatalogVersion: number };
+  'category.set-default.v1': { categoryId: string; expectedCatalogVersion: number };
+  'home.update-summary-preferences.v1': { leftCard: string; rightCard: string; expectedVersion: number };
+  'home.select-local-currency.v1': { localCurrencyTypeId: string; expectedVersion: number };
 
   'portfolio.create-asset.v1': { asset: Record<string, unknown> };
   'portfolio.update-asset.v1': { assetId: string; changes: Record<string, unknown>; expectedVersion: number };
-  'portfolio.reorder-assets.v1': { assets: ReadonlyArray<{ assetId: string; order: number }> };
+  'portfolio.reorder-assets.v1': { assets: ReadonlyArray<{ assetId: string; order: number }>; expectedVersions: Record<string, number> };
   'portfolio.delete-asset.v1': { assetId: string; expectedVersion: number };
-  'portfolio.add-position.v1': { assetId: string; positionKind: 'stock' | 'crypto'; position: Record<string, unknown> };
-  'portfolio.update-position.v1': { assetId: string; positionId: string; positionKind: 'stock' | 'crypto'; changes: Record<string, unknown>; expectedVersion: number };
-  'portfolio.delete-position.v1': { assetId: string; positionId: string; positionKind: 'stock' | 'crypto'; expectedVersion: number };
+  'portfolio.add-position.v1': { assetId: string; positionKind: 'stock' | 'crypto'; position: Record<string, unknown>; expectedAssetVersion: number };
+  'portfolio.update-position.v1': { assetId: string; positionId: string; positionKind: 'stock' | 'crypto'; changes: Record<string, unknown>; expectedVersion: number; expectedAssetVersion: number };
+  'portfolio.delete-position.v1': { assetId: string; positionId: string; positionKind: 'stock' | 'crypto'; expectedVersion: number; expectedAssetVersion: number };
   'portfolio.refresh-market-values.v1': { assetClass: 'stock' | 'crypto' | 'physical-gold' | 'all' };
 
   'payment-configuration.create-merchant-rule.v1': { rule: Record<string, unknown> };
-  'payment-configuration.update-merchant-rule.v1': { ruleId: string; changes: Record<string, unknown> };
-  'payment-configuration.delete-merchant-rule.v1': { ruleId: string };
+  'payment-configuration.update-merchant-rule.v1': { ruleId: string; changes: Record<string, unknown>; expectedVersion: number };
+  'payment-configuration.delete-merchant-rule.v1': { ruleId: string; expectedVersion: number };
   'payment-configuration.register-card.v1': { card: Record<string, unknown> };
-  'payment-configuration.update-card.v1': { cardId: string; changes: Record<string, unknown> };
-  'payment-configuration.delete-card.v1': { cardId: string };
-  'payment-configuration.reorder-cards.v1': { cardIds: string[] };
+  'payment-configuration.update-card.v1': { cardId: string; changes: Record<string, unknown>; expectedVersion: number };
+  'payment-configuration.delete-card.v1': { cardId: string; expectedVersion: number };
+  'payment-configuration.reorder-cards.v1': { cardIds: string[]; expectedCollectionVersion: number };
+  'payment-configuration.reorder-merchant-rules.v1': { matchType: 'startsWith' | 'endsWith' | 'contains'; orderedRuleIds: string[]; expectedCollectionVersion: number };
   'shortcut.issue-credential.v1': Record<string, never>;
   'shortcut.reissue-credential.v1': {
     currentCredentialId: string;
@@ -174,8 +177,8 @@ export interface HouseholdCommandPayloads {
   };
 
   'recurring.create-plan.v1': { plan: Record<string, unknown> };
-  'recurring.update-plan.v1': { planId: string; changes: Record<string, unknown> };
-  'recurring.delete-plan.v1': { planId: string };
+  'recurring.update-plan.v1': { planId: string; changes: Record<string, unknown>; expectedVersion: number };
+  'recurring.delete-plan.v1': { planId: string; expectedVersion: number };
   'notifications.register-endpoint.v1': {
     fid: string;
     platform: 'ios-pwa' | 'android';
@@ -203,10 +206,14 @@ export interface HouseholdCommandResults {
           name: string;
           createdAt: string;
           defaultCategoryKey?: string;
+          categoryCatalogVersion?: number;
+          initializationStatus?: 'pending' | 'failed' | 'completed';
           homeSummaryConfig?: {
             leftCard: string;
             rightCard: string;
           };
+          homeSummaryConfigVersion?: number;
+          selectedLocalCurrencyType?: string;
           members: Array<{
             id: string;
             name: string;
@@ -214,17 +221,17 @@ export interface HouseholdCommandResults {
           }>;
         };
       }
-    | { kind: 'first-visit-required'; choices: Array<'create' | 'join'> };
+    | { kind: 'first-visit-required'; choices: Array<'create' | 'join'>; legacyClaimEnabled?: boolean };
   'access.record-app-visit.v1': {
     kind: 'recorded' | 'already-recorded';
     totalAccessCount: number;
   };
   'access.claim-legacy-membership.v1': { householdId: string; memberId: string };
-  'access.create-household-with-self.v1': { householdId: string; memberId: string };
+  'access.create-household-with-self.v1': { householdId: string; memberId: string; initializationStatus: 'pending' | 'failed' | 'completed' };
+  'access.retry-household-initialization.v1': { initializationStatus: 'failed' | 'completed' };
   'access.join-household-as-self.v1': { householdId: string; memberId: string };
   'access.create-invitation.v1': { invitationCode: string; expiresAt: string };
   'access.rename-self.v1': Record<string, never>;
-  'access.request-household-deletion.v1': Record<string, never>;
   'access.create-asset-owner-profile.v1': { profileId: string; displayName: string };
   'access.rename-asset-owner-profile.v1': AssetOwnerProfileWireView;
   'access.archive-asset-owner-profile.v1': AssetOwnerProfileWireView;
@@ -235,6 +242,7 @@ export interface HouseholdCommandResults {
   'ledger.update-transaction.v1': LedgerTransactionCommandResult;
   'ledger.delete-transaction.v1': LedgerTransactionCommandResult;
   'ledger.change-transaction-category.v1': LedgerTransactionCommandResult;
+  'ledger.restore-item-split.v1': { transactionId: string };
   'ledger.split-transaction.v1': { transactionIds: string[] };
   'ledger.merge-transactions.v1': LedgerMergeCommandWireResult;
   'ledger.unmerge-transaction.v1': { transactionIds: string[] };
@@ -258,7 +266,7 @@ export interface HouseholdCommandResults {
   'portfolio.add-position.v1': { positionId: string };
   'portfolio.update-position.v1': Record<string, never>;
   'portfolio.delete-position.v1': Record<string, never>;
-  'portfolio.refresh-market-values.v1': { refreshedCount: number };
+  'portfolio.refresh-market-values.v1': { refreshedCount: number; failedCount?: number; failedTargets?: { targetKey: string; assetId: string; positionId?: string; code: string; retryable: boolean }[]; retryCommandId?: string };
 
   'payment-configuration.create-merchant-rule.v1': { ruleId: string };
   'payment-configuration.update-merchant-rule.v1': Record<string, never>;
@@ -267,6 +275,7 @@ export interface HouseholdCommandResults {
   'payment-configuration.update-card.v1': Record<string, never>;
   'payment-configuration.delete-card.v1': Record<string, never>;
   'payment-configuration.reorder-cards.v1': Record<string, never>;
+  'payment-configuration.reorder-merchant-rules.v1': Record<string, never>;
   'shortcut.issue-credential.v1': ShortcutCredentialIssueResult;
   'shortcut.reissue-credential.v1': ShortcutCredentialIssueResult;
   'shortcut.revoke-credential.v1':

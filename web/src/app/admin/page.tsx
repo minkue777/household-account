@@ -124,9 +124,10 @@ export default function AdminPage() {
     setIsCreating(true);
     setErrorMessage(null);
     try {
-      await adminHouseholds.create(name);
+      const created = await adminHouseholds.create(name);
       setNewHouseholdName('');
       await loadDashboard();
+      await handleCopy(created.householdId);
     } catch {
       setErrorMessage('가구를 생성하지 못했습니다.');
     } finally {

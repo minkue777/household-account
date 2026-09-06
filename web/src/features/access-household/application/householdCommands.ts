@@ -32,6 +32,10 @@ export const householdCommands = {
     );
   },
 
+  retryInitialization(householdId: string) {
+    return getHouseholdCommandClient().execute('access.retry-household-initialization.v1', {}, { householdId });
+  },
+
   joinAsSelf(invitationCode: string, memberName: string) {
     return getHouseholdCommandClient().execute(
       'access.join-household-as-self.v1',
@@ -51,14 +55,6 @@ export const householdCommands = {
     await getHouseholdCommandClient().execute(
       'access.rename-self.v1',
       { displayName, expectedVersion },
-      { householdId }
-    );
-  },
-
-  async deleteHousehold(householdId: string): Promise<void> {
-    await getHouseholdCommandClient().execute(
-      'access.request-household-deletion.v1',
-      {},
       { householdId }
     );
   },

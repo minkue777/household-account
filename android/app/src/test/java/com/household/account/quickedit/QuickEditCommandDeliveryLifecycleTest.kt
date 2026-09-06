@@ -25,6 +25,21 @@ class QuickEditCommandDeliveryLifecycleTest {
     )
 
     @Test
+    fun `outbox commit 실패는 Worker를 예약하거나 접수 완료로 판정하지 않는다`() = runTest {
+        for (throws in listOf(false, true)) {
+            val lifecycle = QuickEditCommandDeliveryLifecycle()
+            var scheduled = false
+            val result = lifecycle.admit(
+                currentScope = { scope }, transactionId = "transaction-1", envelope = envelope,
+                persist = { _, _, _ -> if (throws) error("encrypted commit failed") else false },
+                reserveDelivery = { scheduled = true }
+            )
+            assertTrue(result is QuickEditCommandEnqueueResult.Rejected)
+            assertFalse(scheduled)
+        }
+    }
+
+    @Test
     fun `outbox commit과 Worker 영속 예약 사이에 session purge가 끼어들 수 없다`() = runTest {
         val lifecycle = QuickEditCommandDeliveryLifecycle()
         val scheduleStarted = CompletableDeferred<Unit>()

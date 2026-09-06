@@ -59,7 +59,7 @@ export interface ShortcutHttpPaymentIntakePort {
 }
 
 export type ShortcutHttpReceiptClaimResult =
-  | { readonly kind: "claimed" }
+  | { readonly kind: "claimed"; readonly receivedAt?: string }
   | {
       readonly kind: "completed";
       readonly result: ShortcutHttpRequestProcessingResult;
@@ -71,6 +71,8 @@ export interface ShortcutHttpReceiptPort {
   claim(input: {
     readonly receiptKey: string;
     readonly payloadHash: string;
+    readonly receivedAt?: string;
+    readonly householdId?: string;
   }): Promise<ShortcutHttpReceiptClaimResult>;
   complete(input: {
     readonly receiptKey: string;

@@ -8,6 +8,17 @@ const projectionPath =
   "households/house-1/runtimeProjections/payment-capture-configuration-v1";
 
 describe("Firebase capture configuration projection", () => {
+  it.each([
+    [{ merchantKeyword: "shop", matchType: "regex", priority: 10 }, "REGEX_NOT_SUPPORTED"],
+    [{ merchantKeyword: "shop,", matchType: "contains", priority: 10 }, "EMPTY_OR_TOKEN"],
+  ])("[MER-001][MER-004] malformed legacy rule은 임의 보정/설정 projection 저장 없이 명시적으로 거부한다", async (rule, code) => {
+    const memory = new InMemoryFirestore();
+    memory.seed("merchant_rules/invalid", { householdId: "house-1", category: "etc", ...rule });
+    const before = memory.paths().map((path) => [path, memory.document(path)]);
+    const result = await new FirebaseCaptureConfigurationQuery(memory as unknown as firestore.Firestore).load({ householdId: "house-1", actingMemberId: "member-1" });
+    expect(result).toEqual({ kind: "contract-failure", code });
+    expect(memory.paths().map((path) => [path, memory.document(path)])).toEqual(before);
+  });
   it("완성된 가구별 projection 한 문서만으로 수집 설정을 읽는다", async () => {
     const memory = new InMemoryFirestore();
     memory.seed(projectionPath, {
@@ -24,7 +35,7 @@ describe("Firebase capture configuration projection", () => {
       merchantRules: [],
       activeCategoryIds: ["etc", "food"],
       defaultCategoryId: "etc",
-      schemaVersion: 1,
+      schemaVersion: 2,
     });
 
     const result = await new FirebaseCaptureConfigurationQuery(

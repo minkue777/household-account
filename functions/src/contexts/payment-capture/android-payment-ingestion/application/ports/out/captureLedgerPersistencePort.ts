@@ -13,6 +13,7 @@ export interface CaptureApprovalPersistenceCommand {
     readonly occurredAt: string;
     readonly accountingDate: string;
     readonly amountInWon: number;
+    readonly approvalAmountInWon?: number;
     readonly originalMerchant: string;
     readonly merchant: string;
     readonly categoryId: string;
@@ -42,6 +43,7 @@ export interface CaptureCancellationPersistenceCommand {
     readonly observedAt: string;
     readonly cancellationDate: string;
     readonly amountInWon: number;
+    readonly originalMerchant?: string;
     readonly merchant: string;
     readonly cardEvidence?: {
       readonly companyLabel: string;

@@ -4,7 +4,7 @@ import type {
   DeliveryAssuranceInputPort,
   DeliveryItemView,
   DeliveryStatusView,
-  HouseholdNotificationRequestedEvent,
+  NotificationAssuranceEvent,
   NotificationInboxStatusView,
   PublicEndpointStatusView,
 } from "./ports/in/deliveryAssurancePort";
@@ -70,7 +70,7 @@ function toDeliveryResult(
       }
       break;
     case "unknown-provider-outcome":
-      if (delivery.errorCode === "PROVIDER_TIMEOUT") {
+      if (delivery.errorCode === "PROVIDER_TIMEOUT" || delivery.errorCode === "WORKER_INTERRUPTED_AFTER_PROVIDER_CALL") {
         return { kind: "UnknownProviderOutcome", code: delivery.errorCode };
       }
       break;
@@ -165,7 +165,7 @@ class DefaultDeliveryAssuranceApplication implements DeliveryAssuranceInputPort 
   ) {}
 
   async accept(
-    event: HouseholdNotificationRequestedEvent,
+    event: NotificationAssuranceEvent,
   ): Promise<AcceptNotificationIntentResult> {
     const now = this.clock.now();
     if (isNotificationEventExpired(event.occurredAt, now)) {
@@ -174,6 +174,7 @@ class DefaultDeliveryAssuranceApplication implements DeliveryAssuranceInputPort 
         if (existing === null || existing.status === "retryable") {
           await transaction.saveInbox({
             eventId: event.eventId,
+          householdId: event.householdId,
             status: "terminal",
             code: "EXPIRED_EVENT",
             ...terminalRetention(now),
@@ -192,9 +193,11 @@ class DefaultDeliveryAssuranceApplication implements DeliveryAssuranceInputPort 
     }
 
     const endpoints = await this.store.listEndpoints(event.householdId);
+    const creatorMemberId = event.eventType === "HouseholdNotificationRequested.v1"
+      ? event.requesterMemberId : event.creatorMemberId;
     const memberIds = Array.from(
       new Set([
-        event.requesterMemberId,
+        ...(creatorMemberId === undefined ? [] : [creatorMemberId]),
         ...endpoints
           .filter((endpoint) => endpoint.status === "active")
           .map((endpoint) => endpoint.memberId),
@@ -221,6 +224,7 @@ class DefaultDeliveryAssuranceApplication implements DeliveryAssuranceInputPort 
         }
         await transaction.saveInbox({
           eventId: event.eventId,
+          householdId: event.householdId,
           status: "retryable",
           code: "MEMBERSHIP_LOOKUP_UNAVAILABLE",
         });
@@ -231,24 +235,22 @@ class DefaultDeliveryAssuranceApplication implements DeliveryAssuranceInputPort 
       });
     }
 
-    const decision = this.planner.forExplicitHouseholdRequest({
+    const facts = {
       eventId: event.eventId,
       householdId: event.householdId,
       transactionId: event.transactionId,
-      creatorMemberId: event.requesterMemberId,
-      requesterMemberId: event.requesterMemberId,
       members: memberIds.map((memberId) => ({
         householdId: event.householdId,
         memberId,
         status:
           membershipByMemberId.get(memberId) === "active" ||
           membershipByMemberId.get(memberId) === "push-disabled"
-            ? "active"
-            : "removed",
+            ? "active" as const
+            : "removed" as const,
         pushDelivery:
           membershipByMemberId.get(memberId) === "push-disabled"
-            ? "disabled"
-            : "enabled",
+            ? "disabled" as const
+            : "enabled" as const,
       })),
       endpoints: endpoints.map((endpoint) => ({
         endpointId: endpoint.endpointId,
@@ -257,9 +259,28 @@ class DefaultDeliveryAssuranceApplication implements DeliveryAssuranceInputPort 
         platform: endpoint.platform,
         status: endpoint.status,
       })),
-    });
+    };
+    const decision = event.eventType === "HouseholdNotificationRequested.v1"
+      ? this.planner.forExplicitHouseholdRequest({
+          ...facts,
+          creatorMemberId: event.requesterMemberId,
+          requesterMemberId: event.requesterMemberId,
+        })
+      : this.planner.forRecordedTransaction({
+          ...facts,
+          transactionType: "expense",
+          creatorMemberId: event.creatorMemberId,
+          originChannel: event.originChannel,
+        });
     if (decision.kind === "ContractFailure") {
-      throw new Error(`Invalid household notification event: ${decision.code}`);
+      await this.store.runAcceptance(event.eventId, async (transaction) => {
+        await transaction.saveInbox({
+          eventId: event.eventId,
+          householdId: event.householdId, status: "terminal", code: decision.code,
+          ...terminalRetention(now),
+        });
+      });
+      return decision;
     }
 
     const intentId = intentIdFor(event.eventId);
@@ -308,6 +329,7 @@ class DefaultDeliveryAssuranceApplication implements DeliveryAssuranceInputPort 
       await transaction.saveDeliveries(deliveries);
       await transaction.saveInbox({
         eventId: event.eventId,
+          householdId: event.householdId,
         status: deliveries.length === 0 ? "terminal" : "accepted",
         ...(deliveries.length === 0 ? { code: "NO_TARGET" } : {}),
         ...(deliveries.length === 0 ? terminalRetention(now) : {}),
@@ -357,7 +379,7 @@ class DefaultDeliveryAssuranceApplication implements DeliveryAssuranceInputPort 
           return { kind: "terminal", delivery: terminal };
         }
 
-        const sending = { ...delivery, status: "sending" as const };
+        const sending = { ...delivery, status: "sending" as const, providerAttemptStartedAt: this.clock.now() };
         await transaction.saveDelivery(sending);
         return { kind: "claimed", delivery: sending, endpoint };
       },
@@ -413,10 +435,25 @@ class DefaultDeliveryAssuranceApplication implements DeliveryAssuranceInputPort 
       );
     }
 
+    const currentEndpoint = await this.store.runForDelivery(deliveryId, async (transaction) => {
+      const currentDelivery = await transaction.readDelivery();
+      const endpoint = await transaction.readEndpoint(claim.delivery.endpointId);
+      if (currentDelivery === null || isTerminal(currentDelivery) || endpoint === null ||
+          endpoint.status !== "active" || endpoint.householdId !== claim.delivery.householdId ||
+          endpoint.memberId !== claim.delivery.recipientMemberId ||
+          endpoint.registrationVersion !== claim.delivery.expectedRegistrationVersion ||
+          endpoint.bindingVersion !== claim.delivery.expectedBindingVersion) return null;
+      await transaction.saveDelivery({ ...currentDelivery, providerAttemptCount: 1 });
+      return endpoint;
+    });
+    if (currentEndpoint === null) {
+      return toDeliveryResult(await this.completeDelivery(claim.delivery,
+        { status: "stale-target", errorCode: "ENDPOINT_CHANGED" }, 0));
+    }
     const providerOutcome = await this.provider.sendOne({
       deliveryId: claim.delivery.deliveryId,
-      endpointId: claim.endpoint.endpointId,
-      fid: claim.endpoint.fid,
+      endpointId: currentEndpoint.endpointId,
+      fid: currentEndpoint.fid,
       payload: claim.delivery.payload,
     });
     return toDeliveryResult(

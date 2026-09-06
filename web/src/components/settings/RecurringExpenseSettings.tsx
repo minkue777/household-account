@@ -29,6 +29,7 @@ export default function RecurringExpenseSettings() {
   const [recurringLoading, setRecurringLoading] = useState(true);
   const [showAddRecurringForm, setShowAddRecurringForm] = useState(false);
   const [editingRecurringId, setEditingRecurringId] = useState<string | null>(null);
+  const [editingRecurringVersion, setEditingRecurringVersion] = useState(1);
   const [pendingDeleteRecurring, setPendingDeleteRecurring] = useState<RecurringExpense | null>(null);
   const recurringFormRef = useRef<HTMLDivElement>(null);
 
@@ -72,6 +73,7 @@ export default function RecurringExpenseSettings() {
 
   const handleStartEditRecurring = (expense: RecurringExpense) => {
     setEditingRecurringId(expense.id);
+    setEditingRecurringVersion(expense.aggregateVersion ?? 1);
     setRecurringMerchant(expense.merchant);
     setRecurringAmount(expense.amount.toString());
     setRecurringCategory(expense.category);
@@ -98,7 +100,7 @@ export default function RecurringExpenseSettings() {
         category: recurringCategory,
         dayOfMonth,
         memo: recurringMemo.trim(),
-      });
+      }, editingRecurringVersion);
     } else {
       await addRecurringExpense(householdKey, {
         merchant: recurringMerchant.trim(),
@@ -115,7 +117,7 @@ export default function RecurringExpenseSettings() {
   const handleDeleteRecurring = async () => {
     if (!pendingDeleteRecurring) return;
 
-    await deleteRecurringExpense(pendingDeleteRecurring.id);
+    await deleteRecurringExpense(pendingDeleteRecurring.id, pendingDeleteRecurring.aggregateVersion ?? 1);
     setPendingDeleteRecurring(null);
   };
 
@@ -295,7 +297,7 @@ export default function RecurringExpenseSettings() {
                       {/* 활성화/비활성화 토글 */}
                       <button
                         onClick={async () => {
-                          await updateRecurringExpense(expense.id, { isActive: !expense.isActive });
+                          await updateRecurringExpense(expense.id, { isActive: !expense.isActive }, expense.aggregateVersion ?? 1);
                         }}
                         className={`p-2 rounded-lg transition-colors ${
                           expense.isActive

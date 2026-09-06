@@ -52,6 +52,7 @@ function dependencies(input: {
       },
     },
     events: {
+      async findAnnouncement() { return undefined; },
       async upsertAnnouncement() {
         throw new Error("no disclosure expected");
       },

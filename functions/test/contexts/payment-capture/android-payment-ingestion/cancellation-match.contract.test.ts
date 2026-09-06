@@ -101,45 +101,6 @@ describe("결제 취소 일치 판정 공개 계약", () => {
     },
   );
 
-  it.each([
-    { splitCount: 1, acceptedDifference: 0, rejectedDifference: 1 },
-    { splitCount: 2, acceptedDifference: 1, rejectedDifference: 2 },
-    { splitCount: 12, acceptedDifference: 11, rejectedDifference: 12 },
-  ])(
-    "[T-CAN-006][CAN-006] $splitCount개월 분할은 최대 $acceptedDifference원 내림 오차만 허용한다",
-    ({ splitCount, acceptedDifference, rejectedDifference }) => {
-      const subject = createSubject();
-      const resultAtBoundary = subject.decide({
-        observation: observation({ amountInWon: 120_000 }),
-        candidates: [
-          candidate("monthly-lineage", {
-            monthlySplit: {
-              groupTotalInWon: 120_000 - acceptedDifference,
-              splitCount,
-            },
-          }),
-        ],
-      });
-      const resultBeyondBoundary = subject.decide({
-        observation: observation({ amountInWon: 120_000 }),
-        candidates: [
-          candidate("monthly-lineage", {
-            monthlySplit: {
-              groupTotalInWon: 120_000 - rejectedDifference,
-              splitCount,
-            },
-          }),
-        ],
-      });
-
-      expect(resultAtBoundary.kind).toBe("matched");
-      expect(resultBeyondBoundary).toEqual({
-        kind: "notFound",
-        resource: "cancellationTarget",
-      });
-    },
-  );
-
   it("[T-CAN-003] 완전 일치 lineage가 둘 이상이면 저장 순서로 선택하지 않고 확인이 필요하다고 반환한다", () => {
     const subject = createSubject();
     const candidates = [candidate("lineage-b"), candidate("lineage-a")];
@@ -194,55 +155,4 @@ describe("결제 취소 일치 판정 공개 계약", () => {
     });
   });
 
-  it.each([
-    { difference: 0, expectedKind: "matched" },
-    { difference: 1, expectedKind: "matched" },
-    { difference: 2, expectedKind: "matched" },
-    { difference: 3, expectedKind: "notFound" },
-  ] as const)(
-    "[T-CAN-006] 3개월 분할 합계가 취소액보다 $difference원 작을 때 $expectedKind를 반환한다",
-    ({ difference, expectedKind }) => {
-      const result = createSubject().decide({
-        observation: observation({ amountInWon: 10_000 }),
-        candidates: [
-          candidate("monthly-lineage", {
-            monthlySplit: {
-              groupTotalInWon: 10_000 - difference,
-              splitCount: 3,
-            },
-          }),
-        ],
-      });
-
-      expect(result.kind).toBe(expectedKind);
-    },
-  );
-
-  it("[T-CAN-006] 분할 합계가 취소액보다 크면 절댓값이 작아도 일치시키지 않는다", () => {
-    const result = createSubject().decide({
-      observation: observation({ amountInWon: 10_000 }),
-      candidates: [
-        candidate("monthly-lineage", {
-          monthlySplit: { groupTotalInWon: 10_001, splitCount: 3 },
-        }),
-      ],
-    });
-
-    expect(result).toEqual({
-      kind: "notFound",
-      resource: "cancellationTarget",
-    });
-  });
-
-  it("[T-CAN-006] 일반 거래에는 월 분할 내림 오차를 허용하지 않는다", () => {
-    const result = createSubject().decide({
-      observation: observation({ amountInWon: 10_000 }),
-      candidates: [candidate("single-lineage", { amountInWon: 9_999 })],
-    });
-
-    expect(result).toEqual({
-      kind: "notFound",
-      resource: "cancellationTarget",
-    });
-  });
 });

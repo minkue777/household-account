@@ -8,6 +8,7 @@ const subscribeToMonthlyTransactions = jest.fn();
 const readMonthlyTransactionsForPrefetch = jest.fn();
 const subscribeToLocalCurrencyBalance = jest.fn();
 let mockPathname = '/';
+let mockRemoteReadEpoch = 0;
 
 jest.mock('next/navigation', () => ({
   usePathname: () => mockPathname,
@@ -17,7 +18,7 @@ jest.mock('@/contexts/HouseholdContext', () => ({
   useHousehold: () => ({
     householdKey: 'household-1',
     isSessionVerified: true,
-    remoteReadEpoch: 0,
+    remoteReadEpoch: mockRemoteReadEpoch,
   }),
 }));
 
@@ -56,6 +57,7 @@ function ReadModelConsumer({
         data-count={String(model.expenses.length)}
         data-ids={model.expenses.map(({ id }) => id).join(',')}
         data-balance={String(model.localCurrencyBalance?.balance ?? '')}
+        data-currency-ready={String(model.localCurrencyReady)}
         data-error={String(model.readError != null)}
         data-refresh-key={model.readRefreshKey}
       />
@@ -73,6 +75,7 @@ function ReadModelConsumer({
 describe('홈 read model 합성 계약', () => {
   beforeEach(() => {
     mockPathname = '/';
+    mockRemoteReadEpoch = 0;
     subscribeToMonthlyTransactions.mockReset();
     readMonthlyTransactionsForPrefetch.mockReset();
     subscribeToLocalCurrencyBalance.mockReset();
@@ -380,6 +383,7 @@ describe('홈 read model 합성 계약', () => {
     await waitFor(() => {
       expect(screen.getByTestId('ledger-view')).toHaveAttribute('data-ids', 'august-expense');
       expect(screen.getByTestId('ledger-view')).toHaveAttribute('data-loading', 'false');
+      expect(subscribeToLocalCurrencyBalance).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -589,6 +593,55 @@ describe('홈 read model 합성 계약', () => {
       expect(screen.getByTestId('ledger-view')).toHaveAttribute('data-count', '2');
       expect(screen.getByTestId('ledger-view')).toHaveAttribute('data-loading', 'false');
     });
+  });
+
+  it('LED-001/BAL-004 같은 가구 permission-denied 후 인증 epoch 재연결은 기존 값과 한 쌍의 구독을 유지한다', async () => {
+    const monthly: Array<{ next: (rows: unknown[]) => void; error: (error: unknown) => void; stop: jest.Mock }> = [];
+    const currency: Array<{ next: (value: unknown) => void; error: (error: unknown) => void; stop: jest.Mock }> = [];
+    subscribeToMonthlyTransactions.mockImplementation((_year, _month, next, options) => {
+      const entry = { next, error: options.onError, stop: jest.fn() };
+      monthly.push(entry);
+      return entry.stop;
+    });
+    subscribeToLocalCurrencyBalance.mockImplementation((next, options) => {
+      const entry = { next, error: options.onError, stop: jest.fn() };
+      currency.push(entry);
+      return entry.stop;
+    });
+    const view = render(<LedgerReadModelProvider><ReadModelConsumer testId="ledger-view" /></LedgerReadModelProvider>);
+    await waitFor(() => expect(monthly).toHaveLength(1));
+    await waitFor(() => expect(currency).toHaveLength(1));
+    const original = { id: 'original', date: '2026-07-27', merchant: '가게', amount: 1_000, category: 'food', transactionType: 'expense', aggregateVersion: 1 };
+    act(() => {
+      monthly[0].next([original]);
+      currency[0].next({ balance: 20_000, currencyType: 'gyeonggi' });
+    });
+    act(() => {
+      monthly[0].error({ code: 'permission-denied' });
+      currency[0].error({ code: 'permission-denied' });
+    });
+    expect(screen.getByTestId('ledger-view')).toHaveAttribute('data-ids', 'original');
+    expect(screen.getByTestId('ledger-view')).toHaveAttribute('data-balance', '20000');
+    expect(screen.getByTestId('ledger-view')).toHaveAttribute('data-error', 'true');
+    expect(screen.getByTestId('ledger-view')).toHaveAttribute('data-currency-ready', 'false');
+    mockRemoteReadEpoch = 1;
+    view.rerender(<LedgerReadModelProvider><ReadModelConsumer testId="ledger-view" /></LedgerReadModelProvider>);
+    await waitFor(() => expect(monthly).toHaveLength(2));
+    await waitFor(() => expect(currency).toHaveLength(2));
+    expect(monthly[0].stop).toHaveBeenCalledTimes(1);
+    expect(currency[0].stop).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('ledger-view')).toHaveAttribute('data-ids', 'original');
+    expect(screen.getByTestId('ledger-view')).toHaveAttribute('data-balance', '20000');
+    act(() => {
+      monthly[1].next([{ ...original, id: 'recovered' }]);
+      currency[1].next({ balance: 30_000, currencyType: 'gyeonggi' });
+      monthly[0].next([]);
+      currency[0].next(null);
+    });
+    expect(screen.getByTestId('ledger-view')).toHaveAttribute('data-ids', 'recovered');
+    expect(screen.getByTestId('ledger-view')).toHaveAttribute('data-balance', '30000');
+    expect(screen.getByTestId('ledger-view')).toHaveAttribute('data-error', 'false');
+    expect(screen.getByTestId('ledger-view')).toHaveAttribute('data-currency-ready', 'true');
   });
 
   it('같은 범위 재구독 실패 시 기존 원장을 유지하면서 저하 상태를 노출한다', async () => {

@@ -1,5 +1,7 @@
 export interface RegisteredCard {
   id: string;
+  version?: number;
+  collectionVersion?: number;
   householdId: string;
   ownerMemberId: string;
   owner: string;
@@ -80,6 +82,7 @@ export function mapRegisteredCardDocument(
 
   return {
     id,
+    version: Number.isSafeInteger(data.aggregateVersion) ? data.aggregateVersion as number : 1,
     householdId: typeof data.householdId === 'string' ? data.householdId : '',
     ownerMemberId: typeof data.ownerMemberId === 'string' ? data.ownerMemberId : '',
     owner: typeof data.owner === 'string' ? data.owner : '',

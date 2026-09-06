@@ -1,7 +1,7 @@
 # Household Account 현재 시스템 요구사항 인덱스
 
 > 상태: Draft — 코드 역추적 명세  
-> 기준일: 2026-07-20  
+> 집계 갱신일: 2026-09-06  
 > 범위: Web, Android, Firebase Functions, Firestore, PWA, 외부 시세·배당 연동  
 > 목적: 5개 업무 Bounded Context에서 기능 모듈·요구사항·테스트·결정·데이터 소유권을 탐색하는 시작점  
 > 목표 아키텍처: [목표 Clean Architecture 설계](../architecture/target-clean-architecture.md)  
@@ -48,12 +48,12 @@ System Contract
 
 | Bounded Context | 책임 | 내부 기능 모듈 | 요구사항 | 개수 | 주요 Aggregate·데이터 |
 |---|---|---|---|---:|---|
-| [Access & Household](contexts/access-household/requirements.md) | Principal·가구·멤버·Membership·명의자 프로필·초대·권한 | [가구와 접근](contexts/access-household/modules/household-access/requirements.md) | HH-*, HH-JOIN-*, ADM-* | 17 | Household, Member, Membership, AssetOwnerProfile, Invitation |
-| [Household Finance](contexts/household-finance/requirements.md) | 거래·분류·예산·정기 계획·지역화폐 | [원장](contexts/household-finance/modules/ledger/requirements.md), [카테고리·예산](contexts/household-finance/modules/categories-budget/requirements.md), [정기 거래](contexts/household-finance/modules/recurring-transactions/requirements.md), [지역화폐](contexts/household-finance/modules/local-currency/requirements.md) | LED-*, SPL-*, MRG-*, SEA-*, CAT-*, BUD-*, REC-*, BAL-* | 39 | Transaction, CategoryCatalog, RecurringPlan, LocalCurrencyBalance |
-| [Payment Capture](contexts/payment-capture/requirements.md) | 카드·가맹점 설정과 Android·Shortcut 결제·잔액 관찰 수렴 | [결제 설정](contexts/payment-capture/modules/payment-configuration/requirements.md), [Android 수집](contexts/payment-capture/modules/android-payment-ingestion/requirements.md), [Shortcut 수집](contexts/payment-capture/modules/shortcut-ingestion/requirements.md) | CARD-*, MER-*, ING-*, PARSE-*, ING-SAVE-*, CAN-*, IOS-* | 63 | CardRegistry, MerchantRuleSet, CaptureEnvelope |
-| [Portfolio](contexts/portfolio/requirements.md) | 자산·명의 참조·Position·평가·자동화·배당 | [포트폴리오](contexts/portfolio/modules/portfolio/requirements.md), [보유종목·시세](contexts/portfolio/modules/holdings-market-data/requirements.md), [자동화](contexts/portfolio/modules/asset-automation/requirements.md), [배당](contexts/portfolio/modules/dividends/requirements.md) | AST-*, HOLD-*, GOLD-*, MARKET-*, JOB-AST-*, AUTO-*, LOAN-*, DIV-*, JOB-DIV-* | 38 | AssetAccount, Position, InstrumentCatalog, AutomationPlan, DividendEvent |
-| [Notifications](contexts/notifications/requirements.md) | endpoint·대상·payload·delivery·가구 purge | [푸시 알림](contexts/notifications/modules/notifications/requirements.md) | PUSH-* | 13 | NotificationEndpoint, NotificationDelivery |
-| 합계 |  | 13개 기능 모듈 |  | 170 |  |
+| [Access & Household](contexts/access-household/requirements.md) | Principal·가구·멤버·Membership·명의자 프로필·초대·권한 | [가구와 접근](contexts/access-household/modules/household-access/requirements.md) | HH-*, HH-JOIN-*, ADM-* | 19 | Household, Member, Membership, AssetOwnerProfile, Invitation |
+| [Household Finance](contexts/household-finance/requirements.md) | 거래·분류·예산·정기 계획·지역화폐 | [원장](contexts/household-finance/modules/ledger/requirements.md), [카테고리·예산](contexts/household-finance/modules/categories-budget/requirements.md), [정기 거래](contexts/household-finance/modules/recurring-transactions/requirements.md), [지역화폐](contexts/household-finance/modules/local-currency/requirements.md) | LED-*, SPL-*, MRG-*, SEA-*, CAT-*, BUD-*, REC-*, BAL-* | 40 | Transaction, CategoryCatalog, RecurringPlan, LocalCurrencyBalance |
+| [Payment Capture](contexts/payment-capture/requirements.md) | 카드·가맹점 설정과 Android·Shortcut 결제·잔액 관찰 수렴 | [결제 설정](contexts/payment-capture/modules/payment-configuration/requirements.md), [Android 수집](contexts/payment-capture/modules/android-payment-ingestion/requirements.md), [Shortcut 수집](contexts/payment-capture/modules/shortcut-ingestion/requirements.md) | CARD-*, MER-*, ING-*, PARSE-*, ING-SAVE-*, CAN-*, IOS-* | 65 | CardRegistry, MerchantRuleSet, CaptureEnvelope |
+| [Portfolio](contexts/portfolio/requirements.md) | 자산·명의 참조·Position·평가·자동화·배당 | [포트폴리오](contexts/portfolio/modules/portfolio/requirements.md), [보유종목·시세](contexts/portfolio/modules/holdings-market-data/requirements.md), [자동화](contexts/portfolio/modules/asset-automation/requirements.md), [배당](contexts/portfolio/modules/dividends/requirements.md) | AST-*, HOLD-*, GOLD-*, MARKET-*, JOB-AST-*, AUTO-*, LOAN-*, DIV-*, JOB-DIV-* | 39 | AssetAccount, Position, InstrumentCatalog, AutomationPlan, DividendEvent |
+| [Notifications](contexts/notifications/requirements.md) | endpoint·대상·payload·delivery·가구 purge | [푸시 알림](contexts/notifications/modules/notifications/requirements.md) | PUSH-* | 14 | NotificationEndpoint, NotificationDelivery |
+| 합계 |  | 13개 기능 모듈 |  | 177 |  |
 
 ### 2.1 Context 의존 방향
 
@@ -86,13 +86,13 @@ Portfolio ──valuation·dividend Outbox Event──▶ Read Side
 
 | 역할 | 기능 모듈 | 요구사항 | 개수 | 책임 |
 |---|---|---|---:|---|
-| Android Delivery | [Android Host](supporting-platform/modules/android-host/requirements.md) | AND-*, QE-* | 24 | 권한, WebView, Bridge, QuickEdit |
+| Android Delivery | [Android Host](supporting-platform/modules/android-host/requirements.md) | AND-*, QE-* | 26 | 권한, WebView, Bridge, QuickEdit |
 | Web Delivery | [PWA](supporting-platform/modules/pwa/requirements.md) | PWA-* | 8 | 설치, cache/messaging worker |
 | Read Side | [통계](supporting-platform/modules/reporting/requirements.md) | STAT-*, STAT-AST-* | 9 | 거래·자산 Projection |
 | Preferences | [홈 환경설정](supporting-platform/modules/home-preferences/requirements.md) | HOME-*, THEME-* | 5 | 홈 카드·표시 지역화폐 구성과 Web theme |
-| Operations | [외부 운영](supporting-platform/modules/external-operations/requirements.md) | JOB-ERR-*, EXT-* | 5 | Scheduler·retry·오류 분류·관측 |
+| Operations | [외부 운영](supporting-platform/modules/external-operations/requirements.md) | JOB-ERR-*, EXT-* | 6 | Scheduler·retry·오류 분류·관측 |
 | Delivery Assurance | [배포 안전성](supporting-platform/modules/delivery-assurance/requirements.md) | REL-* | 4 | release gate, 환경·project, 호환 배포·smoke |
-| 합계 | 6개 기능 모듈 |  | 55 |  |
+| 합계 | 6개 기능 모듈 |  | 58 |  |
 
 지원 모듈은 업무 Aggregate를 직접 수정하지 않고 해당 Context의 공개 Command·Query·Event를 사용한다.
 
@@ -110,11 +110,7 @@ Portfolio ──valuation·dividend Outbox Event──▶ Read Side
 - client SessionScope·늦은 callback 격리
 - migration·backfill의 서버 운영 경계
 
-전체 요구사항 수:
-
-```text
-업무 Context 169 + 지원·플랫폼 53 + 공통 SYS 9 = 231
-```
+전체 요구사항·Canonical 테스트 ID·상태별 수치는 단일 원본에서 생성한 [요구사항 카탈로그 집계](catalog-summary.md)를 사용합니다. 선언 개수는 구현 완료 또는 테스트 실행 통과 개수와 구분합니다.
 
 ## 5. Context와 기능 모듈 의존성 원칙
 
@@ -203,38 +199,13 @@ Portfolio ──valuation·dividend Outbox Event──▶ Read Side
 | [DEC-067](governance/decisions.md#dec-067) | 지원·플랫폼 | QuickEdit은 일반 Ledger Command의 Android Adapter이며, Keystore 암호화 outbox commit과 WorkManager 영속 예약 뒤 화면에서 분리하고 고정 멱등 key로 비동기 전달한다. |
 | [DEC-068](governance/decisions.md#dec-068) | 공통 시스템·Payment Capture·지원 플랫폼 | 현재 두 가구와 향후 소수 가구의 대화형 경로는 첫 paint·결제·QuickEdit 저지연을 우선하고 대규모 분산 장치를 배제합니다. 공용 경로는 Auth·Membership·가구 격리·중복 방지·72시간 실패 복구를 유지하고, Native 결제 수집·세션 교환에는 App Check를 추가 유지합니다. |
 
-코드 감사에서 발견한 Human in the loop 정책은 DEC-064까지 모두 처리했습니다. 중복 질문이던 Q-002는 DEC-011에 통합했고, Q-003은 일반 사용자 복구 금지와 운영 복구일 기준 자동화 재개로 DEC-017·DEC-052에 반영했으며, Q-004는 Shortcut credential 원문 최초 응답 1회와 `AlreadyIssued` 재전송으로 DEC-033에 반영했습니다. Q-005는 별도 카드 통계가 아닌 Ledger 검색 계약으로 정리했고, Q-006은 release gate 우회 금지로 DEC-064에 확정했습니다. [미결정 사항 단일 목록](governance/pending-decisions.md)의 현재 항목은 0개입니다.
+기존 Q-001~006은 결정 기록에 반영되어 있습니다. 추가 감사에서 발견한 정책 충돌은 [미결정 사항 단일 목록](governance/pending-decisions.md)에서 추적하며, 사용자 확인 전에 요구사항의 의미를 변경하지 않습니다.
 
 ## 7. 추적성 검증 기준
 
-현재 매핑 기준:
+19개 기능 모듈과 공통 System의 선언은 [자동 집계](catalog-summary.md)에서 확인합니다. `node tools/requirements/update-catalog.mjs --check`는 집계의 최신성을 검사하고 Architecture traceability gate는 ID 중복 소유·연결 누락·assertion 연결을 검사합니다.
 
-- 기능 모듈: 19개
-- 업무 Context 소속 기능 모듈: 13개
-- 지원·플랫폼 기능 모듈: 6개
-- 전체 요구사항 ID: 232개
-- 업무 Context 요구사항: 170개
-- 지원·플랫폼 요구사항: 53개
-- 공통 SYS 요구사항: 9개
-- Canonical 테스트 ID: 211개
-- 중앙 Human in the loop 미결정 질문: 0개 (`결정 대기` 요구사항 0개)
-- 요구사항·테스트 ID 누락과 중복 소유: 0개
-
-요구사항 상태 합계:
-
-- 현재 명세 86개
-- 현재 명세·결함 1개
-- 현재 명세·목표 보완 1개
-- 현재·목표 3개
-- 목표 명세 78개
-- 특성화 4개
-- 특성화·목표 교정 1개
-- 호환 3개
-- 호환·목표 2개
-- 호환·목표 명세 1개
-- 결함 51개
-
-모든 231개 요구사항은 210개 Canonical 테스트 ID와 실제 계약 assertion 본문에 연결되어 있습니다. 현재 검증 기준과 실행 방법은 [테스트 전략](governance/test-strategy.md)과 [Functions 테스트 안내](../../functions/test/README.md)를 사용합니다.
+실행 결과와 누락된 환경 검증은 [테스트 전략](governance/test-strategy.md), [Functions 테스트 안내](../../functions/test/README.md), [전수 감사 수정 상태](../verification/full-audit-remediation.md)에서 확인합니다. 문서의 상태 표시는 요구사항의 성격이며 실제 배포 완료 판정이 아닙니다.
 
 요구사항을 추가·이동할 때 [요구사항 문서 규약](governance/conventions.md)의 Context 배치와 단일 소유 검사를 다시 수행한다.
 

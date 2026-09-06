@@ -98,14 +98,14 @@
       "requirementIds": ["T-PARSE-001", "PARSE-TOSS-001", "PARSE-COMMON-001"],
       "source": { "packageName": "viva.republica.toss", "parserId": "toss-bank-parser" },
       "raw": { "postedAt": "2026-07-19T13:10:00+09:00", "title": "토스", "textLines": ["토스뱅크 체크카드 | 가맹점마", "3,000원 결제", "500원 캐시백"] },
-      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 2500, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "13:10", "merchant": "가맹점마", "cardCompany": "토스", "timeSource": "postedAt" } }
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 2500, "approvalAmountInWon": 3000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "13:10", "merchant": "가맹점마", "cardCompany": "토스", "timeSource": "postedAt" } }
     },
     {
       "caseId": "toss-cashback-clamped-to-zero",
       "requirementIds": ["T-PARSE-001", "PARSE-TOSS-001"],
       "source": { "packageName": "viva.republica.toss", "parserId": "toss-bank-parser" },
       "raw": { "postedAt": "2026-07-19T13:20:00+09:00", "title": "토스", "textLines": ["페이스페이 (토스뱅크) | 가맹점바", "1,000원 결제", "1,500원 캐시백"] },
-      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 0, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "13:20", "merchant": "가맹점바", "cardCompany": "토스", "timeSource": "postedAt" } }
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 0, "approvalAmountInWon": 1000, "occurredLocalDate": "2026-07-19", "occurredLocalTime": "13:20", "merchant": "가맹점바", "cardCompany": "토스", "timeSource": "postedAt" } }
     },
     {
       "caseId": "toss-cancellation-total",
@@ -119,7 +119,7 @@
       "requirementIds": ["T-PARSE-001", "PARSE-TOSS-001", "PARSE-COMMON-001"],
       "source": { "packageName": "viva.republica.toss", "parserId": "toss-bank-parser" },
       "raw": { "postedAt": "2026-07-20T13:11:00+09:00", "title": "토스", "textLines": ["토스뱅크 체크카드 | 가맹점마", "3,000원 결제", "2,147,483,648원 캐시백"] },
-      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 3000, "occurredLocalDate": "2026-07-20", "occurredLocalTime": "13:11", "merchant": "가맹점마", "cardCompany": "토스", "timeSource": "postedAt" } }
+      "expected": { "kind": "Parsed", "payment": { "type": "approval", "amountInWon": 3000, "approvalAmountInWon": 3000, "occurredLocalDate": "2026-07-20", "occurredLocalTime": "13:11", "merchant": "가맹점마", "cardCompany": "토스", "timeSource": "postedAt" } }
     },
     {
       "caseId": "toss-preauthorization-ignored",

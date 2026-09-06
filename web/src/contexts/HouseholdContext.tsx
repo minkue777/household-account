@@ -130,6 +130,8 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '가계부 세션을 복원하지 못했습니다.';
 }
 
+const INITIALIZATION_FAILED_MESSAGE = '가계부는 생성되었지만 기본 설정 초기화에 실패했습니다. 다시 시도해 주세요.';
+
 const TRANSIENT_FIRESTORE_READ_CODES = new Set([
   'aborted',
   'cancelled',
@@ -184,6 +186,10 @@ function householdFromResolution(
     id: value.id,
     name: value.name,
     createdAt: new Date(value.createdAt),
+    categoryCatalogVersion: value.categoryCatalogVersion ?? 0,
+    homeSummaryConfigVersion: value.homeSummaryConfigVersion ?? 0,
+    selectedLocalCurrencyType: value.selectedLocalCurrencyType,
+    initializationStatus: value.initializationStatus,
     ...(value.defaultCategoryKey === undefined
       ? {}
       : { defaultCategoryKey: value.defaultCategoryKey }),
@@ -209,6 +215,10 @@ function householdToResolutionView(
     id: household.id,
     name: household.name,
     createdAt: household.createdAt.toISOString(),
+    categoryCatalogVersion: household.categoryCatalogVersion ?? 0,
+    homeSummaryConfigVersion: household.homeSummaryConfigVersion ?? 0,
+    selectedLocalCurrencyType: household.selectedLocalCurrencyType,
+    initializationStatus: household.initializationStatus,
     ...(household.defaultCategoryKey === undefined
       ? {}
       : { defaultCategoryKey: household.defaultCategoryKey }),
@@ -226,6 +236,10 @@ function sameHousehold(left: Household | null, right: Household): boolean {
     || left.name !== right.name
     || left.createdAt.getTime() !== right.createdAt.getTime()
     || left.defaultCategoryKey !== right.defaultCategoryKey
+    || (left.categoryCatalogVersion ?? 0) !== (right.categoryCatalogVersion ?? 0)
+    || (left.homeSummaryConfigVersion ?? 0) !== (right.homeSummaryConfigVersion ?? 0)
+    || left.selectedLocalCurrencyType !== right.selectedLocalCurrencyType
+    || left.initializationStatus !== right.initializationStatus
     || left.homeSummaryConfig?.leftCard !== right.homeSummaryConfig?.leftCard
     || left.homeSummaryConfig?.rightCard !== right.homeSummaryConfig?.rightCard
     || left.members.length !== right.members.length
@@ -396,10 +410,11 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       if (resolution.kind === 'first-visit-required') {
         clearSignedInMembershipCache();
         clearResolvedSession();
-        if (candidate) {
+        if (candidate && resolution.legacyClaimEnabled !== false) {
           setLegacyCandidate(candidate);
           setSessionState('legacy-confirmation');
         } else {
+          if (resolution.legacyClaimEnabled === false) clearLegacySessionCandidate();
           setLegacyCandidate(null);
           setSessionState('first-visit');
         }
@@ -529,7 +544,24 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         }
       };
 
-      const resolvedHousehold = householdFromResolution(resolution);
+      const finishInitialization = async (loaded: Household): Promise<Household> => {
+        if (loaded.initializationStatus !== 'failed' && loaded.initializationStatus !== 'pending') return loaded;
+        setSessionState('resolving');
+        const { householdCommands } = await import('@/features/access-household/application/householdCommands');
+        const result = await withinDeadline(
+          householdCommands.retryInitialization(loaded.id),
+          SESSION_RESOLUTION_TIMEOUT_MS,
+          'SESSION_RESOLUTION_TIMEOUT'
+        );
+        if (result.initializationStatus !== 'completed') throw new Error(INITIALIZATION_FAILED_MESSAGE);
+        // 초기화가 변경한 기본 카테고리와 catalog version까지 서버에서 다시 읽습니다.
+        const { getHousehold } = await import('@/lib/householdService');
+        return getHousehold(loaded.id);
+      };
+      const prefetchedHousehold = householdFromResolution(resolution);
+      const resolvedHousehold = prefetchedHousehold === undefined
+        ? undefined : await finishInitialization(prefetchedHousehold);
+      if (resolutionGeneration !== resolutionGenerationRef.current) return;
       const restoredFromCache =
         options.membershipSource === 'last-verified-cache';
       if (!restoredFromCache && resolvedHousehold === undefined) {
@@ -571,14 +603,21 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
             'HOUSEHOLD_READ_TIMEOUT'
           );
         })
-        .then((loadedHousehold) => {
+        .then(async (loadedHousehold) => {
           if (!loadedHousehold) return;
+          const initialized = await finishInitialization(loadedHousehold);
           markWebHouseholdCompleted(true);
-          applyHousehold(loadedHousehold);
+          applyHousehold(initialized);
         })
         .catch((error) => {
           if (resolutionGeneration !== resolutionGenerationRef.current) return;
           markWebHouseholdCompleted(false);
+          if (error instanceof Error && error.message === INITIALIZATION_FAILED_MESSAGE) {
+            clearResolvedSession();
+            setSessionError(error.message);
+            setSessionState('error');
+            return;
+          }
           if (isTransientHouseholdReadFailure(error)) return;
           clearSignedInMembershipCache();
           requestAuthoritativeMembershipResolution();
@@ -853,6 +892,9 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
 
     return () => {
       disposed = true;
+      resolutionGenerationRef.current += 1;
+      cancelEndpointRegistrationRef.current?.();
+      cancelEndpointRegistrationRef.current = undefined;
       cancelMembershipResolutionRetry();
       cancelQueuedAuthoritativeMembershipResolution();
       unsubscribeAuth?.();
@@ -970,7 +1012,14 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       await restoreSignedInUser(user);
     } catch (error) {
       setSessionError(errorMessage(error));
-      setSessionState('legacy-confirmation');
+      if (typeof error === 'object' && error !== null && 'code' in error
+        && (error.code === 'LEGACY_MEMBERSHIP_NOT_FOUND' || error.code === 'LEGACY_CLAIM_DISABLED')) {
+        clearLegacySessionCandidate();
+        setLegacyCandidate(null);
+        setSessionState('first-visit');
+      } else {
+        setSessionState('legacy-confirmation');
+      }
       throw error;
     }
   }, [legacyCandidate, restoreSignedInUser]);
@@ -987,7 +1036,13 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       const { householdCommands } = await import(
         '@/features/access-household/application/householdCommands'
       );
-      await householdCommands.createWithSelf(householdName.trim(), memberName.trim());
+      const created = await householdCommands.createWithSelf(householdName.trim(), memberName.trim());
+      if (created.initializationStatus === 'failed' || created.initializationStatus === 'pending') {
+        clearSignedInMembershipCache();
+        setSessionError(INITIALIZATION_FAILED_MESSAGE);
+        setSessionState('error');
+        return;
+      }
       await restoreSignedInUser(user);
     } catch (error) {
       setSessionError(errorMessage(error));
@@ -1025,9 +1080,9 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
           '@/platform/pwa/fidEndpointLifecycle'
         );
         await removePwaFidEndpointForLogout();
-      } catch {
-        // 원격 endpoint 정리는 다음 로그인 binding 교체로 수렴시킵니다.
-        // 편의 알림 정리 실패가 로컬 로그아웃을 막지 않습니다.
+      } catch (error) {
+        setSessionError('알림 연결 해제에 실패했습니다. 다시 로그아웃해 주세요.');
+        throw error;
       }
     }
     try {
@@ -1045,7 +1100,15 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       setLegacyCandidate(null);
       setSessionError(null);
       setSessionState('signed-out');
-      await clearPwaRuntimeCaches().catch(() => {});
+      try {
+        await clearPwaRuntimeCaches();
+        if (Platform.isIOSPWA() && logoutError === undefined) {
+          const { completePwaSessionCleanup } = await import('@/platform/pwa/fidEndpointLifecycle');
+          completePwaSessionCleanup();
+        }
+      } catch (error) {
+        logoutError ??= error;
+      }
     }
     if (logoutError) throw logoutError;
   }, [clearResolvedSession]);

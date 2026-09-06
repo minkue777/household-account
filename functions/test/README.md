@@ -16,7 +16,7 @@ npm run test:callable-integration
 - `test/contexts`: 기능 모듈의 Domain·Application 공개 행위를 검증하는 suite
 - `test/architecture`: 요구사항 ID → Canonical 테스트 ID → 테스트 소스 연결, 중복 소유, 미작성 표, 구현 결합, 문서 상대 링크를 검사하는 active gate
 - `test/integration/callable`: 실제 Auth 토큰과 callable HTTP wire를 거쳐 Functions Emulator와 Firestore Emulator까지 연결하는 수직 통합 suite
-- `describe.skip`: 실행·release 근거에서 명시적으로 제외한 suite. 제품 동작 중 의도적으로 제외한 것은 교체 전 PWA 특성화 1개뿐이며, 통합 테스트는 Emulator 환경 변수가 없을 때만 조건부 skip됩니다.
+- Emulator 통합 테스트는 해당 Emulator 환경 변수가 없을 때만 조건부 skip되며 별도 실행 결과가 필요합니다. 활성 계약의 skip은 release 통과 근거가 아닙니다.
 - `test.todo`: 제품 결정이 남아 결과를 고정할 수 없는 단일 시나리오. 현재는 없습니다.
 
 skip과 todo는 통과가 아닙니다. 결과 보고에는 active·skip·todo 개수를 함께 적습니다.
@@ -37,31 +37,11 @@ Messaging을 실행하지 않으므로 Android·PWA 제품 구현 통과 수로 
 릴리스 근거에는 해당 기능의 참고 모델 테스트만 제시할 수 없으며, 대응하는 실제 런타임
 통합 또는 E2E 결과를 함께 제시해야 합니다.
 
-## 현재 상태
+## 현재 검증 상태
 
-2026-07-21 실측 결과입니다. 모든 목표 Context 계약은 실제 Domain/Application 공개 계약에 연결된 Implemented 상태입니다. 일반 `npm test`는 2,299개를 통과하고 Emulator 전용 46개를 환경 조건으로 건너뜁니다. 전용 Emulator 명령에서 이 46개도 모두 통과하므로 활성 release 근거는 총 2,345개입니다.
+실행 개수와 결과는 [전수 감사 수정 상태](../../docs/verification/full-audit-remediation.md)와 CI의 실제 JSON/XML 보고서를 사용합니다. 요구사항·Canonical 테스트 ID 선언 개수는 [자동 카탈로그](../../docs/requirements/catalog-summary.md)에서 별도로 집계합니다.
 
-| 실행 경계 | 활성 파일 | 통과 시나리오 | skip 파일 / 시나리오 |
-|---|---:|---:|---:|
-| Access & Household | 13 | 145 | 0 / 0 |
-| Household Finance | 33 | 250 | 0 / 0 |
-| Notifications | 12 | 108 | 0 / 0 |
-| Payment Capture | 39 | 579 | 0 / 0 |
-| Portfolio | 34 | 245 | 0 / 0 |
-| Android Host | 17 | 186 | 0 / 0 |
-| Delivery Assurance | 3 | 87 | 0 / 0 |
-| External Operations | 9 | 104 | 0 / 0 |
-| Home Preferences | 6 | 48 | 0 / 0 |
-| PWA | 8 | 287 | 1 / 1 |
-| Reporting | 10 | 54 | 0 / 0 |
-| 공통 시스템 계약 | 5 | 45 | 0 / 0 |
-| 공유 wire·운영 계약 | 10 | 35 | 0 / 0 |
-| Architecture Fitness Function | 9 | 33 | 0 / 0 |
-| Adapter·bootstrap·read-side 단위 계약 | 33 | 93 | 0 / 0 |
-| Emulator 전용 통합 | 12 | 46 | 일반 실행에서 12 / 46, 전용 실행에서 0 / 0 |
-| 합계 | 253 | 2,345 | 의도적 legacy 1 / 1 |
-
-목표 Context의 Implemented 범위는 189개 파일·2,138개 시나리오입니다. 유일한 비활성 제품 외 테스트는 [교체 전 PWA `skipWaiting` 동작 특성화](contexts/supporting-platform/pwa/legacy-worker-activation-characterization.contract.test.ts) 1개입니다. 목표 동작은 활성 PWA update 계약이 검증하므로 이 파일은 구현 대기 상태가 아니라 의도적으로 보존한 이력이며 release 통과 근거에는 포함하지 않습니다. `test.todo`는 없습니다.
+교체 전 PWA 특성화 파일은 Subject가 연결되지 않은 비활성 placeholder였으므로 제거했습니다. 열린 입력·controller 보존은 활성 [worker 계약](contexts/supporting-platform/pwa/worker-update-session-isolation.contract.test.ts)과 [실제 production browser E2E](../../web/e2e-pwa/production-runtime.spec.ts)가 검증합니다.
 
 ## 목표 구현 연결
 
@@ -79,4 +59,4 @@ Messaging을 실행하지 않으므로 Android·PWA 제품 구현 통과 수로 
 
 ## 추적성 완료의 의미
 
-모든 요구사항이 Canonical 테스트와 연결되고 모든 테스트 본문이 존재하더라도 목표 계약이 `describe.skip` 상태라면 구현 검증은 완료된 것이 아닙니다. 현재 목표 계약에는 skip이 없으며, 남은 PWA legacy characterization은 목표 합격 기준이 아닙니다. 추적성 gate는 누락 없는 테스트 명세를 보장하고, release 통과 여부는 목표 Input Port에 연결되어 실제로 실행되는 active 테스트만으로 판단합니다.
+모든 요구사항이 Canonical 테스트와 연결되고 모든 테스트 본문이 존재하더라도 목표 계약이 `describe.skip` 상태라면 구현 검증은 완료된 것이 아닙니다. 실행되지 않은 과거 placeholder를 합격 기준으로 유지하지 않습니다. 추적성 gate는 누락 없는 테스트 명세를 보장하고, release 통과 여부는 목표 Input Port에 연결되어 실제로 실행되는 active 테스트만으로 판단합니다.

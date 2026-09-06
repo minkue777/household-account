@@ -30,6 +30,7 @@ export interface PortfolioPositionCommands {
     readonly assetId: string;
     readonly positionKind: PortfolioPositionKind;
     readonly position: unknown;
+    readonly expectedAssetVersion?: number;
   }): Promise<PortfolioCommandResult>;
   updatePosition(input: {
     readonly metadata: PortfolioCommandMetadata;
@@ -38,6 +39,7 @@ export interface PortfolioPositionCommands {
     readonly positionKind: PortfolioPositionKind;
     readonly changes: unknown;
     readonly expectedVersion?: number;
+    readonly expectedAssetVersion?: number;
   }): Promise<PortfolioCommandResult>;
   deletePosition(input: {
     readonly metadata: PortfolioCommandMetadata;
@@ -45,6 +47,7 @@ export interface PortfolioPositionCommands {
     readonly positionId: string;
     readonly positionKind: PortfolioPositionKind;
     readonly expectedVersion?: number;
+    readonly expectedAssetVersion?: number;
   }): Promise<PortfolioCommandResult>;
 }
 
@@ -52,7 +55,7 @@ export function createPortfolioPositionCommands(
   atomic: PortfolioAtomicExecutor,
 ): PortfolioPositionCommands {
   return {
-    async addPosition({ metadata, assetId, positionKind, position }) {
+    async addPosition({ metadata, assetId, positionKind, position, expectedAssetVersion }) {
       if (!POSITION_KINDS.has(positionKind)) {
         return error("UNSUPPORTED_POSITION_KIND");
       }
@@ -71,6 +74,7 @@ export function createPortfolioPositionCommands(
         });
         if (parsed.kind === "error") return noWrite(state, error(parsed.code));
         const currentAsset = state.assets.find((asset) => asset.assetId === assetId)!;
+        if (expectedAssetVersion !== undefined && currentAsset.aggregateVersion !== expectedAssetVersion) return noWrite(state, error("ASSET_VERSION_MISMATCH"));
         const positions = [...state.positions, parsed.value];
         const nextAsset = revalueAsset(
           currentAsset,
@@ -100,7 +104,7 @@ export function createPortfolioPositionCommands(
           ],
           success({ positionId }),
         );
-      });
+      }, { assetId, automationPlans: false });
     },
 
     async updatePosition({
@@ -110,6 +114,7 @@ export function createPortfolioPositionCommands(
       positionKind,
       changes,
       expectedVersion,
+      expectedAssetVersion,
     }) {
       if (!POSITION_KINDS.has(positionKind)) {
         return error("UNSUPPORTED_POSITION_KIND");
@@ -130,6 +135,7 @@ export function createPortfolioPositionCommands(
         );
         const asset = state.assets.find((candidate) => candidate.assetId === assetId);
         if (asset === undefined) return noWrite(state, error("ASSET_NOT_FOUND"));
+        if (expectedAssetVersion !== undefined && asset.aggregateVersion !== expectedAssetVersion) return noWrite(state, error("ASSET_VERSION_MISMATCH"));
         if (asset.lifecycleState !== "active") {
           return noWrite(state, error("ASSET_NOT_ACTIVE"));
         }
@@ -224,7 +230,7 @@ export function createPortfolioPositionCommands(
           ],
           success({}),
         );
-      });
+      }, { assetId, automationPlans: false });
     },
 
     async deletePosition({
@@ -233,6 +239,7 @@ export function createPortfolioPositionCommands(
       positionId,
       positionKind,
       expectedVersion,
+      expectedAssetVersion,
     }) {
       if (!POSITION_KINDS.has(positionKind)) {
         return error("UNSUPPORTED_POSITION_KIND");
@@ -243,6 +250,7 @@ export function createPortfolioPositionCommands(
           (position) => position.positionId === positionId,
         );
         if (asset === undefined) return noWrite(state, error("ASSET_NOT_FOUND"));
+        if (expectedAssetVersion !== undefined && asset.aggregateVersion !== expectedAssetVersion) return noWrite(state, error("ASSET_VERSION_MISMATCH"));
         if (asset.lifecycleState !== "active") {
           return noWrite(state, error("ASSET_NOT_ACTIVE"));
         }
@@ -297,7 +305,7 @@ export function createPortfolioPositionCommands(
           ],
           success({}),
         );
-      });
+      }, { assetId, automationPlans: false });
     },
   };
 }

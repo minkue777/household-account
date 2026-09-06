@@ -156,19 +156,6 @@ function applicationFor(
   return { actor, store, application };
 }
 
-async function existingPlanVersion(
-  store: FirebaseRecurringPlanManagementStore,
-  planIdValue: string,
-): Promise<number> {
-  const state = await store.read();
-  const plan = state.plans.find(
-    (candidate) =>
-      candidate.planId === planIdValue && candidate.lifecycleState === "active",
-  );
-  if (plan === undefined) throw new HouseholdCommandRejection("PLAN_NOT_FOUND");
-  return plan.version;
-}
-
 export function createRecurringHouseholdCommandHandlers(
   database: firestore.Firestore,
 ): ReadonlyMap<string, HouseholdCommandHandler> {
@@ -207,7 +194,7 @@ export function createRecurringHouseholdCommandHandlers(
           const payload = record(context.envelope.payload);
           const changes = record(payload.changes);
           const planIdValue = stringValue(payload, "planId");
-          const { actor, store, application } = applicationFor(database, context);
+          const { actor, application } = applicationFor(database, context);
           const patch: Record<string, unknown> = {};
           if (changes.merchant !== undefined) {
             patch.merchant = stringValue(changes, "merchant");
@@ -237,7 +224,7 @@ export function createRecurringHouseholdCommandHandlers(
               operation: {
                 kind: "update",
                 planId: planIdValue,
-                expectedVersion: await existingPlanVersion(store, planIdValue),
+                expectedVersion: numberValue(payload, "expectedVersion"),
                 patch,
               },
             }),
@@ -252,7 +239,7 @@ export function createRecurringHouseholdCommandHandlers(
         async execute(context) {
           const payload = record(context.envelope.payload);
           const planIdValue = stringValue(payload, "planId");
-          const { actor, store, application } = applicationFor(database, context);
+          const { actor, application } = applicationFor(database, context);
           resultPlan(
             await application.manage({
               commandId: context.envelope.commandId,
@@ -260,7 +247,7 @@ export function createRecurringHouseholdCommandHandlers(
               operation: {
                 kind: "delete",
                 planId: planIdValue,
-                expectedVersion: await existingPlanVersion(store, planIdValue),
+                expectedVersion: numberValue(payload, "expectedVersion"),
               },
             }),
           );

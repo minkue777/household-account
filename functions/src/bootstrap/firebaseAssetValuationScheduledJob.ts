@@ -50,7 +50,7 @@ export const assetValuationDaily = onSchedule(
         }),
       },
     });
-    if (result.status === "FAILED") {
+    if (result.status !== "COMPLETE") {
       throw new Error("ASSET_VALUATION_DAILY_JOB_FAILED");
     }
   },

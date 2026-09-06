@@ -10,13 +10,13 @@ import {
   stableHouseholdId,
 } from "../../adapters/firebase/access/firebaseAccessPersistence";
 import { FirebaseGoogleOnboardingStore } from "../../adapters/firebase/access/firebaseGoogleOnboardingStore";
-import { FirebaseHouseholdLifecycleUnitOfWork } from "../../adapters/firebase/access/firebaseHouseholdLifecycleUnitOfWork";
 import { FirebaseLegacyMembershipStore } from "../../adapters/firebase/access/firebaseLegacyMembershipStore";
+import { legacyMembershipClaimEnabled } from "../../adapters/firebase/access/legacyMembershipClaimConfiguration";
 import { FirebaseMemberRenameStore } from "../../adapters/firebase/access/firebaseMemberRenameStore";
 import { FirebaseCategoryCatalogStore } from "../../adapters/firebase/categories/firebaseCategoryCatalogStore";
 import { createAssetOwnerProfileApplication } from "../../contexts/access/asset-owner-profile/application/assetOwnerProfileApplication";
 import { createGoogleOnboardingApplication } from "../../contexts/access/google-onboarding/application/googleOnboardingApplication";
-import { createHouseholdLifecycleApplication } from "../../contexts/access/household-lifecycle/application/householdLifecycleApplication";
+import { GoogleOnboardingPayloadConflict } from "../../contexts/access/google-onboarding/application/ports/out/googleOnboardingStorePort";
 import { createLegacyMembershipApplication } from "../../contexts/access/legacy-membership/application/legacyMembershipApplication";
 import { createMemberRenameApplication } from "../../contexts/access/member-rename/application/memberRenameApplication";
 import { createCategoryCatalogApplication } from "../../contexts/household-finance/categories-budget/application/categoryCatalogApplication";
@@ -64,9 +64,9 @@ function defaultCategoryInitializer(
 ) {
   return {
     async initialize(householdId: string) {
-      const commandId =
-        `${context.envelope.commandId}:initialize-default-categories`;
+      const commandId = stableAccessId("initialize-default-categories", householdId);
       const store = new FirebaseCategoryCatalogStore(database, {
+        requireActiveHousehold: true,
         householdId,
         principalUid: context.principalUid,
         commandId,
@@ -120,6 +120,7 @@ export function createAccessHouseholdCommandHandlers(
       "access.claim-legacy-membership.v1",
       {
         async execute(context) {
+          if (!legacyMembershipClaimEnabled()) throw new HouseholdCommandRejection("LEGACY_CLAIM_DISABLED");
           const payload = payloadRecord(context.envelope.payload);
           const householdKey = requiredString(
             payload.legacyHouseholdId,
@@ -178,6 +179,7 @@ export function createAccessHouseholdCommandHandlers(
     [
       "access.create-household-with-self.v1",
       {
+        idempotencyBoundary: "domain-idempotency-key",
         async execute(context) {
           const payload = payloadRecord(context.envelope.payload);
           const householdName = requiredString(
@@ -231,7 +233,12 @@ export function createAccessHouseholdCommandHandlers(
               selfDisplayName: memberName,
               idempotencyKey: context.envelope.idempotencyKey,
             },
-          );
+          ).catch((error: unknown) => {
+            if (error instanceof GoogleOnboardingPayloadConflict) {
+              throw new HouseholdCommandRejection("IDEMPOTENCY_PAYLOAD_MISMATCH");
+            }
+            throw error;
+          });
           if (result.kind === "success") {
             return {
               householdId: result.householdId,
@@ -240,6 +247,37 @@ export function createAccessHouseholdCommandHandlers(
             };
           }
           return rejectDomainResult(result, "HOUSEHOLD_CREATE_FAILED");
+        },
+      },
+    ],
+    [
+      "access.retry-household-initialization.v1",
+      {
+        idempotencyBoundary: "domain-idempotency-key",
+        async execute(context) {
+          if (context.actor === undefined) throw new HouseholdCommandRejection("HOUSEHOLD_REQUIRED");
+          const payload = payloadRecord(context.envelope.payload);
+          if (Object.keys(payload).length !== 0) throw new HouseholdCommandRejection("INVALID_PAYLOAD");
+          const household = database.collection("households").doc(context.actor.householdId);
+          const data = (await household.get()).data();
+          if (!data || (data.lifecycleState ?? "active") !== "active" || data.deletedAt != null) {
+            throw new HouseholdCommandRejection("HOUSEHOLD_NOT_ACTIVE");
+          }
+          // 구형 가구는 별도 초기화 상태가 없으며 기존 카탈로그를 보존합니다.
+          if (data.initializationStatus == null || data.initializationStatus === "completed") {
+            return { initializationStatus: "completed" };
+          }
+          const observedStatus = await defaultCategoryInitializer(database, context)
+            .initialize(context.actor.householdId);
+          return database.runTransaction(async transaction => {
+            const current = (await transaction.get(household)).data();
+            if (!current || (current.lifecycleState ?? "active") !== "active" || current.deletedAt != null) {
+              throw new HouseholdCommandRejection("HOUSEHOLD_NOT_ACTIVE");
+            }
+            const initializationStatus = current.initializationStatus === "completed" ? "completed" : observedStatus;
+            if (current.initializationStatus !== initializationStatus) transaction.update(household, { initializationStatus });
+            return { initializationStatus };
+          });
         },
       },
     ],
@@ -546,80 +584,6 @@ export function createAccessHouseholdCommandHandlers(
       },
     ],
     [
-      "access.request-household-deletion.v1",
-      {
-        async execute(context) {
-          if (context.actor === undefined) {
-            throw new HouseholdCommandRejection("HOUSEHOLD_DELETE_REQUIRED");
-          }
-          const payload = payloadRecord(context.envelope.payload);
-          const reason = optionalString(payload.reason) ?? "user-requested";
-          let expectedVersion = payload.expectedVersion;
-          if (expectedVersion === undefined) {
-            const household = await database
-              .collection("households")
-              .doc(context.actor.householdId)
-              .get();
-            if (!household.exists) {
-              throw new HouseholdCommandRejection("HOUSEHOLD_NOT_FOUND");
-            }
-            expectedVersion =
-              typeof household.data()?.aggregateVersion === "number"
-                ? household.data()?.aggregateVersion
-                : 1;
-          }
-          const validatedVersion = requiredNumber(
-            expectedVersion,
-            "EXPECTED_VERSION_REQUIRED",
-          );
-          const application = createHouseholdLifecycleApplication({
-            unitOfWork: new FirebaseHouseholdLifecycleUnitOfWork(database, {
-              householdId: context.actor.householdId,
-              principalUid: context.actor.principalUid,
-              idempotencyKey: context.envelope.idempotencyKey,
-              requestedAt: context.requestedAt,
-              commandId: context.envelope.commandId,
-            }),
-            clock: { now: () => context.requestedAt },
-            identities: {
-              nextPurgeProcessId: (idempotencyKey) =>
-                stableAccessId("purge", context.actor?.householdId ?? "", idempotencyKey),
-            },
-            hash: { hashSensitiveReference: sha256 },
-          });
-          const lifecycleCapabilities = context.actor.capabilities.filter(
-            (
-              capability,
-            ): capability is
-              | "household.delete"
-              | "household.restore"
-              | "household.purge.permanent"
-              | "household.purge.read" =>
-              capability === "household.delete" ||
-              capability === "household.restore" ||
-              capability === "household.purge.permanent" ||
-              capability === "household.purge.read",
-          );
-          const result = await application.requestHouseholdDeletion(
-            {
-              principalRef: context.actor.principalUid,
-              capabilities: lifecycleCapabilities,
-            },
-            {
-              householdId: context.actor.householdId,
-              reason,
-              expectedVersion: validatedVersion,
-              idempotencyKey: context.envelope.idempotencyKey,
-            },
-          );
-          if (result.kind === "success" || result.kind === "already-processed") {
-            return {};
-          }
-          return rejectDomainResult(result, "HOUSEHOLD_DELETE_FAILED");
-        },
-      },
-    ],
-    [
       "access.rename-self.v1",
       {
         async execute(context) {
@@ -633,6 +597,11 @@ export function createAccessHouseholdCommandHandlers(
               context.actor.householdId,
               context.requestedAt,
               context.envelope.commandId,
+              {
+                principalUid: context.principalUid,
+                memberId: context.actor.actingMemberId,
+                idempotencyKey: context.envelope.idempotencyKey,
+              },
             ),
           });
           const result = await application.renameSelf(

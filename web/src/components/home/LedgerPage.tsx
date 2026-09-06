@@ -7,7 +7,7 @@ import CategorySummary from '@/components/CategorySummary';
 import CategoryDetailModal from '@/components/CategoryDetailModal';
 import LocalCurrencyModal from '@/components/LocalCurrencyModal';
 import { Expense, Category, TransactionType } from '@/types/expense';
-import { DEFAULT_HOME_SUMMARY_CONFIG } from '@/types/household';
+import { useHomePreferences } from '@/features/home-preferences/homePreferences';
 import BalanceCards from '@/components/BalanceCards';
 import HomeHeader from '@/components/HomeHeader';
 import AddExpenseModal from '@/components/expense/AddExpenseModal';
@@ -15,6 +15,7 @@ import ExpenseDetail from '@/components/expense/ExpenseDetail';
 import IncomeSummaryModal from '@/components/expense/IncomeSummaryModal';
 import SearchModal from '@/components/search/SearchModal';
 import type { SplitItem } from '@/lib/expenseService';
+import { getSeoulCalendarParts } from '@/lib/utils/date';
 import { orderLedgerTransactions } from '@/features/ledger/domain/ledgerTransactionOrder';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { useCategoryContext } from '@/contexts/CategoryContext';
@@ -42,13 +43,15 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   const {
     isLoading: categoriesLoading,
     serverSnapshotReady: categoriesServerSnapshotReady,
+    readError: categoriesError,
   } = useCategoryContext();
 
-  const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
-  const [currentMonth, setCurrentMonth] = useState(() => new Date().getMonth() + 1);
+  const [currentYear, setCurrentYear] = useState(() => getSeoulCalendarParts().year);
+  const [currentMonth, setCurrentMonth] = useState(() => getSeoulCalendarParts().month);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [yearlyExpenses, setYearlyExpenses] = useState<Expense[]>([]);
   const [yearlyTotal, setYearlyTotal] = useState<number | null>(null);
+  const [yearlyError, setYearlyError] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
@@ -73,7 +76,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     transactionType,
   });
 
-  const homeSummaryConfig = household?.homeSummaryConfig || DEFAULT_HOME_SUMMARY_CONFIG;
+  const { configuration: homeSummaryConfig } = useHomePreferences();
   const needsYearlyTotal =
     isIncome ||
     homeSummaryConfig.leftCard === 'yearlySpent' ||
@@ -101,7 +104,8 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   useLayoutEffect(() => {
     setYearlyExpenses([]);
     setYearlyTotal(null);
-  }, [currentYear, transactionType]);
+    setYearlyError(false);
+  }, [currentYear, transactionType, householdKey]);
 
   useEffect(() => {
     if (!serverSnapshotReady) return undefined;
@@ -186,6 +190,8 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
         startDate,
         endDate,
         (yearExpenses) => {
+          if (cancelled) return;
+          setYearlyError(false);
           setYearlyExpenses(yearExpenses);
           setYearlyTotal(yearExpenses.reduce((sum, expense) => sum + expense.amount, 0));
         },
@@ -193,10 +199,10 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
           transactionType,
           // 실패를 유효한 0원으로 축약하지 않습니다. 같은 연도의 마지막 성공값이
           // 있으면 유지하고, 아직 성공값이 없으면 null 상태를 그대로 표시합니다.
-          onError: () => undefined,
+          onError: () => { if (!cancelled) setYearlyError(true); },
         }
       );
-    }).catch(() => {});
+    }).catch(() => { if (!cancelled) setYearlyError(true); });
 
     return () => {
       cancelled = true;
@@ -204,6 +210,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     };
   }, [
     currentYear,
+    householdKey,
     isSessionVerified,
     needsYearlyTotal,
     readRefreshKey,
@@ -309,24 +316,16 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
 
   const handleExpenseUpdate = async (
     expenseId: string,
-    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string }
+    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string },
+    expectedVersion?: number,
+    rememberForNextTime = false
   ) => {
     const expense = expenses.find((item) => item.id === expenseId)
       ?? yearlyExpenses.find((item) => item.id === expenseId);
-    if (!expense) throw new Error('수정할 거래의 최신 버전을 찾을 수 없습니다.');
+    const version = expectedVersion ?? expense?.aggregateVersion;
+    if (version === undefined) throw new Error('수정할 거래의 최신 버전을 찾을 수 없습니다.');
     const { updateExpense } = await import('@/lib/expenseService');
-    await updateExpense(expenseId, data, expense.aggregateVersion);
-  };
-
-  const handleSaveMerchantRule = async (merchantName: string, category: string) => {
-    if (isIncome) {
-      return;
-    }
-
-    if (!householdKey) throw new Error('인증된 가구 세션이 필요합니다.');
-    const householdId = householdKey;
-    const { addMerchantRule } = await import('@/lib/merchantRuleService');
-    await addMerchantRule(householdId, merchantName, category, true);
+    await updateExpense(expenseId, data, version, rememberForNextTime);
   };
 
   const handleAddExpense = async (
@@ -347,12 +346,13 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     await addManualExpense(merchant, amount, category, date, memo, transactionType);
   };
 
-  const handleDeleteExpense = async (expenseId: string) => {
+  const handleDeleteExpense = async (expenseId: string, expectedVersion?: number) => {
     const expense = expenses.find((item) => item.id === expenseId)
       ?? yearlyExpenses.find((item) => item.id === expenseId);
-    if (!expense) throw new Error('삭제할 거래의 최신 버전을 찾을 수 없습니다.');
+    const version = expectedVersion ?? expense?.aggregateVersion;
+    if (version === undefined) throw new Error('삭제할 거래의 최신 버전을 찾을 수 없습니다.');
     const { deleteExpense } = await import('@/lib/expenseService');
-    await deleteExpense(expenseId, expense.aggregateVersion);
+    await deleteExpense(expenseId, version);
   };
 
   const handleSplitExpense = async (expense: Expense, splits: SplitItem[]) => {
@@ -419,6 +419,11 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
             localCurrencyBalance={localCurrencyBalance}
             ledgerReady={serverSnapshotReady}
             categoriesReady={!categoriesLoading}
+            localCurrencyReady={localCurrencyReady}
+            sourceErrors={{ monthlySpent: readError != null, monthlyIncome: readError != null,
+              monthlyRemainingBudget: readError != null || categoriesError != null,
+              yearlySpent: yearlyError, yearlyIncome: yearlyError,
+              localCurrencyBalance: localCurrencySettled && !localCurrencyReady }}
             className={isIncome
               ? 'order-1'
               : 'order-1 lg:col-span-3 lg:col-start-2 lg:row-start-1'}
@@ -456,7 +461,6 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
                 date={selectedDate}
                 expenses={selectedDateExpenses}
                 onExpenseUpdate={handleExpenseUpdate}
-                onSaveMerchantRule={isIncome ? undefined : handleSaveMerchantRule}
                 onDelete={handleDeleteExpense}
                 onAddExpense={() => setShowAddModal(true)}
                 onSplitExpense={handleSplitExpense}

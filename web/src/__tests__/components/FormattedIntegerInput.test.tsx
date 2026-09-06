@@ -33,7 +33,7 @@ describe('FormattedIntegerInput', () => {
   test('맨 앞 숫자를 지우고 입력해도 커서가 끝으로 이동하지 않는다', async () => {
     const user = userEvent.setup();
     render(<Subject />);
-    const input = screen.getByRole('textbox', { name: '현재 잔액' });
+    const input = screen.getByRole<HTMLInputElement>('textbox', { name: '현재 잔액' });
 
     input.focus();
     input.setSelectionRange(1, 1);

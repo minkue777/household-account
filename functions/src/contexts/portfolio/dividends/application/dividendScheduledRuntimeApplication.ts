@@ -88,6 +88,7 @@ export function createDividendScheduledRuntimeApplication(
 ) {
   return {
     async runDiscoveryPage(input: {
+      readonly skipTarget?: (targetId: string) => boolean;
       readonly cursor?: string;
       readonly limit: number;
       readonly concurrency: number;
@@ -105,7 +106,7 @@ export function createDividendScheduledRuntimeApplication(
         Promise<KindDividendDiscoveryResult>
       >();
       const items = await boundedMap(
-        page.items,
+        page.items.filter(target => input.skipTarget?.(target.targetId) !== true),
         input.concurrency,
         async (target): Promise<DividendScheduledTargetOutcome> => {
           let discovery = byInstrument.get(target.instrument.code);
@@ -143,12 +144,35 @@ export function createDividendScheduledRuntimeApplication(
 
           const changedEventIds: string[] = [];
           for (const disclosure of result.disclosures) {
+            const existing = await dependencies.events.findAnnouncement({ target, disclosure });
+            let correction;
+            if (existing?.status === "fixed" && disclosure.disclosureState === "active" &&
+                (existing.recordDate !== disclosure.recordDate || existing.perShareAmount !== disclosure.perShareAmount)) {
+              try {
+                const observations = await dependencies.holdings.listPositionHistory({
+                  householdId: target.householdId,
+                  sourceAssetIds: [...new Set([...existing.sourceAssetIds, ...target.sourceAssetIds])],
+                  instrumentCode: disclosure.instrumentCode,
+                });
+                const selected = selectNearestPositionSnapshots({ instrumentCode: disclosure.instrumentCode, recordDate: disclosure.recordDate, snapshots: observations });
+                if (selected.length === 0) return { targetId: target.targetId, kind: "failed", code: "POSITION_HISTORY_NOT_OBSERVED", retryable: true };
+                correction = {
+                  expectedVersion: existing.aggregateVersion,
+                  eligibleQuantity: selected.reduce((sum, item) => sum + item.quantity, 0),
+                  evidence: selected.map((item): DividendLifecycleEvidence => ({ ...item, selectionKind: item.snapshotDate === disclosure.recordDate ? "exact" : "nearest" })),
+                };
+              } catch {
+                return { targetId: target.targetId, kind: "failed", code: "POSITION_HISTORY_READ_FAILED", retryable: true };
+              }
+            }
             const upsert = await dependencies.events.upsertAnnouncement({
               target,
               disclosure,
               observedAt: input.observedAt,
               idempotencyKey: `${input.executionKey}:discovery:${target.targetId}:${disclosure.sourceDisclosureId}`,
+              ...(correction === undefined ? {} : { correction }),
             });
+            if (upsert.kind === "retryable-failure") return { targetId: target.targetId, kind: "failed", code: upsert.code, retryable: true };
             if (
               upsert.kind === "created" ||
               upsert.kind === "changed" ||
@@ -173,6 +197,7 @@ export function createDividendScheduledRuntimeApplication(
     },
 
     async runLifecyclePage(input: {
+      readonly skipTarget?: (targetId: string) => boolean;
       readonly cursor?: string;
       readonly limit: number;
       readonly executionKey: string;
@@ -185,6 +210,7 @@ export function createDividendScheduledRuntimeApplication(
       });
       const items: DividendScheduledTargetOutcome[] = [];
       for (const event of page.items) {
+        if (input.skipTarget?.(`event:${event.eventId}`) === true) continue;
         if (event.status === "fixed") {
           if (input.asOfDate < event.paymentDate) {
             items.push({

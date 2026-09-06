@@ -4,11 +4,11 @@ export interface ReconciliableDeliveryRecord {
   deliveryId: string;
   householdId: string;
   endpointId: string;
-  status: "sending" | Extract<DeliveryTerminalStatus, "unknown-provider-outcome">;
-  providerAttemptCount: 1;
-  providerAttemptStartedAt: string;
-  providerOutcomeCommitted: boolean;
-  errorCode?: "WORKER_INTERRUPTED_AFTER_PROVIDER_CALL";
+  status: "sending" | DeliveryTerminalStatus;
+  providerAttemptCount: 0 | 1;
+  providerAttemptStartedAt?: string;
+  providerOutcomeCommitted?: boolean;
+  errorCode?: string;
   terminalAt?: string;
   expiresAt?: string;
 }

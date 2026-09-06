@@ -10,6 +10,7 @@ import type {
   AdminHouseholdState,
 } from "../../../contexts/access/admin-household-console/domain/model/adminHousehold";
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
+import { writeHouseholdClaimLifecycle } from "./firebaseHouseholdClaimLifecycle";
 import {
   ACCESS_SCHEMA_VERSION,
   accessEventId,
@@ -27,12 +28,14 @@ export interface FirebaseAdminHouseholdStoreInput {
   readonly payloadFingerprint: string;
   readonly requestedAt: string;
   readonly commandId: string;
+  readonly householdId?: string;
 }
 
 function mapHousehold(
-  snapshot: firestore.QueryDocumentSnapshot,
+  snapshot: firestore.DocumentSnapshot,
 ): AdminHousehold | undefined {
   const data = snapshot.data();
+  if (data === undefined) return undefined;
   const name = stringField(data, "name");
   if (name === undefined) return undefined;
   const lifecycle =
@@ -68,6 +71,12 @@ export class FirebaseAdminHouseholdStore implements AdminHouseholdStorePort {
     transaction?: firestore.Transaction,
   ): Promise<AdminHouseholdState> {
     const query = this.database.collection("households");
+    if (this.input.householdId !== undefined) {
+      const reference = query.doc(this.input.householdId);
+      const document = transaction === undefined ? await reference.get() : await transaction.get(reference);
+      const household = mapHousehold(document);
+      return { households: household === undefined ? [] : [household], events: [] };
+    }
     const snapshot =
       transaction === undefined
         ? await query.get()
@@ -108,6 +117,15 @@ export class FirebaseAdminHouseholdStore implements AdminHouseholdStorePort {
       const previousById = new Map(
         current.households.map((household) => [household.householdId, household]),
       );
+      const lifecycleChanges = mutation.state.households.filter((household) => {
+        const previous = previousById.get(household.householdId);
+        return previous !== undefined && previous.lifecycleState !== household.lifecycleState;
+      });
+      const claimsByHousehold = new Map(await Promise.all(lifecycleChanges.map(async (household) => [
+        household.householdId,
+        await transaction.get(this.database.collection("principalMembershipClaims")
+          .where("householdId", "==", household.householdId)),
+      ] as const)));
 
       for (const household of mutation.state.households) {
         const reference = this.database
@@ -129,6 +147,8 @@ export class FirebaseAdminHouseholdStore implements AdminHouseholdStorePort {
           continue;
         }
         if (!changed(previous, household)) continue;
+        const claims = claimsByHousehold.get(household.householdId);
+        if (claims !== undefined) writeHouseholdClaimLifecycle(transaction, claims, household.lifecycleState);
         transaction.set(
           reference,
           {

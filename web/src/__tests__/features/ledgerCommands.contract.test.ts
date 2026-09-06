@@ -9,6 +9,14 @@ import { ledgerCommands } from '@/features/ledger/application/ledgerCommands';
 describe('Ledger Web command DTO', () => {
   beforeEach(() => execute.mockReset());
 
+  test('[MER-005] 거래 수정과 기억 선택은 동일 command payload에 포함한다', async () => {
+    await ledgerCommands.update('household-1', 'expense-1', 7, { category: 'food' }, true);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledWith('ledger.update-transaction.v1', {
+      transactionId: 'expense-1', expectedVersion: 7, patch: { categoryId: 'food' }, rememberForNextTime: true,
+    }, { householdId: 'household-1' });
+  });
+
   test('update는 UI/서버 관리 필드를 버리고 허용된 canonical patch만 보낸다', async () => {
     execute.mockResolvedValue({});
 

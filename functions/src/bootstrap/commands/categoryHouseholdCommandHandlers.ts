@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import type * as firestore from "firebase-admin/firestore";
 
 import { FirebaseCategoryCatalogStore } from "../../adapters/firebase/categories/firebaseCategoryCatalogStore";
+import { createFirebaseRecurringCategoryRemapper } from "../../adapters/firebase/recurring/firebaseRecurringCategoryRemapper";
+import { createFirebaseMerchantRuleCategoryRemapper } from "../../adapters/firebase/payment-configuration/firebaseMerchantRuleCategoryRemapper";
 import { createCategoryCatalogApplication } from "../../contexts/household-finance/categories-budget/application/categoryCatalogApplication";
 import type { CategoryResult } from "../../contexts/household-finance/categories-budget/application/ports/in/categoryCatalogInputPort";
 import type { CategoryCatalog } from "../../contexts/household-finance/categories-budget/domain/model/categoryCatalog";
@@ -32,6 +34,12 @@ function budgetValue(value: unknown): number | null {
   if (typeof value !== "number") {
     throw new HouseholdCommandRejection("BUDGET_INVALID");
   }
+  return value;
+}
+
+function expectedVersion(payload: Record<string, unknown>, field = "expectedVersion"): number {
+  const value = payload[field];
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < (field === "expectedCatalogVersion" ? 0 : 1)) throw new HouseholdCommandRejection("EXPECTED_VERSION_REQUIRED");
   return value;
 }
 
@@ -87,12 +95,8 @@ function applicationFor(
         archiveProcessId: (commandKey) => stableId("category-archive", commandKey),
       },
       referenceRemapper: {
-        async remapRecurringReferences() {
-          return { kind: "retryable-failure" as const, code: "ARCHIVE_WORKER_REQUIRED" };
-        },
-        async remapMerchantRuleReferences() {
-          return { kind: "retryable-failure" as const, code: "ARCHIVE_WORKER_REQUIRED" };
-        },
+        ...createFirebaseRecurringCategoryRemapper(database, verifiedActor.householdId),
+        ...createFirebaseMerchantRuleCategoryRemapper(database, verifiedActor.householdId),
       },
     }),
   };
@@ -191,7 +195,7 @@ export function createCategoryHouseholdCommandHandlers(
             await application.updateCategory({
               commandKey: context.envelope.commandId,
               categoryId: category.categoryId,
-              expectedVersion: category.version,
+              expectedVersion: expectedVersion(payload),
               name:
                 changes.label === undefined
                   ? category.name
@@ -223,13 +227,15 @@ export function createCategoryHouseholdCommandHandlers(
             store,
             stringValue(payload, "categoryId"),
           );
-          resultValue(
-            await application.archiveCategory({
+          const archive = await application.archiveCategory({
               commandKey: context.envelope.commandId,
               categoryId: category.categoryId,
-              expectedVersion: category.version,
-            }),
-          );
+              expectedVersion: expectedVersion(payload),
+            });
+          if (archive.kind === "accepted") {
+            const completion = applicationFor(database, { ...context, envelope: { ...context.envelope, commandId: `${context.envelope.commandId}:complete` } }).application;
+            resultValue(await completion.completeArchive(archive.processId));
+          } else resultValue(archive);
           return {};
         },
       },
@@ -251,7 +257,7 @@ export function createCategoryHouseholdCommandHandlers(
             await application.updateCategory({
               commandKey: context.envelope.commandId,
               categoryId: category.categoryId,
-              expectedVersion: category.version,
+              expectedVersion: expectedVersion(payload),
               name: category.name,
               color: category.color,
               budgetInWon: budgetValue(payload.budget),
@@ -305,7 +311,7 @@ export function createCategoryHouseholdCommandHandlers(
           resultValue(
             await application.reorder({
               commandKey: context.envelope.commandId,
-              expectedCatalogVersion: catalog.catalogVersion,
+              expectedCatalogVersion: expectedVersion(payload, "expectedCatalogVersion"),
               orderedCategoryIds,
             }),
           );
@@ -329,6 +335,7 @@ export function createCategoryHouseholdCommandHandlers(
             await application.setDefault({
               commandKey: context.envelope.commandId,
               categoryId: category.categoryId,
+              expectedCatalogVersion: expectedVersion(payload, "expectedCatalogVersion"),
             }),
           );
           return {};

@@ -23,10 +23,10 @@ object NativeMembershipResolver {
     private val mutex = Mutex()
 
     /** 같은 Native Firebase principal로 서버가 함께 반환한 해석 결과를 mirror에 반영합니다. */
-    fun acceptAuthoritative(
+    suspend fun acceptAuthoritative(
         context: Context,
         rawValue: Map<String, Any?>
-    ): NativeMembershipResolution = decodeAndPersist(context, rawValue)
+    ): NativeMembershipResolution = mutex.withLock { decodeAndPersist(context, rawValue) }
 
     suspend fun refresh(context: Context): NativeMembershipResolution = mutex.withLock {
         val result = CallableHouseholdCommandClient(
@@ -51,11 +51,14 @@ object NativeMembershipResolver {
         }
     }
 
-    private fun decodeAndPersist(context: Context, rawValue: Any?): NativeMembershipResolution {
+    private suspend fun decodeAndPersist(context: Context, rawValue: Any?): NativeMembershipResolution {
         val value = rawValue as? Map<*, *>
             ?: return NativeMembershipResolution.Failed("MEMBERSHIP_RESPONSE_INVALID", false)
         return when (value["kind"]?.toString()) {
-            "first-visit-required" -> NativeMembershipResolution.FirstVisit
+            "first-visit-required" -> {
+                HouseholdPreferences.clearHouseholdKey(context.applicationContext)
+                NativeMembershipResolution.FirstVisit
+            }
             "membership-found" -> {
                 val membership = value["membership"] as? Map<*, *>
                     ?: return NativeMembershipResolution.Failed("MEMBERSHIP_RESPONSE_INVALID", false)

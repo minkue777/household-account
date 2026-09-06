@@ -1,5 +1,6 @@
 import java.io.FileInputStream
 import java.util.Properties
+import java.net.URI
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -17,6 +18,17 @@ val keystoreProperties = Properties().apply {
 val googleWebClientId = providers.gradleProperty("GOOGLE_WEB_CLIENT_ID")
     .orElse(providers.environmentVariable("GOOGLE_WEB_CLIENT_ID"))
     .getOrElse("")
+val webEnvironmentVersion = providers.gradleProperty("WEB_ENVIRONMENT_VERSION")
+    .orElse(providers.environmentVariable("WEB_ENVIRONMENT_VERSION")).getOrElse("production-v1")
+val webAppUrl = providers.gradleProperty("WEB_APP_URL")
+    .orElse(providers.environmentVariable("WEB_APP_URL"))
+    .getOrElse("https://household-account-app-demo-v1.vercel.app/")
+require(webEnvironmentVersion.matches(Regex("[A-Za-z0-9._-]{1,64}")))
+val webAppUri = URI(webAppUrl)
+require(webAppUri.scheme == "https" && !webAppUri.host.isNullOrBlank() &&
+    webAppUri.userInfo == null && webAppUri.fragment == null && webAppUri.query == null) {
+    "WEB_APP_URL must be an HTTPS deployment URL without credentials, query or fragment"
+}
 
 android {
     namespace = "com.household.account"
@@ -26,10 +38,12 @@ android {
         applicationId = "com.household.account"
         minSdk = 26
         targetSdk = 34
-        versionCode = 23
-        versionName = "1.2.21"
+        versionCode = 24
+        versionName = "1.2.22"
 
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
+        buildConfigField("String", "WEB_ENVIRONMENT_VERSION", "\"$webEnvironmentVersion\"")
+        buildConfigField("String", "WEB_APP_URL", "\"$webAppUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

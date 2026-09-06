@@ -13,6 +13,7 @@ import type {
   PortfolioRuntimeEvent,
   PortfolioRuntimeMutation,
   PortfolioRuntimeState,
+  PortfolioRuntimeReadScope,
 } from "./ports/out/portfolioRuntimeStorePort";
 
 const ASSET_TYPES = new Set<AssetType>([
@@ -58,6 +59,7 @@ export type ParseResult<T> =
 export type PortfolioAtomicExecutor = (
   metadata: PortfolioCommandMetadata,
   decide: (state: PortfolioRuntimeState) => PortfolioRuntimeMutation,
+  scope?: PortfolioRuntimeReadScope,
 ) => Promise<PortfolioCommandResult>;
 
 export function success(

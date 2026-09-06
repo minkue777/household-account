@@ -77,4 +77,8 @@ internal class QuickEditCommandDeliveryLifecycle {
     suspend fun <T> runExclusive(block: suspend () -> T): T = mutex.withLock {
         block()
     }
+
+    suspend fun resumeAfterFailedTransition(scope: CaptureSessionScope) = mutex.withLock {
+        if (blockedScope == scope) blockedScope = null
+    }
 }

@@ -62,15 +62,7 @@ export function subscribeToLocalCurrencyBalance(
   };
 
   const emitCanonicalSelection = () => {
-    if (!balancesLoaded) return;
-
-    if (balances.size <= 1) {
-      callback(balances.values().next().value ?? null);
-      return;
-    }
-
-    ensurePreferenceSubscription();
-    if (!preferenceLoaded) return;
+    if (!balancesLoaded || !preferenceLoaded) return;
 
     if (selectedType !== undefined) {
       callback(balances.get(selectedType) ?? null);
@@ -80,6 +72,7 @@ export function subscribeToLocalCurrencyBalance(
     callback(null);
   };
 
+  ensurePreferenceSubscription();
   const balancesReference = collection(
     db,
     'households',

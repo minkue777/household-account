@@ -1,6 +1,7 @@
 // 정기 지출 (매월 자동 등록)
 export interface RecurringExpense {
   id: string;
+  aggregateVersion?: number;
   householdId: string;
   merchant: string;           // 가맹점명
   amount: number;             // 금액

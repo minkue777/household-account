@@ -7,6 +7,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.await
 import com.household.account.quickedit.QuickEditCoordinator
 import com.household.account.server.FirebaseAuthenticatedCallableGateway
 import com.household.account.session.NativeMembershipResolution
@@ -127,10 +128,20 @@ object AndroidCaptureDelivery {
         return outcome
     }
 
-    suspend fun purgeForSessionTransition(context: Context) {
-        queue(context).purgeForSessionTransition()
-        QuickEditCoordinator.purgeForSessionTransition(context)
-        WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+    suspend fun purgeForSessionTransition(context: Context, previousScope: CaptureSessionScope? = currentScope(context)) {
+        try {
+            queue(context).purgeForSessionTransition(previousScope)
+            QuickEditCoordinator.purgeForSessionTransition(context, previousScope)
+            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME).await()
+        } catch (error: Exception) {
+            // The mirror retains the previous actor on failure, so its local input must
+            // also remain usable. A successful transition keeps the old generation blocked.
+            previousScope?.let { scope ->
+                queue(context).resumeAfterFailedTransition(scope)
+                QuickEditCoordinator.resumeAfterFailedTransition(context, scope)
+            }
+            throw error
+        }
     }
 
     fun scheduleRetry(context: Context) {
@@ -160,11 +171,7 @@ object AndroidCaptureDelivery {
         )
     }
 
-    private fun currentScope(context: Context) = CaptureSessionScope(
-        householdId = HouseholdPreferences.getHouseholdKey(context),
-        memberId = HouseholdPreferences.getMemberId(context),
-        sessionGeneration = HouseholdPreferences.getSessionGeneration(context)
-    )
+    private fun currentScope(context: Context) = HouseholdPreferences.currentScope(context)
 
     private suspend fun resolveScope(context: Context): CaptureSessionScope {
         val current = currentScope(context)

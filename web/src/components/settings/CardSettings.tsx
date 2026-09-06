@@ -29,6 +29,8 @@ interface CardItem {
   cardLabel: string;
   cardLastFour: string;
   orderIndex?: number;
+  version: number;
+  collectionVersion: number;
 }
 
 type CardTab = 'credit' | 'local' | 'simple';
@@ -290,6 +292,8 @@ export default function CardSettings({
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [editingCardVersion, setEditingCardVersion] = useState(1);
+  const [pendingDeleteVersion, setPendingDeleteVersion] = useState(1);
   const [detailCardLastFour, setDetailCardLastFour] = useState('');
   const [isSavingDetail, setIsSavingDetail] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -298,7 +302,7 @@ export default function CardSettings({
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const cardsRef = useRef<CardItem[]>([]);
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dragStateRef = useRef<{ cardId: string; active: boolean } | null>(null);
+  const dragStateRef = useRef<{ cardId: string; active: boolean; collectionVersion: number } | null>(null);
   const dragUnsubscribeRef = useRef<(() => void) | null>(null);
   const lastDragEndRef = useRef(0);
 
@@ -319,6 +323,8 @@ export default function CardSettings({
             cardLabel: card.cardLabel,
             cardLastFour: card.cardLastFour,
             orderIndex: card.orderIndex,
+            version: card.version ?? 1,
+            collectionVersion: card.collectionVersion ?? 0,
           }))
         );
         setLoadError('');
@@ -344,7 +350,7 @@ export default function CardSettings({
       return;
     }
 
-    void updateRegisteredCardOrder(cards.map((card) => card.id));
+    void updateRegisteredCardOrder(cards.map((card) => card.id), cards[0].collectionVersion).catch(() => setLoadError('카드 순서를 저장하지 못했습니다. 목록을 확인해 주세요.'));
   }, [cards, householdId, ownerMemberId, ownerName]);
 
   const hidesCardNumber = useMemo(
@@ -382,17 +388,6 @@ export default function CardSettings({
   useEffect(() => {
     setFormError('');
   }, [selectedLabel, cardLastFour]);
-
-  useEffect(() => {
-    if (!selectedCard) {
-      setDetailCardLastFour('');
-      setDetailError('');
-      return;
-    }
-
-    setDetailCardLastFour(selectedCard.cardLastFour);
-    setDetailError('');
-  }, [selectedCard]);
 
   useEffect(() => {
     if (detailHidesCardNumber) {
@@ -436,6 +431,7 @@ export default function CardSettings({
     try {
       const updated = await updateRegisteredCard({
         cardId: selectedCard.id,
+        expectedVersion: editingCardVersion,
         householdId,
         owner: ownerName,
         cardLabel: selectedCard.cardLabel,
@@ -461,7 +457,7 @@ export default function CardSettings({
       return;
     }
 
-    await deleteRegisteredCard(pendingDeleteId);
+    await deleteRegisteredCard(pendingDeleteId, pendingDeleteVersion);
 
     if (selectedCardId === pendingDeleteId) {
       setSelectedCardId(null);
@@ -491,12 +487,14 @@ export default function CardSettings({
       return;
     }
 
+    const expectedCollectionVersion = dragStateRef.current.collectionVersion;
     dragStateRef.current = null;
     setDraggingCardId(null);
     lastDragEndRef.current = Date.now();
 
     if (householdId && ownerName) {
-      await updateRegisteredCardOrder(cardsRef.current.map((card) => card.id));
+      try { await updateRegisteredCardOrder(cardsRef.current.map((card) => card.id), expectedCollectionVersion); }
+      catch (error) { setLoadError(error instanceof Error ? error.message : '카드 순서를 저장하지 못했습니다. 목록을 확인해 주세요.'); }
     }
   };
 
@@ -507,7 +505,7 @@ export default function CardSettings({
 
     const startX = event.clientX;
     const startY = event.clientY;
-    dragStateRef.current = { cardId, active: false };
+    dragStateRef.current = { cardId, active: false, collectionVersion: cardsRef.current[0]?.collectionVersion ?? 0 };
 
     clearPressTimer();
     cleanupDragListeners();
@@ -753,6 +751,9 @@ export default function CardSettings({
                         }
 
                         setSelectedCardId(card.id);
+                        setDetailCardLastFour(card.cardLastFour);
+                        setEditingCardVersion(card.version);
+                        setDetailError('');
                       }}
                     />
                   ))}
@@ -839,7 +840,7 @@ export default function CardSettings({
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setPendingDeleteId(selectedCard.id)}
+                  onClick={() => { setPendingDeleteId(selectedCard.id); setPendingDeleteVersion(editingCardVersion); }}
                   className="flex-1 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 font-medium text-red-600 transition-colors hover:bg-red-100"
                 >
                   삭제

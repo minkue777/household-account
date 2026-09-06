@@ -3,6 +3,7 @@ import type {
   RecurringProcessingDecision,
   RecurringProcessingEvent,
   RecurringProcessingState,
+  RecurringProcessPlan,
 } from "../../../domain/model/recurringProcessing";
 
 export type RecurringCommitFailure =
@@ -19,6 +20,10 @@ export interface RecurringFinanceUnitOfWork {
     committedEvents: readonly RecurringProcessingEvent[];
   }>;
   read(): Promise<RecurringProcessingState>;
+  readPlanPage?(input: { readonly afterPlanId?: string; readonly limit: number }): Promise<{
+    readonly plans: readonly RecurringProcessPlan[];
+    readonly nextCursor?: string;
+  }>;
 }
 
 export interface RecurringProcessingClock {

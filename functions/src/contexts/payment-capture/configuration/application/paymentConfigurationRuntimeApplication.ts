@@ -139,7 +139,7 @@ function metadata(
   };
 }
 
-function merchantMutation(
+export function merchantMutation(
   current: MerchantRuleCommandState,
   householdId: string,
   execute: (
@@ -299,6 +299,7 @@ export function createPaymentConfigurationRuntimeApplication(
       input: PaymentConfigurationRuntimeCommand & {
         readonly ruleId: string;
         readonly changes: unknown;
+        readonly expectedVersion: number;
       },
     ): Promise<PaymentConfigurationRuntimeResult> {
       const changes = record(input.changes);
@@ -371,7 +372,7 @@ export function createPaymentConfigurationRuntimeApplication(
             return application.update({
               actor: actor(input),
               ruleId: target.ruleId,
-              expectedVersion: target.version,
+              expectedVersion: input.expectedVersion,
               keyword: requestedKeyword,
               matchType: requestedType,
               ...(priority === undefined ? {} : { priority }),
@@ -389,7 +390,7 @@ export function createPaymentConfigurationRuntimeApplication(
     },
 
     async deleteMerchantRule(
-      input: PaymentConfigurationRuntimeCommand & { readonly ruleId: string },
+      input: PaymentConfigurationRuntimeCommand & { readonly ruleId: string; readonly expectedVersion: number },
     ): Promise<PaymentConfigurationRuntimeResult> {
       const atomic = await store.transactMerchantRules(
         metadata(input),
@@ -401,13 +402,26 @@ export function createPaymentConfigurationRuntimeApplication(
               : application.delete({
                   actor: actor(input),
                   ruleId: target.ruleId,
-                  expectedVersion: target.version,
+                  expectedVersion: input.expectedVersion,
                 });
           }),
       );
       return result(atomic, (value) =>
         value.kind === "Deleted" ? {} : undefined,
       );
+    },
+
+    async reorderMerchantRules(input: PaymentConfigurationRuntimeCommand & {
+      readonly matchType: Exclude<MatchType, "exact">;
+      readonly orderedRuleIds: readonly string[];
+      readonly expectedCollectionVersion: number;
+    }): Promise<PaymentConfigurationRuntimeResult> {
+      const atomic = await store.transactMerchantRules(metadata(input), (current) =>
+        merchantMutation(current, input.actor.householdId, (application) => application.reorder({
+          actor: actor(input), matchType: input.matchType, orderedRuleIds: input.orderedRuleIds,
+          expectedCollectionVersion: input.expectedCollectionVersion,
+        })));
+      return result(atomic, (value) => value.kind === "Reordered" ? {} : undefined);
     },
 
     async registerCard(
@@ -454,6 +468,7 @@ export function createPaymentConfigurationRuntimeApplication(
       input: PaymentConfigurationRuntimeCommand & {
         readonly cardId: string;
         readonly changes: unknown;
+        readonly expectedVersion: number;
       },
     ): Promise<PaymentConfigurationRuntimeResult> {
       const changes = record(input.changes);
@@ -485,6 +500,7 @@ export function createPaymentConfigurationRuntimeApplication(
           cardMutation(current, input.actor.householdId, (application) => {
             const target = current.cards.find(({ cardId }) => cardId === input.cardId);
             if (target === undefined) return { kind: "NotFound" };
+            if (target.version !== input.expectedVersion) return { kind: "Conflict", code: "VERSION_MISMATCH" };
             if (
               typeof changes.cardLabel === "string" &&
               normalizeCardCompanyKey(changes.cardLabel) !==
@@ -502,7 +518,7 @@ export function createPaymentConfigurationRuntimeApplication(
               actor: cardActor(input),
               cardId: target.cardId,
               rawLastFour: changesLastFour,
-              expectedVersion: target.version,
+              expectedVersion: input.expectedVersion,
             });
           }),
       );
@@ -520,7 +536,7 @@ export function createPaymentConfigurationRuntimeApplication(
     },
 
     async deleteCard(
-      input: PaymentConfigurationRuntimeCommand & { readonly cardId: string },
+      input: PaymentConfigurationRuntimeCommand & { readonly cardId: string; readonly expectedVersion: number },
     ): Promise<PaymentConfigurationRuntimeResult> {
       const atomic = await store.transactRegisteredCards(
         metadata(input),
@@ -532,7 +548,7 @@ export function createPaymentConfigurationRuntimeApplication(
               : application.retire({
                   actor: cardActor(input),
                   cardId: target.cardId,
-                  expectedVersion: target.version,
+                  expectedVersion: input.expectedVersion,
                 });
           }),
       );
@@ -544,18 +560,18 @@ export function createPaymentConfigurationRuntimeApplication(
     async reorderCards(
       input: PaymentConfigurationRuntimeCommand & {
         readonly cardIds: readonly string[];
+        readonly expectedCollectionVersion: number;
       },
     ): Promise<PaymentConfigurationRuntimeResult> {
       const atomic = await store.transactRegisteredCards(
         metadata(input),
         (current) => {
-          const key = `${input.actor.householdId}:${input.actor.memberId}`;
           return cardMutation(current, input.actor.householdId, (application) =>
             application.reorder({
               actor: cardActor(input),
               ownerMemberId: input.actor.memberId,
               orderedCardIds: input.cardIds,
-              expectedCollectionVersion: current.collectionVersions[key] ?? 0,
+              expectedCollectionVersion: input.expectedCollectionVersion,
             }),
           );
         },

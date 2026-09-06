@@ -115,7 +115,7 @@ Android→Functions 공개 입력 계약은 observation ID, 알림 패키지명,
 | PARSE-KB-001 | 현재 명세 | KB국민카드 | 승인·취소, MM/DD HH:mm 형식과 금액·일시 요약 형식, 국민(번호), 가맹점 추출. 문자 앱의 `KB국민체크(1164)`·별도 명의자·일시·금액·`가맹점 사용` 행도 승인으로 처리하고 가맹점의 `사용` 접미사는 제거한다. 요약형 시간은 게시 시각, 없으면 00:00 | [서버 카드 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/cardProviderParsers.ts) | U |
 | PARSE-NH-001 | 현재 명세 | NH Pay·문자 앱 | 승인·승인취소, 금액·M/D HH:mm·가맹점·농협 카드 토큰을 추출한다. 문자 앱의 `[Web발신]`, `NH카드4*3*승인`, 별도 명의자·금액·일시·가맹점 행과 `총누적` 형식을 지원한다. | [서버 카드 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/cardProviderParsers.ts) | U |
 | PARSE-NAVER-001 | 현재 명세 | 네이버페이 | 가맹점에서 금액을 `결제했습니다`·`결제했어요`·`결제되었습니다`·`결제되었어요`·`결제됐어요`라고 알리는 승인 문장을 처리한다. Android가 제목·본문 앞에 붙인 Unicode 방향 제어 문자는 의미 없는 표시 문자로 제거하고 게시 시각, 없으면 현재 시각을 거래 시각으로 사용한다. | [서버 wallet parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/walletProviderParsers.ts) | U |
-| PARSE-TOSS-001 | 현재 명세 | 토스 | 승인·취소, 체크카드·페이스페이 형식, 가승인 제외, 승인 시 max(총액-캐시백, 0), 취소는 총액 사용 | [서버 wallet parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/walletProviderParsers.ts) | U |
+| PARSE-TOSS-001 | 현재 명세 | 토스 | 승인·취소, 체크카드·페이스페이 형식, 가승인 제외. 승인은 max(총액-캐시백, 0)을 원장·QuickEdit 금액으로 사용하며 원승인 총액을 별도 불변 증거로 저장한다. 취소는 총액 사용 | [서버 wallet parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/walletProviderParsers.ts), [DEC-070](../../../../governance/decisions.md#dec-070) | U, I |
 | PARSE-KAKAO-001 | 현재 명세 | 카카오페이 | 결제 완료 제목과 본문의 가맹점·금액을 승인으로 처리하고 게시 시각, 없으면 현재 시각 사용 | [서버 wallet parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/walletProviderParsers.ts) | U |
 | PARSE-ONNURI-001 | 현재 명세 | 디지털 온누리 | `[디지털온누리상품권]` 접두 형식과 `결제되었어요` 제목·본문 분리 형식의 상품권 결제 문장에서 사용자 호칭을 제외한 가맹점·금액을 승인으로 처리하고 게시 시각, 없으면 현재 시각 사용 | [서버 wallet parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/walletProviderParsers.ts) | U |
 | PARSE-PAYBOOC-001 | 현재 명세 | Paybooc/ISP | 인라인·분리형 승인과 매출취소, 양수 금액·비어 있지 않은 가맹점, 카드 라벨·마스킹 번호 정규화 | [서버 카드 parser](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/cardProviderParsers.ts) | U |
@@ -146,12 +146,12 @@ Android→Functions 공개 입력 계약은 observation ID, 알림 패키지명,
 
 | ID | 상태 | 요구사항 | 경계·예외 | 근거 | 테스트 |
 |---|---|---|---|---|---|
-| CAN-001 | 현재 명세 | 취소 알림의 가맹점명 규칙을 적용하고 같은 가구의 원거래를 찾는다. | 가구 키가 없으면 취소하지 않는다. | Android 알림 Service와 [취소 일치 정책](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/cancellationMatch.ts) | U, I |
+| CAN-001 | 현재 명세 | 취소 알림의 정규화된 원 가맹점 증거와 승인 시 보존한 immutable provenance로 같은 가구의 원거래를 찾는다. | 가구 키가 없으면 취소하지 않는다. 현재 표시명이나 승인 이후 변경된 가맹점 mapping은 취소 식별에 사용하지 않는다(DEC-041, CAN-007). | Android 알림 Service와 [취소 일치 정책](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/cancellationMatch.ts) | U, I |
 | CAN-002 | 결함 | 목표 취소 후보 검색은 일반 거래와 월 분할 그룹 모두 취소일에서 최대 30일 전까지 같은 날짜 범위를 사용한다. | 현재 일반 거래는 30일을 검색하지만 직접 일치가 없는 분할 그룹 fallback은 취소 당일 문서만 seed로 조회한다. 날짜 파싱 실패 시 목표도 당일 범위만 사용한다. | [취소 검색 기간 정책](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/cancellationSearchWindow.ts) | U, I |
-| CAN-003 | 목표 명세 | 금액·정규화된 가맹점·카드가 모두 일치하는 원거래만 취소 후보로 허용한다. | 월 분할 내림 오차는 CAN-006 범위에서 허용한다. 완전 일치 원거래가 없으면 무변경 `NotFound`이며 대기 취소·tombstone·미래 승인 억제를 만들지 않는다. 이후 승인은 일반 입력으로 등록한다. 완전 일치 후보가 여러 건이면 임의 선택하지 않는다. | 같은 근거와 [DEC-012](../../../../governance/decisions.md#dec-012), [DEC-031](../../../../governance/decisions.md#dec-031) | U, I |
+| CAN-003 | 목표 명세 | 원승인 금액·정규화된 가맹점·카드가 모두 일치하는 원거래만 취소 후보로 허용한다. 토스 캐시백 승인은 원장의 순액 대신 별도 보존한 승인 총액으로 대조한다. | 총액 없는 과거 기록은 기존 승인 증거의 금액만 사용하며 캐시백·분할 합계로 원승인을 추정하지 않는다(CAN-006). 완전 일치 원거래가 없으면 무변경 `NotFound`이며 대기 취소·tombstone·미래 승인 억제를 만들지 않는다. 이후 승인은 일반 입력으로 등록한다. 완전 일치 후보가 여러 건이면 임의 선택하지 않는다. | 같은 근거와 [DEC-012](../../../../governance/decisions.md#dec-012), [DEC-031](../../../../governance/decisions.md#dec-031), [DEC-070](../../../../governance/decisions.md#dec-070), [DEC-071](../../../../governance/decisions.md#dec-071) | U, I |
 | CAN-004 | 현재 명세 | 원거래가 월 분할 그룹이면 그룹 전체를, 일반 거래이면 해당 문서만 삭제한다. | 그룹 삭제의 원자성은 CAN-005에서 다룬다. | 같은 근거 | U, I |
 | CAN-005 | 결함 | 취소 대상 전체 삭제는 원자적으로 성공하거나 전부 실패해야 한다. | 현재 순차 삭제와 예외 은폐는 보존하지 않는다. | 같은 근거 | I |
-| CAN-006 | 현재 명세 | 월 분할 그룹 합계가 취소액보다 최대 분할 개수-1원 작아도 의도한 월 분할 내림 오차로 보고 취소 후보로 허용한다. | DEC-001의 나머지 미반영 정책과 함께 유지한다. | [취소 일치 정책](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/cancellationMatch.ts) | U, I |
+| CAN-006 | 현재 명세 | 월 분할의 합계 내림 오차와 관계없이 보존한 원승인 금액으로 취소 대상을 식별하고 연결된 원본·모든 파생 기록을 취소한다. 분할 합계와 취소액이 비슷하다는 이유로 후보를 만들지 않는다. | 승인 증거·연결이 없는 구형 그룹은 `NotFound`로 보존한다. 원본 자료로 연결을 확인할 수 있을 때만 명시적 migration으로 복구한다. DEC-001의 분할 내림 자체는 유지하며 구형 그룹 번호나 migration의 legacy ID만으로 승인 증거를 대체하지 않는다. | [취소 일치 정책](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/cancellationMatch.ts), [DEC-071](../../../../governance/decisions.md#dec-071) | U, I |
 | CAN-007 | 목표 명세 | 취소 후보는 현재 편집값이 아니라 ING-SAVE-007의 capture provenance와 captureLineageId로 원 승인을 식별하고, 완전 일치하는 유일한 lineage이면 사용자 확인 없이 원본·수정·분할·합치기 파생 지출 전체 삭제를 요청한다. | 다른 승인 lineage와 합쳐진 파생 거래는 제거하되 다른 원본은 같은 UoW에서 복원한다. 원본·파생·복원·receipt 변경은 전부 성공하거나 전부 실패하며, 완료 뒤 사용자 원복은 제공하지 않는다. 원거래 없음은 무변경이고 후보가 여러 개면 `NeedsConfirmation`이다. | [DEC-041](../../../../governance/decisions.md#dec-041) | U, I |
 
 ## 6. 현재 흐름
@@ -198,7 +198,7 @@ Android→Functions 공개 입력 계약은 observation ID, 알림 패키지명,
 
 | 결정 | 상태 | 이 모듈에 미치는 영향 |
 |---|---|---|
-| [DEC-001](../../../../governance/decisions.md#dec-001) | 확정 | 월 분할 내림 오차를 취소 후보 허용 범위에도 유지합니다. |
+| [DEC-001](../../../../governance/decisions.md#dec-001), [DEC-071](../../../../governance/decisions.md#dec-071) | 확정 | 월 분할 내림은 유지하며 취소 대상은 분할 합계 대신 원승인 증거로 식별합니다. 증거 없는 구형 기록은 명시적 복구 전 보존합니다. |
 | [DEC-002](../../../../governance/decisions.md#dec-002) | 확정 | `notification_debug_logs`는 임시 Diagnostic Adapter이며 파서 안정화 후 제거합니다. |
 | [DEC-003](../../../../governance/decisions.md#dec-003) | 확정 | 같은 가구·날짜·시간·금액·가맹점이면 카드가 달라도 후속 거래를 버립니다. |
 | [DEC-005](../../../../governance/decisions.md#dec-005) | 확정 | Source Registry에 등록된 package만 수용하고 매핑된 전용 parser만 실행합니다. |
@@ -220,8 +220,8 @@ Android→Functions 공개 입력 계약은 observation ID, 알림 패키지명,
 |---|---|---|---|
 | T-CAN-001 | 목표 | 월 분할 그룹 / 원금 취소 / 그룹 전체가 한 트랜잭션으로 삭제 | CAN-004, CAN-005 |
 | T-CAN-002 | 목표 | 승인보다 취소 알림이 먼저 도착하고 원거래 없음 / 취소 처리 후 승인 처리 / 취소는 `NotFound`·무변경·후속 작업 없음, 이후 승인은 정상 등록 | CAN-003, ING-SAVE-005, DEC-031 |
-| T-CAN-004 | 현재 명세 | actor 가구 없음, 가맹점 규칙 있음·없음 / 취소 후보 조회 준비 / actor 없으면 조회·변경 없음, 규칙이 있으면 mapped 가맹점, 없으면 정규 원 가맹점으로 같은 가구를 조회 | CAN-001 |
-| T-CAN-006 | 현재 명세 | 월 분할 개수 1·2·12와 취소액 차이 `count-1`·`count` / 취소 일치 판정 / `count-1`까지 허용하고 `count`부터 불일치 | CAN-006, DEC-001 |
+| T-CAN-004 | 현재 명세 | actor 가구 없음, 가맹점 규칙 있음·없음·승인 후 변경 / 취소 후보 조회 준비 / actor 없으면 조회·변경 없음, 규칙 변경과 무관하게 정규 원 가맹점과 immutable 승인 증거로 같은 가구를 조회 | CAN-001, CAN-007, DEC-041 |
+| T-CAN-006 | 현재 명세 | 원승인 10,001원을 5,000원씩 2개월로 분할한 연결 그룹 및 승인 증거 없는 구형 그룹 / 원승인 총액 취소 / 연결 그룹은 미래 월분을 포함한 원본·모든 파생 삭제, 증거 없는 그룹은 합계 차이 0·1·2원 모두 NotFound·원장 무변경·재전송 부작용 없음 | CAN-006, DEC-001, DEC-071 |
 | T-DUP-001 | 특성화 | 같은 가구·날짜·분·금액·정규 가맹점의 다른 카드·Android/Shortcut source와 날짜·분·금액·가맹점 중 하나씩 다른 쌍 / 승인 두 건 / 완전 동일 tuple의 두 번째만 중복으로 버리고 한 요소라도 다르면 별도 거래 생성 | ING-SAVE-005, IOS-006, DEC-003 |
 | T-ING-001 | 현재 명세 | text·bigText·textLines와 제목, 65,536자 초과 / Android raw DTO 생성 후 서버 envelope 구성 / 계약 한도 안에서 전달되고 초과 시 parser 우선순위 순으로 보존되며 서버에서 textLines 우선·제목이 첫 줄 | ING-001 |
 | T-ING-002 | 특성화 | 같은 package·후보 본문을 29,999ms·30,000ms·30,001ms 간격으로 입력하고 카카오 알림을 `A → A+B`로 누적 갱신 / 처리 / 앞 둘 중복, 마지막 재처리, 갱신에서 A는 중복이고 새 B는 별도 observation으로 처리 | ING-004 |
@@ -238,7 +238,7 @@ Android→Functions 공개 입력 계약은 observation ID, 알림 패키지명,
 | T-ING-FOLLOWUP-001 | 현재 명세 | creator 있음·없음, Created+`quickEditSnapshot`, 구버전 ID-only Queue, 편집 가능한/불가능한 Duplicate·Rejected·retryable failure, receipt 확정·미확정 / Android 후속 처리 / creator 필수, 새 Created는 별도 Query 없이 snapshot으로 QuickEdit, 구버전만 Query fallback, 확정 편집 ID에서만 QuickEdit·완료 broadcast, 자동 push 없음 | ING-SAVE-006, QE-001, DEC-013, DEC-068 |
 | T-ING-PROV-001 | 목표 | 승인 observation과 검증된 creator / 최초 거래 저장 / observation·source/parser version·원 금액·가맹점·카드·시각·hash를 불변 provenance와 lineage로 거래·dedup claim과 원자 저장하고 전체 원문은 저장하지 않음 | ING-SAVE-006, ING-SAVE-007, DEC-041 |
 | T-CAPTURE-LINEAGE-001 | 목표 | 자동 승인 후 가맹점·금액 수정, 항목·월 분할, 다른 승인과 합치기 / 구조 변경 / 원 provenance를 덮어쓰지 않고 모든 파생이 원 lineage 집합을 보존하며 구조 변경 원본은 superseded로 유지 | ING-SAVE-007, DEC-041 |
-| T-CAN-LINEAGE-001 | 목표 | 미변경·수정·분할·다른 승인과 합쳐진 lineage, 불완전 legacy, 후보 0·1·복수, commit 실패 / 취소 / 유일 대상의 원본·파생 삭제와 다른 lineage 복원·receipt·dedup tombstone을 원자 확정하고 0건은 NotFound, 복수는 NeedsConfirmation, legacy 불완전은 typed 실패 | CAN-003, CAN-005, CAN-007, DEC-041 |
+| T-CAN-LINEAGE-001 | 목표 | 미변경·수정·분할·다른 승인과 합쳐진 lineage, 토스 캐시백 순액과 원승인 총액, 불완전 legacy, 후보 0·1·복수, commit 실패 / 취소 / 토스 10,000원 승인·500원 캐시백은 9,500원으로 저장·표시하고 수정·분할 뒤에도 총액 10,000원 취소만 연결한다. 유일 대상의 원본·파생 삭제와 다른 lineage 복원·receipt·dedup tombstone을 원자 확정하고 0건은 NotFound, 복수는 NeedsConfirmation, legacy 불완전은 typed 실패 | PARSE-TOSS-001, CAN-003, CAN-005, CAN-007, DEC-041, DEC-070 |
 | T-CAN-003 | 목표 | 취소 1~30일 전 월 분할 그룹이며 취소 당일 seed 없음 / 후보 검색 / 그룹을 범위 안에서 발견하고 31일 전은 제외 | CAN-002 |
 
 추가로 Diagnostic Adapter는 Domain 테스트에서 fake로 대체하고, 원문 저장 실패가 승인·취소 결과를 바꾸지 않는지 검증합니다. 공급자별 비식별 원문과 전체 공개 ParseResult의 단일 fixture는 [`android-provider-parser-golden.v1.json`](../../../../../../contracts/fixtures/payment-capture/android-provider-parser-golden.v1.json)이며 정상 승인, 지원 취소, 빈 필드, 0원·음수, 연말·연초, 마스킹 카드 변형을 포함합니다. 운영 Functions TypeScript parser가 이 파일을 직접 소비하며 Android Kotlin parser 복사본은 두지 않습니다. parser 선택 테스트는 성공 parser ID 목록 같은 합성 입력으로 fixture를 대체할 수 없습니다.

@@ -14,7 +14,7 @@ export {
   submitCaptureEnvelope,
 } from "./firebaseCaptureSubmission";
 export { submitNotificationDiagnostic } from "./firebaseNotificationDiagnostic";
-export { consumeNotificationOutbox } from "./firebaseNotificationOutbox";
+export { consumeNotificationOutbox, reconcileNotificationDeliveries } from "./firebaseNotificationOutbox";
 export {
   instrumentCatalogDaily,
   recurringDaily,

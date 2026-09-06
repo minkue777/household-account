@@ -49,6 +49,7 @@ export default function PeriodSelector({
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
           <input
             type="month"
+            aria-label="시작 월"
             value={customRange.startDate ? customRange.startDate.substring(0, 7) : ''}
             onChange={(e) =>
               customRange.onStartDateChange(e.target.value ? `${e.target.value}-01` : '')
@@ -58,6 +59,7 @@ export default function PeriodSelector({
           <span className="text-slate-400">~</span>
           <input
             type="month"
+            aria-label="종료 월"
             value={customRange.endDate ? customRange.endDate.substring(0, 7) : ''}
             onChange={(e) => {
               if (e.target.value) {

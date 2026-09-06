@@ -1,5 +1,9 @@
 import { GoogleOnboardingState } from "../../../domain/model/googleOnboarding";
 
+export class GoogleOnboardingPayloadConflict extends Error {
+  constructor() { super("IDEMPOTENCY_PAYLOAD_MISMATCH"); }
+}
+
 export interface GoogleOnboardingMutation<T> {
   state: GoogleOnboardingState;
   value: T;

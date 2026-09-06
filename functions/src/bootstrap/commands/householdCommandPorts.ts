@@ -1,6 +1,7 @@
 import type {
   HouseholdCommandActor,
   HouseholdCommandResult,
+  HouseholdCommandEnvelope,
 } from "./householdCommand";
 
 export type ResolveHouseholdActorResult =
@@ -30,6 +31,8 @@ export interface HouseholdCommandReceiptPort {
     readonly principalUid: string;
     readonly command: string;
     readonly payloadHash: string;
+    readonly householdId?: string;
+    readonly legacyEnvelope?: HouseholdCommandEnvelope;
     readonly requestedAt: string;
   }): Promise<HouseholdCommandReceiptClaim>;
 

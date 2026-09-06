@@ -67,8 +67,14 @@ function terminalResult(
   return data?.result as CaptureTransactionBranchResult | undefined;
 }
 
-function branchPayloadFingerprint(command: unknown): string {
-  return `sha256:${hash(JSON.stringify(command))}`;
+function branchPayloadFingerprint(
+  command: CaptureApprovalPersistenceCommand | CaptureCancellationPersistenceCommand,
+): string {
+  // 원문 hash가 이미 결박한 서버 파생 증거는 기존 receipt의 identity를 바꾸지 않습니다.
+  // 배포 전 Ledger commit 후 응답을 잃은 요청도 같은 결과를 재생해야 합니다.
+  const branch = { ...command.branch };
+  if ("approvalAmountInWon" in branch) delete branch.approvalAmountInWon;
+  return `sha256:${hash(JSON.stringify({ ...command, branch }))}`;
 }
 
 function digits(value: string | undefined): string {
@@ -199,7 +205,7 @@ interface CancellationCandidate {
   readonly captureLineageId: string;
   readonly fingerprintHash: string;
   readonly approvalDate: string;
-  readonly amountInWon: number;
+  readonly approvalAmountInWon: number;
   readonly merchant: string;
   readonly companyLabel: string;
   readonly lastFour: string;
@@ -210,6 +216,9 @@ function candidate(
   document: firestore.QueryDocumentSnapshot,
 ): CancellationCandidate | undefined {
   const data = document.data();
+  const approvalAmountInWon = data.approvalAmountInWon === undefined
+    ? data.amountInWon
+    : data.approvalAmountInWon;
   if (
     data.observationType !== "approval" ||
     data.lifecycleState === "deleted" ||
@@ -218,6 +227,8 @@ function candidate(
     typeof data.fingerprintHash !== "string" ||
     typeof data.approvalDate !== "string" ||
     typeof data.amountInWon !== "number" ||
+    !Number.isSafeInteger(approvalAmountInWon) ||
+    approvalAmountInWon < data.amountInWon ||
     typeof data.merchant !== "string"
   ) {
     return undefined;
@@ -232,8 +243,8 @@ function candidate(
     captureLineageId: data.captureLineageId,
     fingerprintHash: data.fingerprintHash,
     approvalDate: data.approvalDate,
-    amountInWon: data.amountInWon,
-    merchant: data.merchant,
+    approvalAmountInWon,
+    merchant: typeof data.originalMerchant === "string" ? data.originalMerchant : data.merchant,
     companyLabel: typeof card.companyLabel === "string" ? card.companyLabel : "",
     lastFour: typeof card.lastFour === "string" ? card.lastFour : "",
     ...(typeof data.canonicalCardId === "string"
@@ -253,9 +264,9 @@ function matchesCancellation(
     !Number.isFinite(approval) ||
     approval > end ||
     approval < end - 30 * DAY ||
-    value.amountInWon !== command.branch.amountInWon ||
+    value.approvalAmountInWon !== command.branch.amountInWon ||
     normalizeCancellationMerchant(value.merchant) !==
-      normalizeCancellationMerchant(command.branch.merchant)
+      normalizeCancellationMerchant(command.branch.originalMerchant ?? command.branch.merchant)
   ) {
     return false;
   }
@@ -272,6 +283,46 @@ function matchesCancellation(
   }
   const evidenceDigits = digits(evidence.maskedToken);
   return evidenceDigits === "" || evidenceDigits === value.lastFour;
+}
+
+async function loadCancellationGraph(
+  database: firestore.Firestore,
+  transaction: firestore.Transaction,
+  householdId: string,
+  captureLineageId: string,
+): Promise<Map<string, firestore.DocumentSnapshot>> {
+  const canonical = database.collection("households").doc(householdId).collection("ledgerTransactions");
+  const legacy = database.collection("expenses").where("householdId", "==", householdId);
+  const documents = new Map<string, firestore.DocumentSnapshot>();
+  const add = (snapshots: readonly firestore.DocumentSnapshot[]) => {
+    for (const document of snapshots) if (document.exists) documents.set(document.id, document);
+  };
+  for (const collection of [legacy, canonical]) {
+    for (const field of ["captureLineageId", "sourceFingerprint", "provenance.captureLineageId", "captureLineageIds"]) {
+      add((await transaction.get(collection.where(field, field === "captureLineageIds" ? "array-contains" : "==", captureLineageId))).docs);
+    }
+  }
+  const visited = new Set<string>();
+  while ([...documents.keys()].some((id) => !visited.has(id))) {
+    for (const [id, document] of [...documents]) {
+      if (visited.has(id)) continue;
+      visited.add(id);
+      // 분할/합치기 이전 버전도 부모 링크를 따라 범위를 확장합니다.
+      for (const collection of [legacy, canonical]) {
+        for (const field of ["derivedFromTransactionId", "splitOriginalId", "splitGroup.originalId", "mergeLeafIds"]) {
+          add((await transaction.get(collection.where(field, field === "mergeLeafIds" ? "array-contains" : "==", id))).docs);
+        }
+      }
+      for (const leafId of mergeLeafIds(document.data() ?? {})) {
+        if (documents.has(leafId)) continue;
+        const [old, current] = await Promise.all([
+          transaction.get(database.collection("expenses").doc(leafId)), transaction.get(canonical.doc(leafId)),
+        ]);
+        add([old, current].filter((snapshot) => snapshot.data()?.householdId === householdId));
+      }
+    }
+  }
+  return documents;
 }
 
 function appendDuplicateEvent(
@@ -445,6 +496,9 @@ export class FirebaseCaptureLedgerPersistence
           approvalDate: command.branch.accountingDate,
           occurredAt: command.branch.occurredAt,
           amountInWon: command.branch.amountInWon,
+          ...(command.branch.approvalAmountInWon === undefined
+            ? {}
+            : { approvalAmountInWon: command.branch.approvalAmountInWon }),
           merchant: command.branch.merchant,
           originalMerchant: command.branch.originalMerchant,
           cardEvidence: {
@@ -547,20 +601,16 @@ export class FirebaseCaptureLedgerPersistence
     const payloadFingerprint = branchPayloadFingerprint(command);
     try {
       return await this.database.runTransaction(async (transaction) => {
-        const [receiptSnapshot, captureRecords, canonical, legacy] =
-          await Promise.all([
-            transaction.get(receipt),
-            transaction.get(household.collection("captureRecords")),
-            transaction.get(household.collection("ledgerTransactions")),
-            transaction.get(
-              this.database
-                .collection("expenses")
-                .where("householdId", "==", command.householdId),
-            ),
-          ]);
+        const receiptSnapshot = await transaction.get(receipt);
         const replay = terminalResult(receiptSnapshot, payloadFingerprint);
         if (replay !== undefined) return replay;
-
+        const end = Date.parse(`${command.branch.cancellationDate}T00:00:00+09:00`);
+        const startDate = Number.isFinite(end)
+          ? new Date(end - 30 * DAY + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+          : command.branch.cancellationDate;
+        const captureRecords = await transaction.get(household.collection("captureRecords")
+          .where("approvalDate", ">=", startDate)
+          .where("approvalDate", "<=", command.branch.cancellationDate));
         const matches = captureRecords.docs
           .map(candidate)
           .filter((value): value is CancellationCandidate => value !== undefined)
@@ -596,14 +646,12 @@ export class FirebaseCaptureLedgerPersistence
         if (matchedCapture === undefined) {
           throw new Error("MATCHED_CAPTURE_INVARIANT_BROKEN");
         }
-        const all = new Map<string, firestore.QueryDocumentSnapshot>();
-        for (const document of legacy.docs) all.set(document.id, document);
-        for (const document of canonical.docs) all.set(document.id, document);
+        const all = await loadCancellationGraph(this.database, transaction, command.householdId, captureLineageId);
 
         const original = all.get(matchedCapture.transactionId);
         if (
           original === undefined ||
-          !lineageIds(original.data()).includes(captureLineageId)
+          !lineageIds(original.data() ?? {}).includes(captureLineageId)
         ) {
           const result: CaptureTransactionBranchResult = {
             kind: "notFound",
@@ -625,12 +673,12 @@ export class FirebaseCaptureLedgerPersistence
           captureLineageId,
           transactions: [...all].map(([transactionId, document]) => ({
             transactionId,
-            lifecycleState: transactionLifecycleState(document.data()),
-            captureLineageIds: lineageIds(document.data()),
-            parentTransactionIds: derivedParents(document.data()),
-            mergeLeafIds: mergeLeafIds(document.data()),
+            lifecycleState: transactionLifecycleState(document.data() ?? {}),
+            captureLineageIds: lineageIds(document.data() ?? {}),
+            parentTransactionIds: derivedParents(document.data() ?? {}),
+            mergeLeafIds: mergeLeafIds(document.data() ?? {}),
             legacyMergeSnapshotPresent: hasLegacyMergeSnapshot(
-              document.data(),
+              document.data() ?? {},
             ),
           })),
         });
@@ -653,7 +701,7 @@ export class FirebaseCaptureLedgerPersistence
           if (document === undefined) {
             throw new Error("AFFECTED_TRANSACTION_INVARIANT_BROKEN");
           }
-          const version = transactionVersion(document.data()) + 1;
+          const version = transactionVersion(document.data() ?? {}) + 1;
           transaction.delete(
             household.collection("ledgerTransactions").doc(transactionId),
           );
@@ -680,7 +728,7 @@ export class FirebaseCaptureLedgerPersistence
           if (document === undefined) {
             throw new Error("RESTORATION_SNAPSHOT_INVARIANT_BROKEN");
           }
-          const stored = document.data();
+          const stored = document.data() ?? {};
           if (transactionLifecycleState(stored) === "active") continue;
           const version = transactionVersion(stored) + 1;
           const cardDisplay =
@@ -758,11 +806,14 @@ export class FirebaseCaptureLedgerPersistence
           transaction.set(
             household.collection("captureRecords").doc(value.documentId),
             {
+              householdId: command.householdId,
+              captureLineageId,
+              fingerprintHash: value.fingerprintHash,
               lifecycleState: "deleted",
               deletedAt: command.branch.observedAt,
-              cancellationObservationId: command.branch.observationId,
+              cancellationReceiptId: commandReceiptId(command.householdId, command.downstreamKey),
+              schemaVersion: 1,
             },
-            { merge: true },
           );
         }
         const cancellationId = `cancellation-${hash(
@@ -772,18 +823,13 @@ export class FirebaseCaptureLedgerPersistence
           household.collection("captureRecords").doc(cancellationId),
           {
             householdId: command.householdId,
-            captureId: cancellationId,
-            observationId: command.branch.observationId,
             observationType: "cancellation",
             captureLineageId,
+            fingerprintHash: matchedCapture.fingerprintHash,
             lifecycleState: "recorded",
-            creatorMemberId: command.branch.creatorMemberId,
-            sourceType: command.branch.sourceType,
-            parser: command.branch.parser,
-            rawPayloadHash: command.branch.rawPayloadHash,
             observedAt: command.branch.observedAt,
+            cancellationReceiptId: commandReceiptId(command.householdId, command.downstreamKey),
             schemaVersion: 1,
-            createdAt: FieldValue.serverTimestamp(),
           },
         );
         const transactionIds = [...affected].sort((left, right) =>

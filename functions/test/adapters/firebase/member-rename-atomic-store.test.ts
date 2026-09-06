@@ -49,6 +49,7 @@ describe("Firebase member rename atomic adapter", () => {
         "house-1",
         "2026-07-29T14:20:00.000Z",
         "rename-jang-command",
+        { principalUid: "principal-jang", memberId: "member-jang", idempotencyKey: "rename-jang-v1" },
       ),
     });
 

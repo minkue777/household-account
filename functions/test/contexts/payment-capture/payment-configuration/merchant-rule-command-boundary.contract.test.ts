@@ -23,6 +23,7 @@ interface MerchantRuleRecord {
 }
 
 type MerchantRuleCommandResult =
+  | { kind: "CategoryReferencesRemapped"; changedCount: number; nextCursor: string | null }
   | { kind: "Created" | "Updated"; rule: MerchantRuleRecord }
   | { kind: "Deleted"; ruleId: string }
   | {

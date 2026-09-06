@@ -39,7 +39,7 @@ function mapTransaction(
     data === undefined ||
     typeof data.householdId !== "string" ||
     (typeof data.amountInWon !== "number" && typeof data.amount !== "number") ||
-    data.lifecycleState === "deleted"
+    data.lifecycleState === "deleted" || data.deletedAt !== undefined
   ) {
     return undefined;
   }
@@ -356,7 +356,12 @@ export class FirebaseItemSplitStore implements ItemSplitStore {
             occurredAt: this.occurredAt,
             correlationId: input.operationKey,
             causationId: input.operationKey,
-            payload: { transactionId: value.transactionId },
+            payload: {
+              transactionId: value.transactionId,
+              ...(eventType === "TransactionRecorded.v1"
+                ? { originChannel: "system", creatorMemberId: value.creatorMemberId }
+                : {}),
+            },
           });
         }
         unitOfWork.create(receipt, {

@@ -114,4 +114,21 @@ describe('client startup observation contract', () => {
 
     await expect(subject.captureClientStartupObservation()).resolves.toBeUndefined();
   });
+
+  it('Native 계측 실패는 성공 표본이나 화면 오류로 바꾸지 않고 중복 요청도 하지 않는다', async () => {
+    const bridge = require(
+      '@/platform/android-host/androidHostBridge'
+    ) as typeof import('@/platform/android-host/androidHostBridge');
+    jest.mocked(bridge.isAndroidHostAvailable).mockReturnValue(true);
+    jest.mocked(bridge.requestAndroidHost).mockRejectedValue(new Error('bridge unavailable'));
+    const subject = require(
+      '@/platform/performance/clientStartupObservation'
+    ) as typeof import('@/platform/performance/clientStartupObservation');
+
+    const first = subject.captureClientStartupObservation();
+    expect(subject.captureClientStartupObservation()).toBe(first);
+    await expect(first).resolves.toBeUndefined();
+    await expect(subject.readCapturedClientStartupObservation()).resolves.toBeUndefined();
+    expect(bridge.requestAndroidHost).toHaveBeenCalledTimes(1);
+  });
 });

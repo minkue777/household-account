@@ -403,6 +403,8 @@ class QuickEditActivity : AppCompatActivity() {
     private fun showSplitDialog() {
         val currentAmount = etAmount.text.toString().toIntOrNull() ?: originalAmount
         val currentMerchant = etMerchant.text.toString().ifEmpty { originalMerchant }
+        val currentCategory = selectedCategoryKey
+        val currentMemo = etMemo.text.toString().trim()
 
         val dialog = AlertDialog.Builder(this, R.style.Theme_QuickEdit)
             .create()
@@ -419,8 +421,8 @@ class QuickEditActivity : AppCompatActivity() {
         )
 
         val splits = mutableListOf(
-            SplitItem(currentMerchant, currentAmount / 2, selectedCategoryKey, ""),
-            SplitItem(currentMerchant, currentAmount - currentAmount / 2, selectedCategoryKey, "")
+            SplitItem(currentMerchant, currentAmount / 2, currentCategory, ""),
+            SplitItem(currentMerchant, currentAmount - currentAmount / 2, currentCategory, "")
         )
 
         val splitItemsContainer = view.findViewById<LinearLayout>(R.id.splitItemsContainer)
@@ -520,7 +522,7 @@ class QuickEditActivity : AppCompatActivity() {
         view.findViewById<Button>(R.id.btnAddSplit).setOnClickListener {
             val totalUsed = splits.sumOf { it.amount }
             val remaining = maxOf(0, currentAmount - totalUsed)
-            splits.add(SplitItem(currentMerchant, remaining, selectedCategoryKey, ""))
+            splits.add(SplitItem(currentMerchant, remaining, currentCategory, ""))
             renderSplitItems()
         }
 
@@ -553,8 +555,8 @@ class QuickEditActivity : AppCompatActivity() {
                         "baseDraft" to mapOf(
                             "merchant" to currentMerchant,
                             "amountInWon" to currentAmount,
-                            "categoryId" to selectedCategoryKey,
-                            "memo" to etMemo.text.toString().trim()
+                            "categoryId" to currentCategory,
+                            "memo" to currentMemo
                         ),
                         "items" to splits.map { split ->
                             mapOf(

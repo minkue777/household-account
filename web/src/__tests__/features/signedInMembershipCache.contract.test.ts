@@ -23,6 +23,10 @@ const resolutionWithHousehold: Parameters<typeof writeSignedInMembershipCache>[1
     name: '저장된 가계부',
     createdAt: '2026-07-20T00:00:00.000Z',
     defaultCategoryKey: '생활',
+    categoryCatalogVersion: 5,
+    homeSummaryConfigVersion: 7,
+    selectedLocalCurrencyType: '서울페이',
+    initializationStatus: 'completed',
     homeSummaryConfig: {
       leftCard: 'monthlyRemainingBudget',
       rightCard: 'monthlySpent',
@@ -34,6 +38,15 @@ const resolutionWithHousehold: Parameters<typeof writeSignedInMembershipCache>[1
 describe('로그인 Membership cache 계약', () => {
   beforeEach(() => {
     window.localStorage.clear();
+  });
+
+  it('구형 가구 metadata의 누락 version은 0으로 읽고 사용자 선택을 추정하지 않는다', () => {
+    const { categoryCatalogVersion: _category, homeSummaryConfigVersion: _home, selectedLocalCurrencyType: _selection,
+      ...legacyHousehold } = resolutionWithHousehold.household!;
+    writeSignedInMembershipCache('uid-1', { ...resolution, household: legacyHousehold });
+    expect(readSignedInMembershipCache('uid-1')?.household).toEqual({
+      ...legacyHousehold, categoryCatalogVersion: 0, homeSummaryConfigVersion: 0,
+    });
   });
 
   it('UID에 귀속된 Membership scope와 가구 표시 설정만 저장한다', () => {

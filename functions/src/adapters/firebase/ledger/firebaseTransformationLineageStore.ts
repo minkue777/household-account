@@ -686,7 +686,12 @@ export class FirebaseTransformationLineageStore
             occurredAt: this.occurredAt,
             correlationId: input.operationKey,
             causationId: input.operationKey,
-            payload: { transactionId: value.transactionId },
+            payload: {
+              transactionId: value.transactionId,
+              ...(eventType === "TransactionRecorded.v1"
+                ? { originChannel: "system", creatorMemberId: value.provenance.creatorMemberId }
+                : {}),
+            },
           });
         }
 

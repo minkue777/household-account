@@ -14,6 +14,8 @@ export interface AndroidProviderSource {
 export interface ParsedPaymentGolden {
   readonly type: "approval" | "cancellation";
   readonly amountInWon: number;
+  /** 캐시백 차감 전 원승인 총액. 원장 금액과 별도로 취소 대조에 사용합니다. */
+  readonly approvalAmountInWon?: number;
   readonly occurredLocalDate: string;
   readonly occurredLocalTime: string;
   readonly merchant: string;

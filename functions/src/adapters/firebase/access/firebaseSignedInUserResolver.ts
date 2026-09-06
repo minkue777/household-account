@@ -1,4 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
+import { legacyMembershipClaimEnabled } from "./legacyMembershipClaimConfiguration";
 
 export interface SignedInUserMembershipView {
   readonly householdId: string;
@@ -14,6 +15,10 @@ export interface SignedInUserHouseholdView {
   readonly name: string;
   readonly createdAt: string;
   readonly defaultCategoryKey?: string;
+  readonly categoryCatalogVersion?: number;
+  readonly homeSummaryConfigVersion?: number;
+  readonly selectedLocalCurrencyType?: string;
+  readonly initializationStatus?: "pending" | "failed" | "completed";
   readonly homeSummaryConfig?: {
     readonly leftCard: string;
     readonly rightCard: string;
@@ -34,6 +39,7 @@ export type SignedInUserResolution =
   | {
       readonly kind: "first-visit-required";
       readonly choices: readonly ["create", "join"];
+      readonly legacyClaimEnabled?: boolean;
     };
 
 export class SignedInUserResolutionError extends Error {
@@ -124,6 +130,11 @@ function householdView(
     name,
     createdAt,
     ...(defaultCategoryKey === undefined ? {} : { defaultCategoryKey }),
+    categoryCatalogVersion: Number.isInteger(data.categoryCatalogVersion) ? data.categoryCatalogVersion : 0,
+    homeSummaryConfigVersion: Number.isInteger(data.homeSummaryConfigVersion) ? data.homeSummaryConfigVersion : 0,
+    ...(typeof data.selectedLocalCurrencyType === 'string' ? { selectedLocalCurrencyType: data.selectedLocalCurrencyType } : {}),
+    ...(["pending", "failed", "completed"].includes(data.initializationStatus)
+      ? { initializationStatus: data.initializationStatus } : {}),
     ...(homeSummaryConfig === undefined ? {} : { homeSummaryConfig }),
     members: members as SignedInUserHouseholdView["members"],
   };
@@ -145,7 +156,7 @@ export async function resolveFirebaseSignedInUser(
     .limit(2)
     .get();
   if (snapshot.size === 0) {
-    return { kind: "first-visit-required", choices: ["create", "join"] };
+    return { kind: "first-visit-required", choices: ["create", "join"], legacyClaimEnabled: legacyMembershipClaimEnabled() };
   }
   if (snapshot.size > 1) {
     throw new SignedInUserResolutionError(

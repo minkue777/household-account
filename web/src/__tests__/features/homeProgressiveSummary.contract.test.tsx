@@ -22,10 +22,21 @@ const expense: Expense = {
 function card(label: string) {
   const element = screen.getByText(label).closest('.balance-card-glass');
   if (element === null) throw new Error(`${label} 카드를 찾을 수 없습니다.`);
-  return within(element);
+  return within(element as HTMLElement);
 }
 
 describe('첫 가계부 요약의 독립 점진 렌더링 계약', () => {
+  test('source failure, observed zero and NoData remain distinct while the other card stays usable', () => {
+    const props = { currentYear: 2026, currentMonth: 7, expenses: [], yearlySpent: null, summaryConfig: { leftCard: 'localCurrencyBalance' as const, rightCard: 'monthlySpent' as const }, transactionType: 'expense' as const, localCurrencyBalance: null };
+    const { rerender } = render(<BalanceCards {...props} sourceErrors={{ localCurrencyBalance: true }} />);
+    expect(card('지역화폐 잔액').getByText('조회 실패')).toBeInTheDocument();
+    expect(card('7월 지출').getByText('0')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('일부 카드');
+    rerender(<BalanceCards {...props} />);
+    expect(card('지역화폐 잔액').getByText('데이터 없음')).toBeInTheDocument();
+    rerender(<BalanceCards {...props} localCurrencyBalance={{ balance: 0, currencyType: 'gyeonggi', updatedAt: null }} />);
+    expect(card('지역화폐 잔액').getByText('0')).toBeInTheDocument();
+  });
   beforeEach(() => {
     mockUseCategoryContext.mockReturnValue({
       activeCategories: [

@@ -54,8 +54,8 @@ export interface AdminDashboardScheduledJob {
 export interface AdminDashboardProviderHealth {
   readonly provider: string;
   readonly operation: string;
-  readonly status: "healthy" | "degraded" | "outage";
-  readonly lastAttemptAt: string;
+  readonly status: "healthy" | "degraded" | "outage" | "unknown";
+  readonly lastAttemptAt?: string;
   readonly lastSuccessAt?: string;
   readonly consecutiveFailedRuns: number;
   readonly lastResultKind: string;
@@ -89,7 +89,7 @@ export interface AdminDashboardFunctionLatency {
 }
 
 export interface AdminDashboardFunctionLatencyWindow {
-  readonly status: "available" | "unavailable";
+  readonly status: "available" | "partial" | "unavailable";
   readonly windowHours: number;
   readonly operations: readonly AdminDashboardFunctionLatency[];
 }

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const REQUIRED_TTL_COLLECTION_GROUPS = [
+  "externalQueryQuotas",
   "shortcutIngressCounters",
   "shortcutHttpReceipts",
   "receipts",

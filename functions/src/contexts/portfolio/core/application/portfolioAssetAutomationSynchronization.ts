@@ -254,10 +254,13 @@ function syncAutomationPlan(input: {
   const active = applicableType && amount > 0 && day > 0;
   if (!active) {
     if (previous === undefined) return undefined;
-    if (previous.status === "suspended") return previous;
+    if (previous.status === "suspended" || previous.status === "recovering-before-stop") return previous;
+    const hasOverdue = Date.parse(`${previous.nextDueDate}T00:00:00+09:00`) < Date.parse(occurredAt);
     return {
       ...previous,
-      status: "suspended",
+      status: hasOverdue ? "recovering-before-stop" : "suspended",
+      stopEffectiveAt: occurredAt,
+      statusAfterRecovery: "suspended",
       aggregateVersion: previous.aggregateVersion + 1,
       updatedAt: occurredAt,
     };
@@ -296,7 +299,7 @@ function syncAutomationPlan(input: {
       (savings ? undefined : asset.automation.loanInterestRate);
   const previousDueIsOverdue =
     previous !== undefined &&
-    previous.status === "active" &&
+    (previous.status === "active" || previous.status === "recovering-before-stop") &&
     previous.nextDueDate <= seoulDate(occurredAt);
   const previousDueMonth = previous?.nextDueDate.slice(0, 7);
   const rescheduleFromMonth =

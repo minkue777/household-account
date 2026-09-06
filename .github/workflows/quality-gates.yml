@@ -29,7 +29,7 @@ jobs:
           java-version: 21
       - run: npm ci
         working-directory: functions
-      - run: npm test
+      - run: npm test -- --reporter=default --reporter=json --outputFile=quality-functions.json
         working-directory: functions
       - run: npm run test:types
         working-directory: functions
@@ -48,6 +48,11 @@ jobs:
         working-directory: functions
       - run: npm run test:firebase-integration
         working-directory: functions
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quality-functions
+          path: functions/quality-functions.json
+          if-no-files-found: error
 
   web:
     runs-on: ubuntu-latest
@@ -61,10 +66,19 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
         working-directory: web
-      - run: npm test -- --runInBand
+      - run: npm test -- --runInBand --json --outputFile=quality-web.json
         working-directory: web
       - run: npm run build
         working-directory: web
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+      - run: npm run test:e2e:pwa
+        working-directory: web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quality-web
+          path: web/quality-web.json
+          if-no-files-found: error
 
   web-e2e:
     runs-on: ubuntu-latest
@@ -113,8 +127,13 @@ jobs:
       - uses: android-actions/setup-android@v3
       - run: chmod +x gradlew
         working-directory: android
-      - run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+      - run: ./gradlew testDebugUnitTest lintDebug assembleDebug assembleRelease --stacktrace
         working-directory: android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quality-android
+          path: android/app/build/test-results/testDebugUnitTest
+          if-no-files-found: error
 
   android-instrumentation:
     runs-on: ubuntu-latest

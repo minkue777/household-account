@@ -6,6 +6,7 @@ import type {
 } from "../ports/basicLedgerRepository";
 import type {
   LedgerCommandResult,
+  LedgerEvent,
   LedgerSummaryResult,
   LedgerTransactionType,
   LedgerTransactionView,
@@ -110,11 +111,7 @@ export function createBasicLedgerCommands(input: {
   async function commit(
     commandId: string,
     transaction: LedgerTransactionView,
-    event: {
-      type: string;
-      transactionId: string;
-      requesterMemberId?: string;
-    },
+    event: LedgerEvent,
   ): Promise<LedgerCommandResult> {
     const result = { kind: "success" as const, value: transaction };
     const committed = await input.repository.commit({
@@ -145,7 +142,7 @@ export function createBasicLedgerCommands(input: {
     if (loaded.kind !== "ready") return { kind: "error", result: loaded };
     if (
       loaded.value === undefined ||
-      loaded.value.lifecycleState === "deleted" ||
+      loaded.value.lifecycleState !== "active" ||
       loaded.value.householdId !== householdId
     ) {
       return { kind: "error", result: { kind: "not-found" } };
@@ -187,6 +184,8 @@ export function createBasicLedgerCommands(input: {
       return commit(command.commandId, transaction, {
         type: "TransactionRecorded.v1",
         transactionId,
+        originChannel: "web-manual",
+        creatorMemberId: transaction.creatorMemberId,
       });
     },
 
@@ -206,7 +205,7 @@ export function createBasicLedgerCommands(input: {
         householdId: command.actor.householdId,
         transactionType: "income",
         merchant: "수입",
-        memo: command.memo ?? command.itemName.trim(),
+        memo: command.itemName.trim(),
         amountInWon: command.amountInWon,
         categoryId: "etc",
         accountingDate: command.accountingDate,
@@ -220,6 +219,8 @@ export function createBasicLedgerCommands(input: {
       return commit(command.commandId, transaction, {
         type: "TransactionRecorded.v1",
         transactionId,
+        originChannel: "web-manual",
+        creatorMemberId: transaction.creatorMemberId,
       });
     },
 
@@ -277,6 +278,7 @@ export function createBasicLedgerCommands(input: {
       const deleted = {
         ...loaded.value,
         lifecycleState: "deleted" as const,
+        deletedAt: input.clock.now(),
         aggregateVersion: loaded.value.aggregateVersion + 1,
       };
       return commit(command.commandId, deleted, {
@@ -327,6 +329,8 @@ export function createBasicLedgerCommands(input: {
     },
 
     requestNotification: async (command) => {
+      const requester = validateRequiredText(command.actor.actingMemberId, "REQUESTER_MEMBER_REQUIRED");
+      if (requester.kind !== "valid") return requester;
       const loaded = await existingOrLoad(
         command.commandId,
         command.transactionId,

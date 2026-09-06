@@ -21,7 +21,8 @@ export interface ScheduledTargetPage {
 }
 
 export interface ScheduledFeaturePagePort {
-  nextPage(checkpoint?: string): Promise<ScheduledTargetPage | undefined>;
+  /** A replay must check terminal targets before any external call or mutation. */
+  nextPage(checkpoint?: string, skipTarget?: (targetId: string) => boolean): Promise<ScheduledTargetPage | undefined>;
 }
 
 export interface ScheduledJobRunRepositoryPort {
@@ -29,7 +30,8 @@ export interface ScheduledJobRunRepositoryPort {
   getRun(runId: string): Promise<JobRun | undefined>;
   saveRun(run: JobRun): Promise<void>;
   getResult(runId: string): Promise<JobExecutionResult | undefined>;
-  saveResult(result: JobExecutionResult): Promise<void>;
+  /** Final run and result are committed together by the current lease owner. */
+  completeRun(run: JobRun, result: JobExecutionResult, leaseToken: string): Promise<void>;
 }
 
 export interface JobExecutionObservationPort {

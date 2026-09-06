@@ -9,7 +9,9 @@ import type {
   SafeExternalTextHttpInputPort,
   SafeExternalTextHttpResult,
 } from "../../../platform/external-operations/application/ports/in/safeExternalTextHttpInputPort";
-import { isKrxGoldSpotCode } from "../../../contexts/portfolio/holdings/public";
+import { isKrxGoldSpotCode, parseFrankfurterRate, type ExchangeRateObservation } from "../../../contexts/portfolio/holdings/public";
+import { parseLocalDate, resolveSeoulMonthBoundary } from "../../../platform/shared-kernel/seoulDateTime";
+import { FirebasePortfolioQuoteObservations, type SourceMarketObservation } from "./firebasePortfolioQuoteObservations";
 
 const NATIONAL_GROWTH_FUND_CODES = new Set([
   "FUND:K55301EW0012",
@@ -105,7 +107,7 @@ function httpFailure(
   return failure(result.code, false, provider);
 }
 
-function parseLatestFundNav(html: string):
+function parseLatestFundNav(html: string, asOfDate: string):
   | { readonly date: string; readonly nav: number }
   | undefined {
   const quotes: { date: string; nav: number }[] = [];
@@ -127,8 +129,10 @@ function parseLatestFundNav(html: string):
     const dateMatch = /^(\d{4})[.-](\d{2})[.-](\d{2})$/u.exec(cells[0] ?? "");
     const nav = numberFromText(cells[1]);
     if (dateMatch !== null && nav !== undefined) {
+      const date = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
+      if (date > asOfDate || parseLocalDate(date).kind !== "success") continue;
       quotes.push({
-        date: `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`,
+        date,
         nav,
       });
     }
@@ -195,12 +199,13 @@ interface CachedExchangeRate {
   readonly fetchedAt: number;
   readonly rate: number;
   readonly rateDate: string;
+  readonly observedAt: string;
 }
 
 export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
   private cachedExchangeRate?: CachedExchangeRate;
 
-  constructor(private readonly http: SafeExternalTextHttpInputPort = defaultSafeHttp()) {}
+  constructor(private readonly http: SafeExternalTextHttpInputPort = defaultSafeHttp(), private readonly observations?: FirebasePortfolioQuoteObservations) {}
 
   async getQuote(
     target: PortfolioMarketTarget,
@@ -258,7 +263,7 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
     if (response.kind !== "success") {
       return httpFailure(response, "miraeasset-fund-nav");
     }
-    const quote = parseLatestFundNav(response.body);
+    const quote = parseLatestFundNav(response.body, resolveSeoulMonthBoundary({ instant: new Date().toISOString(), zoneId: "Asia/Seoul" }).localDate);
     return quote === undefined
       ? failure("MARKET_SCHEMA_CHANGED", false, "miraeasset-fund-nav")
       : successQuote({
@@ -286,7 +291,7 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
       return price === undefined
         ? failure("MARKET_SCHEMA_CHANGED", false, "upbit")
         : successQuote({
-            priceInWon: Math.round(price),
+            priceInWon: price,
             provider: "upbit",
             ...(typeof timestamp === "number" && Number.isFinite(timestamp)
               ? { observedAt: new Date(timestamp).toISOString() }
@@ -324,7 +329,7 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
     return pricePerGram === undefined
       ? failure("MARKET_SCHEMA_CHANGED", false, "naver-krx-gold-market")
       : successQuote({
-          priceInWon: Math.round(pricePerGram * gramMultiplier),
+          priceInWon: pricePerGram * gramMultiplier,
           provider: "naver-krx-gold-market",
         });
   }
@@ -337,12 +342,7 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
       Origin: "https://www.nasdaq.com",
       Referer: "https://www.nasdaq.com/",
     };
-    let quote:
-      | {
-          readonly sourcePrice: number;
-          readonly observedAt: string;
-        }
-      | undefined;
+    let quote: SourceMarketObservation | undefined;
     let lastFailure: PortfolioMarketQuoteResult = failure(
       "QUOTE_NOT_PUBLISHED",
       false,
@@ -370,7 +370,7 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
           numberFromText(payload.data?.primaryData?.lastSalePrice) ??
           numberFromText(payload.data?.secondaryData?.lastSalePrice);
         if (sourcePrice !== undefined) {
-          quote = { sourcePrice, observedAt: new Date().toISOString() };
+          quote = { sourcePrice, observedAt: new Date().toISOString(), provider: "nasdaq-us" };
           break;
         }
         lastFailure = failure("MARKET_SCHEMA_CHANGED", false, "nasdaq-us");
@@ -378,19 +378,36 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
         lastFailure = failure("MARKET_SCHEMA_CHANGED", false, "nasdaq-us");
       }
     }
+    const providerFailures: { kind: "failure"; code: string; retryable: boolean; provider: string }[] = [];
+    if (quote !== undefined) quote = await this.observations?.saveSource(symbol, quote) ?? quote;
+    else {
+      if (lastFailure.kind === "failure") providerFailures.push({ ...lastFailure, provider: "nasdaq-us" });
+      quote = await this.observations?.source(symbol);
+    }
+    const observedRate = await this.usdKrwRate();
+    let rate: ExchangeRateObservation | undefined;
+    if (observedRate.kind === "success") {
+      const candidate: ExchangeRateObservation = { pair: "USD/KRW", rate: observedRate.rate, rateDate: observedRate.rateDate, observedAt: observedRate.observedAt, provider: "frankfurter-v2" };
+      rate = await this.observations?.saveRate(candidate) ?? candidate;
+    } else {
+      providerFailures.push({ ...observedRate, provider: "frankfurter-v2" });
+      rate = await this.observations?.rate();
+      if (rate === undefined && this.cachedExchangeRate !== undefined) rate = { ...this.cachedExchangeRate, pair: "USD/KRW", provider: "frankfurter-v2" };
+    }
     if (quote === undefined) return lastFailure;
-    const rate = await this.usdKrwRate();
-    if (rate.kind === "failure") return rate;
-    return successQuote({
-      priceInWon: Math.round(quote.sourcePrice * rate.rate),
-      provider: "nasdaq-us+frankfurter-v2",
-      observedAt: quote.observedAt,
+    if (rate === undefined) return failure("EXCHANGE_RATE_NOT_OBSERVED", observedRate.kind === "failure" && observedRate.retryable, "frankfurter-v2");
+    return {
+      kind: "success",
+      quote: { priceInWon: quote.sourcePrice * rate.rate, provider: "nasdaq-us+frankfurter-v2", observedAt: quote.observedAt,
+        sourcePrice: quote.sourcePrice, sourceCurrency: "USD", quoteProvider: quote.provider, quoteObservedAt: quote.observedAt,
+        exchangeRateDate: rate.rateDate, exchangeRateObservedAt: rate.observedAt, exchangeRateProvider: rate.provider },
       quoteAsOf: rate.rateDate,
-    });
+      ...(providerFailures.length === 0 ? {} : { providerFailures }),
+    };
   }
 
   private async usdKrwRate(): Promise<
-    | { readonly kind: "success"; readonly rate: number; readonly rateDate: string }
+    | { readonly kind: "success"; readonly rate: number; readonly rateDate: string; readonly observedAt: string }
     | Extract<PortfolioMarketQuoteResult, { readonly kind: "failure" }>
   > {
     if (
@@ -401,6 +418,7 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
         kind: "success",
         rate: this.cachedExchangeRate.rate,
         rateDate: this.cachedExchangeRate.rateDate,
+        observedAt: this.cachedExchangeRate.observedAt,
       };
     }
     const response = await this.http.execute({
@@ -422,28 +440,23 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
         quote?: unknown;
         rate?: unknown;
       };
-      const rate = numberFromText(payload.rate);
-      if (
-        rate === undefined ||
-        rate <= 0 ||
-        payload.base !== "USD" ||
-        payload.quote !== "KRW" ||
-        typeof payload.date !== "string" ||
-        !/^\d{4}-\d{2}-\d{2}$/u.test(payload.date)
-      ) {
+      const observedAt = new Date().toISOString();
+      const parsed = parseFrankfurterRate({ body: payload, observedAt, asOfDate: resolveSeoulMonthBoundary({ instant: observedAt, zoneId: "Asia/Seoul" }).localDate });
+      if (parsed.kind === "failure") {
         return {
           kind: "failure",
-          code: "INVALID_PROVIDER_DATA",
+          code: parsed.code,
           retryable: false,
           provider: "frankfurter-v2",
         };
       }
       this.cachedExchangeRate = {
         fetchedAt: Date.now(),
-        rate,
-        rateDate: payload.date,
+        rate: parsed.value.rate,
+        rateDate: parsed.value.rateDate,
+        observedAt,
       };
-      return { kind: "success", rate, rateDate: payload.date };
+      return { kind: "success", rate: parsed.value.rate, rateDate: parsed.value.rateDate, observedAt };
     } catch {
       return {
         kind: "failure",

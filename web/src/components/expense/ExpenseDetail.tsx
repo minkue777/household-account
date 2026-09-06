@@ -20,11 +20,9 @@ interface ExpenseDetailProps {
   expenses: Expense[];
   onExpenseUpdate?: (
     expenseId: string,
-    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string }
-  ) => Promise<void> | void;
-  onSaveMerchantRule?: (
-    merchantName: string,
-    category: string
+    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string },
+    expectedVersion?: number,
+    rememberForNextTime?: boolean
   ) => Promise<void> | void;
   onDelete?: (expenseId: string) => Promise<void> | void;
   onAddExpense?: () => void;
@@ -46,7 +44,6 @@ export default function ExpenseDetail({
   date,
   expenses,
   onExpenseUpdate,
-  onSaveMerchantRule,
   onDelete,
   onAddExpense,
   onSplitExpense,
@@ -119,10 +116,11 @@ export default function ExpenseDetail({
 
   const handleSaveEdit = (
     expense: Expense,
-    updates: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string }
+    updates: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string },
+    rememberForNextTime = false
   ): Promise<void> | void => {
     if (onExpenseUpdate && Object.keys(updates).length > 0) {
-      return onExpenseUpdate(expense.id, updates);
+      return onExpenseUpdate(expense.id, updates, expense.aggregateVersion, rememberForNextTime);
     }
   };
 
@@ -139,7 +137,7 @@ export default function ExpenseDetail({
   const formatDate = (dateStr: string) => {
     const dateValue = new Date(dateStr);
     const days = ['일', '월', '화', '수', '목', '금', '토'];
-    return `${dateValue.getMonth() + 1}월 ${dateValue.getDate()}일 (${days[dateValue.getDay()]})`;
+    return `${dateValue.getUTCMonth() + 1}월 ${dateValue.getUTCDate()}일 (${days[dateValue.getUTCDay()]})`;
   };
 
   if (expenses.length === 0) {
@@ -216,8 +214,8 @@ export default function ExpenseDetail({
           isOpen
           onClose={() => setEditingExpenseId(null)}
           transactionType={transactionType}
-          onSave={(updates) => handleSaveEdit(editingExpense, updates)}
-          onSaveMerchantRule={onSaveMerchantRule}
+          onSave={(updates, remember) => handleSaveEdit(editingExpense, updates, remember)}
+          allowRememberMerchant={transactionType === 'expense' && onExpenseUpdate !== undefined}
           onUnmerge={
             onUnmergeExpense
               ? () => {
@@ -248,6 +246,10 @@ export default function ExpenseDetail({
                   })
               : undefined
           }
+          onRestoreItemSplit={editingExpense.derivedFromTransactionId ? async () => {
+            const { restoreItemSplit } = await import('@/lib/expenseService');
+            await restoreItemSplit(editingExpense);
+          } : undefined}
           onUpdateSplitGroup={
             transactionType === 'expense' && editingExpense.splitGroupId
               ? (newMonths) =>

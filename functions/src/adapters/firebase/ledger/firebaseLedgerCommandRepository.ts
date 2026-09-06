@@ -18,6 +18,13 @@ import { firestoreTtlAfter } from "../shared/firestoreTtl";
 const TRANSACTIONS = "expenses";
 const RECEIPT_CONTEXT = "household-finance-ledger";
 
+export interface FirebaseLedgerCommitParticipant {
+  prepare(unitOfWork: firestore.Transaction, input: {
+    current: firestore.DocumentData;
+    updated: LedgerTransactionView;
+  }): Promise<(() => void) | { rejectionCode: string }>;
+}
+
 function receiptId(householdId: string, commandId: string): string {
   return createHash("sha256")
     .update(`${householdId}\u0000${commandId}`, "utf8")
@@ -60,7 +67,7 @@ function mapTransaction(
   const lifecycleState =
     data.lifecycleState === "deleted" || data.deletedAt !== undefined
       ? "deleted"
-      : "active";
+      : data.lifecycleState === "superseded" ? "superseded" : "active";
   const cardType = data.cardType === "captured" ? "captured" : "manual";
   const localCurrencyType = text(data, "localCurrencyType");
   return {
@@ -79,6 +86,7 @@ function mapTransaction(
     source: text(data, "source") || (cardType === "manual" ? "manual" : "captured"),
     creatorMemberId: text(data, "creatorMemberId", "createdBy"),
     lifecycleState,
+    ...(typeof data.deletedAt === "string" ? { deletedAt: data.deletedAt } : {}),
     aggregateVersion: Math.max(1, numberValue(data, 1, "aggregateVersion")),
     ...(data.notificationRequest !== undefined
       ? {
@@ -115,6 +123,7 @@ function transactionDocument(
       : { localCurrencyType: transaction.localCurrencyType }),
     creatorMemberId: transaction.creatorMemberId,
     lifecycleState: transaction.lifecycleState,
+    ...(transaction.deletedAt === undefined ? {} : { deletedAt: transaction.deletedAt }),
     aggregateVersion: transaction.aggregateVersion,
     source:
       transaction.source ??
@@ -135,6 +144,7 @@ export class FirebaseLedgerCommandRepository
     private readonly database: firestore.Firestore,
     private readonly householdId: string,
     private readonly receiptPayloadHash?: string,
+    private readonly participant?: FirebaseLedgerCommitParticipant,
   ) {}
 
   async findReceipt(commandId: string): Promise<LedgerCommandResult | undefined> {
@@ -282,7 +292,7 @@ export class FirebaseLedgerCommandRepository
         const expectedVersion = input.transaction.aggregateVersion - 1;
         if (
           (expectedVersion === 0 && current !== undefined) ||
-          (expectedVersion > 0 && current?.aggregateVersion !== expectedVersion)
+          (expectedVersion > 0 && (current?.aggregateVersion !== expectedVersion || current.lifecycleState !== "active"))
         ) {
           return {
             kind: "retryable-failure",
@@ -290,6 +300,14 @@ export class FirebaseLedgerCommandRepository
           } as const;
         }
 
+        const prepared = await this.participant?.prepare(unitOfWork, {
+          current: canonicalSnapshot.exists ? canonicalSnapshot.data() ?? {} : legacySnapshot.data() ?? {},
+          updated: input.transaction,
+        });
+        if (prepared !== undefined && typeof prepared !== "function") {
+          return { kind: "success", replayedResult: { kind: "validation-error", code: prepared.rejectionCode } } as const;
+        }
+        prepared?.();
         unitOfWork.set(
           canonicalTransactionReference,
           transactionDocument(input.transaction, !canonicalSnapshot.exists),

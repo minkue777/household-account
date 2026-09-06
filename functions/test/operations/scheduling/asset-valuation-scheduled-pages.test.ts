@@ -1,5 +1,8 @@
 import type * as firestore from "firebase-admin/firestore";
 import { describe, expect, it } from "vitest";
+import { createScheduledJobExecutionApplication } from '../../../src/platform/external-operations/application/scheduledJobExecutionApplication';
+import { FirebaseScheduledJobExecutionRepository } from '../../../src/adapters/firebase/operations/firebaseScheduledJobStores';
+import { InMemoryFirestore } from '../../support/in-memory-firestore';
 
 import type { AssetSnapshotProjectionInputPort } from "../../../src/contexts/portfolio/core/application/ports/in/assetSnapshotProjectionInputPort";
 import type { PortfolioCommandMetadata } from "../../../src/contexts/portfolio/core/application/ports/out/portfolioRuntimeStorePort";
@@ -28,6 +31,31 @@ function householdReader(): AssetValuationHouseholdPageReader {
 }
 
 describe("asset-valuation-daily scheduled pages", () => {
+  it('actual executor and Firebase repository resume failed valuation without repeating successful providers or snapshots', async () => {
+    const memory = new InMemoryFirestore(); const database = memory as unknown as firestore.Firestore;
+    const instant = '2026-09-06T00:00:00Z';
+    const repository = new FirebaseScheduledJobExecutionRepository(database, () => instant);
+    const refreshCalls: string[] = []; const snapshotCalls: string[] = []; const commandIds: string[] = [];
+    let secondAttempt = false;
+    const execute = () => createScheduledJobExecutionApplication({ repository,
+      pages: createAssetValuationScheduledPages({ database, executionKey: 'day', scheduledFor: instant, asOfDate: '2026-09-06' }, {
+        households: { next: async after => after === undefined ? { householdId: 'a', active: true } : after === 'a' ? { householdId: 'b', active: true } : undefined },
+        refresh: { refreshMarketValues: async ({ metadata }) => {
+          refreshCalls.push(metadata.householdId); if (metadata.householdId === 'b') commandIds.push(metadata.commandId);
+          return { kind: 'success', value: { targetCount: 1, refreshedCount: metadata.householdId === 'b' && !secondAttempt ? 0 : 1, failedCount: metadata.householdId === 'b' && !secondAttempt ? 1 : 0 } };
+        } },
+        snapshots: { project: async input => { snapshotCalls.push(input.householdId); return { kind: 'projected', snapshot: { schemaVersion: 1, householdId: input.householdId, localDate: input.localDate,
+          total: 1, financial: 1, byType: { savings: 1, stock: 0, crypto: 0, property: 0, gold: 0, loan: 0 }, byOwnerRefKey: { household: 1 }, ownerDisplayNames: { household: '가구' }, sourceAssetVersions: {}, sourceCheckpoint: input.sourceCheckpoint, calculatedAt: input.calculatedAt } }; } },
+      }),
+      observations: { record: () => undefined }, identity: { runId: () => 'daily', leaseToken: (_id, attempt) => 'lease-' + attempt, hash: value => value }, clock: { now: () => instant }, topLevelFailure: { failure: () => undefined },
+    }).run({ jobName: 'daily', executionKey: 'day', workerId: 'worker', scheduledFor: instant, deadlineAt: '2026-09-06T00:04:00Z' });
+    expect((await execute()).status).toBe('PARTIAL_FAILURE');
+    expect(snapshotCalls).toEqual(['a']);
+    secondAttempt = true;
+    expect((await execute()).status).toBe('COMPLETE');
+    expect(refreshCalls).toEqual(['a', 'b', 'b']); expect(snapshotCalls).toEqual(['a', 'b']);
+    expect(commandIds[0]).toBe(commandIds[1]);
+  });
   it("refresh phase가 모두 terminal인 뒤에만 snapshot phase를 시작하고 마지막 성공 시세 유지도 완료 결과로 남깁니다", async () => {
     const order: string[] = [];
     const metadata: PortfolioCommandMetadata[] = [];

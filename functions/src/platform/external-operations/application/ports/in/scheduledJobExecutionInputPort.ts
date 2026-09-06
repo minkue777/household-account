@@ -25,6 +25,8 @@ export interface JobRun {
   readonly jobName: string;
   readonly executionKey: string;
   readonly status: JobRunStatus;
+  /** Monotonic fencing generation, retained after the active lease is cleared. */
+  readonly attempt?: number;
   readonly checkpoint?: string;
   readonly lease?: JobLease;
   readonly lastHeartbeatAt?: string;

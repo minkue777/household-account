@@ -66,6 +66,7 @@ export interface ScheduledDividendEvent {
 }
 
 export type DividendAnnouncementUpsertResult =
+  | { readonly kind: "retryable-failure"; readonly code: string }
   | {
       readonly kind: "created" | "changed";
       readonly eventId: string;
@@ -97,11 +98,21 @@ export type DividendTransitionResult =
   | { readonly kind: "unchanged"; readonly code: string };
 
 export interface DividendEventRuntimeRepository {
+  findAnnouncement(input: {
+    readonly target: DividendHoldingTargetView;
+    readonly disclosure: KindDividendDisclosure;
+  }): Promise<ScheduledDividendEvent | undefined>;
+
   upsertAnnouncement(input: {
     readonly target: DividendHoldingTargetView;
     readonly disclosure: KindDividendDisclosure;
     readonly observedAt: string;
     readonly idempotencyKey: string;
+    readonly correction?: {
+      readonly expectedVersion: number;
+      readonly eligibleQuantity: number;
+      readonly evidence: readonly DividendLifecycleEvidence[];
+    };
   }): Promise<DividendAnnouncementUpsertResult>;
 
   listNonterminal(input: {

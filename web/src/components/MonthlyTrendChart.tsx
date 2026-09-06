@@ -52,12 +52,12 @@ export default function MonthlyTrendChart({ expenses, startDate, endDate, enable
     const start = new Date(startDate);
     const end = new Date(endDate);
 
-    const current = new Date(start.getFullYear(), start.getMonth(), 1);
-    const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+    const current = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+    const endMonth = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1));
 
     while (current <= endMonth) {
-      result.push(`${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`);
-      current.setMonth(current.getMonth() + 1);
+      result.push(`${current.getUTCFullYear()}-${String(current.getUTCMonth() + 1).padStart(2, '0')}`);
+      current.setUTCMonth(current.getUTCMonth() + 1);
     }
 
     return result;
@@ -203,6 +203,7 @@ export default function MonthlyTrendChart({ expenses, startDate, endDate, enable
         {/* All 버튼 */}
         <button
           onClick={() => toggleCategory('all')}
+          aria-pressed={enabledCategories.has('all')}
           className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
             enabledCategories.has('all')
               ? 'bg-blue-500 text-white shadow-md'
@@ -217,6 +218,7 @@ export default function MonthlyTrendChart({ expenses, startDate, endDate, enable
           <button
             key={cat.key}
             onClick={() => toggleCategory(cat.key)}
+            aria-pressed={enabledCategories.has(cat.key)}
             className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${
               enabledCategories.has(cat.key)
                 ? 'text-white shadow-md'

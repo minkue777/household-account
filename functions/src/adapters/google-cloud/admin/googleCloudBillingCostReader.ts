@@ -1,4 +1,6 @@
 import { applicationDefault } from "firebase-admin/app";
+import { NodeExternalTextHttpTransport } from "../../http/nodeExternalTextHttpTransport";
+import { createSafeExternalTextHttpApplication } from "../../../platform/external-operations/application/safeExternalTextHttpApplication";
 
 import type {
   BillingCostSourceReaderPort,
@@ -10,12 +12,6 @@ interface AccessTokenProvider {
   getAccessToken(): Promise<{ readonly access_token: string }>;
 }
 
-interface BigQueryFetchResponse {
-  readonly ok: boolean;
-  readonly status: number;
-  json(): Promise<unknown>;
-}
-
 type BigQueryFetch = (
   url: string,
   init: {
@@ -23,8 +19,9 @@ type BigQueryFetch = (
     readonly headers: Readonly<Record<string, string>>;
     readonly body?: string;
     readonly signal: AbortSignal;
+    readonly redirect: "manual";
   },
-) => Promise<BigQueryFetchResponse>;
+) => Promise<Response>;
 
 interface BigQueryQueryResponse {
   readonly jobComplete?: unknown;
@@ -252,17 +249,25 @@ implements BillingCostSourceReaderPort {
     const recentStart = shiftDate(today, -7);
     const fromDate = recentStart < monthStart ? recentStart : monthStart;
     const token = await this.tokenProvider.getAccessToken();
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      const response = await this.fetcher(
+    const http = createSafeExternalTextHttpApplication({
+      transport: new NodeExternalTextHttpTransport(this.fetcher),
+      policy: { providers: [{ provider: "google-billing", allowedHosts: ["bigquery.googleapis.com"], allowedPorts: [443], maxRedirectHops: 0 }],
+        timeoutMs: Math.min(10000, this.timeoutMs), maxAttempts: 1, maxResponseBytes: 1024 * 1024 },
+    });
+    const request = async (url: string, init: { method: "GET" | "POST"; body?: string }) => {
+      const result = await http.execute({ provider: "google-billing", operation: "cost-summary", stage: init.method === "POST" ? "query" : "poll", url,
+        ...init, headers: { authorization: `Bearer ${token.access_token}`, "content-type": "application/json" } });
+      if (result.kind !== "success") {
+        if (result.httpStatus === 404) throw new BillingCostSourceNotReadyError();
+        throw new Error(`BILLING_QUERY_${result.code}`);
+      }
+      try { return JSON.parse(result.body) as BigQueryQueryResponse; }
+      catch { throw new Error("BILLING_QUERY_RESULT_INVALID"); }
+    };
+      let body = await request(
         `https://bigquery.googleapis.com/bigquery/v2/projects/${encodeURIComponent(this.queryProjectId)}/queries`,
         {
           method: "POST",
-          headers: {
-            authorization: `Bearer ${token.access_token}`,
-            "content-type": "application/json",
-          },
           body: JSON.stringify({
             query: BILLING_COST_QUERY(this.tableId),
             useLegacySql: false,
@@ -277,39 +282,24 @@ implements BillingCostSourceReaderPort {
             maximumBytesBilled: MAXIMUM_BYTES_BILLED,
             timeoutMs: Math.max(1_000, this.timeoutMs - 1_000),
           }),
-          signal: controller.signal,
         },
       );
-      if (!response.ok) {
-        if (response.status === 404) throw new BillingCostSourceNotReadyError();
-        throw new Error(`BILLING_QUERY_HTTP_${response.status}`);
-      }
-      let body = await response.json() as BigQueryQueryResponse;
       if (responseError(body)) throw new Error("BILLING_QUERY_FAILED");
 
       if (body.jobComplete !== true) {
         const jobReference = record(body.jobReference);
         const jobId = nonEmptyString(jobReference?.jobId);
         if (jobId === undefined) throw new Error("BILLING_QUERY_INCOMPLETE");
-        const pollResponse = await this.fetcher(
+        body = await request(
           `https://bigquery.googleapis.com/bigquery/v2/projects/${encodeURIComponent(this.queryProjectId)}/queries/${encodeURIComponent(jobId)}?location=${encodeURIComponent(this.location)}&timeoutMs=${Math.max(1_000, this.timeoutMs - 1_000)}`,
           {
             method: "GET",
-            headers: { authorization: `Bearer ${token.access_token}` },
-            signal: controller.signal,
           },
         );
-        if (!pollResponse.ok) {
-          throw new Error(`BILLING_QUERY_POLL_HTTP_${pollResponse.status}`);
-        }
-        body = await pollResponse.json() as BigQueryQueryResponse;
         if (responseError(body)) throw new Error("BILLING_QUERY_FAILED");
       }
       if (body.jobComplete !== true) throw new Error("BILLING_QUERY_INCOMPLETE");
       return parsePayload(payloadFromRows(body.rows));
-    } finally {
-      clearTimeout(timeout);
-    }
   }
 }
 

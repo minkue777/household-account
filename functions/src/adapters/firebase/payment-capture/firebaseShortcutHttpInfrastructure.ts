@@ -214,6 +214,8 @@ export class FirebaseShortcutHttpReceiptAdapter
   async claim(input: {
     readonly receiptKey: string;
     readonly payloadHash: string;
+    readonly receivedAt?: string;
+    readonly householdId?: string;
   }): Promise<ShortcutHttpReceiptClaimResult> {
     const reference = this.reference(input.receiptKey);
     const now = Date.now();
@@ -221,6 +223,7 @@ export class FirebaseShortcutHttpReceiptAdapter
       const snapshot = await transaction.get(reference);
       const data = snapshot.data();
       if (data !== undefined) {
+        if (typeof data.householdId === "string" && input.householdId !== undefined && data.householdId !== input.householdId) return { kind: "payload-mismatch" } as const;
         if (data.payloadHash !== input.payloadHash) {
           return { kind: "payload-mismatch" } as const;
         }
@@ -238,17 +241,20 @@ export class FirebaseShortcutHttpReceiptAdapter
           return { kind: "in-progress" } as const;
         }
       }
+      const receivedAt = typeof data?.receivedAt === "string" ? data.receivedAt : input.receivedAt ?? new Date(now).toISOString();
       transaction.set(reference, {
         receiptKeyHash: sha256(input.receiptKey),
+        ...(input.householdId === undefined ? {} : { householdId: input.householdId }),
         payloadHash: input.payloadHash,
+        receivedAt,
         status: "processing",
         leaseExpiresAt: new Date(now + RECEIPT_LEASE_MS).toISOString(),
         expiresAt: new Date(now + RECEIPT_RETENTION_MS),
         schemaVersion: 1,
         updatedAt: FieldValue.serverTimestamp(),
-        ...(snapshot.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
+        createdAt: data?.createdAt ?? FieldValue.serverTimestamp(),
       });
-      return { kind: "claimed" } as const;
+      return { kind: "claimed", receivedAt } as const;
     });
   }
 
@@ -281,7 +287,7 @@ export class FirebaseShortcutHttpReceiptAdapter
       await this.complete({ receiptKey: input.receiptKey, result: input.result });
       return;
     }
-    await reference.delete();
+    await reference.set({ status: "retryable", leaseExpiresAt: new Date(0).toISOString(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   }
 
   async waitForCompletion(
@@ -345,7 +351,9 @@ export class FirebaseShortcutCaptureIntakeAdapter
         },
       },
     });
-    if (outcome.kind !== "success") return { kind: "retryable-failure" as const };
+    if (outcome.kind === "conflict") return { kind: "rejected" as const, code: "IDEMPOTENCY_PAYLOAD_MISMATCH" as const };
+    if (outcome.kind === "Unauthenticated") return { kind: "rejected" as const, code: "AUTH_REQUIRED" as const };
+    if (outcome.kind === "Forbidden") return { kind: "rejected" as const, code: "HOUSEHOLD_FORBIDDEN" as const };
     const transaction = outcome.value.transactionResult;
     if (transaction?.kind === "created") {
       return { kind: "created" as const, transactionId: transaction.transactionId };

@@ -16,6 +16,7 @@ const customJestConfig = {
     '<rootDir>/node_modules/',
     '<rootDir>/.next/',
     '<rootDir>/e2e/',
+    '<rootDir>/e2e-pwa/', // 실제 production worker는 test:e2e:pwa(Playwright)에서 실행합니다.
   ],
   collectCoverageFrom: [
     'src/**/*.{js,jsx,ts,tsx}',

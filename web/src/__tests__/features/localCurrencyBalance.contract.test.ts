@@ -51,6 +51,10 @@ jest.mock('@/composition/clientSessionScope', () => ({
 
 import { subscribeToLocalCurrencyBalance } from '@/lib/balanceService';
 
+function select(type: string) {
+  listeners.get('preference')?.next({ metadata: { fromCache: false }, exists: () => true, data: () => ({ selectedLocalCurrencyType: type }) });
+}
+
 function balanceDocument(
   id: string,
   balanceInWon: number,
@@ -85,6 +89,7 @@ describe('지역화폐 잔액 읽기 계약', () => {
   it('[T-BAL-004][BAL-004] 권한이 없는 레거시 root가 아니라 가구 하위 canonical balance를 구독한다', () => {
     const callback = jest.fn();
     const unsubscribe = subscribeToLocalCurrencyBalance(callback);
+    select('gyeonggi');
 
     expect(collectionMock).toHaveBeenCalledWith(
       { kind: 'db' },
@@ -107,16 +112,17 @@ describe('지역화폐 잔액 읽기 계약', () => {
       currencyType: 'gyeonggi',
       updatedAt: new Date('2026-07-23T08:02:15.234Z'),
     });
-    expect(docMock).not.toHaveBeenCalled();
+    expect(docMock).toHaveBeenCalledWith({ kind: 'db' }, 'households', 'household-1', 'homePreferences', 'home');
     unsubscribe();
     expect(unsubscribeBalances).toHaveBeenCalledTimes(1);
-    expect(unsubscribePreference).not.toHaveBeenCalled();
+    expect(unsubscribePreference).toHaveBeenCalledTimes(1);
   });
 
   it('[T-BAL-006][BAL-004] 일시적인 구독 오류가 이미 표시한 DB 값을 지우지 않는다', () => {
     const callback = jest.fn();
     const onError = jest.fn();
     subscribeToLocalCurrencyBalance(callback, { onError });
+    select('gyeonggi');
     listeners.get('balances')?.next({
       metadata: { fromCache: false },
       docs: [balanceDocument('gyeonggi', 1_153_429)],
@@ -129,7 +135,7 @@ describe('지역화폐 잔액 읽기 계약', () => {
     }));
 
     listeners.get('balances')?.error(new Error('temporarily unavailable'));
-    expect(listeners.has('preference')).toBe(false);
+    expect(listeners.has('preference')).toBe(true);
     expect(callback).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledTimes(1);
   });
@@ -165,9 +171,20 @@ describe('지역화폐 잔액 읽기 계약', () => {
     }));
   });
 
+  it('BAL-004 다른 유형이 추가되어도 이미 선택한 잔액을 그대로 표시한다', () => {
+    const callback = jest.fn();
+    subscribeToLocalCurrencyBalance(callback);
+    select('daejeon');
+    listeners.get('balances')?.next({ metadata: { fromCache: false }, docs: [balanceDocument('daejeon', 3_289)] });
+    expect(callback).toHaveBeenLastCalledWith(expect.objectContaining({ balance: 3_289, currencyType: 'daejeon' }));
+    listeners.get('balances')?.next({ metadata: { fromCache: false }, docs: [balanceDocument('gyeonggi', 50_000), balanceDocument('daejeon', 3_289)] });
+    expect(callback).toHaveBeenLastCalledWith(expect.objectContaining({ balance: 3_289, currencyType: 'daejeon' }));
+  });
+
   it('첫 화면에서는 로컬 Firestore cache 값을 무시하고 서버 snapshot부터 표시한다', () => {
     const callback = jest.fn();
     subscribeToLocalCurrencyBalance(callback);
+    select('gyeonggi');
 
     listeners.get('balances')?.next({
       metadata: { fromCache: true },
@@ -183,5 +200,15 @@ describe('지역화폐 잔액 읽기 계약', () => {
       balance: 20_000,
       currencyType: 'gyeonggi',
     }));
+  });
+
+  it('단일 잔액이 남아 있어도 저장된 선택이 없어진 경우 다른 유형으로 바꾸지 않으며 0원 선택은 보존한다', () => {
+    const callback = jest.fn();
+    subscribeToLocalCurrencyBalance(callback);
+    select('daejeon');
+    listeners.get('balances')?.next({ metadata: { fromCache: false }, docs: [balanceDocument('gyeonggi', 0)] });
+    expect(callback).toHaveBeenLastCalledWith(null);
+    select('gyeonggi');
+    expect(callback).toHaveBeenLastCalledWith(expect.objectContaining({ balance: 0, currencyType: 'gyeonggi' }));
   });
 });

@@ -11,23 +11,20 @@ import type {
   RecurringProcessingIds,
 } from "./ports/out/recurringProcessingPorts";
 
-interface DueTask {
-  householdId: string;
-  planId: string;
-  targetMonth?: string;
-  noDataReason?: "INACTIVE_PLAN" | "NON_POSITIVE_PLAN_AMOUNT";
+interface PageCursor {
+  readonly asOfDate: string;
+  readonly afterPlanId?: string;
+  readonly resumePlanId?: string;
+  readonly afterMonth?: string;
 }
 
-function checkpoint(asOfDate: string, index: number): string {
-  return `recurring:${asOfDate}:${index}`;
+function checkpoint(cursor: PageCursor): string {
+  return `recurring:v2:${encodeURIComponent(JSON.stringify(cursor))}`;
 }
 
-function checkpointIndex(value: string | undefined, asOfDate: string): number {
-  if (value === undefined) return 0;
-  const prefix = `recurring:${asOfDate}:`;
-  if (!value.startsWith(prefix)) return -1;
-  const parsed = Number(value.slice(prefix.length));
-  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : -1;
+function nextMonth(value: string): string {
+  const [year, month] = value.split("-").map(Number);
+  return month === 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, "0")}`;
 }
 
 export function createRecurringSchedulerWorkflowApplication(dependencies: {
@@ -81,93 +78,56 @@ export function createRecurringSchedulerWorkflowApplication(dependencies: {
       if (!Number.isSafeInteger(input.limit) || input.limit <= 0) {
         return { kind: "validation-error", code: "INVALID_PAGE_LIMIT" };
       }
-      const state = await dependencies.unitOfWork.read();
-      const tasks: DueTask[] = [];
-      for (const plan of state.plans) {
-        if (!plan.active) {
-          tasks.push({
-            householdId: plan.householdId,
-            planId: plan.planId,
-            noDataReason: "INACTIVE_PLAN",
-          });
-          continue;
-        }
-        if (!Number.isSafeInteger(plan.amountInWon) || plan.amountInWon <= 0) {
-          tasks.push({
-            householdId: plan.householdId,
-            planId: plan.planId,
-            noDataReason: "NON_POSITIVE_PLAN_AMOUNT",
-          });
-          continue;
-        }
-        const due = findDueRecurringMonths({
-          plan: {
-            planId: plan.planId,
-            createdOn: `${plan.firstApplicableMonth}-01`,
-            requestedDay: plan.dayOfMonth,
-            firstApplicableMonth: plan.firstApplicableMonth,
-            active: true,
-          },
-          asOfDate: input.asOfDate,
-          completedMonths: [],
-          limit: 10_000,
-        });
-        if (due.kind !== "success") {
-          return { kind: "validation-error", code: due.code };
-        }
-        tasks.push(
-          ...due.months.map((targetMonth) => ({
-            householdId: plan.householdId,
-            planId: plan.planId,
-            targetMonth,
-          })),
-        );
+      let cursor: PageCursor = { asOfDate: input.asOfDate };
+      if (input.checkpoint !== undefined) {
+        try {
+          if (!input.checkpoint.startsWith("recurring:v2:")) throw new Error();
+          cursor = JSON.parse(decodeURIComponent(input.checkpoint.slice("recurring:v2:".length))) as PageCursor;
+          if (cursor.asOfDate !== input.asOfDate || (cursor.afterPlanId !== undefined && typeof cursor.afterPlanId !== "string") || (cursor.resumePlanId !== undefined && typeof cursor.resumePlanId !== "string") || (cursor.afterMonth !== undefined && (typeof cursor.afterMonth !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/u.test(cursor.afterMonth)))) throw new Error();
+        } catch { return { kind: "validation-error", code: "INVALID_CHECKPOINT" }; }
       }
-
-      const start = checkpointIndex(input.checkpoint, input.asOfDate);
-      if (start < 0 || start > tasks.length) {
-        return { kind: "validation-error", code: "INVALID_CHECKPOINT" };
-      }
-      const end = Math.min(start + input.limit, tasks.length);
+      const readPage = dependencies.unitOfWork.readPlanPage;
+      const page = readPage === undefined ? await (async () => {
+        const plans = (await dependencies.unitOfWork.read()).plans
+          .filter(plan => cursor.afterPlanId === undefined || plan.planId > cursor.afterPlanId)
+          .sort((left, right) => left.planId.localeCompare(right.planId));
+        return { plans: plans.slice(0, input.limit), ...(plans.length > input.limit ? { nextCursor: plans[input.limit - 1]!.planId } : {}) };
+      })() : await readPage.call(dependencies.unitOfWork, { afterPlanId: cursor.afterPlanId, limit: input.limit });
       const results = [];
-      for (let index = start; index < end; index += 1) {
-        const task = tasks[index]!;
-        if (task.noDataReason !== undefined) {
-          results.push({
-            kind: "no-data" as const,
-            planId: task.planId,
-            reason: task.noDataReason,
-          });
+      let afterPlanId = cursor.afterPlanId;
+      for (const plan of page.plans) {
+        if (results.length === input.limit) return { kind: "success", results, completed: false, nextCheckpoint: checkpoint({ asOfDate: input.asOfDate, afterPlanId }) };
+        if (!plan.active || !Number.isSafeInteger(plan.amountInWon) || plan.amountInWon <= 0) {
+          results.push({ kind: "no-data" as const, planId: plan.planId, reason: !plan.active ? "INACTIVE_PLAN" as const : "NON_POSITIVE_PLAN_AMOUNT" as const });
+          afterPlanId = plan.planId;
           continue;
         }
-        const result = await processTarget({
-          householdId: task.householdId,
-          planId: task.planId,
-          targetMonth: task.targetMonth!,
-          asOfDate: input.asOfDate,
+        const afterMonth = cursor.resumePlanId === plan.planId ? cursor.afterMonth : undefined;
+        const firstApplicableMonth = [plan.firstApplicableMonth,
+          ...(plan.processedThroughMonth === undefined ? [] : [nextMonth(plan.processedThroughMonth)]),
+          ...(afterMonth === undefined ? [] : [nextMonth(afterMonth)]),
+        ].sort().at(-1)!;
+        const due = findDueRecurringMonths({
+          plan: { planId: plan.planId, createdOn: `${plan.firstApplicableMonth}-01`, requestedDay: plan.dayOfMonth, firstApplicableMonth, active: true },
+          asOfDate: input.asOfDate, completedMonths: [], limit: input.limit - results.length + 1,
         });
-        if (result.kind === "retryable-failure") {
-          results.push({
-            ...result,
-            code: "RECURRING_TARGET_PROCESS_FAILED",
-          });
-          return {
-            kind: "partial-failure",
-            results,
-            retryFromCheckpoint: checkpoint(input.asOfDate, index),
-            completed: false,
+        if (due.kind !== "success") return { kind: "validation-error", code: due.code };
+        let previousMonth = afterMonth;
+        for (const targetMonth of due.months) {
+          const resume = { asOfDate: input.asOfDate, afterPlanId, resumePlanId: plan.planId, afterMonth: previousMonth };
+          if (results.length === input.limit) return { kind: "success", results, completed: false, nextCheckpoint: checkpoint(resume) };
+          const result = await processTarget({ householdId: plan.householdId, planId: plan.planId, targetMonth, asOfDate: input.asOfDate });
+          if (result.kind === "retryable-failure") return {
+            kind: "partial-failure", results: [...results, { ...result, code: "RECURRING_TARGET_PROCESS_FAILED" }],
+            retryFromCheckpoint: checkpoint(resume), completed: false,
           };
+          results.push(result);
+          previousMonth = targetMonth;
         }
-        results.push(result);
+        afterPlanId = plan.planId;
       }
-      const completed = end >= tasks.length;
-      return {
-        kind: "success",
-        results,
-        ...(completed
-          ? {}
-          : { nextCheckpoint: checkpoint(input.asOfDate, end) }),
-        completed,
+      return { kind: "success", results, completed: page.nextCursor === undefined,
+        ...(page.nextCursor === undefined ? {} : { nextCheckpoint: checkpoint({ asOfDate: input.asOfDate, afterPlanId: page.nextCursor }) }),
       };
     },
   };

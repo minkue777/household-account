@@ -108,26 +108,11 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'app-theme';
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeType>('default');
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  // localStorage에서 초기값 로드
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved && THEMES.some(t => t.key === saved)) {
-      setThemeState(saved as ThemeType);
-    }
-    setIsLoaded(true);
-  }, []);
-
-  // 테마 변경 시 CSS 변수 업데이트
-  useEffect(() => {
-    if (!isLoaded) return;
-
-    const config = THEMES.find(t => t.key === theme) || THEMES[0];
+function applyTheme(theme: ThemeType): boolean {
+  const config = THEMES.find(value => value.key === theme);
+  if (!config) return false;
+  try {
     const root = document.documentElement;
-
     root.style.setProperty('--theme-background', config.background);
     root.style.setProperty('--theme-card-bg', config.cardBg);
     root.style.setProperty('--theme-card-border', config.cardBorder);
@@ -136,32 +121,29 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     root.style.setProperty('--theme-text-muted', config.textMuted);
     root.style.setProperty('--theme-accent', config.accent);
     root.style.setProperty('--theme-accent-hover', config.accentHover);
-
-    // body 배경 직접 설정
     document.body.style.background = config.background;
     document.body.style.backgroundAttachment = 'fixed';
-  }, [theme, isLoaded]);
+    return true;
+  } catch { return false; }
+}
 
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setThemeState] = useState<ThemeType>('default');
+  useEffect(() => {
+    let initial: ThemeType = 'default';
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (THEMES.some(value => value.key === saved)) initial = saved as ThemeType;
+    } catch { /* 저장소가 없어도 기본 테마로 실행합니다. */ }
+    if (applyTheme(initial)) setThemeState(initial);
+  }, []);
   const setTheme = (newTheme: ThemeType) => {
+    if (!applyTheme(newTheme)) return;
     setThemeState(newTheme);
-    localStorage.setItem(STORAGE_KEY, newTheme);
+    try { localStorage.setItem(STORAGE_KEY, newTheme); } catch { /* 현재 화면 선택은 유지합니다. */ }
   };
-
-  const themeConfig = THEMES.find(t => t.key === theme) || THEMES[0];
-
-  if (!isLoaded) {
-    return (
-      <ThemeContext.Provider value={{ theme: 'default', themeConfig: THEMES[0], setTheme }}>
-        {children}
-      </ThemeContext.Provider>
-    );
-  }
-
-  return (
-    <ThemeContext.Provider value={{ theme, themeConfig, setTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  const themeConfig = THEMES.find(value => value.key === theme) || THEMES[0];
+  return <ThemeContext.Provider value={{ theme, themeConfig, setTheme }}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme(): ThemeContextType {

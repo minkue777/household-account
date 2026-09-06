@@ -158,19 +158,23 @@ class DefaultGoogleOnboardingApplication implements GoogleOnboardingInputPort {
     const initializationStatus = await this.dependencies.initializer.initialize(
       committed.householdId,
     );
-    await this.dependencies.store.transact<void>((current) => ({
-      state: {
+    const finalStatus = await this.dependencies.store.transact((current) => {
+      const household = current.households.find(value => value.householdId === committed.householdId);
+      if (!household || household.lifecycleState !== "active") return { state: current, value: "failed" as const };
+      const status = current.initializations.find(value => value.householdId === committed.householdId)?.status === "completed"
+        ? "completed" as const : initializationStatus;
+      return { state: {
         ...current,
         initializations: current.initializations.map((initialization) =>
           initialization.householdId === committed.householdId
-            ? { ...initialization, status: initializationStatus }
+            ? { ...initialization, status }
             : initialization,
         ),
       },
-      value: undefined,
-    }));
+      value: status,
+    }; });
 
-    return { ...committed, initializationStatus };
+    return { ...committed, initializationStatus: finalStatus };
   }
 
   async createInvitationCode(

@@ -58,6 +58,7 @@ export function createCaptureTransactionGatewayApplication(input: {
       if (loaded.kind === "retryable-failure") {
         return { kind: "retryable-failure", code: "LEDGER_UNAVAILABLE" };
       }
+      if (loaded.kind === "contract-failure") return { kind: "rejected", code: loaded.code };
       const configuration = loaded.value;
       const bill =
         context.paymentKind === "bill" ||
@@ -98,7 +99,7 @@ export function createCaptureTransactionGatewayApplication(input: {
 
       const rule = merchantRulePolicy.resolve({
         merchant: command.branch.merchant,
-        memo: "",
+        memo: context.parsedMemo ?? "",
         rules: configuration.merchantRules,
       });
       if (rule.kind === "contractFailure") {
@@ -133,6 +134,7 @@ export function createCaptureTransactionGatewayApplication(input: {
             observedAt: command.branch.occurredAt,
             cancellationDate: command.branch.accountingDate,
             amountInWon: command.branch.amountInWon,
+            originalMerchant: command.branch.merchant,
             merchant: mappedMerchant,
             ...(context.cardEvidence === undefined
               ? {}
@@ -147,7 +149,7 @@ export function createCaptureTransactionGatewayApplication(input: {
           sourceKind: bill ? "city-gas" : "payment",
           merchant: command.branch.merchant,
           categoryId: bill ? "fixed" : undefined,
-          memo: "",
+          memo: context.parsedMemo ?? "",
         },
         merchantRuleLookup:
           mapping === undefined
@@ -188,6 +190,9 @@ export function createCaptureTransactionGatewayApplication(input: {
           occurredAt: command.branch.occurredAt,
           accountingDate: command.branch.accountingDate,
           amountInWon: command.branch.amountInWon,
+          ...(context.approvalAmountInWon === undefined
+            ? {}
+            : { approvalAmountInWon: context.approvalAmountInWon }),
           originalMerchant: command.branch.merchant,
           merchant: enrichment.draft.merchant,
           categoryId: enrichment.draft.categoryId,

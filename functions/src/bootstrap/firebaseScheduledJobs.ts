@@ -54,7 +54,7 @@ export const instrumentCatalogDaily = onSchedule(
         }),
       },
     });
-    if (result.status === "FAILED") {
+    if (result.status !== "COMPLETE") {
       throw new Error("INSTRUMENT_CATALOG_JOB_FAILED");
     }
   },
@@ -86,7 +86,7 @@ export const recurringDaily = onSchedule(
         }),
       },
     });
-    if (result.status === "FAILED") {
+    if (result.status !== "COMPLETE") {
       throw new Error("RECURRING_DAILY_JOB_FAILED");
     }
   },

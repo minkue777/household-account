@@ -60,17 +60,6 @@ export type {
   QuickEditOperation,
   QuickEditTransactionView,
 } from "./application/ports/in/quickEditCommandOutcomeInputPort";
-export { NATIVE_WEBVIEW_SESSION_MAX_TTL_MS } from "./application/ports/in/nativeGoogleSessionHandoffInputPort";
-export type {
-  MembershipHandoffResult,
-  MembershipLookupResult,
-  NativeGoogleAuthenticationResult,
-  NativeGoogleSessionHandoffInputPort,
-  NativeGoogleSessionMirror,
-  NativeGoogleSessionState,
-  PrincipalBoundMembershipReceipt,
-} from "./application/ports/in/nativeGoogleSessionHandoffInputPort";
-
 export type {
   CaptureRetryDecision,
   CaptureRetryQueueEntry,
@@ -108,13 +97,6 @@ export type {
   SessionTransitionOutcome,
 } from "./application/ports/in/sessionScopeTransitionInputPort";
 export type {
-  SecureBridgeOperation,
-  SecureBridgeResult,
-  SecureWebViewBridgeInputPort,
-  SecureWebViewBridgeState,
-  WebViewSessionExchangeResult,
-} from "./application/ports/in/secureWebViewBridgeInputPort";
-export type {
   AndroidVersionPresentation,
   WebShellBackResult,
   WebShellEnvironment,
@@ -129,6 +111,5 @@ export type {
 export { createQuickEditFifoApplication } from "./application/quickEditFifoApplication";
 export { createQuickEditSplitConflictApplication } from "./application/quickEditSplitConflictApplication";
 export { createSessionScopeTransitionApplication } from "./application/sessionScopeTransitionApplication";
-export { createSecureWebViewBridgeApplication } from "./application/secureWebViewBridgeApplication";
 export { createWebShellApplication } from "./application/webShellApplication";
 export { createWireDtoConformanceApplication } from "./application/wireDtoConformanceApplication";

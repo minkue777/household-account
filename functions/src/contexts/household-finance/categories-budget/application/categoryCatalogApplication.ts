@@ -305,6 +305,7 @@ class DefaultCategoryCatalogApplication implements CategoryCatalogInputPort {
   ): Promise<CategoryResult<CategoryView>> {
     return this.dependencies.store.transact<CategoryResult<CategoryView>>(
       (current) => {
+      if (input.expectedCatalogVersion !== undefined && current.catalogVersion !== input.expectedCatalogVersion) return { state: current, value: { kind: "conflict" as const, code: "CATALOG_VERSION_MISMATCH" } };
       const category = current.categories.find(
         ({ categoryId }) => categoryId === input.categoryId,
       );

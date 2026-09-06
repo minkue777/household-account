@@ -1,5 +1,6 @@
 import {
   collection,
+  doc,
   onSnapshot,
   db,
 } from '@/platform/read-model/firestoreReadModel';
@@ -82,7 +83,18 @@ export function subscribeToRegisteredCards(
     'registeredCards'
   );
 
-  return onSnapshot(
+  let latestCards: RegisteredCard[] | undefined;
+  let collectionVersion: number | undefined;
+  const publish = () => {
+    if (latestCards !== undefined && collectionVersion !== undefined) callback(sortRegisteredCards(latestCards.map((card) => ({ ...card, collectionVersion }))));
+  };
+  const stopMeta = onSnapshot(doc(db, 'households', householdId, 'paymentConfigurationMeta', 'registered-cards'), { includeMetadataChanges: true }, (snapshot) => {
+    if (snapshot.metadata.fromCache) return;
+    const versions = snapshot.data()?.collectionVersions;
+    collectionVersion = versions?.[`${householdId}:${ownerMemberId}`] ?? 0;
+    publish();
+  }, (error) => onError?.(error));
+  const stopCards = onSnapshot(
     cardsCollection,
     { includeMetadataChanges: true },
     (snapshot) => {
@@ -99,10 +111,12 @@ export function subscribeToRegisteredCards(
             : Boolean(legacyOwnerName && card.owner === legacyOwnerName)
         );
 
-      callback(sortRegisteredCards(cards));
+      latestCards = cards;
+      publish();
     },
     (error) => onError?.(error)
   );
+  return () => { stopCards(); stopMeta(); };
 }
 
 export async function addRegisteredCard(input: CreateRegisteredCardInput): Promise<string> {
@@ -121,12 +135,13 @@ export async function addRegisteredCard(input: CreateRegisteredCardInput): Promi
   });
 }
 
-export async function deleteRegisteredCard(cardId: string): Promise<void> {
-  await paymentConfigurationCommands.deleteCard(requireHouseholdId(), cardId);
+export async function deleteRegisteredCard(cardId: string, expectedVersion: number): Promise<void> {
+  await paymentConfigurationCommands.deleteCard(requireHouseholdId(), cardId, expectedVersion);
 }
 
 export async function updateRegisteredCard(input: {
   cardId: string;
+  expectedVersion: number;
   householdId: string;
   owner: string;
   cardLabel: string;
@@ -145,13 +160,13 @@ export async function updateRegisteredCard(input: {
   return paymentConfigurationCommands.updateCard(householdId, cardId, {
     cardLabel,
     cardLastFour: normalizedLastFour,
-  });
+  }, input.expectedVersion);
 }
 
-export async function updateRegisteredCardOrder(cardIds: string[]): Promise<void> {
+export async function updateRegisteredCardOrder(cardIds: string[], expectedCollectionVersion: number): Promise<void> {
   if (cardIds.length === 0) {
     return;
   }
 
-  await paymentConfigurationCommands.reorderCards(requireHouseholdId(), cardIds);
+  await paymentConfigurationCommands.reorderCards(requireHouseholdId(), cardIds, expectedCollectionVersion);
 }

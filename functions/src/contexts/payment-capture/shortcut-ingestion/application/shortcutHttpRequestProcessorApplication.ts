@@ -83,45 +83,22 @@ export function createShortcutHttpRequestProcessorApplication(
       const commandId = `shortcut-command-${dependencies.hashes
         .hash(receiptKey)
         .slice(0, 24)}`;
-      const claim = await dependencies.receipts.claim({ receiptKey, payloadHash });
+      const claim = await dependencies.receipts.claim({ receiptKey, payloadHash, receivedAt: input.requestedAt, householdId: authorization.credential.actor.householdId });
       if (claim.kind === "payload-mismatch") {
         return processingError("IDEMPOTENCY_PAYLOAD_MISMATCH");
       }
-      if (claim.kind === "completed") {
-        if (
-          claim.result.kind === "error" &&
-          claim.result.code === "UNSUPPORTED_MESSAGE"
-        ) {
-          await retainMessage({
-            kind: "rejected",
-            code: "UNSUPPORTED_MESSAGE",
-          });
-        } else if (claim.result.kind === "success") {
-          await retainMessage({ kind: "accepted" });
-        }
-        return claim.result;
-      }
-      if (claim.kind === "in-progress") {
-        const result = await dependencies.receipts.waitForCompletion(receiptKey);
-        if (result.kind === "error" && result.code === "UNSUPPORTED_MESSAGE") {
-          await retainMessage({
-            kind: "rejected",
-            code: "UNSUPPORTED_MESSAGE",
-          });
-        } else if (result.kind === "success") {
-          await retainMessage({ kind: "accepted" });
-        }
-        return result;
-      }
+      if (claim.kind === "completed") return claim.result;
+      if (claim.kind === "in-progress") return dependencies.receipts.waitForCompletion(receiptKey);
+      const receivedAt = claim.receivedAt ?? input.requestedAt;
 
       try {
         const parsed = dependencies.parser.parse({
           message: input.normalizedMessage,
-          receivedAt: input.requestedAt,
+          receivedAt,
           zoneId: "Asia/Seoul",
         });
         if (parsed.kind === "Rejected") {
-          const result = processingError("UNSUPPORTED_MESSAGE");
+          const result = processingError(parsed.code);
           await Promise.all([
             dependencies.receipts.complete({ receiptKey, result }),
             retainMessage({ kind: "rejected", code: parsed.code }),
@@ -134,7 +111,7 @@ export function createShortcutHttpRequestProcessorApplication(
             commandId,
             credentialId: authorization.credential.credentialId,
             payloadHash,
-            requestedAt: input.requestedAt,
+            requestedAt: receivedAt,
             actor: authorization.credential.actor,
             parsed,
           }),

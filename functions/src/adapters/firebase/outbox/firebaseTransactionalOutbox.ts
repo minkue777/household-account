@@ -12,6 +12,7 @@ const PRODUCER_BY_EVENT = Object.freeze({
   "HouseholdCreated.v1": "access.google-onboarding",
   "MemberJoined.v1": "access.google-onboarding",
   "LegacyMembershipClaimed.v1": "access.legacy-membership",
+  "LegacyMembershipClaimRepaired.v1": "access.legacy-membership",
   "AssetOwnerProfileChanged.v1": "access.asset-owner-profile",
   "HouseholdDeleted.v1": "access.household-lifecycle",
   "HouseholdRestored.v1": "access.household-lifecycle",

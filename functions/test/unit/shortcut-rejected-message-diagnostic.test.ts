@@ -111,7 +111,7 @@ describe("Shortcut parser 거부 원문 진단", () => {
 
     expect(result).toEqual({
       kind: "error",
-      code: "UNSUPPORTED_MESSAGE",
+      code: "UNSUPPORTED_CARD_COMPANY",
       retryable: false,
     });
     expect(subject.retained).toEqual([
@@ -137,14 +137,14 @@ describe("Shortcut parser 거부 원문 진단", () => {
     ]);
   });
 
-  it("진단 port 저장 실패가 UNSUPPORTED_MESSAGE 응답과 완료 receipt를 깨지 않는다", async () => {
+  it("진단 port 저장 실패가 UNSUPPORTED_CARD_COMPANY 응답과 완료 receipt를 깨지 않는다", async () => {
     const subject = createRejectedMessageSubject({ diagnostics: "failure" });
 
     const result = await subject.processor.process(processorInput);
 
     expect(result).toEqual({
       kind: "error",
-      code: "UNSUPPORTED_MESSAGE",
+      code: "UNSUPPORTED_CARD_COMPANY",
       retryable: false,
     });
     expect(subject.retained).toHaveLength(1);
@@ -165,7 +165,7 @@ describe("Shortcut parser 거부 원문 진단", () => {
 
     expect(result).toEqual({
       kind: "error",
-      code: "UNSUPPORTED_MESSAGE",
+      code: "UNSUPPORTED_CARD_COMPANY",
       retryable: false,
     });
     expect(subject.retained).toEqual([]);

@@ -12,6 +12,13 @@ export interface QuoteObservation {
   priceInWon: number;
   observedAt: string;
   provider: string;
+  sourcePrice?: number;
+  sourceCurrency?: "USD";
+  quoteProvider?: string;
+  quoteObservedAt?: string;
+  exchangeRateDate?: string;
+  exchangeRateObservedAt?: string;
+  exchangeRateProvider?: "frankfurter-v2";
 }
 
 export interface PositionValuationInput {

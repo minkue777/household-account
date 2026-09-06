@@ -10,6 +10,9 @@ export interface SplitTransaction {
   memo: string;
   cardType: string;
   cardDisplay: string;
+  cardEvidence?: string;
+  captureLineageId?: string;
+  localTime?: string;
   creatorMemberId: string;
   source: string;
   originChannel: string;

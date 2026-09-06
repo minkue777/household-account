@@ -34,42 +34,44 @@ export async function addCategory(
 // 카테고리 수정
 export async function updateCategory(
   id: string,
-  data: Partial<Omit<CategoryDocument, 'id' | 'isDefault'>>
+  data: Partial<Omit<CategoryDocument, 'id' | 'isDefault'>>,
+  expectedVersion: number
 ): Promise<void> {
   const householdId = requireStoredHouseholdId();
   const { categoryCommands } = await import(
     '@/features/category-budget/application/categoryCommands'
   );
-  await categoryCommands.update(householdId, id, data);
+  await categoryCommands.update(householdId, id, data, expectedVersion);
 }
 
 // 카테고리 삭제 (기본 카테고리는 삭제 불가)
-export async function deleteCategory(id: string): Promise<void> {
+export async function deleteCategory(id: string, expectedVersion: number): Promise<void> {
   const householdId = requireStoredHouseholdId();
   const { categoryCommands } = await import(
     '@/features/category-budget/application/categoryCommands'
   );
-  await categoryCommands.archive(householdId, id);
+  await categoryCommands.archive(householdId, id, expectedVersion);
 }
 
 // 예산 설정
-export async function setBudget(id: string, budget: number | null): Promise<void> {
+export async function setBudget(id: string, budget: number | null, expectedVersion: number): Promise<void> {
   const householdId = requireStoredHouseholdId();
   const { categoryCommands } = await import(
     '@/features/category-budget/application/categoryCommands'
   );
-  await categoryCommands.setBudget(householdId, id, budget);
+  await categoryCommands.setBudget(householdId, id, budget, expectedVersion);
 }
 
 // 카테고리 순서 변경
 export async function reorderCategories(
-  categories: { id: string; order: number }[]
+  categories: { id: string; order: number }[],
+  expectedCatalogVersion: number
 ): Promise<void> {
   const householdId = requireStoredHouseholdId();
   const { categoryCommands } = await import(
     '@/features/category-budget/application/categoryCommands'
   );
-  await categoryCommands.reorder(householdId, categories);
+  await categoryCommands.reorder(householdId, categories, expectedCatalogVersion);
 }
 
 // 실시간 구독 (householdId별로)

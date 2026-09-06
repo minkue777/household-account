@@ -41,6 +41,8 @@ function alreadyExists(error: unknown): boolean {
 }
 
 function canonicalEnvelope(envelope: CaptureBranchEnvelope): unknown {
+  // approvalAmountInWon은 원문 hash에서 재현되는 서버 파생 증거입니다.
+  // 이를 추가해도 배포 전 receipt와 동일한 입력 identity를 유지합니다.
   const transaction = envelope.transactionBranch;
   const context = transaction?.captureContext;
   const balance = envelope.balanceBranch;

@@ -12,12 +12,15 @@ service cloud.firestore {
 
     function activeMembership(householdId) {
       return signedIn()
+        && exists(/databases/$(database)/documents/households/$(householdId))
+        && get(/databases/$(database)/documents/households/$(householdId)).data.get('lifecycleState', 'active') == 'active'
+        && get(/databases/$(database)/documents/households/$(householdId)).data.get('deletedAt', null) == null
         && exists(/databases/$(database)/documents/households/$(householdId)/memberships/$(request.auth.uid))
         && get(/databases/$(database)/documents/households/$(householdId)/memberships/$(request.auth.uid)).data.lifecycleState == 'active';
     }
 
     function canReadHousehold(householdId) {
-      return activeMembership(householdId) || isSystemAdministrator();
+      return isSystemAdministrator() || activeMembership(householdId);
     }
 
     function canReadLegacyHouseholdDocument() {
@@ -86,6 +89,11 @@ service cloud.firestore {
 
       match /registeredCards/{cardId} {
         allow read: if canReadHousehold(householdId);
+        allow write: if false;
+      }
+
+      match /paymentConfigurationMeta/{kind} {
+        allow read: if kind in ['registered-cards', 'merchant-rules'] && canReadHousehold(householdId);
         allow write: if false;
       }
 

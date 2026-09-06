@@ -4,6 +4,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { sha256 } from "../../../src/adapters/firebase/access/firebaseAccessPersistence";
 import { createAccessHouseholdCommandHandlers } from "../../../src/bootstrap/commands/accessHouseholdCommandHandlers";
+import { createAdminAccessRouter } from "../../../src/bootstrap/admin/adminAccess";
+import { createAdminHouseholdAccessHandlers } from "../../../src/bootstrap/admin/handlers/adminHouseholdAccessHandlers";
+import { verifiedSystemAdministrator } from "../../../src/bootstrap/verifiedSystemAdministrator";
+import { FirebaseHouseholdCommandMembershipAdapter } from "../../../src/adapters/firebase/commands/firebaseHouseholdCommandInfrastructure";
 import type {
   HouseholdCommandActor,
   HouseholdCommandExecutionContext,
@@ -88,7 +92,6 @@ describeWithFirestoreEmulator("Firebase Access command adapters", () => {
         "household.read",
         "household.write",
         "household.asset-owner-profile.write",
-        "household.delete",
       ],
     };
     const householdReference = database.collection("households").doc(created.householdId);
@@ -255,18 +258,21 @@ describeWithFirestoreEmulator("Firebase Access command adapters", () => {
     await householdReference.collection("ledgerTransactions").doc("keep-me").set({
       amountInWon: 10_000,
     });
-    await handlers
-      .get("access.request-household-deletion.v1")!
-      .execute(
-        context({
-          principalUid: creatorUid,
-          householdId: created.householdId,
-          actor,
-          command: "access.request-household-deletion.v1",
-          commandId: "delete-household-1",
-          payload: {},
-        }),
-      );
+    expect(handlers.has("access.request-household-deletion.v1")).toBe(false);
+    const administratorUid = "uid-access-administrator";
+    const adminRouter = createAdminAccessRouter({ handlers: new Map(createAdminHouseholdAccessHandlers(database)) });
+    await expect(adminRouter.execute({
+      principalUid: administratorUid,
+      administrator: verifiedSystemAdministrator(administratorUid, { systemAdmin: true }),
+      requestedAt: REQUESTED_AT,
+      request: {
+        contractVersion: "admin-access.v1", requestId: "delete-household-1", idempotencyKey: "delete-household-1",
+        operation: "delete-household", payload: { householdId: created.householdId, confirmed: true, expectedVersion: 1 },
+      },
+    })).resolves.toMatchObject({ kind: "success" });
+    await expect(new FirebaseHouseholdCommandMembershipAdapter(database).resolveActor({
+      principalUid: creatorUid, householdId: created.householdId,
+    })).resolves.toEqual({ kind: "household-not-active" });
     expect((await householdReference.get()).data()).toMatchObject({
       lifecycleState: "deleted",
       aggregateVersion: 2,

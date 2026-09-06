@@ -1,0 +1,33 @@
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import AssetProfitChart from '@/components/assets/AssetProfitChart';
+import { readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
+import type { AssetHistoryEntry } from '@/types/asset';
+jest.mock('@/contexts/HouseholdContext', () => ({ useHousehold: () => ({ householdKey: 'home', isSessionVerified: true }) }));
+jest.mock('@/platform/reporting/assetStatisticsReadModel', () => ({ readAssetStatisticsHistory: jest.fn() }));
+jest.mock('react-chartjs-2', () => ({ Bar: ({ data }: { data: unknown }) => <output>{JSON.stringify(data)}</output> }));
+const read = jest.mocked(readAssetStatisticsHistory);
+const entry = (date: string): AssetHistoryEntry => ({ id: date, householdId: 'home', assetId: 'TOTAL', date, balance: 0, changeAmount: 0, createdAt: new Date() });
+beforeEach(() => { jest.clearAllMocks(); read.mockResolvedValue([]); });
+it('reads the chart own month and year and does not turn missing or failed sources into zero', async () => {
+  render(<AssetProfitChart />);
+  await screen.findByText('변동 데이터가 없습니다');
+  const initialStart = read.mock.calls[0][0]!;
+  read.mockResolvedValueOnce([entry(initialStart)]);
+  fireEvent.click(screen.getByRole('button', { name: '월별' }));
+  await screen.findByText('0원');
+  expect(read.mock.calls.at(-1)?.[0]).toMatch(/-01-01$/);
+  read.mockRejectedValueOnce(new Error('offline'));
+  fireEvent.click(screen.getByRole('button', { name: '이전 변동 기간' }));
+  await screen.findByRole('alert');
+  expect(screen.queryByText('0원')).not.toBeInTheDocument();
+});
+it('ignores an earlier month response arriving after the next period', async () => {
+  let resolve!: (rows: AssetHistoryEntry[]) => void;
+  read.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+  render(<AssetProfitChart />);
+  await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByRole('button', { name: '이전 변동 기간' }));
+  await screen.findByText('변동 데이터가 없습니다');
+  await act(async () => resolve([entry(read.mock.calls[0][0]!)]));
+  expect(screen.queryByText('0원')).not.toBeInTheDocument();
+});

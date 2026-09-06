@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type * as firestore from "firebase-admin/firestore";
 
 import { FirebaseLedgerCommandRepository } from "../../adapters/firebase/ledger/firebaseLedgerCommandRepository";
+import { createFirebaseRememberMerchantRuleParticipant } from "../../adapters/firebase/payment-configuration/firebaseRememberMerchantRuleParticipant";
 import { FirebaseMonthlySplitLifecycleStore } from "../../adapters/firebase/ledger/firebaseMonthlySplitLifecycleStore";
 import { FirebaseItemSplitStore } from "../../adapters/firebase/ledger/firebaseItemSplitStore";
 import { FirebaseTransformationLineageStore } from "../../adapters/firebase/ledger/firebaseTransformationLineageStore";
@@ -207,6 +208,7 @@ function commandsFor(
   database: firestore.Firestore,
   context: HouseholdCommandExecutionContext,
   categories?: ReadonlySet<string>,
+  rememberForNextTime = false,
 ) {
   const verifiedActor = actor(context);
   return createBasicLedgerCommands({
@@ -214,6 +216,7 @@ function commandsFor(
       database,
       verifiedActor.householdId,
       receiptPayloadHash(context),
+      rememberForNextTime ? createFirebaseRememberMerchantRuleParticipant(database, verifiedActor.actingMemberId) : undefined,
     ),
     // categoryId가 명령 payload에 없으면 domain policy도 이 포트를 호출하지
     // 않습니다. 메모/금액 수정과 삭제가 카테고리 전체 조회를 선행하지 않도록
@@ -278,11 +281,13 @@ export function createLedgerHouseholdCommandHandlers(
         async execute(context) {
           const payload = record(context.envelope.payload);
           const patch = record(payload.patch);
+          if (payload.rememberForNextTime !== undefined && typeof payload.rememberForNextTime !== "boolean") throw new HouseholdCommandRejection("REMEMBER_INVALID");
+          if (payload.rememberForNextTime === true && typeof patch.categoryId !== "string") throw new HouseholdCommandRejection("CATEGORY_REQUIRED");
           const categories =
             patch.categoryId === undefined
               ? undefined
               : await activeCategories(database, actor(context).householdId);
-          const commands = commandsFor(database, context, categories);
+          const commands = commandsFor(database, context, categories, payload.rememberForNextTime === true);
           return resultValue(
             await commands.update({
               commandId: context.envelope.commandId,
@@ -305,6 +310,7 @@ export function createLedgerHouseholdCommandHandlers(
             database,
             context,
             await activeCategories(database, actor(context).householdId),
+            payload.rememberForNextTime === true,
           );
           return resultValue(
             await commands.update({
@@ -418,6 +424,28 @@ export function createLedgerHouseholdCommandHandlers(
             throw new HouseholdCommandRejection(result.code, true);
           }
           throw new HouseholdCommandRejection(result.code);
+        },
+      },
+    ],
+    [
+      "ledger.restore-item-split.v1",
+      {
+        async execute(context) {
+          const payload = record(context.envelope.payload);
+          const verifiedActor = actor(context);
+          const sourceId = stringValue(payload, "sourceId");
+          const expectedVersions = versionMap(payload.expectedVersions);
+          const store = new FirebaseItemSplitStore(database, verifiedActor.householdId, context.requestedAt);
+          // Hidden originals are immutable to ordinary commands; the UoW rechecks this read version.
+          const source = (await store.load({ sourceId, includeDerived: true })).transactions.find(item => item.transactionId === sourceId);
+          if (source === undefined) throw new HouseholdCommandRejection("TRANSACTION_NOT_FOUND");
+          const result = await createItemSplitRestorationCommands({ store }).restore({
+            actor: { householdId: verifiedActor.householdId, memberId: verifiedActor.actingMemberId },
+            operationKey: context.envelope.commandId, sourceId,
+            expectedVersions: { ...expectedVersions, [sourceId]: expectedVersions[sourceId] ?? source.aggregateVersion },
+          });
+          if (result.kind === "Restored") return { transactionId: result.transactionId };
+          throw new HouseholdCommandRejection(result.kind === "Split" ? "RESTORATION_RECEIPT_MISMATCH" : result.code, result.kind === "RetryableFailure");
         },
       },
     ],

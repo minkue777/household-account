@@ -3,6 +3,7 @@ package com.household.account
 import android.annotation.SuppressLint
 import android.Manifest
 import android.content.Intent
+import android.content.ComponentName
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -28,6 +29,8 @@ import com.household.account.startup.AppLaunchDurationClock
 import com.household.account.startup.OneShotExecutionGate
 import com.household.account.webhost.AndroidHostBridge
 import com.household.account.webhost.TrustedWebOrigin
+import com.household.account.webhost.NotificationListenerAccess
+import com.household.account.service.CardNotificationListenerService
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -38,6 +41,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var hostBridge: AndroidHostBridge
     private val resumeRefreshGate = FirstResumeRefreshGate()
     private val webStartupGate = OneShotExecutionGate()
+    private var pendingNavigation: Bundle? = null
     private val pushPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
@@ -53,6 +57,10 @@ class MainActivity : AppCompatActivity() {
             WebView.setWebContentsDebuggingEnabled(true)
         }
         setupWebView()
+        pendingNavigation = savedInstanceState?.takeIf {
+            it.getString("webEnvironmentVersion") == TrustedWebOrigin.ENVIRONMENT_VERSION &&
+                TrustedWebOrigin.contains(it.getString("webNavigationUrl"))
+        }?.getBundle("webNavigation")
         setupPermissionButtons()
         checkPermissionAndShowContent()
     }
@@ -71,6 +79,18 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             QuickEditCoordinator.resumePending(applicationContext)
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        if (::webView.isInitialized && TrustedWebOrigin.contains(webView.url)) {
+            val navigation = Bundle()
+            if (webView.saveState(navigation) != null) {
+                outState.putBundle("webNavigation", navigation)
+                outState.putString("webNavigationUrl", webView.url)
+                outState.putString("webEnvironmentVersion", TrustedWebOrigin.ENVIRONMENT_VERSION)
+            }
+        }
+        super.onSaveInstanceState(outState)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -188,6 +208,9 @@ class MainActivity : AppCompatActivity() {
 
         if (!webStartupGate.tryEnter()) return
 
+        pendingNavigation?.let { webView.restoreState(it) }
+        pendingNavigation = null
+
         if (webView.url == null) {
             // WebView Firebase Auth가 남아 있으면 그 세션을 즉시 재사용합니다.
             // 세션이 없는 경우에만 Web이 Native bridge에 교환을 요청하므로 앱을
@@ -224,7 +247,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun isNotificationListenerEnabled(): Boolean {
         val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
-        return flat?.contains(packageName) == true
+        return NotificationListenerAccess.isEnabled(flat, ComponentName(this, CardNotificationListenerService::class.java))
     }
 
     private fun openNotificationListenerSettings() {

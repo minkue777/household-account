@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Expense } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import Portal from './common/Portal';
-import { getTodayLocalDate } from '@/lib/utils/date';
+import { getTodayLocalDate, getSeoulCalendarParts } from '@/lib/utils/date';
 import { getLedgerPrimaryText } from '@/lib/utils/ledgerDisplay';
 
 interface CalendarProps {
@@ -203,9 +203,9 @@ export default function Calendar({
             {/* 오늘로 이동 버튼 */}
             <button
               onClick={() => {
-                const today = new Date();
+                const today = getSeoulCalendarParts();
                 if (onYearMonthChange) {
-                  onYearMonthChange(today.getFullYear(), today.getMonth() + 1);
+                  onYearMonthChange(today.year, today.month);
                 }
                 setShowYearMonthPicker(false);
               }}

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import compatibilityCases from "../../../../contracts/fixtures/system/category-compatibility.v1.json";
 import {
   createPositiveMoneyInWon,
   mapStoredCategory,
@@ -44,6 +45,9 @@ export function createSubject(): SharedValueContractsSubject {
 }
 
 describe("공통 값 객체·호환 mapper 계약", () => {
+  it.each(compatibilityCases.cases)("[SYS-003] preserves category $storedValue", ({ storedValue, categoryId }) => {
+    expect(mapStoredCategory({ storedValue, source: "android", knownCategoryIds: ["food", "etc"] }).categoryId).toBe(categoryId);
+  });
   it.each([
     [undefined, "legacy", "etc", "legacy-default"],
     ["FOOD", "android", "food", "known"],

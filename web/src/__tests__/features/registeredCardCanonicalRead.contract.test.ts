@@ -7,6 +7,7 @@ const mockOnSnapshot = jest.fn();
 jest.mock('@/platform/read-model/firestoreReadModel', () => ({
   db: { kind: 'firestore' },
   collection: (...segments: unknown[]) => mockCollection(...segments),
+  doc: (...segments: unknown[]) => ({ kind: 'document', segments }),
   onSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
 }));
 
@@ -57,7 +58,10 @@ describe('등록 카드 Canonical 조회 계약', () => {
   beforeEach(() => {
     mockCollection.mockClear();
     mockOnSnapshot.mockReset();
-    mockOnSnapshot.mockReturnValue(jest.fn());
+    mockOnSnapshot.mockImplementation((reference, _options, next) => {
+      if (reference.kind === 'document') next({ metadata: { fromCache: false }, data: () => ({ collectionVersions: { 'household-1:member-1': 8 } }) });
+      return jest.fn();
+    });
   });
 
   test('[T-CARD-005] 이름이 변경되어도 안정적인 가구원 ID로 본인 카드를 표시한다', () => {

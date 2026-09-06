@@ -1,8 +1,19 @@
 type StoredDocument = Record<string, unknown>;
 
+function firestoreWriteValue(value: unknown): unknown {
+  if (value instanceof Date) return new Date(value);
+  if (Array.isArray(value)) return value.map(firestoreWriteValue);
+  if (typeof value !== "object" || value === null) return value;
+  if (value.constructor.name === "DeleteTransform") return { __memoryFieldValue: "delete" };
+  if (value.constructor.name === "ServerTimestampTransform") return new Date();
+  if ("toDate" in value && typeof value.toDate === "function") return value.toDate();
+  return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, firestoreWriteValue(child)]));
+}
+
 interface QueryFilter {
   readonly field: string;
   readonly value: unknown;
+  readonly operator: string;
 }
 
 export interface InMemoryTransactionReadTarget {
@@ -22,6 +33,10 @@ class MemoryDocumentSnapshot {
 
   get id(): string {
     return this.reference.id;
+  }
+
+  get ref(): MemoryDocumentReference {
+    return this.reference;
   }
 
   data(): StoredDocument | undefined {
@@ -49,14 +64,17 @@ class MemoryQuery {
     readonly filters: readonly QueryFilter[],
     protected readonly database?: InMemoryFirestore,
     readonly maximum?: number,
+    readonly ordering: readonly { field: string; direction: "asc" | "desc" }[] = [],
+    readonly cursor?: readonly unknown[],
+    readonly group = false,
   ) {}
 
   where(field: string, operator: string, value: unknown): MemoryQuery {
-    if (operator !== "==") throw new Error(`Unsupported operator: ${operator}`);
+    if (!["==", ">=", "<=", ">", "<", "array-contains"].includes(operator)) throw new Error(`Unsupported operator: ${operator}`);
     return new MemoryQuery(this.collectionPath, [
       ...this.filters,
-      { field, value },
-    ], this.database, this.maximum);
+      { field, value, operator },
+    ], this.database, this.maximum, this.ordering, this.cursor, this.group);
   }
 
   limit(maximum: number): MemoryQuery {
@@ -65,30 +83,56 @@ class MemoryQuery {
       this.filters,
       this.database,
       maximum,
+      this.ordering, this.cursor, this.group,
     );
+  }
+
+  orderBy(field: string, direction: "asc" | "desc" = "asc"): MemoryQuery {
+    return new MemoryQuery(this.collectionPath, this.filters, this.database, this.maximum, [...this.ordering, { field, direction }], this.cursor, this.group);
+  }
+
+  startAfter(...values: readonly unknown[]): MemoryQuery {
+    return new MemoryQuery(this.collectionPath, this.filters, this.database, this.maximum, this.ordering, values, this.group);
+  }
+
+  execute(database: InMemoryFirestore): MemoryQuerySnapshot {
+    const fieldValue = (document: { path: string; value: StoredDocument }, field: string) =>
+      field === "__name__" ? (this.group ? document.path : document.path.split("/").at(-1)) : valueAt(document.value, field);
+    const compare = (a: unknown, b: unknown): number => a === b ? 0 : (a as string | number) < (b as string | number) ? -1 : 1;
+    let records = (this.group ? database.documentsInGroup(this.collectionPath) : database.documentsInCollection(this.collectionPath))
+      .filter((document) => this.filters.every(({ field, operator, value }) => {
+        const actual = fieldValue(document, field);
+        if (actual === undefined) return false;
+        if (operator === "array-contains") return Array.isArray(actual) && actual.includes(value);
+        const order = compare(actual, value);
+        return operator === "==" ? order === 0 : operator === ">=" ? order >= 0 : operator === "<=" ? order <= 0 : operator === ">" ? order > 0 : order < 0;
+      }));
+    if (this.ordering.length > 0) {
+      records = records.filter((document) => this.ordering.every(({ field }) => fieldValue(document, field) !== undefined))
+        .sort((left, right) => {
+          for (const { field, direction } of this.ordering) {
+            const order = compare(fieldValue(left, field), fieldValue(right, field));
+            if (order !== 0) return direction === "asc" ? order : -order;
+          }
+          return compare(left.path, right.path);
+        });
+      if (this.cursor !== undefined) records = records.filter((document) => {
+        for (let index = 0; index < this.cursor!.length; index += 1) {
+          const { field, direction } = this.ordering[index];
+          const order = compare(fieldValue(document, field), this.cursor![index]);
+          if (order !== 0) return direction === "asc" ? order > 0 : order < 0;
+        }
+        return false;
+      });
+    }
+    return new MemoryQuerySnapshot(records.slice(0, this.maximum).map(({ path, value }) => new MemoryDocumentSnapshot(new MemoryDocumentReference(path, database), value)));
   }
 
   async get(): Promise<MemoryQuerySnapshot> {
     if (this.database === undefined) {
       throw new Error("MEMORY_QUERY_DATABASE_NOT_BOUND");
     }
-    const docs = this.database
-      .documentsInCollection(this.collectionPath)
-      .filter(({ value: document }) =>
-        this.filters.every(
-          ({ field, value: expected }) =>
-            expected === valueAt(document, field),
-        ),
-      )
-      .slice(0, this.maximum)
-      .map(
-        ({ path, value }) =>
-          new MemoryDocumentSnapshot(
-            new MemoryDocumentReference(path, this.database),
-            value,
-          ),
-      );
-    return new MemoryQuerySnapshot(docs);
+    return this.execute(this.database);
   }
 }
 
@@ -105,6 +149,12 @@ class MemoryCollectionReference extends MemoryQuery {
   doc(id: string): MemoryDocumentReference {
     return new MemoryDocumentReference(`${this.path}/${id}`, this.database);
   }
+
+  get id(): string { return this.path.split("/").at(-1) ?? ""; }
+  get parent(): MemoryDocumentReference | null {
+    const segments = this.path.split("/");
+    return segments.length < 2 ? null : new MemoryDocumentReference(segments.slice(0, -1).join("/"), this.database);
+  }
 }
 
 class MemoryDocumentReference {
@@ -117,6 +167,20 @@ class MemoryDocumentReference {
 
   get id(): string {
     return this.path.split("/").at(-1) ?? "";
+  }
+
+  get parent(): MemoryCollectionReference {
+    return new MemoryCollectionReference(this.path.split("/").slice(0, -1).join("/"), this.database);
+  }
+
+  async set(value: StoredDocument, options?: { merge?: boolean }): Promise<void> {
+    if (this.database === undefined) throw new Error("MEMORY_DOCUMENT_DATABASE_NOT_BOUND");
+    this.database.write(this.path, value, options?.merge === true);
+  }
+
+  async delete(): Promise<void> {
+    if (this.database === undefined) throw new Error("MEMORY_DOCUMENT_DATABASE_NOT_BOUND");
+    this.database.remove(this.path);
   }
 
   collection(name: string): MemoryCollectionReference {
@@ -199,20 +263,7 @@ class MemoryTransaction {
       kind: "query",
       path: target.collectionPath,
     });
-    const docs = this.database
-      .documentsInCollection(target.collectionPath)
-      .filter(({ value: document }) =>
-        target.filters.every(
-          ({ field, value: expected }) =>
-            expected === valueAt(document, field),
-        ),
-      )
-      .slice(0, target.maximum)
-      .map(
-        ({ path, value }) =>
-          new MemoryDocumentSnapshot(new MemoryDocumentReference(path), value),
-      );
-    return new MemoryQuerySnapshot(docs);
+    return target.execute(this.database);
   }
 
   set(
@@ -223,7 +274,7 @@ class MemoryTransaction {
     this.writes.push({
       kind: "set",
       path: reference.path,
-      value: structuredClone(value),
+      value: firestoreWriteValue(value) as StoredDocument,
       merge: options?.merge === true,
       requireAbsent: false,
     });
@@ -234,7 +285,7 @@ class MemoryTransaction {
     this.writes.push({
       kind: "set",
       path: reference.path,
-      value: structuredClone(value),
+      value: firestoreWriteValue(value) as StoredDocument,
       merge: false,
       requireAbsent: true,
     });
@@ -285,6 +336,15 @@ export class InMemoryFirestore {
     return new MemoryCollectionReference(path, this);
   }
 
+  collectionGroup(name: string): MemoryQuery {
+    return new MemoryQuery(name, [], this, undefined, [], undefined, true);
+  }
+
+  documentsInGroup(name: string): readonly { path: string; value: StoredDocument }[] {
+    return [...this.documents.entries()].filter(([path]) => path.split("/").at(-2) === name)
+      .map(([path, value]) => ({ path, value: structuredClone(value) }));
+  }
+
   async runTransaction<T>(
     operation: (transaction: MemoryTransaction) => Promise<T>,
   ): Promise<T> {
@@ -325,12 +385,12 @@ export class InMemoryFirestore {
 
   write(path: string, value: StoredDocument, merge: boolean): void {
     const current = this.documents.get(path);
-    this.documents.set(
-      path,
-      merge && current !== undefined
-        ? { ...structuredClone(current), ...structuredClone(value) }
-        : structuredClone(value),
-    );
+    const next = merge && current !== undefined ? structuredClone(current) : {};
+    for (const [key, child] of Object.entries(firestoreWriteValue(value) as StoredDocument)) {
+      if (typeof child === "object" && child !== null && "__memoryFieldValue" in child && child.__memoryFieldValue === "delete") delete next[key];
+      else next[key] = child;
+    }
+    this.documents.set(path, next);
   }
 
   documentsInCollection(

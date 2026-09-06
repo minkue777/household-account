@@ -179,30 +179,49 @@ export class FirebaseDividendHoldingQuery implements DividendHoldingQuery {
     readonly cursor?: string;
     readonly limit: number;
   }) {
-    const snapshot = await this.database.collectionGroup("positions").get();
+    let query = this.database.collectionGroup("positions")
+      .where("market", "==", "KRX").where("lifecycleState", "==", "active")
+      .orderBy("householdId").orderBy("instrumentCode");
+    if (input.cursor !== undefined) {
+      const separator = input.cursor.indexOf(":");
+      if (separator < 1) throw new Error("INVALID_DIVIDEND_CURSOR");
+      query = query.startAfter(input.cursor.slice(0, separator), input.cursor.slice(separator + 1));
+    }
+    const snapshot = await query.limit(input.limit).get();
+    const last = snapshot.docs.at(-1)?.data();
+    // A target is a household/instrument group. Complete the boundary group so
+    // its quantity evidence never loses positions at a database page boundary.
+    const boundary = last === undefined ? [] : (await this.database.collectionGroup("positions")
+      .where("market", "==", "KRX").where("lifecycleState", "==", "active")
+      .where("householdId", "==", last.householdId)
+      .where("instrumentCode", "==", last.instrumentCode).get()).docs;
+    const documents = [...new Map([...snapshot.docs, ...boundary].map(document => [document.ref.path, document])).values()];
     const catalogEtfCodes =
       this.resolveKrxEtfCodes !== undefined &&
-      snapshot.docs.some(needsCatalogClassification)
+      documents.some(needsCatalogClassification)
         ? await this.resolveKrxEtfCodes()
         : undefined;
-    const targets = groupTargets(
-      snapshot.docs.flatMap((document) => {
+    const positions = documents.flatMap((document) => {
         const position = explicitKrxEtfPosition(document, catalogEtfCodes);
         return position === undefined ? [] : [position];
-      }),
-    );
-    const cursor = input.cursor;
-    const start =
-      cursor === undefined
-        ? 0
-        : targets.findIndex(({ targetId }) => targetId > cursor);
-    if (start < 0) return { items: [] };
-    const items = targets.slice(start, start + input.limit);
-    const last = items.at(-1)?.targetId;
+      });
+    const activeParents = new Set<string>();
+    const parents = new Map(positions.map(position => [`${position.householdId}/${position.assetId}`, position]));
+    await Promise.all([...parents].map(async ([key, position]) => {
+      const canonical = await this.database.collection("households").doc(position.householdId).collection("assets").doc(position.assetId).get();
+      if (canonical.exists) {
+        if (canonical.data()?.lifecycleState === "active" && canonical.data()?.deletedAt === undefined) activeParents.add(key);
+        return;
+      }
+      const legacy = await this.database.collection("assets").doc(position.assetId).get();
+      const data = legacy.data();
+      if (data?.householdId === position.householdId && data.isActive !== false && data.lifecycleState !== "deleted" && data.deletedAt === undefined) activeParents.add(key);
+    }));
+    const targets = groupTargets(positions.filter(position => activeParents.has(`${position.householdId}/${position.assetId}`)));
     return {
-      items,
-      ...(last !== undefined && start + items.length < targets.length
-        ? { nextCursor: last }
+      items: targets,
+      ...(last !== undefined && snapshot.size === input.limit
+        ? { nextCursor: `${last.householdId}:${last.instrumentCode}` }
         : {}),
     };
   }
@@ -216,6 +235,7 @@ export class FirebaseDividendHoldingQuery implements DividendHoldingQuery {
     const snapshot = await this.database
       .collectionGroup("positionHistory")
       .where("householdId", "==", input.householdId)
+      .where("instrument.code", "==", input.instrumentCode.toLocaleUpperCase("en-US"))
       .get();
     const assetIds = new Set(input.sourceAssetIds);
     return snapshot.docs

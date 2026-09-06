@@ -27,8 +27,8 @@
 |---|---|---|---|
 | `GetHomeConfiguration` Query | ActorContext, householdId | `HomeConfigurationView` | 현재 사용 |
 | `GetHomeSummary` Query | ActorContext, householdId, accounting period | 카드 2개의 `HomeSummaryView` | 현재 사용 |
-| `SaveHomeConfiguration` Command | envelope, left·right card selection, expectedVersion | 저장된 configuration/version 또는 ValidationError·Conflict | 모든 활성 가구원이 설정 UI에서 호출하는 목표 계약 |
-| `SelectHomeLocalCurrency` Command | envelope, localCurrencyType, expectedVersion | 저장된 선택/version | HOME-002 목표 계약 |
+| `SaveHomeConfiguration` Command | `home.update-summary-preferences.v1` envelope, `leftCard`, `rightCard`, `expectedVersion` | receipt 성공 `{}` 또는 ValidationError·Conflict; 저장된 configuration/version은 canonical listener에서 수렴 | 모든 활성 가구원이 설정 UI에서 호출 |
+| `SelectHomeLocalCurrency` Command | `home.select-local-currency.v1` envelope, `localCurrencyTypeId`, `expectedVersion` | receipt 성공 `{}`; 선택/version은 canonical listener에서 수렴 | HOME-002 사용자 선택 경로 |
 | `ListAvailableLocalCurrencies` Query | ActorContext, householdId | 선택 가능한 유형과 표시명 목록 | Local Currency 공개 Query 소비 |
 
 ```ts
@@ -116,7 +116,9 @@ interface ThemePreferencePort {
 4. 선택 type과 receipt를 같은 transaction에 저장하고 변경 Event를 한 번 기록한다.
 5. 이후 Home Summary는 다른 유형의 잔액이 더 최근에 갱신되어도 저장된 선택을 유지한다.
 
-자동 선택도 같은 Command와 version 검증을 사용합니다. 동시에 두 번째 유형이 등록되어 선택 후보가 둘이 되면 자동 선택을 중단하고 `LOCAL_CURRENCY_SELECTION_REQUIRED`로 수렴합니다.
+최초 자동 선택은 사용자 조회가 늦어 첫 유형을 놓치지 않도록 잔액 저장 transaction에 Home의 `autoSelectFirstLocalCurrency` 정책을 합성합니다. `prepareFirstLocalCurrencySelection`이 쓰기 전에 canonical Preferences·가구 호환 필드·현재 유형 목록을 읽고, 선택이 없으며 새 잔액을 포함한 유형이 정확히 하나일 때만 현재 Preferences 버전을 1 증가시킵니다. 잔액·해당 관측 receipt와 Home 변경 Outbox가 같은 transaction에 저장되므로 중복 관측과 concurrent 사용자 변경은 원자 재평가됩니다. 이미 선택된 유형 또는 처음부터 복수 유형은 변경하지 않습니다. 사용자 명령은 계속 명시적 `expectedVersion`을 필수로 받습니다.
+
+설정 UI는 편집 시작 때의 버전을 초안과 함께 보존합니다. 서버 listener에 더 최신 버전이 도착해도 미저장 초안의 버전을 바꾸지 않으며, 충돌 시 초안을 유지하고 사용자가 최신 구성을 다시 불러올 수 있습니다. 가구 DTO의 `homeSummaryConfigVersion`·`selectedLocalCurrencyType`은 호환 읽기에 사용합니다.
 
 ### 5.5 Theme 복원·변경
 

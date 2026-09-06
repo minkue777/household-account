@@ -96,7 +96,19 @@ export class FirebaseMemberRenameStore implements MemberRenameStorePort {
     private readonly householdId: string,
     private readonly requestedAt: string,
     private readonly commandId: string,
+    private readonly scope: {
+      readonly principalUid: string;
+      readonly memberId: string;
+      readonly idempotencyKey: string;
+    },
   ) {}
+
+  private async currentReceipt(transaction?: firestore.Transaction) {
+    const reference = this.database.collection("commandReceipts").doc("access-member-rename")
+      .collection("receipts").doc(hash(`${this.householdId}\u0000${this.scope.idempotencyKey}`));
+    const snapshot = transaction === undefined ? await reference.get() : await transaction.get(reference);
+    return { docs: snapshot.exists ? [snapshot] : [] };
+  }
 
   private async load(): Promise<MemberRenameState> {
     const householdReference = this.database
@@ -104,15 +116,10 @@ export class FirebaseMemberRenameStore implements MemberRenameStorePort {
       .doc(this.householdId);
     const [household, members, memberships, profiles, receipts] = await Promise.all([
       householdReference.get(),
-      householdReference.collection("members").get(),
-      householdReference.collection("memberships").get(),
-      householdReference.collection("assetOwnerProfiles").get(),
-      this.database
-        .collection("commandReceipts")
-        .doc("access-member-rename")
-        .collection("receipts")
-        .where("householdId", "==", this.householdId)
-        .get(),
+      householdReference.collection("members").where("linkedPrincipalUid", "==", this.scope.principalUid).get(),
+      householdReference.collection("memberships").where("memberId", "==", this.scope.memberId).get(),
+      householdReference.collection("assetOwnerProfiles").where("linkedMemberId", "==", this.scope.memberId).get(),
+      this.currentReceipt(),
     ]);
     if (!household.exists) throw new Error("Household not found");
     const mappedMemberships = mapMemberships(memberships.docs);
@@ -138,7 +145,7 @@ export class FirebaseMemberRenameStore implements MemberRenameStorePort {
           : [];
       }),
       receipts: receipts.docs.flatMap((snapshot) => {
-        const value = snapshot.data().receipt;
+        const value = snapshot.data()?.receipt;
         return typeof value === "object" && value !== null
           ? [value as MemberRenameReceipt]
           : [];
@@ -160,20 +167,14 @@ export class FirebaseMemberRenameStore implements MemberRenameStorePort {
     return this.database.runTransaction(async (transaction) => {
       const [household, members, memberships, profiles, receipts] = await Promise.all([
         transaction.get(householdReference),
-        transaction.get(householdReference.collection("members")),
+        transaction.get(householdReference.collection("members").where("linkedPrincipalUid", "==", this.scope.principalUid)),
         transaction.get(
-          householdReference.collection("memberships"),
+          householdReference.collection("memberships").where("memberId", "==", this.scope.memberId),
         ),
         transaction.get(
-          householdReference.collection("assetOwnerProfiles"),
+          householdReference.collection("assetOwnerProfiles").where("linkedMemberId", "==", this.scope.memberId),
         ),
-        transaction.get(
-          this.database
-            .collection("commandReceipts")
-            .doc("access-member-rename")
-            .collection("receipts")
-            .where("householdId", "==", this.householdId),
-        ),
+        this.currentReceipt(transaction),
       ]);
       if (!household.exists) throw new Error("Household not found");
       const mappedMemberships = mapMemberships(memberships.docs);
@@ -199,7 +200,7 @@ export class FirebaseMemberRenameStore implements MemberRenameStorePort {
             : [];
         }),
         receipts: receipts.docs.flatMap((snapshot) => {
-          const value = snapshot.data().receipt;
+          const value = snapshot.data()?.receipt;
           return typeof value === "object" && value !== null
             ? [value as MemberRenameReceipt]
             : [];
@@ -209,8 +210,13 @@ export class FirebaseMemberRenameStore implements MemberRenameStorePort {
       const mutation = operation(before);
       const existingMemberIds = new Set(members.docs.map((document) => document.id));
       const existingProfileIds = new Set(profiles.docs.map((document) => document.id));
+      const changedMembers = mutation.state.members.filter((member) => {
+        const previous = before.members.find((candidate) => candidate.memberId === member.memberId);
+        return previous === undefined || previous.displayName !== member.displayName
+          || previous.aggregateVersion !== member.aggregateVersion;
+      });
 
-      for (const member of mutation.state.members) {
+      for (const member of changedMembers) {
         transaction.set(
           householdReference.collection("members").doc(member.memberId),
           {
@@ -219,12 +225,11 @@ export class FirebaseMemberRenameStore implements MemberRenameStorePort {
             linkedPrincipalUid: member.principalUid,
             displayName: member.displayName,
             aggregateVersion: member.aggregateVersion,
-            lifecycleState: "active",
             schemaVersion: 2,
             updatedAt: FieldValue.serverTimestamp(),
             ...(existingMemberIds.has(member.memberId)
               ? {}
-              : { createdAt: FieldValue.serverTimestamp() }),
+              : { lifecycleState: "active", createdAt: FieldValue.serverTimestamp() }),
           },
           { merge: true },
         );
@@ -251,6 +256,8 @@ export class FirebaseMemberRenameStore implements MemberRenameStorePort {
         }
       }
       for (const profile of mutation.state.memberOwnerProfiles) {
+        const previous = before.memberOwnerProfiles.find((candidate) => candidate.profileId === profile.profileId);
+        if (previous?.displayName === profile.displayName) continue;
         transaction.set(
           householdReference.collection("assetOwnerProfiles").doc(profile.profileId),
           {
@@ -268,6 +275,7 @@ export class FirebaseMemberRenameStore implements MemberRenameStorePort {
         );
       }
       for (const receipt of mutation.state.receipts) {
+        if (before.receipts.some((previous) => previous.idempotencyKey === receipt.idempotencyKey)) continue;
         transaction.set(
           this.database
             .collection("commandReceipts")
@@ -304,12 +312,12 @@ export class FirebaseMemberRenameStore implements MemberRenameStorePort {
       }
 
       const legacy = household.data()?.members;
-      if (Array.isArray(legacy)) {
+      if (Array.isArray(legacy) && changedMembers.length > 0) {
         transaction.update(householdReference, {
           members: legacy.map((raw) => {
             if (typeof raw !== "object" || raw === null) return raw;
             const value = raw as Record<string, unknown>;
-            const changed = mutation.state.members.find(
+            const changed = changedMembers.find(
               (member) => member.memberId === value.id,
             );
             return changed === undefined

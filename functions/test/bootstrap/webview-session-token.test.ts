@@ -6,7 +6,7 @@ import {
   issueWebViewSessionToken,
 } from "../../src/bootstrap/firebaseWebViewSession";
 
-describe("WebView Firebase session bridge", () => {
+describe("[T-WEBVIEW-001][AND-005] 실제 WebView Firebase session 발급 계약", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -103,22 +103,72 @@ describe("WebView Firebase session bridge", () => {
     expect(resolveSignedInUser).not.toHaveBeenCalled();
   });
 
-  it("callable adapter는 발급 결과를 그대로 반환한다", async () => {
+  it("최초 방문자도 같은 UID로 로그인하되 가구 권한 없이 생성·참여로 안내한다", async () => {
+    const issue = vi.fn(
+      async (_principalUid: string, claims: Readonly<Record<string, unknown>>) =>
+        `token-for:${String(claims.hcaClient)}`,
+    );
     await expect(
       handleCreateWebViewSessionToken({
         principalUid: "uid-a",
-        issue: async (_principalUid, claims) =>
-          `token-for:${String(claims.hcaClient)}`,
+        issue,
         resolveSignedInUser: async () => ({
           kind: "first-visit-required",
           choices: ["create", "join"],
         }),
       }),
-    ).resolves.toMatchObject({
+    ).resolves.toEqual({
+      contractVersion: "webview-session-token.v1",
       customToken: "token-for:web",
       nativeCustomToken: "token-for:native",
+      principalUid: "uid-a",
+      signedInUserResolution: {
+        kind: "first-visit-required",
+        choices: ["create", "join"],
+      },
     });
+    expect(issue.mock.calls).toEqual([
+      ["uid-a", {
+        hcaClient: "web",
+        hcaCaptureMembershipVersion: 1,
+        hcaCaptureMember: false,
+      }],
+      ["uid-a", {
+        hcaClient: "native",
+        hcaCaptureMembershipVersion: 1,
+        hcaCaptureMember: false,
+      }],
+    ]);
   });
+
+  it.each(["web", "native"])(
+    "%s token 발급에 실패하면 부분 성공이나 SDK 오류 원문을 반환하지 않는다",
+    async (failedClient) => {
+      const issue = vi.fn(
+        async (_principalUid: string, claims: Readonly<Record<string, unknown>>) => {
+          if (claims.hcaClient === failedClient) {
+            throw new Error("internal-signer-error: private-diagnostic");
+          }
+          return "successfully-issued-token";
+        },
+      );
+      await expect(
+        handleCreateWebViewSessionToken({
+          principalUid: "uid-a",
+          issue,
+          resolveSignedInUser: async () => ({
+            kind: "first-visit-required",
+            choices: ["create", "join"],
+          }),
+        }),
+      ).rejects.toMatchObject({
+        code: "unavailable",
+        message: "SIGNED_IN_USER_RESOLUTION_FAILED",
+        details: undefined,
+      });
+      expect(issue).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it("callable adapter도 인증되지 않은 요청을 거부한다", async () => {
     await expect(

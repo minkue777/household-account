@@ -10,6 +10,7 @@ export interface CaptureProvenance {
     readonly parserVersion: string;
   };
   readonly originalAmountInWon: number;
+  readonly approvalAmountInWon?: number;
   readonly originalMerchantEvidence: string;
   readonly originalCardEvidence: {
     readonly companyLabel: string;

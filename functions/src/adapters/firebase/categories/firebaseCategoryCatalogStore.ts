@@ -120,6 +120,7 @@ function categorySignature(category: CategoryEntity): string {
 }
 
 interface LoadedCategoryCatalog {
+  readonly householdActive: boolean;
   readonly state: CategoryCatalog;
   readonly canonicalDocumentIds: ReadonlyMap<string, string>;
   readonly legacyDocumentIds: ReadonlyMap<string, string>;
@@ -128,6 +129,7 @@ interface LoadedCategoryCatalog {
 }
 
 export interface FirebaseCategoryCatalogStoreInput {
+  readonly requireActiveHousehold?: boolean;
   readonly householdId: string;
   readonly principalUid: string;
   readonly commandId: string;
@@ -188,6 +190,8 @@ export class FirebaseCategoryCatalogStore implements CategoryCatalogStorePort {
       })[0] ??
       null;
     return {
+      householdActive: household.exists &&
+        (household.data()?.lifecycleState ?? "active") === "active" && household.data()?.deletedAt == null,
       state: {
         categories: [...canonicalMapped, ...legacyMapped],
         defaultCategoryId,
@@ -252,6 +256,9 @@ export class FirebaseCategoryCatalogStore implements CategoryCatalogStorePort {
         return receipt.data()?.result as T;
       }
       const loaded = await this.load(transaction);
+      if (this.input.requireActiveHousehold && !loaded.householdActive) {
+        throw new Error("HOUSEHOLD_NOT_ACTIVE");
+      }
       const mutation = operation(loaded.state);
       const beforeById = new Map(
         loaded.state.categories.map((category) => [category.categoryId, category]),

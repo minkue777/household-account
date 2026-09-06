@@ -8,6 +8,9 @@ function isDuplicate(error: unknown): boolean {
 }
 
 export const paymentConfigurationCommands = {
+  async reorderMerchantRules(householdId: string, matchType: 'startsWith' | 'endsWith' | 'contains', orderedRuleIds: string[], expectedCollectionVersion: number): Promise<void> {
+    await getHouseholdCommandClient().execute('payment-configuration.reorder-merchant-rules.v1', { matchType, orderedRuleIds, expectedCollectionVersion }, { householdId });
+  },
   async createMerchantRule(householdId: string, rule: CreateMerchantRuleInput): Promise<string> {
     try {
       const result = await getHouseholdCommandClient().execute(
@@ -25,19 +28,20 @@ export const paymentConfigurationCommands = {
   async updateMerchantRule(
     householdId: string,
     ruleId: string,
-    changes: Partial<Pick<MerchantRule, 'merchantKeyword' | 'matchType' | 'mapping' | 'priority' | 'isActive'>>
+    changes: Partial<Pick<MerchantRule, 'merchantKeyword' | 'matchType' | 'mapping' | 'priority' | 'isActive'>>,
+    expectedVersion: number
   ): Promise<void> {
     await getHouseholdCommandClient().execute(
       'payment-configuration.update-merchant-rule.v1',
-      { ruleId, changes: { ...changes } },
+      { ruleId, changes: { ...changes }, expectedVersion },
       { householdId }
     );
   },
 
-  async deleteMerchantRule(householdId: string, ruleId: string): Promise<void> {
+  async deleteMerchantRule(householdId: string, ruleId: string, expectedVersion: number): Promise<void> {
     await getHouseholdCommandClient().execute(
       'payment-configuration.delete-merchant-rule.v1',
-      { ruleId },
+      { ruleId, expectedVersion },
       { householdId }
     );
   },
@@ -62,12 +66,13 @@ export const paymentConfigurationCommands = {
   async updateCard(
     householdId: string,
     cardId: string,
-    changes: { cardLabel?: string; cardLastFour?: string }
+    changes: { cardLabel?: string; cardLastFour?: string },
+    expectedVersion: number
   ): Promise<boolean> {
     try {
       await getHouseholdCommandClient().execute(
         'payment-configuration.update-card.v1',
-        { cardId, changes },
+        { cardId, changes, expectedVersion },
         { householdId }
       );
       return true;
@@ -77,18 +82,18 @@ export const paymentConfigurationCommands = {
     }
   },
 
-  async deleteCard(householdId: string, cardId: string): Promise<void> {
+  async deleteCard(householdId: string, cardId: string, expectedVersion: number): Promise<void> {
     await getHouseholdCommandClient().execute(
       'payment-configuration.delete-card.v1',
-      { cardId },
+      { cardId, expectedVersion },
       { householdId }
     );
   },
 
-  async reorderCards(householdId: string, cardIds: string[]): Promise<void> {
+  async reorderCards(householdId: string, cardIds: string[], expectedCollectionVersion: number): Promise<void> {
     await getHouseholdCommandClient().execute(
       'payment-configuration.reorder-cards.v1',
-      { cardIds },
+      { cardIds, expectedCollectionVersion },
       { householdId }
     );
   },

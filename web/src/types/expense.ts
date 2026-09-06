@@ -21,6 +21,8 @@ export interface Expense {
   category: Category;     // 카테고리 (동적)
   cardType?: string;  // 'manual' | 'captured' | 'local_currency' | legacy type
   cardLastFour?: string;  // 기존 UI 호환용 카드 표시 문자열(예: 수동, 삼성(1840))
+  cardEvidence?: string; // 최초 수집 시 보존한 카드 식별 증거
+  derivedFromTransactionId?: string;
   localCurrencyType?: string; // 검증된 지역화폐 유형 code (예: gyeonggi)
   memo?: string;          // 메모 (선택)
   mergedFrom?: MergedExpenseInfo[];  // 합쳐진 원본 지출들 (되돌리기용)

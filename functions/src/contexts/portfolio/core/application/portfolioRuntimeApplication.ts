@@ -34,8 +34,8 @@ export function createPortfolioRuntimeApplication(dependencies: {
   readonly marketQuotes: PortfolioMarketQuotePort;
   readonly providerHealth?: PortfolioProviderHealthPort;
 }): PortfolioRuntimeApplication {
-  const atomic: PortfolioAtomicExecutor = async (metadata, decide) =>
-    normalizeAtomicResult(await dependencies.store.transact(metadata, decide));
+  const atomic: PortfolioAtomicExecutor = async (metadata, decide, scope) =>
+    normalizeAtomicResult(await dependencies.store.transact(metadata, decide, scope));
 
   return {
     ...createPortfolioAssetCommands(atomic),

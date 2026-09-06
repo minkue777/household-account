@@ -35,6 +35,7 @@ export interface FirebaseLegacyMembershipStoreInput {
   readonly payloadFingerprint: string;
   readonly requestedAt: string;
   readonly commandId: string;
+  readonly recoveryAudit?: { readonly operatorRef: string; readonly reasonHash: string };
 }
 
 interface LoadedLegacyState {
@@ -366,13 +367,16 @@ export class FirebaseLegacyMembershipStore implements LegacyMembershipStorePort 
         });
 
         for (const event of mutation.state.auditEvents) {
+          if (event.eventType !== 'LegacyMembershipClaimed.v1' && event.eventType !== 'LegacyMembershipClaimRepaired.v1') {
+            throw new Error('UNSUPPORTED_LEGACY_MEMBERSHIP_EVENT');
+          }
           new FirebaseTransactionalOutbox(this.database).append(transaction, {
             eventId: accessEventId(
               this.input.commandId,
-              "LegacyMembershipClaimed.v1",
+              event.eventType,
               event.memberId,
             ),
-            eventType: "LegacyMembershipClaimed.v1",
+            eventType: event.eventType,
             householdId: event.householdId,
             aggregateId: event.memberId,
             aggregateVersion: memberVersion,
@@ -387,6 +391,13 @@ export class FirebaseLegacyMembershipStore implements LegacyMembershipStorePort 
         }
       }
 
+      if (this.input.recoveryAudit && (mutation.value as { kind?: string })?.kind === 'repaired') {
+        transaction.create(this.database.collection('accessRecoveryAudit').doc(sha256(`${this.input.principalUid}:${this.input.idempotencyKey}`)), {
+          ...this.input.recoveryAudit, householdId: this.input.householdKey,
+          memberRefHash: sha256(this.input.memberId), principalRefHash: sha256(this.input.principalUid),
+          recordedAt: FieldValue.serverTimestamp(),
+        });
+      }
       transaction.create(
         receiptReference,
         terminalReceiptFields({

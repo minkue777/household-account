@@ -104,6 +104,7 @@ describe("Portfolio household command registration", () => {
               currentPrice: 1_500_000,
             },
             expectedVersion: 3,
+            expectedAssetVersion: 1,
           },
         },
         principalUid: "uid-1",

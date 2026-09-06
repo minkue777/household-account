@@ -58,11 +58,9 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
     mockShowAlert.mockResolvedValue(undefined);
   });
 
-  test('거래 저장을 한 번 시작하고 즉시 닫은 뒤 성공한 경우에만 가맹점 규칙을 저장한다', async () => {
+  test('[MER-005] 거래와 기억 선택을 한 번 전달하고 즉시 닫으며 중복 저장을 차단한다', async () => {
     const transactionSave = deferred();
-    const merchantRuleSave = deferred();
     const onSave = jest.fn(() => transactionSave.promise);
-    const onSaveMerchantRule = jest.fn(() => merchantRuleSave.promise);
     const onClose = jest.fn();
 
     render(
@@ -71,7 +69,7 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
         isOpen
         onClose={onClose}
         onSave={onSave}
-        onSaveMerchantRule={onSaveMerchantRule}
+        allowRememberMerchant
         transactionType="expense"
       />
     );
@@ -82,9 +80,8 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
     fireEvent.click(saveButton);
 
     expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onSave).toHaveBeenCalledWith({ category: 'living' });
+    expect(onSave).toHaveBeenCalledWith({ category: 'living' }, true);
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(onSaveMerchantRule).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: '저장 중...' })).toBeDisabled();
 
     await act(async () => {
@@ -92,20 +89,12 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
       await transactionSave.promise;
     });
 
-    await waitFor(() => {
-      expect(onSaveMerchantRule).toHaveBeenCalledWith('테스트 가맹점', 'living');
-    });
 
-    await act(async () => {
-      merchantRuleSave.resolve();
-      await merchantRuleSave.promise;
-    });
   });
 
   test('거래 저장 실패 시 가맹점 규칙을 저장하지 않고 AppDialog로 오류를 알린다', async () => {
     const transactionSave = deferred();
     const onSave = jest.fn(() => transactionSave.promise);
-    const onSaveMerchantRule = jest.fn();
     const onClose = jest.fn();
 
     render(
@@ -114,7 +103,7 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
         isOpen
         onClose={onClose}
         onSave={onSave}
-        onSaveMerchantRule={onSaveMerchantRule}
+        allowRememberMerchant
         transactionType="expense"
       />
     );
@@ -134,38 +123,15 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
         '지출 수정 실패'
       );
     });
-    expect(onSaveMerchantRule).not.toHaveBeenCalled();
   });
 
-  test('거래 저장 후 가맹점 규칙만 실패하면 부분 성공 사실을 AppDialog로 알린다', async () => {
+  test('[MER-005] 기억을 선택하지 않으면 단일 거래 수정만 요청한다', async () => {
     const onSave = jest.fn().mockResolvedValue(undefined);
-    const onSaveMerchantRule = jest.fn().mockRejectedValue(
-      new Error('MERCHANT_RULE_FAILED')
-    );
-    const onClose = jest.fn();
-
-    render(
-      <ExpenseEditModal
-        expense={expense}
-        isOpen
-        onClose={onClose}
-        onSave={onSave}
-        onSaveMerchantRule={onSaveMerchantRule}
-        transactionType="expense"
-      />
-    );
-    selectRememberedCategory();
+    render(<ExpenseEditModal expense={expense} isOpen onClose={jest.fn()} onSave={onSave} allowRememberMerchant transactionType="expense" />);
+    fireEvent.click(screen.getByRole('button', { name: '생활' }));
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
-
-    await waitFor(() => {
-      expect(mockShowAlert).toHaveBeenCalledWith(
-        expect.stringMatching(/수정은 저장됐지만[\s\S]*MERCHANT_RULE_FAILED/),
-        '가맹점 규칙 저장 실패'
-      );
-    });
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith({ category: 'living' }, false));
     expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onSaveMerchantRule).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   test('삭제는 즉시 닫고 중복 실행을 막되 원격 실패를 AppDialog로 알린다', async () => {

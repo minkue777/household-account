@@ -14,19 +14,20 @@ export const recurringCommands = {
   async update(
     householdId: string,
     planId: string,
-    changes: Partial<CreateRecurringExpenseInput & { isActive: boolean }>
+    changes: Partial<CreateRecurringExpenseInput & { isActive: boolean }>,
+    expectedVersion: number
   ): Promise<void> {
     await getHouseholdCommandClient().execute(
       'recurring.update-plan.v1',
-      { planId, changes: { ...changes } },
+      { planId, changes: { ...changes }, expectedVersion },
       { householdId }
     );
   },
 
-  async delete(householdId: string, planId: string): Promise<void> {
+  async delete(householdId: string, planId: string, expectedVersion: number): Promise<void> {
     await getHouseholdCommandClient().execute(
       'recurring.delete-plan.v1',
-      { planId },
+      { planId, expectedVersion },
       { householdId }
     );
   },

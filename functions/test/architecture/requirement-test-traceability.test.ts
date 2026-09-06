@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -151,6 +152,12 @@ function contextContractTestCorpus(): string {
 }
 
 describe("요구사항과 계약 테스트 추적성", () => {
+  it("요구사항 카탈로그 집계는 현재 단일 소유 문서와 일치한다", () => {
+    expect(() => execFileSync(process.execPath,
+      [join(workspaceRoot, "tools/requirements/update-catalog.mjs"), "--check"],
+      { cwd: workspaceRoot, stdio: "pipe" },
+    )).not.toThrow();
+  });
   it("모듈 요구사항 ID는 한 소유 문서에서만 선언된다", () => {
     const declarations = requirementDeclarationEntries();
     const duplicates = declarations
@@ -298,7 +305,11 @@ describe("요구사항과 계약 테스트 추적성", () => {
     );
     const corpus = contractTestCorpus();
 
-    expect(pendingDecisions).toContain("현재 미결정 제품 정책 0건");
-    expect(corpus).not.toMatch(/\btest\.todo\s*\(/);
+    const declaredCount = pendingDecisions.match(/현재 미결정 제품 정책 (\d+)건/);
+    const questions = [...pendingDecisions.matchAll(/^\|\s*(Q-\d+)\s*\|/gm)].map(match => match[1]);
+    expect(declaredCount, "미결정 정책 집계가 명시되어야 합니다").not.toBeNull();
+    expect(Number(declaredCount?.[1])).toBe(questions.length);
+    expect(new Set(questions).size).toBe(questions.length);
+    if (questions.length === 0) expect(corpus).not.toMatch(/\b(?:it|test)\.todo\s*\(/);
   });
 });

@@ -5,16 +5,53 @@
   "description": "공통 Query callable의 정규 transport 결과입니다.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["contractVersion", "queryId", "result"],
+  "required": [
+    "contractVersion",
+    "queryId",
+    "result"
+  ],
   "properties": {
-    "contractVersion": { "const": "household-query-response.v1" },
-    "queryId": { "$ref": "#/$defs/stableId" },
+    "contractVersion": {
+      "const": "household-query-response.v1"
+    },
+    "queryId": {
+      "$ref": "#/$defs/stableId"
+    },
     "result": {
       "oneOf": [
-        { "$ref": "#/$defs/succeeded" },
-        { "$ref": "#/$defs/alreadyProcessed" },
-        { "$ref": "#/$defs/rejected" }
+        {
+          "$ref": "#/$defs/succeeded"
+        },
+        {
+          "$ref": "#/$defs/alreadyProcessed"
+        },
+        {
+          "$ref": "#/$defs/rejected"
+        }
       ]
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "releaseId",
+        "commitSha",
+        "artifactSha256"
+      ],
+      "properties": {
+        "releaseId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commitSha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "artifactSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
     }
   },
   "$defs": {
@@ -27,28 +64,57 @@
     "succeeded": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "value"],
-      "properties": { "kind": { "const": "succeeded" }, "value": {} }
+      "required": [
+        "kind",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "const": "succeeded"
+        },
+        "value": {}
+      }
     },
     "alreadyProcessed": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "value"],
-      "properties": { "kind": { "const": "already-processed" }, "value": {} }
+      "required": [
+        "kind",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "const": "already-processed"
+        },
+        "value": {}
+      }
     },
     "rejected": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "error"],
+      "required": [
+        "kind",
+        "error"
+      ],
       "properties": {
-        "kind": { "const": "rejected" },
+        "kind": {
+          "const": "rejected"
+        },
         "error": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["code", "retryable"],
+          "required": [
+            "code",
+            "retryable"
+          ],
           "properties": {
-            "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,79}$" },
-            "retryable": { "type": "boolean" }
+            "code": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]{1,79}$"
+            },
+            "retryable": {
+              "type": "boolean"
+            }
           }
         }
       }

@@ -3,6 +3,17 @@ import { describe, expect, it } from "vitest";
 import { GoogleCloudBillingCostReader } from "../../src/adapters/google-cloud/admin/googleCloudBillingCostReader";
 
 describe("Google Cloud Billing BigQuery reader", () => {
+  it("bounded transport rejects an oversized response and never follows a credential-bearing redirect", async () => {
+    for (const response of [new Response('x'.repeat(1_048_577)), new Response(null, { status: 302, headers: { location: 'https://outside.example/steal' } })]) {
+      const requests: string[] = [];
+      const reader = new GoogleCloudBillingCostReader('project', 'project.dataset.table', 'US', { getAccessToken: async () => ({ access_token: 'secret' }) }, async (url, init) => {
+        expect(init.redirect).toBe('manual'); requests.push(url); return response;
+      });
+      await expect(reader.read({ projectId: 'project', calculatedAt: '2026-09-06T00:00:00Z' })).rejects.toThrow('BILLING_QUERY_');
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toContain('https://bigquery.googleapis.com/');
+    }
+  });
   it("credits를 포함한 parameterized Standard export query 결과를 읽는다", async () => {
     const requests: Array<{ url: string; body?: Record<string, unknown> }> = [];
     const reader = new GoogleCloudBillingCostReader(
@@ -17,10 +28,7 @@ describe("Google Cloud Billing BigQuery reader", () => {
             ? {}
             : { body: JSON.parse(init.body) as Record<string, unknown> }),
         });
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
+        return Response.json({
             jobComplete: true,
             rows: [{
               f: [{
@@ -41,8 +49,7 @@ describe("Google Cloud Billing BigQuery reader", () => {
                 }),
               }],
             }],
-          }),
-        };
+          });
       },
     );
 
@@ -85,20 +92,13 @@ describe("Google Cloud Billing BigQuery reader", () => {
       async (url) => {
         invocation += 1;
         if (invocation === 1) {
-          return {
-            ok: true,
-            status: 200,
-            json: async () => ({
+          return Response.json({
               jobComplete: false,
               jobReference: { jobId: "job-a" },
-            }),
-          };
+            });
         }
         expect(url).toContain("/queries/job-a?location=US");
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
+        return Response.json({
             jobComplete: true,
             rows: [{ f: [{ v: JSON.stringify({
               currency: "KRW",
@@ -106,8 +106,7 @@ describe("Google Cloud Billing BigQuery reader", () => {
               dailyAmounts: [],
               serviceAmounts: [],
             }) }] }],
-          }),
-        };
+          });
       },
     );
 
@@ -133,11 +132,7 @@ describe("Google Cloud Billing BigQuery reader", () => {
       "household-account-6f300.cloud_billing_export.gcp_billing_export_v1_ABC_DEF_GHI",
       "US",
       { getAccessToken: async () => ({ access_token: "token-a" }) },
-      async () => ({
-        ok: false,
-        status: 404,
-        json: async () => ({}),
-      }),
+      async () => Response.json({}, { status: 404 }),
     );
 
     await expect(reader.read({

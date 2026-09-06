@@ -95,8 +95,8 @@ export interface AdminOperationsDashboardWireView {
   providerHealth: Array<{
     provider: string;
     operation: string;
-    status: 'healthy' | 'degraded' | 'outage';
-    lastAttemptAt: string;
+    status: 'healthy' | 'degraded' | 'outage' | 'unknown';
+    lastAttemptAt?: string;
     lastSuccessAt?: string;
     consecutiveFailedRuns: number;
     lastResultKind: string;
@@ -110,7 +110,7 @@ export interface AdminOperationsDashboardWireView {
     openedAt: string;
   }>;
   functionLatency: {
-    status: 'available' | 'unavailable';
+    status: 'available' | 'partial' | 'unavailable';
     windowHours: number;
     operations: Array<{
       endpoint:

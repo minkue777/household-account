@@ -40,7 +40,7 @@ import {
   type PreviousAssetDailySummary,
 } from '@/features/portfolio/application/dailyAssetChangeSummary';
 import { readPreviousAssetDailySummary } from '@/platform/read-model/assetDailyChangeReadModel';
-import { formatLocalDate } from '@/lib/utils/date';
+import { getTodayLocalDate } from '@/lib/utils/date';
 
 export default function AssetsPage() {
   const { themeConfig } = useTheme();
@@ -266,7 +266,7 @@ export default function AssetsPage() {
     let cancelled = false;
     void readPreviousAssetDailySummary(
       householdId,
-      formatLocalDate(new Date())
+      getTodayLocalDate()
     )
       .then((value) => {
         if (!cancelled) {

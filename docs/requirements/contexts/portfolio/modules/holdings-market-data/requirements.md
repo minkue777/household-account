@@ -83,7 +83,7 @@
 | MARKET-006 | 목표 명세 | 외화 자산의 KRW 평가는 최신 사용 가능 원 통화 Quote와 Frankfurter v2의 최신 성공 환율을 각각 선택하고 두 관측 시각 차이에 별도 상한을 두지 않는다. 환율은 성공 후 경과 기간과 무관하게 다음 성공까지 계속 사용한다. | 환산 결과에 Quote provider·observedAt과 환율 provider=`frankfurter-v2`·rateDate·observedAt을 보존하고 화면 경고는 표시하지 않는다. 환율 성공 이력과 이전 정상 KRW 환산이 모두 없으면 `NoData(EXCHANGE_RATE_NOT_OBSERVED)`이며 고정·평균·1:1 환율을 추정하지 않는다. 실패·더 오래된 rateDate는 저장된 환율을 덮어쓰지 않는다. 보조 공급자와 네이버 HTML 환율 fallback은 두지 않는다. | [DEC-053](../../../../governance/decisions.md#dec-053), [DEC-060](../../../../governance/decisions.md#dec-060) | U, C, I, 운영 계약 |
 | JOB-AST-001 | 결함 | 각 시세 연동 자산은 개별 수동 갱신을 제공하고, 다른 화면에서 자산 메인 페이지로 진입할 때 한 번 실행되는 갱신과 매일 23:55 `Asia/Seoul` 예약 작업은 현재 가구 또는 전체 active 가구의 국내·미국 주식·ETF·ETN, 지원 펀드, KRW 코인, 실물 금을 모두 갱신한다. 페이지에 머무르는 동안의 주기·visibility 복귀 갱신은 실행하지 않는다. 예약 작업은 모든 내부 page가 terminal 결과에 도달한 뒤 최신 성공 Quote 또는 보존된 마지막 성공 Quote로 평가하고 당일 자산 Snapshot을 요청한다. | 사용자가 다루는 전체 종목 수 상한은 없다. 화면은 마지막 자산·당일 변동 snapshot을 먼저 표시하고 Firestore의 첫 비캐시 서버 snapshot을 반영한 뒤에만 진입 갱신을 시작해 최초 자산 읽기와 외부 Provider 작업이 경쟁하지 않게 한다. 한 번의 전체 갱신 결과는 모든 계좌를 한 원자적 단위로 반영한다. 동일 가구·범위의 선행 갱신이 실행 중인 후속 요청은 정상 생략이며 사용자 오류·공급자 실패·관리자 실패 건수로 집계하지 않는다. 내부 처리·중복 실행·timeout·retry는 DEC-049를 따르고, 일부 실패는 성공 범위를 되돌리지 않으며 Snapshot은 같은 날짜에 멱등이다. | [자산 평가 예약 작업](../../../../../../functions/src/bootstrap/firebaseAssetValuationScheduledJob.ts), [assets page](../../../../../../web/src/app/assets/page.tsx), [DEC-049](../../../../governance/decisions.md#dec-049) | U, C, I, E2E |
 | JOB-AST-002 | 결함 | 총자산, 금융자산과 현재·직전 snapshot에 존재하는 소유자별·유형별 scope의 전일 대비 변화량을 계산하고, 사라진 scope와 자산이 없는 가구에는 명시적 0원 snapshot intent를 요청한다. Web의 당일 변동은 오늘 이전 최신 Canonical `assetSnapshots` 문서 한 건만 읽고 현재 자산 source snapshot과의 전체·안정 profile ID별 차이를 메모리에서 함께 계산한다. | 활성 자산만 포함하고 대출은 음수이다. Web은 명의자별 레거시 history 조회를 하지 않으며, 전일 문서·해당 명의자 기준값이 없으면 참고 변동을 0원으로 둔다. 실제 snapshot 저장 불변식은 Portfolio `AST-008`이 소유한다. | [자산 평가 예약 작업](../../../../../../functions/src/bootstrap/firebaseAssetValuationScheduledJob.ts), [Web 일간 변동 계산](../../../../../../web/src/features/portfolio/application/dailyAssetChangeSummary.ts), [AST-008](../portfolio/requirements.md#5-요구사항) | U, C, I |
-| JOB-AST-003 | 결함 | Web과 예약 작업은 레거시 자산 생명주기를 동일하게 해석하고, 일부 가격 갱신 뒤 실패해도 일관된 복구 상태를 가져야 한다. | `isActive` 누락·true는 active, false는 deleted로 변환한다. 현재 job의 true query는 누락 문서를 제외하며 다단계 갱신도 원자적이지 않다. | 같은 근거 | U, I |
+| JOB-AST-003 | 현재 명세 | Web과 예약 작업은 레거시 자산 생명주기를 동일하게 해석하고, 일부 가격 갱신 뒤 실패해도 일관된 복구 상태를 가져야 한다. | `isActive` 누락·true는 active, false는 deleted로 변환한다. 공용 lifecycle mapper를 사용하고 자산별 Position·평가·Snapshot을 같은 transaction에서 갱신한다. 외부 관측 후 version 경합은 전체 거부하고 재시도로 수렴한다. | 같은 근거 | U, I |
 
 ## 6. 모듈 결함
 
@@ -91,8 +91,8 @@
 - 예약 작업이 미국 종목에도 Naver 국내 시세 경로를 사용합니다. (`MARKET-002`)
 - Web과 Functions에 계좌 평가 계산이 중복되어 변경 시 결과가 달라질 수 있습니다. (`HOLD-003`)
 - Position write와 부모 Asset 평가 반영이 분리되어 동시 보유종목 추가·수정·삭제 또는 중간 실패 시 부모 합계와 Position 집합이 달라질 수 있습니다. (`HOLD-004`)
-- Web과 예약 작업이 `isActive` 누락·false 레거시 자산의 active/deleted 상태를 다르게 해석합니다. (`JOB-AST-003`)
-- 시세·보유종목·부모 계좌·스냅샷의 다단계 갱신이 원자적이지 않아 부분 성공 상태가 남을 수 있습니다. (`JOB-AST-001`, `JOB-AST-003`)
+- 과거 Web·예약 작업의 레거시 lifecycle 해석 차이는 공용 mapper 회귀 테스트로 방지합니다. (`JOB-AST-003`)
+- 시세·보유종목·부모 계좌·스냅샷은 자산별 원자 갱신으로 부분 저장을 방지하며 자산 간 부분 실패는 명시적으로 보고하고 재시도합니다. (`JOB-AST-001`, `JOB-AST-003`)
 - 자산이 없어진 범위의 0원 스냅샷을 만들지 않아 마지막 owner·유형의 차트가 이전 값을 유지할 수 있습니다. (`JOB-AST-002`)
 - 시세 API가 계속 실패해도 공급자별 마지막 성공·연속 실패 상태와 경보가 없어 실물 금·주식 시세 장애를 장기간 발견하지 못할 수 있습니다. (`MARKET-004`)
 

@@ -337,7 +337,7 @@ describe("예약 JobRun 실행·lease·부분 실패 공개 계약", () => {
     expect(await subject.getRun(current.runId)).toEqual(current);
   });
 
-  it("[T-JOB-002][JOB-ERR-002] 만료 lease takeover는 checkpoint 뒤 retryable 실패만 재개하고 성공 receipt를 다시 만들지 않는다", async () => {
+  it("[T-JOB-002][JOB-ERR-002] 만료 lease takeover는 실패 target을 재탐색하고 성공 receipt를 보존한다", async () => {
     const current = existingRun({
       status: "PARTIAL_FAILURE",
       lastHeartbeatAt: "2026-07-19T23:56:00+09:00",
@@ -366,6 +366,7 @@ describe("예약 JobRun 실행·lease·부분 실패 공개 계약", () => {
       now: "2026-07-19T23:58:00+09:00",
       existingRun: current,
       pages: [
+        { checkpointAfter: "page-1", targets: [successTarget("asset-a")] },
         {
           checkpointBefore: "page-1",
           checkpointAfter: "page-2",
@@ -471,10 +472,10 @@ describe("예약 JobRun 실행·lease·부분 실패 공개 계약", () => {
       ],
     });
 
-    await expect(subject.run(command())).rejects.toThrow("SIMULATED_JOB_INTERRUPTION");
+    await expect(subject.run(command())).resolves.toMatchObject({ status: "FAILED", failures: [{ scope: "job", code: "SCHEDULED_JOB_PAGE_FAILED", retryable: true }] });
     const interrupted = await subject.getRun(`run:${command().executionKey}`);
     expect(interrupted).toMatchObject({
-      status: "RUNNING",
+      status: "FAILED",
       checkpoint: "page-1",
       totals: { target: 1, succeeded: 1, skipped: 0, failed: 0 },
     });

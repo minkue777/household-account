@@ -36,6 +36,7 @@ class QuickEditPendingQueue(
     private val nowEpochMillis: () -> Long = System::currentTimeMillis
 ) {
     private val mutex = Mutex()
+    private val purgedScopes = mutableSetOf<CaptureSessionScope>()
 
     suspend fun recoverAfterProcessStart() = mutex.withLock {
         val state = store.load()
@@ -50,7 +51,7 @@ class QuickEditPendingQueue(
         snapshot: CaptureQuickEditSnapshot? = null,
         observationId: String? = null
     ): Boolean = mutex.withLock {
-        if (!scope.isUsable || transactionId.isBlank()) return@withLock false
+        if (!scope.isUsable || scope in purgedScopes || transactionId.isBlank()) return@withLock false
         val state = sanitizeScope(store.load(), scope)
         val updated = enqueueState(state, scope, transactionId, snapshot, observationId)
         if (updated != state) store.replace(updated)
@@ -68,7 +69,7 @@ class QuickEditPendingQueue(
         snapshot: CaptureQuickEditSnapshot? = null,
         observationId: String? = null
     ): QuickEditEnqueueAndAcquireResult = mutex.withLock {
-        if (!scope.isUsable || transactionId.isBlank()) {
+        if (!scope.isUsable || scope in purgedScopes || transactionId.isBlank()) {
             return@withLock QuickEditEnqueueAndAcquireResult(accepted = false)
         }
         val state = sanitizeScope(store.load(), scope)
@@ -91,6 +92,7 @@ class QuickEditPendingQueue(
     }
 
     suspend fun acquireHead(scope: CaptureSessionScope): QuickEditQueueEntry? = mutex.withLock {
+        if (!scope.isUsable || scope in purgedScopes) return@withLock null
         val state = sanitizeScope(store.load(), scope)
         if (state.activeTransactionId != null) return@withLock null
         val head = state.entries.minByOrNull { it.sequence } ?: return@withLock null
@@ -99,6 +101,7 @@ class QuickEditPendingQueue(
     }
 
     suspend fun releaseLease(scope: CaptureSessionScope, transactionId: String) = mutex.withLock {
+        if (scope in purgedScopes) return@withLock
         val state = sanitizeScope(store.load(), scope)
         if (state.activeTransactionId == transactionId) {
             store.replace(state.copy(activeTransactionId = null))
@@ -106,6 +109,7 @@ class QuickEditPendingQueue(
     }
 
     suspend fun complete(scope: CaptureSessionScope, transactionId: String) = mutex.withLock {
+        if (scope in purgedScopes) return@withLock
         val state = sanitizeScope(store.load(), scope)
         store.replace(
             state.copy(
@@ -115,7 +119,16 @@ class QuickEditPendingQueue(
         )
     }
 
-    suspend fun purge() = mutex.withLock { store.clear() }
+    suspend fun purge(previousScope: CaptureSessionScope? = null) = mutex.withLock {
+        val scopes = store.load().entries.map { it.scope }
+        store.clear()
+        purgedScopes.addAll(scopes)
+        previousScope?.let(purgedScopes::add)
+    }
+
+    suspend fun resumeAfterFailedTransition(scope: CaptureSessionScope) = mutex.withLock {
+        purgedScopes.remove(scope)
+    }
 
     fun snapshot(): QuickEditQueueState = store.load()
 

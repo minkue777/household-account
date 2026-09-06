@@ -26,6 +26,10 @@ export interface Household {
   name: string;
   createdAt: Date;
   defaultCategoryKey?: string;
+  categoryCatalogVersion?: number;
+  initializationStatus?: 'pending' | 'failed' | 'completed';
   homeSummaryConfig?: HomeSummaryConfig;
+  homeSummaryConfigVersion?: number;
+  selectedLocalCurrencyType?: string;
   members: HouseholdMember[];
 }

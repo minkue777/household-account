@@ -93,6 +93,16 @@ test('로그인부터 첫 월 원장과 지출 CRUD까지 실제 Firebase 경계
   });
   const expenseId = documentId(createdDocument!);
 
+  // A real Firestore trigger must finish the non-push manual origin normally.
+  await expect.poll(async () => {
+    const outbox = await readFirestoreCollection(request, 'outboxEvents');
+    return outbox.find((document) =>
+      document.fields?.aggregateId?.stringValue === expenseId
+      && document.fields?.eventType?.stringValue === 'TransactionRecorded'
+    )?.fields;
+  }).toMatchObject({ notificationConsumerStatus: { stringValue: 'NoTarget' } });
+  expect(await readFirestoreCollection(request, 'notificationDeliveries')).toEqual([]);
+
   await createdItem.click();
   const editDialog = page.getByRole('dialog', { name: '지출 수정' });
   const merchantInput = editDialog.locator('input[type="text"]').first();

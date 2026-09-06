@@ -4,6 +4,7 @@ import type {
   HouseholdCommandHandler,
   HouseholdCommandResult,
 } from "./householdCommand";
+import { canonicalJson } from '../../platform/shared-kernel/canonicalJson';
 import {
   HOUSEHOLD_COMMAND_CONTRACT_VERSION,
   householdCommandReceiptValue,
@@ -75,17 +76,6 @@ function containsReservedIdentityField(value: unknown): boolean {
     ([key, nested]) =>
       RESERVED_IDENTITY_FIELDS.has(key) || containsReservedIdentityField(nested),
   );
-}
-
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(",")}]`;
-  }
-  if (!isRecord(value)) return JSON.stringify(value) ?? "null";
-  return `{${Object.keys(value)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
-    .join(",")}}`;
 }
 
 function error(
@@ -257,7 +247,12 @@ export function createHouseholdCommandRouter(input: {
         }
       }
 
-      const payloadHash = input.hashes.hash(canonicalJson(parsed));
+      const payloadHash = input.hashes.hash(canonicalJson({
+        contractVersion: parsed.contractVersion,
+        command: parsed.command,
+        householdId: parsed.householdId,
+        payload: parsed.payload,
+      }));
       const receiptId = input.hashes.hash(
         `${principalUid}\u0000${parsed.idempotencyKey}`,
       );
@@ -269,6 +264,8 @@ export function createHouseholdCommandRouter(input: {
             principalUid,
             command: parsed.command,
             payloadHash,
+            legacyEnvelope: parsed,
+            ...(householdId === undefined ? {} : { householdId }),
             requestedAt: request.requestedAt,
           }),
       );
@@ -285,8 +282,8 @@ export function createHouseholdCommandRouter(input: {
       }
       if (claim.kind === "completed") {
         return claim.result.kind === "success"
-          ? { ...claim.result, replayed: true }
-          : claim.result;
+          ? { ...claim.result, commandId: parsed.commandId, replayed: true }
+          : { ...claim.result, commandId: parsed.commandId };
       }
 
       try {

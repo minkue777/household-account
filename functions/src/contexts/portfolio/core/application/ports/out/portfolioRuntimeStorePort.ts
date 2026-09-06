@@ -92,7 +92,9 @@ export interface PortfolioRuntimeAutomationPlan {
   readonly assetId: string;
   readonly operation: "savings-contribution" | "loan-repayment";
   readonly kind: "savings-deposit" | "loan-repayment";
-  readonly status: "active" | "suspended" | "needs-attention";
+  readonly status: "active" | "suspended" | "needs-attention" | "recovering-before-stop";
+  readonly stopEffectiveAt?: string;
+  readonly statusAfterRecovery?: "suspended";
   readonly amountInWon: number;
   readonly configuredDay: number;
   readonly firstActivatedOn: string;
@@ -161,7 +163,8 @@ export type PortfolioAtomicResult =
   | { readonly kind: "commit-failed" };
 
 export type PortfolioRefreshLeaseResult =
-  | { readonly kind: "acquired" }
+  | { readonly kind: "acquired"; readonly completedTargetKeys?: readonly string[] }
+  | { readonly kind: "rate-limited"; readonly retryAfterMs: number }
   | { readonly kind: "busy" }
   | { readonly kind: "replayed"; readonly value: PortfolioCommandResult }
   | { readonly kind: "payload-mismatch" }
@@ -171,9 +174,10 @@ export interface PortfolioRuntimeStorePort {
   transact(
     metadata: PortfolioCommandMetadata,
     decide: (state: PortfolioRuntimeState) => PortfolioRuntimeMutation,
+    scope?: PortfolioRuntimeReadScope,
   ): Promise<PortfolioAtomicResult>;
 
-  readState(householdId: string): Promise<PortfolioRuntimeState>;
+  readState(householdId: string, scope?: PortfolioRuntimeReadScope): Promise<PortfolioRuntimeState>;
 
   acquireRefreshLease(
     metadata: PortfolioCommandMetadata,
@@ -184,6 +188,12 @@ export interface PortfolioRuntimeStorePort {
     metadata: PortfolioCommandMetadata,
     scopeKey: string,
   ): Promise<void>;
+}
+
+export interface PortfolioRuntimeReadScope {
+  readonly assetId?: string;
+  readonly positions?: boolean;
+  readonly automationPlans?: boolean;
 }
 
 export interface PortfolioMarketTarget {
@@ -207,6 +217,7 @@ export type PortfolioMarketQuoteResult =
       readonly kind: "success";
       readonly quote: QuoteObservation;
       readonly quoteAsOf?: string;
+      readonly providerFailures?: readonly { readonly kind: "failure"; readonly code: string; readonly retryable: boolean; readonly provider: string }[];
     }
   | {
       readonly kind: "failure";

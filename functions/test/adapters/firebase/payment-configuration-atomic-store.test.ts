@@ -133,6 +133,7 @@ describe("Firebase payment configuration atomic adapter", () => {
     expect(
       await application.reorderCards({
         ...command(13, "payment-configuration.reorder-cards.v1"),
+        expectedCollectionVersion: 0,
         cardIds: [secondId, firstId],
       }),
     ).toEqual({ kind: "success", value: {} });
@@ -146,6 +147,7 @@ describe("Firebase payment configuration atomic adapter", () => {
     expect(
       await application.deleteCard({
         ...command(14, "payment-configuration.delete-card.v1"),
+        expectedVersion: 1,
         cardId: firstId,
       }),
     ).toEqual({ kind: "success", value: {} });
@@ -180,6 +182,7 @@ describe("Firebase payment configuration atomic adapter", () => {
     expect(
       await application.updateCard({
         ...command(21, "payment-configuration.update-card.v1"),
+        expectedVersion: 1,
         cardId,
         changes: { cardLastFour: "4321" },
       }),
@@ -192,6 +195,7 @@ describe("Firebase payment configuration atomic adapter", () => {
     expect(
       await application.updateCard({
         ...command(22, "payment-configuration.update-card.v1"),
+        expectedVersion: 2,
         cardId,
         changes: { cardLastFour: "" },
       }),
@@ -246,6 +250,7 @@ describe("Firebase payment configuration atomic adapter", () => {
     const cardId = created.value.cardId as string;
     const update = {
       ...command(31, "payment-configuration.update-card.v1"),
+      expectedVersion: 1,
       cardId,
       changes: { cardLastFour: "4321" },
     };
@@ -300,6 +305,7 @@ describe("Firebase payment configuration atomic adapter", () => {
     expect(
       await application.updateCard({
         ...command(42, "payment-configuration.update-card.v1"),
+        expectedVersion: 1,
         cardId: secondId,
         changes: { cardLastFour: "1234" },
       }),

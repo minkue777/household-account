@@ -51,6 +51,15 @@
 - `LoadThemePreference`, `SetThemePreference`, `ApplyTheme`
 - 기본 카드 구성: 왼쪽 `X월 지출`, 오른쪽 `X월 잔여 예산`
 
+실제 Household Command 입력은 다음과 같습니다. 두 명령 모두 현재 Actor·가구 scope를 서버에서 검증하며, `expectedVersion`은 0 이상의 안전한 정수입니다. 아직 저장된 Preferences가 없으면 버전 0을 사용합니다.
+
+| Wire 명령 | payload | 성공 결과와 조회 동기화 |
+|---|---|---|
+| `home.update-summary-preferences.v1` | `leftCard`, `rightCard`, `expectedVersion` | receipt 성공 `{}` 이후 canonical `homePreferences/home` 구독에서 구성과 `aggregateVersion`을 읽습니다. |
+| `home.select-local-currency.v1` | `localCurrencyTypeId`, `expectedVersion` | receipt 성공 `{}` 이후 같은 구독에서 선택 type과 버전을 읽습니다. |
+
+`expectedVersion` 누락·잘못된 형식은 `INVALID_PAYLOAD`, 현재 버전과 다른 값은 `HOME_CONFIGURATION_VERSION_MISMATCH`로 write 없이 거부합니다. 카드 초안은 편집을 시작한 버전을 보존하며 충돌 후 자동 덮어쓰기하지 않습니다. 같은 idempotency key와 같은 payload의 재시도는 최초 receipt를 재생합니다.
+
 ### 의존 모듈
 
 - 가구 모듈: 홈 카드 구성 조회
@@ -73,9 +82,9 @@
 
 ## 6. 모듈 결함
 
-- 저장된 홈 카드 구성을 읽을 수 있지만 변경 UI가 없는 것은 현재 구현의 제한입니다. 목표 HOME-004·DEC-061에서는 가구 공통 설정 화면과 저장 Command를 명시적으로 추가합니다. (`HOME-001`, `HOME-004`)
-- 현재 지역화폐 카드가 여러 유형 중 첫 Firestore 문서를 임의로 표시하며, 표시 유형을 선택·유지할 수 없습니다. (`HOME-002`)
-- 지역화폐·거래 원천 실패가 null·빈 배열로 축약되어 유효한 0원 또는 데이터 없음처럼 보일 수 있습니다. (`HOME-003`)
+- 설정 화면에서 가구 공통 카드 구성과 지역화폐 선택을 각각 저장합니다. stale version, 새 중복 구성은 거부하며 기존 중복 읽기는 유지합니다. (`HOME-001`, `HOME-004`)
+- 최초 단일 지역화폐 잔액 저장은 같은 transaction에 Home 자동 선택 정책을 합성합니다. 두 번째 유형 등록과 이후 갱신은 기존 선택을 바꾸지 않습니다. (`HOME-002`)
+- 홈 카드는 원천 실패를 독립적으로 표시하고 partial 안내를 제공합니다. 지역화폐의 유효한 0원과 선택 자료 없음은 별도 표시합니다. (`HOME-003`)
 
 ## 7. 관련 DEC
 
@@ -100,7 +109,7 @@
 
 | 시나리오 | 수준 | 연결 요구사항 |
 |---|---|---|
-| 저장 구성이 없으면 왼쪽에 지역화폐, 오른쪽에 월 잔여 예산 카드를 표시한다. | U, UI | HOME-001 |
+| 저장 구성이 없으면 왼쪽에 월 지출, 오른쪽에 월 잔여 예산 카드를 표시한다. | U, UI | HOME-001 |
 | 유효한 저장 구성이 있으면 지정된 두 카드와 월·연 수입 합계를 표시한다. | U, UI | HOME-001 |
 | 홈 카드가 받는 원천 조회 하나가 실패하면 0원으로 위장하지 않고 실패 카드와 정상 카드를 독립 표시하며 partial 상태를 남긴다. | U, UI | HOME-003 |
 | 경기·대전 잔액 중 대전을 선택하면 이후 경기 잔액이 갱신되어도 홈에는 대전 잔액을 표시한다. | U, I, UI | HOME-002 |

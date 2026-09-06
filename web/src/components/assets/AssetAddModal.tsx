@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { getSeoulCalendarParts } from '@/lib/utils/date';
 import {
   AssetInput,
   AssetOwnerOption,
@@ -86,13 +87,13 @@ function sanitizeDecimalInput(rawValue: string) {
 }
 
 function getCurrentYearMonth() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const now = getSeoulCalendarParts();
+  return `${now.year}-${String(now.month).padStart(2, '0')}`;
 }
 
 function getEffectiveContributionDay(dayOfMonth: number) {
-  const now = new Date();
-  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const now = getSeoulCalendarParts();
+  const lastDayOfMonth = new Date(now.year, now.month, 0).getDate();
   return Math.min(dayOfMonth, lastDayOfMonth);
 }
 
@@ -414,7 +415,7 @@ export default function AssetAddModal({
           isSavingsInstallment &&
           (parseInt(recurringContributionAmount, 10) || 0) > 0 &&
           (parseInt(recurringContributionDay, 10) || 0) > 0 &&
-          new Date().getDate() >= getEffectiveContributionDay(parseInt(recurringContributionDay, 10))
+          getSeoulCalendarParts().day >= getEffectiveContributionDay(parseInt(recurringContributionDay, 10))
             ? getCurrentYearMonth()
             : '',
         loanInterestRate: isLoanAsset ? parseFloat(loanInterestRate) || 0 : 0,
@@ -427,7 +428,7 @@ export default function AssetAddModal({
           (parseFloat(loanInterestRate) || 0) > 0 &&
           (parseInt(loanMonthlyPaymentAmount, 10) || 0) > 0 &&
           (parseInt(loanPaymentDay, 10) || 0) > 0 &&
-          new Date().getDate() >= getEffectiveContributionDay(parseInt(loanPaymentDay, 10))
+          getSeoulCalendarParts().day >= getEffectiveContributionDay(parseInt(loanPaymentDay, 10))
             ? getCurrentYearMonth()
             : '',
         currency: 'KRW',

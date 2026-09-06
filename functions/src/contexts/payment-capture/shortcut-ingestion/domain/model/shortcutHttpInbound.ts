@@ -1,4 +1,5 @@
 import type { ShortcutCredentialActor } from "./shortcutCredentialLifecycle";
+import type { ShortcutCardMessageParseResult } from "./shortcutCardMessage";
 
 export interface ShortcutHttpAuthorizedCredential {
   readonly credentialId: string;
@@ -18,6 +19,7 @@ export type ShortcutHttpAuthorizationDecision =
   | { readonly kind: "forbidden"; readonly code: "HOUSEHOLD_FORBIDDEN" };
 
 export type ShortcutHttpProcessingErrorCode =
+  | Extract<ShortcutCardMessageParseResult, { kind: "Rejected" }>["code"]
   | "AUTH_REQUIRED"
   | "CREDENTIAL_REVOKED"
   | "CREDENTIAL_REPLACED"
@@ -77,5 +79,5 @@ export type ShortcutHttpPaymentIntakeResult =
       readonly captureLineageIds: readonly string[];
     }
   | { readonly kind: "cancellation-not-found" }
-  | { readonly kind: "rejected"; readonly code: "CARD_NOT_REGISTERED_FOR_ACTOR" }
+  | { readonly kind: "rejected"; readonly code: "CARD_NOT_REGISTERED_FOR_ACTOR" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "AUTH_REQUIRED" | "HOUSEHOLD_FORBIDDEN" }
   | { readonly kind: "retryable-failure" };

@@ -56,7 +56,7 @@ export function createScheduledJobMonitorApplication(dependencies: {
 
         let reason: JobIncident["reason"] | undefined;
         let from: MonitoredJobStatus | undefined;
-        if (run === undefined) {
+        if (run === undefined || run.status === "EXPECTED") {
           if (after(input.observedAt, expected.startGraceDeadlineAt)) {
             from = "EXPECTED";
             reason = "MISSING";
@@ -82,7 +82,7 @@ export function createScheduledJobMonitorApplication(dependencies: {
 
         if (reason === undefined || run === undefined || from === undefined) continue;
 
-        await dependencies.repository.saveRun(run);
+        if (await dependencies.repository.saveRun(run) === false) continue;
         transitions.push({
           occurrenceId: expected.occurrenceId,
           from,
@@ -125,7 +125,7 @@ export function createScheduledJobMonitorApplication(dependencies: {
         lease: undefined,
         heartbeatDeadlineAt: undefined,
       };
-      await dependencies.repository.saveRun(recovered);
+      if (await dependencies.repository.saveRun(recovered) === false) throw new Error("SCHEDULED_JOB_EXECUTION_COMPLETION_REQUIRED");
       return { kind: "success", run: recovered };
     },
 

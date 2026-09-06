@@ -1,0 +1,45 @@
+{
+  "releaseId": "release-YYYYMMDD-CHANGE_ID",
+  "commitSha": "0000000000000000000000000000000000000000",
+  "environment": "production",
+  "firebaseProjectId": "household-account-6f300",
+  "artifacts": [
+    {
+      "name": "firebase-functions",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
+  "dependencyLockHash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "contractHash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "rulesHash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "indexesHash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "contractVersion": "household-command.v1+household-query.v1",
+  "authorizedActorIds": ["REPLACE_WITH_GITHUB_LOGIN"],
+  "monitoringChannelReference": "projects/household-account-6f300/notificationChannels/REPLACE_WITH_CHANNEL_ID",
+  "secretReferences": [
+    "projects/household-account-6f300/secrets/SHORTCUT_CREDENTIAL_PEPPER/versions/latest"
+  ],
+  "target": {
+    "environment": "production",
+    "explicitProjectId": "household-account-6f300",
+    "bindings": [
+      {
+        "resource": "firebase-api",
+        "target": {
+          "kind": "cloud-project",
+          "projectId": "household-account-6f300",
+          "httpsOrigin": "https://household-account-6f300.web.app"
+        }
+      },
+      { "resource": "rules", "target": { "kind": "cloud-project", "projectId": "household-account-6f300" } },
+      { "resource": "indexes", "target": { "kind": "cloud-project", "projectId": "household-account-6f300" } },
+      { "resource": "secret", "target": { "kind": "cloud-project", "projectId": "household-account-6f300" } },
+      { "resource": "monitoring-channel", "target": { "kind": "cloud-project", "projectId": "household-account-6f300" } }
+    ]
+  },
+  "compatibility": {
+    "releaseId": "release-YYYYMMDD-CHANGE_ID",
+    "sharedContractChanges": [],
+    "compatibilityPlans": []
+  }
+}

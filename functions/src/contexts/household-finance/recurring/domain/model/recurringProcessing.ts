@@ -9,6 +9,7 @@ export interface RecurringProcessPlan {
   readonly active: boolean;
   readonly creatorMemberId: string;
   readonly firstApplicableMonth: string;
+  readonly processedThroughMonth?: string;
   readonly version: number;
 }
 

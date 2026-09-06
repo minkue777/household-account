@@ -32,8 +32,9 @@ object FidEndpointManager {
     private val registrationInFlight = AtomicBoolean(false)
 
     fun registerCurrentInstallation(context: Context) {
-        val householdId = HouseholdPreferences.getHouseholdKey(context)
-        val memberId = HouseholdPreferences.getMemberId(context)
+        val session = HouseholdPreferences.snapshot(context) ?: return
+        val householdId = session.householdId
+        val memberId = session.memberId
         if (householdId.isBlank() || memberId.isBlank()) return
         if (!registrationInFlight.compareAndSet(false, true)) return
         val appContext = context.applicationContext
@@ -77,9 +78,10 @@ object FidEndpointManager {
         if (fid.isBlank()) return
         val appContext = context.applicationContext
         FidRegistrationStateStore.observe(appContext, fid)
-        val householdId = HouseholdPreferences.getHouseholdKey(appContext)
-        val memberId = HouseholdPreferences.getMemberId(appContext)
-        val sessionGeneration = HouseholdPreferences.getSessionGeneration(appContext)
+        val session = HouseholdPreferences.snapshot(appContext) ?: return
+        val householdId = session.householdId
+        val memberId = session.memberId
+        val sessionGeneration = session.generation
         if (householdId.isBlank() || memberId.isBlank()) return
 
         scope.launch {
@@ -123,8 +125,9 @@ object FidEndpointManager {
         val appContext = context.applicationContext
         val state = FidRegistrationStateStore.current(appContext)
         if (state?.fid != fid || state.registrationVersion == null) return
-        val householdId = HouseholdPreferences.getHouseholdKey(appContext)
-        val memberId = HouseholdPreferences.getMemberId(appContext)
+        val session = HouseholdPreferences.snapshot(appContext) ?: return
+        val householdId = session.householdId
+        val memberId = session.memberId
         if (householdId.isBlank() || memberId.isBlank()) return
 
         scope.launch {
@@ -220,9 +223,10 @@ object FidEndpointManager {
         } else {
             null
         }
+        val session = HouseholdPreferences.snapshot(appContext)
         return canDisplayFidNotification(
-            currentHouseholdId = HouseholdPreferences.getHouseholdKey(appContext),
-            currentMemberId = HouseholdPreferences.getMemberId(appContext),
+            currentHouseholdId = session?.householdId.orEmpty(),
+            currentMemberId = session?.memberId.orEmpty(),
             suppressedForLogout = FidRegistrationStateStore.notificationsSuppressed(
                 appContext
             ),
@@ -255,10 +259,9 @@ object FidEndpointManager {
         householdId: String,
         memberId: String,
         sessionGeneration: Long
-    ): Boolean =
-        HouseholdPreferences.getHouseholdKey(context) == householdId &&
-            HouseholdPreferences.getMemberId(context) == memberId &&
-            HouseholdPreferences.getSessionGeneration(context) == sessionGeneration
+    ): Boolean = HouseholdPreferences.snapshot(context)?.let {
+        it.householdId == householdId && it.memberId == memberId && it.generation == sessionGeneration
+    } == true
 
     private fun HouseholdCommandResult.Succeeded.registrationVersion(): Int? =
         ((value as? Map<*, *>)?.get("registrationVersion") as? Number)?.toInt()

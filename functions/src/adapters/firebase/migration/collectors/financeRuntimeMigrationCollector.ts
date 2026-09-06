@@ -471,6 +471,22 @@ export function collectFinanceRuntimeMigration(
     }
     const rawCreator = text(data, "creatorMemberId", "createdBy");
     const explicitCreator = input.mappings.recurringCreators?.[snapshot.id];
+    if (
+      input.memberIds.has(rawCreator) &&
+      explicitCreator !== undefined &&
+      explicitCreator !== rawCreator
+    ) {
+      unresolved.push(
+        migrationIssue({
+          code: "SOURCE_DOCUMENT_INVALID",
+          sourceCollection: "recurring_expenses",
+          reference: snapshot.ref.path,
+          requiredManifestField: "recurringCreators",
+          detailCode: "RECURRING_CREATOR_MAPPING_CONFLICT",
+        }),
+      );
+      continue;
+    }
     const creator = resolveMember({
       raw: rawCreator,
       documentId: snapshot.id,

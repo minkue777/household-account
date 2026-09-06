@@ -12,7 +12,7 @@ import { hash, text } from "./firebasePortfolioRuntimeValues";
 const REFRESH_LEASE_MILLIS = 30_000;
 
 export class FirebasePortfolioRefreshLease {
-  constructor(private readonly database: firestore.Firestore) {}
+  constructor(private readonly database: firestore.Firestore, private readonly now: () => number = Date.now) {}
 
   async acquire(
     metadata: PortfolioCommandMetadata,
@@ -24,13 +24,15 @@ export class FirebasePortfolioRefreshLease {
       .doc(metadata.householdId)
       .collection("operationLocks")
       .doc(`market-refresh-${hash(scopeKey)}`);
-    const requestedAt = Date.parse(metadata.occurredAt);
-    const now = Number.isFinite(requestedAt) ? requestedAt : Date.now();
+    const cooldown = this.database.collection("households").doc(metadata.householdId)
+      .collection("operationLocks").doc(`market-refresh-cooldown-${hash(`${metadata.principalUid}\u0000${scopeKey}`)}`);
+    const now = this.now();
     try {
       return await this.database.runTransaction(async (transaction) => {
-        const [receiptSnapshot, lockSnapshot] = await Promise.all([
+        const [receiptSnapshot, lockSnapshot, cooldownSnapshot] = await Promise.all([
           transaction.get(receipt),
           transaction.get(lock),
+          transaction.get(cooldown),
         ]);
         if (receiptSnapshot.exists) {
           if (
@@ -39,7 +41,7 @@ export class FirebasePortfolioRefreshLease {
           ) {
             return { kind: "payload-mismatch" } as const;
           }
-          return {
+          if (receiptSnapshot.data()?.status !== "pending") return {
             kind: "replayed",
             value: receiptSnapshot.data()?.result as PortfolioCommandResult,
           } as const;
@@ -55,6 +57,17 @@ export class FirebasePortfolioRefreshLease {
             return { kind: "busy" } as const;
           }
         }
+        const nextAllowedAt = Date.parse(text(cooldownSnapshot.data(), "nextAllowedAt"));
+        if (receiptSnapshot.data()?.status !== "pending" && cooldownSnapshot.exists && text(cooldownSnapshot.data(), "holderCommandId") !== metadata.commandId
+          && Number.isFinite(nextAllowedAt) && nextAllowedAt > now) {
+          return { kind: "rate-limited", retryAfterMs: nextAllowedAt - now } as const;
+        }
+        transaction.set(cooldown, {
+          holderCommandId: metadata.commandId,
+          nextAllowedAt: new Date(now + REFRESH_LEASE_MILLIS).toISOString(),
+          expiresAt: new Date(now + 24 * 60 * 60 * 1000),
+          schemaVersion: 1,
+        });
         transaction.set(lock, {
           householdId: metadata.householdId,
           scopeKeyHash: hash(scopeKey),
@@ -63,7 +76,8 @@ export class FirebasePortfolioRefreshLease {
           schemaVersion: 1,
           updatedAt: FieldValue.serverTimestamp(),
         });
-        return { kind: "acquired" } as const;
+        const completedTargetKeys = receiptSnapshot.data()?.completedTargetKeys ?? receiptSnapshot.data()?.result?.value?.completedTargetKeys;
+        return { kind: "acquired", ...(Array.isArray(completedTargetKeys) ? { completedTargetKeys: completedTargetKeys.filter((key): key is string => typeof key === "string") } : {}) } as const;
       });
     } catch (caught) {
       console.error("Portfolio refresh lease acquisition failed", caught);

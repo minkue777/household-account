@@ -76,6 +76,7 @@ export type {
 } from "./domain/model/goldPosition";
 
 export type { ForeignCurrencyValuation } from "./application/ports/in/foreignCurrencyValuation";
+export { parseFrankfurterRate } from "./domain/policies/foreignCurrencyValuationPolicy";
 export type {
   ExchangeRateObservation,
   ForeignCurrencyValuationEvent,

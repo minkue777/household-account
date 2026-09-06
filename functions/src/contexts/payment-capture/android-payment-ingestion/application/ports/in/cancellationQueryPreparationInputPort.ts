@@ -38,6 +38,7 @@ export interface CancellationQueryPreparationInputPort {
   prepare(input: {
     readonly actor?: CancellationPreparationActor;
     readonly observation: CancellationPreparationObservation;
+    /** Legacy caller compatibility only: immutable cancellation evidence ignores current mapping (DEC-041). */
     readonly merchantMapping?: { readonly replacementMerchant: string };
   }): CancellationPreparationResult;
 }

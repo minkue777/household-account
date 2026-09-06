@@ -42,11 +42,9 @@ function statusFor(targets: readonly StoredJobTargetResult[]): Exclude<JobRunSta
 
 function isRetryableJobFailure(result: JobExecutionResult): boolean {
   return (
-    result.status === "FAILED" &&
+    (result.status === "FAILED" || result.status === "PARTIAL_FAILURE") &&
     result.failures.length > 0 &&
-    result.failures.every(
-      (failure) => failure.scope === "job" && failure.retryable,
-    )
+    result.failures.some((failure) => failure.retryable)
   );
 }
 
@@ -102,8 +100,8 @@ export function createScheduledJobExecutionApplication(dependencies: {
       startedAt,
       finishedAt,
     };
-    await dependencies.repository.saveRun(finalRun);
-    await dependencies.repository.saveResult(result);
+    if (run.lease === undefined) throw new Error("SCHEDULED_JOB_LEASE_REQUIRED");
+    await dependencies.repository.completeRun(finalRun, result, run.lease.token);
     dependencies.observations.record({
       kind: "job-outcome",
       jobName: finalRun.jobName,
@@ -136,10 +134,17 @@ export function createScheduledJobExecutionApplication(dependencies: {
           retryable: true,
         });
       }
-      const page = await dependencies.pages.nextPage(current.checkpoint);
-      if (page === undefined) return finish(current, startedAt);
-
       const byHash = new Map(current.targets.map((target) => [target.targetIdHash, target]));
+      let page;
+      try {
+        page = await dependencies.pages.nextPage(current.checkpoint, targetId => {
+          const previous = byHash.get(dependencies.identity.hash(targetId));
+          return previous !== undefined && (previous.kind !== "FAILED" || !previous.retryable);
+        });
+      } catch {
+        return failAtTopLevel(current, startedAt, { code: "SCHEDULED_JOB_PAGE_FAILED", retryable: true });
+      }
+      if (page === undefined) return finish(current, startedAt);
       for (const target of page.targets) {
         const targetIdHash = dependencies.identity.hash(target.targetId);
         const previous = byHash.get(targetIdHash);
@@ -202,8 +207,8 @@ export function createScheduledJobExecutionApplication(dependencies: {
       startedAt,
       finishedAt,
     };
-    await dependencies.repository.saveRun(failedRun);
-    await dependencies.repository.saveResult(result);
+    if (run.lease === undefined) throw new Error("SCHEDULED_JOB_LEASE_REQUIRED");
+    await dependencies.repository.completeRun(failedRun, result, run.lease.token);
     dependencies.observations.record({
       kind: "job-outcome",
       jobName: run.jobName,
@@ -231,7 +236,7 @@ export function createScheduledJobExecutionApplication(dependencies: {
       if (existing !== undefined && leaseActive(existing.lease, startedAt)) {
         throw new Error("SCHEDULED_JOB_LEASE_PROTECTED");
       }
-      const attempt = (existing?.lease?.attempt ?? 0) + 1;
+      const attempt = (existing?.attempt ?? existing?.lease?.attempt ?? 0) + 1;
       const run: JobRun = {
         ...(existing ?? {
           runId,
@@ -241,6 +246,9 @@ export function createScheduledJobExecutionApplication(dependencies: {
           totals: { target: 0, succeeded: 0, skipped: 0, failed: 0 },
         }),
         status: "RUNNING",
+        ...(existing?.targets.some(target => target.kind === "FAILED" && target.retryable)
+          ? { checkpoint: undefined } : {}),
+        attempt,
         lease: {
           ownerId: command.workerId,
           expiresAt: plusLeaseDuration(startedAt, leaseDurationMs),
@@ -265,10 +273,13 @@ export function createScheduledJobExecutionApplication(dependencies: {
       if (leaseActive(run.lease, command.asOf) && run.lease?.ownerId !== command.workerId) {
         return { kind: "lease-protected", run };
       }
-      const attempt = (run.lease?.attempt ?? 0) + 1;
+      const attempt = (run.attempt ?? run.lease?.attempt ?? 0) + 1;
       const resumed: JobRun = {
         ...run,
         status: "RUNNING",
+        ...(run.targets.some(target => target.kind === "FAILED" && target.retryable)
+          ? { checkpoint: undefined } : {}),
+        attempt,
         lease: {
           ownerId: command.workerId,
           expiresAt: plusLeaseDuration(command.asOf, leaseDurationMs),

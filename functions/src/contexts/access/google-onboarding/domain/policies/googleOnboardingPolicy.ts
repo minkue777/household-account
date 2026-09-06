@@ -4,7 +4,6 @@ export const STANDARD_MEMBER_CAPABILITIES: readonly string[] = [
   "household.read",
   "household.write",
   "household.asset-owner-profile.write",
-  "household.delete",
 ];
 
 export type CreateSelfInputValidation =

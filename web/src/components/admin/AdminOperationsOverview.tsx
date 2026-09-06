@@ -560,6 +560,11 @@ export function AdminOperationsOverview({
         title="사용자 체감·서버 처리 시간"
         description={`최근 ${functionLatency.windowHours}시간 앱 첫 화면과 서버 로직별 total 구조화 로그 집계`}
       >
+        {functionLatency.status === 'partial' && (
+          <p role="status" className="px-4 py-3 text-xs text-amber-300">
+            조회 한도에 도달하여 최신 일부 기록만 집계했습니다. 전체 기간의 통계가 아닙니다.
+          </p>
+        )}
         {functionLatency.status === 'unavailable' ? (
           <EmptyState>
             Cloud Logging 처리 시간을 읽지 못했습니다.
@@ -754,11 +759,13 @@ export function AdminOperationsOverview({
             label="비정상 공급자"
             value={dashboard.summary.unhealthyProviders}
             detail={
-              dashboard.summary.unhealthyProviders === 0
+              dashboard.providerHealth.length === 0
+                ? '수집된 공급자 기록 없음'
+                : dashboard.summary.unhealthyProviders === 0
                 ? '등록된 공급자 정상'
                 : '시세 공급 상태 확인 필요'
             }
-            tone={dashboard.summary.unhealthyProviders === 0 ? 'emerald' : 'amber'}
+            tone={dashboard.providerHealth.length > 0 && dashboard.summary.unhealthyProviders === 0 ? 'emerald' : 'amber'}
             compact
           />
         </div>
@@ -848,10 +855,10 @@ export function AdminOperationsOverview({
                         ? '정상'
                         : provider.status === 'degraded'
                           ? '저하'
-                          : '중단'}
+                          : provider.status === 'unknown' ? '미관측' : '중단'}
                     </StatusBadge>
                     <p className="mt-1.5 text-[10px] text-slate-600">
-                      {formatDateTime(provider.lastAttemptAt)}
+                      {provider.status === 'unknown' ? '관측 기록 없음' : formatDateTime(provider.lastAttemptAt)}
                       {provider.consecutiveFailedRuns > 0
                         ? ` · ${provider.consecutiveFailedRuns}회 실패`
                         : ''}

@@ -7,6 +7,7 @@ import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import NotificationSettings from '@/components/NotificationSettings';
+import HomePreferencesSettings from '@/components/settings/HomePreferencesSettings';
 import { isIOS } from '@/lib/pushNotificationService';
 import {
   CardSettings,
@@ -30,9 +31,11 @@ export default function SettingsPage() {
 
   useEffect(() => {
     setIsIOSDevice(isIOS());
+    if (!AndroidBridge.isAvailable()) return;
+    setAppVersionLabel('현재 앱 버전: 알 수 없음');
     void AndroidBridge.getAppVersion()
-      .then(setAppVersionLabel)
-      .catch(() => setAppVersionLabel(null));
+      .then((version) => setAppVersionLabel(`현재 앱 버전: ${version?.trim() || '알 수 없음'}`))
+      .catch(() => setAppVersionLabel('현재 앱 버전: 알 수 없음'));
   }, []);
 
   if (isLoading) {
@@ -97,6 +100,7 @@ export default function SettingsPage() {
           <MerchantRuleSettings />
           <RecurringExpenseSettings />
           <ThemeSettings />
+          <HomePreferencesSettings />
           <InvitationSettings />
           {isIOSDevice && <ShortcutSettings />}
 

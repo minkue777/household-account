@@ -1,10 +1,12 @@
 # 서버 권위형 런타임 전환 상태
 
-> 기준일: 2026-07-22  
+> 이력 기준일: 2026-07-22  
 > 목표 설계: [목표 Clean Architecture](target-clean-architecture.md)  
 > 원칙: 로컬 구현 완료, 운영 배포, 운영 데이터 전환을 서로 다른 상태로 추적한다.
 
-## 1. 현재 상태
+이 문서는 2026-07-22 구조 전환 시점의 기록입니다. 이후 전수 감사에서 발견한 구현 불일치와 추가 수정·검증 상태는 [전수 감사 수정 상태](../verification/full-audit-remediation.md)를 사용합니다. 아래의 완료 표시는 현재 HEAD 전체 검증이나 운영 배포 완료를 뜻하지 않습니다.
+
+## 1. 당시 상태
 
 | 작업 흐름 | 로컬 소스 상태 | 남은 운영 조건 |
 |---|---|---|
@@ -30,14 +32,14 @@
 - 운영 migration은 배포 Functions에 노출하지 않고 별도 CLI에서만 실행한다. source drift, target 충돌, 미해결 명의·creator가 있으면 추정하거나 덮어쓰지 않는다.
 - terminal receipt·알림·예약 작업 기록 16개 collection group은 `Timestamp` TTL을 사용한다. 미해결 장애와 영구 보존 업무 이력에는 TTL을 넣지 않는다.
 
-## 3. 검증 근거
+## 3. 당시 검증 근거
 
 - Functions: 246개 테스트 파일, 2,322개 테스트 통과; 타입 검사, 아키텍처 33개, 런타임 경계 위반 0건, 빌드 통과
 - Firebase Emulator: Firestore Rules 7개, Storage Rules 3개, Firebase Adapter·migration·TTL 통합 36개 통과
 - Web: 7개 suite, 28개 테스트와 Next.js production build 통과
 - Android: 단위 테스트 29개와 Debug APK 조립 통과
 
-일반 `npm test`에서 비실행되는 항목은 Emulator 환경에서 별도로 실행하는 통합 suite와 교체 전 PWA 동작을 기록한 의도적 legacy characterization뿐이다. 제품 결정을 기다리는 `test.todo`는 없다.
+당시 일반 `npm test`에서 비실행된 항목은 Emulator 환경에서 별도로 실행하는 통합 suite와 교체 전 PWA 동작을 기록한 의도적 legacy characterization뿐이다. 제품 결정을 기다리는 `test.todo`는 없다.
 
 ## 4. 운영에서만 남은 작업
 

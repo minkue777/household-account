@@ -9,8 +9,9 @@ import PeriodSelector, { PeriodPreset } from '@/components/stats/PeriodSelector'
 import CategoryExpenseModal from '@/components/stats/CategoryExpenseModal';
 import ExpenseEditModal from '@/components/expense/ExpenseEditModal';
 import { Expense, Category } from '@/types/expense';
-import { subscribeToDateRangeExpenses, updateExpense, deleteExpense } from '@/lib/expenseService';
-import { addMerchantRule } from '@/lib/merchantRuleService';
+import { updateExpense, deleteExpense } from '@/lib/expenseService';
+import { readExpenseStatistics } from '@/platform/reporting/expenseStatisticsReadModel';
+import { resolveExpenseStatisticsPeriod } from '@/features/reporting/statisticsPeriod';
 import { ExpenseUpdates } from '@/lib/utils/expenseForm';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -18,16 +19,14 @@ import { useHousehold } from '@/contexts/HouseholdContext';
 
 const DEFAULT_CATEGORY_KEYS = ['food', 'living', 'childcare'];
 
-function formatDate(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
 export default function StatsPage() {
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('1year');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [readError, setReadError] = useState(false);
+  const [queryRevision, setQueryRevision] = useState(0);
   const [enabledCategories, setEnabledCategories] = useState<Set<string>>(new Set(DEFAULT_CATEGORY_KEYS));
   const [hasInitializedCategories, setHasInitializedCategories] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
@@ -35,7 +34,9 @@ export default function StatsPage() {
 
   const { activeCategories } = useCategoryContext();
   const { themeConfig } = useTheme();
-  const { householdKey } = useHousehold();
+  const { householdKey, remoteReadEpoch = 0 } = useHousehold();
+
+  useEffect(() => { setHasInitializedCategories(false); setEditingExpense(null); setSelectedCategory(null); }, [householdKey, remoteReadEpoch]);
 
   useEffect(() => {
     if (hasInitializedCategories || activeCategories.length === 0) {
@@ -47,7 +48,7 @@ export default function StatsPage() {
       .map((category) => category.key);
 
     setEnabledCategories(
-      new Set(budgetedCategoryKeys.length > 0 ? budgetedCategoryKeys : DEFAULT_CATEGORY_KEYS)
+      new Set(budgetedCategoryKeys.length > 0 ? budgetedCategoryKeys : DEFAULT_CATEGORY_KEYS.filter(key => activeCategories.some(category => category.key === key)))
     );
     setHasInitializedCategories(true);
   }, [activeCategories, hasInitializedCategories]);
@@ -63,62 +64,30 @@ export default function StatsPage() {
       .sort((left, right) => right.date.localeCompare(left.date));
   }, [expenses, selectedCategory]);
 
-  const handleSaveEdit = async (expense: Expense, updates: ExpenseUpdates) => {
-    await updateExpense(expense.id, updates, expense.aggregateVersion);
-  };
-
-  const handleSaveMerchantRule = async (merchantName: string, category: string) => {
-    if (!householdKey) throw new Error('인증된 가구 세션이 필요합니다.');
-    const householdId = householdKey;
-    await addMerchantRule(householdId, merchantName, category, true);
+  const handleSaveEdit = async (expense: Expense, updates: ExpenseUpdates, rememberForNextTime = false) => {
+    await updateExpense(expense.id, updates, expense.aggregateVersion, rememberForNextTime);
+    setQueryRevision(revision => revision + 1);
   };
 
   const handleDeleteExpense = async (expense: Expense) => {
-    const operation = deleteExpense(expense.id, expense.aggregateVersion);
+    await deleteExpense(expense.id, expense.aggregateVersion);
     setEditingExpense(null);
-    await operation;
+    setQueryRevision(revision => revision + 1);
   };
 
-  const { startDate, endDate } = useMemo(() => {
-    const now = new Date();
-
-    if (periodPreset === 'custom' && customStartDate && customEndDate) {
-      return { startDate: customStartDate, endDate: customEndDate };
-    }
-
-    let start: Date;
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-    switch (periodPreset) {
-      case '3months':
-        start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-        break;
-      case '6months':
-        start = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-        break;
-      case '1year':
-      default:
-        start = new Date(now.getFullYear() - 1, now.getMonth() + 1, 1);
-        break;
-    }
-
-    return { startDate: formatDate(start), endDate: formatDate(end) };
-  }, [periodPreset, customStartDate, customEndDate]);
+  const { startDate, endDate, error: periodError } = useMemo(() => resolveExpenseStatisticsPeriod(periodPreset, customStartDate, customEndDate), [periodPreset, customStartDate, customEndDate]);
 
   useEffect(() => {
-    if (!startDate || !endDate) {
-      return;
-    }
-
+    let active = true;
+    setExpenses([]);
+    setReadError(false);
+    setSelectedCategory(null);
+    setEditingExpense(null);
+    if (!householdKey || periodError) { setIsLoading(false); return; }
     setIsLoading(true);
-
-    const unsubscribe = subscribeToDateRangeExpenses(startDate, endDate, (newExpenses) => {
-      setExpenses(newExpenses);
-      setIsLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [startDate, endDate]);
+    void readExpenseStatistics(startDate, endDate).then(result => { if (active) setExpenses(result); }, () => { if (active) setReadError(true); }).finally(() => { if (active) setIsLoading(false); });
+    return () => { active = false; };
+  }, [startDate, endDate, periodError, householdKey, remoteReadEpoch, queryRevision]);
 
   const totalAmount = expenses.reduce((sum, expense) => sum + expense.amount, 0);
 
@@ -127,9 +96,7 @@ export default function StatsPage() {
       return '';
     }
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    return `${start.getFullYear()}.${start.getMonth() + 1} - ${end.getFullYear()}.${end.getMonth() + 1}`;
+    return `${startDate.slice(0, 4)}.${Number(startDate.slice(5, 7))} - ${endDate.slice(0, 4)}.${Number(endDate.slice(5, 7))}`;
   }, [startDate, endDate]);
 
   return (
@@ -166,6 +133,7 @@ export default function StatsPage() {
                 onEndDateChange: setCustomEndDate,
               }}
             />
+            {(periodError || readError) && <p role="alert" className="mt-3 text-sm text-red-600">{periodError ?? '통계를 불러오지 못했습니다.'}{readError && <button type="button" className="ml-3 underline" onClick={() => setQueryRevision(value => value + 1)}>다시 시도</button>}</p>}
 
             <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
               <div className="text-sm text-slate-500">{periodLabel}</div>
@@ -174,7 +142,7 @@ export default function StatsPage() {
                   <span className="text-sm text-slate-500">총</span>
                   {isLoading ? (
                     <span className="text-lg text-slate-400">로딩중...</span>
-                  ) : (
+                  ) : periodError || readError ? <span>조회 실패</span> : expenses.length === 0 ? <span>데이터 없음</span> : (
                     <span className="text-xl font-bold text-slate-800">{totalAmount.toLocaleString()}원</span>
                   )}
                 </div>
@@ -186,7 +154,7 @@ export default function StatsPage() {
             <h3 className="mb-4 text-lg font-semibold text-slate-700">월별 지출 추이</h3>
             {isLoading ? (
               <div className="flex h-72 items-center justify-center text-slate-400">로딩중...</div>
-            ) : expenses.length > 0 ? (
+            ) : periodError || readError ? <p>조회 실패</p> : expenses.length > 0 ? (
               <MonthlyTrendChart
                 expenses={expenses}
                 startDate={startDate}
@@ -206,7 +174,7 @@ export default function StatsPage() {
                 <DonutChart expenses={expenses} onCategoryClick={handleCategoryClick} />
               ) : (
                 <div className="flex h-64 items-center justify-center text-slate-400">
-                  {isLoading ? '로딩중...' : '데이터가 없습니다'}
+                  {isLoading ? '로딩중...' : periodError || readError ? '조회 실패' : '데이터가 없습니다'}
                 </div>
               )}
             </div>
@@ -228,8 +196,9 @@ export default function StatsPage() {
           expense={editingExpense}
           isOpen={!!editingExpense}
           onClose={() => setEditingExpense(null)}
-          onSave={(updates) => handleSaveEdit(editingExpense, updates)}
-          onSaveMerchantRule={handleSaveMerchantRule}
+          onSave={(updates, remember) => handleSaveEdit(editingExpense, updates, remember)}
+          allowRememberMerchant
+          preserveDraftUntilSuccess
           onDelete={() => handleDeleteExpense(editingExpense)}
           transactionType="expense"
         />

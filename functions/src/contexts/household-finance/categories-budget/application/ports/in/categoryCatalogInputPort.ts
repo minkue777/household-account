@@ -63,6 +63,7 @@ export interface ArchiveCategoryCommand {
 export interface SetDefaultCategoryCommand {
   commandKey: string;
   categoryId: string;
+  expectedCatalogVersion?: number;
 }
 
 export interface CategoryCatalogInputPort {

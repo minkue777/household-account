@@ -113,8 +113,18 @@ describeWithFirestoreEmulator("Firestore TTL adapter boundary", () => {
       targets: [],
       totals: { target: 0, succeeded: 0, skipped: 0, failed: 0 },
     } as const;
-    await repository.saveRun({ runId: "complete", status: "COMPLETE", ...base });
-    await repository.saveRun({ runId: "failed", status: "FAILED", ...base });
+    for (const [runId, status] of [["complete", "COMPLETE"], ["failed", "FAILED"]] as const) {
+      await repository.saveRun({
+        ...base, runId, status: "RUNNING",
+        lease: { ownerId: "worker", token: runId, attempt: 1,
+          expiresAt: new Date(Date.parse(NOW) + 60_000).toISOString() },
+      });
+      await repository.completeRun(
+        { ...base, runId, status },
+        { ...base, runId, status, failures: [], startedAt: NOW, finishedAt: NOW },
+        runId,
+      );
+    }
 
     const runs = database
       .collection("operations")

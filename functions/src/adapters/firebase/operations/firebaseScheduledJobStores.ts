@@ -76,6 +76,7 @@ function toExecutionRun(snapshot: firestore.DocumentSnapshot): JobRun | undefine
     jobName: data.jobName,
     executionKey: data.executionKey,
     status: data.status as JobRun["status"],
+    ...(typeof data.lastLeaseAttempt === "number" ? { attempt: data.lastLeaseAttempt } : {}),
     ...(typeof data.checkpoint === "string" ? { checkpoint: data.checkpoint } : {}),
     ...(typeof data.lastHeartbeatAt === "string"
       ? { lastHeartbeatAt: data.lastHeartbeatAt }
@@ -156,7 +157,7 @@ export class FirebaseScheduledJobExecutionRepository
   private readonly results: firestore.CollectionReference;
 
   constructor(
-    database: firestore.Firestore,
+    private readonly database: firestore.Firestore,
     private readonly now: () => string = () => new Date().toISOString(),
     private readonly heartbeatTimeoutSeconds = 300,
   ) {
@@ -184,25 +185,57 @@ export class FirebaseScheduledJobExecutionRepository
   }
 
   async saveRun(run: JobRun): Promise<void> {
+    if (run.status !== "RUNNING" && run.status !== "OVERDUE") {
+      throw new Error("SCHEDULED_JOB_COMPLETION_REQUIRED");
+    }
+    return this.writeRun(run);
+  }
+
+  async completeRun(
+    run: JobRun,
+    result: JobExecutionResult,
+    leaseToken: string,
+  ): Promise<void> {
+    if (
+      run.runId !== result.runId || run.status !== result.status ||
+      run.jobName !== result.jobName || run.lease !== undefined
+    ) throw new Error("SCHEDULED_JOB_COMPLETION_INVALID");
+    return this.writeRun(run, { result, leaseToken });
+  }
+
+  private async writeRun(
+    run: JobRun,
+    completion?: { readonly result: JobExecutionResult; readonly leaseToken: string },
+  ): Promise<void> {
     const reference = this.runs.doc(run.runId);
-    await reference.firestore.runTransaction(async (transaction) => {
+    await this.database.runTransaction(async (transaction) => {
       const current = await transaction.get(reference);
+      const stored = current.exists ? asRecord(current.data()) : undefined;
+      if (completion !== undefined && (
+        stored === undefined ||
+        activeLeaseToken(stored) !== completion.leaseToken ||
+        leaseExpired(stored, this.now()) ||
+        (stored.status !== "RUNNING" && stored.status !== "OVERDUE")
+      )) throw new Error("SCHEDULED_JOB_STALE_LEASE");
       if (current.exists) {
         const currentData = asRecord(current.data());
         const currentToken = activeLeaseToken(currentData);
         const incomingToken = run.lease?.token;
-        const terminalIncoming =
-          run.status === "COMPLETE" ||
-          run.status === "PARTIAL_FAILURE" ||
-          run.status === "FAILED";
         if (
-          !terminalIncoming &&
+          completion === undefined &&
           currentToken !== undefined &&
           currentToken !== incomingToken &&
           !leaseExpired(currentData, this.now())
         ) {
           throw new Error("SCHEDULED_JOB_RUN_ALREADY_CLAIMED");
         }
+        if (completion === undefined && (
+          currentData.status === "COMPLETE" ||
+          (typeof currentData.lastLeaseAttempt === "number" &&
+            ((run.lease?.attempt ?? 0) < currentData.lastLeaseAttempt ||
+              (currentToken !== incomingToken && (run.lease?.attempt ?? 0) <= currentData.lastLeaseAttempt))) ||
+          (currentToken !== undefined && currentToken === incomingToken && leaseExpired(currentData, this.now()))
+        )) throw new Error("SCHEDULED_JOB_STALE_LEASE");
       }
       const currentStatus = current.exists
         ? asRecord(current.data()).status
@@ -220,11 +253,11 @@ export class FirebaseScheduledJobExecutionRepository
           executionKey: run.executionKey,
           status: run.status,
           ...(run.checkpoint === undefined
-            ? {}
+            ? { checkpoint: FieldValue.delete() }
             : { checkpoint: run.checkpoint }),
           ...(run.lease === undefined
             ? { lease: FieldValue.delete() }
-            : { lease: run.lease }),
+            : { lease: run.lease, lastLeaseAttempt: run.lease.attempt }),
           ...(run.lastHeartbeatAt === undefined
             ? {}
             : { lastHeartbeatAt: run.lastHeartbeatAt }),
@@ -259,6 +292,18 @@ export class FirebaseScheduledJobExecutionRepository
         },
         { merge: true },
       );
+      if (completion !== undefined) {
+        const result = completion.result;
+        transaction.set(this.results.doc(result.runId), {
+          ...result,
+          schemaVersion: 1,
+          updatedAt: FieldValue.serverTimestamp(),
+          ...(result.status === "COMPLETE" ? {
+            terminalAt: result.finishedAt,
+            expiresAt: firestoreTtlAfter(result.finishedAt),
+          } : {}),
+        });
+      }
     });
   }
 
@@ -266,28 +311,6 @@ export class FirebaseScheduledJobExecutionRepository
     return toExecutionResult(await this.results.doc(runId).get());
   }
 
-  async saveResult(result: JobExecutionResult): Promise<void> {
-    await this.results.doc(result.runId).set({
-      runId: result.runId,
-      jobName: result.jobName,
-      status: result.status,
-      ...(result.checkpoint === undefined
-        ? {}
-        : { checkpoint: result.checkpoint }),
-      totals: result.totals,
-      failures: result.failures,
-      startedAt: result.startedAt,
-      finishedAt: result.finishedAt,
-      ...(result.status === "COMPLETE"
-        ? {
-            terminalAt: result.finishedAt,
-            expiresAt: firestoreTtlAfter(result.finishedAt),
-          }
-        : {}),
-      schemaVersion: 1,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-  }
 }
 
 export class FirebaseScheduledJobExpectationWriter {
@@ -339,7 +362,7 @@ export class FirebaseScheduledJobMonitorRepository
   private readonly receipts: firestore.CollectionReference;
 
   constructor(
-    database: firestore.Firestore,
+    private readonly database: firestore.Firestore,
     private readonly now: () => string = () => new Date().toISOString(),
   ) {
     this.runs = operationsCollection(database, "scheduledJobRuns");
@@ -360,9 +383,21 @@ export class FirebaseScheduledJobMonitorRepository
     return toMonitoredRun(await this.runs.doc(occurrenceId).get());
   }
 
-  async saveRun(run: MonitoredJobRun): Promise<void> {
-    const terminalAt = this.now();
-    await this.runs.doc(run.occurrenceId).set(
+  async saveRun(run: MonitoredJobRun): Promise<boolean> {
+    const reference = this.runs.doc(run.occurrenceId);
+    return this.database.runTransaction(async transaction => {
+      const snapshot = await transaction.get(reference);
+      const current = snapshot.data();
+      if (run.status === "MISSING") {
+        if (snapshot.exists && current?.status !== "EXPECTED") return false;
+      } else if (run.status === "OVERDUE") {
+        if (current?.status !== "RUNNING" || current?.checkpoint !== run.checkpoint
+          || current?.lastHeartbeatAt !== run.lastHeartbeatAt || current?.lease?.token !== run.lease?.token) return false;
+      } else {
+        // A monitor cannot manufacture a terminal execution result or clear its lease.
+        return current?.status === run.status;
+      }
+      transaction.set(reference,
       {
         occurrenceId: run.occurrenceId,
         jobName: run.jobName,
@@ -384,20 +419,15 @@ export class FirebaseScheduledJobMonitorRepository
           ? {}
           : { checkpoint: run.checkpoint }),
         completedTargetReceipts: run.completedTargetReceipts,
-        ...(run.status === "COMPLETE"
-          ? {
-              terminalAt,
-              expiresAt: firestoreTtlAfter(terminalAt),
-            }
-          : {
-              terminalAt: FieldValue.delete(),
-              expiresAt: FieldValue.delete(),
-            }),
+        terminalAt: FieldValue.delete(),
+        expiresAt: FieldValue.delete(),
         schemaVersion: 1,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
-    );
+      );
+      return true;
+    });
   }
 
   async getIncident(occurrenceId: string): Promise<JobIncident | undefined> {

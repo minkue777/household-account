@@ -62,7 +62,7 @@ export const dividendHourly = onSchedule(
         }),
       },
     });
-    if (result.status === "FAILED") {
+    if (result.status !== "COMPLETE") {
       throw new Error("DIVIDEND_HOURLY_JOB_FAILED");
     }
   },

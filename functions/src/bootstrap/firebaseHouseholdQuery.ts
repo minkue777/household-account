@@ -10,6 +10,7 @@ import {
 import { FirebasePortfolioDividendProjectionReader } from "../adapters/firebase/portfolio/firebasePortfolioDividendProjectionReader";
 import { FirebasePortfolioInstrumentSearch } from "../adapters/firebase/portfolio/firebasePortfolioInstrumentSearch";
 import { FirebasePortfolioMarketData } from "../adapters/firebase/portfolio/firebasePortfolioMarketData";
+import { FirebasePortfolioQuoteObservations } from "../adapters/firebase/portfolio/firebasePortfolioQuoteObservations";
 import { db, REGION } from "../config";
 import { createInstrumentCatalogApplication } from "../contexts/portfolio/holdings/application/instrumentCatalogApplication";
 import {
@@ -25,8 +26,11 @@ import { createPortfolioMarketHouseholdQueryHandlers } from "./queries/portfolio
 import { createAccessHouseholdQueryHandlers } from "./queries/accessHouseholdQueryHandlers";
 import { verifiedSystemAdministrator } from "./verifiedSystemAdministrator";
 import { startInteractiveLatencyInvocation } from "../observability/interactiveLatency";
+import { readDeploymentMarker, type DeploymentMarker } from "./deploymentMarker";
+import { FirebaseExternalQueryQuota } from "../adapters/firebase/operations/firebaseExternalQueryQuota";
 
 export interface HouseholdQueryWireResponse {
+  readonly deployment?: DeploymentMarker;
   readonly contractVersion: "household-query-response.v1";
   readonly queryId: string;
   readonly result:
@@ -121,7 +125,7 @@ const handlers = createManifestBackedHouseholdQueryRegistry([
     search: {
       search: (input) => getPortfolioInstrumentSearch().search(input),
     },
-    quotes: new FirebasePortfolioMarketData(),
+    quotes: new FirebasePortfolioMarketData(undefined, new FirebasePortfolioQuoteObservations(db)),
     dividends: new FirebasePortfolioDividendProjectionReader(db),
   }),
   ...createAccessHouseholdQueryHandlers(db),
@@ -130,6 +134,7 @@ const handlers = createManifestBackedHouseholdQueryRegistry([
 const router = createHouseholdQueryRouter({
   handlers,
   memberships: new FirebaseHouseholdCommandMembershipAdapter(db),
+  externalQueryQuota: new FirebaseExternalQueryQuota(db),
 });
 
 export const executeHouseholdQuery = functions
@@ -140,6 +145,7 @@ export const executeHouseholdQuery = functions
       try {
         const result = await router.execute({
           principalUid: context.auth?.uid,
+          sourceIp: context.rawRequest.ip,
           administrator: verifiedSystemAdministrator(
             context.auth?.uid,
             context.auth?.token,
@@ -150,7 +156,8 @@ export const executeHouseholdQuery = functions
         latency.complete(
           result.kind === "success" ? "succeeded" : "rejected",
         );
-        return response;
+        const deployment = context.auth?.uid !== undefined && result.kind === "success" ? readDeploymentMarker() : undefined;
+        return deployment === undefined ? response : { ...response, deployment };
       } catch (error) {
         latency.complete("failed");
         throw error;

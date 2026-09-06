@@ -12,7 +12,7 @@ import type {
 
 const PROJECTION_COLLECTION = "runtimeProjections";
 const PROJECTION_DOCUMENT = "payment-capture-configuration-v1";
-const PROJECTION_SCHEMA_VERSION = 1;
+const PROJECTION_SCHEMA_VERSION = 2;
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)

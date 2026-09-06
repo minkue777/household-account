@@ -2,5 +2,8 @@
 export async function clearPwaRuntimeCaches(): Promise<void> {
   if (typeof window === 'undefined' || !('caches' in window)) return;
   const keys = await window.caches.keys();
-  await Promise.all(keys.map((key) => window.caches.delete(key)));
+  const obsolete = keys.filter(key => !key.startsWith('household-static-v1-') && key !== 'immutable-next-static');
+  await Promise.all(obsolete.map(key => window.caches.delete(key)));
+  const remaining = await window.caches.keys();
+  if (obsolete.some(key => remaining.includes(key))) throw new Error('PWA_SESSION_CACHE_PURGE_FAILED');
 }

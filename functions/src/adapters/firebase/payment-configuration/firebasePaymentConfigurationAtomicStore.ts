@@ -419,49 +419,27 @@ export class FirebasePaymentConfigurationAtomicStore
 {
   constructor(private readonly database: firestore.Firestore) {}
 
-  async transactMerchantRules(
-    metadata: PaymentConfigurationCommandMetadata,
-    decide: (
-      current: MerchantRuleCommandState,
-    ) => AtomicPaymentConfigurationMutation<
-      MerchantRuleCommandState,
-      MerchantRuleCommandResult
-    >,
-  ): Promise<PaymentConfigurationAtomicResult<MerchantRuleCommandResult>> {
-    const household = this.database.collection("households").doc(metadata.householdId);
+  async prepareMerchantRules(
+    transaction: firestore.Transaction,
+    householdId: string,
+    decide: (current: MerchantRuleCommandState) => AtomicPaymentConfigurationMutation<MerchantRuleCommandState, MerchantRuleCommandResult>,
+  ): Promise<{ value: MerchantRuleCommandResult; stage: () => void }> {
+    const household = this.database.collection("households").doc(householdId);
     const canonical = household.collection("merchantRules");
     const legacy = this.database.collection("merchant_rules");
     const claims = household.collection("merchantRuleClaims");
     const meta = household.collection("paymentConfigurationMeta").doc("merchant-rules");
-    const receipt = receiptReference(this.database, metadata);
-    try {
-      return await this.database.runTransaction(async (transaction) => {
-        const [receiptSnapshot, canonicalSnapshot, legacySnapshot, metaSnapshot] =
-          await Promise.all([
-            transaction.get(receipt),
-            transaction.get(canonical),
-            transaction.get(legacy.where("householdId", "==", metadata.householdId)),
-            transaction.get(meta),
-          ]);
-        if (receiptSnapshot.exists) {
-          if (receiptSnapshot.data()?.payloadFingerprint !== metadata.payloadFingerprint) {
-            return { kind: "payload-mismatch" } as const;
-          }
-          return {
-            kind: "replayed",
-            value: receiptSnapshot.data()?.result as MerchantRuleCommandResult,
-          } as const;
-        }
-
-        const current = buildMerchantRuleCommandState({
-          rules: mergeRules({
-            canonical: canonicalSnapshot.docs,
-            legacy: legacySnapshot.docs,
-            householdId: metadata.householdId,
-          }),
-          collectionVersions: collectionVersions(metaSnapshot.data()),
-        });
-        const mutation = decide(current);
+    const [canonicalSnapshot, legacySnapshot, metaSnapshot] = await Promise.all([
+      transaction.get(canonical),
+      transaction.get(legacy.where("householdId", "==", householdId)),
+      transaction.get(meta),
+    ]);
+    const current = buildMerchantRuleCommandState({
+      rules: mergeRules({ canonical: canonicalSnapshot.docs, legacy: legacySnapshot.docs, householdId }),
+      collectionVersions: collectionVersions(metaSnapshot.data()),
+    });
+    const mutation = decide(current);
+    return { value: mutation.value, stage: () => {
         if (mutation.writes) {
           const beforeRules = new Map(current.rules.map((rule) => [rule.ruleId, rule]));
           const afterRules = new Map(mutation.state.rules.map((rule) => [rule.ruleId, rule]));
@@ -484,14 +462,14 @@ export class FirebasePaymentConfigurationAtomicStore
             before: merchantClaims(current),
             after: merchantClaims(mutation.state),
             document: (claim) => ({
-              householdId: metadata.householdId,
+              householdId: householdId,
               ...claim,
             }),
           });
           transaction.set(
             meta,
             {
-              householdId: metadata.householdId,
+              householdId: householdId,
               collectionVersions: mutation.state.collectionVersions,
               schemaVersion: 1,
               updatedAt: FieldValue.serverTimestamp(),
@@ -501,15 +479,31 @@ export class FirebasePaymentConfigurationAtomicStore
           invalidateCaptureConfigurationProjection(
             transaction,
             this.database,
-            metadata.householdId,
+            householdId,
           );
         }
-        transaction.create(receipt, receiptDocument(metadata, mutation.value));
-        return { kind: "committed", value: mutation.value } as const;
+
+    } };
+  }
+
+  async transactMerchantRules(
+    metadata: PaymentConfigurationCommandMetadata,
+    decide: (current: MerchantRuleCommandState) => AtomicPaymentConfigurationMutation<MerchantRuleCommandState, MerchantRuleCommandResult>,
+  ): Promise<PaymentConfigurationAtomicResult<MerchantRuleCommandResult>> {
+    const receipt = receiptReference(this.database, metadata);
+    try {
+      return await this.database.runTransaction(async (transaction) => {
+        const receiptSnapshot = await transaction.get(receipt);
+        if (receiptSnapshot.exists) {
+          if (receiptSnapshot.data()?.payloadFingerprint !== metadata.payloadFingerprint) return { kind: "payload-mismatch" } as const;
+          return { kind: "replayed", value: receiptSnapshot.data()?.result as MerchantRuleCommandResult } as const;
+        }
+        const prepared = await this.prepareMerchantRules(transaction, metadata.householdId, decide);
+        prepared.stage();
+        transaction.create(receipt, receiptDocument(metadata, prepared.value));
+        return { kind: "committed", value: prepared.value } as const;
       });
-    } catch (_error) {
-      return { kind: "commit-failed" };
-    }
+    } catch (_error) { return { kind: "commit-failed" }; }
   }
 
   async transactRegisteredCardUpdate(

@@ -1,271 +1,154 @@
 import {
-  getMessaging,
-  isSupported as isMessagingSupported,
-  onMessage,
-  onRegistered,
-  onUnregistered,
-  register,
-  unregister,
-  type MessagePayload,
-  type Messaging,
-  type Unsubscribe,
+  getMessaging, isSupported as isMessagingSupported, onMessage, onRegistered,
+  onUnregistered, register, unregister, type MessagePayload, type Messaging, type Unsubscribe,
 } from 'firebase/messaging';
+import { getId, getInstallations } from 'firebase/installations';
 import { app } from '@/lib/firebaseApp';
 import { notificationCommands } from '@/features/notifications/application/notificationCommands';
-import {
-  getClientSessionScope,
-  requireClientSessionScope,
-} from '@/composition/clientSessionScope';
+import { getClientSessionScope, requireClientSessionScope, type ClientSessionScope } from '@/composition/clientSessionScope';
 import { Platform } from '@/lib/utils/platform';
+import { ensurePwaServiceWorker } from './browserServiceWorker';
+import { expenseNotificationData } from './notificationPayload';
 
 const VAPID_KEY = 'BLI2AoMlLXi5yMOfCAPdup52iEoPoItcWzFQws-Vb5xviQ9VA1ex7oTLZ9M5kqDccQoYAiMaNSUQZSjURD98y3k';
-const FIREBASE_MESSAGING_SCOPE = '/firebase-cloud-messaging-push-scope';
-
-interface ActiveEndpointBinding {
-  fid: string;
-  householdId: string;
-  sessionGeneration: number;
-  registrationVersion: number;
-}
-
+const CLEANUP_KEY = 'pwa-endpoint-cleanup.v1';
+interface ActiveEndpointBinding { fid: string; scope: ClientSessionScope; registrationVersion: number }
 export type PwaFidEndpointRegistrationState =
-  | { status: 'idle' }
-  | { status: 'unsupported' }
-  | { status: 'permission-required' }
-  | { status: 'permission-denied' }
-  | { status: 'registering' }
-  | { status: 'active'; registrationVersion: number }
-  | { status: 'error' };
-
+  | { status: 'idle' | 'unsupported' | 'permission-required' | 'permission-denied' | 'registering' | 'error' }
+  | { status: 'active'; registrationVersion: number };
 type EndpointStateListener = (state: PwaFidEndpointRegistrationState) => void;
 
 let messagingPromise: Promise<Messaging | null> | undefined;
-let lifecycleMessaging: Messaging | undefined;
-let unsubscribeRegistered: Unsubscribe | undefined;
-let unsubscribeUnregistered: Unsubscribe | undefined;
-let unsubscribeForegroundDisplay: Unsubscribe | undefined;
+let listeners: Unsubscribe[] = [];
 let activeBinding: ActiveEndpointBinding | undefined;
 let registrationTask: Promise<void> | undefined;
-let activationTask: { sessionGeneration: number; promise: Promise<boolean> } | undefined;
+let pendingSdkRemoval: ActiveEndpointBinding | undefined;
+let activationTask: { scope: ClientSessionScope; promise: Promise<boolean> } | undefined;
+let cleanupStarted = false;
+let listenerEpoch = 0;
 let endpointState: PwaFidEndpointRegistrationState = { status: 'idle' };
 const endpointStateListeners = new Set<EndpointStateListener>();
 
 function publishEndpointState(state: PwaFidEndpointRegistrationState): void {
   endpointState = state;
-  endpointStateListeners.forEach((listener) => listener(state));
+  endpointStateListeners.forEach(listener => listener(state));
 }
-
-function eligibleRuntime(): boolean {
-  return Platform.isIOSPWA() && Platform.supportsPushNotification();
+function eligibleRuntime(): boolean { return Platform.isIOSPWA() && Platform.supportsPushNotification(); }
+function sameScope(a: ClientSessionScope | undefined, b: ClientSessionScope): boolean {
+  return !!a && a.principalUid === b.principalUid && a.householdId === b.householdId
+    && a.memberId === b.memberId && a.sessionGeneration === b.sessionGeneration;
 }
-
+function cleanupPending(): boolean {
+  return cleanupStarted || localStorage.getItem(CLEANUP_KEY) !== null;
+}
+function detachListeners(): void {
+  listenerEpoch++;
+  listeners.forEach(unsubscribe => unsubscribe());
+  listeners = [];
+}
 async function messagingInstance(): Promise<Messaging | null> {
   if (!eligibleRuntime()) return null;
-  messagingPromise ??= isMessagingSupported()
-    .then((supported) => supported ? getMessaging(app) : null)
-    .catch(() => null);
+  messagingPromise ??= isMessagingSupported().then(supported => supported ? getMessaging(app) : null).catch(() => null);
   return messagingPromise;
 }
-
-async function messagingServiceWorker(): Promise<ServiceWorkerRegistration> {
-  await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-    scope: FIREBASE_MESSAGING_SCOPE,
-  });
-  const registration = await navigator.serviceWorker.getRegistration(FIREBASE_MESSAGING_SCOPE);
-  if (!registration) throw new Error('Firebase Messaging 서비스 워커를 찾을 수 없습니다.');
-  return registration;
-}
-
-const EXPENSE_ID_PATTERN = /^[A-Za-z0-9._-]{1,256}$/;
-
-function foregroundExpensePayload(payload: MessagePayload) {
-  const data = payload.data;
-  if (
-    data?.payloadVersion !== 'notification-payload.v1' ||
-    data.clickTarget !== 'expense-edit' ||
-    (data.type !== 'expense-created' && data.type !== 'household-notification-requested') ||
-    !EXPENSE_ID_PATTERN.test(data.expenseId ?? '')
-  ) {
-    return null;
-  }
-  return {
-    payloadVersion: 'notification-payload.v1',
-    type: data.type,
-    clickTarget: 'expense-edit',
-    expenseId: data.expenseId,
-  };
-}
-
-async function displayForegroundExpenseNotification(payload: MessagePayload): Promise<void> {
-  const data = foregroundExpensePayload(payload);
-  if (!data) return;
-  const registration = await messagingServiceWorker();
-  await registration.showNotification(
-    payload.notification?.title || '가계부 알림',
-    {
-      body: payload.notification?.body || '새 지출 내역을 확인해 주세요.',
-      icon: '/icons/icon-192x192.png',
-      badge: '/icons/icon-72x72.png',
-      data,
-    }
+async function retrySdkRemoval(): Promise<void> {
+  const binding = pendingSdkRemoval;
+  if (!binding) return;
+  if (!sameScope(getClientSessionScope(), binding.scope)) throw new Error('PWA_ENDPOINT_SCOPE_CHANGED');
+  await notificationCommands.removeEndpointForSdkUnregistered(
+    binding.scope.householdId, binding.fid, binding.registrationVersion
   );
+  if (pendingSdkRemoval === binding) pendingSdkRemoval = undefined;
+  if (activeBinding === binding) activeBinding = undefined;
 }
 
-function attachLifecycleListeners(messaging: Messaging): void {
-  if (lifecycleMessaging === messaging) return;
-  unsubscribeRegistered?.();
-  unsubscribeUnregistered?.();
-  unsubscribeForegroundDisplay?.();
-  lifecycleMessaging = messaging;
-
-  unsubscribeRegistered = onRegistered(messaging, (fid) => {
-    const scope = getClientSessionScope();
-    if (!scope) return;
-    const capturedGeneration = scope.sessionGeneration;
-    const task = notificationCommands
-      .registerEndpoint(scope.householdId, fid, 'ios-pwa')
-      .then((result) => {
-        const currentScope = getClientSessionScope();
-        if (
-          !currentScope ||
-          currentScope.sessionGeneration !== capturedGeneration ||
-          currentScope.householdId !== scope.householdId
-        ) {
-          return;
-        }
-        activeBinding = {
-          fid,
-          householdId: scope.householdId,
-          sessionGeneration: capturedGeneration,
-          registrationVersion: result.registrationVersion,
-        };
-        publishEndpointState({
-          status: 'active',
-          registrationVersion: result.registrationVersion,
-        });
-      })
-      .catch((error) => {
-        const currentScope = getClientSessionScope();
-        if (
-          currentScope?.sessionGeneration === capturedGeneration &&
-          currentScope.householdId === scope.householdId
-        ) {
-          publishEndpointState({ status: 'error' });
-        }
+function attachLifecycleListeners(messaging: Messaging, scope: ClientSessionScope): void {
+  detachListeners();
+  const epoch = listenerEpoch;
+  const current = () => epoch === listenerEpoch && !cleanupPending() && sameScope(getClientSessionScope(), scope);
+  listeners.push(onRegistered(messaging, fid => {
+    if (!current()) return;
+    const task = notificationCommands.registerEndpoint(scope.householdId, fid, 'ios-pwa')
+      .then(result => {
+        if (!current()) return;
+        activeBinding = { fid, scope, registrationVersion: result.registrationVersion };
+        publishEndpointState({ status: 'active', registrationVersion: result.registrationVersion });
+      }).catch(error => {
+        if (current()) publishEndpointState({ status: 'error' });
         throw error;
       });
     registrationTask = task;
     void task.catch(() => {});
-  });
-
-  unsubscribeUnregistered = onUnregistered(messaging, (fid) => {
+  }));
+  listeners.push(onUnregistered(messaging, fid => {
     const binding = activeBinding;
-    const scope = getClientSessionScope();
-    if (
-      !binding ||
-      binding.fid !== fid ||
-      !scope ||
-      binding.householdId !== scope.householdId ||
-      binding.sessionGeneration !== scope.sessionGeneration
-    ) {
-      return;
-    }
-    activeBinding = undefined;
-    publishEndpointState({ status: 'idle' });
-    const task = notificationCommands.removeEndpointForSdkUnregistered(
-      binding.householdId,
-      fid,
-      binding.registrationVersion
-    ).then(() => undefined);
+    if (!current() || !binding || binding.fid !== fid || !sameScope(binding.scope, scope)) return;
+    pendingSdkRemoval = binding;
+    const task = retrySdkRemoval().then(() => publishEndpointState({ status: 'idle' }))
+      .catch(error => { if (current()) publishEndpointState({ status: 'error' }); throw error; });
     registrationTask = task;
     void task.catch(() => {});
-  });
-
-  unsubscribeForegroundDisplay = onMessage(messaging, (payload) => {
-    void displayForegroundExpenseNotification(payload).catch(() => {
-      // foreground 표시 실패는 endpoint 등록 상태를 변경하지 않습니다.
-    });
-  });
+  }));
+  listeners.push(onMessage(messaging, payload => {
+    const binding = activeBinding;
+    const data = expenseNotificationData(payload.data);
+    if (!current() || !data || !binding || !sameScope(binding.scope, scope)) return;
+    void ensurePwaServiceWorker().then(registration => {
+      // The registration lookup can finish after logout or actor replacement.
+      if (!current() || activeBinding !== binding) return;
+      return registration.showNotification(payload.notification?.title || '가계부 알림', {
+        body: payload.notification?.body || '새 지출 내역을 확인해 주세요.',
+        icon: '/icons/icon-192x192.png', badge: '/icons/icon-72x72.png', data,
+      });
+    }).catch(() => {});
+  }));
 }
 
 export async function activatePwaFidEndpoint(): Promise<boolean> {
-  if (!eligibleRuntime()) {
-    publishEndpointState({ status: 'unsupported' });
-    return false;
-  }
+  if (!eligibleRuntime()) { publishEndpointState({ status: 'unsupported' }); return false; }
+  if (cleanupPending()) throw new Error('PWA_SESSION_CLEANUP_REQUIRED');
+  const scope = { ...requireClientSessionScope() };
+  if (scope.accessMode === 'administrator-readonly') return false;
+  if (activeBinding && !sameScope(activeBinding.scope, scope)) throw new Error('PWA_SESSION_CLEANUP_REQUIRED');
   if (Notification.permission !== 'granted') {
-    publishEndpointState({
-      status: Notification.permission === 'denied'
-        ? 'permission-denied'
-        : 'permission-required',
-    });
+    publishEndpointState({ status: Notification.permission === 'denied' ? 'permission-denied' : 'permission-required' });
     return false;
   }
-
-  const scope = requireClientSessionScope();
-  if (activationTask?.sessionGeneration === scope.sessionGeneration) {
-    return activationTask.promise;
-  }
-
+  if (activationTask && sameScope(activationTask.scope, scope)) return activationTask.promise;
   const promise = (async () => {
     publishEndpointState({ status: 'registering' });
     try {
+      await retrySdkRemoval();
       const messaging = await messagingInstance();
-      if (!messaging) {
-        publishEndpointState({ status: 'unsupported' });
-        return false;
-      }
-      attachLifecycleListeners(messaging);
-      const serviceWorkerRegistration = await messagingServiceWorker();
-      await register(messaging, {
-        vapidKey: VAPID_KEY,
-        serviceWorkerRegistration,
-      });
-
-      const currentRegistrationTask = registrationTask;
-      if (!currentRegistrationTask) {
-        throw new Error('FID 등록 callback이 실행되지 않았습니다.');
-      }
-      await currentRegistrationTask;
-
-      const currentScope = getClientSessionScope();
-      if (
-        !activeBinding ||
-        !currentScope ||
-        currentScope.sessionGeneration !== scope.sessionGeneration ||
-        activeBinding.sessionGeneration !== scope.sessionGeneration ||
-        activeBinding.householdId !== scope.householdId
-      ) {
-        throw new Error('현재 로그인 세션의 알림 endpoint 등록을 확인하지 못했습니다.');
-      }
+      if (!messaging) { publishEndpointState({ status: 'unsupported' }); return false; }
+      if (cleanupPending() || !sameScope(getClientSessionScope(), scope)) throw new Error('PWA_ENDPOINT_SCOPE_CHANGED');
+      attachLifecycleListeners(messaging, scope);
+      const serviceWorkerRegistration = await ensurePwaServiceWorker();
+      if (cleanupPending() || !sameScope(getClientSessionScope(), scope)) throw new Error('PWA_ENDPOINT_SCOPE_CHANGED');
+      registrationTask = undefined;
+      await register(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration });
+      if (!registrationTask) throw new Error('PWA_FID_CALLBACK_MISSING');
+      await registrationTask;
+      if (cleanupPending() || !sameScope(getClientSessionScope(), scope)
+        || !activeBinding || !sameScope(activeBinding.scope, scope)) throw new Error('PWA_ENDPOINT_SCOPE_CHANGED');
       return true;
     } catch (error) {
-      const currentScope = getClientSessionScope();
-      if (currentScope?.sessionGeneration === scope.sessionGeneration) {
-        publishEndpointState({ status: 'error' });
-      }
+      if (sameScope(getClientSessionScope(), scope)) publishEndpointState({ status: 'error' });
       throw error;
     }
   })();
-
-  activationTask = { sessionGeneration: scope.sessionGeneration, promise };
-  try {
-    return await promise;
-  } finally {
-    if (activationTask?.promise === promise) activationTask = undefined;
-  }
+  activationTask = { scope, promise };
+  try { return await promise; }
+  finally { if (activationTask?.promise === promise) activationTask = undefined; }
 }
 
 export async function requestAndActivatePwaFidEndpoint(): Promise<boolean> {
-  if (!eligibleRuntime()) {
-    publishEndpointState({ status: 'unsupported' });
-    return false;
-  }
+  if (!eligibleRuntime()) { publishEndpointState({ status: 'unsupported' }); return false; }
+  requireClientSessionScope();
+  if (cleanupPending()) throw new Error('PWA_SESSION_CLEANUP_REQUIRED');
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') {
-    publishEndpointState({
-      status: permission === 'denied' ? 'permission-denied' : 'permission-required',
-    });
+    publishEndpointState({ status: permission === 'denied' ? 'permission-denied' : 'permission-required' });
     return false;
   }
   return activatePwaFidEndpoint();
@@ -273,67 +156,48 @@ export async function requestAndActivatePwaFidEndpoint(): Promise<boolean> {
 
 export async function removePwaFidEndpointForLogout(): Promise<void> {
   if (!eligibleRuntime()) return;
-  if (registrationTask) await registrationTask.catch(() => undefined);
-  const binding = activeBinding;
-  if (!binding) {
-    publishEndpointState({ status: 'idle' });
-    return;
-  }
-
-  const scope = requireClientSessionScope();
-  if (
-    scope.householdId !== binding.householdId ||
-    scope.sessionGeneration !== binding.sessionGeneration
-  ) {
-    throw new Error('알림 endpoint의 세션 범위가 현재 로그인과 일치하지 않습니다.');
-  }
-
-  await notificationCommands.removeEndpointForLogout(binding.householdId, binding.fid);
+  const scope = { ...requireClientSessionScope() };
+  // Persist before network I/O so a page reload cannot bypass a failed cleanup.
+  localStorage.setItem(CLEANUP_KEY, 'pending');
+  cleanupStarted = true;
+  detachListeners();
+  await activationTask?.promise.catch(() => undefined);
+  await registrationTask?.catch(() => undefined);
+  if (!sameScope(getClientSessionScope(), scope)) throw new Error('PWA_ENDPOINT_SCOPE_CHANGED');
+  const fid = activeBinding?.fid ?? await getId(getInstallations(app));
+  await notificationCommands.removeEndpointForLogout(scope.householdId, fid);
   activeBinding = undefined;
-  activationTask = undefined;
-  publishEndpointState({ status: 'idle' });
-  unsubscribeRegistered?.();
-  unsubscribeUnregistered?.();
-  unsubscribeForegroundDisplay?.();
-  unsubscribeRegistered = undefined;
-  unsubscribeUnregistered = undefined;
-  unsubscribeForegroundDisplay = undefined;
-  lifecycleMessaging = undefined;
+  pendingSdkRemoval = undefined;
   registrationTask = undefined;
-
+  publishEndpointState({ status: 'idle' });
   const messaging = await messagingInstance();
   if (messaging) {
-    try {
-      await unregister(messaging);
-    } catch {
-      // 서버 binding 삭제가 확인되었으므로 SDK 정리 실패가 로그아웃을 막지는 않습니다.
-    }
+    try { await unregister(messaging); } catch { /* Remote deletion already succeeded. */ }
   }
+  // The caller releases the barrier only after session/cache purge also succeeds.
+}
+
+export function completePwaSessionCleanup(): void {
+  localStorage.removeItem(CLEANUP_KEY);
+  cleanupStarted = false;
 }
 
 export async function setupPwaForegroundMessageListener(
   onMessageReceived: (payload: MessagePayload) => void
 ): Promise<Unsubscribe> {
+  const scope = getClientSessionScope();
+  if (!scope || cleanupPending()) return () => {};
   const messaging = await messagingInstance();
-  return messaging ? onMessage(messaging, onMessageReceived) : () => {};
+  return messaging ? onMessage(messaging, payload => {
+    if (!cleanupPending() && sameScope(getClientSessionScope(), scope) && expenseNotificationData(payload.data)) onMessageReceived(payload);
+  }) : () => {};
 }
-
-export function isPwaPushEligible(): boolean {
-  return eligibleRuntime();
-}
-
+export function isPwaPushEligible(): boolean { return eligibleRuntime(); }
 export function notificationPermission(): NotificationPermission | null {
-  if (Platform.isServer() || !Platform.supportsNotification()) return null;
-  return Notification.permission;
+  return Platform.isServer() || !Platform.supportsNotification() ? null : Notification.permission;
 }
-
-export function getPwaFidEndpointRegistrationState(): PwaFidEndpointRegistrationState {
-  return endpointState;
-}
-
-export function subscribePwaFidEndpointRegistrationState(
-  listener: EndpointStateListener
-): Unsubscribe {
+export function getPwaFidEndpointRegistrationState(): PwaFidEndpointRegistrationState { return endpointState; }
+export function subscribePwaFidEndpointRegistrationState(listener: EndpointStateListener): Unsubscribe {
   endpointStateListeners.add(listener);
   return () => endpointStateListeners.delete(listener);
 }

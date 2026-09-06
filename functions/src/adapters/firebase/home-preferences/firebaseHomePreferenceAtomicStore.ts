@@ -16,6 +16,7 @@ import {
 } from "../../../platform/home-preferences/domain/homeSummary";
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
+import { autoSelectFirstLocalCurrency } from "../../../platform/home-preferences/application/homePreferenceRuntimeApplication";
 
 const RECEIPT_CONTEXT = "home-preferences";
 const RETENTION_MILLIS = 30 * 24 * 60 * 60 * 1_000;
@@ -144,6 +145,35 @@ function expiry(occurredAt: string) {
     new Date(Number.isFinite(parsed) ? parsed : Date.now()),
     RETENTION_MILLIS,
   );
+}
+
+/** Prepare all Home reads before the source balance transaction starts writing. */
+export async function prepareFirstLocalCurrencySelection(database: firestore.Firestore, transaction: firestore.Transaction, householdId: string) {
+  const household = database.collection("households").doc(householdId);
+  const preference = household.collection("homePreferences").doc("home");
+  const [householdSnapshot, canonical, balances, legacy] = await Promise.all([
+    transaction.get(household), transaction.get(preference), transaction.get(household.collection("localCurrencyBalances")),
+    transaction.get(database.collection("balances").where("householdId", "==", householdId)),
+  ]);
+  const current = currentState({ householdId, canonical, household: householdSnapshot });
+  const available = new Set(currencyTypes(balances.docs, legacy.docs));
+  return (type: string, occurredAt: string) => {
+    if (!householdSnapshot.exists) return;
+    available.add(type);
+    const selection = autoSelectFirstLocalCurrency(current, available);
+    if (!selection.changed || selection.selectedType === undefined) return;
+    const version = current.aggregateVersion + 1;
+    transaction.set(preference, { householdId, left: current.left, right: current.right,
+      selectedLocalCurrencyType: selection.selectedType, aggregateVersion: version, schemaVersion: 2,
+      updatedAt: FieldValue.serverTimestamp(), ...(!canonical.exists ? { createdAt: FieldValue.serverTimestamp() } : {}) }, { merge: true });
+    transaction.set(household, { selectedLocalCurrencyType: selection.selectedType, homeSummaryConfigVersion: version, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    new FirebaseTransactionalOutbox(database).append(transaction, {
+      eventId: `${hash(`${householdId}\u0000home-auto-select\u0000${version}`)}-home-preference`, eventType: "HomeConfigurationChanged.v1",
+      householdId, aggregateId: `home-preferences:${householdId}`, aggregateVersion: version, occurredAt,
+      correlationId: `home-auto-select:${householdId}`, causationId: `local-currency:${type}`,
+      payload: { changedField: "local-currency", left: current.left, right: current.right, selectedLocalCurrencyType: selection.selectedType },
+    });
+  };
 }
 
 export class FirebaseHomePreferenceAtomicStore

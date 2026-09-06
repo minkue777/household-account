@@ -120,12 +120,18 @@ function branchEnvelope(
             captureContext: {
               observationId: envelope.observationId,
               observationType: payment.observationType,
+              ...(payment.observationType !== "approval" || command.approvalAmountInWon === undefined
+                ? {}
+                : { approvalAmountInWon: command.approvalAmountInWon }),
               ...(command.paymentKind === undefined
                 ? {}
                 : { paymentKind: command.paymentKind }),
               ...(command.paymentKind !== "bill" || payment.dueDate === undefined
                 ? {}
                 : { billDueDate: payment.dueDate }),
+              ...(command.paymentKind !== "bill" || command.parsedMemo === undefined
+                ? {}
+                : { parsedMemo: command.parsedMemo }),
               originChannel: envelope.originChannel,
               creatorMemberId,
               ...(payment.cardEvidence === undefined

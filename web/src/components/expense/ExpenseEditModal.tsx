@@ -11,7 +11,6 @@ import { useMonthlySplitInput } from '@/lib/utils/useMonthlySplitInput';
 import {
   buildExpenseUpdates,
   parsePositiveExpenseAmount,
-  trimExpenseMerchant,
   ExpenseUpdates,
 } from '@/lib/utils/expenseForm';
 import { useExpenseFormState } from '@/lib/utils/useExpenseFormState';
@@ -23,15 +22,14 @@ interface ExpenseEditModalProps {
   expense: Expense;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (updates: ExpenseUpdates) => Promise<void> | void;
-  onSaveMerchantRule?: (
-    merchantName: string,
-    category: string
-  ) => Promise<void> | void;
+  onSave: (updates: ExpenseUpdates, rememberForNextTime?: boolean) => Promise<void> | void;
+  allowRememberMerchant?: boolean;
+  preserveDraftUntilSuccess?: boolean;
   onUnmerge?: () => void;
   onOpenSplit?: () => void;
   onSplitMonths?: (months: number) => void;
   onCancelSplitGroup?: () => Promise<void> | void;
+  onRestoreItemSplit?: () => Promise<void> | void;
   onUpdateSplitGroup?: (newMonths: number) => void;
   onDelete?: () => Promise<void> | void;
   onNotifyPartner?: () => Promise<void> | void;
@@ -45,11 +43,13 @@ export default function ExpenseEditModal({
   isOpen,
   onClose,
   onSave,
-  onSaveMerchantRule,
+  allowRememberMerchant = false,
+  preserveDraftUntilSuccess = false,
   onUnmerge,
   onOpenSplit,
   onSplitMonths,
   onCancelSplitGroup,
+  onRestoreItemSplit,
   onUpdateSplitGroup,
   onDelete,
   onNotifyPartner,
@@ -155,9 +155,7 @@ export default function ExpenseEditModal({
     }
 
     let updates: ExpenseUpdates;
-    let merchantRule:
-      | { merchantName: string; category: string }
-      | undefined;
+
 
     if (isIncome) {
       const item = memo.trim();
@@ -199,50 +197,27 @@ export default function ExpenseEditModal({
       }
       updates = expenseUpdates;
 
-      if (
-        category !== expense.category &&
-        rememberMerchant &&
-        onSaveMerchantRule
-      ) {
-        merchantRule = {
-          merchantName: trimExpenseMerchant(merchant),
-          category,
-        };
-      }
+
     }
 
     isSubmittingRef.current = true;
     setIsSubmitting(true);
-    let saveStage: 'transaction' | 'merchant-rule' = 'transaction';
     try {
       const pendingSave = Object.keys(updates).length > 0
-        ? onSave(updates)
+        ? onSave(updates, allowRememberMerchant && !isIncome && rememberMerchant && category !== expense.category)
         : undefined;
-      onClose();
+      if (!preserveDraftUntilSuccess) onClose();
       await pendingSave;
+      if (preserveDraftUntilSuccess) onClose();
 
-      if (merchantRule && onSaveMerchantRule) {
-        saveStage = 'merchant-rule';
-        await onSaveMerchantRule(
-          merchantRule.merchantName,
-          merchantRule.category
-        );
-      }
     } catch (error) {
       const detail = error instanceof Error && error.message.trim() !== ''
         ? `\n\n${error.message}`
         : '';
-      if (saveStage === 'merchant-rule') {
-        await showAlert(
-          `${transactionLabel} 수정은 저장됐지만 가맹점 분류 규칙을 저장하지 못했습니다. 설정에서 규칙을 다시 등록해 주세요.${detail}`,
-          '가맹점 규칙 저장 실패'
-        );
-      } else {
-        await showAlert(
-          `${transactionLabel} 수정을 저장하지 못했습니다. 최신 내역을 확인한 뒤 다시 시도해 주세요.${detail}`,
-          `${transactionLabel} 수정 실패`
-        );
-      }
+      await showAlert(
+        `${transactionLabel} 수정을 저장하지 못했습니다. 최신 내역을 확인한 뒤 다시 시도해 주세요.${detail}`,
+        `${transactionLabel} 수정 실패`
+      );
     } finally {
       isSubmittingRef.current = false;
       setIsSubmitting(false);
@@ -259,8 +234,9 @@ export default function ExpenseEditModal({
     setShowDeleteConfirm(false);
     try {
       const pendingDelete = onDelete();
-      onClose();
+      if (!preserveDraftUntilSuccess) onClose();
       await pendingDelete;
+      if (preserveDraftUntilSuccess) onClose();
     } catch (error) {
       const detail = error instanceof Error && error.message.trim() !== ''
         ? `\n\n${error.message}`
@@ -391,7 +367,7 @@ export default function ExpenseEditModal({
 
   const renderExpenseExtraSections = () => (
     <>
-      {category !== expense.category && onSaveMerchantRule && (
+      {category !== expense.category && allowRememberMerchant && (
         <label className="mt-4 flex cursor-pointer items-center gap-2 rounded-lg bg-blue-50 p-3">
           <input
             type="checkbox"
@@ -438,6 +414,16 @@ export default function ExpenseEditModal({
             합치기 되돌리기
           </button>
         </div>
+      )}
+
+      {expense.derivedFromTransactionId && onRestoreItemSplit && (
+        <button type="button" className="mt-4 w-full rounded-lg bg-amber-500 px-4 py-2 text-white" onClick={async () => {
+          if (isSubmittingRef.current) return;
+          isSubmittingRef.current = true;
+          try { await onRestoreItemSplit(); onClose(); }
+          catch { await showAlert('항목 분할을 되돌리지 못했습니다. 다시 시도해 주세요.'); }
+          finally { isSubmittingRef.current = false; }
+        }}>항목 분할 되돌리기</button>
       )}
 
       {expense.splitGroupId && (onCancelSplitGroup || onUpdateSplitGroup) && (

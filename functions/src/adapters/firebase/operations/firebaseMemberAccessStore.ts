@@ -93,8 +93,13 @@ export class FirebaseMemberAccessStore {
     const reference = statsCollection(this.database).doc(
       documentId(event.householdId, event.memberId),
     );
+    const visit = this.database.collection('operations').doc(OPERATIONS_DOCUMENT)
+      .collection('memberAccessVisits').doc(createHash('sha256')
+        .update(JSON.stringify([event.householdId, event.memberId, event.visitId])).digest('hex'));
     return this.database.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(reference);
+      const receipt = await transaction.get(visit);
+      if (receipt.exists) return { kind: 'already-recorded' as const, totalAccessCount: count(snapshot.data()?.totalAccessCount) };
       const update = recordMemberAccess(
         mapStats(event.householdId, event.memberId, snapshot.data()),
         event,
@@ -113,6 +118,11 @@ export class FirebaseMemberAccessStore {
           { merge: true },
         );
       }
+      // 집계의 128개 최근 ID는 구형 기록 호환용이며, 중복 판정의 보존 기간을 제한하지 않습니다.
+      transaction.create(visit, {
+        householdId: event.householdId, memberId: event.memberId,
+        accessedAt: event.accessedAt, schemaVersion: 1,
+      });
       return {
         kind: update.replayed ? "already-recorded" : "recorded",
         totalAccessCount: update.stats.totalAccessCount,

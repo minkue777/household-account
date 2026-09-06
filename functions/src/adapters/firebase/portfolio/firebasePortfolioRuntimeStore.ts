@@ -7,6 +7,7 @@ import type {
   PortfolioRefreshLeaseResult,
   PortfolioRuntimeMutation,
   PortfolioRuntimeState,
+  PortfolioRuntimeReadScope,
   PortfolioRuntimeStorePort,
 } from "../../../contexts/portfolio/core/application/ports/out/portfolioRuntimeStorePort";
 import {
@@ -32,6 +33,7 @@ export class FirebasePortfolioRuntimeStore implements PortfolioRuntimeStorePort 
   async transact(
     metadata: PortfolioCommandMetadata,
     decide: (state: PortfolioRuntimeState) => PortfolioRuntimeMutation,
+    scope?: PortfolioRuntimeReadScope,
   ): Promise<PortfolioAtomicResult> {
     const receipt = receiptReference(this.database, metadata);
     try {
@@ -44,15 +46,22 @@ export class FirebasePortfolioRuntimeStore implements PortfolioRuntimeStorePort 
           ) {
             return { kind: "payload-mismatch" } as const;
           }
-          return {
+          if (receiptSnapshot.data()?.status !== "pending") return {
             kind: "replayed",
             value: receiptSnapshot.data()?.result as PortfolioCommandResult,
           } as const;
         }
-        const loaded = await this.loader.load(transaction, metadata.householdId);
+        const loaded = await this.loader.load(transaction, metadata.householdId, scope);
         const mutation = decide(loaded.state);
         this.writer.writeMutation(transaction, metadata, loaded, mutation);
-        transaction.create(receipt, receiptDocument(metadata, mutation.value));
+        const pending = mutation.value.kind === "error" ? mutation.value.retryable === true
+          : typeof mutation.value.value.failedCount === "number" && mutation.value.value.failedCount > 0;
+        const completedTargetKeys = mutation.value.kind === "success"
+          ? mutation.value.value.completedTargetKeys ?? []
+          : receiptSnapshot.data()?.completedTargetKeys ?? receiptSnapshot.data()?.result?.value?.completedTargetKeys ?? [];
+        transaction.set(receipt, pending
+          ? { householdId: metadata.householdId, payloadFingerprint: metadata.payloadFingerprint, result: mutation.value, completedTargetKeys, status: "pending", updatedAt: metadata.occurredAt }
+          : receiptDocument(metadata, mutation.value));
         return { kind: "committed", value: mutation.value } as const;
       });
     } catch (caught) {
@@ -61,9 +70,9 @@ export class FirebasePortfolioRuntimeStore implements PortfolioRuntimeStorePort 
     }
   }
 
-  async readState(householdId: string): Promise<PortfolioRuntimeState> {
+  async readState(householdId: string, scope?: PortfolioRuntimeReadScope): Promise<PortfolioRuntimeState> {
     return this.database.runTransaction(async (transaction) =>
-      (await this.loader.load(transaction, householdId)).state,
+      (await this.loader.load(transaction, householdId, scope)).state,
     );
   }
 

@@ -74,7 +74,11 @@ export function createScheduledJobExecutionFixture(fixture: {
       async getResult(runId) {
         return results.get(runId);
       },
-      async saveResult(result) {
+      async completeRun(run, result, leaseToken) {
+        if (runs.get(run.runId)?.lease?.token !== leaseToken) {
+          throw new Error("SCHEDULED_JOB_STALE_LEASE");
+        }
+        runs.set(run.runId, run);
         results.set(result.runId, result);
       },
     },

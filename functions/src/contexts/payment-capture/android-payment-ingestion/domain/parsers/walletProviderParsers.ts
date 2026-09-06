@@ -82,6 +82,7 @@ function parseToss(context: ProviderParserContext): AndroidProviderParseResult {
       amountInWon: cancellation
         ? grossAmount
         : Math.max(grossAmount - cashback, 0),
+      ...(cancellation ? {} : { approvalAmountInWon: grossAmount }),
       merchant,
       cardCompany: "토스",
     },

@@ -5,6 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 
 import type {
   DividendAnnouncementUpsertResult,
+  DividendLifecycleEvidence,
   DividendEventRuntimeRepository,
   DividendTransitionResult,
   KindDividendDisclosure,
@@ -109,9 +110,10 @@ function eventDocument(input: {
   readonly status: "announced" | "fixed";
   readonly aggregateVersion: number;
   readonly observedAt: string;
+  readonly correction?: { readonly eligibleQuantity: number; readonly evidence: readonly DividendLifecycleEvidence[] };
 }): FirebaseFirestore.DocumentData {
   const current = input.current;
-  const eligibleQuantity = number(current?.eligibleQuantity);
+  const eligibleQuantity = input.correction?.eligibleQuantity ?? number(current?.eligibleQuantity);
   const totalAmount =
     input.status === "fixed" && eligibleQuantity !== undefined
       ? Math.round(eligibleQuantity * input.disclosure.perShareAmount)
@@ -146,7 +148,11 @@ function eventDocument(input: {
     status: input.status,
     ...(eligibleQuantity === undefined ? {} : { eligibleQuantity }),
     ...(totalAmount === undefined ? {} : { totalAmount }),
-    ...(Array.isArray(current?.eligibilityContributions)
+    ...(input.correction !== undefined ? { eligibilityContributions: input.correction.evidence.map(item => ({
+      assetId: item.assetId, quantity: item.quantity,
+      kind: item.selectionKind === "exact" ? "record-date-position" : "nearest-position-snapshot",
+      snapshotDate: item.snapshotDate, sourceVersion: item.sourceVersion, observedAt: item.observedAt,
+    })) } : Array.isArray(current?.eligibilityContributions)
       ? { eligibilityContributions: current.eligibilityContributions }
       : {}),
     sourceReferenceHash: input.disclosure.sourceReferenceHash,
@@ -209,30 +215,26 @@ export class FirebaseDividendEventRuntimeRepository
 {
   constructor(private readonly database: firestore.Firestore) {}
 
+  private async matchingAnnouncement(input: { readonly target: DividendHoldingTargetView; readonly disclosure: KindDividendDisclosure }) {
+    const events = await this.database.collection(EVENTS).where("householdId", "==", input.target.householdId).get();
+    return events.docs.find(document => currentSourceMatches(document.data(), input.disclosure.sourceDisclosureId, input.disclosure.instrumentCode)) ??
+      events.docs.find(document => text(document.data().sourceDisclosureId) === undefined && sameDisclosureFact(document.data(), input.disclosure));
+  }
+
+  async findAnnouncement(input: { readonly target: DividendHoldingTargetView; readonly disclosure: KindDividendDisclosure }) {
+    const matching = await this.matchingAnnouncement(input);
+    return matching === undefined ? undefined : scheduledEvent(matching);
+  }
+
   async upsertAnnouncement(input: {
     readonly target: DividendHoldingTargetView;
     readonly disclosure: KindDividendDisclosure;
     readonly observedAt: string;
     readonly idempotencyKey: string;
+    readonly correction?: { readonly expectedVersion: number; readonly eligibleQuantity: number; readonly evidence: readonly DividendLifecycleEvidence[] };
   }): Promise<DividendAnnouncementUpsertResult> {
     const receipt = receiptReference(this.database, input.idempotencyKey);
-    const events = await this.database
-      .collection(EVENTS)
-      .where("householdId", "==", input.target.householdId)
-      .get();
-    const matching =
-      events.docs.find((document) =>
-        currentSourceMatches(
-          document.data(),
-          input.disclosure.sourceDisclosureId,
-          input.disclosure.instrumentCode,
-        ),
-      ) ??
-      events.docs.find(
-        (document) =>
-          text(document.data().sourceDisclosureId) === undefined &&
-          sameDisclosureFact(document.data(), input.disclosure),
-      );
+    const matching = await this.matchingAnnouncement(input);
     const canonicalEventId = stableEventId(
       input.target.householdId,
       input.disclosure.sourceDisclosureId,
@@ -307,6 +309,14 @@ export class FirebaseDividendEventRuntimeRepository
       }
 
       const status = current === undefined ? "announced" : storedStatus(current);
+      const requiresCorrection = status === "fixed" && current !== undefined &&
+        (text(current.recordDate) !== input.disclosure.recordDate || number(current.perShareAmount) !== input.disclosure.perShareAmount);
+      if (requiresCorrection && (input.correction === undefined || input.correction.evidence.length === 0)) {
+        return { kind: "retryable-failure", code: "DIVIDEND_CORRECTION_EVIDENCE_REQUIRED" };
+      }
+      if (input.correction !== undefined && (currentVersion !== input.correction.expectedVersion || !Number.isFinite(input.correction.eligibleQuantity) || input.correction.eligibleQuantity < 0)) {
+        return { kind: "retryable-failure", code: "DIVIDEND_VERSION_CONFLICT" };
+      }
       const candidate = eventDocument({
         eventId: currentEventId,
         target: input.target,
@@ -315,6 +325,7 @@ export class FirebaseDividendEventRuntimeRepository
         status: status === "paid" ? "fixed" : status,
         aggregateVersion: current === undefined ? 1 : currentVersion + 1,
         observedAt: input.observedAt,
+        ...(input.correction === undefined ? {} : { correction: input.correction }),
       });
       const unchanged =
         current !== undefined &&
@@ -357,19 +368,17 @@ export class FirebaseDividendEventRuntimeRepository
   }
 
   async listNonterminal(input: { readonly cursor?: string; readonly limit: number }) {
-    const snapshot = await this.database.collection(EVENTS).get();
-    const all = snapshot.docs
-      .sort((left, right) => left.id.localeCompare(right.id))
-      .filter((document) => input.cursor === undefined || document.id > input.cursor)
-      .flatMap((document) => {
+    let query = this.database.collection(EVENTS).orderBy("__name__").limit(input.limit);
+    if (input.cursor !== undefined) query = query.startAfter(input.cursor);
+    const snapshot = await query.get();
+    const items = snapshot.docs.flatMap((document) => {
         const event = scheduledEvent(document);
         return event === undefined ? [] : [event];
       });
-    const items = all.slice(0, input.limit);
     return {
       items,
-      ...(items.length === input.limit && all.length > items.length
-        ? { nextCursor: items[items.length - 1]!.documentId }
+      ...(snapshot.size === input.limit
+        ? { nextCursor: snapshot.docs.at(-1)!.id }
         : {}),
     };
   }

@@ -17,46 +17,48 @@ export const categoryCommands = {
   async update(
     householdId: string,
     categoryId: string,
-    changes: Partial<Omit<CategoryDocument, 'id' | 'householdId' | 'isDefault'>>
+    changes: Partial<Omit<CategoryDocument, 'id' | 'householdId' | 'isDefault'>>,
+    expectedVersion: number
   ): Promise<void> {
     await getHouseholdCommandClient().execute(
       'category.update.v1',
-      { categoryId, changes: { ...changes } },
+      { categoryId, changes: { ...changes }, expectedVersion },
       { householdId }
     );
   },
 
-  async archive(householdId: string, categoryId: string): Promise<void> {
+  async archive(householdId: string, categoryId: string, expectedVersion: number): Promise<void> {
     await getHouseholdCommandClient().execute(
       'category.archive.v1',
-      { categoryId },
+      { categoryId, expectedVersion },
       { householdId }
     );
   },
 
-  async setBudget(householdId: string, categoryId: string, budget: number | null): Promise<void> {
+  async setBudget(householdId: string, categoryId: string, budget: number | null, expectedVersion: number): Promise<void> {
     await getHouseholdCommandClient().execute(
       'category.set-budget.v1',
-      { categoryId, budget },
+      { categoryId, budget, expectedVersion },
       { householdId }
     );
   },
 
   async reorder(
     householdId: string,
-    categories: ReadonlyArray<{ id: string; order: number }>
+    categories: ReadonlyArray<{ id: string; order: number }>,
+    expectedCatalogVersion: number
   ): Promise<void> {
     await getHouseholdCommandClient().execute(
       'category.reorder.v1',
-      { categories: categories.map(({ id, order }) => ({ categoryId: id, order })) },
+      { categories: categories.map(({ id, order }) => ({ categoryId: id, order })), expectedCatalogVersion },
       { householdId }
     );
   },
 
-  async setDefault(householdId: string, categoryId: string): Promise<void> {
+  async setDefault(householdId: string, categoryId: string, expectedCatalogVersion: number): Promise<void> {
     await getHouseholdCommandClient().execute(
       'category.set-default.v1',
-      { categoryId },
+      { categoryId, expectedCatalogVersion },
       { householdId }
     );
   },

@@ -28,6 +28,8 @@
 
 영향 요구사항: SPL-005, CAN-006.
 
+2026-09-06 보완: 분할 금액의 내림은 유지하지만, 분할 합계에서 취소 대상·원승인 금액을 추정하는 규칙은 [DEC-071](#dec-071)로 대체합니다. 취소는 보존하거나 명시적으로 복구한 원승인 증거와 계보로만 판정합니다.
+
 <a id="dec-002"></a>
 ## DEC-002 알림 원문 진단 로그
 
@@ -1656,3 +1658,70 @@ Cloud Function 왕복 시간 때문에 빠른 편집 화면이 0.5~1초 동안 �
 결제 알림이 도착하는 별도 가족 기기를 지원하면서도 로그인 주체를 다른 가구원으로 가장하거나, 자산 명의자와 알림 수신자 목록에 실제 사용 목적과 다른 사람을 노출하지 않기 위함입니다. Access, Portfolio 표시, Notifications 수신 정책을 각각의 소유 경계에서 분리해 카드 수집을 유지한 채 독립적으로 숨김·수신 제외할 수 있습니다.
 
 영향 요구사항: HH-011, AST-009, PUSH-003, PUSH-004, PUSH-005, PUSH-014.
+
+<a id="dec-070"></a>
+## DEC-070 토스 캐시백 순지출과 원승인 총액 증거 분리
+
+> 상태: Accepted  
+> 결정일: 2026-09-06  
+> 정책 소유 Context: [Payment Capture](../contexts/payment-capture/requirements.md)  
+> 근거: 사용자가 미결정 정책 Q-007의 권장안을 승인함
+
+- 토스 승인 10,000원·캐시백 500원은 가계부와 QuickEdit에 순지출 9,500원으로 기록한다. 파서의 `max(총액-캐시백, 0)` 규칙을 유지한다.
+- 서버 파서는 차감 전 총액을 `approvalAmountInWon`으로 추출한다. 이 값은 공개 wire 입력으로 받지 않고 승인 시 `captureRecords`에 불변 증거로 저장한다. 원장 수정·분할·합치기는 이 증거를 변경하지 않는다.
+- 취소는 10,000원 원승인 총액, 원 가맹점, 카드 및 검색 기간으로 완전 일치하는 유일한 계보를 찾는다. 순지출 9,500원과 일치하는 취소만으로 이 승인을 삭제하지 않는다. 이후 삭제·복원과 최소 tombstone은 DEC-041을 따른다.
+- 기존 기록에 총액이 없으면 기존 승인 금액으로만 대조한다. 과거 캐시백이나 총액을 추정해 보정하지 않는다. 잘못된 총액 필드가 있으면 순액으로 대체하지 않고 후보에서 제외한다.
+- 원문 hash에 결박된 파생 증거를 추가하더라도 기존 중복 fingerprint와 receipt identity는 유지한다. 배포 전 처리된 요청의 재전송은 최초 결과를 재생하고 기존 증거를 덮어쓰지 않는다. 순지출 0원 입력을 원장에 생성하지 않는 현행 동작도 유지한다.
+
+영향 요구사항: PARSE-TOSS-001, CAN-003, CAN-007, ING-008, T-PARSE-001, T-PARSE-002, T-CAN-LINEAGE-001.
+
+<a id="dec-071"></a>
+## DEC-071 분할 취소는 원승인 증거와 연결된 전체 계보로 처리
+
+> 상태: Accepted  
+> 결정일: 2026-09-06  
+> 정책 소유 Context: [Payment Capture](../contexts/payment-capture/requirements.md)·[Household Finance](../contexts/household-finance/requirements.md)  
+> 근거: 사용자가 Q-008 권장안인 증거 확인·복구 후 처리, 근거 없는 추정 삭제 금지를 승인함
+
+- 알림으로 등록한 거래를 분할할 때 원거래 ID, 원승인 증거, `captureLineageId`를 보존한다. 취소는 원승인 금액·가맹점·카드·검색 기간이 일치하는 유일한 계보에 대해서만 실행한다.
+- 원승인 10,001원을 5,000원씩 두 달로 나눴더라도 10,001원 취소가 오면 보존한 승인 총액으로 식별한다. 원거래와 다음 달 이후를 포함한 모든 파생 기록을 같은 원자 작업에서 삭제한다. 수정·재분할·병합도 DEC-041의 계보 규칙을 따른다.
+- 분할 합계와 취소 금액의 차이가 `분할 개수-1`원 이내라는 이유만으로 후보를 만들지 않는다. `splitGroupId`와 순번은 분할 항목끼리의 연결이며 원승인 증거를 대신하지 않는다.
+- 구형 기록에 승인 증거나 연결이 없으면 `NotFound`로 기록을 보존한다. 금액·카드·가맹점의 유사성으로 승인 금액이나 계보를 추정하지 않는다. 근거 없는 자동 migration·취소 대기 등록도 하지 않는다.
+- 복구는 원승인과 해당 그룹의 연결을 확인할 수 있는 원본 자료·백업이 있을 때 명시적 migration으로 수행한다. 기존 migration의 `legacy:<문서 ID>`는 식별용 값이며 원승인 증거를 복구했다는 의미가 아니다. 일반 자동 취소 경로에는 복구 로직을 넣지 않는다.
+
+운영 확인: 2026-09-06 읽기 전용 metadata 조회에서 활성 분할 그룹 8개(legacy·canonical 각 40항목)에 원거래 연결과 연결된 승인 capture가 없음을 확인했다. 이 중 표시 날짜가 최근 30일에 포함된 그룹은 2개이며, 이는 원승인일이 최근 30일이라는 뜻은 아니다. 원승인과 그룹의 연결을 입증할 자료가 없어 데이터 보정은 수행하지 않았다. 자세한 범위는 [감사 보고서](../../verification/full-audit-remediation.md#gap-can-006)에 기록한다.
+
+영향 요구사항: CAN-003, CAN-006, CAN-007, SPL-005, T-CAN-006, T-CAN-LINEAGE-001.
+
+<a id="dec-072"></a>
+## DEC-072 Android 알림 표시 권한은 현재 최초 진입 요청 유지
+
+> 상태: Accepted  
+> 결정일: 2026-09-06  
+> 정책 소유 Context: [Android Host](../supporting-platform/modules/android-host/requirements.md)  
+> 근거: 사용자가 Q-009에 대해 현재 앱 동작 유지를 선택함
+
+- 첫 실행의 필수 권한 화면에서 알림 접근·다른 앱 위 표시 권한을 안내하고 둘 다 허용된 뒤 가계부 WebView를 표시한다. 이 진입 조건은 DEC-004를 유지한다.
+- API 33 이상에서는 알림 표시 권한이 없고 이전 요청 이력도 없으면 가계부 최초 진입 시 `POST_NOTIFICATIONS`를 한 번 요청한다. 요청 이력은 dialog 실행 전에 로컬에 저장한다. 이미 허용됐거나 요청한 이력이 있으면 다시 자동 요청하지 않으며 API 32 이하는 요청하지 않는다.
+- 알림 표시 권한을 거부해도 가계부 진입, 결제 알림 수집, QuickEdit와 FID 등록을 막지 않는다. 이후 권한 변경은 Android 시스템 설정에서 수행한다.
+- Android 앱 안에 별도의 푸시 알림 설정·토글·설정 이동 메뉴를 추가하지 않는다. 현재의 ‘결제 후 바로 편집’ 설정은 편집창 자동 표시만 제어하며 OS 권한과 독립적으로 유지한다.
+
+영향 요구사항: AND-001, AND-002, AND-010, T-ANDROID-NOTIFICATION-PERMISSION-001.
+
+<a id="dec-073"></a>
+## DEC-073 Android→Web 로그인은 Firebase custom token 직접 전달 유지
+
+> 상태: Accepted  
+> 결정일: 2026-09-06  
+> 정책 소유 Context: [Android Host](../supporting-platform/modules/android-host/requirements.md)  
+> 근거: 사용자가 Q-010의 최종 권장안인 현재 Firebase 로그인 방식 유지와 문서 정정을 승인함
+
+- Native Credential Manager·Firebase Auth 로그인과 `createWebViewSessionToken` callable을 유지한다. 서버는 호출자의 Firebase Auth UID와 App Check를 확인하고 해당 UID의 Membership을 권위 해석한다. 요청 payload의 가구·멤버 ID를 인증 증거로 사용하지 않는다.
+- `webview-session-token.v1` 응답은 같은 UID의 Web용 `customToken`, Native용 `nativeCustomToken`, `principalUid`, `signedInUserResolution`을 담는다. Native용 토큰은 Native SDK에서 사용하고 Web bridge에는 Web용 토큰과 UID·해석 결과만 전달한다. 각 클라이언트는 인증 UID와 응답 UID가 일치할 때만 해당 결과를 사용한다.
+- 최초 방문자도 가구 생성·참여를 위해 로그인할 수 있다. 이때 가구 권한 claim은 부여하지 않는다. Membership 조회 실패나 어느 한쪽 토큰 발급 실패를 token-only 또는 부분 성공으로 반환하지 않는다.
+- 별도 exchange handle이나 Membership receipt의 발급·저장·만료·소비 API를 추가하지 않는다. 따라서 자체 최대 5분·1회 소비 보장은 계약에서 제거한다. Firebase custom token의 검증·만료는 Firebase SDK 계약을 따르며, 로그인 후 세션 유지 시간과 구분한다. 참고: [Firebase custom token](https://firebase.google.com/docs/auth/admin/create-custom-tokens).
+- 허용 HTTPS origin의 top-level bridge, Native App Check, 서버 Auth·Membership 권한 검증을 유지한다. Google credential, Firebase ID/refresh token, legacy householdKey를 범용 bridge 응답에 노출하지 않는다.
+- DEC-068의 영속 Web Auth 우선 재사용을 유지한다. Web Auth가 없거나 갱신 실패·5초 무응답이면 Native 교환으로 복구하며, 매 실행마다 별도 교환권을 미리 발급하지 않는다.
+- 실제 코드 대신 자체 handle·receipt 모델만 검증하던 테스트와 보조 구현을 제거한다. 서버 발급 함수와 실제 Web authService·HouseholdProvider 테스트를 근거로 삼으며, Credential Manager 계정 선택·취소와 Native SDK 재인증 왕복은 실제 기기 검증 전까지 완료로 계산하지 않는다.
+
+영향 요구사항: AND-005, AND-006, AND-012, T-WEBVIEW-001, T-WEBVIEW-004.

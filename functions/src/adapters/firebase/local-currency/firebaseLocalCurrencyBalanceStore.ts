@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type * as firestore from "firebase-admin/firestore";
 import { FieldValue } from "firebase-admin/firestore";
+import { prepareFirstLocalCurrencySelection } from "../home-preferences/firebaseHomePreferenceAtomicStore";
 
 import type {
   BalanceObservationReceipt,
@@ -109,6 +110,7 @@ export class FirebaseLocalCurrencyBalanceStore
   ): Promise<T> {
     const household = this.database.collection("households").doc(householdId);
     return this.database.runTransaction(async (unitOfWork) => {
+      const selectFirstType = await prepareFirstLocalCurrencySelection(this.database, unitOfWork, householdId);
       const adapter: LocalCurrencyBalanceTransaction = {
         readBalance: async (scope, localCurrencyType) => {
           if (scope !== householdId) return null;
@@ -130,6 +132,7 @@ export class FirebaseLocalCurrencyBalanceStore
             : null;
         },
         saveBalance: async (balance) => {
+          selectFirstType(balance.localCurrencyType, balance.observedAt);
           const canonical = household
             .collection("localCurrencyBalances")
             .doc(balance.localCurrencyType);

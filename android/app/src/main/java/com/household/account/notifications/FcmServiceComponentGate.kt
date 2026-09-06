@@ -21,10 +21,7 @@ object FcmServiceComponentGate {
     fun enableForRegistration(context: Context): Boolean = setEnabled(context, enabled = true)
 
     fun disableWhenNoLocalSession(context: Context) {
-        if (
-            HouseholdPreferences.getHouseholdKey(context).isBlank() ||
-            HouseholdPreferences.getMemberId(context).isBlank()
-        ) {
+        if (HouseholdPreferences.snapshot(context) == null) {
             disableForLogout(context)
         }
     }

@@ -50,7 +50,7 @@ export const billingCostRefresh = onSchedule(
         }),
       },
     });
-    if (result.status === "FAILED") {
+    if (result.status !== "COMPLETE") {
       throw new Error("BILLING_COST_REFRESH_JOB_FAILED");
     }
   },

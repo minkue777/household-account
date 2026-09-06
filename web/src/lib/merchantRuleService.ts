@@ -1,5 +1,7 @@
 import {
   collection,
+  doc,
+  getDoc,
   query,
   where,
   getDocs,
@@ -11,12 +13,11 @@ import {
   MatchType,
   MerchantRuleMapping,
   CreateMerchantRuleInput,
-  AppliedRule,
   MATCH_TYPE_LABELS,
 } from '@/types/merchant';
 import { requireClientSessionScope } from '@/composition/clientSessionScope';
 
-export type { MerchantRule, MatchType, MerchantRuleMapping, CreateMerchantRuleInput, AppliedRule };
+export type { MerchantRule, MatchType, MerchantRuleMapping, CreateMerchantRuleInput };
 export { MATCH_TYPE_LABELS };
 
 const COLLECTION_NAME = 'merchant_rules';
@@ -25,100 +26,6 @@ function requireHouseholdId(): string {
   return requireClientSessionScope().householdId;
 }
 
-/**
- * 가맹점명이 규칙과 매칭되는지 확인
- */
-export function matchesMerchant(
-  merchantName: string,
-  keyword: string,
-  matchType: MatchType
-): boolean {
-  const normalizedMerchant = merchantName.toLowerCase().trim();
-
-  // 쉼표가 있으면 OR 조건으로 처리
-  const keywords = keyword.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
-
-  // 각 키워드에 대해 매칭 검사 (하나라도 매칭되면 true)
-  return keywords.some(normalizedKeyword => {
-    switch (matchType) {
-      case 'exact':
-        return normalizedMerchant === normalizedKeyword;
-      case 'contains':
-        return normalizedMerchant.includes(normalizedKeyword);
-      case 'startsWith':
-        return normalizedMerchant.startsWith(normalizedKeyword);
-      case 'endsWith':
-        return normalizedMerchant.endsWith(normalizedKeyword);
-      default:
-        return false;
-    }
-  });
-}
-
-/**
- * 가맹점명에 매칭되는 규칙 찾기
- * 우선순위: priority 높은 순 > exact > startsWith > endsWith > contains > regex
- */
-export function findMatchingRule(
-  merchantName: string,
-  rules: MerchantRule[]
-): MerchantRule | null {
-  // 활성화된 규칙만 필터링
-  const activeRules = rules.filter((rule) => rule.isActive !== false);
-
-  // 우선순위별로 정렬 (priority 높은 순, 같으면 matchType 우선순위)
-  const matchTypePriority: Record<MatchType, number> = {
-    exact: 4,
-    startsWith: 3,
-    endsWith: 2,
-    contains: 1,
-  };
-
-  const sortedRules = [...activeRules].sort((a, b) => {
-    const priorityA = a.priority ?? 0;
-    const priorityB = b.priority ?? 0;
-    if (priorityA !== priorityB) return priorityB - priorityA;
-    return matchTypePriority[b.matchType] - matchTypePriority[a.matchType];
-  });
-
-  // 매칭되는 첫 번째 규칙 반환
-  for (const rule of sortedRules) {
-    // 하위 호환성: exactMatch 필드가 있으면 matchType으로 변환
-    const matchType = rule.matchType ?? (rule.exactMatch ? 'exact' : 'contains');
-    if (matchesMerchant(merchantName, rule.merchantKeyword, matchType)) {
-      return rule;
-    }
-  }
-
-  return null;
-}
-
-/**
- * 가맹점명에 규칙을 적용하여 매핑된 값 반환
- */
-export function applyRule(
-  merchantName: string,
-  rules: MerchantRule[]
-): AppliedRule | null {
-  const rule = findMatchingRule(merchantName, rules);
-  if (!rule) return null;
-
-  // 하위 호환성: mapping이 없으면 category 필드 사용
-  const mapping = rule.mapping ?? { category: rule.category };
-
-  return {
-    rule,
-    mappedValues: {
-      merchant: mapping.merchant ?? merchantName,
-      category: mapping.category || 'etc',
-      memo: mapping.memo ?? '',
-    },
-  };
-}
-
-/**
- * 규칙 추가 (새로운 API)
- */
 export async function addMerchantRuleV2(
   householdId: string,
   input: CreateMerchantRuleInput
@@ -156,12 +63,13 @@ export async function addMerchantRule(
  */
 export async function updateMerchantRuleV2(
   id: string,
-  updates: Partial<Pick<MerchantRule, 'merchantKeyword' | 'matchType' | 'mapping' | 'priority' | 'isActive'>>
+  updates: Partial<Pick<MerchantRule, 'merchantKeyword' | 'matchType' | 'mapping' | 'priority' | 'isActive'>>,
+  expectedVersion: number
 ): Promise<void> {
   const { paymentConfigurationCommands } = await import(
     '@/features/payment-configuration/application/paymentConfigurationCommands'
   );
-  await paymentConfigurationCommands.updateMerchantRule(requireHouseholdId(), id, updates);
+  await paymentConfigurationCommands.updateMerchantRule(requireHouseholdId(), id, updates, expectedVersion);
 }
 
 /**
@@ -170,21 +78,27 @@ export async function updateMerchantRuleV2(
  */
 export async function updateMerchantRule(
   id: string,
-  category: string
+  category: string,
+  expectedVersion: number
 ): Promise<void> {
   await updateMerchantRuleV2(id, {
     mapping: { category },
-  });
+  }, expectedVersion);
 }
 
 /**
  * 규칙 삭제
  */
-export async function deleteMerchantRule(id: string): Promise<void> {
+export async function deleteMerchantRule(id: string, expectedVersion: number): Promise<void> {
   const { paymentConfigurationCommands } = await import(
     '@/features/payment-configuration/application/paymentConfigurationCommands'
   );
-  await paymentConfigurationCommands.deleteMerchantRule(requireHouseholdId(), id);
+  await paymentConfigurationCommands.deleteMerchantRule(requireHouseholdId(), id, expectedVersion);
+}
+
+export async function reorderMerchantRules(householdId: string, matchType: Exclude<MatchType, 'exact'>, rules: readonly MerchantRule[]): Promise<void> {
+  const { paymentConfigurationCommands } = await import('@/features/payment-configuration/application/paymentConfigurationCommands');
+  await paymentConfigurationCommands.reorderMerchantRules(householdId, matchType, rules.map((rule) => rule.id), rules[0]?.collectionVersion ?? 0);
 }
 
 /**
@@ -226,6 +140,7 @@ function mapDocToRule(doc: any): MerchantRule {
   const data = doc.data();
   return {
     id: doc.id,
+    version: Number.isSafeInteger(data.aggregateVersion) ? data.aggregateVersion : 1,
     householdId: data.householdId,
     merchantKeyword: data.merchantKeyword,
     // 하위 호환성: matchType이 없으면 exactMatch로 판단
@@ -259,18 +174,28 @@ export function subscribeToRules(
     where('householdId', '==', householdId)
   );
 
+  let latestRules: MerchantRule[] | undefined;
+  let versions: Record<string, number> | undefined;
+  const publish = () => {
+    if (latestRules !== undefined && versions !== undefined) callback(latestRules.map((rule) => ({ ...rule, collectionVersion: versions![`${householdId}:${rule.matchType}`] ?? 0 })));
+  };
+  const stopMeta = onSnapshot(doc(db, 'households', householdId, 'paymentConfigurationMeta', 'merchant-rules'), (snapshot) => {
+    versions = snapshot.data()?.collectionVersions ?? {};
+    publish();
+  }, () => callback([]));
   const unsubscribe = onSnapshot(
     q,
     (snapshot) => {
       const rules: MerchantRule[] = snapshot.docs.map(mapDocToRule);
-      callback(rules);
+      latestRules = rules;
+      publish();
     },
     (error) => {
       callback([]);
     }
   );
 
-  return unsubscribe;
+  return () => { unsubscribe(); stopMeta(); };
 }
 
 /**
@@ -284,6 +209,7 @@ export async function getRules(householdId: string): Promise<MerchantRule[]> {
     where('householdId', '==', householdId)
   );
 
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(mapDocToRule);
+  const [snapshot, meta] = await Promise.all([getDocs(q), getDoc(doc(db, 'households', householdId, 'paymentConfigurationMeta', 'merchant-rules'))]);
+  const versions = meta.data()?.collectionVersions ?? {};
+  return snapshot.docs.map(mapDocToRule).map((rule) => ({ ...rule, collectionVersion: versions[`${householdId}:${rule.matchType}`] ?? 0 }));
 }

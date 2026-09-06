@@ -11,6 +11,17 @@ import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.matcher.ViewMatchers.withId
+import com.google.firebase.auth.FirebaseAuth
+import com.household.account.quickedit.AndroidKeystoreQuickEditCommandOutboxStore
+import com.household.account.ledger.HouseholdCommandKind
+import com.household.account.util.HouseholdPreferences
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
+import androidx.work.WorkManager
 import com.google.android.flexbox.FlexboxLayout
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -39,6 +50,7 @@ class QuickEditActivityInstrumentationTest {
 
     @After
     fun tearDown() {
+        runBlocking { HouseholdPreferences.clearHouseholdKey(context) }
         context.getSharedPreferences("household_prefs", Context.MODE_PRIVATE)
             .edit()
             .clear()
@@ -47,6 +59,77 @@ class QuickEditActivityInstrumentationTest {
             .edit()
             .clear()
             .commit()
+    }
+
+    @Test
+    fun notifyOnlyPersistsVersionedCommandWithoutUnsavedFormValues() {
+        prepareLocalCommandSession()
+        launchQuickEdit().use { scenario ->
+            scenario.onActivity { activity ->
+                activity.findViewById<EditText>(R.id.etMerchant).setText("저장하지 않을 가맹점")
+                activity.findViewById<EditText>(R.id.etAmount).setText("99001")
+                activity.findViewById<EditText>(R.id.etMemo).setText("저장하지 않을 메모")
+                activity.findViewById<Button>(R.id.btnNotify).performClick()
+            }
+            val store = AndroidKeystoreQuickEditCommandOutboxStore(context)
+            waitUntil("알림 요청 암호화 outbox commit") { store.load().isNotEmpty() }
+            val entry = store.load().single()
+            assertEquals(HouseholdCommandKind.REQUEST_HOUSEHOLD_NOTIFICATION, entry.envelope.command)
+            assertEquals(setOf("transactionId", "expectedVersion"), entry.envelope.payload.keys)
+            assertEquals("expense-quick-edit-test", entry.envelope.payload["transactionId"])
+            assertEquals(3, (entry.envelope.payload["expectedVersion"] as Number).toInt())
+            waitUntil("Worker 영속 예약 후 QuickEdit 닫기") { scenario.state == Lifecycle.State.DESTROYED }
+            assertWorkerReservationExists()
+        }
+    }
+
+    @Test
+    fun splitFreezesWholeFormAtDialogOpenAndCommitsOneEnvelope() {
+        prepareLocalCommandSession()
+        launchQuickEdit().use { scenario ->
+            scenario.onActivity { activity ->
+                activity.findViewById<EditText>(R.id.etMerchant).setText("분할 초안")
+                activity.findViewById<EditText>(R.id.etAmount).setText("12000")
+                activity.findViewById<EditText>(R.id.etMemo).setText("버튼 시점 메모")
+                activity.findViewById<Button>(R.id.btnSplit).performClick()
+                // A later form refresh must not mutate the already opened draft.
+                activity.findViewById<EditText>(R.id.etMemo).setText("이후 변경")
+            }
+            onView(withId(R.id.btnConfirmSplit)).perform(click())
+            val store = AndroidKeystoreQuickEditCommandOutboxStore(context)
+            waitUntil("분할 암호화 outbox commit") { store.load().isNotEmpty() }
+            val envelope = store.load().single().envelope
+            assertEquals(HouseholdCommandKind.SPLIT, envelope.command)
+            assertEquals(3, (envelope.payload["expectedVersion"] as Number).toInt())
+            val operation = envelope.payload["operation"] as Map<*, *>
+            val draft = operation["baseDraft"] as Map<*, *>
+            assertEquals("분할 초안", draft["merchant"])
+            assertEquals(12000, (draft["amountInWon"] as Number).toInt())
+            assertEquals("버튼 시점 메모", draft["memo"])
+            assertEquals(setOf("merchant", "amountInWon", "categoryId", "memo"), draft.keys)
+            val items = operation["items"] as List<*>
+            assertEquals(12000, items.sumOf { ((it as Map<*, *>)["amountInWon"] as Number).toInt() })
+            waitUntil("Worker 영속 예약 후 QuickEdit 닫기") { scenario.state == Lifecycle.State.DESTROYED }
+            assertWorkerReservationExists()
+        }
+    }
+
+    private fun prepareLocalCommandSession() {
+        // No authenticated remote request can leave this instrumentation test.
+        check(FirebaseAuth.getInstance().currentUser == null)
+        runBlocking {
+            HouseholdPreferences.replaceAuthenticatedSession(context, "instrumentation-house", "instrumentation-member", "테스터")
+        }
+        AndroidKeystoreQuickEditCommandOutboxStore(context).clear()
+    }
+
+    private fun assertWorkerReservationExists() = runBlocking {
+        withTimeout(5_000) {
+            WorkManager.getInstance(context)
+                .getWorkInfosForUniqueWorkFlow("quick-edit-command-delivery.v1")
+                .first { it.isNotEmpty() }
+        }
+        Unit
     }
 
     @Test

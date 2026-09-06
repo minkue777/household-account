@@ -1,103 +1,53 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import '@testing-library/jest-dom';
-
-let mockSessionVerified = false;
-let mockAdminHouseholdView: { householdId: string; householdName: string } | null = null;
-
-jest.mock('@/contexts/HouseholdContext', () => ({
-  useHousehold: () => ({
-    isSessionVerified: mockSessionVerified,
-    adminHouseholdView: mockAdminHouseholdView,
-  }),
-}));
-
-jest.mock('@/contexts/ThemeContext', () => ({
-  useTheme: () => ({
-    themeConfig: { titleGradient: 'linear-gradient(#000, #000)' },
-  }),
-}));
-
-jest.mock('@/components/assets/AssetProfitChart', () => ({
-  __esModule: true,
-  default: () => <div data-testid={'asset-profit-chart'} />,
-}));
-
-jest.mock('@/components/assets/AssetDividendChart', () => ({
-  __esModule: true,
-  default: () => <div data-testid={'asset-dividend-chart'} />,
-}));
-
-jest.mock('react-chartjs-2', () => {
-  const React = jest.requireActual<typeof import('react')>('react');
-  return {
-    Line: React.forwardRef(() => <div data-testid={'asset-trend-chart'} />),
-  };
-});
-
-jest.mock('@/lib/assetService', () => ({
-  getAssetHistoryByPeriod: jest.fn(),
-  refreshAllPhysicalGoldValues: jest.fn(),
-  subscribeToAssets: jest.fn(),
-}));
-
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import AssetStatsPage from '@/app/assets/stats/page';
-import {
-  getAssetHistoryByPeriod,
-  refreshAllPhysicalGoldValues,
-  subscribeToAssets,
-} from '@/lib/assetService';
+import { readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
+import type { AssetHistoryEntry } from '@/types/asset';
 
-const mockGetAssetHistory = jest.mocked(getAssetHistoryByPeriod);
-const mockRefreshGold = jest.mocked(refreshAllPhysicalGoldValues);
-const mockSubscribeToAssets = jest.mocked(subscribeToAssets);
-
-describe('자산 통계 세션 읽기 계약', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockSessionVerified = false;
-    mockAdminHouseholdView = null;
-    mockGetAssetHistory.mockResolvedValue([]);
-    mockRefreshGold.mockResolvedValue(undefined);
-    mockSubscribeToAssets.mockImplementation((callback) => {
-      callback([]);
-      return jest.fn();
-    });
-  });
-
-  it('인증 복원 전 조회를 실패로 소모하지 않고 복원 직후 자산과 이력을 다시 읽는다', async () => {
+let mockScope = { householdKey: 'house-1', isSessionVerified: false, remoteReadEpoch: 0 };
+jest.mock('@/contexts/HouseholdContext', () => ({ useHousehold: () => mockScope }));
+jest.mock('@/platform/reporting/assetStatisticsReadModel', () => ({ readAssetStatisticsHistory: jest.fn() }));
+jest.mock('@/components/assets/AssetProfitChart', () => ({ __esModule: true, default: () => null }));
+jest.mock('@/components/assets/AssetDividendChart', () => ({ __esModule: true, default: () => null }));
+jest.mock('react-chartjs-2', () => ({ Line: ({ data }: { data: unknown }) => <output data-testid="chart">{JSON.stringify(data)}</output> }));
+const read = jest.mocked(readAssetStatisticsHistory);
+function entry(assetId: string, date: string, balance: number, extra = {}): AssetHistoryEntry { return { id: assetId + date, householdId: 'house-1', assetId, date, balance, changeAmount: 0, createdAt: new Date(), ...extra }; }
+describe('actual asset statistics page', () => {
+  beforeEach(() => { jest.clearAllMocks(); mockScope = { householdKey: 'house-1', isSessionVerified: false, remoteReadEpoch: 0 }; read.mockResolvedValue([]); });
+  it('waits for restored session, reads again on household change and discards old replies', async () => {
+    let oldResolve!: (rows: AssetHistoryEntry[]) => void;
+    read.mockImplementationOnce(() => new Promise(resolve => { oldResolve = resolve; }));
     const { rerender } = render(<AssetStatsPage />);
-
-    expect(screen.getByText('불러오는 중...')).toBeInTheDocument();
-    expect(mockSubscribeToAssets).not.toHaveBeenCalled();
-    expect(mockGetAssetHistory).not.toHaveBeenCalled();
-    expect(mockRefreshGold).not.toHaveBeenCalled();
-
-    mockSessionVerified = true;
-    rerender(<AssetStatsPage />);
-
-    await waitFor(() => {
-      expect(mockSubscribeToAssets).toHaveBeenCalledTimes(1);
-      expect(mockGetAssetHistory).toHaveBeenCalledTimes(1);
-      expect(mockRefreshGold).toHaveBeenCalledTimes(1);
-    });
-    await waitFor(() => {
-      expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument();
-    });
+    expect(read).not.toHaveBeenCalled();
+    mockScope.isSessionVerified = true; rerender(<AssetStatsPage />);
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    mockScope = { ...mockScope, householdKey: 'house-2' }; rerender(<AssetStatsPage />);
+    await screen.findByText('데이터가 없습니다');
+    await act(async () => oldResolve([entry('TOTAL', '2026-08-01', 123456)]));
+    expect(screen.queryByText('123,456원')).not.toBeInTheDocument();
   });
-
-  it('관리자 조회에서는 시세 갱신 명령을 실행하지 않는다', async () => {
-    mockSessionVerified = true;
-    mockAdminHouseholdView = {
-      householdId: 'household-1',
-      householdName: '관리 대상 가계부',
-    };
-
+  it('preserves historical zero type/archived owner catalog without current assets and ALL has no 2020 cutoff', async () => {
+    mockScope.isSessionVerified = true;
+    read.mockResolvedValue([entry('TOTAL', '2019-01-01', 0), entry('TYPE_stock', '2019-01-01', 0), entry('OWNER_REF_profile:old', '2019-01-01', 0, { ownerKey: 'profile:old', ownerDisplayName: '지아' })]);
     render(<AssetStatsPage />);
-
-    await waitFor(() => {
-      expect(mockSubscribeToAssets).toHaveBeenCalledTimes(1);
-      expect(mockGetAssetHistory).toHaveBeenCalledTimes(1);
-    });
-    expect(mockRefreshGold).not.toHaveBeenCalled();
+    await screen.findByText('0원');
+    expect(screen.getByRole('button', { name: '지아' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '지아' }));
+    expect(screen.getByText('지아 추이')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '전체 기간' }));
+    await waitFor(() => expect(read).toHaveBeenLastCalledWith(undefined, expect.any(String)));
+    expect(screen.getByTestId('chart').textContent).toContain('2019-01-01');
+    read.mockResolvedValueOnce([entry('TOTAL', '2026-09-01', 10)]);
+    fireEvent.click(screen.getByRole('button', { name: '6개월' }));
+    await screen.findByText('전체 자산 추이');
+    expect(screen.queryByRole('button', { name: '지아' })).not.toBeInTheDocument();
+  });
+  it('failure stays distinct from NoData and zero and supports retry', async () => {
+    mockScope.isSessionVerified = true; read.mockRejectedValueOnce(new Error('offline'));
+    render(<AssetStatsPage />);
+    await screen.findByRole('alert');
+    expect(screen.queryByText('0원')).not.toBeInTheDocument();
+    expect(screen.queryByText('데이터가 없습니다')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+    await screen.findByText('데이터가 없습니다');
   });
 });

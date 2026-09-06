@@ -16,25 +16,10 @@ function amountMatches(
     return false;
   }
 
-  if (candidate.monthlySplit === undefined) {
-    return (
-      Number.isSafeInteger(candidate.amountInWon) &&
-      candidate.amountInWon === observationAmount
-    );
-  }
-
-  const { groupTotalInWon, splitCount } = candidate.monthlySplit;
-  if (
-    !Number.isSafeInteger(groupTotalInWon) ||
-    groupTotalInWon <= 0 ||
-    !Number.isSafeInteger(splitCount) ||
-    splitCount <= 0
-  ) {
-    return false;
-  }
-
-  const downwardDifference = observationAmount - groupTotalInWon;
-  return downwardDifference >= 0 && downwardDifference <= splitCount - 1;
+  return (
+    Number.isSafeInteger(candidate.amountInWon) &&
+    candidate.amountInWon === observationAmount
+  );
 }
 
 function isCompleteMatch(

@@ -29,6 +29,10 @@ function stable(value: unknown): string {
 }
 
 function input(context: HouseholdCommandExecutionContext) {
+  const expectedVersion = context.envelope.payload.expectedVersion;
+  if (typeof expectedVersion !== "number" || !Number.isSafeInteger(expectedVersion) || expectedVersion < 0) {
+    throw new HouseholdCommandRejection("INVALID_PAYLOAD");
+  }
   if (context.actor === undefined) {
     throw new HouseholdCommandRejection("HOUSEHOLD_FORBIDDEN");
   }
@@ -44,6 +48,7 @@ function input(context: HouseholdCommandExecutionContext) {
       .update(stable(context.envelope.payload), "utf8")
       .digest("hex"),
     occurredAt: context.requestedAt,
+    expectedVersion,
   };
 }
 
@@ -72,7 +77,7 @@ export function createHomeHouseholdCommandHandlers(
           const payload = record(context.envelope.payload);
           if (
             Object.keys(payload).some(
-              (field) => field !== "leftCard" && field !== "rightCard",
+              (field) => field !== "leftCard" && field !== "rightCard" && field !== "expectedVersion",
             )
           ) {
             throw new HouseholdCommandRejection("INVALID_PAYLOAD");
@@ -94,7 +99,7 @@ export function createHomeHouseholdCommandHandlers(
           const payload = record(context.envelope.payload);
           if (
             Object.keys(payload).some(
-              (field) => field !== "localCurrencyTypeId",
+              (field) => field !== "localCurrencyTypeId" && field !== "expectedVersion",
             )
           ) {
             throw new HouseholdCommandRejection("INVALID_PAYLOAD");

@@ -58,8 +58,12 @@ export interface CaptureSubmissionCommand {
   readonly actor: CaptureApprovalActor;
   readonly rootIdempotencyKey: string;
   readonly envelope: CaptureEnvelopeInput;
+  /** 서버 parser에서만 받는 원승인 총액이며 공개 wire 필드가 아닙니다. */
+  readonly approvalAmountInWon?: number;
   /** 서버 parser가 결정하며 Android/iOS 공개 wire에서는 받지 않습니다. */
   readonly paymentKind?: "card" | "bill";
+  /** 서버의 고지서 parser가 만든 청구 제목이며 공개 wire에서 받지 않습니다. */
+  readonly parsedMemo?: string;
 }
 
 export type CaptureSubmittedTransactionResult =

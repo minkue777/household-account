@@ -47,6 +47,7 @@ export function createPortfolioMarketRefreshCommand(dependencies: {
       const scopeKey = assetId === undefined ? "household" : `asset:${assetId}`;
       const lease = await dependencies.store.acquireRefreshLease(metadata, scopeKey);
       if (lease.kind === "replayed") return lease.value;
+      if (lease.kind === "rate-limited") return error("MARKET_REFRESH_RATE_LIMITED", true);
       if (lease.kind === "payload-mismatch") {
         return error("IDEMPOTENCY_PAYLOAD_MISMATCH");
       }
@@ -55,14 +56,17 @@ export function createPortfolioMarketRefreshCommand(dependencies: {
           refreshedCount: 0,
           targetCount: 0,
           retainedLastSuccessCount: 0,
+          failedCount: 0,
           skippedReason: "MARKET_REFRESH_IN_PROGRESS",
         });
       }
       if (lease.kind === "failed") return error("PORTFOLIO_UOW_FAILED", true);
 
       try {
-        const snapshot = await dependencies.store.readState(metadata.householdId);
+        const snapshot = await dependencies.store.readState(metadata.householdId, { assetId, automationPlans: false });
         const targets = marketTargets(snapshot, assetClass, assetId);
+        const completedTargetKeys = new Set(lease.completedTargetKeys ?? []);
+        const pendingTargets = targets.filter(target => !completedTargetKeys.has(target.targetKey));
         const results = new Map<string, PortfolioMarketQuoteResult>();
         const executions: {
           target: PortfolioMarketTarget;
@@ -72,8 +76,8 @@ export function createPortfolioMarketRefreshCommand(dependencies: {
             readonly latencyMs: number;
           }[];
         }[] = [];
-        for (let offset = 0; offset < targets.length; offset += 50) {
-          const page = targets.slice(offset, offset + 50);
+        for (let offset = 0; offset < pendingTargets.length; offset += 50) {
+          const page = pendingTargets.slice(offset, offset + 50);
           const quoteCache = new Map<string, ReturnType<typeof quoteWithRetries>>();
           const pageResults = await withConcurrency(page, 5, async (target) => {
             const cacheKey = `${target.market}\u0000${target.instrumentCode}`;
@@ -109,8 +113,30 @@ export function createPortfolioMarketRefreshCommand(dependencies: {
             (asset) => asset.assetId === target.assetId && asset.currentBalance > 0,
           );
         }).length;
+        const failedCount = executions.filter(execution => execution.result.kind === "failure").length - retainedLastSuccessCount;
+        for (const target of pendingTargets) {
+          const result = results.get(target.targetKey);
+          if (result?.kind === "success" || (result?.kind === "failure" && (
+            target.positionId !== undefined
+              ? snapshot.positions.some(position => position.positionId === target.positionId && position.lastQuote !== undefined)
+              : snapshot.assets.some(asset => asset.assetId === target.assetId && asset.currentBalance > 0)
+          ))) completedTargetKeys.add(target.targetKey);
+        }
+        const failedTargets = pendingTargets.flatMap(target => {
+          const result = results.get(target.targetKey);
+          return result?.kind === "failure" && !completedTargetKeys.has(target.targetKey)
+            ? [{ targetKey: target.targetKey, assetId: target.assetId, ...(target.positionId === undefined ? {} : { positionId: target.positionId }), code: result.code, retryable: result.retryable }]
+            : [];
+        });
 
         return dependencies.atomic(metadata, (state) => {
+          if (targets.some(target => {
+            const beforeAsset = snapshot.assets.find(asset => asset.assetId === target.assetId);
+            const currentAsset = state.assets.find(asset => asset.assetId === target.assetId);
+            if (beforeAsset?.aggregateVersion !== currentAsset?.aggregateVersion) return true;
+            if (target.positionId === undefined) return false;
+            return snapshot.positions.find(position => position.positionId === target.positionId)?.aggregateVersion !== state.positions.find(position => position.positionId === target.positionId)?.aggregateVersion;
+          })) return noWrite(state, error("VALUATION_VERSION_MISMATCH", true));
           if (assetId !== undefined) {
             const scopedAsset = state.assets.find(
               (candidate) => candidate.assetId === assetId,
@@ -243,9 +269,11 @@ export function createPortfolioMarketRefreshCommand(dependencies: {
               refreshedCount,
               targetCount: targets.length,
               retainedLastSuccessCount,
+              failedCount,
+              ...(failedCount > 0 ? { completedTargetKeys: [...completedTargetKeys], failedTargets, retryCommandId: metadata.commandId } : {}),
             }),
           );
-        });
+        }, { assetId, automationPlans: false });
       } catch {
         return error("MARKET_REFRESH_FAILED", true);
       } finally {

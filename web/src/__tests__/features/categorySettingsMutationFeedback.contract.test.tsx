@@ -90,6 +90,8 @@ describe('CategorySettings mutation feedback contract', () => {
       categories: [category()],
       activeCategories: [category()],
       isLoading: false,
+      serverSnapshotReady: true,
+      readError: null,
       addCategory,
       updateCategory: jest.fn(),
       deleteCategory: jest.fn(),
@@ -167,6 +169,8 @@ describe('CategorySettings mutation feedback contract', () => {
       categories: [firstCategory, secondCategory],
       activeCategories: [firstCategory, secondCategory],
       isLoading: false,
+      serverSnapshotReady: true,
+      readError: null,
       addCategory,
       updateCategory: jest.fn(),
       deleteCategory: jest.fn(),
@@ -197,7 +201,7 @@ describe('CategorySettings mutation feedback contract', () => {
     fireEvent.drop(second!, { dataTransfer: dataTransfer() });
 
     expect(reorderCategories).toHaveBeenCalledTimes(1);
-    expect(reorderCategories).toHaveBeenCalledWith([secondCategory, firstCategory]);
+    expect(reorderCategories).toHaveBeenCalledWith([secondCategory, firstCategory], 0);
     expect(first).toHaveAttribute('draggable', 'false');
     expect(second).toHaveAttribute('draggable', 'false');
 

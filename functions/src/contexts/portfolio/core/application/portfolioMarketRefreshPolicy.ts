@@ -98,6 +98,10 @@ export async function withConcurrency<T, R>(
 export async function quoteWithRetries(
   quotes: PortfolioMarketQuotePort,
   target: PortfolioMarketTarget,
+  retry: { readonly sleep: (milliseconds: number) => Promise<void>; readonly random: () => number } = {
+    sleep: milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
+    random: Math.random,
+  },
 ): Promise<{
   readonly result: PortfolioMarketQuoteResult;
   readonly attempts: readonly {
@@ -115,6 +119,7 @@ export async function quoteWithRetries(
     latencyMs: number;
   }[] = [];
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt > 0) await retry.sleep(Math.round(250 * 2 ** (attempt - 1) * (0.5 + retry.random())));
     const startedAt = Date.now();
     last = await quotes.getQuote(target);
     attempts.push({ result: last, latencyMs: Math.max(0, Date.now() - startedAt) });
@@ -204,6 +209,12 @@ export function providerObservations(input: {
     if (execution.result.kind === "success") {
       for (const route of routes) {
         const run = ensure(route.provider, route.operation);
+        const failure = execution.result.providerFailures?.find(item => item.provider === route.provider);
+        if (failure !== undefined) {
+          run.failures.push(failure);
+          run.attempts.push({ resultKind: failureResultKind(failure), errorCode: failure.code, attempt: run.attempts.length + 1, latencyMs: execution.attempts.reduce((total, attempt) => total + attempt.latencyMs, 0) });
+          continue;
+        }
         run.successes.push(execution.result);
         run.attempts.push({
           resultKind: "SUCCESS",

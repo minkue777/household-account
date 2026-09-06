@@ -13,15 +13,18 @@ import Portal from '../common/Portal';
 import { ExpenseEditModal, ExpenseSplitModal } from '../expense';
 import SearchResultList from './SearchResultList';
 import { useAppDialog } from '@/contexts/AppDialogContext';
+import type { ExpenseSearchCursor, ExpenseSearchSummary } from '@/lib/expenseService';
+import { useHousehold } from '@/contexts/HouseholdContext';
 
 interface SearchModalProps {
   isOpen: boolean;
   onClose: () => void;
   onExpenseUpdate?: (
     expenseId: string,
-    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string }
+    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string },
+    expectedVersion?: number
   ) => Promise<void> | void;
-  onDelete?: (expenseId: string) => Promise<void> | void;
+  onDelete?: (expenseId: string, expectedVersion?: number) => Promise<void> | void;
   onSplitExpense?: (
     expense: Expense,
     splits: SplitItem[]
@@ -42,16 +45,35 @@ export default function SearchModal({
   transactionType,
 }: SearchModalProps) {
   const { showAlert } = useAppDialog();
+  const { householdKey, remoteReadEpoch } = useHousehold();
   const transactionLabel = transactionType === 'income' ? '수입' : '지출';
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState<Expense[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [nextCursor, setNextCursor] = useState<ExpenseSearchCursor | undefined>();
+  const [searchError, setSearchError] = useState('');
+  const [summary, setSummary] = useState<ExpenseSearchSummary>();
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const sourceWindowRef = useRef('');
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [splitExpense, setSplitExpense] = useState<Expense | null>(null);
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const projectionRef = useRef<ExpenseProjectionSubscription | null>(null);
   const searchRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    const windowId = `search-${Date.now()}-${Math.random()}`;
+    sourceWindowRef.current = windowId;
+    return () => { const closingWindowId = sourceWindowRef.current; void import('@/lib/expenseService').then(service => service.closeExpenseSearchWindow?.(closingWindowId)); };
+  }, [isOpen, householdKey, remoteReadEpoch]);
+
+  useEffect(() => {
+    setResults([]);
+    setSelectedExpense(null);
+    setSplitExpense(null);
+  }, [householdKey, remoteReadEpoch]);
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
@@ -75,13 +97,38 @@ export default function SearchModal({
     const projection = projectionRef.current;
     if (!projection || !keyword.trim()) return;
     const requestId = ++searchRequestIdRef.current;
-    const { searchExpenses } = await import('@/lib/expenseService');
-    const searchResults = await searchExpenses(keyword, { transactionType });
+    const { searchExpensePage } = await import('@/lib/expenseService');
+    sourceWindowRef.current = `search-${Date.now()}-${Math.random()}`;
+    let page;
+    try { page = await searchExpensePage(keyword, { transactionType, startDate, endDate, sourceWindow: sourceWindowRef.current }); }
+    catch (error) {
+      if (requestId === searchRequestIdRef.current) { setResults([]); setSummary(undefined); setNextCursor(undefined); setSearchError(error instanceof Error ? error.message : '검색 결과를 불러오지 못했습니다.'); }
+      return;
+    }
     if (
       requestId !== searchRequestIdRef.current
       || projectionRef.current !== projection
     ) return;
-    projection.publish(searchResults);
+    projection.publish(page.items);
+    setNextCursor(page.nextCursor);
+    setSummary(page.summary);
+    setSearchError('');
+  };
+
+  const loadNextPage = async () => {
+    if (!nextCursor || isSearching || !projectionRef.current) return;
+    const projection = projectionRef.current;
+    const requestId = ++searchRequestIdRef.current;
+    setIsSearching(true);
+    try {
+      const { searchExpensePage } = await import('@/lib/expenseService');
+      const page = await searchExpensePage(keyword, { transactionType, cursor: nextCursor, startDate, endDate, sourceWindow: sourceWindowRef.current });
+      if (requestId !== searchRequestIdRef.current || projectionRef.current !== projection) return;
+      projection.publish([...results, ...page.items]);
+      setNextCursor(page.nextCursor);
+      setSummary(page.summary);
+    } catch { setSearchError('검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.'); }
+    finally { if (requestId === searchRequestIdRef.current) setIsSearching(false); }
   };
 
   const handleSaveEdit = async (updates: {
@@ -92,13 +139,15 @@ export default function SearchModal({
     date?: string;
   }) => {
     if (!selectedExpense || !onExpenseUpdate) return;
-    await onExpenseUpdate(selectedExpense.id, updates);
+    await onExpenseUpdate(selectedExpense.id, updates, selectedExpense.aggregateVersion);
     void refreshSearch();
   };
 
   const handleDelete = async (id: string) => {
     if (!onDelete) return;
-    await onDelete(id);
+    const expense = results.find(item => item.id === id) ?? selectedExpense;
+    if (!expense || expense.id !== id) throw new Error('삭제할 거래의 버전을 찾을 수 없습니다.');
+    await onDelete(id, expense.aggregateVersion);
     void refreshSearch();
   };
 
@@ -144,7 +193,9 @@ export default function SearchModal({
   };
 
   useEffect(() => {
-    if (!keyword.trim()) {
+    setNextCursor(undefined);
+    setSearchError('');
+    if (!isOpen || !keyword.trim()) {
       setIsSearching(false);
       setResults([]);
       setExpandedMonth(null);
@@ -155,7 +206,7 @@ export default function SearchModal({
     let projection: ExpenseProjectionSubscription | undefined;
     void import('@/lib/expenseService').then(({
       expenseMatchesSearch,
-      searchExpenses,
+      searchExpensePage,
       subscribeToExpenseProjection,
     }) => {
       if (cancelled) return;
@@ -170,18 +221,26 @@ export default function SearchModal({
       void (async () => {
         const requestId = ++searchRequestIdRef.current;
         setIsSearching(true);
+        setSearchError('');
+        setSummary(undefined);
+        setNextCursor(undefined);
         try {
-          const searchResults = await searchExpenses(keyword, { transactionType });
+          const page = await searchExpensePage(keyword, { transactionType, startDate, endDate, sourceWindow: sourceWindowRef.current });
           if (
             requestId !== searchRequestIdRef.current
             || projectionRef.current !== projection
           ) return;
+          const searchResults = page.items;
           projection.publish(searchResults);
+          setNextCursor(page.nextCursor);
+          setSummary(page.summary);
           if (searchResults.length > 0) {
             setExpandedMonth(searchResults[0].date.substring(0, 7));
           } else {
             setExpandedMonth(null);
           }
+        } catch (error) {
+          if (requestId === searchRequestIdRef.current) { projection.publish([]); setSearchError(error instanceof Error ? error.message : '검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.'); }
         } finally {
           if (requestId === searchRequestIdRef.current) {
             setIsSearching(false);
@@ -196,7 +255,7 @@ export default function SearchModal({
       if (projectionRef.current === projection) projectionRef.current = null;
       projection?.dispose();
     };
-  }, [keyword, transactionType]);
+  }, [keyword, transactionType, isOpen, householdKey, remoteReadEpoch, startDate, endDate]);
 
   if (!isOpen) return null;
 
@@ -245,18 +304,25 @@ export default function SearchModal({
                 <X className="h-5 w-5 text-slate-500" />
               </button>
             </div>
+            <div className="mt-3 flex gap-3 text-xs text-slate-500">
+              <label>시작일 <input aria-label="검색 시작일" type="date" value={startDate} onChange={event => setStartDate(event.target.value)} className="rounded border p-1" /></label>
+              <label>종료일 <input aria-label="검색 종료일" type="date" value={endDate} onChange={event => setEndDate(event.target.value)} className="rounded border p-1" /></label>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
             <SearchResultList
               keyword={keyword}
               results={results}
+              summary={summary}
               isSearching={isSearching}
               expandedMonth={expandedMonth}
               onExpandedMonthChange={setExpandedMonth}
               onExpenseClick={setSelectedExpense}
               transactionType={transactionType}
             />
+            {searchError && <p role="alert" className="py-2 text-sm text-red-600">{searchError}</p>}
+            {nextCursor && <button type="button" disabled={isSearching} onClick={() => void loadNextPage()} className="w-full rounded-lg p-3 text-sm text-blue-600 disabled:opacity-50">이전 거래에서 더 검색</button>}
           </div>
         </div>
       </div>
@@ -278,6 +344,11 @@ export default function SearchModal({
               ? () => void handleCancelSplitGroup()
               : undefined
           }
+          onRestoreItemSplit={selectedExpense.derivedFromTransactionId ? async () => {
+            const { restoreItemSplit } = await import('@/lib/expenseService');
+            await restoreItemSplit(selectedExpense);
+            await refreshSearch();
+          } : undefined}
           onUpdateSplitGroup={
             transactionType === 'expense' && selectedExpense.splitGroupId
               ? (newMonths) => void handleUpdateSplitGroup(newMonths)

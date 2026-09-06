@@ -1,5 +1,6 @@
 export interface CategoryDocument {
   id: string;
+  aggregateVersion?: number;
   key: string;           // 'living', 'custom_001' 등
   label: string;         // '생활비', '취미' 등
   color: string;         // '#4ADE80'

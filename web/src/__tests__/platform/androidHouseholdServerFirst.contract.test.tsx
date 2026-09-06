@@ -20,12 +20,13 @@ jest.mock('@/features/access-household/application/householdCommands', () => ({
     resolveSignedInUser: jest.fn(),
     claimLegacyMembership: jest.fn(),
     createWithSelf: jest.fn(),
+    retryInitialization: jest.fn(),
     joinAsSelf: jest.fn(),
   },
 }));
 
 jest.mock('@/features/access-household/application/legacySessionCandidate', () => ({
-  captureLegacySessionCandidate: () => undefined,
+  captureLegacySessionCandidate: jest.fn(),
   clearLegacySessionCandidate: jest.fn(),
 }));
 
@@ -40,13 +41,12 @@ jest.mock('@/composition/clientSessionScope', () => ({
   setClientSessionScope: jest.fn(),
 }));
 
-const mockPwaModuleLoaded = jest.fn();
 const mockActivatePwaFidEndpoint = jest.fn().mockResolvedValue(false);
+const mockRemovePwaFidEndpoint = jest.fn();
 jest.mock('@/platform/pwa/fidEndpointLifecycle', () => {
-  mockPwaModuleLoaded();
   return {
     activatePwaFidEndpoint: mockActivatePwaFidEndpoint,
-    removePwaFidEndpointForLogout: jest.fn(),
+    removePwaFidEndpointForLogout: mockRemovePwaFidEndpoint,
   };
 });
 
@@ -72,7 +72,9 @@ import {
   onAuthChange,
   refreshAndroidWebAuth,
   restoreAndroidHostAuth,
+  logOut,
 } from '@/lib/authService';
+import { captureLegacySessionCandidate, clearLegacySessionCandidate } from '@/features/access-household/application/legacySessionCandidate';
 import { householdCommands } from '@/features/access-household/application/householdCommands';
 import {
   clearSignedInMembershipCache,
@@ -140,6 +142,11 @@ function Probe() {
     householdKey,
     isSessionVerified,
     renameMember,
+    createHouseholdForSelf,
+    retrySession,
+    confirmLegacyMembership,
+    logout,
+    sessionError,
   } = useHousehold();
   return (
     <>
@@ -153,6 +160,11 @@ function Probe() {
         ].join(':')}
       </div>
       <output data-testid={'household-key'}>{householdKey ?? 'no-key'}</output>
+      <output data-testid={'session-error'}>{sessionError}</output>
+      <button onClick={() => void createHouseholdForSelf('우리집', '사용자').catch(() => {})}>create</button>
+      <button onClick={() => void retrySession().catch(() => {})}>retry</button>
+      <button onClick={() => void confirmLegacyMembership().catch(() => {})}>claim</button>
+      <button onClick={() => void logout().catch(() => {})}>logout</button>
       <output data-testid={'member-state'}>
         {currentMember
           ? `${currentMember.name}:${currentMember.aggregateVersion}`
@@ -181,10 +193,57 @@ describe('Android 가계부 server-first 복원 계약', () => {
     mockOnAuthChange.mockImplementation(() => jest.fn());
     mockRefreshAndroidWebAuth.mockImplementation(async (user) => ({ user }));
     mockRenameHouseholdMember.mockResolvedValue(undefined);
+    jest.mocked(captureLegacySessionCandidate).mockReturnValue(undefined);
+    mockRemovePwaFidEndpoint.mockReset();
   });
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  it('[HH-007] 생성 graph를 유지하고 실패한 초기화만 다시 시도하여 서버 설정으로 복구한다', async () => {
+    mockOnAuthChange.mockImplementation((listener) => { listener({ uid: 'uid-new' } as User); return jest.fn(); });
+    mockResolveSignedInUser.mockResolvedValueOnce({ kind: 'first-visit-required', choices: ['create', 'join'] });
+    jest.mocked(householdCommands.createWithSelf).mockResolvedValue({ householdId: 'household-1', memberId: 'member-1', initializationStatus: 'failed' });
+    render(<HouseholdProvider><Probe /></HouseholdProvider>);
+    await screen.findByText('first-visit:none:member:no-member:unverified');
+    fireEvent.click(screen.getByRole('button', { name: 'create' }));
+    await screen.findByText('error:none:member:no-member:unverified');
+    expect(screen.getByTestId('session-error')).toHaveTextContent('초기화에 실패');
+    mockResolveSignedInUser.mockResolvedValue({ ...cachedResolution, household: { ...cachedResolution.household, initializationStatus: 'failed' } });
+    jest.mocked(householdCommands.retryInitialization).mockResolvedValue({ initializationStatus: 'completed' });
+    mockGetHousehold.mockResolvedValue({ ...household('복구된 가계부'), initializationStatus: 'completed', categoryCatalogVersion: 1 });
+    fireEvent.click(screen.getByRole('button', { name: 'retry' }));
+    await screen.findByText('ready:복구된 가계부:member:member-1:verified');
+    expect(householdCommands.createWithSelf).toHaveBeenCalledTimes(1);
+    expect(householdCommands.retryInitialization).toHaveBeenCalledWith('household-1');
+    expect(mockWriteSignedInMembershipCache).toHaveBeenLastCalledWith('uid-new', expect.objectContaining({ household: expect.objectContaining({ initializationStatus: 'completed', categoryCatalogVersion: 1 }) }));
+  });
+
+  it.each(['LEGACY_MEMBERSHIP_NOT_FOUND', 'LEGACY_CLAIM_DISABLED'])('[HH-003] 무효한 기존 후보(%s)는 제거하고 첫 방문으로 돌아간다', async (code) => {
+    mockOnAuthChange.mockImplementation((listener) => { listener({ uid: 'uid-new' } as User); return jest.fn(); });
+    jest.mocked(captureLegacySessionCandidate).mockReturnValue({ legacyHouseholdId: 'old', legacyMemberId: 'missing' });
+    mockResolveSignedInUser.mockResolvedValue({ kind: 'first-visit-required', choices: ['create', 'join'] });
+    jest.mocked(householdCommands.claimLegacyMembership).mockRejectedValue(Object.assign(new Error(code), { code }));
+    render(<HouseholdProvider><Probe /></HouseholdProvider>);
+    await screen.findByText('legacy-confirmation:none:member:no-member:unverified');
+    fireEvent.click(screen.getByRole('button', { name: 'claim' }));
+    await screen.findByText('first-visit:none:member:no-member:unverified');
+    expect(clearLegacySessionCandidate).toHaveBeenCalled();
+  });
+
+  it('[PWA-004] endpoint 제거 실패 시 Auth 로그아웃과 로컬 세션 삭제를 시작하지 않는다', async () => {
+    iosPwa = true;
+    mockOnAuthChange.mockImplementation((listener) => { listener({ uid: 'uid-1' } as User); return jest.fn(); });
+    mockResolveSignedInUser.mockResolvedValue(cachedResolution);
+    mockRemovePwaFidEndpoint.mockRejectedValue(new Error('endpoint unavailable'));
+    render(<HouseholdProvider><Probe /></HouseholdProvider>);
+    await screen.findByText('ready:저장된 가계부:member:member-1:verified');
+    fireEvent.click(screen.getByRole('button', { name: 'logout' }));
+    await waitFor(() => expect(mockRemovePwaFidEndpoint).toHaveBeenCalledTimes(1));
+    expect(logOut).not.toHaveBeenCalled();
+    expect(screen.getByText('ready:저장된 가계부:member:member-1:verified')).toBeInTheDocument();
+    expect(screen.getByTestId('session-error')).toHaveTextContent('다시 로그아웃');
   });
 
   it('Auth observer의 첫 결과 전에는 Native 인증을 시작하지 않는다', async () => {
@@ -280,7 +339,6 @@ describe('Android 가계부 server-first 복원 계약', () => {
     expect(screen.getByText('ready:우리집:member:member-1:verified'))
       .toBeInTheDocument();
     expect(screen.getByTestId('household-key')).toHaveTextContent('household-1');
-    expect(mockPwaModuleLoaded).not.toHaveBeenCalled();
     expect(mockActivatePwaFidEndpoint).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -293,7 +351,7 @@ describe('Android 가계부 server-first 복원 계약', () => {
 
   it('저장된 Web 사용자의 첫 방문 상태도 Native 왕복 없이 확정한다', async () => {
     androidHostAvailable = true;
-    mockResolveSignedInUser.mockResolvedValue({ kind: 'first-visit-required' });
+    mockResolveSignedInUser.mockResolvedValue({ kind: 'first-visit-required', choices: ['create', 'join'] });
     mockOnAuthChange.mockImplementation((listener) => {
       listener({ uid: 'uid-new' } as User);
       return jest.fn();
@@ -690,11 +748,9 @@ describe('Android 가계부 server-first 복원 계약', () => {
     expect(await screen.findByText(
       'ready:iOS 가계부:member:member-1:verified'
     )).toBeInTheDocument();
-    expect(mockPwaModuleLoaded).not.toHaveBeenCalled();
     expect(mockActivatePwaFidEndpoint).not.toHaveBeenCalled();
 
     act(() => markWebFirstLedgerPaint());
-    await waitFor(() => expect(mockPwaModuleLoaded).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mockActivatePwaFidEndpoint).toHaveBeenCalledTimes(1));
   });
 });

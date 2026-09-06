@@ -126,6 +126,8 @@ interface CaptureEnvelopeV1 {
 
 ### 3.3 공개 Input Port
 
+토스 승인 parser의 `approvalAmountInWon`은 공개 envelope 밖의 서버 내부 `CaptureSubmissionCommand` → branch context → 승인 저장 Port로 전달합니다. [DEC-070](../../../../governance/decisions.md#dec-070)에 따라 `captureRecords.amountInWon`은 원래 순지출, `captureRecords.approvalAmountInWon`은 캐시백 차감 전 총액입니다. 원장·legacy 지출·QuickEdit에는 순지출을 사용합니다. 기존 wire와 중복 fingerprint를 유지하며 원문 hash에 결박된 이 파생 필드는 기존 receipt identity를 바꾸지 않습니다.
+
 | 이름·종류 | 호출자 | 입력 | 결과 | 권한 | 일관성·멱등성 |
 |---|---|---|---|---|---|
 | `AdmitRawNotification` Android Policy | Notification Listener Adapter | package·title·fullText 또는 분리된 현재 메시지 | forward 또는 ignore | OS listener capability | package allowlist와 다목적 앱 최소화만 수행; 카카오톡 일반·과거 대화 차단, 거래 해석 금지 |
@@ -227,7 +229,8 @@ CityGas parser의 최소 성공 조건은 도시가스 청구 문구와 총액�
 
 - 검색 범위는 파싱된 취소일부터 30일 전까지이며 날짜 파싱 실패 시 당일 범위입니다.
 - 금액·정규 가맹점·카드가 모두 일치하는 후보만 취소할 수 있습니다.
-- 월 분할 그룹은 `cancelAmount - groupTotal`이 `0..splitCount-1`원이면 [DEC-001](../../../../governance/decisions.md#dec-001) 오차로 금액 일치입니다.
+- 토스 캐시백 승인의 취소 금액은 불변 `approvalAmountInWon`과 대조합니다. 필드가 없던 과거 기록은 기존 `amountInWon`으로만 비교하며 캐시백을 추정하지 않습니다. 총액이 유효한 정수가 아니거나 순액보다 작으면 후보에서 제외합니다.
+- 월 분할 그룹은 합계로 원승인을 추정하지 않습니다. [DEC-071](../../../../governance/decisions.md#dec-071)에 따라 불변 승인 금액과 완전 일치하는 유일 계보를 선택합니다. 10,001원 승인을 5,000원씩 두 달로 나누어도 원승인 10,001원 취소로 원본·미래 월분까지 함께 삭제합니다. 원승인 증거가 없는 구형 그룹은 합계 차이가 0원이더라도 `NotFound`입니다.
 - 금액·카드가 같아도 정규 가맹점이 다르면 후보에서 제외합니다. 완전 일치 후보가 없으면 [DEC-012](../../../../governance/decisions.md#dec-012)에 따라 확인 후보를 만들거나 Ledger를 호출하지 않고 `NotFound`입니다.
 - 완전 일치 후보가 둘 이상이면 저장 순서로 선택하지 않고 `NeedsConfirmation`입니다.
 - 완전 일치 후보가 없으면 DEC-031에 따라 `NotFound`로 끝내고 대기 취소·tombstone·미래 승인 억제 key·재조정 job을 만들지 않습니다. 이후 승인 observation은 이전 취소와 연결하지 않고 일반 승인 경로로 처리합니다.
@@ -239,9 +242,11 @@ CityGas parser의 최소 성공 조건은 도시가스 청구 문구와 총액�
 승인 Intake는 observationId, sourceType, parser ID/version, 원 amount, 정규화 전 merchant candidate, 최소 card evidence, occurredAt을 `CaptureProvenanceV1`으로 만들어 `RecordCapturedTransaction`에 전달합니다. Ledger가 반환한 `captureLineageId`는 QuickEdit 수정과 모든 분할·합치기 파생 거래가 유지해야 하는 내부 참조입니다.
 
 - provenance는 append-only 내부 snapshot이며 일반 거래 수정 Command의 patch 대상이 아닙니다.
+- 토스의 순지출과 원승인 총액은 별도 증거로 유지하며 수정·분할·합치기 후에도 원 총액으로 취소합니다. 취소 완료 때는 총액을 포함한 결제 상세 증거를 제거하고 기존 최소 tombstone만 남깁니다.
 - 전체 알림 원문, title, textLines, 가구 key, 전체 카드 번호는 포함하지 않습니다.
 - capture fingerprint와 provenance는 목적이 다릅니다. fingerprint는 중복 claim용 hash이고 provenance는 취소 후보 사실 복원용 최소 증거입니다.
 - 파생 거래 취소는 provenance와 lineage가 모두 완전해야 하며 `CancellationLineagePolicy`가 대상 lineage를 확정합니다. 불완전 legacy lineage는 추정 삭제하지 않고 typed failure입니다.
+- 기존 migration의 `legacy:<문서 ID>`와 분할 그룹 번호는 원승인 증거가 아닙니다. 구형 기록 복구는 원본 자료로 승인·그룹의 연결을 확인한 별도 migration에서 수행하며, 자동 취소 경로는 복구나 근삿값 선택을 수행하지 않습니다.
 
 ## 5. Application Use Case 상세
 
@@ -442,7 +447,7 @@ parser golden fixture에는 정상 승인, 지원 취소, 빈 필드, 0원·음�
 | [PARSE-KB-001](requirements.md#52-지원-입력-형식) | Parser Golden | KB parser | 승인·취소·요약형·게시시각 없음, 줄바꿈 없는 inline `MM/DD HH:mm` 본문과 후행 `누적`, `KB국민체크(1164)` 문자 분리형과 `가맹점 사용` | 명의자 무시, inline 가맹점 추출·후행 누적 제거, 사용 접미사 제거, 금액·일시·국민 token 추출 | `T-PARSE-001`, `T-PARSE-002` |
 | [PARSE-NH-001](requirements.md#52-지원-입력-형식) | Parser Golden | NH parser | 승인·승인취소·M/D·농협 token, 문자 앱의 `[Web발신]`·마스킹 헤더·별도 명의자/일시/가맹점·총누적 | 금액·일시·가맹점·카드·취소 구분, 명의자 행은 creator 결정에서 제외 | `T-PARSE-001`, `T-PARSE-002` |
 | [PARSE-NAVER-001](requirements.md#52-지원-입력-형식) | Parser Golden | Naver parser | 승인 문장·게시시각·clock fallback | 승인 후보와 결정 시각 | `T-PARSE-001` |
-| [PARSE-TOSS-001](requirements.md#52-지원-입력-형식) | Parser Golden | Toss parser | 승인·취소·가승인·캐시백이 총액 초과 | 승인 max(total-cashback,0), 취소 총액, 가승인 제외 | `T-PARSE-001`, `T-PARSE-002` |
+| [PARSE-TOSS-001](requirements.md#52-지원-입력-형식) | Parser Golden, Firebase Integration | Toss parser·원장·취소 | 승인·취소·가승인·캐시백이 총액 초과, 수정·분할 후 취소 | 순지출 표시·원승인 총액 보존, 총액 취소 연결, 가승인 제외 | `T-PARSE-001`, `T-PARSE-002`, `T-CAN-LINEAGE-001` |
 | [PARSE-KAKAO-001](requirements.md#52-지원-입력-형식) | Parser Golden | KakaoPay parser | 완료 제목·가맹점·금액·시각 없음 | 게시시각 또는 clock으로 승인 | `T-PARSE-001` |
 | [PARSE-ONNURI-001](requirements.md#52-지원-입력-형식) | Parser Golden | Onnuri parser | 상품권 결제·시각 없음 | 승인과 시각 fallback | `T-PARSE-001` |
 | [PARSE-PAYBOOC-001](requirements.md#52-지원-입력-형식) | Parser Golden | Paybooc parser | 인라인·분리·취소·0원·빈 merchant | 유효 양수 승인/취소와 카드 정규화 | `T-PARSE-001`, `T-PARSE-002` |
@@ -461,12 +466,12 @@ parser golden fixture에는 정상 승인, 지원 취소, 빈 필드, 0원·음�
 | [ING-SAVE-005](requirements.md#53-승인-저장) | Domain, Emulator | fingerprint·Ledger 경합 | 같은 tuple 다른 카드/source, 동시 2회 | 카드/source 무관 거래 한 건 | `T-DUP-001` |
 | [ING-SAVE-006](requirements.md#53-승인-저장) | Application, Client, Context Contract | creator 원자 저장·result 후속 효과 | creator 있음·없음, Created·editable Duplicate·Rejected·network 실패, Ledger Event 소비 | creator 없으면 Ledger write 없음, 거래와 creator가 함께 확정된 편집 ID에서만 QuickEdit/broadcast, Android 자동 푸시 `NoTarget` | `T-ING-FOLLOWUP-001`, `T-ING-PROV-001` |
 | [ING-SAVE-007](requirements.md#53-승인-저장) | Contract, Application, Emulator | CaptureProvenanceV1·Ledger lineage | 생성 후 편집·항목/월 분할·합치기, retry | 최초 원 증거·creator 원자 저장, 모든 파생에 같은 lineage, 편집 후에도 자동 수집 `source`·`cardType` 보존, 원문 비저장 | `T-ING-PROV-001`, `T-CAPTURE-LINEAGE-001` |
-| [CAN-001](requirements.md#54-취소) | Application | mapping과 candidate query | 가구 없음, mapping 있음·없음 | 가구 없으면 중단, mapped evidence로 조회 | `T-CAN-004` |
+| [CAN-001](requirements.md#54-취소) | Application | immutable provenance와 candidate query | 가구 없음, mapping 있음·없음·승인 후 변경 | 가구 없으면 중단, 현재 mapping과 무관한 정규 원 가맹점 evidence로 조회(DEC-041) | `T-CAN-004` |
 | [CAN-002](requirements.md#54-취소) | Domain, Application | 취소 검색 범위 | 일반·월 분할, 당일 seed 없음, 30일/31일 경계, 날짜 parse 실패 | 모든 후보 유형 30일 포함 검색, 실패 시 당일만 | `T-CAN-003` |
 | [CAN-003](requirements.md#54-취소) | Domain Unit, Application | CancellationMatchPolicy | 유일한 완전 일치, merchant 불일치만 존재, 취소 선도착 후 승인, 완전 일치 동률 | 유일한 완전 일치만 취소 가능, 없음은 무변경 `NotFound`·보류 없음, 후속 승인은 정상 생성, 동률은 `NeedsConfirmation` | `T-CAN-002` |
 | [CAN-004](requirements.md#54-취소) | Application, Emulator | `CancelCapturedLineage` 조정 | 일반 거래·월 분할·수정·합치기 lineage | 대상 lineage 전체 삭제와 다른 lineage 보존 결과 | `T-CAN-001` |
 | [CAN-005](requirements.md#54-취소) | Emulator Integration | Ledger 원자 취소 | 중간 실패·stale version·callback retry | 전부 취소 또는 전부 유지, 성공 후만 완료 | `T-CAN-001` |
-| [CAN-006](requirements.md#54-취소) | Domain Unit | 분할 내림 오차 | splitCount 1·2·12, 차이 count-1/count | count-1까지 match, count부터 불일치 | `T-CAN-006` |
+| [CAN-006](requirements.md#54-취소) | Firebase Adapter, Emulator | 원승인 증거와 전체 분할 계보 | 10,001원 승인→5,000원×2, 증거 없는 구형 그룹에 10,000·10,001·10,002원 취소 | 연결 그룹은 원본·미래 월분 모두 삭제, 증거 없는 그룹은 합계 차이와 무관하게 보존·NotFound, replay 무변경 | `T-CAN-006` |
 | [CAN-007](requirements.md#54-취소) | Domain Unit, Application | CancellationLineagePolicy | 단일 미변경, 수정·분할, 다른 승인과 합치기, 불완전 legacy, 후보 없음·완전 일치 동률, commit 실패 | 현재 표시값이 아닌 provenance로 유일 lineage를 자동 취소하고 다른 lineage 복원, 불완전 lineage typed failure, 없음은 NotFound, 동률만 NeedsConfirmation, 실패는 전체 rollback | `T-CAN-LINEAGE-001` |
 
 추가 Context contract test는 같은 idempotency key의 동일·상이 payload, receipt 완료 전 중단, Android·Shortcut 교차 채널 동시 fingerprint, balance 부분 실패, source Policy 교체 전후, transaction callback 2회 실행에서 외부 side effect 0회를 검증합니다.

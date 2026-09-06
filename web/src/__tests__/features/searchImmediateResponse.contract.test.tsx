@@ -1,9 +1,11 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import SearchModal from '@/components/search/SearchModal';
 import {
-  searchExpenses,
+  searchExpensePage,
   subscribeToExpenseProjection,
 } from '@/lib/expenseService';
+
+jest.mock('@/contexts/HouseholdContext', () => ({ useHousehold: () => ({ householdKey: 'house-1', remoteReadEpoch: 0 }) }));
 
 jest.mock('@/components/search/SearchResultList', () => function SearchResultListStub() {
   return <div data-testid="search-results" />;
@@ -11,14 +13,14 @@ jest.mock('@/components/search/SearchResultList', () => function SearchResultLis
 
 jest.mock('@/lib/expenseService', () => ({
   expenseMatchesSearch: jest.fn(() => true),
-  searchExpenses: jest.fn(async () => []),
+  searchExpensePage: jest.fn(async () => ({ items: [] })),
   subscribeToExpenseProjection: jest.fn(() => ({
     publish: jest.fn(),
     dispose: jest.fn(),
   })),
 }));
 
-const mockedSearchExpenses = searchExpenses as jest.MockedFunction<typeof searchExpenses>;
+const mockedSearchExpenses = searchExpensePage as jest.MockedFunction<typeof searchExpensePage>;
 const mockedSubscribeToExpenseProjection =
   subscribeToExpenseProjection as jest.MockedFunction<typeof subscribeToExpenseProjection>;
 
@@ -48,7 +50,7 @@ describe('원장 검색 첫 상호작용 계약', () => {
 
     expect(mockedSubscribeToExpenseProjection).toHaveBeenCalledTimes(1);
     expect(mockedSearchExpenses).toHaveBeenCalledWith('삼성', {
-      transactionType: 'expense',
+      transactionType: 'expense', startDate: '', endDate: '', sourceWindow: expect.any(String),
     });
   });
 });

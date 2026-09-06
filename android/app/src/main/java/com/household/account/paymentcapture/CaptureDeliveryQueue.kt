@@ -119,6 +119,7 @@ class CaptureDeliveryQueue(
     private val nowEpochMillis: () -> Long = System::currentTimeMillis
 ) {
     private val mutex = Mutex()
+    private val purgedScopes = mutableSetOf<CaptureSessionScope>()
 
     suspend fun enqueue(
         scope: CaptureSessionScope,
@@ -134,7 +135,7 @@ class CaptureDeliveryQueue(
         scope: CaptureSessionScope,
         envelopes: List<CaptureDeliveryEnvelope>
     ): CaptureBatchEnqueueResult = mutex.withLock {
-        if (!scope.isUsable || envelopes.isEmpty()) {
+        if (!scope.isUsable || scope in purgedScopes || envelopes.isEmpty()) {
             return@withLock CaptureBatchEnqueueResult.Rejected
         }
         val entries = store.load().filterNot { isExpired(it) }
@@ -180,6 +181,9 @@ class CaptureDeliveryQueue(
         client: CaptureSubmissionClient,
         beforeCommitFollowUps: suspend (List<CaptureDeliveryFollowUp>) -> Unit = {}
     ): CaptureFlushOutcome = mutex.withLock {
+        if (!currentScope.isUsable || currentScope in purgedScopes) {
+            return@withLock CaptureFlushOutcome(emptyList(), store.load().size)
+        }
         val retained = mutableListOf<QueuedCapture>()
         val followUps = mutableListOf<CaptureDeliveryFollowUp>()
 
@@ -213,8 +217,15 @@ class CaptureDeliveryQueue(
         CaptureFlushOutcome(followUps, retained.size)
     }
 
-    suspend fun purgeForSessionTransition() = mutex.withLock {
+    suspend fun purgeForSessionTransition(previousScope: CaptureSessionScope? = null) = mutex.withLock {
+        val scopes = store.load().map { it.scope }
         store.clear()
+        purgedScopes.addAll(scopes)
+        previousScope?.let(purgedScopes::add)
+    }
+
+    suspend fun resumeAfterFailedTransition(scope: CaptureSessionScope) = mutex.withLock {
+        purgedScopes.remove(scope)
     }
 
     suspend fun retainAfterAttempt(
@@ -222,7 +233,7 @@ class CaptureDeliveryQueue(
         envelope: CaptureDeliveryEnvelope,
         terminalBranches: Set<CaptureBranch>
     ): Boolean = mutex.withLock {
-        if (!scope.isUsable) return@withLock false
+        if (!scope.isUsable || scope in purgedScopes) return@withLock false
         val entries = store.load().filterNot { isExpired(it) }.toMutableList()
         val index = entries.indexOfFirst {
             it.envelope.observationId == envelope.observationId

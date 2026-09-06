@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type * as firestore from "firebase-admin/firestore";
 
 import { FirebasePortfolioMarketData } from "../../adapters/firebase/portfolio/firebasePortfolioMarketData";
+import { FirebasePortfolioQuoteObservations } from "../../adapters/firebase/portfolio/firebasePortfolioQuoteObservations";
 import { FirebasePortfolioProviderHealthStore } from "../../adapters/firebase/portfolio/firebasePortfolioProviderHealthStore";
 import { FirebasePortfolioRuntimeStore } from "../../adapters/firebase/portfolio/firebasePortfolioRuntimeStore";
 import { createPortfolioRuntimeApplication } from "../../contexts/portfolio/core/application/portfolioRuntimeApplication";
@@ -45,9 +46,8 @@ function stringField(payload: Record<string, unknown>, field: string): string {
 
 function expectedVersion(
   payload: Record<string, unknown>,
-): number | undefined {
+): number {
   const value = payload.expectedVersion;
-  if (value === undefined) return undefined;
   if (!Number.isSafeInteger(value) || (value as number) < 1) {
     throw new HouseholdCommandRejection("INVALID_EXPECTED_VERSION");
   }
@@ -99,7 +99,7 @@ function positionKind(value: unknown): PortfolioPositionKind {
 
 export function createPortfolioHouseholdCommandHandlers(
   database: firestore.Firestore,
-  marketQuotes: PortfolioMarketQuotePort = new FirebasePortfolioMarketData(),
+  marketQuotes: PortfolioMarketQuotePort = new FirebasePortfolioMarketData(undefined, new FirebasePortfolioQuoteObservations(database)),
 ): ReadonlyMap<string, HouseholdCommandHandler> {
   const application = createPortfolioRuntimeApplication({
     store: new FirebasePortfolioRuntimeStore(database),
@@ -148,7 +148,11 @@ export function createPortfolioHouseholdCommandHandlers(
       {
         async execute(context) {
           const payload = record(context.envelope.payload);
-          exactFields(payload, ["assets"]);
+          exactFields(payload, ["assets", "expectedVersions"]);
+          const expectedVersions = record(payload.expectedVersions);
+          for (const version of Object.values(expectedVersions)) {
+            if (!Number.isSafeInteger(version) || (version as number) < 1) throw new HouseholdCommandRejection("INVALID_EXPECTED_VERSION");
+          }
           if (!Array.isArray(payload.assets)) {
             throw new HouseholdCommandRejection("INVALID_ORDER_SET");
           }
@@ -167,6 +171,7 @@ export function createPortfolioHouseholdCommandHandlers(
             await application.reorderAssets({
               metadata: metadata(context),
               assets,
+              expectedVersions: expectedVersions as Record<string, number>,
             }),
           );
         },
@@ -196,13 +201,14 @@ export function createPortfolioHouseholdCommandHandlers(
         idempotencyBoundary: "domain-idempotency-key",
         async execute(context) {
           const payload = record(context.envelope.payload);
-          exactFields(payload, ["assetId", "positionKind", "position"]);
+          exactFields(payload, ["assetId", "positionKind", "position", "expectedAssetVersion"]);
           return value(
             await application.addPosition({
               metadata: metadata(context),
               assetId: stringField(payload, "assetId"),
               positionKind: positionKind(payload.positionKind),
               position: payload.position,
+              expectedAssetVersion: expectedVersion({ expectedVersion: payload.expectedAssetVersion }),
             }),
           );
         },
@@ -220,6 +226,7 @@ export function createPortfolioHouseholdCommandHandlers(
             "positionKind",
             "changes",
             "expectedVersion",
+            "expectedAssetVersion",
           ]);
           const version = expectedVersion(payload);
           return value(
@@ -229,6 +236,7 @@ export function createPortfolioHouseholdCommandHandlers(
               positionId: stringField(payload, "positionId"),
               positionKind: positionKind(payload.positionKind),
               changes: payload.changes,
+              expectedAssetVersion: expectedVersion({ expectedVersion: payload.expectedAssetVersion }),
               ...(version === undefined ? {} : { expectedVersion: version }),
             }),
           );
@@ -246,10 +254,12 @@ export function createPortfolioHouseholdCommandHandlers(
             "positionId",
             "positionKind",
             "expectedVersion",
+            "expectedAssetVersion",
           ]);
           const version = expectedVersion(payload);
           return value(
             await application.deletePosition({
+              expectedAssetVersion: expectedVersion({ expectedVersion: payload.expectedAssetVersion }),
               metadata: metadata(context),
               assetId: stringField(payload, "assetId"),
               positionId: stringField(payload, "positionId"),

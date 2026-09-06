@@ -50,7 +50,7 @@ export const assetAutomationDaily = onSchedule(
         }),
       },
     });
-    if (result.status === "FAILED") {
+    if (result.status !== "COMPLETE") {
       throw new Error("ASSET_AUTOMATION_DAILY_JOB_FAILED");
     }
   },

@@ -20,7 +20,7 @@ export interface DeliveryReconciliationSnapshot {
   delivery: {
     deliveryId: string;
     status: "unknown-provider-outcome";
-    providerAttemptCount: 1;
+    providerAttemptCount: 0 | 1;
     terminalAt: string;
     expiresAt: string;
   };

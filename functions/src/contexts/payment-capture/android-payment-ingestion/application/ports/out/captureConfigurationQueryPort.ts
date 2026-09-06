@@ -16,6 +16,7 @@ export interface CaptureConfigurationSnapshot {
 }
 
 export type CaptureConfigurationQueryResult =
+  | { readonly kind: "contract-failure"; readonly code: string }
   | { readonly kind: "available"; readonly value: CaptureConfigurationSnapshot }
   | {
       readonly kind: "retryable-failure";

@@ -50,6 +50,7 @@ import {
   updateStockHolding,
 } from '@/lib/assetService';
 import type { Asset, CryptoHolding, StockHolding } from '@/types/asset';
+import { portfolioOptimisticProjection } from '@/features/portfolio/application/portfolioOptimisticProjection';
 
 const mockedCommands = portfolioCommands as jest.Mocked<typeof portfolioCommands>;
 
@@ -117,6 +118,10 @@ function cryptoHolding(overrides: Partial<CryptoHolding> = {}): CryptoHolding {
 }
 
 function snapshotAsset(value: Asset | StockHolding | CryptoHolding) {
+  if ('assetId' in value && !portfolioOptimisticProjection.current(value.assetId)) {
+    const parents = portfolioOptimisticProjection.subscribe(() => {}, 'house-1');
+    parents.publish([asset({ id: value.assetId, type: 'stock' })]);
+  }
   const { id, ...data } = value;
   return {
     id,
@@ -632,7 +637,8 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
       'stock-1',
       'asset-1',
       { quantity: 11 },
-      4
+      4,
+      3
     );
     unsubscribeStock();
 
@@ -661,7 +667,8 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
       'crypto',
       'crypto-1',
       'asset-2',
-      4
+      4,
+      3
     );
     unsubscribeCrypto();
   });
@@ -829,7 +836,8 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
       'stock-1',
       'asset-1',
       { quantity: 11 },
-      4
+      4,
+      3
     );
     expect(mockedCommands.updatePosition).toHaveBeenCalledTimes(2);
     unsubscribe();
@@ -871,7 +879,8 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
       'stock',
       'stock-1',
       'asset-1',
-      4
+      4,
+      3
     );
     await deletePending;
     unsubscribe();
@@ -1095,7 +1104,8 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
       [
         { id: second.id, order: 0 },
         { id: first.id, order: 1 },
-      ]
+      ],
+      { [first.id]: 4, [second.id]: 3 }
     );
     await reorderPending;
     expect(rendered.at(-1)?.find(({ id }) => id === first.id)).toMatchObject({

@@ -44,6 +44,7 @@ async function seedPosition(input: {
 }) {
   const positionId = input.positionId ?? POSITION_ID;
   const assetId = input.assetId ?? ASSET_ID;
+  await database.collection("households").doc(HOUSEHOLD_ID).collection("assets").doc(assetId).set({ householdId: HOUSEHOLD_ID, lifecycleState: "active" }, { merge: true });
   await database
     .collection("households")
     .doc(HOUSEHOLD_ID)

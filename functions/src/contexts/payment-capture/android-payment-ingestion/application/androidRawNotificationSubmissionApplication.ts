@@ -81,9 +81,22 @@ function currencyType(
     : undefined;
 }
 
+function acceptsCurrency(
+  source: AndroidPaymentSourceRegistryEntry,
+  value: string | undefined,
+): boolean {
+  if (value === undefined) return true;
+  const currency = currencyType(value);
+  if (currency === undefined) return false;
+  // SMS는 고정 순서의 공급자 parser가 검증한 경기·대전 결과를 전달합니다.
+  return source.parserId === "sms-card-message-parser"
+    ? currency === "gyeonggi" || currency === "daejeon"
+    : currency === source.localCurrencyType;
+}
+
 function cityGasPayment(
   input: AndroidRawNotificationInput,
-): CapturePaymentObservation | undefined {
+): { payment: CapturePaymentObservation; memo: string } | undefined {
   const envelope = buildNotificationEnvelope({
     packageName: input.packageName,
     postedAt: input.notification.postedAt,
@@ -101,6 +114,10 @@ function cityGasPayment(
   if (result.kind !== "Parsed" || result.amountInWon <= 0) return undefined;
   const received = seoulParts(input.notification.postedAt);
   return {
+    memo: result.memoPolicy === "BillingTitle"
+      ? `${result.billingMonth.slice(0, 4)}년 ${Number(result.billingMonth.slice(5))}월 도시가스요금 청구서`
+      : "",
+    payment: {
     branchId: branchId(input.observationId, "payment"),
     observationType: "approval",
     amountInWon: result.amountInWon,
@@ -111,12 +128,15 @@ function cityGasPayment(
       rawCandidate: `${Number(result.billingMonth.slice(5))}월 도시가스요금`,
     },
     dueDate: result.accountingDate,
+    },
   };
 }
 
 interface ParsedAndroidCapture {
   readonly envelope: CaptureEnvelopeInput;
+  readonly approvalAmountInWon?: number;
   readonly paymentKind?: "card" | "bill";
+  readonly parsedMemo?: string;
 }
 
 function parsedEnvelope(
@@ -137,10 +157,8 @@ function parsedEnvelope(
     const parsedCurrency = currencyType(result.payment?.localCurrencyType);
     const balanceCurrency = currencyType(result.balance?.localCurrencyType);
     if (
-      (result.payment?.localCurrencyType !== undefined &&
-        parsedCurrency !== source.localCurrencyType) ||
-      (result.balance?.localCurrencyType !== undefined &&
-        balanceCurrency !== source.localCurrencyType)
+      !acceptsCurrency(source, result.payment?.localCurrencyType) ||
+      !acceptsCurrency(source, result.balance?.localCurrencyType)
     ) {
       return undefined;
     }
@@ -205,15 +223,19 @@ function parsedEnvelope(
         !source.supportsCityGasBill
           ? {}
           : { paymentKind: "card" as const }),
+        ...(paymentObservation?.observationType !== "approval" || payment?.approvalAmountInWon === undefined
+          ? {}
+          : { approvalAmountInWon: payment.approvalAmountInWon }),
       };
     }
   }
 
   if (!source.supportsCityGasBill) return undefined;
-  const paymentObservation = cityGasPayment(input);
-  if (paymentObservation === undefined) return undefined;
+  const bill = cityGasPayment(input);
+  if (bill === undefined) return undefined;
   return {
     paymentKind: "bill",
+    parsedMemo: bill.memo,
     envelope: {
       contractVersion: "capture-envelope.v1",
       observationId: input.observationId,
@@ -230,7 +252,7 @@ function parsedEnvelope(
         parserVersion: source.parserVersion,
       },
       rawPayloadHash: payloads.hash(input),
-      paymentObservation,
+      paymentObservation: bill.payment,
     },
   };
 }
@@ -278,9 +300,13 @@ class DefaultAndroidRawNotificationSubmissionApplication
       actor: command.actor,
       rootIdempotencyKey: command.input.observationId,
       envelope: parsed.envelope,
+      ...(parsed.approvalAmountInWon === undefined
+        ? {}
+        : { approvalAmountInWon: parsed.approvalAmountInWon }),
       ...(parsed.paymentKind === undefined
         ? {}
         : { paymentKind: parsed.paymentKind }),
+      ...(parsed.parsedMemo === undefined ? {} : { parsedMemo: parsed.parsedMemo }),
     });
   }
 }

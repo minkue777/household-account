@@ -185,6 +185,26 @@ export class FirebasePortfolioRuntimeMutationWriter {
         .doc(plan.planId);
       if (!before.planIds.has(plan.planId)) {
         transaction.create(reference, planDocument(plan, true));
+        if (plan.activationMonthDisposition === "included") {
+          const targetMonth = plan.firstActivatedOn.slice(0, 7);
+          const executionKey = `${plan.householdId}:${plan.assetId}:${plan.operation}:${targetMonth}`;
+          const executionHash = hash(executionKey);
+          const executionId = `automation-execution-${executionHash}`;
+          const asset = mutation.state.assets.find(item => item.assetId === plan.assetId)!;
+          transaction.create(household.collection("assetAutomationExecutions").doc(executionHash), {
+            executionId, executionKey, occurrenceId: metadata.commandId, householdId: plan.householdId,
+            planId: plan.planId, assetId: plan.assetId, operation: plan.operation, targetMonth,
+            appliedRevision: plan.currentRevision, appliedAmountInWon: 0, balanceDeltaInWon: 0,
+            resultingBalanceInWon: asset.currentBalance, resultingAssetVersion: asset.aggregateVersion,
+            status: "included", reason: "included-in-current-balance", processedAt: metadata.occurredAt,
+            schemaVersion: 1, createdAt: FieldValue.serverTimestamp(),
+          });
+          transaction.create(household.collection("assetAutomationExecutionReceipts").doc(executionHash), {
+            receiptId: executionHash, executionId, executionKey, occurrenceId: metadata.commandId,
+            householdId: plan.householdId, resultingAssetVersion: asset.aggregateVersion,
+            status: "completed", terminalAt: metadata.occurredAt, schemaVersion: 1, createdAt: FieldValue.serverTimestamp(),
+          });
+        }
       } else {
         transaction.set(reference, planDocument(plan, false), { merge: true });
       }
@@ -223,7 +243,7 @@ export class FirebasePortfolioRuntimeMutationWriter {
     for (const event of mutation.events) {
       outbox.append(transaction, {
         eventId: hash(
-          `${metadata.commandId}\u0000${event.eventType}\u0000${event.aggregateId}`,
+          `${metadata.commandId}\u0000${event.eventType}\u0000${event.aggregateId}\u0000${event.aggregateVersion}`,
         ),
         eventType: event.eventType,
         householdId: metadata.householdId,

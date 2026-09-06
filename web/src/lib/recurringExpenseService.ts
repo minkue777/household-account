@@ -45,16 +45,17 @@ export async function addRecurringExpense(
  */
 export async function updateRecurringExpense(
   id: string,
-  updates: Partial<CreateRecurringExpenseInput & { isActive: boolean }>
+  updates: Partial<CreateRecurringExpenseInput & { isActive: boolean }>,
+  expectedVersion: number
 ): Promise<void> {
-  await recurringCommands.update(requireHouseholdId(), id, updates);
+  await recurringCommands.update(requireHouseholdId(), id, updates, expectedVersion);
 }
 
 /**
  * 정기 지출 삭제
  */
-export async function deleteRecurringExpense(id: string): Promise<void> {
-  await recurringCommands.delete(requireHouseholdId(), id);
+export async function deleteRecurringExpense(id: string, expectedVersion: number): Promise<void> {
+  await recurringCommands.delete(requireHouseholdId(), id, expectedVersion);
 }
 
 /**
@@ -78,6 +79,7 @@ export function subscribeToRecurringExpenses(
         const data = doc.data();
         return {
           id: doc.id,
+          aggregateVersion: data.aggregateVersion ?? data.version ?? 1,
           householdId: data.householdId,
           merchant: data.merchant,
           amount: data.amount,
@@ -113,6 +115,7 @@ export async function getRecurringExpenses(householdId: string): Promise<Recurri
     const data = doc.data();
     return {
       id: doc.id,
+          aggregateVersion: data.aggregateVersion ?? data.version ?? 1,
       householdId: data.householdId,
       merchant: data.merchant,
       amount: data.amount,
@@ -127,31 +130,4 @@ export async function getRecurringExpenses(householdId: string): Promise<Recurri
   });
 
   return sortRecurringExpenses(expenses);
-}
-
-/**
- * 현재 월 문자열 생성 (예: "2024-01")
- */
-export function getCurrentMonthString(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  return `${year}-${month}`;
-}
-
-/**
- * ?? ??? ?? ??? ??? ??
- */
-function getEffectiveDayOfMonth(year: number, month: number, dayOfMonth: number): number {
-  const lastDayOfMonth = new Date(year, month, 0).getDate();
-  return Math.min(dayOfMonth, lastDayOfMonth);
-}
-
-/**
- * ?? ?? ?? ?? ?? ??? ?? (?: "2024-01-15")
- */
-function getRecurringExpenseDate(year: number, month: number, dayOfMonth: number): string {
-  const safeMonth = String(month).padStart(2, '0');
-  const safeDay = String(getEffectiveDayOfMonth(year, month, dayOfMonth)).padStart(2, '0');
-  return `${year}-${safeMonth}-${safeDay}`;
 }

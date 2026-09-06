@@ -62,11 +62,12 @@ export const ledgerCommands = {
     householdId: string,
     transactionId: string,
     expectedVersion: number,
-    changes: Partial<Expense>
+    changes: Partial<Expense>,
+    rememberForNextTime = false
   ): Promise<LedgerTransactionCommandResult> {
     return getHouseholdCommandClient().execute(
       'ledger.update-transaction.v1',
-      { transactionId, expectedVersion, patch: toTransactionPatch(changes) },
+      { transactionId, expectedVersion, patch: toTransactionPatch(changes), ...(rememberForNextTime ? { rememberForNextTime: true } : {}) },
       { householdId }
     );
   },
@@ -201,6 +202,11 @@ export const ledgerCommands = {
       { householdId }
     );
     return result.transactionIds;
+  },
+
+  async restoreItemSplit(householdId: string, sourceId: string, expectedVersions: Record<string, number>): Promise<string> {
+    const result = await getHouseholdCommandClient().execute('ledger.restore-item-split.v1', { sourceId, expectedVersions }, { householdId });
+    return result.transactionId;
   },
 
   async cancelMonthlySplit(

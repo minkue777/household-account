@@ -44,11 +44,12 @@ export const portfolioCommands = {
 
   async reorderAssets(
     householdId: string,
-    assets: ReadonlyArray<{ id: string; order: number }>
+    assets: ReadonlyArray<{ id: string; order: number }>,
+    expectedVersions: Record<string, number>
   ): Promise<void> {
     await getHouseholdCommandClient().execute(
       'portfolio.reorder-assets.v1',
-      { assets: assets.map(({ id, order }) => ({ assetId: id, order })) },
+      { assets: assets.map(({ id, order }) => ({ assetId: id, order })), expectedVersions },
       { householdId }
     );
   },
@@ -69,11 +70,12 @@ export const portfolioCommands = {
     householdId: string,
     kind: PositionKind,
     input: StockHoldingInput | CryptoHoldingInput,
-    commandId?: string
+    commandId: string | undefined,
+    expectedAssetVersion: number
   ): Promise<string> {
     const result = await getHouseholdCommandClient().execute(
       'portfolio.add-position.v1',
-      { assetId: input.assetId, positionKind: kind, position: definedFields(input) },
+      { assetId: input.assetId, positionKind: kind, position: definedFields(input), expectedAssetVersion },
       { householdId, ...(commandId ? { commandId, idempotencyKey: commandId } : {}) }
     );
     return result.positionId;
@@ -85,11 +87,12 @@ export const portfolioCommands = {
     positionId: string,
     assetId: string,
     changes: Partial<StockHolding> | Partial<CryptoHolding>,
-    expectedVersion: number
+    expectedVersion: number,
+    expectedAssetVersion: number
   ): Promise<void> {
     await getHouseholdCommandClient().execute(
       'portfolio.update-position.v1',
-      { assetId, positionId, positionKind: kind, changes: definedFields(changes), expectedVersion },
+      { assetId, positionId, positionKind: kind, changes: definedFields(changes), expectedVersion, expectedAssetVersion },
       { householdId }
     );
   },
@@ -99,11 +102,12 @@ export const portfolioCommands = {
     kind: PositionKind,
     positionId: string,
     assetId: string,
-    expectedVersion: number
+    expectedVersion: number,
+    expectedAssetVersion: number
   ): Promise<void> {
     await getHouseholdCommandClient().execute(
       'portfolio.delete-position.v1',
-      { assetId, positionId, positionKind: kind, expectedVersion },
+      { assetId, positionId, positionKind: kind, expectedVersion, expectedAssetVersion },
       { householdId }
     );
   },
@@ -118,6 +122,7 @@ export const portfolioCommands = {
       { assetClass, ...(assetId ? { assetId } : {}) },
       { householdId }
     );
+    if ((result.failedCount ?? 0) > 0) throw new Error(`시세 ${result.failedCount}건을 갱신하지 못했습니다. 잠시 후 다시 시도해 주세요.`);
     return result.refreshedCount;
   },
 };

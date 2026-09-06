@@ -177,7 +177,7 @@ web/public/manifest.json
 | 요구사항 ID | 수준 | 테스트 대상 | 핵심 fixture·경계값 | 관찰 결과 | Canonical 테스트 ID |
 |---|---|---|---|---|---|
 | PWA-001 | I, E2E | 초기화·manifest | prod/dev, standalone, portrait | prod 한 registration·설치 가능, dev 비활성 | `T-PWA-INSTALL-001` |
-| PWA-002 | Characterization I, E2E | 교체 전 install/activate Adapter | 열린 구 client, 미저장 form, 새 worker | 현재 즉시 활성화 동작만 전환 기간에 재현하며 목표 기대값과 분리 | `T-PWA-LEGACY-ACTIVATION-001` |
+| PWA-002 | Contract·실제 browser E2E | 통합 worker install/activate Adapter | 열린 구 client, 미저장 form, 새 worker | 새 worker는 waiting하고 현재 입력·controller를 보존하며 명시적 활성화 뒤 전환 | `T-PWA-006` |
 | PWA-003 | production E2E | 통합 worker·endpoint cleanup barrier | 기존 두 root script, fetch, background push, click, Messaging handoff, 삭제·purge 성공/실패, 비인증·browser·desktop | root registration 하나, 별도 Firebase worker 0건, 삭제와 purge 뒤에만 재등록 | T-PWA-001 |
 | PWA-004 | 보안 I, production E2E | CachePolicy·PurgePwaSession | method, Set-Cookie, private/no-store, 개인정보 query, 인증·금융 응답, logout, 사용자·가구 변경, 진행 request·subscription, purge 실패 | 민감 응답·PII cache key 0건, logout generation 없음, 이전 state 제거 또는 query·endpoint 격리 | T-PWA-002 |
 | PWA-005 | Contract, production build | Firebase worker config generator·실제 artifact | Web/worker config drift, 지원·미지원 SDK 조합, compat·deprecated API·설정 hardcode | 통합 `/sw.js`와 단일 산출 config, drift·미지원·hardcode 조합은 build 실패 | T-PWA-003 |

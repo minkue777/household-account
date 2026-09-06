@@ -7,6 +7,23 @@ import {
 } from "../../src/adapters/google-cloud/admin/googleCloudInteractiveLatencyReader";
 
 describe("Google Cloud interactive latency reader", () => {
+  it('조회 제한 뒤 다음 페이지가 있으면 전체 기간의 available 통계로 표시하지 않는다', async () => {
+    let calls = 0;
+    const reader = new GoogleCloudInteractiveLatencyReader('test-project', {
+      async getAccessToken() { return { access_token: 'test-token' }; },
+    }, async () => {
+      calls += 1;
+      return { ok: true, status: 200, async json() {
+        return { entries: [{ timestamp: '2026-09-06T00:00:00Z', jsonPayload: {
+          endpoint: 'executeHouseholdCommand', operation: 'ledger.update-transaction.v1', elapsedMs: 100, status: 'succeeded',
+        } }], nextPageToken: `page-${calls}` };
+      } };
+    });
+    const result = await reader.read({ generatedAt: '2026-09-06T01:00:00Z', windowHours: 24 });
+    expect(result.status).toBe('partial');
+    expect(calls).toBe(4);
+    expect(result.operations[0].sampleCount).toBe(4);
+  });
   it("aggregates Cloud Function totals by endpoint and operation", () => {
     const observations: InteractiveLatencyObservation[] = [
       {

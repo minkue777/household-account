@@ -4,7 +4,7 @@
 export { assetAutomationDaily } from "./bootstrap/firebaseAssetAutomationScheduledJob";
 export { assetValuationDaily } from "./bootstrap/firebaseAssetValuationScheduledJob";
 export { billingCostRefresh } from "./bootstrap/firebaseBillingCostScheduledJob";
-export { consumeNotificationOutbox } from "./bootstrap/firebaseNotificationOutbox";
+export { consumeNotificationOutbox, reconcileNotificationDeliveries } from "./bootstrap/firebaseNotificationOutbox";
 export { dividendHourly } from "./bootstrap/firebaseDividendScheduledJob";
 export { executeAdminAccess } from "./bootstrap/firebaseAdminAccess";
 export { executeHouseholdCommand } from "./bootstrap/firebaseHouseholdCommand";

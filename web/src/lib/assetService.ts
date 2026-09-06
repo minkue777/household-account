@@ -32,7 +32,7 @@ import {
 } from '@/features/portfolio/application/portfolioOptimisticProjection';
 import { createHouseholdCommandId } from '@/platform/functions-api/householdCommandClient';
 import { registerClientSessionReset } from '@/composition/clientSessionResetRegistry';
-import { formatLocalDate } from './utils/date';
+import { formatLocalDate, getSeoulCalendarParts } from './utils/date';
 import { sumSignedBalancesByAssetType } from './assets/assetMath';
 import {
   calculateHoldingCostBasis,
@@ -803,7 +803,7 @@ export async function updateAssetOrders(assetOrders: { id: string; order: number
       // reorder version from that response-time snapshot would invent a
       // version that this command never created.
       const commandBases = new Map(
-        mutations.map(({ current, update }) => {
+        planned.map(({ current, update }) => {
           const authoritative = assetAuthoritativeStates.get(householdId);
           return [
             update.id,
@@ -813,7 +813,7 @@ export async function updateAssetOrders(assetOrders: { id: string; order: number
           ] as const;
         })
       );
-      await portfolioCommands.reorderAssets(householdId, normalized);
+      await portfolioCommands.reorderAssets(householdId, normalized, Object.fromEntries(Array.from(commandBases, ([id, base]) => [id, base.aggregateVersion])));
       mutations.forEach(({ current, update, mutationId }) => {
         const commandBase = commandBases.get(update.id) ?? current;
         const canonical = {
@@ -1071,14 +1071,14 @@ export async function getAssetHistoryByPeriod(
  */
 export async function getPreviousMonthTotal(): Promise<number | null> {
   const householdId = getHouseholdId();
-  const now = new Date();
+  const now = getSeoulCalendarParts();
 
   // 전월 마지막 날 계산
-  const lastDayOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+  const lastDayOfPrevMonth = new Date(now.year, now.month - 1, 0);
   const endDate = formatLocalDate(lastDayOfPrevMonth);
 
   // 전월 첫째 날
-  const firstDayOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const firstDayOfPrevMonth = new Date(now.year, now.month - 2, 1);
   const startDate = formatLocalDate(firstDayOfPrevMonth);
 
   try {
@@ -1176,6 +1176,12 @@ function mapDocToCryptoHolding(docSnap: QueryDocumentSnapshot<DocumentData>): Cr
 /**
  * 주식 보유 종목 추가
  */
+function assetVersionForPositionCommand(assetId: string): number {
+  const asset = portfolioOptimisticProjection.current(assetId);
+  if (!asset) throw new Error('ASSET_READ_MODEL_REQUIRED');
+  return asset.aggregateVersion;
+}
+
 export async function addStockHolding(input: StockHoldingInput): Promise<string> {
   const householdId = getHouseholdId();
   const commandId = createHouseholdCommandId('portfolio-position-create');
@@ -1196,7 +1202,8 @@ export async function addStockHolding(input: StockHoldingInput): Promise<string>
       householdId,
       'stock',
       input,
-      commandId
+      commandId,
+      assetVersionForPositionCommand(input.assetId)
     );
     if (confirmedPositionId !== positionId) throw new Error('POSITION_ID_CONTRACT_MISMATCH');
     stockHoldingOptimisticProjection.commitCreate(mutationId, optimisticHolding);
@@ -1226,7 +1233,8 @@ export async function addCryptoHolding(input: CryptoHoldingInput): Promise<strin
       householdId,
       'crypto',
       input,
-      commandId
+      commandId,
+      assetVersionForPositionCommand(input.assetId)
     );
     if (confirmedPositionId !== positionId) throw new Error('POSITION_ID_CONTRACT_MISMATCH');
     cryptoHoldingOptimisticProjection.commitCreate(mutationId, optimisticHolding);
@@ -1312,7 +1320,8 @@ export async function updateStockHolding(
         id,
         assetId,
         effectivePatch,
-        commandExpectedVersion
+        commandExpectedVersion,
+        assetVersionForPositionCommand(assetId)
       );
     } catch (error) {
       if (
@@ -1338,7 +1347,8 @@ export async function updateStockHolding(
         id,
         assetId,
         effectivePatch,
-        commandExpectedVersion
+        commandExpectedVersion,
+        assetVersionForPositionCommand(assetId)
       );
     }
       const canonical = {
@@ -1438,7 +1448,8 @@ export async function updateCryptoHolding(
         id,
         assetId,
         effectivePatch,
-        commandExpectedVersion
+        commandExpectedVersion,
+        assetVersionForPositionCommand(assetId)
       );
     } catch (error) {
       if (
@@ -1464,7 +1475,8 @@ export async function updateCryptoHolding(
         id,
         assetId,
         effectivePatch,
-        commandExpectedVersion
+        commandExpectedVersion,
+        assetVersionForPositionCommand(assetId)
       );
     }
       const canonical = {
@@ -1560,8 +1572,9 @@ export async function deleteStockHolding(
           'stock',
           id,
           assetId,
-          commandExpectedVersion
-        );
+          commandExpectedVersion,
+        assetVersionForPositionCommand(assetId)
+      );
       } catch (error) {
         if (
           !isPositionVersionMismatch(error)
@@ -1584,7 +1597,8 @@ export async function deleteStockHolding(
           'stock',
           id,
           assetId,
-          commandExpectedVersion
+          commandExpectedVersion,
+        assetVersionForPositionCommand(assetId)
         );
       }
       if (queueGeneration === assetUpdateQueueGeneration) {
@@ -1670,8 +1684,9 @@ export async function deleteCryptoHolding(
           'crypto',
           id,
           assetId,
-          commandExpectedVersion
-        );
+          commandExpectedVersion,
+        assetVersionForPositionCommand(assetId)
+      );
       } catch (error) {
         if (
           !isPositionVersionMismatch(error)
@@ -1694,7 +1709,8 @@ export async function deleteCryptoHolding(
           'crypto',
           id,
           assetId,
-          commandExpectedVersion
+          commandExpectedVersion,
+        assetVersionForPositionCommand(assetId)
         );
       }
       if (queueGeneration === assetUpdateQueueGeneration) {
@@ -1906,6 +1922,7 @@ export interface DividendSnapshotData {
 
 export interface DividendEventRecord {
   id: string;
+  eventId: string;
   householdId: string;
   stockCode: string;
   stockName: string;
@@ -1944,6 +1961,7 @@ function mapDocToDividendEvent(docSnap: QueryDocumentSnapshot<DocumentData>): Di
 
   return {
     id: docSnap.id,
+    eventId: typeof data.eventId === 'string' ? data.eventId : `legacy-dividend:${docSnap.id}`,
     householdId: data.householdId,
     stockCode: String(data.stockCode || '').trim().toUpperCase(),
     stockName: data.stockName || data.stockCode || '',

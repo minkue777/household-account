@@ -143,6 +143,8 @@ export interface CryptoPriceInfo {
 }
 
 export interface AssetHistoryEntry {
+  ownerKey?: string;
+  ownerDisplayName?: string;
   id: string;
   householdId: string;
   assetId: string;

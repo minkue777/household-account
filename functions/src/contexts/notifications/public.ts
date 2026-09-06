@@ -3,6 +3,8 @@ import {
   NotificationTargetPlanner,
 } from "./application/planNotificationTargets";
 
+export { createNotificationHouseholdPurgeApplication } from "./application/notificationHouseholdPurgeApplication";
+
 export type {
   EndpointFact,
   HouseholdNotificationRequestedInput,

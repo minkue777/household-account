@@ -144,11 +144,12 @@ export function createDividendScheduledPages(input: {
   });
 
   return {
-    async nextPage(rawCheckpoint) {
+    async nextPage(rawCheckpoint, skipTarget) {
       if (rawCheckpoint === COMPLETE) return undefined;
       const current = parseCheckpoint(rawCheckpoint);
       if (current.phase === DISCOVERY) {
         const result = await application.runDiscoveryPage({
+          skipTarget,
           ...(current.cursor === undefined ? {} : { cursor: current.cursor }),
           limit: input.pageSize,
           concurrency: 2,
@@ -168,6 +169,7 @@ export function createDividendScheduledPages(input: {
       }
 
       const result = await application.runLifecyclePage({
+        skipTarget,
         ...(current.cursor === undefined ? {} : { cursor: current.cursor }),
         limit: input.pageSize,
         executionKey: input.executionKey,
@@ -182,6 +184,10 @@ export function createDividendScheduledPages(input: {
         };
       }
       try {
+        if (skipTarget?.("dividend:annual-projections")) return {
+          checkpointBefore: rawCheckpoint, checkpointAfter: COMPLETE, terminal: true,
+          targets: result.items.map(outcome),
+        };
         const projection = await events.rebuildAllAnnualProjections({
           sourceCheckpoint: input.executionKey,
           observedAt: input.observedAt,

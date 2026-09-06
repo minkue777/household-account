@@ -16,6 +16,16 @@ import { loadScheduledJobDefinitions } from "../../../operations/scheduling/sche
 import { seoulCalendarDate } from "../../../platform/usage-observability/public";
 
 const OPERATIONS_DOCUMENT = "runtime";
+// Runtime provider-operation routes supported by the Portfolio and Dividend adapters.
+export const EXPECTED_PROVIDER_OPERATIONS = [
+  { provider: "naver-domestic", operation: "market-quote" },
+  { provider: "nasdaq-us", operation: "market-quote" },
+  { provider: "frankfurter-v2", operation: "exchange-rate" },
+  { provider: "upbit", operation: "market-quote" },
+  { provider: "miraeasset-fund-nav", operation: "fund-nav" },
+  { provider: "naver-krx-gold-market", operation: "market-quote" },
+  { provider: "KIND", operation: "dividend-disclosure" },
+] as const;
 const VALID_JOB_STATUS = new Set([
   "EXPECTED",
   "RUNNING",
@@ -309,7 +319,7 @@ export class FirebaseAdminDashboardReader {
       });
     households.sort((left, right) =>
       left.lifecycleState.localeCompare(right.lifecycleState) ||
-      left.createdAt.localeCompare(right.createdAt) ||
+      right.createdAt.localeCompare(left.createdAt) ||
       left.name.localeCompare(right.name, "ko"),
     );
 
@@ -393,6 +403,11 @@ export class FirebaseAdminDashboardReader {
           alertState: data.alertState === "open" ? "open" : "closed",
         }];
       });
+    for (const expected of EXPECTED_PROVIDER_OPERATIONS) {
+      if (!providerHealth.some(row => row.provider === expected.provider && row.operation === expected.operation)) {
+        providerHealth.push({ ...expected, status: "unknown", consecutiveFailedRuns: 0, lastResultKind: "NOT_OBSERVED", alertState: "closed" });
+      }
+    }
     providerHealth.sort((left, right) =>
       left.status.localeCompare(right.status) ||
       left.provider.localeCompare(right.provider),
@@ -440,12 +455,12 @@ export class FirebaseAdminDashboardReader {
     );
     const providerOutage = providerHealth.some(({ status }) => status === "outage");
     const providerDegraded = providerHealth.some(
-      ({ status }) => status === "degraded",
+      ({ status }) => status === "degraded" || status === "unknown",
     );
     const health: AdminDashboardHealth =
       incidents.length > 0 || providerOutage
         ? "critical"
-        : failedJob || unknownJob || providerDegraded
+        : failedJob || unknownJob || providerDegraded || providerHealth.length === 0
           ? "degraded"
           : "healthy";
 

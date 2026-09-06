@@ -1,6 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { renderToString } from 'react-dom/server.node';
+
+// jsdom의 browser 조건 대신 Node renderer를 사용하되 공개 server API 타입을 유지합니다.
+const { renderToString } = jest.requireActual<typeof import('react-dom/server')>(
+  'react-dom/server.node'
+);
 
 import AssetEditModal from '@/components/assets/AssetEditModal';
 import { ASSET_TYPE_CONFIG, type Asset } from '@/types/asset';

@@ -25,6 +25,7 @@ export default function CategorySettings() {
   } = useCategoryContext();
 
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingVersion, setEditingVersion] = useState(1);
   const [showAddForm, setShowAddForm] = useState(false);
   const [pendingDeleteCategory, setPendingDeleteCategory] = useState<CategoryDocument | null>(null);
 
@@ -99,6 +100,7 @@ export default function CategorySettings() {
   const handleStartEdit = (category: CategoryDocument) => {
     if (mutationInFlightRef.current) return;
     setEditingId(category.id);
+    setEditingVersion(category.aggregateVersion ?? 1);
     setEditLabel(category.label);
     setEditColor(category.color);
     setEditBudget(category.budget?.toString() || '');
@@ -116,7 +118,7 @@ export default function CategorySettings() {
         label,
         color: editColor,
         budget,
-      }),
+      }, editingVersion),
       '카테고리를 수정하지 못했습니다. 다시 시도해 주세요.'
     );
     if (!completed) return;
@@ -138,7 +140,7 @@ export default function CategorySettings() {
 
     const completed = await runMutation(
       'delete',
-      () => deleteCategory(category.id),
+      () => deleteCategory(category.id, category.aggregateVersion ?? 1),
       '카테고리를 삭제하지 못했습니다. 다시 시도해 주세요.'
     );
     if (!completed) return;
@@ -152,7 +154,7 @@ export default function CategorySettings() {
       'default',
       async () => {
         if (!household?.id) throw new Error('인증된 가구 세션이 필요합니다.');
-        await setDefaultCategoryKey(household.id, categoryKey);
+        await setDefaultCategoryKey(household.id, categoryKey, household.categoryCatalogVersion ?? 0);
       },
       '기본 카테고리를 변경하지 못했습니다. 다시 시도해 주세요.'
     );
@@ -207,7 +209,7 @@ export default function CategorySettings() {
     try {
       await runMutation(
         'reorder',
-        () => reorderCategories(reordered),
+        () => reorderCategories(reordered, household?.categoryCatalogVersion ?? 0),
         '카테고리 순서를 변경하지 못했습니다. 다시 시도해 주세요.'
       );
     } finally {

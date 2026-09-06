@@ -8,6 +8,21 @@ export interface HouseholdNotificationRequestedEvent {
   requesterMemberId: string;
 }
 
+export interface CapturedTransactionNotificationEvent {
+  eventId: string;
+  eventType: "TransactionRecorded.v1" | "CaptureDuplicateObserved.v1";
+  producer: "payment-capture.shortcut-ingestion" | "household-finance.ledger";
+  occurredAt: string;
+  householdId: string;
+  transactionId: string;
+  creatorMemberId?: string;
+  originChannel: string;
+}
+
+export type NotificationAssuranceEvent =
+  | HouseholdNotificationRequestedEvent
+  | CapturedTransactionNotificationEvent;
+
 export type AcceptNotificationIntentResult =
   | { kind: "Queued"; intentId: string; deliveryIds: readonly string[] }
   | {
@@ -20,7 +35,8 @@ export type AcceptNotificationIntentResult =
       kind: "RetryableFailure";
       code: "MEMBERSHIP_LOOKUP_UNAVAILABLE";
     }
-  | { kind: "ExpiredEvent" };
+  | { kind: "ExpiredEvent" }
+  | { kind: "ContractFailure"; code: "CREATOR_MEMBER_REQUIRED" | "UNKNOWN_ORIGIN_CHANNEL" | "REQUESTER_MEMBER_REQUIRED" };
 
 export type DeliverNotificationResult =
   | { kind: "Delivered" }
@@ -32,7 +48,7 @@ export type DeliverNotificationResult =
         | "PROVIDER_NETWORK_ERROR"
         | "MEMBERSHIP_CHECK_UNAVAILABLE";
     }
-  | { kind: "UnknownProviderOutcome"; code: "PROVIDER_TIMEOUT" }
+  | { kind: "UnknownProviderOutcome"; code: "PROVIDER_TIMEOUT" | "WORKER_INTERRUPTED_AFTER_PROVIDER_CALL" }
   | { kind: "PermanentFailure"; code: "FID_UNREGISTERED" }
   | {
       kind: "ContractFailure";
@@ -96,7 +112,7 @@ export interface NotificationInboxStatusView {
 
 export interface DeliveryAssuranceInputPort {
   accept(
-    event: HouseholdNotificationRequestedEvent,
+    event: NotificationAssuranceEvent,
   ): Promise<AcceptNotificationIntentResult>;
   deliver(deliveryId: string): Promise<DeliverNotificationResult>;
   completeIntent(intentId: string): Promise<void>;

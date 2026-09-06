@@ -9,6 +9,7 @@ import {
   type ActivePortfolioHouseholdPage,
 } from "../../adapters/firebase/portfolio/firebaseAssetSnapshotProjection";
 import { FirebasePortfolioMarketData } from "../../adapters/firebase/portfolio/firebasePortfolioMarketData";
+import { FirebasePortfolioQuoteObservations } from "../../adapters/firebase/portfolio/firebasePortfolioQuoteObservations";
 import { FirebasePortfolioProviderHealthStore } from "../../adapters/firebase/portfolio/firebasePortfolioProviderHealthStore";
 import { FirebasePortfolioRuntimeStore } from "../../adapters/firebase/portfolio/firebasePortfolioRuntimeStore";
 import {
@@ -130,6 +131,11 @@ function refreshOutcome(
   const refreshed = numericResultValue(result, "refreshedCount");
   const retained = numericResultValue(result, "retainedLastSuccessCount");
   const targets = numericResultValue(result, "targetCount");
+  const failed = numericResultValue(result, "failedCount");
+  if (failed > 0) return {
+    targetId: targetId("refresh", householdId),
+    outcome: { kind: "FAILED", code: refreshed + retained > 0 ? "PARTIAL_QUOTE_FAILURE" : "ALL_QUOTES_FAILED", retryable: true },
+  };
   return {
     targetId: targetId("refresh", householdId),
     outcome:
@@ -175,7 +181,7 @@ export function createAssetValuationScheduledPages(
     overrides.refresh ??
     createPortfolioRuntimeApplication({
       store: portfolioStore,
-      marketQuotes: new FirebasePortfolioMarketData(),
+      marketQuotes: new FirebasePortfolioMarketData(undefined, new FirebasePortfolioQuoteObservations(input.database)),
       providerHealth: new FirebasePortfolioProviderHealthStore(input.database),
     });
   const snapshots =
@@ -185,8 +191,10 @@ export function createAssetValuationScheduledPages(
       store: new FirebaseAssetSnapshotProjectionStore(input.database),
     });
 
+  const failedHouseholds = new Set<string>();
+
   return {
-    async nextPage(rawCheckpoint) {
+    async nextPage(rawCheckpoint, skipTarget) {
       if (rawCheckpoint === COMPLETE) return undefined;
       const current = parseCheckpoint(rawCheckpoint);
       const household = await households.next(current.cursor);
@@ -222,6 +230,12 @@ export function createAssetValuationScheduledPages(
       }
 
       const checkpointAfter = checkpoint(current.phase, household.householdId);
+      const phase = current.phase === REFRESH_PHASE ? "refresh" : "snapshot";
+      if (skipTarget?.(targetId(phase, household.householdId))) return {
+        ...(rawCheckpoint === undefined ? {} : { checkpointBefore: rawCheckpoint }),
+        checkpointAfter,
+        targets: [],
+      };
       if (!household.active) {
         return {
           ...(rawCheckpoint === undefined
@@ -246,15 +260,22 @@ export function createAssetValuationScheduledPages(
           }),
           assetClass: "all",
         });
+        const outcome = refreshOutcome(household.householdId, result);
+        if (outcome.outcome.kind === "FAILED") failedHouseholds.add(household.householdId);
+        else failedHouseholds.delete(household.householdId);
         return {
           ...(rawCheckpoint === undefined
             ? {}
             : { checkpointBefore: rawCheckpoint }),
           checkpointAfter,
-          targets: [refreshOutcome(household.householdId, result)],
+          targets: [outcome],
         };
       }
 
+      if (failedHouseholds.has(household.householdId)) return {
+        ...(rawCheckpoint === undefined ? {} : { checkpointBefore: rawCheckpoint }), checkpointAfter,
+        targets: [{ targetId: targetId("snapshot", household.householdId), outcome: { kind: "FAILED", code: "VALUATION_REFRESH_INCOMPLETE", retryable: true } }],
+      };
       const result = await snapshots.project({
         householdId: household.householdId,
         localDate: input.asOfDate,

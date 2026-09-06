@@ -148,8 +148,9 @@ class NativeAuthCoordinator(
 
     suspend fun signOut(): NativeAuthResult {
         val context = activity.applicationContext
-        val householdId = HouseholdPreferences.getHouseholdKey(context)
-        val memberId = HouseholdPreferences.getMemberId(context)
+        val session = HouseholdPreferences.snapshot(context)
+        val householdId = session?.householdId.orEmpty()
+        val memberId = session?.memberId.orEmpty()
         // 원격 endpoint 삭제가 실패해도 FcmService component를 먼저 끄고 로컬
         // unregister를 별도로 시도하여 로그아웃 설치의 OS 자동 표시 경로를 닫습니다.
         try {
@@ -165,14 +166,16 @@ class NativeAuthCoordinator(
         }
 
         try {
-            AndroidCaptureDelivery.purgeForSessionTransition(context)
-        } finally {
             HouseholdPreferences.clearHouseholdKey(context)
-            bootstrappedMembership = null
-            firebaseAuth.signOut()
-            runCatching {
-                credentialManager.clearCredentialState(ClearCredentialStateRequest())
-            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            return NativeAuthResult.Rejected("SESSION_PURGE_FAILED")
+        }
+        bootstrappedMembership = null
+        firebaseAuth.signOut()
+        runCatching {
+            credentialManager.clearCredentialState(ClearCredentialStateRequest())
         }
         return NativeAuthResult.SignedOut
     }

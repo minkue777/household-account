@@ -1,5 +1,5 @@
 import type * as firestore from "firebase-admin/firestore";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FirebasePortfolioRuntimeStore } from "../../../src/adapters/firebase/portfolio/firebasePortfolioRuntimeStore";
 import { createPortfolioRuntimeApplication } from "../../../src/contexts/portfolio/core/application/portfolioRuntimeApplication";
@@ -93,6 +93,84 @@ async function createStockAsset(
 }
 
 describe("Firebase portfolio runtime store", () => {
+  afterEach(() => vi.restoreAllMocks());
+  it("rejects the whole valuation intent if an Asset changes while quotes are fetched", async () => {
+    const memory = new InMemoryFirestore();
+    const assetId = await createStockAsset(memory);
+    const path = `households/house-1/assets/${assetId}`;
+    memory.seed(`${path}/positions/position`, { householdId: "house-1", assetId, positionKind: "stock", instrumentType: "stock", market: "KRX", instrumentCode: "005930", instrumentName: "삼성", quantity: 1, averagePriceInWon: 100, priceScale: 1, lifecycleState: "active", aggregateVersion: 1 });
+    const quotes = new FixedMarketQuotes(() => {
+      memory.seed(path, { ...memory.document(path), aggregateVersion: 2, memo: "concurrent" });
+      return { kind: "success", quote: { priceInWon: 1000, provider: "test", observedAt: "2026-07-21T00:00:00Z" } };
+    });
+    await expect(application(memory, quotes).refreshMarketValues({ metadata: command(2, "portfolio.refresh-market-values.v1"), assetClass: "all" })).resolves.toEqual({ kind: "error", code: "VALUATION_VERSION_MISMATCH", retryable: true });
+    expect(memory.document(`${path}/positions/position`)).not.toHaveProperty("lastQuote");
+    expect(memory.document(path)).toMatchObject({ aggregateVersion: 2, currentBalance: 0, memo: "concurrent" });
+  });
+
+  it("records an included activation month once with zero balance delta", async () => {
+    const memory = new InMemoryFirestore();
+    const runtime = application(memory);
+    const result = await runtime.createAsset({ metadata: command(1, "portfolio.create-asset.v1"), asset: { name: "적금", type: "savings", subType: "installment", ownerRef: { kind: "household" }, currency: "KRW", currentBalance: 100000, order: 0, memo: "", isActive: true, recurringContributionAmount: 10000, recurringContributionDay: 10 } });
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") throw new Error(result.code);
+    const assetId = String(result.value.assetId);
+    const executions = memory.paths("households/house-1/assetAutomationExecutions/").map(path => memory.document(path));
+    expect(executions).toEqual([expect.objectContaining({ assetId, targetMonth: "2026-07", appliedAmountInWon: 0, balanceDeltaInWon: 0, status: "included", reason: "included-in-current-balance" })]);
+    expect(memory.document(`households/house-1/assets/${assetId}`)).toMatchObject({ currentBalance: 100000 });
+  });
+
+  it("keeps overdue automation runnable through the original stop instant", async () => {
+    const memory = new InMemoryFirestore();
+    const runtime = application(memory);
+    const created = await runtime.createAsset({ metadata: { ...command(1, "portfolio.create-asset.v1"), occurredAt: "2026-07-01T00:00:00Z" }, asset: { name: "적금", type: "savings", subType: "installment", ownerRef: { kind: "household" }, currency: "KRW", currentBalance: 100000, order: 0, memo: "", isActive: true, recurringContributionAmount: 10000, recurringContributionDay: 10 } });
+    if (created.kind !== "success") throw new Error(created.code);
+    const assetId = String(created.value.assetId);
+    await runtime.updateAsset({ metadata: command(2, "portfolio.update-asset.v1"), assetId, expectedVersion: 1, changes: { recurringContributionAmount: 0, recurringContributionDay: 0 } });
+    expect(memory.document(`households/house-1/assetAutomationPlans/${assetId}_savings-contribution`)).toMatchObject({ status: "recovering-before-stop", stopEffectiveAt: command(2, "x").occurredAt, statusAfterRecovery: "suspended", nextDueDate: "2026-07-10", amountInWon: 10000 });
+  });
+
+  it("reports an unresolved market failure when a target has never had a successful quote", async () => {
+    const memory = new InMemoryFirestore();
+    const assetId = await createStockAsset(memory);
+    memory.seed(`households/house-1/assets/${assetId}/positions/unpriced`, {
+      householdId: "house-1", assetId, positionKind: "stock", instrumentType: "stock", market: "KRX",
+      instrumentCode: "005930", instrumentName: "Samsung", quantity: 1, averagePrice: 0, priceScale: 1,
+      lifecycleState: "active", aggregateVersion: 1, updatedAt: "2026-07-21T00:00:00Z",
+    });
+    const quotes = new FixedMarketQuotes(() => ({ kind: "failure", code: "INVALID_PROVIDER_DATA", retryable: false }));
+    await expect(application(memory, quotes).refreshMarketValues({ metadata: command(2, "portfolio.refresh-market-values.v1"), assetClass: "all" })).resolves.toMatchObject({ kind: "success", value: { refreshedCount: 0, targetCount: 1, retainedLastSuccessCount: 0, failedCount: 1 } });
+    expect(memory.document(`households/house-1/assets/${assetId}/positions/unpriced`)).not.toHaveProperty("lastQuote");
+    const recoveredQuotes = new FixedMarketQuotes(() => ({ kind: "success", quote: { priceInWon: 1000, provider: "recovered", observedAt: "2026-07-21T03:00:00Z" } }));
+    await expect(application(memory, recoveredQuotes).refreshMarketValues({ metadata: command(2, "portfolio.refresh-market-values.v1"), assetClass: "all" })).resolves.toMatchObject({ kind: "success", value: { refreshedCount: 1, targetCount: 1, failedCount: 0 } });
+    expect(memory.document(`households/house-1/assets/${assetId}/positions/unpriced`)).toMatchObject({ lastQuote: { priceInWon: 1000 } });
+    await application(memory, recoveredQuotes).refreshMarketValues({ metadata: command(2, "portfolio.refresh-market-values.v1"), assetClass: "all" });
+    expect(recoveredQuotes.calls.get("005930")).toBe(1);
+  });
+
+  it("retries only the unresolved target of a partially committed refresh", async () => {
+    const memory = new InMemoryFirestore();
+    const assetId = await createStockAsset(memory);
+    for (const instrumentCode of ["005930", "000660"]) memory.seed(`households/house-1/assets/${assetId}/positions/${instrumentCode}`, {
+      householdId: "house-1", assetId, positionKind: "stock", instrumentType: "stock", market: "KRX",
+      instrumentCode, instrumentName: instrumentCode, quantity: 1, averagePrice: 0, priceScale: 1,
+      lifecycleState: "active", aggregateVersion: 1, updatedAt: "2026-07-21T00:00:00Z",
+    });
+    let recovered = false;
+    const quotes = new FixedMarketQuotes(target => target.instrumentCode === "000660" && !recovered
+      ? { kind: "failure", code: "INVALID_PROVIDER_DATA", retryable: false }
+      : { kind: "success", quote: { priceInWon: 1000, provider: "test-provider", observedAt: "2026-07-21T03:00:00Z" } });
+    const request = { metadata: command(2, "portfolio.refresh-market-values.v1"), assetClass: "all" as const };
+    await expect(application(memory, quotes).refreshMarketValues(request)).resolves.toMatchObject({ kind: "success", value: { refreshedCount: 1, failedCount: 1, failedTargets: [{ code: "INVALID_PROVIDER_DATA", assetId }], retryCommandId: request.metadata.commandId } });
+    recovered = true;
+    await expect(application(memory, quotes).refreshMarketValues(request)).resolves.toMatchObject({ kind: "success", value: { refreshedCount: 1, failedCount: 0 } });
+    expect(quotes.calls.get("005930")).toBe(1);
+    expect(quotes.calls.get("000660")).toBe(2);
+    expect(memory.document(`households/house-1/assets/${assetId}`)?.currentBalance).toBe(2000);
+    await application(memory, quotes).refreshMarketValues(request);
+    expect(quotes.calls.get("000660")).toBe(2);
+  });
+
   it("advances the aggregate version for every accepted asset update command", async () => {
     const memory = new InMemoryFirestore();
     const runtime = application(memory);
@@ -160,14 +238,14 @@ describe("Firebase portfolio runtime store", () => {
       ),
     ).resolves.toEqual({ kind: "acquired" });
 
-    expect(memory.paths("households/house-1/operationLocks/")).toHaveLength(3);
+    expect(memory.paths("households/house-1/operationLocks/").filter(path => !path.includes("cooldown"))).toHaveLength(3);
     await store.releaseRefreshLease(first, "asset:asset-1");
     await store.releaseRefreshLease(competing, "asset:asset-2");
     await store.releaseRefreshLease(
       { ...competing, commandId: "command-household" },
       "household",
     );
-    expect(memory.paths("households/house-1/operationLocks/")).toHaveLength(0);
+    expect(memory.paths("households/house-1/operationLocks/").filter(path => !path.includes("cooldown"))).toHaveLength(0);
   });
 
   it("treats an overlapping market refresh as a successful no-op without reading state or calling providers", async () => {
@@ -203,14 +281,15 @@ describe("Firebase portfolio runtime store", () => {
         refreshedCount: 0,
         targetCount: 0,
         retainedLastSuccessCount: 0,
+        failedCount: 0,
         skippedReason: "MARKET_REFRESH_IN_PROGRESS",
       },
     });
 
     expect(quotes.calls.size).toBe(0);
-    expect(memory.paths("households/house-1/operationLocks/")).toHaveLength(1);
+    expect(memory.paths("households/house-1/operationLocks/").filter(path => !path.includes("cooldown"))).toHaveLength(1);
     await store.releaseRefreshLease(running, "household");
-    expect(memory.paths("households/house-1/operationLocks/")).toHaveLength(0);
+    expect(memory.paths("households/house-1/operationLocks/").filter(path => !path.includes("cooldown"))).toHaveLength(0);
   });
 
   it("creates canonical and legacy assets, owner references, plans, receipts and outbox atomically", async () => {
@@ -748,6 +827,7 @@ describe("Firebase portfolio runtime store", () => {
         refreshedCount: 1,
         targetCount: 2,
         retainedLastSuccessCount: 1,
+        failedCount: 0,
       },
     });
     expect(quotes.calls.get("US:AAPL")).toBe(3);
@@ -769,6 +849,7 @@ describe("Firebase portfolio runtime store", () => {
       memory.has("households/house-1/operationLocks/market-refresh"),
     ).toBe(false);
 
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 31_000);
     const allUnavailable = new FixedMarketQuotes(() => ({
       kind: "failure",
       code: "MARKET_UNAVAILABLE",
@@ -785,6 +866,7 @@ describe("Firebase portfolio runtime store", () => {
         refreshedCount: 0,
         targetCount: 2,
         retainedLastSuccessCount: 2,
+        failedCount: 0,
       },
     });
     expect(memory.document(`stock_holdings/${firstId}`)).toMatchObject({
@@ -860,6 +942,7 @@ describe("Firebase portfolio runtime store", () => {
         refreshedCount: 1,
         targetCount: 1,
         retainedLastSuccessCount: 0,
+        failedCount: 0,
       },
     });
 
@@ -877,7 +960,7 @@ describe("Firebase portfolio runtime store", () => {
       expectedData: true,
       finalResult: { kind: "SUCCESS" },
     });
-    expect(memory.paths("households/house-1/operationLocks/")).toHaveLength(0);
+    expect(memory.paths("households/house-1/operationLocks/").filter(path => !path.includes("cooldown"))).toHaveLength(0);
 
     const routedMarkets: PortfolioMarketTarget["market"][] = [];
     const marketAwareQuotes: PortfolioMarketQuotePort = {
@@ -904,6 +987,7 @@ describe("Firebase portfolio runtime store", () => {
         refreshedCount: 2,
         targetCount: 2,
         retainedLastSuccessCount: 0,
+        failedCount: 0,
       },
     });
     expect(routedMarkets.sort()).toEqual(["KRX", "US"]);

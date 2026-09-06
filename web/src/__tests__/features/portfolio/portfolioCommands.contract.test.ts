@@ -24,7 +24,7 @@ describe('portfolio command contract', () => {
         quantity: 2,
         avgPrice: 100_000,
         currentPrice: 140_000,
-      }),
+      }, undefined, 6),
     ).resolves.toBe('position-1');
 
     expect(execute).toHaveBeenCalledWith(
@@ -32,6 +32,7 @@ describe('portfolio command contract', () => {
       {
         assetId: 'asset-1',
         positionKind: 'stock',
+        expectedAssetVersion: 6,
         position: expect.objectContaining({
           stockCode: 'US:AAPL',
           market: 'US',
@@ -55,7 +56,7 @@ describe('portfolio command contract', () => {
         market: 'KRX',
         quantity: 1,
       },
-      'command-1'
+      'command-1', 6
     );
 
     expect(execute).toHaveBeenCalledWith(
@@ -81,14 +82,14 @@ describe('portfolio command contract', () => {
       'position-1',
       'asset-1',
       { quantity: 2 },
-      4
+      4, 6
     );
     await portfolioCommands.deletePosition(
       'house-1',
       'stock',
       'position-1',
       'asset-1',
-      5
+      5, 7
     );
 
     expect(execute).toHaveBeenNthCalledWith(
@@ -112,6 +113,7 @@ describe('portfolio command contract', () => {
         positionKind: 'stock',
         changes: { quantity: 2 },
         expectedVersion: 4,
+        expectedAssetVersion: 6,
       },
       { householdId: 'house-1' }
     );
@@ -123,6 +125,7 @@ describe('portfolio command contract', () => {
         positionId: 'position-1',
         positionKind: 'stock',
         expectedVersion: 5,
+        expectedAssetVersion: 7,
       },
       { householdId: 'house-1' }
     );
@@ -143,7 +146,7 @@ describe('portfolio command contract', () => {
         avgPrice: undefined,
         currentPrice: 1_500_000,
       },
-      3
+      3, 6
     );
 
     expect(execute).toHaveBeenCalledWith(
@@ -158,6 +161,7 @@ describe('portfolio command contract', () => {
           currentPrice: 1_500_000,
         },
         expectedVersion: 3,
+        expectedAssetVersion: 6,
       },
       { householdId: 'house-1' }
     );

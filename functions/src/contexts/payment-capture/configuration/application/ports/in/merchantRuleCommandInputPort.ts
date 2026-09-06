@@ -15,6 +15,7 @@ export type {
 } from "../../../domain/model/merchantRuleSet";
 
 export type MerchantRuleCommandResult =
+  | { readonly kind: "CategoryReferencesRemapped"; readonly changedCount: number; readonly nextCursor: string | null }
   | {
       readonly kind: "Created" | "Updated";
       readonly rule: MerchantRuleRecord;

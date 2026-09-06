@@ -31,7 +31,7 @@ function mapTransaction(
     data === undefined ||
     typeof data.householdId !== "string" ||
     (typeof data.amountInWon !== "number" && typeof data.amount !== "number") ||
-    data.lifecycleState === "deleted"
+    data.lifecycleState === "deleted" || data.deletedAt !== undefined
   ) {
     return undefined;
   }
@@ -64,7 +64,12 @@ function mapTransaction(
     categoryId: String(data.categoryId ?? data.category ?? "etc"),
     memo: String(data.memo ?? ""),
     cardType: String(data.cardType ?? "manual"),
-    cardDisplay: String(data.cardDisplay ?? "수동"),
+    cardDisplay: String(data.cardDisplay ?? data.cardLastFour ?? "수동"),
+    ...(typeof (data.cardEvidence ?? data.cardDisplay ?? data.cardLastFour) === "string"
+      ? { cardEvidence: String(data.cardEvidence ?? data.cardDisplay ?? data.cardLastFour) } : {}),
+    ...(typeof (data.captureLineageId ?? data.sourceFingerprint) === "string"
+      ? { captureLineageId: String(data.captureLineageId ?? data.sourceFingerprint) } : {}),
+    ...(typeof (data.localTime ?? data.time) === "string" ? { localTime: String(data.localTime ?? data.time) } : {}),
     creatorMemberId: String(data.creatorMemberId ?? data.createdBy ?? ""),
     source: String(data.source ?? "manual"),
     originChannel: String(data.originChannel ?? "web"),
@@ -89,6 +94,9 @@ function documentData(transaction: SplitTransaction, isNew: boolean) {
     memo: transaction.memo,
     cardType: transaction.cardType,
     cardDisplay: transaction.cardDisplay,
+    ...(transaction.cardEvidence === undefined ? {} : { cardEvidence: transaction.cardEvidence }),
+    ...(transaction.captureLineageId === undefined ? {} : { captureLineageId: transaction.captureLineageId }),
+    ...(transaction.localTime === undefined ? {} : { localTime: transaction.localTime, time: transaction.localTime }),
     creatorMemberId: transaction.creatorMemberId,
     source: transaction.source,
     originChannel: transaction.originChannel,
@@ -348,7 +356,12 @@ export class FirebaseMonthlySplitLifecycleStore
             occurredAt: this.occurredAt,
             correlationId: input.operationKey,
             causationId: input.operationKey,
-            payload: { transactionId: value.transactionId },
+            payload: {
+              transactionId: value.transactionId,
+              // A derived monthly row is not a new captured payment.
+              originChannel: "system",
+              creatorMemberId: value.creatorMemberId,
+            },
           });
         }
         transaction.create(receiptReference, {

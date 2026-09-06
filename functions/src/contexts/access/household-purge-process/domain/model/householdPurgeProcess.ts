@@ -48,6 +48,9 @@ export interface HouseholdPurgeProcessRecord {
   readonly claimPageSize: number;
   readonly claimSnapshotCheckpoint: string;
   readonly claimSnapshotEntries: readonly HouseholdPurgeClaimSnapshotEntry[];
+  /** Durable adapters may load only the current page; absent fields retain in-memory whole-state compatibility. */
+  readonly claimSnapshotEntryCount?: number;
+  readonly claimSnapshotPageOffset?: number;
   readonly participants: Readonly<
     Record<HouseholdPurgeParticipant, HouseholdPurgeParticipantProgress>
   >;
@@ -55,6 +58,7 @@ export interface HouseholdPurgeProcessRecord {
   readonly releasedClaimCount: number;
   readonly absentClaimCount: number;
   readonly claimConflicts: readonly HouseholdPurgeClaimConflict[];
+  readonly claimConflictCount?: number;
 }
 
 export interface HouseholdPurgeRequestReceipt {

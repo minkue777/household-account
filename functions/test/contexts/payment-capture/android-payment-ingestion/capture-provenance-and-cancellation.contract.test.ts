@@ -7,6 +7,7 @@ interface CaptureProvenance {
   source: { sourceType: string; registryVersion: string };
   parser: { parserId: string; parserVersion: string };
   originalAmountInWon: number;
+  approvalAmountInWon?: number;
   originalMerchantEvidence: string;
   originalCardEvidence: { companyLabel: string; maskedToken?: string };
   originalOccurredLocalDate: string;
@@ -154,6 +155,19 @@ function cancellationEvidence(source = provenance()): CancellationEvidence {
 }
 
 describe("불변 capture provenance·lineage 취소 공개 계약", () => {
+  it("[PARSE-TOSS-001][CAN-003][T-CAN-LINEAGE-001] 순지출과 승인 총액을 분리하고 순액 취소를 연결하지 않는다", () => {
+    const subject = createSubject();
+    const source = provenance({ originalAmountInWon: 9_500, approvalAmountInWon: 10_000 });
+    expect(subject.captureApproval({ transactionId: "cashback", actor: { householdId: "household-a", memberId: "member-a", capability: "paymentCapture:submit" }, provenance: source })).toMatchObject({ kind: "Created" });
+    const before = subject.state();
+    expect(before.transactions[0].displayed.amountInWon).toBe(9_500);
+    const actor = { householdId: "household-a", memberId: "member-a" };
+    expect(subject.cancel({ actor, evidence: cancellationEvidence(source) })).toEqual({ kind: "NotFound" });
+    expect(subject.state()).toEqual(before);
+    expect(subject.cancel({ actor, evidence: { ...cancellationEvidence(source), amountInWon: 10_000 } })).toMatchObject({ kind: "Cancelled", deletedTransactionIds: ["cashback"] });
+    expect(subject.state().transactions).toEqual([]);
+  });
+
   it("[T-ING-PROV-001][ING-SAVE-006][ING-SAVE-007] creator와 전체 provenance를 거래와 원자 저장하며 원문은 저장하지 않는다", () => {
     const subject = createSubject();
     const source = provenance();

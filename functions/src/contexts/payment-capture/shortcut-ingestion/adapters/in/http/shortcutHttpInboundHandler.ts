@@ -1,6 +1,6 @@
 import type { ShortcutValueNormalizerInputPort } from "../../../application/ports/in/shortcutValueNormalizerInputPort";
 import type { ShortcutHttpRequestProcessorInputPort } from "../../../application/ports/in/shortcutHttpRequestProcessorInputPort";
-import type { ShortcutHttpRequestProcessingResult } from "../../../domain/model/shortcutHttpInbound";
+import type { ShortcutHttpRequestProcessingResult, ShortcutHttpProcessingErrorCode } from "../../../domain/model/shortcutHttpInbound";
 import type { ShortcutHttpIngressGatePort } from "../../../application/ports/out/shortcutHttpInboundPorts";
 
 export type { ShortcutHttpIngressGatePort } from "../../../application/ports/out/shortcutHttpInboundPorts";
@@ -26,6 +26,7 @@ export interface ShortcutHttpInboundRequest {
 }
 
 export type ShortcutHttpInboundErrorCode =
+  | ShortcutHttpProcessingErrorCode
   | "INVALID_CONTRACT"
   | "REQUIRED_FIELD"
   | "UNSUPPORTED_CONTRACT_VERSION"

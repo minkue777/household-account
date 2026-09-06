@@ -170,7 +170,7 @@ function evidenceMatches(
     evidenceMerchant !== "" &&
     evidenceMerchant ===
       normalizeCancellationMerchant(provenance.originalMerchantEvidence) &&
-    evidence.amountInWon === provenance.originalAmountInWon &&
+    evidence.amountInWon === (provenance.approvalAmountInWon ?? provenance.originalAmountInWon) &&
     evidenceCompany !== "" &&
     evidenceCompany ===
       normalizeCardCompany(provenance.originalCardEvidence.companyLabel) &&

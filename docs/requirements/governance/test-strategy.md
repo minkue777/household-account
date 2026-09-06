@@ -20,7 +20,7 @@
 - 소비자 테스트는 제공자의 Domain 동작을 다시 구현하지 않고 공개 계약 fixture를 사용한다.
 - 의미가 같은 E2E·보안 시나리오가 여러 기능에 필요하면 Canonical 테스트 한 곳을 소유자로 두고 다른 문서는 링크한다.
 
-현재 고유 Canonical 테스트 ID는 업무 150개, 지원·플랫폼 51개, 공통 System 7개와 공통 보안 2개로 총 210개입니다.
+고유 Canonical 테스트 ID와 요구사항 수는 [자동 생성 카탈로그](../catalog-summary.md)를 단일 집계로 사용합니다. 구현된 테스트 실행 개수와 선언된 시나리오 ID 개수는 구분합니다.
 
 ## 2. 원칙
 
@@ -59,27 +59,11 @@
 
 ## 4. Context별 테스트 카탈로그
 
-### 4.1 업무 Context
+### 4.1 업무 Context 및 지원·플랫폼
 
-| Bounded Context | 요구사항 | Test ID 개수 | 테스트 소유 기능 문서 |
-|---|---:|---:|---|
-| [Access & Household](../contexts/access-household/requirements.md) | 17 | 13 | [가구와 접근](../contexts/access-household/modules/household-access/requirements.md#8-모듈-테스트-시나리오) |
-| [Household Finance](../contexts/household-finance/requirements.md) | 39 | 44 | [원장](../contexts/household-finance/modules/ledger/requirements.md#8-모듈-테스트-시나리오), [카테고리·예산](../contexts/household-finance/modules/categories-budget/requirements.md#8-모듈-테스트-시나리오), [정기 거래](../contexts/household-finance/modules/recurring-transactions/requirements.md#8-모듈-테스트-시나리오), [지역화폐](../contexts/household-finance/modules/local-currency/requirements.md#8-모듈-테스트-시나리오) |
-| [Payment Capture](../contexts/payment-capture/requirements.md) | 63 | 47 | [결제 설정](../contexts/payment-capture/modules/payment-configuration/requirements.md#8-모듈-테스트-시나리오), [Android 수집](../contexts/payment-capture/modules/android-payment-ingestion/requirements.md#9-모듈-테스트-시나리오), [Shortcut](../contexts/payment-capture/modules/shortcut-ingestion/requirements.md#9-모듈-테스트-시나리오) |
-| [Portfolio](../contexts/portfolio/requirements.md) | 38 | 35 | [포트폴리오](../contexts/portfolio/modules/portfolio/requirements.md#8-모듈-테스트-시나리오), [보유종목·시세](../contexts/portfolio/modules/holdings-market-data/requirements.md#8-모듈-테스트-시나리오), [자동화](../contexts/portfolio/modules/asset-automation/requirements.md#8-모듈-테스트-시나리오), [배당](../contexts/portfolio/modules/dividends/requirements.md#8-모듈-테스트-시나리오) |
-| [Notifications](../contexts/notifications/requirements.md) | 13 | 12 | [푸시 알림](../contexts/notifications/modules/notifications/requirements.md#9-모듈-테스트-시나리오) |
-| 합계 | 170 | 151 | 13개 기능 모듈 |
+[자동 생성 카탈로그](../catalog-summary.md)는 각 소유 모듈 문서의 요구사항과 Canonical Test ID를 집계합니다. 공통 System 테스트는 `system/design.md`, 공통 보안 테스트는 `cross-cutting/security-privacy.md`가 소유합니다. 상세 시나리오는 카탈로그에 연결된 각 모듈 문서를 사용합니다.
 
-모든 업무 Context 요구사항은 이름이 부여된 Canonical 테스트와 실제 계약 assertion 본문에 연결되어 있습니다. Architecture traceability gate가 이 연결을 양방향으로 검사합니다.
-
-### 4.2 지원·플랫폼과 Cross-cutting
-
-| 영역 | 요구사항 | Test ID 개수 | 테스트 소유 문서 |
-|---|---:|---:|---|
-| [지원·읽기·플랫폼](../supporting-platform/requirements.md) | 53 | 51 | [Android Host](../supporting-platform/modules/android-host/requirements.md#9-모듈-테스트-시나리오), [PWA](../supporting-platform/modules/pwa/requirements.md#9-모듈-테스트-시나리오), [Reporting](../supporting-platform/modules/reporting/requirements.md#8-모듈-테스트-시나리오), [Home](../supporting-platform/modules/home-preferences/requirements.md#8-모듈-테스트-시나리오), [Operations](../supporting-platform/modules/external-operations/requirements.md#8-모듈-테스트-시나리오), [Delivery Assurance](../supporting-platform/modules/delivery-assurance/requirements.md#8-모듈-테스트-시나리오) |
-| [공통 System](../system/context.md) | 9 | 7 | [공통 시스템 상세 설계](../system/design.md#11-테스트-설계) |
-| [공통 보안](../cross-cutting/security-privacy.md#7-보안-테스트-행렬) | SYS·보안 영향 요구사항 | 2 | T-SEC-001, T-SEC-002 |
-| 합계 | 62 + 공통 보안 | 60 |  |
+Architecture traceability gate가 소유권과 실제 계약 assertion의 연결을 양방향으로 검사합니다. 새 선언·이동 후 `node tools/requirements/update-catalog.mjs`로 집계를 갱신하고 `--check`로 검증합니다.
 
 ### 4.3 Canonical 소유권 확정
 
