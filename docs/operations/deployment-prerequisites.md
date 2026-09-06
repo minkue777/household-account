@@ -6,7 +6,8 @@
 
 ## Web·Android 배포 순서
 
-- Web은 `web/vercel.json`의 `git.deploymentEnabled=false`로 push 직후 자동 배포를 막습니다. 같은 HEAD의 `quality-gates.yml` 다섯 job 성공을 확인한 뒤 연결된 Vercel 프로젝트에 `vercel deploy --prod`로 배포합니다. [Vercel Git 설정](https://vercel.com/docs/project-configuration/git-configuration)을 따릅니다.
+- Web은 `web/vercel.json`의 `git.deploymentEnabled=false`로 push 직후 자동 배포를 막습니다. 같은 HEAD의 `quality-gates.yml` 다섯 job 성공을 확인한 뒤 연결된 Vercel 프로젝트에 배포합니다. [Vercel Git 설정](https://vercel.com/docs/project-configuration/git-configuration)을 따릅니다.
+- Vercel CLI는 `.gitignore`만으로 로컬 서명 파일이나 환경 파일의 업로드를 막지 못합니다. 루트 `.vercelignore`는 `web/`·`contracts/`만 허용하고 환경·서명·빌드 파일을 추가로 제외합니다. 실제 배포는 `git archive --format=zip --output=<저장소 밖 후보.zip> HEAD web contracts .vercelignore`로 **검증된 커밋의 추적 소스만** 별도 디렉터리에 풀고, 루트 `.vercel/project.json`의 기존 프로젝트 연결 정보만 복사한 뒤 후보 루트에서 `vercel deploy --prod`를 실행합니다. 프로젝트 Root Directory는 `web`을 유지합니다. 로컬 작업 디렉터리 전체를 복사하지 않습니다. [Vercel 업로드 제외 규칙](https://vercel.com/docs/deployments/vercel-ignore)을 따릅니다.
 - Android는 같은 CI 성공 확인 후 서명된 release APK를 GitHub Releases에 올립니다. 버전·서명·태그는 프로젝트의 `github-release-deploy` 스킬을 따릅니다.
 
 ## App Check

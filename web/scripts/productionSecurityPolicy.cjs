@@ -50,4 +50,19 @@ function validateSecurityHeaders(headers) {
     || !['no-referrer', 'strict-origin-when-cross-origin'].includes(values.get('referrer-policy'))
     || values.get('permissions-policy') !== 'camera=(), microphone=(), geolocation=()') throw new Error('INVALID_SECURITY_HEADERS');
 }
-module.exports = { inlineScriptHashes, securityHeaders, validateSecurityHeaders };
+
+function replaceSecurityHeaderRoutes(routes = [], headers) {
+  const securityHeaderNames = new Set(headers.map(header => header.key.toLowerCase()));
+  const preservedRoutes = routes.map(route => ({
+    ...route,
+    headers: route.headers.filter(header => !securityHeaderNames.has(header.key.toLowerCase())),
+  })).filter(route => route.headers.length > 0);
+  // Vercel rejects routes whose headers were emptied while replacing the policy.
+  return [...preservedRoutes, {
+    source: '/:path*',
+    regex: '^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))?/?$',
+    headers,
+  }];
+}
+
+module.exports = { inlineScriptHashes, securityHeaders, validateSecurityHeaders, replaceSecurityHeaderRoutes };

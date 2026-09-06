@@ -1,0 +1,26 @@
+# Only Web and shared contracts belong in this Vercel project.
+/*
+!/web
+!/contracts
+!/.vercelignore
+
+# Vercel CLI does not inherit all Git ignore rules.
+**/node_modules/**
+**/.next/**
+**/.vercel/**
+**/coverage/**
+**/playwright-report/**
+**/test-results/**
+**/.env*
+**/.secret*
+**/*.jks
+**/*.keystore
+**/keystore.properties
+**/*.apk
+**/*.aab
+**/*.log
+**/*.tsbuildinfo
+/web/quality-web.json
+/web/public/sw.js
+/web/public/workbox-*.js
+/web/public/worker-*.js

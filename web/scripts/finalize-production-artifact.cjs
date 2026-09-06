@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { inlineScriptHashes, securityHeaders } = require('./productionSecurityPolicy.cjs');
+const { inlineScriptHashes, securityHeaders, replaceSecurityHeaderRoutes } = require('./productionSecurityPolicy.cjs');
 
 function filesBelow(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
@@ -18,10 +18,7 @@ const headers = securityHeaders(hashes);
 if (headers[0].value.length > 14000) throw new Error('CSP_HEADER_TOO_LARGE');
 // Next's production router and Vercel's Next adapter consume this manifest after
 // the build command returns. Preserve static rendering and authorize exact bytes.
-manifest.headers = (manifest.headers || []).map(route => ({
-  ...route, headers: route.headers.filter(header => !headers.some(value => value.key.toLowerCase() === header.key.toLowerCase())),
-}));
-manifest.headers.push({ source: '/:path*', regex: '^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))?/?$', headers });
+manifest.headers = replaceSecurityHeaderRoutes(manifest.headers, headers);
 fs.writeFileSync(manifestPath, JSON.stringify(manifest));
 
 const worker = fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8');
