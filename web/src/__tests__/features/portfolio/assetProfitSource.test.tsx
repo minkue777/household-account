@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import AssetProfitChart from '@/components/assets/AssetProfitChart';
 import { readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
 import type { AssetHistoryEntry } from '@/types/asset';
-import { getTodayLocalDate } from '@/lib/utils/date';
+import { getTodayLocalDate, getSeoulCalendarParts, formatLocalDate } from '@/lib/utils/date';
 jest.mock('@/contexts/HouseholdContext', () => ({ useHousehold: () => ({ householdKey: 'home', isSessionVerified: true }) }));
 jest.mock('@/platform/reporting/assetStatisticsReadModel', () => ({ readAssetStatisticsHistory: jest.fn() }));
 jest.mock('react-chartjs-2', () => ({ Bar: ({ data }: { data: unknown }) => <output>{JSON.stringify(data)}</output> }));
@@ -40,4 +40,42 @@ it('preserves the observed change when today is the only snapshot and the live b
   fireEvent.click(await screen.findByRole('button', { name: '일별 자산 변동' }));
   expect(screen.getByText('+200원')).toBeInTheDocument();
   expect(screen.getByText('+25.00%')).toBeInTheDocument();
+});
+
+it('uses shared history for month, year and snapshot changes without another read or loading state', () => {
+  const { year, month } = getSeoulCalendarParts();
+  const previousMonth = formatLocalDate(new Date(year, month - 2, 1));
+  const previousYear = `${year - 1}-01-01`;
+  const sourceHistory = [
+    { ...entry(previousYear), balance: 500, changeAmount: 100 },
+    { ...entry(previousMonth), balance: 800, changeAmount: 300 },
+    { ...entry(getTodayLocalDate()), balance: 1000, changeAmount: 200 },
+    { ...entry(getTodayLocalDate()), assetId: 'FINANCIAL', balance: 400, changeAmount: 50 },
+  ];
+  const { rerender } = render(<AssetProfitChart sourceHistory={sourceHistory} currentBalance={1000} />);
+  fireEvent.click(screen.getByRole('button', { name: '일별 자산 변동' }));
+  expect(screen.getByText('+200원')).toBeInTheDocument();
+  expect(screen.getByText('+25.00%')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: '이전 변동 기간' }));
+  expect(screen.getByText('+300원')).toBeInTheDocument();
+  expect(screen.getByText('+60.00%')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '다음 변동 기간' }));
+  fireEvent.click(screen.getByRole('button', { name: '월별' }));
+  fireEvent.click(screen.getByRole('button', { name: '이전 변동 기간' }));
+  expect(screen.getByText('+100원')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: '다음 변동 기간' }));
+  rerender(<AssetProfitChart sourceHistory={sourceHistory} snapshotId="FINANCIAL" currentBalance={400} />);
+  expect(screen.getByText('+50원')).toBeInTheDocument();
+  expect(screen.queryByText('+200원')).not.toBeInTheDocument();
+  expect(screen.queryByText('변동 내역을 불러오는 중...')).not.toBeInTheDocument();
+  expect(read).not.toHaveBeenCalled();
+});
+
+it('keeps a confirmed empty shared history empty without a fallback request', () => {
+  render(<AssetProfitChart sourceHistory={[]} />);
+  expect(screen.getByText('변동 데이터가 없습니다')).toBeInTheDocument();
+  expect(screen.queryByText('변동 내역을 불러오는 중...')).not.toBeInTheDocument();
+  expect(read).not.toHaveBeenCalled();
 });

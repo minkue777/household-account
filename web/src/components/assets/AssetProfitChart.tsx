@@ -20,7 +20,11 @@ function formatSignedRate(value: number | undefined) {
   return `${prefix}${Math.abs(value).toFixed(2)}%`;
 }
 
-export default function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance }: { snapshotId?: string; currentBalance?: number }) {
+export default function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance, sourceHistory }: {
+  snapshotId?: string;
+  currentBalance?: number;
+  sourceHistory?: readonly AssetHistoryEntry[];
+}) {
   const today = getSeoulCalendarParts();
   const { householdKey, isSessionVerified, remoteReadEpoch = 0 } = useHousehold();
   const [view, setView] = useState<'monthly' | 'daily'>('daily');
@@ -35,6 +39,8 @@ export default function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance 
     end: formatLocalDate(new Date(year, view === 'monthly' ? 12 : month, 0)),
   }), [year, month, view]);
   useEffect(() => {
+    // The statistics page supplies its complete read so chart controls stay local.
+    if (sourceHistory !== undefined) return;
     let active = true;
     setHistory([]); setStatus('loading');
     if (!householdKey || !isSessionVerified) return;
@@ -42,12 +48,16 @@ export default function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance 
       if (active) { setHistory(rows.filter(entry => entry.assetId === snapshotId)); setStatus('ready'); }
     }, () => { if (active) setStatus('failed'); });
     return () => { active = false; };
-  }, [householdKey, isSessionVerified, remoteReadEpoch, range.start, range.end, snapshotId, revision]);
+  }, [householdKey, isSessionVerified, remoteReadEpoch, range.start, range.end, snapshotId, revision, sourceHistory]);
+  const chartHistory = useMemo(() => sourceHistory === undefined ? history : sourceHistory.filter(
+    entry => entry.assetId === snapshotId && entry.date <= range.end,
+  ), [sourceHistory, history, snapshotId, range.end]);
+  const displayStatus = sourceHistory === undefined ? status : householdKey && isSessionVerified ? 'ready' : 'loading';
   const currentDate = getTodayLocalDate();
   const displayHistory = useMemo(() => {
-    if (currentBalance === undefined || currentDate < range.start || currentDate > range.end) return history;
-    const previous = history.filter(entry => entry.date < currentDate).at(-1);
-    const todayEntry = history.find(entry => entry.date === currentDate);
+    if (currentBalance === undefined || currentDate < range.start || currentDate > range.end) return chartHistory;
+    const previous = chartHistory.filter(entry => entry.date < currentDate).at(-1);
+    const todayEntry = chartHistory.find(entry => entry.date === currentDate);
     const baseline = previous?.balance ?? (todayEntry ? todayEntry.balance - todayEntry.changeAmount : undefined);
     // This display point comes from a confirmed asset read and is never saved.
     const current: AssetHistoryEntry = {
@@ -55,8 +65,8 @@ export default function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance 
       date: currentDate, balance: currentBalance, changeAmount: baseline === undefined ? 0 : currentBalance - baseline,
       createdAt: new Date(0),
     };
-    return [...history.filter(entry => entry.date !== currentDate), current].sort((a, b) => a.date.localeCompare(b.date));
-  }, [currentBalance, currentDate, range.start, range.end, history, householdKey, snapshotId]);
+    return [...chartHistory.filter(entry => entry.date !== currentDate), current].sort((a, b) => a.date.localeCompare(b.date));
+  }, [currentBalance, currentDate, range.start, range.end, chartHistory, householdKey, snapshotId]);
   const rows = useMemo(() => {
     const count = view === 'monthly' ? 12 : new Date(year, month, 0).getDate();
     return Array.from({ length: count }, (_, index) => {
@@ -132,9 +142,9 @@ export default function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance 
         </button>
       </div>
 
-      {status === 'loading' ? (
+      {displayStatus === 'loading' ? (
         <p role="status" className="py-8 text-center text-sm text-slate-400">변동 내역을 불러오는 중...</p>
-      ) : status === 'failed' ? (
+      ) : displayStatus === 'failed' ? (
         <p role="alert" className="py-4 text-sm text-slate-500">
           변동 내역을 불러오지 못했습니다.
           <button type="button" className="ml-2 underline" onClick={() => setRevision(value => value + 1)}>다시 시도</button>

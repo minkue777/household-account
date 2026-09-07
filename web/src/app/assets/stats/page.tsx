@@ -43,12 +43,10 @@ ChartJS.register(
 );
 
 type PeriodType = '3M' | '6M' | '1Y' | 'ALL';
-type OwnerSeriesKey = `OWNER_REF_${string}`;
-type TrendSeriesKey = 'all' | AssetType | OwnerSeriesKey;
+type TrendSeriesKey = 'all' | AssetType;
 
 const TYPE_SNAPSHOT_PREFIX = 'TYPE_';
 const ASSET_TYPE_ORDER: AssetType[] = ['savings', 'stock', 'crypto', 'property', 'gold', 'loan'];
-const OWNER_SERIES_COLORS = ['#8B5CF6', '#EC4899', '#0891B2', '#D97706'];
 
 function formatKoreanUnit(value: number): string {
   if (value === 0) {
@@ -152,6 +150,7 @@ export default function AssetStatsPage() {
   const [hasCurrentAssets, setHasCurrentAssets] = useState(false);
   const [allHistory, setAllHistory] = useState<AssetHistoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [completedSourceKey, setCompletedSourceKey] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [revision, setRevision] = useState(0);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('3M');
@@ -159,6 +158,8 @@ export default function AssetStatsPage() {
   const [enabledSeries, setEnabledSeries] = useState<Set<TrendSeriesKey>>(new Set<TrendSeriesKey>(['all']));
   const trendChartRef = useRef<ChartJS<'line', Array<number | null>, string> | null>(null);
   const selectedPeriodRange = useMemo(() => resolveAssetStatisticsPeriod(selectedPeriod), [selectedPeriod]);
+  const sourceKey = JSON.stringify([householdKey, remoteReadEpoch, selectedPeriodRange.endDate, revision]);
+  const isCurrentSource = isSessionVerified && !!householdKey && completedSourceKey === sourceKey;
 
   useEffect(() => {
     let active = true;
@@ -186,6 +187,7 @@ export default function AssetStatsPage() {
     let active = true;
     setAllHistory([]);
     setIsLoading(true);
+    setCompletedSourceKey(null);
     setFailed(false);
     if (!isSessionVerified || !householdKey) return;
 
@@ -193,19 +195,24 @@ export default function AssetStatsPage() {
       setIsLoading(true);
 
       try {
-        const historyData = await readAssetStatisticsHistory(selectedPeriodRange.startDate, selectedPeriodRange.endDate);
+        // Period buttons reuse this complete read instead of restarting the
+        // paginated history load and remounting the charts on every selection.
+        const historyData = await readAssetStatisticsHistory(undefined, selectedPeriodRange.endDate);
         if (active) setAllHistory(historyData);
       } catch (error) {
         if (active) setFailed(true);
         console.error('자산 통계 이력을 불러오지 못했습니다.', error);
       } finally {
-        if (active) setIsLoading(false);
+        if (active) {
+          setCompletedSourceKey(sourceKey);
+          setIsLoading(false);
+        }
       }
     };
 
     void fetchHistory();
     return () => { active = false; };
-  }, [householdKey, isSessionVerified, remoteReadEpoch, selectedPeriodRange.startDate, selectedPeriodRange.endDate, revision]);
+  }, [householdKey, isSessionVerified, remoteReadEpoch, selectedPeriodRange.endDate, revision, sourceKey]);
 
   const activeAssets = useMemo(() => assets.filter((asset) => asset.isActive), [assets]);
   const visibleAssets = useMemo(
@@ -221,6 +228,8 @@ export default function AssetStatsPage() {
     const startDate = selectedPeriodRange.startDate;
     const baselines = new Map<string, AssetHistoryEntry>();
     const entries = allHistory.filter((entry) => {
+      if (entry.assetId !== 'TOTAL' && entry.assetId !== 'FINANCIAL'
+        && !entry.assetId.startsWith(TYPE_SNAPSHOT_PREFIX)) return false;
       if (startDate && entry.date < startDate) {
         baselines.set(entry.assetId, { ...entry, date: startDate, changeAmount: 0 });
         return false;
@@ -303,31 +312,8 @@ export default function AssetStatsPage() {
     return ASSET_TYPE_ORDER.filter((type) => available.has(type));
   }, [visibleAssets, typeSnapshots]);
 
-  const ownerSeries = useMemo(() => {
-    const owners = new Map<OwnerSeriesKey, { label: string; color: string; entries: AssetHistoryEntry[] }>();
-    // Owner snapshots describe the whole portfolio; they cannot be used as
-    // financial-only totals without an authoritative owner/type intersection.
-    if (financialOnly) return owners;
-    history.forEach((entry) => {
-      if (!entry.assetId.startsWith('OWNER_REF_')) return;
-      const key = entry.assetId as OwnerSeriesKey;
-      let owner = owners.get(key);
-      if (!owner) {
-        owner = {
-          label: entry.ownerDisplayName ?? entry.ownerKey ?? key.slice('OWNER_REF_'.length),
-          color: OWNER_SERIES_COLORS[owners.size % OWNER_SERIES_COLORS.length],
-          entries: [],
-        };
-        owners.set(key, owner);
-      }
-      if (entry.ownerDisplayName) owner.label = entry.ownerDisplayName;
-      owner.entries.push(entry);
-    });
-    return owners;
-  }, [financialOnly, history]);
-
   useEffect(() => {
-    const allowedKeys = new Set<TrendSeriesKey>(['all', ...availableTypes, ...Array.from(ownerSeries.keys())]);
+    const allowedKeys = new Set<TrendSeriesKey>(['all', ...availableTypes]);
 
     setEnabledSeries((prev) => {
       const next = new Set<TrendSeriesKey>(
@@ -340,7 +326,7 @@ export default function AssetStatsPage() {
 
       return next;
     });
-  }, [availableTypes, ownerSeries]);
+  }, [availableTypes]);
 
   const summaryTotals = useMemo(() => {
     if (displayTotalSnapshots.length > 0) {
@@ -368,16 +354,13 @@ export default function AssetStatsPage() {
 
       displayTypeSnapshots[type].forEach((entry) => dateSet.add(entry.date));
     });
-    ownerSeries.forEach((owner, key) => {
-      if (enabledSeries.has(key)) owner.entries.forEach((entry) => dateSet.add(entry.date));
-    });
 
     if (dateSet.size === 0) {
       dateSet.add(today);
     }
 
     return Array.from(dateSet).sort();
-  }, [availableTypes, displayTotalSnapshots, displayTypeSnapshots, enabledSeries, ownerSeries, today]);
+  }, [availableTypes, displayTotalSnapshots, displayTypeSnapshots, enabledSeries, today]);
 
   const chartData = useMemo<ChartData<'line', Array<number | null>, string>>(() => {
     const labels = chartDates.map((dateString) => {
@@ -424,23 +407,6 @@ export default function AssetStatsPage() {
         pointHoverRadius: 4,
       });
     });
-    ownerSeries.forEach((owner, key) => {
-      if (!enabledSeries.has(key)) return;
-      datasets.push({
-        label: owner.label,
-        data: buildCarriedSeries(chartDates, owner.entries),
-        borderColor: owner.color,
-        backgroundColor: `${owner.color}20`,
-        borderWidth: 1.75,
-        borderDash: [4, 3],
-        fill: false,
-        tension: 0.3,
-        cubicInterpolationMode: 'monotone',
-        spanGaps: true,
-        pointRadius: chartDates.length > 14 ? 0 : 2,
-        pointHoverRadius: 4,
-      });
-    });
 
     return { labels, datasets };
   }, [
@@ -450,7 +416,6 @@ export default function AssetStatsPage() {
     displayTypeSnapshots,
     enabledSeries,
     financialOnly,
-    ownerSeries,
     totalAssets,
     typeTotals,
   ]);
@@ -604,7 +569,7 @@ export default function AssetStatsPage() {
           </h1>
         </header>
 
-        {isLoading ? (
+        {!isCurrentSource || isLoading ? (
           <div role="status" className="py-12 text-center text-slate-400">불러오는 중...</div>
         ) : failed ? (
           <div role="alert" className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
@@ -716,28 +681,6 @@ export default function AssetStatsPage() {
                 })}
               </div>
 
-              {ownerSeries.size > 0 && (
-                <div className="mb-4 flex flex-wrap items-center gap-2" aria-label="소유자별 자산 추이">
-                  <span className="text-xs text-slate-400">소유자</span>
-                  {Array.from(ownerSeries, ([key, owner]) => {
-                    const isEnabled = enabledSeries.has(key);
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        aria-pressed={isEnabled}
-                        onClick={() => toggleSeries(key)}
-                        className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all ${isEnabled ? 'text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                        style={{ backgroundColor: isEnabled ? owner.color : undefined }}
-                      >
-                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: isEnabled ? 'white' : owner.color }} />
-                        {owner.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
               <div className="h-[280px]" onClick={(event) => event.stopPropagation()}>
                 {chartData.datasets.some((dataset) => dataset.data.some((value) => value !== null)) ? (
                   <Line ref={trendChartRef} data={chartData} options={chartOptions} />
@@ -753,6 +696,7 @@ export default function AssetStatsPage() {
               key={`profit:${householdKey}:${remoteReadEpoch}`}
               snapshotId={snapshotType}
               currentBalance={hasCurrentAssets ? totalAssets : undefined}
+              sourceHistory={allHistory}
             />
 
             {isSessionVerified && householdKey && <AssetDividendChart key={`dividend:${householdKey}:${remoteReadEpoch}`} />}
