@@ -9,6 +9,7 @@ import { getClientSessionScope, requireClientSessionScope, type ClientSessionSco
 import { Platform } from '@/lib/utils/platform';
 import { ensurePwaServiceWorker, ensurePwaMessagingServiceWorker, retireLegacyPwaMessagingWorkers } from './browserServiceWorker';
 import { expenseNotificationData } from './notificationPayload';
+import { formatPwaEndpointRegistrationErrorCode, type PwaEndpointRegistrationPhase } from './pwaEndpointRegistrationDiagnostic';
 
 const VAPID_KEY = 'BLI2AoMlLXi5yMOfCAPdup52iEoPoItcWzFQws-Vb5xviQ9VA1ex7oTLZ9M5kqDccQoYAiMaNSUQZSjURD98y3k';
 const CLEANUP_KEY = 'pwa-endpoint-cleanup.v1';
@@ -16,7 +17,7 @@ const ROOT_BINDING_KEY = 'pwa-fid-root-binding.v1';
 interface ActiveEndpointBinding { fid: string; scope: ClientSessionScope; registrationVersion: number }
 interface RootBindingMarker { fid: string; subscriptionFingerprint: string }
 export type PwaFidEndpointRegistrationState =
-  | { status: 'idle' | 'unsupported' | 'permission-required' | 'permission-denied' | 'registering' | 'error' }
+  | { status: 'idle' | 'unsupported' | 'permission-required' | 'permission-denied' | 'registering' | 'error'; phase?: PwaEndpointRegistrationPhase; errorCode?: string }
   | { status: 'active'; registrationVersion: number };
 type EndpointStateListener = (state: PwaFidEndpointRegistrationState) => void;
 
@@ -103,12 +104,13 @@ async function retrySdkRemoval(): Promise<void> {
   if (activeBinding === binding) activeBinding = undefined;
 }
 
-function attachLifecycleListeners(messaging: Messaging, scope: ClientSessionScope): void {
+function attachLifecycleListeners(messaging: Messaging, scope: ClientSessionScope, onServerRegistration?: () => void): void {
   detachListeners();
   const epoch = listenerEpoch;
   const current = () => epoch === listenerEpoch && !cleanupPending() && sameScope(getClientSessionScope(), scope);
   listeners.push(onRegistered(messaging, fid => {
     if (!current()) return;
+    onServerRegistration?.();
     registrationFidsForCleanup.add(fid);
     const task = notificationCommands.registerEndpoint(scope.householdId, fid, 'ios-pwa')
       .then(result => {
@@ -118,7 +120,7 @@ function attachLifecycleListeners(messaging: Messaging, scope: ClientSessionScop
         // and legacy cleanup have also completed.
         if (!activationTask) publishEndpointState({ status: 'active', registrationVersion: result.registrationVersion });
       }).catch(error => {
-        if (current()) publishEndpointState({ status: 'error' });
+        if (current()) publishEndpointState({ status: 'error', phase: 'server-registration', errorCode: formatPwaEndpointRegistrationErrorCode(error) });
         throw error;
       });
     trackEndpointTask(task);
@@ -128,7 +130,7 @@ function attachLifecycleListeners(messaging: Messaging, scope: ClientSessionScop
     if (!current() || !binding || binding.fid !== fid || !sameScope(binding.scope, scope)) return;
     pendingSdkRemoval = binding;
     const task = retrySdkRemoval().then(() => { if (current()) publishEndpointState({ status: 'idle' }); })
-      .catch(error => { if (current()) publishEndpointState({ status: 'error' }); throw error; });
+      .catch(error => { if (current()) publishEndpointState({ status: 'error', phase: 'unregister', errorCode: formatPwaEndpointRegistrationErrorCode(error) }); throw error; });
     trackEndpointTask(task);
   }));
   listeners.push(onMessage(messaging, payload => {
@@ -164,7 +166,12 @@ export async function activatePwaFidEndpoint(): Promise<boolean> {
     return activatePwaFidEndpoint();
   }
   const promise = (async () => {
-    publishEndpointState({ status: 'registering' });
+    let phase: PwaEndpointRegistrationPhase = 'worker';
+    const setPhase = (next: PwaEndpointRegistrationPhase) => {
+      phase = next;
+      publishEndpointState({ status: 'registering', phase });
+    };
+    setPhase('worker');
     let messaging: Messaging | null | undefined;
     const assertScope = () => {
       if (cleanupPending() || !sameScope(getClientSessionScope(), scope)) throw new Error('PWA_ENDPOINT_SCOPE_CHANGED');
@@ -173,8 +180,10 @@ export async function activatePwaFidEndpoint(): Promise<boolean> {
       detachListeners();
       await drainEndpointTasks();
       assertScope();
+      if (pendingSdkRemoval) setPhase('unregister');
       await retrySdkRemoval();
       assertScope();
+      if (phase !== 'worker') setPhase('worker');
       messaging = await messagingInstance();
       assertScope();
       if (!messaging) { publishEndpointState({ status: 'unsupported' }); return false; }
@@ -187,8 +196,10 @@ export async function activatePwaFidEndpoint(): Promise<boolean> {
           throw new Error('PWA_PUSH_WORKER_NOT_READY');
         }
       };
+      setPhase('installation');
       const fid = await getId(getInstallations(app));
       assertCurrent();
+      setPhase('subscription');
       const fingerprintBefore = await subscriptionFingerprint(serviceWorkerRegistration);
       assertCurrent();
       const marker = readRootBindingMarker();
@@ -205,9 +216,11 @@ export async function activatePwaFidEndpoint(): Promise<boolean> {
         try {
           // A fresh installation has no FCM registration to DELETE. Prime it
           // first, without publishing an app endpoint or an active UI state.
+          setPhase('prime-registration');
           await register(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration });
           assertCurrent();
           if (primedFid !== fid) throw new Error('PWA_FID_CHANGED_DURING_REGISTRATION');
+          setPhase('unregister');
           await unregister(messaging);
           assertCurrent();
         } finally {
@@ -215,8 +228,11 @@ export async function activatePwaFidEndpoint(): Promise<boolean> {
         }
       }
 
-      attachLifecycleListeners(messaging, scope);
+      attachLifecycleListeners(messaging, scope, () => {
+        if (activationTask?.promise === promise) setPhase('server-registration');
+      });
       registrationTask = undefined;
+      setPhase('push-registration');
       await register(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration });
       assertCurrent();
       if (!registrationTask) throw new Error('PWA_FID_CALLBACK_MISSING');
@@ -224,6 +240,7 @@ export async function activatePwaFidEndpoint(): Promise<boolean> {
       assertCurrent();
       if (!activeBinding || !sameScope(activeBinding.scope, scope)) throw new Error('PWA_ENDPOINT_SCOPE_CHANGED');
       if (activeBinding.fid !== fid) throw new Error('PWA_FID_CHANGED_DURING_REGISTRATION');
+      setPhase('verification');
       const confirmedBinding = activeBinding;
       const assertConfirmed = () => {
         assertCurrent();
@@ -234,6 +251,7 @@ export async function activatePwaFidEndpoint(): Promise<boolean> {
       if (!fingerprintAfter || (!reconnect && fingerprintBefore !== fingerprintAfter)) {
         throw new Error('PWA_PUSH_SUBSCRIPTION_CHANGED');
       }
+      setPhase('legacy-cleanup');
       await retireLegacyPwaMessagingWorkers(assertConfirmed);
       assertConfirmed();
       localStorage.setItem(ROOT_BINDING_KEY, JSON.stringify({ fid, subscriptionFingerprint: fingerprintAfter }));
@@ -244,7 +262,7 @@ export async function activatePwaFidEndpoint(): Promise<boolean> {
       // messages. Restore its foreground handler without bypassing logout.
       if (messaging && !cleanupPending() && sameScope(getClientSessionScope(), scope)
         && activeBinding && sameScope(activeBinding.scope, scope)) attachLifecycleListeners(messaging, scope);
-      if (sameScope(getClientSessionScope(), scope)) publishEndpointState({ status: 'error' });
+      if (sameScope(getClientSessionScope(), scope)) publishEndpointState({ status: 'error', phase, errorCode: formatPwaEndpointRegistrationErrorCode(error) });
       throw error;
     }
   })();

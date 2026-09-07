@@ -27,7 +27,8 @@ const mockRegisterEndpoint = jest.fn();
 const mockRemoveEndpoint = jest.fn(async (..._args: unknown[]) => undefined);
 const mockSdkRemoveEndpoint = jest.fn(async (..._args: unknown[]) => undefined);
 const mockUnregister = jest.fn(async () => { mockUnregisteredHandler?.('fid-current-installation'); });
-jest.mock('firebase/installations', () => ({ getInstallations: jest.fn(() => ({})), getId: jest.fn(async () => 'fid-current-installation') }));
+const mockGetInstallationId = jest.fn(async () => 'fid-current-installation');
+jest.mock('firebase/installations', () => ({ getInstallations: jest.fn(() => ({})), getId: () => mockGetInstallationId() }));
 jest.mock('@/platform/pwa/browserServiceWorker', () => ({
   ensurePwaServiceWorker: jest.fn(async () => mockRootRegistration),
   ensurePwaMessagingServiceWorker: (...args: []) => mockEnsureMessagingWorker(...args),
@@ -91,6 +92,10 @@ import {
   removePwaFidEndpointForLogout,
   completePwaSessionCleanup,
 } from '@/platform/pwa/fidEndpointLifecycle';
+import {
+  formatPwaEndpointRegistrationErrorCode,
+  type PwaEndpointRegistrationPhase,
+} from '@/platform/pwa/pwaEndpointRegistrationDiagnostic';
 
 describe('iPhone PWA FID endpoint 등록 계약', () => {
   beforeAll(() => {
@@ -150,9 +155,9 @@ describe('iPhone PWA FID endpoint 등록 계약', () => {
       registrationVersion: 12,
     });
     expect(observedStatuses).toEqual([
-      'registering',
+      ...Array(9).fill('registering'),
       'active',
-      'registering',
+      ...Array(7).fill('registering'),
       'active',
     ]);
     expect(mockRegister).toHaveBeenCalledTimes(3); // prime + reconnect, then cached activation
@@ -165,7 +170,7 @@ describe('iPhone PWA FID endpoint 등록 계약', () => {
     mockRegisterEndpoint.mockRejectedValueOnce(new Error('REGISTER_ENDPOINT_FAILED'));
 
     await expect(activatePwaFidEndpoint()).rejects.toThrow('REGISTER_ENDPOINT_FAILED');
-    expect(getPwaFidEndpointRegistrationState()).toEqual({ status: 'error' });
+    expect(getPwaFidEndpointRegistrationState()).toEqual({ status: 'error', phase: 'server-registration', errorCode: 'unknown' });
     expect(mockRetireLegacyWorkers).not.toHaveBeenCalled();
     expect(localStorage.getItem('pwa-fid-root-binding.v1')).toBeNull();
   });
@@ -266,12 +271,12 @@ describe('iPhone PWA FID endpoint 등록 계약', () => {
       primed = true;
       mockRegisteredHandler?.('fid-current-installation');
       expect(mockRegisterEndpoint).not.toHaveBeenCalled();
-      expect(getPwaFidEndpointRegistrationState()).toEqual({ status: 'registering' });
+      expect(getPwaFidEndpointRegistrationState()).toEqual({ status: 'registering', phase: 'prime-registration' });
     });
     mockUnregister.mockImplementationOnce(async () => {
       if (!primed) throw new Error('FID_NOT_FOUND');
       expect(mockRegisterEndpoint).not.toHaveBeenCalled();
-      expect(getPwaFidEndpointRegistrationState()).toEqual({ status: 'registering' });
+      expect(getPwaFidEndpointRegistrationState()).toEqual({ status: 'registering', phase: 'unregister' });
       mockUnregisteredHandler?.('fid-current-installation');
     });
     await expect(activatePwaFidEndpoint()).resolves.toBe(true);
@@ -332,6 +337,71 @@ describe('iPhone PWA FID endpoint 등록 계약', () => {
     expect(getPwaFidEndpointRegistrationState()).toEqual({ status: 'idle' });
     completePwaSessionCleanup();
     await activatePwaFidEndpoint();
+  });
+
+  it('등록 진행 단계를 순서대로 표시하고 SDK callback 뒤 서버 응답을 기다린다', async () => {
+    const phases: PwaEndpointRegistrationPhase[] = [];
+    const stop = subscribePwaFidEndpointRegistrationState(state => {
+      if (state.status === 'registering' && state.phase) phases.push(state.phase);
+    });
+    let completeServer!: (value: { registrationVersion: number }) => void;
+    mockRegisterEndpoint.mockImplementationOnce(() => new Promise(resolve => { completeServer = resolve; }));
+    const activation = activatePwaFidEndpoint();
+    await waitFor(() => expect(completeServer).toBeDefined());
+    expect(getPwaFidEndpointRegistrationState()).toEqual({ status: 'registering', phase: 'server-registration' });
+    expect(mockRetireLegacyWorkers).not.toHaveBeenCalled();
+    completeServer({ registrationVersion: 120 });
+    await activation;
+    expect(phases).toEqual([
+      'worker', 'installation', 'subscription', 'prime-registration', 'unregister',
+      'push-registration', 'server-registration', 'verification', 'legacy-cleanup',
+    ]);
+    expect(getPwaFidEndpointRegistrationState()).toEqual({ status: 'active', registrationVersion: 120 });
+    stop();
+  });
+
+  it.each<PwaEndpointRegistrationPhase>([
+    'worker', 'installation', 'subscription', 'prime-registration', 'unregister',
+    'push-registration', 'server-registration', 'verification', 'legacy-cleanup',
+  ])('%s 실패는 정확한 단계와 안전한 SDK 코드만 보존한다', async phase => {
+    const error = Object.assign(new Error('secret-fid https://push.example/private-endpoint'), {
+      code: phase === 'installation' ? 'installations/request-failed' : 'messaging/fid-registration-failed',
+      customData: { errorInfo: 'private-fid and backend URL' },
+    });
+    if (phase === 'worker') mockEnsureMessagingWorker.mockRejectedValueOnce(error);
+    if (phase === 'installation') mockGetInstallationId.mockRejectedValueOnce(error);
+    if (phase === 'subscription') mockGetSubscription.mockRejectedValueOnce(error);
+    if (phase === 'prime-registration') mockRegister.mockRejectedValueOnce(error);
+    if (phase === 'unregister') mockUnregister.mockRejectedValueOnce(error);
+    if (phase === 'push-registration') {
+      mockRegister.mockImplementationOnce(async () => { mockRegisteredHandler?.('fid-current-installation'); })
+        .mockRejectedValueOnce(error);
+    }
+    if (phase === 'server-registration') mockRegisterEndpoint.mockRejectedValueOnce(error);
+    if (phase === 'verification') {
+      mockGetSubscription.mockResolvedValueOnce({ endpoint: mockSubscriptionEndpoint, getKey: () => new Uint8Array([1, 2, 3]).buffer })
+        .mockRejectedValueOnce(error);
+    }
+    if (phase === 'legacy-cleanup') mockRetireLegacyWorkers.mockRejectedValueOnce(error);
+
+    await expect(activatePwaFidEndpoint()).rejects.toBe(error);
+    expect(getPwaFidEndpointRegistrationState()).toEqual({ status: 'error', phase, errorCode: error.code });
+    expect(localStorage.getItem('pwa-fid-root-binding.v1')).toBeNull();
+  });
+
+  it('오류 formatter는 원문과 customData를 반환하지 않고 허용된 코드만 추출한다', () => {
+    expect(formatPwaEndpointRegistrationErrorCode({ code: 'functions/unavailable', message: 'private', customData: { errorInfo: 'private' } })).toBe('functions/unavailable');
+    expect(formatPwaEndpointRegistrationErrorCode(new DOMException('private push endpoint', 'NotAllowedError'))).toBe('NotAllowedError');
+    expect(formatPwaEndpointRegistrationErrorCode(new Error('PWA_PUSH_WORKER_NOT_READY'))).toBe('PWA_PUSH_WORKER_NOT_READY');
+    expect(formatPwaEndpointRegistrationErrorCode(new Error('PWA_SESSION_CLEANUP_REQUIRED'))).toBe('PWA_SESSION_CLEANUP_REQUIRED');
+    expect(formatPwaEndpointRegistrationErrorCode(new Error('LEGACY_WORKER_CLEANUP_FAILED'))).toBe('LEGACY_WORKER_CLEANUP_FAILED');
+    for (const unknown of [
+      undefined, null, 'PWA_UNSUPPORTED', new Error('private-fid https://push.example/secret'),
+      { code: 'messaging/failure https://push.example/secret' },
+      { code: 'installations/private/fid' },
+      { code: 'PWA_PRIVATE_FID', message: 'PWA_PRIVATE_FID' },
+      { code: 'unknown/provider', customData: { errorInfo: 'NOT_FOUND' } },
+    ]) expect(formatPwaEndpointRegistrationErrorCode(unknown)).toBe('unknown');
   });
 
   it('actor가 바뀐 뒤 늦게 도착한 등록 callback과 foreground는 새 actor에 전달하지 않는다', async () => {
