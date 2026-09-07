@@ -103,9 +103,12 @@ test('로그인부터 첫 월 원장과 지출 CRUD까지 실제 Firebase 경계
   }).toMatchObject({ notificationConsumerStatus: { stringValue: 'NoTarget' } });
   expect(await readFirestoreCollection(request, 'notificationDeliveries')).toEqual([]);
 
-  await createdItem.click();
+  // 알림 클릭과 같은 full navigation 뒤에도 인증을 복원하고 해당 지출을 엽니다.
+  await page.goto(`/expenses/${encodeURIComponent(expenseId)}/edit`);
   const editDialog = page.getByRole('dialog', { name: '지출 수정' });
   const merchantInput = editDialog.locator('input[type="text"]').first();
+  await expect(editDialog).toBeVisible();
+  await expect(merchantInput).toHaveValue(CREATED_MERCHANT);
   await merchantInput.fill(UPDATED_MERCHANT);
   await editDialog.getByRole('button', { name: '저장', exact: true }).click();
 

@@ -1,5 +1,34 @@
 import { expect, test } from '@playwright/test';
 
+test('알림 주소는 HTTP redirect로 편집 대상을 보존하고 CSP 차단 없이 화면을 연다', async ({ page, request }) => {
+  const blockedScripts: string[] = [];
+  const browserErrors: string[] = [];
+  page.on('console', message => {
+    if (/Refused to execute inline script|violates.*script-src|Executing inline script violates/i.test(message.text())) blockedScripts.push(message.text());
+  });
+  page.on('pageerror', error => browserErrors.push(error.message));
+
+  for (const id of ['notification-route-probe', '한글/거래?수정#1&edit=other']) {
+    const route = `/expenses/${encodeURIComponent(id)}/edit`;
+    const redirect = await request.get(route, { maxRedirects: 0 });
+    expect(redirect.status()).toBe(307);
+    expect(redirect.headers()['cache-control']).toContain('no-store');
+    const destination = new URL(redirect.headers().location, redirect.url());
+    expect(destination.origin).toBe(new URL(redirect.url()).origin);
+    expect(destination.pathname).toBe('/');
+    expect([...destination.searchParams]).toEqual([['edit', id]]);
+    expect(destination.hash).toBe('');
+    expect(await redirect.text()).not.toContain('<script');
+
+    // 로그인 복원 전에도 대상 ID를 잃거나 빈 화면에 멈추지 않아야 합니다.
+    await page.goto(route);
+    await expect(page.getByRole('button', { name: /Google/ }).first()).toBeVisible();
+    expect(new URL(page.url()).searchParams.get('edit')).toBe(id);
+  }
+  expect(blockedScripts).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
 test('빌드된 HTML의 CSP가 hydration을 허용하고 실제 root worker가 static만 cache한다', async ({ page, context }) => {
   const blockedScripts: string[] = [];
   page.on('console', message => { if (/Refused to execute inline script|violates.*script-src/i.test(message.text())) blockedScripts.push(message.text()); });
