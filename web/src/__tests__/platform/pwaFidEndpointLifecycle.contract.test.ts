@@ -1,19 +1,38 @@
 import type { Messaging } from 'firebase/messaging';
+import { waitFor } from '@testing-library/react';
 
 const mockMessaging = {} as Messaging;
 let mockRegisteredHandler: ((fid: string) => void) | undefined;
+let mockUnregisteredHandler: ((fid: string) => void) | undefined;
 let mockForegroundHandler: ((payload: {
   notification?: { title?: string; body?: string };
   data?: Record<string, string>;
 }) => void) | undefined;
 const mockShowNotification = jest.fn(async () => undefined);
+let mockSubscriptionEndpoint = 'https://push.example/root-subscription';
+const mockGetSubscription = jest.fn(async (): Promise<{ endpoint: string; getKey: () => ArrayBuffer } | null> => ({
+  endpoint: mockSubscriptionEndpoint,
+  getKey: () => new Uint8Array([1, 2, 3]).buffer,
+}));
+const mockRootRegistration = {
+  scope: 'https://app.example/', active: { state: 'activated' },
+  pushManager: { getSubscription: mockGetSubscription }, showNotification: mockShowNotification,
+};
+const mockEnsureMessagingWorker = jest.fn(async () => mockRootRegistration);
+const mockRetireLegacyWorkers = jest.fn(async (assertCurrent: () => void) => assertCurrent());
 const mockRegister = jest.fn(async (..._args: unknown[]) => {
   mockRegisteredHandler?.('fid-current-installation');
 });
 const mockRegisterEndpoint = jest.fn();
 const mockRemoveEndpoint = jest.fn(async (..._args: unknown[]) => undefined);
+const mockSdkRemoveEndpoint = jest.fn(async (..._args: unknown[]) => undefined);
+const mockUnregister = jest.fn(async () => { mockUnregisteredHandler?.('fid-current-installation'); });
 jest.mock('firebase/installations', () => ({ getInstallations: jest.fn(() => ({})), getId: jest.fn(async () => 'fid-current-installation') }));
-jest.mock('@/platform/pwa/browserServiceWorker', () => ({ ensurePwaServiceWorker: jest.fn(async () => ({ scope: '/', showNotification: mockShowNotification })) }));
+jest.mock('@/platform/pwa/browserServiceWorker', () => ({
+  ensurePwaServiceWorker: jest.fn(async () => mockRootRegistration),
+  ensurePwaMessagingServiceWorker: (...args: []) => mockEnsureMessagingWorker(...args),
+  retireLegacyPwaMessagingWorkers: (...args: [() => void]) => mockRetireLegacyWorkers(...args),
+}));
 
 jest.mock('firebase/messaging', () => ({
   getMessaging: jest.fn(() => mockMessaging),
@@ -24,11 +43,14 @@ jest.mock('firebase/messaging', () => ({
   }),
   onRegistered: jest.fn((_messaging, handler) => {
     mockRegisteredHandler = handler;
-    return jest.fn();
+    return jest.fn(() => { if (mockRegisteredHandler === handler) mockRegisteredHandler = undefined; });
   }),
-  onUnregistered: jest.fn(() => jest.fn()),
+  onUnregistered: jest.fn((_messaging, handler) => {
+    mockUnregisteredHandler = handler;
+    return jest.fn(() => { if (mockUnregisteredHandler === handler) mockUnregisteredHandler = undefined; });
+  }),
   register: (...args: unknown[]) => mockRegister(...args),
-  unregister: jest.fn(async () => undefined),
+  unregister: () => mockUnregister(),
 }));
 
 jest.mock('@/lib/firebaseApp', () => ({ app: {} }));
@@ -37,7 +59,7 @@ jest.mock('@/features/notifications/application/notificationCommands', () => ({
   notificationCommands: {
     registerEndpoint: (...args: unknown[]) => mockRegisterEndpoint(...args),
     removeEndpointForLogout: (...args: unknown[]) => mockRemoveEndpoint(...args),
-    removeEndpointForSdkUnregistered: jest.fn(async () => undefined),
+    removeEndpointForSdkUnregistered: (...args: unknown[]) => mockSdkRemoveEndpoint(...args),
   },
 }));
 
@@ -72,6 +94,8 @@ import {
 
 describe('iPhone PWA FID endpoint 등록 계약', () => {
   beforeAll(() => {
+    Object.defineProperty(globalThis, 'crypto', { configurable: true, value: require('node:crypto').webcrypto });
+    Object.defineProperty(globalThis, 'TextEncoder', { configurable: true, value: require('node:util').TextEncoder });
     Object.defineProperty(globalThis, 'Notification', {
       configurable: true,
       value: {
@@ -94,6 +118,9 @@ describe('iPhone PWA FID endpoint 등록 계약', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     completePwaSessionCleanup();
+    localStorage.removeItem('pwa-fid-root-binding.v1');
+    mockSubscriptionEndpoint = 'https://push.example/root-subscription';
+    mockRegisterEndpoint.mockResolvedValue({ registrationVersion: 99 });
   });
 
   it('[T-PUSH-008] 권한 허용만으로 활성 처리하지 않고 같은 FID도 서버 재등록 성공 뒤 활성 처리한다', async () => {
@@ -128,6 +155,9 @@ describe('iPhone PWA FID endpoint 등록 계약', () => {
       'registering',
       'active',
     ]);
+    expect(mockRegister).toHaveBeenCalledTimes(3); // prime + reconnect, then cached activation
+    expect(mockUnregister).toHaveBeenCalledTimes(1);
+    expect(mockSdkRemoveEndpoint).not.toHaveBeenCalled();
     unsubscribe();
   });
 
@@ -136,6 +166,8 @@ describe('iPhone PWA FID endpoint 등록 계약', () => {
 
     await expect(activatePwaFidEndpoint()).rejects.toThrow('REGISTER_ENDPOINT_FAILED');
     expect(getPwaFidEndpointRegistrationState()).toEqual({ status: 'error' });
+    expect(mockRetireLegacyWorkers).not.toHaveBeenCalled();
+    expect(localStorage.getItem('pwa-fid-root-binding.v1')).toBeNull();
   });
 
   it('[T-PUSH-004][PUSH-006] PWA가 열린 상태에서도 안전한 지출 payload를 시스템 알림으로 표시한다', async () => {
@@ -194,6 +226,112 @@ describe('iPhone PWA FID endpoint 등록 계약', () => {
     completePwaSessionCleanup();
     mockRegisterEndpoint.mockResolvedValueOnce({ registrationVersion: 14 });
     await expect(activatePwaFidEndpoint()).resolves.toBe(true);
+  });
+
+  it('새 worker 준비 실패는 기존 연결과 완료 marker를 건드리지 않는다', async () => {
+    await activatePwaFidEndpoint();
+    jest.clearAllMocks();
+    localStorage.setItem('pwa-fid-root-binding.v1', 'existing-marker');
+    mockEnsureMessagingWorker.mockRejectedValueOnce(new Error('PWA_PUSH_WORKER_NOT_READY'));
+    await expect(activatePwaFidEndpoint()).rejects.toThrow('PWA_PUSH_WORKER_NOT_READY');
+    expect(mockRegister).not.toHaveBeenCalled();
+    expect(mockUnregister).not.toHaveBeenCalled();
+    expect(mockRetireLegacyWorkers).not.toHaveBeenCalled();
+    expect(localStorage.getItem('pwa-fid-root-binding.v1')).toBe('existing-marker');
+    mockForegroundHandler?.({ data: {
+      payloadVersion: 'notification-payload.v1', type: 'expense-created', clickTarget: 'expense-edit', expenseId: 'after-update-failure',
+    } });
+    await waitFor(() => expect(mockShowNotification).toHaveBeenCalledTimes(1));
+  });
+
+  it('동일 FID도 root 구독이 바뀌면 한 번 재연결하고 SDK 삭제 callback을 서버 삭제로 전달하지 않는다', async () => {
+    await activatePwaFidEndpoint();
+    const firstMarker = localStorage.getItem('pwa-fid-root-binding.v1');
+    mockSubscriptionEndpoint = 'https://push.example/replaced-subscription';
+    await activatePwaFidEndpoint();
+    expect(mockUnregister).toHaveBeenCalledTimes(2);
+    expect(mockRegister).toHaveBeenCalledTimes(4);
+    expect(mockRegisterEndpoint).toHaveBeenCalledTimes(2);
+    expect(mockSdkRemoveEndpoint).not.toHaveBeenCalled();
+    expect(localStorage.getItem('pwa-fid-root-binding.v1')).not.toBe(firstMarker);
+    await activatePwaFidEndpoint();
+    expect(mockUnregister).toHaveBeenCalledTimes(2);
+    expect(mockRegister).toHaveBeenCalledTimes(5);
+  });
+
+  it('신규 root 구독은 prime 중 서버 등록이나 active를 발행하지 않고 최종 연결 뒤에만 완료한다', async () => {
+    let primed = false;
+    mockGetSubscription.mockResolvedValueOnce(null);
+    mockRegister.mockImplementationOnce(async () => {
+      primed = true;
+      mockRegisteredHandler?.('fid-current-installation');
+      expect(mockRegisterEndpoint).not.toHaveBeenCalled();
+      expect(getPwaFidEndpointRegistrationState()).toEqual({ status: 'registering' });
+    });
+    mockUnregister.mockImplementationOnce(async () => {
+      if (!primed) throw new Error('FID_NOT_FOUND');
+      expect(mockRegisterEndpoint).not.toHaveBeenCalled();
+      expect(getPwaFidEndpointRegistrationState()).toEqual({ status: 'registering' });
+      mockUnregisteredHandler?.('fid-current-installation');
+    });
+    await expect(activatePwaFidEndpoint()).resolves.toBe(true);
+    expect(mockRegister).toHaveBeenCalledTimes(2);
+    expect(mockRegisterEndpoint).toHaveBeenCalledTimes(1);
+    expect(mockSdkRemoveEndpoint).not.toHaveBeenCalled();
+    expect(localStorage.getItem('pwa-fid-root-binding.v1')).not.toBeNull();
+  });
+
+  it('SDK 재연결 실패 뒤 legacy와 marker 미완료 상태를 유지하고 재시도한다', async () => {
+    mockUnregister.mockRejectedValueOnce(new Error('FCM_UNAVAILABLE'));
+    await expect(activatePwaFidEndpoint()).rejects.toThrow('FCM_UNAVAILABLE');
+    expect(mockRegisterEndpoint).not.toHaveBeenCalled();
+    expect(mockRetireLegacyWorkers).not.toHaveBeenCalled();
+    expect(localStorage.getItem('pwa-fid-root-binding.v1')).toBeNull();
+    await expect(activatePwaFidEndpoint()).resolves.toBe(true);
+    expect(mockRegisterEndpoint).toHaveBeenCalledTimes(1);
+    expect(mockRetireLegacyWorkers).toHaveBeenCalledTimes(1);
+  });
+
+  it('prime 완료를 기다리는 로그아웃은 최종 재등록이나 legacy 정리를 시작하지 않는다', async () => {
+    let finishPrime!: () => void;
+    mockRegister.mockImplementationOnce(() => new Promise<void>(resolve => {
+      const handler = mockRegisteredHandler;
+      finishPrime = () => { handler?.('fid-current-installation'); resolve(); };
+    }));
+    const activation = expect(activatePwaFidEndpoint()).rejects.toThrow('PWA_ENDPOINT_SCOPE_CHANGED');
+    await waitFor(() => expect(finishPrime).toBeDefined());
+    const logout = removePwaFidEndpointForLogout();
+    finishPrime();
+    await activation;
+    await logout;
+    expect(mockRegister).toHaveBeenCalledTimes(1);
+    expect(mockRegisterEndpoint).not.toHaveBeenCalled();
+    expect(mockRetireLegacyWorkers).not.toHaveBeenCalled();
+    expect(localStorage.getItem('pwa-fid-root-binding.v1')).toBeNull();
+    completePwaSessionCleanup();
+    await activatePwaFidEndpoint();
+  });
+
+  it('로그아웃은 마지막 callback뿐 아니라 미완료 서버 등록을 모두 기다린 뒤 endpoint를 삭제한다', async () => {
+    await activatePwaFidEndpoint();
+    let finishFirst!: (value: { registrationVersion: number }) => void;
+    let finishSecond!: (value: { registrationVersion: number }) => void;
+    mockRegisterEndpoint
+      .mockImplementationOnce(() => new Promise(resolve => { finishFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise(resolve => { finishSecond = resolve; }));
+    mockRegisteredHandler?.('fid-current-installation');
+    mockRegisteredHandler?.('fid-current-installation');
+    const logout = removePwaFidEndpointForLogout();
+    finishSecond({ registrationVersion: 101 });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(mockRemoveEndpoint).not.toHaveBeenCalled();
+    finishFirst({ registrationVersion: 100 });
+    await logout;
+    expect(mockRemoveEndpoint).toHaveBeenCalledWith('household-1', 'fid-current-installation');
+    expect(getPwaFidEndpointRegistrationState()).toEqual({ status: 'idle' });
+    completePwaSessionCleanup();
+    await activatePwaFidEndpoint();
   });
 
   it('actor가 바뀐 뒤 늦게 도착한 등록 callback과 foreground는 새 actor에 전달하지 않는다', async () => {
