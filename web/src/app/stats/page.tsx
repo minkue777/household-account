@@ -154,7 +154,9 @@ export default function StatsPage() {
             <h3 className="mb-4 text-lg font-semibold text-slate-700">월별 지출 추이</h3>
             {isLoading ? (
               <div className="flex h-72 items-center justify-center text-slate-400">로딩중...</div>
-            ) : periodError || readError ? <p>조회 실패</p> : expenses.length > 0 ? (
+            ) : periodError || readError ? (
+              <div className="flex h-72 items-center justify-center text-slate-400">조회 실패</div>
+            ) : expenses.length > 0 ? (
               <MonthlyTrendChart
                 expenses={expenses}
                 startDate={startDate}

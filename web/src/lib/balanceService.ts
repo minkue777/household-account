@@ -69,7 +69,9 @@ export function subscribeToLocalCurrencyBalance(
       return;
     }
 
-    callback(null);
+    // Existing households can have a balance before the first preference is saved.
+    // A single currency is unambiguous; an explicit selection still takes priority.
+    callback(balances.size === 1 ? balances.values().next().value ?? null : null);
   };
 
   ensurePreferenceSubscription();

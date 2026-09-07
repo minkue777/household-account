@@ -7,7 +7,6 @@ import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import NotificationSettings from '@/components/NotificationSettings';
-import HomePreferencesSettings from '@/components/settings/HomePreferencesSettings';
 import { isIOS } from '@/lib/pushNotificationService';
 import {
   CardSettings,
@@ -100,7 +99,6 @@ export default function SettingsPage() {
           <MerchantRuleSettings />
           <RecurringExpenseSettings />
           <ThemeSettings />
-          <HomePreferencesSettings />
           <InvitationSettings />
           {isIOSDevice && <ShortcutSettings />}
 

@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import AssetProfitChart from '@/components/assets/AssetProfitChart';
 import { readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
 import type { AssetHistoryEntry } from '@/types/asset';
+import { getTodayLocalDate } from '@/lib/utils/date';
 jest.mock('@/contexts/HouseholdContext', () => ({ useHousehold: () => ({ householdKey: 'home', isSessionVerified: true }) }));
 jest.mock('@/platform/reporting/assetStatisticsReadModel', () => ({ readAssetStatisticsHistory: jest.fn() }));
 jest.mock('react-chartjs-2', () => ({ Bar: ({ data }: { data: unknown }) => <output>{JSON.stringify(data)}</output> }));
@@ -14,6 +15,7 @@ it('reads the chart own month and year and does not turn missing or failed sourc
   const initialStart = read.mock.calls[0][0]!;
   read.mockResolvedValueOnce([entry(initialStart)]);
   fireEvent.click(screen.getByRole('button', { name: '월별' }));
+  fireEvent.click(await screen.findByRole('button', { name: '월별 자산 변동' }));
   await screen.findByText('0원');
   expect(read.mock.calls.at(-1)?.[0]).toMatch(/-01-01$/);
   read.mockRejectedValueOnce(new Error('offline'));
@@ -30,4 +32,12 @@ it('ignores an earlier month response arriving after the next period', async () 
   await screen.findByText('변동 데이터가 없습니다');
   await act(async () => resolve([entry(read.mock.calls[0][0]!)]));
   expect(screen.queryByText('0원')).not.toBeInTheDocument();
+});
+
+it('preserves the observed change when today is the only snapshot and the live balance arrives', async () => {
+  read.mockResolvedValueOnce([{ ...entry(getTodayLocalDate()), balance: 1000, changeAmount: 200 }]);
+  render(<AssetProfitChart currentBalance={1000} />);
+  fireEvent.click(await screen.findByRole('button', { name: '일별 자산 변동' }));
+  expect(screen.getByText('+200원')).toBeInTheDocument();
+  expect(screen.getByText('+25.00%')).toBeInTheDocument();
 });

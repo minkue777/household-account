@@ -6,8 +6,9 @@
 
 ## Web·Android 배포 순서
 
-- Web은 `web/vercel.json`의 `git.deploymentEnabled=false`로 push 직후 자동 배포를 막습니다. 같은 HEAD의 `quality-gates.yml` 다섯 job 성공을 확인한 뒤 연결된 Vercel 프로젝트에 배포합니다. [Vercel Git 설정](https://vercel.com/docs/project-configuration/git-configuration)을 따릅니다.
-- Vercel CLI는 `.gitignore`만으로 로컬 서명 파일이나 환경 파일의 업로드를 막지 못합니다. 루트 `.vercelignore`는 `web/`·`contracts/`만 허용하고 환경·서명·빌드 파일을 추가로 제외합니다. 실제 배포는 `git archive --format=zip --output=<저장소 밖 후보.zip> HEAD web contracts .vercelignore`로 **검증된 커밋의 추적 소스만** 별도 디렉터리에 풀고, 루트 `.vercel/project.json`의 기존 프로젝트 연결 정보만 복사한 뒤 후보 루트에서 `vercel deploy --prod`를 실행합니다. 프로젝트 Root Directory는 `web`을 유지합니다. 로컬 작업 디렉터리 전체를 복사하지 않습니다. [Vercel 업로드 제외 규칙](https://vercel.com/docs/deployments/vercel-ignore)을 따릅니다.
+- Web은 연결된 GitHub 저장소의 `main`에 push하면 Vercel이 자동으로 빌드·배포합니다. 프로젝트 Root Directory는 `web`, Production Branch는 `main`을 유지하고 `git.deploymentEnabled=false`를 추가하지 않습니다. 배포 화면에는 Git 커밋 제목·SHA·브랜치가 자동으로 표시됩니다. [Vercel Git 자동배포](https://vercel.com/docs/git/vercel-for-github)를 따릅니다.
+- Push 전에는 저장소에서 정한 품질 게이트와 변경한 화면의 테스트·프로덕션 빌드를 통과시킵니다. Push 후에는 같은 HEAD의 GitHub Actions 결과와 Vercel 자동배포 상태·운영 도메인 반영을 확인합니다. Git 자동배포가 시작되면 별도 CLI 배포를 중복 실행하지 않습니다.
+- Git 자동배포는 커밋된 소스를 사용합니다. 로컬 서명 파일·환경 파일은 Git에 추가하지 않습니다. 수동 CLI 배포가 별도로 필요한 경우에도 작업 디렉터리 전체를 업로드하지 않습니다. `git -c core.autocrlf=false archive --format=zip --output=<저장소 밖 후보.zip> HEAD web contracts .vercelignore`로 **검증된 커밋의 추적 소스만** 별도 디렉터리에 준비합니다. 루트 `.vercelignore`의 환경·서명·빌드 파일 제외 규칙을 유지합니다. [Vercel 업로드 제외 규칙](https://vercel.com/docs/deployments/vercel-ignore)을 따릅니다.
 - Android는 같은 CI 성공 확인 후 서명된 release APK를 GitHub Releases에 올립니다. 버전·서명·태그는 프로젝트의 `github-release-deploy` 스킬을 따릅니다.
 
 ## App Check

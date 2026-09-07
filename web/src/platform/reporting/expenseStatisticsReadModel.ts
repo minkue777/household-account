@@ -2,6 +2,8 @@ import { collection, db, documentId, getDocsFromServer, limit, orderBy, query, s
 import { getClientSessionScope, requireClientSessionScope } from '@/composition/clientSessionScope';
 import { mapDocToExpense } from '@/lib/expenseService';
 import { isVisibleLedgerReadDocument } from '@/features/ledger/application/ledgerReadVisibility';
+import { requestMembershipResolution } from '@/features/access-household/application/membershipResolutionRecovery';
+import { requestRemoteSessionRecovery } from '@/platform/functions-api/firebaseCallableRecovery';
 import type { Expense } from '@/types/expense';
 
 /** A total is published only after the last page for the captured session. */
@@ -20,7 +22,13 @@ export async function readExpenseStatistics(startDate: string, endDate: string):
     assertCurrent();
     const snapshot = await getDocsFromServer(query(collection(db, 'expenses'),
       where('householdId', '==', scope.householdId), where('date', '>=', startDate), where('date', '<=', endDate),
-      orderBy('date', 'asc'), orderBy(documentId(), 'asc'), ...(cursor ? [startAfter(cursor)] : []), limit(50)));
+      orderBy('date', 'asc'), orderBy(documentId(), 'asc'), ...(cursor ? [startAfter(cursor)] : []), limit(50)))
+      .catch((error: unknown) => {
+        assertCurrent();
+        // 실시간 조회와 동일하게 인증 복구를 요청하고, 복구 epoch에서 다시 조회합니다.
+        if (!requestMembershipResolution(error)) requestRemoteSessionRecovery();
+        throw error;
+      });
     assertCurrent();
     for (const document of snapshot.docs) {
       if (seen.has(document.id)) throw new Error('STATISTICS_CURSOR_REPEATED');
