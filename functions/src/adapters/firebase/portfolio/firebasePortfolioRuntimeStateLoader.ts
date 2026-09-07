@@ -32,40 +32,53 @@ export class FirebasePortfolioRuntimeStateLoader {
   ): Promise<LoadedState> {
     const household = this.database.collection("households").doc(householdId);
     const canonicalAssets = household.collection("assets");
-    const [canonicalAssetSnapshot, legacyAssetSnapshot, profileSnapshot, planSnapshot] =
-      await Promise.all([
-        scope.assetId === undefined ? transaction.get(canonicalAssets) : transaction.get(canonicalAssets.doc(scope.assetId)).then(snapshot => ({ docs: snapshot.exists ? [snapshot] : [] })),
-        scope.assetId === undefined ? transaction.get(this.database.collection("assets").where("householdId", "==", householdId)) : transaction.get(this.database.collection("assets").doc(scope.assetId)).then(snapshot => ({ docs: snapshot.exists && snapshot.data()?.householdId === householdId ? [snapshot] : [] })),
+    const assetSnapshots = scope.assetId === undefined
+      ? Promise.all([
+          transaction.get(canonicalAssets),
+          transaction.get(this.database.collection("assets").where("householdId", "==", householdId)),
+        ])
+      : transaction.getAll(canonicalAssets.doc(scope.assetId), this.database.collection("assets").doc(scope.assetId)).then(([canonical, legacy]) => [
+          { docs: canonical.exists ? [canonical] : [] },
+          { docs: legacy.exists && legacy.data()?.householdId === householdId ? [legacy] : [] },
+        ] as const);
+    const assetState = Promise.all([
+        assetSnapshots,
         transaction.get(household.collection("assetOwnerProfiles")),
         scope.automationPlans === false ? Promise.resolve({ docs: [] }) : transaction.get(scope.assetId === undefined ? household.collection("assetAutomationPlans") : household.collection("assetAutomationPlans").where("assetId", "==", scope.assetId)),
-      ]);
-    const ownerProfiles = mapOwnerProfiles(householdId, profileSnapshot.docs);
-    const canonicalById = new Map(
-      canonicalAssetSnapshot.docs.map((snapshot) => [snapshot.id, snapshot.data()]),
-    );
-    const legacyById = new Map(
-      legacyAssetSnapshot.docs.map((snapshot) => [snapshot.id, snapshot.data()]),
-    );
-    const assetIds = new Set([...legacyById.keys(), ...canonicalById.keys()]);
-    const assets = [...assetIds].flatMap((assetId) => {
-      const asset = mapAsset({
-        householdId,
-        assetId,
-        canonical: canonicalById.get(assetId),
-        legacy: legacyById.get(assetId),
-        ownerProfiles,
+      ]).then(async ([[canonicalAssetSnapshot, legacyAssetSnapshot], profileSnapshot, planSnapshot]) => {
+        const ownerProfiles = mapOwnerProfiles(householdId, profileSnapshot.docs);
+        const canonicalById = new Map(
+          canonicalAssetSnapshot.docs.map((snapshot) => [snapshot.id, snapshot.data()]),
+        );
+        const legacyById = new Map(
+          legacyAssetSnapshot.docs.map((snapshot) => [snapshot.id, snapshot.data()]),
+        );
+        const assetIds = new Set([...legacyById.keys(), ...canonicalById.keys()]);
+        const assets = [...assetIds].flatMap((assetId) => {
+          const asset = mapAsset({
+            householdId,
+            assetId,
+            canonical: canonicalById.get(assetId),
+            legacy: legacyById.get(assetId),
+            ownerProfiles,
+          });
+          return asset === undefined ? [] : [asset];
+        });
+        const canonicalPositionSnapshots = await Promise.all(
+          (scope.positions === false ? [] : assets).map(asset =>
+            transaction.get(canonicalAssets.doc(asset.assetId).collection("positions")),
+          ),
+        );
+        return { canonicalAssetSnapshot, legacyAssetSnapshot, planSnapshot, ownerProfiles, assets, canonicalPositionSnapshots };
       });
-      return asset === undefined ? [] : [asset];
-    });
-
-    const [legacyStockSnapshot, legacyCryptoSnapshot, ...canonicalPositionSnapshots] =
-      await Promise.all([
+    // Legacy positions need only the requested scope. Their queries run while
+    // the asset/profile -> canonical positions branch resolves independently.
+    const [loadedAssets, legacyStockSnapshot, legacyCryptoSnapshot] = await Promise.all([
+        assetState,
         scope.positions === false ? Promise.resolve({ docs: [] }) : transaction.get(scope.assetId === undefined ? this.database.collection("stock_holdings").where("householdId", "==", householdId) : this.database.collection("stock_holdings").where("householdId", "==", householdId).where("assetId", "==", scope.assetId)),
         scope.positions === false ? Promise.resolve({ docs: [] }) : transaction.get(scope.assetId === undefined ? this.database.collection("crypto_holdings").where("householdId", "==", householdId) : this.database.collection("crypto_holdings").where("householdId", "==", householdId).where("assetId", "==", scope.assetId)),
-        ...(scope.positions === false ? [] : assets).map((asset) =>
-          transaction.get(canonicalAssets.doc(asset.assetId).collection("positions")),
-        ),
       ]);
+    const { canonicalAssetSnapshot, legacyAssetSnapshot, planSnapshot, ownerProfiles, assets, canonicalPositionSnapshots } = loadedAssets;
     const legacyStockById = new Map(
       legacyStockSnapshot.docs.map((snapshot) => [snapshot.id, snapshot.data()]),
     );

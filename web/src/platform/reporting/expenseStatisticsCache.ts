@@ -1,8 +1,9 @@
 import { getClientSessionScope, type ClientSessionScope } from '@/composition/clientSessionScope';
 import { registerClientSessionReset } from '@/composition/clientSessionResetRegistry';
+import { normalizeStoredCategoryId } from '@/lib/categoryCompatibility';
 import type { Expense } from '@/types/expense';
 import { readExpenseStatistics } from './expenseStatisticsReadModel';
-import { expenseStatisticsActorKey, getExpenseStatisticsRevision, invalidateExpenseStatistics, subscribeExpenseStatisticsInvalidation } from './expenseStatisticsInvalidation';
+import { expenseStatisticsActorKey, getExpenseStatisticsRevision, invalidateExpenseStatistics, subscribeExpenseStatisticsInvalidation, type ExpenseStatisticsMutation } from './expenseStatisticsInvalidation';
 
 const MAX_AGE_MS = 60_000;
 const MAX_COMPLETED_RANGES = 4;
@@ -31,6 +32,7 @@ let completed: CompletedRange[] = [];
 const pending = new Set<PendingRange>();
 let generation = 0;
 let activeIdentity: string | undefined;
+let activeQuery: ExpenseStatisticsQuery | undefined;
 
 function identity(query: ExpenseStatisticsQuery): string {
   return JSON.stringify([expenseStatisticsActorKey(query.scope), query.remoteReadEpoch, query.revision]);
@@ -67,6 +69,7 @@ export async function loadExpenseStatistics(query: ExpenseStatisticsQuery, force
     completed = [];
     pending.clear();
     activeIdentity = key;
+    activeQuery = query;
   }
   const cached = findCompleted(query);
   const existing = Array.from(pending).find(range => !range.obsolete && range.identity === key && covers(range, query));
@@ -97,9 +100,53 @@ export async function loadExpenseStatistics(query: ExpenseStatisticsQuery, force
   return select(await request.promise, query);
 }
 
-subscribeExpenseStatisticsInvalidation(() => {
+function applyConfirmedUpdate(mutation: ExpenseStatisticsMutation): boolean {
+  // Never replace a pending re-entry/resume verification with an older completed source.
+  if (pending.size > 0 || completed.length === 0 || !activeQuery
+    || activeQuery.revision !== getExpenseStatisticsRevision() - 1
+    || activeIdentity !== identity(activeQuery)
+    || expenseStatisticsActorKey(activeQuery.scope) !== expenseStatisticsActorKey(mutation.scope)) return false;
+  const { transaction, transactionId, expectedVersion } = mutation;
+  if (!transaction || transaction.transactionId !== transactionId
+    || transaction.householdId !== activeQuery.scope.householdId
+    || transaction.lifecycleState !== 'active' || transaction.transactionType !== 'expense'
+    || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1
+    || !Number.isSafeInteger(transaction.aggregateVersion) || transaction.aggregateVersion !== expectedVersion + 1
+    || typeof transaction.memo !== 'string' || typeof transaction.categoryId !== 'string'
+    || transaction.categoryId.trim() === '') return false;
+
+  // Every retained source must prove it contains the exact predecessor. Missing rows,
+  // disjoint ranges and version gaps conservatively retain the full invalidation path.
+  for (const range of completed) {
+    const matches = range.expenses.filter(expense => expense.id === transactionId);
+    const previous = matches[0];
+    if (range.identity !== activeIdentity || matches.length !== 1
+      || previous.aggregateVersion !== expectedVersion
+      || previous.date !== transaction.accountingDate || previous.amount !== transaction.amountInWon
+      || previous.merchant !== transaction.merchant
+      || (previous.transactionType ?? 'expense') !== transaction.transactionType) return false;
+  }
+
+  activeQuery = { ...activeQuery, revision: getExpenseStatisticsRevision() };
+  activeIdentity = identity(activeQuery);
+  completed = completed.map(range => ({
+    ...range,
+    identity: activeIdentity!,
+    expenses: range.expenses.map(expense => expense.id === transactionId ? {
+      ...expense,
+      memo: transaction.memo,
+      category: normalizeStoredCategoryId(transaction.categoryId),
+      aggregateVersion: transaction.aggregateVersion,
+    } : expense),
+  }));
+  return true;
+}
+
+subscribeExpenseStatisticsInvalidation(mutation => {
   generation += 1;
+  if (mutation && applyConfirmedUpdate(mutation)) return;
   activeIdentity = undefined;
+  activeQuery = undefined;
   completed = [];
   pending.clear();
 });

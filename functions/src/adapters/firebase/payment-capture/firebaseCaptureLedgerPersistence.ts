@@ -379,10 +379,7 @@ export class FirebaseCaptureLedgerPersistence
     const ids = deterministicIds(command.householdId, fingerprint.fingerprintHash);
     try {
       return await this.database.runTransaction(async (transaction) => {
-        const [receiptSnapshot, claimSnapshot] = await Promise.all([
-          transaction.get(receipt),
-          transaction.get(dedup),
-        ]);
+        const [receiptSnapshot, claimSnapshot] = await transaction.getAll(receipt, dedup);
         const replay = terminalResult(receiptSnapshot, payloadFingerprint);
         if (replay !== undefined) return replay;
 

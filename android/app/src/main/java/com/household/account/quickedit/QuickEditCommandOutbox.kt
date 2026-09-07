@@ -83,7 +83,7 @@ class QuickEditCommandOutbox(
         if (existing != null) {
             return@withLock existing.scope == scope &&
                 existing.transactionId == transactionId &&
-                existing.envelope == envelope &&
+                (existing.envelope == envelope || existing.envelope.isLegacyIdentityOf(envelope)) &&
                 existing.deliveryState == QuickEditCommandDeliveryState.PENDING
         }
 
@@ -188,6 +188,21 @@ class QuickEditCommandOutbox(
 
     suspend fun acknowledgeUnrecoverableLossNotification() = mutex.withLock {
         store.acknowledgeUnrecoverableLossNotification()
+    }
+
+    private fun HouseholdCommandEnvelopeV1.isLegacyIdentityOf(
+        submitted: HouseholdCommandEnvelopeV1
+    ): Boolean {
+        if (command != HouseholdCommandKind.UPDATE && command != HouseholdCommandKind.DELETE) {
+            return false
+        }
+        if (!commandId.startsWith("android:")) return false
+        val operationId = commandId.removePrefix("android:")
+        // 업그레이드 전 접수된 동일 작업만 인정하며 저장된 envelope와 접수 시각은 바꾸지 않습니다.
+        return operationId.isNotBlank() &&
+            idempotencyKey == "android-quick-edit:$operationId" &&
+            submitted.idempotencyKey == commandId &&
+            copy(idempotencyKey = submitted.idempotencyKey) == submitted
     }
 
     private suspend fun removeEntry(commandId: String) = mutex.withLock {

@@ -39,6 +39,10 @@ function validationError(
 
 export function createItemSplitRestorationCommands(input: {
   store: ItemSplitStore;
+  resolveRestorationSourceVersion?: (
+    source: ItemSplitTransaction | undefined,
+    expectedVersion: number | undefined,
+  ) => number | undefined;
 }): ItemSplitRestorationCommands {
   return {
     split: async (command) => {
@@ -144,9 +148,15 @@ export function createItemSplitRestorationCommands(input: {
       const source = snapshot.transactions.find(
         (transaction) =>
           transaction.transactionId === command.sourceId &&
-          transaction.householdId === command.actor.householdId &&
-          transaction.lifecycleState === "superseded",
+          transaction.householdId === command.actor.householdId,
       );
+      // The adapter may fill the immutable hidden source version omitted by
+      // older clients. Derived versions remain supplied by the client, and
+      // replaceAtomically still rechecks every observed version in the UoW.
+      const suppliedSourceVersion = command.expectedVersions[command.sourceId];
+      const expectedSourceVersion = input.resolveRestorationSourceVersion === undefined
+        ? suppliedSourceVersion
+        : input.resolveRestorationSourceVersion(source, suppliedSourceVersion);
       const derived = snapshot.transactions.filter(
         (transaction) =>
           transaction.householdId === command.actor.householdId &&
@@ -154,8 +164,10 @@ export function createItemSplitRestorationCommands(input: {
       );
       if (
         source === undefined ||
+        source.lifecycleState !== "superseded" ||
         derived.length === 0 ||
-        [source, ...derived].some(
+        source.aggregateVersion !== expectedSourceVersion ||
+        derived.some(
           (transaction) =>
             command.expectedVersions[transaction.transactionId] !==
             transaction.aggregateVersion,

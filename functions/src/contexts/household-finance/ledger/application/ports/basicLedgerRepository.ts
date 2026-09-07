@@ -38,5 +38,5 @@ export interface LedgerTransactionIdGenerator {
 }
 
 export interface LedgerCategoryUsagePolicy {
-  isUsable(categoryId: string): boolean;
+  isUsable(categoryId: string): boolean | Promise<boolean>;
 }

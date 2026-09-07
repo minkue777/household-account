@@ -1,16 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { StockHolding } from '@/types/asset';
 import {
   DividendEventRecord,
   DividendSnapshotData,
-  getAllStockHoldings,
-  getDividendEventsByYear,
-  getDividendSnapshot,
 } from '@/lib/assetService';
+import {
+  readAssetDividendStatistics,
+  type AssetDividendPrefetch,
+  type AssetDividendStatistics,
+} from '@/platform/reporting/assetDividendReadModel';
 import ModalOverlay from '@/components/common/ModalOverlay';
 import { getSeoulCalendarParts, getTodayLocalDate } from '@/lib/utils/date';
 
@@ -38,8 +40,9 @@ function createEmptyMonthlyData() {
   return Array.from({ length: 12 }, () => 0);
 }
 
-export default function AssetDividendChart() {
-  const [dividendYear, setDividendYear] = useState(CURRENT_YEAR);
+export default function AssetDividendChart({ prefetchedSource }: { prefetchedSource?: AssetDividendPrefetch } = {}) {
+  const initialSource = useRef(prefetchedSource);
+  const [dividendYear, setDividendYear] = useState(prefetchedSource?.year ?? CURRENT_YEAR);
   const [stockHoldings, setStockHoldings] = useState<StockHolding[]>([]);
   const [cachedDividendSnapshot, setCachedDividendSnapshot] = useState<DividendSnapshotData | null>(
     null
@@ -52,18 +55,15 @@ export default function AssetDividendChart() {
   useEffect(() => {
     let isCancelled = false;
     let revision = 0;
+    if (initialSource.current?.year !== dividendYear) initialSource.current = undefined;
 
-    const loadDividendData = async () => {
+    const loadDividendData = async (prefetched?: Promise<AssetDividendStatistics>) => {
       const requestRevision = ++revision;
       setIsDividendLoading(true);
       setDividendFailed(false);
 
       try {
-        const [allHoldings, snapshot, events] = await Promise.all([
-          getAllStockHoldings(),
-          getDividendSnapshot(dividendYear),
-          getDividendEventsByYear(dividendYear),
-        ]);
+        const { allHoldings, snapshot, events } = await (prefetched ?? readAssetDividendStatistics(dividendYear));
 
         if (isCancelled || revision !== requestRevision) {
           return;
@@ -87,10 +87,11 @@ export default function AssetDividendChart() {
         return;
       }
 
+      initialSource.current = undefined;
       void loadDividendData();
     };
 
-    void loadDividendData();
+    void loadDividendData(initialSource.current?.result);
     window.addEventListener('focus', handleRefresh);
     document.addEventListener('visibilitychange', handleRefresh);
 

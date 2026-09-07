@@ -89,11 +89,11 @@ export default function StatsPage() {
   }, [expenses, selectedCategory]);
 
   const handleSaveEdit = async (expense: Expense, updates: ExpenseUpdates, rememberForNextTime = false) => {
+    // Successful ledger commands already update the shared statistics revision.
     await updateExpense(expense.id, updates, expense.aggregateVersion, rememberForNextTime);
     if (expenseStatisticsActorKey(getClientSessionScope()) !== actorKey) return;
     setEditingExpense(null);
     setSelectedCategory(null);
-    setQueryRevision(revision => revision + 1);
   };
 
   const handleDeleteExpense = async (expense: Expense) => {
@@ -101,7 +101,6 @@ export default function StatsPage() {
     if (expenseStatisticsActorKey(getClientSessionScope()) !== actorKey) return;
     setEditingExpense(null);
     setSelectedCategory(null);
-    setQueryRevision(revision => revision + 1);
   };
 
   useEffect(() => {

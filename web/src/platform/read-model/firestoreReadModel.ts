@@ -25,6 +25,7 @@ export {
   type DocumentData,
   type DocumentSnapshot,
   type QueryDocumentSnapshot,
+  type QuerySnapshot,
 } from 'firebase/firestore';
 
 export { db } from '@/lib/firebase';

@@ -178,21 +178,19 @@ export async function resolveFirebaseSignedInUser(
     );
   }
 
-  const [canonicalMembership, member, household] = await Promise.all([
+  const [canonicalMembership, member, household] = await database.getAll(
     database
       .collection("households")
       .doc(householdId)
       .collection("memberships")
-      .doc(principalUid)
-      .get(),
+      .doc(principalUid),
     database
       .collection("households")
       .doc(householdId)
       .collection("members")
-      .doc(memberId)
-      .get(),
-    database.collection("households").doc(householdId).get(),
-  ]);
+      .doc(memberId),
+    database.collection("households").doc(householdId),
+  );
   if (
     !household.exists ||
     household.data()?.lifecycleState === "deleted" ||

@@ -1,6 +1,6 @@
 import { getHouseholdCommandClient } from '@/composition/webCommandRuntime';
 import { getClientSessionScope } from '@/composition/clientSessionScope';
-import { notifyExpenseStatisticsMutation } from '@/platform/reporting/expenseStatisticsInvalidation';
+import { notifyExpenseStatisticsMutation, type ExpenseStatisticsConfirmedUpdate } from '@/platform/reporting/expenseStatisticsInvalidation';
 import type { HouseholdCommandName, HouseholdCommandPayloads, HouseholdCommandResults } from '@/platform/functions-api/householdCommandContract';
 import type { ExecuteHouseholdCommandOptions } from '@/platform/functions-api/householdCommandClient';
 import type { Expense } from '@/types/expense';
@@ -38,11 +38,14 @@ function toTransactionPatch(changes: Partial<Expense>): LedgerTransactionPatch {
 async function executeLedgerCommand<Name extends HouseholdCommandName>(
   command: Name,
   payload: HouseholdCommandPayloads[Name],
-  options: ExecuteHouseholdCommandOptions
+  options: ExecuteHouseholdCommandOptions,
+  confirmedUpdate?: (result: HouseholdCommandResults[Name]) => ExpenseStatisticsConfirmedUpdate
 ): Promise<HouseholdCommandResults[Name]> {
   const scope = getClientSessionScope();
   const result = await getHouseholdCommandClient().execute(command, payload, options);
-  if (command !== 'ledger.request-notification.v1') notifyExpenseStatisticsMutation(scope, options.householdId);
+  if (command !== 'ledger.request-notification.v1') {
+    notifyExpenseStatisticsMutation(scope, options.householdId, confirmedUpdate?.(result));
+  }
   return result;
 }
 
@@ -80,10 +83,14 @@ export const ledgerCommands = {
     changes: Partial<Expense>,
     rememberForNextTime = false
   ): Promise<LedgerTransactionCommandResult> {
+    const patch = toTransactionPatch(changes);
+    const fields = Object.keys(patch);
+    const canUpdateStatistics = fields.length > 0 && fields.every(field => field === 'memo' || field === 'categoryId');
     return executeLedgerCommand(
       'ledger.update-transaction.v1',
-      { transactionId, expectedVersion, patch: toTransactionPatch(changes), ...(rememberForNextTime ? { rememberForNextTime: true } : {}) },
-      { householdId }
+      { transactionId, expectedVersion, patch, ...(rememberForNextTime ? { rememberForNextTime: true } : {}) },
+      { householdId },
+      canUpdateStatistics ? transaction => ({ transactionId, expectedVersion, transaction }) : undefined
     );
   },
 
@@ -151,7 +158,8 @@ export const ledgerCommands = {
     return executeLedgerCommand(
       'ledger.change-transaction-category.v1',
       { transactionId, categoryId, expectedVersion },
-      { householdId }
+      { householdId },
+      transaction => ({ transactionId, expectedVersion, transaction })
     );
   },
 

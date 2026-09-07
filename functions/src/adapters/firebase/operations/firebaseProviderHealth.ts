@@ -136,10 +136,10 @@ export class FirebaseProviderHealthRepository
     ).doc(executionKeyHash);
 
     await this.database.runTransaction(async (transaction) => {
-      const [receiptSnapshot, currentHealth] = await Promise.all([
-        transaction.get(receiptReference),
-        transaction.get(healthReference),
-      ]);
+      const [receiptSnapshot, currentHealth] = await transaction.getAll(
+        receiptReference,
+        healthReference,
+      );
       if (receiptSnapshot.exists) return;
 
       const currentVersion = currentHealth.exists

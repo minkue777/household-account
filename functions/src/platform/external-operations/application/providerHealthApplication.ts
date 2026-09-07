@@ -62,10 +62,6 @@ export function createProviderHealthApplication(dependencies: {
       command.provider,
       command.operation,
     );
-    const previousQuote = await dependencies.repository.findQuote(
-      command.provider,
-      command.operation,
-    );
     const previousAlertOpen = previousHealth?.alertState === "open";
     const nextVersion = (previousHealth?.version ?? 0) + 1;
     const alertIdentity = `provider-health:${dependencies.hash.hash(
@@ -94,6 +90,10 @@ export function createProviderHealthApplication(dependencies: {
       result = { kind: "quote-updated", quote: run.finalResult.quote, health };
       if (previousAlertOpen) alertTransition = "resolved";
     } else {
+      const previousQuote = await dependencies.repository.findQuote(
+        command.provider,
+        command.operation,
+      );
       const failure = run.finalResult;
       const normalNoData = failure.kind === "NO_DATA" && !command.expectedData;
       const failedRuns = normalNoData

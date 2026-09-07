@@ -24,10 +24,13 @@ import {
   markWebFirstHomeCompletePaint,
   markWebFirstLedgerPaint,
   markWebLedgerCacheResult,
+  scheduleAfterWebFirstHomeCompletePaint,
 } from '@/platform/performance/webStartupPerformance';
 interface LedgerPageProps {
   transactionType: TransactionType;
 }
+
+const ADJACENT_PREFETCH_FALLBACK_MS = 15_000;
 
 export default function LedgerPage({ transactionType }: LedgerPageProps) {
   const isIncome = transactionType === 'income';
@@ -89,11 +92,19 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
       || !localCurrencySettled
     ) return undefined;
 
-    return prefetchAdjacentPeriods();
+    let cancelPrefetch: (() => void) | undefined;
+    const cancelScheduled = scheduleAfterWebFirstHomeCompletePaint(() => {
+      cancelPrefetch = prefetchAdjacentPeriods();
+    }, { fallbackMs: ADJACENT_PREFETCH_FALLBACK_MS });
+    return () => {
+      cancelScheduled();
+      cancelPrefetch?.();
+    };
   }, [
     categoriesLoading,
     localCurrencySettled,
     prefetchAdjacentPeriods,
+    readRefreshKey,
     serverSnapshotReady,
   ]);
 

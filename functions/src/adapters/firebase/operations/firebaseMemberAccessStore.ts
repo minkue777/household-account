@@ -97,8 +97,7 @@ export class FirebaseMemberAccessStore {
       .collection('memberAccessVisits').doc(createHash('sha256')
         .update(JSON.stringify([event.householdId, event.memberId, event.visitId])).digest('hex'));
     return this.database.runTransaction(async (transaction) => {
-      const snapshot = await transaction.get(reference);
-      const receipt = await transaction.get(visit);
+      const [snapshot, receipt] = await transaction.getAll(reference, visit);
       if (receipt.exists) return { kind: 'already-recorded' as const, totalAccessCount: count(snapshot.data()?.totalAccessCount) };
       const update = recordMemberAccess(
         mapStats(event.householdId, event.memberId, snapshot.data()),

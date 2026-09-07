@@ -45,7 +45,11 @@ data class HouseholdCommandEnvelopeV1(
             operationId: String = UUID.randomUUID().toString()
         ) = HouseholdCommandEnvelopeV1(
             commandId = "android:$operationId",
-            idempotencyKey = "android-quick-edit:$operationId",
+            // Update/Delete의 원자적 domain receipt가 같은 command ID를 멱등 key로 사용합니다.
+            idempotencyKey = when (command) {
+                HouseholdCommandKind.UPDATE, HouseholdCommandKind.DELETE -> "android:$operationId"
+                else -> "android-quick-edit:$operationId"
+            },
             householdId = householdId,
             command = command,
             payload = payload

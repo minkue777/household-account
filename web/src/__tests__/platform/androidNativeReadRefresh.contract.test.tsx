@@ -6,6 +6,11 @@ const mockScheduleAfterWebFirstLedgerPaint = jest.fn((
   _task: () => void,
   _options?: { delayAfterPaintMs?: number; idleTimeoutMs?: number }
 ) => jest.fn());
+const mockScheduleAfterWebFirstHomeCompletePaint = jest.fn((
+  _task: () => void,
+  _options?: { delayAfterPaintMs?: number; idleTimeoutMs?: number; fallbackMs?: number }
+) => jest.fn());
+let mockSessionVerified = true;
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ prefetch: mockRoutePrefetch }),
@@ -15,7 +20,7 @@ jest.mock('@/contexts/HouseholdContext', () => ({
   HouseholdProvider: ({ children }: { children: React.ReactNode }) => children,
   useHousehold: () => ({
     sessionState: 'ready',
-    isSessionVerified: true,
+    isSessionVerified: mockSessionVerified,
     adminHouseholdView: null,
     householdKey: 'household-1',
     currentMember: { id: 'member-1', name: '멤버', aggregateVersion: 1 },
@@ -43,8 +48,8 @@ jest.mock('@/platform/performance/webStartupPerformance', () => ({
   ) => mockScheduleAfterWebFirstLedgerPaint(task, options),
   scheduleAfterWebFirstHomeCompletePaint: (
     task: () => void,
-    options?: { delayAfterPaintMs?: number; idleTimeoutMs?: number }
-  ) => mockScheduleAfterWebFirstLedgerPaint(task, options),
+    options?: { delayAfterPaintMs?: number; idleTimeoutMs?: number; fallbackMs?: number }
+  ) => mockScheduleAfterWebFirstHomeCompletePaint(task, options),
 }));
 
 jest.mock('@/composition/ledgerMutationRuntimePreload', () => ({
@@ -90,6 +95,7 @@ const mockRefreshAndroidHostSession = refreshAndroidHostSession as jest.MockedFu
 describe('Android native 복귀 원격 읽기 갱신 계약', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSessionVerified = true;
     mockRefreshAndroidHostSession.mockResolvedValue(undefined);
   });
 
@@ -155,12 +161,15 @@ describe('Android native 복귀 원격 읽기 갱신 계약', () => {
     expect(recoverRemoteSession).not.toHaveBeenCalled();
   });
 
-  it('첫 원장 paint 이후 idle 작업으로 주요 내부 route를 미리 받는다', () => {
+  it('첫 홈 전체 paint 이후에 주요 route를 미리 받고 다른 진입 화면에는 유한 fallback을 둔다', () => {
     const view = render(<AuthenticatedPlatformEffects />);
-    const routePrefetchTask = mockScheduleAfterWebFirstLedgerPaint.mock.calls
-      .find(([, options]) => options?.idleTimeoutMs === 10_000)?.[0];
+    const routePrefetchCall = mockScheduleAfterWebFirstHomeCompletePaint.mock.calls
+      .find(([, options]) => options?.idleTimeoutMs === 10_000);
+    const routePrefetchTask = routePrefetchCall?.[0];
 
     expect(routePrefetchTask).toBeDefined();
+    expect(routePrefetchCall?.[1]?.fallbackMs).toBe(15_000);
+    expect(mockScheduleAfterWebFirstLedgerPaint.mock.calls.some(([, options]) => options?.idleTimeoutMs === 10_000)).toBe(false);
     expect(mockRoutePrefetch).not.toHaveBeenCalled();
 
     act(() => {
@@ -173,6 +182,19 @@ describe('Android native 복귀 원격 읽기 갱신 계약', () => {
       '/stats',
     ]);
 
+    view.unmount();
+  });
+
+  it('세션 검증을 잃으면 예약한 route prefetch를 취소하고 새 작업을 만들지 않는다', () => {
+    const view = render(<AuthenticatedPlatformEffects />);
+    const index = mockScheduleAfterWebFirstHomeCompletePaint.mock.calls
+      .findIndex(([, options]) => options?.idleTimeoutMs === 10_000);
+    const cancel = mockScheduleAfterWebFirstHomeCompletePaint.mock.results[index].value;
+    const before = mockScheduleAfterWebFirstHomeCompletePaint.mock.calls.length;
+    mockSessionVerified = false;
+    view.rerender(<AuthenticatedPlatformEffects />);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(mockScheduleAfterWebFirstHomeCompletePaint).toHaveBeenCalledTimes(before);
     view.unmount();
   });
 });

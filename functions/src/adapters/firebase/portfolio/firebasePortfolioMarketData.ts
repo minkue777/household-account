@@ -7,6 +7,7 @@ import { NodeExternalTextHttpTransport } from "../../http/nodeExternalTextHttpTr
 import { createSafeExternalTextHttpApplication } from "../../../platform/external-operations/application/safeExternalTextHttpApplication";
 import type {
   SafeExternalTextHttpInputPort,
+  SafeExternalTextHttpRequest,
   SafeExternalTextHttpResult,
 } from "../../../platform/external-operations/application/ports/in/safeExternalTextHttpInputPort";
 import { isKrxGoldSpotCode, parseFrankfurterRate, type ExchangeRateObservation } from "../../../contexts/portfolio/holdings/public";
@@ -26,6 +27,7 @@ const FRANKFURTER_USD_KRW_URL =
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 HouseholdAccount/1.0";
 const REQUEST_TIMEOUT_MILLIS = 10_000;
+const MAX_PROVIDER_CONCURRENCY = 5;
 const DON_TO_GRAM = 3.75;
 
 function failure(
@@ -202,10 +204,35 @@ interface CachedExchangeRate {
   readonly observedAt: string;
 }
 
+type ExchangeRateResult =
+  | { readonly kind: "success"; readonly rate: number; readonly rateDate: string; readonly observedAt: string }
+  | Extract<PortfolioMarketQuoteResult, { readonly kind: "failure" }>;
+
 export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
   private cachedExchangeRate?: CachedExchangeRate;
+  private pendingExchangeRate?: Promise<ExchangeRateResult>;
+  private readonly pendingRateObservations = new Map<string, Promise<ExchangeRateObservation | undefined>>();
+  private activeProviderRequests = 0;
+  private readonly providerRequestWaiters: (() => void)[] = [];
 
   constructor(private readonly http: SafeExternalTextHttpInputPort = defaultSafeHttp(), private readonly observations?: FirebasePortfolioQuoteObservations) {}
+
+  private async executeHttp(request: SafeExternalTextHttpRequest): Promise<SafeExternalTextHttpResult> {
+    // A USD target can fetch its price and FX concurrently without exceeding
+    // the refresh contract's five simultaneous external requests.
+    if (this.activeProviderRequests >= MAX_PROVIDER_CONCURRENCY) {
+      await new Promise<void>(resolve => this.providerRequestWaiters.push(resolve));
+    } else {
+      this.activeProviderRequests += 1;
+    }
+    try {
+      return await this.http.execute(request);
+    } finally {
+      const next = this.providerRequestWaiters.shift();
+      if (next === undefined) this.activeProviderRequests -= 1;
+      else next();
+    }
+  }
 
   async getQuote(
     target: PortfolioMarketTarget,
@@ -227,7 +254,7 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
   }
 
   private async domesticStock(code: string): Promise<PortfolioMarketQuoteResult> {
-    const response = await this.http.execute({
+    const response = await this.executeHttp({
       provider: "naver-domestic",
       operation: "market-quote",
       url: `https://m.stock.naver.com/api/stock/${encodeURIComponent(code)}/basic`,
@@ -251,7 +278,7 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
     if (!NATIONAL_GROWTH_FUND_CODES.has(code.toLocaleUpperCase("en-US"))) {
       return failure("INSTRUMENT_NOT_FOUND", false, "miraeasset-fund-nav");
     }
-    const response = await this.http.execute({
+    const response = await this.executeHttp({
       provider: "miraeasset-fund-nav",
       operation: "fund-nav",
       url: NATIONAL_GROWTH_FUND_PRICE_URL,
@@ -274,7 +301,7 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
   }
 
   private async crypto(market: string): Promise<PortfolioMarketQuoteResult> {
-    const response = await this.http.execute({
+    const response = await this.executeHttp({
       provider: "upbit",
       operation: "market-quote",
       url: `https://api.upbit.com/v1/ticker?markets=${encodeURIComponent(market)}`,
@@ -313,7 +340,7 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
   private async goldMarketQuote(
     gramMultiplier: number,
   ): Promise<PortfolioMarketQuoteResult> {
-    const response = await this.http.execute({
+    const response = await this.executeHttp({
       provider: "naver-krx-gold-market",
       operation: "market-quote",
       url: NAVER_GOLD_URL,
@@ -337,6 +364,33 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
   private async usStock(code: string): Promise<PortfolioMarketQuoteResult> {
     const symbol = code.replace(/^US:/u, "").trim().toLocaleUpperCase("en-US");
     if (symbol === "") return failure("INSTRUMENT_NOT_FOUND", false, "nasdaq-us");
+    const [{ quote, lastFailure }, observedRate] = await Promise.all([
+      this.usStockSource(symbol),
+      this.usdKrwRate(),
+    ]);
+    const providerFailures: { kind: "failure"; code: string; retryable: boolean; provider: string }[] = [];
+    if (lastFailure !== undefined) providerFailures.push({ ...lastFailure, provider: "nasdaq-us" });
+    if (observedRate.kind === "failure") providerFailures.push({ ...observedRate, provider: "frankfurter-v2" });
+    // Select the durable FX observation after the price is ready, even when
+    // its HTTP response came from the five-minute cache. Other instances may
+    // have published a newer rate while this quote was being fetched.
+    const rate = await this.usdKrwObservation(observedRate);
+    if (quote === undefined) return lastFailure ?? failure("QUOTE_NOT_PUBLISHED", false, "nasdaq-us");
+    if (rate === undefined) return failure("EXCHANGE_RATE_NOT_OBSERVED", observedRate.kind === "failure" && observedRate.retryable, "frankfurter-v2");
+    return {
+      kind: "success",
+      quote: { priceInWon: quote.sourcePrice * rate.rate, provider: "nasdaq-us+frankfurter-v2", observedAt: quote.observedAt,
+        sourcePrice: quote.sourcePrice, sourceCurrency: "USD", quoteProvider: quote.provider, quoteObservedAt: quote.observedAt,
+        exchangeRateDate: rate.rateDate, exchangeRateObservedAt: rate.observedAt, exchangeRateProvider: rate.provider },
+      quoteAsOf: rate.rateDate,
+      ...(providerFailures.length === 0 ? {} : { providerFailures }),
+    };
+  }
+
+  private async usStockSource(symbol: string): Promise<{
+    readonly quote?: SourceMarketObservation;
+    readonly lastFailure?: Extract<PortfolioMarketQuoteResult, { readonly kind: "failure" }>;
+  }> {
     const headers = {
       Accept: "application/json, text/plain, */*",
       Origin: "https://www.nasdaq.com",
@@ -349,7 +403,7 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
       "nasdaq-us",
     );
     for (const assetClass of ["stocks", "etf"] as const) {
-      const response = await this.http.execute({
+      const response = await this.executeHttp({
         provider: "nasdaq-us",
         operation: "market-quote",
         url: `https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/info?assetclass=${assetClass}`,
@@ -378,38 +432,41 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
         lastFailure = failure("MARKET_SCHEMA_CHANGED", false, "nasdaq-us");
       }
     }
-    const providerFailures: { kind: "failure"; code: string; retryable: boolean; provider: string }[] = [];
-    if (quote !== undefined) quote = await this.observations?.saveSource(symbol, quote) ?? quote;
-    else {
-      if (lastFailure.kind === "failure") providerFailures.push({ ...lastFailure, provider: "nasdaq-us" });
-      quote = await this.observations?.source(symbol);
+    if (quote !== undefined) {
+      return { quote: await this.observations?.saveSource(symbol, quote) ?? quote };
     }
-    const observedRate = await this.usdKrwRate();
-    let rate: ExchangeRateObservation | undefined;
-    if (observedRate.kind === "success") {
-      const candidate: ExchangeRateObservation = { pair: "USD/KRW", rate: observedRate.rate, rateDate: observedRate.rateDate, observedAt: observedRate.observedAt, provider: "frankfurter-v2" };
-      rate = await this.observations?.saveRate(candidate) ?? candidate;
-    } else {
-      providerFailures.push({ ...observedRate, provider: "frankfurter-v2" });
-      rate = await this.observations?.rate();
-      if (rate === undefined && this.cachedExchangeRate !== undefined) rate = { ...this.cachedExchangeRate, pair: "USD/KRW", provider: "frankfurter-v2" };
-    }
-    if (quote === undefined) return lastFailure;
-    if (rate === undefined) return failure("EXCHANGE_RATE_NOT_OBSERVED", observedRate.kind === "failure" && observedRate.retryable, "frankfurter-v2");
     return {
-      kind: "success",
-      quote: { priceInWon: quote.sourcePrice * rate.rate, provider: "nasdaq-us+frankfurter-v2", observedAt: quote.observedAt,
-        sourcePrice: quote.sourcePrice, sourceCurrency: "USD", quoteProvider: quote.provider, quoteObservedAt: quote.observedAt,
-        exchangeRateDate: rate.rateDate, exchangeRateObservedAt: rate.observedAt, exchangeRateProvider: rate.provider },
-      quoteAsOf: rate.rateDate,
-      ...(providerFailures.length === 0 ? {} : { providerFailures }),
+      quote: await this.observations?.source(symbol),
+      ...(lastFailure.kind === "failure" ? { lastFailure } : {}),
     };
   }
 
-  private async usdKrwRate(): Promise<
-    | { readonly kind: "success"; readonly rate: number; readonly rateDate: string; readonly observedAt: string }
-    | Extract<PortfolioMarketQuoteResult, { readonly kind: "failure" }>
-  > {
+  private async usdKrwObservation(observedRate: ExchangeRateResult): Promise<ExchangeRateObservation | undefined> {
+    const key = JSON.stringify(observedRate);
+    let pending = this.pendingRateObservations.get(key);
+    if (pending === undefined) {
+      pending = this.selectUsdKrwObservation(observedRate);
+      this.pendingRateObservations.set(key, pending);
+    }
+    try {
+      return await pending;
+    } finally {
+      // Share only concurrent persistence/fallback reads, never a completed
+      // durable selection: its transaction must see newer cross-instance FX.
+      if (this.pendingRateObservations.get(key) === pending) this.pendingRateObservations.delete(key);
+    }
+  }
+
+  private async selectUsdKrwObservation(observedRate: ExchangeRateResult): Promise<ExchangeRateObservation | undefined> {
+    if (observedRate.kind === "success") {
+      const candidate: ExchangeRateObservation = { pair: "USD/KRW", rate: observedRate.rate, rateDate: observedRate.rateDate, observedAt: observedRate.observedAt, provider: "frankfurter-v2" };
+      return await this.observations?.saveRate(candidate) ?? candidate;
+    }
+    const rate = await this.observations?.rate();
+    return rate ?? (this.cachedExchangeRate === undefined ? undefined : { ...this.cachedExchangeRate, pair: "USD/KRW", provider: "frankfurter-v2" });
+  }
+
+  private async usdKrwRate(): Promise<ExchangeRateResult> {
     if (
       this.cachedExchangeRate !== undefined &&
       Date.now() - this.cachedExchangeRate.fetchedAt < 5 * 60 * 1_000
@@ -421,7 +478,18 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
         observedAt: this.cachedExchangeRate.observedAt,
       };
     }
-    const response = await this.http.execute({
+    if (this.pendingExchangeRate !== undefined) return this.pendingExchangeRate;
+    const pending = this.fetchUsdKrwRate();
+    this.pendingExchangeRate = pending;
+    try {
+      return await pending;
+    } finally {
+      if (this.pendingExchangeRate === pending) this.pendingExchangeRate = undefined;
+    }
+  }
+
+  private async fetchUsdKrwRate(): Promise<ExchangeRateResult> {
+    const response = await this.executeHttp({
       provider: "frankfurter-v2",
       operation: "exchange-rate",
       url: FRANKFURTER_USD_KRW_URL,

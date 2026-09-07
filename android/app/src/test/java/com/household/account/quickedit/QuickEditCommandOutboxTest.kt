@@ -81,6 +81,92 @@ class QuickEditCommandOutboxTest {
     }
 
     @Test
+    fun `업그레이드 전 pending 수정 삭제를 다시 접수해도 저장된 key와 재시도 시각을 보존한다`() = runTest {
+        for (kind in listOf(HouseholdCommandKind.UPDATE, HouseholdCommandKind.DELETE)) {
+            val store = MemoryStore()
+            var now = 100L
+            val outbox = QuickEditCommandOutbox(store) { now }
+            val submitted = envelope("upgrade-${kind.name}").copy(command = kind)
+            val legacy = submitted.copy(idempotencyKey = "android-quick-edit:upgrade-${kind.name}")
+            assertTrue(outbox.enqueue(scope, "transaction-1", legacy))
+            // 디스크에 저장했던 구버전 identity를 프로세스 재시작 뒤 복원합니다.
+            store.entries = QuickEditCommandOutboxJsonCodec.decode(
+                QuickEditCommandOutboxJsonCodec.encode(store.entries)
+            )
+            val stored = store.entries.single()
+            now = 200L
+
+            assertTrue(outbox.enqueue(scope, "transaction-1", submitted))
+            assertEquals(listOf(stored), store.entries)
+            val client = RecordingClient(ArrayDeque(listOf(
+                HouseholdCommandResult.RetryableFailure("SERVER_UNAVAILABLE"),
+                HouseholdCommandResult.Succeeded(emptyMap<String, Any?>())
+            )))
+            assertEquals(1, outbox.flush(scope, client).pendingCount)
+            assertTrue(outbox.enqueue(scope, "transaction-1", submitted))
+            assertEquals(listOf(stored), store.entries)
+            assertEquals(0, outbox.flush(scope, client).pendingCount)
+            assertEquals(listOf(legacy, legacy), client.envelopes)
+            assertTrue(store.entries.isEmpty())
+        }
+    }
+
+    @Test
+    fun `구버전 key 호환은 같은 scope payload와 정확한 단방향 key 전환에만 허용한다`() = runTest {
+        val submitted = envelope("upgrade-strict")
+        val legacy = submitted.copy(idempotencyKey = "android-quick-edit:upgrade-strict")
+        val store = MemoryStore()
+        val outbox = QuickEditCommandOutbox(store) { 100L }
+        assertTrue(outbox.enqueue(scope, "transaction-1", legacy))
+        val stored = store.entries.single()
+
+        assertFalse(outbox.enqueue(scope.copy(memberId = "another-member"), "transaction-1", submitted))
+        assertFalse(outbox.enqueue(scope.copy(sessionGeneration = 8L), "transaction-1", submitted))
+        assertFalse(outbox.enqueue(scope.copy(householdId = "another-household"), "transaction-1",
+            submitted.copy(householdId = "another-household")))
+        assertFalse(outbox.enqueue(scope, "transaction-2", submitted.copy(
+            payload = submitted.payload + ("transactionId" to "transaction-2")
+        )))
+        assertFalse(outbox.enqueue(scope, "transaction-1", submitted.copy(
+            payload = submitted.payload + ("expectedVersion" to 4)
+        )))
+        assertFalse(outbox.enqueue(scope, "transaction-1", submitted.copy(
+            payload = submitted.payload + ("patch" to mapOf("memo" to "다른 수정"))
+        )))
+        assertFalse(outbox.enqueue(scope, "transaction-1", submitted.copy(command = HouseholdCommandKind.DELETE)))
+        assertFalse(outbox.enqueue(scope, "transaction-1", submitted.copy(idempotencyKey = "unexpected-key")))
+        assertEquals(listOf(stored), store.entries)
+
+        store.entries = listOf(stored.copy(envelope = legacy.copy(idempotencyKey = "unexpected-old-key")))
+        assertFalse(outbox.enqueue(scope, "transaction-1", submitted))
+        store.entries = listOf(stored.copy(envelope = submitted))
+        assertFalse(outbox.enqueue(scope, "transaction-1", legacy))
+        for (kind in listOf(HouseholdCommandKind.SPLIT, HouseholdCommandKind.REQUEST_HOUSEHOLD_NOTIFICATION)) {
+            store.entries = listOf(stored.copy(envelope = legacy.copy(command = kind)))
+            assertFalse(outbox.enqueue(scope, "transaction-1", submitted.copy(command = kind)))
+        }
+    }
+
+    @Test
+    fun `업그레이드 후 재접수는 기존 TTL을 연장하거나 terminal 상태를 되살리지 않는다`() = runTest {
+        val store = MemoryStore()
+        var now = 100L
+        val outbox = QuickEditCommandOutbox(store) { now }
+        val submitted = envelope("upgrade-expired")
+        val legacy = submitted.copy(idempotencyKey = "android-quick-edit:upgrade-expired")
+        assertTrue(outbox.enqueue(scope, "transaction-1", legacy))
+        now += QuickEditCommandOutbox.MAX_RETRY_WINDOW_MILLIS
+        assertTrue(outbox.enqueue(scope, "transaction-1", submitted))
+        val client = RecordingClient(ArrayDeque())
+
+        assertEquals(0, outbox.flush(scope, client).pendingCount)
+        assertTrue(client.envelopes.isEmpty())
+        assertEquals("QUICK_EDIT_RETRY_WINDOW_EXPIRED", store.entries.single().terminalCode)
+        assertEquals(legacy, store.entries.single().envelope)
+        assertFalse(outbox.enqueue(scope, "transaction-1", submitted))
+    }
+
+    @Test
     fun `충돌은 알림 전까지만 needs attention으로 보존하고 알림 뒤 삭제하며 자동 재시도하지 않는다`() = runTest {
         val store = MemoryStore()
         val outbox = QuickEditCommandOutbox(store) { 200L }

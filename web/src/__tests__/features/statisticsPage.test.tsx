@@ -1,10 +1,14 @@
 import { Profiler } from 'react';
-import { setClientSessionScope } from '@/composition/clientSessionScope';
+import { getClientSessionScope, setClientSessionScope } from '@/composition/clientSessionScope';
+import { notifyExpenseStatisticsMutation } from '@/platform/reporting/expenseStatisticsInvalidation';
+import { resolveExpenseStatisticsPeriod } from '@/features/reporting/statisticsPeriod';
 import { resetLoadedClientSessionState } from '@/composition/clientSessionResetRegistry';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import StatsPage from '@/app/stats/page';
 import { readExpenseStatistics } from '@/platform/reporting/expenseStatisticsReadModel';
 import { deleteExpense, updateExpense } from '@/lib/expenseService';
+import { ledgerCommands } from '@/features/ledger/application/ledgerCommands';
+import type { LedgerTransactionCommandResult } from '@/platform/functions-api/householdCommandContract';
 import type { Expense } from '@/types/expense';
 import type { CategoryDocument } from '@/types/category';
 
@@ -12,6 +16,8 @@ let mockHousehold = { householdKey: 'house-1', remoteReadEpoch: 0 };
 let mockCurrentMemberId = 'member';
 let mockCategories: CategoryDocument[] = [];
 const mockShowAlert = jest.fn();
+const mockExecuteLedger = jest.fn();
+jest.mock('@/composition/webCommandRuntime', () => ({ getHouseholdCommandClient: () => ({ execute: mockExecuteLedger }) }));
 jest.mock('@/contexts/HouseholdContext', () => ({ useHousehold: () => ({ ...mockHousehold, currentMember: { id: mockCurrentMemberId } }) }));
 jest.mock('@/contexts/AppDialogContext', () => ({ useAppDialog: () => ({ showAlert: mockShowAlert }) }));
 jest.mock('@/contexts/CategoryContext', () => ({ useCategoryContext: () => ({
@@ -26,12 +32,15 @@ jest.mock('@/lib/expenseService', () => ({ updateExpense: jest.fn(), deleteExpen
 // Actual chart controls, category detail, edit form and confirmation dialog are exercised.
 // Only the canvas renderer and chart click hit testing are replaced.
 jest.mock('react-chartjs-2', () => ({ Line: ({ data }: { data: { datasets: Array<{ label: string }> } }) => <output data-testid="trend-series">{data.datasets.map(dataset => dataset.label).join(',')}</output> }));
-jest.mock('@/components/DonutChart', () => ({ __esModule: true, default: ({ onCategoryClick }: { onCategoryClick: (key: string) => void }) => <button onClick={() => onCategoryClick('food')}>상세</button> }));
+jest.mock('@/components/DonutChart', () => ({ __esModule: true, default: ({ expenses, onCategoryClick }: { expenses: Expense[]; onCategoryClick: (key: string) => void }) => <><button onClick={() => onCategoryClick(expenses[0]?.category ?? 'food')}>상세</button><output data-testid="donut-source">{expenses.map(expense => `${expense.category}:${expense.amount}`).join(',')}</output></> }));
 const read = jest.mocked(readExpenseStatistics);
 const row: Expense = { id: 'a', aggregateVersion: 1, amount: 0, date: '2026-09-01', merchant: '가게', category: 'food', transactionType: 'expense' };
 const category = (key: string, budget: number | null, order = 0): CategoryDocument => ({
   id: key, key, label: key, color: '#123456', budget, order, isDefault: false, isActive: true, householdId: 'house-1',
 });
+async function confirmMutation() {
+  notifyExpenseStatisticsMutation(getClientSessionScope(), mockHousehold.householdKey);
+}
 beforeEach(() => {
   jest.clearAllMocks();
   read.mockReset();
@@ -42,6 +51,9 @@ beforeEach(() => {
   mockCategories = [];
   read.mockResolvedValue([]);
   mockShowAlert.mockResolvedValue(undefined);
+  mockExecuteLedger.mockReset();
+  jest.mocked(updateExpense).mockReset().mockImplementation(confirmMutation);
+  jest.mocked(deleteExpense).mockReset().mockImplementation(confirmMutation);
 });
 afterEach(() => jest.useRealTimers());
 
@@ -54,7 +66,7 @@ async function openEditor() {
 it('distinguishes observed zero, NoData and source failure and advances revision only after a successful command', async () => {
   mockCategories = [category('food', 500), category('living', null)];
   read.mockResolvedValueOnce([row]).mockResolvedValueOnce([{ ...row, amount: 20 }]);
-  jest.mocked(updateExpense).mockResolvedValue(undefined);
+  jest.mocked(updateExpense).mockImplementation(confirmMutation);
   render(<StatsPage />);
   await screen.findByText('0원');
   const editor = await openEditor();
@@ -78,7 +90,7 @@ it.each(['delete', 'save'] as const)('STAT-004 actual %s failure preserves the p
   let rejectCommand!: (error: Error) => void;
   const commandMock = command === 'delete' ? jest.mocked(deleteExpense) : jest.mocked(updateExpense);
   commandMock.mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { rejectCommand = reject; }));
-  commandMock.mockResolvedValueOnce(undefined);
+  commandMock.mockImplementationOnce(confirmMutation);
   render(<StatsPage />);
   fireEvent.click(screen.getByRole('button', { name: '3개월' }));
   const editor = await openEditor();
@@ -93,7 +105,7 @@ it.each(['delete', 'save'] as const)('STAT-004 actual %s failure preserves the p
     }
   };
   const initialReadCount = read.mock.calls.length;
-  const initialRange = read.mock.calls.at(-1);
+  const selectedRange = resolveExpenseStatisticsPeriod('3months', '', '');
   submit();
   expect(editor).toBeInTheDocument();
   expect(within(editor).getByDisplayValue('실패해도 보존할 메모')).toBeInTheDocument();
@@ -108,9 +120,74 @@ it.each(['delete', 'save'] as const)('STAT-004 actual %s failure preserves the p
   submit();
   await waitFor(() => expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument());
   await waitFor(() => expect(read).toHaveBeenCalledTimes(initialReadCount + 1));
-  expect(read.mock.calls.at(-1)?.slice(0, 2)).toEqual(initialRange?.slice(0, 2));
+  expect(read.mock.calls.at(-1)?.slice(0, 2)).toEqual([selectedRange.startDate, selectedRange.endDate]);
   if (command === 'delete') expect(deleteExpense).toHaveBeenLastCalledWith('a', 1);
   else expect(updateExpense).toHaveBeenLastCalledWith('a', { amount: 27, memo: '실패해도 보존할 메모' }, 1, false);
+});
+
+it.each(['save', 'delete'] as const)('a completed shared refresh is not repeated when the %s form finishes closing', async command => {
+  read.mockResolvedValue([{ ...row, amount: 10 }]);
+  let finishForm!: () => void;
+  const commandMock = command === 'delete' ? jest.mocked(deleteExpense) : jest.mocked(updateExpense);
+  commandMock.mockImplementationOnce(() => new Promise<void>(resolve => { finishForm = resolve; }));
+  render(<StatsPage />);
+  const editor = await openEditor();
+  if (command === 'save') {
+    fireEvent.change(within(editor).getByDisplayValue('10'), { target: { value: '27' } });
+    fireEvent.click(within(editor).getByRole('button', { name: '저장' }));
+  } else {
+    fireEvent.click(within(editor).getByRole('button', { name: '삭제' }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: '지출 삭제' })).getByRole('button', { name: '삭제' }));
+  }
+  expect(read).toHaveBeenCalledTimes(1);
+  read.mockResolvedValue(command === 'save' ? [{ ...row, aggregateVersion: 2, amount: 27 }] : []);
+  // The command layer publishes its revision before its caller finishes the
+  // optimistic projection and closes the form. Let that shared read finish first.
+  await act(confirmMutation);
+  await screen.findAllByText(command === 'save' ? '27원' : '데이터 없음');
+  expect(read).toHaveBeenCalledTimes(2);
+  await act(async () => finishForm());
+  expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
+  expect(read).toHaveBeenCalledTimes(2);
+  fireEvent.focus(window);
+  await waitFor(() => expect(read).toHaveBeenCalledTimes(3));
+});
+
+it.each(['memo', 'category'] as const)('confirmed %s edits update the visible statistics and next editor without another source read', async field => {
+  mockCategories = [category('food', 500), category('living', 500)];
+  read.mockResolvedValue([{ ...row, amount: 10, memo: '원래 메모' }]);
+  const confirmed: LedgerTransactionCommandResult = {
+    transactionId: row.id, householdId: 'house-1', transactionType: 'expense',
+    merchant: row.merchant, amountInWon: 10, accountingDate: row.date,
+    memo: field === 'memo' ? '새 메모' : '원래 메모',
+    categoryId: field === 'category' ? 'living' : 'food',
+    aggregateVersion: 2, lifecycleState: 'active', localTime: '12:00',
+    cardType: 'manual', cardDisplay: '수동', creatorMemberId: 'member',
+  };
+  mockExecuteLedger.mockResolvedValue(confirmed);
+  jest.mocked(updateExpense).mockImplementation(async (id, changes, version, remember) => {
+    await ledgerCommands.update('house-1', id, version, changes, remember);
+  });
+  render(<StatsPage />);
+  const editor = await openEditor();
+  if (field === 'memo') {
+    fireEvent.change(within(editor).getByPlaceholderText('메모를 입력하세요'), { target: { value: '새 메모' } });
+  } else {
+    fireEvent.click(within(editor).getByRole('button', { name: 'li' }));
+  }
+  fireEvent.click(within(editor).getByRole('button', { name: '저장' }));
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument());
+  expect(read).toHaveBeenCalledTimes(1);
+  expect(screen.getByTestId('donut-source')).toHaveTextContent(`${confirmed.categoryId}:10`);
+  const nextEditor = await openEditor();
+  expect(within(nextEditor).getByDisplayValue(confirmed.memo)).toBeInTheDocument();
+  fireEvent.change(within(nextEditor).getByPlaceholderText('메모를 입력하세요'), { target: { value: '다음 수정' } });
+  mockExecuteLedger.mockResolvedValue({ ...confirmed, memo: '다음 수정', aggregateVersion: 3 });
+  fireEvent.click(within(nextEditor).getByRole('button', { name: '저장' }));
+  await waitFor(() => expect(updateExpense).toHaveBeenLastCalledWith('a', { memo: '다음 수정' }, 2, false));
+  expect(read).toHaveBeenCalledTimes(1);
+  fireEvent.focus(window);
+  await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
 });
 
 it('STAT-003 waits for the asynchronous budget catalog, keeps screen toggles across period changes, and reinitializes on household change', async () => {

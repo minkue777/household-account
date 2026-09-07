@@ -36,9 +36,58 @@ class HouseholdCommandClientTest {
         assertEquals("household-command.v1", sent["contractVersion"])
         assertEquals("household-1", sent["householdId"])
         assertEquals("ledger.update-transaction.v1", sent["command"])
+        assertEquals("android:operation-1", sent["commandId"])
+        assertEquals("android:operation-1", sent["idempotencyKey"])
         assertFalse(sent.containsKey("uid"))
         assertFalse(sent.containsKey("memberId"))
         assertFalse(sent.containsKey("role"))
+    }
+
+    @Test
+    fun `신규 수정 삭제만 domain receipt key를 공유하고 나머지 command key는 보존한다`() {
+        for (kind in HouseholdCommandKind.entries) {
+            val envelope = HouseholdCommandEnvelopeV1.create(
+                "household-1", kind, emptyMap(), "operation-key"
+            )
+            assertEquals("android:operation-key", envelope.commandId)
+            assertEquals(
+                if (kind == HouseholdCommandKind.UPDATE || kind == HouseholdCommandKind.DELETE) {
+                    "android:operation-key"
+                } else {
+                    "android-quick-edit:operation-key"
+                },
+                envelope.idempotencyKey
+            )
+        }
+        val principal = HouseholdCommandEnvelopeV1.createPrincipal(
+            HouseholdCommandKind.RESOLVE_SIGNED_IN_USER, operationId = "principal-key"
+        )
+        assertEquals("android:principal-key", principal.commandId)
+        assertEquals("android-principal:principal-key", principal.idempotencyKey)
+    }
+
+    @Test
+    fun `저장된 구버전 key도 그대로 전송하고 서버 replay는 성공으로 처리한다`() = runTest {
+        val legacy = HouseholdCommandEnvelopeV1.create(
+            "household-1", HouseholdCommandKind.UPDATE,
+            mapOf("transactionId" to "transaction-1", "expectedVersion" to 3), "legacy"
+        ).copy(idempotencyKey = "android-quick-edit:legacy")
+        var sent = emptyMap<String, Any?>()
+        val client = CallableHouseholdCommandClient(object : AuthenticatedCallableGateway {
+            override suspend fun call(
+                functionName: String, payload: Map<String, Any?>
+            ): Map<String, Any?> {
+                sent = payload
+                return mapOf(
+                    "contractVersion" to "household-command-response.v1",
+                    "commandId" to payload["commandId"],
+                    "result" to mapOf("kind" to "already-processed", "value" to "confirmed")
+                )
+            }
+        })
+
+        assertEquals(HouseholdCommandResult.Succeeded("confirmed"), client.execute(legacy))
+        assertEquals(legacy.toMap(), sent)
     }
 
     @Test

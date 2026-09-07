@@ -254,11 +254,11 @@ export class FirebaseLedgerCommandRepository
 
     try {
       return await this.database.runTransaction(async (unitOfWork) => {
-        const [receiptSnapshot, canonicalSnapshot, legacySnapshot] = await Promise.all([
-          unitOfWork.get(receiptReference),
-          unitOfWork.get(canonicalTransactionReference),
-          unitOfWork.get(legacyTransactionReference),
-        ]);
+        const [receiptSnapshot, canonicalSnapshot, legacySnapshot] = await unitOfWork.getAll(
+          receiptReference,
+          canonicalTransactionReference,
+          legacyTransactionReference,
+        );
         if (receiptSnapshot.exists) {
           const storedHash = receiptSnapshot.data()?.payloadHash;
           const replayedResult =

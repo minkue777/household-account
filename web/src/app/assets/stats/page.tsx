@@ -25,8 +25,9 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import AssetProfitChart from '@/components/assets/AssetProfitChart';
 import AssetDividendChart from '@/components/assets/AssetDividendChart';
-import { getTodayLocalDate } from '@/lib/utils/date';
+import { getSeoulCalendarParts, getTodayLocalDate } from '@/lib/utils/date';
 import { readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
+import { readAssetDividendStatistics, type AssetDividendPrefetch } from '@/platform/reporting/assetDividendReadModel';
 import { resolveAssetStatisticsPeriod } from '@/features/reporting/statisticsPeriod';
 import { sumSignedAssetBalances, sumSignedBalancesByAssetType } from '@/lib/assets/assetMath';
 import { getClientSessionScope } from '@/composition/clientSessionScope';
@@ -152,6 +153,7 @@ export default function AssetStatsPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [hasCurrentAssets, setHasCurrentAssets] = useState(false);
   const [allHistory, setAllHistory] = useState<AssetHistoryEntry[]>([]);
+  const [dividendPrefetch, setDividendPrefetch] = useState<{ key: string; source: AssetDividendPrefetch } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [completedSourceKey, setCompletedSourceKey] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -198,7 +200,19 @@ export default function AssetStatsPage() {
     setIsLoading(true);
     setCompletedSourceKey(null);
     setFailed(false);
+    setDividendPrefetch(null);
     if (!canRead) return;
+
+    // Dividend reads do not depend on history. Start them now and hand the
+    // complete source to the card once the existing history display gate opens.
+    const year = getSeoulCalendarParts().year;
+    const result = readAssetDividendStatistics(year, () => {
+      if (!active) throw new Error('STATISTICS_SESSION_CHANGED');
+    });
+    // The card retains this rejection, including when history finishes later.
+    // Observe it now so leaving the page cannot produce an unhandled rejection.
+    void result.catch(() => {});
+    setDividendPrefetch({ key: sourceKey, source: { year, result } });
 
     const fetchHistory = async () => {
       setIsLoading(true);
@@ -711,7 +725,9 @@ export default function AssetStatsPage() {
               sourceHistory={allHistory}
             />
 
-            {canRead && <AssetDividendChart key={`dividend:${actorKey}:${remoteReadEpoch}`} />}
+            {canRead && dividendPrefetch?.key === sourceKey && (
+              <AssetDividendChart key={`dividend:${actorKey}:${remoteReadEpoch}`} prefetchedSource={dividendPrefetch.source} />
+            )}
           </div>
         )}
       </div>

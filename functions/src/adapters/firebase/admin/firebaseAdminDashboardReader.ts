@@ -192,7 +192,7 @@ export class FirebaseAdminDashboardReader {
   }): Promise<AdminOperationsDashboard> {
     const definitions = loadScheduledJobDefinitions();
     const [
-      householdSnapshot,
+      [householdSnapshot, memberSnapshots],
       statsSnapshot,
       runSnapshot,
       monitorReceiptSnapshot,
@@ -202,7 +202,14 @@ export class FirebaseAdminDashboardReader {
       billingCostSnapshot,
     ] =
       await Promise.all([
-        this.database.collection("households").get(),
+        // Member reads depend only on households, not on the slower external
+        // Cloud Logging request or the other independent dashboard sections.
+        this.database.collection("households").get().then(async (households) => [
+          households,
+          await Promise.all(households.docs.map((household) =>
+            household.ref.collection("members").get(),
+          )),
+        ] as const),
         operationsCollection(this.database, "memberAccessStats").get(),
         operationsCollection(this.database, "scheduledJobRuns")
           .orderBy("scheduledFor", "desc")
@@ -234,11 +241,6 @@ export class FirebaseAdminDashboardReader {
         this.database.doc(BILLING_COST_SNAPSHOT_PATH).get(),
       ]);
 
-    const memberSnapshots = await Promise.all(
-      householdSnapshot.docs.map((household) =>
-        household.ref.collection("members").get(),
-      ),
-    );
     const dates = recentDates(input.generatedAt, input.rangeDays);
     const today = dates.at(-1) ?? seoulCalendarDate(input.generatedAt);
 

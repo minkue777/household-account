@@ -3,6 +3,7 @@ import { act, render } from '@testing-library/react';
 const markWebFirstLedgerPaint = jest.fn();
 const markWebFirstHomeCompletePaint = jest.fn();
 const prefetchAdjacentPeriods = jest.fn(() => jest.fn());
+const scheduleHomePrefetch = jest.fn((_task: () => void, _options?: { fallbackMs?: number }) => jest.fn());
 
 let categoryRead = {
   isLoading: true,
@@ -55,6 +56,7 @@ jest.mock('@/platform/performance/webStartupPerformance', () => ({
   markWebLedgerCacheResult: jest.fn(),
   markWebFirstLedgerPaint: () => markWebFirstLedgerPaint(),
   markWebFirstHomeCompletePaint: () => markWebFirstHomeCompletePaint(),
+  scheduleAfterWebFirstHomeCompletePaint: (task: () => void, options?: { fallbackMs?: number }) => scheduleHomePrefetch(task, options),
 }));
 
 jest.mock('@/components/Calendar', () => ({
@@ -167,5 +169,37 @@ describe('first home complete paint contract', () => {
     expect(markWebFirstHomeCompletePaint).not.toHaveBeenCalled();
     flushFrame();
     expect(markWebFirstHomeCompletePaint).toHaveBeenCalledTimes(1);
+  });
+
+  it('먼저 도착한 월 원장만으로 인접 월을 조회하지 않고 전체 paint 예약을 기다린다', () => {
+    ledgerRead = { ...ledgerRead, isLoading: false, serverSnapshotReady: true, localCurrencySettled: true };
+    categoryRead = { isLoading: false, serverSnapshotReady: true };
+    const view = render(<LedgerPage transactionType="expense" />);
+    flushFrame();
+    flushFrame();
+    expect(markWebFirstLedgerPaint).toHaveBeenCalled();
+    expect(markWebFirstHomeCompletePaint).not.toHaveBeenCalled();
+    expect(prefetchAdjacentPeriods).not.toHaveBeenCalled();
+    expect(scheduleHomePrefetch).toHaveBeenCalledWith(expect.any(Function), { fallbackMs: 15_000 });
+    act(() => scheduleHomePrefetch.mock.calls[0][0]());
+    expect(prefetchAdjacentPeriods).toHaveBeenCalledTimes(1);
+    const cancelPrefetch = prefetchAdjacentPeriods.mock.results[0].value;
+    view.unmount();
+    expect(cancelPrefetch).toHaveBeenCalledTimes(1);
+    expect(scheduleHomePrefetch.mock.results[0].value).toHaveBeenCalledTimes(1);
+  });
+
+  it('읽기 세대가 바뀌거나 화면을 떠나면 아직 시작하지 않은 사전 조회 예약을 취소한다', () => {
+    ledgerRead = { ...ledgerRead, isLoading: false, serverSnapshotReady: true, localCurrencySettled: true };
+    categoryRead = { isLoading: false, serverSnapshotReady: true };
+    const view = render(<LedgerPage transactionType="expense" />);
+    const cancelFirst = scheduleHomePrefetch.mock.results[0].value;
+    ledgerRead = { ...ledgerRead, readRefreshKey: 'read-2' };
+    view.rerender(<LedgerPage transactionType="expense" />);
+    expect(cancelFirst).toHaveBeenCalledTimes(1);
+    expect(scheduleHomePrefetch).toHaveBeenCalledTimes(2);
+    view.unmount();
+    expect(scheduleHomePrefetch.mock.results[1].value).toHaveBeenCalledTimes(1);
+    expect(prefetchAdjacentPeriods).not.toHaveBeenCalled();
   });
 });

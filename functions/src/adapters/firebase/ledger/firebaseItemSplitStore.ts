@@ -213,16 +213,13 @@ export class FirebaseItemSplitStore implements ItemSplitStore {
         if (receiptSnapshot.exists) return { kind: "success" } as const;
 
         const affected = [...affectedIds];
-        const currentSnapshots = await Promise.all(
-          affected.flatMap((transactionId) => [
-            unitOfWork.get(
-              household.collection("ledgerTransactions").doc(transactionId),
-            ),
-            unitOfWork.get(
-              this.database.collection("expenses").doc(transactionId),
-            ),
-          ]),
-        );
+        const currentReferences = affected.flatMap((transactionId) => [
+          household.collection("ledgerTransactions").doc(transactionId),
+          this.database.collection("expenses").doc(transactionId),
+        ]);
+        const currentSnapshots = currentReferences.length === 0
+          ? []
+          : await unitOfWork.getAll(...currentReferences);
         const currentById = new Map<string, ItemSplitTransaction>();
         affected.forEach((transactionId, index) => {
           const current = mergeCanonicalLedgerTransactions({

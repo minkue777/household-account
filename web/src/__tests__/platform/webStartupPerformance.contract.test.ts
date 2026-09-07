@@ -124,4 +124,51 @@ describe('Web startup performance contract', () => {
     jest.runAllTimers();
     expect(task).toHaveBeenCalledTimes(1);
   });
+
+  it('선택적 홈 prefetch는 월 원장 paint로 시작하지 않으며 완료 불가 시 fallback이 한 번만 실행된다', () => {
+    const performance = installPerformanceDouble();
+    const telemetry = require('@/platform/performance/webStartupPerformance') as typeof import(
+      '@/platform/performance/webStartupPerformance'
+    );
+    const task = jest.fn();
+    telemetry.scheduleAfterWebFirstHomeCompletePaint(task, { fallbackMs: 15_000 });
+    telemetry.markWebFirstLedgerPaint();
+    jest.advanceTimersByTime(14_999);
+    expect(task).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(1);
+    jest.runOnlyPendingTimers();
+    expect(task).toHaveBeenCalledTimes(1);
+    expect(performance.entries.some(entry => entry.name === telemetry.WEB_STARTUP_MARKS.firstHomeCompletePaint)).toBe(false);
+    telemetry.markWebFirstHomeCompletePaint();
+    jest.runAllTimers();
+    expect(task).toHaveBeenCalledTimes(1);
+  });
+
+  it('다른 route에서 홈 paint가 없어도 fallback이 실행되고 unmount는 그 예약을 취소한다', () => {
+    installPerformanceDouble();
+    const telemetry = require('@/platform/performance/webStartupPerformance') as typeof import(
+      '@/platform/performance/webStartupPerformance'
+    );
+    const activeTask = jest.fn();
+    const cancelledTask = jest.fn();
+    telemetry.scheduleAfterWebFirstHomeCompletePaint(activeTask, { fallbackMs: 15_000 });
+    const cancel = telemetry.scheduleAfterWebFirstHomeCompletePaint(cancelledTask, { fallbackMs: 15_000 });
+    cancel();
+    jest.runAllTimers();
+    expect(activeTask).toHaveBeenCalledTimes(1);
+    expect(cancelledTask).not.toHaveBeenCalled();
+  });
+
+  it('전체 홈 paint 후 실행 대기 중 cleanup도 작업과 fallback을 모두 취소한다', () => {
+    installPerformanceDouble();
+    const telemetry = require('@/platform/performance/webStartupPerformance') as typeof import(
+      '@/platform/performance/webStartupPerformance'
+    );
+    const task = jest.fn();
+    const cancel = telemetry.scheduleAfterWebFirstHomeCompletePaint(task, { fallbackMs: 15_000 });
+    telemetry.markWebFirstHomeCompletePaint();
+    cancel();
+    jest.runAllTimers();
+    expect(task).not.toHaveBeenCalled();
+  });
 });

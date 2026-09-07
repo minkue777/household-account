@@ -16,7 +16,8 @@ describe('Android native 복귀 읽기 경계', () => {
     expect(appProviders).not.toContain('refreshRemoteReads');
     expect(ledgerReadModel).toContain('ANDROID_NATIVE_RESUME_EVENT');
     expect(ledgerReadModel).toContain('readRefreshKey');
-    expect(ledgerPage.match(/\breadRefreshKey\b/g)).toHaveLength(2);
+    // Context 수신, 연간 조회 갱신, 이전 세대 인접 월 prefetch 취소에만 사용합니다.
+    expect(ledgerPage.match(/\breadRefreshKey\b/g)).toHaveLength(3);
 
     for (const unrelatedReadModel of [
       'contexts/CategoryContext.tsx',

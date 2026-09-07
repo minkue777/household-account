@@ -10,6 +10,7 @@ import {
   orderBy,
   documentId,
   QueryDocumentSnapshot,
+  QuerySnapshot,
   DocumentData,
   db,
 } from '@/platform/read-model/firestoreReadModel';
@@ -132,7 +133,10 @@ export function resolveExpenseCardDisplay(data: LedgerCardReadFields): string | 
  * Firestore 문서를 Expense 객체로 변환 (DRY 원칙)
  */
 export function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense {
-  const data = docSnap.data();
+  return mapExpenseReadData(docSnap.id, docSnap.data());
+}
+
+function mapExpenseReadData(id: string, data: DocumentData): Expense {
   const cardDisplay = resolveExpenseCardDisplay(data);
   const localCurrencyType =
     typeof data.localCurrencyType === 'string' && data.localCurrencyType.trim() !== ''
@@ -153,7 +157,7 @@ export function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): E
       )
     : undefined;
   return {
-    id: docSnap.id,
+    id,
     aggregateVersion: Number.isInteger(data.aggregateVersion) && data.aggregateVersion > 0
       ? data.aggregateVersion
       : 1,
@@ -175,6 +179,37 @@ export function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): E
     ...(splitOriginalId === undefined ? {} : { splitOriginalId }),
     splitIndex: data.splitIndex,
     splitTotal: data.splitTotal,
+  };
+}
+
+/** Each listener owns its source; the first accepted server event may follow ignored cache events. */
+function createExpenseSnapshotReader(): (snapshot: QuerySnapshot<DocumentData>) => Expense[] {
+  let current: Map<string, Expense> | undefined;
+  return (snapshot) => {
+    // Commit the source only after the complete event has been decoded.
+    const next = new Map(current);
+    const put = (document: QueryDocumentSnapshot<DocumentData>) => {
+      const data = document.data();
+      if (isVisibleLedgerReadDocument(data)) next.set(document.id, mapExpenseReadData(document.id, data));
+      else next.delete(document.id);
+    };
+    try {
+      if (current === undefined) {
+        snapshot.docs.forEach(put);
+      } else {
+        for (const change of snapshot.docChanges()) {
+          if (change.type === 'removed') next.delete(change.doc.id);
+          else put(change.doc);
+        }
+      }
+    } catch (error) {
+      // Firestore's change cursor still advanced. Rebuild from all documents
+      // next time so changes from this rejected event cannot be lost.
+      current = undefined;
+      throw error;
+    }
+    current = next;
+    return Array.from(next.values());
   };
 }
 
@@ -479,16 +514,13 @@ function subscribeToMonthlyTransactionSource(
     where('date', '<=', endDate)
   );
 
+  const readSnapshot = createExpenseSnapshotReader();
   let hasServerSnapshot = false;
   const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
     if (!hasServerSnapshot && snapshot.metadata.fromCache) return;
     hasServerSnapshot = true;
-    const allExpenses = snapshot.docs
-      .filter((document) => isVisibleLedgerReadDocument(document.data()))
-      .map(mapDocToExpense);
-
-    // 클라이언트에서 날짜 필터링 및 정렬
-    projection.publish(allExpenses);
+    // Metadata events still advance authority/reconciliation, without decoding unchanged rows.
+    projection.publish(readSnapshot(snapshot));
   }, (error) => {
     onError?.(error);
   });
@@ -600,12 +632,9 @@ export function subscribeToDateRangeExpenses(
     where('date', '<=', endDate)
   );
 
+  const readSnapshot = createExpenseSnapshotReader();
   const unsubscribe = onSnapshot(q, (snapshot) => {
-    const allExpenses = snapshot.docs
-      .filter((document) => isVisibleLedgerReadDocument(document.data()))
-      .map(mapDocToExpense);
-
-    projection.publish(allExpenses);
+    projection.publish(readSnapshot(snapshot));
   }, (error) => {
     options.onError?.(error);
   });

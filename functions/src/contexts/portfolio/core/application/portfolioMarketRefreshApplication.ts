@@ -76,22 +76,26 @@ export function createPortfolioMarketRefreshCommand(dependencies: {
             readonly latencyMs: number;
           }[];
         }[] = [];
-        for (let offset = 0; offset < pendingTargets.length; offset += 50) {
-          const page = pendingTargets.slice(offset, offset + 50);
-          const quoteCache = new Map<string, ReturnType<typeof quoteWithRetries>>();
-          const pageResults = await withConcurrency(page, 5, async (target) => {
-            const cacheKey = `${target.market}\u0000${target.instrumentCode}`;
-            let pending = quoteCache.get(cacheKey);
-            if (pending === undefined) {
-              pending = quoteWithRetries(dependencies.marketQuotes, target);
-              quoteCache.set(cacheKey, pending);
-            }
-            return { target, execution: await pending };
-          });
-          for (const { target, execution } of pageResults) {
-            results.set(target.targetKey, execution.result);
-            executions.push({ target, ...execution });
-          }
+        const quoteKey = (target: PortfolioMarketTarget) => `${target.market}\u0000${target.instrumentCode}`;
+        const uniqueTargets = new Map<string, PortfolioMarketTarget>();
+        for (const target of pendingTargets) {
+          if (!uniqueTargets.has(quoteKey(target))) uniqueTargets.set(quoteKey(target), target);
+        }
+        const quoteTargets = [...uniqueTargets.values()];
+        const quoted = new Map<string, Awaited<ReturnType<typeof quoteWithRetries>>>();
+        // Workers and page boundaries belong to provider quotes, not positions:
+        // repeated holdings must not occupy slots or re-fetch across pages.
+        for (let offset = 0; offset < quoteTargets.length; offset += 50) {
+          const pageResults = await withConcurrency(quoteTargets.slice(offset, offset + 50), 5, async target => ({
+            target,
+            execution: await quoteWithRetries(dependencies.marketQuotes, target),
+          }));
+          for (const { target, execution } of pageResults) quoted.set(quoteKey(target), execution);
+        }
+        for (const target of pendingTargets) {
+          const execution = quoted.get(quoteKey(target))!;
+          results.set(target.targetKey, execution.result);
+          executions.push({ target, ...execution });
         }
         if (dependencies.providerHealth !== undefined) {
           await Promise.allSettled(
@@ -129,7 +133,7 @@ export function createPortfolioMarketRefreshCommand(dependencies: {
             : [];
         });
 
-        return dependencies.atomic(metadata, (state) => {
+        return await dependencies.atomic(metadata, (state) => {
           if (targets.some(target => {
             const beforeAsset = snapshot.assets.find(asset => asset.assetId === target.assetId);
             const currentAsset = state.assets.find(asset => asset.assetId === target.assetId);

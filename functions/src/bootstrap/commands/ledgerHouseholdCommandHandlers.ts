@@ -207,7 +207,7 @@ async function activeCategories(
 function commandsFor(
   database: firestore.Firestore,
   context: HouseholdCommandExecutionContext,
-  categories?: ReadonlySet<string>,
+  categories?: ReadonlySet<string> | (() => Promise<ReadonlySet<string>>),
   rememberForNextTime = false,
 ) {
   const verifiedActor = actor(context);
@@ -222,7 +222,9 @@ function commandsFor(
     // 않습니다. 메모/금액 수정과 삭제가 카테고리 전체 조회를 선행하지 않도록
     // 카탈로그를 생략하되, 예상 밖 호출은 허용하지 않는 보수적 policy를 둡니다.
     categories: {
-      isUsable: (categoryId) => categories?.has(categoryId) ?? false,
+      isUsable: (categoryId) => typeof categories === "function"
+        ? categories().then((catalog) => catalog.has(categoryId))
+        : categories?.has(categoryId) ?? false,
     },
     clock: { now: () => context.requestedAt },
     idGenerator: {
@@ -286,7 +288,7 @@ export function createLedgerHouseholdCommandHandlers(
           const categories =
             patch.categoryId === undefined
               ? undefined
-              : await activeCategories(database, actor(context).householdId);
+              : () => activeCategories(database, actor(context).householdId);
           const commands = commandsFor(database, context, categories, payload.rememberForNextTime === true);
           return resultValue(
             await commands.update({
@@ -309,7 +311,7 @@ export function createLedgerHouseholdCommandHandlers(
           const commands = commandsFor(
             database,
             context,
-            await activeCategories(database, actor(context).householdId),
+            () => activeCategories(database, actor(context).householdId),
             payload.rememberForNextTime === true,
           );
           return resultValue(
@@ -436,13 +438,18 @@ export function createLedgerHouseholdCommandHandlers(
           const sourceId = stringValue(payload, "sourceId");
           const expectedVersions = versionMap(payload.expectedVersions);
           const store = new FirebaseItemSplitStore(database, verifiedActor.householdId, context.requestedAt);
-          // Hidden originals are immutable to ordinary commands; the UoW rechecks this read version.
-          const source = (await store.load({ sourceId, includeDerived: true })).transactions.find(item => item.transactionId === sourceId);
-          if (source === undefined) throw new HouseholdCommandRejection("TRANSACTION_NOT_FOUND");
-          const result = await createItemSplitRestorationCommands({ store }).restore({
+          const result = await createItemSplitRestorationCommands({
+            store,
+            resolveRestorationSourceVersion(source, expectedVersion) {
+              if (source === undefined) throw new HouseholdCommandRejection("TRANSACTION_NOT_FOUND");
+              // Hidden originals are immutable to ordinary commands; the UoW
+              // rechecks the same version loaded by the restoration service.
+              return expectedVersion ?? source.aggregateVersion;
+            },
+          }).restore({
             actor: { householdId: verifiedActor.householdId, memberId: verifiedActor.actingMemberId },
             operationKey: context.envelope.commandId, sourceId,
-            expectedVersions: { ...expectedVersions, [sourceId]: expectedVersions[sourceId] ?? source.aggregateVersion },
+            expectedVersions,
           });
           if (result.kind === "Restored") return { transactionId: result.transactionId };
           throw new HouseholdCommandRejection(result.kind === "Split" ? "RESTORATION_RECEIPT_MISMATCH" : result.code, result.kind === "RetryableFailure");

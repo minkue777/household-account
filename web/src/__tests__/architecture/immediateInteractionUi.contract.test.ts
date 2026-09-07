@@ -184,13 +184,15 @@ describe('즉시 상호작용 UI 계약', () => {
     expect(ledgerPage).toContain('if (!serverSnapshotReady) return undefined;');
   });
 
-  test('인접 월 사전 조회는 첫 화면의 세 데이터가 모두 준비된 뒤에만 시작한다', () => {
+  test('인접 월 사전 조회는 필수 데이터의 전체 paint를 기다리고 cleanup을 보존한다', () => {
     const ledgerPage = source('components/home/LedgerPage.tsx');
 
     expect(ledgerPage).toContain('!serverSnapshotReady');
     expect(ledgerPage).toContain('|| categoriesLoading');
     expect(ledgerPage).toContain('|| !localCurrencySettled');
-    expect(ledgerPage).toContain('return prefetchAdjacentPeriods();');
+    expect(ledgerPage).toContain('scheduleAfterWebFirstHomeCompletePaint(() =>');
+    expect(ledgerPage).toContain('cancelPrefetch = prefetchAdjacentPeriods();');
+    expect(ledgerPage).toContain('cancelPrefetch?.();');
   });
 
   test('모바일의 일반 클릭 대상은 double-tap 판정으로 지연되지 않는다', () => {

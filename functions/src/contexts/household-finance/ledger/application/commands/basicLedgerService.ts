@@ -136,9 +136,20 @@ export function createBasicLedgerCommands(input: {
     | { kind: "transaction"; value: LedgerTransactionView }
     | { kind: "error"; result: LedgerCommandResult }
   > {
-    const receipt = await input.repository.findReceipt(commandId);
+    const receiptTask = input.repository.findReceipt(commandId);
+    // Reads can overlap, but a saved receipt must win even if the current
+    // transaction is unavailable or has changed since the original command.
+    const transactionTask = Promise.resolve()
+      .then(() => input.repository.findTransaction(transactionId))
+      .then(
+        (value) => ({ kind: "loaded", value } as const),
+        (error: unknown) => ({ kind: "failed", error } as const),
+      );
+    const receipt = await receiptTask;
     if (receipt !== undefined) return { kind: "receipt", result: receipt };
-    const loaded = await input.repository.findTransaction(transactionId);
+    const transactionRead = await transactionTask;
+    if (transactionRead.kind === "failed") throw transactionRead.error;
+    const loaded = transactionRead.value;
     if (loaded.kind !== "ready") return { kind: "error", result: loaded };
     if (
       loaded.value === undefined ||
@@ -157,7 +168,7 @@ export function createBasicLedgerCommands(input: {
       const validation = firstError([
         validateRequiredText(command.merchant, "MERCHANT_REQUIRED"),
         validatePositiveWon(command.amountInWon),
-        input.categories.isUsable(command.categoryId)
+        await input.categories.isUsable(command.categoryId)
           ? { kind: "valid" }
           : { kind: "validation-error", code: "CATEGORY_NOT_USABLE" },
         validateAccountingDate(command.accountingDate),
@@ -225,11 +236,30 @@ export function createBasicLedgerCommands(input: {
     },
 
     update: async (command) => {
-      const loaded = await existingOrLoad(
+      const categoryId = command.patch.categoryId;
+      const categoryTask = Promise.resolve()
+        .then(() => categoryId === undefined ? true : input.categories.isUsable(categoryId))
+        .then(
+          (usable) => ({ kind: "checked", usable } as const),
+          (error: unknown) => ({ kind: "failed", error } as const),
+        );
+      const existingRead = await existingOrLoad(
         command.commandId,
         command.transactionId,
         command.actor.householdId,
+      ).then(
+        (value) => ({ kind: "loaded", value } as const),
+        (error: unknown) => ({ kind: "failed", error } as const),
       );
+      // A completed command is independent of today's category availability.
+      // New commands retain category-read failure priority over ledger errors.
+      if (existingRead.kind === "loaded" && existingRead.value.kind === "receipt") {
+        return existingRead.value.result;
+      }
+      const categoryRead = await categoryTask;
+      if (categoryRead.kind === "failed") throw categoryRead.error;
+      if (existingRead.kind === "failed") throw existingRead.error;
+      const loaded = existingRead.value;
       if (loaded.kind !== "transaction") return loaded.result;
       if (loaded.value.aggregateVersion !== command.expectedVersion) {
         return {
@@ -245,8 +275,7 @@ export function createBasicLedgerCommands(input: {
         command.patch.amountInWon === undefined
           ? { kind: "valid" }
           : validatePositiveWon(command.patch.amountInWon),
-        command.patch.categoryId === undefined ||
-        input.categories.isUsable(command.patch.categoryId)
+        categoryRead.usable
           ? { kind: "valid" }
           : { kind: "validation-error", code: "CATEGORY_NOT_USABLE" },
         command.patch.accountingDate === undefined

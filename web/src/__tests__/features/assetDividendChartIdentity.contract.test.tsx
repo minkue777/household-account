@@ -1,10 +1,14 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import AssetDividendChart from '@/components/assets/AssetDividendChart';
 import { getAllStockHoldings, getDividendEventsByYear, getDividendSnapshot } from '@/lib/assetService';
+import { clearClientSessionScope, setClientSessionScope } from '@/composition/clientSessionScope';
 
 jest.mock('@/lib/assetService', () => ({ getAllStockHoldings: jest.fn(), getDividendEventsByYear: jest.fn(), getDividendSnapshot: jest.fn() }));
 jest.mock('@/lib/utils/date', () => ({ getSeoulCalendarParts: () => ({ year: 2026, month: 9, day: 6 }), getTodayLocalDate: () => '2026-09-06' }));
 jest.mock('react-chartjs-2', () => ({ Bar: ({ data }: { data: unknown }) => <pre data-testid="dividend-chart">{JSON.stringify(data)}</pre> }));
+
+beforeEach(() => setClientSessionScope({ principalUid: 'uid', memberId: 'member', householdId: 'house', sessionGeneration: 1 }));
+afterEach(clearClientSessionScope);
 
 test('[DIV-004] excludes the confirmed event identity and record-date-today estimates while retaining a distinct disclosure with identical payment facts', async () => {
   jest.mocked(getAllStockHoldings).mockResolvedValue([{ stockCode: 'ETF', holdingType: 'stock', quantity: 2 }] as never);

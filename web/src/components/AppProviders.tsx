@@ -28,6 +28,7 @@ const MUTATION_PRELOAD_DELAY_AFTER_LEDGER_MS = 3_000;
 const MUTATION_PRELOAD_IDLE_TIMEOUT_MS = 15_000;
 const VISIT_TELEMETRY_IDLE_TIMEOUT_MS = 5_000;
 const ROUTE_PREFETCH_IDLE_TIMEOUT_MS = 10_000;
+const ROUTE_PREFETCH_FALLBACK_MS = 15_000;
 const POST_LEDGER_PREFETCH_ROUTES = [
   '/income',
   '/assets',
@@ -192,9 +193,9 @@ export function AuthenticatedPlatformEffects() {
   ]);
 
   useEffect(() => {
-    if (sessionState !== 'ready' || adminHouseholdView !== null) return;
+    if (sessionState !== 'ready' || !isSessionVerified || adminHouseholdView !== null) return;
 
-    return scheduleAfterWebFirstLedgerPaint(
+    return scheduleAfterWebFirstHomeCompletePaint(
       () => {
         for (const route of POST_LEDGER_PREFETCH_ROUTES) {
           router.prefetch(route);
@@ -202,9 +203,11 @@ export function AuthenticatedPlatformEffects() {
       },
       {
         idleTimeoutMs: ROUTE_PREFETCH_IDLE_TIMEOUT_MS,
+        // Other entry routes and a failed home read may never paint a complete home.
+        fallbackMs: ROUTE_PREFETCH_FALLBACK_MS,
       }
     );
-  }, [adminHouseholdView, router, sessionState]);
+  }, [adminHouseholdView, currentMember?.id, householdKey, isSessionVerified, router, sessionState]);
 
   useEffect(() => {
     if (sessionState !== 'ready' || adminHouseholdView !== null) return;
