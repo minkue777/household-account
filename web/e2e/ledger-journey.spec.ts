@@ -103,6 +103,29 @@ test('로그인부터 첫 월 원장과 지출 CRUD까지 실제 Firebase 경계
   }).toMatchObject({ notificationConsumerStatus: { stringValue: 'NoTarget' } });
   expect(await readFirestoreCollection(request, 'notificationDeliveries')).toEqual([]);
 
+  await page.goto('/stats');
+  await expect(page.getByRole('heading', { name: '지출 통계', exact: true })).toBeVisible();
+  await expect(page.getByText('12,300원', { exact: true }).first()).toBeVisible();
+  // 빠른 Emulator 응답에도 중간 로딩 화면이 나타났다면 관측합니다.
+  await page.evaluate(() => {
+    const state = { loadingFrames: 0, observer: undefined as MutationObserver | undefined };
+    state.observer = new MutationObserver(() => {
+      if (document.body.textContent?.includes('로딩중...')) state.loadingFrames += 1;
+    });
+    state.observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    (window as unknown as { statisticsTransition: typeof state }).statisticsTransition = state;
+  });
+  for (const period of ['3개월', '6개월', '1년', '3개월']) {
+    await page.getByRole('button', { name: period, exact: true }).click();
+    await expect(page.getByText('12,300원', { exact: true }).first()).toBeVisible();
+  }
+  const loadingFrames = await page.evaluate(() => {
+    const state = (window as unknown as { statisticsTransition: { loadingFrames: number; observer: MutationObserver } }).statisticsTransition;
+    state.observer.disconnect();
+    return state.loadingFrames;
+  });
+  expect(loadingFrames).toBe(0);
+
   // 알림 클릭과 같은 full navigation 뒤에도 인증을 복원하고 해당 지출을 엽니다.
   await page.goto(`/expenses/${encodeURIComponent(expenseId)}/edit`);
   const editDialog = page.getByRole('dialog', { name: '지출 수정' });

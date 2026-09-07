@@ -29,6 +29,8 @@ import { getTodayLocalDate } from '@/lib/utils/date';
 import { readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
 import { resolveAssetStatisticsPeriod } from '@/features/reporting/statisticsPeriod';
 import { sumSignedAssetBalances, sumSignedBalancesByAssetType } from '@/lib/assets/assetMath';
+import { getClientSessionScope } from '@/composition/clientSessionScope';
+import { assetStatisticsSessionKey, subscribeAssetStatisticsInvalidation } from '@/platform/reporting/assetStatisticsQueryCache';
 
 ChartJS.register(
   CategoryScale,
@@ -145,6 +147,7 @@ export default function AssetStatsPage() {
     householdKey,
     isSessionVerified,
     remoteReadEpoch = 0,
+    currentMember,
   } = useHousehold();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [hasCurrentAssets, setHasCurrentAssets] = useState(false);
@@ -158,14 +161,20 @@ export default function AssetStatsPage() {
   const [enabledSeries, setEnabledSeries] = useState<Set<TrendSeriesKey>>(new Set<TrendSeriesKey>(['all']));
   const trendChartRef = useRef<ChartJS<'line', Array<number | null>, string> | null>(null);
   const selectedPeriodRange = useMemo(() => resolveAssetStatisticsPeriod(selectedPeriod), [selectedPeriod]);
-  const sourceKey = JSON.stringify([householdKey, remoteReadEpoch, selectedPeriodRange.endDate, revision]);
-  const isCurrentSource = isSessionVerified && !!householdKey && completedSourceKey === sourceKey;
+  const sessionScope = getClientSessionScope();
+  const actorKey = sessionScope ? assetStatisticsSessionKey(sessionScope) : null;
+  const canRead = isSessionVerified && !!householdKey && sessionScope?.householdId === householdKey
+    && (sessionScope.accessMode === 'administrator-readonly' || sessionScope.memberId === currentMember?.id);
+  const sourceKey = JSON.stringify([actorKey, householdKey, currentMember?.id, remoteReadEpoch, selectedPeriodRange.endDate, revision]);
+  const isCurrentSource = canRead && completedSourceKey === sourceKey;
+
+  useEffect(() => subscribeAssetStatisticsInvalidation(() => setRevision(value => value + 1)), []);
 
   useEffect(() => {
     let active = true;
     setAssets([]);
     setHasCurrentAssets(false);
-    if (!isSessionVerified || !householdKey) return undefined;
+    if (!canRead) return undefined;
 
     try {
       // A projection's initial empty list or a failed subscription is not an
@@ -181,7 +190,7 @@ export default function AssetStatsPage() {
       console.error('자산 통계의 자산 목록을 불러오지 못했습니다.', error);
       return undefined;
     }
-  }, [householdKey, isSessionVerified, remoteReadEpoch, revision]);
+  }, [householdKey, canRead, actorKey, remoteReadEpoch, revision]);
 
   useEffect(() => {
     let active = true;
@@ -189,7 +198,7 @@ export default function AssetStatsPage() {
     setIsLoading(true);
     setCompletedSourceKey(null);
     setFailed(false);
-    if (!isSessionVerified || !householdKey) return;
+    if (!canRead) return;
 
     const fetchHistory = async () => {
       setIsLoading(true);
@@ -197,7 +206,10 @@ export default function AssetStatsPage() {
       try {
         // Period buttons reuse this complete read instead of restarting the
         // paginated history load and remounting the charts on every selection.
-        const historyData = await readAssetStatisticsHistory(undefined, selectedPeriodRange.endDate);
+        const historyData = await readAssetStatisticsHistory(undefined, selectedPeriodRange.endDate, {
+          cacheEpoch: remoteReadEpoch,
+          forceRefresh: revision > 0,
+        });
         if (active) setAllHistory(historyData);
       } catch (error) {
         if (active) setFailed(true);
@@ -212,7 +224,7 @@ export default function AssetStatsPage() {
 
     void fetchHistory();
     return () => { active = false; };
-  }, [householdKey, isSessionVerified, remoteReadEpoch, selectedPeriodRange.endDate, revision, sourceKey]);
+  }, [householdKey, canRead, actorKey, remoteReadEpoch, selectedPeriodRange.endDate, revision, sourceKey]);
 
   const activeAssets = useMemo(() => assets.filter((asset) => asset.isActive), [assets]);
   const visibleAssets = useMemo(
@@ -693,13 +705,13 @@ export default function AssetStatsPage() {
             </div>
 
             <AssetProfitChart
-              key={`profit:${householdKey}:${remoteReadEpoch}`}
+              key={`profit:${actorKey}:${remoteReadEpoch}`}
               snapshotId={snapshotType}
               currentBalance={hasCurrentAssets ? totalAssets : undefined}
               sourceHistory={allHistory}
             />
 
-            {isSessionVerified && householdKey && <AssetDividendChart key={`dividend:${householdKey}:${remoteReadEpoch}`} />}
+            {canRead && <AssetDividendChart key={`dividend:${actorKey}:${remoteReadEpoch}`} />}
           </div>
         )}
       </div>

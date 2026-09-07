@@ -1,4 +1,8 @@
 import { getHouseholdCommandClient } from '@/composition/webCommandRuntime';
+import { getClientSessionScope } from '@/composition/clientSessionScope';
+import { assetStatisticsSessionKey, invalidateAssetStatisticsCache } from '@/platform/reporting/assetStatisticsQueryCache';
+import type { HouseholdCommandName, HouseholdCommandPayloads, HouseholdCommandResults } from '@/platform/functions-api/householdCommandContract';
+import type { ExecuteHouseholdCommandOptions } from '@/platform/functions-api/householdCommandClient';
 import type { Asset, AssetInput, CryptoHolding, CryptoHoldingInput, StockHolding, StockHoldingInput } from '@/types/asset';
 
 type PositionKind = 'stock' | 'crypto';
@@ -15,13 +19,29 @@ function definedFields(value: object): Record<string, unknown> {
   );
 }
 
+async function executePortfolioCommand<Name extends HouseholdCommandName>(
+  command: Name,
+  payload: HouseholdCommandPayloads[Name],
+  options: ExecuteHouseholdCommandOptions,
+): Promise<HouseholdCommandResults[Name]> {
+  const actor = getClientSessionScope();
+  const result = await getHouseholdCommandClient().execute(command, payload, options);
+  const active = getClientSessionScope();
+  // 이전 멤버의 늦은 저장 완료가 다음 세션의 조회를 취소하지 않게 합니다.
+  if (actor && active && actor.householdId === options.householdId
+    && assetStatisticsSessionKey(actor) === assetStatisticsSessionKey(active)) {
+    invalidateAssetStatisticsCache();
+  }
+  return result;
+}
+
 export const portfolioCommands = {
   async createAsset(
     householdId: string,
     asset: AssetInput,
     commandId?: string
   ): Promise<string> {
-    const result = await getHouseholdCommandClient().execute(
+    const result = await executePortfolioCommand(
       'portfolio.create-asset.v1',
       { asset: definedFields(asset) },
       { householdId, ...(commandId ? { commandId, idempotencyKey: commandId } : {}) }
@@ -35,7 +55,7 @@ export const portfolioCommands = {
     changes: Partial<Asset>,
     expectedVersion: number
   ): Promise<void> {
-    await getHouseholdCommandClient().execute(
+    await executePortfolioCommand(
       'portfolio.update-asset.v1',
       { assetId, changes: definedFields(changes), expectedVersion },
       { householdId }
@@ -47,7 +67,7 @@ export const portfolioCommands = {
     assets: ReadonlyArray<{ id: string; order: number }>,
     expectedVersions: Record<string, number>
   ): Promise<void> {
-    await getHouseholdCommandClient().execute(
+    await executePortfolioCommand(
       'portfolio.reorder-assets.v1',
       { assets: assets.map(({ id, order }) => ({ assetId: id, order })), expectedVersions },
       { householdId }
@@ -59,7 +79,7 @@ export const portfolioCommands = {
     assetId: string,
     expectedVersion: number
   ): Promise<void> {
-    await getHouseholdCommandClient().execute(
+    await executePortfolioCommand(
       'portfolio.delete-asset.v1',
       { assetId, expectedVersion },
       { householdId }
@@ -73,7 +93,7 @@ export const portfolioCommands = {
     commandId: string | undefined,
     expectedAssetVersion: number
   ): Promise<string> {
-    const result = await getHouseholdCommandClient().execute(
+    const result = await executePortfolioCommand(
       'portfolio.add-position.v1',
       { assetId: input.assetId, positionKind: kind, position: definedFields(input), expectedAssetVersion },
       { householdId, ...(commandId ? { commandId, idempotencyKey: commandId } : {}) }
@@ -90,7 +110,7 @@ export const portfolioCommands = {
     expectedVersion: number,
     expectedAssetVersion: number
   ): Promise<void> {
-    await getHouseholdCommandClient().execute(
+    await executePortfolioCommand(
       'portfolio.update-position.v1',
       { assetId, positionId, positionKind: kind, changes: definedFields(changes), expectedVersion, expectedAssetVersion },
       { householdId }
@@ -105,7 +125,7 @@ export const portfolioCommands = {
     expectedVersion: number,
     expectedAssetVersion: number
   ): Promise<void> {
-    await getHouseholdCommandClient().execute(
+    await executePortfolioCommand(
       'portfolio.delete-position.v1',
       { assetId, positionId, positionKind: kind, expectedVersion, expectedAssetVersion },
       { householdId }
@@ -117,11 +137,12 @@ export const portfolioCommands = {
     assetClass: 'stock' | 'crypto' | 'physical-gold' | 'all',
     assetId?: string
   ): Promise<number> {
-    const result = await getHouseholdCommandClient().execute(
+    const result = await executePortfolioCommand(
       'portfolio.refresh-market-values.v1',
       { assetClass, ...(assetId ? { assetId } : {}) },
       { householdId }
     );
+    // 일부 시세가 실패해도 성공한 항목이 있어 완료 캐시는 이미 무효화했습니다.
     if ((result.failedCount ?? 0) > 0) throw new Error(`시세 ${result.failedCount}건을 갱신하지 못했습니다. 잠시 후 다시 시도해 주세요.`);
     return result.refreshedCount;
   },

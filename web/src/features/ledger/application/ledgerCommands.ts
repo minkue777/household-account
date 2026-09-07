@@ -1,4 +1,8 @@
 import { getHouseholdCommandClient } from '@/composition/webCommandRuntime';
+import { getClientSessionScope } from '@/composition/clientSessionScope';
+import { notifyExpenseStatisticsMutation } from '@/platform/reporting/expenseStatisticsInvalidation';
+import type { HouseholdCommandName, HouseholdCommandPayloads, HouseholdCommandResults } from '@/platform/functions-api/householdCommandContract';
+import type { ExecuteHouseholdCommandOptions } from '@/platform/functions-api/householdCommandClient';
 import type { Expense } from '@/types/expense';
 import {
   ledgerMergedTransactionId,
@@ -31,6 +35,17 @@ function toTransactionPatch(changes: Partial<Expense>): LedgerTransactionPatch {
   };
 }
 
+async function executeLedgerCommand<Name extends HouseholdCommandName>(
+  command: Name,
+  payload: HouseholdCommandPayloads[Name],
+  options: ExecuteHouseholdCommandOptions
+): Promise<HouseholdCommandResults[Name]> {
+  const scope = getClientSessionScope();
+  const result = await getHouseholdCommandClient().execute(command, payload, options);
+  if (command !== 'ledger.request-notification.v1') notifyExpenseStatisticsMutation(scope, options.householdId);
+  return result;
+}
+
 export const ledgerCommands = {
   async record(
     householdId: string,
@@ -50,7 +65,7 @@ export const ledgerCommands = {
           merchant: transaction.merchant,
           categoryId: transaction.category,
         };
-    const result = await getHouseholdCommandClient().execute(
+    const result = await executeLedgerCommand(
       'ledger.record-manual-transaction.v1',
       payload,
       { householdId, ...(commandId ? { commandId, idempotencyKey: commandId } : {}) }
@@ -65,7 +80,7 @@ export const ledgerCommands = {
     changes: Partial<Expense>,
     rememberForNextTime = false
   ): Promise<LedgerTransactionCommandResult> {
-    return getHouseholdCommandClient().execute(
+    return executeLedgerCommand(
       'ledger.update-transaction.v1',
       { transactionId, expectedVersion, patch: toTransactionPatch(changes), ...(rememberForNextTime ? { rememberForNextTime: true } : {}) },
       { householdId }
@@ -83,7 +98,7 @@ export const ledgerCommands = {
       months: number;
     }
   ): Promise<{ transactionIds: string[]; splitGroupId: string }> {
-    return getHouseholdCommandClient().execute(
+    return executeLedgerCommand(
       'ledger.record-manual-monthly-split.v1',
       { ...input, transactionType: 'expense' },
       { householdId }
@@ -95,7 +110,7 @@ export const ledgerCommands = {
     transactionId: string,
     expectedVersion: number
   ): Promise<void> {
-    await getHouseholdCommandClient().execute(
+    await executeLedgerCommand(
       'ledger.request-notification.v1',
       { transactionId, expectedVersion },
       { householdId }
@@ -108,7 +123,7 @@ export const ledgerCommands = {
     expectedVersion: number,
     months: number
   ): Promise<{ transactionIds: string[]; splitGroupId: string }> {
-    return getHouseholdCommandClient().execute(
+    return executeLedgerCommand(
       'ledger.split-existing-transaction-monthly.v1',
       { transactionId, expectedVersion, months },
       { householdId }
@@ -120,7 +135,7 @@ export const ledgerCommands = {
     transactionId: string,
     expectedVersion: number
   ): Promise<LedgerTransactionCommandResult> {
-    return getHouseholdCommandClient().execute(
+    return executeLedgerCommand(
       'ledger.delete-transaction.v1',
       { transactionId, expectedVersion },
       { householdId }
@@ -133,7 +148,7 @@ export const ledgerCommands = {
     categoryId: string,
     expectedVersion: number
   ): Promise<LedgerTransactionCommandResult> {
-    return getHouseholdCommandClient().execute(
+    return executeLedgerCommand(
       'ledger.change-transaction-category.v1',
       { transactionId, categoryId, expectedVersion },
       { householdId }
@@ -146,7 +161,7 @@ export const ledgerCommands = {
     expectedVersion: number,
     items: readonly LedgerSplitItem[]
   ): Promise<string[]> {
-    const result = await getHouseholdCommandClient().execute(
+    const result = await executeLedgerCommand(
       'ledger.split-transaction.v1',
       {
         transactionId,
@@ -171,7 +186,7 @@ export const ledgerCommands = {
     sourceExpectedVersion: number,
     commandId = createHouseholdCommandId('ledger-merge')
   ): Promise<{ transactionId: string }> {
-    const result = await getHouseholdCommandClient().execute(
+    const result = await executeLedgerCommand(
       'ledger.merge-transactions.v1',
       {
         targetTransactionId,
@@ -196,7 +211,7 @@ export const ledgerCommands = {
     transactionId: string,
     expectedVersion: number
   ): Promise<string[]> {
-    const result = await getHouseholdCommandClient().execute(
+    const result = await executeLedgerCommand(
       'ledger.unmerge-transaction.v1',
       { transactionId, expectedVersion },
       { householdId }
@@ -205,7 +220,7 @@ export const ledgerCommands = {
   },
 
   async restoreItemSplit(householdId: string, sourceId: string, expectedVersions: Record<string, number>): Promise<string> {
-    const result = await getHouseholdCommandClient().execute('ledger.restore-item-split.v1', { sourceId, expectedVersions }, { householdId });
+    const result = await executeLedgerCommand('ledger.restore-item-split.v1', { sourceId, expectedVersions }, { householdId });
     return result.transactionId;
   },
 
@@ -214,7 +229,7 @@ export const ledgerCommands = {
     splitGroupId: string,
     expectedVersions: Record<string, number>
   ): Promise<void> {
-    await getHouseholdCommandClient().execute(
+    await executeLedgerCommand(
       'ledger.cancel-monthly-split.v1',
       { splitGroupId, expectedVersions },
       { householdId }
@@ -227,7 +242,7 @@ export const ledgerCommands = {
     months: number,
     expectedVersions: Record<string, number>
   ): Promise<string> {
-    const result = await getHouseholdCommandClient().execute(
+    const result = await executeLedgerCommand(
       'ledger.reconfigure-monthly-split.v1',
       { splitGroupId, months, expectedVersions },
       { householdId }

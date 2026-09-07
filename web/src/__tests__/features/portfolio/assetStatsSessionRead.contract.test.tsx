@@ -5,8 +5,13 @@ import { readAssetStatisticsHistory } from '@/platform/reporting/assetStatistics
 import { subscribeToAssets, getAllStockHoldings, getDividendSnapshot, getDividendEventsByYear } from '@/lib/assetService';
 import type { AssetHistoryEntry } from '@/types/asset';
 import { getTodayLocalDate } from '@/lib/utils/date';
+import { invalidateAssetStatisticsCache } from '@/platform/reporting/assetStatisticsQueryCache';
 
-let mockScope = { householdKey: 'house-1', isSessionVerified: false, remoteReadEpoch: 0 };
+let mockScope = { householdKey: 'house-1', isSessionVerified: false, remoteReadEpoch: 0, currentMember: { id: 'member-1' } };
+jest.mock('@/composition/clientSessionScope', () => ({
+  getClientSessionScope: () => ({ principalUid: 'uid', householdId: mockScope.householdKey,
+    memberId: mockScope.currentMember.id, sessionGeneration: 1 }),
+}));
 jest.mock('@/contexts/HouseholdContext', () => ({ useHousehold: () => mockScope }));
 jest.mock('@/contexts/ThemeContext', () => ({ useTheme: () => ({ themeConfig: { titleGradient: 'linear-gradient(blue, purple)' } }) }));
 jest.mock('@/lib/assetService', () => ({
@@ -28,7 +33,7 @@ jest.mock('react-chartjs-2', () => {
 const read = jest.mocked(readAssetStatisticsHistory);
 function entry(assetId: string, date: string, balance: number, extra = {}): AssetHistoryEntry { return { id: assetId + date, householdId: 'house-1', assetId, date, balance, changeAmount: 0, createdAt: new Date(), ...extra }; }
 describe('actual asset statistics page', () => {
-  beforeEach(() => { jest.clearAllMocks(); mockScope = { householdKey: 'house-1', isSessionVerified: false, remoteReadEpoch: 0 }; read.mockResolvedValue([]); });
+  beforeEach(() => { jest.clearAllMocks(); mockScope = { householdKey: 'house-1', isSessionVerified: false, remoteReadEpoch: 0, currentMember: { id: 'member-1' } }; read.mockResolvedValue([]); });
   it('waits for restored session, reads again on household change and discards old replies', async () => {
     let oldResolve!: (rows: AssetHistoryEntry[]) => void;
     read.mockImplementationOnce(() => new Promise(resolve => { oldResolve = resolve; }));
@@ -41,7 +46,7 @@ describe('actual asset statistics page', () => {
     await act(async () => oldResolve([entry('TOTAL', '2026-08-01', 123456)]));
     expect(screen.queryByText('123,456')).not.toBeInTheDocument();
   });
-  it.each(['household', 'remote epoch'] as const)('hides a completed source in the first %s-change commit before passive effects clear it', async change => {
+  it.each(['household', 'member', 'remote epoch'] as const)('hides a completed source in the first %s-change commit before passive effects clear it', async change => {
     mockScope.isSessionVerified = true;
     read.mockResolvedValueOnce([entry('TOTAL', getTodayLocalDate(), 987654)]);
     const commits: string[] = [];
@@ -56,6 +61,7 @@ describe('actual asset statistics page', () => {
     read.mockImplementationOnce(() => new Promise<AssetHistoryEntry[]>(() => {}));
     mockScope = change === 'household'
       ? { ...mockScope, householdKey: 'house-2' }
+      : change === 'member' ? { ...mockScope, currentMember: { id: 'member-2' } }
       : { ...mockScope, remoteReadEpoch: mockScope.remoteReadEpoch + 1 };
     rerender(page());
     expect(commits.length).toBeGreaterThan(0);
@@ -92,7 +98,7 @@ describe('actual asset statistics page', () => {
     read.mockResolvedValue([entry('TOTAL', '2019-01-01', 0), entry('TYPE_stock', '2019-01-01', 0), entry('OWNER_REF_profile:old', '2019-01-01', 0, { ownerKey: 'profile:old', ownerDisplayName: '지아' })]);
     render(<AssetStatsPage />);
     await screen.findByText('마지막 기록 자산');
-    expect(read).toHaveBeenCalledWith(undefined, expect.any(String));
+    expect(read).toHaveBeenCalledWith(undefined, expect.any(String), { cacheEpoch: 0, forceRefresh: false });
     expect(screen.queryByText('데이터가 없습니다')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '지아' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('소유자별 자산 추이')).not.toBeInTheDocument();
@@ -120,7 +126,7 @@ describe('actual asset statistics page', () => {
     await waitFor(() => expect(getDividendSnapshot).toHaveBeenCalledTimes(1));
     expect(JSON.parse(screen.getByTestId('chart').textContent!).datasets[0].data).toEqual([80, 100]);
 
-    fireEvent.click(screen.getByRole('button', { name: '월별', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: '월별' }));
     fireEvent.click(screen.getByRole('button', { name: '월별 자산 변동' }));
     const profitToggle = screen.getByRole('button', { name: '월별 자산 변동' });
     expect(profitToggle).toHaveAttribute('aria-expanded', 'true');
@@ -157,7 +163,7 @@ describe('actual asset statistics page', () => {
     rerender(<AssetStatsPage />);
     await screen.findByText('25');
     expect(read).toHaveBeenCalledTimes(2);
-    expect(read).toHaveBeenLastCalledWith(undefined, expect.any(String));
+    expect(read).toHaveBeenLastCalledWith(undefined, expect.any(String), { cacheEpoch: 1, forceRefresh: false });
   });
   it('does not replace history with a cached empty list and accepts a confirmed zero balance', async () => {
     mockScope.isSessionVerified = true;
@@ -171,6 +177,21 @@ describe('actual asset statistics page', () => {
     expect(screen.getByText('현재 총 자산')).toBeInTheDocument();
     expect(screen.getByText('0')).toBeInTheDocument();
     expect(screen.queryByText('123,456')).not.toBeInTheDocument();
+  });
+  it('restarts a pending history read after a successful portfolio change without exposing its obsolete error', async () => {
+    mockScope.isSessionVerified = true;
+    let rejectOld!: (reason: unknown) => void;
+    read.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectOld = reject; }));
+    render(<AssetStatsPage />);
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    read.mockResolvedValueOnce([entry('TOTAL', getTodayLocalDate(), 765432)]);
+    act(() => invalidateAssetStatisticsCache());
+    await screen.findByText('765,432');
+    await act(async () => rejectOld(new Error('STATISTICS_SESSION_CHANGED')));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('765,432')).toBeInTheDocument();
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(read).toHaveBeenLastCalledWith(undefined, expect.any(String), { cacheEpoch: 0, forceRefresh: true });
   });
   it('failure stays distinct from NoData and zero and supports retry', async () => {
     mockScope.isSessionVerified = true; read.mockRejectedValueOnce(new Error('offline'));

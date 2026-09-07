@@ -16,7 +16,7 @@ test('알림 주소는 HTTP redirect로 편집 대상을 보존하고 CSP 차단
     const destination = new URL(redirect.headers().location, redirect.url());
     expect(destination.origin).toBe(new URL(redirect.url()).origin);
     expect(destination.pathname).toBe('/');
-    expect([...destination.searchParams]).toEqual([['edit', id]]);
+    expect(Array.from(destination.searchParams)).toEqual([['edit', id]]);
     expect(destination.hash).toBe('');
     expect(await redirect.text()).not.toContain('<script');
 

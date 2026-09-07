@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import DonutChart from '@/components/DonutChart';
@@ -10,7 +10,10 @@ import CategoryExpenseModal from '@/components/stats/CategoryExpenseModal';
 import ExpenseEditModal from '@/components/expense/ExpenseEditModal';
 import { Expense, Category } from '@/types/expense';
 import { updateExpense, deleteExpense } from '@/lib/expenseService';
-import { readExpenseStatistics } from '@/platform/reporting/expenseStatisticsReadModel';
+import { loadExpenseStatistics, peekExpenseStatistics, type ExpenseStatisticsQuery } from '@/platform/reporting/expenseStatisticsCache';
+import { expenseStatisticsActorKey, getExpenseStatisticsRevision, subscribeExpenseStatisticsInvalidation } from '@/platform/reporting/expenseStatisticsInvalidation';
+import { getClientSessionScope } from '@/composition/clientSessionScope';
+import { ANDROID_NATIVE_RESUME_EVENT } from '@/platform/android-host/androidLifecycleEvents';
 import { resolveExpenseStatisticsPeriod } from '@/features/reporting/statisticsPeriod';
 import { ExpenseUpdates } from '@/lib/utils/expenseForm';
 import { useCategoryContext } from '@/contexts/CategoryContext';
@@ -23,20 +26,40 @@ export default function StatsPage() {
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('1year');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [readError, setReadError] = useState(false);
+  const [readState, setReadState] = useState<{ key: string; expenses?: Expense[]; loading: boolean; error: boolean }>({ key: '', loading: true, error: false });
+  const firstRead = useRef(true);
+  const lastQueryRevision = useRef(0);
   const [queryRevision, setQueryRevision] = useState(0);
   const [enabledCategories, setEnabledCategories] = useState<Set<string>>(new Set(DEFAULT_CATEGORY_KEYS));
   const [hasInitializedCategories, setHasInitializedCategories] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [modalScope, setModalScope] = useState('');
 
   const { activeCategories } = useCategoryContext();
   const { themeConfig } = useTheme();
-  const { householdKey, remoteReadEpoch = 0 } = useHousehold();
+  const { householdKey, currentMember, isSessionVerified = true, remoteReadEpoch = 0 } = useHousehold();
+  const scope = getClientSessionScope();
+  const actorKey = expenseStatisticsActorKey(scope);
+  const revision = useSyncExternalStore(subscribeExpenseStatisticsInvalidation, getExpenseStatisticsRevision, () => 0);
+  const { startDate, endDate, error: periodError } = useMemo(() => resolveExpenseStatisticsPeriod(periodPreset, customStartDate, customEndDate), [periodPreset, customStartDate, customEndDate]);
+  const query = useMemo<ExpenseStatisticsQuery | undefined>(() => scope && scope.householdId === householdKey
+    && (scope.accessMode === 'administrator-readonly' || scope.memberId === currentMember?.id) && isSessionVerified && !periodError
+    ? { scope, remoteReadEpoch, revision, startDate, endDate } : undefined,
+  [scope, householdKey, currentMember?.id, isSessionVerified, periodError, remoteReadEpoch, revision, startDate, endDate]);
+  const requestKey = JSON.stringify([actorKey, householdKey, currentMember?.id, isSessionVerified, remoteReadEpoch, revision, startDate, endDate, periodError, queryRevision]);
+  const cached = useMemo(() => query ? peekExpenseStatistics(query) : undefined, [query, queryRevision]);
+  const currentRead = readState.key === requestKey ? readState : undefined;
+  const expenses = currentRead?.expenses ?? cached ?? [];
+  const hasResult = currentRead?.expenses !== undefined || cached !== undefined;
+  const readError = currentRead?.error ?? false;
+  const isLoading = !periodError && !readError && (!query || !hasResult);
+  const isRefreshing = !!query && hasResult && !!currentRead?.loading;
+  const modalKey = JSON.stringify([actorKey, householdKey, currentMember?.id, isSessionVerified, remoteReadEpoch, startDate, endDate, periodError]);
+  const canShowModals = !!query && modalScope === modalKey;
 
   useEffect(() => { setHasInitializedCategories(false); setEditingExpense(null); setSelectedCategory(null); }, [householdKey, remoteReadEpoch]);
+  useEffect(() => { setEditingExpense(null); setSelectedCategory(null); }, [modalKey]);
 
   useEffect(() => {
     if (hasInitializedCategories || activeCategories.length === 0) {
@@ -54,6 +77,7 @@ export default function StatsPage() {
   }, [activeCategories, hasInitializedCategories]);
 
   const handleCategoryClick = (category: Category) => {
+    setModalScope(modalKey);
     setSelectedCategory(category);
   };
 
@@ -66,28 +90,53 @@ export default function StatsPage() {
 
   const handleSaveEdit = async (expense: Expense, updates: ExpenseUpdates, rememberForNextTime = false) => {
     await updateExpense(expense.id, updates, expense.aggregateVersion, rememberForNextTime);
+    if (expenseStatisticsActorKey(getClientSessionScope()) !== actorKey) return;
+    setEditingExpense(null);
+    setSelectedCategory(null);
     setQueryRevision(revision => revision + 1);
   };
 
   const handleDeleteExpense = async (expense: Expense) => {
     await deleteExpense(expense.id, expense.aggregateVersion);
+    if (expenseStatisticsActorKey(getClientSessionScope()) !== actorKey) return;
     setEditingExpense(null);
+    setSelectedCategory(null);
     setQueryRevision(revision => revision + 1);
   };
 
-  const { startDate, endDate, error: periodError } = useMemo(() => resolveExpenseStatisticsPeriod(periodPreset, customStartDate, customEndDate), [periodPreset, customStartDate, customEndDate]);
-
   useEffect(() => {
     let active = true;
-    setExpenses([]);
-    setReadError(false);
-    setSelectedCategory(null);
-    setEditingExpense(null);
-    if (!householdKey || periodError) { setIsLoading(false); return; }
-    setIsLoading(true);
-    void readExpenseStatistics(startDate, endDate).then(result => { if (active) setExpenses(result); }, () => { if (active) setReadError(true); }).finally(() => { if (active) setIsLoading(false); });
+    if (!query) return;
+    // Re-entry and device resume show the last complete source immediately, then verify it.
+    const force = firstRead.current || lastQueryRevision.current !== queryRevision;
+    firstRead.current = false;
+    lastQueryRevision.current = queryRevision;
+    setReadState({ key: requestKey, expenses: cached, loading: true, error: false });
+    void loadExpenseStatistics(query, force).then(result => {
+      if (active) setReadState({ key: requestKey, expenses: result, loading: false, error: false });
+    }, () => {
+      if (active) setReadState({ key: requestKey, expenses: cached, loading: false, error: true });
+    });
     return () => { active = false; };
-  }, [startDate, endDate, periodError, householdKey, remoteReadEpoch, queryRevision]);
+  }, [query, requestKey, queryRevision, cached]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible') setQueryRevision(value => value + 1);
+    };
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    window.addEventListener('pageshow', refresh);
+    window.addEventListener('online', refresh);
+    window.addEventListener(ANDROID_NATIVE_RESUME_EVENT, refresh);
+    return () => {
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('pageshow', refresh);
+      window.removeEventListener('online', refresh);
+      window.removeEventListener(ANDROID_NATIVE_RESUME_EVENT, refresh);
+    };
+  }, []);
 
   const totalAmount = expenses.reduce((sum, expense) => sum + expense.amount, 0);
 
@@ -133,6 +182,7 @@ export default function StatsPage() {
                 onEndDateChange: setCustomEndDate,
               }}
             />
+            {isRefreshing && <p role="status" className="mt-3 text-sm text-slate-500">최신 내역 확인 중...</p>}
             {(periodError || readError) && <p role="alert" className="mt-3 text-sm text-red-600">{periodError ?? '통계를 불러오지 못했습니다.'}{readError && <button type="button" className="ml-3 underline" onClick={() => setQueryRevision(value => value + 1)}>다시 시도</button>}</p>}
 
             <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
@@ -184,7 +234,7 @@ export default function StatsPage() {
         </div>
       </div>
 
-      {selectedCategory ? (
+      {canShowModals && selectedCategory ? (
         <CategoryExpenseModal
           category={selectedCategory}
           expenses={selectedCategoryExpenses}
@@ -193,7 +243,7 @@ export default function StatsPage() {
         />
       ) : null}
 
-      {editingExpense ? (
+      {canShowModals && editingExpense ? (
         <ExpenseEditModal
           expense={editingExpense}
           isOpen={!!editingExpense}
