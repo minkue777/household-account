@@ -110,7 +110,7 @@ export class FirebaseLocalCurrencyBalanceStore
   ): Promise<T> {
     const household = this.database.collection("households").doc(householdId);
     return this.database.runTransaction(async (unitOfWork) => {
-      const selectFirstType = await prepareFirstLocalCurrencySelection(this.database, unitOfWork, householdId);
+      let firstSelection: ReturnType<typeof prepareFirstLocalCurrencySelection> | undefined;
       const adapter: LocalCurrencyBalanceTransaction = {
         readBalance: async (scope, localCurrencyType) => {
           if (scope !== householdId) return null;
@@ -132,6 +132,11 @@ export class FirebaseLocalCurrencyBalanceStore
             : null;
         },
         saveBalance: async (balance) => {
+          // Replay and stale observations do not need Home data. Prepare it only
+          // for a balance write, still before any writes in this transaction.
+          const selectFirstType = await (firstSelection ??= prepareFirstLocalCurrencySelection(
+            this.database, unitOfWork, householdId,
+          ));
           selectFirstType(balance.localCurrencyType, balance.observedAt);
           const canonical = household
             .collection("localCurrencyBalances")

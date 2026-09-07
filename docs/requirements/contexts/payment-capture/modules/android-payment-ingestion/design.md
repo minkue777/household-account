@@ -336,6 +336,8 @@ Queue root 상태는 `queued → submitting → completed | partial-retryable | 
 
 root 상태는 최초 claim 뒤 `completed | partial-retryable` 또는 terminal `ignored/rejected/needs-review`로 진행합니다. transaction·balance branch는 논리적으로 `absent | pending → terminal | retryable`이지만 정상 한 실행에서 중간 `processing`과 branch별 상태를 root 문서에 매번 직렬 저장하지 않습니다. 존재 branch를 처리한 뒤 결과 전체를 마지막에 한 번 compare-and-set 저장합니다.
 
+독립된 거래·잔액 branch는 claim 확인 뒤 함께 시작하고 양쪽 결과를 모은 후 최종 저장합니다. Port 예외도 해당 branch의 재시도 가능한 결과로 보존해 sibling의 commit을 막지 않습니다. 동시 최종 저장은 이미 terminal인 branch 결과를 덮지 않고, 병합된 실제 저장 결과를 caller에게 반환합니다. 양쪽 partial 결과가 합쳐 모두 terminal이 되면 root를 completed로 확정하며 completed replay에서는 TTL과 저장 시각을 갱신하지 않습니다.
+
 Capture receipt와 Ledger Transaction·Local Currency Balance는 서로 다른 Context의 문서이므로 하나의 Infrastructure transaction으로 결합하지 않습니다. 대신 branch별 stable downstream key와 각 Context receipt로 중단 지점을 복구합니다. root 최종 저장 전 중단에서는 이미 성공한 branch가 다시 호출될 수 있으나 각 Context receipt가 동일 결과를 재생하며, 최종 `partial-retryable` receipt가 저장된 뒤에는 terminal branch를 건너뜁니다.
 
 ### 7.3 소규모 운영 저지연 Adapter

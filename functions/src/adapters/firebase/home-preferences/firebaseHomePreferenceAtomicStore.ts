@@ -151,11 +151,14 @@ function expiry(occurredAt: string) {
 export async function prepareFirstLocalCurrencySelection(database: firestore.Firestore, transaction: firestore.Transaction, householdId: string) {
   const household = database.collection("households").doc(householdId);
   const preference = household.collection("homePreferences").doc("home");
-  const [householdSnapshot, canonical, balances, legacy] = await Promise.all([
-    transaction.get(household), transaction.get(preference), transaction.get(household.collection("localCurrencyBalances")),
+  const [householdSnapshot, canonical] = await transaction.getAll(household, preference);
+  const current = currentState({ householdId, canonical, household: householdSnapshot });
+  // Existing selections are never changed by balance updates, regardless of the inventory.
+  if (current.selectedLocalCurrencyType !== undefined) return () => {};
+  const [balances, legacy] = await Promise.all([
+    transaction.get(household.collection("localCurrencyBalances")),
     transaction.get(database.collection("balances").where("householdId", "==", householdId)),
   ]);
-  const current = currentState({ householdId, canonical, household: householdSnapshot });
   const available = new Set(currencyTypes(balances.docs, legacy.docs));
   return (type: string, occurredAt: string) => {
     if (!householdSnapshot.exists) return;

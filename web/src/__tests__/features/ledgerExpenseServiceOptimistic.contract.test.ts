@@ -9,6 +9,7 @@ import {
   updateExpenseCategory,
 } from '@/lib/expenseService';
 import { createHouseholdCommandId } from '@/platform/functions-api/householdCommandClient';
+import { OptimisticEntityProjection } from '@/platform/read-model/optimisticEntityProjection';
 import type { LedgerTransactionCommandResult } from '@/platform/functions-api/householdCommandContract';
 import type { Expense } from '@/types/expense';
 
@@ -92,6 +93,7 @@ describe('ledger expense service optimistic canonical contract', () => {
   });
 
   afterEach(() => {
+    jest.restoreAllMocks();
     ledgerOptimisticProjection.reset();
   });
 
@@ -104,9 +106,12 @@ describe('ledger expense service optimistic canonical contract', () => {
     );
     subscription.publish([expense()]);
     mockedCommands.update.mockResolvedValue(commandResult());
+    const lookup = jest.spyOn(OptimisticEntityProjection.prototype, 'current');
 
     await updateExpense('expense-1', { memo: 'new memo' }, 3);
 
+    // One lookup preserves read-only metadata; one starts the optimistic update.
+    expect(lookup.mock.calls).toEqual([['expense-1'], ['expense-1']]);
     expect(rendered.at(-1)?.[0]).toMatchObject({
       aggregateVersion: 4,
       memo: 'new memo',
@@ -131,9 +136,11 @@ describe('ledger expense service optimistic canonical contract', () => {
     mockedCommands.changeCategory.mockResolvedValue(
       commandResult({ categoryId: 'FOOD', memo: 'old memo' })
     );
+    const lookup = jest.spyOn(OptimisticEntityProjection.prototype, 'current');
 
     await updateExpenseCategory('expense-1', 'food', 3);
 
+    expect(lookup.mock.calls).toEqual([['expense-1'], ['expense-1']]);
     expect(rendered.at(-1)?.[0]).toMatchObject({
       aggregateVersion: 4,
       category: 'food',

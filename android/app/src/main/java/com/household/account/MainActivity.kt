@@ -220,10 +220,9 @@ class MainActivity : AppCompatActivity() {
 
         requestPushPermissionOnceIfNeeded()
 
-        if (HouseholdPreferences.hasHouseholdKey(this) &&
-            HouseholdPreferences.getMemberName(this).isNotEmpty()
-        ) {
-            AndroidCaptureDelivery.scheduleRetry(this)
+        val appContext = applicationContext
+        AndroidCaptureDelivery.scheduleRetry(appContext) {
+            HouseholdPreferences.snapshot(appContext)?.memberName?.isNotEmpty() == true
         }
     }
 

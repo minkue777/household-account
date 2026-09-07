@@ -122,16 +122,36 @@ function advancedBranch<TResult>(
   current: CaptureReceiptBranch<TResult>,
   next: CaptureReceiptBranch<TResult>,
 ): CaptureReceiptBranch<TResult> {
+  if (current.stage === "absent" || next.stage === "absent") {
+    if (current.stage !== next.stage) {
+      throw new Error("CAPTURE_RECEIPT_BRANCH_MISMATCH");
+    }
+    return current;
+  }
+  if (current.downstreamKey !== next.downstreamKey) {
+    throw new Error("CAPTURE_RECEIPT_BRANCH_MISMATCH");
+  }
+  // A terminal result is immutable, including when another execution also finished.
+  if (current.stage === "terminal") return current;
   return branchRank(next) >= branchRank(current) ? next : current;
 }
 
-function stateRank(state: CaptureSubmissionReceipt["state"]): number {
-  return {
-    claimed: 0,
-    processing: 1,
-    "partial-retryable": 2,
-    completed: 3,
-  }[state];
+function mergedState(
+  current: CaptureSubmissionReceipt,
+  next: CaptureSubmissionReceipt,
+  transaction: CaptureSubmissionReceipt["transaction"],
+  balance: CaptureSubmissionReceipt["balance"],
+): CaptureSubmissionReceipt["state"] {
+  const branches = [transaction, balance];
+  if (branches.every(branch => branch.stage === "absent" || branch.stage === "terminal")) {
+    return "completed";
+  }
+  if (branches.some(branch => branch.stage === "retryable")
+    || current.state === "partial-retryable" || next.state === "partial-retryable") {
+    return "partial-retryable";
+  }
+  return current.state === "processing" || next.state === "processing"
+    ? "processing" : "claimed";
 }
 
 export class FirebaseCaptureSubmissionReceiptStore
@@ -199,42 +219,44 @@ export class FirebaseCaptureSubmissionReceiptStore
         } as const);
   }
 
-  async save(receipt: CaptureSubmissionReceipt): Promise<void> {
+  async save(receipt: CaptureSubmissionReceipt): Promise<CaptureSubmissionReceipt> {
     const reference = this.database
       .collection("households")
       .doc(receipt.householdId)
       .collection("captureSubmissionReceipts")
       .doc(receiptId(receipt.householdId, receipt.rootIdempotencyKey));
-    if (receipt.state === "completed") {
-      const now = this.now();
-      await reference.update({
-        state: "completed",
-        transaction: receipt.transaction,
-        balance: receipt.balance,
-        updatedAt: FieldValue.serverTimestamp(),
-        terminalAt: now,
-        expiresAt: terminalExpiry(now),
-      });
-      return;
-    }
-    await this.database.runTransaction(async (transaction) => {
+    return this.database.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(reference);
       if (!snapshot.exists) throw new Error("CAPTURE_RECEIPT_NOT_CLAIMED");
       const current = fromData(snapshot.data() ?? {});
       if (current.payloadFingerprint !== receipt.payloadFingerprint) {
         throw new Error("IDEMPOTENCY_PAYLOAD_MISMATCH");
       }
-      const state =
-        stateRank(receipt.state) >= stateRank(current.state)
-          ? receipt.state
-          : current.state;
+      if (current.householdId !== receipt.householdId
+        || current.rootIdempotencyKey !== receipt.rootIdempotencyKey) {
+        throw new Error("CAPTURE_RECEIPT_IDENTITY_MISMATCH");
+      }
+      const nextTransaction = advancedBranch(current.transaction, receipt.transaction);
+      const nextBalance = advancedBranch(current.balance, receipt.balance);
+      // Replay must preserve the first terminal results and their original TTL.
+      if (current.state === "completed") return current;
+      const state = mergedState(current, receipt, nextTransaction, nextBalance);
+      if (state === current.state && nextTransaction === current.transaction && nextBalance === current.balance) {
+        return current;
+      }
+      const saved: CaptureSubmissionReceipt = {
+        ...current,
+        state,
+        transaction: nextTransaction,
+        balance: nextBalance,
+      };
       const now = this.now();
       transaction.set(
         reference,
         {
           state,
-          transaction: advancedBranch(current.transaction, receipt.transaction),
-          balance: advancedBranch(current.balance, receipt.balance),
+          transaction: saved.transaction,
+          balance: saved.balance,
           updatedAt: FieldValue.serverTimestamp(),
           ...(state === "completed"
             ? { terminalAt: now, expiresAt: terminalExpiry(now) }
@@ -242,6 +264,7 @@ export class FirebaseCaptureSubmissionReceiptStore
         },
         { merge: true },
       );
+      return saved;
     });
   }
 }

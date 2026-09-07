@@ -151,6 +151,8 @@ Client 검증은 즉시 피드백용이다. Ledger가 같은 불변식과 원자
 
 ### 5.3 `SynchronizeSessionMirror`
 
+Web Shell 준비에서는 Native 인증 객체를 미리 만들지 않습니다. Bridge의 `auth.sign-in`, `auth.sign-out`, `session.refresh`가 처음 필요할 때만 `NativeAuthCoordinator`를 생성하며 앱 버전·시작 시간 조회는 인증 SDK 초기화를 요구하지 않습니다. WebView 시작 뒤 캡처 재전송 예약을 위한 SessionMirror 조건 확인도 기존 process IO coroutine에서 한 snapshot으로 읽습니다. 세션 존재·멤버 이름 조건과 Queue 확인·WorkManager 예약 순서는 유지하며 Activity 종료 때문에 이 복구 작업을 취소하지 않습니다.
+
 1. Bridge Adapter가 main-frame origin과 contract version을 검증한다.
 2. `NativeAuthCoordinator.refreshMembership`이 같은 Native 인증 세션의 bootstrap 결과 또는 서버 권위 조회 결과를 `NativeMembershipResolver`로 전달한다. caller payload의 householdId·memberId·status는 Membership 증거로 사용하지 않으며 별도 receipt 서명·만료·소비 프로토콜은 없다.
 3. 현재 snapshot과 권위 결과의 householdId/memberId가 다르면 `SessionTransitionPort`로 이전 actor Queue 삭제를 먼저 요청한다.

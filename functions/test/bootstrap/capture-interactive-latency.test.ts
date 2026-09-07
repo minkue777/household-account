@@ -23,7 +23,7 @@ describe("capture interactive latency instrumentation", () => {
         kind: "conflict",
         code: "IDEMPOTENCY_PAYLOAD_MISMATCH",
       }),
-      save: async () => undefined,
+      save: async (receipt) => receipt,
     });
     const configuration = withCaptureConfigurationLatency({
       load: async () => ({

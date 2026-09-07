@@ -114,35 +114,67 @@ class DefaultCaptureBranchSubmissionApplication
     });
     if (claim.kind === "conflict") return claim;
 
-    let receipt = claim.receipt;
-    const shouldProcess = hasIncompleteBranch(receipt);
+    const shouldProcess = hasIncompleteBranch(claim.receipt);
+    // 두 Context는 독립된 receipt로 확정됩니다. 한쪽의 실패가 다른 쪽의
+    // 시작을 막지 않도록 병렬 실행하며, 예외도 분기 결과로 수렴한 뒤 저장합니다.
+    const [transaction, balance] = await Promise.all([
+      this.completeTransaction(envelope, claim.receipt.transaction),
+      this.completeBalance(envelope, claim.receipt.balance),
+    ]);
+    const receipt = { ...claim.receipt, transaction, balance };
+    const terminalReceipt: CaptureSubmissionReceipt = {
+      ...receipt,
+      state: completionOf(receipt) === "terminal" ? "completed" : "partial-retryable",
+    };
+    // 중간 branch 쓰기 없이 한 번만 병합합니다. 동시 재시도가 먼저 확정한
+    // terminal 결과가 있으면 로컬 후보 대신 저장소가 반환한 결과를 재생합니다.
+    const savedReceipt = shouldProcess || terminalReceipt.state !== claim.receipt.state
+      ? await this.dependencies.receipts.save(terminalReceipt)
+      : terminalReceipt;
 
-    const transactionReceipt = receipt.transaction;
+    return {
+      kind: "accepted",
+      completion: completionOf(savedReceipt),
+      ...(savedReceipt.transaction.stage === "absent"
+        ? {}
+        : { transactionResult: resultOf(savedReceipt.transaction) }),
+      ...(savedReceipt.balance.stage === "absent"
+        ? {}
+        : { balanceResult: resultOf(savedReceipt.balance) }),
+    };
+  }
+
+  private async completeTransaction(
+    envelope: CaptureBranchEnvelope,
+    current: CaptureReceiptBranch<CaptureTransactionBranchResult>,
+  ): Promise<CaptureReceiptBranch<CaptureTransactionBranchResult>> {
     if (
-      envelope.transactionBranch !== undefined &&
-      transactionReceipt.stage !== "absent" &&
-      transactionReceipt.stage !== "terminal"
-    ) {
-      const transactionResult = await this.dependencies.transactions.record({
+      envelope.transactionBranch === undefined ||
+      current.stage === "absent" ||
+      current.stage === "terminal"
+    ) return current;
+
+    let result: CaptureTransactionBranchResult;
+    try {
+      result = await this.dependencies.transactions.record({
         householdId: envelope.householdId,
-        downstreamKey: transactionReceipt.downstreamKey,
+        downstreamKey: current.downstreamKey,
         branch: envelope.transactionBranch,
       });
-      receipt = {
-        ...receipt,
-        transaction: completedBranch(
-          transactionReceipt,
-          transactionResult,
-          isRetryable(transactionResult),
-        ),
-      };
+    } catch {
+      result = { kind: "retryable-failure", code: "LEDGER_UNAVAILABLE" };
     }
+    return completedBranch(current, result, isRetryable(result));
+  }
 
-    const balanceReceipt = receipt.balance;
+  private async completeBalance(
+    envelope: CaptureBranchEnvelope,
+    current: CaptureReceiptBranch<CaptureBalanceBranchResult>,
+  ): Promise<CaptureReceiptBranch<CaptureBalanceBranchResult>> {
     if (
       envelope.balanceBranch !== undefined &&
-      balanceReceipt.stage !== "absent" &&
-      balanceReceipt.stage !== "terminal"
+      current.stage !== "absent" &&
+      current.stage !== "terminal"
     ) {
       let balanceResult: CaptureBalanceBranchResult;
       try {
@@ -169,39 +201,9 @@ class DefaultCaptureBranchSubmissionApplication
           code: "BALANCE_REPOSITORY_UNAVAILABLE",
         };
       }
-      receipt = {
-        ...receipt,
-        balance: completedBranch(
-          balanceReceipt,
-          balanceResult,
-          isRetryable(balanceResult),
-        ),
-      };
+      return completedBranch(current, balanceResult, isRetryable(balanceResult));
     }
-
-    const completion = completionOf(receipt);
-    const terminalReceipt: CaptureSubmissionReceipt = {
-      ...receipt,
-      state:
-        completion === "terminal" ? "completed" : "partial-retryable",
-    };
-    // Downstream ledger/balance는 각자의 idempotency key로 재생할 수 있습니다.
-    // 따라서 중간 processing/branch 상태를 매번 직렬 transaction으로 저장하지 않고,
-    // 이번 실행의 모든 branch 결과를 마지막에 한 번만 root receipt에 반영합니다.
-    if (shouldProcess || terminalReceipt.state !== claim.receipt.state) {
-      await this.dependencies.receipts.save(terminalReceipt);
-    }
-
-    return {
-      kind: "accepted",
-      completion,
-      ...(terminalReceipt.transaction.stage === "absent"
-        ? {}
-        : { transactionResult: resultOf(terminalReceipt.transaction) }),
-      ...(terminalReceipt.balance.stage === "absent"
-        ? {}
-        : { balanceResult: resultOf(terminalReceipt.balance) }),
-    };
+    return current;
   }
 }
 

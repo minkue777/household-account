@@ -208,6 +208,8 @@ Balance persistence DTO는 identityPolicyVersion, localCurrencyType, balanceInWo
 - created/updated: Balance + receipt + Outbox.
 - staleIgnored: receipt만, Balance/Event 없음.
 - replay: 기존 receipt read, write 없음.
+
+Home 최초 유형 자동 선택(`HOME-002`)에 필요한 설정·유형 목록 조회는 created/updated의 실제 Balance 저장 직전에만 수행합니다. replay·hash 충돌·staleIgnored에서는 이 준비를 생략합니다. 준비는 같은 transaction의 첫 write 이전에 완료하며 transaction 재시도마다 새 snapshot을 사용합니다. 자동 선택 정책은 Home Preferences가 소유하고 잔액 저장과 같은 UoW로 합성합니다.
 - purge: Finance Workflow가 정한 page + checkpoint.
 
 같은 identity에 동시 observation이 오면 Firestore transaction이 재실행되고 `ObservationOrder`가 최종 최신값을 다시 계산합니다. 도착 순서가 달라도 더 최신인 `observedAt, observationId` 값으로 수렴합니다. 같은 identity 문서 create 경합은 한 문서로 수렴합니다.

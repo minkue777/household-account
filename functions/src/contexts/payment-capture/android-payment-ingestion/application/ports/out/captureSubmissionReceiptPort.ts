@@ -39,7 +39,7 @@ export interface CaptureSubmissionReceiptPort {
     readonly envelope: CaptureBranchEnvelope;
     readonly payloadFingerprint: string;
   }): Promise<CaptureReceiptClaimResult>;
-  save(receipt: CaptureSubmissionReceipt): Promise<void>;
+  save(receipt: CaptureSubmissionReceipt): Promise<CaptureSubmissionReceipt>;
 }
 
 export interface CapturePayloadFingerprintPort {

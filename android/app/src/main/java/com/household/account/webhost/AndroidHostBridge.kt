@@ -14,9 +14,12 @@ import org.json.JSONObject
 /** 정확한 허용 origin에서만 노출되는 versioned Android host contract입니다. */
 class AndroidHostBridge(
     private val context: Activity,
-    private val authCoordinator: NativeAuthCoordinator = NativeAuthCoordinator(context),
+    createAuthCoordinator: () -> NativeAuthCoordinator = { NativeAuthCoordinator(context) },
     private val consumeAppLaunchDurationMillis: () -> Long?
 ) {
+    // A restored Web Auth session does not need Native authentication at startup.
+    private val authCoordinator by lazy(createAuthCoordinator)
+
     suspend fun handle(rawMessage: String): String {
         val request = runCatching { JSONObject(rawMessage) }.getOrNull()
             ?: return rejected("invalid-request", "INVALID_JSON")

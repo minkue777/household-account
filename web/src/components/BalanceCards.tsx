@@ -68,15 +68,14 @@ export default function BalanceCards({
       totalBudget += category.budget;
     }
 
-    const budgetedSpent = expenses.reduce((sum, expense) => {
-      if (!budgetedCategoryKeys.has(expense.category)) {
-        return sum;
+    let budgetedSpent = 0;
+    let totalSpent = 0;
+    for (const expense of expenses) {
+      totalSpent += expense.amount;
+      if (budgetedCategoryKeys.has(expense.category)) {
+        budgetedSpent += expense.amount;
       }
-
-      return sum + expense.amount;
-    }, 0);
-
-    const totalSpent = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+    }
     const remainingBudget = totalBudget - budgetedSpent;
 
     return {

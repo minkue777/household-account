@@ -99,7 +99,7 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
   }
 
   beginUpdate(entityId: string, patch: Partial<Entity>): string {
-    return this.beginUpdateInternal(entityId, patch, false);
+    return this.begin({ entityId, kind: 'update', patch });
   }
 
   /**
@@ -107,26 +107,11 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
    * still in flight. The caller must serialize the corresponding commands.
    */
   beginQueuedUpdate(entityId: string, patch: Partial<Entity>): string {
-    return this.beginUpdateInternal(entityId, patch, true);
-  }
-
-  private beginUpdateInternal(
-    entityId: string,
-    patch: Partial<Entity>,
-    allowPendingUpdate: boolean
-  ): string {
-    const current = this.current(entityId);
-    const optimisticPatch = current === undefined
-      ? patch
-      : {
-          ...patch,
-          aggregateVersion: current.aggregateVersion + 1,
-        };
     return this.begin({
       entityId,
       kind: 'update',
-      patch: optimisticPatch,
-      allowPendingUpdate,
+      patch,
+      allowPendingUpdate: true,
     });
   }
 
@@ -209,6 +194,9 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
       throw new Error(`${this.prefix.toUpperCase()}_MUTATION_ALREADY_PENDING`);
     }
     const original = this.current(input.entityId);
+    const patch = input.kind === 'update' && original && input.patch
+      ? { ...input.patch, aggregateVersion: original.aggregateVersion + 1 }
+      : input.patch;
     const id = operationId(`${this.prefix}-optimistic`);
     const observedBy = new Set<number>();
     const subscriptionRevisionAtBegin = new Map<number, number>();
@@ -225,7 +213,7 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
     this.pending.set(id, {
       entityId: input.entityId,
       kind: input.kind,
-      ...(input.patch ? { patch: input.patch } : {}),
+      ...(patch ? { patch } : {}),
       ...(input.canonical ? { canonical: input.canonical } : {}),
       ...(original ? { original } : {}),
       observedBy,

@@ -197,6 +197,8 @@ Value Object는 `HouseholdName`, `MemberDisplayName`, `AssetOwnerProfileName`, `
 
 #### 5.2.2 반복 실행의 Session 복원 순서
 
+일반 브라우저와 iPhone PWA는 `initializeAuth`에 기존 저장 우선순위(IndexedDB → localStorage → sessionStorage)를 명시하고 팝업 resolver를 초기 의존성에서 제외합니다. 모바일에서 팝업용 외부 스크립트·iframe 준비가 기존 사용자 복원을 기다리게 하지 않으며 Firebase의 계정·토큰 검증과 observer는 그대로 사용합니다. 실제 Google 로그인은 `signInWithPopup`의 세 번째 인자로 `browserPopupRedirectResolver`를 전달합니다. Android의 localStorage 영속 Auth 정책은 유지합니다.
+
 1. Android WebView도 Firebase Auth observer의 첫 결과를 먼저 기다립니다. 영속 Web Auth 사용자가 있으면 해당 사용자를 사용하고, 첫 화면 선행 단계에서 강제 token refresh나 Native custom-token 교환을 반복하지 않습니다.
 2. observer가 사용자를 반환하지 않은 Android WebView만 Native 로그인 세션으로 fallback합니다. custom-token 교환 중 observer가 먼저 같은 사용자를 반환해도 Native 응답의 Membership 해석이 끝날 때까지 별도 `ResolveSignedInUser`를 시작하지 않습니다.
 3. Auth UID와 `SignedInSessionBootstrapCache.principalUid`가 같고 Membership 연결과 Household metadata가 완전하면 cache hit입니다. 여기서 Household metadata는 `id`, 가계부 이름 `name`, 생성 시각 `createdAt`, 기본 카테고리 `defaultCategoryKey`, 홈의 좌·우 요약 카드 `homeSummaryConfig`, 가구원별 `id`·표시 이름·`aggregateVersion`만 뜻합니다. 원장·예산·지역화폐 잔액·자산·카드·알림 데이터는 포함하지 않습니다. SessionScope·자기 member·가구 표시 정보를 원자 적용하고 별도 Membership 또는 Household 응답을 기다리지 않은 채 월 원장·카테고리·지역화폐 listener를 같은 generation에서 시작합니다. 구버전 cache에 Membership만 있고 metadata가 없으면 scope와 업무 listener는 즉시 복원하되 최소 표시값을 사용하고 5번의 한 문서 read로 metadata를 한 번 보강합니다.

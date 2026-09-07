@@ -6,7 +6,7 @@ import { useCategoryContext } from '@/contexts/CategoryContext';
 
 interface CategorySummaryProps {
   expenses: Expense[];
-  onCategoryClick?: (category: Category, categoryExpenses: Expense[]) => void;
+  onCategoryClick?: (category: Category) => void;
   showBudgetProgress?: boolean;
   ledgerLoading?: boolean;
 }
@@ -26,19 +26,15 @@ export default function CategorySummary({
   } = useCategoryContext();
 
   const categorySummary = useMemo(() => {
-    const totals = new Map<Category, { total: number; count: number }>();
+    const totals = new Map<Category, number>();
 
     expenses.forEach((expense) => {
-      const current = totals.get(expense.category) || { total: 0, count: 0 };
-      totals.set(expense.category, {
-        total: current.total + expense.amount,
-        count: current.count + 1,
-      });
+      totals.set(expense.category, (totals.get(expense.category) ?? 0) + expense.amount);
     });
 
     const categoryOrder = new Map(categories.map((category, index) => [category.key, index]));
     return Array.from(totals.entries())
-      .map(([category, { total, count }]) => ({ category, total, count }))
+      .map(([category, total]) => ({ category, total }))
       .sort((a, b) => {
         const orderA = categoryOrder.get(a.category) ?? 999;
         const orderB = categoryOrder.get(b.category) ?? 999;
@@ -65,13 +61,12 @@ export default function CategorySummary({
         const hasBudget = showBudgetProgress && budget !== null && budget > 0;
         const percentage = hasBudget ? Math.min((total / budget) * 100, 100) : 0;
         const isOverBudget = hasBudget && total > budget;
-        const categoryExpenses = expenses.filter((expense) => expense.category === category);
 
         return (
           <div
             key={category}
             className={`group ${onCategoryClick ? '-mx-2 cursor-pointer rounded-lg px-2 py-1 transition-colors hover:bg-slate-50' : ''}`}
-            onClick={() => onCategoryClick?.(category, categoryExpenses)}
+            onClick={() => onCategoryClick?.(category)}
           >
             <div className="mb-1 flex items-center justify-between">
               <div className="flex items-center gap-2">

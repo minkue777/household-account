@@ -78,12 +78,13 @@ export class InMemoryCaptureSubmissionReceiptStore
     return { kind: "claimed", receipt: cloneReceipt(receipt) };
   }
 
-  async save(receipt: CaptureSubmissionReceipt): Promise<void> {
+  async save(receipt: CaptureSubmissionReceipt): Promise<CaptureSubmissionReceipt> {
     this.saves += 1;
     this.receipts.set(
       receiptKey(receipt.householdId, receipt.rootIdempotencyKey),
       cloneReceipt(receipt),
     );
+    return cloneReceipt(receipt);
   }
 
   list(): readonly CaptureSubmissionReceipt[] {

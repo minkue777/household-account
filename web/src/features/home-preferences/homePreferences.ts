@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { collection, db, doc, onSnapshot } from '@/platform/read-model/firestoreReadModel';
-import { getHouseholdCommandClient } from '@/composition/webCommandRuntime';
 import { DEFAULT_HOME_SUMMARY_CONFIG, type HomeSummaryCardKey, type HomeSummaryConfig } from '@/types/household';
 
 export const HOME_CARD_LABELS: Record<HomeSummaryCardKey, string> = {
@@ -14,10 +13,12 @@ const canonical: Record<string, HomeSummaryCardKey> = {
   MONTHLY_EXPENSE: 'monthlySpent', YEARLY_EXPENSE: 'yearlySpent',
 };
 export const homePreferenceCommands = {
-  saveCards(householdId: string, configuration: HomeSummaryConfig, expectedVersion: number) {
+  async saveCards(householdId: string, configuration: HomeSummaryConfig, expectedVersion: number) {
+    const { getHouseholdCommandClient } = await import('@/composition/webCommandRuntime');
     return getHouseholdCommandClient().execute('home.update-summary-preferences.v1', { ...configuration, expectedVersion }, { householdId });
   },
-  selectCurrency(householdId: string, localCurrencyTypeId: string, expectedVersion: number) {
+  async selectCurrency(householdId: string, localCurrencyTypeId: string, expectedVersion: number) {
+    const { getHouseholdCommandClient } = await import('@/composition/webCommandRuntime');
     return getHouseholdCommandClient().execute('home.select-local-currency.v1', { localCurrencyTypeId, expectedVersion }, { householdId });
   },
 };

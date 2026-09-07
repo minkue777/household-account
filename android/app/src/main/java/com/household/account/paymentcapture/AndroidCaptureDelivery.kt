@@ -144,11 +144,11 @@ object AndroidCaptureDelivery {
         }
     }
 
-    fun scheduleRetry(context: Context) {
+    fun scheduleRetry(context: Context, shouldSchedule: () -> Boolean = { true }) {
         val applicationContext = context.applicationContext
         retryWorkScheduler.schedule(
             hasPendingCaptures = {
-                queue(applicationContext).snapshot().isNotEmpty()
+                shouldSchedule() && queue(applicationContext).snapshot().isNotEmpty()
             },
             enqueueRetryWork = { enqueueRetryWork(applicationContext) }
         )

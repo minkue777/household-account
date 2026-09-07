@@ -17,12 +17,20 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.household.account.service.CardNotificationListenerService
+import com.household.account.paymentcapture.AndroidCaptureDelivery
+import com.household.account.webhost.AndroidHostBridge
 import com.household.account.webhost.TrustedWebOrigin
 import com.household.account.webhost.NotificationListenerAccess
 import java.io.FileInputStream
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -149,6 +157,61 @@ class MainActivityInstrumentationTest {
                 .getBoolean("postNotificationsRequested", false))
             assertTrue(Settings.canDrawOverlays(context))
             assertTrue(isNotificationListenerEnabled())
+        }
+    }
+
+    @Test
+    fun captureRetryChecksTheSessionOutsideTheMainThread() {
+        val checked = CountDownLatch(1)
+        val ranOnMainThread = AtomicBoolean(true)
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                AndroidCaptureDelivery.scheduleRetry(activity.applicationContext) {
+                    ranOnMainThread.set(android.os.Looper.myLooper() == android.os.Looper.getMainLooper())
+                    checked.countDown()
+                    false // No worker or remote capture is needed for this thread-boundary check.
+                }
+            }
+            assertTrue(checked.await(5, TimeUnit.SECONDS))
+            assertFalse(ranOnMainThread.get())
+        }
+    }
+
+    @Test
+    fun bridgeMetadataSkipsNativeAuthInitializationAndEachAuthOperationRequestsIt() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                var authInitializations = 0
+                val stopBeforeAuthentication = IllegalStateException("test-auth-initialization")
+                val bridge = AndroidHostBridge(
+                    context = activity,
+                    createAuthCoordinator = {
+                        authInitializations += 1
+                        throw stopBeforeAuthentication
+                    },
+                    consumeAppLaunchDurationMillis = { 42L }
+                )
+                fun request(operation: String) = JSONObject()
+                    .put("contractVersion", AndroidHostBridge.REQUEST_VERSION)
+                    .put("requestId", operation)
+                    .put("operation", operation)
+                    .put("payload", JSONObject())
+                    .toString()
+
+                runBlocking {
+                    assertEquals(0, authInitializations)
+                    assertEquals("succeeded", JSONObject(bridge.handle(request("app.get-version")))
+                        .getJSONObject("result").getString("kind"))
+                    assertEquals(42L, JSONObject(bridge.handle(request("performance.get-app-launch-duration")))
+                        .getJSONObject("result").getJSONObject("value").getLong("durationMs"))
+                    assertEquals(0, authInitializations)
+                    // Stop at construction so this check never opens login UI or calls Firebase.
+                    listOf("auth.sign-in", "auth.sign-out", "session.refresh").forEachIndexed { index, operation ->
+                        assertSame(stopBeforeAuthentication, runCatching { bridge.handle(request(operation)) }.exceptionOrNull())
+                        assertEquals(index + 1, authInitializations)
+                    }
+                }
+            }
         }
     }
 

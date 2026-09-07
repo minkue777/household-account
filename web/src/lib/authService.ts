@@ -2,6 +2,9 @@ import {
   getAuth,
   initializeAuth,
   browserLocalPersistence,
+  browserSessionPersistence,
+  indexedDBLocalPersistence,
+  browserPopupRedirectResolver,
   connectAuthEmulator,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -30,12 +33,14 @@ export interface AuthenticatedWebSession {
 }
 
 function createAuth() {
-  if (!isAndroidHostAvailable()) return getAuth(app);
   try {
-    // 검증된 WebView 세션을 영속화하여 앱 프로세스 재시작마다 custom-token
-    // 교환을 첫 화면의 선행 조건으로 반복하지 않습니다. Native 세션 검증은
-    // 백그라운드에서 계속 수행하고 실제 권한은 서버 rules가 확인합니다.
-    return initializeAuth(app, { persistence: browserLocalPersistence });
+    // 저장 방식은 유지하고 모바일 Auth 복원 앞의 팝업 iframe 준비만 미룹니다.
+    // resolver는 실제 팝업 로그인에서 전달합니다. Android는 기존 LOCAL을 유지합니다.
+    return initializeAuth(app, {
+      persistence: isAndroidHostAvailable()
+        ? browserLocalPersistence
+        : [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence],
+    });
   } catch {
     return getAuth(app);
   }
@@ -236,7 +241,7 @@ export async function signInWithGoogleSession(): Promise<AuthenticatedWebSession
     if (isAndroidHostAvailable()) {
       return await signInFromAndroidHost();
     }
-    const result = await signInWithPopup(auth, googleProvider);
+    const result = await signInWithPopup(auth, googleProvider, browserPopupRedirectResolver);
     return { user: result.user };
   } catch (error) {
     return null;
