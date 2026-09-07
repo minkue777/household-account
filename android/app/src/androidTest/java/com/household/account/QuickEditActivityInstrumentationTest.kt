@@ -13,6 +13,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.matcher.RootMatchers.isDialog
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import com.google.firebase.auth.FirebaseAuth
 import com.household.account.quickedit.AndroidKeystoreQuickEditCommandOutboxStore
@@ -95,7 +96,7 @@ class QuickEditActivityInstrumentationTest {
                 // A later form refresh must not mutate the already opened draft.
                 activity.findViewById<EditText>(R.id.etMemo).setText("이후 변경")
             }
-            onView(withId(R.id.btnConfirmSplit)).perform(click())
+            onView(withId(R.id.btnConfirmSplit)).inRoot(isDialog()).perform(click())
             val store = AndroidKeystoreQuickEditCommandOutboxStore(context)
             waitUntil("분할 암호화 outbox commit") { store.load().isNotEmpty() }
             val envelope = store.load().single().envelope
