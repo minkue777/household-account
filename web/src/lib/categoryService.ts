@@ -114,24 +114,24 @@ export function generateCategoryKey(): string {
   return `custom_${Date.now()}`;
 }
 
-// 색조와 밝기 차이를 함께 둔 카테고리 선택 색상입니다.
+// 사용 중인 기존 색을 보존하고, 미사용 유사색만 교체한 16색 팔레트입니다.
 export const CATEGORY_COLOR_OPTIONS = [
-  { value: '#16A34A', label: '초록' },
-  { value: '#DC2626', label: '빨강' },
-  { value: '#F97316', label: '주황' },
-  { value: '#FACC15', label: '노랑' },
-  { value: '#84CC16', label: '연두' },
-  { value: '#5EEAD4', label: '민트' },
-  { value: '#0F766E', label: '청록' },
-  { value: '#38BDF8', label: '하늘' },
+  { value: '#4ADE80', label: '초록' },
+  { value: '#F472B6', label: '분홍' },
+  { value: '#60A5FA', label: '하늘' },
+  { value: '#FBBF24', label: '황금색' },
+  { value: '#9CA3AF', label: '회색' },
+  { value: '#A78BFA', label: '보라' },
   { value: '#2563EB', label: '파랑' },
+  { value: '#2DD4BF', label: '청록' },
+  { value: '#F87171', label: '빨강' },
+  { value: '#818CF8', label: '연남색' },
+  { value: '#34D399', label: '민트' },
+  { value: '#DC2626', label: '진빨강' },
   { value: '#1E3A8A', label: '남색' },
-  { value: '#9333EA', label: '보라' },
-  { value: '#C4B5FD', label: '연보라' },
-  { value: '#EC4899', label: '분홍' },
   { value: '#831843', label: '자주' },
   { value: '#92400E', label: '갈색' },
-  { value: '#64748B', label: '회색' },
+  { value: '#334155', label: '진회색' },
 ];
 
 export const COLOR_PALETTE = CATEGORY_COLOR_OPTIONS.map(({ value }) => value);
