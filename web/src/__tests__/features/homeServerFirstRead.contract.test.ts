@@ -38,7 +38,7 @@ jest.mock('@/features/ledger/application/ledgerOptimisticProjection', () => ({
   },
 }));
 
-import { subscribeToCategories } from '@/lib/categoryService';
+import { subscribeToCategories, subscribeToCategoryCatalogVersion } from '@/lib/categoryService';
 import {
   readMonthlyTransactionsForPrefetch,
   subscribeToMonthlyTransactions,
@@ -275,5 +275,61 @@ describe('가계부 첫 화면 server-first 조회 계약', () => {
     expect(callback).toHaveBeenLastCalledWith([
       expect.objectContaining({ id: 'server-category', label: '최신' }),
     ]);
+  });
+
+  it('카테고리 카탈로그 버전은 단일 설정 문서의 서버 변경을 구독하고 해제한다', () => {
+    const callback = jest.fn();
+    const unsubscribe = jest.fn();
+    mockOnSnapshot.mockReturnValue(unsubscribe);
+
+    const dispose = subscribeToCategoryCatalogVersion('household-1', callback);
+    const { options, next } = listenerArguments();
+    expect(mockOnSnapshot.mock.calls[0][0]).toEqual({
+      kind: 'document',
+      segments: [{ kind: 'db' }, 'households', 'household-1', 'categorySettings', 'default'],
+    });
+    expect(options).toEqual({ includeMetadataChanges: true });
+
+    next({ metadata: { fromCache: true }, data: () => ({ catalogVersion: 6 }) });
+    expect(callback).not.toHaveBeenCalled();
+    next({ metadata: { fromCache: false }, data: () => ({ catalogVersion: 7, defaultCategoryId: 'food' }) });
+    next({ metadata: { fromCache: true }, data: () => ({ catalogVersion: 6 }) });
+    next({ metadata: { fromCache: false }, data: () => ({ catalogVersion: 8 }) });
+    expect(callback.mock.calls).toEqual([[7, 'food'], [8, undefined]]);
+    expect(mockGetDocFromServer).not.toHaveBeenCalled();
+    expect(mockGetDocsFromServer).not.toHaveBeenCalled();
+
+    dispose();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { description: '설정 문서가 없으면', data: undefined, expected: 0 },
+    { description: '버전 필드가 없으면', data: {}, expected: 0 },
+    { description: 'legacy aggregateVersion만 있으면', data: { aggregateVersion: 4 }, expected: 4 },
+  ])('카테고리 카탈로그는 $description 서버 저장소와 같은 버전을 사용한다', ({ data, expected }) => {
+    const callback = jest.fn();
+    subscribeToCategoryCatalogVersion('household-1', callback);
+    listenerArguments().next({ metadata: { fromCache: false }, data: () => data });
+    expect(callback).toHaveBeenCalledWith(expected, undefined);
+  });
+
+  it('카테고리 카탈로그 권한 오류를 버전 0으로 위장하지 않고 호출자에게 전달한다', () => {
+    const callback = jest.fn();
+    const onError = jest.fn();
+    const denied = Object.assign(new Error('permission denied'), { code: 'permission-denied' });
+    subscribeToCategoryCatalogVersion('household-1', callback, onError);
+    listenerArguments().error(denied);
+    expect(onError).toHaveBeenCalledWith(denied);
+    expect(callback).not.toHaveBeenCalled();
+  });
+
+  it('손상된 카탈로그 버전은 순서 변경에 전달하지 않는다', () => {
+    const callback = jest.fn();
+    const onError = jest.fn();
+    subscribeToCategoryCatalogVersion('household-1', callback, onError);
+    listenerArguments().next({ metadata: { fromCache: false }, data: () => ({ catalogVersion: -1 }) });
+    expect(callback).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(expect.any(Error));
   });
 });

@@ -1,4 +1,11 @@
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import {
+  devices,
+  expect,
+  test,
+  type APIRequestContext,
+  type CDPSession,
+  type Page,
+} from '@playwright/test';
 import {
   type FirestoreDocument,
   readExpenseDocuments,
@@ -32,10 +39,95 @@ async function findExpense(
     .find((document) => documentId(document) === id);
 }
 
-test('로그인부터 첫 월 원장과 지출 CRUD까지 실제 Firebase 경계를 통과한다', async ({
+async function dragCategoryByTouch(
+  page: Page,
+  session: CDPSession,
+  sourceLabel: string,
+  targetLabel: string
+): Promise<void> {
+  const list = page.getByTestId('category-order-list');
+  await list.scrollIntoViewIfNeeded();
+  const source = list.getByRole('button', { name: `${sourceLabel} 순서 이동`, exact: true });
+  const target = list.getByRole('button', { name: `${targetLabel} 순서 이동`, exact: true });
+  await expect(source).toBeEnabled();
+  await expect(target).toBeEnabled();
+  const sourceBox = await source.boundingBox();
+  const targetBox = await target.boundingBox();
+  expect(sourceBox).not.toBeNull();
+  expect(targetBox).not.toBeNull();
+  const start = {
+    x: sourceBox!.x + sourceBox!.width / 2,
+    y: sourceBox!.y + sourceBox!.height / 2,
+  };
+  const end = {
+    x: targetBox!.x + targetBox!.width / 2,
+    y: targetBox!.y + targetBox!.height / 2,
+  };
+
+  // DOM dispatchEvent/HTML drag 대신 Chromium 입력 경계에서 실제 touch를 전달합니다.
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ ...start, id: 1 }],
+  });
+  for (let step = 1; step <= 8; step += 1) {
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{
+        x: start.x + (end.x - start.x) * step / 8,
+        y: start.y + (end.y - start.y) * step / 8,
+        id: 1,
+      }],
+    });
+  }
+  await expect.poll(() => source.evaluate((button) =>
+    getComputedStyle(button.closest('[data-category-id]')!).transform
+  )).not.toBe('none');
+  await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+}
+
+async function expectStoredCategoryOrder(
+  request: APIRequestContext,
+  householdId: string,
+  expectedKeys: string[],
+  expectedVersion: number
+): Promise<void> {
+  await expect.poll(async () => {
+    const [canonical, projection, settings, households] = await Promise.all([
+      readFirestoreCollection(request, `households/${householdId}/categories`),
+      readFirestoreCollection(request, 'categories'),
+      readFirestoreCollection(request, `households/${householdId}/categorySettings`),
+      readFirestoreCollection(request, 'households'),
+    ]);
+    return {
+      canonical: canonical
+        .filter((document) => document.fields?.state?.stringValue === 'active')
+        .sort((left, right) => Number(left.fields?.sortOrder?.integerValue)
+          - Number(right.fields?.sortOrder?.integerValue))
+        .map((document) => document.fields?.categoryId?.stringValue),
+      projection: projection
+        .filter((document) => document.fields?.householdId?.stringValue === householdId
+          && document.fields?.isActive?.booleanValue === true)
+        .sort((left, right) => Number(left.fields?.order?.integerValue)
+          - Number(right.fields?.order?.integerValue))
+        .map((document) => document.fields?.key?.stringValue),
+      catalogVersion: Number(settings.find((document) => documentId(document) === 'default')
+        ?.fields?.catalogVersion?.integerValue),
+      householdVersion: Number(households.find((document) => documentId(document) === householdId)
+        ?.fields?.categoryCatalogVersion?.integerValue),
+    };
+  }).toEqual({
+    canonical: expectedKeys,
+    projection: expectedKeys,
+    catalogVersion: expectedVersion,
+    householdVersion: expectedVersion,
+  });
+}
+
+test('[T-CAT-007][CAT-002] 로그인·지출 CRUD·모바일 카테고리 순서 변경이 실제 Firebase 경계를 통과한다', async ({
+  browser,
   page,
   request,
-}) => {
+}, testInfo) => {
   const today = todayInSeoul();
   const browserErrors: string[] = [];
   page.on('pageerror', (error) => browserErrors.push(error.message));
@@ -175,4 +267,92 @@ test('로그인부터 첫 월 원장과 지출 CRUD까지 실제 Firebase 경계
   await expect(updatedItem).toHaveCount(0);
   await expect(page.getByText('지출 내역이 없습니다', { exact: true })).toBeVisible();
   expect(browserErrors).toEqual([]);
+
+  await test.step('모바일 실제 touch로 연속 저장하고 canonical·projection·새로고침 순서를 확인한다', async () => {
+    const householdId = createdDocument!.fields?.householdId?.stringValue;
+    expect(householdId).toBeDefined();
+    const household = (await readFirestoreCollection(request, 'households'))
+      .find((document) => documentId(document) === householdId);
+    expect(household).toBeDefined();
+    const initialCatalogVersion = Number(household!.fields?.categoryCatalogVersion?.integerValue);
+    expect(initialCatalogVersion).toBeGreaterThan(0);
+
+    const mobileContext = await browser.newContext({
+      ...devices['Pixel 7'],
+      baseURL: new URL(page.url()).origin,
+      locale: 'ko-KR',
+      timezoneId: 'Asia/Seoul',
+    });
+    try {
+      const mobilePage = await mobileContext.newPage();
+      const mobileErrors: string[] = [];
+      mobilePage.on('pageerror', (error) => mobileErrors.push(error.message));
+      await mobilePage.goto('/');
+      await mobilePage.getByRole('button', { name: '테스트 계정으로 로그인' }).click();
+      await expect(mobilePage.locator('.calendar-glass')).toHaveAttribute('aria-busy', 'false');
+      await mobilePage.goto('/settings');
+      await mobilePage.getByRole('button', { name: /^카테고리\s*5개$/ }).click();
+
+      const handles = mobilePage.getByTestId('category-order-list')
+        .getByRole('button', { name: / 순서 이동$/ });
+      const expectVisibleOrder = async (labels: string[]) => {
+        await expect.poll(() => handles.evaluateAll((buttons) =>
+          buttons.map((button) => button.getAttribute('aria-label'))
+        )).toEqual(labels.map((label) => `${label} 순서 이동`));
+      };
+      await expectVisibleOrder(['생활비', '육아비', '고정비', '식비', '기타']);
+
+      await mobilePage.evaluate(() => {
+        type PointerSample = { type: string; pointerType: string; trusted: boolean };
+        const samples: PointerSample[] = [];
+        (window as unknown as { categoryPointerSamples: PointerSample[] }).categoryPointerSamples = samples;
+        for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) {
+          document.addEventListener(type, (event) => {
+            const pointer = event as PointerEvent;
+            if ((pointer.target as Element | null)?.closest('[data-category-id]')) {
+              samples.push({ type, pointerType: pointer.pointerType, trusted: pointer.isTrusted });
+            }
+          }, true);
+        }
+      });
+      const session = await mobileContext.newCDPSession(mobilePage);
+
+      await dragCategoryByTouch(mobilePage, session, '생활비', '고정비');
+      await expectVisibleOrder(['육아비', '고정비', '생활비', '식비', '기타']);
+      await expectStoredCategoryOrder(request, householdId!,
+        ['childcare', 'fixed', 'living', 'food', 'etc'], initialCatalogVersion + 1);
+
+      // 새로고침 없이 다음 저장이 최신 catalogVersion으로 성공해야 합니다.
+      await dragCategoryByTouch(mobilePage, session, '식비', '육아비');
+      await expectVisibleOrder(['식비', '육아비', '고정비', '생활비', '기타']);
+      await expectStoredCategoryOrder(request, householdId!,
+        ['food', 'childcare', 'fixed', 'living', 'etc'], initialCatalogVersion + 2);
+
+      const pointerSamples = await mobilePage.evaluate(() =>
+        (window as unknown as {
+          categoryPointerSamples: { type: string; pointerType: string; trusted: boolean }[];
+        }).categoryPointerSamples
+      );
+      expect(pointerSamples.filter((event) => event.type === 'pointerdown')).toHaveLength(2);
+      expect(pointerSamples.filter((event) => event.type === 'pointerup')).toHaveLength(2);
+      expect(pointerSamples.some((event) => event.type === 'pointermove')).toBe(true);
+      expect(pointerSamples.some((event) => event.type === 'pointercancel')).toBe(false);
+      expect(pointerSamples.every((event) => event.pointerType === 'touch' && event.trusted)).toBe(true);
+      await testInfo.attach('mobile-category-native-touch', {
+        body: JSON.stringify(pointerSamples, null, 2),
+        contentType: 'application/json',
+      });
+
+      await mobilePage.reload();
+      await mobilePage.getByRole('button', { name: /^카테고리\s*5개$/ }).click();
+      await expectVisibleOrder(['식비', '육아비', '고정비', '생활비', '기타']);
+      await expectStoredCategoryOrder(request, householdId!,
+        ['food', 'childcare', 'fixed', 'living', 'etc'], initialCatalogVersion + 2);
+      expect(mobileErrors).toEqual([]);
+      await mobilePage.getByTestId('category-order-list').scrollIntoViewIfNeeded();
+      await mobilePage.screenshot({ path: testInfo.outputPath('category-reorder-mobile.png') });
+    } finally {
+      await mobileContext.close();
+    }
+  });
 });

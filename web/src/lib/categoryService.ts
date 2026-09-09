@@ -1,5 +1,6 @@
 import {
   collection,
+  doc,
   onSnapshot,
   query,
   orderBy,
@@ -72,6 +73,31 @@ export async function reorderCategories(
     '@/features/category-budget/application/categoryCommands'
   );
   await categoryCommands.reorder(householdId, categories, expectedCatalogVersion);
+}
+
+// 순서/기본 카테고리 변경에 사용하는 버전은 개별 카테고리 버전과 별도로 구독합니다.
+export function subscribeToCategoryCatalogVersion(
+  householdId: string,
+  callback: (version: number, defaultCategoryKey?: string) => void,
+  onError?: (error: unknown) => void
+): () => void {
+  if (!householdId) {
+    onError?.(new Error('카테고리 버전을 불러오지 못했습니다.'));
+    return () => {};
+  }
+
+  const reference = doc(db, 'households', householdId, 'categorySettings', 'default');
+  return onSnapshot(reference, { includeMetadataChanges: true }, (snapshot) => {
+    if (snapshot.metadata.fromCache) return;
+    const data = snapshot.data();
+    // 서버 저장소도 설정 문서가 없는 legacy 카탈로그의 버전을 0으로 취급합니다.
+    const version = data?.catalogVersion ?? data?.aggregateVersion ?? 0;
+    if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 0) {
+      onError?.(new Error('카테고리 버전을 불러오지 못했습니다.'));
+      return;
+    }
+    callback(version, typeof data?.defaultCategoryId === 'string' ? data.defaultCategoryId : undefined);
+  }, onError);
 }
 
 // 실시간 구독 (householdId별로)

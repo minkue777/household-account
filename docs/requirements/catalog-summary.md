@@ -3,7 +3,7 @@
 `node tools/requirements/update-catalog.mjs`로 생성합니다. 실행 결과나 구현 완료 개수가 아닌 문서 선언 집계입니다.
 
 - 요구사항: 244개 (고유 ID 244개)
-- Canonical 테스트 시나리오 ID: 228개
+- Canonical 테스트 시나리오 ID: 229개
 
 | 소유 영역 | 요구사항 |
 |---|---:|
@@ -18,7 +18,7 @@
 | 모듈 | 요구사항 | 테스트 시나리오 ID |
 |---|---:|---:|
 | [contexts/access-household/modules/household-access](contexts/access-household/modules/household-access/requirements.md) | 19 | 15 |
-| [contexts/household-finance/modules/categories-budget](contexts/household-finance/modules/categories-budget/requirements.md) | 6 | 7 |
+| [contexts/household-finance/modules/categories-budget](contexts/household-finance/modules/categories-budget/requirements.md) | 6 | 8 |
 | [contexts/household-finance/modules/ledger](contexts/household-finance/modules/ledger/requirements.md) | 23 | 23 |
 | [contexts/household-finance/modules/local-currency](contexts/household-finance/modules/local-currency/requirements.md) | 5 | 8 |
 | [contexts/household-finance/modules/recurring-transactions](contexts/household-finance/modules/recurring-transactions/requirements.md) | 6 | 8 |

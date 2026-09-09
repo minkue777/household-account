@@ -5,19 +5,20 @@ import { useCategoryContext } from '@/contexts/CategoryContext';
 import { CategoryDocument } from '@/lib/categoryService';
 import ColorPicker from '@/components/common/ColorPicker';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
-import { COLOR_PALETTE } from '@/lib/categoryService';
+import { COLOR_PALETTE, subscribeToCategoryCatalogVersion } from '@/lib/categoryService';
 import { setDefaultCategoryKey } from '@/lib/householdService';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { useAppDialog } from '@/contexts/AppDialogContext';
-import { ChevronDown, Edit2, Plus, Star, Tags, Trash2 } from 'lucide-react';
+import { ChevronDown, Edit2, GripVertical, Plus, Star, Tags, Trash2 } from 'lucide-react';
+import { useCategoryReorder } from './useCategoryReorder';
 
 type CategoryMutation = 'add' | 'edit' | 'delete' | 'default' | 'reorder';
 
 export default function CategorySettings() {
-  const { household } = useHousehold();
+  const { household, isSessionVerified = true, remoteReadEpoch = 0 } = useHousehold();
   const { showAlert } = useAppDialog();
   const {
-    categories,
+    activeCategories: categories,
     addCategory,
     updateCategory,
     deleteCategory,
@@ -28,10 +29,6 @@ export default function CategorySettings() {
   const [editingVersion, setEditingVersion] = useState(1);
   const [showAddForm, setShowAddForm] = useState(false);
   const [pendingDeleteCategory, setPendingDeleteCategory] = useState<CategoryDocument | null>(null);
-
-  // 드래그 앤 드롭 상태
-  const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   // 섹션 펼침/접힘 상태
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
@@ -50,7 +47,26 @@ export default function CategorySettings() {
   const [editBudget, setEditBudget] = useState('');
   const mutationInFlightRef = useRef(false);
   const [pendingMutation, setPendingMutation] = useState<CategoryMutation | null>(null);
-  const isMutating = pendingMutation !== null;
+  const [catalogVersion, setCatalogVersion] = useState<number | null>(null);
+  const [completedMutationVersion, setCompletedMutationVersion] = useState<number | null>(null);
+  const [catalogReadFailed, setCatalogReadFailed] = useState(false);
+  const isCatalogReady = catalogVersion !== null
+    && (completedMutationVersion === null || catalogVersion > completedMutationVersion);
+  const isMutating = pendingMutation !== null || !isCatalogReady;
+
+  useEffect(() => {
+    setCatalogVersion(null);
+    setCompletedMutationVersion(null);
+    setCatalogReadFailed(false);
+    if (!isCategoryOpen || !household?.id || !isSessionVerified) return;
+    return subscribeToCategoryCatalogVersion(household.id, (version, defaultCategoryKey) => {
+      setCatalogVersion(version);
+      if (defaultCategoryKey !== undefined) setDefaultCategory(defaultCategoryKey);
+    }, () => {
+      setCatalogVersion(null);
+      setCatalogReadFailed(true);
+    });
+  }, [isCategoryOpen, household?.id, isSessionVerified, remoteReadEpoch]);
 
   useEffect(() => {
     setDefaultCategory(household?.defaultCategoryKey ?? '');
@@ -61,12 +77,15 @@ export default function CategorySettings() {
     operation: () => Promise<unknown>,
     failureMessage: string
   ): Promise<boolean> => {
-    if (mutationInFlightRef.current) return false;
+    if (mutationInFlightRef.current || !isCatalogReady) return false;
 
     mutationInFlightRef.current = true;
     setPendingMutation(mutation);
     try {
       await operation();
+      // 명령 응답이 구독보다 먼저 와도 다음 변경에 이전 버전을 재사용하지 않습니다.
+      // archive는 준비와 완료 트랜잭션에서 각각 버전이 증가합니다.
+      setCompletedMutationVersion(catalogVersion! + (mutation === 'delete' ? 1 : 0));
       return true;
     } catch (error) {
       console.error(`${failureMessage}:`, error);
@@ -76,7 +95,7 @@ export default function CategorySettings() {
       mutationInFlightRef.current = false;
       setPendingMutation(null);
     }
-  }, [showAlert]);
+  }, [showAlert, isCatalogReady, catalogVersion]);
 
   const handleAddCategory = async () => {
     const label = newLabel.trim();
@@ -149,12 +168,12 @@ export default function CategorySettings() {
 
   // 기본 카테고리 변경
   const handleDefaultCategoryChange = async (categoryKey: string) => {
-    if (mutationInFlightRef.current) return;
+    if (mutationInFlightRef.current || catalogVersion === null || categoryKey === defaultCategory) return;
     const completed = await runMutation(
       'default',
       async () => {
         if (!household?.id) throw new Error('인증된 가구 세션이 필요합니다.');
-        await setDefaultCategoryKey(household.id, categoryKey, household.categoryCatalogVersion ?? 0);
+        await setDefaultCategoryKey(household.id, categoryKey, catalogVersion);
       },
       '기본 카테고리를 변경하지 못했습니다. 다시 시도해 주세요.'
     );
@@ -162,66 +181,18 @@ export default function CategorySettings() {
     setDefaultCategory(categoryKey);
   };
 
-  // 드래그 앤 드롭 핸들러
-  const handleDragStart = (e: React.DragEvent, id: string) => {
-    if (mutationInFlightRef.current) {
-      e.preventDefault();
-      return;
-    }
-    setDraggedId(id);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e: React.DragEvent, id: string) => {
-    if (mutationInFlightRef.current) return;
-    e.preventDefault();
-    if (draggedId && draggedId !== id) {
-      setDragOverId(id);
-    }
-  };
-
-  const handleDragLeave = () => {
-    setDragOverId(null);
-  };
-
-  const handleDrop = async (e: React.DragEvent, targetId: string) => {
-    e.preventDefault();
-    if (mutationInFlightRef.current || !draggedId || draggedId === targetId) {
-      setDraggedId(null);
-      setDragOverId(null);
-      return;
-    }
-
-    const draggedIndex = categories.findIndex((c) => c.id === draggedId);
-    const targetIndex = categories.findIndex((c) => c.id === targetId);
-
-    if (draggedIndex === -1 || targetIndex === -1) {
-      setDraggedId(null);
-      setDragOverId(null);
-      return;
-    }
-
-    // 새 순서 배열 생성
-    const reordered = [...categories];
-    const [removed] = reordered.splice(draggedIndex, 1);
-    reordered.splice(targetIndex, 0, removed);
-
-    try {
+  const reorder = useCategoryReorder(
+    categories,
+    isMutating || catalogVersion === null || editingId !== null || !isCategoryOpen,
+    async (reordered) => {
+      if (catalogVersion === null) return;
       await runMutation(
         'reorder',
-        () => reorderCategories(reordered, household?.categoryCatalogVersion ?? 0),
+        () => reorderCategories(reordered, catalogVersion),
         '카테고리 순서를 변경하지 못했습니다. 다시 시도해 주세요.'
       );
-    } finally {
-      setDraggedId(null);
-      setDragOverId(null);
     }
-  };
-
-  const handleDragEnd = () => {
-    setDraggedId(null);
-    setDragOverId(null);
-  };
+  );
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200">
@@ -245,21 +216,25 @@ export default function CategorySettings() {
 
       {isCategoryOpen && (
         <div className="border-t border-slate-100">
-          <div className="divide-y divide-slate-100">
+          <p id="category-reorder-help" className="px-4 pt-3 text-xs text-slate-500">
+            왼쪽 손잡이를 위아래로 끌어 순서를 바꾸세요.
+          </p>
+          {catalogReadFailed && (
+            <p role="alert" className="px-4 pt-2 text-sm text-red-600">카테고리 정보를 불러오지 못했습니다.</p>
+          )}
+          <div ref={reorder.listRef} data-testid="category-order-list" className="divide-y divide-slate-100">
             {categories.map((category) => (
               <div
                 key={category.id}
-                draggable={!isMutating && editingId !== category.id}
-                onDragStart={(e) => handleDragStart(e, category.id)}
-                onDragOver={(e) => handleDragOver(e, category.id)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, category.id)}
-                onDragEnd={handleDragEnd}
-                className={`p-4 transition-all ${
-                  draggedId === category.id
-                    ? 'opacity-50 bg-slate-100'
-                    : dragOverId === category.id
-                      ? 'bg-blue-50 border-l-4 border-blue-500'
+                data-category-id={category.id}
+                style={reorder.preview?.id === category.id
+                  ? { transform: `translateY(${reorder.preview.offsetY}px)` }
+                  : undefined}
+                className={`relative p-4 ${
+                  reorder.preview?.id === category.id
+                    ? 'z-10 bg-white shadow-lg ring-2 ring-blue-300'
+                    : reorder.preview?.targetId === category.id
+                      ? 'bg-blue-50 ring-2 ring-inset ring-blue-300'
                       : ''
                 }`}
               >
@@ -313,15 +288,30 @@ export default function CategorySettings() {
                 ) : (
                   // 보기 모드
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium"
+                    <div className="min-w-0 flex-1 flex items-center gap-3">
+                      <button
+                        type="button"
+                        aria-label={`${category.label} 순서 이동`}
+                        aria-describedby="category-reorder-help"
+                        disabled={isMutating || catalogVersion === null || editingId !== null}
+                        onPointerDown={(event) => reorder.onPointerDown(event, category.id)}
+                        onPointerMove={reorder.onPointerMove}
+                        onPointerUp={reorder.onPointerUp}
+                        onPointerCancel={reorder.cancel}
+                        onLostPointerCapture={reorder.cancel}
+                        onKeyDown={(event) => {
+                          if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                            event.preventDefault();
+                            reorder.moveByKeyboard(category.id, event.key === 'ArrowUp' ? -1 : 1);
+                          }
+                        }}
+                        className="w-11 h-11 shrink-0 touch-none select-none cursor-grab active:cursor-grabbing rounded-full flex items-center justify-center text-slate-700 disabled:opacity-50"
                         style={{ backgroundColor: category.color }}
                       >
-                        {category.label.slice(0, 2)}
-                      </div>
-                      <div>
-                        <div className="font-medium text-slate-800 flex items-center gap-2">
+                        <GripVertical className="h-5 w-5" />
+                      </button>
+                      <div className="min-w-0">
+                        <div className="font-medium text-slate-800 flex flex-wrap items-center gap-2 break-all">
                           {category.label}
                           {defaultCategory === category.key && (
                             <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-600">
@@ -336,13 +326,13 @@ export default function CategorySettings() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="shrink-0 flex items-center gap-1">
                       {/* 기본 카테고리 설정 버튼 */}
                       <button
                         onClick={() => {
                           void handleDefaultCategoryChange(category.key);
                         }}
-                        disabled={isMutating}
+                        disabled={isMutating || catalogVersion === null}
                         className={`p-2 rounded-lg transition-colors ${
                           defaultCategory === category.key
                             ? 'text-blue-500 bg-blue-50'
