@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { COLOR_PALETTE } from '@/lib/categoryService';
+import { CATEGORY_COLOR_OPTIONS } from '@/lib/categoryService';
 
 interface ColorPickerProps {
   value: string;
@@ -15,6 +15,8 @@ export default function ColorPicker({ value, onChange }: ColorPickerProps) {
     <div className="relative">
       <button
         type="button"
+        aria-label="카테고리 색상 선택"
+        aria-expanded={isOpen}
         onClick={() => setIsOpen(!isOpen)}
         className="w-10 h-10 rounded-lg border-2 border-slate-200 hover:border-slate-300 transition-colors flex items-center justify-center"
         style={{ backgroundColor: value }}
@@ -42,12 +44,15 @@ export default function ColorPicker({ value, onChange }: ColorPickerProps) {
             onClick={() => setIsOpen(false)}
           />
           {/* 색상 팔레트 */}
-          <div className="absolute top-full left-0 mt-2 p-4 bg-white rounded-xl shadow-lg border border-slate-200 z-20 min-w-[240px]">
-            <div className="flex flex-wrap gap-3 justify-start">
-              {COLOR_PALETTE.map((color) => (
+          <div className="absolute top-full left-0 mt-2 p-4 bg-white rounded-xl shadow-lg border border-slate-200 z-20 w-60">
+            <div className="grid grid-cols-4 gap-2">
+              {CATEGORY_COLOR_OPTIONS.map(({ value: color, label }) => (
                 <button
                   key={color}
                   type="button"
+                  aria-label={label}
+                  aria-pressed={value === color}
+                  title={label}
                   onClick={() => {
                     onChange(color);
                     setIsOpen(false);

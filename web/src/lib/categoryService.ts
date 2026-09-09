@@ -114,18 +114,24 @@ export function generateCategoryKey(): string {
   return `custom_${Date.now()}`;
 }
 
-// 사전 정의된 색상 팔레트
-export const COLOR_PALETTE = [
-  '#4ADE80', // Green
-  '#F472B6', // Pink
-  '#60A5FA', // Blue
-  '#FBBF24', // Amber
-  '#9CA3AF', // Gray
-  '#A78BFA', // Purple
-  '#FB923C', // Orange
-  '#2DD4BF', // Teal
-  '#F87171', // Red
-  '#818CF8', // Indigo
-  '#34D399', // Emerald
-  '#FACC15', // Yellow
+// 색조와 밝기 차이를 함께 둔 카테고리 선택 색상입니다.
+export const CATEGORY_COLOR_OPTIONS = [
+  { value: '#16A34A', label: '초록' },
+  { value: '#DC2626', label: '빨강' },
+  { value: '#F97316', label: '주황' },
+  { value: '#FACC15', label: '노랑' },
+  { value: '#84CC16', label: '연두' },
+  { value: '#5EEAD4', label: '민트' },
+  { value: '#0F766E', label: '청록' },
+  { value: '#38BDF8', label: '하늘' },
+  { value: '#2563EB', label: '파랑' },
+  { value: '#1E3A8A', label: '남색' },
+  { value: '#9333EA', label: '보라' },
+  { value: '#C4B5FD', label: '연보라' },
+  { value: '#EC4899', label: '분홍' },
+  { value: '#831843', label: '자주' },
+  { value: '#92400E', label: '갈색' },
+  { value: '#64748B', label: '회색' },
 ];
+
+export const COLOR_PALETTE = CATEGORY_COLOR_OPTIONS.map(({ value }) => value);
