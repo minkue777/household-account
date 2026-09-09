@@ -114,7 +114,7 @@ export default function SearchModal({
         : page.items[0]?.date.substring(0, 7) ?? null);
     } catch (error) {
       if (isCurrentRequest()) {
-        setSearchError(error instanceof Error ? error.message : '검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.');
+        setSearchError(error instanceof Error ? error.message : '검색 결과를 불러오지 못했습니다.');
       }
     } finally {
       if (isCurrentRequest()) setIsSearching(false);
@@ -136,7 +136,7 @@ export default function SearchModal({
       setSearchError('');
     } catch {
       if (requestId === searchRequestIdRef.current && projectionRef.current === projection) {
-        setSearchError('검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.');
+        setSearchError('검색 결과를 불러오지 못했습니다.');
       }
     }
     finally { if (requestId === searchRequestIdRef.current) setIsSearching(false); }
@@ -253,7 +253,7 @@ export default function SearchModal({
           }
         } catch (error) {
           if (requestId === searchRequestIdRef.current && projectionRef.current === projection) {
-            setSearchError(error instanceof Error ? error.message : '검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.');
+            setSearchError(error instanceof Error ? error.message : '검색 결과를 불러오지 못했습니다.');
           }
         } finally {
           if (requestId === searchRequestIdRef.current && projectionRef.current === projection) {
@@ -331,10 +331,7 @@ export default function SearchModal({
               onExpenseClick={setSelectedExpense}
               transactionType={transactionType}
             />}
-            {searchError && <div className="py-2">
-              <p role="alert" className="text-sm text-red-600">{searchError}</p>
-              <button type="button" disabled={isSearching} onClick={() => void refreshSearch()} className="mt-2 rounded-lg p-2 text-sm text-blue-600 disabled:opacity-50">다시 시도</button>
-            </div>}
+            {searchError && <p role="alert" className="py-2 text-sm text-red-600">{searchError}</p>}
             {nextCursor && <button type="button" disabled={isSearching} onClick={() => void loadNextPage()} className="w-full rounded-lg p-3 text-sm text-blue-600 disabled:opacity-50">이전 거래에서 더 검색</button>}
           </div>
         </div>

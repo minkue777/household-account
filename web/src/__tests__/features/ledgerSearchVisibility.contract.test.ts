@@ -136,37 +136,19 @@ describe('ledger search visibility contract', () => {
     });
   });
 
-  test.each(['permission-denied', 'failed-precondition', 'firestore/unavailable'])(
-    'exposes only the read stage and safe provider code %s when search fails',
-    async (code) => {
-      mockedGetDocs.mockRejectedValueOnce(Object.assign(
-        new Error('private provider message containing a request token and document contents'),
-        { code }
-      ));
+  test('read failures expose a simple message without provider codes or private details', async () => {
+    mockedGetDocs.mockRejectedValueOnce(Object.assign(
+      new Error('private provider message containing a request token and document contents'),
+      { code: 'invalid-argument' }
+    ));
 
-      await expect(searchExpensePage('merchant')).rejects.toMatchObject({
-        code: 'SOURCE_UNAVAILABLE',
-        message: `검색 결과를 불러오지 못했습니다. 다시 시도해 주세요. (read/${code})`,
-      });
-    }
-  );
+    await expect(searchExpensePage('merchant')).rejects.toMatchObject({
+      code: 'SOURCE_UNAVAILABLE',
+      message: '검색 결과를 불러오지 못했습니다.',
+    });
+  });
 
-  test.each(['invalid code: private contents', 'a'.repeat(81)])(
-    'uses the error name instead of an unsafe provider code',
-    async (code) => {
-      mockedGetDocs.mockRejectedValueOnce(Object.assign(
-        new TypeError('private provider message'),
-        { code }
-      ));
-
-      await expect(searchExpensePage('merchant')).rejects.toMatchObject({
-        code: 'SOURCE_UNAVAILABLE',
-        message: '검색 결과를 불러오지 못했습니다. 다시 시도해 주세요. (read/TypeError)',
-      });
-    }
-  );
-
-  test('distinguishes document decoding failures without exposing the original message', async () => {
+  test('document decoding failures do not expose the error type or original message', async () => {
     mockedGetDocs.mockResolvedValueOnce({
       docs: [{
         id: 'invalid-row',
@@ -176,7 +158,7 @@ describe('ledger search visibility contract', () => {
 
     await expect(searchExpensePage('merchant')).rejects.toMatchObject({
       code: 'SOURCE_UNAVAILABLE',
-      message: '검색 결과를 불러오지 못했습니다. 다시 시도해 주세요. (map/TypeError)',
+      message: '검색 결과를 불러오지 못했습니다.',
     });
   });
 

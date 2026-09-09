@@ -51,30 +51,34 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
     expect(mockedGetDocs).toHaveBeenCalledTimes(1);
   });
 
-  test('조회 실패를 검색 결과 없음으로 표시하지 않고 같은 검색어로 다시 조회한다', async () => {
-    mockedGetDocs.mockRejectedValueOnce(new Error('network unavailable'));
+  test('조회 실패는 간단히 안내하고 검색어 입력으로 다시 조회한다', async () => {
+    mockedGetDocs.mockRejectedValueOnce(Object.assign(new Error('private provider details'), { code: 'invalid-argument' }));
     mockedGetDocs.mockResolvedValue(expenseSnapshot());
     render(<SearchModal isOpen onClose={jest.fn()} transactionType="expense" />);
-    fireEvent.change(screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요'), {
+    const input = screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요');
+    fireEvent.change(input, {
       target: { value: '검색 확인' },
     });
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('검색 결과를 불러오지 못했습니다.');
+    expect(await screen.findByRole('alert')).toHaveTextContent(/^검색 결과를 불러오지 못했습니다\.$/);
     expect(screen.queryByText(/검색 결과가 없습니다/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/invalid-argument|private provider details/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+    fireEvent.change(input, { target: { value: '저녁' } });
     expect(await screen.findByText('검색 확인 가게')).toBeInTheDocument();
     expect(screen.getByText('1건 · 12,000원')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(mockedGetDocs).toHaveBeenCalledTimes(2);
   });
 
-  test('수정 후 재조회가 실패해도 기존 검색 결과를 유지하고 다시 조회할 수 있다', async () => {
+  test('수정 후 자동 재조회가 실패해도 기존 결과를 유지하고 새 검색어 입력으로 조회한다', async () => {
     mockedGetDocs.mockResolvedValueOnce(expenseSnapshot());
     mockedGetDocs.mockRejectedValueOnce(new Error('network unavailable'));
     mockedGetDocs.mockResolvedValue(expenseSnapshot('검색 확인 새 가게', '2026-08-09'));
     render(<SearchModal isOpen onClose={jest.fn()} transactionType="expense" onExpenseUpdate={jest.fn()} />);
-    fireEvent.change(screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요'), {
+    const input = screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요');
+    fireEvent.change(input, {
       target: { value: '검색 확인' },
     });
     fireEvent.click(await screen.findByText('검색 확인 가게'));
@@ -85,7 +89,8 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
     expect(screen.getByText('1건 · 12,000원')).toBeInTheDocument();
     expect(screen.queryByText(/검색 결과가 없습니다/)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+    expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument();
+    fireEvent.change(input, { target: { value: '검색 확인 새' } });
     expect(await screen.findByText('검색 확인 새 가게')).toBeInTheDocument();
     expect(screen.queryByText('검색 확인 가게')).not.toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -93,16 +98,17 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
   });
 
   test('다시 조회하는 동안 검색어를 바꾸면 이전 요청이 현재 결과를 덮어쓰지 않는다', async () => {
-    let resolveRetry!: (snapshot: Awaited<ReturnType<typeof getDocsFromServer>>) => void;
+    let resolveSearch!: (snapshot: Awaited<ReturnType<typeof getDocsFromServer>>) => void;
     mockedGetDocs.mockRejectedValueOnce(new Error('network unavailable'));
-    mockedGetDocs.mockImplementationOnce(() => new Promise(resolve => { resolveRetry = resolve; }));
+    mockedGetDocs.mockImplementationOnce(() => new Promise(resolve => { resolveSearch = resolve; }));
     render(<SearchModal isOpen onClose={jest.fn()} transactionType="expense" />);
     const input = screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요');
     fireEvent.change(input, { target: { value: '검색 확인' } });
-    fireEvent.click(await screen.findByRole('button', { name: '다시 시도' }));
+    await screen.findByRole('alert');
+    fireEvent.change(input, { target: { value: '다른 가게' } });
     await waitFor(() => expect(mockedGetDocs).toHaveBeenCalledTimes(2));
     fireEvent.change(input, { target: { value: '점심' } });
-    await act(async () => { resolveRetry(expenseSnapshot('점심 가게')); });
+    await act(async () => { resolveSearch(expenseSnapshot('점심 가게')); });
 
     expect(await screen.findByText('점심 가게')).toBeInTheDocument();
     expect(screen.getByText('"점심" 검색 결과')).toBeInTheDocument();
