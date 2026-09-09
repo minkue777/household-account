@@ -1,6 +1,7 @@
 name: 품질 게이트
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches: [main]
@@ -140,20 +141,30 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Android 에뮬레이터 검증 대상 확인
+        id: scope
+        run: node tools/ci/android-instrumentation-scope.mjs
       - name: KVM 사용 권한 활성화
+        if: steps.scope.outputs.required == 'true'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - uses: actions/setup-java@v4
+        if: steps.scope.outputs.required == 'true'
         with:
           distribution: temurin
           java-version: 17
           cache: gradle
       - uses: android-actions/setup-android@v3
+        if: steps.scope.outputs.required == 'true'
       - run: chmod +x gradlew
+        if: steps.scope.outputs.required == 'true'
         working-directory: android
       - uses: reactivecircus/android-emulator-runner@v2
+        if: steps.scope.outputs.required == 'true'
         with:
           api-level: 34
           arch: x86_64
@@ -166,7 +177,7 @@ jobs:
             adb shell input keyevent KEYCODE_WAKEUP
             adb shell wm dismiss-keyguard
             bash -c 'cd android; status=0; ./gradlew connectedDebugAndroidTest --stacktrace || status=$?; mkdir -p app/build/ci-diagnostics; adb logcat -d > app/build/ci-diagnostics/logcat.txt || true; adb exec-out screencap -p > app/build/ci-diagnostics/screen.png || true; exit "$status"'
-      - if: failure()
+      - if: failure() && steps.scope.outputs.required == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: android-instrumentation-failure

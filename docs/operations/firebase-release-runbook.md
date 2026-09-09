@@ -7,7 +7,7 @@
 - Node.js 22, Java 21, 저장소의 Functions·Web 의존성, 인증된 GitHub CLI와 Application Default Credentials가 필요합니다. Firebase CLI는 설치된 Web workspace의 `firebase-tools`를 사용합니다.
 - 운영자는 manifest의 `authorizedActorIds`에 등록된 GitHub 로그인 계정이어야 합니다. ADC에는 해당 Firebase 배포, Secret version metadata 읽기, Monitoring channel 읽기, 배포 승인·기록·잠금 저장소 접근 권한이 필요합니다.
 - 변경 내용을 commit하기 전에 `npm --prefix functions run test:quality-gate`를 실행합니다. Web 또는 Android 변경 시 해당 활성 테스트와 production build도 실행합니다. 실패가 있으면 commit·push·배포를 진행하지 않습니다.
-- push한 **같은 HEAD**의 `quality-gates.yml`이 완료되어야 합니다. `functions`, `web`, `web-e2e`, `android`, `android-instrumentation` 다섯 job 모두 `success`여야 하며, 누락·pending·실패·취소·skip은 차단됩니다.
+- push한 **같은 HEAD**의 `quality-gates.yml`이 완료되어야 합니다. `functions`, `web`, `web-e2e`, `android`, `android-instrumentation` 다섯 job 모두 `success`여야 하며, job의 누락·pending·실패·취소·skip은 차단됩니다. `android-instrumentation`은 [변경 범위 판정](../../tools/ci/android-instrumentation-scope.mjs)에서 Android 코드·공용 계약·연동 변경이 확인될 때만 에뮬레이터를 실행합니다. 관련 변경이 없으면 범위 확인만으로 성공하며 내부 에뮬레이터 단계의 조건부 미실행은 정상입니다. Web 표시만 바뀐 경우 에뮬레이터 검증을 별도로 요구하지 않습니다.
 - working tree는 깨끗해야 합니다. manifest와 smoke token은 저장소 밖에 둡니다. 운영 실행 환경에 `FIRESTORE_EMULATOR_HOST`나 `FIREBASE_AUTH_EMULATOR_HOST`를 설정하지 않습니다.
 
 CI는 Functions unit·contract·형식·architecture·Rules/Storage/실제 Firebase integration, Web unit·production build·E2E, Android JVM·lint·Debug/Release build·instrumentation을 실행합니다. wrapper는 같은 CI 실행의 실제 Functions/Web JSON과 Android unit XML을 읽어 활성 테스트 수와 실패·skip 수를 평가합니다. build·Emulator·E2E 완료 여부는 필수 job 성공 결과로 확인합니다. CI 보고서가 없거나 만료된 경우 같은 HEAD에서 CI를 다시 실행합니다.
