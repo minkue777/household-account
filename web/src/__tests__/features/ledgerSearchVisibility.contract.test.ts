@@ -53,7 +53,7 @@ describe('ledger search visibility contract', () => {
   test('search pages one bounded source window with whole-result totals and reuses it across keystrokes', async () => {
     mockedGetDocs.mockResolvedValueOnce({ docs: Array.from({ length: 51 }, (_, index) => ledgerDocument(`row-${index}`)) } as Awaited<ReturnType<typeof getDocsFromServer>>);
     const page = await searchExpensePage('merchant', { transactionType: 'expense', sourceWindow: 'window-1' });
-    expect(limit).toHaveBeenCalledWith(10_001);
+    expect(limit).toHaveBeenCalledWith(10_000);
     expect((where as jest.Mock).mock.calls).toEqual([['householdId', '==', 'house-1']]);
     expect(orderBy).not.toHaveBeenCalled();
     expect(documentId).not.toHaveBeenCalled();
@@ -117,11 +117,22 @@ describe('ledger search visibility contract', () => {
     expect(mockedGetDocs).not.toHaveBeenCalled();
   });
 
-  test('fails instead of publishing partial totals beyond the safe source bound', async () => {
-    mockedGetDocs.mockResolvedValueOnce({ docs: Array.from({ length: 10_001 }, (_, index) => ledgerDocument(`row-${index}`)) } as Awaited<ReturnType<typeof getDocsFromServer>>);
+  test('returns complete totals below the production Listen query limit', async () => {
+    mockedGetDocs.mockResolvedValueOnce({ docs: Array.from({ length: 9_999 }, (_, index) => ledgerDocument(`row-${index}`)) } as Awaited<ReturnType<typeof getDocsFromServer>>);
+
+    const page = await searchExpensePage('merchant');
+
+    expect(limit).toHaveBeenCalledWith(10_000);
+    expect(page.items).toHaveLength(50);
+    expect(page.summary.count).toBe(9_999);
+    expect(page.summary.amount).toBe(99_990_000);
+  });
+
+  test('fails at the production Listen limit instead of publishing potentially partial totals', async () => {
+    mockedGetDocs.mockResolvedValueOnce({ docs: Array.from({ length: 10_000 }, (_, index) => ledgerDocument(`row-${index}`)) } as Awaited<ReturnType<typeof getDocsFromServer>>);
     await expect(searchExpensePage('merchant')).rejects.toMatchObject({
       code: 'SOURCE_LIMIT_EXCEEDED',
-      message: '검색할 거래가 많습니다. 검색 기간을 줄여 주세요.',
+      message: '검색 대상이 조회 한도에 도달해 전체 결과를 확인할 수 없습니다.',
     });
   });
 

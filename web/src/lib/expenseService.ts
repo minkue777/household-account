@@ -25,6 +25,7 @@ import { normalizeStoredCategoryId } from '@/lib/categoryCompatibility';
 
 const COLLECTION_NAME = 'expenses';
 const DEFAULT_TRANSACTION_TYPE: TransactionType = 'expense';
+const SEARCH_SOURCE_QUERY_LIMIT = 10_000;
 
 interface AddExpenseOptions {
   notifyOnCreate?: boolean;
@@ -886,7 +887,7 @@ export class ExpenseSearchFailure extends Error {
     readonly code: 'SOURCE_LIMIT_EXCEEDED' | 'SOURCE_WINDOW_CHANGED' | 'INVALID_PERIOD' | 'SOURCE_UNAVAILABLE',
     diagnostic?: { stage: 'read' | 'map'; error: unknown }
   ) {
-    const message = code === 'SOURCE_LIMIT_EXCEEDED' ? '검색할 거래가 많습니다. 검색 기간을 줄여 주세요.' : code === 'SOURCE_WINDOW_CHANGED' ? '검색 중 세션이 변경되었거나 검색 조건이 변경되었습니다. 다시 검색해 주세요.' : code === 'INVALID_PERIOD' ? '검색 시작일과 종료일을 확인해 주세요.' : '검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.';
+    const message = code === 'SOURCE_LIMIT_EXCEEDED' ? '검색 대상이 조회 한도에 도달해 전체 결과를 확인할 수 없습니다.' : code === 'SOURCE_WINDOW_CHANGED' ? '검색 중 세션이 변경되었거나 검색 조건이 변경되었습니다. 다시 검색해 주세요.' : code === 'INVALID_PERIOD' ? '검색 시작일과 종료일을 확인해 주세요.' : '검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.';
     // Provider messages may contain request or document contents; expose identifiers only.
     super(message + (code === 'SOURCE_UNAVAILABLE' && diagnostic
       ? ` (${diagnostic.stage}/${searchFailureIdentifier(diagnostic.error)})`
@@ -917,13 +918,14 @@ export async function searchExpensePage(
     let stage: 'read' | 'map' = 'read';
     const source = (async () => {
       // Every keystroke and result page shares one bounded server snapshot.
-      // A source exceeding the safety limit never produces partial totals.
+      // Production Listen rejects limits above 10,000. At the limit we cannot
+      // prove the source is complete, so never publish potentially partial totals.
       const snapshot = await getDocsFromServer(query(collection(db, COLLECTION_NAME),
         where('householdId', '==', scope.householdId),
         ...(options.startDate ? [where('date', '>=', period.startDate)] : []),
         ...(options.endDate ? [where('date', '<=', period.endDate)] : []),
-        limit(10_001)));
-      if (snapshot.docs.length > 10_000) throw new ExpenseSearchFailure('SOURCE_LIMIT_EXCEEDED');
+        limit(SEARCH_SOURCE_QUERY_LIMIT)));
+      if (snapshot.docs.length >= SEARCH_SOURCE_QUERY_LIMIT) throw new ExpenseSearchFailure('SOURCE_LIMIT_EXCEEDED');
       stage = 'map';
       return snapshot.docs.flatMap(document => {
         const data = document.data();
