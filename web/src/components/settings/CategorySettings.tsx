@@ -273,7 +273,7 @@ export default function CategorySettings() {
                         value={editLabel}
                         onChange={(e) => setEditLabel(e.target.value)}
                         placeholder="카테고리명"
-                        className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="min-w-0 flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
                     <div>
@@ -393,7 +393,7 @@ export default function CategorySettings() {
                     value={newLabel}
                     onChange={(e) => setNewLabel(e.target.value)}
                     placeholder="카테고리명"
-                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="min-w-0 flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     autoFocus
                   />
                 </div>
