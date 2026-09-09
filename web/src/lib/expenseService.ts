@@ -7,8 +7,6 @@ import {
   getDocs,
   getDocsFromServer,
   limit,
-  orderBy,
-  documentId,
   QueryDocumentSnapshot,
   QuerySnapshot,
   DocumentData,
@@ -921,11 +919,21 @@ export async function searchExpensePage(
       // Every keystroke and result page shares one bounded server snapshot.
       // A source exceeding the safety limit never produces partial totals.
       const snapshot = await getDocsFromServer(query(collection(db, COLLECTION_NAME),
-        where('householdId', '==', scope.householdId), where('date', '>=', period.startDate), where('date', '<=', period.endDate),
-        orderBy('date', 'desc'), orderBy(documentId(), 'desc'), limit(10_001)));
+        where('householdId', '==', scope.householdId),
+        ...(options.startDate ? [where('date', '>=', period.startDate)] : []),
+        ...(options.endDate ? [where('date', '<=', period.endDate)] : []),
+        limit(10_001)));
       if (snapshot.docs.length > 10_000) throw new ExpenseSearchFailure('SOURCE_LIMIT_EXCEEDED');
       stage = 'map';
-      return snapshot.docs.filter(document => isVisibleLedgerReadDocument(document.data())).map(mapDocToExpense);
+      return snapshot.docs.flatMap(document => {
+        const data = document.data();
+        // Preserve the previous date-range visibility without sorting the source query.
+        return typeof data.date === 'string'
+          && data.date >= period.startDate && data.date <= period.endDate
+          && isVisibleLedgerReadDocument(data)
+          ? [mapExpenseReadData(document.id, data)]
+          : [];
+      });
     })().catch(error => {
       if (searchWindow?.key === key) searchWindow = undefined;
       throw error instanceof ExpenseSearchFailure ? error : new ExpenseSearchFailure('SOURCE_UNAVAILABLE', { stage, error });

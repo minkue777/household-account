@@ -1,5 +1,5 @@
 import { searchExpenses, searchExpensePage, subscribeToDateRangeExpenses } from '@/lib/expenseService';
-import { getDocsFromServer, onSnapshot, limit } from '@/platform/read-model/firestoreReadModel';
+import { getDocsFromServer, onSnapshot, limit, where, orderBy, documentId } from '@/platform/read-model/firestoreReadModel';
 import { ledgerOptimisticProjection } from '@/features/ledger/application/ledgerOptimisticProjection';
 import { requireClientSessionScope } from '@/composition/clientSessionScope';
 
@@ -54,6 +54,9 @@ describe('ledger search visibility contract', () => {
     mockedGetDocs.mockResolvedValueOnce({ docs: Array.from({ length: 51 }, (_, index) => ledgerDocument(`row-${index}`)) } as Awaited<ReturnType<typeof getDocsFromServer>>);
     const page = await searchExpensePage('merchant', { transactionType: 'expense', sourceWindow: 'window-1' });
     expect(limit).toHaveBeenCalledWith(10_001);
+    expect((where as jest.Mock).mock.calls).toEqual([['householdId', '==', 'house-1']]);
+    expect(orderBy).not.toHaveBeenCalled();
+    expect(documentId).not.toHaveBeenCalled();
     expect(page.items).toHaveLength(50);
     expect(page.summary).toEqual({ count: 51, amount: 510_000, months: { '2026-08': { count: 51, amount: 510_000 } } });
     const second = await searchExpensePage('merchant', { transactionType: 'expense', cursor: page.nextCursor, sourceWindow: 'window-1' });
@@ -63,6 +66,55 @@ describe('ledger search visibility contract', () => {
     await searchExpensePage('matched', { transactionType: 'expense', sourceWindow: 'window-1' });
     expect(mockedGetDocs).toHaveBeenCalledTimes(1);
     await expect(searchExpensePage('merchant', { transactionType: 'expense', cursor: page.nextCursor, sourceWindow: 'changed-window' })).rejects.toMatchObject({ code: 'SOURCE_WINDOW_CHANGED' });
+  });
+
+  test('searches every month and keeps newest order while excluding dates outside the previous source range', async () => {
+    mockedGetDocs.mockResolvedValueOnce({ docs: [
+      ledgerDocument('previous-month', { date: '2026-08-15' }),
+      ledgerDocument('recent-a', { date: '2026-09-09', time: '10:00' }),
+      ledgerDocument('recent-b', { date: '2026-09-09', time: '11:00' }),
+      ledgerDocument('recent-z', { date: '2026-09-09', time: '11:00' }),
+      ledgerDocument('missing-date', { date: undefined, cardType: 42 }),
+      ledgerDocument('null-date', { date: null }),
+      ledgerDocument('numeric-date', { date: 20260909 }),
+      ledgerDocument('before-range', { date: '0000-12-31' }),
+      ledgerDocument('after-range', { date: '9999-12-32' }),
+    ] } as Awaited<ReturnType<typeof getDocsFromServer>>);
+
+    const page = await searchExpensePage('merchant');
+
+    expect(page.items.map(item => item.id)).toEqual(['recent-z', 'recent-b', 'recent-a', 'previous-month']);
+    expect(page.summary).toEqual({
+      count: 4,
+      amount: 40_000,
+      months: { '2026-09': { count: 3, amount: 30_000 }, '2026-08': { count: 1, amount: 10_000 } },
+    });
+  });
+
+  test.each([
+    { options: { startDate: '2026-09-01' }, conditions: [['date', '>=', '2026-09-01']], expected: ['after', 'end', 'start'] },
+    { options: { endDate: '2026-09-30' }, conditions: [['date', '<=', '2026-09-30']], expected: ['end', 'start', 'before'] },
+    { options: { startDate: '2026-09-01', endDate: '2026-09-30' }, conditions: [['date', '>=', '2026-09-01'], ['date', '<=', '2026-09-30']], expected: ['end', 'start'] },
+  ])('applies only explicitly requested date constraints: $options', async ({ options, conditions, expected }) => {
+    mockedGetDocs.mockResolvedValueOnce({ docs: [
+      ledgerDocument('before', { date: '2026-08-31' }),
+      ledgerDocument('start', { date: '2026-09-01' }),
+      ledgerDocument('end', { date: '2026-09-30' }),
+      ledgerDocument('after', { date: '2026-10-01' }),
+    ] } as Awaited<ReturnType<typeof getDocsFromServer>>);
+
+    const page = await searchExpensePage('merchant', options);
+
+    expect((where as jest.Mock).mock.calls).toEqual([['householdId', '==', 'house-1'], ...conditions]);
+    expect(orderBy).not.toHaveBeenCalled();
+    expect(documentId).not.toHaveBeenCalled();
+    expect(page.items.map(item => item.id)).toEqual(expected);
+  });
+
+  test('rejects an inverted requested period before reading the source', async () => {
+    await expect(searchExpensePage('merchant', { startDate: '2026-10-01', endDate: '2026-09-30' }))
+      .rejects.toMatchObject({ code: 'INVALID_PERIOD' });
+    expect(mockedGetDocs).not.toHaveBeenCalled();
   });
 
   test('fails instead of publishing partial totals beyond the safe source bound', async () => {
