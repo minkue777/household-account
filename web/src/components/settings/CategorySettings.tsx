@@ -9,7 +9,7 @@ import { COLOR_PALETTE, subscribeToCategoryCatalogVersion } from '@/lib/category
 import { setDefaultCategoryKey } from '@/lib/householdService';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { useAppDialog } from '@/contexts/AppDialogContext';
-import { ChevronDown, Edit2, GripVertical, Plus, Star, Tags, Trash2 } from 'lucide-react';
+import { ChevronDown, Edit2, Plus, Star, Tags, Trash2 } from 'lucide-react';
 import { useCategoryReorder } from './useCategoryReorder';
 
 type CategoryMutation = 'add' | 'edit' | 'delete' | 'default' | 'reorder';
@@ -217,7 +217,7 @@ export default function CategorySettings() {
       {isCategoryOpen && (
         <div className="border-t border-slate-100">
           <p id="category-reorder-help" className="px-4 pt-3 text-xs text-slate-500">
-            왼쪽 손잡이를 위아래로 끌어 순서를 바꾸세요.
+            왼쪽 동그라미를 위아래로 끌어 순서를 바꾸세요.
           </p>
           {catalogReadFailed && (
             <p role="alert" className="px-4 pt-2 text-sm text-red-600">카테고리 정보를 불러오지 못했습니다.</p>
@@ -305,10 +305,10 @@ export default function CategorySettings() {
                             reorder.moveByKeyboard(category.id, event.key === 'ArrowUp' ? -1 : 1);
                           }
                         }}
-                        className="w-11 h-11 shrink-0 touch-none select-none cursor-grab active:cursor-grabbing rounded-full flex items-center justify-center text-slate-700 disabled:opacity-50"
+                        className="w-10 h-10 shrink-0 touch-none select-none cursor-grab active:cursor-grabbing rounded-full flex items-center justify-center text-white text-sm font-medium disabled:opacity-50"
                         style={{ backgroundColor: category.color }}
                       >
-                        <GripVertical className="h-5 w-5" />
+                        {category.label.slice(0, 2)}
                       </button>
                       <div className="min-w-0">
                         <div className="font-medium text-slate-800 flex flex-wrap items-center gap-2 break-all">
