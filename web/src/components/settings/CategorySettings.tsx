@@ -224,10 +224,10 @@ export default function CategorySettings() {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200">
       <button
         onClick={() => setIsCategoryOpen(!isCategoryOpen)}
-        className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
+        className={`w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors ${isCategoryOpen ? 'rounded-t-2xl' : 'rounded-2xl'}`}
       >
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
@@ -384,7 +384,7 @@ export default function CategorySettings() {
 
           {/* 새 카테고리 추가 */}
           {showAddForm ? (
-            <div className="p-4 border-t border-slate-200 bg-slate-50">
+            <div className="p-4 border-t border-slate-200 bg-slate-50 rounded-b-2xl">
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
                   <ColorPicker value={newColor} onChange={setNewColor} />
@@ -446,7 +446,7 @@ export default function CategorySettings() {
                 if (!mutationInFlightRef.current) setShowAddForm(true);
               }}
               disabled={isMutating}
-              className="w-full p-4 border-t border-slate-200 flex items-center justify-center gap-2 text-blue-500 hover:bg-blue-50 transition-colors"
+              className="w-full p-4 border-t border-slate-200 flex items-center justify-center gap-2 text-blue-500 hover:bg-blue-50 transition-colors rounded-b-2xl"
             >
               <Plus className="h-5 w-5" />
               <span className="font-medium">새 카테고리 추가</span>
