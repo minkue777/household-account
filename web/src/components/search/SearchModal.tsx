@@ -53,8 +53,6 @@ export default function SearchModal({
   const [nextCursor, setNextCursor] = useState<ExpenseSearchCursor | undefined>();
   const [searchError, setSearchError] = useState('');
   const [summary, setSummary] = useState<ExpenseSearchSummary>();
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
   const sourceWindowRef = useRef('');
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [splitExpense, setSplitExpense] = useState<Expense | null>(null);
@@ -97,22 +95,30 @@ export default function SearchModal({
     const projection = projectionRef.current;
     if (!projection || !keyword.trim()) return;
     const requestId = ++searchRequestIdRef.current;
-    const { searchExpensePage } = await import('@/lib/expenseService');
-    sourceWindowRef.current = `search-${Date.now()}-${Math.random()}`;
-    let page;
-    try { page = await searchExpensePage(keyword, { transactionType, startDate, endDate, sourceWindow: sourceWindowRef.current }); }
-    catch (error) {
-      if (requestId === searchRequestIdRef.current) { setResults([]); setSummary(undefined); setNextCursor(undefined); setSearchError(error instanceof Error ? error.message : '검색 결과를 불러오지 못했습니다.'); }
-      return;
-    }
-    if (
-      requestId !== searchRequestIdRef.current
-      || projectionRef.current !== projection
-    ) return;
-    projection.publish(page.items);
-    setNextCursor(page.nextCursor);
-    setSummary(page.summary);
+    const isCurrentRequest = () => requestId === searchRequestIdRef.current
+      && projectionRef.current === projection;
+    setIsSearching(true);
     setSearchError('');
+    setNextCursor(undefined);
+    try {
+      const { searchExpensePage } = await import('@/lib/expenseService');
+      if (!isCurrentRequest()) return;
+      sourceWindowRef.current = `search-${Date.now()}-${Math.random()}`;
+      const page = await searchExpensePage(keyword, { transactionType, sourceWindow: sourceWindowRef.current });
+      if (!isCurrentRequest()) return;
+      projection.publish(page.items);
+      setNextCursor(page.nextCursor);
+      setSummary(page.summary);
+      setExpandedMonth((currentMonth) => page.items.some(expense => expense.date.substring(0, 7) === currentMonth)
+        ? currentMonth
+        : page.items[0]?.date.substring(0, 7) ?? null);
+    } catch (error) {
+      if (isCurrentRequest()) {
+        setSearchError(error instanceof Error ? error.message : '검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.');
+      }
+    } finally {
+      if (isCurrentRequest()) setIsSearching(false);
+    }
   };
 
   const loadNextPage = async () => {
@@ -122,12 +128,17 @@ export default function SearchModal({
     setIsSearching(true);
     try {
       const { searchExpensePage } = await import('@/lib/expenseService');
-      const page = await searchExpensePage(keyword, { transactionType, cursor: nextCursor, startDate, endDate, sourceWindow: sourceWindowRef.current });
+      const page = await searchExpensePage(keyword, { transactionType, cursor: nextCursor, sourceWindow: sourceWindowRef.current });
       if (requestId !== searchRequestIdRef.current || projectionRef.current !== projection) return;
       projection.publish([...results, ...page.items]);
       setNextCursor(page.nextCursor);
       setSummary(page.summary);
-    } catch { setSearchError('검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.'); }
+      setSearchError('');
+    } catch {
+      if (requestId === searchRequestIdRef.current && projectionRef.current === projection) {
+        setSearchError('검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.');
+      }
+    }
     finally { if (requestId === searchRequestIdRef.current) setIsSearching(false); }
   };
 
@@ -193,6 +204,7 @@ export default function SearchModal({
   };
 
   useEffect(() => {
+    setResults([]);
     setNextCursor(undefined);
     setSearchError('');
     if (!isOpen || !keyword.trim()) {
@@ -225,7 +237,7 @@ export default function SearchModal({
         setSummary(undefined);
         setNextCursor(undefined);
         try {
-          const page = await searchExpensePage(keyword, { transactionType, startDate, endDate, sourceWindow: sourceWindowRef.current });
+          const page = await searchExpensePage(keyword, { transactionType, sourceWindow: sourceWindowRef.current });
           if (
             requestId !== searchRequestIdRef.current
             || projectionRef.current !== projection
@@ -240,9 +252,11 @@ export default function SearchModal({
             setExpandedMonth(null);
           }
         } catch (error) {
-          if (requestId === searchRequestIdRef.current) { projection.publish([]); setSearchError(error instanceof Error ? error.message : '검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.'); }
+          if (requestId === searchRequestIdRef.current && projectionRef.current === projection) {
+            setSearchError(error instanceof Error ? error.message : '검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.');
+          }
         } finally {
-          if (requestId === searchRequestIdRef.current) {
+          if (requestId === searchRequestIdRef.current && projectionRef.current === projection) {
             setIsSearching(false);
           }
         }
@@ -255,7 +269,7 @@ export default function SearchModal({
       if (projectionRef.current === projection) projectionRef.current = null;
       projection?.dispose();
     };
-  }, [keyword, transactionType, isOpen, householdKey, remoteReadEpoch, startDate, endDate]);
+  }, [keyword, transactionType, isOpen, householdKey, remoteReadEpoch]);
 
   if (!isOpen) return null;
 
@@ -304,14 +318,10 @@ export default function SearchModal({
                 <X className="h-5 w-5 text-slate-500" />
               </button>
             </div>
-            <div className="mt-3 flex gap-3 text-xs text-slate-500">
-              <label>시작일 <input aria-label="검색 시작일" type="date" value={startDate} onChange={event => setStartDate(event.target.value)} className="rounded border p-1" /></label>
-              <label>종료일 <input aria-label="검색 종료일" type="date" value={endDate} onChange={event => setEndDate(event.target.value)} className="rounded border p-1" /></label>
-            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
-            <SearchResultList
+            {(!searchError || results.length > 0) && <SearchResultList
               keyword={keyword}
               results={results}
               summary={summary}
@@ -320,8 +330,11 @@ export default function SearchModal({
               onExpandedMonthChange={setExpandedMonth}
               onExpenseClick={setSelectedExpense}
               transactionType={transactionType}
-            />
-            {searchError && <p role="alert" className="py-2 text-sm text-red-600">{searchError}</p>}
+            />}
+            {searchError && <div className="py-2">
+              <p role="alert" className="text-sm text-red-600">{searchError}</p>
+              <button type="button" disabled={isSearching} onClick={() => void refreshSearch()} className="mt-2 rounded-lg p-2 text-sm text-blue-600 disabled:opacity-50">다시 시도</button>
+            </div>}
             {nextCursor && <button type="button" disabled={isSearching} onClick={() => void loadNextPage()} className="w-full rounded-lg p-3 text-sm text-blue-600 disabled:opacity-50">이전 거래에서 더 검색</button>}
           </div>
         </div>

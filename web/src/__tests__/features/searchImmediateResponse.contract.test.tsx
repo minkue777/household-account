@@ -50,7 +50,9 @@ describe('원장 검색 첫 상호작용 계약', () => {
 
     expect(mockedSubscribeToExpenseProjection).toHaveBeenCalledTimes(1);
     expect(mockedSearchExpenses).toHaveBeenCalledWith('삼성', {
-      transactionType: 'expense', startDate: '', endDate: '', sourceWindow: expect.any(String),
+      transactionType: 'expense', sourceWindow: expect.any(String),
     });
+    expect(screen.queryByLabelText('검색 시작일')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('검색 종료일')).not.toBeInTheDocument();
   });
 });
