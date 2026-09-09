@@ -128,10 +128,10 @@ export const CATEGORY_COLOR_OPTIONS = [
   { value: '#818CF8', label: '연남색' },
   { value: '#34D399', label: '민트' },
   { value: '#DC2626', label: '진빨강' },
-  { value: '#1E3A8A', label: '남색' },
-  { value: '#831843', label: '자주' },
-  { value: '#92400E', label: '갈색' },
-  { value: '#334155', label: '진회색' },
+  { value: '#FDBA74', label: '살구' },
+  { value: '#BEF264', label: '연두' },
+  { value: '#67E8F9', label: '밝은 청록' },
+  { value: '#CBAA91', label: '베이지' },
 ];
 
 export const COLOR_PALETTE = CATEGORY_COLOR_OPTIONS.map(({ value }) => value);
