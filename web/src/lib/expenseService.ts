@@ -872,9 +872,27 @@ export async function searchExpenses(
 
 export interface ExpenseSearchSummary { count: number; amount: number; months: Record<string, { count: number; amount: number }> }
 export interface ExpenseSearchCursor { windowId: string; scope: string; offset: number }
+
+function searchFailureIdentifier(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'code' in error
+    && typeof error.code === 'string' && /^[a-z0-9/-]{1,80}$/.test(error.code)) {
+    return error.code;
+  }
+  return error instanceof Error && /^[A-Za-z][A-Za-z0-9]{0,79}$/.test(error.name)
+    ? error.name
+    : 'Error';
+}
+
 export class ExpenseSearchFailure extends Error {
-  constructor(readonly code: 'SOURCE_LIMIT_EXCEEDED' | 'SOURCE_WINDOW_CHANGED' | 'INVALID_PERIOD' | 'SOURCE_UNAVAILABLE') {
-    super(code === 'SOURCE_LIMIT_EXCEEDED' ? '검색할 거래가 많습니다. 검색 기간을 줄여 주세요.' : code === 'SOURCE_WINDOW_CHANGED' ? '검색 중 세션이 변경되었거나 검색 조건이 변경되었습니다. 다시 검색해 주세요.' : code === 'INVALID_PERIOD' ? '검색 시작일과 종료일을 확인해 주세요.' : '검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.');
+  constructor(
+    readonly code: 'SOURCE_LIMIT_EXCEEDED' | 'SOURCE_WINDOW_CHANGED' | 'INVALID_PERIOD' | 'SOURCE_UNAVAILABLE',
+    diagnostic?: { stage: 'read' | 'map'; error: unknown }
+  ) {
+    const message = code === 'SOURCE_LIMIT_EXCEEDED' ? '검색할 거래가 많습니다. 검색 기간을 줄여 주세요.' : code === 'SOURCE_WINDOW_CHANGED' ? '검색 중 세션이 변경되었거나 검색 조건이 변경되었습니다. 다시 검색해 주세요.' : code === 'INVALID_PERIOD' ? '검색 시작일과 종료일을 확인해 주세요.' : '검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.';
+    // Provider messages may contain request or document contents; expose identifiers only.
+    super(message + (code === 'SOURCE_UNAVAILABLE' && diagnostic
+      ? ` (${diagnostic.stage}/${searchFailureIdentifier(diagnostic.error)})`
+      : ''));
   }
 }
 let searchWindowSequence = 0;
@@ -898,6 +916,7 @@ export async function searchExpensePage(
   const cursor = options.cursor;
   if (cursor && (cursor.scope !== queryScope || searchWindow?.key !== key || cursor.offset < 0 || !Number.isSafeInteger(cursor.offset))) throw new ExpenseSearchFailure('SOURCE_WINDOW_CHANGED');
   if (searchWindow?.key !== key) {
+    let stage: 'read' | 'map' = 'read';
     const source = (async () => {
       // Every keystroke and result page shares one bounded server snapshot.
       // A source exceeding the safety limit never produces partial totals.
@@ -905,10 +924,11 @@ export async function searchExpensePage(
         where('householdId', '==', scope.householdId), where('date', '>=', period.startDate), where('date', '<=', period.endDate),
         orderBy('date', 'desc'), orderBy(documentId(), 'desc'), limit(10_001)));
       if (snapshot.docs.length > 10_000) throw new ExpenseSearchFailure('SOURCE_LIMIT_EXCEEDED');
+      stage = 'map';
       return snapshot.docs.filter(document => isVisibleLedgerReadDocument(document.data())).map(mapDocToExpense);
     })().catch(error => {
       if (searchWindow?.key === key) searchWindow = undefined;
-      throw error instanceof ExpenseSearchFailure ? error : new ExpenseSearchFailure('SOURCE_UNAVAILABLE');
+      throw error instanceof ExpenseSearchFailure ? error : new ExpenseSearchFailure('SOURCE_UNAVAILABLE', { stage, error });
     });
     searchWindow = { key, id: windowId, source };
   }

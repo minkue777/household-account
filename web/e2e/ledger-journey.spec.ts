@@ -103,6 +103,17 @@ test('로그인부터 첫 월 원장과 지출 CRUD까지 실제 Firebase 경계
   }).toMatchObject({ notificationConsumerStatus: { stringValue: 'NoTarget' } });
   expect(await readFirestoreCollection(request, 'notificationDeliveries')).toEqual([]);
 
+  // 실제 Client SDK로 돋보기 검색 원본을 읽고 결과까지 표시해야 합니다.
+  await page.goto('/');
+  await expect(calendar).toHaveAttribute('aria-busy', 'false');
+  await page.getByRole('button', { name: '검색', exact: true }).click();
+  await page.getByPlaceholder('지출처명, 메모, 카드명을 검색해보세요').fill(CREATED_MERCHANT);
+  await expect(page.getByText('1건 · 12,300원', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('검색 시작일')).toHaveCount(0);
+  await expect(page.getByLabel('검색 종료일')).toHaveCount(0);
+  await expect(page.getByRole('alert').filter({ hasText: '검색 결과를 불러오지 못했습니다' })).toHaveCount(0);
+  await page.getByRole('button', { name: '닫기', exact: true }).click();
+
   await page.goto('/stats');
   await expect(page.getByRole('heading', { name: '지출 통계', exact: true })).toBeVisible();
   await expect(page.getByText('12,300원', { exact: true }).first()).toBeVisible();

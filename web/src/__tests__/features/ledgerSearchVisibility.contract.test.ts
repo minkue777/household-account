@@ -67,7 +67,54 @@ describe('ledger search visibility contract', () => {
 
   test('fails instead of publishing partial totals beyond the safe source bound', async () => {
     mockedGetDocs.mockResolvedValueOnce({ docs: Array.from({ length: 10_001 }, (_, index) => ledgerDocument(`row-${index}`)) } as Awaited<ReturnType<typeof getDocsFromServer>>);
-    await expect(searchExpensePage('merchant')).rejects.toMatchObject({ code: 'SOURCE_LIMIT_EXCEEDED' });
+    await expect(searchExpensePage('merchant')).rejects.toMatchObject({
+      code: 'SOURCE_LIMIT_EXCEEDED',
+      message: '검색할 거래가 많습니다. 검색 기간을 줄여 주세요.',
+    });
+  });
+
+  test.each(['permission-denied', 'failed-precondition', 'firestore/unavailable'])(
+    'exposes only the read stage and safe provider code %s when search fails',
+    async (code) => {
+      mockedGetDocs.mockRejectedValueOnce(Object.assign(
+        new Error('private provider message containing a request token and document contents'),
+        { code }
+      ));
+
+      await expect(searchExpensePage('merchant')).rejects.toMatchObject({
+        code: 'SOURCE_UNAVAILABLE',
+        message: `검색 결과를 불러오지 못했습니다. 다시 시도해 주세요. (read/${code})`,
+      });
+    }
+  );
+
+  test.each(['invalid code: private contents', 'a'.repeat(81)])(
+    'uses the error name instead of an unsafe provider code',
+    async (code) => {
+      mockedGetDocs.mockRejectedValueOnce(Object.assign(
+        new TypeError('private provider message'),
+        { code }
+      ));
+
+      await expect(searchExpensePage('merchant')).rejects.toMatchObject({
+        code: 'SOURCE_UNAVAILABLE',
+        message: '검색 결과를 불러오지 못했습니다. 다시 시도해 주세요. (read/TypeError)',
+      });
+    }
+  );
+
+  test('distinguishes document decoding failures without exposing the original message', async () => {
+    mockedGetDocs.mockResolvedValueOnce({
+      docs: [{
+        id: 'invalid-row',
+        data: () => { throw new TypeError('private document contents'); },
+      }],
+    } as Awaited<ReturnType<typeof getDocsFromServer>>);
+
+    await expect(searchExpensePage('merchant')).rejects.toMatchObject({
+      code: 'SOURCE_UNAVAILABLE',
+      message: '검색 결과를 불러오지 못했습니다. 다시 시도해 주세요. (map/TypeError)',
+    });
   });
 
   test('drops a response from a previous authenticated session generation', async () => {
