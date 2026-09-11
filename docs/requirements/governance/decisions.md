@@ -1508,7 +1508,7 @@ Scheduler가 만든 거래도 실제로 그 일정을 등록한 가구원에게 
 <a id="dec-064"></a>
 ## DEC-064 필수 release gate 실패는 waiver로 우회하지 않음
 
-> 상태: Accepted  
+> 상태: 전체 CI 선행 배포 차단은 [DEC-074](#dec-074)로 대체됨. 실패를 pass로 위장하지 않는 원칙은 유지.  
 > 결정일: 2026-07-20  
 > 정책 소유 영역: [Delivery Assurance](../supporting-platform/modules/delivery-assurance/requirements.md)  
 > 영향 기능: [배포 안전성](../supporting-platform/modules/delivery-assurance/requirements.md)
@@ -1620,13 +1620,14 @@ Cloud Function 왕복 시간 때문에 빠른 편집 화면이 0.5~1초 동안 �
 - Web은 Firebase Auth persistence가 복원한 UID와 정확히 일치하는 마지막 검증 Membership·가구 표시 metadata snapshot을 함께 복원한다. cache hit이면 이를 화면 scope로 즉시 적용하고 현재 월 원장·가구별 카테고리·지역화폐의 Rules 보호 listener를 곧바로 시작한다. 가구 metadata는 cache 값을 먼저 표시하되 `households/{householdId}` 한 문서를 별도로 갱신하며, 이 read는 업무 listener를 막지 않고 정규화 결과가 실제로 다를 때만 UI와 cache를 교체한다. 월 원장·카테고리·지역화폐 데이터는 localStorage나 Firestore cache snapshot을 선표시하지 않고 서버 snapshot부터 표시한다. cache miss와 Rules의 `permission-denied`만 `ResolveSignedInUser` 권위 조회를 시작하는 정상 반복 실행 경계이며, 30분을 포함한 주기적 Membership 재해석은 실행하지 않는다. `permission-denied`이면 해당 bootstrap cache를 즉시 지우고 오류 listener를 종료한 뒤 같은 UID의 권위 조회를 하나로 병합하되, 결과를 기다리는 동안 마지막 in-memory 화면은 저하 상태로 유지한다. Android token 복구와 병렬 실행하지 않고 이 권위 조회의 transient transport 실패 동안에만 2~30초 backoff로 재시도한다. 서버 Rules와 Functions는 이 동안 새 데이터와 Command를 계속 거부한다. 권위 결과가 같은 scope이면 새 cache를 저장하고 read epoch로 listener를 다시 열며, first visit 또는 다른 scope이면 그때 이전 scope·화면·나머지 구독을 폐기한다. Firebase UID가 바뀌면 이전 scope를 즉시 폐기한 뒤 새 UID의 cache hit/miss 흐름을 다시 적용한다. cache는 Firestore Rules나 Functions의 Membership 검증, Command 권한, 서버 ActorContext를 대체하지 않는다. 자산 route의 재진입 표시 snapshot과 종목 검색 카탈로그 cache는 이 정책과 별개로 유지한다.
 - Command 모듈은 첫 paint의 정적 import 선행 조건에서 제외한다. Web App Check 초기화는 공용 Command·Query가 강제하지 않으므로 런타임에서 제거하고, Native App Check는 Android Application 시작 시 설치한다. 첫 화면의 공용 import는 Firebase·희귀 관리 기능을 끌어오지 않게 직접 경계로 구성한다. 원장·자산의 자주 쓰는 모달은 각 route에 정적으로 포함해 첫 클릭에 동적 chunk나 준비 fallback을 기다리지 않고, 저장 명령 코드는 첫 paint 직후 준비한다. 시세·배당·일간 변화 같은 비필수 네트워크 작업은 첫 상호작용 뒤로 미룬다. 사용자 동작에 기능상 필요 없는 고정 debounce·표시 애니메이션 대기를 두지 않는다.
 - Android 결제 원문은 원격 호출 직전에 암호화 write-ahead journal에 기록하되 정상 온라인 경로에서는 WorkManager를 예약하지 않고 Functions에 즉시 제출한다. 실패하거나 일부 branch만 retryable일 때만 journal entry를 남기고 `APPEND_OR_REPLACE` unique WorkManager를 예약한다. 서버의 `quickEditSnapshot`을 expected SessionScope의 암호화 표시 FIFO에 먼저 내구화한 뒤 capture journal entry를 ack/delete하고 Activity를 열며, 구버전 ID-only entry만 Query fallback을 사용한다.
-- `submitAndroidRawNotification`, `executeHouseholdCommand`, `executeHouseholdQuery`는 현재 소규모·비용 우선 운영에서 `minInstances=0`을 사용한다. process가 warm인 동안에는 성공한 활성 Membership을 최대 5분·64개, 성공한 결제 설정 snapshot을 최대 1분·32개만 process-local cache에 보존한다. 거부·실패 결과는 cache하지 않고, cache hit는 보장하지 않으며 UID를 다른 가구로 재해석하거나 Firebase Auth·Membership 검증을 대체하지 않는다. Native 결제 수집의 App Check도 cache로 대체하지 않는다. 단계별 latency 계측과 hot-path 단순화 뒤 cold start가 목표 지연을 지배한다고 확인될 때에만 특정 Function의 warm instance를 재검토한다.
-- Android 세션 교환은 서버가 해석한 활성 householdId·memberId를 별도 Native custom token의 서명된 최소 접근 claim으로 발급하고 Native Firebase Auth도 그 token으로 교체한다. 이후 Android 결제 수집은 매 요청의 검증된 ID token claim으로 ActorContext를 만들며 Membership Firestore 조회를 선행하지 않는다. claim이 없는 구 APK·전환 세션만 UID 전역 `PrincipalMembershipClaim` 한 문서를 읽고, 그 문서도 없는 데이터만 기존 Membership view·canonical 검증으로 fallback한다. 가구·멤버 삭제·복구·전환 뒤에는 새 세션 token을 발급하며, token의 제한된 권한 회수 지연은 현재 소규모 운영에서 수용한다.
+- `submitAndroidRawNotification`, `executeHouseholdCommand`, `executeHouseholdQuery`는 현재 소규모·비용 우선 운영에서 `minInstances=0`을 사용한다. 완료된 Membership·결제 설정 결과는 process-local TTL cache에 보존하지 않는다. 각 수집은 현재 권위 Membership과 설정 projection을 읽으며 Firebase Auth·Membership·App Check를 생략하지 않는다. 단계별 latency 계측과 hot-path 단순화 뒤 cold start가 목표 지연을 지배한다고 확인될 때에만 특정 Function의 warm instance를 재검토한다.
+- Android 세션 교환은 서버가 해석한 활성 householdId·memberId를 별도 Native custom token의 서명된 신원 힌트로 발급하고 Native Firebase Auth도 그 token으로 교체한다. 이후 결제 수집은 매 요청 UID 전역 `PrincipalMembershipClaim` 한 문서의 현재 권위로 ActorContext를 만든다. Native 가구·멤버 힌트가 현재 권위와 다르면 거절하여 오래된 알림을 다른 scope로 재해석하지 않는다. 전역 claim이 없는 전환 데이터만 기존 Membership view·canonical 검증으로 fallback한다.
 - Android 결제 설정은 가구별 `runtimeProjections/payment-capture-configuration-v1` 한 문서로 읽는다. 문서가 없으면 동일 Firestore transaction에서 가구원·카드·가맹점 규칙·카테고리 원본을 조합해 생성한다. 카드·규칙·카테고리 Command는 자신의 변경 transaction에서 이 projection을 삭제하므로 다음 수집이 최신 원본으로 재생성하며, 동시 생성·변경은 Firestore transaction 충돌 재시도로 직렬화한다.
+- 2026-09-11 보완: 위 결정의 결제 설정 1분·32개 process cache는 제거한다. 실제 E2E에서 `1234` 카드로 수집한 뒤 설정 UI에서 끝번호를 `5678`로 저장하고 즉시 `5678`을 수집하면, 이전 warm 설정 때문에 거절되는 문제가 재현됐다. 정상 경로의 Firestore projection 한 문서 조회와 동시 in-flight 요청 병합만 유지하여 Writer의 projection 삭제가 다음 수집에 반영되도록 한다. Membership cache 정책과 과거 측정 기록은 변경하지 않는다.
 - Android parser가 승인 후보를 만든 직후 결제 설정 projection 조회를 시작하고, root receipt claim과 겹쳐 실행한다. transaction gateway의 실제 설정 조회는 같은 in-flight Promise를 재사용하므로 동일 요청에서 두 번 읽지 않는다.
 - Functions 소스는 하나의 모듈러 모놀리스로 유지하되 배포 codebase는 `default`, `payment-capture`, `access-session`으로 분리한다. Android raw·전환용 envelope·iPhone Shortcut은 `payment-capture`, Android 최초 WebView custom-token 교환은 `access-session`, 일반 Command·Query·관리·예약 작업은 `default`가 export한다. 이에 따라 scale-to-zero 뒤 결제나 최초 세션 요청이 배당·시세·관리자·Scheduler 초기화 graph를 함께 읽지 않는다.
 - Web·Functions·Android의 대화형 지연은 개인정보 없는 고정 단계명으로 계측한다. Android `observationId` 원문은 로그에 남기지 않고 UTF-8 SHA-256 앞 16자리 `correlationId`만 Android와 Functions에서 공유한다.
-- 활성 Membership cache 때문에 멤버 제거·가구 연결 변경 직후 기존 warm capture instance의 반영은 최대 5분 늦을 수 있다. Native capture에서는 Firebase Auth와 App Check를 매 요청 검증하고 cached UID를 다른 가구로 재해석하지 않으며, 이 제한된 권한 회수 지연은 현재 소규모·속도 우선 운영에서 수용한다.
+- 2026-09-11 추가 보완: 관리자 Member 제거 후 같은 일반 Auth JWT의 신규 3,300원 수집이 warm instance에서 저장되는 E2E 실패를 확인했다. 과거의 Membership 최대 5분·64개 TTL과 Native claim read 0회 정책을 폐기하고 HH-012의 제거 직후 접근 차단을 적용한다. 제거 transaction 완료 뒤 시작한 요청은 claim/view 해제를 즉시 확인하며, 같은 ID의 복구가 완료되면 다음 요청에서 다시 허용한다. 토큰 발급이나 Native bridge 형식은 바꾸지 않는다.
 - 일반 Ledger CRUD와 Portfolio 자산·Position CRUD는 handler가 own atomic receipt·expectedVersion을 소유하면 공통 Router receipt claim·complete를 다시 만들지 않는다. split·merge·cancel·알림 요청·외부 시세처럼 복합 복구나 외부 효과가 필요한 Command는 공통 receipt 경계를 유지한다.
 - 단일 Android 승인 branch는 Ledger가 거래·fingerprint claim·Outbox·멱등 receipt를 한 transaction에서 확정하므로 같은 의미의 Capture root receipt 읽기·최종 쓰기를 생략한다. balance를 함께 가진 복합 envelope, 취소와 Shortcut은 root receipt와 고정 downstream idempotency key를 유지하며 중단 시 하위 결과를 재생한다.
 - 파서 개선용 임시 Diagnostic Adapter는 결제 저장·QuickEdit과 네트워크 및 App Check token을 경쟁하지 않도록 5초 뒤 best-effort로 실행한다. 진단 실패는 업무 결과를 바꾸지 않는다.
@@ -1725,3 +1726,20 @@ Cloud Function 왕복 시간 때문에 빠른 편집 화면이 0.5~1초 동안 �
 - 실제 코드 대신 자체 handle·receipt 모델만 검증하던 테스트와 보조 구현을 제거한다. 서버 발급 함수와 실제 Web authService·HouseholdProvider 테스트를 근거로 삼으며, Credential Manager 계정 선택·취소와 Native SDK 재인증 왕복은 실제 기기 검증 전까지 완료로 계산하지 않는다.
 
 영향 요구사항: AND-005, AND-006, AND-012, T-WEBVIEW-001, T-WEBVIEW-004.
+
+<a id="dec-074"></a>
+## DEC-074 배포와 전체 품질 CI를 독립 실행
+
+> 상태: Accepted  
+> 결정일: 2026-09-11  
+> 정책 소유 영역: [Delivery Assurance](../supporting-platform/modules/delivery-assurance/requirements.md)  
+> 근거: 사용자가 배포를 먼저 진행하고 CI는 별도 실행한 뒤 문제가 생기면 알리는 방식을 명시 요청함
+
+- 배포하는 surface의 production build와 명시적 대상·clean HEAD·immutable artifact/hash·actor·Secret·호환 계획·배포 lease·post-deploy smoke는 유지합니다.
+- 전체 Functions·Web·Web E2E·Android·해당되는 instrumentation CI는 main push와 PR에서 별도로 실행합니다. commit·push·배포 전에 전체 테스트를 반복 실행하거나 정확 HEAD CI 완료를 기다리지 않습니다. main의 새 commit이 이전 commit CI를 취소하지 않도록 실행을 분리합니다.
+- 배포 승인에는 CI를 확인하지 않았다는 `not-evaluated` 참조만 기록합니다. CI pending·실패·취소·skip·누락을 passed로 간주하거나 가짜 evidence를 만들지 않습니다. 과거 승인 기록은 변경하지 않습니다.
+- CI 최종 summary는 실제 다섯 job 결과, commit SHA, run URL을 남깁니다. 한 job이라도 비성공이면 실패 check와 annotation으로 알립니다. GitHub 기본 알림은 사용자 Actions 알림 설정을 따르며 repository가 외부 메시지를 직접 발송하지 않습니다.
+- 배포 성공과 CI 성공을 따로 보고합니다. 후속 CI 문제는 조사·수정하며 자동으로 배포 완료 기록을 취소하거나 rollback하지 않습니다. build·배포·smoke 실패를 배포 성공으로 보고하지 않습니다.
+- 더 이상 실행되지 않는 전체 gate→deploy authorization 전용 Application과 전용 fixture 테스트를 제거하고 실제 wrapper 검증·CI CLI 실행 테스트로 정책을 검증합니다. 실패를 pass로 바꾸는 waiver·skip·force 우회는 만들지 않습니다.
+
+영향 요구사항: REL-001, REL-004, T-REL-001, T-REL-004.

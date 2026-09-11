@@ -58,6 +58,8 @@ export interface CaptureSubmissionCommand {
   readonly actor: CaptureApprovalActor;
   readonly rootIdempotencyKey: string;
   readonly envelope: CaptureEnvelopeInput;
+  /** 실제 raw ingress가 원 입력 전체에서 계산하며 공개 typed wire에서는 받지 않습니다. */
+  readonly verifiedRawPayloadHash?: string;
   /** 서버 parser에서만 받는 원승인 총액이며 공개 wire 필드가 아닙니다. */
   readonly approvalAmountInWon?: number;
   /** 서버 parser가 결정하며 Android/iOS 공개 wire에서는 받지 않습니다. */

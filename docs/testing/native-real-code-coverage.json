@@ -1,0 +1,357 @@
+{
+    "schemaVersion":  "native-real-code-coverage.v1",
+    "date":  "2026-09-11",
+    "note":  "실제 파일::메서드 연결입니다. 파일 전체를 명시한 경우 해당 Kotlin suite의 실제 운영 코드 assertion을 뜻하며, remaining이 있는 Canonical 시나리오는 전체 E2E 완료로 계산하지 않습니다. 실행 상태는 별도 실제 결과를 확인합니다.",
+    "mappings":  [
+                     {
+                         "canonicalId":  "T-ANDROID-HOST-001",
+                         "requirementIds":  [
+                                                "AND-001",
+                                                "AND-002"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/androidTest/java/com/household/account/MainActivityInstrumentationTest.kt::missingMandatoryPermissionsShowSetupWithoutStartingTheWebPage",
+                                       "android/app/src/androidTest/java/com/household/account/MainActivityInstrumentationTest.kt::grantedMandatoryPermissionsStartTheTrustedWebPage",
+                                       "android/app/src/androidTest/java/com/household/account/HostPlatformAdapterTest.kt::listenerPermissionRequiresTheExactServiceComponent"
+                                   ],
+                         "verifiedBehavior":  "실제 권한 gate 및 listener component",
+                         "remaining":  [
+                                           "시스템 설정 화면 내부의 사용자 허용 동작"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-WEBVIEW-002",
+                         "requirementIds":  [
+                                                "AND-003"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/androidTest/java/com/household/account/MainActivityInstrumentationTest.kt::grantedMandatoryPermissionsStartTheTrustedWebPage",
+                                       "android/app/src/test/java/com/household/account/startup/ActivityStartupGatesTest.kt",
+                                       "android/app/src/androidTest/java/com/household/account/MainActivityInstrumentationTest.kt::permissionRechecksAndActivityRecreationRetainTheCurrentTrustedNavigation"
+                                   ],
+                         "verifiedBehavior":  "실제 시작 URL, 권한 재확인 시 현재 navigation 유지, Activity 재생성 history 복원",
+                         "remaining":  [
+                                           "잘못된 환경의 빌드 거부 조합"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-WEBVIEW-003",
+                         "requirementIds":  [
+                                                "AND-004"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/androidTest/java/com/household/account/MainActivityInstrumentationTest.kt::realWebViewBridgeIsOriginBoundAndHistoryBackKeepsTheActivityOpen",
+                                       "android/app/src/androidTest/java/com/household/account/MainActivityInstrumentationTest.kt::permissionGuideBackUsesTheActivityDefaultInsteadOfHiddenWebHistory"
+                                   ],
+                         "verifiedBehavior":  "실제 WebView history와 권한 화면 뒤로가기",
+                         "remaining":  [
+
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-ANDROID-VERSION-001",
+                         "requirementIds":  [
+                                                "AND-007"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/androidTest/java/com/household/account/MainActivityInstrumentationTest.kt::actualBridgeCodecReturnsPackageVersionAndRejectsInvalidWireRequests"
+                                   ],
+                         "verifiedBehavior":  "설치된 앱 versionName을 실제 bridge JSON 응답으로 확인",
+                         "remaining":  [
+                                           "PackageManager 조회 실패 주입"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-ANDROID-WIRE-001",
+                         "requirementIds":  [
+                                                "AND-005",
+                                                "AND-006",
+                                                "QE-002"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/androidTest/java/com/household/account/MainActivityInstrumentationTest.kt::actualBridgeCodecReturnsPackageVersionAndRejectsInvalidWireRequests",
+                                       "android/app/src/androidTest/java/com/household/account/MainActivityInstrumentationTest.kt::realWebViewBridgeIsOriginBoundAndHistoryBackKeepsTheActivityOpen",
+                                       "android/app/src/test/java/com/household/account/quickedit/QuickEditPendingQueueJsonCodecTest.kt",
+                                       "android/app/src/test/java/com/household/account/quickedit/QuickEditCommandOutboxJsonCodecTest.kt"
+                                   ],
+                         "verifiedBehavior":  "실제 Kotlin bridge·queue codec과 WebView JavaScript↔Native 왕복",
+                         "remaining":  [
+                                           "문서의 generated Kotlin DTO codec은 실제 구현에 존재하지 않으므로 generated conformance 주장을 하지 않음"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-ANDROID-NOTIFICATION-PERMISSION-001",
+                         "requirementIds":  [
+                                                "AND-010"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/androidTest/java/com/household/account/MainActivityInstrumentationTest.kt::deniedPushPermissionDoesNotBlockWebAndIsNotRequestedAgainAfterRecreation"
+                                   ],
+                         "verifiedBehavior":  "API 33 이상 실제 권한 거부·재생성",
+                         "remaining":  [
+                                           "API 32 별도 device 실행"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-ANDROID-BACKUP-001",
+                         "requirementIds":  [
+                                                "AND-009"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/androidTest/java/com/household/account/HostPlatformAdapterTest.kt::installedBackupPolicyExcludesEveryPrivateStorageDomain",
+                                       "android/app/src/androidTest/java/com/household/account/HostPlatformAdapterTest.kt::captureJournalReloadRunsTheActualKotlinCodecAndKeystoreWithoutPlaintext",
+                                       "android/app/src/androidTest/java/com/household/account/QuickEditEncryptedOutboxInstrumentationTest.kt"
+                                   ],
+                         "verifiedBehavior":  "설치된 manifest·backup XML·Keystore 저장",
+                         "remaining":  [
+                                           "실제 cloud backup/device-transfer 복원"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-ANDROID-LOG-001",
+                         "requirementIds":  [
+                                                "AND-008"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt::serverCreatedCategoryFlowsThroughCaptureIntoQuickEditAndMemoSave"
+                                   ],
+                         "verifiedBehavior":  "실제 수집·QuickEdit·서버 저장 흐름의 process logcat 비노출",
+                         "remaining":  [
+                                           "모든 실패 경로의 log sink 조합"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-SESSION-MIRROR-001",
+                         "requirementIds":  [
+                                                "AND-011"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/test/java/com/household/account/session/SessionMirrorTest.kt",
+                                       "android/app/src/androidTest/java/com/household/account/HostPlatformAdapterTest.kt::sessionMirrorPersistsAnEncryptedAtomicSnapshot",
+                                       "android/app/src/androidTest/java/com/household/account/MainActivityInstrumentationTest.kt::bridgeOverlayPreferencePersistsForExactActorAndRejectsAnotherHousehold"
+                                   ],
+                         "verifiedBehavior":  "실제 Kotlin session 전환·암호화·가구/멤버 설정 격리",
+                         "remaining":  [
+
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-ANDROID-FCM-LOGOUT-001",
+                         "requirementIds":  [
+                                                "AND-005",
+                                                "AND-013",
+                                                "PUSH-003",
+                                                "PUSH-007"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/test/java/com/household/account/notifications/FidLogoutDetachmentTest.kt",
+                                       "android/app/src/androidTest/java/com/household/account/HostPlatformAdapterTest.kt::logoutGateDisablesTheActualFcmServiceAndRegistrationCanReenableIt"
+                                   ],
+                         "verifiedBehavior":  "실제 detach orchestration과 OS component gate",
+                         "remaining":  [
+                                           "실제 FCM 수신·로그아웃·재등록 전체 연결"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-PUSH-010",
+                         "requirementIds":  [
+                                                "AND-013",
+                                                "PUSH-003",
+                                                "PUSH-007",
+                                                "PUSH-008"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/test/java/com/household/account/notifications/FidLogoutDetachmentTest.kt",
+                                       "android/app/src/androidTest/java/com/household/account/HostPlatformAdapterTest.kt::logoutGateDisablesTheActualFcmServiceAndRegistrationCanReenableIt"
+                                   ],
+                         "verifiedBehavior":  "실제 native detach 및 component gate",
+                         "remaining":  [
+                                           "기기 FCM 왕복"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-QUEUE-001",
+                         "requirementIds":  [
+
+                                            ],
+                         "tests":  [
+                                       "android/app/src/test/java/com/household/account/paymentcapture/CaptureDeliveryQueueTest.kt",
+                                       "android/app/src/androidTest/java/com/household/account/HostPlatformAdapterTest.kt::captureJournalReloadRunsTheActualKotlinCodecAndKeystoreWithoutPlaintext",
+                                       "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt::serverCreatedCategoryFlowsThroughCaptureIntoQuickEditAndMemoSave"
+                                   ],
+                         "verifiedBehavior":  "실제 Kotlin queue·Keystore·서버 전달",
+                         "remaining":  [
+
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-QE-001",
+                         "requirementIds":  [
+                                                "QE-005",
+                                                "QE-007"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/androidTest/java/com/household/account/QuickEditActivityInstrumentationTest.kt::splitFreezesWholeFormAtDialogOpenAndCommitsOneEnvelope",
+                                       "android/app/src/androidTest/java/com/household/account/QuickEditActivityInstrumentationTest.kt::splitAmountEditingBalancesTwoItemsButKeepsThreeItemsIndependent"
+                                   ],
+                         "verifiedBehavior":  "실제 분할 dialog의 2항목 자동 금액 조정, 3항목 독립 입력, 항목 삭제 후 재조정, 취소 시 command 없음과 immutable form",
+                         "remaining":  [
+
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-QE-002",
+                         "requirementIds":  [
+                                                "QE-002",
+                                                "QE-003",
+                                                "QE-004",
+                                                "QE-005",
+                                                "QE-006"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/androidTest/java/com/household/account/QuickEditActivityInstrumentationTest.kt::notifyOnlyPersistsVersionedCommandWithoutUnsavedFormValues",
+                                       "android/app/src/androidTest/java/com/household/account/QuickEditActivityInstrumentationTest.kt::splitFreezesWholeFormAtDialogOpenAndCommitsOneEnvelope",
+                                       "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt::serverCreatedCategoryFlowsThroughCaptureIntoQuickEditAndMemoSave",
+                                       "android/app/src/test/java/com/household/account/ledger/HouseholdCommandClientTest.kt"
+                                   ],
+                         "verifiedBehavior":  "실제 UI command 접수와 저장 callable",
+                         "remaining":  [
+                                           "모든 명령의 서버 원자성은 Functions integration 증거로 별도 연결"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-QE-003",
+                         "requirementIds":  [
+                                                "QE-009",
+                                                "QE-012"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/test/java/com/household/account/quickedit/QuickEditPendingQueueTest.kt::같은 거래를 중복 없이 FIFO로 한 개씩 lease한다",
+                                       "android/app/src/test/java/com/household/account/quickedit/QuickEditPendingQueueTest.kt::실패 lease 해제는 head를 보존하고 process 복구는 active만 해제한다",
+                                       "android/app/src/test/java/com/household/account/quickedit/QuickEditCommandDeliveryLifecycleTest.kt::Worker 예약 실패는 Accepted가 아니며 저장 payload 재접수를 허용한다",
+                                       "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt::serverCreatedCategoryFlowsThroughCaptureIntoQuickEditAndMemoSave"
+                                   ],
+                         "verifiedBehavior":  "실제 Kotlin FIFO·중복·lease·예약 실패, 실제 서버 3개 거래 수집→A 유지→암호화 FIFO B/C→A 저장 접수 후 B 표시→명시 닫기 C 표시",
+                         "remaining":  [
+                                           "Activity 세 개의 연속 표시 및 실제 process 강제종료 재시작"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-QE-004",
+                         "requirementIds":  [
+                                                "QE-010",
+                                                "QE-006"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/androidTest/java/com/household/account/QuickEditActivityInstrumentationTest.kt::splitFreezesWholeFormAtDialogOpenAndCommitsOneEnvelope",
+                                       "android/app/src/androidTest/java/com/household/account/QuickEditEncryptedOutboxInstrumentationTest.kt::actualKeystoreRetainsConflictUntilNotificationAcknowledgmentAcrossReload"
+                                   ],
+                         "verifiedBehavior":  "실제 UI 분할 초안과 실제 outbox 충돌 보존",
+                         "remaining":  [
+                                           "동시 두 사용자의 Native 분할→서버 경합 전체"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-QE-005",
+                         "requirementIds":  [
+                                                "QE-008",
+                                                "QE-011"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/androidTest/java/com/household/account/QuickEditActivityInstrumentationTest.kt::launchPaintsIntentSnapshotAndSelectedCategoryImmediately",
+                                       "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt::serverCreatedCategoryFlowsThroughCaptureIntoQuickEditAndMemoSave"
+                                   ],
+                         "verifiedBehavior":  "실제 표시·설치 Activity 외부 진입 금지·최근 앱 제외·캡처/keyguard flag",
+                         "remaining":  [
+                                           "실제 잠금 상태에서의 사용자 잠금 해제와 화면 녹화"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-QE-006",
+                         "requirementIds":  [
+                                                "QE-001"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt::serverCreatedCategoryFlowsThroughCaptureIntoQuickEditAndMemoSave"
+                                   ],
+                         "verifiedBehavior":  "실제 수집 성공→표시·설정 off·overlay 권한 없을 때 queue 불변",
+                         "remaining":  [
+                                           "실제 수집 실패의 화면 불변"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-QE-007",
+                         "requirementIds":  [
+                                                "QE-012",
+                                                "AND-009",
+                                                "AND-011"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/test/java/com/household/account/quickedit/QuickEditCommandOutboxTest.kt",
+                                       "android/app/src/test/java/com/household/account/quickedit/QuickEditCommandDeliveryLifecycleTest.kt",
+                                       "android/app/src/androidTest/java/com/household/account/QuickEditEncryptedOutboxInstrumentationTest.kt",
+                                       "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt::serverCreatedCategoryFlowsThroughCaptureIntoQuickEditAndMemoSave"
+                                   ],
+                         "verifiedBehavior":  "실제 outbox·Keystore·lifecycle·Worker와 서버 저장",
+                         "remaining":  [
+                                           "프로세스 강제 종료와 OS Worker 재기동 전체"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-ING-002",
+                         "requirementIds":  [
+                                                "ING-004"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt::serverCreatedCategoryFlowsThroughCaptureIntoQuickEditAndMemoSave",
+                                       "android/app/src/androidTest/java/com/household/account/HostPlatformAdapterTest.kt::actualListenerDedupUsesInclusiveThirtySecondWindowWithoutExtendingIt"
+                                   ],
+                         "verifiedBehavior":  "실제 Listener onNotificationPosted 동일 OS 입력 반복, 서버 payment-capture-ledger receipt 1개, 실제 QuickEdit 표시와 저장, 실제 Listener 29,999/30,000/30,001ms inclusive 경계·중복으로 window 미연장·메모리 재시작",
+                         "remaining":  [
+                                           "카카오 누적 후보는 실제 RawNotificationCandidateFactory 단위 테스트와 별도 Native E2E 확장 대상"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-PUSH-009",
+                         "requirementIds":  [
+                                                "PUSH-007"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/androidTest/java/com/household/account/e2e/FcmFirebaseE2ETest.kt::registeredCallbackConfirmsServerBindingBeforeForegroundNotificationAndLogoutBlocksIt"
+                                   ],
+                         "verifiedBehavior":  "실제 FcmService 등록 callback→인증 Command→binding 확인, 실제 foreground 시스템 알림 채널/내용/PendingIntent/MainActivity, data-only·다른 member·로그아웃 차단",
+                         "remaining":  [
+                                           "물리 FCM 수신과 OS background 외부 전달"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-ANDROID-STARTUP-001",
+                         "requirementIds":  [
+                                                "AND-014",
+                                                "AND-012",
+                                                "ADM-005"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/androidTest/java/com/household/account/e2e/WebStartupFirebaseE2ETest.kt::realHomePaintReportsActivityElapsedOnceAndReloadKeepsMemoryCacheServerFresh"
+                                   ],
+                         "verifiedBehavior":  "실제 MainActivity monotonic clock→HTTPS Next Web 전체→홈 서버 데이터 paint→실제 앱 방문 계측 Command, Native 준비시간 포함 및 reload 중복 표본 없음, Android memory cache와 최신 지역화폐",
+                         "remaining":  [
+                                           "2분 경계·실패 표본 억제는 실제 clientStartupObservation/AppLaunchDurationClock 단위 테스트"
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-ING-FOLLOWUP-001",
+                         "requirementIds":  [
+                                                "ING-SAVE-006",
+                                                "QE-001"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt::serverCreatedCategoryFlowsThroughCaptureIntoQuickEditAndMemoSave"
+                                   ],
+                         "verifiedBehavior":  "실제 Listener→서버 저장 성공 receipt의 정확한 category/merchant/version snapshot→실제 Quick Edit, 설정 off/권한 없을 때 queue와 표시 불변",
+                         "remaining":  [
+                                           "실제 실패 수집에서 후속 UX 0회는 별도 실행 시나리오"
+                                       ]
+                     }
+                 ]
+}

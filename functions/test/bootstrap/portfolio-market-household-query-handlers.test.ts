@@ -75,7 +75,7 @@ function subject(input: { readonly active?: boolean } = {}) {
 }
 
 describe("Portfolio market household query handlers", () => {
-  it("does not call a catalog or market provider before active membership is resolved", async () => {
+  it("[T-EXT-002][EXT-002] does not call a catalog or market provider before active membership is resolved", async () => {
     const fixture = subject({ active: false });
 
     await expect(
@@ -89,7 +89,7 @@ describe("Portfolio market household query handlers", () => {
     expect(fixture.getQuote).not.toHaveBeenCalled();
   });
 
-  it("routes an explicit market to the shared quote provider without inferring it from code", async () => {
+  it("[T-MARKET-004][MARKET-002] routes an explicit market to the shared quote provider without inferring it from code", async () => {
     const fixture = subject();
 
     await expect(

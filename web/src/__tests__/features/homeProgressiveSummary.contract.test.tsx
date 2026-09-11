@@ -26,7 +26,7 @@ function card(label: string) {
 }
 
 describe('첫 가계부 요약의 독립 점진 렌더링 계약', () => {
-  test('source failure, observed zero and NoData remain distinct while the other card stays usable', () => {
+  test('[T-HOME-001][HOME-003] source failure, observed zero and NoData remain distinct while the other card stays usable', () => {
     const props = { currentYear: 2026, currentMonth: 7, expenses: [], yearlySpent: null, summaryConfig: { leftCard: 'localCurrencyBalance' as const, rightCard: 'monthlySpent' as const }, transactionType: 'expense' as const, localCurrencyBalance: null };
     const { rerender } = render(<BalanceCards {...props} sourceErrors={{ localCurrencyBalance: true }} />);
     expect(card('지역화폐 잔액').getByText('조회 실패')).toBeInTheDocument();

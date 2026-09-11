@@ -1,14 +1,4 @@
 export type {
-  GateEvidence,
-  GateEvidenceStatus,
-  GateWaiver,
-  ReleaseCandidateEvaluationInputPort,
-  ReleaseCandidateManifest,
-  ReleaseEvaluation,
-  RequiredReleaseGate,
-  TestRunSummary,
-} from "./application/ports/in/releaseCandidateEvaluationInputPort";
-export type {
   CompatibilityChange,
   CompatibilityEvaluation,
   CompatibilityManifest,

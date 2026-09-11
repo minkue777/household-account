@@ -14,6 +14,7 @@ export interface CaptureTransactionBranch {
   readonly rawPayloadHash: string;
   readonly localCurrencyType?: "gyeonggi" | "daejeon" | "sejong";
   readonly captureContext?: {
+    readonly verifiedRawPayloadHash?: string;
     readonly observationId: string;
     readonly observationType: "approval" | "cancellation";
     readonly approvalAmountInWon?: number;
@@ -37,6 +38,7 @@ export interface CaptureBalanceBranch {
 export interface CaptureBranchEnvelope {
   readonly rootIdempotencyKey: string;
   readonly householdId: string;
+  readonly verifiedRawInput?: { readonly creatorMemberId: string; readonly payloadHash: string };
   readonly captureEnvelopeIdentity?: {
     readonly contractVersion: "capture-envelope.v1";
     readonly observationId: string;

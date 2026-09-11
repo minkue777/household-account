@@ -4,7 +4,7 @@ import { FirebaseLocalCurrencyBalanceStore } from '../../../src/adapters/firebas
 import { InMemoryFirestore } from '../../support/in-memory-firestore';
 
 describe('first balance and Home selection transaction', () => {
-  it('persists first type with zero balance and preserves it when another type arrives', async () => {
+  it('[T-HOME-004][HOME-002] persists first type with zero balance and preserves it when another type arrives', async () => {
     const memory = new InMemoryFirestore();
     memory.seed('households/home', { lifecycleState: 'active', homeSummaryConfigVersion: 2 });
     const store = new FirebaseLocalCurrencyBalanceStore(memory as unknown as firestore.Firestore);

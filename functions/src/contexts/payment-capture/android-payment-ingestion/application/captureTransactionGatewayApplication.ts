@@ -126,6 +126,7 @@ export function createCaptureTransactionGatewayApplication(input: {
           householdId: command.householdId,
           downstreamKey: command.downstreamKey,
           branch: {
+            ...(context.verifiedRawPayloadHash === undefined ? {} : { verifiedRawPayloadHash: context.verifiedRawPayloadHash }),
             observationId: context.observationId,
             creatorMemberId: context.creatorMemberId,
             sourceType: command.branch.sourceType,
@@ -181,6 +182,7 @@ export function createCaptureTransactionGatewayApplication(input: {
         householdId: command.householdId,
         downstreamKey: command.downstreamKey,
         branch: {
+          ...(context.verifiedRawPayloadHash === undefined ? {} : { verifiedRawPayloadHash: context.verifiedRawPayloadHash }),
           observationId: context.observationId,
           originChannel: context.originChannel,
           creatorMemberId: context.creatorMemberId,

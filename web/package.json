@@ -11,10 +11,13 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:e2e:pwa": "playwright test --config playwright.pwa.config.ts",
-    "test:e2e:functions": "npm --prefix ../functions run build",
-    "test:e2e:install": "playwright install chromium",
+    "test:e2e:dependencies": "node ../tools/e2e/check-dependencies.mjs",
+    "test:e2e:functions": "npm run test:e2e:dependencies && npm --prefix ../functions run build && node ../tools/build/prepare-functions-codebase.mjs functions-payment-capture && node ../tools/build/prepare-functions-codebase.mjs functions-access-session",
+    "test:e2e:install": "playwright install chromium webkit",
     "pretest:e2e": "npm run test:e2e:functions && npm run test:e2e:install",
-    "test:e2e": "node ../functions/scripts/run-with-emulator-secret.mjs firebase --config ../firebase.e2e.json emulators:exec --project demo-household-account-e2e --only auth,firestore,functions --log-verbosity QUIET \"npm run test:e2e:playwright\"",
+    "test:e2e": "node ../functions/scripts/run-with-emulator-secret.mjs node ../tools/e2e/firebase-emulators.mjs \"npm --prefix web run test:e2e:playwright\"",
+    "pretest:e2e:android": "npm run test:e2e:functions && playwright install chromium",
+    "test:e2e:android": "node ../functions/scripts/run-with-emulator-secret.mjs node ../tools/e2e/firebase-emulators.mjs \"node tools/e2e/native-firebase.mjs\"",
     "test:e2e:playwright": "playwright test"
   },
   "dependencies": {

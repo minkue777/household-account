@@ -129,7 +129,7 @@ request body에는 householdId·createdBy·memberName·deviceOwner·owner를 넣
 
 `IssueShortcutCredential`, `RevokeShortcutCredential`, `GetShortcutCredentialStatus`는 Access의 인증된 SessionScope를 요구합니다. 원문 재조회 API는 두지 않습니다. Shortcut 자체는 편집 가능한 사용자 영역이므로 키를 별도 보안 저장소라고 표현하지 않으며, 한 사용자·가구·capability 범위와 즉시 폐기로 노출 반경을 제한합니다.
 
-HTTP response는 원문 message, 전체 token, 내부 parser stack을 포함하지 않습니다. 기존 `success`, `duplicate`, `notificationSent`, `targetOwner` 소비자는 Legacy Response Mapper에서 위 typed 결과로부터 제한 기간 동안만 변환합니다. `notificationSent=true`는 실제 `delivered`일 때만 허용하고 `queued`를 성공 전송으로 표현하지 않습니다.
+HTTP response는 원문 message, 전체 token, 내부 parser stack을 포함하지 않습니다. 현행 공개 계약은 `shortcut-payment-response.v1`이며 `transaction`과 `notification`을 분리합니다. 활성 legacy HTTP 호환 창은 없으므로 최상위 `success`, `duplicate`, `notificationSent`, `targetOwner` 필드를 만들지 않습니다. `queued`는 실제 전달 성공이 아닙니다.
 
 ### 3.2 공개 Input Port
 
@@ -261,9 +261,11 @@ Shortcut parser와 HTTP Adapter는 영속 중복 query를 하지 않습니다. �
 
 Shortcut 응답 조정기는 `Created`이면 `producer=household-finance.ledger`인 `TransactionRecorded.v1`, `Duplicate`이면 `producer=payment-capture.intake`인 `CaptureDuplicateObserved.v1`의 **이미 원자 commit된 source event receipt**만 소비합니다. event 종류·transaction ID·creator가 거래 결과와 일치할 때 typed 응답 receipt를 멱등 기록하며, Shortcut Ingestion이 이 단계에서 Transaction이나 Outbox Event를 다시 생성하는 것은 금지합니다. source event가 아직 없거나 상관관계가 다르면 대체 Event를 합성하지 않고 소비를 보류·거부합니다.
 
-### 5.4 Legacy HTTP response 호환 창
+### 5.4 현행 HTTP 응답과 폐기된 호환 설계
 
-Domain과 `ProcessShortcutRequestV2`는 typed V2 결과만 반환합니다. 구형 path를 유지하는 최외곽 `LegacyShortcutResponseMapper`만 V2의 거래 결과와 조회된 delivery 상태를 `duplicate`·`notificationSent`·`targetOwner`로 변환합니다. `notificationSent=true`는 실제 `delivered`에만 대응하며 `queued`를 전달 성공으로 위장하지 않습니다. 이 mapper는 inbound Actor 결정, Domain model, receipt, Outbox payload에 관여하지 않고 호환 창 종료 시 Facade와 함께 제거합니다.
+현행 공개 응답의 단일 원본은 [`shortcut-payment-response.v1` Schema](../../../../../../contracts/schemas/payment-capture/shortcut-payment-response.v1.schema.json)와 실제 [`shortcutHttpInboundHandler`](../../../../../../functions/src/contexts/payment-capture/shortcut-ingestion/adapters/in/http/shortcutHttpInboundHandler.ts)입니다. 거래의 `Created`·`Duplicate` 결과와 `notification` 상태를 분리하고 최상위 `success`·`duplicate`·`notificationSent`·`targetOwner`는 반환하지 않습니다. `T-IOS-COMPAT-001`은 실제 HTTP 생성·중복 요청을 통해 이 버전과 응답 구조를 검증합니다.
+
+폐기된 호환 설계: 이전 문서는 `ProcessShortcutRequestV2` 결과를 `LegacyShortcutResponseMapper`가 구형 필드로 바꾸고 실제 `delivered`만 `notificationSent=true`로 표현하는 한시적 창을 계획했습니다. 그러나 이 mapper는 현재 배포 bootstrap/HTTP 실행 경로에 연결되지 않았고 활성 legacy client 호환 창도 없습니다. 과거 계획의 출처를 보존할 뿐 현재 동작이나 검증 완료로 계산하지 않습니다. 그 독립 모델만 호출하던 계약 테스트는 제거하며, 이를 통과시키려고 새 legacy 응답 기능을 만들지 않습니다.
 
 ## 6. Port 설계
 
@@ -293,7 +295,7 @@ Shortcut 모듈 자체에는 Canonical 영속 Aggregate가 없습니다. 요청�
 - 같은 DEC-003 tuple의 Android·Shortcut 동시 요청은 Ledger fingerprint claim 경합으로 거래 한 건이 됩니다.
 - 알림 요청은 transaction 안에서 FCM을 호출하지 않습니다. duplicate 호환 Event ID와 Outbox append는 Payment Intake가 `captureReceiptId:duplicate-notification:targetMemberId`에서 결정적으로 만들고 receipt Unit of Work에 포함합니다.
 - Legacy Adapter만 기존 `expenses` DTO의 `source=ios-shortcut`, 빈 memo, 기본 category, 필수 creatorMemberId를 legacy `createdBy`에도 매핑합니다. Canonical 거래에는 parser evidence로 만든 완성 `cardDisplay`(예: `삼성(1876)`)를 저장하고, 기존 Web Read Model과 함께 운영하는 동안에는 같은 완성 표시 문자열을 legacy `cardLastFour`에도 기록합니다. 이 필드는 호환 표시 슬롯이지 숫자 네 자리 Domain 사실이 아닙니다. 1876의 레거시 `cardType`도 Adapter에서만 기록하며 목표 V2 Domain은 공개하지 않습니다.
-- 기존 HTTP path와 response는 Facade로 유지한 뒤 새 schema 사용률과 response parity를 확인하고 제거합니다.
+- HTTP 응답은 공개 v1 Schema를 그대로 유지합니다. 별도의 legacy Facade/response mapper를 운영하는 호환 창은 없습니다.
 
 ## 8. Event·Projection·외부 연동
 
@@ -335,7 +337,6 @@ functions/src/contexts/payment-capture/shortcut-adapter/      # 목표
     ports/out/
   adapters/in/http/
     shortcut-request-v1-handler.ts
-    legacy-response-mapper.ts
   adapters/out/credential/
   public.ts
 
@@ -358,8 +359,8 @@ contracts/
 | [IOS-005](requirements.md#5-요구사항) | Domain, Application | owner Policy 전환 | 레거시 요청 owner 유효/무효, 타 멤버 wildcard 일치 | 레거시 결과는 특성화만 하고 목표 Writer는 Actor 범위만 사용 | `T-IOS-OWNER-LEGACY-001` |
 | [IOS-006](requirements.md#5-요구사항) | Domain, Context Contract | DEC-003 fingerprint | 같은 tuple 다른 카드/source·실제 동시 입력 | 후속 거래 `Duplicate`, 거래 한 건 | `T-DUP-001` |
 | [IOS-007](requirements.md#5-요구사항) | Application, Legacy Mapper | 거래 초안·호환 저장 | 본인 카드 0·1·여러 건, 타 멤버 동일 카드, 1876/번호 없음 | 본인 카드 1건 이상이면 Actor creator로 저장, 타 멤버 상태 무관, 임의 카드 선택 없음 | `T-CARD-001` |
-| [IOS-008](requirements.md#5-요구사항) | Context Contract, Integration, E2E | 신규 typed V2 결과와 Ledger Outbox 알림 | Created, creator의 iOS·Android·desktop endpoint 혼재, 다중 active iPhone, FCM 성공·지연·실패 | Payment Capture는 creator+capability만 발행하고 Notifications가 creator의 active iPhone만 선택, 다른 가구원 제외, 거래와 delivery 상태 분리 | `T-IOS-NOTIFY-001`, `T-IOS-COMPAT-001` |
-| [IOS-009](requirements.md#5-요구사항) | Application, Integration, Outbound Compatibility | duplicate Notification Intent·legacy response mapper | target 0·1, delivery 성공·failed·unknown·permanent, 요청 재실행, V2→legacy 변환 | 새 거래 없음, event·delivery 멱등, Domain/Application은 typed V2만 사용하고 최외곽 mapper만 구형 응답 생성 | `T-IOS-NOTIFY-002`, `T-IOS-COMPAT-001` |
+| [IOS-008](requirements.md#5-요구사항) | Context Contract, Integration, E2E | 공개 typed v1 응답과 Ledger Outbox 알림 | Created, creator의 iOS·Android·desktop endpoint 혼재, 다중 active iPhone, FCM 성공·지연·실패 | Payment Capture는 creator+capability만 발행하고 Notifications가 creator의 active iPhone만 선택, 다른 가구원 제외, 거래와 delivery 상태 분리 | `T-IOS-NOTIFY-001`, `T-IOS-COMPAT-001` |
+| [IOS-009](requirements.md#5-요구사항) | Application, Integration, E2E | duplicate Notification Intent와 실제 HTTP typed v1 응답 | 실제 승인·중복 요청, target 0·1, delivery 성공·failed·unknown·permanent, 요청 재실행 | 새 거래 없음, event·delivery 멱등, 공개 응답 버전 고정·transaction/notification 분리·최상위 legacy 4개 필드 없음 | `T-IOS-NOTIFY-002`, `T-IOS-COMPAT-001` |
 | [IOS-010](requirements.md#5-요구사항) | Contract, Security, Emulator | 인증·가구·금액·달력 검증 | 무인증·타 가구·0·NaN·overflow·2/30·24:00·임의 owner | 권한/field 오류와 모든 저장소 변경 없음 | `T-IOS-002`, `T-IOS-SEC-001` |
 | [IOS-011](requirements.md#5-요구사항) | Emulator, Concurrency | Intake receipt·Ledger claim | 동일 요청 동시 2회, callback retry, receipt 완료 전 중단 | 거래 한 건·같은 결과 재생·알림 멱등 | `T-IOS-001` |
 | [IOS-012](requirements.md#5-요구사항) | Contract, Security I | HTTP Adapter·Ingress limit | POST/GET/OPTIONS, JSON/기타, version, byte/field/key 경계, CORS-only, rate/quota 병렬 경합 | 허용 POST만 Application 한 번, 나머지는 안정 status/code와 downstream 0회 | `T-IOS-003`, `T-IOS-SEC-002` |
@@ -373,4 +374,4 @@ contracts/
 
 다중 FID endpoint는 [DEC-020](../../../../governance/decisions.md#dec-020), 카드사 헤더는 [DEC-030](../../../../governance/decisions.md#dec-030), Shortcut credential 발급·반자동 설치·폐기는 [DEC-033](../../../../governance/decisions.md#dec-033)으로 확정되었습니다.
 
-구현 순서는 (1) value normalizer·승인/취소 parser·owner·연도 legacy characterization, (2) NH `승인취소` golden fixture와 DEC-029 공통 연도 Policy fixture 연결, (3) HTTP wrapper에서 순수 handler와 OPTIONS를 분리하고 유한 ingress limit을 먼저 적용, (4) DEC-033 scoped credential 발급·검증·폐기 Application과 승인·취소 개인 자동화 안내를 포함한 반자동 설치 UI·공유 Shortcut·보안 목표 test, (5) 인증된 parser 성공·거부에 호출되는 IOS-014 Diagnostic Port와 best-effort 격리·성공 경로 병렬화 test, (6) approval·cancellation `CaptureEnvelope.v1` 변환·공통 Intake Fake, (7) 실제 Intake 연결과 DEC-003 경합 및 공통 cancellation Port test, (8) transaction/notification 분리 response, (9) duplicate 알림 멱등화, (10) Legacy Response Mapper와 직접 Firestore·FCM 접근 제거 순입니다.
+구현 순서는 (1) value normalizer·승인/취소 parser·owner·연도 legacy characterization, (2) NH `승인취소` golden fixture와 DEC-029 공통 연도 Policy fixture 연결, (3) HTTP wrapper에서 순수 handler와 OPTIONS를 분리하고 유한 ingress limit을 먼저 적용, (4) DEC-033 scoped credential 발급·검증·폐기 Application과 승인·취소 개인 자동화 안내를 포함한 반자동 설치 UI·공유 Shortcut·보안 목표 test, (5) 인증된 parser 성공·거부에 호출되는 IOS-014 Diagnostic Port와 best-effort 격리·성공 경로 병렬화 test, (6) approval·cancellation `CaptureEnvelope.v1` 변환·공통 Intake Fake, (7) 실제 Intake 연결과 DEC-003 경합 및 공통 cancellation Port test, (8) transaction/notification 분리 response, (9) duplicate 알림 멱등화, (10) 공개 v1 응답 검증과 직접 Firestore·FCM 접근 제거 순입니다. Legacy Response Mapper 추가 계획은 §5.4에 기록한 대로 폐기되었습니다.

@@ -262,7 +262,7 @@ CityGas parser의 최소 성공 조건은 도시가스 청구 문구와 총액�
 
 ### 5.2 독립 branch submit
 
-1. callable Adapter가 raw schema·Firebase Auth·App Check와 서버 발급 Native membership claim을 검증해 `ActorContext`를 생성합니다. claim이 없는 전환 세션만 `PrincipalMembershipClaim` 단일 read와 legacy canonical 검증으로 fallback합니다.
+1. callable Adapter가 raw schema·Firebase Auth·App Check를 검증하고 매 호출 `PrincipalMembershipClaim` 한 문서의 현재 권위로 `ActorContext`를 생성합니다. Native token의 가구·멤버 힌트가 있으면 이 결과와 일치해야 하며, 과거 token이나 메모리 cache로 권위 조회를 생략하지 않습니다. 전역 claim이 없는 전환 데이터만 view·legacy canonical 검증으로 fallback합니다.
 2. Raw Application이 source·parser를 서버에서 확정해 내부 envelope를 만든 뒤 Intake가 household 일치, source Policy, parser metadata와 최소 한 branch 존재를 검증합니다.
 3. 단일 Android 승인 branch는 `rootIdempotencyKey`를 Ledger downstream key로 사용하고 Ledger의 원자 receipt가 같은 payload를 재생하며 다른 payload를 `Conflict`로 반환합니다. balance가 함께 있거나 취소·Shortcut인 envelope만 canonical payload hash로 root receipt를 claim하고 존재 branch별 stable downstream key와 `pending` stage를 기록합니다.
 4. transaction branch가 있으면 금액·날짜·시간을 검증하고 `ResolveCard(ownerMemberId=ActorContext.actingMemberId)`, `ResolveMerchantMapping`, 필요 시 기본 Category Query를 호출해 거래 초안을 만듭니다. parser가 도시가스 고지서로 분류하지 않은 입력에서 본인 카드가 하나도 일치하지 않으면 transaction branch만 `rejected(CARD_NOT_REGISTERED_FOR_ACTOR)`로 완료합니다. 카카오톡 카드 결과도 이 검증을 우회하지 않으며, 도시가스 고지서 결과만 fixed category·due-date 경로를 사용합니다.
@@ -342,13 +342,13 @@ Capture receipt와 Ledger Transaction·Local Currency Balance는 서로 다른 C
 
 ### 7.3 소규모 운영 저지연 Adapter
 
-- `submitAndroidRawNotification`, `executeHouseholdCommand`, `executeHouseholdQuery`는 현재 소규모·비용 우선 운영에서 `minInstances=0`을 사용합니다. process-local cache는 warm process에서만 best-effort로 동작하고 cache hit를 보장하지 않습니다. 단계별 latency 계측과 hot-path 단순화 뒤에도 cold start가 목표 지연을 지배한다고 확인될 때에만 특정 Function의 warm instance를 재검토합니다. Firebase Auth·Membership은 모든 공용 Command·Query에서 유지하고 App Check는 Native 결제 수집·세션 교환에서 유지합니다.
-- warm Functions instance는 성공한 활성 Membership을 UID별 최대 5분·64개, 성공한 결제 설정 snapshot을 household/member별 최대 1분·32개만 process-local LRU/TTL cache에 보존합니다. 거부·실패 결과는 cache하지 않으며 instance 종료 시 사라집니다.
-- process-local cache miss에서는 가구별 `runtimeProjections/payment-capture-configuration-v1` 한 문서로 카드·가맹점 규칙·활성 카테고리를 읽습니다. projection 자체가 없을 때만 원본 collection을 동일 transaction에서 조합해 다시 저장합니다.
+- `submitAndroidRawNotification`, `executeHouseholdCommand`, `executeHouseholdQuery`는 현재 소규모·비용 우선 운영에서 `minInstances=0`을 사용합니다. 단계별 latency 계측과 hot-path 단순화 뒤에도 cold start가 목표 지연을 지배한다고 확인될 때에만 특정 Function의 warm instance를 재검토합니다. Firebase Auth·Membership은 모든 공용 Command·Query에서 유지하고 App Check는 Native 결제 수집·세션 교환에서 유지합니다.
+- 2026-09-11에 결제 설정 snapshot의 1분 TTL과 Membership의 5분 TTL·Native JWT 직접 승인 경로를 제거했습니다. 실제 E2E에서 카드 수정 직후 이전 끝번호가 사용되고, 관리자 Member 제거 직후 같은 JWT의 새 수집이 저장되는 문제가 각각 재현됐기 때문입니다. 권위 Membership은 매 요청 조회하며 완료된 설정 결과도 process에 보관하지 않습니다.
+- 결제 설정은 매 요청 가구별 `runtimeProjections/payment-capture-configuration-v1` 한 문서로 카드·가맹점 규칙·활성 카테고리를 읽습니다. 동시에 진행 중인 동일 가구·멤버 조회만 한 Promise로 합치며 완료된 결과는 process에 보관하지 않습니다. projection 자체가 없을 때만 원본 collection을 동일 transaction에서 조합해 다시 저장합니다.
 - Registered Card·Merchant Rule·Category Catalog 변경 Writer는 자신의 변경 transaction 안에서 위 projection을 삭제합니다. 재생성 transaction도 projection을 먼저 읽으므로 변경과 재생성이 경합하면 Firestore가 재시도하여 변경 뒤 오래된 projection이 복원되는 경쟁 조건을 막습니다.
 - Android와 Functions의 capture latency 로그는 원 observation ID를 저장하지 않고 동일한 SHA-256 앞 16자리 `correlationId`만 공유합니다. Android는 알림 수신부터 Quick Edit 표시까지, Functions는 Membership·receipt·configuration·persistence 단계를 각각 기록합니다.
-- cache는 UID를 다른 가구로 바꾸거나 클라이언트가 주장한 householdId를 수용하지 않습니다. 모든 raw 요청은 여전히 인증된 UID를 입력으로 사용하고 cache miss에서는 권위 저장소를 읽습니다.
-- 활성 Membership 제거·연결 변경은 기존 warm instance에서 최대 5분 늦게 반영될 수 있습니다. Firebase Auth·App Check는 매 요청 유지하며 이 제한된 회수 지연은 현재 소규모·속도 우선 운영에서 명시적으로 수용합니다.
+- 모든 raw 요청은 인증된 UID의 현재 권위 저장소를 읽습니다. Native token의 발급 당시 household/member 힌트가 현재 권위와 다르면 거절하여 오래된 알림을 다른 가구로 재해석하지 않습니다.
+- 관리자 제거 transaction이 claim/view 해제를 완료하면, 이후 시작한 수집은 같은 JWT·같은 warm instance에서도 거절합니다. 복구 transaction이 같은 ID의 active claim을 복원하면 다음 수집부터 다시 허용합니다. 이전의 최대 5분 회수 지연은 더 이상 현재 정책이 아닙니다.
 - 현재 두 가구와 향후 소수 가구를 기준으로 별도 Redis, 분산 invalidation, 요청 fan-out Queue를 대화형 경로에 두지 않습니다. 외부 Provider와 Scheduler의 page·rate limit은 이 결정과 무관하게 유지합니다.
 
 ### 7.4 Canonical Writer와 migration

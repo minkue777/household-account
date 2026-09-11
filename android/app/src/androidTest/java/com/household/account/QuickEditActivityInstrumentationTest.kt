@@ -7,15 +7,21 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.TextView
+import android.widget.LinearLayout
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.ViewAction
+import androidx.test.espresso.UiController
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.matcher.RootMatchers.isDialog
 import androidx.test.espresso.matcher.ViewMatchers.withId
+import androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom
+import org.hamcrest.Matcher
 import com.google.firebase.auth.FirebaseAuth
+import com.household.account.data.CategoryData
 import com.household.account.quickedit.AndroidKeystoreQuickEditCommandOutboxStore
 import com.household.account.ledger.HouseholdCommandKind
 import com.household.account.util.HouseholdPreferences
@@ -85,9 +91,58 @@ class QuickEditActivityInstrumentationTest {
     }
 
     @Test
-    fun splitFreezesWholeFormAtDialogOpenAndCommitsOneEnvelope() {
+    fun splitAmountEditingBalancesTwoItemsButKeepsThreeItemsIndependent() {
         prepareLocalCommandSession()
         launchQuickEdit().use { scenario ->
+            scenario.onActivity { activity ->
+                activity.findViewById<EditText>(R.id.etAmount).setText("12000")
+                activity.findViewById<Button>(R.id.btnSplit).performClick()
+            }
+            editSplitRows { rows ->
+                assertEquals(2, rows.childCount)
+                rows.amount(0).setText("7500")
+                assertEquals("4500", rows.amount(1).text.toString())
+            }
+            onView(withId(R.id.btnAddSplit)).inRoot(isDialog()).perform(click())
+            editSplitRows { rows ->
+                assertEquals(3, rows.childCount)
+                rows.amount(0).setText("3000")
+                assertEquals("4500", rows.amount(1).text.toString())
+                assertEquals("0", rows.amount(2).text.toString())
+                rows.amount(2).setText("4500")
+                assertEquals("3000", rows.amount(0).text.toString())
+                assertEquals("4500", rows.amount(1).text.toString())
+                rows.getChildAt(2).findViewById<ImageButton>(R.id.btnRemove).performClick()
+            }
+            editSplitRows { rows ->
+                assertEquals(2, rows.childCount)
+                rows.amount(0).setText("5000")
+                assertEquals("7000", rows.amount(1).text.toString())
+            }
+            onView(withId(R.id.btnCancelSplit)).inRoot(isDialog()).perform(click())
+            scenario.onActivity { activity -> assertFalse(activity.isFinishing) }
+            assertTrue(AndroidKeystoreQuickEditCommandOutboxStore(context).load().isEmpty())
+        }
+    }
+
+    private fun editSplitRows(action: (LinearLayout) -> Unit) {
+        onView(withId(R.id.splitItemsContainer)).inRoot(isDialog()).perform(object : ViewAction {
+            override fun getConstraints(): Matcher<View> = isAssignableFrom(LinearLayout::class.java)
+            override fun getDescription() = "분할 dialog의 실제 금액 입력과 TextWatcher 확인"
+            override fun perform(uiController: UiController, view: View) {
+                action(view as LinearLayout)
+                uiController.loopMainThreadUntilIdle()
+            }
+        })
+    }
+
+    private fun LinearLayout.amount(index: Int): EditText = getChildAt(index).findViewById(R.id.etAmount)
+
+    @Test
+    fun splitFreezesWholeFormAtDialogOpenAndCommitsOneEnvelope() {
+        prepareLocalCommandSession()
+        val categoryId = "category-aBcD_123"
+        launchQuickEdit(categoryId).use { scenario ->
             scenario.onActivity { activity ->
                 activity.findViewById<EditText>(R.id.etMerchant).setText("분할 초안")
                 activity.findViewById<EditText>(R.id.etAmount).setText("12000")
@@ -107,10 +162,51 @@ class QuickEditActivityInstrumentationTest {
             assertEquals("분할 초안", draft["merchant"])
             assertEquals(12000, (draft["amountInWon"] as Number).toInt())
             assertEquals("버튼 시점 메모", draft["memo"])
+            assertEquals(categoryId, draft["categoryId"])
             assertEquals(setOf("merchant", "amountInWon", "categoryId", "memo"), draft.keys)
             val items = operation["items"] as List<*>
             assertEquals(12000, items.sumOf { ((it as Map<*, *>)["amountInWon"] as Number).toInt() })
+            assertTrue(items.all { (it as Map<*, *>)["categoryId"] == categoryId })
             waitUntil("Worker 영속 예약 후 QuickEdit 닫기") { scenario.state == Lifecycle.State.DESTROYED }
+            assertWorkerReservationExists()
+        }
+    }
+
+    @Test
+    fun customCategoryIsSelectedByExactIdAndMemoSavePreservesIt() {
+        prepareLocalCommandSession()
+        val categoryId = "category-aBcD_123"
+        launchQuickEdit(categoryId).use { scenario ->
+            scenario.onActivity { activity ->
+                // 조회 결과만 주입하고 Intent 해석, 버튼 생성·선택, 저장은 실제 Activity로 검증합니다.
+                val catalog = listOf(
+                    CategoryData(key = "category-abcd_123", label = "다른 카테고리"),
+                    CategoryData(key = categoryId, label = "간식/디저트/커피")
+                )
+                QuickEditActivity::class.java.getDeclaredField("categories").apply {
+                    isAccessible = true
+                    set(activity, catalog)
+                }
+                QuickEditActivity::class.java.getDeclaredMethod("setupCategoryButtons").apply {
+                    isAccessible = true
+                    invoke(activity)
+                }
+
+                val categories = activity.findViewById<FlexboxLayout>(R.id.categoryContainer)
+                assertEquals(2, categories.childCount)
+                assertFalse(categories.getChildAt(0).isSelected)
+                assertTrue(categories.getChildAt(1).isSelected)
+                assertTrue(categories.getChildAt(1).descendantTexts().contains("간식"))
+                activity.findViewById<EditText>(R.id.etMemo).setText("메모 추가")
+                activity.findViewById<Button>(R.id.btnSave).performClick()
+            }
+
+            val store = AndroidKeystoreQuickEditCommandOutboxStore(context)
+            waitUntil("메모 수정 암호화 outbox commit") { store.load().isNotEmpty() }
+            val envelope = store.load().single().envelope
+            assertEquals(HouseholdCommandKind.UPDATE, envelope.command)
+            assertEquals(mapOf("memo" to "메모 추가"), envelope.payload["patch"])
+            waitUntil("메모 수정 접수 후 QuickEdit 닫기") { scenario.state == Lifecycle.State.DESTROYED }
             assertWorkerReservationExists()
         }
     }
@@ -198,14 +294,14 @@ class QuickEditActivityInstrumentationTest {
         }
     }
 
-    private fun launchQuickEdit(): ActivityScenario<QuickEditActivity> {
+    private fun launchQuickEdit(categoryId: String = "food"): ActivityScenario<QuickEditActivity> {
         val intent = Intent(context, QuickEditActivity::class.java).apply {
             putExtra(QuickEditActivity.EXTRA_EXPENSE_ID, "expense-quick-edit-test")
             putExtra(QuickEditActivity.EXTRA_MERCHANT, "롯데쇼핑동탄")
             putExtra(QuickEditActivity.EXTRA_AMOUNT, 20_300)
             putExtra(QuickEditActivity.EXTRA_DATE, "2026-07-31")
             putExtra(QuickEditActivity.EXTRA_TIME, "17:40")
-            putExtra(QuickEditActivity.EXTRA_CATEGORY, "FOOD")
+            putExtra(QuickEditActivity.EXTRA_CATEGORY, categoryId)
             putExtra(QuickEditActivity.EXTRA_MEMO, "테스트 메모")
             putExtra(QuickEditActivity.EXTRA_VERSION, 3)
         }

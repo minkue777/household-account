@@ -189,7 +189,7 @@ describe("AssetOwnerProfile household/dependent identity 공개 계약", () => {
     expect(event?.payload).not.toHaveProperty("principalUid");
   });
 
-  it("[T-HH-006][HH-011] dependent 이름 변경은 profileId와 기존 자산의 owner reference를 유지한다", async () => {
+  it("[T-AST-006][T-HH-006][HH-011] dependent 이름 변경은 profileId와 기존 자산의 owner reference를 유지한다", async () => {
     const existingProfile: AssetOwnerProfileView = {
       profileId: "profile-dependent-jia",
       householdId,

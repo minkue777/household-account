@@ -110,7 +110,7 @@
 | T-CAT-004 | 목표 | 기본 카테고리, 다른 카테고리의 과거 거래·정기지출·가맹점 규칙 참조 / archive / 기본은 Conflict, 다른 카테고리는 과거 거래 유지·설정 참조를 기본값으로 변경 후 보관 | CAT-002, CAT-003, REC-005, DEC-015 |
 | T-CAT-005 | 특성화 | 정상 활성 목록과 legacy 조회의 빈 값·실패 / Android QuickEdit Legacy Adapter / 정상은 저장 순서·활성 필터 유지, 빈 값·실패는 표시 전용 기본 다섯 개이며 영속 write 없음 | CAT-004 |
 | T-CAT-006 | 목표 | Repository 조회 실패 / `ListActiveCategories` / 데이터 없음·기본 다섯 개 성공과 구분되는 오류 상태 | CAT-004 |
-| T-CAT-007 | 현재 명세 | 휴대폰 설정 화면의 활성 카테고리 / 손잡이를 터치로 끌어 연속 순서 변경 / 항목이 손가락을 따라 움직이고 놓을 때 한 번 저장하며, 서버 카탈로그 버전 갱신 후 다음 변경을 허용하고 새로고침해도 순서 유지. 취소한 드래그는 저장하지 않음. [상태·취소 계약 테스트](../../../../../../web/src/__tests__/features/categorySettingsMutationFeedback.contract.test.tsx), [실제 터치·저장 E2E](../../../../../../web/e2e/ledger-journey.spec.ts) | CAT-002 |
+| T-CAT-007 | 현재 명세 | 휴대폰 설정 화면의 활성 카테고리 / 손잡이를 터치로 끌어 연속 순서 변경 / 항목이 손가락을 따라 움직이고 놓을 때 한 번 저장하며, 서버 카탈로그 버전 갱신 후 다음 변경을 허용하고 새로고침해도 순서 유지. 취소한 드래그는 저장하지 않음. [상태·취소 계약 테스트](../../../../../../web/src/__tests__/features/categorySettingsMutationFeedback.contract.test.tsx), [실제 터치·저장 E2E](../../../../../../web/e2e/finance-categories.spec.ts) | CAT-002 |
 | T-BUD-001 | 현재 명세 | 예산 카테고리와 예산 없는 카테고리 지출, 여러 cursor page / 월 계산 / 모든 page를 반영해 잔여 예산에는 전자만 차감하고 총지출에는 모두 포함하며 조회 실패를 0원으로 바꾸지 않음 | BUD-001, BUD-002, DEC-048 |
 
 ## 9. 코드 근거

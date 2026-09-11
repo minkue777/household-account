@@ -160,7 +160,7 @@ Android→Functions 공개 입력 계약은 observation ID, 알림 패키지명,
 
 1. Android는 등록 package와 다목적 앱 admission을 통과한 알림의 raw DTO와 안정 observation ID를 만든다. 카카오톡 `MessagingStyle` 알림은 현재 메시지마다 독립 후보·observation을 만들고 과거 메시지는 수집하지 않으며, 일반 대화 후보는 raw DTO 생성 전에 제외한다.
 2. 후보별 30초 process-local 중복을 통과하면 raw DTO를 암호화 write-ahead journal에 먼저 기록하고 raw callable을 바로 호출한다. 정상 경로에서는 WorkManager를 예약하지 않으며 진단 원문 전송은 결제 경로와 경쟁하지 않도록 5초 뒤 best-effort로 시작한다.
-3. Functions는 매 호출의 Firebase Auth·App Check를 검증하고, Android 세션 교환에서 서버가 서명한 Native membership claim으로 householdId·creatorMemberId를 정한다. claim이 없는 전환 세션만 `PrincipalMembershipClaim` 단일 문서와 legacy 검증 경로를 사용한다.
+3. Functions는 매 호출의 Firebase Auth·App Check를 검증하고 UID의 권위 `PrincipalMembershipClaim` 한 문서로 현재 householdId·creatorMemberId를 정한다. Native token의 가구·멤버 claim은 발급 당시의 신원 힌트이며 현재 권위 결과와 다르면 수집을 거절한다. 메모리 Membership TTL이나 token claim만으로 권한을 승인하지 않는다. 전역 claim이 없는 전환 데이터만 기존 view·canonical 검증 경로를 사용한다.
 4. 서버 Source Registry의 package 전용 parser가 거래·잔액 후보를 만들고, Payment Configuration과 Ledger·Local Currency 공개 Port가 각 branch를 처리한다. `com.kakao.talk`은 `kakao-talk-financial-message`/`kakao-talk-financial-message-parser` 한 쌍으로만 선택되며, parser가 분류한 카드 결과와 도시가스 고지서 결과를 서로 다른 downstream 정책으로 보낸다.
 5. 일반 Android 승인 하나는 Ledger의 원자 멱등 receipt를 그대로 사용해 중복 root receipt를 만들지 않는다. 잔액을 함께 가진 복합 입력·취소는 root receipt와 하위 branch 고정 key로 중단 재시도를 복구한다.
 6. 새 거래 성공 응답은 `quickEditSnapshot`을 포함한다. Android는 expected SessionScope가 그대로인지 확인하고 이를 암호화 QuickEdit 표시 FIFO에 내구화한 뒤 capture journal entry를 ack/delete하고, 별도 거래 Query 없이 Activity를 연다.

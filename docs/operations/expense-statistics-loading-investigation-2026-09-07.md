@@ -81,4 +81,4 @@
 - [지출 조회 adapter](../../web/src/__tests__/features/reportingReadAdapters.test.ts): 실제 mapper를 사용하여 합성 1,743문서를 4회 조회하고 결과 행·총액 일치를 확인합니다.
 - [지출 화면](../../web/src/__tests__/features/statisticsPage.test.tsx), [범위 캐시](../../web/src/__tests__/features/expenseStatisticsCache.test.ts): 완료된 1년에서 3·6개월 전환 시 추가 원천 조회 0회, 첫 React commit의 정확한 기간 총액·중간 로딩 없음, 재진입과 세션 변경·수정 실패 초안 보존을 확인합니다.
 - [자산 조회 adapter](../../web/src/__tests__/features/portfolio/assetStatisticsReadModel.contract.test.ts): legacy 2,014문서를 5회로 읽고 canonical과 병렬 처리하며, 완료 전 발행 금지·재진입 재사용·무효화 후 불필요한 후속 페이지 중단을 확인합니다.
-- [브라우저 흐름](../../web/e2e/ledger-journey.spec.ts): Firebase Emulator의 실제 지출을 조회한 브라우저에서 3개월→6개월→1년→3개월을 선택하며 총액을 확인하고, DOM observer로 중간 `로딩중...` 표시가 0회임을 확인합니다. 이후 알림 경로를 통한 지출 수정·저장·삭제까지 이어집니다.
+- 당시 단일 `ledger-journey.spec.ts`에서 기간 변경·수정·삭제를 검증했습니다. 2026-09-11에 [독립 검색·통계 E2E](../../web/e2e/finance-search-statistics.spec.ts)와 [수정·삭제 E2E](../../web/e2e/finance-ledger.spec.ts)로 분리하고 기간마다 다른 합계를 검증하도록 보강했습니다. 운영 기기의 실제 밀리초 성능은 별도 계측 결과를 사용합니다.

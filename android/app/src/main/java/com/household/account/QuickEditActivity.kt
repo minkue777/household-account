@@ -103,8 +103,8 @@ class QuickEditActivity : AppCompatActivity() {
         originalVersion = intent.getIntExtra(EXTRA_VERSION, 1).coerceAtLeast(1)
         captureObservationId = intent.getStringExtra(EXTRA_CAPTURE_OBSERVATION_ID)
 
-        // 카테고리 키 정규화 (대문자 -> 소문자)
-        selectedCategoryKey = originalCategory.lowercase()
+        // 서버가 확정한 카테고리 ID는 대소문자를 포함해 그대로 보존합니다.
+        selectedCategoryKey = originalCategory
 
         initViews()
         setupUI()

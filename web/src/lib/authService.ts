@@ -259,7 +259,10 @@ export async function signInWithEmulatorTestSession(): Promise<AuthenticatedWebS
     throw new Error('Auth Emulator 테스트 로그인은 로컬 E2E 환경에서만 사용할 수 있습니다.');
   }
 
-  const email = process.env.NEXT_PUBLIC_E2E_TEST_EMAIL?.trim() ?? '';
+  // 이 분기는 demo 프로젝트·loopback·명시적 E2E 모드에서만 실행됩니다.
+  // 서로 다른 가구원도 같은 실제 Auth SDK 경로로 로그인해 공동 편집을 검증합니다.
+  const email = new URL(window.location.href).searchParams.get('e2eEmail')?.trim()
+    || process.env.NEXT_PUBLIC_E2E_TEST_EMAIL?.trim() || '';
   const password = process.env.NEXT_PUBLIC_E2E_TEST_PASSWORD ?? '';
   if (!email || !password) {
     throw new Error('E2E 테스트 계정 환경 변수가 설정되지 않았습니다.');

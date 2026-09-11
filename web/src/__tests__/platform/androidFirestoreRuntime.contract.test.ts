@@ -26,8 +26,12 @@ jest.mock('firebase/firestore', () => ({
 }));
 
 let mockAndroidHostAvailable = true;
+let mockIOSPWA = false;
 jest.mock('@/platform/android-host/androidHostBridge', () => ({
   isAndroidHostAvailable: () => mockAndroidHostAvailable,
+}));
+jest.mock('@/lib/utils/platform', () => ({
+  Platform: { isIOSPWA: () => mockIOSPWA },
 }));
 
 describe('Android Firestore runtime 계약', () => {
@@ -35,9 +39,10 @@ describe('Android Firestore runtime 계약', () => {
     jest.resetModules();
     jest.clearAllMocks();
     mockAndroidHostAvailable = true;
+    mockIOSPWA = false;
   });
 
-  it('[T-WEBVIEW-004][AND-012] 기본 realtime 전송을 유지하고 Android에만 single-tab persistent cache를 설정한다', async () => {
+  it('[T-WEBVIEW-004][AND-012] 기본 realtime 전송을 유지하고 Android는 memory cache를 사용한다', async () => {
     await import('@/lib/firebase');
 
     expect(mockMemoryLocalCache).toHaveBeenCalledTimes(1);
@@ -51,7 +56,22 @@ describe('Android Firestore runtime 계약', () => {
     expect(mockGetFirestore).not.toHaveBeenCalled();
   });
 
-  it('[AND-012] 브라우저와 iPhone PWA도 multiple-tab persistent cache를 사용한다', async () => {
+  it('[AND-012] iPhone PWA는 영속 cache를 유지하면서 응답 완료 지연을 피하는 long-polling을 사용한다', async () => {
+    mockAndroidHostAvailable = false;
+    mockIOSPWA = true;
+
+    await import('@/lib/firebase');
+
+    expect(mockMemoryLocalCache).not.toHaveBeenCalled();
+    expect(mockPersistentLocalCache).toHaveBeenCalledTimes(1);
+    expect(mockPersistentMultipleTabManager).toHaveBeenCalledTimes(1);
+    expect(mockInitializeFirestore).toHaveBeenCalledWith(mockApp, {
+      localCache: mockLocalCache,
+      experimentalForceLongPolling: true,
+    });
+  });
+
+  it('[AND-012] 일반 브라우저는 multiple-tab persistent cache를 유지한다', async () => {
     mockAndroidHostAvailable = false;
     const multipleTabManager = { kind: 'multiple-tab' };
     mockPersistentMultipleTabManager.mockReturnValue(multipleTabManager);

@@ -2,6 +2,7 @@ type CategoryKey = string;
 
 interface MinimalCategory {
   key: string;
+  isDefault?: boolean;
 }
 
 interface BuildExpenseUpdatesParams {
@@ -57,7 +58,7 @@ export function resolveDefaultCategoryKey(
   if (categories.length === 0) {
     return fallbackCategory;
   }
-  return categories[0].key;
+  return (categories.find(category => category.isDefault) ?? categories[0]).key;
 }
 
 export function buildExpenseUpdates({

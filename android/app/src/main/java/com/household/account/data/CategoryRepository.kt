@@ -141,9 +141,7 @@ class CategoryRepository {
      * key로 카테고리 찾기
      */
     fun findCategoryByKey(categories: List<CategoryData>, key: String): CategoryData? {
-        // key가 대문자인 경우 (예전 enum 형식) 소문자로 변환
-        val normalizedKey = key.lowercase()
-        return categories.find { it.key == normalizedKey || it.key == key }
+        return categories.find { it.key == key }
     }
 
     /**

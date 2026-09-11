@@ -25,6 +25,11 @@ val webAppUrl = providers.gradleProperty("WEB_APP_URL")
     .getOrElse("https://household-account-app-demo-v1.vercel.app/")
 require(webEnvironmentVersion.matches(Regex("[A-Za-z0-9._-]{1,64}")))
 val webAppUri = URI(webAppUrl)
+val firebaseEmulatorE2e = providers.gradleProperty("firebaseE2e")
+    .map(String::toBoolean).getOrElse(false)
+val firebaseWebEmulatorE2e = providers.gradleProperty("firebaseWebE2e")
+    .map(String::toBoolean).getOrElse(false)
+require(!firebaseWebEmulatorE2e || firebaseEmulatorE2e) { "Firebase Web E2E requires the isolated Firebase E2E runner" }
 require(webAppUri.scheme == "https" && !webAppUri.host.isNullOrBlank() &&
     webAppUri.userInfo == null && webAppUri.fragment == null && webAppUri.query == null) {
     "WEB_APP_URL must be an HTTPS deployment URL without credentials, query or fragment"
@@ -45,7 +50,26 @@ android {
         buildConfigField("String", "WEB_ENVIRONMENT_VERSION", "\"$webEnvironmentVersion\"")
         buildConfigField("String", "WEB_APP_URL", "\"$webAppUrl\"")
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = if (firebaseEmulatorE2e) {
+            "com.household.account.e2e.FirebaseEmulatorTestRunner"
+        } else {
+            "androidx.test.runner.AndroidJUnitRunner"
+        }
+        // 기본 기기 검증과 서버까지 연결하는 E2E를 서로 독립적인 실행 대상으로 둡니다.
+        testInstrumentationRunnerArguments[
+            if (firebaseEmulatorE2e) "annotation" else "notAnnotation"
+        ] = "com.household.account.e2e.FirebaseEmulatorE2E"
+    }
+    if (firebaseEmulatorE2e) {
+        sourceSets.getByName("debug") {
+            manifest.srcFile("src/firebaseE2e/AndroidManifest.xml")
+            if (firebaseWebEmulatorE2e) {
+                res.srcDir("src/firebaseWebE2e/res")
+                res.srcDir(layout.buildDirectory.dir("generated/e2eTrust/res"))
+            } else {
+                res.srcDir("src/firebaseE2e/res")
+            }
+        }
     }
     buildFeatures {
         buildConfig = true

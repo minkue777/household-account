@@ -6,130 +6,53 @@
 
 ## 1. 설계 목적과 추적성
 
-`REL-001~004`를 실행 가능한 release gate와 배포 기록으로 내립니다. 이 모듈은 업무 테스트를 재정의하지 않고 각 소유 suite의 결과를 조합합니다.
+`REL-001~004`를 배포 검증, 독립 CI 결과, 장기 배포 기록으로 구분합니다. [DEC-074](../../../governance/decisions.md#dec-074)에 따라 전체 CI 완료는 배포의 선행 조건이 아닙니다. 테스트 결과를 성공으로 바꾸는 waiver나 override 계층은 두지 않습니다.
 
 ## 2. 모듈 경계와 책임
 
-- Release candidate의 모든 입력은 immutable manifest로 고정합니다.
-- 환경 선택, gate 실행, compatibility plan, deployment/smoke 기록을 조정합니다.
-- 실제 Firebase deploy와 각 test runner는 Output Adapter입니다.
-- 업무 실패의 의미는 소유 모듈 test가 결정하며 이 모듈은 통과/실패를 바꾸지 않습니다.
+- 배포 wrapper는 immutable manifest의 HEAD·artifact·대상·호환성·actor·Secret·Monitoring을 검증합니다.
+- production build와 배포 후 실제 인증·가구 Query smoke가 배포 경로에 포함됩니다.
+- 전체 unit·contract·Rules·E2E·Android 검증은 `quality-gates.yml`에서 별도로 실행됩니다.
+- CI 결과는 commit별 GitHub run/check/summary로 남기며 배포 기록을 성공 또는 실패로 덮어쓰지 않습니다.
 
 ## 3. 공개 계약
 
-```ts
-type Environment = 'development' | 'test' | 'production';
+| 실행 계약 | 호출자 | 결과 |
+|---|---|---|
+| `verifyCandidate(manifest, projectId, dependencies)` | 배포 wrapper·predeploy guard | 배포 authorization hash와 `ci.status=not-evaluated`, 또는 대상·hash·호환성 오류 |
+| `qualitySummary(needs, commitSha, runUrl)` | CI 최종 요약 CLI | 다섯 job 결과와 commit·실행 링크·전체 CI conclusion |
+| `ResolveDeploymentTarget(candidate)` | 배포 wrapper | resolved target 또는 `TARGET_MISMATCH` |
+| `VerifyCompatibilityWindow(manifest)` | 배포 wrapper | compatible 또는 `INCOMPATIBLE_ORDER` |
+| `RecordDeploymentResult(releaseId, result)` | 배포 후 runner | recorded·replayed 또는 target/artifact mismatch |
 
-type RequiredReleaseGate =
-  | 'web-build'
-  | 'functions-build'
-  | 'android-build'
-  | 'active-unit-tests'
-  | 'active-contract-tests'
-  | 'firestore-rules-emulator'
-  | 'requirement-id-trace'
-  | 'relative-link-check'
-  | 'architecture-fitness';
-
-interface TestRunSummary {
-  active: number;
-  passed: number;
-  failed: number;
-  skipped: number;
-  knownFailures: number;
-}
-
-interface GateEvidence {
-  gate: RequiredReleaseGate;
-  status: 'passed' | 'failed' | 'missing' | 'skipped' | 'known-failure';
-  testRun?: TestRunSummary;
-}
-
-interface CompatibilityPlan {
-  change: string;
-  window: {
-    oldContractVersion: string;
-    newContractVersion: string;
-    startsAt: string;
-    endsAt: string;
-    minimumSupportedClients: Readonly<Record<string, string>>;
-  };
-  steps: ReadonlyArray<{
-    phase: 'expand' | 'migrate' | 'contract';
-    capabilities: ReadonlyArray<string>;
-    rollbackCheckpoint?: string;
-  }>;
-}
-
-interface ReleaseCandidateManifest {
-  releaseId: string;
-  commitSha: string;
-  environment: Environment;
-  firebaseProjectId: string;
-  artifacts: ReadonlyArray<{ name: string; sha256: string }>;
-  contractVersion: string;
-  rulesHash: string;
-  indexesHash: string;
-  compatibilityPlans?: ReadonlyArray<CompatibilityPlan>;
-  waivers?: ReadonlyArray<{ gate: RequiredReleaseGate; scope: string; reason: string; approver: string; expiresAt: string }>;
-}
-
-type ReleaseEvaluation =
-  | { kind: 'approved'; gateResults: ReadonlyArray<GateEvidence>; deployAuthorization: { releaseId: string; manifestHash: string } }
-  | { kind: 'rejected'; gateResults: ReadonlyArray<GateEvidence>; failed: ReadonlyArray<{ gate: RequiredReleaseGate; code: 'GATE_FAILED' | 'GATE_MISSING' }>; waivers: ReadonlyArray<{ gate: RequiredReleaseGate; scope: string; reason: string; approver: string; expiresAt: string }> };
-
-interface DeploymentTargetCandidate {
-  environment: Environment;
-  explicitProjectId?: string;
-  bindings: ReadonlyArray<{
-    resource: 'firebase-api' | 'rules' | 'indexes' | 'secret' | 'monitoring-channel';
-    target: { kind: 'cloud-project'; projectId: string } | { kind: 'emulator'; authority: string };
-  }>;
-}
-
-interface CompatibilityManifest {
-  releaseId: string;
-  sharedContractChanges: ReadonlyArray<string>;
-  compatibilityPlans: ReadonlyArray<CompatibilityPlan>;
-}
-```
-
-| Input Port | 호출자 | 결과 | 권한·멱등성 |
-|---|---|---|---|
-| `EvaluateReleaseCandidate` | CI | `ReleaseEvaluation` | source commit에 대한 read-only 평가, 같은 manifest hash 재생 |
-| `ResolveDeploymentTarget` | CI·승인된 배포 작업 | resolved target 또는 `TARGET_MISMATCH` | explicit project와 URL·Rules·index·Secret·Monitoring binding 전체를 함께 검증 |
-| `VerifyCompatibilityWindow` | CI | compatible 또는 `INCOMPATIBLE_ORDER` | 각 `sharedContractChange`에 정확히 하나의 plan을 연결하고 expand→migrate→contract 순서·rollback checkpoint 검증 |
-| `RecordDeploymentResult` | post-deploy runner | recorded·replayed 또는 target/artifact mismatch | 승인된 manifest·artifact hash만 허용, `releaseId+projectId` 멱등 |
+전체 CI 증거를 `deployAuthorization`으로 바꾸던 `ReleaseCandidateEvaluationApplication`은 제거합니다. 정상 배포 검증은 wrapper에서 실제 사용하며 CI 요약은 workflow가 실행합니다.
 
 ## 4. 플랫폼 모델과 불변식
 
-- `ReleaseCandidate`는 평가가 시작된 뒤 수정할 수 없습니다.
-- required gate 하나라도 missing/failed이면 `approved`가 아닙니다.
-- `active-unit-tests`와 `active-contract-tests`의 `TestRunSummary`는 `active=passed`, `failed=skipped=knownFailures=0`일 때만 passed입니다. 아직 활성화하지 않은 Ready suite는 별도 진척 정보이며 active gate 집계에 섞지 않습니다.
-- production target은 명시적 project ID와 environment binding이 모두 일치해야 합니다.
-- compatibility 변화마다 하나의 `CompatibilityPlan`이 존재하고 `expand`, `migrate`, `contract` 단계와 rollback 가능한 checkpoint를 가집니다. plan이 없거나 한 plan을 서로 다른 변화에 암묵적으로 공유하지 않습니다.
-- [DEC-064](../../../governance/decisions.md#dec-064)에 따라 gate waiver는 정상 pass가 아니며 scope·reason·approver·expiresAt을 별도 기록할 뿐 deploy authorization을 만들지 않습니다. 실패 후보를 승인으로 바꾸는 override Input Port나 capability는 존재하지 않습니다.
-- Secret 값은 manifest에 넣지 않고 version/resource reference만 둡니다.
+- manifest는 releaseId·commit·세 Functions codebase artifact·lock·contract·Rules·index hash를 고정합니다.
+- `ci = {policy: 'independent', workflow: 'quality-gates.yml', commitSha, status: 'not-evaluated'}`는 배포 승인 시점에 CI를 평가하지 않았다는 뜻입니다. pending·pass·fail 추정이나 가짜 run ID를 담지 않습니다.
+- CI summary는 `functions`, `web`, `web-e2e`, `android`, `android-instrumentation`이 모두 success일 때만 success입니다. failure·cancelled·skipped·missing은 실패 exit code와 annotation으로 남깁니다.
+- instrumentation 범위 확인이 성공하고 대상이 없으면 job 성공은 정상입니다. 해당되는 emulator 테스트를 skip하여 성공 처리하지 않습니다.
+- production target은 명시적 project ID와 모든 resource binding이 일치해야 합니다. 각 공유 계약 변화는 하나의 compatibility plan과 expand→migrate→contract 순서, rollback checkpoint를 가집니다.
+- Secret 원문은 manifest나 로그가 아닌 version/resource reference로만 취급합니다.
 
 ## 5. Application Use Case 상세
 
-### 5.1 EvaluateReleaseCandidate
+### 5.1 배포 후보 검증과 독립 CI
 
-1. manifest schema와 artifact hash를 검증합니다.
-2. 환경 binding과 Secret/Monitoring/index/Rules reference의 존재를 확인합니다.
-3. build → unit → contract → Rules Emulator → architecture/docs 순으로 독립 gate를 실행합니다.
-4. 공유 계약 변화가 있으면 compatibility plan과 최소 지원 version을 검사합니다.
-5. 모든 결과와 waiver 감사 annotation을 분리해 저장하고 하나라도 실패하면 deploy capability를 발급하지 않습니다. waiver가 있어도 같은 rejected 결과이며, 수정 후 필수 gate 전체를 다시 평가해야 합니다.
+1. 배포 wrapper는 깨끗한 HEAD를 확인하고 production build·세 codebase 준비를 실행합니다. build lifecycle의 architecture 검사는 유지합니다.
+2. 현재 파일의 hash와 manifest를 비교하고 명시적 production project·대상 resource·호환 계획을 검증합니다.
+3. 실제 GitHub actor·Secret version metadata·Monitoring channel을 확인합니다. 전체 테스트 실행, GitHub CI 대기, CI 보고서 다운로드는 하지 않습니다.
+4. main push와 PR은 CI를 시작합니다. main commit별 concurrency group을 사용하여 후속 push가 이전 commit 검증을 취소하지 않습니다.
+5. `quality-summary`는 모든 job 종료 후 `needs`의 실제 결과를 요약합니다. 실패하면 GitHub check와 annotation을 남기며 기본 알림은 사용자 Actions 알림 설정을 따릅니다. repository가 별도 email·Slack을 보내지 않습니다.
 
 ### 5.2 배포 실행과 `RecordDeploymentResult`
 
-1. 승인된 manifest hash와 호출자의 운영 capability를 검증합니다.
-2. 명시적 `firebaseProjectId`를 deploy adapter에 전달합니다.
-3. expand/migrate/contract 중 현재 phase에 허용된 artifact만 배포합니다.
-4. post-deploy smoke와 Monitoring channel test를 실행합니다.
-5. 결과를 `RecordDeploymentResult`로 기록합니다. 실패 시 단계별 rollback 또는 forward-fix checkpoint를 함께 보존하며 성공으로 바꾸지 않습니다.
-
-배포 명령 자체는 승인 capability를 소비하는 운영 Adapter workflow이고 별도의 동의어 공개 계약으로 노출하지 않습니다. 공개 조회·기록 계약 이름은 상위 요구사항의 `EvaluateReleaseCandidate`, `ResolveDeploymentTarget`, `VerifyCompatibilityWindow`, `RecordDeploymentResult`로 통일합니다.
+1. manifest hash와 actor를 승인 기록에 저장합니다. CI 참조와 호환 계획은 별도로 보존합니다.
+2. project의 deployment lease를 획득한 실행만 명시적 project에 Firebase CLI를 실행합니다.
+3. 각 Functions predeploy는 build 후 guard를 실행합니다. guard는 전체 테스트나 build를 중복 실행하지 않고 현재 hash·actor·lease 소유자를 다시 확인합니다. Rules·Storage도 guard를 사용합니다.
+4. 배포 후 authenticated 사용자 해석·가구 Query를 호출하고 반환된 releaseId·commit·artifact marker를 검사합니다.
+5. smoke·실패·rollback 근거를 기록합니다. 실제 배포와 smoke가 성공한 경우에만 lease를 해제합니다. CI 결과는 배포 기록을 변경하거나 자동 rollback을 시작하지 않습니다.
 
 ### 5.3 호환 전환 예
 
@@ -138,75 +61,53 @@ interface CompatibilityManifest {
 
 ## 6. Port 설계
 
-| Port | 책임 |
+| 실제 경계 | 책임 |
 |---|---|
-| `GateRunnerPort` | 이름·명령·결과·artifact를 구조화해 실행 |
-| `ProjectBindingPort` | environment와 허용 Firebase project 검증 |
-| `SecretReferencePort` | Secret 존재·version만 확인하고 원문 비노출 |
-| `CompatibilityCheckerPort` | schema/Rules/client 지원 범위 검사 |
-| `DeploymentPort` | 명시적 project에 immutable artifact 배포 |
-| `SmokeTestPort` | 인증·query·Rules·notification/alert 최소 흐름 검증 |
-| `ReleaseRecordRepository` | manifest, gate, deployment, waiver append |
+| `DeploymentTargetCompatibilityInputPort` | project binding·공유 계약 호환 순서 검사 |
+| `ApprovedReleaseQueryPort` | immutable 배포 승인 조회 |
+| `DeploymentRecordRepositoryPort` | provenance의 기록·멱등성·충돌 |
+| Firebase CLI·ADC·GitHub actor 조회 | 실제 배포·외부 resource·운영자 확인 |
+| CI `needs`·step summary | 실제 다섯 job 결과를 공급하고 확인 가능한 보고서 기록 |
 
 ## 7. 저장·트랜잭션·동시성
 
-- `releaseId`와 manifest hash가 다르면 `Conflict(RELEASE_ID_REUSED)`입니다.
-- 같은 artifact를 같은 project에 중복 배포하면 저장된 결과를 재생합니다.
-- 배포 lease로 같은 project의 겹치는 production 배포를 막습니다.
-- gate와 deploy record는 append-only이며 오류 원문 대신 redacted code·artifact link를 저장합니다.
+`approvedReleases/{releaseId}`는 승인 manifest/hash와 독립 CI 참조를 보존합니다. 같은 releaseId에 다른 후보는 충돌입니다. `deploymentProvenance/{releaseId}`는 실제 배포·smoke 결과를 append-only로 보존합니다.
+
+`deploymentLeases/{projectId}`는 한 운영 배포만 허용합니다. 성공한 smoke와 provenance 기록 뒤 해제하며 실패·중단된 실행은 잠금을 유지합니다. 자동 만료로 Cloud 작업이 겹치게 하지 않고 운영자가 기존 작업 종료를 확인한 후 복구합니다.
 
 ## 8. Event·외부 연동
 
-- CI, Firebase CLI/Admin, Emulator, artifact registry, Cloud Monitoring은 모두 Adapter입니다.
-- `ReleaseApproved`, `DeploymentStarted`, `DeploymentCompleted`, `DeploymentFailed`는 운영 Event이며 업무 Outbox Event와 저장소를 섞지 않습니다.
-- Monitoring 이메일 주소는 소스가 아니라 환경별 notification channel resource reference로 주입합니다.
+CI, Firebase CLI/Admin, Emulator, GitHub, Cloud Monitoring은 외부 경계입니다. 운영 결과를 업무 Outbox와 섞지 않습니다. CI 네이티브 알림 수신 여부는 사용자 계정 설정을 따르며 저장소 코드가 수신을 보장하지 않습니다. Monitoring channel reference는 환경별 manifest 입력입니다.
 
 ## 9. 오류·보안·관측성
 
-- 오류: `GATE_FAILED`, `GATE_MISSING`, `TARGET_MISMATCH`, `INCOMPATIBLE_ORDER`, `ARTIFACT_MISMATCH`, `SMOKE_FAILED`.
-- log에는 Secret, Firebase credential, 가구 ID, 금융 fixture 원문을 포함하지 않습니다.
-- releaseId, commit, project alias, gate duration, failure code, rollback result를 관측합니다.
+- 배포 오류: `CLEAN_EXACT_HEAD_REQUIRED`, `TARGET_MISMATCH`, `INCOMPATIBLE_ORDER`, `ARTIFACT_MISMATCH`, `SMOKE_FAILED` 등.
+- CI 결과: success 또는 failure와 다섯 job 각각의 원래 status. 누락이나 취소를 success로 바꾸지 않습니다.
+- 로그에는 Secret, Firebase credential, 가구 ID, 금융 데이터 원문을 넣지 않습니다.
+- releaseId·commit·artifact와 CI run URL을 연결하여 배포와 검증의 상태를 따로 설명합니다.
 
-## 10. 목표 패키지 구조
+## 10. 실행 패키지 구조
 
-```text
-tools/release/
-  application/
-  domain/
-  adapters/
-contracts/compatibility/
-.github/workflows/
-firebase/
-  environments/
-  indexes/
-  rules/
-```
-
-특정 CI 공급자에 Domain 판단을 넣지 않고 작은 검증 CLI와 manifest schema를 workflow가 호출합니다.
+- [실제 배포 wrapper](../../../../../functions/scripts/deploy-firebase.mjs)
+- [독립 CI 요약 CLI](../../../../../tools/ci/quality-summary.mjs)
+- [품질 workflow](../../../../../.github/workflows/quality-gates.yml)
+- [Firebase provenance adapter](../../../../../functions/src/adapters/firebase/operations/firebaseDeploymentProvenance.ts)
 
 ## 11. 테스트 설계
 
-| 요구사항 ID | 수준 | 테스트 대상 | 핵심 fixture | 관찰 결과 | Canonical 테스트 ID |
-|---|---|---|---|---|---|
-| REL-001 | U, C, I | gate aggregator | pass, failed, missing, skipped, known failure, waiver | 하나라도 비통과면 waiver와 무관하게 deploy 0회 | T-REL-001 |
-| REL-002 | U, C | project/config resolver | implicit default, mixed URL, missing index/channel | production target 거부 | T-REL-002 |
-| REL-003 | U, C | compatibility checker | Auth/Rules, FID client/server 순서 | unsafe partial deploy 거부 | T-REL-003 |
-| REL-004 | C, I | provenance·smoke | hash mismatch, Secret leak, smoke failure | 추적·redaction·실패 보존 | T-REL-004 |
+| 요구사항 ID | 수준 | 실제 테스트 대상 | 관찰 결과 | Canonical 테스트 ID |
+|---|---|---|---|---|
+| REL-001 | U, I | wrapper 후보 검사·별도 CI CLI subprocess | CI 증거 없이 배포 후보 검증, CI 실패 exit code·실제 summary 파일 | T-REL-001 |
+| REL-002 | U, C | project/config resolver | implicit default·mixed URL·binding 누락 거부 | T-REL-002 |
+| REL-003 | U, C | compatibility checker | Auth/Rules·FID client/server 순서 위반 거부 | T-REL-003 |
+| REL-004 | C, I | provenance·smoke·실제 파일 hash | 추적·redaction·실패 보존·artifact 변조 탐지 | T-REL-004 |
+
+CI job 실행과 실제 운영 Firebase 배포는 서로 다른 외부 실행입니다. fake gh/npm 결과로 운영 배포 E2E 통과를 주장하지 않습니다.
 
 ## 12. 확정 정책과 구현 순서
 
-현재 운영 Adapter는 `functions/scripts/deploy-firebase.mjs`입니다. [운영 실행 절차](../../../../operations/firebase-release-runbook.md)와 [manifest 예시](../../../../operations/firebase-release-manifest.example.json)에 CLI 입력을 정의합니다. CI의 정확한 HEAD·필수 job 및 실제 보고서를 집계하고, 세 Functions codebase의 build 산출물·lock·계약·Rules·index hash를 승인합니다. Firebase predeploy는 build 이후 guard를 실행하며 같은 후보와 잠금 소유자를 다시 검증합니다.
+[운영 실행 절차](../../../../operations/firebase-release-runbook.md)와 [manifest 예시](../../../../operations/firebase-release-manifest.example.json)를 따릅니다. [DEC-074](../../../governance/decisions.md#dec-074)가 DEC-064의 전체 CI 선행 배포 차단을 대체합니다. 실패 결과를 성공으로 위장하지 않는 원칙은 유지합니다.
 
-`deploymentLeases/{projectId}`는 한 운영 배포만 허용합니다. 성공한 smoke와 provenance 기록 뒤에 해제하고, 실패·중단된 배포는 잠금을 보존합니다. 자동 만료로 진행 중인 Cloud 작업과 재배포가 겹치지 않게 하며 운영자가 기존 작업 종료를 확인한 후 복구합니다. 승인과 provenance 저장소에는 자동 TTL을 두지 않습니다.
+인증된 Query 성공 응답의 선택적 `deployment` metadata는 releaseId·commitSha·artifactSha256를 담습니다. 이 marker JSON 자체만 artifact hash에서 제외하여 자기 참조를 피하고 실행 코드는 hash에 포함합니다. smoke는 인증·가구 Query를 확인하며 Native App Check·수집·bridge 전체 경로는 독립 CI/Emulator/E2E와 외부 설정 확인이 담당합니다.
 
-인증된 `household-query.v1` 성공 응답은 선택적인 `deployment` metadata(`releaseId`, `commitSha`, `artifactSha256`)를 포함할 수 있습니다. wrapper는 이 metadata를 승인 후보와 비교합니다. metadata를 담은 생성 JSON 자체만 artifact hash에서 제외하여 자기 참조를 피하고, 이를 읽는 실행 코드와 나머지 산출물은 hash에 포함합니다. 이 smoke의 현재 범위는 인증·가구 Query이며 Native App Check·수집·bridge의 전체 경로는 CI/Emulator/E2E와 외부 설정 검증이 담당합니다.
-
-[DEC-046](../../../governance/decisions.md#dec-046)에 따라 release manifest와 artifact·contract·Rules·index hash, 배포 대상·smoke·rollback provenance는 자동 TTL 없이 장기 보존합니다. Secret 원문은 보존 대상에 포함하지 않습니다. [DEC-050](../../../governance/decisions.md#dec-050)에 따라 Cloud binding은 `household-account-6f300` 하나만 허용하고 자동 검증은 Emulator를 사용합니다. `ProjectBindingPort`는 단일 project라도 누락·불일치·암묵적 default를 거부합니다. [DEC-064](../../../governance/decisions.md#dec-064)에 따라 waiver는 감사 기록으로만 보존하고 필수 gate 실패를 승인으로 바꾸는 긴급 override 경로는 구현하지 않습니다.
-
-구현 순서:
-
-1. 현재 실행 명령과 실패 Web suite를 release manifest 밖에서 먼저 정리합니다.
-2. 문서 ID/link, build, unit/contract gate를 read-only CI로 연결합니다.
-3. Rules Emulator와 architecture boundary test를 추가합니다.
-4. Firebase Emulator에서 Rules·index·contract와 smoke fixture를 검증합니다.
-5. Auth/Rules와 FID 호환 계획을 통과하고 `household-account-6f300`을 명시한 후보에만 production deploy를 엽니다.
+[DEC-046](../../../governance/decisions.md#dec-046)에 따라 manifest와 provenance는 자동 TTL 없이 보존하며 Secret 원문은 제외합니다. [DEC-050](../../../governance/decisions.md#dec-050)에 따라 Cloud binding은 `household-account-6f300`만 허용하고 자동 업무 검증은 Emulator에서 수행합니다.

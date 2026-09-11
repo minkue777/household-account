@@ -12,6 +12,7 @@ import type {
   CaptureSubmissionReceiptPort,
 } from "../../../contexts/payment-capture/android-payment-ingestion/application/ports/out/captureSubmissionReceiptPort";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
+import { verifiedRawCaptureFingerprint } from "../../crypto/payment-capture/verifiedRawCaptureFingerprint";
 
 function hash(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -88,6 +89,10 @@ export class Sha256CapturePayloadFingerprint
   implements CapturePayloadFingerprintPort
 {
   fingerprint(envelope: CaptureBranchEnvelope): string {
+    if (envelope.verifiedRawInput !== undefined) return verifiedRawCaptureFingerprint({
+      householdId: envelope.householdId, idempotencyKey: envelope.rootIdempotencyKey,
+      ...envelope.verifiedRawInput,
+    });
     return `sha256:${hash(JSON.stringify(canonicalEnvelope(envelope)))}`;
   }
 }
@@ -211,7 +216,9 @@ export class FirebaseCaptureSubmissionReceiptStore
     const snapshot = await reference.get();
     if (!snapshot.exists) throw new Error("CAPTURE_RECEIPT_CONCURRENTLY_REMOVED");
     const existing = fromData(snapshot.data() ?? {});
-    return existing.payloadFingerprint === input.payloadFingerprint
+    const legacyFingerprint = `sha256:${hash(JSON.stringify(canonicalEnvelope(input.envelope)))}`;
+    return existing.payloadFingerprint === input.payloadFingerprint ||
+      (input.envelope.verifiedRawInput !== undefined && existing.payloadFingerprint === legacyFingerprint)
       ? ({ kind: "existing", receipt: existing } as const)
       : ({
           kind: "conflict",

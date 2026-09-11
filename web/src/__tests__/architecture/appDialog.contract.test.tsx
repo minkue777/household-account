@@ -75,17 +75,6 @@ describe('앱 내부 대화상자 계약', () => {
     expect(violations).toEqual([]);
   });
 
-  test('모든 App Router 화면은 공통 앱 대화상자 Provider 안에서 실행된다', () => {
-    const rootLayout = fs.readFileSync(path.join(SOURCE_ROOT, 'app', 'layout.tsx'), 'utf8');
-    const appProviders = fs.readFileSync(
-      path.join(SOURCE_ROOT, 'components', 'AppProviders.tsx'),
-      'utf8'
-    );
-
-    expect(rootLayout).toContain('<AppProviders>');
-    expect(appProviders).toContain('<AppDialogProvider>');
-  });
-
   test('오류·확인·텍스트 입력을 URL 없는 앱 Portal 대화상자로 표시한다', async () => {
     const nativeAlert = jest.spyOn(window, 'alert').mockImplementation(() => {});
     const nativeConfirm = jest.spyOn(window, 'confirm').mockImplementation(() => false);

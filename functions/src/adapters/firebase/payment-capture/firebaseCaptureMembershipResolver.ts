@@ -1,6 +1,5 @@
 import type * as firestore from "firebase-admin/firestore";
 
-import { BoundedTtlCache } from "../../memory/boundedTtlCache";
 import { principalClaimId } from "../access/firebasePrincipalMembershipClaim";
 
 export type CaptureMembershipResolution =
@@ -23,9 +22,6 @@ export interface CaptureMembershipResolver {
   ): Promise<CaptureMembershipResolution>;
 }
 
-export const CAPTURE_MEMBERSHIP_CACHE_TTL_MILLIS = 5 * 60 * 1_000;
-export const CAPTURE_MEMBERSHIP_CACHE_MAX_ENTRIES = 64;
-
 function active(data: FirebaseFirestore.DocumentData | undefined): boolean {
   return (
     data !== undefined &&
@@ -37,36 +33,20 @@ function active(data: FirebaseFirestore.DocumentData | undefined): boolean {
   );
 }
 
-function tokenMembership(
-  principalUid: string | undefined,
+function matchesNativeMembershipHint(
   authToken: Readonly<Record<string, unknown>> | undefined,
-): Extract<CaptureMembershipResolution, { readonly kind: "active" }> | undefined {
-  const normalizedUid = principalUid?.trim();
-  if (
-    normalizedUid === undefined ||
-    normalizedUid === "" ||
-    authToken?.hcaClient !== "native" ||
-    authToken.hcaCaptureMembershipVersion !== 1 ||
-    authToken.hcaCaptureMember !== true
-  ) {
-    return undefined;
-  }
-  const householdId =
-    typeof authToken.hcaCaptureHouseholdId === "string"
-      ? authToken.hcaCaptureHouseholdId.trim()
-      : "";
-  const memberId =
-    typeof authToken.hcaCaptureMemberId === "string"
-      ? authToken.hcaCaptureMemberId.trim()
-      : "";
-  return householdId === "" || memberId === ""
-    ? undefined
-    : {
-        kind: "active",
-        principalUid: normalizedUid,
-        householdId,
-        memberId,
-      };
+  householdId: string,
+  memberId: string,
+): boolean {
+  if (authToken?.hcaClient !== "native") return true;
+  const householdHint = authToken.hcaCaptureHouseholdId;
+  const memberHint = authToken.hcaCaptureMemberId;
+  // 발급 당시의 신원 힌트는 현재 권한을 승인하지 않습니다. 다른 가구나 멤버로
+  // 바뀐 세션의 오래된 알림을 새 scope로 재해석하지 않는 데만 사용합니다.
+  return (
+    (householdHint === undefined || (typeof householdHint === "string" && householdHint.trim() === householdId)) &&
+    (memberHint === undefined || (typeof memberHint === "string" && memberHint.trim() === memberId))
+  );
 }
 
 export class FirebaseCaptureMembershipResolver
@@ -78,9 +58,8 @@ export class FirebaseCaptureMembershipResolver
     principalUid: string | undefined,
     authToken?: Readonly<Record<string, unknown>>,
   ): Promise<CaptureMembershipResolution> {
-    const token = tokenMembership(principalUid, authToken);
-    if (token !== undefined) return token;
-    if (principalUid === undefined || principalUid.trim() === "") {
+    principalUid = principalUid?.trim();
+    if (principalUid === undefined || principalUid === "") {
       return { kind: "unauthenticated", code: "AUTH_REQUIRED" };
     }
 
@@ -100,7 +79,8 @@ export class FirebaseCaptureMembershipResolver
         claim?.householdLifecycleState !== "deleted" &&
         claim?.principalUid === principalUid &&
         householdId !== "" &&
-        memberId !== ""
+        memberId !== "" &&
+        matchesNativeMembershipHint(authToken, householdId, memberId)
       ) {
         return { kind: "active", principalUid, householdId, memberId };
       }
@@ -131,7 +111,7 @@ export class FirebaseCaptureMembershipResolver
     const householdId =
       typeof view.householdId === "string" ? view.householdId : views.docs[0].id;
     const memberId = typeof view.memberId === "string" ? view.memberId : "";
-    if (householdId.trim() === "" || memberId.trim() === "") {
+    if (householdId.trim() === "" || memberId.trim() === "" || !matchesNativeMembershipHint(authToken, householdId, memberId)) {
       return {
         kind: "forbidden",
         code: "ACTIVE_HOUSEHOLD_MEMBERSHIP_REQUIRED",
@@ -164,49 +144,5 @@ export class FirebaseCaptureMembershipResolver
     }
 
     return { kind: "active", principalUid, householdId, memberId };
-  }
-}
-
-export class CachedCaptureMembershipResolver
-  implements CaptureMembershipResolver
-{
-  private readonly cache: BoundedTtlCache<
-    string,
-    Extract<CaptureMembershipResolution, { readonly kind: "active" }>
-  >;
-
-  constructor(
-    private readonly delegate: CaptureMembershipResolver,
-    options: {
-      readonly ttlMillis?: number;
-      readonly maxEntries?: number;
-      readonly now?: () => number;
-    } = {},
-  ) {
-    this.cache = new BoundedTtlCache({
-      ttlMillis: options.ttlMillis ?? CAPTURE_MEMBERSHIP_CACHE_TTL_MILLIS,
-      maxEntries:
-        options.maxEntries ?? CAPTURE_MEMBERSHIP_CACHE_MAX_ENTRIES,
-      ...(options.now === undefined ? {} : { now: options.now }),
-    });
-  }
-
-  async resolve(
-    principalUid: string | undefined,
-    authToken?: Readonly<Record<string, unknown>>,
-  ): Promise<CaptureMembershipResolution> {
-    const token = tokenMembership(principalUid, authToken);
-    if (token !== undefined) return token;
-    const normalizedUid = principalUid?.trim();
-    if (normalizedUid === undefined || normalizedUid === "") {
-      return this.delegate.resolve(principalUid, authToken);
-    }
-
-    const cached = this.cache.get(normalizedUid);
-    if (cached !== undefined) return cached;
-
-    const resolved = await this.delegate.resolve(normalizedUid, authToken);
-    if (resolved.kind === "active") this.cache.set(normalizedUid, resolved);
-    return resolved;
   }
 }

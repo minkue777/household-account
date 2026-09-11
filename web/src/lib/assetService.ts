@@ -2003,41 +2003,35 @@ export async function getDividendSnapshot(year: number): Promise<DividendSnapsho
   const householdId = getHouseholdId();
   const docId = `${householdId}_${year}`;
 
-  try {
-    const docSnap = await getDoc(doc(db, DIVIDEND_COLLECTION, docId));
-    if (docSnap.exists()) {
-      return normalizeDividendSnapshotData(docSnap.data());
-    }
-  } catch (error) {
-    console.error('배당금 스냅샷 조회 오류:', error);
-  }
-  return null;
+  // 없는 flat 문서의 get은 householdId를 확인할 수 없어 Rules가 거절합니다.
+  // 가구 조건을 가진 조회는 실제 0건과 접근/통신 실패를 구분합니다.
+  const snapshot = await getDocs(query(
+    collection(db, DIVIDEND_COLLECTION),
+    where('householdId', '==', householdId)
+  ));
+  const yearlySnapshot = snapshot.docs.find(document => document.id === docId);
+  return yearlySnapshot ? normalizeDividendSnapshotData(yearlySnapshot.data()) : null;
 }
 
 export async function getDividendEventsByYear(year: number): Promise<DividendEventRecord[]> {
   const householdId = getHouseholdId();
 
-  try {
-    const q = query(
-      collection(db, DIVIDEND_EVENTS_COLLECTION),
-      where('householdId', '==', householdId)
-    );
-    const snapshot = await getDocs(q);
+  const q = query(
+    collection(db, DIVIDEND_EVENTS_COLLECTION),
+    where('householdId', '==', householdId)
+  );
+  const snapshot = await getDocs(q);
 
-    return snapshot.docs
-      .map(mapDocToDividendEvent)
-      .filter((event) => event.paymentYear === year)
-      .sort((left, right) => {
-        if (left.paymentDate !== right.paymentDate) {
-          return right.paymentDate.localeCompare(left.paymentDate);
-        }
+  return snapshot.docs
+    .map(mapDocToDividendEvent)
+    .filter((event) => event.paymentYear === year)
+    .sort((left, right) => {
+      if (left.paymentDate !== right.paymentDate) {
+        return right.paymentDate.localeCompare(left.paymentDate);
+      }
 
-        return left.stockName.localeCompare(right.stockName, 'ko');
-      });
-  } catch (error) {
-    console.error('배당금 이벤트 조회 오류:', error);
-    return [];
-  }
+      return left.stockName.localeCompare(right.stockName, 'ko');
+    });
 }
 
 /**

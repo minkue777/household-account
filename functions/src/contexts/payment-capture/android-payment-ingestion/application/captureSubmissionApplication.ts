@@ -89,6 +89,9 @@ function branchEnvelope(
   return {
     rootIdempotencyKey: command.rootIdempotencyKey,
     householdId,
+    ...(command.verifiedRawPayloadHash === undefined ? {} : {
+      verifiedRawInput: { creatorMemberId, payloadHash: command.verifiedRawPayloadHash },
+    }),
     captureEnvelopeIdentity: {
       contractVersion: envelope.contractVersion,
       observationId: envelope.observationId,
@@ -118,6 +121,9 @@ function branchEnvelope(
               ? {}
               : { localCurrencyType: payment.localCurrencyType }),
             captureContext: {
+              ...(command.verifiedRawPayloadHash === undefined ? {} : {
+                verifiedRawPayloadHash: command.verifiedRawPayloadHash,
+              }),
               observationId: envelope.observationId,
               observationType: payment.observationType,
               ...(payment.observationType !== "approval" || command.approvalAmountInWon === undefined

@@ -13,6 +13,7 @@ import { normalizeCancellationMerchant } from "../../../contexts/payment-capture
 import { planCaptureLineageCancellation } from "../../../contexts/household-finance/ledger/domain/policies/captureLineageCancellationGraph";
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
+import { verifiedRawCaptureFingerprint } from "../../crypto/payment-capture/verifiedRawCaptureFingerprint";
 
 const RECEIPT_CONTEXT = "payment-capture-ledger";
 const FINGERPRINT_VERSION = 1;
@@ -58,23 +59,51 @@ function deterministicIds(householdId: string, fingerprintHash: string) {
 function terminalResult(
   snapshot: firestore.DocumentSnapshot,
   payloadFingerprint: string,
+  command: CaptureApprovalPersistenceCommand | CaptureCancellationPersistenceCommand,
 ): CaptureTransactionBranchResult | undefined {
   if (!snapshot.exists) return undefined;
   const data = snapshot.data();
-  if (data?.payloadFingerprint !== payloadFingerprint) {
+  if (data?.payloadFingerprint !== payloadFingerprint &&
+      data?.payloadFingerprint !== legacyBranchPayloadFingerprint(command)) {
     return { kind: "rejected", code: "IDEMPOTENCY_PAYLOAD_MISMATCH" };
   }
   return data?.result as CaptureTransactionBranchResult | undefined;
 }
 
-function branchPayloadFingerprint(
+function legacyBranchPayloadFingerprint(
   command: CaptureApprovalPersistenceCommand | CaptureCancellationPersistenceCommand,
 ): string {
   // 원문 hash가 이미 결박한 서버 파생 증거는 기존 receipt의 identity를 바꾸지 않습니다.
   // 배포 전 Ledger commit 후 응답을 잃은 요청도 같은 결과를 재생해야 합니다.
   const branch = { ...command.branch };
   if ("approvalAmountInWon" in branch) delete branch.approvalAmountInWon;
+  delete branch.verifiedRawPayloadHash;
   return `sha256:${hash(JSON.stringify({ ...command, branch }))}`;
+}
+
+function branchPayloadFingerprint(
+  command: CaptureApprovalPersistenceCommand | CaptureCancellationPersistenceCommand,
+): string {
+  const branch = command.branch;
+  if (branch.verifiedRawPayloadHash !== undefined) {
+    return verifiedRawCaptureFingerprint({ householdId: command.householdId,
+      idempotencyKey: command.downstreamKey, creatorMemberId: branch.creatorMemberId,
+      payloadHash: branch.verifiedRawPayloadHash });
+  }
+  // A public typed envelope's rawPayloadHash is caller supplied. Bind its original parsed
+  // facts explicitly; configuration enrichment is not part of the submitted input.
+  const approval = "occurredAt" in branch;
+  const identity = [command.householdId, command.downstreamKey, approval ? "approval" : "cancellation",
+    branch.observationId, branch.creatorMemberId, branch.sourceType,
+    branch.parser.parserId, branch.parser.parserVersion, branch.rawPayloadHash,
+    branch.amountInWon, branch.originalMerchant ?? branch.merchant,
+    approval ? branch.originChannel : null,
+    approval ? branch.occurredAt : branch.observedAt,
+    approval ? branch.accountingDate : branch.cancellationDate,
+    branch.cardEvidence?.companyLabel ?? null, branch.cardEvidence?.maskedToken ?? null,
+    "localCurrencyType" in branch ? branch.localCurrencyType ?? null : null,
+  ];
+  return `capture-input.v2:${hash(JSON.stringify(identity))}`;
 }
 
 function digits(value: string | undefined): string {
@@ -380,7 +409,7 @@ export class FirebaseCaptureLedgerPersistence
     try {
       return await this.database.runTransaction(async (transaction) => {
         const [receiptSnapshot, claimSnapshot] = await transaction.getAll(receipt, dedup);
-        const replay = terminalResult(receiptSnapshot, payloadFingerprint);
+        const replay = terminalResult(receiptSnapshot, payloadFingerprint, command);
         if (replay !== undefined) return replay;
 
         if (claimSnapshot.exists) {
@@ -599,7 +628,7 @@ export class FirebaseCaptureLedgerPersistence
     try {
       return await this.database.runTransaction(async (transaction) => {
         const receiptSnapshot = await transaction.get(receipt);
-        const replay = terminalResult(receiptSnapshot, payloadFingerprint);
+        const replay = terminalResult(receiptSnapshot, payloadFingerprint, command);
         if (replay !== undefined) return replay;
         const end = Date.parse(`${command.branch.cancellationDate}T00:00:00+09:00`);
         const startDate = Number.isFinite(end)

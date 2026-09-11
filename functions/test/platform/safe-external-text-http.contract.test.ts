@@ -50,7 +50,7 @@ describe("SafeExternalTextHttp 계약", () => {
     });
   });
 
-  it("허용 목록 밖 redirect는 실제 다음 요청 없이 차단한다", async () => {
+  it("[T-EXT-003][EXT-003] 허용 목록 밖 redirect는 실제 다음 요청 없이 차단한다", async () => {
     const result = await subject([
       {
         kind: "response",

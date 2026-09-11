@@ -1,5 +1,5 @@
 {
-  "functions": {
+  "functions": [{
     "source": "functions",
     "codebase": "default",
     "ignore": [
@@ -8,7 +8,15 @@
       "firebase-debug.log",
       "firebase-debug.*.log"
     ]
-  },
+  }, {
+    "source": "functions-payment-capture",
+    "codebase": "payment-capture",
+    "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log"]
+  }, {
+    "source": "functions-access-session",
+    "codebase": "access-session",
+    "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log"]
+  }],
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
@@ -29,4 +37,3 @@
     "singleProjectMode": true
   }
 }
-

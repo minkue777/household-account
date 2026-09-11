@@ -9,7 +9,24 @@ const requirementsRoot = join(workspaceRoot, "docs", "requirements");
 const testRoots = [
   join(workspaceRoot, "functions", "test"),
   join(workspaceRoot, "web", "src", "__tests__"),
+  join(workspaceRoot, "web", "e2e"),
+  join(workspaceRoot, "web", "e2e-pwa"),
 ];
+
+interface ExecutableEvidence {
+  file: string;
+  title: string;
+  caseId: string;
+  level: "unit" | "integration" | "e2e";
+  ids: string[];
+}
+
+function declaredExecutableEvidence(): ExecutableEvidence[] {
+  return (JSON.parse(execFileSync(process.execPath,
+    [join(workspaceRoot, "tools/requirements/executable-tests.mjs"), "--evidence"],
+    { cwd: workspaceRoot, encoding: "utf8", maxBuffer: 8 * 1024 * 1024 },
+  )) as { tests: ExecutableEvidence[] }).tests;
+}
 
 function listFiles(root: string, extension: string): string[] {
   return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
@@ -147,11 +164,15 @@ function contractTestReferenceLines(): string[] {
     .flatMap((file) => readFileSync(file, "utf8").split(/\r?\n/));
 }
 
-function contextContractTestCorpus(): string {
-  return contractTestReferenceLines().join("\n");
-}
-
 describe("요구사항과 계약 테스트 추적성", () => {
+  it("현재 요구사항은 실행 E2E 또는 명시적 운영·폐기 경계에 연결된다", () => {
+    const result = JSON.parse(execFileSync(process.execPath,
+      [join(workspaceRoot, "tools/requirements/e2e-coverage.mjs"), "--json"],
+      { cwd: workspaceRoot, encoding: "utf8", maxBuffer: 8 * 1024 * 1024 },
+    ));
+    expect(result.missing).toEqual([]);
+    expect(result.requirements).toBe(requirementDeclarationEntries().length);
+  });
   it("요구사항 카탈로그 집계는 현재 단일 소유 문서와 일치한다", () => {
     expect(() => execFileSync(process.execPath,
       [join(workspaceRoot, "tools/requirements/update-catalog.mjs"), "--check"],
@@ -225,10 +246,10 @@ describe("요구사항과 계약 테스트 추적성", () => {
     expect([...new Set(duplicates)]).toEqual([]);
   });
 
-  it("문서에 선언된 모든 Canonical 테스트 ID는 실행 가능한 테스트 소스에 연결된다", () => {
-    const corpus = contractTestCorpus();
+  it("모든 Canonical 테스트 ID는 주석·fixture가 아닌 실제 Web·Functions·Kotlin 실행 case에 연결된다", () => {
+    const ids = new Set(declaredExecutableEvidence().flatMap(test => test.ids));
     const missing = canonicalTestDeclarations()
-      .filter((id) => !new RegExp(`(?<![A-Z0-9-])${id}(?![A-Z0-9-])`).test(corpus))
+      .filter((id) => !ids.has(id))
       .sort();
 
     expect(missing).toEqual([]);
@@ -278,13 +299,15 @@ describe("요구사항과 계약 테스트 추적성", () => {
     expect(missing).toEqual([]);
   });
 
-  it("모든 모듈 요구사항은 계약 테스트 본문의 assertion 시나리오에 직접 연결된다", () => {
-    const corpus = contextContractTestCorpus();
+  it("모든 모듈 요구사항은 실행 case에 연결되며 참고 구현 복사본을 검증 근거로 사용하지 않는다", () => {
+    const evidence = declaredExecutableEvidence();
+    const ids = new Set(evidence.flatMap(test => test.ids));
     const missing = [...requirementDeclarations().keys()]
-      .filter((requirementId) => !lineReferencesRequirement(corpus, requirementId))
+      .filter((requirementId) => !ids.has(requirementId))
       .sort();
 
     expect(missing).toEqual([]);
+    expect(evidence.filter(test => /\/reference\//.test(test.file))).toEqual([]);
   });
 
   it("모듈 테스트 표에 구현되지 않은 '추가 예정' 항목을 남기지 않는다", () => {

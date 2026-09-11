@@ -1,0 +1,718 @@
+{
+    "schemaVersion":  "shadow-test-removal.v1",
+    "date":  "2026-09-11",
+    "items":  [
+                  {
+                      "file":  "functions/test/contexts/notifications/capture-duplicate-consumer.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-IOS-NOTIFY-002"
+                                       ],
+                      "requirementIds":  [
+                                             "IOS-009",
+                                             "PUSH-008",
+                                             "PUSH-010"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createCaptureDuplicateNotificationConsumer",
+                                            "file":  "functions/src/contexts/notifications/application/captureDuplicateNotificationConsumer.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/capture-duplicate-consumer-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/notifications.spec.ts",
+                                                        "web/e2e-pwa/worker-events.spec.ts",
+                                                        "web/e2e/recurring-execution.spec.ts"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/notifications/endpoint-lifecycle.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-PUSH-004",
+                                           "T-PUSH-006"
+                                       ],
+                      "requirementIds":  [
+                                             "PUSH-002",
+                                             "PUSH-008",
+                                             "PUSH-003",
+                                             "PUSH-001"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createEndpointLifecycleApplication",
+                                            "file":  "functions/src/contexts/notifications/application/endpointLifecycleApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/endpoint-lifecycle-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/notifications.spec.ts",
+                                                        "web/e2e-pwa/worker-events.spec.ts",
+                                                        "web/e2e/recurring-execution.spec.ts"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/notifications/member-security-boundary.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-PUSH-SEC-001",
+                                           "T-PUSH-007"
+                                       ],
+                      "requirementIds":  [
+                                             "PUSH-002",
+                                             "PUSH-009",
+                                             "PUSH-012"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createNotificationSecurityBoundaryApplication",
+                                            "file":  "functions/src/contexts/notifications/application/notificationSecurityBoundaryApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/notification-security-boundary-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/notifications.spec.ts",
+                                                        "web/e2e-pwa/worker-events.spec.ts",
+                                                        "web/e2e/recurring-execution.spec.ts"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/notifications/notification-settings-independence.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-PUSH-008",
+                                           "T-PUSH-001",
+                                           "T-PUSH-005"
+                                       ],
+                      "requirementIds":  [
+                                             "PUSH-001",
+                                             "PUSH-004",
+                                             "PUSH-003"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createNotificationSettingsIndependenceApplication",
+                                            "file":  "functions/src/contexts/notifications/application/notificationSettingsIndependenceApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/notification-settings-independence-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/notifications.spec.ts",
+                                                        "web/e2e-pwa/worker-events.spec.ts",
+                                                        "web/e2e/recurring-execution.spec.ts"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/notifications/safe-notification-click.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-PUSH-SEC-002"
+                                       ],
+                      "requirementIds":  [
+                                             "PUSH-006",
+                                             "PUSH-011"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createSafeNotificationClickApplication",
+                                            "file":  "functions/src/contexts/notifications/application/safeNotificationClickApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/safe-notification-click-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/notifications.spec.ts",
+                                                        "web/e2e-pwa/worker-events.spec.ts",
+                                                        "web/e2e/recurring-execution.spec.ts"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/notifications/shortcut-transaction-consumer.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-IOS-NOTIFY-001",
+                                           "T-PUSH-011"
+                                       ],
+                      "requirementIds":  [
+                                             "IOS-008",
+                                             "PUSH-004",
+                                             "PUSH-010",
+                                             "PUSH-014"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createShortcutTransactionNotificationConsumer",
+                                            "file":  "functions/src/contexts/notifications/application/shortcutTransactionNotificationConsumer.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/shortcut-transaction-consumer-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/notifications.spec.ts",
+                                                        "web/e2e-pwa/worker-events.spec.ts",
+                                                        "web/e2e/recurring-execution.spec.ts"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/android-payment-ingestion/android-capture-follow-up.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-ING-FOLLOWUP-001"
+                                       ],
+                      "requirementIds":  [
+                                             "ING-SAVE-006"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createAndroidCaptureFollowUpApplication",
+                                            "file":  "functions/src/contexts/payment-capture/android-payment-ingestion/application/androidCaptureFollowUpApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/capture-follow-up-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/payment-capture.spec.ts",
+                                                        "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/android-payment-ingestion/android-capture-queue-branch-lifecycle.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-QUEUE-001",
+                                           "T-ING-BAL-001"
+                                       ],
+                      "requirementIds":  [
+                                             "ING-008",
+                                             "ING-009"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createAndroidCaptureQueueApplication",
+                                            "file":  "functions/src/contexts/payment-capture/android-payment-ingestion/application/androidCaptureQueueApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/capture-queue-branch-lifecycle-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/payment-capture.spec.ts",
+                                                        "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/android-payment-ingestion/android-sms-candidate-generation.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-PARSE-001",
+                                           "T-PARSE-002",
+                                           "T-ING-003"
+                                       ],
+                      "requirementIds":  [
+                                             "ING-006",
+                                             "ING-007",
+                                             "ING-002",
+                                             "ING-003"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createAndroidSmsCandidateApplication",
+                                            "file":  "functions/src/contexts/payment-capture/android-payment-ingestion/application/androidSmsCandidateApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/sms-candidate-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/payment-capture.spec.ts",
+                                                        "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/android-payment-ingestion/cancellation-atomicity.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-CAN-001",
+                                           "T-CAN-002",
+                                           "T-CAN-003"
+                                       ],
+                      "requirementIds":  [
+
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createCancellationExecutionApplication",
+                                            "file":  "functions/src/contexts/payment-capture/android-payment-ingestion/application/cancellationExecutionApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/cancellation-atomicity-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/payment-capture.spec.ts",
+                                                        "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/android-payment-ingestion/cancellation-match.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-CAN-002",
+                                           "T-CAN-003"
+                                       ],
+                      "requirementIds":  [
+
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createCancellationMatchApplication",
+                                            "file":  "functions/src/contexts/payment-capture/android-payment-ingestion/application/cancellationMatchApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/cancellation-match-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/payment-capture.spec.ts",
+                                                        "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/android-payment-ingestion/cancellation-query-preparation.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-CAN-004",
+                                           "T-CAN-003"
+                                       ],
+                      "requirementIds":  [
+
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createCancellationMatchApplication",
+                                            "file":  "functions/src/contexts/payment-capture/android-payment-ingestion/application/cancellationMatchApplication.ts"
+                                        },
+                                        {
+                                            "name":  "createCancellationQueryPreparationApplication",
+                                            "file":  "functions/src/contexts/payment-capture/android-payment-ingestion/application/cancellationQueryPreparationApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/cancellation-query-preparation-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/payment-capture.spec.ts",
+                                                        "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/android-payment-ingestion/capture-authorization.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-ING-AUTH-001"
+                                       ],
+                      "requirementIds":  [
+                                             "ING-SAVE-001",
+                                             "ING-SAVE-006"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createCaptureAuthorizationApplication",
+                                            "file":  "functions/src/contexts/payment-capture/android-payment-ingestion/application/captureAuthorizationApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/capture-authorization-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/payment-capture.spec.ts",
+                                                        "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/android-payment-ingestion/capture-provenance-and-cancellation.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-CAN-LINEAGE-001",
+                                           "T-ING-PROV-001",
+                                           "T-ING-AUTH-001",
+                                           "T-DUP-001",
+                                           "T-CAN-003",
+                                           "T-CAN-002",
+                                           "T-CAN-001"
+                                       ],
+                      "requirementIds":  [
+                                             "ING-SAVE-006",
+                                             "ING-SAVE-007",
+                                             "ING-SAVE-005"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createCaptureProvenanceCancellationApplication",
+                                            "file":  "functions/src/contexts/payment-capture/android-payment-ingestion/application/captureProvenanceCancellationApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/capture-provenance-cancellation-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/payment-capture.spec.ts",
+                                                        "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/android-payment-ingestion/parsed-observation-classification.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-PARSE-001",
+                                           "T-PARSE-002",
+                                           "T-ING-BAL-001"
+                                       ],
+                      "requirementIds":  [
+                                             "ING-003",
+                                             "ING-009"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createParsedObservationClassificationApplication",
+                                            "file":  "functions/src/contexts/payment-capture/android-payment-ingestion/application/parsedObservationClassificationApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/parsed-observation-classification-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/payment-capture.spec.ts",
+                                                        "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/android-payment-ingestion/source-registry-selection.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-ING-003"
+                                       ],
+                      "requirementIds":  [
+                                             "ING-002"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createSourceRegistrySelectionApplication",
+                                            "file":  "functions/src/contexts/payment-capture/android-payment-ingestion/application/sourceRegistrySelectionApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/source-registry-selection-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/payment-capture.spec.ts",
+                                                        "android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/payment-configuration/card-resolution-boundaries.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-CARD-001"
+                                       ],
+                      "requirementIds":  [
+                                             "CARD-004",
+                                             "ING-SAVE-003"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createPaymentCardResolutionApplication",
+                                            "file":  "functions/src/contexts/payment-capture/configuration/application/paymentCardResolutionApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/card-resolution-boundary-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/payment-configuration.spec.ts",
+                                                        "web/e2e/payment-capture.spec.ts",
+                                                        "web/e2e/finance-categories.spec.ts"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/payment-configuration/merchant-rule-compatibility-and-claims.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-MER-002",
+                                           "T-MER-004"
+                                       ],
+                      "requirementIds":  [
+                                             "MER-006",
+                                             "MER-004"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createMerchantRulePersistenceApplication",
+                                            "file":  "functions/src/contexts/payment-capture/configuration/application/merchantRulePersistenceApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/merchant-rule-persistence-fixture.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/payment-configuration.spec.ts",
+                                                        "web/e2e/payment-capture.spec.ts",
+                                                        "web/e2e/finance-categories.spec.ts"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/payment-configuration/merchant-rule-remember-existing-transaction.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-MER-006"
+                                       ],
+                      "requirementIds":  [
+                                             "MER-005"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createRememberExistingTransactionApplication",
+                                            "file":  "functions/src/contexts/payment-capture/configuration/application/rememberExistingTransactionApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/remember-existing-transaction-fixture.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/payment-configuration.spec.ts",
+                                                        "web/e2e/payment-capture.spec.ts",
+                                                        "web/e2e/finance-categories.spec.ts"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/payment-configuration/merchant-rule-remember-flow.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-MER-006"
+                                       ],
+                      "requirementIds":  [
+                                             "MER-005"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createRememberMerchantRuleApplication",
+                                            "file":  "functions/src/contexts/payment-capture/configuration/application/rememberMerchantRuleApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/remember-merchant-rule-fixture.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/payment-configuration.spec.ts",
+                                                        "web/e2e/payment-capture.spec.ts",
+                                                        "web/e2e/finance-categories.spec.ts"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/payment-configuration/registered-card-management.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-CARD-002",
+                                           "T-CARD-003",
+                                           "T-CARD-005",
+                                           "T-CARD-004"
+                                       ],
+                      "requirementIds":  [
+                                             "CARD-001",
+                                             "CARD-002",
+                                             "CARD-005",
+                                             "CARD-003"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createRegisteredCardManagementApplication",
+                                            "file":  "functions/src/contexts/payment-capture/configuration/application/registeredCardManagementApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/registered-card-management-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/payment-configuration.spec.ts",
+                                                        "web/e2e/payment-capture.spec.ts",
+                                                        "web/e2e/finance-categories.spec.ts"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/shortcut-ingestion/shortcut-notification-outcome.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-IOS-NOTIFY-001",
+                                           "T-IOS-NOTIFY-002"
+                                       ],
+                      "requirementIds":  [
+                                             "IOS-008",
+                                             "IOS-009",
+                                             "IOS-011"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createShortcutNotificationOutcomeApplication",
+                                            "file":  "functions/src/contexts/payment-capture/shortcut-ingestion/application/shortcutNotificationOutcomeApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/shortcut-notification-outcome-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/shortcut-ingestion.spec.ts",
+                                                        "web/e2e/notifications.spec.ts",
+                                                        "functions/test/contexts/payment-capture/shortcut-ingestion/shortcut-http-inbound.contract.test.ts"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/shortcut-ingestion/shortcut-outbox-and-response-compatibility.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-IOS-NOTIFY-001",
+                                           "T-IOS-NOTIFY-002",
+                                           "T-IOS-002",
+                                           "T-IOS-COMPAT-001"
+                                       ],
+                      "requirementIds":  [
+                                             "IOS-008",
+                                             "IOS-009",
+                                             "IOS-011",
+                                             "IOS-007"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createShortcutOutboxResponseApplication",
+                                            "file":  "functions/src/contexts/payment-capture/shortcut-ingestion/application/shortcutOutboxResponseApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/shortcut-outbox-response-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/shortcut-ingestion.spec.ts",
+                                                        "web/e2e/notifications.spec.ts",
+                                                        "functions/test/contexts/payment-capture/shortcut-ingestion/shortcut-http-inbound.contract.test.ts"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/payment-capture/shortcut-ingestion/shortcut-payment-recording.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-CARD-001",
+                                           "T-IOS-002",
+                                           "T-IOS-001",
+                                           "T-IOS-OWNER-LEGACY-001"
+                                       ],
+                      "requirementIds":  [
+                                             "IOS-007",
+                                             "IOS-008",
+                                             "IOS-011"
+                                         ],
+                      "factories":  [
+                                        {
+                                            "name":  "createShortcutPaymentRecordingApplication",
+                                            "file":  "functions/src/contexts/payment-capture/shortcut-ingestion/application/shortcutPaymentRecordingApplication.ts"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/shortcut-payment-recording-driver.ts"
+                                  ],
+                      "reason":  "Only test fixtures invoke this application factory; actual bootstrap/adapter uses a different implementation.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/shortcut-ingestion.spec.ts",
+                                                        "web/e2e/notifications.spec.ts",
+                                                        "functions/test/contexts/payment-capture/shortcut-ingestion/shortcut-http-inbound.contract.test.ts"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/household-finance/recurring-transactions/recurring-notification-consumer.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-REC-PUSH-001",
+                                           "T-PUSH-001",
+                                           "T-IOS-NOTIFY-001",
+                                           "T-PUSH-005"
+                                       ],
+                      "requirementIds":  [
+
+                                         ],
+                      "factories":  [
+                                        {
+                                            "file":  "functions/test/support/recurring-notification-consumer-driver.ts",
+                                            "name":  "createRecurringNotificationConsumerFixtureSubject"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/recurring-notification-consumer-driver.ts",
+                                      "functions/test/support/recurring-creator-fixture.ts",
+                                      "functions/test/support/notification-settings-independence-driver.ts"
+                                  ],
+                      "reason":  "Client runtime is implemented in Web/Kotlin; this disconnected server/test application only simulates the boundary.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/notifications.spec.ts",
+                                                        "web/e2e-pwa/worker-events.spec.ts",
+                                                        "web/e2e/recurring-execution.spec.ts"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  },
+                  {
+                      "file":  "functions/test/contexts/system/client-session-scope.contract.test.ts",
+                      "canonicalIds":  [
+                                           "T-SYS-008"
+                                       ],
+                      "requirementIds":  [
+
+                                         ],
+                      "factories":  [
+                                        {
+                                            "file":  "functions/src/platform/client-session/application/clientSessionScopeApplication.ts",
+                                            "name":  "createClientSessionScopeApplication"
+                                        }
+                                    ],
+                      "drivers":  [
+                                      "functions/test/support/client-session-scope-fixture.ts"
+                                  ],
+                      "reason":  "Client runtime is implemented in Web/Kotlin; this disconnected server/test application only simulates the boundary.",
+                      "actualReplacementSurfaces":  [
+                                                        "web/e2e/access-household.spec.ts",
+                                                        "android/app/src/androidTest/java/com/household/account/e2e/WebStartupFirebaseE2ETest.kt"
+                                                    ],
+                      "replacementLimit":  "행동별 E2E assertion과 실행 결과를 별도로 확인해야 하며, 삭제된 Canonical 시나리오 전체가 단순 파일 연결만으로 충족되는 것은 아닙니다."
+                  }
+              ]
+}

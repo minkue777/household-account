@@ -1,16 +1,14 @@
-import { readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { withEmulatorSecrets } from "../../tools/e2e/emulator-secrets.mjs";
 
-const TEST_SECRET =
-  "# Generated temporarily by run-with-emulator-secret.mjs\n" +
-  "SHORTCUT_CREDENTIAL_PEPPER=emulator-only-not-a-production-secret\n";
 const functionsDirectory = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-const secretPath = resolve(functionsDirectory, ".secret.local");
+const secretPaths = [functionsDirectory, resolve(functionsDirectory, '../functions-payment-capture'),
+  resolve(functionsDirectory, '../functions-access-session')].map(directory => resolve(directory, '.secret.local'));
 const [command, ...args] = process.argv.slice(2);
 
 if (command === undefined) {
@@ -19,21 +17,11 @@ if (command === undefined) {
 
 function assertWindowsCommandToken(value) {
   if (/["&|<>^%\r\n]/u.test(value)) {
-    throw new Error(`Windows shell에서 안전하지 않은 명령 인자입니다: ${value}`);
+    throw new Error("Windows shell에서 안전하지 않은 명령 인자입니다.");
   }
 }
 
-let ownsTestSecret = false;
-try {
-  try {
-    const current = await readFile(secretPath, "utf8");
-    ownsTestSecret = current === TEST_SECRET;
-  } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
-    await writeFile(secretPath, TEST_SECRET, { encoding: "utf8", flag: "wx" });
-    ownsTestSecret = true;
-  }
-
+await withEmulatorSecrets(secretPaths, async () => {
   const exitCode = await new Promise((resolveExit, reject) => {
     const windows = process.platform === "win32";
     if (windows) {
@@ -59,8 +47,4 @@ try {
     });
   });
   process.exitCode = exitCode;
-} finally {
-  if (ownsTestSecret) {
-    await rm(secretPath, { force: true });
-  }
-}
+});

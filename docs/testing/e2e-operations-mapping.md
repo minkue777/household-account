@@ -1,0 +1,23 @@
+# 운영 CLI 요구사항 검증 경계
+
+2026-09-11. `web/e2e/operations-cli.spec.ts`는 브라우저 UI가 없는 운영 기능의 공개 CLI를 별도 Node subprocess로 호출합니다. 테스트 전용 Application을 만들거나 함수 본문을 복사하지 않으며, [`migrate-runtime.mjs`](../../functions/scripts/migrate-runtime.mjs)와 [`deploy-firebase.mjs`](../../functions/scripts/deploy-firebase.mjs)의 실제 인자 파싱부터 운영 코드까지 실행합니다. 최종 공식 `npm --prefix web run test:e2e`에서 운영 CLI 5개를 포함한 전체 89개가 통과했습니다. 실패·skip·flaky 0개이며 `web/quality-e2e.json`과 `%TEMP%/household-final-web-e2e-20260911.json`에 결과를 보존했습니다. Web 전체 TypeScript 검사도 통과했습니다.
+
+## 실행과 데이터 경계
+
+- CLI의 파일 입력은 Playwright 실행별 출력 디렉터리의 JSON mapping입니다. 실제 파일을 읽은 뒤 운영 manifest validator를 거칩니다.
+- CLI 자식 프로세스는 `127.0.0.1:8080` Firestore Emulator와 별도 `demo-household-operations-e2e` 프로젝트로 고정합니다. 기존 브라우저 E2E 프로젝트를 삭제하거나 운영 프로젝트에 쓰지 않습니다.
+- Firestore 사전조건을 REST로 준비한 뒤, 실제 `FirebaseRuntimeMigrationPlanBuilder`, `FirebaseRuntimeMigrationPersistence`, Application, Admin SDK transaction이 결과를 만듭니다. 테스트는 Emulator의 실제 저장 문서와 CLI의 종료 코드·표준 출력·표준 오류를 관찰합니다.
+- 운영 배포 테스트도 Emulator 환경을 유지하여 wrapper의 혼합 환경 거절 단계에서 종료합니다. 실제 `firebase deploy`, GitHub push, Secret 읽기, Monitoring 변경은 실행하지 않습니다. 필수 품질 gate를 가짜 npm 출력으로 통과시키는 fixture는 없습니다.
+
+## 요구사항별 실제 assertion
+
+| 요구사항 | CLI E2E에서 실행하는 범위 | 직접 검증하지 않는 경계와 유지할 근거 |
+|---|---|---|
+| SYS-009 | dry-run은 plan만 저장하고 legacy/canonical 업무 문서는 불변입니다. 동일 mapping 재실행은 같은 plan을 사용합니다. `--confirm APPLY`가 없으면 종료 코드 2로 거절합니다. page 크기 2·최대 1 page에서 checkpoint를 남기고 새 subprocess가 이어서 끝냅니다. 계획 첫 두 target만 쓰였는지 확인하고, 완료 후 실제 3개 거래의 ID·금액 합계 13,000원·creator·메모를 대조합니다. 재실행은 신규 page 쓰기 없이 기존 문서·receipt를 보존합니다. 타가구·tenant 없는 source는 가져오지 않습니다. | 모든 collector의 상품별 변환은 [`firebase-runtime-migration.integration.test.ts`](../../functions/test/integration/firebase/firebase-runtime-migration.integration.test.ts)가 실제 Emulator로 별도 검증합니다. 운영 IAM/ADC 권한 발급과 담당자의 mapping 승인 판단은 테스트가 대신하지 않습니다. |
+| SYS-009 | mapping의 household hash, apply 가구 범위, 존재하지 않는 plan hash, stale checkpoint를 실제 CLI로 거절하고 업무 쓰기·page receipt가 없는지 확인합니다. dry-run 이후 source 변경은 page 전체를 rollback합니다. creator 누락을 임의로 채우지 않고 unresolved 보고와 apply 거절을 남깁니다. 완료 target이 변조된 뒤 재실행하면 reconciliation mismatch이며 해당 값을 덮어쓰지 않습니다. stdout에는 원장 가맹점·메모 원문을 출력하지 않습니다. | 대상 문서 충돌·모든 source schema 조합·개별 필드의 merge-missing은 위 실제 Firebase 통합 테스트와 production policy 테스트의 경계입니다. 일반 client가 운영 API를 호출할 수 없는 구조는 Architecture Fitness와 공개 callable 계약 검증을 병행합니다. |
+| REL-001 | 운영 배포·GitHub CI 성공을 CLI E2E로 모사하지 않습니다. | [`firebase-release-gate-runtime.test.ts`](../../functions/test/bootstrap/firebase-release-gate-runtime.test.ts)는 CI 증거 없이 실제 wrapper의 후보 검증이 성공하고 CI를 `not-evaluated`로 분리하는지 검사합니다. [`quality-summary-runtime.test.ts`](../../functions/test/bootstrap/quality-summary-runtime.test.ts)는 workflow가 사용하는 CLI subprocess를 실행하여 실제 summary 파일, 다섯 job의 성공·실패·취소·skip·누락, exit code와 annotation을 검증합니다. 정상 `--check`의 실제 운영 Monitoring·Secret·actor 확인과 GitHub 각 품질 검사 실행은 외부 경계입니다. 배포는 CI를 기다리지 않으며 가짜 CI 통과 근거를 만들지 않습니다. |
+| REL-002 | 공개 deploy CLI의 `--project`/`--manifest` 누락을 종료 코드 1로 거절합니다. production project와 Emulator 환경이 섞이면 일반 `--check` 및 Firebase predeploy `--guard` 모두 `PRODUCTION_EMULATOR_MIXED`로 거절합니다. 존재하지 않는 manifest 경로를 전달해도 해당 파일이나 클라우드에 접근하기 전에 거절해야 합니다. | 정확한 production URL·Rules/index hash·Secret binding·Monitoring channel의 실제 존재와 권한은 운영 read-only 검사입니다. 실제 project/호환 resolver 및 외부 Monitoring GET 응답 해석은 기존 production 모듈 테스트에서 검증합니다. |
+| REL-003 | 운영 CLI의 호환 승인 성공 경로는 이 Emulator 전용 suite에서 실행하지 않습니다. | [`firebase-release-gate-runtime.test.ts`](../../functions/test/bootstrap/firebase-release-gate-runtime.test.ts), delivery-assurance Application/Domain 테스트가 실제 `verifyCandidate`와 compatibility checker의 release ID·artifact·순서를 검증합니다. 실제 여러 surface의 배포 순서와 이전 설치 앱의 호환성은 release manifest 및 해당 후보 rollout 결과로 검증해야 합니다. CLI는 Emulator 환경을 안전하게 거절하므로 이를 제거하지 않고서는 전체 승인 경로에 들어갈 수 없습니다. |
+| REL-004 | migration stdout 원문 비노출은 SYS-009에서 검증하며, 이를 release artifact Secret 검증으로 잘못 계산하지 않습니다. | 기존 runtime gate 테스트는 격리된 파일 시스템의 child codebase hash·배포 marker·smoke marker 불일치와 actor 거절을 실제 함수로 검증합니다. [`deployment-provenance-runtime.test.ts`](../../functions/test/adapters/firebase/deployment-provenance-runtime.test.ts)는 실제 production adapter/Application을 호출하지만 저장소가 InMemoryFirestore이므로 실제 Emulator E2E로 계산하지 않습니다. 실제 운영 artifact hash, 운영 smoke 로그인·가구 읽기·배포 marker, Secret 원문 비포함, Monitoring channel은 그 배포의 명시적인 사후 증거가 필요합니다. 파일 단위/Emulator 결과만으로 운영 배포 완료라고 주장하지 않습니다. |
+
+운영 wrapper에 공개 offline 평가 CLI가 현재 없으므로, 라이브러리 함수를 별도 테스트용 `node -e`에서 호출한 결과를 공개 CLI E2E로 이름만 바꾸지 않았습니다. 기존 production 함수 테스트와 실제 운영 pipeline의 책임을 유지하면서, 공개 CLI에서 안전하게 검증할 수 있는 migration 전체 흐름과 배포 전 환경 거절을 추가했습니다.

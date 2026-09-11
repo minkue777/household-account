@@ -163,7 +163,7 @@ describe("submitAndroidRawNotification callable wire", () => {
     expect(decoded).toBe(false);
   });
 
-  it("strict raw 계약 오류를 invalid-argument로 반환한다", async () => {
+  it.each(["parserId", "verifiedRawPayloadHash", "verifiedRawInput"])("strict raw 계약의 추가 %s 필드를 invalid-argument로 반환한다", async (field) => {
     const handler = createAndroidRawNotificationCallableHandler({
       memberships: membership(),
       submissions: { submit: async () => { throw new Error("호출되면 안 됩니다"); } },
@@ -172,12 +172,12 @@ describe("submitAndroidRawNotification callable wire", () => {
     await expect(
       handler.handle({
         principalUid: "firebase-uid",
-        data: { ...raw(), parserId: "client-parser" },
+        data: { ...raw(), [field]: "client-forgery" },
       }),
     ).rejects.toMatchObject({
       callableCode: "invalid-argument",
       domainCode: "UNKNOWN_FIELD",
-      details: { path: "$.parserId" },
+      details: { path: `$.${field}` },
     });
   });
 });

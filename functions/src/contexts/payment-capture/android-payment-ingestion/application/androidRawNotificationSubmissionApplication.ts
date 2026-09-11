@@ -300,6 +300,7 @@ class DefaultAndroidRawNotificationSubmissionApplication
       actor: command.actor,
       rootIdempotencyKey: command.input.observationId,
       envelope: parsed.envelope,
+      verifiedRawPayloadHash: parsed.envelope.rawPayloadHash,
       ...(parsed.approvalAmountInWon === undefined
         ? {}
         : { approvalAmountInWon: parsed.approvalAmountInWon }),

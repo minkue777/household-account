@@ -154,7 +154,7 @@ describe('ledger search visibility contract', () => {
         id: 'invalid-row',
         data: () => { throw new TypeError('private document contents'); },
       }],
-    } as Awaited<ReturnType<typeof getDocsFromServer>>);
+    } as unknown as Awaited<ReturnType<typeof getDocsFromServer>>);
 
     await expect(searchExpensePage('merchant')).rejects.toMatchObject({
       code: 'SOURCE_UNAVAILABLE',

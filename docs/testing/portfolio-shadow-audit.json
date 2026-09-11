@@ -1,0 +1,415 @@
+[
+  {
+    "factory": "createAssetOwnerUiSurfaceApplication",
+    "file": "functions/src/contexts/access/asset-owner-ui/application/assetOwnerUiSurfaceApplication.ts",
+    "tests": [
+      "functions/test/support/asset-owner-ui-surface-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/access-household/asset-owner-ui-surface.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createAssetAutomationExecutionApplication",
+    "file": "functions/src/contexts/portfolio/automation/application/assetAutomationExecutionApplication.ts",
+    "tests": [
+      "functions/test/support/asset-automation-execution-fixture.ts"
+    ],
+    "ownsCollections": true,
+    "removedTests": [
+      "functions/test/contexts/portfolio/asset-automation-execution.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createLoanRepaymentWorkflowApplication",
+    "file": "functions/src/contexts/portfolio/automation/application/loanRepaymentWorkflowApplication.ts",
+    "tests": [
+      "functions/test/support/loan-repayment-workflow-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/portfolio/loan-repayment-workflow.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createAssetCreationApplication",
+    "file": "functions/src/contexts/portfolio/core/application/assetCreationApplication.ts",
+    "tests": [
+      "functions/test/support/asset-creation-driver.ts",
+      "functions/test/support/asset-owner-profile-lifecycle-driver.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/portfolio/asset-creation-contract.contract.test.ts",
+      "functions/test/contexts/portfolio/asset-owner-profile-lifecycle.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createAssetHistoryApplication",
+    "file": "functions/src/contexts/portfolio/core/application/assetHistoryApplication.ts",
+    "tests": [
+      "functions/test/support/asset-history-dimensions-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/portfolio/asset-history-dimensions.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createAssetOrderApplication",
+    "file": "functions/src/contexts/portfolio/core/application/assetOrderApplication.ts",
+    "tests": [
+      "functions/test/support/asset-order-legacy-delete-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/portfolio/asset-order-legacy-delete.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createDividendDiscoveryApplication",
+    "file": "functions/src/contexts/portfolio/dividends/application/dividendDiscoveryApplication.ts",
+    "tests": [
+      "functions/test/support/dividend-discovery-eligibility-fixture.ts"
+    ],
+    "ownsCollections": true,
+    "removedTests": [
+      "functions/test/contexts/portfolio/dividend-discovery-eligibility.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createDividendLifecycleApplication",
+    "file": "functions/src/contexts/portfolio/dividends/application/dividendLifecycleApplication.ts",
+    "tests": [
+      "functions/test/support/dividend-lifecycle-fixture.ts"
+    ],
+    "ownsCollections": true,
+    "removedTests": [
+      "functions/test/contexts/portfolio/dividend-lifecycle.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createDividendProjectionWriterApplication",
+    "file": "functions/src/contexts/portfolio/dividends/application/dividendProjectionWriterApplication.ts",
+    "tests": [
+      "functions/test/support/dividend-projection-writer-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/portfolio/dividend-projection-writer-boundary.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createDividendReadPoliciesApplication",
+    "file": "functions/src/contexts/portfolio/dividends/application/dividendReadPoliciesApplication.ts",
+    "tests": [
+      "functions/test/support/dividend-read-policies-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/portfolio/dividend-read-policies.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createDividendRefreshJobApplication",
+    "file": "functions/src/contexts/portfolio/dividends/application/dividendRefreshJobApplication.ts",
+    "tests": [
+      "functions/test/support/dividend-refresh-job-fixture.ts"
+    ],
+    "ownsCollections": true,
+    "removedTests": [
+      "functions/test/contexts/portfolio/dividend-refresh-job.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createDividendSweepRecoveryApplication",
+    "file": "functions/src/contexts/portfolio/dividends/application/dividendSweepRecoveryApplication.ts",
+    "tests": [
+      "functions/test/support/dividend-sweep-recovery-fixture.ts"
+    ],
+    "ownsCollections": true,
+    "removedTests": [
+      "functions/test/contexts/portfolio/dividend-sweep-recovery.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createAssetRevaluationWorkflow",
+    "file": "functions/src/contexts/portfolio/holdings/application/assetRevaluationWorkflow.ts",
+    "tests": [
+      "functions/test/support/asset-revaluation-workflow-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/portfolio/asset-revaluation-workflow.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createAssetValuationTriggerScopeApplication",
+    "file": "functions/src/contexts/portfolio/holdings/application/assetValuationTriggerScopeApplication.ts",
+    "tests": [
+      "functions/test/support/asset-valuation-trigger-scope-fixture.ts"
+    ],
+    "ownsCollections": true,
+    "removedTests": [
+      "functions/test/contexts/portfolio/asset-valuation-trigger-scope.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createDailyAssetValuationApplication",
+    "file": "functions/src/contexts/portfolio/holdings/application/dailyAssetValuationApplication.ts",
+    "tests": [
+      "functions/test/support/daily-asset-valuation-fixture.ts"
+    ],
+    "ownsCollections": true,
+    "removedTests": [
+      "functions/test/contexts/portfolio/daily-asset-valuation.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createDailyValuationRecoveryApplication",
+    "file": "functions/src/contexts/portfolio/holdings/application/dailyValuationRecoveryApplication.ts",
+    "tests": [
+      "functions/test/support/daily-valuation-recovery-fixture.ts"
+    ],
+    "ownsCollections": true,
+    "removedTests": [
+      "functions/test/contexts/portfolio/daily-valuation-recovery.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createForeignCurrencyValuationApplication",
+    "file": "functions/src/contexts/portfolio/holdings/application/foreignCurrencyValuationApplication.ts",
+    "tests": [
+      "functions/test/support/foreign-currency-valuation-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/portfolio/foreign-currency-valuation.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createGoldPositionApplication",
+    "file": "functions/src/contexts/portfolio/holdings/application/goldPositionApplication.ts",
+    "tests": [
+      "functions/test/support/gold-position-and-provider-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/portfolio/gold-position-and-provider.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createHoldingValuationApplication",
+    "file": "functions/src/contexts/portfolio/holdings/application/holdingValuationApplication.ts",
+    "tests": [
+      "functions/test/support/holding-valuation-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/portfolio/holding-valuation.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createMarketRoutingApplication",
+    "file": "functions/src/contexts/portfolio/holdings/application/marketRoutingApplication.ts",
+    "tests": [
+      "functions/test/support/market-routing-contract-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/portfolio/market-routing-contract.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createPositionMutationLifecycleApplication",
+    "file": "functions/src/contexts/portfolio/holdings/application/positionMutationLifecycleApplication.ts",
+    "tests": [
+      "functions/test/support/position-mutation-lifecycle-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/portfolio/position-mutation-lifecycle.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createDemoAssetFixtureApplication",
+    "file": "functions/src/demo/portfolio/application/demoAssetFixtureApplication.ts",
+    "tests": [
+      "functions/test/support/demo-asset-fixture-boundary-driver.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/portfolio/demo-asset-fixture-boundary.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createCredentialIngressApplication",
+    "file": "functions/src/platform/external-operations/application/credentialIngressApplication.ts",
+    "tests": [
+      "functions/test/support/credential-ingress-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/supporting-platform/external-operations/ingress-credential-boundary.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createExternalResultClassificationApplication",
+    "file": "functions/src/platform/external-operations/application/externalResultClassificationApplication.ts",
+    "tests": [
+      "functions/test/support/external-result-classification-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/supporting-platform/external-operations/external-result-classification.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createHardenedIngressApplication",
+    "file": "functions/src/platform/external-operations/application/hardenedIngressApplication.ts",
+    "tests": [
+      "functions/test/support/hardened-ingress-fixture.ts"
+    ],
+    "ownsCollections": true,
+    "removedTests": [
+      "functions/test/contexts/supporting-platform/external-operations/hardened-ingress.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createHtmlQuoteParsingApplication",
+    "file": "functions/src/platform/external-operations/application/htmlQuoteParsingApplication.ts",
+    "tests": [
+      "functions/test/support/html-provider-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/supporting-platform/external-operations/html-provider-fixture.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createProviderScopedSafeHttpApplication",
+    "file": "functions/src/platform/external-operations/application/providerScopedSafeHttpApplication.ts",
+    "tests": [
+      "functions/test/support/provider-scoped-safe-http-fixture.ts"
+    ],
+    "ownsCollections": true,
+    "removedTests": [
+      "functions/test/contexts/supporting-platform/external-operations/provider-scoped-safe-http.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createSafeExternalHttpApplication",
+    "file": "functions/src/platform/external-operations/application/safeExternalHttpApplication.ts",
+    "tests": [
+      "functions/test/support/safe-external-http-fixture.ts"
+    ],
+    "ownsCollections": true,
+    "removedTests": [
+      "functions/test/contexts/supporting-platform/external-operations/safe-external-http.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createHomeConfigurationApplication",
+    "file": "functions/src/platform/home-preferences/application/homeConfigurationApplication.ts",
+    "tests": [
+      "functions/test/support/home-configuration-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/supporting-platform/home-preferences/home-command-boundary.contract.test.ts",
+      "functions/test/contexts/supporting-platform/home-preferences/home-configuration.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createHomeSummaryApplication",
+    "file": "functions/src/platform/home-preferences/application/homeSummaryApplication.ts",
+    "tests": [
+      "functions/test/support/home-summary-configuration-fixture.ts",
+      "functions/test/support/home-summary-source-state-fixture.ts"
+    ],
+    "ownsCollections": true,
+    "removedTests": [
+      "functions/test/contexts/supporting-platform/home-preferences/home-summary-configuration.contract.test.ts",
+      "functions/test/contexts/supporting-platform/home-preferences/home-summary-source-state.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createLocalCurrencySelectionApplication",
+    "file": "functions/src/platform/home-preferences/application/localCurrencySelectionApplication.ts",
+    "tests": [
+      "functions/test/support/home-local-currency-selection-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/supporting-platform/home-preferences/home-local-currency-selection.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createThemePreferenceApplication",
+    "file": "functions/src/platform/home-preferences/application/themePreferenceApplication.ts",
+    "tests": [
+      "functions/test/support/theme-preference-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/supporting-platform/home-preferences/theme-preference.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createBoundedAssetStatisticsQuery",
+    "file": "functions/src/read-side/reporting/application/queries/boundedAssetStatisticsQuery.ts",
+    "tests": [
+      "functions/test/support/bounded-asset-statistics-fixture.ts"
+    ],
+    "ownsCollections": true,
+    "removedTests": [
+      "functions/test/contexts/supporting-platform/reporting/bounded-asset-statistics-source.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  },
+  {
+    "factory": "createAssetSnapshotContinuityQuery",
+    "file": "functions/src/read-side/reporting/application/queries/getAssetSnapshotContinuity.ts",
+    "tests": [
+      "functions/test/support/asset-snapshot-continuity-fixture.ts"
+    ],
+    "ownsCollections": false,
+    "removedTests": [
+      "functions/test/contexts/supporting-platform/reporting/asset-snapshot-continuity.contract.test.ts"
+    ],
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+  }
+]

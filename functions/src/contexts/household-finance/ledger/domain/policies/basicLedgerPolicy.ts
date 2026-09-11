@@ -5,7 +5,7 @@ export type LedgerValidationResult =
   | { kind: "validation-error"; code: string };
 
 export function validatePositiveWon(amountInWon: number): LedgerValidationResult {
-  return Number.isInteger(amountInWon) && amountInWon > 0
+  return Number.isSafeInteger(amountInWon) && amountInWon > 0
     ? { kind: "valid" }
     : { kind: "validation-error", code: "AMOUNT_MUST_BE_POSITIVE_INTEGER" };
 }

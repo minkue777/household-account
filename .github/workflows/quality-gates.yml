@@ -1,4 +1,4 @@
-name: 품질 게이트
+name: 독립 품질 CI
 
 on:
   workflow_dispatch:
@@ -10,7 +10,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: quality-${{ github.ref }}
+  # Preserve every main commit's result even when another deployment is pushed.
+  group: quality-${{ github.event_name }}-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || 'latest' }}
   cancel-in-progress: true
 
 jobs:
@@ -41,6 +42,7 @@ jobs:
       - run: npm run test:runtime-boundaries
         working-directory: functions
       - run: npm install --global firebase-tools@15.4.0
+      - run: npm ci --prefix functions-payment-capture && npm ci --prefix functions-access-session
       - run: npm run test:callable-integration
         working-directory: functions
       - run: npm run test:firestore-rules
@@ -75,15 +77,41 @@ jobs:
         working-directory: web
       - run: npm run test:e2e:pwa
         working-directory: web
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-web-pwa
+          path: web/quality-pwa-e2e.json
+          if-no-files-found: error
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-pwa-failure
+          path: web/test-results/pwa
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
           name: quality-web
           path: web/quality-web.json
           if-no-files-found: error
 
+  quality-summary:
+    name: CI 결과 알림
+    if: always()
+    needs: [functions, web, web-e2e, android, android-instrumentation]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: 배포와 별도로 검증 결과 기록
+        env:
+          QUALITY_JOB_RESULTS: ${{ toJSON(needs) }}
+        run: node tools/ci/quality-summary.mjs
+
   web-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -101,10 +129,17 @@ jobs:
         working-directory: functions
       - run: npm ci
         working-directory: web
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
         working-directory: web
+      - run: npm ci --prefix functions-payment-capture && npm ci --prefix functions-access-session
       - run: npm run test:e2e
         working-directory: web
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-web-e2e
+          path: web/quality-e2e.json
+          if-no-files-found: error
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -138,7 +173,7 @@ jobs:
 
   android-instrumentation:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
         with:
@@ -156,8 +191,23 @@ jobs:
         if: steps.scope.outputs.required == 'true'
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
           cache: gradle
+      - uses: actions/setup-node@v4
+        if: steps.scope.outputs.required == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            functions/package-lock.json
+            web/package-lock.json
+      - run: npm ci --prefix functions && npm ci --prefix web
+        if: steps.scope.outputs.required == 'true'
+      - run: npm ci --prefix functions-payment-capture && npm ci --prefix functions-access-session
+        if: steps.scope.outputs.required == 'true'
+      - run: npx playwright install --with-deps chromium
+        if: steps.scope.outputs.required == 'true'
+        working-directory: web
       - uses: android-actions/setup-android@v3
         if: steps.scope.outputs.required == 'true'
       - run: chmod +x gradlew
@@ -176,7 +226,18 @@ jobs:
             adb shell settings put system screen_off_timeout 2147483647
             adb shell input keyevent KEYCODE_WAKEUP
             adb shell wm dismiss-keyguard
-            bash -c 'cd android; status=0; ./gradlew connectedDebugAndroidTest --stacktrace || status=$?; mkdir -p app/build/ci-diagnostics; adb logcat -d > app/build/ci-diagnostics/logcat.txt || true; adb exec-out screencap -p > app/build/ci-diagnostics/screen.png || true; exit "$status"'
+            bash -c 'cd android; status=0; ./gradlew connectedDebugAndroidTest --stacktrace || status=$?; mkdir -p app/build/ci-diagnostics; if [ -d app/build/outputs/androidTest-results ]; then cp -R app/build/outputs/androidTest-results app/build/ci-diagnostics/default-androidTest-results; fi; adb logcat -d > app/build/ci-diagnostics/logcat.txt || true; adb exec-out screencap -p > app/build/ci-diagnostics/screen.png || true; exit "$status"'
+            npm --prefix web run test:e2e:android
+      - if: always() && steps.scope.outputs.required == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-native-firebase-e2e
+          path: |
+            android/app/build/ci-diagnostics/default-androidTest-results
+            android/app/build/outputs/androidTest-results
+            web/quality-native-e2e.json
+            web/test-results/native-firebase/startup-result.json
+          if-no-files-found: error
       - if: failure() && steps.scope.outputs.required == 'true'
         uses: actions/upload-artifact@v4
         with:
@@ -185,5 +246,6 @@ jobs:
             android/app/build/reports/androidTests
             android/app/build/outputs/androidTest-results
             android/app/build/ci-diagnostics
+            web/test-results/native-browser
           if-no-files-found: ignore
           retention-days: 7

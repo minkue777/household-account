@@ -1,14 +1,12 @@
 import * as functions from "firebase-functions/v1";
 
 import {
-  CachedCaptureConfigurationQuery,
   CoalescingCaptureConfigurationQuery,
   FirebaseCaptureConfigurationQuery,
 } from "../adapters/firebase/payment-capture/firebaseCaptureConfigurationQuery";
 import { FirebaseCaptureLedgerPersistence } from "../adapters/firebase/payment-capture/firebaseCaptureLedgerPersistence";
 import {
   FirebaseCaptureMembershipResolver,
-  CachedCaptureMembershipResolver,
   type CaptureMembershipResolver,
 } from "../adapters/firebase/payment-capture/firebaseCaptureMembershipResolver";
 import {
@@ -259,10 +257,8 @@ const tenantAuthorization = createTenantAuthorizationApplication({
 });
 function createFirebaseCaptureConfigurationQuery(): CoalescingCaptureConfigurationQuery {
   return new CoalescingCaptureConfigurationQuery(
-    new CachedCaptureConfigurationQuery(
-      withCaptureConfigurationLatency(
-        new FirebaseCaptureConfigurationQuery(db),
-      ),
+    withCaptureConfigurationLatency(
+      new FirebaseCaptureConfigurationQuery(db),
     ),
   );
 }
@@ -295,9 +291,7 @@ export function createFirebaseCaptureSubmissionPort(
   });
 }
 
-const captureMemberships = new CachedCaptureMembershipResolver(
-  new FirebaseCaptureMembershipResolver(db),
-);
+const captureMemberships = new FirebaseCaptureMembershipResolver(db);
 const captureConfiguration = createFirebaseCaptureConfigurationQuery();
 const captureSubmissions =
   createFirebaseCaptureSubmissionPort(captureConfiguration);

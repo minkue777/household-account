@@ -1,6 +1,8 @@
 import { getSeoulLocalTime } from '@/lib/utils/date';
 import {
   collection,
+  doc,
+  getDocFromServer,
   query,
   where,
   onSnapshot,
@@ -133,6 +135,18 @@ export function resolveExpenseCardDisplay(data: LedgerCardReadFields): string | 
  */
 export function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense {
   return mapExpenseReadData(docSnap.id, docSnap.data());
+}
+
+/** 알림 편집 링크는 현재 달 목록과 무관하게 자기 가구의 한 건을 권위 조회합니다. */
+export async function getExpenseForEdit(id: string): Promise<Expense | null> {
+  const scope = requireClientSessionScope();
+  const snapshot = await getDocFromServer(doc(db, COLLECTION_NAME, id));
+  const current = requireClientSessionScope();
+  if (current.householdId !== scope.householdId || current.sessionGeneration !== scope.sessionGeneration
+    || current.principalUid !== scope.principalUid) throw new Error('세션이 변경되었습니다.');
+  const data = snapshot.data();
+  return data && data.householdId === scope.householdId && isVisibleLedgerReadDocument(data)
+    ? mapExpenseReadData(snapshot.id, data) : null;
 }
 
 function mapExpenseReadData(id: string, data: DocumentData): Expense {

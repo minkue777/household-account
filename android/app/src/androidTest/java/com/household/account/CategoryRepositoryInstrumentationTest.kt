@@ -9,17 +9,31 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.Query
 import com.household.account.data.CategoryRepository
+import com.household.account.data.CategoryData
 import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class CategoryRepositoryInstrumentationTest {
+    @Test
+    fun categoryLookupPreservesCaseSensitiveIds() {
+        val repository = CategoryRepository()
+        val lowercase = CategoryData(key = "category-abcd_123", label = "다른 카테고리")
+        val original = CategoryData(key = "category-aBcD_123", label = "간식/디저트/커피")
+        val categories = listOf(lowercase, original)
+
+        assertEquals(original, repository.findCategoryByKey(categories, original.key))
+        assertEquals(lowercase, repository.findCategoryByKey(categories, lowercase.key))
+        assertNull(repository.findCategoryByKey(listOf(original), lowercase.key))
+    }
+
     // CAT-004 / T-CAT-005: Legacy QuickEdit의 실제 adapter만 별도 SDK 인스턴스로 실행합니다.
     // production singleton과 외부 Firebase는 변경하거나 호출하지 않습니다.
     private suspend fun withIsolatedRepository(

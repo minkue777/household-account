@@ -4,6 +4,7 @@ export interface CaptureApprovalPersistenceCommand {
   readonly householdId: string;
   readonly downstreamKey: string;
   readonly branch: {
+    readonly verifiedRawPayloadHash?: string;
     readonly observationId: string;
     readonly originChannel: "android-notification" | "ios-shortcut";
     readonly creatorMemberId: string;
@@ -35,6 +36,7 @@ export interface CaptureCancellationPersistenceCommand {
   readonly householdId: string;
   readonly downstreamKey: string;
   readonly branch: {
+    readonly verifiedRawPayloadHash?: string;
     readonly observationId: string;
     readonly creatorMemberId: string;
     readonly sourceType: string;

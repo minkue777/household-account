@@ -13,7 +13,6 @@ process.env.NEXT_PUBLIC_E2E_TEST_PASSWORD = E2E_PASSWORD;
 
 export default defineConfig({
   testDir: './e2e',
-  globalSetup: './e2e/global-setup.ts',
   fullyParallel: false,
   workers: 1,
   timeout: 120_000,
@@ -23,9 +22,11 @@ export default defineConfig({
   reporter: [
     ['list'],
     ['html', { open: 'never' }],
+    ['json', { outputFile: 'quality-e2e.json' }],
   ],
   use: {
     baseURL: 'http://127.0.0.1:3100',
+    actionTimeout: 30_000,
     locale: 'ko-KR',
     timezoneId: 'Asia/Seoul',
     trace: 'retain-on-failure',
@@ -34,13 +35,19 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      testIgnore: ['ios-startup.spec.ts', 'native-quick-edit.spec.ts'],
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'ios-webkit',
+      testMatch: ['ios-startup.spec.ts', 'notification-deeplink.spec.ts'],
+      use: { ...devices['iPhone 13'] },
     },
   ],
   webServer: {
-    command: 'npm run dev -- --hostname 127.0.0.1 --port 3100',
+    command: 'npm run build && npm run start -- --hostname 127.0.0.1 --port 3100',
     url: 'http://127.0.0.1:3100',
     reuseExistingServer: false,
-    timeout: 120_000,
+    timeout: 300_000,
   },
 });

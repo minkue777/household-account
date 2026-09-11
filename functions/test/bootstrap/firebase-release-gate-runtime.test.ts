@@ -1,17 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDeploymentTargetCompatibilityApplication } from '../../src/platform/delivery-assurance/application/deploymentTargetCompatibilityApplication';
-import { createReleaseCandidateEvaluationApplication } from '../../src/platform/delivery-assurance/application/releaseCandidateEvaluationApplication';
 import { readDeploymentMarker } from '../../src/bootstrap/deploymentMarker';
 
 describe('[REL-001][REL-002][REL-003] 실제 배포 wrapper의 실패 차단', () => {
   afterEach(() => vi.restoreAllMocks());
-  const scripts = () => Promise.all([import('../../scripts/deploy-firebase.mjs'), import('../../scripts/release-evidence.mjs')]);
+  const scripts = () => Promise.all([import('../../scripts/deploy-firebase.mjs')]);
   const sha = 'a'.repeat(40);
-  const run = { headSha: sha, status: 'completed', conclusion: 'success', event: 'push' };
-  const jobs = ['functions', 'web', 'web-e2e', 'android', 'android-instrumentation'].map(name => ({ name, conclusion: 'success' }));
   it.each([
     { verificationStatus: 'VERIFIED', enabled: true, expected: true },
     { verificationStatus: 'VERIFICATION_STATUS_UNSPECIFIED', enabled: true, expected: true },
@@ -35,30 +32,24 @@ describe('[REL-001][REL-002][REL-003] 실제 배포 wrapper의 실패 차단', (
     await expect(script.verifyCloudResource(credential, resource, 'monitoring.googleapis.com')).rejects.toThrow('MONITORING_CHANNEL_UNAVAILABLE');
     await expect(script.verifyCloudResource(credential, resource, 'monitoring.googleapis.com')).resolves.toBe(false);
   });
-  it.each(['pending', 'failure', 'cancelled', 'skipped', 'missing'])('정확한 HEAD의 완료 success 이외 CI 상태(%s)는 차단한다', async status => {
-    const [, script] = await scripts();
-    const candidate = status === 'missing' ? [] : [{ ...run, conclusion: status, status: status === 'pending' ? 'in_progress' : 'completed' }];
-    expect(() => script.requireSuccessfulHeadRun(candidate, sha, jobs)).toThrow('EXACT_HEAD_QUALITY_GATES_REQUIRED');
-    expect(() => script.requireSuccessfulHeadRun([run], 'b'.repeat(40), jobs)).toThrow('EXACT_HEAD_QUALITY_GATES_REQUIRED');
-  });
-  it('성공 CI라도 필수 surface job이 빠지면 허용하지 않는다', async () => {
-    const [, script] = await scripts();
-    expect(() => script.requireSuccessfulHeadRun([run], sha, jobs.slice(1))).toThrow('QUALITY_JOB_REQUIRED');
-    expect(script.requireSuccessfulHeadRun([run], sha, jobs)).toEqual(run);
-  });
-  it('활성 테스트가 skip이면 실제 보고서로부터 계산한 Domain gate가 배포를 거부한다', async () => {
-    const [, script] = await scripts();
-    const report = { testResults: ['test/architecture/requirement-test-traceability', 'test/architecture/document-relative-links', 'test/architecture/production-dependency-direction', 'test/contexts/core'].map(name => ({ name: `/repo/functions/${name}`, assertionResults: [{ status: name.endsWith('core') ? 'pending' : 'passed' }] })) };
-    const web = { testResults: [{ name: 'web-test', assertionResults: [{ status: 'passed' }] }] };
-    const evidence = script.releaseGateEvidence(report, web, { active: 1, passed: 1, failed: 0, skipped: 0, knownFailures: 0 });
-    const result = await createReleaseCandidateEvaluationApplication({ evidence: { collect: async () => evidence }, manifestHash: { hash: () => 'manifest' } }).evaluate({} as never);
-    expect(result).toMatchObject({ kind: 'rejected', failed: [{ gate: 'active-contract-tests', code: 'GATE_FAILED' }] });
+  it('[T-REL-001][REL-001] 배포 후보는 CI 증거 없이 검증하고 CI 통과 결과를 만들지 않는다', async () => {
+    const [script] = await scripts();
+    const manifest = JSON.parse(readFileSync(new URL('../../../docs/operations/firebase-release-manifest.example.json', import.meta.url), 'utf8'));
+    manifest.commitSha = sha;
+    const hashes = { dependencyLockHash: manifest.dependencyLockHash, contractHash: manifest.contractHash,
+      rulesHash: manifest.rulesHash, indexesHash: manifest.indexesHash, artifact: manifest.artifacts[0] };
+    const result = await script.verifyCandidate(manifest, manifest.firebaseProjectId,
+      { dirty: '', head: sha, hashes, compatibility: createDeploymentTargetCompatibilityApplication() });
+    expect(result).toMatchObject({ kind: 'approved', deployAuthorization: { releaseId: manifest.releaseId, manifestHash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      ci: { policy: 'independent', workflow: 'quality-gates.yml', commitSha: sha, status: 'not-evaluated' } });
+    expect(result).not.toHaveProperty('gateResults');
+    expect(result.ci).not.toHaveProperty('runId');
   });
   it('dirty workspace와 변경 artifact를 policy 호출 전에 차단한다', async () => {
     const [script] = await scripts();
     const hashes = { dependencyLockHash: 'l', contractHash: 'c', rulesHash: 'r', indexesHash: 'i', artifact: { name: 'firebase-functions', sha256: 'a' } };
     const manifest = { releaseId: 'release-1', environment: 'production', contractVersion: 'v1', compatibility: { releaseId: 'release-1' }, firebaseProjectId: 'household-account-6f300', commitSha: sha, ...hashes, artifacts: [hashes.artifact] };
-    const dependencies = { dirty: 'modified', head: sha, hashes, compatibility: createDeploymentTargetCompatibilityApplication(), evaluator: createReleaseCandidateEvaluationApplication({ evidence: { collect: async () => [] }, manifestHash: { hash: () => 'm' } }) };
+    const dependencies = { dirty: 'modified', head: sha, hashes, compatibility: createDeploymentTargetCompatibilityApplication() };
     await expect(script.verifyCandidate(manifest, manifest.firebaseProjectId, dependencies)).rejects.toThrow('CLEAN_EXACT_HEAD_REQUIRED');
     await expect(script.verifyCandidate({ ...manifest, artifacts: [] }, manifest.firebaseProjectId, { ...dependencies, dirty: '' })).rejects.toThrow('ARTIFACT_MISMATCH');
     await expect(script.verifyCandidate(manifest, undefined, { ...dependencies, dirty: '' })).rejects.toThrow('EXPLICIT_PRODUCTION_PROJECT_REQUIRED');

@@ -58,6 +58,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
+  const [editLinkError, setEditLinkError] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [showLocalCurrencyModal, setShowLocalCurrencyModal] = useState(false);
   const [localCurrencyExpenses, setLocalCurrencyExpenses] = useState<Expense[]>([]);
@@ -236,6 +237,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     }
 
     setEditExpenseId(editId);
+    setEditLinkError('');
     router.replace(pathname, { scroll: false });
   }, [searchParams, router, pathname]);
 
@@ -252,9 +254,27 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
       return;
     }
 
-    setShowSearchModal(true);
-    setEditExpenseId(null);
-  }, [editExpenseId, expenses, serverSnapshotReady]);
+    let cancelled = false;
+    void import('@/lib/expenseService').then(({ getExpenseForEdit }) => getExpenseForEdit(editExpenseId))
+      .then((target) => {
+        if (cancelled) return;
+        if (!target || target.transactionType !== transactionType) {
+          setEditLinkError('지출을 찾을 수 없습니다.');
+        } else {
+          const [year, month] = target.date.split('-').map(Number);
+          setCurrentYear(year);
+          setCurrentMonth(month);
+          setSelectedDate(target.date);
+          setAutoEditExpenseId(target.id);
+        }
+        setEditExpenseId(null);
+      }).catch(() => {
+        if (cancelled) return;
+        setEditLinkError('지출을 불러오지 못했습니다. 다시 열어 주세요.');
+        setEditExpenseId(null);
+      });
+    return () => { cancelled = true; };
+  }, [editExpenseId, expenses, serverSnapshotReady, transactionType, householdKey]);
 
   const selectedDateExpenses = useMemo(() => {
     if (!selectedDate) return [];
@@ -408,6 +428,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
           />
         )}
 
+        {editLinkError && <p role="alert" className="text-sm text-red-600">{editLinkError}</p>}
         {showSearchModal && (
           <SearchModal
             isOpen={true}

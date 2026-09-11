@@ -70,3 +70,21 @@
 로그는 로컬 임시 디렉터리의 `frequent-operations-functions-gate.log`, `frequent-operations-web-tests.log`, `frequent-operations-web-focused.log`, `frequent-operations-web-incremental.log`, `frequent-operations-finance-integration.log`에 남겼다. 원장 구현과 서버 수정은 각각 독립 리뷰를 받았다.
 
 최종 브라우저·산출물 검증 로그는 같은 디렉터리의 `frequent-operations-web-e2e.log`, `frequent-operations-web-build.log`, `frequent-operations-web-pwa.log`다. Git HEAD는 `5d66067147807a3e542833f53939318d4c8ac834`로 유지되며 staging한 파일은 없다. 실제 운영 성능을 개선했다고 확정한 측정값은 아직 없다.
+
+## 2026-09-11 후속 수정: 결제 설정 TTL 제거
+
+실제 브라우저와 Firebase Emulator를 연결한 E2E에서 `1234` 카드 알림 수집 → 설정 UI의 끝번호 `5678` 저장 확인 → 즉시 `5678` 신규 알림 수집이 거절되는 문제를 재현했다. 카드 변경 transaction은 Firestore 설정 projection을 이미 삭제했지만, warm process의 60초 설정 cache가 이전 카드 정보를 계속 반환했다.
+
+중복된 메모리 TTL 계층과 전용 상수·검증을 제거했다. 정상 수집은 이미 가구별 Firestore projection 한 문서만 읽으므로 원본 collection 전체 조회를 매번 반복하지 않는다. 동시에 진행 중인 동일 가구·멤버 조회는 기존 Promise 병합으로 함께 기다리고, 완료 뒤 다음 수집은 projection 무효화를 확인해 필요할 때만 원본에서 다시 만든다. Membership cache와 앞의 과거 측정 기록은 유지한다.
+
+수정된 projection·동시 조회·callable 연결·latency 관련 단위 테스트 4파일·13개가 통과했다. 같은 query 객체에서 카드·규칙·카테고리 변경과 projection 삭제 뒤 새 값이 즉시 조회되는 실행 검증을 추가했다. 실제 카드 수정·재수집 E2E 재실행과 최종 build는 전체 검증 단계에서 수행하며, 변경 후 운영 지연은 아직 측정하지 않았다.
+
+## 2026-09-11 후속 수정: 제거된 멤버의 수집 권한 즉시 회수
+
+이어진 실제 공개 API E2E에서 관리자 Member 제거를 완료했는데도 같은 일반 Auth JWT의 신규 3,300원 수집이 `created`로 저장됐다. 재현 로그는 로컬 임시 디렉터리의 `notifications-member-lifecycle-e2e.log`다. Membership의 5분 메모리 cache가 제거된 권위를 재사용했고, Native JWT 경로는 이 TTL도 거치지 않고 발급 당시 claim을 바로 `active`로 반환했다.
+
+두 우회 경로와 마지막 소비자가 사라진 bounded TTL utility·전용 테스트를 제거했다. 이제 매 capture는 UID의 `principalMembershipClaims` 한 문서를 읽고, Native 가구·멤버 힌트가 있으면 현재 권위와 일치해야 한다. 다른 가구·멤버로 바뀐 권위에 오래된 Native 알림을 재해석하지 않는다. claim이 없는 전환 데이터만 기존 view·canonical 검증을 사용한다. 제거 transaction 완료 뒤 새 요청은 거절하고 같은 ID의 복구 뒤 다음 요청은 다시 허용한다.
+
+앞 절의 Membership cache 유지와 과거 `Membership read 0회` 분석은 이 후속 수정 전의 상태다. 현재는 HH-012의 제거 직후 접근 차단을 우선하며 Native·Web token 발급 형식과 bridge는 유지한다. 기존 source parser·단일 승인 receipt 단순화·설정 projection 한 문서·동시 요청 병합은 그대로다.
+
+실제 resolver의 일반/Native JWT active→removed→claim 삭제→복구, 권위 조회 실패, Native 가구·멤버 불일치, legacy 경로 검증을 추가했다. 관련 resolver·동시 설정 조회·수집 callable·세션 발급·관리자 권한 테스트 5파일·34개가 통과했다. 서버 build와 실제 Emulator E2E 재실행은 전체 검증 단계에서 수행한다.

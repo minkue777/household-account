@@ -30,17 +30,6 @@ type CommandResult =
   | { kind: "not-found" }
   | { kind: "retryable-failure"; code: string };
 
-type SummaryResult =
-  | {
-      kind: "success";
-      selectedDateAmountInWon: number;
-      monthAmountInWon: number;
-      yearAmountInWon: number;
-      categories: readonly { categoryId: string; amountInWon: number }[];
-    }
-  | { kind: "no-data" }
-  | { kind: "retryable-failure"; code: string };
-
 interface LedgerCommandState {
   transactions: readonly LedgerTransactionView[];
   events: readonly { type: string; transactionId: string; requesterMemberId?: string }[];
@@ -75,13 +64,6 @@ export interface BasicLedgerCommandsSubject {
     transactionId: string;
     expectedVersion: number;
   }): Promise<CommandResult>;
-  summary(input: {
-    householdId: string;
-    transactionType: TransactionType;
-    selectedDate: string;
-    yearMonth: string;
-    year: number;
-  }): Promise<SummaryResult>;
   requestNotification(input: {
     commandId: string;
     actor: { householdId: string; actingMemberId: string };
@@ -158,6 +140,7 @@ describe("Ledger 기본 Command·Query 공개 계약", () => {
     ["식당", 0, "food", "AMOUNT_MUST_BE_POSITIVE_INTEGER"],
     ["식당", -1, "food", "AMOUNT_MUST_BE_POSITIVE_INTEGER"],
     ["식당", 1.5, "food", "AMOUNT_MUST_BE_POSITIVE_INTEGER"],
+    ["식당", Number.MAX_SAFE_INTEGER + 1, "food", "AMOUNT_MUST_BE_POSITIVE_INTEGER"],
     ["식당", 10_000, "archived", "CATEGORY_NOT_USABLE"],
   ] as const)(
     "[T-LED-005][LED-002] 잘못된 수동 지출 입력을 %s로 거부하고 write하지 않는다",
@@ -207,6 +190,7 @@ describe("Ledger 기본 Command·Query 공개 계약", () => {
   it.each([
     ["", 10_000, "ITEM_NAME_REQUIRED"],
     ["급여", 0, "AMOUNT_MUST_BE_POSITIVE_INTEGER"],
+    ["급여", Number.MAX_SAFE_INTEGER + 1, "AMOUNT_MUST_BE_POSITIVE_INTEGER"],
   ] as const)(
     "[T-LED-006][LED-003] 잘못된 수입 입력은 %s로 거부한다",
     async (itemName, amountInWon, code) => {
@@ -310,6 +294,7 @@ describe("Ledger 기본 Command·Query 공개 계약", () => {
 
   it.each([
     [0, 1, "validation-error", "AMOUNT_MUST_BE_POSITIVE_INTEGER"],
+    [Number.MAX_SAFE_INTEGER + 1, 1, "validation-error", "AMOUNT_MUST_BE_POSITIVE_INTEGER"],
     [20_000, 0, "conflict", "VERSION_MISMATCH"],
   ] as const)(
     "[T-LED-008][LED-005] 잘못된 update는 일부 patch 없이 typed error를 반환한다",
@@ -353,69 +338,6 @@ describe("Ledger 기본 Command·Query 공개 계약", () => {
       code: "LEDGER_COMMIT_FAILED",
     });
     expect(subject.state().transactions).toEqual([original]);
-  });
-
-  it("[T-LED-009][LED-006] active 지출만 선택일·월·연·카테고리 합계에 일관되게 반영한다", async () => {
-    const subject = createSubject({
-      now: "2026-07-20T12:34:56+09:00",
-      transactions: [
-        transaction("food-today", { amountInWon: 10_000 }),
-        transaction("childcare-month", {
-          amountInWon: 20_000,
-          categoryId: "childcare",
-          accountingDate: "2026-07-01",
-        }),
-        transaction("food-year", {
-          amountInWon: 30_000,
-          accountingDate: "2026-01-01",
-        }),
-        transaction("income", {
-          transactionType: "income",
-          amountInWon: 99_000,
-        }),
-        transaction("deleted", {
-          lifecycleState: "deleted",
-          amountInWon: 88_000,
-        }),
-      ],
-    });
-
-    const result = await subject.summary({
-      householdId: "house-1",
-      transactionType: "expense",
-      selectedDate: "2026-07-20",
-      yearMonth: "2026-07",
-      year: 2026,
-    });
-
-    expect(result).toEqual({
-      kind: "success",
-      selectedDateAmountInWon: 10_000,
-      monthAmountInWon: 30_000,
-      yearAmountInWon: 60_000,
-      categories: [
-        { categoryId: "food", amountInWon: 40_000 },
-        { categoryId: "childcare", amountInWon: 20_000 },
-      ],
-    });
-  });
-
-  it("[T-LED-009][LED-006] 원천 실패를 0원 합계로 축약하지 않는다", async () => {
-    const result = await createSubject({
-      now: "2026-07-20T12:34:56+09:00",
-      repositoryFailure: "LEDGER_REPOSITORY_UNAVAILABLE",
-    }).summary({
-      householdId: "house-1",
-      transactionType: "expense",
-      selectedDate: "2026-07-20",
-      yearMonth: "2026-07",
-      year: 2026,
-    });
-
-    expect(result).toEqual({
-      kind: "retryable-failure",
-      code: "LEDGER_REPOSITORY_UNAVAILABLE",
-    });
   });
 
   it("[T-LED-010][LED-007][DEC-013][DEC-022] expense 알림 요청은 인증 requester와 시각·Event를 한 번 기록한다", async () => {

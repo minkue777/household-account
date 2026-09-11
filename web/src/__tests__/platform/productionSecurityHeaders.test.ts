@@ -19,6 +19,26 @@ describe('실제 production header 생성기', () => {
     headers.find((header: any) => header.key === 'Strict-Transport-Security').value = 'max-age=0';
     expect(() => validateSecurityHeaders(headers)).toThrow('INVALID_HSTS');
   });
+  it.each(['false', 'true'])('Emulator 설정 %s에서도 실제 종목 카탈로그 Storage origin을 제한적으로 허용한다', emulatorSuite => {
+    const previousSuite = process.env.NEXT_PUBLIC_FIREBASE_EMULATOR_SUITE;
+    const previousProject = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    try {
+      process.env.NEXT_PUBLIC_FIREBASE_EMULATOR_SUITE = emulatorSuite;
+      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID = 'demo-household-account-e2e';
+      const csp = securityHeaders().find((header: { key: string }) => header.key === 'Content-Security-Policy').value;
+      const connectSources = csp.split(';').map((directive: string) => directive.trim().split(/\s+/))
+        .find((directive: string[]) => directive[0] === 'connect-src').slice(1);
+      expect(connectSources).toContain('https://firebasestorage.googleapis.com');
+      expect(connectSources).not.toEqual(expect.arrayContaining(['https:', 'http:', '*']));
+      expect(connectSources.some((source: string) => source.includes('*'))).toBe(false);
+      expect(() => validateSecurityHeaders(securityHeaders())).not.toThrow();
+    } finally {
+      if (previousSuite === undefined) delete process.env.NEXT_PUBLIC_FIREBASE_EMULATOR_SUITE;
+      else process.env.NEXT_PUBLIC_FIREBASE_EMULATOR_SUITE = previousSuite;
+      if (previousProject === undefined) delete process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+      else process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID = previousProject;
+    }
+  });
 
   it('기존 보안 헤더를 교체할 때 비게 된 라우트를 제거한다', () => {
     const headers = securityHeaders(["'sha256-current'"]);

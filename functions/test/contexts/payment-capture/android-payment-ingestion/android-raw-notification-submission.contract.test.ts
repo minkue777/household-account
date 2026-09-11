@@ -149,6 +149,7 @@ describe("Android 원문 알림 서버 파싱 제출 계약", () => {
       },
     });
     expect(captured[0].envelope.rawPayloadHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
+    expect(captured[0].verifiedRawPayloadHash).toBe(captured[0].envelope.rawPayloadHash);
     expect(JSON.stringify(captured[0].envelope)).not.toContain("이*선");
     expect(subject.state().prefetched).toEqual([
       { householdId: "household-1", actingMemberId: "member-1" },

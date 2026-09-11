@@ -12,7 +12,7 @@ fun buildQuickEditUpdatePatch(
 ): Map<String, Any?> = buildMap {
     if (merchant != originalMerchant) put("merchant", merchant)
     if (amountInWon != originalAmountInWon) put("amountInWon", amountInWon)
-    if (!categoryId.equals(originalCategoryId, ignoreCase = true)) {
+    if (categoryId != originalCategoryId) {
         put("categoryId", categoryId)
     }
     // 빈 문자열도 기존 memo를 지우는 명시적 변경 값입니다.

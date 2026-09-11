@@ -61,7 +61,7 @@ export const ledgerCommands = {
       ...(transaction.memo !== undefined ? { memo: transaction.memo } : {}),
     };
     const payload = transaction.transactionType === 'income'
-      ? { ...common, transactionType: 'income' as const, itemName: transaction.merchant }
+      ? { ...common, transactionType: 'income' as const, itemName: transaction.memo ?? transaction.merchant }
       : {
           ...common,
           transactionType: 'expense' as const,

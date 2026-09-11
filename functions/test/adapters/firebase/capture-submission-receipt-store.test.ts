@@ -46,6 +46,45 @@ function envelope(): CaptureBranchEnvelope {
 }
 
 describe("Firebase Capture root receipt adapter", () => {
+  it("서버에서 결박한 같은 원문은 parser 결과 변경 뒤에도 종단 receipt를 재생하고 다른 원문은 거절한다", async () => {
+    const memory = new InMemoryFirestore();
+    const store = new FirebaseCaptureSubmissionReceiptStore(memory as unknown as firestore.Firestore);
+    const payloads = new Sha256CapturePayloadFingerprint();
+    const base = envelope();
+    const input = { ...base, verifiedRawInput: { creatorMemberId: "member-1", payloadHash: base.captureEnvelopeIdentity!.rawPayloadHash } };
+    const claim = await store.claim({ envelope: input, payloadFingerprint: payloads.fingerprint(input) });
+    if (claim.kind !== "claimed") throw new Error("First receipt required");
+    const saved = await store.save({ ...claim.receipt, state: "completed", transaction: {
+      stage: "terminal", downstreamKey: "payment-1", result: { kind: "recorded", transactionId: "transaction-1",
+        editable: true, captureLineageId: "lineage-1", aggregateVersion: 1 },
+    } });
+    const reparsed = { ...input, captureEnvelopeIdentity: { ...input.captureEnvelopeIdentity!, parserVersion: "3.0.0" },
+      transactionBranch: { ...input.transactionBranch!, parser: { parserId: "new-parser", parserVersion: "3.0.0" },
+        merchant: "새 파싱 결과", amountInWon: 1000 } };
+    expect(await store.claim({ envelope: reparsed, payloadFingerprint: payloads.fingerprint(reparsed) }))
+      .toEqual({ kind: "existing", receipt: saved });
+    const different = { ...reparsed, verifiedRawInput: { ...input.verifiedRawInput, payloadHash: `sha256:${"9".repeat(64)}` } };
+    expect(await store.claim({ envelope: different, payloadFingerprint: payloads.fingerprint(different) }))
+      .toEqual({ kind: "conflict", code: "IDEMPOTENCY_PAYLOAD_MISMATCH" });
+    expect(memory.paths("households/house-1/captureSubmissionReceipts/")).toHaveLength(1);
+  });
+
+  it("기존 typed fingerprint receipt는 같은 원문을 서버 검증 metadata와 함께 재시도해도 계속 읽는다", async () => {
+    const memory = new InMemoryFirestore();
+    const store = new FirebaseCaptureSubmissionReceiptStore(memory as unknown as firestore.Firestore);
+    const payloads = new Sha256CapturePayloadFingerprint();
+    const input = envelope();
+    const first = await store.claim({ envelope: input, payloadFingerprint: payloads.fingerprint(input) });
+    if (first.kind !== "claimed") throw new Error("Legacy receipt required");
+    const upgraded = { ...input, verifiedRawInput: { creatorMemberId: "member-1", payloadHash: input.captureEnvelopeIdentity!.rawPayloadHash } };
+    expect(await store.claim({ envelope: upgraded, payloadFingerprint: payloads.fingerprint(upgraded) }))
+      .toEqual({ kind: "existing", receipt: first.receipt });
+    const different = { ...upgraded, captureEnvelopeIdentity: { ...input.captureEnvelopeIdentity!, rawPayloadHash: `sha256:${"9".repeat(64)}` },
+      verifiedRawInput: { ...upgraded.verifiedRawInput, payloadHash: `sha256:${"9".repeat(64)}` } };
+    expect(await store.claim({ envelope: different, payloadFingerprint: payloads.fingerprint(different) }))
+      .toEqual({ kind: "conflict", code: "IDEMPOTENCY_PAYLOAD_MISMATCH" });
+  });
+
   it("내부 card/bill discriminator를 payload fingerprint에서 구분한다", () => {
     const payloads = new Sha256CapturePayloadFingerprint();
     const input = envelope();

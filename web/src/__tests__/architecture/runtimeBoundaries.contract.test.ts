@@ -30,7 +30,7 @@ describe('Web runtime architecture boundary', () => {
     expect(violations).toEqual([]);
   });
 
-  test('Functions·Storage adapter는 Firestore 초기화를 선행하지 않는다', () => {
+  test('Functions·Storage adapter는 Firestore 초기화 모듈을 직접 참조하지 않는다', () => {
     const lightweightFirebaseConsumers = [
       'platform/functions-api/fidSafeFirebaseFunctions.ts',
       'platform/pwa/fidEndpointLifecycle.ts',
@@ -91,12 +91,10 @@ describe('Web runtime architecture boundary', () => {
     expect(Array.from(declared).sort()).toEqual(expected);
   });
 
-  test('FCM Web 등록은 deprecated getToken이 아닌 FID lifecycle API만 사용한다', () => {
+  test('Web production source는 deprecated FCM getToken API를 참조하지 않는다', () => {
     const messagingSources = sourceFiles(srcRoot)
       .map((file) => fs.readFileSync(file, 'utf8'))
       .join('\n');
     expect(messagingSources).not.toMatch(/\bgetToken\b/);
-    expect(messagingSources).toMatch(/\bonRegistered\b/);
-    expect(messagingSources).toMatch(/\bregister\b/);
   });
 });

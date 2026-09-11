@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "e2e-exceptions.v1",
+  "note": "현재 실행 경로가 없거나 실제 운영 배포가 필요한 요구사항만 제외합니다. 새 기능이나 테스트 비용을 이유로 범위를 줄이지 않습니다.",
+  "requirements": [
+    {
+      "id": "IOS-005",
+      "reason": "DEC-028 이전의 타 멤버 카드 owner 추측 순서를 비교하는 폐기 대상 특성화입니다. 현재 공개 Shortcut HTTP는 인증된 credential의 안정 Member만 사용하므로 이 옛 경로를 다시 연결하는 E2E를 만들지 않습니다. 현재 Actor 격리와 본인 카드 검증은 Shortcut·알림 E2E에서 실행합니다.",
+      "reference": "docs/requirements/contexts/payment-capture/modules/shortcut-ingestion/requirements.md"
+    },
+    {
+      "id": "REL-001",
+      "reason": "배포 후보의 실제 운영 project·actor·Secret·Monitoring·smoke 검증과 GitHub CI 실행은 외부 경계입니다. 공개 CLI 인자·환경 혼합 거절, 실제 wrapper의 CI 독립 후보 검사와 CI 요약 CLI subprocess는 검증하지만 운영 배포·GitHub 실행을 가짜 성공 응답으로 대체해 E2E 통과로 주장하지 않습니다. 전체 CI는 배포와 독립 실행합니다.",
+      "reference": "docs/testing/e2e-operations-mapping.md"
+    },
+    {
+      "id": "REL-003",
+      "reason": "운영 deploy wrapper가 실제 Artifact·Rules·IAM을 검사하고 배포하는 흐름은 실제 클라우드 자원과 승인된 release가 필요합니다. Emulator에서는 이를 허용하지 않는 실제 CLI 거절까지 검증합니다. 계약 hash·호환성 평가기는 production module 통합 테스트를 유지합니다.",
+      "reference": "docs/testing/e2e-operations-mapping.md"
+    },
+    {
+      "id": "REL-004",
+      "reason": "실제 운영 배포 결과·revision·로그인 확인 증거의 provenance 기록은 운영 deploy 실행에 속합니다. 재현용 CI가 운영 release를 만들지 않으며, 공개 CLI 환경 거절 및 실제 provenance adapter 검증 범위와 구분합니다.",
+      "reference": "docs/testing/e2e-operations-mapping.md"
+    }
+  ]
+}

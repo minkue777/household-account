@@ -1,6 +1,5 @@
 import type * as firestore from "firebase-admin/firestore";
 
-import { BoundedTtlCache } from "../../memory/boundedTtlCache";
 import type {
   CaptureConfigurationCard,
   CaptureConfigurationPrefetchPort,
@@ -138,9 +137,6 @@ function unionById<T>(
   return [...new Map([...legacy, ...canonical]).values()];
 }
 
-export const CAPTURE_CONFIGURATION_CACHE_TTL_MILLIS = 60 * 1_000;
-export const CAPTURE_CONFIGURATION_CACHE_MAX_ENTRIES = 32;
-
 function configurationKey(input: {
   readonly householdId: string;
   readonly actingMemberId: string;
@@ -262,6 +258,8 @@ export class FirebaseCaptureConfigurationQuery
           ]) {
             const data = document.data();
             if (
+              data.state === "archived" ||
+              data.state === "deleted" ||
               data.lifecycleState === "archived" ||
               data.lifecycleState === "deleted" ||
               data.lifecycle === "archived" ||
@@ -315,52 +313,10 @@ export class FirebaseCaptureConfigurationQuery
 }
 
 /**
- * 카드·가맹점 규칙·카테고리의 여러 Firestore 조회 결과를 warm instance에서 잠시
- * 재사용합니다. 실패 결과는 캐시하지 않아 복구를 지연시키지 않습니다.
- */
-export class CachedCaptureConfigurationQuery
-  implements CaptureConfigurationQueryPort
-{
-  private readonly cache: BoundedTtlCache<
-    string,
-    Extract<CaptureConfigurationQueryResult, { readonly kind: "available" }>
-  >;
-
-  constructor(
-    private readonly delegate: CaptureConfigurationQueryPort,
-    options: {
-      readonly ttlMillis?: number;
-      readonly maxEntries?: number;
-      readonly now?: () => number;
-    } = {},
-  ) {
-    this.cache = new BoundedTtlCache({
-      ttlMillis:
-        options.ttlMillis ?? CAPTURE_CONFIGURATION_CACHE_TTL_MILLIS,
-      maxEntries:
-        options.maxEntries ?? CAPTURE_CONFIGURATION_CACHE_MAX_ENTRIES,
-      ...(options.now === undefined ? {} : { now: options.now }),
-    });
-  }
-
-  async load(input: {
-    readonly householdId: string;
-    readonly actingMemberId: string;
-  }): Promise<CaptureConfigurationQueryResult> {
-    const key = configurationKey(input);
-    const cached = this.cache.get(key);
-    if (cached !== undefined) return cached;
-
-    const loaded = await this.delegate.load(input);
-    if (loaded.kind === "available") this.cache.set(key, loaded);
-    return loaded;
-  }
-}
-
-/**
  * 같은 인스턴스에서 동시에 시작된 동일 설정 조회를 한 Promise로 합칩니다.
  * Android raw parser가 먼저 조회를 시작하고 transaction gateway가 같은 결과를
  * 기다리므로 receipt claim과 설정 조회가 병렬로 진행됩니다.
+ * 완료된 결과는 보관하지 않아 다음 요청이 설정 변경의 projection 무효화를 봅니다.
  */
 export class CoalescingCaptureConfigurationQuery
   implements CaptureConfigurationQueryPort, CaptureConfigurationPrefetchPort

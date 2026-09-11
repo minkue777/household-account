@@ -18,7 +18,7 @@ function securityHeaders(hashes = []) {
     "font-src 'self'", "worker-src 'self'", "object-src 'none'", "base-uri 'self'",
     "form-action 'self' https://accounts.google.com", "frame-ancestors 'none'",
     `frame-src https://${projectId}.firebaseapp.com https://accounts.google.com`,
-    "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://fcmregistrations.googleapis.com https://fcm.googleapis.com https://accounts.google.com"
+    "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebasestorage.googleapis.com https://firebaseinstallations.googleapis.com https://fcmregistrations.googleapis.com https://fcm.googleapis.com https://accounts.google.com"
       + ` https://asia-northeast3-${projectId}.cloudfunctions.net` + emulatorOrigins,
   ].join('; ');
   const headers = [

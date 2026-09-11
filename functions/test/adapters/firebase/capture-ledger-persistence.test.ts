@@ -270,6 +270,100 @@ describe("Firebase Capture → Ledger transaction adapter", () => {
     expect(memory.paths("outboxEvents/")).toHaveLength(1);
   });
 
+  it("규칙과 카드 설정으로 파생된 값이 바뀌어도 같은 원문은 최초 승인·중복 receipt를 그대로 재생한다", async () => {
+    const memory = new InMemoryFirestore();
+    const persistence = new FirebaseCaptureLedgerPersistence(memory as unknown as firestore.Firestore);
+    const command = approval();
+    const first = await persistence.recordApproval(command);
+    const duplicateCommand = { ...command, downstreamKey: "approval-duplicate" };
+    const duplicate = await persistence.recordApproval(duplicateCommand);
+    const before = memory.paths("").map(path => [path, memory.document(path)]);
+    for (const [input, expected] of [[command, first], [duplicateCommand, duplicate]] as const) {
+      expect(await persistence.recordApproval({ ...input, branch: { ...input.branch,
+        merchant: "규칙 변경 가맹점", categoryId: "new-category", memo: "규칙 변경 메모",
+        canonicalCardId: "new-card-id", resolvedCardEvidence: { companyLabel: "국민", lastFour: "5678" },
+      } })).toEqual(expected);
+    }
+    expect(memory.paths("").map(path => [path, memory.document(path)])).toEqual(before);
+  });
+
+  it("같은 receipt key라도 원문 hash·원 가맹점·생성자·원 카드 증거가 다르면 무변경으로 거절한다", async () => {
+    const memory = new InMemoryFirestore();
+    const persistence = new FirebaseCaptureLedgerPersistence(memory as unknown as firestore.Firestore);
+    const command = approval();
+    await persistence.recordApproval(command);
+    const before = memory.paths("").map(path => [path, memory.document(path)]);
+    for (const changed of [
+      { rawPayloadHash: `sha256:${"9".repeat(64)}` },
+      { originalMerchant: "다른 원문 가맹점" },
+      { creatorMemberId: "different-member" },
+      { cardEvidence: { companyLabel: "국민", maskedToken: "9999" } },
+    ]) {
+      expect(await persistence.recordApproval({ ...command, branch: { ...command.branch, ...changed } }))
+        .toEqual({ kind: "rejected", code: "IDEMPOTENCY_PAYLOAD_MISMATCH" });
+    }
+    expect(memory.paths("").map(path => [path, memory.document(path)])).toEqual(before);
+  });
+
+  it("서버 검증 원문 identity는 parser와 설정의 새 해석에도 최초 결과를 재생하되 다른 원문·배우는 거부한다", async () => {
+    const memory = new InMemoryFirestore();
+    const persistence = new FirebaseCaptureLedgerPersistence(memory as unknown as firestore.Firestore);
+    const base = approval();
+    const command = { ...base, branch: { ...base.branch, verifiedRawPayloadHash: base.branch.rawPayloadHash } };
+    const first = await persistence.recordApproval(command);
+    const before = memory.paths("").map(path => [path, memory.document(path)]);
+    expect(await persistence.recordApproval({ ...command, branch: { ...command.branch,
+      parser: { parserId: "new-parser", parserVersion: "3.0.0" }, amountInWon: 12_100,
+      merchant: "새 규칙", originalMerchant: "새 parser 해석", categoryId: "new-category", memo: "새 메모",
+    } })).toEqual(first);
+    for (const changed of [{ verifiedRawPayloadHash: `sha256:${"9".repeat(64)}` }, { creatorMemberId: "other-member" }]) {
+      expect(await persistence.recordApproval({ ...command, branch: { ...command.branch, ...changed } }))
+        .toEqual({ kind: "rejected", code: "IDEMPOTENCY_PAYLOAD_MISMATCH" });
+    }
+    expect(memory.paths("").map(path => [path, memory.document(path)])).toEqual(before);
+  });
+
+  it("취소 receipt도 규칙으로 바뀐 표시 가맹점·카드 ID와 무관하게 확정 결과를 재생한다", async () => {
+    const memory = new InMemoryFirestore();
+    const persistence = new FirebaseCaptureLedgerPersistence(memory as unknown as firestore.Firestore);
+    await persistence.recordApproval(approval());
+    const command = cancellation();
+    const input = { ...command, branch: { ...command.branch, originalMerchant: command.branch.merchant } };
+    const first = await persistence.cancel(input);
+    expect(first.kind).toBe("cancelled");
+    const before = memory.paths("").map(path => [path, memory.document(path)]);
+    expect(await persistence.cancel({ ...input, branch: { ...input.branch,
+      merchant: "새 규칙 표시값", canonicalCardId: "new-card-id",
+    } })).toEqual(first);
+    expect(memory.paths("").map(path => [path, memory.document(path)])).toEqual(before);
+  });
+
+  it("배포 전 전체 command hash로 저장한 승인·취소 receipt는 같은 입력을 계속 재생한다", async () => {
+    const memory = new InMemoryFirestore();
+    const persistence = new FirebaseCaptureLedgerPersistence(memory as unknown as firestore.Firestore);
+    const recorded = await persistence.recordApproval(approval());
+    const cancelled = await persistence.cancel(cancellation());
+    // Archived SHA-256 fingerprints of the pre-change approval()/cancellation() fixture wire.
+    // Constants intentionally do not call or reconstruct the new fingerprint implementation.
+    for (const path of memory.paths("commandReceipts/payment-capture-ledger/receipts/")) {
+      const receipt = memory.document(path)!;
+      memory.seed(path, { ...receipt, payloadFingerprint: receipt.downstreamKey === "approval-1"
+        ? "sha256:2be7355e8925adae7fccc23d16ec5c1e3fc7306dbf1790374b29e1ede45594b8"
+        : "sha256:106ef7c357e18b6a5f52fb64186c0045dc86e77da8426bc0ee0a45ff025ed2e1" });
+    }
+    const before = memory.paths("").map(path => [path, memory.document(path)]);
+    expect(await persistence.recordApproval(approval())).toEqual(recorded);
+    expect(await persistence.cancel(cancellation())).toEqual(cancelled);
+    expect(await persistence.recordApproval({ ...approval(), branch: { ...approval().branch,
+      verifiedRawPayloadHash: approval().branch.rawPayloadHash } })).toEqual(recorded);
+    expect(await persistence.cancel({ ...cancellation(), branch: { ...cancellation().branch,
+      verifiedRawPayloadHash: cancellation().branch.rawPayloadHash } })).toEqual(cancelled);
+    expect(await persistence.recordApproval({ ...approval(), branch: { ...approval().branch,
+      rawPayloadHash: `sha256:${"9".repeat(64)}`, verifiedRawPayloadHash: `sha256:${"9".repeat(64)}` } }))
+      .toEqual({ kind: "rejected", code: "IDEMPOTENCY_PAYLOAD_MISMATCH" });
+    expect(memory.paths("").map(path => [path, memory.document(path)])).toEqual(before);
+  });
+
   it("원 알림의 마스킹 증거는 보존하고 거래 표시에는 확정된 등록 카드 네 자리를 사용한다", async () => {
     const memory = new InMemoryFirestore();
     const persistence = new FirebaseCaptureLedgerPersistence(

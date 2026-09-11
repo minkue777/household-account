@@ -69,6 +69,11 @@ web/scripts/*.mjs
 *.tsbuildinfo
 functions/quality-functions.json
 web/quality-web.json
+web/quality-e2e.json
+web/quality-native-e2e.json
+web/quality-pwa-e2e.json
+/quality-*-e2e.json
+functions/quality-firebase-integration.json
 
 .vercel
 .env*.local

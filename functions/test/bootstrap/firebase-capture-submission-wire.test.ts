@@ -104,6 +104,7 @@ describe("submitCaptureEnvelope callable wire", () => {
         capabilities: ["paymentCapture:submit"],
       },
     });
+    expect(captured?.verifiedRawPayloadHash).toBeUndefined();
     expect(response).toEqual({
       contractVersion: "capture-submission-response.v1",
       result: {
@@ -128,6 +129,16 @@ describe("submitCaptureEnvelope callable wire", () => {
         completion: "terminal",
       },
     });
+  });
+
+  it.each(["verifiedRawPayloadHash", "verifiedRawInput"])("공개 typed 입력은 서버 전용 %s를 위조할 수 없다", async (field) => {
+    let submitted = false;
+    const handler = createCaptureSubmissionCallableHandler({ memberships: activeMembership(), submissions: {
+      submit: async () => { submitted = true; throw new Error("Not reachable"); },
+    } });
+    await expect(handler.handle({ principalUid: "firebase-uid", data: { ...envelope(), [field]: "forged" } }))
+      .rejects.toMatchObject({ callableCode: "invalid-argument", domainCode: "UNKNOWN_FIELD", details: { path: `$.${field}` } });
+    expect(submitted).toBe(false);
   });
 
   it("미인증 요청은 payload를 해석하기 전에 거부한다", async () => {
