@@ -6,13 +6,15 @@
 
 - Node.js 22, Java 21, 저장소의 Functions·Web 의존성, 인증된 GitHub CLI와 Application Default Credentials가 필요합니다. Firebase CLI는 설치된 Web workspace의 `firebase-tools`를 사용합니다.
 - 운영자는 manifest의 `authorizedActorIds`에 등록된 GitHub 로그인 계정이어야 합니다. ADC에는 해당 Firebase 배포, Secret version metadata 읽기, Monitoring channel 읽기, 배포 승인·기록·잠금 저장소 접근 권한이 필요합니다.
-- 변경에 맞는 로컬 검증을 실행하되 전체 테스트를 commit·push·배포의 대기 조건으로 두지 않습니다. 배포하는 surface의 production build는 수행합니다.
-- main push와 PR에서 `quality-gates.yml`을 독립적으로 실행합니다. 배포는 이 실행의 완료를 기다리지 않습니다. `functions`, `web`, `web-e2e`, `android`, `android-instrumentation` 다섯 job의 실제 결과는 별도 `quality-summary`에 기록됩니다. `android-instrumentation`은 [변경 범위 판정](../../tools/ci/android-instrumentation-scope.mjs)에 해당할 때만 에뮬레이터를 실행하며, 미해당이면 범위 확인 성공으로 기록합니다. main의 다른 commit이 push되어도 이전 commit의 CI를 취소하지 않습니다.
+- 로컬 전체 테스트 완료를 기다리지 않고 변경을 push하여 CI를 실행합니다. 변경에 필요한 빠른 검증이나 실패 원인 재현은 로컬에서 수행할 수 있지만 전체 CI를 push 전에 반복하는 것은 필수 조건이 아닙니다. 배포하는 surface의 production build·Android 서명·실제 배포 smoke는 유지합니다.
+- main push 후 Vercel Git 자동배포와 `quality-gates.yml` 원격 CI가 병행 실행됩니다. 배포는 원격 CI 완료를 기다리지 않습니다. PR도 CI를 실행합니다. `functions`, `web`, `web-e2e`, `android`, `android-instrumentation` 다섯 job의 실제 결과는 별도 `quality-summary`에 기록됩니다. `android-instrumentation`은 [변경 범위 판정](../../tools/ci/android-instrumentation-scope.mjs)에 해당할 때만 에뮬레이터를 실행하며, 미해당이면 범위 확인 성공으로 기록합니다. main의 다른 commit이 push되어도 이전 commit의 CI를 취소하지 않습니다.
 - working tree는 깨끗해야 합니다. manifest와 smoke token은 저장소 밖에 둡니다. 운영 실행 환경에 `FIRESTORE_EMULATOR_HOST`나 `FIREBASE_AUTH_EMULATOR_HOST`를 설정하지 않습니다.
 
 CI는 Functions unit·contract·형식·architecture·Rules/Storage/실제 Firebase integration, Web unit·production build·E2E, Android JVM·lint·Debug/Release build·instrumentation을 실행합니다. wrapper는 CI를 조회하거나 보고서를 내려받지 않고 `ci: { policy: 'independent', workflow: 'quality-gates.yml', commitSha, status: 'not-evaluated' }`를 배포 승인 근거에 기록합니다. 이는 CI pending이나 success라는 추정이 아닙니다. 실제 상태는 해당 commit의 Actions 실행에서 확인합니다.
 
 CI 실패는 GitHub의 실패 check와 summary에 남습니다. [GitHub Actions 알림 설정](https://docs.github.com/en/subscriptions-and-notifications/how-tos/managing-github-actions-notifications)에서 `Only notify for failed workflows`를 선택하면 실행을 시작한 사용자의 활성화된 알림 경로로 받을 수 있습니다. 저장소는 계정 알림 설정을 바꾸거나 Slack·email을 직접 발송하지 않으며 수신 여부를 보장하지 않습니다. 배포와 CI 결과를 각각 전달하고 CI 문제는 원인·영향을 확인하여 후속 수정합니다.
+
+push 이후 CI를 확인하고 실패하면 로그를 읽어 수정한 뒤 다시 push합니다. 최신 HEAD의 다섯 필수 CI 검증 성공과 변경에 필요한 실제 배포 완료를 확인해야 개발 작업을 완료로 판단합니다. 이 확인은 배포를 시작하기 위한 대기 조건이 아니며, 실패한 검사를 skip하거나 성공으로 바꾸지 않습니다.
 
 ## 2. manifest 고정
 

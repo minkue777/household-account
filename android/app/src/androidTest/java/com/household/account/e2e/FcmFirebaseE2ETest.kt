@@ -1,6 +1,7 @@
 package com.household.account.e2e
 
 import android.Manifest
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.ComponentName
@@ -53,6 +54,8 @@ class FcmFirebaseE2ETest {
         val component = ComponentName(context, FcmService::class.java)
         val originalComponent = context.packageManager.getComponentEnabledSetting(component)
         val originalOverlayPermission = Settings.canDrawOverlays(context)
+        val automation = instrumentation.uiAutomation
+        val originalAccessibilityFlags = automation.serviceInfo.flags
         val monitor = instrumentation.addMonitor(MainActivity::class.java.name, null, false)
         var opened: MainActivity? = null
         fun shell(command: String) = instrumentation.uiAutomation.executeShellCommand(command).use { descriptor ->
@@ -67,7 +70,10 @@ class FcmFirebaseE2ETest {
                         appendLine("${" ".repeat(depth)}${node.className} text=${node.text} content=${node.contentDescription} clickable=${node.isClickable} visible=${node.isVisibleToUser}")
                         for (index in 0 until node.childCount) describe(node.getChild(index), depth + 1)
                     }
-                    describe(instrumentation.uiAutomation.rootInActiveWindow, 0)
+                    for (window in automation.windows) {
+                        appendLine("window=${window.title} type=${window.type} active=${window.isActive} focused=${window.isFocused}")
+                        describe(window.root, 0)
+                    }
                 }
                 File(context.filesDir, "native-fcm-failure-tree.txt").writeText(tree)
                 instrumentation.uiAutomation.takeScreenshot()?.let { screenshot ->
@@ -80,6 +86,10 @@ class FcmFirebaseE2ETest {
             }
         }
         try {
+            automation.serviceInfo = automation.serviceInfo.apply {
+                flags = flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                    AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+            }
             withTimeout(30_000) { auth.signInWithEmailAndPassword(fixture.getString("email"), fixture.getString("password")).await() }
             // Observe the actual SDK failure before background delivery deliberately hides it.
             // This also proves the Native session resolves to the server-created household.
@@ -136,10 +146,20 @@ class FcmFirebaseE2ETest {
             shell("appops set ${context.packageName} SYSTEM_ALERT_WINDOW deny")
             eventually("Overlay permission must be disabled before opening MainActivity") { !Settings.canDrawOverlays(context) }
             shell("cmd statusbar expand-notifications")
-            eventually("The actual Android notification shade must expose the notification") { instrumentation.uiAutomation.rootInActiveWindow
-                ?.findAccessibilityNodeInfosByText("FCM 실제 서비스")?.isNotEmpty() == true }
-            var notificationNode: AccessibilityNodeInfo? = instrumentation.uiAutomation.rootInActiveWindow
-                ?.findAccessibilityNodeInfosByText("FCM 실제 서비스")?.firstOrNull()
+            // The system text-search API can omit non-important notification ancestors even
+            // when their child TextViews are visible. Walk the real accessibility tree.
+            fun findVisibleTitle(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+                if (node.isVisibleToUser && node.text?.toString() == "FCM 실제 서비스") return node
+                for (index in 0 until node.childCount) {
+                    val child = node.getChild(index) ?: continue
+                    findVisibleTitle(child)?.let { return it }
+                }
+                return null
+            }
+            fun visibleNotificationNode() = automation.windows.asSequence().mapNotNull { it.root }
+                .mapNotNull(::findVisibleTitle).firstOrNull()
+            eventually("The actual Android notification shade must expose the notification") { visibleNotificationNode() != null }
+            var notificationNode: AccessibilityNodeInfo? = visibleNotificationNode()
             while (notificationNode != null && !notificationNode.isClickable) notificationNode = notificationNode.parent
             assertTrue("Tap the actual OS notification so Android dispatches its PendingIntent",
                 notificationNode?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true)
@@ -166,6 +186,8 @@ class FcmFirebaseE2ETest {
             service.onMessageReceived(incoming)
             assertTrue(manager.activeNotifications.isEmpty())
         } finally {
+            shell("cmd statusbar collapse")
+            automation.serviceInfo = automation.serviceInfo.apply { flags = originalAccessibilityFlags }
             instrumentation.removeMonitor(monitor)
             opened?.let { activity -> instrumentation.runOnMainSync { if (!activity.isFinishing) activity.finish() } }
             HouseholdPreferences.clearHouseholdKey(context)

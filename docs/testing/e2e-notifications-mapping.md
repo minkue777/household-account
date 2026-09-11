@@ -21,4 +21,6 @@ FCM에는 Emulator가 없어 `tools/e2e/firebase-fcm-transport.cjs`가 Firebase 
 | PUSH-013 | purge 시나리오: 실제 compiled production participant + Firestore transaction, capability 거부·논리 삭제 no-op, 2개씩 page 삭제, 같은 checkpoint 결과 재생, 타 가구·FCM 관측 문서 보존 | Access의 전체 영구 삭제 승인 process는 별도 Access E2E; 여기서는 Notifications participant 경계부터 실행 |
 | PUSH-014 | 실제 Android/Shortcut 수집 시나리오: preference 없음은 enabled, disabled는 자동·명시 모두 제외, endpoint와 수집 유지, enabled 복원 후 수신 | provider 직전 동시 preference 변경은 애플리케이션/Adapter 테스트와 구분 |
 
-2026-09-11 1차 실제 실행: UI fanout·Android/Shortcut 수집과 수신 설정·provider 오류/늦은 UNREGISTERED·이벤트 보존 기간·실제 purge의 5개가 통과했습니다. FID lifecycle은 정상 typed AUTH_REQUIRED 응답을 HTTP 예외로 잘못 기대한 테스트를 수정해 재실행 대기 중입니다. 제거/복구는 실제 결함을 재현했습니다. 제거 전에 수집에 성공한 일반 Auth JWT가 제거 뒤에도 3,300원 새 거래를 생성했습니다. Native JWT도 실제 공개 session 발급과 Auth 교환을 거쳐 사전 수집에 성공했으며, 제거 후 두 응답을 모두 수집하도록 검증을 보강했습니다. 서버 권한 수정 뒤 전체 재실행 결과를 별도로 기록합니다.
+2026-09-11 공식 Web 전체 E2E 89개 재실행에서 알림 7개가 모두 통과했습니다. FID lifecycle의 정상 typed AUTH_REQUIRED 응답, UI fanout·Android/Shortcut 수집과 수신 설정·provider 오류/늦은 UNREGISTERED·이벤트 보존 기간·실제 purge를 확인했습니다. 제거/복구는 실제 결함을 재현한 뒤 수정했습니다. 제거 전에 수집에 성공한 일반 Auth JWT와 공개 session 발급·Auth 교환으로 얻은 Native JWT 모두, 제거 뒤 새 결제가 거부되고 거래·영수증이 변하지 않았습니다. 멤버 복원 후 같은 토큰의 새 수집이 다시 성공하는 것까지 검증했습니다. 이 결과와 Android OS 알림 클릭을 실행하는 Native Firebase E2E 결과는 구분합니다.
+
+후속 Android Native 실행에서는 실제 FCM 서버 등록·OS 알림 표시·알림 탭으로 MainActivity 실행·로그아웃 차단 테스트도 통과했습니다. 테스트 후 결과 파일 수집의 runner 오류와 아직 실행되지 않은 후속 Web 검증은 [Native 실행 기록](real-code-test-cleanup.md#검증-기록)에 별도로 기록했습니다.

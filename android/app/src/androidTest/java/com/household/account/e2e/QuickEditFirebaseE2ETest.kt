@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.app.Notification
 import android.os.Process
+import android.os.SystemClock
 import android.provider.Settings
 import android.service.notification.StatusBarNotification
 import android.util.Base64
@@ -15,6 +16,7 @@ import android.view.WindowManager
 import android.widget.EditText
 import android.widget.TextView
 import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.ViewAction
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.action.ViewActions.closeSoftKeyboard
 import androidx.test.espresso.action.ViewActions.replaceText
@@ -85,6 +87,17 @@ class QuickEditFirebaseE2ETest {
         val monitor = instrumentation.addMonitor(QuickEditActivity::class.java.name, null, false)
         var activity: QuickEditActivity? = null
         val previousOverlayPermission = Settings.canDrawOverlays(context)
+        fun awaitNextActivity(previous: QuickEditActivity?, timeoutMillis: Long): QuickEditActivity? {
+            val deadline = SystemClock.elapsedRealtime() + timeoutMillis
+            while (true) {
+                val remaining = deadline - SystemClock.elapsedRealtime()
+                if (remaining <= 0) return null
+                val next = monitor.waitForActivityWithTimeout(remaining) as? QuickEditActivity ?: return null
+                // Android reports both creation and resume to the monitor. A second lifecycle
+                // callback for the current instance is not the next FIFO Activity.
+                if (next !== previous) return next
+            }
+        }
 
         try {
             auth.signOut()
@@ -115,7 +128,9 @@ class QuickEditFirebaseE2ETest {
                 Process.myPid(), 0, notification, Process.myUserHandle(), Instant.parse(raw.notification.postedAt).toEpochMilli())
             listener.onNotificationPosted(externalInput)
             listener.onNotificationPosted(externalInput)
-            activity = instrumentation.waitForMonitorWithTimeout(monitor, 30_000) as? QuickEditActivity
+            // Instrumentation.waitForMonitorWithTimeout removes the monitor after its first hit.
+            // Keep this monitor registered to observe all three real FIFO Activity launches.
+            activity = awaitNextActivity(null, 30_000)
             assertNotNull("Production listener and QuickEditCoordinator must launch the Activity", activity)
             val opened = checkNotNull(activity)
             val actualQueue = AndroidKeystoreQuickEditQueueStore(context).load()
@@ -159,7 +174,7 @@ class QuickEditFirebaseE2ETest {
             fun additionalInput(amount: String, id: Int): StatusBarNotification {
                 val copy = notification.clone().apply {
                     extras.putCharSequenceArray(Notification.EXTRA_TEXT_LINES,
-                        raw.notification.textLines.mapIndexed { index, line -> if (index == 0) "$amount 원 일시불" else line }.toTypedArray())
+                        raw.notification.textLines.mapIndexed { index, line -> if (index == 0) "${amount}원 일시불" else line }.toTypedArray())
                 }
                 @Suppress("DEPRECATION")
                 return StatusBarNotification(raw.packageName, raw.packageName, id, "e2e-card-$id", Process.myUid(),
@@ -175,12 +190,17 @@ class QuickEditFirebaseE2ETest {
             assertEquals(1, monitor.hits)
             assertFalse(opened.isFinishing)
 
-            onView(withId(R.id.etMemo)).perform(replaceText(SAVED_MEMO), closeSoftKeyboard())
+            // Espresso logs the action description in the target app process. Keep its real
+            // text-entry implementation but do not make the test driver leak the private input.
+            val enterMemo = object : ViewAction by replaceText(SAVED_MEMO) {
+                override fun getDescription() = "enter private memo text"
+            }
+            onView(withId(R.id.etMemo)).perform(enterMemo, closeSoftKeyboard())
             onView(withId(R.id.btnSave)).perform(click())
             eventually("Quick Edit durable acceptance closes the screen") { opened.isFinishing || opened.isDestroyed }
 
             for (queuedEntry in queued.entries.drop(1)) {
-                val next = instrumentation.waitForMonitorWithTimeout(monitor, 15_000) as? QuickEditActivity
+                val next = awaitNextActivity(activity, 15_000)
                 assertNotNull("Durable acceptance or explicit close must advance exactly one FIFO entry", next)
                 activity = next
                 assertEquals(queuedEntry.transactionId, next!!.intent.getStringExtra(QuickEditActivity.EXTRA_EXPENSE_ID))
@@ -228,9 +248,15 @@ class QuickEditFirebaseE2ETest {
 
             val appLog = shell("logcat -d --pid=${Process.myPid()} -v brief")
             val authToken = withTimeout(10_000) { auth.currentUser!!.getIdToken(false).await().token }
-            listOfNotNull(householdId, memberId, fixture.getString("email"), snapshot.merchant, SAVED_MEMO,
-                raw.notification.text.takeIf(String::isNotBlank), authToken).forEach { sensitive ->
-                assertFalse("Application log must not expose fixture identity, payment, memo or credential", appLog.contains(sensitive))
+            val privateValues = listOf(
+                "household" to householdId, "member" to memberId, "email" to fixture.getString("email"),
+                "merchant" to snapshot.merchant, "memo" to SAVED_MEMO,
+                "raw title" to raw.notification.title, "raw text" to raw.notification.text, "credential" to authToken
+            ) + raw.notification.textLines.mapIndexed { index, line -> "raw line $index" to line }
+            privateValues.forEach { (field, sensitive) ->
+                if (!sensitive.isNullOrBlank()) {
+                    assertFalse("Application log must not expose private $field", appLog.contains(sensitive))
+                }
             }
 
             resultFile.writeText(JSONObject()

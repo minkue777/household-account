@@ -112,6 +112,9 @@ else {
     logOffset = existsSync(firebaseLog) ? statSync(firebaseLog).size : 0;
     await run(process.platform === 'win32' ? 'gradlew.bat' : './gradlew', [
       'connectedDebugAndroidTest', '-PfirebaseE2e=true', '-PfirebaseWebE2e=true',
+      // AGP normally uninstalls both APKs before Gradle returns, deleting private result files.
+      // Its supported stable option preserves the E2E installation for the reads below.
+      '-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true',
       `-PWEB_APP_URL=${webRuntime.origin}/`, '-PWEB_ENVIRONMENT_VERSION=emulator-e2e-v1',
       `-Pandroid.testInstrumentationRunnerArguments.webOrigin=${webRuntime.origin}`,
       `-Pandroid.testInstrumentationRunnerArguments.fixtureBase64=${Buffer.from(JSON.stringify(fixture)).toString('base64')}`, '--stacktrace',

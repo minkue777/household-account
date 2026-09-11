@@ -97,7 +97,7 @@ jobs:
           if-no-files-found: error
 
   quality-summary:
-    name: CI 결과 알림
+    name: CI 결과 요약
     if: always()
     needs: [functions, web, web-e2e, android, android-instrumentation]
     runs-on: ubuntu-latest

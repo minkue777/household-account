@@ -6,12 +6,12 @@
 
 ## 1. 설계 목적과 추적성
 
-`REL-001~004`를 배포 검증, 독립 CI 결과, 장기 배포 기록으로 구분합니다. [DEC-074](../../../governance/decisions.md#dec-074)에 따라 전체 CI 완료는 배포의 선행 조건이 아닙니다. 테스트 결과를 성공으로 바꾸는 waiver나 override 계층은 두지 않습니다.
+`REL-001~004`를 로컬 검증, 배포 검증, 원격 CI 결과, 장기 배포 기록으로 구분합니다. 로컬 전체 테스트 완료를 기다리지 않고 push하여 자동 CI를 실행하며, 필요한 빠른 검증과 실패 재현은 로컬에서 수행합니다. [DEC-074](../../../governance/decisions.md#dec-074)에 따라 원격 CI와 배포는 병행합니다. 최신 HEAD의 다섯 필수 CI 검증 성공은 개발 작업 완료 조건이며 배포의 선행 대기 조건이 아닙니다. 테스트 결과를 성공으로 바꾸는 waiver나 override 계층은 두지 않습니다.
 
 ## 2. 모듈 경계와 책임
 
 - 배포 wrapper는 immutable manifest의 HEAD·artifact·대상·호환성·actor·Secret·Monitoring을 검증합니다.
-- production build와 배포 후 실제 인증·가구 Query smoke가 배포 경로에 포함됩니다.
+- production build·Android release 서명과 배포 후 실제 smoke가 각 배포 경로에 포함됩니다. Firebase smoke는 인증·가구 Query를 확인합니다.
 - 전체 unit·contract·Rules·E2E·Android 검증은 `quality-gates.yml`에서 별도로 실행됩니다.
 - CI 결과는 commit별 GitHub run/check/summary로 남기며 배포 기록을 성공 또는 실패로 덮어쓰지 않습니다.
 
@@ -43,8 +43,9 @@
 1. 배포 wrapper는 깨끗한 HEAD를 확인하고 production build·세 codebase 준비를 실행합니다. build lifecycle의 architecture 검사는 유지합니다.
 2. 현재 파일의 hash와 manifest를 비교하고 명시적 production project·대상 resource·호환 계획을 검증합니다.
 3. 실제 GitHub actor·Secret version metadata·Monitoring channel을 확인합니다. 전체 테스트 실행, GitHub CI 대기, CI 보고서 다운로드는 하지 않습니다.
-4. main push와 PR은 CI를 시작합니다. main commit별 concurrency group을 사용하여 후속 push가 이전 commit 검증을 취소하지 않습니다.
+4. 로컬 전체 테스트를 기다리지 않고 main에 push하면 Vercel Git 자동배포와 원격 CI가 함께 시작됩니다. PR도 CI를 실행합니다. main commit별 concurrency group을 사용하여 후속 push가 이전 commit 검증을 취소하지 않습니다.
 5. `quality-summary`는 모든 job 종료 후 `needs`의 실제 결과를 요약합니다. 실패하면 GitHub check와 annotation을 남기며 기본 알림은 사용자 Actions 알림 설정을 따릅니다. repository가 별도 email·Slack을 보내지 않습니다.
+6. 실패한 CI 로그를 확인하고 원인을 수정하여 다시 push합니다. 최신 HEAD의 다섯 필수 검증 성공과 필요한 배포 완료를 확인한 뒤 개발 작업을 완료로 판단합니다. 실패를 skip으로 숨기거나 이전 commit의 성공을 최신 변경의 근거로 사용하지 않습니다.
 
 ### 5.2 배포 실행과 `RecordDeploymentResult`
 

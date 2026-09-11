@@ -58,4 +58,8 @@ fixture 필드는 `projectId`, `email`, `password`, `householdId`, `memberId`, `
 
 ## 검증 기록
 
-2026-09-11 기본 Android instrumentation 29개가 API 36.1 Emulator에서 모두 통과했습니다(실패 0, skip 0). 같은 최종 실행의 JVM 단위 테스트 task, lintDebug, assembleDebug, assembleRelease도 성공했습니다. JVM task는 입력 변경이 없어 up-to-date였습니다. Emulator 전용 debug APK·테스트 APK 컴파일도 성공했습니다. Native Firebase E2E 실행과 전체 품질 게이트는 별도 결과로 기록하며, 컴파일 성공을 E2E 실행 성공으로 계산하지 않습니다.
+2026-09-11 기본 Android instrumentation 29개가 API 36.1 Emulator에서 모두 통과했습니다(실패 0, skip 0). 같은 최종 실행의 JVM 단위 테스트 task, lintDebug, assembleDebug, assembleRelease도 성공했습니다. JVM task는 입력 변경이 없어 up-to-date였습니다. Emulator 전용 debug APK·테스트 APK 컴파일도 성공했습니다.
+
+같은 날 공식 Native 실행의 Android Firebase E2E 3개도 모두 통과했습니다(JUnit tests 3, failures 0, errors 0, skipped 0). 실제 OS 알림 탭·서버 등록·로그아웃 차단, 실제 수집 3건의 Quick Edit FIFO·대소문자 카테고리·메모 저장·서버 재조회·로그 비노출, 실제 WebView 첫 화면과 같은 Activity 재로딩을 검증했습니다. 새 테스트의 관측 오류는 실제 알림 접근성 트리 순회, 계속 유지되는 ActivityMonitor, 카드사 원문 형식 보존으로 수정했습니다. Espresso의 실제 입력 액션은 유지하면서 설명에 메모 값을 넣지 않도록 했으며 앱 로그 검사 범위를 줄이지 않았습니다.
+
+다만 이 실행의 전체 명령은 후처리 실패로 종료 코드 1입니다. AGP가 테스트 앱을 먼저 제거해 Node runner가 앱 내부 결과 JSON을 읽지 못했으며, 후속 Web 1개는 실행되지 않았습니다. 로컬 AGP 8.13.2의 Stable 옵션 `android.injected.androidTest.leaveApksInstalledAfterRun`을 확인하여 E2E runner에만 적용했고 Node 구문 검사는 통과했습니다. 이 후처리 수정과 Native→Web 마지막 연결의 실행 결과는 CI에서 확인해야 합니다. Native 3개 통과를 전체 runner 통과로 계산하지 않습니다.

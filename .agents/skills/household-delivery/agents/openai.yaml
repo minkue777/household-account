@@ -1,0 +1,6 @@
+interface:
+  display_name: "가계부 개발·배포·CI 완료"
+  short_description: "개발 변경의 push·대상별 배포와 CI 실패 수정을 이어서 처리합니다."
+  default_prompt: "$household-delivery 스킬로 요청한 변경을 구현하고 push·필요한 배포·CI 확인과 실패 수정까지 진행해 주세요."
+policy:
+  allow_implicit_invocation: true

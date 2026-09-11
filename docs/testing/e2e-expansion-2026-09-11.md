@@ -12,7 +12,7 @@ FCM/APNs 전달, 결제 앱의 OS callback, 외부 시세·Cloud Logging 응답�
 - [요구사항 연결표](e2e-requirement-coverage.md)는 실제 테스트 함수 및 Native 메서드의 존재를 검사합니다. 주석에 ID만 적거나 직접 skip/todo한 테스트는 증거로 사용하지 않습니다. 연결 수는 모든 수용 조건의 통과율이 아닙니다.
 - 제품 코드 대신 별도 참고 구현을 실행하거나 미사용 Application factory만 검사한 테스트를 삭제했습니다. 실제 모듈의 외부 포트를 대역으로 바꾸는 유효한 단위·통합 테스트는 유지합니다. 정적 검사도 운영 schema·금지 의존성·배포 설정을 검증하는 경우 유지합니다.
 - 기존 거대한 Web 시나리오는 독립된 사용자 흐름으로 나눴습니다. 삭제 근거와 대체 경로는 [Native/알림](real-code-test-cleanup.md), [결제](e2e-payment-mapping.md), [재무](e2e-finance-mapping.md), [자산/관리자](e2e-portfolio-admin-mapping.md), [접근/운영](access-system-test-cleanup.md)에 기록했습니다.
-- 이 과정에서 불필요·중복 검사와 제거된 코드의 테스트 118개 파일, 참고 구현 75개 파일, 전용 support 109개 파일을 정리했습니다. 삭제 수에는 실제 단위 테스트였지만 대상 TTL 코드 자체가 제거된 경우도 포함하므로, 모두 가짜 테스트였다는 뜻은 아닙니다.
+- 이 과정에서 불필요·중복 검사와 제거된 코드의 테스트 119개 파일, 참고 구현 75개 파일, 전용 support 110개 파일을 정리했습니다. 삭제 수에는 실제 단위 테스트였지만 대상 TTL 코드 자체가 제거된 경우도 포함하므로, 모두 가짜 테스트였다는 뜻은 아닙니다.
 
 ## 실행 중 발견한 제품 결함
 
@@ -28,7 +28,7 @@ FCM/APNs 전달, 결제 앱의 OS callback, 외부 시세·Cloud Logging 응답�
 
 ## 실행 기록
 
-Web 전체 실행을 완료했으며 Native와 최종 일반 production PWA 실행이 진행 중입니다. 아래 통과는 해당 실행 범위의 증거이며, 아직 실행하지 않은 새 시나리오의 성공을 뜻하지 않습니다.
+Web 전체 실행과 일반 production PWA 실행, Native 테스트 3개를 완료했습니다. Native runner는 테스트 후 결과 파일 수집에서 실패해 수집 설정을 수정했으며, 전체 runner와 후속 Web 1개는 CI 검증이 남아 있습니다. 아래 통과는 해당 실행 범위의 증거이며, 아직 실행하지 않은 새 시나리오의 성공을 뜻하지 않습니다. 로그인 PWA의 로그아웃 후 실제 정적 JS cache bytes 보존 검사를 추가한 뒤의 재검증도 CI에서 확인합니다.
 
 첫 공식 Web 전체 실행은 89개 중 84개 통과·5개 실패·생략 0개였습니다(6분 31초). iPhone WebKit 3개는 모두 통과했습니다. 실패는 실제 receipt 재시도·Storage CSP 결함 2개와 테스트 기대·관측 오류 3개로 구분했습니다. 기존 exact 규칙을 덮어쓰지 않는 계약과 공개 오류 코드에 테스트를 맞추고, PWA는 같은 문서의 history 이동을 제외한 실제 문서 로딩만 셉니다. 테스트 사이에는 이전 Outbox 소비 완료를 확인하고 데이터를 초기화합니다.
 
@@ -36,14 +36,15 @@ Web 전체 실행을 완료했으며 Native와 최종 일반 production PWA 실�
 
 | 검증 | 현재 확인 결과 |
 |---|---|
-| Functions 품질 게이트 | 211개 파일·1,699개 통과, 타입·경계 검사·빌드와 별도 architecture 39개 성공 |
+| Functions 품질 게이트 | 미사용 배포 evaluator 정리 후 211개 파일·1,656개 통과; 타입·경계·production build·architecture 39개 성공 |
 | Web Jest | 96개 파일·613개 통과, 생략 없음 |
 | Firestore Rules·Firebase adapter 통합 | 14개 파일·75개 통과 |
 | Storage Rules | 실제 Storage Emulator에서 3개 통과 |
 | callable HTTP 통합 | 실제 세 Functions codebase와 Auth/Firestore에서 3개 통과 |
 | Android 기본 instrumentation | 29개 통과, 실패·생략 없음; JVM·lint·debug/release 빌드 성공 |
 | Web 전체 E2E | 89개 통과, 실패·생략·flaky 없음 |
-| Native Firebase·일반 production PWA E2E | 최종 실행 후 결과 갱신 |
+| 일반 production PWA E2E | Node 22 일반 운영 빌드에서 5개 통과, 실패·생략·flaky 없음; 14.1초 |
+| Native Firebase E2E | Native 3개 통과(실패·생략 0); 결과 수집 설정 수정 후 전체 runner와 후속 Web 1개는 CI 검증 대기 |
 
 Functions 기본 실행에서 조건부 통합 81개가 제외되므로 별도 Emulator 실행 결과와 합쳐 판단해야 합니다. CI의 다섯 필수 job을 유지하며, Web-only 변경에 Android Emulator를 추가로 의무화하지 않았습니다.
 
