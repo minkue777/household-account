@@ -4,14 +4,18 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const ANDROID_PREFIXES = ['android/', 'contracts/', 'web/src/platform/android-host/'];
-const ANDROID_WEB_FILES = new Set([
+const ANDROID_INTEGRATION_FILES = new Set([
   'web/src/lib/bridges/androidBridge.ts',
   'web/src/lib/authService.ts',
   'web/src/lib/firebase.ts',
+  'web/e2e/native-quick-edit.spec.ts',
+  'web/playwright.native.config.ts',
+  'tools/e2e/native-firebase.mjs',
+  'tools/e2e/native-web-runtime.mjs',
 ]);
 
 export function affectsAndroidRuntime(path) {
-  return ANDROID_PREFIXES.some(prefix => path.startsWith(prefix)) || ANDROID_WEB_FILES.has(path);
+  return ANDROID_PREFIXES.some(prefix => path.startsWith(prefix)) || ANDROID_INTEGRATION_FILES.has(path);
 }
 
 function requireSha(value) {
@@ -42,7 +46,7 @@ export function androidInstrumentationScope(eventName, event, git = args =>
   const required = paths.split('\0').filter(Boolean).some(affectsAndroidRuntime);
   return {
     required,
-    reason: required ? 'Android 코드·공용 계약·연동 변경' : 'Android 관련 변경 없음 — 에뮬레이터 검증 대상 아님',
+    reason: required ? 'Android 코드·공용 계약·연동 또는 Native E2E 변경' : 'Android 관련 변경 없음 — 에뮬레이터 검증 대상 아님',
   };
 }
 

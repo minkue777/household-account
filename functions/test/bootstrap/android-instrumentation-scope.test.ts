@@ -11,6 +11,8 @@ describe('Android 에뮬레이터 검증의 변경 범위', () => {
     'web/src/components/common/ColorPicker.tsx',
     'web/src/components/settings/useCategoryReorder.ts',
     'web/src/app/globals.css',
+    'web/e2e/pwa-authenticated.spec.ts',
+    'web/playwright.pwa.config.ts',
     'docs/operations/deployment-prerequisites.md',
     'AGENTS.md',
   ])('Web 표시·문서 변경은 에뮬레이터를 요구하지 않는다: %s', path => {
@@ -26,7 +28,11 @@ describe('Android 에뮬레이터 검증의 변경 범위', () => {
     'web/src/lib/bridges/androidBridge.ts',
     'web/src/lib/authService.ts',
     'web/src/lib/firebase.ts',
-  ])('Android 코드·의존성·공용 계약·연동 변경은 반드시 검증한다: %s', path => {
+    'web/e2e/native-quick-edit.spec.ts',
+    'web/playwright.native.config.ts',
+    'tools/e2e/native-firebase.mjs',
+    'tools/e2e/native-web-runtime.mjs',
+  ])('Android 코드·의존성·계약·연동과 Native E2E 변경을 검증한다: %s', path => {
     expect(androidInstrumentationScope('push', push, () => `${path}\0`).required).toBe(true);
   });
 

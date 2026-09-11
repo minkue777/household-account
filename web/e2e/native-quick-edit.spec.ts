@@ -13,7 +13,7 @@ test('[QE-001/QE-003/AND-003/AND-004/ING-SAVE-006/MER-003/CAT-001] Android 수�
   await page.goto(`/expenses/${encodeURIComponent(result.transactionId)}/edit`);
   const dialog = page.getByRole('dialog', { name: '지출 수정', exact: true });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByPlaceholder('가맹점명을 입력하세요')).toHaveValue(fixture.expectedMerchant);
+  await expect(dialog.locator('input[type="text"]').first()).toHaveValue(fixture.expectedMerchant);
   await expect(dialog.getByPlaceholder('메모를 입력하세요')).toHaveValue('Android E2E 메모');
   await expect(dialog.locator('input[type="number"]')).toHaveValue(String(fixture.expectedAmountInWon));
   await expect(dialog.getByRole('button', { name: '간식', exact: true })).toHaveClass(/border-blue-500/);
