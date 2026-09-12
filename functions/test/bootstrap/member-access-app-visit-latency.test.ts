@@ -109,44 +109,28 @@ describe("member app visit startup latency", () => {
     expect(recordLatency).not.toHaveBeenCalled();
   });
 
-  it("[T-ADM-004] Navigation 기준의 15개 단계 시각을 총시간과 같은 표본에 기록한다", async () => {
+  it("[T-ADM-004] 롤백 전 Web의 단계 필드를 무시하고 접속과 전체 시간만 기록한다", async () => {
     const recordAccess = vi.fn(async () => ({
       kind: "recorded" as const,
-      totalAccessCount: 1,
+      totalAccessCount: 3,
     }));
     const recordLatency = vi.fn();
-    const timingsMs = {
-      navigationResponseEnd: 0,
-      bootstrapStarted: 100.1234,
-      authStarted: 110,
-      authReady: 300,
-      membershipStarted: 310,
-      membershipReady: 500,
-      sessionReady: 510,
-      ledgerRequested: 520,
-      ledgerReady: 1_500,
-      categoriesRequested: 530,
-      categoriesReady: 1_200,
-      localCurrencyRequested: 540,
-      localCurrencyReady: 1_900,
-      firstLedgerPaint: 1_520,
-      firstHomeCompletePaint: 120_000,
-    };
+    const subject = handler({ recordAccess, recordLatency });
 
-    await handler({ recordAccess, recordLatency }).execute(context({
+    await expect(subject.execute(context({
       visitId: "app-visit-1",
       platform: "ios-pwa",
-      clientStartupDurationMs: 120_000,
-      clientStartupTimingsMs: timingsMs,
-    }));
+      clientStartupDurationMs: 2_345.6784,
+      clientStartupTimingsMs: {
+        navigationResponseEnd: 100,
+        authReady: 450,
+        sessionReady: 500,
+        ledgerRequested: 550,
+        ledgerReady: 2_000,
+        firstHomeCompletePaint: 2_345.6784,
+      },
+    }))).resolves.toEqual({ kind: "recorded", totalAccessCount: 3 });
 
-    expect(recordLatency).toHaveBeenCalledExactlyOnceWith({
-      endpoint: "clientStartup",
-      operation: "client.ios-pwa-first-home-complete-paint.v1",
-      elapsedMs: 120_000,
-      status: "succeeded",
-      clientStartupTimingsMs: { ...timingsMs, bootstrapStarted: 100.123 },
-    });
     expect(recordAccess).toHaveBeenCalledExactlyOnceWith({
       householdId: "household-sensitive",
       memberId: "member-sensitive",
@@ -154,43 +138,12 @@ describe("member app visit startup latency", () => {
       platform: "ios-pwa",
       accessedAt: "2026-07-30T00:00:00.000Z",
     });
-  });
-
-  it.each([
-    ["알 수 없는 키", { url: 100 }],
-    ["식별자 키", { householdId: 100 }],
-    ["음수", { authReady: -1 }],
-    ["2분 초과", { authReady: 120_001 }],
-    ["문자열", { authReady: "100" }],
-    ["NaN", { authReady: NaN }],
-    ["무한대", { authReady: Infinity }],
-    ["배열", [100]],
-    ["null", null],
-    ["16개 키", Object.fromEntries(Array.from({ length: 16 }, (_, i) => [`key${i}`, i]))],
-  ])("[T-ADM-004] %s 단계 시각을 기록 전에 거부한다", async (_label, timingsMs) => {
-    const recordAccess = vi.fn();
-    const recordLatency = vi.fn();
-    await expect(handler({ recordAccess, recordLatency }).execute(context({
-      visitId: "app-visit-1",
-      platform: "ios-pwa",
-      clientStartupDurationMs: 2_000,
-      clientStartupTimingsMs: timingsMs,
-    }))).rejects.toMatchObject({ code: "INVALID_PAYLOAD" });
-    expect(recordAccess).not.toHaveBeenCalled();
-    expect(recordLatency).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    { platform: "ios-pwa" },
-    { platform: "web", clientStartupDurationMs: 2_000 },
-  ])("[T-ADM-004] 유효한 모바일 총시간 없는 단계 표본을 거부한다: %j", async (payload) => {
-    const recordAccess = vi.fn();
-    await expect(handler({ recordAccess }).execute(context({
-      visitId: "app-visit-1",
-      ...payload,
-      clientStartupTimingsMs: { authReady: 100 },
-    }))).rejects.toMatchObject({ code: "INVALID_PAYLOAD" });
-    expect(recordAccess).not.toHaveBeenCalled();
+    expect(recordLatency).toHaveBeenCalledExactlyOnceWith({
+      endpoint: "clientStartup",
+      operation: "client.ios-pwa-first-home-complete-paint.v1",
+      elapsedMs: 2_345.678,
+      status: "succeeded",
+    });
   });
 
   it.each([

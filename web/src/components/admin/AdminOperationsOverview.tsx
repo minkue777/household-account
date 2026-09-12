@@ -42,24 +42,6 @@ const FUNCTION_ENDPOINT_LABELS: Record<string, string> = {
   clientStartup: '클라이언트 앱',
 };
 
-const STARTUP_TIMING_LABELS = [
-  ['navigationResponseEnd', 'HTML 응답 완료'],
-  ['bootstrapStarted', '앱 초기화 시작'],
-  ['authStarted', '로그인 복원 시작'],
-  ['authReady', '로그인 복원 완료'],
-  ['membershipStarted', '가구 권한 조회 시작'],
-  ['membershipReady', '가구 권한 조회 완료'],
-  ['sessionReady', '가구 세션 준비'],
-  ['ledgerRequested', '월 원장 구독 요청'],
-  ['ledgerReady', '월 원장 서버 응답'],
-  ['categoriesRequested', '카테고리 구독 요청'],
-  ['categoriesReady', '카테고리 서버 응답'],
-  ['localCurrencyRequested', '지역화폐 구독 요청'],
-  ['localCurrencyReady', '지역화폐 서버 응답'],
-  ['firstLedgerPaint', '월 원장 표시'],
-  ['firstHomeCompletePaint', '첫 홈 전체 표시'],
-] as const;
-
 const FUNCTION_OPERATION_LABELS: Record<string, string> = {
   'client.android-app-first-home-complete-paint.v1':
     'Android 앱 실행 → 첫 화면 전체 표시',
@@ -613,9 +595,6 @@ export function AdminOperationsOverview({
                   const previousMetadata = index === 0
                     ? undefined
                     : functionOperationMetadata(sortedFunctionOperations[index - 1].operation);
-                  const startupSample = operation.endpoint === 'clientStartup'
-                    ? operation.latestStartupSample
-                    : undefined;
                   return (
                     <tr
                       key={`${operation.endpoint}:${operation.operation}`}
@@ -635,37 +614,6 @@ export function AdminOperationsOverview({
                         <p className="mt-0.5 font-mono text-[10px] text-slate-600">
                           {operation.operation}
                         </p>
-                        {startupSample && (
-                          <details className="mt-2 max-w-sm text-slate-400">
-                            <summary className="cursor-pointer text-sky-300">
-                              최근 계측 단계 보기
-                            </summary>
-                            <div className="mt-2 space-y-2">
-                              <p>
-                                <time dateTime={startupSample.timestamp} title={startupSample.timestamp}>
-                                  {formatDateTime(startupSample.timestamp)}
-                                </time>
-                                {' · 전체 '}{formatDuration(startupSample.elapsedMs)}
-                              </p>
-                              <p>웹 실행 후 도달 시각입니다. 각 구간의 소요 시간이 아니므로 합산하지 않습니다.</p>
-                              {operation.operation === 'client.android-app-first-home-complete-paint.v1' && (
-                                <p>Android 전체 시간은 앱(Activity) 시작부터, 아래 단계는 웹 실행부터 측정합니다.</p>
-                              )}
-                              <dl className="space-y-1">
-                                {STARTUP_TIMING_LABELS.map(([key, label]) => (
-                                  <div key={key} className="flex justify-between gap-4">
-                                    <dt>{label}</dt>
-                                    <dd className="shrink-0 font-mono text-slate-200">
-                                      {startupSample.timingsMs[key] === undefined
-                                        ? '미측정/생략'
-                                        : formatDuration(startupSample.timingsMs[key])}
-                                    </dd>
-                                  </div>
-                                ))}
-                              </dl>
-                            </div>
-                          </details>
-                        )}
                       </td>
                       <td className="px-4 py-3 text-slate-400">
                         {FUNCTION_ENDPOINT_LABELS[operation.endpoint] ?? operation.endpoint}

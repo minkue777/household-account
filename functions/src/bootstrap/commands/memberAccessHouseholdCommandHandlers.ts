@@ -1,7 +1,6 @@
 import type * as firestore from "firebase-admin/firestore";
 
 import { FirebaseMemberAccessStore } from "../../adapters/firebase/operations/firebaseMemberAccessStore";
-import { parseClientStartupTimingsMs } from "../../observability/clientStartupTimings";
 import type {
   MemberAccessEvent,
   MemberAccessPlatform,
@@ -70,7 +69,6 @@ export function createMemberAccessHouseholdCommandHandlers(
       readonly operation: string;
       readonly elapsedMs: number;
       readonly status: InteractiveLatencyStatus;
-      readonly clientStartupTimingsMs?: Readonly<Record<string, number>>;
     }) => void;
   } = {},
 ): readonly (readonly [string, HouseholdCommandHandler])[] {
@@ -95,6 +93,7 @@ export function createMemberAccessHouseholdCommandHandlers(
                 key !== "visitId" &&
                 key !== "platform" &&
                 key !== "clientStartupDurationMs" &&
+                // 이미 열린 이전 Web의 진단 필드는 수신만 허용하고 사용하지 않습니다.
                 key !== "clientStartupTimingsMs",
             ) ||
             typeof payload.visitId !== "string" ||
@@ -108,14 +107,7 @@ export function createMemberAccessHouseholdCommandHandlers(
           }
           const platform = payload.platform as MemberAccessPlatform;
           const durationMs = startupDuration(payload.clientStartupDurationMs);
-          const timingsMs = parseClientStartupTimingsMs(
-            payload.clientStartupTimingsMs,
-          );
-          if (
-            (platform === "web" && durationMs !== undefined) ||
-            (payload.clientStartupTimingsMs !== undefined &&
-              (timingsMs === undefined || durationMs === undefined))
-          ) {
+          if (platform === "web" && durationMs !== undefined) {
             throw new HouseholdCommandRejection("INVALID_PAYLOAD");
           }
           const result = await recordAccess({
@@ -137,9 +129,6 @@ export function createMemberAccessHouseholdCommandHandlers(
                 operation,
                 elapsedMs: durationMs,
                 status: "succeeded",
-                ...(timingsMs === undefined
-                  ? {}
-                  : { clientStartupTimingsMs: timingsMs }),
               });
             } catch {
               // 운영 계측 실패가 이미 완료된 접속 기록을 실패로 바꾸지 않습니다.

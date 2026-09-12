@@ -11,7 +11,6 @@ import React, {
 } from 'react';
 import type { CategoryDocument } from '@/types/category';
 import { useHousehold } from '@/contexts/HouseholdContext';
-import { markWebHomeRead } from '@/platform/performance/webStartupPerformance';
 
 interface CategoryContextType {
   categories: CategoryDocument[];
@@ -87,10 +86,7 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
       .then(({ subscribeToCategories }) => {
         if (cancelled) return;
         // 신규 가구의 기본 카테고리는 서버 온보딩 흐름이 별도 멱등 UoW로 생성합니다.
-        markWebHomeRead('categories', 'requested');
         unsubscribe = subscribeToCategories(householdId, (cats) => {
-          if (cancelled) return;
-          markWebHomeRead('categories', 'ready');
           setCategories(cats);
           setIsLoading(false);
           setServerSnapshotReady(true);

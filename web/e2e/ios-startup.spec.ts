@@ -4,7 +4,7 @@ import { observeIndexedDbOpens, readFirestoreCollection, readIndexedDbOpens, res
 const COMPLETE_PAINT = 'household-account:startup:home:first-complete-paint';
 test.beforeEach(async () => { await resetTestAccount(); });
 
-test('[T-SYS-008][AND-012][SYS-008] iPhone WebKit 재실행은 로그인 유지와 Firestore IndexedDB 대기 없이 최신 홈을 표시한다', async ({ page: initialPage, context, request }, testInfo) => {
+test('[T-SYS-008][AND-012][SYS-008] iPhone WebKit 재실행은 로그인 유지와 Firestore IndexedDB 대기 없이 최신 홈을 표시한다', async ({ page: initialPage, context, request }) => {
   let page = initialPage;
   // WebKit의 standalone 감지만 설정합니다. Auth/Firestore SDK와 서버 응답은 실제입니다.
   await observeIndexedDbOpens(page, true);
@@ -56,13 +56,6 @@ test('[T-SYS-008][AND-012][SYS-008] iPhone WebKit 재실행은 로그인 유지�
   monthlyCard = page.locator('.balance-card-glass').filter({ hasText: /월 지출/ });
   currencyCard = page.locator('.balance-card-glass').filter({ hasText: '지역화폐 잔액' });
 
-  const visitResponsePromise = page.waitForResponse((response) =>
-    response.url().endsWith('/executeHouseholdCommand')
-    && response.request().method() === 'POST'
-    && response.request().postDataJSON()?.data?.command === 'access.record-app-visit.v1'
-  );
-  // 앞선 화면 검증이 실패해 페이지가 닫혀도 관측 promise가 별도 오류를 만들지 않습니다.
-  void visitResponsePromise.catch(() => {});
   await page.goto('/');
   await expect(calendar).toHaveAttribute('aria-busy', 'false');
   await expect(page.getByRole('button', { name: '테스트 계정으로 로그인' })).toHaveCount(0);
@@ -73,81 +66,6 @@ test('[T-SYS-008][AND-012][SYS-008] iPhone WebKit 재실행은 로그인 유지�
   await expect(expenseItem).toContainText('12,300원');
   await expect(expenseItem.getByText('기타', { exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate((name) => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(1);
-
-  // 실제 SDK의 재실행 경로에서 관측한 단계만 저장합니다. 로컬 WebKit의 시간을
-  // 실기기 목표값으로 취급하지 않고 요청·응답·완료 순서와 누락을 확인합니다.
-  const startup = await page.evaluate(() => {
-    const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-    return {
-      entries: performance.getEntries()
-        .filter((entry) => entry.name.startsWith('household-account:startup:'))
-        .map(({ name, entryType, startTime, duration }) => ({ name, entryType, startTime, duration }))
-        .sort((left, right) => left.startTime - right.startTime),
-      navigation: navigation ? {
-        requestStart: navigation.requestStart,
-        responseStart: navigation.responseStart,
-        responseEnd: navigation.responseEnd,
-        domInteractive: navigation.domInteractive,
-        domContentLoadedEventEnd: navigation.domContentLoadedEventEnd,
-      } : undefined,
-    };
-  });
-  const visitResponse = await visitResponsePromise;
-  const visitEnvelope = visitResponse.request().postDataJSON().data;
-  const visitPayload = visitEnvelope.payload;
-  const visitResult = (await visitResponse.json()).result;
-  await testInfo.attach('ios-restart-startup-timings.json', {
-    body: JSON.stringify({
-      environment: 'local Playwright WebKit; not an iPhone timing result',
-      ...startup,
-      transmitted: {
-        platform: visitPayload.platform,
-        clientStartupDurationMs: visitPayload.clientStartupDurationMs,
-        clientStartupTimingsMs: visitPayload.clientStartupTimingsMs,
-      },
-      server: {
-        status: visitResponse.status(),
-        outcome: visitResult?.result?.kind,
-        accessResult: visitResult?.result?.value?.kind,
-      },
-    }, null, 2),
-    contentType: 'application/json',
-  });
-  expect(visitResponse.status()).toBe(200);
-  expect(visitResult.commandId).toBe(visitEnvelope.commandId);
-  expect(visitResult.result).toMatchObject({ kind: 'succeeded', value: { kind: 'recorded' } });
-  expect(visitPayload.platform).toBe('ios-pwa');
-  expect(Number.isFinite(visitPayload.clientStartupDurationMs)).toBe(true);
-  expect(visitPayload.clientStartupTimingsMs).toEqual(expect.any(Object));
-  const marks = new Map(startup.entries
-    .filter((entry) => entry.entryType === 'mark')
-    .map((entry) => [entry.name, entry.startTime]));
-  const prefix = 'household-account:startup:';
-  for (const suffix of [
-    'bootstrap:started', 'auth:started', 'auth:ready', 'membership-cache:hit',
-    'session:ready', 'ledger:first-paint', 'home:first-complete-paint',
-    'ledger:requested', 'ledger:ready', 'categories:requested', 'categories:ready',
-    'local-currency:requested', 'local-currency:ready',
-  ]) {
-    expect(marks.has(`${prefix}${suffix}`), `재실행 단계 누락: ${suffix}`).toBe(true);
-  }
-  expect(marks.get(`${prefix}auth:ready`)!).toBeLessThanOrEqual(marks.get(`${prefix}session:ready`)!);
-  for (const source of ['ledger', 'categories', 'local-currency']) {
-    expect(marks.get(`${prefix}${source}:requested`)!).toBeLessThanOrEqual(marks.get(`${prefix}${source}:ready`)!);
-    expect(marks.get(`${prefix}${source}:ready`)!).toBeLessThanOrEqual(marks.get(COMPLETE_PAINT)!);
-  }
-  for (const [key, suffix] of [
-    ['bootstrapStarted', 'bootstrap:started'], ['authStarted', 'auth:started'], ['authReady', 'auth:ready'],
-    ['sessionReady', 'session:ready'], ['firstLedgerPaint', 'ledger:first-paint'],
-    ['firstHomeCompletePaint', 'home:first-complete-paint'],
-    ['ledgerRequested', 'ledger:requested'], ['ledgerReady', 'ledger:ready'],
-    ['categoriesRequested', 'categories:requested'], ['categoriesReady', 'categories:ready'],
-    ['localCurrencyRequested', 'local-currency:requested'], ['localCurrencyReady', 'local-currency:ready'],
-  ]) {
-    expect(visitPayload.clientStartupTimingsMs[key], `서버로 전달된 단계: ${key}`)
-      .toBeCloseTo(marks.get(`${prefix}${suffix}`)!, 2);
-  }
-  expect(visitPayload.clientStartupDurationMs).toBeGreaterThanOrEqual(visitPayload.clientStartupTimingsMs.firstHomeCompletePaint);
   const databaseNames = await readIndexedDbOpens(page);
   expect(databaseNames.some((name) => name === 'firebaseLocalStorageDb')).toBe(true);
   expect(databaseNames.some((name) => name.startsWith('firestore/'))).toBe(false);

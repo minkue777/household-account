@@ -61,8 +61,7 @@ import {
   markWebMembershipCompleted,
   markWebMembershipPrefetched,
   markWebMembershipStarted,
-  markWebSessionReady,
-  scheduleAfterWebFirstHomeCompletePaint,
+  scheduleAfterWebFirstLedgerPaint,
 } from '@/platform/performance/webStartupPerformance';
 import { REMOTE_SESSION_RECOVERED_EVENT } from '@/platform/functions-api/firebaseCallableRecovery';
 import { isFirebaseEmulatorTestLoginEnabled } from '@/platform/firebase/firebaseEmulatorConfig';
@@ -514,7 +513,6 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
             household: householdToResolutionView(nextHousehold),
           });
         }
-        markWebSessionReady();
         setSessionState('ready');
         if (
           Platform.isIOSPWA()
@@ -522,7 +520,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         ) {
           endpointRegistrationGenerationRef.current = sessionGeneration;
           cancelEndpointRegistrationRef.current?.();
-          cancelEndpointRegistrationRef.current = scheduleAfterWebFirstHomeCompletePaint(
+          cancelEndpointRegistrationRef.current = scheduleAfterWebFirstLedgerPaint(
             () => {
               cancelEndpointRegistrationRef.current = undefined;
               if (

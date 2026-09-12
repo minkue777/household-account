@@ -83,23 +83,6 @@ describe('client startup observation contract', () => {
     await expect(subject.captureClientStartupObservation()).resolves.toBeUndefined();
   });
 
-  it('Native 응답을 기다리는 동안 단계 기록을 변경해도 최초 화면 완료 기록은 유지한다', async () => {
-    const bridge = require('@/platform/android-host/androidHostBridge') as typeof import('@/platform/android-host/androidHostBridge');
-    jest.mocked(bridge.isAndroidHostAvailable).mockReturnValue(true);
-    let finish!: (value: { durationMs: number }) => void;
-    jest.mocked(bridge.requestAndroidHost).mockReturnValue(new Promise(resolve => { finish = resolve; }));
-    const subject = require('@/platform/performance/clientStartupObservation') as typeof import('@/platform/performance/clientStartupObservation');
-    const timingsMs = { ledgerReady: 900, firstHomeCompletePaint: 1_200 };
-    const observation = subject.captureClientStartupObservation(timingsMs);
-    timingsMs.ledgerReady = 8_000;
-    finish({ durationMs: 1_700 });
-    await expect(observation).resolves.toEqual({
-      platform: 'android', durationMs: 1_700,
-      timingsMs: { ledgerReady: 900, firstHomeCompletePaint: 1_200 },
-    });
-    await expect(subject.captureClientStartupObservation({ ledgerReady: 9_000 })).resolves.toEqual(await observation);
-  });
-
   it('구 APK 또는 같은 Activity의 이미 소비된 시작 시간은 성공 표본으로 만들지 않는다', async () => {
     const bridge = require(
       '@/platform/android-host/androidHostBridge'

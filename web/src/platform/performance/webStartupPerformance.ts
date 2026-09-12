@@ -22,13 +22,6 @@ export const WEB_STARTUP_MARKS = {
   householdStarted: `${STARTUP_PREFIX}:household:started`,
   householdReady: `${STARTUP_PREFIX}:household:ready`,
   householdFailed: `${STARTUP_PREFIX}:household:failed`,
-  sessionReady: `${STARTUP_PREFIX}:session:ready`,
-  ledgerRequested: `${STARTUP_PREFIX}:ledger:requested`,
-  ledgerReady: `${STARTUP_PREFIX}:ledger:ready`,
-  categoriesRequested: `${STARTUP_PREFIX}:categories:requested`,
-  categoriesReady: `${STARTUP_PREFIX}:categories:ready`,
-  localCurrencyRequested: `${STARTUP_PREFIX}:local-currency:requested`,
-  localCurrencyReady: `${STARTUP_PREFIX}:local-currency:ready`,
   ledgerCacheHit: `${STARTUP_PREFIX}:ledger-cache:hit`,
   ledgerCacheMiss: `${STARTUP_PREFIX}:ledger-cache:miss`,
   firstLedgerPaint: `${STARTUP_PREFIX}:ledger:first-paint`,
@@ -49,60 +42,6 @@ let firstLedgerPaintReached = false;
 let firstHomeCompletePaintReached = false;
 const recordedMarks = new Set<string>();
 const recordedMeasures = new Set<string>();
-
-const STARTUP_TIMING_MARKS = {
-  bootstrapStarted: WEB_STARTUP_MARKS.bootstrapStarted,
-  authStarted: WEB_STARTUP_MARKS.authStarted,
-  authReady: WEB_STARTUP_MARKS.authReady,
-  membershipStarted: WEB_STARTUP_MARKS.membershipStarted,
-  membershipReady: WEB_STARTUP_MARKS.membershipReady,
-  sessionReady: WEB_STARTUP_MARKS.sessionReady,
-  ledgerRequested: WEB_STARTUP_MARKS.ledgerRequested,
-  ledgerReady: WEB_STARTUP_MARKS.ledgerReady,
-  categoriesRequested: WEB_STARTUP_MARKS.categoriesRequested,
-  categoriesReady: WEB_STARTUP_MARKS.categoriesReady,
-  localCurrencyRequested: WEB_STARTUP_MARKS.localCurrencyRequested,
-  localCurrencyReady: WEB_STARTUP_MARKS.localCurrencyReady,
-  firstLedgerPaint: WEB_STARTUP_MARKS.firstLedgerPaint,
-  firstHomeCompletePaint: WEB_STARTUP_MARKS.firstHomeCompletePaint,
-} as const;
-
-/** Fixed numeric checkpoints only; no URLs, identifiers, or resource names. */
-export function readWebStartupTimingsMs(): Readonly<Record<string, number>> | undefined {
-  try {
-    const performance = browserPerformance();
-    if (!performance || typeof performance.getEntriesByName !== 'function') return undefined;
-    const timings: Record<string, number> = {};
-    const add = (key: string, value: unknown) => {
-      if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 120_000) {
-        timings[key] = Math.round(value * 1_000) / 1_000;
-      }
-    };
-    const navigation = performance.getEntriesByType?.('navigation')[0] as PerformanceNavigationTiming | undefined;
-    // A zero responseEnd denotes an unavailable timing, rather than a free request.
-    if (navigation && navigation.responseEnd > 0) add('navigationResponseEnd', navigation.responseEnd);
-    for (const [key, name] of Object.entries(STARTUP_TIMING_MARKS)) {
-      add(key, performance.getEntriesByName(name, 'mark')[0]?.startTime);
-    }
-    return Object.keys(timings).length > 0 ? timings : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-export function markWebSessionReady(): void {
-  markOnce(WEB_STARTUP_MARKS.sessionReady);
-}
-
-export function markWebHomeRead(
-  source: 'ledger' | 'categories' | 'localCurrency',
-  stage: 'requested' | 'ready'
-): void {
-  const key = `${source}${stage === 'requested' ? 'Requested' : 'Ready'}` as
-    'ledgerRequested' | 'ledgerReady' | 'categoriesRequested' | 'categoriesReady' |
-    'localCurrencyRequested' | 'localCurrencyReady';
-  markOnce(WEB_STARTUP_MARKS[key]);
-}
 
 function browserPerformance(): Performance | undefined {
   if (typeof window === 'undefined') return undefined;
@@ -251,7 +190,7 @@ export function markWebFirstHomeCompletePaint(): void {
     WEB_STARTUP_MARKS.firstHomeCompletePaint
   );
   // 측정용 작업은 화면 표시가 끝난 뒤 시작하며 실패가 사용자 기능에 전파되지 않습니다.
-  void captureClientStartupObservation(readWebStartupTimingsMs());
+  void captureClientStartupObservation();
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event(FIRST_HOME_COMPLETE_PAINT_EVENT));
   }

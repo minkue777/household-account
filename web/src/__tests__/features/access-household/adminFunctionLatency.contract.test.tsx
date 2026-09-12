@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 
 import { AdminOperationsOverview } from '@/components/admin/AdminOperationsOverview';
 import type { AdminOperationsDashboardWireView } from '@/platform/functions-api';
@@ -178,7 +178,6 @@ describe('admin Cloud Function latency contract', () => {
     expect(screen.getByText('가구원 알림 FCM 접수')).toBeInTheDocument();
     expect(screen.getByText('FCM 알림 발송')).toBeInTheDocument();
     expect(screen.queryByText(/online.*ms/i)).not.toBeInTheDocument();
-    expect(screen.queryByText('최근 계측 단계 보기')).not.toBeInTheDocument();
 
     const updateRow = screen.getByText('ledger.update-transaction.v1').closest('tr');
     const deleteRow = screen.getByText('ledger.delete-transaction.v1').closest('tr');
@@ -202,63 +201,5 @@ describe('admin Cloud Function latency contract', () => {
       mergeRow!.compareDocumentPosition(unmergeRow!)
       & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
-  });
-
-  test.each([
-    ['android', 'client.android-app-first-home-complete-paint.v1', 4_500],
-    ['ios-pwa', 'client.ios-pwa-first-home-complete-paint.v1', 3_200],
-  ] as const)('shows the latest %s sample as navigation-relative milestones without replacing aggregate times', (_platform, operation, elapsedMs) => {
-    const dashboard: AdminOperationsDashboardWireView = {
-      generatedAt: '2026-09-12T01:00:00.000Z',
-      service: { apiStatus: 'online', health: 'healthy', serviceName: 'admin', revision: 'revision-1', region: 'asia-northeast3' },
-      summary: { activeHouseholds: 1, deletedHouseholds: 0, activeMembers: 3, todayAccessCount: 1, totalAccessCount: 1, unhealthyProviders: 0, openIncidents: 0 },
-      dailyAccess: [], households: [], scheduledJobs: [], providerHealth: [], incidents: [],
-      functionLatency: {
-        status: 'available', windowHours: 24,
-        operations: [{
-          endpoint: 'clientStartup', operation, sampleCount: 3, succeededCount: 3, failedCount: 0,
-          averageMs: 3_750, p95Ms: 5_250, maxMs: 5_500,
-          latestAt: '2026-09-12T00:59:00.000Z',
-          latestStartupSample: {
-            timestamp: '2026-09-12T00:59:00.000Z', elapsedMs,
-            timingsMs: {
-              navigationResponseEnd: 0, authStarted: 200, authReady: 1_000,
-              sessionReady: 1_100, ledgerRequested: 1_150, categoriesRequested: 1_180,
-              categoriesReady: 1_300, localCurrencyRequested: 1_190, localCurrencyReady: 1_600,
-              ledgerReady: 3_000, firstLedgerPaint: 3_100, firstHomeCompletePaint: 3_200,
-            },
-          },
-        }],
-      },
-      billingCost: { status: 'unavailable' },
-    };
-    const view = render(<AdminOperationsOverview dashboard={dashboard} refreshing={false} onRefresh={jest.fn()} />);
-    const row = screen.getByText(operation).closest('tr')!;
-    const summary = within(row).getByText('최근 계측 단계 보기');
-    const details = summary.closest('details')!;
-    expect(details).not.toHaveAttribute('open');
-    fireEvent.click(summary);
-    expect(details).toHaveAttribute('open');
-    expect(within(details).getByText(/웹 실행 후 도달 시각/)).toBeVisible();
-    expect(within(details).getByText('로그인 복원 완료').nextElementSibling).toHaveTextContent('1.000초');
-    expect(within(details).getByText('월 원장 서버 응답').nextElementSibling).toHaveTextContent('3.000초');
-    expect(within(details).getByText('HTML 응답 완료').nextElementSibling).toHaveTextContent('0.000초');
-    expect(within(details).getByText('가구 권한 조회 시작').nextElementSibling).toHaveTextContent('미측정/생략');
-    expect(within(details).getByText('가구 권한 조회 완료').nextElementSibling).toHaveTextContent('미측정/생략');
-    expect(details.querySelector('time')).toHaveAttribute('datetime', '2026-09-12T00:59:00.000Z');
-    expect(within(details).getByText(new RegExp(`전체 ${(elapsedMs / 1_000).toFixed(3)}초`))).toBeVisible();
-    expect(within(row).getByText('3.750초')).toBeInTheDocument();
-    expect(within(row).getByText('5.250초')).toBeInTheDocument();
-    expect(within(row).getByText('5.500초')).toBeInTheDocument();
-    if (_platform === 'android') {
-      expect(within(details).getByText(/Android 전체 시간은 앱\(Activity\) 시작부터/)).toBeVisible();
-    } else {
-      expect(within(details).queryByText(/Android 전체 시간/)).not.toBeInTheDocument();
-    }
-
-    const { latestStartupSample: _sample, ...withoutTimings } = dashboard.functionLatency.operations[0];
-    view.rerender(<AdminOperationsOverview dashboard={{ ...dashboard, functionLatency: { ...dashboard.functionLatency, operations: [withoutTimings] } }} refreshing={false} onRefresh={jest.fn()} />);
-    expect(screen.queryByText('최근 계측 단계 보기')).not.toBeInTheDocument();
-    expect(screen.getByText('3.750초')).toBeInTheDocument();
   });
 });

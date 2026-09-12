@@ -40,12 +40,7 @@ export function recordCurrentAppVisit(): Promise<void> {
       platform: platform(),
       ...(startupObservation === undefined
         ? {}
-        : {
-          clientStartupDurationMs: startupObservation.durationMs,
-          ...(startupObservation.timingsMs === undefined
-            ? {}
-            : { clientStartupTimingsMs: startupObservation.timingsMs }),
-        }),
+        : { clientStartupDurationMs: startupObservation.durationMs }),
     });
   })().catch(() => {});
   return visitPromise;
