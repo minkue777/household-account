@@ -86,6 +86,11 @@ export interface AdminDashboardFunctionLatency {
   readonly p95Ms: number;
   readonly maxMs: number;
   readonly latestAt: string;
+  readonly latestStartupSample?: {
+    readonly timestamp: string;
+    readonly elapsedMs: number;
+    readonly timingsMs: Readonly<Record<string, number>>;
+  };
 }
 
 export interface AdminDashboardFunctionLatencyWindow {

@@ -88,7 +88,10 @@ import {
   clearAdminHouseholdViewSelection,
   selectAdminHouseholdView,
 } from '@/features/access-household/application/adminHouseholdViewSelection';
-import { markWebFirstLedgerPaint } from '@/platform/performance/webStartupPerformance';
+import {
+  markWebFirstHomeCompletePaint,
+  markWebFirstLedgerPaint,
+} from '@/platform/performance/webStartupPerformance';
 import { DEFAULT_HOME_SUMMARY_CONFIG } from '@/types/household';
 
 const mockGetHousehold = jest.mocked(getHousehold);
@@ -730,7 +733,63 @@ describe('Android 가계부 server-first 복원 계약', () => {
     )).toBeInTheDocument();
   });
 
-  it('iOS PWA FID 모듈은 첫 장부 페인트 뒤에만 로드한다', async () => {
+  it('iOS PWA는 홈 완료가 없어도 15초 뒤 알림 연결을 한 번 시작한다', async () => {
+    jest.useFakeTimers();
+    iosPwa = true;
+    mockOnAuthChange.mockImplementation((listener) => {
+      listener({ uid: 'uid-ios' } as User);
+      return jest.fn();
+    });
+    mockResolveSignedInUser.mockResolvedValue(cachedResolution);
+
+    await act(async () => {
+      render(<HouseholdProvider><Probe /></HouseholdProvider>);
+    });
+    expect(screen.getByText('ready:저장된 가계부:member:member-1:verified')).toBeInTheDocument();
+    await act(async () => {
+      window.dispatchEvent(new Event('household-account:startup:first-ledger-paint'));
+      jest.advanceTimersByTime(14_999);
+    });
+    expect(mockActivatePwaFidEndpoint).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1);
+      jest.runOnlyPendingTimers();
+    });
+    expect(mockActivatePwaFidEndpoint).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      window.dispatchEvent(new Event('household-account:startup:first-home-complete-paint'));
+      jest.runOnlyPendingTimers();
+    });
+    expect(mockActivatePwaFidEndpoint).toHaveBeenCalledTimes(1);
+  });
+
+  it('iOS PWA 세션이 해제되면 홈 완료와 15초 fallback 모두 이전 알림 연결을 시작하지 않는다', async () => {
+    jest.useFakeTimers();
+    iosPwa = true;
+    let authListener!: (user: User | null) => void;
+    mockOnAuthChange.mockImplementation((listener) => {
+      authListener = listener;
+      listener({ uid: 'uid-ios' } as User);
+      return jest.fn();
+    });
+    mockResolveSignedInUser.mockResolvedValue(cachedResolution);
+
+    await act(async () => {
+      render(<HouseholdProvider><Probe /></HouseholdProvider>);
+    });
+    expect(screen.getByText('ready:저장된 가계부:member:member-1:verified')).toBeInTheDocument();
+    await act(async () => authListener(null));
+    expect(screen.getByText('signed-out:none:member:no-member:unverified')).toBeInTheDocument();
+    await act(async () => {
+      window.dispatchEvent(new Event('household-account:startup:first-home-complete-paint'));
+      jest.advanceTimersByTime(20_000);
+      jest.runOnlyPendingTimers();
+    });
+    expect(mockActivatePwaFidEndpoint).not.toHaveBeenCalled();
+  });
+
+  it('iOS PWA FID 모듈은 월 원장만 표시됐을 때 기다리고 첫 홈 전체 페인트 뒤에 로드한다', async () => {
     iosPwa = true;
     mockReadSignedInMembershipCache.mockReturnValue(resolution);
     mockOnAuthChange.mockImplementation((listener) => {
@@ -750,7 +809,13 @@ describe('Android 가계부 server-first 복원 계약', () => {
     )).toBeInTheDocument();
     expect(mockActivatePwaFidEndpoint).not.toHaveBeenCalled();
 
-    act(() => markWebFirstLedgerPaint());
+    await act(async () => {
+      markWebFirstLedgerPaint();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(mockActivatePwaFidEndpoint).not.toHaveBeenCalled();
+
+    act(() => markWebFirstHomeCompletePaint());
     await waitFor(() => expect(mockActivatePwaFidEndpoint).toHaveBeenCalledTimes(1));
   });
 });

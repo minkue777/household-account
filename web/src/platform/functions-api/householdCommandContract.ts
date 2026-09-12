@@ -50,6 +50,7 @@ export interface HouseholdCommandPayloads {
     visitId: string;
     platform: 'android' | 'ios-pwa' | 'web';
     clientStartupDurationMs?: number;
+    clientStartupTimingsMs?: Readonly<Record<string, number>>;
   };
   'access.claim-legacy-membership.v1': {
     legacyHouseholdId: string;

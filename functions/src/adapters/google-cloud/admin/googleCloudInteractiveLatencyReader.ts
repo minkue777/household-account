@@ -1,5 +1,7 @@
 import { applicationDefault } from "firebase-admin/app";
 
+import { parseClientStartupTimingsMs } from "../../../observability/clientStartupTimings";
+
 import type {
   AdminDashboardFunctionLatency,
   AdminDashboardFunctionLatencyWindow,
@@ -48,6 +50,7 @@ export interface InteractiveLatencyObservation {
   readonly elapsedMs: number;
   readonly status: "succeeded" | "rejected" | "failed";
   readonly timestamp: string;
+  readonly clientStartupTimingsMs?: Readonly<Record<string, number>>;
 }
 
 const ENDPOINTS = new Set<AdminDashboardFunctionLatency["endpoint"]>([
@@ -152,6 +155,9 @@ function observation(entry: LoggingEntry): InteractiveLatencyObservation | undef
       ? MAX_NOTIFICATION_DELIVERY_ELAPSED_MS
       : MAX_INTERACTIVE_ELAPSED_MS;
   if (elapsedMs > maxElapsedMs) return undefined;
+  const timingsMs = endpoint === "clientStartup"
+    ? parseClientStartupTimingsMs(payload?.clientStartupTimingsMs)
+    : undefined;
   return {
     ...(parsedCorrelationId === undefined
       ? {}
@@ -161,6 +167,7 @@ function observation(entry: LoggingEntry): InteractiveLatencyObservation | undef
     elapsedMs,
     status: status as InteractiveLatencyObservation["status"],
     timestamp,
+    ...(timingsMs === undefined ? {} : { clientStartupTimingsMs: timingsMs }),
   };
 }
 
@@ -259,6 +266,10 @@ export function summarizeInteractiveLatency(
         : items;
       const durations = durationItems.map(({ elapsedMs }) => elapsedMs);
       const total = durations.reduce((sum, value) => sum + value, 0);
+      const latest = items.reduce((current, item) =>
+        Date.parse(item.timestamp) > Date.parse(current.timestamp)
+          ? item
+          : current, first);
       return {
         endpoint: first.endpoint,
         operation: first.operation,
@@ -270,13 +281,15 @@ export function summarizeInteractiveLatency(
         p95Ms: roundedTenth(percentile(durations, 0.95)),
         maxMs:
           durations.length === 0 ? 0 : roundedTenth(Math.max(...durations)),
-        latestAt: items.reduce(
-          (latest, item) =>
-            Date.parse(item.timestamp) > Date.parse(latest)
-              ? item.timestamp
-              : latest,
-          first.timestamp,
-        ),
+        latestAt: latest.timestamp,
+        ...(latest.endpoint !== "clientStartup" ||
+          latest.clientStartupTimingsMs === undefined
+          ? {}
+          : { latestStartupSample: {
+            timestamp: latest.timestamp,
+            elapsedMs: latest.elapsedMs,
+            timingsMs: latest.clientStartupTimingsMs,
+          } }),
       };
     })
     .sort(

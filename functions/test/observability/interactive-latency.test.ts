@@ -264,6 +264,36 @@ describe("interactive latency telemetry", () => {
     ).not.toThrow();
   });
 
+  it("[T-ADM-004] 실제 구조화 로그는 모바일 시작 표본의 허용된 단계만 보존한다", () => {
+    const logs = memorySink();
+    const samples: Array<Pick<Parameters<typeof recordCompletedInteractiveLatency>[0],
+      "endpoint" | "clientStartupTimingsMs">> = [
+      {
+        endpoint: "clientStartup" as const,
+        clientStartupTimingsMs: { authReady: 123.4567, firstHomeCompletePaint: 2_000 },
+      },
+      { endpoint: "clientStartup" as const, clientStartupTimingsMs: { url: 1 } },
+      { endpoint: "executeHouseholdCommand" as const, clientStartupTimingsMs: { authReady: 123 } },
+    ];
+    for (const input of samples) {
+      recordCompletedInteractiveLatency({
+        ...input,
+        operation: "client.ios-pwa-first-home-complete-paint.v1",
+        elapsedMs: 2_000,
+        status: "succeeded",
+        sink: logs.sink,
+      });
+    }
+    expect(logs.entries).toHaveLength(3);
+    expect(logs.entries[0].clientStartupTimingsMs).toEqual({
+      authReady: 123.457,
+      firstHomeCompletePaint: 2_000,
+    });
+    expect(logs.entries[1]).not.toHaveProperty("clientStartupTimingsMs");
+    expect(logs.entries[2]).not.toHaveProperty("clientStartupTimingsMs");
+    expect(logs.entries.map(({ elapsedMs }) => elapsedMs)).toEqual([2_000, 2_000, 2_000]);
+  });
+
   it("기본 sink는 emulator에서도 보이는 Firebase 구조화 logger를 사용한다", async () => {
     const info = vi.spyOn(logger, "info").mockImplementation(() => undefined);
     const latency = startInteractiveLatencyInvocation(

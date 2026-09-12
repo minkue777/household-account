@@ -16,6 +16,7 @@ import { ANDROID_NATIVE_RESUME_EVENT } from '@/platform/android-host/androidLife
 import type { LocalCurrencyBalance } from '@/lib/balanceService';
 import type { Expense, TransactionType } from '@/types/expense';
 import { getSeoulCalendarParts } from '@/lib/utils/date';
+import { markWebHomeRead } from '@/platform/performance/webStartupPerformance';
 
 interface LedgerPeriod {
   readonly year: number;
@@ -280,11 +281,13 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
     void import('@/lib/expenseService')
       .then(({ subscribeToMonthlyTransactions }) => {
         if (cancelled) return;
+        markWebHomeRead('ledger', 'requested');
         unsubscribe = subscribeToMonthlyTransactions(
           activePeriod.year,
           activePeriod.month,
           (nextTransactions) => {
             if (cancelled) return;
+            markWebHomeRead('ledger', 'ready');
             readyQueryRef.current = readQueryKey;
             periodCacheRef.current.set(readQueryKey, nextTransactions);
             setTransactions(nextTransactions);
@@ -344,8 +347,10 @@ export function LedgerReadModelProvider({ children }: { children: ReactNode }) {
     void import('@/lib/balanceService')
       .then(({ subscribeToLocalCurrencyBalance }) => {
         if (cancelled) return;
+        markWebHomeRead('localCurrency', 'requested');
         unsubscribe = subscribeToLocalCurrencyBalance((balance) => {
           if (cancelled) return;
+          markWebHomeRead('localCurrency', 'ready');
           setLocalCurrencyBalance(balance);
           setLocalCurrencyStatus('ready');
         }, {

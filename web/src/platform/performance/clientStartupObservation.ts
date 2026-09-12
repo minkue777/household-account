@@ -9,6 +9,7 @@ export type ClientStartupPlatform = 'android' | 'ios-pwa';
 export interface ClientStartupObservation {
   readonly platform: ClientStartupPlatform;
   readonly durationMs: number;
+  readonly timingsMs?: Readonly<Record<string, number>>;
 }
 
 const MAX_STARTUP_DURATION_MS = 2 * 60 * 1_000;
@@ -36,9 +37,10 @@ function normalizedDuration(value: unknown): number | undefined {
  * Native의 단조 시계 값을 사용합니다. iPhone 홈 화면 PWA는 Navigation Timing과
  * 같은 시점에서 시작하는 performance.now()를 사용합니다.
  */
-export function captureClientStartupObservation():
+export function captureClientStartupObservation(timingsMs?: Readonly<Record<string, number>>):
 Promise<ClientStartupObservation | undefined> {
   if (capturedObservation !== undefined) return capturedObservation;
+  const timeline = timingsMs === undefined ? {} : { timingsMs: { ...timingsMs } };
 
   if (isAndroidHostAvailable()) {
     capturedObservation = requestAndroidHost(
@@ -49,7 +51,7 @@ Promise<ClientStartupObservation | undefined> {
         const normalized = normalizedDuration(durationMs);
         return normalized === undefined
           ? undefined
-          : { platform: 'android' as const, durationMs: normalized };
+          : { platform: 'android' as const, durationMs: normalized, ...timeline };
       })
       .catch(() => undefined);
     return capturedObservation;
@@ -60,7 +62,7 @@ Promise<ClientStartupObservation | undefined> {
     capturedObservation = Promise.resolve(
       normalized === undefined
         ? undefined
-        : { platform: 'ios-pwa' as const, durationMs: normalized }
+        : { platform: 'ios-pwa' as const, durationMs: normalized, ...timeline }
     );
     return capturedObservation;
   }

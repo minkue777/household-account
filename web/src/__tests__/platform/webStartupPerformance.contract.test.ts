@@ -85,6 +85,35 @@ describe('Web startup performance contract', () => {
     expect(JSON.stringify(performance.entries)).not.toMatch(/uid|householdId|memberId/i);
   });
 
+  it('단계 기록은 같은 Web navigation 시계의 허용된 도달 시각만 복사한다', () => {
+    const telemetry = require('@/platform/performance/webStartupPerformance') as typeof import(
+      '@/platform/performance/webStartupPerformance'
+    );
+    const times = new Map([
+      [telemetry.WEB_STARTUP_MARKS.authReady, 450.12345],
+      [telemetry.WEB_STARTUP_MARKS.ledgerRequested, 600],
+      [telemetry.WEB_STARTUP_MARKS.ledgerReady, 2_500],
+      [telemetry.WEB_STARTUP_MARKS.categoriesReady, Number.NaN],
+      [telemetry.WEB_STARTUP_MARKS.localCurrencyReady, 120_001],
+      ['private-user-and-household', 900],
+    ]);
+    Object.defineProperty(window, 'performance', {
+      configurable: true,
+      value: {
+        mark: jest.fn(),
+        getEntriesByName: (name: string) => times.has(name)
+          ? [{ name, entryType: 'mark', startTime: times.get(name) }] : [],
+        getEntriesByType: () => [{ responseEnd: 120, name: 'https://private.example/?user=secret' }],
+      },
+    });
+    expect(telemetry.readWebStartupTimingsMs()).toEqual({
+      navigationResponseEnd: 120,
+      authReady: 450.123,
+      ledgerRequested: 600,
+      ledgerReady: 2_500,
+    });
+  });
+
   it('선택적 prewarm은 첫 ledger paint와 추가 idle 지연 전에는 실행하지 않는다', () => {
     installPerformanceDouble();
     const telemetry = require('@/platform/performance/webStartupPerformance') as typeof import(

@@ -4,6 +4,8 @@ import { performance } from "node:perf_hooks";
 
 import { logger } from "firebase-functions";
 
+import { parseClientStartupTimingsMs } from "./clientStartupTimings";
+
 export const INTERACTIVE_LATENCY_LOG_NAME = "interactive-latency";
 export const INTERACTIVE_LATENCY_SCHEMA_VERSION =
   "interactive-latency.v1" as const;
@@ -44,6 +46,7 @@ export interface InteractiveLatencyLogEntry {
   readonly stage: InteractiveLatencyStage | "total";
   readonly elapsedMs: number;
   readonly status: InteractiveLatencyStatus;
+  readonly clientStartupTimingsMs?: Readonly<Record<string, number>>;
 }
 
 export interface InteractiveLatencyLogSink {
@@ -120,6 +123,7 @@ export function recordCompletedInteractiveLatency(input: {
   readonly operation: string;
   readonly elapsedMs: number;
   readonly status: InteractiveLatencyStatus;
+  readonly clientStartupTimingsMs?: Readonly<Record<string, number>>;
   readonly sink?: InteractiveLatencyLogSink;
 }): void {
   if (
@@ -130,6 +134,9 @@ export function recordCompletedInteractiveLatency(input: {
   ) {
     return;
   }
+  const timingsMs = input.endpoint === "clientStartup"
+    ? parseClientStartupTimingsMs(input.clientStartupTimingsMs)
+    : undefined;
   const entry: InteractiveLatencyLogEntry = {
     schemaVersion: INTERACTIVE_LATENCY_SCHEMA_VERSION,
     correlationId: randomUUID(),
@@ -141,6 +148,7 @@ export function recordCompletedInteractiveLatency(input: {
     stage: "total",
     elapsedMs: Math.round(input.elapsedMs * 1_000) / 1_000,
     status: input.status,
+    ...(timingsMs === undefined ? {} : { clientStartupTimingsMs: timingsMs }),
   };
   try {
     (input.sink ?? defaultSink).write(entry);

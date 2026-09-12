@@ -128,6 +128,11 @@ export interface AdminOperationsDashboardWireView {
       p95Ms: number;
       maxMs: number;
       latestAt: string;
+      latestStartupSample?: {
+        timestamp: string;
+        elapsedMs: number;
+        timingsMs: Readonly<Record<string, number>>;
+      };
     }>;
   };
   billingCost:
