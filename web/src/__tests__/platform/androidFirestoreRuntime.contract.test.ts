@@ -56,17 +56,17 @@ describe('Android Firestore runtime 계약', () => {
     expect(mockGetFirestore).not.toHaveBeenCalled();
   });
 
-  it('[AND-012] iPhone PWA는 영속 cache를 유지하면서 응답 완료 지연을 피하는 long-polling을 사용한다', async () => {
+  it('[AND-012] iPhone PWA는 IndexedDB lease 대기 없이 memory cache와 long-polling을 사용한다', async () => {
     mockAndroidHostAvailable = false;
     mockIOSPWA = true;
 
     await import('@/lib/firebase');
 
-    expect(mockMemoryLocalCache).not.toHaveBeenCalled();
-    expect(mockPersistentLocalCache).toHaveBeenCalledTimes(1);
-    expect(mockPersistentMultipleTabManager).toHaveBeenCalledTimes(1);
+    expect(mockMemoryLocalCache).toHaveBeenCalledTimes(1);
+    expect(mockPersistentLocalCache).not.toHaveBeenCalled();
+    expect(mockPersistentMultipleTabManager).not.toHaveBeenCalled();
     expect(mockInitializeFirestore).toHaveBeenCalledWith(mockApp, {
-      localCache: mockLocalCache,
+      localCache: mockMemoryCache,
       experimentalForceLongPolling: true,
     });
   });

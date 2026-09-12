@@ -6,9 +6,9 @@ import { requestMembershipResolution } from '@/features/access-household/applica
 import { requestRemoteSessionRecovery } from '@/platform/functions-api/firebaseCallableRecovery';
 import type { Expense } from '@/types/expense';
 
-const PAGE_SIZE = 500;
-// Preserve the previous 50,000-document safety bound while reducing round trips.
-const MAX_PAGES = 100;
+const PAGE_SIZE = 5_000;
+// Preserve the 50,000-document safety bound while reducing sequential server waits.
+const MAX_PAGES = 10;
 
 /** A total is published only after the last page for the captured session. */
 export async function readExpenseStatistics(startDate: string, endDate: string, options: { assertCurrent?: () => void } = {}): Promise<Expense[]> {

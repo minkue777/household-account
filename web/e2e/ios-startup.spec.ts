@@ -4,7 +4,7 @@ import { observeIndexedDbOpens, readFirestoreCollection, readIndexedDbOpens, res
 const COMPLETE_PAINT = 'household-account:startup:home:first-complete-paint';
 test.beforeEach(async () => { await resetTestAccount(); });
 
-test('[T-SYS-008][AND-012][SYS-008] iPhone WebKit 재실행은 로그인과 영속 cache를 유지하고 최신 홈을 표시한다', async ({ page: initialPage, context, request }) => {
+test('[T-SYS-008][AND-012][SYS-008] iPhone WebKit 재실행은 로그인 유지와 Firestore IndexedDB 대기 없이 최신 홈을 표시한다', async ({ page: initialPage, context, request }) => {
   let page = initialPage;
   // WebKit의 standalone 감지만 설정합니다. Auth/Firestore SDK와 서버 응답은 실제입니다.
   await observeIndexedDbOpens(page, true);
@@ -68,6 +68,6 @@ test('[T-SYS-008][AND-012][SYS-008] iPhone WebKit 재실행은 로그인과 영�
   await expect.poll(() => page.evaluate((name) => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(1);
   const databaseNames = await readIndexedDbOpens(page);
   expect(databaseNames.some((name) => name === 'firebaseLocalStorageDb')).toBe(true);
-  expect(databaseNames.some((name) => name.startsWith('firestore/'))).toBe(true);
+  expect(databaseNames.some((name) => name.startsWith('firestore/'))).toBe(false);
   expect(errors).toEqual([]);
 });

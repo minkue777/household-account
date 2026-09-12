@@ -1,5 +1,7 @@
 # iPhone PWA 첫 홈 로딩 조사 — 2026-09-11
 
+후속 조사와 현재 캐시 정책은 [2026-09-12 첫 화면·통계 지연 개선](ios-statistics-loading-2026-09-12.md)을 따른다. 아래 내용은 9월 11일 당시의 실험과 판단 기록이다.
+
 ## 관측과 결론
 
 운영 Cloud Logging의 `interactive-latency.v1`, `endpoint=clientStartup`, `stage=total`을 읽기 전용으로 조회했습니다. 2026-09-09 00:00 UTC 이후 iPhone PWA 8건은 2,505~5,557ms, 중앙값 3,005ms였습니다. 사용자께서 말씀하신 3초대 지연이 실제 계측에도 나타납니다. 사용자·가구·거래 원문은 조사 결과에 저장하지 않았습니다.

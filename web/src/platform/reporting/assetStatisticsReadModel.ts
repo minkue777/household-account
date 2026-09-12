@@ -3,8 +3,8 @@ import { getClientSessionScope, requireClientSessionScope } from '@/composition/
 import type { AssetHistoryEntry } from '@/types/asset';
 import { assetStatisticsSessionKey, readCachedAssetStatistics, type AssetStatisticsReadOptions } from './assetStatisticsQueryCache';
 
-const PAGE_SIZE = 500;
-const MAX_PAGES = 100; // Preserve the existing 50,000-document safety bound per source.
+const PAGE_SIZE = 5_000;
+const MAX_PAGES = 10; // Preserve the existing 50,000-document safety bound per source.
 export async function readAssetStatisticsHistory(startDate: string | undefined, endDate: string, options?: AssetStatisticsReadOptions): Promise<AssetHistoryEntry[]> {
   const scope = { ...requireClientSessionScope() };
   const assertScope = () => {
