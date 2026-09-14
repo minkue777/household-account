@@ -189,6 +189,8 @@ DEC-013의 알림 수신자는 Ledger가 확정하지 않습니다. Ledger는 �
 11. Web read projection은 item split과 기존 지출 monthly split에서 원본의 optimistic delete를 먼저 만들지 않습니다. 명령 처리 중에는 기존 원본을 유지하고, 동일 Firestore transaction에서 도착한 권위 snapshot으로 `원본 -> 파생 항목`을 직접 교체하여 선택 날짜 목록이 잠시 비는 상태를 방지합니다.
 12. 월 분할 취소 UI는 네트워크 Command보다 편집 모달 종료를 먼저 확정합니다. Command는 닫힌 뒤 백그라운드에서 계속합니다. 각 파생 read model은 `splitOriginalId`를 유지하며, Projection은 복구 원본과 그 원본을 가리키는 stale 파생이 같은 emission에 들어오면 파생을 제거한 결과만 방출합니다. 복구 원본이 아직 없는 emission에서는 파생을 유지하므로 목록이 비지 않고, 모달 종료도 snapshot 도착까지 지연하지 않습니다.
 
+Web 항목 분리의 금액 입력은 마지막 항목을 `max(0, 원금 - 나머지 항목 합계)`로 계산합니다. 마지막 항목을 직접 입력한 경우에는 바로 앞 항목을 계산 대상으로 사용하며 다른 입력은 유지합니다. 항목 삭제 후에는 남은 마지막 항목이 잔액을 받습니다. 금액의 단일 상태를 입력창과 제출 payload가 공유하고, 편집 중 빈 입력 표시만 별도로 관리하여 이전 입력값이 자동 조정 결과를 가리지 않게 합니다. 양수·정확 합계의 서버 계약과 저장 전 검증은 그대로 적용합니다.
+
 ### 5.5 Merge·Unmerge
 
 1. 같은 household의 서로 다른 expense와 모든 version을 확인합니다. 저장소는 먼저 target/source ID만 읽고, 각 입력의 `mergeLeafIds`에서 아직 읽지 않은 leaf ID만 추가로 읽으며 가구 전체 canonical·legacy 컬렉션을 스캔하지 않습니다.

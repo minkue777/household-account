@@ -15,6 +15,13 @@ interface ExpenseSplitModalProps {
   onSave: (splits: SplitItem[]) => Promise<void> | void;
 }
 
+function balanceRemainingAmount(items: SplitItem[], total: number, remainderIndex: number): SplitItem[] {
+  const assigned = items.reduce((sum, item, index) => index === remainderIndex ? sum : sum + item.amount, 0);
+  return items.map((item, index) => index === remainderIndex
+    ? { ...item, amount: Math.max(0, total - assigned) }
+    : item);
+}
+
 export default function ExpenseSplitModal({
   expense,
   isOpen,
@@ -23,7 +30,7 @@ export default function ExpenseSplitModal({
 }: ExpenseSplitModalProps) {
   const { showAlert } = useAppDialog();
   const [splits, setSplits] = useState<SplitItem[]>([]);
-  const [splitAmountInputs, setSplitAmountInputs] = useState<Record<number, string>>({});
+  const [emptyAmountIndex, setEmptyAmountIndex] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
 
@@ -34,7 +41,7 @@ export default function ExpenseSplitModal({
         { merchant: expense.merchant, amount: Math.floor(expense.amount / 2), category: expense.category, memo: '' },
         { merchant: expense.merchant, amount: expense.amount - Math.floor(expense.amount / 2), category: expense.category, memo: '' },
       ]);
-      setSplitAmountInputs({});
+      setEmptyAmountIndex(null);
     }
   }, [isOpen, expense]);
 
@@ -48,7 +55,9 @@ export default function ExpenseSplitModal({
   // 분할 항목 삭제
   const handleRemoveSplit = (index: number) => {
     if (splits.length <= 2) return;
-    setSplits(splits.filter((_, i) => i !== index));
+    const remaining = splits.filter((_, i) => i !== index);
+    setSplits(balanceRemainingAmount(remaining, expense.amount, remaining.length - 1));
+    setEmptyAmountIndex(null);
   };
 
   // 분할 항목 수정
@@ -58,12 +67,10 @@ export default function ExpenseSplitModal({
       const newAmount = Number(value) || 0;
       newSplits[index] = { ...newSplits[index], amount: newAmount };
 
-      // 2개 항목일 때 다른 항목 자동 조정
-      if (newSplits.length === 2) {
-        const otherIndex = index === 0 ? 1 : 0;
-        const otherAmount = Math.max(0, expense.amount - newAmount);
-        newSplits[otherIndex] = { ...newSplits[otherIndex], amount: otherAmount };
-      }
+      // 마지막 항목을 잔액으로 맞추되, 마지막을 직접 수정하면 바로 앞 항목을 조정합니다.
+      const remainderIndex = index === newSplits.length - 1 ? index - 1 : newSplits.length - 1;
+      setSplits(balanceRemainingAmount(newSplits, expense.amount, remainderIndex));
+      return;
     } else {
       newSplits[index] = { ...newSplits[index], [field]: value };
     }
@@ -72,21 +79,13 @@ export default function ExpenseSplitModal({
 
   // 금액 입력 핸들러 (0 처리)
   const handleAmountInputChange = (index: number, value: string) => {
-    if (value === '') {
-      setSplitAmountInputs({ ...splitAmountInputs, [index]: '' });
-      handleUpdateSplit(index, 'amount', 0);
-      return;
-    }
     const numericValue = value.replace(/[^0-9]/g, '').replace(/^0+/, '') || '0';
-    setSplitAmountInputs({ ...splitAmountInputs, [index]: numericValue });
+    setEmptyAmountIndex(value === '' ? index : null);
     handleUpdateSplit(index, 'amount', numericValue);
   };
 
   const getAmountInputValue = (index: number, amount: number) => {
-    if (splitAmountInputs[index] !== undefined) {
-      return splitAmountInputs[index];
-    }
-    return amount.toString();
+    return emptyAmountIndex === index && amount === 0 ? '' : amount.toString();
   };
 
   // 분할 저장
@@ -144,6 +143,11 @@ export default function ExpenseSplitModal({
           <p className="text-sm text-slate-500 mb-4">
             {expense.merchant} {expense.amount.toLocaleString()}원을 여러 항목으로 나눕니다
           </p>
+          {splits.length > 2 && (
+            <p className="text-xs text-slate-500 mb-4">
+              마지막 항목이 남은 금액에 맞춰집니다. 마지막 항목을 수정하면 바로 앞 항목이 조정됩니다.
+            </p>
+          )}
 
           {/* 분할 합계 표시 */}
           <div className="mb-4 p-3 bg-slate-100 rounded-lg">
@@ -194,13 +198,15 @@ export default function ExpenseSplitModal({
                     <input
                       type="text"
                       inputMode="numeric"
+                      aria-label={`항목 ${index + 1} 금액`}
                       value={getAmountInputValue(index, split.amount)}
                       onChange={(e) => handleAmountInputChange(index, e.target.value)}
                       onFocus={() => {
                         if (split.amount === 0) {
-                          setSplitAmountInputs({ ...splitAmountInputs, [index]: '' });
+                          setEmptyAmountIndex(index);
                         }
                       }}
+                      onBlur={() => setEmptyAmountIndex(null)}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm pr-10"
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">원</span>

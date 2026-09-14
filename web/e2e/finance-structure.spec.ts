@@ -36,6 +36,65 @@ test('[SPL-001][LED-008][LED-009] 항목 분할은 합계를 보존하고 다른
   expect(restored.fields).toMatchObject({ merchant: { stringValue: '분할 장보기' }, memo: { stringValue: '원본 메모' }, amount: { integerValue: '10001' } });
 });
 
+test('[SPL-001][LED-008][LED-009] 세 항목 분리는 마지막 잔액과 역방향 입력·삭제를 자동 조정하고 화면의 10,000·8,000·13,000원을 그대로 저장한다', async ({ page, request }) => {
+  const householdId = await createFinanceHousehold(page, request);
+  const original = await addExpenseThroughUi(page, request, { merchant: '세 항목 장보기', amount: 31000, category: '생활비' });
+  const sourceId = documentId(original);
+  await (await openExpenseEdit(page, sourceId)).getByRole('button', { name: '분리', exact: true }).click();
+  const split = page.getByRole('heading', { name: '지출 내역 분리', exact: true }).locator('..');
+  const items = split.locator('div.p-4.border');
+  const amount = (index: number) => items.nth(index).locator('input[inputmode="numeric"]');
+  await split.getByRole('button', { name: '항목 추가', exact: true }).click();
+  await expect(items).toHaveCount(3);
+  await amount(0).fill('10000');
+  await expect(amount(1)).toHaveValue('15500');
+  await expect(amount(2)).toHaveValue('5500');
+  await amount(1).fill('8000');
+  await expect(amount(0)).toHaveValue('10000');
+  await expect(amount(2)).toHaveValue('13000');
+
+  // 마지막을 직접 수정하면 바로 앞 항목만 보정하고 첫 항목은 유지합니다.
+  await amount(2).fill('12000');
+  await expect(amount(0)).toHaveValue('10000');
+  await expect(amount(1)).toHaveValue('9000');
+  await expect(amount(2)).toHaveValue('12000');
+  await amount(1).fill('8000');
+  await expect(amount(2)).toHaveValue('13000');
+
+  // 입력한 인덱스가 삭제되어도 예전 표시값이 남지 않고 남은 마지막이 잔액을 받습니다.
+  await split.getByRole('button', { name: '항목 2 삭제', exact: true }).click();
+  await expect(items).toHaveCount(2);
+  await expect(amount(0)).toHaveValue('10000');
+  await expect(amount(1)).toHaveValue('21000');
+  await split.getByRole('button', { name: '항목 추가', exact: true }).click();
+  await expect(items).toHaveCount(3);
+  await amount(1).fill('8000');
+  await expect(amount(0)).toHaveValue('10000');
+  await expect(amount(1)).toHaveValue('8000');
+  await expect(amount(2)).toHaveValue('13000');
+  await expect(split.getByText('31,000원 / 31,000원', { exact: true })).toBeVisible();
+
+  const submitted = page.waitForResponse(response => response.url().endsWith('/executeHouseholdCommand')
+    && response.request().postDataJSON()?.data?.command === 'ledger.split-transaction.v1');
+  await split.getByRole('button', { name: '나누기', exact: true }).click();
+  const response = await submitted;
+  const payload = response.request().postDataJSON().data.payload;
+  expect(payload.items.map((item: { amountInWon: number }) => item.amountInWon)).toEqual([10000, 8000, 13000]);
+  const wire = (await response.json()).result;
+  expect(wire.result, JSON.stringify(wire.result)).toMatchObject({ kind: 'succeeded' });
+  expect(new Set(wire.result.value.transactionIds).size).toBe(3);
+
+  const canonical = await readFirestoreCollection(request, `households/${householdId}/ledgerTransactions`);
+  const children = canonical.filter(doc => textField(doc, 'derivedFromTransactionId') === sourceId && textField(doc, 'lifecycleState') === 'active');
+  expect(children).toHaveLength(3);
+  expect(children.map(doc => integerField(doc, 'amountInWon')).sort((a, b) => a - b)).toEqual([8000, 10000, 13000]);
+  expect(children.reduce((sum, doc) => sum + integerField(doc, 'amountInWon'), 0)).toBe(31000);
+  expect(canonical.find(doc => documentId(doc) === sourceId)?.fields).toMatchObject({ lifecycleState: { stringValue: 'superseded' }, amountInWon: { integerValue: '31000' } });
+  const visible = (await readExpenseDocuments(request)).filter(doc => textField(doc, 'lifecycleState') === 'active');
+  expect(visible.map(documentId).sort()).toEqual(children.map(documentId).sort());
+  expect(visible.map(doc => integerField(doc, 'amount')).sort((a, b) => a - b)).toEqual([8000, 10000, 13000]);
+});
+
 test('[SPL-002][SPL-003][SPL-004][SPL-005] 기존 지출 월 분할·개월 변경·취소는 내림 금액과 원본 복원을 보존한다', async ({ page, request }) => {
   await createFinanceHousehold(page, request);
   const original = await addExpenseThroughUi(page, request, { merchant: '월분할 가전', amount: 10001, date: '2026-01-31', memo: '보존 메모' });
