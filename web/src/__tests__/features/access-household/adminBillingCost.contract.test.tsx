@@ -80,26 +80,6 @@ describe('admin Google Cloud billing cost contract', () => {
     expect(screen.queryByText(/최종 청구액/)).not.toBeInTheDocument();
   });
 
-  test('shows App Engine Firestore SKU usage, zero-cost writes and credits without hiding fractional won', () => {
-    render(<AdminOperationsOverview refreshing={false} onRefresh={jest.fn()} dashboard={dashboard({
-      status: 'available', billingMonth: '2026-09', currency: 'KRW', monthToDateAmount: 1321,
-      estimatedMonthEndAmount: 2500, calculatedAt: '2026-09-16T09:00:00Z', dataUpdatedAt: '2026-09-16T06:00:00Z',
-      serviceAmounts: [{ serviceId: 'app-engine', serviceName: 'App Engine', amount: 1321 }],
-      skuAmounts: [
-        { serviceId: 'app-engine', skuId: 'reads', skuName: 'Cloud Firestore Read Ops Seoul', location: 'asia-northeast3', usageUnit: 'count', usageAmount: 3257532, cost: 1325.66, credits: -5, amount: 1320.66 },
-        { serviceId: 'app-engine', skuId: 'writes', skuName: 'Cloud Firestore Entity Writes Seoul', location: 'asia-northeast3', usageUnit: 'count', usageAmount: 40678, cost: 0, credits: 0, amount: 0 },
-      ],
-    })} />);
-    expect(screen.getByRole('table', { name: 'App Engine 과금 항목' })).toBeVisible();
-    expect(screen.getByText('Firestore 문서 조회')).toBeVisible();
-    expect(screen.getByText('Firestore 문서 쓰기')).toBeVisible();
-    expect(screen.getByText('3,257,532 회')).toBeVisible();
-    expect(screen.getByText('40,678 회')).toBeVisible();
-    expect(screen.getByText('1,320.66원')).toBeVisible();
-    expect(screen.getByText('-5원')).toBeVisible();
-    expect(screen.getByText(/App Engine 청구 항목에는 Firestore 사용료도/)).toBeVisible();
-  });
-
   test('[T-ADM-005] keeps the dashboard usable before the first export snapshot', () => {
     render(
       <AdminOperationsOverview

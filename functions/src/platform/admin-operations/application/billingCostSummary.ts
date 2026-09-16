@@ -9,24 +9,11 @@ export interface BillingCostServiceAmount {
   readonly amount: number;
 }
 
-export interface BillingCostSkuAmount {
-  readonly serviceId: string;
-  readonly skuId: string;
-  readonly skuName: string;
-  readonly location: string;
-  readonly usageAmount: number;
-  readonly usageUnit: string;
-  readonly cost: number;
-  readonly credits: number;
-  readonly amount: number;
-}
-
 export interface BillingCostSourceSnapshot {
   readonly currency: string;
   readonly dataUpdatedAt: string;
   readonly dailyAmounts: readonly BillingCostDailyAmount[];
   readonly serviceAmounts: readonly BillingCostServiceAmount[];
-  readonly skuAmounts?: readonly BillingCostSkuAmount[];
 }
 
 export interface BillingCostSummary {
@@ -37,7 +24,6 @@ export interface BillingCostSummary {
   readonly calculatedAt: string;
   readonly dataUpdatedAt: string;
   readonly serviceAmounts: readonly BillingCostServiceAmount[];
-  readonly skuAmounts?: readonly BillingCostSkuAmount[];
 }
 
 export interface BillingCostSourceReaderPort {
@@ -135,8 +121,7 @@ export function summarizeBillingCost(input: {
       ...service,
       amount: roundedAmount(finiteAmount(service.amount), input.source.currency),
     }))
-    .filter(service => service.amount !== 0 || input.source.skuAmounts?.some(sku =>
-      sku.serviceId === service.serviceId && (sku.usageAmount !== 0 || sku.cost !== 0 || sku.credits !== 0)))
+    .filter(({ amount }) => amount !== 0)
     .sort(
       (left, right) =>
         right.amount - left.amount ||
@@ -157,13 +142,6 @@ export function summarizeBillingCost(input: {
     calculatedAt: new Date(input.calculatedAt).toISOString(),
     dataUpdatedAt: new Date(input.source.dataUpdatedAt).toISOString(),
     serviceAmounts,
-    ...(input.source.skuAmounts === undefined ? {} : {
-      skuAmounts: input.source.skuAmounts.map(sku => ({ ...sku,
-        usageAmount: finiteAmount(sku.usageAmount), cost: finiteAmount(sku.cost),
-        credits: finiteAmount(sku.credits), amount: finiteAmount(sku.amount),
-      })).filter(sku => sku.usageAmount !== 0 || sku.cost !== 0 || sku.credits !== 0 || sku.amount !== 0)
-        .sort((a, b) => b.amount - a.amount || a.skuName.localeCompare(b.skuName)),
-    }),
   };
 }
 

@@ -1,7 +1,6 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { AdminBillingDetails } from './AdminBillingDetails';
 import {
   Activity,
   AlertTriangle,
@@ -488,7 +487,6 @@ export function AdminOperationsOverview({
         {billingCost.status === 'unavailable' ? (
           <EmptyState>비용 집계를 준비하고 있습니다.</EmptyState>
         ) : (
-          <>
           <div className="grid gap-4 p-4 lg:grid-cols-[1fr_1fr_1.4fr]">
             <div className="rounded-xl border border-slate-800 bg-slate-950/35 p-4">
               <div className="flex items-start justify-between gap-3">
@@ -555,8 +553,6 @@ export function AdminOperationsOverview({
               )}
             </div>
           </div>
-          <AdminBillingDetails billing={billingCost} />
-          </>
         )}
       </Panel>
 

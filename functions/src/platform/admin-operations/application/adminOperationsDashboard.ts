@@ -1,4 +1,3 @@
-import type { BillingCostSkuAmount } from "./billingCostSummary";
 export type AdminDashboardHealth = "healthy" | "degraded" | "critical";
 
 export interface AdminDashboardDailyAccess {
@@ -105,7 +104,6 @@ export type AdminDashboardBillingCost =
       readonly estimatedMonthEndAmount: number;
       readonly calculatedAt: string;
       readonly dataUpdatedAt: string;
-      readonly skuAmounts?: readonly BillingCostSkuAmount[];
       readonly serviceAmounts: readonly {
         readonly serviceId: string;
         readonly serviceName: string;

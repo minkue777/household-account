@@ -33,8 +33,6 @@ describe("Google Cloud Billing BigQuery reader", () => {
             rows: [{
               f: [{
                 v: JSON.stringify({
-                  skuAmounts: [{ serviceId: "services/firestore", skuId: "reads", skuName: "Cloud Firestore Read Ops Seoul",
-                    location: "asia-northeast3", usageUnit: "count", usageAmount: "3257532", cost: "900", credits: "-31", amount: "869" }],
                   currency: "KRW",
                   dataUpdatedAt: "2026-08-02T05:40:00Z",
                   dailyAmounts: [
@@ -59,8 +57,6 @@ describe("Google Cloud Billing BigQuery reader", () => {
       projectId: "household-account-6f300",
       calculatedAt: "2026-08-02T06:00:00.000Z",
     })).resolves.toEqual({
-      skuAmounts: [{ serviceId: "services/firestore", skuId: "reads", skuName: "Cloud Firestore Read Ops Seoul",
-        location: "asia-northeast3", usageUnit: "count", usageAmount: 3257532, cost: 900, credits: -31, amount: 869 }],
       currency: "KRW",
       dataUpdatedAt: "2026-08-02T05:40:00.000Z",
       dailyAmounts: [
@@ -82,8 +78,6 @@ describe("Google Cloud Billing BigQuery reader", () => {
     expect(query).toEqual(expect.stringContaining("UNNEST(credits)"));
     expect(query).toEqual(expect.stringContaining("project.id = @projectId"));
     expect(query).toEqual(expect.stringContaining("export_time >="));
-    expect(query).toEqual(expect.stringContaining("usage.amount_in_pricing_units"));
-    expect(query).toEqual(expect.stringContaining("GROUP BY service_id, sku_id, sku_name, location, usage_unit"));
     expect(requests[0].body?.useLegacySql).toBe(false);
     expect(requests[0].body?.maximumBytesBilled).toBe("268435456");
   });

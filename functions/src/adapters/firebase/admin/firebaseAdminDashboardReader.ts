@@ -1,4 +1,3 @@
-import type { BillingCostSkuAmount } from "../../../platform/admin-operations/application/billingCostSummary";
 import { hasScheduledJobRecovered } from "../../../platform/external-operations/application/scheduledJobIncidentRecovery";
 import type * as firestore from "firebase-admin/firestore";
 
@@ -174,12 +173,6 @@ export function parseAdminDashboardBillingCost(
     calculatedAt,
     dataUpdatedAt,
     serviceAmounts,
-    ...(Array.isArray(data.skuAmounts) ? { skuAmounts: data.skuAmounts.filter((sku): sku is BillingCostSkuAmount =>
-      typeof sku === "object" && sku !== null
-      && [sku.serviceId, sku.skuId, sku.skuName, sku.location].every(value => typeof value === "string" && value !== "")
-      && typeof sku.usageUnit === "string"
-      && [sku.usageAmount, sku.cost, sku.credits, sku.amount].every(value => typeof value === "number" && Number.isFinite(value)),
-    ) } : {}),
   };
 }
 

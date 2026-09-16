@@ -65,6 +65,7 @@ yarn-error.log*
 web/scripts/*.mjs
 
 # Misc
+.codex-remote-attachments/
 *.log
 *.tsbuildinfo
 functions/quality-functions.json

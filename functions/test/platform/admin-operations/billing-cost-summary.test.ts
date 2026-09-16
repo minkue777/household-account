@@ -6,15 +6,6 @@ import {
 } from "../../../src/platform/admin-operations/application/billingCostSummary";
 
 describe("Google Cloud 비용 요약", () => {
-  it("preserves zero-cost usage, credits and sub-won SKU amounts without rounding away detail", () => {
-    const sku = { serviceId: "app-engine", skuId: "writes", skuName: "Cloud Firestore Entity Writes Seoul",
-      location: "asia-northeast3", usageUnit: "count", usageAmount: 40678, cost: 1, credits: -1, amount: 0 };
-    const result = summarizeBillingCost({ calculatedAt: "2026-09-16T00:00:00Z", source: {
-      currency: "KRW", dataUpdatedAt: "2026-09-16T00:00:00Z", dailyAmounts: [], serviceAmounts: [],
-      skuAmounts: [sku, { ...sku, skuId: "ttl", cost: 0.659476, credits: 0, amount: 0.659476 }],
-    }});
-    expect(result.skuAmounts).toEqual([{ ...sku, skuId: "ttl", cost: 0.659476, credits: 0, amount: 0.659476 }, sku]);
-  });
   it("[T-EXT-005][EXT-004] 이번 달 누적 순비용과 최근 완료 7일 평균으로 월말 비용을 추정한다", () => {
     const result = summarizeBillingCost({
       calculatedAt: "2026-08-02T06:00:00.000Z",
