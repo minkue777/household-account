@@ -216,8 +216,8 @@ interface CryptoHoldingItemProps {
 }
 
 function CryptoHoldingItem({ holding, onEdit }: CryptoHoldingItemProps) {
-  const hasAvgPrice = holding.avgPrice && holding.avgPrice > 0;
-  const hasCurrentPrice = holding.currentPrice && holding.currentPrice > 0;
+  const hasAvgPrice = (holding.avgPrice ?? 0) > 0;
+  const hasCurrentPrice = (holding.currentPrice ?? 0) > 0;
   const holdingProfitLoss =
     hasAvgPrice && hasCurrentPrice ? (holding.currentPrice! - holding.avgPrice!) * holding.quantity : 0;
   const holdingProfitRate =
