@@ -140,6 +140,17 @@ export interface AdminOperationsDashboardWireView {
         estimatedMonthEndAmount: number;
         calculatedAt: string;
         dataUpdatedAt: string;
+        skuAmounts?: Array<{
+          serviceId: string;
+          skuId: string;
+          skuName: string;
+          location: string;
+          usageAmount: number;
+          usageUnit: string;
+          cost: number;
+          credits: number;
+          amount: number;
+        }>;
         serviceAmounts: Array<{
           serviceId: string;
           serviceName: string;

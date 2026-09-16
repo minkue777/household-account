@@ -42,6 +42,13 @@ WITH base AS (
     DATE(usage_start_time, 'Asia/Seoul') AS usage_date,
     service.id AS service_id,
     service.description AS service_name,
+    sku.id AS sku_id,
+    sku.description AS sku_name,
+    COALESCE(NULLIF(location.region, ''), NULLIF(location.location, ''), 'global') AS location,
+    IFNULL(usage.amount_in_pricing_units, 0) AS usage_amount,
+    IFNULL(usage.pricing_unit, '') AS usage_unit,
+    CAST(cost AS NUMERIC) AS gross_cost,
+    IFNULL((SELECT SUM(CAST(credit.amount AS NUMERIC)) FROM UNNEST(credits) AS credit), 0) AS credit_amount,
     currency,
     CAST(cost AS NUMERIC)
       + IFNULL((
@@ -71,6 +78,14 @@ services AS (
   WHERE usage_date BETWEEN @monthStart AND @today
   GROUP BY service_id, service_name
 ),
+skus AS (
+  SELECT service_id, sku_id, sku_name, location, usage_unit,
+    SUM(usage_amount) AS usage_amount, SUM(gross_cost) AS cost,
+    SUM(credit_amount) AS credits, SUM(net_cost) AS amount
+  FROM base
+  WHERE usage_date BETWEEN @monthStart AND @today
+  GROUP BY service_id, sku_id, sku_name, location, usage_unit
+),
 metadata AS (
   SELECT ANY_VALUE(currency) AS currency, MAX(export_time) AS data_updated_at
   FROM base
@@ -90,7 +105,15 @@ SELECT TO_JSON_STRING(STRUCT(
       CAST(amount AS FLOAT64) AS amount
     FROM services
     ORDER BY amount DESC, service_name
-  ) AS serviceAmounts
+  ) AS serviceAmounts,
+  ARRAY(
+    SELECT AS STRUCT service_id AS serviceId, sku_id AS skuId, sku_name AS skuName,
+      location, usage_unit AS usageUnit, CAST(usage_amount AS FLOAT64) AS usageAmount,
+      CAST(cost AS FLOAT64) AS cost, CAST(credits AS FLOAT64) AS credits, CAST(amount AS FLOAT64) AS amount
+    FROM skus
+    WHERE usage_amount != 0 OR cost != 0 OR credits != 0 OR amount != 0
+    ORDER BY amount DESC, sku_name, location, usage_unit
+  ) AS skuAmounts
 )) AS payload
 `;
 
@@ -199,11 +222,33 @@ function parsePayload(value: unknown): BillingCostSourceSnapshot {
     return { serviceId, serviceName, amount };
   });
 
+  if (payload.skuAmounts !== undefined && !Array.isArray(payload.skuAmounts)) {
+    throw new Error("BILLING_QUERY_RESULT_INVALID");
+  }
+  const skuAmounts = (payload.skuAmounts as unknown[] | undefined)?.map(value => {
+    const sku = record(value);
+    const serviceId = nonEmptyString(sku?.serviceId);
+    const skuId = nonEmptyString(sku?.skuId);
+    const skuName = nonEmptyString(sku?.skuName);
+    const location = nonEmptyString(sku?.location);
+    const usageUnit = typeof sku?.usageUnit === "string" ? sku.usageUnit : undefined;
+    const usageAmount = finiteNumber(sku?.usageAmount);
+    const cost = finiteNumber(sku?.cost);
+    const credits = finiteNumber(sku?.credits);
+    const amount = finiteNumber(sku?.amount);
+    if (serviceId === undefined || skuId === undefined || skuName === undefined || location === undefined
+      || usageUnit === undefined || usageAmount === undefined || cost === undefined || credits === undefined || amount === undefined) {
+      throw new Error("BILLING_QUERY_RESULT_INVALID");
+    }
+    return { serviceId, skuId, skuName, location, usageUnit, usageAmount, cost, credits, amount };
+  });
+
   return {
     currency,
     dataUpdatedAt: new Date(dataUpdatedAt).toISOString(),
     dailyAmounts,
     serviceAmounts,
+    ...(skuAmounts === undefined ? {} : { skuAmounts }),
   };
 }
 

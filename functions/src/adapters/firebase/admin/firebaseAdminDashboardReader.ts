@@ -1,3 +1,5 @@
+import type { BillingCostSkuAmount } from "../../../platform/admin-operations/application/billingCostSummary";
+import { hasScheduledJobRecovered } from "../../../platform/external-operations/application/scheduledJobIncidentRecovery";
 import type * as firestore from "firebase-admin/firestore";
 
 import type {
@@ -172,6 +174,12 @@ export function parseAdminDashboardBillingCost(
     calculatedAt,
     dataUpdatedAt,
     serviceAmounts,
+    ...(Array.isArray(data.skuAmounts) ? { skuAmounts: data.skuAmounts.filter((sku): sku is BillingCostSkuAmount =>
+      typeof sku === "object" && sku !== null
+      && [sku.serviceId, sku.skuId, sku.skuName, sku.location].every(value => typeof value === "string" && value !== "")
+      && typeof sku.usageUnit === "string"
+      && [sku.usageAmount, sku.cost, sku.credits, sku.amount].every(value => typeof value === "number" && Number.isFinite(value)),
+    ) } : {}),
   };
 }
 
@@ -420,6 +428,9 @@ export class FirebaseAdminDashboardReader {
       const occurrenceId = string(data.occurrenceId);
       const reason = string(data.reason);
       const openedAt = instant(data.openedAt);
+      if (occurrenceId !== undefined && openedAt !== undefined && runSnapshot.docs.some(run =>
+        hasScheduledJobRecovered({ occurrenceId, openedAt }, { ...run.data(), occurrenceId: run.id }),
+      )) return [];
       return occurrenceId === undefined ||
         reason === undefined ||
         openedAt === undefined

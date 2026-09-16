@@ -1,3 +1,4 @@
+import { hasScheduledJobRecovered } from "../../../platform/external-operations/application/scheduledJobIncidentRecovery";
 import { createHash, randomUUID } from "node:crypto";
 
 import type * as firestore from "firebase-admin/firestore";
@@ -150,6 +151,15 @@ function leaseExpired(data: Record<string, unknown>, now: string): boolean {
   return typeof expiresAt !== "string" || Date.parse(expiresAt) <= Date.parse(now);
 }
 
+function logIncident(incident: JobIncident): void {
+  const log = { severity: incident.state === "OPEN" ? "ERROR" : "INFO",
+    eventType: incident.state === "OPEN" ? "SCHEDULED_JOB_INCIDENT_OPENED" : "SCHEDULED_JOB_INCIDENT_RESOLVED",
+    incidentId: incident.incidentId, occurrenceId: incident.occurrenceId, reason: incident.reason,
+    observedAt: incident.resolvedAt ?? incident.openedAt };
+  if (incident.state === "OPEN") logger.error("scheduled-job-incident", log);
+  else logger.info("scheduled-job-incident-resolved", log);
+}
+
 export class FirebaseScheduledJobExecutionRepository
   implements ScheduledJobRunRepositoryPort
 {
@@ -208,8 +218,11 @@ export class FirebaseScheduledJobExecutionRepository
     completion?: { readonly result: JobExecutionResult; readonly leaseToken: string },
   ): Promise<void> {
     const reference = this.runs.doc(run.runId);
-    await this.database.runTransaction(async (transaction) => {
+    const resolvedIncidents = await this.database.runTransaction(async (transaction) => {
       const current = await transaction.get(reference);
+      const openIncidents = completion === undefined ? undefined : await transaction.get(
+        operationsCollection(this.database, "scheduledJobIncidents").where("state", "==", "OPEN"),
+      );
       const stored = current.exists ? asRecord(current.data()) : undefined;
       if (completion !== undefined && (
         stored === undefined ||
@@ -292,6 +305,7 @@ export class FirebaseScheduledJobExecutionRepository
         },
         { merge: true },
       );
+      const resolved: JobIncident[] = [];
       if (completion !== undefined) {
         const result = completion.result;
         transaction.set(this.results.doc(result.runId), {
@@ -303,8 +317,20 @@ export class FirebaseScheduledJobExecutionRepository
             expiresAt: firestoreTtlAfter(result.finishedAt),
           } : {}),
         });
+        for (const document of openIncidents?.docs ?? []) {
+          const incident = document.data() as JobIncident;
+          if (!hasScheduledJobRecovered(incident, { ...stored, ...run })) continue;
+          const recovery = { ...incident, state: "RESOLVED" as const,
+            resolvedAt: result.finishedAt, alertResolveCount: incident.alertResolveCount + 1 };
+          transaction.set(document.ref, { ...recovery, recoveryOccurrenceId: run.runId,
+            terminalAt: result.finishedAt, expiresAt: firestoreTtlAfter(result.finishedAt),
+            updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+          resolved.push(recovery);
+        }
       }
+      return resolved;
     });
+    for (const incident of resolvedIncidents) logIncident(incident);
   }
 
   async getResult(runId: string): Promise<JobExecutionResult | undefined> {
@@ -376,7 +402,16 @@ export class FirebaseScheduledJobMonitorRepository
       .where("scheduledFor", ">=", cutoff)
       .orderBy("scheduledFor", "asc")
       .get();
-    return snapshot.docs.map((document) => expectedFrom(asRecord(document.data())));
+    const occurrences = new Map(snapshot.docs.map(document => [document.id, expectedFrom(asRecord(document.data()))]));
+    // Open alarms must stay in the monitor set even after the 48-hour scan window.
+    const open = await this.incidents.where("state", "==", "OPEN").get();
+    for (const incident of open.docs) {
+      const occurrenceId = (incident.data() as JobIncident).occurrenceId;
+      if (occurrences.has(occurrenceId)) continue;
+      const run = await this.runs.doc(occurrenceId).get();
+      if (run.exists) occurrences.set(occurrenceId, expectedFrom(asRecord(run.data())));
+    }
+    return [...occurrences.values()];
   }
 
   async getRun(occurrenceId: string): Promise<MonitoredJobRun | undefined> {
@@ -437,41 +472,23 @@ export class FirebaseScheduledJobMonitorRepository
 
   async saveIncident(incident: JobIncident): Promise<void> {
     const reference = this.incidents.doc(incident.occurrenceId);
-    const previous = await reference.get();
-    await reference.set(
-      {
+    const saved = await this.database.runTransaction(async transaction => {
+      const previous = await transaction.get(reference);
+      const currentRun = await transaction.get(this.runs.doc(incident.occurrenceId));
+      if (incident.state === "OPEN" && (previous.exists ||
+        hasScheduledJobRecovered(incident, currentRun.data() ?? {}))) return false;
+      if (incident.state === "RESOLVED" && previous.data()?.state !== "OPEN") return false;
+      transaction.set(reference, {
         ...incident,
         ...(incident.state === "RESOLVED" && incident.resolvedAt !== undefined
-          ? {
-              terminalAt: incident.resolvedAt,
-              expiresAt: firestoreTtlAfter(incident.resolvedAt),
-            }
-          : {
-              terminalAt: FieldValue.delete(),
-              expiresAt: FieldValue.delete(),
-            }),
-        schemaVersion: 1,
-        updatedAt: FieldValue.serverTimestamp(),
+          ? { terminalAt: incident.resolvedAt, expiresAt: firestoreTtlAfter(incident.resolvedAt) }
+          : { terminalAt: FieldValue.delete(), expiresAt: FieldValue.delete() }),
+        schemaVersion: 1, updatedAt: FieldValue.serverTimestamp(),
         ...(previous.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
-      },
-      { merge: true },
-    );
-    const log = {
-      severity: incident.state === "OPEN" ? "ERROR" : "INFO",
-      eventType:
-        incident.state === "OPEN"
-          ? "SCHEDULED_JOB_INCIDENT_OPENED"
-          : "SCHEDULED_JOB_INCIDENT_RESOLVED",
-      incidentId: incident.incidentId,
-      occurrenceId: incident.occurrenceId,
-      reason: incident.reason,
-      observedAt: incident.resolvedAt ?? incident.openedAt,
-    };
-    if (incident.state === "OPEN") {
-      logger.error("scheduled-job-incident", log);
-    } else {
-      logger.info("scheduled-job-incident-resolved", log);
-    }
+      }, { merge: true });
+      return true;
+    });
+    if (saved) logIncident(incident);
   }
 
   async getMonitorReceipt(

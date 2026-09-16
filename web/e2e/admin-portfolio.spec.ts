@@ -24,7 +24,17 @@ test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] �
   await fixture(request, 'operations/runtime/billingCostSnapshots/current', {
     schemaVersion: 1, status: 'available', billingMonth: month, currency: 'KRW',
     monthToDateAmount: 12_345, estimatedMonthEndAmount: 23_456, calculatedAt: now, dataUpdatedAt: now,
-    serviceAmounts: [{ serviceId: 'firestore', serviceName: 'Cloud Firestore', amount: 12_345 }],
+    serviceAmounts: [{ serviceId: 'app-engine', serviceName: 'App Engine', amount: 12_345 }],
+    skuAmounts: [
+      { serviceId: 'app-engine', skuId: 'reads', skuName: 'Cloud Firestore Read Ops Seoul', location: 'asia-northeast3', usageUnit: 'count', usageAmount: 3257532, cost: 12350, credits: -5, amount: 12345 },
+      { serviceId: 'app-engine', skuId: 'writes', skuName: 'Cloud Firestore Entity Writes Seoul', location: 'asia-northeast3', usageUnit: 'count', usageAmount: 40678, cost: 0, credits: 0, amount: 0 },
+    ],
+  });
+  const staleId = 'asset-automation-daily:old';
+  const openedAt = new Date(Date.now() - 6 * 86400000).toISOString();
+  await fixture(request, `operations/runtime/scheduledJobIncidents/${staleId}`, {
+    incidentId: 'e2e-stale-alarm', occurrenceId: staleId, reason: 'MISSING', state: 'OPEN', openedAt,
+    alertOpenCount: 1, alertResolveCount: 0,
   });
   // Cloud Logging의 원시 HTTP 응답만 준비합니다. 실제 reader의 파싱·재시도
   // 중복 제거·통계 집계·callable 응답·화면 포맷은 대체하지 않습니다.
@@ -51,6 +61,18 @@ test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] �
     await expect(admin.getByRole('heading', { name: 'Household Operations', exact: true })).toBeVisible();
     await expect(admin.getByText('12,345원', { exact: true }).first()).toBeVisible();
     await expect(admin.getByText('23,456원', { exact: true })).toBeVisible();
+    const billing = admin.getByRole('table', { name: 'App Engine 과금 항목' });
+    await expect(billing.getByText('3,257,532 회')).toBeVisible();
+    await expect(billing.getByRole('row').filter({ hasText: 'Firestore 문서 쓰기' })).toContainText('40,678 회');
+    await expect(billing.getByRole('row').filter({ hasText: 'Firestore 문서 조회' })).toContainText('-5원');
+    await expect(admin.getByText(staleId, { exact: true })).toBeVisible();
+    await fixture(request, 'operations/runtime/scheduledJobRuns/asset-automation-daily:new', {
+      occurrenceId: 'asset-automation-daily:new', jobName: 'asset-automation-daily', status: 'COMPLETE', scheduledFor: now, terminalAt: now,
+    });
+    // The real callable projects recovery; an old OPEN storage record cannot keep the UI red.
+    await admin.getByRole('button', { name: '새로고침', exact: true }).click();
+    await expect(admin.getByText(staleId, { exact: true })).toHaveCount(0);
+
     await expect(admin.getByRole('heading', { name: '사용자 체감·서버 처리 시간', exact: true })).toBeVisible();
     const latency = admin.getByRole('row').filter({ hasText: 'ledger.update-transaction.v1' });
     await expect(latency).toHaveCount(1);

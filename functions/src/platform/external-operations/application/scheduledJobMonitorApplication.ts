@@ -1,3 +1,4 @@
+import { hasScheduledJobRecovered } from "./scheduledJobIncidentRecovery";
 import type {
   JobIncident,
   JobMonitorResult,
@@ -9,12 +10,6 @@ import type {
   JobIncidentIdentityPort,
   ScheduledJobMonitorRepositoryPort,
 } from "./ports/out/scheduledJobMonitorRepositoryPort";
-
-const TERMINAL = new Set<MonitoredJobStatus>([
-  "COMPLETE",
-  "PARTIAL_FAILURE",
-  "FAILED",
-]);
 
 function after(observedAt: string, deadlineAt: string): boolean {
   return Date.parse(observedAt) > Date.parse(deadlineAt);
@@ -36,11 +31,15 @@ export function createScheduledJobMonitorApplication(dependencies: {
       const openedIncidentIds: string[] = [];
       const resolvedIncidentIds: string[] = [];
 
-      for (const expected of expectedOccurrences) {
-        let run = await dependencies.repository.getRun(expected.occurrenceId);
+      const runs = await Promise.all(expectedOccurrences.map(expected =>
+        dependencies.repository.getRun(expected.occurrenceId)));
+      for (const [index, expected] of expectedOccurrences.entries()) {
+        let run = runs[index];
         const incident = await dependencies.repository.getIncident(expected.occurrenceId);
 
-        if (run !== undefined && TERMINAL.has(run.status)) {
+        if (runs.some(candidate => candidate !== undefined && hasScheduledJobRecovered(
+          incident ?? { occurrenceId: expected.occurrenceId, openedAt: expected.startGraceDeadlineAt }, candidate,
+        ))) {
           if (incident?.state === "OPEN") {
             const resolved: JobIncident = {
               ...incident,

@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode, useCallback, useEffect, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import type { User } from 'firebase/auth';
 import { Gauge, LogOut, Plus, ShieldCheck } from 'lucide-react';
 
@@ -57,7 +57,10 @@ export default function AdminPage() {
     []
   );
 
+  const dashboardRequestPending = useRef(false);
   const loadDashboard = useCallback(async () => {
+    if (dashboardRequestPending.current) return;
+    dashboardRequestPending.current = true;
     setIsLoading(true);
     setErrorMessage(null);
     try {
@@ -75,6 +78,7 @@ export default function AdminPage() {
         setErrorMessage('운영 대시보드를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
       }
     } finally {
+      dashboardRequestPending.current = false;
       setIsLoading(false);
     }
   }, []);
@@ -85,11 +89,18 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!user || accessDenied) return;
-    const intervalId = window.setInterval(() => {
+    const refreshVisible = () => {
       if (document.visibilityState === 'visible') void loadDashboard();
-    }, 60_000);
-    return () => window.clearInterval(intervalId);
-  }, [accessDenied, loadDashboard, user]);
+    };
+    const intervalId = window.setInterval(refreshVisible, dashboard?.service.health === 'critical' ? 10_000 : 60_000);
+    document.addEventListener('visibilitychange', refreshVisible);
+    window.addEventListener('focus', refreshVisible);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', refreshVisible);
+      window.removeEventListener('focus', refreshVisible);
+    };
+  }, [accessDenied, dashboard?.service.health, loadDashboard, user]);
 
   const loadDetails = useCallback(async (householdId: string) => {
     setDetailHouseholdId(householdId);
