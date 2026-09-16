@@ -21,6 +21,10 @@
 **/*.log
 **/*.tsbuildinfo
 /web/quality-web.json
+# Performance scenarios and their shared tooling run only in local/CI tests.
+/web/e2e-performance/**
+/web/playwright.performance.config.ts
+/web/performance-results/**
 /web/public/sw.js
 /web/public/workbox-*.js
 /web/public/worker-*.js

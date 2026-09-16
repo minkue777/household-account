@@ -51,6 +51,8 @@ Android: Functions E2E 준비 후 실행 중인 AVD에서 `npm --prefix web run 
 
 `quality-web-performance`, `quality-android-performance` artifact와 GitHub step summary에 결과를 남깁니다. 아직 CI 자체의 여러 실행 기준선이 없으므로 로컬 PC 시간으로 좁은 실패 임계값을 정하지 않습니다. 현재 CI는 실제 동작·정확한 데이터·완료 timeout을 검증하며 시간은 통계를 축적합니다. 편차를 확인한 뒤 기능별 허용 시간을 별도 결정합니다.
 
+성능 시나리오는 Playwright 전용이며 Jest의 기존 102개 suite와 분리합니다. Vercel에는 성능 하네스·설정·생성 결과를 포함하지 않습니다. CI checkout에서는 모두 유지해 전용 실행기로 검증합니다.
+
 원본 출력: `web/performance-results/web.json`, `android.json` 및 각 Markdown 표. 생성 출력은 Git에서 제외하고, 이번 측정의 확정 통계는 검토 후 아래에 기록합니다.
 
 ## 이번 실행 결과
@@ -175,6 +177,6 @@ Quick Edit 준비 실행 1회의 별도 관측: 결제 알림 수신 → Quick E
 
 - Android 실제 기본 경로의 instrumentation 7회 표본과 별도 진단 instrumentation을 확인했습니다. 기본 첫 실행은 테스트 자체가 통과한 뒤 runner의 준비 표본 개수 검증이 실패했으며, 검증기를 수정하고 기기에 남은 원본 35개 본 표본과 4개 준비 표본을 재검증해 보존했습니다. 기본 경로를 빠른 값으로 재측정해 덮지 않았습니다.
 
-- 통계·표본 완전성 단위 검사 7개, 배포 범위 검사 14개, 관리자 조회 범위 검사 7개, Web 타입 검사·production build, 최종 Android Kotlin 컴파일을 통과했습니다. 원격 전체 CI 결과는 별도로 확인합니다.
+- 통계·표본 완전성 단위 검사 7개, 배포 범위 검사 15개, 관리자 조회 범위 검사 7개, Web 타입 검사·production build, 최종 Android Kotlin 컴파일을 통과했습니다. Jest/Playwright 수집 범위를 분리한 뒤 기존 Jest 102개 suite와 Playwright 두 프로젝트가 유지됨을 확인했고 관련 집중 검사 12개도 통과했습니다. 원격 전체 CI 결과는 별도로 확인합니다.
 
 - [통계·7회 원본·환경 JSON](core-feature-performance-2026-09-17.samples.json)에 각 표의 원본을 보존합니다. 생성되는 전체 실행 artifact는 web/performance-results에 있으며 CI에서도 다운로드할 수 있습니다.

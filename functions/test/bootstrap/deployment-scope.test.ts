@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -14,6 +14,26 @@ const manifest = { releaseId: 'next', artifacts: [{ sha256: 'new-artifact' }] };
 const previous = { record: { status: 'completed', smoke: { status: 'passed' }, releaseId: 'old', commitSha: base, artifact: { sha256: 'old-artifact' } } };
 
 describe('실제 배포 대상 선택', () => {
+  it('Vercel 배포에는 앱과 계약을 남기고 CI 성능 하네스와 외부 도구를 함께 제외한다', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'household-vercel-input-'));
+    execFileSync('git', ['init', '--quiet'], { cwd: directory, windowsHide: true });
+    writeFileSync(join(directory, '.gitignore'), readFileSync(new URL('../../../.vercelignore', import.meta.url)));
+    const excluded = [
+      'web/e2e-performance/reporter.ts', 'web/e2e-performance/scenarios.spec.ts',
+      'web/playwright.performance.config.ts', 'web/performance-results/web.json',
+      'tools/performance/statistics.mjs', 'android/app/release.keystore',
+    ];
+    const retained = ['web/src/app/page.tsx', 'web/package.json', 'contracts/household-command.v1.json'];
+    for (const path of [...excluded, ...retained]) {
+      mkdirSync(dirname(join(directory, path)), { recursive: true });
+      writeFileSync(join(directory, path), 'fixture');
+    }
+    const ignored = execFileSync('git', ['check-ignore', '--no-index', '--stdin', '-z'], {
+      cwd: directory, windowsHide: true, encoding: 'utf8', input: [...excluded, ...retained].join('\0') + '\0',
+    }).split('\0').filter(Boolean);
+    expect(ignored).toEqual(excluded);
+  });
+
   it.each([
     [['web/src/components/assets/CryptoHoldingList.tsx'], []],
     [['functions/scripts/deploy-firebase.mjs', 'functions/test/bootstrap/deployment-scope.test.ts', 'docs/operations/firebase-release-runbook.md'], []],
