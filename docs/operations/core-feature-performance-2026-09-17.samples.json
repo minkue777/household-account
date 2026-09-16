@@ -2221,20 +2221,28 @@
         "metric": "android.home.activity-reopen-complete",
         "label": "Android 앱 재실행 → 첫 홈 데이터 표시",
         "cacheState": "warm-process-production-activity-close",
-        "n": 7,
+        "n": 6,
         "minMs": 1051.5999999999767,
-        "medianMs": 1461,
-        "meanMs": 8624.885714285707,
-        "maxMs": 50666.59999999998,
+        "medianMs": 1310.25,
+        "meanMs": 1617.9333333333295,
+        "maxMs": 2752,
         "samplesMs": [
           1112.5999999999767,
           1051.5999999999767,
           1159.5,
           1461,
           2170.9000000000233,
-          50666.59999999998,
           2752
-        ]
+        ],
+        "includedIterations": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          7
+        ],
+        "excludedObservationReference": "androidExcludedObservationDiagnostic"
       },
       {
         "project": "android-emulator",
@@ -2393,5 +2401,38 @@
         ]
       }
     ]
+  },
+  "androidExcludedObservationDiagnostic": {
+    "scope": "Only this baseline report; future test statistics retain all measured observations.",
+    "reason": "User requested separating this single 50.7-second observation from normal performance statistics for cause analysis.",
+    "sourceMeasuredAt": "2026-09-16T22:15:07.638278Z",
+    "excludedSample": {
+      "project": "android-emulator",
+      "metric": "android.home.activity-reopen-complete",
+      "cacheState": "warm-process-production-activity-close",
+      "iteration": 6,
+      "warmup": false,
+      "durationMs": 50666.59999999998
+    },
+    "originalStatistics": {
+      "project": "android-emulator",
+      "metric": "android.home.activity-reopen-complete",
+      "label": "Android 앱 재실행 → 첫 홈 데이터 표시",
+      "cacheState": "warm-process-production-activity-close",
+      "n": 7,
+      "minMs": 1051.5999999999767,
+      "medianMs": 1461,
+      "meanMs": 8624.885714285707,
+      "maxMs": 50666.59999999998,
+      "samplesMs": [
+        1112.5999999999767,
+        1051.5999999999767,
+        1159.5,
+        1461,
+        2170.9000000000233,
+        50666.59999999998,
+        2752
+      ]
+    }
   }
 }
