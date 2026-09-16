@@ -161,6 +161,8 @@ jobs:
           java-version: 17
           cache: gradle
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       - run: chmod +x gradlew
         working-directory: android
       - run: ./gradlew testDebugUnitTest lintDebug assembleDebug assembleRelease --stacktrace
@@ -210,6 +212,8 @@ jobs:
         working-directory: web
       - uses: android-actions/setup-android@v3
         if: steps.scope.outputs.required == 'true'
+        with:
+          packages: platform-tools
       - run: chmod +x gradlew
         if: steps.scope.outputs.required == 'true'
         working-directory: android
