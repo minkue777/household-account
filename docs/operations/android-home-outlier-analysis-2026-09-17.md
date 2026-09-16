@@ -1,5 +1,7 @@
 # Android 홈 50.7초 관측 원인 분석
 
+아래 원인 분석은 제품 수정 전 기록입니다. 분석 완료 후 사용자가 승인한 보완은 마지막의 "후속 제품 수정"에 따로 기록합니다.
+
 ## 범위
 
 2026-09-17 Android AVD 성능 측정 중 홈 재실행 6회차의 50,666.6ms만 조사합니다. 제품 동작 수정이나 다른 기능의 최적화는 포함하지 않습니다. 사용자 요청에 따라 이 1회는 [일반 성능 통계](core-feature-performance-2026-09-17.md)에서 제외하고, 원본 7회와 제외 전 통계는 [기준선 JSON](core-feature-performance-2026-09-17.samples.json)의 `androidExcludedObservationDiagnostic`에 보존합니다. 향후 테스트의 느린 표본을 자동 제외하는 코드는 추가하지 않았습니다.
@@ -65,3 +67,19 @@ Emulator의 실제 응답 프로토콜은 HTTP/1.1이었습니다. Chromium 일�
 | 원래 1·2·3·4·5·7회차, n=6 | 1.052초 | 1.310초 | 1.618초 | 2.752초 |
 
 제외된 6회차는 50.667초입니다. 통계 제외는 해당 지연의 수정이나 해결을 의미하지 않습니다. Web·Quick Edit·기존 WebView 정리 진단의 값은 변경하지 않았습니다.
+
+## 후속 제품 수정 — Android v1.2.26
+
+사용자 승인 후 `MainActivity.onDestroy`에서 lifecycle 취소, Web message listener 제거, 로딩 중지, 부모 View에서 분리, WebView 해제를 수행하도록 보완했습니다. 대기 중인 브리지 요청도 결과 전송 직전에 `ensureActive()`로 취소 여부를 확인하여 해제된 WebView로 늦은 응답을 보내지 않습니다.
+
+일시적인 백그라운드 이동에서는 기존 문서를 유지합니다. Activity 재생성은 이전 WebView를 해제하고 저장된 navigation을 새 WebView로 복원합니다. 로그인 저장소·쿠키·캐시 삭제나 전역 Firebase 종료는 추가하지 않았습니다.
+
+실제 Activity와 WebView를 사용하는 회귀 검증을 추가했습니다. finish 시 부모에서 분리된 상태로 한 번 해제되는지, 백그라운드 왕복 시 동일 문서·미저장 값·resume 이벤트가 유지되는지, 재생성 시 이전 WebView 해제와 새 renderer·브리지 응답이 정상인지 확인합니다. 관측용 WebView는 실제 `super.destroy()`를 실행하며 테스트에서 제품 대신 종료 처리를 수행하지 않습니다.
+
+Android 단위 테스트 25개 suite·117개와 실제 `MainActivityInstrumentationTest` 12개가 통과했습니다. 종료·백그라운드·재생성 회귀와 기존 history·navigation 복원 검증을 포함합니다. 알림 표시 권한은 계측 프로세스 실행 전에 거부 상태로 준비했으며, 테스트 실행 중 권한 회수로 OS가 프로세스를 종료했던 준비 오류와 구분했습니다. 테스트 기대값이나 timeout은 완화하지 않았습니다.
+
+운영 Web URL을 사용하는 v1.2.26(versionCode 28) release APK 빌드와 v2 서명을 확인했습니다.
+
+수정 뒤 기존 기본 Native 성능 시나리오도 통과했습니다. 테스트의 명시적 WebView 정리를 사용하지 않고 제품 `onDestroy`만 실행했습니다. 동일한 AVD·production Web·Firebase Emulator 조건에서 홈 7회 원본은 **1087.8, 942.6, 938.3, 931.5, 968.2, 985.1, 954.0ms**입니다. 제외한 표본 없이 중앙값 **954.0ms**, 평균 **972.5ms**, 최대 **1087.8ms**였습니다. Quick Edit를 포함한 5개 지표·총 35개 본 표본이 모두 검증됐고 Firestore 10초 대기·WebChannel·해제된 WebView 오류는 관측되지 않았습니다.
+
+수정 뒤 결과는 `web/performance-results/diagnostics/android-home-after-lifecycle-fix.json` 및 `.md`에 보존했습니다. 이 결과는 앞선 제품 수정 전 기준선을 덮지 않으며, 실제 휴대폰의 절대 로딩 시간을 보장하는 수치는 아닙니다.

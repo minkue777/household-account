@@ -70,6 +70,8 @@ sealed interface BridgeResultV1 {
 
 Bridge 호출은 현재 top-level document의 실제 origin이 `AllowedWebOriginPolicy`에 포함될 때만 처리한다. origin 변경, redirect, subframe, 불명확한 origin은 `Rejected(ORIGIN_NOT_ALLOWED)`다. 가구 키는 호환 입력으로만 받고 인증 증명으로 사용하지 않는다.
 
+Bridge 작업은 Activity lifecycle scope에 속하며 응답 직전에 취소 여부를 확인한다. Activity 종료 중 인증 Adapter가 취소를 실패 결과로 변환하더라도 해제된 WebView에 응답하지 않는다.
+
 Google 로그인 UI는 embedded WebView에서 실행하지 않습니다. 실제 `NativeAuthCoordinator`가 Credential Manager와 Firebase Auth를 사용합니다. `createWebViewSessionToken` callable은 Native App Check와 Firebase Auth를 검증하고, 인증 UID의 Membership을 권위 해석한 뒤 Web·Native용 custom token을 발급합니다. caller가 보낸 householdId·memberId·status와 사용자별 view projection은 Membership 증거로 신뢰하지 않습니다. canonical Membership·Member의 존재, active 상태와 Principal/가구/멤버 일치를 확인하며 여러 active view나 불일치는 typed invariant 오류로 거부합니다. 최초 방문자는 가구 생성·참여로 안내할 수 있도록 가구 권한 claim 없이 로그인합니다.
 
 [DEC-073](../../../governance/decisions.md#dec-073)에 따라 응답 계약은 `webview-session-token.v1`을 유지합니다. 서버는 `customToken`, `nativeCustomToken`, `principalUid`, `signedInUserResolution`을 함께 반환합니다. Native는 현재 인증 UID와 응답 UID를 확인하고 Native용 토큰으로 세션을 갱신합니다. Web bridge는 Web용 `customToken`과 UID·해석 결과만 전달하며 Web은 `signInWithCustomToken`으로 로그인한 UID가 응답 UID와 일치할 때만 resolution을 최초 SessionScope에 사용합니다. 결과가 없는 실제 구버전 응답만 기존 Membership Command로 fallback하며 현재 서버의 resolution 실패나 어느 한쪽 토큰 발급 실패를 부분 성공으로 바꾸지 않습니다. 별도 exchange handle·Membership receipt 저장소와 최대 5분·1회 소비 보장은 두지 않습니다. 토큰 검증·만료는 [Firebase SDK 계약](https://firebase.google.com/docs/auth/admin/create-custom-tokens)을 따르며 로그인 후 세션 유지 시간과 구분합니다.
@@ -108,7 +110,7 @@ QuickEdit Controller가 소비하는 서버 Port:
 | 모델·Policy | 불변식 |
 |---|---|
 | `HostCapabilitySnapshot` | 알림 접근, overlay, 알림 표시 권한을 각각 판정한다. component 비교는 정확한 `ComponentName`으로 한다. |
-| `WebShellState` | 한 Activity lifecycle에서 시작 URL을 중복 load하지 않는다. 권한 안내 화면에서는 Web history를 소비하지 않는다. |
+| `WebShellState` | 한 Activity lifecycle에서 시작 URL을 중복 load하지 않는다. 권한 안내 화면에서는 Web history를 소비하지 않는다. `onDestroy`에서 메시지 listener 제거·로딩 중지·View 분리·WebView 해제를 수행하여 이전 문서의 연결을 남기지 않는다. `onPause/onStop`에서는 문서를 유지하며 재생성은 저장된 navigation을 새 WebView에 복원한다. |
 | `AllowedWebOriginPolicy` | scheme, host, 유효 port가 모두 일치해야 한다. path 문자열 prefix로 origin을 판정하지 않는다. |
 | `SessionMirror` | schemaVersion·sessionGeneration·householdId·memberId·sourceVersion·updatedAt을 Android Keystore 기반 암호화 저장소의 한 snapshot으로 저장한다. sessionGeneration은 actor scope를 교체할 때마다 새 값으로 발급하고 household/member와 함께 원자 교체한다. 일부 갱신과 표시 이름 key를 허용하지 않으며 key는 export·backup하지 않는다. |
 | `SessionTransitionJournal` | Queue purge 시작 전 이전·목표 generation만 보호 저장하고 mirror commit 뒤 제거한다. purge 뒤 commit 전 중단 흔적은 재시작 시 mirror를 비워 어떤 Actor의 수집도 시작하지 않는 fail-closed 상태로 복구한다. |

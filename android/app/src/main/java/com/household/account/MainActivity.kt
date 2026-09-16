@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -32,6 +33,7 @@ import com.household.account.webhost.TrustedWebOrigin
 import com.household.account.webhost.NotificationListenerAccess
 import com.household.account.service.CardNotificationListenerService
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
 
 class MainActivity : AppCompatActivity() {
 
@@ -93,6 +95,19 @@ class MainActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        if (!::webView.isInitialized) return
+
+        // Activity 종료 뒤 이전 문서의 실시간 연결이 남지 않도록 함께 해제합니다.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            WebViewCompat.removeWebMessageListener(webView, AndroidHostBridge.OBJECT_NAME)
+        }
+        webView.stopLoading()
+        (webView.parent as? ViewGroup)?.removeView(webView)
+        webView.destroy()
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
         hostBridge = AndroidHostBridge(
@@ -139,7 +154,9 @@ class MainActivity : AppCompatActivity() {
             ) { _, message, sourceOrigin, isMainFrame, replyProxy ->
                 if (!isMainFrame || sourceOrigin.toString() != TrustedWebOrigin.APP_ORIGIN) return@addWebMessageListener
                 lifecycleScope.launch {
-                    replyProxy.postMessage(hostBridge.handle(message.data.orEmpty()))
+                    val response = hostBridge.handle(message.data.orEmpty())
+                    ensureActive()
+                    replyProxy.postMessage(response)
                 }
             }
         }

@@ -7,6 +7,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.provider.Settings
+import android.util.AttributeSet
+import android.view.LayoutInflater
 import android.view.View
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -19,6 +21,9 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleCallback
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import com.household.account.service.CardNotificationListenerService
 import com.household.account.paymentcapture.AndroidCaptureDelivery
 import com.household.account.webhost.AndroidHostBridge
@@ -40,6 +45,8 @@ import androidx.test.espresso.matcher.ViewMatchers.withId
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -184,6 +191,128 @@ class MainActivityInstrumentationTest {
             }
             assertTrue(checked.await(5, TimeUnit.SECONDS))
             assertFalse(ranOnMainThread.get())
+        }
+    }
+
+    @Test
+    fun finishingActivityDetachesAndDestroysItsWebViewOnce() {
+        withObservedWebViewLifecycle { scenario ->
+            loadLifecycleDocument(scenario)
+            lateinit var original: LifecycleObservedWebView
+            scenario.onActivity { activity ->
+                original = activity.findViewById(R.id.webView)
+                assertEquals(0, original.destroyCalls)
+                assertTrue(original.parent != null)
+                activity.finish()
+            }
+            waitUntil("Activity 종료 후 WebView 해제") {
+                scenario.state == Lifecycle.State.DESTROYED
+            }
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                assertNull(original.parent)
+                assertEquals(1, original.destroyCalls)
+                assertTrue(original.wasDetachedAtDestroy)
+            }
+        }
+    }
+
+    @Test
+    fun backgroundPreservesTheDocumentAndRecreationReleasesOnlyTheOldWebView() {
+        withObservedWebViewLifecycle { scenario ->
+            loadLifecycleDocument(scenario)
+            lateinit var original: LifecycleObservedWebView
+            grantMandatoryPermissions()
+            scenario.onActivity { activity ->
+                original = activity.findViewById(R.id.webView)
+                activity.findViewById<Button>(R.id.btnCheckPermission).performClick()
+            }
+            evaluateWebView(scenario, "window.unsavedDraft = 'keep-before-background'")
+
+            scenario.moveToState(Lifecycle.State.CREATED)
+            scenario.moveToState(Lifecycle.State.RESUMED)
+            scenario.onActivity { activity ->
+                assertSame(original, activity.findViewById(R.id.webView))
+                assertEquals(0, original.destroyCalls)
+                assertTrue(original.parent != null)
+            }
+            assertEquals("keep-before-background", evaluateWebViewText(scenario, "window.unsavedDraft"))
+            assertEquals("1", evaluateWebView(scenario, "window.resumeEvents"))
+
+            scenario.recreate()
+            scenario.onActivity { activity ->
+                val replacement = activity.findViewById<LifecycleObservedWebView>(R.id.webView)
+                assertNotSame(original, replacement)
+                assertNull(original.parent)
+                assertEquals(1, original.destroyCalls)
+                assertTrue(original.wasDetachedAtDestroy)
+                assertEquals(0, replacement.destroyCalls)
+                assertEquals(View.VISIBLE, replacement.visibility)
+            }
+            // Exercise the new real renderer and production bridge, independently of remote hosting.
+            loadLifecycleDocument(scenario)
+            assertEquals("undefined", evaluateWebViewText(scenario, "typeof window.unsavedDraft"))
+        }
+    }
+
+    private fun loadLifecycleDocument(scenario: ActivityScenario<MainActivity>) {
+        scenario.onActivity { activity ->
+            activity.findViewById<WebView>(R.id.webView).loadDataWithBaseURL(
+                "${TrustedWebOrigin.APP_ORIGIN}/native-test/lifecycle",
+                """<!doctype html><html><body>Lifecycle document<script>
+                    window.resumeEvents = 0;
+                    window.addEventListener('household-account:android-resume', function() { window.resumeEvents++; });
+                    window.bridgeVersion = null;
+                    HouseholdNativeBridge.onmessage = function(event) {
+                      window.bridgeVersion = JSON.parse(event.data).result.value.version;
+                    };
+                    HouseholdNativeBridge.postMessage(JSON.stringify({contractVersion:'android-bridge.v1',
+                      requestId:'lifecycle-version',operation:'app.get-version',payload:{}}));
+                </script></body></html>""".trimIndent(),
+                "text/html", "UTF-8", null
+            )
+        }
+        waitUntil("실제 WebView 문서와 Native bridge 준비") {
+            evaluateWebViewText(scenario, "window.bridgeVersion") == BuildConfig.VERSION_NAME
+        }
+    }
+
+    private fun withObservedWebViewLifecycle(block: (ActivityScenario<MainActivity>) -> Unit) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val monitor = ActivityLifecycleMonitorRegistry.getInstance()
+        val callback = ActivityLifecycleCallback { activity, stage ->
+            if (activity is MainActivity && stage == Stage.PRE_ON_CREATE) {
+                activity.layoutInflater.factory2 = object : LayoutInflater.Factory2 {
+                    override fun onCreateView(parent: View?, name: String, context: Context, attrs: AttributeSet): View? =
+                        if (name == "WebView" || name == WebView::class.java.name) {
+                            LifecycleObservedWebView(context, attrs)
+                        } else {
+                            activity.delegate.createView(parent, name, context, attrs)
+                        }
+
+                    override fun onCreateView(name: String, context: Context, attrs: AttributeSet): View? =
+                        onCreateView(null, name, context, attrs)
+                }
+            }
+        }
+        instrumentation.runOnMainSync { monitor.addLifecycleCallback(callback) }
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use(block)
+        } finally {
+            instrumentation.runOnMainSync { monitor.removeLifecycleCallback(callback) }
+        }
+    }
+
+    /** Observe the real WebView teardown; never replace its renderer or destruction behavior. */
+    private class LifecycleObservedWebView(context: Context, attrs: AttributeSet) : WebView(context, attrs) {
+        var destroyCalls = 0
+            private set
+        var wasDetachedAtDestroy = false
+            private set
+
+        override fun destroy() {
+            wasDetachedAtDestroy = parent == null
+            super.destroy()
+            destroyCalls++
         }
     }
 
