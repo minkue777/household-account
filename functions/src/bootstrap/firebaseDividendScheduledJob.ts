@@ -30,7 +30,7 @@ function oneYearBefore(value: string): string {
   )}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
 }
 
-// Preserve the deployed resource and receipt identities; the schedule is daily at 19:00 KST.
+// Preserve the deployed resource and receipt identities; run weekdays at 19:00 KST.
 export const dividendHourly = onSchedule(
   {
     schedule: definition.cron,

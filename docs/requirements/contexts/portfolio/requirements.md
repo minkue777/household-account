@@ -180,9 +180,9 @@ Disclosure Adapter
 | [DEC-053](../../governance/decisions.md#dec-053) | Holdings·Portfolio Core | 최신 사용 가능 외화 Quote·환율의 skew 제한 없는 조합과 관측 provenance 보존 |
 | [DEC-058](../../governance/decisions.md#dec-058) | Portfolio Core·Reporting | 선택 기간 Snapshot의 type·ownerRef dimension을 현재 자산·프로필 상태와 무관하게 과거 필터에 제공 |
 | [DEC-060](../../governance/decisions.md#dec-060) | Holdings·External Operations | Frankfurter v2 단일 환율 공급자, 마지막 성공 환율 무기한 사용, 네이버·보조 공급자 fallback 금지 |
-| [DEC-062](../../governance/decisions.md#dec-062) | Dividends·External Operations | 배당 discovery·lifecycle sweep을 한국 시간 매일 19:00에 1회 실행, occurrence별 멱등 처리 |
+| [DEC-062](../../governance/decisions.md#dec-062) | Dividends·External Operations | 배당 discovery·lifecycle sweep을 한국 시간 평일(월~금) 19:00에 1회 실행, 토·일 미실행, occurrence별 멱등 처리 |
 
-남은 정책은 [미결정 사항 단일 목록](../../governance/pending-decisions.md)에서 관리합니다. 배당 매일 19:00 schedule은 DEC-062, 환율 공급자·stale 정책은 DEC-060, 과거 자산 dimension은 DEC-058, 외화 Quote·환율 조합은 DEC-053, 자산 자동화의 매일 due 처리·누락 월 복구·과거 execution 불변은 DEC-052, 시세 갱신 시점·호출 한도는 DEC-049, Position history 보존·자산 차트 gap은 DEC-048, 처리·운영 기록 보존은 DEC-046, 배당 lifecycle·정정·취소는 DEC-043, 종목 catalog stale·보존·cache는 DEC-035로 확정했습니다. 결정 전에는 나머지 미확정 범위의 과거 Event를 자동 삭제·재작성하거나 실패를 0·빈 성공·고정 추정값으로 바꾸지 않습니다.
+남은 정책은 [미결정 사항 단일 목록](../../governance/pending-decisions.md)에서 관리합니다. 배당 평일(월~금) 19:00 schedule은 DEC-062, 환율 공급자·stale 정책은 DEC-060, 과거 자산 dimension은 DEC-058, 외화 Quote·환율 조합은 DEC-053, 자산 자동화의 매일 due 처리·누락 월 복구·과거 execution 불변은 DEC-052, 시세 갱신 시점·호출 한도는 DEC-049, Position history 보존·자산 차트 gap은 DEC-048, 처리·운영 기록 보존은 DEC-046, 배당 lifecycle·정정·취소는 DEC-043, 종목 catalog stale·보존·cache는 DEC-035로 확정했습니다. 결정 전에는 나머지 미확정 범위의 과거 Event를 자동 삭제·재작성하거나 실패를 0·빈 성공·고정 추정값으로 바꾸지 않습니다.
 
 ## 9. 테스트 소유권
 

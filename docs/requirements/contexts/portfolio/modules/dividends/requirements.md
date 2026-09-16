@@ -22,7 +22,7 @@ KIND HTML 구조, Firebase Scheduler, React 차트는 모듈 내부 업무 규�
 - 기준일 적격 보유수량과 총 배당액 계산
 - 연도별 월 합계와 이벤트 조회
 - 기준일 전 예상 배당 표시와 확정 이벤트 중복 제외
-- 매일 수행되는 배당 갱신 Application job
+- 평일(월~금) 19:00에 수행되는 배당 갱신 Application job
 
 ### 제외
 
@@ -70,8 +70,8 @@ KIND HTML 구조, Firebase Scheduler, React 차트는 모듈 내부 업무 규�
 | DIV-003 | 현재 명세 | 기준일 당일 보유수량과 totalAmount를 계산해 fixed로 전환하고, 지급일 당일부터 paid로 전환한다. 연간 스냅샷에는 fixed와 paid를 모두 지급 월에 포함한다. | 이벤트 ID는 정정될 수 있는 금액·날짜가 아니라 공급자·안정 공시 ID·종목 코드로 결정해 같은 종목의 같은 공시가 항상 같은 문서를 가리키고, 한 공시 문서의 여러 종목은 서로 덮어쓰지 않아야 한다. | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts), [DEC-043](../../../../governance/decisions.md#dec-043) | U, I |
 | DIV-004 | 결함 | dividend_snapshots의 월 합계와 내장 events는 서로 다른 저장 경로에서 덮어쓰거나 불일치하면 안 된다. | Projection의 `events` map key는 반드시 Canonical `eventId`여야 하며 종목 코드·지급일·주당금액을 다시 조합한 별도 key를 사용하지 않는다. Canonical Event와 Projection의 활성 Writer는 Functions 배당 Application 하나이며 Web 저장 API는 두지 않는다. | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts) | I |
 | DIV-005 | 결함 | 기준일 당일 job 실패나 지연 공시가 있어도 기준일과 가장 가까운 보유 snapshot으로 적격 수량을 자동 복구해야 한다. | 정확한 기준일 snapshot을 우선하고, 없으면 날짜 차이가 최소인 snapshot을 사용하며 동률이면 기준일 이전을 우선한다. snapshot이 전혀 없거나 조회 실패이면 0으로 바꾸지 않는다. 추정 여부는 화면에 별도 표시하지 않는다. | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts), [DEC-014](../../../../governance/decisions.md#dec-014) | U, I |
-| DIV-006 | 결함 | 이미 저장된 `announced`·`fixed` 이벤트의 상태 진행과 최신 공시 반영은 당일 신규 discovery 결과와 분리해 매일 19:00 예약 occurrence에서 독립적으로 처리해야 한다. | 기존 nonterminal Event는 모든 source Asset·Holding이 삭제되어도 저장된 Event와 Position history로 `announced → fixed → paid`를 진행한다. 같은 공시의 정정은 미지급 Event의 현재 값만 덮어쓰고 이전 값은 보관하지 않으며, 기준일·금액 변경 시 적격 수량·증거·총액을 원자 재계산한다. 지급 전 명시적 취소·삭제는 Event와 Projection에서 제거하고 `NoData`·실패는 삭제 근거로 쓰지 않는다. `paid`는 이후 정정·취소에도 불변이다. [DEC-062](../../../../governance/decisions.md#dec-062) | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts), [DEC-017](../../../../governance/decisions.md#dec-017), [DEC-043](../../../../governance/decisions.md#dec-043) | U, I |
-| JOB-DIV-001 | 목표 명세 | 매일 `Asia/Seoul` 19:00에 1회 최근 1년 범위의 국내 ETF 분배 공시를 수집하고 기존 nonterminal Event 상태를 전이해 가구·종목별 이벤트와 연간 Projection을 갱신한다. | cron은 `0 19 * * *`이며 하루 1회 실행한다. 같은 occurrence 재실행과 다음 날 반복 수집·상태 전이는 결정적 Event ID와 execution으로 중복 반영하지 않는다. 한 occurrence에서는 배당 보고서로 제한한 최근 1년 검색 결과를 모든 대상 종목이 공유하고, 접수번호·문서번호·상세 URL별 외부 응답을 실행 범위에서만 재사용하며 KIND HTTP 호출은 순차 처리한다. 선언된 전체 검색 건수와 실제 수신 행 수가 다르면 누락으로 간주해 contract failure로 처리한다. 각 종목 결과가 아니라 occurrence 전체 결과를 한 번 집계하며 일부 종목 실패는 `degraded`·경보 닫힘, 모든 종목 실패가 3회 연속일 때만 `outage`·경보 열림으로 판정한다. 19:00 이후 공시는 다음 날 19:00에 수집한다. [DEC-062](../../../../governance/decisions.md#dec-062) | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts) | U, I, 운영 계약 |
+| DIV-006 | 결함 | 이미 저장된 `announced`·`fixed` 이벤트의 상태 진행과 최신 공시 반영은 당일 신규 discovery 결과와 분리해 평일(월~금) 19:00 예약 occurrence에서 독립적으로 처리해야 한다. | 기존 nonterminal Event는 모든 source Asset·Holding이 삭제되어도 저장된 Event와 Position history로 `announced → fixed → paid`를 진행한다. 같은 공시의 정정은 미지급 Event의 현재 값만 덮어쓰고 이전 값은 보관하지 않으며, 기준일·금액 변경 시 적격 수량·증거·총액을 원자 재계산한다. 지급 전 명시적 취소·삭제는 Event와 Projection에서 제거하고 `NoData`·실패는 삭제 근거로 쓰지 않는다. `paid`는 이후 정정·취소에도 불변이다. [DEC-062](../../../../governance/decisions.md#dec-062) | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts), [DEC-017](../../../../governance/decisions.md#dec-017), [DEC-043](../../../../governance/decisions.md#dec-043) | U, I |
+| JOB-DIV-001 | 목표 명세 | `Asia/Seoul` 기준 평일(월~금) 19:00에 1회 최근 1년 범위의 국내 ETF 분배 공시를 수집하고 기존 nonterminal Event 상태를 전이해 가구·종목별 이벤트와 연간 Projection을 갱신한다. | cron은 `0 19 * * 1-5`이며 평일(월~금)에 하루 1회 실행하고 토·일에는 실행하지 않는다. 같은 occurrence 재실행과 다음 평일 반복 수집·상태 전이는 결정적 Event ID와 execution으로 중복 반영하지 않는다. 한 occurrence에서는 배당 보고서로 제한한 최근 1년 검색 결과를 모든 대상 종목이 공유하고, 접수번호·문서번호·상세 URL별 외부 응답을 실행 범위에서만 재사용하며 KIND HTTP 호출은 순차 처리한다. 선언된 전체 검색 건수와 실제 수신 행 수가 다르면 누락으로 간주해 contract failure로 처리한다. 각 종목 결과가 아니라 occurrence 전체 결과를 한 번 집계하며 일부 종목 실패는 `degraded`·경보 닫힘, 모든 종목 실패가 3회 연속일 때만 `outage`·경보 열림으로 판정한다. 19:00 이후 공시는 다음 평일 19:00에 수집한다. 금요일 19:00 이후와 주말 공시는 월요일 19:00에 수집한다. [DEC-062](../../../../governance/decisions.md#dec-062) | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts) | U, I, 운영 계약 |
 | JOB-DIV-002 | 결함 | 공시 discovery 대상은 Instrument Master 또는 Holdings 공개 Query가 `market=KRX`, `instrumentType=ETF`로 명시 분류한 활성 보유종목으로 제한해야 한다. | 이전 이관 데이터가 `stock`으로 저장됐더라도 Instrument Master가 같은 코드를 ETF로 분류하면 이를 정규화해 포함한다. `holdingType=stock`이나 코드 모양만으로 추정하지 않으며 국내 개별주식·미국주식·코인·실물 금과 분류 미확정 종목은 제외한다. | [배당 예약 작업](../../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts) | U, C, I |
 
 ## 6. 모듈 결함
@@ -88,7 +88,7 @@ KIND HTML 구조, Firebase Scheduler, React 차트는 모듈 내부 업무 규�
 - [DEC-014](../../../../governance/decisions.md#dec-014): 기준일과 가장 가까운 보유 snapshot을 사용하고 날짜 차이가 같으면 기준일 이전 데이터를 우선합니다.
 - [DEC-017](../../../../governance/decisions.md#dec-017): deleted Asset은 신규 배당 처리 대상에서 제외하지만 기존 DividendEvent·Annual Projection은 보존합니다. Asset 영구 purge도 배당 이력을 수정·재계산·삭제하지 않으며 paid 배당은 계속 조회합니다.
 - [DEC-043](../../../../governance/decisions.md#dec-043): 같은 공시의 미지급 Event는 최신 값으로 덮어쓰고 이전 공시 값은 보관하지 않습니다. 지급 전 명시적 취소는 제거하지만 공급자 실패로 삭제하지 않으며 paid Event는 불변으로 유지합니다.
-- [DEC-062](../../../../governance/decisions.md#dec-062): 배당 discovery와 lifecycle sweep을 한국 시간 매일 19:00에 1회 실행하고 occurrence별 execution key로 중복 반영을 막습니다. 19:00 이후 공시는 다음 날 19:00에 수집합니다.
+- [DEC-062](../../../../governance/decisions.md#dec-062): 배당 discovery와 lifecycle sweep을 한국 시간 평일(월~금) 19:00에 1회 실행하고 occurrence별 execution key로 중복 반영을 막습니다. 토·일에는 실행하지 않으며 19:00 이후 공시는 다음 평일 19:00에, 금요일 19:00 이후와 주말 공시는 월요일 19:00에 수집합니다.
 
 ## 8. 모듈 테스트 시나리오
 
@@ -98,12 +98,12 @@ KIND HTML 구조, Firebase Scheduler, React 차트는 모듈 내부 업무 규�
 |---|---|---|---|
 | T-DIV-001 | 목표 | 기준일 10일 job 실패, 9일·11일 snapshot / 다음 실행 / 9일 수량으로 fixed 전이 | DIV-005, DEC-014 |
 | T-DIV-002 | 목표 | KRX ETF·국내 개별주식·미국주식·분류 미확정 stock 보유 / discovery 대상 계산 / 명시 분류된 KRX ETF만 KIND 조회 | JOB-DIV-002 |
-| T-DIV-003 | 목표 | 모든 source Asset이 사라진 nonterminal Event, 같은 공시의 정정·명시적 취소, Provider NoData, paid 뒤 정정 / 매일 19:00 lifecycle sweep / announced는 Position history로 fixed, fixed는 paid, 미지급 정정은 같은 Event 덮어쓰기·이전 값 미보관, 미지급 취소는 제거, NoData와 paid 정정은 무변경 | DIV-006, DIV-005, DEC-017, DEC-043, DEC-062 |
+| T-DIV-003 | 목표 | 모든 source Asset이 사라진 nonterminal Event, 같은 공시의 정정·명시적 취소, Provider NoData, paid 뒤 정정 / 평일(월~금) 19:00 lifecycle sweep / announced는 Position history로 fixed, fixed는 paid, 미지급 정정은 같은 Event 덮어쓰기·이전 값 미보관, 미지급 취소는 제거, NoData와 paid 정정은 무변경 | DIV-006, DIV-005, DEC-017, DEC-043, DEC-062 |
 | T-DIV-004 | 목표 | 10개월·비정상 legacy 월 배열과 정상 12개월 canonical Event map / 연간 배당 조회 / legacy는 12개월 0원 보정과 stale 상태로 읽고 정상 map은 eventId 합계와 월 합계를 일치시킴 | DIV-001, DIV-004 |
 | T-DIV-005 | 목표 | 기준일 전 announced Event와 현재 수량, 같은 canonical ID의 fixed·paid, Holdings 실패 / 예정 배당 조회 / 현재 수량으로 예상하고 확정 Event만 제외하며 원천 실패를 빈 성공으로 바꾸지 않음 | DIV-002 |
 | T-DIV-006 | 목표 | 기준일·지급일 경계, 소수 수량, 같은 공시 반복, paid 역전 요청 / 배당 상태 전이 / announced→fixed→paid 순서와 원 단위 총액을 보장하고 반복은 Event 하나, 역전은 Conflict | DIV-003 |
 | T-DIV-007 | 목표·아키텍처 | 같은 Event 중복·version gap·역순·미인증 직접 overwrite·stale projection / 연간 배당 Projection 갱신 / 단일 Writer만 eventId 한 건과 월 합계를 갱신하고 gap은 rebuild를 요구하며 직접 overwrite는 거부 | DIV-004, DIV-006 |
-| T-JOB-DIV-001 | 목표 | 19:00 경계와 18:30·19:30 신규 공시, instrument별 성공·timeout, 전체 실패 3회, 같은 occurrence 재실행 / 배당 예약 갱신 / 서울 매일 19:00에 1회 실행하고 18:30 공시는 당일 19:00·19:30 공시는 다음 날 19:00에 수집하며 부분 실패는 degraded·무경보, 전체 실패 3회째만 outage, 멱등 Projection을 보장 | JOB-DIV-001, DEC-062 |
+| T-JOB-DIV-001 | 목표 | 평일 19:00 경계와 18:30·19:30 신규 공시, 금요일 19:00 이후·토·일 공시, instrument별 성공·timeout, 전체 실패 3회, 같은 occurrence 재실행 / 배당 예약 갱신 / 서울 평일(월~금) 19:00에 1회 실행하고 토·일에는 미실행, 평일 18:30 공시는 당일 19:00·19:30 공시는 다음 평일 19:00·금요일 19:00 이후와 주말 공시는 월요일 19:00에 수집하며 부분 실패는 degraded·무경보, 전체 실패 3회째만 outage, 멱등 Projection을 보장 | JOB-DIV-001, DEC-062 |
 
 ### 상세 시나리오
 

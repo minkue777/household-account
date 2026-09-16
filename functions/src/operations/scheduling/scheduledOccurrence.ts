@@ -113,6 +113,16 @@ function fixedTime(definition: ScheduledJobDefinition): {
   return { hour, minute };
 }
 
+function runsOnDate(definition: ScheduledJobDefinition, seoulDate: string): boolean {
+  const dayOfWeek = definition.cron.trim().split(/\s+/)[4];
+  if (dayOfWeek === "*") return true;
+  if (dayOfWeek === "1-5") {
+    const weekday = new Date(`${seoulDate}T00:00:00.000Z`).getUTCDay();
+    return weekday >= 1 && weekday <= 5;
+  }
+  throw new Error("SCHEDULE_CRON_UNSUPPORTED");
+}
+
 /**
  * Materializes business-job occurrences independently of their handlers. This is
  * what lets the monitor distinguish "the handler never ran" from "there was no
@@ -135,6 +145,7 @@ export function expectedBusinessOccurrences(input: {
     const date = localDateOffset(localToday, dayOffset);
     for (const definition of input.definitions.definitions) {
       if (definition.jobName === "scheduled-job-monitor") continue;
+      if (!runsOnDate(definition, date)) continue;
       if (definition.jobName === "billing-cost-refresh") {
         for (const hour of [0, 6, 12, 18]) {
           const scheduledFor = seoulInstant(date, hour, 0);

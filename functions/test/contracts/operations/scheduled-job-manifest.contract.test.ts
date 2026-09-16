@@ -51,7 +51,7 @@ const expectedJobs = {
     targetKeyTemplate: "snapshotGeneration:checksum",
   },
   "dividend-hourly": {
-    cron: "0 19 * * *",
+    cron: "0 19 * * 1-5",
     publicInputPort: "RefreshDividendEvents",
     capability: "portfolio.job.dividend-refresh",
     executionKeyTemplate: "dividend-hourly:{scheduledHour}",
@@ -120,12 +120,12 @@ describe("예약 작업 공개 계약 manifest v1", () => {
     }
   });
 
-  it("[T-DIV-003] 배당은 19시 하루 한 번 실행하며 기존 scheduledHour 멱등 키를 유지한다", () => {
+  it("[T-DIV-003] 배당은 평일 19시 한 번 실행하며 기존 scheduledHour 멱등 키를 유지한다", () => {
     const dividendJob = manifest.jobs.find(
       ({ jobName }) => jobName === "dividend-hourly",
     );
 
-    expect(dividendJob?.cron).toBe("0 19 * * *");
+    expect(dividendJob?.cron).toBe("0 19 * * 1-5");
     expect(dividendJob?.idempotency.executionKeyTemplate).toBe(
       "dividend-hourly:{scheduledHour}",
     );

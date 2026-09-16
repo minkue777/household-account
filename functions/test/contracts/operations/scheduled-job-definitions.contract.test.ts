@@ -84,7 +84,7 @@ describe("예약 작업 versioned 실행 정의", () => {
 
     expect(loaded).toEqual(fixture);
     expect(scheduledJobDefinition("dividend-hourly", loaded).cron).toBe(
-      "0 19 * * *",
+      "0 19 * * 1-5",
     );
     expect(DIVIDEND_REFRESH_SCHEDULE).toEqual({
       cron: scheduledJobDefinition("dividend-hourly", loaded).cron,

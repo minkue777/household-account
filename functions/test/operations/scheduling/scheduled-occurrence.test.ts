@@ -75,17 +75,35 @@ describe("scheduled occurrence", () => {
   });
 
   it.each([
-    ["2026-09-20T00:00:00.000Z", []],
-    ["2026-09-20T09:59:59.999Z", []],
-    ["2026-09-20T10:00:00.000Z", ["dividend-hourly:2026-09-20T19"]],
-    ["2026-09-20T11:00:00.000Z", ["dividend-hourly:2026-09-20T19"]],
-  ] as const)("배당은 주말에도 서울 19시 한 번만 감시하며 다른 시간의 누락을 만들지 않는다: %s", (observedAt, expectedKeys) => {
+    ["2026-09-18T00:00:00.000Z", []],
+    ["2026-09-18T09:59:59.999Z", []],
+    ["2026-09-18T10:00:00.000Z", ["dividend-hourly:2026-09-18T19"]],
+    ["2026-09-18T11:00:00.000Z", ["dividend-hourly:2026-09-18T19"]],
+    ["2026-09-19T10:00:00.000Z", []],
+    ["2026-09-20T10:00:00.000Z", []],
+    ["2026-09-21T10:00:00.000Z", ["dividend-hourly:2026-09-21T19"]],
+  ] as const)("배당은 서울 평일 19시만 감시하며 주말과 다른 시간의 누락을 만들지 않는다: %s", (observedAt, expectedKeys) => {
     const occurrences = expectedBusinessOccurrences({
       observedAt,
       lookbackHours: 2,
       definitions: loadScheduledJobDefinitions(),
     }).filter(({ jobName }) => jobName === "dividend-hourly");
     expect(occurrences.map(({ executionKey }) => executionKey)).toEqual(expectedKeys);
+  });
+
+  it("주말 배당을 제외해도 다른 일일 작업의 감시는 유지한다", () => {
+    const occurrences = expectedBusinessOccurrences({
+      observedAt: "2026-09-20T10:01:00.000Z",
+      lookbackHours: 24,
+      definitions: loadScheduledJobDefinitions(),
+    });
+    expect(occurrences.filter(({ jobName }) => jobName === "dividend-hourly")).toEqual([]);
+    expect(occurrences).toContainEqual(expect.objectContaining({
+      executionKey: "recurring-daily:2026-09-20",
+    }));
+    expect(occurrences).toContainEqual(expect.objectContaining({
+      executionKey: "asset-automation-daily:2026-09-20",
+    }));
   });
 
   it("관찰 시각보다 미래인 당일 실행은 기대값에 포함하지 않는다", () => {

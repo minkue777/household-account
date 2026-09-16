@@ -34,7 +34,7 @@
     },
     {
       "jobName": "dividend-hourly",
-      "cron": "0 19 * * *",
+      "cron": "0 19 * * 1-5",
       "startGraceSeconds": 300,
       "executionDeadlineSeconds": 480,
       "heartbeatTimeoutSeconds": 300,
