@@ -18,7 +18,11 @@
     "test:e2e": "node ../functions/scripts/run-with-emulator-secret.mjs node ../tools/e2e/firebase-emulators.mjs \"npm --prefix web run test:e2e:playwright\"",
     "pretest:e2e:android": "npm run test:e2e:functions && playwright install chromium",
     "test:e2e:android": "node ../functions/scripts/run-with-emulator-secret.mjs node ../tools/e2e/firebase-emulators.mjs \"node tools/e2e/native-firebase.mjs\"",
-    "test:e2e:playwright": "playwright test"
+    "test:e2e:playwright": "playwright test",
+    "pretest:performance": "npm run test:e2e:functions && npm run test:e2e:install",
+    "test:performance": "node ../functions/scripts/run-with-emulator-secret.mjs node ../tools/e2e/firebase-emulators.mjs \"npm --prefix web run test:performance:playwright\"",
+    "test:performance:playwright": "playwright test --config playwright.performance.config.ts",
+    "test:performance:android": "node ../functions/scripts/run-with-emulator-secret.mjs node ../tools/e2e/firebase-emulators.mjs \"node tools/e2e/native-firebase.mjs performance\""
   },
   "dependencies": {
     "chart.js": "^4.4.0",

@@ -5,6 +5,7 @@ import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, re
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startNativeWebRuntime } from './native-web-runtime.mjs';
+import { markdownTable, summarizeSamples } from '../performance/statistics.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const projectId = 'demo-household-account-e2e';
@@ -37,7 +38,7 @@ async function jsonRequest(url, options = {}) {
   return text ? JSON.parse(text) : {};
 }
 
-async function seed() {
+async function seed({ performance = false } = {}) {
   // Only the fixed demo project on loopback is reachable. Never accept a production project argument.
   await Promise.all([
     jsonRequest(`http://127.0.0.1:9099/emulator/v1/projects/${projectId}/accounts`, { method: 'DELETE' }),
@@ -46,10 +47,10 @@ async function seed() {
   const account = await jsonRequest('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-api-key', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, password, returnSecureToken: true }),
   });
-  async function command(name, payload, householdId) {
+  async function command(name, payload, householdId, idToken = account.idToken) {
     const commandId = `native-e2e-${randomUUID()}`;
     const response = await jsonRequest(`http://127.0.0.1:5001/${projectId}/asia-northeast3/executeHouseholdCommand`, {
-      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${account.idToken}` },
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${idToken}` },
       body: JSON.stringify({ data: { contractVersion: 'household-command.v1', commandId, idempotencyKey: commandId,
         ...(householdId ? { householdId } : {}), command: name, payload } }),
     });
@@ -82,6 +83,41 @@ async function seed() {
   };
   const fixture = { projectId, email, password, householdId: household.householdId, memberId: household.memberId,
     categoryId, categoryName, rawNotification, expectedMerchant: 'E2E 카페', expectedAmountInWon: 12300 };
+  if (performance) {
+    for (const [memberEmail, memberName] of [['native-partner@household.test', '성능 배우자'], ['native-child@household.test', '성능 아이']]) {
+      const member = await jsonRequest('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-api-key', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: memberEmail, password, returnSecureToken: true }),
+      });
+      const invitation = await command('access.create-invitation.v1', {}, household.householdId);
+      await command('access.join-household-as-self.v1', { invitationCode: invitation.invitationCode, memberName }, undefined, member.idToken);
+    }
+    const fields = object => Object.fromEntries(Object.entries(object).map(([key, value]) => [key,
+      typeof value === 'number' ? { integerValue: String(value) } : { stringValue: value }]));
+    const writes = [];
+    const seoulYear = Number(seoul.slice(0, 4));
+    const seoulMonth = Number(seoul.slice(5, 7)) - 1;
+    for (let monthsAgo = 0; monthsAgo < 36; monthsAgo++) {
+      for (let index = 0; index < 60; index++) {
+        const date = new Date(Date.UTC(seoulYear, seoulMonth - monthsAgo, index % 28 + 1)).toISOString().slice(0, 10);
+        writes.push({ update: {
+          name: `projects/${projectId}/databases/(default)/documents/expenses/native-performance-${monthsAgo}-${index}`,
+          fields: fields({ householdId: household.householdId, merchant: `합성 거래 ${monthsAgo}-${index}`,
+            amount: 1000 + index * 100 + monthsAgo * 10, category: categoryId, date, time: '12:00',
+            memo: '', transactionType: 'expense', lifecycleState: 'active', aggregateVersion: 1,
+            creatorMemberId: household.memberId, cardType: 'manual', cardDisplay: '' }),
+        } });
+      }
+    }
+    for (let offset = 0; offset < writes.length; offset += 400) {
+      await jsonRequest(`http://127.0.0.1:8080/v1/projects/${projectId}/databases/(default)/documents:commit`, {
+        method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer owner' },
+        body: JSON.stringify({ writes: writes.slice(offset, offset + 400) }),
+      });
+    }
+    fixture.performanceDataset = { members: 3, months: 36, expensesPerMonth: 60, expenses: writes.length };
+    fixture.expectedMonthlyExpenseInWon = 237000;
+  }
   mkdirSync(output, { recursive: true });
   writeFileSync(fixturePath, JSON.stringify(fixture), 'utf8');
   console.log(`Native Firebase E2E fixture prepared: ${fixturePath}`);
@@ -97,7 +133,13 @@ async function run(command, args, cwd = root, env = process.env) {
 }
 
 const mode = process.argv[2] ?? 'run';
-assert(['run', 'seed', 'verify'].includes(mode), 'Usage: node tools/e2e/native-firebase.mjs [run|seed|verify]');
+assert(['run', 'seed', 'verify', 'performance', 'performance-isolated'].includes(mode),
+  'Usage: node tools/e2e/native-firebase.mjs [run|seed|verify|performance|performance-isolated]');
+const performanceMode = mode === 'performance' || mode === 'performance-isolated';
+const isolateWebView = mode === 'performance-isolated';
+const performanceSamples = Number(process.env.PERFORMANCE_SAMPLES ?? 7);
+if (performanceMode) assert(Number.isInteger(performanceSamples) && performanceSamples >= 1 && performanceSamples <= 30,
+  'PERFORMANCE_SAMPLES must be an integer from 1 to 30');
 if (mode === 'seed') await seed();
 else {
   const adb = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT
@@ -106,8 +148,8 @@ else {
   const firebaseLog = join(root, 'firebase-debug.log');
   let logOffset = 0;
   try {
-  if (mode === 'run') {
-    const fixture = await seed();
+  if (mode === 'run' || performanceMode) {
+    const fixture = await seed({ performance: performanceMode });
     webRuntime = await startNativeWebRuntime(root, output, adb);
     logOffset = existsSync(firebaseLog) ? statSync(firebaseLog).size : 0;
     await run(process.platform === 'win32' ? 'gradlew.bat' : './gradlew', [
@@ -117,8 +159,37 @@ else {
       '-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true',
       `-PWEB_APP_URL=${webRuntime.origin}/`, '-PWEB_ENVIRONMENT_VERSION=emulator-e2e-v1',
       `-Pandroid.testInstrumentationRunnerArguments.webOrigin=${webRuntime.origin}`,
+      ...(performanceMode ? [
+        '-Pandroid.testInstrumentationRunnerArguments.class=com.household.account.e2e.NativePerformanceFirebaseE2ETest',
+        `-Pandroid.testInstrumentationRunnerArguments.performanceSamples=${performanceSamples}`,
+        `-Pandroid.testInstrumentationRunnerArguments.performanceIsolateWebView=${isolateWebView}`,
+      ] : ['-Pandroid.testInstrumentationRunnerArguments.notAnnotation=com.household.account.e2e.FirebasePerformanceE2E']),
       `-Pandroid.testInstrumentationRunnerArguments.fixtureBase64=${Buffer.from(JSON.stringify(fixture)).toString('base64')}`, '--stacktrace',
     ], join(root, 'android'));
+    if (performanceMode) {
+      const result = JSON.parse(execFileSync(adb, ['exec-out', 'run-as', 'com.household.account', 'cat', 'files/native-performance-result.json'], { encoding: 'utf8' }));
+      assert.equal(result.schemaVersion, 1);
+      assert.equal(result.repetitions, performanceSamples);
+      const expectedMetrics = isolateWebView ? ['android.home.isolated-activity-complete'] :
+        ['android.home.activity-reopen-complete', 'android.quick-edit.notification-to-shown',
+          'android.quick-edit.notification-to-ready', 'android.quick-edit.save-to-closed', 'android.quick-edit.save-to-server-observed'];
+      for (const metric of expectedMetrics) {
+        const measured = result.samples.filter(sample => sample.metric === metric && !sample.warmup);
+        assert.equal(measured.length, performanceSamples, `Missing raw samples: ${metric}`);
+        assert(measured.every(sample => Number.isFinite(sample.durationMs) && sample.durationMs >= 0), `Invalid sample: ${metric}`);
+      }
+      result.host = { platform: process.platform, node: process.version };
+      result.dataset = fixture.performanceDataset;
+      result.statistics = summarizeSamples(result.samples);
+      const nativeResultPath = join(output, isolateWebView ? 'native-performance-isolated-diagnostic-result.json' : 'native-performance-result.json');
+      writeFileSync(nativeResultPath, JSON.stringify(result, null, 2), 'utf8');
+      const performanceOutput = join(root, 'web/performance-results');
+      mkdirSync(performanceOutput, { recursive: true });
+      const artifactName = isolateWebView ? 'android-isolated-diagnostic' : 'android';
+      writeFileSync(join(performanceOutput, `${artifactName}.json`), JSON.stringify(result, null, 2), 'utf8');
+      writeFileSync(join(performanceOutput, `${artifactName}.md`), `${markdownTable(result.statistics)}\n`, 'utf8');
+      console.log(`Native Firebase performance samples: ${nativeResultPath}`);
+    } else {
     const startup = JSON.parse(execFileSync(adb, ['exec-out', 'run-as', 'com.household.account', 'cat', 'files/native-startup-e2e-result.json'], { encoding: 'utf8' }));
     assert.equal(startup.platform, 'android');
     assert.equal(startup.sameActivityReloadStartupSamples, 0);
@@ -137,7 +208,9 @@ else {
     }
     assert.equal(observations.size, 1, 'Actual server logger must record the Native startup sample once');
     writeFileSync(join(output, 'startup-result.json'), JSON.stringify({ ...startup, serverStartupLogSamples: observations.size }), 'utf8');
+    }
   }
+  if (!performanceMode) {
   const result = JSON.parse(execFileSync(adb, ['exec-out', 'run-as', 'com.household.account', 'cat', 'files/native-firebase-e2e-result.json'], { encoding: 'utf8' }));
   const fixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
   assert.equal(result.householdId, fixture.householdId);
@@ -148,5 +221,6 @@ else {
     'run', 'test:e2e:playwright', '--', '--config=playwright.native.config.ts',
   ], join(root, 'web'), { ...process.env, NATIVE_E2E_FIXTURE: fixturePath, NATIVE_E2E_RESULT: resultPath,
     ...(webRuntime ? { NATIVE_E2E_EXISTING_SERVER: 'true' } : {}) });
+  }
   } finally { await webRuntime?.stop(); }
 }

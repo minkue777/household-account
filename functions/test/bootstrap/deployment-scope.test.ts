@@ -67,6 +67,8 @@ describe('실제 배포 대상 선택', () => {
     write('web/src/page.tsx', 'old'); write('functions/src/index.ts', 'old');
     const baseline = commit();
     write('web/e2e/page.spec.ts', 'test'); write('docs/note.md', 'docs');
+    write('web/e2e-performance/measurement.ts', 'measurement helper');
+    write('web/performance-results/web.json', '{}');
     let current = commit();
     const env = () => ({ VERCEL_GIT_PREVIOUS_SHA: baseline, VERCEL_GIT_COMMIT_SHA: current });
     expect(shouldBuild(env(), git)).toBe(false);

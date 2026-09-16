@@ -33,6 +33,7 @@ coverage/
 web/coverage/
 web/playwright-report/
 web/test-results/
+web/performance-results/
 *.apk
 *.aab
 

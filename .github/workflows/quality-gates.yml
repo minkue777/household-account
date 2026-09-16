@@ -134,6 +134,22 @@ jobs:
       - run: npm ci --prefix functions-payment-capture && npm ci --prefix functions-access-session
       - run: npm run test:e2e
         working-directory: web
+      - name: 성능 통계·표본 검증 회귀 검사
+        # The summary and coverage checker are shared with Android measurements.
+        # Keep their fast regression check separate from browser execution.
+        run: node --test tools/performance/statistics.test.mjs
+      - name: 핵심 기능 성능 기준선 수집
+        run: npm --ignore-scripts run test:performance
+        working-directory: web
+        env:
+          PERFORMANCE_SAMPLES: '7'
+          PERFORMANCE_USE_EXISTING_BUILD: 'true'
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-web-performance
+          path: web/performance-results
+          if-no-files-found: warn
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -232,6 +248,16 @@ jobs:
             adb shell wm dismiss-keyguard
             bash -c 'cd android; status=0; ./gradlew connectedDebugAndroidTest --stacktrace || status=$?; mkdir -p app/build/ci-diagnostics; if [ -d app/build/outputs/androidTest-results ]; then cp -R app/build/outputs/androidTest-results app/build/ci-diagnostics/default-androidTest-results; fi; adb logcat -d > app/build/ci-diagnostics/logcat.txt || true; adb exec-out screencap -p > app/build/ci-diagnostics/screen.png || true; exit "$status"'
             npm --prefix web run test:e2e:android
+            npm --prefix web run test:performance:android
+      - if: always() && steps.scope.outputs.required == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-android-performance
+          path: |
+            web/performance-results/android.json
+            web/performance-results/android.md
+            web/test-results/native-firebase/native-performance-result.json
+          if-no-files-found: warn
       - if: always() && steps.scope.outputs.required == 'true'
         uses: actions/upload-artifact@v4
         with:

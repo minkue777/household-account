@@ -1,0 +1,2397 @@
+{
+  "schemaVersion": "household-performance-baseline.v1",
+  "source": {
+    "productCommit": "8422bddc243fee4120efd3ab7e37a3d13ddec1c7",
+    "measuredWithUncommittedTestChanges": true,
+    "productCodeChanged": false
+  },
+  "web": {
+    "measuredAt": "2026-09-16T22:47:24.039Z",
+    "environment": {
+      "os": "win32 10.0.26200",
+      "cpu": "AMD Ryzen 7 7800X3D 8-Core Processor           ",
+      "logicalCpus": 16,
+      "node": "v22.23.2",
+      "backend": "local Firebase Auth/Functions/Firestore emulators",
+      "build": "production Next.js",
+      "workers": 1,
+      "realDevice": false,
+      "playwright": "1.62.0",
+      "samplesRequested": 7,
+      "warmupPerScenario": 1
+    },
+    "fixtures": [
+      {
+        "version": 1,
+        "months": 36,
+        "expenseCount": 2160,
+        "memberCount": 3,
+        "assetCount": 12,
+        "stockCount": 20,
+        "snapshotCount": 1082,
+        "anchorDate": "2026-09-17",
+        "warmupCount": 1,
+        "sampleCount": 7,
+        "project": "chromium-mobile",
+        "browserVersion": "151.0.7922.34",
+        "holdingMode": "manual-fixed-value; external market-provider latency excluded",
+        "catalogSource": "same-origin-real-http-fixture/catalog-only-xhr-url-redirect-after-home",
+        "journeyHttpCache": "normal-browser-and-service-worker-cache",
+        "pwaPreparation": "complete-actual-initial-install-after-first-home-before-relaunch"
+      },
+      {
+        "version": 1,
+        "months": 36,
+        "expenseCount": 2160,
+        "memberCount": 3,
+        "assetCount": 12,
+        "stockCount": 20,
+        "snapshotCount": 1082,
+        "anchorDate": "2026-09-17",
+        "warmupCount": 1,
+        "sampleCount": 7,
+        "project": "webkit-mobile",
+        "browserVersion": "26.5",
+        "holdingMode": "manual-fixed-value; external market-provider latency excluded",
+        "catalogSource": "same-origin-real-http-fixture/catalog-only-xhr-url-redirect-after-home",
+        "journeyHttpCache": "normal-browser-and-service-worker-cache",
+        "pwaPreparation": "complete-actual-initial-install-after-first-home-before-relaunch"
+      }
+    ],
+    "pwaPreparation": [
+      {
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "worker": {
+          "active": "http://127.0.0.1:3100/sw.js",
+          "controller": "http://127.0.0.1:3100/sw.js"
+        },
+        "updateBannerVisibleAfterInitialActivation": true,
+        "preparation": "wait-for-product-registration-activation-before-closing-first-document"
+      },
+      {
+        "project": "chromium-mobile",
+        "iteration": 1,
+        "worker": {
+          "active": "http://127.0.0.1:3100/sw.js",
+          "controller": "http://127.0.0.1:3100/sw.js"
+        },
+        "updateBannerVisibleAfterInitialActivation": true,
+        "preparation": "wait-for-product-registration-activation-before-closing-first-document"
+      },
+      {
+        "project": "chromium-mobile",
+        "iteration": 2,
+        "worker": {
+          "active": "http://127.0.0.1:3100/sw.js",
+          "controller": "http://127.0.0.1:3100/sw.js"
+        },
+        "updateBannerVisibleAfterInitialActivation": true,
+        "preparation": "wait-for-product-registration-activation-before-closing-first-document"
+      },
+      {
+        "project": "chromium-mobile",
+        "iteration": 3,
+        "worker": {
+          "active": "http://127.0.0.1:3100/sw.js",
+          "controller": "http://127.0.0.1:3100/sw.js"
+        },
+        "updateBannerVisibleAfterInitialActivation": true,
+        "preparation": "wait-for-product-registration-activation-before-closing-first-document"
+      },
+      {
+        "project": "chromium-mobile",
+        "iteration": 4,
+        "worker": {
+          "active": "http://127.0.0.1:3100/sw.js",
+          "controller": "http://127.0.0.1:3100/sw.js"
+        },
+        "updateBannerVisibleAfterInitialActivation": true,
+        "preparation": "wait-for-product-registration-activation-before-closing-first-document"
+      },
+      {
+        "project": "chromium-mobile",
+        "iteration": 5,
+        "worker": {
+          "active": "http://127.0.0.1:3100/sw.js",
+          "controller": "http://127.0.0.1:3100/sw.js"
+        },
+        "updateBannerVisibleAfterInitialActivation": true,
+        "preparation": "wait-for-product-registration-activation-before-closing-first-document"
+      },
+      {
+        "project": "chromium-mobile",
+        "iteration": 6,
+        "worker": {
+          "active": "http://127.0.0.1:3100/sw.js",
+          "controller": "http://127.0.0.1:3100/sw.js"
+        },
+        "updateBannerVisibleAfterInitialActivation": true,
+        "preparation": "wait-for-product-registration-activation-before-closing-first-document"
+      },
+      {
+        "project": "chromium-mobile",
+        "iteration": 7,
+        "worker": {
+          "active": "http://127.0.0.1:3100/sw.js",
+          "controller": "http://127.0.0.1:3100/sw.js"
+        },
+        "updateBannerVisibleAfterInitialActivation": true,
+        "preparation": "wait-for-product-registration-activation-before-closing-first-document"
+      },
+      {
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "worker": {
+          "active": "http://127.0.0.1:3100/sw.js",
+          "controller": "http://127.0.0.1:3100/sw.js"
+        },
+        "updateBannerVisibleAfterInitialActivation": true,
+        "preparation": "wait-for-product-registration-activation-before-closing-first-document"
+      },
+      {
+        "project": "webkit-mobile",
+        "iteration": 1,
+        "worker": {
+          "active": "http://127.0.0.1:3100/sw.js",
+          "controller": "http://127.0.0.1:3100/sw.js"
+        },
+        "updateBannerVisibleAfterInitialActivation": true,
+        "preparation": "wait-for-product-registration-activation-before-closing-first-document"
+      },
+      {
+        "project": "webkit-mobile",
+        "iteration": 2,
+        "worker": {
+          "active": "http://127.0.0.1:3100/sw.js",
+          "controller": "http://127.0.0.1:3100/sw.js"
+        },
+        "updateBannerVisibleAfterInitialActivation": true,
+        "preparation": "wait-for-product-registration-activation-before-closing-first-document"
+      },
+      {
+        "project": "webkit-mobile",
+        "iteration": 3,
+        "worker": {
+          "active": "http://127.0.0.1:3100/sw.js",
+          "controller": "http://127.0.0.1:3100/sw.js"
+        },
+        "updateBannerVisibleAfterInitialActivation": true,
+        "preparation": "wait-for-product-registration-activation-before-closing-first-document"
+      },
+      {
+        "project": "webkit-mobile",
+        "iteration": 4,
+        "worker": {
+          "active": "http://127.0.0.1:3100/sw.js",
+          "controller": "http://127.0.0.1:3100/sw.js"
+        },
+        "updateBannerVisibleAfterInitialActivation": true,
+        "preparation": "wait-for-product-registration-activation-before-closing-first-document"
+      },
+      {
+        "project": "webkit-mobile",
+        "iteration": 5,
+        "worker": {
+          "active": "http://127.0.0.1:3100/sw.js",
+          "controller": "http://127.0.0.1:3100/sw.js"
+        },
+        "updateBannerVisibleAfterInitialActivation": true,
+        "preparation": "wait-for-product-registration-activation-before-closing-first-document"
+      },
+      {
+        "project": "webkit-mobile",
+        "iteration": 6,
+        "worker": {
+          "active": "http://127.0.0.1:3100/sw.js",
+          "controller": "http://127.0.0.1:3100/sw.js"
+        },
+        "updateBannerVisibleAfterInitialActivation": true,
+        "preparation": "wait-for-product-registration-activation-before-closing-first-document"
+      },
+      {
+        "project": "webkit-mobile",
+        "iteration": 7,
+        "worker": {
+          "active": "http://127.0.0.1:3100/sw.js",
+          "controller": "http://127.0.0.1:3100/sw.js"
+        },
+        "updateBannerVisibleAfterInitialActivation": true,
+        "preparation": "wait-for-product-registration-activation-before-closing-first-document"
+      }
+    ],
+    "coverage": {
+      "projects": [
+        "chromium-mobile",
+        "webkit-mobile"
+      ],
+      "metrics": [
+        "home.fresh-context",
+        "home.relaunch",
+        "ledger.select-day",
+        "ledger.open-detail",
+        "ledger.save-memo",
+        "ledger.save-memo.server-confirmed",
+        "ledger.save-category",
+        "ledger.save-category.server-confirmed",
+        "ledger.previous-month",
+        "ledger.return-month",
+        "search.first",
+        "search.next-page",
+        "search.change-keyword",
+        "expense-stats.first",
+        "expense-stats.period-3",
+        "expense-stats.period-6",
+        "expense-stats.period-12",
+        "expense-stats.revisit",
+        "assets.first",
+        "assets.account-detail",
+        "ledger.return-from-assets",
+        "assets.revisit",
+        "asset-stats.first",
+        "asset-stats.period-6",
+        "asset-stats.period-12",
+        "asset-stats.period-all",
+        "asset-stats.period-3",
+        "asset-stats.revisit",
+        "ledger.add",
+        "ledger.add.server-confirmed",
+        "ledger.delete",
+        "ledger.delete.server-confirmed"
+      ],
+      "complete": true,
+      "errors": []
+    },
+    "statistics": [
+      {
+        "project": "chromium-mobile",
+        "metric": "home.fresh-context",
+        "label": "첫 홈 → 달력·월 합계·지역화폐 표시",
+        "cacheState": "new-context/persisted-auth-and-bootstrap/empty-http-and-firestore-cache",
+        "n": 7,
+        "minMs": 254.20000000018626,
+        "medianMs": 264.20000000018626,
+        "meanMs": 262.62857142862464,
+        "maxMs": 267.90000000037253,
+        "samplesMs": [
+          259.5,
+          264.20000000018626,
+          266.79999999981374,
+          254.20000000018626,
+          267.90000000037253,
+          258,
+          267.79999999981374
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "home.relaunch",
+        "label": "앱 문서 재실행 → 홈 데이터 표시",
+        "cacheState": "same-context/new-document/persisted-auth-http-and-active-service-worker-static-cache",
+        "n": 7,
+        "minMs": 251.5,
+        "medianMs": 264.80000000074506,
+        "meanMs": 267.0857142856611,
+        "maxMs": 278.3999999994412,
+        "samplesMs": [
+          275.29999999981374,
+          263,
+          278.3999999994412,
+          276.70000000018626,
+          251.5,
+          264.80000000074506,
+          259.8999999994412
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "ledger.select-day",
+        "label": "날짜 선택 → 해당 지출 표시",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 28.90000000037253,
+        "medianMs": 30.100000000558794,
+        "meanMs": 30.371428571641445,
+        "maxMs": 31.5,
+        "samplesMs": [
+          30,
+          29.300000000745058,
+          31.399999999441206,
+          31.40000000037253,
+          28.90000000037253,
+          31.5,
+          30.100000000558794
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "ledger.open-detail",
+        "label": "지출 선택 → 수정 화면 준비",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 33.799999999813735,
+        "medianMs": 35.299999999813735,
+        "meanMs": 35.28571428544819,
+        "maxMs": 36.69999999925494,
+        "samplesMs": [
+          35.5,
+          36.09999999962747,
+          34.5,
+          35.299999999813735,
+          36.69999999925494,
+          35.09999999962747,
+          33.799999999813735
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "ledger.save-memo",
+        "label": "메모 저장 → 지출 목록 반영",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 13.100000000558794,
+        "medianMs": 24.299999999813735,
+        "meanMs": 21.98571428590055,
+        "maxMs": 26.800000000745058,
+        "samplesMs": [
+          26.800000000745058,
+          17.59999999962747,
+          26.40000000037253,
+          25.5,
+          20.200000000186265,
+          24.299999999813735,
+          13.100000000558794
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "ledger.save-memo.server-confirmed",
+        "label": "메모 저장 → 지출 목록 반영 — 서버 저장 확정",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 125.2467285161838,
+        "medianMs": 162.33383789099753,
+        "meanMs": 162.26139090436376,
+        "maxMs": 202.0030761724338,
+        "samplesMs": [
+          125.2467285161838,
+          129.78012695349753,
+          162.3990722661838,
+          162.33383789099753,
+          154.3241210943088,
+          199.7427734369412,
+          202.0030761724338
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "ledger.save-category",
+        "label": "카테고리 저장 → 지출 목록 반영",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 25.399999999441206,
+        "medianMs": 29.09999999962747,
+        "meanMs": 28.899999999707298,
+        "maxMs": 32,
+        "samplesMs": [
+          29.09999999962747,
+          32,
+          29.799999999813735,
+          29.799999999813735,
+          27.899999999441206,
+          25.399999999441206,
+          28.299999999813735
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "ledger.save-category.server-confirmed",
+        "label": "카테고리 저장 → 지출 목록 반영 — 서버 저장 확정",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 104.54477539099753,
+        "medianMs": 148.84184570331126,
+        "meanMs": 151.29861886160714,
+        "maxMs": 199.31787109375,
+        "samplesMs": [
+          114.01079101581126,
+          104.54477539099753,
+          136.632080078125,
+          148.84184570331126,
+          173.947998046875,
+          181.79497070237994,
+          199.31787109375
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "ledger.previous-month",
+        "label": "이전 달 → 달력·월 합계",
+        "cacheState": "first-previous-month-in-context",
+        "n": 7,
+        "minMs": 29.40000000037253,
+        "medianMs": 30.5,
+        "meanMs": 30.628571428358555,
+        "maxMs": 31.40000000037253,
+        "samplesMs": [
+          30.199999999254942,
+          31.299999999813735,
+          30.399999999441206,
+          31.199999999254942,
+          30.5,
+          29.40000000037253,
+          31.40000000037253
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "ledger.return-month",
+        "label": "원래 달 복귀 → 달력·월 합계",
+        "cacheState": "month-memory",
+        "n": 7,
+        "minMs": 27.09999999962747,
+        "medianMs": 30.399999999441206,
+        "meanMs": 30.057142856796936,
+        "maxMs": 32.09999999962747,
+        "samplesMs": [
+          31.699999999254942,
+          30.100000000558794,
+          30.399999999441206,
+          32.09999999962747,
+          27.59999999962747,
+          31.399999999441206,
+          27.09999999962747
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "search.first",
+        "label": "전체 기간 검색 → 첫 결과·전체 합계",
+        "cacheState": "first-search-window",
+        "n": 7,
+        "minMs": 1803.5,
+        "medianMs": 1872.3999999994412,
+        "meanMs": 1885.9142857140728,
+        "maxMs": 1992.7999999998137,
+        "samplesMs": [
+          1850.0999999996275,
+          1834.7999999998137,
+          1906.7000000001863,
+          1803.5,
+          1872.3999999994412,
+          1941.0999999996275,
+          1992.7999999998137
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "search.next-page",
+        "label": "검색 다음 페이지 → 추가 내역",
+        "cacheState": "search-window-memory",
+        "n": 7,
+        "minMs": 31.299999999813735,
+        "medianMs": 34.799999999813735,
+        "meanMs": 35.30000000007983,
+        "maxMs": 37.700000000186265,
+        "samplesMs": [
+          34.700000000186265,
+          31.299999999813735,
+          34.60000000055879,
+          37.200000000186265,
+          37.700000000186265,
+          36.799999999813735,
+          34.799999999813735
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "search.change-keyword",
+        "label": "검색어 변경 → 새 결과·합계",
+        "cacheState": "search-window-memory",
+        "n": 7,
+        "minMs": 20.100000000558794,
+        "medianMs": 25.300000000745058,
+        "meanMs": 25.114285714658244,
+        "maxMs": 28.100000000558794,
+        "samplesMs": [
+          27.100000000558794,
+          25.299999999813735,
+          24,
+          20.100000000558794,
+          28.100000000558794,
+          25.90000000037253,
+          25.300000000745058
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "expense-stats.first",
+        "label": "지출 통계 첫 진입 → 합계·차트",
+        "cacheState": "first-statistics-in-context",
+        "n": 7,
+        "minMs": 1931.5999999996275,
+        "medianMs": 1980.4000000003725,
+        "meanMs": 2052.085714285528,
+        "maxMs": 2313.399999999441,
+        "samplesMs": [
+          1931.5999999996275,
+          1997.0999999996275,
+          2231,
+          1964.2999999998137,
+          1980.4000000003725,
+          1946.7999999998137,
+          2313.399999999441
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "expense-stats.period-3",
+        "label": "지출 통계 3개월 → 합계·차트",
+        "cacheState": "statistics-memory",
+        "n": 7,
+        "minMs": 1046.4000000003725,
+        "medianMs": 1047,
+        "meanMs": 1047.2428571428838,
+        "maxMs": 1048.1000000005588,
+        "samplesMs": [
+          1048.1000000005588,
+          1046.4000000003725,
+          1046.9000000003725,
+          1048.0999999996275,
+          1047.3999999994412,
+          1046.7999999998137,
+          1047
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "expense-stats.period-6",
+        "label": "지출 통계 6개월 → 합계·차트",
+        "cacheState": "statistics-memory",
+        "n": 7,
+        "minMs": 1046.7999999998137,
+        "medianMs": 1047.4000000003725,
+        "meanMs": 1047.5571428570631,
+        "maxMs": 1048.2999999998137,
+        "samplesMs": [
+          1047.7000000001863,
+          1047.0999999996275,
+          1048.2999999998137,
+          1046.7999999998137,
+          1047.4000000003725,
+          1047.4000000003725,
+          1048.199999999255
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "expense-stats.period-12",
+        "label": "지출 통계 1년 → 합계·차트",
+        "cacheState": "statistics-memory",
+        "n": 7,
+        "minMs": 1046,
+        "medianMs": 1047.300000000745,
+        "meanMs": 1047.2857142858472,
+        "maxMs": 1048,
+        "samplesMs": [
+          1046.800000000745,
+          1047.300000000745,
+          1048,
+          1047.2000000001863,
+          1047.7999999998137,
+          1047.8999999994412,
+          1046
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "expense-stats.revisit",
+        "label": "지출 통계 재진입 → 합계·차트",
+        "cacheState": "statistics-memory",
+        "n": 7,
+        "minMs": 1545.7000000001863,
+        "medianMs": 1547.2000000001863,
+        "meanMs": 1592.385714285741,
+        "maxMs": 1830.7999999998137,
+        "samplesMs": [
+          1545.7000000001863,
+          1546.9000000003725,
+          1580.8999999994412,
+          1546.7000000001863,
+          1830.7999999998137,
+          1548.5,
+          1547.2000000001863
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "assets.first",
+        "label": "자산 첫 화면 → 총액·목록·전일 증감",
+        "cacheState": "first-assets-in-context",
+        "n": 7,
+        "minMs": 113.5,
+        "medianMs": 129.90000000037253,
+        "meanMs": 123.54285714283053,
+        "maxMs": 131.59999999962747,
+        "samplesMs": [
+          129.90000000037253,
+          114.20000000018626,
+          131.59999999962747,
+          114.79999999981374,
+          130.79999999981374,
+          113.5,
+          130
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "assets.account-detail",
+        "label": "계좌 선택 → 보유 20항목·평가금액",
+        "cacheState": "asset-page-holdings-prefetch",
+        "n": 7,
+        "minMs": 29.600000000558794,
+        "medianMs": 30.59999999962747,
+        "meanMs": 30.585714285661066,
+        "maxMs": 31.899999999441206,
+        "samplesMs": [
+          30.899999999441206,
+          31.899999999441206,
+          30.5,
+          30.59999999962747,
+          30.700000000186265,
+          29.600000000558794,
+          29.90000000037253
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "ledger.return-from-assets",
+        "label": "자산에서 홈 복귀 → 달력·월 합계",
+        "cacheState": "home-memory",
+        "n": 7,
+        "minMs": 45.60000000055879,
+        "medianMs": 47.200000000186265,
+        "meanMs": 47.271428571614834,
+        "maxMs": 48.700000000186265,
+        "samplesMs": [
+          46.90000000037253,
+          46.39999999944121,
+          47.200000000186265,
+          48.700000000186265,
+          48.40000000037253,
+          47.700000000186265,
+          45.60000000055879
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "assets.revisit",
+        "label": "자산 화면 재진입 → 총액·목록·증감",
+        "cacheState": "asset-memory",
+        "n": 7,
+        "minMs": 47.299999999813735,
+        "medianMs": 47.700000000186265,
+        "meanMs": 47.799999999813735,
+        "maxMs": 48.299999999813735,
+        "samplesMs": [
+          47.299999999813735,
+          48,
+          47.700000000186265,
+          48.299999999813735,
+          47.59999999962747,
+          47.39999999944121,
+          48.299999999813735
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "asset-stats.first",
+        "label": "자산 통계 첫 진입 → 합계·차트",
+        "cacheState": "first-asset-statistics-in-context",
+        "n": 7,
+        "minMs": 3878.2000000001863,
+        "medianMs": 4013.100000000559,
+        "meanMs": 4046.2714285716147,
+        "maxMs": 4395.299999999814,
+        "samplesMs": [
+          4014.2999999998137,
+          3913.4000000003725,
+          3878.2000000001863,
+          4395.299999999814,
+          4113.100000000559,
+          4013.100000000559,
+          3996.5
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "asset-stats.period-6",
+        "label": "자산 통계 6개월 → 합계·차트",
+        "cacheState": "complete-snapshot-memory",
+        "n": 7,
+        "minMs": 1061.3999999994412,
+        "medianMs": 1063.8999999994412,
+        "meanMs": 1063.7571428569831,
+        "maxMs": 1065.5,
+        "samplesMs": [
+          1064.0999999996275,
+          1063.5,
+          1063.4000000003725,
+          1063.8999999994412,
+          1061.3999999994412,
+          1065.5,
+          1064.5
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "asset-stats.period-12",
+        "label": "자산 통계 1년 → 합계·차트",
+        "cacheState": "complete-snapshot-memory",
+        "n": 7,
+        "minMs": 1063.3999999994412,
+        "medianMs": 1063.5999999996275,
+        "meanMs": 1063.8285714282788,
+        "maxMs": 1064.8999999994412,
+        "samplesMs": [
+          1064.8999999994412,
+          1063.5999999996275,
+          1064,
+          1063.5,
+          1063.7999999998137,
+          1063.5999999996275,
+          1063.3999999994412
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "asset-stats.period-all",
+        "label": "자산 통계 전체 기간 → 합계·차트",
+        "cacheState": "complete-snapshot-memory",
+        "n": 7,
+        "minMs": 1096.7999999998137,
+        "medianMs": 1097.2000000001863,
+        "meanMs": 1099.8285714285448,
+        "maxMs": 1114.8999999994412,
+        "samplesMs": [
+          1097.2000000001863,
+          1096.7999999998137,
+          1098.5999999996275,
+          1096.9000000003725,
+          1114.8999999994412,
+          1097.4000000003725,
+          1097
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "asset-stats.period-3",
+        "label": "자산 통계 3개월 → 합계·차트",
+        "cacheState": "complete-snapshot-memory",
+        "n": 7,
+        "minMs": 1063.7000000001863,
+        "medianMs": 1064.5,
+        "meanMs": 1064.3000000002128,
+        "maxMs": 1064.7000000001863,
+        "samplesMs": [
+          1064.6000000005588,
+          1063.7000000001863,
+          1064.7000000001863,
+          1064.1000000005588,
+          1063.7999999998137,
+          1064.7000000001863,
+          1064.5
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "asset-stats.revisit",
+        "label": "자산 통계 재진입 → 합계·차트",
+        "cacheState": "asset-statistics-memory",
+        "n": 7,
+        "minMs": 1116.7999999998137,
+        "medianMs": 1128.9000000003725,
+        "meanMs": 1131.6571428572227,
+        "maxMs": 1146.6000000005588,
+        "samplesMs": [
+          1116.7999999998137,
+          1117.3999999994412,
+          1125,
+          1128.9000000003725,
+          1143.800000000745,
+          1146.6000000005588,
+          1143.0999999996275
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "ledger.add",
+        "label": "지출 추가 → 목록·월 합계 반영",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 30.200000000186265,
+        "medianMs": 31,
+        "meanMs": 30.985714285767504,
+        "maxMs": 31.700000000186265,
+        "samplesMs": [
+          30.90000000037253,
+          30.899999999441206,
+          31.700000000186265,
+          30.200000000186265,
+          31,
+          31.200000000186265,
+          31
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "ledger.add.server-confirmed",
+        "label": "지출 추가 → 목록·월 합계 반영 — 서버 저장 확정",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 124.64409179706126,
+        "medianMs": 151.9384765625,
+        "meanMs": 162.72435128369503,
+        "maxMs": 213.87480468768626,
+        "samplesMs": [
+          126.7469726568088,
+          124.64409179706126,
+          125.7518554693088,
+          151.9384765625,
+          199.09819335956126,
+          197.01606445293874,
+          213.87480468768626
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "ledger.delete",
+        "label": "삭제 확인 → 목록·월 합계 반영",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 19.700000000186265,
+        "medianMs": 21,
+        "meanMs": 21.271428571348743,
+        "maxMs": 22.799999999813735,
+        "samplesMs": [
+          20.5,
+          22.200000000186265,
+          20.899999999441206,
+          22.799999999813735,
+          21,
+          21.799999999813735,
+          19.700000000186265
+        ]
+      },
+      {
+        "project": "chromium-mobile",
+        "metric": "ledger.delete.server-confirmed",
+        "label": "삭제 확인 → 목록·월 합계 반영 — 서버 저장 확정",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 99.4466796880588,
+        "medianMs": 139.300048828125,
+        "meanMs": 142.6448869979275,
+        "maxMs": 194.49101562518626,
+        "samplesMs": [
+          99.4466796880588,
+          100.73813476599753,
+          128.05810546875,
+          139.300048828125,
+          148.77021484449506,
+          187.71000976487994,
+          194.49101562518626
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "home.fresh-context",
+        "label": "첫 홈 → 달력·월 합계·지역화폐 표시",
+        "cacheState": "new-context/persisted-auth-and-bootstrap/empty-http-and-firestore-cache",
+        "n": 7,
+        "minMs": 705,
+        "medianMs": 748,
+        "meanMs": 744.1428571428571,
+        "maxMs": 776,
+        "samplesMs": [
+          765,
+          705,
+          776,
+          760,
+          721,
+          748,
+          734
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "home.relaunch",
+        "label": "앱 문서 재실행 → 홈 데이터 표시",
+        "cacheState": "same-context/new-document/persisted-auth-http-and-active-service-worker-static-cache",
+        "n": 7,
+        "minMs": 729,
+        "medianMs": 746,
+        "meanMs": 753.7142857142857,
+        "maxMs": 792,
+        "samplesMs": [
+          729,
+          746,
+          760,
+          730,
+          790,
+          792,
+          729
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "ledger.select-day",
+        "label": "날짜 선택 → 해당 지출 표시",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 122,
+        "medianMs": 131,
+        "meanMs": 133.42857142857142,
+        "maxMs": 142,
+        "samplesMs": [
+          131,
+          142,
+          141,
+          128,
+          139,
+          122,
+          131
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "ledger.open-detail",
+        "label": "지출 선택 → 수정 화면 준비",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 134,
+        "medianMs": 156,
+        "meanMs": 149,
+        "maxMs": 163,
+        "samplesMs": [
+          137,
+          134,
+          158,
+          160,
+          156,
+          163,
+          135
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "ledger.save-memo",
+        "label": "메모 저장 → 지출 목록 반영",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 77,
+        "medianMs": 88,
+        "meanMs": 85.71428571428571,
+        "maxMs": 90,
+        "samplesMs": [
+          80,
+          86,
+          88,
+          89,
+          90,
+          90,
+          77
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "ledger.save-memo.server-confirmed",
+        "label": "메모 저장 → 지출 목록 반영 — 서버 저장 확정",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 113.678955078125,
+        "medianMs": 175.931884765625,
+        "meanMs": 169.99846540178572,
+        "maxMs": 220.66064453125,
+        "samplesMs": [
+          113.678955078125,
+          143.615478515625,
+          162.454833984375,
+          179.849609375,
+          175.931884765625,
+          193.7978515625,
+          220.66064453125
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "ledger.save-category",
+        "label": "카테고리 저장 → 지출 목록 반영",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 72,
+        "medianMs": 78,
+        "meanMs": 81,
+        "maxMs": 99,
+        "samplesMs": [
+          72,
+          99,
+          79,
+          78,
+          77,
+          88,
+          74
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "ledger.save-category.server-confirmed",
+        "label": "카테고리 저장 → 지출 목록 반영 — 서버 저장 확정",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 111.797119140625,
+        "medianMs": 145.295166015625,
+        "meanMs": 148.40105329241072,
+        "maxMs": 185.852783203125,
+        "samplesMs": [
+          112.023193359375,
+          111.797119140625,
+          145.1396484375,
+          145.295166015625,
+          152.969482421875,
+          185.72998046875,
+          185.852783203125
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "ledger.previous-month",
+        "label": "이전 달 → 달력·월 합계",
+        "cacheState": "first-previous-month-in-context",
+        "n": 7,
+        "minMs": 137,
+        "medianMs": 138,
+        "meanMs": 143.14285714285714,
+        "maxMs": 162,
+        "samplesMs": [
+          138,
+          137,
+          139,
+          151,
+          137,
+          138,
+          162
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "ledger.return-month",
+        "label": "원래 달 복귀 → 달력·월 합계",
+        "cacheState": "month-memory",
+        "n": 7,
+        "minMs": 128,
+        "medianMs": 142,
+        "meanMs": 138.71428571428572,
+        "maxMs": 144,
+        "samplesMs": [
+          128,
+          141,
+          144,
+          143,
+          130,
+          143,
+          142
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "search.first",
+        "label": "전체 기간 검색 → 첫 결과·전체 합계",
+        "cacheState": "first-search-window",
+        "n": 7,
+        "minMs": 654,
+        "medianMs": 674,
+        "meanMs": 674.4285714285714,
+        "maxMs": 700,
+        "samplesMs": [
+          676,
+          654,
+          673,
+          654,
+          700,
+          690,
+          674
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "search.next-page",
+        "label": "검색 다음 페이지 → 추가 내역",
+        "cacheState": "search-window-memory",
+        "n": 7,
+        "minMs": 181,
+        "medianMs": 196,
+        "meanMs": 195.28571428571428,
+        "maxMs": 209,
+        "samplesMs": [
+          181,
+          197,
+          194,
+          196,
+          194,
+          196,
+          209
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "search.change-keyword",
+        "label": "검색어 변경 → 새 결과·합계",
+        "cacheState": "search-window-memory",
+        "n": 7,
+        "minMs": 246,
+        "medianMs": 266,
+        "meanMs": 266.14285714285717,
+        "maxMs": 278,
+        "samplesMs": [
+          246,
+          270,
+          266,
+          264,
+          278,
+          266,
+          273
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "expense-stats.first",
+        "label": "지출 통계 첫 진입 → 합계·차트",
+        "cacheState": "first-statistics-in-context",
+        "n": 7,
+        "minMs": 1292,
+        "medianMs": 1310,
+        "meanMs": 1311.2857142857142,
+        "maxMs": 1340,
+        "samplesMs": [
+          1310,
+          1310,
+          1310,
+          1309,
+          1308,
+          1340,
+          1292
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "expense-stats.period-3",
+        "label": "지출 통계 3개월 → 합계·차트",
+        "cacheState": "statistics-memory",
+        "n": 7,
+        "minMs": 1046,
+        "medianMs": 1047,
+        "meanMs": 1046.857142857143,
+        "maxMs": 1048,
+        "samplesMs": [
+          1048,
+          1046,
+          1048,
+          1047,
+          1046,
+          1047,
+          1046
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "expense-stats.period-6",
+        "label": "지출 통계 6개월 → 합계·차트",
+        "cacheState": "statistics-memory",
+        "n": 7,
+        "minMs": 1045,
+        "medianMs": 1046,
+        "meanMs": 1046.2857142857142,
+        "maxMs": 1048,
+        "samplesMs": [
+          1045,
+          1047,
+          1046,
+          1046,
+          1048,
+          1046,
+          1046
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "expense-stats.period-12",
+        "label": "지출 통계 1년 → 합계·차트",
+        "cacheState": "statistics-memory",
+        "n": 7,
+        "minMs": 1045,
+        "medianMs": 1046,
+        "meanMs": 1046,
+        "maxMs": 1047,
+        "samplesMs": [
+          1047,
+          1046,
+          1047,
+          1045,
+          1047,
+          1045,
+          1045
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "expense-stats.revisit",
+        "label": "지출 통계 재진입 → 합계·차트",
+        "cacheState": "statistics-memory",
+        "n": 7,
+        "minMs": 1294,
+        "medianMs": 1310,
+        "meanMs": 1309.7142857142858,
+        "maxMs": 1325,
+        "samplesMs": [
+          1309,
+          1310,
+          1325,
+          1310,
+          1310,
+          1310,
+          1294
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "assets.first",
+        "label": "자산 첫 화면 → 총액·목록·전일 증감",
+        "cacheState": "first-assets-in-context",
+        "n": 7,
+        "minMs": 254,
+        "medianMs": 257,
+        "meanMs": 270.2857142857143,
+        "maxMs": 302,
+        "samplesMs": [
+          254,
+          257,
+          270,
+          301,
+          302,
+          254,
+          254
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "assets.account-detail",
+        "label": "계좌 선택 → 보유 20항목·평가금액",
+        "cacheState": "asset-page-holdings-prefetch",
+        "n": 7,
+        "minMs": 114,
+        "medianMs": 123,
+        "meanMs": 122.42857142857143,
+        "maxMs": 131,
+        "samplesMs": [
+          119,
+          123,
+          114,
+          131,
+          121,
+          124,
+          125
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "ledger.return-from-assets",
+        "label": "자산에서 홈 복귀 → 달력·월 합계",
+        "cacheState": "home-memory",
+        "n": 7,
+        "minMs": 296,
+        "medianMs": 314,
+        "meanMs": 309.57142857142856,
+        "maxMs": 321,
+        "samplesMs": [
+          301,
+          296,
+          316,
+          321,
+          314,
+          302,
+          317
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "assets.revisit",
+        "label": "자산 화면 재진입 → 총액·목록·증감",
+        "cacheState": "asset-memory",
+        "n": 7,
+        "minMs": 179,
+        "medianMs": 190,
+        "meanMs": 190.57142857142858,
+        "maxMs": 209,
+        "samplesMs": [
+          179,
+          190,
+          180,
+          197,
+          193,
+          186,
+          209
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "asset-stats.first",
+        "label": "자산 통계 첫 진입 → 합계·차트",
+        "cacheState": "first-asset-statistics-in-context",
+        "n": 7,
+        "minMs": 1511,
+        "medianMs": 1526,
+        "meanMs": 1531.4285714285713,
+        "maxMs": 1558,
+        "samplesMs": [
+          1543,
+          1526,
+          1543,
+          1513,
+          1511,
+          1526,
+          1558
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "asset-stats.period-6",
+        "label": "자산 통계 6개월 → 합계·차트",
+        "cacheState": "complete-snapshot-memory",
+        "n": 7,
+        "minMs": 1063,
+        "medianMs": 1077,
+        "meanMs": 1075,
+        "maxMs": 1078,
+        "samplesMs": [
+          1077,
+          1077,
+          1078,
+          1063,
+          1076,
+          1077,
+          1077
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "asset-stats.period-12",
+        "label": "자산 통계 1년 → 합계·차트",
+        "cacheState": "complete-snapshot-memory",
+        "n": 7,
+        "minMs": 1077,
+        "medianMs": 1092,
+        "meanMs": 1086.2857142857142,
+        "maxMs": 1094,
+        "samplesMs": [
+          1092,
+          1078,
+          1094,
+          1077,
+          1093,
+          1078,
+          1092
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "asset-stats.period-all",
+        "label": "자산 통계 전체 기간 → 합계·차트",
+        "cacheState": "complete-snapshot-memory",
+        "n": 7,
+        "minMs": 1108,
+        "medianMs": 1108,
+        "meanMs": 1108.5714285714287,
+        "maxMs": 1110,
+        "samplesMs": [
+          1108,
+          1108,
+          1108,
+          1110,
+          1109,
+          1109,
+          1108
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "asset-stats.period-3",
+        "label": "자산 통계 3개월 → 합계·차트",
+        "cacheState": "complete-snapshot-memory",
+        "n": 7,
+        "minMs": 1061,
+        "medianMs": 1062,
+        "meanMs": 1062,
+        "maxMs": 1063,
+        "samplesMs": [
+          1062,
+          1061,
+          1062,
+          1062,
+          1061,
+          1063,
+          1063
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "asset-stats.revisit",
+        "label": "자산 통계 재진입 → 합계·차트",
+        "cacheState": "asset-statistics-memory",
+        "n": 7,
+        "minMs": 1247,
+        "medianMs": 1263,
+        "meanMs": 1258,
+        "maxMs": 1266,
+        "samplesMs": [
+          1266,
+          1263,
+          1264,
+          1248,
+          1247,
+          1254,
+          1264
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "ledger.add",
+        "label": "지출 추가 → 목록·월 합계 반영",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 124,
+        "medianMs": 146,
+        "meanMs": 141.71428571428572,
+        "maxMs": 148,
+        "samplesMs": [
+          148,
+          148,
+          148,
+          139,
+          139,
+          124,
+          146
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "ledger.add.server-confirmed",
+        "label": "지출 추가 → 목록·월 합계 반영 — 서버 저장 확정",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 114.645263671875,
+        "medianMs": 161.800048828125,
+        "meanMs": 163.08823939732142,
+        "maxMs": 205.38818359375,
+        "samplesMs": [
+          114.645263671875,
+          131.4248046875,
+          161.603759765625,
+          161.800048828125,
+          175.023681640625,
+          191.73193359375,
+          205.38818359375
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "ledger.delete",
+        "label": "삭제 확인 → 목록·월 합계 반영",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 67,
+        "medianMs": 76,
+        "meanMs": 76.57142857142857,
+        "maxMs": 84,
+        "samplesMs": [
+          76,
+          84,
+          76,
+          77,
+          72,
+          67,
+          84
+        ]
+      },
+      {
+        "project": "webkit-mobile",
+        "metric": "ledger.delete.server-confirmed",
+        "label": "삭제 확인 → 목록·월 합계 반영 — 서버 저장 확정",
+        "cacheState": "same-month-memory",
+        "n": 7,
+        "minMs": 99.226318359375,
+        "medianMs": 157.048828125,
+        "meanMs": 145.17672293526786,
+        "maxMs": 181.806884765625,
+        "samplesMs": [
+          99.226318359375,
+          99.32275390625,
+          144.894775390625,
+          162.156494140625,
+          157.048828125,
+          171.781005859375,
+          181.806884765625
+        ]
+      }
+    ],
+    "preparationSamples": [
+      {
+        "metric": "home.fresh-context",
+        "label": "첫 홈 → 달력·월 합계·지역화폐 표시",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "new-context/persisted-auth-and-bootstrap/empty-http-and-firestore-cache",
+        "durationMs": 306.70000000018626,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "home.relaunch",
+        "label": "앱 문서 재실행 → 홈 데이터 표시",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-context/new-document/persisted-auth-http-and-active-service-worker-static-cache",
+        "durationMs": 295.09999999962747,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.select-day",
+        "label": "날짜 선택 → 해당 지출 표시",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 29.899999999441206,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.open-detail",
+        "label": "지출 선택 → 수정 화면 준비",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 35.40000000037253,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.save-memo",
+        "label": "메모 저장 → 지출 목록 반영",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 22.5,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.save-memo.server-confirmed",
+        "label": "메모 저장 → 지출 목록 반영 — 서버 저장 확정",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 84.917236328125,
+        "completion": "successful-callable-response-body"
+      },
+      {
+        "metric": "ledger.save-category",
+        "label": "카테고리 저장 → 지출 목록 반영",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 29.799999999813735,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.save-category.server-confirmed",
+        "label": "카테고리 저장 → 지출 목록 반영 — 서버 저장 확정",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 74.208984375,
+        "completion": "successful-callable-response-body"
+      },
+      {
+        "metric": "ledger.previous-month",
+        "label": "이전 달 → 달력·월 합계",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "first-previous-month-in-context",
+        "durationMs": 30.299999999813735,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.return-month",
+        "label": "원래 달 복귀 → 달력·월 합계",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "month-memory",
+        "durationMs": 27.40000000037253,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "search.first",
+        "label": "전체 기간 검색 → 첫 결과·전체 합계",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "first-search-window",
+        "durationMs": 1868.5999999996275,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "search.next-page",
+        "label": "검색 다음 페이지 → 추가 내역",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "search-window-memory",
+        "durationMs": 35.39999999944121,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "search.change-keyword",
+        "label": "검색어 변경 → 새 결과·합계",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "search-window-memory",
+        "durationMs": 26.100000000558794,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "expense-stats.first",
+        "label": "지출 통계 첫 진입 → 합계·차트",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "first-statistics-in-context",
+        "durationMs": 1980.3999999994412,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "expense-stats.period-3",
+        "label": "지출 통계 3개월 → 합계·차트",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "statistics-memory",
+        "durationMs": 1046.9000000003725,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "expense-stats.period-6",
+        "label": "지출 통계 6개월 → 합계·차트",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "statistics-memory",
+        "durationMs": 1047,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "expense-stats.period-12",
+        "label": "지출 통계 1년 → 합계·차트",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "statistics-memory",
+        "durationMs": 1047,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "expense-stats.revisit",
+        "label": "지출 통계 재진입 → 합계·차트",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "statistics-memory",
+        "durationMs": 1546.7999999998137,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "assets.first",
+        "label": "자산 첫 화면 → 총액·목록·전일 증감",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "first-assets-in-context",
+        "durationMs": 114.20000000018626,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "assets.account-detail",
+        "label": "계좌 선택 → 보유 20항목·평가금액",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "asset-page-holdings-prefetch",
+        "durationMs": 30.899999999441206,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.return-from-assets",
+        "label": "자산에서 홈 복귀 → 달력·월 합계",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "home-memory",
+        "durationMs": 47.80000000074506,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "assets.revisit",
+        "label": "자산 화면 재진입 → 총액·목록·증감",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "asset-memory",
+        "durationMs": 48.09999999962747,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "asset-stats.first",
+        "label": "자산 통계 첫 진입 → 합계·차트",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "first-asset-statistics-in-context",
+        "durationMs": 3947.2999999998137,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "asset-stats.period-6",
+        "label": "자산 통계 6개월 → 합계·차트",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "complete-snapshot-memory",
+        "durationMs": 1063.7000000001863,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "asset-stats.period-12",
+        "label": "자산 통계 1년 → 합계·차트",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "complete-snapshot-memory",
+        "durationMs": 1064.7999999998137,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "asset-stats.period-all",
+        "label": "자산 통계 전체 기간 → 합계·차트",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "complete-snapshot-memory",
+        "durationMs": 1097.1000000005588,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "asset-stats.period-3",
+        "label": "자산 통계 3개월 → 합계·차트",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "complete-snapshot-memory",
+        "durationMs": 1063.5,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "asset-stats.revisit",
+        "label": "자산 통계 재진입 → 합계·차트",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "asset-statistics-memory",
+        "durationMs": 1122.2000000001863,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "ledger.add",
+        "label": "지출 추가 → 목록·월 합계 반영",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 31,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.add.server-confirmed",
+        "label": "지출 추가 → 목록·월 합계 반영 — 서버 저장 확정",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 118.740966796875,
+        "completion": "successful-callable-response-body"
+      },
+      {
+        "metric": "ledger.delete",
+        "label": "삭제 확인 → 목록·월 합계 반영",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 23.200000000186265,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.delete.server-confirmed",
+        "label": "삭제 확인 → 목록·월 합계 반영 — 서버 저장 확정",
+        "project": "chromium-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 77.51904296875,
+        "completion": "successful-callable-response-body"
+      },
+      {
+        "metric": "home.fresh-context",
+        "label": "첫 홈 → 달력·월 합계·지역화폐 표시",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "new-context/persisted-auth-and-bootstrap/empty-http-and-firestore-cache",
+        "durationMs": 769,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "home.relaunch",
+        "label": "앱 문서 재실행 → 홈 데이터 표시",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-context/new-document/persisted-auth-http-and-active-service-worker-static-cache",
+        "durationMs": 713,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.select-day",
+        "label": "날짜 선택 → 해당 지출 표시",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 147,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.open-detail",
+        "label": "지출 선택 → 수정 화면 준비",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 157,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.save-memo",
+        "label": "메모 저장 → 지출 목록 반영",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 89,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.save-memo.server-confirmed",
+        "label": "메모 저장 → 지출 목록 반영 — 서버 저장 확정",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 120.48486328125,
+        "completion": "successful-callable-response-body"
+      },
+      {
+        "metric": "ledger.save-category",
+        "label": "카테고리 저장 → 지출 목록 반영",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 84,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.save-category.server-confirmed",
+        "label": "카테고리 저장 → 지출 목록 반영 — 서버 저장 확정",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 98.3310546875,
+        "completion": "successful-callable-response-body"
+      },
+      {
+        "metric": "ledger.previous-month",
+        "label": "이전 달 → 달력·월 합계",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "first-previous-month-in-context",
+        "durationMs": 151,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.return-month",
+        "label": "원래 달 복귀 → 달력·월 합계",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "month-memory",
+        "durationMs": 147,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "search.first",
+        "label": "전체 기간 검색 → 첫 결과·전체 합계",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "first-search-window",
+        "durationMs": 695,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "search.next-page",
+        "label": "검색 다음 페이지 → 추가 내역",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "search-window-memory",
+        "durationMs": 174,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "search.change-keyword",
+        "label": "검색어 변경 → 새 결과·합계",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "search-window-memory",
+        "durationMs": 154,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "expense-stats.first",
+        "label": "지출 통계 첫 진입 → 합계·차트",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "first-statistics-in-context",
+        "durationMs": 1295,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "expense-stats.period-3",
+        "label": "지출 통계 3개월 → 합계·차트",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "statistics-memory",
+        "durationMs": 1045,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "expense-stats.period-6",
+        "label": "지출 통계 6개월 → 합계·차트",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "statistics-memory",
+        "durationMs": 1047,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "expense-stats.period-12",
+        "label": "지출 통계 1년 → 합계·차트",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "statistics-memory",
+        "durationMs": 1046,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "expense-stats.revisit",
+        "label": "지출 통계 재진입 → 합계·차트",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "statistics-memory",
+        "durationMs": 1309,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "assets.first",
+        "label": "자산 첫 화면 → 총액·목록·전일 증감",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "first-assets-in-context",
+        "durationMs": 255,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "assets.account-detail",
+        "label": "계좌 선택 → 보유 20항목·평가금액",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "asset-page-holdings-prefetch",
+        "durationMs": 124,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.return-from-assets",
+        "label": "자산에서 홈 복귀 → 달력·월 합계",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "home-memory",
+        "durationMs": 297,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "assets.revisit",
+        "label": "자산 화면 재진입 → 총액·목록·증감",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "asset-memory",
+        "durationMs": 183,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "asset-stats.first",
+        "label": "자산 통계 첫 진입 → 합계·차트",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "first-asset-statistics-in-context",
+        "durationMs": 1510,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "asset-stats.period-6",
+        "label": "자산 통계 6개월 → 합계·차트",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "complete-snapshot-memory",
+        "durationMs": 1062,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "asset-stats.period-12",
+        "label": "자산 통계 1년 → 합계·차트",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "complete-snapshot-memory",
+        "durationMs": 1078,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "asset-stats.period-all",
+        "label": "자산 통계 전체 기간 → 합계·차트",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "complete-snapshot-memory",
+        "durationMs": 1109,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "asset-stats.period-3",
+        "label": "자산 통계 3개월 → 합계·차트",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "complete-snapshot-memory",
+        "durationMs": 1062,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "asset-stats.revisit",
+        "label": "자산 통계 재진입 → 합계·차트",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "asset-statistics-memory",
+        "durationMs": 1247,
+        "completion": "correct-dom-and-canvas-drawing-quiescence"
+      },
+      {
+        "metric": "ledger.add",
+        "label": "지출 추가 → 목록·월 합계 반영",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 133,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.add.server-confirmed",
+        "label": "지출 추가 → 목록·월 합계 반영 — 서버 저장 확정",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 117.059326171875,
+        "completion": "successful-callable-response-body"
+      },
+      {
+        "metric": "ledger.delete",
+        "label": "삭제 확인 → 목록·월 합계 반영",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 68,
+        "completion": "correct-dom-paint-observation"
+      },
+      {
+        "metric": "ledger.delete.server-confirmed",
+        "label": "삭제 확인 → 목록·월 합계 반영 — 서버 저장 확정",
+        "project": "webkit-mobile",
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "same-month-memory",
+        "durationMs": 83.245849609375,
+        "completion": "successful-callable-response-body"
+      }
+    ]
+  },
+  "android": {
+    "measuredAt": "2026-09-16T22:15:07.638278Z",
+    "environment": {
+      "androidApi": 36,
+      "device": "sdk_gphone64_x86_64",
+      "webView": "151.0.7922.199",
+      "animatorDurationScale": "0",
+      "windowAnimationScale": "0",
+      "transitionAnimationScale": "0",
+      "buildType": "debug",
+      "firebase": "local-emulators",
+      "web": "production-next-build",
+      "homeMode": "production-activity-lifecycle-warm-process-and-http-cache",
+      "quickEditMode": "real-onNotificationPosted-os-delivery-excluded-one-recorded-warmup"
+    },
+    "dataset": {
+      "members": 3,
+      "months": 36,
+      "expensesPerMonth": 60,
+      "expenses": 2160
+    },
+    "definitions": {
+      "android.home.activity-reopen-complete": "Actual MainActivity monotonic start to production first-home-complete-paint; auth/permission bootstrap excluded, process not restarted. Clock bridge observation adds small callback overhead.",
+      "android.quick-edit.notification-to-shown": "Production notification_received to quick_edit_shown window-focus telemetry; card/OS external delivery excluded.",
+      "android.quick-edit.notification-to-ready": "Listener invocation to focused, drawn merchant/amount/selected category/save-ready view; includes <=20ms observation polling and one frame.",
+      "android.quick-edit.save-to-closed": "Actual save performClick to QuickEdit Activity onDestroyed; includes the real close transition.",
+      "android.quick-edit.save-to-server-observed": "Save click to authenticated query confirming exact memo/category/amount; upper bound includes observation query roundtrip and <=50ms polling."
+    },
+    "statistics": [
+      {
+        "project": "android-emulator",
+        "metric": "android.home.activity-reopen-complete",
+        "label": "Android 앱 재실행 → 첫 홈 데이터 표시",
+        "cacheState": "warm-process-production-activity-close",
+        "n": 7,
+        "minMs": 1051.5999999999767,
+        "medianMs": 1461,
+        "meanMs": 8624.885714285707,
+        "maxMs": 50666.59999999998,
+        "samplesMs": [
+          1112.5999999999767,
+          1051.5999999999767,
+          1159.5,
+          1461,
+          2170.9000000000233,
+          50666.59999999998,
+          2752
+        ]
+      },
+      {
+        "project": "android-emulator",
+        "metric": "android.quick-edit.notification-to-shown",
+        "label": "결제 알림 수신 → Quick Edit 창 표시",
+        "cacheState": "warm-after-first-notification",
+        "n": 7,
+        "minMs": 317,
+        "medianMs": 332,
+        "meanMs": 331.57142857142856,
+        "maxMs": 347,
+        "samplesMs": [
+          332,
+          333,
+          323,
+          347,
+          337,
+          332,
+          317
+        ]
+      },
+      {
+        "project": "android-emulator",
+        "metric": "android.quick-edit.notification-to-ready",
+        "label": "결제 알림 수신 → Quick Edit 편집 준비",
+        "cacheState": "warm-after-first-notification",
+        "n": 7,
+        "minMs": 369,
+        "medianMs": 387,
+        "meanMs": 391.57142857142856,
+        "maxMs": 429,
+        "samplesMs": [
+          378,
+          369,
+          387,
+          429,
+          403,
+          384,
+          391
+        ]
+      },
+      {
+        "project": "android-emulator",
+        "metric": "android.quick-edit.save-to-server-observed",
+        "label": "Quick Edit 저장 → 서버 저장 확인",
+        "cacheState": "warm-after-first-notification",
+        "n": 7,
+        "minMs": 140,
+        "medianMs": 147,
+        "meanMs": 151.14285714285714,
+        "maxMs": 173,
+        "samplesMs": [
+          163,
+          173,
+          143,
+          149,
+          147,
+          143,
+          140
+        ]
+      },
+      {
+        "project": "android-emulator",
+        "metric": "android.quick-edit.save-to-closed",
+        "label": "Quick Edit 저장 → 창 닫힘",
+        "cacheState": "warm-after-first-notification",
+        "n": 7,
+        "minMs": 122,
+        "medianMs": 154,
+        "meanMs": 153.14285714285714,
+        "maxMs": 183,
+        "samplesMs": [
+          170,
+          183,
+          159,
+          140,
+          144,
+          122,
+          154
+        ]
+      }
+    ],
+    "preparationSamples": [
+      {
+        "project": "android-emulator",
+        "metric": "android.quick-edit.notification-to-shown",
+        "cacheState": "warm-after-first-notification",
+        "label": "결제 알림 수신 → Quick Edit 창 표시",
+        "warmup": true,
+        "iteration": 0,
+        "durationMs": 2804
+      },
+      {
+        "project": "android-emulator",
+        "metric": "android.quick-edit.notification-to-ready",
+        "cacheState": "warm-after-first-notification",
+        "label": "결제 알림 수신 → Quick Edit 편집 준비",
+        "warmup": true,
+        "iteration": 0,
+        "durationMs": 2840
+      },
+      {
+        "project": "android-emulator",
+        "metric": "android.quick-edit.save-to-server-observed",
+        "cacheState": "warm-after-first-notification",
+        "label": "Quick Edit 저장 → 서버 저장 확인",
+        "warmup": true,
+        "iteration": 0,
+        "durationMs": 1784
+      },
+      {
+        "project": "android-emulator",
+        "metric": "android.quick-edit.save-to-closed",
+        "cacheState": "warm-after-first-notification",
+        "label": "Quick Edit 저장 → 창 닫힘",
+        "warmup": true,
+        "iteration": 0,
+        "durationMs": 303
+      }
+    ]
+  },
+  "androidDiagnostic": {
+    "measuredAt": "2026-09-16T22:30:40.457440Z",
+    "environment": {
+      "androidApi": 36,
+      "device": "sdk_gphone64_x86_64",
+      "webView": "151.0.7922.199",
+      "animatorDurationScale": "0",
+      "windowAnimationScale": "0",
+      "transitionAnimationScale": "0",
+      "buildType": "debug",
+      "firebase": "local-emulators",
+      "web": "production-next-build",
+      "homeMode": "diagnostic-test-disposes-previous-webview",
+      "quickEditMode": "real-onNotificationPosted-os-delivery-excluded-one-recorded-warmup"
+    },
+    "statistics": [
+      {
+        "project": "android-emulator",
+        "metric": "android.home.isolated-activity-complete",
+        "label": "Android 첫 홈 (이전 WebView 테스트 정리 진단)",
+        "cacheState": "diagnostic-warm-process-test-disposed-webview",
+        "n": 7,
+        "minMs": 1013.6000000000931,
+        "medianMs": 1039.6999999999534,
+        "meanMs": 1065.7428571428172,
+        "maxMs": 1196,
+        "samplesMs": [
+          1116.6999999999534,
+          1013.6000000000931,
+          1039.6999999999534,
+          1196,
+          1024.3999999999069,
+          1042.5999999998603,
+          1027.1999999999534
+        ]
+      }
+    ]
+  }
+}

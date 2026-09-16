@@ -81,7 +81,7 @@ function detailRequest(label: string) {
 function openDetails(id: 'A' | 'B') {
   const row = screen.getByText(`${id} 가구`).closest('article');
   expect(row).not.toBeNull();
-  fireEvent.click(within(row!).getByRole('button', { name: '관리', exact: true }));
+  fireEvent.click(within(row!).getByRole('button', { name: '관리' }));
 }
 
 describe('관리자 페이지의 인증·상세 요청 범위', () => {
@@ -106,7 +106,7 @@ describe('관리자 페이지의 인증·상세 요청 범위', () => {
     expect(screen.getByText('latest A 명의자 · 활성')).toBeInTheDocument();
     expect(screen.getByText('latest A 자산 · v1')).toBeInTheDocument();
     expect(screen.queryByText(/old [AB] (가구원|명의자|자산)/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '제거', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: '제거' }));
     await act(async () => {});
     expect(mockRemove).toHaveBeenCalledWith('A', 'latest A-member', 1, '관리 사유');
   });
@@ -130,7 +130,7 @@ describe('관리자 페이지의 인증·상세 요청 범위', () => {
     render(<AdminPage />);
     await screen.findByText('A 가구');
     openDetails('A');
-    fireEvent.click(screen.getByRole('button', { name: '닫기', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: '닫기' }));
     expect(screen.queryByText('관리자 작업')).not.toBeInTheDocument();
     openDetails('A');
     await act(async () => result === 'success' ? closed.resolve() : closed.reject());
@@ -170,7 +170,7 @@ describe('관리자 페이지의 인증·상세 요청 범위', () => {
     await screen.findByText('A 가구');
     openDetails('A');
     await act(async () => a.resolve());
-    fireEvent.click(screen.getByRole('button', { name: '제거', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: '제거' }));
     await act(async () => {});
     openDetails('B');
     await act(async () => b.resolve());
@@ -188,8 +188,8 @@ describe('관리자 페이지의 인증·상세 요청 범위', () => {
     await screen.findByText('A 가구');
     openDetails('A');
     await act(async () => a.resolve());
-    fireEvent.click(screen.getByRole('button', { name: '제거', exact: true }));
-    fireEvent.click(screen.getByRole('button', { name: '닫기', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: '제거' }));
+    fireEvent.click(screen.getByRole('button', { name: '닫기' }));
     await act(async () => prompt.resolve('관리 사유'));
     expect(mockRemove).not.toHaveBeenCalled();
   });

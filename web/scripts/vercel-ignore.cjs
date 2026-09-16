@@ -5,7 +5,7 @@ function affectsWeb(path) {
   if (path.startsWith('contracts/')) return true;
   if (['.vercelignore', '.npmrc', 'package.json', 'package-lock.json', 'vercel.json'].includes(path)) return true;
   if (!path.startsWith('web/')) return false;
-  return !/(?:^|\/)(?:__tests__|__mocks__|e2e|test-results|playwright-report)\//.test(path)
+  return !/(?:^|\/)(?:__tests__|__mocks__|e2e|e2e-performance|performance-results|test-results|playwright-report)\//.test(path)
     && !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path)
     && !/^web\/(?:jest[^/]*|playwright[^/]*|README\.md)$/.test(path);
 }
