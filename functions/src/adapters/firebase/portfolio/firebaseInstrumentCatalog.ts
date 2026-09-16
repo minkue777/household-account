@@ -116,7 +116,7 @@ function decodeHtmlText(value: string): string {
     .trim();
 }
 
-async function fetchKonexCandidates() {
+async function fetchListedCorporations() {
   const html = new TextDecoder("euc-kr").decode(
     await fetchBytes(KRX_CORPORATION_LIST),
   );
@@ -127,7 +127,11 @@ async function fetchKonexCandidates() {
         decodeHtmlText(cell[1]),
       ),
     )
-    .filter((cells) => cells.length >= 3 && /^\d{6}$/u.test(cells[2] ?? ""))
+    .filter((cells) =>
+      cells.length >= 3 &&
+      (cells[1] === "유가" || cells[1] === "코스닥") &&
+      /^[0-9A-Z]{6}$/u.test(cells[2] ?? ""),
+    )
     .map((cells) => ({ code: cells[2], name: cells[0], kind: "STOCK" }));
 }
 
@@ -194,15 +198,15 @@ function parseUsSymbols(
 }
 
 async function loadDomesticCatalog(): Promise<readonly CatalogInstrument[]> {
-  const [kospi, kosdaq, konex, etfCodes] = await Promise.all([
+  const [kospi, kosdaq, corporations, etfCodes] = await Promise.all([
     fetchNaverMarket("KOSPI"),
     fetchNaverMarket("KOSDAQ"),
-    fetchKonexCandidates(),
+    fetchListedCorporations(),
     fetchEtfCodes(),
   ]);
   const unique = new Map<string, CatalogInstrument>();
-  for (const row of [...kospi, ...kosdaq, ...konex]) {
-    const instrumentType = etfCodes.has(row.code)
+  for (const row of [...kospi, ...kosdaq, ...corporations]) {
+    const instrumentType = etfCodes.has(row.code) || row.kind === "ETF"
       ? "ETF"
       : row.kind.includes("ETN")
         ? "ETN"

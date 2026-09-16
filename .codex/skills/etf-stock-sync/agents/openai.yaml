@@ -1,4 +1,4 @@
 interface:
   display_name: "주식·ETF 종목 동기화"
-  short_description: "국내 전체 종목을 갱신하고 미국 심볼 공급자를 검증"
-  default_prompt: "Use $etf-stock-sync to synchronize all Korean stock search data and verify live US symbols."
+  short_description: "국내·미국 종목 목록의 자동 갱신과 최신 데이터 반영을 검증"
+  default_prompt: "$etf-stock-sync로 한국·미국 종목 검색 목록의 최근 자동 갱신과 최신 상장 종목 반영 여부를 확인해 주세요."

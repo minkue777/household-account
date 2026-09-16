@@ -346,7 +346,7 @@ Application 내부에서 50개 page·동시성 5·retryable 결과 총 3회로 �
 
 ### 5.5 `PublishInstrumentCatalog`와 기기 검색 read model
 
-1. 06:00 Scheduler가 국내·미국 catalog source를 호출하고 Provider DTO를 `InstrumentRefV1` 집합으로 정규화합니다.
+1. 06:00 Scheduler가 국내·미국 catalog source를 호출하고 Provider DTO를 `InstrumentRefV1` 집합으로 정규화합니다. 국내는 네이버 KOSPI·KOSDAQ 목록과 KIND의 유가·코스닥 법인만 사용하며 KONEX를 제외합니다. 영문 포함 6자리 코드는 보존하고, 시장 원천의 `stockEndType=etf` 또는 ETF 전용 목록 중 하나가 ETF임을 나타내면 ETF로 분류합니다. 검색 목록 제외는 기존 보유종목과 이력 삭제로 연결하지 않습니다.
 2. 중복 code·market, 필수 필드, 허용 instrument kind, 최소 종목 수, source별 count와 checksum을 검증합니다. 하나라도 contract failure이면 publish하지 않습니다.
 3. `market-catalog/v1/snapshots/{asOfDate}/{catalogVersion}.json.gz` immutable 객체를 업로드하고 다시 metadata·checksum을 검증합니다.
 4. 검증된 객체를 가리키는 `market-catalog/v1/latest.json` manifest를 generation precondition으로 교체합니다. 검색은 이 단계 전 snapshot을 보지 않습니다.

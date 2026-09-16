@@ -3,15 +3,31 @@ import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { createHouseholdThroughUi, resetTestAccount } from './emulator';
 import { addAssetUi, modal } from './portfolio-helpers';
+import { createInstrumentCatalogSourceFixture, newlyListedEtfs } from '../../functions/test/support/instrument-catalog-source-fixture';
+import type { StockCatalogInstrument } from '../src/features/portfolio/instrument-catalog/domain/stockInstrumentCatalog';
+
+async function loadProviderCatalog(): Promise<StockCatalogInstrument[]> {
+  const { RemoteInstrumentCatalogRunSource } = require('../../functions/lib/adapters/firebase/portfolio/firebaseInstrumentCatalog.js');
+  const fixture = createInstrumentCatalogSourceFixture();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = fixture.fetch;
+  try {
+    const source = new RemoteInstrumentCatalogRunSource({ file: () => ({ exists: async () => [false] }) });
+    const run = await source.load('2026-09-16');
+    expect(run.domesticSource.kind).toBe('success');
+    expect(run.usSource.kind).toBe('success');
+    return [...run.domesticSource.items, ...run.usSource.items].map((item: StockCatalogInstrument) =>
+      item.code === '005930' ? { ...item, aliases: ['삼전'] } : item);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
 
 test.beforeEach(async () => { await resetTestAccount(); });
 
 test('[MARKET-001][MARKET-003][MARKET-005] 실제 Storage SDK·gzip·checksum·IndexedDB 경계를 거친 국내/미국 종목을 로컬 검색한다', async ({ page }) => {
-  const items = [
-    { market: 'KRX', instrumentType: 'STOCK', code: '005930', name: '삼성전자', aliases: ['삼전'] },
-    { market: 'US', instrumentType: 'ETF', code: 'SPY', name: 'SPDR S&P 500 ETF Trust' },
-    ...Array.from({ length: 14 }, (_, i) => ({ market: 'KRX', instrumentType: 'ETF', code: `9000${String(i).padStart(2, '0')}`, name: `E2E 지수 ETF ${i}` })),
-  ];
+  // Raw provider responses go through the production server adapter first.
+  const items = await loadProviderCatalog();
   const body = gzipSync(Buffer.from(JSON.stringify({ schemaVersion: 1, asOfDate: '2026-09-01', catalogVersion: 'e2e-v1', itemCount: items.length, items })));
   const objectName = 'market-catalog/v1/snapshots/2026-09-01/v1.json.gz';
   const manifest = { schemaVersion: 1, catalogVersion: 'e2e-v1', snapshotObject: objectName, snapshotGeneration: '1001', asOfDate: '2026-09-01', publishedAt: '2026-09-01T06:00:00+09:00', sha256: createHash('sha256').update(body).digest('hex'), itemCount: items.length };
@@ -47,6 +63,24 @@ test('[MARKET-001][MARKET-003][MARKET-005] 실제 Storage SDK·gzip·checksum·I
   await expect(detail.getByRole('button', { name: /삼성전자/ })).toBeVisible();
   await detail.getByPlaceholder('종목명 입력').fill('SPY');
   await expect(detail.getByRole('button', { name: /SPDR S&P 500 ETF Trust/ })).toBeVisible();
+  for (const item of newlyListedEtfs) {
+    await detail.getByPlaceholder('종목명 입력').fill(item.code);
+    await expect(detail.getByRole('button', { name: new RegExp(item.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) })).toBeVisible();
+  }
+  const cachedItems = await page.evaluate(() => new Promise<StockCatalogInstrument[]>((resolve, reject) => {
+    const open = indexedDB.open('household-account-reference-data');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const database = open.result;
+      const read = database.transaction('instrument-catalog', 'readonly').objectStore('instrument-catalog').get('latest-v1');
+      read.onerror = () => { database.close(); reject(read.error); };
+      read.onsuccess = () => { database.close(); resolve(read.result.snapshot.items); };
+    };
+  }));
+  for (const item of newlyListedEtfs) {
+    expect(cachedItems.find(({ code }) => code === item.code)).toMatchObject({ ...item, instrumentType: 'ETF' });
+  }
+  expect(cachedItems.some(({ code }) => code === '777777' || code === '0203K0')).toBe(false);
   await detail.getByPlaceholder('종목명 입력').fill('E2E 지수');
   await expect(detail.getByRole('button', { name: /E2E 지수 ETF/ })).toHaveCount(10);
   expect(storageReads).toBeGreaterThanOrEqual(3);
