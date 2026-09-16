@@ -1,6 +1,6 @@
 import { collection, db, documentId, getDocsFromServer, limit, orderBy, query, startAfter, where, type QueryDocumentSnapshot, type DocumentData } from '@/platform/read-model/firestoreReadModel';
 import { getClientSessionScope, requireClientSessionScope } from '@/composition/clientSessionScope';
-import { mapDocToExpense } from '@/lib/expenseService';
+import { mapDocToExpense } from '@/features/ledger/application/ledgerExpenseMapping';
 import { isVisibleLedgerReadDocument } from '@/features/ledger/application/ledgerReadVisibility';
 import { requestMembershipResolution } from '@/features/access-household/application/membershipResolutionRecovery';
 import { requestRemoteSessionRecovery } from '@/platform/functions-api/firebaseCallableRecovery';

@@ -180,10 +180,6 @@ class FixtureAssetOwnerProfileDriver
     return this.application.archiveAssetOwnerProfile(...args);
   }
 
-  renameSelf(...args: Parameters<AssetOwnerProfileInputPort["renameSelf"]>) {
-    return this.application.renameSelf(...args);
-  }
-
   listAssetOwnerProfiles(...args: Parameters<AssetOwnerProfileInputPort["listAssetOwnerProfiles"]>) {
     return this.application.listAssetOwnerProfiles(...args);
   }

@@ -220,6 +220,25 @@ class QuickEditActivityInstrumentationTest {
         AndroidKeystoreQuickEditCommandOutboxStore(context).clear()
     }
 
+    @Test
+    fun recreatedQuickEditDoesNotSubmitAnOldDraftAsAnotherMember() {
+        prepareLocalCommandSession()
+        launchQuickEdit().use { scenario ->
+            scenario.recreate()
+            runBlocking {
+                HouseholdPreferences.replaceAuthenticatedSession(
+                    context, "instrumentation-house", "other-member", "다른 사용자"
+                )
+            }
+            scenario.onActivity { activity ->
+                activity.findViewById<EditText>(R.id.etMemo).setText("이전 화면의 초안")
+                activity.findViewById<Button>(R.id.btnSave).performClick()
+            }
+            waitUntil("다른 세션의 QuickEdit 닫기") { scenario.state == Lifecycle.State.DESTROYED }
+            assertTrue(AndroidKeystoreQuickEditCommandOutboxStore(context).load().isEmpty())
+        }
+    }
+
     private fun assertWorkerReservationExists() = runBlocking {
         withTimeout(5_000) {
             WorkManager.getInstance(context)
@@ -231,6 +250,7 @@ class QuickEditActivityInstrumentationTest {
 
     @Test
     fun launchPaintsIntentSnapshotAndSelectedCategoryImmediately() {
+        prepareLocalCommandSession()
         launchQuickEdit().use { scenario ->
             scenario.onActivity { activity ->
                 assertEquals(
@@ -269,6 +289,7 @@ class QuickEditActivityInstrumentationTest {
 
     @Test
     fun invalidInputStaysOpenAndCloseButtonFinishesTheQuickEdit() {
+        prepareLocalCommandSession()
         launchQuickEdit().use { scenario ->
             scenario.onActivity { activity ->
                 activity.findViewById<EditText>(R.id.etMerchant).setText("")
@@ -295,7 +316,11 @@ class QuickEditActivityInstrumentationTest {
     }
 
     private fun launchQuickEdit(categoryId: String = "food"): ActivityScenario<QuickEditActivity> {
+        val scope = HouseholdPreferences.currentScope(context)
         val intent = Intent(context, QuickEditActivity::class.java).apply {
+            putExtra(QuickEditActivity.EXTRA_HOUSEHOLD_ID, scope.householdId)
+            putExtra(QuickEditActivity.EXTRA_MEMBER_ID, scope.memberId)
+            putExtra(QuickEditActivity.EXTRA_SESSION_GENERATION, scope.sessionGeneration)
             putExtra(QuickEditActivity.EXTRA_EXPENSE_ID, "expense-quick-edit-test")
             putExtra(QuickEditActivity.EXTRA_MERCHANT, "롯데쇼핑동탄")
             putExtra(QuickEditActivity.EXTRA_AMOUNT, 20_300)

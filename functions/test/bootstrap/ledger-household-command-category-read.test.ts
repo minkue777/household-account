@@ -139,4 +139,19 @@ describe("Ledger command category lookup boundary", () => {
 
     expect(fixture.categoryReads()).toBe(1);
   });
+
+  it("저장된 수동 등록 receipt는 카테고리 재조회 없이 재생한다", async () => {
+    const fixture = subject();
+
+    const result = await fixture.execute("ledger.record-manual-transaction.v1", {
+      transactionType: "expense",
+      merchant: "가맹점",
+      amountInWon: 10_000,
+      categoryId: "etc",
+      accountingDate: "2026-07-22",
+    });
+
+    expect(result).toEqual(receiptResult.value);
+    expect(fixture.categoryReads()).toBe(0);
+  });
 });

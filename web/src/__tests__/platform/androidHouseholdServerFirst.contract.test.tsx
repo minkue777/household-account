@@ -36,10 +36,14 @@ jest.mock('@/features/access-household/application/signedInMembershipCache', () 
   clearSignedInMembershipCache: jest.fn(),
 }));
 
-jest.mock('@/composition/clientSessionScope', () => ({
-  clearClientSessionScope: jest.fn(),
-  setClientSessionScope: jest.fn(),
-}));
+jest.mock('@/composition/clientSessionScope', () => {
+  const actual = jest.requireActual('@/composition/clientSessionScope');
+  return {
+    ...actual,
+    clearClientSessionScope: jest.fn(actual.clearClientSessionScope),
+    setClientSessionScope: jest.fn(actual.setClientSessionScope),
+  };
+});
 
 const mockActivatePwaFidEndpoint = jest.fn().mockResolvedValue(false);
 const mockRemovePwaFidEndpoint = jest.fn();
@@ -184,6 +188,7 @@ function Probe() {
 
 describe('Android 가계부 server-first 복원 계약', () => {
   beforeEach(() => {
+    jest.requireActual('@/composition/clientSessionScope').clearClientSessionScope();
     jest.clearAllMocks();
     androidHostAvailable = false;
     iosPwa = false;
@@ -426,6 +431,44 @@ describe('Android 가계부 server-first 복원 계약', () => {
       `ready:${cachedResolution.household.name}:member:member-1:verified`
     )).toBeInTheDocument();
     await waitFor(() => expect(mockGetHousehold).toHaveBeenCalledTimes(1));
+    expect(mockWriteSignedInMembershipCache).not.toHaveBeenCalled();
+  });
+
+  it('이름 변경 응답을 기다리는 동안 받은 최신 가구 metadata를 보존한다', async () => {
+    let resolveHousehold!: (value: ReturnType<typeof household>) => void;
+    let finishRename!: () => void;
+    mockReadSignedInMembershipCache.mockReturnValue(cachedResolution);
+    mockOnAuthChange.mockImplementation(listener => { listener({ uid: 'uid-1' } as User); return jest.fn(); });
+    mockGetHousehold.mockReturnValue(new Promise(resolve => { resolveHousehold = resolve; }));
+    mockRenameHouseholdMember.mockReturnValue(new Promise(resolve => { finishRename = resolve; }));
+    render(<HouseholdProvider><Probe /></HouseholdProvider>);
+    await screen.findByText('ready:저장된 가계부:member:member-1:verified');
+    fireEvent.click(screen.getByRole('button', { name: 'rename' }));
+    await waitFor(() => expect(mockRenameHouseholdMember).toHaveBeenCalledTimes(1));
+    await act(async () => resolveHousehold(household('새 가구 정보')));
+    await screen.findByText('ready:새 가구 정보:member:member-1:verified');
+    await act(async () => finishRename());
+    expect(screen.getByText('ready:새 가구 정보:member:member-1:verified')).toBeInTheDocument();
+    expect(screen.getByTestId('member-state')).toHaveTextContent('새 이름:4');
+    expect(mockWriteSignedInMembershipCache).toHaveBeenLastCalledWith('uid-1', expect.objectContaining({
+      household: expect.objectContaining({ name: '새 가구 정보' }),
+    }));
+  });
+
+  it('이름 변경 완료가 로그아웃 뒤 도착해도 이전 가구와 멤버를 되살리지 않는다', async () => {
+    let finishRename!: () => void;
+    mockOnAuthChange.mockImplementation(listener => { listener({ uid: 'uid-1' } as User); return jest.fn(); });
+    mockResolveSignedInUser.mockResolvedValue(cachedResolution);
+    mockRenameHouseholdMember.mockReturnValue(new Promise(resolve => { finishRename = resolve; }));
+    render(<HouseholdProvider><Probe /></HouseholdProvider>);
+    await screen.findByText('ready:저장된 가계부:member:member-1:verified');
+    fireEvent.click(screen.getByRole('button', { name: 'rename' }));
+    await waitFor(() => expect(mockRenameHouseholdMember).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'logout' }));
+    await screen.findByText('signed-out:none:member:no-member:unverified');
+    mockWriteSignedInMembershipCache.mockClear();
+    await act(async () => finishRename());
+    expect(screen.getByText('signed-out:none:member:no-member:unverified')).toBeInTheDocument();
     expect(mockWriteSignedInMembershipCache).not.toHaveBeenCalled();
   });
 

@@ -1,7 +1,6 @@
 import {
   AssetOwnerProfile,
   AssetOwnerProfileChangedEvent,
-  AssetOwnerProfileState,
 } from "../model/assetOwnerProfile";
 
 export type ProfileNameValidation =
@@ -13,19 +12,6 @@ export function validateProfileName(displayName: string): ProfileNameValidation 
   return normalized.length === 0
     ? { kind: "invalid", code: "ASSET_OWNER_PROFILE_NAME_REQUIRED" }
     : { kind: "valid", displayName: normalized };
-}
-
-export function memberHasSingleProfile(
-  state: AssetOwnerProfileState,
-  memberId: string,
-): boolean {
-  return (
-    state.profiles.filter(
-      (profile) =>
-        profile.profileType === "member" &&
-        profile.linkedMemberId === memberId,
-    ).length === 1
-  );
 }
 
 export function profileChangedEvent(

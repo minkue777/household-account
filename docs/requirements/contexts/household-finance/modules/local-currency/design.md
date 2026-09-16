@@ -2,6 +2,8 @@
 
 > 2026-09-17 유지보수 정리: 이 모듈의 관측 intake·유형별 최신값·독립 receipt/UoW 및 Home 최초 선택 참여는 유지합니다. Ledger에 남아 있던 미사용 지역화폐 대체 Service 제거는 이 관측 저장 흐름을 바꾸지 않으며, 실제 merge의 지역화폐 유형 호환 정책도 유지합니다.
 
+> 2차 실행 경로 정리: BAL-004의 실제 구독은 [Web balanceService](../../../../../../web/src/lib/balanceService.ts)와 [LedgerReadModelContext](../../../../../../web/src/contexts/LedgerReadModelContext.tsx)가 소유합니다. 실행·테스트 소비자가 없던 서버 BalanceSubscription Application과 전용 Port는 제거했습니다. 아래 Read Contract 상태 구분은 Web의 데이터 callback과 onError 및 shell 상태로 구현됩니다.
+
 > 상태: Proposed — 테스트 구현 기준  
 > 소유 요구사항: [지역화폐 잔액 모듈 요구사항](requirements.md)  
 > 상위 Context: [Household Finance](../../requirements.md)  

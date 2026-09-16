@@ -16,12 +16,16 @@ internal class QuickEditCommandDeliveryLifecycle {
 
     suspend fun admit(
         currentScope: () -> CaptureSessionScope,
+        expectedScope: CaptureSessionScope,
         transactionId: String,
         envelope: HouseholdCommandEnvelopeV1,
         persist: suspend (CaptureSessionScope, String, HouseholdCommandEnvelopeV1) -> Boolean,
         reserveDelivery: suspend () -> Unit
     ): QuickEditCommandEnqueueResult = mutex.withLock {
         val scope = currentScope()
+        if (!isCurrentSession(expectedScope, scope)) {
+            return@withLock QuickEditCommandEnqueueResult.Rejected("QUICK_EDIT_SESSION_CHANGED")
+        }
         if (!scope.isUsable || envelope.householdId != scope.householdId) {
             return@withLock QuickEditCommandEnqueueResult.Rejected(
                 "HOUSEHOLD_SESSION_REQUIRED"
@@ -80,5 +84,10 @@ internal class QuickEditCommandDeliveryLifecycle {
 
     suspend fun resumeAfterFailedTransition(scope: CaptureSessionScope) = mutex.withLock {
         if (blockedScope == scope) blockedScope = null
+    }
+
+    companion object {
+        fun isCurrentSession(expected: CaptureSessionScope, current: CaptureSessionScope): Boolean =
+            expected.isUsable && expected == current
     }
 }

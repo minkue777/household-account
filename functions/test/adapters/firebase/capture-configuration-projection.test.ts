@@ -8,6 +8,27 @@ const projectionPath =
   "households/house-1/runtimeProjections/payment-capture-configuration-v1";
 
 describe("Firebase capture configuration projection", () => {
+  it.each(["archive-pending", "archived", "deleted"])("canonical %s 상태가 legacy 업무 ID와 문서 별칭의 활성 참조를 함께 제거한다", async (state) => {
+    const memory = new InMemoryFirestore();
+    memory.seed("categories/legacy-food", { householdId: "house-1", key: "food", isActive: true });
+    memory.seed("households/house-1/categories/canonical-food", { categoryId: "food", state });
+    memory.seed("categories/legacy-active", { householdId: "house-1", key: "active" });
+    memory.seed("households/house-1/categories/default", { state: "active" });
+    // 구 projection은 잘못된 활성 판정을 담을 수 있으므로 서버 배포 후 다시 만듭니다.
+    memory.seed(projectionPath, {
+      householdId: "house-1", cards: [], merchantRules: [],
+      activeCategoryIds: ["food", "legacy-food", "canonical-food"], schemaVersion: 2,
+    });
+    const query = new FirebaseCaptureConfigurationQuery(memory as unknown as firestore.Firestore);
+    const input = { householdId: "house-1", actingMemberId: "member-1" };
+    const rebuilt = await query.load(input);
+    expect(rebuilt).toMatchObject({ kind: "available", value: {
+      activeCategoryIds: new Set(["active", "legacy-active", "default"]),
+    } });
+    expect(memory.document(projectionPath)?.schemaVersion).toBe(3);
+    expect(await query.load(input)).toEqual(rebuilt);
+  });
+
   it("설정 변경으로 projection이 무효화되면 같은 warm query의 다음 요청이 새 카드·규칙·카테고리를 읽는다", async () => {
     const memory = new InMemoryFirestore();
     memory.seed("households/house-1/registeredCards/card-1", {
@@ -67,7 +88,7 @@ describe("Firebase capture configuration projection", () => {
       merchantRules: [],
       activeCategoryIds: ["etc", "food"],
       defaultCategoryId: "etc",
-      schemaVersion: 2,
+      schemaVersion: 3,
     });
 
     const result = await new FirebaseCaptureConfigurationQuery(

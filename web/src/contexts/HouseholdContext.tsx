@@ -27,6 +27,7 @@ import {
 } from '@/features/access-household/application/adminHouseholdViewSelection';
 import {
   clearClientSessionScope,
+  getClientSessionScope,
   setClientSessionScope,
 } from '@/composition/clientSessionScope';
 import { resetClientOptimisticProjections } from '@/composition/resetClientOptimisticProjections';
@@ -1022,14 +1023,22 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     if (!trimmedName) throw new Error('이름을 입력해 주세요.');
     if (trimmedName === currentMember.name) return;
 
+    const scope = getClientSessionScope();
     const { renameHouseholdMember } = await import('@/lib/householdService');
+    if (!scope || getClientSessionScope() !== scope) return;
     await renameHouseholdMember(
       household.id,
       currentMember.id,
       trimmedName,
       currentMember.aggregateVersion
     );
-    const updated = {
+    // 이 작업을 시작한 세션만 갱신합니다. 응답 대기 중 받은 가구 metadata와
+    // 다른 멤버의 변경을 예전 render의 household로 되돌리지 않습니다.
+    if (getClientSessionScope() !== scope) return;
+    const latestHousehold = householdRef.current;
+    const latestMember = currentMemberRef.current;
+    if (latestHousehold?.id !== household.id || latestMember?.id !== currentMember.id) return;
+    const updated = latestMember.aggregateVersion > currentMember.aggregateVersion + 1 ? latestMember : {
       ...currentMember,
       name: trimmedName,
       aggregateVersion: currentMember.aggregateVersion + 1,
@@ -1037,8 +1046,8 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     currentMemberRef.current = updated;
     setCurrentMember(updated);
     const updatedHousehold = {
-      ...household,
-      members: household.members.map((member) => member.id === updated.id ? updated : member),
+      ...latestHousehold,
+      members: latestHousehold.members.map((member) => member.id === updated.id ? updated : member),
     };
     householdRef.current = updatedHousehold;
     setHousehold(updatedHousehold);

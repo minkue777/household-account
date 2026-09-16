@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
+import type * as firestore from "firebase-admin/firestore";
+import { describe, expect, it, vi } from "vitest";
 
+import { FirebaseCaptureLedgerPersistence } from "../../../src/adapters/firebase/payment-capture/firebaseCaptureLedgerPersistence";
+import { InMemoryFirestore } from "../../support/in-memory-firestore";
 import { createCaptureTransactionGatewayApplication } from "../../../src/contexts/payment-capture/android-payment-ingestion/application/captureTransactionGatewayApplication";
 import type { CaptureConfigurationQueryPort } from "../../../src/contexts/payment-capture/android-payment-ingestion/application/ports/out/captureConfigurationQueryPort";
 import type {
@@ -132,6 +136,92 @@ export function createSubject(): CaptureTransactionGatewaySubject {
 }
 
 describe("Capture configuration → Ledger application boundary", () => {
+  it.each(["legacy-sha256", "capture-input-v2", "verified-raw"])("표시 가맹점이 치환된 기존 취소 receipt를 실제 adapter로 재생한다: %s", async fingerprintVersion => {
+    const memory = new InMemoryFirestore();
+    const ledger = new FirebaseCaptureLedgerPersistence(memory as unknown as firestore.Firestore);
+    const source = branch();
+    const verifiedRawPayloadHash = fingerprintVersion === "verified-raw" ? source.rawPayloadHash : undefined;
+    const oldCommand: CaptureCancellationPersistenceCommand = {
+      householdId: "house-1",
+      downstreamKey: "old-cancellation",
+      branch: {
+        ...(verifiedRawPayloadHash === undefined ? {} : { verifiedRawPayloadHash }),
+        observationId: source.captureContext.observationId,
+        creatorMemberId: source.captureContext.creatorMemberId,
+        sourceType: source.sourceType,
+        parser: source.parser,
+        rawPayloadHash: source.rawPayloadHash,
+        observedAt: source.occurredAt,
+        cancellationDate: source.accountingDate,
+        amountInWon: source.amountInWon,
+        originalMerchant: source.merchant,
+        merchant: "스타벅스 코리아",
+        cardEvidence: source.captureContext.cardEvidence,
+        canonicalCardId: "card-own",
+      },
+    };
+    const approved = await ledger.recordApproval({
+      householdId: "house-1", downstreamKey: "old-approval",
+      branch: {
+        observationId: "old-approval", originChannel: "android-notification", creatorMemberId: "member-1",
+        sourceType: source.sourceType, parser: source.parser, rawPayloadHash: source.rawPayloadHash,
+        occurredAt: source.occurredAt, accountingDate: source.accountingDate, amountInWon: source.amountInWon,
+        originalMerchant: source.merchant, merchant: "스타벅스 코리아", categoryId: "cafe", memo: "",
+        cardEvidence: source.captureContext.cardEvidence, canonicalCardId: "card-own",
+      },
+    });
+    expect(approved.kind).toBe("recorded");
+    const first = await ledger.cancel(oldCommand);
+    expect(first.kind).toBe("cancelled");
+    if (fingerprintVersion === "legacy-sha256") {
+      const receipt = memory.documentsInCollection("commandReceipts/payment-capture-ledger/receipts")
+        .find(({ value }) => value.downstreamKey === oldCommand.downstreamKey)!;
+      memory.seed(receipt.path, {
+        ...receipt.value,
+        payloadFingerprint: `sha256:${createHash("sha256").update(JSON.stringify(oldCommand), "utf8").digest("hex")}`,
+      });
+    }
+    const subject = createCaptureTransactionGatewayApplication({ configuration: configuration(), ledger });
+    memory.clearTransactionReads();
+    const writes = vi.spyOn(memory, "write");
+    expect(await subject.record({
+      householdId: oldCommand.householdId, downstreamKey: oldCommand.downstreamKey,
+      branch: branch({ captureContext: {
+        ...source.captureContext, observationType: "cancellation",
+        ...(verifiedRawPayloadHash === undefined ? {} : { verifiedRawPayloadHash }),
+      } }),
+    })).toEqual(first);
+    expect(memory.transactionReads().filter(read => read.kind === "query")).toEqual([]);
+    expect(writes).not.toHaveBeenCalled();
+  });
+
+  it("현재 치환 규칙끼리 충돌해도 취소는 원 증거로 처리하고 신규 승인은 충돌을 거부한다", async () => {
+    const loaded = await configuration().load({ householdId: "house-1", actingMemberId: "member-1" });
+    if (loaded.kind !== "available") throw new Error("Expected configuration");
+    const conflicting = {
+      ...loaded.value,
+      merchantRules: [loaded.value.merchantRules[1], {
+        ...loaded.value.merchantRules[1], ruleId: "conflicting-exact",
+      }],
+    };
+    const spy = ledgerSpy();
+    const subject = createCaptureTransactionGatewayApplication({
+      configuration: { load: async () => ({ kind: "available", value: conflicting }) },
+      ledger: spy.ledger,
+    });
+    const cancellation = branch({ captureContext: {
+      ...branch().captureContext, observationType: "cancellation",
+    } });
+    expect(await subject.record({ householdId: "house-1", downstreamKey: "cancel", branch: cancellation }))
+      .toMatchObject({ kind: "cancelled" });
+    expect(spy.cancellations[0].branch).toMatchObject({
+      originalMerchant: "스타벅스", merchant: "스타벅스", canonicalCardId: "card-own",
+    });
+    expect(await subject.record({ householdId: "house-1", downstreamKey: "approval", branch: branch() }))
+      .toEqual({ kind: "rejected", code: "MERCHANT_RULE_CONFLICT" });
+    expect(spy.approvals).toEqual([]);
+  });
+
   it("현재 Actor 소유 카드만 인정하고 exact 규칙을 contains 우선순위보다 먼저 적용한다", async () => {
     const subject = createSubject();
 
@@ -431,7 +521,7 @@ describe("Capture configuration → Ledger application boundary", () => {
     expect(subject.cancellations).toEqual([]);
   });
 
-  it("취소에도 같은 가맹점 규칙과 본인 카드 identity를 적용한 뒤 Ledger에 위임한다", async () => {
+  it("취소는 본인 카드 identity와 원 가맹점을 검증하며 기존 표시 치환값도 보존한다", async () => {
     const subject = createSubject();
 
     expect(
@@ -451,6 +541,7 @@ describe("Capture configuration → Ledger application boundary", () => {
       expect.objectContaining({
         branch: expect.objectContaining({
           merchant: "스타벅스 코리아",
+          originalMerchant: "스타벅스",
           canonicalCardId: "card-own",
           cancellationDate: "2026-07-21",
         }),

@@ -3,7 +3,6 @@ import {
   AssetOwnerProfileInputPort,
   AssetOwnerProfileListResult,
   AssetOwnerProfileView,
-  RenameSelfResult,
   VerifiedProfileActor,
 } from "./ports/in/assetOwnerProfileInputPort";
 import {
@@ -15,7 +14,6 @@ import {
   AssetOwnerProfileState,
 } from "../domain/model/assetOwnerProfile";
 import {
-  memberHasSingleProfile,
   profileChangedEvent,
   validateProfileName,
 } from "../domain/policies/assetOwnerProfilePolicy";
@@ -282,92 +280,6 @@ class DefaultAssetOwnerProfileApplication
         };
       },
     );
-  }
-
-  async renameSelf(
-    actor: VerifiedProfileActor,
-    input: {
-      displayName: string;
-      expectedMemberVersion: number;
-      idempotencyKey: string;
-    },
-  ): Promise<RenameSelfResult> {
-    const name = validateProfileName(input.displayName);
-    if (name.kind === "invalid") {
-      return { kind: "validation-error", code: name.code };
-    }
-
-    return this.dependencies.store.transact<RenameSelfResult>((current) => {
-      if (!canWriteProfile(current, actor)) {
-        return {
-          state: current,
-          value: { kind: "forbidden", code: "RENAME_SELF_FORBIDDEN" },
-        };
-      }
-      const member = current.members.find(
-        (candidate) =>
-          candidate.memberId === actor.actingMemberId &&
-          candidate.principalUid === actor.principalUid,
-      );
-      if (member === undefined || !memberHasSingleProfile(current, member.memberId)) {
-        return {
-          state: current,
-          value: { kind: "conflict", code: "MEMBER_PROFILE_INVARIANT_BROKEN" },
-        };
-      }
-      if (member.aggregateVersion !== input.expectedMemberVersion) {
-        return {
-          state: current,
-          value: { kind: "conflict", code: "MEMBER_VERSION_MISMATCH" },
-        };
-      }
-
-      const memberProfile = current.profiles.find(
-        (profile) =>
-          profile.profileType === "member" &&
-          profile.linkedMemberId === member.memberId,
-      );
-      if (memberProfile === undefined) {
-        return {
-          state: current,
-          value: { kind: "conflict", code: "MEMBER_PROFILE_INVARIANT_BROKEN" },
-        };
-      }
-      const renamedProfile: AssetOwnerProfile = {
-        ...memberProfile,
-        displayName: name.displayName,
-        aggregateVersion: memberProfile.aggregateVersion + 1,
-      };
-
-      return {
-        state: {
-          ...current,
-          members: current.members.map((candidate) =>
-            candidate.memberId === member.memberId
-              ? {
-                  ...candidate,
-                  displayName: name.displayName,
-                  aggregateVersion: candidate.aggregateVersion + 1,
-                }
-              : candidate,
-          ),
-          profiles: current.profiles.map((profile) =>
-            profile.profileId === renamedProfile.profileId
-              ? renamedProfile
-              : profile,
-          ),
-          events: [
-            ...current.events,
-            profileChangedEvent(renamedProfile, true),
-          ],
-        },
-        value: {
-          kind: "success",
-          memberId: member.memberId,
-          displayName: name.displayName,
-        },
-      };
-    });
   }
 
   async listAssetOwnerProfiles(

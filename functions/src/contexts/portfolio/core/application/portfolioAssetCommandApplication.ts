@@ -6,9 +6,9 @@ import type {
 } from "./ports/out/portfolioRuntimeStorePort";
 import {
   parseAutomationFields,
-  plansAfterAssetChange,
-  validateAutomationForAsset,
+  changesAssetAutomation,
 } from "./portfolioAssetAutomationSynchronization";
+import { synchronizeAssetAutomationPlans, validateAutomationConfiguration } from "../../automation/public";
 import {
   ASSET_FIELDS,
   commit,
@@ -181,7 +181,7 @@ export function createPortfolioAssetCommands(
             : {}),
           automation: automation.value,
         };
-        const automationError = validateAutomationForAsset(asset);
+        const automationError = validateAutomationConfiguration(asset);
         if (automationError !== undefined) {
           return noWrite(state, error(automationError));
         }
@@ -191,8 +191,8 @@ export function createPortfolioAssetCommands(
         };
         const nextState: PortfolioRuntimeState = {
           ...withAsset,
-          automationPlans: plansAfterAssetChange(
-            withAsset,
+          automationPlans: synchronizeAssetAutomationPlans(
+            withAsset.automationPlans,
             asset,
             metadata.occurredAt,
           ),
@@ -217,6 +217,7 @@ export function createPortfolioAssetCommands(
         return error("INVALID_ASSET_PATCH");
       }
       if (raw.isActive !== undefined) return error("INVALID_ASSET_LIFECYCLE");
+      const readsAutomation = changesAssetAutomation(raw);
       return atomic(metadata, (state) => {
         const current = state.assets.find((asset) => asset.assetId === assetId);
         if (current === undefined) return noWrite(state, error("ASSET_NOT_FOUND"));
@@ -355,18 +356,24 @@ export function createPortfolioAssetCommands(
           aggregateVersion: current.aggregateVersion + 1,
           updatedAt: metadata.occurredAt,
         };
-        const automationError = validateAutomationForAsset(updated);
+        const automationChanged = current.type !== updated.type ||
+          current.subType !== updated.subType ||
+          stable(current.automation) !== stable(updated.automation);
+        const automationError = automationChanged
+          ? validateAutomationConfiguration(updated) : undefined;
         if (automationError !== undefined) {
           return noWrite(state, error(automationError));
         }
         const withAsset = replaceAsset(state, updated);
         const nextState: PortfolioRuntimeState = {
           ...withAsset,
-          automationPlans: plansAfterAssetChange(
-            withAsset,
-            updated,
-            metadata.occurredAt,
-          ),
+          automationPlans: automationChanged
+            ? synchronizeAssetAutomationPlans(
+                withAsset.automationPlans,
+                updated,
+                metadata.occurredAt,
+              )
+            : withAsset.automationPlans,
         };
         const valuationChanged =
           current.type !== updated.type ||
@@ -387,7 +394,7 @@ export function createPortfolioAssetCommands(
             : [],
           success({}),
         );
-      }, { assetId, positions: false });
+      }, { assetId, positions: false, automationPlans: readsAutomation });
     },
 
     async reorderAssets({ metadata, assets, expectedVersions }) {

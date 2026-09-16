@@ -191,10 +191,8 @@ export function createAssetValuationScheduledPages(
       store: new FirebaseAssetSnapshotProjectionStore(input.database),
     });
 
-  const failedHouseholds = new Set<string>();
-
   return {
-    async nextPage(rawCheckpoint, skipTarget) {
+    async nextPage(rawCheckpoint, skipTarget, targetResult) {
       if (rawCheckpoint === COMPLETE) return undefined;
       const current = parseCheckpoint(rawCheckpoint);
       const household = await households.next(current.cursor);
@@ -261,8 +259,6 @@ export function createAssetValuationScheduledPages(
           assetClass: "all",
         });
         const outcome = refreshOutcome(household.householdId, result);
-        if (outcome.outcome.kind === "FAILED") failedHouseholds.add(household.householdId);
-        else failedHouseholds.delete(household.householdId);
         return {
           ...(rawCheckpoint === undefined
             ? {}
@@ -272,9 +268,12 @@ export function createAssetValuationScheduledPages(
         };
       }
 
-      if (failedHouseholds.has(household.householdId)) return {
+      const refreshResult = targetResult?.(targetId("refresh", household.householdId));
+      if (refreshResult === undefined || refreshResult.kind === "FAILED") return {
         ...(rawCheckpoint === undefined ? {} : { checkpointBefore: rawCheckpoint }), checkpointAfter,
-        targets: [{ targetId: targetId("snapshot", household.householdId), outcome: { kind: "FAILED", code: "VALUATION_REFRESH_INCOMPLETE", retryable: true } }],
+        targets: [{ targetId: targetId("snapshot", household.householdId), outcome: {
+          kind: "FAILED", code: "VALUATION_REFRESH_INCOMPLETE", retryable: refreshResult?.retryable ?? true,
+        } }],
       };
       const result = await snapshots.project({
         householdId: household.householdId,

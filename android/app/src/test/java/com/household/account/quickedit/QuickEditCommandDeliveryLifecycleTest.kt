@@ -30,6 +30,7 @@ class QuickEditCommandDeliveryLifecycleTest {
             val lifecycle = QuickEditCommandDeliveryLifecycle()
             var scheduled = false
             val result = lifecycle.admit(
+                expectedScope = scope,
                 currentScope = { scope }, transactionId = "transaction-1", envelope = envelope,
                 persist = { _, _, _ -> if (throws) error("encrypted commit failed") else false },
                 reserveDelivery = { scheduled = true }
@@ -48,6 +49,7 @@ class QuickEditCommandDeliveryLifecycleTest {
 
         val admitting = async {
             lifecycle.admit(
+                expectedScope = scope,
                 currentScope = { scope },
                 transactionId = "transaction-1",
                 envelope = envelope,
@@ -101,6 +103,7 @@ class QuickEditCommandDeliveryLifecycleTest {
         var persisted = false
 
         val result = lifecycle.admit(
+            expectedScope = scope,
             currentScope = { scope },
             transactionId = "transaction-1",
             envelope = envelope,
@@ -133,6 +136,7 @@ class QuickEditCommandDeliveryLifecycleTest {
         }
 
         val failed = lifecycle.admit(
+            expectedScope = scope,
             currentScope = { scope },
             transactionId = "transaction-1",
             envelope = envelope,
@@ -143,6 +147,7 @@ class QuickEditCommandDeliveryLifecycleTest {
             }
         )
         val retried = lifecycle.admit(
+            expectedScope = scope,
             currentScope = { scope },
             transactionId = "transaction-1",
             envelope = envelope,
@@ -158,5 +163,30 @@ class QuickEditCommandDeliveryLifecycleTest {
         assertEquals(2, persistCalls)
         assertEquals(2, scheduleCalls)
         assertTrue(retried is QuickEditCommandEnqueueResult.Accepted)
+    }
+
+    @Test
+    fun `열린 화면의 가구 멤버 또는 세대가 바뀌면 현재 actor로 초안을 재접수하지 않는다`() = runTest {
+        val changedScopes = listOf(
+            scope.copy(householdId = "other-house"),
+            scope.copy(memberId = "other-member"),
+            scope.copy(sessionGeneration = scope.sessionGeneration + 1),
+            CaptureSessionScope("", "", 0L)
+        )
+        for (current in changedScopes) {
+            var writes = 0
+            var scheduled = 0
+            val result = QuickEditCommandDeliveryLifecycle().admit(
+                currentScope = { current },
+                expectedScope = scope,
+                transactionId = "transaction-1",
+                envelope = envelope,
+                persist = { _, _, _ -> writes++; true },
+                reserveDelivery = { scheduled++ }
+            )
+            assertEquals(QuickEditCommandEnqueueResult.Rejected("QUICK_EDIT_SESSION_CHANGED"), result)
+            assertEquals(0, writes)
+            assertEquals(0, scheduled)
+        }
     }
 }

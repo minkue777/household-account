@@ -237,7 +237,7 @@ export function createLedgerHouseholdCommandHandlers(
           const categories =
             transactionType === "income"
               ? undefined
-              : await activeCategories(database, actor(context).householdId);
+              : () => activeCategories(database, actor(context).householdId);
           const commands = commandsFor(database, context, categories);
           const amountInWon = numberValue(payload, "amountInWon");
           const accountingDate = stringValue(payload, "accountingDate");

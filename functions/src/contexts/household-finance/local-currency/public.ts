@@ -12,8 +12,3 @@ export {
   type BalanceObservationV1,
   type BalanceRecorderActor,
 } from "./application/ports/in/balanceObservationIntakePort";
-export {
-  type BalanceReadState,
-  type BalanceSubscriptionInputPort,
-  type SubscribeBalanceResult,
-} from "./application/ports/in/balanceSubscriptionPort";

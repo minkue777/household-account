@@ -140,7 +140,7 @@ export function createScheduledJobExecutionApplication(dependencies: {
         page = await dependencies.pages.nextPage(current.checkpoint, targetId => {
           const previous = byHash.get(dependencies.identity.hash(targetId));
           return previous !== undefined && (previous.kind !== "FAILED" || !previous.retryable);
-        });
+        }, targetId => byHash.get(dependencies.identity.hash(targetId)));
       } catch {
         return failAtTopLevel(current, startedAt, { code: "SCHEDULED_JOB_PAGE_FAILED", retryable: true });
       }

@@ -12,7 +12,8 @@ import type {
 
 const PROJECTION_COLLECTION = "runtimeProjections";
 const PROJECTION_DOCUMENT = "payment-capture-configuration-v1";
-const PROJECTION_SCHEMA_VERSION = 2;
+// v3는 canonical 보관 상태가 legacy 별칭에도 우선하는 Category 정책을 적용합니다.
+const PROJECTION_SCHEMA_VERSION = 3;
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)

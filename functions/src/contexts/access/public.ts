@@ -3,7 +3,6 @@ export {
   type AssetOwnerProfileInputPort,
   type AssetOwnerProfileListResult,
   type AssetOwnerProfileView,
-  type RenameSelfResult,
   type VerifiedProfileActor,
 } from "./asset-owner-profile/application/ports/in/assetOwnerProfileInputPort";
 export {

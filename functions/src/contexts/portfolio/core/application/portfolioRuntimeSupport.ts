@@ -4,6 +4,7 @@ import {
   type AssetType,
 } from "../domain/model/assetCreation";
 import { normalizeCanonicalAssetSubType } from "../domain/policies/legacyAssetNormalization";
+import { ASSET_AUTOMATION_FIELDS } from "../../automation/public";
 import type {
   PortfolioAtomicResult,
   PortfolioCommandMetadata,
@@ -42,14 +43,7 @@ export const ASSET_FIELDS: ReadonlySet<string> = new Set([
   "order",
   "stockCode",
   "quantity",
-  "recurringContributionAmount",
-  "recurringContributionDay",
-  "lastAutoContributionMonth",
-  "loanInterestRate",
-  "loanRepaymentMethod",
-  "loanMonthlyPaymentAmount",
-  "loanPaymentDay",
-  "lastAutoRepaymentMonth",
+  ...ASSET_AUTOMATION_FIELDS,
 ]);
 
 export type ParseResult<T> =

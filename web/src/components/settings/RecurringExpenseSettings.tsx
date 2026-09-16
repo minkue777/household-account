@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import {
@@ -27,6 +27,8 @@ export default function RecurringExpenseSettings() {
   // 정기 지출 상태
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
   const [recurringLoading, setRecurringLoading] = useState(true);
+  const [recurringReadError, setRecurringReadError] = useState(false);
+  const [recurringReadEpoch, setRecurringReadEpoch] = useState(0);
   const [showAddRecurringForm, setShowAddRecurringForm] = useState(false);
   const [editingRecurringId, setEditingRecurringId] = useState<string | null>(null);
   const [editingRecurringVersion, setEditingRecurringVersion] = useState(1);
@@ -39,9 +41,28 @@ export default function RecurringExpenseSettings() {
   const [recurringCategory, setRecurringCategory] = useState('');
   const [recurringDay, setRecurringDay] = useState('');
   const [recurringMemo, setRecurringMemo] = useState('');
+  const recurringHousehold = useRef(householdKey);
+
+  const resetRecurringForm = useCallback(() => {
+    setRecurringMerchant('');
+    setRecurringAmount('');
+    setRecurringCategory('');
+    setRecurringDay('');
+    setRecurringMemo('');
+    setEditingRecurringId(null);
+    setShowAddRecurringForm(false);
+  }, []);
 
   // 정기 지출 구독
   useEffect(() => {
+    let active = true;
+    setRecurringReadError(false);
+    if (recurringHousehold.current !== householdKey) {
+      recurringHousehold.current = householdKey;
+      setRecurringExpenses([]);
+      setPendingDeleteRecurring(null);
+      resetRecurringForm();
+    }
     if (!householdKey) {
       setRecurringExpenses([]);
       setRecurringLoading(false);
@@ -51,26 +72,23 @@ export default function RecurringExpenseSettings() {
     setRecurringLoading(true);
 
     const unsubscribeRecurring = subscribeToRecurringExpenses(householdKey, (expenses) => {
+      if (!active) return;
       setRecurringExpenses(expenses);
+      setRecurringLoading(false);
+      setRecurringReadError(false);
+    }, () => {
+      if (!active) return;
+      setRecurringReadError(true);
       setRecurringLoading(false);
     });
 
     return () => {
+      active = false;
       unsubscribeRecurring();
     };
-  }, [householdKey, remoteReadEpoch]);
+  }, [householdKey, remoteReadEpoch, recurringReadEpoch, resetRecurringForm]);
 
   // 정기 지출 핸들러
-  const resetRecurringForm = () => {
-    setRecurringMerchant('');
-    setRecurringAmount('');
-    setRecurringCategory('');
-    setRecurringDay('');
-    setRecurringMemo('');
-    setEditingRecurringId(null);
-    setShowAddRecurringForm(false);
-  };
-
   const handleStartEditRecurring = (expense: RecurringExpense) => {
     setEditingRecurringId(expense.id);
     setEditingRecurringVersion(expense.aggregateVersion ?? 1);
@@ -134,7 +152,7 @@ export default function RecurringExpenseSettings() {
           <div className="text-left">
             <div className="font-semibold text-slate-800">정기 지출</div>
             <div className="text-sm text-slate-500">
-              {recurringLoading ? '로딩중...' : `${recurringExpenses.length}개`}
+              {recurringLoading ? '로딩중...' : recurringReadError ? '조회 실패' : `${recurringExpenses.length}개`}
             </div>
           </div>
         </div>
@@ -145,6 +163,14 @@ export default function RecurringExpenseSettings() {
 
       {isRecurringOpen && (
         <div className="border-t border-slate-100">
+          {recurringReadError && (
+            <p role="alert" className="p-4 text-sm text-red-600">
+              정기 지출을 불러오지 못했습니다.
+              <button type="button" className="ml-3 underline" onClick={() => setRecurringReadEpoch(value => value + 1)}>
+                다시 시도
+              </button>
+            </p>
+          )}
           {/* 추가/편집 폼 */}
           {(showAddRecurringForm || editingRecurringId) && (
             <div ref={recurringFormRef} className="scroll-mt-24 p-4 bg-slate-50 border-b border-slate-200">
@@ -258,7 +284,7 @@ export default function RecurringExpenseSettings() {
 
           {recurringLoading ? (
             <div className="p-8 text-center text-slate-400">로딩중...</div>
-          ) : recurringExpenses.length === 0 && !showAddRecurringForm ? (
+          ) : recurringExpenses.length === 0 && !showAddRecurringForm && !recurringReadError ? (
             <div className="p-8 text-center text-slate-400">
               등록된 정기 지출이 없습니다.
             </div>

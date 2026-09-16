@@ -58,26 +58,37 @@ export function createAdminMemberAccessHandlers(
             payload.householdId,
             "HOUSEHOLD_ID_REQUIRED",
           );
-          const members = await database
+          const household = database
             .collection("households")
-            .doc(householdId)
-            .collection("members")
-            .get();
+            .doc(householdId);
+          const [members, memberships] = await Promise.all([
+            household.collection("members").get(),
+            household.collection("memberships").get(),
+          ]);
+          const membershipVersions = new Map(
+            memberships.docs.map((snapshot) => {
+              const data = snapshot.data();
+              return [data.memberId, data.aggregateVersion] as const;
+            }),
+          );
           return {
             members: members.docs.flatMap((snapshot) => {
               const data = snapshot.data();
               if (typeof data.displayName !== "string") return [];
               const lifecycleState =
                 data.lifecycleState === "removed" ? "removed" : "active";
+              const membershipVersion = membershipVersions.get(snapshot.id);
               return [
                 {
                   memberId: snapshot.id,
                   displayName: data.displayName,
                   lifecycleState,
+                  // 기존 wire 이름을 유지합니다. 제거·복구의 optimistic token은
+                  // 이름 변경으로 증가하는 Member가 아니라 Membership 버전입니다.
                   aggregateVersion:
-                    typeof data.aggregateVersion === "number" &&
-                    Number.isSafeInteger(data.aggregateVersion)
-                      ? data.aggregateVersion
+                    typeof membershipVersion === "number" &&
+                    Number.isSafeInteger(membershipVersion)
+                      ? membershipVersion
                       : 1,
                   linkedPrincipal: typeof data.linkedPrincipalUid === "string",
                 },

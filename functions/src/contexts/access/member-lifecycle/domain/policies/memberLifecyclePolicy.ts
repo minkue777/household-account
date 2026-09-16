@@ -42,6 +42,7 @@ export function memberLifecycleEvent(input: {
   operation: "remove" | "restore";
   householdId: string;
   memberId: string;
+  /** 접근 상태 변경 순서를 나타내는 Membership 버전입니다. Member 이름 버전과 독립적입니다. */
   membershipVersion: number;
 }): HouseholdMemberLifecycleEvent {
   return {

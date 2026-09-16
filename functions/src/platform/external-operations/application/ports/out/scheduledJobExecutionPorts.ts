@@ -2,6 +2,7 @@ import type {
   JobExecutionResult,
   JobRun,
   RunScheduledJobCommand,
+  StoredJobTargetResult,
 } from "../in/scheduledJobExecutionInputPort";
 
 export interface ScheduledTargetOutcome {
@@ -22,7 +23,12 @@ export interface ScheduledTargetPage {
 
 export interface ScheduledFeaturePagePort {
   /** A replay must check terminal targets before any external call or mutation. */
-  nextPage(checkpoint?: string, skipTarget?: (targetId: string) => boolean): Promise<ScheduledTargetPage | undefined>;
+  nextPage(
+    checkpoint?: string,
+    skipTarget?: (targetId: string) => boolean,
+    /** Saved outcomes of this occurrence, including earlier feature phases. No extra read is needed. */
+    targetResult?: (targetId: string) => StoredJobTargetResult | undefined,
+  ): Promise<ScheduledTargetPage | undefined>;
 }
 
 export interface ScheduledJobRunRepositoryPort {

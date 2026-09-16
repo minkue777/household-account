@@ -15,7 +15,7 @@ import {
   nextYearMonth,
   parseYearMonth,
 } from "../../../contexts/portfolio/automation/domain/value-objects/yearMonth";
-import { normalizeLoanRepaymentMethod } from "../../../contexts/portfolio/core/public";
+import { normalizeLoanRepaymentMethod } from "../../../contexts/portfolio/automation/public";
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
 
 const PLAN_COLLECTION = "assetAutomationPlans";

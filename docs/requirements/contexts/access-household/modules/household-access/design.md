@@ -227,6 +227,8 @@ Value Object는 `HouseholdName`, `MemberDisplayName`, `AssetOwnerProfileName`, `
 5. 카드·자산·거래·FCM Repository를 호출하지 않습니다.
 6. 동시 변경은 하나만 성공하고 나머지는 `Conflict(currentVersion)`입니다.
 
+실제 `RenameSelf` 구현 소유자는 `member-rename/application/memberRenameApplication.ts`와 `FirebaseMemberRenameStore`입니다. AssetOwnerProfile Application은 dependent 명의자 변경만 처리하며 별도 자기 이름 변경 API를 두지 않습니다.
+
 ### 5.5 자산 명의자 프로필 관리
 
 1. Member 생성·초대 가입·legacy 연결 UoW는 해당 memberId에 연결된 `member` 프로필이 없으면 함께 생성하고, 이미 있으면 같은 profileId를 재사용합니다.
@@ -248,6 +250,8 @@ Value Object는 `HouseholdName`, `MemberDisplayName`, `AssetOwnerProfileName`, `
 6. 복구는 Notifications endpoint를 다시 만들지 않습니다. 사용자가 로그인한 각 모바일 설치가 기존 등록 절차로 새 endpoint를 등록합니다.
 7. 같은 제거·복구 command 재호출은 receipt 결과를 재생하고 제거와 다른 가구 가입·복구 경합은 UID claim precondition으로 하나만 성공합니다.
 8. 마지막 활성 Member가 제거되면 Household는 자동 삭제하지 않고 `active` 상태의 빈 가구로 보존합니다. 일반 접근 주체는 없으며 전체 관리자만 복구·논리 삭제·영구 purge 절차를 수행할 수 있습니다.
+
+관리자 멤버 목록의 기존 wire 필드 `aggregateVersion`은 제거·복구의 `expectedMembershipVersion`으로 사용하는 **Membership 버전**입니다. Member 이름 버전과 구분하며 각 aggregate는 제거·복구 때 자신의 버전을 1씩 증가시킵니다. `HouseholdMemberRemoved/Restored.v1`의 `membershipVersion`은 접근 상태 순서이고, 로그인 projection은 `aggregateVersion`에 Membership 버전, `memberAggregateVersion`에 Member 버전을 별도로 보존합니다. 자기 이름 변경은 Member 버전만 비교합니다.
 
 ### 5.7 RequestHouseholdDeletion
 

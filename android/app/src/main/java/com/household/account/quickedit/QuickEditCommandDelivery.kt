@@ -58,12 +58,14 @@ object QuickEditCommandDelivery {
      */
     suspend fun enqueueAndDispatch(
         context: Context,
+        expectedScope: CaptureSessionScope,
         transactionId: String,
         envelope: HouseholdCommandEnvelopeV1
     ): QuickEditCommandEnqueueResult {
         val applicationContext = context.applicationContext
         val enqueueResult = deliveryLifecycle.admit(
             currentScope = { currentScope(applicationContext) },
+            expectedScope = expectedScope,
             transactionId = transactionId,
             envelope = envelope,
             persist = { scope, storedTransactionId, storedEnvelope ->
@@ -220,6 +222,9 @@ object QuickEditCommandDelivery {
     }
 
     private fun currentScope(context: Context) = HouseholdPreferences.currentScope(context)
+
+    fun isCurrentSession(context: Context, expectedScope: CaptureSessionScope): Boolean =
+        QuickEditCommandDeliveryLifecycle.isCurrentSession(expectedScope, currentScope(context))
 
     private const val WORK_NAME = "quick-edit-command-delivery.v1"
 }

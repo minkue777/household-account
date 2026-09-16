@@ -331,48 +331,5 @@ describe("AssetOwnerProfile household/dependent identity 공개 계약", () => {
     ).toEqual(memberProfile);
   });
 
-  it("[T-HH-006][HH-009/HH-011] 자기 이름 변경은 같은 member profile만 갱신하고 안정 ID를 유지한다", async () => {
-    const subject = createSubject(
-      baseFixture({
-        ownerReferences: [
-          { referenceId: "asset-existing", profileId: memberProfileId },
-          { referenceId: "snapshot-existing", profileId: memberProfileId },
-        ],
-      }),
-    );
-    const before = await subject.snapshot();
 
-    const result = await subject.renameSelf(memberActor, {
-      displayName: "민규(변경)",
-      expectedMemberVersion: 1,
-      idempotencyKey: "rename-self-and-profile",
-    });
-
-    expect(result).toEqual({
-      kind: "success",
-      memberId,
-      displayName: "민규(변경)",
-    });
-    const after = await subject.snapshot();
-    expect(after.ownerReferences).toEqual(before.ownerReferences);
-    expect(
-      after.profiles.filter(
-        (profile) => profile.linkedMemberId === memberId,
-      ),
-    ).toEqual([
-      expect.objectContaining({
-        profileId: memberProfileId,
-        displayName: "민규(변경)",
-        lifecycleState: "active",
-      }),
-    ]);
-    expect(after.members).toEqual([
-      {
-        principalUid: memberActor.principalUid,
-        memberId,
-        displayName: "민규(변경)",
-        aggregateVersion: 2,
-      },
-    ]);
-  });
 });

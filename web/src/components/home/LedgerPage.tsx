@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useMemo, useState } from 'react';
+import { useLedgerYearSummary } from '@/features/ledger/useLedgerYearSummary';
+import { useLedgerHomeReadiness } from '@/features/ledger/useLedgerHomeReadiness';
+import { useLedgerEditLink } from '@/features/ledger/useLedgerEditLink';
 import Calendar from '@/components/Calendar';
 import CategorySummary from '@/components/CategorySummary';
 import CategoryDetailModal from '@/components/CategoryDetailModal';
@@ -20,26 +22,14 @@ import { orderLedgerTransactions } from '@/features/ledger/domain/ledgerTransact
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useLedgerReadModel } from '@/contexts/LedgerReadModelContext';
-import {
-  markWebFirstHomeCompletePaint,
-  markWebFirstLedgerPaint,
-  markWebLedgerCacheResult,
-  scheduleAfterWebFirstHomeCompletePaint,
-} from '@/platform/performance/webStartupPerformance';
 interface LedgerPageProps {
   transactionType: TransactionType;
 }
 
-const ADJACENT_PREFETCH_FALLBACK_MS = 15_000;
-
 export default function LedgerPage({ transactionType }: LedgerPageProps) {
   const isIncome = transactionType === 'income';
   const transactionLabel = isIncome ? '수입' : '지출';
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
   const {
-    household,
     householdKey,
     isSessionVerified = true,
   } = useHousehold();
@@ -52,13 +42,8 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   const [currentYear, setCurrentYear] = useState(() => getSeoulCalendarParts().year);
   const [currentMonth, setCurrentMonth] = useState(() => getSeoulCalendarParts().month);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [yearlyExpenses, setYearlyExpenses] = useState<Expense[]>([]);
-  const [yearlyTotal, setYearlyTotal] = useState<number | null>(null);
-  const [yearlyError, setYearlyError] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
-  const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
-  const [editLinkError, setEditLinkError] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [showLocalCurrencyModal, setShowLocalCurrencyModal] = useState(false);
   const [localCurrencyExpenses, setLocalCurrencyExpenses] = useState<Expense[]>([]);
@@ -86,195 +71,26 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     homeSummaryConfig.leftCard === 'yearlySpent' ||
     homeSummaryConfig.rightCard === 'yearlySpent';
 
-  useEffect(() => {
-    if (
-      !serverSnapshotReady
-      || categoriesLoading
-      || !localCurrencySettled
-    ) return undefined;
-
-    let cancelPrefetch: (() => void) | undefined;
-    const cancelScheduled = scheduleAfterWebFirstHomeCompletePaint(() => {
-      cancelPrefetch = prefetchAdjacentPeriods();
-    }, { fallbackMs: ADJACENT_PREFETCH_FALLBACK_MS });
-    return () => {
-      cancelScheduled();
-      cancelPrefetch?.();
-    };
-  }, [
-    categoriesLoading,
-    localCurrencySettled,
-    prefetchAdjacentPeriods,
-    readRefreshKey,
-    serverSnapshotReady,
-  ]);
-
-  useLayoutEffect(() => {
-    markWebLedgerCacheResult(false);
-  }, [currentYear, currentMonth, transactionType]);
-
-  useLayoutEffect(() => {
-    setYearlyExpenses([]);
-    setYearlyTotal(null);
-    setYearlyError(false);
-  }, [currentYear, transactionType, householdKey]);
-
-  useEffect(() => {
-    if (!serverSnapshotReady) return undefined;
-
-    let firstFrameId: number | undefined;
-    let paintFrameId: number | undefined;
-    let fallbackId: number | undefined;
-    if (typeof window.requestAnimationFrame === 'function') {
-      firstFrameId = window.requestAnimationFrame(() => {
-        paintFrameId = window.requestAnimationFrame(markWebFirstLedgerPaint);
-      });
-    } else {
-      fallbackId = window.setTimeout(markWebFirstLedgerPaint, 0);
-    }
-
-    return () => {
-      if (firstFrameId !== undefined) window.cancelAnimationFrame(firstFrameId);
-      if (paintFrameId !== undefined) window.cancelAnimationFrame(paintFrameId);
-      if (fallbackId !== undefined) window.clearTimeout(fallbackId);
-    };
-  }, [serverSnapshotReady]);
-
-  useEffect(() => {
-    const yearlySummaryReady = !needsYearlyTotal || yearlyTotal !== null;
-    if (
-      !serverSnapshotReady
-      || !categoriesServerSnapshotReady
-      || !localCurrencyReady
-      || !yearlySummaryReady
-    ) {
-      return undefined;
-    }
-
-    let firstFrameId: number | undefined;
-    let paintFrameId: number | undefined;
-    let fallbackId: number | undefined;
-    if (typeof window.requestAnimationFrame === 'function') {
-      firstFrameId = window.requestAnimationFrame(() => {
-        paintFrameId = window.requestAnimationFrame(markWebFirstHomeCompletePaint);
-      });
-    } else {
-      fallbackId = window.setTimeout(markWebFirstHomeCompletePaint, 0);
-    }
-
-    return () => {
-      if (firstFrameId !== undefined) window.cancelAnimationFrame(firstFrameId);
-      if (paintFrameId !== undefined) window.cancelAnimationFrame(paintFrameId);
-      if (fallbackId !== undefined) window.clearTimeout(fallbackId);
-    };
-  }, [
-    categoriesServerSnapshotReady,
-    localCurrencyReady,
-    needsYearlyTotal,
-    serverSnapshotReady,
-    yearlyTotal,
-  ]);
-
-  useEffect(() => {
-    if (!needsYearlyTotal) {
-      setYearlyTotal(null);
-      setYearlyExpenses([]);
-      return undefined;
-    }
-    if (!isSessionVerified) {
-      return undefined;
-    }
-
-    // 첫 화면에 필요한 월간 원장을 먼저 표시한 뒤 연간 합계를 구독합니다.
-    // 두 범위 조회를 동시에 시작해 Android WebView의 초기 네트워크를 경합시키지 않습니다.
-    if (!serverSnapshotReady) {
-      return undefined;
-    }
-
-    const startDate = `${currentYear}-01-01`;
-    const endDate = `${currentYear}-12-31`;
-
-    let cancelled = false;
-    let unsubscribe: (() => void) | undefined;
-    void import('@/lib/expenseService').then(({ subscribeToDateRangeExpenses }) => {
-      if (cancelled) return;
-      unsubscribe = subscribeToDateRangeExpenses(
-        startDate,
-        endDate,
-        (yearExpenses) => {
-          if (cancelled) return;
-          setYearlyError(false);
-          setYearlyExpenses(yearExpenses);
-          setYearlyTotal(yearExpenses.reduce((sum, expense) => sum + expense.amount, 0));
-        },
-        {
-          transactionType,
-          // 실패를 유효한 0원으로 축약하지 않습니다. 같은 연도의 마지막 성공값이
-          // 있으면 유지하고, 아직 성공값이 없으면 null 상태를 그대로 표시합니다.
-          onError: () => { if (!cancelled) setYearlyError(true); },
-        }
-      );
-    }).catch(() => { if (!cancelled) setYearlyError(true); });
-
-    return () => {
-      cancelled = true;
-      unsubscribe?.();
-    };
-  }, [
-    currentYear,
-    householdKey,
-    isSessionVerified,
-    needsYearlyTotal,
-    readRefreshKey,
-    serverSnapshotReady,
-    transactionType,
-  ]);
-
-  useEffect(() => {
-    const editId = searchParams.get('edit');
-    if (!editId) {
-      return;
-    }
-
-    setEditExpenseId(editId);
-    setEditLinkError('');
-    router.replace(pathname, { scroll: false });
-  }, [searchParams, router, pathname]);
-
-  useEffect(() => {
-    if (!editExpenseId || !serverSnapshotReady) {
-      return;
-    }
-
-    const expense = expenses.find((item) => item.id === editExpenseId);
-    if (expense) {
-      setSelectedDate(expense.date);
-      setAutoEditExpenseId(editExpenseId);
-      setEditExpenseId(null);
-      return;
-    }
-
-    let cancelled = false;
-    void import('@/lib/expenseService').then(({ getExpenseForEdit }) => getExpenseForEdit(editExpenseId))
-      .then((target) => {
-        if (cancelled) return;
-        if (!target || target.transactionType !== transactionType) {
-          setEditLinkError('지출을 찾을 수 없습니다.');
-        } else {
-          const [year, month] = target.date.split('-').map(Number);
-          setCurrentYear(year);
-          setCurrentMonth(month);
-          setSelectedDate(target.date);
-          setAutoEditExpenseId(target.id);
-        }
-        setEditExpenseId(null);
-      }).catch(() => {
-        if (cancelled) return;
-        setEditLinkError('지출을 불러오지 못했습니다. 다시 열어 주세요.');
-        setEditExpenseId(null);
-      });
-    return () => { cancelled = true; };
-  }, [editExpenseId, expenses, serverSnapshotReady, transactionType, householdKey]);
+  const { expenses: yearlyExpenses, total: yearlyTotal, error: yearlyError } = useLedgerYearSummary({
+    year: currentYear, transactionType, householdKey, enabled: needsYearlyTotal,
+    ready: isSessionVerified && serverSnapshotReady, readRefreshKey,
+  });
+  useLedgerHomeReadiness({
+    periodKey: `${transactionType}:${currentYear}:${currentMonth}`,
+    ledgerReady: serverSnapshotReady, categoriesLoading, categoriesReady: categoriesServerSnapshotReady,
+    currencySettled: localCurrencySettled, currencyReady: localCurrencyReady,
+    yearSummaryReady: !needsYearlyTotal || yearlyTotal !== null, readRefreshKey, prefetchAdjacentPeriods,
+  });
+  const openExpense = useCallback((expense: Expense) => {
+    const [year, month] = expense.date.split('-').map(Number);
+    setCurrentYear(year);
+    setCurrentMonth(month);
+    setSelectedDate(expense.date);
+    setAutoEditExpenseId(expense.id);
+  }, []);
+  const editLinkError = useLedgerEditLink({
+    expenses, ready: serverSnapshotReady, householdKey, transactionType, openExpense,
+  });
 
   const selectedDateExpenses = useMemo(() => {
     if (!selectedDate) return [];
@@ -537,9 +353,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
           onClose={() => setSelectedCategory(null)}
           onExpenseClick={(expense) => {
             setSelectedCategory(null);
-            setSelectedDate(expense.date);
-            // 이미 메모리에 있는 항목은 URL/deep-link 해석 effect를 다시 거치지 않습니다.
-            setAutoEditExpenseId(expense.id);
+            openExpense(expense);
           }}
           transactionType={transactionType}
         />
@@ -552,8 +366,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
           onClose={() => setShowLocalCurrencyModal(false)}
           onExpenseClick={(expense) => {
             setShowLocalCurrencyModal(false);
-            setSelectedDate(expense.date);
-            setAutoEditExpenseId(expense.id);
+            openExpense(expense);
           }}
         />
       )}

@@ -97,6 +97,37 @@ describe('ledger expense service optimistic canonical contract', () => {
     ledgerOptimisticProjection.reset();
   });
 
+  test.each([
+    ['update', true], ['update', false],
+    ['category', true], ['category', false],
+  ] as const)('%s의 늦은 응답(%s)은 reset 이후 새 projection을 덮지 않는다', async (kind, succeeds) => {
+    let resolve!: (value: LedgerTransactionCommandResult) => void;
+    let reject!: (error: Error) => void;
+    const response = new Promise<LedgerTransactionCommandResult>((yes, no) => { resolve = yes; reject = no; });
+    const oldSubscription = ledgerOptimisticProjection.subscribe(() => {}, () => true, 'house-1');
+    oldSubscription.publish([expense()]);
+    mockedCommands.update.mockReturnValue(response);
+    mockedCommands.changeCategory.mockReturnValue(response);
+    const operation = kind === 'update'
+      ? updateExpense('expense-1', { memo: 'old request' }, 3)
+      : updateExpenseCategory('expense-1', 'food', 3);
+
+    ledgerOptimisticProjection.reset();
+    const rendered: Expense[][] = [];
+    const newSubscription = ledgerOptimisticProjection.subscribe(items => rendered.push(items), () => true, 'house-1');
+    const latest = expense({ aggregateVersion: 10, memo: 'new session', category: 'living' });
+    newSubscription.publish([latest]);
+    if (succeeds) {
+      resolve(commandResult());
+      await operation;
+    } else {
+      reject(new Error('old request failed'));
+      await expect(operation).rejects.toThrow('old request failed');
+    }
+    expect(rendered.at(-1)).toEqual([latest]);
+    newSubscription.dispose();
+  });
+
   test('update response preserves UI provenance and split/merge metadata absent from the command result', async () => {
     const rendered: Expense[][] = [];
     const subscription = ledgerOptimisticProjection.subscribe(

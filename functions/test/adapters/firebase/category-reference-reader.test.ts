@@ -13,6 +13,8 @@ describe("Category가 소유하는 신규 참조 판정", () => {
     memory.seed("categories/other-house", { householdId: "other", key: "other" });
     memory.seed("households/house/categories/archived", { state: "archived" });
     memory.seed("households/house/categories/lifecycle-archive", { state: "", lifecycleState: "archived" });
+    memory.seed("households/house/categories/legacy-lifecycle", { lifecycle: "archived" });
+    memory.seed("households/house/categories/deleted", { state: "deleted" });
     memory.seed("households/house/categories/current", { state: "active" });
     expect([...await readUsableCategoryIds(memory as unknown as Firestore, "house")].sort())
       .toEqual(["current", "living"]);

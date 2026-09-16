@@ -25,11 +25,11 @@ import com.household.account.ledger.HouseholdCommandEnvelopeV1
 import com.household.account.ledger.HouseholdCommandKind
 import com.household.account.paymentcapture.AndroidCaptureLatencyTelemetry
 import com.household.account.paymentcapture.CaptureLatencyStage
+import com.household.account.paymentcapture.CaptureSessionScope
 import com.household.account.quickedit.QuickEditCommandDelivery
 import com.household.account.quickedit.QuickEditCommandEnqueueResult
 import com.household.account.quickedit.QuickEditCoordinator
 import com.household.account.quickedit.buildQuickEditUpdatePatch
-import com.household.account.util.HouseholdPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -55,6 +55,9 @@ class QuickEditActivity : AppCompatActivity() {
         const val EXTRA_MEMO = "memo"
         const val EXTRA_VERSION = "aggregate_version"
         const val EXTRA_CAPTURE_OBSERVATION_ID = "capture_observation_id"
+        const val EXTRA_HOUSEHOLD_ID = "quick_edit_household_id"
+        const val EXTRA_MEMBER_ID = "quick_edit_member_id"
+        const val EXTRA_SESSION_GENERATION = "quick_edit_session_generation"
     }
 
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -62,6 +65,7 @@ class QuickEditActivity : AppCompatActivity() {
     private var commandSubmissionInProgress = false
     private var captureObservationId: String? = null
     private var quickEditShownRecorded = false
+    private lateinit var editingScope: CaptureSessionScope
 
     // 원본 데이터
     private var expenseId: String = ""
@@ -87,6 +91,17 @@ class QuickEditActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Activity 재생성도 처음 표시한 거래의 scope를 유지하며 현재 세션으로 바꾸지 않습니다.
+        editingScope = CaptureSessionScope(
+            intent.getStringExtra(EXTRA_HOUSEHOLD_ID).orEmpty(),
+            intent.getStringExtra(EXTRA_MEMBER_ID).orEmpty(),
+            intent.getLongExtra(EXTRA_SESSION_GENERATION, 0L)
+        )
+        if (!QuickEditCommandDelivery.isCurrentSession(this, editingScope)) {
+            finish()
+            return
+        }
 
         setupWindowStyle()
         setFinishOnTouchOutside(false)  // 외부 터치해도 닫히지 않음
@@ -124,6 +139,10 @@ class QuickEditActivity : AppCompatActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && !QuickEditCommandDelivery.isCurrentSession(this, editingScope)) {
+            finish()
+            return
+        }
         if (!hasFocus || quickEditShownRecorded) return
         val observationId = captureObservationId ?: return
         quickEditShownRecorded = true
@@ -183,12 +202,20 @@ class QuickEditActivity : AppCompatActivity() {
     private fun loadCategories() {
         activityScope.launch {
             try {
-                val householdId = HouseholdPreferences.getHouseholdKey(this@QuickEditActivity)
+                val householdId = editingScope.householdId
                 categories = withContext(Dispatchers.IO) {
                     categoryRepository.getActiveCategories(householdId)
                 }
+                if (!QuickEditCommandDelivery.isCurrentSession(this@QuickEditActivity, editingScope)) {
+                    finish()
+                    return@launch
+                }
                 setupCategoryButtons()
             } catch (e: Exception) {
+                if (!QuickEditCommandDelivery.isCurrentSession(this@QuickEditActivity, editingScope)) {
+                    finish()
+                    return@launch
+                }
                 // 기본 카테고리 사용
                 categories = CategoryRepository.DEFAULT_CATEGORIES
                 setupCategoryButtons()
@@ -592,14 +619,10 @@ class QuickEditActivity : AppCompatActivity() {
         commandSubmissionInProgress = true
 
         activityScope.launch {
-            val householdId = HouseholdPreferences.getHouseholdKey(this@QuickEditActivity)
-            if (householdId.isBlank()) {
+            val householdId = editingScope.householdId
+            if (!QuickEditCommandDelivery.isCurrentSession(this@QuickEditActivity, editingScope)) {
                 commandSubmissionInProgress = false
-                Toast.makeText(
-                    this@QuickEditActivity,
-                    "가계부 연결을 확인해 주세요",
-                    Toast.LENGTH_SHORT
-                ).show()
+                finish()
                 return@launch
             }
 
@@ -615,9 +638,10 @@ class QuickEditActivity : AppCompatActivity() {
                 operationId = operationId
             )
 
-            when (
+            when (val result =
                 QuickEditCommandDelivery.enqueueAndDispatch(
                     context = applicationContext,
+                    expectedScope = editingScope,
                     transactionId = expenseId,
                     envelope = envelope
                 )
@@ -628,6 +652,10 @@ class QuickEditActivity : AppCompatActivity() {
                 }
                 is QuickEditCommandEnqueueResult.Rejected -> {
                     commandSubmissionInProgress = false
+                    if (result.code == "QUICK_EDIT_SESSION_CHANGED") {
+                        finish()
+                        return@launch
+                    }
                     Toast.makeText(
                         this@QuickEditActivity,
                         "빠른 편집을 안전하게 저장하지 못했습니다. 다시 시도해 주세요",
@@ -640,7 +668,7 @@ class QuickEditActivity : AppCompatActivity() {
 
     private suspend fun completeCurrentQuickEdit() {
         val completedTransactionId = expenseId
-        QuickEditCoordinator.completeCurrent(applicationContext, completedTransactionId)
+        QuickEditCoordinator.completeCurrent(applicationContext, editingScope, completedTransactionId)
         finish()
         QuickEditCoordinator.presentNextAsync(applicationContext)
     }

@@ -94,6 +94,59 @@ async function createStockAsset(
 
 describe("Firebase portfolio runtime store", () => {
   afterEach(() => vi.restoreAllMocks());
+  it.each(["active", "needs-attention", "suspended", "recovering-before-stop"])("metadata 편집은 %s 자동화 계획과 보유종목을 읽거나 쓰지 않는다", async status => {
+    const memory = new InMemoryFirestore();
+    const runtime = application(memory);
+    const created = await runtime.createAsset({ metadata: command(1, "portfolio.create-asset.v1"), asset: { name: "적금", type: "savings", subType: "installment", ownerRef: { kind: "household" }, currency: "KRW", currentBalance: 100000, order: 0, memo: "", recurringContributionAmount: 10000, recurringContributionDay: 10 } });
+    if (created.kind !== "success") throw new Error(created.code);
+    const assetId = String(created.value.assetId);
+    const planPath = `households/house-1/assetAutomationPlans/${assetId}_savings-contribution`;
+    memory.seed(planPath, { ...memory.document(planPath), status, attentionCode: "REQUIRES_REVIEW", stopEffectiveAt: "2026-07-20T00:00:00Z" });
+    const before = memory.document(planPath);
+    memory.clearTransactionReads();
+    const writes = vi.spyOn(memory, "write");
+    const request = { metadata: command(2, "portfolio.update-asset.v1"), assetId, expectedVersion: 1, changes: { name: "이름 변경", memo: "설명", icon: "bank", currentBalance: 200000 } };
+    await expect(runtime.updateAsset(request)).resolves.toMatchObject({ kind: "success" });
+    expect(memory.transactionReads()).toHaveLength(4); // receipt, two asset documents, owner profiles
+    expect(memory.transactionReads().some(({ path }) => /positions|holdings|assetAutomation/.test(path))).toBe(false);
+    expect(writes.mock.calls.some(([path]) => /positions|holdings|assetAutomation/.test(path))).toBe(false);
+    expect(memory.document(planPath)).toEqual(before);
+    expect(memory.document(`households/house-1/assets/${assetId}`)).toMatchObject({ name: "이름 변경", currentBalance: 200000, aggregateVersion: 2 });
+    await runtime.updateAsset(request);
+    expect(memory.document(planPath)).toEqual(before);
+    expect(memory.document(`households/house-1/assets/${assetId}`)?.aggregateVersion).toBe(2);
+  });
+
+  it.each(["needs-attention", "suspended", "recovering-before-stop"])("동일한 자동화 설정 patch는 %s 상태와 revision을 보존한다", async status => {
+    const memory = new InMemoryFirestore();
+    const runtime = application(memory);
+    const created = await runtime.createAsset({ metadata: command(1, "portfolio.create-asset.v1"), asset: { name: "적금", type: "savings", subType: "installment", ownerRef: { kind: "household" }, currency: "KRW", currentBalance: 100000, order: 0, memo: "", recurringContributionAmount: 10000, recurringContributionDay: 10 } });
+    if (created.kind !== "success") throw new Error(created.code);
+    const assetId = String(created.value.assetId);
+    const path = `households/house-1/assetAutomationPlans/${assetId}_savings-contribution`;
+    memory.seed(path, { ...memory.document(path), status });
+    const before = memory.document(path);
+    const writes = vi.spyOn(memory, "write");
+    await expect(runtime.updateAsset({ metadata: command(2, "portfolio.update-asset.v1"), assetId, expectedVersion: 1, changes: { recurringContributionAmount: 10000, recurringContributionDay: 10 } })).resolves.toMatchObject({ kind: "success" });
+    expect(memory.document(path)).toEqual(before);
+    expect(writes.mock.calls.some(([key]) => key.includes("assetAutomation"))).toBe(false);
+  });
+
+  it("실제 설정 수정은 새 revision을 만들되 최초 적용월과 needs-attention의 overdue를 바꾸지 않는다", async () => {
+    const memory = new InMemoryFirestore();
+    const runtime = application(memory);
+    const created = await runtime.createAsset({ metadata: command(1, "portfolio.create-asset.v1"), asset: { name: "적금", type: "savings", subType: "installment", ownerRef: { kind: "household" }, currency: "KRW", currentBalance: 100000, order: 0, memo: "", recurringContributionAmount: 10000, recurringContributionDay: 10 } });
+    if (created.kind !== "success") throw new Error(created.code);
+    const assetId = String(created.value.assetId);
+    const path = `households/house-1/assetAutomationPlans/${assetId}_savings-contribution`;
+    memory.seed(path, { ...memory.document(path), status: "needs-attention", nextDueDate: "2026-08-10" });
+    const before = memory.document(path)!;
+    await expect(runtime.updateAsset({ metadata: { ...command(2, "portfolio.update-asset.v1"), occurredAt: "2026-09-17T00:00:00Z" }, assetId, expectedVersion: 1, changes: { recurringContributionAmount: 20000, recurringContributionDay: 25 } })).resolves.toMatchObject({ kind: "success" });
+    expect(memory.document(path)).toMatchObject({ status: "active", amountInWon: 20000, configuredDay: 25, currentRevision: 2, nextDueDate: "2026-08-10", firstActivatedOn: before.firstActivatedOn, firstApplicableMonth: before.firstApplicableMonth, activationMonthDisposition: before.activationMonthDisposition });
+    expect(memory.document(`households/house-1/assetAutomationPlanRevisions/${assetId}_savings-contribution_1`)).toMatchObject({ amountInWon: 10000, configuredDay: 10 });
+    expect(memory.document(`households/house-1/assetAutomationPlanRevisions/${assetId}_savings-contribution_2`)).toMatchObject({ amountInWon: 20000, configuredDay: 25 });
+  });
+
   it("rejects the whole valuation intent if an Asset changes while quotes are fetched", async () => {
     const memory = new InMemoryFirestore();
     const assetId = await createStockAsset(memory);

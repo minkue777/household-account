@@ -44,6 +44,8 @@ describe("Notifications 실제 Outbox dispatch와 Firebase 전달 저장소", ()
 
   it.each(["expense", "income", "monthly", "recurring"])("[PUSH-004] 실제 %s 생성 Outbox는 creator/channel을 보존하고 정상 NoTarget으로 끝난다", async (mode) => {
     const subject = setup();
+    const endpoints = vi.spyOn(subject.store, "listEndpoints");
+    const memberships = vi.spyOn(subject.membership, "status");
     subject.memory.seed("categories/etc", { householdId: "house", key: "etc", isActive: true });
     if (mode === "recurring") {
       subject.memory.seed("households/house/recurringPlans/plan", {
@@ -89,7 +91,26 @@ describe("Notifications 실제 Outbox dispatch와 Firebase 전달 저장소", ()
     }
     expect(subject.memory.documentsInCollection("notificationDeliveries")).toEqual([]);
     expect(subject.send).not.toHaveBeenCalled();
+    expect(endpoints).not.toHaveBeenCalled();
+    expect(memberships).not.toHaveBeenCalled();
   });
+
+  it.each(["android-notification", "web-manual", "recurring", "system", "unknown-channel"])(
+    "%s 채널의 비전송 판정은 수신자 저장소 장애와 독립적이다",
+    async (originChannel) => {
+      const subject = setup();
+      const endpoints = vi.spyOn(subject.store, "listEndpoints").mockRejectedValue(new Error("endpoint unavailable"));
+      const memberships = vi.spyOn(subject.membership, "status").mockResolvedValue("unavailable");
+      const result = await subject.dispatcher.consume({ ...event(), payload: { ...event().payload, originChannel } });
+      expect(result).toMatchObject(originChannel === "unknown-channel"
+        ? { kind: "ContractFailure", code: "UNKNOWN_ORIGIN_CHANNEL" }
+        : { kind: "NoTarget" });
+      expect(endpoints).not.toHaveBeenCalled();
+      expect(memberships).not.toHaveBeenCalled();
+      expect(subject.send).not.toHaveBeenCalled();
+      expect(await subject.delivery.getInboxStatus(event().eventId)).toMatchObject({ status: "terminal" });
+    },
+  );
 
   it("[PUSH-013] legacy Inbox 소유를 durable page로 보완하고 근거가 없는 Inbox는 삭제 전에 실패한다", async () => {
     const subject = setup();

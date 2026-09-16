@@ -23,7 +23,8 @@ import {
   type LedgerTransactionCommandResult,
 } from '@/platform/functions-api/householdCommandContract';
 import { createHouseholdCommandId } from '@/platform/functions-api/householdCommandClient';
-import { normalizeStoredCategoryId } from '@/lib/categoryCompatibility';
+import { mapDocToExpense, mapExpenseReadData, mapCommandTransaction } from '@/features/ledger/application/ledgerExpenseMapping';
+export { mapDocToExpense, resolveExpenseCardDisplay } from '@/features/ledger/application/ledgerExpenseMapping';
 
 const COLLECTION_NAME = 'expenses';
 const DEFAULT_TRANSACTION_TYPE: TransactionType = 'expense';
@@ -45,13 +46,6 @@ interface ExactCardSearchKeyword {
 
 async function loadLedgerCommands() {
   return (await import('@/features/ledger/application/ledgerCommands')).ledgerCommands;
-}
-
-interface LedgerCardReadFields {
-  cardType?: unknown;
-  cardDisplay?: unknown;
-  cardLastFour?: unknown;
-  source?: unknown;
 }
 
 const CARD_LABEL_ALIAS_GROUPS = [
@@ -81,60 +75,11 @@ const CARD_TYPE_SEARCH_TERMS: Record<string, string[]> = {
 };
 
 const EXACT_CARD_KEYWORD_PATTERN = /^(.+?)\s*\(\s*([0-9*xX＊]{4})\s*\)$/;
-const LEGACY_CAPTURED_CARD_TYPES = new Set([
-  'captured',
-  'family',
-  'kb',
-  'sam',
-  'local_currency',
-  '지역화폐',
-  'bill',
-]);
-const LEGACY_CARD_TOKEN_SUFFIX_PATTERN = /[0-9*xX＊]{4}\)?$/;
-
-function isLegacyCardDisplayEvidence(value: string): boolean {
-  const normalized = value.replace(/\s+/g, '');
-  return (
-    normalized !== '' &&
-    normalized !== '수동' &&
-    normalized !== '자동등록' &&
-    normalized !== '정기지출' &&
-    LEGACY_CARD_TOKEN_SUFFIX_PATTERN.test(normalized)
-  );
-}
-
 /**
  * 현재 가구 키 가져오기
  */
 function getHouseholdId(): string {
   return requireClientSessionScope().householdId;
-}
-
-/** Canonical cardDisplay와 legacy cardLastFour를 Web의 기존 표시 필드로 변환합니다. */
-export function resolveExpenseCardDisplay(data: LedgerCardReadFields): string | undefined {
-  const cardType = typeof data.cardType === 'string' ? data.cardType.trim().toLowerCase() : '';
-  const source = typeof data.source === 'string' ? data.source.trim().toLowerCase() : '';
-  const canonicalDisplay = typeof data.cardDisplay === 'string' ? data.cardDisplay.trim() : '';
-  const legacyDisplay = typeof data.cardLastFour === 'string' ? data.cardLastFour.trim() : '';
-  const display = canonicalDisplay || legacyDisplay;
-
-  // source가 원장의 실제 생성 경로입니다. 과거 정기지출 문서에
-  // cardType=manual이 남아 있어도 수동 입력으로 오인하지 않습니다.
-  if (source === 'recurring') return '정기지출';
-  if (cardType === 'manual') return '수동';
-  if (LEGACY_CAPTURED_CARD_TYPES.has(cardType)) return display || undefined;
-  if (cardType === 'main' && isLegacyCardDisplayEvidence(display)) {
-    return display;
-  }
-  if (source === 'manual') return '수동';
-  return display || undefined;
-}
-
-/**
- * Firestore 문서를 Expense 객체로 변환 (DRY 원칙)
- */
-export function mapDocToExpense(docSnap: QueryDocumentSnapshot<DocumentData>): Expense {
-  return mapExpenseReadData(docSnap.id, docSnap.data());
 }
 
 /** 알림 편집 링크는 현재 달 목록과 무관하게 자기 가구의 한 건을 권위 조회합니다. */
@@ -147,52 +92,6 @@ export async function getExpenseForEdit(id: string): Promise<Expense | null> {
   const data = snapshot.data();
   return data && data.householdId === scope.householdId && isVisibleLedgerReadDocument(data)
     ? mapExpenseReadData(snapshot.id, data) : null;
-}
-
-function mapExpenseReadData(id: string, data: DocumentData): Expense {
-  const cardDisplay = resolveExpenseCardDisplay(data);
-  const localCurrencyType =
-    typeof data.localCurrencyType === 'string' && data.localCurrencyType.trim() !== ''
-      ? data.localCurrencyType.trim()
-      : undefined;
-  const splitGroup = typeof data.splitGroup === 'object' && data.splitGroup !== null
-    ? data.splitGroup as Record<string, unknown>
-    : undefined;
-  const splitOriginalId =
-    typeof data.splitOriginalId === 'string' && data.splitOriginalId !== ''
-      ? data.splitOriginalId
-      : typeof splitGroup?.originalId === 'string' && splitGroup.originalId !== ''
-        ? splitGroup.originalId
-        : undefined;
-  const mergeLeafIds = Array.isArray(data.mergeLeafIds)
-    ? data.mergeLeafIds.filter(
-        (value: unknown): value is string => typeof value === 'string' && value !== ''
-      )
-    : undefined;
-  return {
-    id,
-    aggregateVersion: Number.isInteger(data.aggregateVersion) && data.aggregateVersion > 0
-      ? data.aggregateVersion
-      : 1,
-    date: data.date,
-    time: data.time,
-    merchant: data.merchant,
-    amount: data.amount,
-    transactionType: (data.transactionType || DEFAULT_TRANSACTION_TYPE) as TransactionType,
-    category: normalizeStoredCategoryId(data.categoryId || data.category),
-    cardType: data.cardType?.toLowerCase() || (data.source === 'manual' ? 'manual' : 'main'),
-    cardLastFour: cardDisplay,
-    ...(typeof data.derivedFromTransactionId === 'string' ? { derivedFromTransactionId: data.derivedFromTransactionId } : {}),
-    ...(typeof data.cardEvidence === 'string' ? { cardEvidence: data.cardEvidence } : {}),
-    ...(localCurrencyType === undefined ? {} : { localCurrencyType }),
-    memo: data.memo,
-    mergedFrom: data.mergedFrom,
-    ...(mergeLeafIds === undefined ? {} : { mergeLeafIds }),
-    splitGroupId: data.splitGroupId,
-    ...(splitOriginalId === undefined ? {} : { splitOriginalId }),
-    splitIndex: data.splitIndex,
-    splitTotal: data.splitTotal,
-  };
 }
 
 /** Each listener owns its source; the first accepted server event may follow ignored cache events. */
@@ -223,27 +122,6 @@ function createExpenseSnapshotReader(): (snapshot: QuerySnapshot<DocumentData>) 
     }
     current = next;
     return Array.from(next.values());
-  };
-}
-
-function mapCommandTransaction(
-  transaction: LedgerTransactionCommandResult,
-  previous?: Expense
-): Expense {
-  return {
-    ...previous,
-    id: transaction.transactionId,
-    aggregateVersion: transaction.aggregateVersion,
-    date: transaction.accountingDate,
-    time: transaction.localTime,
-    merchant: transaction.merchant,
-    amount: transaction.amountInWon,
-    transactionType: transaction.transactionType,
-    category: normalizeStoredCategoryId(transaction.categoryId),
-    cardType: previous?.cardType ?? transaction.cardType,
-    cardLastFour: previous?.cardLastFour ?? transaction.cardDisplay,
-    localCurrencyType: previous?.localCurrencyType ?? transaction.localCurrencyType,
-    memo: transaction.memo,
   };
 }
 
@@ -470,12 +348,25 @@ export async function updateExpense(
   expectedVersion: number,
   rememberForNextTime = false
 ): Promise<void> {
+  return updateExpenseWithCommand(id, data, (commands, householdId) =>
+    commands.update(householdId, id, expectedVersion, data, rememberForNextTime));
+}
+
+/** 일반 편집과 카테고리 편집은 같은 낙관적 변경·확정·실패 복구 경계를 사용합니다. */
+async function updateExpenseWithCommand(
+  id: string,
+  patch: Partial<Expense>,
+  execute: (
+    commands: Awaited<ReturnType<typeof loadLedgerCommands>>,
+    householdId: string
+  ) => Promise<LedgerTransactionCommandResult>
+): Promise<void> {
   const householdId = getHouseholdId();
   const current = ledgerOptimisticProjection.current(id, householdId);
-  const mutationId = ledgerOptimisticProjection.beginUpdate(id, data, householdId);
+  const mutationId = ledgerOptimisticProjection.beginUpdate(id, patch, householdId);
   try {
     const ledgerCommands = await loadLedgerCommands();
-    const updated = await ledgerCommands.update(householdId, id, expectedVersion, data, rememberForNextTime);
+    const updated = await execute(ledgerCommands, householdId);
     ledgerOptimisticProjection.commitUpdate(mutationId, mapCommandTransaction(updated, current));
   } catch (error) {
     ledgerOptimisticProjection.rollback(mutationId);
@@ -599,22 +490,8 @@ export async function updateExpenseCategory(
   category: string,
   expectedVersion: number
 ): Promise<void> {
-  const householdId = getHouseholdId();
-  const current = ledgerOptimisticProjection.current(id, householdId);
-  const mutationId = ledgerOptimisticProjection.beginUpdate(id, { category }, householdId);
-  try {
-    const ledgerCommands = await loadLedgerCommands();
-    const updated = await ledgerCommands.changeCategory(
-      householdId,
-      id,
-      category,
-      expectedVersion
-    );
-    ledgerOptimisticProjection.commitUpdate(mutationId, mapCommandTransaction(updated, current));
-  } catch (error) {
-    ledgerOptimisticProjection.rollback(mutationId);
-    throw error;
-  }
+  return updateExpenseWithCommand(id, { category }, (commands, householdId) =>
+    commands.changeCategory(householdId, id, category, expectedVersion));
 }
 
 /**

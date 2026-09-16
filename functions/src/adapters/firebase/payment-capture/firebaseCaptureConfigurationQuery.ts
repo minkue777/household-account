@@ -17,6 +17,7 @@ import {
   encodeCaptureConfigurationProjection,
 } from "./firebaseCaptureConfigurationProjection";
 import { readLegacyMerchantRule } from "../../../contexts/payment-capture/configuration/adapters/persistence/merchantRuleLegacyAdapter";
+import { mergeActiveCategoryReferences } from "../categories/categoryReadMapping";
 
 class CaptureConfigurationContractError extends Error {}
 
@@ -251,27 +252,10 @@ export class FirebaseCaptureConfigurationQuery
             }),
           );
 
-          const activeCategoryIds = new Set<string>();
-          for (const document of [
-            ...legacyCategories.docs,
-            ...canonicalCategories.docs,
-          ]) {
-            const data = document.data();
-            if (
-              data.state === "archived" ||
-              data.state === "deleted" ||
-              data.lifecycleState === "archived" ||
-              data.lifecycleState === "deleted" ||
-              data.lifecycle === "archived" ||
-              data.lifecycle === "deleted" ||
-              data.isActive === false
-            ) {
-              continue;
-            }
-            activeCategoryIds.add(document.id);
-            const id = text(data, "categoryId", "key");
-            if (id !== undefined) activeCategoryIds.add(id);
-          }
+          const activeCategoryIds = new Set(mergeActiveCategoryReferences({
+            legacy: legacyCategories.docs,
+            canonical: canonicalCategories.docs,
+          }).flatMap(({ categoryId, documentIds }) => [categoryId, ...documentIds]));
 
           const defaultCategoryId =
             text(

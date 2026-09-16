@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createScheduledJobExecutionApplication } from '../../../src/platform/external-operations/application/scheduledJobExecutionApplication';
 import { FirebaseScheduledJobExecutionRepository } from '../../../src/adapters/firebase/operations/firebaseScheduledJobStores';
 import { InMemoryFirestore } from '../../support/in-memory-firestore';
+import type { ScheduledTargetPage } from "../../../src/platform/external-operations/application/ports/out/scheduledJobExecutionPorts";
 
 import type { AssetSnapshotProjectionInputPort } from "../../../src/contexts/portfolio/core/application/ports/in/assetSnapshotProjectionInputPort";
 import type { PortfolioCommandMetadata } from "../../../src/contexts/portfolio/core/application/ports/out/portfolioRuntimeStorePort";
@@ -31,6 +32,45 @@ function householdReader(): AssetValuationHouseholdPageReader {
 }
 
 describe("asset-valuation-daily scheduled pages", () => {
+  it.each([2, undefined])("terminal refresh 실패를 저장한 occurrence를 재시작해도 snapshot을 만들지 않는다 (page limit %s)", async maxPages => {
+    const memory = new InMemoryFirestore();
+    const database = memory as unknown as firestore.Firestore;
+    const instant = "2026-09-17T00:00:00Z";
+    const repository = new FirebaseScheduledJobExecutionRepository(database, () => instant);
+    let refreshCalls = 0;
+    let snapshotCalls = 0;
+    const execute = (maxPagesPerExecution?: number) => createScheduledJobExecutionApplication({
+      repository,
+      maxPagesPerExecution,
+      pages: createAssetValuationScheduledPages({
+        database, executionKey: "terminal-failure", scheduledFor: instant, asOfDate: "2026-09-17",
+      }, {
+        households: { next: async after => after === undefined ? { householdId: "a", active: true } : undefined },
+        refresh: { refreshMarketValues: async () => {
+          refreshCalls += 1;
+          return { kind: "error", code: "ASSET_NOT_ACTIVE", retryable: false };
+        } },
+        snapshots: { project: async () => {
+          snapshotCalls += 1;
+          throw new Error("snapshot must not run after a failed refresh");
+        } },
+      }),
+      observations: { record: () => undefined },
+      identity: { runId: () => "terminal-failure", leaseToken: (_id, attempt) => `lease-${attempt}`, hash: value => value },
+      clock: { now: () => instant },
+      topLevelFailure: { failure: () => undefined },
+    }).run({
+      jobName: "daily", executionKey: "terminal-failure", workerId: "worker",
+      scheduledFor: instant, deadlineAt: "2026-09-17T00:04:00Z",
+    });
+
+    await execute(maxPages);
+    expect(snapshotCalls).toBe(0);
+    await execute();
+    expect(refreshCalls).toBe(1);
+    expect(snapshotCalls).toBe(0);
+  });
+
   it('actual executor and Firebase repository resume failed valuation without repeating successful providers or snapshots', async () => {
     const memory = new InMemoryFirestore(); const database = memory as unknown as firestore.Firestore;
     const instant = '2026-09-06T00:00:00Z';
@@ -111,10 +151,13 @@ describe("asset-valuation-daily scheduled pages", () => {
       { households: householdReader(), refresh, snapshots },
     );
 
-    const results = [];
+    const results: ScheduledTargetPage[] = [];
     let checkpoint: string | undefined;
     for (let index = 0; index < 6; index += 1) {
-      const page = await pages.nextPage(checkpoint);
+      const page = await pages.nextPage(checkpoint, undefined, targetId => {
+        const target = results.flatMap(result => result.targets).find(target => target.targetId === targetId);
+        return target === undefined ? undefined : { targetIdHash: targetId, ...target.outcome };
+      });
       expect(page).toBeDefined();
       if (page === undefined) break;
       results.push(page);

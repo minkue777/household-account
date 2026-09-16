@@ -2,7 +2,6 @@ import {
   collection,
   query,
   where,
-  getDocs,
   onSnapshot,
   db,
 } from '@/platform/read-model/firestoreReadModel';
@@ -63,7 +62,8 @@ export async function deleteRecurringExpense(id: string, expectedVersion: number
  */
 export function subscribeToRecurringExpenses(
   householdId: string,
-  callback: (expenses: RecurringExpense[]) => void
+  callback: (expenses: RecurringExpense[]) => void,
+  onError?: (error: unknown) => void
 ): () => void {
   if (!householdId) {
     callback([]);
@@ -95,39 +95,10 @@ export function subscribeToRecurringExpenses(
       callback(sortRecurringExpenses(expenses));
     },
     (error) => {
-      callback([]);
+      // 조회 실패의 표시와 재시도는 화면이 소유하며, 마지막 정상 목록은 보존합니다.
+      onError?.(error);
     }
   );
 
   return unsubscribe;
-}
-
-/**
- * 정기 지출 목록 일회성 조회
- */
-export async function getRecurringExpenses(householdId: string): Promise<RecurringExpense[]> {
-  if (!householdId) return [];
-
-  const q = query(recurringRef, where('householdId', '==', householdId));
-  const snapshot = await getDocs(q);
-
-  const expenses = snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-          aggregateVersion: data.aggregateVersion ?? data.version ?? 1,
-      householdId: data.householdId,
-      merchant: data.merchant,
-      amount: data.amount,
-      category: data.category,
-      dayOfMonth: data.dayOfMonth,
-      memo: data.memo,
-      isActive: data.isActive ?? true,
-      lastRegisteredMonth: data.lastRegisteredMonth,
-      createdAt: data.createdAt?.toDate(),
-      updatedAt: data.updatedAt?.toDate(),
-    };
-  });
-
-  return sortRecurringExpenses(expenses);
 }

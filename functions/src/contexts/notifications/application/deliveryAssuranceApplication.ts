@@ -33,6 +33,7 @@ import {
   terminalRetentionDisposition,
 } from "../domain/policies/notificationRetentionPolicy";
 import type { NotificationTargetPlanner } from "./planNotificationTargets";
+import { decideTransactionCreatedRecipients } from "../domain/policies/transactionCreatedNotificationPolicy";
 
 type DeliveryClaim =
   | { kind: "claimed"; delivery: StoredAssuredDelivery; endpoint: MobileNotificationEndpoint }
@@ -192,12 +193,18 @@ class DefaultDeliveryAssuranceApplication implements DeliveryAssuranceInputPort 
       }
     }
 
-    const endpoints = await this.store.listEndpoints(event.householdId);
+    // Channel policy is independent of endpoint and membership storage. Most
+    // recorded transactions intentionally do not send a push; keep those events
+    // independent of recipient lookups, while retaining their terminal receipt.
+    const channelDecision = event.eventType === "HouseholdNotificationRequested.v1"
+      ? undefined : decideTransactionCreatedRecipients(event);
+    const needsRecipients = channelDecision === undefined || channelDecision.kind === "RecipientMembers";
+    const endpoints = needsRecipients ? await this.store.listEndpoints(event.householdId) : [];
     const creatorMemberId = event.eventType === "HouseholdNotificationRequested.v1"
       ? event.requesterMemberId : event.creatorMemberId;
     const memberIds = Array.from(
       new Set([
-        ...(creatorMemberId === undefined ? [] : [creatorMemberId]),
+        ...(!needsRecipients || creatorMemberId === undefined ? [] : [creatorMemberId]),
         ...endpoints
           .filter((endpoint) => endpoint.status === "active")
           .map((endpoint) => endpoint.memberId),
@@ -260,7 +267,8 @@ class DefaultDeliveryAssuranceApplication implements DeliveryAssuranceInputPort 
         status: endpoint.status,
       })),
     };
-    const decision = event.eventType === "HouseholdNotificationRequested.v1"
+    const decision = channelDecision !== undefined && channelDecision.kind !== "RecipientMembers"
+      ? channelDecision : event.eventType === "HouseholdNotificationRequested.v1"
       ? this.planner.forExplicitHouseholdRequest({
           ...facts,
           creatorMemberId: event.requesterMemberId,

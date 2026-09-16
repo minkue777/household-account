@@ -86,3 +86,8 @@ export type {
   AutomationRevisionView,
   AutomationRunResult,
 } from "./domain/model/assetAutomationExecution";
+
+export type { AssetAutomationConfiguration, AssetAutomationPlan, AssetAutomationSubject } from "./domain/model/assetAutomationConfiguration";
+export { ASSET_AUTOMATION_FIELDS } from "./domain/model/assetAutomationConfiguration";
+export { synchronizeAssetAutomationPlans, validateAutomationConfiguration } from "./domain/policies/assetAutomationConfiguration";
+export { normalizeLoanRepaymentMethod } from "./domain/value-objects/loanRepaymentMethod";

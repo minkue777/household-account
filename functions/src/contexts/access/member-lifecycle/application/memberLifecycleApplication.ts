@@ -131,7 +131,7 @@ class DefaultMemberLifecycleApplication implements MemberLifecycleInputPort {
             ...state,
             members: state.members.map((candidate) =>
               candidate.memberId === input.memberId
-                ? { ...candidate, status: "removed", version: nextVersion }
+                ? { ...candidate, status: "removed", version: candidate.version + 1 }
                 : candidate,
             ),
             memberships: state.memberships.map((candidate) =>
@@ -266,7 +266,7 @@ class DefaultMemberLifecycleApplication implements MemberLifecycleInputPort {
             ...state,
             members: state.members.map((candidate) =>
               candidate.memberId === input.memberId
-                ? { ...candidate, status: "active", version: nextVersion }
+                ? { ...candidate, status: "active", version: candidate.version + 1 }
                 : candidate,
             ),
             memberships: state.memberships.map((candidate) =>

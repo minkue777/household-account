@@ -78,6 +78,7 @@ object QuickEditCoordinator {
         }
         val launched = launchQuickEdit(
             context = context.applicationContext,
+            expectedScope = scope,
             snapshot = snapshot.toLedgerSnapshot(),
             observationId = head.observationId
         )
@@ -92,10 +93,10 @@ object QuickEditCoordinator {
         presentNext(context)
     }
 
-    suspend fun completeCurrent(context: Context, transactionId: String) {
+    suspend fun completeCurrent(context: Context, expectedScope: CaptureSessionScope, transactionId: String) {
         withContext(Dispatchers.IO) {
-            val scope = currentScope(context)
-            queue(context).complete(scope, transactionId)
+            if (!QuickEditCommandDelivery.isCurrentSession(context, expectedScope)) return@withContext
+            queue(context).complete(expectedScope, transactionId)
         }
     }
 
@@ -133,6 +134,7 @@ object QuickEditCoordinator {
             entry.snapshot?.let { snapshot ->
                 val launched = launchQuickEdit(
                     context = applicationContext,
+                    expectedScope = scope,
                     snapshot = snapshot.toLedgerSnapshot(),
                     observationId = entry.observationId
                 )
@@ -158,6 +160,7 @@ object QuickEditCoordinator {
                     }
                     val launched = launchQuickEdit(
                         context = applicationContext,
+                        expectedScope = scope,
                         snapshot = snapshot,
                         observationId = entry.observationId
                     )
@@ -188,13 +191,18 @@ object QuickEditCoordinator {
 
     private fun launchQuickEdit(
         context: Context,
+        expectedScope: CaptureSessionScope,
         snapshot: LedgerTransactionSnapshot,
         observationId: String?
     ): Boolean {
-        if (!HouseholdPreferences.isQuickEditOverlayEnabled(context) ||
+        if (!QuickEditCommandDelivery.isCurrentSession(context, expectedScope) ||
+            !HouseholdPreferences.isQuickEditOverlayEnabled(context) ||
             !Settings.canDrawOverlays(context)) return false
         val intent = Intent(context, QuickEditActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+            putExtra(QuickEditActivity.EXTRA_HOUSEHOLD_ID, expectedScope.householdId)
+            putExtra(QuickEditActivity.EXTRA_MEMBER_ID, expectedScope.memberId)
+            putExtra(QuickEditActivity.EXTRA_SESSION_GENERATION, expectedScope.sessionGeneration)
             putExtra(QuickEditActivity.EXTRA_EXPENSE_ID, snapshot.transactionId)
             putExtra(QuickEditActivity.EXTRA_MERCHANT, snapshot.merchant)
             putExtra(QuickEditActivity.EXTRA_AMOUNT, snapshot.amountInWon)

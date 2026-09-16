@@ -41,33 +41,67 @@ export default function AdminPage() {
   const [members, setMembers] = useState<AdminMemberWireView[]>([]);
   const [profiles, setProfiles] = useState<AssetOwnerProfileWireView[]>([]);
   const [deletedAssets, setDeletedAssets] = useState<AdminDeletedAssetWireView[]>([]);
+  const principalUid = useRef<string | null>(null);
+  const sessionGeneration = useRef(0);
+  const detailRequestGeneration = useRef(0);
+  const dashboardRequestGeneration = useRef(0);
+  const dashboardRequestPending = useRef<number | null>(null);
+
+  const closeDetails = useCallback(() => {
+    detailRequestGeneration.current += 1;
+    setDetailHouseholdId(null);
+    setDetailsLoading(false);
+    setMembers([]);
+    setProfiles([]);
+    setDeletedAssets([]);
+  }, []);
 
   useEffect(() => {
     clearAdminHouseholdViewSelection();
   }, []);
 
-  useEffect(
-    () =>
-      onAuthChange((nextUser) => {
-        setUser(nextUser);
-        setAuthLoading(false);
-        setAccessDenied(false);
-        setErrorMessage(null);
-      }),
-    []
-  );
+  useEffect(() => {
+    const unsubscribe = onAuthChange((nextUser) => {
+      if (principalUid.current !== (nextUser?.uid ?? null)) {
+        principalUid.current = nextUser?.uid ?? null;
+        sessionGeneration.current += 1;
+        dashboardRequestPending.current = null;
+        closeDetails();
+        setDashboard(null);
+        setIsLoading(false);
+        setPendingDelete(null);
+        setCopiedKey(null);
+        setIsCreating(false);
+      }
+      setUser(nextUser);
+      setAuthLoading(false);
+      setAccessDenied(false);
+      setErrorMessage(null);
+    });
+    return () => {
+      unsubscribe();
+      sessionGeneration.current += 1;
+      detailRequestGeneration.current += 1;
+      dashboardRequestPending.current = null;
+    };
+  }, [closeDetails]);
 
-  const dashboardRequestPending = useRef(false);
   const loadDashboard = useCallback(async () => {
-    if (dashboardRequestPending.current) return;
-    dashboardRequestPending.current = true;
+    if (principalUid.current === null || dashboardRequestPending.current !== null) return;
+    const session = sessionGeneration.current;
+    const request = ++dashboardRequestGeneration.current;
+    const isCurrent = () => sessionGeneration.current === session
+      && dashboardRequestPending.current === request;
+    dashboardRequestPending.current = request;
     setIsLoading(true);
     setErrorMessage(null);
     try {
       const result = await adminHouseholds.dashboard(14);
+      if (!isCurrent()) return;
       setDashboard(result);
       setAccessDenied(false);
     } catch (error) {
+      if (!isCurrent()) return;
       if (
         error instanceof AdminAccessError
         && (error.code === 'ADMIN_CAPABILITY_REQUIRED' || error.code === 'AUTH_REQUIRED')
@@ -78,8 +112,10 @@ export default function AdminPage() {
         setErrorMessage('운영 대시보드를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
       }
     } finally {
-      dashboardRequestPending.current = false;
-      setIsLoading(false);
+      if (isCurrent()) {
+        dashboardRequestPending.current = null;
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -103,6 +139,9 @@ export default function AdminPage() {
   }, [accessDenied, dashboard?.service.health, loadDashboard, user]);
 
   const loadDetails = useCallback(async (householdId: string) => {
+    if (principalUid.current === null) return;
+    const request = ++detailRequestGeneration.current;
+    const isCurrent = () => detailRequestGeneration.current === request;
     setDetailHouseholdId(householdId);
     setDetailsLoading(true);
     setErrorMessage(null);
@@ -112,16 +151,18 @@ export default function AdminPage() {
         assetOwnerProfiles.list(householdId, true),
         adminHouseholds.listDeletedAssets(householdId),
       ]);
+      if (!isCurrent()) return;
       setMembers(memberResult.members);
       setProfiles(profileResult.profiles);
       setDeletedAssets(assetResult.assets);
     } catch {
+      if (!isCurrent()) return;
       setMembers([]);
       setProfiles([]);
       setDeletedAssets([]);
       setErrorMessage('가구 운영 정보를 불러오지 못했습니다.');
     } finally {
-      setDetailsLoading(false);
+      if (isCurrent()) setDetailsLoading(false);
     }
   }, []);
 
@@ -132,27 +173,37 @@ export default function AdminPage() {
   const handleCreate = async () => {
     const name = newHouseholdName.trim();
     if (!name || isCreating) return;
+    const session = sessionGeneration.current;
     setIsCreating(true);
     setErrorMessage(null);
     try {
       const created = await adminHouseholds.create(name);
+      if (session !== sessionGeneration.current) return;
       setNewHouseholdName('');
       await loadDashboard();
+      if (session !== sessionGeneration.current) return;
       await handleCopy(created.householdId);
     } catch {
+      if (session !== sessionGeneration.current) return;
       setErrorMessage('가구를 생성하지 못했습니다.');
     } finally {
-      setIsCreating(false);
+      if (session === sessionGeneration.current) setIsCreating(false);
     }
   };
 
   const handleCopy = async (householdId: string) => {
+    const session = sessionGeneration.current;
     try {
       const { legacyShareKey } = await adminHouseholds.getLegacyShareKey(householdId);
+      if (session !== sessionGeneration.current) return;
       await navigator.clipboard.writeText(legacyShareKey);
+      if (session !== sessionGeneration.current) return;
       setCopiedKey(householdId);
-      window.setTimeout(() => setCopiedKey(null), 2_000);
+      window.setTimeout(() => {
+        if (session === sessionGeneration.current) setCopiedKey(null);
+      }, 2_000);
     } catch {
+      if (session !== sessionGeneration.current) return;
       setErrorMessage('가구 키를 복사하지 못했습니다.');
     }
   };
@@ -167,40 +218,47 @@ export default function AdminPage() {
 
   const handleDelete = async () => {
     if (!pendingDelete) return;
+    const session = sessionGeneration.current;
     try {
       await adminHouseholds.delete(
         pendingDelete.householdId,
         pendingDelete.aggregateVersion
       );
+      if (session !== sessionGeneration.current) return;
       setPendingDelete(null);
       await loadDashboard();
     } catch {
+      if (session !== sessionGeneration.current) return;
       setErrorMessage('가구를 삭제 상태로 전환하지 못했습니다. 최신 상태를 확인해 주세요.');
     }
   };
 
   const handleRestoreHousehold = async (household: AdminHouseholdWireView) => {
+    const session = sessionGeneration.current;
     const reason = await showPrompt({
       title: '가구 복구',
       message: '가구 복구 사유를 입력해 주세요.',
       placeholder: '복구 사유',
       confirmLabel: '복구',
     });
-    if (!reason?.trim()) return;
+    if (!reason?.trim() || session !== sessionGeneration.current) return;
     try {
       await adminHouseholds.restore(
         household.householdId,
         household.aggregateVersion,
         reason
       );
+      if (session !== sessionGeneration.current) return;
       await loadDashboard();
     } catch {
+      if (session !== sessionGeneration.current) return;
       setErrorMessage('가구를 복구하지 못했습니다. 최신 상태를 확인해 주세요.');
     }
   };
 
   const handleRemoveMember = async (member: AdminMemberWireView) => {
     if (!detailHouseholdId) return;
+    const request = detailRequestGeneration.current;
     const reason = await showPrompt({
       title: '가구원 제거',
       message: `${member.displayName} 가구원 제거 사유를 입력해 주세요.`,
@@ -208,7 +266,7 @@ export default function AdminPage() {
       confirmLabel: '제거',
       variant: 'danger',
     });
-    if (!reason?.trim()) return;
+    if (!reason?.trim() || request !== detailRequestGeneration.current) return;
     try {
       await adminHouseholds.removeMember(
         detailHouseholdId,
@@ -216,55 +274,64 @@ export default function AdminPage() {
         member.aggregateVersion,
         reason
       );
+      if (request !== detailRequestGeneration.current) return;
       await Promise.all([refreshDetails(), loadDashboard()]);
     } catch {
+      if (request !== detailRequestGeneration.current) return;
       setErrorMessage('가구원을 제거하지 못했습니다. 최신 상태를 확인해 주세요.');
     }
   };
 
   const handleRestoreMember = async (member: AdminMemberWireView) => {
     if (!detailHouseholdId) return;
+    const request = detailRequestGeneration.current;
     const confirmed = await showConfirm({
       title: '가구원 복구',
       message: `${member.displayName} 가구원을 복구할까요?`,
       confirmLabel: '복구',
     });
-    if (!confirmed) return;
+    if (!confirmed || request !== detailRequestGeneration.current) return;
     try {
       await adminHouseholds.restoreMember(
         detailHouseholdId,
         member.memberId,
         member.aggregateVersion
       );
+      if (request !== detailRequestGeneration.current) return;
       await Promise.all([refreshDetails(), loadDashboard()]);
     } catch {
+      if (request !== detailRequestGeneration.current) return;
       setErrorMessage('가구원을 복구하지 못했습니다. 다른 가구 가입 여부를 확인해 주세요.');
     }
   };
 
   const handleArchiveProfile = async (profile: AssetOwnerProfileWireView) => {
     if (!detailHouseholdId) return;
+    const request = detailRequestGeneration.current;
     try {
       await assetOwnerProfiles.archive(
         detailHouseholdId,
         profile.profileId,
         profile.aggregateVersion
       );
+      if (request !== detailRequestGeneration.current) return;
       await refreshDetails();
     } catch {
+      if (request !== detailRequestGeneration.current) return;
       setErrorMessage('명의자를 보관하지 못했습니다. 최신 상태를 확인해 주세요.');
     }
   };
 
   const handleRestoreAsset = async (asset: AdminDeletedAssetWireView) => {
     if (!detailHouseholdId) return;
+    const request = detailRequestGeneration.current;
     const reason = await showPrompt({
       title: '자산 복구',
       message: `${asset.name} 자산 복구 사유를 입력해 주세요.`,
       placeholder: '복구 사유',
       confirmLabel: '복구',
     });
-    if (!reason?.trim()) return;
+    if (!reason?.trim() || request !== detailRequestGeneration.current) return;
     try {
       await adminHouseholds.restoreDeletedAsset(
         detailHouseholdId,
@@ -272,8 +339,10 @@ export default function AdminPage() {
         asset.aggregateVersion,
         reason
       );
+      if (request !== detailRequestGeneration.current) return;
       await refreshDetails();
     } catch {
+      if (request !== detailRequestGeneration.current) return;
       setErrorMessage('자산을 복구하지 못했습니다. 최신 상태를 확인해 주세요.');
     }
   };
@@ -410,7 +479,7 @@ export default function AdminPage() {
           onCopy={handleCopy}
           onOpenHousehold={handleOpenHousehold}
           onLoadDetails={loadDetails}
-          onCloseDetails={() => setDetailHouseholdId(null)}
+          onCloseDetails={closeDetails}
           onDelete={setPendingDelete}
           onRestoreHousehold={handleRestoreHousehold}
           onRemoveMember={handleRemoveMember}

@@ -102,26 +102,12 @@ export function createCaptureTransactionGatewayApplication(input: {
         memo: context.parsedMemo ?? "",
         rules: configuration.merchantRules,
       });
-      if (rule.kind === "contractFailure") {
-        return { kind: "rejected", code: rule.code };
-      }
-      const mapping =
-        rule.kind === "matched"
-          ? {
-              ...(mappedValue(rule.mapping.merchant) === undefined
-                ? {}
-                : { merchant: mappedValue(rule.mapping.merchant) }),
-              ...(mappedCategory(rule.mapping.category) === undefined
-                ? {}
-                : { categoryId: mappedCategory(rule.mapping.category) }),
-              ...(mappedValue(rule.mapping.memo) === undefined
-                ? {}
-                : { memo: mappedValue(rule.mapping.memo) }),
-            }
-          : undefined;
-
+      // 구형 SHA256 receipt는 표시 가맹점까지 포함하므로 정상 치환값을 유지합니다.
+      // 규칙 충돌은 원 증거로 처리하는 취소까지 막지 않습니다.
       if (context.observationType === "cancellation") {
-        const mappedMerchant = mapping?.merchant ?? command.branch.merchant;
+        const mappedMerchant = rule.kind === "matched"
+          ? mappedValue(rule.mapping.merchant) ?? command.branch.merchant
+          : command.branch.merchant;
         return input.ledger.cancel({
           householdId: command.householdId,
           downstreamKey: command.downstreamKey,
@@ -144,6 +130,24 @@ export function createCaptureTransactionGatewayApplication(input: {
           },
         });
       }
+
+      if (rule.kind === "contractFailure") {
+        return { kind: "rejected", code: rule.code };
+      }
+      const mapping =
+        rule.kind === "matched"
+          ? {
+              ...(mappedValue(rule.mapping.merchant) === undefined
+                ? {}
+                : { merchant: mappedValue(rule.mapping.merchant) }),
+              ...(mappedCategory(rule.mapping.category) === undefined
+                ? {}
+                : { categoryId: mappedCategory(rule.mapping.category) }),
+              ...(mappedValue(rule.mapping.memo) === undefined
+                ? {}
+                : { memo: mappedValue(rule.mapping.memo) }),
+            }
+          : undefined;
 
       const enrichment = enrichmentBoundary.enrich({
         parsed: {

@@ -1,5 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import type { CryptoHolding, StockHolding } from '@/types/asset';
+import { clearClientSessionScope, setClientSessionScope } from '@/composition/clientSessionScope';
+import { resetLoadedClientSessionState } from '@/composition/clientSessionResetRegistry';
 import {
   resetHouseholdHoldingSnapshotsForTests,
   useHouseholdHoldingSnapshots,
@@ -59,6 +61,7 @@ describe('household holding snapshot contract', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetHouseholdHoldingSnapshotsForTests();
+    setClientSessionScope({ principalUid: 'uid', householdId: 'household-1', memberId: 'member-1', sessionGeneration: 1 });
     subscribeStock.mockImplementation((callback) => {
       stockCallback = callback;
       return unsubscribeStock;
@@ -116,5 +119,55 @@ describe('household holding snapshot contract', () => {
       stockHoldingsReady: true,
       cryptoHoldingsReady: true,
     });
+  });
+
+  test('같은 가구의 멤버가 바뀌면 이전 snapshot과 늦은 callback을 재사용하지 않는다', () => {
+    const hook = renderHook(() => useHouseholdHoldingSnapshots('household-1', true));
+    act(() => stockCallback([stockHolding()]));
+    const previousStock = stockCallback;
+    const previousCrypto = cryptoCallback;
+    setClientSessionScope({ principalUid: 'uid', householdId: 'household-1', memberId: 'member-2', sessionGeneration: 2 });
+    hook.rerender();
+    expect(hook.result.current.stockHoldings).toEqual([]);
+    act(() => stockCallback([{ ...stockHolding(), id: 'new-member-position' }]));
+    act(() => { previousStock([stockHolding()]); previousCrypto([cryptoHolding()]); });
+    expect(hook.result.current.stockHoldings.map(item => item.id)).toEqual(['new-member-position']);
+    expect(hook.result.current.cryptoHoldings).toEqual([]);
+  });
+
+  test('로그아웃 reset은 구독을 즉시 끝내고 늦은 callback이나 같은 가구 재로그인으로 복원하지 않는다', () => {
+    const hook = renderHook(() => useHouseholdHoldingSnapshots('household-1', true));
+    act(() => { stockCallback([stockHolding()]); cryptoCallback([cryptoHolding()]); });
+    const lateStock = stockCallback;
+    const lateCrypto = cryptoCallback;
+    act(() => { clearClientSessionScope(); resetLoadedClientSessionState(); });
+    expect(unsubscribeStock).toHaveBeenCalledTimes(1);
+    expect(unsubscribeCrypto).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.stockHoldings).toEqual([]);
+    act(() => { lateStock([stockHolding()]); lateCrypto([cryptoHolding()]); });
+    hook.unmount();
+    expect(unsubscribeStock).toHaveBeenCalledTimes(1);
+    setClientSessionScope({ principalUid: 'uid', householdId: 'household-1', memberId: 'member-1', sessionGeneration: 2 });
+    const reopened = renderHook(() => useHouseholdHoldingSnapshots('household-1', false));
+    expect(reopened.result.current).toMatchObject({ stockHoldings: [], cryptoHoldings: [], stockHoldingsReady: false });
+  });
+
+  test('remote epoch 교체 후 이전 listener는 최신 entry를 덮지 않는다', () => {
+    const hook = renderHook(({ epoch }) => useHouseholdHoldingSnapshots('household-1', true, epoch), { initialProps: { epoch: 0 } });
+    const previous = stockCallback;
+    hook.rerender({ epoch: 1 });
+    act(() => stockCallback([{ ...stockHolding(), id: 'fresh' }]));
+    act(() => previous([stockHolding()]));
+    expect(hook.result.current.stockHoldings.map(item => item.id)).toEqual(['fresh']);
+  });
+
+  test('두 번째 구독 설정 실패 시 첫 번째 listener도 종료한다', () => {
+    subscribeCrypto.mockImplementationOnce(() => { throw new Error('setup failed'); });
+    const hook = renderHook(() => useHouseholdHoldingSnapshots('household-1', true));
+    expect(unsubscribeStock).toHaveBeenCalledTimes(1);
+    act(() => stockCallback([stockHolding()]));
+    expect(hook.result.current.stockHoldings).toEqual([]);
+    hook.unmount();
+    expect(unsubscribeStock).toHaveBeenCalledTimes(1);
   });
 });

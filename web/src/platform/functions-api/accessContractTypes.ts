@@ -15,6 +15,7 @@ export interface AdminMemberWireView {
   memberId: string;
   displayName: string;
   lifecycleState: 'active' | 'removed';
+  /** 관리자 제거·복구용 Membership 버전이며 Member 표시 이름 버전과는 독립적입니다. */
   aggregateVersion: number;
   linkedPrincipal: boolean;
 }

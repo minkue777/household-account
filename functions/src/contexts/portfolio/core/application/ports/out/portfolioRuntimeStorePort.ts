@@ -1,3 +1,4 @@
+import type { AssetAutomationConfiguration, AssetAutomationPlan } from "../../../../automation/public";
 import type { AssetOwnerRef, AssetType } from "../../../domain/model/assetCreation";
 import type { QuoteObservation } from "../../../../holdings/public";
 
@@ -11,16 +12,7 @@ export interface PortfolioOwnerProfileReference {
   readonly lifecycleState: "active" | "archived";
 }
 
-export interface PortfolioAssetAutomationFields {
-  readonly recurringContributionAmount: number;
-  readonly recurringContributionDay: number;
-  readonly lastAutoContributionMonth: string;
-  readonly loanInterestRate: number;
-  readonly loanRepaymentMethod: string;
-  readonly loanMonthlyPaymentAmount: number;
-  readonly loanPaymentDay: number;
-  readonly lastAutoRepaymentMonth: string;
-}
+export type PortfolioAssetAutomationFields = AssetAutomationConfiguration;
 
 export interface PortfolioRuntimeAsset {
   readonly assetId: string;
@@ -86,29 +78,7 @@ export interface PortfolioRuntimePosition {
   readonly updatedAt: string;
 }
 
-export interface PortfolioRuntimeAutomationPlan {
-  readonly planId: string;
-  readonly householdId: string;
-  readonly assetId: string;
-  readonly operation: "savings-contribution" | "loan-repayment";
-  readonly kind: "savings-deposit" | "loan-repayment";
-  readonly status: "active" | "suspended" | "needs-attention" | "recovering-before-stop";
-  readonly stopEffectiveAt?: string;
-  readonly statusAfterRecovery?: "suspended";
-  readonly amountInWon: number;
-  readonly configuredDay: number;
-  readonly firstActivatedOn: string;
-  readonly activationMonthDisposition: "included" | "applicable";
-  readonly firstApplicableMonth: string;
-  readonly nextDueDate: string;
-  readonly lastAppliedMonth?: string;
-  readonly repaymentMethod?: string;
-  readonly annualInterestRate?: number;
-  readonly currentRevision: number;
-  readonly aggregateVersion: number;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
+export type PortfolioRuntimeAutomationPlan = AssetAutomationPlan;
 
 export interface PortfolioRuntimeState {
   readonly assets: readonly PortfolioRuntimeAsset[];

@@ -34,12 +34,6 @@ export type AssetOwnerProfileListResult =
   | { kind: "no-data" }
   | { kind: "forbidden"; code: string };
 
-export type RenameSelfResult =
-  | { kind: "success"; memberId: string; displayName: string }
-  | { kind: "conflict"; code?: string }
-  | { kind: "forbidden"; code?: string }
-  | { kind: "validation-error"; code?: string };
-
 export interface AssetOwnerProfileInputPort {
   createAssetOwnerProfile(
     actor: VerifiedProfileActor,
@@ -62,14 +56,6 @@ export interface AssetOwnerProfileInputPort {
       idempotencyKey: string;
     },
   ): Promise<AssetOwnerProfileCommandResult>;
-  renameSelf(
-    actor: VerifiedProfileActor,
-    input: {
-      displayName: string;
-      expectedMemberVersion: number;
-      idempotencyKey: string;
-    },
-  ): Promise<RenameSelfResult>;
   listAssetOwnerProfiles(
     actor: VerifiedProfileActor,
     input: { includeArchived?: boolean },
