@@ -9,7 +9,7 @@ import type { HouseholdCommandExecutionContext } from "../../../src/bootstrap/co
 import { InMemoryFirestore } from "../../support/in-memory-firestore";
 
 describe("Finance production query boundaries", () => {
-  it("updates one Asset without loading other Assets or any Position collection", async () => {
+  it("updates one Asset name without loading other Assets, Positions, or Automation plans", async () => {
     const memory = new InMemoryFirestore();
     const handlers = createPortfolioHouseholdCommandHandlers(memory as unknown as Firestore);
     const execute = (command: string, payload: Record<string, unknown>, commandId: string) => handlers.get(command)!.execute({ principalUid: "uid", requestedAt: "2026-09-06T00:00:00Z", actor: { principalUid: "uid", householdId: "house", actingMemberId: "member", capabilities: ["household.write"] }, envelope: { contractVersion: "household-command.v1", householdId: "house", command, commandId, idempotencyKey: commandId, payload } } as HouseholdCommandExecutionContext);
@@ -18,8 +18,10 @@ describe("Finance production query boundaries", () => {
     memory.clearTransactionReads();
     await execute("portfolio.update-asset.v1", { assetId: created.assetId, expectedVersion: 1, changes: { name: "Renamed" } }, "rename");
     expect(memory.document(`households/house/assets/${created.assetId}`)?.name).toBe("Renamed");
-    expect(memory.transactionReads().filter(read => read.path.includes("positions") || read.path === "households/house/assets" || read.path === "assets" || read.path.includes("holdings"))).toEqual([]);
-    expect(memory.transactionReads()).toHaveLength(5);
+    const reads = memory.transactionReads();
+    expect(reads.filter(read => read.path.includes("positions") || read.path === "households/house/assets" || read.path === "assets" || read.path.includes("holdings") || read.path.includes("assetAutomation"))).toEqual([]);
+    // receipt, canonical/legacy Asset, owner profiles; metadata edits do not read plans.
+    expect(reads).toHaveLength(4);
   });
 
   it("pages missing months and advances only a contiguous completion checkpoint", async () => {

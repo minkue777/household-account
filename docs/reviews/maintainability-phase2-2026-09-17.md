@@ -80,3 +80,9 @@
 - 중앙 Web/Functions TypeScript, Functions architecture 39 tests, Web production build, 서명 release APK build를 확인했습니다. 관리자 추가 검증 결과는 해당 상세 보고서에 기록합니다.
 
 이 문서는 배포 전 구현 검토 기록입니다. 배포 SHA·Release·운영 smoke·CI의 최종 결과는 배포 기록 및 작업 완료 보고에서 구분합니다.
+
+### 원격 CI 후속 보완
+
+제품 커밋 `c831984`의 [CI 35119346539](https://github.com/minkue777/household-account/actions/runs/35119346539)에서 Functions 단위/계약 묶음은 1개 실패, 1,742개 통과였습니다. 실패는 `finance-bounded-runtime-read-regression`의 자산 이름 변경이 이전 조회 수 5건을 기대한 항목입니다. 이번 변경으로 Automation 조회가 빠져 실제 4건이 되었으며 제품 처리 실패는 아니었습니다.
+
+회귀를 단순히 상한 검사로 느슨하게 바꾸지 않고, 정확한 4건과 `assetAutomation` 조회 0건을 함께 검증하도록 수정했습니다. 실제 handler/RuntimeStore를 사용하는 해당 파일과 Portfolio 파일, 합계 27개 테스트가 통과했습니다. 이 후속 변경은 테스트·문서에만 해당하므로 Web/Functions/APK를 재배포하지 않으며 새 SHA에서 전체 CI를 다시 확인합니다. 기존 실패 기록은 유지합니다.
