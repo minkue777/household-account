@@ -191,7 +191,7 @@ Portfolio ──valuation·dividend Outbox Event──▶ Read Side
 | [DEC-059](governance/decisions.md#dec-059) | Payment Capture | 등록 카드의 카드사·소유자는 immutable identity로 두고 사용자 별칭 없이 표준 카드사 라벨·끝 번호로 표시하며, 끝 번호만 수정하고 삭제는 과거 증거를 보존하는 퇴역 처리로 수행한다. |
 | [DEC-060](governance/decisions.md#dec-060) | Portfolio·지원 플랫폼 | 환율은 Frankfurter v2 단일 공급자를 사용하고 마지막 성공값을 기간 제한 없이 평가에 계속 사용하며 네이버·보조 공급자 fallback을 두지 않는다. |
 | [DEC-061](governance/decisions.md#dec-061) | 지원 플랫폼 | 모든 활성 가구원이 홈의 서로 다른 두 요약 카드 유형을 가구 공통 설정으로 변경하며 기존 중복 구성은 읽기만 호환한다. |
-| [DEC-062](governance/decisions.md#dec-062) | Portfolio·지원 플랫폼 | 배당 공시 discovery와 lifecycle sweep을 매일 09:00~20:00 매시 정각 실행해 늦은 공시를 다음 시간에 반영한다. |
+| [DEC-062](governance/decisions.md#dec-062) | Portfolio·지원 플랫폼 | 배당 공시 discovery와 lifecycle sweep을 한국 시간 매일 19:00에 1회 실행하며, 이후 공시는 다음 날 19:00에 반영한다. |
 | [DEC-063](governance/decisions.md#dec-063) | Household Finance | 정기 거래 Plan의 최초 등록자를 immutable creator로 보존하고 Scheduler 거래에 사용하며 creator 없는 legacy Plan은 명시 mapping 전 처리하지 않는다. |
 | [DEC-064](governance/decisions.md#dec-064) | 지원·플랫폼 | 필수 release gate 실패는 waiver나 긴급 권한으로 우회하지 않고, 전체 gate를 통과한 후보에만 deploy authorization을 발급한다. |
 | [DEC-065](governance/decisions.md#dec-065) | Household Finance | 일반 거래 삭제는 복구 가능한 논리 삭제로 처리하고 사용자 복구 UI 없이 운영자/Agent의 명시 작업으로만 복구·영구 정리한다. |

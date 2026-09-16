@@ -37,7 +37,7 @@
     },
     {
       "jobName": "dividend-hourly",
-      "cron": "0 9-20 * * *",
+      "cron": "0 19 * * *",
       "publicInputPort": "RefreshDividendEvents",
       "capability": "portfolio.job.dividend-refresh",
       "idempotency": {

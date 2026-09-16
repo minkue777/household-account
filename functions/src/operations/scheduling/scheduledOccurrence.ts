@@ -135,20 +135,6 @@ export function expectedBusinessOccurrences(input: {
     const date = localDateOffset(localToday, dayOffset);
     for (const definition of input.definitions.definitions) {
       if (definition.jobName === "scheduled-job-monitor") continue;
-      if (definition.jobName === "dividend-hourly") {
-        for (let hour = 9; hour <= 20; hour += 1) {
-          const scheduledFor = seoulInstant(date, hour, 0);
-          const instant = assertInstant(scheduledFor);
-          if (
-            instant >= cutoff &&
-            instant <= observed &&
-            monitoringActive(definition, instant)
-          ) {
-            candidates.push(occurrenceFor(definition.jobName, scheduledFor));
-          }
-        }
-        continue;
-      }
       if (definition.jobName === "billing-cost-refresh") {
         for (const hour of [0, 6, 12, 18]) {
           const scheduledFor = seoulInstant(date, hour, 0);

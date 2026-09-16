@@ -281,7 +281,7 @@ Position history 후보 없음이나 Query 실패를 수량 0으로 바꾸지 �
 
 ### 5.3 일일 갱신 job
 
-Scheduler Adapter는 `Asia/Seoul` cron `0 9-20 * * *`로 매일 09:00부터 20:00까지 매시 정각에 실행합니다. 각 시간 occurrence는 `scheduledFor`를 포함한 별도 runId를 가지며, 같은 occurrence 아래 두 phase를 각각 checkpoint로 실행합니다. 하루 12회 반복하더라도 canonical Event ID와 상태 전이 receipt로 같은 공시·상태를 중복 반영하지 않습니다. 17:30에 게시된 공시는 정상 경로에서 18:00 occurrence가 수집하고, 20:00 이후 게시분은 다음 날 09:00 occurrence가 수집합니다.
+Scheduler Adapter는 `Asia/Seoul` cron `0 19 * * *`로 매일 19:00에 1회 실행합니다. 각 일일 occurrence는 `scheduledFor`를 포함한 별도 runId를 가지며, 같은 occurrence 아래 두 phase를 각각 checkpoint로 실행합니다. 같은 occurrence를 재실행하거나 다음 날 같은 공시를 수집해도 canonical Event ID와 상태 전이 receipt로 같은 공시·상태를 중복 반영하지 않습니다. 18:30에 게시된 공시는 정상 경로에서 당일 19:00 occurrence가 수집하고, 19:00 이후 게시분은 다음 날 19:00 occurrence가 수집합니다. 기존 배포 함수 `dividendHourly`, 운영 jobName `dividend-hourly`, 시각이 포함된 execution key 형식은 호환성을 위해 유지합니다.
 
 1. `DISCOVERY`는 Holdings의 공개 Query 또는 Instrument Master에서 `market=KRX && instrumentType=ETF`가 명시된 active instrument만 결정적 page로 읽습니다. 이전 이관 데이터의 저장 타입이 `stock`이어도 Instrument Master의 명시적 ETF 분류로 정규화할 수 있지만, `holdingType=stock`, 코드 형태나 종목명으로 ETF를 추정하지 않습니다.
 2. discovery instrument별 `DividendDisclosurePort` 호출은 transaction 밖에서 수행하되, KIND Adapter는 한 occurrence의 최근 1년 배당 보고서 검색을 공유합니다. 접수번호·문서번호·상세 URL별 HTTP 결과는 해당 Adapter 인스턴스 수명 안에서만 Promise로 재사용하고 외부 HTTP는 단일 큐로 순차 실행합니다. 검색 응답의 세션 쿠키는 메모리에서만 후속 요청에 전달하며 로그·저장소·업무 DTO에는 남기지 않습니다. 선언된 전체 검색 건수와 실제 수신 행 수가 일치할 때만 종목별로 분리하고, 성공 disclosure를 eventId별 upsert합니다. 결과는 성공, NoData, retryable, permanent로 집계합니다.
@@ -461,7 +461,7 @@ Domain은 Firebase, node-fetch, HTML parser와 Holdings Entity를 import하지 �
 | DIV-004 | Emulator Integration, Architecture | Annual Projector·Rules·직접 write 금지 | 같은 Event 정정·fixed→paid, 미지급 취소, 중복·역순, 무인증 save route, stale 기존 map | 단일 Writer, 정정 교체·취소 제거, 중복 합산 없음, 월/event checksum 일치, 직접 overwrite 거부 | T-DIV-007 |
 | DIV-005 | Domain Unit, Contract, Application | PositionHistoryQueryPort·RecoveryPolicy | exact, 기준일 10일과 9일·11일 동률, 8일·11일, 한쪽만 존재, page 경계, NoData/retryable | exact 우선, 동률은 9일, 최소 날짜 차이 선택, 후보 없음·실패는 0 아님, 선택 뒤 수량 고정 | T-DIV-001 |
 | DIV-006 | Domain Unit, Application, Emulator | nonterminal Event sweep·정정·취소·상태 전이 | 모든 source 삭제, Provider NoData, 미지급 정정·취소, paid 뒤 정정·취소, page 재실행 | source 삭제와 무관하게 진행, 미지급 최신 값만 유지, 명시적 취소만 제거, NoData·paid는 무변경, revision 없음 | T-DIV-003 |
-| JOB-DIV-001 | Contract, Application, Emulator | KIND Adapter·Refresh job·Provider Health·Projection | 최근 1년 fixture, 동일 run 2회, instrument A 성공/B timeout, 전체 실패 3회, HTTP 403·503와 요청 단계, 09:00·20:00 경계, 17:30 신규 공시와 18:00 occurrence | 결정 Event 수렴, A만 commit, 부분 실패 degraded·무경보, 전체 실패 3회째 outage, 실제 status·단계 보존, 18:00 수집, Projection Event 처리 후 동일 | T-JOB-DIV-001 |
+| JOB-DIV-001 | Contract, Application, Emulator | KIND Adapter·Refresh job·Provider Health·Projection | 최근 1년 fixture, 동일 run 2회, instrument A 성공/B timeout, 전체 실패 3회, HTTP 403·503와 요청 단계, 19:00 경계, 18:30·19:30 신규 공시와 당일·다음 날 19:00 occurrence | 결정 Event 수렴, A만 commit, 부분 실패 degraded·무경보, 전체 실패 3회째 outage, 실제 status·단계 보존, 서울 매일 19:00 1회 실행, 18:30 공시는 당일 19:00·19:30 공시는 다음 날 19:00 수집, Projection Event 처리 후 동일 | T-JOB-DIV-001 |
 | JOB-DIV-002 | Domain Unit, Contract, Architecture | discovery eligibility·Holdings public DTO | KRX ETF, KRX stock, US stock, crypto, 분류 없음, 영숫자 코드 | 명시 KRX ETF만 Provider 호출, Dividends의 형태 추정 없음 | T-DIV-002 |
 
 추가 공통 suite는 새 테스트 ID 없이 다음을 검증합니다.

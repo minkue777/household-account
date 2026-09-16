@@ -24,6 +24,6 @@ export interface DividendRefreshJobEvent {
 
 export interface DividendRefreshSchedule {
   zoneId: "Asia/Seoul";
-  cron: "0 9-20 * * *";
+  cron: "0 19 * * *";
   dailyHours: readonly number[];
 }

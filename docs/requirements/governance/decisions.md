@@ -1458,25 +1458,26 @@ Google 계정이 없는 아이도 자산 명의자가 될 수 있게 하면서 �
 영향 요구사항: HOME-001, HOME-002, HOME-003, HOME-004.
 
 <a id="dec-062"></a>
-## DEC-062 배당 공시 수집·상태 전이는 09시부터 20시까지 매시 실행
+## DEC-062 배당 공시 수집·상태 전이는 매일 19시에 1회 실행
 
 > 상태: Accepted  
 > 결정일: 2026-07-19  
+> 변경일: 2026-09-16 — 사용자 요청으로 매일 09:00~20:00 매시 실행에서 19:00 하루 1회로 변경  
 > 정책 소유 Context: [Portfolio](../contexts/portfolio/requirements.md)  
 > 영향 기능: [배당](../contexts/portfolio/modules/dividends/requirements.md), [외부 연동과 예약 작업](../supporting-platform/modules/external-operations/requirements.md)
 
 결정:
 
-- 배당 예약 작업은 `Asia/Seoul` cron `0 9-20 * * *`로 매일 09:00부터 20:00까지 매시 정각 실행한다. 시작·종료 시각을 모두 포함하여 하루 12개 occurrence가 생성된다.
-- 각 시간 occurrence는 `scheduledFor`가 포함된 별도 execution key와 runId를 사용한다. 같은 occurrence 안에서 공시 `DISCOVERY`와 기존 nonterminal Event `LIFECYCLE_SWEEP`을 각각 독립 checkpoint로 실행한다.
-- 17:30처럼 정각 이후 게시된 공시는 다음 18:00 occurrence에서 정상 수집한다. 20:00 이후 게시분은 다음 날 09:00 occurrence에서 수집하며 야간 별도 schedule은 두지 않는다.
-- 같은 날 공시와 상태를 반복 확인해도 `source + sourceDisclosureId + instrumentCode`의 canonical Event ID, 상태 전이 receipt와 expected version으로 같은 Event·상태·Projection을 중복 반영하지 않는다.
+- 배당 예약 작업은 `Asia/Seoul` cron `0 19 * * *`로 매일 19:00에 1회 실행한다. 하루 1개 occurrence가 생성된다.
+- 각 일일 occurrence는 `scheduledFor`가 포함된 별도 execution key와 runId를 사용한다. 같은 occurrence 안에서 공시 `DISCOVERY`와 기존 nonterminal Event `LIFECYCLE_SWEEP`을 각각 독립 checkpoint로 실행한다.
+- 18:30에 게시된 공시는 당일 19:00 occurrence에서 정상 수집한다. 19:00 이후 게시분은 다음 날 19:00 occurrence에서 수집한다.
+- 같은 occurrence를 재실행하거나 다음 날 같은 공시와 상태를 확인해도 `source + sourceDisclosureId + instrumentCode`의 canonical Event ID, 상태 전이 receipt와 expected version으로 같은 Event·상태·Projection을 중복 반영하지 않는다.
 - 한 instrument·phase 실패는 다른 성공을 rollback하지 않는다. KIND 호출은 결정적 page, 유한 timeout·retry와 Provider Health 관측을 적용하고 실패·NoData를 빈 성공이나 Event 삭제로 바꾸지 않는다.
-- 현재 `dailyDividendSnapshot`의 17:00 하루 1회 schedule은 전환 대상이다. 함수 이름에 `daily`를 남겨 목표 주기를 오해하지 않도록 목표 Scheduler Adapter와 JobRun 이름은 `dividend-hourly` 의미로 구성한다.
+- 기존 배포 함수 `dividendHourly`, 운영 jobName `dividend-hourly`, 시각이 포함된 execution key 형식은 기존 리소스와 실행 이력의 호환성을 위해 유지한다. 실제 실행 주기는 해당 식별자 이름과 관계없이 매일 19:00 하루 1회이다.
 
 의도:
 
-장중·저녁에 늦게 게시되는 분배 공시를 다음 날까지 기다리지 않고 최대 약 한 시간 안에 반영한다. 현재 가계부 규모에서는 Firebase 실행 부하가 작고 Cloud Scheduler 비용은 실행 횟수가 아니라 job 수 기준이므로 같은 job의 주기 변경 비용은 미미하다. 외부 KIND 요청이 하루 1회 대비 늘어나는 점은 page·timeout·retry·Health로 제한하고 관측한다.
+사용자가 요청한 저녁 19시 하루 1회 갱신으로 공시 수집과 상태 전이 시각을 고정하고, 반복 실행과 외부 KIND 요청 빈도를 줄인다. 19시 이후 공시는 다음 날 19시 실행에서 반영하며 기존 멱등 처리·실패 격리·Provider Health 관측은 유지한다.
 
 영향 요구사항: JOB-DIV-001, DIV-006, JOB-ERR-001, JOB-ERR-002.
 

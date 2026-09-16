@@ -45,7 +45,11 @@ describe("scheduled occurrence", () => {
         ({ jobName, executionKey }) =>
           jobName === "dividend-hourly" && executionKey.startsWith("dividend-hourly:2026-07-21"),
       ),
-    ).toHaveLength(12);
+    ).toEqual([{
+      jobName: "dividend-hourly",
+      scheduledFor: "2026-07-21T10:00:00.000Z",
+      executionKey: "dividend-hourly:2026-07-21T19",
+    }]);
     expect(
       occurrences.filter(({ jobName }) => jobName === "billing-cost-refresh"),
     ).toHaveLength(0);
@@ -68,6 +72,20 @@ describe("scheduled occurrence", () => {
     expect(occurrences.map(({ executionKey }) => executionKey)).toContain(
       "billing-cost-refresh:2026-08-03T06",
     );
+  });
+
+  it.each([
+    ["2026-09-20T00:00:00.000Z", []],
+    ["2026-09-20T09:59:59.999Z", []],
+    ["2026-09-20T10:00:00.000Z", ["dividend-hourly:2026-09-20T19"]],
+    ["2026-09-20T11:00:00.000Z", ["dividend-hourly:2026-09-20T19"]],
+  ] as const)("배당은 주말에도 서울 19시 한 번만 감시하며 다른 시간의 누락을 만들지 않는다: %s", (observedAt, expectedKeys) => {
+    const occurrences = expectedBusinessOccurrences({
+      observedAt,
+      lookbackHours: 2,
+      definitions: loadScheduledJobDefinitions(),
+    }).filter(({ jobName }) => jobName === "dividend-hourly");
+    expect(occurrences.map(({ executionKey }) => executionKey)).toEqual(expectedKeys);
   });
 
   it("관찰 시각보다 미래인 당일 실행은 기대값에 포함하지 않는다", () => {

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import Ajv from "ajv";
 import { describe, expect, it } from "vitest";
+import { DIVIDEND_REFRESH_SCHEDULE } from "../../../src/contexts/portfolio/dividends/domain/policies/dividendRefreshSchedule";
 import {
   MAX_SCHEDULED_EXECUTION_SECONDS,
   loadScheduledJobDefinitions,
@@ -83,7 +84,12 @@ describe("예약 작업 versioned 실행 정의", () => {
 
     expect(loaded).toEqual(fixture);
     expect(scheduledJobDefinition("dividend-hourly", loaded).cron).toBe(
-      "0 9-20 * * *",
+      "0 19 * * *",
     );
+    expect(DIVIDEND_REFRESH_SCHEDULE).toEqual({
+      cron: scheduledJobDefinition("dividend-hourly", loaded).cron,
+      zoneId: loaded.timezone,
+      dailyHours: [19],
+    });
   });
 });
