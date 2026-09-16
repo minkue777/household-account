@@ -165,9 +165,10 @@ function eventDocument(input: {
 }
 
 function scheduledEvent(
-  snapshot: firestore.QueryDocumentSnapshot,
+  snapshot: firestore.DocumentSnapshot,
 ): ScheduledDividendEvent | undefined {
   const data = snapshot.data();
+  if (data === undefined) return undefined;
   const householdId = text(data.householdId);
   const instrumentCode = text(data.instrumentCode ?? data.stockCode);
   const instrumentName = text(data.instrumentName ?? data.stockName) ?? instrumentCode;
@@ -216,9 +217,35 @@ export class FirebaseDividendEventRuntimeRepository
   constructor(private readonly database: firestore.Firestore) {}
 
   private async matchingAnnouncement(input: { readonly target: DividendHoldingTargetView; readonly disclosure: KindDividendDisclosure }) {
-    const events = await this.database.collection(EVENTS).where("householdId", "==", input.target.householdId).get();
-    return events.docs.find(document => currentSourceMatches(document.data(), input.disclosure.sourceDisclosureId, input.disclosure.instrumentCode)) ??
-      events.docs.find(document => text(document.data().sourceDisclosureId) === undefined && sameDisclosureFact(document.data(), input.disclosure));
+    const { target, disclosure } = input;
+    const events = this.database.collection(EVENTS);
+    const canonical = await events.doc(hash(stableEventId(
+      target.householdId, disclosure.sourceDisclosureId, disclosure.instrumentCode,
+    ))).get();
+    const canonicalData = canonical.data();
+    if (canonicalData?.householdId === target.householdId
+      && currentSourceMatches(canonicalData, disclosure.sourceDisclosureId, disclosure.instrumentCode)) return canonical;
+
+    // Legacy document IDs and corrected disclosure aliases still resolve to the
+    // original event. Narrow by identity rather than rereading a household's history.
+    const [bySource, byAlias] = await Promise.all([
+      events.where("householdId", "==", target.householdId)
+        .where("sourceDisclosureId", "==", disclosure.sourceDisclosureId).get(),
+      events.where("disclosureAliases", "array-contains", disclosure.sourceDisclosureId).get(),
+    ]);
+    const matching = [...bySource.docs, ...byAlias.docs]
+      .filter(document => document.data().householdId === target.householdId
+        && currentSourceMatches(document.data(), disclosure.sourceDisclosureId, disclosure.instrumentCode))
+      .sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)[0];
+    if (matching !== undefined) return matching;
+
+    // Records predating source IDs are identified by the original disclosure facts.
+    const legacy = await events.where("householdId", "==", target.householdId)
+      .where("recordDate", "==", disclosure.recordDate)
+      .where("paymentDate", "==", disclosure.paymentDate)
+      .where("perShareAmount", "==", disclosure.perShareAmount).get();
+    return legacy.docs.find(document => text(document.data().sourceDisclosureId) === undefined
+      && sameDisclosureFact(document.data(), disclosure));
   }
 
   async findAnnouncement(input: { readonly target: DividendHoldingTargetView; readonly disclosure: KindDividendDisclosure }) {

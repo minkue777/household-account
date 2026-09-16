@@ -1,6 +1,6 @@
 import { deleteApp, initializeApp, type App } from "firebase-admin/app";
-import { getFirestore, type Firestore } from "firebase-admin/firestore";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { DocumentReference, getFirestore, Query, type Firestore } from "firebase-admin/firestore";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FirebaseDividendEventRuntimeRepository } from "../../../src/adapters/firebase/dividends/firebaseDividendEventRuntimeRepository";
 import { FirebaseDividendProviderObservation } from "../../../src/adapters/firebase/dividends/firebaseDividendProviderObservation";
@@ -136,6 +136,19 @@ const noOpObservations: DividendProviderObservationPort = {
   async finalizeRun() {},
 };
 
+const lookupTarget = {
+  targetId: `${HOUSEHOLD_ID}:102110`,
+  householdId: HOUSEHOLD_ID,
+  instrument: { market: "KRX", instrumentType: "ETF", code: "102110", name: "TIGER 200", currency: "KRW" } as const,
+  sourceAssetIds: [ASSET_ID],
+};
+const lookupDisclosure = {
+  source: "KIND", sourceDisclosureId: "lookup-disclosure", disclosureState: "active",
+  instrumentCode: "102110", instrumentName: "TIGER 200",
+  recordDate: "2026-07-30", paymentDate: "2026-08-03", perShareAmount: 255,
+  disclosedAt: "2026-07-29", sourceReferenceHash: "lookup-hash",
+} as const;
+
 describeWithFirestoreEmulator("Firebase dividend hourly vertical slice", () => {
   beforeAll(() => {
     app = initializeApp({ projectId: PROJECT_ID }, `dividend-${Date.now()}`);
@@ -153,6 +166,80 @@ describeWithFirestoreEmulator("Firebase dividend hourly vertical slice", () => {
   afterAll(async () => {
     if (app !== undefined) await deleteApp(app);
   });
+
+  it("배당 이력 194건에서도 같은 공시 재확인은 문서 2건만 직접 읽고 결과를 유지한다", async () => {
+    const events = new FirebaseDividendEventRuntimeRepository(database);
+    const input = { target: lookupTarget, disclosure: lookupDisclosure, observedAt: "2026-07-29T09:00:00+09:00" };
+    const first = await events.upsertAnnouncement({ ...input, idempotencyKey: "lookup-first" });
+    if (!("eventId" in first)) throw new Error(`배당 fixture 생성 실패: ${first.kind}`);
+    const batch = database.batch();
+    for (let index = 0; index < 193; index++) {
+      batch.set(database.collection("dividend_events").doc(`history-${index}`), {
+        householdId: HOUSEHOLD_ID, status: "paid", stockCode: "069500",
+        recordDate: "2025-01-01", paymentDate: "2025-01-10", perShareAmount: index,
+      });
+    }
+    await batch.commit();
+    const previousLookup = await database.collection("dividend_events")
+      .where("householdId", "==", HOUSEHOLD_ID).get();
+    expect(previousLookup.size).toBe(194);
+
+    const queryReads = vi.spyOn(Query.prototype, "get");
+    const documentReads = vi.spyOn(DocumentReference.prototype, "get");
+    try {
+      const found = await events.findAnnouncement(input);
+      const result = await events.upsertAnnouncement({ ...input, idempotencyKey: "lookup-next-hour" });
+      expect(found).toMatchObject({ eventId: first.eventId, status: "announced", perShareAmount: 255 });
+      expect(result).toMatchObject({ kind: "unchanged", eventId: first.eventId });
+      // Existing transactional receipt/event reads remain in addition to these lookup reads.
+      expect(queryReads).not.toHaveBeenCalled();
+      expect(documentReads).toHaveBeenCalledTimes(2);
+    } finally {
+      queryReads.mockRestore();
+      documentReads.mockRestore();
+    }
+    expect((await database.collection("dividend_events").get()).size).toBe(194);
+  });
+
+  it.each(["source", "alias", "legacy", "paid-legacy"] as const)(
+    "%s 형식의 기존 공시를 재사용하고 다른 가구·종목은 변경하지 않는다",
+    async (kind) => {
+      const events = new FirebaseDividendEventRuntimeRepository(database);
+      const stored = {
+        householdId: HOUSEHOLD_ID, stockCode: lookupDisclosure.instrumentCode,
+        recordDate: lookupDisclosure.recordDate, paymentDate: lookupDisclosure.paymentDate,
+        perShareAmount: lookupDisclosure.perShareAmount,
+        status: kind === "paid-legacy" ? "paid" : "announced", aggregateVersion: 1,
+        ...(kind === "source" ? { sourceDisclosureId: lookupDisclosure.sourceDisclosureId } : {}),
+        ...(kind === "alias" ? { sourceDisclosureId: "original-disclosure", disclosureAliases: [lookupDisclosure.sourceDisclosureId] } : {}),
+      };
+      const reference = database.collection("dividend_events").doc("legacy-target");
+      const otherHousehold = database.collection("dividend_events").doc("a-other-household");
+      const otherInstrument = database.collection("dividend_events").doc("b-other-instrument");
+      await reference.set(stored);
+      await otherHousehold.set({ ...stored, householdId: "other-household" });
+      await otherInstrument.set({ ...stored, stockCode: "069500" });
+      const input = { target: lookupTarget, disclosure: lookupDisclosure };
+      const found = await events.findAnnouncement(input);
+      if (kind === "paid-legacy") expect(found).toBeUndefined();
+      else expect(found).toMatchObject({ documentId: reference.id, instrumentCode: "102110" });
+
+      const result = await events.upsertAnnouncement({
+        ...input, observedAt: "2026-07-29T09:00:00+09:00", idempotencyKey: `reuse-${kind}`,
+      });
+      expect((await database.collection("dividend_events").get()).size).toBe(3);
+      expect((await otherHousehold.get()).data()).toEqual({ ...stored, householdId: "other-household" });
+      expect((await otherInstrument.get()).data()).toEqual({ ...stored, stockCode: "069500" });
+      if (kind === "paid-legacy") {
+        expect(result.kind).toBe("paid-preserved");
+        expect((await reference.get()).data()).toEqual(stored);
+      } else {
+        expect((await reference.get()).data()).toMatchObject({
+          sourceDisclosureId: lookupDisclosure.sourceDisclosureId, aggregateVersion: 2,
+        });
+      }
+    },
+  );
 
   it("명시적인 active KRX ETF만 discovery 대상으로 공개한다", async () => {
     await seedPosition({ market: "KRX", instrumentType: "etf", code: "102110" });

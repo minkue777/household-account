@@ -292,6 +292,8 @@ Scheduler Adapter는 `Asia/Seoul` cron `0 9-20 * * *`로 매일 09:00부터 20:0
 
 전체 1년·전체 가구를 한 transaction에 넣지 않습니다. 한 instrument의 공시 실패가 다른 instrument의 성공 Event를 rollback하지 않으며 `PartialFailure`가 정확한 재시도 범위를 반환합니다.
 
+공시 재확인은 결정적 문서 ID의 단건 조회를 우선합니다. 기존 문서 ID와 정정 alias는 공시 ID로 범위를 좁혀 찾고 가구·종목을 검증하며, 공시 ID가 없는 이관 기록은 가구·기준일·지급일·주당금액으로 후보를 조회합니다. 공시마다 가구의 배당 이력 전체를 다시 읽거나 시간 기반 캐시로 최신 상태를 대체하지 않습니다. 최종 변경은 기존 transaction에서 receipt와 Event를 다시 읽어 지급 완료 보존과 버전 충돌 검사를 유지합니다.
+
 각 instrument 결과는 `executionKey + targetId` receipt로 독립 저장하고 마지막 discovery page에서 같은 executionKey의 receipt를 한 번 집계합니다. 일부 target 실패는 occurrence의 `PARTIAL_FAILURE`이며 Provider Health를 `degraded`, alert를 `closed`, 연속 전체 실패 수를 0으로 둡니다. 성공·NoData target이 하나도 없는 전체 실패 occurrence만 연속 실패 수를 1 증가시키며 3회째에 `outage`와 장애 경보를 엽니다. 같은 executionKey 재실행은 finalization receipt로 no-op 처리하고, 더 최신 occurrence 뒤에 도착한 이전 occurrence는 Health를 되돌리지 않습니다.
 
 ### 5.4 Query와 예상액
