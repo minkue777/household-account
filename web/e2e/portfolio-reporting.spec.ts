@@ -27,6 +27,11 @@ test('[T-STAT-AST-001][AST-004][AST-005][STAT-AST-001][STAT-AST-002][STAT-AST-00
       byType: { savings: balance / 2, property: balance / 2, stock: 0 }, byOwnerRefKey: { household: balance }, ownerDisplayNames: { household: '공동' },
     });
   }
+  const legacyHistoryReads: string[] = [];
+  page.on('request', request => {
+    const body = request.postData() ?? '';
+    if (request.url().includes('google.firestore.v1.Firestore') && decodeURIComponent(body).includes('asset_history')) legacyHistoryReads.push(body);
+  });
   await page.goto('/assets/stats');
   await expect(page.getByRole('button', { name: '3개월', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByText('+400,000원 (+66.67%)', { exact: true })).toBeVisible();
@@ -62,6 +67,7 @@ test('[T-STAT-AST-001][AST-004][AST-005][STAT-AST-001][STAT-AST-002][STAT-AST-00
     runtime.e2eStatisticsObserver.disconnect(); return runtime.e2eStatisticsLoading;
   })).toBe(false);
   expect(historyReads).toEqual([]);
+  expect(legacyHistoryReads).toEqual([]);
   expect(await page.locator('canvas').count()).toBeGreaterThan(0);
 });
 
@@ -138,6 +144,7 @@ test('[AST-008][JOB-AST-001][JOB-AST-002][JOB-AST-003] 빈 가구의 실제 평�
   await runScheduled('assetValuationDaily', '2025-01-02T23:55:00+09:00');
   const snapshot = (await documents(request, `households/${scope.householdId}/assetSnapshots`)).find(x => x.localDate === '2025-01-02');
   expect(snapshot).toMatchObject({ total: 0, financial: 0, byType: { stock: 0 }, byOwnerRefKey: { 'profile:archived-owner': 0 } });
+  expect(await documents(request, 'asset_history')).toEqual([]);
 });
 
 test('[T-DIV-005][DIV-002][DIV-005][DIV-006] 발표 배당 예상액을 표시하고 자산 삭제 후에도 최근 보유 이력으로 확정 수량을 복구한다', async ({ page, request }) => {

@@ -50,13 +50,13 @@ test('[T-AST-007][T-AST-010][AST-001][AST-002][AST-003][AST-006][AST-007][AST-00
   const storedOrder = (await documents(request, 'assets')).sort((a, b) => Number(a.order) - Number(b.order)).map(x => x.id);
   await page.reload();
   await expect.poll(() => page.locator('[data-asset-id]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-asset-id')))).toEqual(storedOrder);
-  await fixture(request, `asset_history/preserved-${savings.id}`, { householdId: scope.householdId, assetId: savings.id, date: '2024-01-01', balance: 100_000 });
+  await fixture(request, `households/${scope.householdId}/assetSnapshots/2024-01-01`, { householdId: scope.householdId, localDate: '2024-01-01', total: 100_000, financial: 100_000, byType: { savings: 100_000 }, byOwnerRefKey: { ['profile:' + owner.id]: 100_000 } });
   await page.locator(`[data-asset-id="${savings.id}"]`).click();
   // 현재 자산 편집의 첫 번째 icon button이 삭제 버튼입니다(접근성 이름 미제공).
   await edit.locator('button').first().click();
   await page.getByRole('dialog', { name: '자산 삭제' }).getByRole('button', { name: '삭제', exact: true }).click();
   await expect.poll(async () => (await documents(request, `households/${scope.householdId}/assets`)).find(x => x.id === savings.id)?.lifecycleState).toBe('deleted');
-  expect((await documents(request, 'asset_history')).find(x => x.id === `preserved-${savings.id}`)).toBeDefined();
+  expect((await documents(request, `households/${scope.householdId}/assetSnapshots`)).find(x => x.id === '2024-01-01')).toBeDefined();
   await expect(page.locator(`[data-asset-id="${savings.id}"]`)).toHaveCount(0);
   await expect(page.getByText(/^470,000\s*원$/).first()).toBeVisible();
 });

@@ -4,7 +4,7 @@ import type { AssetHistoryEntry } from '@/types/asset';
 import { assetStatisticsSessionKey, readCachedAssetStatistics, type AssetStatisticsReadOptions } from './assetStatisticsQueryCache';
 
 const PAGE_SIZE = 5_000;
-const MAX_PAGES = 10; // Preserve the existing 50,000-document safety bound per source.
+const MAX_PAGES = 10; // Preserve the existing 50,000-document safety bound for daily snapshots.
 export async function readAssetStatisticsHistory(startDate: string | undefined, endDate: string, options?: AssetStatisticsReadOptions): Promise<AssetHistoryEntry[]> {
   const scope = { ...requireClientSessionScope() };
   const assertScope = () => {
@@ -12,40 +12,9 @@ export async function readAssetStatisticsHistory(startDate: string | undefined, 
     if (!active || assetStatisticsSessionKey(active) !== assetStatisticsSessionKey(scope)) throw new Error('STATISTICS_SESSION_CHANGED');
   };
   const result = await readCachedAssetStatistics(JSON.stringify(['history', startDate, endDate]), async assertCacheCurrent => {
-    let stopped = false;
     const current = () => {
       assertScope();
       assertCacheCurrent();
-      if (stopped) throw new Error('STATISTICS_READ_CANCELLED');
-    };
-    const legacy: AssetHistoryEntry[] = [];
-    const seen = new Set<string>();
-    // Baseline dimensions may only exist before the selected range, so read this
-    // bounded server range to completion, carrying only the latest prior point.
-    const baselines = new Map<string, AssetHistoryEntry>();
-    const readLegacy = async () => {
-      let cursor: QueryDocumentSnapshot<DocumentData> | undefined;
-      for (let page = 0; ; page++) {
-        if (page >= MAX_PAGES) throw new Error('STATISTICS_PAGE_LIMIT_EXCEEDED');
-        current();
-        const snapshot = await getDocsFromServer(query(collection(db, 'asset_history'),
-          where('householdId', '==', scope.householdId), where('date', '<=', endDate),
-          orderBy('date', 'asc'), orderBy(documentId(), 'asc'), ...(cursor ? [startAfter(cursor)] : []), limit(PAGE_SIZE)));
-        current();
-        for (const document of snapshot.docs) {
-          if (seen.has(document.id)) throw new Error('STATISTICS_CURSOR_REPEATED');
-          seen.add(document.id);
-          const data = document.data();
-          if (typeof data.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(data.date)
-            || typeof data.assetId !== 'string' || typeof data.balance !== 'number' || !Number.isFinite(data.balance)) throw new Error('STATISTICS_SNAPSHOT_INVALID');
-          const entry: AssetHistoryEntry = { id: document.id, householdId: scope.householdId, assetId: data.assetId, date: data.date,
-            balance: data.balance, changeAmount: typeof data.changeAmount === 'number' ? data.changeAmount : 0, createdAt: new Date(0) };
-          if (startDate && entry.date < startDate) baselines.set(entry.assetId, entry);
-          else legacy.push(entry);
-        }
-        if (snapshot.docs.length < PAGE_SIZE) break;
-        cursor = snapshot.docs[snapshot.docs.length - 1];
-      }
     };
     const canonical: AssetHistoryEntry[] = [];
     const canonicalDates = new Set<string>();
@@ -94,15 +63,9 @@ export async function readAssetStatisticsHistory(startDate: string | undefined, 
         cursor = next;
       }
     };
-    // Independent compatibility and canonical streams may run together; neither
-    // contributes visible totals until both have completed every bounded page.
-    await Promise.all([readLegacy(), readCanonical()]).catch(error => {
-      stopped = true;
-      throw error;
-    });
+    await readCanonical();
     current();
-    const merged = [...legacy, ...Array.from(baselines.values())].filter(entry => !canonicalDates.has(entry.date))
-      .concat(canonical).sort((left, right) => left.date.localeCompare(right.date) || left.assetId.localeCompare(right.assetId));
+    const merged = canonical.sort((left, right) => left.date.localeCompare(right.date) || left.assetId.localeCompare(right.assetId));
     const previous = new Map<string, number>();
     return merged.map(entry => {
       const before = previous.get(entry.assetId);

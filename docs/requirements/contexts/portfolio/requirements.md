@@ -59,7 +59,7 @@ Portfolio Context는 **가구가 보유한 자산 계정, Position, 자동 납�
 | 기능 모듈 | Aggregate·데이터 | 핵심 불변식 | 현재 저장 |
 |---|---|---|---|
 | Portfolio Core | AssetAccount | 이름·유형·household/profile 명의 참조·통화·`active/deleted/purging` 생명주기·부호 | `assets` |
-| Portfolio Core | AssetSnapshot | 날짜별 결정 ID, 오늘 실시간 값 중복 없음; Portfolio Core의 `AssetSnapshotProjector`만 저장 | `asset_history` |
+| Portfolio Core | AssetSnapshot | 날짜별 결정 ID, 오늘 실시간 값 중복 없음; Portfolio Core의 `AssetSnapshotProjector`만 저장 | `households/{householdId}/assetSnapshots/{localDate}` |
 | Holdings | Position | 수량·평균단가·현재가, 실패와 0 구분 | `stock_holdings`, `crypto_holdings` |
 | Holdings | Market Contract | 국내·미국·코인·금 공급자 선택과 정규 Quote | 현재 Next/Functions provider 코드 |
 | Automation | AssetAutomationPlan | 납입·상환 정책과 last/first applicable month | 현재 `assets` 혼합 필드 |
@@ -67,7 +67,7 @@ Portfolio Context는 **가구가 보유한 자산 계정, Position, 자동 납�
 | Dividends | DividendEvent | 결정 ID와 상태 전이, 적격 보유수량 | `dividend_events` |
 | Dividends | AnnualDividendProjection | event 합계와 일치하는 12개월 배열 | `dividend_snapshots` |
 
-Position과 Automation은 `assets`를 직접 덮어쓰지 않고 Portfolio Core의 `ApplyAssetValuation` 또는 자동화 Command를 사용한다. `AssetSnapshotProjector`는 commit된 Portfolio 조회 결과만 결정적으로 upsert하며 Scheduler·Holdings·Reporting은 `asset_history`를 직접 쓰지 않는다. 목표 V2에서는 자동화 설정·checkpoint를 별도 소유 문서로 분리한다.
+Position과 Automation은 `assets`를 직접 덮어쓰지 않고 Portfolio Core의 `ApplyAssetValuation` 또는 자동화 Command를 사용한다. `AssetSnapshotProjector`는 commit된 Portfolio 조회 결과만 결정적으로 upsert하며 Scheduler·Holdings·Reporting은 `households/{householdId}/assetSnapshots/{localDate}`를 직접 쓰지 않는다. 목표 V2에서는 자동화 설정·checkpoint를 별도 소유 문서로 분리한다.
 
 ## 5. Context 불변식
 

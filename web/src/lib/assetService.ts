@@ -8,13 +8,11 @@ import {
   getDoc,
   QueryDocumentSnapshot,
   DocumentData,
-  orderBy,
   db,
   timestampToDate,
 } from '@/platform/read-model/firestoreReadModel';
 import {
   Asset,
-  AssetHistoryEntry,
   AssetInput,
   AssetType,
   CryptoHolding,
@@ -32,7 +30,6 @@ import {
 } from '@/features/portfolio/application/portfolioOptimisticProjection';
 import { createHouseholdCommandId } from '@/platform/functions-api/householdCommandClient';
 import { registerClientSessionReset } from '@/composition/clientSessionResetRegistry';
-import { formatLocalDate, getSeoulCalendarParts } from './utils/date';
 import { sumSignedBalancesByAssetType } from './assets/assetMath';
 import {
   calculateHoldingCostBasis,
@@ -40,7 +37,6 @@ import {
 } from './assets/holdingValuation';
 
 const ASSETS_COLLECTION = 'assets';
-const HISTORY_COLLECTION = 'asset_history';
 const HOLDINGS_COLLECTION = 'stock_holdings';
 const CRYPTO_HOLDINGS_COLLECTION = 'crypto_holdings';
 
@@ -559,23 +555,6 @@ function extractPhysicalGoldQuantity(asset: Pick<Asset, 'quantity' | 'memo'>): n
 }
 
 /**
- * Firestore 문서를 AssetHistoryEntry 객체로 변환
- */
-function mapDocToHistory(docSnap: QueryDocumentSnapshot<DocumentData>): AssetHistoryEntry {
-  const data = docSnap.data();
-  return {
-    id: docSnap.id,
-    householdId: data.householdId,
-    assetId: data.assetId,
-    balance: data.balance,
-    date: data.date,
-    changeAmount: data.changeAmount,
-    memo: data.memo,
-    createdAt: timestampToDate(data.createdAt) ?? new Date(0),
-  };
-}
-
-/**
  * 자산 추가
  */
 export async function addAsset(input: AssetInput): Promise<string> {
@@ -1041,79 +1020,6 @@ export function subscribeToAssets(
     ) return;
     unregisterAuthoritativeSubscription(authoritativeState, subscriptionId);
   };
-}
-
-/**
- * 특정 기간의 모든 자산 이력 조회 (차트용)
- */
-export async function getAssetHistoryByPeriod(
-  startDate: string,
-  endDate: string
-): Promise<AssetHistoryEntry[]> {
-  const householdId = getHouseholdId();
-
-  const q = query(
-    collection(db, HISTORY_COLLECTION),
-    where('householdId', '==', householdId)
-  );
-
-  const snapshot = await getDocs(q);
-  const allHistory = snapshot.docs.map(mapDocToHistory);
-
-  // 클라이언트에서 날짜 필터링
-  return allHistory
-    .filter((h) => h.date >= startDate && h.date <= endDate)
-    .sort((a, b) => a.date.localeCompare(b.date));
-}
-
-/**
- * 전월 말 총자산 조회 (asset_history에서 전월 마지막 TOTAL 스냅샷)
- */
-export async function getPreviousMonthTotal(): Promise<number | null> {
-  const householdId = getHouseholdId();
-  const now = getSeoulCalendarParts();
-
-  // 전월 마지막 날 계산
-  const lastDayOfPrevMonth = new Date(now.year, now.month - 1, 0);
-  const endDate = formatLocalDate(lastDayOfPrevMonth);
-
-  // 전월 첫째 날
-  const firstDayOfPrevMonth = new Date(now.year, now.month - 2, 1);
-  const startDate = formatLocalDate(firstDayOfPrevMonth);
-
-  try {
-    // 전월의 TOTAL 스냅샷 중 가장 마지막 날짜 조회
-    const q = query(
-      collection(db, HISTORY_COLLECTION),
-      where('householdId', '==', householdId),
-      where('assetId', '==', 'TOTAL'),
-      where('date', '>=', startDate),
-      where('date', '<=', endDate),
-      orderBy('date', 'desc')
-    );
-
-    const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-      return snapshot.docs[0].data().balance || null;
-    }
-  } catch (error) {
-    console.error('전월 총자산 조회 오류:', error);
-  }
-  return null;
-}
-
-/**
- * 이번 달 자산 변동액 계산 (전월 대비)
- */
-export async function getMonthlyAssetChange(currentTotal: number): Promise<number> {
-  const previousTotal = await getPreviousMonthTotal();
-
-  // 전월 스냅샷이 없으면 0 반환
-  if (previousTotal === null) {
-    return 0;
-  }
-
-  return currentTotal - previousTotal;
 }
 
 // ============================================

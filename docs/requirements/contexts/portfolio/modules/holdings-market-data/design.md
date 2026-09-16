@@ -327,8 +327,8 @@ Production composition은 `RefreshAccountPrices`·`RefreshHouseholdPrices`와 �
 중단 시 저장된 Operations checkpoint 이전에는 Snapshot을 만들지 않습니다. Quote target은
 Application 내부에서 50개 page·동시성 5·retryable 결과 총 3회로 처리하고, 실패 target은
 마지막 성공 Quote를 그대로 둔 terminal 결과로 기록합니다. Snapshot Projector는
-`households/{householdId}/assetSnapshots/{localDate}`를 Canonical key로 upsert하면서
-전환 기간의 `asset_history` Projection도 같은 transaction에서 갱신합니다. 같은 입력의
+`households/{householdId}/assetSnapshots/{localDate}` 한 문서만 upsert합니다. 구형
+`asset_history` 이중 쓰기는 종료했습니다. 같은 입력의
 재실행은 Canonical payload를 비교해 write 없이 replay하고 최초 `createdAt`을 보존합니다.
 
 ### 5.4 조회
