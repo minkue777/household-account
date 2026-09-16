@@ -112,7 +112,9 @@ async function main() {
   if (apply && (option('--confirm-project') !== projectId || !option('--expected-plan-hash'))) throw new Error('APPLY_SCOPE_REQUIRED');
   const app = initializeApp({ projectId, ...(process.env.FIRESTORE_EMULATOR_HOST ? {} : { credential: applicationDefault() }) });
   try {
-    const database = getFirestore(app); database.settings({ preferRest: true });
+    const database = getFirestore(app);
+    // Emulator gRPC supports credential-free local execution; REST fallback asks for ADC.
+    if (!process.env.FIRESTORE_EMULATOR_HOST) database.settings({ preferRest: true });
     const plan = await planAssetHistoryMigration(database);
     const summary = apply ? await applyAssetHistoryMigration(database, plan, option('--expected-plan-hash')) : plan.summary;
     console.log(JSON.stringify({ mode: apply ? 'applied-and-verified' : 'dry-run', planHash: plan.planHash, ...summary }));

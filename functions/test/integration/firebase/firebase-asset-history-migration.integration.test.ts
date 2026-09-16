@@ -11,7 +11,10 @@ const suite = process.env.FIRESTORE_EMULATOR_HOST ? describe : describe.skip;
 let app: App;
 let db: Firestore;
 async function run(...args: string[]) {
-  const { stdout } = await exec(process.execPath, [fileURLToPath(new URL('../../../scripts/migrate-asset-history.mjs', import.meta.url)), '--project', project, ...args]);
+  const { stdout } = await exec(process.execPath, [fileURLToPath(new URL('../../../scripts/migrate-asset-history.mjs', import.meta.url)), '--project', project, ...args], {
+    // Prove that the emulator CLI does not depend on this developer's saved ADC.
+    env: { ...process.env, GOOGLE_APPLICATION_CREDENTIALS: fileURLToPath(new URL('./absent-emulator-credentials.json', import.meta.url)) },
+  });
   return JSON.parse(stdout.trim());
 }
 async function seed(household: string, date: string, amounts: Record<string, number>) {
