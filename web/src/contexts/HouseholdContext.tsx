@@ -12,7 +12,6 @@ import {
 import type { User } from 'firebase/auth';
 import {
   DEFAULT_HOME_SUMMARY_CONFIG,
-  type HomeSummaryCardKey,
   type Household,
   type HouseholdMember,
 } from '@/types/household';
@@ -65,6 +64,8 @@ import {
 } from '@/platform/performance/webStartupPerformance';
 import { REMOTE_SESSION_RECOVERED_EVENT } from '@/platform/functions-api/firebaseCallableRecovery';
 import { isFirebaseEmulatorTestLoginEnabled } from '@/platform/firebase/firebaseEmulatorConfig';
+
+import { householdFromResolution, householdToResolutionView, sameHousehold } from '@/features/access-household/application/householdReadModel';
 
 const INTERACTIVE_AUTH_BOOTSTRAP_TIMEOUT_MS = 180_000;
 const SESSION_RESOLUTION_TIMEOUT_MS = 20_000;
@@ -153,106 +154,6 @@ function isTransientHouseholdReadFailure(error: unknown): boolean {
   if (error instanceof OperationDeadlineExceededError) return true;
   if (typeof error !== 'object' || error === null || !('code' in error)) return false;
   return TRANSIENT_FIRESTORE_READ_CODES.has(String((error as { code: unknown }).code));
-}
-
-const HOME_SUMMARY_CARD_KEYS = new Set<HomeSummaryCardKey>([
-  'localCurrencyBalance',
-  'monthlyRemainingBudget',
-  'monthlySpent',
-  'yearlySpent',
-]);
-
-function householdFromResolution(
-  resolution: Extract<SignedInUserResolution, { kind: 'membership-found' }>
-): Household | undefined {
-  const value = resolution.household;
-  if (
-    !value
-    || value.id !== resolution.membership.householdId
-    || value.name.trim() === ''
-    || Number.isNaN(Date.parse(value.createdAt))
-    || value.members.some(
-      (member) =>
-        member.id.trim() === ''
-        || member.name.trim() === ''
-        || !Number.isInteger(member.aggregateVersion)
-        || member.aggregateVersion < 1
-    )
-  ) {
-    return undefined;
-  }
-  const summary = value.homeSummaryConfig;
-  return {
-    id: value.id,
-    name: value.name,
-    createdAt: new Date(value.createdAt),
-    categoryCatalogVersion: value.categoryCatalogVersion ?? 0,
-    homeSummaryConfigVersion: value.homeSummaryConfigVersion ?? 0,
-    selectedLocalCurrencyType: value.selectedLocalCurrencyType,
-    initializationStatus: value.initializationStatus,
-    ...(value.defaultCategoryKey === undefined
-      ? {}
-      : { defaultCategoryKey: value.defaultCategoryKey }),
-    homeSummaryConfig:
-      summary
-      && HOME_SUMMARY_CARD_KEYS.has(summary.leftCard as HomeSummaryCardKey)
-      && HOME_SUMMARY_CARD_KEYS.has(summary.rightCard as HomeSummaryCardKey)
-        ? {
-            leftCard: summary.leftCard as HomeSummaryCardKey,
-            rightCard: summary.rightCard as HomeSummaryCardKey,
-          }
-        : DEFAULT_HOME_SUMMARY_CONFIG,
-    members: value.members.map((member) => ({ ...member })),
-  };
-}
-
-function householdToResolutionView(
-  household: Household
-): NonNullable<
-  Extract<SignedInUserResolution, { kind: 'membership-found' }>['household']
-> {
-  return {
-    id: household.id,
-    name: household.name,
-    createdAt: household.createdAt.toISOString(),
-    categoryCatalogVersion: household.categoryCatalogVersion ?? 0,
-    homeSummaryConfigVersion: household.homeSummaryConfigVersion ?? 0,
-    selectedLocalCurrencyType: household.selectedLocalCurrencyType,
-    initializationStatus: household.initializationStatus,
-    ...(household.defaultCategoryKey === undefined
-      ? {}
-      : { defaultCategoryKey: household.defaultCategoryKey }),
-    ...(household.homeSummaryConfig === undefined
-      ? {}
-      : { homeSummaryConfig: household.homeSummaryConfig }),
-    members: household.members.map((member) => ({ ...member })),
-  };
-}
-
-function sameHousehold(left: Household | null, right: Household): boolean {
-  if (
-    left === null
-    || left.id !== right.id
-    || left.name !== right.name
-    || left.createdAt.getTime() !== right.createdAt.getTime()
-    || left.defaultCategoryKey !== right.defaultCategoryKey
-    || (left.categoryCatalogVersion ?? 0) !== (right.categoryCatalogVersion ?? 0)
-    || (left.homeSummaryConfigVersion ?? 0) !== (right.homeSummaryConfigVersion ?? 0)
-    || left.selectedLocalCurrencyType !== right.selectedLocalCurrencyType
-    || left.initializationStatus !== right.initializationStatus
-    || left.homeSummaryConfig?.leftCard !== right.homeSummaryConfig?.leftCard
-    || left.homeSummaryConfig?.rightCard !== right.homeSummaryConfig?.rightCard
-    || left.members.length !== right.members.length
-  ) {
-    return false;
-  }
-
-  return left.members.every((member, index) => {
-    const nextMember = right.members[index];
-    return member.id === nextMember.id
-      && member.name === nextMember.name
-      && member.aggregateVersion === nextMember.aggregateVersion;
-  });
 }
 
 export function HouseholdProvider({ children }: { children: ReactNode }) {

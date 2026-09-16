@@ -3,6 +3,9 @@ import { logger } from "firebase-functions";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FirebaseDividendProviderObservation } from "../../../src/adapters/firebase/dividends/firebaseDividendProviderObservation";
+import { FirebaseDividendEventRuntimeRepository } from "../../../src/adapters/firebase/dividends/firebaseDividendEventRuntimeRepository";
+import { KindEtfDividendDisclosureSource } from "../../../src/adapters/http/kindEtfDividendDisclosureSource";
+import { createDividendScheduledRuntimeApplication } from "../../../src/contexts/portfolio/dividends/application/dividendScheduledRuntimeApplication";
 import { InMemoryFirestore } from "../../support/in-memory-firestore";
 
 vi.mock("firebase-functions", () => ({ logger: { info: vi.fn(), error: vi.fn() } }));
@@ -10,6 +13,30 @@ vi.mock("firebase-functions", () => ({ logger: { info: vi.fn(), error: vi.fn() }
 afterEach(() => { vi.unstubAllEnvs(); vi.clearAllMocks(); });
 
 describe("EXT-001 실제 KIND 관측 저장소와 Cloud Monitoring 전이 로그", () => {
+  it("공시 번호 없는 구형 이벤트의 로컬 no-data는 KIND 장애 streak와 열린 경보를 해제하지 않는다", async () => {
+    const memory = new InMemoryFirestore();
+    memory.seed("dividend_events/legacy", { householdId: "house", instrumentCode: "ETF", instrumentName: "ETF", recordDate: "2026-09-01", paymentDate: "2099-09-20", perShareAmount: 100, status: "fixed", eligibleQuantity: 1, totalAmount: 100, aggregateVersion: 1 });
+    const database = memory as unknown as firestore.Firestore;
+    const observations = new FirebaseDividendProviderObservation(database);
+    const http = { execute: vi.fn(async () => { throw new Error("legacy identity must not call HTTP"); }) };
+    const runtime = createDividendScheduledRuntimeApplication({
+      disclosures: new KindEtfDividendDisclosureSource(http),
+      events: new FirebaseDividendEventRuntimeRepository(database),
+      holdings: { async listActiveKrxEtfTargets() { return { items: [] }; }, async listPositionHistory() { return []; } },
+      providerObservations: observations,
+    });
+    for (let sequence = 1; sequence <= 4; sequence += 1) {
+      const executionKey = `outage:${sequence}`;
+      const observedAt = `2026-09-0${sequence}T11:00:00+09:00`;
+      await observations.record({ executionKey, observedAt, targetId: "instrument:current", resultKind: "CONTRACT_FAILURE", errorCode: "HTTP_STATUS_NOT_SUPPORTED", attempts: 1, httpStatus: 403 });
+      await runtime.runLifecyclePage({ limit: 10, executionKey, observedAt, asOfDate: "2026-09-20" });
+    }
+    expect(http.execute).not.toHaveBeenCalled();
+    expect(memory.document(memory.paths("operations/runtime/providerHealth/")[0])).toMatchObject({ status: "outage", consecutiveFailedRuns: 4, alertState: "open", lastRunFailedTargets: 1, lastRunSucceededTargets: 0 });
+    expect(memory.paths("operations/runtime/providerObservationReceipts/")).toHaveLength(4);
+    expect(vi.mocked(logger.info).mock.calls.filter(([event]) => event === "provider-health-alert-resolved")).toHaveLength(0);
+  });
+
   it("부분 실패는 degraded, 전체 실패 3회는 open, 부분 복구는 동일 경보 resolve이며 replay가 중복 경보를 만들지 않는다", async () => {
     const channel = "projects/test/notificationChannels/provider-email";
     vi.stubEnv("CLOUD_MONITORING_NOTIFICATION_CHANNEL", channel);

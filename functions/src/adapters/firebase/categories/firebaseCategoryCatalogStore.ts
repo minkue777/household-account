@@ -16,6 +16,7 @@ import type {
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
 import { invalidateCaptureConfigurationProjection } from "../payment-capture/firebaseCaptureConfigurationProjection";
+import { categoryLifecycleState, categoryReferenceId } from "./categoryReadMapping";
 
 const RECEIPT_CONTEXT = "household-finance-category-catalog";
 const SCHEMA_VERSION = 2;
@@ -65,13 +66,7 @@ function mapCategory(
   const name = text(data, "name", "label");
   const color = text(data, "color");
   if (name === undefined || color === undefined) return undefined;
-  const storedState = text(data, "state", "lifecycleState");
-  const state =
-    storedState === "archive-pending" || storedState === "archived"
-      ? storedState
-      : data.isActive === false
-        ? "archived"
-        : "active";
+  const state = categoryLifecycleState(data);
   const budgetCandidate = data.budgetInWon ?? data.budget;
   const budgetInWon =
     budgetCandidate === null ||
@@ -79,7 +74,7 @@ function mapCategory(
       ? (budgetCandidate as number | null)
       : null;
   return {
-    categoryId: text(data, "categoryId", "key") ?? snapshot.id,
+    categoryId: categoryReferenceId(snapshot.id, data),
     name,
     color,
     budgetInWon,

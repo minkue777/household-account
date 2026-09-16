@@ -22,7 +22,6 @@ import {
   type ShortcutHttpRequestProcessingResult,
 } from "../../src/contexts/payment-capture/shortcut-ingestion/public";
 import { createShortcutCredentialLifecycleDriver } from "./shortcut-credential-lifecycle-driver";
-import { createShortcutPaymentRecordingDriver } from "./shortcut-payment-recording-driver";
 
 export interface ShortcutHttpInboundDriverFixture {
   readonly limits: {
@@ -47,13 +46,6 @@ export interface ShortcutHttpInboundDriverFixture {
     readonly membershipState: "active" | "removed";
     readonly householdState: "active" | "deleted" | "purging";
   }[];
-  readonly cards: readonly {
-    readonly householdId: string;
-    readonly ownerMemberId: string;
-    readonly cardCompany: string;
-    readonly lastFour: string;
-    readonly lifecycleState: "active" | "retired";
-  }[];
   readonly invitationCodes?: readonly string[];
   readonly ingressGate?:
     | "allowed"
@@ -62,6 +54,7 @@ export interface ShortcutHttpInboundDriverFixture {
     | "quota-exceeded";
   readonly intakeOutcome?:
     | "success"
+    | "card-unmatched"
     | "duplicate"
     | "cancelled"
     | "cancellation-not-found"
@@ -69,34 +62,14 @@ export interface ShortcutHttpInboundDriverFixture {
     | "retryable-failure";
 }
 
-export interface ShortcutHttpInboundDriverSnapshot {
-  readonly transactions: readonly {
-    readonly transactionId: string;
-    readonly householdId: string;
-    readonly creatorMemberId: string;
-    readonly source: "ios-shortcut";
-    readonly amountInWon: number;
-    readonly merchant: string;
-  }[];
-  readonly events: readonly {
-    readonly eventName:
-      | "TransactionRecorded.v1"
-      | "CaptureDuplicateObserved.v1";
-    readonly eventId: string;
-    readonly producer:
-      | "household-finance.ledger"
-      | "payment-capture.intake";
-    readonly householdId: string;
-    readonly creatorMemberId: string;
-  }[];
-}
+export type ShortcutIntakeRequest = Parameters<ShortcutHttpPaymentIntakePort["submit"]>[0];
 
 export interface ShortcutHttpInboundDriver {
   handle(request: ShortcutHttpInboundRequest): Promise<ShortcutHttpInboundResponse>;
   handleConcurrently(
     requests: readonly ShortcutHttpInboundRequest[],
   ): Promise<readonly ShortcutHttpInboundResponse[]>;
-  snapshot(): ShortcutHttpInboundDriverSnapshot;
+  intakeRequests(): readonly ShortcutIntakeRequest[];
   intakeSubmissionCount(): number;
 }
 
@@ -285,88 +258,21 @@ class FixtureShortcutHttpCredentialGate
 export function createShortcutHttpInboundDriver(
   fixture: ShortcutHttpInboundDriverFixture,
 ): ShortcutHttpInboundDriver {
-  const duplicateEvents: Array<{
-    readonly eventName: "CaptureDuplicateObserved.v1";
-    readonly eventId: string;
-    readonly producer: "payment-capture.intake";
-    readonly householdId: string;
-    readonly creatorMemberId: string;
-  }> = [];
-  const recording = createShortcutPaymentRecordingDriver({
-    commitAvailable: fixture.intakeOutcome !== "retryable-failure",
-  });
-  let intakeSubmissionCount = 0;
+  // HTTP 경계만 검증하는 명시적 stub입니다. 거래/Outbox를 재구현하지 않습니다.
+  // 실제 저장·카드 판정·중복 event는 Capture adapter 및 E2E에서 검증합니다.
+  const intakeRequests: ShortcutIntakeRequest[] = [];
   const intake: ShortcutHttpPaymentIntakePort = {
     async submit(input) {
-      intakeSubmissionCount += 1;
-      if (input.parsed.observationType === "cancellation") {
-        if (fixture.intakeOutcome === "retryable-failure") {
-          return { kind: "retryable-failure" };
-        }
-        if (fixture.intakeOutcome === "cancellation-not-found") {
-          return { kind: "cancellation-not-found" };
-        }
-        if (fixture.intakeOutcome === "needs-confirmation") {
-          return {
-            kind: "needs-confirmation",
-            captureLineageIds: [
-              "capture-lineage-candidate-a",
-              "capture-lineage-candidate-b",
-            ],
-          };
-        }
-        return {
-          kind: "cancelled",
-          transactionIds: ["transaction-cancelled-original"],
-        };
+      intakeRequests.push(structuredClone(input));
+      switch (fixture.intakeOutcome) {
+        case "retryable-failure": return { kind: "retryable-failure" };
+        case "card-unmatched": return { kind: "rejected", code: "CARD_NOT_REGISTERED_FOR_ACTOR" };
+        case "duplicate": return { kind: "duplicate", existingTransactionId: "transaction-existing" };
+        case "cancellation-not-found": return { kind: "cancellation-not-found" };
+        case "needs-confirmation": return { kind: "needs-confirmation", captureLineageIds: ["capture-lineage-candidate-a", "capture-lineage-candidate-b"] };
+        case "cancelled": return { kind: "cancelled", transactionIds: ["transaction-cancelled-original"] };
+        default: return { kind: "created", transactionId: "transaction-created" };
       }
-      if (fixture.intakeOutcome === "duplicate") {
-        duplicateEvents.push({
-          eventName: "CaptureDuplicateObserved.v1",
-          eventId: `${input.commandId}:capture-duplicate-observed`,
-          producer: "payment-capture.intake",
-          householdId: input.actor.householdId,
-          creatorMemberId: input.actor.actingMemberId,
-        });
-        return {
-          kind: "duplicate",
-          existingTransactionId: "transaction-existing",
-        };
-      }
-      const result = await recording.record({
-        commandId: input.commandId,
-        actor: {
-          householdId: input.actor.householdId,
-          memberId: input.actor.actingMemberId,
-        },
-        parsed: {
-          amountInWon: input.parsed.amountInWon,
-          merchant: input.parsed.merchant,
-          cardEvidence: input.parsed.cardEvidence,
-        },
-        defaultCategory: {
-          kind: "Found",
-          categoryId: "category-default",
-        },
-        cards: fixture.cards.map((card, index) => ({
-          cardId: `fixture-card-${index + 1}`,
-          householdId: card.householdId,
-          ownerMemberId: card.ownerMemberId,
-          companyLabel: card.cardCompany,
-          lastFour: card.lastFour,
-          lifecycle: card.lifecycleState,
-        })),
-      });
-      if (result.kind === "Created") {
-        return { kind: "created", transactionId: result.transactionId };
-      }
-      if (
-        result.kind === "Rejected" &&
-        result.code === "CARD_NOT_REGISTERED_FOR_ACTOR"
-      ) {
-        return { kind: "rejected", code: result.code };
-      }
-      return { kind: "retryable-failure" };
     },
   };
   const processor = createShortcutHttpRequestProcessorApplication({
@@ -392,30 +298,7 @@ export function createShortcutHttpInboundDriver(
     handle: (request) => handler.handle(request),
     handleConcurrently: (requests) =>
       Promise.all(requests.map((request) => handler.handle(request))),
-    intakeSubmissionCount: () => intakeSubmissionCount,
-    snapshot() {
-      const state = recording.state();
-      const transactions = state.transactions.map((transaction) => ({
-        transactionId: transaction.transactionId,
-        householdId: transaction.householdId,
-        creatorMemberId: transaction.creatorMemberId,
-        source: transaction.source,
-        amountInWon: transaction.amountInWon,
-        merchant: transaction.merchant,
-      }));
-      return {
-        transactions,
-        events: [
-          ...state.outboxEventIds.map((eventId, index) => ({
-            eventName: "TransactionRecorded.v1" as const,
-            eventId,
-            producer: "household-finance.ledger" as const,
-            householdId: transactions[index].householdId,
-            creatorMemberId: transactions[index].creatorMemberId,
-          })),
-          ...duplicateEvents.map((event) => ({ ...event })),
-        ],
-      };
-    },
+    intakeSubmissionCount: () => intakeRequests.length,
+    intakeRequests: () => structuredClone(intakeRequests),
   };
 }

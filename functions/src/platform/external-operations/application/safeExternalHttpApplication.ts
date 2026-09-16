@@ -8,6 +8,7 @@ import type {
   SafeExternalHttpInputPort,
 } from "./ports/in/safeExternalHttpInputPort";
 import type { ScriptedHttpTransportPort } from "./ports/out/scriptedHttpTransportPort";
+import { retryableHttpStatusCode } from "../domain/httpStatus";
 
 export interface SafeExternalHttpPolicy {
   readonly allowedHttpsHosts: readonly string[];
@@ -111,12 +112,7 @@ export function createSafeExternalHttpApplication(dependencies: {
           if (step.status === 200) {
             return { targetId: target.targetId, kind: "success", attempts: attempt };
           }
-          const retryCode =
-            step.status === 429
-              ? "RATE_LIMITED"
-              : step.status >= 500
-                ? "PROVIDER_UNAVAILABLE"
-                : undefined;
+          const retryCode = retryableHttpStatusCode(step.status);
           if (retryCode !== undefined) {
             if (attempt < dependencies.policy.maxAttempts) break;
             return {

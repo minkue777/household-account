@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { Expense, Category } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
+import { categoryBudgetProgress } from '@/features/category-budget/monthlyBudget';
 
 interface CategorySummaryProps {
   expenses: Expense[];
@@ -58,9 +59,10 @@ export default function CategorySummary({
         const budget = getCategoryBudget(category);
         const color = getCategoryColor(category);
         const label = getCategoryLabel(category);
-        const hasBudget = showBudgetProgress && budget !== null && budget > 0;
-        const percentage = hasBudget ? Math.min((total / budget) * 100, 100) : 0;
-        const isOverBudget = hasBudget && total > budget;
+        const progress = categoryBudgetProgress(total, showBudgetProgress ? budget : null);
+        const hasBudget = progress.hasBudget;
+        const percentage = Math.min(progress.percentage, 100);
+        const isOverBudget = progress.overrun > 0;
 
         return (
           <div
@@ -83,7 +85,7 @@ export default function CategorySummary({
                       isOverBudget ? 'text-red-500' : 'text-slate-500'
                     }`}
                   >
-                    {hasBudget ? `(${Math.round((total / budget) * 100)}%)` : '(--)'}
+                    {hasBudget ? `(${Math.round(progress.percentage)}%)` : '(--)'}
                   </span>
                 )}
               </div>
@@ -110,7 +112,7 @@ export default function CategorySummary({
                       />
                     </svg>
                     <span className="text-xs text-red-500">
-                      예산 초과 {(total - budget).toLocaleString()}원
+                      예산 초과 {progress.overrun.toLocaleString()}원
                     </span>
                   </div>
                 )}

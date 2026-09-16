@@ -1,3 +1,5 @@
+import type { RecurringLedgerPosting, RecurringLedgerRecordedEvent } from "../../../ledger/public";
+
 export interface RecurringProcessPlan {
   readonly householdId: string;
   readonly planId: string;
@@ -24,39 +26,24 @@ export interface RecurringExecution {
   readonly version: number;
 }
 
-export interface RecurringLedgerTransaction {
-  readonly transactionId: string;
-  readonly recurringPlanId: string;
-  readonly recurringTargetMonth: string;
-  readonly transactionType: "expense";
-  readonly source: "recurring";
-  readonly originChannel: "recurring";
-  readonly creatorMemberId: string;
-  readonly merchant: string;
-  readonly amountInWon: number;
-  readonly categoryId: string;
-  readonly memo: string;
-  readonly accountingDate: string;
-}
-
 export interface RecurringProcessReceipt {
   readonly idempotencyKey: string;
   readonly payloadSignature: string;
   readonly ledgerTransactionId: string;
 }
 
-export interface RecurringProcessingEvent {
-  readonly eventType: "TransactionRecorded.v1" | "RecurringPlanProcessed.v1";
+export type RecurringProcessingEvent = RecurringLedgerRecordedEvent | {
+  readonly eventType: "RecurringPlanProcessed.v1";
   readonly eventId: string;
   readonly planId: string;
   readonly targetMonth: string;
   readonly transactionId: string;
-}
+};
 
 export interface RecurringProcessingState {
   readonly plans: readonly RecurringProcessPlan[];
   readonly executions: readonly RecurringExecution[];
-  readonly ledgerTransactions: readonly RecurringLedgerTransaction[];
+  readonly ledgerTransactions: readonly RecurringLedgerPosting[];
   readonly receipts: readonly RecurringProcessReceipt[];
   readonly outboxEvents: readonly RecurringProcessingEvent[];
 }

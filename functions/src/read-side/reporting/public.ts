@@ -1,13 +1,3 @@
-import {
-  selectInitialTrendCategories,
-  type TrendCategory,
-} from "./trendCategorySelection";
-export {
-  resolveStatisticsPeriod,
-  type ResolveStatisticsPeriodResult,
-  type StatisticsPeriodInput,
-  type StatisticsPeriodPreset,
-} from "./statisticsPeriod";
 export {
   queryAssetStatisticsPeriod,
   type AssetPeriodPreset,
@@ -75,38 +65,3 @@ export {
   type HistoricalAssetStatisticsResult,
   type HistoricalOwnerRefKey,
 } from "./historicalAssetDimensions";
-
-export interface TrendCategorySelectionInput {
-  categories: readonly TrendCategory[];
-  compatibilityDefaults: readonly string[];
-}
-
-export interface TrendCategorySelection {
-  initialSelection(): readonly string[];
-  toggle(categoryId: string): readonly string[];
-  reload(): readonly string[];
-}
-
-export function createTrendCategorySelection(
-  input: TrendCategorySelectionInput,
-): TrendCategorySelection {
-  const initial = selectInitialTrendCategories(
-    input.categories,
-    input.compatibilityDefaults,
-  );
-  let current = [...initial];
-
-  return {
-    initialSelection: () => [...initial],
-    toggle: (categoryId) => {
-      current = current.includes(categoryId)
-        ? current.filter((selectedId) => selectedId !== categoryId)
-        : [...current, categoryId];
-      return [...current];
-    },
-    reload: () => {
-      current = [...initial];
-      return [...current];
-    },
-  };
-}

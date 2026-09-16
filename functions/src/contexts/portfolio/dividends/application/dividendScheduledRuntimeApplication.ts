@@ -1,6 +1,9 @@
 import { selectNearestPositionSnapshots } from "../domain/policies/dividendEligibilityPolicy";
 import type {
   DividendLifecycleEvidence,
+  DividendHoldingTargetView,
+  KindDividendDisclosure,
+  DividendAnnouncementUpsertResult,
   DividendScheduledRuntimeDependencies,
   KindDividendDiscoveryResult,
   ScheduledDividendEvent,
@@ -86,6 +89,58 @@ function lifecycleOutcome(
 export function createDividendScheduledRuntimeApplication(
   dependencies: DividendScheduledRuntimeDependencies,
 ) {
+  // Discovery and persisted-event rechecks share correction evidence and upsert policy.
+  async function applyAnnouncement(
+    target: DividendHoldingTargetView,
+    disclosure: KindDividendDisclosure,
+    observedAt: string,
+    idempotencyKey: string,
+    expectedEventId?: string,
+  ): Promise<DividendAnnouncementUpsertResult> {
+    const existing = await dependencies.events.findAnnouncement({ target, disclosure });
+    let correction;
+    if (existing?.status === "fixed" && disclosure.disclosureState === "active" &&
+        (existing.recordDate !== disclosure.recordDate || existing.perShareAmount !== disclosure.perShareAmount)) {
+      try {
+        const observations = await dependencies.holdings.listPositionHistory({
+          householdId: target.householdId,
+          sourceAssetIds: [...new Set([...existing.sourceAssetIds, ...target.sourceAssetIds])],
+          instrumentCode: disclosure.instrumentCode,
+        });
+        const selected = selectNearestPositionSnapshots({ instrumentCode: disclosure.instrumentCode, recordDate: disclosure.recordDate, snapshots: observations });
+        if (selected.length === 0) return { kind: "retryable-failure", code: "POSITION_HISTORY_NOT_OBSERVED" };
+        correction = {
+          expectedVersion: existing.aggregateVersion,
+          eligibleQuantity: selected.reduce((sum, item) => sum + item.quantity, 0),
+          evidence: selected.map((item): DividendLifecycleEvidence => ({ ...item, selectionKind: item.snapshotDate === disclosure.recordDate ? "exact" : "nearest" })),
+        };
+      } catch {
+        return { kind: "retryable-failure", code: "POSITION_HISTORY_READ_FAILED" };
+      }
+    }
+    return dependencies.events.upsertAnnouncement({
+      target,
+      disclosure,
+      observedAt: observedAt,
+      idempotencyKey: idempotencyKey,
+      ...(expectedEventId === undefined ? {} : { expectedEventId }),
+      ...(correction === undefined ? {} : { correction }),
+    });
+  }
+
+  async function recordProviderResult(targetId: string, result: KindDividendDiscoveryResult,
+    input: { executionKey: string; observedAt: string }): Promise<void> {
+    // Legacy identities rejected locally are not observations of provider health.
+    if (result.attempts === 0) return;
+    const failed = result.kind === "retryable-failure" || result.kind === "contract-failure";
+    await dependencies.providerObservations.record({
+      ...input, targetId, resultKind: providerResultKind(result), attempts: result.attempts,
+      ...(result.kind === "success" ? {} : { errorCode: result.code }),
+      ...(!failed || result.httpStatus === undefined ? {} : { httpStatus: result.httpStatus }),
+      ...(!failed || result.stage === undefined ? {} : { stage: result.stage }),
+    });
+  }
+
   return {
     async runDiscoveryPage(input: {
       readonly skipTarget?: (targetId: string) => boolean;
@@ -118,23 +173,8 @@ export function createDividendScheduledRuntimeApplication(
                 periodFrom: input.periodFrom,
                 periodTo: input.periodTo,
               });
-              const failed =
-                result.kind === "retryable-failure" ||
-                result.kind === "contract-failure";
-              await dependencies.providerObservations.record({
-                executionKey: input.executionKey,
-                targetId: `instrument:${target.instrument.code}`,
-                resultKind: providerResultKind(result),
-                ...(result.kind === "success" ? {} : { errorCode: result.code }),
-                attempts: result.attempts,
-                ...(!failed || result.httpStatus === undefined
-                  ? {}
-                  : { httpStatus: result.httpStatus }),
-                ...(!failed || result.stage === undefined
-                  ? {}
-                  : { stage: result.stage }),
-                observedAt: input.observedAt,
-              });
+              await recordProviderResult(`instrument:${target.instrument.code}`, result,
+                { executionKey: input.executionKey, observedAt: input.observedAt });
               return result;
             })();
             byInstrument.set(target.instrument.code, discovery);
@@ -144,34 +184,8 @@ export function createDividendScheduledRuntimeApplication(
 
           const changedEventIds: string[] = [];
           for (const disclosure of result.disclosures) {
-            const existing = await dependencies.events.findAnnouncement({ target, disclosure });
-            let correction;
-            if (existing?.status === "fixed" && disclosure.disclosureState === "active" &&
-                (existing.recordDate !== disclosure.recordDate || existing.perShareAmount !== disclosure.perShareAmount)) {
-              try {
-                const observations = await dependencies.holdings.listPositionHistory({
-                  householdId: target.householdId,
-                  sourceAssetIds: [...new Set([...existing.sourceAssetIds, ...target.sourceAssetIds])],
-                  instrumentCode: disclosure.instrumentCode,
-                });
-                const selected = selectNearestPositionSnapshots({ instrumentCode: disclosure.instrumentCode, recordDate: disclosure.recordDate, snapshots: observations });
-                if (selected.length === 0) return { targetId: target.targetId, kind: "failed", code: "POSITION_HISTORY_NOT_OBSERVED", retryable: true };
-                correction = {
-                  expectedVersion: existing.aggregateVersion,
-                  eligibleQuantity: selected.reduce((sum, item) => sum + item.quantity, 0),
-                  evidence: selected.map((item): DividendLifecycleEvidence => ({ ...item, selectionKind: item.snapshotDate === disclosure.recordDate ? "exact" : "nearest" })),
-                };
-              } catch {
-                return { targetId: target.targetId, kind: "failed", code: "POSITION_HISTORY_READ_FAILED", retryable: true };
-              }
-            }
-            const upsert = await dependencies.events.upsertAnnouncement({
-              target,
-              disclosure,
-              observedAt: input.observedAt,
-              idempotencyKey: `${input.executionKey}:discovery:${target.targetId}:${disclosure.sourceDisclosureId}`,
-              ...(correction === undefined ? {} : { correction }),
-            });
+            const upsert = await applyAnnouncement(target, disclosure, input.observedAt,
+              `${input.executionKey}:discovery:${target.targetId}:${disclosure.sourceDisclosureId}`);
             if (upsert.kind === "retryable-failure") return { targetId: target.targetId, kind: "failed", code: upsert.code, retryable: true };
             if (
               upsert.kind === "created" ||
@@ -184,12 +198,6 @@ export function createDividendScheduledRuntimeApplication(
           return providerOutcome(target.targetId, result, changedEventIds);
         },
       );
-      if (page.nextCursor === undefined) {
-        await dependencies.providerObservations.finalizeRun({
-          executionKey: input.executionKey,
-          observedAt: input.observedAt,
-        });
-      }
       return {
         items,
         ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
@@ -209,8 +217,41 @@ export function createDividendScheduledRuntimeApplication(
         limit: input.limit,
       });
       const items: DividendScheduledTargetOutcome[] = [];
-      for (const event of page.items) {
+      for (const persisted of page.items) {
+        let event = persisted;
         if (input.skipTarget?.(`event:${event.eventId}`) === true) continue;
+        const recheck = await dependencies.disclosures.recheck({
+          sourceDisclosureId: event.sourceDisclosureId,
+          instrumentCode: event.instrumentCode,
+          instrumentName: event.instrumentName,
+        });
+        await recordProviderResult(`disclosure:${event.sourceDisclosureId}:${event.instrumentCode}`, recheck,
+          { executionKey: input.executionKey, observedAt: input.observedAt });
+        if (recheck.kind === "success") {
+          const disclosure = recheck.disclosures.find(candidate =>
+            candidate.sourceDisclosureId === event.sourceDisclosureId && candidate.instrumentCode === event.instrumentCode);
+          if (disclosure !== undefined) {
+            const target: DividendHoldingTargetView = {
+              targetId: `event:${event.eventId}`, householdId: event.householdId,
+              sourceAssetIds: event.sourceAssetIds,
+              instrument: { market: "KRX", instrumentType: "ETF", code: event.instrumentCode,
+                name: event.instrumentName, currency: "KRW" },
+            };
+            const upsert = await applyAnnouncement(target, disclosure, input.observedAt,
+              `${input.executionKey}:recheck:${event.eventId}`, event.eventId);
+            if (upsert.kind === "retryable-failure") {
+              items.push({ targetId: target.targetId, kind: "failed", code: upsert.code, retryable: true });
+              continue;
+            }
+            const refreshed = await dependencies.events.findAnnouncement({ target, disclosure });
+            if (refreshed === undefined) {
+              items.push({ targetId: target.targetId, kind: "skipped", receipt: upsert.kind });
+              continue;
+            }
+            event = refreshed;
+          }
+        }
+        // Provider absence/failure does not erase stored facts or block their lifecycle.
         if (event.status === "fixed") {
           if (input.asOfDate < event.paymentDate) {
             items.push({
@@ -321,6 +362,12 @@ export function createDividendScheduledRuntimeApplication(
             ? lifecycleOutcome(event, paid.status, paid.aggregateVersion)
             : lifecycleOutcome(event, fixed.status, fixed.aggregateVersion),
         );
+      }
+      if (page.nextCursor === undefined) {
+        await dependencies.providerObservations.finalizeRun({
+          executionKey: input.executionKey,
+          observedAt: input.observedAt,
+        });
       }
       return {
         items,

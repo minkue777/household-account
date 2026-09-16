@@ -99,7 +99,10 @@ export class FirebaseAssetSnapshotProjectionSource
   constructor(private readonly portfolio: PortfolioRuntimeStorePort) {}
 
   async readCurrent(householdId: string) {
-    const state = await this.portfolio.readState(householdId);
+    const state = await this.portfolio.readState(householdId, {
+      positions: false,
+      automationPlans: false,
+    });
     const ownerDisplayNames: Record<string, string> = {};
     for (const asset of state.assets) {
       if (asset.lifecycleState !== "active") continue;

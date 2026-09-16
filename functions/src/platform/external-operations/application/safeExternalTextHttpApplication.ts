@@ -8,6 +8,7 @@ import type {
   SafeExternalTextHttpResult,
 } from "./ports/in/safeExternalTextHttpInputPort";
 import type { ExternalTextHttpTransportPort } from "./ports/out/externalTextHttpTransportPort";
+import { retryableHttpStatusCode } from "../domain/httpStatus";
 
 export interface SafeExternalTextHttpPolicy {
   readonly providers: readonly ProviderNetworkPolicy[];
@@ -34,14 +35,6 @@ function diagnostics(stage: string | undefined, httpStatus?: number) {
     ...(stage === undefined ? {} : { stage }),
     ...(httpStatus === undefined ? {} : { httpStatus }),
   };
-}
-
-function retryableStatus(status: number):
-  | "RATE_LIMITED"
-  | "PROVIDER_UNAVAILABLE"
-  | undefined {
-  if (status === 429) return "RATE_LIMITED";
-  return status >= 500 ? "PROVIDER_UNAVAILABLE" : undefined;
 }
 
 export function createSafeExternalTextHttpApplication(dependencies: {
@@ -139,7 +132,7 @@ export function createSafeExternalTextHttpApplication(dependencies: {
             ...diagnostics(request.stage),
           };
         }
-        const retryCode = retryableStatus(result.status);
+        const retryCode = retryableHttpStatusCode(result.status);
         if (retryCode !== undefined) {
           if (attempt < dependencies.policy.maxAttempts) break;
           return {

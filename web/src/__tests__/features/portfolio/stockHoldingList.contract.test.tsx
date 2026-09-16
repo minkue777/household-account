@@ -2,6 +2,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import StockHoldingList from '@/components/assets/StockHoldingList';
+import CryptoHoldingList from '@/components/assets/CryptoHoldingList';
 import { deleteStockHolding, updateStockHolding } from '@/lib/assetService';
 import { portfolioQueries } from '@/features/portfolio/application/portfolioQueries';
 import type { StockHolding } from '@/types/asset';
@@ -73,6 +74,17 @@ function stockHolding(): StockHolding {
 describe('StockHoldingList 수동 보유 항목 수정 계약', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  test('주식과 코인 목록은 정상 0원 시세의 평가액과 100% 손실을 표시한다', () => {
+    const stock = { ...stockHolding(), currentPrice: 0 };
+    const { unmount } = render(<StockHoldingList holdings={[stock]} isLoading={false} isRefreshing={false} onRefresh={jest.fn()} assetId="asset-1" />);
+    expect(screen.getByText(/-100\.00%/)).toBeInTheDocument();
+    expect(screen.getByText('0원')).toBeInTheDocument();
+    unmount();
+    render(<CryptoHoldingList holdings={[{ id: 'coin-1', aggregateVersion: 1, householdId: 'house-1', assetId: 'asset-1', marketCode: 'KRW-BTC', coinName: '비트코인', quantity: 1, avgPrice: 100, currentPrice: 0, createdAt: new Date(), updatedAt: new Date() }]} isLoading={false} isRefreshing={false} onRefresh={jest.fn()} assetId="asset-1" />);
+    expect(screen.getByText(/-100\.00%/)).toBeInTheDocument();
+    expect(screen.getByText('0원')).toBeInTheDocument();
   });
 
   test('[T-HOLD-001][HOLD-001] 예수금 금액을 저장하면 전송 불가능한 undefined 없이 즉시 편집 화면을 닫는다', async () => {

@@ -28,6 +28,9 @@ function subject() {
   let categoryReads = 0;
   const database = {
     collection(name: string) {
+      if (name === "households") {
+        return { doc: () => ({ collection: () => ({ get: async () => ({ docs: [] }) }) }) };
+      }
       if (name === "categories") {
         categoryReads += 1;
         return {

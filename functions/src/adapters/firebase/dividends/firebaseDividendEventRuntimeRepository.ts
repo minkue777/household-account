@@ -164,6 +164,10 @@ function eventDocument(input: {
   };
 }
 
+function persistedEventId(documentId: string, data: FirebaseFirestore.DocumentData): string {
+  return text(data.eventId) ?? `legacy-dividend:${documentId}`;
+}
+
 function scheduledEvent(
   snapshot: firestore.DocumentSnapshot,
 ): ScheduledDividendEvent | undefined {
@@ -187,7 +191,7 @@ function scheduledEvent(
   ) {
     return undefined;
   }
-  const eventId = text(data.eventId) ?? `legacy-dividend:${snapshot.id}`;
+  const eventId = persistedEventId(snapshot.id, data);
   return {
     documentId: snapshot.id,
     eventId,
@@ -258,6 +262,7 @@ export class FirebaseDividendEventRuntimeRepository
     readonly disclosure: KindDividendDisclosure;
     readonly observedAt: string;
     readonly idempotencyKey: string;
+    readonly expectedEventId?: string;
     readonly correction?: { readonly expectedVersion: number; readonly eligibleQuantity: number; readonly evidence: readonly DividendLifecycleEvidence[] };
   }): Promise<DividendAnnouncementUpsertResult> {
     const receipt = receiptReference(this.database, input.idempotencyKey);
@@ -280,6 +285,10 @@ export class FirebaseDividendEventRuntimeRepository
       if (replay !== undefined) return replay;
       const current = currentSnapshot.exists ? currentSnapshot.data() : undefined;
       const currentEventId = text(current?.eventId) ?? canonicalEventId;
+      if (input.expectedEventId !== undefined &&
+          (current === undefined || persistedEventId(currentSnapshot.id, current) !== input.expectedEventId)) {
+        return { kind: "retryable-failure", code: "DIVIDEND_EVENT_NOT_FOUND" };
+      }
       const currentVersion = Math.max(
         1,
         Math.trunc(number(current?.aggregateVersion) ?? 1),

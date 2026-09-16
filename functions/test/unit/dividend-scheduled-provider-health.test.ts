@@ -38,7 +38,7 @@ function dependencies(input: {
         return [];
       },
     },
-    disclosures: {
+    disclosures: { async recheck() { return { kind: "no-data", code: "NO_DISCLOSURES", attempts: 1 }; },
       async discover({ instrumentCode }) {
         return instrumentCode === "069500"
           ? {
@@ -71,7 +71,7 @@ function dependencies(input: {
 }
 
 describe("배당 예약 실행의 KIND Health 집계", () => {
-  it("마지막 discovery page에서 모든 종목 결과를 기록한 뒤 실행을 한 번만 종결한다", async () => {
+  it("discovery와 기존 이벤트 sweep을 완료한 뒤 실행을 한 번만 종결한다", async () => {
     const recorded: Array<
       Parameters<DividendProviderObservationPort["record"]>[0]
     > = [];
@@ -126,6 +126,9 @@ describe("배당 예약 실행의 KIND Health 집계", () => {
         }),
       ]),
     );
+    expect(finalized).toEqual([]);
+    await application.runLifecyclePage({ limit: 50, executionKey: "dividend-hourly:2026-08-01T11",
+      asOfDate: "2026-08-01", observedAt: "2026-08-01T11:00:00+09:00" });
     expect(finalized).toEqual([
       {
         executionKey: "dividend-hourly:2026-08-01T11",
@@ -166,6 +169,8 @@ describe("배당 예약 실행의 KIND Health 집계", () => {
     expect(finalized).toEqual([]);
 
     await application.runDiscoveryPage({ ...common, cursor: "page-2" });
+    expect(finalized).toEqual([]);
+    await application.runLifecyclePage({ ...common, asOfDate: "2026-08-01" });
     expect(finalized).toEqual(["dividend-hourly:2026-08-01T12"]);
   });
 });

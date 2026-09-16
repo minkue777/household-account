@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { Firestore, Transaction } from "firebase-admin/firestore";
 import { FirebasePortfolioRuntimeStateLoader } from "../../../src/adapters/firebase/portfolio/firebasePortfolioRuntimeStateLoader";
 import { InMemoryFirestore } from "../../support/in-memory-firestore";
+import { FirebaseAssetSnapshotProjectionSource } from "../../../src/adapters/firebase/portfolio/firebaseAssetSnapshotProjection";
+import { FirebasePortfolioRuntimeStore } from "../../../src/adapters/firebase/portfolio/firebasePortfolioRuntimeStore";
 
 function deferred() {
   let resolve!: () => void;
@@ -22,6 +24,15 @@ function fixture() {
 }
 
 describe("portfolio state read dependency branches", () => {
+  it("스냅샷 조회는 포지션·자동화 계획을 제외해도 자산 평가액과 소유자 표시명을 보존한다", async () => {
+    const store = new FirebasePortfolioRuntimeStore(fixture() as unknown as Firestore);
+    const read = vi.spyOn(store, "readState");
+    const result = await new FirebaseAssetSnapshotProjectionSource(store).readCurrent("house-1");
+    expect(read).toHaveBeenCalledWith("house-1", { positions: false, automationPlans: false });
+    expect(result.assets).toEqual([expect.objectContaining({ assetId: "asset-1", currentBalance: 100 })]);
+    expect(result.ownerDisplayNames).toEqual({ "profile:owner-1": "Owner" });
+  });
+
   it("starts legacy queries before assets resolve and canonical positions before slow legacy queries finish", async () => {
     const memory = fixture();
     const assetsReady = deferred();

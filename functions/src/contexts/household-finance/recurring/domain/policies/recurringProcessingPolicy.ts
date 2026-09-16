@@ -5,6 +5,7 @@ import type {
   RecurringProcessingState,
 } from "../model/recurringProcessing";
 import { resolveRecurringEffectiveDate } from "./recurringSchedule";
+import { prepareRecurringPosting } from "../../../ledger/public";
 
 function signature(input: {
   householdId: string;
@@ -122,20 +123,18 @@ export function decideRecurringTarget(input: {
     };
   }
 
-  const transaction = {
+  const posting = prepareRecurringPosting({
     transactionId: input.ledgerTransactionId,
-    recurringPlanId: plan.planId,
-    recurringTargetMonth: input.targetMonth,
-    transactionType: "expense" as const,
-    source: "recurring" as const,
-    originChannel: "recurring" as const,
+    eventId: input.transactionEventId,
+    planId: plan.planId,
+    targetMonth: input.targetMonth,
     creatorMemberId: plan.creatorMemberId,
     merchant: plan.merchant,
     amountInWon: plan.amountInWon,
     categoryId: plan.categoryId,
     memo: plan.memo,
     accountingDate: effectiveDate.localDate,
-  };
+  });
   const execution = {
     executionKey,
     planId: plan.planId,
@@ -147,13 +146,7 @@ export function decideRecurringTarget(input: {
     version: 1,
   };
   const events: readonly RecurringProcessingEvent[] = [
-    {
-      eventType: "TransactionRecorded.v1",
-      eventId: input.transactionEventId,
-      planId: plan.planId,
-      targetMonth: input.targetMonth,
-      transactionId: input.ledgerTransactionId,
-    },
+    posting.event,
     {
       eventType: "RecurringPlanProcessed.v1",
       eventId: input.processedEventId,
@@ -174,7 +167,7 @@ export function decideRecurringTarget(input: {
     nextState: {
       ...input.state,
       executions: [...input.state.executions, execution],
-      ledgerTransactions: [...input.state.ledgerTransactions, transaction],
+      ledgerTransactions: [...input.state.ledgerTransactions, posting.transaction],
       receipts: [
         ...input.state.receipts,
         {

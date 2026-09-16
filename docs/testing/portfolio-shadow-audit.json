@@ -9,7 +9,12 @@
     "removedTests": [
       "functions/test/contexts/access-household/asset-owner-ui-surface.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createAssetAutomationExecutionApplication",
@@ -21,7 +26,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/asset-automation-execution.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createLoanRepaymentWorkflowApplication",
@@ -33,7 +43,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/loan-repayment-workflow.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createAssetCreationApplication",
@@ -47,7 +62,12 @@
       "functions/test/contexts/portfolio/asset-creation-contract.contract.test.ts",
       "functions/test/contexts/portfolio/asset-owner-profile-lifecycle.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createAssetHistoryApplication",
@@ -59,7 +79,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/asset-history-dimensions.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createAssetOrderApplication",
@@ -71,7 +96,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/asset-order-legacy-delete.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createDividendDiscoveryApplication",
@@ -83,7 +113,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/dividend-discovery-eligibility.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createDividendLifecycleApplication",
@@ -95,7 +130,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/dividend-lifecycle.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createDividendProjectionWriterApplication",
@@ -107,7 +147,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/dividend-projection-writer-boundary.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createDividendReadPoliciesApplication",
@@ -119,7 +164,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/dividend-read-policies.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createDividendRefreshJobApplication",
@@ -131,7 +181,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/dividend-refresh-job.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createDividendSweepRecoveryApplication",
@@ -143,7 +198,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/dividend-sweep-recovery.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createAssetRevaluationWorkflow",
@@ -155,7 +215,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/asset-revaluation-workflow.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createAssetValuationTriggerScopeApplication",
@@ -167,7 +232,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/asset-valuation-trigger-scope.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createDailyAssetValuationApplication",
@@ -179,7 +249,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/daily-asset-valuation.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createDailyValuationRecoveryApplication",
@@ -191,7 +266,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/daily-valuation-recovery.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createForeignCurrencyValuationApplication",
@@ -203,7 +283,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/foreign-currency-valuation.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createGoldPositionApplication",
@@ -215,7 +300,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/gold-position-and-provider.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createHoldingValuationApplication",
@@ -227,7 +317,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/holding-valuation.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createMarketRoutingApplication",
@@ -239,7 +334,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/market-routing-contract.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createPositionMutationLifecycleApplication",
@@ -251,7 +351,12 @@
     "removedTests": [
       "functions/test/contexts/portfolio/position-mutation-lifecycle.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createDemoAssetFixtureApplication",
@@ -348,7 +453,12 @@
       "functions/test/contexts/supporting-platform/home-preferences/home-command-boundary.contract.test.ts",
       "functions/test/contexts/supporting-platform/home-preferences/home-configuration.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createHomeSummaryApplication",
@@ -362,7 +472,12 @@
       "functions/test/contexts/supporting-platform/home-preferences/home-summary-configuration.contract.test.ts",
       "functions/test/contexts/supporting-platform/home-preferences/home-summary-source-state.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createLocalCurrencySelectionApplication",
@@ -374,7 +489,12 @@
     "removedTests": [
       "functions/test/contexts/supporting-platform/home-preferences/home-local-currency-selection.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createThemePreferenceApplication",
@@ -386,7 +506,12 @@
     "removedTests": [
       "functions/test/contexts/supporting-platform/home-preferences/theme-preference.contract.test.ts"
     ],
-    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests."
+    "decision": "Remove tests of the unused application factory; preserve runtime source and actual production domain/adapter tests.",
+    "sourceCleanup": {
+      "date": "2026-09-17",
+      "decision": "실제 실행·테스트·운영 도구 참조를 다시 확인하여 미사용 대체 구현을 삭제했습니다. 실제 production 정책과 adapter는 보존합니다.",
+      "review": "docs/reviews/maintainability-2026-09-16.md"
+    }
   },
   {
     "factory": "createBoundedAssetStatisticsQuery",

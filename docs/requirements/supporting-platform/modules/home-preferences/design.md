@@ -1,5 +1,7 @@
 # 홈·환경설정 모듈 상세 설계
 
+> 2026-09-17 실행 경로 정리: 공유 설정 Command는 [HomePreferenceRuntimeApplication](../../../../../functions/src/platform/home-preferences/application/homePreferenceRuntimeApplication.ts)과 AtomicStore가 소유하며, 카드 조합은 [BalanceCards](../../../../../web/src/components/BalanceCards.tsx), 기기 테마는 [ThemeContext](../../../../../web/src/contexts/ThemeContext.tsx)가 담당합니다. 실행되지 않던 Home Configuration/Summary/Local Currency Selection/Theme Application과 전용 Port는 제거했습니다. 최초 지역화폐 선택의 잔액 transaction 참여·설정 version·receipt·Outbox는 유지합니다.
+
 > 요구사항: [홈·환경설정 모듈 요구사항](requirements.md)  
 > 상위 지도: [지원·읽기·플랫폼 영역](../../requirements.md)  
 > 공통 형식: [모듈 상세 설계 규약](../../../governance/module-design-standard.md)  

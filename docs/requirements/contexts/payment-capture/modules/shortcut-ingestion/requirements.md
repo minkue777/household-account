@@ -76,19 +76,17 @@
 
 ## 6. 현재 흐름
 
-1. POST 요청의 정적 공유 토큰과 필수 필드를 검증한다.
-2. 입력 값을 정규화하고 카드 메시지를 파싱한다.
-3. 가구·카드·owner를 판정한다.
-4. 중복이면 HTTP 함수가 직접 알림을 시도하고 결과를 응답한다.
-5. 신규이면 문서를 저장하고 HTTP 성공을 응답한 뒤 별도 Firestore trigger가 owner 알림을 시도한다.
+1. `firebaseShortcutHttp`가 POST/JSON/version·크기·CORS·IP/credential 제한을 적용합니다. `ShortcutHttpRequestProcessor`는 scoped credential과 현재 Membership으로 Actor를 확정합니다.
+2. normalizer와 실제 Shortcut parser가 입력을 승인·취소로 분류하고 공통 서울 연도 정책을 사용합니다. HTTP receipt는 최초 수신 시각과 응답을 보존합니다.
+3. parser 결과는 공통 Capture Intake에 전달합니다. 본인 카드·가맹점 규칙·중복·취소 정책과 원자 Ledger 저장은 Android와 공유합니다.
+4. 원장 저장/중복 관찰 Outbox를 통해 비동기 알림을 요청하고, HTTP는 transaction과 notification 상태를 분리한 공개 응답을 반환합니다. HTTP 함수는 직접 푸시를 보내지 않습니다.
+5. 원문 진단은 인증 후 업무와 독립적인 best-effort Adapter에만 보존합니다.
 
-교정할 불변식은 호출자·가구·입력을 검증하고, 동시 요청에도 한 문서만 만들며, 거래 성공과 알림 전달 결과를 분리해 관측하는 것이다.
+IOS-005 owner 추정은 과거 특성화이며 현재 실행 경로가 아닙니다. 별도 ShortcutPaymentRecording/OutboxResponse/NotificationOutcome Application은 제거했습니다. HTTP 단위 테스트의 Intake는 전달 인자·호출 수·응답 변환만 검증하는 stub이며 실제 저장/Outbox 검증은 공통 Capture adapter/E2E가 담당합니다.
 
-목표 흐름은 parser가 승인·취소를 먼저 분류한 뒤 승인은 기존 생성·중복 경로로, 취소는 공통 Capture cancellation Port로 보냅니다. 두 분기 모두 같은 credential Actor와 카드 증거를 사용합니다.
+## 7. 전환 이전 결함 기록
 
-연결 요구사항: IOS-001~015, PUSH-002, PUSH-004, PUSH-010.
-
-## 7. 정상 요구사항으로 고정하지 않을 결함
+아래는 이전 구현의 역사이며 현재 미해결 목록이 아닙니다. 현재 실행 경로는 6절을 기준으로 합니다.
 
 - 공개 HTTP 함수가 코드에 고정된 정적 공유 토큰으로만 보호되고 응답에 민감한 원문을 포함합니다.
 - 호출자 멤버십, 가구 존재, 양의 정수 금액, 실제 달력 날짜·시간, 요청 owner 권한 검증이 충분하지 않습니다.

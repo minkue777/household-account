@@ -159,6 +159,13 @@ test('[MER-001][MER-003][MER-004] 동일 유형의 규칙 우선순위·수정·
   await page.reload();
   await page.getByRole('button', { name: /^가맹점 규칙/ }).click();
   await expect(page.getByText('수정한 규칙', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: `${lowerKeyword} 규칙 수정`, exact: true }).click();
+  await page.getByPlaceholder('비워두면 원본 가맹점명 유지').fill('');
+  await page.getByPlaceholder('자동으로 추가될 메모').fill('');
+  await page.getByRole('button', { name: '저장', exact: true }).click();
+  await expect.poll(async () => (await records(request, 'merchant_rules')).find(row => row.id === preferredId)?.mapping).toEqual({ category: 'living' });
+  const cleared = await submitRaw(request, actor, rawNotification({ merchant: 'TEA CAFE', amount: 13500 }));
+  expect(cleared.transactionResult.quickEditSnapshot).toMatchObject({ merchant: 'TEA CAFE', categoryId: 'living', memo: '' });
   await page.getByRole('button', { name: `${lowerKeyword} 규칙 삭제`, exact: true }).click();
   await page.getByRole('dialog', { name: '가맹점 규칙 삭제' }).getByRole('button', { name: '삭제', exact: true }).click();
   await expect(page.getByRole('button', { name: `${lowerKeyword} 규칙 수정`, exact: true })).toHaveCount(0);

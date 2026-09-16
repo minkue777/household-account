@@ -40,6 +40,26 @@ afterEach(() => {
 });
 
 describe("Firebase portfolio market-data adapter", () => {
+  it.each(["", "   ", "N/A", "NaN", "Infinity", "1,2", "price 100", "100x"])("rejects placeholder or malformed quote %j", async value => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ closePrice: value })));
+    await expect(new FirebasePortfolioMarketData().getQuote(target("KRX", "005930")))
+      .resolves.toMatchObject({ kind: "failure" });
+  });
+
+  it.each([0, "0", "₩0", "0원"])("preserves an explicitly published zero quote %j", async value => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ closePrice: value })));
+    await expect(new FirebasePortfolioMarketData().getQuote(target("KRX", "005930")))
+      .resolves.toMatchObject({ kind: "success", quote: { priceInWon: 0 } });
+  });
+
+  it("falls back to Nasdaq secondary data when the primary quote is unavailable", async () => {
+    vi.stubGlobal("fetch", vi.fn(async input => String(input).includes("frankfurter")
+      ? json({ base: "USD", quote: "KRW", rate: 1400, date: "2026-09-01" })
+      : json({ data: { primaryData: { lastSalePrice: "N/A" }, secondaryData: { lastSalePrice: "$1.25" } } })));
+    await expect(new FirebasePortfolioMarketData().getQuote(target("US", "US:AAPL")))
+      .resolves.toMatchObject({ kind: "success", quote: { priceInWon: 1750 } });
+  });
+
   it("keeps the newer FX date, rejects future FX, and revalues the retained USD quote on FX-only success", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-06T00:00:00Z"));

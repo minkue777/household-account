@@ -1,5 +1,7 @@
 # 통계 모듈 상세 설계
 
+> 2026-09-17 실행 경로 정리: 실제 지출 통계는 [Web 기간 정책](../../../../../web/src/features/reporting/statisticsPeriod.ts), [범위 조회 adapter](../../../../../web/src/platform/reporting/expenseStatisticsReadModel.ts), [통계 화면](../../../../../web/src/app/stats/page.tsx)을 사용합니다. 기간·초기 추이 선택을 별도로 구현한 서버 대체 정책은 제거하고 `T-STAT-PERIOD-001~005`·`T-STAT-004`를 실제 Web 정책/화면 테스트로 연결했습니다. 아래 서버 Query/Controller 설명과 남은 일부 Functions 계약 fixture는 목표 구조이며 현재 Web 호출 경로를 뜻하지 않습니다. 새 변경은 실제 경로를 먼저 고치며 남은 fixture의 대체 검증 이관 없이 삭제하지 않습니다.
+
 > 요구사항: [통계 모듈 요구사항](requirements.md)  
 > 상위 지도: [지원·읽기·플랫폼 영역](../../requirements.md)  
 > 공통 형식: [모듈 상세 설계 규약](../../../governance/module-design-standard.md)  

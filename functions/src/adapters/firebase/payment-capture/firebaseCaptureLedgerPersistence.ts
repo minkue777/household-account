@@ -9,6 +9,7 @@ import type {
   CaptureLedgerPersistencePort,
 } from "../../../contexts/payment-capture/android-payment-ingestion/application/ports/out/captureLedgerPersistencePort";
 import type { CaptureTransactionBranchResult } from "../../../contexts/payment-capture/android-payment-ingestion/application/ports/in/captureBranchSubmissionInputPort";
+import { captureCancellationSearchWindow, matchesCapturedApprovalCancellation } from "../../../contexts/payment-capture/android-payment-ingestion/domain/policies/capturedApprovalCancellation";
 import { normalizeCancellationMerchant } from "../../../contexts/payment-capture/android-payment-ingestion/domain/value-objects/cancellationEvidence";
 import { planCaptureLineageCancellation } from "../../../contexts/household-finance/ledger/domain/policies/captureLineageCancellationGraph";
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
@@ -116,10 +117,6 @@ function displayToken(value: string | undefined): string {
     .replace(/[^0-9*]/gu, "")
     .slice(-4);
   return token.length === 4 ? token : digits(value);
-}
-
-function normalizeCompany(value: string): string {
-  return value.normalize("NFC").trim().replace(/\s+/gu, " ").toLowerCase();
 }
 
 function cardDisplay(
@@ -280,38 +277,6 @@ function candidate(
       ? { canonicalCardId: data.canonicalCardId }
       : {}),
   };
-}
-
-function matchesCancellation(
-  command: CaptureCancellationPersistenceCommand,
-  value: CancellationCandidate,
-): boolean {
-  const end = Date.parse(`${command.branch.cancellationDate}T00:00:00+09:00`);
-  const approval = Date.parse(`${value.approvalDate}T00:00:00+09:00`);
-  if (
-    !Number.isFinite(end) ||
-    !Number.isFinite(approval) ||
-    approval > end ||
-    approval < end - 30 * DAY ||
-    value.approvalAmountInWon !== command.branch.amountInWon ||
-    normalizeCancellationMerchant(value.merchant) !==
-      normalizeCancellationMerchant(command.branch.originalMerchant ?? command.branch.merchant)
-  ) {
-    return false;
-  }
-  if (
-    command.branch.canonicalCardId !== undefined &&
-    value.canonicalCardId !== undefined
-  ) {
-    return command.branch.canonicalCardId === value.canonicalCardId;
-  }
-  const evidence = command.branch.cardEvidence;
-  if (evidence === undefined) return value.companyLabel === "";
-  if (normalizeCompany(evidence.companyLabel) !== normalizeCompany(value.companyLabel)) {
-    return false;
-  }
-  const evidenceDigits = digits(evidence.maskedToken);
-  return evidenceDigits === "" || evidenceDigits === value.lastFour;
 }
 
 async function loadCancellationGraph(
@@ -630,17 +595,14 @@ export class FirebaseCaptureLedgerPersistence
         const receiptSnapshot = await transaction.get(receipt);
         const replay = terminalResult(receiptSnapshot, payloadFingerprint, command);
         if (replay !== undefined) return replay;
-        const end = Date.parse(`${command.branch.cancellationDate}T00:00:00+09:00`);
-        const startDate = Number.isFinite(end)
-          ? new Date(end - 30 * DAY + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
-          : command.branch.cancellationDate;
+        const window = captureCancellationSearchWindow(command.branch.cancellationDate);
         const captureRecords = await transaction.get(household.collection("captureRecords")
-          .where("approvalDate", ">=", startDate)
-          .where("approvalDate", "<=", command.branch.cancellationDate));
+          .where("approvalDate", ">=", window.startDate)
+          .where("approvalDate", "<=", window.endDate));
         const matches = captureRecords.docs
           .map(candidate)
           .filter((value): value is CancellationCandidate => value !== undefined)
-          .filter((value) => matchesCancellation(command, value));
+          .filter((value) => matchesCapturedApprovalCancellation(command.branch, value));
         const distinctLineages = [
           ...new Set(matches.map((value) => value.captureLineageId)),
         ].sort((left, right) => left.localeCompare(right, "en"));

@@ -43,7 +43,7 @@
 
 ## 4. 공개 계약·의존 모듈
 
-JavaScript bridge의 목표 공개 계약은 서버가 발급한 Principal-bound Membership receipt를 사용한 SessionMirror 동기화, QuickEdit 설정, 앱 버전 조회입니다. 모든 민감 API는 허용된 Web origin에서만 노출되고, SessionMirror 동기화는 origin 확인과 별개로 Membership receipt를 검증·소비해야 하며 값의 부재·실패를 명시적으로 표현해야 합니다. 기존 가구 key·자기 멤버 값은 Google 로그인 전에 Web localStorage에서 일회성 `LegacySessionCandidate`로 포착하는 전환 전용 Adapter 입력일 뿐 범용 JavaScript Bridge API가 아닙니다. legacy partner API도 목표 계약에 포함하지 않습니다.
+JavaScript bridge는 Native 인증 결과를 서버의 custom-token 교환과 UID 확인으로 Web에 전달하고, 권위 Membership 해석 결과를 SessionMirror에 동기화합니다. 별도 Membership receipt 발급·서명·소비 절차는 사용하지 않습니다. QuickEdit 설정과 앱 버전 API도 같은 versioned bridge에서 제공하며 민감 호출은 정확한 허용 origin과 main frame에서만 수용합니다. legacy localStorage 후보는 전환 전용 입력이고 범용 identity 설정 API가 아닙니다.
 
 QuickEdit의 입력은 저장 완료된 거래 ID와 표시용 snapshot입니다. 저장·삭제·분할·가구원 알림 요청은 client 검증 뒤 암호화 command outbox에 접수하며, 로컬 접수와 서버 업무 성공을 별도 결과로 다룹니다. 서버 성공이 확인되기 전 업무 완료 event나 성공 Toast를 내보내면 안 됩니다.
 
@@ -94,7 +94,9 @@ QuickEdit의 입력은 저장 완료된 거래 ID와 표시용 snapshot입니다
 | QE-011 | 현재 명세 | QuickEdit에는 `FLAG_SECURE`나 별도 최근 앱 마스킹을 적용하지 않아 스크린샷·화면 녹화·시스템 미리보기를 허용한다. | 캡처 허용과 별개로 keyguard 우회·외부 export를 금지하고 QuickEdit 민감값을 앱 로그에 남기지 않는다. | 같은 근거와 [DEC-024](../../../governance/decisions.md#dec-024), [DEC-045](../../../governance/decisions.md#dec-045) | 보안 UI, E2E |
 | QE-012 | 목표 명세 | QuickEdit은 별도 업무 규칙을 소유하지 않는 Android 입력·전달 Adapter이며, 일반 Ledger의 저장·삭제·분할·가구원 알림 요청 Command를 그대로 사용한다. versioned payload와 고정 `commandId`·`idempotencyKey`를 Keystore 암호화 outbox에 commit하고 WorkManager 영속 예약까지 완료한 뒤 Activity를 닫아 비동기 전달한다. commit부터 예약·접수 판정까지는 session purge와 하나의 짧은 임계 구역이며 서버 왕복은 그 밖에서 수행한다. | 서버 성공 전 성공 Toast·업무 완료 event는 없다. 느린 서버 응답이 다음 QuickEdit 로컬 접수를 막으면 안 된다. retryable 결과는 같은 envelope로 접수 시각부터 정확히 72시간 전까지 FIFO 재시도한다. 충돌·영구 거부·계약 실패·재시도 만료는 Command를 자동 재시도하지 않고 실패 알림 전달 전까지만 `needs-attention`으로 보존한다. 알림 차단·실패는 완료로 보지 않고 재시도하며 성공 뒤 payload를 삭제한다. 암호문·key·codec 손상은 payload를 fail-closed 삭제하되 비민감 손상 플래그와 실패 알림을 남긴다. outbox commit 또는 WorkManager 예약 실패는 화면을 유지한다. | [QuickEdit command outbox](../../../../../android/app/src/main/java/com/household/account/quickedit/QuickEditCommandOutbox.kt), [delivery lifecycle](../../../../../android/app/src/main/java/com/household/account/quickedit/QuickEditCommandDeliveryLifecycle.kt), [versioned codec](../../../../../android/app/src/main/java/com/household/account/quickedit/QuickEditCommandOutboxJsonCodec.kt), [DEC-067](../../../governance/decisions.md#dec-067) | U, UI, I, E2E |
 
-## 7. 정상 요구사항으로 고정하지 않을 결함
+## 7. 전환 이전 결함 기록
+
+아래는 이전 구현의 역사이며 현재 미해결 목록이 아닙니다. 현재 Native Auth/SessionMirror/암호화 outbox와 일반 Ledger Command 경로는 5절의 구현 링크를 기준으로 합니다.
 
 - 알림 접근 허용 여부를 component name의 문자열 `contains`로 판정합니다.
 - WebView 시작 URL이 production 주소로 고정되어 환경별 배포·테스트 계약이 없습니다.

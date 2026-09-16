@@ -8,6 +8,23 @@ import {
 import type { SafeExternalTextHttpInputPort } from "../../../src/platform/external-operations/application/ports/in/safeExternalTextHttpInputPort";
 
 describe("KIND ETF 배당 공시 adapter 계약", () => {
+  it("현재 보유종목 검색 없이 저장된 canonical 공시 번호로 상세 문서를 재확인한다", async () => {
+    const requests: string[] = [];
+    const source = new KindEtfDividendDisclosureSource({ async execute(request) {
+      requests.push(request.url);
+      const body = request.stage === "contents"
+        ? "setPath('','https://kind.krx.co.kr/external/68659.htm')"
+        : "<table><tr><td>102110</td><td>TIGER 200</td><td>2026-09-10</td><td>2026-09-20</td><td>150원</td></tr></table>";
+      return { kind: "success", body, finalUrl: request.url, responseBytes: Buffer.byteLength(body), attempts: 1 };
+    } });
+    await expect(source.recheck({ sourceDisclosureId: "20260901000123", instrumentCode: "102110", instrumentName: "TIGER 200" }))
+      .resolves.toMatchObject({ kind: "success", disclosures: [{ sourceDisclosureId: "20260901000123", perShareAmount: 150 }] });
+    expect(requests).toEqual([
+      "https://kind.krx.co.kr/common/disclsviewer.do?method=searchContents&docNo=20260901000123",
+      "https://kind.krx.co.kr/external/68659.htm",
+    ]);
+  });
+
   it("검색 단계의 실제 HTTP 상태를 공급자 실패 결과에 보존한다", async () => {
     const requests: Array<{ stage?: string; url: string }> = [];
     const http: SafeExternalTextHttpInputPort = {
@@ -159,7 +176,7 @@ describe("KIND ETF 배당 공시 adapter 계약", () => {
           request.stage === "search"
             ? `<em>2</em><table>${row("TIGER 200", "20260801000001")}${row("KODEX 200", "20260801000001")}</table>`
             : request.stage === "viewer"
-              ? "<select><option value='DOC1|Y'>문서</option></select>"
+              ? "<select><option value='20260801000001|Y'>문서</option></select>"
               : request.stage === "contents"
                 ? "setPath('','https://kind.krx.co.kr/external/68659.htm')"
                 : detail;
@@ -206,6 +223,8 @@ describe("KIND ETF 배당 공시 adapter 계약", () => {
       kind: "success",
       disclosures: [{ instrumentCode: "069500", perShareAmount: 130 }],
     });
+    await expect(source.recheck({ sourceDisclosureId: "20260801000001", instrumentCode: "102110", instrumentName: "TIGER 200" }))
+      .resolves.toMatchObject({ kind: "success", disclosures: [{ perShareAmount: 120 }] });
     expect(calls.filter(({ stage }) => stage === "search")).toHaveLength(1);
     expect(calls.filter(({ stage }) => stage === "viewer")).toHaveLength(1);
     expect(calls.filter(({ stage }) => stage === "contents")).toHaveLength(1);

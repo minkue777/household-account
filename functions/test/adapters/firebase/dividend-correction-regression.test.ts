@@ -16,7 +16,7 @@ describe("Dividend discovery through the Firebase repository", () => {
         async listActiveKrxEtfTargets() { return { items: [target] }; },
         async listPositionHistory() { return hasHistory ? [{ householdId: "household", assetId: "asset", positionId: "position", instrumentCode: "ETF", snapshotDate: "2026-09-05", quantity: 9, observedAt: "2026-09-05T00:00:00Z", sourceVersion: "v5" }] : []; },
       },
-      disclosures: { async discover() { return { kind: "success", attempts: 1, disclosures: [{ source: "KIND", sourceDisclosureId: "disclosure", disclosureState: "active", instrumentCode: "ETF", instrumentName: "ETF", recordDate: "2026-09-05", paymentDate: "2026-09-20", perShareAmount: 200, disclosedAt: "2026-09-06", sourceReferenceHash: "corrected" }] }; } },
+      disclosures: { async recheck() { return { kind: "no-data", code: "NO_DISCLOSURES", attempts: 1 }; }, async discover() { return { kind: "success", attempts: 1, disclosures: [{ source: "KIND", sourceDisclosureId: "disclosure", disclosureState: "active", instrumentCode: "ETF", instrumentName: "ETF", recordDate: "2026-09-05", paymentDate: "2026-09-20", perShareAmount: 200, disclosedAt: "2026-09-06", sourceReferenceHash: "corrected" }] }; } },
       providerObservations: { async record() {}, async finalizeRun() {} },
     });
     const result = await runtime.runDiscoveryPage({ limit: 10, concurrency: 1, periodFrom: "2025-09-06", periodTo: "2026-09-06", executionKey: "correction", observedAt: "2026-09-06T00:00:00Z" });

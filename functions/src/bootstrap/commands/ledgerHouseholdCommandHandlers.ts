@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type * as firestore from "firebase-admin/firestore";
 
 import { FirebaseLedgerCommandRepository } from "../../adapters/firebase/ledger/firebaseLedgerCommandRepository";
+import { readUsableCategoryIds } from "../../adapters/firebase/categories/firebaseCategoryReferenceReader";
 import { createFirebaseRememberMerchantRuleParticipant } from "../../adapters/firebase/payment-configuration/firebaseRememberMerchantRuleParticipant";
 import { FirebaseMonthlySplitLifecycleStore } from "../../adapters/firebase/ledger/firebaseMonthlySplitLifecycleStore";
 import { FirebaseItemSplitStore } from "../../adapters/firebase/ledger/firebaseItemSplitStore";
@@ -189,19 +190,7 @@ async function activeCategories(
   database: firestore.Firestore,
   householdId: string,
 ): Promise<ReadonlySet<string>> {
-  const snapshot = await database
-    .collection("categories")
-    .where("householdId", "==", householdId)
-    .get();
-  return new Set(
-    snapshot.docs
-      .filter((document) => document.data().isActive !== false)
-      .flatMap((document) => {
-        const data = document.data();
-        const key = typeof data.key === "string" ? data.key : document.id;
-        return key.trim() === "" ? [] : [key];
-      }),
-  );
+  return readUsableCategoryIds(database, householdId);
 }
 
 function commandsFor(

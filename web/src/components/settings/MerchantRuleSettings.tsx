@@ -96,9 +96,9 @@ export default function MerchantRuleSettings() {
     if (!householdKey) throw new Error('인증된 가구 세션이 필요합니다.');
     const householdId = householdKey;
     const mapping = {
-      ...(ruleMappedMerchant.trim() && { merchant: ruleMappedMerchant.trim() }),
+      merchant: ruleMappedMerchant.trim(),
       category: ruleCategory,
-      ...(ruleMemo.trim() && { memo: ruleMemo.trim() }),
+      memo: ruleMemo.trim(),
     };
 
     if (editingRuleId) {

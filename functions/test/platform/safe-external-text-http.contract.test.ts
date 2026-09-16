@@ -32,6 +32,20 @@ function subject(results: readonly ExternalTextHttpTransportResult[]) {
 }
 
 describe("SafeExternalTextHttp 계약", () => {
+  it.each([408, 429, 503])("HTTP %s는 제한된 재시도 후 성공을 반환한다", async status => {
+    await expect(subject([
+      { kind: "response", status, body: "", bodyBytes: 0 },
+      { kind: "response", status: 200, body: "ok", bodyBytes: 2 },
+    ]).execute({ provider: "KIND", operation: "dividend-disclosure", url: "https://kind.krx.co.kr/path" }))
+      .resolves.toMatchObject({ kind: "success", attempts: 2 });
+  });
+
+  it.each([401, 403])("HTTP %s 인증·권한 실패는 재시도하지 않는다", async status => {
+    await expect(subject([{ kind: "response", status, body: "", bodyBytes: 0 }])
+      .execute({ provider: "KIND", operation: "dividend-disclosure", url: "https://kind.krx.co.kr/path" }))
+      .resolves.toMatchObject({ kind: "contract-failure", attempts: 1, httpStatus: status });
+  });
+
   it("timeout은 제한된 횟수만 재시도하고 성공 본문을 반환한다", async () => {
     const result = await subject([
       { kind: "timeout" },

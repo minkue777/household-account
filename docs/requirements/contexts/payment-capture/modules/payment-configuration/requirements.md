@@ -93,22 +93,19 @@
 |---|---|---|---|---|---|
 | MER-001 | 현재·목표 | exact, contains, startsWith, endsWith 매칭과 쉼표로 나눈 OR 키워드를 지원하고 모든 keyword는 정규화된 원 가맹점에만 적용한다. | 대소문자와 앞뒤 공백을 무시한다. 빈 전체 keyword와 빈 OR token은 거부한다. memo는 매칭 후보를 만들지 않으며 MER-003의 mapping 출력으로만 치환하거나 보존한다. | [merchantRuleService](../../../../../../web/src/lib/merchantRuleService.ts), [가맹점 규칙 선택 정책](../../../../../../functions/src/contexts/payment-capture/configuration/domain/policies/merchantRuleSelection.ts) | U, C |
 | MER-002 | 목표 명세 | 여러 활성 규칙이 맞으면 숫자 priority보다 `exact → startsWith → endsWith → contains`의 좁은 match type을 먼저 선택하고, 선택된 non-exact 유형 안에서 가장 높은 고유 priority 규칙 하나를 적용한다. | exact는 priority를 사용하지 않고 키워드 유일성으로 최대 한 후보만 허용한다. 더 좁은 유형에 후보가 있으면 넓은 유형은 무시한다. canonical 동률은 저장할 수 없으며 레거시 충돌은 임의 승자 없이 `ContractFailure`다. 현재 우선순위 선적용과 Android 동률 first 선택은 목표 동작이 아니다. | [가맹점 규칙 선택 정책](../../../../../../functions/src/contexts/payment-capture/configuration/domain/policies/merchantRuleSelection.ts), [merchantRuleService](../../../../../../web/src/lib/merchantRuleService.ts), [DEC-042](../../../../governance/decisions.md#dec-042) | U, C |
-| MER-003 | 현재 명세 | 선택 규칙은 가맹점명, 카테고리, 메모를 각각 치환할 수 있다. | Android에서 빈 memo 매핑은 파서 메모를 유지한다. | 같은 근거 | U, C |
+| MER-003 | 현재 명세 | 선택 규칙은 가맹점명, 카테고리, 메모를 각각 치환할 수 있다. | Android에서 빈 memo 매핑은 파서 메모를 유지한다. 규칙 수정의 mapping은 부분 patch이며 미제공 필드는 유지하고 명시적 빈 문자열은 해당 치환을 제거한다. 치환 제거는 거래 memo를 비우는 동작이 아니라 원문 memo를 보존하도록 되돌리는 동작이다. | 같은 근거 | U, C |
 | MER-004 | 결함 | 같은 가구의 exact 규칙은 정규화된 개별 OR 키워드마다 하나만 허용하고, non-exact 규칙은 같은 match type 안에서 비활성 규칙까지 포함해 priority가 서로 달라야 한다. | 모든 변경 Command는 Actor 가구를 검증한다. exact rule 두 개의 전체 표현이 달라도 한 exact 키워드가 겹치면 거부한다. contains·startsWith·endsWith 키워드는 겹칠 수 있다. 생성·수정·삭제는 keyword/priority claim과 본문을 원자 변경하고, 재정렬은 한 유형의 활성·비활성 전체 규칙 집합과 collection version을 검증해 목록 앞을 높은 priority로 한 번에 재번호한다. 누락·중복·타 가구·다른 유형 ID와 중간 실패는 write 0건이다. | [merchantRuleService](../../../../../../web/src/lib/merchantRuleService.ts), [DEC-042](../../../../governance/decisions.md#dec-042) | U, I, 동시성, UI |
 | MER-005 | 현재·목표 | 기존 지출의 category를 예상 transaction version으로 수정하며 다음에도 기억을 선택하면 그 지출의 정규화된 원 가맹점 exact 규칙을 만든다. | 수입에는 제공하지 않는다. 지출 수정과 exact rule·claim 생성 또는 기존 rule 재사용은 한 UoW로 확정하며 권한·stale version·중간 실패에는 전부 원상 유지한다. 입력만으로 존재하지 않던 거래를 새로 만들지 않는다. | [ExpenseEditModal](../../../../../../web/src/components/expense/ExpenseEditModal.tsx) | I, E2E |
 | MER-006 | 호환 | 기존 exactMatch/category 문서를 현재 matchType/mapping 모델로 읽는다. | `active=false`를 보존한다. 빈 keyword, 잘못된 category reference·priority와 regex 유형은 임의 보정 없이 typed `ContractFailure`다. 데이터 마이그레이션 완료 후 제거 일정을 정한다. | Web·Android 규칙 Repository | U, C |
 | MER-007 | 목표 명세 | 카테고리 보관 Process가 요청하면 해당 카테고리를 mapping하는 모든 가맹점 규칙을 현재 기본 카테고리로 변경한다. | 활성·비활성 규칙을 모두 변경한다. page 단위 명령은 process ID와 cursor로 멱등 처리하며 규칙의 다른 mapping 필드는 유지한다. | [DEC-015](../../../../governance/decisions.md#dec-015) | U, I |
 
-## 6. 모듈 결함
+## 6. 현재 구현과 남은 호환 경계
 
-- 카드와 가맹점 규칙의 중복 확인이 check-then-write라 동시 요청에서 중복 문서를 만들 수 있습니다.
-- 레거시 `registered_cards.owner` 표시 이름은 멤버 이름 변경 뒤 남을 수 있으므로 권한·목록·자동 매칭 판단에 사용할 수 없습니다. Web 카드 목록과 Android 자동 매칭은 Canonical `ownerMemberId`만 소유권 기준으로 사용해야 합니다.
-- Web과 Android에 카드사 목록·정규화·가맹점 매칭 로직이 중복되어 회귀 가능성이 있습니다.
-- Android와 Web의 Repository 오류가 빈 목록·불일치로 축약되면 실제 장애와 설정 없음이 구분되지 않습니다.
-- 구형 규칙의 `exactMatch`·`category` 호환 종료 조건과 데이터 마이그레이션 시점이 아직 정의되지 않았습니다.
-- 서비스 경계가 카테고리 참조의 유효성을 일관되게 검증하지 않습니다.
-- 현재 priority 우선 정렬은 낮은 priority의 exact보다 높은 priority의 contains를 먼저 적용할 수 있고, Android의 동률 first 선택은 저장소 반환 순서에 따라 결과가 달라집니다.
-- exact OR 키워드별 claim과 non-exact match type별 priority claim이 없어 동시 생성·수정·재정렬 중 충돌 규칙을 저장할 수 있습니다.
+카드와 규칙의 실제 변경 경로는 `paymentConfigurationRuntimeApplication` → CommandBoundary/CommandApplication → `FirebasePaymentConfigurationAtomicStore`입니다. 카드 identity·keyword/priority claim·collection version을 같은 transaction으로 확정합니다. 자동 등록은 서버의 `ownCardResolution`과 `merchantRuleSelection`을 공유하며 match type의 좁은 범위를 priority보다 먼저 선택합니다.
+
+- legacy 카드 owner 표시 이름과 `exactMatch`/`category` 문서 읽기 호환은 남아 있습니다. 운영 데이터 마이그레이션 완료 증거 없이 제거하지 않습니다.
+- 규칙 편집에서 치환 필드를 지울 때 빈 값을 명시적으로 전달하고, 서버는 최종 mapping을 top-level 필드 단위로 교체하여 Firebase nested merge가 이전 치환을 복구하지 않게 합니다.
+- 사용하지 않던 RegisteredCardManagement/Application과 전용 Port는 제거했습니다. 실제 정책 수정은 위 실행 경로에서 수행합니다.
 
 ## 7. 관련 DEC 링크
 
@@ -152,7 +149,7 @@ Web과 Android의 `T-MER-*`, `T-CARD-*`는 같은 JSON fixture를 사용해야 �
 
 ### Android
 
-- [등록 카드 관리 Application](../../../../../../functions/src/contexts/payment-capture/configuration/application/registeredCardManagementApplication.ts)
+- [등록 카드 관리 Application](../../../../../../functions/src/contexts/payment-capture/configuration/application/registeredCardCommandBoundaryApplication.ts)
 - [가맹점 규칙 Command Application](../../../../../../functions/src/contexts/payment-capture/configuration/application/merchantRuleCommandApplication.ts)
 
 ### Functions

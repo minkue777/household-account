@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { KindDividendDisclosurePort } from "../../contexts/portfolio/dividends/application/ports/out/dividendScheduledRuntimePorts";
+import type { KindDividendDisclosurePort, KindDividendDiscoveryResult } from "../../contexts/portfolio/dividends/application/ports/out/dividendScheduledRuntimePorts";
 import type {
   SafeExternalTextHttpInputPort,
   SafeExternalTextHttpRequest,
@@ -366,6 +366,45 @@ export class KindEtfDividendDisclosureSource
     return pending;
   }
 
+  private async readDocument(input: {
+    readonly sourceDisclosureId: string;
+    readonly instrumentCode: string;
+    readonly instrumentName: string;
+  }, disclosedAt: string): Promise<KindDividendDiscoveryResult> {
+    const contents = await this.contents(input.sourceDisclosureId);
+    if (contents.kind !== "success") return mapHttpFailure(contents);
+    const url = detailUrl(contents.body);
+    if (url === undefined || !url.endsWith("/68659.htm")) {
+      return { kind: "no-data", code: "DISCLOSURE_DETAIL_NOT_FOUND", attempts: contents.attempts };
+    }
+    const response = await this.detail(url);
+    if (response.kind !== "success") return mapHttpFailure(response);
+    const detail = parseKindEtfDisclosureDetail(response.body, input.instrumentCode, input.instrumentName);
+    const attempts = Math.max(contents.attempts, response.attempts);
+    if (detail === undefined) return { kind: "no-data", code: "DISCLOSURE_DETAIL_NOT_FOUND", attempts };
+    const instrumentCode = input.instrumentCode.toLocaleUpperCase("en-US");
+    const sourceReferenceHash = createHash("sha256")
+      .update(`${input.sourceDisclosureId}\u0000${instrumentCode}\u0000${detail.recordDate}\u0000${detail.paymentDate}\u0000${detail.perShareAmount}`, "utf8")
+      .digest("hex");
+    return { kind: "success", attempts, disclosures: [{
+      source: "KIND", sourceDisclosureId: input.sourceDisclosureId, disclosureState: "active",
+      instrumentCode, instrumentName: input.instrumentName, ...detail, disclosedAt, sourceReferenceHash,
+    }] };
+  }
+
+  async recheck(input: {
+    readonly sourceDisclosureId: string;
+    readonly instrumentCode: string;
+    readonly instrumentName: string;
+  }): Promise<KindDividendDiscoveryResult> {
+    // Legacy records without a provider document identity can still advance locally.
+    if (!/^\d+$/u.test(input.sourceDisclosureId)) {
+      return { kind: "no-data", code: "DISCLOSURE_ID_NOT_AVAILABLE", attempts: 0 };
+    }
+    // The canonical document number survives removal of the household's holdings.
+    return this.readDocument(input, `${input.sourceDisclosureId.slice(0, 4)}-${input.sourceDisclosureId.slice(4, 6)}-${input.sourceDisclosureId.slice(6, 8)}`);
+  }
+
   async discover(input: {
     readonly instrumentCode: string;
     readonly instrumentName: string;
@@ -385,7 +424,7 @@ export class KindEtfDividendDisclosureSource
     const disclosures = [];
     let attempts = search.attempts;
     let lastFailure:
-      | ReturnType<typeof mapHttpFailure>
+      | Exclude<KindDividendDiscoveryResult, { kind: "success" | "no-data" }>
       | undefined;
     for (const row of rows) {
       const viewer = await this.viewer(row.sourceDisclosureId);
@@ -396,48 +435,10 @@ export class KindEtfDividendDisclosureSource
       }
       const number = documentNumber(viewer.body);
       if (number === undefined) continue;
-      const contents = await this.contents(number);
-      attempts = Math.max(attempts, contents.attempts);
-      if (contents.kind !== "success") {
-        lastFailure = mapHttpFailure(contents);
-        continue;
-      }
-      const url = detailUrl(contents.body);
-      if (url === undefined || !url.endsWith("/68659.htm")) continue;
-      const detailResponse = await this.detail(url);
-      attempts = Math.max(attempts, detailResponse.attempts);
-      if (detailResponse.kind !== "success") {
-        lastFailure = mapHttpFailure(detailResponse);
-        continue;
-      }
-      const detail = parseKindEtfDisclosureDetail(
-        detailResponse.body,
-        input.instrumentCode,
-        input.instrumentName,
-      );
-      if (detail === undefined) continue;
-      // KIND 검색 접수번호가 여러 개여도 동일 공시 문서로 연결될 수 있습니다.
-      // viewer가 반환한 document number를 canonical provider identity로 사용하면
-      // 정정/일괄공시 alias가 같은 DividendEvent로 수렴합니다.
-      const sourceDisclosureId = number;
-      const sourceReferenceHash = createHash("sha256")
-        .update(
-          `${sourceDisclosureId}\u0000${input.instrumentCode.toLocaleUpperCase("en-US")}\u0000${detail.recordDate}\u0000${detail.paymentDate}\u0000${detail.perShareAmount}`,
-          "utf8",
-        )
-        .digest("hex");
-      disclosures.push({
-        source: "KIND" as const,
-        sourceDisclosureId,
-        disclosureState: "active" as const,
-        instrumentCode: input.instrumentCode.toLocaleUpperCase("en-US"),
-        instrumentName: input.instrumentName,
-        recordDate: detail.recordDate,
-        paymentDate: detail.paymentDate,
-        perShareAmount: detail.perShareAmount,
-        disclosedAt: row.disclosedAt,
-        sourceReferenceHash,
-      });
+      const document = await this.readDocument({ ...input, sourceDisclosureId: number }, row.disclosedAt);
+      attempts = Math.max(attempts, document.attempts);
+      if (document.kind === "success") disclosures.push(...document.disclosures);
+      else if (document.kind !== "no-data") lastFailure = document;
     }
     if (disclosures.length === 0) {
       return (

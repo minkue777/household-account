@@ -44,8 +44,17 @@ function failure(
 }
 
 function numberFromText(value: unknown): number | undefined {
-  if (typeof value !== "string" && typeof value !== "number") return undefined;
-  const parsed = Number(String(value).replace(/[^0-9.+-]/gu, ""));
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value >= 0 ? value : undefined;
+  }
+  if (typeof value !== "string") return undefined;
+  // Only known currency decoration and valid thousands separators may be removed.
+  // Empty/placeholder text must never become the valid quote Number("") === 0.
+  const normalized = value.trim();
+  if (!/^(?:[$₩]\s*)?\+?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*원)?$/u.test(normalized)) {
+    return undefined;
+  }
+  const parsed = Number(normalized.replace(/[$₩,원\s]/gu, ""));
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 

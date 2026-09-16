@@ -44,6 +44,7 @@ import {
   subscribeToMonthlyTransactions,
 } from '@/lib/expenseService';
 import { getHousehold } from '@/lib/householdService';
+import { householdFromResolution } from '@/features/access-household/application/householdReadModel';
 
 function listenerArguments() {
   const [, options, next, error] = mockOnSnapshot.mock.calls.at(-1) as [
@@ -62,6 +63,28 @@ describe('가계부 첫 화면 server-first 조회 계약', () => {
     mockGetDocsFromServer.mockReset();
     mockGetDocFromServer.mockReset();
     mockWhere.mockClear();
+  });
+
+  it('서버 조회와 세션 복원은 잘못된 홈 카드만 기본값으로 바꾸고 유효한 선택은 유지한다', async () => {
+    const household = {
+      id: 'household-1', name: '가계부', createdAt: '2026-09-16T00:00:00.000Z',
+      members: [{ id: 'member-1', name: '멤버', aggregateVersion: 1 }],
+      homeSummaryConfig: { leftCard: 'yearlySpent', rightCard: 'removed-card' },
+    };
+    mockGetDocFromServer.mockResolvedValue({
+      id: household.id, exists: () => true,
+      data: () => ({ ...household, createdAt: new Date(household.createdAt) }),
+    });
+    const restored = householdFromResolution({
+      kind: 'membership-found', household,
+      membership: {
+        householdId: household.id, memberId: 'member-1', displayName: '멤버',
+        aggregateVersion: 1, status: 'active', capabilities: ['household.read'],
+      },
+    });
+    const expected = { leftCard: 'yearlySpent', rightCard: 'monthlyRemainingBudget' };
+    expect(restored?.homeSummaryConfig).toEqual(expected);
+    expect((await getHousehold(household.id)).homeSummaryConfig).toEqual(expected);
   });
 
   it('월 원장은 지출과 수입을 하나로 구독하고 cache가 아닌 서버 snapshot부터 방출한다', () => {

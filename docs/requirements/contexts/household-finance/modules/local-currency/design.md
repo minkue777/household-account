@@ -1,5 +1,7 @@
 # 지역화폐 잔액 모듈 상세 설계
 
+> 2026-09-17 유지보수 정리: 이 모듈의 관측 intake·유형별 최신값·독립 receipt/UoW 및 Home 최초 선택 참여는 유지합니다. Ledger에 남아 있던 미사용 지역화폐 대체 Service 제거는 이 관측 저장 흐름을 바꾸지 않으며, 실제 merge의 지역화폐 유형 호환 정책도 유지합니다.
+
 > 상태: Proposed — 테스트 구현 기준  
 > 소유 요구사항: [지역화폐 잔액 모듈 요구사항](requirements.md)  
 > 상위 Context: [Household Finance](../../requirements.md)  

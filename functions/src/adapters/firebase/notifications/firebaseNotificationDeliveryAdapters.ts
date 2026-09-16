@@ -16,20 +16,10 @@ import type {
   StoredDeliveryAssuranceInbox,
   StoredDeliveryAssuranceIntent,
 } from "../../../contexts/notifications/application/ports/outbound/deliveryAssurancePorts";
-import type {
-  ShortcutDeliveryRecord,
-  ShortcutNotificationFacts,
-  ShortcutNotificationFactsQuery,
-  ShortcutProviderOutcome,
-  ShortcutTransactionNotificationProvider,
-  ShortcutTransactionNotificationStore,
-} from "../../../contexts/notifications/application/ports/outbound/shortcutTransactionNotificationPorts";
 import type { NotificationTarget } from "../../../contexts/notifications/domain/model/notificationTarget";
 import { mapFirebaseMobileEndpoint } from "./firebaseMobileEndpointRegistrationStore";
-import { decideEndpointInactivation } from "../../../contexts/notifications/domain/policies/endpointInactivationPolicy";
 import {
   firestoreInstantAsIso,
-  firestoreTtlAfter,
   firestoreTtlMergeField,
 } from "../shared/firestoreTtl";
 
@@ -37,7 +27,6 @@ const INBOXES = "notificationInboxes";
 const INTENTS = "notificationIntents";
 const DELIVERIES = "notificationDeliveries";
 const ENDPOINTS = "notificationEndpoints";
-const SHORTCUT_INBOXES = "shortcutNotificationInboxes";
 const RECIPIENT_PREFERENCES = "notificationRecipientPreferences";
 
 function pushDeliveryFrom(
@@ -457,195 +446,6 @@ export class FirebaseFidDeliveryProvider
       return { kind: "success" } as const;
     } catch (error) {
       return providerError(error);
-    }
-  }
-}
-
-export class FirebaseShortcutNotificationFactsQuery
-  implements ShortcutNotificationFactsQuery
-{
-  constructor(private readonly database: firestore.Firestore) {}
-
-  async load(householdId: string): Promise<ShortcutNotificationFacts> {
-    const household = this.database.collection("households").doc(householdId);
-    const [members, endpoints, preferences] = await Promise.all([
-      household.collection("members").get(),
-      this.database
-        .collection(ENDPOINTS)
-        .where("householdId", "==", householdId)
-        .get(),
-      household.collection(RECIPIENT_PREFERENCES).get(),
-    ]);
-    const pushDeliveryByMemberId = new Map(
-      preferences.docs.map((document) => [
-        document.id,
-        pushDeliveryFrom(document.data()),
-      ]),
-    );
-    return {
-      members: members.docs.map((document) => ({
-        householdId,
-        memberId: document.id,
-        status:
-          document.data().lifecycleState === "removed" ||
-          document.data().status === "removed"
-            ? ("removed" as const)
-            : ("active" as const),
-        pushDelivery: pushDeliveryByMemberId.get(document.id) ?? "enabled",
-      })),
-      endpoints: endpoints.docs
-        .map(mapFirebaseMobileEndpoint)
-        .filter(
-          (endpoint): endpoint is MobileNotificationEndpoint => endpoint !== null,
-        ),
-    };
-  }
-}
-
-interface ShortcutInboxDocument {
-  readonly eventId: string;
-  readonly transactionId: string;
-  readonly status: "in-progress" | "completed";
-  readonly outcome?: ShortcutProviderOutcome;
-  readonly deliveries: readonly ShortcutDeliveryRecord[];
-}
-
-export class FirebaseShortcutTransactionNotificationStore
-  implements ShortcutTransactionNotificationStore
-{
-  constructor(private readonly database: firestore.Firestore) {}
-
-  async claimEvent(input: {
-    eventId: string;
-    transactionId: string;
-    deliveries: readonly ShortcutDeliveryRecord[];
-  }) {
-    const reference = this.database
-      .collection(SHORTCUT_INBOXES)
-      .doc(documentId(input.eventId));
-    return this.database.runTransaction(async (transaction) => {
-      const current = await transaction.get(reference);
-      if (current.exists) {
-        const data = current.data() as ShortcutInboxDocument;
-        return data.status === "completed" && data.outcome !== undefined
-          ? ({ kind: "completed", outcome: data.outcome } as const)
-          : ({ kind: "in-progress" } as const);
-      }
-      transaction.create(reference, {
-        eventId: input.eventId,
-        transactionId: input.transactionId,
-        status: "in-progress",
-        deliveries: input.deliveries,
-        schemaVersion: 1,
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-      return { kind: "claimed", deliveries: input.deliveries } as const;
-    });
-  }
-
-  async completeEvent(input: {
-    eventId: string;
-    outcome: ShortcutProviderOutcome;
-    deliveries: readonly ShortcutDeliveryRecord[];
-  }): Promise<void> {
-    const inboxReference = this.database
-      .collection(SHORTCUT_INBOXES)
-      .doc(documentId(input.eventId));
-    const permanentlyFailed = input.deliveries.filter(
-      ({ status }) => status === "permanent-failure",
-    );
-    await this.database.runTransaction(async (transaction) => {
-      const endpointReferences = permanentlyFailed.map(({ endpointId }) =>
-        this.database.collection(ENDPOINTS).doc(endpointId),
-      );
-      const endpointSnapshots = await Promise.all(
-        endpointReferences.map((reference) => transaction.get(reference)),
-      );
-      const now = new Date().toISOString();
-      permanentlyFailed.forEach((delivery, index) => {
-        const current = mapFirebaseMobileEndpoint(endpointSnapshots[index]);
-        const decision = decideEndpointInactivation({
-          current,
-          expectedRegistrationVersion: delivery.expectedRegistrationVersion,
-          expectedBindingVersion: delivery.expectedBindingVersion,
-          now,
-          observation: {
-            source: "provider",
-            httpStatus: 404,
-            code: "UNREGISTERED",
-          },
-        });
-        if (decision.kind === "Inactivated") {
-          transaction.set(
-            endpointReferences[index],
-            endpointDocument(decision.endpoint),
-            { merge: true },
-          );
-        }
-      });
-      transaction.set(
-        inboxReference,
-        {
-          status: "completed",
-          outcome: input.outcome,
-          deliveries: input.deliveries,
-          terminalAt: now,
-          expiresAt: firestoreTtlAfter(now),
-          completedAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
-    });
-  }
-
-  async waitForCompletion(eventId: string): Promise<ShortcutProviderOutcome> {
-    const snapshot = await this.database
-      .collection(SHORTCUT_INBOXES)
-      .doc(documentId(eventId))
-      .get();
-    const data = snapshot.data() as ShortcutInboxDocument | undefined;
-    if (data?.status !== "completed" || data.outcome === undefined) {
-      throw new Error("SHORTCUT_NOTIFICATION_IN_PROGRESS");
-    }
-    return data.outcome;
-  }
-}
-
-export class FirebaseShortcutFidProvider
-  implements ShortcutTransactionNotificationProvider
-{
-  constructor(private readonly messaging: Messaging) {}
-
-  async sendOne(input: {
-    eventId: string;
-    endpointId: string;
-    fid: string;
-    payload: NotificationTarget["payload"];
-  }) {
-    const result = await new FirebaseFidDeliveryProvider(this.messaging).sendOne({
-      deliveryId: input.eventId,
-      endpointId: input.endpointId,
-      fid: input.fid,
-      payload: input.payload,
-    });
-    switch (result.kind) {
-      case "success":
-        return "delivered" as const;
-      case "http-error":
-        return result.httpStatus === 404 && result.code === "UNREGISTERED"
-          ? ("permanent-failure" as const)
-          : result.httpStatus === 404
-            ? ("contract-failure" as const)
-            : ("failed" as const);
-      case "timeout":
-        return "unknown-provider-outcome" as const;
-      case "quota":
-      case "network-error":
-        return "failed" as const;
-      case "credential-error":
-        return "contract-failure" as const;
     }
   }
 }

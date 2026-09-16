@@ -28,34 +28,6 @@ export function createShortcutCardMessageParser(): ShortcutCardMessageParserInpu
 }
 
 export type {
-  LegacyShortcutCardTypeCharacterization,
-  ShortcutParsedPayment,
-  ShortcutPaymentActor,
-  ShortcutPaymentRecordingCommand,
-  ShortcutPaymentRecordingResult,
-  ShortcutTransactionDraft,
-} from "./domain/model/shortcutPaymentRecording";
-
-export type { ShortcutPaymentRecordingInputPort } from "./application/ports/in/shortcutPaymentRecordingInputPort";
-
-export type {
-  ShortcutLedgerResult,
-  ShortcutNotificationState,
-  ShortcutPaymentResultV2,
-} from "./domain/model/shortcutOutboxResponse";
-
-export type { ShortcutOutboxResponseInputPort } from "./application/ports/in/shortcutOutboxResponseInputPort";
-
-export type {
-  PublishShortcutNotificationOutcomeResult,
-  ShortcutNotificationOutcomeCommit,
-} from "./domain/model/shortcutNotificationOutcome";
-
-export type { ShortcutCommittedSourceEvent } from "./domain/model/shortcutCommittedSourceEvent";
-
-export type { ShortcutNotificationOutcomeInputPort } from "./application/ports/in/shortcutNotificationOutcomeInputPort";
-
-export type {
   IssueShortcutCredentialResult,
   RevokeShortcutCredentialResult,
   ShortcutCredentialActor,

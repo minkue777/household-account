@@ -138,20 +138,20 @@ Android→Functions 공개 입력 계약은 observation ID, 알림 패키지명,
 | ING-SAVE-002 | 현재 명세 | 활성 가맹점 규칙을 가장 먼저 적용한다. 규칙이 없고 도시가스 청구이면 parser의 fixed를 유지하며, 그 밖의 결제는 가구 기본 카테고리를 사용한다. | 도시가스도 규칙과 일치하면 카테고리·가맹점·메모가 치환된다. | [알림 수집 Service](../../../../../../android/app/src/main/java/com/household/account/service/CardNotificationListenerService.kt), [가맹점 규칙 선택 정책](../../../../../../functions/src/contexts/payment-capture/configuration/domain/policies/merchantRuleSelection.ts), [CategoryRepository](../../../../../../android/app/src/main/java/com/household/account/data/CategoryRepository.kt) | U, I, C |
 | ING-SAVE-003 | 목표 명세 | 도시가스 고지서 외 결제는 인증된 현재 멤버의 등록 카드가 하나 이상 일치할 때만 저장한다. | 타 멤버 카드는 후보에서 제외한다. 본인 카드 여러 건 일치는 허용하며 임의 카드 선택 없이 parser 증거를 유지한다. 마스킹 wildcard와 여민전·세종 라벨 호환을 지원한다. 카카오톡 복합 source도 parser가 분류한 카드 결과에는 이 검증을 적용하고 도시가스 고지서 결과에만 예외를 적용한다. | [본인 카드 판정 정책](../../../../../../functions/src/contexts/payment-capture/configuration/domain/policies/ownCardResolution.ts), [DEC-028](../../../../governance/decisions.md#dec-028) | U, I |
 | ING-SAVE-004 | 현재 명세 | wildcard 매칭으로 본인 등록 카드 하나가 확정되면 거래 표시에는 등록 카드의 정규 끝 네 자리를 반영하고 원 알림의 마스킹 증거는 불변 provenance로 별도 보존한다. | 양쪽에 비교 가능한 토큰이 있고 canonical evidence가 유일할 때만 정규 번호를 사용한다. 특정 카드를 확정할 수 없으면 parser의 네 자리 마스킹 모양(예: `2*6*`)을 그대로 표시하며 별표를 제거해 두 자리처럼 축약하지 않는다. | [본인 카드 판정 정책](../../../../../../functions/src/contexts/payment-capture/configuration/domain/policies/ownCardResolution.ts), [Capture→Ledger Gateway](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/application/captureTransactionGatewayApplication.ts) | U, I |
-| ING-SAVE-005 | 현재 명세 | 영속 중복 기준은 가구·날짜 범위 안의 transactionType·시간·금액·정규화 가맹점이며, 모두 같으면 후속 거래를 저장하지 않는다. | 카드는 의도적으로 기준에 포함하지 않는다. 같은 가맹점·금액·분의 실제 중복 결제는 없다고 보고 parser 오동작으로 생긴 중복을 차단하는 정책이다. | [Capture provenance 정책](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/captureProvenancePolicy.ts) | U, I |
+| ING-SAVE-005 | 현재 명세 | 영속 중복 기준은 가구·날짜 범위 안의 transactionType·시간·금액·정규화 가맹점이며, 모두 같으면 후속 거래를 저장하지 않는다. | 카드는 의도적으로 기준에 포함하지 않는다. 같은 가맹점·금액·분의 실제 중복 결제는 없다고 보고 parser 오동작으로 생긴 중복을 차단하는 정책이다. | [Capture provenance 정책](../../../../../../functions/src/adapters/firebase/payment-capture/firebaseCaptureLedgerPersistence.ts) | U, I |
 | ING-SAVE-006 | 목표 명세 | Android 자동 등록 지출은 검증된 현재 멤버를 `creatorMemberId`로 Ledger 저장 Command에 포함하고, 저장 성공 후 해당 Android 기기에서 QuickEdit만 실행한다. | 생성자가 없으면 거래 자체를 저장하지 않는다. creator는 Ledger transaction에서 거래와 함께 확정하며 클라이언트 후속 효과로 나중에 연결하지 않는다. 생성자 본인 또는 다른 가구원에게 자동 푸시를 요청하지 않으며, 저장 실패·미확정 결과에서는 QuickEdit과 완료 broadcast를 실행하지 않는다. | [CardNotificationListenerService](../../../../../../android/app/src/main/java/com/household/account/service/CardNotificationListenerService.kt), [DEC-013](../../../../governance/decisions.md#dec-013) | U, I, UI |
-| ING-SAVE-007 | 목표 명세 | 승인 observation은 observationId·source/parser version·원 금액·원 가맹점 증거·카드 증거·발생 시각을 불변 capture provenance로 만들고 Ledger 거래의 안정적인 captureLineageId와 연결한다. | QuickEdit 수정과 항목·월 분할·합치기가 표시 필드를 바꿔도 provenance와 자동 수집 분류(`source`, `cardType`)를 수동 입력으로 덮어쓰거나 버리지 않는다. 원문 전체는 provenance에 포함하지 않고 내부 취소·감사 Port에서만 사용한다. 구조 변경 원본은 취소 전까지 `superseded`로 보존한다. | [QuickEdit](../../../../../../android/app/src/main/java/com/household/account/QuickEditActivity.kt), [Capture provenance 정책](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/captureProvenancePolicy.ts), [DEC-041](../../../../governance/decisions.md#dec-041) | U, I, C |
+| ING-SAVE-007 | 목표 명세 | 승인 observation은 observationId·source/parser version·원 금액·원 가맹점 증거·카드 증거·발생 시각을 불변 capture provenance로 만들고 Ledger 거래의 안정적인 captureLineageId와 연결한다. | QuickEdit 수정과 항목·월 분할·합치기가 표시 필드를 바꿔도 provenance와 자동 수집 분류(`source`, `cardType`)를 수동 입력으로 덮어쓰거나 버리지 않는다. 원문 전체는 provenance에 포함하지 않고 내부 취소·감사 Port에서만 사용한다. 구조 변경 원본은 취소 전까지 `superseded`로 보존한다. | [QuickEdit](../../../../../../android/app/src/main/java/com/household/account/QuickEditActivity.kt), [Capture provenance 정책](../../../../../../functions/src/adapters/firebase/payment-capture/firebaseCaptureLedgerPersistence.ts), [DEC-041](../../../../governance/decisions.md#dec-041) | U, I, C |
 
 ### 5.4 취소
 
 | ID | 상태 | 요구사항 | 경계·예외 | 근거 | 테스트 |
 |---|---|---|---|---|---|
-| CAN-001 | 현재 명세 | 취소 알림의 정규화된 원 가맹점 증거와 승인 시 보존한 immutable provenance로 같은 가구의 원거래를 찾는다. | 가구 키가 없으면 취소하지 않는다. 현재 표시명이나 승인 이후 변경된 가맹점 mapping은 취소 식별에 사용하지 않는다(DEC-041, CAN-007). | Android 알림 Service와 [취소 일치 정책](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/cancellationMatch.ts) | U, I |
-| CAN-002 | 결함 | 목표 취소 후보 검색은 일반 거래와 월 분할 그룹 모두 취소일에서 최대 30일 전까지 같은 날짜 범위를 사용한다. | 현재 일반 거래는 30일을 검색하지만 직접 일치가 없는 분할 그룹 fallback은 취소 당일 문서만 seed로 조회한다. 날짜 파싱 실패 시 목표도 당일 범위만 사용한다. | [취소 검색 기간 정책](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/cancellationSearchWindow.ts) | U, I |
+| CAN-001 | 현재 명세 | 취소 알림의 정규화된 원 가맹점 증거와 승인 시 보존한 immutable provenance로 같은 가구의 원거래를 찾는다. | 가구 키가 없으면 취소하지 않는다. 현재 표시명이나 승인 이후 변경된 가맹점 mapping은 취소 식별에 사용하지 않는다(DEC-041, CAN-007). | Android 알림 Service와 [취소 일치 정책](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/capturedApprovalCancellation.ts) | U, I |
+| CAN-002 | 결함 | 목표 취소 후보 검색은 일반 거래와 월 분할 그룹 모두 취소일에서 최대 30일 전까지 같은 날짜 범위를 사용한다. | 현재 일반 거래는 30일을 검색하지만 직접 일치가 없는 분할 그룹 fallback은 취소 당일 문서만 seed로 조회한다. 날짜 파싱 실패 시 목표도 당일 범위만 사용한다. | [취소 검색 기간 정책](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/capturedApprovalCancellation.ts) | U, I |
 | CAN-003 | 목표 명세 | 원승인 금액·정규화된 가맹점·카드가 모두 일치하는 원거래만 취소 후보로 허용한다. 토스 캐시백 승인은 원장의 순액 대신 별도 보존한 승인 총액으로 대조한다. | 총액 없는 과거 기록은 기존 승인 증거의 금액만 사용하며 캐시백·분할 합계로 원승인을 추정하지 않는다(CAN-006). 완전 일치 원거래가 없으면 무변경 `NotFound`이며 대기 취소·tombstone·미래 승인 억제를 만들지 않는다. 이후 승인은 일반 입력으로 등록한다. 완전 일치 후보가 여러 건이면 임의 선택하지 않는다. | 같은 근거와 [DEC-012](../../../../governance/decisions.md#dec-012), [DEC-031](../../../../governance/decisions.md#dec-031), [DEC-070](../../../../governance/decisions.md#dec-070), [DEC-071](../../../../governance/decisions.md#dec-071) | U, I |
 | CAN-004 | 현재 명세 | 원거래가 월 분할 그룹이면 그룹 전체를, 일반 거래이면 해당 문서만 삭제한다. | 그룹 삭제의 원자성은 CAN-005에서 다룬다. | 같은 근거 | U, I |
 | CAN-005 | 결함 | 취소 대상 전체 삭제는 원자적으로 성공하거나 전부 실패해야 한다. | 현재 순차 삭제와 예외 은폐는 보존하지 않는다. | 같은 근거 | I |
-| CAN-006 | 현재 명세 | 월 분할의 합계 내림 오차와 관계없이 보존한 원승인 금액으로 취소 대상을 식별하고 연결된 원본·모든 파생 기록을 취소한다. 분할 합계와 취소액이 비슷하다는 이유로 후보를 만들지 않는다. | 승인 증거·연결이 없는 구형 그룹은 `NotFound`로 보존한다. 원본 자료로 연결을 확인할 수 있을 때만 명시적 migration으로 복구한다. DEC-001의 분할 내림 자체는 유지하며 구형 그룹 번호나 migration의 legacy ID만으로 승인 증거를 대체하지 않는다. | [취소 일치 정책](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/cancellationMatch.ts), [DEC-071](../../../../governance/decisions.md#dec-071) | U, I |
+| CAN-006 | 현재 명세 | 월 분할의 합계 내림 오차와 관계없이 보존한 원승인 금액으로 취소 대상을 식별하고 연결된 원본·모든 파생 기록을 취소한다. 분할 합계와 취소액이 비슷하다는 이유로 후보를 만들지 않는다. | 승인 증거·연결이 없는 구형 그룹은 `NotFound`로 보존한다. 원본 자료로 연결을 확인할 수 있을 때만 명시적 migration으로 복구한다. DEC-001의 분할 내림 자체는 유지하며 구형 그룹 번호나 migration의 legacy ID만으로 승인 증거를 대체하지 않는다. | [취소 일치 정책](../../../../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/capturedApprovalCancellation.ts), [DEC-071](../../../../governance/decisions.md#dec-071) | U, I |
 | CAN-007 | 목표 명세 | 취소 후보는 현재 편집값이 아니라 ING-SAVE-007의 capture provenance와 captureLineageId로 원 승인을 식별하고, 완전 일치하는 유일한 lineage이면 사용자 확인 없이 원본·수정·분할·합치기 파생 지출 전체 삭제를 요청한다. | 다른 승인 lineage와 합쳐진 파생 거래는 제거하되 다른 원본은 같은 UoW에서 복원한다. 원본·파생·복원·receipt 변경은 전부 성공하거나 전부 실패하며, 완료 뒤 사용자 원복은 제공하지 않는다. 원거래 없음은 무변경이고 후보가 여러 개면 `NeedsConfirmation`이다. | [DEC-041](../../../../governance/decisions.md#dec-041) | U, I |
 
 ## 6. 현재 흐름
@@ -169,18 +169,16 @@ Android→Functions 공개 입력 계약은 observation ID, 알림 패키지명,
 
 연결 요구사항: ING-001~009, PARSE-*, MER-001~006, CARD-004, ING-SAVE-001~007, QE-001, BAL-005.
 
-### 6.2 Android 취소 흐름
+### 6.2 Android·Shortcut 공통 취소 흐름
 
-1. 취소 후보를 파싱하고 가맹점명 규칙을 적용한다.
-2. 일반 거래는 취소일로부터 30일 범위를 검색한다. 현재 직접 일치가 없는 월 분할 fallback은 취소 당일만 seed로 조회하는 결함이 있다.
-3. 일반 거래 또는 분할 그룹 전체를 삭제 대상으로 만든다.
-4. 현재는 문서를 순차 삭제하고 Repository가 개별 오류를 숨긴 뒤 완료 broadcast를 보낼 수 있다.
+1. 검증된 Actor와 parser의 취소 증거를 공통 Capture Gateway로 전달합니다.
+2. `capturedApprovalCancellation`의 동일한 서울 날짜 30일 범위를 후보 조회와 대조에 사용합니다. 원승인 총액·원 가맹점·카드 증거를 대조하며 현재 편집 표시값으로 원거래를 추정하지 않습니다.
+3. 유일한 capture lineage에 대해 Ledger의 실제 `captureLineageCancellationGraph` 정책으로 원본·분할·합치기 파생 및 복원 대상을 계산합니다.
+4. `FirebaseCaptureLedgerPersistence` transaction이 대상 변경·중복 claim·receipt를 함께 확정합니다. 원거래 없음이나 복수 후보는 typed 결과이며 순차 삭제 경로는 없습니다.
 
-교정할 불변식은 모든 후보 유형에 같은 30일 범위를 적용하고, 완전 일치하는 유일한 capture lineage의 원본·모든 파생 지출 삭제와 다른 lineage 복원이 원자적으로 성공한 경우에만 완료 event를 발생시키는 것이다. 완료 뒤에는 최소 cancellation receipt와 dedup tombstone만 남겨 같은 승인·취소 재전송이 지출을 재생성하지 않게 한다.
+## 7. 전환 이전 결함 기록
 
-연결 요구사항: CAN-001~007, ING-SAVE-007, LED-008~009, SPL-003, SPL-005, DEC-041.
-
-## 7. 정상 요구사항으로 고정하지 않을 결함
+아래는 전환 이전 구현의 역사이며 현재 미해결 목록이 아닙니다. 현재 경로는 6절과 요구사항 표의 구현 링크를 따릅니다. 사용하지 않는 TS Android Queue/취소 대체 Application은 제거했으며 실제 Kotlin Queue와 공통 Capture를 수정해야 합니다.
 
 - `notification_debug_logs`의 기존 Android 직접 write·공개 읽기 결함은 교정되었습니다. Android는 `submitNotificationDiagnostic` callable에 원문 필드와 게시 시각만 best-effort로 보내며, 서버가 Firebase Auth의 유일한 활성 membership과 서버 소유 진단 source registry를 확인해 actor·source를 확정합니다. Rules는 시스템 관리자 읽기만 허용하고 client write를 거부하며, TTL 없는 전체 보존과 Secret 비수집 정책은 유지합니다.
 - `package in knownPackages || Parser.matches(text)` 조건 때문에 본문만 맞는 미등록 package도 승인 입력이 될 수 있습니다. Source Registry를 선행 gate로 사용하지 않는 현재 출처 선택은 DEC-005와 다른 결함입니다.

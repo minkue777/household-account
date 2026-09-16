@@ -5,7 +5,7 @@ import { RefreshCw } from 'lucide-react';
 import { CryptoHolding } from '@/types/asset';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { deleteCryptoHolding, updateCryptoHolding } from '@/lib/assetService';
-import { calculateCryptoHoldingValue } from '@/lib/utils/useCryptoHoldingManager';
+import { calculateHoldingValue, calculateHoldingProfitLoss } from '@/lib/assets/holdingValuation';
 import { useAppDialog } from '@/contexts/AppDialogContext';
 import FormattedIntegerInput from '@/components/common/FormattedIntegerInput';
 
@@ -217,9 +217,9 @@ interface CryptoHoldingItemProps {
 
 function CryptoHoldingItem({ holding, onEdit }: CryptoHoldingItemProps) {
   const hasAvgPrice = (holding.avgPrice ?? 0) > 0;
-  const hasCurrentPrice = (holding.currentPrice ?? 0) > 0;
+  const hasCurrentPrice = holding.currentPrice != null;
   const holdingProfitLoss =
-    hasAvgPrice && hasCurrentPrice ? (holding.currentPrice! - holding.avgPrice!) * holding.quantity : 0;
+    hasAvgPrice && hasCurrentPrice ? calculateHoldingProfitLoss(holding) : 0;
   const holdingProfitRate =
     hasAvgPrice && hasCurrentPrice ? ((holding.currentPrice! - holding.avgPrice!) / holding.avgPrice!) * 100 : 0;
   const showHoldingProfit = hasAvgPrice && hasCurrentPrice;
@@ -242,7 +242,7 @@ function CryptoHoldingItem({ holding, onEdit }: CryptoHoldingItemProps) {
 
         <div className="flex-shrink-0 text-right">
           <p className="font-semibold text-slate-800">
-            {Math.round(calculateCryptoHoldingValue(holding)).toLocaleString()}원
+            {Math.round(calculateHoldingValue(holding)).toLocaleString()}원
           </p>
           {showHoldingProfit && (
             <p className={`text-xs ${isHoldingProfit ? 'text-red-500' : 'text-blue-500'}`}>

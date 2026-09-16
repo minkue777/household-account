@@ -1,4 +1,4 @@
-import type { StockHolding } from '@/types/asset';
+import type { StockHolding } from '../../types/asset';
 
 type HoldingValuationInput = Pick<
   StockHolding,
@@ -13,7 +13,7 @@ export function getHoldingPriceScale(holding: Pick<StockHolding, 'priceScale'>) 
 }
 
 export function calculateHoldingValue(holding: HoldingValuationInput) {
-  const price = holding.currentPrice || holding.avgPrice || 0;
+  const price = holding.currentPrice ?? holding.avgPrice ?? 0;
   return (price * holding.quantity) / getHoldingPriceScale(holding);
 }
 
@@ -22,7 +22,7 @@ export function calculateHoldingCostBasis(holding: HoldingValuationInput) {
 }
 
 export function calculateHoldingProfitLoss(holding: HoldingValuationInput) {
-  if (!holding.currentPrice || !holding.avgPrice) {
+  if (holding.currentPrice == null || holding.avgPrice == null) {
     return 0;
   }
 

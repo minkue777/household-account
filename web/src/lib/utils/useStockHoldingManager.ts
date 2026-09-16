@@ -196,7 +196,7 @@ export function useStockHoldingManager({
       market: selectedStock.market,
       quantity: Number(quantity),
       avgPrice: avgPrice ? Number(avgPrice) : undefined,
-      currentPrice: currentPriceInfo?.price || currentPrice || undefined,
+      currentPrice: currentPriceInfo?.price ?? currentPrice ?? undefined,
       instrumentType:
         currentPriceInfo?.instrumentType || selectedStock.instrumentType || 'stock',
       priceScale: currentPriceInfo?.priceScale || selectedStock.priceScale || 1,

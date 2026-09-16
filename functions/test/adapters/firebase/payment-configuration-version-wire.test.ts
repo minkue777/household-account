@@ -20,6 +20,27 @@ function setup() {
 }
 
 describe("[CARD-003][CARD-004][MER-004] runtime command versions", () => {
+  it("[MER-003] 명시한 빈 치환만 제거하고 생략한 mapping 필드는 유지하며 재전송은 같은 결과를 재생한다", async () => {
+    const { memory, run, data } = setup();
+    const created = await run("create-merchant-rule", { rule: {
+      merchantKeyword: "CAFE", matchType: "exact",
+      mapping: { merchant: "카페", memo: "식비" },
+    } });
+    const path = `households/house/merchantRules/${created.ruleId}`;
+    await run("update-merchant-rule", { ruleId: created.ruleId, expectedVersion: 1,
+      changes: { mapping: { merchant: "이름 변경" } } });
+    expect(memory.document(path)?.mapping).toEqual({ merchant: "이름 변경", memo: "식비" });
+    const payload = { ruleId: created.ruleId, expectedVersion: 2,
+      changes: { mapping: { merchant: "", memo: "   " } } };
+    const result = await run("update-merchant-rule", payload, "clear-mapping");
+    expect(memory.document(path)?.mapping).toEqual({});
+    const after = data();
+    expect(await run("update-merchant-rule", payload, "clear-mapping")).toEqual(result);
+    expect(data()).toEqual(after);
+    await expect(run("update-merchant-rule", payload, "stale-clear")).rejects.toThrow();
+    expect(data()).toEqual(after);
+  });
+
   it("card update and retirement reject the caller's stale version rather than substituting the latest version", async () => {
     const { memory, run, data } = setup();
     const created = await run("register-card", { card: { cardLabel: "삼성", cardLastFour: "1234" } });

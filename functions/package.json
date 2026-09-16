@@ -2,7 +2,7 @@
   "name": "household-account-functions",
   "scripts": {
     "prebuild": "npm run test:architecture",
-    "build": "tsc && node ../tools/build/copy-functions-contracts.mjs",
+    "build": "node ../tools/build/clean-functions-output.mjs && tsc && node ../tools/build/copy-functions-contracts.mjs",
     "build:watch": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",

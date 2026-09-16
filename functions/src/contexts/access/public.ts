@@ -54,28 +54,6 @@ export {
   type VerifiedMemberRenameActor,
 } from "./member-rename/application/ports/in/memberRenameInputPort";
 export {
-  type LogoutSessionResult,
-  type RestoreSessionResult,
-  type SessionEndpointRegistrationResult,
-  type SessionEndpointRemovalResult,
-  type SessionMembershipInputPort,
-  type SessionScopeView,
-  type VerifiedSessionPrincipal,
-} from "./session-membership/application/ports/in/sessionMembershipInputPort";
-export {
-  type AssetOwnerSelectorItem,
-  type AssetOwnerUiAction,
-  type AssetOwnerUiSurface,
-  type AssetOwnerUiSurfaceInputPort,
-  type AssetOwnerUiSurfaceView,
-  type VerifiedAssetOwnerUiActor,
-} from "./asset-owner-ui/application/ports/in/assetOwnerUiSurfaceInputPort";
-export {
-  type HouseholdGuardInput,
-  type HouseholdGuardInputPort,
-  type HouseholdGuardResult,
-} from "./household-guard/application/ports/in/householdGuardInputPort";
-export {
   type HouseholdMemberAdminActor,
   type MemberLifecycleCommandResult,
   type MemberLifecycleInputPort,

@@ -145,7 +145,7 @@ function HoldingSummaryCard({
   const holdingType = getHoldingType(holding);
   const isFund = isFundHolding(holding);
   const hasAvgPrice = (holding.avgPrice || 0) > 0;
-  const hasCurrentPrice = (holding.currentPrice || 0) > 0;
+  const hasCurrentPrice = holding.currentPrice != null;
   const holdingProfitLoss =
     hasAvgPrice && hasCurrentPrice
       ? calculateHoldingProfitLoss(holding)
@@ -235,7 +235,7 @@ function HoldingEditorCard({
   const amountInputId = `stock-holding-amount-${holding.id}`;
   const topRightLabel =
     holdingType === 'stock'
-      ? holding.currentPrice
+      ? holding.currentPrice != null
         ? `${isFund ? '기준가 ' : ''}${holding.currentPrice.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}원`
         : `${calculateHoldingValue(holding).toLocaleString()}원`
       : `${calculateHoldingValue(holding).toLocaleString()}원`;

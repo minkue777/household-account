@@ -6,6 +6,7 @@ import { useCategoryContext } from '@/contexts/CategoryContext';
 import type { LocalCurrencyBalance } from '@/lib/balanceService';
 import { Expense, TransactionType } from '@/types/expense';
 import { HomeSummaryCardKey, HomeSummaryConfig } from '@/types/household';
+import { calculateMonthlyBudgetSummary } from '@/features/category-budget/monthlyBudget';
 
 interface BalanceCardsProps {
   currentYear: number;
@@ -55,35 +56,10 @@ export default function BalanceCards({
   const isIncome = transactionType === 'income';
   const { activeCategories } = useCategoryContext();
 
-  const { remaining, isOverBudget, monthlySpent } = useMemo(() => {
-    const budgetedCategoryKeys = new Set<string>();
-    let totalBudget = 0;
-
-    for (const category of activeCategories) {
-      if (category.budget === null) {
-        continue;
-      }
-
-      budgetedCategoryKeys.add(category.key);
-      totalBudget += category.budget;
-    }
-
-    let budgetedSpent = 0;
-    let totalSpent = 0;
-    for (const expense of expenses) {
-      totalSpent += expense.amount;
-      if (budgetedCategoryKeys.has(expense.category)) {
-        budgetedSpent += expense.amount;
-      }
-    }
-    const remainingBudget = totalBudget - budgetedSpent;
-
-    return {
-      remaining: remainingBudget,
-      isOverBudget: remainingBudget < 0,
-      monthlySpent: totalSpent,
-    };
-  }, [activeCategories, expenses]);
+  const { remaining, isOverBudget, monthlySpent } = useMemo(
+    () => calculateMonthlyBudgetSummary(activeCategories, expenses),
+    [activeCategories, expenses]
+  );
 
   const handleLocalCurrencyClick = () => {
     if (!onLocalCurrencyClick) {

@@ -65,6 +65,23 @@ function subject(memory: InMemoryFirestore) {
 }
 
 describe("Firebase capture cancellation safety", () => {
+  it.each([
+    { date: "2026-06-21", kind: "cancelled" },
+    { date: "2026-06-20", kind: "notFound" },
+    { date: "2026-07-21", kind: "cancelled" },
+    { date: "2026-07-22", kind: "notFound" },
+  ])("[CAN-002] 실제 조회와 취소 판정은 30일 범위 양 끝을 포함한다: $date → $kind", async ({ date, kind }) => {
+    const memory = new InMemoryFirestore();
+    const persistence = subject(memory);
+    const source = approval();
+    const command = { ...source, branch: { ...source.branch, accountingDate: date, occurredAt: `${date}T10:01:00+09:00` } };
+    expect((await persistence.recordApproval(command)).kind).toBe("recorded");
+    const cancellation = cancellationFor(command, date);
+    const result = await persistence.cancel({ ...cancellation, branch: { ...cancellation.branch, cancellationDate: "2026-07-21", observedAt: "2026-07-21T12:00:00+09:00" } });
+    expect(result.kind).toBe(kind);
+    expect(memory.documentsInCollection("households/house-1/ledgerTransactions").map(({ value }) => value.lifecycleState)).toEqual(kind === "cancelled" ? [] : ["active"]);
+  });
+
   it.each([10_000, 10_001, 10_002])("[T-CAN-006][CAN-006] 원승인 증거 없는 구형 5,000원×2 그룹은 %s원 취소가 와도 추정 삭제하지 않는다", async (amount) => {
     const memory = new InMemoryFirestore();
     const persistence = subject(memory);

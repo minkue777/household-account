@@ -1,5 +1,7 @@
 # 카테고리·예산 모듈 상세 설계
 
+> 2026-09-17 실행 경로 정리: 신규 카테고리 참조는 [Category reference reader](../../../../../../functions/src/adapters/firebase/categories/firebaseCategoryReferenceReader.ts)가 canonical 우선·legacy 호환·보관 상태를 판정하고 Ledger/Recurring에서 공유합니다. 실제 월 예산은 [Web 예산 계산](../../../../../../web/src/features/category-budget/monthlyBudget.ts)이 소유합니다. 활성 카테고리의 null만 미설정이며 0원 예산의 지출도 잔여 예산에서 차감합니다. 진행률은 양수 예산에만 표시합니다. 실행되지 않던 서버 Budget Query/계산은 제거했으며 아래 서버 Query 구조는 현재 배포 경로가 아닌 목표 계약입니다.
+
 > 상태: Proposed — 테스트 구현 기준  
 > 소유 요구사항: [카테고리·예산 모듈 요구사항](requirements.md)  
 > 상위 Context: [Household Finance](../../requirements.md)  

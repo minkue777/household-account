@@ -2,6 +2,7 @@ import type {
   ExternalResult,
   ProviderObservation,
 } from "./externalResult";
+import { retryableHttpStatusCode } from "./httpStatus";
 
 function objectPayload(payload: unknown): Record<string, unknown> | undefined {
   return typeof payload === "object" && payload !== null && !Array.isArray(payload)
@@ -22,11 +23,7 @@ export function classifyNumericObservation(input: {
   if (observation.kind === "network-error") {
     return { kind: "RETRYABLE_FAILURE", code: observation.code };
   }
-  if (
-    observation.status === 408 ||
-    observation.status === 429 ||
-    observation.status >= 500
-  ) {
+  if (retryableHttpStatusCode(observation.status) !== undefined) {
     return {
       kind: "RETRYABLE_FAILURE",
       code: `HTTP_${observation.status}`,

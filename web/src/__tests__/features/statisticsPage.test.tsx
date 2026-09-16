@@ -190,7 +190,7 @@ it.each(['memo', 'category'] as const)('confirmed %s edits update the visible st
   await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
 });
 
-it('STAT-003 waits for the asynchronous budget catalog, keeps screen toggles across period changes, and reinitializes on household change', async () => {
+it('[T-STAT-004][STAT-003] waits for the asynchronous budget catalog, keeps screen toggles across period changes, and reinitializes on household change', async () => {
   read.mockResolvedValue([{ ...row, amount: 10 }]);
   const { rerender } = render(<StatsPage />);
   await screen.findByText('10원');

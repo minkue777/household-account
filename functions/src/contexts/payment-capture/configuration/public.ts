@@ -115,26 +115,6 @@ export function createPaymentDraftEnrichmentBoundary(): PaymentDraftEnrichmentBo
 }
 
 export type {
-  CardBoundaryFailure,
-  RegisterCardCommand,
-  RegisterCardResult,
-  RegisteredCardActor,
-  RegisteredCardManagementInputPort,
-  RegisteredCardView,
-  ResolveRegisteredCardResult,
-  RetireCardResult,
-  RetireRegisteredCardCommand,
-  UpdateCardResult,
-  UpdateRegisteredCardCommand,
-} from "./application/ports/in/registeredCardManagementInputPort";
-
-export type {
-  PaymentCardResolutionInputPort,
-  PaymentCardResolutionResult,
-  ResolvePaymentCardInput,
-} from "./application/ports/in/paymentCardResolutionInputPort";
-
-export type {
   CreateMerchantRuleCommand,
   DeleteMerchantRuleCommand,
   MerchantRuleActor,

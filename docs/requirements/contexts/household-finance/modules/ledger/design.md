@@ -1,5 +1,7 @@
 # 거래 원장 모듈 상세 설계
 
+> 2026-09-17 실행 경로 정리: Command는 [실제 handler](../../../../../../functions/src/bootstrap/commands/ledgerHouseholdCommandHandlers.ts)가 조립하는 Basic Ledger·Item Split·Monthly Split Lifecycle·Transformation Lineage Service가 담당합니다. 검색은 [Web 원장 서비스](../../../../../../web/src/lib/expenseService.ts)의 bounded snapshot과 페이지/요약 계산을 사용합니다. 이 실행 경로와 중복되던 미사용 Service·검색 Query는 제거했습니다. 정기 거래의 원장 posting 계약은 [Ledger 공개 계약](../../../../../../functions/src/contexts/household-finance/ledger/public.ts)이 제공하며 Finance UoW가 commit합니다.
+
 > 상태: Proposed — 테스트 구현 기준  
 > 소유 요구사항: [거래 원장 모듈 요구사항](requirements.md)  
 > 상위 Context: [Household Finance](../../requirements.md)  

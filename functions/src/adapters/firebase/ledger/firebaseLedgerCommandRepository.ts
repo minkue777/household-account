@@ -14,6 +14,7 @@ import type {
 import { mergeCanonicalLedgerTransactions } from "./migrationAwareLedgerUnion";
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
+import { ledgerTransactionDocument as transactionDocument } from "./ledgerDocumentMapping";
 
 const TRANSACTIONS = "expenses";
 const RECEIPT_CONTEXT = "household-finance-ledger";
@@ -96,44 +97,6 @@ function mapTransaction(
           },
         }
       : {}),
-  };
-}
-
-function transactionDocument(
-  transaction: LedgerTransactionView,
-  includeCreatedAt: boolean,
-) {
-  return {
-    householdId: transaction.householdId,
-    transactionType: transaction.transactionType,
-    merchant: transaction.merchant,
-    memo: transaction.memo,
-    amountInWon: transaction.amountInWon,
-    amount: transaction.amountInWon,
-    categoryId: transaction.categoryId,
-    category: transaction.categoryId,
-    accountingDate: transaction.accountingDate,
-    date: transaction.accountingDate,
-    localTime: transaction.localTime,
-    time: transaction.localTime,
-    cardDisplay: transaction.cardDisplay,
-    cardType: transaction.cardType,
-    ...(transaction.localCurrencyType === undefined
-      ? {}
-      : { localCurrencyType: transaction.localCurrencyType }),
-    creatorMemberId: transaction.creatorMemberId,
-    lifecycleState: transaction.lifecycleState,
-    ...(transaction.deletedAt === undefined ? {} : { deletedAt: transaction.deletedAt }),
-    aggregateVersion: transaction.aggregateVersion,
-    source:
-      transaction.source ??
-      (transaction.cardType === "manual" ? "manual" : "captured"),
-    schemaVersion: 2,
-    updatedAt: FieldValue.serverTimestamp(),
-    ...(includeCreatedAt ? { createdAt: FieldValue.serverTimestamp() } : {}),
-    ...(transaction.notificationRequest === undefined
-      ? {}
-      : { notificationRequest: transaction.notificationRequest }),
   };
 }
 

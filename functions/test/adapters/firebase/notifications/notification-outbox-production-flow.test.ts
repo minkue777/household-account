@@ -33,6 +33,15 @@ function event(eventType = "TransactionRecorded.v1") {
 }
 
 describe("Notifications 실제 Outbox dispatch와 Firebase 전달 저장소", () => {
+  it.each(["TransactionRecorded.v1", "CaptureDuplicateObserved.v1"])("%s의 실제 FCM 실패는 성공으로 집계하지 않는다", async (type) => {
+    const subject = setup();
+    subject.send.mockRejectedValueOnce({ code: "messaging/server-unavailable" });
+    await expect(subject.dispatcher.consume(event(type))).resolves.toMatchObject({
+      kind: "Completed", status: "failed",
+    });
+    expect(subject.send).toHaveBeenCalledTimes(1);
+  });
+
   it.each(["expense", "income", "monthly", "recurring"])("[PUSH-004] 실제 %s 생성 Outbox는 creator/channel을 보존하고 정상 NoTarget으로 끝난다", async (mode) => {
     const subject = setup();
     subject.memory.seed("categories/etc", { householdId: "house", key: "etc", isActive: true });
@@ -76,7 +85,7 @@ describe("Notifications 실제 Outbox dispatch와 Firebase 전달 저장소", ()
         eventId: row.value.eventId as string, eventType: "TransactionRecorded.v1",
         householdId: "house", occurredAt: now, aggregateId: row.value.aggregateId as string, payload,
       });
-      expect(result).toMatchObject({ kind: "NoTarget" });
+      expect(result).toMatchObject({ kind: "NoTarget", status: "rejected" });
     }
     expect(subject.memory.documentsInCollection("notificationDeliveries")).toEqual([]);
     expect(subject.send).not.toHaveBeenCalled();

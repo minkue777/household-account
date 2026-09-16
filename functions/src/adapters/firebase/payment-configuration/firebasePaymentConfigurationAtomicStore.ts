@@ -89,7 +89,7 @@ function merchantMapping(
       ? (data.mapping as Record<string, unknown>)
       : {};
   const merchant = text(raw, "merchant");
-  const categoryId = text(raw, "categoryId", "category") ?? text(data, "category");
+  const categoryId = text(raw, "categoryId", "category") ?? text(data, "categoryId", "category");
   const memo = text(raw, "memo");
   return {
     ...(merchant === undefined ? {} : { merchant }),
@@ -246,6 +246,9 @@ function merchantRuleDocument(rule: MerchantRuleRecord, created: boolean) {
       priority:
         rule.priority === undefined ? FieldValue.delete() : rule.priority,
       mapping: { ...rule.mapping },
+      // 호환 reader의 fallback이 제거한 치환을 다시 살리지 않도록 옛 alias도 정리합니다.
+      category: FieldValue.delete(),
+      categoryId: FieldValue.delete(),
       active: rule.active,
       isActive: rule.active,
       aggregateVersion: rule.version,
@@ -261,6 +264,7 @@ function merchantRuleDocument(rule: MerchantRuleRecord, created: boolean) {
       priority:
         rule.priority === undefined ? FieldValue.delete() : rule.priority,
       mapping: legacyMapping,
+      categoryId: FieldValue.delete(),
       ...(rule.mapping.categoryId === undefined
         ? { category: FieldValue.delete() }
         : { category: rule.mapping.categoryId }),
@@ -447,8 +451,10 @@ export class FirebasePaymentConfigurationAtomicStore
             const previous = beforeRules.get(ruleId);
             if (previous !== undefined && stable(previous) === stable(rule)) continue;
             const documents = merchantRuleDocument(rule, previous === undefined);
-            transaction.set(canonical.doc(ruleId), documents.canonical, { merge: true });
-            transaction.set(legacy.doc(ruleId), documents.legacy, { merge: true });
+            // mapping은 이미 부분 수정 정책을 적용한 최종 상태입니다. nested merge로
+            // 저장하면 제거한 치환 필드가 남으므로 이 top-level 필드 전체를 교체합니다.
+            transaction.set(canonical.doc(ruleId), documents.canonical, { mergeFields: Object.keys(documents.canonical) });
+            transaction.set(legacy.doc(ruleId), documents.legacy, { mergeFields: Object.keys(documents.legacy) });
           }
           for (const ruleId of beforeRules.keys()) {
             if (!afterRules.has(ruleId)) {

@@ -5,6 +5,7 @@ import {
   refreshAssetMarketValues,
 } from '@/lib/assetService';
 import { portfolioQueries } from '@/features/portfolio/application/portfolioQueries';
+import { calculateHoldingValue as calculateCryptoHoldingValue } from '@/lib/assets/holdingValuation';
 
 function sanitizeDecimalInput(rawValue: string) {
   const cleaned = rawValue.replace(/[^0-9.]/g, '');
@@ -17,12 +18,7 @@ function sanitizeDecimalInput(rawValue: string) {
   return `${cleaned.slice(0, firstDot + 1)}${cleaned.slice(firstDot + 1).replace(/\./g, '')}`;
 }
 
-export function calculateCryptoHoldingValue(
-  holding: Pick<CryptoHolding, 'quantity' | 'currentPrice' | 'avgPrice'>
-) {
-  const price = holding.currentPrice || holding.avgPrice || 0;
-  return price * holding.quantity;
-}
+export { calculateHoldingValue as calculateCryptoHoldingValue } from '@/lib/assets/holdingValuation';
 
 interface UseCryptoHoldingManagerOptions {
   isOpen: boolean;
@@ -158,7 +154,7 @@ export function useCryptoHoldingManager({
       coinName: selectedCoin.name,
       quantity: parseFloat(quantity),
       avgPrice: avgPrice ? parseInt(avgPrice, 10) : undefined,
-      currentPrice: currentPrice || undefined,
+      currentPrice: currentPrice ?? undefined,
     });
     resetCryptoForm();
     try {

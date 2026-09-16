@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createShortcutHttpInboundDriver } from "../../../support/shortcut-http-inbound-driver";
+import { type ShortcutIntakeRequest, createShortcutHttpInboundDriver } from "../../../support/shortcut-http-inbound-driver";
 
 export interface ShortcutIngressLimitsFixture {
   maxBodyBytes: number;
@@ -26,19 +26,10 @@ export interface ShortcutInboundMembershipFixture {
   householdState: "active" | "deleted" | "purging";
 }
 
-export interface ShortcutOwnedCardFixture {
-  householdId: string;
-  ownerMemberId: string;
-  cardCompany: string;
-  lastFour: string;
-  lifecycleState: "active" | "retired";
-}
-
 export interface ShortcutHttpInboundFixture {
   limits: ShortcutIngressLimitsFixture;
   credentials: readonly ShortcutInboundCredentialFixture[];
   memberships: readonly ShortcutInboundMembershipFixture[];
-  cards: readonly ShortcutOwnedCardFixture[];
   invitationCodes?: readonly string[];
   ingressGate?:
     | "allowed"
@@ -47,6 +38,7 @@ export interface ShortcutHttpInboundFixture {
     | "quota-exceeded";
   intakeOutcome?:
     | "success"
+    | "card-unmatched"
     | "duplicate"
     | "cancelled"
     | "cancellation-not-found"
@@ -141,24 +133,6 @@ export type ShortcutHttpResponse =
       body: ShortcutHttpErrorBody;
     };
 
-export interface ShortcutInboundPublicSnapshot {
-  transactions: readonly {
-    transactionId: string;
-    householdId: string;
-    creatorMemberId: string;
-    source: "ios-shortcut";
-    amountInWon: number;
-    merchant: string;
-  }[];
-  events: readonly {
-    eventName: "TransactionRecorded.v1" | "CaptureDuplicateObserved.v1";
-    eventId: string;
-    producer: "household-finance.ledger" | "payment-capture.intake";
-    householdId: string;
-    creatorMemberId: string;
-  }[];
-}
-
 export interface ShortcutHttpInboundContractSubject {
   handle(request: ShortcutHttpRequest): Promise<ShortcutHttpResponse>;
 
@@ -166,7 +140,7 @@ export interface ShortcutHttpInboundContractSubject {
     requests: readonly ShortcutHttpRequest[],
   ): Promise<readonly ShortcutHttpResponse[]>;
 
-  snapshot(): ShortcutInboundPublicSnapshot;
+  intakeRequests(): readonly ShortcutIntakeRequest[];
   intakeSubmissionCount(): number;
 }
 
@@ -195,14 +169,6 @@ const activeMembership: ShortcutInboundMembershipFixture = {
   householdState: "active",
 };
 
-const memberACard: ShortcutOwnedCardFixture = {
-  householdId: "household-a",
-  ownerMemberId: "member-a",
-  cardCompany: "국민",
-  lastFour: "1234",
-  lifecycleState: "active",
-};
-
 const validMessage = "국민1234승인\n10,000원\n07/19 08:50 스타벅스";
 const nhCardMaskedMultilineMessage =
   "[Web발신]\nNH카드4*3*승인\n김*휘\n5,760원 일시불\n07/30 19:09\n진로마트 행신점\n총누적1,431,944원";
@@ -220,7 +186,6 @@ function fixture(
     },
     credentials: [activeCredential],
     memberships: [activeMembership],
-    cards: [memberACard],
     ingressGate: "allowed",
     intakeOutcome: "success",
     ...overrides,
@@ -248,23 +213,14 @@ function validRequest(
   };
 }
 
-function expectNoCanonicalChange(subject: ShortcutHttpInboundContractSubject) {
-  expect(subject.snapshot()).toEqual({ transactions: [], events: [] });
+function expectNoIntake(subject: ShortcutHttpInboundContractSubject) {
+  expect(subject.intakeSubmissionCount()).toBe(0);
 }
 
 describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
-  it("[T-PARSE-004][IOS-003][IOS-007] NH카드 분리형 문자를 인증된 본인 카드 지출로 저장한다", async () => {
+  it("[T-PARSE-004][IOS-003][IOS-007] NH카드 분리형 문자를 파싱해 인증된 Actor와 Intake에 전달한다", async () => {
     const subject = createSubject(
       fixture({
-        cards: [
-          {
-            householdId: "household-a",
-            ownerMemberId: "member-a",
-            cardCompany: "농협",
-            lastFour: "4139",
-            lifecycleState: "active",
-          },
-        ],
       }),
     );
 
@@ -289,13 +245,10 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
         transaction: { kind: "created" },
       },
     });
-    expect(subject.snapshot().transactions).toEqual([
+    expect(subject.intakeRequests()).toEqual([
       expect.objectContaining({
-        householdId: "household-a",
-        creatorMemberId: "member-a",
-        source: "ios-shortcut",
-        amountInWon: 5_760,
-        merchant: "진로마트 행신점",
+        actor: expect.objectContaining({ householdId: "household-a", actingMemberId: "member-a" }),
+        parsed: expect.objectContaining({ amountInWon: 5_760, merchant: "진로마트 행신점" }),
       }),
     ]);
   });
@@ -365,7 +318,6 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
       });
       expect(replay).toEqual(first);
       expect(subject.intakeSubmissionCount()).toBe(1);
-      expectNoCanonicalChange(subject);
     },
   );
 
@@ -397,36 +349,16 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
         },
       },
     });
-    expect(subject.snapshot().transactions).toEqual([
+    expect(subject.intakeRequests()).toEqual([
       expect.objectContaining({
-        householdId: "household-a",
-        creatorMemberId: "member-a",
-        source: "ios-shortcut",
-      }),
-    ]);
-    expect(subject.snapshot().events).toEqual([
-      expect.objectContaining({
-        eventName: "TransactionRecorded.v1",
-        producer: "household-finance.ledger",
-        householdId: "household-a",
-        creatorMemberId: "member-a",
+        actor: expect.objectContaining({ householdId: "household-a", actingMemberId: "member-a" }),
       }),
     ]);
   });
 
-  it("[T-IOS-SEC-002] 위조한 가구에만 일치 카드가 있어도 credential 가구의 본인 카드로 사용하지 않는다", async () => {
+  it("[T-IOS-SEC-002] Intake의 본인 카드 미등록 거부를 HTTP 422로 전달한다", async () => {
     const subject = createSubject(
-      fixture({
-        cards: [
-          {
-            householdId: "household-b",
-            ownerMemberId: "member-b",
-            cardCompany: "국민",
-            lastFour: "1234",
-            lifecycleState: "active",
-          },
-        ],
-      }),
+      fixture({ intakeOutcome: "card-unmatched" }),
     );
 
     const response = await subject.handle(
@@ -450,7 +382,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
         },
       },
     });
-    expectNoCanonicalChange(subject);
+    expect(subject.intakeSubmissionCount()).toBe(1);
   });
 
   it.each([
@@ -519,7 +451,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
           error: { code: expected.code, retryable: false },
         },
       });
-      expectNoCanonicalChange(subject);
+      expectNoIntake(subject);
     },
   );
 
@@ -602,7 +534,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
         status: expected.status,
         body: { error: { code: expected.code, retryable: false } },
       });
-      expectNoCanonicalChange(subject);
+      expectNoIntake(subject);
     },
   );
 
@@ -625,7 +557,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
         error: { code: "PAYLOAD_TOO_LARGE", retryable: false },
       },
     });
-    expectNoCanonicalChange(overBoundary);
+    expectNoIntake(overBoundary);
   });
 
   it.each([
@@ -663,7 +595,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
           error: { code: "FIELD_TOO_LONG", retryable: false },
         },
       });
-      expectNoCanonicalChange(subject);
+      expectNoIntake(subject);
     },
   );
 
@@ -680,7 +612,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
     );
 
     expect(response).toEqual({ status: 204, body: null });
-    expectNoCanonicalChange(subject);
+    expectNoIntake(subject);
   });
 
   it("[T-IOS-002] schema는 맞지만 지원하지 않는 message는 422 parse 오류로 구분한다", async () => {
@@ -702,7 +634,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
         error: { code: "UNSUPPORTED_MESSAGE", retryable: false },
       },
     });
-    expectNoCanonicalChange(subject);
+    expectNoIntake(subject);
   });
 
   it("[T-IOS-SEC-002] 허용 origin이어도 credential 인증을 생략하지 않는다", async () => {
@@ -722,7 +654,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
       status: 401,
       body: { error: { code: "AUTH_REQUIRED" } },
     });
-    expectNoCanonicalChange(subject);
+    expectNoIntake(subject);
   });
 
   it.each([
@@ -752,7 +684,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
           error: { code, retryable: true },
         },
       });
-      expectNoCanonicalChange(subject);
+      expectNoIntake(subject);
     },
   );
 
@@ -768,8 +700,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
       body: { transaction: { kind: "created" } },
     });
     expect(replay).toEqual(first);
-    expect(subject.snapshot().transactions).toHaveLength(1);
-    expect(subject.snapshot().events).toHaveLength(1);
+    expect(subject.intakeRequests()).toHaveLength(1);
   });
 
   it("[T-IOS-001] 같은 key·message에서 위조 alias만 달라져도 같은 논리 요청으로 재생한다", async () => {
@@ -797,10 +728,9 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
     );
 
     expect(replay).toEqual(first);
-    expect(subject.snapshot().transactions).toHaveLength(1);
-    expect(subject.snapshot().transactions[0]).toMatchObject({
-      householdId: "household-a",
-      creatorMemberId: "member-a",
+    expect(subject.intakeRequests()).toHaveLength(1);
+    expect(subject.intakeRequests()[0]).toMatchObject({
+      actor: { householdId: "household-a", actingMemberId: "member-a" },
     });
   });
 
@@ -827,10 +757,9 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
         },
       },
     });
-    expect(subject.snapshot().transactions).toHaveLength(1);
-    expect(subject.snapshot().transactions[0]).toMatchObject({
-      amountInWon: 10_000,
-      merchant: "스타벅스",
+    expect(subject.intakeRequests()).toHaveLength(1);
+    expect(subject.intakeRequests()[0]).toMatchObject({
+      parsed: { amountInWon: 10_000, merchant: "스타벅스" },
     });
   });
 
@@ -847,10 +776,10 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
     const replay = await subject.handle(request);
 
     expect(replay).toEqual(first);
-    expect(subject.snapshot().transactions).toHaveLength(1);
+    expect(subject.intakeRequests()).toHaveLength(1);
   });
 
-  it("[T-IOS-001] 같은 key·payload의 동시 요청도 거래·Event 하나와 같은 결과만 만든다", async () => {
+  it("[T-IOS-001] 같은 key·payload의 동시 요청은 Intake 한 번과 같은 결과로 수렴한다", async () => {
     const subject = createSubject(fixture());
     const request = validRequest();
 
@@ -860,11 +789,10 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
     ]);
 
     expect(second).toEqual(first);
-    expect(subject.snapshot().transactions).toHaveLength(1);
-    expect(subject.snapshot().events).toHaveLength(1);
+    expect(subject.intakeRequests()).toHaveLength(1);
   });
 
-  it("[IOS-012] Payment Intake 일시 실패는 retryable 503이고 일부 거래를 남기지 않는다", async () => {
+  it("[IOS-012] Payment Intake 일시 실패는 retryable 503으로 전달한다", async () => {
     const subject = createSubject(
       fixture({ intakeOutcome: "retryable-failure" }),
     );
@@ -881,10 +809,10 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
         },
       },
     });
-    expectNoCanonicalChange(subject);
+    expect(subject.intakeSubmissionCount()).toBe(1);
   });
 
-  it("[T-IOS-NOTIFY-002][IOS-009] Duplicate 응답은 새 거래 없이 Payment Intake producer의 관찰 Event만 남긴다", async () => {
+  it("[T-IOS-NOTIFY-002][IOS-009] Intake Duplicate 결과는 queued 알림 응답으로 변환되고 재전송에서 재호출하지 않는다", async () => {
     const subject = createSubject(fixture({ intakeOutcome: "duplicate" }));
 
     const first = await subject.handle(validRequest());
@@ -901,18 +829,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
       },
     });
     expect(replay).toEqual(first);
-    expect(subject.snapshot()).toEqual({
-      transactions: [],
-      events: [
-        {
-          eventName: "CaptureDuplicateObserved.v1",
-          eventId: expect.any(String),
-          producer: "payment-capture.intake",
-          householdId: "household-a",
-          creatorMemberId: "member-a",
-        },
-      ],
-    });
+    expect(subject.intakeSubmissionCount()).toBe(1);
   });
 
   it.each([
@@ -993,7 +910,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
           error: { code: "FIELD_TOO_LONG", retryable: false },
         },
       });
-      expectNoCanonicalChange(subject);
+      expectNoIntake(subject);
     },
   );
 
@@ -1011,7 +928,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
     );
 
     expect(response).toMatchObject({ status: 200 });
-    expect(subject.snapshot().transactions).toHaveLength(1);
+    expect(subject.intakeRequests()).toHaveLength(1);
   });
 
   it("[T-IOS-004][T-IOS-002] Shortcut rich value의 text 필드를 공용 normalizer로 해석한 뒤 parser에 전달한다", async () => {
@@ -1030,9 +947,8 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
       status: 200,
       body: { transaction: { kind: "created" } },
     });
-    expect(subject.snapshot().transactions[0]).toMatchObject({
-      amountInWon: 10_000,
-      merchant: "스타벅스",
+    expect(subject.intakeRequests()[0]).toMatchObject({
+      parsed: { amountInWon: 10_000, merchant: "스타벅스" },
     });
   });
 
@@ -1054,7 +970,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
           error: { code: "REQUIRED_FIELD", retryable: false },
         },
       });
-      expectNoCanonicalChange(subject);
+      expectNoIntake(subject);
     },
   );
 
@@ -1078,7 +994,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
         error: { code: "INVALID_CONTRACT", retryable: false },
       },
     });
-    expectNoCanonicalChange(subject);
+    expectNoIntake(subject);
   });
 
   it.each([Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5])(
@@ -1092,7 +1008,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
         status: 400,
         body: { error: { code: "INVALID_CONTRACT" } },
       });
-      expectNoCanonicalChange(subject);
+      expectNoIntake(subject);
     },
   );
 
@@ -1118,7 +1034,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
         status: 401,
         body: { error: { code: "AUTH_REQUIRED", retryable: false } },
       });
-      expectNoCanonicalChange(subject);
+      expectNoIntake(subject);
     },
   );
 
@@ -1140,7 +1056,7 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
         status: 401,
         body: { error: { code: "AUTH_REQUIRED" } },
       });
-      expectNoCanonicalChange(subject);
+      expectNoIntake(subject);
     },
   );
 
@@ -1193,16 +1109,6 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
             householdState: "active",
           },
         ],
-        cards: [
-          memberACard,
-          {
-            householdId: "household-b",
-            ownerMemberId: "member-b",
-            cardCompany: "국민",
-            lastFour: "1234",
-            lifecycleState: "active",
-          },
-        ],
       }),
     );
     const requestB = validRequest({
@@ -1223,9 +1129,9 @@ describe("iPhone Shortcut HTTP 인바운드 공개 계약", () => {
         ? responseB.body.commandId
         : "",
     ).not.toBe(responseA.status === 200 ? responseA.body.commandId : "");
-    expect(subject.snapshot().transactions).toMatchObject([
-      { householdId: "household-a", creatorMemberId: "member-a" },
-      { householdId: "household-b", creatorMemberId: "member-b" },
+    expect(subject.intakeRequests()).toMatchObject([
+      { actor: { householdId: "household-a", actingMemberId: "member-a" } },
+      { actor: { householdId: "household-b", actingMemberId: "member-b" } },
     ]);
   });
 });

@@ -108,6 +108,7 @@ async function seedHistory(
 
 function disclosureSource(perShareAmount = 120): KindDividendDisclosurePort {
   return {
+    async recheck() { return { kind: "no-data", code: "NO_DISCLOSURES", attempts: 1 }; },
     async discover(input) {
       return {
         kind: "success",

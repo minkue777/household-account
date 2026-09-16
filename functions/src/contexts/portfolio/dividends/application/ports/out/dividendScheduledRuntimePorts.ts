@@ -40,6 +40,11 @@ export type KindDividendDiscoveryResult =
     };
 
 export interface KindDividendDisclosurePort {
+  recheck(input: {
+    readonly sourceDisclosureId: string;
+    readonly instrumentCode: string;
+    readonly instrumentName: string;
+  }): Promise<KindDividendDiscoveryResult>;
   discover(input: {
     readonly instrumentCode: string;
     readonly instrumentName: string;
@@ -108,6 +113,7 @@ export interface DividendEventRuntimeRepository {
     readonly disclosure: KindDividendDisclosure;
     readonly observedAt: string;
     readonly idempotencyKey: string;
+    readonly expectedEventId?: string;
     readonly correction?: {
       readonly expectedVersion: number;
       readonly eligibleQuantity: number;

@@ -328,7 +328,7 @@ export default function AssetAddModal({
           market: selectedStock.market,
           quantity: Number(quantity),
           avgPrice: avgPrice ? Number(avgPrice) : undefined,
-          currentPrice: currentPrice || undefined,
+          currentPrice: currentPrice ?? undefined,
           instrumentType:
             currentPriceInfo?.instrumentType || selectedStock.instrumentType || 'stock',
           priceScale: currentPriceInfo?.priceScale || selectedStock.priceScale || 1,
@@ -372,7 +372,7 @@ export default function AssetAddModal({
           coinName: selectedCoin.name,
           quantity: parseFloat(coinQuantity),
           avgPrice: coinAvgPrice ? parseInt(coinAvgPrice, 10) : undefined,
-          currentPrice: coinCurrentPrice || undefined,
+          currentPrice: coinCurrentPrice ?? undefined,
         },
       ]);
       resetCryptoForm();
@@ -562,8 +562,7 @@ export default function AssetAddModal({
   }, 0);
 
   const pendingCryptoTotal = pendingCryptoHoldings.reduce((sum, holding) => {
-    const price = holding.currentPrice || holding.avgPrice || 0;
-    return sum + price * holding.quantity;
+    return sum + calculateHoldingValue(holding);
   }, 0);
   const stockPendingWrapperClass = isGoldEtf
     ? 'space-y-2 rounded-xl border border-amber-100 bg-amber-50/70 p-3'
@@ -759,8 +758,7 @@ export default function AssetAddModal({
                     </p>
                   </div>
                   {pendingCryptoHoldings.map((holding, index) => {
-                    const holdingValue =
-                      (holding.currentPrice || holding.avgPrice || 0) * holding.quantity;
+                    const holdingValue = calculateHoldingValue(holding);
 
                     return (
                       <div

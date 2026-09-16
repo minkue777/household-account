@@ -173,9 +173,9 @@ class MemoryDocumentReference {
     return new MemoryCollectionReference(this.path.split("/").slice(0, -1).join("/"), this.database);
   }
 
-  async set(value: StoredDocument, options?: { merge?: boolean }): Promise<void> {
+  async set(value: StoredDocument, options?: { merge?: boolean; mergeFields?: readonly string[] }): Promise<void> {
     if (this.database === undefined) throw new Error("MEMORY_DOCUMENT_DATABASE_NOT_BOUND");
-    this.database.write(this.path, value, options?.merge === true);
+    this.database.write(this.path, value, options?.merge === true || options?.mergeFields !== undefined);
   }
 
   async delete(): Promise<void> {
@@ -269,13 +269,13 @@ class MemoryTransaction {
   set(
     reference: MemoryDocumentReference,
     value: StoredDocument,
-    options?: { readonly merge?: boolean },
+    options?: { readonly merge?: boolean; readonly mergeFields?: readonly string[] },
   ): this {
     this.writes.push({
       kind: "set",
       path: reference.path,
       value: firestoreWriteValue(value) as StoredDocument,
-      merge: options?.merge === true,
+      merge: options?.merge === true || options?.mergeFields !== undefined,
       requireAbsent: false,
     });
     return this;

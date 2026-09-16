@@ -70,7 +70,10 @@ function optionalBoolean(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
 
-function mapping(value: unknown): MerchantRuleMapping | undefined {
+function mapping(
+  value: unknown,
+  previous: MerchantRuleMapping = {},
+): MerchantRuleMapping | undefined {
   const raw = record(value);
   if (raw === undefined) return undefined;
   const allowed = new Set(["merchant", "category", "categoryId", "memo"]);
@@ -86,17 +89,19 @@ function mapping(value: unknown): MerchantRuleMapping | undefined {
   ) {
     return undefined;
   }
-  return {
-    ...(typeof merchant === "string" && merchant.trim() !== ""
-      ? { merchant: merchant.trim() }
-      : {}),
-    ...(typeof category === "string" && category.trim() !== ""
-      ? { categoryId: category.trim() }
-      : {}),
-    ...(typeof memo === "string" && memo.trim() !== ""
-      ? { memo: memo.trim() }
-      : {}),
-  };
+  const next = { ...previous };
+  // 미제공 필드는 유지하고 명시적인 빈 값은 해당 치환만 제거합니다.
+  for (const [key, field] of [
+    ["merchant", merchant],
+    ["categoryId", category],
+    ["memo", memo],
+  ] as const) {
+    if (typeof field !== "string") continue;
+    const normalized = field.trim();
+    if (normalized === "") delete next[key];
+    else next[key] = normalized;
+  }
+  return next;
 }
 
 function nextPriority(
@@ -332,7 +337,7 @@ export function createPaymentConfigurationRuntimeApplication(
             const requestedMapping =
               changes.mapping === undefined
                 ? target.mapping
-                : mapping(changes.mapping);
+                : mapping(changes.mapping, target.mapping);
             const requestedActive =
               changes.isActive === undefined
                 ? target.active
@@ -376,10 +381,7 @@ export function createPaymentConfigurationRuntimeApplication(
               keyword: requestedKeyword,
               matchType: requestedType,
               ...(priority === undefined ? {} : { priority }),
-              mapping: {
-                ...target.mapping,
-                ...requestedMapping,
-              },
+              mapping: requestedMapping,
               active: requestedActive,
             });
           }),

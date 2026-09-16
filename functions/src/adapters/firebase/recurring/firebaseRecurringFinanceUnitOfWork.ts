@@ -6,13 +6,13 @@ import { FieldValue } from "firebase-admin/firestore";
 import type { RecurringFinanceUnitOfWork } from "../../../contexts/household-finance/recurring/application/ports/out/recurringProcessingPorts";
 import type {
   RecurringExecution,
-  RecurringLedgerTransaction,
   RecurringProcessPlan,
   RecurringProcessReceipt,
   RecurringProcessingDecision,
   RecurringProcessingState,
 } from "../../../contexts/household-finance/recurring/domain/model/recurringProcessing";
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
+import { recurringLedgerDocument } from "../ledger/ledgerDocumentMapping";
 
 function hash(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -334,7 +334,7 @@ export class FirebaseRecurringFinanceUnitOfWork
             committedEvents: [],
           };
         }
-        const ledgerDocument = this.ledgerDocument(
+        const ledgerDocument = recurringLedgerDocument(
           location.householdId,
           createdLedger,
         );
@@ -457,36 +457,4 @@ export class FirebaseRecurringFinanceUnitOfWork
     }
   }
 
-  private ledgerDocument(
-    householdId: string,
-    value: RecurringLedgerTransaction,
-  ) {
-    return {
-      householdId,
-      transactionType: value.transactionType,
-      source: value.source,
-      originChannel: value.originChannel,
-      creatorMemberId: value.creatorMemberId,
-      merchant: value.merchant,
-      amountInWon: value.amountInWon,
-      amount: value.amountInWon,
-      categoryId: value.categoryId,
-      category: value.categoryId,
-      memo: value.memo,
-      accountingDate: value.accountingDate,
-      date: value.accountingDate,
-      localTime: "00:00",
-      time: "00:00",
-      cardDisplay: "정기지출",
-      cardLastFour: "정기지출",
-      cardType: "recurring",
-      lifecycleState: "active",
-      aggregateVersion: 1,
-      recurringPlanId: value.recurringPlanId,
-      recurringTargetMonth: value.recurringTargetMonth,
-      schemaVersion: 2,
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    };
-  }
 }

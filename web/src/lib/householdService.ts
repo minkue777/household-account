@@ -1,17 +1,14 @@
+import { resolveHomeSummaryConfig } from '@/features/home-preferences/application/homeSummaryConfig';
 import {
   collection,
   doc,
   getDocFromServer,
-  getDocs,
   db,
   timestampToDate,
   type DocumentData,
   type DocumentSnapshot,
 } from '@/platform/read-model/firestoreReadModel';
 import {
-  DEFAULT_HOME_SUMMARY_CONFIG,
-  HomeSummaryCardKey,
-  HomeSummaryConfig,
   Household,
   HouseholdMember,
 } from '@/types/household';
@@ -26,33 +23,6 @@ export class HouseholdReadNotFoundError extends Error {
 }
 
 const householdsCollection = collection(db, 'households');
-const HOME_SUMMARY_CARD_KEYS: HomeSummaryCardKey[] = [
-  'localCurrencyBalance',
-  'monthlyRemainingBudget',
-  'monthlySpent',
-  'yearlySpent',
-];
-
-function isHomeSummaryCardKey(value: unknown): value is HomeSummaryCardKey {
-  return typeof value === 'string' && HOME_SUMMARY_CARD_KEYS.includes(value as HomeSummaryCardKey);
-}
-
-function resolveHomeSummaryConfig(value: unknown): HomeSummaryConfig {
-  const leftCard =
-    typeof value === 'object' && value !== null ? (value as Record<string, unknown>).leftCard : null;
-  const rightCard =
-    typeof value === 'object' && value !== null ? (value as Record<string, unknown>).rightCard : null;
-
-  return {
-    leftCard: isHomeSummaryCardKey(leftCard)
-      ? leftCard
-      : DEFAULT_HOME_SUMMARY_CONFIG.leftCard,
-    rightCard: isHomeSummaryCardKey(rightCard)
-      ? rightCard
-      : DEFAULT_HOME_SUMMARY_CONFIG.rightCard,
-  };
-}
-
 function mapHouseholdSnapshot(docSnap: DocumentSnapshot<DocumentData>): Household | null {
   if (!docSnap.exists()) return null;
 
@@ -87,11 +57,6 @@ export async function getHousehold(key: string): Promise<Household> {
   );
   if (!household) throw new HouseholdReadNotFoundError(key);
   return household;
-}
-
-export async function getAllHouseholds(): Promise<Household[]> {
-  const snapshot = await getDocs(householdsCollection);
-  return snapshot.docs.map(mapHouseholdSnapshot).filter((value): value is Household => value !== null);
 }
 
 export async function renameHouseholdMember(

@@ -1,5 +1,7 @@
 # 정기 거래 모듈 상세 설계
 
+> 2026-09-17 실행 경로 정리: due/execution 판정은 Recurring이 유지하고, 거래와 `TransactionRecorded.v1`의 생성은 [Ledger posting 정책](../../../../../../functions/src/contexts/household-finance/ledger/domain/policies/recurringPosting.ts)이 소유합니다. [원장 공통 저장 mapper](../../../../../../functions/src/adapters/firebase/ledger/ledgerDocumentMapping.ts)는 수동·정기 경로의 공통 필드를 함께 변경할 수 있게 합니다. 기존 `FirebaseRecurringFinanceUnitOfWork`의 execution·거래·receipt·Outbox 단일 transaction과 멱등 key는 그대로입니다. 신규 계획의 Category 판정도 Category 소유 reference reader를 사용합니다.
+
 > 상태: Proposed — 테스트 구현 기준  
 > 소유 요구사항: [정기 거래 모듈 요구사항](requirements.md)  
 > 상위 Context: [Household Finance](../../requirements.md)  

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type * as firestore from "firebase-admin/firestore";
 
 import { FirebaseRecurringPlanManagementStore } from "../../adapters/firebase/recurring/firebaseRecurringPlanManagementStore";
+import { readUsableCategoryIds } from "../../adapters/firebase/categories/firebaseCategoryReferenceReader";
 import { createRecurringPlanManagementApplication } from "../../contexts/household-finance/recurring/application/recurringPlanManagementApplication";
 import type {
   ManageRecurringPlanResult,
@@ -115,33 +116,8 @@ function applicationFor(
     categories: {
       async resolveUsableCategory(householdId, categoryId) {
         try {
-          const [canonical, legacy] = await Promise.all([
-            database
-              .collection("households")
-              .doc(householdId)
-              .collection("categories")
-              .doc(categoryId)
-              .get(),
-            database
-              .collection("categories")
-              .where("householdId", "==", householdId)
-              .get(),
-          ]);
-          const canonicalData = canonical.data();
-          const legacyMatch = legacy.docs.find((snapshot) => {
-            const data = snapshot.data();
-            return snapshot.id === categoryId || data.key === categoryId;
-          });
-          const legacyData = legacyMatch?.data();
-          const usable = canonical.exists
-            ? canonicalData?.state === "active" ||
-              (canonicalData?.state === undefined && canonicalData?.isActive !== false)
-            : legacyMatch !== undefined &&
-              legacyData?.householdId === householdId &&
-              legacyData?.isActive !== false &&
-              legacyData?.state !== "archived" &&
-              legacyData?.state !== "archive-pending";
-          return usable
+          const categories = await readUsableCategoryIds(database, householdId);
+          return categories.has(categoryId)
             ? ({ kind: "usable" } as const)
             : ({ kind: "not-usable" } as const);
         } catch {
