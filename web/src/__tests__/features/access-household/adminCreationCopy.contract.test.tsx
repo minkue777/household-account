@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import AdminPage from '@/app/admin/page';
+import type { AdminOperationsDashboardWireView } from '@/platform/functions-api';
 
 const mockDashboard = jest.fn();
 const mockCreate = jest.fn();
@@ -18,10 +19,18 @@ jest.mock('@/platform/functions-api', () => ({ AdminAccessError: class extends E
 jest.mock('@/components/admin/AdminOperationsOverview', () => ({ AdminOperationsOverview: () => <div>대시보드</div> }));
 jest.mock('@/components/admin/AdminHouseholdList', () => ({ AdminHouseholdList: ({ copiedKey }: { copiedKey?: string }) => <div>{copiedKey ? '복사 완료' : ''}</div> }));
 
+const dashboardFixture = (): AdminOperationsDashboardWireView => ({
+  generatedAt: '2026-09-16T00:00:00Z',
+  service: { apiStatus: 'online', health: 'healthy', serviceName: 'admin', revision: 'test', region: 'asia-northeast3' },
+  summary: { activeHouseholds: 0, deletedHouseholds: 0, activeMembers: 0, todayAccessCount: 0, totalAccessCount: 0, unhealthyProviders: 0, openIncidents: 0 },
+  households: [], dailyAccess: [], scheduledJobs: [], providerHealth: [], incidents: [],
+  functionLatency: { status: 'available', windowHours: 24, operations: [] }, billingCost: { status: 'unavailable' },
+});
+
 describe('관리자 가구 생성 후 키 복사', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockDashboard.mockResolvedValue({ households: [] });
+    mockDashboard.mockResolvedValue(dashboardFixture());
     mockCreate.mockResolvedValue({ householdId: 'new-household' });
     mockShareKey.mockResolvedValue({ legacyShareKey: 'generated-share-key' });
     mockWriteText.mockResolvedValue(undefined);
@@ -43,4 +52,27 @@ describe('관리자 가구 생성 후 키 복사', () => {
     expect(await screen.findByText(failure ? '가구 키를 복사하지 못했습니다.' : '복사 완료')).toBeInTheDocument();
     expect(screen.queryByText('가구를 생성하지 못했습니다.')).not.toBeInTheDocument();
   });
+  it('열린 장애를 빠르게 갱신하되 중복 요청을 막고 복구 후 정상 갱신 주기로 돌아간다', async () => {
+    jest.useFakeTimers();
+    const healthy = dashboardFixture();
+    let resolve!: (value: AdminOperationsDashboardWireView) => void;
+    const pending = new Promise<AdminOperationsDashboardWireView>(done => { resolve = done; });
+    mockDashboard.mockResolvedValueOnce({ ...healthy, service: { ...healthy.service, health: 'critical' } })
+      .mockImplementationOnce(() => pending).mockResolvedValue(healthy);
+    const view = render(<AdminPage />);
+    try {
+      await act(async () => {});
+      expect(mockDashboard).toHaveBeenCalledTimes(1);
+      await act(async () => { jest.advanceTimersByTime(10_000); });
+      expect(mockDashboard).toHaveBeenCalledTimes(2);
+      await act(async () => { window.dispatchEvent(new Event('focus')); jest.advanceTimersByTime(10_000); });
+      expect(mockDashboard).toHaveBeenCalledTimes(2);
+      await act(async () => { resolve(healthy); });
+      await act(async () => { jest.advanceTimersByTime(10_000); });
+      expect(mockDashboard).toHaveBeenCalledTimes(2);
+      await act(async () => { window.dispatchEvent(new Event('focus')); });
+      expect(mockDashboard).toHaveBeenCalledTimes(3);
+    } finally { view.unmount(); jest.useRealTimers(); }
+  });
+
 });
