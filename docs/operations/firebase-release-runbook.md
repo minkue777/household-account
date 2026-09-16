@@ -1,6 +1,6 @@
 # Firebase release 실행 절차
 
-이 절차는 승인받은 운영자가 Firebase Functions의 세 codebase, Firestore Rules·index, Storage Rules를 하나의 후보로 배포하는 방법입니다. 명령을 기록한 것만으로 배포가 승인되지는 않습니다. Web 호스팅, Android APK, Storage CORS, 데이터 migration과 TTL 백필은 별도 절차입니다. 외부 리소스 준비는 [배포 전 외부 설정](deployment-prerequisites.md)을 따릅니다.
+이 절차는 승인받은 운영자가 Firebase Functions의 세 codebase, Firestore Rules·index, Storage Rules 중 변경된 대상을 하나의 후보에서 선택하여 배포하는 방법입니다. 명령을 기록한 것만으로 배포가 승인되지는 않습니다. Web 호스팅, Android APK, Storage CORS, 데이터 migration과 TTL 백필은 별도 절차입니다. 외부 리소스 준비는 [배포 전 외부 설정](deployment-prerequisites.md)을 따릅니다.
 
 ## 1. 후보와 실행 환경 준비
 
@@ -14,9 +14,19 @@ CI는 Functions unit·contract·형식·architecture·Rules/Storage/실제 Fireb
 
 CI 실패는 GitHub의 실패 check와 summary에 남습니다. [GitHub Actions 알림 설정](https://docs.github.com/en/subscriptions-and-notifications/how-tos/managing-github-actions-notifications)에서 `Only notify for failed workflows`를 선택하면 실행을 시작한 사용자의 활성화된 알림 경로로 받을 수 있습니다. 저장소는 계정 알림 설정을 바꾸거나 Slack·email을 직접 발송하지 않으며 수신 여부를 보장하지 않습니다. 배포와 CI 결과를 각각 전달하고 CI 문제는 원인·영향을 확인하여 후속 수정합니다.
 
-push 이후 CI를 확인하고 실패하면 로그를 읽어 수정한 뒤 다시 push합니다. 최신 HEAD의 다섯 필수 CI 검증 성공과 변경에 필요한 실제 배포 완료를 확인해야 개발 작업을 완료로 판단합니다. 이 확인은 배포를 시작하기 위한 대기 조건이 아니며, 실패한 검사를 skip하거나 성공으로 바꾸지 않습니다.
+push 이후 CI를 확인하고 실패하면 로그를 읽어 수정한 뒤 다시 push합니다. 구현·필요한 실제 배포가 끝나면 개발 작업을 먼저 마무리하고, 실행 중인 E2E/CI는 정확한 SHA와 실행 링크를 기록하여 후속 확인으로 넘깁니다. CI 검증 완료는 다섯 필수 검사와 workflow가 실제 성공한 뒤에만 보고합니다. 실패한 검사를 skip하거나 성공으로 바꾸지 않습니다.
 
 ## 2. manifest 고정
+
+먼저 clean commit에서 읽기 전용 배포 계획을 확인합니다. 이 명령은 build·로그인 smoke·운영 쓰기를 수행하지 않습니다.
+
+```powershell
+npm --prefix functions run deploy -- --plan --project household-account-6f300
+```
+
+wrapper는 가장 최근 성공 provenance의 commit부터 현재 HEAD까지 누적 변경을 비교합니다. `targets`가 비어 있으면 Firebase 배포·manifest·smoke token 준비를 생략합니다. Rules, index, Storage와 세 Functions codebase는 각각 선택합니다. 공용 `functions/src`, 계약, build 도구 변경은 세 codebase 모두에 적용됩니다. 테스트·배포 도구·문서만 변경된 경우 운영 runtime을 재배포하지 않습니다. Git 이력이 없어 비교할 수 없으면 오류로 중단합니다.
+
+실제 배포에서는 같은 계획을 다시 계산하고 lease 획득 뒤 기준이 바뀌지 않았는지 재확인합니다. 승인 evidence의 `scope`에 기준 release·commit, 실제 targets와 Query 서버의 예상 marker를 보존하며 guard가 재검증합니다. 첫 배포는 전체 범위입니다. 이전 실패 배포를 복구하거나 Git 변경 없이 전체 재배포가 필요한 명시적 운영 작업은 manifest에 `deployAll: true`를 지정합니다. `--plan --all`로 그 범위를 미리 볼 수 있습니다. 실패한 배포의 lease 검토·해제 절차는 그대로 적용됩니다.
 
 저장소 루트에서 다음 명령으로 Functions production build를 실행하고 세 codebase를 준비한 뒤 hash를 계산합니다. build lifecycle의 architecture 검사는 유지하며 전체 테스트를 재실행하지 않습니다. 이 모드는 Cloud 요청이나 배포를 하지 않습니다.
 
@@ -73,7 +83,7 @@ npm --prefix functions run deploy -- `
 
 wrapper는 배포 검증을 수행하고 승인과 독립 CI 참조를 `approvedReleases/{releaseId}`에 저장합니다. `deploymentLeases/{projectId}`를 transaction으로 획득한 한 실행만 Firebase CLI를 시작합니다. Functions predeploy는 **build 후 guard** 순서로 실행하며, guard가 hash·actor·현재 배포 잠금 소유자를 다시 확인합니다. guard는 전체 테스트나 build를 다시 실행하지 않습니다. Rules와 Storage predeploy에도 같은 guard가 연결됩니다. 직접 `firebase deploy`를 실행하거나 `--guard`용 환경 변수를 수동으로 구성하지 않습니다.
 
-배포 후 smoke는 인증된 사용자 해석과 실제 가구 Query를 호출하고 성공 응답의 release ID·commit SHA·artifact SHA가 승인 후보와 정확히 같은지 확인합니다. 예전 서버의 정상 응답은 통과하지 않습니다. 이 smoke는 공용 인증·Query 경로를 확인하며 Android App Check·결제 수집·WebView bridge의 전체 업무 흐름을 대신하지 않습니다. 해당 경로는 필수 CI/Emulator/E2E와 외부 설정 점검에서 별도로 검증합니다.
+배포 후 smoke는 인증된 사용자 해석과 실제 가구 Query를 호출하고 release ID·commit SHA·artifact SHA를 확인합니다. `functions:default`를 배포했다면 새 후보 marker만 허용합니다. Rules·index 또는 child codebase만 배포했다면 Query 서버는 바꾸지 않았으므로 이전 성공 배포의 정확한 marker를 유지·검증합니다. 부분 배포가 이어져도 승인 evidence에서 그 marker를 계승합니다. 이 smoke는 공용 인증·Query 경로를 확인하며 Android App Check·결제 수집·WebView bridge의 전체 업무 흐름을 대신하지 않습니다. 해당 경로는 필수 CI/Emulator/E2E와 외부 설정 점검에서 별도로 검증합니다.
 
 결과는 `deploymentProvenance/{releaseId}`에 기록하고 성공한 경우에만 프로젝트 잠금을 해제합니다. 승인 manifest와 provenance는 자동 TTL 없이 보존하며 Secret/token 원문을 기록하지 않습니다.
 

@@ -1,9 +1,9 @@
 ---
 name: household-delivery
-description: Household-account 프로젝트에서 기능 개발, 버그 수정, 최적화, 테스트·설정 변경을 요청받으면 구현부터 commit·push, 변경된 Web/Firebase/Android 배포, GitHub CI 실패 분석·수정·재push까지 이어서 수행한다. 별도의 배포 요청을 기다리지 않는다. 설명·읽기 전용 조사만 요청했거나 사용자가 commit·push·배포를 제외하면 그 범위를 따른다.
+description: Household-account 개발 변경을 구현하고 commit·push, 변경 대상 배포까지 수행한다. 전체 CI는 독립 실행하고 미완료 결과는 후속 확인으로 넘기며 실패를 분석·수정한다. 읽기 전용 조사나 사용자가 제외한 작업은 수행하지 않는다.
 ---
 
-# 개발 변경 전달과 CI 확인
+# 개발 변경 전달과 CI 후속 확인
 
 이 저장소의 개발 작업은 필요한 변경을 구현하고 원격 반영·대상별 배포·CI 결과 확인까지 이어간다. 사용자는 이 기본 흐름을 승인했다. 이미 승인된 일반 commit·push·배포를 단계마다 재확인하지 않는다. 현재 요청의 보류·범위 제한이 우선이며, 다른 저장소나 운영 데이터 migration·삭제까지 허용한 것으로 확대하지 않는다.
 
@@ -20,7 +20,7 @@ description: Household-account 프로젝트에서 기능 개발, 버그 수정, 
 | Web 실행 코드·자산·빌드 설정 | 기존 Vercel Git 자동배포 |
 | Functions 실행 코드·서버 의존성·공용 서버 계약, Firestore Rules/index, Storage Rules | Firebase 운영 배포 |
 | Android 실행 코드·리소스·릴리즈 빌드 설정·APK에 포함되는 계약 | 서명 APK와 GitHub Release |
-| 테스트·CI·문서·스킬만 변경 | push와 CI 확인; 기존 Vercel Git 트리거는 유지 |
+| 테스트·CI·문서·스킬·운영 도구만 변경 | push와 CI 후속 확인; 제품 실행 파일 변경이 없으면 제품 재배포 생략 |
 
 - 서버와 클라이언트 변경은 기존 운영 버전과 호환되게 배치한다. 새 서버가 클라이언트보다 먼저 필요한 경우, 해당 서버 후보를 commit한 뒤 Firebase 선행 배포를 완료하고 Web 자동배포를 유발하는 push 또는 APK 공개를 진행한다. 단순 변경에 별도 전환 절차를 만들지 않는다.
 - APK가 필요하면 아래 APK 스킬로 버전과 빌드를 먼저 준비해 한 작업의 commit·push에 포함한다. CI 수정만으로 버전을 다시 올리지 않는다.
@@ -41,12 +41,15 @@ CI에서 실제 제품 결함이 이미 확인되었다면 그 원인을 먼저 
 ### Web
 
 - 기존 `main push → Vercel Git 자동배포` 연결을 유지한다. CI 대기 설정이나 별도 CLI 업로드 경로로 바꾸지 않는다.
+- [Vercel ignore 스크립트](../../../web/scripts/vercel-ignore.cjs)가 마지막 성공 Web 배포 이후의 누적 변경을 비교한다. 테스트·문서만이면 빌드를 생략하고 이력이 부족하면 빌드를 진행한다. 의도적 생략과 배포 오류를 구분한다.
 - 해당 SHA의 GitHub deployment/status 또는 Vercel 배포 상태와 운영 URL을 확인한다. 다른 SHA의 Ready를 이번 배포 성공으로 간주하지 않는다.
 - 작업 디렉터리를 `vercel deploy`로 직접 업로드하지 않는다. Git 무시 파일과 Android 서명 파일이 업로드된 과거 문제가 있다.
 
 ### Firebase
 
 - 이 대상이 필요할 때만 [Firebase runbook](../../../docs/operations/firebase-release-runbook.md)을 읽는다. Functions는 `default`, `payment-capture`, `access-session` 세 codebase이며 운영 project는 `household-account-6f300`이다.
+- clean commit에서 먼저 `npm --prefix functions run deploy -- --plan --project household-account-6f300`을 실행한다. 마지막 성공 provenance부터 누적 변경으로 codebase별 Functions, `firestore:rules`, `firestore:indexes`, `storage`를 선택한다. 공용 Functions 소스는 세 codebase에 포함되므로 함께 배포한다.
+- `targets`가 비어 있으면 Firebase 배포·manifest·로그인 준비를 생략한다. wrapper·테스트·문서만 바뀌었다고 서버를 재배포하지 않는다.
 - runbook의 `npm --prefix functions run deploy -- ...` wrapper를 사용한다. build·clean HEAD/hash·호환성·actor·Secret binding·lease·실제 로그인 smoke를 유지하고 직접 `firebase deploy`로 우회하지 않는다.
 - 운영 데이터나 Secret 값을 로그로 가져오지 않는다. 유효한 인증·smoke 자격이 있으면 재사용하고, 실제 사용자 로그인이 필요한 때만 그 조작을 요청한다. 대기 중 독립적인 push·Web·CI 작업은 진행한다.
 - smoke 인증은 runbook의 `functions/scripts/prepare-smoke-session.cjs --token-file <저장소 밖 경로>`로 준비한다. 고정 주소 `http://localhost:55318/`을 이전에 로그인한 같은 일반 브라우저 프로필로 열어 저장된 로그인과 token 자동 갱신을 먼저 사용한다. 일회용 메모리 인증·완료 후 자동 로그아웃 방식의 임시 도구를 다시 만들지 않는다. 최초 로그인이나 실제 갱신 실패 때만 사용자의 Google 로그인을 요청하고, 창을 열었다고 말하기 전에 실제 페이지 표시를 확인한다.
@@ -58,7 +61,7 @@ CI에서 실제 제품 결함이 이미 확인되었다면 그 원인을 먼저 
 - 이미 공개된 버전은 덮어쓰지 않는다. APK 내용에 후속 수정이 필요할 때 새 patch 버전을 준비한다.
 - 최종 asset URL과 다운로드 가능 여부를 확인한다. 사용자가 카카오톡에 복사할 수 있도록 APK 주소는 일반 텍스트 URL로 제공한다.
 
-## 4. CI 결과 확인과 실패 수정
+## 4. CI는 대기하지 않고 후속 확인
 
 워크플로는 `.github/workflows/quality-gates.yml` 하나이며 검사 job은 `functions`, `web`, `web-e2e`, `android`, `android-instrumentation` 다섯 개다. `quality-summary`는 결과 요약이며 여섯 번째 테스트 묶음이 아니다. Android instrumentation은 기존 변경 범위 판정을 유지하며 Web 화면 수정만으로 에뮬레이터를 의무화하지 않는다.
 
@@ -70,15 +73,18 @@ gh run view RUN_ID --repo minkue777/household-account --json headSha,status,conc
 gh run view RUN_ID --repo minkue777/household-account --log-failed
 ```
 
-- 실행이 아직 생성되지 않았으면 잠시 후 다시 조회한다. 활성 세션에서 30~60초 간격으로 확인하면서 배포·검토 등 독립 작업을 진행하고, 사용자가 상태를 알 수 있게 갱신한다.
+- push 직후와 독립적인 구현·배포 작업을 마칠 때 결과를 확인한다. 실행 중인 E2E/CI만 남으면 반복 polling이나 진행 중이라는 메시지로 대화를 붙잡지 않고 개발·배포 완료를 먼저 보고한다.
+- 미완료 SHA·run ID/URL을 현재 작업의 CI 후속 확인 automation에 기록한다. `automation_update`의 thread heartbeat를 사용하고 기존 가계부 CI 후속 확인이 있으면 갱신한다. 다른 pending SHA를 덮어쓰지 않는다. 기본 확인 간격은 10분이다.
+- 후속 실행은 등록된 정확한 SHA를 확인한다. 계속 실행 중이거나 변화가 없으면 조용히 종료한다. 모든 대상이 끝나면 성공/실패 결과를 알리고 heartbeat를 `PAUSED`로 바꾼다. 다음 push 때 다시 활성화한다. workflow 생성이 늦으면 SHA로 실행을 찾는다.
 - 실패한 job을 발견하면 가능한 즉시 로그를 읽는다. 전체 실행 종료 전 로그가 제공되지 않으면 조회 가능한 job 로그·artifact를 확인하고 완료 후 재확인한다.
 - 코드 결함, 테스트 관측/fixture 오류, 실행 환경·인증 오류를 구분해 원인을 수정한다. 테스트를 skip하거나 기대값·검증 범위를 약하게 만들어 초록색으로 바꾸지 않는다. 같은 원인의 무변경 재실행을 반복하지 않는다.
-- 실패 항목의 빠른 재현 검사를 실행할 수 있으면 확인하고 수정 commit을 push한다. 새 SHA의 CI를 다시 추적하고 제품 변경이 있는 대상만 재배포한다. 이전 실패 실행은 성공 기록으로 덮어쓰지 않는다.
+- 실패 항목의 빠른 재현 검사를 실행할 수 있으면 확인하고 수정 commit을 push한다. 새 SHA를 후속 대상으로 등록하고 제품 변경이 있는 대상만 재배포한다. 이전 실패 실행은 성공 기록으로 덮어쓰지 않는다. 동일 원인이 수정 후에도 반복되거나 인증·외부 조작이 필요하면 원인과 링크를 알리고 자동 반복을 중단한다. 다른 작업 중인 변경을 덮어쓰지 않는다.
 - 마지막 배포 후보 SHA의 workflow와 다섯 검사 job이 모두 성공해야 검증 완료다. pending·누락·취소·job 전체 skipped를 성공으로 보고하지 않는다. Android 범위 미해당으로 job이 성공하고 에뮬레이터 step만 생략된 경우는 정상이다.
 - 인증·권한·서비스 장애 등 스스로 해결할 수 없는 원인이면 실패 로그와 실행 URL, 필요한 사용자 조작을 구체적으로 보고한다. 영향 없는 작업은 완료하고 남은 검증을 완료라고 표현하지 않는다.
+- automation 도구가 없거나 등록이 실패하면 자동 확인을 약속하지 않는다. pending SHA와 링크를 남기고 다음 작업 시작 시 먼저 확인한다. GitHub 기본 실패 알림은 보조 수단이며 이메일/Slack을 직접 발송하지 않는다.
 
 ## 5. 완료와 재개
 
-최종 답변은 push SHA, 대상별 실제 배포 상태와 URL, 해당 SHA의 CI 결과·실행 링크를 구분한다. CI가 실패하거나 필요한 배포가 남아 있으면 전체 완료라고 하지 않는다. 네이버 메일 등 GitHub 개인 알림은 보조 수단이며 메일 도착 여부를 CI 결과로 사용하지 않는다.
+최종 답변은 push SHA, 대상별 실제 배포 상태와 URL, 해당 SHA의 CI 결과·실행 링크를 구분한다. 필요한 배포가 끝나면 개발 작업을 마무리할 수 있으며 CI가 남으면 실행 링크와 후속 확인 등록 여부만 간단히 알린다. CI 검증 완료와 개발·배포 완료는 별도 상태다. 네이버 메일 등 GitHub 개인 알림은 보조 수단이며 메일 도착 여부를 CI 결과로 사용하지 않는다.
 
 이 스킬은 현재 작업 중인 에이전트가 절차를 수행하는 지침이다. 자체적으로 GitHub 이벤트를 구독하거나 종료된 대화를 깨우지 않는다. 세션이 중단되면 다음 실행에서 기록된 SHA와 원격 상태를 다시 확인한다. 별도 예약·이벤트 자동화가 실제 설정되지 않았다면 상시 감시나 자동 재개가 설치됐다고 말하지 않는다.

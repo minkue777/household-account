@@ -1741,7 +1741,7 @@ Cloud Function 왕복 시간 때문에 빠른 편집 화면이 0.5~1초 동안 �
 - 배포 승인에는 CI를 확인하지 않았다는 `not-evaluated` 참조만 기록합니다. CI pending·실패·취소·skip·누락을 passed로 간주하거나 가짜 evidence를 만들지 않습니다. 과거 승인 기록은 변경하지 않습니다.
 - CI 최종 summary는 실제 다섯 job 결과, commit SHA, run URL을 남깁니다. 한 job이라도 비성공이면 실패 check와 annotation으로 알립니다. GitHub 기본 알림은 사용자 Actions 알림 설정을 따르며 repository가 외부 메시지를 직접 발송하지 않습니다.
 - 배포 성공과 CI 성공을 따로 보고합니다. 후속 CI 문제는 조사·수정하며 자동으로 배포 완료 기록을 취소하거나 rollback하지 않습니다. build·배포·smoke 실패를 배포 성공으로 보고하지 않습니다.
-- CI 실패 로그를 확인하고 원인을 수정하여 다시 push합니다. 최신 HEAD의 다섯 필수 CI 검증 성공과 변경에 필요한 실제 배포 완료를 개발 작업 완료 조건으로 삼습니다. 이 완료 확인은 배포를 시작하기 위한 대기 조건이 아니며 실패·skip을 성공으로 바꾸지 않습니다.
+- 2026-09-16 사용자 요청에 따라 구현·필요한 실제 배포 완료와 CI 검증 완료를 분리합니다. 개발·배포 완료 뒤 실행 중인 E2E/CI만 기다리며 대화를 유지하지 않고 정확한 SHA·run URL을 후속 확인에 넘깁니다. 후속 실행에서 실패 로그를 분석·수정·재push하고 다섯 검사와 workflow가 실제 성공한 뒤 CI 완료를 보고합니다. 실패·skip을 성공으로 바꾸지 않습니다.
 - 더 이상 실행되지 않는 전체 gate→deploy authorization 전용 Application과 전용 fixture 테스트를 제거하고 실제 wrapper 검증·CI CLI 실행 테스트로 정책을 검증합니다. 실패를 pass로 바꾸는 waiver·skip·force 우회는 만들지 않습니다.
 
 영향 요구사항: REL-001, REL-004, T-REL-001, T-REL-004.

@@ -6,6 +6,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { initializeApp, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { planFirebaseDeployment, readFirebaseDeploymentBaseline, requireFirebaseDeploymentScope } from './firebase-deploy-scope.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const sha256 = value => createHash('sha256').update(value).digest('hex');
@@ -100,6 +101,15 @@ export async function verifyCloudResource(credential, resource, api) {
 }
 
 async function main() {
+  if (process.argv.includes('--plan')) {
+    if (arg('project') !== 'household-account-6f300') throw new Error('EXPLICIT_PRODUCTION_PROJECT_REQUIRED');
+    if (process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST) throw new Error('PRODUCTION_EMULATOR_MIXED');
+    if (run('git', ['status', '--porcelain'], true)) throw new Error('CLEAN_EXACT_HEAD_REQUIRED');
+    const app = initializeApp({ projectId: arg('project'), credential: applicationDefault() });
+    const previous = await readFirebaseDeploymentBaseline(getFirestore(app));
+    console.log(JSON.stringify(planFirebaseDeployment({ head: run('git', ['rev-parse', 'HEAD'], true), previous, deployAll: process.argv.includes('--all') }, args => run('git', args, true)), null, 2));
+    return;
+  }
   if (process.argv.includes('--print-hashes')) {
     if (run('git', ['status', '--porcelain'], true)) throw new Error('CLEAN_EXACT_HEAD_REQUIRED');
     const candidateHead = run('git', ['rev-parse', 'HEAD'], true);
@@ -131,6 +141,15 @@ async function main() {
   requireAuthorizedActor(manifest, actorId);
   writeDeploymentMarker(manifest, hashes.artifact);
   const credential = applicationDefault();
+  const app = initializeApp({ projectId, credential });
+  const database = getFirestore(app);
+  const store = new FirebaseDeploymentProvenanceStore(database);
+  const previous = await readFirebaseDeploymentBaseline(database);
+  const scope = planFirebaseDeployment({ head, previous, manifest, deployAll: manifest.deployAll === true }, args => run('git', args, true));
+  if (!guard && scope.targets.length === 0) {
+    console.log(JSON.stringify({ kind: 'skipped', commitSha: head, scope, ci: evaluation.ci }));
+    return;
+  }
   if (!await verifyCloudResource(credential, manifest.monitoringChannelReference, 'monitoring.googleapis.com')) throw new Error('MONITORING_CHANNEL_UNVERIFIED');
   if (!Array.isArray(manifest.secretReferences) || manifest.secretReferences.length === 0) throw new Error('SECRET_BINDINGS_REQUIRED');
   if (!manifest.secretReferences.some(reference => /^projects\/household-account-6f300\/secrets\/SHORTCUT_CREDENTIAL_PEPPER\/versions\/(latest|[0-9]+)$/.test(reference))) throw new Error('SHORTCUT_SECRET_BINDING_REQUIRED');
@@ -140,11 +159,11 @@ async function main() {
     const response = await fetch(`https://secretmanager.googleapis.com/v1/${reference}`, { headers: { authorization: `Bearer ${token.access_token}` }, signal: AbortSignal.timeout(15000) });
     if (!response.ok || (await response.json()).state !== 'ENABLED') throw new Error('SECRET_VERSION_UNAVAILABLE');
   }
-  if (!guard && process.argv.includes('--check')) { console.log(JSON.stringify({ kind: 'approved', commitSha: head, ci: evaluation.ci })); return; }
-  const app = initializeApp({ projectId, credential });
-  const store = new FirebaseDeploymentProvenanceStore(getFirestore(app));
+  if (!guard && process.argv.includes('--check')) { console.log(JSON.stringify({ kind: 'approved', commitSha: head, scope, ci: evaluation.ci })); return; }
   if (guard) {
     await store.requireDeploymentLease(projectId, process.env.HOUSEHOLD_DEPLOY_LEASE, manifest.releaseId);
+    const approved = (await database.collection('approvedReleases').doc(manifest.releaseId).get()).data();
+    requireFirebaseDeploymentScope(approved?.evidence?.scope, scope, process.env.HOUSEHOLD_DEPLOY_TARGETS);
     console.log(JSON.stringify({ kind: 'approved', commitSha: head, ci: evaluation.ci }));
     return;
   }
@@ -152,15 +171,24 @@ async function main() {
   if (!smokeToken || !existsSync(smokeToken)) throw new Error('SMOKE_TOKEN_FILE_REQUIRED');
   const release = { releaseId: manifest.releaseId, manifestHash: evaluation.deployAuthorization.manifestHash,
     commitSha: head, ...hashes, projectId, authorizedActorIds: manifest.authorizedActorIds };
-  await store.approve(release, { ci: evaluation.ci, compatibility: manifest.compatibility });
   const require = createRequire(join(root, 'web/package.json'));
   const firebase = require.resolve('firebase-tools/lib/bin/firebase.js');
   const leaseOwner = randomUUID();
   await store.acquireDeploymentLease(projectId, leaseOwner, manifest.releaseId);
+  // A concurrent deployment may have finished between planning and acquiring the lease.
+  const lockedScope = planFirebaseDeployment({ head, previous: await readFirebaseDeploymentBaseline(database), manifest, deployAll: manifest.deployAll === true }, args => run('git', args, true));
+  try {
+    requireFirebaseDeploymentScope(lockedScope, scope, scope.targets.join(','));
+  } catch (error) {
+    await store.releaseDeploymentLease(projectId, leaseOwner);
+    throw error;
+  }
+  await store.approve(release, { ci: evaluation.ci, compatibility: manifest.compatibility, scope });
   let failure;
   try {
-    run(process.execPath, [firebase, 'deploy', '--project', projectId, '--config', join(root, 'firebase.json'), '--only', 'functions,firestore,storage'], false,
-      { ...process.env, HOUSEHOLD_DEPLOY_PROJECT: projectId, HOUSEHOLD_DEPLOY_MANIFEST: resolve(manifestPath), HOUSEHOLD_DEPLOY_LEASE: leaseOwner });
+    console.log(JSON.stringify({ kind: 'deploying', scope }));
+    run(process.execPath, [firebase, 'deploy', '--project', projectId, '--config', join(root, 'firebase.json'), '--only', scope.targets.join(',')], false,
+      { ...process.env, HOUSEHOLD_DEPLOY_PROJECT: projectId, HOUSEHOLD_DEPLOY_MANIFEST: resolve(manifestPath), HOUSEHOLD_DEPLOY_LEASE: leaseOwner, HOUSEHOLD_DEPLOY_TARGETS: scope.targets.join(',') });
     if (JSON.stringify(currentHashes()) !== JSON.stringify(hashes)) throw new Error('DEPLOYED_ARTIFACT_CHANGED');
     const token = readFileSync(smokeToken, 'utf8').trim();
     const response = await fetch(`https://asia-northeast3-${projectId}.cloudfunctions.net/executeHouseholdCommand`, {
@@ -177,7 +205,8 @@ async function main() {
     });
     const readBody = await readResponse.json();
     if (!readResponse.ok || readBody.result?.result?.kind !== 'succeeded') throw new Error('SMOKE_HOUSEHOLD_READ_FAILED');
-    requireSmokeMarker(readBody, manifest, hashes.artifact);
+    // Rules/index-only and child-codebase releases preserve the deployed Query server.
+    requireSmokeMarker(readBody, scope.queryDeployment, { sha256: scope.queryDeployment.artifactSha256 });
   } catch (error) { failure = error; }
   const provenance = createDeploymentProvenanceApplication({ releases: store, records: store.records,
     channels: { isVerified: reference => verifyCloudResource(credential, reference, 'monitoring.googleapis.com') },
@@ -189,7 +218,7 @@ async function main() {
   if (recorded.kind === 'rejected') throw new Error(`PROVENANCE_REJECTED:${recorded.code}`);
   if (failure) throw failure;
   await store.releaseDeploymentLease(projectId, leaseOwner);
-  console.log(JSON.stringify({ kind: recorded.kind, releaseId: manifest.releaseId, commitSha: head, ci: evaluation.ci }));
+  console.log(JSON.stringify({ kind: recorded.kind, releaseId: manifest.releaseId, commitSha: head, scope, ci: evaluation.ci }));
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) main().catch(error => { console.error(error.message); process.exitCode = 1; });

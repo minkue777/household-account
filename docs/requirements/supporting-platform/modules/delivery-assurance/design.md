@@ -6,7 +6,7 @@
 
 ## 1. 설계 목적과 추적성
 
-`REL-001~004`를 로컬 검증, 배포 검증, 원격 CI 결과, 장기 배포 기록으로 구분합니다. 로컬 전체 테스트 완료를 기다리지 않고 push하여 자동 CI를 실행하며, 필요한 빠른 검증과 실패 재현은 로컬에서 수행합니다. [DEC-074](../../../governance/decisions.md#dec-074)에 따라 원격 CI와 배포는 병행합니다. 최신 HEAD의 다섯 필수 CI 검증 성공은 개발 작업 완료 조건이며 배포의 선행 대기 조건이 아닙니다. 테스트 결과를 성공으로 바꾸는 waiver나 override 계층은 두지 않습니다.
+`REL-001~004`를 로컬 검증, 배포 검증, 원격 CI 결과, 장기 배포 기록으로 구분합니다. 로컬 전체 테스트 완료를 기다리지 않고 push하여 자동 CI를 실행하며, 필요한 빠른 검증과 실패 재현은 로컬에서 수행합니다. [DEC-074](../../../governance/decisions.md#dec-074)에 따라 원격 CI와 배포는 병행합니다. 구현·필요한 배포가 끝나면 개발 작업을 마무리하고 미완료 CI는 정확한 SHA로 후속 확인합니다. CI 검증 완료는 해당 SHA의 다섯 검사와 workflow가 실제 성공한 뒤 별도로 보고합니다. 테스트 결과를 성공으로 바꾸는 waiver나 override 계층은 두지 않습니다.
 
 ## 2. 모듈 경계와 책임
 
@@ -45,14 +45,14 @@
 3. 실제 GitHub actor·Secret version metadata·Monitoring channel을 확인합니다. 전체 테스트 실행, GitHub CI 대기, CI 보고서 다운로드는 하지 않습니다.
 4. 로컬 전체 테스트를 기다리지 않고 main에 push하면 Vercel Git 자동배포와 원격 CI가 함께 시작됩니다. PR도 CI를 실행합니다. main commit별 concurrency group을 사용하여 후속 push가 이전 commit 검증을 취소하지 않습니다.
 5. `quality-summary`는 모든 job 종료 후 `needs`의 실제 결과를 요약합니다. 실패하면 GitHub check와 annotation을 남기며 기본 알림은 사용자 Actions 알림 설정을 따릅니다. repository가 별도 email·Slack을 보내지 않습니다.
-6. 실패한 CI 로그를 확인하고 원인을 수정하여 다시 push합니다. 최신 HEAD의 다섯 필수 검증 성공과 필요한 배포 완료를 확인한 뒤 개발 작업을 완료로 판단합니다. 실패를 skip으로 숨기거나 이전 commit의 성공을 최신 변경의 근거로 사용하지 않습니다.
+6. 구현·필요한 배포 완료 뒤 CI만 남으면 SHA·실행 링크를 후속 확인에 넘깁니다. 등록된 automation은 변화 없는 진행 상태에서 조용히 종료하고 실패 시 로그를 분석·수정·재push합니다. 다섯 검사와 workflow가 모두 성공하면 CI 완료를 보고합니다. 실패를 skip으로 숨기거나 이전 commit의 성공을 최신 변경의 근거로 사용하지 않습니다.
 
 ### 5.2 배포 실행과 `RecordDeploymentResult`
 
-1. manifest hash와 actor를 승인 기록에 저장합니다. CI 참조와 호환 계획은 별도로 보존합니다.
-2. project의 deployment lease를 획득한 실행만 명시적 project에 Firebase CLI를 실행합니다.
+1. 마지막 성공 provenance 이후의 누적 변경으로 Functions codebase·Rules·index·Storage 범위를 계산합니다. 변경이 없으면 배포를 생략합니다.
+2. project의 deployment lease를 획득한 뒤 기준을 재확인하고 manifest hash·actor·CI 참조·호환 계획·배포 scope를 승인 기록에 저장합니다. 해당 범위만 명시적 project에 Firebase CLI로 배포합니다.
 3. 각 Functions predeploy는 build 후 guard를 실행합니다. guard는 전체 테스트나 build를 중복 실행하지 않고 현재 hash·actor·lease 소유자를 다시 확인합니다. Rules·Storage도 guard를 사용합니다.
-4. 배포 후 authenticated 사용자 해석·가구 Query를 호출하고 반환된 releaseId·commit·artifact marker를 검사합니다.
+4. 배포 후 authenticated 사용자 해석·가구 Query를 호출하고 반환된 releaseId·commit·artifact marker를 검사합니다. default codebase를 배포했으면 새 marker, 그렇지 않으면 이전 승인 evidence에서 계승한 Query marker를 검증합니다.
 5. smoke·실패·rollback 근거를 기록합니다. 실제 배포와 smoke가 성공한 경우에만 lease를 해제합니다. CI 결과는 배포 기록을 변경하거나 자동 rollback을 시작하지 않습니다.
 
 ### 5.3 호환 전환 예
