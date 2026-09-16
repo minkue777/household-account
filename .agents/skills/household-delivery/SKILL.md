@@ -49,6 +49,7 @@ CI에서 실제 제품 결함이 이미 확인되었다면 그 원인을 먼저 
 - 이 대상이 필요할 때만 [Firebase runbook](../../../docs/operations/firebase-release-runbook.md)을 읽는다. Functions는 `default`, `payment-capture`, `access-session` 세 codebase이며 운영 project는 `household-account-6f300`이다.
 - runbook의 `npm --prefix functions run deploy -- ...` wrapper를 사용한다. build·clean HEAD/hash·호환성·actor·Secret binding·lease·실제 로그인 smoke를 유지하고 직접 `firebase deploy`로 우회하지 않는다.
 - 운영 데이터나 Secret 값을 로그로 가져오지 않는다. 유효한 인증·smoke 자격이 있으면 재사용하고, 실제 사용자 로그인이 필요한 때만 그 조작을 요청한다. 대기 중 독립적인 push·Web·CI 작업은 진행한다.
+- smoke 인증은 runbook의 `functions/scripts/prepare-smoke-session.cjs --token-file <저장소 밖 경로>`로 준비한다. 고정 주소 `http://localhost:55318/`을 이전에 로그인한 같은 일반 브라우저 프로필로 열어 저장된 로그인과 token 자동 갱신을 먼저 사용한다. 일회용 메모리 인증·완료 후 자동 로그아웃 방식의 임시 도구를 다시 만들지 않는다. 최초 로그인이나 실제 갱신 실패 때만 사용자의 Google 로그인을 요청하고, 창을 열었다고 말하기 전에 실제 페이지 표시를 확인한다.
 
 ### Android APK
 
