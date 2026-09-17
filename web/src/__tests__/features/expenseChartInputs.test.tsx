@@ -35,7 +35,7 @@ it('keeps trend inputs stable across parent status renders, but updates enabled 
   const { rerender } = render(<MonthlyTrendChart expenses={rows} startDate="2026-08-01" endDate="2026-09-30" />);
   const initial = mockLineInputs.at(-1)!;
   expect(initial.data.datasets[0].data).toEqual([100, 20]);
-  expect(initial.options.animation).toBeUndefined();
+  expect(initial.options.animation).toEqual({ duration: 150 });
   rerender(<MonthlyTrendChart expenses={rows} startDate="2026-08-01" endDate="2026-09-30" />);
   expect(mockLineInputs.at(-1)!.data).toBe(initial.data);
   expect(mockLineInputs.at(-1)!.options).toBe(initial.options);
@@ -54,7 +54,7 @@ it('keeps donut inputs stable across parent status renders while detail clicks u
   expect(initial.data.labels).toEqual(['식비', '간식']);
   expect(initial.data.datasets[0].data).toEqual([100, 20]);
   expect(screen.getByText('120')).toBeInTheDocument();
-  expect(initial.options.animation).toBeUndefined();
+  expect(initial.options.animation).toEqual({ duration: 150 });
   const currentClick = jest.fn();
   rerender(<DonutChart expenses={rows} onCategoryClick={currentClick} />);
   expect(mockDonutInputs.at(-1)!.data).toBe(initial.data);

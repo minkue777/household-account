@@ -1,6 +1,6 @@
 import { summarizeSamples, validateSampleCoverage } from './statistics.mjs';
 
-export const PERFORMANCE_POLICY_VERSION = 'household-performance-budgets.v1';
+export const PERFORMANCE_POLICY_VERSION = 'household-performance-budgets.v2';
 export const MINIMUM_GATE_SAMPLES = 7;
 const webProjects = ['chromium-mobile', 'webkit-mobile'];
 const androidProjects = ['android-emulator'];
@@ -20,25 +20,25 @@ export const PERFORMANCE_BUDGETS = Object.freeze({
   'ledger.save-category.server-confirmed': budget(500, 1000, 5000),
   'ledger.previous-month': budget(400, 700, 5000),
   'ledger.return-month': budget(400, 700, 5000),
-  'search.first': budget(1500, 2500, 5000),
-  'search.first-open': budget(1500, 2500, 5000),
+  'search.first': budget(500, 800, 1500),
+  'search.first-open': budget(500, 800, 1500),
   'search.next-page': budget(300, 500, 1000),
   'search.change-keyword': budget(300, 500, 1000),
-  'expense-stats.first': budget(2000, 3000, 5000),
-  'expense-stats.period-3': budget(1500, 2000, 5000),
-  'expense-stats.period-6': budget(1500, 2000, 5000),
-  'expense-stats.period-12': budget(1500, 2000, 5000),
-  'expense-stats.revisit': budget(1500, 2000, 5000),
+  'expense-stats.first': budget(800, 1200, 2000),
+  'expense-stats.period-3': budget(400, 600, 1200),
+  'expense-stats.period-6': budget(400, 600, 1200),
+  'expense-stats.period-12': budget(400, 600, 1200),
+  'expense-stats.revisit': budget(400, 600, 1200),
   'assets.first': budget(500, 800, 5000),
   'assets.account-detail': budget(200, 350, 1000),
   'ledger.return-from-assets': budget(400, 700, 5000),
   'assets.revisit': budget(400, 700, 5000),
-  'asset-stats.first': budget(2000, 3000, 5000),
-  'asset-stats.period-6': budget(1500, 2000, 5000),
-  'asset-stats.period-12': budget(1500, 2000, 5000),
-  'asset-stats.period-all': budget(1500, 2000, 5000),
-  'asset-stats.period-3': budget(1500, 2000, 5000),
-  'asset-stats.revisit': budget(1500, 2000, 5000),
+  'asset-stats.first': budget(800, 1200, 2000),
+  'asset-stats.period-6': budget(400, 600, 1200),
+  'asset-stats.period-12': budget(400, 600, 1200),
+  'asset-stats.period-all': budget(400, 600, 1200),
+  'asset-stats.period-3': budget(400, 600, 1200),
+  'asset-stats.revisit': budget(400, 600, 1200),
   'ledger.add': budget(200, 350, 1000),
   'ledger.add.server-confirmed': budget(500, 1000, 5000),
   'ledger.delete': budget(200, 350, 1000),
@@ -55,8 +55,8 @@ const findBudget = metric => Object.hasOwn(PERFORMANCE_BUDGETS, metric) ? PERFOR
 // Runner-specific allowances are reviewed fixed values, never computed from the
 // current run or a global multiplier. Unlisted paths retain the original UX limit.
 export const PERFORMANCE_PROFILES = Object.freeze({
-  'ux-v1': Object.freeze({ overrides: Object.freeze({}) }),
-  'github-hosted-v1': Object.freeze({ overrides: Object.freeze({
+  'ux-v2': Object.freeze({ overrides: Object.freeze({}) }),
+  'github-hosted-v2': Object.freeze({ overrides: Object.freeze({
     'webkit-mobile': Object.freeze({
       'home.fresh-context': budget(1500, 2000, 5000, ['webkit-mobile']),
       'home.relaunch': budget(1500, 2000, 5000, ['webkit-mobile']),
@@ -96,7 +96,7 @@ function assessTiming(row, limit, { errors, diagnostic }) {
 
 /** A complete diagnostic run can finish successfully, but can never claim PASS. */
 export function evaluatePerformanceBudgets(samples, specification) {
-  const { projects, metrics, samplesPerMetric, warmupMetrics = metrics, diagnostic = false, ci = false, profile = 'ux-v1' } = specification;
+  const { projects, metrics, samplesPerMetric, warmupMetrics = metrics, diagnostic = false, ci = false, profile = 'ux-v2' } = specification;
   const coverageErrors = validateSampleCoverage(samples, { projects, metrics, samplesPerMetric, warmupMetrics });
   const errors = [...coverageErrors];
   const selectedProfile = typeof profile === 'string' && Object.hasOwn(PERFORMANCE_PROFILES, profile) ? PERFORMANCE_PROFILES[profile] : undefined;
@@ -128,7 +128,7 @@ export function evaluatePerformanceBudgets(samples, specification) {
     const override = projectOverrides && Object.hasOwn(projectOverrides, row.metric) ? projectOverrides[row.metric] : undefined;
     const limit = selectedProfile ? override ?? uxLimit : undefined;
     return { project: row.project, metric: row.metric, label: row.label, cacheState: row.cacheState, n: row.n,
-      ...assessTiming(row, limit, { errors, diagnostic }), budgetSource: override ? profile : 'ux-v1',
+      ...assessTiming(row, limit, { errors, diagnostic }), budgetSource: override ? profile : 'ux-v2',
       ux: assessTiming(row, uxLimit, { errors, diagnostic }) };
   });
   const exceeded = results.filter(row => !row.withinTimeBudget);
@@ -151,7 +151,7 @@ export function budgetMarkdown(evaluation) {
     '',
     '각 지표는 중앙값, 7회 중 6회(횟수가 다르면 ceil(n × 6 / 7)), 모든 개별 표본의 최대 허용 시간을 함께 검사합니다. 기준 이내의 상대적 속도 변화는 실패시키지 않습니다.',
   ];
-  if (evaluation.profile !== 'ux-v1') lines.push('', 'CI 환경의 명시적 고정 허용값을 적용했습니다. 기존 UX 기준과 비교 결과도 함께 보존하며, CI 통과를 실기기 UX 통과로 해석하지 않습니다.');
+  if (evaluation.profile !== 'ux-v2') lines.push('', 'CI 환경의 명시적 고정 허용값을 적용했습니다. 기존 UX 기준과 비교 결과도 함께 보존하며, CI 통과를 실기기 UX 통과로 해석하지 않습니다.');
   if (evaluation.mode === 'diagnostic') lines.push('', '진단 실행입니다. 시간 초과도 원본에 남기지만 성능 PASS를 부여하지 않습니다.');
   if (evaluation.errors.length) lines.push('', ...evaluation.errors.map(error => `- 검증 실패: ${error}`));
   lines.push('', '| 환경 | 동작 | 적용 판정 | UX 판정 | 중앙값 / 적용·UX 기준 ms | 6/7 기준 이내 (적용·UX) | 개별 최대 / 적용·UX 기준 ms |', '|---|---|---|---|---:|---:|---:|');

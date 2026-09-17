@@ -32,6 +32,7 @@ import { resolveAssetStatisticsPeriod } from '@/features/reporting/statisticsPer
 import { sumSignedAssetBalances, sumSignedBalancesByAssetType } from '@/lib/assets/assetMath';
 import { getClientSessionScope } from '@/composition/clientSessionScope';
 import { assetStatisticsSessionKey, subscribeAssetStatisticsInvalidation } from '@/platform/reporting/assetStatisticsQueryCache';
+import { useChartMotion } from '@/components/common/useChartMotion';
 
 ChartJS.register(
   CategoryScale,
@@ -143,6 +144,7 @@ function areSameActiveElements(
 }
 
 export default function AssetStatsPage() {
+  const chartMotion = useChartMotion();
   const { themeConfig } = useTheme();
   const {
     householdKey,
@@ -448,6 +450,7 @@ export default function AssetStatsPage() {
 
   const chartOptions = useMemo<ChartOptions<'line'>>(
     () => ({
+      ...chartMotion,
       responsive: true,
       maintainAspectRatio: false,
       interaction: {
@@ -530,7 +533,7 @@ export default function AssetStatsPage() {
         },
       },
     }),
-    []
+    [chartMotion]
   );
 
   const periodChange = summaryTotals.length > 1

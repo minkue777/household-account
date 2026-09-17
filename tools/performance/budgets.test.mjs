@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { budgetMarkdown, evaluatePerformanceBudgets, PERFORMANCE_BUDGETS, PERFORMANCE_PROFILES } from './budgets.mjs';
+import { budgetMarkdown, evaluatePerformanceBudgets, PERFORMANCE_BUDGETS, PERFORMANCE_PROFILES, PERFORMANCE_POLICY_VERSION } from './budgets.mjs';
 
 const specification = { projects: ['chromium-mobile'], metrics: ['ledger.open-detail'], samplesPerMetric: 7 };
 function samples(values = Array(7).fill(100), options = {}) {
@@ -157,7 +157,7 @@ test('the independent Web coverage contract has explicit budgets for every path'
 test('first search from modal open includes the same budget as typing into an open search', () => {
   assert.deepEqual(PERFORMANCE_BUDGETS['search.first-open'], PERFORMANCE_BUDGETS['search.first']);
   const metric = 'search.first-open';
-  const result = evaluatePerformanceBudgets(samples(Array(7).fill(1501), { metric }), { ...specification, metrics: [metric] });
+  const result = evaluatePerformanceBudgets(samples(Array(7).fill(501), { metric }), { ...specification, metrics: [metric] });
   assert.equal(result.status, 'fail');
   assert.deepEqual(result.results[0].reasons, ['median-exceeded']);
 });
@@ -178,8 +178,8 @@ test('a selected hosted profile can pass while preserving the original UX budget
   const project = 'webkit-mobile';
   const input = samples([481, 480, 480, 473, 481, 488, 482], { project });
   const originalUxBudgets = structuredClone(PERFORMANCE_BUDGETS);
-  const result = evaluatePerformanceBudgets(input, { ...specification, projects: [project], profile: 'github-hosted-v1', ci: true });
-  assert.equal(result.profile, 'github-hosted-v1');
+  const result = evaluatePerformanceBudgets(input, { ...specification, projects: [project], profile: 'github-hosted-v2', ci: true });
+  assert.equal(result.profile, 'github-hosted-v2');
   assert.equal(result.status, 'pass');
   assert.equal(result.uxStatus, 'fail');
   assert.equal(result.results[0].budget.medianMs, 600);
@@ -191,7 +191,7 @@ test('a selected hosted profile can pass while preserving the original UX budget
   assert.deepEqual(PERFORMANCE_BUDGETS, originalUxBudgets);
   assert.deepEqual(result.statistics[0].samplesMs, input.filter(sample => !sample.warmup).map(sample => sample.durationMs));
   const markdown = budgetMarkdown(result);
-  assert(markdown.includes('적용 프로필: github-hosted-v1'));
+  assert(markdown.includes('적용 프로필: github-hosted-v2'));
   assert(markdown.includes('UX 기준 비교: **FAIL**'));
   assert(markdown.includes('| PASS | FAIL'));
 });
@@ -201,7 +201,7 @@ test('local and CI executions default to strict UX unless a profile is explicitl
   const input = samples(Array(7).fill(480), { project });
   for (const ci of [false, true]) {
     const result = evaluatePerformanceBudgets(input, { ...specification, projects: [project], ci });
-    assert.equal(result.profile, 'ux-v1');
+    assert.equal(result.profile, 'ux-v2');
     assert.equal(result.status, 'fail');
     assert.equal(result.uxStatus, 'fail');
     assert.deepEqual(result.results[0].budget, result.results[0].ux.budget);
@@ -218,17 +218,17 @@ test('unknown or malformed profiles cannot silently fall back to a permissive li
 });
 
 test('the hosted profile leaves Chromium, initial search, statistics, and unlisted paths unchanged', () => {
-  const profile = 'github-hosted-v1';
+  const profile = 'github-hosted-v2';
   assert.equal(evaluate(Array(7).fill(480), { profile }).status, 'fail');
   for (const [metric, durationMs] of [
-    ['search.first', 1501], ['search.first-open', 1501], ['expense-stats.first', 2001],
-    ['asset-stats.first', 2001], ['asset-stats.period-all', 1501], ['ledger.save-memo.server-confirmed', 501],
+    ['search.first', 501], ['search.first-open', 501], ['expense-stats.first', 801],
+    ['asset-stats.first', 801], ['asset-stats.period-all', 401], ['ledger.save-memo.server-confirmed', 501],
   ]) {
     const project = 'webkit-mobile';
     const result = evaluatePerformanceBudgets(samples(Array(7).fill(durationMs), { project, metric }),
       { projects: [project], metrics: [metric], samplesPerMetric: 7, profile });
     assert.equal(result.status, 'fail', metric);
-    assert.equal(result.results[0].budgetSource, 'ux-v1', metric);
+    assert.equal(result.results[0].budgetSource, 'ux-v2', metric);
     assert.deepEqual(result.results[0].budget, result.results[0].ux.budget, metric);
   }
 });
@@ -237,7 +237,7 @@ test('hosted keyword and next-page allowances apply only to those fast WebKit UI
   for (const metric of ['search.next-page', 'search.change-keyword']) {
     const project = 'webkit-mobile';
     const input = samples(Array(7).fill(348), { project, metric });
-    const spec = { projects: [project], metrics: [metric], samplesPerMetric: 7, profile: 'github-hosted-v1' };
+    const spec = { projects: [project], metrics: [metric], samplesPerMetric: 7, profile: 'github-hosted-v2' };
     const result = evaluatePerformanceBudgets(input, spec);
     assert.equal(result.status, 'pass');
     assert.equal(result.uxStatus, 'fail');
@@ -252,7 +252,7 @@ test('hosted Android allowances retain both verdicts and still reject one catast
   const project = 'android-emulator';
   const metric = 'android.home.activity-reopen-complete';
   const input = samples([3005, 3060, 3474, 3355, 3397, 3475, 3276], { project, metric, warmup: false });
-  const spec = { projects: [project], metrics: [metric], samplesPerMetric: 7, warmupMetrics: [], profile: 'github-hosted-v1' };
+  const spec = { projects: [project], metrics: [metric], samplesPerMetric: 7, warmupMetrics: [], profile: 'github-hosted-v2' };
   const result = evaluatePerformanceBudgets(input, spec);
   assert.equal(result.status, 'pass');
   assert.equal(result.uxStatus, 'fail');
@@ -279,5 +279,40 @@ test('hosted profile limits are explicit, immutable, and cannot override an unre
       }
     }
   }
-  assert.equal(evaluate(Array(7).fill(20), { profile: 'github-hosted-v1', diagnostic: true, ci: true }).status, 'fail');
+  assert.equal(evaluate(Array(7).fill(20), { profile: 'github-hosted-v2', diagnostic: true, ci: true }).status, 'fail');
+});
+
+test('version two never evaluates new stricter budgets under a historical profile name', () => {
+  assert.equal(PERFORMANCE_POLICY_VERSION, 'household-performance-budgets.v2');
+  assert.deepEqual(Object.keys(PERFORMANCE_PROFILES), ['ux-v2', 'github-hosted-v2']);
+  assert.equal(evaluate(Array(7).fill(10)).profile, 'ux-v2');
+  for (const profile of ['ux-v1', 'github-hosted-v1']) {
+    const result = evaluate(Array(7).fill(10), { profile });
+    assert.equal(result.status, 'fail');
+    assert(result.errors.some(error => error.includes('Unknown performance profile')));
+  }
+});
+
+test('search and statistics enforce the reviewed v2 boundaries in both UX and hosted execution', () => {
+  const groups = [
+    { metrics: ['search.first', 'search.first-open'], median: 500, repeated: 800, maximum: 1500 },
+    { metrics: ['expense-stats.first', 'asset-stats.first'], median: 800, repeated: 1200, maximum: 2000 },
+    { metrics: ['expense-stats.period-3', 'expense-stats.period-6', 'expense-stats.period-12', 'expense-stats.revisit',
+      'asset-stats.period-3', 'asset-stats.period-6', 'asset-stats.period-12', 'asset-stats.period-all', 'asset-stats.revisit'],
+    median: 400, repeated: 600, maximum: 1200 },
+  ];
+  for (const { metrics, median, repeated, maximum } of groups) for (const metric of metrics) {
+    for (const project of ['chromium-mobile', 'webkit-mobile']) for (const profile of ['ux-v2', 'github-hosted-v2']) {
+      const spec = { projects: [project], metrics: [metric], samplesPerMetric: 7, profile };
+      const boundary = evaluatePerformanceBudgets(samples([median, median, median, median, repeated, repeated, maximum], { project, metric }), spec);
+      assert.equal(boundary.status, 'pass', `${project}/${metric}/${profile}`);
+      assert.equal(boundary.uxStatus, 'pass');
+      for (const values of [Array(7).fill(median + 1), [0, 0, 0, 0, repeated + 1, repeated + 1, repeated + 1],
+        [0, 0, 0, 0, 0, 0, maximum + 1]]) {
+        const failed = evaluatePerformanceBudgets(samples(values, { project, metric }), spec);
+        assert.equal(failed.status, 'fail', `${project}/${metric}/${profile}`);
+        assert.equal(failed.uxStatus, 'fail');
+      }
+    }
+  }
 });

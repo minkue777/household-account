@@ -5,6 +5,7 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend, type ChartOptions } from
 import { Doughnut, getElementAtEvent } from 'react-chartjs-2';
 import { Expense, Category } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
+import { useChartMotion } from '@/components/common/useChartMotion';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -23,6 +24,7 @@ interface DonutChartProps {
 
 export default function DonutChart({ expenses, onCategoryClick }: DonutChartProps) {
   const { getCategoryLabel, getCategoryColor } = useCategoryContext();
+  const chartMotion = useChartMotion();
   const chartRef = useRef<any>(null);
 
   const { chartData, categoryDataList, totalAmount } = useMemo(() => {
@@ -71,6 +73,7 @@ export default function DonutChart({ expenses, onCategoryClick }: DonutChartProp
   }, [expenses, getCategoryLabel, getCategoryColor]);
 
   const options = useMemo<ChartOptions<'doughnut'>>(() => ({
+    ...chartMotion,
     responsive: true,
     maintainAspectRatio: false,
     cutout: '65%',
@@ -87,7 +90,7 @@ export default function DonutChart({ expenses, onCategoryClick }: DonutChartProp
         },
       },
     },
-  }), []);
+  }), [chartMotion]);
 
   const handleChartClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
     if (!chartRef.current || !onCategoryClick) return;

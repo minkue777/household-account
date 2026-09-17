@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { ChevronRight, Search } from 'lucide-react';
 import { Expense, TransactionType } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
@@ -40,35 +41,30 @@ export default function SearchResultList({
     ? `${transactionLabel}처명이나 메모를 검색해보세요.`
     : '지출처명, 메모, 카드명을 검색해보세요.';
 
-  const groupedResults: MonthlyGroup[] = results.reduce((groups, expense) => {
-    const yearMonth = expense.date.substring(0, 7);
-    const existingGroup = groups.find((group) => group.yearMonth === yearMonth);
-
-    if (existingGroup) {
-      existingGroup.expenses.push(expense);
-      existingGroup.total += expense.amount;
-      return groups;
-    }
-
-    const [year, month] = yearMonth.split('-');
-    groups.push({
-      yearMonth,
-      label: `${year}년 ${Number.parseInt(month, 10)}월`,
-      expenses: [expense],
-      total: expense.amount,
-    });
-
-    return groups;
-  }, [] as MonthlyGroup[]);
-
-  const totalAmount = summary?.amount ?? results.reduce((sum, expense) => sum + expense.amount, 0);
-  for (const yearMonth of Object.keys(summary?.months ?? {})) {
-    if (!groupedResults.some(group => group.yearMonth === yearMonth)) {
+  const { groupedResults, totalAmount } = useMemo(() => {
+    const groups = new Map<string, MonthlyGroup>();
+    const groupFor = (yearMonth: string): MonthlyGroup => {
+      const existing = groups.get(yearMonth);
+      if (existing) return existing;
       const [year, month] = yearMonth.split('-');
-      groupedResults.push({ yearMonth, label: `${year}년 ${Number(month)}월`, expenses: [], total: 0 });
+      const group: MonthlyGroup = { yearMonth, label: `${year}년 ${Number(month)}월`, expenses: [], total: 0 };
+      groups.set(yearMonth, group);
+      return group;
+    };
+    let loadedAmount = 0;
+    for (const expense of results) {
+      const group = groupFor(expense.date.substring(0, 7));
+      group.expenses.push(expense);
+      group.total += expense.amount;
+      loadedAmount += expense.amount;
     }
-  }
-  groupedResults.sort((left, right) => right.yearMonth.localeCompare(left.yearMonth));
+    // Whole-source month totals remain visible even before their page is loaded.
+    for (const yearMonth of Object.keys(summary?.months ?? {})) groupFor(yearMonth);
+    return {
+      groupedResults: Array.from(groups.values()).sort((left, right) => right.yearMonth.localeCompare(left.yearMonth)),
+      totalAmount: summary?.amount ?? loadedAmount,
+    };
+  }, [results, summary]);
 
   if (isSearching) {
     return (

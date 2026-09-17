@@ -53,14 +53,18 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
     const retained = retentionKey === undefined
       ? undefined
       : this.retainedSnapshots.get(retentionKey);
-    this.subscriptions.set(subscriptionId, {
+    const subscription: ProjectionSubscription<Entity> = {
       base: retained === undefined ? [] : [...retained],
       hasPublished: retained !== undefined,
       revision: 0,
       accept,
       callback,
-    });
-    if (retained !== undefined) this.emitAll();
+    };
+    this.subscriptions.set(subscriptionId, subscription);
+    if (retained !== undefined) {
+      if (this.pending.size === 0) this.emit(subscription);
+      else this.emitAll();
+    }
     return {
       publish: (entities) => {
         const subscription = this.subscriptions.get(subscriptionId);
@@ -71,13 +75,20 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
         }
         subscription.hasPublished = true;
         subscription.revision += 1;
-        this.reconcile();
-        this.emitAll();
+        // A source read alone does not change other subscriptions. In the common
+        // read-only path, avoid rendering every underlying screen behind a modal.
+        if (this.pending.size === 0) this.emit(subscription);
+        else {
+          this.reconcile();
+          this.emitAll();
+        }
       },
       dispose: () => {
         this.subscriptions.delete(subscriptionId);
-        this.reconcile();
-        this.emitAll();
+        if (this.pending.size > 0) {
+          this.reconcile();
+          this.emitAll();
+        }
       },
     };
   }
@@ -356,12 +367,14 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
   }
 
   private emitAll(): void {
-    this.subscriptions.forEach((subscription) => {
-      subscription.callback(
-        this.applyMutations(subscription.base)
-          .filter(subscription.accept)
-          .sort(this.compare)
-      );
-    });
+    this.subscriptions.forEach((subscription) => this.emit(subscription));
+  }
+
+  private emit(subscription: ProjectionSubscription<Entity>): void {
+    subscription.callback(
+      this.applyMutations(subscription.base)
+        .filter(subscription.accept)
+        .sort(this.compare)
+    );
   }
 }

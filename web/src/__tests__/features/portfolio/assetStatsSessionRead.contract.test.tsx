@@ -21,10 +21,12 @@ jest.mock('@/lib/assetService', () => ({
   getDividendEventsByYear: jest.fn(async () => []),
 }));
 jest.mock('@/platform/reporting/assetStatisticsReadModel', () => ({ readAssetStatisticsHistory: jest.fn() }));
+const mockTrendOptions = jest.fn();
 jest.mock('react-chartjs-2', () => {
   const React = jest.requireActual<typeof import('react')>('react');
   return {
-    Line: React.forwardRef(function MockLine({ data }: { data: unknown }, _ref) {
+    Line: React.forwardRef(function MockLine({ data, options }: { data: unknown; options: unknown }, _ref) {
+      mockTrendOptions(options);
       return <output data-testid="chart">{JSON.stringify(data)}</output>;
     }),
     Bar: ({ data }: { data: unknown }) => <output data-testid="bar-chart">{JSON.stringify(data)}</output>,
@@ -69,6 +71,7 @@ describe('actual asset statistics page', () => {
     );
     const { rerender } = render(page());
     await screen.findByText('987,654');
+    expect(mockTrendOptions.mock.calls.at(-1)![0].animation).toEqual({ duration: 150 });
     commits.length = 0;
     read.mockImplementationOnce(() => new Promise<AssetHistoryEntry[]>(() => {}));
     mockScope = change === 'household'

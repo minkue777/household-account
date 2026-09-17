@@ -1,4 +1,4 @@
-import { collection, db, documentId, getDocsFromServer, limit, orderBy, query, startAfter, where, type QueryDocumentSnapshot, type DocumentData } from '@/platform/read-model/firestoreReadModel';
+import { collection, db, documentId, getDocsFromServer, limit, orderBy, query, startAfter, where, type QueryDocumentSnapshot, type DocumentData } from '@/platform/read-model/firestoreServerReadModel';
 import { getClientSessionScope, requireClientSessionScope } from '@/composition/clientSessionScope';
 import { mapExpenseReadData } from '@/features/ledger/application/ledgerExpenseMapping';
 import { isVisibleLedgerReadDocument } from '@/features/ledger/application/ledgerReadVisibility';
@@ -37,7 +37,8 @@ export async function readExpenseStatistics(startDate: string, endDate: string, 
         throw error;
       });
     assertCurrent();
-    for (const document of snapshot.docs) {
+    const documents = snapshot.docs;
+    for (const document of documents) {
       if (seen.has(document.id)) throw new Error('STATISTICS_CURSOR_REPEATED');
       seen.add(document.id);
       const data = document.data();
@@ -45,7 +46,7 @@ export async function readExpenseStatistics(startDate: string, endDate: string, 
       if (!Number.isSafeInteger(data.amount) || typeof data.date !== 'string' || data.date < startDate || data.date > endDate) throw new Error('STATISTICS_SOURCE_INVALID');
       expenses.push(mapExpenseReadData(document.id, data));
     }
-    if (snapshot.docs.length < PAGE_SIZE) return expenses;
-    cursor = snapshot.docs[snapshot.docs.length - 1];
+    if (documents.length < PAGE_SIZE) return expenses;
+    cursor = documents[documents.length - 1];
   }
 }

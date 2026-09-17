@@ -5,7 +5,11 @@ import { clearClientSessionScope, setClientSessionScope } from '@/composition/cl
 
 jest.mock('@/lib/assetService', () => ({ getAllStockHoldings: jest.fn(), getDividendEventsByYear: jest.fn(), getDividendSnapshot: jest.fn() }));
 jest.mock('@/lib/utils/date', () => ({ getSeoulCalendarParts: () => ({ year: 2026, month: 9, day: 6 }), getTodayLocalDate: () => '2026-09-06' }));
-jest.mock('react-chartjs-2', () => ({ Bar: ({ data }: { data: unknown }) => <pre data-testid="dividend-chart">{JSON.stringify(data)}</pre> }));
+const mockDividendOptions = jest.fn();
+jest.mock('react-chartjs-2', () => ({ Bar: ({ data, options }: { data: unknown; options: unknown }) => {
+  mockDividendOptions(options);
+  return <pre data-testid="dividend-chart">{JSON.stringify(data)}</pre>;
+} }));
 
 beforeEach(() => setClientSessionScope({ principalUid: 'uid', memberId: 'member', householdId: 'house', sessionGeneration: 1 }));
 afterEach(clearClientSessionScope);
@@ -25,4 +29,5 @@ test('[DIV-004] excludes the confirmed event identity and record-date-today esti
     expect(data.datasets[1].data[8]).toBe(200);
   });
   expect(getDividendEventsByYear).toHaveBeenCalledWith(2026);
+  expect(mockDividendOptions.mock.calls.at(-1)![0].animation).toEqual({ duration: 150 });
 });

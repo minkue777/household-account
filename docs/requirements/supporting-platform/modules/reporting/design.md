@@ -1,10 +1,12 @@
 # 통계 모듈 상세 설계
 
-2026-09-17 자산 이력 조회 최적화: `assetStatisticsReadModel.ts`는 동일 인증·Rules를 사용하는 `firestoreServerReadModel.ts`의 단발 서버 조회를 사용합니다. 일반 원장과 자산 실시간 listener의 저장소 설정은 그대로입니다. 이력의 전체 범위·시작 직전 baseline·50,000건 상한·30초 캐시·세션 무효화 정책을 유지하고 문서를 한 번 해석해 날짜순 변동액을 계산합니다. 수익 차트의 기간별 반복 탐색은 한 번의 순회로 대체하며 같은 입력으로 인한 불필요한 차트 갱신을 줄입니다.
+통계 차트의 전환 정책은 `components/common/useChartMotion.ts`에서 공용으로 관리합니다. 지출 비중·월별 추이, 자산 추이·수익·배당 차트는 기본 150ms 전환을 사용하고, OS의 `prefers-reduced-motion` 설정에서는 애니메이션을 끕니다. 성능 E2E는 이 제품 설정 그대로 실제 데이터 표시와 canvas 그리기 완료까지 측정하며 테스트에서 전환을 생략하지 않습니다.
+
+2026-09-17 통계 조회 최적화: `assetStatisticsReadModel.ts`와 `expenseStatisticsReadModel.ts`는 동일 인증·Rules를 사용하는 `firestoreServerReadModel.ts`의 단발 서버 조회를 사용합니다. 일반 원장과 자산 실시간 listener의 저장소 설정은 그대로입니다. 지출은 서버 날짜 범위·cursor·50,000건 상한·완전한 결과만 반환하는 정책을 유지합니다. 자산 이력의 전체 범위·시작 직전 baseline·50,000건 상한·30초 캐시·세션 무효화 정책을 유지하고 문서를 한 번 해석해 날짜순 변동액을 계산합니다. 수익 차트의 기간별 반복 탐색은 한 번의 순회로 대체하며 같은 입력으로 인한 불필요한 차트 갱신을 줄입니다.
 
 > 2026-09-17 실행 경로 정리: 실제 지출 통계는 [Web 기간 정책](../../../../../web/src/features/reporting/statisticsPeriod.ts), [범위 조회 adapter](../../../../../web/src/platform/reporting/expenseStatisticsReadModel.ts), [통계 화면](../../../../../web/src/app/stats/page.tsx)을 사용합니다. 기간·초기 추이 선택을 별도로 구현한 서버 대체 정책은 제거하고 `T-STAT-PERIOD-001~005`·`T-STAT-004`를 실제 Web 정책/화면 테스트로 연결했습니다. 아래 서버 Query/Controller 설명과 남은 일부 Functions 계약 fixture는 목표 구조이며 현재 Web 호출 경로를 뜻하지 않습니다. 새 변경은 실제 경로를 먼저 고치며 남은 fixture의 대체 검증 이관 없이 삭제하지 않습니다.
 
-> 2026-09-17 지출 통계 재진입: 서버 재검증과 60초 캐시 유효기간을 유지합니다. 재검증한 전체 읽기 모델이 이전 결과와 같으면 캐시 배열을 재사용하고, 차트 options도 부모의 조회 상태 변경과 독립적으로 유지해 같은 차트의 애니메이션이 중복 시작되지 않게 합니다. 금액뿐 아니라 메모·카드·합치기·분리 정보까지 비교하므로 상세 내역 갱신을 숨기지 않습니다. 실제 데이터 또는 카테고리 선택이 바뀌면 기존 애니메이션으로 다시 그립니다. 조회 adapter는 SDK 문서를 한 번 해석한 값으로 유효성 검사와 공용 Expense 변환을 수행합니다. 검증은 `expenseStatisticsCache.test.ts`, `expenseChartInputs.test.tsx`, `reportingReadAdapters.test.ts`와 실제 통계 화면 테스트가 담당합니다.
+> 2026-09-17 지출 통계 재진입: 서버 재검증과 60초 캐시 유효기간을 유지합니다. 재검증한 전체 읽기 모델이 이전 결과와 같으면 캐시 배열을 재사용하고, 차트 options도 부모의 조회 상태 변경과 독립적으로 유지해 같은 차트의 애니메이션이 중복 시작되지 않게 합니다. 금액뿐 아니라 메모·카드·합치기·분리 정보까지 비교하므로 상세 내역 갱신을 숨기지 않습니다. 실제 데이터 또는 카테고리 선택이 바뀌면 짧은 전환으로 다시 그립니다. 조회 adapter는 SDK 문서를 한 번 해석한 값으로 유효성 검사와 공용 Expense 변환을 수행합니다. 검증은 `expenseStatisticsCache.test.ts`, `expenseChartInputs.test.tsx`, `reportingReadAdapters.test.ts`와 실제 통계 화면 테스트가 담당합니다.
 
 > 요구사항: [통계 모듈 요구사항](requirements.md)  
 > 상위 지도: [지원·읽기·플랫폼 영역](../../requirements.md)  

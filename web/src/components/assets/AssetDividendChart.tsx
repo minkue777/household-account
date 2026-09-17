@@ -16,6 +16,7 @@ import {
 } from '@/platform/reporting/assetDividendReadModel';
 import ModalOverlay from '@/components/common/ModalOverlay';
 import { getSeoulCalendarParts, getTodayLocalDate } from '@/lib/utils/date';
+import { useChartMotion } from '@/components/common/useChartMotion';
 
 interface DividendSnapshotEvent {
   stockCode: string;
@@ -42,6 +43,7 @@ function createEmptyMonthlyData() {
 }
 
 export default function AssetDividendChart({ prefetchedSource }: { prefetchedSource?: AssetDividendPrefetch } = {}) {
+  const chartMotion = useChartMotion();
   const initialSource = useRef(prefetchedSource);
   const [dividendYear, setDividendYear] = useState(prefetchedSource?.year ?? CURRENT_YEAR);
   const [stockHoldings, setStockHoldings] = useState<StockHolding[]>([]);
@@ -234,6 +236,7 @@ export default function AssetDividendChart({ prefetchedSource }: { prefetchedSou
   );
 
   const dividendChartOptions = useMemo<ChartOptions<'bar'>>(() => ({
+    ...chartMotion,
     responsive: true,
     maintainAspectRatio: false,
     onClick: (_event: unknown, elements: Array<{ index: number }>) => {
@@ -297,7 +300,7 @@ export default function AssetDividendChart({ prefetchedSource }: { prefetchedSou
         },
       },
     },
-  }), [monthlyDividendData]);
+  }), [monthlyDividendData, chartMotion]);
 
   const totalDividend = monthlyDividendData.reduce((sum, item) => sum + item.dividend, 0);
   const totalEstimatedDividend = monthlyDividendData.reduce(

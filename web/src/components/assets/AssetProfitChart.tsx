@@ -8,6 +8,7 @@ import { getSeoulCalendarParts, getTodayLocalDate, formatLocalDate } from '@/lib
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
 import type { AssetHistoryEntry } from '@/types/asset';
+import { useChartMotion } from '@/components/common/useChartMotion';
 
 function formatSignedAmount(value: number) {
   const prefix = value > 0 ? '+' : value < 0 ? '-' : '';
@@ -26,6 +27,7 @@ export default function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance,
   sourceHistory?: readonly AssetHistoryEntry[];
 }) {
   const today = getSeoulCalendarParts();
+  const chartMotion = useChartMotion();
   const { householdKey, isSessionVerified, remoteReadEpoch = 0 } = useHousehold();
   const [view, setView] = useState<'monthly' | 'daily'>('daily');
   const [year, setYear] = useState(today.year);
@@ -104,6 +106,7 @@ export default function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance,
     }],
   }), [rows, view]);
   const chartOptions = useMemo<ChartOptions<'bar'>>(() => ({
+    ...chartMotion,
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -118,7 +121,7 @@ export default function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance,
         ticks: { callback: value => Number((Number(value) / 1000000).toFixed(2)) },
       },
     },
-  }), []);
+  }), [chartMotion]);
   const tableRows = rows.filter(row => row.change !== null).reverse();
 
   return (

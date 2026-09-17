@@ -57,6 +57,7 @@ it('uses shared history for month, year and snapshot changes without another rea
     { ...entry(getTodayLocalDate()), assetId: 'FINANCIAL', balance: 400, changeAmount: 50 },
   ];
   const { rerender } = render(<AssetProfitChart sourceHistory={sourceHistory} currentBalance={1000} />);
+  expect(mockBarInputs.mock.calls.at(-1)![1].animation).toEqual({ duration: 150 });
   fireEvent.click(screen.getByRole('button', { name: '일별 자산 변동' }));
   expect(screen.getByText('+200원')).toBeInTheDocument();
   expect(screen.getByText('+25.00%')).toBeInTheDocument();

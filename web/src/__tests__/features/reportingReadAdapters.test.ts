@@ -1,12 +1,11 @@
 import { readExpenseStatistics } from '@/platform/reporting/expenseStatisticsReadModel';
 import { readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
-import { getDocsFromServer, where, limit, startAfter } from '@/platform/read-model/firestoreReadModel';
+import { getDocsFromServer, where, limit, startAfter } from '@/platform/read-model/firestoreServerReadModel';
 import { resolveExpenseStatisticsPeriod } from '@/features/reporting/statisticsPeriod';
 
 let mockScope = { householdId: 'home', principalUid: 'uid', memberId: 'member', sessionGeneration: 1 };
 jest.mock('@/composition/clientSessionScope', () => ({ requireClientSessionScope: () => mockScope, getClientSessionScope: () => mockScope }));
-jest.mock('@/platform/read-model/firestoreReadModel', () => ({ db: {}, collection: jest.fn((_db, ...path) => path.join('/')), query: jest.fn((...args) => args), where: jest.fn((...args) => args), orderBy: jest.fn(), documentId: jest.fn(), startAfter: jest.fn(), limit: jest.fn(), getDocsFromServer: jest.fn() }));
-jest.mock('@/platform/read-model/firestoreServerReadModel', () => jest.requireMock('@/platform/read-model/firestoreReadModel'));
+jest.mock('@/platform/read-model/firestoreServerReadModel', () => ({ db: {}, collection: jest.fn((_db, ...path) => path.join('/')), query: jest.fn((...args) => args), where: jest.fn((...args) => args), orderBy: jest.fn(), documentId: jest.fn(), startAfter: jest.fn(), limit: jest.fn(), getDocsFromServer: jest.fn() }));
 const read = getDocsFromServer as jest.Mock;
 const doc = (id: string, values: Record<string, unknown>) => ({ id, data: () => values });
 const expense = (id: string, extra = {}) => doc(id, { householdId: 'home', date: '2026-09-01', amount: 0, category: 'food', transactionType: 'expense', ...extra });

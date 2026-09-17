@@ -143,7 +143,7 @@ jobs:
         working-directory: web
         env:
           PERFORMANCE_SAMPLES: '7'
-          PERFORMANCE_PROFILE: 'github-hosted-v1'
+          PERFORMANCE_PROFILE: 'github-hosted-v2'
           PERFORMANCE_USE_EXISTING_BUILD: 'true'
       - if: always()
         uses: actions/upload-artifact@v4
@@ -237,7 +237,7 @@ jobs:
       - uses: reactivecircus/android-emulator-runner@v2
         if: steps.scope.outputs.required == 'true'
         env:
-          PERFORMANCE_PROFILE: 'github-hosted-v1'
+          PERFORMANCE_PROFILE: 'github-hosted-v2'
         with:
           api-level: 34
           arch: x86_64
