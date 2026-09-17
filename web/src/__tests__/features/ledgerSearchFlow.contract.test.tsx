@@ -3,11 +3,13 @@ import SearchModal from '@/components/search/SearchModal';
 import { getDocsFromServer } from '@/platform/read-model/firestoreServerReadModel';
 import { ledgerOptimisticProjection } from '@/features/ledger/application/ledgerOptimisticProjection';
 
+let mockHouseholdKey = 'house-1';
+let mockRemoteReadEpoch = 0;
 jest.mock('@/contexts/HouseholdContext', () => ({
-  useHousehold: () => ({ householdKey: 'house-1', remoteReadEpoch: 0 }),
+  useHousehold: () => ({ householdKey: mockHouseholdKey, remoteReadEpoch: mockRemoteReadEpoch }),
 }));
 jest.mock('@/composition/clientSessionScope', () => ({
-  requireClientSessionScope: () => ({ householdId: 'house-1', memberId: 'member-1', principalUid: 'uid', sessionGeneration: 1 }),
+  requireClientSessionScope: () => ({ householdId: mockHouseholdKey, memberId: 'member-1', principalUid: 'uid', sessionGeneration: mockRemoteReadEpoch + 1 }),
 }));
 jest.mock('@/contexts/CategoryContext', () => ({
   useCategoryContext: () => ({ getCategoryLabel: () => '식비', getCategoryColor: () => '#000000' }),
@@ -44,6 +46,9 @@ const expenseSnapshot = (merchant = '검색 확인 가게', date = '2026-09-09')
 describe('메인 검색 입력부터 실제 결과 표시까지', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockedGetDocs.mockReset();
+    mockHouseholdKey = 'house-1';
+    mockRemoteReadEpoch = 0;
     ledgerOptimisticProjection.reset();
   });
 
@@ -188,12 +193,19 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
     expect(screen.queryByText(/검색 결과가 없습니다/)).not.toBeInTheDocument();
   });
 
-  test('저장 중 편집창을 닫고 검색어를 바꾸면 늦은 저장 완료가 새 검색 결과를 덮어쓰지 않는다', async () => {
+  test.each(['다른 가게', '변경한 메모', ''])('저장 중 검색어를 "%s"로 바꿔도 현재 검색을 유지하며 저장한 새 메모를 검색한다', async (pendingKeyword) => {
     const first = expenseSnapshot('검색 확인 가게').docs[0];
     const second = { ...expenseSnapshot('다른 가게').docs[0], id: 'row-2' };
-    mockedGetDocs.mockResolvedValue({ docs: [first, second] } as Awaited<ReturnType<typeof getDocsFromServer>>);
+    let savedSource = { docs: [first, second] } as Awaited<ReturnType<typeof getDocsFromServer>>;
+    mockedGetDocs.mockImplementation(async () => savedSource);
     let finishSave!: () => void;
-    const onExpenseUpdate = jest.fn(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const onExpenseUpdate = jest.fn(async (_id: string, updates: { memo?: string }) => {
+      await new Promise<void>(resolve => { finishSave = resolve; });
+      savedSource = { docs: [
+        { ...first, data: () => ({ ...first.data() as Record<string, unknown>, ...updates, aggregateVersion: 2 }) },
+        second,
+      ] } as typeof savedSource;
+    });
     render(<SearchModal isOpen onClose={jest.fn()} transactionType="expense" onExpenseUpdate={onExpenseUpdate} />);
     const input = screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요');
     fireEvent.change(input, { target: { value: '검색 확인' } });
@@ -201,16 +213,91 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
     fireEvent.click(screen.getByRole('button', { name: '수정 저장' }));
     expect(onExpenseUpdate).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: '편집 닫기' }));
-    fireEvent.change(input, { target: { value: '다른 가게' } });
-    expect(await screen.findByText('다른 가게')).toBeInTheDocument();
+    fireEvent.change(input, { target: { value: pendingKeyword } });
+    if (pendingKeyword === '다른 가게') {
+      expect(await screen.findByText('다른 가게')).toBeInTheDocument();
+    } else if (pendingKeyword) {
+      expect(await screen.findByText(/검색 결과가 없습니다/)).toBeInTheDocument();
+    }
 
     await act(async () => { finishSave(); });
 
-    expect(screen.getByText('다른 가게')).toBeInTheDocument();
-    expect(screen.getByText('"다른 가게" 검색 결과')).toBeInTheDocument();
-    expect(screen.getByText('1건 · 12,000원')).toBeInTheDocument();
-    expect(screen.queryByText('검색 확인 가게')).not.toBeInTheDocument();
+    expect(input).toHaveValue(pendingKeyword);
+    if (pendingKeyword === '다른 가게') {
+      expect(screen.getByText('다른 가게')).toBeInTheDocument();
+      expect(screen.queryByText('검색 확인 가게')).not.toBeInTheDocument();
+    }
+    fireEvent.change(input, { target: { value: '변경한 메모' } });
+    expect(await screen.findByText('"변경한 메모" 검색 결과')).toBeInTheDocument();
+    const month = screen.getByRole('button', { name: /2026년 9월/ });
+    if (month.getAttribute('aria-expanded') === 'false') fireEvent.click(month);
+    expect(screen.getByText('검색 확인 가게')).toBeInTheDocument();
+    expect(screen.getByText(/2026-09-09 · 변경한 메모/)).toBeInTheDocument();
+    expect(screen.queryByText('다른 가게')).not.toBeInTheDocument();
     expect(screen.queryByText(/검색 결과가 없습니다/)).not.toBeInTheDocument();
-    expect(mockedGetDocs).toHaveBeenCalledTimes(1);
+  });
+
+  test('저장 후 재조회 중 검색어를 바꿔도 새 메모 검색 결과만 표시한다', async () => {
+    const first = expenseSnapshot().docs[0];
+    let savedSource = expenseSnapshot();
+    mockedGetDocs.mockResolvedValueOnce(savedSource);
+    let finishRefresh!: (snapshot: typeof savedSource) => void;
+    mockedGetDocs.mockImplementationOnce(() => new Promise(resolve => { finishRefresh = resolve; }));
+    const onExpenseUpdate = jest.fn(async (_id: string, updates: { memo?: string }) => {
+      savedSource = { docs: [{ ...first, data: () => ({ ...first.data() as Record<string, unknown>, ...updates, aggregateVersion: 2 }) }] } as typeof savedSource;
+    });
+    render(<SearchModal isOpen onClose={jest.fn()} transactionType="expense" onExpenseUpdate={onExpenseUpdate} />);
+    const input = screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요');
+    fireEvent.change(input, { target: { value: '검색 확인' } });
+    fireEvent.click(await screen.findByText('검색 확인 가게'));
+    fireEvent.click(screen.getByRole('button', { name: '수정 저장' }));
+    await waitFor(() => expect(mockedGetDocs).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole('button', { name: '편집 닫기' }));
+    fireEvent.change(input, { target: { value: '변경한 메모' } });
+    await act(async () => { finishRefresh(savedSource); });
+
+    expect(await screen.findByText('"변경한 메모" 검색 결과')).toBeInTheDocument();
+    expect(screen.getByText('검색 확인 가게')).toBeInTheDocument();
+    expect(screen.getByText(/2026-09-09 · 변경한 메모/)).toBeInTheDocument();
+    expect(screen.queryByText('"검색 확인" 검색 결과')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test.each(['닫기', '재열기', '가구 전환', '세션 갱신', '언마운트'])('저장 중 %s 이후 도착한 완료는 종료된 검색 세션이나 새 세션을 갱신하지 않는다', async (transition) => {
+    mockedGetDocs.mockResolvedValue(expenseSnapshot());
+    let finishSave!: () => void;
+    const onExpenseUpdate = jest.fn(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const props = { onClose: jest.fn(), transactionType: 'expense' as const, onExpenseUpdate };
+    const { rerender, unmount } = render(<SearchModal {...props} isOpen />);
+    fireEvent.change(screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요'), { target: { value: '검색 확인' } });
+    fireEvent.click(await screen.findByText('검색 확인 가게'));
+    fireEvent.click(screen.getByRole('button', { name: '수정 저장' }));
+
+    if (transition === '언마운트') {
+      unmount();
+    } else if (transition === '닫기' || transition === '재열기') {
+      rerender(<SearchModal {...props} isOpen={false} />);
+      if (transition === '재열기') rerender(<SearchModal {...props} isOpen />);
+    } else {
+      if (transition === '가구 전환') mockHouseholdKey = 'house-2';
+      mockRemoteReadEpoch += 1;
+      rerender(<SearchModal {...props} isOpen />);
+    }
+    const staysClosed = transition === '닫기' || transition === '언마운트';
+    if (!staysClosed) {
+      fireEvent.change(screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요'), { target: { value: '새 세션 검색어' } });
+      await screen.findByText('"새 세션 검색어"에 대한 검색 결과가 없습니다.');
+    }
+    const readsBeforeCompletion = mockedGetDocs.mock.calls.length;
+    await act(async () => { finishSave(); });
+
+    expect(mockedGetDocs).toHaveBeenCalledTimes(readsBeforeCompletion);
+    expect(screen.queryByText('검색 확인 가게')).not.toBeInTheDocument();
+    if (staysClosed) {
+      expect(screen.queryByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요')).not.toBeInTheDocument();
+    } else {
+      expect(screen.getByText('"새 세션 검색어"에 대한 검색 결과가 없습니다.')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    }
   });
 });
