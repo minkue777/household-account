@@ -14,7 +14,7 @@
 포함 범위:
 
 - 알림 접근·오버레이 권한 상태 확인과 시스템 설정 이동, 알림 표시 권한의 최초 진입 요청
-- WebView 초기화, 고정/환경별 시작 URL, navigation과 뒤로가기
+- WebView 초기화, 고정/환경별 시작 URL, navigation과 뒤로가기, renderer 종료 후 사용자 조작 없는 화면 복구
 - Android Credential Manager 기반 Google 로그인과 WebView의 제한된 인증 세션 교환
 - 허용 origin에 한정된 JavaScript bridge
 - Web localStorage와 Native host 설정의 동기화
@@ -144,7 +144,7 @@ WebView URL·허용 origin은 배포 환경별 versioned 설정으로 고정하�
 | T-QE-007 | 목표 | outbox commit·WorkManager 영속 예약 성공·실패, commit 뒤 예약 전 session purge 경합, 느린 서버 전송 중 다음 접수, process 종료·startup Worker, retryable→success, 앞 retryable과 뒤 명령, conflict·영구 거부·계약 실패, 정확히 72시간 만료, 실패 알림 성공·권한/채널 차단, 암호문·codec 손상 / 일반 Ledger Command의 Android 전달 / commit·예약·Accepted 사이 purge 진입 없음, 서버 왕복 중 다음 로컬 접수 성공, 성공 뒤 화면 종료, 같은 commandId·idempotencyKey FIFO 재시도, terminal·만료는 알림 전까지만 확인 필요 보존하고 알림 성공 뒤 payload 삭제, 손상은 비민감 실패 신호, 다른 actor 전송·Worker 자기 증식 없음 | QE-012, AND-009, AND-011, DEC-067 |
 | T-ANDROID-HOST-001 | 현재 명세 | 정확한·유사 listener component, overlay 권한, QuickEdit on/off / 앱 생성·resume gate / 두 필수 권한일 때만 Web Shell, 누락 권한별 정확한 시스템 설정 action | AND-001, AND-002 |
 | T-WEBVIEW-001 | 현재 명세·기기 검증 보완 | Native 인증의 Firebase custom token 발급, 최초 방문·조회·발급 실패, UID 불일치와 허용하지 않은 origin·redirect·subframe·유사 host / 로그인·bridge 접근 / 동일 UID 로그인과 권한 분리, 부분 성공 금지, Google credential·ID/refresh token 비노출, 외부 origin·subframe 차단 | AND-005, AND-006 |
-| T-WEBVIEW-002 | 목표 | fresh·저장 navigation, production/development 환경, HTTP URL·origin 불일치 / Web Shell 초기화 / 같은 versioned 설정의 허용 HTTPS URL만 fresh에서 한 번 load하고 오설정 빌드 거부 | AND-003 |
+| T-WEBVIEW-002 | 목표·기기 회귀 | fresh·저장 navigation, production/development 환경, HTTP URL·origin 불일치, 전경 renderer crash·배경 종료·연속 종료 / Web Shell 초기화·복구 / 허용 HTTPS URL만 WebView당 한 번 load하고 오설정 빌드 거부, renderer 종료 시 같은 Activity를 유지하며 마지막 허용 URL·bridge·쿠키를 새 WebView에서 자동 복구, 배경은 전경 복귀까지 생성을 미루며 추가 버튼 없음 | AND-003, AND-005, AND-006 |
 | T-WEBVIEW-003 | 현재 명세 | 권한 guide, Web Shell history 있음·없음 / 뒤로가기 / Web history 또는 Activity 기본 동작으로 위임 | AND-004 |
 | T-WEBVIEW-004 | 현재 명세 | Android 재실행의 영속 Web Auth·Membership+Household metadata cache hit/miss, Web Auth `null`, 같은/다른 UID token, Native 교환 성공·실패·무응답·`UNAUTHENTICATED`, Household refresh 동일·변경·실패, Firestore 최초 cache/server snapshot, transient/permission-denied listener 오류, 원장↔자산 재진입·월 변경 / 세션과 화면 복원 / 같은 UID hit은 가구 metadata 즉시 표시와 업무 구독을 시작하고 miss·권한 거부만 Membership을 권위 해석한다. Household 실제 차이만 반영하고 원장·카테고리·지역화폐는 서버 snapshot부터 표시하며 내부 route에서 구독을 유지한다. 권한·UID 불일치는 scope를 폐기하고 Android Firestore는 memory cache에서 서버로 수렴한다. | AND-005, AND-012, DEC-068 |
 | T-ANDROID-VERSION-001 | 현재 명세 | 정상 versionName·값 부재·package 조회 실패 / 버전 표시 / 계약 문자열 또는 알 수 없음 | AND-007 |

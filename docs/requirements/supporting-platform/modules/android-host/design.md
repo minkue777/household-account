@@ -70,7 +70,7 @@ sealed interface BridgeResultV1 {
 
 Bridge 호출은 현재 top-level document의 실제 origin이 `AllowedWebOriginPolicy`에 포함될 때만 처리한다. origin 변경, redirect, subframe, 불명확한 origin은 `Rejected(ORIGIN_NOT_ALLOWED)`다. 가구 키는 호환 입력으로만 받고 인증 증명으로 사용하지 않는다.
 
-Bridge 작업은 Activity lifecycle scope에 속하며 응답 직전에 취소 여부를 확인한다. Activity 종료 중 인증 Adapter가 취소를 실패 결과로 변환하더라도 해제된 WebView에 응답하지 않는다.
+Bridge 작업은 Activity lifecycle에 연결된 WebView별 coroutine scope에 속하며 응답 직전에 취소 여부와 현재 WebView 일치를 확인한다. Activity 종료 또는 renderer 교체 때 해당 scope를 취소한다. 인증 Adapter가 취소를 실패 결과로 변환하더라도 해제된 WebView에 응답하지 않는다.
 
 Google 로그인 UI는 embedded WebView에서 실행하지 않습니다. 실제 `NativeAuthCoordinator`가 Credential Manager와 Firebase Auth를 사용합니다. `createWebViewSessionToken` callable은 Native App Check와 Firebase Auth를 검증하고, 인증 UID의 Membership을 권위 해석한 뒤 Web·Native용 custom token을 발급합니다. caller가 보낸 householdId·memberId·status와 사용자별 view projection은 Membership 증거로 신뢰하지 않습니다. canonical Membership·Member의 존재, active 상태와 Principal/가구/멤버 일치를 확인하며 여러 active view나 불일치는 typed invariant 오류로 거부합니다. 최초 방문자는 가구 생성·참여로 안내할 수 있도록 가구 권한 claim 없이 로그인합니다.
 
@@ -110,7 +110,7 @@ QuickEdit Controller가 소비하는 서버 Port:
 | 모델·Policy | 불변식 |
 |---|---|
 | `HostCapabilitySnapshot` | 알림 접근, overlay, 알림 표시 권한을 각각 판정한다. component 비교는 정확한 `ComponentName`으로 한다. |
-| `WebShellState` | 한 Activity lifecycle에서 시작 URL을 중복 load하지 않는다. 권한 안내 화면에서는 Web history를 소비하지 않는다. `onDestroy`에서 메시지 listener 제거·로딩 중지·View 분리·WebView 해제를 수행하여 이전 문서의 연결을 남기지 않는다. `onPause/onStop`에서는 문서를 유지하며 재생성은 저장된 navigation을 새 WebView에 복원한다. |
+| `WebShellState` | 각 WebView에서 시작 URL을 중복 load하지 않는다. 권한 안내 화면에서는 Web history를 소비하지 않는다. `onDestroy`에서 메시지 listener 제거·로딩 중지·View 분리·WebView 해제를 수행하여 이전 문서의 연결을 남기지 않는다. `onPause/onStop`에서는 정상 문서를 유지하며 Activity 재생성은 저장된 navigation을 새 WebView에 복원한다. renderer 종료 시 손상된 WebView 참조와 bridge 작업을 해제하고 새 WebView에 마지막 허용 URL을 복원한다. 배경 종료는 다음 전경 복귀 때 자동 복구한다. |
 | `AllowedWebOriginPolicy` | scheme, host, 유효 port가 모두 일치해야 한다. path 문자열 prefix로 origin을 판정하지 않는다. |
 | `SessionMirror` | schemaVersion·sessionGeneration·householdId·memberId·sourceVersion·updatedAt을 Android Keystore 기반 암호화 저장소의 한 snapshot으로 저장한다. sessionGeneration은 actor scope를 교체할 때마다 새 값으로 발급하고 household/member와 함께 원자 교체한다. 일부 갱신과 표시 이름 key를 허용하지 않으며 key는 export·backup하지 않는다. |
 | `SessionTransitionJournal` | Queue purge 시작 전 이전·목표 generation만 보호 저장하고 mirror commit 뒤 제거한다. purge 뒤 commit 전 중단 흔적은 재시작 시 mirror를 비워 어떤 Actor의 수집도 시작하지 않는 fail-closed 상태로 복구한다. |
@@ -150,6 +150,7 @@ Client 검증은 즉시 피드백용이다. Ledger가 같은 불변식과 원자
 9. Native→Web 인증 교환에는 60초, fallback Membership 복원과 최초 가계부 Read Contract에는 각각 20초 deadline을 적용한다. cache 없이 deadline을 넘기면 loading을 유지하지 않고 안정적인 오류 code와 재시도 action을 반환한다. cache 화면이 이미 열렸다면 일시적인 Native 교환 실패만 UI 차단으로 승격하지 않는다.
 10. 같은 로그인 세대의 월 원장·자산 query snapshot은 낙관적 변경 합성과 route 재진입을 위한 메모리 projection에만 남긴다. 앱 첫 실행의 월 원장 base는 항상 서버 snapshot으로 시작하고, 자산 query는 권위 인증이 확인된 뒤 idle callback에서 미리 시작한다. 세션 전환은 retained projection 전체를 초기화한다. 숨겨진 모달·차트·검색 컴포넌트는 실제 열릴 때 동적 로드한다.
 11. AND-012에 따라 navigation HTML은 Service Worker가 캐시하지 않는다. 새 Service Worker controller가 활성화되면 현재 runtime을 한 번 갱신한다. 정적 asset 캐시와 Firebase Auth 로그인 저장소는 이 정책과 별개이다.
+12. `onRenderProcessGone`은 처리 완료를 반환하여 renderer 종료가 앱 전체 종료로 이어지지 않게 한다. 손상된 WebView에는 메시지·로딩 중지·상태 저장을 요청하지 않고 참조 해제·View 분리·destroy만 수행한다. 전경에서는 마지막으로 확인한 허용 URL을 새 WebView로 자동 복구하고 배경에서는 `onResume`까지 생성을 미룬다. 첫 복구는 즉시 수행하고 반복 종료는 재생성 간격만 최소 1초로 제한한다. 별도 안내 화면이나 재시도 버튼을 추가하지 않는다. 로그인 쿠키·Web Auth 저장소·캐시는 삭제하지 않으며 renderer 메모리의 미저장 입력까지 복구된다고 보장하지 않는다. 정상 초기화의 권한 요청·캡처 재전송 예약은 Activity당 한 번만 실행한다.
 
 단발 bulk 조회인 전체 기간 검색과 자산 이력 통계는 `firestoreServerReadModel.ts`의 Firestore Lite를 사용합니다. 같은 FirebaseApp의 Auth와 Firestore Rules를 공유하되 REST 조회가 realtime SDK의 IndexedDB 쓰기를 기다리지 않도록 분리합니다. 일반 브라우저의 persistent listener, 모바일 memory listener, iPhone PWA long-polling과 각 기능의 session/cache 무효화 정책은 바꾸지 않습니다. Full/Lite Query·DocumentReference·cursor는 서로 섞지 않으며, 화면 mapping에는 각 경계가 반환한 `id`와 `data()`만 사용합니다.
 

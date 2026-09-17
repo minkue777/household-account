@@ -10,6 +10,7 @@ import android.provider.Settings
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
+import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -36,6 +37,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import androidx.lifecycle.Lifecycle
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.json.JSONTokener
@@ -254,10 +257,189 @@ class MainActivityInstrumentationTest {
         }
     }
 
-    private fun loadLifecycleDocument(scenario: ActivityScenario<MainActivity>) {
+    @Test
+    fun foregroundRendererCrashKeepsActivityAndRestoresTrustedPageAndCookie() {
+        assumeRendererTerminationSupported()
+        grantMandatoryPermissions()
+        waitUntil("필수 권한 허용") {
+            Settings.canDrawOverlays(context) && isNotificationListenerEnabled()
+        }
+        val recoveryUrl = "${TrustedWebOrigin.APP_ORIGIN}/native-test/renderer-recovery"
+        val cookieName = "native_renderer_recovery_test"
+        setRecoveryCookie("$cookieName=preserved; Path=/; SameSite=Lax")
+        try {
+            withObservedWebViewLifecycle { scenario ->
+                loadLifecycleDocument(scenario, recoveryUrl)
+                lateinit var originalActivity: MainActivity
+                lateinit var original: LifecycleObservedWebView
+                scenario.onActivity { activity ->
+                    originalActivity = activity
+                    original = activity.findViewById(R.id.webView)
+                }
+
+                InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                    original.loadUrl("chrome://crash")
+                }
+                waitUntil("전경 renderer 종료 후 새 WebView 복구", 10_000) {
+                    var restored = false
+                    scenario.onActivity { activity ->
+                        assertSame(originalActivity, activity)
+                        assertFalse(activity.isFinishing)
+                        val replacement = activity.findViewById<WebView>(R.id.webView)
+                        restored = replacement != null && replacement !== original &&
+                            (replacement.url == recoveryUrl || replacement.originalUrl == recoveryUrl)
+                    }
+                    restored
+                }
+                scenario.onActivity { activity ->
+                    assertNull(original.parent)
+                    assertEquals(1, original.destroyCalls)
+                    assertTrue(original.wasDetachedAtDestroy)
+                    assertEquals(View.VISIBLE, activity.findViewById<WebView>(R.id.webView).visibility)
+                }
+                // A local document exercises the new real renderer/production bridge without
+                // depending on the remote site's response to the restored navigation request.
+                loadLifecycleDocument(scenario, recoveryUrl)
+                assertEquals(BuildConfig.VERSION_NAME, evaluateWebViewText(scenario, "window.bridgeVersion"))
+                assertTrue(evaluateWebViewText(scenario, "document.cookie")?.contains("$cookieName=preserved") == true)
+            }
+        } finally {
+            setRecoveryCookie("$cookieName=; Max-Age=0; Path=/; SameSite=Lax")
+        }
+    }
+
+    @Test
+    fun backgroundRendererTerminationDefersReplacementUntilTheSameActivityResumes() {
+        assumeRendererTerminationSupported()
+        grantMandatoryPermissions()
+        waitUntil("필수 권한 허용") {
+            Settings.canDrawOverlays(context) && isNotificationListenerEnabled()
+        }
+        withObservedWebViewLifecycle { scenario ->
+            loadLifecycleDocument(scenario)
+            lateinit var originalActivity: MainActivity
+            lateinit var original: LifecycleObservedWebView
+            scenario.onActivity { activity ->
+                originalActivity = activity
+                original = activity.findViewById(R.id.webView)
+            }
+            scenario.moveToState(Lifecycle.State.CREATED)
+
+            terminateRenderer(original)
+            waitUntil("배경 renderer 종료 후 손상된 WebView 해제", 10_000) {
+                var released = false
+                InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                    released = original.destroyCalls == 1
+                }
+                released
+            }
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                assertFalse(originalActivity.isFinishing)
+                assertFalse(originalActivity.isDestroyed)
+                assertNull(original.parent)
+                assertNull(originalActivity.findViewById<WebView>(R.id.webView))
+            }
+            assertEquals(Lifecycle.State.CREATED, scenario.state)
+
+            scenario.moveToState(Lifecycle.State.RESUMED)
+            waitUntil("전경 복귀 시 WebView 복구", 10_000) {
+                var restored = false
+                scenario.onActivity { activity ->
+                    assertSame(originalActivity, activity)
+                    val replacement = activity.findViewById<WebView>(R.id.webView)
+                    restored = replacement != null && replacement !== original && replacement.visibility == View.VISIBLE
+                }
+                restored
+            }
+            loadLifecycleDocument(scenario)
+            assertEquals(BuildConfig.VERSION_NAME, evaluateWebViewText(scenario, "window.bridgeVersion"))
+        }
+    }
+
+    @Test
+    fun repeatedRendererTerminationAutomaticallyRestoresTheSameActivityWithoutUserAction() {
+        assumeRendererTerminationSupported()
+        grantMandatoryPermissions()
+        waitUntil("필수 권한 허용") {
+            Settings.canDrawOverlays(context) && isNotificationListenerEnabled()
+        }
+        withObservedWebViewLifecycle { scenario ->
+            loadLifecycleDocument(scenario)
+            lateinit var originalActivity: MainActivity
+            lateinit var original: WebView
+            scenario.onActivity { activity ->
+                originalActivity = activity
+                original = activity.findViewById(R.id.webView)
+            }
+            terminateRenderer(original)
+            lateinit var recovered: WebView
+            waitUntil("첫 renderer 종료의 자동 복구", 10_000) {
+                var restored = false
+                scenario.onActivity { activity ->
+                    val replacement = activity.findViewById<WebView>(R.id.webView)
+                    if (replacement != null && replacement !== original) {
+                        recovered = replacement
+                        restored = true
+                    }
+                }
+                restored
+            }
+            loadLifecycleDocument(scenario)
+
+            terminateRenderer(recovered)
+            // Recovery must continue without any click, Activity recreation, or resume action.
+            waitUntil("연속 renderer 종료 후 사용자 조작 없이 자동 복구", 10_000) {
+                var restored = false
+                scenario.onActivity { activity ->
+                    assertSame(originalActivity, activity)
+                    assertFalse(activity.isFinishing)
+                    val replacement = activity.findViewById<WebView>(R.id.webView)
+                    restored = replacement != null && replacement !== recovered &&
+                        replacement !== original && replacement.visibility == View.VISIBLE
+                }
+                restored
+            }
+            scenario.onActivity { assertNull(recovered.parent) }
+            loadLifecycleDocument(scenario)
+            assertEquals(BuildConfig.VERSION_NAME, evaluateWebViewText(scenario, "window.bridgeVersion"))
+        }
+    }
+
+    private fun assumeRendererTerminationSupported() {
+        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.GET_WEB_VIEW_RENDERER))
+        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_VIEW_RENDERER_TERMINATE))
+    }
+
+    /** Trigger the actual renderer process exit; never call the production callback ourselves. */
+    private fun terminateRenderer(webView: WebView) {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val renderer = WebViewCompat.getWebViewRenderProcess(webView)
+            assertTrue("Loaded WebView must have a separate renderer", renderer != null)
+            assertTrue("Actual WebView renderer termination must be accepted", renderer!!.terminate())
+        }
+    }
+
+    private fun setRecoveryCookie(cookie: String) {
+        val finished = CountDownLatch(1)
+        val accepted = AtomicBoolean(false)
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            CookieManager.getInstance().setCookie("${TrustedWebOrigin.APP_ORIGIN}/", cookie) {
+                accepted.set(it)
+                finished.countDown()
+            }
+        }
+        assertTrue("Test cookie write timed out", finished.await(3, TimeUnit.SECONDS))
+        assertTrue("Test cookie write must succeed", accepted.get())
+        CookieManager.getInstance().flush()
+    }
+
+    private fun loadLifecycleDocument(
+        scenario: ActivityScenario<MainActivity>,
+        url: String = "${TrustedWebOrigin.APP_ORIGIN}/native-test/lifecycle"
+    ) {
         scenario.onActivity { activity ->
             activity.findViewById<WebView>(R.id.webView).loadDataWithBaseURL(
-                "${TrustedWebOrigin.APP_ORIGIN}/native-test/lifecycle",
+                url,
                 """<!doctype html><html><body>Lifecycle document<script>
                     window.resumeEvents = 0;
                     window.addEventListener('household-account:android-resume', function() { window.resumeEvents++; });
@@ -268,11 +450,11 @@ class MainActivityInstrumentationTest {
                     HouseholdNativeBridge.postMessage(JSON.stringify({contractVersion:'android-bridge.v1',
                       requestId:'lifecycle-version',operation:'app.get-version',payload:{}}));
                 </script></body></html>""".trimIndent(),
-                "text/html", "UTF-8", null
+                "text/html", "UTF-8", url
             )
         }
         waitUntil("실제 WebView 문서와 Native bridge 준비") {
-            evaluateWebViewText(scenario, "window.bridgeVersion") == BuildConfig.VERSION_NAME
+            evaluateWebViewText(scenario, "document.readyState === 'complete' && window.bridgeVersion") == BuildConfig.VERSION_NAME
         }
     }
 
