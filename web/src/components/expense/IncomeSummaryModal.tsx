@@ -6,6 +6,7 @@ import Portal from '@/components/common/Portal';
 import { Expense } from '@/types/expense';
 import { getLedgerPrimaryText, getLedgerSecondaryText } from '@/lib/utils/ledgerDisplay';
 import ExpenseEditModal from './ExpenseEditModal';
+import { useExpenseEditor } from './hooks/useExpenseEditor';
 
 type IncomeSummaryMode = 'monthly' | 'yearly';
 
@@ -49,7 +50,7 @@ export default function IncomeSummaryModal({
   onExpenseUpdate,
   onDelete,
 }: IncomeSummaryModalProps) {
-  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const { expense: selectedExpense, selectExpense: setSelectedExpense, editorKey } = useExpenseEditor();
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
 
   const sortedExpenses = useMemo(() => [...expenses].sort(compareExpenses), [expenses]);
@@ -96,7 +97,7 @@ export default function IncomeSummaryModal({
     }
 
     setExpandedMonth(null);
-  }, [groupedExpenses, isOpen, mode]);
+  }, [groupedExpenses, isOpen, mode, setSelectedExpense]);
 
   const handleSaveEdit = async (updates: {
     amount?: number;
@@ -118,7 +119,6 @@ export default function IncomeSummaryModal({
     }
 
     await onDelete(selectedExpense.id);
-    setSelectedExpense(null);
   };
 
   const renderExpenseRow = (expense: Expense) => {
@@ -226,6 +226,7 @@ export default function IncomeSummaryModal({
 
       {selectedExpense && (
         <ExpenseEditModal
+          key={editorKey}
           expense={selectedExpense}
           isOpen={!!selectedExpense}
           onClose={() => setSelectedExpense(null)}

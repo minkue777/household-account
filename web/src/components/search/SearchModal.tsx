@@ -11,6 +11,7 @@ import {
 } from '@/lib/utils/monthlySplitActions';
 import Portal from '../common/Portal';
 import { ExpenseEditModal, ExpenseSplitModal } from '../expense';
+import { useExpenseEditor } from '../expense/hooks/useExpenseEditor';
 import SearchResultList from './SearchResultList';
 import { useAppDialog } from '@/contexts/AppDialogContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
@@ -56,7 +57,7 @@ export default function SearchModal({
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
   const searchSessionRef = useRef<ExpenseSearchSession | null>(null);
-  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const { expense: selectedExpense, selectExpense: setSelectedExpense, editorKey } = useExpenseEditor();
   const [splitExpense, setSplitExpense] = useState<Expense | null>(null);
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -90,7 +91,7 @@ export default function SearchModal({
     setResults([]);
     setSelectedExpense(null);
     setSplitExpense(null);
-  }, [householdKey, remoteReadEpoch]);
+  }, [householdKey, remoteReadEpoch, setSelectedExpense]);
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
@@ -108,7 +109,7 @@ export default function SearchModal({
     setSelectedExpense(null);
     setSplitExpense(null);
     setExpandedMonth(null);
-  }, [isOpen]);
+  }, [isOpen, setSelectedExpense]);
 
   const refreshSearch = async (session: ExpenseSearchSession | null) => {
     if (!session || searchSessionRef.current !== session) return;
@@ -330,6 +331,7 @@ export default function SearchModal({
 
       {selectedExpense && (
         <ExpenseEditModal
+          key={editorKey}
           expense={selectedExpense}
           isOpen={!!selectedExpense}
           onClose={() => setSelectedExpense(null)}

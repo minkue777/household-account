@@ -373,6 +373,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
 
       {isIncome && incomeSummaryMode && (
         <IncomeSummaryModal
+          key={householdKey}
           isOpen={true}
           mode={incomeSummaryMode}
           expenses={incomeSummaryMode === 'monthly' ? expenses : yearlyExpenses}

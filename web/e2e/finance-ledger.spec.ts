@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Request, type Route } from '@playwright/test';
 import { executeHouseholdCommand, readExpenseDocuments, readFirestoreCollection, resetTestAccount, signInTestAccount } from './emulator';
 import { addCategoryThroughUi, addExpenseThroughUi, createFinanceHousehold, documentId, findExpense, integerField, openAddTransaction, openExpenseEdit, seoulDate, textField } from './finance-helpers';
 
@@ -28,6 +28,80 @@ test('[LED-002][LED-004][LED-005][CAT-002] 사용자 카테고리로 등록하�
   await dialog.getByRole('button', { name: '식비', exact: true }).click();
   await dialog.getByRole('button', { name: '저장', exact: true }).click();
   await expect.poll(async () => (await findExpense(request, id))?.fields).toMatchObject({ category: { stringValue: 'food' }, memo: { stringValue: '메모만 추가' }, amount: { integerValue: '7300' } });
+});
+
+test('[T-LED-008][LED-001][LED-005] 메모·카테고리 저장은 서버 응답 전에 편집창을 닫고 목록에 반영한다', async ({ page, request }) => {
+  await createFinanceHousehold(page, request);
+  const expense = await addExpenseThroughUi(page, request, {
+    merchant: '즉시 편집 거래', amount: 7300, category: '식비', memo: '변경 전 메모',
+  });
+  const id = documentId(expense);
+  const endpoint = '**/executeHouseholdCommand';
+  const isTargetUpdate = (browserRequest: Request): boolean => {
+    if (browserRequest.method() !== 'POST'
+      || !new URL(browserRequest.url()).pathname.endsWith('/executeHouseholdCommand')) return false;
+    const envelope = browserRequest.postDataJSON()?.data;
+    return envelope?.command === 'ledger.update-transaction.v1'
+      && envelope.payload?.transactionId === id;
+  };
+
+  for (const field of ['memo', 'category'] as const) {
+    await test.step(`${field}: 실제 Command를 보류한 상태의 화면과 해제 후 저장 결과`, async () => {
+      const before = (await findExpense(request, id))!;
+      const patch = field === 'memo' ? { memo: '바로 보이는 메모' } : { categoryId: 'living' };
+      const expected = field === 'memo'
+        ? { memo: { stringValue: '바로 보이는 메모' } }
+        : { category: { stringValue: 'living' } };
+      const dialog = await openExpenseEdit(page, id);
+      if (field === 'memo') await dialog.getByPlaceholder('메모를 입력하세요').fill('바로 보이는 메모');
+      else await dialog.getByRole('button', { name: '생활', exact: true }).click();
+
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => { release = resolve; });
+      let heldPayload: unknown;
+      const holdUpdate = async (route: Route) => {
+        if (!isTargetUpdate(route.request())) {
+          await route.continue();
+          return;
+        }
+        heldPayload = route.request().postDataJSON().data.payload;
+        // 응답을 흉내 내지 않고 실제 서버 요청만 잠시 보류합니다.
+        await gate;
+        await route.continue();
+      };
+      await page.route(endpoint, holdUpdate);
+      try {
+        await dialog.getByRole('button', { name: '저장', exact: true }).click();
+        await expect.poll(() => heldPayload).toMatchObject({
+          transactionId: id, expectedVersion: integerField(before, 'aggregateVersion'), patch,
+        });
+        await expect(dialog).toHaveCount(0);
+        const row = page.getByTestId('expense-item').filter({ hasText: '즉시 편집 거래' });
+        await expect(row).toContainText('바로 보이는 메모');
+        if (field === 'category') await expect(row.getByText('생활', { exact: true })).toBeVisible();
+        // 아직 서버에는 이전 값만 있어야 낙관적 화면 반영을 입증할 수 있습니다.
+        expect((await findExpense(request, id))?.fields).toEqual(before.fields);
+      } finally {
+        try {
+          if (heldPayload !== undefined) {
+            const response = page.waitForResponse(candidate => isTargetUpdate(candidate.request()));
+            release();
+            await (await response).finished();
+          } else {
+            release();
+          }
+        } finally {
+          release();
+          await page.unroute(endpoint, holdUpdate);
+        }
+      }
+      await expect.poll(async () => (await findExpense(request, id))?.fields).toMatchObject({
+        ...expected,
+        amount: { integerValue: '7300' },
+        aggregateVersion: { integerValue: String(integerField(before, 'aggregateVersion') + 1) },
+      });
+    });
+  }
 });
 
 test('[LED-002][LED-005] 필수 입력을 검증하고 금액·가맹점·날짜 수정과 논리 삭제가 검색·월 합계에 수렴한다', async ({ page, request }) => {

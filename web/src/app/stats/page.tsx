@@ -8,6 +8,7 @@ import MonthlyTrendChart from '@/components/MonthlyTrendChart';
 import PeriodSelector, { PeriodPreset } from '@/components/stats/PeriodSelector';
 import CategoryExpenseModal from '@/components/stats/CategoryExpenseModal';
 import ExpenseEditModal from '@/components/expense/ExpenseEditModal';
+import { useExpenseEditor } from '@/components/expense/hooks/useExpenseEditor';
 import { Expense, Category } from '@/types/expense';
 import { updateExpense, deleteExpense } from '@/lib/expenseService';
 import { loadExpenseStatistics, peekExpenseStatistics, type ExpenseStatisticsQuery } from '@/platform/reporting/expenseStatisticsCache';
@@ -31,7 +32,7 @@ export default function StatsPage() {
   const lastQueryRevision = useRef(0);
   const [queryRevision, setQueryRevision] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const { expense: editingExpense, selectExpense: setEditingExpense, editorKey } = useExpenseEditor();
   const [modalScope, setModalScope] = useState('');
 
   const { activeCategories } = useCategoryContext();
@@ -69,7 +70,7 @@ export default function StatsPage() {
   const modalKey = JSON.stringify([actorKey, householdKey, currentMember?.id, isSessionVerified, remoteReadEpoch, startDate, endDate, periodError]);
   const canShowModals = !!query && modalScope === modalKey;
 
-  useEffect(() => { setEditingExpense(null); setSelectedCategory(null); }, [modalKey]);
+  useEffect(() => { setEditingExpense(null); setSelectedCategory(null); }, [modalKey, setEditingExpense]);
 
   useEffect(() => {
     if (!hasCurrentCategoryCatalog) return;
@@ -93,17 +94,13 @@ export default function StatsPage() {
 
   const handleSaveEdit = async (expense: Expense, updates: ExpenseUpdates, rememberForNextTime = false) => {
     // Successful ledger commands already update the shared statistics revision.
-    await updateExpense(expense.id, updates, expense.aggregateVersion, rememberForNextTime);
-    if (expenseStatisticsActorKey(getClientSessionScope()) !== actorKey) return;
-    setEditingExpense(null);
     setSelectedCategory(null);
+    await updateExpense(expense.id, updates, expense.aggregateVersion, rememberForNextTime);
   };
 
   const handleDeleteExpense = async (expense: Expense) => {
-    await deleteExpense(expense.id, expense.aggregateVersion);
-    if (expenseStatisticsActorKey(getClientSessionScope()) !== actorKey) return;
-    setEditingExpense(null);
     setSelectedCategory(null);
+    await deleteExpense(expense.id, expense.aggregateVersion);
   };
 
   useEffect(() => {
@@ -249,6 +246,7 @@ export default function StatsPage() {
 
       {canShowModals && editingExpense ? (
         <ExpenseEditModal
+          key={editorKey}
           expense={editingExpense}
           isOpen={!!editingExpense}
           onClose={() => setEditingExpense(null)}

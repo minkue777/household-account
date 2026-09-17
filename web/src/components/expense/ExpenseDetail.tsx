@@ -11,6 +11,7 @@ import {
 } from '@/lib/utils/monthlySplitActions';
 import ExpenseItem from './ExpenseItem';
 import ExpenseEditModal from './ExpenseEditModal';
+import { useExpenseEditor } from './hooks/useExpenseEditor';
 import ExpenseSplitModal from './ExpenseSplitModal';
 import { useDragAndDrop } from './hooks/useDragAndDrop';
 import { useAppDialog } from '@/contexts/AppDialogContext';
@@ -57,7 +58,7 @@ export default function ExpenseDetail({
   const transactionLabel = transactionType === 'income' ? '수입' : '지출';
   // A pending date change or deletion can remove the row from this day's source.
   // Keep the selected transaction until the editor explicitly closes.
-  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const { expense: editingExpense, selectExpense: setEditingExpense, editorKey } = useExpenseEditor();
   const [splittingExpenseId, setSplittingExpenseId] = useState<string | null>(null);
   const handleMergeError = useCallback((error: unknown) => {
     const detail = error instanceof Error && error.message.trim() !== ''
@@ -99,7 +100,7 @@ export default function ExpenseDetail({
     setSplittingExpenseId(null);
     setEditingExpense(autoEditExpense);
     onAutoEditHandled?.();
-  }, [autoEditExpenseId, editingExpense, expenses, onAutoEditHandled]);
+  }, [autoEditExpenseId, editingExpense, expenses, onAutoEditHandled, setEditingExpense]);
 
   useEffect(() => {
     if (splittingExpenseId && !splittingExpense) {
@@ -191,6 +192,7 @@ export default function ExpenseDetail({
 
       {editingExpense && (
         <ExpenseEditModal
+          key={editorKey}
           expense={editingExpense}
           isOpen
           onClose={() => setEditingExpense(null)}

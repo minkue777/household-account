@@ -90,7 +90,7 @@ it('distinguishes observed zero, NoData and source failure and advances revision
   await screen.findByText('데이터 없음');
 });
 
-it.each(['delete', 'save'] as const)('STAT-004 actual %s failure preserves the period, category detail and unsaved draft until retry succeeds', async command => {
+it.each(['delete', 'save'] as const)('STAT-004 actual %s failure preserves the period and restores the unsaved draft until retry succeeds', async command => {
   read.mockResolvedValue([{ ...row, amount: 10 }]);
   let rejectCommand!: (error: Error) => void;
   const commandMock = command === 'delete' ? jest.mocked(deleteExpense) : jest.mocked(updateExpense);
@@ -98,7 +98,7 @@ it.each(['delete', 'save'] as const)('STAT-004 actual %s failure preserves the p
   commandMock.mockImplementationOnce(confirmMutation);
   render(<StatsPage />);
   fireEvent.click(screen.getByRole('button', { name: '3개월' }));
-  const editor = await openEditor();
+  let editor = await openEditor();
   fireEvent.change(within(editor).getByPlaceholderText('메모를 입력하세요'), { target: { value: '실패해도 보존할 메모' } });
   fireEvent.change(within(editor).getByDisplayValue('10'), { target: { value: '27' } });
   const submit = () => {
@@ -112,15 +112,19 @@ it.each(['delete', 'save'] as const)('STAT-004 actual %s failure preserves the p
   const initialReadCount = read.mock.calls.length;
   const selectedRange = resolveExpenseStatisticsPeriod('3months', '', '');
   submit();
-  expect(editor).toBeInTheDocument();
-  expect(within(editor).getByDisplayValue('실패해도 보존할 메모')).toBeInTheDocument();
+  if (command === 'save') {
+    expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
+  } else {
+    expect(editor).toBeInTheDocument();
+    expect(within(editor).getByDisplayValue('실패해도 보존할 메모')).toBeInTheDocument();
+  }
   expect(read).toHaveBeenCalledTimes(initialReadCount);
   await act(async () => rejectCommand(new Error('permission-denied')));
   await waitFor(() => expect(mockShowAlert).toHaveBeenCalledWith(expect.stringContaining('permission-denied'), expect.stringContaining('실패')));
-  expect(screen.getByRole('dialog', { name: '지출 수정' })).toBe(editor);
+  editor = screen.getByRole('dialog', { name: '지출 수정' });
   expect(within(editor).getByDisplayValue('27')).toBeInTheDocument();
   expect(within(editor).getByDisplayValue('실패해도 보존할 메모')).toBeInTheDocument();
-  expect(screen.getByText('1건 · 10원')).toBeInTheDocument();
+  expect(screen.getByTestId('donut-source')).toHaveTextContent('food:10');
   expect(read).toHaveBeenCalledTimes(initialReadCount);
   submit();
   await waitFor(() => expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument());
@@ -169,7 +173,8 @@ it.each(['memo', 'category'] as const)('confirmed %s edits update the visible st
     aggregateVersion: 2, lifecycleState: 'active', localTime: '12:00',
     cardType: 'manual', cardDisplay: '수동', creatorMemberId: 'member',
   };
-  mockExecuteLedger.mockResolvedValue(confirmed);
+  let finishCommand!: (result: LedgerTransactionCommandResult) => void;
+  mockExecuteLedger.mockImplementationOnce(() => new Promise(resolve => { finishCommand = resolve; }));
   jest.mocked(updateExpense).mockImplementation(async (id, changes, version, remember) => {
     await ledgerCommands.update('house-1', id, version, changes, remember);
   });
@@ -181,7 +186,12 @@ it.each(['memo', 'category'] as const)('confirmed %s edits update the visible st
     fireEvent.click(within(editor).getByRole('button', { name: 'li' }));
   }
   fireEvent.click(within(editor).getByRole('button', { name: '저장' }));
-  await waitFor(() => expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument());
+  expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
+  await waitFor(() => expect(mockExecuteLedger).toHaveBeenCalledTimes(1));
+  // Hiding the editor is immediate. Confirmed statistics and the next expected
+  // version must be observed after the command boundary actually completes.
+  expect(screen.getByTestId('donut-source')).toHaveTextContent('food:10');
+  await act(async () => finishCommand(confirmed));
   expect(read).toHaveBeenCalledTimes(1);
   expect(screen.getByTestId('donut-source')).toHaveTextContent(`${confirmed.categoryId}:10`);
   const nextEditor = await openEditor();
@@ -190,9 +200,44 @@ it.each(['memo', 'category'] as const)('confirmed %s edits update the visible st
   mockExecuteLedger.mockResolvedValue({ ...confirmed, memo: '다음 수정', aggregateVersion: 3 });
   fireEvent.click(within(nextEditor).getByRole('button', { name: '저장' }));
   await waitFor(() => expect(updateExpense).toHaveBeenLastCalledWith('a', { memo: '다음 수정' }, 2, false));
+  await waitFor(() => expect(mockExecuteLedger).toHaveBeenCalledTimes(2));
+  await act(async () => { await jest.mocked(updateExpense).mock.results.at(-1)!.value; });
   expect(read).toHaveBeenCalledTimes(1);
   fireEvent.focus(window);
   await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+});
+
+it.each(['success', 'failure'] as const)('a late %s from transaction A does not close transaction B or discard its draft', async outcome => {
+  mockCategories = [category('food', 500)];
+  read.mockResolvedValue([{ ...row, amount: 10 }, { ...row, id: 'b', merchant: '둘째 거래', amount: 20 }]);
+  let finishSave!: () => void;
+  let rejectSave!: (error: Error) => void;
+  jest.mocked(updateExpense).mockImplementationOnce(() => new Promise<void>((resolve, reject) => {
+    finishSave = resolve;
+    rejectSave = reject;
+  }));
+  render(<StatsPage />);
+  const firstEditor = await openEditor();
+  fireEvent.change(within(firstEditor).getByPlaceholderText('메모를 입력하세요'), { target: { value: '첫 거래 저장' } });
+  fireEvent.click(within(firstEditor).getByRole('button', { name: '저장' }));
+  expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByText('상세'));
+  fireEvent.click(screen.getByText('둘째 거래'));
+  const secondEditor = screen.getByRole('dialog', { name: '지출 수정' });
+  fireEvent.change(within(secondEditor).getByPlaceholderText('메모를 입력하세요'), { target: { value: '두번째 거래 작성 중' } });
+  await act(async () => {
+    if (outcome === 'success') finishSave();
+    else rejectSave(new Error('LATE_SAVE_FAILURE'));
+    await jest.mocked(updateExpense).mock.results[0].value.catch(() => undefined);
+  });
+
+  expect(screen.getByRole('dialog', { name: '지출 수정' })).toBe(secondEditor);
+  expect(within(secondEditor).getByDisplayValue('두번째 거래 작성 중')).toBeInTheDocument();
+  expect(screen.getByText('2건 · 30원')).toBeInTheDocument();
+  expect(mockShowAlert).not.toHaveBeenCalled();
+  expect(updateExpense).toHaveBeenCalledTimes(1);
+  expect(read).toHaveBeenCalledTimes(1);
 });
 
 it('[T-STAT-004][STAT-003] waits for the asynchronous budget catalog, keeps screen toggles across period changes, and reinitializes on household change', async () => {
@@ -396,7 +441,7 @@ it('hides the old member on the first context transition even before the global 
   expect(screen.getAllByText('로딩중...').length).toBeGreaterThan(0);
 });
 
-it('keeps the failed edit draft and category modal across background resume revalidation failure', async () => {
+it('keeps the restored edit draft across background resume revalidation failure', async () => {
   mockCategories = [category('food', 500)];
   read.mockResolvedValueOnce([{ ...row, amount: 10 }]).mockRejectedValueOnce(new Error('offline'));
   jest.mocked(updateExpense).mockRejectedValueOnce(new Error('permission-denied'));
@@ -405,9 +450,10 @@ it('keeps the failed edit draft and category modal across background resume reva
   fireEvent.change(within(editor).getByPlaceholderText('메모를 입력하세요'), { target: { value: '복귀 후에도 보존할 내용' } });
   fireEvent.click(within(editor).getByRole('button', { name: '저장' }));
   await waitFor(() => expect(mockShowAlert).toHaveBeenCalled());
+  const restoredEditor = await screen.findByRole('dialog', { name: '지출 수정' });
+  expect(within(restoredEditor).getByDisplayValue('복귀 후에도 보존할 내용')).toBeInTheDocument();
   fireEvent.focus(window);
   await screen.findByRole('alert');
-  expect(screen.getByRole('dialog', { name: '지출 수정' })).toBe(editor);
-  expect(within(editor).getByDisplayValue('복귀 후에도 보존할 내용')).toBeInTheDocument();
-  expect(screen.getByText('1건 · 10원')).toBeInTheDocument();
+  expect(within(screen.getByRole('dialog', { name: '지출 수정' })).getByDisplayValue('복귀 후에도 보존할 내용')).toBeInTheDocument();
+  expect(screen.getByTestId('donut-source')).toHaveTextContent('food:10');
 });

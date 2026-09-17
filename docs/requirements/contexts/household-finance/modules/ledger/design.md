@@ -94,7 +94,7 @@ QuickEdit `items` operation은 DEC-055에 따라 분할을 누른 시점의 merc
 
 ### 3.3 Read Model
 
-Web 일반 수정·삭제는 Command를 즉시 시작하고 성공 후 편집창을 닫습니다. 저장 중 중복 제출과 입력 변경을 막고, 실패하면 작성한 초안을 유지해 다시 저장할 수 있습니다. 원장의 낙관적 반영·실패 원복은 그대로 사용합니다. 사용자가 직접 닫을 수는 있으며, 닫힌 창의 늦은 성공이 이후 열린 편집창을 닫지 않습니다.
+Web 일반 수정은 Command를 시작하면서 편집창을 즉시 숨겨 원장의 낙관적 변경을 바로 표시합니다. 서버 응답을 기다리는 동안 해당 편집 인스턴스에 초안을 보관하고 중복 제출을 막습니다. 성공하면 인스턴스를 정리하고, 실패하면 해당 변경을 원복한 뒤 오류 안내와 함께 같은 초안을 다시 표시합니다. 다른 거래를 열거나 날짜·가구·페이지를 전환해 편집 인스턴스를 벗어나면 이전 응답이 창을 다시 열거나 새 편집창을 닫지 않습니다. 일반 삭제는 기존처럼 성공 후 편집창을 닫고, 실패 시 초안을 유지합니다. 통계의 카테고리 내역 목록은 수정·삭제 요청 시 닫으며, 서버 확정으로 통계 캐시가 갱신됩니다.
 
 `TransactionView`에는 transactionId, transactionType, amountInWon, accountingDate, localTime, zoneId, merchant, memo, categoryId, cardDisplay, source, originChannel, creatorMemberId, optional localCurrencyType, split/merge 표시 metadata, aggregateVersion을 포함합니다. capture fingerprint hash·lineage 내부 ID와 receipt는 노출하지 않습니다. 이 일반 Read Model은 active 거래만 만들며 deleted·superseded 거래를 사용자에게 반환하지 않습니다.
 

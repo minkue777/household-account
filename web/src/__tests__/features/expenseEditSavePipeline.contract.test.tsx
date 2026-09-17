@@ -70,7 +70,7 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
     mockShowAlert.mockResolvedValue(undefined);
   });
 
-  test('[MER-005] 거래와 기억 선택을 즉시 한 번 전달하고 성공 후 닫으며 대기 중 중복 저장을 차단한다', async () => {
+  test('[MER-005] 카테고리와 기억 선택을 한 번 전달하고 서버 응답 전에 편집 화면을 숨긴다', async () => {
     const transactionSave = deferred();
     const onSave = jest.fn(() => transactionSave.promise);
     const onClose = jest.fn();
@@ -93,9 +93,9 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(onSave).toHaveBeenCalledWith({ category: 'living' }, true);
     expect(onClose).not.toHaveBeenCalled();
-    expect(screen.getByRole('dialog', { name: '지출 수정' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '저장 중...' })).toBeDisabled();
-    expect(screen.getByPlaceholderText('메모를 입력하세요')).toBeDisabled();
+    expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '저장 중...' })).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('메모를 입력하세요')).not.toBeInTheDocument();
 
     await act(async () => {
       transactionSave.resolve();
@@ -105,8 +105,31 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
     expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
   });
 
+  test('메모만 저장해도 서버 응답 전에 편집 화면을 숨기고 성공 후 부모 선택을 정리한다', async () => {
+    const transactionSave = deferred();
+    const onSave = jest.fn(() => transactionSave.promise);
+    const onClose = jest.fn();
+    render(<EditorHarness expense={expense} onClosed={onClose} onSave={onSave} transactionType="expense" />);
+    fireEvent.change(screen.getByPlaceholderText('메모를 입력하세요'), { target: { value: '즉시 반영할 메모' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    expect(onSave).toHaveBeenCalledWith({ memo: '즉시 반영할 메모' }, false);
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
+    await act(async () => {
+      transactionSave.resolve();
+      await transactionSave.promise;
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(mockShowAlert).not.toHaveBeenCalled();
+  });
+
   test('거래 저장 실패 시 초안과 기억 선택을 보존하고 같은 입력으로 다시 저장할 수 있다', async () => {
     const transactionSave = deferred();
+    const alertAcknowledged = deferred();
+    mockShowAlert.mockReturnValueOnce(alertAcknowledged.promise);
     const onSave = jest.fn().mockImplementationOnce(() => transactionSave.promise).mockResolvedValue(undefined);
     const onClose = jest.fn();
 
@@ -124,6 +147,7 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
     expect(onClose).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
 
     await act(async () => {
       transactionSave.reject(new Error('VERSION_MISMATCH'));
@@ -136,11 +160,17 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
         '지출 수정 실패'
       );
     });
+    expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
+    await act(async () => {
+      alertAcknowledged.resolve();
+      await alertAcknowledged.promise;
+    });
     expect(screen.getByRole('dialog', { name: '지출 수정' })).toBeInTheDocument();
     expect(screen.getByPlaceholderText('메모를 입력하세요')).toHaveValue('남겨야 하는 메모');
     expect(screen.getByRole('checkbox')).toBeChecked();
     expect(screen.getByRole('button', { name: '저장' })).toBeEnabled();
     expect(onClose).not.toHaveBeenCalled();
+    expect(onSave).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
@@ -159,7 +189,7 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
     const updatedExpense = { ...expense, memo: '다른 기기의 메모', aggregateVersion: 4 };
     rerender(<EditorHarness expense={updatedExpense} onSave={onSave} transactionType="expense" />);
-    expect(screen.getByPlaceholderText('메모를 입력하세요')).toHaveValue('작성 중 메모');
+    expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
     await act(async () => {
       transactionSave.reject(new Error('VERSION_MISMATCH'));
       await transactionSave.promise.catch(() => undefined);
@@ -170,22 +200,26 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
     expect(screen.getByPlaceholderText('메모를 입력하세요')).toHaveValue('다른 기기의 메모');
   });
 
-  test('저장 대기 중 사용자가 닫고 다시 연 편집창은 이전 저장 완료로 닫히지 않는다', async () => {
+  test.each(['성공', '실패'])('다른 편집창을 연 뒤 이전 저장의 늦은 %s 응답은 새 초안을 닫거나 오류창을 띄우지 않는다', async (outcome) => {
     const transactionSave = deferred();
     const onClose = jest.fn();
     const onSave = jest.fn(() => transactionSave.promise);
-    render(<EditorHarness expense={expense} onClosed={onClose} onSave={onSave} transactionType="expense" />);
+    const view = render(<EditorHarness key="first-editor" expense={expense} onClosed={onClose} onSave={onSave} transactionType="expense" />);
     fireEvent.change(screen.getByPlaceholderText('메모를 입력하세요'), { target: { value: '저장할 메모' } });
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
-    expect(screen.getByRole('button', { name: '닫기' })).toBeEnabled();
-    fireEvent.click(screen.getByRole('button', { name: '닫기' }));
-    fireEvent.click(screen.getByRole('button', { name: '다시 열기' }));
+    expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
+    view.rerender(<EditorHarness key="second-editor" expense={{ ...expense, id: 'expense-2' }} onClosed={onClose} onSave={onSave} transactionType="expense" />);
+    fireEvent.change(screen.getByPlaceholderText('메모를 입력하세요'), { target: { value: '새 편집창의 초안' } });
     await act(async () => {
-      transactionSave.resolve();
-      await transactionSave.promise;
+      if (outcome === '성공') transactionSave.resolve();
+      else transactionSave.reject(new Error('OLD_SAVE_REJECTED'));
+      await transactionSave.promise.catch(() => undefined);
     });
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(mockShowAlert).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog', { name: '지출 수정' })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('메모를 입력하세요')).toHaveValue('새 편집창의 초안');
+    expect(onSave).toHaveBeenCalledTimes(1);
   });
 
   test('[MER-005] 기억을 선택하지 않으면 단일 거래 수정만 요청한다', async () => {

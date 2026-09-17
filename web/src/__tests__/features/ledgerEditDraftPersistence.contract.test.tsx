@@ -66,9 +66,13 @@ const original: Expense = {
 };
 
 function deferred() {
+  let resolve!: () => void;
   let reject!: (reason: unknown) => void;
-  const promise = new Promise<void>((_resolve, rejectPromise) => { reject = rejectPromise; });
-  return { promise, reject };
+  const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
 function openEditor() {
@@ -86,7 +90,7 @@ describe('홈 원장 편집의 낙관적 목록 변경과 초안 수명', () => 
     mockShowAlert.mockResolvedValue(undefined);
   });
 
-  test('날짜 변경으로 선택 날짜가 비어도 저장 실패 후 날짜·메모를 보존하고 그대로 재시도한다', async () => {
+  test('저장 즉시 편집창을 숨기고 선택 날짜가 비어도 실패 후 날짜·메모 초안을 복원한다', async () => {
     const save = deferred();
     mockUpdateExpense.mockImplementationOnce(() => save.promise).mockResolvedValue(undefined);
     const view = openEditor();
@@ -95,14 +99,12 @@ describe('홈 원장 편집의 낙관적 목록 변경과 초안 수명', () => 
     fireEvent.change(dateInput, { target: { value: '2026-09-18' } });
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
     await waitFor(() => expect(mockUpdateExpense).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
 
     mockExpenses = [{ ...original, date: '2026-09-18', memo: '보존할 메모' }];
     view.rerender(<LedgerPage transactionType="expense" />);
     expect(screen.getByText('지출 내역이 없습니다')).toBeInTheDocument();
-    expect(screen.getByRole('dialog', { name: '지출 수정' })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('메모를 입력하세요')).toHaveValue('보존할 메모');
-    expect(dateInput).toHaveValue('2026-09-18');
-    expect(screen.getByRole('button', { name: '저장 중...' })).toBeDisabled();
+    expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
 
     mockExpenses = [original];
     view.rerender(<LedgerPage transactionType="expense" />);
@@ -112,7 +114,8 @@ describe('홈 원장 편집의 낙관적 목록 변경과 초안 수명', () => 
     });
     expect(mockShowAlert).toHaveBeenCalledWith(expect.stringContaining('SAVE_REJECTED'), '지출 수정 실패');
     expect(screen.getByPlaceholderText('메모를 입력하세요')).toHaveValue('보존할 메모');
-    expect(dateInput).toHaveValue('2026-09-18');
+    expect(screen.getByRole('dialog').querySelector('input[type="date"]')).toHaveValue('2026-09-18');
+    expect(mockUpdateExpense).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument());
     expect(mockUpdateExpense.mock.calls).toEqual([
@@ -167,5 +170,74 @@ describe('홈 원장 편집의 낙관적 목록 변경과 초안 수명', () => 
     view.rerender(<LedgerPage transactionType="expense" />);
     expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
     expect(screen.getByText('새 가구의 거래')).toBeInTheDocument();
+  });
+
+  test.each(['성공', '실패'])('저장 중 같은 거래를 다시 편집하면 이전 저장의 %s 응답과 목록 갱신이 새 초안을 닫거나 지우지 않는다', async (outcome) => {
+    const save = deferred();
+    mockUpdateExpense.mockImplementationOnce(() => save.promise);
+    const view = openEditor();
+    fireEvent.change(screen.getByPlaceholderText('메모를 입력하세요'), { target: { value: '첫 저장 메모' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
+
+    mockExpenses = [{ ...original, memo: '첫 저장 메모' }];
+    view.rerender(<LedgerPage transactionType="expense" />);
+    fireEvent.click(screen.getByText(original.merchant));
+    expect(screen.getByPlaceholderText('메모를 입력하세요')).toHaveValue('첫 저장 메모');
+    expect(screen.getByRole('button', { name: '저장' })).toBeEnabled();
+    fireEvent.change(screen.getByPlaceholderText('메모를 입력하세요'), { target: { value: '다시 연 창의 새 초안' } });
+
+    mockExpenses = outcome === '성공'
+      ? [{ ...original, aggregateVersion: 8, memo: '첫 저장 메모' }]
+      : [original];
+    view.rerender(<LedgerPage transactionType="expense" />);
+    await act(async () => {
+      if (outcome === '성공') save.resolve();
+      else save.reject(new Error('PREVIOUS_SAVE_REJECTED'));
+      await save.promise.catch(() => undefined);
+    });
+
+    expect(screen.getByRole('dialog', { name: '지출 수정' })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('메모를 입력하세요')).toHaveValue('다시 연 창의 새 초안');
+    expect(screen.getByRole('button', { name: '저장' })).toBeEnabled();
+    expect(mockUpdateExpense).toHaveBeenCalledTimes(1);
+    expect(mockShowAlert).not.toHaveBeenCalled();
+  });
+
+  test.each(['날짜 이동', '가구 전환', '다른 거래 선택', '페이지 종료'])('저장 중 %s 이후 늦은 실패는 이전 초안이나 오류창을 다시 열지 않는다', async (transition) => {
+    const save = deferred();
+    mockUpdateExpense.mockImplementationOnce(() => save.promise);
+    const view = openEditor();
+    fireEvent.change(screen.getByPlaceholderText('메모를 입력하세요'), { target: { value: '이전 거래 초안' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
+
+    if (transition === '날짜 이동') {
+      fireEvent.click(screen.getByRole('button', { name: '18일' }));
+    } else if (transition === '가구 전환') {
+      mockHouseholdKey = 'household-2';
+      mockExpenses = [{ ...original, merchant: '새 가구의 거래' }];
+      view.rerender(<LedgerPage transactionType="expense" />);
+    } else if (transition === '다른 거래 선택') {
+      mockExpenses = [original, { ...original, id: 'expense-2', merchant: '새로 선택한 거래' }];
+      view.rerender(<LedgerPage transactionType="expense" />);
+      fireEvent.click(screen.getByText('새로 선택한 거래'));
+      fireEvent.change(screen.getByPlaceholderText('메모를 입력하세요'), { target: { value: '새 거래 초안' } });
+    } else {
+      view.unmount();
+    }
+
+    await act(async () => {
+      save.reject(new Error('LATE_SAVE_REJECTED'));
+      await save.promise.catch(() => undefined);
+    });
+
+    expect(mockShowAlert).not.toHaveBeenCalled();
+    expect(mockUpdateExpense).toHaveBeenCalledTimes(1);
+    if (transition === '다른 거래 선택') {
+      expect(screen.getByPlaceholderText('메모를 입력하세요')).toHaveValue('새 거래 초안');
+    } else {
+      expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
+    }
   });
 });
