@@ -177,10 +177,10 @@ else {
         ['android.home.activity-reopen-complete', 'android.quick-edit.notification-to-shown',
           'android.quick-edit.notification-to-ready', 'android.quick-edit.save-to-closed', 'android.quick-edit.save-to-server-observed'];
       const performance = evaluatePerformanceBudgets(result.samples, { projects: ['android-emulator'], metrics: expectedMetrics,
-        samplesPerMetric: performanceSamples, warmupMetrics: expectedMetrics.filter(metric => metric.startsWith('android.quick-edit.')),
+        samplesPerMetric: performanceSamples, reportOnly: true, warmupMetrics: expectedMetrics.filter(metric => metric.startsWith('android.quick-edit.')),
         diagnostic: isolateWebView || process.env.PERFORMANCE_DIAGNOSTIC === 'true', ci: Boolean(process.env.CI || process.env.GITHUB_ACTIONS),
         profile: process.env.PERFORMANCE_PROFILE });
-      result.status = validationErrors.length > 0 || performance.status === 'fail' ? 'failed' : performance.status === 'diagnostic' ? 'diagnostic' : 'passed';
+      result.status = validationErrors.length > 0 || performance.status === 'fail' ? 'failed' : performance.status;
       result.validationErrors = validationErrors;
       result.performance = performance;
       result.host = { platform: process.platform, osRelease: release(), node: process.version,
@@ -201,7 +201,7 @@ else {
       if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown);
       console.log(`Native Firebase performance samples: ${nativeResultPath}`);
       if (result.status === 'failed') {
-        console.error(`Native performance failed:\n${[...validationErrors, ...performance.errors, ...performance.exceededMetrics].join('\n')}`);
+        console.error(`Native performance measurement failed:\n${[...validationErrors, ...performance.errors].join('\n')}`);
         process.exitCode = 1;
       }
     } else {

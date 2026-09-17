@@ -9,14 +9,14 @@ import { evaluatePerformanceBudgets } from './budgets.mjs';
 import { renderPerformanceReport } from './html-report.mjs';
 
 function reportFor(values = Array(7).fill(350), {
-  project = 'webkit-mobile', metric = 'search.change-keyword', diagnostic = false, requested = values.length,
+  project = 'webkit-mobile', metric = 'search.change-keyword', diagnostic = false, reportOnly = false, requested = values.length,
 } = {}) {
   const samples = [10000, ...values].map((durationMs, iteration) => ({
     project, metric, durationMs, iteration, warmup: iteration === 0, cacheState: 'search-window-memory', label: '검색어 변경',
   }));
   const performance = evaluatePerformanceBudgets(samples, { projects: [project], metrics: [metric],
-    samplesPerMetric: requested, diagnostic, profile: 'github-hosted-v2' });
-  return { status: performance.status === 'pass' ? 'passed' : performance.status === 'diagnostic' ? 'diagnostic' : 'failed',
+    samplesPerMetric: requested, diagnostic, reportOnly, profile: 'github-hosted-v2' });
+  return { status: performance.status === 'pass' ? 'passed' : ['reported', 'diagnostic'].includes(performance.status) ? performance.status : 'failed',
     commit: 'a'.repeat(40), timestamp: '2026-09-17T05:00:00Z',
     environment: { cpu: 'test CPU', backend: 'local emulators' },
     coverage: { projects: [project], metrics: [metric], ...performance.coverage }, performance, samples };
@@ -25,6 +25,56 @@ const measuredRow = html => html.match(/<details\b[^>]*class="metric-row"[^>]*>[
 const attribute = (html, name) => html?.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1];
 const rowAttribute = (html, name) => attribute(measuredRow(html), name);
 const executionStatus = html => attribute(html.match(/<header\b[^>]*>/)?.[0], 'data-execution-status');
+
+test('report-only charts retain timing comparisons without pass or fail verdicts', () => {
+  for (const [values, ciWithin, uxWithin, bar] of [
+    [Array(7).fill(200), true, true, 'within'],
+    [Array(7).fill(350), true, false, 'within'],
+    [Array(7).fill(900), false, false, 'exceeded'],
+    [[100, 100, 100, 100, 100, 100, 1001], false, false, 'within'],
+  ]) {
+    const report = reportFor(values, { reportOnly: true });
+    const original = JSON.stringify(report);
+    const html = renderPerformanceReport(report);
+    const row = measuredRow(html);
+    assert.equal(executionStatus(html), 'reported');
+    assert.equal(attribute(row, 'data-status'), 'reported');
+    assert.equal(attribute(row, 'data-ux'), 'reported');
+    assert.equal(attribute(row, 'data-ci-within'), String(ciWithin));
+    assert.equal(attribute(row, 'data-ux-within'), String(uxWithin));
+    assert.equal(attribute(row, 'data-ci-median'), '400');
+    assert.equal(attribute(row, 'data-ux-median'), '300');
+    assert.equal(attribute(row, 'data-max'), String(Math.max(...values)));
+    assert.match(row, new RegExp(`class="bar ${bar}"`));
+    assert.match(row, new RegExp(`전체 조건: ${ciWithin ? '기준 이내' : '기준 초과'}`));
+    assert.match(row, /환경 참고선/);
+    assert.match(row, /UX 참고선/);
+    assert.match(html, /기준 초과만/);
+    assert.match(html, /측정 완료/);
+    assert.doesNotMatch(html.split('<script>')[0], /통과|실패|PASS|FAIL|CI 기준/);
+    assert.equal(JSON.stringify(report), original);
+  }
+});
+
+test('report-only preserves functional errors and incomplete measurements as execution failures', () => {
+  const functionalFailure = reportFor(Array(7).fill(900), { reportOnly: true });
+  functionalFailure.status = 'failed';
+  functionalFailure.failures = ['저장 결과 검증 실패'];
+  const failedHtml = renderPerformanceReport(functionalFailure);
+  assert.equal(executionStatus(failedHtml), 'failed');
+  assert.equal(rowAttribute(failedHtml, 'data-status'), 'reported');
+  assert.match(failedHtml, /저장 결과 검증 실패/);
+
+  const incomplete = reportFor([100, 100], { reportOnly: true, requested: 7 });
+  incomplete.coverage.metrics.push('search.first');
+  const html = renderPerformanceReport(incomplete);
+  assert.equal(executionStatus(html), 'failed');
+  assert.equal(rowAttribute(html, 'data-status'), 'invalid');
+  assert.match(measuredRow(html), /class="bar unverified"/);
+  assert.match(html, /표본 불완전/);
+  assert.match(html, /Missing performance sample/);
+  assert.match(html, /data-status="missing"/);
+});
 
 test('preserves independent CI and UX chart thresholds and the evaluator verdicts', () => {
   const report = reportFor();

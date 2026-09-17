@@ -59,14 +59,14 @@ export default class PerformanceReporter implements Reporter {
     mkdirSync(output, { recursive: true });
     const samplesRequested = Number(process.env.PERFORMANCE_SAMPLES ?? 7);
     const performance = evaluatePerformanceBudgets(this.samples, { projects: this.selectedProjects,
-      metrics: WEB_PERFORMANCE_METRICS, samplesPerMetric: samplesRequested,
+      metrics: WEB_PERFORMANCE_METRICS, samplesPerMetric: samplesRequested, reportOnly: true,
       diagnostic: process.env.PERFORMANCE_DIAGNOSTIC === 'true', ci: Boolean(process.env.CI || process.env.GITHUB_ACTIONS),
       profile: process.env.PERFORMANCE_PROFILE });
     const statistics = performance.statistics;
     const errors = [...this.reportingErrors, ...performance.errors];
     const status: FullResult['status'] = result.status === 'passed' && (performance.status === 'fail' || errors.length > 0 || this.failures.length > 0)
       ? 'failed' : result.status;
-    const reportStatus = status === 'passed' && performance.status === 'diagnostic' ? 'diagnostic' : status;
+    const reportStatus = status === 'passed' ? performance.status : status;
     const report = { schemaVersion: 'household-performance.v1', status: reportStatus, testStatus: result.status, timestamp: new Date().toISOString(),
       commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
       workingTreeDirty: execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim().length > 0,
@@ -88,7 +88,7 @@ export default class PerformanceReporter implements Reporter {
     writeFileSync(resolve(output, 'web.md'), markdown);
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown);
     if (errors.length > 0) console.error(`Performance validation failed (${errors.length}):\n${errors.slice(0, 10).join('\n')}`);
-    if (performance.exceededMetrics.length > 0) console.error(`Performance budgets exceeded:\n${performance.exceededMetrics.join('\n')}`);
+    if (performance.exceededMetrics.length > 0) console.log(`Performance reference exceeded (report only):\n${performance.exceededMetrics.join('\n')}`);
     return { status };
   }
 }

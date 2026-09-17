@@ -10,8 +10,8 @@ const attributeNumber = value => Number.isFinite(value) ? String(value) : '';
 const projectName = project => ({ 'chromium-mobile': 'Chromium', 'webkit-mobile': 'WebKit',
   'android-emulator': 'Android 에뮬레이터' })[project] ?? project;
 const statusName = status => ({ pass: '통과', passed: '통과', fail: '실패', failed: '실패',
-  diagnostic: '진단', invalid: '검증 불가', missing: '미측정' })[status] ?? '미완료';
-const statusClass = status => ['pass', 'passed'].includes(status) ? 'pass' : ['fail', 'failed'].includes(status) ? 'fail' : 'neutral';
+  reported: '측정 완료', diagnostic: '진단', invalid: '검증 불가', missing: '미측정' })[status] ?? '미완료';
+const statusClass = status => ['pass', 'passed'].includes(status) ? 'pass' : ['fail', 'failed'].includes(status) ? 'fail' : status === 'reported' ? 'comparison' : 'neutral';
 const badge = status => `<span class="badge ${statusClass(status)}">${statusName(status)}</span>`;
 const reasonName = reason => ({ 'median-exceeded': '중앙값 초과', 'six-of-seven-exceeded': '반복 허용 시간 초과',
   'single-sample-maximum-exceeded': '개별 최대 시간 초과', 'missing-budget': '기준 없음' })[reason] ?? reason;
@@ -20,6 +20,13 @@ const groupNames = { home: '첫 화면', search: '검색', 'expense-stats': '지
   assets: '자산', ledger: '가계부', 'android.home': '앱 재실행', 'android.quick-edit': '퀵에딧' };
 const groupFor = metric => metric.startsWith('android.') ? metric.split('.').slice(0, 2).join('.') : metric.split('.')[0];
 const shortLabel = row => `${(row.label ?? row.metric).split(' → ')[0]}${row.metric.endsWith('.server-confirmed') ? ' · 서버 확정' : ''}`;
+
+function comparisonName(withinBudget) {
+  return withinBudget === true ? '기준 이내' : withinBudget === false ? '기준 초과' : '비교 불가';
+}
+
+const comparisonBadge = result => result?.status === 'reported'
+  ? `<span class="badge comparison">${comparisonName(result.withinTimeBudget)}</span>` : badge(result?.status);
 
 // These pure scale functions are also used by the offline controls below.
 function ratio(value, limit) {
@@ -42,19 +49,21 @@ function preciseNumber(value, ...limits) {
   return Number.isFinite(value) && limits.some(limit => value > limit && Number(value.toFixed(1)) <= limit) ? String(value) : number(value);
 }
 
-function renderRow(row, statistics, axis, project) {
+function renderRow(row, statistics, axis, project, reportOnly) {
   const values = measuredValues(row, statistics);
   const limits = { ci: row.budget ?? {}, ux: row.ux?.budget ?? {} };
   const proportion = ratio(values.median, limits.ci.medianMs);
-  const verified = ['pass', 'fail'].includes(row.status);
+  const verified = ['pass', 'fail', 'reported'].includes(row.status);
   const tone = !verified || !Number.isFinite(proportion) ? 'unverified' : proportion > 1 ? 'exceeded' : 'within';
   const width = Number.isFinite(proportion) ? proportion / axis * 100 : 0;
   const label = row.label ?? row.metric;
   const reasons = (row.reasons ?? []).map(reasonName);
   const uxReasons = (row.ux?.reasons ?? []).map(reasonName);
-  const aria = `${label}: 중앙값 ${attributeNumber(values.median) || '미측정'} ms, 허용 ${attributeNumber(limits.ci.medianMs) || '미기록'} ms${Number.isFinite(proportion) ? `, 기준 대비 ${number(proportion * 100)}%` : ''}`;
-  const detailRows = [['중앙값', values.median, 'medianMs'], ['반복 허용 시간', values.repeat, 'sixOfSevenMs'], ['개별 최대', values.max, 'maxMs']];
+  const aria = `${label}: 중앙값 ${attributeNumber(values.median) || '미측정'} ms, ${reportOnly ? '참고선' : '허용'} ${attributeNumber(limits.ci.medianMs) || '미기록'} ms${Number.isFinite(proportion) ? `, 기준 대비 ${number(proportion * 100)}%` : ''}`;
+  const detailRows = [['중앙값', values.median, 'medianMs'], [reportOnly ? '반복 참고 시간' : '반복 허용 시간', values.repeat, 'sixOfSevenMs'], ['개별 최대', values.max, 'maxMs']];
+  const rowLabel = row.status === 'reported' ? comparisonName(row.withinTimeBudget) : statusName(row.status);
   return `<details class="metric-row" data-project="${escape(row.project)}" data-status="${escape(row.status)}" data-ux="${escape(row.ux?.status)}"
+    data-ci-within="${escape(row.withinTimeBudget)}" data-ux-within="${escape(row.ux?.withinTimeBudget)}"
     data-label="${escape(label)}" data-search="${escape(`${label} ${row.metric} ${row.project}`.toLowerCase())}"
     data-median="${attributeNumber(values.median)}" data-repeat="${attributeNumber(values.repeat)}" data-max="${attributeNumber(values.max)}"
     ${Object.entries(limits).map(([profile, limit]) => `data-${profile}-median="${attributeNumber(limit.medianMs)}" data-${profile}-repeat="${attributeNumber(limit.sixOfSevenMs)}" data-${profile}-max="${attributeNumber(limit.maxMs)}"`).join(' ')}
@@ -64,16 +73,16 @@ function renderRow(row, statistics, axis, project) {
       <span class="plot" role="img" aria-label="${escape(aria)}" title="${escape(aria)}">
         <span class="track"></span><span class="bar ${tone}" style="width:${width}%"></span><span class="threshold"></span>
         ${Number.isFinite(proportion) ? '' : '<span class="unmeasured">미측정</span>'}</span>
-      <span class="row-status ${statusClass(row.status)}" title="전체 조건: ${escape(statusName(row.status))}" aria-label="전체 조건: ${escape(statusName(row.status))}">${row.status === 'pass' ? '✓' : row.status === 'fail' ? '!' : '—'}</span>
+      <span class="row-status ${row.status === 'reported' ? 'comparison' : statusClass(row.status)}" title="전체 조건: ${escape(rowLabel)}" aria-label="전체 조건: ${escape(rowLabel)}">${row.status === 'reported' ? row.withinTimeBudget === false ? '↑' : '·' : row.status === 'pass' ? '✓' : row.status === 'fail' ? '!' : '—'}</span>
     </summary>
     <div class="metric-detail">
       <p>${escape(label)} <code>${escape(row.metric)}</code></p>
-      <div class="detail-verdicts"><span>CI ${badge(row.status)}</span><span>UX ${badge(row.ux?.status)}</span></div>
-      <table><thead><tr><th>조건</th><th>측정 ms</th><th>CI 기준 ms</th><th>UX 기준 ms</th></tr></thead><tbody>
+      <div class="detail-verdicts"><span>${reportOnly ? `환경 참고선 ${comparisonBadge(row)}` : `CI ${badge(row.status)}`}</span><span>${reportOnly ? `UX 참고선 ${comparisonBadge(row.ux)}` : `UX ${badge(row.ux?.status)}`}</span></div>
+      <table><thead><tr><th>조건</th><th>측정 ms</th><th>${reportOnly ? '환경 참고선' : 'CI 기준'} ms</th><th>${reportOnly ? 'UX 참고선' : 'UX 기준'} ms</th></tr></thead><tbody>
         ${detailRows.map(([name, value, property]) => `<tr><th>${name}</th><td>${preciseNumber(value, limits.ci[property], limits.ux[property])}</td><td>≤ ${number(limits.ci[property])}</td><td>≤ ${number(limits.ux[property])}</td></tr>`).join('')}
       </tbody></table>
-      <p>반복 기준 이내 ${number(row.observed?.withinBudget)} / ${number(row.n)}회 · 최소 ${number(row.observed?.requiredWithinBudget)}회 필요</p>
-      ${reasons.length ? `<p class="reason">CI: ${reasons.map(escape).join(' · ')}</p>` : ''}
+      <p>반복 기준 이내 ${number(row.observed?.withinBudget)} / ${number(row.n)}회 · ${reportOnly ? '참고 횟수' : '최소'} ${number(row.observed?.requiredWithinBudget)}회${reportOnly ? '' : ' 필요'}</p>
+      ${reasons.length ? `<p class="reason">${reportOnly ? '환경' : 'CI'}: ${reasons.map(escape).join(' · ')}</p>` : ''}
       ${uxReasons.length ? `<p class="reason">UX: ${uxReasons.map(escape).join(' · ')}</p>` : ''}
       <p class="sample-values">${(statistics?.samplesMs ?? []).map(value => `<span>${number(value)}</span>`).join(' ')}<small>ms · 본 측정 순서</small></p>
       <p class="cache">${escape(row.cacheState ?? '측정 조건 없음')}</p>
@@ -85,6 +94,7 @@ function renderRow(row, statistics, axis, project) {
 export function renderPerformanceReport(report, { title } = {}) {
   const performance = report?.performance;
   if (!performance || !Array.isArray(performance.results)) throw new Error('판정 결과가 포함된 성능 JSON이 필요합니다.');
+  const reportOnly = performance.mode === 'report-only';
   const rows = [...performance.results];
   for (const project of report.coverage?.projects ?? []) for (const metric of report.coverage?.metrics ?? []) {
     if (!rows.some(row => row.project === project && row.metric === metric)) rows.push({ project, metric, n: 0, status: 'missing' });
@@ -115,36 +125,39 @@ export function renderPerformanceReport(report, { title } = {}) {
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
 <title>${escape(title)}</title><style>${styles}</style></head>
-<body><main style="--threshold:${100 / axis}%">
-  <header data-execution-status="${escape(executionStatus)}"><h1>${escape(title)}</h1><span class="run-status">실행 ${badge(executionStatus)}</span></header>
+<body><main data-mode="${escape(performance.mode)}" style="--threshold:${100 / axis}%">
+  <header data-execution-status="${escape(executionStatus)}"><h1>${escape(title)}</h1><span class="run-status">${reportOnly ? '측정' : '실행'} ${badge(reportOnly && executionStatus === 'passed' ? 'reported' : executionStatus)}</span></header>
   <div class="toolbar">
     <select id="project-filter" aria-label="환경">${projects.map(project => `<option value="${escape(project)}" ${project === defaultProject ? 'selected' : ''}>${escape(projectName(project))}</option>`).join('')}<option value="">모든 환경</option></select>
     <fieldset class="segments"><legend class="sr-only">측정 항목</legend>${[['median', '중앙값'], ['repeat', '반복 6/7'], ['max', '최대']].map(([value, label]) => `<label><input type="radio" name="measure" value="${value}" ${value === 'median' ? 'checked' : ''}><span>${label}</span></label>`).join('')}</fieldset>
-    <select id="basis-filter" aria-label="비교 기준"><option value="ci">CI 기준</option><option value="ux">UX 목표</option></select>
+    <select id="basis-filter" aria-label="비교 기준"><option value="ci">${reportOnly ? '환경 참고선' : 'CI 기준'}</option><option value="ux">${reportOnly ? 'UX 참고선' : 'UX 목표'}</option></select>
     <input id="metric-filter" type="search" aria-label="기능 검색" placeholder="기능 찾기" autocomplete="off">
-    <label class="failed-only"><input id="failure-filter" type="checkbox">실패만</label>
+    <label class="failed-only"><input id="failure-filter" type="checkbox">${reportOnly ? '기준 초과만' : '실패만'}</label>
   </div>
-  <div class="legend"><span><i class="swatch within"></i>기준 이내</span><span><i class="swatch exceeded"></i>초과</span><span><i class="line-key"></i>허용 기준</span><small>기준 대비 시간 · 짧을수록 빠름</small></div>
+  <div class="legend"><span><i class="swatch within"></i>기준 이내</span><span><i class="swatch exceeded"></i>초과</span><span><i class="line-key"></i>${reportOnly ? '참고선' : '허용 기준'}</span><small>기준 대비 시간 · 짧을수록 빠름</small></div>
   ${errors.length || !complete ? `<details class="errors"><summary>측정·검증 오류 ${errors.length}건${complete ? '' : ' · 표본 불완전'}</summary><ul>${errors.map(error => `<li>${escape(error)}</li>`).join('')}</ul></details>` : ''}
   ${performance.mode === 'diagnostic' ? '<p class="diagnostic">진단 실행 · 정식 PASS 없음</p>' : ''}
   <div class="charts">${groups.map(group => `<section class="chart-group" data-group="${escape(group)}" ${rows.some(row => row.project === defaultProject && groupFor(row.metric) === group) ? '' : 'hidden'}>
     <h2>${escape(groupNames[group] ?? group)}</h2>
     <div class="axis" aria-hidden="true"><span>0</span><b class="axis-threshold">100%</b><span class="axis-max">${number(axis * 100)}%</span></div>
-    ${rows.filter(row => groupFor(row.metric) === group).map(row => renderRow(row, statistics.get(key(row)), axis, defaultProject)).join('\n')}
+    ${rows.filter(row => groupFor(row.metric) === group).map(row => renderRow(row, statistics.get(key(row)), axis, defaultProject, reportOnly)).join('\n')}
   </section>`).join('')}</div>
   <p id="empty" ${rows.length ? 'hidden' : ''}>해당하는 측정 결과가 없습니다.</p><span id="visible-count" class="sr-only" aria-live="polite"></span>
-  <details class="appendix"><summary>실행 정보 · 판정 상세</summary>
-    <p>CI ${badge(performance.status)} · 공통 UX ${badge(performance.uxStatus)}</p>
+  <details class="appendix"><summary>실행 정보 · ${reportOnly ? '측정' : '판정'} 상세</summary>
+    ${reportOnly ? `<p>측정 ${badge(performance.status)}</p>
+    <p>막대는 선택한 조건의 참고 시간 대비 비율입니다. 시간 초과는 참고용으로 표시하며 CI 성공 여부에 영향을 주지 않습니다.</p>
+    <p>반복은 기록된 참고 횟수번째 본표본(7회 중 6회)을 사용하며 준비 실행은 제외합니다.</p>` : `<p>CI ${badge(performance.status)} · 공통 UX ${badge(performance.uxStatus)}</p>
     <p>막대는 선택한 조건의 허용 시간 대비 비율입니다. 행의 상태 아이콘은 세 조건을 합친 원본 판정을 유지합니다. 모든 조건을 만족해야 통과합니다.</p>
-    <p>반복은 기록된 최소 허용 횟수번째 본표본(7회 중 6회)을 사용합니다. 정식 판정은 최소 ${number(performance.minimumGateSamples)}회이며 준비 실행은 제외합니다.</p>
+    <p>반복은 기록된 최소 허용 횟수번째 본표본(7회 중 6회)을 사용합니다. 정식 판정은 최소 ${number(performance.minimumGateSamples)}회이며 준비 실행은 제외합니다.</p>`}
     <p>기준은 이 실행의 JSON에 기록된 값입니다. 에뮬레이터 측정이며 실제 휴대폰·운영 네트워크 시간과 다릅니다.</p>
     <dl>${metadata.map(([name, value]) => `<dt>${escape(name)}</dt><dd>${escape(value)}</dd>`).join('')}</dl>
     <details class="warmup"><summary>준비 실행 ${warmup.length}개</summary><ul>${warmup.map(sample => `<li>${escape(projectName(sample.project))} · ${escape(sample.label ?? sample.metric)} · ${number(sample.durationMs)} ms</li>`).join('')}</ul></details>
   </details>
-</main><script>${ratio.toString()}\n${axisFor.toString()}\n${controls}</script></body></html>`;
+</main><script>${ratio.toString()}\n${axisFor.toString()}\n${comparisonName.toString()}\n${controls}</script></body></html>`;
 }
 
 const styles = `
+.comparison{color:#607089;background:#edf2fa}
 :root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#182539;background:#f5f7fb;color-scheme:light;font-size:14px}*{box-sizing:border-box}body{margin:0}main{max-width:1320px;margin:auto;padding:28px 30px 40px}h1,h2,p{margin:0}header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}h1{font-size:27px;letter-spacing:-1px}.run-status{font-size:12px;color:#748196}.badge{display:inline-block;padding:3px 7px;border-radius:5px;font-size:11px;font-weight:700}.pass{color:#267459;background:#e7f5ef}.fail{color:#bd3949;background:#ffebee}.neutral{color:#976312;background:#fff2da}
 .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px}select,input,button{font:inherit}select,input[type=search]{padding:9px 12px;border:1px solid #dce3ee;background:white;color:#30435e;border-radius:8px;height:40px}#project-filter{min-width:145px}#metric-filter{width:160px;margin-left:auto}.segments{display:flex;padding:3px;margin:0;border:1px solid #dfe5ef;border-radius:9px;background:#eaf0f8;gap:3px}.segments label{cursor:pointer}.segments input{position:absolute;opacity:0;pointer-events:none}.segments span{display:block;padding:6px 13px;border-radius:6px;font-size:13px;color:#607089}.segments input:checked+span{background:white;color:#235ed0;box-shadow:0 1px 4px #253c651a;font-weight:700}.segments input:focus-visible+span{outline:2px solid #346fe1}.failed-only{font-size:12px;color:#607089;white-space:nowrap;display:flex;gap:4px;align-items:center}.failed-only input{accent-color:#386fd7}:focus-visible{outline:2px solid #4c87f3;outline-offset:3px}
 .legend{display:flex;align-items:center;gap:18px;color:#667791;font-size:11px;margin:0 2px 16px}.legend span{display:flex;align-items:center;gap:6px}.legend small{margin-left:auto;font-size:11px}.swatch{height:8px;width:18px;border-radius:3px}.within{background:#5a83ed}.exceeded{background:#f16476}.unverified{background:repeating-linear-gradient(120deg,#edc57d,#edc57d 4px,#f9e8c9 4px,#f9e8c9 8px)}.line-key{height:13px;border-left:2px dashed #718097}
@@ -160,21 +173,23 @@ const styles = `
 const controls = `
 (() => {
   const main = document.querySelector('main');
+  const reportOnly = main.dataset.mode === 'report-only';
   const rows = [...document.querySelectorAll('.metric-row')];
   const project = document.getElementById('project-filter');
   const basis = document.getElementById('basis-filter');
   const query = document.getElementById('metric-filter');
   const failed = document.getElementById('failure-filter');
   const read = (row, name) => row.getAttribute('data-' + name) === '' ? NaN : Number(row.getAttribute('data-' + name));
-  const labels = { median: '중앙값', repeat: '반복 허용 시간', max: '개별 최대' };
+  const labels = { median: '중앙값', repeat: reportOnly ? '반복 참고 시간' : '반복 허용 시간', max: '개별 최대' };
   function update() {
     const measure = document.querySelector('input[name=measure]:checked').value;
     const keyword = query.value.trim().toLowerCase();
     const visible = [];
     for (const row of rows) {
       const status = basis.value === 'ci' ? row.dataset.status : row.dataset.ux;
+      const withinBudget = row.getAttribute('data-' + basis.value + '-within');
       row.hidden = !!((project.value && row.dataset.project !== project.value) || !row.dataset.search.includes(keyword)
-        || (failed.checked && status === 'pass'));
+        || (failed.checked && (reportOnly ? status !== 'reported' || withinBudget !== 'false' : status === 'pass')));
       if (!row.hidden) visible.push(row);
     }
     const axis = axisFor(visible.map(row => ratio(read(row, measure), read(row, basis.value + '-' + measure))));
@@ -184,22 +199,24 @@ const controls = `
       const value = read(row, measure), limit = read(row, basis.value + '-' + measure);
       const proportion = ratio(value, limit);
       const status = basis.value === 'ci' ? row.dataset.status : row.dataset.ux;
-      const verified = status === 'pass' || status === 'fail';
+      const verified = status === 'pass' || status === 'fail' || status === 'reported';
       const bar = row.querySelector('.bar');
       bar.className = 'bar ' + (!verified || !Number.isFinite(proportion) ? 'unverified' : proportion > 1 ? 'exceeded' : 'within');
       bar.style.width = Number.isFinite(proportion) ? proportion / axis * 100 + '%' : '0%';
       const plot = row.querySelector('.plot');
       const description = row.dataset.label + ': ' + labels[measure] + ' ' + (Number.isFinite(value) ? value : '미측정')
-        + ' ms, 허용 ' + (Number.isFinite(limit) ? limit : '미기록') + ' ms'
+        + ' ms, ' + (reportOnly ? '참고선 ' : '허용 ') + (Number.isFinite(limit) ? limit : '미기록') + ' ms'
         + (Number.isFinite(proportion) ? ', 기준 대비 ' + (proportion * 100).toFixed(1) + '%' : '');
       plot.setAttribute('aria-label', description); plot.title = description;
       let missing = plot.querySelector('.unmeasured');
       if (!Number.isFinite(proportion) && !missing) { missing = document.createElement('span'); missing.className = 'unmeasured'; missing.textContent = '미측정'; plot.append(missing); }
       if (missing) missing.hidden = Number.isFinite(proportion);
       const icon = row.querySelector('.row-status');
-      const label = status === 'pass' ? '통과' : status === 'fail' ? '실패' : '미확인';
-      icon.className = 'row-status ' + (status === 'pass' ? 'pass' : status === 'fail' ? 'fail' : 'neutral');
-      icon.textContent = status === 'pass' ? '✓' : status === 'fail' ? '!' : '—';
+      const withinBudget = row.getAttribute('data-' + basis.value + '-within');
+      const label = status === 'reported' ? comparisonName(withinBudget === 'true' ? true : withinBudget === 'false' ? false : undefined)
+        : status === 'pass' ? '통과' : status === 'fail' ? '실패' : status === 'invalid' ? '검증 불가' : status === 'missing' ? '미측정' : '미확인';
+      icon.className = 'row-status ' + (status === 'reported' ? 'comparison' : status === 'pass' ? 'pass' : status === 'fail' ? 'fail' : 'neutral');
+      icon.textContent = status === 'reported' ? withinBudget === 'false' ? '↑' : '·' : status === 'pass' ? '✓' : status === 'fail' ? '!' : '—';
       icon.title = '전체 조건: ' + label; icon.setAttribute('aria-label', icon.title);
     }
     for (const group of document.querySelectorAll('.chart-group')) {

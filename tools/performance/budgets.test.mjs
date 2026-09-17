@@ -12,6 +12,56 @@ function samples(values = Array(7).fill(100), options = {}) {
 }
 const evaluate = (values, overrides = {}) => evaluatePerformanceBudgets(samples(values), { ...specification, ...overrides });
 
+test('report-only preserves every slow observation without a timing pass/fail for Web and Android', () => {
+  for (const [project, metric] of [
+    ['chromium-mobile', 'ledger.open-detail'], ['webkit-mobile', 'ledger.open-detail'],
+    ['android-emulator', 'android.quick-edit.notification-to-ready'],
+  ]) {
+    const values = [50_001, 50_002, 50_003, 50_004, 50_005, 50_006, 50_007];
+    const result = evaluatePerformanceBudgets(samples(values, { project, metric }), {
+      projects: [project], metrics: [metric], samplesPerMetric: 7,
+      ci: true, profile: 'github-hosted-v2', reportOnly: true,
+    });
+    assert.equal(result.mode, 'report-only');
+    assert.equal(result.status, 'reported');
+    assert.equal(result.uxStatus, 'reported');
+    assert.equal(result.results[0].status, 'reported');
+    assert.equal(result.results[0].ux.status, 'reported');
+    assert.equal(result.results[0].withinTimeBudget, false);
+    assert.deepEqual(result.results[0].reasons, ['median-exceeded', 'six-of-seven-exceeded', 'single-sample-maximum-exceeded']);
+    assert.deepEqual(result.statistics[0].samplesMs, values);
+    assert.deepEqual(result.exceededMetrics, [`${project}/${metric}`]);
+    assert.equal(result.coverage.complete, true);
+    assert.deepEqual(result.errors, []);
+    const markdown = budgetMarkdown(result);
+    assert.match(markdown, /리포트 전용/);
+    assert.match(markdown, /기준 초과/);
+    assert.doesNotMatch(markdown, /\bPASS\b|\bFAIL\b/);
+  }
+  const fast = evaluate(Array(7).fill(1), { reportOnly: true });
+  assert.equal(fast.status, 'reported');
+  assert.match(budgetMarkdown(fast), /기준 이내/);
+});
+
+test('report-only still rejects missing, duplicate, malformed, short and invalidly configured measurements', () => {
+  const input = samples(Array(7).fill(50_000));
+  for (const invalid of [[], input.slice(0, -1), [...input, input[1]],
+    input.map((sample, index) => index === 1 ? { ...sample, durationMs: Number.NaN } : sample)]) {
+    const result = evaluatePerformanceBudgets(invalid, { ...specification, reportOnly: true, ci: true });
+    assert.equal(result.status, 'fail');
+    assert.equal(result.coverage.complete, false);
+    assert(result.errors.length > 0);
+    assert(result.results.every(row => row.status === 'invalid'));
+  }
+  for (const overrides of [
+    { samplesPerMetric: 6 }, { profile: 'unknown' }, { reportOnly: 'true' }, { diagnostic: true, ci: true },
+  ]) {
+    const result = evaluate(Array(7).fill(50_000), { reportOnly: true, ...overrides });
+    assert.equal(result.status, 'fail');
+    assert(result.errors.length > 0);
+  }
+});
+
 test('passes at all three absolute boundaries and preserves raw warmup separately', () => {
   const result = evaluate([200, 200, 200, 200, 350, 350, 1000]);
   assert.equal(result.status, 'pass');

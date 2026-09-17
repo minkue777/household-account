@@ -143,8 +143,8 @@ jobs:
       - name: 성능 통계·표본·HTML 보고서 회귀 검사
         # The summary and coverage checker are shared with Android measurements.
         # Keep their fast regression check separate from browser execution.
-        run: node --test tools/performance/statistics.test.mjs tools/performance/budgets.test.mjs tools/performance/html-report.test.mjs
-      - name: 핵심 기능 성능 PASS/FAIL 검사
+        run: node --test tools/performance/statistics.test.mjs tools/performance/budgets.test.mjs tools/performance/html-report.test.mjs tools/performance/reporting.test.mjs
+      - name: 핵심 기능 성능 측정·보고
         run: npm --ignore-scripts run test:performance
         working-directory: web
         env:
@@ -168,7 +168,7 @@ jobs:
           ARTIFACT_URL: ${{ steps.web-performance-artifact.outputs.artifact-url }}
         run: |
           if [[ -f web/performance-results/web.html ]]; then
-            printf '\n### Web 성능 HTML 보고서\n\n[보고서 다운로드](%s) → 압축을 풀고 `web.html`을 브라우저로 여세요. 각 기능의 측정값과 CI 통과 기준, 별도 UX 목표를 함께 볼 수 있습니다. GitHub 로그인이 필요합니다.\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+            printf '\n### Web 성능 HTML 보고서\n\n[보고서 다운로드](%s) → 압축을 풀고 `web.html`을 브라우저로 여세요. 각 기능의 측정값과 CI 환경 참고선, UX 목표를 함께 볼 수 있습니다. 소요 시간은 통과·실패로 판정하지 않습니다. GitHub 로그인이 필요합니다.\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
           else
             printf '\nWeb 성능 HTML 보고서가 생성되지 않았습니다. [진단 파일 다운로드](%s)와 실행 로그를 확인하세요.\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -293,7 +293,7 @@ jobs:
           ARTIFACT_URL: ${{ steps.android-performance-artifact.outputs.artifact-url }}
         run: |
           if [[ -f web/performance-results/android.html ]]; then
-            printf '\n### Android 성능 HTML 보고서\n\n[보고서 다운로드](%s) → 압축을 풀고 `performance-results/android.html`을 브라우저로 여세요. 각 기능의 측정값과 CI 통과 기준, 별도 UX 목표를 함께 볼 수 있습니다. GitHub 로그인이 필요합니다.\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+            printf '\n### Android 성능 HTML 보고서\n\n[보고서 다운로드](%s) → 압축을 풀고 `performance-results/android.html`을 브라우저로 여세요. 각 기능의 측정값과 CI 환경 참고선, UX 목표를 함께 볼 수 있습니다. 소요 시간은 통과·실패로 판정하지 않습니다. GitHub 로그인이 필요합니다.\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
           else
             printf '\nAndroid 성능 HTML 보고서가 생성되지 않았습니다. [진단 파일 다운로드](%s)와 실행 로그를 확인하세요.\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
           fi

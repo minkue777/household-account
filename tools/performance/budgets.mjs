@@ -96,7 +96,7 @@ export const PERFORMANCE_PROFILES = Object.freeze({
   }) }),
 });
 
-function assessTiming(row, limit, { errors, diagnostic }) {
+function assessTiming(row, limit, { errors, diagnostic, reportOnly }) {
   const requiredWithinBudget = Math.ceil(row.n * 6 / 7);
   const withinBudget = limit ? row.samplesMs.filter(value => value <= limit.sixOfSevenMs).length : 0;
   const reasons = [];
@@ -107,20 +107,23 @@ function assessTiming(row, limit, { errors, diagnostic }) {
   return { budget: limit ?? null,
     observed: { medianMs: row.medianMs, maxMs: row.maxMs, withinBudget, requiredWithinBudget },
     withinTimeBudget: reasons.length === 0,
-    status: reasons.length > 0 ? 'fail' : errors.length > 0 ? 'invalid' : diagnostic ? 'diagnostic' : 'pass', reasons };
+    status: reportOnly ? errors.length > 0 ? 'invalid' : 'reported'
+      : reasons.length > 0 ? 'fail' : errors.length > 0 ? 'invalid' : diagnostic ? 'diagnostic' : 'pass', reasons };
 }
 
-/** A complete diagnostic run can finish successfully, but can never claim PASS. */
+/** Reporting retains reference comparisons; only invalid measurements fail it.
+ * The legacy gate mode remains readable for historical reports and policy tests.
+ */
 export function evaluatePerformanceBudgets(samples, specification) {
-  const { projects, metrics, samplesPerMetric, warmupMetrics = metrics, diagnostic = false, ci = false, profile = 'ux-v2' } = specification;
+  const { projects, metrics, samplesPerMetric, warmupMetrics = metrics, diagnostic = false, reportOnly = false, ci = false, profile = 'ux-v2' } = specification;
   const coverageErrors = validateSampleCoverage(samples, { projects, metrics, samplesPerMetric, warmupMetrics });
   const errors = [...coverageErrors];
   const selectedProfile = typeof profile === 'string' && Object.hasOwn(PERFORMANCE_PROFILES, profile) ? PERFORMANCE_PROFILES[profile] : undefined;
   if (!selectedProfile) errors.push(`Unknown performance profile: ${String(profile)}`);
-  if (typeof diagnostic !== 'boolean' || typeof ci !== 'boolean') errors.push('Invalid performance gate mode');
+  if (typeof diagnostic !== 'boolean' || typeof reportOnly !== 'boolean' || typeof ci !== 'boolean') errors.push('Invalid performance mode');
   if (diagnostic && ci) errors.push('Diagnostic performance mode is not allowed in CI');
   if (!diagnostic && samplesPerMetric < MINIMUM_GATE_SAMPLES) {
-    errors.push(`Performance PASS requires at least ${MINIMUM_GATE_SAMPLES} measured samples per metric; use explicit diagnostic mode for a shorter local run`);
+    errors.push(`Performance ${reportOnly ? 'reporting' : 'PASS'} requires at least ${MINIMUM_GATE_SAMPLES} measured samples per metric; use explicit diagnostic mode for a shorter local run`);
   }
   for (const metric of Array.isArray(metrics) ? metrics : []) {
     const limit = findBudget(metric);
@@ -144,14 +147,14 @@ export function evaluatePerformanceBudgets(samples, specification) {
     const override = projectOverrides && Object.hasOwn(projectOverrides, row.metric) ? projectOverrides[row.metric] : undefined;
     const limit = selectedProfile ? override ?? uxLimit : undefined;
     return { project: row.project, metric: row.metric, label: row.label, cacheState: row.cacheState, n: row.n,
-      ...assessTiming(row, limit, { errors, diagnostic }), budgetSource: override ? profile : 'ux-v2',
-      ux: assessTiming(row, uxLimit, { errors, diagnostic }) };
+      ...assessTiming(row, limit, { errors, diagnostic, reportOnly }), budgetSource: override ? profile : 'ux-v2',
+      ux: assessTiming(row, uxLimit, { errors, diagnostic, reportOnly }) };
   });
   const exceeded = results.filter(row => !row.withinTimeBudget);
   const uxExceeded = results.filter(row => !row.ux.withinTimeBudget);
-  const status = errors.length > 0 ? 'fail' : diagnostic ? 'diagnostic' : exceeded.length > 0 ? 'fail' : 'pass';
-  const uxStatus = errors.length > 0 ? 'fail' : diagnostic ? 'diagnostic' : uxExceeded.length > 0 ? 'fail' : 'pass';
-  return { policyVersion: PERFORMANCE_POLICY_VERSION, profile, status, uxStatus, mode: diagnostic ? 'diagnostic' : 'gate',
+  const status = errors.length > 0 ? 'fail' : diagnostic ? 'diagnostic' : reportOnly ? 'reported' : exceeded.length > 0 ? 'fail' : 'pass';
+  const uxStatus = errors.length > 0 ? 'fail' : diagnostic ? 'diagnostic' : reportOnly ? 'reported' : uxExceeded.length > 0 ? 'fail' : 'pass';
+  return { policyVersion: PERFORMANCE_POLICY_VERSION, profile, status, uxStatus, mode: diagnostic ? 'diagnostic' : reportOnly ? 'report-only' : 'gate',
     minimumGateSamples: MINIMUM_GATE_SAMPLES, samplesRequested: samplesPerMetric,
     requiredWithinBudgetRule: 'ceil(measuredSampleCount * 6 / 7)',
     coverage: { complete: coverageErrors.length === 0, errors: coverageErrors }, errors, results,
@@ -162,17 +165,23 @@ export function evaluatePerformanceBudgets(samples, specification) {
 }
 
 export function budgetMarkdown(evaluation) {
+  const reportOnly = evaluation.mode === 'report-only';
+  const comparison = value => value.status === 'invalid' ? '측정 오류' : value.withinTimeBudget ? '기준 이내' : '기준 초과';
   const lines = [
-    `성능 판정: **${evaluation.status.toUpperCase()}** (적용 프로필: ${evaluation.profile}, ${evaluation.policyVersion}). UX 기준 비교: **${evaluation.uxStatus.toUpperCase()}**.`,
+    reportOnly ? `성능 측정: **리포트 전용** (참고 프로필: ${evaluation.profile}, ${evaluation.policyVersion}). 시간 기준 초과로 CI를 실패시키지 않습니다.`
+      : `성능 판정: **${evaluation.status.toUpperCase()}** (적용 프로필: ${evaluation.profile}, ${evaluation.policyVersion}). UX 기준 비교: **${evaluation.uxStatus.toUpperCase()}**.`,
     '',
-    '각 지표는 중앙값, 7회 중 6회(횟수가 다르면 ceil(n × 6 / 7)), 모든 개별 표본의 최대 허용 시간을 함께 검사합니다. 기준 이내의 상대적 속도 변화는 실패시키지 않습니다.',
+    reportOnly ? '중앙값, 반복 측정, 최대 시간과 참고선 대비 차이를 기록합니다. 기능 오류·측정 실패·표본 누락은 계속 검증합니다.'
+      : '각 지표는 중앙값, 7회 중 6회(횟수가 다르면 ceil(n × 6 / 7)), 모든 개별 표본의 최대 허용 시간을 함께 검사합니다. 기준 이내의 상대적 속도 변화는 실패시키지 않습니다.',
   ];
-  if (evaluation.profile !== 'ux-v2') lines.push('', 'CI 환경의 명시적 고정 허용값을 적용했습니다. 기존 UX 기준과 비교 결과도 함께 보존하며, CI 통과를 실기기 UX 통과로 해석하지 않습니다.');
+  if (evaluation.profile !== 'ux-v2') lines.push('', reportOnly ? 'CI 환경 참고선과 기존 UX 목표를 함께 보존합니다. 실제 휴대폰·운영 네트워크의 성능과 구분합니다.'
+    : 'CI 환경의 명시적 고정 허용값을 적용했습니다. 기존 UX 기준과 비교 결과도 함께 보존하며, CI 통과를 실기기 UX 통과로 해석하지 않습니다.');
   if (evaluation.mode === 'diagnostic') lines.push('', '진단 실행입니다. 시간 초과도 원본에 남기지만 성능 PASS를 부여하지 않습니다.');
   if (evaluation.errors.length) lines.push('', ...evaluation.errors.map(error => `- 검증 실패: ${error}`));
-  lines.push('', '| 환경 | 동작 | 적용 판정 | UX 판정 | 중앙값 / 적용·UX 기준 ms | 6/7 기준 이내 (적용·UX) | 개별 최대 / 적용·UX 기준 ms |', '|---|---|---|---|---:|---:|---:|');
-  for (const row of evaluation.results) lines.push(`| ${row.project} | ${row.label} | ${row.status.toUpperCase()}${row.reasons.length ? ` (${row.reasons.join(', ')})` : ''} | ${row.ux.status.toUpperCase()}${row.ux.reasons.length ? ` (${row.ux.reasons.join(', ')})` : ''} | ${row.observed.medianMs.toFixed(1)} / ${row.budget?.medianMs ?? '없음'}·${row.ux.budget?.medianMs ?? '없음'} | ${row.observed.withinBudget}·${row.ux.observed.withinBudget}/${row.n} (필요 ${row.observed.requiredWithinBudget}, ${row.budget?.sixOfSevenMs ?? '없음'}·${row.ux.budget?.sixOfSevenMs ?? '없음'}ms) | ${row.observed.maxMs.toFixed(1)} / ${row.budget?.maxMs ?? '없음'}·${row.ux.budget?.maxMs ?? '없음'} |`);
-  lines.push('', '준비 실행은 위 반복 실행 판정에서 제외하여 별도로 보존합니다. 이 판정은 최초 실행이나 실제 휴대폰·운영 인터넷 성능의 합격을 의미하지 않습니다.');
+  lines.push('', `| 환경 | 동작 | ${reportOnly ? '환경 참고선 비교 | UX 목표 비교' : '적용 판정 | UX 판정'} | 중앙값 / 적용·UX 기준 ms | 6/7 기준 이내 (적용·UX) | 개별 최대 / 적용·UX 기준 ms |`, '|---|---|---|---|---:|---:|---:|');
+  for (const row of evaluation.results) lines.push(`| ${row.project} | ${row.label} | ${reportOnly ? comparison(row) : row.status.toUpperCase()}${row.reasons.length ? ` (${row.reasons.join(', ')})` : ''} | ${reportOnly ? comparison(row.ux) : row.ux.status.toUpperCase()}${row.ux.reasons.length ? ` (${row.ux.reasons.join(', ')})` : ''} | ${row.observed.medianMs.toFixed(1)} / ${row.budget?.medianMs ?? '없음'}·${row.ux.budget?.medianMs ?? '없음'} | ${row.observed.withinBudget}·${row.ux.observed.withinBudget}/${row.n} (참고 ${row.observed.requiredWithinBudget}, ${row.budget?.sixOfSevenMs ?? '없음'}·${row.ux.budget?.sixOfSevenMs ?? '없음'}ms) | ${row.observed.maxMs.toFixed(1)} / ${row.budget?.maxMs ?? '없음'}·${row.ux.budget?.maxMs ?? '없음'} |`);
+  lines.push('', reportOnly ? '준비 실행은 본 측정과 분리하여 보존합니다. 시간 기준은 합격·불합격 판정에 사용하지 않습니다.'
+    : '준비 실행은 위 반복 실행 판정에서 제외하여 별도로 보존합니다. 이 판정은 최초 실행이나 실제 휴대폰·운영 인터넷 성능의 합격을 의미하지 않습니다.');
   if (evaluation.warmupSamples.length) {
     lines.push('', '| 준비 실행 환경 | 동작 | 시간 ms |', '|---|---|---:|');
     for (const sample of evaluation.warmupSamples) lines.push(`| ${sample.project} | ${sample.label ?? sample.metric} | ${Number.isFinite(sample.durationMs) ? sample.durationMs.toFixed(1) : '잘못된 시간'} |`);
