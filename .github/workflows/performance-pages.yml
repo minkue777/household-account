@@ -1,0 +1,64 @@
+name: 성능 보고서 게시
+
+on:
+  workflow_run:
+    workflows: ['독립 품질 CI']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.head_repository.full_name == github.repository &&
+       github.event.workflow_run.event != 'pull_request')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 보고서 게시 범위 검사
+        run: node --test tools/performance/publish-site.test.mjs
+      - name: 완료된 CI의 HTML만 준비
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/performance/publish-site.mjs "$RUNNER_TEMP/performance-site"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ runner.temp }}/performance-site
+      - name: 보고서 게시
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: 보고서 바로 보기
+        env:
+          SITE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          printf '\n### 성능 그래프\n\n' >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f "$RUNNER_TEMP/performance-site/web.html" ]]; then
+            printf '[Web 보고서 바로 보기](%sweb.html)\n\n' "$SITE_URL" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [[ -f "$RUNNER_TEMP/performance-site/android.html" ]]; then
+            printf '[Android 보고서 바로 보기](%sandroid.html)\n\n' "$SITE_URL" >> "$GITHUB_STEP_SUMMARY"
+          fi

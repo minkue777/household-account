@@ -1,21 +1,31 @@
 # CI 성능 HTML 보고서
 
-CI는 성능 측정이 남긴 JSON으로 독립 HTML을 만들고 JSON·Markdown과 함께 보관합니다. 보고서 생성은 측정과 분리되어 있으며, 보고서를 위한 E2E 재실행이나 별도 서버가 필요하지 않습니다. 현재 Web·Android 성능은 [보고 전용 정책](./performance-report-only-2026-09-17.md)에 따라 소요 시간으로 통과·실패를 판정하지 않습니다. 측정 표본과 시작·종료 시점은 유지합니다.
+CI는 성능 측정이 남긴 JSON으로 독립 HTML을 만들고, 완료 후 보고서 전용 GitHub Pages에 게시합니다. 보고서 생성·게시에는 E2E 재실행이나 앱·Firebase 재배포가 필요하지 않습니다. 현재 Web·Android 성능은 [보고 전용 정책](./performance-report-only-2026-09-17.md)에 따라 소요 시간으로 통과·실패를 판정하지 않습니다. 측정 표본과 시작·종료 시점은 유지합니다.
 
 ## 보고서 열기
 
 1. GitHub 저장소의 **Actions → 독립 품질 CI → 해당 실행 → Summary**를 엽니다.
-2. **Web 성능 HTML 보고서** 또는 **Android 성능 HTML 보고서**의 다운로드 링크를 누릅니다. GitHub 로그인이 필요합니다.
-3. ZIP 압축을 풀고 다음 파일을 브라우저로 엽니다.
+2. **Web 성능 그래프** 또는 **Android 성능 그래프**의 **보고서 바로 보기** 링크를 누릅니다.
+3. 압축 해제나 GitHub 로그인 없이 브라우저에서 그래프가 열립니다. CI 종료 직후에는 별도 **성능 보고서 게시** 작업이 완료될 때까지 잠시 기다려야 합니다.
 
-| 아티팩트 | 압축을 푼 뒤 열 파일 |
+| 주소 | 내용 |
 |---|---|
-| `quality-web-performance` | `web.html` |
-| `quality-android-performance` | `performance-results/android.html` |
+| [최신 Web 보고서](https://minkue777.github.io/household-account/web.html) | 가장 최근 완료된 Web 측정 |
+| [최신 Android 보고서](https://minkue777.github.io/household-account/android.html) | 가장 최근 Android 측정. 이번 CI에서 Android를 측정하지 않았다면 이전 측정 결과와 시각을 그대로 표시 |
+| `https://minkue777.github.io/household-account/runs/<실행 ID>/web.html` | 해당 CI 실행의 Web 측정 |
+| `https://minkue777.github.io/household-account/runs/<실행 ID>/android.html` | 해당 CI 실행의 Android 측정 |
 
-실행 화면의 **Artifacts** 목록에서도 같은 파일을 받을 수 있습니다. Android 검사가 변경 범위에 해당하지 않으면 Android 보고서는 생성되지 않습니다. 측정 실패 시에도 기록된 결과의 HTML을 남기지만, 빌드·환경 준비 실패처럼 보고서 생성 단계에 도달하지 못한 경우는 실행 로그를 확인해야 합니다.
+게시 작업은 최근 완료된 main CI 20개의 사용 가능한 보고서를 보관합니다. 해당 범위를 벗어나거나 원본 아티팩트가 만료되면 실행별 공개 링크도 제거됩니다. 원본 JSON·Markdown·진단 파일은 기존 **Artifacts**에 보관하며 필요한 경우에만 다운로드합니다. Android 검사가 변경 범위에 해당하지 않으면 해당 실행의 Android 보고서는 없습니다. 측정 실패 시에도 생성된 HTML을 게시하지만, 빌드·환경 준비 실패처럼 HTML 생성 단계에 도달하지 못한 경우는 실행 로그를 확인해야 합니다.
 
-다운로드 링크는 공개 HTML 호스팅 주소가 아닙니다. 아티팩트 보관 기간이 지나거나 실행이 삭제되면 링크도 사용할 수 없습니다. [GitHub upload-artifact 공식 문서](https://github.com/actions/upload-artifact/tree/v4#outputs)
+GitHub의 artifact 링크는 ZIP 다운로드 주소여서 HTML 바로 보기 링크로 안내하지 않습니다. GitHub Pages는 정적 HTML을 브라우저에 제공합니다. [GitHub Pages 공식 문서](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
+
+## 게시 범위와 재게시
+
+`.github/workflows/performance-pages.yml`은 **독립 품질 CI**가 끝나면 실행되고, 수동 실행도 지원합니다. 이전 결과를 다시 게시하려면 **Actions → 성능 보고서 게시 → Run workflow**를 실행합니다. 테스트를 다시 돌리지 않습니다.
+
+게시 도구는 같은 저장소의 main에서 실행된 push·수동 CI만 선택하고, GitHub가 제공하는 실행·아티팩트의 커밋 출처를 확인합니다. Web JSON의 커밋도 같은지 대조합니다. 커밋 필드가 없는 기존 Android 보고서는 GitHub 실행 출처로 확인하고, 커밋 필드가 있으면 추가 대조합니다. 명시된 `web.html`·`android.html`만 게시하며 원본 JSON, 실패 화면, DOM, 로그, trace는 공개 사이트에 복사하지 않습니다. 보고서는 합성 데이터로 측정한 시간과 CI 환경 정보이며 운영 가계부의 거래 정보는 포함하지 않습니다. 공개할 보고서가 하나도 없으면 기존 사이트를 빈 내용으로 덮지 않고 게시를 실패 처리합니다.
+
+측정 결과·당시 기준·그래프 내용은 다시 계산하지 않고 생성된 HTML 그대로 게시합니다. 앱의 Vercel 배포와 보고서용 Pages 배포는 독립적입니다.
 
 ## 그래프와 참고선 읽기
 
