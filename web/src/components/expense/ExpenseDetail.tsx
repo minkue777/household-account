@@ -24,7 +24,7 @@ interface ExpenseDetailProps {
     expectedVersion?: number,
     rememberForNextTime?: boolean
   ) => Promise<void> | void;
-  onDelete?: (expenseId: string) => Promise<void> | void;
+  onDelete?: (expenseId: string, expectedVersion?: number) => Promise<void> | void;
   onAddExpense?: () => void;
   onSplitExpense?: (
     expense: Expense,
@@ -55,7 +55,9 @@ export default function ExpenseDetail({
 }: ExpenseDetailProps) {
   const { showAlert } = useAppDialog();
   const transactionLabel = transactionType === 'income' ? '수입' : '지출';
-  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  // A pending date change or deletion can remove the row from this day's source.
+  // Keep the selected transaction until the editor explicitly closes.
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [splittingExpenseId, setSplittingExpenseId] = useState<string | null>(null);
   const handleMergeError = useCallback((error: unknown) => {
     const detail = error instanceof Error && error.message.trim() !== ''
@@ -82,11 +84,10 @@ export default function ExpenseDetail({
     onMergeExpenses,
     onMergeError: handleMergeError,
   });
-  const editingExpense = expenses.find((expense) => expense.id === editingExpenseId);
   const splittingExpense = expenses.find((expense) => expense.id === splittingExpenseId);
 
   useEffect(() => {
-    if (!autoEditExpenseId || editingExpenseId === autoEditExpenseId) {
+    if (!autoEditExpenseId || editingExpense?.id === autoEditExpenseId) {
       return;
     }
 
@@ -96,22 +97,19 @@ export default function ExpenseDetail({
     }
 
     setSplittingExpenseId(null);
-    setEditingExpenseId(autoEditExpense.id);
+    setEditingExpense(autoEditExpense);
     onAutoEditHandled?.();
-  }, [autoEditExpenseId, editingExpenseId, expenses, onAutoEditHandled]);
+  }, [autoEditExpenseId, editingExpense, expenses, onAutoEditHandled]);
 
   useEffect(() => {
-    if (editingExpenseId && !editingExpense) {
-      setEditingExpenseId(null);
-    }
     if (splittingExpenseId && !splittingExpense) {
       setSplittingExpenseId(null);
     }
-  }, [editingExpense, editingExpenseId, splittingExpense, splittingExpenseId]);
+  }, [splittingExpense, splittingExpenseId]);
 
   const openExpenseEditor = (expense: Expense) => {
     setSplittingExpenseId(null);
-    setEditingExpenseId(expense.id);
+    setEditingExpense(expense);
   };
 
   const handleSaveEdit = (
@@ -140,26 +138,6 @@ export default function ExpenseDetail({
     return `${dateValue.getUTCMonth() + 1}월 ${dateValue.getUTCDate()}일 (${days[dateValue.getUTCDay()]})`;
   };
 
-  if (expenses.length === 0) {
-    return (
-      <div className="rounded-2xl border border-slate-200/70 bg-white/95 p-6 shadow-sm backdrop-blur-sm">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-800">{formatDate(date)}</h3>
-          {onAddExpense && (
-            <button
-              onClick={onAddExpense}
-              className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-500"
-              aria-label={`${transactionLabel} 추가`}
-            >
-              <Plus className="h-5 w-5" />
-            </button>
-          )}
-        </div>
-        <div className="py-8 text-center text-slate-400">{transactionLabel} 내역이 없습니다</div>
-      </div>
-    );
-  }
-
   return (
     <div className="rounded-2xl border border-slate-200/70 bg-white/95 p-6 shadow-sm backdrop-blur-sm">
       <div className="mb-4 flex items-center justify-between">
@@ -187,6 +165,9 @@ export default function ExpenseDetail({
       )}
 
       <div className="space-y-3">
+        {expenses.length === 0 && (
+          <div className="py-8 text-center text-slate-400">{transactionLabel} 내역이 없습니다</div>
+        )}
         {expenses.map((expense) => (
           <ExpenseItem
             key={expense.id}
@@ -212,7 +193,7 @@ export default function ExpenseDetail({
         <ExpenseEditModal
           expense={editingExpense}
           isOpen
-          onClose={() => setEditingExpenseId(null)}
+          onClose={() => setEditingExpense(null)}
           transactionType={transactionType}
           onSave={(updates, remember) => handleSaveEdit(editingExpense, updates, remember)}
           allowRememberMerchant={transactionType === 'expense' && onExpenseUpdate !== undefined}
@@ -227,7 +208,7 @@ export default function ExpenseDetail({
           onOpenSplit={
             transactionType === 'expense' && onSplitExpense
               ? () => {
-                  setEditingExpenseId(null);
+                  setEditingExpense(null);
                   setSplittingExpenseId(editingExpense.id);
                 }
               : undefined
@@ -260,7 +241,7 @@ export default function ExpenseDetail({
                   })
               : undefined
           }
-          onDelete={onDelete ? () => onDelete(editingExpense.id) : undefined}
+          onDelete={onDelete ? () => onDelete(editingExpense.id, editingExpense.aggregateVersion) : undefined}
           onNotifyPartner={
             transactionType === 'expense'
               ? async () => {

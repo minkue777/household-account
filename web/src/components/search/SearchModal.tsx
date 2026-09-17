@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import type { Expense, TransactionType } from '@/types/expense';
 import type { SplitItem } from '@/lib/expenseService';
@@ -13,7 +13,6 @@ import Portal from '../common/Portal';
 import { ExpenseEditModal, ExpenseSplitModal } from '../expense';
 import SearchResultList from './SearchResultList';
 import { useAppDialog } from '@/contexts/AppDialogContext';
-import type { ExpenseSearchCursor, ExpenseSearchSummary } from '@/lib/expenseService';
 import { useHousehold } from '@/contexts/HouseholdContext';
 
 interface SearchModalProps {
@@ -50,16 +49,23 @@ export default function SearchModal({
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState<Expense[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [nextCursor, setNextCursor] = useState<ExpenseSearchCursor | undefined>();
   const [searchError, setSearchError] = useState('');
-  const [summary, setSummary] = useState<ExpenseSearchSummary>();
   const sourceWindowRef = useRef('');
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [splitExpense, setSplitExpense] = useState<Expense | null>(null);
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const resultsContainerRef = useRef<HTMLDivElement>(null);
+  const refreshScrollTopRef = useRef<number | null>(null);
   const projectionRef = useRef<ExpenseProjectionSubscription | null>(null);
   const searchRequestIdRef = useRef(0);
+
+  useLayoutEffect(() => {
+    if (refreshScrollTopRef.current !== null && resultsContainerRef.current) {
+      resultsContainerRef.current.scrollTop = refreshScrollTopRef.current;
+      refreshScrollTopRef.current = null;
+    }
+  }, [results]);
 
   useEffect(() => {
     const windowId = `search-${Date.now()}-${Math.random()}`;
@@ -101,27 +107,24 @@ export default function SearchModal({
     setExpandedMonth(null);
   }, [isOpen]);
 
-  const refreshSearch = async () => {
-    const projection = projectionRef.current;
-    if (!projection || !keyword.trim()) return;
+  const refreshSearch = async (projection: ExpenseProjectionSubscription | null) => {
+    if (!projection || projectionRef.current !== projection || !keyword.trim()) return;
     const requestId = ++searchRequestIdRef.current;
     const isCurrentRequest = () => requestId === searchRequestIdRef.current
       && projectionRef.current === projection;
     setIsSearching(true);
     setSearchError('');
-    setNextCursor(undefined);
     try {
-      const { searchExpensePage } = await import('@/lib/expenseService');
+      const { searchExpenses } = await import('@/lib/expenseService');
       if (!isCurrentRequest()) return;
       sourceWindowRef.current = `search-${Date.now()}-${Math.random()}`;
-      const page = await searchExpensePage(keyword, { transactionType, sourceWindow: sourceWindowRef.current });
+      const refreshed = await searchExpenses(keyword, { transactionType, sourceWindow: sourceWindowRef.current });
       if (!isCurrentRequest()) return;
-      projection.publish(page.items);
-      setNextCursor(page.nextCursor);
-      setSummary(page.summary);
-      setExpandedMonth((currentMonth) => page.items.some(expense => expense.date.substring(0, 7) === currentMonth)
-        ? currentMonth
-        : page.items[0]?.date.substring(0, 7) ?? null);
+      refreshScrollTopRef.current = resultsContainerRef.current?.scrollTop ?? null;
+      projection.publish(refreshed);
+      setExpandedMonth(currentMonth => currentMonth === null
+        || refreshed.some(expense => expense.date.substring(0, 7) === currentMonth)
+        ? currentMonth : null);
     } catch (error) {
       if (isCurrentRequest()) {
         setSearchError(error instanceof Error ? error.message : '검색 결과를 불러오지 못했습니다.');
@@ -129,27 +132,6 @@ export default function SearchModal({
     } finally {
       if (isCurrentRequest()) setIsSearching(false);
     }
-  };
-
-  const loadNextPage = async () => {
-    if (!nextCursor || isSearching || !projectionRef.current) return;
-    const projection = projectionRef.current;
-    const requestId = ++searchRequestIdRef.current;
-    setIsSearching(true);
-    try {
-      const { searchExpensePage } = await import('@/lib/expenseService');
-      const page = await searchExpensePage(keyword, { transactionType, cursor: nextCursor, sourceWindow: sourceWindowRef.current });
-      if (requestId !== searchRequestIdRef.current || projectionRef.current !== projection) return;
-      projection.publish([...results, ...page.items]);
-      setNextCursor(page.nextCursor);
-      setSummary(page.summary);
-      setSearchError('');
-    } catch {
-      if (requestId === searchRequestIdRef.current && projectionRef.current === projection) {
-        setSearchError('검색 결과를 불러오지 못했습니다.');
-      }
-    }
-    finally { if (requestId === searchRequestIdRef.current) setIsSearching(false); }
   };
 
   const handleSaveEdit = async (updates: {
@@ -160,50 +142,56 @@ export default function SearchModal({
     date?: string;
   }) => {
     if (!selectedExpense || !onExpenseUpdate) return;
+    const projection = projectionRef.current;
     await onExpenseUpdate(selectedExpense.id, updates, selectedExpense.aggregateVersion);
-    void refreshSearch();
+    void refreshSearch(projection);
   };
 
   const handleDelete = async (id: string) => {
     if (!onDelete) return;
     const expense = results.find(item => item.id === id) ?? selectedExpense;
     if (!expense || expense.id !== id) throw new Error('삭제할 거래의 버전을 찾을 수 없습니다.');
+    const projection = projectionRef.current;
     await onDelete(id, expense.aggregateVersion);
-    void refreshSearch();
+    void refreshSearch(projection);
   };
 
   const handleSplitExpense = async (expense: Expense, splits: SplitItem[]) => {
     if (!onSplitExpense) return;
+    const projection = projectionRef.current;
     await onSplitExpense(expense, splits);
-    void refreshSearch();
+    void refreshSearch(projection);
   };
 
   const handleSplitMonths = async (months: number) => {
     if (!selectedExpense || !onDelete) return;
+    const projection = projectionRef.current;
     await runSplitMonthsAction({
       expense: selectedExpense,
       months,
       deleteExpense: onDelete,
-      onSuccess: refreshSearch,
+      onSuccess: () => refreshSearch(projection),
       alertFn: (message) => void showAlert(message),
     });
   };
 
   const handleCancelSplitGroup = async () => {
     if (!selectedExpense) return;
+    const projection = projectionRef.current;
     await runCancelSplitGroupAction({
       expense: selectedExpense,
-      onSuccess: refreshSearch,
+      onSuccess: () => refreshSearch(projection),
       alertFn: (message) => void showAlert(message),
     });
   };
 
   const handleUpdateSplitGroup = async (newMonths: number) => {
     if (!selectedExpense) return;
+    const projection = projectionRef.current;
     await runUpdateSplitGroupAction({
       expense: selectedExpense,
       newMonths,
-      onSuccess: refreshSearch,
+      onSuccess: () => refreshSearch(projection),
       alertFn: (message) => void showAlert(message),
     });
   };
@@ -215,7 +203,7 @@ export default function SearchModal({
 
   useEffect(() => {
     setResults([]);
-    setNextCursor(undefined);
+    refreshScrollTopRef.current = null;
     setSearchError('');
     if (!isOpen || !keyword.trim()) {
       setIsSearching(false);
@@ -228,7 +216,7 @@ export default function SearchModal({
     let projection: ExpenseProjectionSubscription | undefined;
     void import('@/lib/expenseService').then(({
       createExpenseSearchMatcher,
-      searchExpensePage,
+      searchExpenses,
       subscribeToExpenseProjection,
     }) => {
       if (cancelled) return;
@@ -245,18 +233,13 @@ export default function SearchModal({
         const requestId = ++searchRequestIdRef.current;
         setIsSearching(true);
         setSearchError('');
-        setSummary(undefined);
-        setNextCursor(undefined);
         try {
-          const page = await searchExpensePage(keyword, { transactionType, sourceWindow: sourceWindowRef.current });
+          const searchResults = await searchExpenses(keyword, { transactionType, sourceWindow: sourceWindowRef.current });
           if (
             requestId !== searchRequestIdRef.current
             || projectionRef.current !== projection
           ) return;
-          const searchResults = page.items;
           projection.publish(searchResults);
-          setNextCursor(page.nextCursor);
-          setSummary(page.summary);
           if (searchResults.length > 0) {
             setExpandedMonth(searchResults[0].date.substring(0, 7));
           } else {
@@ -331,11 +314,10 @@ export default function SearchModal({
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4">
+          <div ref={resultsContainerRef} className="flex-1 overflow-y-auto p-4" aria-busy={isSearching}>
             {(!searchError || results.length > 0) && <SearchResultList
               keyword={keyword}
               results={results}
-              summary={summary}
               isSearching={isSearching}
               expandedMonth={expandedMonth}
               onExpandedMonthChange={setExpandedMonth}
@@ -343,7 +325,6 @@ export default function SearchModal({
               transactionType={transactionType}
             />}
             {searchError && <p role="alert" className="py-2 text-sm text-red-600">{searchError}</p>}
-            {nextCursor && <button type="button" disabled={isSearching} onClick={() => void loadNextPage()} className="w-full rounded-lg p-3 text-sm text-blue-600 disabled:opacity-50">이전 거래에서 더 검색</button>}
           </div>
         </div>
       </div>
@@ -366,9 +347,10 @@ export default function SearchModal({
               : undefined
           }
           onRestoreItemSplit={selectedExpense.derivedFromTransactionId ? async () => {
+            const projection = projectionRef.current;
             const { restoreItemSplit } = await import('@/lib/expenseService');
             await restoreItemSplit(selectedExpense);
-            await refreshSearch();
+            await refreshSearch(projection);
           } : undefined}
           onUpdateSplitGroup={
             transactionType === 'expense' && selectedExpense.splitGroupId

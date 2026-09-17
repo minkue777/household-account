@@ -1,11 +1,12 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Profiler } from 'react';
 import AssetStatsPage from '@/app/assets/stats/page';
-import { readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
+import { peekAssetStatisticsHistory, readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
 import { subscribeToAssets, getAllStockHoldings, getDividendSnapshot, getDividendEventsByYear, type DividendSnapshotData } from '@/lib/assetService';
 import type { AssetHistoryEntry } from '@/types/asset';
 import { getTodayLocalDate } from '@/lib/utils/date';
 import { invalidateAssetStatisticsCache } from '@/platform/reporting/assetStatisticsQueryCache';
+import { ANDROID_NATIVE_RESUME_EVENT } from '@/platform/android-host/androidLifecycleEvents';
 
 let mockScope = { householdKey: 'house-1', isSessionVerified: false, remoteReadEpoch: 0, currentMember: { id: 'member-1' } };
 jest.mock('@/composition/clientSessionScope', () => ({
@@ -20,7 +21,7 @@ jest.mock('@/lib/assetService', () => ({
   getDividendSnapshot: jest.fn(async () => null),
   getDividendEventsByYear: jest.fn(async () => []),
 }));
-jest.mock('@/platform/reporting/assetStatisticsReadModel', () => ({ readAssetStatisticsHistory: jest.fn() }));
+jest.mock('@/platform/reporting/assetStatisticsReadModel', () => ({ readAssetStatisticsHistory: jest.fn(), peekAssetStatisticsHistory: jest.fn() }));
 const mockTrendOptions = jest.fn();
 jest.mock('react-chartjs-2', () => {
   const React = jest.requireActual<typeof import('react')>('react');
@@ -41,6 +42,7 @@ describe('actual asset statistics page', () => {
     jest.clearAllMocks();
     mockScope = { householdKey: 'house-1', isSessionVerified: false, remoteReadEpoch: 0, currentMember: { id: 'member-1' } };
     read.mockResolvedValue([]);
+    jest.mocked(peekAssetStatisticsHistory).mockReset().mockReturnValue(undefined);
     jest.mocked(getAllStockHoldings).mockReset().mockResolvedValue([]);
     jest.mocked(getDividendSnapshot).mockReset().mockResolvedValue(null);
     jest.mocked(getDividendEventsByYear).mockReset().mockResolvedValue([]);
@@ -113,7 +115,7 @@ describe('actual asset statistics page', () => {
     read.mockResolvedValue([entry('TOTAL', '2019-01-01', 0), entry('TYPE_stock', '2019-01-01', 0), entry('OWNER_REF_profile:old', '2019-01-01', 0, { ownerKey: 'profile:old', ownerDisplayName: '지아' })]);
     render(<AssetStatsPage />);
     await screen.findByText('마지막 기록 자산');
-    expect(read).toHaveBeenCalledWith(undefined, expect.any(String), { cacheEpoch: 0, forceRefresh: false });
+    expect(read).toHaveBeenCalledWith(undefined, expect.any(String), { cacheEpoch: 0, forceRefresh: true });
     expect(screen.queryByText('데이터가 없습니다')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '지아' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('소유자별 자산 추이')).not.toBeInTheDocument();
@@ -178,8 +180,71 @@ describe('actual asset statistics page', () => {
     rerender(<AssetStatsPage />);
     await screen.findByText('25');
     expect(read).toHaveBeenCalledTimes(2);
-    expect(read).toHaveBeenLastCalledWith(undefined, expect.any(String), { cacheEpoch: 1, forceRefresh: false });
+    expect(read).toHaveBeenLastCalledWith(undefined, expect.any(String), { cacheEpoch: 1, forceRefresh: true });
   });
+  it('paints the cached complete history on the first re-entry commit while verifying the server', async () => {
+    mockScope.isSessionVerified = true;
+    jest.mocked(peekAssetStatisticsHistory).mockReturnValue([entry('TOTAL', getTodayLocalDate(), 123456)]);
+    const refresh = deferred<AssetHistoryEntry[]>();
+    read.mockReturnValueOnce(refresh.promise);
+    const commits: string[] = [];
+    render(<Profiler id="cached-reentry" onRender={() => commits.push(document.body.textContent ?? '')}><AssetStatsPage /></Profiler>);
+    expect(commits[0]).toContain('123,456');
+    expect(screen.getByText('최신 자산 이력 확인 중...')).toBeInTheDocument();
+    expect(read).toHaveBeenCalledWith(undefined, expect.any(String), { cacheEpoch: 0, forceRefresh: true });
+    fireEvent.click(screen.getByRole('button', { name: '월별' }));
+    const toggle = screen.getByRole('button', { name: '월별 자산 변동' });
+    fireEvent.click(toggle);
+    await act(async () => refresh.resolve([entry('TOTAL', getTodayLocalDate(), 234567)]));
+    expect(screen.getByText('234,567')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '월별 자산 변동' })).toBe(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByText('최신 자산 이력 확인 중...')).not.toBeInTheDocument();
+  });
+
+  it.each(['focus', 'pageshow', 'online', 'visibilitychange', ANDROID_NATIVE_RESUME_EVENT])('revalidates on %s while keeping charts and coalescing pending resume events', async event => {
+    mockScope.isSessionVerified = true;
+    read.mockResolvedValueOnce([entry('TOTAL', getTodayLocalDate(), 100)]);
+    render(<AssetStatsPage />);
+    await screen.findByText('100');
+    const chart = screen.getByTestId('chart');
+    const refresh = deferred<AssetHistoryEntry[]>();
+    read.mockReturnValueOnce(refresh.promise);
+    fireEvent(event === 'visibilitychange' ? document : window, new Event(event));
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('100')).toBeInTheDocument();
+    expect(screen.getByTestId('chart')).toBe(chart);
+    fireEvent(window, new Event('focus'));
+    fireEvent(window, new Event(ANDROID_NATIVE_RESUME_EVENT));
+    fireEvent.click(screen.getByRole('button', { name: '6개월' }));
+    expect(read).toHaveBeenCalledTimes(2);
+    await act(async () => refresh.resolve([entry('TOTAL', getTodayLocalDate(), 200)]));
+    expect(screen.getByText('200')).toBeInTheDocument();
+    expect(screen.getByTestId('chart')).toBe(chart);
+    expect(screen.getByRole('button', { name: '6개월' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('keeps the last completed chart when background verification fails and retries without hiding it', async () => {
+    mockScope.isSessionVerified = true;
+    read.mockResolvedValueOnce([entry('TOTAL', getTodayLocalDate(), 123456)]);
+    render(<AssetStatsPage />);
+    await screen.findByText('123,456');
+    const chart = screen.getByTestId('chart');
+    read.mockRejectedValueOnce(new Error('offline'));
+    fireEvent(window, new Event('focus'));
+    await screen.findByText('최신 자산 이력을 확인하지 못했습니다. 이전 내역을 표시합니다.');
+    expect(screen.getByText('123,456')).toBeInTheDocument();
+    expect(screen.getByTestId('chart')).toBe(chart);
+    const retry = deferred<AssetHistoryEntry[]>();
+    read.mockReturnValueOnce(retry.promise);
+    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+    expect(screen.getByText('123,456')).toBeInTheDocument();
+    expect(screen.getByTestId('chart')).toBe(chart);
+    await act(async () => retry.resolve([entry('TOTAL', getTodayLocalDate(), 234567)]));
+    expect(screen.getByText('234,567')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('does not replace history with a cached empty list and accepts a confirmed zero balance', async () => {
     mockScope.isSessionVerified = true;
     read.mockResolvedValue([entry('TOTAL', '2026-09-01', 123456)]);

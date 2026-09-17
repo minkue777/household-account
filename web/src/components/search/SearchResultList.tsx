@@ -5,7 +5,6 @@ import { ChevronRight, Search } from 'lucide-react';
 import { Expense, TransactionType } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { getLedgerPrimaryText, getLedgerSecondaryText } from '@/lib/utils/ledgerDisplay';
-import type { ExpenseSearchSummary } from '@/lib/expenseService';
 
 interface MonthlyGroup {
   yearMonth: string;
@@ -22,7 +21,6 @@ interface SearchResultListProps {
   onExpandedMonthChange: (month: string | null) => void;
   onExpenseClick: (expense: Expense) => void;
   transactionType: TransactionType;
-  summary?: ExpenseSearchSummary;
 }
 
 export default function SearchResultList({
@@ -33,7 +31,6 @@ export default function SearchResultList({
   onExpandedMonthChange,
   onExpenseClick,
   transactionType,
-  summary,
 }: SearchResultListProps) {
   const { getCategoryLabel, getCategoryColor } = useCategoryContext();
   const transactionLabel = transactionType === 'income' ? '수입' : '지출';
@@ -58,15 +55,13 @@ export default function SearchResultList({
       group.total += expense.amount;
       loadedAmount += expense.amount;
     }
-    // Whole-source month totals remain visible even before their page is loaded.
-    for (const yearMonth of Object.keys(summary?.months ?? {})) groupFor(yearMonth);
     return {
       groupedResults: Array.from(groups.values()).sort((left, right) => right.yearMonth.localeCompare(left.yearMonth)),
-      totalAmount: summary?.amount ?? loadedAmount,
+      totalAmount: loadedAmount,
     };
-  }, [results, summary]);
+  }, [results]);
 
-  if (isSearching) {
+  if (isSearching && results.length === 0) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-500" />
@@ -98,7 +93,7 @@ export default function SearchResultList({
         <div className="flex items-center justify-between">
           <span className="font-medium text-blue-800">&quot;{keyword}&quot; 검색 결과</span>
           <span className="text-blue-600">
-            {summary?.count ?? results.length}건 · {totalAmount.toLocaleString()}원
+            {results.length}건 · {totalAmount.toLocaleString()}원
           </span>
         </div>
       </div>
@@ -106,6 +101,8 @@ export default function SearchResultList({
       {groupedResults.map((group) => (
         <div key={group.yearMonth} className="overflow-hidden rounded-xl border border-slate-200">
           <button
+            type="button"
+            aria-expanded={expandedMonth === group.yearMonth}
             onClick={() =>
               onExpandedMonthChange(expandedMonth === group.yearMonth ? null : group.yearMonth)
             }
@@ -118,9 +115,9 @@ export default function SearchResultList({
                 }`}
               />
               <span className="font-semibold text-slate-800">{group.label}</span>
-              <span className="text-sm text-slate-500">{summary?.months[group.yearMonth]?.count ?? group.expenses.length}건</span>
+              <span className="text-sm text-slate-500">{group.expenses.length}건</span>
             </div>
-            <span className="font-semibold text-slate-800">{(summary?.months[group.yearMonth]?.amount ?? group.total).toLocaleString()}원</span>
+            <span className="font-semibold text-slate-800">{group.total.toLocaleString()}원</span>
           </button>
 
           {expandedMonth === group.yearMonth && (

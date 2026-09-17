@@ -165,12 +165,12 @@ async function measureJourney(page: Page, testInfo: TestInfo, fixture: Performan
   await run({ id: 'search.first', label: '전체 기간 검색 → 첫 결과·전체 합계', cacheState: 'first-search-window', startEvent: 'input',
     fromAction: { mark: 'search-open', id: 'search.first-open', label: '검색 열기·즉시 입력 → 첫 결과·전체 합계' },
     action: () => searchInput.fill('성능 원장'), data: { elements: [{ selector: 'div.fixed', text: summary }, { selector: 'div.fixed', text: '성능 원장 00-27' }] },
-    ready: async () => { await expect(search.getByText(summary, { exact: true })).toBeVisible(); await expect(search.getByText(/^성능 원장 (?:\d{2}-\d{2}|수정 대상)$/)).toHaveCount(50); },
+    ready: async () => { await expect(search.getByText(summary, { exact: true })).toBeVisible(); await expect(search.getByText(/^성능 원장 (?:00-\d{2}|수정 대상)$/)).toHaveCount(EXPENSES_PER_MONTH); },
   });
-  await run({ id: 'search.next-page', label: '검색 다음 페이지 → 추가 내역', cacheState: 'search-window-memory',
-    action: () => search.getByRole('button', { name: '이전 거래에서 더 검색', exact: true }).click(),
-    data: { elements: [{ selector: 'div.fixed', text: summary }, { selector: 'div.fixed', text: '성능 원장 00-28' }] },
-    ready: async () => { await expect(search.getByText(/^성능 원장 (?:00-\d{2}|수정 대상)$/)).toHaveCount(EXPENSES_PER_MONTH); },
+  await run({ id: 'search.expand-month', label: '과거 검색 월 선택 → 해당 월 전체 내역', cacheState: 'search-window-memory',
+    action: () => search.getByRole('button').filter({ hasText: /^\d{4}년 \d+월.*건/ }).nth(1).click(),
+    data: { elements: [{ selector: 'div.fixed', text: summary }, { selector: 'div.fixed', text: '성능 원장 01-00' }] },
+    ready: async () => { await expect(search.getByText(/^성능 원장 01-\d{2}$/)).toHaveCount(EXPENSES_PER_MONTH); await expect(search.getByText(/^성능 원장 00-/)).toHaveCount(0); },
   });
   await run({ id: 'search.change-keyword', label: '검색어 변경 → 새 결과·합계', cacheState: 'search-window-memory', startEvent: 'input',
     action: () => searchInput.fill('수정 대상'),

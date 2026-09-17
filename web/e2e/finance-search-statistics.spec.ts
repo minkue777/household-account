@@ -62,32 +62,55 @@ test('[T-SEA-002][SEA-001][SEA-003] 검색 결과 편집 후 합계가 갱신되
   await expect(page.getByText('1건 · 7,200원', { exact: true })).toBeVisible();
 });
 
-test('[T-SEA-002][T-SEA-003][SEA-003][SEA-004] 검색 51건은 50건 첫 페이지에서도 전체 합계를 유지하고 다음 페이지에서 누락 없이 표시한다', async ({ page, request }) => {
+test('[T-SEA-002][T-SEA-003][SEA-003][SEA-004] 50건이 넘어도 월 전체를 바로 펼치고 과거 거래 수정 후 해당 월을 유지한다', async ({ page, request }) => {
   const householdId = await createFinanceHousehold(page, request);
+  await addExpenseThroughUi(page, request, { merchant: '페이지 거래 과거 수정', amount: 100, date: '2020-01-15' });
   // 이 테스트의 입력은 과거에 저장된 원장입니다. 생성 API를 대체하지 않고
-  // 실제 Read Contract·페이지 경계·UI 총합만 검증합니다.
+  // 실제 SDK 검색·월별 표시와 앞서 Command로 생성한 거래의 수정까지 검증합니다.
   for (let offset = 0; offset < 51; offset += 10) {
     await Promise.all(Array.from({ length: Math.min(10, 51 - offset) }, (_, index) => {
       const number = offset + index + 1;
       return writeFirestoreFixture(request, `expenses/search-page-${String(number).padStart(3, '0')}`, firestoreFields({
         householdId, merchant: `페이지 거래 ${String(number).padStart(3, '0')}`, amount: 100,
-        category: 'etc', date: '2020-01-15', time: '12:00', transactionType: 'expense', lifecycleState: 'active', aggregateVersion: 1,
+        category: 'etc', date: '2020-02-15', time: '12:00', transactionType: 'expense', lifecycleState: 'active', aggregateVersion: 1,
       }));
     }));
   }
+  await Promise.all(Array.from({ length: 10 }, (_, index) => writeFirestoreFixture(request,
+    `expenses/search-older-${index}`, firestoreFields({ householdId,
+      merchant: `페이지 거래 과거 ${index}`, amount: 100, category: 'etc', date: '2020-01-16',
+      time: '12:00', transactionType: 'expense', lifecycleState: 'active', aggregateVersion: 1,
+    }))));
   await page.goto('/');
   await page.getByRole('button', { name: '검색', exact: true }).click();
   const input = page.getByPlaceholder('지출처명, 메모, 카드명을 검색해보세요');
   const search = page.locator('div.fixed').filter({ has: input });
   await input.fill('페이지 거래');
-  await expect(search.getByText('51건 · 5,100원', { exact: true })).toBeVisible();
-  await expect(search.getByText(/^페이지 거래 \d{3}$/)).toHaveCount(50);
-  await expect(search.getByText('페이지 거래 001', { exact: true })).toHaveCount(0);
-  await search.getByRole('button', { name: '이전 거래에서 더 검색' }).click();
+  await expect(search.getByText('62건 · 6,200원', { exact: true })).toBeVisible();
   await expect(search.getByText(/^페이지 거래 \d{3}$/)).toHaveCount(51);
-  await expect(search.getByText('페이지 거래 001', { exact: true })).toBeVisible();
-  await expect(search.getByText('51건 · 5,100원', { exact: true })).toBeVisible();
   await expect(search.getByRole('button', { name: '이전 거래에서 더 검색' })).toHaveCount(0);
+  const olderMonth = search.getByRole('button', { name: /2020년 1월/ });
+  await olderMonth.click();
+  await expect(search.getByText('페이지 거래 과거 수정', { exact: true })).toBeVisible();
+  await expect(search.getByText(/^페이지 거래 \d{3}$/)).toHaveCount(0);
+  await search.getByText('페이지 거래 과거 수정', { exact: true }).scrollIntoViewIfNeeded();
+  const scroller = search.locator('[aria-busy]');
+  const scrollBefore = await scroller.evaluate(element => element.scrollTop);
+  expect(scrollBefore).toBeGreaterThan(0);
+  await search.getByText('페이지 거래 과거 수정', { exact: true }).click();
+  const edit = page.getByRole('dialog', { name: '지출 수정' });
+  await edit.locator('input[type="number"]').fill('700');
+  await edit.getByPlaceholder('메모를 입력하세요').fill('같은 월에서 이어서 수정');
+  await edit.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(edit).toHaveCount(0);
+  await expect(search.locator('[aria-busy]')).toHaveAttribute('aria-busy', 'false');
+  await expect(olderMonth).toHaveAttribute('aria-expanded', 'true');
+  await expect(search.getByText('62건 · 6,800원', { exact: true })).toBeVisible();
+  await expect(search.getByText(/같은 월에서 이어서 수정/)).toBeVisible();
+  await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBeCloseTo(scrollBefore, 0);
+  await search.getByText('페이지 거래 과거 수정', { exact: true }).click();
+  await expect(edit.locator('input[type="number"]')).toHaveValue('700');
+  await expect(edit.getByPlaceholder('메모를 입력하세요')).toHaveValue('같은 월에서 이어서 수정');
 });
 
 test('[T-LED-009][STAT-001][STAT-002][STAT-003][LED-006] 3·6·12개월과 지정 기간은 서로 다른 실제 합계를 표시하며 차트와 카테고리 선택이 작동한다', async ({ page, request }) => {

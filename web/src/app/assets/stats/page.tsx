@@ -26,13 +26,14 @@ import { useHousehold } from '@/contexts/HouseholdContext';
 import AssetProfitChart from '@/components/assets/AssetProfitChart';
 import AssetDividendChart from '@/components/assets/AssetDividendChart';
 import { getSeoulCalendarParts, getTodayLocalDate } from '@/lib/utils/date';
-import { readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
+import { peekAssetStatisticsHistory, readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
 import { readAssetDividendStatistics, type AssetDividendPrefetch } from '@/platform/reporting/assetDividendReadModel';
 import { resolveAssetStatisticsPeriod } from '@/features/reporting/statisticsPeriod';
 import { sumSignedAssetBalances, sumSignedBalancesByAssetType } from '@/lib/assets/assetMath';
 import { getClientSessionScope } from '@/composition/clientSessionScope';
 import { assetStatisticsSessionKey, subscribeAssetStatisticsInvalidation } from '@/platform/reporting/assetStatisticsQueryCache';
 import { useChartMotion } from '@/components/common/useChartMotion';
+import { ANDROID_NATIVE_RESUME_EVENT } from '@/platform/android-host/androidLifecycleEvents';
 
 ChartJS.register(
   CategoryScale,
@@ -154,12 +155,11 @@ export default function AssetStatsPage() {
   } = useHousehold();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [hasCurrentAssets, setHasCurrentAssets] = useState(false);
-  const [allHistory, setAllHistory] = useState<AssetHistoryEntry[]>([]);
+  const [historyRead, setHistoryRead] = useState<{ key: string; history?: AssetHistoryEntry[]; loading: boolean; failed: boolean }>({ key: '', loading: true, failed: false });
   const [dividendPrefetch, setDividendPrefetch] = useState<{ key: string; source: AssetDividendPrefetch } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [completedSourceKey, setCompletedSourceKey] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [refreshRevision, setRefreshRevision] = useState(0);
+  const pendingHistoryRead = useRef<{ key: string } | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('3M');
   const [financialOnly, setFinancialOnly] = useState(false);
   const [enabledSeries, setEnabledSeries] = useState<Set<TrendSeriesKey>>(new Set<TrendSeriesKey>(['all']));
@@ -170,7 +170,14 @@ export default function AssetStatsPage() {
   const canRead = isSessionVerified && !!householdKey && sessionScope?.householdId === householdKey
     && (sessionScope.accessMode === 'administrator-readonly' || sessionScope.memberId === currentMember?.id);
   const sourceKey = JSON.stringify([actorKey, householdKey, currentMember?.id, remoteReadEpoch, selectedPeriodRange.endDate, revision]);
-  const isCurrentSource = canRead && completedSourceKey === sourceKey;
+  const cachedHistory = useMemo(() => canRead ? peekAssetStatisticsHistory(undefined, selectedPeriodRange.endDate, { cacheEpoch: remoteReadEpoch }) : undefined,
+    [canRead, sourceKey, remoteReadEpoch, selectedPeriodRange.endDate]);
+  const currentHistoryRead = historyRead.key === sourceKey ? historyRead : undefined;
+  const completeHistory = currentHistoryRead?.history ?? cachedHistory;
+  const allHistory = completeHistory ?? [];
+  const isCurrentSource = canRead && completeHistory !== undefined;
+  const isLoading = currentHistoryRead?.loading ?? true;
+  const failed = canRead && (currentHistoryRead?.failed ?? false);
 
   useEffect(() => subscribeAssetStatisticsInvalidation(() => setRevision(value => value + 1)), []);
 
@@ -198,10 +205,6 @@ export default function AssetStatsPage() {
 
   useEffect(() => {
     let active = true;
-    setAllHistory([]);
-    setIsLoading(true);
-    setCompletedSourceKey(null);
-    setFailed(false);
     setDividendPrefetch(null);
     if (!canRead) return;
 
@@ -215,32 +218,61 @@ export default function AssetStatsPage() {
     // Observe it now so leaving the page cannot produce an unhandled rejection.
     void result.catch(() => {});
     setDividendPrefetch({ key: sourceKey, source: { year, result } });
+    return () => { active = false; };
+  }, [canRead, sourceKey]);
+
+  useEffect(() => {
+    if (!canRead) return;
+    let active = true;
+    const request = { key: sourceKey };
+    pendingHistoryRead.current = request;
+    setHistoryRead(previous => ({ key: sourceKey,
+      history: previous.key === sourceKey ? previous.history ?? cachedHistory : cachedHistory,
+      loading: true, failed: false }));
 
     const fetchHistory = async () => {
-      setIsLoading(true);
-
       try {
-        // Period buttons reuse this complete read instead of restarting the
-        // paginated history load and remounting the charts on every selection.
+        // Re-entry/resume keeps the complete chart visible while verifying it.
+        // Period buttons only select this source; they never restart the read.
         const historyData = await readAssetStatisticsHistory(undefined, selectedPeriodRange.endDate, {
           cacheEpoch: remoteReadEpoch,
-          forceRefresh: revision > 0,
+          forceRefresh: true,
         });
-        if (active) setAllHistory(historyData);
+        if (active) setHistoryRead(previous => ({ key: sourceKey,
+          history: previous.key === sourceKey && JSON.stringify(previous.history) === JSON.stringify(historyData)
+            ? previous.history : historyData,
+          loading: false, failed: false }));
       } catch (error) {
-        if (active) setFailed(true);
+        if (active) setHistoryRead(previous => ({ ...previous, loading: false, failed: true }));
         console.error('자산 통계 이력을 불러오지 못했습니다.', error);
       } finally {
-        if (active) {
-          setCompletedSourceKey(sourceKey);
-          setIsLoading(false);
-        }
+        if (pendingHistoryRead.current === request) pendingHistoryRead.current = null;
       }
     };
 
     void fetchHistory();
     return () => { active = false; };
-  }, [householdKey, canRead, actorKey, remoteReadEpoch, selectedPeriodRange.endDate, revision, sourceKey]);
+  }, [canRead, remoteReadEpoch, selectedPeriodRange.endDate, sourceKey, cachedHistory, refreshRevision]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible' && pendingHistoryRead.current?.key !== sourceKey) {
+        setRefreshRevision(value => value + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    window.addEventListener('pageshow', refresh);
+    window.addEventListener('online', refresh);
+    window.addEventListener(ANDROID_NATIVE_RESUME_EVENT, refresh);
+    return () => {
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('pageshow', refresh);
+      window.removeEventListener('online', refresh);
+      window.removeEventListener(ANDROID_NATIVE_RESUME_EVENT, refresh);
+    };
+  }, [sourceKey]);
 
   const activeAssets = useMemo(() => assets.filter((asset) => asset.isActive), [assets]);
   const visibleAssets = useMemo(
@@ -598,15 +630,20 @@ export default function AssetStatsPage() {
           </h1>
         </header>
 
-        {!isCurrentSource || isLoading ? (
+        {!isCurrentSource && !failed ? (
           <div role="status" className="py-12 text-center text-slate-400">불러오는 중...</div>
-        ) : failed ? (
+        ) : !isCurrentSource ? (
           <div role="alert" className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
             자산 통계를 불러오지 못했습니다.
             <button type="button" className="ml-3 underline" onClick={() => setRevision((value) => value + 1)}>다시 시도</button>
           </div>
         ) : (
           <div className="space-y-4">
+            <div className="min-h-5 text-xs text-slate-500">
+              {failed ? <p role="alert">최신 자산 이력을 확인하지 못했습니다. 이전 내역을 표시합니다.
+                <button type="button" className="ml-2 underline" onClick={() => setRefreshRevision(value => value + 1)}>다시 시도</button>
+              </p> : <p role="status">{isLoading ? '최신 자산 이력 확인 중...' : ''}</p>}
+            </div>
             <div className="relative rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
               <button
                 type="button"

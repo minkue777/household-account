@@ -68,6 +68,7 @@ export default function HomeHeader({ onSearchClick, transactionType }: HomeHeade
       <div className="flex flex-shrink-0 items-center gap-1.5 md:gap-2">
         <button
           onClick={onSearchClick}
+          aria-label="검색"
           className="rounded-xl border border-slate-200/70 bg-white/95 p-2 text-slate-600 shadow-sm transition-all hover:bg-white hover:shadow md:px-4 md:py-2"
         >
           <span className="flex items-center gap-2">

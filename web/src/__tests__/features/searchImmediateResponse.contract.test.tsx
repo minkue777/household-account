@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import SearchModal from '@/components/search/SearchModal';
 import {
-  searchExpensePage,
+  searchExpenses,
   subscribeToExpenseProjection,
 } from '@/lib/expenseService';
 
@@ -14,14 +14,14 @@ jest.mock('@/components/search/SearchResultList', () => function SearchResultLis
 jest.mock('@/lib/expenseService', () => ({
   createExpenseSearchMatcher: jest.fn(() => () => true),
   prepareExpenseSearchWindow: jest.fn(async () => {}),
-  searchExpensePage: jest.fn(async () => ({ items: [] })),
+  searchExpenses: jest.fn(async () => []),
   subscribeToExpenseProjection: jest.fn(() => ({
     publish: jest.fn(),
     dispose: jest.fn(),
   })),
 }));
 
-const mockedSearchExpenses = searchExpensePage as jest.MockedFunction<typeof searchExpensePage>;
+const mockedSearchExpenses = searchExpenses as jest.MockedFunction<typeof searchExpenses>;
 const mockedSubscribeToExpenseProjection =
   subscribeToExpenseProjection as jest.MockedFunction<typeof subscribeToExpenseProjection>;
 

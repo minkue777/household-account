@@ -24,7 +24,6 @@ interface ExpenseEditModalProps {
   onClose: () => void;
   onSave: (updates: ExpenseUpdates, rememberForNextTime?: boolean) => Promise<void> | void;
   allowRememberMerchant?: boolean;
-  preserveDraftUntilSuccess?: boolean;
   onUnmerge?: () => void;
   onOpenSplit?: () => void;
   onSplitMonths?: (months: number) => void;
@@ -44,7 +43,6 @@ export default function ExpenseEditModal({
   onClose,
   onSave,
   allowRememberMerchant = false,
-  preserveDraftUntilSuccess = false,
   onUnmerge,
   onOpenSplit,
   onSplitMonths,
@@ -98,6 +96,7 @@ export default function ExpenseEditModal({
   const [pendingActionConfirm, setPendingActionConfirm] = useState<ExpenseActionConfirmType | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
+  const isOpenRef = useRef(isOpen);
   const mergedItemCount = expense.mergeLeafIds?.length
     ?? expense.mergedFrom?.length
     ?? 0;
@@ -130,7 +129,13 @@ export default function ExpenseEditModal({
   })();
 
   useEffect(() => {
-    if (!isOpen) {
+    isOpenRef.current = isOpen;
+    return () => { isOpenRef.current = false; };
+  }, [isOpen]);
+
+  useEffect(() => {
+    // Optimistic updates and rollback must not erase the submitted draft.
+    if (!isOpen || isSubmittingRef.current) {
       return;
     }
 
@@ -206,9 +211,8 @@ export default function ExpenseEditModal({
       const pendingSave = Object.keys(updates).length > 0
         ? onSave(updates, allowRememberMerchant && !isIncome && rememberMerchant && category !== expense.category)
         : undefined;
-      if (!preserveDraftUntilSuccess) onClose();
       await pendingSave;
-      if (preserveDraftUntilSuccess) onClose();
+      if (isOpenRef.current) onClose();
 
     } catch (error) {
       const detail = error instanceof Error && error.message.trim() !== ''
@@ -234,9 +238,8 @@ export default function ExpenseEditModal({
     setShowDeleteConfirm(false);
     try {
       const pendingDelete = onDelete();
-      if (!preserveDraftUntilSuccess) onClose();
       await pendingDelete;
-      if (preserveDraftUntilSuccess) onClose();
+      if (isOpenRef.current) onClose();
     } catch (error) {
       const detail = error instanceof Error && error.message.trim() !== ''
         ? `\n\n${error.message}`
@@ -589,64 +592,66 @@ export default function ExpenseEditModal({
               </button>
             </div>
 
-            {isIncome ? (
-              renderIncomeFields()
-            ) : (
-              <>
-                {renderExpenseInfo()}
-                <ExpenseFormFields
-                  merchant={merchant}
-                  onMerchantChange={setMerchant}
-                  amount={amount}
-                  onAmountChange={setAmount}
-                  category={category}
-                  onCategoryChange={setCategory}
-                  memo={memo}
-                  onMemoChange={setMemo}
-                  date={date}
-                  onDateChange={setDate}
-                  showDateField
-                  merchantLabel="가맹점명"
-                  memoLabel="메모"
-                  memoPlaceholder="메모를 입력하세요"
-                  textInputPaddingClassName="px-3"
-                  monthlySplit={{
-                    enabled: Boolean(onSplitMonths && !expense.splitGroupId),
-                    showSplitInput,
-                    splitMonthsInput,
-                    splitMonthsError,
-                    onToggle: toggleSplitInput,
-                    onSplitMonthsInputChange: handleSplitMonthsInputChange,
+            <fieldset disabled={isSubmitting} className="min-w-0">
+              {isIncome ? (
+                renderIncomeFields()
+              ) : (
+                <>
+                  {renderExpenseInfo()}
+                  <ExpenseFormFields
+                    merchant={merchant}
+                    onMerchantChange={setMerchant}
+                    amount={amount}
+                    onAmountChange={setAmount}
+                    category={category}
+                    onCategoryChange={setCategory}
+                    memo={memo}
+                    onMemoChange={setMemo}
+                    date={date}
+                    onDateChange={setDate}
+                    showDateField
+                    merchantLabel="가맹점명"
+                    memoLabel="메모"
+                    memoPlaceholder="메모를 입력하세요"
+                    textInputPaddingClassName="px-3"
+                    monthlySplit={{
+                      enabled: Boolean(onSplitMonths && !expense.splitGroupId),
+                      showSplitInput,
+                      splitMonthsInput,
+                      splitMonthsError,
+                      onToggle: toggleSplitInput,
+                      onSplitMonthsInputChange: handleSplitMonthsInputChange,
+                    }}
+                  />
+                  {renderExpenseExtraSections()}
+                </>
+              )}
+
+              {isIncome ? (
+                <ExpenseActionButtons
+                  className="mt-6"
+                  size="large"
+                  leftButton={
+                    onDelete
+                      ? {
+                          label: '삭제',
+                          onClick: () => setShowDeleteConfirm(true),
+                          variant: 'neutral',
+                          disabled: isSubmitting,
+                        }
+                      : undefined
+                  }
+                  rightButton={{
+                    label: isSubmitting ? '저장 중...' : '저장',
+                    onClick: () => void handleSave(),
+                    variant: 'primary',
+                    disabled: isSubmitting,
                   }}
                 />
-                {renderExpenseExtraSections()}
-              </>
-            )}
-
-            {isIncome ? (
-              <ExpenseActionButtons
-                className="mt-6"
-                size="large"
-                leftButton={
-                  onDelete
-                    ? {
-                        label: '삭제',
-                        onClick: () => setShowDeleteConfirm(true),
-                        variant: 'neutral',
-                        disabled: isSubmitting,
-                      }
-                    : undefined
-                }
-                rightButton={{
-                  label: isSubmitting ? '저장 중...' : '저장',
-                  onClick: () => void handleSave(),
-                  variant: 'primary',
-                  disabled: isSubmitting,
-                }}
-              />
-            ) : (
-              renderExpenseActionRow()
-            )}
+              ) : (
+                renderExpenseActionRow()
+              )}
+            </fieldset>
           </div>
         </div>
       </Portal>

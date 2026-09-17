@@ -305,7 +305,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
               : 'order-3 min-w-0 lg:col-span-3 lg:col-start-2 lg:row-start-3'}
             >
               <ExpenseDetail
-                key={`${transactionType}-${selectedDate}`}
+                key={`${householdKey}-${transactionType}-${selectedDate}`}
                 date={selectedDate}
                 expenses={selectedDateExpenses}
                 onExpenseUpdate={handleExpenseUpdate}

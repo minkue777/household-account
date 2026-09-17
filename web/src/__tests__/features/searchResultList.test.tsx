@@ -10,19 +10,17 @@ const expense = (id: string, date: string, amount: number): Expense => ({
   id, date, amount, aggregateVersion: 1, merchant: `가게 ${id}`, category: 'food', transactionType: 'expense',
 });
 
-it('keeps complete source totals and unloaded months while showing only supplied pages, including zero and refunds', () => {
-  const rows = [expense('a', '2026-09-02', 100), expense('b', '2026-09-01', -20), expense('c', '2026-08-01', 0)];
-  const summary = { count: 90, amount: 1000, months: {
-    '2026-09': { count: 60, amount: 500 }, '2026-08': { count: 1, amount: 0 }, '2026-07': { count: 29, amount: 500 },
-  } };
+it('shows every transaction in an expanded month, including months beyond the former 50-row boundary', () => {
+  const rows = [expense('a', '2026-09-02', 100), expense('b', '2026-09-01', -20), expense('c', '2026-08-01', 0),
+    ...Array.from({ length: 60 }, (_, index) => expense(`old-${index}`, '2026-07-20', 10))];
   const onExpenseClick = jest.fn();
   const onExpandedMonthChange = jest.fn();
-  const props = { keyword: '가게', results: rows, summary, isSearching: false, expandedMonth: '2026-09',
+  const props = { keyword: '가게', results: rows, isSearching: false, expandedMonth: '2026-09',
     onExpandedMonthChange, onExpenseClick, transactionType: 'expense' as const };
   const { rerender } = render(<SearchResultList {...props} />);
-  expect(screen.getByText('90건 · 1,000원')).toBeInTheDocument();
+  expect(screen.getByText('63건 · 680원')).toBeInTheDocument();
   expect(screen.getAllByRole('button').map(button => button.textContent)).toEqual([
-    '2026년 9월60건500원', '2026년 8월1건0원', '2026년 7월29건500원',
+    '2026년 9월2건80원', '2026년 8월1건0원', '2026년 7월60건600원',
   ]);
   expect(screen.getByText('가게 a')).toBeInTheDocument();
   expect(screen.getByText('가게 b')).toBeInTheDocument();
@@ -33,11 +31,12 @@ it('keeps complete source totals and unloaded months while showing only supplied
   expect(onExpandedMonthChange).toHaveBeenCalledWith('2026-07');
   rerender(<SearchResultList {...props} expandedMonth="2026-07" />);
   expect(screen.queryByText(/가게 [abc]/)).not.toBeInTheDocument();
-  const nextPage = expense('d', '2026-07-20', 50);
-  rerender(<SearchResultList {...props} results={[...rows, nextPage]} expandedMonth="2026-07" />);
-  expect(screen.getByText('가게 d')).toBeInTheDocument();
-  expect(screen.getByText('90건 · 1,000원')).toBeInTheDocument();
-  expect(rows).toHaveLength(3);
+  expect(screen.getAllByText(/^가게 old-/)).toHaveLength(60);
+  expect(screen.getByText('63건 · 680원')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /2026년 7월/ })).toHaveAttribute('aria-expanded', 'true');
+  rerender(<SearchResultList {...props} expandedMonth="2026-07" isSearching />);
+  expect(screen.getAllByText(/^가게 old-/)).toHaveLength(60);
+  expect(rows).toHaveLength(63);
 });
 
 it('updates fallback totals when actual rows change and preserves the expense object passed to the editor', () => {

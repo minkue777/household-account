@@ -1,10 +1,16 @@
 import { collection, db, documentId, getDocsFromServer, limit, orderBy, query, startAfter, where, type QueryDocumentSnapshot, type DocumentData } from '@/platform/read-model/firestoreServerReadModel';
 import { getClientSessionScope, requireClientSessionScope } from '@/composition/clientSessionScope';
 import type { AssetHistoryEntry } from '@/types/asset';
-import { assetStatisticsSessionKey, readCachedAssetStatistics, type AssetStatisticsReadOptions } from './assetStatisticsQueryCache';
+import { assetStatisticsSessionKey, peekCachedAssetStatistics, readCachedAssetStatistics, type AssetStatisticsReadOptions } from './assetStatisticsQueryCache';
 
 const PAGE_SIZE = 5_000;
 const MAX_PAGES = 10; // Preserve the existing 50,000-document safety bound for daily snapshots.
+
+export function peekAssetStatisticsHistory(startDate: string | undefined, endDate: string, options?: AssetStatisticsReadOptions): AssetHistoryEntry[] | undefined {
+  return peekCachedAssetStatistics<AssetHistoryEntry[]>(JSON.stringify(['history', startDate, endDate]), options)
+    ?.map(entry => ({ ...entry }));
+}
+
 export async function readAssetStatisticsHistory(startDate: string | undefined, endDate: string, options?: AssetStatisticsReadOptions): Promise<AssetHistoryEntry[]> {
   const scope = { ...requireClientSessionScope() };
   const assertScope = () => {

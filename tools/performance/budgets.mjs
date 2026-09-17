@@ -22,7 +22,7 @@ export const PERFORMANCE_BUDGETS = Object.freeze({
   'ledger.return-month': budget(400, 700, 5000),
   'search.first': budget(500, 800, 1500),
   'search.first-open': budget(500, 800, 1500),
-  'search.next-page': budget(300, 500, 1000),
+  'search.expand-month': budget(300, 500, 1000),
   'search.change-keyword': budget(300, 500, 1000),
   'expense-stats.first': budget(800, 1200, 2000),
   'expense-stats.period-3': budget(400, 600, 1200),
@@ -67,7 +67,7 @@ export const PERFORMANCE_PROFILES = Object.freeze({
       'ledger.add': budget(650, 800, 1000, ['webkit-mobile']),
       'ledger.delete': budget(500, 700, 1000, ['webkit-mobile']),
       'assets.first': budget(900, 1200, 5000, ['webkit-mobile']),
-      'search.next-page': budget(400, 650, 1000, ['webkit-mobile']),
+      'search.expand-month': budget(400, 650, 1000, ['webkit-mobile']),
       'search.change-keyword': budget(400, 650, 1000, ['webkit-mobile']),
     }),
     'android-emulator': Object.freeze({

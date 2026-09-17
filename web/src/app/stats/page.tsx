@@ -254,7 +254,6 @@ export default function StatsPage() {
           onClose={() => setEditingExpense(null)}
           onSave={(updates, remember) => handleSaveEdit(editingExpense, updates, remember)}
           allowRememberMerchant
-          preserveDraftUntilSuccess
           onDelete={() => handleDeleteExpense(editingExpense)}
           transactionType="expense"
         />

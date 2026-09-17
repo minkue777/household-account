@@ -220,7 +220,7 @@ describe('ExpenseDetail 모달 소유권 계약', () => {
     fireEvent.click(screen.getByRole('button', { name: '알림 보내기' }));
 
     expect(onExpenseUpdate).toHaveBeenCalledWith(secondExpense.id, { memo: '수정됨' }, secondExpense.aggregateVersion, false);
-    expect(onDelete).toHaveBeenCalledWith(secondExpense.id);
+    expect(onDelete).toHaveBeenCalledWith(secondExpense.id, secondExpense.aggregateVersion);
     expect(onUnmergeExpense).toHaveBeenCalledWith(secondExpense);
     await waitFor(() => {
       expect(mockNotifyPartner).toHaveBeenCalledWith(

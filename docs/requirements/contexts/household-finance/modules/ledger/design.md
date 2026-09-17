@@ -94,11 +94,13 @@ QuickEdit `items` operation은 DEC-055에 따라 분할을 누른 시점의 merc
 
 ### 3.3 Read Model
 
+Web 일반 수정·삭제는 Command를 즉시 시작하고 성공 후 편집창을 닫습니다. 저장 중 중복 제출과 입력 변경을 막고, 실패하면 작성한 초안을 유지해 다시 저장할 수 있습니다. 원장의 낙관적 반영·실패 원복은 그대로 사용합니다. 사용자가 직접 닫을 수는 있으며, 닫힌 창의 늦은 성공이 이후 열린 편집창을 닫지 않습니다.
+
 `TransactionView`에는 transactionId, transactionType, amountInWon, accountingDate, localTime, zoneId, merchant, memo, categoryId, cardDisplay, source, originChannel, creatorMemberId, optional localCurrencyType, split/merge 표시 metadata, aggregateVersion을 포함합니다. capture fingerprint hash·lineage 내부 ID와 receipt는 노출하지 않습니다. 이 일반 Read Model은 active 거래만 만들며 deleted·superseded 거래를 사용자에게 반환하지 않습니다.
 
 `LedgerSearchResult`는 결정적으로 정렬된 현재 `items` page, opaque `nextCursor`, 동일 검색 범위 전체를 기준으로 한 `summary`, `sourceCheckpoint`를 반환합니다. `summary`는 `totalCount`, `totalAmountInWon`, `monthly[{yearMonth, count, amountInWon}]`를 가지며 현재 page의 부분 합계가 아닙니다. 빈 결과는 `NoData`이고 성공 summary의 0원과 구분합니다.
 
-Web 검색은 모달을 연 시점에 한 window의 bounded 서버 snapshot을 준비하여 사용자의 입력과 조회를 병렬로 진행합니다. 입력과 다음 페이지는 진행 중 Promise 또는 완료된 같은 원본을 공유하며 원본의 최신순 정렬도 한 번만 수행합니다. 홈 화면에서는 검색 전체 원본을 미리 읽지 않습니다. 원본 조회는 필요할 때 동적 로드하는 [단발 서버 읽기 경계](../../../../../../web/src/platform/read-model/firestoreServerReadModel.ts)의 Firestore Lite `getDocs`를 사용합니다. 기존 FirebaseApp의 Auth와 Firestore Rules를 그대로 적용하고, realtime SDK의 로컬 IndexedDB 반영 대기 없이 서버 원본을 읽습니다. 일반 월 원장의 실시간 구독과 persistence 설정은 그대로 유지합니다. 닫기·세션 전환·수정 성공 뒤 새 검색 revision은 기존 원본을 재사용하지 않으며, 준비 실패는 첫 실제 검색에 전달하고 자동 재시도로 숨기지 않습니다. 조회 건수·범위·전체 합계·10,000건 안전 상한은 유지합니다.
+Web 검색은 모달을 연 시점에 서버 원본을 준비하여 입력과 조회를 병렬로 진행합니다. Firestore Lite 읽기는 문서 ID 정렬과 cursor로 요청당 5,000건씩 끝까지 진행하며, 전체 조회가 끝난 뒤 최신순으로 정렬합니다. 동일 window의 입력은 같은 진행 중 Promise 또는 완료 원본을 공유합니다. 10,000건 도달 실패와 UI의 50건 페이지·더보기는 제거합니다. 실제 Web API는 모든 일치 거래를 반환하고 SearchResultList가 같은 결과로 전체·월별 합계를 계산하며 펼친 월만 렌더링합니다. 홈에서 원본을 읽거나 키 입력마다 서버를 재조회하지 않습니다. 닫기·세션 전환 뒤에는 추가 페이지를 읽지 않고 이전 응답을 폐기합니다. 수정 성공 후 같은 검색 세션의 원본을 다시 확인하면서 목록·펼친 월·스크롤을 유지하며 실패 시 기존 결과와 일반 오류를 표시합니다. 위 LedgerSearchResult는 목표 서버 계약이며 현재 Web의 표시 페이지 계약으로 사용하지 않습니다.
 
 Web `LedgerSearchController`는 서버 Query와 별개로 `actorSessionGeneration`, householdId, transactionType, normalized query, 증가하는 request revision을 함께 보관합니다. Adapter 응답이 현재 identity와 다르면 결과와 cursor를 폐기합니다. modal close·logout·가구 변경은 이전 revision을 무효화하고 가능한 요청을 취소합니다.
 

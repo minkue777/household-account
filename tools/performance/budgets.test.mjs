@@ -233,8 +233,8 @@ test('the hosted profile leaves Chromium, initial search, statistics, and unlist
   }
 });
 
-test('hosted keyword and next-page allowances apply only to those fast WebKit UI paths', () => {
-  for (const metric of ['search.next-page', 'search.change-keyword']) {
+test('hosted keyword and month-expansion allowances apply only to those fast WebKit UI paths', () => {
+  for (const metric of ['search.expand-month', 'search.change-keyword']) {
     const project = 'webkit-mobile';
     const input = samples(Array(7).fill(348), { project, metric });
     const spec = { projects: [project], metrics: [metric], samplesPerMetric: 7, profile: 'github-hosted-v2' };

@@ -120,9 +120,9 @@
 |---|---|---|---|---|---|
 | SEA-001 | 현재 명세 | 같은 가구·거래 유형에서 가맹점, 메모, 카드 정보로 검색하고 최신 날짜순으로 반환한다. 메인 검색 화면은 기간 입력 없이 전체 기간을 검색한다. | 빈 검색어는 빈 결과를 반환한다. 조회 실패는 결과 없음으로 표시하지 않고 일반 오류 안내만 표시하며 별도 재시도 버튼이나 내부 오류 코드를 노출하지 않는다. 거래 수정 후 같은 검색어의 재조회 실패는 기존 결과를 유지하지만 검색어를 바꾸면 이전 결과를 제거한다. | [expenseService](../../../../../../web/src/lib/expenseService.ts), [SearchModal](../../../../../../web/src/components/search/SearchModal.tsx) | U, I, E2E |
 | SEA-002 | 현재 명세 | 지원하는 모든 카드사·결제수단에 대해 거래 생성 당시 보존한 표준 라벨·카드 유형·마지막 네 자리 증거를 검색 대상으로 포함한다. 카드사명·별칭·끝 네 자리 단독 검색, `카드사(4자리)` 형식과 x·별표 마스킹 검색을 지원한다. | 특정 카드사를 하드코딩하지 않는다. `국민카드(2972)`는 카드사와 네 자리가 모두 일치해야 하고, `삼성카드(3***)`는 카드사와 번호 패턴이 모두 일치해야 한다. 이후 카드 설정의 끝 번호 수정·퇴역은 과거 거래의 검색 증거를 바꾸지 않는다. | [expenseService](../../../../../../web/src/lib/expenseService.ts), [DEC-059](../../../../governance/decisions.md#dec-059) | U |
-| SEA-003 | 결함 | 검색 화면은 `Actor session generation + householdId + transactionType + normalized query + request revision`이 현재 값과 일치하는 최신 응답만 표시하고, cursor와 page limit으로 결과를 제한한다. | 검색어·유형 변경, 닫기, logout·가구 변경 뒤 도착한 응답은 폐기한다. 검색 결과에서 mutation 후에는 Command 성공을 기다린 뒤 새 revision으로 재조회한다. | [SearchModal](../../../../../../web/src/components/search/SearchModal.tsx), [expenseService](../../../../../../web/src/lib/expenseService.ts) | U, C, UI, E2E |
-| SEA-004 | 현재 명세·목표 보완 | 검색 결과의 전체 건수·금액과 월별 건수·금액을 표시한다. 목표 Query가 page를 반환하더라도 합계는 현재 page만이 아니라 동일한 가구·거래 유형·검색어·기간에 일치하는 전체 결과를 기준으로 계산한다. | 검색 원천 실패·안전 조회 한도 도달·source window 변경은 부분 합계를 성공으로 표시하지 않고 typed failure로 반환한다. Web 검색은 운영 Firestore Listen의 최대 한도인 10,000건 이하를 요청하고, 10,000건이 반환되면 원본 전체 여부를 보장할 수 없어 실패로 처리한다. 이 합계는 별도 카드별 통계 화면이 아니라 사용자가 입력한 검색 조건의 결과 요약이다. | [SearchResultList](../../../../../../web/src/components/search/SearchResultList.tsx) | U, C, I, UI |
-| SEA-005 | 현재 명세 | 사용자가 검색어를 입력하면 UI가 임의의 고정 debounce 시간을 추가하지 않고 즉시 현재 검색 계약을 실행한다. | 검색 모달을 명시적으로 열었을 때 해당 window의 bounded 서버 원본을 준비하고 입력·페이지 전환은 같은 진행 중 조회 또는 완료 snapshot을 공유한다. 홈 진입이나 닫힌 모달은 검색 원본을 조회하지 않는다. 닫기·세션 전환과 Command 성공 후에는 기존 window를 폐기한다. 사전 준비 실패를 숨은 재시도로 덮지 않고 실제 검색 때 일반 조회 오류로 알린다. 이전 요청 폐기와 최신 revision 판정은 `SEA-003`대로 유지하며 원장 검색에는 인위적인 300ms 대기를 두지 않는다. | [SearchModal](../../../../../../web/src/components/search/SearchModal.tsx) | U, UI |
+| SEA-003 | 현재 명세 | 검색 화면은 `Actor session generation + householdId + transactionType + normalized query + request revision`이 현재 값과 일치하는 최신 응답만 표시한다. 결과는 전체 기간을 포함하고 펼친 월의 모든 거래를 바로 표시한다. | 검색어·유형 변경, 닫기, logout·가구 변경 뒤 도착한 응답은 폐기한다. mutation 후에는 Command 성공을 기다린 뒤 같은 검색 세션에 한해 재조회하며 기존 목록·펼친 월·스크롤을 유지한다. 해당 월의 결과가 사라지면 최근 월로 이동하지 않고 접는다. | [SearchModal](../../../../../../web/src/components/search/SearchModal.tsx), [expenseService](../../../../../../web/src/lib/expenseService.ts) | U, C, UI, E2E |
+| SEA-004 | 현재 명세·목표 보완 | 검색 결과의 전체 건수·금액과 월별 건수·금액을 같은 전체 결과에서 계산한다. 펼친 월은 건수와 실제 거래 목록이 일치하며 더보기 조작을 요구하지 않는다. | 서버 원천은 문서 ID cursor로 요청당 5,000건씩 끝까지 읽고 전체 완료 후 공개한다. 10,000건 이상도 검색 가능하다. 원천 실패·반복 cursor·source window 변경은 부분 결과나 합계를 성공으로 표시하지 않는다. | [SearchResultList](../../../../../../web/src/components/search/SearchResultList.tsx) | U, C, I, UI |
+| SEA-005 | 현재 명세 | 사용자가 검색어를 입력하면 UI가 임의의 고정 debounce 시간을 추가하지 않고 즉시 현재 검색 계약을 실행한다. | 검색 모달을 명시적으로 열었을 때 해당 window의 서버 원본을 준비하고 입력은 같은 진행 중 조회 또는 완료 원본을 공유한다. 월 펼침은 추가 서버 조회 없이 메모리의 해당 월만 그린다. 홈 진입이나 닫힌 모달은 검색 원본을 조회하지 않는다. 닫기·세션 전환과 Command 성공 후에는 기존 window를 폐기한다. 사전 준비 실패는 실제 검색 때 일반 오류로 알리며 숨은 재시도를 추가하지 않는다. | [SearchModal](../../../../../../web/src/components/search/SearchModal.tsx) | U, UI |
 
 검색어 정규화·정확한 카드 검색 조건은 검색 요청마다 한 번 준비하고, 전체 원천 필터와 낙관적 결과 필터에서 재사용합니다. 고정 카드사 별칭은 한 번 구축한 조회표를 사용합니다. 거래별 검색 필드는 캐시하지 않으며 매번 현재 메모·가맹점·카드 증거를 읽으므로 저장 후 최신성 및 기존 마스킹·별칭 일치 규칙은 유지됩니다.
 
@@ -136,7 +136,6 @@
 - 저장·삭제 실패에도 성공 UI 이벤트가 발생할 수 있습니다.
 - split·merge·group 재구성 일부가 최신 원장을 transaction 안에서 다시 읽지 않거나 여러 create 후 원본을 삭제해 동시 수정과 중간 실패에 취약합니다. (`LED-008`)
 - item/monthly split과 취소·재구성이 creator/source/origin/cardLastFour 같은 원본 provenance를 누락하고 capture dedup lineage를 명시적으로 보존하지 않습니다. (`LED-009`)
-- 검색 요청을 취소하거나 request revision을 검사하지 않아 이전 검색·이전 세션의 늦은 응답이 최신 결과를 덮을 수 있습니다. (`SEA-003`)
 
 DEC-001의 의도적인 월 분할 나머지 미반영은 결함이 아닙니다.
 
@@ -175,8 +174,8 @@ DEC-001의 의도적인 월 분할 나머지 미반영은 결함이 아닙니다
 | T-MRG-002 | 현재 명세 | 날짜·시각·카드가 다른 leaf 전체 필드와 정상·ID/lineage 없는 legacy snapshot / 합치기 해제 / 같은 leaf ID, 원본별 merchant·amount·category·memo·capture evidence와 합친 거래의 공통 날짜·시각·유형·표시 카드 적용, 불완전 legacy는 ContractFailure·무변경 | MRG-002, LED-009, DEC-010, DEC-056 |
 | T-MRG-003 | 현재 명세 | Web pending merge, 연속 drop, 서버 성공·Conflict·RetryableFailure, 모바일 500ms 경계·12px/17px 이동·native dragstart·touchcancel·합성 click / optimistic projection·상호작용 / old target/source 대신 새 merged ID 한 건만 표시, pending 중 중복 호출 차단, 실패 시 세 overlay 전체 rollback과 AppDialog 안내, 12px 이동 후 합치기 성공·17px 이동 취소, native drag 차단, touchcancel 시 명령 없이 drag·scroll 상태 정리, 합성 click 한 번만 억제 | MRG-001, MRG-002 |
 | T-SEA-001 | 현재 명세 | 대소문자·공백이 다른 가맹점, 메모, 설정 기반 모든 카드사 별칭·유형·끝 네 자리·정확/별표/x 마스킹, 빈 query, 기간 양끝, 타 가구·유형·상태 / 검색 / 같은 범위 일치만 날짜·시각·ID 최신순, 빈 query는 NoData, 카드사+번호 조건은 모두 일치 | SEA-001, SEA-002 |
-| T-SEA-002 | 목표 | limit·opaque cursor 두 page와 scope 변경, 느린 A→빠른 B, modal close·logout, 검색 결과 mutation 실패·성공 / paging·응답 처리 / 중복·누락 없는 bounded page, 다른 scope cursor 거부, 최신 revision만 표시, Command 성공 뒤 새 revision 재조회 | SEA-003 |
-| T-SEA-003 | 현재 명세·목표 | `삼성카드(3***)`에 여러 월의 일치·불일치 거래와 여러 page가 존재 / 검색 / 카드사·마스킹 번호가 모두 일치한 전체 결과의 총 건수·금액과 월별 건수·금액을 반환하고 현재 page 부분 합계를 전체 합계로 표시하지 않음 | SEA-002, SEA-004 |
+| T-SEA-002 | 현재 명세 | 50건 이상 여러 월, 느린 A→빠른 B, modal close·logout, 검색 결과 mutation 실패·성공 / 조회·월 펼침·수정 / 모든 월의 전체 거래를 바로 표시하고 최신 revision만 반영, Command 성공 뒤 재조회에도 펼친 월·스크롤 유지, 이전 검색에서 시작한 저장의 늦은 완료는 새 검색을 덮지 않음 | SEA-003 |
+| T-SEA-003 | 현재 명세·목표 | `삼성카드(3***)`에 여러 월의 일치·불일치 거래, 10,000건 이상 원천과 중간 페이지 실패 / 검색 / 카드사·번호가 모두 일치한 전체 건수·금액과 월별 합계를 표시하고 불완전 조회의 부분 합계를 공개하지 않음 | SEA-002, SEA-004 |
 | T-PERF-SEARCH-001 | 목표 | 검색 모달과 입력 가능한 검색어 / 검색어 입력 / 300ms 같은 고정 timer 없이 즉시 최신 request revision의 검색을 시작하고 이전 결과는 표시하지 않음 | SEA-003, SEA-005 |
 
 ## 9. 코드 근거

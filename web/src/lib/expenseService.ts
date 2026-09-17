@@ -28,7 +28,7 @@ export { mapDocToExpense, resolveExpenseCardDisplay } from '@/features/ledger/ap
 
 const COLLECTION_NAME = 'expenses';
 const DEFAULT_TRANSACTION_TYPE: TransactionType = 'expense';
-const SEARCH_SOURCE_QUERY_LIMIT = 10_000;
+const SEARCH_SOURCE_PAGE_SIZE = 5_000;
 
 interface AddExpenseOptions {
   notifyOnCreate?: boolean;
@@ -767,106 +767,102 @@ export async function restoreItemSplit(expense: Expense): Promise<void> {
  */
 export async function searchExpenses(
   keyword: string,
-  options: ExpenseQueryOptions = { transactionType: DEFAULT_TRANSACTION_TYPE }
+  options: ExpenseQueryOptions & { sourceWindow?: string } = { transactionType: DEFAULT_TRANSACTION_TYPE }
 ): Promise<Expense[]> {
-  return (await searchExpensePage(keyword, options)).items;
+  if (!keyword.trim()) return [];
+  const scope = requireClientSessionScope();
+  const windowId = options.sourceWindow ?? `search-window-${++searchWindowSequence}`;
+  const sourcePromise = readExpenseSearchWindow(scope, windowId);
+  const token = searchWindow!.token;
+  let source: Expense[];
+  try {
+    source = await sourcePromise;
+    assertActiveExpenseSearchWindow(token);
+  } catch (error) {
+    // A failed preparation is reported once without a hidden retry. Never
+    // invalidate a newer window when an earlier request finishes or fails.
+    if (searchWindow?.token === token) searchWindow = undefined;
+    throw error;
+  }
+  const matchesSearch = createExpenseSearchMatcher(keyword);
+  return source.filter(expense => matchesTransactionType(expense, options.transactionType) && matchesSearch(expense));
 }
 
-export interface ExpenseSearchSummary { count: number; amount: number; months: Record<string, { count: number; amount: number }> }
-export interface ExpenseSearchCursor { windowId: string; scope: string; offset: number }
-
 export class ExpenseSearchFailure extends Error {
-  constructor(readonly code: 'SOURCE_LIMIT_EXCEEDED' | 'SOURCE_WINDOW_CHANGED' | 'INVALID_PERIOD' | 'SOURCE_UNAVAILABLE') {
-    super(code === 'SOURCE_LIMIT_EXCEEDED' ? '검색 대상이 조회 한도에 도달해 전체 결과를 확인할 수 없습니다.' : code === 'SOURCE_WINDOW_CHANGED' ? '검색 중 세션이 변경되었거나 검색 조건이 변경되었습니다. 다시 검색해 주세요.' : code === 'INVALID_PERIOD' ? '검색 시작일과 종료일을 확인해 주세요.' : '검색 결과를 불러오지 못했습니다.');
+  constructor(readonly code: 'SOURCE_WINDOW_CHANGED' | 'SOURCE_UNAVAILABLE') {
+    super(code === 'SOURCE_WINDOW_CHANGED' ? '검색 중 세션이 변경되었거나 검색 조건이 변경되었습니다. 다시 검색해 주세요.' : '검색 결과를 불러오지 못했습니다.');
   }
 }
 let searchWindowSequence = 0;
-let searchWindow: { key: string; id: string; source: Promise<Expense[]> } | undefined;
+let searchWindow: { key: string; id: string; token: symbol; source: Promise<Expense[]> } | undefined;
 export function closeExpenseSearchWindow(windowId: string): void {
   if (searchWindow?.id === windowId) searchWindow = undefined;
 }
 
-function searchSourceKey(scope: ClientSessionScope, windowId: string, startDate?: string, endDate?: string): string {
+function searchSourceKey(scope: ClientSessionScope, windowId: string): string {
   return JSON.stringify([scope.principalUid, scope.sessionGeneration, scope.householdId,
-    { startDate: startDate || '0001-01-01', endDate: endDate || '9999-12-31' }, windowId]);
+    scope.memberId, scope.accessMode ?? 'member', windowId]);
+}
+
+function assertActiveExpenseSearchWindow(token: symbol): void {
+  let scope: ClientSessionScope;
+  try {
+    scope = requireClientSessionScope();
+  } catch {
+    throw new ExpenseSearchFailure('SOURCE_WINDOW_CHANGED');
+  }
+  if (!searchWindow || searchWindow.token !== token
+    || searchWindow.key !== searchSourceKey(scope, searchWindow.id)) {
+    throw new ExpenseSearchFailure('SOURCE_WINDOW_CHANGED');
+  }
 }
 
 function readExpenseSearchWindow(
-  scope: ClientSessionScope, windowId: string, startDate?: string, endDate?: string
+  scope: ClientSessionScope, windowId: string
 ): Promise<Expense[]> {
-  const key = searchSourceKey(scope, windowId, startDate, endDate);
+  const key = searchSourceKey(scope, windowId);
   if (searchWindow?.key === key) return searchWindow.source;
+  const token = Symbol(windowId);
   const source = (async () => {
     // Keep the additional SDK outside the first-home bundle. Only explicit
     // search preparation loads this server-only read boundary.
-    const { collection, db, getDocsFromServer, limit, query, where } =
+    const { collection, db, getDocsFromServer, limit, query, where, documentId, orderBy, startAfter } =
       await import('@/platform/read-model/firestoreServerReadModel');
-    // Opening the search and every subsequent keystroke/page share one bounded
-    // server snapshot. Keep the same source safety bound across transports.
-    const snapshot = await getDocsFromServer(query(collection(db, COLLECTION_NAME),
-      where('householdId', '==', scope.householdId),
-      ...(startDate ? [where('date', '>=', startDate)] : []),
-      ...(endDate ? [where('date', '<=', endDate)] : []),
-      limit(SEARCH_SOURCE_QUERY_LIMIT)));
-    const documents = snapshot.docs;
-    if (documents.length >= SEARCH_SOURCE_QUERY_LIMIT) throw new ExpenseSearchFailure('SOURCE_LIMIT_EXCEEDED');
-    const result = documents.flatMap(document => {
-      const data = document.data();
-      return typeof data.date === 'string'
-        && data.date >= (startDate || '0001-01-01') && data.date <= (endDate || '9999-12-31')
-        && isVisibleLedgerReadDocument(data)
-        ? [mapExpenseReadData(document.id, data)]
-        : [];
-    }).sort(compareLedgerTransactions);
-    return result;
+    // Transport pages bound each request, not the user's search history. Publish
+    // only the complete source and reuse it for all inputs in this open window.
+    const result: Expense[] = [];
+    const cursors = new Set<string>();
+    let cursor: import('@/platform/read-model/firestoreServerReadModel').QueryDocumentSnapshot | undefined;
+    while (true) {
+      assertActiveExpenseSearchWindow(token);
+      const snapshot = await getDocsFromServer(query(collection(db, COLLECTION_NAME),
+        where('householdId', '==', scope.householdId),
+        orderBy(documentId()),
+        ...(cursor ? [startAfter(cursor)] : []),
+        limit(SEARCH_SOURCE_PAGE_SIZE)));
+      assertActiveExpenseSearchWindow(token);
+      const documents = snapshot.docs;
+      for (const document of documents) {
+        const data = document.data();
+        if (typeof data.date === 'string' && data.date >= '0001-01-01' && data.date <= '9999-12-31'
+          && isVisibleLedgerReadDocument(data)) result.push(mapExpenseReadData(document.id, data));
+      }
+      if (documents.length < SEARCH_SOURCE_PAGE_SIZE) break;
+      cursor = documents[documents.length - 1];
+      if (cursors.has(cursor.id)) throw new ExpenseSearchFailure('SOURCE_UNAVAILABLE');
+      cursors.add(cursor.id);
+    }
+    return result.sort(compareLedgerTransactions);
   })().catch(error => {
     throw error instanceof ExpenseSearchFailure ? error : new ExpenseSearchFailure('SOURCE_UNAVAILABLE');
   });
-  searchWindow = { key, id: windowId, source };
+  searchWindow = { key, id: windowId, token, source };
   return source;
 }
 
 /** Only an explicitly opened search prepares its source; ordinary home visits do not read it. */
 export async function prepareExpenseSearchWindow(windowId: string): Promise<void> {
   await readExpenseSearchWindow(requireClientSessionScope(), windowId);
-}
-
-export async function searchExpensePage(
-  keyword: string,
-  options: ExpenseQueryOptions & { cursor?: ExpenseSearchCursor; startDate?: string; endDate?: string; sourceWindow?: string } = { transactionType: DEFAULT_TRANSACTION_TYPE }
-): Promise<{ items: Expense[]; summary: ExpenseSearchSummary; nextCursor?: ExpenseSearchCursor }> {
-  const empty: ExpenseSearchSummary = { count: 0, amount: 0, months: {} };
-  if (!keyword.trim()) return { items: [], summary: empty };
-  const scope = requireClientSessionScope();
-  const period = { startDate: options.startDate || '0001-01-01', endDate: options.endDate || '9999-12-31' };
-  if (period.startDate > period.endDate) throw new ExpenseSearchFailure('INVALID_PERIOD');
-  const windowId = options.sourceWindow ?? options.cursor?.windowId ?? `search-window-${++searchWindowSequence}`;
-  const key = searchSourceKey(scope, windowId, options.startDate, options.endDate);
-  const queryScope = JSON.stringify([key, keyword.trim().toLocaleLowerCase(), options.transactionType]);
-  const cursor = options.cursor;
-  if (cursor && (cursor.scope !== queryScope || searchWindow?.key !== key || cursor.offset < 0 || !Number.isSafeInteger(cursor.offset))) throw new ExpenseSearchFailure('SOURCE_WINDOW_CHANGED');
-  let source: Expense[];
-  try {
-    source = await readExpenseSearchWindow(scope, windowId, options.startDate, options.endDate);
-  } catch (error) {
-    // A preparation failure is reported by the first actual search, without an
-    // automatic retry. A later input can start a fresh source as before.
-    if (searchWindow?.key === key) searchWindow = undefined;
-    throw error;
-  }
-  const current = requireClientSessionScope();
-  if (current.householdId !== scope.householdId || current.sessionGeneration !== scope.sessionGeneration || current.principalUid !== scope.principalUid || searchWindow?.key !== key) throw new ExpenseSearchFailure('SOURCE_WINDOW_CHANGED');
-  const matchesSearch = createExpenseSearchMatcher(keyword);
-  const matched = source.filter(expense => matchesTransactionType(expense, options.transactionType) && matchesSearch(expense));
-  const summary = matched.reduce<ExpenseSearchSummary>((value, expense) => {
-    value.count += 1; value.amount += expense.amount;
-    const month = value.months[expense.date.slice(0, 7)] ??= { count: 0, amount: 0 };
-    month.count += 1; month.amount += expense.amount;
-    return value;
-  }, empty);
-  const offset = cursor?.offset ?? 0;
-  const items = matched.slice(offset, offset + 50);
-  return { items, summary, ...(offset + items.length < matched.length ? { nextCursor: { windowId, scope: queryScope, offset: offset + items.length } } : {}) };
 }
 
 /**

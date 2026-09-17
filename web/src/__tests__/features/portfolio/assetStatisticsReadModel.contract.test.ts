@@ -1,4 +1,4 @@
-import { readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
+import { peekAssetStatisticsHistory, readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
 import { invalidateAssetStatisticsCache } from '@/platform/reporting/assetStatisticsQueryCache';
 import { setClientSessionScope, clearClientSessionScope, type ClientSessionScope } from '@/composition/clientSessionScope';
 import { resetLoadedClientSessionState } from '@/composition/clientSessionResetRegistry';
@@ -148,7 +148,7 @@ it.each([resetLoadedClientSessionState, invalidateAssetStatisticsCache])('discar
   expect(read).toHaveBeenCalledTimes(2);
 });
 
-it.each(['invalidation', 'remote epoch', 'forced refresh'] as const)('stops the previous full page before requesting another page after %s', async change => {
+it.each(['invalidation', 'remote epoch'] as const)('stops the previous full page before requesting another page after %s', async change => {
   const pending = deferred<any>();
   read.mockReturnValueOnce(pending.promise).mockResolvedValue({ docs: [] } as any);
   const old = readAssetStatisticsHistory(undefined, '2026-09-30');
@@ -156,8 +156,7 @@ it.each(['invalidation', 'remote epoch', 'forced refresh'] as const)('stops the 
   await Promise.resolve();
   expect(read).toHaveBeenCalledTimes(1);
   if (change === 'invalidation') invalidateAssetStatisticsCache();
-  const options = change === 'remote epoch' ? { cacheEpoch: 1 }
-    : change === 'forced refresh' ? { forceRefresh: true } : undefined;
+  const options = change === 'remote epoch' ? { cacheEpoch: 1 } : undefined;
   await readAssetStatisticsHistory(undefined, '2026-09-30', options);
   pending.resolve({ docs: Array.from({ length: 5_000 }, (_, index) => canonical(new Date(Date.UTC(2000, 0, index + 1)).toISOString().slice(0, 10), index)) });
   await rejected;
@@ -170,6 +169,37 @@ it('never caches a failed source as an empty success and allows immediate retry'
   await expect(readAssetStatisticsHistory(undefined, '2026-09-30')).rejects.toThrow('offline');
   await expect(readAssetStatisticsHistory(undefined, '2026-09-30')).resolves.toEqual([]);
   expect(read).toHaveBeenCalledTimes(2);
+});
+
+it('retains the complete history during forced verification and shares the same pending server read', async () => {
+  read.mockResolvedValueOnce({ docs: [canonical('2026-09-01', 100)] } as any);
+  await readAssetStatisticsHistory(undefined, '2026-09-30');
+  const pending = deferred<any>();
+  read.mockReturnValueOnce(pending.promise);
+  const first = readAssetStatisticsHistory(undefined, '2026-09-30', { forceRefresh: true });
+  const second = readAssetStatisticsHistory(undefined, '2026-09-30', { forceRefresh: true });
+  await Promise.resolve();
+  expect(read).toHaveBeenCalledTimes(2);
+  expect(peekAssetStatisticsHistory(undefined, '2026-09-30')?.find(row => row.assetId === 'TOTAL')?.balance).toBe(100);
+  pending.resolve({ docs: [canonical('2026-09-01', 200)] });
+  const [left, right] = await Promise.all([first, second]);
+  expect(left).toEqual(right);
+  expect(left.find(row => row.assetId === 'TOTAL')?.balance).toBe(200);
+  expect(peekAssetStatisticsHistory(undefined, '2026-09-30')?.find(row => row.assetId === 'TOTAL')?.balance).toBe(200);
+});
+
+it('preserves the completed cache after verification failure while keeping the failure visible to its caller', async () => {
+  read.mockResolvedValueOnce({ docs: [canonical('2026-09-01', 100)] } as any)
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockResolvedValueOnce({ docs: [canonical('2026-09-01', 200)] } as any);
+  await readAssetStatisticsHistory(undefined, '2026-09-30');
+  await expect(readAssetStatisticsHistory(undefined, '2026-09-30', { forceRefresh: true })).rejects.toThrow('offline');
+  expect(peekAssetStatisticsHistory(undefined, '2026-09-30')?.find(row => row.assetId === 'TOTAL')?.balance).toBe(100);
+  expect(peekAssetStatisticsHistory(undefined, '2026-09-30', { cacheEpoch: 1 })).toBeUndefined();
+  await readAssetStatisticsHistory(undefined, '2026-09-30', { forceRefresh: true });
+  expect(peekAssetStatisticsHistory(undefined, '2026-09-30')?.find(row => row.assetId === 'TOTAL')?.balance).toBe(200);
+  setClientSessionScope({ ...scope, memberId: 'other' });
+  expect(peekAssetStatisticsHistory(undefined, '2026-09-30')).toBeUndefined();
 });
 
 it('rejects repeated pages rather than showing a truncated total', async () => {

@@ -8,7 +8,7 @@ export interface AssetStatisticsReadOptions {
 
 const MAX_AGE_MS = 30_000;
 const MAX_ENTRIES = 8;
-type Entry = { queryKey: string; task: Promise<unknown>; completedAt?: number };
+type Entry = { queryKey: string; task: Promise<unknown>; pending: boolean; completed?: { value: unknown; at: number } };
 const entries = new Map<string, Entry>();
 const invalidationListeners = new Set<() => void>();
 let cachedScope: string | undefined;
@@ -37,6 +37,13 @@ export function subscribeAssetStatisticsInvalidation(listener: () => void): () =
 
 registerClientSessionReset(clearCache);
 
+/** A completed source can paint immediately while the caller verifies it again. */
+export function peekCachedAssetStatistics<T>(queryKey: string, options: AssetStatisticsReadOptions = {}): T | undefined {
+  const scope = getClientSessionScope();
+  if (!scope || cachedScope !== assetStatisticsSessionKey(scope)) return undefined;
+  return entries.get(JSON.stringify([queryKey, options.cacheEpoch ?? 0]))?.completed?.value as T | undefined;
+}
+
 /** Only complete server reads are reused, in memory, for this exact actor session. */
 export async function readCachedAssetStatistics<T>(
   queryKey: string,
@@ -63,15 +70,15 @@ export async function readCachedAssetStatistics<T>(
     if (entry.queryKey === queryKey && previousKey !== key) entries.delete(previousKey);
   });
   const existing = entries.get(key);
-  if (!options.forceRefresh && existing
-    && (existing.completedAt === undefined || Date.now() - existing.completedAt < MAX_AGE_MS)) {
+  if (existing && (existing.pending
+    || (!options.forceRefresh && existing.completed && Date.now() - existing.completed.at < MAX_AGE_MS))) {
     expectedEntry = existing;
     const value = await existing.task;
     assertCurrent();
     return value as T;
   }
 
-  const entry: Entry = { queryKey, task: Promise.resolve().then(() => {
+  const entry: Entry = { queryKey, pending: true, completed: existing?.completed, task: Promise.resolve().then(() => {
     assertCurrent();
     return load(assertCurrent);
   }) };
@@ -82,10 +89,16 @@ export async function readCachedAssetStatistics<T>(
   try {
     const value = await entry.task;
     assertCurrent();
-    entry.completedAt = Date.now();
+    entry.pending = false;
+    entry.completed = { value, at: Date.now() };
     return value as T;
   } catch (error) {
-    if (entries.get(key) === entry) entries.delete(key);
+    if (entries.get(key) === entry) {
+      if (entry.completed) {
+        entry.pending = false;
+        entry.task = Promise.resolve(entry.completed.value);
+      } else entries.delete(key);
+    }
     throw error;
   }
 }
