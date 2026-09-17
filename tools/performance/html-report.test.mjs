@@ -55,10 +55,24 @@ test('preserves historical recorded budgets instead of silently applying current
   assert.equal(JSON.stringify(report), original);
 });
 
+test('the reviewed search and revisit graph lines retain their stricter UX comparison', () => {
+  for (const [metric, value, ciMedian, uxMedian] of [
+    ['search.first', 600, 750, 500], ['search.first-open', 600, 750, 500],
+    ['expense-stats.revisit', 425, 450, 400], ['asset-stats.revisit', 425, 450, 400],
+  ]) {
+    const html = renderPerformanceReport(reportFor(Array(7).fill(value), { metric }));
+    assert.equal(rowAttribute(html, 'data-status'), 'pass');
+    assert.equal(rowAttribute(html, 'data-ux'), 'fail');
+    assert.equal(rowAttribute(html, 'data-ci-median'), String(ciMedian));
+    assert.equal(rowAttribute(html, 'data-ux-median'), String(uxMedian));
+    assert.equal(rowAttribute(html, 'data-median'), String(value));
+  }
+});
+
 test('the repeat chart uses the recorded required order statistic from measured samples', () => {
-  const report = reportFor([900, 100, 801, 100, 100, 100, 100], { metric: 'search.first' });
+  const report = reportFor([1100, 100, 1001, 100, 100, 100, 100], { metric: 'search.first' });
   let html = renderPerformanceReport(report);
-  assert.equal(rowAttribute(html, 'data-repeat'), '801');
+  assert.equal(rowAttribute(html, 'data-repeat'), '1001');
   assert.equal(rowAttribute(html, 'data-status'), 'fail');
   assert.match(measuredRow(html), /반복 허용 시간 초과/);
 
@@ -69,13 +83,13 @@ test('the repeat chart uses the recorded required order statistic from measured 
   report.performance.results[0].observed.requiredWithinBudget = 7;
   const original = JSON.stringify(report);
   html = renderPerformanceReport(report);
-  assert.equal(rowAttribute(html, 'data-repeat'), '900');
+  assert.equal(rowAttribute(html, 'data-repeat'), '1100');
   assert.equal(JSON.stringify(report), original);
 });
 
 test('rounding does not make a failed timing look equal to its passing threshold', () => {
   for (const [value, metric, ciLimit, tone] of [
-    [500.04, 'search.first', 500, 'exceeded'],
+    [750.04, 'search.first', 750, 'exceeded'],
     [300.04, 'search.change-keyword', 400, 'within'],
   ]) {
     const html = renderPerformanceReport(reportFor(Array(7).fill(value), { metric }));
@@ -90,8 +104,8 @@ test('rounding does not make a failed timing look equal to its passing threshold
 
 test('each independent timing failure remains visible and warmup is kept outside measured samples', () => {
   for (const [values, reason] of [
-    [Array(7).fill(501), '중앙값 초과'],
-    [[100, 100, 100, 100, 801, 801, 801], '반복 허용 시간 초과'],
+    [Array(7).fill(751), '중앙값 초과'],
+    [[100, 100, 100, 100, 1001, 1001, 1001], '반복 허용 시간 초과'],
     [[100, 100, 100, 100, 100, 100, 1501], '개별 최대 시간 초과'],
   ]) {
     const html = renderPerformanceReport(reportFor(values, { metric: 'search.first' }));

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -37,7 +37,7 @@ interface MonthlyTrendChartProps {
   onCategoryToggle?: (categories: Set<string>) => void;
 }
 
-export default function MonthlyTrendChart({ expenses, startDate, endDate, enabledCategories: externalEnabled, onCategoryToggle }: MonthlyTrendChartProps) {
+function MonthlyTrendChart({ expenses, startDate, endDate, enabledCategories: externalEnabled, onCategoryToggle }: MonthlyTrendChartProps) {
   const { activeCategories } = useCategoryContext();
   const chartMotion = useChartMotion();
 
@@ -254,3 +254,5 @@ export default function MonthlyTrendChart({ expenses, startDate, endDate, enable
     </div>
   );
 }
+
+export default memo(MonthlyTrendChart);

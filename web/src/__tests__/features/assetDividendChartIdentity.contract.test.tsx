@@ -23,11 +23,14 @@ test('[DIV-004] excludes the confirmed event identity and record-date-today esti
     { ...event, eventId: 'different-disclosure' },
     { ...event, eventId: 'today', recordDate: '2026-09-06', perShareAmount: 900 },
   ] as never);
-  render(<AssetDividendChart />);
+  const { rerender } = render(<AssetDividendChart />);
   await waitFor(() => {
     const data = JSON.parse(screen.getByTestId('dividend-chart').textContent!);
     expect(data.datasets[1].data[8]).toBe(200);
   });
   expect(getDividendEventsByYear).toHaveBeenCalledWith(2026);
   expect(mockDividendOptions.mock.calls.at(-1)![0].animation).toEqual({ duration: 150 });
+  const renders = mockDividendOptions.mock.calls.length;
+  rerender(<AssetDividendChart />);
+  expect(mockDividendOptions).toHaveBeenCalledTimes(renders);
 });

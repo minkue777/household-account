@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, type ChartOptions } from 'chart.js';
 import { Doughnut, getElementAtEvent } from 'react-chartjs-2';
 import { Expense, Category } from '@/types/expense';
@@ -22,7 +22,7 @@ interface DonutChartProps {
   onCategoryClick?: (category: Category, expenses: Expense[]) => void;
 }
 
-export default function DonutChart({ expenses, onCategoryClick }: DonutChartProps) {
+function DonutChart({ expenses, onCategoryClick }: DonutChartProps) {
   const { getCategoryLabel, getCategoryColor } = useCategoryContext();
   const chartMotion = useChartMotion();
   const chartRef = useRef<any>(null);
@@ -159,3 +159,5 @@ export default function DonutChart({ expenses, onCategoryClick }: DonutChartProp
     </div>
   );
 }
+
+export default memo(DonutChart);

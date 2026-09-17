@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import type { ChartOptions } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
@@ -21,7 +21,7 @@ function formatSignedRate(value: number | undefined) {
   return `${prefix}${Math.abs(value).toFixed(2)}%`;
 }
 
-export default function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance, sourceHistory }: {
+function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance, sourceHistory }: {
   snapshotId?: string;
   currentBalance?: number;
   sourceHistory?: readonly AssetHistoryEntry[];
@@ -197,3 +197,5 @@ export default function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance,
     </section>
   );
 }
+
+export default memo(AssetProfitChart);

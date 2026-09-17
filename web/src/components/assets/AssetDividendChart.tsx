@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChartOptions } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
@@ -42,7 +42,7 @@ function createEmptyMonthlyData() {
   return Array.from({ length: 12 }, () => 0);
 }
 
-export default function AssetDividendChart({ prefetchedSource }: { prefetchedSource?: AssetDividendPrefetch } = {}) {
+function AssetDividendChart({ prefetchedSource }: { prefetchedSource?: AssetDividendPrefetch } = {}) {
   const chartMotion = useChartMotion();
   const initialSource = useRef(prefetchedSource);
   const [dividendYear, setDividendYear] = useState(prefetchedSource?.year ?? CURRENT_YEAR);
@@ -447,3 +447,5 @@ export default function AssetDividendChart({ prefetchedSource }: { prefetchedSou
     </>
   );
 }
+
+export default memo(AssetDividendChart);

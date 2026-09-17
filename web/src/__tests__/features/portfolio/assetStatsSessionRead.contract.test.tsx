@@ -3,7 +3,7 @@ import { Profiler } from 'react';
 import AssetStatsPage from '@/app/assets/stats/page';
 import { peekAssetStatisticsHistory, readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
 import { subscribeToAssets, getAllStockHoldings, getDividendSnapshot, getDividendEventsByYear, type DividendSnapshotData } from '@/lib/assetService';
-import type { AssetHistoryEntry } from '@/types/asset';
+import type { Asset, AssetHistoryEntry } from '@/types/asset';
 import { getTodayLocalDate } from '@/lib/utils/date';
 import { invalidateAssetStatisticsCache } from '@/platform/reporting/assetStatisticsQueryCache';
 import { ANDROID_NATIVE_RESUME_EVENT } from '@/platform/android-host/androidLifecycleEvents';
@@ -272,6 +272,27 @@ describe('actual asset statistics page', () => {
     expect(screen.getByText('765,432')).toBeInTheDocument();
     expect(read).toHaveBeenCalledTimes(2);
     expect(read).toHaveBeenLastCalledWith(undefined, expect.any(String), { cacheEpoch: 0, forceRefresh: true });
+  });
+
+  it('avoids rebuilding charts for identical confirmed assets but accepts changed values even with the same version', async () => {
+    mockScope.isSessionVerified = true;
+    read.mockResolvedValue([entry('TOTAL', getTodayLocalDate(), 100)]);
+    render(<AssetStatsPage />);
+    await screen.findByText('100');
+    const onSourceSnapshot = jest.mocked(subscribeToAssets).mock.calls.at(-1)![2]!;
+    const asset: Asset = { id: 'stock', householdId: 'house-1', aggregateVersion: 1, name: '증권',
+      type: 'stock', currentBalance: 100, currency: 'KRW', isActive: true, order: 0,
+      createdAt: new Date(0), updatedAt: new Date(0), ownerRef: { kind: 'household' } };
+    act(() => onSourceSnapshot([asset], { fromCache: false }));
+    expect(screen.getByText('현재 총 자산')).toBeInTheDocument();
+    const renders = mockTrendOptions.mock.calls.length;
+    act(() => onSourceSnapshot([{ ...asset, ownerRef: { kind: 'household' }, createdAt: new Date(0) }], { fromCache: false }));
+    expect(mockTrendOptions).toHaveBeenCalledTimes(renders);
+    act(() => onSourceSnapshot([{ ...asset, currentBalance: 200 }], { fromCache: false }));
+    expect(screen.getByText('200')).toBeInTheDocument();
+    expect(JSON.parse(screen.getByTestId('chart').textContent!).datasets[0].data.at(-1)).toBe(200);
+    act(() => onSourceSnapshot([{ ...asset, isActive: false }], { fromCache: false }));
+    expect(screen.getByText('0')).toBeInTheDocument();
   });
   it('failure stays distinct from NoData and zero and supports retry', async () => {
     mockScope.isSessionVerified = true; read.mockRejectedValueOnce(new Error('offline'));

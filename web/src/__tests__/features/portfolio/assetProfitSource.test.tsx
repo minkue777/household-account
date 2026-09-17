@@ -124,7 +124,9 @@ it('keeps chart inputs stable when only its detail table or parent rerenders', (
   const [data, options] = mockBarInputs.mock.calls.at(-1)!;
   fireEvent.click(screen.getByRole('button', { name: '일별 자산 변동' }));
   expect(screen.getByText('+200원')).toBeInTheDocument();
+  const renders = mockBarInputs.mock.calls.length;
   rerender(<AssetProfitChart sourceHistory={sourceHistory} />);
+  expect(mockBarInputs).toHaveBeenCalledTimes(renders);
   expect(mockBarInputs.mock.calls.at(-1)![0]).toBe(data);
   expect(mockBarInputs.mock.calls.at(-1)![1]).toBe(options);
 });

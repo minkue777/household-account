@@ -192,7 +192,7 @@ export default function AssetStatsPage() {
       // observed zero balance. Only confirmed source snapshots replace history.
       const unsubscribe = subscribeToAssets(() => {}, undefined, (nextAssets, metadata) => {
         if (active && !metadata.fromCache) {
-          setAssets([...nextAssets]);
+          setAssets(previous => JSON.stringify(previous) === JSON.stringify(nextAssets) ? previous : [...nextAssets]);
           setHasCurrentAssets(true);
         }
       });

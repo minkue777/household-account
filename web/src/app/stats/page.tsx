@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import DonutChart from '@/components/DonutChart';
@@ -51,7 +51,7 @@ export default function StatsPage() {
   const [categorySelection, setCategorySelection] = useState<{ key: string; enabled: Set<string> } | undefined>(() =>
     hasCurrentCategoryCatalog ? { key: categorySelectionKey, enabled: initialCategories } : undefined);
   const enabledCategories = categorySelection?.key === categorySelectionKey ? categorySelection.enabled : initialCategories;
-  const setEnabledCategories = (enabled: Set<string>) => setCategorySelection({ key: categorySelectionKey, enabled });
+  const setEnabledCategories = useCallback((enabled: Set<string>) => setCategorySelection({ key: categorySelectionKey, enabled }), [categorySelectionKey]);
   const revision = useSyncExternalStore(subscribeExpenseStatisticsInvalidation, getExpenseStatisticsRevision, () => 0);
   const { startDate, endDate, error: periodError } = useMemo(() => resolveExpenseStatisticsPeriod(periodPreset, customStartDate, customEndDate), [periodPreset, customStartDate, customEndDate]);
   const query = useMemo<ExpenseStatisticsQuery | undefined>(() => scope && scope.householdId === householdKey
@@ -79,10 +79,10 @@ export default function StatsPage() {
       : { key: categorySelectionKey, enabled: initialCategories });
   }, [hasCurrentCategoryCatalog, categorySelectionKey, initialCategories]);
 
-  const handleCategoryClick = (category: Category) => {
+  const handleCategoryClick = useCallback((category: Category) => {
     setModalScope(modalKey);
     setSelectedCategory(category);
-  };
+  }, [modalKey]);
 
   const selectedCategoryExpenses = useMemo(() => {
     if (!selectedCategory) return [];
@@ -140,7 +140,7 @@ export default function StatsPage() {
     };
   }, []);
 
-  const totalAmount = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const totalAmount = useMemo(() => expenses.reduce((sum, expense) => sum + expense.amount, 0), [expenses]);
 
   const periodLabel = useMemo(() => {
     if (!startDate || !endDate) {

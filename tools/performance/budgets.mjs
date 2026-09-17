@@ -67,6 +67,12 @@ export const PERFORMANCE_PROFILES = Object.freeze({
       'ledger.add': budget(650, 800, 1000, ['webkit-mobile']),
       'ledger.delete': budget(500, 700, 1000, ['webkit-mobile']),
       'assets.first': budget(900, 1200, 5000, ['webkit-mobile']),
+      // Reviewed after UX-preserving optimization and repeated, complete runs
+      // on different hosted CPUs. Keep the original UX and hard maximums.
+      'search.first': budget(750, 1000, 1500, ['webkit-mobile']),
+      'search.first-open': budget(750, 1000, 1500, ['webkit-mobile']),
+      'expense-stats.revisit': budget(450, 600, 1200, ['webkit-mobile']),
+      'asset-stats.revisit': budget(450, 600, 1200, ['webkit-mobile']),
       'search.expand-month': budget(400, 650, 1000, ['webkit-mobile']),
       'search.change-keyword': budget(400, 650, 1000, ['webkit-mobile']),
     }),

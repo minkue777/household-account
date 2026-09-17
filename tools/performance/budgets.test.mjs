@@ -217,11 +217,11 @@ test('unknown or malformed profiles cannot silently fall back to a permissive li
   }
 });
 
-test('the hosted profile leaves Chromium, initial search, statistics, and unlisted paths unchanged', () => {
+test('the hosted profile leaves Chromium, initial statistics, period changes, and unlisted paths unchanged', () => {
   const profile = 'github-hosted-v2';
   assert.equal(evaluate(Array(7).fill(480), { profile }).status, 'fail');
   for (const [metric, durationMs] of [
-    ['search.first', 501], ['search.first-open', 501], ['expense-stats.first', 801],
+    ['expense-stats.first', 801],
     ['asset-stats.first', 801], ['asset-stats.period-all', 401], ['ledger.save-memo.server-confirmed', 501],
   ]) {
     const project = 'webkit-mobile';
@@ -230,6 +230,43 @@ test('the hosted profile leaves Chromium, initial search, statistics, and unlist
     assert.equal(result.status, 'fail', metric);
     assert.equal(result.results[0].budgetSource, 'ux-v2', metric);
     assert.deepEqual(result.results[0].budget, result.results[0].ux.budget, metric);
+  }
+});
+
+test('reviewed search and revisit allowances preserve UX, Chromium, repetition and hard-maximum failures', () => {
+  for (const [metric, median, repeated, maximum, uxMedian, uxRepeated] of [
+    ['search.first', 750, 1000, 1500, 500, 800],
+    ['search.first-open', 750, 1000, 1500, 500, 800],
+    ['expense-stats.revisit', 450, 600, 1200, 400, 600],
+    ['asset-stats.revisit', 450, 600, 1200, 400, 600],
+  ]) {
+    const project = 'webkit-mobile';
+    const spec = { projects: [project], metrics: [metric], samplesPerMetric: 7, profile: 'github-hosted-v2' };
+    const boundaryValues = [median, median, median, median, repeated, repeated, maximum];
+    const input = samples(boundaryValues, { project, metric });
+    const boundary = evaluatePerformanceBudgets(input, spec);
+    assert.equal(boundary.status, 'pass', metric);
+    assert.equal(boundary.uxStatus, 'fail', metric);
+    assert.equal(boundary.results[0].budgetSource, 'github-hosted-v2');
+    assert.equal(boundary.results[0].ux.budget.medianMs, uxMedian);
+    assert.equal(boundary.results[0].ux.budget.sixOfSevenMs, uxRepeated);
+    assert.equal(boundary.results[0].ux.budget.maxMs, maximum);
+    assert.deepEqual(boundary.statistics[0].samplesMs, boundaryValues);
+    for (const [values, reason] of [
+      [Array(7).fill(median + 1), 'median-exceeded'],
+      [[0, 0, 0, 0, repeated + 1, repeated + 1, repeated + 1], 'six-of-seven-exceeded'],
+      [[0, 0, 0, 0, 0, 0, maximum + 1], 'single-sample-maximum-exceeded'],
+    ]) {
+      const rejected = evaluatePerformanceBudgets(samples(values, { project, metric }), spec);
+      assert.equal(rejected.status, 'fail', metric);
+      assert(rejected.results[0].reasons.includes(reason), `${metric}/${reason}`);
+    }
+    const chromium = 'chromium-mobile';
+    const unchanged = evaluatePerformanceBudgets(samples(boundaryValues, { project: chromium, metric }),
+      { ...spec, projects: [chromium] });
+    assert.equal(unchanged.status, 'fail', metric);
+    assert.equal(unchanged.results[0].budgetSource, 'ux-v2');
+    assert.equal(evaluatePerformanceBudgets(input, { ...spec, profile: 'ux-v2' }).status, 'fail', metric);
   }
 });
 
@@ -293,7 +330,7 @@ test('version two never evaluates new stricter budgets under a historical profil
   }
 });
 
-test('search and statistics enforce the reviewed v2 boundaries in both UX and hosted execution', () => {
+test('search and statistics enforce the original v2 boundaries outside the reviewed hosted exceptions', () => {
   const groups = [
     { metrics: ['search.first', 'search.first-open'], median: 500, repeated: 800, maximum: 1500 },
     { metrics: ['expense-stats.first', 'asset-stats.first'], median: 800, repeated: 1200, maximum: 2000 },
@@ -303,6 +340,10 @@ test('search and statistics enforce the reviewed v2 boundaries in both UX and ho
   ];
   for (const { metrics, median, repeated, maximum } of groups) for (const metric of metrics) {
     for (const project of ['chromium-mobile', 'webkit-mobile']) for (const profile of ['ux-v2', 'github-hosted-v2']) {
+      // The explicit hosted exceptions have their own boundary, repetition,
+      // maximum, UX and Chromium checks above.
+      if (project === 'webkit-mobile' && profile === 'github-hosted-v2'
+        && ['search.first', 'search.first-open', 'expense-stats.revisit', 'asset-stats.revisit'].includes(metric)) continue;
       const spec = { projects: [project], metrics: [metric], samplesPerMetric: 7, profile };
       const boundary = evaluatePerformanceBudgets(samples([median, median, median, median, repeated, repeated, maximum], { project, metric }), spec);
       assert.equal(boundary.status, 'pass', `${project}/${metric}/${profile}`);
