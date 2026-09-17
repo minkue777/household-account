@@ -121,6 +121,12 @@ jobs:
           cache-dependency-path: |
             functions/package-lock.json
             web/package-lock.json
+      - name: Firebase Emulator 실행 파일 캐시
+        uses: actions/cache@v4
+        with:
+          # Firebase CLI 다운로드 전용 경로이며 DB·Functions 상태는 포함하지 않습니다.
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

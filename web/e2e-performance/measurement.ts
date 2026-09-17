@@ -60,9 +60,15 @@ function armBrowserProbe(config: any, predicate: (data: any) => boolean) {
     frameCount: 0,
     domObserverChecks: 0,
     domObserverTotalMs: 0,
+    timerTicks: 0,
+    maxTimerGapMs: null as number | null,
+    maxTimerGapStartAt: null as number | null,
+    maxTimerGapEndAt: null as number | null,
   } : undefined;
   const firstDrawn = phases && config.charts ? new WeakMap<HTMLCanvasElement, number>() : undefined;
   let domObserver: MutationObserver | undefined;
+  let phaseTimer: number | undefined;
+  let lastTimerAt: number | undefined;
   // Diagnostic observations never resolve the normal probe or change its endAt.
   const observeDom = (source: 'start' | 'mutation') => {
     if (!phases || startAt === undefined || phases.firstDomMatchAt !== null) return;
@@ -106,6 +112,7 @@ function armBrowserProbe(config: any, predicate: (data: any) => boolean) {
     if (!event.isTrusted || startAt !== undefined) return;
     startAt = performance.now();
     runtime.startAt = startAt;
+    lastTimerAt = startAt;
     frame = requestAnimationFrame(tick);
     observeDom('start');
   };
@@ -164,12 +171,26 @@ function armBrowserProbe(config: any, predicate: (data: any) => boolean) {
     clearTimeout(timer);
     document.removeEventListener(config.startEvent, begin, true);
     domObserver?.disconnect();
+    if (phaseTimer !== undefined) window.clearInterval(phaseTimer);
     if (firstDrawn) delete runtime.onCanvasDraw;
   };
   const timer = window.setTimeout(() => finish({ error: 'PERFORMANCE_READY_TIMEOUT', startAt }), 30_000);
   runtime.startAt = startAt;
   runtime.cancel = () => finish({ error: 'PERFORMANCE_CANCELLED' });
   if (phases) {
+    // Compare timer progress with rAF gaps without changing the paint boundary.
+    lastTimerAt = config.navigation ? performance.now() : undefined;
+    phaseTimer = window.setInterval(() => {
+      if (startAt === undefined) return;
+      const at = performance.now();
+      if (lastTimerAt !== undefined && (phases.maxTimerGapMs === null || at - lastTimerAt > phases.maxTimerGapMs)) {
+        phases.maxTimerGapMs = at - lastTimerAt;
+        phases.maxTimerGapStartAt = lastTimerAt;
+        phases.maxTimerGapEndAt = at;
+      }
+      lastTimerAt = at;
+      phases.timerTicks += 1;
+    }, 16);
     domObserver = new MutationObserver(() => observeDom('mutation'));
     domObserver.observe(document, { subtree: true, childList: true, characterData: true, attributes: true });
     if (config.navigation) observeDom('start');

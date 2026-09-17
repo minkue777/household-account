@@ -291,7 +291,7 @@ export default function SearchModal({
   return (
     <Portal>
       <div
-        className="fixed inset-0 z-[9999] flex items-start justify-center bg-slate-900/30 px-4 pt-12 backdrop-blur-sm md:pt-20"
+        className="fixed inset-0 z-[9999] flex items-start justify-center bg-slate-900/30 px-4 pt-12 md:pt-20"
         onClick={onClose}
       >
         <div
