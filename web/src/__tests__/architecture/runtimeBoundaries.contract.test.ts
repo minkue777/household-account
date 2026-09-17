@@ -25,6 +25,7 @@ describe('Web runtime architecture boundary', () => {
       .filter((file) => ![
         'lib/firebase.ts',
         'platform/read-model/firestoreReadModel.ts',
+        'platform/read-model/firestoreServerReadModel.ts',
       ].includes(file));
 
     expect(violations).toEqual([]);

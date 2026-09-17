@@ -17,16 +17,19 @@ export function summarizeSamples(samples) {
 }
 
 /** Every selected project must report each declared metric once for warmup and each measured iteration. */
-export function validateSampleCoverage(samples, { projects, metrics, samplesPerMetric }) {
+export function validateSampleCoverage(samples, { projects, metrics, samplesPerMetric, warmupMetrics = metrics }) {
   const errors = [];
   if (!Array.isArray(projects) || projects.length === 0 || new Set(projects).size !== projects.length
     || !Array.isArray(metrics) || metrics.length === 0 || new Set(metrics).size !== metrics.length
+    || !Array.isArray(warmupMetrics) || new Set(warmupMetrics).size !== warmupMetrics.length
+    || warmupMetrics.some(metric => !metrics.includes(metric))
     || [...projects, ...metrics].some(value => typeof value !== 'string' || value.length === 0)
     || !Number.isInteger(samplesPerMetric) || samplesPerMetric < 1 || samplesPerMetric > 30) {
     return ['Invalid performance coverage specification'];
   }
   const seen = new Set();
   const cacheStates = new Map();
+  if (!Array.isArray(samples)) return ['Invalid performance samples'];
   for (const sample of samples) {
     const key = JSON.stringify([sample?.project, sample?.metric, sample?.iteration]);
     if (!projects.includes(sample?.project) || !metrics.includes(sample?.metric)
@@ -34,6 +37,7 @@ export function validateSampleCoverage(samples, { projects, metrics, samplesPerM
       errors.push(`Unexpected performance sample: ${key}`);
       continue;
     }
+    if (sample.iteration === 0 && !warmupMetrics.includes(sample.metric)) errors.push(`Unexpected warmup sample: ${key}`);
     if (seen.has(key)) errors.push(`Duplicate performance sample: ${key}`);
     seen.add(key);
     if (sample.warmup !== (sample.iteration === 0)) errors.push(`Incorrect warmup classification: ${key}`);
@@ -44,7 +48,7 @@ export function validateSampleCoverage(samples, { projects, metrics, samplesPerM
     else cacheStates.set(metricKey, sample.cacheState);
   }
   for (const project of projects) for (const metric of metrics) {
-    for (let iteration = 0; iteration <= samplesPerMetric; iteration += 1) {
+    for (let iteration = warmupMetrics.includes(metric) ? 0 : 1; iteration <= samplesPerMetric; iteration += 1) {
       const key = JSON.stringify([project, metric, iteration]);
       if (!seen.has(key)) errors.push(`Missing performance sample: ${key}`);
     }

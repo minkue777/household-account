@@ -69,15 +69,25 @@ export default function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance,
   }, [currentBalance, currentDate, range.start, range.end, chartHistory, householdKey, snapshotId]);
   const rows = useMemo(() => {
     const count = view === 'monthly' ? 12 : new Date(year, month, 0).getDate();
+    let cursor = 0;
+    let baseline: AssetHistoryEntry | undefined;
     return Array.from({ length: count }, (_, index) => {
       const start = formatLocalDate(new Date(year, view === 'monthly' ? index : month - 1, view === 'monthly' ? 1 : index + 1));
       const end = view === 'monthly' ? formatLocalDate(new Date(year, index + 1, 0)) : start;
-      const within = displayHistory.filter(entry => entry.date >= start && entry.date <= end);
-      const baseline = displayHistory.filter(entry => entry.date < start).at(-1);
-      const last = within.at(-1);
+      // History and periods are chronological, so consume the source once.
+      // Repeated full-history filters made every day scan all earlier years.
+      while (cursor < displayHistory.length && displayHistory[cursor].date < start) {
+        baseline = displayHistory[cursor++];
+      }
+      const first = displayHistory[cursor]?.date <= end ? displayHistory[cursor] : undefined;
+      const base = baseline?.balance ?? (first ? first.balance - first.changeAmount : undefined);
+      let change: number | null = null;
+      while (cursor < displayHistory.length && displayHistory[cursor].date <= end) {
+        const entry = displayHistory[cursor++];
+        change = (change ?? 0) + entry.changeAmount;
+        baseline = entry;
+      }
       // Missing observations remain NoData; an observed zero change is valid.
-      const change = last ? within.reduce((sum, entry) => sum + entry.changeAmount, 0) : null;
-      const base = baseline?.balance ?? (within[0] ? within[0].balance - within[0].changeAmount : undefined);
       return { label: (index + 1) + (view === 'monthly' ? '월' : '일'), change, rate: change !== null && base !== undefined && base !== 0 ? change / Math.abs(base) * 100 : undefined };
     });
   }, [displayHistory, view, year, month]);
@@ -85,15 +95,15 @@ export default function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance,
     if (view === 'monthly') setYear(value => value + offset);
     else { const value = new Date(year, month - 1 + offset, 1); setYear(value.getFullYear()); setMonth(value.getMonth() + 1); }
   };
-  const chartData = {
+  const chartData = useMemo(() => ({
     labels: rows.map((_, index) => String(index + 1)),
     datasets: [{
       data: rows.map(row => row.change),
       backgroundColor: rows.map(row => (row.change ?? 0) < 0 ? 'rgba(59, 130, 246, 0.82)' : 'rgba(239, 68, 68, 0.82)'),
       borderRadius: view === 'monthly' ? 4 : 2,
     }],
-  };
-  const chartOptions: ChartOptions<'bar'> = {
+  }), [rows, view]);
+  const chartOptions = useMemo<ChartOptions<'bar'>>(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -108,7 +118,7 @@ export default function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance,
         ticks: { callback: value => Number((Number(value) / 1000000).toFixed(2)) },
       },
     },
-  };
+  }), []);
   const tableRows = rows.filter(row => row.change !== null).reverse();
 
   return (

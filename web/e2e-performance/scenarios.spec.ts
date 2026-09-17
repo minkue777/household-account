@@ -1,5 +1,5 @@
 import { expect, test, type BrowserContextOptions, type Page, type TestInfo } from '@playwright/test';
-import { installMeasurement, measure, type MeasurementOptions } from './measurement';
+import { installMeasurement, markNextAction, measure, type MeasurementOptions } from './measurement';
 import {
   ASSET_COUNT, STOCK_COUNT, EXPENSES_PER_MONTH, FIXTURE_MONTHS, LOCAL_CURRENCY_BALANCE,
   assetPeriodChange, installCatalogFixture, preparePerformanceFixture, readFixtureDocument, type PerformanceFixture,
@@ -156,12 +156,14 @@ async function measureJourney(page: Page, testInfo: TestInfo, fixture: Performan
     ready: () => expectHome(page, fixture),
   });
 
-  // 준비 클릭/포커스는 시간에 포함하지 않고 실제 입력 이벤트부터 측정합니다.
+  // Keep both boundaries: prefetch on opening must not hide waiting before input.
+  await markNextAction(page, 'search-open');
   await page.locator('header button').first().click();
   const searchInput = page.getByPlaceholder('지출처명, 메모, 카드명을 검색해보세요');
   const search = page.locator('div.fixed').filter({ has: searchInput });
   const summary = `${FIXTURE_MONTHS * EXPENSES_PER_MONTH}건 · ${won(fixture.totalExpenseAmount)}원`;
   await run({ id: 'search.first', label: '전체 기간 검색 → 첫 결과·전체 합계', cacheState: 'first-search-window', startEvent: 'input',
+    fromAction: { mark: 'search-open', id: 'search.first-open', label: '검색 열기·즉시 입력 → 첫 결과·전체 합계' },
     action: () => searchInput.fill('성능 원장'), data: { elements: [{ selector: 'div.fixed', text: summary }, { selector: 'div.fixed', text: '성능 원장 00-27' }] },
     ready: async () => { await expect(search.getByText(summary, { exact: true })).toBeVisible(); await expect(search.getByText(/^성능 원장 (?:\d{2}-\d{2}|수정 대상)$/)).toHaveCount(50); },
   });
@@ -253,6 +255,9 @@ async function measureJourney(page: Page, testInfo: TestInfo, fixture: Performan
 test('핵심 사용 경로의 실제 Emulator 성능 기준선', async ({ page: setupPage, browser, request }, testInfo) => {
   test.setTimeout(30 * 60_000);
   expect(Number.isInteger(SAMPLES) && SAMPLES >= 1 && SAMPLES <= 30).toBe(true);
+  // Fixture setup uses the same PWA persistence/transport as the measured iPhone.
+  // Otherwise WebKit setup exercises desktop IndexedDB before measurement starts.
+  if (testInfo.project.name.includes('webkit')) await setupPage.addInitScript(() => Object.defineProperty(navigator, 'standalone', { get: () => true }));
   const fixture = await preparePerformanceFixture(setupPage, request);
   const storage = await setupPage.context().storageState({ indexedDB: true });
   // 로그인·저장된 bootstrap metadata를 유지하며 Firestore 영속 캐시는 제거합니다.

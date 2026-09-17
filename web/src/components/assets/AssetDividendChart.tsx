@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ChartOptions } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { StockHolding } from '@/types/asset';
@@ -232,7 +233,7 @@ export default function AssetDividendChart({ prefetchedSource }: { prefetchedSou
     [monthlyDividendData]
   );
 
-  const dividendChartOptions: any = {
+  const dividendChartOptions = useMemo<ChartOptions<'bar'>>(() => ({
     responsive: true,
     maintainAspectRatio: false,
     onClick: (_event: unknown, elements: Array<{ index: number }>) => {
@@ -296,7 +297,7 @@ export default function AssetDividendChart({ prefetchedSource }: { prefetchedSou
         },
       },
     },
-  };
+  }), [monthlyDividendData]);
 
   const totalDividend = monthlyDividendData.reduce((sum, item) => sum + item.dividend, 0);
   const totalEstimatedDividend = monthlyDividendData.reduce(

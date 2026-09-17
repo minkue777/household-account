@@ -64,7 +64,17 @@ export default function SearchModal({
   useEffect(() => {
     const windowId = `search-${Date.now()}-${Math.random()}`;
     sourceWindowRef.current = windowId;
-    return () => { const closingWindowId = sourceWindowRef.current; void import('@/lib/expenseService').then(service => service.closeExpenseSearchWindow?.(closingWindowId)); };
+    let active = isOpen;
+    if (isOpen) {
+      void import('@/lib/expenseService').then(async service => {
+        if (active) await service.prepareExpenseSearchWindow(windowId);
+      }).catch(() => { /* The actual search reports a preparation failure. */ });
+    }
+    return () => {
+      active = false;
+      const closingWindowId = sourceWindowRef.current;
+      void import('@/lib/expenseService').then(service => service.closeExpenseSearchWindow?.(closingWindowId));
+    };
   }, [isOpen, householdKey, remoteReadEpoch]);
 
   useEffect(() => {

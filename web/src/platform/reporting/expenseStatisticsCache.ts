@@ -48,7 +48,8 @@ function overlaps(left: { startDate: string; endDate: string }, right: { startDa
   return left.startDate <= right.endDate && left.endDate >= right.startDate;
 }
 function select(expenses: Expense[], query: ExpenseStatisticsQuery): Expense[] {
-  return expenses.filter(expense => expense.date >= query.startDate && expense.date <= query.endDate);
+  const inPeriod = (expense: Expense) => expense.date >= query.startDate && expense.date <= query.endDate;
+  return expenses.every(inPeriod) ? expenses : expenses.filter(inPeriod);
 }
 function findCompleted(query: ExpenseStatisticsQuery): CompletedRange | undefined {
   if (!current(query)) return undefined;
@@ -90,11 +91,16 @@ export async function loadExpenseStatistics(query: ExpenseStatisticsQuery, force
   };
   request.promise = readExpenseStatistics(startDate, endDate, { assertCurrent }).then(expenses => {
     assertCurrent();
+    // A successful verification still renews freshness. Reuse identical complete
+    // data so charts do not restart their animation just because the read finished.
+    // Compare every read-model field, including memo and nested merge/split details.
+    const verifiedExpenses = cached && JSON.stringify(cached.expenses) === JSON.stringify(expenses)
+      ? cached.expenses : expenses;
     // Replace overlapping sources so a refreshed subset cannot leave a newer-looking stale total.
     completed = completed.filter(range => range.identity !== key || range.endDate < startDate || range.startDate > endDate);
-    completed.unshift({ identity: key, startDate, endDate, expenses, receivedAt: Date.now() });
+    completed.unshift({ identity: key, startDate, endDate, expenses: verifiedExpenses, receivedAt: Date.now() });
     completed = completed.slice(0, MAX_COMPLETED_RANGES);
-    return expenses;
+    return verifiedExpenses;
   }).finally(() => { pending.delete(request); });
   pending.add(request);
   return select(await request.promise, query);

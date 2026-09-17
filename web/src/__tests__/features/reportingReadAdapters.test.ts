@@ -6,6 +6,7 @@ import { resolveExpenseStatisticsPeriod } from '@/features/reporting/statisticsP
 let mockScope = { householdId: 'home', principalUid: 'uid', memberId: 'member', sessionGeneration: 1 };
 jest.mock('@/composition/clientSessionScope', () => ({ requireClientSessionScope: () => mockScope, getClientSessionScope: () => mockScope }));
 jest.mock('@/platform/read-model/firestoreReadModel', () => ({ db: {}, collection: jest.fn((_db, ...path) => path.join('/')), query: jest.fn((...args) => args), where: jest.fn((...args) => args), orderBy: jest.fn(), documentId: jest.fn(), startAfter: jest.fn(), limit: jest.fn(), getDocsFromServer: jest.fn() }));
+jest.mock('@/platform/read-model/firestoreServerReadModel', () => jest.requireMock('@/platform/read-model/firestoreReadModel'));
 const read = getDocsFromServer as jest.Mock;
 const doc = (id: string, values: Record<string, unknown>) => ({ id, data: () => values });
 const expense = (id: string, extra = {}) => doc(id, { householdId: 'home', date: '2026-09-01', amount: 0, category: 'food', transactionType: 'expense', ...extra });
@@ -42,6 +43,20 @@ it('reads a representative 1,729-document year in one bounded request, with ever
   expect(result).toHaveLength(1729);
   expect(new Set(result.map(row => row.id)).size).toBe(1729);
   expect(result.reduce((total, row) => total + row.amount, 0)).toBe(1729 * 1728 / 2);
+});
+it('decodes each source document once while retaining canonical category, card and split fields', async () => {
+  const data = jest.fn(() => ({
+    householdId: 'home', date: '2026-09-01', amount: 0, categoryId: 'Custom_Snack',
+    cardType: 'captured', cardDisplay: '삼성(1840)', memo: '간식',
+    splitGroup: { originalId: 'original' }, mergeLeafIds: ['first', 'second'],
+  }));
+  read.mockResolvedValueOnce({ docs: [{ id: 'entry', data }] });
+  const result = await readExpenseStatistics('2026-09-01', '2026-09-30');
+  expect(data).toHaveBeenCalledTimes(1);
+  expect(result).toEqual([expect.objectContaining({
+    id: 'entry', amount: 0, category: 'Custom_Snack', cardLastFour: '삼성(1840)', memo: '간식',
+    splitOriginalId: 'original', mergeLeafIds: ['first', 'second'],
+  })]);
 });
 it('stops between pages when the captured revision is invalidated', async () => {
   let current = true;

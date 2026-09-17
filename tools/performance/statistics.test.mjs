@@ -80,3 +80,15 @@ test('retains a valid slow outlier in all seven observations while excluding onl
   samples[0].durationMs = -1;
   assert(validateSampleCoverage(samples, specification).some(error => error.includes('Invalid performance duration')));
 });
+
+test('supports an unmeasured Native home bootstrap while requiring Quick Edit recorded warmup', () => {
+  const specification = { projects: ['android'], metrics: ['home', 'quick-edit'], samplesPerMetric: 7, warmupMetrics: ['quick-edit'] };
+  const samples = completeSamples(specification).filter(sample => sample.metric !== 'home' || !sample.warmup);
+  assert.deepEqual(validateSampleCoverage(samples, specification), []);
+  assert(validateSampleCoverage(samples.filter(sample => !sample.warmup), specification)
+    .some(error => error.includes('Missing performance sample')));
+  assert(validateSampleCoverage(completeSamples(specification), specification)
+    .some(error => error.includes('Unexpected warmup sample')));
+  assert(validateSampleCoverage(samples, { ...specification, warmupMetrics: ['unknown'] })
+    .some(error => error.includes('Invalid performance coverage specification')));
+});

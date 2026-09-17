@@ -1,6 +1,6 @@
 import { collection, db, documentId, getDocsFromServer, limit, orderBy, query, startAfter, where, type QueryDocumentSnapshot, type DocumentData } from '@/platform/read-model/firestoreReadModel';
 import { getClientSessionScope, requireClientSessionScope } from '@/composition/clientSessionScope';
-import { mapDocToExpense } from '@/features/ledger/application/ledgerExpenseMapping';
+import { mapExpenseReadData } from '@/features/ledger/application/ledgerExpenseMapping';
 import { isVisibleLedgerReadDocument } from '@/features/ledger/application/ledgerReadVisibility';
 import { requestMembershipResolution } from '@/features/access-household/application/membershipResolutionRecovery';
 import { requestRemoteSessionRecovery } from '@/platform/functions-api/firebaseCallableRecovery';
@@ -43,7 +43,7 @@ export async function readExpenseStatistics(startDate: string, endDate: string, 
       const data = document.data();
       if (!isVisibleLedgerReadDocument(data) || (data.transactionType ?? 'expense') !== 'expense') continue;
       if (!Number.isSafeInteger(data.amount) || typeof data.date !== 'string' || data.date < startDate || data.date > endDate) throw new Error('STATISTICS_SOURCE_INVALID');
-      expenses.push(mapDocToExpense(document));
+      expenses.push(mapExpenseReadData(document.id, data));
     }
     if (snapshot.docs.length < PAGE_SIZE) return expenses;
     cursor = snapshot.docs[snapshot.docs.length - 1];

@@ -17,6 +17,7 @@ let mockCurrentMemberId = 'member';
 let mockCategories: CategoryDocument[] = [];
 const mockShowAlert = jest.fn();
 const mockExecuteLedger = jest.fn();
+const mockTrendInputs: Array<{ data: { datasets: Array<{ label: string; data: number[] }> }; options: unknown }> = [];
 jest.mock('@/composition/webCommandRuntime', () => ({ getHouseholdCommandClient: () => ({ execute: mockExecuteLedger }) }));
 jest.mock('@/contexts/HouseholdContext', () => ({ useHousehold: () => ({ ...mockHousehold, currentMember: { id: mockCurrentMemberId } }) }));
 jest.mock('@/contexts/AppDialogContext', () => ({ useAppDialog: () => ({ showAlert: mockShowAlert }) }));
@@ -31,7 +32,10 @@ jest.mock('@/platform/reporting/expenseStatisticsReadModel', () => ({ readExpens
 jest.mock('@/lib/expenseService', () => ({ updateExpense: jest.fn(), deleteExpense: jest.fn() }));
 // Actual chart controls, category detail, edit form and confirmation dialog are exercised.
 // Only the canvas renderer and chart click hit testing are replaced.
-jest.mock('react-chartjs-2', () => ({ Line: ({ data }: { data: { datasets: Array<{ label: string }> } }) => <output data-testid="trend-series">{data.datasets.map(dataset => dataset.label).join(',')}</output> }));
+jest.mock('react-chartjs-2', () => ({ Line: (props: { data: { datasets: Array<{ label: string; data: number[] }> }; options: unknown }) => {
+  mockTrendInputs.push(props);
+  return <output data-testid="trend-series">{props.data.datasets.map(dataset => dataset.label).join(',')}</output>;
+} }));
 jest.mock('@/components/DonutChart', () => ({ __esModule: true, default: ({ expenses, onCategoryClick }: { expenses: Expense[]; onCategoryClick: (key: string) => void }) => <><button onClick={() => onCategoryClick(expenses[0]?.category ?? 'food')}>상세</button><output data-testid="donut-source">{expenses.map(expense => `${expense.category}:${expense.amount}`).join(',')}</output></> }));
 const read = jest.mocked(readExpenseStatistics);
 const row: Expense = { id: 'a', aggregateVersion: 1, amount: 0, date: '2026-09-01', merchant: '가게', category: 'food', transactionType: 'expense' };
@@ -49,6 +53,7 @@ beforeEach(() => {
   mockHousehold = { householdKey: 'house-1', remoteReadEpoch: 0 };
   mockCurrentMemberId = 'member';
   mockCategories = [];
+  mockTrendInputs.length = 0;
   read.mockResolvedValue([]);
   mockShowAlert.mockResolvedValue(undefined);
   mockExecuteLedger.mockReset();
@@ -289,6 +294,25 @@ it('shows completed session data on the first re-entry commit while the new serv
   expect(read).toHaveBeenCalledTimes(2);
   await act(async () => finish([{ ...row, amount: 321 }]));
   expect(screen.getByText('321원')).toBeInTheDocument();
+});
+
+it('finishes unchanged re-entry verification without restarting the existing trend chart', async () => {
+  mockCategories = [category('food', 500)];
+  read.mockResolvedValueOnce([{ ...row, amount: 123 }]);
+  const first = render(<StatsPage />);
+  await screen.findByText('123원');
+  first.unmount();
+  let finish!: (rows: Expense[]) => void;
+  read.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  render(<StatsPage />);
+  expect(screen.getByText('최신 내역 확인 중...')).toBeInTheDocument();
+  const drawing = mockTrendInputs.at(-1)!;
+  expect(drawing.data.datasets[0].data.reduce((total, amount) => total + amount, 0)).toBe(123);
+  await act(async () => finish([{ ...row, amount: 123 }]));
+  expect(screen.queryByText('최신 내역 확인 중...')).not.toBeInTheDocument();
+  expect(mockTrendInputs.at(-1)!.data).toBe(drawing.data);
+  expect(mockTrendInputs.at(-1)!.options).toBe(drawing.options);
+  expect(read).toHaveBeenCalledTimes(2);
 });
 
 it.each(['principal', 'member', 'generation', 'household', 'epoch'] as const)('hides previous totals on the very first committed %s transition', async dimension => {

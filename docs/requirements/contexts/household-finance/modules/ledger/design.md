@@ -98,6 +98,8 @@ QuickEdit `items` operation은 DEC-055에 따라 분할을 누른 시점의 merc
 
 `LedgerSearchResult`는 결정적으로 정렬된 현재 `items` page, opaque `nextCursor`, 동일 검색 범위 전체를 기준으로 한 `summary`, `sourceCheckpoint`를 반환합니다. `summary`는 `totalCount`, `totalAmountInWon`, `monthly[{yearMonth, count, amountInWon}]`를 가지며 현재 page의 부분 합계가 아닙니다. 빈 결과는 `NoData`이고 성공 summary의 0원과 구분합니다.
 
+Web 검색은 모달을 연 시점에 한 window의 bounded 서버 snapshot을 준비하여 사용자의 입력과 조회를 병렬로 진행합니다. 입력과 다음 페이지는 진행 중 Promise 또는 완료된 같은 원본을 공유하며 원본의 최신순 정렬도 한 번만 수행합니다. 홈 화면에서는 검색 전체 원본을 미리 읽지 않습니다. 원본 조회는 필요할 때 동적 로드하는 [단발 서버 읽기 경계](../../../../../../web/src/platform/read-model/firestoreServerReadModel.ts)의 Firestore Lite `getDocs`를 사용합니다. 기존 FirebaseApp의 Auth와 Firestore Rules를 그대로 적용하고, realtime SDK의 로컬 IndexedDB 반영 대기 없이 서버 원본을 읽습니다. 일반 월 원장의 실시간 구독과 persistence 설정은 그대로 유지합니다. 닫기·세션 전환·수정 성공 뒤 새 검색 revision은 기존 원본을 재사용하지 않으며, 준비 실패는 첫 실제 검색에 전달하고 자동 재시도로 숨기지 않습니다. 조회 건수·범위·전체 합계·10,000건 안전 상한은 유지합니다.
+
 Web `LedgerSearchController`는 서버 Query와 별개로 `actorSessionGeneration`, householdId, transactionType, normalized query, 증가하는 request revision을 함께 보관합니다. Adapter 응답이 현재 identity와 다르면 결과와 cursor를 폐기합니다. modal close·logout·가구 변경은 이전 revision을 무효화하고 가능한 요청을 취소합니다.
 
 목록 정렬은 `accountingDate DESC, localTime DESC, transactionId DESC`로 결정하고 cursor는 opaque입니다. 날짜 합계와 검색은 householdId·transactionType 범위를 항상 포함합니다. transactionType이 없는 legacy 문서는 읽기 Mapper에서 expense로 해석합니다.

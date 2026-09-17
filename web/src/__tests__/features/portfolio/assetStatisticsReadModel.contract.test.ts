@@ -2,9 +2,9 @@ import { readAssetStatisticsHistory } from '@/platform/reporting/assetStatistics
 import { invalidateAssetStatisticsCache } from '@/platform/reporting/assetStatisticsQueryCache';
 import { setClientSessionScope, clearClientSessionScope, type ClientSessionScope } from '@/composition/clientSessionScope';
 import { resetLoadedClientSessionState } from '@/composition/clientSessionResetRegistry';
-import { getDocsFromServer } from '@/platform/read-model/firestoreReadModel';
+import { getDocsFromServer } from '@/platform/read-model/firestoreServerReadModel';
 
-jest.mock('@/platform/read-model/firestoreReadModel', () => ({
+jest.mock('@/platform/read-model/firestoreServerReadModel', () => ({
   db: {}, collection: jest.fn((_db, ...path) => path.join('/')),
   query: jest.fn((source, ...constraints) => ({ source, constraints })),
   where: jest.fn((...args) => ({ kind: 'where', args })),
@@ -29,6 +29,33 @@ it('reads migrated historical dates from one canonical source without querying t
   expect((read.mock.calls[0][0] as any).source).toBe('households/home/assetSnapshots');
   expect(history.filter(row => row.assetId === 'TOTAL')).toHaveLength(441);
   expect(history.filter(row => row.assetId === 'TOTAL').at(-1)).toMatchObject({ balance: 440, changeAmount: 1 });
+});
+
+it('decodes each SDK document once while preserving every ordered dimension, change and caller isolation', async () => {
+  const rows = ['2026-09-01', '2026-09-02', '2026-09-03'].map((localDate, index) => ({
+    id: localDate,
+    data: jest.fn(() => ({ localDate, total: [100, 0, -20][index], financial: [70, 0, 10][index],
+      byType: { stock: [70, 0, 10][index], loan: [30, 0, -30][index] },
+      byOwnerRefKey: { 'profile:archived': [100, 0, -20][index] },
+      ownerDisplayNames: { 'profile:archived': '이전 명의자' },
+    })),
+  }));
+  read.mockResolvedValueOnce({ docs: rows } as any);
+  const history = await readAssetStatisticsHistory(undefined, '2026-09-30');
+  expect(rows.every(row => row.data.mock.calls.length === 1)).toBe(true);
+  expect(history).toHaveLength(15);
+  expect(history.map(row => `${row.date}:${row.assetId}`)).toEqual(
+    rows.flatMap(row => ['FINANCIAL', 'OWNER_REF_profile:archived', 'TOTAL', 'TYPE_loan', 'TYPE_stock']
+      .map(assetId => `${row.id}:${assetId}`)),
+  );
+  expect(history.filter(row => row.assetId === 'TOTAL').map(row => [row.balance, row.changeAmount]))
+    .toEqual([[100, 0], [0, -100], [-20, -20]]);
+  expect(history.find(row => row.assetId === 'OWNER_REF_profile:archived')).toMatchObject({
+    ownerKey: 'profile:archived', ownerDisplayName: '이전 명의자',
+  });
+  history[0].balance = 999;
+  expect((await readAssetStatisticsHistory(undefined, '2026-09-30'))[0].balance).toBe(70);
+  expect(read).toHaveBeenCalledTimes(1);
 });
 
 it('reads all 5,001 daily snapshots before publishing the complete history', async () => {

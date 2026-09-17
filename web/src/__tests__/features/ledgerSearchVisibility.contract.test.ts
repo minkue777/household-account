@@ -1,5 +1,6 @@
-import { searchExpenses, searchExpensePage, subscribeToDateRangeExpenses } from '@/lib/expenseService';
-import { getDocsFromServer, onSnapshot, limit, where, orderBy, documentId } from '@/platform/read-model/firestoreReadModel';
+import { searchExpenses, searchExpensePage, subscribeToDateRangeExpenses, prepareExpenseSearchWindow, closeExpenseSearchWindow } from '@/lib/expenseService';
+import { onSnapshot } from '@/platform/read-model/firestoreReadModel';
+import { getDocsFromServer, limit, where, orderBy, documentId } from '@/platform/read-model/firestoreServerReadModel';
 import { ledgerOptimisticProjection } from '@/features/ledger/application/ledgerOptimisticProjection';
 import { requireClientSessionScope } from '@/composition/clientSessionScope';
 
@@ -16,6 +17,13 @@ jest.mock('@/platform/read-model/firestoreReadModel', () => ({
   getDocsFromServer: jest.fn(),
   onSnapshot: jest.fn(),
   db: {},
+}));
+jest.mock('@/platform/read-model/firestoreServerReadModel', () => ({
+  collection: jest.fn(() => ({ kind: 'collection' })),
+  query: jest.fn(() => ({ kind: 'query' })),
+  where: jest.fn(() => ({ kind: 'where' })),
+  limit: jest.fn(), orderBy: jest.fn(), documentId: jest.fn(),
+  getDocsFromServer: jest.fn(), db: {},
 }));
 
 const mockedGetDocs = getDocsFromServer as jest.MockedFunction<typeof getDocsFromServer>;
@@ -66,6 +74,64 @@ describe('ledger search visibility contract', () => {
     await searchExpensePage('matched', { transactionType: 'expense', sourceWindow: 'window-1' });
     expect(mockedGetDocs).toHaveBeenCalledTimes(1);
     await expect(searchExpensePage('merchant', { transactionType: 'expense', cursor: page.nextCursor, sourceWindow: 'changed-window' })).rejects.toMatchObject({ code: 'SOURCE_WINDOW_CHANGED' });
+  });
+
+  test('opening and typing share the same in-flight full source, including memo, card evidence and every month', async () => {
+    let resolveSource!: (snapshot: Awaited<ReturnType<typeof getDocsFromServer>>) => void;
+    let sourceStarted!: () => void;
+    const started = new Promise<void>(resolve => { sourceStarted = resolve; });
+    mockedGetDocs.mockImplementationOnce(() => { sourceStarted(); return new Promise(resolve => { resolveSource = resolve; }); });
+    const preparation = prepareExpenseSearchWindow('prepared-window');
+    const search = searchExpensePage('삼성(3***)', { transactionType: 'expense', sourceWindow: 'prepared-window' });
+    await started;
+    expect(mockedGetDocs).toHaveBeenCalledTimes(1);
+    resolveSource({ docs: [
+      ledgerDocument('older', { date: '2024-01-01', memo: '지난 기록', cardEvidence: '삼성(3628)' }),
+      ledgerDocument('latest', { date: '2026-09-17', cardEvidence: '삼성(3999)' }),
+      ledgerDocument('other-card', { cardEvidence: '국민(3999)' }),
+      ledgerDocument('other-type', { transactionType: 'income', cardEvidence: '삼성(3999)' }),
+      ledgerDocument('deleted', { lifecycleState: 'deleted', cardEvidence: '삼성(3999)' }),
+    ] } as Awaited<ReturnType<typeof getDocsFromServer>>);
+    await preparation;
+    const page = await search;
+    expect(page.items.map(item => item.id)).toEqual(['latest', 'older']);
+    expect(page.summary).toEqual({ count: 2, amount: 20_000, months: {
+      '2026-09': { count: 1, amount: 10_000 }, '2024-01': { count: 1, amount: 10_000 },
+    } });
+    expect((await searchExpensePage('지난 기록', { sourceWindow: 'prepared-window' })).items.map(item => item.id)).toEqual(['older']);
+    expect(mockedGetDocs).toHaveBeenCalledTimes(1);
+    closeExpenseSearchWindow('prepared-window');
+  });
+
+  test('closing a prepared window rejects its pending result and reopening reads a new source', async () => {
+    let resolveSource!: (snapshot: Awaited<ReturnType<typeof getDocsFromServer>>) => void;
+    let sourceStarted!: () => void;
+    const started = new Promise<void>(resolve => { sourceStarted = resolve; });
+    mockedGetDocs.mockImplementationOnce(() => { sourceStarted(); return new Promise(resolve => { resolveSource = resolve; }); });
+    const preparation = prepareExpenseSearchWindow('closing-window');
+    const pending = searchExpensePage('merchant', { sourceWindow: 'closing-window' });
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'SOURCE_WINDOW_CHANGED' });
+    await started;
+    closeExpenseSearchWindow('closing-window');
+    resolveSource({ docs: [ledgerDocument('old')] } as Awaited<ReturnType<typeof getDocsFromServer>>);
+    await preparation;
+    await rejected;
+    mockedGetDocs.mockResolvedValueOnce({ docs: [ledgerDocument('new')] } as Awaited<ReturnType<typeof getDocsFromServer>>);
+    await prepareExpenseSearchWindow('reopened-window');
+    expect((await searchExpensePage('merchant', { sourceWindow: 'reopened-window' })).items.map(item => item.id)).toEqual(['new']);
+    expect(mockedGetDocs).toHaveBeenCalledTimes(2);
+    closeExpenseSearchWindow('reopened-window');
+  });
+
+  test('a failed preparation is reported without a hidden retry and a later query can read again', async () => {
+    mockedGetDocs.mockRejectedValueOnce(new Error('private provider detail'));
+    await expect(prepareExpenseSearchWindow('failed-preparation')).rejects.toMatchObject({ code: 'SOURCE_UNAVAILABLE' });
+    await expect(searchExpensePage('merchant', { sourceWindow: 'failed-preparation' })).rejects.toMatchObject({ code: 'SOURCE_UNAVAILABLE' });
+    expect(mockedGetDocs).toHaveBeenCalledTimes(1);
+    mockedGetDocs.mockResolvedValueOnce({ docs: [ledgerDocument('fresh')] } as Awaited<ReturnType<typeof getDocsFromServer>>);
+    expect((await searchExpensePage('merchant', { sourceWindow: 'failed-preparation' })).items.map(item => item.id)).toEqual(['fresh']);
+    expect(mockedGetDocs).toHaveBeenCalledTimes(2);
+    closeExpenseSearchWindow('failed-preparation');
   });
 
   test('searches every month and keeps newest order while excluding dates outside the previous source range', async () => {

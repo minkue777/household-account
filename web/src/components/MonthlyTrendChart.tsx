@@ -11,6 +11,7 @@ import {
   Tooltip,
   Legend,
   Filler,
+  type ChartOptions,
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { Expense } from '@/types/expense';
@@ -36,7 +37,7 @@ interface MonthlyTrendChartProps {
 }
 
 export default function MonthlyTrendChart({ expenses, startDate, endDate, enabledCategories: externalEnabled, onCategoryToggle }: MonthlyTrendChartProps) {
-  const { activeCategories, getCategoryColor, getCategoryLabel } = useCategoryContext();
+  const { activeCategories } = useCategoryContext();
 
   // 내부 상태 (외부에서 제어하지 않을 때 사용)
   const [internalEnabled, setInternalEnabled] = useState<Set<string>>(() => {
@@ -141,7 +142,7 @@ export default function MonthlyTrendChart({ expenses, startDate, endDate, enable
     };
   }, [months, monthlyData, enabledCategories, activeCategories]);
 
-  const options = {
+  const options = useMemo<ChartOptions<'line'>>(() => ({
     responsive: true,
     maintainAspectRatio: false,
     interaction: {
@@ -178,7 +179,7 @@ export default function MonthlyTrendChart({ expenses, startDate, endDate, enable
         },
       },
     },
-  };
+  }), []);
 
   // 토글 핸들러
   const toggleCategory = (key: string) => {

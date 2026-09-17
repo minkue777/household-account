@@ -350,7 +350,7 @@ export default function AssetStatsPage() {
         return new Set<TrendSeriesKey>(['all']);
       }
 
-      return next;
+      return next.size === prev.size ? prev : next;
     });
   }, [availableTypes]);
 

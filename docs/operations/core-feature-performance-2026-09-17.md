@@ -49,7 +49,7 @@ Android: Functions E2E 준비 후 실행 중인 AVD에서 `npm --prefix web run 
 
 기존 CI의 `web-e2e` job에서 기능 E2E 이후 Web 성능 테스트를 실행하고, 이미 같은 job에서 만든 production build를 재사용합니다. Android는 기존 변경 범위가 실제 Native 검증 대상으로 판단된 경우에만 기존 emulator job에서 반복 측정합니다. 매 Web 변경마다 Android emulator를 강제하지 않습니다.
 
-`quality-web-performance`, `quality-android-performance` artifact와 GitHub step summary에 결과를 남깁니다. 아직 CI 자체의 여러 실행 기준선이 없으므로 로컬 PC 시간으로 좁은 실패 임계값을 정하지 않습니다. 현재 CI는 실제 동작·정확한 데이터·완료 timeout을 검증하며 시간은 통계를 축적합니다. 편차를 확인한 뒤 기능별 허용 시간을 별도 결정합니다.
+`quality-web-performance`, `quality-android-performance` artifact와 GitHub step summary에 결과를 남깁니다. 아래 표는 최초 보고 전용 기준선이며 당시에는 별도 시간 임계값을 적용하지 않았습니다. 이후의 최적화와 PASS/FAIL 정책은 [성능 최적화 및 게이트](core-feature-performance-gates-2026-09-17.md)를 따릅니다. 이전 원본을 후속 결과로 덮어쓰지 않습니다.
 
 성능 시나리오는 Playwright 전용이며 Jest의 기존 102개 suite와 분리합니다. Vercel에는 성능 하네스·설정·생성 결과를 포함하지 않습니다. CI checkout에서는 모두 유지해 전용 실행기로 검증합니다.
 

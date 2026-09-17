@@ -16,6 +16,7 @@ export interface MeasurementOptions {
   chartIndexes?: number[];
   command?: boolean;
   commandName?: string;
+  fromAction?: { mark: string; id: string; label: string };
 }
 
 const installed = new WeakSet<Page>();
@@ -124,6 +125,20 @@ export async function installMeasurement(page: Page): Promise<void> {
   installed.add(page);
 }
 
+export async function markNextAction(page: Page, mark: string): Promise<void> {
+  await installMeasurement(page);
+  await page.evaluate(name => {
+    const runtime = (window as any).__householdPerformance;
+    runtime.marks ??= {};
+    const begin = (event: Event) => {
+      if (!event.isTrusted) return;
+      runtime.marks[name] = performance.now();
+      document.removeEventListener('click', begin, true);
+    };
+    document.addEventListener('click', begin, true);
+  }, mark);
+}
+
 async function attach(testInfo: TestInfo, options: MeasurementOptions, durationMs: number, suffix = '', labelSuffix = '') {
   expect(Number.isFinite(durationMs) && durationMs >= 0, options.id).toBe(true);
   await testInfo.attach('performance-sample', {
@@ -176,6 +191,11 @@ export async function measure(page: Page, testInfo: TestInfo, options: Measureme
   expect(result?.error, `${options.id}: ${JSON.stringify(result)}`).toBeUndefined();
   await options.ready();
   await attach(testInfo, options, result.durationMs);
+  if (options.fromAction) {
+    const startAt = await page.evaluate(mark => (window as any).__householdPerformance.marks?.[mark], options.fromAction.mark);
+    expect(Number.isFinite(startAt) && startAt <= result.startAt).toBe(true);
+    await attach(testInfo, { ...options, id: options.fromAction.id, label: options.fromAction.label }, result.endAt - startAt);
+  }
   if (commandResult) {
     const outcome = await commandResult;
     if ('error' in outcome) throw outcome.error;

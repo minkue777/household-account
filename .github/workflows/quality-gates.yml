@@ -137,12 +137,13 @@ jobs:
       - name: 성능 통계·표본 검증 회귀 검사
         # The summary and coverage checker are shared with Android measurements.
         # Keep their fast regression check separate from browser execution.
-        run: node --test tools/performance/statistics.test.mjs
-      - name: 핵심 기능 성능 기준선 수집
+        run: node --test tools/performance/statistics.test.mjs tools/performance/budgets.test.mjs
+      - name: 핵심 기능 성능 PASS/FAIL 검사
         run: npm --ignore-scripts run test:performance
         working-directory: web
         env:
           PERFORMANCE_SAMPLES: '7'
+          PERFORMANCE_PROFILE: 'github-hosted-v1'
           PERFORMANCE_USE_EXISTING_BUILD: 'true'
       - if: always()
         uses: actions/upload-artifact@v4
@@ -235,6 +236,8 @@ jobs:
         working-directory: android
       - uses: reactivecircus/android-emulator-runner@v2
         if: steps.scope.outputs.required == 'true'
+        env:
+          PERFORMANCE_PROFILE: 'github-hosted-v1'
         with:
           api-level: 34
           arch: x86_64

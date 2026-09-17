@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import SearchModal from '@/components/search/SearchModal';
-import { getDocsFromServer } from '@/platform/read-model/firestoreReadModel';
+import { getDocsFromServer } from '@/platform/read-model/firestoreServerReadModel';
 import { ledgerOptimisticProjection } from '@/features/ledger/application/ledgerOptimisticProjection';
 
 jest.mock('@/contexts/HouseholdContext', () => ({
@@ -22,6 +22,10 @@ jest.mock('@/platform/read-model/firestoreReadModel', () => ({
   collection: jest.fn(), query: jest.fn(), where: jest.fn(), limit: jest.fn(),
   orderBy: jest.fn(), documentId: jest.fn(), getDocsFromServer: jest.fn(), db: {},
 }));
+jest.mock('@/platform/read-model/firestoreServerReadModel', () => ({
+  collection: jest.fn(), query: jest.fn(), where: jest.fn(), limit: jest.fn(),
+  getDocsFromServer: jest.fn(), db: {},
+}));
 
 const mockedGetDocs = getDocsFromServer as jest.MockedFunction<typeof getDocsFromServer>;
 const expenseSnapshot = (merchant = '검색 확인 가게', date = '2026-09-09') => ({ docs: [{
@@ -37,6 +41,22 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     ledgerOptimisticProjection.reset();
+  });
+
+  test('닫힌 검색은 조회하지 않고 열린 순간부터 입력과 동일한 서버 원본을 준비한다', async () => {
+    let resolveSource!: (snapshot: Awaited<ReturnType<typeof getDocsFromServer>>) => void;
+    mockedGetDocs.mockImplementationOnce(() => new Promise(resolve => { resolveSource = resolve; }));
+    const { rerender } = render(<SearchModal isOpen={false} onClose={jest.fn()} transactionType="expense" />);
+    await act(async () => { await Promise.resolve(); });
+    expect(mockedGetDocs).not.toHaveBeenCalled();
+    rerender(<SearchModal isOpen onClose={jest.fn()} transactionType="expense" />);
+    await waitFor(() => expect(mockedGetDocs).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/검색 결과가 없습니다/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요'), { target: { value: '검색 확인' } });
+    await act(async () => { resolveSource(expenseSnapshot()); });
+    expect(await screen.findByText('검색 확인 가게')).toBeInTheDocument();
+    expect(screen.getByText('1건 · 12,000원')).toBeInTheDocument();
+    expect(mockedGetDocs).toHaveBeenCalledTimes(1);
   });
 
   test('가맹점과 메모 검색은 같은 서버 원본을 재사용하며 일치한 거래를 표시한다', async () => {

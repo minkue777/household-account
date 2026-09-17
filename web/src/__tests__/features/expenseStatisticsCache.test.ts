@@ -95,6 +95,41 @@ it('retains complete data while revalidating on re-entry/resume, but does not ca
   expect(peekExpenseStatistics(year)).toEqual([]);
 });
 
+it('verifies unchanged complete data on re-entry without replacing chart input, and renews the same 60-second freshness window', async () => {
+  jest.useFakeTimers().setSystemTime(0);
+  const original = [row('one', '2026-09-01')];
+  read.mockResolvedValueOnce(original).mockImplementation(async () => original.map(expense => ({ ...expense })));
+  const first = await loadExpenseStatistics(query());
+  jest.setSystemTime(20_000);
+  const cached = peekExpenseStatistics(query());
+  const verified = await loadExpenseStatistics(query(), true);
+  expect(read).toHaveBeenCalledTimes(2);
+  expect(verified).toBe(first);
+  expect(verified).toBe(cached);
+  jest.setSystemTime(79_999);
+  expect(await loadExpenseStatistics(query())).toBe(first);
+  expect(read).toHaveBeenCalledTimes(2);
+  jest.setSystemTime(80_001);
+  await loadExpenseStatistics(query());
+  expect(read).toHaveBeenCalledTimes(3);
+});
+
+it.each([
+  { amount: 21 }, { aggregateVersion: 2 }, { category: 'custom' }, { memo: '수정한 메모' },
+  { cardLastFour: '삼성(1840)' }, { splitOriginalId: 'split-original' },
+  { mergeLeafIds: ['leaf-a', 'leaf-b'] },
+  { mergedFrom: [{ merchant: '원래 가게', amount: 10, category: 'food', memo: '합치기 원본' }] },
+] satisfies Partial<Expense>[])('replaces verified data when a chart or detail field changes: %o', async change => {
+  const original = [row('one', '2026-09-01')];
+  const refreshed = [{ ...original[0], ...change }];
+  read.mockResolvedValueOnce(original).mockResolvedValueOnce(refreshed);
+  const first = await loadExpenseStatistics(query());
+  const verified = await loadExpenseStatistics(query(), true);
+  expect(verified).not.toBe(first);
+  expect(verified).toEqual(refreshed);
+  expect(peekExpenseStatistics(query())).toEqual(refreshed);
+});
+
 it('refreshes an expired covering range and keeps a different custom range bounded', async () => {
   jest.useFakeTimers().setSystemTime(0);
   read.mockResolvedValue([]);

@@ -151,6 +151,8 @@ Client 검증은 즉시 피드백용이다. Ledger가 같은 불변식과 원자
 10. 같은 로그인 세대의 월 원장·자산 query snapshot은 낙관적 변경 합성과 route 재진입을 위한 메모리 projection에만 남긴다. 앱 첫 실행의 월 원장 base는 항상 서버 snapshot으로 시작하고, 자산 query는 권위 인증이 확인된 뒤 idle callback에서 미리 시작한다. 세션 전환은 retained projection 전체를 초기화한다. 숨겨진 모달·차트·검색 컴포넌트는 실제 열릴 때 동적 로드한다.
 11. AND-012에 따라 navigation HTML은 Service Worker가 캐시하지 않는다. 새 Service Worker controller가 활성화되면 현재 runtime을 한 번 갱신한다. 정적 asset 캐시와 Firebase Auth 로그인 저장소는 이 정책과 별개이다.
 
+단발 bulk 조회인 전체 기간 검색과 자산 이력 통계는 `firestoreServerReadModel.ts`의 Firestore Lite를 사용합니다. 같은 FirebaseApp의 Auth와 Firestore Rules를 공유하되 REST 조회가 realtime SDK의 IndexedDB 쓰기를 기다리지 않도록 분리합니다. 일반 브라우저의 persistent listener, 모바일 memory listener, iPhone PWA long-polling과 각 기능의 session/cache 무효화 정책은 바꾸지 않습니다. Full/Lite Query·DocumentReference·cursor는 서로 섞지 않으며, 화면 mapping에는 각 경계가 반환한 `id`와 `data()`만 사용합니다.
+
 ### 5.3 `SynchronizeSessionMirror`
 
 Web Shell 준비에서는 Native 인증 객체를 미리 만들지 않습니다. Bridge의 `auth.sign-in`, `auth.sign-out`, `session.refresh`가 처음 필요할 때만 `NativeAuthCoordinator`를 생성하며 앱 버전·시작 시간 조회는 인증 SDK 초기화를 요구하지 않습니다. WebView 시작 뒤 캡처 재전송 예약을 위한 SessionMirror 조건 확인도 기존 process IO coroutine에서 한 snapshot으로 읽습니다. 세션 존재·멤버 이름 조건과 Queue 확인·WorkManager 예약 순서는 유지하며 Activity 종료 때문에 이 복구 작업을 취소하지 않습니다.

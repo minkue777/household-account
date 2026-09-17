@@ -11,6 +11,7 @@ export const WEB_PERFORMANCE_METRICS = [
   'ledger.previous-month',
   'ledger.return-month',
   'search.first',
+  'search.first-open',
   'search.next-page',
   'search.change-keyword',
   'expense-stats.first',

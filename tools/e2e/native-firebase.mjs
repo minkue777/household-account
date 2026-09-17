@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
-import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { cpus, release, totalmem } from 'node:os';
 import { startNativeWebRuntime } from './native-web-runtime.mjs';
-import { markdownTable, summarizeSamples } from '../performance/statistics.mjs';
+import { markdownTable } from '../performance/statistics.mjs';
+import { budgetMarkdown, evaluatePerformanceBudgets } from '../performance/budgets.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const projectId = 'demo-household-account-e2e';
@@ -168,27 +170,40 @@ else {
     ], join(root, 'android'));
     if (performanceMode) {
       const result = JSON.parse(execFileSync(adb, ['exec-out', 'run-as', 'com.household.account', 'cat', 'files/native-performance-result.json'], { encoding: 'utf8' }));
-      assert.equal(result.schemaVersion, 1);
-      assert.equal(result.repetitions, performanceSamples);
+      const validationErrors = [];
+      if (result.schemaVersion !== 1) validationErrors.push('Unsupported native performance schema');
+      if (result.repetitions !== performanceSamples) validationErrors.push('Native performance repetition count does not match the requested count');
       const expectedMetrics = isolateWebView ? ['android.home.isolated-activity-complete'] :
         ['android.home.activity-reopen-complete', 'android.quick-edit.notification-to-shown',
           'android.quick-edit.notification-to-ready', 'android.quick-edit.save-to-closed', 'android.quick-edit.save-to-server-observed'];
-      for (const metric of expectedMetrics) {
-        const measured = result.samples.filter(sample => sample.metric === metric && !sample.warmup);
-        assert.equal(measured.length, performanceSamples, `Missing raw samples: ${metric}`);
-        assert(measured.every(sample => Number.isFinite(sample.durationMs) && sample.durationMs >= 0), `Invalid sample: ${metric}`);
-      }
-      result.host = { platform: process.platform, node: process.version };
+      const performance = evaluatePerformanceBudgets(result.samples, { projects: ['android-emulator'], metrics: expectedMetrics,
+        samplesPerMetric: performanceSamples, warmupMetrics: expectedMetrics.filter(metric => metric.startsWith('android.quick-edit.')),
+        diagnostic: isolateWebView || process.env.PERFORMANCE_DIAGNOSTIC === 'true', ci: Boolean(process.env.CI || process.env.GITHUB_ACTIONS),
+        profile: process.env.PERFORMANCE_PROFILE });
+      result.status = validationErrors.length > 0 || performance.status === 'fail' ? 'failed' : performance.status === 'diagnostic' ? 'diagnostic' : 'passed';
+      result.validationErrors = validationErrors;
+      result.performance = performance;
+      result.host = { platform: process.platform, osRelease: release(), node: process.version,
+        cpu: cpus()[0]?.model, logicalCpus: cpus().length, totalMemoryBytes: totalmem(),
+        runnerOs: process.env.RUNNER_OS, runnerArch: process.env.RUNNER_ARCH,
+        runnerImage: process.env.ImageOS, runnerImageVersion: process.env.ImageVersion,
+        job: process.env.GITHUB_JOB };
       result.dataset = fixture.performanceDataset;
-      result.statistics = summarizeSamples(result.samples);
+      result.statistics = performance.statistics;
       const nativeResultPath = join(output, isolateWebView ? 'native-performance-isolated-diagnostic-result.json' : 'native-performance-result.json');
       writeFileSync(nativeResultPath, JSON.stringify(result, null, 2), 'utf8');
       const performanceOutput = join(root, 'web/performance-results');
       mkdirSync(performanceOutput, { recursive: true });
       const artifactName = isolateWebView ? 'android-isolated-diagnostic' : 'android';
       writeFileSync(join(performanceOutput, `${artifactName}.json`), JSON.stringify(result, null, 2), 'utf8');
-      writeFileSync(join(performanceOutput, `${artifactName}.md`), `${markdownTable(result.statistics)}\n`, 'utf8');
+      const markdown = `# Android 핵심 기능 성능 측정\n\n상태: ${result.status}.\n\n${validationErrors.map(error => `- 검증 실패: ${error}`).join('\n')}\n\n${budgetMarkdown(performance)}\n\n${markdownTable(result.statistics)}\n`;
+      writeFileSync(join(performanceOutput, `${artifactName}.md`), markdown, 'utf8');
+      if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown);
       console.log(`Native Firebase performance samples: ${nativeResultPath}`);
+      if (result.status === 'failed') {
+        console.error(`Native performance failed:\n${[...validationErrors, ...performance.errors, ...performance.exceededMetrics].join('\n')}`);
+        process.exitCode = 1;
+      }
     } else {
     const startup = JSON.parse(execFileSync(adb, ['exec-out', 'run-as', 'com.household.account', 'cat', 'files/native-startup-e2e-result.json'], { encoding: 'utf8' }));
     assert.equal(startup.platform, 'android');

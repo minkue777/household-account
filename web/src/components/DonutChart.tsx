@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useRef } from 'react';
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, type ChartOptions } from 'chart.js';
 import { Doughnut, getElementAtEvent } from 'react-chartjs-2';
 import { Expense, Category } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
@@ -25,16 +25,16 @@ export default function DonutChart({ expenses, onCategoryClick }: DonutChartProp
   const { getCategoryLabel, getCategoryColor } = useCategoryContext();
   const chartRef = useRef<any>(null);
 
-  const { chartData, categoryDataList } = useMemo(() => {
+  const { chartData, categoryDataList, totalAmount } = useMemo(() => {
     // 카테고리별 합계 계산
     const categoryTotals = new Map<Category, number>();
 
+    let totalAmount = 0;
     expenses.forEach((expense) => {
       const current = categoryTotals.get(expense.category) || 0;
       categoryTotals.set(expense.category, current + expense.amount);
+      totalAmount += expense.amount;
     });
-
-    const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0);
 
     // 금액이 있는 카테고리만 필터링하고 정렬
     const sortedCategories = Array.from(categoryTotals.entries())
@@ -66,10 +66,11 @@ export default function DonutChart({ expenses, onCategoryClick }: DonutChartProp
         ],
       },
       categoryDataList,
+      totalAmount,
     };
   }, [expenses, getCategoryLabel, getCategoryColor]);
 
-  const options = {
+  const options = useMemo<ChartOptions<'doughnut'>>(() => ({
     responsive: true,
     maintainAspectRatio: false,
     cutout: '65%',
@@ -86,9 +87,7 @@ export default function DonutChart({ expenses, onCategoryClick }: DonutChartProp
         },
       },
     },
-  };
-
-  const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0);
+  }), []);
 
   const handleChartClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
     if (!chartRef.current || !onCategoryClick) return;

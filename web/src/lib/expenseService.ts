@@ -8,7 +8,6 @@ import {
   onSnapshot,
   getDocs,
   getDocsFromServer,
-  limit,
   QueryDocumentSnapshot,
   QuerySnapshot,
   DocumentData,
@@ -17,7 +16,8 @@ import {
 import { Expense, MergedExpenseInfo, TransactionType } from '@/types/expense';
 import { ledgerOptimisticProjection } from '@/features/ledger/application/ledgerOptimisticProjection';
 import { isVisibleLedgerReadDocument } from '@/features/ledger/application/ledgerReadVisibility';
-import { requireClientSessionScope } from '@/composition/clientSessionScope';
+import { requireClientSessionScope, type ClientSessionScope } from '@/composition/clientSessionScope';
+import { compareLedgerTransactions } from '@/features/ledger/domain/ledgerTransactionOrder';
 import {
   ledgerMergedTransactionId,
   type LedgerTransactionCommandResult,
@@ -774,6 +774,51 @@ export function closeExpenseSearchWindow(windowId: string): void {
   if (searchWindow?.id === windowId) searchWindow = undefined;
 }
 
+function searchSourceKey(scope: ClientSessionScope, windowId: string, startDate?: string, endDate?: string): string {
+  return JSON.stringify([scope.principalUid, scope.sessionGeneration, scope.householdId,
+    { startDate: startDate || '0001-01-01', endDate: endDate || '9999-12-31' }, windowId]);
+}
+
+function readExpenseSearchWindow(
+  scope: ClientSessionScope, windowId: string, startDate?: string, endDate?: string
+): Promise<Expense[]> {
+  const key = searchSourceKey(scope, windowId, startDate, endDate);
+  if (searchWindow?.key === key) return searchWindow.source;
+  const source = (async () => {
+    // Keep the additional SDK outside the first-home bundle. Only explicit
+    // search preparation loads this server-only read boundary.
+    const { collection, db, getDocsFromServer, limit, query, where } =
+      await import('@/platform/read-model/firestoreServerReadModel');
+    // Opening the search and every subsequent keystroke/page share one bounded
+    // server snapshot. Keep the same source safety bound across transports.
+    const snapshot = await getDocsFromServer(query(collection(db, COLLECTION_NAME),
+      where('householdId', '==', scope.householdId),
+      ...(startDate ? [where('date', '>=', startDate)] : []),
+      ...(endDate ? [where('date', '<=', endDate)] : []),
+      limit(SEARCH_SOURCE_QUERY_LIMIT)));
+    const documents = snapshot.docs;
+    if (documents.length >= SEARCH_SOURCE_QUERY_LIMIT) throw new ExpenseSearchFailure('SOURCE_LIMIT_EXCEEDED');
+    const result = documents.flatMap(document => {
+      const data = document.data();
+      return typeof data.date === 'string'
+        && data.date >= (startDate || '0001-01-01') && data.date <= (endDate || '9999-12-31')
+        && isVisibleLedgerReadDocument(data)
+        ? [mapExpenseReadData(document.id, data)]
+        : [];
+    }).sort(compareLedgerTransactions);
+    return result;
+  })().catch(error => {
+    throw error instanceof ExpenseSearchFailure ? error : new ExpenseSearchFailure('SOURCE_UNAVAILABLE');
+  });
+  searchWindow = { key, id: windowId, source };
+  return source;
+}
+
+/** Only an explicitly opened search prepares its source; ordinary home visits do not read it. */
+export async function prepareExpenseSearchWindow(windowId: string): Promise<void> {
+  await readExpenseSearchWindow(requireClientSessionScope(), windowId);
+}
+
 export async function searchExpensePage(
   keyword: string,
   options: ExpenseQueryOptions & { cursor?: ExpenseSearchCursor; startDate?: string; endDate?: string; sourceWindow?: string } = { transactionType: DEFAULT_TRANSACTION_TYPE }
@@ -784,41 +829,22 @@ export async function searchExpensePage(
   const period = { startDate: options.startDate || '0001-01-01', endDate: options.endDate || '9999-12-31' };
   if (period.startDate > period.endDate) throw new ExpenseSearchFailure('INVALID_PERIOD');
   const windowId = options.sourceWindow ?? options.cursor?.windowId ?? `search-window-${++searchWindowSequence}`;
-  const key = JSON.stringify([scope.principalUid, scope.sessionGeneration, scope.householdId, period, windowId]);
+  const key = searchSourceKey(scope, windowId, options.startDate, options.endDate);
   const queryScope = JSON.stringify([key, keyword.trim().toLocaleLowerCase(), options.transactionType]);
   const cursor = options.cursor;
   if (cursor && (cursor.scope !== queryScope || searchWindow?.key !== key || cursor.offset < 0 || !Number.isSafeInteger(cursor.offset))) throw new ExpenseSearchFailure('SOURCE_WINDOW_CHANGED');
-  if (searchWindow?.key !== key) {
-    const source = (async () => {
-      // Every keystroke and result page shares one bounded server snapshot.
-      // Production Listen rejects limits above 10,000. At the limit we cannot
-      // prove the source is complete, so never publish potentially partial totals.
-      const snapshot = await getDocsFromServer(query(collection(db, COLLECTION_NAME),
-        where('householdId', '==', scope.householdId),
-        ...(options.startDate ? [where('date', '>=', period.startDate)] : []),
-        ...(options.endDate ? [where('date', '<=', period.endDate)] : []),
-        limit(SEARCH_SOURCE_QUERY_LIMIT)));
-      if (snapshot.docs.length >= SEARCH_SOURCE_QUERY_LIMIT) throw new ExpenseSearchFailure('SOURCE_LIMIT_EXCEEDED');
-      return snapshot.docs.flatMap(document => {
-        const data = document.data();
-        // Preserve the previous date-range visibility without sorting the source query.
-        return typeof data.date === 'string'
-          && data.date >= period.startDate && data.date <= period.endDate
-          && isVisibleLedgerReadDocument(data)
-          ? [mapExpenseReadData(document.id, data)]
-          : [];
-      });
-    })().catch(error => {
-      if (searchWindow?.key === key) searchWindow = undefined;
-      throw error instanceof ExpenseSearchFailure ? error : new ExpenseSearchFailure('SOURCE_UNAVAILABLE');
-    });
-    searchWindow = { key, id: windowId, source };
+  let source: Expense[];
+  try {
+    source = await readExpenseSearchWindow(scope, windowId, options.startDate, options.endDate);
+  } catch (error) {
+    // A preparation failure is reported by the first actual search, without an
+    // automatic retry. A later input can start a fresh source as before.
+    if (searchWindow?.key === key) searchWindow = undefined;
+    throw error;
   }
-  const source = await searchWindow.source;
   const current = requireClientSessionScope();
   if (current.householdId !== scope.householdId || current.sessionGeneration !== scope.sessionGeneration || current.principalUid !== scope.principalUid || searchWindow?.key !== key) throw new ExpenseSearchFailure('SOURCE_WINDOW_CHANGED');
-  const matched = source.filter(expense => matchesTransactionType(expense, options.transactionType) && expenseMatchesSearch(expense, keyword))
-    .sort((a, b) => b.date.localeCompare(a.date) || (b.time ?? '').localeCompare(a.time ?? '') || b.id.localeCompare(a.id));
+  const matched = source.filter(expense => matchesTransactionType(expense, options.transactionType) && expenseMatchesSearch(expense, keyword));
   const summary = matched.reduce<ExpenseSearchSummary>((value, expense) => {
     value.count += 1; value.amount += expense.amount;
     const month = value.months[expense.date.slice(0, 7)] ??= { count: 0, amount: 0 };
