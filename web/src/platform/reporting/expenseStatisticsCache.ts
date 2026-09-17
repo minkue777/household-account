@@ -7,6 +7,7 @@ import { expenseStatisticsActorKey, getExpenseStatisticsRevision, invalidateExpe
 
 const MAX_AGE_MS = 60_000;
 const MAX_COMPLETED_RANGES = 4;
+const MAX_PERIOD_SELECTIONS = 4;
 export interface ExpenseStatisticsQuery {
   scope: ClientSessionScope;
   remoteReadEpoch: number;
@@ -20,13 +21,14 @@ interface CompletedRange {
   endDate: string;
   expenses: Expense[];
   receivedAt: number;
+  selections: Map<string, Expense[]>;
 }
 interface PendingRange {
   identity: string;
   startDate: string;
   endDate: string;
   obsolete: boolean;
-  promise: Promise<Expense[]>;
+  promise: Promise<CompletedRange>;
 }
 let completed: CompletedRange[] = [];
 const pending = new Set<PendingRange>();
@@ -47,9 +49,19 @@ function covers(range: { startDate: string; endDate: string }, query: ExpenseSta
 function overlaps(left: { startDate: string; endDate: string }, right: { startDate: string; endDate: string }): boolean {
   return left.startDate <= right.endDate && left.endDate >= right.startDate;
 }
-function select(expenses: Expense[], query: ExpenseStatisticsQuery): Expense[] {
+function select(range: CompletedRange, query: ExpenseStatisticsQuery): Expense[] {
+  const { expenses, selections } = range;
+  const key = `${query.startDate}/${query.endDate}`;
+  const selected = selections.get(key);
+  if (selected) return selected;
   const inPeriod = (expense: Expense) => expense.date >= query.startDate && expense.date <= query.endDate;
-  return expenses.every(inPeriod) ? expenses : expenses.filter(inPeriod);
+  if (expenses.every(inPeriod)) return expenses;
+  const result = expenses.filter(inPeriod);
+  // Peek and the completed load must give charts the same input for one period.
+  // These small views share rows with their complete source and expire with it.
+  selections.set(key, result);
+  if (selections.size > MAX_PERIOD_SELECTIONS) selections.delete(selections.keys().next().value!);
+  return result;
 }
 function findCompleted(query: ExpenseStatisticsQuery): CompletedRange | undefined {
   if (!current(query)) return undefined;
@@ -59,7 +71,7 @@ function findCompleted(query: ExpenseStatisticsQuery): CompletedRange | undefine
 /** Only a fully completed, identical actor/revision range is eligible for immediate display. */
 export function peekExpenseStatistics(query: ExpenseStatisticsQuery): Expense[] | undefined {
   const cached = findCompleted(query);
-  return cached ? select(cached.expenses, query) : undefined;
+  return cached ? select(cached, query) : undefined;
 }
 
 export async function loadExpenseStatistics(query: ExpenseStatisticsQuery, force = false): Promise<Expense[]> {
@@ -75,7 +87,7 @@ export async function loadExpenseStatistics(query: ExpenseStatisticsQuery, force
   const cached = findCompleted(query);
   const existing = Array.from(pending).find(range => !range.obsolete && range.identity === key && covers(range, query));
   if (existing) return select(await existing.promise, query);
-  if (!force && cached && Date.now() - cached.receivedAt < MAX_AGE_MS) return select(cached.expenses, query);
+  if (!force && cached && Date.now() - cached.receivedAt < MAX_AGE_MS) return select(cached, query);
 
   // Refresh the covering source, retaining instant 3/6/12-month reuse after resume.
   const startDate = cached?.startDate ?? query.startDate;
@@ -98,9 +110,13 @@ export async function loadExpenseStatistics(query: ExpenseStatisticsQuery, force
       ? cached.expenses : expenses;
     // Replace overlapping sources so a refreshed subset cannot leave a newer-looking stale total.
     completed = completed.filter(range => range.identity !== key || range.endDate < startDate || range.startDate > endDate);
-    completed.unshift({ identity: key, startDate, endDate, expenses: verifiedExpenses, receivedAt: Date.now() });
+    const range: CompletedRange = {
+      identity: key, startDate, endDate, expenses: verifiedExpenses, receivedAt: Date.now(),
+      selections: cached && verifiedExpenses === cached.expenses ? cached.selections : new Map(),
+    };
+    completed.unshift(range);
     completed = completed.slice(0, MAX_COMPLETED_RANGES);
-    return verifiedExpenses;
+    return range;
   }).finally(() => { pending.delete(request); });
   pending.add(request);
   return select(await request.promise, query);
@@ -138,6 +154,7 @@ function applyConfirmedUpdate(mutation: ExpenseStatisticsMutation): boolean {
   completed = completed.map(range => ({
     ...range,
     identity: activeIdentity!,
+    selections: new Map(),
     expenses: range.expenses.map(expense => expense.id === transactionId ? {
       ...expense,
       memo: transaction.memo,

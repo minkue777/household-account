@@ -227,16 +227,17 @@ export default function SearchModal({
     let cancelled = false;
     let projection: ExpenseProjectionSubscription | undefined;
     void import('@/lib/expenseService').then(({
-      expenseMatchesSearch,
+      createExpenseSearchMatcher,
       searchExpensePage,
       subscribeToExpenseProjection,
     }) => {
       if (cancelled) return;
+      const matchesSearch = createExpenseSearchMatcher(keyword);
       projection = subscribeToExpenseProjection(
         setResults,
         (expense) =>
           expense.transactionType === transactionType
-          && expenseMatchesSearch(expense, keyword)
+          && matchesSearch(expense)
       );
       projectionRef.current = projection;
 

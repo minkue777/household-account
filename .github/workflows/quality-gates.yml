@@ -145,6 +145,7 @@ jobs:
           PERFORMANCE_SAMPLES: '7'
           PERFORMANCE_PROFILE: 'github-hosted-v2'
           PERFORMANCE_USE_EXISTING_BUILD: 'true'
+          PERFORMANCE_PHASE_DIAGNOSTICS: 'true'
       - if: always()
         uses: actions/upload-artifact@v4
         with:

@@ -1,6 +1,6 @@
 import { loadExpenseStatistics, peekExpenseStatistics, type ExpenseStatisticsQuery } from '@/platform/reporting/expenseStatisticsCache';
 import { readExpenseStatistics } from '@/platform/reporting/expenseStatisticsReadModel';
-import { getExpenseStatisticsRevision, invalidateExpenseStatistics } from '@/platform/reporting/expenseStatisticsInvalidation';
+import { getExpenseStatisticsRevision, invalidateExpenseStatistics, notifyExpenseStatisticsMutation } from '@/platform/reporting/expenseStatisticsInvalidation';
 import { setClientSessionScope, type ClientSessionScope } from '@/composition/clientSessionScope';
 import { resetLoadedClientSessionState } from '@/composition/clientSessionResetRegistry';
 import type { Expense } from '@/types/expense';
@@ -29,10 +29,26 @@ it('one completed year supplies exact 3/6-month and contained custom periods wit
   read.mockResolvedValue(rows);
   await loadExpenseStatistics(query());
   const threeMonths = query({ startDate: '2026-07-01' });
-  expect(peekExpenseStatistics(threeMonths)).toEqual([rows[2]]);
-  expect(await loadExpenseStatistics(threeMonths)).toEqual([rows[2]]);
+  const selected = peekExpenseStatistics(threeMonths);
+  expect(selected).toEqual([rows[2]]);
+  expect(await loadExpenseStatistics(threeMonths)).toBe(selected);
+  expect(peekExpenseStatistics(threeMonths)).toBe(selected);
   expect(await loadExpenseStatistics(query({ startDate: '2026-04-01' }))).toEqual(rows.slice(1));
   expect(await loadExpenseStatistics(query({ startDate: '2026-02-01', endDate: '2026-02-28' }))).toEqual([rows[0]]);
+  expect(read).toHaveBeenCalledTimes(1);
+});
+
+it('keeps only four period selections per complete source without another read when an older selection is rebuilt', async () => {
+  const rows = [row('winter', '2026-02-01'), row('summer', '2026-07-01')];
+  read.mockResolvedValue(rows);
+  await loadExpenseStatistics(query());
+  const periods = [3, 4, 5, 6, 7].map(month => query({ startDate: `2026-0${month}-01` }));
+  const selections = periods.map(period => peekExpenseStatistics(period));
+  expect(peekExpenseStatistics(periods[1])).toBe(selections[1]);
+  const rebuilt = await loadExpenseStatistics(periods[0]);
+  expect(rebuilt).not.toBe(selections[0]);
+  expect(rebuilt).toEqual([rows[1]]);
+  expect(peekExpenseStatistics(periods[0])).toBe(rebuilt);
   expect(read).toHaveBeenCalledTimes(1);
 });
 
@@ -112,6 +128,43 @@ it('verifies unchanged complete data on re-entry without replacing chart input, 
   jest.setSystemTime(80_001);
   await loadExpenseStatistics(query());
   expect(read).toHaveBeenCalledTimes(3);
+});
+
+it('retains the same selected rows through unchanged revalidation but replaces changed detail fields', async () => {
+  const original = [row('winter', '2026-02-01'), row('one', '2026-09-01')];
+  read.mockResolvedValueOnce(original)
+    .mockResolvedValueOnce(original.map(expense => ({ ...expense })))
+    .mockResolvedValueOnce([original[0], { ...original[1], memo: '서버에서 수정한 메모' }]);
+  await loadExpenseStatistics(query());
+  const short = query({ startDate: '2026-07-01' });
+  const selected = peekExpenseStatistics(short);
+  expect(await loadExpenseStatistics(short, true)).toBe(selected);
+  expect(peekExpenseStatistics(short)).toBe(selected);
+  const updated = await loadExpenseStatistics(short, true);
+  expect(updated).not.toBe(selected);
+  expect(updated).toEqual([{ ...original[1], memo: '서버에서 수정한 메모' }]);
+  expect(peekExpenseStatistics(short)).toBe(updated);
+  expect(read).toHaveBeenCalledTimes(3);
+});
+
+it('drops selected views after a confirmed local edit so the next period shows the authoritative category and memo', async () => {
+  const original = [row('winter', '2026-02-01'), row('one', '2026-09-01')];
+  read.mockResolvedValue(original);
+  await loadExpenseStatistics(query());
+  const selected = peekExpenseStatistics(query({ startDate: '2026-07-01' }));
+  notifyExpenseStatisticsMutation(actor, actor.householdId, {
+    transactionId: 'one', expectedVersion: 1,
+    transaction: {
+      transactionId: 'one', householdId: actor.householdId, aggregateVersion: 2,
+      lifecycleState: 'active', transactionType: 'expense', merchant: 'one', amountInWon: 10,
+      accountingDate: '2026-09-01', localTime: '12:00', categoryId: 'custom', memo: '수정한 메모',
+      cardType: 'manual', cardDisplay: '수동', creatorMemberId: actor.memberId,
+    },
+  });
+  const updated = await loadExpenseStatistics(query({ startDate: '2026-07-01' }));
+  expect(updated).not.toBe(selected);
+  expect(updated).toEqual([{ ...original[1], aggregateVersion: 2, category: 'custom', memo: '수정한 메모' }]);
+  expect(read).toHaveBeenCalledTimes(1);
 });
 
 it.each([

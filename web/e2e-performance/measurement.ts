@@ -32,7 +32,9 @@ function installBrowserProbe() {
     const original = prototype[method];
     prototype[method] = function (...args: unknown[]) {
       const result = original.apply(this, args);
-      drawn.set(this.canvas, performance.now());
+      const at = performance.now();
+      drawn.set(this.canvas, at);
+      root.__householdPerformance?.onCanvasDraw?.(this.canvas, at);
       return result;
     };
   }
@@ -49,22 +51,73 @@ function armBrowserProbe(config: any, predicate: (data: any) => boolean) {
   let candidateDraw = -1;
   let settledFrames = 0;
   let completed = false;
+  const phases = config.phaseDiagnostics ? {
+    firstDomMatchAt: null as number | null,
+    firstDomMatchSource: null as 'start' | 'mutation' | null,
+    firstRafAt: null as number | null,
+    lastRafAt: null as number | null,
+    maxFrameGapMs: 0,
+    frameCount: 0,
+    domObserverChecks: 0,
+    domObserverTotalMs: 0,
+  } : undefined;
+  const firstDrawn = phases && config.charts ? new WeakMap<HTMLCanvasElement, number>() : undefined;
+  let domObserver: MutationObserver | undefined;
+  // Diagnostic observations never resolve the normal probe or change its endAt.
+  const observeDom = (source: 'start' | 'mutation') => {
+    if (!phases || startAt === undefined || phases.firstDomMatchAt !== null) return;
+    const before = performance.now();
+    let ready = false;
+    try { ready = predicate(config.data); } catch { /* Navigation may replace the DOM. */ }
+    const after = performance.now();
+    phases.domObserverChecks += 1;
+    phases.domObserverTotalMs += after - before;
+    if (ready) {
+      phases.firstDomMatchAt = after;
+      phases.firstDomMatchSource = source;
+      domObserver?.disconnect();
+    }
+  };
   let resolveResult: (value: any) => void;
   runtime.result = new Promise(resolve => { resolveResult = resolve; });
   const finish = (value: any) => {
     if (completed) return;
+    const observedFinishAt = phases ? performance.now() : undefined;
     completed = true;
     cleanup();
-    resolveResult(value);
+    if (phases) {
+      const canvases = Array.from(document.querySelectorAll('canvas'));
+      const relevant = config.chartIndexes ? config.chartIndexes.map((index: number) => canvases[index]) : canvases;
+      const firstDrawTimes: Array<number | undefined> = firstDrawn
+        ? relevant.map((canvas: HTMLCanvasElement | undefined) => canvas ? firstDrawn.get(canvas) : undefined) : [];
+      const observedDrawTimes = firstDrawTimes.filter((at): at is number => at !== undefined);
+      const firstCanvasDrawAt = observedDrawTimes.length > 0 ? Math.min(...observedDrawTimes) : null;
+      const allCanvasesFirstDrawAt = firstDrawTimes.length > 0 && observedDrawTimes.length === firstDrawTimes.length
+        ? Math.max(...observedDrawTimes) : null;
+      const lastCanvasDrawAt = config.charts
+        ? Math.max(0, ...relevant.map((canvas: HTMLCanvasElement | undefined) => canvas ? runtime.drawn.get(canvas) ?? 0 : 0)) || null
+        : null;
+      resolveResult({ ...value, phaseDiagnostics: { schemaVersion: 'household-performance-phases.v1',
+        ...phases, startAt, firstCanvasDrawAt, allCanvasesFirstDrawAt, lastCanvasDrawAt,
+        canvasFirstDraws: firstDrawTimes.map(at => at ?? null), endAt: value.endAt ?? null, observedFinishAt } });
+    } else resolveResult(value);
   };
   const begin = (event: Event) => {
     if (!event.isTrusted || startAt !== undefined) return;
     startAt = performance.now();
     runtime.startAt = startAt;
     frame = requestAnimationFrame(tick);
+    observeDom('start');
   };
   const tick = () => {
     if (completed || startAt === undefined) return;
+    if (phases) {
+      const at = performance.now();
+      phases.firstRafAt ??= at;
+      if (phases.lastRafAt !== null) phases.maxFrameGapMs = Math.max(phases.maxFrameGapMs, at - phases.lastRafAt);
+      phases.lastRafAt = at;
+      phases.frameCount += 1;
+    }
     let ready = false;
     try { ready = predicate(config.data); } catch { /* DOM may not exist during navigation. */ }
     if (!ready) {
@@ -110,10 +163,20 @@ function armBrowserProbe(config: any, predicate: (data: any) => boolean) {
     if (frame !== undefined) cancelAnimationFrame(frame);
     clearTimeout(timer);
     document.removeEventListener(config.startEvent, begin, true);
+    domObserver?.disconnect();
+    if (firstDrawn) delete runtime.onCanvasDraw;
   };
   const timer = window.setTimeout(() => finish({ error: 'PERFORMANCE_READY_TIMEOUT', startAt }), 30_000);
   runtime.startAt = startAt;
   runtime.cancel = () => finish({ error: 'PERFORMANCE_CANCELLED' });
+  if (phases) {
+    domObserver = new MutationObserver(() => observeDom('mutation'));
+    domObserver.observe(document, { subtree: true, childList: true, characterData: true, attributes: true });
+    if (config.navigation) observeDom('start');
+  }
+  if (firstDrawn) runtime.onCanvasDraw = (canvas: HTMLCanvasElement, at: number) => {
+    if (startAt !== undefined && at >= startAt && !firstDrawn.has(canvas)) firstDrawn.set(canvas, at);
+  };
   if (config.navigation) frame = requestAnimationFrame(tick);
   else document.addEventListener(config.startEvent, begin, true);
 }
@@ -153,7 +216,8 @@ async function attach(testInfo: TestInfo, options: MeasurementOptions, durationM
 export async function measure(page: Page, testInfo: TestInfo, options: MeasurementOptions): Promise<number> {
   await installMeasurement(page);
   const config = { navigation: options.navigation ?? false, startEvent: options.startEvent ?? 'click',
-    charts: options.charts ?? false, chartIndexes: options.chartIndexes, data: options.data };
+    charts: options.charts ?? false, chartIndexes: options.chartIndexes, data: options.data,
+    phaseDiagnostics: process.env.PERFORMANCE_PHASE_DIAGNOSTICS === 'true' };
   const source = `(${installBrowserProbe.toString()})();(${armBrowserProbe.toString()})(${JSON.stringify(config)},(${options.browserReady.toString()}))`;
   // Navigation observers are enabled for exactly the next document by sessionStorage.
   // Persistent init scripts must not arm old predicates on subsequent navigations.
@@ -188,6 +252,12 @@ export async function measure(page: Page, testInfo: TestInfo, options: Measureme
 
   await options.action();
   const result = await page.evaluate(() => (window as any).__householdPerformance.result);
+  if (result?.phaseDiagnostics) {
+    await testInfo.attach('performance-phase-diagnostics', { contentType: 'application/json', body: JSON.stringify({
+      metric: options.id, project: testInfo.project.name, iteration: options.iteration, warmup: options.warmup,
+      cacheState: options.cacheState, ...result.phaseDiagnostics,
+    }) });
+  }
   expect(result?.error, `${options.id}: ${JSON.stringify(result)}`).toBeUndefined();
   await options.ready();
   await attach(testInfo, options, result.durationMs);

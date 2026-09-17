@@ -40,7 +40,7 @@ jest.mock('@/components/DonutChart', () => ({ __esModule: true, default: ({ expe
 const read = jest.mocked(readExpenseStatistics);
 const row: Expense = { id: 'a', aggregateVersion: 1, amount: 0, date: '2026-09-01', merchant: '가게', category: 'food', transactionType: 'expense' };
 const category = (key: string, budget: number | null, order = 0): CategoryDocument => ({
-  id: key, key, label: key, color: '#123456', budget, order, isDefault: false, isActive: true, householdId: 'house-1',
+  id: key, key, label: key, color: '#123456', budget, order, isDefault: false, isActive: true, householdId: mockHousehold.householdKey,
 });
 async function confirmMutation() {
   notifyExpenseStatisticsMutation(getClientSessionScope(), mockHousehold.householdKey);
@@ -222,6 +222,36 @@ it('[T-STAT-004][STAT-003] waits for the asynchronous budget catalog, keeps scre
   expect(screen.getByRole('button', { name: 'custom' })).toHaveAttribute('aria-pressed', 'false');
 });
 
+it('does not freeze the previous household catalog while switching through old, empty and current category lists', async () => {
+  read.mockResolvedValue([{ ...row, amount: 10 }]);
+  mockCategories = [category('food', 500), category('living', null)];
+  const { rerender } = render(<StatsPage />);
+  await screen.findByText('10원');
+  expect(screen.getByTestId('trend-series')).toHaveTextContent(/^food$/);
+
+  setClientSessionScope({ principalUid: 'uid', memberId: 'member', householdId: 'house-2', sessionGeneration: 2 });
+  mockHousehold = { householdKey: 'house-2', remoteReadEpoch: 1 };
+  // The route sees the new household before CategoryProvider clears its old rows.
+  rerender(<StatsPage />);
+  await screen.findByText('10원');
+  expect(screen.queryByTestId('trend-series')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'food' })).toHaveAttribute('aria-pressed', 'false');
+
+  mockCategories = [];
+  rerender(<StatsPage />);
+  expect(screen.queryByTestId('trend-series')).not.toBeInTheDocument();
+
+  mockCategories = [category('food', null), category('custom', 700)];
+  rerender(<StatsPage />);
+  expect(screen.getByTestId('trend-series')).toHaveTextContent(/^custom$/);
+  expect(screen.getByRole('button', { name: 'food' })).toHaveAttribute('aria-pressed', 'false');
+  expect(screen.getByRole('button', { name: 'custom' })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: 'food' }));
+  fireEvent.click(screen.getByRole('button', { name: '3개월' }));
+  await act(async () => {});
+  expect(screen.getByTestId('trend-series')).toHaveTextContent(/^food,custom$/);
+});
+
 it('STAT-001 actual period selector uses Seoul month bounds and incomplete custom input falls back to one year', async () => {
   jest.useFakeTimers().setSystemTime(new Date('2026-08-31T15:00:00Z'));
   render(<StatsPage />);
@@ -263,19 +293,26 @@ it('discards previous household response and rejects a reversed period before re
 
 it('commits cached period totals immediately, without a loading frame or another source request', async () => {
   jest.useFakeTimers().setSystemTime(new Date('2026-09-07T12:00:00Z'));
+  mockCategories = [category('food', 500)];
   read.mockResolvedValue([{ ...row, id: 'winter', date: '2026-02-01', amount: 100 }, { ...row, amount: 20 }]);
   const frames: string[] = [];
   render(<Profiler id="statistics" onRender={() => frames.push(document.body.textContent ?? '')}><StatsPage /></Profiler>);
   await screen.findByText('120원');
   frames.length = 0;
+  mockTrendInputs.length = 0;
   fireEvent.click(screen.getByRole('button', { name: '3개월' }));
   expect(frames[0]).toContain('20원');
   expect(frames.every(frame => !frame.includes('로딩중...') && !frame.includes('120원'))).toBe(true);
   expect(read).toHaveBeenCalledTimes(1);
   await act(async () => {});
+  expect(mockTrendInputs.length).toBeGreaterThan(0);
+  expect(mockTrendInputs.every(input => input.data === mockTrendInputs[0].data)).toBe(true);
+  mockTrendInputs.length = 0;
   fireEvent.click(screen.getByRole('button', { name: '6개월' }));
   expect(screen.getByText('20원')).toBeInTheDocument();
   await act(async () => {});
+  expect(mockTrendInputs.length).toBeGreaterThan(0);
+  expect(mockTrendInputs.every(input => input.data === mockTrendInputs[0].data)).toBe(true);
   expect(read).toHaveBeenCalledTimes(1);
 });
 
@@ -297,19 +334,25 @@ it('shows completed session data on the first re-entry commit while the new serv
 });
 
 it('finishes unchanged re-entry verification without restarting the existing trend chart', async () => {
-  mockCategories = [category('food', 500)];
+  mockCategories = [category('food', 500), category('living', null)];
   read.mockResolvedValueOnce([{ ...row, amount: 123 }]);
   const first = render(<StatsPage />);
   await screen.findByText('123원');
   first.unmount();
+  mockTrendInputs.length = 0;
   let finish!: (rows: Expense[]) => void;
   read.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   render(<StatsPage />);
   expect(screen.getByText('최신 내역 확인 중...')).toBeInTheDocument();
-  const drawing = mockTrendInputs.at(-1)!;
+  const refreshStatus = screen.getByText('최신 내역 확인 중...');
+  const drawing = mockTrendInputs[0];
+  expect(drawing.data.datasets.map(dataset => dataset.label)).toEqual(['food']);
+  expect(mockTrendInputs.every(input => input.data === drawing.data)).toBe(true);
   expect(drawing.data.datasets[0].data.reduce((total, amount) => total + amount, 0)).toBe(123);
   await act(async () => finish([{ ...row, amount: 123 }]));
   expect(screen.queryByText('최신 내역 확인 중...')).not.toBeInTheDocument();
+  expect(refreshStatus).toBeInTheDocument();
+  expect(refreshStatus).toBeEmptyDOMElement();
   expect(mockTrendInputs.at(-1)!.data).toBe(drawing.data);
   expect(mockTrendInputs.at(-1)!.options).toBe(drawing.options);
   expect(read).toHaveBeenCalledTimes(2);

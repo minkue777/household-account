@@ -12,7 +12,7 @@ jest.mock('@/components/search/SearchResultList', () => function SearchResultLis
 });
 
 jest.mock('@/lib/expenseService', () => ({
-  expenseMatchesSearch: jest.fn(() => true),
+  createExpenseSearchMatcher: jest.fn(() => () => true),
   prepareExpenseSearchWindow: jest.fn(async () => {}),
   searchExpensePage: jest.fn(async () => ({ items: [] })),
   subscribeToExpenseProjection: jest.fn(() => ({

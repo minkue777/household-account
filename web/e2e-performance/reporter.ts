@@ -12,6 +12,7 @@ export default class PerformanceReporter implements Reporter {
   private failures: string[] = [];
   private fixtures: any[] = [];
   private pwaPreparation: any[] = [];
+  private phaseDiagnostics: any[] = [];
   private selectedProjects: string[] = [];
   private reportingErrors: string[] = [];
   onBegin(_config: FullConfig, suite: Suite) {
@@ -20,13 +21,14 @@ export default class PerformanceReporter implements Reporter {
   }
   onTestEnd(test: TestCase, result: TestResult) {
     for (const attachment of result.attachments) {
-      if (!['performance-sample', 'performance-fixture', 'performance-pwa-preparation'].includes(attachment.name)) continue;
+      if (!['performance-sample', 'performance-fixture', 'performance-pwa-preparation', 'performance-phase-diagnostics'].includes(attachment.name)) continue;
       try {
         if (!attachment.body) throw new Error('Missing attachment body');
         const value = JSON.parse(attachment.body.toString());
         if (attachment.name === 'performance-sample') this.samples.push(value);
         if (attachment.name === 'performance-fixture') this.fixtures.push(value);
         if (attachment.name === 'performance-pwa-preparation') this.pwaPreparation.push({ project: test.parent.project()?.name, ...value });
+        if (attachment.name === 'performance-phase-diagnostics') this.phaseDiagnostics.push(value);
       } catch (error) {
         this.reportingErrors.push(`${test.parent.project()?.name}/${attachment.name}: ${String(error)}`);
       }
@@ -76,7 +78,9 @@ export default class PerformanceReporter implements Reporter {
         samplesRequested, warmupPerScenario: 1 },
       coverage: { projects: this.selectedProjects, metrics: WEB_PERFORMANCE_METRICS, complete: performance.coverage.complete && this.reportingErrors.length === 0,
         errors: [...this.reportingErrors, ...performance.coverage.errors] },
-      performance, fixtures: this.fixtures, pwaPreparation: this.pwaPreparation, failures: this.failures, statistics, samples: this.samples };
+      performance, fixtures: this.fixtures, pwaPreparation: this.pwaPreparation,
+      ...(this.phaseDiagnostics.length > 0 ? { phaseDiagnostics: this.phaseDiagnostics } : {}),
+      failures: this.failures, statistics, samples: this.samples };
     writeFileSync(resolve(output, 'web.json'), JSON.stringify(report, null, 2) + '\n');
     const validation = report.coverage.complete ? `표본 완전성: 선택된 환경마다 ${WEB_PERFORMANCE_METRICS.length}개 지표 × ${samplesRequested}회와 준비 실행 1회를 확인했습니다.`
       : `표본 검증 실패 ${report.coverage.errors.length}건입니다. 아래 값은 불완전한 측정이며 전체 기준선으로 사용할 수 없습니다. 상세 오류는 web.json의 coverage.errors에 기록했습니다.`;

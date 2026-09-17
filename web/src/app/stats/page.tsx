@@ -30,8 +30,6 @@ export default function StatsPage() {
   const firstRead = useRef(true);
   const lastQueryRevision = useRef(0);
   const [queryRevision, setQueryRevision] = useState(0);
-  const [enabledCategories, setEnabledCategories] = useState<Set<string>>(new Set(DEFAULT_CATEGORY_KEYS));
-  const [hasInitializedCategories, setHasInitializedCategories] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [modalScope, setModalScope] = useState('');
@@ -41,6 +39,19 @@ export default function StatsPage() {
   const { householdKey, currentMember, isSessionVerified = true, remoteReadEpoch = 0 } = useHousehold();
   const scope = getClientSessionScope();
   const actorKey = expenseStatisticsActorKey(scope);
+  const categorySelectionKey = JSON.stringify([actorKey, householdKey, remoteReadEpoch]);
+  const hasCurrentCategoryCatalog = activeCategories.length > 0
+    && activeCategories.every(category => category.householdId === householdKey);
+  const initialCategories = useMemo(() => {
+    if (!hasCurrentCategoryCatalog) return new Set<string>();
+    const budgetedKeys = activeCategories.filter(category => category.budget !== null).map(category => category.key);
+    return new Set(budgetedKeys.length > 0 ? budgetedKeys
+      : DEFAULT_CATEGORY_KEYS.filter(key => activeCategories.some(category => category.key === key)));
+  }, [activeCategories, hasCurrentCategoryCatalog]);
+  const [categorySelection, setCategorySelection] = useState<{ key: string; enabled: Set<string> } | undefined>(() =>
+    hasCurrentCategoryCatalog ? { key: categorySelectionKey, enabled: initialCategories } : undefined);
+  const enabledCategories = categorySelection?.key === categorySelectionKey ? categorySelection.enabled : initialCategories;
+  const setEnabledCategories = (enabled: Set<string>) => setCategorySelection({ key: categorySelectionKey, enabled });
   const revision = useSyncExternalStore(subscribeExpenseStatisticsInvalidation, getExpenseStatisticsRevision, () => 0);
   const { startDate, endDate, error: periodError } = useMemo(() => resolveExpenseStatisticsPeriod(periodPreset, customStartDate, customEndDate), [periodPreset, customStartDate, customEndDate]);
   const query = useMemo<ExpenseStatisticsQuery | undefined>(() => scope && scope.householdId === householdKey
@@ -58,23 +69,15 @@ export default function StatsPage() {
   const modalKey = JSON.stringify([actorKey, householdKey, currentMember?.id, isSessionVerified, remoteReadEpoch, startDate, endDate, periodError]);
   const canShowModals = !!query && modalScope === modalKey;
 
-  useEffect(() => { setHasInitializedCategories(false); setEditingExpense(null); setSelectedCategory(null); }, [householdKey, remoteReadEpoch]);
   useEffect(() => { setEditingExpense(null); setSelectedCategory(null); }, [modalKey]);
 
   useEffect(() => {
-    if (hasInitializedCategories || activeCategories.length === 0) {
-      return;
-    }
-
-    const budgetedCategoryKeys = activeCategories
-      .filter((category) => category.budget !== null)
-      .map((category) => category.key);
-
-    setEnabledCategories(
-      new Set(budgetedCategoryKeys.length > 0 ? budgetedCategoryKeys : DEFAULT_CATEGORY_KEYS.filter(key => activeCategories.some(category => category.key === key)))
-    );
-    setHasInitializedCategories(true);
-  }, [activeCategories, hasInitializedCategories]);
+    if (!hasCurrentCategoryCatalog) return;
+    // Freeze the first catalog selection for this visit, preserving user toggles.
+    // The first chart render already uses this exact Set, including cached re-entry.
+    setCategorySelection(previous => previous?.key === categorySelectionKey ? previous
+      : { key: categorySelectionKey, enabled: initialCategories });
+  }, [hasCurrentCategoryCatalog, categorySelectionKey, initialCategories]);
 
   const handleCategoryClick = (category: Category) => {
     setModalScope(modalKey);
@@ -170,7 +173,7 @@ export default function StatsPage() {
         </header>
 
         <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-200/70 bg-white/95 p-4 shadow-sm backdrop-blur-sm">
+          <div className="rounded-2xl border border-slate-200/70 bg-white/95 p-4 shadow-sm">
             <PeriodSelector
               periodPreset={periodPreset}
               onPresetChange={setPeriodPreset}
@@ -181,11 +184,13 @@ export default function StatsPage() {
                 onEndDateChange: setCustomEndDate,
               }}
             />
-            {isRefreshing && <p role="status" className="mt-3 text-sm text-slate-500">최신 내역 확인 중...</p>}
             {(periodError || readError) && <p role="alert" className="mt-3 text-sm text-red-600">{periodError ?? '통계를 불러오지 못했습니다.'}{readError && <button type="button" className="ml-3 underline" onClick={() => setQueryRevision(value => value + 1)}>다시 시도</button>}</p>}
 
             <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
-              <div className="text-sm text-slate-500">{periodLabel}</div>
+              <div className="text-sm text-slate-500">
+                <div>{periodLabel}</div>
+                <p role="status" className="h-5 text-xs">{isRefreshing ? '최신 내역 확인 중...' : ''}</p>
+              </div>
               <div className="text-right">
                 <div className="flex items-baseline justify-end gap-1">
                   <span className="text-sm text-slate-500">총</span>
@@ -199,7 +204,7 @@ export default function StatsPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200/70 bg-white/95 p-6 shadow-sm backdrop-blur-sm">
+          <div className="rounded-2xl border border-slate-200/70 bg-white/95 p-6 shadow-sm">
             <h3 className="mb-4 text-lg font-semibold text-slate-700">월별 지출 추이</h3>
             {isLoading ? (
               <div className="flex h-72 items-center justify-center text-slate-400">로딩중...</div>
@@ -218,7 +223,7 @@ export default function StatsPage() {
             )}
           </div>
 
-          <div className="rounded-2xl border border-slate-200/70 bg-white/95 p-6 shadow-sm backdrop-blur-sm">
+          <div className="rounded-2xl border border-slate-200/70 bg-white/95 p-6 shadow-sm">
             <h3 className="mb-4 text-lg font-semibold text-slate-700">카테고리별 비중</h3>
             <div className="min-h-64">
               {expenses.length > 0 ? (

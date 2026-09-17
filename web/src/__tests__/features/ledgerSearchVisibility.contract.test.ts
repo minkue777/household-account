@@ -1,4 +1,5 @@
-import { searchExpenses, searchExpensePage, subscribeToDateRangeExpenses, prepareExpenseSearchWindow, closeExpenseSearchWindow } from '@/lib/expenseService';
+import { searchExpenses, searchExpensePage, subscribeToDateRangeExpenses, prepareExpenseSearchWindow, closeExpenseSearchWindow, createExpenseSearchMatcher, expenseMatchesSearch } from '@/lib/expenseService';
+import type { Expense } from '@/types/expense';
 import { onSnapshot } from '@/platform/read-model/firestoreReadModel';
 import { getDocsFromServer, limit, where, orderBy, documentId } from '@/platform/read-model/firestoreServerReadModel';
 import { ledgerOptimisticProjection } from '@/features/ledger/application/ledgerOptimisticProjection';
@@ -56,6 +57,58 @@ describe('ledger search visibility contract', () => {
     jest.clearAllMocks();
     (requireClientSessionScope as jest.Mock).mockReturnValue({ householdId: 'house-1', memberId: 'member-1', principalUid: 'uid', sessionGeneration: 1 });
     ledgerOptimisticProjection.reset();
+  });
+
+  test.each<{
+    keyword: string | null | undefined;
+    fields: Record<string, unknown>;
+    expected: boolean;
+  }>([
+    { keyword: null, fields: {}, expected: false },
+    { keyword: undefined, fields: {}, expected: false },
+    { keyword: ' \t ', fields: {}, expected: false },
+    { keyword: ' CAFE ', fields: { merchant: 'Blue CaFe' }, expected: true },
+    { keyword: ' 도서 ', fields: { memo: '도서 구입' }, expected: true },
+    { keyword: '성능원장', fields: { merchant: '성능 원장' }, expected: false },
+    { keyword: '없는 값', fields: { merchant: null, memo: null, cardLastFour: null, cardEvidence: null }, expected: false },
+    { keyword: '수동', fields: { merchant: null, cardType: 'manual' }, expected: true },
+    { keyword: '경 기 지 역', fields: { cardLastFour: '경기지역화폐(0001)' }, expected: true },
+    { keyword: '  k B ( 18** )  ', fields: { cardLastFour: '국민카드(1840)' }, expected: true },
+    { keyword: '삼성(3628)', fields: { cardLastFour: '삼성(9999)' }, expected: false },
+    { keyword: '삼성(3628)', fields: { cardLastFour: '국민(3628)' }, expected: false },
+    { keyword: '삼성(3628)', fields: { cardLastFour: '공통카드', cardEvidence: '삼성(3628)' }, expected: true },
+    { keyword: '국민(3628)', fields: { cardLastFour: '국민(3628)', cardEvidence: '삼성(3628)' }, expected: false },
+    { keyword: '삼성(36X8)', fields: { cardLastFour: '삼성(3628)' }, expected: true },
+    { keyword: '삼성(3628)', fields: { cardLastFour: '삼성(36＊8)' }, expected: true },
+    { keyword: '삼성(3***)', fields: { cardLastFour: '삼성(3999)' }, expected: true },
+    { keyword: '삼성(3***)', fields: { cardLastFour: '국민(3999)' }, expected: false },
+    { keyword: 'KB국민(18**)', fields: { cardLastFour: 'KB(18**)' }, expected: true },
+    { keyword: 'Partner(1234)', fields: { cardLastFour: 'Partner(1234)' }, expected: true },
+    { keyword: 'Partner(12**)', fields: { cardLastFour: 'Partner(1234)' }, expected: false },
+    { keyword: '1234', fields: { cardLastFour: 'KB(1234)' }, expected: true },
+    { keyword: '1234', fields: { cardLastFour: 'KB(12**)' }, expected: false },
+  ])('prepared matcher and compatibility API retain existing text/card matching: $keyword / $fields', ({ keyword, fields, expected }) => {
+    const expense = { id: 'row', aggregateVersion: 1, date: '2026-09-01', amount: 10,
+      merchant: '', memo: '', category: 'food', ...fields } as Expense;
+    expect(createExpenseSearchMatcher(keyword as string)(expense)).toBe(expected);
+    expect(expenseMatchesSearch(expense, keyword as string)).toBe(expected);
+  });
+
+  test('a prepared matcher reads current memo and card evidence rather than retaining row search data', () => {
+    const expense: Expense = { id: 'row', aggregateVersion: 1, date: '2026-09-01', amount: 10,
+      merchant: '가게', category: 'food', memo: '이전 메모', cardLastFour: '국민(3628)' };
+    const matchesMemo = createExpenseSearchMatcher('변경된 메모');
+    const matchesCard = createExpenseSearchMatcher('삼성(3628)');
+    expect(matchesMemo(expense)).toBe(false);
+    expect(matchesCard(expense)).toBe(false);
+    expense.memo = '변경된 메모';
+    expense.cardEvidence = '삼성(3628)';
+    expect(matchesMemo(expense)).toBe(true);
+    expect(matchesCard(expense)).toBe(true);
+    expense.memo = '';
+    expense.cardEvidence = undefined;
+    expect(matchesMemo(expense)).toBe(false);
+    expect(matchesCard(expense)).toBe(false);
   });
 
   test('search pages one bounded source window with whole-result totals and reuses it across keystrokes', async () => {

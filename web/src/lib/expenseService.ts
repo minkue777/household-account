@@ -67,6 +67,16 @@ const CARD_LABEL_ALIAS_GROUPS = [
   ['온누리상품권', '온누리'],
 ] as const;
 
+// Alias definitions are static. Keep the first matching group, as the original
+// ordered lookup did, without normalizing every alias again for every expense.
+const CARD_LABEL_ALIASES = new Map<string, readonly string[]>();
+for (const group of CARD_LABEL_ALIAS_GROUPS) {
+  for (const alias of group) {
+    const key = compactSearchText(alias);
+    if (!CARD_LABEL_ALIASES.has(key)) CARD_LABEL_ALIASES.set(key, group);
+  }
+}
+
 const CARD_TYPE_SEARCH_TERMS: Record<string, string[]> = {
   main: ['main', '본인', '본인카드'],
   family: ['family', '가족', '가족카드'],
@@ -216,10 +226,7 @@ function matchesCardToken(leftToken: string, rightToken: string): boolean {
 }
 
 function getKnownCardLabelAliasGroup(label: string): readonly string[] | null {
-  const normalizedLabel = compactSearchText(label);
-  return CARD_LABEL_ALIAS_GROUPS.find((group) =>
-    group.some((alias) => compactSearchText(alias) === normalizedLabel)
-  ) || null;
+  return CARD_LABEL_ALIASES.get(compactSearchText(label)) ?? null;
 }
 
 function getCardLabelAliasGroup(label: string): readonly string[] {
@@ -269,8 +276,7 @@ function getExpenseCardSearchTexts(expense: Expense): string[] {
   return searchTexts;
 }
 
-function matchesCardSearch(expense: Expense, keyword: string): boolean {
-  const exactCardKeyword = parseExactCardSearchKeyword(keyword);
+function matchesCardSearch(expense: Expense, exactCardKeyword: ExactCardSearchKeyword | null, compactKeyword: string): boolean {
   const cardValue = expense.cardEvidence || expense.cardLastFour || '';
 
   if (exactCardKeyword) {
@@ -283,7 +289,6 @@ function matchesCardSearch(expense: Expense, keyword: string): boolean {
     );
   }
 
-  const compactKeyword = compactSearchText(keyword);
   if (!compactKeyword) {
     return false;
   }
@@ -293,12 +298,19 @@ function matchesCardSearch(expense: Expense, keyword: string): boolean {
   );
 }
 
-export function expenseMatchesSearch(expense: Expense, keyword: string): boolean {
+/** Prepare query-only normalization once; each call still reads the current expense fields. */
+export function createExpenseSearchMatcher(keyword: string): (expense: Expense) => boolean {
   const normalizedKeyword = normalizeSearchText(keyword);
-  if (!normalizedKeyword) return false;
-  return normalizeSearchText(expense.merchant).includes(normalizedKeyword)
+  if (!normalizedKeyword) return () => false;
+  const exactCardKeyword = parseExactCardSearchKeyword(keyword);
+  const compactKeyword = normalizedKeyword.replace(/\s+/g, '');
+  return expense => normalizeSearchText(expense.merchant).includes(normalizedKeyword)
     || normalizeSearchText(expense.memo).includes(normalizedKeyword)
-    || matchesCardSearch(expense, keyword);
+    || matchesCardSearch(expense, exactCardKeyword, compactKeyword);
+}
+
+export function expenseMatchesSearch(expense: Expense, keyword: string): boolean {
+  return createExpenseSearchMatcher(keyword)(expense);
 }
 
 export function subscribeToExpenseProjection(
@@ -844,7 +856,8 @@ export async function searchExpensePage(
   }
   const current = requireClientSessionScope();
   if (current.householdId !== scope.householdId || current.sessionGeneration !== scope.sessionGeneration || current.principalUid !== scope.principalUid || searchWindow?.key !== key) throw new ExpenseSearchFailure('SOURCE_WINDOW_CHANGED');
-  const matched = source.filter(expense => matchesTransactionType(expense, options.transactionType) && expenseMatchesSearch(expense, keyword));
+  const matchesSearch = createExpenseSearchMatcher(keyword);
+  const matched = source.filter(expense => matchesTransactionType(expense, options.transactionType) && matchesSearch(expense));
   const summary = matched.reduce<ExpenseSearchSummary>((value, expense) => {
     value.count += 1; value.amount += expense.amount;
     const month = value.months[expense.date.slice(0, 7)] ??= { count: 0, amount: 0 };
