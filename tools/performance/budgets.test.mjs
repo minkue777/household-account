@@ -270,22 +270,31 @@ test('reviewed search and revisit allowances preserve UX, Chromium, repetition a
 });
 
 test('server-confirmed UI completion and refreshed asset charts have narrowly scoped hosted allowances', () => {
-  for (const [project, metric, median, repeated, maximum] of [
-    ['chromium-mobile', 'ledger.save-memo', 350, 500, 1000],
-    ['chromium-mobile', 'ledger.save-category', 350, 500, 1000],
-    ['chromium-mobile', 'ledger.delete', 350, 500, 1000],
-    ['webkit-mobile', 'ledger.save-memo', 550, 750, 1000],
-    ['webkit-mobile', 'ledger.save-category', 550, 750, 1000],
-    ['chromium-mobile', 'asset-stats.revisit', 550, 600, 1200],
-    ['webkit-mobile', 'asset-stats.revisit', 650, 700, 1200],
+  for (const [project, metric, median, repeated, maximum, uxMedian, uxRepeated] of [
+    ['chromium-mobile', 'ledger.save-memo', 350, 500, 1000, 200, 350],
+    ['chromium-mobile', 'ledger.save-category', 350, 500, 1000, 200, 350],
+    ['chromium-mobile', 'ledger.delete', 350, 500, 1000, 200, 350],
+    ['webkit-mobile', 'ledger.save-memo', 700, 850, 1000, 200, 350],
+    ['webkit-mobile', 'ledger.save-category', 700, 850, 1000, 200, 350],
+    ['webkit-mobile', 'ledger.delete', 700, 850, 1000, 200, 350],
+    ['chromium-mobile', 'asset-stats.revisit', 550, 600, 1200, 400, 600],
+    ['webkit-mobile', 'asset-stats.revisit', 900, 1000, 1200, 400, 600],
   ]) {
-    const spec = { projects: [project], metrics: [metric], samplesPerMetric: 7, profile: 'github-hosted-v2' };
+    const spec = { projects: [project], metrics: [metric], samplesPerMetric: 7, profile: 'github-hosted-v2', ci: true };
     const values = [median, median, median, median, repeated, repeated, maximum];
     const boundary = evaluatePerformanceBudgets(samples(values, { project, metric }), spec);
     assert.equal(boundary.status, 'pass', `${project}/${metric}`);
     assert.equal(boundary.uxStatus, 'fail');
+    assert.equal(boundary.results[0].budgetSource, 'github-hosted-v2');
+    assert.equal(boundary.results[0].observed.withinBudget, 6);
+    assert.equal(boundary.results[0].observed.requiredWithinBudget, 6);
+    assert.equal(boundary.results[0].n, 7);
     assert.deepEqual(boundary.results[0].ux.budget, PERFORMANCE_BUDGETS[metric]);
+    assert.equal(boundary.results[0].ux.budget.medianMs, uxMedian);
+    assert.equal(boundary.results[0].ux.budget.sixOfSevenMs, uxRepeated);
     assert.equal(boundary.results[0].ux.budget.maxMs, maximum);
+    assert.deepEqual(boundary.statistics[0].samplesMs, values);
+    assert.equal(boundary.warmupSamples[0].durationMs, 10_000);
     for (const [outside, reason] of [
       [Array(7).fill(median + 1), 'median-exceeded'],
       [[0, 0, 0, 0, repeated + 1, repeated + 1, repeated + 1], 'six-of-seven-exceeded'],
@@ -293,7 +302,7 @@ test('server-confirmed UI completion and refreshed asset charts have narrowly sc
     ]) {
       const failed = evaluatePerformanceBudgets(samples(outside, { project, metric }), spec);
       assert.equal(failed.status, 'fail');
-      assert(failed.results[0].reasons.includes(reason), `${project}/${metric}/${reason}`);
+      assert.deepEqual(failed.results[0].reasons, [reason], `${project}/${metric}/${reason}`);
     }
     assert.equal(evaluatePerformanceBudgets(samples(values, { project, metric }), { ...spec, profile: 'ux-v2' }).status, 'fail');
   }

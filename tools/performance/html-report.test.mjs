@@ -48,17 +48,44 @@ test('preserves independent CI and UX chart thresholds and the evaluator verdict
 });
 
 test('preserves historical recorded budgets instead of silently applying current configuration', () => {
-  const report = reportFor();
-  report.performance.results[0].budget = { ...report.performance.results[0].budget, medianMs: 777 };
-  const original = JSON.stringify(report);
-  assert.equal(rowAttribute(renderPerformanceReport(report), 'data-ci-median'), '777');
-  assert.equal(JSON.stringify(report), original);
+  for (const [metric, value, oldMedian, oldRepeat, maximum] of [
+    ['ledger.save-memo', 600, 550, 750, 1000],
+    ['ledger.save-category', 600, 550, 750, 1000],
+    ['ledger.delete', 600, 500, 700, 1000],
+    ['asset-stats.revisit', 675, 650, 700, 1200],
+  ]) {
+    const report = reportFor(Array(7).fill(value), { metric });
+    assert.equal(report.performance.status, 'pass', `current ${metric}`);
+    // A stored report owns its original limit and verdict even when its timings
+    // would pass today's configuration. Rendering must never re-evaluate it.
+    const recorded = report.performance.results[0];
+    recorded.budget = { ...recorded.budget, medianMs: oldMedian, sixOfSevenMs: oldRepeat, maxMs: maximum };
+    recorded.status = 'fail';
+    recorded.withinTimeBudget = false;
+    recorded.reasons = ['median-exceeded'];
+    report.status = 'failed';
+    report.performance.status = 'fail';
+    report.performance.exceededMetrics = [`webkit-mobile/${metric}`];
+    const original = JSON.stringify(report);
+    const html = renderPerformanceReport(report);
+    assert.equal(executionStatus(html), 'failed');
+    assert.equal(rowAttribute(html, 'data-status'), 'fail');
+    assert.equal(rowAttribute(html, 'data-ci-median'), String(oldMedian));
+    assert.equal(rowAttribute(html, 'data-ci-repeat'), String(oldRepeat));
+    assert.equal(rowAttribute(html, 'data-ci-max'), String(maximum));
+    assert.equal(rowAttribute(html, 'data-median'), String(value));
+    assert.match(measuredRow(html), /class="bar exceeded"/);
+    assert.match(measuredRow(html), /중앙값 초과/);
+    assert.equal(JSON.stringify(report), original);
+  }
 });
 
-test('the reviewed search and revisit graph lines retain their stricter UX comparison', () => {
+test('the reviewed hosted graph lines retain their stricter UX comparison', () => {
   for (const [metric, value, ciMedian, uxMedian] of [
     ['search.first', 600, 750, 500], ['search.first-open', 600, 750, 500],
-    ['expense-stats.revisit', 425, 450, 400], ['asset-stats.revisit', 425, 650, 400],
+    ['expense-stats.revisit', 425, 450, 400], ['asset-stats.revisit', 800, 900, 400],
+    ['ledger.save-memo', 600, 700, 200], ['ledger.save-category', 600, 700, 200],
+    ['ledger.delete', 600, 700, 200],
   ]) {
     const html = renderPerformanceReport(reportFor(Array(7).fill(value), { metric }));
     assert.equal(rowAttribute(html, 'data-status'), 'pass');
