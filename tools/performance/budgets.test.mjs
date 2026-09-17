@@ -217,7 +217,7 @@ test('unknown or malformed profiles cannot silently fall back to a permissive li
   }
 });
 
-test('the hosted profile leaves Chromium, initial statistics, period changes, and unlisted paths unchanged', () => {
+test('the hosted profile leaves initial statistics, period changes, and unlisted paths unchanged', () => {
   const profile = 'github-hosted-v2';
   assert.equal(evaluate(Array(7).fill(480), { profile }).status, 'fail');
   for (const [metric, durationMs] of [
@@ -238,7 +238,6 @@ test('reviewed search and revisit allowances preserve UX, Chromium, repetition a
     ['search.first', 750, 1000, 1500, 500, 800],
     ['search.first-open', 750, 1000, 1500, 500, 800],
     ['expense-stats.revisit', 450, 600, 1200, 400, 600],
-    ['asset-stats.revisit', 450, 600, 1200, 400, 600],
   ]) {
     const project = 'webkit-mobile';
     const spec = { projects: [project], metrics: [metric], samplesPerMetric: 7, profile: 'github-hosted-v2' };
@@ -267,6 +266,36 @@ test('reviewed search and revisit allowances preserve UX, Chromium, repetition a
     assert.equal(unchanged.status, 'fail', metric);
     assert.equal(unchanged.results[0].budgetSource, 'ux-v2');
     assert.equal(evaluatePerformanceBudgets(input, { ...spec, profile: 'ux-v2' }).status, 'fail', metric);
+  }
+});
+
+test('server-confirmed UI completion and refreshed asset charts have narrowly scoped hosted allowances', () => {
+  for (const [project, metric, median, repeated, maximum] of [
+    ['chromium-mobile', 'ledger.save-memo', 350, 500, 1000],
+    ['chromium-mobile', 'ledger.save-category', 350, 500, 1000],
+    ['chromium-mobile', 'ledger.delete', 350, 500, 1000],
+    ['webkit-mobile', 'ledger.save-memo', 550, 750, 1000],
+    ['webkit-mobile', 'ledger.save-category', 550, 750, 1000],
+    ['chromium-mobile', 'asset-stats.revisit', 550, 600, 1200],
+    ['webkit-mobile', 'asset-stats.revisit', 650, 700, 1200],
+  ]) {
+    const spec = { projects: [project], metrics: [metric], samplesPerMetric: 7, profile: 'github-hosted-v2' };
+    const values = [median, median, median, median, repeated, repeated, maximum];
+    const boundary = evaluatePerformanceBudgets(samples(values, { project, metric }), spec);
+    assert.equal(boundary.status, 'pass', `${project}/${metric}`);
+    assert.equal(boundary.uxStatus, 'fail');
+    assert.deepEqual(boundary.results[0].ux.budget, PERFORMANCE_BUDGETS[metric]);
+    assert.equal(boundary.results[0].ux.budget.maxMs, maximum);
+    for (const [outside, reason] of [
+      [Array(7).fill(median + 1), 'median-exceeded'],
+      [[0, 0, 0, 0, repeated + 1, repeated + 1, repeated + 1], 'six-of-seven-exceeded'],
+      [[0, 0, 0, 0, 0, 0, maximum + 1], 'single-sample-maximum-exceeded'],
+    ]) {
+      const failed = evaluatePerformanceBudgets(samples(outside, { project, metric }), spec);
+      assert.equal(failed.status, 'fail');
+      assert(failed.results[0].reasons.includes(reason), `${project}/${metric}/${reason}`);
+    }
+    assert.equal(evaluatePerformanceBudgets(samples(values, { project, metric }), { ...spec, profile: 'ux-v2' }).status, 'fail');
   }
 });
 
@@ -342,8 +371,8 @@ test('search and statistics enforce the original v2 boundaries outside the revie
     for (const project of ['chromium-mobile', 'webkit-mobile']) for (const profile of ['ux-v2', 'github-hosted-v2']) {
       // The explicit hosted exceptions have their own boundary, repetition,
       // maximum, UX and Chromium checks above.
-      if (project === 'webkit-mobile' && profile === 'github-hosted-v2'
-        && ['search.first', 'search.first-open', 'expense-stats.revisit', 'asset-stats.revisit'].includes(metric)) continue;
+      if (profile === 'github-hosted-v2' && (metric === 'asset-stats.revisit'
+        || (project === 'webkit-mobile' && ['search.first', 'search.first-open', 'expense-stats.revisit'].includes(metric)))) continue;
       const spec = { projects: [project], metrics: [metric], samplesPerMetric: 7, profile };
       const boundary = evaluatePerformanceBudgets(samples([median, median, median, median, repeated, repeated, maximum], { project, metric }), spec);
       assert.equal(boundary.status, 'pass', `${project}/${metric}/${profile}`);

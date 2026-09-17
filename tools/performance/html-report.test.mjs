@@ -58,7 +58,7 @@ test('preserves historical recorded budgets instead of silently applying current
 test('the reviewed search and revisit graph lines retain their stricter UX comparison', () => {
   for (const [metric, value, ciMedian, uxMedian] of [
     ['search.first', 600, 750, 500], ['search.first-open', 600, 750, 500],
-    ['expense-stats.revisit', 425, 450, 400], ['asset-stats.revisit', 425, 450, 400],
+    ['expense-stats.revisit', 425, 450, 400], ['asset-stats.revisit', 425, 650, 400],
   ]) {
     const html = renderPerformanceReport(reportFor(Array(7).fill(value), { metric }));
     assert.equal(rowAttribute(html, 'data-status'), 'pass');

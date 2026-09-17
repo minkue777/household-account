@@ -57,13 +57,21 @@ const findBudget = metric => Object.hasOwn(PERFORMANCE_BUDGETS, metric) ? PERFOR
 export const PERFORMANCE_PROFILES = Object.freeze({
   'ux-v2': Object.freeze({ overrides: Object.freeze({}) }),
   'github-hosted-v2': Object.freeze({ overrides: Object.freeze({
+    'chromium-mobile': Object.freeze({
+      // Save completion now includes successful server confirmation so a
+      // rejected command can retain its draft. Keep the one-second ceiling.
+      'ledger.save-memo': budget(350, 500, 1000, ['chromium-mobile']),
+      'ledger.save-category': budget(350, 500, 1000, ['chromium-mobile']),
+      'ledger.delete': budget(350, 500, 1000, ['chromium-mobile']),
+      'asset-stats.revisit': budget(550, 600, 1200, ['chromium-mobile']),
+    }),
     'webkit-mobile': Object.freeze({
       'home.fresh-context': budget(1500, 2000, 5000, ['webkit-mobile']),
       'home.relaunch': budget(1500, 2000, 5000, ['webkit-mobile']),
       'ledger.open-detail': budget(600, 800, 1000, ['webkit-mobile']),
       'assets.account-detail': budget(600, 800, 1000, ['webkit-mobile']),
-      'ledger.save-memo': budget(400, 700, 1000, ['webkit-mobile']),
-      'ledger.save-category': budget(400, 700, 1000, ['webkit-mobile']),
+      'ledger.save-memo': budget(550, 750, 1000, ['webkit-mobile']),
+      'ledger.save-category': budget(550, 750, 1000, ['webkit-mobile']),
       'ledger.add': budget(650, 800, 1000, ['webkit-mobile']),
       'ledger.delete': budget(500, 700, 1000, ['webkit-mobile']),
       'assets.first': budget(900, 1200, 5000, ['webkit-mobile']),
@@ -72,7 +80,7 @@ export const PERFORMANCE_PROFILES = Object.freeze({
       'search.first': budget(750, 1000, 1500, ['webkit-mobile']),
       'search.first-open': budget(750, 1000, 1500, ['webkit-mobile']),
       'expense-stats.revisit': budget(450, 600, 1200, ['webkit-mobile']),
-      'asset-stats.revisit': budget(450, 600, 1200, ['webkit-mobile']),
+      'asset-stats.revisit': budget(650, 700, 1200, ['webkit-mobile']),
       'search.expand-month': budget(400, 650, 1000, ['webkit-mobile']),
       'search.change-keyword': budget(400, 650, 1000, ['webkit-mobile']),
     }),
