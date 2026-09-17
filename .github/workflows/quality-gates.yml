@@ -140,10 +140,10 @@ jobs:
       - run: npm ci --prefix functions-payment-capture && npm ci --prefix functions-access-session
       - run: npm run test:e2e
         working-directory: web
-      - name: 성능 통계·표본 검증 회귀 검사
+      - name: 성능 통계·표본·HTML 보고서 회귀 검사
         # The summary and coverage checker are shared with Android measurements.
         # Keep their fast regression check separate from browser execution.
-        run: node --test tools/performance/statistics.test.mjs tools/performance/budgets.test.mjs
+        run: node --test tools/performance/statistics.test.mjs tools/performance/budgets.test.mjs tools/performance/html-report.test.mjs
       - name: 핵심 기능 성능 PASS/FAIL 검사
         run: npm --ignore-scripts run test:performance
         working-directory: web
@@ -152,12 +152,26 @@ jobs:
           PERFORMANCE_PROFILE: 'github-hosted-v2'
           PERFORMANCE_USE_EXISTING_BUILD: 'true'
           PERFORMANCE_PHASE_DIAGNOSTICS: 'true'
+      - name: Web 성능 HTML 보고서 생성
+        if: always() && hashFiles('web/performance-results/web.json') != ''
+        run: node tools/performance/html-report.mjs web/performance-results/web.json web/performance-results/web.html
       - if: always()
+        id: web-performance-artifact
         uses: actions/upload-artifact@v4
         with:
           name: quality-web-performance
           path: web/performance-results
           if-no-files-found: warn
+      - name: Web 성능 HTML 보고서 안내
+        if: always() && steps.web-performance-artifact.outputs.artifact-url != ''
+        env:
+          ARTIFACT_URL: ${{ steps.web-performance-artifact.outputs.artifact-url }}
+        run: |
+          if [[ -f web/performance-results/web.html ]]; then
+            printf '\n### Web 성능 HTML 보고서\n\n[보고서 다운로드](%s) → 압축을 풀고 `web.html`을 브라우저로 여세요. 각 기능의 측정값과 CI 통과 기준, 별도 UX 목표를 함께 볼 수 있습니다. GitHub 로그인이 필요합니다.\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf '\nWeb 성능 HTML 보고서가 생성되지 않았습니다. [진단 파일 다운로드](%s)와 실행 로그를 확인하세요.\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -259,15 +273,30 @@ jobs:
             bash -c 'cd android; status=0; ./gradlew connectedDebugAndroidTest --stacktrace || status=$?; mkdir -p app/build/ci-diagnostics; if [ -d app/build/outputs/androidTest-results ]; then cp -R app/build/outputs/androidTest-results app/build/ci-diagnostics/default-androidTest-results; fi; adb logcat -d > app/build/ci-diagnostics/logcat.txt || true; adb exec-out screencap -p > app/build/ci-diagnostics/screen.png || true; exit "$status"'
             npm --prefix web run test:e2e:android
             npm --prefix web run test:performance:android
+      - name: Android 성능 HTML 보고서 생성
+        if: always() && steps.scope.outputs.required == 'true' && hashFiles('web/performance-results/android.json') != ''
+        run: node tools/performance/html-report.mjs web/performance-results/android.json web/performance-results/android.html
       - if: always() && steps.scope.outputs.required == 'true'
+        id: android-performance-artifact
         uses: actions/upload-artifact@v4
         with:
           name: quality-android-performance
           path: |
             web/performance-results/android.json
             web/performance-results/android.md
+            web/performance-results/android.html
             web/test-results/native-firebase/native-performance-result.json
           if-no-files-found: warn
+      - name: Android 성능 HTML 보고서 안내
+        if: always() && steps.android-performance-artifact.outputs.artifact-url != ''
+        env:
+          ARTIFACT_URL: ${{ steps.android-performance-artifact.outputs.artifact-url }}
+        run: |
+          if [[ -f web/performance-results/android.html ]]; then
+            printf '\n### Android 성능 HTML 보고서\n\n[보고서 다운로드](%s) → 압축을 풀고 `performance-results/android.html`을 브라우저로 여세요. 각 기능의 측정값과 CI 통과 기준, 별도 UX 목표를 함께 볼 수 있습니다. GitHub 로그인이 필요합니다.\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf '\nAndroid 성능 HTML 보고서가 생성되지 않았습니다. [진단 파일 다운로드](%s)와 실행 로그를 확인하세요.\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - if: always() && steps.scope.outputs.required == 'true'
         uses: actions/upload-artifact@v4
         with:

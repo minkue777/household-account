@@ -1,0 +1,35 @@
+# CI 성능 HTML 보고서
+
+CI는 성능 측정이 남긴 기존 JSON으로 독립 HTML을 만들고 JSON·Markdown과 함께 보관합니다. 보고서 생성은 측정과 분리되어 있으며, 보고서를 위한 E2E 재실행이나 별도 서버가 필요하지 않습니다. 측정 표본, 시작·종료 시점, 통과 기준과 판정 로직은 변경하지 않습니다.
+
+## 보고서 열기
+
+1. GitHub 저장소의 **Actions → 독립 품질 CI → 해당 실행 → Summary**를 엽니다.
+2. **Web 성능 HTML 보고서** 또는 **Android 성능 HTML 보고서**의 다운로드 링크를 누릅니다. GitHub 로그인이 필요합니다.
+3. ZIP 압축을 풀고 다음 파일을 브라우저로 엽니다.
+
+| 아티팩트 | 압축을 푼 뒤 열 파일 |
+|---|---|
+| `quality-web-performance` | `web.html` |
+| `quality-android-performance` | `performance-results/android.html` |
+
+실행 화면의 **Artifacts** 목록에서도 같은 파일을 받을 수 있습니다. Android 검사가 변경 범위에 해당하지 않으면 Android 보고서는 생성되지 않습니다. 측정 실패 시에도 기록된 결과의 HTML을 남기지만, 빌드·환경 준비 실패처럼 보고서 생성 단계에 도달하지 못한 경우는 실행 로그를 확인해야 합니다.
+
+다운로드 링크는 공개 HTML 호스팅 주소가 아닙니다. 아티팩트 보관 기간이 지나거나 실행이 삭제되면 링크도 사용할 수 없습니다. [GitHub upload-artifact 공식 문서](https://github.com/actions/upload-artifact/tree/v4#outputs)
+
+## 통과 기준 읽기
+
+- **CI 기준**은 해당 실행에 선택된 프로필입니다. 현재 GitHub CI는 `github-hosted-v2`를 사용하며 일부 WebKit·Android 지표에 실행 환경별 허용값을 적용합니다.
+- **UX 목표**는 공통 `ux-v2` 기준의 별도 평가입니다. CI 통과와 UX 목표 충족을 구분해서 보세요. CI가 통과해도 UX 목표는 초과할 수 있습니다.
+- 각 지표는 **중앙값**, **반복 측정 중 허용 시간 이내 횟수**, **개별 측정 최대 시간**을 모두 만족해야 통과합니다. 정식 7회 측정에서는 반복 조건이 7회 중 6회 이상입니다. 준비 실행은 집계에서 제외합니다.
+- 보고서는 원본 JSON에 저장된 판정과 기준을 그대로 표시합니다. 실패·불완전 표본·진단용 측정을 통과로 바꾸지 않습니다. 실제 휴대폰과 운영 네트워크의 속도를 보장하는 수치는 아닙니다.
+
+## 기존 JSON으로 다시 만들기
+
+저장소 루트에서 다음 명령을 실행합니다. 원본 JSON에 당시 기준이 저장되어 있으므로 현재 기준으로 다시 판정하지 않습니다.
+
+```sh
+node tools/performance/html-report.mjs input.json output.html
+```
+
+예를 들어 다운로드한 `web.json`이나 `android.json`을 입력으로 사용할 수 있습니다. 생성한 HTML은 단독으로 열 수 있으며, 대형 측정 JSON·HTML 결과물은 Git에 추가하지 않습니다.
