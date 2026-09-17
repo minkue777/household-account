@@ -47,7 +47,7 @@ function files(root) {
     ? files(join(root, entry.name)).map(name => `${entry.name}/${name}`) : [entry.name]).sort();
 }
 
-test('publishes only allowlisted HTML, numeric run history and independent latest platform reports without changing bytes', async t => {
+test('publishes only the newest HTML per platform without downloading or retaining earlier reports', async t => {
   const sources = [run('9', '9'.repeat(40)), run('100'), run('200', 'b'.repeat(40))];
   const original = new Map();
   const selected = [];
@@ -70,11 +70,12 @@ test('publishes only allowlisted HTML, numeric run history and independent lates
     },
   });
   const published = await buildPerformanceSite(options);
-  assert.deepEqual(selected, ['200', '100', '9']);
-  assert.deepEqual(files(options.outputDir), ['.nojekyll', 'android.html', 'index.html', 'runs/100/web.html',
-    'runs/200/android.html', 'runs/9/android.html', 'runs/9/web.html', 'web.html']);
+  assert.deepEqual(selected, ['200', '100']);
+  assert.deepEqual([...original.keys()], ['200/android', '100/web']);
+  assert.deepEqual(files(options.outputDir), ['.nojekyll', 'android.html', 'index.html', 'web.html']);
   for (const item of published) {
-    assert.equal(item.path, `runs/${item.runId}/${item.platform}.html`);
+    assert.equal(item.path, `${item.platform}.html`);
+    assert.equal(item.artifactId, `${item.runId}${item.platform === 'web' ? '1' : '2'}`);
     assert.deepEqual(readFileSync(join(options.outputDir, item.path)), original.get(`${item.runId}/${item.platform}`));
   }
   assert.deepEqual(readFileSync(join(options.outputDir, 'web.html')), original.get('100/web'));
@@ -95,15 +96,21 @@ test('ignores PR, other repository, non-main and incomplete runs before accessin
   assert.deepEqual(accessed, ['100', '99']);
 });
 
-test('retains at most the latest twenty completed main runs', async t => {
+test('keeps the latest Android even after more than twenty Web-only runs without retaining Web history', async t => {
+  const downloaded = [];
   const options = harness(t, { runs: Array.from({ length: 23 }, (_, index) => run(String(index + 1))),
-    listArtifacts: async ({ runId }) => [artifact(run(runId), 'web')],
+    listArtifacts: async ({ runId }) => [artifact(run(runId), runId === '1' ? 'android' : 'web')],
+    downloadArtifact: async ({ runId, destination }) => {
+      downloaded.push(runId);
+      writeArtifact(destination, runId === '1' ? 'android' : 'web');
+    },
   });
   const published = await buildPerformanceSite(options);
-  assert.equal(published.length, 20);
+  assert.equal(published.length, 2);
   assert.equal(published[0].runId, '23');
-  assert.equal(published.at(-1).runId, '4');
-  assert(!existsSync(join(options.outputDir, 'runs/3')));
+  assert.equal(published[1].runId, '1');
+  assert.deepEqual(downloaded, ['23', '1']);
+  assert(!existsSync(join(options.outputDir, 'runs')));
 });
 
 test('skips expired or missing HTML and keeps an Android-only measurement failure report unchanged', async t => {
@@ -121,7 +128,7 @@ test('skips expired or missing HTML and keeps an Android-only measurement failur
   });
   const published = await buildPerformanceSite(options);
   assert.deepEqual(downloaded, ['102', '100']);
-  assert.deepEqual(published, [{ runId: '100', platform: 'android', commit: sha, path: 'runs/100/android.html' }]);
+  assert.deepEqual(published, [{ runId: '100', platform: 'android', commit: sha, path: 'android.html', artifactId: '1002' }]);
   assert(!existsSync(join(options.outputDir, 'web.html')));
   assert.equal(readFileSync(join(options.outputDir, 'index.html'), 'utf8'), html);
   assert.match(html, /측정 실패 · 표본 누락/);
@@ -228,15 +235,18 @@ test('CLI uses the main workflow endpoint, paginated run-scoped artifacts and ex
         writeArtifact(args[args.indexOf('--dir') + 1], 'web');
         return '';
       }
-      return JSON.stringify(args.includes('--paginate') ? [{ artifacts: [artifact(run(), 'web')] }, { artifacts: [] }] : { workflow_runs: [run()] });
+      return JSON.stringify(args.at(-1).includes('/runs?')
+        ? [{ workflow_runs: [] }, { workflow_runs: [run()] }]
+        : [{ artifacts: [artifact(run(), 'web')] }, { artifacts: [] }]);
     },
   });
   assert.equal(calls.length, 3);
-  assert.equal(calls[0].at(-1), `repos/${repository}/actions/workflows/quality-gates.yml/runs?branch=main&status=completed&per_page=20`);
+  assert.deepEqual(calls[0].slice(0, 5), ['api', '--hostname', 'github.com', '--paginate', '--slurp']);
+  assert.equal(calls[0].at(-1), `repos/${repository}/actions/workflows/quality-gates.yml/runs?branch=main&status=completed&per_page=100`);
   assert.deepEqual(calls[1].slice(0, 5), ['api', '--hostname', 'github.com', '--paginate', '--slurp']);
   assert.equal(calls[1].at(-1), `repos/${repository}/actions/runs/100/artifacts?per_page=100`);
   assert.deepEqual(calls[2].slice(0, 8), ['run', 'download', '100', '--repo', `github.com/${repository}`, '--name', 'quality-web-performance', '--dir']);
-  assert.deepEqual(summaries, [`run=100 platform=web commit=${sha}`]);
+  assert.deepEqual(summaries.map(text => JSON.parse(text)), [reports]);
   assert.equal(reports.length, 1);
   await assert.rejects(runCli({ argv: [], env: {} }), /Usage/);
   await assert.rejects(runCli({ argv: [options.outputDir], env: { GITHUB_REPOSITORY: repository } }), /GH_TOKEN/);

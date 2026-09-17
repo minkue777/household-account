@@ -12,16 +12,18 @@ CI는 성능 측정이 남긴 JSON으로 독립 HTML을 만들고, 완료 후 �
 |---|---|
 | [최신 Web 보고서](https://minkue777.github.io/household-account/web.html) | 가장 최근 완료된 Web 측정 |
 | [최신 Android 보고서](https://minkue777.github.io/household-account/android.html) | 가장 최근 Android 측정. 이번 CI에서 Android를 측정하지 않았다면 이전 측정 결과와 시각을 그대로 표시 |
-| `https://minkue777.github.io/household-account/runs/<실행 ID>/web.html` | 해당 CI 실행의 Web 측정 |
-| `https://minkue777.github.io/household-account/runs/<실행 ID>/android.html` | 해당 CI 실행의 Android 측정 |
 
-게시 작업은 최근 완료된 main CI 20개의 사용 가능한 보고서를 보관합니다. 해당 범위를 벗어나거나 원본 아티팩트가 만료되면 실행별 공개 링크도 제거됩니다. 원본 JSON·Markdown·진단 파일은 기존 **Artifacts**에 보관하며 필요한 경우에만 다운로드합니다. Android 검사가 변경 범위에 해당하지 않으면 해당 실행의 Android 보고서는 없습니다. 측정 실패 시에도 생성된 HTML을 게시하지만, 빌드·환경 준비 실패처럼 HTML 생성 단계에 도달하지 못한 경우는 실행 로그를 확인해야 합니다.
+공개 보고서는 **Web·Android 각각 최신 1개**만 보관합니다. 이전 `runs/<실행 ID>/...` 주소는 제거되며, 위의 고정 주소를 사용합니다. 과거 CI Summary의 고정 주소도 항상 최신 측정을 가리키므로 보고서의 실행 정보에서 커밋과 측정 시각을 확인합니다.
+
+게시 성공 후 `quality-web-performance`·`quality-android-performance`의 이전 완료 main CI 원본을 자동 삭제합니다. 선택된 최신 원본과 그보다 새로운 실행, 진행 중 실행, 다른 종류의 CI 진단 파일은 삭제하지 않습니다. 게시가 실패하면 정리하지 않습니다. 최신 원본에도 GitHub의 기존 90일 만료 정책은 적용됩니다. 90일 이상 새 측정이 없으면 만료된 플랫폼 보고서는 다음 게시에서 제외됩니다.
+
+Android를 측정하지 않은 CI에서는 기존 Android 최신본을 유지합니다. 최근 20회 제한 없이 완료된 main 실행을 조회하여 플랫폼별 최신 HTML을 찾고, 두 플랫폼을 찾으면 이전 원본은 다운로드하지 않습니다. 측정 실패 시에도 생성된 HTML을 게시하지만, 빌드·환경 준비 실패처럼 HTML 생성 단계에 도달하지 못한 경우는 실행 로그를 확인해야 합니다.
 
 GitHub의 artifact 링크는 ZIP 다운로드 주소여서 HTML 바로 보기 링크로 안내하지 않습니다. GitHub Pages는 정적 HTML을 브라우저에 제공합니다. [GitHub Pages 공식 문서](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
 
 ## 게시 범위와 재게시
 
-`.github/workflows/performance-pages.yml`은 **독립 품질 CI**가 끝나면 실행되고, 수동 실행도 지원합니다. 이전 결과를 다시 게시하려면 **Actions → 성능 보고서 게시 → Run workflow**를 실행합니다. 테스트를 다시 돌리지 않습니다.
+`.github/workflows/performance-pages.yml`은 **독립 품질 CI**가 끝나면 실행되고, 수동 실행도 지원합니다. 현재 최신 결과를 다시 게시하려면 **Actions → 성능 보고서 게시 → Run workflow**를 실행합니다. 테스트를 다시 돌리지 않습니다. 공개 사이트 밖의 임시 manifest에 검증한 원본 ID를 기록하고, 게시 성공 뒤 정리 도구가 이를 보존합니다.
 
 게시 도구는 같은 저장소의 main에서 실행된 push·수동 CI만 선택하고, GitHub가 제공하는 실행·아티팩트의 커밋 출처를 확인합니다. Web JSON의 커밋도 같은지 대조합니다. 커밋 필드가 없는 기존 Android 보고서는 GitHub 실행 출처로 확인하고, 커밋 필드가 있으면 추가 대조합니다. 명시된 `web.html`·`android.html`만 게시하며 원본 JSON, 실패 화면, DOM, 로그, trace는 공개 사이트에 복사하지 않습니다. 보고서는 합성 데이터로 측정한 시간과 CI 환경 정보이며 운영 가계부의 거래 정보는 포함하지 않습니다. 공개할 보고서가 하나도 없으면 기존 사이트를 빈 내용으로 덮지 않고 게시를 실패 처리합니다.
 

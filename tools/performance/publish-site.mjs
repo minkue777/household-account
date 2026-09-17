@@ -108,7 +108,7 @@ function readReport(directory, platform, run) {
   if (!/^\s*<!doctype html>\s*<html\b/i.test(text) || !/<body\b[^>]*>/i.test(text) || !/<\/body>\s*<\/html>\s*$/i.test(text)) {
     throw new Error(`Invalid standalone performance HTML: ${run.id}/${platform.name}`);
   }
-  return { runId: run.id, platform: platform.name, commit: run.commit, path: `runs/${run.id}/${platform.name}.html`, bytes };
+  return { runId: run.id, platform: platform.name, commit: run.commit, path: `${platform.name}.html`, bytes };
 }
 
 /** Build only the allowlisted HTML files. Dependencies are read-only GitHub operations. */
@@ -120,7 +120,7 @@ export async function buildPerformanceSite({ repository, runs, outputDir, listAr
     && ['push', 'workflow_dispatch'].includes(run.event)
     && run.head_repository?.full_name?.toLowerCase() === repository.toLowerCase())
     .map(run => ({ id: numericId(run.id), commit: commitSha(run.head_sha) }))
-    .sort((a, b) => BigInt(a.id) > BigInt(b.id) ? -1 : BigInt(a.id) < BigInt(b.id) ? 1 : 0).slice(0, 20);
+    .sort((a, b) => BigInt(a.id) > BigInt(b.id) ? -1 : BigInt(a.id) < BigInt(b.id) ? 1 : 0);
   if (new Set(selected.map(run => run.id)).size !== selected.length) throw new Error('Duplicate workflow run ID');
   const reports = [];
   const temporaryParent = resolve(temporaryRoot);
@@ -129,6 +129,7 @@ export async function buildPerformanceSite({ repository, runs, outputDir, listAr
     const artifacts = await listArtifacts({ repository, runId: run.id });
     if (!Array.isArray(artifacts)) throw new Error('Run artifacts must be an array');
     for (const platform of platforms) {
+      if (reports.some(report => report.platform === platform.name)) continue;
       const available = artifacts.filter(artifact => artifact.name === platform.artifact && artifact.expired === false);
       if (!available.length) continue;
       if (available.length !== 1) throw new Error(`Duplicate performance artifact: ${run.id}/${platform.name}`);
@@ -138,12 +139,13 @@ export async function buildPerformanceSite({ repository, runs, outputDir, listAr
       try {
         await downloadArtifact({ repository, runId: run.id, artifactId: String(artifact.id), artifactName: platform.artifact, destination: directory });
         const report = readReport(directory, platform, run);
-        if (report) reports.push(report);
+        if (report) reports.push({ ...report, artifactId: numericId(artifact.id) });
       } finally {
         // Only remove the exact disposable child that this invocation created.
         rmSync(childPath(temporaryParent, relative(temporaryParent, directory)), { recursive: true, force: true });
       }
     }
+    if (reports.length === platforms.length) break;
   }
   if (!reports.length) throw new Error('No publishable performance HTML reports');
   // Validate every source before writing output; invalid reports cannot publish a partial site.
@@ -153,10 +155,6 @@ export async function buildPerformanceSite({ repository, runs, outputDir, listAr
     const destination = childPath(output, report.path);
     mkdirSync(dirname(destination), { recursive: true });
     writeFileSync(destination, report.bytes, { flag: 'wx' });
-  }
-  for (const platform of platforms) {
-    const latest = reports.find(report => report.platform === platform.name);
-    if (latest) writeFileSync(childPath(output, `${platform.name}.html`), latest.bytes, { flag: 'wx' });
   }
   writeFileSync(childPath(output, 'index.html'), (reports.find(report => report.platform === 'web') ?? reports[0]).bytes, { flag: 'wx' });
   writeFileSync(childPath(output, '.nojekyll'), '', { flag: 'wx' });
@@ -168,7 +166,9 @@ export async function runCli({ argv = process.argv.slice(2), env = process.env, 
   const repository = repositoryName(env.GITHUB_REPOSITORY);
   if (!env.GH_TOKEN?.trim()) throw new Error('GH_TOKEN is required');
   gh ??= async args => (await exec('gh', args, { encoding: 'utf8', env: { ...env, GH_PROMPT_DISABLED: '1' }, maxBuffer: 16 * 1024 * 1024 })).stdout;
-  const runs = JSON.parse(await gh(['api', '--hostname', 'github.com', `repos/${repository}/actions/workflows/quality-gates.yml/runs?branch=main&status=completed&per_page=20`])).workflow_runs;
+  const pages = JSON.parse(await gh(['api', '--hostname', 'github.com', '--paginate', '--slurp', `repos/${repository}/actions/workflows/quality-gates.yml/runs?branch=main&status=completed&per_page=100`]));
+  if (!Array.isArray(pages) || pages.some(page => !Array.isArray(page.workflow_runs))) throw new Error('Invalid GitHub workflow response');
+  const runs = pages.flatMap(page => page.workflow_runs);
   const reports = await buildPerformanceSite({ repository, runs, outputDir: argv[0],
     listArtifacts: async ({ runId }) => {
       const pages = JSON.parse(await gh(['api', '--hostname', 'github.com', '--paginate', '--slurp', `repos/${repository}/actions/runs/${runId}/artifacts?per_page=100`]));
@@ -179,7 +179,9 @@ export async function runCli({ argv = process.argv.slice(2), env = process.env, 
       await gh(['run', 'download', runId, '--repo', `github.com/${repository}`, '--name', artifactName, '--dir', destination]);
     },
   });
-  for (const report of reports) summary(`run=${report.runId} platform=${report.platform} commit=${report.commit}`);
+  // The deployment workflow keeps this manifest outside the public site and
+  // uses it to preserve the exact published sources during post-deploy cleanup.
+  summary(JSON.stringify(reports));
   return reports;
 }
 
