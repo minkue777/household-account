@@ -47,17 +47,17 @@ test('diagnostic only: compare background and search containment with timer obse
   const home = async () => { await page.locator('header a[href="/"]').first().click(); await expectHome(); };
   await expectHome();
   const measurements: unknown[] = [];
-  const variants = ['baseline', 'without-backdrop', 'body-background-scroll', 'search-containment', 'stable-search-height', 'chart-paint-containment'];
-  // Rotate by two positions so every condition occurs early, middle and late.
-  const orders = [0, 2, 4].map(offset => [...variants.slice(offset), ...variants.slice(0, offset)]);
+  const variants = ['baseline', 'search-backdrop-only', 'home-glass-only', 'search-and-home-glass'];
+  // Rotate every condition through each of the four ordering positions.
+  const orders = [0, 1, 2, 3].map(offset => [...variants.slice(offset), ...variants.slice(0, offset)]);
   const metadata = {
     mode: 'diagnostic-only', baselineProductCommit: 'c835a25', commit, buildId: readFileSync(resolve(process.cwd(), '.next/BUILD_ID'), 'utf8').trim(),
     environment: { os: `${platform()} ${release()}`, cpu: cpus()[0]?.model, realDevice: false, backend: 'local Firebase emulators', build: 'existing production Next.js' },
-    orders, expectedMeasuredRecords: 72, warmupJourneys: 1,
+    orders, expectedMeasuredRecords: 64, warmupJourneys: 1,
     cacheCondition: 'same fixture and document; code/SDK warm; closing search disposes its source window, reopening performs a new server query; statistics revisit memory reused',
     timerInterpretation: '16ms interval with absolute performance.now ticks; compare only ticks/gaps against each original measurement startAt/endAt, not locator/setup/confirmation time',
   };
-  const output = resolve(process.cwd(), 'performance-results/linux-frame-diagnostic.json');
+  const output = resolve(process.cwd(), 'performance-results/linux-backdrop-target-diagnostic.json');
   const save = (complete = false) => writeFileSync(output, JSON.stringify({ ...metadata, complete, measurements }, null, 2));
   save();
   const run = async (variant: string, iteration: number, warmup: boolean,
@@ -91,7 +91,9 @@ test('diagnostic only: compare background and search containment with timer obse
   const journey = async (variant: string, iteration: number, warmup = false) => {
     const modal = 'div.fixed:has(input[placeholder="지출처명, 메모, 카드명을 검색해보세요"])';
     const styles: Record<string, string> = {
-      'without-backdrop': '* { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }',
+            'search-backdrop-only': 'div.fixed:has(input[placeholder="지출처명, 메모, 카드명을 검색해보세요"]) { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }',
+      'home-glass-only': '.balance-card-glass, .calendar-glass { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }',
+      'search-and-home-glass': 'div.fixed:has(input[placeholder="지출처명, 메모, 카드명을 검색해보세요"]), .balance-card-glass, .calendar-glass { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }',
       'body-background-scroll': 'body { background-attachment: scroll !important; }',
       'search-containment': `${modal} .overflow-y-auto { contain: layout paint style !important; }`,
       'stable-search-height': `${modal} > div { height: 80vh !important; }`,
@@ -154,3 +156,4 @@ test('diagnostic only: compare background and search containment with timer obse
   }
   save(true);
 });
+
