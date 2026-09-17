@@ -1,63 +1,14 @@
-name: 독립 품질 CI
+name: Linux WebKit 인과 진단 전용 (성능 합격 판정 아님)
 
 on:
   workflow_dispatch:
-  pull_request:
-  push:
-    branches: [main]
 
 permissions:
   contents: read
 
-concurrency:
-  # Preserve every main commit's result even when another deployment is pushed.
-  group: quality-${{ github.event_name }}-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || 'latest' }}
-  cancel-in-progress: true
-
 jobs:
-  functions:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: functions/package-lock.json
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 21
-      - run: npm ci
-        working-directory: functions
-      - run: npm test -- --reporter=default --reporter=json --outputFile=quality-functions.json
-        working-directory: functions
-      - run: npm run test:types
-        working-directory: functions
-      - run: npm run build
-        working-directory: functions
-      - run: node -e "require('./lib/index.js')"
-        working-directory: functions
-      - run: npm run test:runtime-boundaries
-        working-directory: functions
-      - run: npm install --global firebase-tools@15.4.0
-      - run: npm ci --prefix functions-payment-capture && npm ci --prefix functions-access-session
-      - run: npm run test:callable-integration
-        working-directory: functions
-      - run: npm run test:firestore-rules
-        working-directory: functions
-      - run: npm run test:storage-rules
-        working-directory: functions
-      - run: npm run test:firebase-integration
-        working-directory: functions
-      - uses: actions/upload-artifact@v4
-        with:
-          name: quality-functions
-          path: functions/quality-functions.json
-          if-no-files-found: error
-
-  web:
+  frame-diagnostic:
+    name: 실제 에뮬레이터와 production build의 조건별 원본 측정
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -66,226 +17,35 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci
-        working-directory: web
-      - run: npm test -- --runInBand --json --outputFile=quality-web.json
-        working-directory: web
-      - run: npm run build
-        working-directory: web
-      - run: npx playwright install --with-deps chromium
-        working-directory: web
-      - run: npm run test:e2e:pwa
-        working-directory: web
-      - if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: quality-web-pwa
-          path: web/quality-pwa-e2e.json
-          if-no-files-found: error
-      - if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-pwa-failure
-          path: web/test-results/pwa
-          if-no-files-found: ignore
-          retention-days: 7
-      - uses: actions/upload-artifact@v4
-        with:
-          name: quality-web
-          path: web/quality-web.json
-          if-no-files-found: error
-
-  quality-summary:
-    name: CI 결과 요약
-    if: always()
-    needs: [functions, web, web-e2e, android, android-instrumentation]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-      - name: 배포와 별도로 검증 결과 기록
-        env:
-          QUALITY_JOB_RESULTS: ${{ toJSON(needs) }}
-        run: node tools/ci/quality-summary.mjs
-
-  web-e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
           cache-dependency-path: |
             functions/package-lock.json
             web/package-lock.json
-      - name: Firebase Emulator 실행 파일 캐시
-        uses: actions/cache@v4
-        with:
-          # Firebase CLI 다운로드 전용 경로이며 DB·Functions 상태는 포함하지 않습니다.
-          path: ~/.cache/firebase/emulators
-          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+            functions-payment-capture/package-lock.json
+            functions-access-session/package-lock.json
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
-      - run: npm ci
-        working-directory: functions
-      - run: npm ci
+      - run: npm ci --prefix functions
+      - run: npm ci --prefix web
+      - run: npm ci --prefix functions-payment-capture
+      - run: npm ci --prefix functions-access-session
+      - run: npx playwright install --with-deps webkit
         working-directory: web
-      - run: npx playwright install --with-deps chromium webkit
-        working-directory: web
-      - run: npm ci --prefix functions-payment-capture && npm ci --prefix functions-access-session
-      - run: npm run test:e2e
-        working-directory: web
-      - name: 성능 통계·표본 검증 회귀 검사
-        # The summary and coverage checker are shared with Android measurements.
-        # Keep their fast regression check separate from browser execution.
-        run: node --test tools/performance/statistics.test.mjs tools/performance/budgets.test.mjs
-      - name: 핵심 기능 성능 PASS/FAIL 검사
-        run: npm --ignore-scripts run test:performance
-        working-directory: web
+      - name: 실제 Functions 3개 코드베이스 준비
+        run: npm --prefix web run test:e2e:functions
+      - name: 진단만 실행 (시간 예산 PASS/FAIL 판정 및 배포 없음)
+        run: >-
+          node functions/scripts/run-with-emulator-secret.mjs
+          node tools/e2e/firebase-emulators.mjs
+          "npm --prefix web run test:performance:playwright -- --config playwright.frame-diagnostic.config.ts"
         env:
-          PERFORMANCE_SAMPLES: '7'
-          PERFORMANCE_PROFILE: 'github-hosted-v2'
-          PERFORMANCE_USE_EXISTING_BUILD: 'true'
           PERFORMANCE_PHASE_DIAGNOSTICS: 'true'
+          PERFORMANCE_DIAGNOSTIC: 'true'
       - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: quality-web-performance
+          name: linux-webkit-frame-diagnostic
           path: web/performance-results
           if-no-files-found: warn
-      - if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: quality-web-e2e
-          path: web/quality-e2e.json
-          if-no-files-found: error
-      - if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-e2e-failure
-          path: |
-            web/playwright-report
-            web/test-results
-          if-no-files-found: ignore
-          retention-days: 7
-
-  android:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-          cache: gradle
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: platform-tools
-      - run: chmod +x gradlew
-        working-directory: android
-      - run: ./gradlew testDebugUnitTest lintDebug assembleDebug assembleRelease --stacktrace
-        working-directory: android
-      - uses: actions/upload-artifact@v4
-        with:
-          name: quality-android
-          path: android/app/build/test-results/testDebugUnitTest
-          if-no-files-found: error
-
-  android-instrumentation:
-    runs-on: ubuntu-latest
-    timeout-minutes: 50
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Android 에뮬레이터 검증 대상 확인
-        id: scope
-        run: node tools/ci/android-instrumentation-scope.mjs
-      - name: KVM 사용 권한 활성화
-        if: steps.scope.outputs.required == 'true'
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - uses: actions/setup-java@v4
-        if: steps.scope.outputs.required == 'true'
-        with:
-          distribution: temurin
-          java-version: 21
-          cache: gradle
-      - uses: actions/setup-node@v4
-        if: steps.scope.outputs.required == 'true'
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            functions/package-lock.json
-            web/package-lock.json
-      - run: npm ci --prefix functions && npm ci --prefix web
-        if: steps.scope.outputs.required == 'true'
-      - run: npm ci --prefix functions-payment-capture && npm ci --prefix functions-access-session
-        if: steps.scope.outputs.required == 'true'
-      - run: npx playwright install --with-deps chromium
-        if: steps.scope.outputs.required == 'true'
-        working-directory: web
-      - uses: android-actions/setup-android@v3
-        if: steps.scope.outputs.required == 'true'
-        with:
-          packages: platform-tools
-      - run: chmod +x gradlew
-        if: steps.scope.outputs.required == 'true'
-        working-directory: android
-      - uses: reactivecircus/android-emulator-runner@v2
-        if: steps.scope.outputs.required == 'true'
-        env:
-          PERFORMANCE_PROFILE: 'github-hosted-v2'
-        with:
-          api-level: 34
-          arch: x86_64
-          target: google_apis
-          profile: pixel_6
-          disable-animations: true
-          script: |
-            adb shell svc power stayon true
-            adb shell settings put system screen_off_timeout 2147483647
-            adb shell input keyevent KEYCODE_WAKEUP
-            adb shell wm dismiss-keyguard
-            bash -c 'cd android; status=0; ./gradlew connectedDebugAndroidTest --stacktrace || status=$?; mkdir -p app/build/ci-diagnostics; if [ -d app/build/outputs/androidTest-results ]; then cp -R app/build/outputs/androidTest-results app/build/ci-diagnostics/default-androidTest-results; fi; adb logcat -d > app/build/ci-diagnostics/logcat.txt || true; adb exec-out screencap -p > app/build/ci-diagnostics/screen.png || true; exit "$status"'
-            npm --prefix web run test:e2e:android
-            npm --prefix web run test:performance:android
-      - if: always() && steps.scope.outputs.required == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: quality-android-performance
-          path: |
-            web/performance-results/android.json
-            web/performance-results/android.md
-            web/test-results/native-firebase/native-performance-result.json
-          if-no-files-found: warn
-      - if: always() && steps.scope.outputs.required == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: quality-native-firebase-e2e
-          path: |
-            android/app/build/ci-diagnostics/default-androidTest-results
-            android/app/build/outputs/androidTest-results
-            web/quality-native-e2e.json
-            web/test-results/native-firebase/startup-result.json
-          if-no-files-found: error
-      - if: failure() && steps.scope.outputs.required == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-instrumentation-failure
-          path: |
-            android/app/build/reports/androidTests
-            android/app/build/outputs/androidTest-results
-            android/app/build/ci-diagnostics
-            web/test-results/native-browser
-          if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 14
