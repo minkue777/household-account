@@ -90,9 +90,9 @@
 |---|---|---|
 | PWA-001 | 로그인 뒤 자동 `/sw.js` 등록, manifest standalone/portrait/icon, production worker 활성화 | iPhone 설치 UI 자체는 자동화하지 않음 |
 | PWA-002 | 실제 active/waiting Worker가 열린 입력·controller를 유지 | 과거 즉시활성화 artifact 자체의 이관 별도 |
-| PWA-003 | root registration, 실제 bundled SDK background push, click, logout | iPhone FID/APNs 실토큰 교체는 실제 Apple 기기 필요 |
+| PWA-003 | root registration, 실제 bundled SDK의 열린 창 메시지 전달·OS 알림 0개, 앱 창 종료·worker client 0개 확인 뒤 background push 1개 표시, click, logout | iPhone FID/APNs 실토큰 교체는 실제 Apple 기기 필요 |
 | PWA-004 | 금융/API/인증header/식별자 URL 비캐시, HTML offline 실패, 실제 logout cache폐기 | 다른 UID/가구 변경 세션 경계는 access E2E 병행 |
-| PWA-005 | 생성worker의 Firebase Messaging SDK가 실제 push를 처리하고 legacy worker artifact 없음 | 빌드 환경별 프로젝트 값 drift는 production artifact 검증 병행 |
+| PWA-005 | 생성worker의 Firebase Messaging SDK가 실제 push를 처리하고 legacy worker artifact 없음. CDP 접수 응답 이후 Chromium의 PushEvent 처리 완료·성공을 확인하고 잘못된 payload 알림 0개·정상 payload 알림 1개 검증 | 빌드 환경별 프로젝트 값 drift는 production artifact 검증 병행 |
 | PWA-006 | 실제 worker click handler에 Unicode/구분자 ID·traversal·dismiss, 기존 창 navigate 결과·창 1개·알림 닫기 확인 | OS 사용자 활성화가 필요한 focus/openWindow와 iOS 잠금 화면 클릭은 기기 검증 |
 | PWA-007 | production CSP에서 정상 hydration 성공·임의 inline script 실제 차단·security headers·실제 로드된 Pretendard Variable 폰트·동일 origin 폰트 응답 | HTTPS 인증서/HSTS 배포 origin 실제 검증 별도 |
 | PWA-008 | 실제 waiting/version handshake, legacy SKIP_WAITING/틀린버전 거절, 미저장 입력 유지·폐기승인·1회reload | 서버 UPDATE_REQUIRED의 모든 구버전 조합은 명령 경계 검증 병행 |

@@ -1,6 +1,11 @@
 import { expect, test, type Page, type Worker } from '@playwright/test';
 
-type WorkerRuntime = { registration: ServiceWorkerRegistration; dispatchEvent(event: Event): boolean; NotificationEvent: new (type: string, init: { notification: Notification; action: string }) => Event };
+type WorkerRuntime = {
+  clients: { matchAll(options: { type: 'window'; includeUncontrolled: boolean }): Promise<Array<{ url: string }>> };
+  registration: ServiceWorkerRegistration;
+  dispatchEvent(event: Event): boolean;
+  NotificationEvent: new (type: string, init: { notification: Notification; action: string }) => Event;
+};
 
 async function registeredWorker(page: Page): Promise<Worker> {
   await page.goto('/');
@@ -89,27 +94,64 @@ test('[T-PWA-002][PWA-004][PWA-007] production worker는 식별자 URL·인증 h
   await context.setOffline(false);
 });
 
-test('[PWA-003][PWA-005][PWA-006] 실제 생성 worker의 Messaging SDK는 data-only push를 한 번 표시하고 잘못된 payload를 거절한다', async ({ page, context }) => {
+test('[PWA-003][PWA-005][PWA-006] 실제 생성 worker의 Messaging SDK는 열린 창에 전달하고 닫힌 뒤 data-only push를 한 번 표시하며 잘못된 payload를 거절한다', async ({ page, context }) => {
   const worker = await registeredWorker(page);
   await context.grantPermissions(['notifications'], { origin: new URL(page.url()).origin });
   expect(await page.evaluate(() => Notification.permission)).toBe('granted');
   const origin = new URL(page.url()).origin;
-  const session = await context.newCDPSession(page);
+  // 앱 창을 완전히 닫아도 푸시 전달용 CDP 연결은 유지합니다.
+  // about:blank로 이동했다는 사실만으로 SDK의 foreground 분기가 끝났다고 가정하지 않습니다.
+  const driver = await context.newPage();
+  const session = await context.newCDPSession(driver);
+  const workerErrors: string[] = [];
+  session.on('ServiceWorker.workerErrorReported', ({ errorMessage }) => workerErrors.push(errorMessage.errorMessage));
   let registrationId: string | undefined;
   session.on('ServiceWorker.workerRegistrationUpdated', event => {
     registrationId = event.registrations.find(registration => registration.scopeURL === `${origin}/` && !registration.isDeleted)?.registrationId ?? registrationId;
   });
   await session.send('ServiceWorker.enable');
   await expect.poll(() => registrationId).toBeTruthy();
-  await page.goto('about:blank');
-  const push = async (data: unknown) => session.send('ServiceWorker.deliverPushMessage', {
-    origin, registrationId: registrationId!, data: JSON.stringify(data),
+  const completedPushes: Array<Array<{ key: string; value: string }>> = [];
+  session.on('BackgroundService.backgroundServiceEventReceived', ({ backgroundServiceEvent: event }) => {
+    if (event.serviceWorkerRegistrationId === registrationId && event.eventName === 'Push event completed') {
+      completedPushes.push(event.eventMetadata);
+    }
   });
+  await session.send('BackgroundService.startObserving', { service: 'pushMessaging' });
+  await session.send('BackgroundService.setRecording', { service: 'pushMessaging', shouldRecord: true });
+  const push = async (data: unknown) => {
+    const before = completedPushes.length;
+    await session.send('ServiceWorker.deliverPushMessage', { origin, registrationId: registrationId!, data: JSON.stringify(data) });
+    // CDP 응답은 전달 요청의 접수만 뜻합니다. 실제 PushEvent 완료 뒤 결과를 검증합니다.
+    await expect.poll(() => completedPushes.length).toBe(before + 1);
+    expect(completedPushes[before]).toContainEqual({ key: 'Status', value: 'Success' });
+    expect(workerErrors).toEqual([]);
+  };
+  await page.evaluate(() => {
+    navigator.serviceWorker.addEventListener('message', event => {
+      if (event.data?.isFirebaseMessaging && event.data.messageType === 'push-received') {
+        document.documentElement.dataset.receivedExpense = event.data.data?.expenseId;
+      }
+    });
+  });
+  await page.bringToFront();
+  await expect.poll(() => page.evaluate(() => document.visibilityState)).toBe('visible');
+  await push({ from: 'e2e-sender', data: { payloadVersion: 'notification-payload.v1', type: 'expense-created', clickTarget: 'expense-edit', expenseId: 'foreground-expense' } });
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.receivedExpense)).toBe('foreground-expense');
+  expect(await worker.evaluate(async () => (await (self as unknown as WorkerRuntime).registration.getNotifications()).length)).toBe(0);
+
+  await page.close();
+  await expect.poll(() => worker.evaluate(async () =>
+    (await (self as unknown as WorkerRuntime).clients.matchAll({ type: 'window', includeUncontrolled: true })).map(client => client.url)
+  )).toEqual([]);
   // Push 전달만 Chromium DevTools로 주입합니다. PushEvent와 SDK background handler는 브라우저가 실행합니다.
   await push({ from: 'e2e-sender', data: { url: 'https://evil.example', expenseId: '..' } });
+  expect(await worker.evaluate(async () => (await (self as unknown as WorkerRuntime).registration.getNotifications()).length)).toBe(0);
   await push({ from: 'e2e-sender', data: { payloadVersion: 'notification-payload.v1', type: 'expense-created', clickTarget: 'expense-edit', expenseId: 'real-push-expense' } });
-  await expect.poll(() => worker.evaluate(async () => (await (self as unknown as WorkerRuntime).registration.getNotifications()).map(notification => ({ title: notification.title, expenseId: notification.data.expenseId }))))
-    .toEqual([{ title: '가계부 알림', expenseId: 'real-push-expense' }]);
+  await expect.poll(async () => ({
+    errors: workerErrors,
+    notifications: await worker.evaluate(async () => (await (self as unknown as WorkerRuntime).registration.getNotifications()).map(notification => ({ title: notification.title, expenseId: notification.data.expenseId }))),
+  })).toEqual({ errors: [], notifications: [{ title: '가계부 알림', expenseId: 'real-push-expense' }] });
   await worker.evaluate(async () => {
     const registration = (self as unknown as WorkerRuntime).registration;
     const notifications = await registration.getNotifications();
@@ -117,4 +159,5 @@ test('[PWA-003][PWA-005][PWA-006] 실제 생성 worker의 Messaging SDK는 data-
     notifications.forEach(notification => notification.close());
   });
   await session.detach();
+  await driver.close();
 });
