@@ -21,36 +21,71 @@ function reportFor(values = Array(7).fill(350), {
     environment: { cpu: 'test CPU', backend: 'local emulators' },
     coverage: { projects: [project], metrics: [metric], ...performance.coverage }, performance, samples };
 }
-const card = (html, title) => html.match(new RegExp(`<article><h2>${title}</h2>([\\s\\S]*?)</article>`))?.[1];
-const measuredRow = html => html.match(/<tr data-project=[\s\S]*?<\/tr>/)?.[0];
+const measuredRow = html => html.match(/<details\b[^>]*class="metric-row"[^>]*>[\s\S]*?<\/details>/)?.[0];
+const attribute = (html, name) => html?.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1];
+const rowAttribute = (html, name) => attribute(measuredRow(html), name);
+const executionStatus = html => attribute(html.match(/<header\b[^>]*>/)?.[0], 'data-execution-status');
 
-test('shows applied CI and UX thresholds separately with the evaluator verdicts', () => {
+test('preserves independent CI and UX chart thresholds and the evaluator verdicts', () => {
   const report = reportFor();
   const html = renderPerformanceReport(report);
-  assert.match(card(html, 'CI 기준 판정'), /badge pass/);
-  assert.match(card(html, '공통 UX 목표 비교'), /badge fail/);
   const row = measuredRow(html);
-  assert.match(row, /data-status="pass" data-ux="fail"/);
-  assert.match(row, /<strong>350<\/strong>\s*<span class="limit">기준 ≤ 400 ms/);
-  assert.match(row, /7 \/ 7회/);
-  assert.match(row, /최소 6회 ≤ 650 ms/);
-  assert.match(row, /기준 ≤ 1,000 ms/);
-  assert.match(row, /<dt>중앙값<\/dt><dd>≤ 300 ms/);
+  assert.equal(executionStatus(html), 'passed');
+  assert.equal(attribute(row, 'data-status'), 'pass');
+  assert.equal(attribute(row, 'data-ux'), 'fail');
+  for (const [name, value] of Object.entries({
+    'data-median': 350, 'data-repeat': 350, 'data-max': 350,
+    'data-ci-median': 400, 'data-ci-repeat': 650, 'data-ci-max': 1000,
+    'data-ux-median': 300, 'data-ux-repeat': 500, 'data-ux-max': 1000,
+  })) assert.equal(Number(attribute(row, name)), value, name);
+  assert.match(row, /class="bar within"/);
+  assert.match(row, /role="img"/);
+  assert.match(row, /aria-label="[^"]*87\.5%[^"]*"/);
+  assert.match(row, /aria-label="[^"]*350[^"]*400[^"]*"/);
   assert.match(row, /중앙값 초과/);
-  assert.match(html, /이 실행의 JSON에 기록된 값/);
+  assert.match(html, /100%/);
+  assert(!/^<details[^>]*\bopen(?:[\s=>])/.test(row));
 });
 
 test('preserves historical recorded budgets instead of silently applying current configuration', () => {
   const report = reportFor();
   report.performance.results[0].budget = { ...report.performance.results[0].budget, medianMs: 777 };
   const original = JSON.stringify(report);
-  assert.match(measuredRow(renderPerformanceReport(report)), /기준 ≤ 777 ms/);
+  assert.equal(rowAttribute(renderPerformanceReport(report), 'data-ci-median'), '777');
+  assert.equal(JSON.stringify(report), original);
+});
+
+test('the repeat chart uses the recorded required order statistic from measured samples', () => {
+  const report = reportFor([900, 100, 801, 100, 100, 100, 100], { metric: 'search.first' });
+  let html = renderPerformanceReport(report);
+  assert.equal(rowAttribute(html, 'data-repeat'), '801');
+  assert.equal(rowAttribute(html, 'data-status'), 'fail');
+  assert.match(measuredRow(html), /반복 허용 시간 초과/);
+
+  const eightSamples = reportFor([800, 100, 600, 400, 200, 700, 300, 500], { metric: 'search.first' });
+  assert.equal(rowAttribute(renderPerformanceReport(eightSamples), 'data-repeat'), '700');
+
+  // Historical reports retain their own recorded rule, rather than being reinterpreted.
+  report.performance.results[0].observed.requiredWithinBudget = 7;
+  const original = JSON.stringify(report);
+  html = renderPerformanceReport(report);
+  assert.equal(rowAttribute(html, 'data-repeat'), '900');
   assert.equal(JSON.stringify(report), original);
 });
 
 test('rounding does not make a failed timing look equal to its passing threshold', () => {
-  const html = renderPerformanceReport(reportFor(Array(7).fill(500.04), { metric: 'search.first' }));
-  assert.match(measuredRow(html), /<strong>500\.04<\/strong>\s*<span class="limit">기준 ≤ 500 ms/);
+  for (const [value, metric, ciLimit, tone] of [
+    [500.04, 'search.first', 500, 'exceeded'],
+    [300.04, 'search.change-keyword', 400, 'within'],
+  ]) {
+    const html = renderPerformanceReport(reportFor(Array(7).fill(value), { metric }));
+    const row = measuredRow(html);
+    assert.equal(rowAttribute(html, 'data-median'), String(value));
+    assert.equal(rowAttribute(html, 'data-ci-median'), String(ciLimit));
+    assert.match(row, new RegExp(`class="bar ${tone}"`));
+    assert.equal(attribute(row.match(/<span class="plot"[^>]*>/)?.[0], 'aria-label').includes(String(value)), true);
+    assert.equal(row.match(/<tr><th>중앙값<\/th><td>([^<]*)<\/td>/)?.[1], String(value));
+  }
 });
 
 test('each independent timing failure remains visible and warmup is kept outside measured samples', () => {
@@ -60,13 +95,19 @@ test('each independent timing failure remains visible and warmup is kept outside
     [[100, 100, 100, 100, 100, 100, 1501], '개별 최대 시간 초과'],
   ]) {
     const html = renderPerformanceReport(reportFor(values, { metric: 'search.first' }));
-    assert.match(card(html, 'CI 기준 판정'), /badge fail/);
+    assert.equal(executionStatus(html), 'failed');
     const row = measuredRow(html);
+    assert.equal(attribute(row, 'data-status'), 'fail');
     assert(row.includes(reason));
-    assert.match(row, /class="timing exceeded"/);
+    if (reason === '개별 최대 시간 초과') {
+      assert.equal(attribute(row, 'data-median'), '100');
+      assert.equal(attribute(row, 'data-max'), '1501');
+      assert.match(row, /class="bar within"/);
+    }
     assert(!row.includes('10,000'));
-    assert.match(html, /준비 실행 1개 · 본 판정에서 제외/);
-    assert.match(html, />10,000<\/td>/);
+    assert(!row.includes('10000'));
+    assert.match(html, /준비 실행/);
+    assert.match(html, /10,000/);
   }
 });
 
@@ -75,23 +116,24 @@ test('a functional failure cannot appear as overall success even when timings pa
   report.status = 'failed';
   report.failures = ['합계 검증 실패'];
   const html = renderPerformanceReport(report);
-  assert.match(card(html, '전체 실행'), /badge fail/);
-  assert.match(card(html, 'CI 기준 판정'), /badge pass/);
+  assert.equal(executionStatus(html), 'failed');
+  assert.equal(rowAttribute(html, 'data-status'), 'pass');
   assert.match(html, /합계 검증 실패/);
 });
 
 test('diagnostics and incomplete coverage never become a green overall verdict', () => {
   const diagnostic = renderPerformanceReport(reportFor([100, 110, 120], { diagnostic: true }));
-  assert.match(card(diagnostic, '전체 실행'), /badge neutral/);
-  assert.match(diagnostic, /정식 PASS를 부여하지 않습니다/);
+  assert.equal(executionStatus(diagnostic), 'diagnostic');
+  assert.equal(rowAttribute(diagnostic, 'data-status'), 'diagnostic');
+  assert.match(measuredRow(diagnostic), /class="bar unverified"/);
   const partial = reportFor([100, 100], { requested: 7 });
   partial.coverage.metrics.push('search.first');
   const html = renderPerformanceReport(partial);
-  assert.match(card(html, '전체 실행'), /badge fail/);
-  assert.match(html, /불완전/);
+  assert.equal(executionStatus(html), 'failed');
+  assert.equal(rowAttribute(html, 'data-status'), 'invalid');
+  assert.match(measuredRow(html), /class="bar unverified"/);
   assert.match(html, /Missing performance sample/);
   assert.match(html, /data-status="missing"/);
-  assert.match(html, /기준 기록 없음/);
   assert.match(html, /미측정/);
 });
 
@@ -123,12 +165,12 @@ test('supports the Android native report shape and validation errors', () => {
   report.host = { cpu: 'Native host CPU', platform: 'linux', osRelease: 'test' };
   report.validationErrors = ['Native schema mismatch'];
   const html = renderPerformanceReport(report);
-  assert.match(html, /<title>Android 성능 보고서<\/title>/);
+  assert.match(html, /<title>Android 성능<\/title>/);
   assert.match(html, /Native host CPU/);
   assert.match(html, /emulator-5554/);
   assert.match(html, /2026-09-17T06:00:00Z/);
   assert.match(html, /Native schema mismatch/);
-  assert.match(card(html, '전체 실행'), /badge fail/);
+  assert.equal(executionStatus(html), 'failed');
 });
 
 test('the CLI writes a standalone report from an existing JSON and refuses to overwrite its source', () => {

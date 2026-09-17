@@ -6,62 +6,82 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[char]));
 const number = value => Number.isFinite(value) ? value.toLocaleString('ko-KR', { maximumFractionDigits: 1 }) : '—';
-const projectName = project => ({ 'chromium-mobile': 'Chromium · 모바일', 'webkit-mobile': 'WebKit · 모바일',
-  'android-emulator': 'Android · 에뮬레이터' })[project] ?? project;
+const attributeNumber = value => Number.isFinite(value) ? String(value) : '';
+const projectName = project => ({ 'chromium-mobile': 'Chromium', 'webkit-mobile': 'WebKit',
+  'android-emulator': 'Android 에뮬레이터' })[project] ?? project;
 const statusName = status => ({ pass: '통과', passed: '통과', fail: '실패', failed: '실패',
   diagnostic: '진단', invalid: '검증 불가', missing: '미측정' })[status] ?? '미완료';
-const statusClass = status => ['pass', 'passed'].includes(status) ? 'pass'
-  : ['fail', 'failed'].includes(status) ? 'fail' : 'neutral';
+const statusClass = status => ['pass', 'passed'].includes(status) ? 'pass' : ['fail', 'failed'].includes(status) ? 'fail' : 'neutral';
 const badge = status => `<span class="badge ${statusClass(status)}">${statusName(status)}</span>`;
 const reasonName = reason => ({ 'median-exceeded': '중앙값 초과', 'six-of-seven-exceeded': '반복 허용 시간 초과',
   'single-sample-maximum-exceeded': '개별 최대 시간 초과', 'missing-budget': '기준 없음' })[reason] ?? reason;
 const key = row => JSON.stringify([row.project, row.metric, row.cacheState]);
+const groupNames = { home: '첫 화면', search: '검색', 'expense-stats': '지출 통계', 'asset-stats': '자산 통계',
+  assets: '자산', ledger: '가계부', 'android.home': '앱 재실행', 'android.quick-edit': '퀵에딧' };
+const groupFor = metric => metric.startsWith('android.') ? metric.split('.').slice(0, 2).join('.') : metric.split('.')[0];
+const shortLabel = row => `${(row.label ?? row.metric).split(' → ')[0]}${row.metric.endsWith('.server-confirmed') ? ' · 서버 확정' : ''}`;
 
-function timingCell(observed, limit, failed) {
-  // Do not round a real boundary failure back onto the passing threshold.
-  const value = Number.isFinite(observed) && observed > limit && Number(observed.toFixed(1)) <= limit
-    ? String(observed) : number(observed);
-  return `<td class="timing ${failed ? 'exceeded' : ''}"><strong>${value}</strong>
-    <span class="limit">기준 ≤ ${number(limit)} ms</span></td>`;
+// These pure scale functions are also used by the offline controls below.
+function ratio(value, limit) {
+  return Number.isFinite(value) && value >= 0 && Number.isFinite(limit) && limit > 0 ? value / limit : NaN;
+}
+function axisFor(ratios) {
+  return Math.ceil(Math.max(1.25, ...ratios.filter(Number.isFinite)) * 4) / 4;
 }
 
-function renderRow(row, statistics) {
-  const observed = row.observed ?? {};
-  const limit = row.budget;
-  const ux = row.ux ?? {};
-  const reasons = (row.reasons ?? []).map(reasonName);
-  const uxReasons = (ux.reasons ?? []).map(reasonName);
-  const missing = row.status === 'missing';
+function measuredValues(row, statistics) {
   const values = statistics?.samplesMs ?? [];
-  const label = row.label ?? row.metric;
-  return `<tr data-project="${escape(row.project)}" data-status="${escape(row.status)}" data-ux="${escape(ux.status)}"
-    data-search="${escape(`${label} ${row.metric} ${row.project}`.toLowerCase())}">
-    <td><span class="project">${escape(projectName(row.project))}</span><strong class="metric">${escape(label)}</strong>
-      <code>${escape(row.metric)}</code>
-      <details class="samples"><summary>표본 · 측정 조건</summary>
-        <p>본 측정 ${number(row.n)}회 · 최소 ${number(statistics?.minMs)} / 평균 ${number(statistics?.meanMs)} ms</p>
-        <p class="sample-values">${values.length ? values.map(value => `<span>${number(value)}</span>`).join(' ') : '측정 표본 없음'} <small>ms · 측정 순서</small></p>
-        <p class="cache">${escape(row.cacheState ?? '측정 조건 없음')}</p>
-      </details></td>
-    <td>${badge(row.status)}${reasons.length ? `<p class="reason">${reasons.map(escape).join('<br>')}</p>` : ''}</td>
-    ${timingCell(observed.medianMs, limit?.medianMs, reasons.includes('중앙값 초과'))}
-    <td class="timing ${reasons.includes('반복 허용 시간 초과') ? 'exceeded' : ''}">
-      <strong>${missing ? '—' : `${number(observed.withinBudget)} / ${number(row.n)}회`}</strong>
-      <span class="limit">${missing ? '기준 기록 없음' : `최소 ${number(observed.requiredWithinBudget)}회 ≤ ${number(limit?.sixOfSevenMs)} ms`}</span>
-    </td>
-    ${timingCell(observed.maxMs, limit?.maxMs, reasons.includes('개별 최대 시간 초과'))}
-    <td class="ux-cell">${badge(ux.status)}
-      <details><summary>UX 기준 보기</summary>
-        <dl><dt>중앙값</dt><dd>≤ ${number(ux.budget?.medianMs)} ms</dd>
-          <dt>반복 허용 시간</dt><dd>≤ ${number(ux.budget?.sixOfSevenMs)} ms</dd>
-          <dt>개별 최대</dt><dd>≤ ${number(ux.budget?.maxMs)} ms</dd></dl>
-        <p>${number(ux.observed?.withinBudget)} / ${number(row.n)}회 기준 이내</p>
-        ${uxReasons.length ? `<p class="reason">${uxReasons.map(escape).join('<br>')}</p>` : ''}
-      </details><small>${escape(row.budgetSource ?? '기준 기록 없음')}</small></td>
-  </tr>`;
+  const required = row.observed?.requiredWithinBudget;
+  const repeat = Number.isInteger(required) && required > 0 && required <= values.length
+    && values.length === row.n && values.every(value => Number.isFinite(value) && value >= 0)
+    ? [...values].sort((a, b) => a - b)[required - 1] : undefined;
+  return { median: row.observed?.medianMs, repeat, max: row.observed?.maxMs };
 }
 
-// Render the evaluated snapshot, never re-evaluate an old run against today's budgets.
+function preciseNumber(value, ...limits) {
+  return Number.isFinite(value) && limits.some(limit => value > limit && Number(value.toFixed(1)) <= limit) ? String(value) : number(value);
+}
+
+function renderRow(row, statistics, axis, project) {
+  const values = measuredValues(row, statistics);
+  const limits = { ci: row.budget ?? {}, ux: row.ux?.budget ?? {} };
+  const proportion = ratio(values.median, limits.ci.medianMs);
+  const verified = ['pass', 'fail'].includes(row.status);
+  const tone = !verified || !Number.isFinite(proportion) ? 'unverified' : proportion > 1 ? 'exceeded' : 'within';
+  const width = Number.isFinite(proportion) ? proportion / axis * 100 : 0;
+  const label = row.label ?? row.metric;
+  const reasons = (row.reasons ?? []).map(reasonName);
+  const uxReasons = (row.ux?.reasons ?? []).map(reasonName);
+  const aria = `${label}: 중앙값 ${attributeNumber(values.median) || '미측정'} ms, 허용 ${attributeNumber(limits.ci.medianMs) || '미기록'} ms${Number.isFinite(proportion) ? `, 기준 대비 ${number(proportion * 100)}%` : ''}`;
+  const detailRows = [['중앙값', values.median, 'medianMs'], ['반복 허용 시간', values.repeat, 'sixOfSevenMs'], ['개별 최대', values.max, 'maxMs']];
+  return `<details class="metric-row" data-project="${escape(row.project)}" data-status="${escape(row.status)}" data-ux="${escape(row.ux?.status)}"
+    data-label="${escape(label)}" data-search="${escape(`${label} ${row.metric} ${row.project}`.toLowerCase())}"
+    data-median="${attributeNumber(values.median)}" data-repeat="${attributeNumber(values.repeat)}" data-max="${attributeNumber(values.max)}"
+    ${Object.entries(limits).map(([profile, limit]) => `data-${profile}-median="${attributeNumber(limit.medianMs)}" data-${profile}-repeat="${attributeNumber(limit.sixOfSevenMs)}" data-${profile}-max="${attributeNumber(limit.maxMs)}"`).join(' ')}
+    ${row.project === project ? '' : 'hidden'}>
+    <summary title="${escape(label)}">
+      <span class="metric-name">${escape(shortLabel(row))}<small>${escape(projectName(row.project))}</small></span>
+      <span class="plot" role="img" aria-label="${escape(aria)}" title="${escape(aria)}">
+        <span class="track"></span><span class="bar ${tone}" style="width:${width}%"></span><span class="threshold"></span>
+        ${Number.isFinite(proportion) ? '' : '<span class="unmeasured">미측정</span>'}</span>
+      <span class="row-status ${statusClass(row.status)}" title="전체 조건: ${escape(statusName(row.status))}" aria-label="전체 조건: ${escape(statusName(row.status))}">${row.status === 'pass' ? '✓' : row.status === 'fail' ? '!' : '—'}</span>
+    </summary>
+    <div class="metric-detail">
+      <p>${escape(label)} <code>${escape(row.metric)}</code></p>
+      <div class="detail-verdicts"><span>CI ${badge(row.status)}</span><span>UX ${badge(row.ux?.status)}</span></div>
+      <table><thead><tr><th>조건</th><th>측정 ms</th><th>CI 기준 ms</th><th>UX 기준 ms</th></tr></thead><tbody>
+        ${detailRows.map(([name, value, property]) => `<tr><th>${name}</th><td>${preciseNumber(value, limits.ci[property], limits.ux[property])}</td><td>≤ ${number(limits.ci[property])}</td><td>≤ ${number(limits.ux[property])}</td></tr>`).join('')}
+      </tbody></table>
+      <p>반복 기준 이내 ${number(row.observed?.withinBudget)} / ${number(row.n)}회 · 최소 ${number(row.observed?.requiredWithinBudget)}회 필요</p>
+      ${reasons.length ? `<p class="reason">CI: ${reasons.map(escape).join(' · ')}</p>` : ''}
+      ${uxReasons.length ? `<p class="reason">UX: ${uxReasons.map(escape).join(' · ')}</p>` : ''}
+      <p class="sample-values">${(statistics?.samplesMs ?? []).map(value => `<span>${number(value)}</span>`).join(' ')}<small>ms · 본 측정 순서</small></p>
+      <p class="cache">${escape(row.cacheState ?? '측정 조건 없음')}</p>
+    </div>
+  </details>`;
+}
+
+// Use the saved verdict and budgets, not today's configuration for a historic run.
 export function renderPerformanceReport(report, { title } = {}) {
   const performance = report?.performance;
   if (!performance || !Array.isArray(performance.results)) throw new Error('판정 결과가 포함된 성능 JSON이 필요합니다.');
@@ -70,111 +90,128 @@ export function renderPerformanceReport(report, { title } = {}) {
     if (!rows.some(row => row.project === project && row.metric === metric)) rows.push({ project, metric, n: 0, status: 'missing' });
   }
   const projects = [...new Set(rows.map(row => row.project))];
+  const defaultProject = projects.includes('webkit-mobile') ? 'webkit-mobile' : projects[0];
   const android = projects.includes('android-emulator') || report.suite === 'native-firebase-performance';
-  title ??= android ? 'Android 성능 보고서' : '핵심 기능 성능 보고서';
+  title ??= android ? 'Android 성능' : '성능';
   const statistics = new Map((performance.statistics ?? report.statistics ?? []).map(row => [key(row), row]));
-  const errors = [...new Set([...(report.failures ?? []), ...(report.validationErrors ?? []),
-    ...(report.coverage?.errors ?? []), ...(performance.errors ?? [])])];
+  const groups = [...new Set(rows.map(row => groupFor(row.metric)))].sort((a, b) => {
+    const order = Object.keys(groupNames);
+    return (order.includes(a) ? order.indexOf(a) : order.length) - (order.includes(b) ? order.indexOf(b) : order.length);
+  });
+  const axis = axisFor(rows.filter(row => row.project === defaultProject).map(row => ratio(row.observed?.medianMs, row.budget?.medianMs)));
   const complete = performance.coverage?.complete === true && report.coverage?.complete !== false;
-  const warmup = performance.warmupSamples ?? [];
+  const errors = [...new Set([...(report.failures ?? []), ...(report.validationErrors ?? []), ...(report.coverage?.errors ?? []), ...(performance.errors ?? [])])];
+  const executionStatus = errors.length || !complete ? 'failed' : report.status;
   const host = report.host ?? report.environment ?? {};
   const environment = report.environment ?? {};
   const metadata = [
-    ['측정 시각', report.timestamp ?? report.recordedAt], ['커밋', report.commit],
-    ['실행 환경', host.os ?? [host.platform, host.osRelease].filter(Boolean).join(' ')], ['CPU', host.cpu],
-    ['브라우저 / WebView', environment.playwright ? `Playwright ${environment.playwright}` : environment.webView],
-    ['기기', environment.device], ['빌드', environment.build ?? environment.web],
-    ['데이터 연결', environment.backend ?? environment.firebase],
-  ].filter(([, value]) => value !== undefined && value !== '');
-  const executionStatus = errors.length || !complete ? 'failed' : report.status;
-  const resultLabel = performance.profile === 'ux-v2' ? '적용 기준 판정' : 'CI 기준 판정';
+    ['측정 시각', report.timestamp ?? report.recordedAt], ['커밋', report.commit], ['프로필', performance.profile], ['기준 버전', performance.policyVersion],
+    ['표본', `${complete ? '완전' : '불완전'} · 경로별 ${number(performance.samplesRequested)}회`],
+    ['CPU', host.cpu], ['실행 환경', host.os ?? host.platform],
+    ['브라우저 / WebView', environment.playwright ?? environment.webView], ['기기', environment.device],
+  ].filter(([, value]) => value !== undefined);
+  const warmup = performance.warmupSamples ?? [];
   return `<!doctype html>
-<html lang="ko">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
 <title>${escape(title)}</title><style>${styles}</style></head>
-<body><main>
-  <header><p class="eyebrow">HOUSEHOLD ACCOUNT · PERFORMANCE</p><h1>${escape(title)}</h1>
-    <p class="intro">얼마나 걸렸는지, 어떤 기준으로 통과했는지 한눈에 확인하세요.</p>
-    <div class="metadata"><span>${escape(report.timestamp ?? report.recordedAt ?? '측정 시각 없음')}</span>
-      ${report.commit ? `<code>${escape(report.commit.slice(0, 12))}${report.workingTreeDirty ? ' · 미커밋 변경 포함' : ''}</code>` : ''}
-      <span>${escape(performance.profile)}</span></div></header>
-  <section class="cards" aria-label="판정 요약">
-    <article><h2>전체 실행</h2>${badge(executionStatus)}<p>기능 검증 · 보고서 오류 포함</p></article>
-    <article><h2>${resultLabel}</h2>${badge(performance.status)}<p>통과 ${rows.filter(row => row.status === 'pass').length} / ${rows.length}개 측정 경로</p></article>
-    <article><h2>공통 UX 목표 비교</h2>${badge(performance.uxStatus)}<p>별도 목표와 비교한 결과</p></article>
-    <article><h2>표본 검증</h2><strong class="coverage ${complete ? 'good' : 'bad'}">${complete ? '완전' : '불완전'}</strong>
-      <p>경로별 본 측정 ${number(performance.samplesRequested)}회</p></article>
-  </section>
-  <section class="policy" aria-label="성능 통과 기준 안내">
-    <h2>세 조건을 모두 만족해야 통과합니다</h2>
-    <ol><li><b>중앙값</b>이 기능별 허용 시간 이내</li><li><b>7회 중 6회 이상</b>이 반복 허용 시간 이내</li><li><b>모든 개별 측정</b>이 최대 허용 시간 이내</li></ol>
-    <p>정식 판정은 최소 ${number(performance.minimumGateSamples)}회가 필요합니다. 횟수가 다르면 반복 조건은 ceil(n × 6 / 7)이며, 준비 실행은 별도로 보관합니다.</p>
-    <p>표의 기준은 <b>이 실행의 JSON에 기록된 값</b>입니다. ${performance.profile === 'ux-v2' ? '공통 UX 목표를 적용했습니다.' : 'CI 환경의 허용값과 공통 UX 목표는 다를 수 있으며, UX 목표 초과가 곧 CI 실패를 뜻하지는 않습니다.'}</p>
-    <p>에뮬레이터·합성 데이터 측정입니다. 실제 휴대폰의 최초 실행이나 운영 네트워크 성능을 보증하지 않습니다.</p>
-  </section>
-  ${performance.mode === 'diagnostic' ? '<aside class="notice">진단 실행입니다. 표본이 완전하거나 시간이 기준 이내여도 정식 PASS를 부여하지 않습니다.</aside>' : ''}
-  ${errors.length || !complete ? `<aside class="notice error" role="alert"><h2>측정 또는 검증 오류</h2>
-    <p>표시된 일부 측정값만으로 전체 통과를 판단할 수 없습니다.</p><ul>${errors.map(error => `<li>${escape(error)}</li>`).join('')}</ul></aside>` : ''}
-  <section aria-labelledby="results-title"><div class="results-heading"><h2 id="results-title">기능별 측정 결과와 통과 기준</h2>
-    <span id="visible-count" aria-live="polite">${rows.length}개 경로</span></div>
-    <form class="filters" onsubmit="return false">
-      <label><span id="project-label">환경</span><select id="project-filter" aria-labelledby="project-label"><option value="">모든 환경</option>${projects.map(project => `<option value="${escape(project)}">${escape(projectName(project))}</option>`).join('')}</select></label>
-      <label><span id="status-label">판정</span><select id="status-filter" aria-labelledby="status-label"><option value="">전체 결과</option><option value="attention">실패 · 미완료만</option><option value="ux">UX 목표 초과만</option></select></label>
-      <label class="search"><span id="metric-label">기능 검색</span><input id="metric-filter" aria-labelledby="metric-label" type="search" placeholder="예: 검색, 첫 홈, 퀵에딧" autocomplete="off"></label>
-    </form>
-    <div class="table-scroll" tabindex="0" role="region" aria-label="성능 결과 표, 좁은 화면에서는 좌우로 스크롤하세요">
-      <table><caption>단위 ms · 실측값 아래에 적용 허용값을 표시합니다.</caption>
-        <thead><tr><th scope="col">환경 · 기능</th><th scope="col">적용 판정</th><th scope="col">중앙값</th><th scope="col">반복 기준 이내</th><th scope="col">개별 최대</th><th scope="col">공통 UX 목표</th></tr></thead>
-        <tbody>${rows.map(row => renderRow(row, statistics.get(key(row)))).join('\n')}</tbody></table>
-    </div><p id="empty" class="empty" ${rows.length ? 'hidden' : ''}>표시할 측정 결과가 없습니다.</p>
-  </section>
-  <details class="appendix"><summary>실행 환경 · 기준 버전</summary><dl>
-    ${metadata.map(([label, value]) => `<dt>${escape(label)}</dt><dd>${escape(value)}</dd>`).join('')}
-    <dt>기준 버전</dt><dd>${escape(performance.policyVersion)}</dd><dt>적용 프로필</dt><dd>${escape(performance.profile)}</dd>
-  </dl></details>
-  <details class="appendix"><summary>준비 실행 ${warmup.length}개 · 본 판정에서 제외</summary><div class="table-scroll"><table>
-    <thead><tr><th>환경</th><th>기능</th><th>시간 ms</th></tr></thead><tbody>
-      ${warmup.map(sample => `<tr><td>${escape(projectName(sample.project))}</td><td>${escape(sample.label ?? sample.metric)}</td><td>${number(sample.durationMs)}</td></tr>`).join('')}
-    </tbody></table></div></details>
-  <footer>독립 HTML 보고서 · 인터넷 연결 없이 열 수 있습니다. 원본 JSON의 판정과 표본을 그대로 표시합니다.</footer>
-</main><script>${filterScript}</script></body></html>`;
+<body><main style="--threshold:${100 / axis}%">
+  <header data-execution-status="${escape(executionStatus)}"><h1>${escape(title)}</h1><span class="run-status">실행 ${badge(executionStatus)}</span></header>
+  <div class="toolbar">
+    <select id="project-filter" aria-label="환경">${projects.map(project => `<option value="${escape(project)}" ${project === defaultProject ? 'selected' : ''}>${escape(projectName(project))}</option>`).join('')}<option value="">모든 환경</option></select>
+    <fieldset class="segments"><legend class="sr-only">측정 항목</legend>${[['median', '중앙값'], ['repeat', '반복 6/7'], ['max', '최대']].map(([value, label]) => `<label><input type="radio" name="measure" value="${value}" ${value === 'median' ? 'checked' : ''}><span>${label}</span></label>`).join('')}</fieldset>
+    <select id="basis-filter" aria-label="비교 기준"><option value="ci">CI 기준</option><option value="ux">UX 목표</option></select>
+    <input id="metric-filter" type="search" aria-label="기능 검색" placeholder="기능 찾기" autocomplete="off">
+    <label class="failed-only"><input id="failure-filter" type="checkbox">실패만</label>
+  </div>
+  <div class="legend"><span><i class="swatch within"></i>기준 이내</span><span><i class="swatch exceeded"></i>초과</span><span><i class="line-key"></i>허용 기준</span><small>기준 대비 시간 · 짧을수록 빠름</small></div>
+  ${errors.length || !complete ? `<details class="errors"><summary>측정·검증 오류 ${errors.length}건${complete ? '' : ' · 표본 불완전'}</summary><ul>${errors.map(error => `<li>${escape(error)}</li>`).join('')}</ul></details>` : ''}
+  ${performance.mode === 'diagnostic' ? '<p class="diagnostic">진단 실행 · 정식 PASS 없음</p>' : ''}
+  <div class="charts">${groups.map(group => `<section class="chart-group" data-group="${escape(group)}" ${rows.some(row => row.project === defaultProject && groupFor(row.metric) === group) ? '' : 'hidden'}>
+    <h2>${escape(groupNames[group] ?? group)}</h2>
+    <div class="axis" aria-hidden="true"><span>0</span><b class="axis-threshold">100%</b><span class="axis-max">${number(axis * 100)}%</span></div>
+    ${rows.filter(row => groupFor(row.metric) === group).map(row => renderRow(row, statistics.get(key(row)), axis, defaultProject)).join('\n')}
+  </section>`).join('')}</div>
+  <p id="empty" ${rows.length ? 'hidden' : ''}>해당하는 측정 결과가 없습니다.</p><span id="visible-count" class="sr-only" aria-live="polite"></span>
+  <details class="appendix"><summary>실행 정보 · 판정 상세</summary>
+    <p>CI ${badge(performance.status)} · 공통 UX ${badge(performance.uxStatus)}</p>
+    <p>막대는 선택한 조건의 허용 시간 대비 비율입니다. 행의 상태 아이콘은 세 조건을 합친 원본 판정을 유지합니다. 모든 조건을 만족해야 통과합니다.</p>
+    <p>반복은 기록된 최소 허용 횟수번째 본표본(7회 중 6회)을 사용합니다. 정식 판정은 최소 ${number(performance.minimumGateSamples)}회이며 준비 실행은 제외합니다.</p>
+    <p>기준은 이 실행의 JSON에 기록된 값입니다. 에뮬레이터 측정이며 실제 휴대폰·운영 네트워크 시간과 다릅니다.</p>
+    <dl>${metadata.map(([name, value]) => `<dt>${escape(name)}</dt><dd>${escape(value)}</dd>`).join('')}</dl>
+    <details class="warmup"><summary>준비 실행 ${warmup.length}개</summary><ul>${warmup.map(sample => `<li>${escape(projectName(sample.project))} · ${escape(sample.label ?? sample.metric)} · ${number(sample.durationMs)} ms</li>`).join('')}</ul></details>
+  </details>
+</main><script>${ratio.toString()}\n${axisFor.toString()}\n${controls}</script></body></html>`;
 }
 
 const styles = `
-:root{color-scheme:light;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#172b43;background:#f4f6fa;font-size:14px}
-*{box-sizing:border-box}body{margin:0}main{max-width:1500px;margin:auto;padding:40px 32px}h1,h2,p{margin:0}h1{font-size:32px;letter-spacing:-1px;margin:8px 0 12px}h2{font-size:17px}
-.eyebrow{font-size:11px;font-weight:800;letter-spacing:2px;color:#416cd0}.intro{color:#53657c;line-height:1.6}.metadata{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px;color:#617187;font-size:12px}.metadata>*{padding:5px 9px;background:#e9eef7;border-radius:6px}
-.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:28px 0 20px}.cards article{background:white;border:1px solid #dfe5ee;border-radius:14px;padding:20px}.cards h2{font-size:13px;font-weight:600;color:#52647c;margin-bottom:12px}.cards p{font-size:12px;color:#617187;margin-top:12px}.cards .badge,.coverage{font-size:20px;font-weight:750}.coverage{display:inline-block;padding:4px 0}.good{color:#116b4c}.bad{color:#b42c38}
-.badge{display:inline-block;border-radius:6px;padding:4px 8px;font-size:12px;font-weight:700;white-space:nowrap}.pass{color:#116b4c;background:#e6f6ed}.fail{color:#a42635;background:#ffebee}.neutral{color:#765010;background:#fff2d5}
-.policy{background:#edf3ff;border:1px solid #d8e4fb;border-radius:12px;padding:20px 24px;margin-bottom:26px}.policy h2{color:#254e97}.policy ol{display:flex;flex-wrap:wrap;gap:12px 32px;padding-left:20px;line-height:1.7}.policy p{font-size:12px;line-height:1.7;color:#455f85;margin-top:5px}.notice{padding:18px 22px;background:#fff4dc;border-radius:12px;margin:18px 0;line-height:1.7}.notice.error{background:#fff0f1;border:1px solid #f1c8ce}.notice h2{margin-bottom:8px}.notice li{overflow-wrap:anywhere}
-.results-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:24px 0 16px}.results-heading span{font-size:12px;color:#65768b}.filters{display:flex;gap:12px;margin:0 0 18px}.filters label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:#52647c}.filters select,.filters input{font:inherit;font-size:14px;color:#243951;border:1px solid #ced7e5;border-radius:8px;padding:10px 12px;background:white;min-height:42px}.filters select{min-width:180px}.filters .search{flex:1}.filters input{width:100%}:focus-visible{outline:3px solid #77a7ff;outline-offset:2px}
-.table-scroll{overflow:auto;background:white;border:1px solid #dfe5ee;border-radius:12px}table{border-collapse:collapse;text-align:left;width:100%;min-width:1100px}caption{text-align:left;padding:12px 18px;font-size:12px;color:#60728a;border-bottom:1px solid #e4eaf2}thead{background:#eef2f8}th{padding:14px 16px;color:#50627a;font-size:12px;white-space:nowrap}td{padding:17px 16px;border-top:1px solid #e8edf4;vertical-align:top;font-size:13px}tbody tr:hover{background:#fafcff}td:first-child{width:34%;min-width:320px}.project{display:block;font-size:11px;color:#60718a;margin-bottom:6px}.metric{display:block;line-height:1.5;font-size:14px}code{display:block;font-size:11px;color:#6b7b91;overflow-wrap:anywhere;margin-top:4px}.timing{white-space:nowrap;font-variant-numeric:tabular-nums}.timing strong{font-size:17px;font-weight:700}.limit{display:block;font-size:12px;color:#47617f;margin-top:7px}.exceeded{background:#fff0f1;color:#b02b39}.exceeded .limit{color:#9b4350}.reason{color:#a12b38;font-size:11px;line-height:1.6;margin-top:8px}
-details{font-size:12px;line-height:1.6}summary{cursor:pointer;color:#345da0;font-weight:600}.samples{margin-top:10px}.samples p{margin-top:8px}.sample-values{display:flex;flex-wrap:wrap;gap:4px}.sample-values span{padding:2px 5px;background:#edf1f7;border-radius:4px;font-variant-numeric:tabular-nums}.cache{color:#718096;overflow-wrap:anywhere}.ux-cell{min-width:150px}.ux-cell details{margin-top:8px}.ux-cell small{display:block;color:#64758b;margin-top:8px;font-size:10px}.ux-cell dl{display:block;margin:8px 0}.ux-cell dd{margin:0 0 5px}.appendix{background:white;border:1px solid #dfe5ee;border-radius:12px;padding:18px 20px;margin-top:18px}.appendix summary{font-size:14px}.appendix dl{display:grid;grid-template-columns:140px 1fr;gap:10px;margin-bottom:0}.appendix dt{color:#687990}.appendix dd{margin:0;overflow-wrap:anywhere}.appendix table{min-width:600px}.appendix .table-scroll{margin-top:16px}.empty{text-align:center;padding:24px;color:#63758c}footer{text-align:center;color:#738096;font-size:12px;margin-top:28px;line-height:1.7}[hidden]{display:none!important}
-@media(max-width:760px){main{padding:24px 16px}h1{font-size:26px}.cards{grid-template-columns:repeat(2,1fr);gap:10px}.cards article{padding:16px}.filters{flex-wrap:wrap}.filters label{flex:1;min-width:130px}.filters select{min-width:0;width:100%}.filters .search{flex-basis:100%}.policy{padding:18px}.policy ol{display:block}.policy li{margin:6px 0}.appendix dl{grid-template-columns:90px 1fr}.results-heading h2{font-size:16px}}
-@media print{body{background:white}main{max-width:none;padding:0}.filters{display:none}.table-scroll{overflow:visible}table{min-width:0;font-size:10px}td:first-child{min-width:0}th,td{padding:8px}.cards{break-inside:avoid}.policy{break-inside:avoid}thead{display:table-header-group}tr{break-inside:avoid}}
+:root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#182539;background:#f5f7fb;color-scheme:light;font-size:14px}*{box-sizing:border-box}body{margin:0}main{max-width:1320px;margin:auto;padding:28px 30px 40px}h1,h2,p{margin:0}header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}h1{font-size:27px;letter-spacing:-1px}.run-status{font-size:12px;color:#748196}.badge{display:inline-block;padding:3px 7px;border-radius:5px;font-size:11px;font-weight:700}.pass{color:#267459;background:#e7f5ef}.fail{color:#bd3949;background:#ffebee}.neutral{color:#976312;background:#fff2da}
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px}select,input,button{font:inherit}select,input[type=search]{padding:9px 12px;border:1px solid #dce3ee;background:white;color:#30435e;border-radius:8px;height:40px}#project-filter{min-width:145px}#metric-filter{width:160px;margin-left:auto}.segments{display:flex;padding:3px;margin:0;border:1px solid #dfe5ef;border-radius:9px;background:#eaf0f8;gap:3px}.segments label{cursor:pointer}.segments input{position:absolute;opacity:0;pointer-events:none}.segments span{display:block;padding:6px 13px;border-radius:6px;font-size:13px;color:#607089}.segments input:checked+span{background:white;color:#235ed0;box-shadow:0 1px 4px #253c651a;font-weight:700}.segments input:focus-visible+span{outline:2px solid #346fe1}.failed-only{font-size:12px;color:#607089;white-space:nowrap;display:flex;gap:4px;align-items:center}.failed-only input{accent-color:#386fd7}:focus-visible{outline:2px solid #4c87f3;outline-offset:3px}
+.legend{display:flex;align-items:center;gap:18px;color:#667791;font-size:11px;margin:0 2px 16px}.legend span{display:flex;align-items:center;gap:6px}.legend small{margin-left:auto;font-size:11px}.swatch{height:8px;width:18px;border-radius:3px}.within{background:#5a83ed}.exceeded{background:#f16476}.unverified{background:repeating-linear-gradient(120deg,#edc57d,#edc57d 4px,#f9e8c9 4px,#f9e8c9 8px)}.line-key{height:13px;border-left:2px dashed #718097}
+.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start}.chart-group{--label:182px;--status:22px;background:white;border:1px solid #e2e7f0;border-radius:14px;padding:20px 18px 15px;min-width:0}.chart-group h2{font-size:16px;font-weight:750;margin:0 0 12px;letter-spacing:-.3px}.axis{position:relative;height:24px;margin-left:calc(var(--label) + 10px);margin-right:calc(var(--status) + 10px);display:flex;justify-content:space-between;font-size:10px;color:#9ba7b8}.axis-threshold{position:absolute;left:var(--threshold);transform:translateX(-50%);font-weight:700;color:#74869f}
+.metric-row{border-top:1px solid #f0f3f8}.metric-row>summary{display:grid;grid-template-columns:var(--label) minmax(0,1fr) var(--status);align-items:center;gap:10px;min-height:44px;cursor:pointer;list-style:none;padding:7px 0}.metric-row>summary::-webkit-details-marker{display:none}.metric-row>summary:hover .metric-name{color:#326ae0}.metric-name{font-size:12px;line-height:1.4;min-width:0;overflow-wrap:anywhere}.metric-name small{display:none;color:#95a1b1;font-size:10px;margin-top:2px}main.all-projects .metric-name small{display:block}.plot{position:relative;display:block;height:22px}.track{position:absolute;inset:4px 0;background:#f0f3f9;border-radius:4px}.bar{position:absolute;left:0;top:4px;height:14px;min-width:0;border-radius:4px;transition:width .16s ease}.threshold{position:absolute;left:var(--threshold);top:0;height:22px;border-left:2px dashed #8694aa;z-index:1}.row-status{justify-self:end;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;font-size:10px;border-radius:50%;font-weight:800}.row-status.pass{background:transparent;color:#a1b7b1}.unmeasured{position:absolute;left:6px;top:4px;font-size:10px;color:#a77b31}
+.metric-detail{font-size:12px;color:#576981;padding:12px 2px 15px;line-height:1.7}.metric-detail>p{margin:8px 0;overflow-wrap:anywhere}code{font-size:10px;color:#8b98aa;display:block}.detail-verdicts{display:flex;gap:16px;margin-top:8px}.metric-detail table{width:100%;border-collapse:collapse;font-size:11px;font-variant-numeric:tabular-nums;margin:12px 0}.metric-detail th,.metric-detail td{text-align:left;padding:6px 4px;border-bottom:1px solid #edf1f7}.metric-detail th{font-weight:500;color:#7c8ca2}.reason{color:#bd4656}.sample-values{display:flex;flex-wrap:wrap;gap:4px}.sample-values span{padding:2px 6px;border-radius:5px;background:#edf2fa}.sample-values small{color:#8393a9}.cache{color:#8997a9;font-size:10px}
+.appendix{margin-top:22px;font-size:12px;color:#7b8aa0;line-height:1.8}.appendix summary{cursor:pointer}.appendix>p{margin:10px 0}.appendix dl{display:grid;grid-template-columns:110px 1fr;gap:6px}.appendix dd{margin:0;overflow-wrap:anywhere}.warmup{margin-top:15px}.errors{background:#fff0f2;color:#a73342;border-radius:9px;padding:10px 14px;margin-bottom:14px;font-size:12px}.errors summary{cursor:pointer}.errors li{overflow-wrap:anywhere}.diagnostic{font-size:12px;color:#9a6b23;margin:0 0 14px}#empty{text-align:center;padding:40px;color:#8b99ab}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}[hidden]{display:none!important}
+@media(max-width:1000px){.charts{grid-template-columns:1fr}.chart-group{--label:230px}.legend{flex-wrap:wrap}.legend small{margin-left:0}}@media(max-width:560px){main{padding:20px 14px}.toolbar{gap:8px}h1{font-size:24px}#project-filter{min-width:130px}.segments span{padding:6px 9px;font-size:12px}#metric-filter{width:130px;margin-left:0;flex:1}#basis-filter{width:115px}.legend{gap:12px}.legend small{flex-basis:100%}.chart-group{--label:130px;--status:16px;padding:16px 12px}.chart-group h2{font-size:15px}.metric-row>summary{gap:8px;min-height:46px}.metric-name{font-size:11px}.axis{margin-left:calc(var(--label) + 8px);margin-right:calc(var(--status) + 8px)}.axis-threshold{font-size:9px}.metric-detail table{font-size:10px}}
+@media(max-width:560px){.axis-max{visibility:hidden}}
+@media(prefers-reduced-motion:reduce){.bar{transition:none}}@media print{body{background:white}main{padding:0;max-width:none}.toolbar{display:none}.charts{display:block}.chart-group{break-inside:avoid;margin-bottom:14px}.bar{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 `;
 
-const filterScript = `
-const rows = [...document.querySelectorAll('tr[data-project]')];
-const project = document.getElementById('project-filter');
-const status = document.getElementById('status-filter');
-const query = document.getElementById('metric-filter');
-function filterRows() {
-  const keyword = query.value.trim().toLowerCase();
-  let count = 0;
-  for (const row of rows) {
-    const matchesStatus = !status.value || (status.value === 'attention' ? row.dataset.status !== 'pass' : row.dataset.ux === 'fail');
-    const visible = (!project.value || project.value === row.dataset.project) && matchesStatus && row.dataset.search.includes(keyword);
-    row.hidden = !visible;
-    if (visible) count++;
+const controls = `
+(() => {
+  const main = document.querySelector('main');
+  const rows = [...document.querySelectorAll('.metric-row')];
+  const project = document.getElementById('project-filter');
+  const basis = document.getElementById('basis-filter');
+  const query = document.getElementById('metric-filter');
+  const failed = document.getElementById('failure-filter');
+  const read = (row, name) => row.getAttribute('data-' + name) === '' ? NaN : Number(row.getAttribute('data-' + name));
+  const labels = { median: '중앙값', repeat: '반복 허용 시간', max: '개별 최대' };
+  function update() {
+    const measure = document.querySelector('input[name=measure]:checked').value;
+    const keyword = query.value.trim().toLowerCase();
+    const visible = [];
+    for (const row of rows) {
+      const status = basis.value === 'ci' ? row.dataset.status : row.dataset.ux;
+      row.hidden = !!((project.value && row.dataset.project !== project.value) || !row.dataset.search.includes(keyword)
+        || (failed.checked && status === 'pass'));
+      if (!row.hidden) visible.push(row);
+    }
+    const axis = axisFor(visible.map(row => ratio(read(row, measure), read(row, basis.value + '-' + measure))));
+    main.style.setProperty('--threshold', 100 / axis + '%');
+    main.classList.toggle('all-projects', !project.value);
+    for (const row of visible) {
+      const value = read(row, measure), limit = read(row, basis.value + '-' + measure);
+      const proportion = ratio(value, limit);
+      const status = basis.value === 'ci' ? row.dataset.status : row.dataset.ux;
+      const verified = status === 'pass' || status === 'fail';
+      const bar = row.querySelector('.bar');
+      bar.className = 'bar ' + (!verified || !Number.isFinite(proportion) ? 'unverified' : proportion > 1 ? 'exceeded' : 'within');
+      bar.style.width = Number.isFinite(proportion) ? proportion / axis * 100 + '%' : '0%';
+      const plot = row.querySelector('.plot');
+      const description = row.dataset.label + ': ' + labels[measure] + ' ' + (Number.isFinite(value) ? value : '미측정')
+        + ' ms, 허용 ' + (Number.isFinite(limit) ? limit : '미기록') + ' ms'
+        + (Number.isFinite(proportion) ? ', 기준 대비 ' + (proportion * 100).toFixed(1) + '%' : '');
+      plot.setAttribute('aria-label', description); plot.title = description;
+      let missing = plot.querySelector('.unmeasured');
+      if (!Number.isFinite(proportion) && !missing) { missing = document.createElement('span'); missing.className = 'unmeasured'; missing.textContent = '미측정'; plot.append(missing); }
+      if (missing) missing.hidden = Number.isFinite(proportion);
+      const icon = row.querySelector('.row-status');
+      const label = status === 'pass' ? '통과' : status === 'fail' ? '실패' : '미확인';
+      icon.className = 'row-status ' + (status === 'pass' ? 'pass' : status === 'fail' ? 'fail' : 'neutral');
+      icon.textContent = status === 'pass' ? '✓' : status === 'fail' ? '!' : '—';
+      icon.title = '전체 조건: ' + label; icon.setAttribute('aria-label', icon.title);
+    }
+    for (const group of document.querySelectorAll('.chart-group')) {
+      group.hidden = ![...group.querySelectorAll('.metric-row')].some(row => !row.hidden);
+      group.querySelector('.axis-max').textContent = (axis * 100).toLocaleString('ko-KR') + '%';
+    }
+    document.getElementById('visible-count').textContent = visible.length + '개 측정 경로';
+    document.getElementById('empty').hidden = visible.length !== 0;
   }
-  document.getElementById('visible-count').textContent = count + ' / ' + rows.length + '개 경로';
-  document.getElementById('empty').hidden = count !== 0;
-}
-project.addEventListener('change', filterRows);
-status.addEventListener('change', filterRows);
-query.addEventListener('input', filterRows);
+  document.querySelectorAll('.toolbar input, .toolbar select').forEach(control => control.addEventListener('input', update));
+  update();
+})();
 `;
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
