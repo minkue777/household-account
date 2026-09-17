@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useSettingsSectionExpansion } from './useSettingsSectionExpansion';
 import { useTheme, THEMES } from '@/contexts/ThemeContext';
 import { ChevronDown, Palette } from 'lucide-react';
 
@@ -8,11 +8,12 @@ export default function ThemeSettings() {
   const { theme, setTheme, themeConfig } = useTheme();
 
   // 섹션 펼침/접힘 상태
-  const [isThemeOpen, setIsThemeOpen] = useState(false);
+  const [isThemeOpen, setIsThemeOpen] = useSettingsSectionExpansion();
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
       <button
+        aria-expanded={isThemeOpen}
         onClick={() => setIsThemeOpen(!isThemeOpen)}
         className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
       >

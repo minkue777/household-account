@@ -11,6 +11,7 @@ import { useHousehold } from '@/contexts/HouseholdContext';
 import { useAppDialog } from '@/contexts/AppDialogContext';
 import { ChevronDown, Edit2, Plus, Star, Tags, Trash2 } from 'lucide-react';
 import { useCategoryReorder } from './useCategoryReorder';
+import { useSettingsSectionExpansion } from './useSettingsSectionExpansion';
 
 type CategoryMutation = 'add' | 'edit' | 'delete' | 'default' | 'reorder';
 
@@ -31,7 +32,7 @@ export default function CategorySettings() {
   const [pendingDeleteCategory, setPendingDeleteCategory] = useState<CategoryDocument | null>(null);
 
   // 섹션 펼침/접힘 상태
-  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+  const [isCategoryOpen, setIsCategoryOpen] = useSettingsSectionExpansion();
 
   // 기본 카테고리 설정
   const [defaultCategory, setDefaultCategory] = useState<string>('');
@@ -197,6 +198,7 @@ export default function CategorySettings() {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200">
       <button
+        aria-expanded={isCategoryOpen}
         onClick={() => setIsCategoryOpen(!isCategoryOpen)}
         className={`w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors ${isCategoryOpen ? 'rounded-t-2xl' : 'rounded-2xl'}`}
       >

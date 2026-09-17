@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useSettingsSectionExpansion } from './useSettingsSectionExpansion';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import {
   MerchantRule,
@@ -25,7 +26,7 @@ export default function MerchantRuleSettings() {
   } = useCategoryContext();
 
   // 섹션 펼침/접힘 상태
-  const [isRulesOpen, setIsRulesOpen] = useState(false);
+  const [isRulesOpen, setIsRulesOpen] = useSettingsSectionExpansion();
 
   // 가맹점 규칙 상태
   const [merchantRules, setMerchantRules] = useState<MerchantRule[]>([]);
@@ -146,6 +147,7 @@ export default function MerchantRuleSettings() {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
       <button
+        aria-expanded={isRulesOpen}
         onClick={() => setIsRulesOpen(!isRulesOpen)}
         className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
       >

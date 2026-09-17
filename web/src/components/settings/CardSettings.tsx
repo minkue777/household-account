@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSettingsSectionExpansion } from './useSettingsSectionExpansion';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import ModalOverlay from '@/components/common/ModalOverlay';
 import { ChevronDown, CreditCard, Plus, X } from 'lucide-react';
@@ -283,7 +284,7 @@ export default function CardSettings({
   ownerName,
 }: CardSettingsProps) {
   const { remoteReadEpoch = 0 } = useHousehold();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useSettingsSectionExpansion();
   const [selectedTab, setSelectedTab] = useState<CardTab>('credit');
   const [isAdding, setIsAdding] = useState(false);
   const [selectedLabel, setSelectedLabel] = useState<RegisteredCardLabel>('삼성');
@@ -594,6 +595,7 @@ export default function CardSettings({
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <button
+        aria-expanded={isOpen}
         onClick={() => setIsOpen((prev) => !prev)}
         className="flex w-full items-center justify-between p-4 transition-colors hover:bg-slate-50"
       >

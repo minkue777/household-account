@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSettingsSectionExpansion } from './useSettingsSectionExpansion';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import {
@@ -22,7 +23,7 @@ export default function RecurringExpenseSettings() {
   const { householdKey, remoteReadEpoch = 0 } = useHousehold();
 
   // 섹션 펼침/접힘 상태
-  const [isRecurringOpen, setIsRecurringOpen] = useState(false);
+  const [isRecurringOpen, setIsRecurringOpen] = useSettingsSectionExpansion();
 
   // 정기 지출 상태
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
@@ -142,6 +143,7 @@ export default function RecurringExpenseSettings() {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
       <button
+        aria-expanded={isRecurringOpen}
         onClick={() => setIsRecurringOpen(!isRecurringOpen)}
         className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
       >
