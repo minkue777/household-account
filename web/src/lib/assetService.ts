@@ -1909,7 +1909,9 @@ export async function getDividendSnapshot(year: number): Promise<DividendSnapsho
   const householdId = getHouseholdId();
   const docId = `${householdId}_${year}`;
   const { collection, db, getDocsFromServer, query, where } =
-    await import('@/platform/read-model/firestoreServerReadModel');
+    await ((globalThis as typeof globalThis & { __diagnosticDividendLite?: boolean }).__diagnosticDividendLite
+      ? import('@/platform/read-model/firestoreServerReadModel')
+      : import('@/platform/read-model/firestoreReadModel').then(api => ({ ...api, getDocsFromServer: api.getDocs }))) as unknown as typeof import('@/platform/read-model/firestoreServerReadModel');
 
   // 없는 flat 문서의 get은 householdId를 확인할 수 없어 Rules가 거절합니다.
   // 가구 조건을 가진 조회는 실제 0건과 접근/통신 실패를 구분합니다.
@@ -1924,7 +1926,9 @@ export async function getDividendSnapshot(year: number): Promise<DividendSnapsho
 export async function getDividendEventsByYear(year: number): Promise<DividendEventRecord[]> {
   const householdId = getHouseholdId();
   const { collection, db, getDocsFromServer, query, where } =
-    await import('@/platform/read-model/firestoreServerReadModel');
+    await ((globalThis as typeof globalThis & { __diagnosticDividendLite?: boolean }).__diagnosticDividendLite
+      ? import('@/platform/read-model/firestoreServerReadModel')
+      : import('@/platform/read-model/firestoreReadModel').then(api => ({ ...api, getDocsFromServer: api.getDocs }))) as unknown as typeof import('@/platform/read-model/firestoreServerReadModel');
 
   const q = query(
     collection(db, DIVIDEND_EVENTS_COLLECTION),
@@ -1950,7 +1954,9 @@ export async function getDividendEventsByYear(year: number): Promise<DividendEve
 export async function getAllStockHoldings(): Promise<StockHolding[]> {
   const householdId = getHouseholdId();
   const { collection, db, getDocsFromServer, query, where } =
-    await import('@/platform/read-model/firestoreServerReadModel');
+    await ((globalThis as typeof globalThis & { __diagnosticDividendLite?: boolean }).__diagnosticDividendLite
+      ? import('@/platform/read-model/firestoreServerReadModel')
+      : import('@/platform/read-model/firestoreReadModel').then(api => ({ ...api, getDocsFromServer: api.getDocs }))) as unknown as typeof import('@/platform/read-model/firestoreServerReadModel');
 
   const q = query(
     collection(db, HOLDINGS_COLLECTION),

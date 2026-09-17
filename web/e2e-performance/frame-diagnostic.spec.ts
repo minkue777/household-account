@@ -47,17 +47,17 @@ test('diagnostic only: compare background and search containment with timer obse
   const home = async () => { await page.locator('header a[href="/"]').first().click(); await expectHome(); };
   await expectHome();
   const measurements: unknown[] = [];
-  const variants = ['baseline', 'search-backdrop-only', 'home-glass-only', 'search-and-home-glass'];
+  const variants = ['realtime-read', 'lite-read'];
   // Rotate every condition through each of the four ordering positions.
-  const orders = [0, 1, 2, 3].map(offset => [...variants.slice(offset), ...variants.slice(0, offset)]);
+  const orders = [0, 1, 0, 1].map(offset => [...variants.slice(offset), ...variants.slice(0, offset)]);
   const metadata = {
-    mode: 'diagnostic-only', baselineProductCommit: 'c835a25 plus dividend server-read candidate', commit, buildId: readFileSync(resolve(process.cwd(), '.next/BUILD_ID'), 'utf8').trim(),
+    mode: 'diagnostic-only', baselineProductCommit: 'c835a25 plus diagnostic-only runtime choice of same-scope dividend read SDK; search overlay blur disabled in both conditions', commit, buildId: readFileSync(resolve(process.cwd(), '.next/BUILD_ID'), 'utf8').trim(),
     environment: { os: `${platform()} ${release()}`, cpu: cpus()[0]?.model, realDevice: false, backend: 'local Firebase emulators', build: 'existing production Next.js' },
-    orders, expectedMeasuredRecords: 64, warmupJourneys: 1,
+    orders, expectedMeasuredRecords: 32, warmupJourneys: 2,
     cacheCondition: 'same fixture and document; code/SDK warm; closing search disposes its source window, reopening performs a new server query; statistics revisit memory reused',
     timerInterpretation: '16ms interval with absolute performance.now ticks; compare only ticks/gaps against each original measurement startAt/endAt, not locator/setup/confirmation time',
   };
-  const output = resolve(process.cwd(), 'performance-results/linux-server-read-backdrop-diagnostic.json');
+  const output = resolve(process.cwd(), 'performance-results/linux-dividend-transport-diagnostic.json');
   const save = (complete = false) => writeFileSync(output, JSON.stringify({ ...metadata, complete, measurements }, null, 2));
   save();
   const run = async (variant: string, iteration: number, warmup: boolean,
@@ -99,7 +99,8 @@ test('diagnostic only: compare background and search containment with timer obse
       'stable-search-height': `${modal} > div { height: 80vh !important; }`,
       'chart-paint-containment': 'main:has(canvas) { contain: paint !important; }',
     };
-    const css = styles[variant];
+    await page.evaluate(useLite => { (globalThis as any).__diagnosticDividendLite = useLite; }, variant === 'lite-read');
+    const css = 'div.fixed:has(input[placeholder="지출처명, 메모, 카드명을 검색해보세요"]) { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }';
     const style = css ? await page.addStyleTag({ content: css }) : undefined;
     try {
       await page.locator('header button').first().click();
@@ -150,7 +151,8 @@ test('diagnostic only: compare background and search containment with timer obse
       await home();
     } finally { if (style && !page.isClosed()) await style.evaluate(node => node.remove()); }
   };
-  await journey('baseline', 0, true);
+  await journey('realtime-read', 0, true);
+  await journey('lite-read', 0, true);
   for (let iteration = 0; iteration < orders.length; iteration++) {
     for (const variant of orders[iteration]) await journey(variant, iteration + 1);
   }
