@@ -75,3 +75,47 @@ node functions/scripts/consolidate-storage.mjs --project household-account-6f300
 기존 flat 원본은 보존했고 이후 업무 처리는 canonical만 갱신합니다. 서버 이후 Web은 해당 제품 commit을 포함한 main push의 Vercel Git 자동배포, APK는 해당 제품 commit을 target으로 한 v1.2.28 Release로 전달합니다. 원격 CI는 별도 확인하며 아직 실행되지 않은 CI를 통과로 기록하지 않습니다.
 
 실제 기기에서는 Android 1.2.28 설치 후 앱을 열고, 이미 실행 중이었다면 최근 앱 목록에서 종료 후 다시 엽니다. Android는 별도 PWA 갱신이나 캐시/앱 데이터 삭제가 필요하지 않습니다. 아이폰 PWA도 새로 열고 새 버전 안내가 있으면 갱신합니다. 기기 설치·갱신 완료 여부는 서버 배포 성공과 구분합니다.
+
+## 승인된 기존 원본 정리
+
+후속 요청에서 사용자가 기존 원본 삭제를 명시적으로 승인했습니다. 삭제 대상은 위 표의
+복구용 자료 3,418문서입니다. `assetSnapshots`, 배당·정기거래 원본, receipt·Outbox·감사이력은
+포함하지 않습니다. 새 저장소의 업무 데이터도 수정하지 않습니다.
+
+`functions/scripts/cleanup-consolidated-storage.mjs`는 삭제 전에 모든 원문·문서 경로·updateTime을
+저장소 밖의 private JSON에 백업합니다. 백업 직렬화의 타입·값 왕복이 동일해야 하며, 기존
+이관 검증기의 업무값 대조가 불일치 0·보강 필요 0이어야 계획을 생성합니다. 명시 경로만
+삭제하며 recursive delete는 사용하지 않습니다. 첫 삭제 전 전체 revision, 각 transaction에서
+원본·대상·보유종목의 상위 자산을 다시 검증합니다. 변경이 발견되면 중단하며 부분 완료 후
+같은 계획의 재개는 이미 삭제한 원본을 건너뜁니다.
+
+```powershell
+node functions/scripts/cleanup-consolidated-storage.mjs --project household-account-6f300 --backup-file "$env:TEMP\household-storage-originals-backup-20260918.json"
+node functions/scripts/cleanup-consolidated-storage.mjs --project household-account-6f300 --backup-file "$env:TEMP\household-storage-originals-backup-20260918.json" --apply --expected-plan-hash <검토한-hash>
+```
+
+기존 계획 파일을 덮어쓰지 않습니다. 백업은 원문 복구 자료이며, 이후 새 저장소에 발생한
+변경을 과거 서버로 되돌리는 기능은 아닙니다. 운영 삭제는 아래 두 선행 조치 후 수행합니다.
+
+- 구형 `expenses`로 소유가구를 역조회하던 Shortcut receipt purge 사전검사를 canonical
+  원장으로 전환합니다. 본문에 transactionId가 없는 과거 문서도 가구별 문서 ID로 조회하고,
+  다른 가구에 같은 ID가 존재하면 임의로 소유자를 정하지 않습니다.
+- 원본 삭제·타입 보존·동시 변경 중단·부분 재개·상위 자산 누락에 대한 실제 Firestore
+  통합 검사와, 단축어 수집/편집 및 다른 가구 링크 차단 E2E를 확인합니다.
+
+최초 백업 계획 hash는 `f1e1d270058875de7cc00082b845890913bf65a92a90ae1f5435322527659402`이며,
+원본 수는 거래 3,202, 자산 38, 주식 40, 코인 4, 카드 33, 규칙 44,
+flat 카테고리 27, 가구별 카테고리 27, 기본분류 설정 3입니다. 계획 생성 시 정합성은 MATCH입니다.
+
+## 후속 CI에서 확인한 검증 수정
+
+이전 commit `974967d`의 CI `35333738518`에서 Functions/Web/Android 기본 검사는 성공했고,
+Web E2E 3건과 Android 계측 4건이 실패했습니다. 성공으로 덮어쓰지 않습니다.
+
+- 새 원장의 단축어 카드 표시 필드는 `cardDisplay`인데 테스트가 구형 `cardLastFour`를
+  기대했습니다. 실제 저장값과 편집 화면에 표시되는 카드 정보를 함께 검사하도록 수정했습니다.
+- 알림 링크는 현재 가구의 원장만 읽으므로 다른 가구의 ID도 없는 ID와 같은 안내를
+  표시합니다. 타 가구 정보를 노출하지 않는 동일 오류 안내를 정확히 검사합니다.
+- Android artifact의 화면과 logcat에서 앱 테스트 시작 전 Pixel Launcher ANR을 확인했습니다.
+  APK 빌드를 에뮬레이터 부팅 전에 수행하고 HOME 창의 실제 입력 포커스를 확인한 뒤 검사합니다.
+  앱의 ANR을 숨기거나 테스트 기대값·시간제한을 완화하지 않습니다.

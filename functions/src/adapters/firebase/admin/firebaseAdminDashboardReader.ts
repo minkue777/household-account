@@ -1,4 +1,5 @@
 import { hasScheduledJobRecovered } from "../../../platform/external-operations/application/scheduledJobIncidentRecovery";
+import { readScheduledJobStatusSummary } from '../operations/scheduledJobStatusSummary';
 import type * as firestore from "firebase-admin/firestore";
 
 import type {
@@ -195,8 +196,7 @@ export class FirebaseAdminDashboardReader {
     const [
       [householdSnapshot, memberSnapshots],
       statsSnapshot,
-      runSnapshot,
-      monitorReceiptSnapshot,
+      jobStatusSnapshot,
       providerSnapshot,
       incidentSnapshot,
       functionLatency,
@@ -212,14 +212,7 @@ export class FirebaseAdminDashboardReader {
           )),
         ] as const),
         operationsCollection(this.database, "memberAccessStats").get(),
-        operationsCollection(this.database, "scheduledJobRuns")
-          .orderBy("scheduledFor", "desc")
-          .limit(120)
-          .get(),
-        operationsCollection(this.database, "scheduledJobMonitorReceipts")
-          .orderBy("terminalAt", "desc")
-          .limit(1)
-          .get(),
+        operationsCollection(this.database, "scheduledJobStatuses").get(),
         operationsCollection(this.database, "providerHealth").get(),
         operationsCollection(this.database, "scheduledJobIncidents")
           .where("state", "==", "OPEN")
@@ -326,26 +319,8 @@ export class FirebaseAdminDashboardReader {
       left.name.localeCompare(right.name, "ko"),
     );
 
-    const latestRunByName = new Map<string, firestore.DocumentData>();
-    for (const document of runSnapshot.docs) {
-      const data = document.data();
-      const jobName = string(data.jobName);
-      if (jobName !== undefined && !latestRunByName.has(jobName)) {
-        latestRunByName.set(jobName, data);
-      }
-    }
-    const latestMonitorReceipt = monitorReceiptSnapshot.docs[0]?.data();
-    if (latestMonitorReceipt !== undefined) {
-      const observedAt =
-        instant(latestMonitorReceipt.terminalAt) ??
-        instant(latestMonitorReceipt.createdAt);
-      latestRunByName.set("scheduled-job-monitor", {
-        jobName: "scheduled-job-monitor",
-        status: "COMPLETE",
-        scheduledFor: observedAt,
-        terminalAt: observedAt,
-      });
-    }
+    const jobStatuses = jobStatusSnapshot.docs.map(document => readScheduledJobStatusSummary(document.data())!);
+    const latestRunByName = new Map(jobStatuses.map(summary => [summary.jobName, summary.latestRun]));
     const scheduledJobs: AdminDashboardScheduledJob[] =
       definitions.definitions.map((definition) => {
         const data = latestRunByName.get(definition.jobName);
@@ -356,9 +331,7 @@ export class FirebaseAdminDashboardReader {
             : "UNKNOWN";
         const scheduledFor = instant(data?.scheduledFor);
         const lastUpdatedAt =
-          instant(data?.terminalAt) ??
-          instant(data?.lastHeartbeatAt) ??
-          instant(data?.updatedAt);
+          instant(data?.lastUpdatedAt);
         const runTotals = totals(data?.totals);
         return {
           jobName: definition.jobName,
@@ -416,13 +389,13 @@ export class FirebaseAdminDashboardReader {
       left.provider.localeCompare(right.provider),
     );
 
-    const incidents = incidentSnapshot.docs.flatMap((document) => {
+    const pendingIncidents = incidentSnapshot.docs.flatMap((document) => {
       const data = document.data();
       const occurrenceId = string(data.occurrenceId);
       const reason = string(data.reason);
       const openedAt = instant(data.openedAt);
-      if (occurrenceId !== undefined && openedAt !== undefined && runSnapshot.docs.some(run =>
-        hasScheduledJobRecovered({ occurrenceId, openedAt }, { ...run.data(), occurrenceId: run.id }),
+      if (occurrenceId !== undefined && openedAt !== undefined && jobStatuses.some(summary =>
+        summary.latestSuccessfulRun && hasScheduledJobRecovered({ occurrenceId, openedAt }, summary.latestSuccessfulRun),
       )) return [];
       return occurrenceId === undefined ||
         reason === undefined ||
@@ -435,6 +408,13 @@ export class FirebaseAdminDashboardReader {
             openedAt,
           }];
     });
+    // A historical occurrence may terminate after a newer one started. Read only
+    // still-open incident owners, preserving exact recovery without scanning history.
+    const incidentRuns = await Promise.all(pendingIncidents.map(incident =>
+      operationsCollection(this.database, 'scheduledJobRuns').doc(incident.occurrenceId).get(),
+    ));
+    const incidents = pendingIncidents.filter((incident, index) => !hasScheduledJobRecovered(incident,
+      { ...incidentRuns[index].data(), occurrenceId: incident.occurrenceId }));
 
     const dailyAccess: AdminDashboardDailyAccess[] = dates.map((date) => ({
       date,

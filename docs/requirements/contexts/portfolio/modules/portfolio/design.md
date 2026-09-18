@@ -371,6 +371,8 @@ Repository Fake와 Firestore Adapter는 같은 Conformance Suite를 통과해야
 
 Asset 문서에는 `schemaVersion`, server `createdAt/updatedAt`, `aggregateVersion`을 둡니다. Domain과 Firestore DTO 사이에는 Mapper를 두고 Timestamp·FieldValue를 Domain에 노출하지 않습니다.
 
+AssetSnapshot의 `byType`, `byOwnerRefKey`, `ownerDisplayNames`, `sourceAssetVersions`는 문서 내부 조회·계산용 map이므로 자동 단일 필드 색인에서 제외합니다. 기간·baseline·전일 조회에 사용하는 최상위 `localDate`의 오름차순·내림차순 색인과 `householdId` 기본 색인은 유지합니다. 내부 map의 필터·정렬 쿼리를 새로 도입할 때는 [색인 정책과 조회 근거](../../../../../operations/firestore-snapshot-index-exemptions-2026-09-18.md)를 함께 갱신합니다.
+
 일반 Command transaction은 Canonical Asset write, receipt, 필요한 Outbox를 함께 commit합니다. `RevalueAssetWorkflow`와 `ApplyAssetAutomationWorkflow`에서는 이 모듈이 별도 commit하지 않고 Context UoW 하나만 호출합니다. callback 재실행 시 participant는 순수하게 같은 intent를 반환합니다.
 
 ### 7.2 canonical 단일 저장 경로

@@ -120,7 +120,10 @@ export async function inspect(database, validateCatalog) {
     ]);
     totals.categories += categoryRows.size;
     try {
-      const data = categoryCatalog(h.id, household.data(), settings.data() ?? {}, rows(categoryRows), rows(legacyRows));
+      // After approved source cleanup, the current catalog is the only authority.
+      const canonicalOnly = categoryRows.empty && legacyRows.empty && !settings.exists && current.exists;
+      const data = canonicalOnly ? current.data()
+        : categoryCatalog(h.id, household.data(), settings.data() ?? {}, rows(categoryRows), rows(legacyRows));
       validateCatalog(data, h.id);
       if (Buffer.byteLength(JSON.stringify(data), 'utf8') > 800_000) throw new Error('CATEGORY_CATALOG_TOO_LARGE');
       if (!current.exists) add(current.ref, data, current, [household, settings, ...categoryRows.docs, ...legacyRows.docs]);

@@ -115,6 +115,22 @@ interface ScheduledOccurrenceStateV1 {
 
 각 배포 환경은 jobName, timezone/cron, grace, deadline, heartbeat interval을 가진 유한 `ScheduledJobDefinition`을 등록합니다. monitor는 실행 job과 분리된 occurrence에서 예상 시각별 run 존재 여부와 heartbeat를 검사합니다. 같은 Scheduler 장애 도메인 때문에 monitor까지 실행되지 않는 경우는 Cloud Monitoring의 별도 absence metric/alarm이 보완합니다.
 
+관리자 표시용 `operations/runtime/scheduledJobStatuses/{jobName}`은 `latestRun`과
+`latestSuccessfulRun`만 보존합니다. 각 항목은 occurrence ID·작업명·예약 시각·상태·갱신
+시각·집계 수만 포함하며 lease, 대상별 receipt, 실패 원문은 복제하지 않습니다. 예약 등록,
+실행/heartbeat/완료, Missing/Overdue, monitor 완료 저장이 같은 transaction에서 요약을
+갱신합니다. 다른 occurrence는 예약 시각 순으로, 동일 occurrence는 기존 lease/monitor
+검증을 통과한 원본 상태로 갱신합니다. 처리 완료 순서나 단말 시계 차이로 최신 작업이
+과거 상태로 바뀌지 않습니다.
+
+Admin은 최근 실행 120건과 monitor receipt를 스캔하지 않고 작업별 요약을 읽습니다.
+최근 성공은 다음 실행이 실패해도 유지하여 이미 복구한 장애가 다시 나타나지 않게 합니다.
+그 근거로 해결되지 않은 OPEN 장애는 해당 occurrence만 단건 조회합니다. 요약이 없으면
+UNKNOWN이며 실행 이력 전체를 재조회하는 상시 fallback은 없습니다. 요약은 현재 상태이므로
+TTL을 적용하지 않고, 기존 완료 이력·receipt의 30일 TTL과 unresolved 이력 보존은 유지합니다.
+최초 배포의 기존 상태 초기화는 `backfill-scheduled-job-statuses.mjs`로 수행하며 같은 reducer와
+transaction을 사용하므로 동시 실행 및 재실행에도 최신 상태를 보존합니다.
+
 #### 3.3.1 Cloud Billing 비용 집계
 
 `billing-cost-refresh`는 `Asia/Seoul` 기준 cron `0 */6 * * *`로 `RefreshBillingCostSummary`를 호출하는 tracked job입니다. execution key는 예약 시각의 시간 단위로 고정하고 target은 현재 프로젝트 비용 요약 한 건뿐입니다.

@@ -5,6 +5,9 @@ import { pathToFileURL } from 'node:url';
 
 const ANDROID_PREFIXES = ['android/', 'contracts/', 'web/src/platform/android-host/'];
 const ANDROID_INTEGRATION_FILES = new Set([
+  '.github/workflows/quality-gates.yml',
+  'tools/ci/prepare-android-ui.mjs',
+  'tools/ci/prepare-android-ui.test.mjs',
   'web/src/lib/bridges/androidBridge.ts',
   'web/src/lib/authService.ts',
   'web/src/lib/firebase.ts',

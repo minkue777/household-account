@@ -29,6 +29,7 @@ import type {
 } from "../../../platform/external-operations/application/ports/out/scheduledJobMonitorRepositoryPort";
 import type { ScheduledJobDefinition } from "../../../operations/scheduling/scheduledJobDefinitions";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
+import { readScheduledJobStatusSummary, scheduledJobStatusSummaryReference, writeScheduledJobStatusSummary } from './scheduledJobStatusSummary';
 
 const OPERATIONS_DOCUMENT = "runtime";
 
@@ -220,6 +221,7 @@ export class FirebaseScheduledJobExecutionRepository
     const reference = this.runs.doc(run.runId);
     const resolvedIncidents = await this.database.runTransaction(async (transaction) => {
       const current = await transaction.get(reference);
+      const summary = await transaction.get(scheduledJobStatusSummaryReference(this.database, run.jobName));
       const openIncidents = completion === undefined ? undefined : await transaction.get(
         operationsCollection(this.database, "scheduledJobIncidents").where("state", "==", "OPEN"),
       );
@@ -305,6 +307,7 @@ export class FirebaseScheduledJobExecutionRepository
         },
         { merge: true },
       );
+      writeScheduledJobStatusSummary(transaction, summary, { ...stored, ...run }, completion?.result.finishedAt ?? this.now());
       const resolved: JobIncident[] = [];
       if (completion !== undefined) {
         const result = completion.result;
@@ -356,7 +359,8 @@ export class FirebaseScheduledJobExpectationWriter {
     await this.database.runTransaction(async (transaction) => {
       const current = await transaction.get(reference);
       if (current.exists) return;
-      transaction.create(reference, {
+      const summary = await transaction.get(scheduledJobStatusSummaryReference(this.database, input.definition.jobName));
+      const expected = {
         schemaVersion: 1,
         occurrenceId: input.occurrenceId,
         runId: input.occurrenceId,
@@ -375,7 +379,9 @@ export class FirebaseScheduledJobExpectationWriter {
         completedTargetReceipts: [],
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
-      });
+      };
+      transaction.create(reference, expected);
+      writeScheduledJobStatusSummary(transaction, summary, expected, input.scheduledFor);
     });
   }
 }
@@ -432,6 +438,7 @@ export class FirebaseScheduledJobMonitorRepository
         // A monitor cannot manufacture a terminal execution result or clear its lease.
         return current?.status === run.status;
       }
+      const summary = await transaction.get(scheduledJobStatusSummaryReference(this.database, run.jobName));
       transaction.set(reference,
       {
         occurrenceId: run.occurrenceId,
@@ -461,6 +468,7 @@ export class FirebaseScheduledJobMonitorRepository
       },
       { merge: true },
       );
+      writeScheduledJobStatusSummary(transaction, summary, { ...current, ...run }, this.now());
       return true;
     });
   }
@@ -475,8 +483,13 @@ export class FirebaseScheduledJobMonitorRepository
     const saved = await this.database.runTransaction(async transaction => {
       const previous = await transaction.get(reference);
       const currentRun = await transaction.get(this.runs.doc(incident.occurrenceId));
+      const jobName = currentRun.data()?.jobName;
+      const summary = typeof jobName === 'string' ? readScheduledJobStatusSummary(
+        (await transaction.get(scheduledJobStatusSummaryReference(this.database, jobName))).data(),
+      ) : undefined;
       if (incident.state === "OPEN" && (previous.exists ||
-        hasScheduledJobRecovered(incident, currentRun.data() ?? {}))) return false;
+        hasScheduledJobRecovered(incident, currentRun.data() ?? {}) ||
+        (summary?.latestSuccessfulRun && hasScheduledJobRecovered(incident, summary.latestSuccessfulRun)))) return false;
       if (incident.state === "RESOLVED" && previous.data()?.state !== "OPEN") return false;
       transaction.set(reference, {
         ...incident,
@@ -500,12 +513,13 @@ export class FirebaseScheduledJobMonitorRepository
 
   async saveMonitorReceipt(result: JobMonitorResult): Promise<void> {
     const terminalAt = this.now();
-    await this.receipts.doc(result.monitorOccurrenceId).set({
-      ...result,
-      terminalAt,
-      expiresAt: firestoreTtlAfter(terminalAt),
-      schemaVersion: 1,
-      createdAt: FieldValue.serverTimestamp(),
+    await this.database.runTransaction(async transaction => {
+      const summary = await transaction.get(scheduledJobStatusSummaryReference(this.database, 'scheduled-job-monitor'));
+      transaction.set(this.receipts.doc(result.monitorOccurrenceId), {
+        ...result, terminalAt, expiresAt: firestoreTtlAfter(terminalAt), schemaVersion: 1, createdAt: FieldValue.serverTimestamp(),
+      });
+      writeScheduledJobStatusSummary(transaction, summary, { occurrenceId: result.monitorOccurrenceId,
+        jobName: 'scheduled-job-monitor', scheduledFor: terminalAt, status: 'COMPLETE' }, terminalAt);
     });
   }
 }

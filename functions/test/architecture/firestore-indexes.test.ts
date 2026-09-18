@@ -32,6 +32,37 @@ function configuration(): IndexConfiguration {
 
 describe("Firestore 운영 인덱스 계약", () => {
   it.each([
+    ["assetSnapshots", ["byType", "byOwnerRefKey", "ownerDisplayNames", "sourceAssetVersions"]],
+    ["dividend_snapshots", ["events", "monthlyData", "monthlyAmounts"]],
+  ] as const)("%s의 문서 내부 조회 전용 payload는 하위 필드를 포함해 자동 색인하지 않는다", (collectionGroup, payloadFields) => {
+    const config = configuration();
+    for (const fieldPath of payloadFields) {
+      expect(config.fieldOverrides.filter(candidate => candidate.collectionGroup === collectionGroup && candidate.fieldPath === fieldPath))
+        .toEqual([{ collectionGroup, fieldPath, indexes: [] }]);
+      // A descendant override or composite index can otherwise reintroduce indexing on a large map.
+      expect(config.fieldOverrides.filter(candidate => candidate.collectionGroup === collectionGroup
+        && candidate.fieldPath.startsWith(`${fieldPath}.`) && candidate.indexes.length > 0)).toEqual([]);
+      expect(config.indexes.filter(candidate => candidate.collectionGroup === collectionGroup
+        && candidate.fields.some(field => field.fieldPath === fieldPath || field.fieldPath.startsWith(`${fieldPath}.`)))).toEqual([]);
+    }
+  });
+
+  it.each([
+    ["assetSnapshots", "localDate", ["ASCENDING", "DESCENDING"]],
+    ["assetSnapshots", "householdId", ["ASCENDING"]],
+    ["dividend_snapshots", "householdId", ["ASCENDING"]],
+    ["dividend_snapshots", "year", ["ASCENDING"]],
+  ] as const)("%s의 %s 최상위 조회 필드에는 자동 색인을 보존한다", (collectionGroup, fieldPath, orders) => {
+    const overrides = configuration().fieldOverrides.filter(candidate => candidate.collectionGroup === collectionGroup);
+    const effective = overrides.find(candidate => candidate.fieldPath === fieldPath)
+      ?? overrides.find(candidate => candidate.fieldPath === "*");
+    // No override inherits Firestore's ascending/descending collection indexes.
+    if (effective !== undefined) for (const order of orders) {
+      expect(effective.indexes).toContainEqual({ order, queryScope: "COLLECTION" });
+    }
+  });
+
+  it.each([
     ["recurringPlans", "planId"],
     ["positionHistory", "householdId"],
     ["shortcutCredentials", "secretHash"],

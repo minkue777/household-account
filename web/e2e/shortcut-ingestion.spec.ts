@@ -39,8 +39,7 @@ test('[IOS-001][IOS-003][IOS-004][IOS-006][IOS-007][IOS-009][IOS-011][IOS-014] �
   expect(first.body.contractVersion).toBe('shortcut-payment-response.v1');
   const saved = await ledgerRecords(request);
   expect(saved).toHaveLength(1);
-  expect(saved[0]).toMatchObject({ merchant: 'Shortcut 카페', amount: 12300, createdBy: actor.memberId });
-  expect(saved[0].cardLastFour).toContain('1234');
+  expect(saved[0]).toMatchObject({ merchant: 'Shortcut 카페', amountInWon: 12300, creatorMemberId: actor.memberId, cardDisplay: '국민(1234)' });
   const duplicate = await submitShortcut(request, credential.rawCredential, message);
   expect(duplicate.status).toBe(200);
   expect(duplicate.body.transaction.kind).toBe('duplicate');
@@ -51,6 +50,8 @@ test('[IOS-001][IOS-003][IOS-004][IOS-006][IOS-007][IOS-009][IOS-011][IOS-014] �
   expect(JSON.stringify(diagnostics)).not.toContain(credential.rawCredential);
   expect(JSON.stringify(await records(request, 'outboxEvents'))).not.toContain(message.replaceAll('\n', '\\n'));
   expect(first.headers['cache-control']).toContain('no-store');
+  await page.goto(`/expenses/${encodeURIComponent(saved[0].id)}/edit`);
+  await expect(page.getByRole('dialog', { name: '지출 수정', exact: true }).getByRole('group')).toContainText('· 국민(1234)');
 });
 
 test('[IOS-001][IOS-010][IOS-012][SYS-007] Shortcut HTTP는 method·content type·credential·스키마를 실제 ingress에서 검증해 거래를 만들지 않는다', async ({ page, request }) => {

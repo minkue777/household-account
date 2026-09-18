@@ -425,6 +425,41 @@
       "collectionGroup": "categoryCatalog",
       "fieldPath": "categoryAliases",
       "indexes": []
+    },
+    {
+      "collectionGroup": "assetSnapshots",
+      "fieldPath": "byType",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assetSnapshots",
+      "fieldPath": "byOwnerRefKey",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assetSnapshots",
+      "fieldPath": "ownerDisplayNames",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assetSnapshots",
+      "fieldPath": "sourceAssetVersions",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "dividend_snapshots",
+      "fieldPath": "events",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "dividend_snapshots",
+      "fieldPath": "monthlyData",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "dividend_snapshots",
+      "fieldPath": "monthlyAmounts",
+      "indexes": []
     }
   ]
 }

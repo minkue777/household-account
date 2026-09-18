@@ -21,6 +21,7 @@
 - 기록된 fixture 기반 공급자 계약 테스트 지원
 - 예약 작업의 대상별 성공·실패 집계
 - 예약 시각별 시작 heartbeat, 실행 중 heartbeat, deadline·lease·checkpoint와 missing/overdue 감지
+- 관리자 예약 작업 조회용 작업별 최신 상태·최근 성공 요약. 실행 이력·receipt의 보존/TTL과 분리합니다.
 - 정기 거래 등 기능별 예약 Input Port의 사용자 접속과 독립된 cron 호출
 - Google Cloud Standard Billing Export의 6시간 주기 집계와 관리자용 최신 비용 요약
 - 재시도 가능성, 멱등 키, 실행 시간과 실패 범위 관측
@@ -141,6 +142,7 @@
 | 사용자가 접속하지 않아도 일일 정기 거래 job이 실행되고, 7·8월 누락 target이 있으면 checkpoint를 따라 처리한 뒤 재실행에도 중복 생성하지 않는다. | I, E2E | JOB-ERR-001, REC-002, REC-003 |
 | 자산 자동화 3월 18일 occurrence와 19일 재실패 뒤 20일 실행 / due-plan page와 checkpoint 재개 / 성공 전 nextDueDate가 유지되고 3월 execution·잔액 변경은 최종 한 번만 반영 | I, E2E, 운영 계약 | JOB-ERR-001, JOB-ERR-002, AUTO-003, DEC-052 |
 | 예약 occurrence가 grace 안에 시작되지 않으면 Missing, 시작 후 heartbeat·deadline이 지나면 Overdue이며 같은 실행의 종료 또는 같은 작업의 다음 정상 occurrence 완료 시 즉시 복구 경보를 남긴다. 열린 장애는 48시간 관측 범위를 벗어나도 복구 대조 대상이며 실패 실행 이력은 보존한다. | I, 운영 계약 | JOB-ERR-002 |
+| 관리자 최신 상태는 작업별 요약을 조회하며 예약 시각이 이전인 실행의 늦은 완료가 최신 실행을 덮지 않는다. 이후 실패가 있어도 최근 성공의 장애 복구 근거는 보존하며, 남은 열린 장애는 해당 실행만 조회하여 종료 여부를 확인한다. 요약과 실행·완료 결과는 동일 transaction으로 갱신하며 이력의 TTL은 바꾸지 않는다. | Adapter C, I, 운영 계약 | JOB-ERR-001, JOB-ERR-002 |
 | lease owner만 heartbeat와 checkpoint를 갱신하고 만료 takeover 뒤에도 완료 target은 다시 업무 반영하지 않는다. | I, 동시성 | JOB-ERR-002 |
 | CORS 허용 origin에서 호출해도 인증·App Check가 없으면 거부하고 body·page·기간·대상·호출량 한도를 넘으면 기능 Port를 호출하지 않는다. | C, I, 보안 E2E | EXT-002 |
 | 외부 HTTP는 HTTPS allowlist 밖 직접 URL·redirect를 거부하고 timeout과 최대 응답 byte를 초과하면 bounded 실패로 끝난다. | U, C, 보안 I | EXT-003 |
@@ -149,6 +151,9 @@
 
 ## 9. 코드 근거
 
+- [예약 작업 최신 상태 요약](../../../../../functions/src/adapters/firebase/operations/scheduledJobStatusSummary.ts)
+- [예약 작업 실행·monitor 저장 경계](../../../../../functions/src/adapters/firebase/operations/firebaseScheduledJobStores.ts)
+- [관리자 대시보드 조회](../../../../../functions/src/adapters/firebase/admin/firebaseAdminDashboardReader.ts)
 - [자산 평가 예약 작업](../../../../../functions/src/bootstrap/firebaseAssetValuationScheduledJob.ts)
 - [배당 예약 작업](../../../../../functions/src/bootstrap/firebaseDividendScheduledJob.ts)
 - [시세 공급자 Adapter](../../../../../functions/src/adapters/firebase/portfolio/firebasePortfolioMarketData.ts)

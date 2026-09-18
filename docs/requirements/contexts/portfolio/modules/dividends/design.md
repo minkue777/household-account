@@ -344,6 +344,8 @@ Position history는 이미 KIND ETF Event로 검증된 `householdId + sourceAsse
 
 DividendEvent에는 `schemaVersion`, identityVersion, `source`, `sourceDisclosureId`, `instrumentCode`, 현재 공시 필드, server timestamps, aggregateVersion을 둡니다. 정정 이전 값이나 revision collection은 두지 않습니다. Event state 변경·정정·삭제와 receipt, Outbox는 같은 transaction입니다. Projection은 별도 transaction에서 Inbox claim과 projection replace/checkpoint를 함께 commit하며 `events[eventId]`의 key와 value.eventId가 다르면 commit을 거부합니다.
 
+현재 실행 경로의 연간 Projection은 `dividend_snapshots/{householdId}_{year}`입니다. Web과 서버 Reader는 최상위 `householdId` 조건으로 문서를 읽은 후 종목·기간·월별 합계를 메모리에서 처리합니다. 내부 `events` map, `monthlyData`와 `monthlyAmounts` 배열은 자동 단일 필드 색인에서 제외하고, `householdId`·`year`의 기본 색인은 유지합니다. Canonical `dividend_events`의 공시 ID·별칭·날짜 조회 색인은 변경하지 않습니다. [색인 정책과 조회 근거](../../../../../operations/firestore-snapshot-index-exemptions-2026-09-18.md)를 따릅니다.
+
 DividendEvent는 내부적으로 공시를 발견한 `sourceAssetIds`와 fixed 시점의 `eligibilityContributions[{assetId, quantity, evidence}]`를 결정 순서로 보존합니다. 이는 같은 종목을 여러 Asset에서 보유할 때 논리 삭제가 다른 Asset의 신규 배당 처리를 막지 않게 하고, 원천 Asset이 나중에 없어져도 당시 배당 계산 근거를 재현할 수 있게 하는 역사 정보입니다.
 
 같은 공시가 동시에 두 번 들어오면 결정 ID document create/update 경합으로 하나만 생성됩니다. 같은 상태 전이 재요청은 stored result 또는 `AlreadyProcessed(eventId)`를 반환합니다. expected version이 다르면 lost update 없이 `Conflict(DIVIDEND_VERSION_MISMATCH)`입니다.

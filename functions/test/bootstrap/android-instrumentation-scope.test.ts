@@ -32,6 +32,9 @@ describe('Android 에뮬레이터 검증의 변경 범위', () => {
     'web/playwright.native.config.ts',
     'tools/e2e/native-firebase.mjs',
     'tools/e2e/native-web-runtime.mjs',
+    '.github/workflows/quality-gates.yml',
+    'tools/ci/prepare-android-ui.mjs',
+    'tools/ci/prepare-android-ui.test.mjs',
   ])('Android 코드·의존성·계약·연동과 Native E2E 변경을 검증한다: %s', path => {
     expect(androidInstrumentationScope('push', push, () => `${path}\0`).required).toBe(true);
   });

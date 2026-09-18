@@ -25,14 +25,16 @@ test('[PUSH-006][PUSH-011][LED-001] 과거월 지출 편집 링크에 도착하�
 test('[PUSH-011][HH-008] 없는 ID와 다른 가구의 편집 링크는 정보를 노출하지 않고 오류를 표시한다', async ({ page, request }) => {
   await createFinanceHousehold(page, request);
   await page.goto('/expenses/does-not-exist-e2e/edit');
-  await expect(page.locator('p[role="alert"]')).toContainText(/지출을 (찾을 수 없습니다|불러오지 못했습니다)/);
+  await expect(page.locator('p[role="alert"]')).toHaveText('지출을 찾을 수 없습니다.');
   await expect(page.getByRole('dialog', { name: '지출 수정' })).toHaveCount(0);
   await expect(page.getByPlaceholder('지출처명, 메모, 카드명을 검색해보세요')).toHaveCount(0);
   const outsider = await createEmulatorAccount(request, 'deeplink-outsider@household.test');
   const household = await executeHouseholdCommand<{ householdId: string }>(request, { idToken: outsider.idToken, command: 'access.create-household-with-self.v1', payload: { householdName: '다른 링크 가구', memberName: '다른 사용자' } });
   const expense = await executeHouseholdCommand<{ transactionId: string }>(request, { idToken: outsider.idToken, householdId: household.householdId, command: 'ledger.record-manual-transaction.v1', payload: { transactionType: 'expense', merchant: '읽으면 안 되는 거래', amountInWon: 7654, categoryId: 'etc', accountingDate: seoulDate() } });
   await page.goto(`/expenses/${encodeURIComponent(expense.transactionId)}/edit`);
-  await expect(page.locator('p[role="alert"]')).toContainText('지출을 불러오지 못했습니다.');
+  // A canonical lookup stays inside the current household, so a foreign ID is
+  // indistinguishable from a missing ID and does not read the other household.
+  await expect(page.locator('p[role="alert"]')).toHaveText('지출을 찾을 수 없습니다.');
   await expect(page.getByRole('dialog', { name: '지출 수정' })).toHaveCount(0);
   await expect(page.getByText('읽으면 안 되는 거래', { exact: true })).toHaveCount(0);
 });
