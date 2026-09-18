@@ -35,6 +35,10 @@ test('[T-LED-011][LED-011][T-SEA-004][SEA-006] 여행 태그를 저장·재사�
   await expect(search).toHaveValue('#2026부산여행');
   await expect(page.getByText('2건 · 148,000원', { exact: true })).toBeVisible();
   await expect(page.getByRole('dialog', { name: '지출 수정' })).toHaveCount(0);
+  await search.fill('#2026');
+  await expect(page.getByText('2건 · 148,000원', { exact: true })).toBeVisible();
+  await search.fill('#부산');
+  await expect(page.getByText('2건 · 148,000원', { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('tags-mobile-search.png'), fullPage: true });
 
   dialog = await openExpenseEdit(page, documentId(second));
@@ -45,6 +49,8 @@ test('[T-LED-011][LED-011][T-SEA-004][SEA-006] 여행 태그를 저장·재사�
   await page.goto('/');
   await page.getByRole('button', { name: '검색', exact: true }).click();
   await search.fill('#2026부산여행');
+  await expect(page.getByText('1건 · 120,000원', { exact: true })).toBeVisible();
+  await search.fill('#2026');
   await expect(page.getByText('1건 · 120,000원', { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('tags-desktop-search.png'), fullPage: true });
   await search.fill('부산여행');

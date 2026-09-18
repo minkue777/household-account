@@ -78,9 +78,15 @@ describe('ledger search visibility contract', () => {
     { keyword: ' 도서 ', fields: { memo: '도서 구입' }, expected: true },
     { keyword: '부산', fields: { tags: ['2026부산여행'] }, expected: true },
     { keyword: '#2026부산여행', fields: { tags: ['2026부산여행'] }, expected: true },
-    { keyword: '#부산', fields: { tags: ['2026부산여행'], memo: '#부산' }, expected: false },
+    { keyword: '#2026', fields: { tags: ['2026부산여행'] }, expected: true },
+    { keyword: '#부산', fields: { tags: ['2026부산여행'] }, expected: true },
+    { keyword: '#여행', fields: { tags: ['2026부산여행'] }, expected: true },
+    { keyword: '#2025', fields: { tags: ['2026부산여행'] }, expected: false },
+    { keyword: '#2026', fields: { memo: '#2026부산여행', merchant: '2026부산', cardLastFour: '국민(2026)' }, expected: false },
     { keyword: '#', fields: { tags: ['2026부산여행'] }, expected: false },
+    { keyword: ' ###  ', fields: { tags: ['2026부산여행'] }, expected: false },
     { keyword: '# summer trip ', fields: { tags: ['Summer Trip'] }, expected: true },
+    { keyword: ' ## SUMMER ', fields: { tags: ['2026 Summer Trip'] }, expected: true },
     { keyword: '성능원장', fields: { merchant: '성능 원장' }, expected: false },
     { keyword: '없는 값', fields: { merchant: null, memo: null, cardLastFour: null, cardEvidence: null }, expected: false },
     { keyword: '수동', fields: { merchant: null, cardType: 'manual' }, expected: true },
@@ -138,16 +144,19 @@ describe('ledger search visibility contract', () => {
     closeExpenseSearchWindow('window-1');
   });
 
-  test('[T-SEA-004][SEA-006] 태그 검색은 월을 넘어 같은 태그만 합산하고 메모와 비슷한 태그를 제외한다', async () => {
+  test('[T-SEA-004][SEA-006] 태그 부분 검색은 월을 넘어 일치한 거래를 한 번씩 합산하고 메모만 일치한 거래를 제외한다', async () => {
     mockedGetDocs.mockResolvedValueOnce({ docs: [
       ledgerDocument('trip-first', { tags: ['2026부산여행'], accountingDate: '2026-08-31', amountInWon: 30000 }),
-      ledgerDocument('trip-second', { tags: ['2026부산여행'], accountingDate: '2026-09-01', amountInWon: 20000 }),
+      ledgerDocument('trip-second', { tags: ['2026부산여행', '2026가족여행'], accountingDate: '2026-09-01', amountInWon: 20000 }),
       ledgerDocument('similar-tag', { tags: ['2026부산여행준비'] }),
       ledgerDocument('memo-only', { memo: '2026부산여행' }),
+      ledgerDocument('other-tag', { tags: ['2025제주여행'], amountInWon: 90000 }),
     ] } as SearchSnapshot);
-    const rows = await searchExpenses('#2026부산여행', { sourceWindow: 'tag-search' });
-    expect(rows.map(row => row.id)).toEqual(['trip-second', 'trip-first']);
-    expect(rows.reduce((sum, row) => sum + row.amount, 0)).toBe(50000);
+    const rows = await searchExpenses('#2026', { sourceWindow: 'tag-search' });
+    expect(rows.map(row => row.id)).toEqual(['trip-second', 'trip-first', 'similar-tag']);
+    expect(rows.reduce((sum, row) => sum + row.amount, 0)).toBe(60000);
+    expect(await searchExpenses('#부산', { sourceWindow: 'tag-search' })).toEqual(rows);
+    expect(await searchExpenses('#2026부산여행', { sourceWindow: 'tag-search' })).toEqual(rows);
     expect((await searchExpenses('2026부산여행', { sourceWindow: 'tag-search' }))).toHaveLength(4);
     closeExpenseSearchWindow('tag-search');
   });

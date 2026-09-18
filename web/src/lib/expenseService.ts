@@ -304,8 +304,8 @@ export function createExpenseSearchMatcher(keyword: string): (expense: Expense) 
   const normalizedKeyword = normalizeSearchText(keyword);
   if (!normalizedKeyword) return () => false;
   if (normalizedKeyword.startsWith('#')) {
-    const exactTag = normalizedKeyword.replace(/^#+/, '').trim();
-    return expense => Boolean(exactTag) && (expense.tags ?? []).some(tag => normalizeSearchText(tag) === exactTag);
+    const tagKeyword = normalizedKeyword.replace(/^#+/, '').trim();
+    return expense => Boolean(tagKeyword) && (expense.tags ?? []).some(tag => normalizeSearchText(tag).includes(tagKeyword));
   }
   const exactCardKeyword = parseExactCardSearchKeyword(keyword);
   const compactKeyword = normalizedKeyword.replace(/\s+/g, '');
