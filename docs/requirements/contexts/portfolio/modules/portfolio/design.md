@@ -360,7 +360,7 @@ Repository Fake와 Firestore Adapter는 같은 Conformance Suite를 통과해야
 
 ## 7. 저장·트랜잭션·동시성
 
-### 7.1 목표 저장 모델
+### 7.1 저장 모델
 
 | 논리 데이터 | 목표 key | Canonical Writer | 동시성 |
 |---|---|---|---|
@@ -373,13 +373,12 @@ Asset 문서에는 `schemaVersion`, server `createdAt/updatedAt`, `aggregateVers
 
 일반 Command transaction은 Canonical Asset write, receipt, 필요한 Outbox를 함께 commit합니다. `RevalueAssetWorkflow`와 `ApplyAssetAutomationWorkflow`에서는 이 모듈이 별도 commit하지 않고 Context UoW 하나만 호출합니다. callback 재실행 시 participant는 순수하게 같은 intent를 반환합니다.
 
-### 7.2 전환
+### 7.2 canonical 단일 저장 경로
 
-1. Access 전환이 Member별 `member` 프로필과 기존 비로그인 이름의 `dependent` 프로필을 먼저 준비합니다. Legacy Adapter는 현재 `assets.owner`를 별도 reconciliation mapping으로 `ownerRef`에 연결합니다. 공동 표식은 `household`, 유일한 Member 이름은 연결 프로필, 그 밖의 아이·비로그인 이름은 dependent profile을 사용하며 동명이인·중복 후보는 자동 추측하지 않습니다.
-2. 기존 Web·Functions Writer를 Application Command 뒤로 이동합니다.
-3. `schemaVersion`, version, receipt를 추가한 뒤 V2 경로를 dual-read/shadow-read합니다.
-4. 레거시 `isActive` 누락·true는 active, false는 deleted로 변환하고 문서 수, active·부호 합계, 유형·ownerRef 합계, 날짜 Snapshot hash를 비교합니다.
-5. Read 전환 뒤 구 Writer와 dormant Snapshot Writer를 차단합니다.
+1. Web 구독, Command load/write, 시세 갱신, 자동화와 관리자 복구는 `households/{householdId}/assets/{assetId}`만 사용합니다. Flat `assets`의 shadow read와 mirror write를 실행하지 않습니다.
+2. Asset 명의 identity는 `ownerRef`입니다. 화면 표시 이름은 같은 가구 프로필 구독에서 연결하며 이름 변경 때문에 Asset을 일괄 재작성하지 않습니다.
+3. 운영 이관은 원본과 canonical의 금액·상태·버전·명의·subtype·메모·자동화 필드를 검증한 뒤 누락 필드만 보강합니다. 기존 값 충돌이나 모호한 이름 매핑은 중단하며, 이관 코드가 일반 runtime fallback이 되지 않게 분리합니다.
+4. 과거 flat 문서는 이관 검증과 수동 영구 purge를 위해 보존합니다. 일반 쓰기는 중단하므로 이를 운영 최신 상태로 취급하지 않습니다. AssetSnapshot과 Position history의 보존 정책은 변경하지 않습니다.
 
 ## 8. Event·Projection·외부 연동
 

@@ -29,7 +29,7 @@
 - non-exact 가맹점 규칙 우선순위 재정렬
 - exact·contains·startsWith·endsWith와 쉼표 OR 매칭
 - 규칙 우선순위와 가맹점·카테고리·메모 mapping
-- 구형 `exactMatch`·`category` 문서 호환 읽기
+- 구형 `exactMatch`·`category` 문서의 canonical 이관과 보존 원본 분리
 
 ### 제외
 
@@ -43,10 +43,11 @@
 
 | 데이터 | 소유 범위 | 비고 |
 |---|---|---|
-| `registered_cards` | 가구, 소유 멤버 참조, 카드사, 마지막 번호, 사용자 순서 | 안정적인 멤버 ID를 소유자 참조로 사용해야 합니다. |
+| `households/{householdId}/registeredCards` | 가구, 소유 멤버 참조, 카드사, 마지막 번호, 사용자 순서 | 안정적인 멤버 ID를 소유자 참조로 사용해야 합니다. |
 | 카드사 정의 | 지원 카드사 라벨, 번호 없는 간편결제 라벨, 기본 정렬 기준 | Web·Android 공통 계약입니다. |
-| `merchant_rules` | 키워드, 매칭 유형, 우선순위, 활성 상태, mapping | 가구 범위 Aggregate입니다. |
-| 레거시 규칙 해석 | `exactMatch`, `category`를 현재 모델로 변환 | 마이그레이션 종료 전까지 유지하는 Adapter 책임입니다. |
+| `households/{householdId}/merchantRules` | 키워드, 매칭 유형, 우선순위, 활성 상태, mapping | 가구 범위 Aggregate입니다. |
+| 보존한 `registered_cards`·`merchant_rules` | 이관 검증·복구를 위한 이전 원본 | 운영 reader·writer는 접근하지 않으며 마이그레이션 도구만 canonical과 대조합니다. |
+| 레거시 규칙 해석 | `exactMatch`, `category`를 현재 모델로 변환 | 마이그레이션 Adapter 책임입니다. 이미 canonical에 남은 옛 필드 별칭은 수정할 때 현재 필드로 정리합니다. |
 
 거래의 카드 표시 정보와 최종 카테고리·가맹점·메모는 [거래 원장 모듈](../../../household-finance/modules/ledger/requirements.md)이 소유합니다.
 
@@ -96,14 +97,15 @@
 | MER-003 | 현재 명세 | 선택 규칙은 가맹점명, 카테고리, 메모를 각각 치환할 수 있다. | Android에서 빈 memo 매핑은 파서 메모를 유지한다. 규칙 수정의 mapping은 부분 patch이며 미제공 필드는 유지하고 명시적 빈 문자열은 해당 치환을 제거한다. 치환 제거는 거래 memo를 비우는 동작이 아니라 원문 memo를 보존하도록 되돌리는 동작이다. | 같은 근거 | U, C |
 | MER-004 | 결함 | 같은 가구의 exact 규칙은 정규화된 개별 OR 키워드마다 하나만 허용하고, non-exact 규칙은 같은 match type 안에서 비활성 규칙까지 포함해 priority가 서로 달라야 한다. | 모든 변경 Command는 Actor 가구를 검증한다. exact rule 두 개의 전체 표현이 달라도 한 exact 키워드가 겹치면 거부한다. contains·startsWith·endsWith 키워드는 겹칠 수 있다. 생성·수정·삭제는 keyword/priority claim과 본문을 원자 변경하고, 재정렬은 한 유형의 활성·비활성 전체 규칙 집합과 collection version을 검증해 목록 앞을 높은 priority로 한 번에 재번호한다. 누락·중복·타 가구·다른 유형 ID와 중간 실패는 write 0건이다. | [merchantRuleService](../../../../../../web/src/lib/merchantRuleService.ts), [DEC-042](../../../../governance/decisions.md#dec-042) | U, I, 동시성, UI |
 | MER-005 | 현재·목표 | 기존 지출의 category를 예상 transaction version으로 수정하며 다음에도 기억을 선택하면 그 지출의 정규화된 원 가맹점 exact 규칙을 만든다. | 수입에는 제공하지 않는다. 지출 수정과 exact rule·claim 생성 또는 기존 rule 재사용은 한 UoW로 확정하며 권한·stale version·중간 실패에는 전부 원상 유지한다. 입력만으로 존재하지 않던 거래를 새로 만들지 않는다. | [ExpenseEditModal](../../../../../../web/src/components/expense/ExpenseEditModal.tsx) | I, E2E |
-| MER-006 | 호환 | 기존 exactMatch/category 문서를 현재 matchType/mapping 모델로 읽는다. | `active=false`를 보존한다. 빈 keyword, 잘못된 category reference·priority와 regex 유형은 임의 보정 없이 typed `ContractFailure`다. 데이터 마이그레이션 완료 후 제거 일정을 정한다. | Web·Android 규칙 Repository | U, C |
+| MER-006 | 호환 | 기존 exactMatch/category 문서는 이관 시 현재 matchType/mapping 모델로 변환하며 운영 설정 조회·수정은 canonical만 사용한다. | `active=false`를 보존한다. 빈 keyword, 잘못된 category reference·priority와 regex 유형을 임의 보정하지 않는다. canonical 전환 배포 전 운영 데이터의 ID·소유자·mapping·활성 상태·순서·version을 대조한다. 보존한 이전 원본의 오래된 값은 삭제·수정한 설정을 되살리지 않는다. | Migration Adapter, Web·Android 수집 설정 | U, C, I, E2E |
 | MER-007 | 목표 명세 | 카테고리 보관 Process가 요청하면 해당 카테고리를 mapping하는 모든 가맹점 규칙을 현재 기본 카테고리로 변경한다. | 활성·비활성 규칙을 모두 변경한다. page 단위 명령은 process ID와 cursor로 멱등 처리하며 규칙의 다른 mapping 필드는 유지한다. | [DEC-015](../../../../governance/decisions.md#dec-015) | U, I |
 
 ## 6. 현재 구현과 남은 호환 경계
 
 카드와 규칙의 실제 변경 경로는 `paymentConfigurationRuntimeApplication` → CommandBoundary/CommandApplication → `FirebasePaymentConfigurationAtomicStore`입니다. 카드 identity·keyword/priority claim·collection version을 같은 transaction으로 확정합니다. 자동 등록은 서버의 `ownCardResolution`과 `merchantRuleSelection`을 공유하며 match type의 좁은 범위를 priority보다 먼저 선택합니다.
 
-- legacy 카드 owner 표시 이름과 `exactMatch`/`category` 문서 읽기 호환은 남아 있습니다. 운영 데이터 마이그레이션 완료 증거 없이 제거하지 않습니다.
+- Web 설정과 명령 저장은 canonical 카드·규칙을 사용합니다. 자동 입력은 같은 원본과 단일 Category Catalog에서 기존 수집 설정 projection을 구성하며 설정 변경 트랜잭션에서 projection을 무효화합니다. 표시 이름을 소유자 ID로 바꾸는 작업은 운영 조회가 아니라 이관 도구가 담당합니다.
+- 기존 루트 컬렉션은 이관 검증·복구용으로 남기며 운영에서는 union·fallback 조회하거나 수정하지 않습니다. 배포는 해당 데이터의 마이그레이션 및 정합성 대조 후 진행합니다. receipt·고유성 claim·collection version은 원자 저장 경계로 유지합니다.
 - 규칙 편집에서 치환 필드를 지울 때 빈 값을 명시적으로 전달하고, 서버는 최종 mapping을 top-level 필드 단위로 교체하여 Firebase nested merge가 이전 치환을 복구하지 않게 합니다.
 - 사용하지 않던 RegisteredCardManagement/Application과 전용 Port는 제거했습니다. 실제 정책 수정은 위 실행 경로에서 수행합니다.
 
@@ -124,7 +126,7 @@
 | 테스트 ID | 종류 | Given / When / Then | 연결 요구사항 |
 |---|---|---|---|
 | T-MER-001 | 목표 | 낮은 priority exact와 높은 priority contains·startsWith·endsWith가 모두 일치 / 매칭 / priority와 무관하게 exact 적용, exact가 없으면 startsWith→endsWith→contains 순으로 선택 | MER-001~003, DEC-042 |
-| T-MER-002 | 호환 | legacy exactMatch/category fixture / 매칭 / 현재 mapping과 같은 결과 | MER-006 |
+| T-MER-002 | 호환 | exactMatch/category 이관 fixture와 보존 원본 / canonical 설정 조회·매칭 / 활성 상태와 mapping을 보존하고 보존 원본은 현재 설정을 덮어쓰지 않음 | MER-006 |
 | T-CARD-001 | 목표 | 호출자와 배우자에게 각각 번호 없는 같은 카드사 카드, 본인 exact·wildcard 0·1·여러 건 / Android·Shortcut 자동 등록 / 타 멤버 카드는 결과에 무관하고 본인 1건 이상 일치 시 등록, 0건이면 저장·알림 없음, 여러 건이면 임의 카드 선택 없음 | CARD-004, ING-SAVE-003~004, IOS-007, DEC-028 |
 | T-CARD-002 | 현재 명세 | 숫자·공백·하이픈이 섞인 긴 카드 번호 / 등록 / 숫자 마지막 네 자리만 저장 | CARD-001 |
 | T-CARD-003 | 목표 | 같은 카드 등록 명령 두 개 동시 실행 / 저장 / 한 문서만 생성되고 하나는 중복 결과 | CARD-002 |

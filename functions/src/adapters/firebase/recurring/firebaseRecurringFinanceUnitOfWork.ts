@@ -316,14 +316,8 @@ export class FirebaseRecurringFinanceUnitOfWork
         const canonicalLedger = household
           .collection("ledgerTransactions")
           .doc(createdLedger.transactionId);
-        const legacyLedger = this.database
-          .collection("expenses")
-          .doc(createdLedger.transactionId);
-        const [canonicalLedgerSnapshot, legacyLedgerSnapshot] = await Promise.all([
-          transaction.get(canonicalLedger),
-          transaction.get(legacyLedger),
-        ]);
-        if (canonicalLedgerSnapshot.exists || legacyLedgerSnapshot.exists) {
+        const canonicalLedgerSnapshot = await transaction.get(canonicalLedger);
+        if (canonicalLedgerSnapshot.exists) {
           return {
             result: {
               kind: "retryable-failure" as const,
@@ -339,7 +333,6 @@ export class FirebaseRecurringFinanceUnitOfWork
           createdLedger,
         );
         transaction.create(canonicalLedger, ledgerDocument);
-        transaction.create(legacyLedger, { ...ledgerDocument, schemaVersion: 1 });
         transaction.create(execution, {
           ...createdExecution,
           householdId: location.householdId,

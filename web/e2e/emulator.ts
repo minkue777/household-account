@@ -270,5 +270,7 @@ export async function readFirestoreCollection(
 export async function readExpenseDocuments(
   request: APIRequestContext
 ): Promise<FirestoreDocument[]> {
-  return readFirestoreCollection(request, 'expenses');
+  const households = await readFirestoreCollection(request, 'households');
+  return (await Promise.all(households.map(household => readFirestoreCollection(request,
+    `households/${household.name.split('/').at(-1)}/ledgerTransactions`)))).flat();
 }

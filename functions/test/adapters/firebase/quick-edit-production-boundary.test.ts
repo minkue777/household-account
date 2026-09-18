@@ -9,12 +9,13 @@ import { createNotificationOutboxDispatchApplication } from "../../../src/contex
 import { createDeliveryAssuranceApplication } from "../../../src/contexts/notifications/application/deliveryAssuranceApplication";
 import { createNotificationTargetPlanner } from "../../../src/contexts/notifications/public";
 import { InMemoryFirestore } from "../../support/in-memory-firestore";
+import { categoryCatalogDocument } from "../../support/category-catalog-document";
 
 const now = "2026-09-06T00:00:00.000Z";
 const sourcePath = "households/house/ledgerTransactions/expense";
 function setup() {
   const memory = new InMemoryFirestore();
-  memory.seed("categories/etc", { householdId: "house", key: "etc", isActive: true });
+  memory.seed("households/house/categoryCatalog/current", categoryCatalogDocument("house", [{ categoryId: "etc" }], { defaultCategoryId: "etc" }));
   memory.seed(sourcePath, {
     householdId: "house", transactionType: "expense", lifecycleState: "active", aggregateVersion: 3,
     merchant: "원본", amountInWon: 10000, categoryId: "etc", memo: "원본 메모",

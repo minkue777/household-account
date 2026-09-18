@@ -16,7 +16,7 @@ import type {
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
 import { invalidateCaptureConfigurationProjection } from "../payment-capture/firebaseCaptureConfigurationProjection";
-import { categoryLifecycleState, categoryReferenceId } from "./categoryReadMapping";
+import { categoryCatalogReference, readCategoryCatalogDocument, type CategoryCatalogDocument } from "./categoryCatalogDocument";
 
 const RECEIPT_CONTEXT = "household-finance-category-catalog";
 const SCHEMA_VERSION = 2;
@@ -25,63 +25,13 @@ function hash(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
-function legacyCategoryDocumentId(
-  householdId: string,
-  categoryId: string,
-): string {
-  return hash(`category\u0000${householdId}\u0000${categoryId}`);
-}
-
 function receiptExpiry(occurredAt: string) {
   return firestoreTtlAfter(occurredAt);
 }
 
-function text(
-  data: FirebaseFirestore.DocumentData | undefined,
-  ...fields: readonly string[]
-): string | undefined {
-  for (const field of fields) {
-    const value = data?.[field];
-    if (typeof value === "string" && value.trim() !== "") return value.trim();
-  }
-  return undefined;
-}
-
-function integer(
-  data: FirebaseFirestore.DocumentData | undefined,
-  fallback: number,
-  ...fields: readonly string[]
-): number {
-  for (const field of fields) {
-    const value = data?.[field];
-    if (typeof value === "number" && Number.isInteger(value)) return value;
-  }
-  return fallback;
-}
-
-function mapCategory(
-  snapshot: firestore.QueryDocumentSnapshot,
-): CategoryEntity | undefined {
-  const data = snapshot.data();
-  const name = text(data, "name", "label");
-  const color = text(data, "color");
-  if (name === undefined || color === undefined) return undefined;
-  const state = categoryLifecycleState(data);
-  const budgetCandidate = data.budgetInWon ?? data.budget;
-  const budgetInWon =
-    budgetCandidate === null ||
-    (typeof budgetCandidate === "number" && Number.isSafeInteger(budgetCandidate))
-      ? (budgetCandidate as number | null)
-      : null;
-  return {
-    categoryId: categoryReferenceId(snapshot.id, data),
-    name,
-    color,
-    budgetInWon,
-    state,
-    sortOrder: integer(data, 0, "sortOrder", "order"),
-    version: Math.max(1, integer(data, 1, "version", "aggregateVersion")),
-  };
+function text(data: FirebaseFirestore.DocumentData | undefined, field: string): string | undefined {
+  const value = data?.[field];
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 }
 
 function mapProcess(
@@ -117,10 +67,8 @@ function categorySignature(category: CategoryEntity): string {
 interface LoadedCategoryCatalog {
   readonly householdActive: boolean;
   readonly state: CategoryCatalog;
-  readonly canonicalDocumentIds: ReadonlyMap<string, string>;
-  readonly legacyDocumentIds: ReadonlyMap<string, string>;
-  readonly processIds: ReadonlySet<string>;
-  readonly settingsExists: boolean;
+  readonly document: CategoryCatalogDocument;
+  readonly catalogExists: boolean;
 }
 
 export interface FirebaseCategoryCatalogStoreInput {
@@ -152,71 +100,27 @@ export class FirebaseCategoryCatalogStore implements CategoryCatalogStorePort {
     const householdReference = this.database
       .collection("households")
       .doc(this.input.householdId);
-    const settingsReference = householdReference
-      .collection("categorySettings")
-      .doc("default");
-    const [household, settings, canonical, legacy, processes] = await Promise.all([
+    const catalogReference = categoryCatalogReference(this.database, this.input.householdId);
+    const [household, catalog, processes] = await Promise.all([
       reader.get(householdReference),
-      reader.get(settingsReference),
-      reader.get(householdReference.collection("categories")),
-      reader.get(
-        this.database
-          .collection("categories")
-          .where("householdId", "==", this.input.householdId),
-      ),
+      reader.get(catalogReference),
       reader.get(householdReference.collection("categoryArchiveProcesses")),
     ]);
-    const canonicalMapped = canonical.docs.flatMap((snapshot) => {
-      const mapped = mapCategory(snapshot);
-      return mapped === undefined ? [] : [mapped];
-    });
-    const canonicalIds = new Set(canonicalMapped.map(({ categoryId }) => categoryId));
-    const legacyMapped = legacy.docs.flatMap((snapshot) => {
-      const mapped = mapCategory(snapshot);
-      return mapped === undefined || canonicalIds.has(mapped.categoryId) ? [] : [mapped];
-    });
-    const defaultCategoryId =
-      text(settings.data(), "defaultCategoryId") ??
-      text(household.data(), "defaultCategoryKey") ??
-      [...canonical.docs, ...legacy.docs].flatMap((snapshot) => {
-        if (snapshot.data().isDefault !== true) return [];
-        const mapped = mapCategory(snapshot);
-        return mapped === undefined ? [] : [mapped.categoryId];
-      })[0] ??
-      null;
+    const document = readCategoryCatalogDocument(catalog.data(), this.input.householdId);
     return {
       householdActive: household.exists &&
         (household.data()?.lifecycleState ?? "active") === "active" && household.data()?.deletedAt == null,
       state: {
-        categories: [...canonicalMapped, ...legacyMapped],
-        defaultCategoryId,
-        catalogVersion: Math.max(
-          0,
-          integer(settings.data(), 0, "catalogVersion", "aggregateVersion"),
-        ),
+        categories: document.categories,
+        defaultCategoryId: document.defaultCategoryId,
+        catalogVersion: document.catalogVersion,
         archiveProcesses: processes.docs.flatMap((snapshot) => {
           const mapped = mapProcess(snapshot);
           return mapped === undefined ? [] : [mapped];
         }),
       },
-      canonicalDocumentIds: new Map(
-        canonical.docs.flatMap((snapshot) => {
-          const mapped = mapCategory(snapshot);
-          return mapped === undefined
-            ? []
-            : [[mapped.categoryId, snapshot.id] as const];
-        }),
-      ),
-      legacyDocumentIds: new Map(
-        legacy.docs.flatMap((snapshot) => {
-          const mapped = mapCategory(snapshot);
-          return mapped === undefined
-            ? []
-            : [[mapped.categoryId, snapshot.id] as const];
-        }),
-      ),
-      processIds: new Set(processes.docs.map((snapshot) => snapshot.id)),
-      settingsExists: settings.exists,
+      document,
+      catalogExists: catalog.exists,
     };
   }
 
@@ -228,7 +132,10 @@ export class FirebaseCategoryCatalogStore implements CategoryCatalogStorePort {
 
   async readActiveCategories(): Promise<ActiveCategorySourceResult> {
     try {
-      const state = await this.read();
+      const state = readCategoryCatalogDocument(
+        (await categoryCatalogReference(this.database, this.input.householdId).get()).data(),
+        this.input.householdId,
+      );
       return {
         kind: "success",
         categories: state.categories.filter((category) => category.state === "active"),
@@ -264,97 +171,42 @@ export class FirebaseCategoryCatalogStore implements CategoryCatalogStorePort {
           return before === undefined || categorySignature(before) !== categorySignature(category);
         })
         .map(({ categoryId }) => categoryId);
+      const catalogChanged = loaded.state.catalogVersion !== mutation.state.catalogVersion
+        || loaded.state.defaultCategoryId !== mutation.state.defaultCategoryId
+        || loaded.state.categories.length !== mutation.state.categories.length
+        || changedCategoryIds.length > 0;
       const householdReference = this.database
         .collection("households")
         .doc(this.input.householdId);
 
-      for (const category of mutation.state.categories) {
-        if (
-          !changedCategoryIds.includes(category.categoryId) &&
-          loaded.state.defaultCategoryId === mutation.state.defaultCategoryId
-        ) {
-          continue;
-        }
-        const canonicalReference = householdReference
-          .collection("categories")
-          .doc(
-            loaded.canonicalDocumentIds.get(category.categoryId) ??
-              category.categoryId,
-          );
-        const legacyReference = this.database
-          .collection("categories")
-          .doc(
-            loaded.legacyDocumentIds.get(category.categoryId) ??
-              legacyCategoryDocumentId(
-                this.input.householdId,
-                category.categoryId,
-              ),
-          );
-        const common = {
-          householdId: this.input.householdId,
-          categoryId: category.categoryId,
-          name: category.name,
-          color: category.color,
-          budgetInWon: category.budgetInWon,
-          state: category.state,
-          sortOrder: category.sortOrder,
-          version: category.version,
-          aggregateVersion: category.version,
-          schemaVersion: SCHEMA_VERSION,
+      const catalogDocument = {
+        householdId: this.input.householdId,
+        categories: mutation.state.categories.map(category => ({ ...category })),
+        defaultCategoryId: mutation.state.defaultCategoryId,
+        catalogVersion: mutation.state.catalogVersion,
+        categoryAliases: loaded.document.categoryAliases,
+        schemaVersion: 1,
+      };
+      readCategoryCatalogDocument(catalogDocument, this.input.householdId);
+      // Keep a conservative bound before Firestore's document limit is reached.
+      if (Buffer.byteLength(JSON.stringify(catalogDocument), "utf8") > 800_000) {
+        throw new Error("CATEGORY_CATALOG_TOO_LARGE");
+      }
+      // A rejected or already-applied command records its receipt without rewriting the catalog.
+      if (catalogChanged) {
+        transaction.set(categoryCatalogReference(this.database, this.input.householdId), {
+          ...catalogDocument,
           updatedAt: FieldValue.serverTimestamp(),
-          ...(loaded.canonicalDocumentIds.has(category.categoryId)
-            ? {}
-            : { createdAt: FieldValue.serverTimestamp() }),
-        };
-        transaction.set(canonicalReference, common, { merge: true });
-        transaction.set(
-          legacyReference,
-          {
-            householdId: this.input.householdId,
-            key: category.categoryId,
-            label: category.name,
-            color: category.color,
-            budget: category.budgetInWon,
-            order: category.sortOrder,
-            isDefault: mutation.state.defaultCategoryId === category.categoryId,
-            isActive: category.state === "active",
-            state: category.state,
-            aggregateVersion: category.version,
-            schemaVersion: 1,
-            updatedAt: FieldValue.serverTimestamp(),
-            ...(loaded.legacyDocumentIds.has(category.categoryId)
-              ? {}
-              : { createdAt: FieldValue.serverTimestamp() }),
-          },
-          { merge: true },
-        );
+          ...(loaded.catalogExists ? {} : { createdAt: FieldValue.serverTimestamp() }),
+        }, { merge: true });
       }
 
-      transaction.set(
-        householdReference.collection("categorySettings").doc("default"),
-        {
-          defaultCategoryId: mutation.state.defaultCategoryId,
-          catalogVersion: mutation.state.catalogVersion,
-          aggregateVersion: mutation.state.catalogVersion,
-          schemaVersion: SCHEMA_VERSION,
-          updatedAt: FieldValue.serverTimestamp(),
-          ...(loaded.settingsExists
-            ? {}
-            : { createdAt: FieldValue.serverTimestamp() }),
-        },
-        { merge: true },
-      );
-      // 현재 Web read model이 household.defaultCategoryKey를 읽는 동안만 유지하는 projection입니다.
-      transaction.set(
-        householdReference,
-        {
-          defaultCategoryKey: mutation.state.defaultCategoryId,
-          categoryCatalogVersion: mutation.state.catalogVersion,
-        },
-        { merge: true },
-      );
-
+      const beforeProcesses = new Map(loaded.state.archiveProcesses.map(process => [process.processId, process]));
       for (const process of mutation.state.archiveProcesses) {
+        const before = beforeProcesses.get(process.processId);
+        if (before?.categoryId === process.categoryId
+          && before.destinationCategoryId === process.destinationCategoryId
+          && before.state === process.state) continue;
         const reference = householdReference
           .collection("categoryArchiveProcesses")
           .doc(process.processId);
@@ -365,7 +217,7 @@ export class FirebaseCategoryCatalogStore implements CategoryCatalogStorePort {
             householdId: this.input.householdId,
             schemaVersion: SCHEMA_VERSION,
             updatedAt: FieldValue.serverTimestamp(),
-            ...(loaded.processIds.has(process.processId)
+            ...(before !== undefined
               ? {}
               : { createdAt: FieldValue.serverTimestamp() }),
           },
@@ -373,11 +225,7 @@ export class FirebaseCategoryCatalogStore implements CategoryCatalogStorePort {
         );
       }
 
-      const defaultChanged =
-        loaded.state.defaultCategoryId !== mutation.state.defaultCategoryId;
-      const catalogChanged =
-        loaded.state.catalogVersion !== mutation.state.catalogVersion;
-      if (catalogChanged || defaultChanged || changedCategoryIds.length > 0) {
+      if (catalogChanged) {
         invalidateCaptureConfigurationProjection(
           transaction,
           this.database,

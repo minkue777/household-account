@@ -12,7 +12,7 @@ test('[BAL-003][BAL-004][LED-010][HOME-002] 지역화폐 잔액은 유형별 서
   // 수집된 유형 metadata와 Canonical 잔액을 준비합니다. 실제 capture→balance
   // 쓰기 경계는 ingestion integration에서 검증하며 아래 테스트는 실제 read/UI입니다.
   for (const [document, type] of [[gyeonggi, 'gyeonggi'], [daejeon, 'daejeon']] as const) {
-    await writeFirestoreFixture(request, `expenses/${documentId(document)}`, { ...document.fields!, localCurrencyType: { stringValue: type } });
+    await writeFirestoreFixture(request, `households/${householdId}/ledgerTransactions/${documentId(document)}`, { ...document.fields!, localCurrencyType: { stringValue: type } });
   }
   await writeFirestoreFixture(request, `households/${householdId}/homePreferences/home`, {
     left: { stringValue: 'MONTHLY_EXPENSE' }, right: { stringValue: 'LOCAL_CURRENCY_BALANCE' }, aggregateVersion: { integerValue: '1' },
@@ -107,7 +107,7 @@ test('[REC-005][CAT-002][CAT-003] 카테고리 보관은 비활성 정기지출 
   await page.getByTitle('비활성화', { exact: true }).click();
   await expect(page.getByText('비활성', { exact: true })).toBeVisible();
   const existing = (await readFirestoreCollection(request, 'recurring_expenses'))[0];
-  expect(textField(existing, 'category')).toBe(textField(custom, 'key'));
+  expect(textField(existing, 'category')).toBe(textField(custom, 'categoryId'));
   await openCategorySettings(page);
   await page.getByRole('button', { name: '문화비 삭제' }).click();
   await page.getByRole('dialog', { name: '카테고리 삭제' }).getByRole('button', { name: '삭제', exact: true }).click();

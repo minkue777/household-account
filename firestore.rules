@@ -72,6 +72,11 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      match /categoryCatalog/{catalogId} {
+        allow read: if catalogId == 'current' && canReadHousehold(householdId);
+        allow write: if false;
+      }
+
       match /ledgerTransactions/{transactionId} {
         allow read: if canReadHousehold(householdId);
         allow write: if false;
@@ -143,7 +148,14 @@ service cloud.firestore {
       }
     }
 
-    // V2 전환 기간에 기존 flat collection을 읽는 호환 경계입니다.
+    // 가구별 보유 종목을 한 번에 읽는 collection-group query 경계입니다.
+    match /{parentPath=**}/positions/{positionId} {
+      allow read: if resource.data.householdId is string
+        && canReadHousehold(resource.data.householdId);
+      allow write: if false;
+    }
+
+    // 보존된 구형 클라이언트와 운영 복구 자료의 읽기 경계입니다.
     // householdId 조건 없는 query와 모든 client write는 거부됩니다.
     match /{legacyCollection}/{documentId} {
       allow read: if legacyCollection in [

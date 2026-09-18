@@ -39,11 +39,11 @@ function ledgerDocument(
     data: () => ({
       householdId: 'house-1',
       transactionType: 'expense',
-      date: '2026-08-11',
-      time: '12:00',
+      accountingDate: '2026-08-11',
+      localTime: '12:00',
       merchant: 'matched merchant',
-      amount: 10_000,
-      category: 'etc',
+      amountInWon: 10_000,
+      categoryId: 'etc',
       cardType: 'captured',
       cardDisplay: 'Samsung(3628)',
       aggregateVersion: 1,
@@ -143,8 +143,8 @@ describe('ledger search visibility contract', () => {
     await started;
     expect(mockedGetDocs).toHaveBeenCalledTimes(1);
     resolveSource({ docs: [
-      ledgerDocument('older', { date: '2024-01-01', memo: '지난 기록', cardEvidence: '삼성(3628)' }),
-      ledgerDocument('latest', { date: '2026-09-17', cardEvidence: '삼성(3999)' }),
+      ledgerDocument('older', { accountingDate: '2024-01-01', memo: '지난 기록', cardEvidence: '삼성(3628)' }),
+      ledgerDocument('latest', { accountingDate: '2026-09-17', cardEvidence: '삼성(3999)' }),
       ledgerDocument('other-card', { cardEvidence: '국민(3999)' }),
       ledgerDocument('other-type', { transactionType: 'income', cardEvidence: '삼성(3999)' }),
       ledgerDocument('deleted', { lifecycleState: 'deleted', cardEvidence: '삼성(3999)' }),
@@ -192,15 +192,15 @@ describe('ledger search visibility contract', () => {
 
   test('searches every month and keeps newest order while excluding dates outside the previous source range', async () => {
     mockedGetDocs.mockResolvedValueOnce({ docs: [
-      ledgerDocument('previous-month', { date: '2026-08-15' }),
-      ledgerDocument('recent-a', { date: '2026-09-09', time: '10:00' }),
-      ledgerDocument('recent-b', { date: '2026-09-09', time: '11:00' }),
-      ledgerDocument('recent-z', { date: '2026-09-09', time: '11:00' }),
-      ledgerDocument('missing-date', { date: undefined, cardType: 42 }),
-      ledgerDocument('null-date', { date: null }),
-      ledgerDocument('numeric-date', { date: 20260909 }),
-      ledgerDocument('before-range', { date: '0000-12-31' }),
-      ledgerDocument('after-range', { date: '9999-12-32' }),
+      ledgerDocument('previous-month', { accountingDate: '2026-08-15' }),
+      ledgerDocument('recent-a', { accountingDate: '2026-09-09', localTime: '10:00' }),
+      ledgerDocument('recent-b', { accountingDate: '2026-09-09', localTime: '11:00' }),
+      ledgerDocument('recent-z', { accountingDate: '2026-09-09', localTime: '11:00' }),
+      ledgerDocument('missing-date', { accountingDate: undefined, cardType: 42 }),
+      ledgerDocument('null-date', { accountingDate: null }),
+      ledgerDocument('numeric-date', { accountingDate: 20260909 }),
+      ledgerDocument('before-range', { accountingDate: '0000-12-31' }),
+      ledgerDocument('after-range', { accountingDate: '9999-12-32' }),
     ] } as Awaited<ReturnType<typeof getDocsFromServer>>);
 
     const rows = await searchExpenses('merchant');

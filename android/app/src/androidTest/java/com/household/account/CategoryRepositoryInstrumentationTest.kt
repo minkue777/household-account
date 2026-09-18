@@ -7,7 +7,6 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
-import com.google.firebase.firestore.Query
 import com.household.account.data.CategoryRepository
 import com.household.account.data.CategoryData
 import java.util.UUID
@@ -56,12 +55,7 @@ class CategoryRepositoryInstrumentationTest {
             .setPersistenceEnabled(false)
             .build()
         firestore.disableNetwork().await()
-        val repository = CategoryRepository()
-        // 조회 경계만 isolated SDK로 연결하며 fallback 알고리즘은 대체하지 않습니다.
-        CategoryRepository::class.java.getDeclaredField("categoriesCollection").apply {
-            isAccessible = true
-            set(repository, firestore.collection("categories"))
-        }
+        val repository = CategoryRepository(firestore)
         try {
             test(repository, firestore)
         } finally {
@@ -71,13 +65,16 @@ class CategoryRepositoryInstrumentationTest {
     }
 
     @Test
-    fun emptySdkQueryUsesExactlyFiveDisplayOnlyFallbackCategories() = runBlocking {
+    fun emptySdkCatalogUsesExactlyFiveDisplayOnlyFallbackCategories() = runBlocking {
         withIsolatedRepository { repository, firestore ->
-            val source = firestore.collection("categories")
-                .whereEqualTo("householdId", "house-empty")
-                .orderBy("order", Query.Direction.ASCENDING)
-                .get().await()
-            assertTrue(source.isEmpty)
+            val reference = firestore.collection("households").document("house-empty")
+                .collection("categoryCatalog").document("current")
+            // Fixture is cached locally; no network or production data is used.
+            reference.set(mapOf("schemaVersion" to 1, "householdId" to "house-empty",
+                "categories" to emptyList<Map<String, Any>>(), "catalogVersion" to 0,
+                "defaultCategoryId" to null))
+            val source = reference.get().await()
+            assertTrue((source.get("categories") as List<*>).isEmpty())
             assertTrue(source.metadata.isFromCache)
 
             val categories = repository.getActiveCategories("house-empty")
@@ -89,7 +86,8 @@ class CategoryRepositoryInstrumentationTest {
     @Test
     fun actualSdkReadFailureUsesTheSameDisplayOnlyFallbackWithoutWriting() = runBlocking {
         withIsolatedRepository { repository, firestore ->
-            val query = firestore.collection("categories")
+            val query = firestore.collection("households").document("house-failure")
+                .collection("categoryCatalog").document("current")
             firestore.terminate().await()
             assertNotNull(runCatching { query.get().await() }.exceptionOrNull())
 

@@ -26,7 +26,7 @@ import { createHouseholdCommandId } from '@/platform/functions-api/householdComm
 import { mapDocToExpense, mapExpenseReadData, mapCommandTransaction } from '@/features/ledger/application/ledgerExpenseMapping';
 export { mapDocToExpense, resolveExpenseCardDisplay } from '@/features/ledger/application/ledgerExpenseMapping';
 
-const COLLECTION_NAME = 'expenses';
+const COLLECTION_NAME = 'ledgerTransactions';
 const DEFAULT_TRANSACTION_TYPE: TransactionType = 'expense';
 const SEARCH_SOURCE_PAGE_SIZE = 5_000;
 
@@ -95,7 +95,7 @@ function getHouseholdId(): string {
 /** 알림 편집 링크는 현재 달 목록과 무관하게 자기 가구의 한 건을 권위 조회합니다. */
 export async function getExpenseForEdit(id: string): Promise<Expense | null> {
   const scope = requireClientSessionScope();
-  const snapshot = await getDocFromServer(doc(db, COLLECTION_NAME, id));
+  const snapshot = await getDocFromServer(doc(db, 'households', scope.householdId, COLLECTION_NAME, id));
   const current = requireClientSessionScope();
   if (current.householdId !== scope.householdId || current.sessionGeneration !== scope.sessionGeneration
     || current.principalUid !== scope.principalUid) throw new Error('세션이 변경되었습니다.');
@@ -424,10 +424,10 @@ function subscribeToMonthlyTransactionSource(
 
   // 동일한 공개 read model을 모든 Web runtime에서 실시간 구독합니다.
   const q = query(
-    collection(db, COLLECTION_NAME),
+    collection(db, 'households', householdId, COLLECTION_NAME),
     where('householdId', '==', householdId),
-    where('date', '>=', startDate),
-    where('date', '<=', endDate)
+    where('accountingDate', '>=', startDate),
+    where('accountingDate', '<=', endDate)
   );
 
   const readSnapshot = createExpenseSnapshotReader();
@@ -482,10 +482,10 @@ export async function readMonthlyTransactionsForPrefetch(
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
   const q = query(
-    collection(db, COLLECTION_NAME),
+    collection(db, 'households', householdId, COLLECTION_NAME),
     where('householdId', '==', householdId),
-    where('date', '>=', startDate),
-    where('date', '<=', endDate)
+    where('accountingDate', '>=', startDate),
+    where('accountingDate', '<=', endDate)
   );
   const snapshot = await getDocsFromServer(q);
 
@@ -528,10 +528,10 @@ export function subscribeToDateRangeExpenses(
   );
 
   const q = query(
-    collection(db, COLLECTION_NAME),
+    collection(db, 'households', householdId, COLLECTION_NAME),
     where('householdId', '==', householdId),
-    where('date', '>=', startDate),
-    where('date', '<=', endDate)
+    where('accountingDate', '>=', startDate),
+    where('accountingDate', '<=', endDate)
   );
 
   const readSnapshot = createExpenseSnapshotReader();
@@ -754,7 +754,7 @@ export async function restoreItemSplit(expense: Expense): Promise<void> {
   const sourceId = expense.derivedFromTransactionId;
   if (!sourceId) throw new Error('항목 분할 원본을 찾을 수 없습니다.');
   const householdId = getHouseholdId();
-  const siblings = await getDocs(query(collection(db, COLLECTION_NAME), where('householdId', '==', householdId), where('derivedFromTransactionId', '==', sourceId)));
+  const siblings = await getDocs(query(collection(db, 'households', householdId, COLLECTION_NAME), where('householdId', '==', householdId), where('derivedFromTransactionId', '==', sourceId)));
   const versions = Object.fromEntries(siblings.docs.filter(doc => isVisibleLedgerReadDocument(doc.data())).map(doc => [doc.id, Number(doc.data().aggregateVersion ?? 1)]));
   versions[expense.id] = expense.aggregateVersion;
   const commands = await loadLedgerCommands();
@@ -835,7 +835,7 @@ function readExpenseSearchWindow(
     let cursor: import('@/platform/read-model/firestoreServerReadModel').QueryDocumentSnapshot | undefined;
     while (true) {
       assertActiveExpenseSearchWindow(token);
-      const snapshot = await getDocsFromServer(query(collection(db, COLLECTION_NAME),
+      const snapshot = await getDocsFromServer(query(collection(db, 'households', scope.householdId, COLLECTION_NAME),
         where('householdId', '==', scope.householdId),
         orderBy(documentId()),
         ...(cursor ? [startAfter(cursor)] : []),
@@ -844,7 +844,7 @@ function readExpenseSearchWindow(
       const documents = snapshot.docs;
       for (const document of documents) {
         const data = document.data();
-        if (typeof data.date === 'string' && data.date >= '0001-01-01' && data.date <= '9999-12-31'
+        if (typeof data.accountingDate === 'string' && data.accountingDate >= '0001-01-01' && data.accountingDate <= '9999-12-31'
           && isVisibleLedgerReadDocument(data)) result.push(mapExpenseReadData(document.id, data));
       }
       if (documents.length < SEARCH_SOURCE_PAGE_SIZE) break;
@@ -879,7 +879,7 @@ export async function getSplitGroupExpenses(splitGroupId: string): Promise<Expen
   const householdId = getHouseholdId();
 
   const q = query(
-    collection(db, COLLECTION_NAME),
+    collection(db, 'households', householdId, COLLECTION_NAME),
     where('householdId', '==', householdId),
     where('splitGroupId', '==', splitGroupId)
   );

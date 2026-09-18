@@ -27,9 +27,9 @@ export async function readExpenseStatistics(startDate: string, endDate: string, 
   for (let page = 0; ; page++) {
     if (page >= MAX_PAGES) throw new Error('STATISTICS_PAGE_LIMIT_EXCEEDED');
     assertCurrent();
-    const snapshot = await getDocsFromServer(query(collection(db, 'expenses'),
-      where('householdId', '==', scope.householdId), where('date', '>=', startDate), where('date', '<=', endDate),
-      orderBy('date', 'asc'), orderBy(documentId(), 'asc'), ...(cursor ? [startAfter(cursor)] : []), limit(PAGE_SIZE)))
+    const snapshot = await getDocsFromServer(query(collection(db, 'households', scope.householdId, 'ledgerTransactions'),
+      where('householdId', '==', scope.householdId), where('accountingDate', '>=', startDate), where('accountingDate', '<=', endDate),
+      orderBy('accountingDate', 'asc'), orderBy(documentId(), 'asc'), ...(cursor ? [startAfter(cursor)] : []), limit(PAGE_SIZE)))
       .catch((error: unknown) => {
         assertCurrent();
         // 실시간 조회와 동일하게 인증 복구를 요청하고, 복구 epoch에서 다시 조회합니다.
@@ -43,7 +43,7 @@ export async function readExpenseStatistics(startDate: string, endDate: string, 
       seen.add(document.id);
       const data = document.data();
       if (!isVisibleLedgerReadDocument(data) || (data.transactionType ?? 'expense') !== 'expense') continue;
-      if (!Number.isSafeInteger(data.amount) || typeof data.date !== 'string' || data.date < startDate || data.date > endDate) throw new Error('STATISTICS_SOURCE_INVALID');
+      if (!Number.isSafeInteger(data.amountInWon) || typeof data.accountingDate !== 'string' || data.accountingDate < startDate || data.accountingDate > endDate) throw new Error('STATISTICS_SOURCE_INVALID');
       expenses.push(mapExpenseReadData(document.id, data));
     }
     if (documents.length < PAGE_SIZE) return expenses;

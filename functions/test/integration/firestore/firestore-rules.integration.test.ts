@@ -7,13 +7,14 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { collection, doc, getDoc, getDocs, query, setDoc, where } from "firebase/firestore";
-import { afterAll, beforeAll, describe, it } from "vitest";
+import { collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from "firebase/firestore";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const PROJECT_ID = "demo-household-account-rules";
 const HOUSEHOLD_ID = "household-rules-a";
 const MEMBER_UID = "uid-member-a";
 const OTHER_UID = "uid-member-b";
+const OTHER_HOUSEHOLD_ID = "household-rules-other";
 
 let environment: RulesTestEnvironment;
 
@@ -97,6 +98,21 @@ beforeAll(async () => {
     await setDoc(doc(firestore, "notification_debug_logs", "debug-a"), {
       householdId: HOUSEHOLD_ID,
     });
+    await setDoc(doc(firestore, "households", OTHER_HOUSEHOLD_ID), { lifecycleState: "active" });
+    await setDoc(doc(firestore, "households", OTHER_HOUSEHOLD_ID, "memberships", OTHER_UID), { lifecycleState: "active" });
+    for (const householdId of [HOUSEHOLD_ID, OTHER_HOUSEHOLD_ID]) {
+      await setDoc(doc(firestore, "households", householdId, "categoryCatalog", "current"), {
+        schemaVersion: 1, householdId, categories: [{ categoryId: "food", name: "식비", color: "#123456",
+          budgetInWon: null, state: "active", sortOrder: 0, version: 1 }], defaultCategoryId: "food", catalogVersion: 1,
+      });
+      // Only the current catalog is public, even if another operational document exists.
+      await setDoc(doc(firestore, "households", householdId, "categoryCatalog", "migration-audit"), { householdId });
+      for (const [assetId, positionId] of [["asset-a", "stock-a"], ["asset-b", "crypto-b"]]) {
+        await setDoc(doc(firestore, "households", householdId, "assets", assetId, "positions", positionId), {
+          householdId, assetId, positionId, quantity: 1, lifecycleState: "active",
+        });
+      }
+    }
   });
 });
 
@@ -111,6 +127,60 @@ const describeWithFirestoreEmulator = process.env.FIRESTORE_EMULATOR_HOST
   : describe.skip;
 
 describeWithFirestoreEmulator("서버 권위형 Firestore Rules", () => {
+  it("[T-SEC-001][SYS-001] 단일 카테고리 원본은 자기 가구와 검증된 관리자만 읽으며 다른 문서는 공개하지 않는다", async () => {
+    const member = environment.authenticatedContext(MEMBER_UID).firestore();
+    const other = environment.authenticatedContext(OTHER_UID).firestore();
+    const nonmember = environment.authenticatedContext("uid-no-membership").firestore();
+    const anonymous = environment.unauthenticatedContext().firestore();
+    const admin = environment.authenticatedContext("catalog-admin", { systemAdmin: true }).firestore();
+    const path = `households/${HOUSEHOLD_ID}/categoryCatalog/current`;
+    await assertSucceeds(getDoc(doc(member, path)));
+    await assertSucceeds(getDoc(doc(admin, path)));
+    await assertFails(getDoc(doc(other, path)));
+    await assertFails(getDoc(doc(nonmember, path)));
+    await assertFails(getDoc(doc(anonymous, path)));
+    await assertFails(getDoc(doc(member, `households/${OTHER_HOUSEHOLD_ID}/categoryCatalog/current`)));
+    await assertSucceeds(getDoc(doc(other, `households/${OTHER_HOUSEHOLD_ID}/categoryCatalog/current`)));
+    for (const db of [member, admin]) {
+      await assertFails(getDoc(doc(db, `households/${HOUSEHOLD_ID}/categoryCatalog/migration-audit`)));
+      await assertFails(getDocs(collection(db, "households", HOUSEHOLD_ID, "categoryCatalog")));
+    }
+  });
+
+  it("[T-SEC-001][SYS-001] positions collection-group 조회는 가구 조건과 현재 Membership을 함께 강제한다", async () => {
+    const member = environment.authenticatedContext(MEMBER_UID).firestore();
+    const other = environment.authenticatedContext(OTHER_UID).firestore();
+    const nonmember = environment.authenticatedContext("uid-no-membership").firestore();
+    const anonymous = environment.unauthenticatedContext().firestore();
+    const admin = environment.authenticatedContext("positions-admin", { systemAdmin: true }).firestore();
+    const scoped = (db: typeof member, householdId: string) => query(collectionGroup(db, "positions"), where("householdId", "==", householdId));
+    const own = await assertSucceeds(getDocs(scoped(member, HOUSEHOLD_ID)));
+    expect(own.docs.map(snapshot => snapshot.id).sort()).toEqual(["crypto-b", "stock-a"]);
+    await assertSucceeds(getDocs(scoped(other, OTHER_HOUSEHOLD_ID)));
+    await assertSucceeds(getDocs(scoped(admin, HOUSEHOLD_ID)));
+    await assertSucceeds(getDocs(scoped(admin, OTHER_HOUSEHOLD_ID)));
+    await assertFails(getDocs(collectionGroup(member, "positions")));
+    await assertFails(getDocs(scoped(member, OTHER_HOUSEHOLD_ID)));
+    await assertFails(getDocs(scoped(other, HOUSEHOLD_ID)));
+    await assertFails(getDocs(scoped(nonmember, HOUSEHOLD_ID)));
+    await assertFails(getDocs(scoped(anonymous, HOUSEHOLD_ID)));
+  });
+
+  it.each([false, true])("[T-SEC-001][SYS-001] 카탈로그와 보유종목의 생성·수정·삭제는 관리자=%s도 Client SDK로 수행하지 못한다", async (systemAdmin) => {
+    const db = environment.authenticatedContext(MEMBER_UID, { systemAdmin }).firestore();
+    for (const path of [
+      `households/${HOUSEHOLD_ID}/categoryCatalog/current`,
+      `households/${HOUSEHOLD_ID}/assets/asset-a/positions/stock-a`,
+    ]) {
+      const reference = doc(db, path);
+      await assertFails(setDoc(reference, { householdId: HOUSEHOLD_ID, injected: true }));
+      await assertFails(updateDoc(reference, { injected: true }));
+      await assertFails(deleteDoc(reference));
+    }
+    await assertFails(setDoc(doc(db, "households", HOUSEHOLD_ID, "assets", "asset-a", "positions", "new-position"), { householdId: HOUSEHOLD_ID }));
+    await assertFails(setDoc(doc(db, "households", HOUSEHOLD_ID, "categoryCatalog", "new-catalog"), { householdId: HOUSEHOLD_ID }));
+  });
+
   it.each(["deleted", "purging", "purged"])("[ADM-003][HH-008][SYS-001] %s 가구는 Membership을 보존해도 일반 읽기를 막고 관리자 조회와 복구를 허용한다", async (lifecycleState) => {
     const householdId = `lifecycle-${lifecycleState}`;
     const legacyId = `expense-${lifecycleState}`;

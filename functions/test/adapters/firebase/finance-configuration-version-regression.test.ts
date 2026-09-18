@@ -4,6 +4,7 @@ import { createCategoryHouseholdCommandHandlers } from "../../../src/bootstrap/c
 import { createRecurringHouseholdCommandHandlers } from "../../../src/bootstrap/commands/recurringHouseholdCommandHandlers";
 import { createPortfolioHouseholdCommandHandlers } from "../../../src/bootstrap/commands/portfolioHouseholdCommandHandlers";
 import type { HouseholdCommandExecutionContext, HouseholdCommandHandler } from "../../../src/bootstrap/commands/householdCommand";
+import { categoryCatalogDocument } from "../../support/category-catalog-document";
 import { InMemoryFirestore } from "../../support/in-memory-firestore";
 
 function execute(handlers: ReadonlyMap<string, HouseholdCommandHandler>, command: string, payload: Record<string, unknown>, id: string) {
@@ -30,12 +31,37 @@ describe("Finance configuration client version boundary", () => {
 
   it("rejects a stale category edit instead of substituting the server version", async () => {
     const memory = new InMemoryFirestore();
-    memory.seed("households/house/categories/food", { householdId: "house", categoryId: "food", name: "식비", color: "#FFFFFF", state: "active", sortOrder: 0, version: 2 });
+    memory.seed("households/house/categoryCatalog/current", categoryCatalogDocument("house", [{ categoryId: "food", name: "식비", color: "#FFFFFF", version: 2 }]));
     const handlers = createCategoryHouseholdCommandHandlers(memory as unknown as Firestore);
     await expect(execute(handlers, "category.update.v1", { categoryId: "food", expectedVersion: 1, changes: { label: "stale" } }, "stale")).rejects.toThrow();
-    expect(memory.document("households/house/categories/food")).toMatchObject({ name: "식비", version: 2 });
+    expect((memory.document("households/house/categoryCatalog/current")?.categories as Array<Record<string, unknown>>).find(category => category.categoryId === "food")).toMatchObject({ name: "식비", version: 2 });
     await expect(execute(handlers, "category.update.v1", { categoryId: "food", expectedVersion: 2, changes: { label: "fresh" } }, "fresh")).resolves.toEqual({});
-    expect(memory.document("households/house/categories/food")).toMatchObject({ name: "fresh", version: 3 });
+    expect((memory.document("households/house/categoryCatalog/current")?.categories as Array<Record<string, unknown>>).find(category => category.categoryId === "food")).toMatchObject({ name: "fresh", version: 3 });
+  });
+
+  it("rejected category commands preserve the entire catalog, archive process and capture projection including timestamps", async () => {
+    const memory = new InMemoryFirestore();
+    const catalogPath = "households/house/categoryCatalog/current";
+    const processPath = "households/house/categoryArchiveProcesses/old-archive";
+    const projectionPath = "households/house/runtimeProjections/payment-capture-configuration-v1";
+    const catalog = { ...categoryCatalogDocument("house", [{ categoryId: "etc" }], { defaultCategoryId: "etc" }), updatedAt: "2026-09-01T00:00:00Z" };
+    const process = { processId: "old-archive", categoryId: "archived", destinationCategoryId: "etc", state: "completed", updatedAt: "2026-09-01T00:00:00Z" };
+    const projection = { householdId: "house", schemaVersion: 1, updatedAt: "2026-09-01T00:00:00Z" };
+    memory.seed(catalogPath, catalog);
+    memory.seed(processPath, process);
+    memory.seed(projectionPath, projection);
+    const handlers = createCategoryHouseholdCommandHandlers(memory as unknown as Firestore);
+
+    await expect(execute(handlers, "category.archive.v1", { categoryId: "etc", expectedVersion: 1 }, "default-archive")).rejects.toThrow("CATEGORY_IS_DEFAULT");
+    await expect(execute(handlers, "category.update.v1", { categoryId: "etc", expectedVersion: 99, changes: { label: "stale" } }, "stale-category")).rejects.toThrow("CATEGORY_VERSION_MISMATCH");
+    // Retrying the same rejected command must reproduce its result without another catalog write.
+    await expect(execute(handlers, "category.archive.v1", { categoryId: "etc", expectedVersion: 1 }, "default-archive")).rejects.toThrow("CATEGORY_IS_DEFAULT");
+
+    expect(memory.document(catalogPath)).toEqual(catalog);
+    expect(memory.document(processPath)).toEqual(process);
+    expect(memory.document(projectionPath)).toEqual(projection);
+    expect(memory.documentsInCollection("outboxEvents")).toHaveLength(0);
+    expect(memory.documentsInCollection("commandReceipts/household-finance-category-catalog/receipts")).toHaveLength(2);
   });
 
   it("rejects stale recurring edit and deletion without changing the plan", async () => {
@@ -48,13 +74,12 @@ describe("Finance configuration client version boundary", () => {
 
   it("finishes category archive remapping active and paused plans without rewriting historical ledger categories", async () => {
     const memory = new InMemoryFirestore();
-    memory.seed("households/house/categorySettings/default", { defaultCategoryId: "etc", catalogVersion: 1 });
-    for (const categoryId of ["food", "etc"]) memory.seed(`households/house/categories/${categoryId}`, { householdId: "house", categoryId, name: categoryId, color: "#FFFFFF", state: "active", sortOrder: categoryId === "food" ? 0 : 1, version: 1 });
+    memory.seed("households/house/categoryCatalog/current", categoryCatalogDocument("house", [{ categoryId: "food" }, { categoryId: "etc" }], { defaultCategoryId: "etc" }));
     for (const active of [true, false]) memory.seed(`households/house/recurringPlans/${active}`, { householdId: "house", categoryId: "food", merchant: "plan", amountInWon: 1000, dayOfMonth: 10, active, lifecycleState: "active", version: 1 });
     memory.seed("expenses/history", { householdId: "house", category: "food" });
     const handlers = createCategoryHouseholdCommandHandlers(memory as unknown as Firestore);
     await expect(execute(handlers, "category.archive.v1", { categoryId: "food", expectedVersion: 1 }, "archive")).resolves.toEqual({});
-    expect(memory.document("households/house/categories/food")).toMatchObject({ state: "archived" });
+    expect((memory.document("households/house/categoryCatalog/current")?.categories as Array<Record<string, unknown>>).find(category => category.categoryId === "food")).toMatchObject({ state: "archived" });
     for (const active of [true, false]) expect(memory.document(`households/house/recurringPlans/${active}`)).toMatchObject({ categoryId: "etc", version: 2, active });
     expect(memory.document("expenses/history")).toMatchObject({ category: "food" });
     await execute(handlers, "category.archive.v1", { categoryId: "food", expectedVersion: 1 }, "archive");

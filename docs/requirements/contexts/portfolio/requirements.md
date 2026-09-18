@@ -58,16 +58,18 @@ Portfolio Context는 **가구가 보유한 자산 계정, Position, 자동 납�
 
 | 기능 모듈 | Aggregate·데이터 | 핵심 불변식 | 현재 저장 |
 |---|---|---|---|
-| Portfolio Core | AssetAccount | 이름·유형·household/profile 명의 참조·통화·`active/deleted/purging` 생명주기·부호 | `assets` |
+| Portfolio Core | AssetAccount | 이름·유형·household/profile 명의 참조·통화·`active/deleted/purging` 생명주기·부호 | `households/{householdId}/assets/{assetId}` |
 | Portfolio Core | AssetSnapshot | 날짜별 결정 ID, 오늘 실시간 값 중복 없음; Portfolio Core의 `AssetSnapshotProjector`만 저장 | `households/{householdId}/assetSnapshots/{localDate}` |
-| Holdings | Position | 수량·평균단가·현재가, 실패와 0 구분 | `stock_holdings`, `crypto_holdings` |
+| Holdings | Position | 수량·평균단가·현재가, 실패와 0 구분 | `households/{householdId}/assets/{assetId}/positions/{positionId}` |
 | Holdings | Market Contract | 국내·미국·코인·금 공급자 선택과 정규 Quote | 현재 Next/Functions provider 코드 |
-| Automation | AssetAutomationPlan | 납입·상환 정책과 last/first applicable month | 현재 `assets` 혼합 필드 |
-| Automation | Execution Claim | asset·operation·month 한 번 | 명시 저장 없음 |
+| Automation | AssetAutomationPlan | 납입·상환 정책과 last/first applicable month | `households/{householdId}/assetAutomationPlans/{planId}`, `assetAutomationPlanRevisions/{revisionId}` |
+| Automation | Execution Claim | asset·operation·month 한 번 | `households/{householdId}/assetAutomationExecutions/{executionKeyHash}` |
 | Dividends | DividendEvent | 결정 ID와 상태 전이, 적격 보유수량 | `dividend_events` |
 | Dividends | AnnualDividendProjection | event 합계와 일치하는 12개월 배열 | `dividend_snapshots` |
 
-Position과 Automation은 `assets`를 직접 덮어쓰지 않고 Portfolio Core의 `ApplyAssetValuation` 또는 자동화 Command를 사용한다. `AssetSnapshotProjector`는 commit된 Portfolio 조회 결과만 결정적으로 upsert하며 Scheduler·Holdings·Reporting은 `households/{householdId}/assetSnapshots/{localDate}`를 직접 쓰지 않는다. 목표 V2에서는 자동화 설정·checkpoint를 별도 소유 문서로 분리한다.
+Position과 Automation은 AssetAccount를 직접 덮어쓰지 않고 Portfolio Core의 `ApplyAssetValuation` 또는 자동화 Command를 사용한다. `AssetSnapshotProjector`는 commit된 Portfolio 조회 결과만 결정적으로 upsert하며 Scheduler·Holdings·Reporting은 `households/{householdId}/assetSnapshots/{localDate}`를 직접 쓰지 않는다. 자동화 Plan·Revision·Execution을 별도 문서에 저장하고, 자산 화면용 설정·처리 월은 canonical Asset의 `automation` map에 같은 transaction으로 반영한다.
+
+Web·Functions의 자산·보유종목 조회와 Command는 위 canonical 경로 하나만 사용한다. 과거 flat `assets`, `stock_holdings`, `crypto_holdings`는 운영 이관 검증·수동 purge에만 접근하며 일반 조회 fallback이나 동시 쓰기를 두지 않는다. Web의 가구 전체 Position 구독은 `householdId + positionKind + lifecycleState=active`로 범위를 제한한다. 명의자 이름은 기존 프로필 구독 결과를 `ownerRef.profileId`로 연결한다.
 
 ## 5. Context 불변식
 

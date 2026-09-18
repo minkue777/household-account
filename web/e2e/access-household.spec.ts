@@ -94,7 +94,7 @@ test('[T-HH-001][HH-006][HH-008][HH-009][SYS-001] 다른 가구 ID·Member 위�
   await expect(executeHouseholdCommand(request, { idToken: outsider.idToken, householdId: owner.householdId, command: 'access.rename-self.v1', payload: { displayName: '가로챈 이름', expectedVersion: 1 } })).rejects.toThrow();
   await expect(executeHouseholdCommand(request, { idToken: outsider.idToken, householdId: other.householdId, command: 'access.rename-self.v1', payload: { displayName: '자기 이름', expectedVersion: 1, memberId: owner.memberId, principalUid: owner.uid } })).rejects.toThrow('FORBIDDEN_IDENTITY_FIELD');
   expect((await readFirestoreCollection(request, `households/${owner.householdId}/members`))[0].fields?.displayName?.stringValue).toBe('원장 주인');
-  const endpoint = `http://127.0.0.1:8080/v1/projects/${E2E_PROJECT_ID}/databases/(default)/documents/expenses/${documentId(expense)}`;
+  const endpoint = `http://127.0.0.1:8080/v1/projects/${E2E_PROJECT_ID}/databases/(default)/documents/households/${owner.householdId}/ledgerTransactions/${documentId(expense)}`;
   const deniedRead = await request.get(endpoint, { headers: { authorization: `Bearer ${outsider.idToken}` } });
   expect(deniedRead.status()).toBe(403);
   const deniedWrite = await request.patch(endpoint, { headers: { authorization: `Bearer ${owner.idToken}` }, data: { fields: firestoreFields({ householdId: owner.householdId, amount: 9999 }) } });
@@ -102,11 +102,11 @@ test('[T-HH-001][HH-006][HH-008][HH-009][SYS-001] 다른 가구 ID·Member 위�
   expect((await readExpenseDocuments(request))[0].fields?.amount?.integerValue).toBe('1234');
 });
 
-test('[HH-001][HH-002][SYS-002] legacy 기기 연결은 기존 가구·Member ID와 type 없는 거래를 복사 없이 연결하고 다른 UID의 재연결을 거부한다', async ({ page, request }) => {
+test('[HH-001][HH-002][SYS-002] legacy 기기 연결은 기존 가구·Member ID와 이관된 type 없는 거래를 복사 없이 연결하고 다른 UID의 재연결을 거부한다', async ({ page, request }) => {
   const householdId = 'legacy-household-e2e';
   const memberId = 'legacy-member-e2e';
   await writeFirestoreFixture(request, `households/${householdId}`, firestoreFields({ name: '기존가구네', lifecycleState: 'active', members: [{ id: memberId, name: '기존 사용자' }] }));
-  await writeFirestoreFixture(request, 'expenses/legacy-expense-e2e', firestoreFields({ householdId, merchant: '기존 기록', amount: 3210, category: 'etc', date: seoulDate(0, 1), lifecycleState: 'active', aggregateVersion: 1 }));
+  await writeFirestoreFixture(request, `households/${householdId}/ledgerTransactions/legacy-expense-e2e`, firestoreFields({ householdId, merchant: '기존 기록', amountInWon: 3210, categoryId: 'etc', accountingDate: seoulDate(0, 1), lifecycleState: 'active', aggregateVersion: 1 }));
   await page.addInitScript(({ householdId, memberId }) => {
     localStorage.setItem('householdKey', householdId); localStorage.setItem('currentMemberId', memberId); localStorage.setItem('currentMemberName', '기존 사용자');
   }, { householdId, memberId });

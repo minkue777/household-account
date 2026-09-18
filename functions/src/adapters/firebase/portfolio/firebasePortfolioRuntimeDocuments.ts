@@ -57,48 +57,6 @@ export function canonicalAssetDocument(
   };
 }
 
-export function legacyAssetDocument(
-  asset: PortfolioRuntimeAsset,
-  created: boolean,
-): Readonly<Record<string, unknown>> {
-  return {
-    householdId: asset.householdId,
-    name: asset.name,
-    type: asset.type,
-    ...optionalWriteField(
-      created,
-      "subType",
-      asset.legacySubType ?? asset.subType,
-    ),
-    owner: asset.ownerDisplayName,
-    ownerRef: asset.ownerRef,
-    currentBalance: asset.currentBalance,
-    ...optionalWriteField(created, "costBasis", asset.costBasis),
-    ...optionalWriteField(created, "initialInvestment", asset.initialInvestment),
-    currency: asset.currency,
-    memo: asset.memo,
-    ...optionalWriteField(created, "icon", asset.icon),
-    ...optionalWriteField(created, "color", asset.color),
-    isActive: asset.lifecycleState === "active",
-    order: asset.order,
-    ...optionalWriteField(created, "stockCode", asset.stockCode),
-    ...optionalWriteField(created, "quantity", asset.quantity),
-    recurringContributionAmount: asset.automation.recurringContributionAmount,
-    recurringContributionDay: asset.automation.recurringContributionDay,
-    lastAutoContributionMonth: asset.automation.lastAutoContributionMonth,
-    loanInterestRate: asset.automation.loanInterestRate,
-    loanRepaymentMethod: asset.automation.loanRepaymentMethod,
-    loanMonthlyPaymentAmount: asset.automation.loanMonthlyPaymentAmount,
-    loanPaymentDay: asset.automation.loanPaymentDay,
-    lastAutoRepaymentMonth: asset.automation.lastAutoRepaymentMonth,
-    aggregateVersion: asset.aggregateVersion,
-    ...optionalWriteField(created, "deletedAt", asset.deletedAt),
-    schemaVersion: 1,
-    ...(created ? { createdAt: FieldValue.serverTimestamp() } : {}),
-    updatedAt: FieldValue.serverTimestamp(),
-  };
-}
-
 export function canonicalPositionDocument(
   position: PortfolioRuntimePosition,
   created: boolean,
@@ -135,45 +93,6 @@ export function canonicalPositionDocument(
     ...(created ? { createdAt: FieldValue.serverTimestamp() } : {}),
     updatedAt: FieldValue.serverTimestamp(),
   };
-}
-
-export function legacyPositionDocument(
-  position: PortfolioRuntimePosition,
-  created: boolean,
-): Readonly<Record<string, unknown>> {
-  const common = {
-    householdId: position.householdId,
-    assetId: position.assetId,
-    quantity: position.quantity,
-    avgPrice: position.averagePriceInWon,
-    market: position.market,
-    ...optionalWriteField(created, "exchange", position.exchange),
-    currency: position.currency,
-    ...optionalWriteField(
-      created,
-      "currentPrice",
-      position.lastQuote?.priceInWon,
-    ),
-    ...optionalWriteField(created, "quoteAsOf", position.quoteAsOf),
-    aggregateVersion: position.aggregateVersion,
-    schemaVersion: 1,
-    ...(created ? { createdAt: FieldValue.serverTimestamp() } : {}),
-    updatedAt: FieldValue.serverTimestamp(),
-  };
-  return position.positionKind === "stock"
-    ? {
-        ...common,
-        holdingType: position.holdingType ?? "stock",
-        stockCode: position.instrumentCode,
-        stockName: position.instrumentName,
-        instrumentType: position.instrumentType,
-        priceScale: position.priceScale,
-      }
-    : {
-        ...common,
-        marketCode: position.instrumentCode,
-        coinName: position.instrumentName,
-      };
 }
 
 export function planDocument(

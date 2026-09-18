@@ -2,10 +2,11 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { describe, expect, it, vi } from 'vitest';
 import { FirebaseCategoryCatalogStore } from '../../../src/adapters/firebase/categories/firebaseCategoryCatalogStore';
 import { createCategoryCatalogApplication } from '../../../src/contexts/household-finance/categories-budget/application/categoryCatalogApplication';
+import { categoryCatalogDocument } from "../../support/category-catalog-document";
 import { InMemoryFirestore } from '../../support/in-memory-firestore';
 
 describe('[CAT-004][T-CAT-006] 목표 category Query와 실제 Firebase read adapter', () => {
-  it('빈 저장소는 NoData, 실제 transaction 실패는 RetryableFailure이며 기본 카테고리를 쓰지 않는다', async () => {
+  it('빈 저장소는 NoData, 실제 문서 조회 실패는 RetryableFailure이며 기본 카테고리를 쓰지 않는다', async () => {
     const memory = new InMemoryFirestore();
     const application = createCategoryCatalogApplication({
       store: new FirebaseCategoryCatalogStore(memory as unknown as Firestore, {
@@ -20,12 +21,12 @@ describe('[CAT-004][T-CAT-006] 목표 category Query와 실제 Firebase read ada
     });
     expect(await application.listActive()).toEqual({ kind: 'no-data' });
     expect(memory.paths('')).toEqual([]);
-    const unavailable = vi.spyOn(memory, 'runTransaction').mockRejectedValue(new Error('offline'));
+    const unavailable = vi.spyOn(memory, 'collection').mockImplementation(() => { throw new Error('offline'); });
     expect(await application.listActive()).toEqual({ kind: 'retryable-failure', code: 'CATEGORY_REPOSITORY_UNAVAILABLE' });
     expect(memory.paths('')).toEqual([]);
     unavailable.mockRestore();
-    memory.seed('households/house/categories/custom', { name: '취미', color: '#123456', state: 'active', sortOrder: 0, version: 2 });
+    memory.seed('households/house/categoryCatalog/current', categoryCatalogDocument('house', [{ categoryId: 'custom', name: '취미', version: 2 }]));
     expect(await application.listActive()).toMatchObject({ kind: 'success', items: [{ categoryId: 'custom', name: '취미', version: 2 }] });
-    expect(memory.paths('')).toEqual(['households/house/categories/custom']);
+    expect(memory.paths('')).toEqual(['households/house/categoryCatalog/current']);
   });
 });

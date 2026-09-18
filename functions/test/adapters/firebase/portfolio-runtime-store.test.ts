@@ -107,7 +107,7 @@ describe("Firebase portfolio runtime store", () => {
     const writes = vi.spyOn(memory, "write");
     const request = { metadata: command(2, "portfolio.update-asset.v1"), assetId, expectedVersion: 1, changes: { name: "이름 변경", memo: "설명", icon: "bank", currentBalance: 200000 } };
     await expect(runtime.updateAsset(request)).resolves.toMatchObject({ kind: "success" });
-    expect(memory.transactionReads()).toHaveLength(4); // receipt, two asset documents, owner profiles
+    expect(memory.transactionReads()).toHaveLength(3); // receipt, canonical asset, owner profiles
     expect(memory.transactionReads().some(({ path }) => /positions|holdings|assetAutomation/.test(path))).toBe(false);
     expect(writes.mock.calls.some(([path]) => /positions|holdings|assetAutomation/.test(path))).toBe(false);
     expect(memory.document(planPath)).toEqual(before);
@@ -258,10 +258,7 @@ describe("Firebase portfolio runtime store", () => {
       aggregateVersion: 2,
       memo: "",
     });
-    expect(memory.document(`assets/${assetId}`)).toMatchObject({
-      aggregateVersion: 2,
-      memo: "",
-    });
+    expect(memory.has(`assets/${assetId}`)).toBe(false);
   });
 
   it("uses independent 30-second single-flight leases for household and asset scopes", async () => {
@@ -345,7 +342,7 @@ describe("Firebase portfolio runtime store", () => {
     expect(memory.paths("households/house-1/operationLocks/").filter(path => !path.includes("cooldown"))).toHaveLength(0);
   });
 
-  it("creates canonical and legacy assets, owner references, plans, receipts and outbox atomically", async () => {
+  it("creates only canonical assets with owner references, plans, receipts and outbox atomically", async () => {
     const memory = new InMemoryFirestore();
     memory.seed("households/house-1/assetOwnerProfiles/profile-child", {
       householdId: "house-1",
@@ -386,15 +383,9 @@ describe("Firebase portfolio runtime store", () => {
       currentBalance: 1_000_000,
       lifecycleState: "active",
       aggregateVersion: 1,
+      automation: { recurringContributionAmount: 100_000, recurringContributionDay: 25 },
     });
-    expect(memory.document(`assets/${assetId}`)).toMatchObject({
-      householdId: "house-1",
-      owner: "Child",
-      ownerRef: { kind: "profile", profileId: "profile-child" },
-      isActive: true,
-      recurringContributionAmount: 100_000,
-      recurringContributionDay: 25,
-    });
+    expect(memory.has(`assets/${assetId}`)).toBe(false);
     const planId = `${assetId}_savings-contribution`;
     expect(
       memory.document(`households/house-1/assetAutomationPlans/${planId}`),
@@ -560,12 +551,12 @@ describe("Firebase portfolio runtime store", () => {
       lifecycleState: "active",
       aggregateVersion: 1,
     });
-    expect(memory.document(`stock_holdings/${positionId}`)).toMatchObject({
+    expect(memory.document(`households/house-1/assets/${assetId}/positions/${positionId}`)).toMatchObject({
       assetId,
-      stockCode: "US:AAPL",
+      instrumentCode: "US:AAPL",
       market: "US",
       currency: "USD",
-      currentPrice: 1_500,
+      lastQuote: { priceInWon: 1_500 },
     });
     expect(
       memory.paths(`households/house-1/assets/${assetId}/positionHistory/`),
@@ -632,16 +623,13 @@ describe("Firebase portfolio runtime store", () => {
       lifecycleState: "deleted",
       aggregateVersion: 3,
     });
-    expect(memory.document(`assets/${assetId}`)).toMatchObject({
-      isActive: false,
-      aggregateVersion: 3,
-    });
+    expect(memory.has(`assets/${assetId}`)).toBe(false);
     expect(
       memory.document(
         `households/house-1/assets/${assetId}/positions/${positionId}`,
       ),
     ).toMatchObject({ lifecycleState: "active", quantity: 10 });
-    expect(memory.has(`stock_holdings/${positionId}`)).toBe(true);
+    expect(memory.has(`stock_holdings/${positionId}`)).toBe(false);
     expect(
       memory.paths(`households/house-1/assets/${assetId}/positionHistory/`),
     ).toHaveLength(1);
@@ -757,17 +745,20 @@ describe("Firebase portfolio runtime store", () => {
     });
   });
 
-  it("[T-HOLD-001][HOLD-001] updates a legacy cash position that has an empty code and no instrument type", async () => {
+  it("[T-HOLD-001][HOLD-001] updates a migrated cash position with a stable generated instrument code", async () => {
     const memory = new InMemoryFirestore();
     const assetId = await createStockAsset(memory);
-    memory.seed("stock_holdings/legacy-cash-1", {
+    memory.seed(`households/house-1/assets/${assetId}/positions/legacy-cash-1`, {
       householdId: "house-1",
       assetId,
       holdingType: "cash",
-      stockCode: "",
-      stockName: "예수금",
+      positionKind: "stock",
+      instrumentCode: "LEGACY:CASH:LEGACY-CASH-1",
+      instrumentName: "예수금",
+      instrumentType: "cash",
+      lifecycleState: "active",
       quantity: 1,
-      currentPrice: 1_000_000,
+      lastQuote: { priceInWon: 1_000_000, observedAt: "2026-07-01T00:00:00.000Z", provider: "migration" },
       aggregateVersion: 3,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-07-01T00:00:00.000Z",
@@ -788,13 +779,7 @@ describe("Firebase portfolio runtime store", () => {
       }),
     ).toEqual({ kind: "success", value: {} });
 
-    expect(memory.document("stock_holdings/legacy-cash-1")).toMatchObject({
-      holdingType: "cash",
-      stockName: "예수금",
-      instrumentType: "cash",
-      currentPrice: 1_500_000,
-      aggregateVersion: 4,
-    });
+    expect(memory.has("stock_holdings/legacy-cash-1")).toBe(false);
     expect(
       memory.document(
         `households/house-1/assets/${assetId}/positions/legacy-cash-1`,
@@ -885,11 +870,11 @@ describe("Firebase portfolio runtime store", () => {
     });
     expect(quotes.calls.get("US:AAPL")).toBe(3);
     expect(quotes.calls.get("005930")).toBe(1);
-    expect(memory.document(`stock_holdings/${firstId}`)).toMatchObject({
-      currentPrice: 100,
+    expect(memory.document(`households/house-1/assets/${assetId}/positions/${firstId}`)).toMatchObject({
+      lastQuote: { priceInWon: 100 },
     });
-    expect(memory.document(`stock_holdings/${secondId}`)).toMatchObject({
-      currentPrice: 500,
+    expect(memory.document(`households/house-1/assets/${assetId}/positions/${secondId}`)).toMatchObject({
+      lastQuote: { priceInWon: 500 },
       quoteAsOf: "2026-07-21",
     });
     expect(memory.document(`households/house-1/assets/${assetId}`)).toMatchObject({
@@ -922,11 +907,11 @@ describe("Firebase portfolio runtime store", () => {
         failedCount: 0,
       },
     });
-    expect(memory.document(`stock_holdings/${firstId}`)).toMatchObject({
-      currentPrice: 100,
+    expect(memory.document(`households/house-1/assets/${assetId}/positions/${firstId}`)).toMatchObject({
+      lastQuote: { priceInWon: 100 },
     });
-    expect(memory.document(`stock_holdings/${secondId}`)).toMatchObject({
-      currentPrice: 500,
+    expect(memory.document(`households/house-1/assets/${assetId}/positions/${secondId}`)).toMatchObject({
+      lastQuote: { priceInWon: 500 },
     });
   });
 
@@ -1001,11 +986,11 @@ describe("Firebase portfolio runtime store", () => {
 
     expect([...quotes.calls.keys()]).toEqual(["005930"]);
     expect(
-      memory.document(`stock_holdings/${first.value.positionId as string}`),
-    ).toMatchObject({ currentPrice: 999 });
+      memory.document(`households/house-1/assets/${firstAssetId}/positions/${first.value.positionId as string}`),
+    ).toMatchObject({ lastQuote: { priceInWon: 999 } });
     expect(
-      memory.document(`stock_holdings/${second.value.positionId as string}`),
-    ).toMatchObject({ currentPrice: 200 });
+      memory.document(`households/house-1/assets/${secondAssetId}/positions/${second.value.positionId as string}`),
+    ).toMatchObject({ lastQuote: { priceInWon: 200 } });
     expect(observations).toHaveLength(1);
     expect(observations[0]).toMatchObject({
       provider: "naver-domestic",

@@ -70,7 +70,7 @@ function compareEntryOrder(left: OrderedProfile, right: OrderedProfile): number 
 }
 
 export class FirestoreAssetOwnerProfileReadModel implements AssetOwnerProfileReadPort {
-  subscribeActive(
+  subscribe(
     householdId: string,
     listener: (profiles: AssetOwnerProfileView[]) => void,
     onError?: (error: Error) => void
@@ -84,13 +84,12 @@ export class FirestoreAssetOwnerProfileReadModel implements AssetOwnerProfileRea
     return onSnapshot(
       profiles,
       (snapshot) => {
-        const activeProfiles = snapshot.docs
+        const mappedProfiles = snapshot.docs
           .map((document, index) => mapProfile(householdId, document, index))
           .filter((entry): entry is OrderedProfile => entry !== undefined)
-          .filter(({ profile }) => profile.lifecycleState === 'active')
           .sort(compareEntryOrder)
           .map(({ profile }) => profile);
-        listener(activeProfiles);
+        listener(mappedProfiles);
       },
       (error) => {
         onError?.(error instanceof Error ? error : new Error('ASSET_OWNER_PROFILE_READ_FAILED'));

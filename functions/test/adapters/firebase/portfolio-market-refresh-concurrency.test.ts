@@ -118,7 +118,8 @@ describe("market refresh distinct quote scheduling", () => {
     await expect(application(memory, { getQuote }).refreshMarketValues({ metadata, assetClass: "all" })).resolves.toMatchObject({ kind: "success", value: { refreshedCount: 51, targetCount: 51, failedCount: 0 } });
     expect(getQuote).toHaveBeenCalledTimes(1);
     expect(memory.document("households/house-1/assets/stock")).toMatchObject({ currentBalance: 51000 });
-    expect(memory.paths("stock_holdings/")).toHaveLength(51);
+    expect(memory.paths("households/house-1/assets/stock/positions/")).toHaveLength(51);
+    expect(memory.paths("stock_holdings/")).toHaveLength(0);
   });
 
   it("keeps the market in the quote identity when two positions have the same instrument code", async () => {

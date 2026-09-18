@@ -286,15 +286,12 @@ async function loadCancellationGraph(
   captureLineageId: string,
 ): Promise<Map<string, firestore.DocumentSnapshot>> {
   const canonical = database.collection("households").doc(householdId).collection("ledgerTransactions");
-  const legacy = database.collection("expenses").where("householdId", "==", householdId);
   const documents = new Map<string, firestore.DocumentSnapshot>();
   const add = (snapshots: readonly firestore.DocumentSnapshot[]) => {
     for (const document of snapshots) if (document.exists) documents.set(document.id, document);
   };
-  for (const collection of [legacy, canonical]) {
-    for (const field of ["captureLineageId", "sourceFingerprint", "provenance.captureLineageId", "captureLineageIds"]) {
-      add((await transaction.get(collection.where(field, field === "captureLineageIds" ? "array-contains" : "==", captureLineageId))).docs);
-    }
+  for (const field of ["captureLineageId", "sourceFingerprint", "provenance.captureLineageId", "captureLineageIds"]) {
+    add((await transaction.get(canonical.where(field, field === "captureLineageIds" ? "array-contains" : "==", captureLineageId))).docs);
   }
   const visited = new Set<string>();
   while ([...documents.keys()].some((id) => !visited.has(id))) {
@@ -302,17 +299,13 @@ async function loadCancellationGraph(
       if (visited.has(id)) continue;
       visited.add(id);
       // 분할/합치기 이전 버전도 부모 링크를 따라 범위를 확장합니다.
-      for (const collection of [legacy, canonical]) {
-        for (const field of ["derivedFromTransactionId", "splitOriginalId", "splitGroup.originalId", "mergeLeafIds"]) {
-          add((await transaction.get(collection.where(field, field === "mergeLeafIds" ? "array-contains" : "==", id))).docs);
-        }
+      for (const field of ["derivedFromTransactionId", "splitOriginalId", "splitGroup.originalId", "mergeLeafIds"]) {
+        add((await transaction.get(canonical.where(field, field === "mergeLeafIds" ? "array-contains" : "==", id))).docs);
       }
       for (const leafId of mergeLeafIds(document.data() ?? {})) {
         if (documents.has(leafId)) continue;
-        const [old, current] = await Promise.all([
-          transaction.get(database.collection("expenses").doc(leafId)), transaction.get(canonical.doc(leafId)),
-        ]);
-        add([old, current].filter((snapshot) => snapshot.data()?.householdId === householdId));
+        const current = await transaction.get(canonical.doc(leafId));
+        if (current.data()?.householdId === householdId) add([current]);
       }
     }
   }
@@ -419,7 +412,6 @@ export class FirebaseCaptureLedgerPersistence
         const canonical = household
           .collection("ledgerTransactions")
           .doc(ids.transactionId);
-        const legacy = this.database.collection("expenses").doc(ids.transactionId);
         const captureRecord = household
           .collection("captureRecords")
           .doc(ids.captureId);
@@ -470,12 +462,6 @@ export class FirebaseCaptureLedgerPersistence
           updatedAt: FieldValue.serverTimestamp(),
         };
         transaction.create(canonical, common);
-        transaction.create(legacy, {
-          ...common,
-          // 기존 Web read model은 카드 표시 문자열을 cardLastFour에서 읽습니다.
-          cardLastFour: display,
-          schemaVersion: 1,
-        });
         transaction.create(captureRecord, {
           householdId: command.householdId,
           captureId: ids.captureId,
@@ -693,9 +679,6 @@ export class FirebaseCaptureLedgerPersistence
           transaction.delete(
             household.collection("ledgerTransactions").doc(transactionId),
           );
-          transaction.delete(
-            this.database.collection("expenses").doc(transactionId),
-          );
           new FirebaseTransactionalOutbox(this.database).append(transaction, {
             eventId: hash(
               `${command.householdId}\u0000${command.downstreamKey}\u0000TransactionDeleted.v1\u0000${transactionId}`,
@@ -719,12 +702,6 @@ export class FirebaseCaptureLedgerPersistence
           const stored = document.data() ?? {};
           if (transactionLifecycleState(stored) === "active") continue;
           const version = transactionVersion(stored) + 1;
-          const cardDisplay =
-            typeof stored.cardDisplay === "string"
-              ? stored.cardDisplay
-              : typeof stored.cardLastFour === "string"
-                ? stored.cardLastFour
-                : "";
           const restoration = {
             ...stored,
             householdId: command.householdId,
@@ -739,15 +716,6 @@ export class FirebaseCaptureLedgerPersistence
           transaction.set(
             household.collection("ledgerTransactions").doc(transactionId),
             { ...restoration, schemaVersion: 2 },
-            { merge: true },
-          );
-          transaction.set(
-            this.database.collection("expenses").doc(transactionId),
-            {
-              ...restoration,
-              cardLastFour: cardDisplay,
-              schemaVersion: 1,
-            },
             { merge: true },
           );
           new FirebaseTransactionalOutbox(this.database).append(transaction, {

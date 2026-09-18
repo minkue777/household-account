@@ -16,8 +16,7 @@ import {
   decodeCaptureConfigurationProjection,
   encodeCaptureConfigurationProjection,
 } from "./firebaseCaptureConfigurationProjection";
-import { readLegacyMerchantRule } from "../../../contexts/payment-capture/configuration/adapters/persistence/merchantRuleLegacyAdapter";
-import { mergeActiveCategoryReferences } from "../categories/categoryReadMapping";
+import { categoryCatalogReference, readCategoryCatalogDocument } from "../categories/categoryCatalogDocument";
 
 class CaptureConfigurationContractError extends Error {}
 
@@ -65,10 +64,6 @@ function mapRule(
   const category = mappingValue.categoryId ?? mappingValue.category ?? data.categoryId ?? data.category;
   if (category !== undefined && (typeof category !== "string" || category.trim() === "")) throw new CaptureConfigurationContractError("INVALID_CATEGORY_REFERENCE");
   if (data.priority !== undefined && (!Number.isSafeInteger(data.priority) || data.priority <= 0)) throw new CaptureConfigurationContractError("INVALID_PRIORITY");
-  if (type === "exact" || type === "contains") {
-    const legacy = readLegacyMerchantRule({ ...data, keyword, category, matchType: type });
-    if (legacy.kind === "ContractFailure") throw new CaptureConfigurationContractError(legacy.code);
-  }
   const priority =
     typeof data.priority === "number" && Number.isSafeInteger(data.priority)
       ? data.priority
@@ -99,7 +94,6 @@ function mapRule(
 function mapCard(
   document: firestore.QueryDocumentSnapshot,
   householdId: string,
-  memberIdByAlias: ReadonlyMap<string, string>,
 ): CaptureConfigurationCard | undefined {
   const data = document.data();
   if (text(data, "householdId") !== undefined && text(data, "householdId") !== householdId) {
@@ -112,12 +106,11 @@ function mapCard(
     "cardCompany",
     "cardLabel",
   );
-  const owner = text(data, "ownerMemberId", "ownerId", "owner");
+  const owner = text(data, "ownerMemberId");
   if (companyLabel === undefined || owner === undefined) return undefined;
-  const canonicalOwner = memberIdByAlias.get(owner) ?? owner;
   return {
     cardId: document.id,
-    ownerMemberId: canonicalOwner,
+    ownerMemberId: owner,
     companyLabel,
     ...(text(data, "lastFour", "cardLastFour") === undefined
       ? {}
@@ -129,13 +122,6 @@ function mapCard(
         ? "retired"
         : "active",
   };
-}
-
-function unionById<T>(
-  legacy: readonly (readonly [string, T])[],
-  canonical: readonly (readonly [string, T])[],
-): readonly T[] {
-  return [...new Map([...legacy, ...canonical]).values()];
 }
 
 function configurationKey(input: {
@@ -176,100 +162,27 @@ export class FirebaseCaptureConfigurationQuery
           );
           if (concurrentProjection !== undefined) return concurrentProjection;
 
-          const [
-            householdSnapshot,
-            memberSnapshots,
-            categorySetting,
-            canonicalCards,
-            legacyCards,
-            canonicalRules,
-            legacyRules,
-            canonicalCategories,
-            legacyCategories,
-          ] = await Promise.all([
-            transaction.get(household),
-            transaction.get(household.collection("members")),
-            transaction.get(
-              household.collection("categorySettings").doc("default"),
-            ),
+          const [catalogSnapshot, canonicalCards, canonicalRules] = await Promise.all([
+            transaction.get(categoryCatalogReference(this.database, input.householdId)),
             transaction.get(household.collection("registeredCards")),
-            transaction.get(
-              this.database
-                .collection("registered_cards")
-                .where("householdId", "==", input.householdId),
-            ),
             transaction.get(household.collection("merchantRules")),
-            transaction.get(
-              this.database
-                .collection("merchant_rules")
-                .where("householdId", "==", input.householdId),
-            ),
-            transaction.get(household.collection("categories")),
-            transaction.get(
-              this.database
-                .collection("categories")
-                .where("householdId", "==", input.householdId),
-            ),
           ]);
-
-          const memberIdByAlias = new Map<string, string>();
-          for (const member of memberSnapshots.docs) {
-            memberIdByAlias.set(member.id, member.id);
-            const displayName = text(member.data(), "displayName", "name");
-            if (displayName !== undefined) {
-              memberIdByAlias.set(displayName, member.id);
-            }
+          const cards = canonicalCards.docs.flatMap((document) => {
+            const card = mapCard(document, input.householdId);
+            return card === undefined ? [] : [card];
+          });
+          const merchantRules = canonicalRules.docs.flatMap((document) => {
+            const rule = mapRule(document, input.householdId);
+            return rule === undefined ? [] : [rule];
+          });
+          const catalog = readCategoryCatalogDocument(catalogSnapshot.data(), input.householdId);
+          const activeCategoryIds = new Set(catalog.categories
+            .filter((category) => category.state === "active")
+            .map((category) => category.categoryId));
+          for (const [alias, categoryId] of Object.entries(catalog.categoryAliases)) {
+            if (activeCategoryIds.has(categoryId)) activeCategoryIds.add(alias);
           }
-          memberIdByAlias.set(input.actingMemberId, input.actingMemberId);
-
-          const cards = unionById(
-            legacyCards.docs.flatMap((document) => {
-              const card = mapCard(
-                document,
-                input.householdId,
-                memberIdByAlias,
-              );
-              return card === undefined ? [] : [[document.id, card] as const];
-            }),
-            canonicalCards.docs.flatMap((document) => {
-              const card = mapCard(
-                document,
-                input.householdId,
-                memberIdByAlias,
-              );
-              return card === undefined ? [] : [[document.id, card] as const];
-            }),
-          );
-          const canonicalRuleIds = new Set(canonicalRules.docs.map((document) => document.id));
-          const merchantRules = unionById(
-            legacyRules.docs.filter((document) => !canonicalRuleIds.has(document.id)).flatMap((document) => {
-              const rule = mapRule(document, input.householdId);
-              return rule === undefined ? [] : [[document.id, rule] as const];
-            }),
-            canonicalRules.docs.flatMap((document) => {
-              const rule = mapRule(document, input.householdId);
-              return rule === undefined ? [] : [[document.id, rule] as const];
-            }),
-          );
-
-          const activeCategoryIds = new Set(mergeActiveCategoryReferences({
-            legacy: legacyCategories.docs,
-            canonical: canonicalCategories.docs,
-          }).flatMap(({ categoryId, documentIds }) => [categoryId, ...documentIds]));
-
-          const defaultCategoryId =
-            text(
-              categorySetting.data(),
-              "defaultCategoryId",
-              "categoryId",
-              "value",
-            ) ??
-            text(
-              householdSnapshot.data(),
-              "defaultCategoryId",
-              "defaultCategoryKey",
-            ) ??
-            (activeCategoryIds.has("etc") ? "etc" : undefined);
+          const defaultCategoryId = catalog.defaultCategoryId ?? undefined;
           const rebuilt: CaptureConfigurationSnapshot = {
             cards,
             merchantRules,

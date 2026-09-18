@@ -289,7 +289,7 @@ AutomationChangeIntent =
 
 ## 7. 저장·트랜잭션·동시성
 
-### 7.1 목표 저장 모델
+### 7.1 저장 모델
 
 | 논리 데이터 | 목표 key | Writer | 동시성 |
 |---|---|---|---|
@@ -304,24 +304,18 @@ Plan·Revision·Execution의 Canonical Writer는 Automation이지만 Context UoW
 
 동시에 다른 idempotency key로 같은 월을 처리하면 create-only execution claim 하나만 성공합니다. 패자는 transaction 재조회 후 `AlreadyProcessed`를 반환합니다. 같은 key의 다른 payload는 receipt hash로 `Conflict`입니다.
 
-### 7.2 legacy 전환
-
-현재 `assets`의 `recurringContribution*`, `loan*`, `lastAuto*Month`는 Legacy Mapper가 Plan·Revision·Execution view로 변환합니다. 전환 순서는 다음과 같습니다.
-
-1. legacy 필드를 읽는 Adapter 뒤에서 새 Domain Policy를 실행합니다.
-2. 화면 방문 호출과 Scheduler 호출을 같은 Application Port로 연결합니다.
-3. 신규 execution claim을 별도 문서로 쓰고 기존 last month와 결과를 shadow 비교합니다.
-4. Plan V2 backfill 시 자산별 설정·처리 월 hash를 검증합니다.
-5. Read 전환 뒤 `assets`의 자동화 필드 write를 차단하고 호환 필드를 제거합니다.
+### 7.2 canonical 단일 저장 경로
 
 현재 Functions production binding은 canonical `assetAutomationPlans`를
 `(nextDueDate ASC, document path ASC)`로 조회하고, target 월의
 `assetAutomationPlanRevisions`를 transaction 안에서 다시 선택합니다. 같은
-transaction에서 canonical Asset, 결정 execution claim, receipt, 두 Outbox와
-전환 기간의 legacy Asset read projection을 함께 갱신합니다. 따라서 배포 전에
-기존 legacy `assets`의 자동화 설정·last month를 Plan/Revision으로 변환하는
-backfill과 건수·hash reconciliation을 완료해야 합니다. Scheduler가 legacy
-Asset 전체를 매일 scan하며 묵시적으로 backfill하지는 않습니다.
+transaction에서 canonical Asset의 잔액과 `automation` map 처리 월, 결정 execution
+claim, receipt와 Outbox를 갱신합니다. Flat `assets`를 읽거나 mirror write하지 않습니다.
+
+운영 이관은 기존 flat `recurringContribution*`, `loan*`, `lastAuto*Month`와
+canonical `automation` map을 비교해 누락 키만 보강합니다. 이미 존재하는 설정·처리 월이
+다르면 중단하고 원인을 확인합니다. Scheduler가 legacy Asset을 scan하거나
+묵시적으로 backfill하지 않으며 Plan·Revision·Execution의 정책과 보존 범위는 유지합니다.
 
 ### 7.3 production Scheduler binding
 

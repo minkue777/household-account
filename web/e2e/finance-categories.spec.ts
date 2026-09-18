@@ -1,13 +1,13 @@
 import { devices, expect, test } from '@playwright/test';
 import { readFirestoreCollection, resetTestAccount } from './emulator';
-import { addCategoryThroughUi, addExpenseThroughUi, createFinanceHousehold, documentId, dragCategoryByTouch, expectInsideViewport, expectStoredCategoryOrder, findExpense, integerField, openAddTransaction, openCategorySettings, openExpenseEdit, textField } from './finance-helpers';
+import { addCategoryThroughUi, addExpenseThroughUi, createFinanceHousehold, documentId, dragCategoryByTouch, expectInsideViewport, expectStoredCategoryOrder, findExpense, integerField, openAddTransaction, openCategorySettings, openExpenseEdit, readStoredCategories, textField } from './finance-helpers';
 
 test.beforeEach(async () => { await resetTestAccount(); });
 
 test('[T-CAT-007][CAT-002] 모바일 실제 touch로 연속 순서를 저장하고 취소한 드래그는 저장하지 않는다', async ({ page, browser, request }, testInfo) => {
   const householdId = await createFinanceHousehold(page, request);
-  const household = (await readFirestoreCollection(request, 'households')).find(doc => documentId(doc) === householdId)!;
-  const version = integerField(household, 'categoryCatalogVersion');
+  const catalog = (await readFirestoreCollection(request, `households/${householdId}/categoryCatalog`))[0];
+  const version = integerField(catalog, 'catalogVersion');
   const mobileContext = await browser.newContext({ ...devices['Pixel 7'], baseURL: new URL(page.url()).origin, locale: 'ko-KR', timezoneId: 'Asia/Seoul' });
   try {
     const mobile = await mobileContext.newPage();
@@ -64,7 +64,7 @@ test('[CAT-001][CAT-002] 모바일 카테고리 추가·16색 선택은 잘리�
   const householdId = await createFinanceHousehold(page, request);
   const list = await openCategorySettings(page);
   await expect(list.getByRole('button', { name: / 순서 이동$/ })).toHaveText(['생활', '육아', '고정', '식비', '기타']);
-  const settings = await readFirestoreCollection(request, `households/${householdId}/categorySettings`);
+  const settings = await readFirestoreCollection(request, `households/${householdId}/categoryCatalog`);
   expect(textField(settings[0], 'defaultCategoryId')).toBe('etc');
   await page.getByRole('button', { name: '새 카테고리 추가', exact: true }).click();
   await expectInsideViewport(page.getByPlaceholder('카테고리명'));
@@ -90,12 +90,12 @@ test('[CAT-001][CAT-002] 모바일 카테고리 추가·16색 선택은 잘리�
   await page.getByRole('button', { name: '살구', exact: true }).click();
   await page.getByRole('button', { name: '저장', exact: true }).click();
   await expect(list.locator('[data-category-id]').filter({ hasText: '간식과 커피' })).toContainText('월 예산: 60,000원');
-  await expect.poll(async () => (await readFirestoreCollection(request, 'categories')).find(doc => textField(doc, 'label') === '간식과 커피')?.fields)
-    .toMatchObject({ color: { stringValue: '#FDBA74' }, budget: { integerValue: '60000' }, isActive: { booleanValue: true } });
+  await expect.poll(async () => (await readStoredCategories(request, householdId)).find(doc => textField(doc, 'name') === '간식과 커피')?.fields)
+    .toMatchObject({ color: { stringValue: '#FDBA74' }, budgetInWon: { integerValue: '60000' }, state: { stringValue: 'active' } });
 });
 
 test('[CAT-002][CAT-003] 기본 카테고리가 새 등록에 적용되고 보관된 카테고리는 과거 거래를 보존하며 신규 선택에서 제외된다', async ({ page, request }) => {
-  await createFinanceHousehold(page, request);
+  const householdId = await createFinanceHousehold(page, request);
   const custom = await addCategoryThroughUi(page, request, '여행비');
   const oldExpense = await addExpenseThroughUi(page, request, { merchant: '기존 여행', amount: 9000, category: '여행비' });
   const list = await openCategorySettings(page);
@@ -109,8 +109,8 @@ test('[CAT-002][CAT-003] 기본 카테고리가 새 등록에 적용되고 보�
   await page.getByRole('button', { name: '여행비 삭제', exact: true }).click();
   await page.getByRole('dialog', { name: '카테고리 삭제' }).getByRole('button', { name: '삭제', exact: true }).click();
   await expect(page.getByRole('button', { name: '여행비 순서 이동' })).toHaveCount(0);
-  await expect.poll(async () => (await readFirestoreCollection(request, 'categories')).find(doc => documentId(doc) === documentId(custom))?.fields?.isActive?.booleanValue).toBe(false);
-  expect(textField((await findExpense(request, documentId(oldExpense)))!, 'category')).toBe(textField(custom, 'key'));
+  await expect.poll(async () => (await readStoredCategories(request, householdId)).find(doc => documentId(doc) === documentId(custom))?.fields?.state?.stringValue).toBe('archived');
+  expect(textField((await findExpense(request, documentId(oldExpense)))!, 'category')).toBe(textField(custom, 'categoryId'));
   const edit = await openExpenseEdit(page, documentId(oldExpense));
   await expect(edit.getByRole('button', { name: '여행', exact: true })).toHaveCount(0);
   await edit.getByRole('button', { name: '닫기', exact: true }).click();
@@ -135,11 +135,11 @@ test('[T-LED-009][T-BUD-001][BUD-001][BUD-002] 예산 있는 지출만 잔여 �
 test('[CAT-002][CAT-003] 기본 카테고리 삭제와 음수 예산은 실제 서버에서 거부되어 카탈로그가 보존된다', async ({ page, request }) => {
   const householdId = await createFinanceHousehold(page, request);
   await openCategorySettings(page);
-  const before = await readFirestoreCollection(request, `households/${householdId}/categories`);
+  const before = await readFirestoreCollection(request, `households/${householdId}/categoryCatalog`);
   await page.getByRole('button', { name: '기타 삭제', exact: true }).click();
   await page.getByRole('dialog', { name: '카테고리 삭제' }).getByRole('button', { name: '삭제', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '카테고리 변경 실패' })).toBeVisible();
-  expect(await readFirestoreCollection(request, `households/${householdId}/categories`)).toEqual(before);
+  expect(await readFirestoreCollection(request, `households/${householdId}/categoryCatalog`)).toEqual(before);
   await page.reload();
   await page.getByRole('button', { name: /^카테고리\s*5개$/ }).click();
   await page.getByRole('button', { name: '새 카테고리 추가', exact: true }).click();
@@ -147,5 +147,5 @@ test('[CAT-002][CAT-003] 기본 카테고리 삭제와 음수 예산은 실제 �
   await page.getByPlaceholder('예산 없음').fill('-1');
   await page.getByRole('button', { name: '추가', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '카테고리 변경 실패' })).toBeVisible();
-  expect(await readFirestoreCollection(request, `households/${householdId}/categories`)).toEqual(before);
+  expect(await readFirestoreCollection(request, `households/${householdId}/categoryCatalog`)).toEqual(before);
 });

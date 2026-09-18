@@ -27,21 +27,29 @@ export async function dragCategoryByTouch(page: Page, session: CDPSession, sourc
   await session.send('Input.dispatchTouchEvent', { type: cancel ? 'touchCancel' : 'touchEnd', touchPoints: [] });
 }
 
+/** Unpack actual stored catalog entries; names identify entries, not separate documents. */
+export async function readStoredCategories(request: APIRequestContext, householdId: string): Promise<FirestoreDocument[]> {
+  const catalog = (await readFirestoreCollection(request, `households/${householdId}/categoryCatalog`)).find(document => documentId(document) === 'current');
+  return (catalog?.fields?.categories?.arrayValue?.values ?? []).map(value => ({
+    name: `${catalog!.name}/entries/${value.mapValue?.fields?.categoryId?.stringValue}`,
+    fields: value.mapValue?.fields,
+  }));
+}
+
 export async function expectStoredCategoryOrder(request: APIRequestContext, householdId: string, keys: string[], version: number): Promise<void> {
   await expect.poll(async () => {
-    const [canonical, projection, settings, households] = await Promise.all([
-      readFirestoreCollection(request, `households/${householdId}/categories`),
-      readFirestoreCollection(request, 'categories'),
-      readFirestoreCollection(request, `households/${householdId}/categorySettings`),
-      readFirestoreCollection(request, 'households'),
-    ]);
+    const catalogs = await readFirestoreCollection(request, `households/${householdId}/categoryCatalog`);
+    const catalog = catalogs.find(doc => documentId(doc) === 'current');
+    const categories = (catalog?.fields?.categories?.arrayValue?.values ?? []).map(value => value.mapValue?.fields ?? {});
     return {
-      canonical: canonical.filter(doc => textField(doc, 'state') === 'active').sort((left, right) => integerField(left, 'sortOrder') - integerField(right, 'sortOrder')).map(doc => textField(doc, 'categoryId')),
-      projection: projection.filter(doc => textField(doc, 'householdId') === householdId && doc.fields?.isActive?.booleanValue).sort((left, right) => integerField(left, 'order') - integerField(right, 'order')).map(doc => textField(doc, 'key')),
-      catalogVersion: integerField(settings.find(doc => documentId(doc) === 'default')!, 'catalogVersion'),
-      householdVersion: integerField(households.find(doc => documentId(doc) === householdId)!, 'categoryCatalogVersion'),
+      categories: categories.filter(category => category.state?.stringValue === 'active')
+        .sort((left, right) => Number(left.sortOrder?.integerValue) - Number(right.sortOrder?.integerValue))
+        .map(category => category.categoryId?.stringValue),
+      catalogVersion: catalog ? integerField(catalog, 'catalogVersion') : undefined,
     };
-  }).toEqual({ canonical: keys, projection: keys, catalogVersion: version, householdVersion: version });
+  }).toEqual({ categories: keys, catalogVersion: version });
+  expect(await readFirestoreCollection(request, `households/${householdId}/categories`)).toEqual([]);
+  expect((await readFirestoreCollection(request, 'categories')).filter(doc => textField(doc, 'householdId') === householdId)).toEqual([]);
 }
 
 export function seoulDate(monthOffset = 0, day = 15): string {
@@ -97,7 +105,7 @@ export async function findExpense(request: APIRequestContext, id: string): Promi
 export async function openExpenseEdit(page: Page, id: string): Promise<Locator> {
   const target = await findExpense(page.request, id);
   expect(target, `수정 대상 ${id}`).toBeDefined();
-  if (textField(target!, 'date')?.slice(0, 7) === seoulDate().slice(0, 7)) {
+  if (textField(target!, 'accountingDate')?.slice(0, 7) === seoulDate().slice(0, 7)) {
     await page.goto(`/expenses/${encodeURIComponent(id)}/edit`);
   } else {
     // 과거월은 검색 결과의 실제 편집 경로를 사용합니다.
@@ -128,7 +136,8 @@ export async function addCategoryThroughUi(page: Page, request: APIRequestContex
   await page.getByRole('button', { name: '추가', exact: true }).click();
   let category: FirestoreDocument | undefined;
   await expect.poll(async () => {
-    category = (await readFirestoreCollection(request, 'categories')).find(doc => textField(doc, 'label') === label && doc.fields?.isActive?.booleanValue);
+    const household = (await readFirestoreCollection(request, 'households'))[0];
+    category = (await readStoredCategories(request, documentId(household))).find(doc => textField(doc, 'name') === label && textField(doc, 'state') === 'active');
     return category !== undefined;
   }).toBe(true);
   return category!;

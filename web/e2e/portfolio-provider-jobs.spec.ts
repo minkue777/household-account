@@ -33,12 +33,12 @@ test('[T-MARKET-003][T-GOLD-002][T-JOB-AST-001][T-JOB-AST-002][T-EXT-004][MARKET
   expect(urls.some(url => url.includes('api.frankfurter.dev/v2/rate/USD/KRW'))).toBe(true);
   expect(urls.some(url => url.includes('fundCd=539502'))).toBe(true);
   expect(urls.some(url => /api\/stock\/(AAPL|KRXGOLD)/.test(url))).toBe(false);
-  for (const asset of created) expect((await documents(request, 'assets')).find(x => x.id === asset.id)?.currentBalance).toBe(asset.expected);
-  const balances = (await documents(request, 'assets')).map(x => ({ id: x.id, currentBalance: x.currentBalance }));
+  for (const asset of created) expect((await documents(request, `households/${scope.householdId}/assets`)).find(x => x.id === asset.id)?.currentBalance).toBe(asset.expected);
+  const balances = (await documents(request, `households/${scope.householdId}/assets`)).map(x => ({ id: x.id, currentBalance: x.currentBalance }));
   const next = new Date(`${today}T00:00:00Z`); next.setUTCDate(next.getUTCDate() + 1);
   const failures = fixtures.map(item => ({ ...item, status: 503, body: '{}' }));
   await expect(runScheduled('assetValuationDaily', `${next.toISOString().slice(0, 10)}T23:55:00+09:00`, failures)).rejects.toThrow();
-  expect((await documents(request, 'assets')).map(x => ({ id: x.id, currentBalance: x.currentBalance }))).toEqual(balances);
+  expect((await documents(request, `households/${scope.householdId}/assets`)).map(x => ({ id: x.id, currentBalance: x.currentBalance }))).toEqual(balances);
   // 정상 결과는 실제 Firestore SDK를 거쳐 통계 화면에도 나타납니다.
   await page.goto('/assets/stats');
   await expect(page.getByText(/^1,084,000\s*원$/)).toBeVisible();

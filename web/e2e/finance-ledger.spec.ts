@@ -7,7 +7,7 @@ test.beforeEach(async () => { await resetTestAccount(); });
 test('[LED-002][LED-004][LED-005][CAT-002] 사용자 카테고리로 등록하고 메모만 수정해도 정확한 ID·카드 표시·금액이 보존된다', async ({ page, request }) => {
   await createFinanceHousehold(page, request);
   const category = await addCategoryThroughUi(page, request, '간식/디저트/커피');
-  const key = textField(category, 'key');
+  const key = textField(category, 'categoryId');
   expect(key).toBeTruthy();
   const expense = await addExpenseThroughUi(page, request, { merchant: '회귀 카페', amount: 7300, category: '간식/디저트/커피' });
   const id = documentId(expense);

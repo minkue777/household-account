@@ -23,7 +23,7 @@ describeWithEmulator("[MER-003] Firestore 가맹점 치환 수정", () => {
   });
   afterAll(async () => { if (app) await deleteApp(app); });
 
-  it("가맹점 치환을 지워도 memo와 createdAt은 보존하고 canonical/legacy 양쪽의 중첩 필드가 실제로 제거된다", async () => {
+  it("가맹점 치환을 지워도 memo와 createdAt은 보존하고 canonical 중첩 필드만 실제로 제거된다", async () => {
     const application = createPaymentConfigurationRuntimeApplication(new FirebasePaymentConfigurationAtomicStore(database));
     const command = (id: string) => ({
       actor: { householdId, memberId: "member" }, commandId: id, idempotencyKey: id,
@@ -45,24 +45,23 @@ describeWithEmulator("[MER-003] Firestore 가맹점 치환 수정", () => {
     const result = await application.updateMerchantRule({ ...command("clear"), ruleId, expectedVersion: 2, changes: { mapping: { merchant: "" } } });
     expect(result.kind).toBe("success");
     expect((await canonical.get()).get("mapping")).toEqual({ memo: "식비" });
-    expect((await legacy.get()).get("mapping")).toEqual({ memo: "식비" });
+    expect((await legacy.get()).exists).toBe(false);
     expect((await canonical.get()).get("createdAt")).toEqual(createdAt);
   });
 
   it.each([
     { source: "canonical", field: "category" },
     { source: "canonical", field: "categoryId" },
-    { source: "legacy", field: "category" },
-    { source: "legacy", field: "categoryId" },
   ])("[MER-006] $source 최상위 $field 호환값은 삭제 Command와 수집 설정 재조회 뒤 되살아나지 않는다", async ({ source, field }) => {
     const ruleId = `old-${source}-${field}`;
     const canonical = database.doc(`households/${householdId}/merchantRules/${ruleId}`);
     const legacy = database.doc(`merchant_rules/${ruleId}`);
     const seed = { householdId, merchantKeyword: ruleId, exactMatch: true,
       [field]: "food", mapping: { memo: "원래 메모" }, aggregateVersion: 1 };
-    await (source === "canonical" ? canonical : legacy).set(seed);
-    // 동일 ID의 legacy 문서에도 categoryId가 남는 전환 상태를 포함합니다.
-    if (source === "canonical") await legacy.set({ ...seed, categoryId: "food" });
+    await canonical.set(seed);
+    // 보존한 legacy 원본에 오래된 치환이 있어도 현재 설정에는 되살리지 않습니다.
+    const legacySeed = { ...seed, categoryId: "food" };
+    await legacy.set(legacySeed);
     await database.doc(`households/${householdId}/runtimeProjections/payment-capture-configuration-v1`).delete();
     const query = new FirebaseCaptureConfigurationQuery(database);
     const scope = { householdId, actingMemberId: "member" };
@@ -85,12 +84,11 @@ describeWithEmulator("[MER-003] Firestore 가맹점 치환 수정", () => {
     };
     await submit("clear-category", 1, { categoryId: "" });
     expect(await mapping()).toEqual({ memo: "원래 메모" });
-    for (const reference of [canonical, legacy]) {
-      const stored = (await reference.get()).data();
-      expect(stored).not.toHaveProperty("category");
-      expect(stored).not.toHaveProperty("categoryId");
-      expect(stored?.mapping).toEqual({ memo: "원래 메모" });
-    }
+    const stored = (await canonical.get()).data();
+    expect(stored).not.toHaveProperty("category");
+    expect(stored).not.toHaveProperty("categoryId");
+    expect(stored?.mapping).toEqual({ memo: "원래 메모" });
+    expect((await legacy.get()).data()).toEqual(legacySeed);
     // 다시 수정해도 AtomicStore의 호환 read가 삭제한 category를 되돌리지 않습니다.
     await submit("edit-memo", 2, { memo: "새 메모" });
     expect(await mapping()).toEqual({ memo: "새 메모" });

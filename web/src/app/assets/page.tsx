@@ -50,7 +50,7 @@ export default function AssetsPage() {
     isSessionVerified = true,
     remoteReadEpoch = 0,
   } = useHousehold();
-  const [assets, setAssets] = useState<Asset[]>([]);
+  const [sourceViewAssets, setAssets] = useState<Asset[]>([]);
   const [dailyChanges, setDailyChanges] = useState<{
     householdId: string | null;
     amounts: Record<string, number>;
@@ -78,6 +78,12 @@ export default function AssetsPage() {
   const [showOwnerModal, setShowOwnerModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState<string>(ALL_MEMBERS_OPTION);
   const [ownerProfiles, setOwnerProfiles] = useState<AssetOwnerProfileView[]>([]);
+  const assets = useMemo(() => {
+    const names = new Map(ownerProfiles.map(profile => [profile.profileId, profile.displayName]));
+    return sourceViewAssets.map(asset => asset.ownerRef?.kind === 'profile'
+      ? { ...asset, owner: names.get(asset.ownerRef.profileId) ?? asset.owner }
+      : asset);
+  }, [sourceViewAssets, ownerProfiles]);
   const cachedAssetsRef = useRef<Asset[] | undefined>(undefined);
   const holdingSnapshots = useHouseholdHoldingSnapshots(
     household?.id,
@@ -237,7 +243,7 @@ export default function AssetsPage() {
       setOwnerProfiles([]);
       return;
     }
-    return getAssetOwnerProfileQueries().subscribeActive(
+    return getAssetOwnerProfileQueries().subscribe(
       householdId,
       (profiles) => {
         setOwnerProfiles(profiles);
@@ -370,7 +376,7 @@ export default function AssetsPage() {
     const latest = assets.find((asset) => asset.id === selectedAsset.id);
     if (
       latest !== undefined
-      && latest.aggregateVersion !== selectedAsset.aggregateVersion
+      && (latest.aggregateVersion !== selectedAsset.aggregateVersion || latest.owner !== selectedAsset.owner)
     ) {
       setSelectedAsset(latest);
     }

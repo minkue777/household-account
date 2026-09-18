@@ -11,12 +11,12 @@ jest.mock('@/contexts/ThemeContext', () => ({ useTheme: () => ({ themeConfig: { 
 jest.mock('@/contexts/AppDialogContext', () => ({ useAppDialog: () => ({ showPrompt: jest.fn() }) }));
 jest.mock('@/composition/webCommandRuntime', () => ({ getHouseholdCommandClient: () => ({ execute: mockCommand }) }));
 jest.mock('@/composition/webQueryRuntime', () => ({ getHouseholdQueryClient: () => ({ execute: jest.fn() }) }));
-jest.mock('@/composition/assetOwnerProfileReadRuntime', () => ({ getAssetOwnerProfileQueries: () => ({ subscribeActive: mockProfiles }) }));
+jest.mock('@/composition/assetOwnerProfileReadRuntime', () => ({ getAssetOwnerProfileQueries: () => ({ subscribe: mockProfiles }) }));
 jest.mock('@/composition/stockInstrumentCatalogRuntime', () => ({ warmStockInstrumentCatalog: jest.fn() }));
 jest.mock('@/lib/assetService', () => ({ subscribeToAssets: jest.fn(), refreshAllMarketValues: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('@/platform/read-model/assetDailyChangeReadModel', () => ({ readPreviousAssetDailySummary: jest.fn() }));
 jest.mock('@/lib/utils/useHouseholdHoldingSnapshots', () => ({ useHouseholdHoldingSnapshots: () => ({ stockHoldings: [], cryptoHoldings: [], stockHoldingsReady: true, cryptoHoldingsReady: true }) }));
-jest.mock('@/components/assets/AssetList', () => ({ __esModule: true, default: () => null }));
+jest.mock('@/components/assets/AssetList', () => ({ __esModule: true, default: ({ assets }: { assets: Asset[] }) => <div>{assets.map(item => <span key={item.id} data-testid={`asset-owner-${item.id}`}>{item.owner}</span>)}</div> }));
 jest.mock('@/components/assets/AssetAddModal', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/components/assets/AssetEditModal', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/components/assets/AssetHistoryModal', () => ({ __esModule: true, default: () => null }));
@@ -56,6 +56,22 @@ describe('[AST-009][T-AST-011] 실제 AssetsPage·명의자 command·일간 cach
     jest.mocked(readPreviousAssetDailySummary).mockReset().mockImplementation(() => new Promise(resolve => { resolvePrevious = resolve; }));
   });
   afterEach(() => { cleanup(); jest.useRealTimers(); });
+
+  it('canonical 자산의 profileId로 표시 이름을 연결하고 프로필 이름 변경을 자산 재조회 없이 반영한다', async () => {
+    render(<AssetsPage />);
+    await act(async () => {
+      publishAssets([...assets, asset('archived-owner', 50, 'p-archived')]);
+      publishProfiles([...profiles, dependent]);
+    });
+    expect(screen.getByTestId('asset-owner-a')).toHaveTextContent('민규');
+    expect(screen.getByTestId('asset-owner-child')).toHaveTextContent('지아');
+    expect(screen.getByTestId('asset-owner-archived-owner')).toHaveTextContent('보관 명의');
+    expect(screen.queryByRole('button', { name: '보관 명의' })).not.toBeInTheDocument();
+    const subscriptionCount = jest.mocked(subscribeToAssets).mock.calls.length;
+    await act(async () => { publishProfiles([profile('p-a', '새 이름'), dependent]); });
+    expect(screen.getByTestId('asset-owner-a')).toHaveTextContent('새 이름');
+    expect(subscribeToAssets).toHaveBeenCalledTimes(subscriptionCount);
+  });
 
   it('dependent 추가는 실제 command를 호출하고 profileId 필터의 총액·변동을 함께 전환한다', async () => {
     render(<AssetsPage />);

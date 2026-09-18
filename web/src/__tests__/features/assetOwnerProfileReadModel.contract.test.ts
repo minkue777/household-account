@@ -36,7 +36,7 @@ describe('자산 명의자 Firestore 읽기 모델 계약', () => {
     jest.clearAllMocks();
   });
 
-  test('[T-HH-006][HH-011] 활성 명의자를 서버 함수 없이 생성 순서대로 구독한다', () => {
+  test('[T-HH-006][HH-011] 명의자를 서버 함수 없이 구독하고 보관 명의의 이름은 유지하되 신규 선택에서 제외한다', () => {
     const reference = { path: 'households/house-1/assetOwnerProfiles' };
     const unsubscribe = jest.fn();
     let publish: ((snapshot: ProfileSnapshot) => void) | undefined;
@@ -47,7 +47,7 @@ describe('자산 명의자 Firestore 읽기 모델 계약', () => {
     });
     const listener = jest.fn();
 
-    const dispose = new FirestoreAssetOwnerProfileReadModel().subscribeActive(
+    const dispose = new FirestoreAssetOwnerProfileReadModel().subscribe(
       'house-1',
       listener
     );
@@ -107,6 +107,15 @@ describe('자산 명의자 Firestore 읽기 모델 계약', () => {
     );
     expect(listener).toHaveBeenCalledWith([
       {
+        profileId: 'profile-member-archived',
+        householdId: 'house-1',
+        displayName: '보관 멤버',
+        profileType: 'member',
+        selectionVisibility: 'visible',
+        lifecycleState: 'archived',
+        aggregateVersion: 3,
+      },
+      {
         profileId: 'profile-member',
         householdId: 'house-1',
         displayName: '민규',
@@ -140,6 +149,7 @@ describe('자산 명의자 Firestore 읽기 모델 계약', () => {
     expect(selectVisibleAssetOwnerProfiles(listener.mock.calls[0][0])).toEqual(
       expect.not.arrayContaining([
         expect.objectContaining({ profileId: 'profile-capture-only' }),
+        expect.objectContaining({ profileId: 'profile-member-archived' }),
       ])
     );
 
@@ -157,7 +167,7 @@ describe('자산 명의자 Firestore 읽기 모델 계약', () => {
     });
     const listener = jest.fn();
 
-    new FirestoreAssetOwnerProfileReadModel().subscribeActive(
+    new FirestoreAssetOwnerProfileReadModel().subscribe(
       'house-1',
       listener,
       errorListener

@@ -134,36 +134,16 @@ function mapMerchantRule(
   };
 }
 
-function mergeRules(input: {
-  readonly canonical: readonly firestore.DocumentSnapshot[];
-  readonly legacy: readonly firestore.DocumentSnapshot[];
-  readonly householdId: string;
-}): readonly MerchantRuleRecord[] {
-  const merged = new Map<string, MerchantRuleRecord>();
-  for (const snapshot of input.legacy) {
-    const rule = mapMerchantRule(snapshot, input.householdId);
-    if (rule !== undefined) merged.set(rule.ruleId, rule);
-  }
-  for (const snapshot of input.canonical) {
-    const rule = mapMerchantRule(snapshot, input.householdId);
-    if (rule !== undefined) merged.set(rule.ruleId, rule);
-  }
-  return [...merged.values()];
-}
-
 function mapCard(
   snapshot: firestore.DocumentSnapshot,
   householdId: string,
-  memberIdByDisplayName: ReadonlyMap<string, string>,
 ): RegisteredCardCommandRecord | undefined {
   if (!snapshot.exists) return undefined;
   const data = snapshot.data();
   if (data === undefined) return undefined;
   const documentHouseholdId = text(data, "householdId") ?? householdId;
   if (documentHouseholdId !== householdId) return undefined;
-  const ownerMemberId =
-    text(data, "ownerMemberId") ??
-    memberIdByDisplayName.get(text(data, "owner") ?? "");
+  const ownerMemberId = text(data, "ownerMemberId");
   const cardCompanyCode = text(data, "cardCompanyCode", "cardCompany", "cardLabel");
   if (ownerMemberId === undefined || cardCompanyCode === undefined) return undefined;
   const lastFour = text(data, "lastFour", "cardLastFour");
@@ -184,32 +164,6 @@ function mapCard(
   };
 }
 
-function mergeCards(input: {
-  readonly canonical: readonly firestore.DocumentSnapshot[];
-  readonly legacy: readonly firestore.DocumentSnapshot[];
-  readonly householdId: string;
-  readonly memberIdByDisplayName: ReadonlyMap<string, string>;
-}): readonly RegisteredCardCommandRecord[] {
-  const merged = new Map<string, RegisteredCardCommandRecord>();
-  for (const snapshot of input.legacy) {
-    const card = mapCard(
-      snapshot,
-      input.householdId,
-      input.memberIdByDisplayName,
-    );
-    if (card !== undefined) merged.set(card.cardId, card);
-  }
-  for (const snapshot of input.canonical) {
-    const card = mapCard(
-      snapshot,
-      input.householdId,
-      input.memberIdByDisplayName,
-    );
-    if (card !== undefined) merged.set(card.cardId, card);
-  }
-  return [...merged.values()];
-}
-
 function collectionVersions(
   data: FirebaseFirestore.DocumentData | undefined,
 ): Readonly<Record<string, number>> {
@@ -226,88 +180,44 @@ function collectionVersions(
 }
 
 function merchantRuleDocument(rule: MerchantRuleRecord, created: boolean) {
-  const legacyMapping = {
-    ...(rule.mapping.merchant === undefined
-      ? {}
-      : { merchant: rule.mapping.merchant }),
-    ...(rule.mapping.categoryId === undefined
-      ? {}
-      : { category: rule.mapping.categoryId }),
-    ...(rule.mapping.memo === undefined ? {} : { memo: rule.mapping.memo }),
-  };
   return {
-    canonical: {
-      householdId: rule.householdId,
-      ruleId: rule.ruleId,
-      keyword: rule.keyword,
-      merchantKeyword: rule.keyword,
-      normalizedKeywords: [...rule.normalizedKeywords],
-      matchType: rule.matchType,
-      priority:
-        rule.priority === undefined ? FieldValue.delete() : rule.priority,
-      mapping: { ...rule.mapping },
-      // 호환 reader의 fallback이 제거한 치환을 다시 살리지 않도록 옛 alias도 정리합니다.
-      category: FieldValue.delete(),
-      categoryId: FieldValue.delete(),
-      active: rule.active,
-      isActive: rule.active,
-      aggregateVersion: rule.version,
-      schemaVersion: 2,
-      ...(created ? { createdAt: FieldValue.serverTimestamp() } : {}),
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    legacy: {
-      householdId: rule.householdId,
-      merchantKeyword: rule.keyword,
-      matchType: rule.matchType,
-      exactMatch: rule.matchType === "exact",
-      priority:
-        rule.priority === undefined ? FieldValue.delete() : rule.priority,
-      mapping: legacyMapping,
-      categoryId: FieldValue.delete(),
-      ...(rule.mapping.categoryId === undefined
-        ? { category: FieldValue.delete() }
-        : { category: rule.mapping.categoryId }),
-      isActive: rule.active,
-      aggregateVersion: rule.version,
-      schemaVersion: 1,
-      ...(created ? { createdAt: FieldValue.serverTimestamp() } : {}),
-      updatedAt: FieldValue.serverTimestamp(),
-    },
+    householdId: rule.householdId,
+    ruleId: rule.ruleId,
+    keyword: rule.keyword,
+    normalizedKeywords: [...rule.normalizedKeywords],
+    matchType: rule.matchType,
+    priority:
+      rule.priority === undefined ? FieldValue.delete() : rule.priority,
+    mapping: { ...rule.mapping },
+    // 이전 canonical 문서의 별칭도 정리해 제거한 치환이 남지 않게 합니다.
+    category: FieldValue.delete(),
+    categoryId: FieldValue.delete(),
+    merchantKeyword: FieldValue.delete(),
+    isActive: FieldValue.delete(),
+    active: rule.active,
+    aggregateVersion: rule.version,
+    schemaVersion: 2,
+    ...(created ? { createdAt: FieldValue.serverTimestamp() } : {}),
+    updatedAt: FieldValue.serverTimestamp(),
   };
 }
 
 function cardDocument(
   card: RegisteredCardCommandRecord,
-  ownerDisplayName: string,
   created: boolean,
 ) {
   return {
-    canonical: {
-      householdId: card.householdId,
-      cardId: card.cardId,
-      ownerMemberId: card.ownerMemberId,
-      cardCompanyCode: card.cardCompanyCode,
-      lastFour: card.lastFour ?? "",
-      order: card.order,
-      lifecycle: card.lifecycle,
-      aggregateVersion: card.version,
-      schemaVersion: 2,
-      ...(created ? { createdAt: FieldValue.serverTimestamp() } : {}),
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    legacy: {
-      householdId: card.householdId,
-      owner: ownerDisplayName,
-      ownerMemberId: card.ownerMemberId,
-      cardLabel: card.cardCompanyCode,
-      cardLastFour: card.lastFour ?? "",
-      orderIndex: card.order,
-      aggregateVersion: card.version,
-      schemaVersion: 1,
-      ...(created ? { createdAt: FieldValue.serverTimestamp() } : {}),
-      updatedAt: FieldValue.serverTimestamp(),
-    },
+    householdId: card.householdId,
+    cardId: card.cardId,
+    ownerMemberId: card.ownerMemberId,
+    cardCompanyCode: card.cardCompanyCode,
+    lastFour: card.lastFour ?? "",
+    order: card.order,
+    lifecycle: card.lifecycle,
+    aggregateVersion: card.version,
+    schemaVersion: 2,
+    ...(created ? { createdAt: FieldValue.serverTimestamp() } : {}),
+    updatedAt: FieldValue.serverTimestamp(),
   };
 }
 
@@ -430,16 +340,17 @@ export class FirebasePaymentConfigurationAtomicStore
   ): Promise<{ value: MerchantRuleCommandResult; stage: () => void }> {
     const household = this.database.collection("households").doc(householdId);
     const canonical = household.collection("merchantRules");
-    const legacy = this.database.collection("merchant_rules");
     const claims = household.collection("merchantRuleClaims");
     const meta = household.collection("paymentConfigurationMeta").doc("merchant-rules");
-    const [canonicalSnapshot, legacySnapshot, metaSnapshot] = await Promise.all([
+    const [canonicalSnapshot, metaSnapshot] = await Promise.all([
       transaction.get(canonical),
-      transaction.get(legacy.where("householdId", "==", householdId)),
       transaction.get(meta),
     ]);
     const current = buildMerchantRuleCommandState({
-      rules: mergeRules({ canonical: canonicalSnapshot.docs, legacy: legacySnapshot.docs, householdId }),
+      rules: canonicalSnapshot.docs.flatMap((document) => {
+        const rule = mapMerchantRule(document, householdId);
+        return rule === undefined ? [] : [rule];
+      }),
       collectionVersions: collectionVersions(metaSnapshot.data()),
     });
     const mutation = decide(current);
@@ -450,16 +361,14 @@ export class FirebasePaymentConfigurationAtomicStore
           for (const [ruleId, rule] of afterRules) {
             const previous = beforeRules.get(ruleId);
             if (previous !== undefined && stable(previous) === stable(rule)) continue;
-            const documents = merchantRuleDocument(rule, previous === undefined);
+            const document = merchantRuleDocument(rule, previous === undefined);
             // mapping은 이미 부분 수정 정책을 적용한 최종 상태입니다. nested merge로
             // 저장하면 제거한 치환 필드가 남으므로 이 top-level 필드 전체를 교체합니다.
-            transaction.set(canonical.doc(ruleId), documents.canonical, { mergeFields: Object.keys(documents.canonical) });
-            transaction.set(legacy.doc(ruleId), documents.legacy, { mergeFields: Object.keys(documents.legacy) });
+            transaction.set(canonical.doc(ruleId), document, { mergeFields: Object.keys(document) });
           }
           for (const ruleId of beforeRules.keys()) {
             if (!afterRules.has(ruleId)) {
               transaction.delete(canonical.doc(ruleId));
-              transaction.delete(legacy.doc(ruleId));
             }
           }
           writeClaimDiff({
@@ -524,24 +433,17 @@ export class FirebasePaymentConfigurationAtomicStore
   ): Promise<PaymentConfigurationAtomicResult<RegisteredCardCommandResult>> {
     const household = this.database.collection("households").doc(metadata.householdId);
     const canonical = household.collection("registeredCards");
-    const legacy = this.database.collection("registered_cards");
     const claims = household.collection("registeredCardClaims");
-    const members = household.collection("members");
     const receipt = receiptReference(this.database, metadata);
     const canonicalCard = canonical.doc(cardId);
-    const legacyCard = legacy.doc(cardId);
     try {
       return await this.database.runTransaction(async (transaction) => {
         const [
           receiptSnapshot,
           canonicalSnapshot,
-          legacySnapshot,
-          actorMemberSnapshot,
         ] = await transaction.getAll(
           receipt,
           canonicalCard,
-          legacyCard,
-          members.doc(metadata.actorMemberId),
         );
         if (receiptSnapshot.exists) {
           if (receiptSnapshot.data()?.payloadFingerprint !== metadata.payloadFingerprint) {
@@ -553,41 +455,8 @@ export class FirebasePaymentConfigurationAtomicStore
           } as const;
         }
 
-        const actorDisplayName = text(
-          actorMemberSnapshot.data(),
-          "displayName",
-          "name",
-        );
-        const memberIdByDisplayName = new Map<string, string>();
-        if (actorDisplayName !== undefined) {
-          memberIdByDisplayName.set(actorDisplayName, metadata.actorMemberId);
-        }
-        let currentCards = mergeCards({
-          canonical: [canonicalSnapshot],
-          legacy: [legacySnapshot],
-          householdId: metadata.householdId,
-          memberIdByDisplayName,
-        });
-        if (
-          currentCards.length === 0 &&
-          !canonicalSnapshot.exists &&
-          legacySnapshot.exists &&
-          text(legacySnapshot.data(), "ownerMemberId") === undefined
-        ) {
-          const legacyMembers = await transaction.get(members);
-          for (const member of legacyMembers.docs) {
-            const displayName = text(member.data(), "displayName", "name");
-            if (displayName !== undefined) {
-              memberIdByDisplayName.set(displayName, member.id);
-            }
-          }
-          currentCards = mergeCards({
-            canonical: [canonicalSnapshot],
-            legacy: [legacySnapshot],
-            householdId: metadata.householdId,
-            memberIdByDisplayName,
-          });
-        }
+        const card = mapCard(canonicalSnapshot, metadata.householdId);
+        const currentCards = card === undefined ? [] : [card];
         const current: RegisteredCardCommandState = {
           cards: currentCards,
           claims: currentCards
@@ -633,17 +502,7 @@ export class FirebasePaymentConfigurationAtomicStore
             }
           }
 
-          const ownerDisplayName =
-            actorDisplayName ??
-            text(legacySnapshot.data(), "owner") ??
-            updated.ownerMemberId;
-          const documents = cardDocument(updated, ownerDisplayName, false);
-          transaction.set(canonicalCard, documents.canonical, { merge: true });
-          if (updated.lifecycle === "active") {
-            transaction.set(legacyCard, documents.legacy, { merge: true });
-          } else {
-            transaction.delete(legacyCard);
-          }
+          transaction.set(canonicalCard, cardDocument(updated, false), { merge: true });
 
           if (beforeClaim !== undefined && beforeClaim[0] !== afterClaim?.[0]) {
             transaction.delete(claims.doc(beforeClaim[0]));
@@ -692,9 +551,7 @@ export class FirebasePaymentConfigurationAtomicStore
   ): Promise<PaymentConfigurationAtomicResult<RegisteredCardCommandResult>> {
     const household = this.database.collection("households").doc(metadata.householdId);
     const canonical = household.collection("registeredCards");
-    const legacy = this.database.collection("registered_cards");
     const claims = household.collection("registeredCardClaims");
-    const members = household.collection("members");
     const meta = household.collection("paymentConfigurationMeta").doc("registered-cards");
     const receipt = receiptReference(this.database, metadata);
     try {
@@ -702,14 +559,10 @@ export class FirebasePaymentConfigurationAtomicStore
         const [
           receiptSnapshot,
           canonicalSnapshot,
-          legacySnapshot,
-          memberSnapshot,
           metaSnapshot,
         ] = await Promise.all([
           transaction.get(receipt),
           transaction.get(canonical),
-          transaction.get(legacy.where("householdId", "==", metadata.householdId)),
-          transaction.get(members),
           transaction.get(meta),
         ]);
         if (receiptSnapshot.exists) {
@@ -722,20 +575,9 @@ export class FirebasePaymentConfigurationAtomicStore
           } as const;
         }
 
-        const memberIdByDisplayName = new Map<string, string>();
-        const displayNameByMemberId = new Map<string, string>();
-        for (const member of memberSnapshot.docs) {
-          const displayName = text(member.data(), "displayName", "name");
-          if (displayName !== undefined) {
-            memberIdByDisplayName.set(displayName, member.id);
-            displayNameByMemberId.set(member.id, displayName);
-          }
-        }
-        const currentCards = mergeCards({
-          canonical: canonicalSnapshot.docs,
-          legacy: legacySnapshot.docs,
-          householdId: metadata.householdId,
-          memberIdByDisplayName,
+        const currentCards = canonicalSnapshot.docs.flatMap((document) => {
+          const card = mapCard(document, metadata.householdId);
+          return card === undefined ? [] : [card];
         });
         const current: RegisteredCardCommandState = {
           cards: currentCards,
@@ -758,15 +600,7 @@ export class FirebasePaymentConfigurationAtomicStore
           for (const [cardId, card] of afterCards) {
             const previous = beforeCards.get(cardId);
             if (previous !== undefined && stable(previous) === stable(card)) continue;
-            const ownerDisplayName =
-              displayNameByMemberId.get(card.ownerMemberId) ?? card.ownerMemberId;
-            const documents = cardDocument(card, ownerDisplayName, previous === undefined);
-            transaction.set(canonical.doc(cardId), documents.canonical, { merge: true });
-            if (card.lifecycle === "active") {
-              transaction.set(legacy.doc(cardId), documents.legacy, { merge: true });
-            } else {
-              transaction.delete(legacy.doc(cardId));
-            }
+            transaction.set(canonical.doc(cardId), cardDocument(card, previous === undefined), { merge: true });
           }
           writeClaimDiff({
             transaction,

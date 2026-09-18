@@ -5,12 +5,12 @@ import { addCategoryThroughUi, addExpenseThroughUi, createFinanceHousehold, docu
 test.beforeEach(async () => { await resetTestAccount(); });
 
 test('[T-SEA-001][SEA-001][SEA-002][SEA-004][SEA-005] 전체기간 검색은 과거 가맹점·메모·카드 별칭·마스킹과 월별 합계를 실제 SDK로 읽는다', async ({ page, request }) => {
-  await createFinanceHousehold(page, request);
+  const householdId = await createFinanceHousehold(page, request);
   const newest = await addExpenseThroughUi(page, request, { merchant: '공통 카페 현재', amount: 3000, memo: '구독영수증', date: seoulDate() });
   await addExpenseThroughUi(page, request, { merchant: '공통 카페 과거', amount: 4500, memo: '출장영수증', date: '2020-02-13' });
   // 카드 수집 경계는 별도 ingestion E2E가 담당합니다. 이 fixture는 생성 당시
   // 저장되는 카드 증거를 입력으로 삼아 실제 공개 Query/SDK/검색 UI를 검증합니다.
-  await writeFirestoreFixture(request, `expenses/${documentId(newest)}`, {
+  await writeFirestoreFixture(request, `households/${householdId}/ledgerTransactions/${documentId(newest)}`, {
     ...newest.fields!, cardType: { stringValue: 'card' }, cardDisplay: { stringValue: '국민카드(2972)' },
     cardEvidence: { stringValue: '국민카드(2972)' }, cardLastFour: { stringValue: '2972' },
   });
@@ -70,16 +70,16 @@ test('[T-SEA-002][T-SEA-003][SEA-003][SEA-004] 50건이 넘어도 월 전체를 
   for (let offset = 0; offset < 51; offset += 10) {
     await Promise.all(Array.from({ length: Math.min(10, 51 - offset) }, (_, index) => {
       const number = offset + index + 1;
-      return writeFirestoreFixture(request, `expenses/search-page-${String(number).padStart(3, '0')}`, firestoreFields({
-        householdId, merchant: `페이지 거래 ${String(number).padStart(3, '0')}`, amount: 100,
-        category: 'etc', date: '2020-02-15', time: '12:00', transactionType: 'expense', lifecycleState: 'active', aggregateVersion: 1,
+      return writeFirestoreFixture(request, `households/${householdId}/ledgerTransactions/search-page-${String(number).padStart(3, '0')}`, firestoreFields({
+        householdId, merchant: `페이지 거래 ${String(number).padStart(3, '0')}`, amountInWon: 100,
+        categoryId: 'etc', accountingDate: '2020-02-15', localTime: '12:00', transactionType: 'expense', lifecycleState: 'active', aggregateVersion: 1,
       }));
     }));
   }
   await Promise.all(Array.from({ length: 10 }, (_, index) => writeFirestoreFixture(request,
-    `expenses/search-older-${index}`, firestoreFields({ householdId,
-      merchant: `페이지 거래 과거 ${index}`, amount: 100, category: 'etc', date: '2020-01-16',
-      time: '12:00', transactionType: 'expense', lifecycleState: 'active', aggregateVersion: 1,
+    `households/${householdId}/ledgerTransactions/search-older-${index}`, firestoreFields({ householdId,
+      merchant: `페이지 거래 과거 ${index}`, amountInWon: 100, categoryId: 'etc', accountingDate: '2020-01-16',
+      localTime: '12:00', transactionType: 'expense', lifecycleState: 'active', aggregateVersion: 1,
     }))));
   await page.goto('/');
   await page.getByRole('button', { name: '검색', exact: true }).click();

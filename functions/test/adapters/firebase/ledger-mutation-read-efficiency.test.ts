@@ -1,3 +1,5 @@
+import * as catalogDocuments from '../../../src/adapters/firebase/categories/categoryCatalogDocument';
+import { categoryCatalogDocument } from '../../support/category-catalog-document';
 import type { Firestore } from "firebase-admin/firestore";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -19,25 +21,6 @@ class ObservedFirestore extends InMemoryFirestore {
   categoryReads = 0;
   categoryReadGate?: Promise<void>;
   categoryReadFailure?: Error;
-
-  override collection(path: string) {
-    const reference = super.collection(path);
-    if (path === "categories") {
-      const where = reference.where.bind(reference);
-      reference.where = (...conditions) => {
-        const query = where(...conditions);
-        const get = query.get.bind(query);
-        query.get = async () => {
-          this.categoryReads += 1;
-          await this.categoryReadGate;
-          if (this.categoryReadFailure) throw this.categoryReadFailure;
-          return get();
-        };
-        return query;
-      };
-    }
-    return reference;
-  }
 
   override async runTransaction<T>(operation: (transaction: MemoryTransaction) => Promise<T>): Promise<T> {
     this.beforeTransaction?.();
@@ -68,7 +51,19 @@ function fixture() {
   database.seed(canonical("source"), {
     ...source, originChannel: "android", cardEvidence: "현대카드|1234", captureLineageId: "capture-original",
   });
-  database.seed("categories/etc", { householdId, key: "etc", isActive: true });
+  database.seed(`households/${householdId}/categoryCatalog/current`, categoryCatalogDocument(householdId, [{ categoryId: "etc" }]));
+  const reference = catalogDocuments.categoryCatalogReference;
+  vi.spyOn(catalogDocuments, 'categoryCatalogReference').mockImplementation((db, id) => {
+    const document = reference(db, id);
+    const get = document.get.bind(document);
+    document.get = async () => {
+      database.categoryReads += 1;
+      await database.categoryReadGate;
+      if (database.categoryReadFailure) throw database.categoryReadFailure;
+      return get();
+    };
+    return document;
+  });
   return database;
 }
 
@@ -157,15 +152,15 @@ describe("Ledger mutation bounded reads", () => {
     expect(database.paths("outboxEvents/")).toEqual([]);
   });
 
-  it("batches receipt and both transaction copies while preserving the receipt and outbox", async () => {
+  it("batches receipt and the single canonical transaction while preserving receipt and outbox", async () => {
     const database = fixture();
     await execute(database, "ledger.update-transaction.v1", { transactionId: "source", expectedVersion: 2, patch: { memo: "수정" } });
     expect(database.readBatches).toHaveLength(1);
     expect(database.readBatches[0]).toEqual([
       expect.stringMatching(/^commandReceipts\/household-finance-ledger\/receipts\//),
-      canonical("source"), "expenses/source",
+      canonical("source"),
     ]);
-    for (const path of [canonical("source"), "expenses/source"]) {
+    for (const path of [canonical("source")]) {
       expect(database.document(path)).toMatchObject({ memo: "수정", aggregateVersion: 3 });
     }
     expect(database.paths("outboxEvents/")).toHaveLength(1);
@@ -250,7 +245,7 @@ describe("Ledger mutation bounded reads", () => {
     expect(load).toHaveBeenCalledExactlyOnceWith({ sourceId: "source", includeDerived: true });
     expect(database.readBatches).toHaveLength(1);
     expect(new Set(database.readBatches[0])).toEqual(new Set(
-      ["source", ...Object.keys(expectedVersions)].flatMap((id) => [canonical(id), `expenses/${id}`]),
+      ["source", ...Object.keys(expectedVersions)].map((id) => canonical(id)),
     ));
     expect(database.document(canonical("source"))).toMatchObject({
       lifecycleState: "active", aggregateVersion: 4, amountInWon: 10000,

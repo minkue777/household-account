@@ -11,12 +11,10 @@ import type {
   LedgerCommandResult,
   LedgerTransactionView,
 } from "../../../contexts/household-finance/ledger/domain/model/ledgerTransaction";
-import { mergeCanonicalLedgerTransactions } from "./migrationAwareLedgerUnion";
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
 import { ledgerTransactionDocument as transactionDocument } from "./ledgerDocumentMapping";
 
-const TRANSACTIONS = "expenses";
 const RECEIPT_CONTEXT = "household-finance-ledger";
 
 export interface FirebaseLedgerCommitParticipant {
@@ -136,17 +134,13 @@ export class FirebaseLedgerCommandRepository
     transactionId: string,
   ): Promise<LedgerRepositoryReadResult<LedgerTransactionView | undefined>> {
     try {
-      const [canonicalSnapshot, legacySnapshot] = await Promise.all([
-        this.database
+      const canonicalSnapshot = await this.database
           .collection("households")
           .doc(this.householdId)
           .collection("ledgerTransactions")
           .doc(transactionId)
-          .get(),
-        this.database.collection(TRANSACTIONS).doc(transactionId).get(),
-      ]);
-      const transaction =
-        mapTransaction(canonicalSnapshot) ?? mapTransaction(legacySnapshot);
+          .get();
+      const transaction = mapTransaction(canonicalSnapshot);
       return {
         kind: "ready",
         value:
@@ -164,17 +158,11 @@ export class FirebaseLedgerCommandRepository
       return { kind: "ready", value: [] };
     }
     try {
-      const [canonical, legacy] = await Promise.all([
-        this.database
+      const canonical = await this.database
           .collection("households")
           .doc(householdId)
           .collection("ledgerTransactions")
-          .get(),
-        this.database
-          .collection(TRANSACTIONS)
-          .where("householdId", "==", householdId)
-          .get(),
-      ]);
+          .get();
       const mapAll = (documents: readonly firestore.QueryDocumentSnapshot[]) =>
         documents
           .map(mapTransaction)
@@ -183,10 +171,7 @@ export class FirebaseLedgerCommandRepository
           );
       return {
         kind: "ready",
-        value: mergeCanonicalLedgerTransactions({
-          canonical: mapAll(canonical.docs),
-          legacy: mapAll(legacy.docs),
-        }),
+        value: mapAll(canonical.docs),
       };
     } catch (_error) {
       return { kind: "retryable-failure", code: "LEDGER_READ_UNAVAILABLE" };
@@ -205,9 +190,6 @@ export class FirebaseLedgerCommandRepository
       .doc(RECEIPT_CONTEXT)
       .collection("receipts")
       .doc(receiptId(this.householdId, input.commandId));
-    const legacyTransactionReference = this.database
-      .collection(TRANSACTIONS)
-      .doc(input.transaction.transactionId);
     const canonicalTransactionReference = this.database
       .collection("households")
       .doc(this.householdId)
@@ -217,10 +199,9 @@ export class FirebaseLedgerCommandRepository
 
     try {
       return await this.database.runTransaction(async (unitOfWork) => {
-        const [receiptSnapshot, canonicalSnapshot, legacySnapshot] = await unitOfWork.getAll(
+        const [receiptSnapshot, canonicalSnapshot] = await unitOfWork.getAll(
           receiptReference,
           canonicalTransactionReference,
-          legacyTransactionReference,
         );
         if (receiptSnapshot.exists) {
           const storedHash = receiptSnapshot.data()?.payloadHash;
@@ -242,7 +223,7 @@ export class FirebaseLedgerCommandRepository
         }
 
         const current =
-          mapTransaction(canonicalSnapshot) ?? mapTransaction(legacySnapshot);
+          mapTransaction(canonicalSnapshot);
         if (
           current !== undefined &&
           current.householdId !== this.householdId
@@ -264,7 +245,7 @@ export class FirebaseLedgerCommandRepository
         }
 
         const prepared = await this.participant?.prepare(unitOfWork, {
-          current: canonicalSnapshot.exists ? canonicalSnapshot.data() ?? {} : legacySnapshot.data() ?? {},
+          current: canonicalSnapshot.data() ?? {},
           updated: input.transaction,
         });
         if (prepared !== undefined && typeof prepared !== "function") {
@@ -274,15 +255,6 @@ export class FirebaseLedgerCommandRepository
         unitOfWork.set(
           canonicalTransactionReference,
           transactionDocument(input.transaction, !canonicalSnapshot.exists),
-          { merge: true },
-        );
-        unitOfWork.set(
-          legacyTransactionReference,
-          {
-            ...transactionDocument(input.transaction, !legacySnapshot.exists),
-            cardLastFour: input.transaction.cardDisplay,
-            schemaVersion: 1,
-          },
           { merge: true },
         );
         new FirebaseTransactionalOutbox(this.database).append(unitOfWork, {

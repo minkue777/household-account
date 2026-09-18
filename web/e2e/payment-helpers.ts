@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { expect, type APIRequestContext } from '@playwright/test';
-import { executeHouseholdCommand, readFirestoreCollection, type EmulatorAccount, type FirestoreValue, type FirestoreDocument, E2E_PROJECT_ID } from './emulator';
+import { executeHouseholdCommand, readExpenseDocuments, readFirestoreCollection, type EmulatorAccount, type FirestoreValue, type FirestoreDocument, E2E_PROJECT_ID } from './emulator';
 
 export interface PaymentActor extends EmulatorAccount { householdId: string; memberId: string }
 export function decodeDocument(document: FirestoreDocument): Record<string, any> {
@@ -15,6 +15,9 @@ export function decodeDocument(document: FirestoreDocument): Record<string, any>
     return null;
   };
   return { id: document.name.split('/').at(-1)!, ...Object.fromEntries(Object.entries(document.fields ?? {}).map(([key, value]) => [key, decode(value)])) };
+}
+export async function ledgerRecords(request: APIRequestContext) {
+  return (await readExpenseDocuments(request)).map(decodeDocument);
 }
 export async function records(request: APIRequestContext, path: string) {
   return (await readFirestoreCollection(request, path)).map(decodeDocument);

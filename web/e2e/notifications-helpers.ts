@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { callEmulatorFunction, createEmulatorAccount, E2E_PROJECT_ID, executeHouseholdCommand, firestoreFields, writeFirestoreFixture } from './emulator';
 import { openExpenseEdit } from './finance-helpers';
-import { paymentCommand, records, type PaymentActor } from './payment-helpers';
+import { paymentCommand, ledgerRecords, records, type PaymentActor } from './payment-helpers';
 
 export const endpointId = (fid: string) => createHash('sha256').update(fid).digest('hex');
 /** Mint Native membership claims through the deployed callable, then let Auth Emulator
@@ -54,7 +54,7 @@ export async function waitForOutbox(request: APIRequestContext, transactionId: s
 }
 export async function requestNotification(request: APIRequestContext, actor: PaymentActor, transactionId: string, commandId?: string) {
   const previous = (await records(request, 'outboxEvents')).map(row => row.id);
-  const transaction = (await records(request, 'expenses')).find(row => row.id === transactionId)!;
+  const transaction = (await ledgerRecords(request)).find(row => row.id === transactionId)!;
   const payload = { transactionId, expectedVersion: transaction.aggregateVersion };
   const result = await paymentCommand(request, actor, 'ledger.request-notification.v1', payload, commandId);
   const event = await waitForOutbox(request, transactionId, 'HouseholdNotificationRequested', previous);

@@ -1,3 +1,4 @@
+import { categoryCatalogDocument } from "../../../support/category-catalog-document";
 import type * as firestore from "firebase-admin/firestore";
 import type { Messaging } from "firebase-admin/messaging";
 import { describe, expect, it, vi } from "vitest";
@@ -46,7 +47,7 @@ describe("Notifications 실제 Outbox dispatch와 Firebase 전달 저장소", ()
     const subject = setup();
     const endpoints = vi.spyOn(subject.store, "listEndpoints");
     const memberships = vi.spyOn(subject.membership, "status");
-    subject.memory.seed("categories/etc", { householdId: "house", key: "etc", isActive: true });
+    subject.memory.seed("households/house/categoryCatalog/current", categoryCatalogDocument("house", [{ categoryId: "etc" }]));
     if (mode === "recurring") {
       subject.memory.seed("households/house/recurringPlans/plan", {
         householdId: "house", planId: "plan", merchant: "정기", categoryId: "etc",

@@ -21,7 +21,7 @@ function command(
 }
 
 describe("Firebase payment configuration atomic adapter", () => {
-  it("현재 Web payload를 canonical/legacy에 함께 쓰고 rule claim·version·멱등성을 보장한다", async () => {
+  it("현재 Web payload를 canonical에만 쓰고 rule claim·version·멱등성을 보장한다", async () => {
     const memory = new InMemoryFirestore();
     memory.seed("households/house-1/members/member-1", {
       householdId: "house-1",
@@ -51,7 +51,7 @@ describe("Firebase payment configuration atomic adapter", () => {
     const ruleId = first.value.ruleId as string;
     expect(memory.document(`households/house-1/merchantRules/${ruleId}`)).toMatchObject({
       householdId: "house-1",
-      merchantKeyword: "스타벅스 , 스타벅스리저브",
+      keyword: "스타벅스 , 스타벅스리저브",
       normalizedKeywords: ["스타벅스", "스타벅스리저브"],
       matchType: "contains",
       priority: 10,
@@ -59,11 +59,8 @@ describe("Firebase payment configuration atomic adapter", () => {
       aggregateVersion: 1,
       schemaVersion: 2,
     });
-    expect(memory.document(`merchant_rules/${ruleId}`)).toMatchObject({
-      householdId: "house-1",
-      mapping: { merchant: "스타벅스", category: "food" },
-      priority: 10,
-    });
+    expect(memory.has(`merchant_rules/${ruleId}`)).toBe(false);
+    expect(memory.transactionReads().some(({ path }) => path.startsWith("merchant_rules"))).toBe(false);
     expect(memory.paths("households/house-1/merchantRuleClaims/")).toHaveLength(1);
     expect(memory.paths("commandReceipts/payment-configuration/receipts/")).toHaveLength(1);
 
@@ -83,7 +80,7 @@ describe("Firebase payment configuration atomic adapter", () => {
     expect(memory.paths("households/house-1/merchantRules/")).toHaveLength(1);
   });
 
-  it("카드 owner를 Actor로 고정하고 claim·순서·퇴역과 legacy 삭제를 한 transaction으로 반영한다", async () => {
+  it("카드 owner를 Actor로 고정하고 claim·순서·퇴역을 canonical 한 transaction으로 반영한다", async () => {
     const memory = new InMemoryFirestore();
     memory.seed("households/house-1/members/member-1", {
       householdId: "house-1",
@@ -116,12 +113,7 @@ describe("Firebase payment configuration atomic adapter", () => {
       lifecycle: "active",
       aggregateVersion: 1,
     });
-    expect(memory.document(`registered_cards/${firstId}`)).toMatchObject({
-      owner: "민규",
-      ownerMemberId: "member-1",
-      cardLabel: "국민",
-      cardLastFour: "1234",
-    });
+    expect(memory.has(`registered_cards/${firstId}`)).toBe(false);
 
     expect(
       await application.registerCard({
@@ -137,11 +129,11 @@ describe("Firebase payment configuration atomic adapter", () => {
         cardIds: [secondId, firstId],
       }),
     ).toEqual({ kind: "success", value: {} });
-    expect(memory.document(`registered_cards/${secondId}`)).toMatchObject({
-      orderIndex: 0,
+    expect(memory.document(`households/house-1/registeredCards/${secondId}`)).toMatchObject({
+      order: 0,
     });
-    expect(memory.document(`registered_cards/${firstId}`)).toMatchObject({
-      orderIndex: 1,
+    expect(memory.document(`households/house-1/registeredCards/${firstId}`)).toMatchObject({
+      order: 1,
     });
 
     expect(
@@ -203,20 +195,12 @@ describe("Firebase payment configuration atomic adapter", () => {
     expect(
       memory.document(`households/house-1/registeredCards/${cardId}`),
     ).toMatchObject({ lastFour: "", aggregateVersion: 3 });
-    expect(memory.document(`registered_cards/${cardId}`)).toMatchObject({
-      cardLastFour: "",
-      aggregateVersion: 3,
-    });
+    expect(memory.has(`registered_cards/${cardId}`)).toBe(false);
     expect(memory.transactionReads()).toEqual(
       expect.arrayContaining([
         {
           kind: "document",
           path: `households/house-1/registeredCards/${cardId}`,
-        },
-        { kind: "document", path: `registered_cards/${cardId}` },
-        {
-          kind: "document",
-          path: "households/house-1/members/member-1",
         },
       ]),
     );
@@ -228,6 +212,7 @@ describe("Firebase payment configuration atomic adapter", () => {
         path.includes("paymentConfigurationMeta"),
       ),
     ).toBe(false);
+    expect(memory.transactionReads().some(({ path }) => path.startsWith("registered_cards") || path.includes("/members/"))).toBe(false);
   });
 
   it("카드 수정 receipt를 재생하고 다른 payload는 상태 변경 없이 거부한다", async () => {

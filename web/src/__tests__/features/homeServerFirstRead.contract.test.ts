@@ -269,72 +269,54 @@ describe('가계부 첫 화면 server-first 조회 계약', () => {
 
     expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1);
     expect(mockOnSnapshot).not.toHaveBeenCalled();
-    expect(mockWhere).toHaveBeenCalledWith('date', '>=', '2026-08-01');
-    expect(mockWhere).toHaveBeenCalledWith('date', '<=', '2026-08-31');
+    expect(mockWhere).toHaveBeenCalledWith('accountingDate', '>=', '2026-08-01');
+    expect(mockWhere).toHaveBeenCalledWith('accountingDate', '<=', '2026-08-31');
   });
 
-  it('카테고리도 Firestore cache snapshot을 건너뛰고 서버 snapshot부터 방출한다', () => {
+  function catalogData(version = 1, defaultCategoryId: string | null = null) {
+    return { schemaVersion: 1, householdId: 'household-1', catalogVersion: version, defaultCategoryId,
+      categories: [{ categoryId: 'food', name: '최신', color: '#123456', budgetInWon: null, sortOrder: 0, version: 3, state: 'active' }] };
+  }
+
+  it('카테고리는 단일 catalog의 서버 snapshot부터 stable ID와 개별 버전을 방출한다', () => {
     const callback = jest.fn();
     subscribeToCategories('household-1', callback);
     const { options, next } = listenerArguments();
-
     expect(options).toEqual({ includeMetadataChanges: true });
-    next({
-      metadata: { fromCache: true },
-      docs: [{
-        id: 'cached-category',
-        data: () => ({ householdId: 'household-1', key: 'old', label: '이전' }),
-      }],
-    });
+    next({ metadata: { fromCache: true }, data: () => catalogData() });
     expect(callback).not.toHaveBeenCalled();
-
-    next({
-      metadata: { fromCache: false },
-      docs: [{
-        id: 'server-category',
-        data: () => ({ householdId: 'household-1', key: 'new', label: '최신' }),
-      }],
-    });
+    next({ metadata: { fromCache: false }, data: () => catalogData(1, 'food') });
     expect(callback).toHaveBeenLastCalledWith([
-      expect.objectContaining({ id: 'server-category', label: '최신' }),
+      expect.objectContaining({ id: 'food', key: 'food', label: '최신', aggregateVersion: 3, isDefault: true }),
     ]);
   });
 
-  it('카테고리 카탈로그 버전은 단일 설정 문서의 서버 변경을 구독하고 해제한다', () => {
+  it('카테고리 카탈로그 버전은 목록과 같은 문서의 서버 변경을 구독하고 해제한다', () => {
     const callback = jest.fn();
     const unsubscribe = jest.fn();
     mockOnSnapshot.mockReturnValue(unsubscribe);
-
     const dispose = subscribeToCategoryCatalogVersion('household-1', callback);
     const { options, next } = listenerArguments();
-    expect(mockOnSnapshot.mock.calls[0][0]).toEqual({
-      kind: 'document',
-      segments: [{ kind: 'db' }, 'households', 'household-1', 'categorySettings', 'default'],
-    });
+    expect(mockOnSnapshot.mock.calls[0][0]).toEqual({ kind: 'document',
+      segments: [{ kind: 'db' }, 'households', 'household-1', 'categoryCatalog', 'current'] });
     expect(options).toEqual({ includeMetadataChanges: true });
-
-    next({ metadata: { fromCache: true }, data: () => ({ catalogVersion: 6 }) });
+    next({ metadata: { fromCache: true }, data: () => catalogData(6) });
     expect(callback).not.toHaveBeenCalled();
-    next({ metadata: { fromCache: false }, data: () => ({ catalogVersion: 7, defaultCategoryId: 'food' }) });
-    next({ metadata: { fromCache: true }, data: () => ({ catalogVersion: 6 }) });
-    next({ metadata: { fromCache: false }, data: () => ({ catalogVersion: 8 }) });
+    next({ metadata: { fromCache: false }, data: () => catalogData(7, 'food') });
+    next({ metadata: { fromCache: true }, data: () => catalogData(6) });
+    next({ metadata: { fromCache: false }, data: () => catalogData(8) });
     expect(callback.mock.calls).toEqual([[7, 'food'], [8, undefined]]);
     expect(mockGetDocFromServer).not.toHaveBeenCalled();
     expect(mockGetDocsFromServer).not.toHaveBeenCalled();
-
     dispose();
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    { description: '설정 문서가 없으면', data: undefined, expected: 0 },
-    { description: '버전 필드가 없으면', data: {}, expected: 0 },
-    { description: 'legacy aggregateVersion만 있으면', data: { aggregateVersion: 4 }, expected: 4 },
-  ])('카테고리 카탈로그는 $description 서버 저장소와 같은 버전을 사용한다', ({ data, expected }) => {
+  it('아직 생성되지 않은 catalog는 서버 저장소와 같은 빈 상태와 버전 0을 사용한다', () => {
     const callback = jest.fn();
     subscribeToCategoryCatalogVersion('household-1', callback);
-    listenerArguments().next({ metadata: { fromCache: false }, data: () => data });
-    expect(callback).toHaveBeenCalledWith(expected, undefined);
+    listenerArguments().next({ metadata: { fromCache: false }, data: () => undefined });
+    expect(callback).toHaveBeenCalledWith(0, undefined);
   });
 
   it('카테고리 카탈로그 권한 오류를 버전 0으로 위장하지 않고 호출자에게 전달한다', () => {

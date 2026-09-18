@@ -9,6 +9,7 @@ import { FirebaseCaptureConfigurationQuery } from "../../../src/adapters/firebas
 import type { CaptureConfigurationQueryResult } from "../../../src/contexts/payment-capture/android-payment-ingestion/application/ports/out/captureConfigurationQueryPort";
 import { FirebaseCaptureSubmissionReceiptStore, Sha256CapturePayloadFingerprint } from "../../../src/adapters/firebase/payment-capture/firebaseCaptureSubmissionReceiptStore";
 import { InMemoryFirestore } from "../../support/in-memory-firestore";
+import { categoryCatalogDocument } from "../../support/category-catalog-document";
 import { readContractJson } from "../../support/contract-json";
 import type { AndroidRawNotificationInput } from "../../../src/contexts/payment-capture/android-payment-ingestion/public";
 import { Sha256AndroidRawNotificationHasher } from "../../../src/adapters/crypto/payment-capture/sha256AndroidRawNotificationHasher";
@@ -56,7 +57,7 @@ describe("raw parser부터 실제 Capture receipt와 Firebase Ledger까지", () 
     expect(records[0].value).toMatchObject({ amountInWon: 9_500, approvalAmountInWon: 10_000 });
     const ledgerBefore = subject.memory.documentsInCollection("households/house/ledgerTransactions");
     expect(ledgerBefore[0].value).toMatchObject({ amountInWon: 9_500, amount: 9_500 });
-    expect(subject.memory.documentsInCollection("expenses")[0].value.amount).toBe(9_500);
+    expect(subject.memory.documentsInCollection("expenses")).toHaveLength(0);
     expect(await subject.submit(toss(10_000), "viva.republica.toss", "observation.toss.approval")).toEqual(approved);
 
     expect(await subject.submit(toss(9_500, true), "viva.republica.toss", "observation.toss.wrong-cancel")).toMatchObject({ kind: "success", value: { transactionResult: { kind: "notFound" } } });
@@ -88,7 +89,7 @@ describe("raw parser부터 실제 Capture receipt와 Firebase Ledger까지", () 
     const rulePath = "households/house/merchantRules/g";
     subject.memory.seed(cardPath, { ownerMemberId: "member", companyLabel: "경기지역화폐", lifecycleState: "active" });
     subject.memory.seed(rulePath, { keyword: "카페", matchType: "contains", priority: 1, active: true, mapping: { merchant: "최초 표시명", categoryId: "etc" } });
-    subject.memory.seed("households/house/categories/etc", { lifecycleState: "active" });
+    subject.memory.seed("households/house/categoryCatalog/current", categoryCatalogDocument("house", [{ categoryId: "etc" }], { defaultCategoryId: "etc" }));
     const query = new FirebaseCaptureConfigurationQuery(subject.memory as unknown as firestore.Firestore);
     subject.configuration.load.mockImplementation(input => query.load(input));
     const notification = fixture.cases.find((item) => item.caseId === "gyeonggi-payment-and-balance")!.raw;

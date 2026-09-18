@@ -8,7 +8,7 @@ jest.mock('@/composition/clientSessionScope', () => ({ requireClientSessionScope
 jest.mock('@/platform/read-model/firestoreServerReadModel', () => ({ db: {}, collection: jest.fn((_db, ...path) => path.join('/')), query: jest.fn((...args) => args), where: jest.fn((...args) => args), orderBy: jest.fn(), documentId: jest.fn(), startAfter: jest.fn(), limit: jest.fn(), getDocsFromServer: jest.fn() }));
 const read = getDocsFromServer as jest.Mock;
 const doc = (id: string, values: Record<string, unknown>) => ({ id, data: () => values });
-const expense = (id: string, extra = {}) => doc(id, { householdId: 'home', date: '2026-09-01', amount: 0, category: 'food', transactionType: 'expense', ...extra });
+const expense = (id: string, extra = {}) => doc(id, { householdId: 'home', accountingDate: '2026-09-01', amountInWon: 0, categoryId: 'food', transactionType: 'expense', ...extra });
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { resolve, promise }; }
 beforeEach(() => { jest.clearAllMocks(); mockScope = { householdId: 'home', principalUid: 'uid', memberId: 'member', sessionGeneration: 1 }; });
 
@@ -21,10 +21,10 @@ it('reads every bounded expense page before publishing and excludes income/delet
   const pending = readExpenseStatistics('2026-09-01', '2026-09-30').then(result => { settled = true; return result; });
   await lastPageStarted.promise;
   expect(settled).toBe(false);
-  lastPage.resolve({ docs: [expense('income', { transactionType: 'income' }), expense('deleted', { lifecycleState: 'deleted' }), expense('last', { amount: 10 })] });
+  lastPage.resolve({ docs: [expense('income', { transactionType: 'income' }), expense('deleted', { lifecycleState: 'deleted' }), expense('last', { amountInWon: 10 })] });
   const result = await pending;
   expect(result).toHaveLength(5_001); expect(result.reduce((sum, row) => sum + row.amount, 0)).toBe(10);
-  expect(where).toHaveBeenCalledWith('date', '>=', '2026-09-01'); expect(where).toHaveBeenCalledWith('date', '<=', '2026-09-30');
+  expect(where).toHaveBeenCalledWith('accountingDate', '>=', '2026-09-01'); expect(where).toHaveBeenCalledWith('accountingDate', '<=', '2026-09-30');
   expect(limit).toHaveBeenCalledWith(5_000); expect(startAfter).toHaveBeenCalledTimes(1);
 });
 it('rejects repeated cursor records and previous-session replies instead of publishing partial success', async () => {
@@ -35,7 +35,7 @@ it('rejects repeated cursor records and previous-session replies instead of publ
   await expect(readExpenseStatistics('2026-09-01', '2026-09-30')).rejects.toThrow('STATISTICS_SESSION_CHANGED');
 });
 it('reads a representative 1,729-document year in one bounded request, with every row included', async () => {
-  const rows = Array.from({ length: 1729 }, (_, i) => expense('expense-' + i, { amount: i }));
+  const rows = Array.from({ length: 1729 }, (_, i) => expense('expense-' + i, { amountInWon: i }));
   read.mockResolvedValueOnce({ docs: rows });
   const result = await readExpenseStatistics('2025-10-01', '2026-09-30');
   expect(read).toHaveBeenCalledTimes(1);
@@ -45,7 +45,7 @@ it('reads a representative 1,729-document year in one bounded request, with ever
 });
 it('decodes each source document once while retaining canonical category, card and split fields', async () => {
   const data = jest.fn(() => ({
-    householdId: 'home', date: '2026-09-01', amount: 0, categoryId: 'Custom_Snack',
+    householdId: 'home', accountingDate: '2026-09-01', amountInWon: 0, categoryId: 'Custom_Snack',
     cardType: 'captured', cardDisplay: '삼성(1840)', memo: '간식',
     splitGroup: { originalId: 'original' }, mergeLeafIds: ['first', 'second'],
   }));

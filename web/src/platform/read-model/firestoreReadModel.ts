@@ -11,6 +11,7 @@ import { requestMembershipResolution } from '@/features/access-household/applica
 export {
   Timestamp,
   collection,
+  collectionGroup,
   doc,
   getDoc,
   getDocFromServer,

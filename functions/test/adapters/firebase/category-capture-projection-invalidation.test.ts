@@ -2,6 +2,7 @@ import type * as firestore from "firebase-admin/firestore";
 import { describe, expect, it } from "vitest";
 
 import { FirebaseCategoryCatalogStore } from "../../../src/adapters/firebase/categories/firebaseCategoryCatalogStore";
+import { categoryCatalogDocument } from "../../support/category-catalog-document";
 import { InMemoryFirestore } from "../../support/in-memory-firestore";
 
 const projectionPath =
@@ -13,20 +14,9 @@ describe("Firebase category capture projection invalidation", () => {
     memory.seed("households/house-1", {
       defaultCategoryKey: "etc",
     });
-    memory.seed("households/house-1/categorySettings/default", {
-      defaultCategoryId: "etc",
-      catalogVersion: 1,
-    });
-    memory.seed("households/house-1/categories/etc", {
-      householdId: "house-1",
-      categoryId: "etc",
-      name: "기타",
-      color: "#000000",
-      budgetInWon: null,
-      state: "active",
-      sortOrder: 0,
-      version: 1,
-    });
+    memory.seed("households/house-1/categoryCatalog/current", categoryCatalogDocument("house-1", [
+      { categoryId: "etc", name: "기타", color: "#000000" },
+    ], { defaultCategoryId: "etc" }));
     memory.seed(projectionPath, {
       householdId: "house-1",
       schemaVersion: 1,
@@ -56,5 +46,30 @@ describe("Firebase category capture projection invalidation", () => {
     }));
 
     expect(memory.has(projectionPath)).toBe(false);
+  });
+
+  it("Catalog 크기 초과는 원본·수집 설정·receipt·outbox를 변경하지 않고 거부한다", async () => {
+    const memory = new InMemoryFirestore();
+    const catalogPath = "households/house-1/categoryCatalog/current";
+    const catalog = categoryCatalogDocument("house-1", [{ categoryId: "etc" }], { defaultCategoryId: "etc" });
+    memory.seed("households/house-1", { lifecycleState: "active" });
+    memory.seed(catalogPath, catalog);
+    memory.seed(projectionPath, { householdId: "house-1", schemaVersion: 1 });
+    const store = new FirebaseCategoryCatalogStore(memory as unknown as firestore.Firestore, {
+      householdId: "house-1", principalUid: "uid-1", commandId: "oversized-command",
+      payloadFingerprint: "oversized-payload", requestedAt: "2026-09-18T00:00:00.000Z",
+    });
+
+    await expect(store.transact(current => ({
+      state: { ...current, catalogVersion: current.catalogVersion + 1,
+        categories: current.categories.map(category => ({ ...category, name: "가".repeat(270_000), version: category.version + 1 })),
+      },
+      value: { kind: "success" as const },
+    }))).rejects.toThrow("CATEGORY_CATALOG_TOO_LARGE");
+
+    expect(memory.document(catalogPath)).toEqual(catalog);
+    expect(memory.has(projectionPath)).toBe(true);
+    expect(memory.documentsInCollection("commandReceipts/household-finance-category-catalog/receipts")).toHaveLength(0);
+    expect(memory.documentsInCollection("outboxEvents")).toHaveLength(0);
   });
 });

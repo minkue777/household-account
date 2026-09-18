@@ -1,6 +1,6 @@
 # 카테고리·예산 모듈 상세 설계
 
-> 2026-09-17 실행 경로 정리: 신규 카테고리 참조는 [Category reference reader](../../../../../../functions/src/adapters/firebase/categories/firebaseCategoryReferenceReader.ts)가 canonical 우선·legacy 호환·보관 상태를 판정하고 Ledger/Recurring에서 공유합니다. 실제 월 예산은 [Web 예산 계산](../../../../../../web/src/features/category-budget/monthlyBudget.ts)이 소유합니다. 활성 카테고리의 null만 미설정이며 0원 예산의 지출도 잔여 예산에서 차감합니다. 진행률은 양수 예산에만 표시합니다. 실행되지 않던 서버 Budget Query/계산은 제거했으며 아래 서버 Query 구조는 현재 배포 경로가 아닌 목표 계약입니다.
+> 2026-09-18 저장 구조 정리: [Category reference reader](../../../../../../functions/src/adapters/firebase/categories/firebaseCategoryReferenceReader.ts)와 Web·Android는 `households/{householdId}/categoryCatalog/current` 한 문서를 읽습니다. 안정 ID·개별 version·보관 항목을 유지하고 과거 물리 ID는 문서 안의 별칭으로 해석합니다. 개별 category 문서·settings·호환 Projection의 런타임 이중 읽기·쓰기는 종료합니다. 실제 월 예산은 [Web 예산 계산](../../../../../../web/src/features/category-budget/monthlyBudget.ts)이 소유합니다. 활성 카테고리의 null만 미설정이며 0원 예산의 지출도 잔여 예산에서 차감합니다. 진행률은 양수 예산에만 표시합니다. 실행되지 않던 서버 Budget Query/계산은 제거했으며 아래 서버 Query 구조는 현재 배포 경로가 아닌 목표 계약입니다.
 
 > 상태: Proposed — 테스트 구현 기준  
 > 소유 요구사항: [카테고리·예산 모듈 요구사항](requirements.md)  
@@ -29,8 +29,8 @@
 
 | 기능 | 책임 | 일관성 경계 |
 |---|---|---|
-| Category Catalog | 초기화, 생성, 수정, archive 준비, 정렬 | 가구 Catalog version과 영향 category 문서 |
-| Default Category | active categoryId를 가구 기본 참조로 설정 | Catalog settings + receipt + Outbox |
+| Category Catalog | 초기화, 생성, 수정, archive 준비, 정렬 | 가구 Catalog 한 문서와 각 항목 version |
+| Default Category | active categoryId를 가구 기본 참조로 설정 | 같은 Catalog + receipt + Outbox |
 | Category Reference | Ledger·Recurring·Payment Configuration에 안정 ID와 사용 가능 상태 제공 | 읽기 일관성 |
 | Budget Domain | category별 사용액·비율·초과액, 월 잔여 예산 계산 | 순수 계산 |
 | Budget Query | 요청 월의 Ledger page를 모두 읽어 월·category별로 계산 | 한 요청의 일관된 source window |
@@ -41,7 +41,7 @@
 - merchant mapping은 Payment Configuration이 소유합니다.
 - recurring plan의 categoryId 참조는 Recurring이 소유합니다.
 - 홈 카드 구성과 시각 표현은 Home Preferences/Web Presentation이 소유합니다.
-- 기존 `households.defaultCategoryKey`의 물리 위치가 Access 소유권을 의미하지 않습니다. 목표 V2에서는 Category settings로 분리합니다.
+- 기본 참조는 Category 소유 Catalog의 `defaultCategoryId`입니다. Access의 가구 문서에 따로 기록하지 않습니다.
 
 [DEC-015](../../../../governance/decisions.md#dec-015)에 따라 삭제 요청은 과거 참조를 보존하는 archive입니다. `CategoryRetirementPolicy`는 기본 카테고리 삭제를 거부하고, 다른 카테고리의 과거 거래는 유지하면서 정기지출·가맹점 규칙 같은 설정 참조만 현재 기본 카테고리로 변경합니다. hard delete·과거 거래 remap·재활성화는 제공하지 않습니다.
 
@@ -53,10 +53,10 @@
 
 | 이름·종류 | 호출자 | 입력 DTO | 결과 | 권한 | 일관성 | 멱등성 |
 |---|---|---|---|---|---|---|
-| `InitializeDefaultCategories` Command v1 | 가구 온보딩 handler, Web 설정 | catalogVersion | `Success<CategoryCatalogView>`, `AlreadyProcessed`, `Conflict`, `Forbidden` | `category.manage` 또는 제한된 onboarding actor | 기본 category 집합·settings·receipt·Outbox 한 UoW | `householdId:catalogVersion` |
+| `InitializeDefaultCategories` Command v1 | 가구 온보딩 handler, Web 설정 | catalogVersion | `Success<CategoryCatalogView>`, `AlreadyProcessed`, `Conflict`, `Forbidden` | `category.manage` 또는 제한된 onboarding actor | Catalog·receipt·Outbox 한 UoW | `householdId:catalogVersion` |
 | `UpdateCategoryCatalog` Command v1 | Web 설정 | create/update/archive/reorder operation | `Success<CategoryCatalogView>`, `Accepted<ArchiveProcessView>`, `ValidationError`, `NotFound`, `Conflict` | `category.manage` | 일반 변경 UoW 또는 재개 가능한 archive process | envelope key + catalogVersion |
 | `ContinueCategoryArchiveProcess` Process Command v1 | archive worker, 운영 재개 | processId, page limit | `Success<ArchiveProcessView>`, `PartialFailure`, `RetryableFailure`, `Conflict` | `category.archive.process` SystemActor | 소비 모듈별 page UoW와 Category checkpoint UoW | processId+consumer+cursor |
-| `SetDefaultCategory` Command v1 | Web 설정 | categoryId, expectedCatalogVersion | `Success<DefaultCategoryView>`, `ValidationError`, `NotFound`, `Conflict` | `category.manage` | settings·receipt·Outbox 한 UoW | envelope key + version |
+| `SetDefaultCategory` Command v1 | Web 설정 | categoryId, expectedCatalogVersion | `Success<DefaultCategoryView>`, `ValidationError`, `NotFound`, `Conflict` | `category.manage` | Catalog·receipt·Outbox 한 UoW | envelope key + version |
 | `GetCategoryReference` Query | Ledger, Recurring, Payment Configuration | categoryId, requiredUsage | `Success<CategoryReference>`, `NotFound`, `Conflict(CATEGORY_NOT_USABLE)`, `RetryableFailure` | 가구 범위 내부 capability | 읽기 일관성 | 해당 없음 |
 | `ListActiveCategories` Query/Read Contract | Web, Android, Payment Capture | optional cursor/limit | `Success<CategoryPage>`, `NoData`, `RetryableFailure`, `Forbidden` | `category.read` | `sortOrder ASC, categoryId ASC` | 해당 없음 |
 | `GetMonthlyBudget` Query | Web·Home·Reporting | `YYYY-MM` | `Success<MonthlyBudgetView>`, `NoData`, `RetryableFailure`, `ContractFailure` | `budget.read` | Ledger 기간 Query의 모든 page 완료 뒤 계산 | 해당 없음 |
@@ -85,7 +85,7 @@
 
 ### 3.3 Android QuickEdit 계약
 
-Android는 `ListActiveCategories`의 typed 상태를 그대로 ViewModel에 전달합니다.
+목표 공개 Query 전환 시 Android는 `ListActiveCategories`의 typed 상태를 그대로 ViewModel에 전달합니다. 현재 SDK Adapter는 새 Catalog 문서를 읽지만 CAT-004의 표시 전용 기본 목록 fallback은 유지합니다. 저장 경로 전환이 아래 목표 오류 표시까지 구현했다는 뜻은 아닙니다.
 
 - `Success(non-empty)`: 서버 순서의 category를 표시합니다.
 - `NoData`: 온보딩/초기화 유도 또는 명시된 호환 기본 목록을 표시할 수 있습니다.
@@ -100,7 +100,7 @@ Android는 `ListActiveCategories`의 typed 상태를 그대로 ViewModel에 전�
 |---|---|---|
 | `CategoryCatalog` Aggregate | householdId, catalogVersion, ordered category IDs, defaultCategoryId | 순서 목록에 중복·타 가구 category 없음; default는 active category |
 | `Category` Entity | categoryId, name, color, budget, status(active·archive-pending·archived), sortOrder, version | 이름 비공백, budget은 null 또는 0 이상 정수, stable ID, archived도 표시 정보 보존 |
-| `DefaultCategorySettings` | defaultCategoryId, version | 없는/archived category를 참조하지 않음 |
+| Catalog 내부 기본 참조 | defaultCategoryId, catalogVersion | 없는/archived category를 참조하지 않음; 별도 settings 문서 없음 |
 | `CategoryArchiveProcess` | processId, categoryId, defaultCategoryId, historical reference count, 설정 remap checkpoint, status | target≠default, 과거 참조 유지, 설정 참조는 default로 변경, 완료 뒤 archived, 재활성화·hard delete 없음 |
 
 기본 초기화 정의는 다음 stable key와 순서를 가진 Domain fixture입니다: `living`, `childcare`, `fixed`, `food`, `etc`. 초기 default는 현재 명세의 `etc`입니다. Catalog가 완전히 비어 있을 때만 한 번 생성하고, 일부만 존재하면 누락분을 자동 보충하지 않습니다.
@@ -126,7 +126,7 @@ Money 계산은 정수 원 단위만 사용하며 NaN/Infinity는 wire schema �
 | `CategoryRetirementPolicy` | target/default 동일 여부와 유효 default를 검사해 Reject 또는 ArchivePlan 선택 | DEC-015 확정 |
 | `CategoryUsageQueryPort` | Ledger historical count, Recurring·Payment Configuration 설정 참조 page를 공개 계약으로 조회 | 구현 필요 |
 | `CategoryReferenceRemapPort` | Recurring·Payment Configuration 공개 Command로 설정 참조를 defaultCategoryId로 멱등 변경 | 구현 필요 |
-| `CatalogWriteLimitPolicy` | reorder/초기화의 transaction 크기 검증 | 기술 설정 |
+| Catalog 저장 경계 | schema·가구·안정 ID·기본 참조·문서 크기 검증 | 단일 문서 Writer에서 검증 |
 | `BudgetSourceWindowPolicy` | 요청 월의 시작·끝, cursor 상한, source window 일관성 검증 | DEC-048 확정 |
 
 archive 요청에서 target이 현재 default이면 `Conflict(CATEGORY_IS_DEFAULT)`, 유효한 active default가 없으면 `Conflict(DEFAULT_CATEGORY_REQUIRED)`입니다. 그 외에는 target을 `archive-pending`으로 전환해 신규 참조를 막고, RecurringPlan·MerchantRule 등 설정 참조를 현재 defaultCategoryId로 page 단위 변경하는 `ArchiveCategoryProcess`를 시작합니다. 과거 Ledger 거래는 조회만 하고 categoryId를 변경하지 않습니다. 모든 설정 remap이 완료된 뒤 target을 `archived`로 전이합니다. 중간 실패는 process checkpoint에서 재개하며 archived를 다시 active로 바꾸는 Command는 없습니다.
@@ -138,9 +138,9 @@ archive 요청에서 target이 현재 default이면 `Conflict(CATEGORY_IS_DEFAUL
 1. Actor와 가구 active 상태, capability를 검증합니다.
 2. catalogVersion과 idempotency payload hash를 확인합니다.
 3. Catalog가 비어 있는지 transaction 안에서 다시 읽습니다.
-4. 완전히 비어 있으면 결정적 category IDs로 기본 다섯 Entity와 settings를 만듭니다.
-5. 일부 또는 전체가 있으면 추가 문서를 만들지 않고 `AlreadyProcessed`와 현재 Catalog를 반환합니다.
-6. category 문서, settings version, receipt, `CategoryCatalogChanged.v1`을 한 UoW로 commit합니다.
+4. 완전히 비어 있으면 결정적 category IDs로 기본 다섯 Entity와 defaultCategoryId를 같은 Catalog에 만듭니다.
+5. 일부 또는 전체가 있으면 항목을 추가하지 않고 `AlreadyProcessed`와 현재 Catalog를 반환합니다.
+6. Catalog 문서와 version, receipt, `CategoryCatalogChanged.v1`을 한 UoW로 commit합니다.
 7. 동시 두 요청은 같은 결정 ID 경합으로 한 집합에 수렴합니다.
 
 ### 5.2 UpdateCategoryCatalog
@@ -159,7 +159,7 @@ archive 요청에서 target이 현재 default이면 `Conflict(CATEGORY_IS_DEFAUL
 
 1. Actor와 expected catalogVersion을 검증합니다.
 2. `GetCategoryReference`와 동일한 Domain 판정으로 대상이 active인지 확인합니다.
-3. settings와 catalogVersion, receipt, Event를 한 UoW로 commit합니다.
+3. Catalog의 defaultCategoryId와 catalogVersion, receipt, Event를 한 UoW로 commit합니다.
 4. Web manual과 Android captured flow는 이후 같은 `GetCategoryReference(default)` 계약을 사용합니다.
 5. retry는 최초 result를 재생합니다.
 
@@ -186,7 +186,7 @@ archive 요청에서 target이 현재 default이면 `Conflict(CATEGORY_IS_DEFAUL
 
 | Port | 책임 | 계약 핵심 |
 |---|---|---|
-| `CategoryCatalogRepository` | Catalog/settings/category 조회와 persistence mapping | stable ID, version, NoData/실패 구분 |
+| `CategoryCatalogRepository` | 단일 Catalog 조회와 persistence mapping | stable ID, version, NoData/실패 구분 |
 | `CategoryUnitOfWork` | Catalog 변경·receipt·Outbox 원자 commit | callback 재실행, 결정 ID 경합 |
 | `CategoryUsageQueryPort` | 소비 모듈의 historical count·설정 참조 page 조합 | consumer 내부 Repository 비노출 |
 | `CategoryReferenceRemapPort` | Recurring·Payment Configuration remap Command 조정 | processId+consumer+page key 멱등, 부분 진행 checkpoint |
@@ -199,7 +199,7 @@ archive 요청에서 target이 현재 default이면 `Conflict(CATEGORY_IS_DEFAUL
 
 ### 6.2 Adapter
 
-- Firestore Catalog Adapter와 Legacy settings Mapper
+- Firestore 단일 Catalog Adapter와 과거 물리 ID 별칭 해석
 - Ledger 월 범위 Query Adapter
 - callable Command/Query Adapter
 - Web Firestore Read Model Adapter
@@ -211,33 +211,36 @@ archive 요청에서 target이 현재 default이면 `Conflict(CATEGORY_IS_DEFAUL
 
 ### 7.1 논리 저장
 
-| 데이터 | 목표 key | Writer |
+| 데이터 | 저장 key | Writer |
 |---|---|---|
-| Category | `households/{householdId}/categories/{categoryId}` | Category Catalog |
-| Catalog settings | `households/{householdId}/categorySettings/default` | Category Catalog |
-| Web 호환 Category Projection | `categories/{sha256("category\0" + householdId + "\0" + categoryId)}`; 기존 문서는 발견한 실제 ID 유지 | Category Catalog |
+| Category Catalog | `households/{householdId}/categoryCatalog/current` | Category Catalog |
+| Archive process | `households/{householdId}/categoryArchiveProcesses/{processId}` | Category Catalog |
 | receipt/outbox | 공통 platform 경로 | 각 Category Command Port |
 
-Catalog settings는 catalogVersion, ordered IDs, defaultCategoryId를 갖습니다. Category 문서는 categoryVersion, schemaVersion, server timestamps를 갖습니다. Web 호환 Projection의 물리 ID는 가구 범위를 포함해 서로 다른 가구의 `living`, `food` 같은 동일 업무 key가 충돌하지 않게 하며, 업무 식별자는 문서의 `key` 필드에 유지합니다. `MonthlyBudgetView`는 요청 결과이므로 저장 경로가 없습니다.
+Catalog는 `schemaVersion: 1`, householdId, categories 배열, defaultCategoryId, catalogVersion, categoryAliases, server timestamps를 갖습니다. 각 항목에는 categoryId, name, color, budgetInWon, state, sortOrder, version을 보존합니다. 서로 다른 가구의 같은 안정 ID는 가구별 문서 안에서 독립적입니다. Web·Android·서버의 목록·기본값·참조 판정이 모두 같은 한 문서를 읽습니다. `MonthlyBudgetView`는 요청 결과이므로 저장 경로가 없습니다.
+
+[문서 파서](../../../../../../functions/src/adapters/firebase/categories/categoryCatalogDocument.ts)는 schema와 경로의 가구 일치, ID 중복, 필드 타입·범위, active 기본값, 별칭 대상과 충돌을 검증합니다. defaultCategoryId가 null인 미설정 상태는 보존하며 임의 기본값을 추정하지 않습니다. 없는 문서는 새 가구 초기화를 위한 빈 Catalog(version 0)이고, 존재하지만 잘못된 문서는 오류입니다. [Writer](../../../../../../functions/src/adapters/firebase/categories/firebaseCategoryCatalogStore.ts)는 저장할 JSON의 UTF-8 크기 800,000바이트 초과를 원자 쓰기 전에 거부합니다. 가구의 작은 분류 목록을 위한 저장 방식이며 무제한 증가하는 거래·receipt·process를 배열에 합치지 않습니다.
 
 ### 7.2 UoW와 경합
 
-- 초기화: 결정적 기본 문서 전체 + settings + receipt + Outbox.
-- category create/update/reorder: 영향 문서 + settings version + receipt + Outbox.
-- default 설정: settings + receipt + Outbox.
+- 초기화: 결정적 기본 항목·기본값을 포함한 Catalog 한 문서 + receipt + Outbox.
+- category create/update/reorder: 변경한 Catalog 한 문서 + receipt + Outbox.
+- default 설정: 같은 Catalog 한 문서 + receipt + Outbox.
+- archive: Catalog + 별도 process checkpoint + receipt + Outbox.
+
+거부되거나 이미 반영되어 상태가 바뀌지 않은 명령은 결과 receipt만 기록합니다. Catalog·기존 archive process의 저장 시각을 갱신하거나 수집 설정을 무효화하지 않습니다. 같은 receipt의 재시도는 저장된 결과를 재생합니다.
 
 같은 빈 가구 초기화 동시 두 번은 결정 ID와 catalogVersion precondition으로 한 집합에 수렴합니다. reorder는 expectedCatalogVersion이 다르면 전체 Conflict입니다. Budget Query는 저장을 수행하지 않으며 같은 원천 page 집합에 대해 항상 같은 계산 결과를 만듭니다.
 
 ### 7.3 Legacy 전환
 
-1. Legacy Catalog Adapter가 현재 `categories`와 `households.defaultCategoryKey`를 읽습니다.
-2. 새 Application만 legacy 경로에 쓰도록 Writer를 먼저 통합합니다.
-3. categoryId 안정성, budget 숫자, sortOrder를 backfill·검증합니다.
-4. `categorySettings/default`를 dual-read하고 shadow compare합니다.
-5. Transaction/Recurring/Merchant 참조 usage report를 생성합니다.
-6. V2 read 전환 후 household 혼합 필드와 client direct write를 제거합니다.
+1. 배포 전 운영 이관에서 기존 가구 하위 categories와 categorySettings, top-level categories와 household 기본값을 확인합니다. 신규 Writer를 먼저 실행해 기존 가구를 빈 Catalog로 취급하지 않도록 이관을 먼저 완료합니다.
+2. 기존 canonical 항목을 우선하되 legacy에만 있는 항목도 누락 없이 합칩니다. 안정 categoryId·개별 version·순서·보관 상태·기본값은 보존하고 과거 물리 ID를 categoryAliases에 기록합니다.
+3. schema·가구·별칭 충돌·기본 참조·크기 검증을 통과한 Catalog를 가구별 한 문서로 기록합니다. 누락 기본값은 추정하지 않습니다.
+4. Web·Android·Functions reader와 Writer를 단일 Catalog 경로로 함께 전환합니다. 런타임 legacy fallback, 이중쓰기, settings shadow compare는 두지 않습니다.
+5. 이전 문서는 검증·복구 자료로만 남기고 제품의 조회·쓰기에는 사용하지 않습니다. 실제 정리는 운영 이관 절차가 담당합니다.
 
-Legacy default field 접근은 전환 Adapter 하나로 제한하고 목표 패키지의 다른 모듈에 household collection name을 노출하지 않습니다.
+구형 물리 ID로 들어오는 Category Command와 기존 참조는 Catalog 안의 별칭으로 해석합니다. 다른 모듈에 이전 collection 경로를 노출하거나 별도 호환 Projection을 유지하지 않습니다.
 
 ## 8. Event·Query 연동
 
@@ -360,5 +363,5 @@ Budget Domain은 Ledger Domain을 import하지 않고 공개 월 범위 Query DT
 4. Create/Update/Reorder/Default Command를 서버 Writer로 통합합니다.
 5. category reference를 Ledger·Recurring·Payment Configuration에 연결합니다.
 6. Ledger 월 범위 Query Adapter와 `GetMonthlyBudget`를 만들고 다중 page·실패·상한 테스트를 활성화합니다.
-7. V2 settings를 shadow compare하고 `households.defaultCategoryKey`와 client direct write를 제거합니다.
+7. 저장 구조 전환에서는 기존 Catalog를 단일 정본으로 이관하고 Web·Android·Functions를 함께 전환합니다. `households.defaultCategoryKey`와 개별 category/settings의 런타임 접근은 종료하며 직접 client write 금지는 유지합니다.
 8. DEC-015 archive process와 historical display, default archive 거부, 설정 참조 default remap·재시도 테스트를 활성화합니다.

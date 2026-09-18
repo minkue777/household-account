@@ -3,6 +3,7 @@ const mockOnSnapshot = jest.fn();
 jest.mock('@/platform/read-model/firestoreReadModel', () => ({
   db: { kind: 'db' },
   collection: jest.fn((...segments: unknown[]) => ({ kind: 'collection', segments })),
+  collectionGroup: jest.fn((...segments: unknown[]) => ({ kind: 'collectionGroup', segments })),
   doc: jest.fn((...segments: unknown[]) => ({ kind: 'document', segments })),
   getDoc: jest.fn(),
   getDocs: jest.fn(),
@@ -51,6 +52,7 @@ import {
 } from '@/lib/assetService';
 import type { Asset, CryptoHolding, StockHolding } from '@/types/asset';
 import { portfolioOptimisticProjection } from '@/features/portfolio/application/portfolioOptimisticProjection';
+import { collection, collectionGroup, db } from '@/platform/read-model/firestoreReadModel';
 
 const mockedCommands = portfolioCommands as jest.Mocked<typeof portfolioCommands>;
 
@@ -117,7 +119,7 @@ function cryptoHolding(overrides: Partial<CryptoHolding> = {}): CryptoHolding {
   };
 }
 
-function snapshotAsset(value: Asset | StockHolding | CryptoHolding) {
+function snapshotAsset(value: Asset | StockHolding | CryptoHolding): { id: string; data: () => Record<string, unknown> } {
   if ('assetId' in value && !portfolioOptimisticProjection.current(value.assetId)) {
     const parents = portfolioOptimisticProjection.subscribe(() => {}, 'house-1');
     parents.publish([asset({ id: value.assetId, type: 'stock' })]);
@@ -125,7 +127,28 @@ function snapshotAsset(value: Asset | StockHolding | CryptoHolding) {
   const { id, ...data } = value;
   return {
     id,
-    data: () => data,
+    data: () => 'assetId' in value ? {
+      ...data,
+      positionKind: 'stockCode' in value ? 'stock' : 'crypto',
+      instrumentCode: 'stockCode' in value ? value.stockCode : value.marketCode,
+      instrumentName: 'stockName' in value ? value.stockName : value.coinName,
+      averagePriceInWon: value.avgPrice,
+      lastQuote: value.currentPrice === undefined ? undefined : { priceInWon: value.currentPrice },
+      lifecycleState: 'active',
+    } : {
+      ...data,
+      lifecycleState: value.isActive ? 'active' : 'deleted',
+      automation: {
+        recurringContributionAmount: value.recurringContributionAmount,
+        recurringContributionDay: value.recurringContributionDay,
+        lastAutoContributionMonth: value.lastAutoContributionMonth,
+        loanInterestRate: value.loanInterestRate,
+        loanRepaymentMethod: value.loanRepaymentMethod,
+        loanMonthlyPaymentAmount: value.loanMonthlyPaymentAmount,
+        loanPaymentDay: value.loanPaymentDay,
+        lastAutoRepaymentMonth: value.lastAutoRepaymentMonth,
+      },
+    },
   };
 }
 
@@ -162,6 +185,44 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
   afterEach(() => {
     resetClientOptimisticProjections();
     jest.useRealTimers();
+  });
+
+  test('정본만 저장된 자산과 Position의 자동화·한글 분류·0원 시세를 표시하며 가구 및 종류로 조회한다', () => {
+    const assetRows: Asset[][] = [];
+    const unsubscribeAsset = subscribeToAssets(items => assetRows.push(items));
+    expect(collection).toHaveBeenLastCalledWith(db, 'households', 'house-1', 'assets');
+    const assetNext = listenerArguments().next;
+    assetNext({ metadata: { fromCache: false }, docs: [{ id: 'asset-1', data: () => ({
+      householdId: 'house-1', assetId: 'asset-1', name: '정본 적금', type: 'savings', subType: 'installment',
+      ownerRef: { kind: 'household' }, lifecycleState: 'active', currentBalance: 100_000, aggregateVersion: 4,
+      createdAt: '2026-07-01T00:00:00.000Z', updatedAt: '2026-09-18T00:00:00.000Z',
+      automation: { recurringContributionAmount: 20_000, recurringContributionDay: 25, lastAutoContributionMonth: '2026-09' },
+    }) }] });
+    expect(assetRows.at(-1)).toEqual([expect.objectContaining({
+      name: '정본 적금', subType: '적금', owner: '가구', isActive: true, currentBalance: 100_000,
+      recurringContributionAmount: 20_000, recurringContributionDay: 25, lastAutoContributionMonth: '2026-09',
+      createdAt: new Date('2026-07-01T00:00:00.000Z'), updatedAt: new Date('2026-09-18T00:00:00.000Z'),
+    })]);
+    const holdings: StockHolding[][] = [];
+    const unsubscribeStock = subscribeToHouseholdStockHoldings(items => holdings.push(items));
+    expect(collectionGroup).toHaveBeenLastCalledWith(db, 'positions');
+    expect(mockOnSnapshot.mock.calls.at(-1)?.[0]).toEqual({ kind: 'query', constraints: [
+      { kind: 'collectionGroup', segments: [db, 'positions'] },
+      { kind: 'where', args: ['householdId', '==', 'house-1'] },
+      { kind: 'where', args: ['positionKind', '==', 'stock'] },
+      { kind: 'where', args: ['lifecycleState', '==', 'active'] },
+    ] });
+    listenerArguments().next({ metadata: { fromCache: false }, docs: [{ id: 'position-1', data: () => ({
+      householdId: 'house-1', assetId: 'asset-1', positionKind: 'stock', instrumentCode: 'EW001',
+      instrumentName: '국민성장펀드', instrumentType: 'fund', market: 'KOFIA_FUND', lifecycleState: 'active',
+      quantity: 0, averagePriceInWon: 1_000, priceScale: 1_000, lastQuote: { priceInWon: 0 }, aggregateVersion: 2,
+    }) }] });
+    expect(holdings.at(-1)).toEqual([expect.objectContaining({
+      stockCode: 'EW001', stockName: '국민성장펀드', instrumentType: 'fund', market: 'KOFIA_FUND',
+      quantity: 0, avgPrice: 1_000, currentPrice: 0, priceScale: 1_000,
+    })]);
+    unsubscribeStock();
+    unsubscribeAsset();
   });
 
   test('자산 구독은 캐시와 서버 snapshot을 구분해 후속 시세 갱신 시점을 결정하게 한다', () => {
@@ -603,6 +664,24 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
       'asset-1',
       4
     );
+    unsubscribe();
+  });
+
+  test.each([false, true])('캐시 자산 삭제에서 표시 이름을 제외하고 ownerRef 변경 여부(%s)로 충돌을 판단한다', async changedOwner => {
+    const cached = asset({ ownerRef: { kind: 'profile', profileId: 'child' }, owner: '아이' });
+    const unsubscribe = subscribeToAssets(() => undefined, [cached]);
+    const { next } = listenerArguments();
+    const pending = deleteAsset(cached.id, cached.aggregateVersion, cached);
+    const result = changedOwner
+      ? expect(pending).rejects.toThrow('ASSET_VERSION_MISMATCH')
+      : expect(pending).resolves.toBeUndefined();
+    next({ metadata: { fromCache: false }, docs: [snapshotAsset(asset({
+      aggregateVersion: 4,
+      ownerRef: { kind: 'profile', profileId: changedOwner ? 'another' : 'child' },
+    }))] });
+    await result;
+    if (changedOwner) expect(mockedCommands.deleteAsset).not.toHaveBeenCalled();
+    else expect(mockedCommands.deleteAsset).toHaveBeenCalledWith('house-1', 'asset-1', 4);
     unsubscribe();
   });
 

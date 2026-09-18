@@ -83,11 +83,13 @@ describe("Access 실제 router와 Firebase adapter의 접근·무변경 계약",
     f.memory.seed(`households/${householdId}`, { ...f.memory.document(`households/${householdId}`), initializationStatus: 'failed' });
     await expect(f.execute('access.retry-household-initialization.v1', {}, 'retry-initialization-1'))
       .resolves.toMatchObject({ kind: 'success', data: { initializationStatus: 'completed' } });
-    const categories = f.memory.documentsInCollection('categories');
-    expect(categories.length).toBeGreaterThan(0);
+    const catalogPath = `households/${householdId}/categoryCatalog/current`;
+    const catalog = f.memory.document(catalogPath);
+    expect(catalog?.categories).toHaveLength(5);
     await expect(f.execute('access.retry-household-initialization.v1', {}, 'retry-initialization-2'))
       .resolves.toMatchObject({ kind: 'success', data: { initializationStatus: 'completed' } });
-    expect(f.memory.documentsInCollection('categories')).toEqual(categories);
+    expect(f.memory.document(catalogPath)).toEqual(catalog);
+    expect(f.memory.documentsInCollection('categories')).toHaveLength(0);
     expect(f.memory.document(`households/${householdId}`)).toMatchObject({ initializationStatus: 'completed' });
   });
   it.each(['completed', 'deleted'] as const)('[HH-007][SYS-007] 늦은 초기화 실패가 동시 %s 결과를 덮어쓰지 않는다', async transition => {
@@ -95,7 +97,7 @@ describe("Access 실제 router와 Firebase adapter의 접근·무변경 계약",
     const path = `households/${householdId}`;
     f.memory.seed(path, { ...f.memory.document(path), initializationStatus: 'failed' });
     vi.spyOn(f.memory, 'recordTransactionRead').mockImplementation(target => {
-      if (target.path !== 'categories') return;
+      if (target.path !== `${path}/categoryCatalog/current`) return;
       f.memory.seed(path, { ...f.memory.document(path), ...(transition === 'completed'
         ? { initializationStatus: 'completed' } : { lifecycleState: 'deleted', aggregateVersion: 2 }) });
       throw new Error('late failed initialization');
@@ -109,12 +111,13 @@ describe("Access 실제 router와 Firebase adapter의 접근·무변경 계약",
       expect(f.memory.document(path)).toMatchObject({ lifecycleState: 'deleted', initializationStatus: 'failed', aggregateVersion: 2 });
     }
     expect(f.memory.documentsInCollection('categories')).toHaveLength(0);
+    expect(f.memory.document(`${path}/categoryCatalog/current`)).toBeUndefined();
   });
   it("[HH-007][CAT-001] 기본 카테고리 초기화가 실패해도 생성 graph를 보존하고 같은 생성 key로 초기화만 재시도한다", async () => {
     const memory = new InMemoryFirestore();
     let failures = 0;
     vi.spyOn(memory, "recordTransactionRead").mockImplementation((target) => {
-      if (target.path === "categories" && failures++ === 0) throw new Error("category storage unavailable");
+      if (target.path.endsWith("/categoryCatalog/current") && failures++ === 0) throw new Error("category storage unavailable");
     });
     const database = memory as unknown as Firestore;
     const router = createHouseholdCommandRouter({
@@ -134,11 +137,13 @@ describe("Access 실제 router와 Firebase adapter의 접근·무변경 계약",
     expect(first).toMatchObject({ kind: "success", data: { initializationStatus: "failed" } });
     const household = memory.documentsInCollection("households")[0];
     expect(household.value).toMatchObject({ lifecycleState: "active", initializationStatus: "failed" });
+    expect(memory.document(`${household.path}/categoryCatalog/current`)).toBeUndefined();
     const repeated = await execute("create-attempt-2");
     expect(repeated).toMatchObject({ kind: "success", data: { initializationStatus: "completed" } });
     expect(memory.documentsInCollection("households")).toHaveLength(1);
     expect(memory.document(household.path)).toMatchObject({ initializationStatus: "completed" });
-    expect(memory.documentsInCollection("categories").length).toBeGreaterThan(0);
+    expect(memory.document(`${household.path}/categoryCatalog/current`)?.categories).toHaveLength(5);
+    expect(memory.documentsInCollection("categories")).toHaveLength(0);
     expect(memory.documentsInCollection("outboxEvents").filter((event) => event.value.eventType === "HouseholdCreated")).toHaveLength(1);
   });
 

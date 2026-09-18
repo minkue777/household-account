@@ -1,6 +1,7 @@
 import type * as firestore from "firebase-admin/firestore";
 import { describe, expect, it } from "vitest";
 
+import { categoryCatalogDocument } from "../support/category-catalog-document";
 import { createLedgerHouseholdCommandHandlers } from "../../src/bootstrap/commands/ledgerHouseholdCommandHandlers";
 import type { HouseholdCommandExecutionContext } from "../../src/bootstrap/commands/householdCommand";
 
@@ -29,17 +30,13 @@ function subject() {
   const database = {
     collection(name: string) {
       if (name === "households") {
-        return { doc: () => ({ collection: () => ({ get: async () => ({ docs: [] }) }) }) };
-      }
-      if (name === "categories") {
-        categoryReads += 1;
-        return {
-          where: () => ({
-            get: async () => ({
-              docs: [{ id: "category-etc", data: () => ({ key: "etc" }) }],
-            }),
-          }),
-        };
+        return { doc: () => ({ collection: (collectionName: string) => {
+          if (collectionName !== "categoryCatalog") throw new Error(`Unexpected category read: ${collectionName}`);
+          return { doc: () => ({ get: async () => {
+            categoryReads += 1;
+            return { data: () => categoryCatalogDocument("household-1", [{ categoryId: "etc" }]) };
+          } }) };
+        } }) };
       }
       if (name === "commandReceipts") {
         return {

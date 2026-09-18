@@ -86,10 +86,10 @@ export function mapExpenseReadData(id: string, data: DocumentData): Expense {
     aggregateVersion: Number.isInteger(data.aggregateVersion) && data.aggregateVersion > 0
       ? data.aggregateVersion
       : 1,
-    date: data.date,
-    time: data.time,
+    date: data.accountingDate ?? data.date,
+    time: data.localTime ?? data.time,
     merchant: data.merchant,
-    amount: data.amount,
+    amount: data.amountInWon ?? data.amount,
     transactionType: (data.transactionType || DEFAULT_TRANSACTION_TYPE) as TransactionType,
     category: normalizeStoredCategoryId(data.categoryId || data.category),
     cardType: data.cardType?.toLowerCase() || (data.source === 'manual' ? 'manual' : 'main'),
@@ -100,10 +100,10 @@ export function mapExpenseReadData(id: string, data: DocumentData): Expense {
     memo: data.memo,
     mergedFrom: data.mergedFrom,
     ...(mergeLeafIds === undefined ? {} : { mergeLeafIds }),
-    splitGroupId: data.splitGroupId,
+    splitGroupId: data.splitGroupId ?? splitGroup?.groupId,
     ...(splitOriginalId === undefined ? {} : { splitOriginalId }),
-    splitIndex: data.splitIndex,
-    splitTotal: data.splitTotal,
+    splitIndex: data.splitIndex ?? splitGroup?.index,
+    splitTotal: data.splitTotal ?? splitGroup?.total,
   };
 }
 

@@ -3,7 +3,7 @@ import {
   createEmulatorAccount, createHouseholdThroughUi, E2E_PROJECT_ID, executeHouseholdCommand,
   firestoreFields, readFirestoreCollection, resetTestAccount,
 } from '../e2e/emulator';
-import { seoulDate } from '../e2e/finance-helpers';
+import { readStoredCategories, seoulDate } from '../e2e/finance-helpers';
 
 export interface PerformanceFixture {
   householdId: string;
@@ -80,11 +80,11 @@ export async function preparePerformanceFixture(page: Page, request: APIRequestC
       payload: { invitationCode: invitation.invitationCode, memberName },
     });
   }
-  const categoryDocs = await readFirestoreCollection(request, 'categories');
+  const categoryDocs = await readStoredCategories(request, scope.householdId);
   const keyFor = (label: string) => {
-    const found = categoryDocs.find(doc => doc.fields?.label?.stringValue === label);
+    const found = categoryDocs.find(doc => doc.fields?.name?.stringValue === label);
     expect(found, `기본 카테고리 ${label}`).toBeDefined();
-    return found!.fields!.key.stringValue!;
+    return found!.fields!.categoryId.stringValue!;
   };
   const categories = { food: keyFor('식비'), other: keyFor('기타') };
   const targetDate = seoulDate(0, 15);
@@ -107,9 +107,9 @@ export async function preparePerformanceFixture(page: Page, request: APIRequestC
       // 28일까지 분산해 어느 실행 월에도 유효하며, 월별 크기와 합계는 매번 같습니다.
       const date = seoulDate(-monthsAgo, index % 28 + 1);
       const id = `performance-expense-${String(monthsAgo).padStart(2, '0')}-${String(index).padStart(2, '0')}`;
-      rows.push({ path: `expenses/${id}`, value: {
+      rows.push({ path: `households/${scope.householdId}/ledgerTransactions/${id}`, value: {
         householdId: scope.householdId, merchant: `성능 원장 ${String(monthsAgo).padStart(2, '0')}-${String(index).padStart(2, '0')}`,
-        amount, category: index % 2 ? categories.food : categories.other, date, time: '12:00',
+        amountInWon: amount, categoryId: index % 2 ? categories.food : categories.other, accountingDate: date, localTime: '12:00',
         memo: `합성 거래 ${index}`, transactionType: 'expense', lifecycleState: 'active', aggregateVersion: 1,
         creatorMemberId: scope.memberId, cardType: 'manual', cardDisplay: '',
       } });

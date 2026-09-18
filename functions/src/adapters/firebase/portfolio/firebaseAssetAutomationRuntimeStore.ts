@@ -394,7 +394,6 @@ export class FirebaseAssetAutomationRuntimeStore
           .collection("assetAutomationExecutionReceipts")
           .doc(executionHash);
         const canonicalAssetReference = household.collection("assets").doc(assetId);
-        const legacyAssetReference = this.database.collection("assets").doc(assetId);
         const revisionsQuery = household
           .collection("assetAutomationPlanRevisions")
           .where("planId", "==", input.plan.planId);
@@ -402,13 +401,11 @@ export class FirebaseAssetAutomationRuntimeStore
           executionSnapshot,
           receiptSnapshot,
           canonicalAssetSnapshot,
-          legacyAssetSnapshot,
           revisionSnapshot,
         ] = await Promise.all([
           transaction.get(executionReference),
           transaction.get(receiptReference),
           transaction.get(canonicalAssetReference),
-          transaction.get(legacyAssetReference),
           transaction.get(revisionsQuery),
         ]);
 
@@ -473,13 +470,11 @@ export class FirebaseAssetAutomationRuntimeStore
         }
 
         const canonicalAssetData = canonicalAssetSnapshot.data();
-        const legacyAssetData = legacyAssetSnapshot.data();
-        const assetData = { ...(legacyAssetData ?? {}), ...(canonicalAssetData ?? {}) };
+        const assetData = canonicalAssetData ?? {};
         const lifecycle =
-          text(canonicalAssetData, "lifecycleState") ??
-          (legacyAssetData?.isActive === false ? "deleted" : "active");
+          text(canonicalAssetData, "lifecycleState");
         if (
-          (!canonicalAssetSnapshot.exists && !legacyAssetSnapshot.exists) ||
+          !canonicalAssetSnapshot.exists ||
           text(assetData, "householdId") !== input.plan.householdId ||
           lifecycle !== "active"
         ) {
@@ -693,7 +688,6 @@ export class FirebaseAssetAutomationRuntimeStore
         transaction.set(
           canonicalAssetReference,
           {
-            ...(!canonicalAssetSnapshot.exists ? assetData : {}),
             assetId,
             householdId: input.plan.householdId,
             lifecycleState: "active",
@@ -703,29 +697,8 @@ export class FirebaseAssetAutomationRuntimeStore
               ...canonicalAutomation,
               [lastMonthField]: targetMonth,
             },
-            [lastMonthField]: targetMonth,
             schemaVersion: 1,
             updatedAt: FieldValue.serverTimestamp(),
-            ...(!canonicalAssetSnapshot.exists
-              ? { createdAt: FieldValue.serverTimestamp() }
-              : {}),
-          },
-          { merge: true },
-        );
-        transaction.set(
-          legacyAssetReference,
-          {
-            ...(!legacyAssetSnapshot.exists ? assetData : {}),
-            householdId: input.plan.householdId,
-            currentBalance: resultingBalance,
-            aggregateVersion: assetVersion,
-            isActive: true,
-            [lastMonthField]: targetMonth,
-            schemaVersion: 1,
-            updatedAt: FieldValue.serverTimestamp(),
-            ...(!legacyAssetSnapshot.exists
-              ? { createdAt: FieldValue.serverTimestamp() }
-              : {}),
           },
           { merge: true },
         );

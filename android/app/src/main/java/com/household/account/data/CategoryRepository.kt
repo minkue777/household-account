@@ -2,7 +2,7 @@ package com.household.account.data
 
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.DocumentSnapshot
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -26,10 +26,35 @@ data class CategoryData(
 /**
  * Firebase Firestore를 통한 카테고리 데이터 관리
  */
-class CategoryRepository {
+class CategoryRepository(private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()) {
+    private fun catalogReference(householdId: String) = firestore.collection("households")
+        .document(householdId).collection("categoryCatalog").document("current")
 
-    private val firestore = FirebaseFirestore.getInstance()
-    private val categoriesCollection = firestore.collection("categories")
+    private fun readCategories(snapshot: DocumentSnapshot, householdId: String): List<CategoryData> {
+        if (!snapshot.exists()) return emptyList()
+        require(snapshot.getLong("schemaVersion") == 1L && snapshot.getString("householdId") == householdId) {
+            "CATEGORY_CATALOG_INVALID"
+        }
+        val entries = snapshot.get("categories") as? List<*> ?: error("CATEGORY_CATALOG_INVALID")
+        val defaultCategoryId = snapshot.getString("defaultCategoryId")
+        val categories = entries.map { entry ->
+            val fields = entry as? Map<*, *> ?: error("CATEGORY_CATALOG_INVALID")
+            val key = fields["categoryId"] as? String ?: error("CATEGORY_CATALOG_INVALID")
+            val state = fields["state"] as? String ?: error("CATEGORY_CATALOG_INVALID")
+            require(key.isNotBlank() && state in listOf("active", "archive-pending", "archived"))
+            CategoryData(
+                id = key, key = key,
+                label = fields["name"] as? String ?: error("CATEGORY_CATALOG_INVALID"),
+                color = fields["color"] as? String ?: error("CATEGORY_CATALOG_INVALID"),
+                budget = (fields["budgetInWon"] as? Number)?.toLong(),
+                order = (fields["sortOrder"] as? Number)?.toInt() ?: error("CATEGORY_CATALOG_INVALID"),
+                isDefault = key == defaultCategoryId,
+                isActive = state == "active", householdId = householdId,
+            )
+        }
+        require(categories.map { it.key }.distinct().size == categories.size) { "CATEGORY_CATALOG_INVALID" }
+        return categories.filter { it.isActive }.sortedWith(compareBy({ it.order }, { it.key }))
+    }
 
     companion object {
         private const val TAG = "CategoryRepository"
@@ -54,30 +79,8 @@ class CategoryRepository {
         }
 
         return try {
-            val snapshot = categoriesCollection
-                .whereEqualTo("householdId", householdId)
-                .orderBy("order", Query.Direction.ASCENDING)
-                .get()
-                .await()
-
-            val categories = snapshot.documents.mapNotNull { doc ->
-                try {
-                    CategoryData(
-                        id = doc.id,
-                        key = doc.getString("key") ?: "",
-                        label = doc.getString("label") ?: "",
-                        color = doc.getString("color") ?: "#9CA3AF",
-                        budget = doc.getLong("budget"),
-                        order = doc.getLong("order")?.toInt() ?: 0,
-                        isDefault = doc.getBoolean("isDefault") ?: false,
-                        isActive = doc.getBoolean("isActive") ?: true,
-                        householdId = doc.getString("householdId") ?: ""
-                    )
-                } catch (e: Exception) {
-                    Log.e(TAG, "CATEGORY_DOCUMENT_INVALID")
-                    null
-                }
-            }.filter { it.isActive }
+            val snapshot = catalogReference(householdId).get().await()
+            val categories = readCategories(snapshot, householdId)
 
             if (categories.isEmpty()) {
                 Log.w(TAG, "CATEGORY_RESULT_EMPTY")
@@ -101,35 +104,19 @@ class CategoryRepository {
             return@callbackFlow
         }
 
-        val listenerRegistration = categoriesCollection
-            .whereEqualTo("householdId", householdId)
-            .orderBy("order", Query.Direction.ASCENDING)
+        val listenerRegistration = catalogReference(householdId)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) {
+                if (error != null || snapshot == null) {
                     Log.e(TAG, "CATEGORY_SUBSCRIPTION_FAILED")
                     trySend(DEFAULT_CATEGORIES)
                     return@addSnapshotListener
                 }
-
-                val categories = snapshot?.documents?.mapNotNull { doc ->
-                    try {
-                        CategoryData(
-                            id = doc.id,
-                            key = doc.getString("key") ?: "",
-                            label = doc.getString("label") ?: "",
-                            color = doc.getString("color") ?: "#9CA3AF",
-                            budget = doc.getLong("budget"),
-                            order = doc.getLong("order")?.toInt() ?: 0,
-                            isDefault = doc.getBoolean("isDefault") ?: false,
-                            isActive = doc.getBoolean("isActive") ?: true,
-                            householdId = doc.getString("householdId") ?: ""
-                        )
-                    } catch (e: Exception) {
-                        null
-                    }
-                }?.filter { it.isActive } ?: DEFAULT_CATEGORIES
-
-                trySend(categories.ifEmpty { DEFAULT_CATEGORIES })
+                try {
+                    trySend(readCategories(snapshot, householdId).ifEmpty { DEFAULT_CATEGORIES })
+                } catch (e: Exception) {
+                    Log.e(TAG, "CATEGORY_CATALOG_INVALID")
+                    trySend(DEFAULT_CATEGORIES)
+                }
             }
 
         awaitClose {
@@ -158,12 +145,9 @@ class CategoryRepository {
         if (householdId.isEmpty()) return "etc"
 
         return try {
-            val householdDoc = firestore.collection("households")
-                .document(householdId)
-                .get()
-                .await()
-
-            householdDoc.getString("defaultCategoryKey") ?: "etc"
+            val catalog = catalogReference(householdId).get().await()
+            val categories = readCategories(catalog, householdId)
+            categories.firstOrNull { it.isDefault }?.key ?: "etc"
         } catch (e: Exception) {
             Log.e(TAG, "DEFAULT_CATEGORY_READ_FAILED")
             "etc"

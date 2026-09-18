@@ -130,26 +130,24 @@ describeWithFirestoreEmulator("Firebase Access command adapters", () => {
       memberId: created.memberId,
     });
     expect(memberProfile.size).toBe(1);
-    const initializedCategories = await database
-      .collection("categories")
-      .where("householdId", "==", created.householdId)
+    const initializedCatalog = await householdReference
+      .collection("categoryCatalog")
+      .doc("current")
       .get();
     expect(
-      initializedCategories.docs
-        .map((snapshot) => snapshot.data().key)
+      initializedCatalog.data()!.categories
+        .map((category: { categoryId: string }) => category.categoryId)
         .sort(),
     ).toEqual(["childcare", "etc", "fixed", "food", "living"]);
-    expect(
-      (
-        await householdReference
-          .collection("categorySettings")
-          .doc("default")
-          .get()
-      ).data(),
-    ).toMatchObject({
+    expect(initializedCatalog.data()).toMatchObject({
+      schemaVersion: 1,
+      householdId: created.householdId,
       defaultCategoryId: "etc",
       catalogVersion: 1,
     });
+    expect((await householdReference.collection("categories").get()).empty).toBe(true);
+    expect((await householdReference.collection("categorySettings").get()).empty).toBe(true);
+    expect((await database.collection("categories").get()).empty).toBe(true);
 
     const invitation = (await handlers
       .get("access.create-invitation.v1")!
@@ -372,7 +370,7 @@ describeWithFirestoreEmulator("Firebase Access command adapters", () => {
     ).rejects.toMatchObject({ code: "MEMBER_ALREADY_LINKED" });
   });
 
-  it("여러 신규 가구의 같은 기본 카테고리는 서로 다른 legacy projection 문서로 보존한다", async () => {
+  it("여러 신규 가구의 같은 기본 카테고리를 가구별 catalog 단일 문서로 격리한다", async () => {
     const handlers = createAccessHouseholdCommandHandlers(database);
     const households: Array<{ householdId: string; memberId: string }> = [];
     for (const input of [
@@ -406,18 +404,24 @@ describeWithFirestoreEmulator("Firebase Access command adapters", () => {
       );
     }
 
-    const projections = await Promise.all(
+    const catalogs = await Promise.all(
       households.map(({ householdId }) =>
         database
-          .collection("categories")
-          .where("householdId", "==", householdId)
+          .collection("households")
+          .doc(householdId)
+          .collection("categoryCatalog")
+          .doc("current")
           .get(),
       ),
     );
-    for (const [index, projection] of projections.entries()) {
-      expect(projection.size).toBe(5);
+    for (const [index, catalog] of catalogs.entries()) {
+      expect(catalog.data()).toMatchObject({
+        householdId: households[index]!.householdId,
+        defaultCategoryId: "etc",
+        catalogVersion: 1,
+      });
       expect(
-        projection.docs.map((snapshot) => snapshot.data().key).sort(),
+        catalog.data()!.categories.map((category: { categoryId: string }) => category.categoryId).sort(),
       ).toEqual(["childcare", "etc", "fixed", "food", "living"]);
       expect(
         (
@@ -427,15 +431,9 @@ describeWithFirestoreEmulator("Firebase Access command adapters", () => {
             .collection("categories")
             .get()
         ).size,
-      ).toBe(5);
+      ).toBe(0);
     }
-    expect(
-      projections[0]!.docs
-        .map((snapshot) => snapshot.id)
-        .filter((documentId) =>
-          projections[1]!.docs.some((snapshot) => snapshot.id === documentId),
-        ),
-    ).toEqual([]);
-    expect((await database.collection("categories").get()).size).toBe(10);
+    expect(catalogs[0]!.ref.path).not.toBe(catalogs[1]!.ref.path);
+    expect((await database.collection("categories").get()).empty).toBe(true);
   });
 });

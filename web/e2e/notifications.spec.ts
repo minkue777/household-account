@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { callEmulatorFunction, createEmulatorAccount, createHouseholdThroughUi, E2E_PROJECT_ID, executeHouseholdCommand, firestoreFields, resetTestAccount, signInTestAccount, writeFirestoreFixture } from './emulator';
 import { addExpenseThroughUi, documentId } from './finance-helpers';
-import { issueShortcut, paymentCommand, rawNotification, records, registerCard, shortcutMessage, submitRaw, submitShortcut } from './payment-helpers';
+import { issueShortcut, paymentCommand, rawNotification, ledgerRecords, records, registerCard, shortcutMessage, submitRaw, submitShortcut } from './payment-helpers';
 import { setEmulatorAdminClaims } from './portfolio-helpers';
 import { adminAccess, deliveriesFor, endpointId, joinNotificationHousehold, nativeCaptureActor, purgeNotificationPage, redeliverOutbox, registerEndpoint, requestNotification, requestNotificationThroughUi, setPushDelivery, waitForOutbox } from './notifications-helpers';
 
@@ -54,18 +54,18 @@ test('[PUSH-004][PUSH-014][IOS-008] Android 수집은 푸시 없이 저장하고
   await registerEndpoint(request, actor, 'capture-ios-two', 'ios-pwa');
   await registerEndpoint(request, other, 'other-ios', 'ios-pwa');
   await submitRaw(request, actor, rawNotification({ merchant: 'Android 푸시 없는 수집', amount: 8000 }));
-  const androidExpense = (await records(request, 'expenses')).find(row => row.merchant === 'Android 푸시 없는 수집')!;
+  const androidExpense = (await ledgerRecords(request)).find(row => row.merchant === 'Android 푸시 없는 수집')!;
   expect((await waitForOutbox(request, androidExpense.id, 'TransactionRecorded')).notificationConsumerStatus).toBe('NoTarget');
   expect(await records(request, 'e2eFcmTransport')).toHaveLength(0);
   const credential = await issueShortcut(request, actor);
   expect((await submitShortcut(request, credential.rawCredential, shortcutMessage({ merchant: '본인 iOS 편집 알림' }))).status).toBe(200);
-  const iosExpense = (await records(request, 'expenses')).find(row => row.merchant === '본인 iOS 편집 알림')!;
+  const iosExpense = (await ledgerRecords(request)).find(row => row.merchant === '본인 iOS 편집 알림')!;
   await waitForOutbox(request, iosExpense.id, 'TransactionRecorded');
   expect((await records(request, 'e2eFcmTransport')).map(row => row.message.fid).sort()).toEqual(['capture-ios-one', 'capture-ios-two']);
   const endpoints = await records(request, 'notificationEndpoints');
   await setPushDelivery(request, actor, 'disabled');
   expect((await submitShortcut(request, credential.rawCredential, shortcutMessage({ merchant: '수집 전용 유지', amount: 4200 }))).status).toBe(200);
-  const disabledExpense = (await records(request, 'expenses')).find(row => row.merchant === '수집 전용 유지')!;
+  const disabledExpense = (await ledgerRecords(request)).find(row => row.merchant === '수집 전용 유지')!;
   expect((await waitForOutbox(request, disabledExpense.id, 'TransactionRecorded')).notificationConsumerStatus).toBe('NoTarget');
   expect((await requestNotification(request, other, disabledExpense.id)).event.notificationConsumerStatus).toBe('NoTarget');
   expect(await records(request, 'notificationEndpoints')).toEqual(endpoints);
@@ -166,7 +166,7 @@ test('[PUSH-012] 실제 관리자 제거와 복구는 endpoint와 이미 인증�
   for (const [index, captureActor] of [[0, removed], [1, native]] as const) {
     const merchant = `제거 전 수집 ${index}`;
     await submitRaw(request, captureActor, rawNotification({ merchant, amount: 2300 + index }));
-    expect((await records(request, 'expenses')).find(row => row.merchant === merchant))
+    expect((await ledgerRecords(request)).find(row => row.merchant === merchant))
       .toMatchObject({ creatorMemberId: removed.memberId, amount: 2300 + index });
   }
   const expense = await addExpenseThroughUi(page, request, { merchant: '멤버 제거와 복구', amount: 4000 });
@@ -178,7 +178,7 @@ test('[PUSH-012] 실제 관리자 제거와 복구는 endpoint와 이미 인증�
   let member = (await records(request, `households/${actor.householdId}/members`)).find(row => row.id === removed.memberId)!;
   await adminAccess(request, admin.idToken, 'remove-household-member', { householdId: actor.householdId, memberId: removed.memberId, expectedVersion: member.aggregateVersion, reason: '알림 E2E 제거' });
   await expect.poll(async () => (await records(request, 'notificationEndpoints')).filter(row => row.memberId === removed.memberId).length).toBe(0);
-  const beforeDeniedCapture = await records(request, 'expenses');
+  const beforeDeniedCapture = await ledgerRecords(request);
   const beforeDeniedReceipts = await records(request, `households/${actor.householdId}/captureSubmissionReceipts`);
   const deniedCaptures = await Promise.allSettled([removed, native].map((captureActor, index) =>
     submitRaw(request, captureActor, rawNotification({ merchant: `제거 후 거부 ${index}`, amount: 3300 + index }))));
@@ -187,7 +187,7 @@ test('[PUSH-012] 실제 관리자 제거와 복구는 endpoint와 이미 인증�
   for (const result of deniedCaptures) if (result.status === 'rejected') {
     expect(String(result.reason)).toContain('ACTIVE_HOUSEHOLD_MEMBERSHIP_REQUIRED');
   }
-  expect(await records(request, 'expenses')).toEqual(beforeDeniedCapture);
+  expect(await ledgerRecords(request)).toEqual(beforeDeniedCapture);
   expect(await records(request, `households/${actor.householdId}/captureSubmissionReceipts`)).toEqual(beforeDeniedReceipts);
   const cleanup = (await records(request, 'outboxEvents')).find(row => row.eventType === 'HouseholdMemberRemoved' && row.payload.memberId === removed.memberId)!;
   await redeliverOutbox(request, cleanup);
@@ -203,7 +203,7 @@ test('[PUSH-012] 실제 관리자 제거와 복구는 endpoint와 이미 인증�
   for (const [index, captureActor] of [[0, removed], [1, native]] as const) {
     const merchant = `복구 후 수집 ${index}`;
     await submitRaw(request, captureActor, rawNotification({ merchant, amount: 4300 + index }));
-    expect((await records(request, 'expenses')).find(row => row.merchant === merchant))
+    expect((await ledgerRecords(request)).find(row => row.merchant === merchant))
       .toMatchObject({ creatorMemberId: removed.memberId, amount: 4300 + index });
   }
   await registerEndpoint(request, removed, 'removed-ios', 'ios-pwa');

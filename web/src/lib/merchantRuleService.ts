@@ -7,6 +7,7 @@ import {
   getDocs,
   onSnapshot,
   db,
+  type QueryDocumentSnapshot,
 } from '@/platform/read-model/firestoreReadModel';
 import {
   MerchantRule,
@@ -20,7 +21,9 @@ import { requireClientSessionScope } from '@/composition/clientSessionScope';
 export type { MerchantRule, MatchType, MerchantRuleMapping, CreateMerchantRuleInput };
 export { MATCH_TYPE_LABELS };
 
-const COLLECTION_NAME = 'merchant_rules';
+function ruleCollection(householdId: string) {
+  return collection(db, 'households', householdId, 'merchantRules');
+}
 
 function requireHouseholdId(): string {
   return requireClientSessionScope().householdId;
@@ -110,9 +113,8 @@ export async function ruleExistsV2(
   matchType: MatchType
 ): Promise<boolean> {
   const q = query(
-    collection(db, COLLECTION_NAME),
-    where('householdId', '==', householdId),
-    where('merchantKeyword', '==', keyword),
+    ruleCollection(householdId),
+    where('keyword', '==', keyword),
     where('matchType', '==', matchType)
   );
   const snapshot = await getDocs(q);
@@ -125,35 +127,33 @@ export async function ruleExistsV2(
  */
 export async function ruleExists(householdId: string, keyword: string): Promise<boolean> {
   const q = query(
-    collection(db, COLLECTION_NAME),
-    where('householdId', '==', householdId),
-    where('merchantKeyword', '==', keyword)
+    ruleCollection(householdId),
+    where('keyword', '==', keyword)
   );
   const snapshot = await getDocs(q);
   return !snapshot.empty;
 }
 
 /**
- * Firestore 문서를 MerchantRule로 변환 (하위 호환성 처리)
+ * canonical 결제 설정 문서를 화면 모델로 변환합니다.
  */
-function mapDocToRule(doc: any): MerchantRule {
+function mapDocToRule(doc: QueryDocumentSnapshot): MerchantRule {
   const data = doc.data();
   return {
     id: doc.id,
     version: Number.isSafeInteger(data.aggregateVersion) ? data.aggregateVersion : 1,
     householdId: data.householdId,
-    merchantKeyword: data.merchantKeyword,
-    // 하위 호환성: matchType이 없으면 exactMatch로 판단
-    matchType: data.matchType ?? (data.exactMatch ? 'exact' : 'contains'),
-    // 하위 호환성: mapping이 없으면 category로 생성
-    mapping: data.mapping ?? { category: data.category },
+    merchantKeyword: data.keyword,
+    matchType: data.matchType,
+    mapping: {
+      ...(data.mapping?.merchant === undefined ? {} : { merchant: data.mapping.merchant }),
+      ...(data.mapping?.categoryId === undefined ? {} : { category: data.mapping.categoryId }),
+      ...(data.mapping?.memo === undefined ? {} : { memo: data.mapping.memo }),
+    },
     priority: data.priority ?? 0,
-    isActive: data.isActive ?? true,
+    isActive: data.active ?? true,
     createdAt: data.createdAt?.toDate?.() ?? undefined,
     updatedAt: data.updatedAt?.toDate?.() ?? undefined,
-    // deprecated 필드도 포함 (하위 호환성)
-    category: data.category,
-    exactMatch: data.exactMatch,
   };
 }
 
@@ -169,10 +169,7 @@ export function subscribeToRules(
     return () => {};
   }
 
-  const q = query(
-    collection(db, COLLECTION_NAME),
-    where('householdId', '==', householdId)
-  );
+  const q = ruleCollection(householdId);
 
   let latestRules: MerchantRule[] | undefined;
   let versions: Record<string, number> | undefined;
@@ -204,10 +201,7 @@ export function subscribeToRules(
 export async function getRules(householdId: string): Promise<MerchantRule[]> {
   if (!householdId) return [];
 
-  const q = query(
-    collection(db, COLLECTION_NAME),
-    where('householdId', '==', householdId)
-  );
+  const q = ruleCollection(householdId);
 
   const [snapshot, meta] = await Promise.all([getDocs(q), getDoc(doc(db, 'households', householdId, 'paymentConfigurationMeta', 'merchant-rules'))]);
   const versions = meta.data()?.collectionVersions ?? {};

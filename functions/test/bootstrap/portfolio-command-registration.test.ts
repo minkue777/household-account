@@ -53,30 +53,33 @@ describe("Portfolio household command registration", () => {
     ).toBe(undefined);
   });
 
-  it("[T-HOLD-001][HOLD-001] routes a legacy cash amount edit through the authoritative command handler", async () => {
+  it("[T-HOLD-001][HOLD-001] routes a migrated cash amount edit through the authoritative command handler", async () => {
     const memory = new InMemoryFirestore();
-    memory.seed("assets/asset-1", {
+    memory.seed("households/house-1/assets/asset-1", {
       householdId: "house-1",
       name: "주식계좌",
       type: "stock",
-      owner: "가구",
+      ownerRef: { kind: "household" },
       currency: "KRW",
       currentBalance: 1_000_000,
       memo: "",
-      isActive: true,
+      lifecycleState: "active",
       order: 0,
       aggregateVersion: 1,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-07-01T00:00:00.000Z",
     });
-    memory.seed("stock_holdings/legacy-cash-1", {
+    memory.seed("households/house-1/assets/asset-1/positions/legacy-cash-1", {
       householdId: "house-1",
       assetId: "asset-1",
       holdingType: "cash",
-      stockCode: "",
-      stockName: "예수금",
+      positionKind: "stock",
+      instrumentCode: "LEGACY:CASH:LEGACY-CASH-1",
+      instrumentName: "예수금",
+      instrumentType: "cash",
+      lifecycleState: "active",
       quantity: 1,
-      currentPrice: 1_000_000,
+      lastQuote: { priceInWon: 1_000_000, observedAt: "2026-07-01T00:00:00.000Z", provider: "migration" },
       aggregateVersion: 3,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-07-01T00:00:00.000Z",
@@ -118,12 +121,12 @@ describe("Portfolio household command registration", () => {
       }),
     ).resolves.toEqual({});
 
-    expect(memory.document("stock_holdings/legacy-cash-1")).toMatchObject({
+    expect(memory.document("households/house-1/assets/asset-1/positions/legacy-cash-1")).toMatchObject({
       holdingType: "cash",
-      currentPrice: 1_500_000,
+      lastQuote: { priceInWon: 1_500_000 },
       aggregateVersion: 4,
     });
-    expect(memory.document("assets/asset-1")).toMatchObject({
+    expect(memory.document("households/house-1/assets/asset-1")).toMatchObject({
       currentBalance: 1_500_000,
       aggregateVersion: 2,
     });

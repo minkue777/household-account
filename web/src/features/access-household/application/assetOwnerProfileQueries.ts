@@ -1,7 +1,7 @@
 import type { AssetOwnerProfileView } from '../domain/assetOwnerProfile';
 
 export interface AssetOwnerProfileReadPort {
-  subscribeActive(
+  subscribe(
     householdId: string,
     listener: (profiles: AssetOwnerProfileView[]) => void,
     onError?: (error: Error) => void
@@ -11,11 +11,11 @@ export interface AssetOwnerProfileReadPort {
 export class AssetOwnerProfileQueries {
   constructor(private readonly readModel: AssetOwnerProfileReadPort) {}
 
-  subscribeActive(
+  subscribe(
     householdId: string,
     listener: (profiles: AssetOwnerProfileView[]) => void,
     onError?: (error: Error) => void
   ): () => void {
-    return this.readModel.subscribeActive(householdId, listener, onError);
+    return this.readModel.subscribe(householdId, listener, onError);
   }
 }

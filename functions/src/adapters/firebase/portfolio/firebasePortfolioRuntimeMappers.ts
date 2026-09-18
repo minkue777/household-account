@@ -94,27 +94,26 @@ export function mapAsset(input: {
   readonly householdId: string;
   readonly assetId: string;
   readonly canonical?: FirebaseFirestore.DocumentData;
-  readonly legacy?: FirebaseFirestore.DocumentData;
   readonly ownerProfiles: readonly PortfolioOwnerProfileReference[];
 }): PortfolioRuntimeAsset | undefined {
-  const merged = { ...(input.legacy ?? {}), ...(input.canonical ?? {}) };
+  const merged = input.canonical ?? {};
   const rawType = merged.type;
   if (typeof rawType !== "string" || !ASSET_TYPES.has(rawType as AssetType)) {
     return undefined;
   }
   const type = rawType as AssetType;
   const canonicalSubType = normalizeCanonicalAssetSubType(type, merged.subType);
-  const legacySubType = optionalText(input.legacy, "subType");
   const owner = ownerRefFromData(merged, input.ownerProfiles);
   const lifecycle = text(
     input.canonical,
     "lifecycleState",
-    input.legacy?.isActive === false ? "deleted" : "active",
+    "active",
   );
   const currency = text(merged, "currency", "KRW");
   const costBasisValue = merged.costBasis;
   const quantityValue = merged.quantity;
   const initialInvestmentValue = merged.initialInvestment;
+  const automation = record(merged.automation) ?? {};
   return {
     assetId: input.assetId,
     householdId: input.householdId,
@@ -123,7 +122,6 @@ export function mapAsset(input: {
     ...(canonicalSubType?.canonical === undefined
       ? {}
       : { subType: canonicalSubType.canonical }),
-    ...(legacySubType === undefined ? {} : { legacySubType }),
     ownerRef: owner.ownerRef,
     ownerDisplayName: owner.ownerDisplayName,
     currency: currency === "USD" ? "USD" : "KRW",
@@ -159,22 +157,22 @@ export function mapAsset(input: {
       : { color: optionalText(merged, "color") }),
     automation: {
       recurringContributionAmount: safeWon(
-        merged,
+        automation,
         "recurringContributionAmount",
       ),
       recurringContributionDay: Math.max(
         0,
-        Math.round(finite(merged, "recurringContributionDay", 0)),
+        Math.round(finite(automation, "recurringContributionDay", 0)),
       ),
-      lastAutoContributionMonth: text(merged, "lastAutoContributionMonth"),
-      loanInterestRate: Math.max(0, finite(merged, "loanInterestRate", 0)),
-      loanRepaymentMethod: text(merged, "loanRepaymentMethod"),
-      loanMonthlyPaymentAmount: safeWon(merged, "loanMonthlyPaymentAmount"),
+      lastAutoContributionMonth: text(automation, "lastAutoContributionMonth"),
+      loanInterestRate: Math.max(0, finite(automation, "loanInterestRate", 0)),
+      loanRepaymentMethod: text(automation, "loanRepaymentMethod"),
+      loanMonthlyPaymentAmount: safeWon(automation, "loanMonthlyPaymentAmount"),
       loanPaymentDay: Math.max(
         0,
-        Math.round(finite(merged, "loanPaymentDay", 0)),
+        Math.round(finite(automation, "loanPaymentDay", 0)),
       ),
-      lastAutoRepaymentMonth: text(merged, "lastAutoRepaymentMonth"),
+      lastAutoRepaymentMonth: text(automation, "lastAutoRepaymentMonth"),
     },
   };
 }
@@ -224,9 +222,8 @@ export function mapPosition(input: {
   readonly positionId: string;
   readonly sourceKind: "stock" | "crypto";
   readonly canonical?: FirebaseFirestore.DocumentData;
-  readonly legacy?: FirebaseFirestore.DocumentData;
 }): PortfolioRuntimePosition | undefined {
-  const merged = { ...(input.legacy ?? {}), ...(input.canonical ?? {}) };
+  const merged = input.canonical ?? {};
   const positionKind = text(merged, "positionKind", input.sourceKind);
   if (positionKind !== "stock" && positionKind !== "crypto") return undefined;
   const rawHoldingType = text(merged, "holdingType");

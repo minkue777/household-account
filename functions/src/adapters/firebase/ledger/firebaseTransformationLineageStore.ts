@@ -19,7 +19,6 @@ const RECEIPT_CONTEXT = "household-finance-ledger-transformation";
 
 interface SelectedSnapshots {
   readonly canonical: readonly firestore.DocumentSnapshot[];
-  readonly legacy: readonly firestore.DocumentSnapshot[];
   readonly claims: readonly firestore.DocumentSnapshot[];
 }
 
@@ -308,10 +307,6 @@ export class FirebaseTransformationLineageStore
     return this.household().collection("ledgerTransactions");
   }
 
-  private legacyTransactions() {
-    return this.database.collection("expenses");
-  }
-
   private dedupClaims() {
     return this.household().collection("ledgerDedupKeys");
   }
@@ -326,46 +321,9 @@ export class FirebaseTransformationLineageStore
 
   private stateFrom(snapshots: SelectedSnapshots): LedgerTransformationState {
     const transactions = new Map<string, LedgerTransformationTransaction>();
-    for (const snapshot of snapshots.legacy) {
-      const mapped = mapTransaction(this.householdId, snapshot);
-      if (mapped !== undefined) transactions.set(mapped.transactionId, mapped);
-    }
     for (const snapshot of snapshots.canonical) {
       const mapped = mapTransaction(this.householdId, snapshot);
-      if (mapped !== undefined) {
-        const legacy = transactions.get(mapped.transactionId);
-        transactions.set(
-          mapped.transactionId,
-          {
-            ...mapped,
-            ...(legacy?.legacyMergeSnapshotPresent === true &&
-            mapped.legacyMergeSnapshotPresent !== true
-              ? { legacyMergeSnapshotPresent: true }
-              : {}),
-            ...(mapped.splitGroupId === undefined &&
-            legacy?.splitGroupId !== undefined
-              ? { splitGroupId: legacy.splitGroupId }
-              : {}),
-            ...(mapped.splitIndex === undefined && legacy?.splitIndex !== undefined
-              ? { splitIndex: legacy.splitIndex }
-              : {}),
-            ...(mapped.splitTotal === undefined && legacy?.splitTotal !== undefined
-              ? { splitTotal: legacy.splitTotal }
-              : {}),
-            ...(mapped.splitOriginalId === undefined &&
-            legacy?.splitOriginalId !== undefined
-              ? { splitOriginalId: legacy.splitOriginalId }
-              : {}),
-            ...(mapped.derivedFromTransactionId === undefined &&
-            legacy?.derivedFromTransactionId !== undefined
-              ? {
-                  derivedFromTransactionId:
-                    legacy.derivedFromTransactionId,
-                }
-              : {}),
-          },
-        );
-      }
+      if (mapped !== undefined) transactions.set(mapped.transactionId, mapped);
     }
 
     const claims = new Map<
@@ -398,172 +356,25 @@ export class FirebaseTransformationLineageStore
 
   private async readSelection(
     selection: TransformationLineageSelection,
+    unitOfWork?: firestore.Transaction,
   ): Promise<SelectedSnapshots> {
     const transactionIds = distinct(selection.transactionIds ?? []);
     const captureLineageIds = distinct(selection.captureLineageIds ?? []);
     const mergeLeafIds = distinct(selection.mergeLeafIds ?? []);
-    const directReferences = [
-      ...transactionIds.map((id) => this.canonicalTransactions().doc(id)),
-      ...transactionIds.map((id) => this.legacyTransactions().doc(id)),
-    ];
-    const [
-      directById,
-      canonicalByCaptureLineage,
-      canonicalBySourceFingerprint,
-      legacyByCaptureLineage,
-      legacyBySourceFingerprint,
-      canonicalByMergeLeaf,
-      legacyByMergeLeaf,
-      claims,
-    ] = await Promise.all([
-      directReferences.length === 0
-        ? Promise.resolve([])
-        : this.database.getAll(...directReferences),
-      Promise.all(
-        captureLineageIds.map((id) =>
-          this.canonicalTransactions().where("captureLineageId", "==", id).get(),
-        ),
-      ),
-      Promise.all(
-        captureLineageIds.map((id) =>
-          this.canonicalTransactions().where("sourceFingerprint", "==", id).get(),
-        ),
-      ),
-      Promise.all(
-        captureLineageIds.map((id) =>
-          this.legacyTransactions().where("captureLineageId", "==", id).get(),
-        ),
-      ),
-      Promise.all(
-        captureLineageIds.map((id) =>
-          this.legacyTransactions().where("sourceFingerprint", "==", id).get(),
-        ),
-      ),
-      Promise.all(
-        mergeLeafIds.map((id) =>
-          this.canonicalTransactions().where("mergeLeafIds", "array-contains", id).get(),
-        ),
-      ),
-      Promise.all(
-        mergeLeafIds.map((id) =>
-          this.legacyTransactions().where("mergeLeafIds", "array-contains", id).get(),
-        ),
-      ),
-      Promise.all(
-        captureLineageIds.map((id) =>
-          this.dedupClaims().where("captureLineageId", "==", id).get(),
-        ),
-      ),
+    const references = transactionIds.map(id => this.canonicalTransactions().doc(id));
+    const readQuery = (query: firestore.Query) => unitOfWork ? unitOfWork.get(query) : query.get();
+    const [direct, lineage, fingerprints, leaves, claims] = await Promise.all([
+      references.length === 0 ? Promise.resolve([]) : unitOfWork
+        ? unitOfWork.getAll(...references) : this.database.getAll(...references),
+      Promise.all(captureLineageIds.map(id => readQuery(this.canonicalTransactions().where("captureLineageId", "==", id)))),
+      Promise.all(captureLineageIds.map(id => readQuery(this.canonicalTransactions().where("sourceFingerprint", "==", id)))),
+      Promise.all(mergeLeafIds.map(id => readQuery(this.canonicalTransactions().where("mergeLeafIds", "array-contains", id)))),
+      Promise.all(captureLineageIds.map(id => readQuery(this.dedupClaims().where("captureLineageId", "==", id)))),
     ]);
-    const canonicalById = directById.slice(0, transactionIds.length);
-    const legacyById = directById.slice(transactionIds.length);
     return {
-      canonical: [
-        ...canonicalById,
-        ...canonicalByCaptureLineage.flatMap((snapshot) => snapshot.docs),
-        ...canonicalBySourceFingerprint.flatMap((snapshot) => snapshot.docs),
-        ...canonicalByMergeLeaf.flatMap((snapshot) => snapshot.docs),
-      ],
-      legacy: [
-        ...legacyById,
-        ...legacyByCaptureLineage.flatMap((snapshot) => snapshot.docs),
-        ...legacyBySourceFingerprint.flatMap((snapshot) => snapshot.docs),
-        ...legacyByMergeLeaf.flatMap((snapshot) => snapshot.docs),
-      ],
-      claims: claims.flatMap((snapshot) => snapshot.docs),
-    };
-  }
-
-  private async readSelectionInTransaction(
-    unitOfWork: firestore.Transaction,
-    selection: TransformationLineageSelection,
-  ): Promise<SelectedSnapshots> {
-    const transactionIds = distinct(selection.transactionIds ?? []);
-    const captureLineageIds = distinct(selection.captureLineageIds ?? []);
-    const mergeLeafIds = distinct(selection.mergeLeafIds ?? []);
-    const directReferences = [
-      ...transactionIds.map((id) => this.canonicalTransactions().doc(id)),
-      ...transactionIds.map((id) => this.legacyTransactions().doc(id)),
-    ];
-    const [
-      directById,
-      canonicalByCaptureLineage,
-      canonicalBySourceFingerprint,
-      legacyByCaptureLineage,
-      legacyBySourceFingerprint,
-      canonicalByMergeLeaf,
-      legacyByMergeLeaf,
-      claims,
-    ] = await Promise.all([
-      directReferences.length === 0
-        ? Promise.resolve([])
-        : unitOfWork.getAll(...directReferences),
-      Promise.all(
-        captureLineageIds.map((id) =>
-          unitOfWork.get(
-            this.canonicalTransactions().where("captureLineageId", "==", id),
-          ),
-        ),
-      ),
-      Promise.all(
-        captureLineageIds.map((id) =>
-          unitOfWork.get(
-            this.canonicalTransactions().where("sourceFingerprint", "==", id),
-          ),
-        ),
-      ),
-      Promise.all(
-        captureLineageIds.map((id) =>
-          unitOfWork.get(
-            this.legacyTransactions().where("captureLineageId", "==", id),
-          ),
-        ),
-      ),
-      Promise.all(
-        captureLineageIds.map((id) =>
-          unitOfWork.get(
-            this.legacyTransactions().where("sourceFingerprint", "==", id),
-          ),
-        ),
-      ),
-      Promise.all(
-        mergeLeafIds.map((id) =>
-          unitOfWork.get(
-            this.canonicalTransactions().where("mergeLeafIds", "array-contains", id),
-          ),
-        ),
-      ),
-      Promise.all(
-        mergeLeafIds.map((id) =>
-          unitOfWork.get(
-            this.legacyTransactions().where("mergeLeafIds", "array-contains", id),
-          ),
-        ),
-      ),
-      Promise.all(
-        captureLineageIds.map((id) =>
-          unitOfWork.get(
-            this.dedupClaims().where("captureLineageId", "==", id),
-          ),
-        ),
-      ),
-    ]);
-    const canonicalById = directById.slice(0, transactionIds.length);
-    const legacyById = directById.slice(transactionIds.length);
-    return {
-      canonical: [
-        ...canonicalById,
-        ...canonicalByCaptureLineage.flatMap((snapshot) => snapshot.docs),
-        ...canonicalBySourceFingerprint.flatMap((snapshot) => snapshot.docs),
-        ...canonicalByMergeLeaf.flatMap((snapshot) => snapshot.docs),
-      ],
-      legacy: [
-        ...legacyById,
-        ...legacyByCaptureLineage.flatMap((snapshot) => snapshot.docs),
-        ...legacyBySourceFingerprint.flatMap((snapshot) => snapshot.docs),
-        ...legacyByMergeLeaf.flatMap((snapshot) => snapshot.docs),
-      ],
-      claims: claims.flatMap((snapshot) => snapshot.docs),
+      canonical: [...direct, ...lineage.flatMap(snapshot => snapshot.docs),
+        ...fingerprints.flatMap(snapshot => snapshot.docs), ...leaves.flatMap(snapshot => snapshot.docs)],
+      claims: claims.flatMap(snapshot => snapshot.docs),
     };
   }
 
@@ -603,7 +414,7 @@ export class FirebaseTransformationLineageStore
           ]),
         };
         const currentState = this.stateFrom(
-          await this.readSelectionInTransaction(unitOfWork, guardedSelection),
+          await this.readSelection(guardedSelection, unitOfWork),
         );
         if (!statesEqual(input.baseline, currentState)) {
           return { kind: "conflict" as const, code: "VERSION_MISMATCH" as const };
@@ -657,18 +468,6 @@ export class FirebaseTransformationLineageStore
             data,
             { merge: true },
           );
-          const legacyReference = this.legacyTransactions().doc(
-            value.transactionId,
-          );
-          if (value.lifecycleState === "active") {
-            unitOfWork.set(
-              legacyReference,
-              { ...data, schemaVersion: 1 },
-              { merge: true },
-            );
-          } else {
-            unitOfWork.delete(legacyReference);
-          }
           const eventType =
             previous === undefined
               ? ("TransactionRecorded.v1" as const)
@@ -697,7 +496,6 @@ export class FirebaseTransformationLineageStore
 
         for (const value of removed) {
           unitOfWork.delete(this.canonicalTransactions().doc(value.transactionId));
-          unitOfWork.delete(this.legacyTransactions().doc(value.transactionId));
           outbox.append(unitOfWork, {
             eventId: hash(
               `${this.householdId}\u0000${input.operationKey}\u0000TransactionDeleted.v1\u0000${value.transactionId}`,

@@ -21,7 +21,7 @@ test('[T-SYS-007][SYS-007] 실제 HTTP 동시 Command는 거래·receipt·Outbox
   const canonical = await records(request, canonicalPath);
   expect(canonical).toHaveLength(1);
   expect(canonical[0]).toMatchObject({ amountInWon: 7200, memo: '첫 요청' });
-  expect(await records(request, 'expenses')).toHaveLength(1);
+  expect(await records(request, 'expenses')).toHaveLength(0);
   const receipts = await records(request, receiptPath);
   expect(receipts).toHaveLength(1);
   const eventIds = (await records(request, 'outboxEvents')).map(row => row.id).filter(id => !beforeEvents.has(id));

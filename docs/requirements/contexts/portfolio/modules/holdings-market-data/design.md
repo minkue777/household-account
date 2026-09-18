@@ -406,7 +406,7 @@ Market Data Adapter는 기능이 정의한 Port를 구현합니다. Operations S
 
 ## 7. 저장·트랜잭션·동시성
 
-### 7.1 목표 저장 모델
+### 7.1 저장 모델
 
 | 논리 데이터 | 목표 key | Writer | version/key |
 |---|---|---|---|
@@ -430,7 +430,9 @@ Position DTO에는 `schemaVersion`, server timestamp, aggregateVersion을 둡니
 
 ### 7.3 전환
 
-Legacy Mapper는 `stock_holdings`, `crypto_holdings`, Asset의 구형 금 필드를 읽습니다. 먼저 Web과 Functions의 평가 계산을 Domain Policy 하나로 교체한 뒤 Writer를 Workflow로 모읍니다. V1/V2 shadow read에서는 Position 수량·원가·마지막 시세, Asset 합계, 활성 해석, 동일 fixture의 Web/job 결과 hash를 비교합니다. 종목 검색은 Cloud Storage snapshot과 기존 `stocks.json` 결과를 일시 shadow 비교하되, MARKET-005 contract 통과 뒤 `stocks.json` reader와 파일을 함께 제거하며 fallback으로 남기지 않습니다.
+Web과 Functions는 canonical Position만 조회·저장합니다. Web 가구 전체 구독은 `positions` collection group에서 `householdId`, `positionKind`, `lifecycleState=active`를 모두 제한합니다. 서버 Command는 해당 canonical Asset 아래 Position만 읽고 Asset·Position 변경을 같은 Workflow transaction에 저장합니다. 삭제된 Position은 과거 보유·배당 근거를 위해 canonical에 남겨 두며 활성 목록에 섞지 않습니다.
+
+운영 이관에서 수량·평균단가·마지막 시세·종목 metadata·통화·priceScale·버전과 실제 UI 필드 형식을 검증하고 누락 정보만 보강합니다. Flat `stock_holdings`·`crypto_holdings` 접근은 이관 검증과 수동 purge에만 남깁니다. 종목 검색은 Cloud Storage catalog snapshot을 사용하며 과거 `stocks.json` fallback을 두지 않습니다.
 
 ## 8. Event·Projection·외부 연동
 

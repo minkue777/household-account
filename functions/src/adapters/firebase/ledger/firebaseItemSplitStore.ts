@@ -8,7 +8,6 @@ import type {
   ItemSplitResult,
   ItemSplitTransaction,
 } from "../../../contexts/household-finance/ledger/domain/model/itemSplitRestoration";
-import { mergeCanonicalLedgerTransactions } from "./migrationAwareLedgerUnion";
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
 
@@ -127,21 +126,12 @@ export class FirebaseItemSplitStore implements ItemSplitStore {
       .doc(this.householdId);
     const [
       canonicalSource,
-      legacySource,
       canonicalDerived,
-      legacyDerived,
     ] = await Promise.all([
       household.collection("ledgerTransactions").doc(input.sourceId).get(),
-      this.database.collection("expenses").doc(input.sourceId).get(),
       input.includeDerived
         ? household
           .collection("ledgerTransactions")
-          .where("derivedFromTransactionId", "==", input.sourceId)
-          .get()
-        : Promise.resolve(undefined),
-      input.includeDerived
-        ? this.database
-          .collection("expenses")
           .where("derivedFromTransactionId", "==", input.sourceId)
           .get()
         : Promise.resolve(undefined),
@@ -150,14 +140,8 @@ export class FirebaseItemSplitStore implements ItemSplitStore {
       canonicalSource,
       ...(canonicalDerived?.docs ?? []),
     ];
-    const legacyDocuments: firestore.DocumentSnapshot[] = [
-      legacySource,
-      ...(legacyDerived?.docs ?? []),
-    ];
-    const transactions = mergeCanonicalLedgerTransactions({
-      canonical: mapped(canonicalDocuments),
-      legacy: mapped(legacyDocuments),
-    }).filter((value) => value.householdId === this.householdId);
+    const transactions = mapped(canonicalDocuments)
+      .filter((value) => value.householdId === this.householdId);
     this.loadedTransactions = new Map(
       transactions.map((value) => [value.transactionId, value]),
     );
@@ -165,7 +149,7 @@ export class FirebaseItemSplitStore implements ItemSplitStore {
       transactions.map((value) => [value.transactionId, value.aggregateVersion]),
     );
     this.loadedMetadata = new Map();
-    for (const document of [...legacyDocuments, ...canonicalDocuments]) {
+    for (const document of canonicalDocuments) {
       const value = metadata(document);
       if (
         value !== undefined &&
@@ -213,19 +197,15 @@ export class FirebaseItemSplitStore implements ItemSplitStore {
         if (receiptSnapshot.exists) return { kind: "success" } as const;
 
         const affected = [...affectedIds];
-        const currentReferences = affected.flatMap((transactionId) => [
+        const currentReferences = affected.map((transactionId) =>
           household.collection("ledgerTransactions").doc(transactionId),
-          this.database.collection("expenses").doc(transactionId),
-        ]);
+        );
         const currentSnapshots = currentReferences.length === 0
           ? []
           : await unitOfWork.getAll(...currentReferences);
         const currentById = new Map<string, ItemSplitTransaction>();
         affected.forEach((transactionId, index) => {
-          const current = mergeCanonicalLedgerTransactions({
-            canonical: mapped([currentSnapshots[index * 2]]),
-            legacy: mapped([currentSnapshots[index * 2 + 1]]),
-          })[0];
+          const current = mapTransaction(currentSnapshots[index]);
           if (current !== undefined) currentById.set(transactionId, current);
         });
         for (const transactionId of affected) {
@@ -257,12 +237,8 @@ export class FirebaseItemSplitStore implements ItemSplitStore {
           const canonicalReference = household
             .collection("ledgerTransactions")
             .doc(transactionId);
-          const legacyReference = this.database
-            .collection("expenses")
-            .doc(transactionId);
           if (value === undefined) {
             unitOfWork.delete(canonicalReference);
-            unitOfWork.delete(legacyReference);
             continue;
           }
           const extra = metadataFor(value);
@@ -303,11 +279,6 @@ export class FirebaseItemSplitStore implements ItemSplitStore {
           unitOfWork.set(
             canonicalReference,
             data,
-            { merge: true },
-          );
-          unitOfWork.set(
-            legacyReference,
-            { ...data, schemaVersion: 1 },
             { merge: true },
           );
         }

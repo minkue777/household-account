@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { test, expect, devices } from '@playwright/test';
 import { createHouseholdThroughUi, resetTestAccount, E2E_PROJECT_ID } from './emulator';
-import { issueShortcut, paymentCommand, records, registerCard, shortcutMessage, submitShortcut } from './payment-helpers';
+import { issueShortcut, paymentCommand, ledgerRecords, records, registerCard, shortcutMessage, submitShortcut } from './payment-helpers';
 
 test.beforeEach(resetTestAccount);
 
@@ -17,7 +17,7 @@ test('[T-IOS-COMPAT-001][IOS-002] Shortcut 객체 우선 키와 중첩 배열은
   const lines = shortcutMessage({ merchant: '배열 입력 카페', amount: 6200 }).split('\n');
   const second = await submitShortcut(request, credential.rawCredential, [lines.slice(0, 2), null, lines.slice(2)]);
   expect(second.status).toBe(200);
-  expect((await records(request, 'expenses')).map(row => [row.merchant, row.amount]).sort()).toEqual([
+  expect((await ledgerRecords(request)).map(row => [row.merchant, row.amount]).sort()).toEqual([
     ['객체 입력 카페', 5100], ['배열 입력 카페', 6200],
   ]);
   for (const value of [0, true, { unknown: '알 수 없는 객체' }]) {
@@ -25,7 +25,7 @@ test('[T-IOS-COMPAT-001][IOS-002] Shortcut 객체 우선 키와 중첩 배열은
     expect(response.status).toBeGreaterThanOrEqual(400);
     expect(response.status).toBeLessThan(500);
   }
-  expect(await records(request, 'expenses')).toHaveLength(2);
+  expect(await ledgerRecords(request)).toHaveLength(2);
 });
 
 test('[IOS-001][IOS-003][IOS-004][IOS-006][IOS-007][IOS-009][IOS-011][IOS-014] 실제 발급 credential로 동시 Shortcut 승인을 보내면 한 지출·안전한 진단만 저장하고 재전송도 동일 결과다', async ({ page, request }) => {
@@ -37,14 +37,14 @@ test('[IOS-001][IOS-003][IOS-004][IOS-006][IOS-007][IOS-009][IOS-011][IOS-014] �
   const [first, concurrent] = await Promise.all([submitShortcut(request, credential.rawCredential, message, key), submitShortcut(request, credential.rawCredential, message, key)]);
   expect(first.status).toBe(200); expect(concurrent.status).toBe(200);
   expect(first.body.contractVersion).toBe('shortcut-payment-response.v1');
-  const saved = await records(request, 'expenses');
+  const saved = await ledgerRecords(request);
   expect(saved).toHaveLength(1);
   expect(saved[0]).toMatchObject({ merchant: 'Shortcut 카페', amount: 12300, createdBy: actor.memberId });
   expect(saved[0].cardLastFour).toContain('1234');
   const duplicate = await submitShortcut(request, credential.rawCredential, message);
   expect(duplicate.status).toBe(200);
   expect(duplicate.body.transaction.kind).toBe('duplicate');
-  expect(await records(request, 'expenses')).toHaveLength(1);
+  expect(await ledgerRecords(request)).toHaveLength(1);
   const diagnostics = await records(request, 'notification_debug_logs');
   expect(diagnostics.length).toBeGreaterThan(0);
   expect(JSON.stringify(diagnostics)).toContain(message.replaceAll('\n', '\\n'));
@@ -66,7 +66,7 @@ test('[IOS-001][IOS-010][IOS-012][SYS-007] Shortcut HTTP는 method·content type
   expect(forged.status()).toBeGreaterThanOrEqual(400);
   const unsupported = await submitShortcut(request, credential.rawCredential, '카드사 없는 10,000원 지출');
   expect(unsupported.status).toBeGreaterThanOrEqual(400);
-  expect(await records(request, 'expenses')).toHaveLength(0);
+  expect(await ledgerRecords(request)).toHaveLength(0);
 });
 
 test.describe('iPhone 설정', () => {
@@ -102,5 +102,5 @@ test('[IOS-003][IOS-015][CAN-003][CAN-007] Shortcut 승인취소는 공통 linea
   expect(cancelled.status).toBe(200);
   expect(cancelled.body.transaction.kind).toBe('cancelled');
   expect((await submitShortcut(request, credential.rawCredential, shortcutMessage({ amount: 78000 }))).status).toBe(200);
-  expect((await records(request, 'expenses')).filter(row => row.lifecycleState === 'active').map(row => row.amount)).toEqual([78000]);
+  expect((await ledgerRecords(request)).filter(row => row.lifecycleState === 'active').map(row => row.amount)).toEqual([78000]);
 });

@@ -274,7 +274,7 @@ android/core/contracts/                                   # 생성 Kotlin DTO; �
 | [MER-003](requirements.md#가맹점-규칙) | Domain, Contract | 세 필드 독립 mapping | 필드 누락, 빈 memo, merchant/category 치환 | preserve/replace가 명시적으로 구분 | `T-MER-001`, `T-MER-003` |
 | [MER-004](requirements.md#가맹점-규칙) | Emulator, Repository, UI | exact token·non-exact priority claim, ReorderMerchantRules | OR exact token 겹침, 같은 type/priority 동시 생성·수정, 완전 집합 재정렬, 중간 실패 | 충돌 loser write 0건, 고유 priority 전체 commit 또는 rollback | `T-MER-004`, `T-MER-005` |
 | [MER-005](requirements.md#가맹점-규칙) | Application, E2E | 기존 거래 편집 후 기억 흐름 | 지출·수입, Actor·expected version, remember on/off, 규칙 중복·commit 실패 | 존재 지출+remember만 거래·rule/claim을 원자 갱신, 중복은 기존 규칙 재사용, 나머지는 무변경 | `T-MER-006` |
-| [MER-006](requirements.md#가맹점-규칙) | Mapper Contract | 레거시 호환 read | `exactMatch/category`, active=false, current mapping, 빈 keyword·잘못된 category/priority·regex 값 | 유효 문서는 현재 모델과 같은 mapping; malformed·regex는 typed ContractFailure | `T-MER-002` |
+| [MER-006](requirements.md#가맹점-규칙) | Migration·Production Contract | 이관 검증과 canonical 설정 조회 | `exactMatch/category`, active=false, current mapping, 빈 keyword·잘못된 category/priority·regex 값 | 유효 문서는 현재 모델과 같은 mapping이며 malformed는 이관 거부; 보존 원본은 현재 설정을 덮지 않음 | `T-MER-002` |
 | [MER-007](requirements.md#가맹점-규칙) | Application, Repository, Contract | RemapMerchantRuleCategoryReferences | 활성·비활성 규칙, 이미 변경된 규칙, page 실패·재시도 | category만 default로 수렴하고 다른 mapping·조건은 불변 | `T-CAT-004` |
 
 추가 공통 suite는 동일 idempotency key의 동일·상이 payload, 타 가구 Actor, stale version, callback 2회 실행, Repository 장애와 빈 결과 구분을 검증합니다.
@@ -288,6 +288,6 @@ android/core/contracts/                                   # 생성 Kotlin DTO; �
 
 - 카드사 라벨 목록과 label-only/wildcard 허용 행렬은 운영 데이터와 `T-CARD-001` fixture로 동결합니다.
 - 레거시 이름 owner를 memberId로 연결하지 못한 문서의 수동 reconciliation 절차가 필요합니다.
-- 레거시 규칙 제거 시점은 잔존 문서 0건과 `T-MER-002` 통과 뒤로 둡니다.
+- 운영의 legacy read·dual-write 제거는 canonical 정합성 사전 검증과 `T-MER-002` 통과 뒤 배포합니다. 이전 문서는 복구용으로 보존할 수 있으며 live 설정의 원본으로 사용하지 않습니다.
 
 구현 순서는 (1) 현재 Web·Android 공용 fixture 추출, (2) 순수 정규화·매칭 Policy와 characterization test, (3) 서버 Query Port와 Legacy Mapper, (4) uniqueness claim·Command, (5) Web writer 전환, (6) Android·Shortcut의 직접 조회 제거, (7) category archive page remap Command와 receipt 추가, (8) backfill과 레거시 writer 제거 순입니다.

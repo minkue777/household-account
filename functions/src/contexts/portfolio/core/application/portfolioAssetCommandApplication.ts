@@ -152,9 +152,6 @@ export function createPortfolioAssetCommands(
           name: value.name,
           type: value.type,
           ...(value.subType === undefined ? {} : { subType: value.subType }),
-          ...(subType.value.legacy === undefined
-            ? {}
-            : { legacySubType: subType.value.legacy }),
           ownerRef: value.ownerRef,
           ownerDisplayName: owner.value.displayName,
           currency: value.currency,
@@ -317,11 +314,6 @@ export function createPortfolioAssetCommands(
           ...(validation.value.subType === undefined
             ? { subType: undefined }
             : { subType: validation.value.subType }),
-          ...(raw.subType === undefined
-            ? {}
-            : typeof raw.subType === "string" && raw.subType.trim() !== ""
-              ? { legacySubType: raw.subType.trim() }
-              : { legacySubType: undefined }),
           ownerRef: owner.value.ownerRef,
           ownerDisplayName: owner.value.displayName,
           currency: validation.value.currency,

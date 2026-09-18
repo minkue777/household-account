@@ -1,10 +1,6 @@
 import {
-  collection,
   doc,
   onSnapshot,
-  query,
-  orderBy,
-  where,
   db,
 } from '@/platform/read-model/firestoreReadModel';
 import { CategoryDocument } from '@/types/category';
@@ -12,14 +8,9 @@ import { requireClientSessionScope } from '@/composition/clientSessionScope';
 
 export type { CategoryDocument };
 
-const COLLECTION_NAME = 'categories';
-
 function requireStoredHouseholdId(): string {
   return requireClientSessionScope().householdId;
 }
-
-// 컬렉션 참조
-const categoriesRef = collection(db, COLLECTION_NAME);
 
 // 카테고리 추가
 export async function addCategory(
@@ -75,64 +66,79 @@ export async function reorderCategories(
   await categoryCommands.reorder(householdId, categories, expectedCatalogVersion);
 }
 
-// 순서/기본 카테고리 변경에 사용하는 버전은 개별 카테고리 버전과 별도로 구독합니다.
-export function subscribeToCategoryCatalogVersion(
-  householdId: string,
-  callback: (version: number, defaultCategoryKey?: string) => void,
-  onError?: (error: unknown) => void
-): () => void {
-  if (!householdId) {
-    onError?.(new Error('카테고리 버전을 불러오지 못했습니다.'));
-    return () => {};
-  }
+interface CategoryCatalogReadModel {
+  categories: CategoryDocument[];
+  catalogVersion: number;
+  defaultCategoryId?: string;
+}
 
-  const reference = doc(db, 'households', householdId, 'categorySettings', 'default');
-  return onSnapshot(reference, { includeMetadataChanges: true }, (snapshot) => {
-    if (snapshot.metadata.fromCache) return;
-    const data = snapshot.data();
-    // 서버 저장소도 설정 문서가 없는 legacy 카탈로그의 버전을 0으로 취급합니다.
-    const version = data?.catalogVersion ?? data?.aggregateVersion ?? 0;
-    if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 0) {
-      onError?.(new Error('카테고리 버전을 불러오지 못했습니다.'));
-      return;
+function readCategoryCatalog(data: Record<string, unknown> | undefined, householdId: string): CategoryCatalogReadModel {
+  if (!data) return { categories: [], catalogVersion: 0 };
+  if (data.schemaVersion !== 1 || data.householdId !== householdId || !Array.isArray(data.categories)
+    || !Number.isSafeInteger(data.catalogVersion) || (data.catalogVersion as number) < 0) {
+    throw new Error('카테고리를 불러오지 못했습니다.');
+  }
+  const ids = new Set<string>();
+  const categories = data.categories.map((entry: unknown): CategoryDocument => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('카테고리를 불러오지 못했습니다.');
+    const category = entry as Record<string, unknown>;
+    if (typeof category.categoryId !== 'string' || !category.categoryId || ids.has(category.categoryId)
+      || typeof category.name !== 'string' || typeof category.color !== 'string'
+      || !Number.isSafeInteger(category.version) || (category.version as number) < 1
+      || !Number.isSafeInteger(category.sortOrder)
+      || !(category.budgetInWon === null || Number.isSafeInteger(category.budgetInWon))
+      || !['active', 'archive-pending', 'archived'].includes(category.state as string)) {
+      throw new Error('카테고리를 불러오지 못했습니다.');
     }
-    callback(version, typeof data?.defaultCategoryId === 'string' ? data.defaultCategoryId : undefined);
+    ids.add(category.categoryId);
+    return {
+      id: category.categoryId, key: category.categoryId, householdId,
+      label: category.name, color: category.color, budget: category.budgetInWon as number | null,
+      order: category.sortOrder as number, aggregateVersion: category.version as number,
+      isDefault: category.categoryId === data.defaultCategoryId, isActive: category.state === 'active',
+    };
+  }).sort((left, right) => left.order - right.order || left.key.localeCompare(right.key));
+  if (!(data.defaultCategoryId === null || (typeof data.defaultCategoryId === 'string'
+    && categories.some(category => category.key === data.defaultCategoryId && category.isActive)))) {
+    throw new Error('카테고리를 불러오지 못했습니다.');
+  }
+  return { categories, catalogVersion: data.catalogVersion as number,
+    defaultCategoryId: typeof data.defaultCategoryId === 'string' ? data.defaultCategoryId : undefined };
+}
+
+function subscribeToCategoryCatalog(
+  householdId: string,
+  callback: (catalog: CategoryCatalogReadModel) => void,
+  onError?: (error: unknown) => void,
+): () => void {
+  if (!householdId) { onError?.(new Error('카테고리를 불러오지 못했습니다.')); return () => {}; }
+  const reference = doc(db, 'households', householdId, 'categoryCatalog', 'current');
+  return onSnapshot(reference, { includeMetadataChanges: true }, snapshot => {
+    if (snapshot.metadata.fromCache) return;
+    try {
+      const catalog = readCategoryCatalog(snapshot.data(), householdId);
+      callback(catalog);
+    } catch (error) { onError?.(error); }
   }, onError);
 }
 
-// 실시간 구독 (householdId별로)
+// 목록과 순서 변경 버전은 동일한 권위 문서에서 읽습니다.
+export function subscribeToCategoryCatalogVersion(
+  householdId: string,
+  callback: (version: number, defaultCategoryKey?: string) => void,
+  onError?: (error: unknown) => void,
+): () => void {
+  return subscribeToCategoryCatalog(householdId,
+    catalog => callback(catalog.catalogVersion, catalog.defaultCategoryId), onError);
+}
+
 export function subscribeToCategories(
   householdId: string,
   callback: (categories: CategoryDocument[]) => void,
-  onError?: (error: unknown) => void
+  onError?: (error: unknown) => void,
 ): () => void {
-  if (!householdId) {
-    callback([]);
-    return () => {};
-  }
-
-  const q = query(
-    categoriesRef,
-    where('householdId', '==', householdId),
-    orderBy('order', 'asc')
-  );
-
-  let hasServerSnapshot = false;
-  const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
-    if (!hasServerSnapshot && snapshot.metadata.fromCache) return;
-    hasServerSnapshot = true;
-    const categories: CategoryDocument[] = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as CategoryDocument[];
-
-    callback(categories);
-  }, (error) => {
-    // 일시 오류가 마지막으로 확인한 카테고리 화면을 지우지 않도록 유지합니다.
-    onError?.(error);
-  });
-
-  return unsubscribe;
+  if (!householdId) { callback([]); return () => {}; }
+  return subscribeToCategoryCatalog(householdId, catalog => callback(catalog.categories), onError);
 }
 
 // 고유한 카테고리 키 생성

@@ -1,15 +1,13 @@
 import type * as firestore from "firebase-admin/firestore";
-import { mergeActiveCategoryReferences } from "./categoryReadMapping";
+import { categoryCatalogReference, readCategoryCatalogDocument } from "./categoryCatalogDocument";
 
-/** 신규 참조에 사용할 수 있는 category key만 공개하며 저장소 오류는 숨기지 않습니다. */
+/** Read the authoritative catalog once, preserving historical aliases for existing references. */
 export async function readUsableCategoryIds(
   database: firestore.Firestore,
   householdId: string,
 ): Promise<ReadonlySet<string>> {
-  const [canonical, legacy] = await Promise.all([
-    database.collection("households").doc(householdId).collection("categories").get(),
-    database.collection("categories").where("householdId", "==", householdId).get(),
-  ]);
-  return new Set(mergeActiveCategoryReferences({ legacy: legacy.docs, canonical: canonical.docs })
-    .map(({ categoryId }) => categoryId));
+  const catalog = readCategoryCatalogDocument((await categoryCatalogReference(database, householdId).get()).data(), householdId);
+  const active = new Set(catalog.categories.filter(category => category.state === "active").map(category => category.categoryId));
+  return new Set([...active, ...Object.entries(catalog.categoryAliases)
+    .filter(([, categoryId]) => active.has(categoryId)).map(([alias]) => alias)]);
 }

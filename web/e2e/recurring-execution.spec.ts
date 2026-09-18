@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { createHouseholdThroughUi, resetTestAccount } from './emulator';
-import { paymentCommand, records } from './payment-helpers';
+import { paymentCommand, ledgerRecords, records } from './payment-helpers';
 import { runScheduled } from './portfolio-helpers';
 import { joinNotificationHousehold, registerEndpoint, waitForOutbox } from './notifications-helpers';
 
@@ -18,11 +18,11 @@ test('[T-REC-PUSH-001][REC-002][REC-003][REC-004][REC-006][SYS-005] 실제 정�
   const [year, month] = plan.firstApplicableMonth.split('-').map(Number);
   const firstDay = new Date(Date.UTC(year, month - 1, 1));
   await runScheduled('recurringDaily', `${firstDay.toISOString().slice(0, 10)}T00:00:00+09:00`);
-  expect(await records(request, 'expenses')).toHaveLength(0);
+  expect(await ledgerRecords(request)).toHaveLength(0);
   const lastDay = new Date(Date.UTC(year, month + 1, 0)).toISOString().slice(0, 10);
   await runScheduled('recurringDaily', `${lastDay}T00:00:00+09:00`);
   await runScheduled('recurringDaily', `${lastDay}T00:00:00+09:00`);
-  const expenses = await records(request, 'expenses');
+  const expenses = await ledgerRecords(request);
   expect(expenses).toHaveLength(2);
   expect(expenses.map(row => row.date).sort()).toEqual([
     new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10), lastDay,

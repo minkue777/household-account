@@ -191,7 +191,6 @@ describe("Firebase capture cancellation safety", () => {
     if (created.kind !== "recorded") throw new Error("APPROVAL_REQUIRED");
     for (const path of [
       `households/house-1/ledgerTransactions/${created.transactionId}`,
-      `expenses/${created.transactionId}`,
     ]) {
       const stored = memory.document(path);
       if (stored === undefined) throw new Error("TRANSACTION_REQUIRED");
@@ -222,7 +221,6 @@ describe("Firebase capture cancellation safety", () => {
     if (created.kind !== "recorded") throw new Error("APPROVAL_REQUIRED");
     for (const path of [
       `households/house-1/ledgerTransactions/${created.transactionId}`,
-      `expenses/${created.transactionId}`,
     ]) {
       const stored = memory.document(path);
       if (stored === undefined) throw new Error("TRANSACTION_REQUIRED");
@@ -360,7 +358,6 @@ describe("Firebase capture cancellation safety", () => {
     }
     for (const path of [
       `households/house-1/ledgerTransactions/${recordedA.transactionId}`,
-      `expenses/${recordedA.transactionId}`,
     ]) {
       const stored = memory.document(path);
       if (stored === undefined) throw new Error("TRANSACTION_REQUIRED");
@@ -372,7 +369,6 @@ describe("Firebase capture cancellation safety", () => {
     }
     for (const path of [
       `households/house-1/ledgerTransactions/${recordedB.transactionId}`,
-      `expenses/${recordedB.transactionId}`,
     ]) {
       const stored = memory.document(path);
       if (stored === undefined) throw new Error("TRANSACTION_REQUIRED");
@@ -409,9 +405,6 @@ describe("Firebase capture cancellation safety", () => {
         `households/house-1/ledgerTransactions/${recordedB.transactionId}`,
       ),
     ).toMatchObject({ lifecycleState: "deleted", aggregateVersion: 4 });
-    expect(memory.document(`expenses/${recordedB.transactionId}`)).toMatchObject({
-      lifecycleState: "deleted",
-      aggregateVersion: 4,
-    });
+    expect(memory.document(`expenses/${recordedB.transactionId}`)).toBeUndefined();
   });
 });

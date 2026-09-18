@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type * as firestore from "firebase-admin/firestore";
 
+import { categoryCatalogReference, readCategoryCatalogDocument, resolveCatalogCategoryId } from "../../adapters/firebase/categories/categoryCatalogDocument";
 import { FirebaseCategoryCatalogStore } from "../../adapters/firebase/categories/firebaseCategoryCatalogStore";
 import { createFirebaseRecurringCategoryRemapper } from "../../adapters/firebase/recurring/firebaseRecurringCategoryRemapper";
 import { createFirebaseMerchantRuleCategoryRemapper } from "../../adapters/firebase/payment-configuration/firebaseMerchantRuleCategoryRemapper";
@@ -131,26 +132,9 @@ async function categoryFromIdentifier(
     (item) => item.categoryId === categoryIdentifier,
   );
   if (direct !== undefined) return direct;
-  const [canonical, legacy] = await Promise.all([
-    database
-      .collection("households")
-      .doc(householdId)
-      .collection("categories")
-      .doc(categoryIdentifier)
-      .get(),
-    database.collection("categories").doc(categoryIdentifier).get(),
-  ]);
-  const canonicalData = canonical.data();
-  const legacyData = legacy.data();
-  const stableId =
-    typeof canonicalData?.categoryId === "string"
-      ? canonicalData.categoryId
-      : legacyData?.householdId === householdId && typeof legacyData.key === "string"
-        ? legacyData.key
-        : undefined;
-  return stableId === undefined
-    ? undefined
-    : catalog.categories.find((item) => item.categoryId === stableId);
+  const document = readCategoryCatalogDocument((await categoryCatalogReference(database, householdId).get()).data(), householdId);
+  const stableId = resolveCatalogCategoryId(document, categoryIdentifier);
+  return stableId === undefined ? undefined : catalog.categories.find(item => item.categoryId === stableId);
 }
 
 export function createCategoryHouseholdCommandHandlers(

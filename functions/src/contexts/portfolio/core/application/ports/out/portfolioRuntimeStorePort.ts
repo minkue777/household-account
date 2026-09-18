@@ -20,8 +20,6 @@ export interface PortfolioRuntimeAsset {
   readonly name: string;
   readonly type: AssetType;
   readonly subType?: string;
-  /** Legacy Web projection keeps its localized value until the read side migrates. */
-  readonly legacySubType?: string;
   readonly ownerRef: AssetOwnerRef;
   readonly ownerDisplayName: string;
   readonly currency: "KRW" | "USD";

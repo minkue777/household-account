@@ -155,10 +155,11 @@ export async function prepareFirstLocalCurrencySelection(database: firestore.Fir
   const current = currentState({ householdId, canonical, household: householdSnapshot });
   // Existing selections are never changed by balance updates, regardless of the inventory.
   if (current.selectedLocalCurrencyType !== undefined) return () => {};
-  const [balances, legacy] = await Promise.all([
-    transaction.get(household.collection("localCurrencyBalances")),
-    transaction.get(database.collection("balances").where("householdId", "==", householdId)),
-  ]);
+  // Keep query reads in this transaction sequential. If one read loses a lock
+  // conflict, another in-flight query may report INVALID_ARGUMENT for the now
+  // closed transaction and hide the retryable ABORTED result from Firestore.
+  const balances = await transaction.get(household.collection("localCurrencyBalances"));
+  const legacy = await transaction.get(database.collection("balances").where("householdId", "==", householdId));
   const available = new Set(currencyTypes(balances.docs, legacy.docs));
   return (type: string, occurredAt: string) => {
     if (!householdSnapshot.exists) return;

@@ -239,7 +239,7 @@ Web 항목 분리의 금액 입력은 마지막 항목을 `max(0, 원금 - 나�
 | `LedgerRepository` | 단건·그룹·기간·검색 후보 조회와 persistence mapping | tenant 강제, legacy transactionType=expense, 오류/NoData 구분 |
 | `ItemSplitStore` | 항목 분할 원본·직접 파생 항목의 선택 조회와 원자 교체 | split은 원본 ID 한 건, restore는 원본 ID와 `derivedFromTransactionId` 일치 항목만 읽고 같은 선택 집합의 version을 commit 안에서 재검증한다. |
 | `MonthlySplitLifecycleStore` | 월 분할 원본·그룹의 선택 조회와 원자 교체 | 신규·기존 분할은 원본 한 건 이하, 취소·재구성은 `splitGroupId` 일치 항목과 그 원본만 읽고 전체 원장과 무관한 거래는 조회·재저장하지 않는다. |
-| `TransformationLineageStore` | Merge·Unmerge·lineage cancel의 선택 조회와 원자 commit | Merge·Unmerge는 명시된 transaction/capture-lineage/merge-leaf ID만 조회하고 canonical 우선·legacy fallback과 commit 안의 동일 선택 집합·새 aggregate ID 재검증을 적용한다. Cancellation도 대상 captureLineageId의 current transaction ref에서 도달 가능한 활성 영향 graph만 선택 조회하고 commit 안에서 같은 graph를 재검증한다. 이 graph의 active 공유 merge에 ID·lineage snapshot이 부족하면 무변경 거부하되, graph 밖의 관련 없는 거래와 deleted·superseded 과거 `mergedFrom` 감사 이력은 취소 precondition으로 사용하지 않는다. |
+| `TransformationLineageStore` | Merge·Unmerge·lineage cancel의 선택 조회와 원자 commit | Merge·Unmerge는 명시된 transaction/capture-lineage/merge-leaf ID만 조회하고 가구별 canonical 단일 조회와 commit 안의 동일 선택 집합·새 aggregate ID 재검증을 적용한다. Cancellation도 대상 captureLineageId의 current transaction ref에서 도달 가능한 활성 영향 graph만 선택 조회하고 commit 안에서 같은 graph를 재검증한다. 이 graph의 active 공유 merge에 ID·lineage snapshot이 부족하면 무변경 거부하되, graph 밖의 관련 없는 거래와 deleted·superseded 과거 `mergedFrom` 감사 이력은 취소 precondition으로 사용하지 않는다. |
 | `LedgerUnitOfWork` | Transaction, claim, receipt, Outbox 원자 commit | callback 2회, create 경합, rollback |
 | `CategoryReferencePort` | categoryId 활성·사용 가능 상태 확인 | NotFound/Inactive/RetryableFailure 구분 |
 | `Clock` / `IdGenerator` | manual time, ID, occurredAt | 고정·순차 fixture |
@@ -304,17 +304,15 @@ Firestore write limit을 넘을 가능성이 있으면 transaction 시작 전에
 - callback 재실행에도 ID, receipt, Event ID는 사전 생성된 결정값을 사용합니다.
 - 외부 side effect는 commit 뒤 Outbox Dispatcher가 수행합니다.
 
-### 7.4 Legacy 전환
+### 7.4 단일 원본 전환과 기존 자료 보존
 
-1. 새 Application이 기존 `expenses`를 쓰는 Legacy Mapper 뒤에서 동작합니다.
-2. transactionType 누락을 expense로 읽는 호환 fixture를 유지합니다.
-3. Canonical `cardDisplay`는 `삼성(1876)` 또는 `수동`처럼 사용자에게 보일 완성 문자열입니다. Web Read Adapter는 이를 우선 읽고, 기존 문서는 `expenses.cardLastFour` 표시 슬롯으로 fallback합니다. Legacy Projection도 전환 기간에 같은 완성 문자열을 `cardLastFour`에 기록합니다. 이는 끝 네 자리만 뜻하는 Domain 필드가 아니며 Canonical 모델로 역유입하지 않습니다. `cardType=manual` 또는 `source=manual`이면 오래된 호환 필드가 없거나 잘못 남아 있어도 표시 결과는 항상 `수동`입니다.
-4. lifecycleState가 없는 문서는 active로 읽되 `lifecycleState=deleted` 또는 legacy `deletedAt`이 있으면 일반 Read Model에서 제외합니다.
-5. source, originChannel, creatorMemberId, localCurrencyType, schemaVersion, aggregateVersion을 근거가 있는 범위에서 backfill하고 불명확한 legacy 값은 명시적인 unknown 채널로 격리합니다. localCurrencyType은 parser/capture 근거가 없으면 추정하지 않습니다.
-6. legacy `notifyPartnerAt/notifyPartnerBy` 변경은 전환 Mapper가 `requestedAt/requesterMemberId`와 `HouseholdNotificationRequested.v1`로 변환하되 특정 partner 수신자를 만들지 않습니다.
-7. V1/V2 문서 수·기간별 금액 합계·결정 hash를 shadow compare합니다.
-8. Read 전환 후 Web·Android·기존 Functions의 직접 write를 Rules와 dependency test로 막습니다.
-9. dual-write는 제거 조건과 권위 Writer를 명시합니다.
+Web의 월 구독·검색·지출 통계 및 모든 서버 거래 생성·수정·분할·합치기·취소는 `households/{householdId}/ledgerTransactions`만 사용합니다. 날짜 Query는 `accountingDate` 필드와 해당 index를 사용합니다. 기존 `expenses`와 병합 조회하거나 함께 쓰지 않습니다. receipt·capture lineage·claim·Outbox의 원자성은 유지합니다.
+
+전환 전에 운영 도구가 양쪽 거래 금액·날짜·유형·카테고리·메모·버전과 분할/합치기 이력을 대조하고 누락된 호환 메타데이터만 보강합니다. 삭제·superseded 원본 및 이전 구성원의 생성자 ID는 감사 이력이므로 유지합니다. 존재하는 canonical 업무 값을 임의로 덮거나 이전 원본을 삭제하지 않습니다.
+
+Canonical `cardDisplay`는 `삼성(1876)` 또는 `수동`처럼 완성된 표시 문자열입니다. 이전 `cardLastFour`가 전체 표시 문자열이었던 경우에도 끝 번호를 담는 canonical 필드를 덮지 않습니다. `transactionType` 누락은 expense로, lifecycleState 누락은 active로 읽는 문서 내 호환은 유지하지만 다른 저장소로 fallback하지 않습니다. `deleted`·`superseded`·`deletedAt` 문서는 일반 목록·검색·합계에서 제외합니다.
+
+구형 PWA는 갱신하고 Android는 새 APK를 설치한 뒤 사용을 재개해야 합니다. 운영 순서와 검증 증거는 [저장소 통합 기록](../../../../../operations/storage-consolidation-2026-09-18.md)에 기록합니다.
 
 ## 8. Event·Projection·외부 연동
 

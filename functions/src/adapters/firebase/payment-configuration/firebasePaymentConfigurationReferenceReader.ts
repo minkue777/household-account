@@ -1,27 +1,5 @@
 import type * as firestore from "firebase-admin/firestore";
-
-function isUsableCategory(
-  snapshot: firestore.DocumentSnapshot,
-  categoryId: string,
-  householdId: string,
-): boolean {
-  if (!snapshot.exists) return false;
-  const data = snapshot.data();
-  if (data === undefined) return false;
-  const storedHouseholdId =
-    typeof data.householdId === "string" ? data.householdId : householdId;
-  const storedCategoryId =
-    typeof data.key === "string" && data.key.trim() !== ""
-      ? data.key.trim()
-      : snapshot.id;
-  return (
-    storedHouseholdId === householdId &&
-    storedCategoryId === categoryId &&
-    data.isActive !== false &&
-    data.lifecycleState !== "archived" &&
-    data.deletedAt === undefined
-  );
-}
+import { categoryCatalogReference, readCategoryCatalogDocument } from "../categories/categoryCatalogDocument";
 
 /** Category Catalog의 물리 경로를 Payment Configuration Application에서 격리합니다. */
 export class FirebasePaymentConfigurationReferenceReader {
@@ -31,19 +9,9 @@ export class FirebasePaymentConfigurationReferenceReader {
     householdId: string,
     categoryId: string,
   ): Promise<boolean> {
-    const [canonical, legacy] = await Promise.all([
-      this.database
-        .collection("households")
-        .doc(householdId)
-        .collection("categories")
-        .get(),
-      this.database
-        .collection("categories")
-        .where("householdId", "==", householdId)
-        .get(),
-    ]);
-    return [...canonical.docs, ...legacy.docs].some((snapshot) =>
-      isUsableCategory(snapshot, categoryId, householdId),
-    );
+    const snapshot = await categoryCatalogReference(this.database, householdId).get();
+    const catalog = readCategoryCatalogDocument(snapshot.data(), householdId);
+    const stableId = catalog.categoryAliases[categoryId] ?? categoryId;
+    return catalog.categories.some((category) => category.categoryId === stableId && category.state === "active");
   }
 }

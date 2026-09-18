@@ -3,17 +3,19 @@ import { describe, expect, it } from "vitest";
 
 import { CoalescingCaptureConfigurationQuery, FirebaseCaptureConfigurationQuery } from "../../../src/adapters/firebase/payment-capture/firebaseCaptureConfigurationQuery";
 import { InMemoryFirestore } from "../../support/in-memory-firestore";
+import { categoryCatalogDocument } from "../../support/category-catalog-document";
 
 const projectionPath =
   "households/house-1/runtimeProjections/payment-capture-configuration-v1";
 
 describe("Firebase capture configuration projection", () => {
-  it.each(["archive-pending", "archived", "deleted"])("canonical %s 상태가 legacy 업무 ID와 문서 별칭의 활성 참조를 함께 제거한다", async (state) => {
+  it.each(["archive-pending", "archived"] as const)("catalog %s 상태가 업무 ID와 이전 문서 별칭의 활성 참조를 함께 제거한다", async (state) => {
     const memory = new InMemoryFirestore();
     memory.seed("categories/legacy-food", { householdId: "house-1", key: "food", isActive: true });
-    memory.seed("households/house-1/categories/canonical-food", { categoryId: "food", state });
     memory.seed("categories/legacy-active", { householdId: "house-1", key: "active" });
-    memory.seed("households/house-1/categories/default", { state: "active" });
+    memory.seed("households/house-1/categoryCatalog/current", categoryCatalogDocument("house-1", [
+      { categoryId: "food", state }, { categoryId: "active" }, { categoryId: "default" },
+    ], { categoryAliases: { "legacy-food": "food", "canonical-food": "food", "legacy-active": "active" } }));
     // 구 projection은 잘못된 활성 판정을 담을 수 있으므로 서버 배포 후 다시 만듭니다.
     memory.seed(projectionPath, {
       householdId: "house-1", cards: [], merchantRules: [],
@@ -25,7 +27,7 @@ describe("Firebase capture configuration projection", () => {
     expect(rebuilt).toMatchObject({ kind: "available", value: {
       activeCategoryIds: new Set(["active", "legacy-active", "default"]),
     } });
-    expect(memory.document(projectionPath)?.schemaVersion).toBe(3);
+    expect(memory.document(projectionPath)?.schemaVersion).toBe(4);
     expect(await query.load(input)).toEqual(rebuilt);
   });
 
@@ -34,7 +36,7 @@ describe("Firebase capture configuration projection", () => {
     memory.seed("households/house-1/registeredCards/card-1", {
       ownerMemberId: "member-1", companyLabel: "국민", lastFour: "1234",
     });
-    memory.seed("households/house-1/categories/old-category", { label: "기존", state: "active" });
+    memory.seed("households/house-1/categoryCatalog/current", categoryCatalogDocument("house-1", [{ categoryId: "old-category" }]));
     memory.seed("households/house-1/merchantRules/rule-1", {
       merchantKeyword: "커피", matchType: "exact", mapping: { categoryId: "old-category" },
     });
@@ -49,8 +51,9 @@ describe("Firebase capture configuration projection", () => {
     memory.seed("households/house-1/registeredCards/card-1", {
       ownerMemberId: "member-1", companyLabel: "국민", lastFour: "5678",
     });
-    memory.seed("households/house-1/categories/old-category", { label: "기존", state: "archived" });
-    memory.seed("households/house-1/categories/NewCategory", { label: "간식/디저트/커피", state: "active" });
+    memory.seed("households/house-1/categoryCatalog/current", categoryCatalogDocument("house-1", [
+      { categoryId: "old-category", state: "archived" }, { categoryId: "NewCategory", name: "간식/디저트/커피" },
+    ]));
     memory.seed("households/house-1/merchantRules/rule-1", {
       merchantKeyword: "커피", matchType: "exact", mapping: { categoryId: "NewCategory" },
     });
@@ -64,9 +67,9 @@ describe("Firebase capture configuration projection", () => {
   it.each([
     [{ merchantKeyword: "shop", matchType: "regex", priority: 10 }, "REGEX_NOT_SUPPORTED"],
     [{ merchantKeyword: "shop,", matchType: "contains", priority: 10 }, "EMPTY_OR_TOKEN"],
-  ])("[MER-001][MER-004] malformed legacy rule은 임의 보정/설정 projection 저장 없이 명시적으로 거부한다", async (rule, code) => {
+  ])("[MER-001][MER-004] malformed canonical rule은 임의 보정/설정 projection 저장 없이 명시적으로 거부한다", async (rule, code) => {
     const memory = new InMemoryFirestore();
-    memory.seed("merchant_rules/invalid", { householdId: "house-1", category: "etc", ...rule });
+    memory.seed("households/house-1/merchantRules/invalid", { householdId: "house-1", mapping: { categoryId: "etc" }, ...rule });
     const before = memory.paths().map((path) => [path, memory.document(path)]);
     const result = await new FirebaseCaptureConfigurationQuery(memory as unknown as firestore.Firestore).load({ householdId: "house-1", actingMemberId: "member-1" });
     expect(result).toEqual({ kind: "contract-failure", code });
@@ -88,7 +91,7 @@ describe("Firebase capture configuration projection", () => {
       merchantRules: [],
       activeCategoryIds: ["etc", "food"],
       defaultCategoryId: "etc",
-      schemaVersion: 3,
+      schemaVersion: 4,
     });
 
     const result = await new FirebaseCaptureConfigurationQuery(
@@ -118,7 +121,7 @@ describe("Firebase capture configuration projection", () => {
     expect(memory.paths()).toEqual([projectionPath]);
   });
 
-  it("projection이 없으면 원본을 한 번 조합하고 모든 가구원의 이름을 안정 ID로 정규화한다", async () => {
+  it("projection이 없으면 canonical 원본만 조합하고 보존된 legacy 문서를 다시 읽지 않는다", async () => {
     const memory = new InMemoryFirestore();
     memory.seed("households/house-1", {
       defaultCategoryKey: "etc",
@@ -135,6 +138,11 @@ describe("Firebase capture configuration projection", () => {
       cardLabel: "삼성",
       cardLastFour: "1876",
     });
+    memory.seed("households/house-1/registeredCards/card-2", {
+      householdId: "house-1", ownerMemberId: "member-2", cardCompanyCode: "삼성", lastFour: "1876", lifecycle: "active",
+    });
+    memory.seed("merchant_rules/stale", { householdId: "house-1", merchantKeyword: "shop", exactMatch: true, category: "food" });
+    memory.seed("households/house-1/categoryCatalog/current", categoryCatalogDocument("house-1", [{ categoryId: "etc" }], { defaultCategoryId: "etc" }));
     memory.seed("categories/etc", {
       householdId: "house-1",
       key: "etc",
@@ -162,10 +170,14 @@ describe("Firebase capture configuration projection", () => {
       },
     ]);
     expect(result.value.activeCategoryIds).toEqual(new Set(["etc"]));
+    expect(result.value.merchantRules).toEqual([]);
+    expect(memory.transactionReads().map(({ path }) => path)).not.toEqual(expect.arrayContaining([
+      "registered_cards", "merchant_rules", "categories", "households/house-1/members", "households/house-1/categories",
+    ]));
     expect(memory.has(projectionPath)).toBe(true);
 
-    memory.remove("registered_cards/card-2");
-    memory.remove("categories/etc");
+    memory.remove("households/house-1/registeredCards/card-2");
+    memory.remove("households/house-1/categoryCatalog/current");
     const projected = await new FirebaseCaptureConfigurationQuery(
       memory as unknown as firestore.Firestore,
     ).load({

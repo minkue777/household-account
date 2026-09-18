@@ -47,7 +47,7 @@ describe("capture approval atomic batch reads", () => {
       ]]);
       expect(memory.transactionReads()).toHaveLength(2);
       const firstPaths = memory.paths("");
-      expect(firstPaths).toHaveLength(6);
+      expect(firstPaths).toHaveLength(5);
 
       await expect(persistence.recordApproval(command)).resolves.toEqual(first);
       await expect(persistence.recordApproval({
@@ -59,7 +59,7 @@ describe("capture approval atomic batch reads", () => {
       expect(duplicate).toMatchObject({ kind: "duplicate", editable: true,
         followUp: { kind: originChannel === "ios-shortcut" ? "outboxQueued" : "notRequested" } });
       expect(memory.paths("households/house-1/ledgerTransactions/")).toHaveLength(1);
-      expect(memory.paths("expenses/")).toHaveLength(1);
+      expect(memory.paths("expenses/")).toHaveLength(0);
       expect(memory.paths("households/house-1/captureRecords/")).toHaveLength(1);
       expect(memory.paths("households/house-1/ledgerDedupKeys/")).toHaveLength(1);
       expect(memory.paths("outboxEvents/")).toHaveLength(originChannel === "ios-shortcut" ? 2 : 1);
@@ -109,7 +109,7 @@ describe("capture approval atomic batch reads", () => {
 
     memory.runTransaction = runTransaction;
     await expect(persistence.recordApproval(command)).resolves.toMatchObject({ kind: "recorded" });
-    expect(memory.paths("")).toHaveLength(6);
+    expect(memory.paths("")).toHaveLength(5);
   });
 
   it("a retried transaction reads the new dedup snapshot before committing any previously staged approval", async () => {

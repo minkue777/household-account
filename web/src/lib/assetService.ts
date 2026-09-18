@@ -1,11 +1,10 @@
 import {
   collection,
-  doc,
+  collectionGroup,
   query,
   where,
   onSnapshot,
   getDocs,
-  getDoc,
   QueryDocumentSnapshot,
   DocumentData,
   db,
@@ -36,9 +35,24 @@ import {
   calculateHoldingValue,
 } from './assets/holdingValuation';
 
-const ASSETS_COLLECTION = 'assets';
-const HOLDINGS_COLLECTION = 'stock_holdings';
-const CRYPTO_HOLDINGS_COLLECTION = 'crypto_holdings';
+const ASSET_SUB_TYPE_LABELS: Readonly<Record<string, string>> = {
+  deposit: '예금', installment: '적금', insurance: '보험',
+  physical: '실물', stock: '주식', credit: '신용대출', mortgage: '주택담보대출', jeonse: '전세대출',
+};
+
+function householdPositions(householdId: string, positionKind: 'stock' | 'crypto') {
+  return query(collectionGroup(db, 'positions'),
+    where('householdId', '==', householdId),
+    where('positionKind', '==', positionKind),
+    where('lifecycleState', '==', 'active'));
+}
+
+function portfolioDocumentDate(value: unknown): Date {
+  const timestamp = timestampToDate(value);
+  if (timestamp) return timestamp;
+  const parsed = typeof value === 'string' ? new Date(value) : undefined;
+  return parsed && Number.isFinite(parsed.getTime()) ? parsed : new Date(0);
+}
 
 const assetUpdateTails = new Map<string, Promise<void>>();
 const stockMutationTails = new Map<string, Promise<void>>();
@@ -479,6 +493,14 @@ function sameEntityContent<Entity extends VersionedPortfolioEntity>(
   );
 }
 
+function sameAssetContent(left: Asset, right: Asset): boolean {
+  if (left.ownerRef === undefined || right.ownerRef === undefined) {
+    return sameEntityContent(left, right);
+  }
+  // Display names are joined from profiles; ownerRef is the persisted identity.
+  return sameEntityContent({ ...left, owner: undefined }, { ...right, owner: undefined });
+}
+
 function commandErrorCode(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null || !('code' in error)) {
     return undefined;
@@ -499,6 +521,7 @@ function isPositionVersionMismatch(error: unknown): boolean {
  */
 function mapDocToAsset(docSnap: QueryDocumentSnapshot<DocumentData>): Asset {
   const data = docSnap.data();
+  const automation = data.automation ?? {};
   return {
     id: docSnap.id,
     aggregateVersion:
@@ -508,8 +531,8 @@ function mapDocToAsset(docSnap: QueryDocumentSnapshot<DocumentData>): Asset {
     householdId: data.householdId,
     name: data.name,
     type: data.type,
-    subType: data.subType,
-    owner: data.owner,
+    subType: ASSET_SUB_TYPE_LABELS[data.subType] ?? data.subType,
+    owner: data.ownerRef?.kind === 'household' ? '가구' : undefined,
     ownerRef:
       data.ownerRef?.kind === 'household'
         ? { kind: 'household' }
@@ -517,26 +540,26 @@ function mapDocToAsset(docSnap: QueryDocumentSnapshot<DocumentData>): Asset {
           ? { kind: 'profile', profileId: data.ownerRef.profileId }
           : undefined,
     currentBalance: data.currentBalance || 0,
-    recurringContributionAmount: data.recurringContributionAmount || 0,
-    recurringContributionDay: data.recurringContributionDay || 0,
-    lastAutoContributionMonth: data.lastAutoContributionMonth || '',
-    loanInterestRate: data.loanInterestRate || 0,
-    loanRepaymentMethod: data.loanRepaymentMethod || '',
-    loanMonthlyPaymentAmount: data.loanMonthlyPaymentAmount || 0,
-    loanPaymentDay: data.loanPaymentDay || 0,
-    lastAutoRepaymentMonth: data.lastAutoRepaymentMonth || '',
+    recurringContributionAmount: automation.recurringContributionAmount || 0,
+    recurringContributionDay: automation.recurringContributionDay || 0,
+    lastAutoContributionMonth: automation.lastAutoContributionMonth || '',
+    loanInterestRate: automation.loanInterestRate || 0,
+    loanRepaymentMethod: automation.loanRepaymentMethod || '',
+    loanMonthlyPaymentAmount: automation.loanMonthlyPaymentAmount || 0,
+    loanPaymentDay: automation.loanPaymentDay || 0,
+    lastAutoRepaymentMonth: automation.lastAutoRepaymentMonth || '',
     costBasis: data.costBasis,
     initialInvestment: data.initialInvestment,
     currency: data.currency || 'KRW',
     memo: data.memo,
     icon: data.icon,
     color: data.color,
-    isActive: data.isActive !== false,
+    isActive: data.lifecycleState === 'active',
     order: data.order || 0,
     stockCode: data.stockCode,
     quantity: data.quantity,
-    createdAt: timestampToDate(data.createdAt) ?? new Date(0),
-    updatedAt: timestampToDate(data.updatedAt) ?? new Date(0),
+    createdAt: portfolioDocumentDate(data.createdAt),
+    updatedAt: portfolioDocumentDate(data.updatedAt),
   };
 }
 
@@ -882,7 +905,7 @@ export async function deleteAsset(
           id,
           queueGeneration
         );
-        if (!sameEntityContent(mutationBase, fresh)) {
+        if (!sameAssetContent(mutationBase, fresh)) {
           throw new Error('ASSET_VERSION_MISMATCH');
         }
         commandExpectedVersion = fresh.aggregateVersion;
@@ -906,7 +929,7 @@ export async function deleteAsset(
           queueGeneration,
           commandExpectedVersion
         );
-        if (!sameEntityContent(mutationBase, fresh)) {
+        if (!sameAssetContent(mutationBase, fresh)) {
           throw new Error('ASSET_VERSION_MISMATCH');
         }
         commandExpectedVersion = fresh.aggregateVersion;
@@ -960,10 +983,7 @@ export function subscribeToAssets(
     projection.publish(initialAssets);
   }
 
-  const q = query(
-    collection(db, ASSETS_COLLECTION),
-    where('householdId', '==', householdId)
-  );
+  const q = collection(db, 'households', householdId, 'assets');
 
   const unsubscribe = onSnapshot(
     q,
@@ -1040,22 +1060,22 @@ function mapDocToHolding(docSnap: QueryDocumentSnapshot<DocumentData>): StockHol
     assetId: data.assetId,
     householdId: data.householdId,
     holdingType: data.holdingType || 'stock',
-    stockCode: data.stockCode || '',
-    stockName: data.stockName,
+    stockCode: data.instrumentCode || '',
+    stockName: data.instrumentName,
     market:
       data.market === 'KRX' ||
       data.market === 'US' ||
       data.market === 'KOFIA_FUND'
         ? data.market
         : 'UNRESOLVED',
-    quantity: data.quantity || 1,
-    avgPrice: data.avgPrice,
-    currentPrice: data.currentPrice,
+    quantity: data.quantity ?? 0,
+    avgPrice: data.averagePriceInWon,
+    currentPrice: data.lastQuote?.priceInWon,
     instrumentType: data.instrumentType,
     priceScale: data.priceScale,
     quoteAsOf: data.quoteAsOf,
-    createdAt: timestampToDate(data.createdAt) ?? new Date(0),
-    updatedAt: timestampToDate(data.updatedAt) ?? new Date(0),
+    createdAt: portfolioDocumentDate(data.createdAt),
+    updatedAt: portfolioDocumentDate(data.updatedAt),
   };
 }
 
@@ -1069,13 +1089,13 @@ function mapDocToCryptoHolding(docSnap: QueryDocumentSnapshot<DocumentData>): Cr
         : 1,
     assetId: data.assetId,
     householdId: data.householdId,
-    marketCode: data.marketCode,
-    coinName: data.coinName,
+    marketCode: data.instrumentCode,
+    coinName: data.instrumentName,
     quantity: data.quantity,
-    avgPrice: data.avgPrice,
-    currentPrice: data.currentPrice,
-    createdAt: timestampToDate(data.createdAt) ?? new Date(0),
-    updatedAt: timestampToDate(data.updatedAt) ?? new Date(0),
+    avgPrice: data.averagePriceInWon,
+    currentPrice: data.lastQuote?.priceInWon,
+    createdAt: portfolioDocumentDate(data.createdAt),
+    updatedAt: portfolioDocumentDate(data.updatedAt),
   };
 }
 
@@ -1664,10 +1684,7 @@ export function subscribeToHouseholdStockHoldings(
   );
   capturingRetainedSnapshot = false;
 
-  const q = query(
-    collection(db, HOLDINGS_COLLECTION),
-    where('householdId', '==', householdId)
-  );
+  const q = householdPositions(householdId, 'stock');
 
   const unsubscribe = onSnapshot(
     q,
@@ -1748,10 +1765,7 @@ export function subscribeToHouseholdCryptoHoldings(
   );
   capturingRetainedSnapshot = false;
 
-  const q = query(
-    collection(db, CRYPTO_HOLDINGS_COLLECTION),
-    where('householdId', '==', householdId)
-  );
+  const q = householdPositions(householdId, 'crypto');
 
   const unsubscribe = onSnapshot(
     q,
@@ -1946,10 +1960,7 @@ export async function getDividendEventsByYear(year: number): Promise<DividendEve
 export async function getAllStockHoldings(): Promise<StockHolding[]> {
   const householdId = getHouseholdId();
 
-  const q = query(
-    collection(db, HOLDINGS_COLLECTION),
-    where('householdId', '==', householdId)
-  );
+  const q = householdPositions(householdId, 'stock');
 
   const snapshot = await getDocs(q);
   return snapshot.docs.map(mapDocToHolding);

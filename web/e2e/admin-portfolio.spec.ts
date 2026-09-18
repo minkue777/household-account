@@ -96,7 +96,7 @@ test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] �
     await admin.goto('/assets/stats');
     await expect(admin.getByRole('button', { name: '3개월', exact: true })).toBeVisible();
     await expect(admin.getByRole('link', { name: '관리자 화면', exact: true })).toBeVisible();
-    expect((await documents(request, 'assets')).find(x => x.id === created.assetId)).toMatchObject({ currentBalance: 25_000, isActive: true });
+    expect((await documents(request, `households/${scope.householdId}/assets`)).find(x => x.id === created.assetId)).toMatchObject({ currentBalance: 25_000, lifecycleState: 'active' });
   } finally { await context.close(); }
 });
 
@@ -116,7 +116,7 @@ test('[ADM-003][HH-012] 실제 관리자 callable의 가구 삭제·복구와 �
   await operation('delete-household', { householdId: scope.householdId, expectedVersion: household.aggregateVersion, confirmed: true });
   household = (await documents(request, 'households')).find(x => x.id === scope.householdId)!;
   expect(household.lifecycleState).toBe('deleted');
-  expect((await documents(request, 'assets')).find(x => x.id === asset.assetId)?.currentBalance).toBe(51_000);
+  expect((await documents(request, `households/${scope.householdId}/assets`)).find(x => x.id === asset.assetId)?.currentBalance).toBe(51_000);
   await operation('restore-household', { householdId: scope.householdId, expectedVersion: household.aggregateVersion, reason: 'E2E 복구' });
   expect((await documents(request, 'households')).find(x => x.id === scope.householdId)?.lifecycleState).toBe('active');
   let member = (await documents(request, `households/${scope.householdId}/members`)).find(x => x.id === scope.memberId)!;
@@ -127,11 +127,16 @@ test('[ADM-003][HH-012] 실제 관리자 callable의 가구 삭제·복구와 �
   await expect(executeHouseholdCommand(request, { ...scope, command: 'portfolio.update-asset.v1', payload: { assetId: asset.assetId, expectedVersion: 1, changes: { currentBalance: 0 } } })).rejects.toThrow();
   await operation('restore-household-member', { householdId: scope.householdId, memberId: scope.memberId, expectedVersion: member.aggregateVersion });
   expect((await documents(request, `households/${scope.householdId}/members`)).find(x => x.id === scope.memberId)?.lifecycleState).toBe('active');
-  expect((await documents(request, 'assets')).find(x => x.id === asset.assetId)?.currentBalance).toBe(51_000);
+  expect((await documents(request, `households/${scope.householdId}/assets`)).find(x => x.id === asset.assetId)?.currentBalance).toBe(51_000);
 });
 
 test('[ADM-006] 실제 접속 command는 같은 문서 visitId 재전송을 중복 집계하지 않는다', async ({ page, request }) => {
+  const initialVisit = page.waitForResponse(response => response.url().endsWith('/executeHouseholdCommand')
+    && response.request().postDataJSON()?.data?.command === 'access.record-app-visit.v1');
   const scope = await createHouseholdThroughUi(page);
+  // Closing a page does not cancel a server transaction already in flight.
+  // Finish the document's own visit before measuring this separate visit ID.
+  expect((await initialVisit).ok()).toBe(true);
   await page.close();
   const commandId = `app-visit-e2e-${randomUUID()}`;
   const input = { ...scope, command: 'access.record-app-visit.v1', commandId, payload: { visitId: commandId, platform: 'web' } };

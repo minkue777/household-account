@@ -20,8 +20,8 @@ describe("Finance production query boundaries", () => {
     expect(memory.document(`households/house/assets/${created.assetId}`)?.name).toBe("Renamed");
     const reads = memory.transactionReads();
     expect(reads.filter(read => read.path.includes("positions") || read.path === "households/house/assets" || read.path === "assets" || read.path.includes("holdings") || read.path.includes("assetAutomation"))).toEqual([]);
-    // receipt, canonical/legacy Asset, owner profiles; metadata edits do not read plans.
-    expect(reads).toHaveLength(4);
+    // receipt, canonical Asset, owner profiles; metadata edits do not read plans.
+    expect(reads).toHaveLength(3);
   });
 
   it("pages missing months and advances only a contiguous completion checkpoint", async () => {
@@ -44,7 +44,8 @@ describe("Finance production query boundaries", () => {
     const nextOccurrence = await app.processDue(input);
     expect(nextOccurrence).toMatchObject({ kind: "success", results: [] });
     expect(memory.transactionReads()).toEqual([]);
-    expect(memory.paths("expenses/")).toHaveLength(3);
+    expect(memory.paths("households/house/ledgerTransactions/")).toHaveLength(3);
+    expect(memory.paths("expenses/")).toEqual([]);
   });
 
   it("keeps a complete dividend target at a page boundary and progresses past terminal events", async () => {

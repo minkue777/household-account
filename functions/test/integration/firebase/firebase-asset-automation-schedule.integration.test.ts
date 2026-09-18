@@ -59,11 +59,6 @@ async function seed(input: {
   await Promise.all([
     household.set({ lifecycleState: "active", aggregateVersion: 1 }),
     household.collection("assets").doc(ASSET_ID).set(asset),
-    database.collection("assets").doc(ASSET_ID).set({
-      ...asset,
-      isActive: true,
-      subType: operation === "loan-repayment" ? "신용대출" : "적금",
-    }),
     household.collection("assetAutomationPlans").doc(planId).set({
       planId,
       householdId: HOUSEHOLD_ID,
@@ -142,14 +137,9 @@ describeWithFirestoreEmulator("Firebase asset automation scheduled runtime", () 
     ).toMatchObject({
       currentBalance: 1_300_000,
       aggregateVersion: 6,
-      lastAutoContributionMonth: "2026-03",
       automation: { lastAutoContributionMonth: "2026-03" },
     });
-    expect((await database.collection("assets").doc(ASSET_ID).get()).data()).toMatchObject({
-      currentBalance: 1_300_000,
-      aggregateVersion: 6,
-      lastAutoContributionMonth: "2026-03",
-    });
+    expect((await database.collection("assets").doc(ASSET_ID).get()).exists).toBe(false);
     expect((await household.collection("assetAutomationPlans").doc(PLAN_ID).get()).data()).toMatchObject({
       lastAppliedMonth: "2026-03",
       nextDueDate: "2026-04-18",

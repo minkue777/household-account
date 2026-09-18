@@ -9,8 +9,6 @@ import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutb
 import {
   canonicalAssetDocument,
   canonicalPositionDocument,
-  legacyAssetDocument,
-  legacyPositionDocument,
   planDocument,
 } from "./firebasePortfolioRuntimeDocuments";
 import { hash, stable } from "./firebasePortfolioRuntimeValues";
@@ -47,9 +45,7 @@ export class FirebasePortfolioRuntimeMutationWriter {
       const previous = beforeAssets.get(asset.assetId);
       if (previous !== undefined && stable(previous) === stable(asset)) continue;
       const canonicalCreated = !before.canonicalAssetIds.has(asset.assetId);
-      const legacyCreated = !before.legacyAssetIds.has(asset.assetId);
       const canonicalReference = household.collection("assets").doc(asset.assetId);
-      const legacyReference = this.database.collection("assets").doc(asset.assetId);
       if (canonicalCreated) {
         transaction.create(
           canonicalReference,
@@ -61,13 +57,6 @@ export class FirebasePortfolioRuntimeMutationWriter {
           canonicalAssetDocument(asset, false),
           { merge: true },
         );
-      }
-      if (legacyCreated) {
-        transaction.create(legacyReference, legacyAssetDocument(asset, true));
-      } else {
-        transaction.set(legacyReference, legacyAssetDocument(asset, false), {
-          merge: true,
-        });
       }
     }
 
@@ -137,39 +126,6 @@ export class FirebasePortfolioRuntimeMutationWriter {
             schemaVersion: 1,
             createdAt: FieldValue.serverTimestamp(),
           },
-        );
-      }
-      const stockReference = this.database
-        .collection("stock_holdings")
-        .doc(position.positionId);
-      const cryptoReference = this.database
-        .collection("crypto_holdings")
-        .doc(position.positionId);
-      if (position.lifecycleState === "deleted") {
-        if (before.legacyStockPositionIds.has(position.positionId)) {
-          transaction.delete(stockReference);
-        }
-        if (before.legacyCryptoPositionIds.has(position.positionId)) {
-          transaction.delete(cryptoReference);
-        }
-        continue;
-      }
-      const legacyReference =
-        position.positionKind === "stock" ? stockReference : cryptoReference;
-      const legacyCreated =
-        position.positionKind === "stock"
-          ? !before.legacyStockPositionIds.has(position.positionId)
-          : !before.legacyCryptoPositionIds.has(position.positionId);
-      if (legacyCreated) {
-        transaction.create(
-          legacyReference,
-          legacyPositionDocument(position, true),
-        );
-      } else {
-        transaction.set(
-          legacyReference,
-          legacyPositionDocument(position, false),
-          { merge: true },
         );
       }
     }

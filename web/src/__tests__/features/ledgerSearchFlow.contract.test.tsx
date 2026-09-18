@@ -37,8 +37,8 @@ const mockedGetDocs = getDocsFromServer as jest.MockedFunction<typeof getDocsFro
 const expenseSnapshot = (merchant = '검색 확인 가게', date = '2026-09-09') => ({ docs: [{
   id: 'row-1',
   data: () => ({
-    householdId: 'house-1', transactionType: 'expense', date,
-    merchant, memo: '저녁 식사', amount: 12000,
+    householdId: 'house-1', transactionType: 'expense', accountingDate: date,
+    merchant, memo: '저녁 식사', amountInWon: 12000,
     categoryId: 'food', cardType: 'manual', aggregateVersion: 1, lifecycleState: 'active',
   }),
 }] } as Awaited<ReturnType<typeof getDocsFromServer>>);
@@ -85,7 +85,7 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
     const documents = Array.from({ length: 55 }, (_, index) => ({
       id: `new-${index}`, data: () => ({ ...baseData, merchant: `검색 확인 ${index}` }),
     }));
-    const older = { id: 'older', data: () => ({ ...baseData, date: '2020-01-01', merchant: '검색 확인 과거' }) };
+    const older = { id: 'older', data: () => ({ ...baseData, accountingDate: '2020-01-01', merchant: '검색 확인 과거' }) };
     const initial = { docs: [...documents, older] } as Awaited<ReturnType<typeof getDocsFromServer>>;
     mockedGetDocs.mockResolvedValueOnce(initial);
     let resolveRefresh!: (value: typeof initial) => void;

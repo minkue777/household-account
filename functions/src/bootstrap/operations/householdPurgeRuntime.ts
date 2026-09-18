@@ -17,7 +17,7 @@ export function createFirebaseHouseholdPurgeRuntime(db: Firestore, input: { hous
     ...names.map(name => household.collection(name)), ...scopedCollections(db, id, legacy),
   ], pageSize);
   const participants: Partial<Record<HouseholdPurgeParticipant, HouseholdPurgeParticipantPort>> = {
-    'household-finance': withShortcutReceiptOwnershipPreflight(db, participant(['ledgerTransactions', 'ledgerDedupKeys', 'categories', 'categorySettings', 'categoryArchiveProcesses', 'recurringPlans', 'recurringCommandReceipts', 'categoryRecurringRemapReceipts', 'localCurrencyBalances'], ['expenses', 'categories', 'recurring_expenses']), pageSize),
+    'household-finance': withShortcutReceiptOwnershipPreflight(db, participant(['ledgerTransactions', 'ledgerDedupKeys', 'categories', 'categorySettings', 'categoryCatalog', 'categoryArchiveProcesses', 'recurringPlans', 'recurringCommandReceipts', 'categoryRecurringRemapReceipts', 'localCurrencyBalances'], ['expenses', 'categories', 'recurring_expenses']), pageSize),
     'payment-capture': participant(['registeredCards', 'merchantRules', 'paymentConfigurationMeta'], ['registered_cards', 'merchant_rules', 'captureReceipts', 'shortcutReceipts', 'shortcutHttpReceipts', 'notification_debug_logs', 'shortcutCredentials', 'shortcutCredentialVersions']),
     portfolio: participant(['assets', 'assetAutomationPlans', 'assetAutomationPlanRevisions', 'assetAutomationExecutions', 'assetAutomationExecutionReceipts'], ['assets', 'stock_holdings', 'crypto_holdings', 'dividend_events', 'dividend_snapshots', 'asset_history']),
     'access-household': firebaseScopedPurgeParticipant(db, async id => [

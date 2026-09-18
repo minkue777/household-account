@@ -264,7 +264,7 @@ describeWithFirestoreEmulator("Firebase 관리자 Access adapter", () => {
     ).toMatchObject({ lifecycleState: "active", memberId });
   });
 
-  it("삭제 자산 복구는 자산·레거시 projection·자동화 재개를 함께 반영한다", async () => {
+  it("삭제 자산 복구는 정본 자산·자동화만 재개하고 이전 projection은 수정하지 않는다", async () => {
     const householdId = "house-asset-restore";
     const assetId = "asset-savings";
     const household = database.collection("households").doc(householdId);
@@ -334,8 +334,8 @@ describeWithFirestoreEmulator("Firebase 관리자 Access adapter", () => {
       aggregateVersion: 5,
     });
     expect((await database.collection("assets").doc(assetId).get()).data()).toMatchObject({
-      isActive: true,
-      aggregateVersion: 5,
+      isActive: false,
+      aggregateVersion: 4,
     });
     expect((await household.collection("assetAutomationPlans").doc("plan-savings").get()).data()).toMatchObject({
       status: "active",

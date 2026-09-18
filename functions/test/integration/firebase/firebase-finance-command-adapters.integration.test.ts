@@ -1,6 +1,7 @@
 import { deleteApp, initializeApp, type App } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { categoryCatalogDocument } from "../../support/category-catalog-document";
 
 import { createCategoryHouseholdCommandHandlers } from "../../../src/bootstrap/commands/categoryHouseholdCommandHandlers";
 import { createLedgerHouseholdCommandHandlers } from "../../../src/bootstrap/commands/ledgerHouseholdCommandHandlers";
@@ -103,7 +104,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     const net = gross - cashback;
     const household = database.collection("households").doc(HOUSEHOLD_ID);
     await household.collection("registeredCards").doc("toss").set({ ownerMemberId: actor.actingMemberId, companyLabel: "토스", lifecycleState: "active" });
-    await household.collection("categories").doc("etc").set({ lifecycleState: "active" });
+    await household.collection("categoryCatalog").doc("current").set(categoryCatalogDocument(HOUSEHOLD_ID, [{ categoryId: "etc" }], { defaultCategoryId: "etc" }));
     const raw = createAndroidRawNotificationSubmissionApplication({
       parser: createAndroidProviderParser(),
       payloads: new Sha256AndroidRawNotificationHasher(),
@@ -136,7 +137,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     const canonical = household.collection("ledgerTransactions");
     expect(approved.value.transactionResult.quickEditSnapshot?.amountInWon).toBe(net);
     expect((await canonical.doc(transactionId).get()).data()?.amountInWon).toBe(net);
-    expect((await database.collection("expenses").doc(transactionId).get()).data()?.amount).toBe(net);
+    expect((await database.collection("expenses").doc(transactionId).get()).exists).toBe(false);
     const evidence = (await household.collection("captureRecords").get()).docs[0];
     expect(evidence.data()).toMatchObject({ amountInWon: net, approvalAmountInWon: gross });
     const handlers = createLedgerHouseholdCommandHandlers(database);
@@ -164,13 +165,9 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     expect((await database.collection("outboxEvents").get()).size).toBe(outboxCount);
   });
 
-  it("수동 거래의 canonical·legacy 카드 표시를 모두 수동으로 기록한다", async () => {
-    await database.collection("categories").doc("food").set({
-      householdId: HOUSEHOLD_ID,
-      key: "food",
-      label: "식비",
-      isActive: true,
-    });
+  it("수동 거래의 카드 표시를 canonical에만 수동으로 기록한다", async () => {
+    await database.collection("households").doc(HOUSEHOLD_ID).collection("categoryCatalog").doc("current")
+      .set(categoryCatalogDocument(HOUSEHOLD_ID, [{ categoryId: "food", name: "식비" }]));
     const handlers = createLedgerHouseholdCommandHandlers(database);
     const result = (await execute(
       handlers,
@@ -194,14 +191,10 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     const legacy = await database.collection("expenses").doc(result.transactionId).get();
 
     expect(canonical.data()).toMatchObject({ cardType: "manual", cardDisplay: "수동" });
-    expect(legacy.data()).toMatchObject({
-      cardType: "manual",
-      cardDisplay: "수동",
-      cardLastFour: "수동",
-    });
+    expect(legacy.exists).toBe(false);
   });
 
-  it("지역화폐 거래 수정은 응답과 canonical·legacy 문서에 지역화폐 유형을 보존한다", async () => {
+  it("지역화폐 거래 수정은 응답과 canonical 문서에 지역화폐 유형을 보존한다", async () => {
     const transactionId = "local-currency-update";
     const source = {
       householdId: HOUSEHOLD_ID,
@@ -256,8 +249,8 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       ).data(),
     ).toMatchObject({ localCurrencyType: "gyeonggi", memo: "수정 후" });
     expect(
-      (await database.collection("expenses").doc(transactionId).get()).data(),
-    ).toMatchObject({ localCurrencyType: "gyeonggi", memo: "수정 후" });
+      (await database.collection("expenses").doc(transactionId).get()).exists,
+    ).toBe(false);
   });
 
   it("월 분할은 대량 원장에서도 변경 항목만 저장하고 보이는 파생 version만으로 취소한다", async () => {
@@ -355,12 +348,8 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
   });
 
   it("지출 나누기는 대량 원장을 읽거나 재저장하지 않고 원본과 파생 항목만 변경한다", async () => {
-    await database.collection("categories").doc("food").set({
-      householdId: HOUSEHOLD_ID,
-      key: "food",
-      label: "식비",
-      isActive: true,
-    });
+    await database.collection("households").doc(HOUSEHOLD_ID).collection("categoryCatalog").doc("current")
+      .set(categoryCatalogDocument(HOUSEHOLD_ID, [{ categoryId: "food", name: "식비" }]));
     const household = database.collection("households").doc(HOUSEHOLD_ID);
     const canonical = household.collection("ledgerTransactions");
     const seed = database.batch();
@@ -450,7 +439,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     });
   });
 
-  it("카테고리 6개 command가 같은 catalog 계약과 projection을 원자적으로 갱신한다", async () => {
+  it("카테고리 6개 command가 단일 catalog 원본을 원자적으로 갱신한다", async () => {
     const handlers = createCategoryHouseholdCommandHandlers(database);
     const first = (await execute(handlers, "category.create.v1", "category-create-1", {
       category: {
@@ -500,12 +489,9 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     });
 
     const household = database.collection("households").doc(HOUSEHOLD_ID);
-    expect((await household.get()).data()).toMatchObject({
-      defaultCategoryKey: first.categoryId,
-    });
-    expect(
-      (await household.collection("categories").doc(second.categoryId).get()).data(),
-    ).toMatchObject({
+    const catalog = (await household.collection("categoryCatalog").doc("current").get()).data()!;
+    expect(catalog.defaultCategoryId).toBe(first.categoryId);
+    expect(catalog.categories.find((category: { categoryId: string }) => category.categoryId === second.categoryId)).toMatchObject({
       name: "여가",
       color: "#ABCDEF",
       budgetInWon: 55_000,
@@ -517,12 +503,10 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
         .collection("categories")
         .where("householdId", "==", HOUSEHOLD_ID)
         .get()
-    ).docs.find((snapshot) => snapshot.data().key === second.categoryId);
-    expect(legacyProjection?.data()).toMatchObject({
-      isActive: false,
-      label: "여가",
-      budget: 55_000,
-    });
+    );
+    expect(legacyProjection.empty).toBe(true);
+    expect((await household.collection("categories").get()).empty).toBe(true);
+    expect((await household.collection("categorySettings").get()).empty).toBe(true);
     expect((await household.collection("categoryArchiveProcesses").get()).size).toBe(1);
     expect(
       (
@@ -535,7 +519,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     ).toBe(8);
   });
 
-  it("기존 legacy category의 문서 ID와 업무 key가 달라도 중복 문서 없이 canonical로 확장한다", async () => {
+  it("이관한 물리 ID 별칭은 단일 catalog의 stable category를 수정하며 legacy 원본은 변경하지 않는다", async () => {
     await database.collection("categories").doc("legacy-category-document").set({
       householdId: HOUSEHOLD_ID,
       key: "legacy-category-key",
@@ -546,9 +530,10 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       isActive: true,
       isDefault: true,
     });
-    await database.collection("households").doc(HOUSEHOLD_ID).set(
-      { defaultCategoryKey: "legacy-category-key" },
-      { merge: true },
+    await database.collection("households").doc(HOUSEHOLD_ID).collection("categoryCatalog").doc("current").set(
+      categoryCatalogDocument(HOUSEHOLD_ID, [{ categoryId: "legacy-category-key", name: "기존 이름", color: "#111111" }], {
+        defaultCategoryId: "legacy-category-key", categoryAliases: { "legacy-category-document": "legacy-category-key" },
+      }),
     );
     const handlers = createCategoryHouseholdCommandHandlers(database);
     await execute(handlers, "category.update.v1", "legacy-category-update", {
@@ -558,7 +543,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     });
     expect(
       (await database.collection("categories").doc("legacy-category-document").get()).data(),
-    ).toMatchObject({ key: "legacy-category-key", label: "바뀐 이름" });
+    ).toMatchObject({ key: "legacy-category-key", label: "기존 이름" });
     expect(
       await database.collection("categories").doc("legacy-category-key").get(),
     ).toMatchObject({ exists: false });
@@ -567,27 +552,18 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
         await database
           .collection("households")
           .doc(HOUSEHOLD_ID)
-          .collection("categories")
-          .doc("legacy-category-key")
+          .collection("categoryCatalog")
+          .doc("current")
           .get()
       ).data(),
-    ).toMatchObject({ categoryId: "legacy-category-key", name: "바뀐 이름" });
+    ).toMatchObject({ categories: [{ categoryId: "legacy-category-key", name: "바뀐 이름", version: 2 }],
+      categoryAliases: { "legacy-category-document": "legacy-category-key" } });
   });
 
   it("정기지출 create/update/delete가 creator, version, tombstone, Outbox를 보존한다", async () => {
     const categoryId = "category-recurring";
-    await database
-      .collection("categories")
-      .doc("legacy-recurring-category-document")
-      .set({
-        householdId: HOUSEHOLD_ID,
-        key: categoryId,
-        label: "정기",
-        color: "#112233",
-        budget: null,
-        isActive: true,
-        order: 0,
-      });
+    await database.collection("households").doc(HOUSEHOLD_ID).collection("categoryCatalog").doc("current")
+      .set(categoryCatalogDocument(HOUSEHOLD_ID, [{ categoryId, name: "정기", color: "#112233" }]));
     const handlers = createRecurringHouseholdCommandHandlers(database);
     const created = (await execute(
       handlers,
@@ -723,25 +699,24 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       mergeLeafIds: ["expense-a", "expense-b"],
       localCurrencyType: "gyeonggi",
     });
-    const mergedLegacy = (
-      await database.collection("expenses").doc(mergedId).get()
+    const mergedDocument = (
+      await household.collection("ledgerTransactions").doc(mergedId).get()
     ).data();
-    expect(mergedLegacy).toMatchObject({
+    expect(mergedDocument).toMatchObject({
       transactionType: "expense",
       cardType: "local_currency",
       mergeLeafIds: ["expense-a", "expense-b"],
       localCurrencyType: "gyeonggi",
     });
-    expect(mergedLegacy?.mergedFrom).toEqual([
+    expect(mergedDocument?.mergedFrom).toEqual([
       expect.objectContaining({ amount: 40_000, category: "etc" }),
       expect.objectContaining({ amount: 60_000, category: "etc" }),
     ]);
-    expect(await database.collection("expenses").doc("expense-a").get()).toMatchObject({
-      exists: false,
-    });
-    expect(await database.collection("expenses").doc("expense-b").get()).toMatchObject({
-      exists: false,
-    });
+    for (const transactionId of ["expense-a", "expense-b"]) {
+      expect((await household.collection("ledgerTransactions").doc(transactionId).get()).data())
+        .toMatchObject({ lifecycleState: "superseded", aggregateVersion: 2 });
+    }
+    expect((await database.collection("expenses").get()).empty).toBe(true);
 
     const restored = (await execute(
       handlers,
@@ -774,15 +749,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       lifecycleState: "deleted",
       aggregateVersion: 2,
     });
-    expect(
-      (await database.collection("expenses").doc("expense-a").get()).data(),
-    ).toMatchObject({ lifecycleState: "active", aggregateVersion: 3 });
-    expect(
-      (await database.collection("expenses").doc("expense-b").get()).data(),
-    ).toMatchObject({ lifecycleState: "active", aggregateVersion: 3 });
-    expect(await database.collection("expenses").doc(mergedId).get()).toMatchObject({
-      exists: false,
-    });
+    expect((await database.collection("expenses").get()).empty).toBe(true);
   });
 
   it("연속 병합은 leaf ID와 표시 snapshot을 평탄화하고 최종 병합 해제에서 원본을 복원한다", async () => {
@@ -862,15 +829,15 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       aggregateVersion: 2,
       mergeLeafIds: ["A", "B"],
     });
-    const finalLegacy = (
-      await database.collection("expenses").doc(finalMergedId).get()
+    const finalDocument = (
+      await household.collection("ledgerTransactions").doc(finalMergedId).get()
     ).data();
-    expect(finalLegacy).toMatchObject({
+    expect(finalDocument).toMatchObject({
       amountInWon: 6_000,
       mergeLeafIds: ["A", "B", "C"],
       intermediateMergeHistoryIds: [first.transactionId],
     });
-    expect(finalLegacy?.mergedFrom).toEqual([
+    expect(finalDocument?.mergedFrom).toEqual([
       {
         merchant: "merchant-A",
         amount: 1_000,
@@ -971,7 +938,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     ).toMatchObject({ exists: false });
   });
 
-  it("mergedFrom은 있지만 mergeLeafIds가 없는 legacy 병합 거래는 재병합을 fail-closed로 거절한다", async () => {
+  it("이관한 mergedFrom에 mergeLeafIds가 없으면 재병합을 무변경으로 거절한다", async () => {
     const household = database.collection("households").doc(HOUSEHOLD_ID);
     await database.collection("expenses").doc("legacy-merged").set({
       householdId: HOUSEHOLD_ID,
@@ -999,6 +966,8 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
         { merchant: "leaf-b", amount: 2_000, category: "etc" },
       ],
     });
+    const preservedLegacy = (await database.collection("expenses").doc("legacy-merged").get()).data()!;
+    await household.collection("ledgerTransactions").doc("legacy-merged").set({ ...preservedLegacy, schemaVersion: 2 });
     await household.collection("ledgerTransactions").doc("source").set({
       householdId: HOUSEHOLD_ID,
       transactionType: "expense",
@@ -1033,7 +1002,9 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     ).rejects.toMatchObject({ code: "RESTORATION_SNAPSHOT_INCOMPLETE" });
     expect(
       (await database.collection("expenses").doc("legacy-merged").get()).data(),
-    ).toMatchObject({ lifecycleState: "active", aggregateVersion: 1 });
+    ).toEqual(preservedLegacy);
+    expect((await household.collection("ledgerTransactions").doc("legacy-merged").get()).data())
+      .toMatchObject({ lifecycleState: "active", aggregateVersion: 1 });
     expect(
       (await household.collection("ledgerTransactions").doc("source").get()).data(),
     ).toMatchObject({ lifecycleState: "active", aggregateVersion: 1 });
@@ -1045,7 +1016,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     ).toMatchObject({ exists: false });
   });
 
-  it("legacy-only 및 canonical 불완전 split leaf는 병합과 해제 후 구조 metadata를 양쪽 projection에 보존한다", async () => {
+  it("이관한 split leaf는 병합과 해제 후 canonical 구조 metadata를 보존하고 stale legacy 원본은 변경하지 않는다", async () => {
     const household = database.collection("households").doc(HOUSEHOLD_ID);
     const splitA = {
       householdId: HOUSEHOLD_ID,
@@ -1093,18 +1064,13 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     };
     await database.collection("expenses").doc("split-A").set(splitA);
     await database.collection("expenses").doc("split-B").set(splitB);
-    const {
-      splitGroupId: _splitGroupId,
-      splitIndex: _splitIndex,
-      splitTotal: _splitTotal,
-      splitOriginalId: _splitOriginalId,
-      derivedFromTransactionId: _derivedFromTransactionId,
-      ...canonicalB
-    } = splitB;
+    await household.collection("ledgerTransactions").doc("split-A").set({ ...splitA, schemaVersion: 2 });
     await household
       .collection("ledgerTransactions")
       .doc("split-B")
-      .set({ ...canonicalB, schemaVersion: 2 });
+      .set({ ...splitB, schemaVersion: 2 });
+    // 보존용 원본이 뒤처져 있어도 현재 구조를 덮어쓰거나 재활성화하지 않습니다.
+    await database.collection("expenses").doc("split-B").update({ splitTotal: 99 });
     const handlers = createLedgerHouseholdCommandHandlers(database);
 
     const merged = (await execute(
@@ -1177,8 +1143,9 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
         (await database.collection("expenses").doc(transactionId).get()).data(),
       ).toMatchObject({
         lifecycleState: "active",
-        aggregateVersion: 3,
+        aggregateVersion: 1,
         ...metadata,
+        ...(transactionId === "split-B" ? { splitTotal: 99 } : {}),
       });
     }
   });
@@ -1239,13 +1206,8 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       cardLastFour: "정기지출",
     });
     expect(
-      (await database.collection("expenses").doc(first.ledgerTransactionId).get()).data(),
-    ).toMatchObject({
-      source: "recurring",
-      cardType: "recurring",
-      cardDisplay: "정기지출",
-      cardLastFour: "정기지출",
-    });
+      (await database.collection("expenses").doc(first.ledgerTransactionId).get()).exists,
+    ).toBe(false);
     expect((await household.collection("recurringPlans").doc(planId).get()).data()).toMatchObject({
       lastProcessedMonth: "2026-07",
       lastExecutionKey: `${planId}:2026-07`,

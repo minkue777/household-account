@@ -38,7 +38,6 @@ export interface FirebaseAssetLifecycleUnitOfWorkInput {
 interface LoadedAssetLifecycle {
   readonly record: AssetLifecycleRecord;
   readonly canonical: firestore.DocumentSnapshot;
-  readonly legacy: firestore.DocumentSnapshot;
   readonly plan?: firestore.QueryDocumentSnapshot;
   readonly participantState?: AssetAutomationRestorationState;
   readonly receiptReference: firestore.DocumentReference;
@@ -47,35 +46,33 @@ interface LoadedAssetLifecycle {
 
 function lifecycle(
   canonical: FirebaseFirestore.DocumentData | undefined,
-  legacy: FirebaseFirestore.DocumentData | undefined,
 ): "active" | "deleted" | "purging" {
   const value = stringField(canonical, "lifecycleState");
   if (value === "deleted" || value === "purging") return value;
-  return legacy?.isActive === false ? "deleted" : "active";
+  return "active";
 }
 
 function mapAsset(
   householdId: string,
   assetId: string,
   canonical: FirebaseFirestore.DocumentData | undefined,
-  legacy: FirebaseFirestore.DocumentData | undefined,
 ): AssetLifecycleView | undefined {
-  if (canonical === undefined && legacy === undefined) return undefined;
+  if (canonical === undefined) return undefined;
   const storedHouseholdId =
-    stringField(canonical, "householdId") ?? stringField(legacy, "householdId");
+    stringField(canonical, "householdId");
   if (storedHouseholdId !== undefined && storedHouseholdId !== householdId) {
     return undefined;
   }
   const deletedAt =
-    isoString(canonical?.deletedAt) ?? isoString(legacy?.deletedAt);
+    isoString(canonical.deletedAt);
   return {
     assetId,
     householdId,
-    lifecycleState: lifecycle(canonical, legacy),
+    lifecycleState: lifecycle(canonical),
     aggregateVersion: numberField(
       canonical,
       "aggregateVersion",
-      numberField(legacy, "aggregateVersion", 1),
+      1,
     ),
     ...(deletedAt === undefined ? {} : { deletedAt }),
   };
@@ -169,16 +166,14 @@ export class FirebaseAssetLifecycleUnitOfWork
       .collection("households")
       .doc(this.input.householdId);
     const canonicalReference = household.collection("assets").doc(assetId);
-    const legacyReference = this.database.collection("assets").doc(assetId);
     const receiptReference = accessReceiptReference(
       this.database,
       "portfolio-asset-restoration",
       this.input.administratorPrincipalRef,
       this.input.idempotencyKey,
     );
-    const [canonical, legacy, plans, receipt] = await Promise.all([
+    const [canonical, plans, receipt] = await Promise.all([
       transaction.get(canonicalReference),
-      transaction.get(legacyReference),
       transaction.get(
         household.collection("assetAutomationPlans").where("assetId", "==", assetId),
       ),
@@ -190,7 +185,6 @@ export class FirebaseAssetLifecycleUnitOfWork
       this.input.householdId,
       assetId,
       canonical.data(),
-      legacy.data(),
     );
     return {
       record: {
@@ -198,7 +192,6 @@ export class FirebaseAssetLifecycleUnitOfWork
         commandReceipts: commandReceipts(this.input.idempotencyKey, receipt),
       },
       canonical,
-      legacy,
       ...(plan === undefined ? {} : { plan }),
       ...(participantState(assetId, plan) === undefined
         ? {}
@@ -220,24 +213,9 @@ export class FirebaseAssetLifecycleUnitOfWork
   ): Promise<readonly AssetLifecycleRecord[]> {
     if (householdId !== this.input.householdId) return [];
     const household = this.database.collection("households").doc(householdId);
-    const [canonical, legacy] = await Promise.all([
-      household.collection("assets").get(),
-      this.database.collection("assets").where("householdId", "==", householdId).get(),
-    ]);
-    const canonicalById = new Map(
-      canonical.docs.map((snapshot) => [snapshot.id, snapshot.data()]),
-    );
-    const legacyById = new Map(
-      legacy.docs.map((snapshot) => [snapshot.id, snapshot.data()]),
-    );
-    const assetIds = new Set([...canonicalById.keys(), ...legacyById.keys()]);
-    return [...assetIds].flatMap((assetId) => {
-      const asset = mapAsset(
-        householdId,
-        assetId,
-        canonicalById.get(assetId),
-        legacyById.get(assetId),
-      );
+    const snapshot = await household.collection("assets").get();
+    return snapshot.docs.flatMap(document => {
+      const asset = mapAsset(householdId, document.id, document.data());
       return asset === undefined
         ? []
         : [{ asset, commandReceipts: {} } satisfies AssetLifecycleRecord];
@@ -352,12 +330,6 @@ export class FirebaseAssetLifecycleUnitOfWork
   ): void {
     if (asset === undefined) return;
     const canonicalFields = {
-      ...(!loaded.canonical.exists
-        ? {
-            ...(loaded.legacy.data() ?? {}),
-            createdAt: FieldValue.serverTimestamp(),
-          }
-        : {}),
       assetId: asset.assetId,
       householdId: asset.householdId,
       lifecycleState: asset.lifecycleState,
@@ -371,25 +343,6 @@ export class FirebaseAssetLifecycleUnitOfWork
       updatedAt: FieldValue.serverTimestamp(),
     };
     transaction.set(loaded.canonical.ref, canonicalFields, { merge: true });
-    transaction.set(
-      loaded.legacy.ref,
-      {
-        householdId: asset.householdId,
-        isActive: asset.lifecycleState === "active",
-        aggregateVersion: asset.aggregateVersion,
-        ...(asset.deletedAt === undefined
-          ? loaded.legacy.exists
-            ? { deletedAt: FieldValue.delete() }
-            : {}
-          : { deletedAt: asset.deletedAt }),
-        schemaVersion: 1,
-        updatedAt: FieldValue.serverTimestamp(),
-        ...(!loaded.legacy.exists
-          ? { createdAt: FieldValue.serverTimestamp() }
-          : {}),
-      },
-      { merge: true },
-    );
   }
 
   private persistReceipt(

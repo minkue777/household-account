@@ -2,7 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import type { LedgerTransactionView } from "../../../contexts/household-finance/ledger/domain/model/ledgerTransaction";
 import type { RecurringLedgerPosting } from "../../../contexts/household-finance/ledger/public";
 
-/** canonical 원장과 legacy 읽기 projection이 공유하는 필드의 단일 mapper입니다. */
+/** Canonical 원장의 단일 mapper입니다. 과거 문서의 호환 필드도 같은 문서 안에서 유지합니다. */
 export function ledgerTransactionDocument(
   transaction: Omit<LedgerTransactionView, "cardType"> & { readonly cardType: LedgerTransactionView["cardType"] | "recurring" },
   includeCreatedAt: boolean,

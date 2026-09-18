@@ -209,13 +209,7 @@ export class FirebaseDividendHoldingQuery implements DividendHoldingQuery {
     const parents = new Map(positions.map(position => [`${position.householdId}/${position.assetId}`, position]));
     await Promise.all([...parents].map(async ([key, position]) => {
       const canonical = await this.database.collection("households").doc(position.householdId).collection("assets").doc(position.assetId).get();
-      if (canonical.exists) {
-        if (canonical.data()?.lifecycleState === "active" && canonical.data()?.deletedAt === undefined) activeParents.add(key);
-        return;
-      }
-      const legacy = await this.database.collection("assets").doc(position.assetId).get();
-      const data = legacy.data();
-      if (data?.householdId === position.householdId && data.isActive !== false && data.lifecycleState !== "deleted" && data.deletedAt === undefined) activeParents.add(key);
+      if (canonical.data()?.lifecycleState === "active" && canonical.data()?.deletedAt === undefined) activeParents.add(key);
     }));
     const targets = groupTargets(positions.filter(position => activeParents.has(`${position.householdId}/${position.assetId}`)));
     return {

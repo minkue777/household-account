@@ -1,3 +1,4 @@
+import { categoryCatalogDocument } from '../../support/category-catalog-document';
 import type { Firestore } from "firebase-admin/firestore";
 import { describe, expect, it } from "vitest";
 
@@ -32,7 +33,7 @@ describe("Ledger command lifecycle regressions", () => {
   it("restores an item split through the registered production handler", async () => {
     const database = new InMemoryFirestore();
     seed(database);
-    database.seed("categories/etc", { householdId, key: "etc", isActive: true });
+    database.seed(`households/${householdId}/categoryCatalog/current`, categoryCatalogDocument(householdId, [{ categoryId: "etc" }]));
     const split = await execute(database, "ledger.split-transaction.v1", { transactionId: "captured", expectedVersion: 2, items: [{ merchant: "A", amountInWon: 4000, categoryId: "etc" }, { merchant: "B", amountInWon: 6000, categoryId: "etc" }] }) as { transactionIds: string[] };
     const result = await execute(database, "ledger.restore-item-split.v1", { sourceId: "captured", expectedVersions: Object.fromEntries(split.transactionIds.map(id => [id, 1])) });
     expect(result).toEqual({ transactionId: "captured" });
@@ -48,11 +49,12 @@ describe("Ledger command lifecycle regressions", () => {
     expect(database.paths().filter(path => path.startsWith("outboxEvents/"))).toEqual([]);
   });
 
-  it("persists deletion time in canonical and legacy documents", async () => {
+  it("persists deletion time only in the canonical transaction", async () => {
     const database = new InMemoryFirestore();
     seed(database);
     await execute(database, "ledger.delete-transaction.v1", { transactionId: "captured", expectedVersion: 2 });
-    for (const path of [canonical("captured"), "expenses/captured"]) {
+    expect(database.document("expenses/captured")).toBeUndefined();
+    for (const path of [canonical("captured")]) {
       expect(database.document(path)).toMatchObject({ lifecycleState: "deleted", deletedAt: now, aggregateVersion: 3 });
     }
   });
@@ -63,7 +65,7 @@ describe("Ledger command lifecycle regressions", () => {
     const result = await execute(database, "ledger.split-existing-transaction-monthly.v1", { transactionId: "captured", expectedVersion: 2, months: 3 }) as { transactionIds: string[] };
     expect(result.transactionIds).toHaveLength(3);
     for (const id of result.transactionIds) {
-      for (const path of [canonical(id), `expenses/${id}`]) {
+      for (const path of [canonical(id)]) {
         expect(database.document(path)).toMatchObject({ captureLineageId: "capture-original", cardEvidence: "현대카드|1234", localTime: "12:34", source: "notification", originChannel: "android", memo: "원본 메모" });
       }
     }

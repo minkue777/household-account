@@ -3,13 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import { createLedgerHouseholdCommandHandlers } from "../../../src/bootstrap/commands/ledgerHouseholdCommandHandlers";
 import type { HouseholdCommandExecutionContext } from "../../../src/bootstrap/commands/householdCommand";
 import { InMemoryFirestore } from "../../support/in-memory-firestore";
+import { categoryCatalogDocument } from "../../support/category-catalog-document";
 
 const householdId = "remember-house";
 const canonical = `households/${householdId}/ledgerTransactions/expense`;
 function setup() {
   const memory = new InMemoryFirestore();
   memory.seed(canonical, { householdId, transactionType: "expense", merchant: "편집 표시명", originalMerchant: " 원 가맹점 ", amountInWon: 1000, categoryId: "etc", accountingDate: "2026-09-06", lifecycleState: "active", aggregateVersion: 3, creatorMemberId: "member" });
-  memory.seed("categories/food", { householdId, key: "food", isActive: true });
+  memory.seed(`households/${householdId}/categoryCatalog/current`, categoryCatalogDocument(householdId, [{ categoryId: "food" }]));
   const execute = (payload: Record<string, unknown>, commandId = "edit", actorHousehold = householdId) => {
     const context: HouseholdCommandExecutionContext = {
       principalUid: "uid", requestedAt: "2026-09-06T05:00:00.000Z",
@@ -30,7 +31,7 @@ describe("[MER-005] production transaction and remembered rule unit of work", ()
     expect(memory.document(canonical)).toMatchObject({ categoryId: "food", merchant: "새 표시명", originalMerchant: " 원 가맹점 ", aggregateVersion: 4 });
     expect(memory.documentsInCollection(`households/${householdId}/merchantRules`).map(({ value }) => value)).toEqual([expect.objectContaining({ keyword: "원 가맹점", mapping: { categoryId: "food" }, matchType: "exact", aggregateVersion: 1 })]);
     expect(memory.documentsInCollection(`households/${householdId}/merchantRuleClaims`)).toHaveLength(1);
-    expect(memory.documentsInCollection("merchant_rules")).toHaveLength(1);
+    expect(memory.documentsInCollection("merchant_rules")).toHaveLength(0);
     expect(memory.documentsInCollection("outboxEvents")).toHaveLength(1);
   });
 

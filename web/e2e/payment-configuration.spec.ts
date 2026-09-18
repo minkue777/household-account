@@ -22,7 +22,7 @@ test('[CARD-001][CARD-002][CARD-005] 카드 등록·중복 안내·끝 번호 �
   await page.getByPlaceholder('예: 1234').fill('1234');
   await page.getByRole('button', { name: '저장', exact: true }).click();
   await expect(page.getByText('이미 등록된 카드입니다.')).toBeVisible();
-  expect((await records(request, 'registered_cards')).filter(row => row.lifecycleState !== 'retired')).toHaveLength(1);
+  expect((await records(request, `households/${actor.householdId}/registeredCards`)).filter(row => row.lifecycle !== 'retired')).toHaveLength(1);
   await page.getByRole('button', { name: '취소', exact: true }).click();
   await page.locator(`[data-card-id="${id}"]`).click();
   await page.getByPlaceholder('예: 1234').fill('5678');
@@ -30,15 +30,15 @@ test('[CARD-001][CARD-002][CARD-005] 카드 등록·중복 안내·끝 번호 �
   await expect(page.locator(`[data-card-id="${id}"]`)).toContainText('5678');
   const afterEdit = await submitRaw(request, actor, rawNotification({ merchant: '수정 카드 거래', card: '5678' }));
   expect(afterEdit.transactionResult.kind).toBe('created');
-  const saved = (await records(request, 'registered_cards')).find(row => row.id === id)!;
+  const saved = (await records(request, `households/${actor.householdId}/registeredCards`)).find(row => row.id === id)!;
   await expect(paymentCommand(request, actor, 'payment-configuration.update-card.v1', { cardId: id, expectedVersion: saved.aggregateVersion,
     changes: { cardLabel: '삼성' } })).rejects.toThrow('CARD_IDENTITY_CHANGE_REQUIRES_REREGISTRATION');
   await page.locator(`[data-card-id="${id}"]`).click();
   await page.getByRole('button', { name: '삭제', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: '삭제', exact: true }).click();
   await expect(page.locator('[data-card-id]')).toHaveCount(0);
-  const expense = (await records(request, 'expenses')).find(row => row.id === captured.transactionResult.transactionId)!;
-  expect(expense.cardLastFour).toContain('1234');
+  const expense = (await records(request, `households/${actor.householdId}/ledgerTransactions`)).find(row => row.id === captured.transactionResult.transactionId)!;
+  expect(expense.cardDisplay).toContain('1234');
   const retired = await submitRaw(request, actor, rawNotification({ merchant: '삭제 카드 거래', card: '5678' }));
   expect(retired.transactionResult.kind).toBe('rejected');
 });
@@ -70,7 +70,7 @@ test('[T-CARD-003][CARD-003] 실제 카드 길게 끌기 순서는 재진입에�
 test('[T-MER-006][MER-001][MER-003][MER-005][CAT-004] 사용자 카테고리와 쉼표 규칙을 적용하고 기억하기는 기존 exact를 보존하며 새 가맹점의 exact를 만든다', async ({ page, request }) => {
   const actor = await createHouseholdThroughUi(page);
   const category = await addCategoryThroughUi(page, request, '간식/디저트/커피');
-  const categoryId = textField(category, 'key')!;
+  const categoryId = textField(category, 'categoryId')!;
   await registerCard(request, actor);
   await page.goto('/settings');
   await page.getByRole('button', { name: /^가맹점 규칙/ }).click();
@@ -89,13 +89,13 @@ test('[T-MER-006][MER-001][MER-003][MER-005][CAT-004] 사용자 카테고리와 
   await edit.getByRole('button', { name: '식비', exact: true }).click();
   await edit.getByText('이 가맹점 기억하기', { exact: true }).click();
   await edit.getByRole('button', { name: '저장', exact: true }).click();
-  await expect.poll(async () => (await records(request, 'expenses')).find(row => row.id === captured.transactionResult.transactionId)?.category).toBe('food');
+  await expect.poll(async () => (await records(request, `households/${actor.householdId}/ledgerTransactions`)).find(row => row.id === captured.transactionResult.transactionId)?.categoryId).toBe('food');
   // MER-005: 이미 존재하는 exact는 사용자가 만든 mapping을 덮어쓰지 않고 재사용합니다.
   const next = await submitRaw(request, actor, rawNotification({ merchant: 'CAFE', amount: 15000 }));
   expect(next.transactionResult.quickEditSnapshot).toMatchObject({ categoryId, merchant: '우리 카페', memo: '원두' });
-  const savedRules = await records(request, 'merchant_rules');
+  const savedRules = await records(request, `households/${actor.householdId}/merchantRules`);
   expect(savedRules).toHaveLength(1);
-  expect(savedRules[0].merchantKeyword.toLowerCase()).toContain('cafe');
+  expect(savedRules[0].keyword.toLowerCase()).toContain('cafe');
 
   const fresh = await submitRaw(request, actor, rawNotification({ merchant: '새 기억 가맹점', amount: 16000 }));
   expect(fresh.transactionResult.quickEditSnapshot.categoryId).toBe('etc');
@@ -104,10 +104,10 @@ test('[T-MER-006][MER-001][MER-003][MER-005][CAT-004] 사용자 카테고리와 
   await freshEdit.getByText('이 가맹점 기억하기', { exact: true }).click();
   await freshEdit.getByRole('button', { name: '저장', exact: true }).click();
   // 모달은 낙관적으로 닫힙니다. 후속 수집 전 실제 원장+규칙 transaction 완료를 관측합니다.
-  await expect.poll(async () => (await records(request, 'expenses')).find(row => row.id === fresh.transactionResult.transactionId)?.category).toBe('food');
-  const rememberedRules = await records(request, 'merchant_rules');
+  await expect.poll(async () => (await records(request, `households/${actor.householdId}/ledgerTransactions`)).find(row => row.id === fresh.transactionResult.transactionId)?.categoryId).toBe('food');
+  const rememberedRules = await records(request, `households/${actor.householdId}/merchantRules`);
   expect(rememberedRules).toHaveLength(2);
-  expect(rememberedRules.find(row => row.merchantKeyword === '새 기억 가맹점')).toMatchObject({ matchType: 'exact', mapping: { category: 'food' } });
+  expect(rememberedRules.find(row => row.keyword === '새 기억 가맹점')).toMatchObject({ matchType: 'exact', mapping: { categoryId: 'food' } });
   const rememberedCapture = await submitRaw(request, actor, rawNotification({ merchant: '새 기억 가맹점', amount: 17000 }));
   expect(rememberedCapture.transactionResult.quickEditSnapshot.categoryId).toBe('food');
 });
@@ -124,7 +124,8 @@ test('[MER-001][MER-002][MER-007] 규칙은 좁은 매칭을 우선하며 중복
   const first = await submitRaw(request, actor, rawNotification({ merchant: 'CAFE' }));
   expect(first.transactionResult.quickEditSnapshot).toMatchObject({ merchant: '정확', categoryId: category.categoryId });
   await expect(paymentCommand(request, actor, 'payment-configuration.create-merchant-rule.v1', { rule: { merchantKeyword: 'cafe, OTHER', matchType: 'exact', mapping: { category: 'etc' } } })).rejects.toThrow('RULE_ALREADY_EXISTS');
-  const cat = (await records(request, `households/${actor.householdId}/categories`)).find(row => row.categoryId === category.categoryId)!;
+  const catalog = (await records(request, `households/${actor.householdId}/categoryCatalog`)).find(row => row.id === 'current')!;
+  const cat = catalog.categories.find((row: { categoryId: string }) => row.categoryId === category.categoryId)!;
   await paymentCommand(request, actor, 'category.archive.v1', { categoryId: category.categoryId, expectedVersion: cat.aggregateVersion ?? cat.version });
   const next = await submitRaw(request, actor, rawNotification({ merchant: 'CAFE', amount: 15500 }));
   expect(next.transactionResult.quickEditSnapshot.categoryId).not.toBe(category.categoryId);
@@ -140,10 +141,10 @@ test('[MER-001][MER-003][MER-004] 동일 유형의 규칙 우선순위·수정·
   const cafe = await paymentCommand(request, actor, 'payment-configuration.create-merchant-rule.v1', { rule: { merchantKeyword: 'CAFE', matchType: 'contains', mapping: { merchant: '커피 규칙', category: 'fixed' } } });
   await page.goto('/settings');
   await page.getByRole('button', { name: /^가맹점 규칙/ }).click();
-  const priorities = (await records(request, 'merchant_rules')).sort((left, right) => right.priority - left.priority);
-  const lowerKeyword = priorities[1].merchantKeyword;
+  const priorities = (await records(request, `households/${actor.householdId}/merchantRules`)).sort((left, right) => right.priority - left.priority);
+  const lowerKeyword = priorities[1].keyword;
   await page.getByRole('button', { name: `${lowerKeyword} 우선순위 올리기`, exact: true }).click();
-  await expect.poll(async () => (await records(request, 'merchant_rules')).sort((left, right) => right.priority - left.priority).map(row => row.merchantKeyword)).toEqual([lowerKeyword, priorities[0].merchantKeyword]);
+  await expect.poll(async () => (await records(request, `households/${actor.householdId}/merchantRules`)).sort((left, right) => right.priority - left.priority).map(row => row.keyword)).toEqual([lowerKeyword, priorities[0].keyword]);
   const preferredId = lowerKeyword === 'TEA' ? tea.ruleId : cafe.ruleId;
   const otherId = lowerKeyword === 'TEA' ? cafe.ruleId : tea.ruleId;
   const first = await submitRaw(request, actor, rawNotification({ merchant: 'TEA CAFE' }));
@@ -163,7 +164,7 @@ test('[MER-001][MER-003][MER-004] 동일 유형의 규칙 우선순위·수정·
   await page.getByPlaceholder('비워두면 원본 가맹점명 유지').fill('');
   await page.getByPlaceholder('자동으로 추가될 메모').fill('');
   await page.getByRole('button', { name: '저장', exact: true }).click();
-  await expect.poll(async () => (await records(request, 'merchant_rules')).find(row => row.id === preferredId)?.mapping).toEqual({ category: 'living' });
+  await expect.poll(async () => (await records(request, `households/${actor.householdId}/merchantRules`)).find(row => row.id === preferredId)?.mapping).toEqual({ categoryId: 'living' });
   const cleared = await submitRaw(request, actor, rawNotification({ merchant: 'TEA CAFE', amount: 13500 }));
   expect(cleared.transactionResult.quickEditSnapshot).toMatchObject({ merchant: 'TEA CAFE', categoryId: 'living', memo: '' });
   await page.getByRole('button', { name: `${lowerKeyword} 규칙 삭제`, exact: true }).click();
@@ -171,17 +172,22 @@ test('[MER-001][MER-003][MER-004] 동일 유형의 규칙 우선순위·수정·
   await expect(page.getByRole('button', { name: `${lowerKeyword} 규칙 수정`, exact: true })).toHaveCount(0);
   const afterDelete = await submitRaw(request, actor, rawNotification({ merchant: 'TEA CAFE', amount: 14000 }));
   expect(afterDelete.transactionResult.quickEditSnapshot.merchant).toBe(lowerKeyword === 'TEA' ? '커피 규칙' : '차 규칙');
-  const remaining = await records(request, 'merchant_rules');
+  const remaining = await records(request, `households/${actor.householdId}/merchantRules`);
   expect(remaining.map(row => row.id)).toEqual([otherId]);
   expect(remaining.map(row => row.id)).not.toContain(preferredId);
 });
 
-test('[MER-006][MER-002] 과거 exactMatch·category 필드의 실제 저장 문서는 projection 재생성 후 정확·포함·기본 카테고리로 수집된다', async ({ page, request }) => {
+test('[MER-006][MER-002] 이전 규칙을 이관한 canonical 문서만 정확·포함·기본 카테고리에 반영하고 legacy 원본은 보존한다', async ({ page, request }) => {
   const actor = await createHouseholdThroughUi(page);
   await registerCard(request, actor);
   await writeFirestoreFixture(request, 'merchant_rules/legacy-exact', firestoreFields({ householdId: actor.householdId, merchantKeyword: 'LEGACY CAFE', exactMatch: true, category: 'food', isActive: true }));
   await writeFirestoreFixture(request, 'merchant_rules/legacy-contains', firestoreFields({ householdId: actor.householdId, merchantKeyword: 'LEGACY', exactMatch: false, category: 'fixed', priority: 10, isActive: true }));
   await writeFirestoreFixture(request, 'merchant_rules/legacy-disabled', firestoreFields({ householdId: actor.householdId, merchantKeyword: '중지 CAFE', exactMatch: true, category: 'food', active: false }));
+  await writeFirestoreFixture(request, `households/${actor.householdId}/merchantRules/legacy-exact`, firestoreFields({ householdId: actor.householdId, keyword: 'LEGACY CAFE', matchType: 'exact', mapping: { categoryId: 'food' }, active: true, aggregateVersion: 1 }));
+  await writeFirestoreFixture(request, `households/${actor.householdId}/merchantRules/legacy-contains`, firestoreFields({ householdId: actor.householdId, keyword: 'LEGACY', matchType: 'contains', mapping: { categoryId: 'fixed' }, priority: 10, active: true, aggregateVersion: 1 }));
+  await writeFirestoreFixture(request, `households/${actor.householdId}/merchantRules/legacy-disabled`, firestoreFields({ householdId: actor.householdId, keyword: '중지 CAFE', matchType: 'exact', mapping: { categoryId: 'food' }, active: false, aggregateVersion: 1 }));
+  // 이관 후 보존한 구 문서는 live 설정의 원본이 아닙니다.
+  await writeFirestoreFixture(request, 'merchant_rules/stale-only', firestoreFields({ householdId: actor.householdId, merchantKeyword: '중지 CAFE', exactMatch: true, category: 'food', isActive: true }));
   // 최초 capture 이전에 실제 저장 projection을 무효화합니다. warm cache를
   // 테스트 전용 API로 지우거나 Query/매칭 결과를 대체하지 않습니다.
   await writeFirestoreFixture(request, `households/${actor.householdId}/runtimeProjections/payment-capture-configuration-v1`, firestoreFields({ householdId: actor.householdId, schemaVersion: 0 }));

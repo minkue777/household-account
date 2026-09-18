@@ -1,3 +1,4 @@
+import { categoryCatalogDocument } from "../../support/category-catalog-document";
 import type { Firestore } from 'firebase-admin/firestore';
 import { describe, expect, it } from 'vitest';
 import { createRecurringHouseholdCommandHandlers } from '../../../src/bootstrap/commands/recurringHouseholdCommandHandlers';
@@ -20,7 +21,7 @@ function scheduler(memory: InMemoryFirestore) {
 describe('[REC-006][T-REC-007] 실제 등록 handler와 Firebase scheduler creator', () => {
   it('payload의 creator를 받지 않고 다른 가구원의 일반 수정 뒤에도 최초 creator로 거래를 만든다', async () => {
     const memory = new InMemoryFirestore();
-    memory.seed('households/house/categories/fixed', { categoryId: 'fixed', name: '고정비', color: '#112233', state: 'active', version: 1 });
+    memory.seed('households/house/categoryCatalog/current', categoryCatalogDocument('house', [{ categoryId: 'fixed', name: '고정비', color: '#112233' }]));
     const handlers = createRecurringHouseholdCommandHandlers(memory as unknown as Firestore);
     const execute = (command: string, id: string, member: string, payload: Record<string, unknown>) => handlers.get(command)!.execute({
       principalUid: `uid-${member}`, requestedAt: '2026-09-06T00:00:00Z',

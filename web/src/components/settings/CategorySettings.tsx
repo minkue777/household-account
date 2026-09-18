@@ -70,8 +70,8 @@ export default function CategorySettings() {
   }, [isCategoryOpen, household?.id, isSessionVerified, remoteReadEpoch]);
 
   useEffect(() => {
-    setDefaultCategory(household?.defaultCategoryKey ?? '');
-  }, [household?.defaultCategoryKey]);
+    setDefaultCategory(categories.find(category => category.isDefault)?.key ?? '');
+  }, [categories]);
 
   const runMutation = useCallback(async (
     mutation: CategoryMutation,

@@ -81,18 +81,11 @@ export function createAdminAssetAccessHandlers(
           const assetIds = result.kind === "no-data" ? [] : result.assetIds;
           const assets = await Promise.all(
             assetIds.map(async (assetId) => {
-              const [canonical, legacy] = await Promise.all([
-                database
-                  .collection("households")
-                  .doc(householdId)
-                  .collection("assets")
-                  .doc(assetId)
-                  .get(),
-                database.collection("assets").doc(assetId).get(),
-              ]);
+              const canonical = await database
+                .collection("households").doc(householdId)
+                .collection("assets").doc(assetId).get();
               const canonicalData = canonical.data();
-              const legacyData = legacy.data();
-              const deletedAt = canonicalData?.deletedAt ?? legacyData?.deletedAt;
+              const deletedAt = canonicalData?.deletedAt;
               const asIso =
                 typeof deletedAt === "string"
                   ? deletedAt
@@ -104,15 +97,12 @@ export function createAdminAssetAccessHandlers(
                 name:
                   (typeof canonicalData?.name === "string"
                     ? canonicalData.name
-                    : undefined) ??
-                  (typeof legacyData?.name === "string" ? legacyData.name : assetId),
+                    : assetId),
                 lifecycleState: "deleted" as const,
                 aggregateVersion:
                   typeof canonicalData?.aggregateVersion === "number"
                     ? canonicalData.aggregateVersion
-                    : typeof legacyData?.aggregateVersion === "number"
-                      ? legacyData.aggregateVersion
-                      : 1,
+                    : 1,
                 ...(asIso === undefined ? {} : { deletedAt: asIso }),
               };
             }),

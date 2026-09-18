@@ -169,7 +169,7 @@ test('[MRG-001][MRG-002][LED-008][LED-009] 실제 drag로 연속 합치고 되�
   await expect(item('합치기 A')).toContainText('6,600원');
   await expect(page.getByTestId('expense-item')).toHaveCount(1);
   await expect(item('합치기 A')).toHaveAttribute('draggable', 'true');
-  // 구조변경은 원본을 canonical 원장에 보존하고 화면용 projection에서 제외합니다.
+  // 구조변경은 원본을 단일 원장에 보존하고 lifecycleState로 화면에서 제외합니다.
   const canonical = await readFirestoreCollection(request, `households/${householdId}/ledgerTransactions`);
   for (const original of originals) expect(textField(canonical.find(doc => documentId(doc) === documentId(original))!, 'lifecycleState')).toBe('superseded');
   await item('합치기 A').click();

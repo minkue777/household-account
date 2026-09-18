@@ -8,7 +8,6 @@ import type {
   SplitLifecycleResult,
   SplitTransaction,
 } from "../../../contexts/household-finance/ledger/domain/model/monthlySplitLifecycle";
-import { mergeCanonicalLedgerTransactions } from "./migrationAwareLedgerUnion";
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
 
@@ -119,18 +118,12 @@ function documentData(transaction: SplitTransaction, isNew: boolean) {
   };
 }
 
-function unionTransactions(
-  canonical: readonly firestore.DocumentSnapshot[],
-  legacy: readonly firestore.DocumentSnapshot[],
+function mappedTransactions(
+  documents: readonly firestore.DocumentSnapshot[],
 ): readonly SplitTransaction[] {
-  const mapAll = (documents: readonly firestore.DocumentSnapshot[]) =>
-    documents
+  return documents
       .map(mapTransaction)
       .filter((value): value is SplitTransaction => value !== undefined);
-  return mergeCanonicalLedgerTransactions({
-    canonical: mapAll(canonical),
-    legacy: mapAll(legacy),
-  });
 }
 
 export class FirebaseMonthlySplitLifecycleStore
@@ -172,26 +165,17 @@ export class FirebaseMonthlySplitLifecycleStore
     if (selection.kind === "empty") {
       transactions = [];
     } else if (selection.kind === "transaction") {
-      const [canonical, legacy] = await Promise.all([
-        householdReference
+      const canonical = await householdReference
           .collection("ledgerTransactions")
           .doc(selection.transactionId)
-          .get(),
-        this.database.collection("expenses").doc(selection.transactionId).get(),
-      ]);
-      transactions = unionTransactions([canonical], [legacy]);
+          .get();
+      transactions = mappedTransactions([canonical]);
     } else {
-      const [canonicalParts, legacyParts] = await Promise.all([
-        householdReference
+      const canonicalParts = await householdReference
           .collection("ledgerTransactions")
           .where("splitGroupId", "==", selection.groupId)
-          .get(),
-        this.database
-          .collection("expenses")
-          .where("splitGroupId", "==", selection.groupId)
-          .get(),
-      ]);
-      const parts = unionTransactions(canonicalParts.docs, legacyParts.docs)
+          .get();
+      const parts = mappedTransactions(canonicalParts.docs)
         .filter((transaction) => transaction.householdId === this.householdId);
       const originalIds = [
         ...new Set(
@@ -203,24 +187,15 @@ export class FirebaseMonthlySplitLifecycleStore
         ),
       ];
       const originalSnapshots = await Promise.all(
-        originalIds.flatMap((transactionId) => [
+        originalIds.map((transactionId) =>
           householdReference
             .collection("ledgerTransactions")
             .doc(transactionId)
             .get(),
-          this.database.collection("expenses").doc(transactionId).get(),
-        ]),
+        ),
       );
-      const canonicalOriginals = originalSnapshots.filter(
-        (_snapshot, index) => index % 2 === 0,
-      );
-      const legacyOriginals = originalSnapshots.filter(
-        (_snapshot, index) => index % 2 === 1,
-      );
-      transactions = mergeCanonicalLedgerTransactions({
-        canonical: [...parts, ...unionTransactions(canonicalOriginals, [])],
-        legacy: unionTransactions([], legacyOriginals),
-      });
+      transactions = [...new Map([...parts, ...mappedTransactions(originalSnapshots)]
+        .map(value => [value.transactionId, value])).values()];
     }
     transactions = transactions
       .filter(
@@ -281,21 +256,15 @@ export class FirebaseMonthlySplitLifecycleStore
 
         const affected = [...affectedIds];
         const snapshots = await Promise.all(
-          affected.flatMap((transactionId) => [
+          affected.map((transactionId) =>
             transaction.get(
               householdReference.collection("ledgerTransactions").doc(transactionId),
             ),
-            transaction.get(this.database.collection("expenses").doc(transactionId)),
-          ]),
+          ),
         );
         const currentAffected = new Map<string, SplitTransaction>();
         affected.forEach((transactionId, index) => {
-          const canonical = mapTransaction(snapshots[index * 2]);
-          const legacy = mapTransaction(snapshots[index * 2 + 1]);
-          const current = mergeCanonicalLedgerTransactions({
-            canonical: canonical === undefined ? [] : [canonical],
-            legacy: legacy === undefined ? [] : [legacy],
-          })[0];
+          const current = mapTransaction(snapshots[index]);
           if (current !== undefined) currentAffected.set(transactionId, current);
         });
 
@@ -315,26 +284,14 @@ export class FirebaseMonthlySplitLifecycleStore
           const canonicalReference = householdReference
             .collection("ledgerTransactions")
             .doc(transactionId);
-          const legacyReference = this.database
-            .collection("expenses")
-            .doc(transactionId);
           if (value === undefined) {
             transaction.delete(canonicalReference);
-            transaction.delete(legacyReference);
             continue;
           }
           const isNew = !this.loadedTransactions.has(transactionId);
           transaction.set(
             canonicalReference,
             documentData(value, isNew),
-            { merge: true },
-          );
-          transaction.set(
-            legacyReference,
-            {
-              ...documentData(value, isNew),
-              schemaVersion: 1,
-            },
             { merge: true },
           );
         }

@@ -131,7 +131,6 @@ async function mergedCaptureFixture() {
       lifecycleState: "superseded",
       aggregateVersion: 2,
     });
-    memory.remove(`expenses/${record.transactionId}`);
   }
 
   const mergedABId = "merged-AB";
@@ -169,11 +168,6 @@ async function mergedCaptureFixture() {
     `households/house-1/ledgerTransactions/${mergedABCId}`,
     mergedABC,
   );
-  memory.seed(`expenses/${mergedABCId}`, {
-    ...mergedABC,
-    cardLastFour: target.cardDisplay,
-    schemaVersion: 1,
-  });
 
   return {
     memory,
@@ -187,7 +181,7 @@ async function mergedCaptureFixture() {
 }
 
 describe("Firebase Capture → Ledger transaction adapter", () => {
-  it("승인·dedup claim·immutable evidence·canonical/legacy·Outbox·receipt를 한 번만 commit한다", async () => {
+  it("승인·dedup claim·immutable evidence·canonical·Outbox·receipt를 한 번만 commit한다", async () => {
     const memory = new InMemoryFirestore();
     const persistence = new FirebaseCaptureLedgerPersistence(
       memory as unknown as firestore.Firestore,
@@ -225,13 +219,7 @@ describe("Firebase Capture → Ledger transaction adapter", () => {
       cardDisplay: "국민(1234)",
       aggregateVersion: 1,
     });
-    expect(memory.document(`expenses/${first.transactionId}`)).toMatchObject({
-      householdId: "house-1",
-      creatorMemberId: "member-1",
-      cardDisplay: "국민(1234)",
-      cardLastFour: "국민(1234)",
-      schemaVersion: 1,
-    });
+    expect(memory.document(`expenses/${first.transactionId}`)).toBeUndefined();
     expect(memory.paths("households/house-1/captureRecords/")).toHaveLength(1);
     expect(memory.paths("households/house-1/ledgerDedupKeys/")).toHaveLength(1);
     expect(memory.paths("outboxEvents/")).toHaveLength(1);
@@ -424,9 +412,8 @@ describe("Firebase Capture → Ledger transaction adapter", () => {
     );
     if (result.kind !== "recorded") throw new Error("승인 생성이 필요합니다.");
 
-    expect(memory.document(`expenses/${result.transactionId}`)).toMatchObject({
+    expect(memory.document(`households/house-1/ledgerTransactions/${result.transactionId}`)).toMatchObject({
       cardDisplay: "농협(2*6*)",
-      cardLastFour: "농협(2*6*)",
     });
   });
 
@@ -468,7 +455,8 @@ describe("Firebase Capture → Ledger transaction adapter", () => {
       memory.document("households/house-1/ledgerTransactions/derived-1"),
     ).toBeUndefined();
     expect(memory.document(`expenses/${created.transactionId}`)).toBeUndefined();
-    expect(memory.document("expenses/derived-1")).toBeUndefined();
+    expect(memory.document("expenses/derived-1")).toEqual(derived);
+    expect(memory.transactionReads().some(({ path }) => path.startsWith("expenses"))).toBe(false);
     const claimPath = memory.paths("households/house-1/ledgerDedupKeys/")[0];
     expect(memory.document(claimPath)).toMatchObject({
       state: "cancelled",
@@ -556,11 +544,7 @@ describe("Firebase Capture → Ledger transaction adapter", () => {
         ).toMatchObject({ ...expectedProjection, schemaVersion: 2 });
         expect(
           fixture.memory.document(`expenses/${record.transactionId}`),
-        ).toMatchObject({
-          ...expectedProjection,
-          cardLastFour: original.cardDisplay,
-          schemaVersion: 1,
-        });
+        ).toBeUndefined();
       }
 
       if (!deletesMergedAB) {
