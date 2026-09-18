@@ -147,3 +147,22 @@ Android 14의 `dumpsys window windows` 출력에 없는 포커스 필드를 찾�
 OPEN 이력은 보존된 상태에서 복구된 장애가 화면에서 사라지는 기존 검증을 유지합니다.
 수정 후 새 에뮬레이터에서 관리자 E2E 3개(Chromium)와 Android 준비 도구 회귀 4개를
 통과했습니다. 원격 전체 CI는 후속 commit에서 별도로 실행합니다.
+
+## Android 계측 후속 확인
+
+`33db6eb`의 CI `35337817069`에서 Functions/Web/Android 기본 검사와 Web E2E·성능 보고는
+성공했습니다. 다섯 검사 중 Android 계측만 실패했습니다.
+HOME 포커스 준비와 첫 WebView bridge 검사도 통과하여 앞선 준비 단계 오류와 구분합니다.
+화면 재생성 검사 종료 직후 Android 14의 WebView 113 내부 `libmonochrome_64.so`에서
+SIGSEGV가 발생해 계측 프로세스가 종료됐습니다. Java assertion 실패는 아닙니다.
+
+해당 검사는 첫 WebView에만 로컬 응답을 설치해 재생성된 화면에서는 운영 주소를 읽을 수
+있었고, URL만 복원되면 문서 준비 전에 종료했습니다. 테스트 전용 WebView 생성 관찰자를
+재사용해 재생성 전후 동일 문서를 공급하고, 제품의 navigation/history/renderer callbacks를
+보존합니다. 실제 문서·bridge 준비, 이전 WebView의 분리·단일 종료, 뒤로가기 복원까지
+검사합니다. 시간제한·검증 기준·제품 코드 및 WebView 버전은 변경하지 않습니다.
+
+fixture의 격리 누락은 확인됐지만 이것이 SIGSEGV의 직접 원인인지는 아직 미확정입니다.
+로컬에는 같은 Android 14 이미지가 없어 다른 엔진의 결과로 대체하지 않고, 수정 후 동일
+CI 환경에서 충돌 재발 여부를 확인합니다. 기존 실패를 성공으로 기록하지 않습니다.
+수정한 계측 Kotlin 컴파일은 성공했으며 JVM 검사 task는 기존 결과가 유효한 UP-TO-DATE였습니다.

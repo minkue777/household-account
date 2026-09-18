@@ -16,6 +16,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.RenderProcessGoneDetail
 import android.widget.Button
 import android.widget.LinearLayout
 import androidx.test.core.app.ActivityScenario
@@ -458,7 +459,10 @@ class MainActivityInstrumentationTest {
         }
     }
 
-    private fun withObservedWebViewLifecycle(block: (ActivityScenario<MainActivity>) -> Unit) {
+    private fun withObservedWebViewLifecycle(
+        localDocument: LocalWebViewDocument? = null,
+        block: (ActivityScenario<MainActivity>) -> Unit
+    ) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val monitor = ActivityLifecycleMonitorRegistry.getInstance()
         val callback = ActivityLifecycleCallback { activity, stage ->
@@ -466,7 +470,7 @@ class MainActivityInstrumentationTest {
                 activity.layoutInflater.factory2 = object : LayoutInflater.Factory2 {
                     override fun onCreateView(parent: View?, name: String, context: Context, attrs: AttributeSet): View? =
                         if (name == "WebView" || name == WebView::class.java.name) {
-                            LifecycleObservedWebView(context, attrs)
+                            LifecycleObservedWebView(context, attrs, localDocument)
                         } else {
                             activity.delegate.createView(parent, name, context, attrs)
                         }
@@ -484,12 +488,46 @@ class MainActivityInstrumentationTest {
         }
     }
 
+    private data class LocalWebViewDocument(val url: String, val html: String)
+
     /** Observe the real WebView teardown; never replace its renderer or destruction behavior. */
-    private class LifecycleObservedWebView(context: Context, attrs: AttributeSet) : WebView(context, attrs) {
+    private class LifecycleObservedWebView(
+        context: Context,
+        attrs: AttributeSet,
+        private val localDocument: LocalWebViewDocument?
+    ) : WebView(context, attrs) {
         var destroyCalls = 0
             private set
         var wasDetachedAtDestroy = false
             private set
+
+        override fun setWebViewClient(client: WebViewClient) {
+            val document = localDocument
+            if (document == null) {
+                super.setWebViewClient(client)
+                return
+            }
+            // Installed as production configures every WebView, before restoreState/loadUrl.
+            // Preserve all callbacks implemented by MainActivity; replace network responses only.
+            super.setWebViewClient(object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean =
+                    client.shouldOverrideUrlLoading(view, request)
+
+                override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) =
+                    client.doUpdateVisitedHistory(view, url, isReload)
+
+                override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean =
+                    client.onRenderProcessGone(view, detail)
+
+                override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse =
+                    if (request?.isForMainFrame == true && request.url.toString().substringBefore('#') == document.url) {
+                        WebResourceResponse("text/html", "UTF-8", document.html.byteInputStream())
+                    } else {
+                        // Never let an unexpected navigation or subresource contact the live site.
+                        WebResourceResponse("text/plain", "UTF-8", 404, "Not Found", emptyMap(), "".byteInputStream())
+                    }
+            })
+        }
 
         override fun destroy() {
             wasDetachedAtDestroy = parent == null
@@ -560,29 +598,31 @@ class MainActivityInstrumentationTest {
     fun permissionRechecksAndActivityRecreationRetainTheCurrentTrustedNavigation() {
         val initialUrl = "${TrustedWebOrigin.APP_ORIGIN}/native-test/restore"
         val secondUrl = "$initialUrl#second"
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            scenario.onActivity { activity ->
-                val webView = activity.findViewById<WebView>(R.id.webView)
-                val productionClient = webView.webViewClient
-                webView.webViewClient = object : WebViewClient() {
-                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean =
-                        productionClient.shouldOverrideUrlLoading(view, request)
-
-                    override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
-                        if (request?.url?.toString()?.substringBefore('#') == initialUrl) {
-                            val html = """<html><body><button style="position:fixed;inset:0;width:100%;height:100%"
-                              onclick="history.pushState({}, '', '#second')">다음 화면</button></body></html>"""
-                            return WebResourceResponse("text/html", "UTF-8", html.byteInputStream())
-                        }
-                        return productionClient.shouldInterceptRequest(view, request)
-                    }
+        val document = LocalWebViewDocument(initialUrl, """<!doctype html><html><body>
+            <button id="navigation" style="position:fixed;inset:0;width:100%;height:100%"
+              onclick="history.pushState({}, '', '#second')">다음 화면</button><script>
+                window.bridgeVersion = null;
+                HouseholdNativeBridge.onmessage = function(event) {
+                  window.bridgeVersion = JSON.parse(event.data).result.value.version;
+                };
+                HouseholdNativeBridge.postMessage(JSON.stringify({contractVersion:'android-bridge.v1',
+                  requestId:'navigation-restore',operation:'app.get-version',payload:{}}));
+            </script></body></html>""".trimIndent())
+        withObservedWebViewLifecycle(localDocument = document) { scenario ->
+            lateinit var original: LifecycleObservedWebView
+            fun waitForDocument(url: String) {
+                waitUntil("로컬 문서·bridge·URL 복원 완료") {
+                    evaluateWebViewText(scenario, """document.readyState === 'complete' &&
+                        document.getElementById('navigation') &&
+                        window.bridgeVersion === ${JSONObject.quote(BuildConfig.VERSION_NAME)} && location.href
+                    """.trimIndent()) == url
                 }
-                // Only the document network response is supplied; the production navigation callback stays intact.
-                webView.loadUrl(initialUrl)
             }
-            waitUntil("로컬 trusted HTML 로드") {
-                evaluateWebViewText(scenario, "location.href") == initialUrl
+            scenario.onActivity { activity ->
+                original = activity.findViewById(R.id.webView)
+                original.loadUrl(initialUrl)
             }
+            waitForDocument(initialUrl)
             grantMandatoryPermissions()
             scenario.onActivity { activity ->
                 activity.findViewById<Button>(R.id.btnCheckPermission).performClick()
@@ -601,15 +641,20 @@ class MainActivityInstrumentationTest {
                 assertEquals(secondUrl, activity.findViewById<WebView>(R.id.webView).url)
             }
             scenario.recreate()
-            waitUntil("Activity 재생성 후 WebView navigation 복원") {
-                var restoredUrl: String? = null
-                scenario.onActivity { activity -> restoredUrl = activity.findViewById<WebView>(R.id.webView).url }
-                restoredUrl == secondUrl
-            }
+            waitForDocument(secondUrl)
             scenario.onActivity { activity ->
-                assertTrue(activity.findViewById<WebView>(R.id.webView).canGoBack())
+                val replacement = activity.findViewById<WebView>(R.id.webView)
+                assertNotSame(original, replacement)
+                assertEquals(1, original.destroyCalls)
+                assertTrue(original.wasDetachedAtDestroy)
+                assertEquals(secondUrl, replacement.url)
+                assertTrue(replacement.canGoBack())
                 assertEquals(View.GONE, activity.findViewById<LinearLayout>(R.id.permissionLayout).visibility)
+                @Suppress("DEPRECATION")
+                activity.onBackPressed()
+                assertFalse(activity.isFinishing)
             }
+            waitForDocument(initialUrl)
         }
     }
 
