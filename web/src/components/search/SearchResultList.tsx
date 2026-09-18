@@ -75,7 +75,6 @@ export default function SearchResultList({
       <div className="py-12 text-center text-slate-400">
         <Search className="mx-auto mb-3 h-12 w-12 text-slate-300" />
         <p>{emptyGuideText}</p>
-        {transactionType === 'expense' && <p className="mt-2 text-xs">#2026부산여행처럼 검색하면 해당 태그의 지출만 모아볼 수 있어요.</p>}
       </div>
     );
   }
