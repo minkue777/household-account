@@ -57,4 +57,21 @@ node functions/scripts/consolidate-storage.mjs --project household-account-6f300
 - 검증: Functions 단위·계약 1,800개, 전체 Web 773개, Rules 에뮬레이터 15개, 실제 이관 5개, 주요 브라우저 E2E 38개(첫 실행 35개 성공 + 발견한 3건 수정 후 재검증 성공). 추가 이관/표시/삭제 회귀도 별도로 통과했습니다.
 - 브라우저 검증에서 거부된 카테고리 명령의 불필요한 시간값 쓰기, 보관 명의 표시 누락과 표시 이름으로 인한 자산 삭제 충돌을 수정했습니다. admin 방문 계수 테스트는 초기 실제 접속 요청 완료 후 중복 여부를 관측하도록 수정했습니다.
 - Android 1.2.28(versionCode 30) JVM 테스트·계측 테스트 컴파일·서명 Release 빌드를 완료하고 APK Signature Scheme v2 검증을 통과했습니다. 이번 로컬 실행에서는 Android 에뮬레이터를 시작하지 않았습니다.
-- 운영 이관·배포는 아직 실행 전입니다. 구형 앱/PWA 사용 중단 및 갱신 확인이 필요한 전환 창을 기다립니다. 최종 commit·이관 결과·배포 결과는 실행 후 갱신합니다.
+
+## 운영 적용 결과
+
+사용자가 배포를 승인한 뒤 같은 계획으로 운영 이관을 실행했습니다.
+
+- 제품 commit: `744ecc5f594623c0329f97d11bce84076ea62508`
+- 적용 계획: `3317321742b83b70acca050f940a74bc9d2f87e211ba062e603d54b7cb6f6f0a`
+- 적용 결과: `written: 1068`, `alreadyApplied: 0`, `status: MATCH`
+- 서버 배포 후 재대조: `mutations: 0`, `issueCounts: {}`
+- 재대조 계획: `dd726415f7e777a74056582cdf61972a3434af3e9a3d5c357cdc4ae4e390c9af`
+- Firebase release: `release-20260918-storage-consolidation-744ecc5`
+- Firebase 세 Functions codebase와 Firestore Rules/index 배포 및 실제 로그인 smoke 성공. 배포 결과가 기록되고 lease가 해제됐습니다.
+- Functions artifact SHA-256: `1fe51ede0aa262d650b029d683cbc7f8f6755567ff48949b8f800f114dc9d1c7`
+- APK v1.2.28 SHA-256: `f752c3e77e989f45491f8487e0c5a743b033d054178301dabf51e7ff5be55c66`
+
+기존 flat 원본은 보존했고 이후 업무 처리는 canonical만 갱신합니다. 서버 이후 Web은 해당 제품 commit을 포함한 main push의 Vercel Git 자동배포, APK는 해당 제품 commit을 target으로 한 v1.2.28 Release로 전달합니다. 원격 CI는 별도 확인하며 아직 실행되지 않은 CI를 통과로 기록하지 않습니다.
+
+실제 기기에서는 Android 1.2.28 설치 후 앱을 열고, 이미 실행 중이었다면 최근 앱 목록에서 종료 후 다시 엽니다. Android는 별도 PWA 갱신이나 캐시/앱 데이터 삭제가 필요하지 않습니다. 아이폰 PWA도 새로 열고 새 버전 안내가 있으면 갱신합니다. 기기 설치·갱신 완료 여부는 서버 배포 성공과 구분합니다.
