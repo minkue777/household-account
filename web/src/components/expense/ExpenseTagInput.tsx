@@ -77,7 +77,7 @@ export default function ExpenseTagInput({
           }}
           maxLength={MAX_EXPENSE_TAG_LENGTH}
           disabled={hasReachedLimit}
-          aria-describedby={descriptionId}
+          aria-describedby={hasReachedLimit ? descriptionId : undefined}
           autoComplete="off"
           enterKeyHint="done"
           placeholder="예: 2026부산여행"
@@ -94,11 +94,11 @@ export default function ExpenseTagInput({
           추가
         </button>
       </div>
-      <p id={descriptionId} className="mt-1.5 text-xs text-slate-400">
-        {hasReachedLimit
-          ? `태그는 최대 ${MAX_EXPENSE_TAGS}개까지 추가할 수 있어요.`
-          : '여행·행사 이름을 태그로 묶어 검색할 수 있어요.'}
-      </p>
+      {hasReachedLimit && (
+        <p id={descriptionId} className="mt-1.5 text-xs text-slate-400">
+          태그는 최대 {MAX_EXPENSE_TAGS}개까지 추가할 수 있어요.
+        </p>
+      )}
 
       {!hasReachedLimit && suggestions.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5" aria-label="기존 태그 선택">

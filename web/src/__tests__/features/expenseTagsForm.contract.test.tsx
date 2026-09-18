@@ -46,7 +46,6 @@ describe('[T-LED-011][LED-011] 지출 태그 입력과 저장', () => {
     expect(screen.getByRole('button', { name: '2026부산여행 태그 제거' })).toBeInTheDocument();
 
     const input = screen.getByRole('textbox', { name: '태그 (선택)' });
-    expect(input).toHaveAccessibleDescription('여행·행사 이름을 태그로 묶어 검색할 수 있어요.');
     expect(input).toHaveAttribute('maxlength', String(MAX_EXPENSE_TAG_LENGTH));
     expect(screen.queryByRole('button', { name: '#2026부산여행' })).not.toBeInTheDocument();
     fireEvent.change(input, { target: { value: '#2026부산여행' } });
