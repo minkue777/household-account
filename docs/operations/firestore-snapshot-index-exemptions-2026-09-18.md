@@ -34,6 +34,13 @@ Firestore는 map을 색인에서 제외하면 그 하위 필드도 제외 설정
 - [운영 색인 계약 검사](../../functions/test/architecture/firestore-indexes.test.ts)는 map/array 제외, 하위 override·복합 색인의 재도입 없음, 날짜 양방향·가구·연도 필드 색인 보존을 확인합니다.
 - 기존 자산 통계·전일 대비·배당 reader 테스트로 실제 호출 조건과 내부 자료 해석을 확인합니다. 스냅샷 projector와 배당 scheduler의 Firestore 에뮬레이터 통합 테스트로 저장·재조회·재실행 결과를 확인합니다.
 - 에뮬레이터의 쿼리 성공은 운영 색인의 배포·준비 완료 또는 비용 절감을 입증하지 않습니다. 배포자는 `firestore:indexes` 배포 결과를 확인해야 하며, 색인 빌드가 필요한 추가 항목은 ready 상태 이후 의존 운영 작업을 실행합니다.
-- 일반 [Firebase 배포 절차](firebase-release-runbook.md)의 변경 범위 판정을 사용합니다. 색인 설정만 바뀌었다는 이유로 Web·APK 재배포나 운영 데이터 backfill을 추가하지 않습니다. 이 문서 자체는 실제 운영 반영 완료 증거가 아닙니다.
+- 일반 [Firebase 배포 절차](firebase-release-runbook.md)의 변경 범위 판정을 사용합니다. 색인 설정만 바뀌었다는 이유로 Web·APK 재배포나 운영 데이터 backfill을 추가하지 않습니다. 실제 운영 반영 결과는 아래에 구분해 기록합니다.
 
 향후 내부 map의 특정 값으로 서버 검색을 추가하려면 먼저 해당 field index 정책과 쿼리 검증을 함께 변경합니다. 원복은 지정 field override를 제거하고 필요한 색인의 준비 상태를 확인하는 방식이며 문서 데이터 복구는 필요하지 않습니다.
+
+## 운영 반영 결과
+
+2026-09-18 `7d8f1f7`의 Firebase release `release-20260918-storage-followup-7d8f1f7`으로
+색인 설정을 배포했습니다. 운영 Firestore Admin API로 위 7개 필드를 직접 조회하여 각각
+`usesAncestorConfig: false`, `indexes: []`를 확인했습니다. 배포 명령 성공뿐 아니라 운영의
+명시적 색인 제외 설정까지 확인한 결과이며, 실제 비용 절감액이나 성능 개선율을 측정한 것은 아닙니다.

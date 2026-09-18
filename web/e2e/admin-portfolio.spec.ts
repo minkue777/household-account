@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { callEmulatorFunction, createHouseholdThroughUi, executeHouseholdCommand, resetTestAccount, signInTestAccount } from './emulator';
-import { documents, fixture, setEmulatorAdminClaims } from './portfolio-helpers';
+import { documents, fixture, runScheduled, setEmulatorAdminClaims } from './portfolio-helpers';
 
 test.beforeEach(async () => { await resetTestAccount(); });
 
@@ -28,10 +28,11 @@ test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] �
   });
   const staleId = 'asset-automation-daily:old';
   const openedAt = new Date(Date.now() - 6 * 86400000).toISOString();
-  await fixture(request, `operations/runtime/scheduledJobIncidents/${staleId}`, {
+  const staleIncident = {
     incidentId: 'e2e-stale-alarm', occurrenceId: staleId, reason: 'MISSING', state: 'OPEN', openedAt,
     alertOpenCount: 1, alertResolveCount: 0,
-  });
+  };
+  await fixture(request, `operations/runtime/scheduledJobIncidents/${staleId}`, staleIncident);
   // Cloud Logging의 원시 HTTP 응답만 준비합니다. 실제 reader의 파싱·재시도
   // 중복 제거·통계 집계·callable 응답·화면 포맷은 대체하지 않습니다.
   const latencyEntry = (correlationId: string, secondsAgo: number, elapsedMs: number | string, status = 'succeeded') => ({
@@ -60,12 +61,19 @@ test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] �
     await expect(admin.getByText('App Engine', { exact: true })).toBeVisible();
     await expect(admin.getByRole('table', { name: /과금 항목/ })).toHaveCount(0);
     await expect(admin.getByText(staleId, { exact: true })).toBeVisible();
-    await fixture(request, 'operations/runtime/scheduledJobRuns/asset-automation-daily:new', {
-      occurrenceId: 'asset-automation-daily:new', jobName: 'asset-automation-daily', status: 'COMPLETE', scheduledFor: now, terminalAt: now,
+    // 실제 예약 작업 writer가 완료 이력과 최신 상태 요약을 함께 기록합니다.
+    await runScheduled('assetAutomationDaily', now);
+    expect((await documents(request, 'operations/runtime/scheduledJobStatuses'))
+      .find(x => x.id === 'asset-automation-daily')).toMatchObject({
+      latestRun: { status: 'COMPLETE', scheduledFor: now },
+      latestSuccessfulRun: { status: 'COMPLETE', scheduledFor: now },
     });
-    // The real callable projects recovery; an old OPEN storage record cannot keep the UI red.
+    // 과거 OPEN 기록이 남아 있어도 실제 callable이 완료 요약으로 복구를 판정해야 합니다.
+    await fixture(request, `operations/runtime/scheduledJobIncidents/${staleId}`, staleIncident);
     await admin.getByRole('button', { name: '새로고침', exact: true }).click();
     await expect(admin.getByText(staleId, { exact: true })).toHaveCount(0);
+    expect((await documents(request, 'operations/runtime/scheduledJobIncidents'))
+      .find(x => x.id === staleId)).toMatchObject({ state: 'OPEN' });
 
     await expect(admin.getByRole('heading', { name: '사용자 체감·서버 처리 시간', exact: true })).toBeVisible();
     const latency = admin.getByRole('row').filter({ hasText: 'ledger.update-transaction.v1' });

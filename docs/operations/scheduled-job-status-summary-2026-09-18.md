@@ -44,7 +44,10 @@ node functions/scripts/backfill-scheduled-job-statuses.mjs --project household-a
 않습니다. 배포 이후 신규 실행과 초기화가 경합해도 원본 query와 요약이 함께 검증됩니다.
 도구는 기존 실행·결과·monitor receipt·장애를 수정하거나 삭제하지 않습니다.
 
-이 문서는 구현·검증 절차이며 운영 초기화를 실행했다는 증거가 아닙니다.
+운영 적용 결과(2026-09-18): `7d8f1f7`의 서버 배포 전에 7개 요약을 초기화했습니다.
+배포 직후 다시 대조했을 때 추가 변경은 0개였습니다. 실제 로그인으로 관리자 callable을
+조회하여 7개 예약 작업의 COMPLETE 상태와 열린 장애 0개를 확인했습니다.
+이력 원본·결과·monitor receipt를 삭제하지 않았습니다.
 
 ## 로컬 검증
 

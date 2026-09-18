@@ -119,3 +119,31 @@ Web E2E 3건과 Android 계측 4건이 실패했습니다. 성공으로 덮어�
 - Android artifact의 화면과 logcat에서 앱 테스트 시작 전 Pixel Launcher ANR을 확인했습니다.
   APK 빌드를 에뮬레이터 부팅 전에 수행하고 HOME 창의 실제 입력 포커스를 확인한 뒤 검사합니다.
   앱의 ANR을 숨기거나 테스트 기대값·시간제한을 완화하지 않습니다.
+
+## 후속 운영 적용 결과
+
+- 제품 commit: `7d8f1f734d792606db90c4ed9fc7d82dc78f0425`
+- Firebase release: `release-20260918-storage-followup-7d8f1f7`
+- Functions 세 codebase와 Firestore index 배포, 실제 로그인 smoke 및 배포 기록 저장을 완료했습니다.
+- 위 백업 계획으로 기존 원본 3,418문서를 삭제했고, 새 저장소 3,364문서의 보존을 검증했습니다.
+- 삭제 후 재대조에서 기존 원본 0건, 추가 이관 0건, 불일치 0건을 확인했습니다.
+  재대조 hash는 `88e731b83458c97c51dc0f68542f4c4d7e1a83b8adb5b6a5a1b9a55fcc715591`입니다.
+- 삭제 후 실제 인증 조회에서 2026년 9월 원장 오름차순·내림차순 각각 134건,
+  주식 13건, 코인 2건, 카테고리 12건을 정상 조회했습니다. 사용한 계정은 system-admin이며,
+  일반 가구 구성원의 권한 검증과는 구분합니다.
+- 원문 복구 백업 `household-storage-originals-backup-20260918.json`은 Git 밖의 private 경로에
+  보존했습니다. 새 저장소에만 있던 감사 거래, receipt·Outbox 및 다른 업무 원본은 삭제하지 않았습니다.
+- 실제 Firestore 통합 42개, 상태 요약 동시성 통합 2개와 관련 Web E2E 9개를 확인했습니다.
+  최초 실패를 수정한 뒤 해당 검사만 재실행한 결과를 포함하며 전체 원격 CI 성공을 뜻하지 않습니다.
+
+원격 CI `35336068255`의 Functions/Web/Android 기본 검사는 성공했습니다. Android 준비 검사는
+Android 14의 `dumpsys window windows` 출력에 없는 포커스 필드를 찾던 도구 오류로 중단됐습니다.
+포커스가 포함되는 `dumpsys window displays`로 수정하고 실제 실패 출력 기반 회귀를 추가했습니다.
+앱 계측 테스트는 이 실행에서 시작되지 않았으므로 후속 CI에서 별도로 확인합니다.
+
+같은 실행의 Web E2E는 93개 중 1개가 실패했습니다. 관리자 장애 복구 검사가 구형 실행
+이력만 직접 준비하여 신규 요약이 없는 fixture 문제였습니다. 기존 scheduled helper로
+실제 작업·상태 writer를 실행하고 COMPLETE 요약이 기록된 것을 확인하도록 변경했습니다.
+OPEN 이력은 보존된 상태에서 복구된 장애가 화면에서 사라지는 기존 검증을 유지합니다.
+수정 후 새 에뮬레이터에서 관리자 E2E 3개(Chromium)와 Android 준비 도구 회귀 4개를
+통과했습니다. 원격 전체 CI는 후속 commit에서 별도로 실행합니다.

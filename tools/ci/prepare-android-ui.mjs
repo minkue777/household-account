@@ -19,7 +19,10 @@ export async function prepareAndroidUi({
   wait = delay,
   now = Date.now,
 } = {}) {
-  save('windows-before.txt', adb(['shell', 'dumpsys', 'window', 'windows']));
+  // Android 14 emits mCurrentFocus from DisplayContent.dump, not the "windows" section.
+  // Keep the acquisition and parser on the same dump contract.
+  const readFocus = () => adb(['shell', 'dumpsys', 'window', 'displays']);
+  save('windows-before.txt', readFocus());
   // Google APIs API 34 can leave a Pixel Launcher boot ANR above every app.
   // Restart that package alone; never dismiss an ANR belonging to the tested app.
   adb(['shell', 'am', 'force-stop', launcherPackage]);
@@ -27,7 +30,7 @@ export async function prepareAndroidUi({
   const deadline = now() + 10_000;
   let windows;
   do {
-    windows = adb(['shell', 'dumpsys', 'window', 'windows']);
+    windows = readFocus();
     if (isLauncherFocused(windows)) {
       save('windows-ready.txt', windows);
       return;
