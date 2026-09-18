@@ -33,7 +33,7 @@
 | SEA-003 | `finance-search-statistics`: 검색 변경 시 이전 결과 제거, mutation 재조회, 50+1 페이지 | 지연 응답 뒤 logout/가구 전환은 session 통합 검증 |
 | SEA-004 | `finance-search-statistics`: 전체·월별 합계, 첫50건에서51건 전체5,100원 | 10,000건 안전 상한과 운영 Listen 제한은 SDK 요청/실제 Query 통합 검증 |
 | SEA-005 | `finance-search-statistics`: 별도 검색 제출 없이 입력만으로 결과 | 임의 debounce 시간 부재는 production hook 타이머 검증 |
-| SEA-006 | `finance-tags`: 목록 chip 선택이 편집 없이 `#태그` 검색을 열고 2건·148,000원 표시, `#2026`·`#부산` 부분 검색도 같은 합계, 태그 제거 후 새로고침하면 전체 이름·부분 검색 모두 1건·120,000원 | 여러 월·이름에 검색어를 포함하는 유사 태그·메모만 일치한 거래 제외·빈 `#`·대소문자 경계는 실제 matcher 계약, 실패 시 검색 projection 복구는 Web 저장 계약 |
+| SEA-006 | `finance-tags`: 목록 태그 텍스트 선택이 편집 없이 `#태그` 검색을 열고 2건·148,000원 표시, `#2026`·`#부산` 부분 검색도 같은 합계, 태그 제거 후 새로고침하면 전체 이름·부분 검색 모두 1건·120,000원 | 여러 월·이름에 검색어를 포함하는 유사 태그·메모만 일치한 거래 제외·빈 `#`·대소문자 경계는 실제 matcher 계약, 실패 시 검색 projection 복구는 Web 저장 계약 |
 | CAT-001 | `finance-categories`: 실제 온보딩5개 순서·기본etc, 서버 catalog 확인 | 일부 카탈로그 재초기화·동시성은 Category Store 통합 |
 | CAT-002 | `finance-categories`: 모바일360px 실제 geometry/hit-test, 16색, 이름/색/예산 수정·새로고침·archive·과거 참조, 음수 예산 거절. 실제 CDP touch 연속 순서 변경·취소·canonical/projection 버전·새로고침 보존 독립 테스트 추가 | 실제 Android QuickEdit 표시는 Android instrumentation. 실제 색상 사용 여부 조회는 운영 관리 절차 |
 | CAT-003 | `finance-categories`: 기본 카테고리 변경→새 지출 선택, 기본 archive 거절과 무변경, 다른 archive 신규 선택 제외; 정기 참조 remap | 가맹점 규칙 참조 remap은 payment-configuration E2E와 연결 |
@@ -66,7 +66,7 @@
 |---|---|---|
 | LED-011 / T-LED-011 | [태그 Policy](../../functions/test/unit/expense-tags.test.ts), [태그 폼](../../web/src/__tests__/features/expenseTagsForm.contract.test.tsx), [Read/응답 매핑](../../web/src/__tests__/features/ledgerTagsMapping.contract.test.ts), [명령 DTO](../../web/src/__tests__/features/ledgerCommands.contract.test.ts), [저장 projection](../../web/src/__tests__/features/ledgerExpenseServiceOptimistic.contract.test.ts), [Firebase 저장](../../functions/test/integration/firebase/firebase-finance-command-adapters.integration.test.ts), [여행 태그 E2E](../../web/e2e/finance-tags.spec.ts) | 정규화·추천·IME·입력 한도, 저장 중인 입력과 태그만 수정, 생략은 보존·빈 배열은 제거, 수입 UI 제외, 저장 문서·응답·재조회, 저장 거부 시 이전 태그 복구 |
 | LED-012 / T-LED-012 | [Firebase 구조 변환](../../functions/test/integration/firebase/firebase-finance-command-adapters.integration.test.ts)의 태그 변환 4개 사례, [낙관적 합치기](../../web/src/__tests__/features/ledgerExpenseServiceOptimistic.contract.test.ts)의 태그 사례, [구조 변경 E2E](../../web/e2e/finance-structure.spec.ts)의 태그가 있는 4개 흐름 | 항목 태그 상속·명시 덮어쓰기·원본 복원, 월 분할·재구성·취소, 중복 없는 합집합·원본별 복원, 한도 초과 합치기의 원본 무변경. 브라우저 E2E는 정상 변환 경로를 검증하며 입력 한도 실패 조합은 Firebase 통합 근거로 구분 |
-| SEA-006 / T-SEA-004 | [검색 가시성](../../web/src/__tests__/features/ledgerSearchVisibility.contract.test.ts)의 태그 검색 사례, [여행 태그 E2E](../../web/e2e/finance-tags.spec.ts) | 일반 검색과 `#태그` 검색의 태그 부분 일치, 여러 월의 일치 태그 3건·60,000원 합계, 한 거래의 복수 태그 중복 합산 방지와 불일치 태그·메모만 일치한 거래 제외, chip 클릭·전체 건수/금액·태그 제거 후 결과 갱신 |
+| SEA-006 / T-SEA-004 | [검색 가시성](../../web/src/__tests__/features/ledgerSearchVisibility.contract.test.ts)의 태그 검색 사례, [여행 태그 E2E](../../web/e2e/finance-tags.spec.ts) | 일반 검색과 `#태그` 검색의 태그 부분 일치, 여러 월의 일치 태그 3건·60,000원 합계, 한 거래의 복수 태그 중복 합산 방지와 불일치 태그·메모만 일치한 거래 제외, 태그 텍스트 클릭·전체 건수/금액·태그 제거 후 결과 갱신 |
 
 2026-09-18 태그 변경 검증에서 `finance-tags.spec.ts` 1개 E2E, 서버 회귀 106건, Firebase 통합 21건(태그 저장·변환 5건 포함), Web 회귀 세 묶음 18·76·29건이 통과했습니다. 이 수치는 함께 실행한 회귀 사례 수이며 태그 수용 조건이나 고유 요구사항의 개수가 아닙니다. 이후 `finance-structure.spec.ts`의 기존 4개 흐름에 태그 입력과 저장·복원 assertion을 추가하고 `finance-tags.spec.ts`와 함께 Chromium·실제 Firebase Emulator에서 선택 실행하여 5개 모두 통과했습니다. 실행 명령은 아래와 같습니다. 문서·ID 연결 자체를 실행 통과로 세지 않습니다.
 

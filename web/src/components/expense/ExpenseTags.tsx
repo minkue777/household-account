@@ -10,7 +10,7 @@ export default function ExpenseTags({ tags, onTagClick }: ExpenseTagsProps) {
   if (normalizedTags.length === 0) return null;
 
   return (
-    <div className="mt-1.5 flex flex-wrap gap-1" aria-label="지출 태그">
+    <div className="flex flex-wrap items-baseline gap-x-2 text-xs leading-4" aria-label="지출 태그">
       {normalizedTags.map((tag) => onTagClick ? (
         <button
           key={tag}
@@ -22,12 +22,12 @@ export default function ExpenseTags({ tags, onTagClick }: ExpenseTagsProps) {
             onTagClick(tag);
           }}
           aria-label={`${tag} 태그 검색`}
-          className="max-w-full truncate rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          className="max-w-full break-all text-left text-blue-600 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         >
           #{tag}
         </button>
       ) : (
-        <span key={tag} className="max-w-full truncate rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">
+        <span key={tag} className="max-w-full break-all text-blue-600">
           #{tag}
         </span>
       ))}

@@ -112,7 +112,7 @@ QuickEdit `items` operation은 DEC-055에 따라 분할을 누른 시점의 merc
 
 현재 [태그 입력 UI](../../../../../../web/src/components/expense/ExpenseTagInput.tsx)의 HTML `maxLength={30}`은 UTF-16 code unit 기준이므로 서버의 30 code point 계약과 계산 단위가 다릅니다. 일반 한글 30자는 입력할 수 있으나 emoji 등은 UI에서 더 일찍 제한될 수 있습니다. 이는 현재 UI 구현 차이이며 이 문서 정비에서 서버 한도나 runtime을 변경하지 않습니다.
 
-폼은 메모 아래 `태그 (선택)` 입력을 두고 선택값을 파란 chip과 개별 제거 버튼으로 표시합니다. 최대 개수에 도달했을 때만 입력 제한 안내를 표시합니다. Enter·추가 버튼·기존 태그 추천 클릭으로 확정하며 IME 조합 중 Enter는 소비하지 않습니다. 저장 시 미확정 입력도 정규화한 배열에 합칩니다. 추천은 [요구사항의 읽기 범위](requirements.md#3-소유-데이터) 안에서 이미 받은 태그 중 선택하지 않은 값과 입력 부분 일치로 최대 5개를 제시하며 추천만을 위한 서버 조회는 하지 않습니다. 목록·검색 결과 chip은 같은 이름을 표시합니다.
+폼은 메모 아래 `태그 (선택)` 입력을 두고 선택값을 배경·테두리·안쪽 여백 없는 파란색 `#태그` 텍스트와 개별 제거 버튼으로 표시합니다. 목록·검색 결과는 메모와 왼쪽 시작선을 맞추고 여러 태그는 텍스트 간격만 두어 자연스럽게 줄바꿈합니다. 기존 태그 추천도 같은 텍스트 형태를 사용합니다. 최대 개수에 도달했을 때만 입력 제한 안내를 표시합니다. Enter·추가 버튼·기존 태그 추천 클릭으로 확정하며 IME 조합 중 Enter는 소비하지 않습니다. 저장 시 미확정 입력도 정규화한 배열에 합칩니다. 추천은 [요구사항의 읽기 범위](requirements.md#3-소유-데이터) 안에서 이미 받은 태그 중 선택하지 않은 값과 입력 부분 일치로 최대 5개를 제시하며 추천만을 위한 서버 조회는 하지 않습니다. 목록·검색 결과 태그 텍스트은 같은 이름을 표시합니다.
 
 #### 3.2.2 실제 v1 명령 payload와 응답 — LED-011·LED-012
 
@@ -305,7 +305,7 @@ Web 항목 분리의 금액 입력은 마지막 항목을 `max(0, 원금 - 나�
 
 태그 검색은 3.3의 현재 Web 검색 원본·matcher·결과 목록을 확장합니다. 새 서버 `SearchLedger` endpoint나 태그 전용 Firestore Query를 만들지 않습니다. [현재 matcher](../../../../../../web/src/lib/expenseService.ts)는 query와 비교 대상을 trim·소문자로 정규화합니다. 일반 `부산` 검색은 기존 가맹점·memo·카드 조건에 태그 부분 일치를 OR로 추가합니다. `#2026`·`#부산`처럼 선두에 `#`를 입력하면 연속된 `#`를 제거한 검색어가 태그 이름에 포함될 때 반환합니다. `#2026부산여행`은 `2026부산여행`과 `2026부산여행준비` 모두에 일치하며 같은 문구가 memo·가맹점·카드에만 있는 거래는 포함하지 않습니다. 빈 query와 `#`만 있는 query는 일치하지 않습니다. 저장 시 대소문자를 유지하는 규칙과 검색 비교의 소문자 정규화를 구분합니다.
 
-지출 목록 태그 chip 클릭은 `#태그이름`을 기존 검색창 초기 query로 전달합니다. 같은 household·지출 유형·active 가시성의 완료된 전체 검색 결과를 기존 합계 계산에 전달하므로 한 거래에 일치 태그가 여러 개 있어도 거래는 한 번만 세며 전체·월별 건수와 금액이 일치합니다. 예를 들어 같은 태그의 120,000원과 28,000원은 2건·148,000원이고 두 번째 거래의 태그를 지운 뒤 Command 성공·원천 갱신을 거치면 1건·120,000원입니다. 기존 모달 종료·logout·가구 전환의 revision 폐기와 원천 조회 실패 처리는 그대로 적용합니다.
+지출 목록 태그 텍스트 클릭은 `#태그이름`을 기존 검색창 초기 query로 전달합니다. 같은 household·지출 유형·active 가시성의 완료된 전체 검색 결과를 기존 합계 계산에 전달하므로 한 거래에 일치 태그가 여러 개 있어도 거래는 한 번만 세며 전체·월별 건수와 금액이 일치합니다. 예를 들어 같은 태그의 120,000원과 28,000원은 2건·148,000원이고 두 번째 거래의 태그를 지운 뒤 Command 성공·원천 갱신을 거치면 1건·120,000원입니다. 기존 모달 종료·logout·가구 전환의 revision 폐기와 원천 조회 실패 처리는 그대로 적용합니다.
 
 ## 6. Port 설계
 
@@ -407,7 +407,7 @@ Canonical `cardDisplay`는 `삼성(1876)` 또는 `수동`처럼 완성된 표시
 
 Event payload는 projection 조정에 필요한 최소 금액·날짜·category 사실만 포함하고 memo·카드 전체값 같은 불필요한 개인정보를 제외합니다. group operation은 동일 correlationId 아래 각 확정 Transaction Event를 기록합니다.
 
-태그 변경도 기존 Recorded/Changed 및 구조 변경 Event·receipt 경계를 사용하며 태그 전용 Event를 만들지 않습니다. 검색·chip 표시는 Canonical read model을 소비하므로 Event payload·capture claim·취소 tombstone에 태그 문자열을 복제할 필요가 없습니다. 기존 소비자의 필수 필드와 Event version은 유지합니다.
+태그 변경도 기존 Recorded/Changed 및 구조 변경 Event·receipt 경계를 사용하며 태그 전용 Event를 만들지 않습니다. 검색·태그 텍스트 표시는 Canonical read model을 소비하므로 Event payload·capture claim·취소 tombstone에 태그 문자열을 복제할 필요가 없습니다. 기존 소비자의 필수 필드와 Event version은 유지합니다.
 
 ### 8.2 조회와 Projection
 
@@ -554,7 +554,7 @@ Domain은 Firebase·React를 import하지 않습니다. 다른 기능은 `ledger
 | SEA-003 | Query Contract·Client | SearchLedger·LedgerSearchController | cursor/limit 두 page·scope 변경, A slow→B fast, close, logout·가구 변경, mutation 실패·성공 | bounded page 중복·누락 없음, cursor scope 고정, obsolete 응답 폐기, 성공 mutation 뒤 새 revision 재조회 | T-SEA-002 |
 | SEA-004 | Domain·Query Contract | LedgerSearchSummaryPolicy·SearchLedger | 여러 월·여러 page, 일치·불일치 카드, source window 변경·조회 한도 | 전체 검색 범위의 총·월별 건수와 금액, 부분 합계 성공 금지 | T-SEA-003 |
 | SEA-005 | Client·UI | 기존 Web 검색 원본 준비·matcher | 모달 열기, 입력, 같은 window 재사용, 닫기·session 전환 | 고정 debounce 없이 최신 입력 처리, 원본 공유, 닫힌 모달의 새 조회 없음 | T-PERF-SEARCH-001 |
-| SEA-006 | Contract·Client·UI·E2E | 태그 matcher·목록 chip·SearchModal·SearchResultList | 일반 부분 query, #앞부분·중간·끝부분·전체 이름, #만 입력, 대소문자, 비슷한 태그·동일 memo, 여러 월, 저장·제거 후 갱신 | 태그 이름에 검색어를 포함하는 거래만 반환, 여러 태그가 일치해도 거래 한 번 합산, 전체·월별 건수/금액 일치, 기존 검색·세션 격리 유지 | T-SEA-004 |
+| SEA-006 | Contract·Client·UI·E2E | 태그 matcher·목록 태그 텍스트·SearchModal·SearchResultList | 일반 부분 query, #앞부분·중간·끝부분·전체 이름, #만 입력, 대소문자, 비슷한 태그·동일 memo, 여러 월, 저장·제거 후 갱신 | 태그 이름에 검색어를 포함하는 거래만 반환, 여러 태그가 일치해도 거래 한 번 합산, 전체·월별 건수/금액 일치, 기존 검색·세션 격리 유지 | T-SEA-004 |
 
 Ledger 요구사항의 Canonical 테스트 ID는 모두 위 추적 표와 계약 테스트 파일에 연결합니다. `describe.skip` 상태는 테스트 본문이 준비됐지만 목표 Input Port 구현과 연결되지 않았음을 뜻하며 통과로 간주하지 않습니다.
 

@@ -46,15 +46,15 @@ export default function ExpenseTagInput({
       </label>
 
       {tags.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-1.5" aria-label="선택한 태그">
+        <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1" aria-label="선택한 태그">
           {tags.map((tag) => (
-            <span key={tag} className="inline-flex max-w-full items-center gap-1 rounded-full bg-blue-50 py-1 pl-2.5 pr-1 text-xs font-medium text-blue-700">
+            <span key={tag} className="inline-flex max-w-full items-center gap-0.5 text-sm leading-5 text-blue-600">
               <span className="min-w-0 break-all">#{tag}</span>
               <button
                 type="button"
                 onClick={() => onChange(tags.filter((selectedTag) => selectedTag !== tag))}
                 aria-label={`${tag} 태그 제거`}
-                className="shrink-0 rounded-full p-1 transition-colors hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className="shrink-0 p-1 text-slate-400 transition-colors hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
               >
                 <X className="h-3 w-3" aria-hidden="true" />
               </button>
@@ -101,14 +101,14 @@ export default function ExpenseTagInput({
       )}
 
       {!hasReachedLimit && suggestions.length > 0 && (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5" aria-label="기존 태그 선택">
+        <div className="mt-2 flex flex-wrap items-baseline gap-x-2.5 gap-y-1" aria-label="기존 태그 선택">
           <span className="mr-0.5 text-xs text-slate-400">기존 태그</span>
           {suggestions.map((tag) => (
             <button
               type="button"
               key={tag}
               onClick={() => addTag(tag)}
-              className="max-w-full break-all rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-500 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+              className="max-w-full break-all text-left text-xs leading-5 text-blue-600 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               #{tag}
             </button>
