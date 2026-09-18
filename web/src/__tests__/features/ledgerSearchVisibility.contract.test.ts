@@ -138,7 +138,7 @@ describe('ledger search visibility contract', () => {
     closeExpenseSearchWindow('window-1');
   });
 
-  test('태그 검색은 월을 넘어 같은 태그만 합산하고 메모와 비슷한 태그를 제외한다', async () => {
+  test('[T-SEA-004][SEA-006] 태그 검색은 월을 넘어 같은 태그만 합산하고 메모와 비슷한 태그를 제외한다', async () => {
     mockedGetDocs.mockResolvedValueOnce({ docs: [
       ledgerDocument('trip-first', { tags: ['2026부산여행'], accountingDate: '2026-08-31', amountInWon: 30000 }),
       ledgerDocument('trip-second', { tags: ['2026부산여행'], accountingDate: '2026-09-01', amountInWon: 20000 }),

@@ -113,7 +113,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     return { run, record, read, canonical };
   }
 
-  it("지출 태그는 저장·재조회되며 구버전 수정 요청은 보존하고 명시한 빈 배열은 제거한다", async () => {
+  it("[T-LED-011][LED-011] 지출 태그는 저장·재조회되며 구버전 수정 요청은 보존하고 명시한 빈 배열은 제거한다", async () => {
     const { run, record, read, canonical } = await tagFixture();
     const created = await record("tag-create", [" #2026부산여행 ", "2026부산여행", "가족"]);
     expect(created.tags).toEqual(["2026부산여행", "가족"]);
@@ -150,7 +150,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     expect((await read(legacy.transactionId))?.tags).toEqual(overLimitTags);
   });
 
-  it("항목 분할은 생략한 태그를 상속하고 개별 태그와 원본 복원 태그를 보존한다", async () => {
+  it("[T-LED-012][LED-012] 항목 분할은 생략한 태그를 상속하고 개별 태그와 원본 복원 태그를 보존한다", async () => {
     const { run, record, read } = await tagFixture();
     const original = await record("tag-item-source", ["2026부산여행"]);
     const split = await run("ledger.split-transaction.v1", "tag-item-split", {
@@ -174,7 +174,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     expect(await read(original.transactionId)).toMatchObject({ tags: ["2026부산여행"], lifecycleState: "active" });
   });
 
-  it("신규 및 기존 월 분할·개월 재구성·분할 해제는 태그를 보존한다", async () => {
+  it("[T-LED-012][LED-012] 신규 및 기존 월 분할·개월 재구성·분할 해제는 태그를 보존한다", async () => {
     const { run, record, read, canonical } = await tagFixture();
     const original = await record("tag-monthly-source", ["2026부산여행"]);
     const split = await run("ledger.split-existing-transaction-monthly.v1", "tag-monthly-split", {
@@ -200,7 +200,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     for (const id of manual.transactionIds) expect((await read(id))?.tags).toEqual(["2026부산여행"]);
   });
 
-  it("합친 거래는 중복 없는 태그를 반환하고 합치기 해제는 각 원본의 태그를 복원한다", async () => {
+  it("[T-LED-012][LED-012] 합친 거래는 중복 없는 태그를 반환하고 합치기 해제는 각 원본의 태그를 복원한다", async () => {
     const { run, record, read } = await tagFixture();
     const first = await record("tag-merge-first", ["2026부산여행", "가족"]);
     const second = await record("tag-merge-second", ["2026부산여행", "친구"]);
@@ -215,7 +215,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     expect(await read(second.transactionId)).toMatchObject({ tags: second.tags, lifecycleState: "active" });
   });
 
-  it("태그 합계가 한도를 넘는 합치기는 태그를 자르지 않고 원본 전체를 보존한다", async () => {
+  it("[T-LED-012][LED-012] 태그 합계가 한도를 넘는 합치기는 태그를 자르지 않고 원본 전체를 보존한다", async () => {
     const { run, record, read } = await tagFixture();
     const first = await record("tag-limit-first", Array.from({ length: 10 }, (_, index) => `행사${index}`));
     const second = await record("tag-limit-second", ["추가 행사"]);

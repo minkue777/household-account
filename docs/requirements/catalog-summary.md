@@ -2,13 +2,13 @@
 
 `node tools/requirements/update-catalog.mjs`로 생성합니다. 실행 결과나 구현 완료 개수가 아닌 문서 선언 집계입니다.
 
-- 요구사항: 244개 (고유 ID 244개)
-- Canonical 테스트 시나리오 ID: 229개
+- 요구사항: 247개 (고유 ID 247개)
+- Canonical 테스트 시나리오 ID: 232개
 
 | 소유 영역 | 요구사항 |
 |---|---:|
 | access-household | 19 |
-| household-finance | 40 |
+| household-finance | 43 |
 | notifications | 14 |
 | payment-capture | 65 |
 | portfolio | 39 |
@@ -19,7 +19,7 @@
 |---|---:|---:|
 | [contexts/access-household/modules/household-access](contexts/access-household/modules/household-access/requirements.md) | 19 | 15 |
 | [contexts/household-finance/modules/categories-budget](contexts/household-finance/modules/categories-budget/requirements.md) | 6 | 8 |
-| [contexts/household-finance/modules/ledger](contexts/household-finance/modules/ledger/requirements.md) | 23 | 23 |
+| [contexts/household-finance/modules/ledger](contexts/household-finance/modules/ledger/requirements.md) | 26 | 26 |
 | [contexts/household-finance/modules/local-currency](contexts/household-finance/modules/local-currency/requirements.md) | 5 | 8 |
 | [contexts/household-finance/modules/recurring-transactions](contexts/household-finance/modules/recurring-transactions/requirements.md) | 6 | 8 |
 | [contexts/notifications/modules/notifications](contexts/notifications/modules/notifications/requirements.md) | 14 | 14 |
@@ -45,7 +45,7 @@
 | 임시 진단 | 1 |
 | 특성화 | 3 |
 | 특성화·목표 교정 | 1 |
-| 현재 명세 | 113 |
+| 현재 명세 | 116 |
 | 현재 명세·목표 보완 | 3 |
 | 현재·목표 | 3 |
 | 호환 | 3 |

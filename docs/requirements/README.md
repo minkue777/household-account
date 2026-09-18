@@ -1,7 +1,7 @@
 # Household Account 현재 시스템 요구사항 인덱스
 
 > 상태: Draft — 코드 역추적 명세  
-> 집계 갱신일: 2026-09-06  
+> 집계 갱신일: 2026-09-18  
 > 범위: Web, Android, Firebase Functions, Firestore, PWA, 외부 시세·배당 연동  
 > 목적: 5개 업무 Bounded Context에서 기능 모듈·요구사항·테스트·결정·데이터 소유권을 탐색하는 시작점  
 > 목표 아키텍처: [목표 Clean Architecture 설계](../architecture/target-clean-architecture.md)  
@@ -35,7 +35,7 @@ System Contract
 | [모듈 상세 설계 규약](governance/module-design-standard.md) | 공개 API, Domain·Port·저장 경계, 요구사항별 테스트 설계 형식 |
 | [시스템 컨텍스트](system/context.md) | 행위자, 공통 용어, SYS-* 공통 계약 |
 | [공통 시스템 계약 상세 설계](system/design.md) | tenant·Money·날짜·호환 mapper·Unit of Work의 SYS-* 테스트 기준 |
-| [제품 결정 기록](governance/decisions.md) | DEC-001~067의 단일 정책 소유 Context와 영향 모듈 |
+| [제품 결정 기록](governance/decisions.md) | DEC-001~075의 단일 정책 소유 Context와 영향 모듈 |
 | [데이터 소유권](cross-cutting/data-ownership.md) | 논리 데이터·컬렉션·필드별 Context와 최종 Writer |
 | [Context 간 종단 흐름](system/flows.md) | 둘 이상 Context 또는 Context+지원 계층의 현재 흐름과 교정 불변식 |
 | [보안과 개인정보](cross-cutting/security-privacy.md) | 가구 격리, 서버 권한, 민감 데이터, 기기 경계 |
@@ -49,11 +49,11 @@ System Contract
 | Bounded Context | 책임 | 내부 기능 모듈 | 요구사항 | 개수 | 주요 Aggregate·데이터 |
 |---|---|---|---|---:|---|
 | [Access & Household](contexts/access-household/requirements.md) | Principal·가구·멤버·Membership·명의자 프로필·초대·권한 | [가구와 접근](contexts/access-household/modules/household-access/requirements.md) | HH-*, HH-JOIN-*, ADM-* | 19 | Household, Member, Membership, AssetOwnerProfile, Invitation |
-| [Household Finance](contexts/household-finance/requirements.md) | 거래·분류·예산·정기 계획·지역화폐 | [원장](contexts/household-finance/modules/ledger/requirements.md), [카테고리·예산](contexts/household-finance/modules/categories-budget/requirements.md), [정기 거래](contexts/household-finance/modules/recurring-transactions/requirements.md), [지역화폐](contexts/household-finance/modules/local-currency/requirements.md) | LED-*, SPL-*, MRG-*, SEA-*, CAT-*, BUD-*, REC-*, BAL-* | 40 | Transaction, CategoryCatalog, RecurringPlan, LocalCurrencyBalance |
+| [Household Finance](contexts/household-finance/requirements.md) | 거래·분류·예산·정기 계획·지역화폐 | [원장](contexts/household-finance/modules/ledger/requirements.md), [카테고리·예산](contexts/household-finance/modules/categories-budget/requirements.md), [정기 거래](contexts/household-finance/modules/recurring-transactions/requirements.md), [지역화폐](contexts/household-finance/modules/local-currency/requirements.md) | LED-*, SPL-*, MRG-*, SEA-*, CAT-*, BUD-*, REC-*, BAL-* | 43 | Transaction, CategoryCatalog, RecurringPlan, LocalCurrencyBalance |
 | [Payment Capture](contexts/payment-capture/requirements.md) | 카드·가맹점 설정과 Android·Shortcut 결제·잔액 관찰 수렴 | [결제 설정](contexts/payment-capture/modules/payment-configuration/requirements.md), [Android 수집](contexts/payment-capture/modules/android-payment-ingestion/requirements.md), [Shortcut 수집](contexts/payment-capture/modules/shortcut-ingestion/requirements.md) | CARD-*, MER-*, ING-*, PARSE-*, ING-SAVE-*, CAN-*, IOS-* | 65 | CardRegistry, MerchantRuleSet, CaptureEnvelope |
 | [Portfolio](contexts/portfolio/requirements.md) | 자산·명의 참조·Position·평가·자동화·배당 | [포트폴리오](contexts/portfolio/modules/portfolio/requirements.md), [보유종목·시세](contexts/portfolio/modules/holdings-market-data/requirements.md), [자동화](contexts/portfolio/modules/asset-automation/requirements.md), [배당](contexts/portfolio/modules/dividends/requirements.md) | AST-*, HOLD-*, GOLD-*, MARKET-*, JOB-AST-*, AUTO-*, LOAN-*, DIV-*, JOB-DIV-* | 39 | AssetAccount, Position, InstrumentCatalog, AutomationPlan, DividendEvent |
 | [Notifications](contexts/notifications/requirements.md) | endpoint·대상·payload·delivery·가구 purge | [푸시 알림](contexts/notifications/modules/notifications/requirements.md) | PUSH-* | 14 | NotificationEndpoint, NotificationDelivery |
-| 합계 |  | 13개 기능 모듈 |  | 177 |  |
+| 합계 |  | 13개 기능 모듈 |  | 180 |  |
 
 ### 2.1 Context 의존 방향
 
@@ -198,6 +198,8 @@ Portfolio ──valuation·dividend Outbox Event──▶ Read Side
 | [DEC-066](governance/decisions.md#dec-066) | Payment Capture | Android는 raw 알림을 암호화 journal에 선기록한 뒤 전달하고 Functions parser를 단일 정본으로 사용하며, created snapshot을 QuickEdit FIFO에 내구화한 뒤 journal을 ack한다. |
 | [DEC-067](governance/decisions.md#dec-067) | 지원·플랫폼 | QuickEdit은 일반 Ledger Command의 Android Adapter이며, Keystore 암호화 outbox commit과 WorkManager 영속 예약 뒤 화면에서 분리하고 고정 멱등 key로 비동기 전달한다. |
 | [DEC-068](governance/decisions.md#dec-068) | 공통 시스템·Payment Capture·지원 플랫폼 | 현재 두 가구와 향후 소수 가구의 대화형 경로는 첫 paint·결제·QuickEdit 저지연을 우선하고 대규모 분산 장치를 배제합니다. 공용 경로는 Auth·Membership·가구 격리·중복 방지·72시간 실패 복구를 유지하고, Native 결제 수집·세션 교환에는 App Check를 추가 유지합니다. |
+
+| [DEC-075](governance/decisions.md#dec-075) | Household Finance | 지출의 여행·행사 목적 태그를 선택 필드로 저장하고 기존 검색과 합계를 재사용한다. |
 
 기존 Q-001~006은 결정 기록에 반영되어 있습니다. 추가 감사에서 발견한 정책 충돌은 [미결정 사항 단일 목록](governance/pending-decisions.md)에서 추적하며, 사용자 확인 전에 요구사항의 의미를 변경하지 않습니다.
 

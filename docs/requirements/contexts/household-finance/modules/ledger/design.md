@@ -10,7 +10,7 @@
 
 ## 1. 설계 목적과 추적성
 
-이 설계는 `LED-001~010`, `SPL-001~006`, `MRG-001~002`, `SEA-001~004`를 하나의 Canonical Ledger Writer와 테스트 가능한 공개 계약으로 옮깁니다. 정책의 단일 원본은 [요구사항](requirements.md#5-요구사항)과 Accepted [DEC-001](../../../../governance/decisions.md#dec-001)·[DEC-010](../../../../governance/decisions.md#dec-010)·[DEC-056](../../../../governance/decisions.md#dec-056)·[DEC-057](../../../../governance/decisions.md#dec-057)·[DEC-059](../../../../governance/decisions.md#dec-059)·[DEC-065](../../../../governance/decisions.md#dec-065)입니다.
+이 설계는 `LED-001~012`, `SPL-001~006`, `MRG-001~002`, `SEA-001~006`를 하나의 Canonical Ledger Writer와 테스트 가능한 공개 계약으로 옮깁니다. 정책의 단일 원본은 [요구사항](requirements.md#5-요구사항)과 Accepted [DEC-001](../../../../governance/decisions.md#dec-001)·[DEC-010](../../../../governance/decisions.md#dec-010)·[DEC-056](../../../../governance/decisions.md#dec-056)·[DEC-057](../../../../governance/decisions.md#dec-057)·[DEC-059](../../../../governance/decisions.md#dec-059)·[DEC-065](../../../../governance/decisions.md#dec-065)입니다. 태그 입력·저장, 변환 보존, 검색의 설계는 각각 `LED-011`, `LED-012`, `SEA-006`에 연결하며 Canonical 테스트 ID의 소유권은 요구사항 문서에 둡니다.
 
 핵심 목표는 다음과 같습니다.
 
@@ -24,13 +24,15 @@
 
 관련 설계 근거는 [데이터 소유권](../../../../cross-cutting/data-ownership.md), [수동 거래·결제·취소 흐름](../../../../system/flows.md), [보안 경계](../../../../cross-cutting/security-privacy.md), [테스트 전략](../../../../governance/test-strategy.md)을 따릅니다.
 
+태그의 거래 내 저장·입력 한도·변환 보존·기존 검색 확장은 [DEC-075](../../../../governance/decisions.md#dec-075)를 따릅니다.
+
 ## 2. 모듈 경계와 책임
 
 ### 2.1 소유 책임
 
 | 책임 | 설명 |
 |---|---|
-| Canonical Transaction | 지출·수입의 본문, 회계일·현지 시각, 금액, 표시 정보, categoryId, 업무 source, originChannel, creatorMemberId |
+| Canonical Transaction | 지출·수입의 본문, 회계일·현지 시각, 금액, 표시 정보, categoryId, 지출의 optional tags, 업무 source, originChannel, creatorMemberId |
 | Group operation | item split, monthly split/reconfigure/cancel, merge/unmerge의 원자 계획과 실행 |
 | Capture lineage·claim | Payment Capture가 계산해 전달한 fingerprint를 immutable lineage에 원자 연결하고 split·merge 뒤에도 dedup을 유지 |
 | Ledger Query | 기간·유형 목록, 날짜·월·연·카테고리 합계, 검색, 취소 후보의 원장 사실 |
@@ -80,11 +82,11 @@
 
 | DTO | 필수 필드 | 서버 규칙 |
 |---|---|---|
-| `ManualExpenseDraft` | merchant, amountInWon, categoryId, accountingDate | merchant trim 후 비어 있지 않고 amount는 양의 정수; localTime은 Clock, card 표시는 manual |
+| `ManualExpenseDraft` | merchant, amountInWon, categoryId, accountingDate; optional memo, tags | merchant trim 후 비어 있지 않고 amount는 양의 정수; localTime은 Clock, card 표시는 manual; tags는 3.2.1의 입력 정책 적용 |
 | `ManualIncomeDraft` | itemName, amountInWon, accountingDate | itemName 필수; Domain Mapper가 merchant=수입, category=etc, memo=itemName으로 정규화 |
 | `CapturedTransactionDraft` | amount, merchant, categoryId, occurred local date/time/zone, source evidence, originChannel, optional card display, optional localCurrencyType | creatorMemberId·source capability·originChannel·지역화폐 type은 호출자 임의 payload가 아니라 검증된 Capture 결과에서 받음; non-local에는 type 금지 |
 | `RecurringPostingIntent` | planId, targetMonth, merchant, amount, categoryId, effectiveDate, memo, creatorMemberId | source는 recurring, originChannel은 scheduler로 고정하며 일반 외부 Command에서 선택 불가 |
-| `TransactionPatch` | 변경 필드 집합 | amount, memo, categoryId, merchant, accountingDate만 허용; server fields와 capture claim 변경 금지 |
+| `TransactionPatch` | 변경 필드 집합 | amount, memo, tags, categoryId, merchant, accountingDate만 허용; tags 생략은 보존, 명시한 빈 배열은 제거; server fields와 capture claim 변경 금지 |
 | `SplitOperation` | kind와 kind별 payload | `items`, `monthly-existing`, `monthly-new-manual`, `reconfigure-monthly`, `collapse-monthly`의 discriminated union. QuickEdit item split은 현재 form base draft·items·expectedVersion을 한 payload로 전달 |
 | `MergePayload` | targetId, 중복 없는 sourceIds, version map | 같은 household·expense 유형만 허용 |
 
@@ -92,11 +94,69 @@
 
 QuickEdit `items` operation은 DEC-055에 따라 분할을 누른 시점의 merchant, amountInWon, categoryId, memo를 `baseDraft`로 받고 item별 허용 표시값과 expectedVersion을 함께 받습니다. 서버는 baseDraft에 없는 카드·source·originChannel·creatorMemberId·capture lineage를 원본에서 읽어 보존합니다. 선행 Update 없이 한 Split UoW로 처리하며, 원본 version 불일치에서는 `Conflict(VERSION_MISMATCH)`와 현재 version·lifecycle state를 반환하고 write하지 않습니다. `superseded`·`deleted` 원본은 새 expectedVersion으로도 일반 Update·Split하지 못합니다.
 
+#### 3.2.1 태그 값과 호환 계약 — LED-011
+
+지출의 태그는 별도 Tag Aggregate나 memo 인코딩을 만들지 않고 거래에 `tags?: string[]`로 둡니다. 등록·수정 UI는 지출에만 제공하며 기존 memo 문자열은 그대로 유지합니다. `2026부산여행`이 적힌 과거 memo를 자동 태그로 전환하거나 `#`를 붙여 재저장하지 않습니다.
+
+| 경계 | 계약 |
+|---|---|
+| 신규 draft의 tags 생략 | 태그 없는 신규 지출로 처리합니다. 서버 신규 지출 결과와 문서는 `tags: []`를 가질 수 있습니다. |
+| 기존 patch·baseDraft의 tags 생략 | 현재 거래 또는 분할 원본의 태그를 보존합니다. JSON에 없는 필드를 빈 배열로 채워 보내지 않습니다. |
+| 명시한 `tags: []` | 해당 draft·patch의 태그를 모두 제거합니다. 태그 하나 제거는 남길 배열 전체를 보냅니다. |
+| 입력 형식 | `null`, 배열 아닌 값, 문자열 아닌 원소가 하나라도 있는 배열은 `TAGS_INVALID`입니다. 쉼표 문자열을 서버에서 배열로 나누지 않습니다. |
+| 입력 정규화 | 각 문자열을 `trim → 선두의 연속 # 제거 → trim`한 뒤 빈 문자열을 버리고, 정규화된 문자열의 정확한 동등성으로 중복을 제거합니다. 최초 등장 순서를 유지하며 대소문자·내부 공백·Unicode 표기는 바꾸지 않습니다. |
+| 입력 한도 | 정규화 뒤 태그별 Unicode code point 수가 30 이하여야 하고, 중복 제거 뒤 최대 10개입니다. UTF-16 code unit 수나 grapheme 수가 아닙니다. 길이 초과는 `TAG_TOO_LONG`, 개수 초과는 `TOO_MANY_TAGS`이며 잘라 저장하지 않습니다. |
+| 기존 저장값 읽기 | 생략은 태그 없음으로 읽습니다. 서버 읽기 Mapper의 `readExpenseTags`는 저장된 문자열 원소를 정규화하되 새 입력의 10개·30자 제한을 적용하지 않습니다. 한도 초과 기존 값 때문에 전체 배열을 `[]`로 바꾸거나 태그와 무관한 수정에서 지우지 않습니다. |
+
+새 입력 검증은 [태그 Domain 정책](../../../../../../functions/src/contexts/household-finance/ledger/domain/policies/expenseTags.ts)의 `validateExpenseTags`, 기존 값 복원은 같은 모듈의 `readExpenseTags`가 담당합니다. 형식이 잘못된 기존 배열의 서버 읽기에서는 문자열 원소만 보존하며, 새 쓰기 요청에는 같은 관대한 읽기 규칙으로 검증을 우회하지 않습니다. 생략한 patch는 기존 값 전체를 유지하고 명시한 새 배열에만 입력 한도를 적용합니다.
+
+현재 [태그 입력 UI](../../../../../../web/src/components/expense/ExpenseTagInput.tsx)의 HTML `maxLength={30}`은 UTF-16 code unit 기준이므로 서버의 30 code point 계약과 계산 단위가 다릅니다. 일반 한글 30자는 입력할 수 있으나 emoji 등은 UI에서 더 일찍 제한될 수 있습니다. 이는 현재 UI 구현 차이이며 이 문서 정비에서 서버 한도나 runtime을 변경하지 않습니다.
+
+폼은 메모 아래 `태그 (선택)` 입력과 용도 안내를 두고 선택값을 파란 chip과 개별 제거 버튼으로 표시합니다. Enter·추가 버튼·기존 태그 추천 클릭으로 확정하며 IME 조합 중 Enter는 소비하지 않습니다. 저장 시 미확정 입력도 정규화한 배열에 합칩니다. 추천은 [요구사항의 읽기 범위](requirements.md#3-소유-데이터) 안에서 이미 받은 태그 중 선택하지 않은 값과 입력 부분 일치로 최대 5개를 제시하며 추천만을 위한 서버 조회는 하지 않습니다. 목록·검색 결과 chip은 같은 이름을 표시합니다.
+
+#### 3.2.2 실제 v1 명령 payload와 응답 — LED-011·LED-012
+
+[공통 wire schema](../../../../../../contracts/schemas/system/household-command.v1.schema.json)는 envelope와 `payload`가 object라는 조건을 검증합니다. 개별 명령의 `tags` 형식·길이·개수까지 검증하는 JSON Schema는 아닙니다. [Web 명령 DTO](../../../../../../web/src/platform/functions-api/householdCommandContract.ts)는 호출자 타입 계약이고, 런타임 의미 검증의 권위는 [Ledger handler](../../../../../../functions/src/bootstrap/commands/ledgerHouseholdCommandHandlers.ts)와 Domain 정책입니다. 태그 추가는 기존 명령 v1의 선택 필드 확장이며 공통 envelope version을 바꾸지 않습니다.
+
+요청은 기존 `executeHouseholdCommand` callable에 다음 envelope로 전달합니다. 아래 표의 다른 명령도 `command`와 `payload`만 해당 값으로 바꾸고 논리 요청마다 새 ID를 사용합니다.
+
+```json
+{
+  "contractVersion": "household-command.v1",
+  "commandId": "expense-trip-1",
+  "idempotencyKey": "expense-trip-1",
+  "householdId": "household-1",
+  "command": "ledger.record-manual-transaction.v1",
+  "payload": {
+    "transactionType": "expense",
+    "merchant": "부산 숙소",
+    "amountInWon": 120000,
+    "categoryId": "travel",
+    "accountingDate": "2026-09-18",
+    "memo": "2박 숙박",
+    "tags": ["2026부산여행"]
+  }
+}
+```
+
+`travel`은 해당 가구의 활성 카테고리 ID라는 fixture 전제입니다. 예제의 ID·version은 서버가 반환한 실제 값으로 치환합니다.
+
+| 명령 | payload 예시 | 성공 value와 태그 반영 |
+|---|---|---|
+| `ledger.update-transaction.v1` | `{"transactionId":"tx-1","expectedVersion":1,"patch":{"tags":["2026부산여행","가족"]}}` | `LedgerTransactionCommandResult`에 정규화된 tags와 증가한 aggregateVersion. `patch: {"memo":"숙박"}`는 tags 보존, `patch: {"tags":[]}`는 제거입니다. |
+| `ledger.record-manual-monthly-split.v1` | `{"transactionType":"expense","merchant":"부산 숙소","amountInWon":120000,"categoryId":"travel","accountingDate":"2026-09-18","memo":"2박 숙박","tags":["2026부산여행"],"months":2}` | `{transactionIds, splitGroupId}`. 원본 snapshot과 모든 파생 문서에 같은 tags를 저장하고 read stream으로 관찰합니다. |
+| `ledger.split-existing-transaction-monthly.v1` | `{"transactionId":"tx-1","expectedVersion":1,"months":2}` | `{transactionIds, splitGroupId}`. 현재 원본 tags를 서버에서 읽어 상속하므로 tags를 재전송하지 않습니다. |
+| `ledger.split-transaction.v1` | `{"transactionId":"tx-1","expectedVersion":1,"items":[{"merchant":"식사","amountInWon":8000,"categoryId":"food"},{"merchant":"간식","amountInWon":4000,"categoryId":"food","tags":[]}]}` | `{transactionIds}`. 원금 12,000원 fixture에서 첫 항목은 원본 tags를 상속하고 두 번째 항목은 비웁니다. item에 명시한 비어 있지 않은 tags는 해당 항목 값을 대체합니다. |
+
+항목 분할 handler가 지원하는 `operation: {kind: "items", baseDraft, items}` 형식에서도 `baseDraft.tags?: string[]`, `items[].tags?: string[]`를 같은 의미로 해석합니다. 예를 들어 `baseDraft: {merchant: "부산 식당", amountInWon: 12000, categoryId: "food", memo: "점심", tags: ["2026부산여행"]}`이면 tags를 생략한 item은 이 정규화된 baseDraft 태그를 상속합니다. `baseDraft.tags` 생략은 저장 원본 유지, `[]`는 원본 snapshot의 태그 제거이며 원복은 해당 snapshot을 복원합니다. 이 operation 형식은 handler/QuickEdit 경계이고 현재 Web 타입 DTO의 최상위 `items` 형식과 구분합니다.
+
+수동 생성과 일반 수정의 성공값은 `{contractVersion: "household-command-response.v1", commandId, result: {kind: "succeeded", value: LedgerTransactionCommandResult}}`에 담깁니다. receipt replay는 기존 response 규약을 따르며 `already-processed`도 성공값으로 해석합니다. `LedgerTransactionCommandResult.tags`와 Web `Expense.tags`는 이전 응답·문서를 읽도록 선택 필드로 유지합니다. [read/command Mapper](../../../../../../web/src/features/ledger/application/ledgerExpenseMapping.ts)가 문서와 응답의 배열을 같은 Expense 값으로 옮기며 목록·검색·낙관적 Projection에서 사용합니다. 이전 서버의 응답에 tags가 없다는 이유로 저장된 태그를 지웠다고 판단하지 않습니다.
+
 ### 3.3 Read Model
 
 Web 일반 수정은 Command를 시작하면서 편집창을 즉시 숨겨 원장의 낙관적 변경을 바로 표시합니다. 서버 응답을 기다리는 동안 해당 편집 인스턴스에 초안을 보관하고 중복 제출을 막습니다. 성공하면 인스턴스를 정리하고, 실패하면 해당 변경을 원복한 뒤 오류 안내와 함께 같은 초안을 다시 표시합니다. 다른 거래를 열거나 날짜·가구·페이지를 전환해 편집 인스턴스를 벗어나면 이전 응답이 창을 다시 열거나 새 편집창을 닫지 않습니다. 일반 삭제는 기존처럼 성공 후 편집창을 닫고, 실패 시 초안을 유지합니다. 통계의 카테고리 내역 목록은 수정·삭제 요청 시 닫으며, 서버 확정으로 통계 캐시가 갱신됩니다.
 
-`TransactionView`에는 transactionId, transactionType, amountInWon, accountingDate, localTime, zoneId, merchant, memo, categoryId, cardDisplay, source, originChannel, creatorMemberId, optional localCurrencyType, split/merge 표시 metadata, aggregateVersion을 포함합니다. capture fingerprint hash·lineage 내부 ID와 receipt는 노출하지 않습니다. 이 일반 Read Model은 active 거래만 만들며 deleted·superseded 거래를 사용자에게 반환하지 않습니다.
+`TransactionView`에는 transactionId, transactionType, amountInWon, accountingDate, localTime, zoneId, merchant, memo, optional tags, categoryId, cardDisplay, source, originChannel, creatorMemberId, optional localCurrencyType, split/merge 표시 metadata, aggregateVersion을 포함합니다. tags는 정규화된 문자열 배열이며 `#`는 UI 표시·검색 접두사입니다. capture fingerprint hash·lineage 내부 ID와 receipt는 노출하지 않습니다. 이 일반 Read Model은 active 거래만 만들며 deleted·superseded 거래를 사용자에게 반환하지 않습니다.
 
 `LedgerSearchResult`는 결정적으로 정렬된 현재 `items` page, opaque `nextCursor`, 동일 검색 범위 전체를 기준으로 한 `summary`, `sourceCheckpoint`를 반환합니다. `summary`는 `totalCount`, `totalAmountInWon`, `monthly[{yearMonth, count, amountInWon}]`를 가지며 현재 page의 부분 합계가 아닙니다. 빈 결과는 `NoData`이고 성공 summary의 0원과 구분합니다.
 
@@ -114,7 +174,7 @@ Web `LedgerSearchController`는 서버 Query와 별개로 `actorSessionGeneratio
 
 | 모델 | 핵심 값 | 불변식 |
 |---|---|---|
-| `Transaction` Aggregate | householdId, type, MoneyWon, accounting date/time, merchant, categoryId, source, originChannel, creatorMemberId, optional localCurrencyType, originLineageRefs, lifecycleState, version | 정상 금액은 양의 원 단위 정수, household/type·localCurrencyType과 provenance 불변, active만 일반 조회·집계, 구조 변경 원본은 superseded, 일반 삭제 원본은 deleted로 보존, server metadata 임의 수정 금지 |
+| `Transaction` Aggregate | householdId, type, MoneyWon, accounting date/time, merchant, categoryId, optional tags, source, originChannel, creatorMemberId, optional localCurrencyType, originLineageRefs, lifecycleState, version | 정상 금액은 양의 원 단위 정수, tags는 입력 검증과 기존값 보존을 분리, household/type·localCurrencyType과 provenance 불변, active만 일반 조회·집계, 구조 변경 원본은 superseded, 일반 삭제 원본은 deleted로 보존, server metadata 임의 수정 금지 |
 | `MonthlySplitGroup` Aggregate | groupId, original snapshot, immutable origin lineage refs, installment list, version | 개월 수 2 이상, 날짜 월말 보정, 모든 installment 동일 내림 금액, 그룹 전체 원자 변경 |
 | `ItemSplitPlan` Domain result | source snapshot, item drafts | 항목 2개 이상, 각 양수, 합계가 원금과 정확히 동일 |
 | `MergedTransaction` Aggregate | target common fields, 평탄한 leaf source snapshot, 중간 merge history ref, immutable origin lineage snapshot, merge version | leaf ID 유일, merge ancestry 중첩 없음, 합계 정확, DEC-010 복원 표시 필드와 숨은 capture lineage 보존 |
@@ -129,6 +189,7 @@ Web `LedgerSearchController`는 서버 Query와 별개로 `actorSessionGeneratio
 | Policy | 결정 |
 |---|---|
 | `ItemSplitPolicy` | 항목 수·양수·원금 합계 보존 |
+| `ExpenseTagsPolicy` | 선택 배열의 형식·정규화·신규 입력 한도와 기존 저장값 읽기를 분리; 누락 patch 보존·명시한 빈 배열 제거 |
 | `MonthlySplitPolicy` | `floor(originalAmount / months)`을 모든 달에 동일 저장하고 나머지를 반영하지 않음 |
 | `MonthlySplitDatePolicy` | 원 거래 일자를 유지하되 없는 29~31일은 대상 월 말일 |
 | `MergePolicy` | 대상 거래의 공통 필드를 유지하고 금액 합산, 원본별 가맹점·금액·카테고리·메모 보존 |
@@ -137,7 +198,7 @@ Web `LedgerSearchController`는 서버 Query와 별개로 `actorSessionGeneratio
 | `UnmergeRestorationPolicy` | 원본별 표시 필드를 복원하고 합친 거래의 날짜·시각·거래 유형·카드 정보를 공통 적용 |
 | `TransformationLineagePolicy` | 서버가 읽은 원본 lineage를 새 거래·그룹 snapshot에 연결하고 fingerprint claim을 복제·해제하지 않음 |
 | `CapturedLineageCancellationPolicy` | DEC-041의 대상 lineage 원본·모든 파생 삭제와 공유 merge에서 다른 lineage 원본 복원 계획을 계산 |
-| `LedgerSearchPolicy` | 가맹점·메모와 거래 생성 당시의 표준 카드사 라벨·유형·끝 네 자리 증거에 대해 별칭/마스킹 문자열을 결정적으로 매칭 |
+| `LedgerSearchPolicy` | 일반 검색은 가맹점·메모·태그 부분 일치와 기존 카드 별칭/마스킹 일치의 OR; 선두 # 검색은 정규화된 태그 전체 이름만 일치 |
 | `LedgerSearchSummaryPolicy` | 동일 검색 범위 전체의 건수·금액과 월별 건수·금액을 계산하고 page 부분 합계와 분리 |
 | `HouseholdNotificationEligibility` | 명시적 요청은 expense에서만 허용 |
 | `LedgerGroupWriteLimitPolicy` | Adapter 쓰기 한도 안에서 가능한 최대 그룹 크기 검증 |
@@ -158,6 +219,8 @@ DEC-013의 알림 수신자는 Ledger가 확정하지 않습니다. Ledger는 �
 6. Transaction을 생성하고 receipt, `TransactionRecorded.v1`과 한 transaction으로 commit합니다.
 7. 성공 후 외부 알림·Projection을 동기 실행하지 않습니다.
 8. 재시도는 최초 Transaction ID와 typed result를 재생합니다.
+
+`LED-011`의 지출 draft는 tags 정규화·검증을 Canonical commit 전에 수행합니다. 태그 실패에서는 거래와 Ledger Event를 만들지 않습니다. 수입 폼·자동 수집·정기 거래에 별도 태그 입력을 추가하는 작업은 이 지출 UI 변경의 범위에 포함하지 않습니다.
 
 ### 5.2 RecordCapturedTransaction
 
@@ -180,6 +243,8 @@ DEC-013의 알림 수신자는 Ledger가 확정하지 않습니다. Ledger는 �
 7. version 경합은 `Conflict(currentVersion)`이며 일부 patch를 적용하지 않습니다.
 8. deleted 거래에는 TTL을 설정하지 않습니다. 일반 사용자는 복구할 수 없고 별도 요청을 받은 운영자/Agent만 감사 사유를 남겨 같은 ID 복구 또는 종속 자료를 포함한 영구 정리를 수행합니다.
 
+`LED-011`의 tags-only patch도 같은 version·receipt·UoW를 사용합니다. tags를 생략한 메모·카테고리·금액 수정은 저장값을 복사하고, 명시한 tags만 정규화·검증한 뒤 교체합니다. 태그는 provenance나 서버 권한 필드가 아니며 UI 검증 성공을 서버 검증의 대체로 신뢰하지 않습니다.
+
 ### 5.4 Split
 
 1. kind별 payload와 write-limit policy를 먼저 검증합니다.
@@ -188,14 +253,16 @@ DEC-013의 알림 수신자는 Ledger가 확정하지 않습니다. Ledger는 �
 4. `TransformationLineagePolicy`가 원본의 source, originChannel, creatorMemberId, card evidence와 capture lineage refs를 서버 snapshot에서 읽어 모든 새 항목과 group snapshot에 보존합니다. fingerprint claim은 새로 만들거나 삭제하지 않고 lineage의 current transaction refs만 같은 UoW에서 교체합니다.
 5. 원본에 localCurrencyType이 있으면 모든 item/monthly 파생 거래와 group snapshot에 같은 값을 보존합니다.
 6. `monthly-new-manual`은 manual draft의 memo, card metadata, creator를 모든 필요한 snapshot에 보존합니다.
-7. `collapse-monthly`은 installment 금액 합계로 단일 거래를 만들고 날짜·category·memo는 첫 항목, 가맹점은 분할 표시를 제거한 값을 사용합니다. DEC-001에서 버린 나머지는 복원 금액에 다시 더하지 않습니다.
-8. UoW가 원본 제거/tombstone, 새 항목, lineage ref 갱신, receipt와 Event 집합을 한 번에 commit합니다.
+7. `collapse-monthly`은 `SPL-003`에 따라 보존된 원본 snapshot을 같은 ID로 재활성화하고 파생 항목을 제거합니다. 원본의 금액·날짜·표시값을 복원하며 파생 금액 합계나 첫 항목 값으로 원본을 다시 만들지 않습니다. DEC-001의 내림·나머지 미반영은 분할 파생 금액의 규칙이고 원본 snapshot 복원과 구분합니다.
+8. UoW가 분할 시 원본의 superseded 전이와 새 항목 생성, 재구성 시 기존 파생의 교체, 복원 시 원본의 active 전이와 파생 제거를 lineage ref·receipt·Event 집합과 원자적으로 반영합니다.
 9. 한 쓰기라도 실패하면 원본·lineage와 모든 새 항목이 이전 상태를 유지합니다.
 10. retry는 동일 groupId·transactionIds와 결과를 재생합니다.
 11. Web read projection은 item split과 기존 지출 monthly split에서 원본의 optimistic delete를 먼저 만들지 않습니다. 명령 처리 중에는 기존 원본을 유지하고, 동일 Firestore transaction에서 도착한 권위 snapshot으로 `원본 -> 파생 항목`을 직접 교체하여 선택 날짜 목록이 잠시 비는 상태를 방지합니다.
 12. 월 분할 취소 UI는 네트워크 Command보다 편집 모달 종료를 먼저 확정합니다. Command는 닫힌 뒤 백그라운드에서 계속합니다. 각 파생 read model은 `splitOriginalId`를 유지하며, Projection은 복구 원본과 그 원본을 가리키는 stale 파생이 같은 emission에 들어오면 파생을 제거한 결과만 방출합니다. 복구 원본이 아직 없는 emission에서는 파생을 유지하므로 목록이 비지 않고, 모달 종료도 snapshot 도착까지 지연하지 않습니다.
 
 Web 항목 분리의 금액 입력은 마지막 항목을 `max(0, 원금 - 나머지 항목 합계)`로 계산합니다. 마지막 항목을 직접 입력한 경우에는 바로 앞 항목을 계산 대상으로 사용하며 다른 입력은 유지합니다. 항목 삭제 후에는 남은 마지막 항목이 잔액을 받습니다. 금액의 단일 상태를 입력창과 제출 payload가 공유하고, 편집 중 빈 입력 표시만 별도로 관리하여 이전 입력값이 자동 조정 결과를 가리지 않게 합니다. 양수·정확 합계의 서버 계약과 저장 전 검증은 그대로 적용합니다.
+
+`LED-012`의 태그 전이는 다음과 같습니다. 항목 분할은 검증된 baseDraft의 태그가 있으면 원본 snapshot에 반영하고, 각 item의 tags 생략은 그 snapshot의 배열 복사, 명시한 배열은 해당 item의 교체로 처리합니다. 항목 분할 복원은 보존된 원본 snapshot 태그를 되살립니다. 기존·신규 월 분할은 원본 태그를 모든 파생에 복사하며 재구성도 원본 snapshot 태그를 새 파생에 복사합니다. 월 분할 해제는 원본 태그를 복원합니다. 파생에서 나중에 수정한 태그를 자동 합산하여 원본 태그를 바꾸지 않습니다.
 
 ### 5.5 Merge·Unmerge
 
@@ -207,6 +274,10 @@ Web 항목 분리의 금액 입력은 마지막 항목을 `max(0, 원금 - 나�
 6. UoW는 commit transaction 안에서 동일한 선택 집합과 새 ID의 부재, 모든 expected version을 다시 확인합니다. 대상·원본과 중간 merge node의 `superseded` 전이, 새 합친 거래, lineage current refs, receipt와 Event를 원자 commit하고 새 ID·version을 반환합니다.
 7. Unmerge는 merged ID와 그 `mergeLeafIds`만 선택 조회하여 평탄한 leaf만 `UnmergeRestorationPolicy`에 전달합니다. 중간 merge node는 복원하지 않습니다.
 8. 확정 계획은 합친 거래를 제거하고 같은 leaf ID를 재활성화합니다. merchant·amount·category·memo와 숨은 provenance는 leaf 값을 유지하고, accountingDate·localTime·transactionType·cardType·cardDisplay은 DEC-010에 따라 merged 거래의 공통 값을 적용한 뒤 한 UoW로 commit합니다.
+
+`LED-012`에서 합친 거래의 tags는 이번 active target/source 입력 순서의 배열을 이어 정규화·중복 제거한 합집합입니다. 각 원본 leaf의 tags는 복원 자료에 그대로 남으며 합친 배열로 덮어쓰지 않습니다. 합집합이 10개를 넘으면 `TOO_MANY_TAGS`로 원장 변경·Ledger Event write 0건, 원본 태그·version·lifecycle 유지입니다. 길이 초과 기존 태그가 합집합에 포함되면 `TAG_TOO_LONG`으로 같은 무변경 거절을 적용하며 어느 경우도 잘라내지 않습니다. Unmerge는 각 leaf의 원래 태그를 복원하고 merged 태그를 공통 필드처럼 각 원본에 덮지 않습니다. 연속 merge도 leaf별 복원 자료를 유지합니다.
+
+실제 `ledger.merge-transactions.v1`은 `{targetTransactionId, sourceTransactionId, expectedVersions}`를 받아 `{transactionId, transaction}`을 반환하며 `transaction.tags`는 위 합집합입니다. `ledger.unmerge-transaction.v1`은 `{transactionId, expectedVersion}`를 받아 `{transactionIds}`를 반환하고 원본별 태그는 이어지는 read stream에서 확인합니다. 태그 없는 leaf의 표시용 `mergedFrom` snapshot에는 tags를 생략할 수 있으며 권위 있는 복원 원본과 legacy 표시 snapshot을 혼동하지 않습니다.
 
 ### 5.6 FindCancellationCandidates·CancelCapturedLineage
 
@@ -229,6 +300,12 @@ Web 항목 분리의 금액 입력은 마지막 항목을 `max(0, 원금 - 나�
 - 합계는 성공적으로 읽은 거래만 계산하며 실패를 0으로 반환하지 않습니다.
 - `RequestHouseholdNotification`은 expense, requester membership, version을 검증하고 metadata와 `HouseholdNotificationRequested.v1`을 commit합니다.
 - 푸시 전달 실패는 이 Command를 rollback하지 않고 Notifications delivery 상태로 관찰합니다.
+
+#### 태그 검색 — SEA-006
+
+태그 검색은 3.3의 현재 Web 검색 원본·matcher·결과 목록을 확장합니다. 새 서버 `SearchLedger` endpoint나 태그 전용 Firestore Query를 만들지 않습니다. [현재 matcher](../../../../../../web/src/lib/expenseService.ts)는 query와 비교 대상을 trim·소문자로 정규화합니다. 일반 `부산` 검색은 기존 가맹점·memo·카드 조건에 태그 부분 일치를 OR로 추가합니다. `#2026부산여행`은 선두의 연속 `#`를 제거한 전체 태그 이름과 정확히 일치할 때만 반환하며 같은 문구가 memo·가맹점에만 있는 거래는 포함하지 않습니다. 빈 query와 `#`만 있는 query는 일치하지 않습니다. 저장 시 대소문자를 유지하는 규칙과 검색 비교의 소문자 정규화를 구분합니다.
+
+지출 목록 태그 chip 클릭은 `#태그이름`을 기존 검색창 초기 query로 전달합니다. 같은 household·지출 유형·active 가시성의 완료된 전체 검색 결과를 기존 합계 계산에 전달하므로 한 거래에 일치 태그가 여러 개 있어도 거래는 한 번만 세며 전체·월별 건수와 금액이 일치합니다. 예를 들어 같은 태그의 120,000원과 28,000원은 2건·148,000원이고 두 번째 거래의 태그를 지운 뒤 Command 성공·원천 갱신을 거치면 1건·120,000원입니다. 기존 모달 종료·logout·가구 전환의 revision 폐기와 원천 조회 실패 처리는 그대로 적용합니다.
 
 ## 6. Port 설계
 
@@ -277,6 +354,8 @@ Recurring 쪽 `ProcessRecurringPlanParticipant`, Ledger 쪽 `RecordRecurringTran
 | Outbox | 공통 `OutboxAppendPort` | 물리 경로를 모듈이 알지 않음 |
 
 Monthly split은 각 파생 Transaction에 groupId, installmentIndex, installmentCount, groupVersion을 저장하고 원본 Transaction은 superseded로 보존합니다. Merge도 모든 원본을 superseded로 보존하고 파생 거래에 immutable lineage refs를 연결합니다. DEC-010의 원복 표시 정책은 보존된 원본을 같은 ID로 재활성화할 때 적용하며 외부 Read Model에는 active 표시 정보만 노출합니다.
+
+tags는 같은 Canonical Transaction 문서의 선택 문자열 배열이며 별도 태그 collection·전역 사전·색상 metadata를 저장하지 않습니다. 기본 CRUD, item split, monthly split, transformation 저장소 Mapper 모두 읽기와 쓰기에 배열을 포함합니다. 기존 문서의 필드 생략을 허용하므로 필수 backfill·memo migration·새 schema version은 필요하지 않습니다. 검색은 기존 전체 원천을 메모리에서 필터하므로 태그용 index도 추가하지 않습니다. 태그를 모르는 기존 클라이언트의 누락 patch는 보존되지만 새 태그 입력 UI는 태그를 처리하는 서버가 먼저 준비되어야 합니다.
 
 지역화폐 상세 Query에는 `householdId + localCurrencyType + lifecycleState + accountingDate + transactionId`의 결정적 index를 사용합니다. type 없는 legacy 거래를 index 조회 뒤 client에서 숨기는 방식이 아니라 저장소 query 자체에서 제외합니다.
 
@@ -328,6 +407,8 @@ Canonical `cardDisplay`는 `삼성(1876)` 또는 `수동`처럼 완성된 표시
 
 Event payload는 projection 조정에 필요한 최소 금액·날짜·category 사실만 포함하고 memo·카드 전체값 같은 불필요한 개인정보를 제외합니다. group operation은 동일 correlationId 아래 각 확정 Transaction Event를 기록합니다.
 
+태그 변경도 기존 Recorded/Changed 및 구조 변경 Event·receipt 경계를 사용하며 태그 전용 Event를 만들지 않습니다. 검색·chip 표시는 Canonical read model을 소비하므로 Event payload·capture claim·취소 tombstone에 태그 문자열을 복제할 필요가 없습니다. 기존 소비자의 필수 필드와 Event version은 유지합니다.
+
 ### 8.2 조회와 Projection
 
 - 브라우저 Web·PWA·Android WebView의 월·연 원장 목록은 Ledger가 소유한 같은 공개 Firestore Read Contract를 실시간 구독합니다. 검증된 SessionScope의 `householdId`와 시작일·종료일을 `householdId + date` 복합 index에 전달하고, 거래 유형과 lifecycle 가시성은 같은 Read Adapter가 적용합니다.
@@ -358,6 +439,7 @@ FCM·Android broadcast·QuickEdit·HTTP Provider는 Ledger transaction에서 호
 | 분류 | 코드 예 |
 |---|---|
 | 입력 | `AMOUNT_NOT_POSITIVE_INTEGER`, `MERCHANT_REQUIRED`, `INCOME_ITEM_REQUIRED`, `MONTHS_BELOW_TWO` |
+| 태그 | `TAGS_INVALID`(배열·원소 형식), `TAG_TOO_LONG`(정규화 후 태그별 30 code points 초과), `TOO_MANY_TAGS`(중복 제거 후 10개 초과) |
 | 참조 | `CATEGORY_NOT_FOUND`, `CATEGORY_INACTIVE`, `TRANSACTION_NOT_FOUND` |
 | 그룹 | `SPLIT_SUM_MISMATCH`, `GROUP_TOO_LARGE`, `LINEAGE_TOO_LARGE`, `GROUP_VERSION_MISMATCH`, `MERGE_LEAF_OVERLAP`, `MERGE_ANCESTRY_CYCLE`, `LINEAGE_VERSION_MISMATCH` |
 | 정책 | `MERGE_EXPENSE_ONLY`, `RESTORATION_SNAPSHOT_INCOMPLETE` |
@@ -365,6 +447,21 @@ FCM·Android broadcast·QuickEdit·HTTP Provider는 Ledger transaction에서 호
 | 계약 | `UNSUPPORTED_CONTRACT_VERSION`, `UNSUPPORTED_FINGERPRINT_VERSION` |
 
 Duplicate는 실패 문자열이 아니라 existingTransactionId를 가진 typed Result입니다.
+
+태그 검증 오류는 도메인 내부의 validation/contract failure를 handler가 `HouseholdCommandRejection(code, false)`로 변환합니다. Router 내부 Result는 `COMMAND_FAILED`와 `details.domainCode`이지만 [callable response Mapper](../../../../../../functions/src/bootstrap/firebaseHouseholdCommand.ts)는 이 domainCode를 실제 wire `result.error.code`로 내보냅니다. 예를 들어 최종 응답은 아래와 같으며 HTTP/callable의 `invalid-argument` 예외로 해석하지 않습니다. Web Command Client는 이 rejected 결과를 같은 code·retryable을 가진 `HouseholdCommandError`로 전달합니다.
+
+```json
+{
+  "contractVersion": "household-command-response.v1",
+  "commandId": "expense-trip-1",
+  "result": {
+    "kind": "rejected",
+    "error": {"code": "TOO_MANY_TAGS", "retryable": false}
+  }
+}
+```
+
+태그 입력 오류는 수정 없는 자동 재시도 대상이 아닙니다. 무변경 거절의 `write 0건`은 Canonical 원장·Ledger Event·업무 claim에 적용하며 Router가 구조 명령의 거절 결과를 멱등성 receipt에 기록하는 것까지 금지한다는 의미가 아닙니다. 인증·tenant·version·동일 key의 다른 payload·저장 장애의 기존 오류 코드는 태그 입력 오류로 치환하지 않습니다.
 
 ### 9.2 보안
 
@@ -374,6 +471,7 @@ Duplicate는 실패 문자열이 아니라 existingTransactionId를 가진 typed
 - creatorMemberId는 Actor 또는 검증된 SystemActor에서만 설정합니다.
 - 다른 가구의 transactionId/groupId를 사용하면 NotFound로 정보 노출을 최소화합니다.
 - 로그에 memo, 전체 카드 정보, merchant 원문을 기본 기록하지 않습니다.
+- tags에도 행사·여행 등 사적 내용이 들어갈 수 있으므로 일반 로그·trace에 태그 문자열을 추가하지 않습니다. 태그 필드가 있는 명령도 로그인·현재 household Membership·write 권한과 expectedVersion을 기존과 동일하게 검증하며 별도 client direct write 권한을 열지 않습니다.
 
 ### 9.3 관측성
 
@@ -440,6 +538,8 @@ Domain은 Firebase·React를 import하지 않습니다. 다른 기능은 `ledger
 | LED-008 | Application·Emulator·E2E | 모든 group replacement UoW | 여섯 구조 operation의 권한 없음·타 가구·누락·stale version·commit 실패, 같은 거래 Update·Split 경합 | typed Forbidden·NotFound·Conflict·RetryableFailure와 본문·claim·receipt·Event write 0건, 먼저 commit한 하나만 성공 | T-LED-002 |
 | LED-009 | Domain·Application·Emulator | TransformationLineagePolicy·CapturedLineageCancellationPolicy·CaptureDedupClaim | captured item/monthly split·reconfigure·merge/unmerge, duplicate 재수집, 월 그룹 취소·replay, legacy 불완전 lineage | 원본 superseded·전체 증거·같은 ID 원복, 취소 시 대상 전체 삭제·다른 lineage 복원·claim cancelled·tombstone/Event 한 건, 불완전 legacy typed failure | T-LED-003 |
 | LED-010 | Domain·Contract·Repository·UI | LocalCurrencyTransactionPolicy·ListLocalCurrencyTransactions | 검증 capture type 있음·없음, 수동 위조, update 변경/제거, 경기·대전·legacy-unknown, single type route, split·merge | 검증 type만 생성·immutable, 선택 type만 상세 표시, legacy 일반 원장 보존, split type 유지, 모호한 merge Conflict | T-LED-004 |
+| LED-011 | Domain·Contract·Emulator·UI·E2E | 태그 Policy·manual/update handler·read/command Mapper·지출 폼 | 생략/빈 배열, 공백/#/중복, null·비문자열, 10/11개, 30/31 code points, 기존 한도 초과, 이전 응답, IME·미확정 입력·추천 | 입력 정규화와 typed rejection, 누락 patch·기존 값 보존, 명시적 제거, 실제 저장·재조회, 기존 버전·tenant·멱등성 경계 유지 | T-LED-011 |
+| LED-012 | Emulator·Client·E2E | item/monthly split·reconfigure·restore·merge/unmerge 저장소와 낙관적 Projection | 태그 상속/명시/빈 배열, 서로 겹치는 태그, baseDraft 변경, 연속 합치기, 합집합 10개 초과·서버 거절 | 파생 보존·원본별 복원, 합집합 중복 제거, 거절 시 원장·태그 무변경, 낙관적 변경 rollback | T-LED-012 |
 | SPL-001 | Domain·Emulator | item Split·restore | 1개, 0원 항목, 합계 불일치, 항목별 표시값, 두 번째 write 실패, 성공 후 원복 | 실패는 원본·claim 유지; 성공은 원본 superseded·파생 active와 증거 보존; 원복은 파생 제거·같은 원본 전체 필드 재활성화 | T-SPL-003 |
 | SPL-002 | Domain Unit | monthly Split date/sequence | 2개월, 1월 31일, 윤년 2월 | 2개 이상·월말 보정·순번 표시 | T-SPL-001, T-SPL-002 |
 | SPL-003 | Application·Emulator | Split collapse-monthly·captured cancel | group ID·index·count, 파생 항목 version map, 숨겨진 원본, 원본·항목 전체 metadata, 한 문서 version 경합, lineage 취소·replay | 클라이언트는 보이는 파생 version만 전송하고 서버가 원본 version·그룹 완전성을 검증; collapse는 같은 원본 복원, 취소는 원본·그룹 삭제와 claim cancelled, 경합은 그룹 전체 유지 | T-SPL-004, T-LED-003 |
@@ -453,8 +553,12 @@ Domain은 Firebase·React를 import하지 않습니다. 다른 기능은 `ledger
 | SEA-002 | Domain Unit | LedgerSearchPolicy | 설정 기반 모든 카드사 alias·유형, 끝 4자리, 카드사+정확 번호, x/별표 마스킹 | 특정 카드사 하드코딩 없이 복합 조건 모두 일치 | T-SEA-001 |
 | SEA-003 | Query Contract·Client | SearchLedger·LedgerSearchController | cursor/limit 두 page·scope 변경, A slow→B fast, close, logout·가구 변경, mutation 실패·성공 | bounded page 중복·누락 없음, cursor scope 고정, obsolete 응답 폐기, 성공 mutation 뒤 새 revision 재조회 | T-SEA-002 |
 | SEA-004 | Domain·Query Contract | LedgerSearchSummaryPolicy·SearchLedger | 여러 월·여러 page, 일치·불일치 카드, source window 변경·조회 한도 | 전체 검색 범위의 총·월별 건수와 금액, 부분 합계 성공 금지 | T-SEA-003 |
+| SEA-005 | Client·UI | 기존 Web 검색 원본 준비·matcher | 모달 열기, 입력, 같은 window 재사용, 닫기·session 전환 | 고정 debounce 없이 최신 입력 처리, 원본 공유, 닫힌 모달의 새 조회 없음 | T-PERF-SEARCH-001 |
+| SEA-006 | Contract·Client·UI·E2E | 태그 matcher·목록 chip·SearchModal·SearchResultList | 일반 부분 query, #전체 이름, #만 입력, 대소문자, 비슷한 태그·동일 memo, 여러 월, 저장·제거 후 갱신 | 정확 태그만 반환, 거래 한 번 합산, 전체·월별 건수/금액 일치, 기존 검색·세션 격리 유지 | T-SEA-004 |
 
 Ledger 요구사항의 Canonical 테스트 ID는 모두 위 추적 표와 계약 테스트 파일에 연결합니다. `describe.skip` 상태는 테스트 본문이 준비됐지만 목표 Input Port 구현과 연결되지 않았음을 뜻하며 통과로 간주하지 않습니다.
+
+태그 테스트의 실제 연결은 [요구사항 코드 근거](requirements.md#9-코드-근거)를 사용합니다. `T-LED-011`은 [서버 Policy 검사](../../../../../../functions/test/unit/expense-tags.test.ts), [폼 계약](../../../../../../web/src/__tests__/features/expenseTagsForm.contract.test.tsx), [read/command 매핑 계약](../../../../../../web/src/__tests__/features/ledgerTagsMapping.contract.test.ts)과 [Firebase Adapter 통합](../../../../../../functions/test/integration/firebase/firebase-finance-command-adapters.integration.test.ts)의 저장·재조회/거절 fixture로 검증합니다. `T-LED-012`는 같은 Firebase 통합의 태그 변환 4개 시나리오, [Web 낙관적 저장 계약](../../../../../../web/src/__tests__/features/ledgerExpenseServiceOptimistic.contract.test.ts), [실제 구조 변경 E2E](../../../../../../web/e2e/finance-structure.spec.ts)의 항목 분할 원복·기존 월 분할 재구성/취소·신규 월 분할·연속 합치기/해제의 태그 assertion으로 검증합니다. 일반 split/lineage suite의 통과만으로 태그 보존 검증을 대체하지 않습니다.
 
 ## 12. 미결정 사항과 구현 순서
 

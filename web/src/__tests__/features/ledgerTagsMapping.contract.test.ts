@@ -11,7 +11,7 @@ const result: LedgerTransactionCommandResult = {
   lifecycleState: 'active', aggregateVersion: 2,
 };
 
-describe('태그 조회 및 저장 응답 매핑', () => {
+describe('[T-LED-011][LED-011] 태그 조회 및 저장 응답 매핑', () => {
   test('조회는 태그 없는 기존 거래를 유지하고 저장된 태그를 정규화한다', () => {
     expect(mapExpenseReadData('legacy', document)).not.toHaveProperty('tags');
     expect(mapExpenseReadData('tagged', { ...document, tags: [' #2026부산여행 ', '', '2026부산여행'] }).tags)

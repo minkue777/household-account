@@ -1,8 +1,8 @@
 # 재무·접근 요구사항과 실제 E2E 경계
 
-2026-09-11 작성. 요구사항 ID가 테스트 이름에 있다는 사실만으로 전체 요구사항이 검증된 것으로 세지 않습니다. 아래 표는 실행되는 assertion 범위와 남는 경계를 구분합니다.
+2026-09-11 작성, 2026-09-18 태그 추적성 보완. 요구사항 ID가 테스트 이름에 있다는 사실만으로 전체 요구사항이 검증된 것으로 세지 않습니다. 아래 표는 실행되는 assertion 범위와 남는 경계를 구분합니다.
 
-최종 공식 `npm --prefix web run test:e2e`에서 이 문서 범위인 재무 23개, 접근 6개, 알림 딥링크 Chromium 2개·iPhone WebKit 2개가 모두 통과했습니다. native touch 연속 변경·취소도 재무 23개에 포함합니다. 전체 suite는 Chromium 86개·iPhone WebKit 3개, 총 89개 통과, 실패·skip·flaky 0개이며 프로덕션 Next 빌드와 실제 Firebase Emulator를 사용했습니다. 최종 보고서는 `web/quality-e2e.json`, 보존본은 `%TEMP%/household-final-web-e2e-20260911.json`입니다.
+2026-09-11 공식 `npm --prefix web run test:e2e`에서 이 문서 범위인 재무 23개, 접근 6개, 알림 딥링크 Chromium 2개·iPhone WebKit 2개가 모두 통과했습니다. native touch 연속 변경·취소도 재무 23개에 포함합니다. 당시 전체 suite는 Chromium 86개·iPhone WebKit 3개, 총 89개 통과, 실패·skip·flaky 0개이며 프로덕션 Next 빌드와 실제 Firebase Emulator를 사용했습니다. 보고서는 `web/quality-e2e.json`, 당시 보존본은 `%TEMP%/household-final-web-e2e-20260911.json`입니다. 이후 추가한 태그 검증의 실행 결과는 아래 별도 기록과 구분합니다.
 
 입력·수정·삭제·분할·합치기·온보딩·초대는 실제 Next UI → Firebase Auth Emulator → 운영 callable entry → 운영 Application/Firestore transaction → 공개 Read Contract → 실제 Client SDK → 브라우저 표시를 통과합니다. `test/reference`나 응답 대체를 사용하지 않습니다. 과거 카드 증거·지역화폐·대량 검색 문서는 조회 E2E의 사전조건으로만 Emulator에 준비하며 해당 생성 경계를 검증했다고 주장하지 않습니다.
 
@@ -18,6 +18,8 @@
 | LED-008 | `finance-structure`: 원자 구조변경 결과. `finance-ledger`: stale update/delete 무변경 | 모든 구조변경 동시성·transaction 중간 실패는 실제 Firebase UoW 통합 검증 |
 | LED-009 | `finance-structure`: 원본 superseded, source·creator, 같은 원본 ID 복원 | 결제 capture lineage 전체 조합은 capture integration |
 | LED-010 | `finance-currency-recurring`: 유형별 상세, typed/untyped 제외 | 유형이 다른 merge 거부·capture immutable metadata는 실제 서버 통합 |
+| LED-011 | `finance-tags`: 실제 지출 태그 입력·저장·재조회, 기존 태그 재사용, 마지막 태그 제거 후 저장·새로고침 | 한글 IME, 태그만 수정·미확정 입력 저장·수입 제외는 Web 폼 계약; 형식·10/11개·30/31자·구버전 요청과 기존 초과 값 보존은 Policy·Firebase 통합 |
+| LED-012 | `finance-structure`: 실제 UI로 입력한 태그의 항목 분할·원복, 신규/기존 월 분할·개월 변경·취소, 연속 drag 합치기의 중복 제거와 원본별 태그 복원 | 항목별 명시 태그·빈 배열, 합집합 한도 초과의 전체 무변경은 Firebase 통합. `finance-tags`는 구조 변환을 검증하지 않음 |
 | SPL-001 | `finance-structure`: 4,000+6,001 분할, 개별 카테고리, 원본 ID 복원 | 실패 주입·선택 조회 범위는 Firebase Store 통합 |
 | SPL-002 | `finance-structure`: 1월31일→2월28일→3월31일 | 윤년 등 날짜 policy 단위 검증 유지 |
 | SPL-003 | `finance-structure`: 그룹 연결·취소·원본 ID와 금액/날짜/메모 복원 | 중간 emission 타이밍은 Read Model 통합 |
@@ -31,6 +33,7 @@
 | SEA-003 | `finance-search-statistics`: 검색 변경 시 이전 결과 제거, mutation 재조회, 50+1 페이지 | 지연 응답 뒤 logout/가구 전환은 session 통합 검증 |
 | SEA-004 | `finance-search-statistics`: 전체·월별 합계, 첫50건에서51건 전체5,100원 | 10,000건 안전 상한과 운영 Listen 제한은 SDK 요청/실제 Query 통합 검증 |
 | SEA-005 | `finance-search-statistics`: 별도 검색 제출 없이 입력만으로 결과 | 임의 debounce 시간 부재는 production hook 타이머 검증 |
+| SEA-006 | `finance-tags`: 목록 chip 선택이 편집 없이 `#태그` 검색을 열고 2건·148,000원 표시, 태그 제거 후 새로고침하면 정확·부분 검색 모두 1건·120,000원 | 여러 월·유사 태그·같은 메모 제외·빈 `#`·대소문자 경계는 실제 matcher 계약, 실패 시 검색 projection 복구는 Web 저장 계약 |
 | CAT-001 | `finance-categories`: 실제 온보딩5개 순서·기본etc, 서버 catalog 확인 | 일부 카탈로그 재초기화·동시성은 Category Store 통합 |
 | CAT-002 | `finance-categories`: 모바일360px 실제 geometry/hit-test, 16색, 이름/색/예산 수정·새로고침·archive·과거 참조, 음수 예산 거절. 실제 CDP touch 연속 순서 변경·취소·canonical/projection 버전·새로고침 보존 독립 테스트 추가 | 실제 Android QuickEdit 표시는 Android instrumentation. 실제 색상 사용 여부 조회는 운영 관리 절차 |
 | CAT-003 | `finance-categories`: 기본 카테고리 변경→새 지출 선택, 기본 archive 거절과 무변경, 다른 archive 신규 선택 제외; 정기 참조 remap | 가맹점 규칙 참조 remap은 payment-configuration E2E와 연결 |
@@ -54,6 +57,22 @@
 | STAT-004 | 같은 파일: 카테고리 상세에서 금액/카테고리 수정·삭제,총합 수렴 | 가맹점 규칙 기억하기는 merchant-rule E2E와 연결 |
 | STAT-005 | 삭제 후 NoData와 날짜 오류 화면 구분 | 실제 공급자 장애·자산0원 구분은 reporting별 테스트 |
 | STAT-006 | 기간별 다른 원천·페이지 결과 검증 | stale actor/request revision·읽기 상한은 production Query 단위/통합 |
+
+## 지출 태그의 실행 근거
+
+`LED-011`·`LED-012`·`SEA-006`은 각각 `T-LED-011`·`T-LED-012`·`T-SEA-004`에 연결합니다. `tools/requirements/executable-tests.mjs`는 실제 `test`/`it` 또는 이를 감싼 `describe` 제목에서 ID를 추출합니다. 아래 근거의 해당 실행 사례 제목에 ID를 직접 기록했으며 주석이나 fixture만으로 연결하지 않습니다.
+
+| 요구사항 / Canonical ID | 실제 실행 근거 | 관찰하는 결과 |
+|---|---|---|
+| LED-011 / T-LED-011 | [태그 Policy](../../functions/test/unit/expense-tags.test.ts), [태그 폼](../../web/src/__tests__/features/expenseTagsForm.contract.test.tsx), [Read/응답 매핑](../../web/src/__tests__/features/ledgerTagsMapping.contract.test.ts), [명령 DTO](../../web/src/__tests__/features/ledgerCommands.contract.test.ts), [저장 projection](../../web/src/__tests__/features/ledgerExpenseServiceOptimistic.contract.test.ts), [Firebase 저장](../../functions/test/integration/firebase/firebase-finance-command-adapters.integration.test.ts), [여행 태그 E2E](../../web/e2e/finance-tags.spec.ts) | 정규화·추천·IME·입력 한도, 저장 중인 입력과 태그만 수정, 생략은 보존·빈 배열은 제거, 수입 UI 제외, 저장 문서·응답·재조회, 저장 거부 시 이전 태그 복구 |
+| LED-012 / T-LED-012 | [Firebase 구조 변환](../../functions/test/integration/firebase/firebase-finance-command-adapters.integration.test.ts)의 태그 변환 4개 사례, [낙관적 합치기](../../web/src/__tests__/features/ledgerExpenseServiceOptimistic.contract.test.ts)의 태그 사례, [구조 변경 E2E](../../web/e2e/finance-structure.spec.ts)의 태그가 있는 4개 흐름 | 항목 태그 상속·명시 덮어쓰기·원본 복원, 월 분할·재구성·취소, 중복 없는 합집합·원본별 복원, 한도 초과 합치기의 원본 무변경. 브라우저 E2E는 정상 변환 경로를 검증하며 입력 한도 실패 조합은 Firebase 통합 근거로 구분 |
+| SEA-006 / T-SEA-004 | [검색 가시성](../../web/src/__tests__/features/ledgerSearchVisibility.contract.test.ts)의 태그 검색 사례, [여행 태그 E2E](../../web/e2e/finance-tags.spec.ts) | 일반 검색의 태그 부분 일치, `#태그` 정확 일치, 여러 월의 동일 태그 50,000원 합계와 유사 태그·메모 제외, chip 클릭·전체 건수/금액·태그 제거 후 결과 갱신 |
+
+2026-09-18 태그 변경 검증에서 `finance-tags.spec.ts` 1개 E2E, 서버 회귀 106건, Firebase 통합 21건(태그 저장·변환 5건 포함), Web 회귀 세 묶음 18·76·29건이 통과했습니다. 이 수치는 함께 실행한 회귀 사례 수이며 태그 수용 조건이나 고유 요구사항의 개수가 아닙니다. 이후 `finance-structure.spec.ts`의 기존 4개 흐름에 태그 입력과 저장·복원 assertion을 추가하고 `finance-tags.spec.ts`와 함께 Chromium·실제 Firebase Emulator에서 선택 실행하여 5개 모두 통과했습니다. 실행 명령은 아래와 같습니다. 문서·ID 연결 자체를 실행 통과로 세지 않습니다.
+
+```text
+node functions/scripts/run-with-emulator-secret.mjs node tools/e2e/firebase-emulators.mjs "npm --prefix web run test:e2e:playwright -- finance-tags.spec.ts finance-structure.spec.ts --project chromium --grep T-LED-01"
+```
 
 ## Access / Household
 

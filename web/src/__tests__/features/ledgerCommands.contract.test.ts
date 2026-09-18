@@ -9,7 +9,7 @@ import { ledgerCommands } from '@/features/ledger/application/ledgerCommands';
 describe('Ledger Web command DTO', () => {
   beforeEach(() => execute.mockReset());
 
-  test('태그 수정은 생략과 전체 제거를 구분하며 저장 전에 표기를 정리한다', async () => {
+  test('[T-LED-011][LED-011] 태그 수정은 생략과 전체 제거를 구분하며 저장 전에 표기를 정리한다', async () => {
     await ledgerCommands.update('household-1', 'expense-1', 1, { memo: '메모' });
     await ledgerCommands.update('household-1', 'expense-1', 2, { tags: [' #2026부산여행 ', '2026부산여행'] });
     await ledgerCommands.update('household-1', 'expense-1', 3, { tags: [] });
@@ -18,7 +18,7 @@ describe('Ledger Web command DTO', () => {
     ]);
   });
 
-  test('수동 지출과 월 분할은 태그를 보내며 수입에는 지출 태그를 넣지 않는다', async () => {
+  test('[T-LED-011][LED-011] 수동 지출과 월 분할은 태그를 보내며 수입에는 지출 태그를 넣지 않는다', async () => {
     const transaction = { merchant: '부산식당', amount: 30000, category: 'food', date: '2026-09-18', tags: [' #부산 '] };
     await ledgerCommands.record('household-1', { ...transaction, transactionType: 'expense' });
     await ledgerCommands.record('household-1', { ...transaction, transactionType: 'income' });

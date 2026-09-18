@@ -25,7 +25,8 @@
 
 - 지출·수입의 등록·조회·수정·삭제
 - 월·일·카테고리별 원장 조회와 합계
-- 가맹점·메모·카드 정보 검색
+- 지출의 여행·행사 등 목적 태그 입력·표시·재사용
+- 가맹점·메모·카드 정보·지출 태그 검색
 - 한 거래의 항목 분할과 월 단위 분할
 - 월 분할 그룹 조회·재구성·취소
 - 여러 지출의 합치기와 합치기 해제
@@ -40,18 +41,21 @@
 - 정기지출 일정과 자동 생성 시점 결정
 - 푸시 대상 계산과 전송
 - 자산·잔액·배당 원장
+- 기존 메모의 자동 태그 변환, 별도 태그 마스터·전역 태그 관리, 태그 일괄 수정·이름 변경·전용 통계, 수입 및 Android 네이티브 QuickEdit 태그 UI
 
 ## 3. 소유 데이터
 
 | 데이터 | 소유 범위 | 비고 |
 |---|---|---|
-| `households/{householdId}/ledgerTransactions/{transactionId}` | 지출·수입 본문, 날짜·시각, 금액, 가맹점, 메모, 카테고리 참조, 카드 표시 정보 | Web·Functions가 읽고 쓰는 단일 원본입니다. 기존 `expenses`는 이관 대조·복구 자료로 보존하며 일상 조회·이중 쓰기에서 제외합니다. |
+| `households/{householdId}/ledgerTransactions/{transactionId}` | 지출·수입 본문, 날짜·시각, 금액, 가맹점, 메모, 지출 목적 태그 `tags`, 카테고리 참조, 카드 표시 정보 | Web·Functions가 읽고 쓰는 단일 원본입니다. 기존 `expenses`는 이관 대조·복구 자료로 보존하며 일상 조회·이중 쓰기에서 제외합니다. |
 | 분할 메타데이터 | 월 분할 그룹 ID·순번·전체 개월 수 | 같은 원장 트랜잭션 안에서만 생성·변경합니다. |
-| 합치기 복원 데이터 | `mergedFrom`의 원본별 가맹점·금액·카테고리·메모 | 날짜·시간·거래 유형·카드 정보는 합친 거래의 공통 값을 사용합니다. |
+| 합치기 복원 데이터 | 원본 거래와 `mergedFrom`의 원본별 가맹점·금액·카테고리·메모·태그 | 태그는 원본별 값으로 복원합니다. 날짜·시간·거래 유형·카드 정보는 합친 거래의 공통 값을 사용합니다. |
 | 명시적 가구원 알림 요청 | `requestedAt`, `requesterMemberId` | 실제 수신자·전달은 알림 모듈이 담당합니다. legacy `notifyPartnerAt/By`는 전환 Mapper에서만 읽습니다. |
 | 생성 출처·주체 | 업무 `source`, `originChannel`, `creatorMemberId`, 거래 유형 | 필수 공통 계약으로 관리하며 legacy `createdBy`는 Mapper에서만 읽습니다. `source`와 입력 채널을 한 문자열로 겸용하지 않습니다. |
 
 카테고리 이름·예산, 카드 등록 정보, 가맹점 규칙은 참조할 뿐 소유하지 않습니다.
+
+태그는 거래에 저장하는 선택 문자열 배열이며 별도 태그 ID나 마스터 문서를 만들지 않습니다. 추천은 현재 가구에서 이미 로드한 월 원장과, 연 합계 표시로 로드한 경우의 연 원장 및 열린 검색 화면의 결과에 있는 태그를 재사용합니다. 추천을 위해 전체 기간 원장을 추가 조회하지 않으며 다른 월·연의 모든 태그가 항상 추천되는 것은 아닙니다.
 
 ## 4. 공개 계약·의존 모듈
 
@@ -100,6 +104,8 @@
 | LED-008 | 결함 | 원본을 교체하거나 여러 문서를 변경하는 split·reconfigure·collapse·merge·unmerge·capture lineage cancel은 서버 Application의 단일 Unit of Work에서 대상 전체를 다시 읽고 expected version map을 검증한 뒤 전부 commit하거나 전부 rollback한다. | 중간 실패·누락·타 가구 ID·한 문서 version 불일치가 있으면 write 0건과 typed `NotFound`·`Forbidden`·`Conflict`를 반환한다. 일반 Update와 구조 변경이 경합해도 서버 transaction에서 먼저 version 검증·commit한 하나만 성공하고 stale 요청은 자동 병합·덮어쓰기하지 않는다. 취소 시 다른 lineage 복원도 같은 UoW에 포함한다. Merge·Unmerge와 merge lineage 취소는 이 계약을 구현했으며, 남은 split·reconfigure·collapse 경로의 client 계획·순차 쓰기를 계속 제거해야 한다. | [expenseService](../../../../../../web/src/lib/expenseService.ts), [monthlySplitActions](../../../../../../web/src/lib/utils/monthlySplitActions.ts), [DEC-041](../../../../governance/decisions.md#dec-041), [DEC-055](../../../../governance/decisions.md#dec-055) | Application, Emulator, E2E |
 | LED-009 | 결함 | split·merge·unmerge 등 구조 변경은 원본 거래를 일반 조회·집계에서 제외되는 `superseded` 상태로 보존하고, 업무 `source`, `originChannel`, `creatorMemberId`, 카드 증거와 immutable capture lineage를 유지하며 dedup claim을 다시 열거나 복제하지 않는다. | 사용자가 명시적으로 변경한 금액·날짜·표시 필드만 바꾼다. Merge는 기존 target/source를 수정·삭제하지 않고 새 ID의 aggregate를 만들며 두 원본을 `superseded`로 보존한다. lineage는 일반 수정 API로 변경할 수 없고 원복은 보존된 같은 ID 원본을 재활성화한다. 결제 취소가 확정되면 DEC-041에 따라 대상 lineage의 superseded 원본과 모든 파생 지출은 삭제한다. 재병합은 DEC-056에 따라 merge ancestry만 최종 non-merge leaf까지 평탄화하고 중간 merge node는 감사 이력으로 보존한다. | [expenseService](../../../../../../web/src/lib/expenseService.ts), [monthlySplitActions](../../../../../../web/src/lib/utils/monthlySplitActions.ts), [DEC-013](../../../../governance/decisions.md#dec-013), [DEC-041](../../../../governance/decisions.md#dec-041), [DEC-056](../../../../governance/decisions.md#dec-056) | U, Application, Emulator |
 | LED-010 | 목표 명세 | 지역화폐 결제 거래는 검증된 capture의 `localCurrencyType`을 immutable metadata로 저장하고, 지역화폐 상세 Query는 홈 카드에서 전달받은 한 유형만 조회한다. | 상세 화면에 전체·다른 유형 전환 UI를 두지 않는다. 유형 누락·`legacy-unknown` 거래는 일반 원장에 보존하되 특정 유형 상세에서 제외한다. 분할은 유형을 보존하고 서로 다른 유형 또는 typed/untyped 거래의 merge는 전체 Conflict다. | [DEC-057](../../../../governance/decisions.md#dec-057), [expenseService](../../../../../../web/src/lib/expenseService.ts) | U, Contract, I, UI |
+| LED-011 | 현재 명세 | 지출 추가·수정에서 선택 태그를 직접 입력하거나 기존 추천에서 고르고, 선택한 태그를 개별 제거할 수 있다. 메모 아래에 용도를 안내하고 선택 태그·목록·검색 결과에 파란 chip으로 표시한다. Enter 또는 추가 버튼으로 태그를 확정하며 지출 저장 시 아직 입력 중인 태그도 함께 반영한다. 태그만 바꿔도 저장하고 마지막 태그 제거는 `tags: []`로 전달한다. | 앞뒤 공백과 선행 `#`를 제거한 뒤 빈 값·동일 문자열 중복을 제거하며 최초 순서·철자·내부 공백을 유지한다. 신규 입력·명시적 태그 변경은 정규화 후 최대 10개, 각 30 Unicode code point이며 잘못된 형식·길이·개수는 `TAGS_INVALID`·`TAG_TOO_LONG`·`TOO_MANY_TAGS`로 무변경 거부한다. 한글 IME 조합 Enter는 확정하지 않는다. 수입 추가·수정에는 태그 UI와 태그 전송을 제공하지 않는다. 태그 없는 기존 거래를 허용하고 Update의 태그 생략은 보존, 명시적 빈 배열만 제거로 해석한다. 저장된 문자열 태그는 현재 입력 한도를 초과해도 조회·다른 필드 수정에서 잘라내거나 비우지 않는다. 추천 범위는 3절의 이미 로드된 원장·검색 결과로 한정하고 메모는 자동 변환하지 않는다. | [ExpenseTagInput](../../../../../../web/src/components/expense/ExpenseTagInput.tsx), [태그 저장 폼](../../../../../../web/src/components/expense/ExpenseEditModal.tsx), [태그 Domain Policy](../../../../../../functions/src/contexts/household-finance/ledger/domain/policies/expenseTags.ts), [태그 Read Mapper](../../../../../../web/src/features/ledger/application/ledgerExpenseMapping.ts) | U, C, I, UI, E2E; T-LED-011 |
+| LED-012 | 현재 명세 | 항목 분할과 기존·신규 월 분할은 원본 또는 입력 draft의 태그를 파생 거래에 보존한다. 항목 draft에서 태그를 생략하면 원본을 상속하고 명시한 배열은 해당 항목에 적용한다. 월 분할 재구성은 보존 원본의 태그를 새 그룹에 적용하고 항목·월 분할 되돌리기는 같은 원본 ID와 원본 태그를 복원한다. 합치기는 현재 선택한 거래들의 태그를 중복 없이 합치되 각 leaf 원본의 태그도 보존하며, 합치기 해제는 각 원본의 태그를 복원한다. | 태그 합집합이 신규 입력의 개수·길이 제한을 넘으면 잘라 저장하지 않고 전체 합치기를 typed failure로 거부한다. 구조 변경의 version·원자성 계약을 따르며 실패는 원본과 태그를 변경하지 않는다. 합친 거래에서 나중에 수정한 태그를 해제 시 원본 전체에 덮어쓰지 않는다. 태그 보존은 기존 금액·날짜·카드·lineage 정책을 변경하지 않으며 월 분할 내림 금액은 DEC-001, 합치기 해제 공통 표시 필드는 DEC-010을 따른다. | [항목 분할·복원](../../../../../../functions/src/contexts/household-finance/ledger/application/commands/itemSplitRestorationService.ts), [월 분할 수명주기](../../../../../../functions/src/contexts/household-finance/ledger/application/commands/monthlySplitLifecycleService.ts), [합치기·해제](../../../../../../functions/src/contexts/household-finance/ledger/application/commands/transformationLineageService.ts), [Web 낙관적 합치기](../../../../../../web/src/lib/expenseService.ts) | U, C, I, E2E; T-LED-012 |
 
 ### 항목 분할·월 분할·합치기
 
@@ -118,13 +124,14 @@
 
 | ID | 상태 | 요구사항 | 경계·예외 | 근거 | 테스트 |
 |---|---|---|---|---|---|
-| SEA-001 | 현재 명세 | 같은 가구·거래 유형에서 가맹점, 메모, 카드 정보로 검색하고 최신 날짜순으로 반환한다. 메인 검색 화면은 기간 입력 없이 전체 기간을 검색한다. | 빈 검색어는 빈 결과를 반환한다. 조회 실패는 결과 없음으로 표시하지 않고 일반 오류 안내만 표시하며 별도 재시도 버튼이나 내부 오류 코드를 노출하지 않는다. 거래 수정 후 같은 검색어의 재조회 실패는 기존 결과를 유지하지만 검색어를 바꾸면 이전 결과를 제거한다. | [expenseService](../../../../../../web/src/lib/expenseService.ts), [SearchModal](../../../../../../web/src/components/search/SearchModal.tsx) | U, I, E2E |
+| SEA-001 | 현재 명세 | 같은 가구·거래 유형에서 가맹점, 메모, 카드 정보와 지출 태그로 검색하고 최신 날짜순으로 반환한다. 메인 검색 화면은 기간 입력 없이 전체 기간을 검색한다. | 빈 검색어는 빈 결과를 반환한다. 조회 실패는 결과 없음으로 표시하지 않고 일반 오류 안내만 표시하며 별도 재시도 버튼이나 내부 오류 코드를 노출하지 않는다. 거래 수정 후 같은 검색어의 재조회 실패는 기존 결과를 유지하지만 검색어를 바꾸면 이전 결과를 제거한다. | [expenseService](../../../../../../web/src/lib/expenseService.ts), [SearchModal](../../../../../../web/src/components/search/SearchModal.tsx) | U, I, E2E |
 | SEA-002 | 현재 명세 | 지원하는 모든 카드사·결제수단에 대해 거래 생성 당시 보존한 표준 라벨·카드 유형·마지막 네 자리 증거를 검색 대상으로 포함한다. 카드사명·별칭·끝 네 자리 단독 검색, `카드사(4자리)` 형식과 x·별표 마스킹 검색을 지원한다. | 특정 카드사를 하드코딩하지 않는다. `국민카드(2972)`는 카드사와 네 자리가 모두 일치해야 하고, `삼성카드(3***)`는 카드사와 번호 패턴이 모두 일치해야 한다. 이후 카드 설정의 끝 번호 수정·퇴역은 과거 거래의 검색 증거를 바꾸지 않는다. | [expenseService](../../../../../../web/src/lib/expenseService.ts), [DEC-059](../../../../governance/decisions.md#dec-059) | U |
 | SEA-003 | 현재 명세 | 검색 화면은 `Actor session generation + householdId + transactionType + normalized query + request revision`이 현재 값과 일치하는 최신 응답만 표시한다. 결과는 전체 기간을 포함하고 펼친 월의 모든 거래를 바로 표시한다. | 검색어·유형 변경, 닫기, logout·가구 변경 뒤 도착한 응답은 폐기한다. mutation 후에는 Command 성공을 기다린 뒤 같은 검색 세션에 한해 재조회하며 기존 목록·펼친 월·스크롤을 유지한다. 해당 월의 결과가 사라지면 최근 월로 이동하지 않고 접는다. | [SearchModal](../../../../../../web/src/components/search/SearchModal.tsx), [expenseService](../../../../../../web/src/lib/expenseService.ts) | U, C, UI, E2E |
 | SEA-004 | 현재 명세·목표 보완 | 검색 결과의 전체 건수·금액과 월별 건수·금액을 같은 전체 결과에서 계산한다. 펼친 월은 건수와 실제 거래 목록이 일치하며 더보기 조작을 요구하지 않는다. | 서버 원천은 문서 ID cursor로 요청당 5,000건씩 끝까지 읽고 전체 완료 후 공개한다. 10,000건 이상도 검색 가능하다. 원천 실패·반복 cursor·source window 변경은 부분 결과나 합계를 성공으로 표시하지 않는다. | [SearchResultList](../../../../../../web/src/components/search/SearchResultList.tsx) | U, C, I, UI |
 | SEA-005 | 현재 명세 | 사용자가 검색어를 입력하면 UI가 임의의 고정 debounce 시간을 추가하지 않고 즉시 현재 검색 계약을 실행한다. | 검색 모달을 명시적으로 열었을 때 해당 window의 서버 원본을 준비하고 입력은 같은 진행 중 조회 또는 완료 원본을 공유한다. 월 펼침은 추가 서버 조회 없이 메모리의 해당 월만 그린다. 홈 진입이나 닫힌 모달은 검색 원본을 조회하지 않는다. 닫기·세션 전환과 Command 성공 후에는 기존 window를 폐기한다. 사전 준비 실패는 실제 검색 때 일반 오류로 알리며 숨은 재시도를 추가하지 않는다. | [SearchModal](../../../../../../web/src/components/search/SearchModal.tsx) | U, UI |
+| SEA-006 | 현재 명세 | 기존 지출 검색의 일반 검색어는 태그 이름의 부분 일치도 포함한다. `#태그이름`은 앞뒤 공백·선행 `#`를 정리하고 대소문자를 구분하지 않는 태그 이름 전체 일치로만 검색한다. 지출 목록의 태그 chip을 누르면 해당 `#태그이름`으로 기존 검색을 열고, 같은 가구의 전체 기간에서 일치한 지출의 건수·금액과 월별 합계를 표시한다. | `#`만 입력하면 빈 결과이며 `#부산`은 `2026부산여행`이나 같은 문구가 있는 메모·가맹점·카드와 일치하지 않는다. chip 선택은 거래 편집을 함께 열지 않는다. 태그 추가·삭제는 기존 검색 Projection과 성공 후 재조회에 반영하고 실패하면 원래 태그와 결과로 복구한다. 태그 하나가 여러 번 입력됐더라도 거래 금액은 한 번만 합산한다. 기존 카드 검색·거래 유형·상태·가구 격리와 SEA-003·SEA-004의 최신 응답·전체 결과 계약을 유지한다. | [검색 matcher](../../../../../../web/src/lib/expenseService.ts), [태그 chip](../../../../../../web/src/components/expense/ExpenseTags.tsx), [검색 연결](../../../../../../web/src/components/home/LedgerPage.tsx), [검색 합계](../../../../../../web/src/components/search/SearchResultList.tsx) | U, C, UI, E2E; T-SEA-004 |
 
-검색어 정규화·정확한 카드 검색 조건은 검색 요청마다 한 번 준비하고, 전체 원천 필터와 낙관적 결과 필터에서 재사용합니다. 고정 카드사 별칭은 한 번 구축한 조회표를 사용합니다. 거래별 검색 필드는 캐시하지 않으며 매번 현재 메모·가맹점·카드 증거를 읽으므로 저장 후 최신성 및 기존 마스킹·별칭 일치 규칙은 유지됩니다.
+검색어 정규화·정확한 카드·태그 검색 조건은 검색 요청마다 한 번 준비하고, 전체 원천 필터와 낙관적 결과 필터에서 재사용합니다. 고정 카드사 별칭은 한 번 구축한 조회표를 사용합니다. 거래별 검색 필드는 캐시하지 않으며 매번 현재 메모·가맹점·카드 증거·태그를 읽으므로 저장 후 최신성 및 기존 마스킹·별칭 일치 규칙은 유지됩니다.
 
 ## 6. 모듈 결함
 
@@ -149,6 +156,7 @@ DEC-001의 의도적인 월 분할 나머지 미반영은 결함이 아닙니다
 - [DEC-056: 재병합 merge 계보 평탄화](../../../../governance/decisions.md#dec-056) — merge ancestry는 non-merge leaf 원본까지 펼치고 중간 merge node는 감사 이력으로만 보존합니다.
 - [DEC-057: 선택 지역화폐 상세 범위](../../../../governance/decisions.md#dec-057) — 홈 카드가 선택한 한 유형만 상세 조회하고 별도 전환 UI와 legacy 임의 귀속을 두지 않습니다.
 - [DEC-065: 일반 거래 논리 삭제와 운영 정리](../../../../governance/decisions.md#dec-065) — 일반 삭제는 복구 가능한 `deleted` 전이이며 정상 조회에서 즉시 제외하고, 자동 영구 삭제와 일반 사용자 복구를 두지 않습니다.
+- [DEC-075: 지출 목적 태그와 기존 검색 통합](../../../../governance/decisions.md#dec-075) — 지출 태그의 입력·호환·구조 변경 보존과 일반 부분 검색·`#` 전체 일치를 `LED-011`, `LED-012`, `SEA-006`에 반영합니다.
 
 ## 8. 모듈 테스트 시나리오
 
@@ -164,6 +172,8 @@ DEC-001의 의도적인 월 분할 나머지 미반영은 결함이 아닙니다
 | T-LED-008 | 목표 | 모든 허용 필드 정상 patch와 active 거래 delete, 대상 없음·타 가구·0원·stale version·이미 deleted·저장 실패 / Update·Delete / 정상 삭제는 본문·provenance를 유지한 deleted 상태·deletedAt·version·Event를 확정하고 즉시 목록·검색·집계에서 사라지며, 나머지는 NotFound·Conflict·ValidationError·RetryableFailure와 write 0건 | LED-001, LED-005, SYS-007, DEC-065 |
 | T-LED-009 | 목표 | 여러 날짜·월·연·카테고리의 active/inactive 거래와 원천 실패 / 합계 조회 / 선택 범위 목록·월·연·카테고리 합계가 일치하고 실패를 0원 성공으로 축약하지 않음 | LED-006 |
 | T-LED-010 | 목표 | expense·income, 인증 requester와 creator 동일·상이, 중복 key / 알림 요청 / expense에 requester·시각과 Event를 한 번 기록하고 income은 거부하며 실제 대상·전달 결과는 저장 성공과 분리 | LED-007, DEC-013, DEC-022 |
+| T-LED-011 | 현재 명세·호환 | 태그 생략·빈 배열·공백·선행 해시·중복·잘못된 형식·10/11개·30/31자·기존 초과 태그, 추천 후보·한글 조합 입력·수입 / 지출 추가·태그만 수정·다른 필드만 수정·태그 제거·수입 폼 / 정규화한 태그와 미확정 입력 저장, 입력 한도 오류는 무변경, 기존 값과 생략 응답은 보존·명시한 빈 배열은 제거, 추천 재사용과 IME 안전성 유지, 수입 태그 UI·전송 없음 | LED-011 |
+| T-LED-012 | 현재 명세 | 태그 있는 원본·태그 생략/명시 항목 draft, 서로 겹치는 태그의 여러 거래, 합집합 한도 초과·서버 거부 / 항목·월 분할과 재구성·복원·합치기·해제 / 파생은 원본 태그 상속 또는 명시 draft 적용, 합친 거래는 중복 없는 합집합, 복원 거래는 각 원본 태그 유지, 한도 초과와 실패는 원본·태그 무변경 및 Web 낙관적 변경 rollback | LED-012 |
 | T-SPL-001 | 특성화 | 10,000원과 3개월 / 월 분할 / 각 3,333원이고 합계 9,999원으로 나머지 1원 미반영 | SPL-002, SPL-005, DEC-001 |
 | T-SPL-002 | 특성화 | 1월 31일 거래 / 3개월 분할 / 2월 말일, 3월 31일로 보정 | SPL-002 |
 | T-SPL-003 | 목표 | 항목 1개·0원·합계 불일치, 정상 항목별 표시값, 저장 실패, 성공 뒤 원복 / 항목 분할·복원 / 잘못된 입력과 실패는 원본·claim 유지, 성공은 원본 superseded·파생 active와 불변 증거 보존, Web 목록은 원본과 파생 사이에 빈 상태를 방출하지 않으며 원복은 파생 제거·같은 원본 ID와 전체 필드 재활성화 | SPL-001, LED-008, LED-009, SYS-007 |
@@ -176,6 +186,7 @@ DEC-001의 의도적인 월 분할 나머지 미반영은 결함이 아닙니다
 | T-SEA-001 | 현재 명세 | 대소문자·공백이 다른 가맹점, 메모, 설정 기반 모든 카드사 별칭·유형·끝 네 자리·정확/별표/x 마스킹, 빈 query, 기간 양끝, 타 가구·유형·상태 / 검색 / 같은 범위 일치만 날짜·시각·ID 최신순, 빈 query는 NoData, 카드사+번호 조건은 모두 일치 | SEA-001, SEA-002 |
 | T-SEA-002 | 현재 명세 | 50건 이상 여러 월, 느린 A→빠른 B, modal close·logout, 검색 결과 mutation 실패·성공 / 조회·월 펼침·수정 / 모든 월의 전체 거래를 바로 표시하고 최신 revision만 반영, Command 성공 뒤 재조회에도 펼친 월·스크롤 유지, 이전 검색에서 시작한 저장의 늦은 완료는 새 검색을 덮지 않음 | SEA-003 |
 | T-SEA-003 | 현재 명세·목표 | `삼성카드(3***)`에 여러 월의 일치·불일치 거래, 10,000건 이상 원천과 중간 페이지 실패 / 검색 / 카드사·번호가 모두 일치한 전체 건수·금액과 월별 합계를 표시하고 불완전 조회의 부분 합계를 공개하지 않음 | SEA-002, SEA-004 |
+| T-SEA-004 | 현재 명세 | 월을 가로지르는 같은 여행 태그·비슷한 태그·태그와 같은 메모·중복 태그, 빈 `#`, 대소문자·앞뒤 공백, 태그 수정 성공·실패 / 일반 부분 검색·`#` 전체 일치·목록 chip 선택·태그 제거 뒤 새로고침 / 일반 검색은 태그를 포함하고 `#` 검색은 정확한 태그 지출만 한 번씩 합산, chip은 편집 없이 검색을 열며 전체·월별 건수와 금액이 일치, 저장 성공은 결과 갱신·실패는 복구 | SEA-001, SEA-004, SEA-006 |
 | T-PERF-SEARCH-001 | 목표 | 검색 모달과 입력 가능한 검색어 / 검색어 입력 / 300ms 같은 고정 timer 없이 즉시 최신 request revision의 검색을 시작하고 이전 결과는 표시하지 않음 | SEA-003, SEA-005 |
 
 ## 9. 코드 근거
@@ -185,6 +196,9 @@ DEC-001의 의도적인 월 분할 나머지 미반영은 결함이 아닙니다
 - [거래 서비스](../../../../../../web/src/lib/expenseService.ts)
 - [거래 폼 규칙](../../../../../../web/src/lib/utils/expenseForm.ts)
 - [거래 표시 규칙](../../../../../../web/src/lib/utils/ledgerDisplay.ts)
+- [태그 정규화](../../../../../../web/src/lib/utils/expenseTags.ts)
+- [태그 입력과 추천](../../../../../../web/src/components/expense/ExpenseTagInput.tsx)
+- [태그 chip 표시와 검색 선택](../../../../../../web/src/components/expense/ExpenseTags.tsx)
 - [월 분할 동작](../../../../../../web/src/lib/utils/monthlySplitActions.ts)
 - [월 분할 Domain Policy](../../../../../../functions/src/contexts/household-finance/ledger/domain/policies/monthlySplit.ts)
 - [월 분할 계산](../../../../../../web/src/lib/utils/splitMonths.ts)
@@ -198,4 +212,11 @@ DEC-001의 의도적인 월 분할 나머지 미반영은 결함이 아닙니다
 
 - [Android 원장 Command Client](../../../../../../android/app/src/main/java/com/household/account/ledger/HouseholdCommandClient.kt)
 - [Functions 원장 Command 입력](../../../../../../functions/src/bootstrap/commands/ledgerHouseholdCommandHandlers.ts)
+- [Functions 태그 검증·기존 값 읽기 정책](../../../../../../functions/src/contexts/household-finance/ledger/domain/policies/expenseTags.ts)
 - [Functions 알림 Outbox consumer](../../../../../../functions/src/bootstrap/firebaseNotificationOutbox.ts)
+
+### 태그 요구사항의 검증 관찰 지점
+
+- `T-LED-011`: [태그 Policy 검사](../../../../../../functions/test/unit/expense-tags.test.ts)는 정규화·입력 한도·기존 초과 값 읽기와 Update 생략/빈 배열 결과를 관찰합니다. [폼 계약](../../../../../../web/src/__tests__/features/expenseTagsForm.contract.test.tsx)은 추천·IME·입력 중 저장·수입 UI 제외를, [Read/Command 매핑 계약](../../../../../../web/src/__tests__/features/ledgerTagsMapping.contract.test.ts)은 이전 응답 호환과 명시적 제거를 관찰합니다. [Firebase 원장 Command Adapter 검사](../../../../../../functions/test/integration/firebase/firebase-finance-command-adapters.integration.test.ts)의 태그 저장·재조회 시나리오는 저장값과 입력 거부 시 무변경, 한도 초과 기존 태그의 메모 수정 후 보존을 직접 확인합니다.
+- `T-LED-012`: [Firebase 원장 Command Adapter 검사](../../../../../../functions/test/integration/firebase/firebase-finance-command-adapters.integration.test.ts)의 항목 분할, 월 분할·재구성·해제, 합치기·해제, 한도 초과 합치기 시나리오는 최종 원본·파생 거래의 태그와 typed 결과를 직접 확인합니다. [Web 낙관적 저장 계약](../../../../../../web/src/__tests__/features/ledgerExpenseServiceOptimistic.contract.test.ts)은 합집합·복원 snapshot 및 서버 거부 시 rollback을 관찰합니다. [구조 변경 E2E](../../../../../../web/e2e/finance-structure.spec.ts)는 실제 태그 입력부터 항목·월 분할·재구성·원복과 연속 합치기·원본별 해제의 정상 경로를 확인합니다. 일반 월 분할·계보 계약 suite의 통과만으로 태그 보존 검증을 대체하지 않습니다.
+- `T-SEA-004`: [검색 가시성 계약](../../../../../../web/src/__tests__/features/ledgerSearchVisibility.contract.test.ts)은 부분·전체 일치와 여러 월의 태그 결과를, [여행 태그 E2E](../../../../../../web/e2e/finance-tags.spec.ts)는 저장·추천 재사용·chip 검색·합계·태그 제거 후 새로고침 결과를 관찰합니다. 테스트 실행 여부와 성공 결과는 해당 검증 실행 기록에서 별도로 확인하며 문서 등록 자체를 통과로 세지 않습니다.

@@ -2,18 +2,19 @@
 
 > 문서 유형: Business Bounded Context  
 > 소유 기능 모듈: 거래 원장, 카테고리·예산, 정기 거래, 지역화폐  
-> 소유 요구사항: 40개  
+> 소유 요구사항: 43개  
 > 목표 구조: [목표 Clean Architecture 설계](../../../architecture/target-clean-architecture.md#5-bounded-context와-기능-모듈)
 
 ## 1. 책임과 경계
 
 Household Finance Context는 **가구의 일상적인 금전 기록과 분류·계획·지역화폐 최신 잔액**을 관리한다. 거래 원장을 Canonical 재무 기록으로 두고, 카테고리 카탈로그, 조회 시 계산하는 월 예산, 정기 거래 계획, 지역화폐 잔액을 독립 경계로 구성한다.
 
-이 문서는 Context 수준의 경계와 상호작용을 정리한다. 40개 상세 요구사항은 아래 네 기능 문서가 한 번씩만 소유한다.
+이 문서는 Context 수준의 경계와 상호작용을 정리한다. 43개 상세 요구사항은 아래 네 기능 문서가 한 번씩만 소유한다.
 
 포함 범위:
 
 - 지출·수입 CRUD와 월·일·카테고리 조회
+- 여행·행사 등 목적별 지출 태그와 기존 검색을 통한 태그별 내역·합계 조회
 - 항목 분할, 월 분할, 합치기·해제, 취소
 - 카테고리 정의·정렬·기본값과 월 예산 계산
 - 정기 거래 정의, 월말 보정, 일일 서버 처리와 누락 월 자동 복구
@@ -31,11 +32,11 @@ Household Finance Context는 **가구의 일상적인 금전 기록과 분류·�
 
 | 기능 모듈 | 요구사항 | 개수 | 독립 책임 | 상세 소유 문서 |
 |---|---|---:|---|---|
-| 거래 원장 | LED-*, SPL-*, MRG-*, SEA-* | 23 | 거래 생명주기와 원자적 그룹 작업 | [거래 원장](modules/ledger/requirements.md) |
+| 거래 원장 | LED-*, SPL-*, MRG-*, SEA-* | 26 | 거래 생명주기, 지출 태그·검색과 원자적 그룹 작업 | [거래 원장](modules/ledger/requirements.md) |
 | 카테고리·예산 | CAT-*, BUD-* | 6 | Category Catalog와 Budget Query | [카테고리와 예산](modules/categories-budget/requirements.md) |
 | 정기 거래 | REC-* | 6 | RecurringPlan, 월 처리 checkpoint, 카테고리 참조 변경 | [정기 거래](modules/recurring-transactions/requirements.md) |
 | 지역화폐 | BAL-* | 5 | LocalCurrencyBalance 최신 상태 | [지역화폐](modules/local-currency/requirements.md) |
-| 합계 |  | 40 |  |  |
+| 합계 |  | 43 |  |  |
 
 ## 3. 공통 언어
 
@@ -43,6 +44,7 @@ Household Finance Context는 **가구의 일상적인 금전 기록과 분류·�
 |---|---|
 | Transaction | 한 가구의 지출 또는 수입 Canonical 기록 |
 | Ledger | Transaction의 생성·변경·조회 규칙과 저장 경계 |
+| Expense Tag | 여행·행사 등 목적을 표시하는 Transaction의 선택 문자열 값; 카테고리와 독립이며 별도 Tag Aggregate는 없음 |
 | Item Split | 원금 합계를 보존하면서 한 거래를 여러 항목으로 교체하는 작업 |
 | Monthly Split | 원금을 여러 달의 내림 금액으로 나누는 [DEC-001](../../governance/decisions.md#dec-001) 정책 |
 | Split Group | 월 분할 재구성·취소를 함께 수행하는 거래 집합 |
@@ -56,16 +58,16 @@ Household Finance Context는 **가구의 일상적인 금전 기록과 분류·�
 
 | 기능 모듈 | Aggregate·데이터 | 핵심 불변식 | 현재 컬렉션 |
 |---|---|---|---|
-| Ledger | Transaction | 양의 원 단위 금액, 가구·유형·source·creator | `expenses` |
-| Ledger | MonthlySplitGroup | DEC-001, 그룹 전체 재구성·취소 원자성 | `expenses` 분할 문서 |
-| Ledger | MergedTransaction | 합계 거래와 복원 snapshot | `expenses.mergedFrom` |
+| Ledger | Transaction | 양의 원 단위 금액, 가구·유형·source·creator, 선택 tags | `households/{householdId}/ledgerTransactions/{transactionId}` |
+| Ledger | MonthlySplitGroup | DEC-001, 그룹 전체 재구성·취소 원자성 | `ledgerTransactions` 분할 문서 |
+| Ledger | MergedTransaction | 합계 거래와 원본별 태그를 포함하는 복원 snapshot | `ledgerTransactions.mergedFrom` 및 보존 원본 |
 | Ledger | Capture Dedup Claim | Payment fingerprint 한 번 | 목표 `ledgerDedupKeys` |
 | Category/Budget | CategoryCatalog | 안정 ID, 순서, 기본 참조, 예산 값 | `categories`, 현재 household 일부 필드 |
 | Category/Budget | MonthlyBudgetView | 원천 수정 권한 없는 요청 단위 계산 결과이며 영속 저장하지 않음 | 현재 클라이언트 계산 |
 | Recurring | RecurringPlan | plan/month 한 번, 월말 보정 | `recurring_expenses` |
 | Local Currency | LocalCurrencyBalance | 원 단위 정수, 관찰 시각, 없음·오류 구분 | `balances` |
 
-`expenses`, `categories`, `recurring_expenses`, `balances`에는 각각 위 기능 모듈 하나만 최종 Writer가 된다.
+거래 본문·태그·분할·합치기는 Ledger Application이 `ledgerTransactions`의 단일 최종 Writer다. 나머지 데이터의 Writer와 실제 저장 경계는 각 소유 기능의 상세 설계를 따른다.
 
 ## 5. Context 불변식
 
@@ -149,6 +151,7 @@ Context를 넘는 결제·취소 흐름은 [Payment Capture Context](../payment-
 | [DEC-056](../../governance/decisions.md#dec-056) | Ledger | 재병합의 merge ancestry를 non-merge leaf까지 평탄화하고 중간 merge node는 감사 이력으로 보존 |
 | [DEC-057](../../governance/decisions.md#dec-057) | Ledger·Local Currency, Home 소비 | 선택된 한 지역화폐 유형만 상세 조회하고 내부 전환 UI·legacy 임의 귀속을 두지 않음 |
 | [DEC-063](../../governance/decisions.md#dec-063) | Recurring·Ledger | Plan 최초 등록자를 immutable creator로 보존하고 Scheduler 거래에 사용하며 legacy는 명시 mapping 전 처리 차단 |
+| [DEC-075](../../governance/decisions.md#dec-075) | Ledger | 지출의 목적 태그를 별도 필드로 저장하고 기존 검색과 합계를 재사용 |
 
 남은 제품·운영 정책은 [미결정 사항 단일 목록](../../governance/pending-decisions.md)에서 관리합니다. 조회 시 예산·홈·통계 계산은 DEC-048, 처리·운영 기록 보존은 DEC-046, 파생 거래 취소는 DEC-041, 지역화폐 음수 전용 정책 미도입은 DEC-044, 재병합 계보 평탄화는 DEC-056, 선택 지역화폐 상세 범위는 DEC-057, 정기 거래 creator는 DEC-063으로 확정되었으며, 나머지 결정 전에는 임의 0 보정·현재값 위장을 하지 않습니다.
 

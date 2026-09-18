@@ -4,7 +4,7 @@
 
 **이 표는 실행 연결이며 전체 수용 조건의 통과율이 아닙니다.** 실제 통과 여부는 Playwright JSON/JUnit 결과로 확인합니다. 한 요구사항의 정상 흐름 E2E가 모든 실패 타이밍·외부서비스·실기기 동작을 검증했다는 뜻이 아닙니다. 정확한 assertion·남은 경계는 [재무/접근](e2e-finance-mapping.md), [결제 수집](e2e-payment-mapping.md), [자산/관리자/PWA](e2e-portfolio-admin-mapping.md), [알림](e2e-notifications-mapping.md), [운영 CLI](e2e-operations-mapping.md), [Native](native-real-code-coverage.json)를 확인합니다.
 
-요구사항 244개, E2E 연결 240개, 운영/폐기 경계 4개. 새 요구사항에 실행 E2E 또는 명시적 운영 경계가 없으면 품질 gate가 실패합니다.
+요구사항 247개, E2E 연결 243개, 운영/폐기 경계 4개. 새 요구사항에 실행 E2E 또는 명시적 운영 경계가 없으면 품질 gate가 실패합니다.
 
 | 요구사항 | 실제 테스트 파일 | 범위 |
 |---|---|---|
@@ -43,6 +43,8 @@
 | [LED-008](../../docs/requirements/contexts/household-finance/modules/ledger/requirements.md) | [finance-ledger.spec.ts](../../web/e2e/finance-ledger.spec.ts), [finance-structure.spec.ts](../../web/e2e/finance-structure.spec.ts) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
 | [LED-009](../../docs/requirements/contexts/household-finance/modules/ledger/requirements.md) | [finance-structure.spec.ts](../../web/e2e/finance-structure.spec.ts) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
 | [LED-010](../../docs/requirements/contexts/household-finance/modules/ledger/requirements.md) | [finance-currency-recurring.spec.ts](../../web/e2e/finance-currency-recurring.spec.ts) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
+| [LED-011](../../docs/requirements/contexts/household-finance/modules/ledger/requirements.md) | [finance-tags.spec.ts](../../web/e2e/finance-tags.spec.ts) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
+| [LED-012](../../docs/requirements/contexts/household-finance/modules/ledger/requirements.md) | [finance-structure.spec.ts](../../web/e2e/finance-structure.spec.ts) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
 | [SPL-001](../../docs/requirements/contexts/household-finance/modules/ledger/requirements.md) | [finance-structure.spec.ts](../../web/e2e/finance-structure.spec.ts) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
 | [SPL-002](../../docs/requirements/contexts/household-finance/modules/ledger/requirements.md) | [finance-structure.spec.ts](../../web/e2e/finance-structure.spec.ts) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
 | [SPL-003](../../docs/requirements/contexts/household-finance/modules/ledger/requirements.md) | [finance-structure.spec.ts](../../web/e2e/finance-structure.spec.ts), [payment-capture.spec.ts](../../web/e2e/payment-capture.spec.ts) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
@@ -56,6 +58,7 @@
 | [SEA-003](../../docs/requirements/contexts/household-finance/modules/ledger/requirements.md) | [finance-search-statistics.spec.ts](../../web/e2e/finance-search-statistics.spec.ts) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
 | [SEA-004](../../docs/requirements/contexts/household-finance/modules/ledger/requirements.md) | [finance-search-statistics.spec.ts](../../web/e2e/finance-search-statistics.spec.ts) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
 | [SEA-005](../../docs/requirements/contexts/household-finance/modules/ledger/requirements.md) | [finance-search-statistics.spec.ts](../../web/e2e/finance-search-statistics.spec.ts) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
+| [SEA-006](../../docs/requirements/contexts/household-finance/modules/ledger/requirements.md) | [finance-tags.spec.ts](../../web/e2e/finance-tags.spec.ts) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
 | [BAL-001](../../docs/requirements/contexts/household-finance/modules/local-currency/requirements.md) | [payment-capture.spec.ts](../../web/e2e/payment-capture.spec.ts) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
 | [BAL-002](../../docs/requirements/contexts/household-finance/modules/local-currency/requirements.md) | [payment-capture.spec.ts](../../web/e2e/payment-capture.spec.ts) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
 | [BAL-003](../../docs/requirements/contexts/household-finance/modules/local-currency/requirements.md) | [finance-currency-recurring.spec.ts](../../web/e2e/finance-currency-recurring.spec.ts), [payment-capture.spec.ts](../../web/e2e/payment-capture.spec.ts) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |

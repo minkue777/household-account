@@ -4,7 +4,7 @@ import { createFinanceHousehold, documentId, findExpense, openAddTransaction, op
 
 test.beforeEach(async () => { await resetTestAccount(); });
 
-test('여행 태그를 저장·재사용하고 태그 검색 합계와 삭제가 새로고침 후에도 일치한다', async ({ page, request }, testInfo) => {
+test('[T-LED-011][LED-011][T-SEA-004][SEA-006] 여행 태그를 저장·재사용하고 태그 검색 합계와 삭제가 새로고침 후에도 일치한다', async ({ page, request }, testInfo) => {
   await createFinanceHousehold(page, request);
   await page.setViewportSize({ width: 390, height: 844 });
   let dialog = await openAddTransaction(page);

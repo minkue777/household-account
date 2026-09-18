@@ -39,7 +39,7 @@ function TagInputHarness({ initialTags = [] }: { initialTags?: string[] }) {
   return <ExpenseTagInput tags={tags} onChange={setTags} inputValue={input} onInputChange={setInput} availableTags={['2026부산여행', '가족모임']} />;
 }
 
-describe('지출 태그 입력과 저장', () => {
+describe('[T-LED-011][LED-011] 지출 태그 입력과 저장', () => {
   test('기존 태그를 재사용하고 중복 없이 직접 추가하며 한글 조합 Enter는 기다린다', () => {
     render(<TagInputHarness />);
     fireEvent.click(screen.getByRole('button', { name: '#2026부산여행' }));

@@ -4,9 +4,11 @@ import { addExpenseThroughUi, createFinanceHousehold, documentId, findExpense, i
 
 test.beforeEach(async () => { await resetTestAccount(); });
 
-test('[SPL-001][LED-008][LED-009] 항목 분할은 합계를 보존하고 다른 카테고리 파생 항목을 만든 뒤 같은 원본 ID로 되돌린다', async ({ page, request }) => {
+test('[SPL-001][LED-008][LED-009][T-LED-012][LED-012] 항목 분할은 합계·태그를 보존하고 다른 카테고리 파생 항목을 만든 뒤 같은 원본 ID로 되돌린다', async ({ page, request }) => {
   await createFinanceHousehold(page, request);
-  const original = await addExpenseThroughUi(page, request, { merchant: '분할 장보기', amount: 10001, memo: '원본 메모', category: '생활비' });
+  const original = await addExpenseThroughUi(page, request, { merchant: '분할 장보기', amount: 10001, memo: '원본 메모', category: '생활비', tags: ['2026부산여행', '가족'] });
+  const expectedTags = [{ stringValue: '2026부산여행' }, { stringValue: '가족' }];
+  expect(original.fields?.tags?.arrayValue?.values).toEqual(expectedTags);
   const sourceId = documentId(original);
   await (await openExpenseEdit(page, sourceId)).getByRole('button', { name: '분리', exact: true }).click();
   const split = page.getByRole('heading', { name: '지출 내역 분리', exact: true }).locator('..');
@@ -27,6 +29,7 @@ test('[SPL-001][LED-008][LED-009] 항목 분할은 합계를 보존하고 다른
   expect(children.map(doc => textField(doc, 'category')).sort()).toEqual(['food', 'living']);
   expect(textField((await findExpense(request, sourceId))!, 'lifecycleState')).toBe('superseded');
   for (const child of children) {
+    expect(child.fields?.tags?.arrayValue?.values).toEqual(expectedTags);
     expect(textField(child, 'creatorMemberId')).toBe(textField(original, 'creatorMemberId'));
     expect(textField(child, 'source')).toBe(textField(original, 'source'));
   }
@@ -34,6 +37,7 @@ test('[SPL-001][LED-008][LED-009] 항목 분할은 합계를 보존하고 다른
   await expect.poll(async () => (await readExpenseDocuments(request)).filter(doc => textField(doc, 'lifecycleState') === 'active').map(documentId)).toEqual([sourceId]);
   const restored = (await findExpense(request, sourceId))!;
   expect(restored.fields).toMatchObject({ merchant: { stringValue: '분할 장보기' }, memo: { stringValue: '원본 메모' }, amount: { integerValue: '10001' } });
+  expect(restored.fields?.tags?.arrayValue?.values).toEqual(expectedTags);
 });
 
 test('[SPL-001][LED-008][LED-009] 세 항목 분리는 마지막 잔액과 역방향 입력·삭제를 자동 조정하고 화면의 10,000·8,000·13,000원을 그대로 저장한다', async ({ page, request }) => {
@@ -95,9 +99,11 @@ test('[SPL-001][LED-008][LED-009] 세 항목 분리는 마지막 잔액과 역�
   expect(visible.map(doc => integerField(doc, 'amount')).sort((a, b) => a - b)).toEqual([8000, 10000, 13000]);
 });
 
-test('[SPL-002][SPL-003][SPL-004][SPL-005] 기존 지출 월 분할·개월 변경·취소는 내림 금액과 원본 복원을 보존한다', async ({ page, request }) => {
+test('[SPL-002][SPL-003][SPL-004][SPL-005][T-LED-012][LED-012] 기존 지출 월 분할·개월 변경·취소는 내림 금액·태그와 원본 복원을 보존한다', async ({ page, request }) => {
   await createFinanceHousehold(page, request);
-  const original = await addExpenseThroughUi(page, request, { merchant: '월분할 가전', amount: 10001, date: '2026-01-31', memo: '보존 메모' });
+  const original = await addExpenseThroughUi(page, request, { merchant: '월분할 가전', amount: 10001, date: '2026-01-31', memo: '보존 메모', tags: ['이사준비'] });
+  const expectedTags = [{ stringValue: '이사준비' }];
+  expect(original.fields?.tags?.arrayValue?.values).toEqual(expectedTags);
   const sourceId = documentId(original);
   let edit = await openExpenseEdit(page, sourceId);
   await edit.getByTitle('월별 분할').click();
@@ -111,6 +117,7 @@ test('[SPL-002][SPL-003][SPL-004][SPL-005] 기존 지출 월 분할·개월 변�
   expect(children.map(doc => textField(doc, 'date')).sort()).toEqual(['2026-01-31', '2026-02-28', '2026-03-31']);
   expect(children.map(doc => integerField(doc, 'amount'))).toEqual([3333, 3333, 3333]);
   expect(new Set(children.map(doc => textField(doc, 'splitGroupId'))).size).toBe(1);
+  for (const child of children) expect(child.fields?.tags?.arrayValue?.values).toEqual(expectedTags);
   edit = await openExpenseEdit(page, documentId(children[0]));
   await edit.getByRole('button', { name: '개월 수 변경' }).click();
   await edit.locator('input[type="number"][min="2"]').fill('2');
@@ -120,20 +127,24 @@ test('[SPL-002][SPL-003][SPL-004][SPL-005] 기존 지출 월 분할·개월 변�
     children = (await readExpenseDocuments(request)).filter(doc => textField(doc, 'splitOriginalId') === sourceId && textField(doc, 'lifecycleState') === 'active');
     return children.map(doc => integerField(doc, 'amount'));
   }).toEqual([5000, 5000]);
+  for (const child of children) expect(child.fields?.tags?.arrayValue?.values).toEqual(expectedTags);
   edit = await openExpenseEdit(page, documentId(children[0]));
   await edit.getByRole('button', { name: '분할 취소' }).click();
   await expect(edit).toHaveCount(0);
   await expect.poll(async () => textField((await findExpense(request, sourceId))!, 'lifecycleState')).toBe('active');
   expect((await findExpense(request, sourceId))?.fields).toMatchObject({ amount: { integerValue: '10001' }, date: { stringValue: '2026-01-31' }, memo: { stringValue: '보존 메모' } });
+  expect((await findExpense(request, sourceId))?.fields?.tags?.arrayValue?.values).toEqual(expectedTags);
 });
 
-test('[SPL-006][SPL-005] 신규 월 분할은 메모·수동 카드·생성자를 보존하고 나머지만 버린다', async ({ page, request }) => {
+test('[SPL-006][SPL-005][T-LED-012][LED-012] 신규 월 분할은 메모·태그·수동 카드·생성자를 보존하고 나머지만 버린다', async ({ page, request }) => {
   await createFinanceHousehold(page, request);
   const add = await openAddTransaction(page);
   await add.getByPlaceholder('가맹점명을 입력하세요').fill('신규 할부');
   await add.locator('input[type="number"]').fill('10001');
   await add.locator('input[type="date"]').fill(seoulDate());
   await add.getByPlaceholder('메모를 입력하세요').fill('할부 메모');
+  await add.getByLabel('태그 (선택)', { exact: true }).fill('이사준비');
+  await add.getByRole('button', { name: '태그 추가', exact: true }).click();
   await add.getByTitle('월별 분할').click();
   await add.locator('input[type="number"][min="2"]').fill('3');
   await add.getByRole('button', { name: '추가', exact: true }).click();
@@ -146,14 +157,17 @@ test('[SPL-006][SPL-005] 신규 월 분할은 메모·수동 카드·생성자�
     expect(child.fields).toMatchObject({ amount: { integerValue: '3333' }, memo: { stringValue: '할부 메모' }, cardType: { stringValue: 'manual' } });
     expect(textField(child, 'creatorMemberId')).toBeTruthy();
     expect(textField(child, 'merchant')).toMatch(/신규 할부.*[123].*3/);
+    expect(child.fields?.tags?.arrayValue?.values).toEqual([{ stringValue: '이사준비' }]);
   }
 });
 
-test('[MRG-001][MRG-002][LED-008][LED-009] 실제 drag로 연속 합치고 되돌리면 세 원본의 ID와 개별 금액·메모가 복원된다', async ({ page, request }) => {
+test('[MRG-001][MRG-002][LED-008][LED-009][T-LED-012][LED-012] 실제 drag로 연속 합치면 태그가 중복 없이 모이고 되돌리면 세 원본의 ID와 개별 금액·메모·태그가 복원된다', async ({ page, request }) => {
   const householdId = await createFinanceHousehold(page, request);
   const originals = [];
-  for (const [merchant, amount, memo] of [['합치기 A', 1100, '첫 메모'], ['합치기 B', 2200, '둘 메모'], ['합치기 C', 3300, '셋 메모']] as const) {
-    originals.push(await addExpenseThroughUi(page, request, { merchant, amount, memo, date: seoulDate(0, 1) }));
+  for (const [merchant, amount, memo, tag] of [['합치기 A', 1100, '첫 메모', '숙박'], ['합치기 B', 2200, '둘 메모', '식비'], ['합치기 C', 3300, '셋 메모', '교통']] as const) {
+    const original = await addExpenseThroughUi(page, request, { merchant, amount, memo, date: seoulDate(0, 1), tags: ['2026부산여행', tag] });
+    expect(original.fields?.tags?.arrayValue?.values).toEqual([{ stringValue: '2026부산여행' }, { stringValue: tag }]);
+    originals.push(original);
   }
   await page.goto('/');
   await page.getByTestId(/^calendar-day-/).first().click();
@@ -172,6 +186,8 @@ test('[MRG-001][MRG-002][LED-008][LED-009] 실제 drag로 연속 합치고 되�
   // 구조변경은 원본을 단일 원장에 보존하고 lifecycleState로 화면에서 제외합니다.
   const canonical = await readFirestoreCollection(request, `households/${householdId}/ledgerTransactions`);
   for (const original of originals) expect(textField(canonical.find(doc => documentId(doc) === documentId(original))!, 'lifecycleState')).toBe('superseded');
+  const merged = canonical.find(doc => textField(doc, 'lifecycleState') === 'active');
+  expect(merged?.fields?.tags?.arrayValue?.values?.map(value => value.stringValue).sort()).toEqual(['2026부산여행', '숙박', '식비', '교통'].sort());
   await item('합치기 A').click();
   await page.getByRole('dialog', { name: '지출 수정' }).getByRole('button', { name: '합치기 되돌리기' }).click();
   await page.getByRole('dialog', { name: '합치기 되돌리기' }).getByRole('button', { name: '진행', exact: true }).click();
@@ -180,6 +196,7 @@ test('[MRG-001][MRG-002][LED-008][LED-009] 실제 drag로 연속 합치고 되�
     const restored = (await findExpense(request, documentId(original)))!;
     expect(integerField(restored, 'amount')).toBe(integerField(original, 'amount'));
     expect(textField(restored, 'memo')).toBe(textField(original, 'memo'));
+    expect(restored.fields?.tags?.arrayValue?.values).toEqual(original.fields?.tags?.arrayValue?.values);
     await expect(item(textField(original, 'merchant')!)).toBeVisible();
   }
 });

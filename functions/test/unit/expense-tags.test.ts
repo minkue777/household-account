@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { readExpenseTags, validateExpenseTags } from "../../src/contexts/household-finance/ledger/domain/policies/expenseTags";
 import { createBasicLedgerCommandsFixtureSubject } from "../support/basic-ledger-commands-fixture";
 
-describe("지출 태그 입력 정책", () => {
+describe("[T-LED-011][LED-011] 지출 태그 입력 정책", () => {
   it("기존 요청의 태그 생략을 허용하고 공백·해시 접두사·중복을 정리한다", () => {
     expect(validateExpenseTags(undefined)).toEqual({ kind: "valid", tags: [] });
     expect(validateExpenseTags([" #2026부산여행 ", "2026부산여행", "## 가족 여행", " ", "#"]))
