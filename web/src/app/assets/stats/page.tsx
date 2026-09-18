@@ -155,7 +155,7 @@ export default function AssetStatsPage() {
   } = useHousehold();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [hasCurrentAssets, setHasCurrentAssets] = useState(false);
-  const [historyRead, setHistoryRead] = useState<{ key: string; history?: AssetHistoryEntry[]; loading: boolean; failed: boolean }>({ key: '', loading: true, failed: false });
+  const [historyRead, setHistoryRead] = useState<{ key: string; history?: AssetHistoryEntry[]; failed: boolean }>({ key: '', failed: false });
   const [dividendPrefetch, setDividendPrefetch] = useState<{ key: string; source: AssetDividendPrefetch } | null>(null);
   const [revision, setRevision] = useState(0);
   const [refreshRevision, setRefreshRevision] = useState(0);
@@ -176,7 +176,6 @@ export default function AssetStatsPage() {
   const completeHistory = currentHistoryRead?.history ?? cachedHistory;
   const allHistory = completeHistory ?? [];
   const isCurrentSource = canRead && completeHistory !== undefined;
-  const isLoading = currentHistoryRead?.loading ?? true;
   const failed = canRead && (currentHistoryRead?.failed ?? false);
 
   useEffect(() => subscribeAssetStatisticsInvalidation(() => setRevision(value => value + 1)), []);
@@ -228,7 +227,7 @@ export default function AssetStatsPage() {
     pendingHistoryRead.current = request;
     setHistoryRead(previous => ({ key: sourceKey,
       history: previous.key === sourceKey ? previous.history ?? cachedHistory : cachedHistory,
-      loading: true, failed: false }));
+      failed: false }));
 
     const fetchHistory = async () => {
       try {
@@ -241,9 +240,9 @@ export default function AssetStatsPage() {
         if (active) setHistoryRead(previous => ({ key: sourceKey,
           history: previous.key === sourceKey && JSON.stringify(previous.history) === JSON.stringify(historyData)
             ? previous.history : historyData,
-          loading: false, failed: false }));
+          failed: false }));
       } catch (error) {
-        if (active) setHistoryRead(previous => ({ ...previous, loading: false, failed: true }));
+        if (active) setHistoryRead(previous => ({ ...previous, failed: true }));
         console.error('자산 통계 이력을 불러오지 못했습니다.', error);
       } finally {
         if (pendingHistoryRead.current === request) pendingHistoryRead.current = null;
@@ -639,11 +638,11 @@ export default function AssetStatsPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="min-h-5 text-xs text-slate-500">
-              {failed ? <p role="alert">최신 자산 이력을 확인하지 못했습니다. 이전 내역을 표시합니다.
+            {failed && (
+              <p role="alert" className="text-xs text-slate-500">최신 자산 이력을 확인하지 못했습니다. 이전 내역을 표시합니다.
                 <button type="button" className="ml-2 underline" onClick={() => setRefreshRevision(value => value + 1)}>다시 시도</button>
-              </p> : <p role="status">{isLoading ? '최신 자산 이력 확인 중...' : ''}</p>}
-            </div>
+              </p>
+            )}
             <div className="relative rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
               <button
                 type="button"

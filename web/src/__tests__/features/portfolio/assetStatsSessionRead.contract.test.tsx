@@ -190,7 +190,7 @@ describe('actual asset statistics page', () => {
     const commits: string[] = [];
     render(<Profiler id="cached-reentry" onRender={() => commits.push(document.body.textContent ?? '')}><AssetStatsPage /></Profiler>);
     expect(commits[0]).toContain('123,456');
-    expect(screen.getByText('최신 자산 이력 확인 중...')).toBeInTheDocument();
+    expect(screen.queryByText('최신 자산 이력 확인 중...')).not.toBeInTheDocument();
     expect(read).toHaveBeenCalledWith(undefined, expect.any(String), { cacheEpoch: 0, forceRefresh: true });
     fireEvent.click(screen.getByRole('button', { name: '월별' }));
     const toggle = screen.getByRole('button', { name: '월별 자산 변동' });
