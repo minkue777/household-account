@@ -36,10 +36,10 @@ test('[T-REC-PUSH-001][REC-002][REC-003][REC-004][REC-006][SYS-005] 실제 정�
   expect(await records(request, 'e2eFcmTransport')).toHaveLength(0);
   await page.goto('/');
   await page.getByRole('button', { name: '검색', exact: true }).click();
-  await page.getByPlaceholder('지출처명, 메모, 카드명을 검색해보세요').fill('말일 보험료');
+  await page.getByPlaceholder('지출처명, 메모, 카드명, 태그 검색').fill('말일 보험료');
   await expect(page.getByText('2건 · 62,000원', { exact: true })).toBeVisible();
   // 검색 행은 카드 라벨을 표시하지 않습니다. 실제 편집 메타데이터에서 확인합니다.
-  const search = page.locator('div.fixed').filter({ has: page.getByPlaceholder('지출처명, 메모, 카드명을 검색해보세요') });
+  const search = page.locator('div.fixed').filter({ has: page.getByPlaceholder('지출처명, 메모, 카드명, 태그 검색') });
   await search.getByText('말일 보험료', { exact: true }).first().click();
   await expect(page.getByRole('dialog', { name: '지출 수정' })).toContainText('정기지출');
 });

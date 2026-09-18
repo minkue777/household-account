@@ -1,4 +1,5 @@
 import { getSeoulLocalTime } from '@/lib/utils/date';
+import { normalizeExpenseTags } from '@/lib/utils/expenseTags';
 import {
   collection,
   doc,
@@ -302,10 +303,15 @@ function matchesCardSearch(expense: Expense, exactCardKeyword: ExactCardSearchKe
 export function createExpenseSearchMatcher(keyword: string): (expense: Expense) => boolean {
   const normalizedKeyword = normalizeSearchText(keyword);
   if (!normalizedKeyword) return () => false;
+  if (normalizedKeyword.startsWith('#')) {
+    const exactTag = normalizedKeyword.replace(/^#+/, '').trim();
+    return expense => Boolean(exactTag) && (expense.tags ?? []).some(tag => normalizeSearchText(tag) === exactTag);
+  }
   const exactCardKeyword = parseExactCardSearchKeyword(keyword);
   const compactKeyword = normalizedKeyword.replace(/\s+/g, '');
   return expense => normalizeSearchText(expense.merchant).includes(normalizedKeyword)
     || normalizeSearchText(expense.memo).includes(normalizedKeyword)
+    || (expense.tags ?? []).some(tag => normalizeSearchText(tag).includes(normalizedKeyword))
     || matchesCardSearch(expense, exactCardKeyword, compactKeyword);
 }
 
@@ -331,6 +337,7 @@ export async function addExpense(
   void options;
   const transaction = {
     ...expense,
+    ...(expense.tags === undefined ? {} : { tags: normalizeExpenseTags(expense.tags) }),
     transactionType: expense.transactionType || DEFAULT_TRANSACTION_TYPE,
   };
   const commandId = createHouseholdCommandId('ledger-record');
@@ -360,8 +367,13 @@ export async function updateExpense(
   expectedVersion: number,
   rememberForNextTime = false
 ): Promise<void> {
-  return updateExpenseWithCommand(id, data, (commands, householdId) =>
-    commands.update(householdId, id, expectedVersion, data, rememberForNextTime));
+  const { tags, ...changes } = data;
+  const normalized = {
+    ...changes,
+    ...(tags === undefined ? {} : { tags: normalizeExpenseTags(tags) }),
+  };
+  return updateExpenseWithCommand(id, normalized, (commands, householdId) =>
+    commands.update(householdId, id, expectedVersion, normalized, rememberForNextTime));
 }
 
 /** 일반 편집과 카테고리 편집은 같은 낙관적 변경·확정·실패 복구 경계를 사용합니다. */
@@ -556,7 +568,8 @@ export async function addManualExpense(
   category: string,
   date: string,
   memo?: string,
-  transactionType: TransactionType = DEFAULT_TRANSACTION_TYPE
+  transactionType: TransactionType = DEFAULT_TRANSACTION_TYPE,
+  tags?: string[]
 ): Promise<string> {
   const time = getSeoulLocalTime();
 
@@ -570,6 +583,7 @@ export async function addManualExpense(
     cardType: 'manual',
     cardLastFour: '수동',
     memo: memo || '',
+    ...(transactionType === 'expense' && tags !== undefined ? { tags: normalizeExpenseTags(tags) } : {}),
   });
 }
 
@@ -579,7 +593,8 @@ export async function addManualMonthlySplit(
   category: string,
   date: string,
   months: number,
-  memo?: string
+  memo?: string,
+  tags?: string[]
 ): Promise<string[]> {
   const ledgerCommands = await loadLedgerCommands();
   const result = await ledgerCommands.recordMonthlySplit(getHouseholdId(), {
@@ -588,6 +603,7 @@ export async function addManualMonthlySplit(
     categoryId: category,
     accountingDate: date,
     ...(memo !== undefined ? { memo } : {}),
+    ...(tags !== undefined ? { tags: normalizeExpenseTags(tags) } : {}),
     months,
   });
   return result.transactionIds;
@@ -602,6 +618,7 @@ export interface SplitItem {
   amount: number;
   category: string;
   memo?: string;
+  tags?: string[];
 }
 
 export async function splitExpense(
@@ -658,6 +675,9 @@ export async function mergeExpenses(
     id: mergedTransactionId,
     aggregateVersion: 1,
     amount: targetExpense.amount + sourceExpense.amount,
+    ...(targetExpense.tags === undefined && sourceExpense.tags === undefined ? {} : {
+      tags: normalizeExpenseTags([...(targetExpense.tags ?? []), ...(sourceExpense.tags ?? [])]),
+    }),
     mergeLeafIds: leafIds,
     ...(restorationDetails === undefined
       ? { mergedFrom: undefined }
@@ -725,6 +745,7 @@ function mergeRestorationDetails(
       amount: expense.amount,
       category: expense.category,
       ...(expense.memo === undefined ? {} : { memo: expense.memo }),
+      ...(expense.tags === undefined ? {} : { tags: [...expense.tags] }),
     }];
   };
 

@@ -41,7 +41,7 @@ describe('원장 검색 첫 상호작용 계약', () => {
 
     await act(async () => {
       fireEvent.change(
-        screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요'),
+        screen.getByPlaceholderText('지출처명, 메모, 카드명, 태그 검색'),
         { target: { value: '삼성' } }
       );
       await Promise.resolve();

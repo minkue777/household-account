@@ -112,7 +112,7 @@ export async function openExpenseEdit(page: Page, id: string): Promise<Locator> 
     // 직접 알림 딥링크의 과거월 이동은 notification-deeplink가 검증합니다.
     await page.goto('/');
     await page.getByRole('button', { name: '검색', exact: true }).click();
-    const input = page.getByPlaceholder('지출처명, 메모, 카드명을 검색해보세요');
+    const input = page.getByPlaceholder('지출처명, 메모, 카드명, 태그 검색');
     await input.fill(textField(target!, 'merchant')!);
     const search = page.locator('div.fixed').filter({ has: input });
     await search.getByText(textField(target!, 'merchant')!, { exact: true }).click();

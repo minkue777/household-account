@@ -2,6 +2,7 @@ import type { QueryDocumentSnapshot, DocumentData } from '@/platform/read-model/
 import type { LedgerTransactionCommandResult } from '@/platform/functions-api/householdCommandContract';
 import type { Expense, TransactionType } from '@/types/expense';
 import { normalizeStoredCategoryId } from '@/lib/categoryCompatibility';
+import { normalizeExpenseTags } from '@/lib/utils/expenseTags';
 
 const DEFAULT_TRANSACTION_TYPE: TransactionType = 'expense';
 
@@ -98,6 +99,7 @@ export function mapExpenseReadData(id: string, data: DocumentData): Expense {
     ...(typeof data.cardEvidence === 'string' ? { cardEvidence: data.cardEvidence } : {}),
     ...(localCurrencyType === undefined ? {} : { localCurrencyType }),
     memo: data.memo,
+    ...(data.tags === undefined ? {} : { tags: normalizeExpenseTags(data.tags) }),
     mergedFrom: data.mergedFrom,
     ...(mergeLeafIds === undefined ? {} : { mergeLeafIds }),
     splitGroupId: data.splitGroupId ?? splitGroup?.groupId,
@@ -125,5 +127,6 @@ export function mapCommandTransaction(
     cardLastFour: previous?.cardLastFour ?? transaction.cardDisplay,
     localCurrencyType: previous?.localCurrencyType ?? transaction.localCurrencyType,
     memo: transaction.memo,
+    ...(transaction.tags === undefined ? {} : { tags: normalizeExpenseTags(transaction.tags) }),
   };
 }

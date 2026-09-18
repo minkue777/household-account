@@ -19,9 +19,11 @@ import { useHousehold } from '@/contexts/HouseholdContext';
 interface SearchModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialKeyword?: string;
+  availableTags?: string[];
   onExpenseUpdate?: (
     expenseId: string,
-    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string },
+    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string; tags?: string[] },
     expectedVersion?: number
   ) => Promise<void> | void;
   onDelete?: (expenseId: string, expectedVersion?: number) => Promise<void> | void;
@@ -44,6 +46,8 @@ interface ExpenseSearchSession {
 export default function SearchModal({
   isOpen,
   onClose,
+  initialKeyword = '',
+  availableTags = [],
   onExpenseUpdate,
   onDelete,
   onSplitExpense,
@@ -52,7 +56,7 @@ export default function SearchModal({
   const { showAlert } = useAppDialog();
   const { householdKey, remoteReadEpoch } = useHousehold();
   const transactionLabel = transactionType === 'income' ? '수입' : '지출';
-  const [keyword, setKeyword] = useState('');
+  const [keyword, setKeyword] = useState(initialKeyword);
   const [results, setResults] = useState<Expense[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
@@ -127,6 +131,7 @@ export default function SearchModal({
     category?: string;
     merchant?: string;
     date?: string;
+    tags?: string[];
   }) => {
     if (!selectedExpense || !onExpenseUpdate) return;
     const session = searchSessionRef.current;
@@ -267,7 +272,7 @@ export default function SearchModal({
 
   const searchPlaceholder = transactionType === 'income'
     ? `${transactionLabel}처명이나 메모를 검색해보세요`
-    : '지출처명, 메모, 카드명을 검색해보세요';
+    : '지출처명, 메모, 카드명, 태그 검색';
 
   return (
     <Portal>
@@ -333,6 +338,7 @@ export default function SearchModal({
         <ExpenseEditModal
           key={editorKey}
           expense={selectedExpense}
+          availableTags={Array.from(new Set([...availableTags, ...results.flatMap((expense) => expense.tags ?? [])]))}
           isOpen={!!selectedExpense}
           onClose={() => setSelectedExpense(null)}
           onSave={handleSaveEdit}

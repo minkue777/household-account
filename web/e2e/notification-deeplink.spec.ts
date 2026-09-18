@@ -16,7 +16,7 @@ test('[PUSH-006][PUSH-011][LED-001] 과거월 지출 편집 링크에 도착하�
   await expect(edit.locator('input[type="text"]').first()).toHaveValue('과거 알림 거래');
   await expect(edit.locator('input[type="date"]')).toHaveValue(seoulDate(-4));
   await expect(edit.getByPlaceholder('메모를 입력하세요')).toHaveValue('링크 도착 원문');
-  await expect(page.getByPlaceholder('지출처명, 메모, 카드명을 검색해보세요')).toHaveCount(0);
+  await expect(page.getByPlaceholder('지출처명, 메모, 카드명, 태그 검색')).toHaveCount(0);
   await edit.getByRole('button', { name: '닫기', exact: true }).click();
   await expect(page.getByTestId(`calendar-day-${seoulDate(-4)}`)).toBeVisible();
   await expect(page.getByTestId('expense-item').filter({ hasText: '과거 알림 거래' })).toContainText('4,567원');
@@ -27,7 +27,7 @@ test('[PUSH-011][HH-008] 없는 ID와 다른 가구의 편집 링크는 정보�
   await page.goto('/expenses/does-not-exist-e2e/edit');
   await expect(page.locator('p[role="alert"]')).toHaveText('지출을 찾을 수 없습니다.');
   await expect(page.getByRole('dialog', { name: '지출 수정' })).toHaveCount(0);
-  await expect(page.getByPlaceholder('지출처명, 메모, 카드명을 검색해보세요')).toHaveCount(0);
+  await expect(page.getByPlaceholder('지출처명, 메모, 카드명, 태그 검색')).toHaveCount(0);
   const outsider = await createEmulatorAccount(request, 'deeplink-outsider@household.test');
   const household = await executeHouseholdCommand<{ householdId: string }>(request, { idToken: outsider.idToken, command: 'access.create-household-with-self.v1', payload: { householdName: '다른 링크 가구', memberName: '다른 사용자' } });
   const expense = await executeHouseholdCommand<{ transactionId: string }>(request, { idToken: outsider.idToken, householdId: household.householdId, command: 'ledger.record-manual-transaction.v1', payload: { transactionType: 'expense', merchant: '읽으면 안 되는 거래', amountInWon: 7654, categoryId: 'etc', accountingDate: seoulDate() } });

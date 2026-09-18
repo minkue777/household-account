@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readExpenseTags } from "../../../contexts/household-finance/ledger/domain/policies/expenseTags";
 
 import type * as firestore from "firebase-admin/firestore";
 import { FieldValue } from "firebase-admin/firestore";
@@ -75,6 +76,7 @@ function mapTransaction(
     transactionType,
     merchant: text(data, "merchant") || (transactionType === "income" ? "수입" : ""),
     memo: text(data, "memo"),
+    tags: readExpenseTags(data.tags),
     amountInWon: numberValue(data, 0, "amountInWon", "amount"),
     categoryId: text(data, "categoryId", "category") || "etc",
     accountingDate: text(data, "accountingDate", "date"),

@@ -15,6 +15,7 @@ export interface LedgerTransformationTransaction {
   merchant: string;
   categoryId: string;
   memo: string;
+  tags?: string[];
   accountingDate: string;
   localTime: string;
   cardDisplay: string;

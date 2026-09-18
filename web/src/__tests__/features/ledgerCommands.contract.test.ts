@@ -9,6 +9,28 @@ import { ledgerCommands } from '@/features/ledger/application/ledgerCommands';
 describe('Ledger Web command DTO', () => {
   beforeEach(() => execute.mockReset());
 
+  test('태그 수정은 생략과 전체 제거를 구분하며 저장 전에 표기를 정리한다', async () => {
+    await ledgerCommands.update('household-1', 'expense-1', 1, { memo: '메모' });
+    await ledgerCommands.update('household-1', 'expense-1', 2, { tags: [' #2026부산여행 ', '2026부산여행'] });
+    await ledgerCommands.update('household-1', 'expense-1', 3, { tags: [] });
+    expect(execute.mock.calls.map(([, payload]) => payload.patch)).toEqual([
+      { memo: '메모' }, { tags: ['2026부산여행'] }, { tags: [] },
+    ]);
+  });
+
+  test('수동 지출과 월 분할은 태그를 보내며 수입에는 지출 태그를 넣지 않는다', async () => {
+    const transaction = { merchant: '부산식당', amount: 30000, category: 'food', date: '2026-09-18', tags: [' #부산 '] };
+    await ledgerCommands.record('household-1', { ...transaction, transactionType: 'expense' });
+    await ledgerCommands.record('household-1', { ...transaction, transactionType: 'income' });
+    await ledgerCommands.recordMonthlySplit('household-1', {
+      merchant: transaction.merchant, amountInWon: 30000, categoryId: 'food', accountingDate: transaction.date,
+      tags: transaction.tags, months: 2,
+    });
+    expect(execute.mock.calls[0][1]).toMatchObject({ tags: ['부산'] });
+    expect(execute.mock.calls[1][1]).not.toHaveProperty('tags');
+    expect(execute.mock.calls[2][1]).toMatchObject({ tags: ['부산'], months: 2 });
+  });
+
   test('[MER-005] 거래 수정과 기억 선택은 동일 command payload에 포함한다', async () => {
     await ledgerCommands.update('household-1', 'expense-1', 7, { category: 'food' }, true);
     expect(execute).toHaveBeenCalledTimes(1);

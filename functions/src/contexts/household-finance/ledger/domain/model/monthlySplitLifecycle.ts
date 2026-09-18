@@ -8,6 +8,7 @@ export interface SplitTransaction {
   merchant: string;
   categoryId: string;
   memo: string;
+  tags?: string[];
   cardType: string;
   cardDisplay: string;
   cardEvidence?: string;

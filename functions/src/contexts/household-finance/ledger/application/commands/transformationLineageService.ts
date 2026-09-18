@@ -11,6 +11,8 @@ import type {
 import { planCaptureLineageCancellation } from "../../domain/policies/captureLineageCancellationGraph";
 import { areLocalCurrencyTypesCompatible } from "../../domain/policies/localCurrencyTypeCompatibility";
 
+import { readExpenseTags, validateExpenseTags } from "../../domain/policies/expenseTags";
+
 export interface LedgerTransformationCommands {
   splitItems(command: {
     operationKey: string;
@@ -21,6 +23,7 @@ export interface LedgerTransformationCommands {
       merchant: string;
       categoryId: string;
       memo: string;
+      tags?: string[];
     }[];
   }): Promise<LedgerTransformationResult>;
   merge(command: {
@@ -53,6 +56,7 @@ function copyTransaction(
   return {
     ...transaction,
     provenance: { ...transaction.provenance },
+    ...(transaction.tags === undefined ? {} : { tags: [...transaction.tags] }),
     ...(transaction.mergeLeafIds === undefined
       ? {}
       : { mergeLeafIds: [...transaction.mergeLeafIds] }),
@@ -194,6 +198,9 @@ export function createLedgerTransformationCommands(input: {
       ) {
         return { kind: "contract-failure", code: "INVALID_ITEM_SPLIT" };
       }
+      const invalidTags = command.items.map((item) => validateExpenseTags(item.tags))
+        .find((result) => result.kind === "validation-error");
+      if (invalidTags?.kind === "validation-error") return { kind: "contract-failure", code: invalidTags.code };
       const superseded: LedgerTransformationTransaction = {
         ...copyTransaction(source),
         lifecycleState: "superseded",
@@ -208,6 +215,7 @@ export function createLedgerTransformationCommands(input: {
           merchant: item.merchant,
           categoryId: item.categoryId,
           memo: item.memo,
+          tags: item.tags === undefined ? [...(source.tags ?? [])] : readExpenseTags(item.tags),
           aggregateVersion: 1,
           provenance: { ...source.provenance },
         }),
@@ -363,9 +371,12 @@ export function createLedgerTransformationCommands(input: {
       const selection = {
         transactionIds: distinct([...selectedIds, ...leafIds]),
       };
+      const mergedTags = validateExpenseTags(aggregates.flatMap((transaction) => transaction.tags ?? []));
+      if (mergedTags.kind !== "valid") return { kind: "contract-failure", code: mergedTags.code };
       const merged: LedgerTransformationTransaction = {
         ...copyTransaction(target),
         transactionId: mergedId,
+        tags: mergedTags.tags,
         lifecycleState: "active",
         amountInWon: aggregates.reduce(
           (sum, transaction) => sum + transaction.amountInWon,

@@ -96,6 +96,137 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     if (app !== undefined) await deleteApp(app);
   });
 
+  async function tagFixture() {
+    const household = database.collection("households").doc(HOUSEHOLD_ID);
+    await household.collection("categoryCatalog").doc("current")
+      .set(categoryCatalogDocument(HOUSEHOLD_ID, [{ categoryId: "food", name: "식비" }]));
+    const handlers = createLedgerHouseholdCommandHandlers(database);
+    const run = (command: string, commandId: string, payload: Record<string, unknown>) =>
+      execute(handlers, command, commandId, payload);
+    const record = async (commandId: string, tags?: string[]) => run(
+      "ledger.record-manual-transaction.v1", commandId,
+      { transactionType: "expense", merchant: "부산 식당", amountInWon: 12_000,
+        categoryId: "food", accountingDate: "2026-09-18", ...(tags === undefined ? {} : { tags }) },
+    ) as Promise<{ transactionId: string; aggregateVersion: number; tags: string[] }>;
+    const canonical = household.collection("ledgerTransactions");
+    const read = async (transactionId: string) => (await canonical.doc(transactionId).get()).data();
+    return { run, record, read, canonical };
+  }
+
+  it("지출 태그는 저장·재조회되며 구버전 수정 요청은 보존하고 명시한 빈 배열은 제거한다", async () => {
+    const { run, record, read, canonical } = await tagFixture();
+    const created = await record("tag-create", [" #2026부산여행 ", "2026부산여행", "가족"]);
+    expect(created.tags).toEqual(["2026부산여행", "가족"]);
+    expect((await read(created.transactionId))?.tags).toEqual(created.tags);
+    const legacyEdit = await run("ledger.update-transaction.v1", "tag-legacy-edit", {
+      transactionId: created.transactionId, expectedVersion: 1, patch: { memo: "점심" },
+    });
+    expect(legacyEdit).toMatchObject({ tags: created.tags, aggregateVersion: 2 });
+    expect((await read(created.transactionId))?.tags).toEqual(created.tags);
+    await run("ledger.update-transaction.v1", "tag-replace", {
+      transactionId: created.transactionId, expectedVersion: 2, patch: { tags: ["#2026서울여행"] },
+    });
+    expect((await read(created.transactionId))?.tags).toEqual(["2026서울여행"]);
+    await expect(run("ledger.update-transaction.v1", "tag-invalid-edit", {
+      transactionId: created.transactionId, expectedVersion: 3, patch: { tags: "잘못된 값", memo: "저장 금지" },
+    })).rejects.toMatchObject({ code: "TAGS_INVALID" });
+    expect(await read(created.transactionId)).toMatchObject({ tags: ["2026서울여행"], memo: "점심", aggregateVersion: 3 });
+    await run("ledger.update-transaction.v1", "tag-clear", {
+      transactionId: created.transactionId, expectedVersion: 3, patch: { tags: [] },
+    });
+    expect((await read(created.transactionId))?.tags).toEqual([]);
+    const legacy = await record("tag-legacy-create");
+    const legacyData = (await read(legacy.transactionId))!;
+    delete legacyData.tags;
+    await canonical.doc(legacy.transactionId).set(legacyData);
+    expect(await run("ledger.update-transaction.v1", "tag-pre-feature-edit", {
+      transactionId: legacy.transactionId, expectedVersion: 1, patch: { memo: "태그 도입 전 거래" },
+    })).toMatchObject({ tags: [], memo: "태그 도입 전 거래" });
+    const overLimitTags = [...Array.from({ length: 11 }, (_, index) => `기존 행사${index}`), "가".repeat(31)];
+    await canonical.doc(legacy.transactionId).set({ tags: overLimitTags }, { merge: true });
+    expect(await run("ledger.update-transaction.v1", "tag-preserve-stored-limits", {
+      transactionId: legacy.transactionId, expectedVersion: 2, patch: { memo: "기존 태그 보존" },
+    })).toMatchObject({ tags: overLimitTags, aggregateVersion: 3 });
+    expect((await read(legacy.transactionId))?.tags).toEqual(overLimitTags);
+  });
+
+  it("항목 분할은 생략한 태그를 상속하고 개별 태그와 원본 복원 태그를 보존한다", async () => {
+    const { run, record, read } = await tagFixture();
+    const original = await record("tag-item-source", ["2026부산여행"]);
+    const split = await run("ledger.split-transaction.v1", "tag-item-split", {
+      transactionId: original.transactionId, expectedVersion: 1,
+      operation: { kind: "items",
+        baseDraft: { merchant: "부산 식당", amountInWon: 12_000, categoryId: "food", memo: "수정 메모" },
+        items: [
+          { merchant: "식사", amountInWon: 6_000, categoryId: "food", memo: "" },
+          { merchant: "간식", amountInWon: 3_000, categoryId: "food", memo: "", tags: ["#간식"] },
+          { merchant: "별도 지출", amountInWon: 3_000, categoryId: "food", memo: "", tags: [] },
+        ],
+      },
+    }) as { transactionIds: string[] };
+    expect((await read(split.transactionIds[0]))?.tags).toEqual(["2026부산여행"]);
+    expect((await read(split.transactionIds[1]))?.tags).toEqual(["간식"]);
+    expect((await read(split.transactionIds[2]))?.tags).toEqual([]);
+    await run("ledger.restore-item-split.v1", "tag-item-restore", {
+      sourceId: original.transactionId,
+      expectedVersions: Object.fromEntries(split.transactionIds.map((id) => [id, 1])),
+    });
+    expect(await read(original.transactionId)).toMatchObject({ tags: ["2026부산여행"], lifecycleState: "active" });
+  });
+
+  it("신규 및 기존 월 분할·개월 재구성·분할 해제는 태그를 보존한다", async () => {
+    const { run, record, read, canonical } = await tagFixture();
+    const original = await record("tag-monthly-source", ["2026부산여행"]);
+    const split = await run("ledger.split-existing-transaction-monthly.v1", "tag-monthly-split", {
+      transactionId: original.transactionId, expectedVersion: 1, months: 2,
+    }) as { transactionIds: string[]; splitGroupId: string };
+    for (const id of split.transactionIds) expect((await read(id))?.tags).toEqual(["2026부산여행"]);
+    await run("ledger.reconfigure-monthly-split.v1", "tag-monthly-reconfigure", {
+      splitGroupId: split.splitGroupId, months: 3,
+      expectedVersions: Object.fromEntries(split.transactionIds.map((id) => [id, 1])),
+    });
+    const parts = (await canonical.where("splitGroupId", "==", split.splitGroupId).get()).docs;
+    expect(parts).toHaveLength(3);
+    for (const part of parts) expect(part.data().tags).toEqual(["2026부산여행"]);
+    await run("ledger.cancel-monthly-split.v1", "tag-monthly-collapse", {
+      splitGroupId: split.splitGroupId,
+      expectedVersions: Object.fromEntries(parts.map((part) => [part.id, part.data().aggregateVersion])),
+    });
+    expect(await read(original.transactionId)).toMatchObject({ tags: ["2026부산여행"], lifecycleState: "active" });
+    const manual = await run("ledger.record-manual-monthly-split.v1", "tag-monthly-new", {
+      transactionType: "expense", merchant: "숙소", amountInWon: 120_000, categoryId: "food",
+      accountingDate: "2026-09-18", months: 2, tags: ["#2026부산여행"],
+    }) as { transactionIds: string[] };
+    for (const id of manual.transactionIds) expect((await read(id))?.tags).toEqual(["2026부산여행"]);
+  });
+
+  it("합친 거래는 중복 없는 태그를 반환하고 합치기 해제는 각 원본의 태그를 복원한다", async () => {
+    const { run, record, read } = await tagFixture();
+    const first = await record("tag-merge-first", ["2026부산여행", "가족"]);
+    const second = await record("tag-merge-second", ["2026부산여행", "친구"]);
+    const merged = await run("ledger.merge-transactions.v1", "tag-merge", {
+      targetTransactionId: first.transactionId, sourceTransactionId: second.transactionId,
+      expectedVersions: { [first.transactionId]: 1, [second.transactionId]: 1 },
+    }) as { transactionId: string; transaction: { tags: string[] } };
+    expect(merged.transaction.tags).toEqual(["2026부산여행", "가족", "친구"]);
+    expect((await read(merged.transactionId))?.tags).toEqual(merged.transaction.tags);
+    await run("ledger.unmerge-transaction.v1", "tag-unmerge", { transactionId: merged.transactionId, expectedVersion: 1 });
+    expect(await read(first.transactionId)).toMatchObject({ tags: first.tags, lifecycleState: "active" });
+    expect(await read(second.transactionId)).toMatchObject({ tags: second.tags, lifecycleState: "active" });
+  });
+
+  it("태그 합계가 한도를 넘는 합치기는 태그를 자르지 않고 원본 전체를 보존한다", async () => {
+    const { run, record, read } = await tagFixture();
+    const first = await record("tag-limit-first", Array.from({ length: 10 }, (_, index) => `행사${index}`));
+    const second = await record("tag-limit-second", ["추가 행사"]);
+    await expect(run("ledger.merge-transactions.v1", "tag-limit-merge", {
+      targetTransactionId: first.transactionId, sourceTransactionId: second.transactionId,
+      expectedVersions: { [first.transactionId]: 1, [second.transactionId]: 1 },
+    })).rejects.toMatchObject({ code: "TOO_MANY_TAGS" });
+    expect(await read(first.transactionId)).toMatchObject({ tags: first.tags, lifecycleState: "active", aggregateVersion: 1 });
+    expect(await read(second.transactionId)).toMatchObject({ tags: second.tags, lifecycleState: "active", aggregateVersion: 1 });
+  });
+
   it.each([
     { transformation: "edit", gross: 10_000, cashback: 500 },
     { transformation: "monthly-split", gross: 10_000, cashback: 500 },

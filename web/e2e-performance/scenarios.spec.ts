@@ -159,7 +159,7 @@ async function measureJourney(page: Page, testInfo: TestInfo, fixture: Performan
   // Keep both boundaries: prefetch on opening must not hide waiting before input.
   await markNextAction(page, 'search-open');
   await page.locator('header button').first().click();
-  const searchInput = page.getByPlaceholder('지출처명, 메모, 카드명을 검색해보세요');
+  const searchInput = page.getByPlaceholder('지출처명, 메모, 카드명, 태그 검색');
   const search = page.locator('div.fixed').filter({ has: searchInput });
   const summary = `${FIXTURE_MONTHS * EXPENSES_PER_MONTH}건 · ${won(fixture.totalExpenseAmount)}원`;
   await run({ id: 'search.first', label: '전체 기간 검색 → 첫 결과·전체 합계', cacheState: 'first-search-window', startEvent: 'input',

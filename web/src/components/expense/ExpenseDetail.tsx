@@ -19,9 +19,11 @@ import { useAppDialog } from '@/contexts/AppDialogContext';
 interface ExpenseDetailProps {
   date: string;
   expenses: Expense[];
+  availableTags?: string[];
+  onTagClick?: (tag: string) => void;
   onExpenseUpdate?: (
     expenseId: string,
-    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string },
+    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string; tags?: string[] },
     expectedVersion?: number,
     rememberForNextTime?: boolean
   ) => Promise<void> | void;
@@ -44,6 +46,8 @@ interface ExpenseDetailProps {
 export default function ExpenseDetail({
   date,
   expenses,
+  availableTags,
+  onTagClick,
   onExpenseUpdate,
   onDelete,
   onAddExpense,
@@ -115,7 +119,7 @@ export default function ExpenseDetail({
 
   const handleSaveEdit = (
     expense: Expense,
-    updates: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string },
+    updates: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string; tags?: string[] },
     rememberForNextTime = false
   ): Promise<void> | void => {
     if (onExpenseUpdate && Object.keys(updates).length > 0) {
@@ -175,6 +179,7 @@ export default function ExpenseDetail({
             expense={expense}
             allExpenses={expenses}
             onEdit={openExpenseEditor}
+            onTagClick={onTagClick}
             onMergeExpenses={requestMerge}
             draggingExpenseId={draggingExpenseId}
             setDraggingExpenseId={setDraggingExpenseId}
@@ -194,6 +199,7 @@ export default function ExpenseDetail({
         <ExpenseEditModal
           key={editorKey}
           expense={editingExpense}
+          availableTags={availableTags}
           isOpen
           onClose={() => setEditingExpense(null)}
           transactionType={transactionType}

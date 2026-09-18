@@ -1,3 +1,5 @@
+import { normalizeExpenseTags } from '@/lib/utils/expenseTags';
+
 type CategoryKey = string;
 
 interface MinimalCategory {
@@ -12,6 +14,7 @@ interface BuildExpenseUpdatesParams {
     category: CategoryKey;
     memo?: string;
     date?: string;
+    tags?: string[];
   };
   draft: {
     merchant: string;
@@ -19,6 +22,7 @@ interface BuildExpenseUpdatesParams {
     category: CategoryKey;
     memo: string;
     date?: string;
+    tags?: string[];
   };
 }
 
@@ -28,6 +32,7 @@ export interface ExpenseUpdates {
   category?: string;
   merchant?: string;
   date?: string;
+  tags?: string[];
 }
 
 export function trimExpenseMerchant(merchant: string): string {
@@ -92,6 +97,14 @@ export function buildExpenseUpdates({
 
   if (draft.date !== undefined && draft.date !== original.date) {
     updates.date = draft.date;
+  }
+
+  if (draft.tags !== undefined) {
+    const originalTags = normalizeExpenseTags(original.tags);
+    const nextTags = normalizeExpenseTags(draft.tags);
+    if (originalTags.length !== nextTags.length || nextTags.some((tag, index) => tag !== originalTags[index])) {
+      updates.tags = nextTags;
+    }
   }
 
   return updates;

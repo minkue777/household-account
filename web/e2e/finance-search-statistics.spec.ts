@@ -16,7 +16,7 @@ test('[T-SEA-001][SEA-001][SEA-002][SEA-004][SEA-005] 전체기간 검색은 과
   });
   await page.goto('/');
   await page.getByRole('button', { name: '검색', exact: true }).click();
-  const input = page.getByPlaceholder('지출처명, 메모, 카드명을 검색해보세요');
+  const input = page.getByPlaceholder('지출처명, 메모, 카드명, 태그 검색');
   const search = page.locator('div.fixed').filter({ has: input });
   await expect(page.locator('input[type="date"]')).toHaveCount(0);
   await input.fill('공통 카페');
@@ -46,7 +46,7 @@ test('[T-SEA-002][SEA-001][SEA-003] 검색 결과 편집 후 합계가 갱신되
   await addExpenseThroughUi(page, request, { merchant: '검색에서 수정', amount: 3000 });
   await page.goto('/');
   await page.getByRole('button', { name: '검색', exact: true }).click();
-  const input = page.getByPlaceholder('지출처명, 메모, 카드명을 검색해보세요');
+  const input = page.getByPlaceholder('지출처명, 메모, 카드명, 태그 검색');
   const search = page.locator('div.fixed').filter({ has: input });
   await input.fill('검색에서');
   await search.getByText('검색에서 수정', { exact: true }).click();
@@ -83,7 +83,7 @@ test('[T-SEA-002][T-SEA-003][SEA-003][SEA-004] 50건이 넘어도 월 전체를 
     }))));
   await page.goto('/');
   await page.getByRole('button', { name: '검색', exact: true }).click();
-  const input = page.getByPlaceholder('지출처명, 메모, 카드명을 검색해보세요');
+  const input = page.getByPlaceholder('지출처명, 메모, 카드명, 태그 검색');
   const search = page.locator('div.fixed').filter({ has: input });
   await input.fill('페이지 거래');
   await expect(search.getByText('62건 · 6,200원', { exact: true })).toBeVisible();

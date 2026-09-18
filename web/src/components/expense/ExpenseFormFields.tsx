@@ -2,6 +2,7 @@ import { ChevronDown } from 'lucide-react';
 import AmountInput from '@/components/common/AmountInput';
 import CategorySelector from '@/components/common/CategorySelector';
 import MonthlySplitAmountControl from '@/components/expense/MonthlySplitAmountControl';
+import ExpenseTagInput from '@/components/expense/ExpenseTagInput';
 
 interface MonthlySplitControlProps {
   enabled: boolean;
@@ -21,6 +22,11 @@ interface ExpenseFormFieldsProps {
   onCategoryChange: (value: string) => void;
   memo: string;
   onMemoChange: (value: string) => void;
+  tags?: string[];
+  onTagsChange?: (tags: string[]) => void;
+  tagInput?: string;
+  onTagInputChange?: (value: string) => void;
+  availableTags?: string[];
   monthlySplit: MonthlySplitControlProps;
   date?: string;
   onDateChange?: (value: string) => void;
@@ -45,6 +51,11 @@ export default function ExpenseFormFields({
   onCategoryChange,
   memo,
   onMemoChange,
+  tags = [],
+  onTagsChange,
+  tagInput = '',
+  onTagInputChange,
+  availableTags,
   monthlySplit,
   date,
   onDateChange,
@@ -133,6 +144,15 @@ export default function ExpenseFormFields({
           className={textInputClassName}
         />
       </div>
+      {onTagsChange && onTagInputChange && (
+        <ExpenseTagInput
+          tags={tags}
+          onChange={onTagsChange}
+          inputValue={tagInput}
+          onInputChange={onTagInputChange}
+          availableTags={availableTags}
+        />
+      )}
     </div>
   );
 }

@@ -4,6 +4,8 @@ import type {
   ItemSplitTransaction,
 } from "../../domain/model/itemSplitRestoration";
 
+import { readExpenseTags, validateExpenseTags } from "../../domain/policies/expenseTags";
+
 export interface ItemSplitRestorationCommands {
   split(input: {
     actor: { householdId: string; memberId: string };
@@ -15,12 +17,14 @@ export interface ItemSplitRestorationCommands {
       amountInWon: number;
       categoryId: string;
       memo: string;
+      tags?: string[];
     };
     items: readonly {
       merchant: string;
       amountInWon: number;
       categoryId: string;
       memo: string;
+      tags?: string[];
     }[];
   }): Promise<ItemSplitResult>;
   restore(input: {
@@ -64,6 +68,10 @@ export function createItemSplitRestorationCommands(input: {
       ) {
         return { kind: "Conflict", code: "VERSION_MISMATCH" };
       }
+      const invalidTags = [command.baseDraft, ...command.items]
+        .map((draft) => validateExpenseTags(draft?.tags))
+        .find((result) => result.kind === "validation-error");
+      if (invalidTags?.kind === "validation-error") return validationError(invalidTags.code);
       const splitSource: ItemSplitTransaction =
         command.baseDraft === undefined
           ? source
@@ -73,6 +81,7 @@ export function createItemSplitRestorationCommands(input: {
               amountInWon: command.baseDraft.amountInWon,
               categoryId: command.baseDraft.categoryId,
               memo: command.baseDraft.memo,
+              ...(command.baseDraft.tags === undefined ? {} : { tags: readExpenseTags(command.baseDraft.tags) }),
             };
       if (command.items.length < 2) {
         return validationError("ITEM_SPLIT_REQUIRES_AT_LEAST_TWO_ITEMS");
@@ -105,6 +114,7 @@ export function createItemSplitRestorationCommands(input: {
         amountInWon: item.amountInWon,
         categoryId: item.categoryId,
         memo: item.memo,
+        tags: item.tags === undefined ? [...(splitSource.tags ?? [])] : readExpenseTags(item.tags),
         source: splitSource.source,
         originChannel: splitSource.originChannel,
         creatorMemberId: splitSource.creatorMemberId,

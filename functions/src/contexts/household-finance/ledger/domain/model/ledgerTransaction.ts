@@ -6,6 +6,7 @@ export interface LedgerTransactionView {
   transactionType: LedgerTransactionType;
   merchant: string;
   memo: string;
+  tags?: string[];
   amountInWon: number;
   categoryId: string;
   accountingDate: string;

@@ -8,6 +8,7 @@ export interface LedgerTransactionCommandResult {
   transactionType: 'expense' | 'income';
   merchant: string;
   memo: string;
+  tags?: string[];
   amountInWon: number;
   categoryId: string;
   accountingDate: string;
@@ -80,6 +81,7 @@ export interface HouseholdCommandPayloads {
     categoryId: string;
     accountingDate: string;
     memo?: string;
+    tags?: string[];
   }
   | {
     transactionType: 'income';
@@ -95,6 +97,7 @@ export interface HouseholdCommandPayloads {
     categoryId: string;
     accountingDate: string;
     memo?: string;
+    tags?: string[];
     months: number;
   };
   'ledger.split-existing-transaction-monthly.v1': {
@@ -109,6 +112,7 @@ export interface HouseholdCommandPayloads {
     patch: {
       merchant?: string;
       memo?: string;
+      tags?: string[];
       amountInWon?: number;
       categoryId?: string;
       accountingDate?: string;
@@ -124,6 +128,7 @@ export interface HouseholdCommandPayloads {
       amountInWon: number;
       categoryId: string;
       memo?: string;
+      tags?: string[];
     }>;
     expectedVersion: number;
   };

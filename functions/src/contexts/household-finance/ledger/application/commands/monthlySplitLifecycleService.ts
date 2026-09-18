@@ -3,6 +3,7 @@ import type {
   SplitLifecycleResult,
   SplitTransaction,
 } from "../../domain/model/monthlySplitLifecycle";
+import { readExpenseTags, validateExpenseTags } from "../../domain/policies/expenseTags";
 import { applyMonthlySplitPolicy } from "../../domain/policies/monthlySplit";
 
 export interface MonthlySplitLifecycleCommands {
@@ -34,6 +35,7 @@ export interface MonthlySplitLifecycleCommands {
       categoryId: string;
       accountingDate: string;
       memo: string;
+      tags?: string[];
     };
     months: number;
   }): Promise<SplitLifecycleResult>;
@@ -130,6 +132,7 @@ function buildParts(input: {
       merchant: `${input.source.merchant} (${installment.sequence}/${installment.total})`,
       categoryId: input.source.categoryId,
       memo: input.source.memo,
+      tags: [...(input.source.tags ?? [])],
       cardType: input.source.cardType,
       cardDisplay: input.source.cardDisplay,
       ...(input.source.cardEvidence === undefined ? {} : { cardEvidence: input.source.cardEvidence }),
@@ -326,6 +329,8 @@ export function createMonthlySplitLifecycleCommands(input: {
     splitNewManual: async (command) => {
       const prior = await replay(command.operationKey);
       if (prior !== undefined) return prior;
+      const tags = validateExpenseTags(command.draft.tags);
+      if (tags.kind !== "valid") return tags;
       const originalId = `manual-original:${command.operationKey}`;
       const groupId = `monthly-group:${command.operationKey}`;
       const source: SplitTransaction = {
@@ -338,6 +343,7 @@ export function createMonthlySplitLifecycleCommands(input: {
         merchant: command.draft.merchant.trim(),
         categoryId: command.draft.categoryId,
         memo: command.draft.memo,
+        tags: readExpenseTags(command.draft.tags),
         cardType: "manual",
         cardDisplay: "수동",
         creatorMemberId: command.actor.actingMemberId,

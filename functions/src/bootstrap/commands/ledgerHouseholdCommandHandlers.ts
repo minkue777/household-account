@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { validateExpenseTags } from "../../contexts/household-finance/ledger/domain/policies/expenseTags";
 
 import type * as firestore from "firebase-admin/firestore";
 
@@ -58,6 +59,13 @@ function optionalString(
   return value;
 }
 
+function optionalTags(payload: Record<string, unknown>): string[] | undefined {
+  if (payload.tags === undefined) return undefined;
+  const result = validateExpenseTags(payload.tags);
+  if (result.kind !== "valid") throw new HouseholdCommandRejection(result.code);
+  return result.tags;
+}
+
 function itemDrafts(value: unknown) {
   if (!Array.isArray(value)) {
     throw new HouseholdCommandRejection("ITEMS_REQUIRED");
@@ -69,6 +77,7 @@ function itemDrafts(value: unknown) {
       amountInWon: numberValue(item, "amountInWon"),
       categoryId: stringValue(item, "categoryId"),
       memo: optionalString(item, "memo") ?? "",
+      ...(item.tags === undefined ? {} : { tags: optionalTags(item) }),
     };
   });
 }
@@ -166,6 +175,7 @@ function transformationTransactionValue(
     transactionType: transaction.transactionType,
     merchant: transaction.merchant,
     memo: transaction.memo,
+    tags: transaction.tags ?? [],
     amountInWon: transaction.amountInWon,
     categoryId: transaction.categoryId,
     accountingDate: transaction.accountingDate,
@@ -258,6 +268,7 @@ export function createLedgerHouseholdCommandHandlers(
                   merchant: stringValue(payload, "merchant"),
                   amountInWon,
                   categoryId: stringValue(payload, "categoryId"),
+                  ...(payload.tags === undefined ? {} : { tags: optionalTags(payload) }),
                   accountingDate,
                   ...(memo === undefined ? {} : { memo }),
                 });
@@ -272,6 +283,7 @@ export function createLedgerHouseholdCommandHandlers(
         async execute(context) {
           const payload = record(context.envelope.payload);
           const patch = record(payload.patch);
+          if (patch.tags !== undefined) patch.tags = optionalTags(patch);
           if (payload.rememberForNextTime !== undefined && typeof payload.rememberForNextTime !== "boolean") throw new HouseholdCommandRejection("REMEMBER_INVALID");
           if (payload.rememberForNextTime === true && typeof patch.categoryId !== "string") throw new HouseholdCommandRejection("CATEGORY_REQUIRED");
           const categories =
@@ -376,6 +388,7 @@ export function createLedgerHouseholdCommandHandlers(
                     amountInWon: numberValue(draft, "amountInWon"),
                     categoryId: stringValue(draft, "categoryId"),
                     memo: optionalString(draft, "memo") ?? "",
+                    ...(draft.tags === undefined ? {} : { tags: optionalTags(draft) }),
                   };
                 })();
           const categories = await activeCategories(
@@ -520,6 +533,7 @@ export function createLedgerHouseholdCommandHandlers(
               amountInWon: numberValue(payload, "amountInWon"),
               categoryId,
               accountingDate: stringValue(payload, "accountingDate"),
+              ...(payload.tags === undefined ? {} : { tags: optionalTags(payload) }),
               memo:
                 memo ??
                 (transactionType === "income"

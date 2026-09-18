@@ -61,7 +61,7 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
     rerender(<SearchModal isOpen onClose={jest.fn()} transactionType="expense" />);
     await waitFor(() => expect(mockedGetDocs).toHaveBeenCalledTimes(1));
     expect(screen.queryByText(/검색 결과가 없습니다/)).not.toBeInTheDocument();
-    fireEvent.change(screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요'), { target: { value: '검색 확인' } });
+    fireEvent.change(screen.getByPlaceholderText('지출처명, 메모, 카드명, 태그 검색'), { target: { value: '검색 확인' } });
     await act(async () => { resolveSource(expenseSnapshot()); });
     expect(await screen.findByText('검색 확인 가게')).toBeInTheDocument();
     expect(screen.getByText('1건 · 12,000원')).toBeInTheDocument();
@@ -71,7 +71,7 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
   test('가맹점과 메모 검색은 같은 서버 원본을 재사용하며 일치한 거래를 표시한다', async () => {
     mockedGetDocs.mockResolvedValue(expenseSnapshot());
     render(<SearchModal isOpen onClose={jest.fn()} transactionType="expense" />);
-    const input = screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요');
+    const input = screen.getByPlaceholderText('지출처명, 메모, 카드명, 태그 검색');
     fireEvent.change(input, { target: { value: '검색 확인' } });
     expect(await screen.findByText('검색 확인 가게')).toBeInTheDocument();
     expect(screen.getByText('1건 · 12,000원')).toBeInTheDocument();
@@ -91,7 +91,7 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
     let resolveRefresh!: (value: typeof initial) => void;
     mockedGetDocs.mockImplementationOnce(() => new Promise(resolve => { resolveRefresh = resolve; }));
     render(<SearchModal isOpen onClose={jest.fn()} transactionType="expense" onExpenseUpdate={jest.fn()} />);
-    fireEvent.change(screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요'), { target: { value: '검색 확인' } });
+    fireEvent.change(screen.getByPlaceholderText('지출처명, 메모, 카드명, 태그 검색'), { target: { value: '검색 확인' } });
     const month = await screen.findByRole('button', { name: /2020년 1월/ });
     fireEvent.click(month);
     expect(screen.getByText('검색 확인 과거')).toBeInTheDocument();
@@ -116,7 +116,7 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
     mockedGetDocs.mockRejectedValueOnce(Object.assign(new Error('private provider details'), { code: 'invalid-argument' }));
     mockedGetDocs.mockResolvedValue(expenseSnapshot());
     render(<SearchModal isOpen onClose={jest.fn()} transactionType="expense" />);
-    const input = screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요');
+    const input = screen.getByPlaceholderText('지출처명, 메모, 카드명, 태그 검색');
     fireEvent.change(input, {
       target: { value: '검색 확인' },
     });
@@ -138,7 +138,7 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
     mockedGetDocs.mockRejectedValueOnce(new Error('network unavailable'));
     mockedGetDocs.mockResolvedValue(expenseSnapshot('검색 확인 새 가게', '2026-08-09'));
     render(<SearchModal isOpen onClose={jest.fn()} transactionType="expense" onExpenseUpdate={jest.fn()} />);
-    const input = screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요');
+    const input = screen.getByPlaceholderText('지출처명, 메모, 카드명, 태그 검색');
     fireEvent.change(input, {
       target: { value: '검색 확인' },
     });
@@ -163,7 +163,7 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
     mockedGetDocs.mockRejectedValueOnce(new Error('network unavailable'));
     mockedGetDocs.mockImplementationOnce(() => new Promise(resolve => { resolveSearch = resolve; }));
     render(<SearchModal isOpen onClose={jest.fn()} transactionType="expense" />);
-    const input = screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요');
+    const input = screen.getByPlaceholderText('지출처명, 메모, 카드명, 태그 검색');
     fireEvent.change(input, { target: { value: '검색 확인' } });
     await screen.findByRole('alert');
     fireEvent.change(input, { target: { value: '다른 가게' } });
@@ -182,7 +182,7 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
     mockedGetDocs.mockRejectedValueOnce(new Error('network unavailable'));
     mockedGetDocs.mockRejectedValueOnce(new Error('network unavailable'));
     render(<SearchModal isOpen onClose={jest.fn()} transactionType="expense" onExpenseUpdate={jest.fn()} />);
-    const input = screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요');
+    const input = screen.getByPlaceholderText('지출처명, 메모, 카드명, 태그 검색');
     fireEvent.change(input, { target: { value: '검색 확인' } });
     fireEvent.click(await screen.findByText('검색 확인 가게'));
     fireEvent.click(screen.getByRole('button', { name: '수정 저장' }));
@@ -207,7 +207,7 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
       ] } as typeof savedSource;
     });
     render(<SearchModal isOpen onClose={jest.fn()} transactionType="expense" onExpenseUpdate={onExpenseUpdate} />);
-    const input = screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요');
+    const input = screen.getByPlaceholderText('지출처명, 메모, 카드명, 태그 검색');
     fireEvent.change(input, { target: { value: '검색 확인' } });
     fireEvent.click(await screen.findByText('검색 확인 가게'));
     fireEvent.click(screen.getByRole('button', { name: '수정 저장' }));
@@ -247,7 +247,7 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
       savedSource = { docs: [{ ...first, data: () => ({ ...first.data() as Record<string, unknown>, ...updates, aggregateVersion: 2 }) }] } as typeof savedSource;
     });
     render(<SearchModal isOpen onClose={jest.fn()} transactionType="expense" onExpenseUpdate={onExpenseUpdate} />);
-    const input = screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요');
+    const input = screen.getByPlaceholderText('지출처명, 메모, 카드명, 태그 검색');
     fireEvent.change(input, { target: { value: '검색 확인' } });
     fireEvent.click(await screen.findByText('검색 확인 가게'));
     fireEvent.click(screen.getByRole('button', { name: '수정 저장' }));
@@ -269,7 +269,7 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
     const onExpenseUpdate = jest.fn(() => new Promise<void>(resolve => { finishSave = resolve; }));
     const props = { onClose: jest.fn(), transactionType: 'expense' as const, onExpenseUpdate };
     const { rerender, unmount } = render(<SearchModal {...props} isOpen />);
-    fireEvent.change(screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요'), { target: { value: '검색 확인' } });
+    fireEvent.change(screen.getByPlaceholderText('지출처명, 메모, 카드명, 태그 검색'), { target: { value: '검색 확인' } });
     fireEvent.click(await screen.findByText('검색 확인 가게'));
     fireEvent.click(screen.getByRole('button', { name: '수정 저장' }));
 
@@ -285,7 +285,7 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
     }
     const staysClosed = transition === '닫기' || transition === '언마운트';
     if (!staysClosed) {
-      fireEvent.change(screen.getByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요'), { target: { value: '새 세션 검색어' } });
+      fireEvent.change(screen.getByPlaceholderText('지출처명, 메모, 카드명, 태그 검색'), { target: { value: '새 세션 검색어' } });
       await screen.findByText('"새 세션 검색어"에 대한 검색 결과가 없습니다.');
     }
     const readsBeforeCompletion = mockedGetDocs.mock.calls.length;
@@ -294,7 +294,7 @@ describe('메인 검색 입력부터 실제 결과 표시까지', () => {
     expect(mockedGetDocs).toHaveBeenCalledTimes(readsBeforeCompletion);
     expect(screen.queryByText('검색 확인 가게')).not.toBeInTheDocument();
     if (staysClosed) {
-      expect(screen.queryByPlaceholderText('지출처명, 메모, 카드명을 검색해보세요')).not.toBeInTheDocument();
+      expect(screen.queryByPlaceholderText('지출처명, 메모, 카드명, 태그 검색')).not.toBeInTheDocument();
     } else {
       expect(screen.getByText('"새 세션 검색어"에 대한 검색 결과가 없습니다.')).toBeInTheDocument();
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();

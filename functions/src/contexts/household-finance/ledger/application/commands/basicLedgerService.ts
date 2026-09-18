@@ -19,6 +19,8 @@ import {
   type LedgerValidationResult,
 } from "../../domain/policies/basicLedgerPolicy";
 
+import { readExpenseTags, validateExpenseTags } from "../../domain/policies/expenseTags";
+
 export interface BasicLedgerCommands {
   recordManualExpense(input: {
     commandId: string;
@@ -28,6 +30,7 @@ export interface BasicLedgerCommands {
     categoryId: string;
     accountingDate: string;
     memo?: string;
+    tags?: string[];
   }): Promise<LedgerCommandResult>;
   recordManualIncome(input: {
     commandId: string;
@@ -45,7 +48,7 @@ export interface BasicLedgerCommands {
     patch: Partial<
       Pick<
         LedgerTransactionView,
-        "merchant" | "memo" | "amountInWon" | "categoryId" | "accountingDate"
+        "merchant" | "memo" | "tags" | "amountInWon" | "categoryId" | "accountingDate"
       >
     >;
   }): Promise<LedgerCommandResult>;
@@ -167,6 +170,7 @@ export function createBasicLedgerCommands(input: {
       if (receipt !== undefined) return receipt;
       const validation = firstError([
         validateRequiredText(command.merchant, "MERCHANT_REQUIRED"),
+        validateExpenseTags(command.tags),
         validatePositiveWon(command.amountInWon),
         await input.categories.isUsable(command.categoryId)
           ? { kind: "valid" }
@@ -182,6 +186,7 @@ export function createBasicLedgerCommands(input: {
         transactionType: "expense",
         merchant: command.merchant.trim(),
         memo: command.memo ?? "",
+        tags: readExpenseTags(command.tags),
         amountInWon: command.amountInWon,
         categoryId: command.categoryId,
         accountingDate: command.accountingDate,
@@ -269,6 +274,7 @@ export function createBasicLedgerCommands(input: {
         };
       }
       const validation = firstError([
+        validateExpenseTags(command.patch.tags),
         command.patch.merchant === undefined
           ? { kind: "valid" }
           : validateRequiredText(command.patch.merchant, "MERCHANT_REQUIRED"),

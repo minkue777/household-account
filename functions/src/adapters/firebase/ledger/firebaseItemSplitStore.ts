@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readExpenseTags } from "../../../contexts/household-finance/ledger/domain/policies/expenseTags";
 
 import type * as firestore from "firebase-admin/firestore";
 import { FieldValue } from "firebase-admin/firestore";
@@ -56,6 +57,7 @@ function mapTransaction(
     amountInWon: Number(data.amountInWon ?? data.amount),
     categoryId: String(data.categoryId ?? data.category ?? ""),
     memo: String(data.memo ?? ""),
+    tags: readExpenseTags(data.tags),
     source: String(data.source ?? "legacy"),
     originChannel: String(data.originChannel ?? "legacy"),
     creatorMemberId: String(data.creatorMemberId ?? data.createdBy ?? ""),
@@ -252,6 +254,7 @@ export class FirebaseItemSplitStore implements ItemSplitStore {
             categoryId: value.categoryId,
             category: value.categoryId,
             memo: value.memo,
+            tags: value.tags ?? [],
             accountingDate: extra.accountingDate,
             date: extra.accountingDate,
             localTime: extra.localTime,

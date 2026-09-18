@@ -19,6 +19,7 @@ import { getTodayLocalDate } from '@/lib/utils/date';
 import ExpenseActionButtons from '@/components/expense/ExpenseActionButtons';
 import ExpenseFormFields from '@/components/expense/ExpenseFormFields';
 import { useAppDialog } from '@/contexts/AppDialogContext';
+import { normalizeExpenseTags } from '@/lib/utils/expenseTags';
 
 interface AddExpenseModalProps {
   isOpen: boolean;
@@ -29,10 +30,12 @@ interface AddExpenseModalProps {
     category: string,
     date: string,
     memo?: string,
-    splitMonths?: number
+    splitMonths?: number,
+    tags?: string[]
   ) => Promise<void> | void;
   selectedDate?: string | null;
   transactionType: TransactionType;
+  availableTags?: string[];
 }
 
 export default function AddExpenseModal({
@@ -41,6 +44,7 @@ export default function AddExpenseModal({
   onAdd,
   selectedDate,
   transactionType,
+  availableTags,
 }: AddExpenseModalProps) {
   const { activeCategories, isLoading } = useCategoryContext();
   const { showAlert } = useAppDialog();
@@ -56,11 +60,15 @@ export default function AddExpenseModal({
     category,
     memo,
     date,
+    tags,
+    tagInput,
     setMerchant,
     setAmount,
     setCategory,
     setMemo,
     setDate,
+    setTags,
+    setTagInput,
     resetExpenseFormState,
   } = useExpenseFormState({
     initial: {
@@ -147,6 +155,8 @@ export default function AddExpenseModal({
         toOptionalMemo(memo),
         splitMonths,
       ];
+      const normalizedTags = normalizeExpenseTags([...tags, tagInput]);
+      if (normalizedTags.length > 0) submission.push(normalizedTags);
       resetCategory = resolveDefaultCategoryKey(activeCategories);
     }
 
@@ -238,6 +248,11 @@ export default function AddExpenseModal({
             onCategoryChange={setCategory}
             memo={memo}
             onMemoChange={setMemo}
+            tags={tags}
+            onTagsChange={setTags}
+            tagInput={tagInput}
+            onTagInputChange={setTagInput}
+            availableTags={availableTags}
             date={date}
             onDateChange={setDate}
             showDateField

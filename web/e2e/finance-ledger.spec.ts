@@ -130,7 +130,7 @@ test('[LED-002][LED-005] 필수 입력을 검증하고 금액·가맹점·날짜
   await expect.poll(async () => (await findExpense(request, id))?.fields).toMatchObject({ lifecycleState: { stringValue: 'deleted' }, merchant: { stringValue: '변경 후' }, amount: { integerValue: '8100' } });
   await page.goto('/');
   await page.getByRole('button', { name: '검색', exact: true }).click();
-  await page.getByPlaceholder('지출처명, 메모, 카드명을 검색해보세요').fill('변경 후');
+  await page.getByPlaceholder('지출처명, 메모, 카드명, 태그 검색').fill('변경 후');
   await expect(page.getByText('"변경 후"에 대한 검색 결과가 없습니다.', { exact: true })).toBeVisible();
   await page.goto('/stats');
   await expect(page.getByText('데이터 없음', { exact: true })).toBeVisible();

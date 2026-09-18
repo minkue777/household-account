@@ -4,6 +4,7 @@ import { notifyExpenseStatisticsMutation, type ExpenseStatisticsConfirmedUpdate 
 import type { HouseholdCommandName, HouseholdCommandPayloads, HouseholdCommandResults } from '@/platform/functions-api/householdCommandContract';
 import type { ExecuteHouseholdCommandOptions } from '@/platform/functions-api/householdCommandClient';
 import type { Expense } from '@/types/expense';
+import { normalizeExpenseTags } from '@/lib/utils/expenseTags';
 import {
   ledgerMergedTransactionId,
   type LedgerTransactionCommandResult,
@@ -15,11 +16,13 @@ export interface LedgerSplitItem {
   amount: number;
   category: string;
   memo?: string;
+  tags?: string[];
 }
 
 export interface LedgerTransactionPatch {
   merchant?: string;
   memo?: string;
+  tags?: string[];
   amountInWon?: number;
   categoryId?: string;
   accountingDate?: string;
@@ -29,6 +32,7 @@ function toTransactionPatch(changes: Partial<Expense>): LedgerTransactionPatch {
   return {
     ...(changes.merchant !== undefined ? { merchant: changes.merchant } : {}),
     ...(changes.memo !== undefined ? { memo: changes.memo } : {}),
+    ...(changes.tags !== undefined ? { tags: normalizeExpenseTags(changes.tags) } : {}),
     ...(changes.amount !== undefined ? { amountInWon: changes.amount } : {}),
     ...(changes.category !== undefined ? { categoryId: changes.category } : {}),
     ...(changes.date !== undefined ? { accountingDate: changes.date } : {}),
@@ -67,6 +71,7 @@ export const ledgerCommands = {
           transactionType: 'expense' as const,
           merchant: transaction.merchant,
           categoryId: transaction.category,
+          ...(transaction.tags !== undefined ? { tags: normalizeExpenseTags(transaction.tags) } : {}),
         };
     const result = await executeLedgerCommand(
       'ledger.record-manual-transaction.v1',
@@ -102,12 +107,13 @@ export const ledgerCommands = {
       categoryId: string;
       accountingDate: string;
       memo?: string;
+      tags?: string[];
       months: number;
     }
   ): Promise<{ transactionIds: string[]; splitGroupId: string }> {
     return executeLedgerCommand(
       'ledger.record-manual-monthly-split.v1',
-      { ...input, transactionType: 'expense' },
+      { ...input, transactionType: 'expense', ...(input.tags === undefined ? {} : { tags: normalizeExpenseTags(input.tags) }) },
       { householdId }
     );
   },
@@ -178,6 +184,7 @@ export const ledgerCommands = {
           amountInWon: item.amount,
           categoryId: item.category,
           ...(item.memo !== undefined ? { memo: item.memo } : {}),
+          ...(item.tags !== undefined ? { tags: normalizeExpenseTags(item.tags) } : {}),
         })),
         expectedVersion,
       },

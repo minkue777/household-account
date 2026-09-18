@@ -22,6 +22,7 @@ import { orderLedgerTransactions } from '@/features/ledger/domain/ledgerTransact
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useLedgerReadModel } from '@/contexts/LedgerReadModelContext';
+import { normalizeExpenseTags } from '@/lib/utils/expenseTags';
 interface LedgerPageProps {
   transactionType: TransactionType;
 }
@@ -44,6 +45,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [showLocalCurrencyModal, setShowLocalCurrencyModal] = useState(false);
   const [localCurrencyExpenses, setLocalCurrencyExpenses] = useState<Expense[]>([]);
@@ -75,6 +77,13 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     year: currentYear, transactionType, householdKey, enabled: needsYearlyTotal,
     ready: isSessionVerified && serverSnapshotReady, readRefreshKey,
   });
+  const availableTags = useMemo(() => Array.from(new Set(
+    [...expenses, ...yearlyExpenses].flatMap((expense) => normalizeExpenseTags(expense.tags))
+  )), [expenses, yearlyExpenses]);
+  const openTagSearch = (tag: string) => {
+    setSearchKeyword(`#${tag}`);
+    setShowSearchModal(true);
+  };
   useLedgerHomeReadiness({
     periodKey: `${transactionType}:${currentYear}:${currentMonth}`,
     ledgerReady: serverSnapshotReady, categoriesLoading, categoriesReady: categoriesServerSnapshotReady,
@@ -163,7 +172,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
 
   const handleExpenseUpdate = async (
     expenseId: string,
-    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string },
+    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string; tags?: string[] },
     expectedVersion?: number,
     rememberForNextTime = false
   ) => {
@@ -181,16 +190,17 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     category: string,
     date: string,
     memo?: string,
-    splitMonths?: number
+    splitMonths?: number,
+    tags?: string[]
   ) => {
     if (splitMonths && splitMonths > 1) {
       const { addManualMonthlySplit } = await import('@/lib/expenseService');
-      await addManualMonthlySplit(merchant, amount, category, date, splitMonths, memo);
+      await addManualMonthlySplit(merchant, amount, category, date, splitMonths, memo, ...(tags ? [tags] : []));
       return;
     }
 
     const { addManualExpense } = await import('@/lib/expenseService');
-    await addManualExpense(merchant, amount, category, date, memo, transactionType);
+    await addManualExpense(merchant, amount, category, date, memo, transactionType, ...(tags ? [tags] : []));
   };
 
   const handleDeleteExpense = async (expenseId: string, expectedVersion?: number) => {
@@ -221,7 +231,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     <main className="min-h-screen p-4 md:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl">
         <HomeHeader
-          onSearchClick={() => setShowSearchModal(true)}
+          onSearchClick={() => { setSearchKeyword(''); setShowSearchModal(true); }}
           transactionType={transactionType}
         />
 
@@ -239,6 +249,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
             isOpen={true}
             onClose={() => setShowAddModal(false)}
             onAdd={handleAddExpense}
+            availableTags={availableTags}
             selectedDate={selectedDate}
             transactionType={transactionType}
           />
@@ -248,6 +259,8 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
         {showSearchModal && (
           <SearchModal
             isOpen={true}
+            initialKeyword={searchKeyword}
+            availableTags={availableTags}
             onClose={() => setShowSearchModal(false)}
             onExpenseUpdate={handleExpenseUpdate}
             onDelete={handleDeleteExpense}
@@ -308,6 +321,8 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
                 key={`${householdKey}-${transactionType}-${selectedDate}`}
                 date={selectedDate}
                 expenses={selectedDateExpenses}
+                availableTags={availableTags}
+                onTagClick={openTagSearch}
                 onExpenseUpdate={handleExpenseUpdate}
                 onDelete={handleDeleteExpense}
                 onAddExpense={() => setShowAddModal(true)}

@@ -8,6 +8,7 @@ export interface MergedExpenseInfo {
   amount: number;
   category: string;
   memo?: string;
+  tags?: string[];
 }
 
 export interface Expense {
@@ -25,6 +26,7 @@ export interface Expense {
   derivedFromTransactionId?: string;
   localCurrencyType?: string; // 검증된 지역화폐 유형 code (예: gyeonggi)
   memo?: string;          // 메모 (선택)
+  tags?: string[];        // 여행·행사 등 지출 목적 태그
   mergedFrom?: MergedExpenseInfo[];  // 합쳐진 원본 지출들 (되돌리기용)
   mergeLeafIds?: string[]; // 서버가 보존한 합치기 원본 aggregate ID
   splitGroupId?: string;  // 월별 분할 그룹 ID (같은 ID면 같은 분할 그룹)

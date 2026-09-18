@@ -5,7 +5,7 @@ import type { Expense } from '@/types/expense';
 
 type LedgerPatch = Partial<Pick<
   Expense,
-  'merchant' | 'memo' | 'amount' | 'category' | 'date'
+  'merchant' | 'memo' | 'amount' | 'category' | 'date' | 'tags'
 >>;
 
 /**

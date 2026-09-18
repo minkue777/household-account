@@ -27,7 +27,10 @@ export type ItemSplitResult =
       code:
         | "ITEM_SPLIT_REQUIRES_AT_LEAST_TWO_ITEMS"
         | "ITEM_AMOUNT_NOT_POSITIVE_INTEGER"
-        | "SPLIT_SUM_MISMATCH";
+        | "SPLIT_SUM_MISMATCH"
+        | "TAGS_INVALID"
+        | "TAG_TOO_LONG"
+        | "TOO_MANY_TAGS";
     }
   | { kind: "Conflict"; code: "VERSION_MISMATCH" }
   | { kind: "RetryableFailure"; code: string };

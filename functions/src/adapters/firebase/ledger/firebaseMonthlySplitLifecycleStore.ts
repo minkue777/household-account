@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readExpenseTags } from "../../../contexts/household-finance/ledger/domain/policies/expenseTags";
 
 import type * as firestore from "firebase-admin/firestore";
 import { FieldValue } from "firebase-admin/firestore";
@@ -62,6 +63,7 @@ function mapTransaction(
     merchant: String(data.merchant ?? ""),
     categoryId: String(data.categoryId ?? data.category ?? "etc"),
     memo: String(data.memo ?? ""),
+    tags: readExpenseTags(data.tags),
     cardType: String(data.cardType ?? "manual"),
     cardDisplay: String(data.cardDisplay ?? data.cardLastFour ?? "수동"),
     ...(typeof (data.cardEvidence ?? data.cardDisplay ?? data.cardLastFour) === "string"
@@ -91,6 +93,7 @@ function documentData(transaction: SplitTransaction, isNew: boolean) {
     categoryId: transaction.categoryId,
     category: transaction.categoryId,
     memo: transaction.memo,
+    tags: transaction.tags ?? [],
     cardType: transaction.cardType,
     cardDisplay: transaction.cardDisplay,
     ...(transaction.cardEvidence === undefined ? {} : { cardEvidence: transaction.cardEvidence }),

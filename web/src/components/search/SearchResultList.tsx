@@ -5,6 +5,7 @@ import { ChevronRight, Search } from 'lucide-react';
 import { Expense, TransactionType } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { getLedgerPrimaryText, getLedgerSecondaryText } from '@/lib/utils/ledgerDisplay';
+import ExpenseTags from '@/components/expense/ExpenseTags';
 
 interface MonthlyGroup {
   yearMonth: string;
@@ -36,7 +37,7 @@ export default function SearchResultList({
   const transactionLabel = transactionType === 'income' ? '수입' : '지출';
   const emptyGuideText = transactionType === 'income'
     ? `${transactionLabel}처명이나 메모를 검색해보세요.`
-    : '지출처명, 메모, 카드명을 검색해보세요.';
+    : '지출처명, 메모, 카드명, 태그를 검색해보세요.';
 
   const { groupedResults, totalAmount } = useMemo(() => {
     const groups = new Map<string, MonthlyGroup>();
@@ -74,6 +75,7 @@ export default function SearchResultList({
       <div className="py-12 text-center text-slate-400">
         <Search className="mx-auto mb-3 h-12 w-12 text-slate-300" />
         <p>{emptyGuideText}</p>
+        {transactionType === 'expense' && <p className="mt-2 text-xs">#2026부산여행처럼 검색하면 해당 태그의 지출만 모아볼 수 있어요.</p>}
       </div>
     );
   }
@@ -90,9 +92,9 @@ export default function SearchResultList({
   return (
     <div className="space-y-4">
       <div className="rounded-xl bg-blue-50 p-4">
-        <div className="flex items-center justify-between">
-          <span className="font-medium text-blue-800">&quot;{keyword}&quot; 검색 결과</span>
-          <span className="text-blue-600">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="min-w-0 break-all font-medium text-blue-800">&quot;{keyword}&quot; 검색 결과</span>
+          <span className="shrink-0 text-blue-600">
             {results.length}건 · {totalAmount.toLocaleString()}원
           </span>
         </div>
@@ -145,6 +147,7 @@ export default function SearchResultList({
                           {expense.date}
                           {secondaryText ? ` · ${secondaryText}` : ''}
                         </div>
+                        {transactionType === 'expense' && <ExpenseTags tags={expense.tags} />}
                       </div>
                     </div>
                     <div className="ml-3 flex-shrink-0 font-semibold text-slate-800">

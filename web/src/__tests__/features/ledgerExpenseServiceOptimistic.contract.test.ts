@@ -2,6 +2,8 @@ import { ledgerCommands } from '@/features/ledger/application/ledgerCommands';
 import { ledgerOptimisticProjection } from '@/features/ledger/application/ledgerOptimisticProjection';
 import {
   mergeExpenses,
+  addManualExpense,
+  addManualMonthlySplit,
   splitExpense,
   splitExpenseMonthly,
   unmergeExpense,
@@ -12,6 +14,7 @@ import { createHouseholdCommandId } from '@/platform/functions-api/householdComm
 import { OptimisticEntityProjection } from '@/platform/read-model/optimisticEntityProjection';
 import type { LedgerTransactionCommandResult } from '@/platform/functions-api/householdCommandContract';
 import type { Expense } from '@/types/expense';
+import { TextEncoder } from 'node:util';
 
 jest.mock('@/composition/clientSessionScope', () => ({
   requireClientSessionScope: () => ({ householdId: 'house-1', memberId: 'member-1' }),
@@ -86,6 +89,12 @@ function commandResult(overrides: Partial<LedgerTransactionCommandResult> = {}) 
 }
 
 describe('ledger expense service optimistic canonical contract', () => {
+  const textEncoderDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'TextEncoder');
+  beforeAll(() => Object.defineProperty(globalThis, 'TextEncoder', { configurable: true, value: TextEncoder }));
+  afterAll(() => {
+    if (textEncoderDescriptor) Object.defineProperty(globalThis, 'TextEncoder', textEncoderDescriptor);
+    else Reflect.deleteProperty(globalThis, 'TextEncoder');
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     mockedCreateCommandId.mockReturnValue('merge-command-default');
@@ -95,6 +104,44 @@ describe('ledger expense service optimistic canonical contract', () => {
   afterEach(() => {
     jest.restoreAllMocks();
     ledgerOptimisticProjection.reset();
+  });
+
+  test('수동 지출과 월 분할의 태그가 명령까지 전달된다', async () => {
+    mockedCommands.record.mockResolvedValue(commandResult({ tags: ['2026부산여행'] }));
+    mockedCommands.recordMonthlySplit.mockResolvedValue({ transactionIds: ['part-1', 'part-2'], splitGroupId: 'group' });
+    await addManualExpense('부산식당', 10000, 'food', '2026-09-18', undefined, 'expense', [' #2026부산여행 ']);
+    await addManualMonthlySplit('호텔', 20000, 'etc', '2026-09-18', 2, undefined, ['2026부산여행']);
+    expect(mockedCommands.record.mock.calls[0][1].tags).toEqual(['2026부산여행']);
+    expect(mockedCommands.recordMonthlySplit.mock.calls[0][1].tags).toEqual(['2026부산여행']);
+  });
+
+  test('태그 변경은 검색 projection에 즉시 반영되며 명령 거부 시 이전 태그로 복구된다', async () => {
+    const rendered: Expense[][] = [];
+    const subscription = ledgerOptimisticProjection.subscribe(items => rendered.push(items),
+      item => item.tags?.includes('2026부산여행') === true, 'house-1');
+    const original = expense({ tags: ['2026부산여행'] });
+    subscription.publish([original]);
+    let reject!: (error: Error) => void;
+    mockedCommands.update.mockReturnValue(new Promise((_, no) => { reject = no; }));
+    const operation = updateExpense(original.id, { tags: [] }, original.aggregateVersion);
+    expect(rendered.at(-1)).toEqual([]);
+    reject(new Error('저장 실패'));
+    await expect(operation).rejects.toThrow('저장 실패');
+    expect(rendered.at(-1)).toEqual([original]);
+    subscription.dispose();
+  });
+
+  test('합친 지출은 양쪽 태그를 보존하며 되돌리기 원본에는 각각의 태그를 유지한다', async () => {
+    const rendered: Expense[][] = [];
+    const subscription = ledgerOptimisticProjection.subscribe(items => rendered.push(items), () => true, 'house-1');
+    const target = expense({ id: 'target', tags: ['2026부산여행', '휴가'], mergedFrom: undefined });
+    const source = expense({ id: 'source', tags: ['2026부산여행', '가족모임'], mergedFrom: undefined });
+    subscription.publish([target, source]);
+    mockedCommands.merge.mockResolvedValue({ transactionId: 'merged:merge-command-default' });
+    await mergeExpenses(target, source);
+    expect(rendered.at(-1)?.[0].tags).toEqual(['2026부산여행', '휴가', '가족모임']);
+    expect(rendered.at(-1)?.[0].mergedFrom?.map(item => item.tags)).toEqual([target.tags, source.tags]);
+    subscription.dispose();
   });
 
   test.each([

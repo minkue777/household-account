@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Expense, TransactionType } from '@/types/expense';
 import { getLedgerPrimaryText, getLedgerSecondaryText } from '@/lib/utils/ledgerDisplay';
 import { useCategoryContext } from '@/contexts/CategoryContext';
+import ExpenseTags from './ExpenseTags';
 import {
   lockDocumentTouchScroll,
   LONG_PRESS_CLICK_SUPPRESSION_MS,
@@ -16,6 +17,7 @@ interface ExpenseItemProps {
   expense: Expense;
   allExpenses: Expense[];
   onEdit: (expense: Expense) => void;
+  onTagClick?: (tag: string) => void;
   onMergeExpenses?: (
     targetExpense: Expense,
     sourceExpense: Expense
@@ -40,6 +42,7 @@ export default function ExpenseItem({
   expense,
   allExpenses,
   onEdit,
+  onTagClick,
   onMergeExpenses,
   draggingExpenseId,
   setDraggingExpenseId,
@@ -282,6 +285,7 @@ export default function ExpenseItem({
                 {secondaryText}
               </div>
             )}
+            {transactionType === 'expense' && <ExpenseTags tags={expense.tags} onTagClick={onTagClick} />}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">

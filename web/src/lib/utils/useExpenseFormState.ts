@@ -6,6 +6,8 @@ export interface ExpenseFormStateSnapshot {
   category: string;
   memo: string;
   date: string;
+  tags?: string[];
+  tagInput?: string;
 }
 
 interface UseExpenseFormStateOptions {
@@ -35,6 +37,14 @@ export function useExpenseFormState({ initial }: UseExpenseFormStateOptions) {
     setFormState((prev) => ({ ...prev, date }));
   }, []);
 
+  const setTags = useCallback((tags: string[]) => {
+    setFormState((prev) => ({ ...prev, tags }));
+  }, []);
+
+  const setTagInput = useCallback((tagInput: string) => {
+    setFormState((prev) => ({ ...prev, tagInput }));
+  }, []);
+
   const resetExpenseFormState = useCallback((next: ExpenseFormStateSnapshot) => {
     setFormState(next);
   }, []);
@@ -45,12 +55,15 @@ export function useExpenseFormState({ initial }: UseExpenseFormStateOptions) {
     category: formState.category,
     memo: formState.memo,
     date: formState.date,
+    tags: formState.tags ?? [],
+    tagInput: formState.tagInput ?? '',
     setMerchant,
     setAmount,
     setCategory,
     setMemo,
     setDate,
+    setTags,
+    setTagInput,
     resetExpenseFormState,
   };
 }
-

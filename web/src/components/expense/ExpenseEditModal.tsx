@@ -17,6 +17,7 @@ import { useExpenseFormState } from '@/lib/utils/useExpenseFormState';
 import ExpenseFormFields from '@/components/expense/ExpenseFormFields';
 import ExpenseActionButtons from '@/components/expense/ExpenseActionButtons';
 import { useAppDialog } from '@/contexts/AppDialogContext';
+import { normalizeExpenseTags } from '@/lib/utils/expenseTags';
 
 interface ExpenseEditModalProps {
   expense: Expense;
@@ -33,6 +34,7 @@ interface ExpenseEditModalProps {
   onDelete?: () => Promise<void> | void;
   onNotifyPartner?: () => Promise<void> | void;
   transactionType: TransactionType;
+  availableTags?: string[];
 }
 
 type ExpenseActionConfirmType = 'unmerge' | 'updateSplitGroup';
@@ -52,6 +54,7 @@ export default function ExpenseEditModal({
   onDelete,
   onNotifyPartner,
   transactionType,
+  availableTags,
 }: ExpenseEditModalProps) {
   const { getCategoryLabel } = useCategoryContext();
   const { showAlert } = useAppDialog();
@@ -64,11 +67,15 @@ export default function ExpenseEditModal({
     category,
     memo,
     date,
+    tags,
+    tagInput,
     setMerchant,
     setAmount,
     setCategory,
     setMemo,
     setDate,
+    setTags,
+    setTagInput,
     resetExpenseFormState,
   } = useExpenseFormState({
     initial: {
@@ -77,6 +84,7 @@ export default function ExpenseEditModal({
       category: expense.category,
       memo: expense.memo || '',
       date: expense.date,
+      tags: normalizeExpenseTags(expense.tags),
     },
   });
 
@@ -146,6 +154,7 @@ export default function ExpenseEditModal({
       category: expense.category,
       memo: expense.memo || '',
       date: expense.date,
+      tags: normalizeExpenseTags(expense.tags),
     });
     setRememberMerchant(false);
     resetMonthlySplitInput();
@@ -188,6 +197,7 @@ export default function ExpenseEditModal({
           category: expense.category,
           memo: expense.memo,
           date: expense.date,
+          tags: expense.tags,
         },
         draft: {
           merchant,
@@ -195,6 +205,7 @@ export default function ExpenseEditModal({
           category,
           memo,
           date,
+          tags: normalizeExpenseTags([...tags, tagInput]),
         },
       });
 
@@ -613,6 +624,11 @@ export default function ExpenseEditModal({
                     onCategoryChange={setCategory}
                     memo={memo}
                     onMemoChange={setMemo}
+                    tags={tags}
+                    onTagsChange={setTags}
+                    tagInput={tagInput}
+                    onTagInputChange={setTagInput}
+                    availableTags={availableTags}
                     date={date}
                     onDateChange={setDate}
                     showDateField

@@ -1,3 +1,4 @@
+import { readExpenseTags } from "./expenseTags";
 import type { LedgerTransactionView } from "../model/ledgerTransaction";
 
 export type LedgerValidationResult =
@@ -35,7 +36,7 @@ export function applyTransactionPatch(
   patch: Partial<
     Pick<
       LedgerTransactionView,
-      "merchant" | "memo" | "amountInWon" | "categoryId" | "accountingDate"
+      "merchant" | "memo" | "tags" | "amountInWon" | "categoryId" | "accountingDate"
     >
   >,
 ): LedgerTransactionView {
@@ -43,6 +44,7 @@ export function applyTransactionPatch(
     ...transaction,
     ...(patch.merchant === undefined ? {} : { merchant: patch.merchant.trim() }),
     ...(patch.memo === undefined ? {} : { memo: patch.memo.trim() }),
+    ...(patch.tags === undefined ? {} : { tags: readExpenseTags(patch.tags) }),
     ...(patch.amountInWon === undefined
       ? {}
       : { amountInWon: patch.amountInWon }),

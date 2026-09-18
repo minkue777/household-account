@@ -12,6 +12,7 @@ export function ledgerTransactionDocument(
     transactionType: transaction.transactionType,
     merchant: transaction.merchant,
     memo: transaction.memo,
+    tags: transaction.tags ?? [],
     amountInWon: transaction.amountInWon,
     amount: transaction.amountInWon,
     categoryId: transaction.categoryId,

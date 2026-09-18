@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readExpenseTags } from "../../../contexts/household-finance/ledger/domain/policies/expenseTags";
 
 import type * as firestore from "firebase-admin/firestore";
 import { FieldValue } from "firebase-admin/firestore";
@@ -27,6 +28,7 @@ interface MergedDisplaySnapshot {
   readonly amount: number;
   readonly category: string;
   readonly memo?: string;
+  readonly tags?: string[];
 }
 
 function hash(value: string): string {
@@ -120,6 +122,7 @@ function mapTransaction(
     merchant: text(data, "merchant"),
     categoryId: text(data, "categoryId", "category") || "etc",
     memo: text(data, "memo"),
+    tags: readExpenseTags(data.tags),
     accountingDate: text(data, "accountingDate", "date"),
     localTime: text(data, "localTime", "time") || "00:00",
     cardDisplay,
@@ -219,6 +222,7 @@ function mergedDisplaySnapshots(
     amount: leaf.amountInWon,
     category: leaf.categoryId,
     ...(leaf.memo === "" ? {} : { memo: leaf.memo }),
+    ...(leaf.tags === undefined || leaf.tags.length === 0 ? {} : { tags: leaf.tags }),
   }));
 }
 
@@ -238,6 +242,7 @@ function transactionDocument(
     categoryId: value.categoryId,
     category: value.categoryId,
     memo: value.memo,
+    tags: value.tags ?? [],
     accountingDate: value.accountingDate,
     date: value.accountingDate,
     localTime: value.localTime,
