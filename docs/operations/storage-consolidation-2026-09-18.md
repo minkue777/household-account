@@ -166,3 +166,28 @@ fixture의 격리 누락은 확인됐지만 이것이 SIGSEGV의 직접 원인�
 로컬에는 같은 Android 14 이미지가 없어 다른 엔진의 결과로 대체하지 않고, 수정 후 동일
 CI 환경에서 충돌 재발 여부를 확인합니다. 기존 실패를 성공으로 기록하지 않습니다.
 수정한 계측 Kotlin 컴파일은 성공했으며 JVM 검사 task는 기존 결과가 유효한 UP-TO-DATE였습니다.
+
+## Native 성능 fixture 누락 수정
+
+`d35a2cb`의 CI `35339568294`에서는 Android 일반 계측 35개와 Native Firebase E2E 3개가
+모두 통과했습니다. 이전 화면 재생성 검사는 6.102초에 통과했고 같은 SIGSEGV는 없었습니다.
+남은 실패는 Native 성능 측정의 `Authenticated home with fixture balance` 확인입니다.
+홈 완료 표식은 기록됐지만 테스트가 기대한 월 지출 237,000원이 없어 준비 단계에서 실패했습니다.
+
+`tools/e2e/native-firebase.mjs`의 성능 전용 seed가 2,160건을 옛 `expenses` 경로에
+준비하던 누락을 수정했습니다. 현재 가구의 `ledgerTransactions`와 canonical 금액·카테고리·날짜
+필드로 저장하며 3명·36개월·월 60건, 월 지출 237,000원의 합성 데이터 규모를 유지합니다.
+측정 전에 실제 사용자 token으로 홈과 같은 가구·월 조건을 조회해 60건과 합계를 검증합니다.
+잘못된 fixture는 Android 빌드·실행 전에 실패하므로 90초 동안 불가능한 화면을 기다리지 않습니다.
+Kotlin 화면 검증, 측정 횟수·시간제한 및 성능 보고 전용 정책은 그대로입니다.
+
+Android 없이 같은 준비 경로를 확인하는 명령은 다음과 같습니다. 고정 demo 프로젝트의
+로컬 Auth·Functions·Firestore만 사용하며 운영 데이터나 조회 응답을 대체하지 않습니다.
+
+```powershell
+node functions/scripts/run-with-emulator-secret.mjs node tools/e2e/firebase-emulators.mjs "node tools/e2e/native-firebase.mjs seed-performance"
+```
+
+위 명령의 실제 실행에서 인증된 조회 60건·합계 237,000원을 확인했고 exit 0으로 완료했습니다.
+다른 일반 E2E·성능·Android fixture도 점검했으며, 남은 flat 자료 준비는 이관 및 legacy 무시를
+검사하는 의도적 테스트입니다. 최종 Android 성능 표본 생성 여부는 수정 commit의 CI에서 확인합니다.

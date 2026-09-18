@@ -103,11 +103,11 @@ async function seed({ performance = false } = {}) {
       for (let index = 0; index < 60; index++) {
         const date = new Date(Date.UTC(seoulYear, seoulMonth - monthsAgo, index % 28 + 1)).toISOString().slice(0, 10);
         writes.push({ update: {
-          name: `projects/${projectId}/databases/(default)/documents/expenses/native-performance-${monthsAgo}-${index}`,
+          name: `projects/${projectId}/databases/(default)/documents/households/${household.householdId}/ledgerTransactions/native-performance-${monthsAgo}-${index}`,
           fields: fields({ householdId: household.householdId, merchant: `합성 거래 ${monthsAgo}-${index}`,
-            amount: 1000 + index * 100 + monthsAgo * 10, category: categoryId, date, time: '12:00',
+            amountInWon: 1000 + index * 100 + monthsAgo * 10, categoryId, accountingDate: date, localTime: '12:00',
             memo: '', transactionType: 'expense', lifecycleState: 'active', aggregateVersion: 1,
-            creatorMemberId: household.memberId, cardType: 'manual', cardDisplay: '' }),
+            creatorMemberId: household.memberId, cardType: 'manual', cardDisplay: '', source: 'manual', schemaVersion: 2 }),
         } });
       }
     }
@@ -119,6 +119,29 @@ async function seed({ performance = false } = {}) {
     }
     fixture.performanceDataset = { members: 3, months: 36, expensesPerMonth: 60, expenses: writes.length };
     fixture.expectedMonthlyExpenseInWon = 237000;
+    // Verify the real authenticated home query before building/launching Android or measuring time.
+    // A stale fixture path/field must fail here, not after the UI waits for an impossible total.
+    const month = seoul.slice(0, 7);
+    const monthEnd = new Date(Date.UTC(seoulYear, seoulMonth + 1, 0)).toISOString().slice(0, 10);
+    const result = await jsonRequest(`http://127.0.0.1:8080/v1/projects/${projectId}/databases/(default)/documents/households/${household.householdId}:runQuery`, {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${account.idToken}` },
+      body: JSON.stringify({ structuredQuery: {
+        from: [{ collectionId: 'ledgerTransactions' }],
+        where: { compositeFilter: { op: 'AND', filters: [
+          ['householdId', 'EQUAL', household.householdId],
+          ['accountingDate', 'GREATER_THAN_OR_EQUAL', `${month}-01`],
+          ['accountingDate', 'LESS_THAN_OR_EQUAL', monthEnd],
+        ].map(([fieldPath, op, stringValue]) => ({ fieldFilter: { field: { fieldPath }, op, value: { stringValue } } })) } },
+      } }),
+    });
+    const monthly = result.flatMap(row => row.document ? [row.document.fields] : []);
+    assert.equal(monthly.length, 60, 'Authenticated home query must read all 60 fixture expenses');
+    assert(monthly.every(row => row.categoryId?.stringValue === categoryId
+      && row.transactionType?.stringValue === 'expense' && row.lifecycleState?.stringValue === 'active'),
+    'Home fixture must contain visible expenses with the actual category');
+    assert.equal(monthly.reduce((sum, row) => sum + Number(row.amountInWon?.integerValue), 0),
+      fixture.expectedMonthlyExpenseInWon, 'Authenticated home fixture monthly amount must match');
+    console.log(`Native performance fixture verified: ${monthly.length} monthly expenses / ${fixture.expectedMonthlyExpenseInWon} KRW`);
   }
   mkdirSync(output, { recursive: true });
   writeFileSync(fixturePath, JSON.stringify(fixture), 'utf8');
@@ -135,14 +158,14 @@ async function run(command, args, cwd = root, env = process.env) {
 }
 
 const mode = process.argv[2] ?? 'run';
-assert(['run', 'seed', 'verify', 'performance', 'performance-isolated'].includes(mode),
-  'Usage: node tools/e2e/native-firebase.mjs [run|seed|verify|performance|performance-isolated]');
-const performanceMode = mode === 'performance' || mode === 'performance-isolated';
+assert(['run', 'seed', 'seed-performance', 'verify', 'performance', 'performance-isolated'].includes(mode),
+  'Usage: node tools/e2e/native-firebase.mjs [run|seed|seed-performance|verify|performance|performance-isolated]');
+const performanceMode = ['performance', 'performance-isolated', 'seed-performance'].includes(mode);
 const isolateWebView = mode === 'performance-isolated';
 const performanceSamples = Number(process.env.PERFORMANCE_SAMPLES ?? 7);
 if (performanceMode) assert(Number.isInteger(performanceSamples) && performanceSamples >= 1 && performanceSamples <= 30,
   'PERFORMANCE_SAMPLES must be an integer from 1 to 30');
-if (mode === 'seed') await seed();
+if (mode === 'seed' || mode === 'seed-performance') await seed({ performance: performanceMode });
 else {
   const adb = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT
     ? join(process.env.ANDROID_HOME ?? process.env.ANDROID_SDK_ROOT, 'platform-tools', process.platform === 'win32' ? 'adb.exe' : 'adb') : 'adb';
