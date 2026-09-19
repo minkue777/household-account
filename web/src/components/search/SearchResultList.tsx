@@ -142,11 +142,13 @@ export default function SearchResultList({
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-medium text-slate-800">{primaryText}</div>
-                        <div className="text-xs text-slate-500">
-                          {expense.date}
-                          {secondaryText ? ` · ${secondaryText}` : ''}
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-1 text-xs leading-4 text-slate-500">
+                          <span className="min-w-0 max-w-full truncate">
+                            {expense.date}
+                            {secondaryText ? ` · ${secondaryText}` : ''}
+                          </span>
+                          {transactionType === 'expense' && <ExpenseTags tags={expense.tags} />}
                         </div>
-                        {transactionType === 'expense' && <ExpenseTags tags={expense.tags} />}
                       </div>
                     </div>
                     <div className="ml-3 flex-shrink-0 font-semibold text-slate-800">

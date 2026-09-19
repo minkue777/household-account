@@ -10,7 +10,7 @@ export default function ExpenseTags({ tags, onTagClick }: ExpenseTagsProps) {
   if (normalizedTags.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-baseline gap-x-2 text-xs leading-4" aria-label="지출 태그">
+    <span className="contents text-xs leading-4" aria-label="지출 태그">
       {normalizedTags.map((tag) => onTagClick ? (
         <button
           key={tag}
@@ -31,6 +31,6 @@ export default function ExpenseTags({ tags, onTagClick }: ExpenseTagsProps) {
           #{tag}
         </span>
       ))}
-    </div>
+    </span>
   );
 }

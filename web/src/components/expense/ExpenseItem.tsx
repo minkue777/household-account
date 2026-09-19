@@ -280,12 +280,12 @@ export default function ExpenseItem({
             <div className="font-medium text-slate-800 truncate">
               {primaryText}
             </div>
-            {secondaryText && (
-              <div className="text-xs text-slate-500 truncate">
-                {secondaryText}
+            {(secondaryText || (transactionType === 'expense' && !!expense.tags?.length)) && (
+              <div className="flex min-w-0 flex-wrap items-baseline gap-x-1 text-xs leading-4 text-slate-500">
+                {secondaryText && <span className="min-w-0 max-w-full truncate">{secondaryText}</span>}
+                {transactionType === 'expense' && <ExpenseTags tags={expense.tags} onTagClick={onTagClick} />}
               </div>
             )}
-            {transactionType === 'expense' && <ExpenseTags tags={expense.tags} onTagClick={onTagClick} />}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
