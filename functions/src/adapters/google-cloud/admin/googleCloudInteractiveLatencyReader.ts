@@ -264,7 +264,8 @@ export function summarizeInteractiveLatency(
         operation: first.operation,
         sampleCount: items.length,
         succeededCount: items.filter(({ status }) => status === "succeeded").length,
-        failedCount: items.filter(({ status }) => status !== "succeeded").length,
+        rejectedCount: items.filter(({ status }) => status === "rejected").length,
+        failedCount: items.filter(({ status }) => status === "failed").length,
         averageMs:
           durations.length === 0 ? 0 : roundedTenth(total / durations.length),
         p95Ms: roundedTenth(percentile(durations, 0.95)),

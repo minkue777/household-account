@@ -40,11 +40,17 @@ test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] �
     jsonPayload: { message: 'interactive-latency', schemaVersion: 'interactive-latency.v1', stage: 'total',
       endpoint: 'executeHouseholdCommand', operation: 'ledger.update-transaction.v1', correlationId, elapsedMs, status },
   });
+  const iosEntry = (correlationId: string, secondsAgo: number, status: string) => {
+    const entry = latencyEntry(correlationId, secondsAgo, 100, status);
+    return { ...entry, jsonPayload: { ...entry.jsonPayload,
+      endpoint: 'addExpenseFromMessage', operation: 'payment-capture.submit-ios-shortcut-message.v1' } };
+  };
   await fixture(request, 'e2eGoogleCloudTransport/interactiveLatency', { entries: [
     latencyEntry('e2e-edit-a', 180, 9_000, 'failed'),
     latencyEntry('e2e-edit-a', 120, 1_000),
     latencyEntry('e2e-edit-b', 60, 3_000),
     latencyEntry('e2e-invalid-duration', 30, '60000'),
+    iosEntry('e2e-card-mismatch', 90, 'rejected'),
   ] });
   await setEmulatorAdminClaims(scope.uid);
   const householdName = String((await documents(request, 'households')).find(x => x.id === scope.householdId)!.name);
@@ -80,10 +86,29 @@ test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] �
     await expect(latency).toHaveCount(1);
     await expect(latency.getByRole('cell').nth(1)).toContainText('지출·수입 수정');
     await expect(latency.getByRole('cell').nth(3)).toHaveText('2');
-    await expect(latency.getByRole('cell').nth(4)).toHaveText('2/2');
-    await expect(latency.getByRole('cell').nth(5)).toHaveText('2.000초');
-    await expect(latency.getByRole('cell').nth(6)).toHaveText('3.000초');
-    await expect(latency.getByRole('cell').nth(7)).toHaveText('3.000초');
+    await expect(latency.getByRole('cell').nth(4)).toHaveText('2');
+    await expect(latency.getByRole('cell').nth(5)).toHaveText('0');
+    await expect(latency.getByRole('cell').nth(6)).toHaveText('0');
+    await expect(latency.getByRole('cell').nth(7)).toHaveText('2.000초');
+    await expect(latency.getByRole('cell').nth(8)).toHaveText('3.000초');
+    await expect(latency.getByRole('cell').nth(9)).toHaveText('3.000초');
+    const iosLatency = admin.getByRole('row').filter({ hasText: 'payment-capture.submit-ios-shortcut-message.v1' });
+    await expect(iosLatency.getByRole('cell').nth(3)).toHaveText('1');
+    await expect(iosLatency.getByRole('cell').nth(4)).toHaveText('0');
+    await expect(iosLatency.getByRole('cell').nth(5)).toHaveText('1');
+    await expect(iosLatency.getByRole('cell').nth(6)).toHaveText('0');
+    await expect(iosLatency.getByRole('cell').nth(6)).not.toHaveClass(/text-amber-300/);
+    await fixture(request, 'e2eGoogleCloudTransport/interactiveLatency', { entries: [
+      iosEntry('e2e-accepted', 120, 'succeeded'),
+      iosEntry('e2e-card-mismatch', 90, 'rejected'),
+      iosEntry('e2e-server-error', 60, 'failed'),
+    ] });
+    await admin.getByRole('button', { name: '새로고침', exact: true }).click();
+    await expect(iosLatency.getByRole('cell').nth(3)).toHaveText('3');
+    await expect(iosLatency.getByRole('cell').nth(4)).toHaveText('1');
+    await expect(iosLatency.getByRole('cell').nth(5)).toHaveText('1');
+    await expect(iosLatency.getByRole('cell').nth(6)).toHaveText('1');
+    await expect(iosLatency.getByRole('cell').nth(6)).toHaveClass(/text-amber-300/);
     const loggingRequest = (await documents(request, 'e2eGoogleCloudTransport')).find(x => x.id === 'lastLoggingRequest')!;
     expect(loggingRequest).toMatchObject({ resourceNames: ['projects/demo-household-account-e2e'], orderBy: 'timestamp desc', pageSize: 250 });
     expect(String(loggingRequest.filter)).toMatch(/^timestamp>="[^"]+" AND timestamp<="[^"]+" AND jsonPayload.message="interactive-latency" AND jsonPayload.schemaVersion="interactive-latency.v1" AND jsonPayload.stage="total"$/);

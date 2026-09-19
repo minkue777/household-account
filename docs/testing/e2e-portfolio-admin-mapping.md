@@ -75,7 +75,7 @@
 | ADM-002 | admin-portfolio: 일반 token 거절·Auth Emulator claim에 의한 서버 권한 승인 | 운영 IAM 부여 절차 |
 | ADM-003 | admin-portfolio: 가구 논리 삭제/복구·자산 보존 | 수동 영구 purge 승인 인프라 |
 | ADM-004 | admin-portfolio: 조회전용 banner·자산/통계 이동·복귀 링크 | 다른 UID의 전 금융 Query 목록은 access 보안 E2E 병행 |
-| ADM-005 | admin-portfolio: 실제 dashboard callable·비용 snapshot·Cloud Logging 원시 표본 파싱/중복 제거/집계와 호출·성공·평균/P95/최대 화면 수치 | 실제 ADC/IAM·운영 로그 수집과 Billing export 인프라 |
+| ADM-005 | admin-portfolio: 실제 dashboard callable·비용 snapshot·Cloud Logging 원시 표본 파싱/중복 제거/집계와 호출·성공·제외/거절·실패·평균/P95/최대 화면 수치와 카드번호 불일치 거절의 실패 제외 | 실제 ADC/IAM·운영 로그 수집과 Billing export 인프라 |
 | ADM-006 | admin-portfolio: 실제 visit callable 재전송 중복 집계 없음 | GCP 로그 보존기간 설정 |
 | EXT-001 | portfolio-provider-jobs/admin-portfolio: 원시503 실패 보존·운영조회 | Monitoring 경보 이메일 전달 |
 | EXT-002 | admin-portfolio: 무권한 관리자 entry 거절 | App Check attestation 외부서비스·IP별 quota 전 조합 |

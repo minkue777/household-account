@@ -124,6 +124,8 @@ export interface AdminOperationsDashboardWireView {
       operation: string;
       sampleCount: number;
       succeededCount: number;
+      /** 구 서버 응답에는 없으므로 제외·거절 건수를 추측하지 않습니다. */
+      rejectedCount?: number;
       failedCount: number;
       averageMs: number;
       p95Ms: number;

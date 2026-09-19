@@ -7,6 +7,46 @@ import {
 } from "../../src/adapters/google-cloud/admin/googleCloudInteractiveLatencyReader";
 
 describe("Google Cloud interactive latency reader", () => {
+  it.each([
+    { statuses: ["rejected"], succeeded: 0, rejected: 1, failed: 0 },
+    { statuses: ["succeeded", "rejected", "failed"], succeeded: 1, rejected: 1, failed: 1 },
+  ])("[T-ADM-004] iPhone 정책 거절은 실패와 분리한다: $statuses", async ({ statuses, succeeded, rejected, failed }) => {
+    const reader = new GoogleCloudInteractiveLatencyReader("test-project", {
+      async getAccessToken() { return { access_token: "test-token" }; },
+    }, async () => ({ ok: true, status: 200, async json() {
+      return { entries: statuses.map((status, index) => ({
+        timestamp: `2026-09-18T06:24:4${index}.000Z`,
+        jsonPayload: {
+          endpoint: "addExpenseFromMessage",
+          operation: "payment-capture.submit-ios-shortcut-message.v1",
+          elapsedMs: 100,
+          status,
+        },
+      })) };
+    } }));
+    const result = await reader.read({ generatedAt: "2026-09-18T07:00:00Z", windowHours: 24 });
+    expect(result.operations).toEqual([expect.objectContaining({
+      sampleCount: statuses.length,
+      succeededCount: succeeded,
+      rejectedCount: rejected,
+      failedCount: failed,
+      averageMs: 100,
+    })]);
+  });
+
+  it("[T-ADM-004] 재시도의 최종 거절은 실패로 남기지 않고 다른 실제 실패는 보존한다", () => {
+    const base = {
+      endpoint: "addExpenseFromMessage" as const,
+      operation: "payment-capture.submit-ios-shortcut-message.v1",
+      elapsedMs: 100,
+    };
+    expect(summarizeInteractiveLatency([
+      { ...base, correlationId: "retried", status: "failed", timestamp: "2026-09-18T06:24:40Z" },
+      { ...base, correlationId: "retried", status: "rejected", timestamp: "2026-09-18T06:24:41Z" },
+      { ...base, correlationId: "server-error", status: "failed", timestamp: "2026-09-18T06:24:42Z" },
+    ])).toEqual([expect.objectContaining({ sampleCount: 2, succeededCount: 0, rejectedCount: 1, failedCount: 1 })]);
+  });
+
   it('조회 제한 뒤 다음 페이지가 있으면 전체 기간의 available 통계로 표시하지 않는다', async () => {
     let calls = 0;
     const reader = new GoogleCloudInteractiveLatencyReader('test-project', {
@@ -69,6 +109,8 @@ describe("Google Cloud interactive latency reader", () => {
         operation: "ledger.transaction.update.v1",
         sampleCount: 3,
         succeededCount: 2,
+        rejectedCount: 0,
+
         failedCount: 1,
         averageMs: 233.3,
         p95Ms: 400,
@@ -80,6 +122,8 @@ describe("Google Cloud interactive latency reader", () => {
         operation: "payment-capture.submit-ios-shortcut-message.v1",
         sampleCount: 1,
         succeededCount: 1,
+        rejectedCount: 0,
+
         failedCount: 0,
         averageMs: 75,
         p95Ms: 75,
@@ -91,6 +135,8 @@ describe("Google Cloud interactive latency reader", () => {
         operation: "portfolio.market-data.search.v1",
         sampleCount: 1,
         succeededCount: 1,
+        rejectedCount: 0,
+
         failedCount: 0,
         averageMs: 50,
         p95Ms: 50,
@@ -141,6 +187,8 @@ describe("Google Cloud interactive latency reader", () => {
         operation,
         sampleCount: 1,
         succeededCount: 1,
+        rejectedCount: 0,
+
         failedCount: 0,
         averageMs: 300,
         p95Ms: 300,
@@ -153,6 +201,8 @@ describe("Google Cloud interactive latency reader", () => {
       operation: "ledger.split-transaction.v1",
       sampleCount: 1,
       succeededCount: 1,
+      rejectedCount: 0,
+
       failedCount: 0,
       averageMs: 310,
       p95Ms: 310,
@@ -186,6 +236,8 @@ describe("Google Cloud interactive latency reader", () => {
         operation,
         sampleCount: 1,
         succeededCount: 1,
+        rejectedCount: 0,
+
         failedCount: 0,
         averageMs: 180,
         p95Ms: 180,
@@ -226,6 +278,8 @@ describe("Google Cloud interactive latency reader", () => {
         operation: "notifications.deliver-household-request.v1",
         sampleCount: 1,
         succeededCount: 1,
+        rejectedCount: 0,
+
         failedCount: 0,
         averageMs: 1_250,
         p95Ms: 1_250,
@@ -286,6 +340,8 @@ describe("Google Cloud interactive latency reader", () => {
         operation,
         sampleCount: 2,
         succeededCount: 1,
+        rejectedCount: 0,
+
         failedCount: 1,
         averageMs: 1_250,
         p95Ms: 1_250,
@@ -313,6 +369,8 @@ describe("Google Cloud interactive latency reader", () => {
         operation: "notifications.deliver-household-request.v1",
         sampleCount: 1,
         succeededCount: 0,
+        rejectedCount: 0,
+
         failedCount: 1,
         averageMs: 0,
         p95Ms: 0,
@@ -416,6 +474,8 @@ describe("Google Cloud interactive latency reader", () => {
         operation: "notifications.deliver-ios-shortcut.v1",
         sampleCount: 1,
         succeededCount: 1,
+        rejectedCount: 0,
+
         failedCount: 0,
         averageMs: 700,
         p95Ms: 700,

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 
 import { AdminOperationsOverview } from '@/components/admin/AdminOperationsOverview';
 import type { AdminOperationsDashboardWireView } from '@/platform/functions-api';
@@ -102,7 +102,8 @@ describe('admin Cloud Function latency contract', () => {
             endpoint: 'addExpenseFromMessage',
             operation: 'payment-capture.submit-ios-shortcut-message.v1',
             sampleCount: 1,
-            succeededCount: 1,
+            succeededCount: 0,
+            rejectedCount: 1,
             failedCount: 0,
             averageMs: 150,
             p95Ms: 150,
@@ -180,6 +181,17 @@ describe('admin Cloud Function latency contract', () => {
     expect(screen.queryByText(/online.*ms/i)).not.toBeInTheDocument();
 
     const updateRow = screen.getByText('ledger.update-transaction.v1').closest('tr');
+    const iosRow = screen.getByText('payment-capture.submit-ios-shortcut-message.v1').closest('tr')!;
+    expect(screen.getByRole('columnheader', { name: '제외/거절' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: '실패', exact: true })).toBeInTheDocument();
+    const iosCells = within(iosRow).getAllByRole('cell');
+    expect(iosCells.slice(3, 7).map(cell => cell.textContent)).toEqual(['1', '0', '1', '0']);
+    expect(iosCells[5]).not.toHaveClass('text-amber-300');
+    expect(iosCells[6]).not.toHaveClass('text-amber-300');
+    const updateCells = within(updateRow!).getAllByRole('cell');
+    expect(updateCells[5]).toHaveTextContent('—');
+    expect(updateCells[6]).toHaveTextContent('1');
+    expect(updateCells[6]).toHaveClass('text-amber-300');
     const deleteRow = screen.getByText('ledger.delete-transaction.v1').closest('tr');
     const splitRow = screen.getByText('ledger.split-transaction.v1').closest('tr');
     const mergeRow = screen.getByText('ledger.merge-transactions.v1').closest('tr');

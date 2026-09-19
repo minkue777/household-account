@@ -81,6 +81,7 @@ export interface AdminDashboardFunctionLatency {
   readonly operation: string;
   readonly sampleCount: number;
   readonly succeededCount: number;
+  readonly rejectedCount: number;
   readonly failedCount: number;
   readonly averageMs: number;
   readonly p95Ms: number;

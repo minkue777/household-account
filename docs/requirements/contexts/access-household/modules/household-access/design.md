@@ -449,6 +449,10 @@ Transport 문자열이 아니라 Result 종류와 code를 테스트합니다.
 
 모든 Command에 commandId, correlationId, householdId의 비가역 표기, principal의 비가역 표기, result code, retry count를 기록합니다. legacy claim은 성공·이미 연결·다른 UID 충돌 count만, 초대는 발급·만료·소비 count만 기록합니다. 수동 영구 Purge Process는 Context, checkpoint hash, page count, deletedCount, attempt, next retry를 metric으로 남깁니다. displayName, invitation code, legacy key 원문은 구조화 로그에 포함하지 않습니다.
 
+관리자 처리 시간 집계(ADM-005)는 기존 `interactive-latency.v1`의 `succeeded`, `rejected`, `failed`를 각각 `succeededCount`, `rejectedCount`, `failedCount`로 반환합니다. 카드번호 불일치처럼 의도적으로 처리 대상을 제외한 `rejected`는 실패가 아닙니다. 인증·검증 거절도 성공으로 바꾸지 않고 같은 제외·거절 열에 보존합니다. `sampleCount = succeededCount + rejectedCount + failedCount`이며 UI는 호출·성공·제외/거절·실패를 별도 건수로 표시하고 실패 건수에만 경고색을 적용합니다. 기존 로그도 조회 시 같은 기준으로 다시 집계하며 원문 로그와 결제 처리 결과는 변경하지 않습니다.
+
+관리자 응답에 추가하는 `rejectedCount`는 구 Web에서 무시할 수 있는 확장 필드입니다. 신 Web은 구 응답에서 이 값이 없으면 제외·거절 건수를 `—`로 표시하고 기존 실패 건수는 추측으로 재분류하지 않습니다. 서버 배포 후 Web을 배포합니다. 기존 correlation별 최종 결과 선택, 알림 provider 호출이 없는 `rejected`의 표본 제외, 처리 시간 산식은 유지합니다. T-ADM-004의 reader 검사와 UI 검사 및 ADM-005 E2E에서 카드 불일치 거절·성공·실제 서버 실패를 구분하고 호출 합계와 재시도 집계를 검증합니다.
+
 ## 10. 목표 패키지 구조
 
 아직 없는 경로는 모두 `목표`입니다.

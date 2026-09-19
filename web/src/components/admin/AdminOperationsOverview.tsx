@@ -575,7 +575,7 @@ export function AdminOperationsOverview({
           </EmptyState>
         ) : (
           <div className="max-h-[420px] overflow-auto">
-            <table className="w-full min-w-[940px] text-left text-xs">
+            <table className="w-full min-w-[1040px] text-left text-xs">
               <thead className="sticky top-0 z-10 border-b border-slate-800 bg-slate-900 text-slate-500">
                 <tr>
                   <th className="px-4 py-3 font-medium">업무군</th>
@@ -583,6 +583,8 @@ export function AdminOperationsOverview({
                   <th className="px-4 py-3 font-medium">측정 경로</th>
                   <th className="px-4 py-3 text-right font-medium">호출</th>
                   <th className="px-4 py-3 text-right font-medium">성공</th>
+                  <th className="whitespace-nowrap px-4 py-3 text-right font-medium">제외/거절</th>
+                  <th className="px-4 py-3 text-right font-medium">실패</th>
                   <th className="px-4 py-3 text-right font-medium">평균</th>
                   <th className="px-4 py-3 text-right font-medium">P95</th>
                   <th className="px-4 py-3 text-right font-medium">최대</th>
@@ -621,8 +623,14 @@ export function AdminOperationsOverview({
                       <td className="px-4 py-3 text-right font-mono">
                         {operation.sampleCount.toLocaleString('ko-KR')}
                       </td>
-                      <td className={`px-4 py-3 text-right font-mono ${operation.failedCount > 0 ? 'text-amber-300' : 'text-emerald-300'}`}>
-                        {operation.succeededCount}/{operation.sampleCount}
+                      <td className="px-4 py-3 text-right font-mono text-emerald-300">
+                        {operation.succeededCount.toLocaleString('ko-KR')}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-400">
+                        {operation.rejectedCount?.toLocaleString('ko-KR') ?? '—'}
+                      </td>
+                      <td className={`px-4 py-3 text-right font-mono ${operation.failedCount > 0 ? 'text-amber-300' : 'text-slate-400'}`}>
+                        {operation.failedCount.toLocaleString('ko-KR')}
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-sky-300">
                         {formatDuration(operation.averageMs)}
