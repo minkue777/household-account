@@ -85,7 +85,7 @@ export async function addExpenseThroughUi(page: Page, request: APIRequestContext
   if (input.memo !== undefined) await dialog.getByPlaceholder('메모를 입력하세요').fill(input.memo);
   if (input.category) await dialog.getByRole('button', { name: input.category.slice(0, 2), exact: true }).click();
   for (const tag of input.tags ?? []) {
-    await dialog.getByLabel('태그 (선택)', { exact: true }).fill(tag);
+    await dialog.getByLabel('태그', { exact: true }).fill(tag);
     await dialog.getByRole('button', { name: '태그 추가', exact: true }).click();
   }
   await dialog.getByRole('button', { name: '추가', exact: true }).click();

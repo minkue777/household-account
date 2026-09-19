@@ -45,7 +45,7 @@ describe('[T-LED-011][LED-011] 지출 태그 입력과 저장', () => {
     fireEvent.click(screen.getByRole('button', { name: '#2026부산여행' }));
     expect(screen.getByRole('button', { name: '2026부산여행 태그 제거' })).toBeInTheDocument();
 
-    const input = screen.getByRole('textbox', { name: '태그 (선택)' });
+    const input = screen.getByRole('textbox', { name: '태그' });
     expect(input).toHaveAttribute('maxlength', String(MAX_EXPENSE_TAG_LENGTH));
     expect(screen.queryByRole('button', { name: '#2026부산여행' })).not.toBeInTheDocument();
     fireEvent.change(input, { target: { value: '#2026부산여행' } });
@@ -62,7 +62,7 @@ describe('[T-LED-011][LED-011] 지출 태그 입력과 저장', () => {
 
   test('입력한 이름으로 기존 태그를 좁히고 선택하면 입력칸을 비운다', () => {
     render(<TagInputHarness />);
-    const input = screen.getByRole('textbox', { name: '태그 (선택)' });
+    const input = screen.getByRole('textbox', { name: '태그' });
     fireEvent.change(input, { target: { value: '#부산' } });
     expect(screen.queryByRole('button', { name: '#가족모임' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '#2026부산여행' }));
@@ -72,7 +72,7 @@ describe('[T-LED-011][LED-011] 지출 태그 입력과 저장', () => {
 
   test('태그 한도에 도달하면 추가를 막고 기존 태그를 제거하면 다시 입력할 수 있다', () => {
     render(<TagInputHarness initialTags={Array.from({ length: MAX_EXPENSE_TAGS - 1 }, (_, index) => `행사${index}`)} />);
-    const input = screen.getByRole('textbox', { name: '태그 (선택)' });
+    const input = screen.getByRole('textbox', { name: '태그' });
     fireEvent.change(input, { target: { value: '마지막행사' } });
     fireEvent.click(screen.getByRole('button', { name: '태그 추가' }));
     expect(input).toBeDisabled();
@@ -87,7 +87,7 @@ describe('[T-LED-011][LED-011] 지출 태그 입력과 저장', () => {
     const onSave = jest.fn().mockResolvedValue(undefined);
     render(<ExpenseEditModal expense={expense} isOpen onClose={jest.fn()} onSave={onSave} transactionType="expense" availableTags={['2026부산여행']} />);
     fireEvent.click(screen.getByRole('button', { name: '#2026부산여행' }));
-    fireEvent.change(screen.getByRole('textbox', { name: '태그 (선택)' }), { target: { value: '가족모임' } });
+    fireEvent.change(screen.getByRole('textbox', { name: '태그' }), { target: { value: '가족모임' } });
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
     await waitFor(() => expect(onSave).toHaveBeenCalledWith({ tags: ['2026부산여행', '가족모임'] }, false));
   });
@@ -106,7 +106,7 @@ describe('[T-LED-011][LED-011] 지출 태그 입력과 저장', () => {
     fireEvent.change(screen.getByPlaceholderText('가맹점명을 입력하세요'), { target: { value: '부산 식당' } });
     fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '12000' } });
     fireEvent.click(screen.getByRole('button', { name: '#2026부산여행' }));
-    fireEvent.change(screen.getByRole('textbox', { name: '태그 (선택)' }), { target: { value: '가족모임' } });
+    fireEvent.change(screen.getByRole('textbox', { name: '태그' }), { target: { value: '가족모임' } });
     fireEvent.click(screen.getByRole('button', { name: '추가' }));
     await waitFor(() => expect(onAdd).toHaveBeenCalledWith('부산 식당', 12_000, 'food', '2026-09-18', undefined, undefined, ['2026부산여행', '가족모임']));
   });
@@ -114,7 +114,7 @@ describe('[T-LED-011][LED-011] 지출 태그 입력과 저장', () => {
   test('수입에는 태그 입력을 표시하거나 전송하지 않는다', async () => {
     const onAdd = jest.fn().mockResolvedValue(undefined);
     render(<AddExpenseModal isOpen onClose={jest.fn()} onAdd={onAdd} selectedDate="2026-09-18" transactionType="income" availableTags={['2026부산여행']} />);
-    expect(screen.queryByRole('textbox', { name: '태그 (선택)' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: '태그' })).not.toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText('항목을 입력하세요'), { target: { value: '용돈' } });
     fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '12000' } });
     fireEvent.click(screen.getByRole('button', { name: '추가' }));
@@ -124,7 +124,7 @@ describe('[T-LED-011][LED-011] 지출 태그 입력과 저장', () => {
   test('수입 수정은 원본에 태그가 있어도 태그를 변경하지 않는다', async () => {
     const onSave = jest.fn().mockResolvedValue(undefined);
     render(<ExpenseEditModal expense={{ ...expense, transactionType: 'income', memo: '용돈', tags: ['2026부산여행'] }} isOpen onClose={jest.fn()} onSave={onSave} transactionType="income" />);
-    expect(screen.queryByRole('textbox', { name: '태그 (선택)' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: '태그' })).not.toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText('항목을 입력하세요'), { target: { value: '급여' } });
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
     await waitFor(() => expect(onSave).toHaveBeenCalledWith({ memo: '급여' }, false));

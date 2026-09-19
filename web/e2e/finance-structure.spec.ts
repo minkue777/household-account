@@ -143,7 +143,7 @@ test('[SPL-006][SPL-005][T-LED-012][LED-012] 신규 월 분할은 메모·태그
   await add.locator('input[type="number"]').fill('10001');
   await add.locator('input[type="date"]').fill(seoulDate());
   await add.getByPlaceholder('메모를 입력하세요').fill('할부 메모');
-  await add.getByLabel('태그 (선택)', { exact: true }).fill('이사준비');
+  await add.getByLabel('태그', { exact: true }).fill('이사준비');
   await add.getByRole('button', { name: '태그 추가', exact: true }).click();
   await add.getByTitle('월별 분할').click();
   await add.locator('input[type="number"][min="2"]').fill('3');

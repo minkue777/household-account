@@ -12,7 +12,7 @@ test('[T-LED-011][LED-011][T-SEA-004][SEA-006] 여행 태그를 저장·재사�
   await dialog.locator('input[type="number"]').fill('120000');
   await dialog.locator('input[type="date"]').fill(seoulDate());
   await dialog.getByPlaceholder('메모를 입력하세요').fill('2박 숙박');
-  await dialog.getByLabel('태그 (선택)', { exact: true }).fill('2026부산여행');
+  await dialog.getByLabel('태그', { exact: true }).fill('2026부산여행');
   await dialog.getByRole('button', { name: '태그 추가', exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath('tags-mobile-add.png'), fullPage: true });
   await dialog.getByRole('button', { name: '추가', exact: true }).click();

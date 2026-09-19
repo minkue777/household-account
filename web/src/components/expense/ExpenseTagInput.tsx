@@ -42,7 +42,7 @@ export default function ExpenseTagInput({
   return (
     <div className="min-w-0">
       <label htmlFor={inputId} className="mb-1 block text-sm font-medium text-slate-700">
-        태그 (선택)
+        태그
       </label>
 
       {tags.length > 0 && (
@@ -80,7 +80,7 @@ export default function ExpenseTagInput({
           aria-describedby={hasReachedLimit ? descriptionId : undefined}
           autoComplete="off"
           enterKeyHint="done"
-          placeholder="예: 2026부산여행"
+          placeholder="태그를 입력하세요"
           className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50"
         />
         <button
