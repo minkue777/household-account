@@ -2,6 +2,7 @@ package com.household.account
 
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.View
 import android.widget.Button
@@ -341,6 +342,16 @@ class QuickEditActivityInstrumentationTest {
             val instrumentation = InstrumentationRegistry.getInstrumentation()
             val monitor = instrumentation.addMonitor(QuickEditActivity::class.java.name, null, false)
             var opened: QuickEditActivity? = null
+            fun awaitNextActivity(previous: QuickEditActivity?): QuickEditActivity? {
+                val deadline = SystemClock.elapsedRealtime() + 8_000
+                while (true) {
+                    val remaining = deadline - SystemClock.elapsedRealtime()
+                    if (remaining <= 0) return null
+                    val next = monitor.waitForActivityWithTimeout(remaining) as? QuickEditActivity ?: return null
+                    // 생성과 재개가 같은 인스턴스를 각각 알린다. 거래 ID가 다른 새 창은 반드시 아래에서 검증한다.
+                    if (next !== previous) return next
+                }
+            }
             try {
                 runBlocking {
                     listOf("following-1", "following-2", "following-3").forEach { id ->
@@ -350,11 +361,12 @@ class QuickEditActivityInstrumentationTest {
                     }
                 }
                 listOf("expense-quick-edit-test", "following-1", "following-2", "following-3").forEach { id ->
-                    opened = monitor.waitForActivityWithTimeout(8_000) as? QuickEditActivity
+                    opened = awaitNextActivity(opened)
                     assertNotNull("실제 FIFO 창이 표시되어야 합니다: $id", opened)
                     val activity = requireNotNull(opened)
                     assertEquals(id, activity.intent.getStringExtra(QuickEditActivity.EXTRA_EXPENSE_ID))
                     assertEquals(id, store.load().activeTransactionId)
+                    waitUntil("FIFO 창 실제 표시: $id") { activity.hasWindowFocus() && !activity.isDestroyed }
                     instrumentation.runOnMainSync { activity.findViewById<ImageButton>(R.id.btnClose).performClick() }
                     waitUntil("닫은 창 종료") { activity.isDestroyed }
                 }

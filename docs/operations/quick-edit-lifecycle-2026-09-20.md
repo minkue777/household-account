@@ -29,3 +29,11 @@ Coordinator는 표시 작업을 하나의 mutex로 직렬화한다. 다음 결�
 - `lintDebug`, `assembleRelease`: 성공. Android 버전은 1.2.29 (versionCode 31).
 - 테스트는 FirebaseAuth 없는 격리된 에뮬레이터에서 실행했다. 운영 원장에 진단용 결제를 추가하지 않았다. 제조사별 모든 OS 차단 조건을 재현한 것으로 해석하지 않는다.
 - 전체 CI는 최종 push SHA에 연결한 별도 workflow에서 확인한다.
+
+## CI 관측 보완
+
+초기 커밋 `5e5dfd3`의 CI `35495949849`에서는 API 34 Android 기본 계측 37개 중 FIFO 복구 테스트 하나가 `following-3` 기대 / `following-2` 관측으로 실패했다. 실제 로그는 두 번째 창 `dc646e5`가 07:13:30.487에 종료되고 세 번째 창 `e85c361`이 07:13:30.975에 RESUMED 되었음을 보여 준다. 실패는 07:13:31.143에 발생했으며, 테스트의 ActivityMonitor가 같은 인스턴스의 생성·재개 알림을 중복 반환한 경우를 처리하지 못했다.
+
+기존 Firebase QuickEdit E2E와 동일하게 직전 Activity 인스턴스의 중복 알림만 제한 시간 안에서 제외한다. 예상 거래 ID로 필터링하지 않고 새 인스턴스의 거래 ID·active lease·FIFO 소진·command outbox 무변경 assertion은 유지하며, 각 창의 실제 window focus도 확인한다. 이 보완은 테스트·문서만 변경하므로 배포된 v1.2.29 APK 내용과 버전은 바꾸지 않는다.
+
+보완 후 API 36.1 에뮬레이터의 QuickEdit Activity 검사 9개와 해당 FIFO 시나리오 추가 3회 반복이 모두 통과했다. API 34 검증은 보완 커밋의 CI에서 확인한다.
