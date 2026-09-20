@@ -2,6 +2,7 @@ package com.household.account
 
 import android.content.Context
 import android.content.Intent
+import android.provider.Settings
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -12,6 +13,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.ViewAction
 import androidx.test.espresso.UiController
@@ -23,6 +25,11 @@ import org.hamcrest.Matcher
 import com.google.firebase.auth.FirebaseAuth
 import com.household.account.data.CategoryData
 import com.household.account.quickedit.AndroidKeystoreQuickEditCommandOutboxStore
+import com.household.account.quickedit.AndroidKeystoreQuickEditQueueStore
+import com.household.account.quickedit.QuickEditCoordinator
+import com.household.account.quickedit.QuickEditPendingQueue
+import com.household.account.paymentcapture.CaptureDeliveryFollowUp
+import com.household.account.paymentcapture.CaptureQuickEditSnapshot
 import com.household.account.ledger.HouseholdCommandKind
 import com.household.account.util.HouseholdPreferences
 import kotlinx.coroutines.runBlocking
@@ -34,6 +41,8 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -313,6 +322,98 @@ class QuickEditActivityInstrumentationTest {
                 scenario.state == Lifecycle.State.DESTROYED
             }
         }
+    }
+
+    @Test
+    fun removedActivityRecoversTheSameHeadAndThreeFollowingPaymentsWithoutProcessRestart() {
+        prepareLocalCommandSession()
+        withOverlayAllowed {
+            val scope = HouseholdPreferences.currentScope(context)
+            val store = AndroidKeystoreQuickEditQueueStore(context)
+            runBlocking {
+                QuickEditPendingQueue(store).enqueueAndAcquireIfIdle(
+                    scope, "expense-quick-edit-test", presentationSnapshot("expense-quick-edit-test")
+                )
+            }
+            launchQuickEdit().close() // 명시적 닫기 버튼을 거치지 않는 실제 Activity 제거.
+            assertEquals("expense-quick-edit-test", store.load().activeTransactionId)
+
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val monitor = instrumentation.addMonitor(QuickEditActivity::class.java.name, null, false)
+            var opened: QuickEditActivity? = null
+            try {
+                runBlocking {
+                    listOf("following-1", "following-2", "following-3").forEach { id ->
+                        QuickEditCoordinator.enqueueAndPresent(
+                            context, scope, CaptureDeliveryFollowUp("observation.$id", id, 1, presentationSnapshot(id))
+                        )
+                    }
+                }
+                listOf("expense-quick-edit-test", "following-1", "following-2", "following-3").forEach { id ->
+                    opened = monitor.waitForActivityWithTimeout(8_000) as? QuickEditActivity
+                    assertNotNull("실제 FIFO 창이 표시되어야 합니다: $id", opened)
+                    val activity = requireNotNull(opened)
+                    assertEquals(id, activity.intent.getStringExtra(QuickEditActivity.EXTRA_EXPENSE_ID))
+                    assertEquals(id, store.load().activeTransactionId)
+                    instrumentation.runOnMainSync { activity.findViewById<ImageButton>(R.id.btnClose).performClick() }
+                    waitUntil("닫은 창 종료") { activity.isDestroyed }
+                }
+                waitUntil("후속 세 거래까지 FIFO 소진") { store.load().entries.isEmpty() }
+                assertTrue(AndroidKeystoreQuickEditCommandOutboxStore(context).load().isEmpty())
+            } finally {
+                opened?.let { activity -> instrumentation.runOnMainSync { activity.finish() } }
+                instrumentation.removeMonitor(monitor)
+            }
+        }
+    }
+
+    @Test
+    fun hiddenActivityIsReusedWithUnsavedMemoAndRotationDoesNotDuplicateIt() {
+        prepareLocalCommandSession()
+        withOverlayAllowed {
+            val scope = HouseholdPreferences.currentScope(context)
+            val id = "expense-quick-edit-test"
+            runBlocking {
+                QuickEditPendingQueue(AndroidKeystoreQuickEditQueueStore(context))
+                    .enqueueAndAcquireIfIdle(scope, id, presentationSnapshot(id))
+            }
+            launchQuickEdit().use { scenario ->
+                var original: QuickEditActivity? = null
+                scenario.onActivity { activity ->
+                    original = activity
+                    activity.findViewById<EditText>(R.id.etMemo).setText("저장하지 않은 입력")
+                }
+                scenario.moveToState(Lifecycle.State.CREATED)
+                runBlocking { QuickEditCoordinator.resumePending(context) }
+                waitUntil("숨은 기존 편집창 재개") { scenario.state == Lifecycle.State.RESUMED }
+                scenario.onActivity { activity ->
+                    assertSame(original, activity)
+                    assertEquals("저장하지 않은 입력", activity.findViewById<EditText>(R.id.etMemo).text.toString())
+                }
+                scenario.recreate()
+                runBlocking { QuickEditCoordinator.resumePending(context) }
+                scenario.onActivity { activity ->
+                    assertEquals("저장하지 않은 입력", activity.findViewById<EditText>(R.id.etMemo).text.toString())
+                    assertFalse(QuickEditCoordinator.presentations.needsRecovery(scope, id))
+                }
+            }
+        }
+    }
+
+    private fun presentationSnapshot(id: String) = CaptureQuickEditSnapshot(
+        id, "로컬 회귀 검사", 1000, "2026-09-20", "11:36", "food", "", 1
+    )
+
+    private fun withOverlayAllowed(block: () -> Unit) {
+        val wasAllowed = Settings.canDrawOverlays(context)
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        fun setMode(mode: String) {
+            automation.executeShellCommand("appops set ${context.packageName} SYSTEM_ALERT_WINDOW $mode").use {
+                android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes()
+            }
+        }
+        if (!wasAllowed) setMode("allow")
+        try { block() } finally { if (!wasAllowed) setMode("default") }
     }
 
     private fun launchQuickEdit(categoryId: String = "food"): ActivityScenario<QuickEditActivity> {

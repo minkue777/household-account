@@ -113,7 +113,7 @@ class QuickEditPendingQueue(
         val state = sanitizeScope(store.load(), scope)
         store.replace(
             state.copy(
-                activeTransactionId = null,
+                activeTransactionId = state.activeTransactionId?.takeUnless { it == transactionId },
                 entries = state.entries.filterNot { it.transactionId == transactionId }
             )
         )

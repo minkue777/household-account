@@ -2,6 +2,7 @@ package com.household.account.quickedit
 
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
@@ -28,6 +29,7 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -39,7 +41,9 @@ object QuickEditCoordinator {
     @Volatile
     private var processRecovered = false
     private val recoveryMutex = Mutex()
+    private val presentationMutex = Mutex()
     private val presentationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    internal val presentations = QuickEditPresentationRegistry(SystemClock::elapsedRealtime)
 
     private fun queue(context: Context): QuickEditPendingQueue =
         queueInstance ?: synchronized(this) {
@@ -52,12 +56,21 @@ object QuickEditCoordinator {
         context: Context,
         expectedScope: CaptureSessionScope,
         followUp: CaptureDeliveryFollowUp
+    ) = presentationMutex.withLock {
+        enqueueAndPresentLocked(context, expectedScope, followUp)
+    }
+
+    private suspend fun enqueueAndPresentLocked(
+        context: Context,
+        expectedScope: CaptureSessionScope,
+        followUp: CaptureDeliveryFollowUp
     ) {
         if (!HouseholdPreferences.isQuickEditOverlayEnabled(context)) return
         if (!Settings.canDrawOverlays(context)) return
         ensureProcessRecovered(context)
         val scope = currentScope(context)
         if (scope != expectedScope) return
+        releaseInactivePresentation(context, scope)
         val result = queue(context).enqueueAndAcquireIfIdle(
             scope = scope,
             transactionId = followUp.transactionId,
@@ -89,14 +102,16 @@ object QuickEditCoordinator {
     }
 
     suspend fun resumePending(context: Context) = withContext(Dispatchers.IO) {
-        ensureProcessRecovered(context)
         presentNext(context)
     }
 
     suspend fun completeCurrent(context: Context, expectedScope: CaptureSessionScope, transactionId: String) {
         withContext(Dispatchers.IO) {
-            if (!QuickEditCommandDelivery.isCurrentSession(context, expectedScope)) return@withContext
-            queue(context).complete(expectedScope, transactionId)
+            presentationMutex.withLock {
+                if (!QuickEditCommandDelivery.isCurrentSession(context, expectedScope)) return@withLock
+                queue(context).complete(expectedScope, transactionId)
+                presentations.complete(expectedScope, transactionId)
+            }
         }
     }
 
@@ -105,8 +120,9 @@ object QuickEditCoordinator {
         presentationScope.launch { presentNext(applicationContext) }
     }
 
-    suspend fun purgeForSessionTransition(context: Context, previousScope: CaptureSessionScope? = currentScope(context)) {
+    suspend fun purgeForSessionTransition(context: Context, previousScope: CaptureSessionScope? = currentScope(context)) = presentationMutex.withLock {
         queue(context).purge(previousScope)
+        presentations.purge(previousScope)
         QuickEditCommandDelivery.purgeForSessionTransition(context, previousScope)
         WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME).await()
     }
@@ -122,12 +138,25 @@ object QuickEditCoordinator {
         processRecovered = true
     }
 
-    private suspend fun presentNext(context: Context) {
+    private suspend fun presentNext(context: Context) = presentationMutex.withLock {
+        ensureProcessRecovered(context)
+        presentNextLocked(context)
+    }
+
+    private suspend fun releaseInactivePresentation(context: Context, scope: CaptureSessionScope) {
+        val activeId = queue(context).snapshot().activeTransactionId ?: return
+        if (presentations.needsRecovery(scope, activeId)) {
+            queue(context).releaseLease(scope, activeId)
+        }
+    }
+
+    private suspend fun presentNextLocked(context: Context) {
         val applicationContext = context.applicationContext
         if (!HouseholdPreferences.isQuickEditOverlayEnabled(applicationContext) ||
             !Settings.canDrawOverlays(applicationContext)) return
         val scope = currentScope(applicationContext)
         if (!scope.isUsable) return
+        releaseInactivePresentation(applicationContext, scope)
 
         while (true) {
             val entry = queue(applicationContext).acquireHead(scope) ?: return
@@ -189,7 +218,7 @@ object QuickEditCoordinator {
         }
     }
 
-    private fun launchQuickEdit(
+    private suspend fun launchQuickEdit(
         context: Context,
         expectedScope: CaptureSessionScope,
         snapshot: LedgerTransactionSnapshot,
@@ -198,8 +227,13 @@ object QuickEditCoordinator {
         if (!QuickEditCommandDelivery.isCurrentSession(context, expectedScope) ||
             !HouseholdPreferences.isQuickEditOverlayEnabled(context) ||
             !Settings.canDrawOverlays(context)) return false
+        // Android가 기존 Activity를 재생성한 직후라면 이미 살아 있는 화면을 유지합니다.
+        if (!presentations.needsRecovery(expectedScope, snapshot.transactionId)) return true
         val intent = Intent(context, QuickEditActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+            if (presentations.canReuseActivity(expectedScope, snapshot.transactionId)) {
+                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            }
             putExtra(QuickEditActivity.EXTRA_HOUSEHOLD_ID, expectedScope.householdId)
             putExtra(QuickEditActivity.EXTRA_MEMBER_ID, expectedScope.memberId)
             putExtra(QuickEditActivity.EXTRA_SESSION_GENERATION, expectedScope.sessionGeneration)
@@ -221,7 +255,18 @@ object QuickEditCoordinator {
                 stage = CaptureLatencyStage.QUICK_EDIT_LAUNCH
             )
         }
-        val launched = runCatching { context.startActivity(intent) }.isSuccess
+        val requestId = presentations.beginLaunch(expectedScope, snapshot.transactionId)
+        val launched = withContext(Dispatchers.Main.immediate) {
+            runCatching {
+                check(QuickEditCommandDelivery.isCurrentSession(context, expectedScope))
+                context.startActivity(intent)
+            }.isSuccess
+        }
+        if (launched) {
+            watchForUnshownActivity(context, expectedScope, snapshot.transactionId, requestId, observationId)
+        } else {
+            presentations.complete(expectedScope, snapshot.transactionId)
+        }
         if (!launched) observationId?.let {
             AndroidCaptureLatencyTelemetry.mark(
                 observationId = it,
@@ -230,6 +275,28 @@ object QuickEditCoordinator {
             )
         }
         return launched
+    }
+
+    private fun watchForUnshownActivity(
+        context: Context,
+        scope: CaptureSessionScope,
+        transactionId: String,
+        requestId: Long,
+        observationId: String?
+    ) {
+        presentationScope.launch {
+            delay(QuickEditPresentationRegistry.LAUNCH_TIMEOUT_MILLIS)
+            presentationMutex.withLock {
+                if (!QuickEditCommandDelivery.isCurrentSession(context, scope) ||
+                    !presentations.expireLaunch(scope, transactionId, requestId)) return@withLock
+                queue(context).releaseLease(scope, transactionId)
+                observationId?.let {
+                    AndroidCaptureLatencyTelemetry.mark(it, CaptureLatencyStage.QUICK_EDIT_LAUNCH, CaptureLatencyOutcome.FAILURE)
+                }
+                // OS 차단을 빠른 팝업 재시도 루프로 만들지 않습니다. 다음 결제/재진입은 즉시 복구합니다.
+                scheduleRecovery(context, delayed = true)
+            }
+        }
     }
 
     private fun CaptureQuickEditSnapshot.toLedgerSnapshot() = LedgerTransactionSnapshot(
@@ -245,8 +312,9 @@ object QuickEditCoordinator {
         memo = memo
     )
 
-    private fun scheduleRecovery(context: Context) {
+    private fun scheduleRecovery(context: Context, delayed: Boolean = false) {
         val request = OneTimeWorkRequestBuilder<QuickEditRecoveryWorker>()
+            .setInitialDelay(if (delayed) 15L else 0L, TimeUnit.MINUTES)
             .setConstraints(
                 Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
             )

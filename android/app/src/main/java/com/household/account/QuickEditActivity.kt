@@ -29,6 +29,7 @@ import com.household.account.paymentcapture.CaptureSessionScope
 import com.household.account.quickedit.QuickEditCommandDelivery
 import com.household.account.quickedit.QuickEditCommandEnqueueResult
 import com.household.account.quickedit.QuickEditCoordinator
+import com.household.account.quickedit.QuickEditPresentationOwner
 import com.household.account.quickedit.buildQuickEditUpdatePatch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +44,10 @@ import java.util.Locale
  * 지출 수정 액티비티
  * 카드 결제 알림 후 가맹점, 금액, 카테고리, 메모를 수정할 수 있는 화면
  */
-class QuickEditActivity : AppCompatActivity() {
+class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
+    @Volatile private var quickEditStarted = false
+    override val isQuickEditAlive: Boolean get() = !isFinishing && !isDestroyed
+    override val isQuickEditVisible: Boolean get() = quickEditStarted
 
     companion object {
         const val EXTRA_EXPENSE_ID = "expense_id"
@@ -117,6 +121,7 @@ class QuickEditActivity : AppCompatActivity() {
         originalMemo = intent.getStringExtra(EXTRA_MEMO) ?: ""
         originalVersion = intent.getIntExtra(EXTRA_VERSION, 1).coerceAtLeast(1)
         captureObservationId = intent.getStringExtra(EXTRA_CAPTURE_OBSERVATION_ID)
+        QuickEditCoordinator.presentations.created(editingScope, expenseId, this)
 
         // 서버가 확정한 카테고리 ID는 대소문자를 포함해 그대로 보존합니다.
         selectedCategoryKey = originalCategory
@@ -135,6 +140,27 @@ class QuickEditActivity : AppCompatActivity() {
                 }
             }
         )
+    }
+
+    override fun onStart() {
+        super.onStart()
+        quickEditStarted = true
+        if (::editingScope.isInitialized) {
+            QuickEditCoordinator.presentations.started(editingScope, expenseId, this)
+        }
+    }
+
+    override fun onStop() {
+        quickEditStarted = false
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        quickEditStarted = false
+        if (::editingScope.isInitialized) {
+            QuickEditCoordinator.presentations.destroyed(editingScope, expenseId, this, isChangingConfigurations)
+        }
+        super.onDestroy()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

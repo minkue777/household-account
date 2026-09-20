@@ -134,6 +134,20 @@ class QuickEditPendingQueueTest {
         assertEquals(1, store.state.entries.size)
     }
 
+    @Test
+    fun `이전 화면의 늦은 완료는 다음 거래의 active lease를 해제하지 않는다`() = runTest {
+        val store = MemoryStore()
+        val queue = QuickEditPendingQueue(store)
+        queue.enqueue(scope, "a")
+        queue.enqueue(scope, "b")
+        queue.acquireHead(scope)
+        queue.complete(scope, "a")
+        assertEquals("b", queue.acquireHead(scope)?.transactionId)
+        queue.complete(scope, "a")
+        assertEquals("b", store.state.activeTransactionId)
+        assertNull(queue.acquireHead(scope))
+    }
+
     private fun snapshot(transactionId: String) = CaptureQuickEditSnapshot(
         transactionId = transactionId,
         merchant = "가맹점",

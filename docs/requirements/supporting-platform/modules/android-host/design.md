@@ -200,11 +200,11 @@ Web Shell 준비에서는 Native 인증 객체를 미리 만들지 않습니다.
 
 1. 결제 수집의 서버 저장 성공 event에서 QuickEdit 설정·overlay capability와 현재 `SessionMirror`를 확인한다. 저장 실패 거래는 대기열에 넣지 않는다.
 2. `QuickEditPendingQueuePort.enqueueIfAbsent`가 session scope와 transaction ID 중복을 제거하고 원자적으로 고유 sequence를 발급한다. 새 서버 응답이면 최소 `quickEditSnapshot`도 같은 암호화 entry에 저장하고, 같은 ID의 기존 entry가 ID-only이면 snapshot을 보강한다.
-3. 활성 QuickEdit lease가 없으면 가장 낮은 sequence의 항목을 선택하고, 있으면 현재 Activity를 유지한 채 `Queued`를 반환한다.
+3. `QuickEditPresentationRegistry`에서 실제 Activity 소유권과 시작 여부를 확인한다. 표시 중이거나 실행·재생성 후 10초 이내인 lease는 유지하고, 창이 사라졌거나 숨은 경우에는 표시 mutex 안에서 해당 lease만 풀고 가장 낮은 sequence를 다시 선택한다. 같은 head의 살아 있는 숨은 Activity만 `REORDER_TO_FRONT`로 재사용하여 미저장 입력을 유지한다. 다음 거래를 띄울 때 이전 거래 Activity를 재사용하면 안 된다.
 4. entry에 `quickEditSnapshot`이 있으면 현재 SessionScope 일치만 확인하고 즉시 Activity를 연다. snapshot이 없는 구버전 ID-only entry만 `LedgerTransactionQueryClient`로 최신 snapshot과 편집 가능 상태를 읽으며, 삭제됨·접근 불가·편집 불가 항목은 해당 head만 `Skipped`로 완료하고 다음 항목을 평가한다. 새 snapshot 이후의 동시 변경은 후속 Ledger Command의 expectedVersion이 최종 검증한다.
 5. 저장·삭제·분할·알림 Ledger Command envelope의 command outbox commit과 WorkManager 영속 예약이 모두 성공하면 head를 완료하고 Activity를 닫은 뒤 다음 항목을 연다. 명시적 닫기도 head를 완료한다.
 6. outbox 쓰기·예약 실패에서는 head와 Activity를 유지한다. outbox 접수 뒤의 네트워크·서버 일시 실패는 표시 FIFO와 분리해 Worker가 FIFO 재시도하고, terminal·만료 결과는 실패 알림 전까지만 outbox의 `needs-attention`으로 보존한 뒤 알림 성공 시 삭제한다. 알림 실패는 Worker retry를 유지하고 저장소 손상은 비민감 진단만 남긴다.
-7. process 재시작·Activity 재생성 시 대기열에서 가장 오래된 미완료 항목을 복구한다. 동시에 둘 이상의 Activity가 열리지 않도록 process-local coordinator와 영속 active entry를 함께 조정한다.
+7. process 재시작뿐 아니라 Activity만 제거된 뒤의 새 결제·앱 재진입에서도 가장 오래된 미완료 항목을 복구한다. `onCreate/onStart/onDestroy`와 약한 owner 참조를 연결하고, 이전 Activity 종료 callback은 새 소유권을 지우지 않는다. 10초 동안 시작되지 않은 실행 요청은 그 request ID의 lease만 해제하고 15분 후 WorkManager 복구를 예약한다. 새 결제·앱 재진입은 그 예약을 기다리지 않는다. 실제 표시가 확인된 요청이나 이전 세션·이전 request timeout은 현재 lease를 해제하지 않는다. FIFO JSON·외부 callable 계약은 유지한다.
 8. 로그아웃·가구·멤버 전환은 이전 scope의 표시 FIFO와 command outbox 삭제가 모두 성공한 뒤에만 새 SessionMirror를 commit한다. 새 session에서 이전 transaction ID나 Command를 복구하지 않는다.
 
 ## 6. Port 설계

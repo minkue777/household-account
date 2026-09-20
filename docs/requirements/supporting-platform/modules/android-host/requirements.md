@@ -96,6 +96,13 @@ AND-012의 realtime SDK와 영속 저장소 정책은 유지합니다. 전체 �
 | QE-011 | 현재 명세 | QuickEdit에는 `FLAG_SECURE`나 별도 최근 앱 마스킹을 적용하지 않아 스크린샷·화면 녹화·시스템 미리보기를 허용한다. | 캡처 허용과 별개로 keyguard 우회·외부 export를 금지하고 QuickEdit 민감값을 앱 로그에 남기지 않는다. | 같은 근거와 [DEC-024](../../../governance/decisions.md#dec-024), [DEC-045](../../../governance/decisions.md#dec-045) | 보안 UI, E2E |
 | QE-012 | 목표 명세 | QuickEdit은 별도 업무 규칙을 소유하지 않는 Android 입력·전달 Adapter이며, 일반 Ledger의 저장·삭제·분할·가구원 알림 요청 Command를 그대로 사용한다. versioned payload와 고정 `commandId`·`idempotencyKey`를 Keystore 암호화 outbox에 commit하고 WorkManager 영속 예약까지 완료한 뒤 Activity를 닫아 비동기 전달한다. commit부터 예약·접수 판정까지는 session purge와 하나의 짧은 임계 구역이며 서버 왕복은 그 밖에서 수행한다. | 서버 성공 전 성공 Toast·업무 완료 event는 없다. 느린 서버 응답이 다음 QuickEdit 로컬 접수를 막으면 안 된다. retryable 결과는 같은 envelope로 접수 시각부터 정확히 72시간 전까지 FIFO 재시도한다. 충돌·영구 거부·계약 실패·재시도 만료는 Command를 자동 재시도하지 않고 실패 알림 전달 전까지만 `needs-attention`으로 보존한다. 알림 차단·실패는 완료로 보지 않고 재시도하며 성공 뒤 payload를 삭제한다. 암호문·key·codec 손상은 payload를 fail-closed 삭제하되 비민감 손상 플래그와 실패 알림을 남긴다. outbox commit 또는 WorkManager 예약 실패는 화면을 유지한다. | [QuickEdit command outbox](../../../../../android/app/src/main/java/com/household/account/quickedit/QuickEditCommandOutbox.kt), [delivery lifecycle](../../../../../android/app/src/main/java/com/household/account/quickedit/QuickEditCommandDeliveryLifecycle.kt), [versioned codec](../../../../../android/app/src/main/java/com/household/account/quickedit/QuickEditCommandOutboxJsonCodec.kt), [DEC-067](../../../governance/decisions.md#dec-067) | U, UI, I, E2E |
 
+### QE-009 표시 수명과 복구 계약
+
+- 화면 종료·최근 앱 제거 이후에도 앱 프로세스가 살아 있으면, 다음 결제 또는 앱 재진입에서 실제 창이 없는 표시 lease를 해제하고 기존 FIFO head부터 복구한다. 명시적으로 닫지 않은 거래를 완료 처리하거나 삭제하지 않는다.
+- 아직 살아 있는 숨은 편집창은 같은 Activity를 앞으로 가져와 미저장 입력을 유지한다. 표시 중인 창과 화면 회전 재생성 중에는 중복 창을 만들지 않는다.
+- 실행 요청 이후 10초 동안 Activity 시작이 확인되지 않으면 해당 요청의 lease만 풀고 15분 후 복구를 예약한다. 새 결제·앱 재진입은 이 예약을 기다리지 않고 재시도할 수 있다. 늦은 이전 요청·Activity callback이 다음 거래 또는 다른 세션의 lease를 해제하면 안 된다.
+- 외부 서버 계약과 암호화 FIFO 저장 형식은 유지한다. 추적성: `T-QE-003`, [표시 수명 회귀 기록](../../../../operations/quick-edit-lifecycle-2026-09-20.md).
+
 ## 7. 전환 이전 결함 기록
 
 아래는 이전 구현의 역사이며 현재 미해결 목록이 아닙니다. 현재 Native Auth/SessionMirror/암호화 outbox와 일반 Ledger Command 경로는 5절의 구현 링크를 기준으로 합니다.
