@@ -37,7 +37,7 @@ describe('portfolio query contract', () => {
         name: 'SPDR S&P 500 ETF Trust',
       },
     ]);
-    expect(search).toHaveBeenCalledWith('SPY', 10);
+    expect(search).toHaveBeenCalledWith('SPY');
     expect(mockedGetClient).not.toHaveBeenCalled();
   });
 

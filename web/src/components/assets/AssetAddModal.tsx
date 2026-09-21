@@ -97,6 +97,12 @@ function getEffectiveContributionDay(dayOfMonth: number) {
   return Math.min(dayOfMonth, lastDayOfMonth);
 }
 
+function resolveInitialOwnerKey(defaultOwnerKey: string | undefined, ownerOptions: AssetOwnerOption[]) {
+  return defaultOwnerKey && ownerOptions.some((option) => option.key === defaultOwnerKey)
+    ? defaultOwnerKey
+    : ownerOptions[0]?.key || HOUSEHOLD_OWNER_OPTION;
+}
+
 export default function AssetAddModal({
   isOpen,
   onClose,
@@ -107,8 +113,8 @@ export default function AssetAddModal({
   const { showAlert } = useAppDialog();
   const [name, setName] = useState('');
   const [type, setType] = useState<AssetType>(defaultType);
-  const [subType, setSubType] = useState('');
-  const [ownerKey, setOwnerKey] = useState(ownerOptions[0]?.key || HOUSEHOLD_OWNER_OPTION);
+  const [subType, setSubType] = useState(() => ASSET_TYPE_CONFIG[defaultType].subTypes[0] || '');
+  const [ownerKey, setOwnerKey] = useState(() => resolveInitialOwnerKey(defaultOwnerKey, ownerOptions));
   const [balance, setBalance] = useState('');
   const [recurringContributionAmount, setRecurringContributionAmount] = useState('');
   const [recurringContributionDay, setRecurringContributionDay] = useState('');
@@ -199,12 +205,7 @@ export default function AssetAddModal({
     setType(defaultType);
     setSubType(ASSET_TYPE_CONFIG[defaultType].subTypes[0] || '');
 
-    const initialOwnerKey =
-      defaultOwnerKey && ownerOptions.some((option) => option.key === defaultOwnerKey)
-        ? defaultOwnerKey
-        : ownerOptions[0]?.key || HOUSEHOLD_OWNER_OPTION;
-
-    setOwnerKey(initialOwnerKey);
+    setOwnerKey(resolveInitialOwnerKey(defaultOwnerKey, ownerOptions));
     setName('');
     setBalance('');
     setRecurringContributionAmount('');

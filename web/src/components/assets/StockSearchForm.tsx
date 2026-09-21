@@ -1,6 +1,7 @@
 'use client';
 
 import { Loader2 } from 'lucide-react';
+import { useState } from 'react';
 import type { StockPriceInfo, StockSearchResult } from '@/types/asset';
 
 export interface StockSearchState {
@@ -81,6 +82,45 @@ function formatUsdPrice(price?: number) {
   }).format(price);
 }
 
+const SEARCH_RESULT_BATCH_SIZE = 30;
+
+function StockSearchResults({ results, onSelect }: {
+  results: StockSearchResult[];
+  onSelect: (stock: StockSearchResult) => void;
+}) {
+  const [visibleCount, setVisibleCount] = useState(SEARCH_RESULT_BATCH_SIZE);
+  const showMore = () => setVisibleCount((count) => Math.min(results.length, count + SEARCH_RESULT_BATCH_SIZE));
+
+  return (
+    <div
+      role="region"
+      aria-label="종목 검색 결과"
+      className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"
+      onScroll={(event) => {
+        const { scrollTop, clientHeight, scrollHeight } = event.currentTarget;
+        if (scrollHeight - scrollTop - clientHeight <= 64) showMore();
+      }}
+    >
+      {results.slice(0, visibleCount).map((stock) => (
+        <button
+          key={`${stock.market}-${stock.code}`}
+          type="button"
+          onClick={() => onSelect(stock)}
+          className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-50"
+        >
+          <span className="font-medium text-slate-800">{stock.name}</span>
+          <span className="text-xs text-slate-500">{getDisplayCode(stock)}</span>
+        </button>
+      ))}
+      {visibleCount < results.length && (
+        <button type="button" onClick={showMore} className="w-full px-4 py-2.5 text-sm text-blue-600 hover:bg-slate-50">
+          더 보기
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function StockSearchForm({
   state,
   onAdd,
@@ -134,21 +174,7 @@ export default function StockSearchForm({
           )}
 
           {searchResults.length > 0 && !selectedStock && (
-            <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-              {searchResults.map((stock) => (
-                <button
-                  key={`${stock.market}-${stock.code}`}
-                  type="button"
-                  onClick={() => {
-                    void selectStock(stock);
-                  }}
-                  className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-50"
-                >
-                  <span className="font-medium text-slate-800">{stock.name}</span>
-                  <span className="text-xs text-slate-500">{getDisplayCode(stock)}</span>
-                </button>
-              ))}
-            </div>
+            <StockSearchResults key={searchQuery} results={searchResults} onSelect={selectStock} />
           )}
         </div>
 

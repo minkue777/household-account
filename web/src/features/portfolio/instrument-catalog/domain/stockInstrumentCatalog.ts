@@ -176,8 +176,7 @@ export function prepareStockCatalog(
 
 export function searchPreparedStockCatalog(
   prepared: readonly PreparedInstrument[],
-  rawQuery: string,
-  limit = 10
+  rawQuery: string
 ): StockSearchResult[] {
   const query = normalize(rawQuery);
   if (query === '') return [];
@@ -203,6 +202,5 @@ export function searchPreparedStockCatalog(
         left.instrument.market.localeCompare(right.instrument.market) ||
         left.instrument.code.localeCompare(right.instrument.code)
     )
-    .slice(0, Math.min(10, Math.max(1, Math.trunc(limit))))
     .map(({ instrument }) => toSearchResult(instrument));
 }

@@ -82,7 +82,18 @@ test('[MARKET-001][MARKET-003][MARKET-005] 실제 Storage SDK·gzip·checksum·I
   }
   expect(cachedItems.some(({ code }) => code === '777777' || code === '0203K0')).toBe(false);
   await detail.getByPlaceholder('종목명 입력').fill('E2E 지수');
-  await expect(detail.getByRole('button', { name: /E2E 지수 ETF/ })).toHaveCount(10);
+  const searchResults = detail.getByRole('region', { name: '종목 검색 결과' });
+  await expect(searchResults.getByRole('button', { name: /E2E 지수 ETF/ })).toHaveCount(30);
+  for (let count = 60; count <= 510; count += 30) {
+    await searchResults.evaluate(element => { element.scrollTop = element.scrollHeight; });
+    await expect(searchResults.getByRole('button', { name: /E2E 지수 ETF/ })).toHaveCount(Math.min(count, 500));
+  }
+  const lastResult = searchResults.getByRole('button', { name: 'E2E 지수 ETF 499 900499' });
+  await lastResult.scrollIntoViewIfNeeded();
+  await expect(lastResult).toBeInViewport();
+  await detail.getByPlaceholder('종목명 입력').fill('E2E 지수 ETF');
+  await expect(searchResults.getByRole('button', { name: /E2E 지수 ETF/ })).toHaveCount(30);
+  await expect.poll(() => searchResults.evaluate(element => element.scrollTop)).toBe(0);
   expect(storageReads).toBeGreaterThanOrEqual(3);
   expect(queries).toEqual([]);
   await detail.getByRole('button', { name: '닫기', exact: true }).click();

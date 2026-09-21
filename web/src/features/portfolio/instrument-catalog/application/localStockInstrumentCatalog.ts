@@ -43,7 +43,7 @@ export class LocalStockInstrumentCatalog {
     await this.refresh(false);
   }
 
-  async search(query: string, limit = 10): Promise<StockSearchResult[]> {
+  async search(query: string): Promise<StockSearchResult[]> {
     if (query.trim() === '') return [];
     await this.hydrateFromCache();
 
@@ -53,7 +53,7 @@ export class LocalStockInstrumentCatalog {
       void this.refresh(false);
     }
 
-    return searchPreparedStockCatalog(this.prepared, query, limit);
+    return searchPreparedStockCatalog(this.prepared, query);
   }
 
   private async hydrateFromCache(): Promise<void> {
@@ -113,4 +113,3 @@ export class LocalStockInstrumentCatalog {
     this.prepared = prepareStockCatalog([...snapshot.items, ...this.supplemental]);
   }
 }
-

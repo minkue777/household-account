@@ -276,7 +276,7 @@ Position에 Quote가 한 번도 없으면 평가가는 평균단가를 사용합
 
 `MarketRoutingPolicy`는 일반 KRX 종목→Naver 국내 주식 API, KRX 금현물 코드(`KRXGOLD1KG`, `KRXGOLD100G`)→Naver KRX 금시장 페이지, US→미국 종목 Quote Adapter+USD/KRW, KOFIA_FUND→해당 운용사 기준가 Adapter, UPBIT_KRW→Upbit, PHYSICAL_GOLD→Gold provider로 라우팅합니다. 현재 미국 Adapter 구현·공급자 이름이 Nasdaq이더라도 `exchange=NYSE|NASDAQ|AMEX`인 미국 종목 전체를 `market=US`로 다루며 Provider 이름을 종목 market으로 저장하지 않습니다. 금 ETF는 PHYSICAL_GOLD가 아니라 KRX instrument입니다. Quote routing과 종목 검색 catalog는 분리하며 검색 요청에서 거래소 공급자를 실시간 fan-out하지 않습니다.
 
-주식·ETF·ETN 검색은 DEC-035의 정규화된 최신 성공 `InstrumentCatalogSnapshot`만 입력으로 사용합니다. exact code, code prefix, name prefix, name contains 순으로 점수를 매기고 market·code로 안정 tie-break하여 최대 10개를 반환합니다. 응답에는 `catalogAsOf`, `catalogVersion`, `stale`을 포함할 수 있으며 오래된 snapshot을 빈 결과로 바꾸지 않습니다. 코인은 별도 Upbit catalog에서 `KRW-` market만 허용합니다.
+주식·ETF·ETN 검색은 DEC-035의 정규화된 최신 성공 `InstrumentCatalogSnapshot`만 입력으로 사용합니다. exact code, code prefix, name prefix, name contains 순으로 점수를 매기고 market·code로 안정 tie-break합니다. 기기 검색은 모든 일치 항목을 반환하며 UI는 처음 30개를 표시하고 하단 스크롤 또는 더 보기로 30개씩 끝까지 확장합니다. 검색어 변경 시 목록을 다시 마운트해 표시 개수와 스크롤을 초기화합니다. 서버 호환 검색 API의 최대 10개 응답은 유지합니다. 응답에는 `catalogAsOf`, `catalogVersion`, `stale`을 포함할 수 있으며 오래된 snapshot을 빈 결과로 바꾸지 않습니다. 코인은 별도 Upbit catalog에서 `KRW-` market만 허용합니다.
 
 ## 5. Application Use Case 상세
 
@@ -355,7 +355,7 @@ Application 내부에서 50개 page·동시성 5·retryable 결과 총 3회로 �
 7. 원격 manifest는 최대 5분 간격으로 백그라운드 확인합니다. generation·checksum이 기존 snapshot과 같으면 다운로드하지 않고, 바뀐 경우에만 압축 snapshot을 받습니다.
 8. 새 snapshot은 허용된 `market-catalog/v1/snapshots/{date}/v1.json.gz` 경로, object generation, SHA-256, schemaVersion, catalogVersion, asOfDate, itemCount와 모든 instrument 필드를 검증한 뒤 IndexedDB와 메모리 reference를 교체합니다.
 9. 원격 갱신 실패 시 검증된 기기 cache가 있으면 그대로 검색합니다. 기기에 snapshot이 전혀 없는 최초 동기화 실패만 `INSTRUMENT_CATALOG_*` 실패이며 빈 성공으로 바꾸지 않습니다.
-10. 종목명·코드·별칭 관련도 계산과 최대 10개 정렬은 기기 메모리의 정규화된 검색 인덱스에서 수행합니다. 주식 타이핑마다 Household Query·Cloud Function·Quote 공급자를 호출하지 않습니다.
+10. 종목명·코드·별칭 관련도 계산과 모든 일치 결과 정렬은 기기 메모리의 정규화된 검색 인덱스에서 수행합니다. 표시 묶음은 UI에서만 나누며 검색 결과를 10개로 절단하지 않습니다. 주식 타이핑마다 Household Query·Cloud Function·Quote 공급자를 호출하지 않습니다.
 
 Cloud Storage snapshot이 단일 원본이며 IndexedDB와 메모리는 재구축 가능한 read model입니다. Redis·Firestore catalog 복제·번들 `stocks.json`은 사용하지 않습니다. `market-catalog/v1/**`는 공개 시장 기준정보이므로 Storage Rules에서 읽기만 허용하고, 쓰기는 publisher만 수행합니다. 브라우저 CORS도 `GET`·`HEAD`만 허용합니다. 시세·자산·배당처럼 사용자 데이터가 포함되는 요청은 기존 인증 서버 경계를 유지합니다.
 
@@ -542,7 +542,7 @@ Domain은 Firebase·node-fetch·HTML parser를 import하지 않습니다. `publi
 | GOLD-002 | Contract, Application, Emulator | GoldMarketPort·RefreshAccountPrices | timeout, 5xx, schema drift, 고정 fallback fixture | Asset/Position 미변경, 실패 분류 반환, 추정값 성공 없음 | T-GOLD-002 |
 | MARKET-001 | Contract | 시장별 ACL과 routing | 일반 KRX, KRX 금현물, US(NASDAQ·NYSE·AMEX)+USD/KRW, UPBIT_KRW, 실물 금, 배당 disclosure fixture | KRX 금현물은 일반 주식 API를 호출하지 않고 정확한 Adapter 한 개 호출, 공급자 이름과 종목 market 분리, 공급자 DTO 비노출 | T-MARKET-004 |
 | MARKET-002 | Domain Unit, Application | MarketRoutingPolicy·daily job | 동일 code를 가진 KRX/US instrument | US는 Nasdaq+환율, 국내는 Naver; 시장 혼선 없음 | T-MARKET-004 |
-| MARKET-003 | Domain Unit, Contract | 기기 검색 ranking·filter와 서버 코인 검색 | 국내 주식·ETF·ETN+미국 catalog 중복, exact/code prefix/name prefix/name contains 동률, 11건, 빈 query, 비-KRW 코인 | 네 단계 관련도 뒤 market·code tie-break로 결정적 최대 10, 주식 빈 query는 빈 결과와 원격 호출 0회, KRW 코인만 반환하고 코인 빈 query는 typed error | T-MARKET-005 |
+| MARKET-003 | Domain Unit, Contract | 기기 검색 ranking·filter와 서버 코인 검색 | 국내 주식·ETF·ETN+미국 catalog 중복, exact/code prefix/name prefix/name contains 동률, 11건, 빈 query, 비-KRW 코인 | 관련도 뒤 market·code tie-break로 기기 검색의 모든 일치 결과를 반환하고 30개씩 표시하여 스크롤로 마지막 항목까지 선택, 서버 호환 검색은 최대 10, 주식 빈 query는 빈 결과와 원격 호출 0회, KRW 코인만 반환하고 코인 빈 query는 typed error | T-MARKET-005 |
 | MARKET-004 | Domain Unit, Contract, Application, Operations Integration | Quote fallback·ProviderHealthRecorder | 마지막 성공 뒤 retryable 10회, NoData 3회, contract/invalid 1회, 이후 성공, 오래된 observedAt | 마지막 가격·observedAt 불변, 매 시도 log, health 누적, 즉시·3회 경보, 성공 시 해제 | T-MARKET-001 |
 | MARKET-005 | Domain Unit, Contract, Application, Operations Integration | PublishInstrumentCatalog·SnapshotStore·LocalStockInstrumentCatalog·IndexedDB Cache | 서로 다른 성공일 4개, 같은 날짜 재실행, 부분 실패, generation 경합, 5분 경계, 기기 cache hit/cold Storage 실패, checksum drift | 서로 다른 최근 성공일 3개 보존, latest 원자 교체, 같은 generation 재다운로드 없음, cache hit 즉시 검색, 마지막 성공 기기본 유지, cold failure, `stocks.json` 접근 없음 | T-MARKET-002 |
 | MARKET-006 | Domain Unit, Contract, Application, Emulator, Operations Integration | FrankfurterExchangeRateAdapter·ForeignCurrencyValuationPolicy·ExchangeRateObservationRepository | 정상 JSON, base·quote 불일치, 주말 같은 rateDate, 더 오래된·미래 date, 0/음수, timeout·schema drift, 장기 실패, 최초 부재·이전 정상 KRW Quote | Frankfurter만 호출, rateDate·observedAt 보존, 더 오래된 응답 무변경, 장기 실패에도 마지막 성공값 사용·경보, 최초 부재만 NoData, 화면 경고·fallback 없음 | T-MARKET-003 |

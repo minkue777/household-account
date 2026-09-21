@@ -36,7 +36,7 @@ function stockPriceInfo(result: PortfolioQuoteQueryResult): StockPriceInfo {
 
 export const portfolioQueries = {
   async searchStocks(query: string): Promise<StockSearchResult[]> {
-    return getStockInstrumentCatalog().search(query, 10);
+    return getStockInstrumentCatalog().search(query);
   },
 
   async searchCrypto(query: string): Promise<CryptoSearchResult[]> {

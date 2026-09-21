@@ -47,6 +47,38 @@ function cache(initial?: StockCatalogSnapshot): StockInstrumentCatalogCache & {
 }
 
 describe('local stock instrument catalog contract', () => {
+  test('[MARKET-003][T-MARKET-005] 넓은 부분 검색에서도 12번째 RISE를 포함하고 중복 없이 모든 결과를 반환한다', async () => {
+    const entries = [
+      ['0015B0', 'KoAct 미국나스닥성장기업액티브'],
+      ['0019K0', 'TIME 미국나스닥100채권혼합50액티브'],
+      ['0069M0', '1Q 미국나스닥100'],
+      ['0089B0', 'PLUS 미국나스닥100미국채혼합50'],
+      ['0104H0', 'KoAct 미국나스닥채권혼합50액티브'],
+      ['0111P0', '1Q 미국나스닥100미국채혼합50액티브'],
+      ['133690', 'TIGER 미국나스닥100'],
+      ['203780', 'TIGER 미국나스닥바이오'],
+      ['287180', 'PLUS 미국나스닥테크'],
+      ['304940', 'KODEX 미국나스닥100선물(H)'],
+      ['367380', 'ACE 미국나스닥100'],
+      ['368590', 'RISE 미국나스닥100'],
+      ['379810', 'KODEX 미국나스닥100'],
+    ].map(([code, name]) => ({ code, name, market: 'KRX' as const, instrumentType: 'ETF' as const }));
+    const items = [...entries].reverse().concat(entries[11]);
+    const remote = { readManifest: jest.fn(), readSnapshot: jest.fn() };
+    const subject = new LocalStockInstrumentCatalog(remote,
+      cache({ manifest: { ...manifest, itemCount: items.length }, items }), () => 0);
+
+    const broad = await subject.search('미국나스닥');
+    expect(broad.map(({ code }) => code)).toEqual(entries.map(({ code }) => code));
+    expect(broad[11]).toMatchObject({ code: '368590', name: 'RISE 미국나스닥100' });
+    const narrow = await subject.search('미국나스닥100');
+    expect(narrow).toHaveLength(9);
+    expect(narrow[7]).toMatchObject({ code: '368590' });
+    await expect(subject.search('미국 나스닥')).resolves.toEqual(broad);
+    await expect(subject.search('  ')).resolves.toEqual([]);
+    expect(remote.readManifest).not.toHaveBeenCalled();
+  });
+
   test('returns a cached result without waiting for a remote manifest request', async () => {
     const remote: StockInstrumentCatalogRemote = {
       readManifest: jest.fn(

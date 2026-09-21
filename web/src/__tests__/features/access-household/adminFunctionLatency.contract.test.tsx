@@ -183,7 +183,7 @@ describe('admin Cloud Function latency contract', () => {
     const updateRow = screen.getByText('ledger.update-transaction.v1').closest('tr');
     const iosRow = screen.getByText('payment-capture.submit-ios-shortcut-message.v1').closest('tr')!;
     expect(screen.getByRole('columnheader', { name: '제외/거절' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: '실패', exact: true })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: '실패' })).toBeInTheDocument();
     const iosCells = within(iosRow).getAllByRole('cell');
     expect(iosCells.slice(3, 7).map(cell => cell.textContent)).toEqual(['1', '0', '1', '0']);
     expect(iosCells[5]).not.toHaveClass('text-amber-300');
