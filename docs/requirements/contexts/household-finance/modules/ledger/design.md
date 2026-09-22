@@ -154,7 +154,7 @@ QuickEdit `items` operation은 DEC-055에 따라 분할을 누른 시점의 merc
 
 ### 3.3 Read Model
 
-Web 일반 수정은 Command를 시작하면서 편집창을 즉시 숨겨 원장의 낙관적 변경을 바로 표시합니다. 서버 응답을 기다리는 동안 해당 편집 인스턴스에 초안을 보관하고 중복 제출을 막습니다. 성공하면 인스턴스를 정리하고, 실패하면 해당 변경을 원복한 뒤 오류 안내와 함께 같은 초안을 다시 표시합니다. 다른 거래를 열거나 날짜·가구·페이지를 전환해 편집 인스턴스를 벗어나면 이전 응답이 창을 다시 열거나 새 편집창을 닫지 않습니다. 일반 삭제는 기존처럼 성공 후 편집창을 닫고, 실패 시 초안을 유지합니다. 통계의 카테고리 내역 목록은 수정·삭제 요청 시 닫으며, 서버 확정으로 통계 캐시가 갱신됩니다.
+Web 일반 수정과 삭제는 Command를 시작하면서 같은 pending 상태로 편집창을 즉시 숨겨 원장의 낙관적 변경을 바로 표시합니다. 삭제는 사용자 확인 뒤에만 시작하며, 마지막 거래를 지워 해당 날짜가 비어도 편집창을 서버 응답까지 노출하지 않습니다. 서버 응답을 기다리는 동안 해당 편집 인스턴스에 초안을 보관하고 중복 제출을 막습니다. 성공하면 인스턴스를 정리하고, 실패하면 서비스가 해당 변경을 원복한 뒤 오류 안내를 확인할 때 같은 초안을 다시 표시합니다. 다른 거래를 열거나 날짜·가구·페이지를 전환해 편집 인스턴스를 벗어나면 이전 수정·삭제 응답이 오류창을 띄우거나 창을 다시 열거나 새 편집창을 닫지 않습니다. 통계의 카테고리 내역 목록은 수정·삭제 요청 시 닫으며, 서버 확정으로 통계 캐시가 갱신됩니다.
 
 `TransactionView`에는 transactionId, transactionType, amountInWon, accountingDate, localTime, zoneId, merchant, memo, optional tags, categoryId, cardDisplay, source, originChannel, creatorMemberId, optional localCurrencyType, split/merge 표시 metadata, aggregateVersion을 포함합니다. tags는 정규화된 문자열 배열이며 `#`는 UI 표시·검색 접두사입니다. capture fingerprint hash·lineage 내부 ID와 receipt는 노출하지 않습니다. 이 일반 Read Model은 active 거래만 만들며 deleted·superseded 거래를 사용자에게 반환하지 않습니다.
 
@@ -532,7 +532,7 @@ Domain은 Firebase·React를 import하지 않습니다. 다른 기능은 `ledger
 | LED-002 | Domain·Application | RecordManualTransaction expense | 공백 merchant, 0/음수/소수, 유효 category | 검증 오류 또는 한 거래·Event | T-LED-005 |
 | LED-003 | Domain·Application | RecordManualTransaction income | 빈 itemName, 양의 금액 | merchant/category/memo 정규화 | T-LED-006 |
 | LED-004 | Application·Repository | manual metadata | FixedClock, 회계일과 현재 시각 차이 | HH:mm·manual metadata·서버 creator 저장 | T-LED-007 |
-| LED-005 | Domain·Emulator·Client | Update/Delete | 허용 필드 전체 patch·active delete, 대상 없음·타 가구·0원, stale version, 이미 deleted, 저장 실패 | delete는 본문·provenance를 보존한 deleted 전이·deletedAt·version·Event, 일반 목록·검색·집계 즉시 제외, 실패는 typed 결과와 write 0건 | T-LED-008 |
+| LED-005 | Domain·Emulator·Client·UI | Update/Delete | 허용 필드 전체 patch·active delete, 보류 중 마지막 항목 삭제·중복 제출, 대상 없음·타 가구·0원, stale version, 이미 deleted, 저장 실패·화면 이동 뒤 늦은 성공/실패 | 수정·삭제 편집창과 목록 즉시 반영, 실패 시 원복·오류 확인 후 초안 복구, 이전 응답의 새 편집 간섭 0건; delete는 본문·provenance를 보존한 deleted 전이·deletedAt·version·Event, 실패는 typed 결과와 write 0건 | T-LED-008 |
 | LED-006 | Query·Client | GetLedgerSummary | 선택일, 월·연, category, Repository 실패 | 목록·합계 정확, 실패를 0으로 축약하지 않음 | T-LED-009 |
 | LED-007 | Application·Outbox | RequestHouseholdNotification | expense/income, requester와 creator 동일·상이, 가구원 1·2·3명, 중복 key, delivery 실패 | expense metadata·Event 한 번, requester 외 전원, 전달 상태 분리 | T-LED-010 |
 | LED-008 | Application·Emulator·E2E | 모든 group replacement UoW | 여섯 구조 operation의 권한 없음·타 가구·누락·stale version·commit 실패, 같은 거래 Update·Split 경합 | typed Forbidden·NotFound·Conflict·RetryableFailure와 본문·claim·receipt·Event write 0건, 먼저 commit한 하나만 성공 | T-LED-002 |

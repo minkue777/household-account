@@ -112,12 +112,7 @@ it.each(['delete', 'save'] as const)('STAT-004 actual %s failure preserves the p
   const initialReadCount = read.mock.calls.length;
   const selectedRange = resolveExpenseStatisticsPeriod('3months', '', '');
   submit();
-  if (command === 'save') {
-    expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
-  } else {
-    expect(editor).toBeInTheDocument();
-    expect(within(editor).getByDisplayValue('실패해도 보존할 메모')).toBeInTheDocument();
-  }
+  expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
   expect(read).toHaveBeenCalledTimes(initialReadCount);
   await act(async () => rejectCommand(new Error('permission-denied')));
   await waitFor(() => expect(mockShowAlert).toHaveBeenCalledWith(expect.stringContaining('permission-denied'), expect.stringContaining('실패')));

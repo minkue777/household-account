@@ -231,8 +231,32 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 
-  test('삭제는 성공까지 편집창을 유지하고 원격 실패 후 다시 시도할 수 있다', async () => {
+  test.each(['expense', 'income'] as const)('[T-LED-008] %s 삭제 확인 즉시 창을 숨기고 중복 제출 없이 성공 후 선택을 정리한다', async (transactionType) => {
     const deletion = deferred();
+    const onDelete = jest.fn(() => deletion.promise);
+    const onClose = jest.fn();
+    render(<EditorHarness expense={{ ...expense, transactionType }} onClosed={onClose} onSave={jest.fn()} onDelete={onDelete} transactionType={transactionType} />);
+    fireEvent.click(screen.getByRole('button', { name: '삭제' }));
+    expect(onDelete).not.toHaveBeenCalled();
+    const deleteButtons = screen.getAllByRole('button', { name: '삭제' });
+    const confirmButton = deleteButtons[deleteButtons.length - 1];
+    fireEvent.click(confirmButton);
+    fireEvent.click(confirmButton);
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () => {
+      deletion.resolve();
+      await deletion.promise;
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(mockShowAlert).not.toHaveBeenCalled();
+  });
+
+  test('[T-LED-008] 삭제는 즉시 숨기되 실패 안내 확인 후 초안과 기억 선택을 복원하고 다시 시도할 수 있다', async () => {
+    const deletion = deferred();
+    const alertAcknowledged = deferred();
+    mockShowAlert.mockReturnValueOnce(alertAcknowledged.promise);
     const onDelete = jest.fn().mockImplementationOnce(() => deletion.promise).mockResolvedValue(undefined);
     const onClose = jest.fn();
 
@@ -242,16 +266,20 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
         onClosed={onClose}
         onSave={jest.fn()}
         onDelete={onDelete}
+        allowRememberMerchant
         transactionType="expense"
       />
     );
 
+    selectRememberedCategory();
+    fireEvent.change(screen.getByPlaceholderText('메모를 입력하세요'), { target: { value: '삭제 전 초안' } });
     fireEvent.click(screen.getByRole('button', { name: '삭제' }));
     const deleteButtons = screen.getAllByRole('button', { name: '삭제' });
     fireEvent.click(deleteButtons[deleteButtons.length - 1]);
 
     expect(onDelete).toHaveBeenCalledTimes(1);
     expect(onClose).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
     await act(async () => {
       deletion.reject(new Error('DELETE_REJECTED'));
@@ -264,13 +292,42 @@ describe('ExpenseEditModal 저장 pipeline 계약', () => {
         '지출 삭제 실패'
       );
     });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await act(async () => {
+      alertAcknowledged.resolve();
+      await alertAcknowledged.promise;
+    });
     expect(screen.getByRole('dialog', { name: '지출 수정' })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('메모를 입력하세요')).toHaveValue('삭제 전 초안');
+    expect(screen.getByRole('checkbox')).toBeChecked();
+    expect(screen.getByRole('button', { name: '생활' })).toHaveClass('border-blue-500');
     fireEvent.click(screen.getByRole('button', { name: '삭제' }));
     const retryButtons = screen.getAllByRole('button', { name: '삭제' });
     fireEvent.click(retryButtons[retryButtons.length - 1]);
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(onDelete).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
+  });
+
+  test.each(['성공', '실패'])('[T-LED-008] 다른 편집창을 연 뒤 이전 삭제의 늦은 %s 응답은 새 초안에 간섭하지 않는다', async (outcome) => {
+    const deletion = deferred();
+    const onDelete = jest.fn(() => deletion.promise);
+    const onClose = jest.fn();
+    const view = render(<EditorHarness key="first-editor" expense={expense} onClosed={onClose} onSave={jest.fn()} onDelete={onDelete} transactionType="expense" />);
+    fireEvent.click(screen.getByRole('button', { name: '삭제' }));
+    const deleteButtons = screen.getAllByRole('button', { name: '삭제' });
+    fireEvent.click(deleteButtons[deleteButtons.length - 1]);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    view.rerender(<EditorHarness key="second-editor" expense={{ ...expense, id: 'expense-2' }} onClosed={onClose} onSave={jest.fn()} transactionType="expense" />);
+    fireEvent.change(screen.getByPlaceholderText('메모를 입력하세요'), { target: { value: '새 편집창의 초안' } });
+    await act(async () => {
+      if (outcome === '성공') deletion.resolve();
+      else deletion.reject(new Error('OLD_DELETE_REJECTED'));
+      await deletion.promise.catch(() => undefined);
+    });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(mockShowAlert).not.toHaveBeenCalled();
+    expect(screen.getByPlaceholderText('메모를 입력하세요')).toHaveValue('새 편집창의 초안');
   });
 
   test('가구원 알림 전송도 즉시 닫되 원격 실패를 AppDialog로 알린다', async () => {

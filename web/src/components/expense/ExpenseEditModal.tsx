@@ -103,7 +103,7 @@ export default function ExpenseEditModal({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingActionConfirm, setPendingActionConfirm] = useState<ExpenseActionConfirmType | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSavePending, setIsSavePending] = useState(false);
+  const [isMutationPending, setIsMutationPending] = useState(false);
   const isSubmittingRef = useRef(false);
   const isOpenRef = useRef(isOpen);
   const mergedItemCount = expense.mergeLeafIds?.length
@@ -220,7 +220,7 @@ export default function ExpenseEditModal({
     isSubmittingRef.current = true;
     setIsSubmitting(true);
     // Reveal the optimistic list immediately, retaining the draft until the command settles.
-    setIsSavePending(true);
+    setIsMutationPending(true);
     try {
       const pendingSave = Object.keys(updates).length > 0
         ? onSave(updates, allowRememberMerchant && !isIncome && rememberMerchant && category !== expense.category)
@@ -241,7 +241,7 @@ export default function ExpenseEditModal({
     } finally {
       isSubmittingRef.current = false;
       setIsSubmitting(false);
-      setIsSavePending(false);
+      setIsMutationPending(false);
     }
   };
 
@@ -253,11 +253,13 @@ export default function ExpenseEditModal({
     isSubmittingRef.current = true;
     setIsSubmitting(true);
     setShowDeleteConfirm(false);
+    setIsMutationPending(true);
     try {
       const pendingDelete = onDelete();
       await pendingDelete;
       if (isOpenRef.current) onClose();
     } catch (error) {
+      if (!isOpenRef.current) return;
       const detail = error instanceof Error && error.message.trim() !== ''
         ? `\n\n${error.message}`
         : '';
@@ -268,6 +270,7 @@ export default function ExpenseEditModal({
     } finally {
       isSubmittingRef.current = false;
       setIsSubmitting(false);
+      setIsMutationPending(false);
     }
   };
 
@@ -329,7 +332,7 @@ export default function ExpenseEditModal({
     }
   };
 
-  if (!isOpen || isSavePending) {
+  if (!isOpen || isMutationPending) {
     return null;
   }
 

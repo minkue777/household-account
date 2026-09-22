@@ -124,7 +124,7 @@ describe('홈 원장 편집의 낙관적 목록 변경과 초안 수명', () => 
     ]);
   });
 
-  test('마지막 거래의 낙관적 삭제에도 편집창을 유지하고 삭제 실패 후 초안과 버전을 보존한다', async () => {
+  test('[T-LED-008] 마지막 거래의 낙관적 삭제는 편집창을 숨기고 삭제 실패 후 초안과 버전을 보존한다', async () => {
     const deletion = deferred();
     mockDeleteExpense.mockImplementationOnce(() => deletion.promise).mockResolvedValue(undefined);
     const view = openEditor();
@@ -137,8 +137,7 @@ describe('홈 원장 편집의 낙관적 목록 변경과 초안 수명', () => 
     mockExpenses = [];
     view.rerender(<LedgerPage transactionType="expense" />);
     expect(screen.getByText('지출 내역이 없습니다')).toBeInTheDocument();
-    expect(screen.getByRole('dialog', { name: '지출 수정' })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('메모를 입력하세요')).toHaveValue('삭제 전에 작성한 메모');
+    expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
 
     mockExpenses = [original];
     view.rerender(<LedgerPage transactionType="expense" />);

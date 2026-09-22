@@ -104,6 +104,94 @@ test('[T-LED-008][LED-001][LED-005] 메모·카테고리 저장은 서버 응답
   }
 });
 
+for (const outcome of ['성공', '버전 충돌'] as const) {
+  test(`[T-LED-008][LED-005] 삭제 즉시 화면 반영과 실제 서버 ${outcome}의 확정·복구`, async ({ page, request }) => {
+    const householdId = await createFinanceHousehold(page, request);
+    const expense = await addExpenseThroughUi(page, request, {
+      merchant: '즉시 삭제 거래', amount: 7300, category: '식비', memo: '원본 메모', tags: ['여행'],
+    });
+    const id = documentId(expense);
+    const before = (await findExpense(request, id))!;
+    const dialog = await openExpenseEdit(page, id);
+    await dialog.getByPlaceholder('메모를 입력하세요').fill('삭제 전 작성한 초안');
+    const monthlyTotal = page.locator('.balance-card-glass').filter({ hasText: /월 지출/ });
+    await expect(monthlyTotal).toContainText('7,300');
+    const endpoint = '**/executeHouseholdCommand';
+    const isTargetDelete = (browserRequest: Request): boolean => {
+      if (browserRequest.method() !== 'POST'
+        || !new URL(browserRequest.url()).pathname.endsWith('/executeHouseholdCommand')) return false;
+      const envelope = browserRequest.postDataJSON()?.data;
+      return envelope?.command === 'ledger.delete-transaction.v1'
+        && envelope.payload?.transactionId === id;
+    };
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let heldPayload: unknown;
+    const holdDelete = async (route: Route) => {
+      if (!isTargetDelete(route.request())) {
+        await route.continue();
+        return;
+      }
+      heldPayload = route.request().postDataJSON().data.payload;
+      await gate;
+      await route.continue();
+    };
+    await page.route(endpoint, holdDelete);
+    try {
+      await dialog.getByRole('button', { name: '삭제', exact: true }).click();
+      await page.getByRole('dialog', { name: '지출 삭제', exact: true }).getByRole('button', { name: '삭제', exact: true }).click();
+      await expect.poll(() => heldPayload).toMatchObject({ transactionId: id, expectedVersion: integerField(before, 'aggregateVersion') });
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page.getByTestId('expense-item')).toHaveCount(0);
+      await expect(monthlyTotal.locator('div.font-bold')).toHaveText('0');
+      expect((await findExpense(request, id))?.fields).toEqual(before.fields);
+      if (outcome === '버전 충돌') {
+        // 다른 클라이언트의 실제 수정으로 삭제의 expectedVersion을 낡게 만듭니다.
+        const account = await signInTestAccount(request);
+        await executeHouseholdCommand(request, {
+          idToken: account.idToken, householdId, command: 'ledger.update-transaction.v1',
+          payload: { transactionId: id, expectedVersion: integerField(before, 'aggregateVersion'), patch: { memo: '서버에서 먼저 수정한 메모' } },
+        });
+      }
+    } finally {
+      try {
+        if (heldPayload !== undefined) {
+          const response = page.waitForResponse(candidate => isTargetDelete(candidate.request()));
+          release();
+          await (await response).finished();
+        } else release();
+      } finally {
+        release();
+        await page.unroute(endpoint, holdDelete);
+      }
+    }
+    if (outcome === '성공') {
+      await expect.poll(async () => (await findExpense(request, id))?.fields).toMatchObject({
+        lifecycleState: { stringValue: 'deleted' }, memo: { stringValue: '원본 메모' },
+        aggregateVersion: { integerValue: String(integerField(before, 'aggregateVersion') + 1) },
+      });
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await page.reload();
+      await expect(page.locator('.calendar-glass')).toHaveAttribute('aria-busy', 'false');
+      await expect(monthlyTotal.locator('div.font-bold')).toHaveText('0');
+    } else {
+      const alert = page.getByRole('dialog', { name: '지출 삭제 실패', exact: true });
+      await expect(alert).toBeVisible();
+      await expect(dialog).toHaveCount(0);
+      await expect(monthlyTotal).toContainText('7,300');
+      const row = page.getByTestId('expense-item').filter({ hasText: '즉시 삭제 거래' });
+      await expect(row).toContainText('서버에서 먼저 수정한 메모');
+      await expect(row).toContainText('#여행');
+      await alert.getByRole('button', { name: '확인', exact: true }).click();
+      await expect(dialog.getByPlaceholder('메모를 입력하세요')).toHaveValue('삭제 전 작성한 초안');
+      expect((await findExpense(request, id))?.fields).toMatchObject({
+        lifecycleState: { stringValue: 'active' }, amount: { integerValue: '7300' },
+        aggregateVersion: { integerValue: String(integerField(before, 'aggregateVersion') + 1) },
+      });
+    }
+  });
+}
+
 test('[LED-002][LED-005] 필수 입력을 검증하고 금액·가맹점·날짜 수정과 논리 삭제가 검색·월 합계에 수렴한다', async ({ page, request }) => {
   await createFinanceHousehold(page, request);
   const add = await openAddTransaction(page);

@@ -4,6 +4,7 @@ import {
   mergeExpenses,
   addManualExpense,
   addManualMonthlySplit,
+  deleteExpense,
   splitExpense,
   splitExpenseMonthly,
   unmergeExpense,
@@ -104,6 +105,32 @@ describe('ledger expense service optimistic canonical contract', () => {
   afterEach(() => {
     jest.restoreAllMocks();
     ledgerOptimisticProjection.reset();
+  });
+
+  test.each(['성공', '실패'])('[T-LED-008] 삭제는 즉시 목록·합계에서 제외하고 서버 %s에 따라 확정하거나 원복한다', async (outcome) => {
+    const rendered: Expense[][] = [];
+    const subscription = ledgerOptimisticProjection.subscribe(items => rendered.push(items), () => true, 'house-1');
+    const original = expense({ tags: ['여행'] });
+    subscription.publish([original]);
+    let resolve!: (result: LedgerTransactionCommandResult) => void;
+    let reject!: (error: Error) => void;
+    mockedCommands.delete.mockReturnValue(new Promise((yes, no) => { resolve = yes; reject = no; }));
+    const deletion = deleteExpense(original.id, original.aggregateVersion);
+    expect(rendered.at(-1)).toEqual([]);
+    if (outcome === '성공') {
+      resolve(commandResult({ lifecycleState: 'deleted' }));
+      await deletion;
+      subscription.publish([original]);
+      expect(rendered.at(-1)).toEqual([]);
+    } else {
+      const rejected = expect(deletion).rejects.toThrow('DELETE_REJECTED');
+      reject(new Error('DELETE_REJECTED'));
+      await rejected;
+      expect(rendered.at(-1)).toEqual([original]);
+      expect(rendered.at(-1)!.reduce((total, item) => total + item.amount, 0)).toBe(original.amount);
+    }
+    expect(mockedCommands.delete).toHaveBeenCalledWith('house-1', original.id, original.aggregateVersion);
+    subscription.dispose();
   });
 
   test('[T-LED-011][LED-011] 수동 지출과 월 분할의 태그가 명령까지 전달된다', async () => {
