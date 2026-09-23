@@ -54,6 +54,8 @@
 - `assembleDebugAndroidTest`와 서명 `assembleRelease` 성공(빌드 1분 23초). `apksigner` v2 서명 검증과 APK의 v1.2.30/versionCode 32 확인도 통과했습니다.
 - 서명 APK SHA-256: `68E3CE5F7CBE243C8823C00239EB960448F9F1F7705BC885F811A582A71EB7C3`.
 - Android API 36.1 에뮬레이터에서 QuickEdit Activity·실제 Keystore outbox instrumentation 18개 통과(건너뜀·실패 0, 29초).
-- 실제 Native Firebase E2E는 검증 중입니다. 실행 결과가 확정되기 전 통과로 기록하지 않습니다.
+- 실제 Native Firebase E2E 3개 통과(API 36.1, 39초). 태그만 저장·Query/Intent 재조회·전체 삭제·미저장 태그 분할 상속까지 실제 인증 callable과 원장에서 확인했습니다.
+- 후속 Native→Web Chromium 검사 1개 통과(4.2초). E2E의 production Web build를 포함하며 테스트 종료 뒤 Firebase 에뮬레이터도 정상 종료했습니다.
+- 위 검증은 구현 커밋 `d9583fd0d4b00237eb19bb86b19bd806c04f92fa`와 같은 런타임 파일을 대상으로 했습니다. 로그는 `TEMP/household-quickedit-tags-{build,instrumentation,prepare,e2e}-20260923.log`입니다.
 
 런타임 변경은 Android에 한정하며 기존 서버의 optional tags 계약을 사용합니다. Functions·Web 실행 코드가 바뀌지 않아 Firebase·Web 재배포는 필요하지 않습니다. Android v1.2.30(versionCode 32)의 서명 APK를 빌드했으며 GitHub Release 배포는 준비 중입니다. 아직 배포 완료 기록은 아니며 최종 SHA의 CI 결과와 실제 서명 APK 배포 결과를 구분해 확인합니다.
