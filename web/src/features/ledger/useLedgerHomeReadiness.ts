@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect } from 'react';
 import {
   markWebFirstHomeCompletePaint, markWebFirstLedgerPaint, markWebLedgerCacheResult,
+  markWebHomeReadiness,
   scheduleAfterWebFirstHomeCompletePaint,
 } from '@/platform/performance/webStartupPerformance';
 
@@ -34,12 +35,16 @@ export function useLedgerHomeReadiness(input: {
   currencySettled: boolean;
   currencyReady: boolean;
   yearSummaryReady: boolean;
+  yearSummaryRequired: boolean;
   readRefreshKey: string;
   prefetchAdjacentPeriods: () => () => void;
 }) {
   const { periodKey, ledgerReady, categoriesLoading, categoriesReady, currencySettled,
-    currencyReady, yearSummaryReady, readRefreshKey, prefetchAdjacentPeriods } = input;
+    currencyReady, yearSummaryReady, yearSummaryRequired, readRefreshKey, prefetchAdjacentPeriods } = input;
   useLayoutEffect(() => { markWebLedgerCacheResult(false); }, [periodKey]);
+  useLayoutEffect(() => {
+    markWebHomeReadiness({ ledgerReady, categoriesReady, currencyReady, yearSummaryReady, yearSummaryRequired });
+  }, [ledgerReady, categoriesReady, currencyReady, yearSummaryReady, yearSummaryRequired]);
   usePaintWhenReady(ledgerReady, markWebFirstLedgerPaint);
   usePaintWhenReady(ledgerReady && categoriesReady && currencyReady && yearSummaryReady, markWebFirstHomeCompletePaint);
   useEffect(() => {

@@ -1,5 +1,6 @@
 import type * as firestore from "firebase-admin/firestore";
 import { describe, expect, it, vi } from "vitest";
+import { logger } from "firebase-functions";
 
 import { createMemberAccessHouseholdCommandHandlers } from "../../src/bootstrap/commands/memberAccessHouseholdCommandHandlers";
 import type {
@@ -42,6 +43,42 @@ function handler(dependencies: Parameters<
 }
 
 describe("member app visit startup latency", () => {
+  it("[T-ADM-005] 실제 구조화 로그에 iPhone 진단을 같은 총시간과 한 번만 기록한다", async () => {
+    const logs = vi.spyOn(logger, "info").mockImplementation(() => {});
+    const recordAccess = vi.fn()
+      .mockResolvedValueOnce({ kind: "recorded", totalAccessCount: 1 })
+      .mockResolvedValueOnce({ kind: "already-recorded", totalAccessCount: 1 });
+    const subject = handler({ recordAccess });
+    const diagnostics = {
+      version: 1, webBuild: "build-123", initialVisibility: "visible",
+      visibilityTrackingStartedAtMs: 150, hiddenMs: 600, hiddenCount: 1,
+      timingsMs: { bootstrapStarted: 150, ledgerReady: 1_700, firstHomeCompletePaint: 2_000 },
+    };
+    const payload = { visitId: "app-visit-1", platform: "ios-pwa", clientStartupDurationMs: 2_000,
+      clientStartupDiagnostics: diagnostics };
+    try {
+      await subject.execute(context(payload));
+      await subject.execute(context(payload));
+      expect(logs).toHaveBeenCalledExactlyOnceWith("interactive-latency", expect.objectContaining({
+        endpoint: "clientStartup", operation: "client.ios-pwa-first-home-complete-paint.v1",
+        stage: "total", elapsedMs: 2_000, clientStartupDiagnostics: diagnostics,
+      }));
+      expect(JSON.stringify(logs.mock.calls)).not.toMatch(/uid-sensitive|household-sensitive|member-sensitive/);
+      expect(recordAccess.mock.calls[0]).toEqual([expect.not.objectContaining({ clientStartupDiagnostics: expect.anything() })]);
+    } finally { logs.mockRestore(); }
+  });
+
+  it.each(["ios-pwa", "android"])("[T-ADM-005] %s 손상/대상 외 진단은 접속과 기존 총시간을 막지 않는다", async platform => {
+    const recordLatency = vi.fn();
+    const subject = handler({ recordAccess: async () => ({ kind: "recorded", totalAccessCount: 1 }), recordLatency });
+    await expect(subject.execute(context({ visitId: "app-visit-1", platform, clientStartupDurationMs: 2_000,
+      clientStartupDiagnostics: { version: 1, secret: "must-not-log" },
+    }))).resolves.toMatchObject({ kind: "recorded" });
+    expect(recordLatency).toHaveBeenCalledOnce();
+    expect(recordLatency.mock.calls[0][0]).not.toHaveProperty("clientStartupDiagnostics");
+    expect(recordLatency.mock.calls[0][0].elapsedMs).toBe(2_000);
+  });
+
   it.each([
     [
       "android",

@@ -1,4 +1,5 @@
 import type { AssetOwnerProfileWireView } from './accessContractTypes';
+import type { ClientStartupDiagnostics } from './clientStartupDiagnosticsContract';
 
 export const HOUSEHOLD_COMMAND_CONTRACT_VERSION = 'household-command.v1' as const;
 
@@ -51,6 +52,7 @@ export interface HouseholdCommandPayloads {
     visitId: string;
     platform: 'android' | 'ios-pwa' | 'web';
     clientStartupDurationMs?: number;
+    clientStartupDiagnostics?: ClientStartupDiagnostics;
   };
   'access.claim-legacy-membership.v1': {
     legacyHouseholdId: string;

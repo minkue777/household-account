@@ -3,12 +3,15 @@ import {
   requestAndroidHost,
 } from '@/platform/android-host/androidHostBridge';
 import { Platform } from '@/lib/utils/platform';
+import { completeClientStartupDiagnostics } from './clientStartupDiagnostics';
+import type { ClientStartupDiagnostics } from '@/platform/functions-api/clientStartupDiagnosticsContract';
 
 export type ClientStartupPlatform = 'android' | 'ios-pwa';
 
 export interface ClientStartupObservation {
   readonly platform: ClientStartupPlatform;
   readonly durationMs: number;
+  readonly diagnostics?: ClientStartupDiagnostics;
 }
 
 const MAX_STARTUP_DURATION_MS = 2 * 60 * 1_000;
@@ -57,10 +60,15 @@ Promise<ClientStartupObservation | undefined> {
 
   if (Platform.isIOSPWA()) {
     const normalized = normalizedDuration(window.performance?.now());
+    let diagnostics: ClientStartupDiagnostics | undefined;
+    try { diagnostics = completeClientStartupDiagnostics(normalized); } catch {
+      // 부가 진단 미지원/실패는 기존 총시간 표본에 영향을 주지 않습니다.
+    }
     capturedObservation = Promise.resolve(
       normalized === undefined
         ? undefined
-        : { platform: 'ios-pwa' as const, durationMs: normalized }
+        : { platform: 'ios-pwa' as const, durationMs: normalized,
+          ...(diagnostics === undefined ? {} : { diagnostics }) }
     );
     return capturedObservation;
   }

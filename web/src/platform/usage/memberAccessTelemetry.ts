@@ -41,6 +41,8 @@ export function recordCurrentAppVisit(): Promise<void> {
       ...(startupObservation === undefined
         ? {}
         : { clientStartupDurationMs: startupObservation.durationMs }),
+      ...(startupObservation?.platform === 'ios-pwa' && startupObservation.diagnostics
+        ? { clientStartupDiagnostics: startupObservation.diagnostics } : {}),
     });
   })().catch(() => {});
   return visitPromise;

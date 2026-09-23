@@ -1,4 +1,5 @@
 import { getHouseholdCommandClient } from '@/composition/webCommandRuntime';
+import type { ClientStartupDiagnostics } from '@/platform/functions-api/clientStartupDiagnosticsContract';
 
 export const householdCommands = {
   resolveSignedInUser() {
@@ -9,6 +10,7 @@ export const householdCommands = {
     visitId: string;
     platform: 'android' | 'ios-pwa' | 'web';
     clientStartupDurationMs?: number;
+    clientStartupDiagnostics?: ClientStartupDiagnostics;
   }) {
     return getHouseholdCommandClient().execute(
       'access.record-app-visit.v1',

@@ -1,4 +1,9 @@
 import { captureClientStartupObservation } from './clientStartupObservation';
+import {
+  startClientStartupDiagnostics, recordClientStartupTiming,
+  recordClientStartupCache, recordClientStartupYearSummaryRequired,
+} from './clientStartupDiagnostics';
+import type { ClientStartupTiming } from '@/platform/functions-api/clientStartupDiagnosticsContract';
 
 const STARTUP_PREFIX = 'household-account:startup';
 const FIRST_LEDGER_PAINT_EVENT = `${STARTUP_PREFIX}:first-ledger-paint`;
@@ -24,9 +29,21 @@ export const WEB_STARTUP_MARKS = {
   householdFailed: `${STARTUP_PREFIX}:household:failed`,
   ledgerCacheHit: `${STARTUP_PREFIX}:ledger-cache:hit`,
   ledgerCacheMiss: `${STARTUP_PREFIX}:ledger-cache:miss`,
+  ledgerReady: `${STARTUP_PREFIX}:ledger:ready`,
+  categoriesReady: `${STARTUP_PREFIX}:categories:ready`,
+  localCurrencyReady: `${STARTUP_PREFIX}:local-currency:ready`,
+  yearSummaryReady: `${STARTUP_PREFIX}:year-summary:ready`,
+  homeReady: `${STARTUP_PREFIX}:home:ready`,
   firstLedgerPaint: `${STARTUP_PREFIX}:ledger:first-paint`,
   firstHomeCompletePaint: `${STARTUP_PREFIX}:home:first-complete-paint`,
 } as const;
+
+const STARTUP_TIMING_BY_MARK: Record<string, ClientStartupTiming> = Object.fromEntries(
+  (['bootstrapStarted', 'authStarted', 'authReady', 'membershipStarted', 'membershipReady',
+    'householdStarted', 'householdReady', 'ledgerReady', 'categoriesReady', 'localCurrencyReady',
+    'yearSummaryReady', 'homeReady', 'firstLedgerPaint', 'firstHomeCompletePaint'] as const)
+    .map((timing) => [WEB_STARTUP_MARKS[timing], timing])
+);
 
 export const WEB_STARTUP_MEASURES = {
   bootstrapCache: `${STARTUP_PREFIX}:duration:bootstrap-cache`,
@@ -55,15 +72,22 @@ function hasEntry(name: string, entryType?: string): boolean {
   return performance.getEntriesByName(name, entryType).length > 0;
 }
 
-function markOnce(name: string): void {
+function markOnce(name: string): number | undefined {
   const performance = browserPerformance();
-  if (!performance || recordedMarks.has(name) || hasEntry(name, 'mark')) return;
-  try {
-    performance.mark(name);
-    recordedMarks.add(name);
-  } catch {
-    // Performance telemetry must never interrupt session restoration.
+  let observedAtMs: number | undefined;
+  if (performance && !recordedMarks.has(name) && !hasEntry(name, 'mark')) {
+    try {
+      const entry = performance.mark(name);
+      observedAtMs = entry?.startTime
+        ?? performance.getEntriesByName?.(name, 'mark')[0]?.startTime;
+      recordedMarks.add(name);
+    } catch {
+      // Performance telemetry must never interrupt session restoration.
+    }
   }
+  const timing = STARTUP_TIMING_BY_MARK[name];
+  if (timing) recordClientStartupTiming(timing, observedAtMs);
+  return observedAtMs;
 }
 
 function measureOnce(name: string, startMark: string, endMark: string): void {
@@ -87,10 +111,12 @@ function measureOnce(name: string, startMark: string, endMark: string): void {
 }
 
 export function markWebBootstrapStarted(): void {
-  markOnce(WEB_STARTUP_MARKS.bootstrapStarted);
+  const startedAtMs = markOnce(WEB_STARTUP_MARKS.bootstrapStarted);
+  startClientStartupDiagnostics(startedAtMs);
 }
 
 export function markWebBootstrapCacheResult(hit: boolean): void {
+  recordClientStartupCache('bootstrap', hit ? 'hit' : 'miss');
   const resultMark = hit
     ? WEB_STARTUP_MARKS.bootstrapCacheHit
     : WEB_STARTUP_MARKS.bootstrapCacheMiss;
@@ -117,10 +143,12 @@ export function markWebAuthCompleted(success: boolean): void {
 }
 
 export function markWebMembershipCacheUsed(): void {
+  recordClientStartupCache('membership', 'hit');
   markOnce(WEB_STARTUP_MARKS.membershipCacheHit);
 }
 
 export function markWebMembershipPrefetched(): void {
+  recordClientStartupCache('membership', 'prefetched');
   markOnce(WEB_STARTUP_MARKS.membershipPrefetched);
 }
 
@@ -141,6 +169,7 @@ export function markWebMembershipCompleted(success: boolean): void {
 }
 
 export function markWebHouseholdCacheResult(hit: boolean): void {
+  recordClientStartupCache('household', hit ? 'hit' : 'miss');
   markOnce(
     hit ? WEB_STARTUP_MARKS.householdCacheHit : WEB_STARTUP_MARKS.householdCacheMiss
   );
@@ -164,6 +193,23 @@ export function markWebHouseholdCompleted(success: boolean): void {
 
 export function markWebLedgerCacheResult(hit: boolean): void {
   markOnce(hit ? WEB_STARTUP_MARKS.ledgerCacheHit : WEB_STARTUP_MARKS.ledgerCacheMiss);
+}
+
+export function markWebHomeReadiness(input: {
+  ledgerReady: boolean;
+  categoriesReady: boolean;
+  currencyReady: boolean;
+  yearSummaryReady: boolean;
+  yearSummaryRequired: boolean;
+}): void {
+  recordClientStartupYearSummaryRequired(input.yearSummaryRequired);
+  if (input.ledgerReady) markOnce(WEB_STARTUP_MARKS.ledgerReady);
+  if (input.categoriesReady) markOnce(WEB_STARTUP_MARKS.categoriesReady);
+  if (input.currencyReady) markOnce(WEB_STARTUP_MARKS.localCurrencyReady);
+  if (input.yearSummaryRequired && input.yearSummaryReady) markOnce(WEB_STARTUP_MARKS.yearSummaryReady);
+  if (input.ledgerReady && input.categoriesReady && input.currencyReady && input.yearSummaryReady) {
+    markOnce(WEB_STARTUP_MARKS.homeReady);
+  }
 }
 
 export function markWebFirstLedgerPaint(): void {

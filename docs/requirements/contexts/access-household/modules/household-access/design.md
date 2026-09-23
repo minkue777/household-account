@@ -76,7 +76,7 @@
 | `GetMembership` Query | Session Application, 다른 Context | householdId | `Success<MembershipView>`, `NotFound`, `Forbidden` | 자기 Membership 또는 `membership.read` | 읽기 일관성 | 해당 없음 |
 | `ListHouseholds` Query | Admin·승인된 운영 도구 | scope, cursor, limit | `Success<HouseholdPage>`, `Forbidden`, `NoData` | `admin.households.read` | `createdAt DESC, householdId ASC` 결정 정렬 | 해당 없음 |
 | `GetAdminOperationsDashboard` Query v1 | `systemAdmin` 관리자 화면 | rangeDays(7~30) | 서버 상태, 가구·가구원 활동, 예약 작업, 공급자, 열린 장애, 최근 24시간 Android·iPhone 첫 화면 전체 표시와 Functions 로직별 호출 수·평균·P95·최대 처리 시간 | `admin.households.read` | Operations Read Model과 가구·가구원 projection의 동일 조회 시점 snapshot | 해당 없음 |
-| `RecordAppVisit` Command v1 | 인증된 Web·Android WebView·iPhone PWA | visitId, platform, clientStartupDurationMs? | `Recorded(totalAccessCount)`, `AlreadyRecorded` | 활성 Membership | household/member별 stats와 최근 visitId를 한 transaction으로 갱신하고, 신규 모바일 visit의 유효한 전체 홈 paint 시간만 PII 없는 구조화 로그로 기록 | visitId |
+| `RecordAppVisit` Command v1 | 인증된 Web·Android WebView·iPhone PWA | visitId, platform, clientStartupDurationMs?, clientStartupDiagnostics? | `Recorded(totalAccessCount)`, `AlreadyRecorded` | 활성 Membership | household/member별 stats와 최근 visitId를 한 transaction으로 갱신하고 신규 모바일 visit의 전체 홈 paint 시간을 기록. iPhone의 선택적 단계 진단은 별도 허용 목록으로 검증해 동일 로그에 보존하며 손상 시 진단만 생략 | visitId |
 
 `HouseholdCreatedResult`는 Access 생성 ID와 `initializationStatus: pending | completed | failed`를 구분할 수 있어야 합니다. 후속 Context 초기화 실패는 가구 생성 rollback으로 표현하지 않고 재시도 가능한 상태로 관찰합니다.
 
@@ -563,3 +563,13 @@ partner 선택 정책은 [DEC-022](../../../../governance/decisions.md#dec-022),
 - `FirebaseHouseholdLifecycleUnitOfWork`는 관리자 전용 가구 복구를 지원합니다. 일반 사용자 UI에는 가구·가구원·명의자 복구를 노출하지 않습니다.
 - 일반 자산 화면의 명의자 `+`는 dependent 프로필 생성만 수행하며, 이름 변경은 허용하되 보관은 관리자 화면에서만 실행합니다. 자산 입력은 표시 이름 대신 typed `ownerRef`를 함께 전송합니다.
 - 관리자 claim 부여는 배포와 별개인 운영 절차입니다. [배포 전제조건](../../../../../operations/deployment-prerequisites.md)에 따라 대상 프로젝트와 Firebase UID를 명시하고 토큰을 갱신해야 합니다.
+
+### iPhone 시작 진단 보강 계약 (2026-09-23, ADM-006 / T-ADM-005)
+
+- 기존 전체 시간·화면 완료 조건·문서당 1회·재전송 멱등성은 유지한다. iPhone PWA만 `clientStartupDiagnostics` version 1을 선택적으로 보내며 구 Web/Android와 진단 없는 요청도 유지한다. 일반 Web이나 Android의 이 필드는 사용하지 않는다.
+- `timingsMs`는 navigation 기준 offset이다. 문서 응답 시작/완료, DOM interactive, bootstrap, 인증 시작/완료, Membership 시작/완료, 가구 metadata 시작/완료, 월 원장·카테고리·지역화폐·연간 합계 준비, 홈 준비와 실제 paint를 구분한다. 병렬 구간을 단순 합산하지 않고 없는 관측은 생략한다. 연간 합계 필요 여부도 기록한다.
+- `webBuild`는 현재 Web에 포함된 빌드 식별자이며 Functions revision과 구분한다. navigation 종류, Service Worker 제어 여부, bootstrap/Membership/가구 캐시 결과는 제한된 enum·boolean만 기록한다. URL, UA 원문, 사용자·가구·거래 식별자, 금액, 메모는 넣지 않는다.
+- visibility는 bootstrap에서 관측을 시작해 최초 홈 paint 때 종료한다. 최초 상태, 관측 시작 offset, 그 이후 숨김 누적 시간·횟수를 기록한다. 관측 시작 전 숨김 시간은 알 수 없으며 전체 시간에서 임의로 빼지 않는다. 성공한 2분 이내 표본의 기존 집계 기준을 바꾸지 않는다.
+- 서버는 허용 필드만 재구성한다. 모든 시각은 유한한 0~전체 시간 범위, 숨김 횟수는 정수 0~1000, 빌드는 1~128자의 영숫자/점/밑줄/하이픈만 허용한다. 잘못된 추가 진단은 버리고 이미 유효한 접속·총시간은 보존한다. 기존 `clientStartupTimingsMs`는 이전처럼 무시한다.
+- 같은 `interactive-latency.v1` / `clientStartup` / `total` 로그의 `clientStartupDiagnostics`에 넣어 기존 관리자 집계와 표본 수를 유지한다. 별도 접속 저장·추가 요청·주기 조회는 만들지 않는다. 서버의 선택 필드 수용을 먼저 배포한 후 Web을 배포한다.
+- 검증: 서버 허용 목록·손상 무간섭·구버전·멱등·로그 비노출, Web visibility 전환·준비 순서·누락 API·플랫폼 분리, 실제 WebKit 재실행→Firebase 요청/응답 및 구조화 로그를 확인한다. 과거 운영 18초의 정확한 병목은 소급 복원할 수 없다.

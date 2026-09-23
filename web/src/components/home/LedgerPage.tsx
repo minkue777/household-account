@@ -88,7 +88,8 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     periodKey: `${transactionType}:${currentYear}:${currentMonth}`,
     ledgerReady: serverSnapshotReady, categoriesLoading, categoriesReady: categoriesServerSnapshotReady,
     currencySettled: localCurrencySettled, currencyReady: localCurrencyReady,
-    yearSummaryReady: !needsYearlyTotal || yearlyTotal !== null, readRefreshKey, prefetchAdjacentPeriods,
+    yearSummaryReady: !needsYearlyTotal || yearlyTotal !== null, yearSummaryRequired: needsYearlyTotal,
+    readRefreshKey, prefetchAdjacentPeriods,
   });
   const openExpense = useCallback((expense: Expense) => {
     const [year, month] = expense.date.split('-').map(Number);

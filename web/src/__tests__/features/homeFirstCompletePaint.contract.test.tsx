@@ -54,6 +54,7 @@ jest.mock('@/contexts/LedgerReadModelContext', () => ({
 
 jest.mock('@/platform/performance/webStartupPerformance', () => ({
   markWebLedgerCacheResult: jest.fn(),
+  markWebHomeReadiness: jest.fn(),
   markWebFirstLedgerPaint: () => markWebFirstLedgerPaint(),
   markWebFirstHomeCompletePaint: () => markWebFirstHomeCompletePaint(),
   scheduleAfterWebFirstHomeCompletePaint: (task: () => void, options?: { fallbackMs?: number }) => scheduleHomePrefetch(task, options),

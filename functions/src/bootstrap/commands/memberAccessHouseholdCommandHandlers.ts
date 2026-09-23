@@ -1,6 +1,7 @@
 import type * as firestore from "firebase-admin/firestore";
 
 import { FirebaseMemberAccessStore } from "../../adapters/firebase/operations/firebaseMemberAccessStore";
+import { normalizeClientStartupDiagnostics, type ClientStartupDiagnostics } from "../../observability/clientStartupDiagnostics";
 import type {
   MemberAccessEvent,
   MemberAccessPlatform,
@@ -69,6 +70,7 @@ export function createMemberAccessHouseholdCommandHandlers(
       readonly operation: string;
       readonly elapsedMs: number;
       readonly status: InteractiveLatencyStatus;
+      readonly clientStartupDiagnostics?: ClientStartupDiagnostics;
     }) => void;
   } = {},
 ): readonly (readonly [string, HouseholdCommandHandler])[] {
@@ -93,6 +95,7 @@ export function createMemberAccessHouseholdCommandHandlers(
                 key !== "visitId" &&
                 key !== "platform" &&
                 key !== "clientStartupDurationMs" &&
+                key !== "clientStartupDiagnostics" &&
                 // 이미 열린 이전 Web의 진단 필드는 수신만 허용하고 사용하지 않습니다.
                 key !== "clientStartupTimingsMs",
             ) ||
@@ -107,6 +110,9 @@ export function createMemberAccessHouseholdCommandHandlers(
           }
           const platform = payload.platform as MemberAccessPlatform;
           const durationMs = startupDuration(payload.clientStartupDurationMs);
+          const diagnostics = platform === "ios-pwa" && durationMs !== undefined
+            ? normalizeClientStartupDiagnostics(payload.clientStartupDiagnostics, durationMs)
+            : undefined;
           if (platform === "web" && durationMs !== undefined) {
             throw new HouseholdCommandRejection("INVALID_PAYLOAD");
           }
@@ -129,6 +135,7 @@ export function createMemberAccessHouseholdCommandHandlers(
                 operation,
                 elapsedMs: durationMs,
                 status: "succeeded",
+                ...(diagnostics === undefined ? {} : { clientStartupDiagnostics: diagnostics }),
               });
             } catch {
               // 운영 계측 실패가 이미 완료된 접속 기록을 실패로 바꾸지 않습니다.

@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 
 import { logger } from "firebase-functions";
+import { normalizeClientStartupDiagnostics, type ClientStartupDiagnostics } from "./clientStartupDiagnostics";
 
 export const INTERACTIVE_LATENCY_LOG_NAME = "interactive-latency";
 export const INTERACTIVE_LATENCY_SCHEMA_VERSION =
@@ -44,6 +45,7 @@ export interface InteractiveLatencyLogEntry {
   readonly stage: InteractiveLatencyStage | "total";
   readonly elapsedMs: number;
   readonly status: InteractiveLatencyStatus;
+  readonly clientStartupDiagnostics?: ClientStartupDiagnostics;
 }
 
 export interface InteractiveLatencyLogSink {
@@ -120,6 +122,7 @@ export function recordCompletedInteractiveLatency(input: {
   readonly operation: string;
   readonly elapsedMs: number;
   readonly status: InteractiveLatencyStatus;
+  readonly clientStartupDiagnostics?: ClientStartupDiagnostics;
   readonly sink?: InteractiveLatencyLogSink;
 }): void {
   if (
@@ -130,6 +133,10 @@ export function recordCompletedInteractiveLatency(input: {
   ) {
     return;
   }
+  const diagnostics = input.endpoint === "clientStartup" &&
+    input.operation === "client.ios-pwa-first-home-complete-paint.v1"
+    ? normalizeClientStartupDiagnostics(input.clientStartupDiagnostics, input.elapsedMs)
+    : undefined;
   const entry: InteractiveLatencyLogEntry = {
     schemaVersion: INTERACTIVE_LATENCY_SCHEMA_VERSION,
     correlationId: randomUUID(),
@@ -141,6 +148,7 @@ export function recordCompletedInteractiveLatency(input: {
     stage: "total",
     elapsedMs: Math.round(input.elapsedMs * 1_000) / 1_000,
     status: input.status,
+    ...(diagnostics === undefined ? {} : { clientStartupDiagnostics: diagnostics }),
   };
   try {
     (input.sink ?? defaultSink).write(entry);
