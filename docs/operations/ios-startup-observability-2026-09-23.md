@@ -54,6 +54,12 @@
 배포 대상은 Functions 세 codebase의 공유 소스와 Web입니다. 서버를 먼저 배포하고
 그 뒤 해당 commit을 push해 Vercel Git 자동배포와 전체 CI를 시작합니다.
 
+Functions 구현 후보 `661ca903371c161522ad953265d4f4b81a43381c`는 운영 세 codebase의
+17개 함수 배포와 실제 로그인·가구 Query의 release/commit/artifact marker 검증을
+완료했습니다. Release ID는 `release-20260923-ios-startup-diagnostics-661ca90`, 로그는
+`TEMP/household-ios-diagnostics-deploy-20260923.log`입니다. 후속 문서 커밋에는 실행 코드
+변경이 없으며 Web과 CI는 main push의 최종 SHA로 확인합니다.
+
 ## 변경 이력 조사
 
 조사 범위는 2026-09-16~23의 Web 초기 실행 경로, 공유 모듈, 원장·카테고리 읽기,
@@ -98,6 +104,18 @@ prefetch fallback은 여전히 존재합니다. 따라서 전체 홈이 늦을 �
 운영 조회 결과는 저장소 밖 `TEMP/household-ios-startup-counts-20260923.json`에 기록했습니다.
 백업은 `TEMP/household-storage-originals-backup-20260918.json`을 로컬 집계만 했으며 복원하지 않았습니다.
 문서 내용·이름·금액을 출력하거나 새로 저장하지 않았습니다.
+
+22:36 KST에는 복합 인덱스 추가 없이 실제 UI와 같은 `householdId`·날짜 범위 query에
+`select(lifecycleState, deletedAt)`만 적용해 상태를 집계했습니다. 식별자·날짜·금액·메모는
+출력하거나 저장하지 않았으며 결과는 `TEMP/household-ios-startup-projected-counts-20260923.json`입니다.
+
+| 범위 | 전체 수신 | 표시 대상 | 삭제 | 대체 | 화면에서 제외 |
+|---|---:|---:|---:|---:|---:|
+| 9월 | 182 | 158 | 13 | 11 | 24 (13.2%) |
+| 2026년 | 1,932 | 1,714 | 91 | 127 | 218 (11.3%) |
+
+`deletedAt`이 있는 월 9건·연 22건은 모두 위 제외 상태와 겹쳤습니다. 추가 수신문서가
+있다는 점은 확인됐지만 이 양이 수초 지연을 유발하는지는 단계 기록으로 확인해야 합니다.
 
 최근 기간에도 9/19 20:39의 1.698초, 9/20 08:58의 1.483초,
 9/21 01:09의 1.407초처럼 빠른 표본이 섞여 있습니다. 따라서 증가를 모든 실행에 고정으로
