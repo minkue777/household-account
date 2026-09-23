@@ -4,18 +4,54 @@ import { documents } from './portfolio-helpers';
 
 test.beforeEach(async () => { await resetTestAccount(); });
 
-test('[T-HOME-002][T-HOME-003][HOME-001][HOME-003][HOME-004] 기본 홈 카드와 실제 설정 Command·version 충돌·동일 카드 거절을 검증한다', async ({ page, request }) => {
+test('[T-HOME-002][T-HOME-003][HOME-001][HOME-003][HOME-004] 기본 홈 카드와 실제 설정 Command·version 충돌·동일 카드 거절을 검증한다', async ({ page, request }, testInfo) => {
+  // 열린 Listen 응답은 Playwright trace에 본문이 남지 않습니다. 요청 내용·인증값을
+  // 복제하지 않고 전송 수명만 기록하여 저장 실패와 실시간 전달 지연을 구분합니다.
+  const listens: { startedAt: number; method: string; acknowledgedMessageId: string | null; status?: number; finishedAt?: number; error?: string }[] = [];
+  const listeningRequests = new Map<import('@playwright/test').Request, typeof listens[number]>();
+  page.on('request', value => {
+    const url = new URL(value.url());
+    if (!url.pathname.endsWith('/Firestore/Listen/channel')) return;
+    const entry = { startedAt: Date.now(), method: value.method(), acknowledgedMessageId: url.searchParams.get('AID') };
+    listens.push(entry);
+    listeningRequests.set(value, entry);
+  });
+  page.on('response', value => {
+    const entry = listeningRequests.get(value.request());
+    if (entry) entry.status = value.status();
+  });
+  page.on('requestfinished', value => {
+    const entry = listeningRequests.get(value);
+    if (entry) entry.finishedAt = Date.now();
+  });
+  page.on('requestfailed', value => {
+    const entry = listeningRequests.get(value);
+    if (entry) entry.error = value.failure()?.errorText;
+  });
   const scope = await createHouseholdThroughUi(page);
   await expect(page.locator('.balance-card-glass')).toHaveCount(2);
   await expect(page.locator('.balance-card-glass').first()).toContainText('월 지출');
   await expect(page.locator('.balance-card-glass').nth(1)).toContainText('월 잔여 예산');
   const save = { ...scope, command: 'home.update-summary-preferences.v1', payload: { leftCard: 'yearlySpent', rightCard: 'localCurrencyBalance', expectedVersion: 0 }, commandId: 'e2e-home-config' };
   await executeHouseholdCommand(request, save);
-  await expect(page.locator('.balance-card-glass').first()).toContainText('년 지출');
-  await expect(page.locator('.balance-card-glass').nth(1)).toContainText('지역화폐 잔액');
-  await expect(page.locator('.balance-card-glass').nth(1)).toContainText('데이터 없음');
   const stored = await documents(request, `households/${scope.householdId}/homePreferences`);
-  expect(stored[0]).toMatchObject({ aggregateVersion: 1 });
+  expect(stored).toEqual([expect.objectContaining({
+    id: 'home', left: 'YEARLY_EXPENSE', right: 'LOCAL_CURRENCY_BALANCE', aggregateVersion: 1,
+  })]);
+  try {
+    await expect(page.locator('.balance-card-glass').first()).toContainText('년 지출');
+    await expect(page.locator('.balance-card-glass').nth(1)).toContainText('지역화폐 잔액');
+    await expect(page.locator('.balance-card-glass').nth(1)).toContainText('데이터 없음');
+  } catch (error) {
+    await testInfo.attach('home-preferences-live-read', {
+      body: JSON.stringify({
+        stored: stored.map(({ left, right, aggregateVersion }) => ({ left, right, aggregateVersion })),
+        cards: await page.locator('.balance-card-glass').allTextContents(),
+        listens,
+      }), contentType: 'application/json',
+    });
+    throw error;
+  }
   await executeHouseholdCommand(request, save);
   expect(await documents(request, `households/${scope.householdId}/homePreferences`)).toEqual(stored);
   await expect(executeHouseholdCommand(request, { ...scope, command: save.command, payload: { leftCard: 'monthlySpent', rightCard: 'monthlyRemainingBudget', expectedVersion: 0 } })).rejects.toThrow('HOME_CONFIGURATION_VERSION_MISMATCH');
