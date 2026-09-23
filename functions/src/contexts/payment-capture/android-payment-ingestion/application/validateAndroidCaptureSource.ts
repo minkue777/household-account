@@ -90,15 +90,35 @@ function isLegacySamsungSemanticParserVersion(
     source.packageName === evidence.packageName &&
     source.sourceType === legacy.sourceType &&
     source.parserId === legacy.parserId &&
-    source.parserVersion === "1.1.0" &&
+    source.parserVersion === "1.2.0" &&
     evidence.sourceType === legacy.sourceType &&
     evidence.registryVersion === source.registryVersion &&
     envelope.parser.parserId === legacy.parserId &&
-    envelope.parser.parserVersion === "1.0.0" &&
-    payment !== undefined &&
-    payment.localCurrencyType === undefined &&
-    payment.dueDate === undefined &&
-    envelope.balanceObservation === undefined
+    (envelope.parser.parserVersion === "1.1.0" ||
+      (envelope.parser.parserVersion === "1.0.0" &&
+        payment !== undefined &&
+        payment.localCurrencyType === undefined &&
+        payment.dueDate === undefined &&
+        envelope.balanceObservation === undefined))
+  );
+}
+
+function isPreviousKakaoParserVersion(
+  envelope: CaptureEnvelopeInput,
+  source: AndroidPaymentSourceRegistryEntry,
+): boolean {
+  const evidence = envelope.sourceEvidence;
+  return (
+    evidence.kind === "android-registered-package" &&
+    source.packageName === KAKAO_TALK_FINANCIAL_SOURCE.packageName &&
+    source.sourceType === KAKAO_TALK_FINANCIAL_SOURCE.sourceType &&
+    source.parserId === KAKAO_TALK_FINANCIAL_SOURCE.parserId &&
+    source.parserVersion === KAKAO_TALK_FINANCIAL_SOURCE.parserVersion &&
+    evidence.packageName === source.packageName &&
+    evidence.sourceType === source.sourceType &&
+    evidence.registryVersion === source.registryVersion &&
+    envelope.parser.parserId === source.parserId &&
+    envelope.parser.parserVersion === "1.0.0"
   );
 }
 
@@ -136,7 +156,8 @@ export function validateAndroidCaptureSource(
   if (
     currentEvidenceMismatch &&
     !legacyKakaoCityGas &&
-    !legacySamsungParserVersion
+    !legacySamsungParserVersion &&
+    !isPreviousKakaoParserVersion(envelope, source)
   ) {
     return { kind: "rejected", code: "SOURCE_EVIDENCE_MISMATCH" };
   }

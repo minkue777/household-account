@@ -4,7 +4,7 @@ export const KAKAO_TALK_FINANCIAL_SOURCE = Object.freeze({
   packageName: "com.kakao.talk",
   sourceType: "kakao-talk-financial-message",
   parserId: "kakao-talk-financial-message-parser",
-  parserVersion: "1.0.0",
+  parserVersion: "1.1.0",
 });
 
 export const PAYMENT_KIND_EVIDENCE_MISMATCH =
@@ -69,7 +69,8 @@ function isKakaoCompositeSource(input: ExplicitPaymentKindCandidate): boolean {
       input.packageName === KAKAO_TALK_FINANCIAL_SOURCE.packageName) &&
     input.sourceType === KAKAO_TALK_FINANCIAL_SOURCE.sourceType &&
     input.parserId === KAKAO_TALK_FINANCIAL_SOURCE.parserId &&
-    input.parserVersion === KAKAO_TALK_FINANCIAL_SOURCE.parserVersion
+    (input.parserVersion === KAKAO_TALK_FINANCIAL_SOURCE.parserVersion ||
+      input.parserVersion === "1.0.0")
   );
 }
 

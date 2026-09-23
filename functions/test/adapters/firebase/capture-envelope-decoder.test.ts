@@ -273,7 +273,7 @@ describe("Firebase Capture envelope inbound adapter", () => {
     ["com.samsung.android.spay", "samsung-card", "samsung-card-parser"],
     ["kr.co.samsungcard.mpocket", "samsung-card", "samsung-card-parser"],
   ] as const)(
-    "%s에서 이미 생성된 parser 1.0.0 카드 envelope는 1.1.0 registry 전환 후에도 허용한다",
+    "%s에서 이미 생성된 parser 1.0.0·1.1.0 카드 envelope는 1.2.0 registry 전환 후에도 허용한다",
     (packageName, sourceType, parserId) => {
       const queued = legacySamsungSemanticEnvelope({
         packageName,
@@ -281,10 +281,13 @@ describe("Firebase Capture envelope inbound adapter", () => {
         parserId,
       });
 
-      expect(validateAndroidCaptureSource(decodeCaptureEnvelope(queued))).toMatchObject({
-        kind: "allowed",
-        entry: { packageName, sourceType, parserId, parserVersion: "1.1.0" },
-      });
+      for (const parserVersion of ["1.0.0", "1.1.0"]) {
+        (queued.parser as Record<string, unknown>).parserVersion = parserVersion;
+        expect(validateAndroidCaptureSource(decodeCaptureEnvelope(queued))).toMatchObject({
+          kind: "allowed",
+          entry: { packageName, sourceType, parserId, parserVersion: "1.2.0" },
+        });
+      }
     },
   );
 

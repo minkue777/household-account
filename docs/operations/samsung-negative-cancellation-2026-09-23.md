@@ -34,3 +34,7 @@ Shortcut parser는 삼성 취소의 표준 layout에서만 금액 행의 숫자 
 회귀를 먼저 추가해 수정 전 실패를 확인하고 수정 후 결과를 기록한다. Firebase 세 codebase는 공용 Functions 소스를 사용하므로 delivery plan으로 대상과 마지막 성공 이후 누적 변경을 확인해 배포한다. Android APK와 Web 실행 코드는 변경하지 않는다. 전체 CI 결과는 후보 SHA로 별도 추적한다.
 
 - 수정 전 새 회귀 15개 실패(기존 포함 125개 통과), 수정 후 관련 7개 파일 175개 테스트와 Functions `tsc --noEmit` 통과. 실제 Emulator 두 경로 검사는 별도 실행한다.
+
+- 실제 Emulator의 Android callable·Shortcut HTTP 취소·동일 입력 재전송 및 홈 합계 검사 2개 통과(Chromium, production build 포함).
+- 첫 CI에서 parser version 증가에 따른 구버전 삼성/SMS envelope 호환 판정과 카카오톡 도시가스 payment kind 판정의 고정 버전 불일치가 드러났다. 기존 1.0.0·1.1.0 입력을 명시적으로 허용하되 source·카드·도시가스 형태 검증은 유지하도록 보완한다.
+- 호환 보완 후 첫 CI 실패 파일 2개를 포함한 관련 9개 파일 153개 테스트 및 Functions 타입 검사 통과. 기존 source 위조·카드 누락·도시가스 형태 거절 검증도 유지했다.
