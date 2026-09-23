@@ -42,7 +42,8 @@ data class CaptureQuickEditSnapshot(
     val localTime: String,
     val categoryId: String,
     val memo: String,
-    val aggregateVersion: Int
+    val aggregateVersion: Int,
+    val tags: List<String> = emptyList()
 )
 
 data class CaptureFlushOutcome(

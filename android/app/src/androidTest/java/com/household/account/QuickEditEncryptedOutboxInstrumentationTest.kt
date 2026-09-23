@@ -30,6 +30,30 @@ class QuickEditEncryptedOutboxInstrumentationTest {
 
     @After fun cleanUp() { AndroidKeystoreQuickEditCommandOutboxStore(context).clear() }
 
+    @Test fun actualEncryptedReloadPreservesTagArraysAndExplicitClears() = runBlocking {
+        val privateTag = "2026비공개가족여행"
+        val commands = listOf(
+            HouseholdCommandEnvelopeV1.create(scope.householdId, HouseholdCommandKind.UPDATE,
+                mapOf("transactionId" to "transaction", "expectedVersion" to 3,
+                    "patch" to mapOf("tags" to listOf(privateTag, "가족 행사"))), "encrypted-tags-add"),
+            HouseholdCommandEnvelopeV1.create(scope.householdId, HouseholdCommandKind.UPDATE,
+                mapOf("transactionId" to "transaction", "expectedVersion" to 4,
+                    "patch" to mapOf("tags" to emptyList<String>())), "encrypted-tags-clear"),
+            HouseholdCommandEnvelopeV1.create(scope.householdId, HouseholdCommandKind.SPLIT,
+                mapOf("transactionId" to "transaction", "expectedVersion" to 5,
+                    "operation" to mapOf("kind" to "items", "baseDraft" to mapOf("tags" to listOf(privateTag)))),
+                "encrypted-tags-split")
+        )
+        for (command in commands) {
+            val store = AndroidKeystoreQuickEditCommandOutboxStore(context).also { it.clear() }
+            assertTrue(QuickEditCommandOutbox(store) { 100L }.enqueue(scope, "transaction", command))
+            assertFalse("Raw tags must not appear in SharedPreferences", preferences.all.toString().contains(privateTag))
+            val reloaded = QuickEditCommandOutbox(AndroidKeystoreQuickEditCommandOutboxStore(context)) { 200L }
+            assertEquals("The actual Keystore and JSON codec must preserve tag arrays including []",
+                command, reloaded.snapshot().single().envelope)
+        }
+    }
+
     @Test fun actualKeystoreRetainsConflictUntilNotificationAcknowledgmentAcrossReload() = runBlocking {
         val store = AndroidKeystoreQuickEditCommandOutboxStore(context).also { it.clear() }
         val outbox = QuickEditCommandOutbox(store) { 100L }

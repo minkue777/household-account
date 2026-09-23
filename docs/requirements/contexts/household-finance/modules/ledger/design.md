@@ -26,6 +26,8 @@
 
 태그의 거래 내 저장·입력 한도·변환 보존·기존 검색 확장은 [DEC-075](../../../../governance/decisions.md#dec-075)를 따릅니다.
 
+2026-09-23의 Android 네이티브 QuickEdit 확장은 같은 태그 정책과 일반 Ledger Update·Split 계약을 소비합니다. 입력 화면·snapshot·Intent·암호화 표시 FIFO·command outbox의 필드 전달은 [Android Host QE-013 상세 설계](../../../../supporting-platform/modules/android-host/design.md#34-quickedit-태그-계약--qe-013)가 소유합니다. 태그를 변경하지 않은 QuickEdit은 Update patch와 Split baseDraft에서 tags를 생략해 기존값을 유지하며, 명시한 빈 배열만 전체 제거로 처리합니다.
+
 ## 2. 모듈 경계와 책임
 
 ### 2.1 소유 책임

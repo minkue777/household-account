@@ -20,6 +20,7 @@ import androidx.test.espresso.ViewAction
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.action.ViewActions.closeSoftKeyboard
 import androidx.test.espresso.action.ViewActions.replaceText
+import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -50,6 +51,8 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
+import org.hamcrest.Description
+import org.hamcrest.TypeSafeMatcher
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -195,8 +198,8 @@ class QuickEditFirebaseE2ETest {
             val enterMemo = object : ViewAction by replaceText(SAVED_MEMO) {
                 override fun getDescription() = "enter private memo text"
             }
-            onView(withId(R.id.etMemo)).perform(enterMemo, closeSoftKeyboard())
-            onView(withId(R.id.btnSave)).perform(click())
+            onView(withId(R.id.etMemo)).perform(scrollTo(), enterMemo, closeSoftKeyboard())
+            onView(withId(R.id.btnSave)).perform(scrollTo(), click())
             eventually("Quick Edit durable acceptance closes the screen") { opened.isFinishing || opened.isDestroyed }
 
             for (queuedEntry in queued.entries.drop(1)) {
@@ -231,6 +234,18 @@ class QuickEditFirebaseE2ETest {
                 .all.toString().contains(SAVED_MEMO))
             assertEquals("Only three distinct notifications create capture receipts", 3, captureLedgerReceiptCount(householdId))
 
+            // Reopen B through the Coordinator's real server-query fallback. This keeps A intact
+            // for the following Web test, and exercises decoded tags instead of a supplied snapshot.
+            tagOnlySaveClearAndUnsavedSplitReachServer(householdId, queued.entries[1].transactionId, query) { current ->
+                val previous = activity
+                QuickEditCoordinator.enqueueAndPresent(context, HouseholdPreferences.currentScope(context),
+                    CaptureDeliveryFollowUp("native-tag-edit-${current.aggregateVersion}", current.transactionId, current.aggregateVersion))
+                val next = awaitNextActivity(previous, 30_000)
+                assertNotNull("Query fallback must open the current ledger version", next)
+                activity = next
+                checkNotNull(next)
+            }
+
             // Use the real receipt again so removing either gate would enqueue and reopen this transaction.
             val queueStore = AndroidKeystoreQuickEditQueueStore(context)
             val queueBefore = queueStore.load()
@@ -251,6 +266,7 @@ class QuickEditFirebaseE2ETest {
             val privateValues = listOf(
                 "household" to householdId, "member" to memberId, "email" to fixture.getString("email"),
                 "merchant" to snapshot.merchant, "memo" to SAVED_MEMO,
+                "saved tag" to SAVED_TAG, "split tag" to SPLIT_TAG,
                 "raw title" to raw.notification.title, "raw text" to raw.notification.text, "credential" to authToken
             ) + raw.notification.textLines.mapIndexed { index, line -> "raw line $index" to line }
             privateValues.forEach { (field, sensitive) ->
@@ -271,6 +287,90 @@ class QuickEditFirebaseE2ETest {
             HouseholdPreferences.clearHouseholdKey(context)
             auth.signOut()
             if (!previousOverlayPermission) shell("appops set ${context.packageName} SYSTEM_ALERT_WINDOW deny")
+        }
+    }
+
+    /** UI → encrypted outbox → authenticated callable → real ledger query; no seeded command responses. */
+    private suspend fun tagOnlySaveClearAndUnsavedSplitReachServer(
+        householdId: String,
+        transactionId: String,
+        query: CallableLedgerTransactionQueryClient,
+        open: suspend (LedgerTransactionSnapshot) -> QuickEditActivity
+    ) {
+        suspend fun current(): LedgerTransactionSnapshot =
+            checkNotNull((query.get(householdId, transactionId) as? LedgerTransactionQueryResult.Success)?.value)
+
+        suspend fun awaitClosedAndCommitted(opened: QuickEditActivity, expectedVersion: Int): LedgerTransactionSnapshot {
+            eventually("Tag edit closes after durable acceptance") { opened.isFinishing || opened.isDestroyed }
+            var saved: LedgerTransactionSnapshot? = null
+            eventually("Tag edit reaches the actual ledger", 60_000) {
+                saved = (query.get(householdId, transactionId) as? LedgerTransactionQueryResult.Success)?.value
+                saved?.aggregateVersion == expectedVersion
+            }
+            eventually("Tag edit drains its durable command and presentation queues") {
+                AndroidKeystoreQuickEditCommandOutboxStore(context).load().isEmpty() &&
+                    AndroidKeystoreQuickEditQueueStore(context).load().entries.isEmpty()
+            }
+            return checkNotNull(saved)
+        }
+
+        fun enterPrivateTag(value: String) {
+            val enter = object : ViewAction by replaceText(value) {
+                override fun getDescription() = "enter private tag text"
+            }
+            onView(withId(R.id.etTags)).perform(scrollTo(), enter, closeSoftKeyboard())
+        }
+
+        val original = current()
+        assertTrue(original.tags.isEmpty())
+        val adding = open(original)
+        assertEquals(original.tags, adding.intent.getStringArrayListExtra(QuickEditActivity.EXTRA_TAGS))
+        // Saving includes the still-uncommitted input without requiring the separate add button.
+        enterPrivateTag("#$SAVED_TAG")
+        onView(withId(R.id.btnSave)).perform(scrollTo(), click())
+        val tagged = awaitClosedAndCommitted(adding, original.aggregateVersion + 1)
+        assertEquals("A tag-only edit must preserve every other ledger field",
+            original.copy(aggregateVersion = original.aggregateVersion + 1, tags = listOf(SAVED_TAG)), tagged)
+
+        val removing = open(tagged)
+        assertEquals(listOf(SAVED_TAG), removing.intent.getStringArrayListExtra(QuickEditActivity.EXTRA_TAGS))
+        val remove = object : ViewAction by click() {
+            override fun getDescription() = "remove private tag"
+        }
+        // Espresso logs matcher descriptions as well as action descriptions. Observe the actual
+        // accessible remove control without placing the private tag in the test driver's log.
+        val privateTagRemove = object : TypeSafeMatcher<View>() {
+            override fun describeTo(description: Description) { description.appendText("private tag remove control") }
+            override fun matchesSafely(view: View) = view.contentDescription == "$SAVED_TAG 태그 제거"
+        }
+        onView(privateTagRemove).perform(scrollTo(), remove)
+        onView(withId(R.id.btnSave)).perform(scrollTo(), click())
+        val cleared = awaitClosedAndCommitted(removing, original.aggregateVersion + 2)
+        assertEquals("Removing the final tag must send an explicit empty array",
+            original.copy(aggregateVersion = original.aggregateVersion + 2), cleared)
+
+        val splitting = open(cleared)
+        assertEquals(emptyList<String>(), splitting.intent.getStringArrayListExtra(QuickEditActivity.EXTRA_TAGS))
+        enterPrivateTag(SPLIT_TAG)
+        onView(withId(R.id.btnSplit)).perform(scrollTo(), click())
+        onView(withId(R.id.btnConfirmSplit)).perform(click())
+        val source = awaitClosedAndCommitted(splitting, original.aggregateVersion + 3)
+        assertEquals("superseded", source.lifecycleState)
+        assertEquals(listOf(SPLIT_TAG), source.tags)
+
+        var derivedIds = emptyList<String>()
+        eventually("The server creates both split children", 60_000) {
+            derivedIds = derivedTransactionIds(householdId, transactionId)
+            derivedIds.size == 2
+        }
+        val children = derivedIds.map { id ->
+            checkNotNull((query.get(householdId, id) as? LedgerTransactionQueryResult.Success)?.value)
+        }
+        assertEquals(original.amountInWon, children.sumOf { it.amountInWon })
+        children.forEach { child ->
+            assertEquals("active", child.lifecycleState)
+            assertEquals(original.categoryId, child.categoryId)
+            assertEquals("Each child inherits the unsaved current draft tags", listOf(SPLIT_TAG), child.tags)
         }
     }
 
@@ -307,10 +407,32 @@ class QuickEditFirebaseE2ETest {
         } finally { connection.disconnect() }
     }
 
+    /** Read-only discovery of server-generated child IDs; contents are verified by authenticated query. */
+    private fun derivedTransactionIds(householdId: String, sourceId: String): List<String> {
+        check(FirebaseApp.getInstance().options.projectId == FirebaseEmulatorTestRunner.PROJECT_ID)
+        val connection = URL("http://10.0.2.2:8080/v1/projects/${FirebaseEmulatorTestRunner.PROJECT_ID}/databases/(default)/documents/households/$householdId/ledgerTransactions?pageSize=1000")
+            .openConnection() as HttpURLConnection
+        try {
+            connection.connectTimeout = 5_000
+            connection.readTimeout = 5_000
+            connection.setRequestProperty("Authorization", "Bearer owner")
+            check(connection.responseCode == 200) { "Local Emulator split observation failed" }
+            val documents = JSONObject(connection.inputStream.bufferedReader().use { it.readText() }).optJSONArray("documents")
+                ?: return emptyList()
+            return (0 until documents.length()).map(documents::getJSONObject)
+                .filter { it.getJSONObject("fields").optJSONObject("derivedFromTransactionId")?.optString("stringValue") == sourceId }
+                .map { it.getString("name").substringAfterLast('/') }
+        } finally { connection.disconnect() }
+    }
+
     private fun View.texts(): List<String> = buildList {
         if (this@texts is TextView) add(text.toString())
         if (this@texts is ViewGroup) for (index in 0 until childCount) addAll(getChildAt(index).texts())
     }
 
-    companion object { private const val SAVED_MEMO = "Android E2E 메모" }
+    companion object {
+        private const val SAVED_MEMO = "Android E2E 메모"
+        private const val SAVED_TAG = "2026부산여행"
+        private const val SPLIT_TAG = "2026가족행사"
+    }
 }

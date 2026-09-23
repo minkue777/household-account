@@ -244,6 +244,7 @@ object QuickEditCoordinator {
             putExtra(QuickEditActivity.EXTRA_TIME, snapshot.localTime)
             putExtra(QuickEditActivity.EXTRA_CATEGORY, snapshot.categoryId)
             putExtra(QuickEditActivity.EXTRA_MEMO, snapshot.memo)
+            putStringArrayListExtra(QuickEditActivity.EXTRA_TAGS, ArrayList(snapshot.tags))
             putExtra(QuickEditActivity.EXTRA_VERSION, snapshot.aggregateVersion)
             observationId?.let {
                 putExtra(QuickEditActivity.EXTRA_CAPTURE_OBSERVATION_ID, it)
@@ -309,7 +310,8 @@ object QuickEditCoordinator {
         localTime = localTime,
         merchant = merchant,
         categoryId = categoryId,
-        memo = memo
+        memo = memo,
+        tags = tags
     )
 
     private fun scheduleRecovery(context: Context, delayed: Boolean = false) {

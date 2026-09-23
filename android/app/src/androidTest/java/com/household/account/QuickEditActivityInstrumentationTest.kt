@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.View
+import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
@@ -19,6 +20,7 @@ import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.ViewAction
 import androidx.test.espresso.UiController
 import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.espresso.matcher.RootMatchers.isDialog
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom
@@ -86,6 +88,7 @@ class QuickEditActivityInstrumentationTest {
                 activity.findViewById<EditText>(R.id.etMerchant).setText("저장하지 않을 가맹점")
                 activity.findViewById<EditText>(R.id.etAmount).setText("99001")
                 activity.findViewById<EditText>(R.id.etMemo).setText("저장하지 않을 메모")
+                activity.findViewById<EditText>(R.id.etTags).setText("저장하지 않을 태그")
                 activity.findViewById<Button>(R.id.btnNotify).performClick()
             }
             val store = AndroidKeystoreQuickEditCommandOutboxStore(context)
@@ -97,6 +100,102 @@ class QuickEditActivityInstrumentationTest {
             assertEquals(3, (entry.envelope.payload["expectedVersion"] as Number).toInt())
             waitUntil("Worker 영속 예약 후 QuickEdit 닫기") { scenario.state == Lifecycle.State.DESTROYED }
             assertWorkerReservationExists()
+        }
+    }
+
+    @Test
+    fun tagsOnlySaveIncludesAddedAndStillTypingTagsWithoutSplittingTheirSpaces() {
+        prepareLocalCommandSession()
+        launchQuickEdit(tags = listOf("2026부산여행")).use { scenario ->
+            scenario.onActivity { activity ->
+                assertTrue(activity.findViewById<FlexboxLayout>(R.id.tagContainer).descendantTexts().contains("#2026부산여행"))
+                activity.findViewById<EditText>(R.id.etTags).setText(" ##가족 여행,행사#1 ")
+                activity.findViewById<Button>(R.id.btnAddTag).performClick()
+                assertEquals("", activity.findViewById<EditText>(R.id.etTags).text.toString())
+                activity.findViewById<EditText>(R.id.etTags).setText("#민규용돈")
+                activity.findViewById<Button>(R.id.btnSave).performClick()
+            }
+            val store = AndroidKeystoreQuickEditCommandOutboxStore(context)
+            waitUntil("태그만 수정한 암호화 outbox commit") { store.load().isNotEmpty() }
+            assertEquals(
+                mapOf("tags" to listOf("2026부산여행", "가족 여행,행사#1", "민규용돈")),
+                store.load().single().envelope.payload["patch"]
+            )
+            waitUntil("태그 수정 후 닫기") { scenario.state == Lifecycle.State.DESTROYED }
+            assertWorkerReservationExists()
+        }
+    }
+
+    @Test
+    fun removingEveryTagPersistsAnExplicitEmptyArray() {
+        prepareLocalCommandSession()
+        launchQuickEdit(tags = listOf("2026부산여행")).use { scenario ->
+            scenario.onActivity { activity ->
+                val container = activity.findViewById<FlexboxLayout>(R.id.tagContainer)
+                (container.getChildAt(0) as LinearLayout).getChildAt(1).performClick()
+                assertEquals(View.GONE, container.visibility)
+                activity.findViewById<Button>(R.id.btnSave).performClick()
+            }
+            val store = AndroidKeystoreQuickEditCommandOutboxStore(context)
+            waitUntil("태그 전체 삭제 outbox commit") { store.load().isNotEmpty() }
+            assertEquals(mapOf("tags" to emptyList<String>()), store.load().single().envelope.payload["patch"])
+            waitUntil("태그 삭제 후 닫기") { scenario.state == Lifecycle.State.DESTROYED }
+        }
+    }
+
+    @Test
+    fun overLimitTagsBlockSaveAndSplitWithoutDroppingTheInput() {
+        prepareLocalCommandSession()
+        launchQuickEdit(tags = (1..10).map { "태그$it" }).use { scenario ->
+            scenario.onActivity { activity ->
+                val input = activity.findViewById<EditText>(R.id.etTags)
+                input.setText("🧳".repeat(31))
+                activity.findViewById<Button>(R.id.btnSave).performClick()
+                assertEquals("태그는 30자까지 입력할 수 있습니다", input.error.toString())
+                assertEquals("🧳".repeat(31), input.text.toString())
+                assertFalse(activity.isFinishing)
+                input.setText("열한번째")
+                activity.findViewById<Button>(R.id.btnSplit).performClick()
+                assertEquals("태그는 최대 10개까지 추가할 수 있습니다", input.error.toString())
+                assertFalse(activity.isFinishing)
+            }
+            onView(withId(R.id.splitItemsContainer)).check(doesNotExist())
+            assertTrue(AndroidKeystoreQuickEditCommandOutboxStore(context).load().isEmpty())
+        }
+    }
+
+    @Test
+    fun koreanComposingInputIsNotCommittedByTheImeAction() {
+        prepareLocalCommandSession()
+        launchQuickEdit().use { scenario ->
+            scenario.onActivity { activity ->
+                val input = activity.findViewById<EditText>(R.id.etTags)
+                val connection = requireNotNull(input.onCreateInputConnection(EditorInfo()))
+                connection.setComposingText("부산", 1)
+                input.onEditorAction(EditorInfo.IME_ACTION_DONE)
+                assertEquals("부산", input.text.toString())
+                assertEquals(0, activity.findViewById<FlexboxLayout>(R.id.tagContainer).childCount)
+                connection.finishComposingText()
+                input.onEditorAction(EditorInfo.IME_ACTION_DONE)
+                assertEquals("", input.text.toString())
+                assertTrue(activity.findViewById<FlexboxLayout>(R.id.tagContainer).descendantTexts().contains("#부산"))
+            }
+            assertTrue(AndroidKeystoreQuickEditCommandOutboxStore(context).load().isEmpty())
+        }
+    }
+
+    @Test
+    fun changingMemoPreservesExistingTagsEvenIfTheyExceedCurrentLimits() {
+        prepareLocalCommandSession()
+        launchQuickEdit(tags = (1..11).map { "태그$it" }).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.findViewById<EditText>(R.id.etMemo).setText("메모만 변경")
+                activity.findViewById<Button>(R.id.btnSave).performClick()
+            }
+            val store = AndroidKeystoreQuickEditCommandOutboxStore(context)
+            waitUntil("기존 태그 보존 outbox commit") { store.load().isNotEmpty() }
+            assertEquals(mapOf("memo" to "메모만 변경"), store.load().single().envelope.payload["patch"])
+            waitUntil("메모 수정 후 닫기") { scenario.state == Lifecycle.State.DESTROYED }
         }
     }
 
@@ -157,9 +256,11 @@ class QuickEditActivityInstrumentationTest {
                 activity.findViewById<EditText>(R.id.etMerchant).setText("분할 초안")
                 activity.findViewById<EditText>(R.id.etAmount).setText("12000")
                 activity.findViewById<EditText>(R.id.etMemo).setText("버튼 시점 메모")
+                activity.findViewById<EditText>(R.id.etTags).setText("#버튼 시점 태그")
                 activity.findViewById<Button>(R.id.btnSplit).performClick()
                 // A later form refresh must not mutate the already opened draft.
                 activity.findViewById<EditText>(R.id.etMemo).setText("이후 변경")
+                activity.findViewById<EditText>(R.id.etTags).setText("이후 태그 변경")
             }
             onView(withId(R.id.btnConfirmSplit)).inRoot(isDialog()).perform(click())
             val store = AndroidKeystoreQuickEditCommandOutboxStore(context)
@@ -173,7 +274,8 @@ class QuickEditActivityInstrumentationTest {
             assertEquals(12000, (draft["amountInWon"] as Number).toInt())
             assertEquals("버튼 시점 메모", draft["memo"])
             assertEquals(categoryId, draft["categoryId"])
-            assertEquals(setOf("merchant", "amountInWon", "categoryId", "memo"), draft.keys)
+            assertEquals(listOf("버튼 시점 태그"), draft["tags"])
+            assertEquals(setOf("merchant", "amountInWon", "categoryId", "memo", "tags"), draft.keys)
             val items = operation["items"] as List<*>
             assertEquals(12000, items.sumOf { ((it as Map<*, *>)["amountInWon"] as Number).toInt() })
             assertTrue(items.all { (it as Map<*, *>)["categoryId"] == categoryId })
@@ -394,6 +496,9 @@ class QuickEditActivityInstrumentationTest {
                 scenario.onActivity { activity ->
                     original = activity
                     activity.findViewById<EditText>(R.id.etMemo).setText("저장하지 않은 입력")
+                    activity.findViewById<EditText>(R.id.etTags).setText("추가한 태그")
+                    activity.findViewById<Button>(R.id.btnAddTag).performClick()
+                    activity.findViewById<EditText>(R.id.etTags).setText("입력 중 태그")
                 }
                 scenario.moveToState(Lifecycle.State.CREATED)
                 runBlocking { QuickEditCoordinator.resumePending(context) }
@@ -401,11 +506,15 @@ class QuickEditActivityInstrumentationTest {
                 scenario.onActivity { activity ->
                     assertSame(original, activity)
                     assertEquals("저장하지 않은 입력", activity.findViewById<EditText>(R.id.etMemo).text.toString())
+                    assertEquals("입력 중 태그", activity.findViewById<EditText>(R.id.etTags).text.toString())
+                    assertTrue(activity.findViewById<FlexboxLayout>(R.id.tagContainer).descendantTexts().contains("#추가한 태그"))
                 }
                 scenario.recreate()
                 runBlocking { QuickEditCoordinator.resumePending(context) }
                 scenario.onActivity { activity ->
                     assertEquals("저장하지 않은 입력", activity.findViewById<EditText>(R.id.etMemo).text.toString())
+                    assertEquals("입력 중 태그", activity.findViewById<EditText>(R.id.etTags).text.toString())
+                    assertTrue(activity.findViewById<FlexboxLayout>(R.id.tagContainer).descendantTexts().contains("#추가한 태그"))
                     assertFalse(QuickEditCoordinator.presentations.needsRecovery(scope, id))
                 }
             }
@@ -428,7 +537,7 @@ class QuickEditActivityInstrumentationTest {
         try { block() } finally { if (!wasAllowed) setMode("default") }
     }
 
-    private fun launchQuickEdit(categoryId: String = "food"): ActivityScenario<QuickEditActivity> {
+    private fun launchQuickEdit(categoryId: String = "food", tags: List<String> = emptyList()): ActivityScenario<QuickEditActivity> {
         val scope = HouseholdPreferences.currentScope(context)
         val intent = Intent(context, QuickEditActivity::class.java).apply {
             putExtra(QuickEditActivity.EXTRA_HOUSEHOLD_ID, scope.householdId)
@@ -441,6 +550,7 @@ class QuickEditActivityInstrumentationTest {
             putExtra(QuickEditActivity.EXTRA_TIME, "17:40")
             putExtra(QuickEditActivity.EXTRA_CATEGORY, categoryId)
             putExtra(QuickEditActivity.EXTRA_MEMO, "테스트 메모")
+            putStringArrayListExtra(QuickEditActivity.EXTRA_TAGS, ArrayList(tags))
             putExtra(QuickEditActivity.EXTRA_VERSION, 3)
         }
         return ActivityScenario.launch(intent)

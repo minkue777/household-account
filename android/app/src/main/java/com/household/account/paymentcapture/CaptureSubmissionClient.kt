@@ -106,6 +106,11 @@ class CallableCaptureSubmissionClient(
         val categoryId = this["categoryId"] as? String ?: return null
         val memo = this["memo"] as? String ?: return null
         val aggregateVersion = (this["aggregateVersion"] as? Number)?.toInt() ?: return null
+        val rawTags = this["tags"]
+        val tags = if (!containsKey("tags")) emptyList() else {
+            if (rawTags !is List<*> || rawTags.any { it !is String }) return null
+            rawTags.filterIsInstance<String>()
+        }
         if (
             transactionId.isBlank() ||
             merchant.isBlank() ||
@@ -124,7 +129,8 @@ class CallableCaptureSubmissionClient(
             localTime = localTime,
             categoryId = categoryId,
             memo = memo,
-            aggregateVersion = aggregateVersion
+            aggregateVersion = aggregateVersion,
+            tags = tags
         )
     }
 

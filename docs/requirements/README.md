@@ -1,7 +1,7 @@
 # Household Account 현재 시스템 요구사항 인덱스
 
 > 상태: Draft — 코드 역추적 명세  
-> 집계 갱신일: 2026-09-18  
+> 집계 갱신일: 2026-09-23  
 > 범위: Web, Android, Firebase Functions, Firestore, PWA, 외부 시세·배당 연동  
 > 목적: 5개 업무 Bounded Context에서 기능 모듈·요구사항·테스트·결정·데이터 소유권을 탐색하는 시작점  
 > 목표 아키텍처: [목표 Clean Architecture 설계](../architecture/target-clean-architecture.md)  
@@ -86,13 +86,13 @@ Portfolio ──valuation·dividend Outbox Event──▶ Read Side
 
 | 역할 | 기능 모듈 | 요구사항 | 개수 | 책임 |
 |---|---|---|---:|---|
-| Android Delivery | [Android Host](supporting-platform/modules/android-host/requirements.md) | AND-*, QE-* | 26 | 권한, WebView, Bridge, QuickEdit |
+| Android Delivery | [Android Host](supporting-platform/modules/android-host/requirements.md) | AND-*, QE-* | 27 | 권한, WebView, Bridge, QuickEdit |
 | Web Delivery | [PWA](supporting-platform/modules/pwa/requirements.md) | PWA-* | 8 | 설치, cache/messaging worker |
 | Read Side | [통계](supporting-platform/modules/reporting/requirements.md) | STAT-*, STAT-AST-* | 9 | 거래·자산 Projection |
 | Preferences | [홈 환경설정](supporting-platform/modules/home-preferences/requirements.md) | HOME-*, THEME-* | 5 | 홈 카드·표시 지역화폐 구성과 Web theme |
 | Operations | [외부 운영](supporting-platform/modules/external-operations/requirements.md) | JOB-ERR-*, EXT-* | 6 | Scheduler·retry·오류 분류·관측 |
 | Delivery Assurance | [배포 안전성](supporting-platform/modules/delivery-assurance/requirements.md) | REL-* | 4 | release gate, 환경·project, 호환 배포·smoke |
-| 합계 | 6개 기능 모듈 |  | 58 |  |
+| 합계 | 6개 기능 모듈 |  | 59 |  |
 
 지원 모듈은 업무 Aggregate를 직접 수정하지 않고 해당 Context의 공개 Command·Query·Event를 사용한다.
 

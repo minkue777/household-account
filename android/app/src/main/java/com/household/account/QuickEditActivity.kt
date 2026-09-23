@@ -10,6 +10,8 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
+import android.view.inputmethod.BaseInputConnection
+import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
@@ -30,7 +32,10 @@ import com.household.account.quickedit.QuickEditCommandDelivery
 import com.household.account.quickedit.QuickEditCommandEnqueueResult
 import com.household.account.quickedit.QuickEditCoordinator
 import com.household.account.quickedit.QuickEditPresentationOwner
+import com.household.account.quickedit.QuickEditTagsValidation
 import com.household.account.quickedit.buildQuickEditUpdatePatch
+import com.household.account.quickedit.normalizeQuickEditTags
+import com.household.account.quickedit.validateQuickEditTags
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,7 +47,7 @@ import java.util.Locale
 
 /**
  * 지출 수정 액티비티
- * 카드 결제 알림 후 가맹점, 금액, 카테고리, 메모를 수정할 수 있는 화면
+ * 카드 결제 알림 후 가맹점, 금액, 카테고리, 메모, 태그를 수정할 수 있는 화면
  */
 class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
     @Volatile private var quickEditStarted = false
@@ -57,11 +62,13 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
         const val EXTRA_TIME = "time"
         const val EXTRA_CATEGORY = "category"
         const val EXTRA_MEMO = "memo"
+        const val EXTRA_TAGS = "tags"
         const val EXTRA_VERSION = "aggregate_version"
         const val EXTRA_CAPTURE_OBSERVATION_ID = "capture_observation_id"
         const val EXTRA_HOUSEHOLD_ID = "quick_edit_household_id"
         const val EXTRA_MEMBER_ID = "quick_edit_member_id"
         const val EXTRA_SESSION_GENERATION = "quick_edit_session_generation"
+        private const val STATE_SELECTED_TAGS = "selected_tags"
     }
 
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -79,17 +86,21 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
     private var originalDate: String = ""
     private var originalTime: String = ""
     private var originalMemo: String = ""
+    private var originalTags: List<String> = emptyList()
     private var originalVersion: Int = 1
 
     // 현재 선택된 값들
     private var selectedCategoryKey: String = ""
     private var categories: List<CategoryData> = emptyList()
     private val categoryViews = mutableMapOf<String, View>()
+    private var selectedTags: List<String> = emptyList()
 
     // UI 요소
     private lateinit var etMerchant: EditText
     private lateinit var etAmount: EditText
     private lateinit var etMemo: EditText
+    private lateinit var etTags: EditText
+    private lateinit var tagContainer: FlexboxLayout
     private lateinit var categoryContainer: FlexboxLayout
     private lateinit var tvDateTime: TextView
 
@@ -119,6 +130,8 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
         originalTime = intent.getStringExtra(EXTRA_TIME) ?: ""
         originalCategory = intent.getStringExtra(EXTRA_CATEGORY) ?: "etc"
         originalMemo = intent.getStringExtra(EXTRA_MEMO) ?: ""
+        originalTags = normalizeQuickEditTags(intent.getStringArrayListExtra(EXTRA_TAGS).orEmpty())
+        selectedTags = savedInstanceState?.getStringArrayList(STATE_SELECTED_TAGS)?.toList() ?: originalTags
         originalVersion = intent.getIntExtra(EXTRA_VERSION, 1).coerceAtLeast(1)
         captureObservationId = intent.getStringExtra(EXTRA_CAPTURE_OBSERVATION_ID)
         QuickEditCoordinator.presentations.created(editingScope, expenseId, this)
@@ -148,6 +161,11 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
         if (::editingScope.isInitialized) {
             QuickEditCoordinator.presentations.started(editingScope, expenseId, this)
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putStringArrayList(STATE_SELECTED_TAGS, ArrayList(selectedTags))
+        super.onSaveInstanceState(outState)
     }
 
     override fun onStop() {
@@ -196,6 +214,8 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
         etMerchant = findViewById(R.id.etMerchant)
         etAmount = findViewById(R.id.etAmount)
         etMemo = findViewById(R.id.etMemo)
+        etTags = findViewById(R.id.etTags)
+        tagContainer = findViewById(R.id.tagContainer)
         categoryContainer = findViewById(R.id.categoryContainer)
         tvDateTime = findViewById(R.id.tvDateTime)
     }
@@ -209,6 +229,7 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
 
         // 메모
         etMemo.setText(originalMemo)
+        renderTags()
 
         // 날짜/시간 포맷팅
         val dateTime = buildString {
@@ -338,6 +359,17 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
     }
 
     private fun setupButtons() {
+        findViewById<Button>(R.id.btnAddTag).setOnClickListener { addTag() }
+        etTags.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE &&
+                BaseInputConnection.getComposingSpanStart(etTags.text) == -1
+            ) {
+                addTag()
+                true
+            } else {
+                false
+            }
+        }
         // 닫기 버튼
         findViewById<ImageButton>(R.id.btnClose).setOnClickListener {
             dismissCurrentQuickEdit()
@@ -364,6 +396,67 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
         findViewById<Button>(R.id.btnDelete).setOnClickListener {
             showDeleteConfirmation()
         }
+    }
+
+    private fun renderTags() {
+        tagContainer.removeAllViews()
+        tagContainer.visibility = if (selectedTags.isEmpty()) View.GONE else View.VISIBLE
+        selectedTags.forEach { tag ->
+            val tagView = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = FlexboxLayout.LayoutParams(
+                    FlexboxLayout.LayoutParams.WRAP_CONTENT,
+                    FlexboxLayout.LayoutParams.WRAP_CONTENT
+                ).apply { marginEnd = (8 * resources.displayMetrics.density).toInt() }
+            }
+            tagView.addView(TextView(this).apply {
+                text = "#$tag"
+                textSize = 14f
+                setTextColor(Color.parseColor("#2563EB"))
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { weight = 1f }
+            })
+            tagView.addView(TextView(this).apply {
+                text = "×"
+                textSize = 18f
+                gravity = Gravity.CENTER
+                setTextColor(Color.parseColor("#94A3B8"))
+                contentDescription = "$tag 태그 제거"
+                isFocusable = true
+                val targetSize = (40 * resources.displayMetrics.density).toInt()
+                layoutParams = LinearLayout.LayoutParams(targetSize, targetSize)
+                setOnClickListener {
+                    selectedTags = selectedTags.filterNot { it == tag }
+                    etTags.error = null
+                    renderTags()
+                }
+            })
+            tagContainer.addView(tagView)
+        }
+    }
+
+    private fun readTagDraft(): List<String>? = when (
+        val validation = validateQuickEditTags(selectedTags + etTags.text.toString(), originalTags)
+    ) {
+        is QuickEditTagsValidation.Valid -> {
+            etTags.error = null
+            validation.tags
+        }
+        is QuickEditTagsValidation.Invalid -> {
+            etTags.error = validation.message
+            etTags.requestFocus()
+            null
+        }
+    }
+
+    private fun addTag() {
+        val tags = readTagDraft() ?: return
+        selectedTags = tags
+        etTags.text.clear()
+        renderTags()
     }
 
     private fun sendNotifyOnly() {
@@ -402,6 +495,7 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
             return
         }
 
+        val tags = readTagDraft() ?: return
         val patch = buildQuickEditUpdatePatch(
             originalMerchant = originalMerchant,
             originalAmountInWon = originalAmount,
@@ -410,7 +504,9 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
             merchant = merchant,
             amountInWon = amount,
             categoryId = selectedCategoryKey,
-            memo = memo
+            memo = memo,
+            originalTags = originalTags,
+            tags = tags
         )
         if (patch.isEmpty()) {
             activityScope.launch { completeCurrentQuickEdit() }
@@ -458,6 +554,7 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
         val currentMerchant = etMerchant.text.toString().ifEmpty { originalMerchant }
         val currentCategory = selectedCategoryKey
         val currentMemo = etMemo.text.toString().trim()
+        val currentTags = readTagDraft() ?: return
 
         val dialog = AlertDialog.Builder(this, R.style.Theme_QuickEdit)
             .create()
@@ -605,12 +702,14 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
                     "operation" to mapOf(
                         "kind" to "items",
                         // 분할 버튼을 누른 시점의 미저장 form을 immutable baseDraft로 보냅니다.
-                        "baseDraft" to mapOf(
-                            "merchant" to currentMerchant,
-                            "amountInWon" to currentAmount,
-                            "categoryId" to currentCategory,
-                            "memo" to currentMemo
-                        ),
+                        "baseDraft" to buildMap<String, Any?> {
+                            put("merchant", currentMerchant)
+                            put("amountInWon", currentAmount)
+                            put("categoryId", currentCategory)
+                            put("memo", currentMemo)
+                            // 기존 태그는 서버에서 상속하고 미저장 변경만 명시합니다.
+                            if (currentTags != originalTags) put("tags", currentTags)
+                        },
                         "items" to splits.map { split ->
                             mapOf(
                                 "merchant" to split.merchant.trim(),

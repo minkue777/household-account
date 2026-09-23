@@ -4,7 +4,7 @@
 
 **이 표는 실행 연결이며 전체 수용 조건의 통과율이 아닙니다.** 실제 통과 여부는 Playwright JSON/JUnit 결과로 확인합니다. 한 요구사항의 정상 흐름 E2E가 모든 실패 타이밍·외부서비스·실기기 동작을 검증했다는 뜻이 아닙니다. 정확한 assertion·남은 경계는 [재무/접근](e2e-finance-mapping.md), [결제 수집](e2e-payment-mapping.md), [자산/관리자/PWA](e2e-portfolio-admin-mapping.md), [알림](e2e-notifications-mapping.md), [운영 CLI](e2e-operations-mapping.md), [Native](native-real-code-coverage.json)를 확인합니다.
 
-요구사항 247개, E2E 연결 243개, 운영/폐기 경계 4개. 새 요구사항에 실행 E2E 또는 명시적 운영 경계가 없으면 품질 gate가 실패합니다.
+요구사항 248개, E2E 연결 244개, 운영/폐기 경계 4개. 새 요구사항에 실행 E2E 또는 명시적 운영 경계가 없으면 품질 gate가 실패합니다.
 
 | 요구사항 | 실제 테스트 파일 | 범위 |
 |---|---|---|
@@ -214,6 +214,7 @@
 | [QE-010](../../docs/requirements/supporting-platform/modules/android-host/requirements.md) | [QuickEditActivityInstrumentationTest.kt](../../android/app/src/androidTest/java/com/household/account/QuickEditActivityInstrumentationTest.kt), [QuickEditEncryptedOutboxInstrumentationTest.kt](../../android/app/src/androidTest/java/com/household/account/QuickEditEncryptedOutboxInstrumentationTest.kt) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
 | [QE-011](../../docs/requirements/supporting-platform/modules/android-host/requirements.md) | [QuickEditFirebaseE2ETest.kt](../../android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt), [QuickEditActivityInstrumentationTest.kt](../../android/app/src/androidTest/java/com/household/account/QuickEditActivityInstrumentationTest.kt) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
 | [QE-012](../../docs/requirements/supporting-platform/modules/android-host/requirements.md) | [QuickEditFirebaseE2ETest.kt](../../android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt), [QuickEditEncryptedOutboxInstrumentationTest.kt](../../android/app/src/androidTest/java/com/household/account/QuickEditEncryptedOutboxInstrumentationTest.kt) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
+| [QE-013](../../docs/requirements/supporting-platform/modules/android-host/requirements.md) | [QuickEditFirebaseE2ETest.kt](../../android/app/src/androidTest/java/com/household/account/e2e/QuickEditFirebaseE2ETest.kt), [QuickEditEncryptedOutboxInstrumentationTest.kt](../../android/app/src/androidTest/java/com/household/account/QuickEditEncryptedOutboxInstrumentationTest.kt) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
 | [REL-001](../../docs/requirements/supporting-platform/modules/delivery-assurance/requirements.md) | 공개 실행 경로 없음 / 운영 경계 | 배포 후보의 실제 운영 project·actor·Secret·Monitoring·smoke 검증과 GitHub CI 실행은 외부 경계입니다. 공개 CLI 인자·환경 혼합 거절, 실제 wrapper의 CI 독립 후보 검사와 CI 요약 CLI subprocess는 검증하지만 운영 배포·GitHub 실행을 가짜 성공 응답으로 대체해 E2E 통과로 주장하지 않습니다. 전체 CI는 배포와 독립 실행합니다. |
 | [REL-002](../../docs/requirements/supporting-platform/modules/delivery-assurance/requirements.md) | [operations-cli.spec.ts](../../web/e2e/operations-cli.spec.ts) | 세부 assertion·환경 한계는 영역별 매핑 문서 참조 |
 | [REL-003](../../docs/requirements/supporting-platform/modules/delivery-assurance/requirements.md) | 공개 실행 경로 없음 / 운영 경계 | 운영 deploy wrapper가 실제 Artifact·Rules·IAM을 검사하고 배포하는 흐름은 실제 클라우드 자원과 승인된 release가 필요합니다. Emulator에서는 이를 허용하지 않는 실제 CLI 거절까지 검증합니다. 계약 hash·호환성 평가기는 production module 통합 테스트를 유지합니다. |

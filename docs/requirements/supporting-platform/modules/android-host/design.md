@@ -87,6 +87,7 @@ data class QuickEditSnapshotV1(
     val amountInWon: Long,
     val categoryId: String?,
     val memo: String?,
+    val tags: List<String> = emptyList(),
     val aggregateVersion: Long?
 )
 ```
@@ -103,6 +104,23 @@ QuickEdit Controller가 소비하는 서버 Port:
 
 모든 쓰기는 인증 token, `householdId`, `idempotencyKey`, 예상 `aggregateVersion`을 포함한다. Activity의 즉시 종료는 Keystore outbox commit과 WorkManager 영속 예약으로 구성된 로컬 접수 결과이며 업무 성공이 아니다. 성공 Toast와 업무 완료 event는 `Success` 또는 동일 요청의 `AlreadyProcessed`를 받은 뒤에만 발생한다.
 
+### 3.4 QuickEdit 태그 계약 — QE-013
+
+태그의 업무 규칙은 [Ledger LED-011·LED-012](../../../contexts/household-finance/modules/ledger/design.md#321-태그-값과-호환-계약--led-011)이 소유합니다. QuickEdit은 `tags?: string[]`를 기존 v1 snapshot·일반 Ledger Command의 선택 필드로 전달합니다. 별도 태그 저장소, QuickEdit 전용 서버 명령 또는 새로운 envelope version을 만들지 않습니다.
+
+| 경계 | 계약 |
+|---|---|
+| 서버 표시 snapshot → Android DTO → Intent → 화면 | 제공된 태그를 같은 순서로 초기 표시합니다. 필드가 없는 구버전 응답·Intent는 태그 없는 표시로 호환하며 태그를 가져오기 위한 추가 Query를 만들지 않습니다. 서버 응답에 필드가 있지만 null·비배열·비문자열 원소이면 계약 실패로 처리하며 정상 빈 배열로 바꾸지 않습니다. |
+| 표시 FIFO JSON | tags가 있으면 암호화 snapshot과 함께 round-trip하고 구버전 필드 누락도 읽습니다. 태그 확장 때문에 기존 entry를 폐기하거나 큐의 순서를 바꾸지 않습니다. |
+| 입력·정규화 | 앞뒤 공백·선행 `#`·빈 태그·동일 문자열 중복을 제거하고 최초 순서·철자·내부 공백을 보존합니다. 신규/변경된 배열만 최대 10개·각 30 Unicode code point를 검증하며 IME 조합 중 Enter는 확정으로 소비하지 않습니다. |
+| 일반 Update | 변경된 배열만 `patch.tags`에 넣습니다. 태그만 변경한 요청도 제출하며 `[]`는 전체 제거, 생략은 현재 서버 태그 보존입니다. 다른 필드만 수정할 때 기존 초과값을 잘라내거나 재검증해 거부하지 않습니다. |
+| 항목 Split | 분할을 여는 순간 입력 중인 태그까지 포함한 전체 form을 immutable baseDraft로 고정합니다. 변경된 태그를 `operation.baseDraft.tags`에 넣고 각 항목의 생략된 tags는 이를 상속합니다. 변경 없는 tags는 생략해 원본을 보존하고 `[]`만 명시적 제거입니다. 태그 정규화·한도 실패는 원본과 파생 전체 무변경입니다. |
+| command outbox JSON·재시도 | tags 값과 필드 존재 여부를 고정 envelope 그대로 암호화하고 decode·재시작·재전송에서도 보존합니다. 같은 commandId·idempotencyKey·expectedVersion 및 기존 72시간·실패 알림 정책을 유지합니다. |
+
+화면은 메모 아래 `태그` 레이블과 `태그를 입력하세요` 안내를 사용합니다. 선택한 태그는 배경·테두리·안쪽 여백 없는 파란색 `#태그` 텍스트와 개별 제거 조작으로 표시하고, 단일 태그 입력과 추가 조작으로 확정합니다. 내부 공백·쉼표·선행 이외 위치의 `#`는 태그 이름의 일부로 유지하며 구분자로 나누지 않습니다. 태그 값에 `#`를 붙이는 표시는 UI 표현이며 메모에 태그 문자열을 합쳐 저장하지 않습니다. 태그 검증 실패는 outbox 접수 전에 표시하여 사용자가 같은 초안을 수정할 수 있게 합니다. 서버는 UI 검증과 별개로 기존 Ledger Domain 정책을 최종 적용합니다.
+
+입력·전달·실제 서버 저장의 검증 경계와 실행 결과는 [작업 기록](../../../../operations/quick-edit-tags-2026-09-23.md)에 연결합니다.
+
 ## 4. 플랫폼 상태와 불변식
 
 업무 Aggregate를 만들지 않고 다음 플랫폼 상태와 Policy를 둔다.
@@ -116,9 +134,9 @@ QuickEdit Controller가 소비하는 서버 Port:
 | `SessionTransitionJournal` | Queue purge 시작 전 이전·목표 generation만 보호 저장하고 mirror commit 뒤 제거한다. purge 뒤 commit 전 중단 흔적은 재시작 시 mirror를 비워 어떤 Actor의 수집도 시작하지 않는 fail-closed 상태로 복구한다. |
 | `QuickEditPreferenceKey` | `(householdId, memberId)`의 안정 ID만 사용한다. 표시 이름 변경은 key를 바꾸지 않으며 legacy 이름 key는 한 번만 이관한다. |
 | `SensitiveStoragePolicy` | 인증·mirror·legacy key·WebView 민감 저장소·Queue는 backup/device transfer denylist가 아니라 기본 거부 대상이고, 비민감 설정만 allowlist한다. SessionMirror와 Queue는 Keystore-backed encryption을 사용한다. |
-| `QuickEditForm` | transaction ID가 있어야 Command 가능하고 금액은 양의 원 단위 정수다. memo의 빈 문자열은 명시적 삭제 값이다. |
+| `QuickEditForm` | transaction ID가 있어야 Command 가능하고 금액은 양의 원 단위 정수다. memo의 빈 문자열과 명시한 빈 tags 배열은 삭제 값이다. tags의 생략과 빈 배열은 구분하며 입력 규칙은 Ledger LED-011을 재사용한다. |
 | `SplitDraft` | 최소 2항목, 각 항목 양수, 합계 원금 일치. 2항목일 때만 반대 금액 자동 조정한다. |
-| `QuickEditQueueEntry` | `(sessionGeneration, householdId, memberId, transactionId, sequence, enqueuedAt)`과 선택적인 `quickEditSnapshot`을 Keystore 기반 암호화 저장소에 보존한다. snapshot은 서버가 같은 created 결과에서 확정한 거래 ID·가맹점·금액·회계일·시각·카테고리·memo·aggregateVersion만 가진다. 같은 session·transaction ID는 중복될 수 없고 sequence는 단조 증가한다. |
+| `QuickEditQueueEntry` | `(sessionGeneration, householdId, memberId, transactionId, sequence, enqueuedAt)`과 선택적인 `quickEditSnapshot`을 Keystore 기반 암호화 저장소에 보존한다. snapshot은 서버가 같은 created 결과에서 확정한 거래 ID·가맹점·금액·회계일·시각·카테고리·memo·선택적 tags·aggregateVersion만 가진다. 같은 session·transaction ID는 중복될 수 없고 sequence는 단조 증가한다. |
 | `QuickEditCommandOutboxEntry` | 일반 Ledger Command의 session scope·transaction ID·생성 시 고정한 commandId·idempotencyKey·versioned payload·접수 시각·delivery 상태를 별도 Keystore 암호화 저장소에 원자 보존한다. QuickEdit 전용 업무 모델을 만들지 않으며 retryable 결과에서 envelope를 재생성하지 않는다. |
 | `QuickEditPresentationPolicy` | 한 번에 가장 오래된 유효 항목 하나만 표시한다. 현재 항목을 후속 거래가 덮어쓰지 않으며 command outbox commit·WorkManager 영속 예약 성공 또는 명시 닫기 뒤에만 다음 항목으로 진행한다. outbox 쓰기·예약 실패에서는 진행하지 않는다. 표시 FIFO는 시간 TTL로 버리지 않고 stale 판정 또는 session purge 전까지 보존한다. |
 | `QuickEditCommandDeliveryPolicy` | outbox commit부터 WorkManager 영속 예약·접수 판정까지를 session purge와 같은 짧은 lifecycle 임계 구역에 두고 로컬 접수 경계로 삼는다. 서버 왕복은 이 임계 구역 밖에서 수행하여 느린 응답이 다음 QuickEdit 접수를 막지 않는다. retryable 결과는 같은 envelope로 접수 후 정확히 72시간 전까지 FIFO 재시도하고 앞 명령을 뒤 명령이 추월하지 않는다. Success·AlreadyProcessed는 즉시 삭제한다. Conflict·영구 거부·계약 실패·만료는 Command 자동 재시도 없이 실패 알림 전까지만 `needs-attention`으로 암호화 보존하고, 권한·앱·채널 차단 시 알림 Worker 재시도를 유지하며 전달 성공 뒤 payload를 삭제한다. 복호화·versioned codec 손상은 payload를 fail-closed 삭제하고 비민감 손상 플래그를 별도 보존한다. 다른 SessionScope entry는 전송하지 않는다. |
@@ -180,7 +198,7 @@ Web Shell 준비에서는 Native 인증 객체를 미리 만들지 않습니다.
 ### 5.5 QuickEdit 변경·삭제·알림 요청
 
 1. 누락 transaction ID면 Command를 보내지 않고 `InvalidInput` 상태로 종료한다.
-2. 표시 snapshot과 입력값을 비교해 실제 변경 필드만 Command payload에 넣는다. 빈 memo는 삭제 값으로 포함하고 변경이 없으면 표시 head만 완료한다.
+2. 표시 snapshot과 입력값을 비교해 실제 변경 필드만 Command payload에 넣는다. 빈 memo와 명시한 빈 tags 배열은 삭제 값으로 포함하고 변경이 없으면 표시 head만 완료한다. 태그만 변경해도 Update 대상이며 변경 없는 tags는 생략한다. 저장 시 입력 중인 태그를 합친 뒤 LED-011 한도를 검증하며 오류면 화면과 초안을 유지한다.
 3. 현재 Actor는 인증 세션 Adapter에서 얻고, 일반 Ledger use case의 고정 commandId·idempotencyKey envelope를 별도 Keystore command outbox에 원자 commit한다.
 4. outbox commit 뒤 unique WorkManager 요청의 영속 예약 완료를 확인한다. 둘 중 하나라도 실패하면 기존 화면을 유지하고 오류 code를 표시하며, 둘 다 성공하면 업무 성공 Toast 없이 Activity와 표시 head를 완료한다.
 5. process 내 전송과 WorkManager가 저장된 동일 envelope로 서버 Command를 호출한다. retryable 결과는 접수 후 정확히 72시간 전까지 재시도한다. process 시작 복구는 `KEEP`으로 기존 work를 재사용하고 network backoff를 우회하는 중복 flush를 만들지 않는다.
@@ -188,8 +206,8 @@ Web Shell 준비에서는 Native 인증 객체를 미리 만들지 않습니다.
 
 ### 5.6 QuickEdit 분할
 
-1. 사용자가 분할을 누른 순간 `SplitDraftSourcePolicy`가 현재 form의 가맹점·금액·카테고리·memo와 현재 `aggregateVersion`을 immutable base draft로 고정한다.
-2. `SplitDraftPolicy`가 현재 form 금액을 기준으로 2개 초기 금액을 몫과 나머지로 만들고 각 항목의 표시 필드를 base draft에서 초기화한다.
+1. 사용자가 분할을 누른 순간 `SplitDraftSourcePolicy`가 현재 form의 가맹점·금액·카테고리·memo·tags와 현재 `aggregateVersion`을 immutable base draft로 고정한다.
+2. `SplitDraftPolicy`가 현재 form 금액을 기준으로 2개 초기 금액을 몫과 나머지로 만들고 각 항목의 표시 필드를 base draft에서 초기화한다. 태그는 baseDraft에서 상속하며 현재 입력 태그를 생략하거나 저장 전 snapshot으로 되돌리지 않는다. tags를 변경하지 않았으면 baseDraft에서 생략해 서버 원본을 유지하고 명시한 빈 배열만 제거로 전달한다.
 3. 두 항목 중 하나 변경 시 반대 항목을 `max(0, baseDraft.amount-input)`으로 갱신한다.
 4. 세 항목 이상에서는 자동 조정하지 않고 새 항목을 미배분 잔액으로 시작한다.
 5. 최소 개수·양수·base draft 합계 조건을 만족해야 제출을 활성화한다. 카드·출처·creator·capture lineage는 payload에 포함하지 않는다.
@@ -258,7 +276,7 @@ Web Shell 준비에서는 Native 인증 객체를 미리 만들지 않습니다.
 ## 9. 오류·보안·관측성
 
 - Bridge API는 허용 origin, top-level frame, contract version을 모두 검증한다.
-- 가구 key·householdId 원문, member 이름, FCM FID·registration token, 인증 token, 알림 원문, 거래 memo를 일반 로그·crash breadcrumb·analytics에 기록하지 않는다. 식별자는 목적별 salt의 correlation용 비가역 hash만 허용하고 redaction test를 통과해야 한다.
+- 가구 key·householdId 원문, member 이름, FCM FID·registration token, 인증 token, 알림 원문, 거래 memo·tags를 일반 로그·crash breadcrumb·analytics에 기록하지 않는다. 식별자는 목적별 salt의 correlation용 비가역 hash만 허용하고 redaction test를 통과해야 한다.
 - `SensitiveOverlayPolicy`는 DEC-024에 따라 QuickEdit 조건 충족 시 화면 켜기와 잠금 화면 위 편집 정보 표시를 허용한다. keyguard 해제 API는 금지하고 Activity non-exported·유효 거래 ID·현재 session 조건을 함께 강제한다.
 - WebView의 파일 접근, cleartext traffic, 임의 popup과 외부 scheme은 기본 차단하고 명시적 navigation policy만 허용한다.
 - 관측 event: `host_gate_evaluated`, `bridge_rejected`, `mirror_sync_failed`, `quick_edit_command_failed`; 오류 code와 app/contract version만 기록한다.
@@ -326,6 +344,7 @@ Activity는 화면 event를 Input Port에 전달하고 상태를 render만 한�
 | QE-010 | U, UI, I | SplitDraftSourcePolicy·Split Controller | 미저장 전체 form, 현재 금액 기준 항목, 제출 직전 다른 actor의 Update·Split, active 대상 사용자 재확인 | 한 immutable draft를 단일 Command로 접수, provenance 비노출, stale 요청 write 0건·실패 알림 전까지만 needs-attention 보존, active만 최신 version의 새 draft로 명시 재제출 | T-QE-004 |
 | QE-011 | 보안 UI, E2E | SensitiveOverlayPolicy | 잠금·최근 앱·screen capture·외부 Intent·log sink | Window에 `FLAG_SECURE` 없음, 별도 최근 앱 마스킹 없음, 캡처 허용, keyguard·export·앱 로그 보호 유지 | T-QE-005 |
 | QE-012 | U, UI, I, E2E | 일반 Ledger Command Client·QuickEditCommandOutbox·versioned codec·WorkManager | commit·예약 성공/실패, commit 뒤 예약 전 session purge 경합, 느린 서버 왕복 중 다음 접수, process 종료·startup Worker, retryable→success, 앞 retryable·뒤 명령, conflict·영구 거부·계약 실패·정확히 72시간 만료, 알림 성공·권한/채널 차단, 암호문·codec 손상 | commit·예약·Accepted 판정 사이 purge 진입 불가, 서버 왕복은 다음 로컬 접수를 차단하지 않음, 성공 뒤 Activity 종료, 고정 key FIFO 재시도, Success 즉시 삭제, terminal·만료는 알림 전까지만 needs-attention 보존 후 알림 성공 시 payload 삭제, 손상 비민감 신호, Worker 자기 증식·actor 교차 전송 없음 | T-QE-007 |
+| QE-013 | U, C, UI, I, E2E | 실제 QuickEdit 입력·Update patch·Split draft·snapshot/FIFO/outbox codec·Ledger command | 기존 태그, 필드 누락, 태그만 변경·전체 제거, 미확정 입력, IME, 10/11개·30/31 code point, 기존 초과값, 재로딩·재전송·stale version | 초기 표시, 규칙에 맞는 입력과 실제 저장, 태그만 변경해도 제출, 생략 보존·빈 배열 제거, immutable 분할 태그 상속, codec 손실·중복 전송 없음, 잘못된 입력·충돌 무변경 | T-QE-008, T-LED-011, T-LED-012 |
 
 추가 공통 suite:
 

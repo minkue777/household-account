@@ -19,7 +19,8 @@ class QuickEditPendingQueueJsonCodecTest {
             localTime = "20:00",
             categoryId = "etc",
             memo = "메모",
-            aggregateVersion = 2
+            aggregateVersion = 2,
+            tags = listOf("2026부산여행", "가족 모임")
         )
         val state = QuickEditQueueState(
             nextSequence = 2L,
@@ -40,6 +41,22 @@ class QuickEditPendingQueueJsonCodecTest {
         ).entries.single()
         assertEquals(snapshot, decoded.snapshot)
         assertEquals("observation.android.codec", decoded.observationId)
+    }
+
+    @Test
+    fun `태그 없는 구버전 snapshot은 빈 태그로 복원하고 손상 태그는 query로 복구한다`() {
+        val snapshot = CaptureQuickEditSnapshot("transaction-1", "가맹점", 1000,
+            "2026-09-23", "12:00", "etc", "", 1)
+        val state = QuickEditQueueState(entries = listOf(QuickEditQueueEntry(
+            scope, "transaction-1", 1L, 100L, snapshot)))
+        val json = org.json.JSONObject(QuickEditPendingQueueJsonCodec.encode(state))
+        val storedSnapshot = json.getJSONArray("entries").getJSONObject(0).getJSONObject("quickEditSnapshot")
+        storedSnapshot.remove("tags")
+        assertEquals(emptyList<String>(), QuickEditPendingQueueJsonCodec.decode(json.toString()).entries.single().snapshot?.tags)
+        storedSnapshot.put("tags", org.json.JSONArray().put(123))
+        val recovered = QuickEditPendingQueueJsonCodec.decode(json.toString()).entries.single()
+        assertEquals("transaction-1", recovered.transactionId)
+        assertNull(recovered.snapshot)
     }
 
     @Test

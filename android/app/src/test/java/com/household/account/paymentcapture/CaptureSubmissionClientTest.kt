@@ -8,6 +8,30 @@ import org.junit.Test
 
 class CaptureSubmissionClientTest {
     @Test
+    fun `snapshot 태그는 그대로 전달하고 구버전 누락과 손상 fallback을 구분한다`() = runTest {
+        suspend fun snapshot(tags: Map<String, Any?>): CaptureQuickEditSnapshot? {
+            val client = CallableCaptureSubmissionClient(gateway(mapOf("result" to mapOf(
+                "completion" to "terminal", "transactionResult" to mapOf(
+                    "kind" to "created", "transactionId" to "transaction-1", "aggregateVersion" to 1,
+                    "quickEditSnapshot" to (mapOf(
+                        "transactionId" to "transaction-1", "merchant" to "상점", "amountInWon" to 1000,
+                        "accountingDate" to "2026-09-23", "localTime" to "12:00",
+                        "categoryId" to "etc", "memo" to "", "aggregateVersion" to 1
+                    ) + tags)
+                )
+            ))))
+            return client.submit(envelope()).transaction?.quickEditSnapshot
+        }
+        val tags = listOf("2026부산여행", "가족 모임")
+        assertEquals(tags, snapshot(mapOf("tags" to tags))?.tags)
+        assertEquals(emptyList<String>(), snapshot(emptyMap())?.tags)
+        assertEquals(emptyList<String>(), snapshot(mapOf("tags" to emptyList<String>()))?.tags)
+        for (invalid in listOf(null, "여행", listOf("여행", 123))) {
+            assertEquals(null, snapshot(mapOf("tags" to invalid)))
+        }
+    }
+
+    @Test
     fun `원문과 레거시 envelope를 각각 호환되는 callable로 전송한다`() = runTest {
         val functions = mutableListOf<String>()
         val gateway = object : AuthenticatedCallableGateway {

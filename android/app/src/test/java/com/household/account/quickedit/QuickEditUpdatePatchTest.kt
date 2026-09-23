@@ -6,6 +6,29 @@ import org.junit.Test
 
 class QuickEditUpdatePatchTest {
     @Test
+    fun `태그만 추가하면 태그 변경만 전송한다`() {
+        assertEquals(mapOf("tags" to listOf("여행", "민규용돈")), tagPatch(listOf("여행"), listOf("여행", "민규용돈")))
+    }
+
+    @Test
+    fun `태그를 모두 지우면 명시적인 빈 배열을 전송한다`() {
+        assertEquals(mapOf("tags" to emptyList<String>()), tagPatch(listOf("여행"), emptyList()))
+    }
+
+    @Test
+    fun `변경하지 않은 기존 태그는 한도를 넘어도 전송하지 않는다`() {
+        val tags = (1..11).map { "태그$it" }
+        assertTrue(tagPatch(tags, tags).isEmpty())
+    }
+
+    private fun tagPatch(originalTags: List<String>, tags: List<String>) = buildQuickEditUpdatePatch(
+        originalMerchant = "가맹점", originalAmountInWon = 10_000,
+        originalCategoryId = "food", originalMemo = "메모",
+        merchant = "가맹점", amountInWon = 10_000, categoryId = "food", memo = "메모",
+        originalTags = originalTags, tags = tags
+    )
+
+    @Test
     fun `변경하지 않은 필드는 patch에서 제외한다`() {
         val patch = buildQuickEditUpdatePatch(
             originalMerchant = "가맹점",

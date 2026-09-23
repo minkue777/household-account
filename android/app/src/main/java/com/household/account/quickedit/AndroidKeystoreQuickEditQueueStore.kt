@@ -53,6 +53,7 @@ internal object QuickEditPendingQueueJsonCodec {
                             put("localTime", snapshot.localTime)
                             put("categoryId", snapshot.categoryId)
                             put("memo", snapshot.memo)
+                            put("tags", JSONArray(snapshot.tags))
                             put("aggregateVersion", snapshot.aggregateVersion)
                         })
                     }
@@ -103,7 +104,12 @@ internal object QuickEditPendingQueueJsonCodec {
             localTime = getString("localTime"),
             categoryId = getString("categoryId"),
             memo = getString("memo"),
-            aggregateVersion = getInt("aggregateVersion")
+            aggregateVersion = getInt("aggregateVersion"),
+            tags = if (!has("tags")) emptyList() else getJSONArray("tags").let { tags ->
+                List(tags.length()) { index ->
+                    tags.get(index) as? String ?: error("Invalid QuickEdit tag")
+                }
+            }
         )
     }.getOrNull()?.takeIf {
         it.transactionId.isNotBlank() &&

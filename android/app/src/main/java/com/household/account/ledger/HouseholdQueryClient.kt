@@ -13,7 +13,8 @@ data class LedgerTransactionSnapshot(
     val localTime: String,
     val merchant: String,
     val categoryId: String,
-    val memo: String
+    val memo: String,
+    val tags: List<String> = emptyList()
 )
 
 sealed interface LedgerTransactionQueryResult {
@@ -96,6 +97,13 @@ class CallableLedgerTransactionQueryClient(
         val lifecycleState = value["lifecycleState"]?.toString().orEmpty()
         val transactionType = value["transactionType"]?.toString().orEmpty()
         val accountingDate = value["accountingDate"]?.toString().orEmpty()
+        val rawTags = value["tags"]
+        val tags = if (!value.containsKey("tags")) emptyList() else {
+            if (rawTags !is List<*> || rawTags.any { it !is String }) {
+                return LedgerTransactionQueryResult.ContractFailure("QUERY_VALUE_INVALID")
+            }
+            rawTags.filterIsInstance<String>()
+        }
         if (
             transactionId != expectedTransactionId ||
             amount == null ||
@@ -119,7 +127,8 @@ class CallableLedgerTransactionQueryClient(
                 merchant = value["merchant"]?.toString()
                     ?: value["itemName"]?.toString().orEmpty(),
                 categoryId = value["categoryId"]?.toString().orEmpty(),
-                memo = value["memo"]?.toString().orEmpty()
+                memo = value["memo"]?.toString().orEmpty(),
+                tags = tags
             )
         )
     }

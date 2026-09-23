@@ -8,6 +8,29 @@ import org.junit.Test
 
 class HouseholdQueryClientTest {
     @Test
+    fun `태그 query 계약은 기존값을 보존하고 누락과 손상을 구분한다`() = runTest {
+        suspend fun query(tags: Map<String, Any?>): LedgerTransactionQueryResult =
+            CallableLedgerTransactionQueryClient(object : AuthenticatedCallableGateway {
+                override suspend fun call(functionName: String, payload: Map<String, Any?>): Map<String, Any?> = mapOf(
+                    "contractVersion" to "household-query-response.v1", "queryId" to payload["queryId"],
+                    "result" to mapOf("kind" to "succeeded", "value" to (mapOf(
+                        "transactionId" to "transaction-1", "aggregateVersion" to 2,
+                        "lifecycleState" to "active", "transactionType" to "expense",
+                        "amountInWon" to 1000, "accountingDate" to "2026-09-23"
+                    ) + tags))
+                )
+            }).get("household-1", "transaction-1")
+
+        val original = listOf("2026부산여행", "가족 모임", "오래된".repeat(15))
+        assertEquals(original, (query(mapOf("tags" to original)) as LedgerTransactionQueryResult.Success).value.tags)
+        assertEquals(emptyList<String>(), (query(emptyMap()) as LedgerTransactionQueryResult.Success).value.tags)
+        assertEquals(emptyList<String>(), (query(mapOf("tags" to emptyList<String>())) as LedgerTransactionQueryResult.Success).value.tags)
+        for (invalid in listOf(null, "여행", listOf("여행", 123))) {
+            assertEquals(LedgerTransactionQueryResult.ContractFailure("QUERY_VALUE_INVALID"), query(mapOf("tags" to invalid)))
+        }
+    }
+
+    @Test
     fun `정본 query wire를 보내고 succeeded snapshot을 해석한다`() = runTest {
         var sent = emptyMap<String, Any?>()
         val client = CallableLedgerTransactionQueryClient(object : AuthenticatedCallableGateway {
