@@ -223,9 +223,12 @@ function parsedPaymentFields(input: {
 
 function parseStandardPaymentFields(
   lines: readonly string[],
+  samsungCancellation = false,
 ): ShortcutPaymentFieldsResult {
   return parsedPaymentFields({
-    amountLine: lines[1],
+    amountLine: samsungCancellation
+      ? lines[1]?.replace(/^-(?=\d)/u, "")
+      : lines[1],
     occurrenceLine: lines[2],
   });
 }
@@ -413,7 +416,10 @@ export function parseShortcutCardMessage(input: {
   const paymentFields = recognizedLayout?.paymentFields ??
     (header.layout === "nh-card-sms"
       ? parseNhCardSmsPaymentFields(lines)
-      : parseStandardPaymentFields(lines));
+      : parseStandardPaymentFields(
+          lines,
+          header.companyLabel === "삼성" && header.observationType === "cancellation",
+        ));
   if (paymentFields.kind === "Rejected") return paymentFields;
   const fields = paymentFields.fields;
 

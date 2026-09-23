@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { createHouseholdThroughUi, resetTestAccount, createEmulatorAccount, executeHouseholdCommand } from './emulator';
-import { ledgerRecords, records, paymentCommand, rawNotification, registerCard, submitRaw } from './payment-helpers';
+import { ledgerRecords, records, paymentCommand, rawNotification, registerCard, submitRaw, samsungMessage } from './payment-helpers';
 
 test.beforeEach(resetTestAccount);
 
@@ -158,4 +158,26 @@ test('[T-CAN-001][CAN-002][CAN-004][CAN-006][ING-SAVE-007][SPL-003] 지난달 �
   expect((await ledgerRecords(request)).filter(row => row.lifecycleState === 'active')).toEqual([
     expect.objectContaining({ id: unrelated.transactionResult.transactionId, amount: 7777, merchant: '보존할 별도 카페' }),
   ]);
+});
+
+test('[T-PARSE-002][PARSE-SAMSUNG-001][CAN-003][CAN-007] 삼성 음수 취소 문자는 가승인만 제거하고 실제 주유 승인과 재전송 멱등성을 보존한다', async ({ page, request }) => {
+  const actor = await createHouseholdThroughUi(page);
+  await registerCard(request, actor, '삼성', '1234');
+  const source = rawNotification();
+  const notification = (amount: number, cancellation = false) => ({
+    ...source, observationId: 'samsung-fuel-' + randomUUID(), packageName: 'com.samsung.android.messaging',
+    notification: { postedAt: source.notification.postedAt, title: '\u2068삼성카드 승인안내\u2069', text: samsungMessage(amount, cancellation) },
+  });
+  const original = await submitRaw(request, actor, notification(100000));
+  const actual = await submitRaw(request, actor, notification(93200));
+  expect(original.transactionResult.kind).toBe('created');
+  expect(actual.transactionResult.kind).toBe('created');
+  expect((await ledgerRecords(request)).map(row => row.amount).sort()).toEqual([100000, 93200]);
+  const cancellation = notification(-100000, true);
+  const cancelled = await submitRaw(request, actor, cancellation);
+  expect(cancelled.transactionResult).toEqual({ kind: 'cancelled', transactionIds: [original.transactionResult.transactionId] });
+  const replay = await submitRaw(request, actor, cancellation);
+  expect(replay.transactionResult).toEqual(cancelled.transactionResult);
+  expect(await ledgerRecords(request)).toEqual([expect.objectContaining({ id: actual.transactionResult.transactionId, amount: 93200, lifecycleState: 'active' })]);
+  await expect(page.locator('.balance-card-glass').filter({ hasText: '월 지출' })).toContainText('93,200');
 });

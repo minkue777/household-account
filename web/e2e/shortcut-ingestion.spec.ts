@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { test, expect, devices } from '@playwright/test';
 import { createHouseholdThroughUi, resetTestAccount, E2E_PROJECT_ID } from './emulator';
-import { issueShortcut, paymentCommand, ledgerRecords, records, registerCard, shortcutMessage, submitShortcut } from './payment-helpers';
+import { issueShortcut, paymentCommand, ledgerRecords, records, registerCard, shortcutMessage, submitShortcut, samsungMessage } from './payment-helpers';
 
 test.beforeEach(resetTestAccount);
 
@@ -104,4 +104,24 @@ test('[IOS-003][IOS-015][CAN-003][CAN-007] Shortcut 승인취소는 공통 linea
   expect(cancelled.body.transaction.kind).toBe('cancelled');
   expect((await submitShortcut(request, credential.rawCredential, shortcutMessage({ amount: 78000 }))).status).toBe(200);
   expect((await ledgerRecords(request)).filter(row => row.lifecycleState === 'active').map(row => row.amount)).toEqual([78000]);
+});
+
+test('[T-PARSE-004][IOS-015][CAN-003][CAN-007] 삼성 음수 취소 Shortcut은 가승인만 제거하고 실제 주유 승인과 재전송 멱등성을 보존한다', async ({ page, request }) => {
+  const actor = await createHouseholdThroughUi(page);
+  await registerCard(request, actor, '삼성', '1234');
+  const credential = await issueShortcut(request, actor);
+  const original = await submitShortcut(request, credential.rawCredential, samsungMessage(100000));
+  const actual = await submitShortcut(request, credential.rawCredential, samsungMessage(93200));
+  expect(original.status).toBe(200);
+  expect(actual.status).toBe(200);
+  expect((await ledgerRecords(request)).map(row => row.amount).sort()).toEqual([100000, 93200]);
+  const key = 'samsung-fuel-' + randomUUID();
+  const cancelled = await submitShortcut(request, credential.rawCredential, samsungMessage(-100000, true), key);
+  expect(cancelled.status).toBe(200);
+  expect(cancelled.body.transaction.kind).toBe('cancelled');
+  const replay = await submitShortcut(request, credential.rawCredential, samsungMessage(-100000, true), key);
+  expect(replay.status).toBe(200);
+  expect(replay.body.transaction).toEqual(cancelled.body.transaction);
+  expect(await ledgerRecords(request)).toEqual([expect.objectContaining({ amount: 93200, lifecycleState: 'active' })]);
+  await expect(page.locator('.balance-card-glass').filter({ hasText: '월 지출' })).toContainText('93,200');
 });

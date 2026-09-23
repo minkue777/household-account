@@ -130,7 +130,7 @@ IOS-005 owner 추정은 과거 특성화이며 현재 실행 경로가 아닙니
 | T-IOS-NOTIFY-001 | 현재·목표 | 신규 Created, 생성자의 iOS·Android·desktop endpoint와 타 멤버 iOS endpoint, 전달 성공·지연·실패 / 편집 알림 / 생성자 활성 iPhone PWA만 대상이며 거래와 delivery 상태를 분리하고 실패해도 거래를 롤백하지 않음 | IOS-008, DEC-013, DEC-020 |
 | T-IOS-NOTIFY-002 | 현재·목표 | Duplicate, 생성자 endpoint 0·1, 전달 성공·failed·unknown·permanent와 같은 요청 재실행 / 중복 알림 / 새 거래 없이 기존 거래용 event·대상·결과를 구분하고 동일 요청은 event·delivery 하나 | IOS-009, DEC-020 |
 | T-PARSE-003 | 목표 | 1월 수신 `12/31`, 같은 날의 몇 분 뒤 시각, 12월 수신 `01/01`, 윤년 `02/29`, 불가능한 날짜·시각 / Android·Shortcut parse / 미래 후보는 전년, 가장 가까운 유효 과거 연도, 불가능한 값은 오류 | SYS-005, IOS-004, DEC-029 |
-| T-PARSE-004 | 목표 | 정상 승인 헤더, NH `승인취소` 헤더, 헤더 누락·미지원 헤더 / Shortcut parse / 승인은 approval, NH 승인취소는 cancellation observation을 만들고 누락·미지원은 typed 오류이며 거래·알림 없음 | IOS-003, IOS-010, IOS-015, DEC-030 |
+| T-PARSE-004 | 목표 | 정상 승인 헤더, NH `승인취소` 헤더, 삼성 양수·음수 취소와 음수 승인·0·상한 초과·잘못된 부호, 헤더 누락·미지원 헤더 / Shortcut parse / 승인은 approval, NH 승인취소와 삼성 취소는 양의 원금을 가진 cancellation observation을 만들고 누락·미지원은 typed 오류이며 거래·알림 없음 | IOS-003, IOS-010, IOS-015, DEC-030 |
 | T-IOS-SEC-001 | 목표 | 무인증 RegisterEndpoint·rename·Shortcut·dividend save / 호출 / 모두 권한 오류와 변경 없음 | ADM-002, IOS-010, PUSH-009 |
 | T-IOS-SEC-002 | 목표 | CORS 허용 origin이지만 credential 없음·폐기·교체된 이전 키·Membership 상실·타 capability·body의 위조 household/owner, 동일 발급 idempotency key 재전송 / Shortcut 호출·발급 / claim의 현재 Actor·가구만 사용하거나 Membership·Application·저장소 호출 전 권한 오류이며, 발급 재전송은 새 자격·원문 없이 `AlreadyIssued` 메타데이터만 반환 | IOS-001, IOS-012, IOS-013, DEC-033 |
 | T-IOS-INSTALL-001 | 목표 | 최초 발급·설치 중단·동일 발급 재전송·명시적 재발급과 경합 / credential 저장·공유 Shortcut 설치 / 서버는 강한 hash·메타데이터만 저장하고 원문은 최초 한 번, endpoint·POST·JSON·Authorization·typed 응답이 구성된 Shortcut에서 secret 질문 한 번만 제공 | IOS-013, DEC-033 |

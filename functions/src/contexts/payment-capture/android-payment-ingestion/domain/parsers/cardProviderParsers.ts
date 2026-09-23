@@ -36,7 +36,7 @@ const PAYBOOC_INLINE_CANCELLATION_PATTERN =
 
 const SAMSUNG_CARD_PATTERN = /삼성([0-9*xX]{4})\s*(승인\s*취소|승인|취소)/u;
 const SAMSUNG_AMOUNT_LINE_PATTERN =
-  /^([\d,]+)원(?:\s*(?:일시불|(?:\d{1,2}개월\s*)?할부))?$/u;
+  /^(-?[\d,]+)원(?:\s*(?:일시불|(?:\d{1,2}개월\s*)?할부))?$/u;
 const SAMSUNG_CUMULATIVE_LINE_PATTERN = /^(?:누적|총누적)/u;
 const SAMSUNG_DATE_MERCHANT_PATTERN =
   /(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})\s+(.+)/u;
@@ -368,7 +368,14 @@ function parseSamsung(
   if (card === null || amountMatch === undefined || dateMerchant === null) {
     return ignoredParseFailure();
   }
-  const amount = amountInWon(amountMatch[1]);
+  const cancellation = card[2] !== "승인";
+  if (!cancellation && amountMatch[1].startsWith("-")) {
+    return ignoredParseFailure();
+  }
+  // 카드사의 음수 표기는 취소 헤더가 확인됐을 때만 양의 원금으로 바꿉니다.
+  const amount = amountInWon(
+    cancellation ? amountMatch[1].replace(/^-/, "") : amountMatch[1],
+  );
   const occurred = occurrence({
     context,
     month: dateMerchant[1],
@@ -376,13 +383,13 @@ function parseSamsung(
     hour: dateMerchant[3],
     minute: dateMerchant[4],
   });
-  if (amount === undefined || occurred.kind === "failure") {
+  if (amount === undefined || amount <= 0 || occurred.kind === "failure") {
     return ignoredParseFailure(
       occurred.kind === "failure" ? occurred.code : "INVALID_AMOUNT",
     );
   }
   return parsedPayment({
-    type: card[2] === "승인" ? "approval" : "cancellation",
+    type: cancellation ? "cancellation" : "approval",
     amountInWon: amount,
     occurredLocalDate: occurred.occurredLocalDate,
     occurredLocalTime: occurred.occurredLocalTime,

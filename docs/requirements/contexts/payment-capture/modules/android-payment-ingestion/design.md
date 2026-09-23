@@ -79,6 +79,8 @@ data class RawNotificationEnvelopeV1(
 
 wire에는 `householdId`, `createdBy`, `sourceType`, `parserId`, `paymentKind`, 금액·가맹점·카드·잔액 후보가 없습니다. Android factory가 제목 → text lines → bigText → text 순으로 parser 우선 입력을 보존하면서 총 65,536자로 제한하고, callable Adapter도 같은 strict schema·개별 길이·총 길이 제한을 다시 검증한 뒤 인증 Membership으로 Actor를 만듭니다. Functions envelope builder가 `textLines.join("\n")` → `bigText` → `text` 순으로 본문을 선택하고 제목을 첫 줄에 둡니다. 모두 비면 `Ignored(EMPTY_NOTIFICATION)`으로 terminal 종료합니다. 카카오톡이 표준 `MessagingStyle`을 제공하면 Android Adapter는 `messages`의 현재 항목마다 별도 envelope와 observation ID를 만들고 `historicMessages`는 복사하지 않습니다. 구조화 메시지가 없으면 현재 `text`를 누적 `bigText`·`textLines`보다 우선하고, `[보낸이] [오전|오후 h:mm]` 경계가 있는 대화 본문은 메시지별 후보로 나눕니다. 따라서 여러 승인이 한 OS 알림에 함께 표시돼도 기존 단일 payment wire를 확장하지 않고 메시지별 Queue·멱등·QuickEdit 수명을 유지합니다.
 
+삼성 취소의 `-100,000원`은 취소 헤더를 먼저 확인한 뒤 단일 음수 부호를 제거하고 양의 정수 원금으로 검증합니다. 승인 헤더의 음수·0·상한 초과·잘못된 부호는 제외하며 누적액으로 대체하지 않습니다. SMS·카카오톡도 같은 삼성 parser를 재사용합니다. 공개 envelope와 fingerprint, 기존 원승인 완전 일치 취소 정책은 유지합니다. [2026-09-23 상세 변경·검증](../../../../../operations/samsung-negative-cancellation-2026-09-23.md)을 참조합니다.
+
 ### 3.2 서버 내부 `CaptureEnvelope.v1`
 
 ```ts

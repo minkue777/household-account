@@ -53,3 +53,5 @@
 - 중복 메모리 캐시를 제거하자, 같은 원문 재전송의 receipt hash에 현재 가맹점 규칙의 파생 표시값까지 포함하여 `IDEMPOTENCY_PAYLOAD_MISMATCH`가 발생하는 결함이 드러났습니다. 실제 영수증 지문을 수정한 뒤 같은 원문·observation을 유지하고 규칙 변경·취소 후 재전송하는 E2E가 통과했습니다.
 - 첫 전체 실행의 기억하기 테스트는 기존 exact를 덮어쓴다고 잘못 기대했습니다. 명세와 운영 Application은 기존 exact 재사용을 규정하므로 기존 규칙 보존과 새 가맹점 exact 생성 두 흐름을 명시적으로 검증하도록 교정했습니다. 중복 exact의 공개 Command 오류도 내부 정책 코드가 아닌 실제 `RULE_ALREADY_EXISTS`로 검증합니다.
 - 테스트 사이 DB 삭제가 이전 비동기 Outbox consumer보다 빨라, 완료 필드만 있는 문서가 재생성되는 격리 문제를 실제 로그에서 확인했습니다. 공용 reset은 처리 대상 v1 이벤트의 실제 terminal 상태를 기다린 뒤 Auth·Firestore를 초기화합니다. 운영 consumer의 malformed envelope 거절을 완화하거나 알림 전송을 생략하지 않습니다.
+
+- `T-PARSE-002`, `T-PARSE-004`, `PARSE-SAMSUNG-001`, `IOS-015`, `CAN-003/007`: 삼성 100,000원 승인·93,200원 승인 뒤 `-100,000원` 취소를 실제 Android callable·Shortcut HTTP로 각각 제출합니다. 가승인만 삭제되고 재전송 뒤에도 실제 주유액과 홈 월 합계 93,200원이 유지되는지 확인합니다.

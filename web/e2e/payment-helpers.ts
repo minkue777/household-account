@@ -71,3 +71,11 @@ export async function submitShortcut(request: APIRequestContext, credential: str
   });
   return { status: response.status(), body: await response.json(), headers: response.headers() };
 }
+
+/** 비식별 삼성 주유 문자: 음수는 실제 카드사 취소 표기입니다. */
+export function samsungMessage(amount: number, cancellation = false) {
+  const date = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return '[Web발신]\r\n삼성1234' + (cancellation ? '취소' : '승인') + ' 김*원\r\n'
+    + amount.toLocaleString('en-US') + '원 일시불\r\n' + date.slice(5, 7) + '/' + date.slice(8, 10)
+    + ' 00:01 테스트 주유소\r\n누적1,332,233원';
+}

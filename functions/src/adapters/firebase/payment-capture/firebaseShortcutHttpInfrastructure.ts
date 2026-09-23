@@ -336,7 +336,7 @@ export class FirebaseShortcutCaptureIntakeAdapter
         observedAt: input.requestedAt,
         parser: {
           parserId: "shortcut-card-message-parser",
-          parserVersion: "1.3.0",
+          parserVersion: "1.4.0",
         },
         rawPayloadHash: `sha256:${input.payloadHash}`,
         paymentObservation: {

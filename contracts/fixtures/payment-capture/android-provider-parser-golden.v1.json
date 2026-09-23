@@ -3,6 +3,274 @@
   "zoneId": "Asia/Seoul",
   "cases": [
     {
+      "caseId": "samsung-negative-cancellation",
+      "requirementIds": [
+        "T-PARSE-002",
+        "PARSE-SAMSUNG-001"
+      ],
+      "source": {
+        "packageName": "kr.co.samsungcard.mpocket",
+        "parserId": "samsung-card-parser"
+      },
+      "raw": {
+        "postedAt": "2026-09-23T13:57:00+09:00",
+        "title": "⁨삼성카드 승인안내⁩",
+        "text": "삼성1234취소 김*원\r\n-100,000원 일시불\r\n09/23 13:54 테스트 주유소\r\n누적1,332,233원"
+      },
+      "expected": {
+        "kind": "Parsed",
+        "payment": {
+          "type": "cancellation",
+          "amountInWon": 100000,
+          "occurredLocalDate": "2026-09-23",
+          "occurredLocalTime": "13:54",
+          "merchant": "테스트 주유소",
+          "cardCompany": "삼성",
+          "maskedCardToken": "1234"
+        }
+      }
+    },
+    {
+      "caseId": "samsung-negative-approval-cancellation",
+      "requirementIds": [
+        "T-PARSE-002",
+        "PARSE-SAMSUNG-001"
+      ],
+      "source": {
+        "packageName": "kr.co.samsungcard.mpocket",
+        "parserId": "samsung-card-parser"
+      },
+      "raw": {
+        "postedAt": "2026-09-23T13:57:00+09:00",
+        "title": "⁨삼성카드 승인안내⁩",
+        "text": "삼성1234승인취소 김*원\r\n-100,000원 일시불\r\n09/23 13:54 테스트 주유소\r\n누적1,332,233원"
+      },
+      "expected": {
+        "kind": "Parsed",
+        "payment": {
+          "type": "cancellation",
+          "amountInWon": 100000,
+          "occurredLocalDate": "2026-09-23",
+          "occurredLocalTime": "13:54",
+          "merchant": "테스트 주유소",
+          "cardCompany": "삼성",
+          "maskedCardToken": "1234"
+        }
+      }
+    },
+    {
+      "caseId": "sms-samsung-negative-cancellation",
+      "requirementIds": [
+        "T-PARSE-002",
+        "PARSE-SAMSUNG-001"
+      ],
+      "source": {
+        "packageName": "com.samsung.android.messaging",
+        "parserId": "sms-card-message-parser"
+      },
+      "raw": {
+        "postedAt": "2026-09-23T13:57:00+09:00",
+        "title": "⁨삼성카드 승인안내⁩",
+        "text": "삼성1234취소 김*원\r\n-100,000원 일시불\r\n09/23 13:54 테스트 주유소\r\n누적1,332,233원"
+      },
+      "expected": {
+        "kind": "Parsed",
+        "payment": {
+          "type": "cancellation",
+          "amountInWon": 100000,
+          "occurredLocalDate": "2026-09-23",
+          "occurredLocalTime": "13:54",
+          "merchant": "테스트 주유소",
+          "cardCompany": "삼성",
+          "maskedCardToken": "1234"
+        }
+      }
+    },
+    {
+      "caseId": "sms-google-negative-cancellation",
+      "requirementIds": [
+        "T-PARSE-002",
+        "PARSE-SAMSUNG-001"
+      ],
+      "source": {
+        "packageName": "com.google.android.apps.messaging",
+        "parserId": "sms-card-message-parser"
+      },
+      "raw": {
+        "postedAt": "2026-09-23T13:57:00+09:00",
+        "title": "⁨삼성카드 승인안내⁩",
+        "text": "삼성1234취소 김*원\r\n-100,000원 일시불\r\n09/23 13:54 테스트 주유소\r\n누적1,332,233원"
+      },
+      "expected": {
+        "kind": "Parsed",
+        "payment": {
+          "type": "cancellation",
+          "amountInWon": 100000,
+          "occurredLocalDate": "2026-09-23",
+          "occurredLocalTime": "13:54",
+          "merchant": "테스트 주유소",
+          "cardCompany": "삼성",
+          "maskedCardToken": "1234"
+        }
+      }
+    },
+    {
+      "caseId": "sms-mms-negative-cancellation",
+      "requirementIds": [
+        "T-PARSE-002",
+        "PARSE-SAMSUNG-001"
+      ],
+      "source": {
+        "packageName": "com.android.mms",
+        "parserId": "sms-card-message-parser"
+      },
+      "raw": {
+        "postedAt": "2026-09-23T13:57:00+09:00",
+        "title": "⁨삼성카드 승인안내⁩",
+        "text": "삼성1234취소 김*원\r\n-100,000원 일시불\r\n09/23 13:54 테스트 주유소\r\n누적1,332,233원"
+      },
+      "expected": {
+        "kind": "Parsed",
+        "payment": {
+          "type": "cancellation",
+          "amountInWon": 100000,
+          "occurredLocalDate": "2026-09-23",
+          "occurredLocalTime": "13:54",
+          "merchant": "테스트 주유소",
+          "cardCompany": "삼성",
+          "maskedCardToken": "1234"
+        }
+      }
+    },
+    {
+      "caseId": "kakao-talk-samsung-negative-cancellation",
+      "requirementIds": [
+        "T-PARSE-002",
+        "PARSE-SAMSUNG-001"
+      ],
+      "source": {
+        "packageName": "com.kakao.talk",
+        "parserId": "kakao-talk-financial-message-parser"
+      },
+      "raw": {
+        "postedAt": "2026-09-23T13:57:00+09:00",
+        "title": "⁨삼성카드 승인안내⁩",
+        "text": "[김가명] [오후 1:57] 삼성1234취소 김*원\r\n-100,000원 일시불\r\n09/23 13:54 테스트 주유소\r\n누적1,332,233원"
+      },
+      "expected": {
+        "kind": "Parsed",
+        "payment": {
+          "type": "cancellation",
+          "amountInWon": 100000,
+          "occurredLocalDate": "2026-09-23",
+          "occurredLocalTime": "13:54",
+          "merchant": "테스트 주유소",
+          "cardCompany": "삼성",
+          "maskedCardToken": "1234"
+        }
+      }
+    },
+    {
+      "caseId": "samsung-negative-approval",
+      "requirementIds": [
+        "T-PARSE-002",
+        "PARSE-SAMSUNG-001"
+      ],
+      "source": {
+        "packageName": "kr.co.samsungcard.mpocket",
+        "parserId": "samsung-card-parser"
+      },
+      "raw": {
+        "postedAt": "2026-09-23T13:57:00+09:00",
+        "title": "⁨삼성카드 승인안내⁩",
+        "text": "삼성1234승인 김*원\r\n-100,000원 일시불\r\n09/23 13:54 테스트 주유소\r\n누적1,332,233원"
+      },
+      "expected": {
+        "kind": "Ignored",
+        "code": "PARSE_FAILED"
+      }
+    },
+    {
+      "caseId": "samsung-negative-zero-cancellation",
+      "requirementIds": [
+        "T-PARSE-002",
+        "PARSE-SAMSUNG-001"
+      ],
+      "source": {
+        "packageName": "kr.co.samsungcard.mpocket",
+        "parserId": "samsung-card-parser"
+      },
+      "raw": {
+        "postedAt": "2026-09-23T13:57:00+09:00",
+        "title": "⁨삼성카드 승인안내⁩",
+        "text": "삼성1234취소 김*원\r\n-0원 일시불\r\n09/23 13:54 테스트 주유소\r\n누적1,332,233원"
+      },
+      "expected": {
+        "kind": "Ignored",
+        "code": "INVALID_AMOUNT"
+      }
+    },
+    {
+      "caseId": "samsung-zero-cancellation",
+      "requirementIds": [
+        "T-PARSE-002",
+        "PARSE-SAMSUNG-001"
+      ],
+      "source": {
+        "packageName": "kr.co.samsungcard.mpocket",
+        "parserId": "samsung-card-parser"
+      },
+      "raw": {
+        "postedAt": "2026-09-23T13:57:00+09:00",
+        "title": "⁨삼성카드 승인안내⁩",
+        "text": "삼성1234취소 김*원\r\n0원 일시불\r\n09/23 13:54 테스트 주유소\r\n누적1,332,233원"
+      },
+      "expected": {
+        "kind": "Ignored",
+        "code": "INVALID_AMOUNT"
+      }
+    },
+    {
+      "caseId": "samsung-negative-overflow-cancellation",
+      "requirementIds": [
+        "T-PARSE-002",
+        "PARSE-SAMSUNG-001"
+      ],
+      "source": {
+        "packageName": "kr.co.samsungcard.mpocket",
+        "parserId": "samsung-card-parser"
+      },
+      "raw": {
+        "postedAt": "2026-09-23T13:57:00+09:00",
+        "title": "⁨삼성카드 승인안내⁩",
+        "text": "삼성1234취소 김*원\r\n-2,147,483,648원 일시불\r\n09/23 13:54 테스트 주유소\r\n누적1,332,233원"
+      },
+      "expected": {
+        "kind": "Ignored",
+        "code": "INVALID_AMOUNT"
+      }
+    },
+    {
+      "caseId": "samsung-double-minus-cancellation",
+      "requirementIds": [
+        "T-PARSE-002",
+        "PARSE-SAMSUNG-001"
+      ],
+      "source": {
+        "packageName": "kr.co.samsungcard.mpocket",
+        "parserId": "samsung-card-parser"
+      },
+      "raw": {
+        "postedAt": "2026-09-23T13:57:00+09:00",
+        "title": "⁨삼성카드 승인안내⁩",
+        "text": "삼성1234취소 김*원\r\n--100,000원 일시불\r\n09/23 13:54 테스트 주유소\r\n누적1,332,233원"
+      },
+      "expected": {
+        "kind": "Ignored",
+        "code": "PARSE_FAILED"
+      }
+    },
+    {
       "caseId": "kb-approval",
       "requirementIds": ["T-PARSE-001", "PARSE-KB-001", "PARSE-COMMON-001"],
       "source": { "packageName": "com.kbcard.cxh.appcard", "parserId": "kb-card-parser" },

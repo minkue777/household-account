@@ -54,6 +54,22 @@ function raw(
 }
 
 describe("Android 원문 알림 서버 파싱 제출 계약", () => {
+  it.each(['com.samsung.android.messaging', 'com.google.android.apps.messaging', 'com.android.mms'])(
+    '[T-PARSE-002][PARSE-SAMSUNG-001] %s의 음수 취소를 양수 원금의 취소 observation으로 전달한다', async (packageName) => {
+      const subject = createSubject();
+      await subject.submit({ actor, input: raw({ packageName, notification: {
+        postedAt: '2026-09-23T13:57:00+09:00', title: '삼성카드 승인안내',
+        text: '삼성1234취소 김*원\r\n-100,000원 일시불\r\n09/23 13:54 테스트 주유소\r\n누적1,332,233원',
+      } }) });
+      expect(subject.state().captured).toHaveLength(1);
+      expect(subject.state().captured[0].envelope.paymentObservation).toMatchObject({
+        observationType: 'cancellation', amountInWon: 100_000,
+        merchantEvidence: { rawCandidate: '테스트 주유소' },
+        cardEvidence: { companyLabel: '삼성', maskedToken: '1234' },
+      });
+    },
+  );
+
   it("NH카드 분리형 문자를 농협 결제 observation으로 변환한다", async () => {
     const subject = createSubject();
 
@@ -136,7 +152,7 @@ describe("Android 원문 알림 서버 파싱 제출 계약", () => {
         },
         parser: {
           parserId: "sms-card-message-parser",
-          parserVersion: "1.1.0",
+          parserVersion: "1.2.0",
         },
         paymentObservation: {
           observationType: "approval",
@@ -185,7 +201,7 @@ describe("Android 원문 알림 서버 파싱 제출 계약", () => {
         },
         parser: {
           parserId: "kakao-talk-financial-message-parser",
-          parserVersion: "1.0.0",
+          parserVersion: "1.1.0",
         },
         paymentObservation: {
           amountInWon: 78_120,
@@ -478,7 +494,7 @@ describe("Android 원문 알림 서버 파싱 제출 계약", () => {
         },
         parser: {
           parserId: "kakao-talk-financial-message-parser",
-          parserVersion: "1.0.0",
+          parserVersion: "1.1.0",
         },
       },
     });

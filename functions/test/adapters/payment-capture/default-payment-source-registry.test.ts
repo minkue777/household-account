@@ -12,7 +12,7 @@ describe("기본 Android 결제 source registry", () => {
       expect.objectContaining({
         sourceType: "kakao-talk-financial-message",
         parserId: "kakao-talk-financial-message-parser",
-        parserVersion: "1.0.0",
+        parserVersion: "1.1.0",
         supportsCityGasBill: true,
       }),
     ]);
@@ -33,7 +33,7 @@ describe("기본 Android 결제 source registry", () => {
     ["com.samsung.android.spay", "samsung-card", "samsung-card-parser"],
     ["kr.co.samsungcard.mpocket", "samsung-card", "samsung-card-parser"],
   ] as const)(
-    "%s의 삼성 승인 취소 의미 변경을 parser 1.1.0으로 표시한다",
+    "%s의 삼성 음수 취소 금액 지원을 parser 1.2.0으로 표시한다",
     (packageName, sourceType, parserId) => {
       expect(
         ANDROID_PAYMENT_SOURCE_REGISTRY.filter(
@@ -43,7 +43,7 @@ describe("기본 Android 결제 source registry", () => {
         expect.objectContaining({
           sourceType,
           parserId,
-          parserVersion: "1.1.0",
+          parserVersion: "1.2.0",
         }),
       ]);
     },
