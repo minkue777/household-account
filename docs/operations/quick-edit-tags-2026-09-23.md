@@ -63,7 +63,9 @@
 ## CI 후속 관측 — 2026-09-23
 
 - 구현 SHA의 [실행 35826417801](https://github.com/minkue777/household-account/actions/runs/35826417801)에서 Android unit/build·실제 instrumentation·Native Firebase E2E·성능 검사는 성공했습니다. Web E2E는 97개 통과, 기존 `home-preferences.spec.ts`의 홈 카드 설정 갱신 검사 1개가 실패했습니다.
+- 배포 SHA `6a75b29`의 [실행 35826528264](https://github.com/minkue777/household-account/actions/runs/35826528264)는 다섯 검사와 `CI 결과 요약`이 모두 성공했습니다. 같은 웹 실행 코드·검사에서 앞선 실패가 반복되지는 않았으며 실패 이력을 성공으로 덮지 않습니다.
 - 실패는 설정 Command 이후 첫 카드가 30초 동안 `9월 지출0`을 유지한 경우입니다. trace의 실제 Command 응답은 HTTP 200/`succeeded`이며 대상 가구·문서가 구독과 일치합니다. 홈 설정 target은 해제되지 않았고 Listen의 수신 확인 번호(AID)가 증가하므로 미완료 스트림 응답만으로 전체 전송 정지를 단정할 수 없습니다.
 - trace에는 열린 Listen 응답 본문이 보존되지 않아 문서 저장→실시간 전달→화면 상태 적용 중 정확한 중단 지점은 확정하지 못했습니다. 제품 수정 근거가 없는 상태에서 앱의 구독 동작을 바꾸거나 검증을 약화하지 않았습니다.
 - 기존 UI·재전송·version 충돌·새로고침 검증과 30초 제한을 유지하면서, Command 직후 실제 정본 문서의 `left/right/aggregateVersion` 검증을 추가했습니다. 화면 갱신 실패 시 저장값·카드 표시·Listen 전송 수명과 AID를 첨부하며 원문 요청·인증 토큰은 첨부하지 않습니다.
 - 보강한 해당 파일은 실제 Firebase Emulator와 production build를 거쳐 Chromium 2개 모두 통과했습니다(35.3초). 국소 실행에서 실패는 재현되지 않았으며 이를 원인 해결의 증거로 표현하지 않습니다. 로그는 `TEMP/household-home-preferences-e2e-20260923.log`입니다. 원래 실패 기록은 유지하고 보강한 후보의 전체 CI를 후속 확인합니다.
+- 진단 URL을 SDK의 실제 `/google.firestore.v1.Firestore/Listen/channel` 경로와 맞추고 실제 Listen 기록이 1개 이상인지도 검사했습니다. 이 관측 검증까지 포함한 파일의 Chromium 2개가 다시 통과했습니다(34.0초, `TEMP/household-home-preferences-e2e-observation-20260923.log`).

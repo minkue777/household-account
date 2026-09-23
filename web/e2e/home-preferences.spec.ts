@@ -11,7 +11,7 @@ test('[T-HOME-002][T-HOME-003][HOME-001][HOME-003][HOME-004] 기본 홈 카드�
   const listeningRequests = new Map<import('@playwright/test').Request, typeof listens[number]>();
   page.on('request', value => {
     const url = new URL(value.url());
-    if (!url.pathname.endsWith('/Firestore/Listen/channel')) return;
+    if (!url.pathname.endsWith('/google.firestore.v1.Firestore/Listen/channel')) return;
     const entry = { startedAt: Date.now(), method: value.method(), acknowledgedMessageId: url.searchParams.get('AID') };
     listens.push(entry);
     listeningRequests.set(value, entry);
@@ -42,6 +42,7 @@ test('[T-HOME-002][T-HOME-003][HOME-001][HOME-003][HOME-004] 기본 홈 카드�
     await expect(page.locator('.balance-card-glass').first()).toContainText('년 지출');
     await expect(page.locator('.balance-card-glass').nth(1)).toContainText('지역화폐 잔액');
     await expect(page.locator('.balance-card-glass').nth(1)).toContainText('데이터 없음');
+    expect(listens.length, '실제 Firestore Listen 전송을 진단 기록에 보존한다').toBeGreaterThan(0);
   } catch (error) {
     await testInfo.attach('home-preferences-live-read', {
       body: JSON.stringify({
