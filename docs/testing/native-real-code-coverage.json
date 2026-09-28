@@ -317,18 +317,21 @@
                                                 "QE-002",
                                                 "QE-012",
                                                 "AND-005",
-                                                "AND-006"
+                                                "AND-006",
+                                                "AND-011",
+                                                "LED-001",
+                                                "LED-005"
                                             ],
                          "tests":  [
                                        "android/app/src/test/java/com/household/account/quickedit/QuickEditUpdateFeedbackTest.kt",
                                        "android/app/src/test/java/com/household/account/quickedit/QuickEditUpdateFeedbackBridgeTest.kt",
                                        "android/app/src/androidTest/java/com/household/account/MainActivityInstrumentationTest.kt::quickEditFeedbackChangesReachRealWebViewAfterResumeAndRecreationWithoutTransactionData",
-                                       "android/app/src/androidTest/java/com/household/account/MainActivityInstrumentationTest.kt::realWebViewQuickEditFeedbackOperationsRejectForeignIdentityAndStayOriginBound"
+                                       "android/app/src/androidTest/java/com/household/account/MainActivityInstrumentationTest.kt::realWebViewQuickEditFeedbackOperationsRejectForeignIdentityAndStayOriginBound",
+                                       "android/app/src/androidTest/java/com/household/account/e2e/QuickEditWebFeedbackFirebaseE2ETest.kt::acceptedUpdateAppearsBeforeServerRequestAndConflictRestoresCanonicalList"
                                    ],
-                         "verifiedBehavior":  "실제 Native outbox/feedback·bridge 생산 코드를 대상으로 한 JVM 단위 16개 통과: 영속 예약 뒤 pending 공개, retryable 유지, 성공 outbox 삭제와 canonical 인계, 실패 rollback 힌트, 복구 예약 뒤 pending 복원, identity/generation·ack 격리, 256개/72시간 완료 메모리 상한, 후행 DELETE/SPLIT의 이전 완료 힌트 제거. MainActivity 신규 2개는 실제 WebView 무데이터 event의 resume/재생성 및 get/ack의 foreign identity·origin 경계를 검사하도록 작성·컴파일했으며 기기 실행 성공을 뜻하지 않음",
+                         "verifiedBehavior":  "실제 Native outbox/feedback·bridge 생산 코드 JVM 16개 및 API 36.1 실제 MainActivity 계측 2개 통과: 영속 예약 뒤 pending 공개, retryable 유지, 성공 outbox 삭제와 canonical 인계, 실패 rollback 힌트, 복구 예약 뒤 pending 복원, identity/generation·ack 격리, 256개/72시간 완료 메모리 상한, 후행 DELETE/SPLIT의 이전 완료 힌트 제거, 실제 WebView 무데이터 event의 resume/재생성 및 get/ack의 foreign identity·origin 경계. 실제 SDK·QuickEditActivity·MainActivity WebView·production Web·Firebase Emulator 연결 E2E 1개도 API 36.1에서 통과: 실제 UPDATE 요청을 loopback에서 서버 전달 전 보류한 동안 목록 memo·tag pending과 서버 원본 미변경을 함께 확인하고, 해제 뒤 실제 succeeded canonical·Web ack, 별도 인증 명령의 version 선점 뒤 실제 failed feedback·최신 원장 rollback·ack를 검증함",
                          "remaining":  [
-                                           "MainActivityInstrumentationTest 신규 2개는 compileDebugAndroidTestKotlin 성공까지만 확인했으며 adb 연결 기기가 없어 실제 instrumentation 실행은 미완료",
-                                           "실제 Native QuickEdit 저장→WebView 목록 즉시 표시→Emulator 서버 성공/실제 version 충돌까지 연결하는 전체 E2E는 미실행; JVM 및 Web 계약 검사 통과로 대체하지 않음",
+                                           "프로세스 강제 종료와 실제 다른 계정 전환의 전체 Native→Web 연결은 별도 기기 시나리오로 실행하지 않았으며 해당 경계는 JVM·Web 계약 검사의 scope/purge/restart 증거로 구분함",
                                            "이 manifest와 E2E 연결 표는 실행 코드/메서드 추적성이며 전체 수용 조건의 통과율이나 제품 배포 완료를 의미하지 않음"
                                        ]
                      },

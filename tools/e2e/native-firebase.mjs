@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cpus, release, totalmem } from 'node:os';
 import { startNativeWebRuntime } from './native-web-runtime.mjs';
+import { startNativeCommandGate } from './native-command-gate.mjs';
 import { markdownTable } from '../performance/statistics.mjs';
 import { budgetMarkdown, evaluatePerformanceBudgets } from '../performance/budgets.mjs';
 
@@ -158,9 +159,10 @@ async function run(command, args, cwd = root, env = process.env) {
 }
 
 const mode = process.argv[2] ?? 'run';
-assert(['run', 'seed', 'seed-performance', 'verify', 'performance', 'performance-isolated'].includes(mode),
-  'Usage: node tools/e2e/native-firebase.mjs [run|seed|seed-performance|verify|performance|performance-isolated]');
+assert(['run', 'seed', 'seed-performance', 'verify', 'performance', 'performance-isolated', 'quick-edit-feedback'].includes(mode),
+  'Usage: node tools/e2e/native-firebase.mjs [run|seed|seed-performance|verify|performance|performance-isolated|quick-edit-feedback]');
 const performanceMode = ['performance', 'performance-isolated', 'seed-performance'].includes(mode);
+const quickEditFeedbackMode = mode === 'quick-edit-feedback';
 const isolateWebView = mode === 'performance-isolated';
 const performanceSamples = Number(process.env.PERFORMANCE_SAMPLES ?? 7);
 if (performanceMode) assert(Number.isInteger(performanceSamples) && performanceSamples >= 1 && performanceSamples <= 30,
@@ -170,12 +172,14 @@ else {
   const adb = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT
     ? join(process.env.ANDROID_HOME ?? process.env.ANDROID_SDK_ROOT, 'platform-tools', process.platform === 'win32' ? 'adb.exe' : 'adb') : 'adb';
   let webRuntime;
+  let commandGate;
   const firebaseLog = join(root, 'firebase-debug.log');
   let logOffset = 0;
   try {
-  if (mode === 'run' || performanceMode) {
+  if (mode === 'run' || quickEditFeedbackMode || performanceMode) {
     const fixture = await seed({ performance: performanceMode });
     webRuntime = await startNativeWebRuntime(root, output, adb);
+    if (!performanceMode) commandGate = await startNativeCommandGate({ port: 5002, upstreamPort: 5001 });
     logOffset = existsSync(firebaseLog) ? statSync(firebaseLog).size : 0;
     await run(process.platform === 'win32' ? 'gradlew.bat' : './gradlew', [
       'connectedDebugAndroidTest', '-PfirebaseE2e=true', '-PfirebaseWebE2e=true',
@@ -184,10 +188,13 @@ else {
       '-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true',
       `-PWEB_APP_URL=${webRuntime.origin}/`, '-PWEB_ENVIRONMENT_VERSION=emulator-e2e-v1',
       `-Pandroid.testInstrumentationRunnerArguments.webOrigin=${webRuntime.origin}`,
+      ...(commandGate ? [`-Pandroid.testInstrumentationRunnerArguments.quickEditCommandGatePort=${commandGate.port}`] : []),
       ...(performanceMode ? [
         '-Pandroid.testInstrumentationRunnerArguments.class=com.household.account.e2e.NativePerformanceFirebaseE2ETest',
         `-Pandroid.testInstrumentationRunnerArguments.performanceSamples=${performanceSamples}`,
         `-Pandroid.testInstrumentationRunnerArguments.performanceIsolateWebView=${isolateWebView}`,
+      ] : quickEditFeedbackMode ? [
+        '-Pandroid.testInstrumentationRunnerArguments.class=com.household.account.e2e.QuickEditWebFeedbackFirebaseE2ETest',
       ] : ['-Pandroid.testInstrumentationRunnerArguments.notAnnotation=com.household.account.e2e.FirebasePerformanceE2E']),
       `-Pandroid.testInstrumentationRunnerArguments.fixtureBase64=${Buffer.from(JSON.stringify(fixture)).toString('base64')}`, '--stacktrace',
     ], join(root, 'android'));
@@ -227,7 +234,7 @@ else {
         console.error(`Native performance measurement failed:\n${[...validationErrors, ...performance.errors].join('\n')}`);
         process.exitCode = 1;
       }
-    } else {
+    } else if (!quickEditFeedbackMode) {
     const startup = JSON.parse(execFileSync(adb, ['exec-out', 'run-as', 'com.household.account', 'cat', 'files/native-startup-e2e-result.json'], { encoding: 'utf8' }));
     assert.equal(startup.platform, 'android');
     assert.equal(startup.sameActivityReloadStartupSamples, 0);
@@ -247,8 +254,16 @@ else {
     assert.equal(observations.size, 1, 'Actual server logger must record the Native startup sample once');
     writeFileSync(join(output, 'startup-result.json'), JSON.stringify({ ...startup, serverStartupLogSamples: observations.size }), 'utf8');
     }
+    if (!performanceMode) {
+      const feedback = JSON.parse(execFileSync(adb, ['exec-out', 'run-as', 'com.household.account', 'cat', 'files/native-quickedit-feedback-e2e-result.json'], { encoding: 'utf8' }));
+      assert.equal(feedback.contractVersion, 'quick-edit-web-feedback-e2e.v1');
+      assert.equal(feedback.pendingBeforeForward, true, 'Native pending patch must be visible before forwarding the command');
+      assert.equal(feedback.successCanonical, true, 'The actual successful canonical result must replace the pending patch');
+      assert.equal(feedback.conflictRollback, true, 'The actual version conflict must roll back only the rejected patch');
+      writeFileSync(join(output, 'native-quickedit-feedback-e2e-result.json'), JSON.stringify(feedback), 'utf8');
+    }
   }
-  if (!performanceMode) {
+  if (!performanceMode && !quickEditFeedbackMode) {
   const result = JSON.parse(execFileSync(adb, ['exec-out', 'run-as', 'com.household.account', 'cat', 'files/native-firebase-e2e-result.json'], { encoding: 'utf8' }));
   const fixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
   assert.equal(result.householdId, fixture.householdId);
@@ -260,5 +275,8 @@ else {
   ], join(root, 'web'), { ...process.env, NATIVE_E2E_FIXTURE: fixturePath, NATIVE_E2E_RESULT: resultPath,
     ...(webRuntime ? { NATIVE_E2E_EXISTING_SERVER: 'true' } : {}) });
   }
-  } finally { await webRuntime?.stop(); }
+  } finally {
+    try { await commandGate?.stop(); }
+    finally { await webRuntime?.stop(); }
+  }
 }

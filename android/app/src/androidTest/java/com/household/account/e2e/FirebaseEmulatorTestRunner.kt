@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.util.Base64
 import androidx.test.runner.AndroidJUnitRunner
+import androidx.test.platform.app.InstrumentationRegistry
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
@@ -54,8 +55,10 @@ class FirebaseEmulatorTestRunner : AndroidJUnitRunner() {
                 .setPersistenceEnabled(false).build()
             useEmulator(HOST, 8080)
         }
+        val gatePort = InstrumentationRegistry.getArguments().getString("quickEditCommandGatePort")
+        check(gatePort == null || gatePort == "5002") { "Only the fixed local command gate is permitted" }
         FirebaseFunctions.getInstance(app, FirebaseAuthenticatedCallableGateway.REGION)
-            .useEmulator(HOST, 5001)
+            .useEmulator(HOST, gatePort?.toInt() ?: 5001)
         // Preserve production startup scheduling and its real FCM/outbox recovery work.
         super.callApplicationOnCreate(application)
         // Replace only external Play Integrity attestation. The actual Functions SDK supplies

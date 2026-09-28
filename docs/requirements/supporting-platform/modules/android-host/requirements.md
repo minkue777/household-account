@@ -112,6 +112,8 @@ AND-012의 realtime SDK와 영속 저장소 정책은 유지합니다. 전체 �
 - Web은 Native expectedVersion보다 더 최신인 서버값을 보존하고 source 목록에서 이미 사라진 거래를 pending·완료 Canonical로 재삽입하지 않습니다. 첫 목록 전 pending은 publish까지 보류하며 완료가 먼저 오면 ack 뒤 server-first 조회로 수렴합니다. 인증 복구의 remoteReadEpoch 변경 때 재연결하고 비동기 응답은 Web scope 객체 수명까지 확인합니다.
 - `UNKNOWN_OPERATION`을 반환하는 기존 APK는 feedback 미지원으로 처리하고 기존 로그인·원장 구독을 유지합니다. 추적성: `T-QE-009`, [작업 기록](../../../../operations/quick-edit-immediate-feedback-2026-09-28.md).
 
+`T-QE-009`의 실제 Native→Web 연결 검사는 [QuickEditWebFeedbackFirebaseE2ETest](../../../../../android/app/src/androidTest/java/com/household/account/e2e/QuickEditWebFeedbackFirebaseE2ETest.kt)에서 실제 SDK 요청을 서버 전달 전에 보류하여 목록의 메모·태그 pending과 서버 원본 미변경을 함께 확인합니다. 해제 후 실제 성공 Canonical·Web ack, 별도 인증 명령이 version을 선점한 실제 충돌 뒤 terminal feedback·최신 원장 복구까지 검사합니다. [기존 Native E2E runner](../../../../../tools/e2e/native-firebase.mjs)의 기본 `run`에 포함하며 `quick-edit-feedback`은 같은 검사의 단독 재현 경로입니다. MainActivity의 무데이터 event·복귀·재생성·origin/identity 계측과 별도로 실제 연결 결과를 기록하며, 실행 연결과 통과 여부를 구분하는 근거는 [Native 추적성](../../../../testing/native-real-code-coverage.json)입니다.
+
 ## 7. 전환 이전 결함 기록
 
 아래는 이전 구현의 역사이며 현재 미해결 목록이 아닙니다. 현재 Native Auth/SessionMirror/암호화 outbox와 일반 Ledger Command 경로는 5절의 구현 링크를 기준으로 합니다.

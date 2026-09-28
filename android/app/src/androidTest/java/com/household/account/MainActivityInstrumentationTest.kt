@@ -279,10 +279,21 @@ class MainActivityInstrumentationTest {
         withObservedWebViewLifecycle(LocalWebViewDocument(url, html)) { scenario ->
             fun loadDocument() {
                 scenario.onActivity { activity ->
-                    activity.findViewById<WebView>(R.id.webView).loadDataWithBaseURL(url, html, "text/html", "UTF-8", url)
+                    // This harness serves only the declared main-frame URL. A data load can be
+                    // intercepted as an unexpected request and replaced by its blocking 404.
+                    activity.findViewById<WebView>(R.id.webView).loadUrl(url)
                 }
-                waitUntil("QuickEdit 변경 관측용 실제 문서 준비") {
-                    evaluateWebViewText(scenario, "document.readyState === 'complete' && window.bridgeVersion") == BuildConfig.VERSION_NAME
+                try {
+                    waitUntil("QuickEdit 변경 관측용 실제 문서 준비") {
+                        evaluateWebViewText(scenario, "document.readyState === 'complete' && window.bridgeVersion") == BuildConfig.VERSION_NAME
+                    }
+                } catch (failure: AssertionError) {
+                    val documentState = evaluateWebView(scenario, """JSON.stringify({
+                        url:location.href, readyState:document.readyState,
+                        bridge:typeof HouseholdNativeBridge, version:window.bridgeVersion,
+                        eventObserverReady:Array.isArray(window.quickEditEvents)
+                    })""".trimIndent())
+                    throw AssertionError("QuickEdit 변경 관측 문서 상태: $documentState", failure)
                 }
                 InstrumentationRegistry.getInstrumentation().waitForIdleSync()
             }
