@@ -1,6 +1,6 @@
 {
     "schemaVersion":  "native-real-code-coverage.v1",
-    "date":  "2026-09-23",
+    "date":  "2026-09-28",
     "note":  "실제 파일::메서드 연결입니다. 파일 전체를 명시한 경우 해당 Kotlin suite의 실제 운영 코드 assertion을 뜻하며, remaining이 있는 Canonical 시나리오는 전체 E2E 완료로 계산하지 않습니다. 실행 상태는 별도 실제 결과를 확인합니다.",
     "mappings":  [
                      {
@@ -309,6 +309,27 @@
                          "verifiedBehavior":  "실제 수집 거래의 query fallback→태그만 저장→재조회·Intent 전달→마지막 태그 제거→명시 빈 배열 저장, 미저장 태그를 포함한 분할의 서버 자식 상속, 실제 Keystore 재로드의 태그·빈 배열·분할 초안 보존",
                          "remaining":  [
 
+                                       ]
+                     },
+                     {
+                         "canonicalId":  "T-QE-009",
+                         "requirementIds":  [
+                                                "QE-002",
+                                                "QE-012",
+                                                "AND-005",
+                                                "AND-006"
+                                            ],
+                         "tests":  [
+                                       "android/app/src/test/java/com/household/account/quickedit/QuickEditUpdateFeedbackTest.kt",
+                                       "android/app/src/test/java/com/household/account/quickedit/QuickEditUpdateFeedbackBridgeTest.kt",
+                                       "android/app/src/androidTest/java/com/household/account/MainActivityInstrumentationTest.kt::quickEditFeedbackChangesReachRealWebViewAfterResumeAndRecreationWithoutTransactionData",
+                                       "android/app/src/androidTest/java/com/household/account/MainActivityInstrumentationTest.kt::realWebViewQuickEditFeedbackOperationsRejectForeignIdentityAndStayOriginBound"
+                                   ],
+                         "verifiedBehavior":  "실제 Native outbox/feedback·bridge 생산 코드를 대상으로 한 JVM 단위 16개 통과: 영속 예약 뒤 pending 공개, retryable 유지, 성공 outbox 삭제와 canonical 인계, 실패 rollback 힌트, 복구 예약 뒤 pending 복원, identity/generation·ack 격리, 256개/72시간 완료 메모리 상한, 후행 DELETE/SPLIT의 이전 완료 힌트 제거. MainActivity 신규 2개는 실제 WebView 무데이터 event의 resume/재생성 및 get/ack의 foreign identity·origin 경계를 검사하도록 작성·컴파일했으며 기기 실행 성공을 뜻하지 않음",
+                         "remaining":  [
+                                           "MainActivityInstrumentationTest 신규 2개는 compileDebugAndroidTestKotlin 성공까지만 확인했으며 adb 연결 기기가 없어 실제 instrumentation 실행은 미완료",
+                                           "실제 Native QuickEdit 저장→WebView 목록 즉시 표시→Emulator 서버 성공/실제 version 충돌까지 연결하는 전체 E2E는 미실행; JVM 및 Web 계약 검사 통과로 대체하지 않음",
+                                           "이 manifest와 E2E 연결 표는 실행 코드/메서드 추적성이며 전체 수용 조건의 통과율이나 제품 배포 완료를 의미하지 않음"
                                        ]
                      },
                      {

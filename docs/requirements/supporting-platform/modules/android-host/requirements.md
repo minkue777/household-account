@@ -84,7 +84,7 @@ AND-012의 realtime SDK와 영속 저장소 정책은 유지합니다. 전체 �
 | ID | 상태 | 요구사항 | 경계·예외 | 근거 | 테스트 |
 |---|---|---|---|---|---|
 | QE-001 | 현재 명세 | 자동 지출 저장 후 사용자별 설정이 켜져 있고 오버레이 권한이 있으면 QuickEdit을 연다. | 기본 설정은 true이다. | [알림 수집 Service](../../../../../android/app/src/main/java/com/household/account/service/CardNotificationListenerService.kt), [HouseholdPreferences](../../../../../android/app/src/main/java/com/household/account/util/HouseholdPreferences.kt) | UI, E2E |
-| QE-002 | 현재 명세 | QuickEdit은 지출 ID와 표시 필드를 받아 가맹점, 양의 정수 금액, 카테고리, 메모, 태그를 편집하고 원본과 실제로 다른 필드만 Update patch에 포함한다. | 빈 memo는 기존 memo를 지우는 명시적 변경이다. 변경 필드가 없으면 서버 Command를 만들지 않는다. | [QuickEditActivity](../../../../../android/app/src/main/java/com/household/account/QuickEditActivity.kt) | U, UI, I |
+| QE-002 | 현재 명세 | QuickEdit은 지출 ID와 표시 필드를 받아 가맹점, 양의 정수 금액, 카테고리, 메모, 태그를 편집하고 원본과 실제로 다른 필드만 Update patch에 포함한다. 같은 앱의 Web 원장은 outbox commit·WorkManager 영속 예약이 완료된 UPDATE를 일반 수정과 같은 Ledger 낙관적 Projection으로 서버 응답 전에 표시한다. | 빈 memo는 기존 memo를 지우는 명시적 변경이다. 변경 필드가 없으면 서버 Command를 만들지 않는다. 접수한 patch는 로컬 표시 힌트이며 업무 성공이 아니다. 성공은 실제 Canonical 결과로 확정하고 retryable은 pending 유지, 영구 실패는 해당 overlay만 복구한다. 더 최신 서버 version·다른 수정·다른 session을 과거 결과로 덮어쓰지 않는다. 삭제·분할·타 기기 변경과 구 APK의 기존 구독은 유지한다. | [QuickEditActivity](../../../../../android/app/src/main/java/com/household/account/QuickEditActivity.kt), [Ledger Projection](../../../../../web/src/features/ledger/application/ledgerOptimisticProjection.ts), [즉시 표시 계약](design.md#35-quickedit-update의-같은-앱-즉시-표시) | U, C, UI, I, E2E; T-QE-009 |
 | QE-003 | 목표 명세 | 인증된 현재 멤버가 `알림 보내기`를 실행하면 해당 지출에 요청 시각과 안정적인 requesterMemberId를 기록한다. | 현재 편집 중인 미저장 값은 저장하지 않는다. 요청자가 없으면 실패로 처리하며, Notifications는 단일 partner 없이 요청자를 제외한 활성 가구원 모두에게 알린다. | 같은 근거와 [DEC-013](../../../governance/decisions.md#dec-013), [DEC-022](../../../governance/decisions.md#dec-022) | U, UI, I |
 | QE-004 | 현재 명세 | 삭제는 원 가맹점·금액 확인 후 문서를 삭제한다. | 실패를 성공 Toast로 표시하면 안 된다. | 같은 근거 | UI, I |
 | QE-005 | 현재 명세 | 나누기는 최소 두 양수 항목이며 합계가 원금과 같을 때만 확정한다. | 첫 두 항목은 몫과 나머지로 초기화한다. | 같은 근거 | U, UI |
@@ -103,6 +103,14 @@ AND-012의 realtime SDK와 영속 저장소 정책은 유지합니다. 전체 �
 - 아직 살아 있는 숨은 편집창은 같은 Activity를 앞으로 가져와 미저장 입력을 유지한다. 표시 중인 창과 화면 회전 재생성 중에는 중복 창을 만들지 않는다.
 - 실행 요청 이후 10초 동안 Activity 시작이 확인되지 않으면 해당 요청의 lease만 풀고 15분 후 복구를 예약한다. 새 결제·앱 재진입은 이 예약을 기다리지 않고 재시도할 수 있다. 늦은 이전 요청·Activity callback이 다음 거래 또는 다른 세션의 lease를 해제하면 안 된다.
 - 외부 서버 계약과 암호화 FIFO 저장 형식은 유지한다. 추적성: `T-QE-003`, [표시 수명 회귀 기록](../../../../operations/quick-edit-lifecycle-2026-09-20.md).
+
+### QE-002·QE-012 로컬 UPDATE 표시 힌트
+
+- `quick-edit.get-update-feedback`·`quick-edit.ack-update-feedback`은 현재 Principal·가구·멤버를 Native Auth·SessionMirror와 대조하는 trusted bridge 계약입니다. 초기 연결·resume·무데이터 `household-account:quick-edit-updates-changed` event에서 snapshot을 pull하고 기존 `beginUpdate`·`commitUpdate`·`rollback`을 사용합니다. event는 서버 성공 전 업무 완료를 알리지 않습니다.
+- 성공 outbox 항목은 기존처럼 즉시 삭제하고 Canonical 완료 결과만 프로세스 메모리에 최대 256개·72시간 동안 보존하며 Web ack·session 종료 때 정리합니다. 같은 거래의 후행 Native DELETE·SPLIT 성공도 이전 UPDATE 완료 힌트를 제거합니다. 이 정리는 표시 힌트에만 적용합니다. ack는 pending 영속 payload·재시도·실패 알림을 완료 처리하지 않습니다. 기존 FIFO·15분 재예약·72시간 재시도 상한은 유지합니다.
+- 프로세스 재시작 시 암호화 outbox의 pending은 복구 예약 성공 또는 실제 Worker 전송 시작 뒤 공개하고 이미 성공한 건은 기존 server-first 원장 초기 조회로 수렴합니다. 새 영속 원장 cache를 만들지 않습니다. Native generation은 Native snapshot/ack 세대, Web generation은 Web 비동기 응답 세대로 각각 검증하며 둘을 직접 비교하지 않습니다.
+- Web은 Native expectedVersion보다 더 최신인 서버값을 보존하고 source 목록에서 이미 사라진 거래를 pending·완료 Canonical로 재삽입하지 않습니다. 첫 목록 전 pending은 publish까지 보류하며 완료가 먼저 오면 ack 뒤 server-first 조회로 수렴합니다. 인증 복구의 remoteReadEpoch 변경 때 재연결하고 비동기 응답은 Web scope 객체 수명까지 확인합니다.
+- `UNKNOWN_OPERATION`을 반환하는 기존 APK는 feedback 미지원으로 처리하고 기존 로그인·원장 구독을 유지합니다. 추적성: `T-QE-009`, [작업 기록](../../../../operations/quick-edit-immediate-feedback-2026-09-28.md).
 
 ## 7. 전환 이전 결함 기록
 
@@ -152,6 +160,7 @@ WebView URL·허용 origin은 배포 환경별 versioned 설정으로 고정하�
 | T-QE-007 | 목표 | outbox commit·WorkManager 영속 예약 성공·실패, commit 뒤 예약 전 session purge 경합, 느린 서버 전송 중 다음 접수, process 종료·startup Worker, retryable→success, 앞 retryable과 뒤 명령, conflict·영구 거부·계약 실패, 정확히 72시간 만료, 실패 알림 성공·권한/채널 차단, 암호문·codec 손상 / 일반 Ledger Command의 Android 전달 / commit·예약·Accepted 사이 purge 진입 없음, 서버 왕복 중 다음 로컬 접수 성공, 성공 뒤 화면 종료, 같은 commandId·idempotencyKey FIFO 재시도, terminal·만료는 알림 전까지만 확인 필요 보존하고 알림 성공 뒤 payload 삭제, 손상은 비민감 실패 신호, 다른 actor 전송·Worker 자기 증식 없음 | QE-012, AND-009, AND-011, DEC-067 |
 | T-ANDROID-HOST-001 | 현재 명세 | 정확한·유사 listener component, overlay 권한, QuickEdit on/off / 앱 생성·resume gate / 두 필수 권한일 때만 Web Shell, 누락 권한별 정확한 시스템 설정 action | AND-001, AND-002 |
 | T-QE-008 | 현재 명세·호환 | 기존 태그·태그 없는 구버전 snapshot, 공백·선행 해시·중복·내부 공백, 10/11개·30/31 code point, 한글 조합 입력, 기존 초과 태그 / 실제 QuickEdit 입력·태그만 저장·전체 제거·미저장 분할·FIFO 및 outbox 재로딩 / 태그 초기 표시와 정규화 저장, 생략 보존·명시 빈 배열 제거, 미확정 입력 반영, 변경 없는 초과 값 보존, 잘못된 입력은 무제출, 새 snapshot은 추가 Query 없음, 같은 고정 envelope와 분할 원본·파생에 태그 유지 | QE-013, QE-002, QE-009, QE-010, QE-012, LED-011, LED-012 |
+| T-QE-009 | 현재 명세·계약 | UPDATE 접수·예약 실패/성공, 같은 command 반복 pull, 서버 성공·retryable·충돌·영구 거절, 최신 snapshot·동시 수정, identity/generation 전환, 초기 연결·resume·무데이터 event, process 재시작·구 APK / Native feedback → 기존 Web Ledger Projection / 접수 완료한 patch 즉시 표시, Canonical 확정·해당 overlay만 rollback, 최신 version 보존, pending 유지, session 간 무간섭, 성공 outbox 즉시 삭제와 완료 메모리 ack, persisted pending 복구·server-first 수렴, UNKNOWN_OPERATION은 기존 구독 유지 | QE-002, QE-012, AND-005, AND-006, AND-011, LED-001, LED-005 |
 | T-WEBVIEW-001 | 현재 명세·기기 검증 보완 | Native 인증의 Firebase custom token 발급, 최초 방문·조회·발급 실패, UID 불일치와 허용하지 않은 origin·redirect·subframe·유사 host / 로그인·bridge 접근 / 동일 UID 로그인과 권한 분리, 부분 성공 금지, Google credential·ID/refresh token 비노출, 외부 origin·subframe 차단 | AND-005, AND-006 |
 | T-WEBVIEW-002 | 목표·기기 회귀 | fresh·저장 navigation, production/development 환경, HTTP URL·origin 불일치, 전경 renderer crash·배경 종료·연속 종료 / Web Shell 초기화·복구 / 허용 HTTPS URL만 WebView당 한 번 load하고 오설정 빌드 거부, renderer 종료 시 같은 Activity를 유지하며 마지막 허용 URL·bridge·쿠키를 새 WebView에서 자동 복구, 배경은 전경 복귀까지 생성을 미루며 추가 버튼 없음 | AND-003, AND-005, AND-006 |
 | T-WEBVIEW-003 | 현재 명세 | 권한 guide, Web Shell history 있음·없음 / 뒤로가기 / Web history 또는 Activity 기본 동작으로 위임 | AND-004 |

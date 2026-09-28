@@ -9,6 +9,10 @@ import com.household.account.paymentcapture.AndroidCaptureDelivery
 import com.household.account.session.NativeMembershipResolution
 import com.household.account.util.FidEndpointManager
 import com.household.account.util.HouseholdPreferences
+import com.google.firebase.auth.FirebaseAuth
+import com.household.account.quickedit.QuickEditCommandDelivery
+import com.household.account.quickedit.QuickEditUpdateFeedbackBridge
+import kotlinx.coroutines.CancellationException
 import org.json.JSONObject
 
 /** 정확한 허용 origin에서만 노출되는 versioned Android host contract입니다. */
@@ -19,6 +23,14 @@ class AndroidHostBridge(
 ) {
     // A restored Web Auth session does not need Native authentication at startup.
     private val authCoordinator by lazy(createAuthCoordinator)
+    private val updateFeedbackBridge by lazy {
+        QuickEditUpdateFeedbackBridge(
+            currentPrincipalUid = { FirebaseAuth.getInstance().currentUser?.uid },
+            currentScope = { HouseholdPreferences.currentScope(context) },
+            readFeedback = { QuickEditCommandDelivery.updateFeedback(context.applicationContext, it) },
+            acknowledge = { scope, ids -> QuickEditCommandDelivery.acknowledgeUpdateFeedback(context.applicationContext, scope, ids) }
+        )
+    }
 
     suspend fun handle(rawMessage: String): String {
         val request = runCatching { JSONObject(rawMessage) }.getOrNull()
@@ -31,6 +43,13 @@ class AndroidHostBridge(
             ?: return rejected(requestId, "PAYLOAD_REQUIRED")
 
         return when (request.optString("operation")) {
+            QuickEditUpdateFeedbackBridge.GET_OPERATION, QuickEditUpdateFeedbackBridge.ACK_OPERATION -> try {
+                succeeded(requestId, updateFeedbackBridge.handle(request.getString("operation"), payload))
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                rejected(requestId, if (error.message == "SESSION_SCOPE_MISMATCH") "SESSION_SCOPE_MISMATCH" else "UPDATE_FEEDBACK_UNAVAILABLE")
+            }
             "app.get-version" -> succeeded(
                 requestId,
                 JSONObject().put("version", appVersion() ?: JSONObject.NULL)

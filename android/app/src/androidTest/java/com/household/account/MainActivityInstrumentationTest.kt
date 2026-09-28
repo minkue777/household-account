@@ -28,6 +28,8 @@ import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import com.household.account.service.CardNotificationListenerService
 import com.household.account.paymentcapture.AndroidCaptureDelivery
+import com.household.account.quickedit.QuickEditCommandDelivery
+import com.household.account.quickedit.QuickEditUpdateFeedbackBridge
 import com.household.account.webhost.AndroidHostBridge
 import com.household.account.webhost.TrustedWebOrigin
 import com.household.account.webhost.NotificationListenerAccess
@@ -255,6 +257,105 @@ class MainActivityInstrumentationTest {
             // Exercise the new real renderer and production bridge, independently of remote hosting.
             loadLifecycleDocument(scenario)
             assertEquals("undefined", evaluateWebViewText(scenario, "typeof window.unsavedDraft"))
+        }
+    }
+
+    @Test
+    fun quickEditFeedbackChangesReachRealWebViewAfterResumeAndRecreationWithoutTransactionData() {
+        val url = "${TrustedWebOrigin.APP_ORIGIN}/native-test/quick-edit-events"
+        val html = """<!doctype html><html><body>QuickEdit changes<script>
+            window.quickEditEvents = [];
+            window.addEventListener('${QuickEditUpdateFeedbackBridge.CHANGED_EVENT}', function(event) {
+              window.quickEditEvents.push({type:event.type, detail:event.detail || null,
+                hasTransaction:('transaction' in event || 'patch' in event || 'commandId' in event)});
+            });
+            window.bridgeVersion = null;
+            HouseholdNativeBridge.onmessage = function(event) {
+              window.bridgeVersion = JSON.parse(event.data).result.value.version;
+            };
+            HouseholdNativeBridge.postMessage(JSON.stringify({contractVersion:'android-bridge.v1',
+              requestId:'quick-edit-event-version',operation:'app.get-version',payload:{}}));
+        </script></body></html>""".trimIndent()
+        withObservedWebViewLifecycle(LocalWebViewDocument(url, html)) { scenario ->
+            fun loadDocument() {
+                scenario.onActivity { activity ->
+                    activity.findViewById<WebView>(R.id.webView).loadDataWithBaseURL(url, html, "text/html", "UTF-8", url)
+                }
+                waitUntil("QuickEdit 변경 관측용 실제 문서 준비") {
+                    evaluateWebViewText(scenario, "document.readyState === 'complete' && window.bridgeVersion") == BuildConfig.VERSION_NAME
+                }
+                InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            }
+            fun eventCount() = evaluateWebView(scenario, "window.quickEditEvents.length")!!.toInt()
+            fun changeNativeState() {
+                // 실제 outbox revision 경로를 사용합니다. 서버 명령이나 Web 이벤트를 직접 만들지 않습니다.
+                runBlocking { QuickEditCommandDelivery.purgeForSessionTransition(context) }
+            }
+            fun awaitChangeAfter(previous: Int) = waitUntil("Native 상태 변경의 WebView 이벤트 도착") {
+                eventCount() > previous
+            }
+            fun assertDataFreeEvents() {
+                assertEquals("true", evaluateWebView(scenario,
+                    "window.quickEditEvents.every(e => e.type === '${QuickEditUpdateFeedbackBridge.CHANGED_EVENT}' && e.detail === null && !e.hasTransaction)"))
+            }
+
+            loadDocument()
+            grantMandatoryPermissions()
+            scenario.onActivity { it.findViewById<Button>(R.id.btnCheckPermission).performClick() }
+            val beforeChange = eventCount()
+            changeNativeState()
+            awaitChangeAfter(beforeChange)
+            assertDataFreeEvents()
+
+            val beforeBackground = eventCount()
+            scenario.moveToState(Lifecycle.State.CREATED)
+            changeNativeState()
+            scenario.moveToState(Lifecycle.State.RESUMED)
+            awaitChangeAfter(beforeBackground)
+            assertDataFreeEvents()
+
+            lateinit var original: WebView
+            scenario.onActivity { original = it.findViewById(R.id.webView) }
+            scenario.recreate()
+            scenario.onActivity { assertNotSame(original, it.findViewById<WebView>(R.id.webView)) }
+            loadDocument()
+            val beforeRecreatedChange = eventCount()
+            changeNativeState()
+            awaitChangeAfter(beforeRecreatedChange)
+            assertDataFreeEvents()
+        }
+    }
+
+    @Test
+    fun realWebViewQuickEditFeedbackOperationsRejectForeignIdentityAndStayOriginBound() {
+        withObservedWebViewLifecycle { scenario ->
+            loadLifecycleDocument(scenario)
+            evaluateWebView(scenario, """
+                window.feedbackResponses = {};
+                HouseholdNativeBridge.onmessage = function(event) {
+                  const response = JSON.parse(event.data);
+                  window.feedbackResponses[response.requestId] = response;
+                };
+                ['get','ack'].forEach(function(kind) {
+                  HouseholdNativeBridge.postMessage(JSON.stringify({contractVersion:'android-bridge.v1',
+                    requestId:'feedback-'+kind, operation:'quick-edit.'+kind+'-update-feedback',
+                    payload:{principalUid:'foreign-native-test-principal',householdId:'foreign-native-test-house',
+                      memberId:'foreign-native-test-member',nativeSessionGeneration:1,commandIds:['foreign-command']}}));
+                });
+            """.trimIndent())
+            waitUntil("실제 bridge의 QuickEdit get/ack 인증 범위 거절") {
+                evaluateWebView(scenario, "['feedback-get','feedback-ack'].every(id => window.feedbackResponses[id] && window.feedbackResponses[id].result.kind === 'rejected' && window.feedbackResponses[id].result.error.code === 'SESSION_SCOPE_MISMATCH')") == "true"
+            }
+            scenario.onActivity { activity ->
+                activity.findViewById<WebView>(R.id.webView).loadDataWithBaseURL(
+                    "https://untrusted-native-test.invalid/", "<html><body>untrusted</body></html>",
+                    "text/html", "UTF-8", null
+                )
+            }
+            waitUntil("다른 origin에는 QuickEdit bridge도 노출하지 않음") {
+                evaluateWebView(scenario, "location.origin") == "\"https://untrusted-native-test.invalid\"" &&
+                    evaluateWebView(scenario, "typeof HouseholdNativeBridge") == "\"undefined\""
+            }
         }
     }
 

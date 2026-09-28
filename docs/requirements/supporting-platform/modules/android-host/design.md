@@ -66,6 +66,7 @@ sealed interface BridgeResultV1 {
 - `auth.sign-out`: Native 인증·mirror·endpoint 정리
 - `session.refresh`: Native가 서버에서 권위 조회한 Membership으로 mirror 동기화
 - `quick-edit.get-overlay-enabled`, `quick-edit.set-overlay-enabled`: 현재 mirror와 일치하는 scope의 표시 설정 조회·변경
+- `quick-edit.get-update-feedback`, `quick-edit.ack-update-feedback`: 현재 Principal·가구·멤버가 접수한 UPDATE의 로컬 표시 힌트 조회·완료 결과 ack
 - `app.get-version`, `performance.get-app-launch-duration`
 
 Bridge 호출은 현재 top-level document의 실제 origin이 `AllowedWebOriginPolicy`에 포함될 때만 처리한다. origin 변경, redirect, subframe, 불명확한 origin은 `Rejected(ORIGIN_NOT_ALLOWED)`다. 가구 키는 호환 입력으로만 받고 인증 증명으로 사용하지 않는다.
@@ -120,6 +121,30 @@ QuickEdit Controller가 소비하는 서버 Port:
 화면은 메모 아래 `태그` 레이블과 `태그를 입력하세요` 안내를 사용합니다. 선택한 태그는 배경·테두리·안쪽 여백 없는 파란색 `#태그` 텍스트와 개별 제거 조작으로 표시하고, 단일 태그 입력과 추가 조작으로 확정합니다. 내부 공백·쉼표·선행 이외 위치의 `#`는 태그 이름의 일부로 유지하며 구분자로 나누지 않습니다. 태그 값에 `#`를 붙이는 표시는 UI 표현이며 메모에 태그 문자열을 합쳐 저장하지 않습니다. 태그 검증 실패는 outbox 접수 전에 표시하여 사용자가 같은 초안을 수정할 수 있게 합니다. 서버는 UI 검증과 별개로 기존 Ledger Domain 정책을 최종 적용합니다.
 
 입력·전달·실제 서버 저장의 검증 경계와 실행 결과는 [작업 기록](../../../../operations/quick-edit-tags-2026-09-23.md)에 연결합니다.
+
+### 3.5 QuickEdit UPDATE의 같은 앱 즉시 표시
+
+`QE-002`·`QE-012`의 Native UPDATE는 trusted bridge를 통해 일반 Web 수정의 [Ledger 낙관적 Projection](../../../../../web/src/features/ledger/application/ledgerOptimisticProjection.ts)을 소비합니다. Native는 서버 쓰기를 계속 소유하고 Web은 같은 Command를 재제출하지 않습니다. pending 전달은 로컬 접수 뒤의 표시 힌트이며 서버 성공 Toast·업무 완료 event를 허용하는 예외가 아닙니다.
+
+| 계약 | 필드·결과 |
+|---|---|
+| `quick-edit.get-update-feedback` 입력 | `principalUid`, `householdId`, `memberId` |
+| `quick-edit-update-feedback.v1` 응답 | 최상위 `contractVersion`, `principalUid`, `householdId`, `memberId`, `nativeSessionGeneration`, `updates`; 별도 scope object 없음 |
+| `updates[]` | `commandId`, `transactionId`, `expectedVersion`, 기존 Update `patch`, `state: pending / succeeded / failed`, 선택적 `transaction` |
+| `quick-edit.ack-update-feedback` 입력 | 세 identity와 응답의 `nativeSessionGeneration`, 적용한 완료 `commandIds` |
+| `household-account:quick-edit-updates-changed` | payload 없는 snapshot pull 신호. 거래·태그·인증값이나 성공 판정을 event에 담지 않음 |
+
+각 bridge operation은 기존 top-level origin·현재 WebView 검증과 Native Auth/SessionMirror의 세 identity 일치를 확인합니다. Web은 응답 identity와 현재 세션을 다시 확인합니다. Native generation은 Native 내부 snapshot/ack에만 사용하고, Web generation은 비동기 pull 시작/완료의 현재 세션 확인에만 사용합니다. 두 generation 값을 같은 식별자로 비교하지 않습니다.
+
+처리 순서는 다음과 같습니다.
+
+1. 암호화 outbox commit과 WorkManager 영속 예약이 완료된 UPDATE만 pending 힌트가 됩니다. 접수 실패는 현재 QuickEdit을 유지합니다. DELETE·SPLIT·알림 요청은 이 feedback 배열에 넣지 않습니다.
+2. 초기 Web 연결·Activity resume·변경 event에서 snapshot을 pull하고 인증 복구의 `remoteReadEpoch` 변경 때 같은 identity에서도 재연결합니다. 같은 `commandId`는 같은 Web mutation에 한 번 연결하여 기존 `beginUpdate`를 사용합니다. API 미지원 `UNKNOWN_OPERATION`이면 기존 원장 구독을 유지합니다.
+3. `pending`은 서버 확정 전 표시이며 retryable 중에는 유지합니다. `succeeded`는 서버가 반환한 실제 Canonical 거래로 `commitUpdate`하고, `failed`는 해당 mutation만 `rollback`합니다. Canonical을 patch로 만들어 성공으로 가정하지 않습니다.
+4. 공통 Projection은 Native `expectedVersion` 조건으로 최신 원장 version을 보호합니다. source에 이미 없는 거래는 pending·완료 Canonical로 재삽입하지 않습니다. 첫 목록 전 pending은 source publish까지 보류하고 완료가 먼저 오면 ack한 뒤 server-first 조회로 수렴합니다. session 전환의 늦은 응답과 ack는 새 projection·Native feedback에 영향을 주지 않으며 Web scope 객체의 수명도 검사합니다. Web의 다른 mutation도 함께 지우지 않습니다.
+5. 완료 결과를 Web에 적용한 뒤 ack합니다. 성공·실패 feedback은 프로세스 메모리에서 최대 256개·72시간 동안만 전달 대기하고 ack/session 종료 또는 상한 도달 시 정리합니다. 이 상한은 서버 원장과 pending의 수명을 바꾸지 않습니다. 같은 거래의 Native DELETE·SPLIT 성공은 이전 UPDATE 완료 힌트도 제거합니다. ack는 outbox command·실패 알림의 완료 신호가 아닙니다.
+
+기존 성공 outbox 즉시 삭제, FIFO, 15분 재예약, retryable의 72시간 상한과 terminal 실패 알림 수명은 유지합니다. process 재시작은 영속 pending을 복구 예약 성공 또는 실제 Worker 전송 시작 뒤 힌트로 공개하고 이미 성공한 항목은 기존 server-first 원장 초기 조회에 맡깁니다. 완료 Canonical을 새 영속 저장소에 복제하지 않습니다. 상세 수용 조건과 실제 실행·미실행 검증은 [작업 기록](../../../../operations/quick-edit-immediate-feedback-2026-09-28.md)에서 구분합니다.
 
 ## 4. 플랫폼 상태와 불변식
 
@@ -203,6 +228,8 @@ Web Shell 준비에서는 Native 인증 객체를 미리 만들지 않습니다.
 4. outbox commit 뒤 unique WorkManager 요청의 영속 예약 완료를 확인한다. 둘 중 하나라도 실패하면 기존 화면을 유지하고 오류 code를 표시하며, 둘 다 성공하면 업무 성공 Toast 없이 Activity와 표시 head를 완료한다.
 5. process 내 전송과 WorkManager가 저장된 동일 envelope로 서버 Command를 호출한다. retryable 결과는 접수 후 정확히 72시간 전까지 재시도한다. process 시작 복구는 `KEEP`으로 기존 work를 재사용하고 network backoff를 우회하는 중복 flush를 만들지 않는다.
 6. `Success`·`AlreadyProcessed`는 entry를 즉시 삭제한다. `Conflict`, 영구 거부, 계약 실패, 만료는 자동 payload 변경·재전송 없이 민감값 없는 로컬 실패 알림 전까지만 `needs-attention`으로 보존하고, 알림 전달 성공 뒤 payload를 삭제한다.
+
+같은 앱의 UPDATE 목록 반영은 3.5절의 feedback으로 기존 Web Projection과 연결합니다. Native outbox 접수·재시도·삭제 수명을 바꾸거나 응답 전 업무 성공을 보고하지 않으며, 완료 Canonical 전달 대기만 별도 프로세스 메모리가 소유합니다.
 
 ### 5.6 QuickEdit 분할
 
@@ -345,6 +372,7 @@ Activity는 화면 event를 Input Port에 전달하고 상태를 render만 한�
 | QE-011 | 보안 UI, E2E | SensitiveOverlayPolicy | 잠금·최근 앱·screen capture·외부 Intent·log sink | Window에 `FLAG_SECURE` 없음, 별도 최근 앱 마스킹 없음, 캡처 허용, keyguard·export·앱 로그 보호 유지 | T-QE-005 |
 | QE-012 | U, UI, I, E2E | 일반 Ledger Command Client·QuickEditCommandOutbox·versioned codec·WorkManager | commit·예약 성공/실패, commit 뒤 예약 전 session purge 경합, 느린 서버 왕복 중 다음 접수, process 종료·startup Worker, retryable→success, 앞 retryable·뒤 명령, conflict·영구 거부·계약 실패·정확히 72시간 만료, 알림 성공·권한/채널 차단, 암호문·codec 손상 | commit·예약·Accepted 판정 사이 purge 진입 불가, 서버 왕복은 다음 로컬 접수를 차단하지 않음, 성공 뒤 Activity 종료, 고정 key FIFO 재시도, Success 즉시 삭제, terminal·만료는 알림 전까지만 needs-attention 보존 후 알림 성공 시 payload 삭제, 손상 비민감 신호, Worker 자기 증식·actor 교차 전송 없음 | T-QE-007 |
 | QE-013 | U, C, UI, I, E2E | 실제 QuickEdit 입력·Update patch·Split draft·snapshot/FIFO/outbox codec·Ledger command | 기존 태그, 필드 누락, 태그만 변경·전체 제거, 미확정 입력, IME, 10/11개·30/31 code point, 기존 초과값, 재로딩·재전송·stale version | 초기 표시, 규칙에 맞는 입력과 실제 저장, 태그만 변경해도 제출, 생략 보존·빈 배열 제거, immutable 분할 태그 상속, codec 손실·중복 전송 없음, 잘못된 입력·충돌 무변경 | T-QE-008, T-LED-011, T-LED-012 |
+| QE-002·QE-012, LED-001·LED-005 | U, C, UI, I, E2E | Native 접수·bridge feedback·기존 Ledger 낙관적 Projection | 예약 성공/실패, pending·retryable·성공·terminal, 중복 pull/ack, 최신 version·다른 mutation, identity/session 전환, restart·resume·구 APK | 접수한 UPDATE만 즉시 표시, 실제 Canonical 확정·해당 overlay 복구, 서버/로컬 세대 보호, pending 내구성·완료 메모리 수명, UNKNOWN_OPERATION 기존 구독 유지 | T-QE-009 |
 
 추가 공통 suite:
 

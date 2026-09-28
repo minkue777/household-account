@@ -24,9 +24,13 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.withResumed
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.household.account.quickedit.QuickEditCoordinator
+import com.household.account.quickedit.QuickEditCommandDelivery
+import com.household.account.quickedit.QuickEditUpdateFeedbackBridge
 import com.household.account.util.HouseholdPreferences
 import com.household.account.paymentcapture.AndroidCaptureDelivery
 import com.household.account.startup.FirstResumeRefreshGate
@@ -43,6 +47,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.CancellationException
 
 class MainActivity : AppCompatActivity() {
 
@@ -88,6 +94,22 @@ class MainActivity : AppCompatActivity() {
         }?.getBundle("webNavigation")
         setupPermissionButtons()
         checkPermissionAndShowContent()
+        lifecycleScope.launch {
+            try {
+                repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    QuickEditCommandDelivery.updateFeedbackChanges(applicationContext).collect {
+                        webView?.takeIf { TrustedWebOrigin.contains(it.url) }?.evaluateJavascript(
+                            "window.dispatchEvent(new Event('${QuickEditUpdateFeedbackBridge.CHANGED_EVENT}'))",
+                            null
+                        )
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // 로컬 표시 피드백이 불가능해도 기존 서버 구독/명령 전달은 계속합니다.
+            }
+        }
     }
 
     override fun onResume() {

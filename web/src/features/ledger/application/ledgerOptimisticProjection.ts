@@ -26,6 +26,12 @@ export function reconcileRestoredMonthlySplit(
 export class LedgerOptimisticProjection {
   private readonly projections = new Map<string, OptimisticEntityProjection<Expense>>();
   private readonly mutationScopes = new Map<string, string>();
+  private readonly changeListeners = new Set<() => void>();
+
+  observeChanges(listener: () => void): () => void {
+    this.changeListeners.add(listener);
+    return () => { this.changeListeners.delete(listener); };
+  }
 
   subscribe(
     callback: (expenses: Expense[]) => void,
@@ -33,19 +39,30 @@ export class LedgerOptimisticProjection {
     scope = 'default',
     retentionKey?: string
   ) {
-    return this.projectionFor(scope).subscribe(
+    const subscription = this.projectionFor(scope).subscribe(
       (expenses) => callback(reconcileRestoredMonthlySplit(expenses)),
       accept,
       retentionKey
     );
+    return {
+      publish: (expenses: readonly Expense[]) => {
+        subscription.publish(expenses);
+        this.notifyChanges();
+      },
+      dispose: () => subscription.dispose(),
+    };
   }
 
   current(transactionId: string, scope = 'default'): Expense | undefined {
     return this.projectionFor(scope).current(transactionId);
   }
 
-  beginUpdate(transactionId: string, patch: LedgerPatch, scope = 'default'): string {
-    return this.track(scope, this.projectionFor(scope).beginUpdate(transactionId, patch));
+  sourceCurrent(transactionId: string, scope = 'default'): Expense | undefined {
+    return this.projectionFor(scope).sourceCurrent(transactionId);
+  }
+
+  beginUpdate(transactionId: string, patch: LedgerPatch, scope = 'default', expectedVersion?: number): string {
+    return this.track(scope, this.projectionFor(scope).beginUpdate(transactionId, patch, expectedVersion));
   }
 
   beginCreate(transaction: Expense, scope = 'default'): string {
@@ -91,6 +108,7 @@ export class LedgerOptimisticProjection {
 
   private track(scope: string, mutationId: string): string {
     this.mutationScopes.set(mutationId, scope);
+    this.notifyChanges();
     return mutationId;
   }
 
@@ -102,6 +120,11 @@ export class LedgerOptimisticProjection {
     if (scope === undefined) return;
     action(this.projectionFor(scope));
     this.mutationScopes.delete(mutationId);
+    this.notifyChanges();
+  }
+
+  private notifyChanges(): void {
+    this.changeListeners.forEach((listener) => listener());
   }
 }
 

@@ -247,6 +247,8 @@ DEC-013의 알림 수신자는 Ledger가 확정하지 않습니다. Ledger는 �
 
 `LED-011`의 tags-only patch도 같은 version·receipt·UoW를 사용합니다. tags를 생략한 메모·카테고리·금액 수정은 저장값을 복사하고, 명시한 tags만 정규화·검증한 뒤 교체합니다. 태그는 provenance나 서버 권한 필드가 아니며 UI 검증 성공을 서버 검증의 대체로 신뢰하지 않습니다.
 
+같은 앱에서 접수한 Native QuickEdit UPDATE도 일반 Web 수정과 같은 `ledgerOptimisticProjection.beginUpdate` → `commitUpdate(canonical)` / `rollback` 경로를 사용합니다. [Android Host feedback 계약](../../../../supporting-platform/modules/android-host/design.md#35-quickedit-update의-같은-앱-즉시-표시)에서 검증된 로컬 접수 patch를 받아 표시하며 서버 Command를 Web에서 다시 호출하지 않습니다. commandId별 mutation은 멱등이고 retryable은 pending 유지, terminal 실패는 해당 overlay만 복구합니다. 실제 Canonical 성공 결과를 적용하되 Native expectedVersion 조건으로 더 최신 server version과 다른 mutation을 보호합니다. source에서 이미 삭제된 거래를 pending·완료 Canonical로 재삽입하지 않습니다. 첫 목록 이전 pending은 실제 source publish까지 보류하고 먼저 도착한 완료는 ack한 뒤 server-first 조회로 수렴합니다. 삭제·분할·타 기기 변경은 기존 서버 수렴 경로를 유지합니다. 추적성은 `LED-001`·`LED-005`, `T-QE-009`입니다.
+
 ### 5.4 Split
 
 1. kind별 payload와 write-limit policy를 먼저 검증합니다.

@@ -11,6 +11,12 @@ const mockScheduleAfterWebFirstHomeCompletePaint = jest.fn((
   _options?: { delayAfterPaintMs?: number; idleTimeoutMs?: number; fallbackMs?: number }
 ) => jest.fn());
 let mockSessionVerified = true;
+let mockRemoteReadEpoch = 0;
+const mockStopQuickEditUpdates = jest.fn();
+const mockStartQuickEditUpdates = jest.fn((..._args: unknown[]) => mockStopQuickEditUpdates);
+jest.mock('@/composition/androidQuickEditUpdates', () => ({
+  startAndroidQuickEditUpdates: (...args: unknown[]) => mockStartQuickEditUpdates(...args),
+}));
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ prefetch: mockRoutePrefetch }),
@@ -25,6 +31,7 @@ jest.mock('@/contexts/HouseholdContext', () => ({
     householdKey: 'household-1',
     currentMember: { id: 'member-1', name: '멤버', aggregateVersion: 1 },
     recoverRemoteSession,
+    remoteReadEpoch: mockRemoteReadEpoch,
   }),
 }));
 
@@ -96,7 +103,18 @@ describe('Android native 복귀 원격 읽기 갱신 계약', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSessionVerified = true;
+    mockRemoteReadEpoch = 0;
     mockRefreshAndroidHostSession.mockResolvedValue(undefined);
+  });
+
+  it('같은 identity의 인증 복구도 새 Web scope로 QuickEdit 연결을 다시 시작한다', () => {
+    const view = render(<AuthenticatedPlatformEffects />);
+    expect(mockStartQuickEditUpdates).toHaveBeenCalledTimes(1);
+    mockRemoteReadEpoch += 1;
+    view.rerender(<AuthenticatedPlatformEffects />);
+    expect(mockStopQuickEditUpdates).toHaveBeenCalledTimes(1);
+    expect(mockStartQuickEditUpdates).toHaveBeenCalledTimes(2);
+    view.unmount();
   });
 
   it('검증된 Android 세션은 첫 원장 paint를 기다리지 않고 FID 등록 동기화를 시작한다', () => {

@@ -1,3 +1,5 @@
+import type { QuickEditFeedbackScope } from './quickEditUpdateFeedback';
+
 export const ANDROID_BRIDGE_CONTRACT_VERSION = 'android-bridge.v1' as const;
 export const ANDROID_BRIDGE_RESPONSE_CONTRACT_VERSION = 'android-bridge-response.v1' as const;
 
@@ -7,6 +9,11 @@ interface AndroidBridgeRequestMap {
   'session.refresh': Record<string, never>;
   'app.get-version': Record<string, never>;
   'performance.get-app-launch-duration': Record<string, never>;
+  'quick-edit.get-update-feedback': QuickEditFeedbackScope;
+  'quick-edit.ack-update-feedback': QuickEditFeedbackScope & {
+    nativeSessionGeneration: number;
+    commandIds: string[];
+  };
   'quick-edit.get-overlay-enabled': { householdId: string; memberId: string };
   'quick-edit.set-overlay-enabled': {
     householdId: string;
@@ -54,6 +61,8 @@ interface AndroidBridgeResultMap {
   'session.refresh': { householdId: string; memberId: string; sessionGeneration: number };
   'app.get-version': { version: string | null };
   'performance.get-app-launch-duration': { durationMs: number | null };
+  'quick-edit.get-update-feedback': unknown;
+  'quick-edit.ack-update-feedback': unknown;
   'quick-edit.get-overlay-enabled': { enabled: boolean };
   'quick-edit.set-overlay-enabled': Record<string, never>;
 }

@@ -23,6 +23,7 @@ import { preloadLedgerMutationRuntime } from '@/composition/ledgerMutationRuntim
 import { AppDialogProvider } from '@/contexts/AppDialogContext';
 import { REMOTE_SESSION_RECOVERY_REQUESTED_EVENT } from '@/platform/functions-api/firebaseCallableRecovery';
 import { clearRetiredHomeReadSnapshots } from '@/platform/read-model/retiredHomeReadSnapshotCleanup';
+import { startAndroidQuickEditUpdates } from '@/composition/androidQuickEditUpdates';
 
 const MUTATION_PRELOAD_DELAY_AFTER_LEDGER_MS = 3_000;
 const MUTATION_PRELOAD_IDLE_TIMEOUT_MS = 15_000;
@@ -55,7 +56,15 @@ export function AuthenticatedPlatformEffects() {
     householdKey,
     currentMember,
     recoverRemoteSession,
+    remoteReadEpoch,
   } = useHousehold();
+
+  useEffect(() => {
+    if (sessionState !== 'ready' || !isSessionVerified || adminHouseholdView !== null) return;
+    const scope = getClientSessionScope();
+    if (!scope || scope.householdId !== householdKey || scope.memberId !== currentMember?.id) return;
+    return startAndroidQuickEditUpdates(scope);
+  }, [sessionState, isSessionVerified, adminHouseholdView, householdKey, currentMember?.id, remoteReadEpoch]);
 
   useEffect(() => {
     if (

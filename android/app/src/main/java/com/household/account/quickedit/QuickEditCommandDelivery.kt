@@ -34,6 +34,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.StateFlow
 
 sealed interface QuickEditCommandEnqueueResult {
     data object Accepted : QuickEditCommandEnqueueResult
@@ -81,6 +82,9 @@ object QuickEditCommandDelivery {
         )
         if (enqueueResult !is QuickEditCommandEnqueueResult.Accepted) return enqueueResult
 
+        withContext(Dispatchers.IO) {
+            runCatching { outbox(applicationContext).acceptUpdateFeedback(expectedScope, envelope.commandId) }
+        }
         deliveryScope.launch { flush(applicationContext) }
         return QuickEditCommandEnqueueResult.Accepted
     }
@@ -105,7 +109,10 @@ object QuickEditCommandDelivery {
                         it.scope == scope &&
                             it.deliveryState == QuickEditCommandDeliveryState.PENDING
                     } || pendingFailureNotificationCount(applicationContext) > 0
-                    if (requiresRecovery) scheduleRecovery(applicationContext)
+                    if (requiresRecovery) {
+                        scheduleRecovery(applicationContext)
+                        outbox(applicationContext).acceptUpdateFeedback(scope)
+                    }
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -222,6 +229,23 @@ object QuickEditCommandDelivery {
     }
 
     private fun currentScope(context: Context) = HouseholdPreferences.currentScope(context)
+
+    fun updateFeedbackChanges(context: Context): StateFlow<Long> = outbox(context).updateFeedbackChanges
+
+    suspend fun updateFeedback(context: Context, scope: CaptureSessionScope): List<QuickEditUpdateFeedback> =
+        withContext(Dispatchers.IO) {
+            check(isCurrentSession(context, scope)) { "SESSION_SCOPE_MISMATCH" }
+            outbox(context).updateFeedback(scope).also {
+                check(isCurrentSession(context, scope)) { "SESSION_SCOPE_MISMATCH" }
+            }
+        }
+
+    suspend fun acknowledgeUpdateFeedback(context: Context, scope: CaptureSessionScope, commandIds: Set<String>) =
+        withContext(Dispatchers.IO) {
+            check(isCurrentSession(context, scope)) { "SESSION_SCOPE_MISMATCH" }
+            outbox(context).acknowledgeUpdateFeedback(scope, commandIds)
+            check(isCurrentSession(context, scope)) { "SESSION_SCOPE_MISMATCH" }
+        }
 
     fun isCurrentSession(context: Context, expectedScope: CaptureSessionScope): Boolean =
         QuickEditCommandDeliveryLifecycle.isCurrentSession(expectedScope, currentScope(context))

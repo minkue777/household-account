@@ -20,6 +20,7 @@ interface PendingMutation<Entity extends VersionedEntity> {
   readonly original?: Entity;
   canonical?: Entity;
   committed: boolean;
+  readonly expectedVersion?: number;
 }
 
 export interface OptimisticProjectionSubscription<Entity> {
@@ -109,8 +110,14 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
     return base ? this.applyMutations([base])[0] : undefined;
   }
 
-  beginUpdate(entityId: string, patch: Partial<Entity>): string {
-    return this.begin({ entityId, kind: 'update', patch });
+  sourceCurrent(entityId: string): Entity | undefined {
+    return Array.from(this.subscriptions.values()).flatMap(({ base }) => base)
+      .filter((entity) => entity.id === entityId)
+      .sort((left, right) => right.aggregateVersion - left.aggregateVersion)[0];
+  }
+
+  beginUpdate(entityId: string, patch: Partial<Entity>, expectedVersion?: number): string {
+    return this.begin({ entityId, kind: 'update', patch, expectedVersion });
   }
 
   /**
@@ -188,6 +195,7 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
     patch?: Partial<Entity>;
     canonical?: Entity;
     allowPendingUpdate?: boolean;
+    expectedVersion?: number;
   }): string {
     const existingMutations = Array.from(this.pending.values())
       .filter(({ entityId }) => entityId === input.entityId);
@@ -205,8 +213,9 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
       throw new Error(`${this.prefix.toUpperCase()}_MUTATION_ALREADY_PENDING`);
     }
     const original = this.current(input.entityId);
-    const patch = input.kind === 'update' && original && input.patch
-      ? { ...input.patch, aggregateVersion: original.aggregateVersion + 1 }
+    const baseVersion = input.expectedVersion ?? original?.aggregateVersion;
+    const patch = input.kind === 'update' && baseVersion !== undefined && input.patch
+      ? { ...input.patch, aggregateVersion: baseVersion + 1 }
       : input.patch;
     const id = operationId(`${this.prefix}-optimistic`);
     const observedBy = new Set<number>();
@@ -230,6 +239,7 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
       observedBy,
       subscriptionRevisionAtBegin,
       committed: false,
+      ...(input.expectedVersion === undefined ? {} : { expectedVersion: input.expectedVersion }),
     });
     this.emitAll();
     return id;
@@ -237,6 +247,16 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
 
   private reconcile(): void {
     this.pending.forEach((mutation, id) => {
+      // A native UPDATE cannot undo a later authoritative deletion/move. This
+      // only applies to its explicit expected-version hint, not Web date moves.
+      if (mutation.expectedVersion !== undefined && mutation.original) {
+        const removed = Array.from(this.subscriptions.entries()).some(([subscriptionId, subscription]) =>
+          mutation.observedBy.has(subscriptionId) && subscription.hasPublished
+          && subscription.revision > (mutation.subscriptionRevisionAtBegin.get(subscriptionId) ?? 0)
+          && subscription.accept(mutation.canonical ?? mutation.original!)
+          && !subscription.base.some((entity) => entity.id === mutation.entityId));
+        if (removed) { this.pending.delete(id); return; }
+      }
       if (!mutation.committed) return;
       if ((mutation.kind === 'create' || mutation.kind === 'update') && mutation.canonical) {
         const relevantSubscriptions = Array.from(this.subscriptions.entries())
@@ -330,6 +350,7 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
 
       const currentIndex = projected.findIndex((entity) => entity.id === mutation.entityId);
       const current = currentIndex >= 0 ? projected[currentIndex] : undefined;
+      if (mutation.expectedVersion !== undefined && !current) return;
       const source = (current === undefined
         ? mutation.original
         : mutation.original === undefined
@@ -338,6 +359,11 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
             ? current
             : mutation.original) ?? mutation.canonical;
       if (!source) return;
+
+      // An external native command can reach Web after a newer server snapshot.
+      // Its pending patch is only a hint for the exact version it edited.
+      if (!mutation.canonical && mutation.expectedVersion !== undefined
+        && source.aggregateVersion !== mutation.expectedVersion) return;
 
       const next = mutation.canonical === undefined
         ? {

@@ -9,6 +9,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 enum class QuickEditCommandDeliveryState {
     PENDING,
@@ -62,6 +65,10 @@ class QuickEditCommandOutbox(
 ) {
     private val mutex = Mutex()
     private val deliveryMutex = Mutex()
+    private val completedUpdates = linkedMapOf<String, CompletedQuickEditUpdateFeedback>()
+    private val acceptedUpdates = mutableSetOf<String>()
+    private val feedbackRevision = MutableStateFlow(0L)
+    val updateFeedbackChanges: StateFlow<Long> = feedbackRevision.asStateFlow()
 
     suspend fun enqueue(
         scope: CaptureSessionScope,
@@ -109,6 +116,11 @@ class QuickEditCommandOutbox(
                 it.deliveryState == QuickEditCommandDeliveryState.PENDING &&
                     it.scope == currentScope &&
                     currentScope.isUsable
+            }.also { entries ->
+                // 실제 Worker 전달 시작도 영속 예약 성공이 확인된 접수 경계입니다.
+                if (acceptedUpdates.addAll(entries.filter { it.envelope.command == HouseholdCommandKind.UPDATE }.map { it.envelope.commandId })) {
+                    feedbackRevision.value += 1
+                }
             }
         }
 
@@ -132,7 +144,7 @@ class QuickEditCommandOutbox(
             }
 
             when (result) {
-                is HouseholdCommandResult.Succeeded -> removeEntry(entry.envelope.commandId)
+                is HouseholdCommandResult.Succeeded -> completeEntry(entry.envelope.commandId, result.value)
                 is HouseholdCommandResult.RetryableFailure -> break
                 is HouseholdCommandResult.Conflict -> {
                     updateEntry(entry.envelope.commandId) { current ->
@@ -173,14 +185,50 @@ class QuickEditCommandOutbox(
         val next = entries.filterNot {
             it.envelope.commandId == commandId && it.failureNotificationPending
         }
-        if (next != entries) store.replace(next)
+        if (next != entries) {
+            store.replace(next)
+            feedbackRevision.value += 1
+        }
     }
 
     suspend fun purgeForSessionTransition() = deliveryMutex.withLock {
-        mutex.withLock { store.clear() }
+        mutex.withLock {
+            store.clear()
+            completedUpdates.clear()
+            acceptedUpdates.clear()
+            feedbackRevision.value += 1
+        }
     }
 
     suspend fun snapshot(): List<QuickEditCommandOutboxEntry> = mutex.withLock { store.load() }
+
+    /** WorkManager 영속 예약에 성공한 명령만 Web의 낙관적 pending으로 공개합니다. */
+    suspend fun acceptUpdateFeedback(scope: CaptureSessionScope, commandId: String? = null) = mutex.withLock {
+        val ids = store.load().filter {
+            it.scope == scope && it.envelope.command == HouseholdCommandKind.UPDATE &&
+                it.deliveryState == QuickEditCommandDeliveryState.PENDING &&
+                (commandId == null || it.envelope.commandId == commandId)
+        }.map { it.envelope.commandId }
+        if (acceptedUpdates.addAll(ids)) feedbackRevision.value += 1
+    }
+
+    /** pending과 완료 결과 사이에 빈 구간이 없도록 같은 저장소 mutex로 조회합니다. */
+    suspend fun updateFeedback(scope: CaptureSessionScope): List<QuickEditUpdateFeedback> = mutex.withLock {
+        pruneCompletedUpdates()
+        val entries = store.load().filter { it.scope == scope }
+        val activeIds = entries.map { it.envelope.commandId }.toSet()
+        completedUpdates.values.filter { it.scope == scope && it.feedback.commandId !in activeIds }.map { it.feedback } +
+            entries.mapNotNull {
+                if (it.deliveryState == QuickEditCommandDeliveryState.PENDING && it.envelope.commandId !in acceptedUpdates) null
+                else it.updateFeedback(if (it.deliveryState == QuickEditCommandDeliveryState.PENDING) "pending" else "failed")
+            }
+    }
+
+    /** 전달 대기 명령은 ack로 삭제하지 않습니다. Web에 인계한 프로세스 메모리 결과만 정리합니다. */
+    suspend fun acknowledgeUpdateFeedback(scope: CaptureSessionScope, commandIds: Set<String>) = mutex.withLock {
+        val changed = completedUpdates.entries.removeAll { (id, result) -> id in commandIds && result.scope == scope }
+        if (changed) feedbackRevision.value += 1
+    }
 
     suspend fun hasUnrecoverableLossNotificationPending(): Boolean = mutex.withLock {
         store.hasUnrecoverableLossNotificationPending()
@@ -205,10 +253,21 @@ class QuickEditCommandOutbox(
             copy(idempotencyKey = submitted.idempotencyKey) == submitted
     }
 
-    private suspend fun removeEntry(commandId: String) = mutex.withLock {
+    private suspend fun completeEntry(commandId: String, canonical: Any?) = mutex.withLock {
         val entries = store.load()
+        val completed = entries.firstOrNull { it.envelope.commandId == commandId }
         val next = entries.filterNot { it.envelope.commandId == commandId }
-        if (next != entries) store.replace(next)
+        if (next != entries) {
+            store.replace(next)
+            acceptedUpdates.remove(commandId)
+            completed?.let { entry ->
+                if (entry.envelope.command == HouseholdCommandKind.DELETE || entry.envelope.command == HouseholdCommandKind.SPLIT) {
+                    completedUpdates.entries.removeAll { it.value.scope == entry.scope && it.value.feedback.transactionId == entry.transactionId }
+                }
+                entry.updateFeedback("succeeded", canonical)?.let { rememberCompleted(entry.scope, it) }
+            }
+            feedbackRevision.value += 1
+        }
     }
 
     private suspend fun updateEntry(
@@ -219,7 +278,27 @@ class QuickEditCommandOutbox(
         val next = entries.map { entry ->
             if (entry.envelope.commandId == commandId) transform(entry) else entry
         }
-        if (next != entries) store.replace(next)
+        if (next != entries) {
+            store.replace(next)
+            next.firstOrNull { it.envelope.commandId == commandId && it.deliveryState == QuickEditCommandDeliveryState.NEEDS_ATTENTION }?.let { entry ->
+                acceptedUpdates.remove(commandId)
+                entry.updateFeedback("failed")?.let { rememberCompleted(entry.scope, it) }
+            }
+            feedbackRevision.value += 1
+        }
+    }
+
+    private fun rememberCompleted(scope: CaptureSessionScope, feedback: QuickEditUpdateFeedback) {
+        completedUpdates[feedback.commandId] = CompletedQuickEditUpdateFeedback(scope, feedback, nowEpochMillis())
+        pruneCompletedUpdates()
+    }
+
+    private fun pruneCompletedUpdates() {
+        val now = nowEpochMillis()
+        completedUpdates.entries.removeAll { now - it.value.completedAtEpochMillis >= MAX_RETRY_WINDOW_MILLIS }
+        while (completedUpdates.size > MAX_COMPLETED_UPDATE_FEEDBACK) {
+            completedUpdates.remove(completedUpdates.keys.first())
+        }
     }
 
     private fun QuickEditCommandOutboxEntry.toNeedsAttention(
@@ -234,6 +313,7 @@ class QuickEditCommandOutbox(
 
     companion object {
         const val MAX_RETRY_WINDOW_MILLIS = 72L * 60L * 60L * 1_000L
+        internal const val MAX_COMPLETED_UPDATE_FEEDBACK = 256
         private const val COMMAND_TIMEOUT_MILLIS = 30_000L
         private const val RETRY_WINDOW_EXPIRED = "QUICK_EDIT_RETRY_WINDOW_EXPIRED"
         private const val VERSION_CONFLICT = "VERSION_MISMATCH"

@@ -3,7 +3,7 @@
 `node tools/requirements/update-catalog.mjs`로 생성합니다. 실행 결과나 구현 완료 개수가 아닌 문서 선언 집계입니다.
 
 - 요구사항: 248개 (고유 ID 248개)
-- Canonical 테스트 시나리오 ID: 233개
+- Canonical 테스트 시나리오 ID: 234개
 
 | 소유 영역 | 요구사항 |
 |---|---:|
@@ -30,7 +30,7 @@
 | [contexts/portfolio/modules/dividends](contexts/portfolio/modules/dividends/requirements.md) | 8 | 8 |
 | [contexts/portfolio/modules/holdings-market-data](contexts/portfolio/modules/holdings-market-data/requirements.md) | 17 | 15 |
 | [contexts/portfolio/modules/portfolio](contexts/portfolio/modules/portfolio/requirements.md) | 9 | 12 |
-| [supporting-platform/modules/android-host](supporting-platform/modules/android-host/requirements.md) | 27 | 21 |
+| [supporting-platform/modules/android-host](supporting-platform/modules/android-host/requirements.md) | 27 | 22 |
 | [supporting-platform/modules/delivery-assurance](supporting-platform/modules/delivery-assurance/requirements.md) | 4 | 4 |
 | [supporting-platform/modules/external-operations](supporting-platform/modules/external-operations/requirements.md) | 6 | 6 |
 | [supporting-platform/modules/home-preferences](supporting-platform/modules/home-preferences/requirements.md) | 5 | 5 |
