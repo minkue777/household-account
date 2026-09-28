@@ -74,3 +74,13 @@ Native generation과 Web generation은 서로 다른 lifecycle 식별자입니�
 - 실제 기기 계측과 Native→Web E2E는 통과했으며 APK 공개는 준비 중입니다. 현재 문서 갱신 시점에는 아직 APK를 공개하지 않았습니다. 구현 SHA 이후의 테스트·검증 보완을 후속 커밋으로 반영할 예정이며 서명 빌드·로컬 검증·GitHub Release 공개·최종 SHA의 원격 CI를 구분합니다.
 
 실행 코드 변경은 Web과 Android이며 Firebase 서버 명령은 기존 계약을 재사용합니다. 최초 환경에서는 `.git` 읽기 전용 때문에 commit·push를 시도하지 않았고 `gh release` 목록 조회도 proxy `127.0.0.1:9`의 연결 거절로 실패했습니다. 이는 당시 환경 제한 이력이며 배포 재개 후 `git fetch`·네트워크 접근, 구현 commit·push와 Web 배포가 완료됐습니다. Firebase 재배포는 필요하지 않습니다. 현재 남은 항목은 테스트·검증 보완의 후속 커밋 반영, Android APK 공개와 최종 SHA의 전체 CI 확인입니다. 운영 금융 데이터는 수정하지 않았습니다.
+
+## 최종 배포와 원격 후속 확인
+
+테스트 보완과 실제 기기 E2E를 커밋 `9e451d9af3fe8aeb54eec8e354416769f5e39070`으로 push했습니다. [CI 36395601162](https://github.com/minkue777/household-account/actions/runs/36395601162)는 이 SHA의 다섯 검사와 결과 요약을 실행 중입니다. 특히 실제 Native→Web 검사가 이 실행에 포함되므로 뒤에 문서만 바뀐 SHA에서 Android 범위 미해당으로 성공하더라도 이 실행의 실제 기기 결과를 함께 확인합니다.
+
+[Android v1.2.31 Release](https://github.com/minkue777/household-account/releases/tag/v1.2.31)를 공개했습니다. tag와 targetCommitish는 모두 위 `9e451d9` 전체 SHA이며 공개 asset은 `uploaded`입니다. 직접 APK URL의 HTTP 200, 11,421,551 bytes와 위 SHA-256 일치를 다시 다운로드해 확인했습니다. `0b6a286` 이후는 테스트·CI·문서 변경이므로 검증한 서명 APK의 제품 내용은 동일합니다. 이미 공개한 APK를 덮어쓰지 않습니다.
+
+첫 Web E2E 실패의 trace에서는 UI 로그인(Auth HTTP 200)·가구 생성·홈 준비가 성공한 뒤 fixture의 추가 로그인 요청만 약 3.37ms 만에 연결 종료됐습니다. 다음 테스트의 인증·가구 생성은 정상입니다. 예산/지출 assertion 이전이며 timeout 실패도 아닙니다. 정확한 TCP 종료 주체는 확정할 수 없으므로 제품 수정 근거로 삼거나 해결 완료로 기록하지 않습니다. 실패 artifact는 `%TEMP%/household-quickedit-feedback-ci-web-36394421689`에 보존했습니다. 무변경 재실행이나 검사 완화 없이 새 검증 커밋의 CI에서 후속 결과를 확인합니다.
+
+개발·Web 배포·서명 APK 공개는 완료했으며 원격 CI의 최종 성공 확인이 남았습니다. 이 절 이전의 미공개·진행 예정 문구는 해당 확인 시점의 이력입니다.
