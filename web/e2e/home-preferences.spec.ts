@@ -1,12 +1,14 @@
 import { expect, test } from '@playwright/test';
 import { createHouseholdThroughUi, executeHouseholdCommand, resetTestAccount } from './emulator';
 import { documents } from './portfolio-helpers';
+import { observeFirestoreListenResponses } from './firestore-listen-observation';
 
 test.beforeEach(async () => { await resetTestAccount(); });
 
 test('[T-HOME-002][T-HOME-003][HOME-001][HOME-003][HOME-004] 기본 홈 카드와 실제 설정 Command·version 충돌·동일 카드 거절을 검증한다', async ({ page, request }, testInfo) => {
-  // 열린 Listen 응답은 Playwright trace에 본문이 남지 않습니다. 요청 내용·인증값을
-  // 복제하지 않고 전송 수명만 기록하여 저장 실패와 실시간 전달 지연을 구분합니다.
+  const responseObservation = await observeFirestoreListenResponses(page);
+  // 열린 Listen 응답은 Playwright trace에 본문이 남지 않습니다. 허용된 응답 필드와
+  // 전송 수명을 함께 관측하며 요청 내용·인증값은 기록하지 않습니다.
   const listens: { startedAt: number; method: string; acknowledgedMessageId: string | null; status?: number; finishedAt?: number; error?: string }[] = [];
   const listeningRequests = new Map<import('@playwright/test').Request, typeof listens[number]>();
   page.on('request', value => {
@@ -43,15 +45,28 @@ test('[T-HOME-002][T-HOME-003][HOME-001][HOME-003][HOME-004] 기본 홈 카드�
     await expect(page.locator('.balance-card-glass').nth(1)).toContainText('지역화폐 잔액');
     await expect(page.locator('.balance-card-glass').nth(1)).toContainText('데이터 없음');
     expect(listens.length, '실제 Firestore Listen 전송을 진단 기록에 보존한다').toBeGreaterThan(0);
+    await expect.poll(async () => (await responseObservation.read())?.entries ?? [], {
+      message: '실제 Listen 응답에서 저장된 홈 설정 문서가 전달되는지 확인합니다.', timeout: 30_000,
+    }).toContainEqual(expect.objectContaining({
+      kind: 'documentChange', householdId: scope.householdId,
+      left: 'YEARLY_EXPENSE', right: 'LOCAL_CURRENCY_BALANCE', aggregateVersion: 1,
+    }));
+    expect(await responseObservation.read()).toMatchObject({ parseErrors: 0, truncated: false });
+    await testInfo.attach('home-preferences-listen-responses', {
+      body: JSON.stringify(await responseObservation.read()), contentType: 'application/json',
+    });
   } catch (error) {
     await testInfo.attach('home-preferences-live-read', {
       body: JSON.stringify({
         stored: stored.map(({ left, right, aggregateVersion }) => ({ left, right, aggregateVersion })),
         cards: await page.locator('.balance-card-glass').allTextContents(),
         listens,
+        responses: await responseObservation.read(),
       }), contentType: 'application/json',
     });
     throw error;
+  } finally {
+    await responseObservation.stop();
   }
   await executeHouseholdCommand(request, save);
   expect(await documents(request, `households/${scope.householdId}/homePreferences`)).toEqual(stored);
