@@ -3,4 +3,7 @@
 - Do not use informal speech.
 - Write git commit messages in Korean.
 
+## Skills
+- Do not use the impeccable skill in this project.
+
 

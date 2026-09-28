@@ -122,7 +122,7 @@ function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance, sourceHistory 
       },
     },
   }), [chartMotion]);
-  const tableRows = rows.filter(row => row.change !== null).reverse();
+  const tableRows = rows.filter(row => row.change !== null && (view === 'monthly' || row.change !== 0)).reverse();
 
   return (
     <section className="rounded-2xl border border-slate-100 bg-white p-[14px] shadow-sm">
@@ -162,7 +162,7 @@ function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance, sourceHistory 
           변동 내역을 불러오지 못했습니다.
           <button type="button" className="ml-2 underline" onClick={() => setRevision(value => value + 1)}>다시 시도</button>
         </p>
-      ) : tableRows.length === 0 ? (
+      ) : rows.every(row => row.change === null) ? (
         <p className="py-8 text-center text-sm text-slate-400">변동 데이터가 없습니다</p>
       ) : <>
         <div className="mb-3 h-[180px]"><Bar data={chartData} options={chartOptions} /></div>
@@ -175,7 +175,9 @@ function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance, sourceHistory 
           <span>{view === 'monthly' ? '월별 자산 변동' : '일별 자산 변동'}</span>
           {showProfitTable ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
-        {showProfitTable && (
+        {showProfitTable && (tableRows.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-400">변동 내역이 없습니다</p>
+        ) : (
           <div className="tabular-nums">
             <div className="flex items-center border-b border-slate-100 pb-1 text-[12px] font-medium tracking-[-0.01em] text-slate-400">
               <span className="w-11 shrink-0">{view === 'monthly' ? '월' : '일'}</span>
@@ -192,7 +194,7 @@ function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance, sourceHistory 
               ))}
             </div>
           </div>
-        )}
+        ))}
       </>}
     </section>
   );

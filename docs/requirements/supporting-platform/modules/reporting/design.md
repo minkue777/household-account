@@ -108,6 +108,7 @@ interface ReportingRequestIdentity {
 
 ### 4.3 자산 집계
 
+- 일별 증감 상세 행은 원천·차트 series와 분리하여 `change === 0`인 날짜 행을 숨긴다. 전체 관측값이 0이어도 차트와 유효한 원천을 유지하고 상세 목록에만 변동 내역 없음 상태를 표시한다. 월별 상세 행과 집계 계산은 그대로 유지한다.
 - 기본 기간은 최근 3개월이다.
 - `financialOnly=true`이면 property와 loan을 제외한다.
 - `ALL`은 저장소의 가장 오래된 유효 snapshot부터 현재까지이며 고정 연도를 사용하지 않는다. 유효 snapshot이 없으면 `NoData`다.
