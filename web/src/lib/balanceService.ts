@@ -5,7 +5,8 @@ import {
   onSnapshot,
   timestampToDate,
 } from '@/platform/read-model/firestoreReadModel';
-import { requireClientSessionScope } from '@/composition/clientSessionScope';
+import { getClientSessionScope, requireClientSessionScope } from '@/composition/clientSessionScope';
+import { recordClientStartupTiming } from '@/platform/performance/clientStartupDiagnostics';
 
 export interface LocalCurrencyBalance {
   balance: number;
@@ -25,6 +26,7 @@ export function subscribeToLocalCurrencyBalance(
   options: LocalCurrencyBalanceSubscriptionOptions = {}
 ): () => void {
   const scope = requireClientSessionScope();
+  let active = true;
   let balances = new Map<string, LocalCurrencyBalance>();
   let balancesLoaded = false;
   let preferenceLoaded = false;
@@ -40,10 +42,14 @@ export function subscribeToLocalCurrencyBalance(
       'homePreferences',
       'home'
     );
+    recordClientStartupTiming('currencyPreferencesListenStarted');
     unsubscribePreference = onSnapshot(
       preferenceReference,
       { includeMetadataChanges: true },
       (snapshot) => {
+        if (active && getClientSessionScope() === scope && snapshot.metadata.fromCache === false) {
+          recordClientStartupTiming('currencyPreferencesServerSnapshotReceived');
+        }
         if (!preferenceLoaded && snapshot.metadata.fromCache) return;
         const data = snapshot.exists() ? snapshot.data() : undefined;
         selectedType =
@@ -81,10 +87,14 @@ export function subscribeToLocalCurrencyBalance(
     scope.householdId,
     'localCurrencyBalances'
   );
+  recordClientStartupTiming('currencyBalancesListenStarted');
   const unsubscribeBalances = onSnapshot(
     balancesReference,
     { includeMetadataChanges: true },
     (snapshot) => {
+      if (active && getClientSessionScope() === scope && snapshot.metadata.fromCache === false) {
+        recordClientStartupTiming('currencyBalancesServerSnapshotReceived');
+      }
       if (!balancesLoaded && snapshot.metadata.fromCache) return;
       balances = new Map(
         snapshot.docs.flatMap((balanceDocument) => {
@@ -125,6 +135,7 @@ export function subscribeToLocalCurrencyBalance(
   );
 
   return () => {
+    active = false;
     unsubscribeBalances();
     unsubscribePreference?.();
   };

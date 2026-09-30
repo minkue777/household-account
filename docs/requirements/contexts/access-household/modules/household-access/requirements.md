@@ -130,6 +130,16 @@
 | ADM-005 | 목표 명세 | `systemAdmin` 관리자는 `/admin` 한 화면에서 관리자 API 상태·배포 리비전, 최근 24시간 Android·iPhone 홈 화면 PWA의 앱 실행부터 첫 화면 전체 표시까지의 호출 수·평균·P95·최대 시간, Cloud Functions 로직별 처리 시간, 예약 작업별 최신 실행, 열린 장애, 외부 공급자 상태와 활성/삭제 가구·가구원 현황을 조회한다. 첫 화면 전체 표시는 월 원장·카테고리·지역화폐와 현재 홈 설정이 노출하는 연간 합계가 모두 최신 서버 결과로 성공한 뒤 실제 paint된 시점이다. 활성 로그인 사용자의 오늘 접속 횟수·누적 접속 횟수·최근 접속 시각은 사용자별로 비교할 수 있어야 한다. 알림 Outbox 문서 생성부터 FCM provider 응답·결과 저장 완료까지도 독립 업무로 표시한다. | 별도 Grafana 서버는 두지 않는다. 운영 상태는 서버가 이미 보존하는 Operations Read Model을 읽고, 처리 시간은 Cloud Logging의 `interactive-latency` 중 endpoint·operation·status·elapsedMs·timestamp만 관리자 서버에서 집계한다. Android는 Activity 생성 시점의 단조 시계, iPhone 홈 화면 PWA는 Web Navigation 시작 시점을 사용하며 일반 Web 접속은 모바일 앱 시작 표본에 섞지 않는다. 동일 앱 문서·Activity에서 한 번만 기록하고 2분을 넘거나 실패로 끝난 초기화는 성공 표본으로 만들지 않는다. custom-token 세션 생성 시간은 일반 앱 재실행을 뜻하지 않으므로 수집·표시하지 않는다. `ledger.request-notification.v1`은 Outbox 요청 저장 시간일 뿐 수신 체감 지표가 아니며, `access.list-asset-owner-profiles.v1`은 관리자 가구 상세 화면 자체의 보조 조회이므로 관리자 성능 표에서 제외한다. 알림 발송 시간의 성공 종점은 FCM이 요청을 접수한 시점이며 OS가 실제 알림을 표시했음을 증명하지 않는다. `succeeded`·`rejected`·`failed`는 성공·제외/거절·실패 건수로 각각 집계한다. 카드번호 불일치 등 정책상 제외를 실패에 합치거나 성공으로 바꾸지 않으며 호출 수는 세 결과의 합이다. 표시 단위는 초로 통일하고, 각 operation은 사람이 바로 이해할 수 있는 업무명과 내부 ID를 함께 표시한다. 사용자·가구·거래 식별자와 correlation 원문은 응답하지 않는다. 관리자 조회 실패를 정상으로 표시하지 않으며 공급자·예약 작업의 기록 없음도 `degraded`로 구분한다. | [admin dashboard](../../../../../../web/src/components/admin/AdminOperationsOverview.tsx), [admin dashboard reader](../../../../../../functions/src/adapters/google-cloud/admin/googleCloudInteractiveLatencyReader.ts) | C, UI, I |
 | ADM-006 | 목표 명세 | 사용자별 접속 횟수는 Google 재인증 횟수가 아니라 인증된 Membership으로 앱 화면 준비가 완료된 문서 생명주기당 1회로 집계한다. | 첫 화면 표시 후 비동기로 기록하여 사용자 화면을 기다리게 하지 않는다. 서버가 검증한 householdId·memberId만 사용하고 같은 visitId 재전송은 중복 집계하지 않는다. 일별 상세는 최근 30일, 누적 횟수와 최근 접속 시각은 계속 보존하며 관리자 화면은 최근 14일 추이를 표시한다. 집계 도입 전 과거 접속 횟수는 추정하지 않는다. iPhone PWA 시작 표본에는 선택적으로 navigation 기준 단계 시각·실행 Web 빌드·캐시 경로·관측된 백그라운드 시간을 같은 로그에 보존한다. 진단 실패는 기존 접속·총시간을 막지 않으며 없는 관측은 추정하지 않는다. | [member access policy](../../../../../../functions/src/platform/usage-observability/domain/memberAccessStats.ts), [member access telemetry](../../../../../../web/src/platform/usage/memberAccessTelemetry.ts) | U, C, I |
 
+`ADM-006`의 2026-09-30 확장: iPhone 진단 v1은 인증 token callback 관측,
+이미 완료된 token 요청의 Resource Timing, 가구 서버 조회와 홈 read-model 구독 시작,
+mapper 전 서버 snapshot 수신을 선택적으로 기록한다. 연간 합계의 최초 callback은 캐시일
+수 있으므로 서버 callback과 구분한다. 모든 시각은 navigation 기준이며 기존 Ready/paint와
+접속 집계 의미를 바꾸지 않는다. token callback은 Firestore 내부 token 취득 완료를,
+요청 완료는 HTTP 성공이나 유효 token을 보장하지 않는다. 지원되지 않거나 최종 기록 후인
+관측은 생략한다. 추가 요청·URL 원문·token·snapshot 자료는 보존하지 않는다.
+필드별 의미, 구버전 호환과 검증 계획은
+[운영 설계](../../../../../operations/ios-startup-read-phases-2026-09-30.md)에 따른다.
+
 ## 6. 모듈 결함
 
 - Firestore Rules가 가구 데이터의 인증·멤버십·`householdId` 불변식을 강제하지 않습니다.
@@ -177,6 +187,13 @@
 | T-ADM-005 | 목표·성능·멱등 | 같은 앱 문서의 동일 visitId 재전송, Android·iPhone PWA·일반 Web, 서울 날짜 경계, iPhone 시작 단계·백그라운드 전환·진단 누락/손상 / 첫 화면 전체 표시 후 접속 기록 / 첫 화면 렌더를 기다리게 하지 않고 사용자·일별·플랫폼 횟수를 한 번만 증가시키며 모바일 표본은 같은 visitId에서 한 번만 기록하고 최근 30일 상세과 누적 횟수를 보존. iPhone은 허용된 단계 시각·Web 빌드·캐시·관측된 숨김 시간만 같은 표본에 보존하며 진단 실패는 접속 집계·기존 전체 시간을 막지 않음 | ADM-006 |
 | T-HH-RULES-001 | 목표 | 인증 없음·같은 가구·다른 가구·관리자별 컬렉션 CRUD / Rules / 권한 행렬과 householdId 불변식 적용 | ADM-002 |
 | T-HH-SEC-001 | 목표 | 무인증 rename 호출 / 실행 / 권한 오류이며 어떤 모듈 데이터도 변경되지 않음 | ADM-002, HH-009 |
+
+`T-ADM-005`의 추가 경계값은 신규 선택 시각 16개의 0/전체 시간/소수점, 비유한 값·범위
+초과·숫자 아닌 값·비허용 키, 신규 키가 없는 기존 v1, Resource Timing 미지원·가려짐,
+캐시/서버 callback 분리, 해제되거나 scope가 바뀐 구독의 늦은 관측, 최종 기록 이후
+관측이다. 실제 구조화 logger까지 새 시각이 동일 total 로그에 한 번 보존되고 손상 진단은
+접속과 총시간을 막지 않는지 확인한다. 구독 callback의 계측 한정이 기존 데이터 전달과
+readiness를 바꾸지 않는지도 검증한다.
 
 `renameHouseholdMember`를 포함한 무인증 서버 쓰기 행렬은 [알림 모듈의 T-SEC-002](../../../notifications/modules/notifications/requirements.md#9-모듈-테스트-시나리오)에서 한 번만 정의하고 함께 검증합니다.
 

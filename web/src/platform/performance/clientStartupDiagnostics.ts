@@ -76,9 +76,13 @@ export function startClientStartupDiagnostics(startedAtMs?: number): void {
 }
 
 export function recordClientStartupTiming(timing: ClientStartupTiming, observedAtMs?: number): void {
-  if (!tracking || finished || tracking.timingsMs[timing] !== undefined) return;
-  const time = observedAtMs === undefined ? now() : validTime(observedAtMs);
-  if (time !== undefined) tracking.timingsMs[timing] = time;
+  try {
+    if (!tracking || finished || tracking.timingsMs[timing] !== undefined) return;
+    const time = observedAtMs === undefined ? now() : validTime(observedAtMs);
+    if (time !== undefined) tracking.timingsMs[timing] = time;
+  } catch {
+    // 계측 실패는 원래 인증 observer와 서버 snapshot callback을 막지 않습니다.
+  }
 }
 
 export function recordClientStartupCache<K extends keyof Cache>(key: K, value: Cache[K]): void {
@@ -90,6 +94,29 @@ export function recordClientStartupYearSummaryRequired(required: boolean): void 
   if (tracking && !finished) tracking.yearSummaryRequired = required;
 }
 
+/** 완료된 토큰 요청의 숫자 시각만 읽습니다. 갱신·네트워크 관측기를 추가하지 않습니다. */
+function readCompletedTokenRequest(end: number): Partial<Record<ClientStartupTiming, number>> {
+  try {
+    const resources = window.performance.getEntriesByType?.('resource') ?? [];
+    let first: { started: number; ended: number } | undefined;
+    for (const resource of resources) {
+      const entry = resource as PerformanceResourceTiming;
+      const started = validTime(entry.startTime);
+      const ended = validTime(entry.responseEnd);
+      if (started === undefined || ended === undefined || ended <= 0 || ended < started || ended > end) continue;
+      // origin/path만 비교하며 query·URL 원문은 보관하지 않습니다.
+      let url: URL;
+      try { url = new URL(entry.name); } catch { continue; }
+      if (url.origin !== 'https://securetoken.googleapis.com' || url.pathname !== '/v1/token') continue;
+      if (!first || started < first.started) first = { started, ended };
+    }
+    return first ? { authTokenRequestStarted: first.started, authTokenResponseEnd: first.ended } : {};
+  } catch {
+    // Resource Timing 미지원·제한·버퍼 누락은 미관측이며 0이나 cache hit로 추정하지 않습니다.
+    return {};
+  }
+}
+
 /** 첫 전체 paint 시점에 동결합니다. 이후 통계 전송/다른 화면은 시각을 바꾸지 않습니다. */
 export function completeClientStartupDiagnostics(completedAtMs?: number): ClientStartupDiagnostics | undefined {
   if (finished) return captured;
@@ -99,7 +126,7 @@ export function completeClientStartupDiagnostics(completedAtMs?: number): Client
   const state = tracking;
   const end = completedAtMs === undefined ? now() : validTime(completedAtMs);
   if (end === undefined || state.visibilityTrackingStartedAtMs > end) return undefined;
-  const timingsMs = { ...state.timingsMs };
+  const timingsMs = { ...state.timingsMs, ...readCompletedTokenRequest(end) };
   let navigationType: ClientStartupDiagnostics['navigationType'];
   try {
     const navigation = window.performance.getEntriesByType?.('navigation')[0] as PerformanceNavigationTiming | undefined;

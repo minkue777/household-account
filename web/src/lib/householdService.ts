@@ -1,4 +1,6 @@
 import { resolveHomeSummaryConfig } from '@/features/home-preferences/application/homeSummaryConfig';
+import { getClientSessionScope } from '@/composition/clientSessionScope';
+import { recordClientStartupTiming } from '@/platform/performance/clientStartupDiagnostics';
 import {
   collection,
   doc,
@@ -52,9 +54,14 @@ function mapHouseholdSnapshot(docSnap: DocumentSnapshot<DocumentData>): Househol
 }
 
 export async function getHousehold(key: string): Promise<Household> {
-  const household = mapHouseholdSnapshot(
-    await getDocFromServer(doc(householdsCollection, key))
-  );
+  const scope = getClientSessionScope();
+  const reference = doc(householdsCollection, key);
+  if (scope?.householdId === key) recordClientStartupTiming('householdReadStarted');
+  const snapshot = await getDocFromServer(reference);
+  if (scope?.householdId === key && getClientSessionScope() === scope) {
+    recordClientStartupTiming('householdSnapshotReceived');
+  }
+  const household = mapHouseholdSnapshot(snapshot);
   if (!household) throw new HouseholdReadNotFoundError(key);
   return household;
 }

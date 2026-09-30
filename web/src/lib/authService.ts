@@ -15,6 +15,7 @@ import {
   User,
 } from 'firebase/auth';
 import { app } from './firebaseApp';
+import { recordClientStartupTiming } from '@/platform/performance/clientStartupDiagnostics';
 import {
   type AndroidSignedInUserResolution,
   isAndroidHostAvailable,
@@ -313,5 +314,9 @@ export function onAuthChange(callback: (user: User | null) => void): () => void 
   // onAuthStateChanged는 같은 사용자의 ID token 갱신을 알리지 않습니다.
   // 장시간 열린 Android WebView에서 token이 교체된 뒤 종료된 Firestore listener를
   // 다시 연결할 수 있도록 token lifecycle까지 포함하는 observer를 사용합니다.
-  return onIdTokenChanged(auth, callback);
+  return onIdTokenChanged(auth, (user) => {
+    // 기존 토큰 observer만 관측합니다. 추가 getIdToken/강제 갱신은 하지 않습니다.
+    if (user) recordClientStartupTiming('authTokenObserved');
+    callback(user);
+  });
 }

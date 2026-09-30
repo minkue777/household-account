@@ -51,9 +51,26 @@ async function acceptedAppVisit(observed: ReturnType<typeof observeAppVisits>) {
     };
   };
 }
+
+function expectServerReadinessOrder(timings: Record<string, number>) {
+  for (const [started, received, ready] of [
+    ['ledgerListenStarted', 'ledgerServerSnapshotReceived', 'ledgerReady'],
+    ['categoriesListenStarted', 'categoriesServerSnapshotReceived', 'categoriesReady'],
+    ['currencyPreferencesListenStarted', 'currencyPreferencesServerSnapshotReceived', 'localCurrencyReady'],
+    ['currencyBalancesListenStarted', 'currencyBalancesServerSnapshotReceived', 'localCurrencyReady'],
+  ]) {
+    for (const key of [started, received, ready, 'homeReady']) {
+      expect(timings, `${key}의 실제 SDK 또는 React 준비 관측이 있어야 합니다.`).toHaveProperty(key);
+    }
+    expect(timings[received], `${received}는 실제 구독 시작 이후여야 합니다.`).toBeGreaterThanOrEqual(timings[started]);
+    expect(timings[ready], `${ready}는 mapper 전 서버 callback 이후여야 합니다.`).toBeGreaterThanOrEqual(timings[received]);
+    expect(timings.homeReady, `전체 홈은 ${ready} 이후 준비되어야 합니다.`).toBeGreaterThanOrEqual(timings[ready]);
+  }
+}
+
 test.beforeEach(async () => { await resetTestAccount(); });
 
-test('[T-SYS-008][T-ADM-005][ADM-006][AND-012][SYS-008] iPhone WebKit 재실행은 로그인 유지와 Firestore IndexedDB 대기 없이 최신 홈을 표시한다', async ({ page: initialPage, context, request }) => {
+test('[T-SYS-008][T-ADM-005][ADM-006][AND-012][SYS-008] iPhone WebKit 재실행은 로그인 유지와 Firestore IndexedDB 대기 없이 최신 홈을 표시한다', async ({ page: initialPage, context, request }, testInfo) => {
   let page = initialPage;
   // WebKit의 standalone 감지만 설정합니다. Auth/Firestore SDK와 서버 응답은 실제입니다.
   await observeIndexedDbOpens(page, true);
@@ -71,6 +88,19 @@ test('[T-SYS-008][T-ADM-005][ADM-006][AND-012][SYS-008] iPhone WebKit 재실행�
   const households = await readFirestoreCollection(request, 'households');
   expect(households).toHaveLength(1);
   const householdId = households[0].name.split('/').at(-1)!;
+  expect(await readFirestoreCollection(request, `households/${householdId}/localCurrencyBalances`)).toHaveLength(0);
+  // 잔액 문서가 없는 실제 서버 snapshot도 수신·준비 단계로 관측되어야 합니다.
+  // fixture를 쓰기 전에 첫 접속 기록을 받아 이후 snapshot으로 가려지지 않게 합니다.
+  const initialVisit = await acceptedAppVisit(initialVisits);
+  const initialDiagnostics = initialVisit.clientStartupDiagnostics;
+  expect(initialDiagnostics, '빈 잔액으로 완료된 첫 홈에도 실제 시작 진단이 있어야 합니다.').toBeDefined();
+  if (!initialDiagnostics) throw new Error('IOS_INITIAL_STARTUP_DIAGNOSTICS_MISSING');
+  expectServerReadinessOrder(initialDiagnostics.timingsMs);
+  for (const [key, value] of Object.entries(initialDiagnostics.timingsMs)) {
+    expect(Number.isFinite(value), `첫 홈의 ${key}는 유한한 navigation offset이어야 합니다.`).toBe(true);
+    expect(value).toBeGreaterThanOrEqual(0);
+    expect(value).toBeLessThanOrEqual(initialVisit.clientStartupDurationMs);
+  }
   await writeFirestoreFixture(request, `households/${householdId}/homePreferences/home`, {
     left: { stringValue: 'MONTHLY_EXPENSE' }, right: { stringValue: 'LOCAL_CURRENCY_BALANCE' },
     aggregateVersion: { integerValue: '1' }, selectedLocalCurrencyType: { stringValue: 'gyeonggi' },
@@ -91,7 +121,6 @@ test('[T-SYS-008][T-ADM-005][ADM-006][AND-012][SYS-008] iPhone WebKit 재실행�
   let currencyCard = page.locator('.balance-card-glass').filter({ hasText: '지역화폐 잔액' });
   await expect(monthlyCard).toContainText('12,300');
   await expect(currencyCard).toContainText('25,789');
-  const initialVisit = await acceptedAppVisit(initialVisits);
 
   // 열린 stream을 가로채지 않고 실제 재실행을 검사합니다. 앱이 닫힌 동안
   // 서버 잔액을 바꿔 이전 화면의 값이 아니라 최신 결과를 읽는지 확인합니다.
@@ -149,7 +178,22 @@ test('[T-SYS-008][T-ADM-005][ADM-006][AND-012][SYS-008] iPhone WebKit 재실행�
       },
       marks: Object.fromEntries(performance.getEntriesByType('mark')
         .map((entry) => [entry.name, entry.startTime])),
+      // endpoint 일치 여부만 검사하고 URL·query·토큰 원문은 반환하거나 첨부하지 않습니다.
+      tokenRequests: (performance.getEntriesByType('resource') as PerformanceResourceTiming[])
+        .filter((entry) => {
+          const url = new URL(entry.name);
+          return url.origin === 'https://securetoken.googleapis.com' && url.pathname === '/v1/token';
+        })
+        .map((entry) => ({ startTime: entry.startTime, responseEnd: entry.responseEnd })),
     };
+  });
+  await testInfo.attach('ios-startup-read-phases', {
+    contentType: 'application/json',
+    body: Buffer.from(JSON.stringify({
+      initial: { durationMs: initialVisit.clientStartupDurationMs, timingsMs: initialDiagnostics.timingsMs },
+      restarted: { durationMs: restartedVisit.clientStartupDurationMs, timingsMs: diagnostics.timingsMs },
+      tokenRequests: browserTiming.tokenRequests,
+    }, null, 2)),
   });
   expect(diagnostics.navigationType).toBe(browserTiming.navigation.type);
   expect(Number.isFinite(restartedVisit.clientStartupDurationMs)).toBe(true);
@@ -175,11 +219,46 @@ test('[T-SYS-008][T-ADM-005][ADM-006][AND-012][SYS-008] iPhone WebKit 재실행�
     homeReady: 'home:ready', firstLedgerPaint: 'ledger:first-paint',
     firstHomeCompletePaint: 'home:first-complete-paint',
   };
-  for (const key of ['bootstrapStarted', 'authStarted', 'authReady', 'ledgerReady',
+  for (const key of ['bootstrapStarted', 'authStarted', 'authTokenObserved', 'authReady', 'ledgerReady',
     'categoriesReady', 'localCurrencyReady', 'homeReady', 'firstLedgerPaint', 'firstHomeCompletePaint']) {
     expect(timings, `${key}의 최초 실제 준비 시각을 기록해야 합니다.`).toHaveProperty(key);
   }
-  expect(timings.yearSummaryReady).toBeUndefined();
+  for (const key of ['yearSummaryListenStarted', 'yearSummaryFirstSnapshotReceived',
+    'yearSummaryServerSnapshotReceived', 'yearSummaryReady']) {
+    expect(timings[key], '필요하지 않은 연간 합계의 읽기·snapshot·준비 시각을 만들어서는 안 됩니다.').toBeUndefined();
+  }
+  expect(timings.authTokenObserved).toBeGreaterThanOrEqual(timings.authStarted);
+  expect(timings.authReady).toBeGreaterThanOrEqual(timings.authTokenObserved);
+  expectServerReadinessOrder(timings);
+  // 가구 metadata는 복원한 scope의 홈 읽기와 병렬이므로 homeReady의 선행조건으로 삼지 않습니다.
+  if (timings.householdReadStarted !== undefined) {
+    expect(timings.householdReadStarted).toBeGreaterThanOrEqual(timings.householdStarted);
+  }
+  if (timings.householdSnapshotReceived !== undefined) {
+    expect(timings).toHaveProperty('householdReadStarted');
+    expect(timings.householdSnapshotReceived).toBeGreaterThanOrEqual(timings.householdReadStarted);
+  }
+  if (timings.householdReady !== undefined) {
+    expect(timings).toHaveProperty('householdSnapshotReceived');
+    expect(timings.householdReady).toBeGreaterThanOrEqual(timings.householdSnapshotReceived);
+  }
+  const completedTokenRequests = browserTiming.tokenRequests.filter((entry) =>
+    entry.startTime >= 0 && entry.responseEnd > 0 && entry.responseEnd >= entry.startTime
+      && entry.responseEnd <= restartedVisit.clientStartupDurationMs
+  ).sort((left, right) => left.startTime - right.startTime);
+  if (timings.authTokenRequestStarted !== undefined || timings.authTokenResponseEnd !== undefined) {
+    expect(timings).toHaveProperty('authTokenRequestStarted');
+    expect(timings).toHaveProperty('authTokenResponseEnd');
+    expect(timings.authTokenResponseEnd).toBeGreaterThanOrEqual(timings.authTokenRequestStarted);
+    expect(completedTokenRequests.length, '토큰 단계는 paint 전에 완료된 실제 Resource Timing이 있어야 합니다.').toBeGreaterThan(0);
+    // startTime은 연결 준비 등을 포함한 리소스 시작이며 HTTP 전송 시작(requestStart)은 아닙니다.
+    expect(timings.authTokenRequestStarted).toBeCloseTo(completedTokenRequests[0].startTime, 2);
+    expect(timings.authTokenResponseEnd).toBeCloseTo(completedTokenRequests[0].responseEnd, 2);
+  }
+  if (completedTokenRequests.length === 0) {
+    expect(timings.authTokenRequestStarted, '완료된 요청 관측이 없으면 토큰 시작 시각을 추정하지 않습니다.').toBeUndefined();
+    expect(timings.authTokenResponseEnd, '완료된 요청 관측이 없으면 토큰 응답 시각을 추정하지 않습니다.').toBeUndefined();
+  }
   for (const [key, value] of Object.entries(timings)) {
     expect(Number.isFinite(value), `${key}는 유한한 navigation offset이어야 합니다.`).toBe(true);
     expect(value).toBeGreaterThanOrEqual(0);

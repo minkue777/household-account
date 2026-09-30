@@ -17,6 +17,7 @@ jest.mock('@/platform/read-model/firestoreReadModel', () => ({
 }));
 
 jest.mock('@/composition/clientSessionScope', () => ({
+  ...jest.requireActual('@/composition/clientSessionScope'),
   requireClientSessionScope: () => ({
     sessionGeneration: 1,
     principalUid: 'uid-1',

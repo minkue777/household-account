@@ -5,6 +5,14 @@ const TIMING_KEYS = [
   "membershipReady", "householdStarted", "householdReady", "ledgerReady",
   "categoriesReady", "localCurrencyReady", "yearSummaryReady", "homeReady",
   "firstLedgerPaint", "firstHomeCompletePaint",
+  "authTokenObserved", "authTokenRequestStarted", "authTokenResponseEnd",
+  "householdReadStarted", "householdSnapshotReceived",
+  "ledgerListenStarted", "ledgerServerSnapshotReceived",
+  "categoriesListenStarted", "categoriesServerSnapshotReceived",
+  "currencyPreferencesListenStarted", "currencyPreferencesServerSnapshotReceived",
+  "currencyBalancesListenStarted", "currencyBalancesServerSnapshotReceived",
+  "yearSummaryListenStarted", "yearSummaryFirstSnapshotReceived",
+  "yearSummaryServerSnapshotReceived",
 ] as const;
 
 export interface ClientStartupDiagnostics {

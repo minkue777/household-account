@@ -1,7 +1,14 @@
 export type ClientStartupTiming =
   | 'navigationResponseStart' | 'navigationResponseEnd' | 'domInteractive'
   | 'bootstrapStarted' | 'authStarted' | 'authReady'
+  | 'authTokenObserved' | 'authTokenRequestStarted' | 'authTokenResponseEnd'
   | 'membershipStarted' | 'membershipReady' | 'householdStarted' | 'householdReady'
+  | 'householdReadStarted' | 'householdSnapshotReceived'
+  | 'ledgerListenStarted' | 'ledgerServerSnapshotReceived'
+  | 'categoriesListenStarted' | 'categoriesServerSnapshotReceived'
+  | 'currencyPreferencesListenStarted' | 'currencyPreferencesServerSnapshotReceived'
+  | 'currencyBalancesListenStarted' | 'currencyBalancesServerSnapshotReceived'
+  | 'yearSummaryListenStarted' | 'yearSummaryFirstSnapshotReceived' | 'yearSummaryServerSnapshotReceived'
   | 'ledgerReady' | 'categoriesReady' | 'localCurrencyReady' | 'yearSummaryReady'
   | 'homeReady' | 'firstLedgerPaint' | 'firstHomeCompletePaint';
 

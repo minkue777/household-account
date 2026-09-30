@@ -17,7 +17,8 @@ import {
 import { Expense, MergedExpenseInfo, TransactionType } from '@/types/expense';
 import { ledgerOptimisticProjection } from '@/features/ledger/application/ledgerOptimisticProjection';
 import { isVisibleLedgerReadDocument } from '@/features/ledger/application/ledgerReadVisibility';
-import { requireClientSessionScope, type ClientSessionScope } from '@/composition/clientSessionScope';
+import { getClientSessionScope, requireClientSessionScope, type ClientSessionScope } from '@/composition/clientSessionScope';
+import { recordClientStartupTiming } from '@/platform/performance/clientStartupDiagnostics';
 import { compareLedgerTransactions } from '@/features/ledger/domain/ledgerTransactionOrder';
 import {
   ledgerMergedTransactionId,
@@ -421,7 +422,9 @@ function subscribeToMonthlyTransactionSource(
   transactionType: TransactionType | undefined,
   onError?: (error: unknown) => void
 ): () => void {
-  const householdId = getHouseholdId();
+  const scope = requireClientSessionScope();
+  const householdId = scope.householdId;
+  let active = true;
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
   const projection = ledgerOptimisticProjection.subscribe(
@@ -444,7 +447,11 @@ function subscribeToMonthlyTransactionSource(
 
   const readSnapshot = createExpenseSnapshotReader();
   let hasServerSnapshot = false;
+  recordClientStartupTiming('ledgerListenStarted');
   const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+    if (active && getClientSessionScope() === scope && snapshot.metadata.fromCache === false) {
+      recordClientStartupTiming('ledgerServerSnapshotReceived');
+    }
     if (!hasServerSnapshot && snapshot.metadata.fromCache) return;
     hasServerSnapshot = true;
     // Metadata events still advance authority/reconciliation, without decoding unchanged rows.
@@ -454,6 +461,7 @@ function subscribeToMonthlyTransactionSource(
   });
 
   return () => {
+    active = false;
     unsubscribe();
     projection.dispose();
   };
@@ -527,7 +535,9 @@ export function subscribeToDateRangeExpenses(
   callback: (expenses: Expense[]) => void,
   options: ExpenseQueryOptions = { transactionType: DEFAULT_TRANSACTION_TYPE }
 ): () => void {
-  const householdId = getHouseholdId();
+  const scope = requireClientSessionScope();
+  const householdId = scope.householdId;
+  let active = true;
   const transactionType = options.transactionType ?? DEFAULT_TRANSACTION_TYPE;
   const projection = ledgerOptimisticProjection.subscribe(
     callback,
@@ -547,13 +557,19 @@ export function subscribeToDateRangeExpenses(
   );
 
   const readSnapshot = createExpenseSnapshotReader();
+  recordClientStartupTiming('yearSummaryListenStarted');
   const unsubscribe = onSnapshot(q, (snapshot) => {
+    if (active && getClientSessionScope() === scope) {
+      recordClientStartupTiming('yearSummaryFirstSnapshotReceived');
+      if (snapshot.metadata?.fromCache === false) recordClientStartupTiming('yearSummaryServerSnapshotReceived');
+    }
     projection.publish(readSnapshot(snapshot));
   }, (error) => {
     options.onError?.(error);
   });
 
   return () => {
+    active = false;
     unsubscribe();
     projection.dispose();
   };

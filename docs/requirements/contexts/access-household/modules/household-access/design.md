@@ -573,3 +573,13 @@ partner 선택 정책은 [DEC-022](../../../../governance/decisions.md#dec-022),
 - 서버는 허용 필드만 재구성한다. 모든 시각은 유한한 0~전체 시간 범위, 숨김 횟수는 정수 0~1000, 빌드는 1~128자의 영숫자/점/밑줄/하이픈만 허용한다. 잘못된 추가 진단은 버리고 이미 유효한 접속·총시간은 보존한다. 기존 `clientStartupTimingsMs`는 이전처럼 무시한다.
 - 같은 `interactive-latency.v1` / `clientStartup` / `total` 로그의 `clientStartupDiagnostics`에 넣어 기존 관리자 집계와 표본 수를 유지한다. 별도 접속 저장·추가 요청·주기 조회는 만들지 않는다. 서버의 선택 필드 수용을 먼저 배포한 후 Web을 배포한다.
 - 검증: 서버 허용 목록·손상 무간섭·구버전·멱등·로그 비노출, Web visibility 전환·준비 순서·누락 API·플랫폼 분리, 실제 WebKit 재실행→Firebase 요청/응답 및 구조화 로그를 확인한다. 과거 운영 18초의 정확한 병목은 소급 복원할 수 없다.
+
+### iPhone 인증·서버 snapshot 관측 확장 (2026-09-30, ADM-006 / T-ADM-005)
+
+- [운영 설계와 검증 계획](../../../../../operations/ios-startup-read-phases-2026-09-30.md)에 정의한 16개 키를 v1 `timingsMs`의 선택 필드로 추가한다. 모든 값은 navigation 기준 offset이며 기존 Ready/paint, 총시간, 접속 1회 기준을 바꾸지 않는다. 새로운 관측을 기다리지 않고 최종 방문 기록 후의 늦은 관측은 버린다.
+- `authTokenObserved`는 기존 `onIdTokenChanged`의 `user != null` 관측이다. Firestore 내부 `getToken` 완료로 해석하지 않는다. `authTokenRequestStarted` / `authTokenResponseEnd`는 지원되는 브라우저에서 이미 완료된 `securetoken.googleapis.com/v1/token` Resource Timing에 한해 기록하며 추가 요청을 만들지 않는다. 지원되지 않거나 가려진 관측은 생략한다.
+- `householdReadStarted` / `householdSnapshotReceived`는 실제 서버 조회 직전과 mapper 전 수신을 구분한다. `ledger`, `categories`, `currencyPreferences`, `currencyBalances` 각각의 `ListenStarted` / `ServerSnapshotReceived`는 구독 직전과 mapper 전 최초 서버 callback을 구분한다. `yearSummaryListenStarted` / `yearSummaryFirstSnapshotReceived` / `yearSummaryServerSnapshotReceived`는 최초 callback의 캐시 가능성을 별도로 보존한다. 캐시 callback을 서버 도착으로 승격하지 않는다.
+- 서버는 새 키에도 기존 유한한 0~전체 시간 범위와 반올림, 허용 목록 정책을 적용한다. 모든 새 키가 없어도 구버전 v1을 수용하며 손상 진단만 생략해 접속과 전체 시간을 보존한다. 임의 선후 관계 검증이나 새로운 필수 키를 추가하지 않는다. 서버 수용을 먼저 배포한다.
+- URL 원문·query·토큰·snapshot 자료·사용자/가구 식별자는 수집하지 않고 동일 구조화 total 로그에 허용된 숫자만 보존한다. 검증은 신규 키별 범위·손상·누락·구버전, 실제 logger 보존과 중복 방지, Resource Timing 미지원, 캐시/서버 callback과 mapper 순서, 최종 기록 후 무시를 포함한다. 이 변경은 관측 보강이며 기존 8.357초 표본의 속도 개선이나 원인 확정이 아니다.
+- token Resource Timing은 HTTP 실패 응답도 포함할 수 있으며 인증 성공이나 유효한 token을 보장하지 않는다. 구독 callback 계측은 `active && capturedScope === getClientSessionScope()`이고 요청 household가 일치할 때만 수행하되 기존 callback 전달·오류 흐름과 연간 구독의 metadata 옵션은 유지한다. 가구 metadata 백그라운드 갱신은 homeReady의 필수 조건이 아니므로 해당 선택 시각을 강제하지 않는다.
+- `authTokenRequestStarted`는 Resource Timing의 `startTime`이며 연결 준비를 포함한다. `authTokenResponseEnd`는 `responseEnd`이며 유한한 `0 <= startTime <= responseEnd <= 전체 시간`과 `responseEnd > 0`을 만족하는 완료 entry 중 가장 이른 시작 쌍을 사용한다. Timing-Allow-Origin으로 가려질 수 있는 `requestStart`를 사용하거나 순수 HTTP 전송 시간으로 해석하지 않는다. 유효한 관측 쌍이 없으면 둘 다 생략하며 token 캐시 hit으로 단정하지 않는다.

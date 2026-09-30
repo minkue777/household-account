@@ -6,7 +6,10 @@ import type { DocumentData, QueryDocumentSnapshot } from '@/platform/read-model/
 
 const mockOnSnapshot = jest.fn();
 let mockHouseholdId = 'house';
-jest.mock('@/composition/clientSessionScope', () => ({ requireClientSessionScope: () => ({ householdId: mockHouseholdId }) }));
+jest.mock('@/composition/clientSessionScope', () => ({
+  ...jest.requireActual('@/composition/clientSessionScope'),
+  requireClientSessionScope: () => ({ householdId: mockHouseholdId }),
+}));
 jest.mock('@/platform/read-model/firestoreReadModel', () => ({
   db: {}, collection: jest.fn(), query: jest.fn(), where: jest.fn(),
   onSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),

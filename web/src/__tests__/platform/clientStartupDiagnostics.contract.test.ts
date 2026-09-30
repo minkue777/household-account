@@ -12,6 +12,7 @@ describe('iPhone startup diagnostics contract', () => {
   let clock: number;
   let visible: DocumentVisibilityState;
   let navigation: Partial<PerformanceNavigationTiming>[];
+  let resources: Partial<PerformanceResourceTiming>[];
   let entries: { name: string; entryType: string; startTime: number }[];
 
   function subject() {
@@ -32,12 +33,13 @@ describe('iPhone startup diagnostics contract', () => {
     visible = 'visible';
     entries = [];
     navigation = [{ type: 'reload', responseStart: 20, responseEnd: 40, domInteractive: 80 }];
+    resources = [];
     Object.defineProperty(window, 'performance', { configurable: true, value: {
       now: jest.fn(() => clock),
       mark: jest.fn((name: string) => entries.push({ name, entryType: 'mark', startTime: clock })),
       measure: jest.fn(),
       getEntriesByName: jest.fn((name: string) => entries.filter((entry) => entry.name === name)),
-      getEntriesByType: jest.fn(() => navigation),
+      getEntriesByType: jest.fn((type: string) => type === 'resource' ? resources : navigation),
     } });
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visible });
     Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: { controller: {} } });
@@ -169,5 +171,60 @@ describe('iPhone startup diagnostics contract', () => {
     marks.markWebFirstHomeCompletePaint();
     expect(add).not.toHaveBeenCalledWith('visibilitychange', expect.any(Function));
     expect(await observation.readCapturedClientStartupObservation()).toBeUndefined();
+  });
+
+  it('완료된 실제 토큰 endpoint의 최초 리소스 구간만 복사하며 원문과 요청 상태를 추정하지 않는다', async () => {
+    resources = [
+      { name: 'https://securetoken.googleapis.com/v1/token?key=private-key', startTime: 500, responseEnd: 900 },
+      { name: 'https://securetoken.googleapis.com/v1/token?key=private-key', startTime: 200, requestStart: 0, responseEnd: 450 },
+      { name: 'https://securetoken.googleapis.com.evil.test/v1/token', startTime: 1, responseEnd: 2 },
+      { name: 'https://securetoken.googleapis.com/v1/other', startTime: 3, responseEnd: 4 },
+      { name: 'https://identitytoolkit.googleapis.com/v1/accounts:lookup', startTime: 5, responseEnd: 6 },
+      { name: 'https://securetoken.googleapis.com/v1/token', startTime: 50, responseEnd: 0 },
+      { name: 'https://securetoken.googleapis.com/v1/token', startTime: 100, responseEnd: 2_000 },
+    ];
+    const { marks, observation } = subject();
+    marks.markWebBootstrapStarted();
+    clock = 1_000; marks.markWebFirstHomeCompletePaint();
+    const diagnostics = (await observation.readCapturedClientStartupObservation())?.diagnostics;
+    expect(diagnostics?.timingsMs).toMatchObject({ authTokenRequestStarted: 200, authTokenResponseEnd: 450 });
+    expect(diagnostics?.timingsMs.authTokenObserved).toBeUndefined();
+    expect(JSON.stringify(diagnostics)).not.toMatch(/private-key|googleapis|token\?/);
+    resources = [{ name: 'https://securetoken.googleapis.com/v1/token', startTime: 1, responseEnd: 2 }];
+    expect((await observation.readCapturedClientStartupObservation())?.diagnostics).toBe(diagnostics);
+  });
+
+  it('Resource Timing 조회가 실패해도 기존 진단과 총시간을 유지한다', async () => {
+    const { marks, observation } = subject();
+    marks.markWebBootstrapStarted();
+    jest.mocked(window.performance.getEntriesByType).mockImplementation((type) => {
+      if (type === 'resource') throw new Error('resource timing unavailable');
+      return navigation as PerformanceEntry[];
+    });
+    clock = 600; marks.markWebFirstHomeCompletePaint();
+    const result = await observation.readCapturedClientStartupObservation();
+    expect(result).toMatchObject({ durationMs: 600, diagnostics: { timingsMs: { bootstrapStarted: 100, firstHomeCompletePaint: 600 } } });
+    expect(result?.diagnostics?.timingsMs.authTokenRequestStarted).toBeUndefined();
+    expect(result?.diagnostics?.timingsMs.authTokenResponseEnd).toBeUndefined();
+  });
+
+  it('새 callback 시각은 준비 완료와 분리하고 최초 값만 동결하며 시계 오류는 전파하지 않는다', async () => {
+    const { marks, observation } = subject();
+    const diagnostics = require('@/platform/performance/clientStartupDiagnostics') as typeof import('@/platform/performance/clientStartupDiagnostics');
+    marks.markWebBootstrapStarted();
+    clock = 120; diagnostics.recordClientStartupTiming('authTokenObserved');
+    clock = 150; diagnostics.recordClientStartupTiming('ledgerListenStarted');
+    clock = 400; diagnostics.recordClientStartupTiming('ledgerServerSnapshotReceived');
+    clock = 450; diagnostics.recordClientStartupTiming('ledgerServerSnapshotReceived');
+    jest.mocked(window.performance.now).mockImplementationOnce(() => { throw new Error('clock unavailable'); });
+    expect(() => diagnostics.recordClientStartupTiming('categoriesListenStarted')).not.toThrow();
+    clock = 500; marks.markWebHomeReadiness({ ledgerReady: true, categoriesReady: true, currencyReady: true, yearSummaryReady: true, yearSummaryRequired: false });
+    clock = 600; marks.markWebFirstHomeCompletePaint();
+    clock = 700; diagnostics.recordClientStartupTiming('yearSummaryServerSnapshotReceived');
+    expect((await observation.readCapturedClientStartupObservation())?.diagnostics?.timingsMs).toMatchObject({
+      authTokenObserved: 120, ledgerListenStarted: 150, ledgerServerSnapshotReceived: 400, ledgerReady: 500,
+    });
+    expect((await observation.readCapturedClientStartupObservation())?.diagnostics?.timingsMs.categoriesListenStarted).toBeUndefined();
+    expect((await observation.readCapturedClientStartupObservation())?.diagnostics?.timingsMs.yearSummaryServerSnapshotReceived).toBeUndefined();
   });
 });

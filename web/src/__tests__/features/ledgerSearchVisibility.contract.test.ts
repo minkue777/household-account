@@ -6,6 +6,7 @@ import { ledgerOptimisticProjection } from '@/features/ledger/application/ledger
 import { requireClientSessionScope } from '@/composition/clientSessionScope';
 
 jest.mock('@/composition/clientSessionScope', () => ({
+  ...jest.requireActual('@/composition/clientSessionScope'),
   requireClientSessionScope: jest.fn(() => ({ householdId: 'house-1', memberId: 'member-1', principalUid: 'uid', sessionGeneration: 1 })),
 }));
 

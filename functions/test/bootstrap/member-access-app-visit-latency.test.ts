@@ -43,7 +43,7 @@ function handler(dependencies: Parameters<
 }
 
 describe("member app visit startup latency", () => {
-  it("[T-ADM-005] 실제 구조화 로그에 iPhone 진단을 같은 총시간과 한 번만 기록한다", async () => {
+  it("[T-ADM-005] 실제 구조화 로그에 신규 16개 iPhone 관측을 같은 총시간과 한 번만 기록한다", async () => {
     const logs = vi.spyOn(logger, "info").mockImplementation(() => {});
     const recordAccess = vi.fn()
       .mockResolvedValueOnce({ kind: "recorded", totalAccessCount: 1 })
@@ -52,7 +52,18 @@ describe("member app visit startup latency", () => {
     const diagnostics = {
       version: 1, webBuild: "build-123", initialVisibility: "visible",
       visibilityTrackingStartedAtMs: 150, hiddenMs: 600, hiddenCount: 1,
-      timingsMs: { bootstrapStarted: 150, ledgerReady: 1_700, firstHomeCompletePaint: 2_000 },
+      timingsMs: {
+        bootstrapStarted: 150,
+        authTokenObserved: 300, authTokenRequestStarted: 200, authTokenResponseEnd: 280,
+        householdReadStarted: 350, householdSnapshotReceived: 1_650,
+        ledgerListenStarted: 400, ledgerServerSnapshotReceived: 1_600,
+        categoriesListenStarted: 410, categoriesServerSnapshotReceived: 1_610,
+        currencyPreferencesListenStarted: 420, currencyPreferencesServerSnapshotReceived: 1_620,
+        currencyBalancesListenStarted: 430, currencyBalancesServerSnapshotReceived: 1_630,
+        yearSummaryListenStarted: 440, yearSummaryFirstSnapshotReceived: 450,
+        yearSummaryServerSnapshotReceived: 1_640,
+        ledgerReady: 1_700, firstHomeCompletePaint: 2_000,
+      },
     };
     const payload = { visitId: "app-visit-1", platform: "ios-pwa", clientStartupDurationMs: 2_000,
       clientStartupDiagnostics: diagnostics };
@@ -65,6 +76,51 @@ describe("member app visit startup latency", () => {
       }));
       expect(JSON.stringify(logs.mock.calls)).not.toMatch(/uid-sensitive|household-sensitive|member-sensitive/);
       expect(recordAccess.mock.calls[0]).toEqual([expect.not.objectContaining({ clientStartupDiagnostics: expect.anything() })]);
+    } finally { logs.mockRestore(); }
+  });
+
+  it.each([
+    ["범위 초과", { ledgerServerSnapshotReceived: 2_001 }],
+    ["숫자 아님", { authTokenObserved: "private-token" }],
+    ["비허용 키", { authTokenRequestStarted: 200, authTokenRequestUrl: "https://private/token?key=secret" }],
+  ])("[T-ADM-005] 신규 관측 %s도 실제 logger에서는 생략하고 접속·전체 시간은 보존한다", async (_label, timingsMs) => {
+    const logs = vi.spyOn(logger, "info").mockImplementation(() => {});
+    const recordAccess = vi.fn(async () => ({ kind: "recorded" as const, totalAccessCount: 1 }));
+    const subject = handler({ recordAccess });
+    try {
+      await expect(subject.execute(context({
+        visitId: "app-visit-1", platform: "ios-pwa", clientStartupDurationMs: 2_000,
+        clientStartupDiagnostics: {
+          version: 1, initialVisibility: "visible", visibilityTrackingStartedAtMs: 150,
+          hiddenMs: 0, hiddenCount: 0, timingsMs,
+        },
+      }))).resolves.toEqual({ kind: "recorded", totalAccessCount: 1 });
+      expect(recordAccess).toHaveBeenCalledOnce();
+      expect(logs).toHaveBeenCalledExactlyOnceWith("interactive-latency", expect.objectContaining({
+        endpoint: "clientStartup", operation: "client.ios-pwa-first-home-complete-paint.v1",
+        stage: "total", elapsedMs: 2_000,
+      }));
+      expect(logs.mock.calls[0][1]).not.toHaveProperty("clientStartupDiagnostics");
+      expect(JSON.stringify(logs.mock.calls)).not.toMatch(/private-token|private\/token|key=secret|uid-sensitive|household-sensitive|member-sensitive/u);
+    } finally { logs.mockRestore(); }
+  });
+
+  it("[T-ADM-005] 신규 관측 없는 기존 v1 진단도 실제 logger에 그대로 보존한다", async () => {
+    const logs = vi.spyOn(logger, "info").mockImplementation(() => {});
+    const subject = handler({ recordAccess: async () => ({ kind: "recorded", totalAccessCount: 1 }) });
+    const diagnostics = {
+      version: 1, initialVisibility: "visible", visibilityTrackingStartedAtMs: 150,
+      hiddenMs: 0, hiddenCount: 0,
+      timingsMs: { bootstrapStarted: 150, ledgerReady: 1_700, firstHomeCompletePaint: 2_000 },
+    };
+    try {
+      await subject.execute(context({
+        visitId: "app-visit-1", platform: "ios-pwa", clientStartupDurationMs: 2_000,
+        clientStartupDiagnostics: diagnostics,
+      }));
+      expect(logs).toHaveBeenCalledExactlyOnceWith("interactive-latency", expect.objectContaining({
+        elapsedMs: 2_000, clientStartupDiagnostics: diagnostics,
+      }));
     } finally { logs.mockRestore(); }
   });
 

@@ -4,7 +4,8 @@ import {
   db,
 } from '@/platform/read-model/firestoreReadModel';
 import { CategoryDocument } from '@/types/category';
-import { requireClientSessionScope } from '@/composition/clientSessionScope';
+import { getClientSessionScope, requireClientSessionScope } from '@/composition/clientSessionScope';
+import { recordClientStartupTiming } from '@/platform/performance/clientStartupDiagnostics';
 
 export type { CategoryDocument };
 
@@ -112,14 +113,22 @@ function subscribeToCategoryCatalog(
   onError?: (error: unknown) => void,
 ): () => void {
   if (!householdId) { onError?.(new Error('카테고리를 불러오지 못했습니다.')); return () => {}; }
+  const scope = getClientSessionScope();
+  let active = true;
   const reference = doc(db, 'households', householdId, 'categoryCatalog', 'current');
-  return onSnapshot(reference, { includeMetadataChanges: true }, snapshot => {
+  if (scope?.householdId === householdId) recordClientStartupTiming('categoriesListenStarted');
+  const unsubscribe = onSnapshot(reference, { includeMetadataChanges: true }, snapshot => {
+    if (active && scope?.householdId === householdId && getClientSessionScope() === scope
+      && snapshot.metadata.fromCache === false) {
+      recordClientStartupTiming('categoriesServerSnapshotReceived');
+    }
     if (snapshot.metadata.fromCache) return;
     try {
       const catalog = readCategoryCatalog(snapshot.data(), householdId);
       callback(catalog);
     } catch (error) { onError?.(error); }
   }, onError);
+  return () => { active = false; unsubscribe(); };
 }
 
 // 목록과 순서 변경 버전은 동일한 권위 문서에서 읽습니다.

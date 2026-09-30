@@ -12,6 +12,7 @@ jest.mock('firebase/auth', () => ({
   onIdTokenChanged: jest.fn(),
 }));
 jest.mock('@/lib/firebaseApp', () => ({ app: { name: 'web-app' } }));
+jest.mock('@/platform/performance/clientStartupDiagnostics', () => ({ recordClientStartupTiming: jest.fn() }));
 jest.mock('@/platform/android-host/androidHostBridge', () => ({
   isAndroidHostAvailable: () => false,
   requestAndroidHost: jest.fn(),
@@ -30,6 +31,7 @@ import {
 } from 'firebase/auth';
 import { requestAndroidHost } from '@/platform/android-host/androidHostBridge';
 import { logOut, onAuthChange, signInWithGoogleSession } from '@/lib/authService';
+import { recordClientStartupTiming } from '@/platform/performance/clientStartupDiagnostics';
 
 describe('Browser and iPhone PWA auth bootstrap contract', () => {
   it('기존 브라우저 저장 우선순위를 유지하고 재방문 초기화에 팝업 resolver를 넣지 않는다', () => {
@@ -49,15 +51,18 @@ describe('Browser and iPhone PWA auth bootstrap contract', () => {
 
     expect(onAuthChange(callback)).toBe(unsubscribe);
     expect(onIdTokenChanged).toHaveBeenCalledWith(
-      { runtime: 'browser-auth', currentUser: null }, callback
+      { runtime: 'browser-auth', currentUser: null }, expect.any(Function)
     );
-    // SDK callback을 그대로 사용하므로 앱이 저장된 사용자를 자체 확정하지 않습니다.
-    const restored = { uid: 'restored-user' };
+    // 실제 SDK 알림을 그대로 전달하며 계측을 위해 토큰을 조회·갱신하지 않습니다.
+    const restored = { uid: 'restored-user', getIdToken: jest.fn() };
     const observer = jest.mocked(onIdTokenChanged).mock.calls[0][1] as typeof callback;
     observer(restored);
     observer({ ...restored });
     observer(null);
     expect(callback.mock.calls).toEqual([[restored], [restored], [null]]);
+    expect(restored.getIdToken).not.toHaveBeenCalled();
+    expect(recordClientStartupTiming).toHaveBeenCalledTimes(2);
+    expect(jest.mocked(recordClientStartupTiming).mock.calls).toEqual([['authTokenObserved'], ['authTokenObserved']]);
   });
 
   it('실제 Google 로그인에서 resolver를 명시하고 성공한 Firebase 사용자만 반환한다', async () => {
