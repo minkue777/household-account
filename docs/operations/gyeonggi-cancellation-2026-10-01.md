@@ -68,3 +68,33 @@ Android APK는 원문을 전달하므로 변경하지 않습니다.
 - 이전 미배포 iPhone 진단 `e6f407e`의 서버 계약도 함께 반영했습니다. Web은 이 서버
   검증 이후 main push의 Vercel Git 자동배포로 전달하며, 최종 push SHA의 CI 다섯 검사와
   결과 요약은 별도로 추적합니다. APK 변경은 없습니다.
+
+## CI의 기존 Android 화면 검사 실패와 후속 보강
+
+최종 배포 SHA `aaeddb5c79ea65f6054343f08d82e14c4cdff94d`의
+[CI 36867746679](https://github.com/minkue777/household-account/actions/runs/36867746679)에서
+Android 기본 instrumentation은 44개 통과·1개 실패했습니다. 실패는 기존
+`MainActivityInstrumentationTest.quickEditFeedbackChangesReachRealWebViewAfterResumeAndRecreationWithoutTransactionData`의
+Activity 재생성 직후 이벤트 개수 조회(기존 333행)입니다. renderer 로그는
+`window.quickEditEvents`가 undefined인 상태의 length 접근을, 테스트 stack은 반환된
+`null` 문자열의 `toInt()` 변환 실패를 보여 줍니다. 최초 변경·백그라운드 복귀 검사는
+통과했으며 이후 Native Firebase E2E·성능 단계는 이 실패로 실행되지 않았습니다.
+
+테스트가 재생성 후 앱의 `restoreState`에 더해 같은 URL을 `loadUrl`로 다시 여는
+중복 탐색을 확인했습니다. 준비 확인 직후 문서가 교체되는 경쟁 가능성이 있으므로
+최초 fixture 탐색만 명시적으로 시작하고 재생성 후에는 앱의 실제 복원 경로를 관찰하도록
+변경했습니다. 준비 조건에 정확한 URL·이벤트 배열·기존 bridge 버전을 함께 확인합니다.
+이벤트 개수가 없으면 0으로 대체하지 않고 문서 상태를 포함해 실패시킵니다. 실제 outbox
+revision 변경, 세 시점의 이벤트 증가와 거래 자료 미포함 assertion, 기존 5초 제한을 유지합니다.
+
+CI API 34의 정확한 renderer 탐색 순서는 기존 로그만으로 확정할 수 없습니다.
+로컬 API 36.1에서 수정 전 단일 검사는 통과하여 간헐 실패를 재현하지 못했습니다.
+보강 후 실제 Activity·WebView·bridge를 사용하는 `MainActivityInstrumentationTest` 전체
+17개가 48초에 통과했고 skip은 없습니다. 제품 실행 코드·APK·서버·웹을 변경하지 않으며
+제품 결함 해결로 표현하지 않습니다. 새 테스트 커밋의 Android 실제 기기 검사를 포함한
+전체 CI로 후속 확인하고 과거 실패 실행은 보존합니다.
+
+로그는 `TEMP/household-ci-36867746679-android{,-before,-after}.log`, 실패 artifact는
+`TEMP/household-ci-36867746679-android-artifact`입니다. 배포 SHA의 Vercel Git 배포와
+Production deployment `6785300833`은 성공했습니다. 운영 `/`·`/sw.js` HTTP 200과
+해당 SHA 포함, 해당 SHA의 `_buildManifest.js` HTTP 200을 확인했습니다.

@@ -277,27 +277,29 @@ class MainActivityInstrumentationTest {
               requestId:'quick-edit-event-version',operation:'app.get-version',payload:{}}));
         </script></body></html>""".trimIndent()
         withObservedWebViewLifecycle(LocalWebViewDocument(url, html)) { scenario ->
-            fun loadDocument() {
-                scenario.onActivity { activity ->
-                    // This harness serves only the declared main-frame URL. A data load can be
-                    // intercepted as an unexpected request and replaced by its blocking 404.
-                    activity.findViewById<WebView>(R.id.webView).loadUrl(url)
-                }
+            fun documentState() = evaluateWebView(scenario, """JSON.stringify({
+                url:location.href, readyState:document.readyState,
+                bridge:typeof HouseholdNativeBridge, version:window.bridgeVersion,
+                eventObserverReady:Array.isArray(window.quickEditEvents)
+            })""".trimIndent())
+            fun waitForDocument() {
                 try {
                     waitUntil("QuickEdit 변경 관측용 실제 문서 준비") {
-                        evaluateWebViewText(scenario, "document.readyState === 'complete' && window.bridgeVersion") == BuildConfig.VERSION_NAME
+                        evaluateWebViewText(scenario, """document.readyState === 'complete' &&
+                            location.href === ${JSONObject.quote(url)} &&
+                            Array.isArray(window.quickEditEvents) && window.bridgeVersion
+                        """.trimIndent()) == BuildConfig.VERSION_NAME
                     }
                 } catch (failure: AssertionError) {
-                    val documentState = evaluateWebView(scenario, """JSON.stringify({
-                        url:location.href, readyState:document.readyState,
-                        bridge:typeof HouseholdNativeBridge, version:window.bridgeVersion,
-                        eventObserverReady:Array.isArray(window.quickEditEvents)
-                    })""".trimIndent())
-                    throw AssertionError("QuickEdit 변경 관측 문서 상태: $documentState", failure)
+                    throw AssertionError("QuickEdit 변경 관측 문서 상태: ${documentState()}", failure)
                 }
                 InstrumentationRegistry.getInstrumentation().waitForIdleSync()
             }
-            fun eventCount() = evaluateWebView(scenario, "window.quickEditEvents.length")!!.toInt()
+            fun eventCount(): Int {
+                val count = evaluateWebView(scenario, "Array.isArray(window.quickEditEvents) ? window.quickEditEvents.length : null")
+                return count?.toIntOrNull()
+                    ?: throw AssertionError("QuickEdit 이벤트 개수 관측 실패: $count, 문서: ${documentState()}")
+            }
             fun changeNativeState() {
                 // 실제 outbox revision 경로를 사용합니다. 서버 명령이나 Web 이벤트를 직접 만들지 않습니다.
                 runBlocking { QuickEditCommandDelivery.purgeForSessionTransition(context) }
@@ -310,7 +312,11 @@ class MainActivityInstrumentationTest {
                     "window.quickEditEvents.every(e => e.type === '${QuickEditUpdateFeedbackBridge.CHANGED_EVENT}' && e.detail === null && !e.hasTransaction)"))
             }
 
-            loadDocument()
+            scenario.onActivity { activity ->
+                // 이 fixture의 최초 탐색만 시작합니다. 이후 재생성은 앱의 복원 경로를 사용합니다.
+                activity.findViewById<WebView>(R.id.webView).loadUrl(url)
+            }
+            waitForDocument()
             grantMandatoryPermissions()
             scenario.onActivity { it.findViewById<Button>(R.id.btnCheckPermission).performClick() }
             val beforeChange = eventCount()
@@ -329,7 +335,9 @@ class MainActivityInstrumentationTest {
             scenario.onActivity { original = it.findViewById(R.id.webView) }
             scenario.recreate()
             scenario.onActivity { assertNotSame(original, it.findViewById<WebView>(R.id.webView)) }
-            loadDocument()
+            // onCreate의 restoreState와 테스트의 추가 loadUrl이 경쟁하지 않도록,
+            // 앱이 복원한 실제 문서의 URL·bridge·이벤트 관측 준비를 확인합니다.
+            waitForDocument()
             val beforeRecreatedChange = eventCount()
             changeNativeState()
             awaitChangeAfter(beforeRecreatedChange)
