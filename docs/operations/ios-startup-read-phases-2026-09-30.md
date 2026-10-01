@@ -102,4 +102,13 @@ Web 검증 결과:
 
 로그는 저장소 밖 `TEMP/household-ios-read-phases-{prepare,e2e}-20260930.log`입니다.
 개발 PC의 Emulator/WebKit 결과와 운영 iPhone의 체감 속도는 구분하며 추가 관측 전에는
-기존 표본의 병목을 확정하지 않습니다. 실제 배포 식별자는 배포 후 기록합니다.
+기존 표본의 병목을 확정하지 않습니다.
+
+## 서버 선행 배포
+
+2026-10-01 지역화폐 취소 수정과 함께 구현 후보
+`66929412791ea95deed300dc0af7c69fef2435e2`를 세 Functions codebase에 배포했습니다.
+release는 `release-20261001-gyeonggi-cancellation-6692941`이며 실제 로그인·가구 조회의
+release/commit/artifact marker 검증과 provenance 기록이 완료됐습니다. 새 선택 필드를
+수용하는 서버 배포 이후 main push로 Web Git 자동배포를 진행합니다. CI와 Web 배포는
+최종 push SHA를 기준으로 별도 확인하며 이 계측 배포를 실행 지연 해결로 판단하지 않습니다.

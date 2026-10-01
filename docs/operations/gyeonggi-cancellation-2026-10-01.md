@@ -60,6 +60,11 @@ Android APK는 원문을 전달하므로 변경하지 않습니다.
   원승인 증거와 기존 balance-only receipts는 전후 동일합니다. 운영 자료 백업은 Git
   밖 `TEMP/household-gyeonggi-cancellation-backup-20261001.json`에 보관합니다.
 - 검사 로그는 `TEMP/household-gyeonggi-cancellation-{prepare,e2e,recovery-test}-20261001.log`입니다.
-- GitHub 재인증 완료. 서버·웹 배포는 실제 로그인 smoke 인증 준비 후 진행합니다.
-  이전 미배포 iPhone 진단 `e6f407e`가 누적되어 서버를 먼저 배포한 뒤 main push로
-  Vercel Git 자동배포를 진행해야 합니다. APK 변경은 없습니다.
+- 2026-10-01 서버 배포 완료: 구현 후보 `66929412791ea95deed300dc0af7c69fef2435e2`,
+  release `release-20261001-gyeonggi-cancellation-6692941`로 `default`, `payment-capture`,
+  `access-session` 세 codebase를 배포했습니다. 저장된 브라우저 로그인 재사용 후 실제
+  사용자 해석·가구 조회·배포 marker 일치 검증과 provenance 기록, 배포 잠금 해제를
+  완료했습니다. 로그는 `TEMP/household-gyeonggi-cancellation-deploy-20261001.log`입니다.
+- 이전 미배포 iPhone 진단 `e6f407e`의 서버 계약도 함께 반영했습니다. Web은 이 서버
+  검증 이후 main push의 Vercel Git 자동배포로 전달하며, 최종 push SHA의 CI 다섯 검사와
+  결과 요약은 별도로 추적합니다. APK 변경은 없습니다.
