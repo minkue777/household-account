@@ -90,17 +90,33 @@ function isLegacySamsungSemanticParserVersion(
     source.packageName === evidence.packageName &&
     source.sourceType === legacy.sourceType &&
     source.parserId === legacy.parserId &&
-    source.parserVersion === "1.2.0" &&
+    source.parserVersion === (legacy.parserId === "sms-card-message-parser" ? "1.3.0" : "1.2.0") &&
     evidence.sourceType === legacy.sourceType &&
     evidence.registryVersion === source.registryVersion &&
     envelope.parser.parserId === legacy.parserId &&
-    (envelope.parser.parserVersion === "1.1.0" ||
+    ((legacy.parserId === "sms-card-message-parser" && envelope.parser.parserVersion === "1.2.0") ||
+      envelope.parser.parserVersion === "1.1.0" ||
       (envelope.parser.parserVersion === "1.0.0" &&
         payment !== undefined &&
         payment.localCurrencyType === undefined &&
         payment.dueDate === undefined &&
         envelope.balanceObservation === undefined))
   );
+}
+
+function isPreviousGyeonggiParserVersion(
+  envelope: CaptureEnvelopeInput,
+  source: AndroidPaymentSourceRegistryEntry,
+): boolean {
+  const evidence = envelope.sourceEvidence;
+  return evidence.kind === "android-registered-package" &&
+    source.parserId === "gyeonggi-local-currency-parser" &&
+    source.parserVersion === "1.1.0" &&
+    evidence.packageName === source.packageName &&
+    evidence.sourceType === source.sourceType &&
+    evidence.registryVersion === source.registryVersion &&
+    envelope.parser.parserId === source.parserId &&
+    envelope.parser.parserVersion === "1.0.0";
 }
 
 function isPreviousKakaoParserVersion(
@@ -157,6 +173,7 @@ export function validateAndroidCaptureSource(
     currentEvidenceMismatch &&
     !legacyKakaoCityGas &&
     !legacySamsungParserVersion &&
+    !isPreviousGyeonggiParserVersion(envelope, source) &&
     !isPreviousKakaoParserVersion(envelope, source)
   ) {
     return { kind: "rejected", code: "SOURCE_EVIDENCE_MISMATCH" };

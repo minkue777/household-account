@@ -516,6 +516,13 @@
       "expected": { "kind": "Parsed", "balance": { "amountInWon": 83000, "localCurrencyType": "gyeonggi" } }
     },
     {
+      "caseId": "gyeonggi-cancellation-and-balance",
+      "requirementIds": ["T-PARSE-002", "T-ING-BAL-001", "PARSE-GYEONGGI-001"],
+      "source": { "packageName": "gov.gyeonggi.ggcard", "parserId": "gyeonggi-local-currency-parser" },
+      "raw": { "postedAt": "2026-09-29T17:22:40+09:00", "title": "결제 취소 4,000원", "text": "테스트약국\r\n희망화성지역화폐 총 보유 잔액 80,000원" },
+      "expected": { "kind": "Parsed", "payment": { "type": "cancellation", "amountInWon": 4000, "occurredLocalDate": "2026-09-29", "occurredLocalTime": "17:22", "merchant": "테스트약국", "cardCompany": "경기지역화폐", "localCurrencyType": "gyeonggi", "timeSource": "postedAt" }, "balance": { "amountInWon": 80000, "localCurrencyType": "gyeonggi" } }
+    },
+    {
       "caseId": "gyeonggi-skips-overflow-balance-candidate",
       "requirementIds": ["T-PARSE-001", "T-ING-BAL-001", "PARSE-GYEONGGI-001", "PARSE-COMMON-001"],
       "source": { "packageName": "com.coocon.chakwallet", "parserId": "gyeonggi-local-currency-parser" },

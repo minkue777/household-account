@@ -273,7 +273,7 @@ describe("Firebase Capture envelope inbound adapter", () => {
     ["com.samsung.android.spay", "samsung-card", "samsung-card-parser"],
     ["kr.co.samsungcard.mpocket", "samsung-card", "samsung-card-parser"],
   ] as const)(
-    "%s에서 이미 생성된 parser 1.0.0·1.1.0 카드 envelope는 1.2.0 registry 전환 후에도 허용한다",
+    "%s에서 이미 생성된 카드 envelope는 현재 registry 전환 후에도 허용한다",
     (packageName, sourceType, parserId) => {
       const queued = legacySamsungSemanticEnvelope({
         packageName,
@@ -281,13 +281,33 @@ describe("Firebase Capture envelope inbound adapter", () => {
         parserId,
       });
 
-      for (const parserVersion of ["1.0.0", "1.1.0"]) {
+      for (const parserVersion of parserId === "sms-card-message-parser" ? ["1.0.0", "1.1.0", "1.2.0"] : ["1.0.0", "1.1.0"]) {
         (queued.parser as Record<string, unknown>).parserVersion = parserVersion;
         expect(validateAndroidCaptureSource(decodeCaptureEnvelope(queued))).toMatchObject({
           kind: "allowed",
-          entry: { packageName, sourceType, parserId, parserVersion: "1.2.0" },
+          entry: { packageName, sourceType, parserId, parserVersion: parserId === "sms-card-message-parser" ? "1.3.0" : "1.2.0" },
         });
       }
+    },
+  );
+
+  it.each(["gov.gyeonggi.ggcard", "com.mobiletoong.gpay", "com.coocon.chakwallet"])(
+    "%s의 구 경기 parser 1.0.0은 허용하지만 출처·카드·지역화폐 검증을 유지한다", packageName => {
+      const input = validEnvelope();
+      Object.assign(input.sourceEvidence as object, { packageName, sourceType: "gyeonggi-local-currency" });
+      input.parser = { parserId: "gyeonggi-local-currency-parser", parserVersion: "1.0.0" };
+      const payment = input.paymentObservation as Record<string, unknown>;
+      payment.cardEvidence = { companyLabel: "경기지역화폐" };
+      payment.localCurrencyType = "gyeonggi";
+      expect(validateAndroidCaptureSource(decodeCaptureEnvelope(input)).kind).toBe("allowed");
+      payment.localCurrencyType = "sejong";
+      expect(validateAndroidCaptureSource(decodeCaptureEnvelope(input))).toEqual({ kind: "rejected", code: "LOCAL_CURRENCY_TYPE_MISMATCH" });
+      payment.localCurrencyType = "gyeonggi";
+      delete payment.cardEvidence;
+      expect(validateAndroidCaptureSource(decodeCaptureEnvelope(input))).toEqual({ kind: "rejected", code: "CARD_EVIDENCE_REQUIRED" });
+      payment.cardEvidence = { companyLabel: "경기지역화폐" };
+      (input.sourceEvidence as Record<string, unknown>).sourceType = "sejong-local-currency";
+      expect(validateAndroidCaptureSource(decodeCaptureEnvelope(input))).toEqual({ kind: "rejected", code: "SOURCE_EVIDENCE_MISMATCH" });
     },
   );
 

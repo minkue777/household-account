@@ -152,7 +152,7 @@ describe("Android 원문 알림 서버 파싱 제출 계약", () => {
         },
         parser: {
           parserId: "sms-card-message-parser",
-          parserVersion: "1.2.0",
+          parserVersion: "1.3.0",
         },
         paymentObservation: {
           observationType: "approval",

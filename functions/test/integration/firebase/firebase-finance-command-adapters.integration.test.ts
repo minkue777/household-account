@@ -11,6 +11,8 @@ import { createCaptureBranchSubmissionApplication } from "../../../src/contexts/
 import { createCaptureTransactionGatewayApplication } from "../../../src/contexts/payment-capture/android-payment-ingestion/application/captureTransactionGatewayApplication";
 import { FirebaseCaptureConfigurationQuery } from "../../../src/adapters/firebase/payment-capture/firebaseCaptureConfigurationQuery";
 import { FirebaseCaptureLedgerPersistence } from "../../../src/adapters/firebase/payment-capture/firebaseCaptureLedgerPersistence";
+import { FirebaseTransformationLineageStore } from "../../../src/adapters/firebase/ledger/firebaseTransformationLineageStore";
+import { createLedgerTransformationCommands } from "../../../src/contexts/household-finance/ledger/application/commands/transformationLineageService";
 import { FirebaseCaptureSubmissionReceiptStore, Sha256CapturePayloadFingerprint } from "../../../src/adapters/firebase/payment-capture/firebaseCaptureSubmissionReceiptStore";
 import { Sha256AndroidRawNotificationHasher } from "../../../src/adapters/crypto/payment-capture/sha256AndroidRawNotificationHasher";
 import { createRecurringHouseholdCommandHandlers } from "../../../src/bootstrap/commands/recurringHouseholdCommandHandlers";
@@ -94,6 +96,42 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
 
   afterAll(async () => {
     if (app !== undefined) await deleteApp(app);
+  });
+
+  it("[CAN-003][CAN-007] 지정 계보 취소 복구는 같은 금액의 과거 결제와 최신 잔액을 보존한다", async () => {
+    const household = database.collection("households").doc(HOUSEHOLD_ID);
+    const persistence = new FirebaseCaptureLedgerPersistence(database);
+    const created: { id: string; lineage: string }[] = [];
+    for (const [key, amountInWon, date] of [["old", 4000, "2026-09-07"], ["first", 4000, "2026-09-29"], ["second", 7000, "2026-09-29"], ["actual", 3500, "2026-09-29"]] as const) {
+      const result = await persistence.recordApproval({ householdId: HOUSEHOLD_ID, downstreamKey: key,
+        branch: { observationId: key, originChannel: "android-notification", creatorMemberId: "member-finance",
+          sourceType: "gyeonggi-local-currency", parser: { parserId: "gyeonggi-local-currency-parser", parserVersion: "1.0.0" },
+          rawPayloadHash: `sha256:${"a".repeat(64)}`, occurredAt: `${date}T16:00:00+09:00`, accountingDate: date,
+          amountInWon, originalMerchant: "테스트약국", merchant: "테스트약국", categoryId: "etc", memo: "",
+          cardEvidence: { companyLabel: "경기지역화폐" }, localCurrencyType: "gyeonggi" } });
+      expect(result.kind).toBe("recorded");
+      if (result.kind !== "recorded") throw new Error("capture required");
+      created.push({ id: result.transactionId, lineage: result.captureLineageId });
+    }
+    const balance = household.collection("localCurrencyBalances").doc("gyeonggi");
+    await balance.set({ balanceInWon: 962089, aggregateVersion: 155, observedAt: "2026-10-01T16:22:00+09:00" });
+    const beforeBalance = (await balance.get()).data();
+    const service = createLedgerTransformationCommands({
+      store: new FirebaseTransformationLineageStore(database, HOUSEHOLD_ID, REQUESTED_AT),
+      clock: { now: () => REQUESTED_AT },
+    });
+    for (const chosen of created.slice(1, 3)) {
+      const command = { cancellationKey: `recovery-${chosen.id}`, captureLineageId: chosen.lineage, expectedLineageVersion: 1 };
+      expect(await service.cancelCapturedLineage({ ...command, expectedLineageVersion: 2 })).toMatchObject({ kind: "conflict" });
+      const result = await service.cancelCapturedLineage(command);
+      expect(result.kind).toBe("success");
+      expect(await service.cancelCapturedLineage(command)).toEqual(result);
+      expect((await household.collection("ledgerTransactions").doc(chosen.id).get()).exists).toBe(false);
+      const claims = await household.collection("ledgerDedupKeys").where("captureLineageId", "==", chosen.lineage).get();
+      expect(claims.docs.map(doc => doc.data().state)).toEqual(["cancelled"]);
+    }
+    expect((await household.collection("ledgerTransactions").get()).docs.map(doc => doc.id).sort()).toEqual([created[0].id, created[3].id].sort());
+    expect((await balance.get()).data()).toEqual(beforeBalance);
   });
 
   async function tagFixture() {

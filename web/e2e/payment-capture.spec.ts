@@ -7,6 +7,43 @@ import { ledgerRecords, records, paymentCommand, rawNotification, registerCard, 
 
 test.beforeEach(resetTestAccount);
 
+test('[T-PARSE-002][PARSE-GYEONGGI-001][CAN-003][CAN-007][ING-008][BAL-003] 경기지역화폐 취소는 두 원승인만 제거하고 최종 결제·최신 잔액·재전송을 보존한다', async ({ page, request }) => {
+  const actor = await createHouseholdThroughUi(page);
+  await registerCard(request, actor, '경기지역화폐');
+  const date = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+  const raw = (amount: number, minute: string, balance: number, cancellation = false) => ({
+    contractVersion: 'android-raw-notification.v1', observationId: 'gyeonggi-cancel-' + randomUUID(),
+    packageName: 'gov.gyeonggi.ggcard', notification: { postedAt: `${date}T16:${minute}:00+09:00`,
+      title: `결제 ${cancellation ? '취소' : '완료'} ${amount.toLocaleString('en-US')}원`,
+      text: `테스트약국\r\n희망화성지역화폐 총 보유 잔액 ${balance.toLocaleString('en-US')}원` },
+  });
+  const first = await submitRaw(request, actor, raw(4000, '01', 96000));
+  const second = await submitRaw(request, actor, raw(7000, '02', 89000));
+  const actual = await submitRaw(request, actor, raw(3500, '05', 96500));
+  expect(first.transactionResult.kind).toBe('created');
+  expect(second.transactionResult.kind).toBe('created');
+  expect(actual.transactionResult.kind).toBe('created');
+  const balancePath = `households/${actor.householdId}/localCurrencyBalances`;
+  const latestBalance = await records(request, balancePath);
+  expect(latestBalance).toEqual([expect.objectContaining({ balanceInWon: 96500 })]);
+  // 이미 더 최신 잔액을 받은 뒤 늦게 도착한 취소도 원장은 취소해야 합니다.
+  for (const [amount, minute, original] of [[4000, '03', first], [7000, '04', second]] as const) {
+    const cancellation = raw(amount, minute, 100000, true);
+    const cancelled = await submitRaw(request, actor, cancellation);
+    expect(cancelled.transactionResult).toEqual({ kind: 'cancelled', transactionIds: [original.transactionResult.transactionId] });
+    expect(cancelled.balanceResult).toMatchObject({ kind: 'recorded', status: 'staleIgnored' });
+    expect(await submitRaw(request, actor, cancellation)).toEqual(cancelled);
+  }
+  expect(await records(request, balancePath)).toEqual(latestBalance);
+  expect(await ledgerRecords(request)).toEqual([
+    expect.objectContaining({ id: actual.transactionResult.transactionId, amount: 3500, lifecycleState: 'active' }),
+  ]);
+  const provenance = await records(request, `households/${actor.householdId}/captureRecords`);
+  expect(provenance.filter(row => row.observationType === 'cancellation')).toHaveLength(2);
+  expect(provenance.filter(row => row.lifecycleState === 'deleted')).toHaveLength(2);
+  await expect(page.locator('.balance-card-glass').filter({ hasText: '월 지출' })).toContainText('3,500');
+});
+
 test('[PARSE-CITYGAS-001][ING-SAVE-003] 실제 KakaoTalk 도시가스 청구는 카드 없이 고정비로 저장하고 납기일과 청구 월을 보존한다', async ({ page, request }) => {
   const actor = await createHouseholdThroughUi(page);
   const notification = { contractVersion: 'android-raw-notification.v1', observationId: `citygas-${randomUUID()}`,

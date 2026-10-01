@@ -29,6 +29,8 @@ const PAYMENT_PATTERNS = [
 
 const GYEONGGI_DATE_TIME_PATTERN =
   /(?:\d{4}\/)?(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/u;
+const GYEONGGI_CANCELLATION_HEADER = /^결제\s*취소/u;
+const GYEONGGI_CANCELLATION_PATTERN = /^결제\s*취소\s+([\d,]+)원$/u;
 
 const DAEJEON_DETAILED_PAYMENT_PATTERN =
   /([^\s]+(?:\s*[^\s]+)?)\s+체크카드\((\d{4})\)\s+승인\s+([\d,]+)원(?:\s+캐시백적립\s+[\d,]+원)?\s+(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})\s+(.+?)\s+잔액\s*([\d,]+)원/u;
@@ -164,7 +166,12 @@ function parseGyeonggi(
   context: ProviderParserContext,
 ): AndroidProviderParseResult {
   const balance = firstAmount(context.body, BALANCE_PATTERNS);
-  const paymentMatch = firstPaymentMatch(context.body);
+  const lines = localCurrencyLines(context.body);
+  const cancellationLine = lines.find((line) => GYEONGGI_CANCELLATION_HEADER.test(line));
+  // 취소 신청·실패·손상 금액을 본문의 원 결제 금액으로 승인 처리하지 않습니다.
+  const paymentMatch = cancellationLine === undefined
+    ? firstPaymentMatch(context.body)
+    : GYEONGGI_CANCELLATION_PATTERN.exec(cancellationLine) ?? undefined;
   let payment: ParsedPaymentGolden | undefined;
   if (paymentMatch !== undefined) {
     const amount = amountInWon(paymentMatch[1]);
@@ -178,12 +185,14 @@ function parseGyeonggi(
           embedded[3],
           embedded[4],
         );
-    if (amount !== undefined && occurred !== undefined) {
+    const merchant = gyeonggiMerchant(lines);
+    if (amount !== undefined && occurred !== undefined &&
+        (cancellationLine === undefined || (amount > 0 && merchant !== "알수없음"))) {
       payment = {
-        type: "approval",
+        type: cancellationLine === undefined ? "approval" : "cancellation",
         amountInWon: amount,
         ...occurred,
-        merchant: gyeonggiMerchant(localCurrencyLines(context.body)),
+        merchant,
         cardCompany: "경기지역화폐",
         localCurrencyType: "gyeonggi",
       };
