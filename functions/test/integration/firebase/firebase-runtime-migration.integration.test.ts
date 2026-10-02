@@ -428,6 +428,12 @@ describeWithFirestoreEmulator("Firebase runtime migration operations boundary", 
       market: "KRX",
       instrumentCode: "005930",
     });
+    const initialHistory = await household.collection("assets").doc("asset-1").collection("positionHistory").get();
+    expect(initialHistory.size).toBe(1);
+    expect(initialHistory.docs[0].data()).toMatchObject({
+      householdId: HOUSEHOLD_ID, assetId: "asset-1", positionId: "holding-1",
+      snapshotDate: "2026-07-21", observedAt: "2026-07-21T00:00:00.000Z", operation: "added",
+    });
     expect((await household.collection("registeredCards").doc("card-1").get()).data()).toMatchObject({
       ownerMemberId: "member-a",
       cardCompanyCode: "Samsung Card",

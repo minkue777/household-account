@@ -67,6 +67,8 @@ export interface ScheduledDividendEvent {
   readonly status: "announced" | "fixed";
   readonly eligibleQuantity?: number;
   readonly totalAmount?: number;
+  /** Undefined only for legacy records that never stored quantity evidence. */
+  readonly eligibilityAssetIds?: readonly string[];
   readonly aggregateVersion: number;
 }
 

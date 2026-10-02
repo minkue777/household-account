@@ -1,4 +1,4 @@
-import { selectNearestPositionSnapshots } from "../domain/policies/dividendEligibilityPolicy";
+import { positionHistoryFailure, selectNearestPositionSnapshots } from "../domain/policies/dividendEligibilityPolicy";
 import type {
   DividendLifecycleEvidence,
   DividendHoldingTargetView,
@@ -86,6 +86,11 @@ function lifecycleOutcome(
   };
 }
 
+function incompleteFixedEvidence(event: ScheduledDividendEvent, sourceAssetIds = event.sourceAssetIds): boolean {
+  return event.status === "fixed" && event.eligibilityAssetIds !== undefined &&
+    sourceAssetIds.some(assetId => !event.eligibilityAssetIds!.includes(assetId));
+}
+
 export function createDividendScheduledRuntimeApplication(
   dependencies: DividendScheduledRuntimeDependencies,
 ) {
@@ -98,17 +103,21 @@ export function createDividendScheduledRuntimeApplication(
     expectedEventId?: string,
   ): Promise<DividendAnnouncementUpsertResult> {
     const existing = await dependencies.events.findAnnouncement({ target, disclosure });
+    const sourceAssetIds = [...new Set([...(existing?.sourceAssetIds ?? []), ...target.sourceAssetIds])];
     let correction;
     if (existing?.status === "fixed" && disclosure.disclosureState === "active" &&
-        (existing.recordDate !== disclosure.recordDate || existing.perShareAmount !== disclosure.perShareAmount)) {
+        (existing.recordDate !== disclosure.recordDate || existing.perShareAmount !== disclosure.perShareAmount ||
+          incompleteFixedEvidence(existing, sourceAssetIds))) {
       try {
         const observations = await dependencies.holdings.listPositionHistory({
           householdId: target.householdId,
-          sourceAssetIds: [...new Set([...existing.sourceAssetIds, ...target.sourceAssetIds])],
+          sourceAssetIds,
           instrumentCode: disclosure.instrumentCode,
         });
-        const selected = selectNearestPositionSnapshots({ instrumentCode: disclosure.instrumentCode, recordDate: disclosure.recordDate, snapshots: observations });
-        if (selected.length === 0) return { kind: "retryable-failure", code: "POSITION_HISTORY_NOT_OBSERVED" };
+        const selected = selectNearestPositionSnapshots({ instrumentCode: disclosure.instrumentCode, recordDate: disclosure.recordDate,
+          snapshots: observations.filter(item => item.householdId === target.householdId && sourceAssetIds.includes(item.assetId)) });
+        const failure = positionHistoryFailure(sourceAssetIds, selected);
+        if (failure !== undefined) return { kind: "retryable-failure", code: failure };
         correction = {
           expectedVersion: existing.aggregateVersion,
           eligibleQuantity: selected.reduce((sum, item) => sum + item.quantity, 0),
@@ -253,6 +262,10 @@ export function createDividendScheduledRuntimeApplication(
         }
         // Provider absence/failure does not erase stored facts or block their lifecycle.
         if (event.status === "fixed") {
+          if (incompleteFixedEvidence(event)) {
+            items.push({ targetId: `event:${event.eventId}`, kind: "failed", code: "POSITION_HISTORY_INCOMPLETE", retryable: true });
+            continue;
+          }
           if (input.asOfDate < event.paymentDate) {
             items.push({
               targetId: `event:${event.eventId}`,
@@ -294,7 +307,7 @@ export function createDividendScheduledRuntimeApplication(
         const selected = selectNearestPositionSnapshots({
           instrumentCode: event.instrumentCode,
           recordDate: event.recordDate,
-          snapshots: observations.map((observation) => ({
+          snapshots: observations.filter(item => item.householdId === event.householdId && event.sourceAssetIds.includes(item.assetId)).map((observation) => ({
             assetId: observation.assetId,
             instrumentCode: observation.instrumentCode,
             snapshotDate: observation.snapshotDate,
@@ -303,11 +316,12 @@ export function createDividendScheduledRuntimeApplication(
             sourceVersion: observation.sourceVersion,
           })),
         });
-        if (selected.length === 0) {
+        const historyFailure = positionHistoryFailure(event.sourceAssetIds, selected);
+        if (historyFailure !== undefined) {
           items.push({
             targetId: `event:${event.eventId}`,
             kind: "skipped",
-            receipt: "POSITION_HISTORY_NOT_OBSERVED",
+            receipt: historyFailure,
           });
           continue;
         }

@@ -7,6 +7,8 @@
 
 ## 1. 설계 목적과 추적성
 
+Position 최초 수량 근거는 `HOLD-004`, `T-HOLD-001`에 포함합니다. 새 운영 이관은 최초 positionHistory도 결정적 후보로 계획·적용·대사하며, 기존 이관 누락은 Holdings 공개 Query의 읽기 전용 완료 계획 근거로 다룹니다. 현재 수량을 과거로 소급하지 않는 세부 계약은 [2026-10-02 분배금 이력 설계](../../../../../operations/dividend-initial-history-2026-10-02.md)를 따릅니다.
+
 이 문서는 Position의 단일 Writer, `HOLD-004`의 Position+부모 Asset 원자 평가 commit, 공급자 중립 Market Data ACL과 일일 평가 job을 테스트 가능한 계약으로 정의합니다. 외부 Provider의 성공·데이터 없음·일시 실패·계약 실패·유효하지 않은 데이터를 서로 다른 결과로 보존하고, 실패를 0원이나 빈 성공으로 바꾸지 않는 것이 핵심입니다. [DEC-018](../../../../governance/decisions.md#dec-018)에 따라 마지막 성공 Quote는 기간 제한 없이 평가에 사용하되 공급자 장애가 숨지 않도록 모든 시도와 연속 실패·복구를 관측합니다.
 
 공통 `CommandEnvelope`, `ActorContext`, typed Result, Outbox·Inbox 형식은 [모듈 상세 설계 규약](../../../../governance/module-design-standard.md)을 사용합니다. 추가 근거는 [Portfolio Context 불변식](../../requirements.md), [자산 자동 처리 흐름](../../../../system/flows.md), [데이터 소유권](../../../../cross-cutting/data-ownership.md), [보안 경계](../../../../cross-cutting/security-privacy.md), [테스트 전략](../../../../governance/test-strategy.md)입니다.

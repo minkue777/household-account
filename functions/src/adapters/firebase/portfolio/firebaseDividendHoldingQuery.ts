@@ -6,6 +6,7 @@ import type {
   DividendHoldingTargetView,
   DividendPositionHistoryView,
 } from "../../../contexts/portfolio/holdings/public";
+import { readMigratedPositionHistory } from "./firebaseMigratedPositionHistoryReader";
 
 function text(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() !== ""
@@ -232,7 +233,7 @@ export class FirebaseDividendHoldingQuery implements DividendHoldingQuery {
       .where("instrument.code", "==", input.instrumentCode.toLocaleUpperCase("en-US"))
       .get();
     const assetIds = new Set(input.sourceAssetIds);
-    return snapshot.docs
+    const observations = snapshot.docs
       .flatMap((document) => {
         const observation = historyView(document);
         return observation === undefined ? [] : [observation];
@@ -241,8 +242,14 @@ export class FirebaseDividendHoldingQuery implements DividendHoldingQuery {
         ({ assetId, instrumentCode }) =>
           assetIds.has(assetId) &&
           instrumentCode === input.instrumentCode.toLocaleUpperCase("en-US"),
-      )
-      .sort(
+      );
+    const observedAssets = new Set(observations.map(item => item.assetId));
+    const migrated = await readMigratedPositionHistory(this.database, {
+      householdId: input.householdId,
+      assetIds: new Set(input.sourceAssetIds.filter(assetId => !observedAssets.has(assetId))),
+      instrumentCode: input.instrumentCode.toLocaleUpperCase("en-US"),
+    });
+    return [...observations, ...migrated].sort(
         (left, right) =>
           left.assetId.localeCompare(right.assetId) ||
           left.snapshotDate.localeCompare(right.snapshotDate) ||

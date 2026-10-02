@@ -9,6 +9,7 @@ import {
   migrationIssue,
   numberValue,
   positiveInteger,
+  rawSha256,
   text,
   type MigrationDocumentData,
   type RuntimeMigrationCandidateDraft,
@@ -214,6 +215,19 @@ export async function collectPortfolioPositionRuntimeMigration(
         logicalCollection: "position",
       }),
     );
+    const snapshotId = rawSha256(`migration-initial\u0000${input.scope.migrationId}\u0000${snapshot.ref.path}`);
+    drafts.push(candidateDraft(snapshot, {
+      targetPath: `${input.householdPath}/assets/${target.assetId}/positionHistory/${snapshotId}`,
+      targetData: {
+        snapshotId, householdId: input.scope.householdId, assetId: target.assetId, positionId: snapshot.id,
+        instrument: { market, instrumentType: instrumentType.toUpperCase(), code, currency },
+        snapshotDate: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(input.plannedAt)),
+        observedAt: input.plannedAt, quantity: lifecycle(data) === "deleted" ? 0 : quantity,
+        sourceVersion: Math.max(1, positiveInteger(data, 1, "aggregateVersion")), operation: "added",
+        schemaVersion: 1, createdAt: input.plannedAt,
+      },
+      action: "create", logicalCollection: "position-history", amountInWon: 0, sourceAmountInWon: amountInWon,
+    }));
   }
 
   return { drafts, unresolved };

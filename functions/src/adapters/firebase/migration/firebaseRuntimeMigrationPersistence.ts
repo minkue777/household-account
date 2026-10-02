@@ -39,6 +39,7 @@ const ALLOWED_LOGICAL_COLLECTIONS = new Set([
   "recurring",
   "recurring-creator-receipt",
   "position",
+  "position-history",
   "asset-automation-plan",
   "asset-automation-revision",
   "registered-card",
@@ -212,6 +213,7 @@ function validateTargetPath(path: string, householdId: string): boolean {
       "ledgerTransactions/[^/]+|" +
       "assets/[^/]+|" +
       "assets/[^/]+/positions/[^/]+|" +
+      "assets/[^/]+/positionHistory/[^/]+|" +
       "categories/[^/]+|" +
       "categorySettings/default|" +
       "recurringPlans/[^/]+|" +

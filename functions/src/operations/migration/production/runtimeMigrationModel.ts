@@ -93,6 +93,7 @@ export interface RuntimeMigrationCandidate {
     | "recurring"
     | "recurring-creator-receipt"
     | "position"
+    | "position-history"
     | "asset-automation-plan"
     | "asset-automation-revision"
     | "registered-card"

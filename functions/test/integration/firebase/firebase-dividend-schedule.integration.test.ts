@@ -168,6 +168,52 @@ describeWithFirestoreEmulator("Firebase dividend hourly vertical slice", () => {
     if (app !== undefined) await deleteApp(app);
   });
 
+  it("T-DIV-008 DIV-004 DIV-005 DIV-006 실제 이관 최초 근거로 부분 fixed를 정정하고 지급·월 합계·멱등을 검증한다", async () => {
+    const quantities = [72, 574, 1286, 400, 855];
+    const sourceAssetIds = quantities.map((_, i) => `pension-${i}`);
+    const announcement = { source: "KIND" as const, sourceDisclosureId: "20260928000552", disclosureState: "active" as const,
+      instrumentCode: "368590", instrumentName: "RISE 미국나스닥100", recordDate: "2026-09-30", paymentDate: "2026-10-02",
+      perShareAmount: 44, disclosedAt: "2026-09-28", sourceReferenceHash: "same-hash" };
+    const batch = database.batch();
+    for (let i = 0; i < 4; i++) batch.set(database.doc(`households/${HOUSEHOLD_ID}/assets/${sourceAssetIds[i]}/positionHistory/quantity`), {
+      householdId: HOUSEHOLD_ID, assetId: sourceAssetIds[i], positionId: `holding-${i}`, instrument: { market: "KRX", code: "368590" },
+      quantity: quantities[i], snapshotDate: "2026-09-28", observedAt: "2026-09-28T00:00:00Z", sourceVersion: 1,
+    });
+    batch.set(database.doc("operationsMigrationPlans/completed"), { status: "completed", nextIndex: 1, candidateCount: 1,
+      scope: { householdId: HOUSEHOLD_ID }, createdAt: "2026-07-21T14:24:05.162Z" });
+    batch.set(database.doc("operationsMigrationPlans/completed/candidates/initial"), {
+      action: "create", logicalCollection: "position", targetPath: `households/${HOUSEHOLD_ID}/assets/${sourceAssetIds[4]}/positions/holding-4`,
+      targetData: { householdId: HOUSEHOLD_ID, assetId: sourceAssetIds[4], positionId: "holding-4", market: "KRX", instrumentCode: "368590",
+        quantity: 855, aggregateVersion: 1, lifecycleState: "active" },
+    });
+    const reference = database.collection("dividend_events").doc("partial-fixed");
+    batch.set(reference, { ...announcement, householdId: HOUSEHOLD_ID, eventId: "event-partial", sourceAssetIds,
+      status: "fixed", eligibleQuantity: 2332, totalAmount: 102608, aggregateVersion: 2,
+      eligibilityContributions: quantities.slice(0, 4).map((quantity, i) => ({ assetId: sourceAssetIds[i], quantity, snapshotDate: "2026-09-28" })),
+    });
+    await batch.commit();
+    const holdings = new FirebaseDividendHoldingQuery(database);
+    const events = new FirebaseDividendEventRuntimeRepository(database);
+    const runtime = createDividendScheduledRuntimeApplication({ holdings, events, providerObservations: noOpObservations,
+      disclosures: { async discover() { return { kind: "no-data", attempts: 1, code: "NO_DISCLOSURES" }; },
+        async recheck() { return { kind: "success", attempts: 1, disclosures: [announcement] }; } },
+    });
+    const run = () => runtime.runLifecyclePage({ limit: 10, executionKey: "restore", asOfDate: "2026-10-02", observedAt: "2026-10-02T10:00:00Z" });
+    expect((await run()).items[0]?.kind).toBe("succeeded");
+    const restored = (await reference.get()).data()!;
+    expect(restored).toMatchObject({ status: "paid", eligibleQuantity: 3187, totalAmount: 140228, aggregateVersion: 4 });
+    expect(restored.eligibilityContributions).toHaveLength(5);
+    expect(restored.eligibilityContributions.find((item: { assetId: string }) => item.assetId === sourceAssetIds[4])).toMatchObject({ quantity: 855, snapshotDate: "2026-07-21", sourceVersion: expect.stringContaining("migration:completed:") });
+    await events.rebuildAllAnnualProjections({ sourceCheckpoint: "restore", observedAt: "2026-10-02T10:00:00Z" });
+    const projection = (await database.collection("dividend_snapshots").doc(`${HOUSEHOLD_ID}_2026`).get()).data()!;
+    expect(projection.monthlyData[9]).toBe(140228);
+    expect(projection.events["event-partial"]).toMatchObject({ totalAmount: 140228, status: "paid", eligibleQuantity: 3187 });
+    expect((await run()).items).toEqual([]);
+    expect((await reference.get()).data()).toEqual(restored);
+    expect((await database.doc(`households/${HOUSEHOLD_ID}/assets/${sourceAssetIds[4]}`).collection("positionHistory").get()).size).toBe(0);
+    expect((await database.doc("operationsMigrationPlans/completed").get()).data()?.status).toBe("completed");
+  });
+
   it("배당 이력 194건에서도 같은 공시 재확인은 문서 2건만 직접 읽고 결과를 유지한다", async () => {
     const events = new FirebaseDividendEventRuntimeRepository(database);
     const input = { target: lookupTarget, disclosure: lookupDisclosure, observedAt: "2026-07-29T09:00:00+09:00" };

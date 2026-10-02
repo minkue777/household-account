@@ -3,7 +3,7 @@
 `node tools/requirements/update-catalog.mjs`로 생성합니다. 실행 결과나 구현 완료 개수가 아닌 문서 선언 집계입니다.
 
 - 요구사항: 248개 (고유 ID 248개)
-- Canonical 테스트 시나리오 ID: 234개
+- Canonical 테스트 시나리오 ID: 235개
 
 | 소유 영역 | 요구사항 |
 |---|---:|
@@ -27,7 +27,7 @@
 | [contexts/payment-capture/modules/payment-configuration](contexts/payment-capture/modules/payment-configuration/requirements.md) | 12 | 12 |
 | [contexts/payment-capture/modules/shortcut-ingestion](contexts/payment-capture/modules/shortcut-ingestion/requirements.md) | 15 | 15 |
 | [contexts/portfolio/modules/asset-automation](contexts/portfolio/modules/asset-automation/requirements.md) | 5 | 5 |
-| [contexts/portfolio/modules/dividends](contexts/portfolio/modules/dividends/requirements.md) | 8 | 8 |
+| [contexts/portfolio/modules/dividends](contexts/portfolio/modules/dividends/requirements.md) | 8 | 9 |
 | [contexts/portfolio/modules/holdings-market-data](contexts/portfolio/modules/holdings-market-data/requirements.md) | 17 | 15 |
 | [contexts/portfolio/modules/portfolio](contexts/portfolio/modules/portfolio/requirements.md) | 9 | 12 |
 | [supporting-platform/modules/android-host](supporting-platform/modules/android-host/requirements.md) | 27 | 22 |

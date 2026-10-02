@@ -7,6 +7,8 @@
 
 ## 1. 설계 목적과 추적성
 
+최초 수량 이력 누락 복구는 [2026-10-02 상세 설계](../../../../../operations/dividend-initial-history-2026-10-02.md)의 `T-DIV-008` 계약을 따릅니다. 모든 원천 계좌의 근거를 확인한 뒤에만 확정·정정하며, 명시적 부분 증거가 저장된 fixed는 동일 공시에도 재계산합니다. 증거가 없는 구버전 fixed와 paid 불변 계약은 유지합니다.
+
 이 문서는 공시를 결정적 `DividendEvent`로 바꾸고 `announced → fixed → paid` 상태를 강제하며, 원천 Event에서 연간 12개월 Projection을 멱등 재구축하는 계약을 정의합니다. KRX ETF 공시 discovery와 이미 저장된 nonterminal Event lifecycle sweep을 분리하고, 기준일 적격 수량은 Holdings의 공개 Position history Query만 사용하며 Position Repository나 Provider DTO에 직접 의존하지 않습니다.
 
 공통 `CommandEnvelope`, `ActorContext`, typed Result, receipt·Outbox·Inbox 형식은 [모듈 상세 설계 규약](../../../../governance/module-design-standard.md)을 사용합니다. [DEC-014](../../../../governance/decisions.md#dec-014)의 최근접 snapshot·이전 날짜 동률 우선 규칙은 `DividendEligibilityRecoveryPolicy`에 고정합니다. 추가 근거는 [배당 종단 흐름](../../../../system/flows.md), [데이터 소유권](../../../../cross-cutting/data-ownership.md), [보안 경계](../../../../cross-cutting/security-privacy.md), [테스트 전략](../../../../governance/test-strategy.md)입니다.

@@ -12,6 +12,7 @@ import type {
   ScheduledDividendEvent,
 } from "../../../contexts/portfolio/dividends/application/ports/out/dividendScheduledRuntimePorts";
 import type { DividendHoldingTargetView } from "../../../contexts/portfolio/holdings/public";
+import { positionHistoryFailure } from "../../../contexts/portfolio/dividends/domain/policies/dividendEligibilityPolicy";
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
 
 const EVENTS = "dividend_events";
@@ -211,6 +212,11 @@ function scheduledEvent(
     ...(number(data.totalAmount) === undefined
       ? {}
       : { totalAmount: number(data.totalAmount)! }),
+    ...(Array.isArray(data.eligibilityContributions) ? {
+      eligibilityAssetIds: data.eligibilityContributions.flatMap((item: Record<string, unknown>) =>
+        item !== null && typeof item === "object" && text(item.assetId) !== undefined &&
+          number(item.quantity) !== undefined && Number(item.quantity) >= 0 ? [String(item.assetId)] : []),
+    } : {}),
     aggregateVersion: Math.max(1, Math.trunc(number(data.aggregateVersion) ?? 1)),
   };
 }
@@ -353,6 +359,13 @@ export class FirebaseDividendEventRuntimeRepository
       if (input.correction !== undefined && (currentVersion !== input.correction.expectedVersion || !Number.isFinite(input.correction.eligibleQuantity) || input.correction.eligibleQuantity < 0)) {
         return { kind: "retryable-failure", code: "DIVIDEND_VERSION_CONFLICT" };
       }
+      if (input.correction !== undefined) {
+        const failure = positionHistoryFailure([...new Set([...strings(current?.sourceAssetIds), ...input.target.sourceAssetIds])], input.correction.evidence);
+        if (failure !== undefined) return { kind: "retryable-failure", code: failure };
+        if (input.correction.eligibleQuantity !== input.correction.evidence.reduce((sum, item) => sum + item.quantity, 0)) {
+          return { kind: "retryable-failure", code: "DIVIDEND_CORRECTION_EVIDENCE_REQUIRED" };
+        }
+      }
       const candidate = eventDocument({
         eventId: currentEventId,
         target: input.target,
@@ -368,6 +381,8 @@ export class FirebaseDividendEventRuntimeRepository
         text(current.sourceReferenceHash) === input.disclosure.sourceReferenceHash &&
         strings(current.sourceAssetIds).slice().sort().join("|") ===
           candidate.sourceAssetIds.join("|") &&
+        (input.correction === undefined || (number(current.eligibleQuantity) === candidate.eligibleQuantity &&
+          JSON.stringify(current.eligibilityContributions) === JSON.stringify(candidate.eligibilityContributions))) &&
         text(current.eventId) !== undefined;
       const result: DividendAnnouncementUpsertResult = unchanged
         ? {
@@ -466,6 +481,11 @@ export class FirebaseDividendEventRuntimeRepository
         ) {
           result = { kind: "unchanged", code: "DIVIDEND_TRANSITION_NOT_APPLICABLE" };
         } else {
+          const failure = positionHistoryFailure(strings(current.sourceAssetIds), input.evidence ?? []);
+          if (failure !== undefined) return { kind: "unchanged", code: failure };
+          if (input.eligibleQuantity !== input.evidence!.reduce((sum, item) => sum + item.quantity, 0)) {
+            return { kind: "unchanged", code: "DIVIDEND_CORRECTION_EVIDENCE_REQUIRED" };
+          }
           const nextVersion = currentVersion + 1;
           result = {
             kind: "changed",
@@ -498,6 +518,10 @@ export class FirebaseDividendEventRuntimeRepository
       } else if (currentStatus !== "fixed") {
         result = { kind: "unchanged", code: "DIVIDEND_TRANSITION_NOT_APPLICABLE" };
       } else {
+        if (Array.isArray(current.eligibilityContributions)) {
+          const failure = positionHistoryFailure(strings(current.sourceAssetIds), current.eligibilityContributions);
+          if (failure !== undefined) return { kind: "unchanged", code: failure };
+        }
         const nextVersion = currentVersion + 1;
         result = {
           kind: "changed",
