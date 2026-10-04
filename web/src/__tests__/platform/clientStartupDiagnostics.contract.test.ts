@@ -74,6 +74,10 @@ describe('iPhone startup diagnostics contract', () => {
     clock = 300; marks.markWebAuthCompleted(true);
     clock = 350; diagnostics.recordClientStartupTiming('ledgerListenStarted');
     clock = 700; diagnostics.recordClientStartupTiming('ledgerServerSnapshotReceived');
+    jest.mocked(window.performance.getEntriesByType).mockImplementation(type => {
+      if (type === 'resource') { clock += 50; return resources as PerformanceEntry[]; }
+      return navigation as PerformanceEntry[];
+    });
     clock = 800; marks.markWebFirstHomeCompletePaint();
     changeVisibility('hidden', 900);
     clock = 1_000; diagnostics.recordClientStartupTiming('yearSummaryServerSnapshotReceived');
@@ -81,7 +85,7 @@ describe('iPhone startup diagnostics contract', () => {
     const result = await observation.readCapturedClientStartupObservation();
     expect(result).toMatchObject({ platform: 'android', durationMs: 2_000, diagnostics: {
       hiddenMs: 0, hiddenCount: 0,
-      android: { webDurationMs: 800, bridgeRoundTripMs: 200 },
+      android: { webDurationMs: 800, bridgeRoundTripMs: 150 },
       timingsMs: { bootstrapStarted: 100, authStarted: 200, authReady: 300,
         ledgerListenStarted: 350, ledgerServerSnapshotReceived: 700, firstHomeCompletePaint: 800 },
     } });

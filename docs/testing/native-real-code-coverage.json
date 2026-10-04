@@ -372,7 +372,7 @@
                          "tests":  [
                                        "android/app/src/androidTest/java/com/household/account/e2e/WebStartupFirebaseE2ETest.kt::realHomePaintReportsActivityElapsedOnceAndReloadKeepsMemoryCacheServerFresh"
                                    ],
-                         "verifiedBehavior":  "실제 MainActivity monotonic clock→HTTPS Next Web 전체→홈 서버 데이터 paint→실제 앱 방문 계측 Command, Native 준비시간 포함 및 reload 중복 표본 없음, Android memory cache와 최신 지역화폐",
+                         "verifiedBehavior":  "실제 MainActivity monotonic clock→HTTPS Next Web 전체→홈 서버 데이터 paint→실제 앱 방문 계측 Command, Native WebView 준비·navigation 요청과 Web 구간의 기준점 분리, 실제 logger와 전체 진단 동등성, reload 중복 표본 없음, Android memory cache와 최신 지역화폐 및 Lite 미실행",
                          "remaining":  [
                                            "2분 경계·실패 표본 억제는 실제 clientStartupObservation/AppLaunchDurationClock 단위 테스트"
                                        ]

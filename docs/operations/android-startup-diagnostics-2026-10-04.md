@@ -29,3 +29,5 @@ AND-014 / T-ANDROID-STARTUP-001, ADM-006 / T-ADM-005: 기존 Activity 생성부�
 로그는 저장소 밖 TEMP/household-android-diagnostics-{web-unit,functions-unit,native-unit,prepare,apk,native-e2e,ios-e2e}-20261004.log에 둔다.
 
 첫 Native 실행은 실제 Android E2E 4개가 통과했으나 runner의 신규 로그 대조에서 실패했다. Firebase CLI가 runtime JSON 뒤에 metadata JSON을 이어 쓰는 형식을 한 JSON으로 해석한 관측 도구 오류다. 따옴표·escape·중첩을 유지하며 첫 JSON 객체만 읽는 parser와 형식 회귀 3개를 추가하고, 실제 서버 진단 전체 동등성·1회 로그 assertion을 유지한다.
+
+Web 전체 단위 검사 123파일 882개가 통과했다. 서버 `9528a559e1660c60e01259f7526c423ce9fdef4e`는 release-20261004-android-startup-9528a55로 세 codebase 배포, 실제 로그인·가구 Query·release marker 및 provenance 기록을 완료했다. 두 번째 Native 실행도 Android 검사 4개는 통과했으나 동시 실행한 배포 도구가 공용 firebase-debug.log를 정리하여 로그 대조만 실패했다. 이후 배포와 Emulator 검사를 순차 실행한다. 후속 Web 보정은 진단 동결 작업을 bridge 왕복 구간에서 제외하며 서버 재배포나 APK 내용 변경은 없다.

@@ -71,6 +71,7 @@ Promise<ClientStartupObservation | undefined> {
     // Freeze Web observations at paint, before the asynchronous Native bridge round trip.
     const webDurationMs = webNow();
     const webDiagnostics = captureDiagnostics(webDurationMs);
+    const bridgeStartedAt = webNow();
     capturedObservation = requestAndroidHost(
       'performance.get-app-launch-duration',
       {}
@@ -79,8 +80,8 @@ Promise<ClientStartupObservation | undefined> {
         const normalized = normalizedDuration(durationMs);
         if (normalized === undefined) return undefined;
         const receivedAt = webNow();
-        const bridgeRoundTripMs = receivedAt !== undefined && webDurationMs !== undefined
-          ? normalizedDuration(receivedAt - webDurationMs) : undefined;
+        const bridgeRoundTripMs = receivedAt !== undefined && bridgeStartedAt !== undefined
+          ? normalizedDuration(receivedAt - bridgeStartedAt) : undefined;
         const native = nativeTimings(startupTimingsMs, normalized);
         const diagnostics = webDiagnostics && webDurationMs !== undefined && bridgeRoundTripMs !== undefined
           ? { ...webDiagnostics, android: { webDurationMs, bridgeRoundTripMs,
