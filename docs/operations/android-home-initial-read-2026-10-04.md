@@ -38,3 +38,11 @@ CI 37206047688의 Web 단위 검사는 통과했으나 기존 PWA worker 활성�
 기존 CSP·cache·잘못된 버전 거부 검사를 유지하며 후보 waiting URL, 실제 active/controller의 정확한 후보 URL·activated 상태를 검증한다. 15초 제한이나 재시도는 바꾸지 않는다. worker statechange/controllerchange의 읽기 전용 관측과 최종 registration 상태를 첨부하여 재발 시 설치·활성화·제어권 전환을 구분한다. 원인 해결로 표현하지 않고 새 CI 결과와 과거 실패 이력을 함께 유지한다.
 
 관측 보강 뒤 production PWA 검사 5개(15.6초)와 타입 검사가 통과했다. 이 후속 변경은 테스트·문서뿐이며 추가 제품 배포 대상은 없다. 원 실행의 실제 Android instrumentation과 남은 Web E2E도 함께 추적한다. 관련 로그는 TEMP/household-android-initial-{native-e2e,ios-e2e,pwa-build,pwa-repro,pwa-observation}-20261004.log, CI 원본과 trace는 TEMP/household-android-initial-ci-{web,pwa}-37206047688에 보관한다.
+
+### Native 성공 경로와 복귀 경로의 분리
+
+원 실행의 실제 Native startup 검사는 Listen을 보류한 상태에서 첫 홈 완료를 90초 기다리다 실패했다. API 34/WebView 113 로그에 보류된 Listen의 10초 offline·45초 transport timeout이 남았으며 초기 Lite별 완료·fallback은 첫 paint 이전 실패라 전송되지 않았다. 어느 초기 자료가 750ms를 넘겼거나 세션 교체로 취소됐는지는 원 자료만으로 확정하지 않는다. 단, 성공 경로 검사가 최초 로그인·코드 준비를 함께 수행하면서 fallback의 유일한 Listen 경로까지 보류한 구조는 정상 fallback을 검증할 수 없었다.
+
+실제 앱의 일반 최초 실행이 최신 첫 홈과 방문 Command까지 완료되는 것을 먼저 확인한 뒤, 새 Activity 재실행에서 Listen을 보류하고 네 Lite 성공·750ms 기준·서버 snapshot 없는 첫 홈 assertion을 그대로 검사한다. 같은 Activity reload에서는 반대로 실제 Lite 응답만 보류하고 기존 구독이 최신 잔액 36,890원을 표시해야 한다. 구독으로 47,901원까지 변경한 뒤 보류된 이전 Lite 응답을 전달해도 최신 값이 유지되는지 추가 검증한다. 숫자는 고정 demo fixture이며 운영 자료를 사용하지 않는다. 지연된 실제 응답만 전달하며 가짜 데이터·시간·성공값을 주입하지 않는다.
+
+제품의 750ms 예산·코드·90초 검사 제한은 변경하지 않는다. 실패 시 자료 본문 없이 실제 요청 종류·시각·응답 상태, 보류 수와 준비 mark를 logcat에 남긴다. 이 변경은 테스트 시나리오 보강이며 원 CI의 Lite 내부 지연 원인이나 운영 제품 결함을 해결했다고 표현하지 않는다.

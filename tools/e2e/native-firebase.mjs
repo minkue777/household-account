@@ -240,6 +240,7 @@ else {
     assert.equal(startup.platform, 'android');
     assert.equal(startup.sameActivityReloadStartupSamples, 0);
     assert.equal(startup.latestLocalCurrencyBalance, 36890);
+    assert.equal(startup.lateLiteRetainedBalance, 47901, 'Timed-out Lite responses must not overwrite newer real live data');
     // Observe the actual production logger output. No logging sink or handler is replaced.
     const logText = readLogSince(firebaseLog, logOffset);
     const observations = new Set();
