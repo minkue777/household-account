@@ -8,6 +8,9 @@ type Entry = {
   scope: ReturnType<typeof getClientSessionScope>;
   observers: Set<Observer>;
   stop: () => void;
+  restart: () => void;
+  generation: number;
+  failed: boolean;
   loaded: boolean;
   data?: DocumentData;
 };
@@ -29,37 +32,49 @@ export function subscribeToHomePreferencesDocument(
   }
   if (entry) {
     entry.observers.add(observer);
+    if (entry.failed) entry.restart();
     if (entry.loaded) next(entry.data);
   } else {
-    const created: Entry = { scope, observers: new Set([observer]), stop: () => {}, loaded: false };
+    const created: Entry = { scope, observers: new Set([observer]), stop: () => {}, restart: () => {},
+      generation: 0, failed: false, loaded: false };
     entries.set(householdId, created);
     entry = created;
-    const current = () => entries.get(householdId) === created && getClientSessionScope() === scope;
-    const publish = (data: DocumentData | undefined) => {
-      if (!current()) return;
-      created.data = data;
-      created.loaded = true;
-      created.observers.forEach(value => value.next(data));
+    created.restart = () => {
+      created.stop();
+      created.failed = false;
+      const generation = ++created.generation;
+      const current = () => entries.get(householdId) === created && getClientSessionScope() === scope
+        && created.generation === generation;
+      const publish = (data: DocumentData | undefined) => {
+        if (!current()) return;
+        created.data = data;
+        created.loaded = true;
+        created.observers.forEach(value => value.next(data));
+      };
+      created.stop = subscribeWithInitialHomeRead({
+        source: 'currencyPreferences', scope: scope?.householdId === householdId ? scope : undefined,
+        read: async () => {
+          const server = await import('./firestoreServerReadModel');
+          return server.getDocFromServer(server.doc(server.db, 'households', householdId, 'homePreferences', 'home'));
+        },
+        publish: snapshot => publish(snapshot.data()),
+        listen: () => {
+          recordClientStartupTiming('currencyPreferencesListenStarted');
+          return onSnapshot(doc(db, 'households', householdId, 'homePreferences', 'home'),
+            { includeMetadataChanges: true }, snapshot => {
+              if (!current() || snapshot.metadata.fromCache) return;
+              recordClientStartupTiming('currencyPreferencesServerSnapshotReceived');
+              publish(snapshot.data());
+            }, failure => {
+              if (current()) {
+                created.failed = true;
+                created.observers.forEach(value => value.error?.(failure));
+              }
+            });
+        },
+      });
     };
-    created.stop = subscribeWithInitialHomeRead({
-      source: 'currencyPreferences', scope: scope?.householdId === householdId ? scope : undefined,
-      read: async () => {
-        const server = await import('./firestoreServerReadModel');
-        return server.getDocFromServer(server.doc(server.db, 'households', householdId, 'homePreferences', 'home'));
-      },
-      publish: snapshot => publish(snapshot.data()),
-      listen: () => {
-        recordClientStartupTiming('currencyPreferencesListenStarted');
-        return onSnapshot(doc(db, 'households', householdId, 'homePreferences', 'home'),
-          { includeMetadataChanges: true }, snapshot => {
-            if (!current() || snapshot.metadata.fromCache) return;
-            recordClientStartupTiming('currencyPreferencesServerSnapshotReceived');
-            publish(snapshot.data());
-          }, failure => {
-            if (current()) created.observers.forEach(value => value.error?.(failure));
-          });
-      },
-    });
+    created.restart();
   }
   const owned = entry;
   return () => {

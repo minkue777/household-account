@@ -23,3 +23,9 @@ Lite 조회 예산은 750ms이다. 실패 또는 예산 초과 시 해당 결과
 - 이전 d727a45의 CI 37190951536은 다섯 검사와 요약 모두 성공했다. 이전 37190669714의 web-e2e도 성공이며 해당 실행의 기존 web 실패 기록은 유지한다.
 
 로그는 저장소 밖 TEMP/household-ios-initial-{unit,regression,incremental,prepare,e2e,preferences-e2e}-20261004.log이다. 이 결과는 실기기 속도 측정이 아니다. 750ms 예산에 동적 모듈 로드를 포함하며 운영의 fallback 비율과 동일 조건 전체 실행 시간으로 효과를 판정한다. Firestore의 기본 서버 읽기 일관성은 [공식 문서](https://firebase.google.com/docs/firestore/understand-reads-writes-scale)를 참고했다.
+
+## 공유 설정 구독의 복구 및 서버 선행 배포
+
+공유 구독이 실패했을 때 다른 observer가 남아 있으면 단순 참조 수명 관리만으로는 기존 종료 listener를 재사용할 수 있음을 검토에서 확인했다. 실패 상태와 구독 세대를 분리하여 같은 scope의 재연결이 전체 observer의 source를 다시 열고 이전 구독의 늦은 callback/error를 무시하도록 보정했다. 초기 Lite 요청은 반복하지 않는다. 이 회귀를 포함한 관련 3파일 27개와 타입 검사가 통과했다. 1,000개 원장의 증분 mapping·숨김·이동·삭제·해석 실패 복구 8개 및 카테고리 설정 4개도 기존 검증 기준으로 통과했다.
+
+서버 진단 확장은 e1714d701626d1c94d80672e0690b69c23aca7a2의 release-20261004-ios-initial-read-e1714d7로 default/payment-capture/access-session 세 codebase를 배포했고 wrapper의 실제 로그인·가구 Query·release marker 검증과 성공 provenance 기록이 완료됐다. 로그는 TEMP/household-ios-initial-deploy-20261004.log이다. 이후 보정은 Web 공유 구독과 테스트·문서뿐이므로 서버 재배포 대상은 아니다. Web은 후속 SHA의 Git 자동배포 및 전체 CI로 확인한다.

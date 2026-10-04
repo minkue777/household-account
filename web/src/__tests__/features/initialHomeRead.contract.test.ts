@@ -127,4 +127,26 @@ describe('[T-WEBVIEW-004][T-SYS-008][AND-012] 첫 홈 서버 조회 전환', () 
     expect(b).toHaveBeenLastCalledWith(undefined); expect(a).toHaveBeenCalledTimes(1);
     stopB(); expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
+
+  it('공유 구독 실패 뒤 같은 scope의 재연결은 남은 observer도 복구하고 종료된 구독의 늦은 응답을 무시한다', async () => {
+    setup(); mockRead.mockResolvedValue({ data: () => ({ aggregateVersion: 1 }) });
+    const { subscribeToHomePreferencesDocument: subscribe } = require('@/platform/read-model/homePreferencesReadModel') as typeof import('@/platform/read-model/homePreferencesReadModel');
+    const a = jest.fn(), b = jest.fn(), failure = jest.fn();
+    const stopA = subscribe('house-1', a, failure), stopB = subscribe('house-1', b);
+    await flush();
+    const old = mockListen.mock.calls[0], oldStop = mockListen.mock.results[0].value;
+    old[3](new Error('permission-denied')); expect(failure).toHaveBeenCalledTimes(1);
+    stopB();
+    const stopNewB = subscribe('house-1', b);
+    expect(oldStop).toHaveBeenCalledTimes(1);
+    expect(mockListen).toHaveBeenCalledTimes(2); expect(mockRead).toHaveBeenCalledTimes(1);
+    mockListen.mock.calls[1][2]({ metadata: { fromCache: false }, data: () => ({ aggregateVersion: 2 }) });
+    expect(a).toHaveBeenLastCalledWith({ aggregateVersion: 2 });
+    expect(b).toHaveBeenLastCalledWith({ aggregateVersion: 2 });
+    const count = a.mock.calls.length;
+    old[2]({ metadata: { fromCache: false }, data: () => ({ aggregateVersion: 1 }) });
+    old[3](new Error('late'));
+    expect(a).toHaveBeenCalledTimes(count); expect(failure).toHaveBeenCalledTimes(1);
+    stopA(); stopNewB();
+  });
 });
