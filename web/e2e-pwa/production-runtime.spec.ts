@@ -29,7 +29,7 @@ test('[T-PWA-005][PWA-006][PWA-007] 알림 주소는 HTTP redirect로 편집 대
   expect(browserErrors).toEqual([]);
 });
 
-test('[T-PWA-INSTALL-001][T-PWA-001][T-PWA-003][PWA-001][PWA-002][PWA-003][PWA-004][PWA-005][PWA-007][PWA-008] 빌드된 HTML의 CSP가 hydration을 허용하고 실제 root worker가 static만 cache한다', async ({ page, context, request }) => {
+test('[T-PWA-INSTALL-001][T-PWA-001][T-PWA-003][PWA-001][PWA-002][PWA-003][PWA-004][PWA-005][PWA-007][PWA-008] 빌드된 HTML의 CSP가 hydration을 허용하고 실제 root worker가 static만 cache한다', async ({ page, context, request }, testInfo) => {
   const blockedScripts: string[] = [];
   page.on('console', message => { if (/Refused to execute inline script|violates.*script-src/i.test(message.text())) blockedScripts.push(message.text()); });
   const response = await page.goto('/');
@@ -88,36 +88,80 @@ test('[T-PWA-INSTALL-001][T-PWA-001][T-PWA-003][PWA-001][PWA-002][PWA-003][PWA-0
   expect(await page.evaluate(() => (window as typeof window & { __e2eUntrustedInlineExecuted?: boolean }).__e2eUntrustedInlineExecuted)).toBeUndefined();
   expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).map(registration => new URL(registration.scope).pathname))).toEqual(['/']);
 
-  // A second worker script identity installs but keeps the existing client and controller.
-  const before = await page.evaluate(() => navigator.serviceWorker.controller?.scriptURL);
-  await page.evaluate(async () => { await navigator.serviceWorker.register('/sw.js?candidate=2', { scope: '/' }); });
-  await expect.poll(() => page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration('/'))?.waiting)).toBe(true);
-  expect(await page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toBe(before);
-  const version = await page.evaluate(async () => {
-    const waiting = (await navigator.serviceWorker.getRegistration('/'))!.waiting!;
-    const channel = new MessageChannel();
-    const response = new Promise<string>(resolve => { channel.port1.onmessage = event => resolve(event.data.workerVersion); });
-    waiting.postMessage({ type: 'GET_WORKER_VERSION' }, [channel.port2]);
-    return response;
+  // Observe the real registration lifecycle without replacing workers, messages or clocks.
+  const lifecycle = await page.evaluateHandle(async () => {
+    const registration = (await navigator.serviceWorker.getRegistration('/'))!;
+    const describe = (worker: ServiceWorker | null) => worker
+      ? { scriptURL: worker.scriptURL, state: worker.state } : null;
+    const current = () => ({ controller: describe(navigator.serviceWorker.controller),
+      active: describe(registration.active), waiting: describe(registration.waiting), installing: describe(registration.installing) });
+    const events: Array<{ reason: string; atMs: number; state: ReturnType<typeof current> }> = [];
+    const record = (reason: string) => {
+      events.push({ reason, atMs: performance.now(), state: current() });
+      if (events.length > 30) events.shift();
+    };
+    const watched = new Map<ServiceWorker, () => void>();
+    const discover = () => {
+      for (const worker of [registration.active, registration.waiting, registration.installing]) {
+        if (!worker || watched.has(worker)) continue;
+        const changed = () => record(worker.scriptURL + ':' + worker.state);
+        watched.set(worker, changed); worker.addEventListener('statechange', changed);
+      }
+      record('registration');
+    };
+    const controllerChanged = () => record('controllerchange');
+    registration.addEventListener('updatefound', discover);
+    navigator.serviceWorker.addEventListener('controllerchange', controllerChanged);
+    discover();
+    return { read: () => ({ current: current(), events }), dispose: () => {
+      registration.removeEventListener('updatefound', discover);
+      navigator.serviceWorker.removeEventListener('controllerchange', controllerChanged);
+      watched.forEach((listener, worker) => worker.removeEventListener('statechange', listener));
+    } };
   });
-  expect(version).toBeTruthy();
-  expect(context.serviceWorkers()).toHaveLength(2);
-  // Legacy Workbox 명령과 잘못된 버전은 활성화를 우회하지 못합니다.
-  await page.evaluate(async () => {
-    const waiting = (await navigator.serviceWorker.getRegistration('/'))!.waiting!;
-    waiting.postMessage({ type: 'SKIP_WAITING' });
-    waiting.postMessage({ type: 'ACTIVATE_WAITING_WORKER', workerVersion: 'wrong-build-version' });
-    const channel = new MessageChannel();
-    const ack = new Promise<void>(resolve => { channel.port1.onmessage = () => resolve(); });
-    waiting.postMessage({ type: 'GET_WORKER_VERSION' }, [channel.port2]);
-    await ack;
-  });
-  expect(await page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toBe(before);
-  expect(await page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration('/'))?.waiting)).toBe(true);
-  // 실제 version handshake 뒤에만 새 Worker가 controller가 됩니다.
-  await page.evaluate(async workerVersion => {
-    (await navigator.serviceWorker.getRegistration('/'))!.waiting!.postMessage({ type: 'ACTIVATE_WAITING_WORKER', workerVersion });
-  }, version);
-  await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toContain('?candidate=2');
-  await expect(page.getByRole('button', { name: /\uB85C\uADF8\uC778/ }).first()).toBeVisible();
+  try {
+    // A second worker script identity installs but keeps the existing client and controller.
+    const before = await page.evaluate(() => navigator.serviceWorker.controller?.scriptURL);
+    const candidateUrl = new URL('/sw.js?candidate=2', page.url()).href;
+    await page.evaluate(async () => { await navigator.serviceWorker.register('/sw.js?candidate=2', { scope: '/' }); });
+    await expect.poll(() => page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration('/'))?.waiting)).toBe(true);
+    expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistration('/'))?.waiting?.scriptURL)).toBe(candidateUrl);
+    expect(await page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toBe(before);
+    const version = await page.evaluate(async () => {
+      const waiting = (await navigator.serviceWorker.getRegistration('/'))!.waiting!;
+      const channel = new MessageChannel();
+      const response = new Promise<string>(resolve => { channel.port1.onmessage = event => resolve(event.data.workerVersion); });
+      waiting.postMessage({ type: 'GET_WORKER_VERSION' }, [channel.port2]);
+      return response;
+    });
+    expect(version).toBeTruthy();
+    expect(context.serviceWorkers()).toHaveLength(2);
+    // Legacy Workbox 명령과 잘못된 버전은 활성화를 우회하지 못합니다.
+    await page.evaluate(async () => {
+      const waiting = (await navigator.serviceWorker.getRegistration('/'))!.waiting!;
+      waiting.postMessage({ type: 'SKIP_WAITING' });
+      waiting.postMessage({ type: 'ACTIVATE_WAITING_WORKER', workerVersion: 'wrong-build-version' });
+      const channel = new MessageChannel();
+      const ack = new Promise<void>(resolve => { channel.port1.onmessage = () => resolve(); });
+      waiting.postMessage({ type: 'GET_WORKER_VERSION' }, [channel.port2]);
+      await ack;
+    });
+    expect(await page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toBe(before);
+    expect(await page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration('/'))?.waiting)).toBe(true);
+    // 실제 version handshake 뒤에만 새 Worker가 controller가 됩니다.
+    await page.evaluate(async workerVersion => {
+      (await navigator.serviceWorker.getRegistration('/'))!.waiting!.postMessage({ type: 'ACTIVATE_WAITING_WORKER', workerVersion });
+    }, version);
+    // Keep the same 15-second activation deadline, and include the active/waiting states on failure.
+    await expect.poll(() => lifecycle.evaluate(probe => probe.read())).toMatchObject({ current: {
+      controller: { scriptURL: candidateUrl, state: 'activated' },
+      active: { scriptURL: candidateUrl, state: 'activated' },
+    } });
+    await expect(page.getByRole('button', { name: /\uB85C\uADF8\uC778/ }).first()).toBeVisible();
+  } finally {
+    await testInfo.attach('worker-activation-lifecycle', { contentType: 'application/json',
+      body: Buffer.from(JSON.stringify(await lifecycle.evaluate(probe => probe.read()), null, 2)) });
+    await lifecycle.evaluate(probe => probe.dispose());
+    await lifecycle.dispose();
+  }
 });

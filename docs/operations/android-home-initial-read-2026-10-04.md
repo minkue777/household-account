@@ -28,3 +28,13 @@ AND-012 / T-WEBVIEW-004, AND-014 / T-ANDROID-STARTUP-001, SYS-008 / T-SYS-008의
 ## 로컬 검증
 
 변경 전 성공→구독 순서 검사를 Android/iPhone에 실행하여 Android 실패와 iPhone 통과를 확인했다. 구현 후 초기 조회·진단·시계·Android runtime 관련 4파일 50개, `tsc --noEmit`, 요구사항 catalog와 E2E 추적성 생성이 통과했다. 실제 Native 전송 보류·구독 전환 및 iPhone 회귀는 production build와 Emulator로 별도 검증한다.
+
+실제 API 36.1 Android/production Web/Firebase Emulator 검사 4개, 후속 Native→Web Chromium 1개, iPhone WebKit 회귀 3개가 통과했다. Android에서 실제 Listen 전송을 보류한 동안 네 Lite 조회 성공으로 첫 홈을 표시하고, 해제 후 지역화폐 변경과 reload 최신 값·동일 Activity 계측 1회를 검증했다. 실제 서버 logger와 기기 진단 전체 동등성 및 로그 1회도 통과했다. 운영 `cbe4b52f2e5cb891f86a17eaafc60248d532e052`의 Git 자동배포와 `/`, `/sw.js`, build manifest HTTP 200 및 버전을 확인했다.
+
+## 후속 CI 관측 보강
+
+CI 37206047688의 Web 단위 검사는 통과했으나 기존 PWA worker 활성화 검사에서 15초 뒤에도 controller URL이 `/sw.js`여서 `?candidate=2` 기대와 달랐다. trace에서 후보 script HTTP 200, waiting 존재, 버전 handshake 응답과 활성화 메시지 전송은 확인했다. 당시 active/waiting/installing 상태는 없어 활성화 중단 원인을 확정하지 못했으며 Android Lite의 제품 결함으로 단정하지 않는다. 같은 production 빌드의 로컬 원본 검사 2개는 통과해 실패가 재현되지 않았다.
+
+기존 CSP·cache·잘못된 버전 거부 검사를 유지하며 후보 waiting URL, 실제 active/controller의 정확한 후보 URL·activated 상태를 검증한다. 15초 제한이나 재시도는 바꾸지 않는다. worker statechange/controllerchange의 읽기 전용 관측과 최종 registration 상태를 첨부하여 재발 시 설치·활성화·제어권 전환을 구분한다. 원인 해결로 표현하지 않고 새 CI 결과와 과거 실패 이력을 함께 유지한다.
+
+관측 보강 뒤 production PWA 검사 5개(15.6초)와 타입 검사가 통과했다. 이 후속 변경은 테스트·문서뿐이며 추가 제품 배포 대상은 없다. 원 실행의 실제 Android instrumentation과 남은 Web E2E도 함께 추적한다. 관련 로그는 TEMP/household-android-initial-{native-e2e,ios-e2e,pwa-build,pwa-repro,pwa-observation}-20261004.log, CI 원본과 trace는 TEMP/household-android-initial-ci-{web,pwa}-37206047688에 보관한다.
