@@ -1,0 +1,30 @@
+# Android 첫 홈 서버 조회와 실시간 구독 전환
+
+## 근거와 요구사항
+
+2026-10-04 22:25 KST 운영 재실행 3건의 전체 시간은 2,319 / 2,251 / 1,656ms였다. 로그인 복원은 1,278.3 / 354.5 / 360.7ms, 주요 데이터 수신 대기는 421.6 / 1,521.1 / 877.2ms였고 준비 후 paint는 12.3~17ms였다. 인증 갱신 이후 대기와 Firestore 연결·서버·전송 내부 원인을 각각 확정한 것은 아니다. 운영 효과는 후속 상세 로그로 비교한다.
+
+AND-012 / T-WEBVIEW-004, AND-014 / T-ANDROID-STARTUP-001, SYS-008 / T-SYS-008의 첫 서버 자료·최신 값·계측 기준을 유지하면서 iPhone의 초기 Lite 조회를 Android WebView 첫 홈에도 적용한다. 이번 변경은 로그인 복원이나 Native 준비 시간을 바꾸지 않는다.
+
+## 상세 설계와 계약
+
+- 현재 월 원장, 카테고리, 홈 설정, 지역화폐 잔액을 기존 Auth·Rules를 공유하는 Firestore Lite로 조회한다. 각 조회의 실제 서버 결과를 기존 mapper와 optimistic projection에 반영한 뒤 같은 원본의 실시간 구독을 연다. 공유 홈 설정의 조회·구독도 하나를 유지한다.
+- 초기 조회는 첫 홈이 준비되기 전 문서 실행당 원본별 한 번이다. 일반 브라우저, 다른 route, 이후 월 이동·재연결은 기존 구독을 즉시 시작한다. 가구 metadata는 기존 병렬 비차단 갱신을 유지한다.
+- 동적 코드 로드 포함 750ms 예산을 유지한다. 초과·조회/해석 실패면 기존 구독으로 한 번 복귀하며 늦게 끝난 Lite 응답을 영구 폐기한다. 구독 시작 전 취소·세션/가구 scope 변경은 timer와 응답을 무효화한다. 실패 시 구독 시작이 최대 750ms 늦어지는 비용과 첫 홈의 추가 읽기 비용은 운영 평가에 포함한다.
+- Lite보다 먼저 구독을 열어 이전 서버값이 새 값을 덮는 race를 만들지 않는다. 첫 watch cache는 무시하고 실제 서버 snapshot부터 적용한다. 수정·삭제 pending과 실패 rollback, QuickEdit feedback은 기존 projection을 통과한다.
+- 기존 InitialReadStarted/Received/Fallback을 Android 상세 진단에도 기록한다. Native/Web 시간 기준, 첫 최신 홈 paint와 동일 Activity 1회 총시간 규칙을 유지한다. 서버는 해당 필드를 이미 지원한다. 운영 자료·로그 필드·APK 계약 변경은 없다.
+
+## 계약 테스트와 추적성
+
+| 요구사항 / 계약 | 검증 |
+|---|---|
+| AND-012 / T-WEBVIEW-004: 양쪽 모바일의 성공→구독 순서, 750ms 복귀, 늦은 응답·해제·세션 교체, 문서당 1회, 일반 Web 제외 | initialHomeRead.contract.test.ts의 iPhone/Android 계약 |
+| 수정·삭제 pending/rollback, cache 무시, 설정 공유·구독 복구 | 같은 계약 파일의 실제 projection·공유 read model 검사 |
+| AND-014 / T-ANDROID-STARTUP-001: 실제 Android Activity/bridge/Auth/Lite/서버 로그, Listen 대기 중 최신 첫 홈, 구독 전환 뒤 최신 변경, reload 계측 1회 | WebStartupFirebaseE2ETest 및 native-firebase runner |
+| SYS-008 / T-SYS-008: iPhone의 기존 초기 조회·구독 전환·로그인·paint 유지 | ios-startup.spec.ts 실제 WebKit/Emulator 검사 |
+
+요구사항·설계와 계약을 먼저 갱신한다. Web Git 자동배포만 필요하며 Firebase와 APK 재배포는 필요하지 않다. 검증 결과는 로컬 TEMP/household-android-initial-* 로그 및 해당 커밋 CI로 확인한다. 에뮬레이터의 절대시간을 실기기 성능 개선으로 주장하지 않는다.
+
+## 로컬 검증
+
+변경 전 성공→구독 순서 검사를 Android/iPhone에 실행하여 Android 실패와 iPhone 통과를 확인했다. 구현 후 초기 조회·진단·시계·Android runtime 관련 4파일 50개, `tsc --noEmit`, 요구사항 catalog와 E2E 추적성 생성이 통과했다. 실제 Native 전송 보류·구독 전환 및 iPhone 회귀는 production build와 Emulator로 별도 검증한다.

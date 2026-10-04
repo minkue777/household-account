@@ -81,7 +81,9 @@ class WebStartupFirebaseE2ETest {
                 val clock = MainActivity::class.java.getDeclaredField("appLaunchDurationClock").apply { isAccessible = true }.get(activity)
                 startedAt = clock.javaClass.getDeclaredField("startedAtMillis").apply { isAccessible = true }.getLong(clock)
                 check(WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT))
-                WebViewCompat.addDocumentStartJavaScript(webView, OBSERVE_REAL_OPERATIONS, setOf(origin))
+                val observationScript = OBSERVE_REAL_OPERATIONS.replace("native-startup-listen-released",
+                    "native-startup-listen-released-${SystemClock.elapsedRealtime()}")
+                WebViewCompat.addDocumentStartJavaScript(webView, observationScript, setOf(origin))
                 assertTrue(webView.url.isNullOrBlank())
             }
             suspend fun evaluate(script: String): Any? = suspendCancellableCoroutine { continuation ->
@@ -122,17 +124,31 @@ class WebStartupFirebaseE2ETest {
             assertTrue(nativeTiming.getDouble("navigationRequested") <= duration)
             assertTrue(androidTiming.getDouble("bridgeRoundTripMs") >= 0)
             val webTiming = diagnostics.getJSONObject("timingsMs")
-            for (key in listOf("bootstrapStarted", "authStarted", "authReady", "ledgerListenStarted",
-                "ledgerServerSnapshotReceived", "categoriesListenStarted", "categoriesServerSnapshotReceived",
-                "currencyPreferencesListenStarted", "currencyPreferencesServerSnapshotReceived",
-                "currencyBalancesListenStarted", "currencyBalancesServerSnapshotReceived", "homeReady", "firstHomeCompletePaint")) {
+            for (key in listOf("bootstrapStarted", "authStarted", "authReady", "homeReady", "firstHomeCompletePaint")) {
                 assertTrue("$key must be observed before Web completion", webTiming.getDouble(key) in 0.0..webDuration)
             }
+            for ((source, ready) in listOf("ledger" to "ledgerReady", "categories" to "categoriesReady",
+                "currencyPreferences" to "localCurrencyReady", "currencyBalances" to "localCurrencyReady")) {
+                val initialStart = webTiming.getDouble(source + "InitialReadStarted")
+                val initialReceived = webTiming.getDouble(source + "InitialReadReceived")
+                assertTrue(initialStart in 0.0..initialReceived)
+                assertTrue(initialReceived <= webTiming.getDouble(ready))
+                assertTrue(webTiming.getDouble(ready) <= webTiming.getDouble("homeReady"))
+                assertTrue(webTiming.getDouble(source + "ListenStarted") >= initialReceived)
+                assertFalse("Held Listen must not supply the first home", webTiming.has(source + "ServerSnapshotReceived"))
+                assertFalse("Actual Lite requests must succeed within the existing budget", webTiming.has(source + "InitialReadFallback"))
+            }
             assertEquals(startup.getDouble("completePaintAt"), webTiming.getDouble("firstHomeCompletePaint"), 0.01)
-            assertFalse("Diagnostics must not enable iPhone Lite reads on Android", webTiming.keys().asSequence().any { it.contains("InitialRead") })
+            assertTrue("Real Listen transport must have been held", first.getInt("heldListenRequests") > 0)
+            assertTrue("Actual Lite query and document responses must arrive", first.getInt("liteResponses") >= 4)
             val databases = first.getJSONArray("databases").let { entries -> (0 until entries.length()).map(entries::getString) }
             assertTrue("Android Firestore must use memory cache", databases.none { it.startsWith("firestore/") })
             val firstDocumentId = first.getString("documentId")
+            evaluate("window.nativeE2e.releaseListen();true")
+            balance(30000)
+            eventually("Live subscription after Lite must reflect another real server change") {
+                evaluate("document.body.innerText.includes('30,000')") == true
+            }
             balance(36890)
             active.onActivity { webView.reload() }
             eventually("Same Activity reload creates a new real document with newest server balance") {
@@ -173,15 +189,41 @@ class WebStartupFirebaseE2ETest {
     }
 
     companion object {
-        // Observers preserve all SDK requests and responses and never provide domain results or clocks.
+        // Hold only Listen transport until the first real home; do not fabricate SDK results or clocks.
         private const val OBSERVE_REAL_OPERATIONS = """
             (() => {
-              const observation = window.nativeE2e = { documentId: crypto.randomUUID(), commands: [], databases: [] };
+              const observation = window.nativeE2e = { documentId: crypto.randomUUID(), commands: [], databases: [], heldListenRequests: 0, liteResponses: 0 };
+              let holding = sessionStorage.getItem('native-startup-listen-released') !== 'true';
+              const waiting = [];
+              const isListen = url => String(url).includes('/google.firestore.v1.Firestore/Listen/channel');
+              observation.releaseListen = () => {
+                holding = false;
+                sessionStorage.setItem('native-startup-listen-released', 'true');
+                waiting.splice(0).forEach(resume => resume());
+              };
+              const urls = new WeakMap();
+              const xhrOpen = XMLHttpRequest.prototype.open;
+              const xhrSend = XMLHttpRequest.prototype.send;
+              XMLHttpRequest.prototype.open = function(...args) { urls.set(this, args[1]); return Reflect.apply(xhrOpen, this, args); };
+              XMLHttpRequest.prototype.send = function(...args) {
+                if (holding && isListen(urls.get(this))) {
+                  observation.heldListenRequests++;
+                  waiting.push(() => { if (this.readyState === 1) Reflect.apply(xhrSend, this, args); });
+                  return;
+                }
+                return Reflect.apply(xhrSend, this, args);
+              };
               const open = IDBFactory.prototype.open;
               IDBFactory.prototype.open = function(...args) { observation.databases.push(args[0]); return Reflect.apply(open, this, args); };
               const originalFetch = window.fetch;
               window.fetch = async function(...args) {
+                const url = String(args[0]?.url || args[0]);
+                if (holding && isListen(url)) {
+                  observation.heldListenRequests++;
+                  await new Promise(resolve => waiting.push(resolve));
+                }
                 const response = await Reflect.apply(originalFetch, this, args);
+                if (response.ok && /\/documents(?:\/[^?]+)?:runQuery|\/documents:batchGet/.test(url)) observation.liteResponses++;
                 const body = args[1]?.body;
                 if (typeof body === 'string' && String(args[0]).includes('executeHouseholdCommand')) {
                   try {

@@ -37,10 +37,15 @@ function rows(amount: number, version = 1, fromCache = false) {
   return { metadata: { fromCache }, docs: [document], docChanges: () => [{ type: 'modified', doc: document }] };
 }
 
-describe('[T-WEBVIEW-004][T-SYS-008][AND-012] 첫 홈 서버 조회 전환', () => {
+describe.each(['iPhone', 'Android'] as const)('[T-WEBVIEW-004][T-SYS-008][AND-012] %s 첫 홈 서버 조회 전환', runtime => {
   beforeEach(() => {
     jest.resetModules(); jest.useFakeTimers();
     mockRead.mockReset(); mockListen.mockReset().mockReturnValue(jest.fn());
+    const platform = require('@/lib/utils/platform') as typeof import('@/lib/utils/platform');
+    const bridge = require('@/platform/android-host/androidHostBridge') as typeof import('@/platform/android-host/androidHostBridge');
+    jest.mocked(platform.Platform.isIOSPWA).mockReturnValue(runtime === 'iPhone');
+    jest.mocked(bridge.isAndroidHostAvailable).mockReturnValue(runtime === 'Android');
+    window.history.replaceState(null, '', '/');
   });
   afterEach(() => {
     const diagnostics = require('@/platform/performance/clientStartupDiagnostics') as typeof import('@/platform/performance/clientStartupDiagnostics');
@@ -48,17 +53,25 @@ describe('[T-WEBVIEW-004][T-SYS-008][AND-012] 첫 홈 서버 조회 전환', () 
     jest.useRealTimers();
   });
 
-  it('Android 상세 계측이 실행 중이어도 초기 Lite 조회 없이 기존 구독을 즉시 시작한다', () => {
+  it('일반 브라우저에서는 초기 Lite 조회 없이 기존 구독을 즉시 시작한다', () => {
+    const value = setup();
     const platform = require('@/lib/utils/platform') as typeof import('@/lib/utils/platform');
     const bridge = require('@/platform/android-host/androidHostBridge') as typeof import('@/platform/android-host/androidHostBridge');
     jest.mocked(platform.Platform.isIOSPWA).mockReturnValue(false);
-    jest.mocked(bridge.isAndroidHostAvailable).mockReturnValue(true);
-    const value = setup();
+    jest.mocked(bridge.isAndroidHostAvailable).mockReturnValue(false);
     expect(value.diagnostics.isClientStartupInProgress()).toBe(true);
     const read = jest.fn(), listen = jest.fn(() => jest.fn());
     value.subscribeWithInitialHomeRead({ source: 'ledger', scope: value.scope, read, publish: jest.fn(), listen })();
     expect(read).not.toHaveBeenCalled();
     expect(listen).toHaveBeenCalledTimes(1);
+  });
+
+  it('홈 이외 화면에서는 진단 중이어도 기존 구독을 즉시 시작한다', () => {
+    const value = setup();
+    window.history.replaceState(null, '', '/assets');
+    const read = jest.fn(), listen = jest.fn(() => jest.fn());
+    value.subscribeWithInitialHomeRead({ source: 'ledger', scope: value.scope, read, publish: jest.fn(), listen })();
+    expect(read).not.toHaveBeenCalled(); expect(listen).toHaveBeenCalledTimes(1);
   });
 
   it('서버 응답을 표시한 뒤에만 구독을 시작하고 문서당 같은 원본을 재조회하지 않는다', async () => {
