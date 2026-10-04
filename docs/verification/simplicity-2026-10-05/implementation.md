@@ -30,6 +30,10 @@
 
 ## 배포와 남은 범위
 
-Android v1.2.33/code35로 배포합니다. Web·Functions 실행 코드 변경은 없으므로 해당 제품 재배포는 필요하지 않습니다. 서명 APK와 원격 CI의 결과는 배포 단계에서 확인합니다.
+Android v1.2.33/code35의 release build와 APK v2 서명을 확인했습니다. 실제 APK package/version은 `com.household.account / 35 / 1.2.33`이며 운영 URL·environment·Google client ID 설정도 확인했습니다. 크기는 11,421,547바이트, SHA256은 `87ec25beef5e2867d63da59560de357733894c3bfe35766f589d0a10dd8fbe77`입니다.
+
+배포 대상은 [v1.2.33 GitHub Release](https://github.com/minkue777/household-account/releases/tag/v1.2.33)입니다. Web·Functions 실행 코드 변경은 없으므로 해당 제품 재배포는 필요하지 않습니다. 공개 후 asset 다운로드와 hash, 배포 커밋의 전체 CI를 별도로 확인합니다. CI 대기 중에는 검증 완료로 기록하지 않습니다.
+
+로컬 로그: `TEMP/household-simplicity-capture-unit-20261005.log`, `TEMP/household-simplicity-category-instrumentation-20261005.log`, `TEMP/household-simplicity-release-20261005.log`.
 
 이번 실행은 Android 미사용 경로 정리입니다. 서버의 미사용 모형, 자산 명령 결과·편집 상태, capture 재시도 잠금/중복 알고리즘, 실제 계약을 관측하지 않는 테스트 등의 후보는 아직 미완료입니다. 전체 정비가 끝났다고 해석하지 않습니다.
