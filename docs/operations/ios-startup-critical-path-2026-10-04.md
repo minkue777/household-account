@@ -39,4 +39,12 @@ gzip 20,978 bytes(6.42%) 감소했습니다. 여섯 `home-*` 파일이 별도 ch
 
 production WebKit의 실제 chunk 미요청·추가·검색·편집·chunk 실패 후 재요청, 로그인 재실행·진단·알림 편집 회귀를 진행합니다. 로컬 로그와 크기 근거는 저장소 밖 `TEMP/household-ios-startup-{before-build,after-build,prepare,e2e}-20261004.log`, `TEMP/household-ios-startup-bundle-{before,after}-20261004.json`입니다.
 
+## 첫 검증에서 확인한 보정과 결과
+
+첫 구현 `284a1ea`의 production WebKit에서 기존 로그인 재실행·시작 진단 및 알림 편집 3개는 통과했습니다. 신규 첫 사용 검사는 추가 창의 가맹점 입력이 비어 저장 버튼이 비활성인 상태로 실패했습니다. 기존 `AddExpenseModal`은 mount 후 passive effect에서 폼을 초기화하여 지연 로드 직후 입력과 초기화가 경합할 수 있었습니다. 초기화를 layout effect로 옮겨 창이 표시되기 전에 끝내도록 했습니다. 기존 카테고리·날짜 기본값 및 저장 동작은 유지합니다. 새 검사는 첫 입력의 보존 assertion도 포함합니다.
+
+보정 후 같은 production build + WebKit + 실제 Firebase Emulator 검사 2개(첫 사용/실제 chunk 실패·재요청·canonical 저장, 로그인 재실행/최신 서버 값/진단)가 모두 통과했습니다. `home-search` chunk의 첫 요청을 실제로 실패시킨 뒤 재시도에서 두 번째 요청이 성공하고 15,400원 및 메모가 canonical `ledgerTransactions`에 저장됨을 확인했습니다. 나머지 홈은 실패 중에도 유지됩니다. 브라우저 검사는 40.1초였으며 실기기 성능 결과가 아닙니다. 로그는 `TEMP/household-ios-startup-e2e-input-fix-20261004.log`입니다.
+
+원격 CI `37190669714`의 web 실패는 기존 `ledgerEditDraftPersistence` 10개에서 날짜 선택 직후 동기 DOM 조회를 하던 관측 문제였습니다(나머지 121파일/851검사 통과). 실제 import 완료를 `findByText`로 기다린 후 동일한 즉시 숨김·rollback·초안/버전 보존·세션 전환·늦은 응답 무간섭 assertion을 수행하도록 수정했습니다. timeout을 늘리거나 기대값을 완화하지 않았습니다. 보정한 초안·검색·지연 경계 3파일 28개가 통과했습니다. 이전 실행은 실패 이력으로 유지하고 최종 SHA의 전체 CI를 후속 확인합니다.
+
 Web 실행 코드만 변경하므로 main push의 Vercel Git 자동배포 대상이며 Firebase와 APK 재배포는 필요하지 않습니다. 운영 데이터는 변경하지 않습니다. 정확한 SHA의 CI·배포와 후속 실기기 기록으로 전달 상태와 성능 효과를 별도로 확인합니다.

@@ -35,6 +35,7 @@ test.describe('첫 홈의 사용 시점 코드 로드', () => {
     const add = page.getByRole('dialog', { name: '지출 추가', exact: true });
     await add.getByPlaceholder('가맹점명을 입력하세요').fill('첫 사용 코드 검사');
     await add.locator('input[type="number"]').fill('12300');
+    await expect(add.getByPlaceholder('가맹점명을 입력하세요')).toHaveValue('첫 사용 코드 검사');
     await add.getByRole('button', { name: '기타', exact: true }).click();
     await add.getByRole('button', { name: '추가', exact: true }).click();
     const expense = page.getByTestId('expense-item').filter({ hasText: '첫 사용 코드 검사' });

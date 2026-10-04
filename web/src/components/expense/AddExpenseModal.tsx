@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import AmountInput from '@/components/common/AmountInput';
 import ModalOverlay from '@/components/common/ModalOverlay';
@@ -90,7 +90,8 @@ export default function AddExpenseModal({
     getValidSplitMonths,
   } = useMonthlySplitInput();
 
-  useEffect(() => {
+  // 코드가 늦게 도착해도 창을 그리기 전에 초기화를 마쳐 첫 입력을 지우지 않습니다.
+  useLayoutEffect(() => {
     if (!isOpen) {
       return;
     }

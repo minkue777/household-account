@@ -75,10 +75,10 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function openEditor() {
+async function openEditor() {
   const view = render(<LedgerPage transactionType="expense" />);
   fireEvent.click(screen.getByRole('button', { name: '17일' }));
-  fireEvent.click(screen.getByText(original.merchant));
+  fireEvent.click(await screen.findByText(original.merchant));
   return view;
 }
 
@@ -93,7 +93,7 @@ describe('홈 원장 편집의 낙관적 목록 변경과 초안 수명', () => 
   test('저장 즉시 편집창을 숨기고 선택 날짜가 비어도 실패 후 날짜·메모 초안을 복원한다', async () => {
     const save = deferred();
     mockUpdateExpense.mockImplementationOnce(() => save.promise).mockResolvedValue(undefined);
-    const view = openEditor();
+    const view = await openEditor();
     fireEvent.change(screen.getByPlaceholderText('메모를 입력하세요'), { target: { value: '보존할 메모' } });
     const dateInput = screen.getByRole('dialog').querySelector('input[type="date"]')!;
     fireEvent.change(dateInput, { target: { value: '2026-09-18' } });
@@ -127,7 +127,7 @@ describe('홈 원장 편집의 낙관적 목록 변경과 초안 수명', () => 
   test('[T-LED-008] 마지막 거래의 낙관적 삭제는 편집창을 숨기고 삭제 실패 후 초안과 버전을 보존한다', async () => {
     const deletion = deferred();
     mockDeleteExpense.mockImplementationOnce(() => deletion.promise).mockResolvedValue(undefined);
-    const view = openEditor();
+    const view = await openEditor();
     fireEvent.change(screen.getByPlaceholderText('메모를 입력하세요'), { target: { value: '삭제 전에 작성한 메모' } });
     fireEvent.click(screen.getByRole('button', { name: '삭제' }));
     let deleteButtons = screen.getAllByRole('button', { name: '삭제' });
@@ -154,27 +154,27 @@ describe('홈 원장 편집의 낙관적 목록 변경과 초안 수명', () => 
     expect(mockDeleteExpense.mock.calls).toEqual([[original.id, 7], [original.id, 7]]);
   });
 
-  test('사용자가 다른 날짜로 이동하면 기존 선택 거래와 편집창을 남기지 않는다', () => {
-    openEditor();
+  test('사용자가 다른 날짜로 이동하면 기존 선택 거래와 편집창을 남기지 않는다', async () => {
+    await openEditor();
     fireEvent.click(screen.getByRole('button', { name: '18일' }));
     expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
-    expect(screen.getByText('지출 내역이 없습니다')).toBeInTheDocument();
+    expect(await screen.findByText('지출 내역이 없습니다')).toBeInTheDocument();
   });
 
-  test('가구가 바뀌면 같은 날짜와 거래 ID가 있어도 이전 가구의 편집 초안을 폐기한다', () => {
-    const view = openEditor();
+  test('가구가 바뀌면 같은 날짜와 거래 ID가 있어도 이전 가구의 편집 초안을 폐기한다', async () => {
+    const view = await openEditor();
     fireEvent.change(screen.getByPlaceholderText('메모를 입력하세요'), { target: { value: '이전 가구 초안' } });
     mockHouseholdKey = 'household-2';
     mockExpenses = [{ ...original, merchant: '새 가구의 거래' }];
     view.rerender(<LedgerPage transactionType="expense" />);
     expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
-    expect(screen.getByText('새 가구의 거래')).toBeInTheDocument();
+    expect(await screen.findByText('새 가구의 거래')).toBeInTheDocument();
   });
 
   test.each(['성공', '실패'])('저장 중 같은 거래를 다시 편집하면 이전 저장의 %s 응답과 목록 갱신이 새 초안을 닫거나 지우지 않는다', async (outcome) => {
     const save = deferred();
     mockUpdateExpense.mockImplementationOnce(() => save.promise);
-    const view = openEditor();
+    const view = await openEditor();
     fireEvent.change(screen.getByPlaceholderText('메모를 입력하세요'), { target: { value: '첫 저장 메모' } });
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
     expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
@@ -206,17 +206,19 @@ describe('홈 원장 편집의 낙관적 목록 변경과 초안 수명', () => 
   test.each(['날짜 이동', '가구 전환', '다른 거래 선택', '페이지 종료'])('저장 중 %s 이후 늦은 실패는 이전 초안이나 오류창을 다시 열지 않는다', async (transition) => {
     const save = deferred();
     mockUpdateExpense.mockImplementationOnce(() => save.promise);
-    const view = openEditor();
+    const view = await openEditor();
     fireEvent.change(screen.getByPlaceholderText('메모를 입력하세요'), { target: { value: '이전 거래 초안' } });
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
     expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
 
     if (transition === '날짜 이동') {
       fireEvent.click(screen.getByRole('button', { name: '18일' }));
+      await screen.findByText('지출 내역이 없습니다');
     } else if (transition === '가구 전환') {
       mockHouseholdKey = 'household-2';
       mockExpenses = [{ ...original, merchant: '새 가구의 거래' }];
       view.rerender(<LedgerPage transactionType="expense" />);
+      await screen.findByText('새 가구의 거래');
     } else if (transition === '다른 거래 선택') {
       mockExpenses = [original, { ...original, id: 'expense-2', merchant: '새로 선택한 거래' }];
       view.rerender(<LedgerPage transactionType="expense" />);
