@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css'
 import './globals.css'
 import AppProviders from '@/components/AppProviders'
+import { isFirebaseEmulatorSuiteConfigured } from '@/platform/firebase/firebaseEmulatorConfig'
 
 export const metadata: Metadata = {
   title: '가계부',
@@ -34,6 +35,10 @@ export default function RootLayout({
     <html lang="ko">
       <head>
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+        {!isFirebaseEmulatorSuiteConfigured() && <>
+          <link rel="preconnect" href="https://securetoken.googleapis.com" crossOrigin="anonymous" />
+          <link rel="preconnect" href="https://firestore.googleapis.com" />
+        </>}
       </head>
       <body className="min-h-screen">
         <AppProviders>

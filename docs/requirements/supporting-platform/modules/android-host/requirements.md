@@ -79,6 +79,8 @@ QuickEdit의 입력은 저장 완료된 거래 ID와 표시용 snapshot입니다
 
 AND-012의 realtime SDK와 영속 저장소 정책은 유지합니다. 전체 기간 검색·자산 이력 통계의 단발 서버 조회는 별도의 읽기 전용 Firestore Lite 경계를 사용하여 IndexedDB 반영을 기다리지 않습니다. 두 SDK는 같은 FirebaseApp의 Auth를 공유하고 같은 Firestore Rules로 제한되며, 검색 window·통계 cache와 session generation 검증은 각 기능이 계속 소유합니다. 이 경계는 listener·로컬 쓰기·오프라인 결과를 제공하지 않습니다.
 
+AND-012의 첫 화면 준비에서는 운영 HTML이 인증 토큰 서버와 Firestore 서버의 연결을 미리 준비할 수 있습니다. 힌트에 사용자·가구·token·query를 넣지 않고 Emulator 빌드에는 운영 연결 힌트를 포함하지 않습니다. 첫 홈에서 닫힌 검색·추가·요약 모달과 날짜를 선택하기 전 지출 상세 코드는 실제 사용 시 동적으로 불러옵니다. 로딩 중에도 기존 홈은 유지하며 완료 후 기존 추가·검색·편집·수입 동작과 최신 서버 snapshot 기준을 보존합니다. 코드 로드 실패는 오류와 재시도 경로를 제공하며 접속 완료 계측이나 성공 기준을 앞당기지 않습니다.
+
 ### 5.2 QuickEdit
 
 | ID | 상태 | 요구사항 | 경계·예외 | 근거 | 테스트 |

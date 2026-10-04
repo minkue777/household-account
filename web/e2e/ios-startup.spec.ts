@@ -1,7 +1,82 @@
 import { expect, test, type Page, type Request, type Response } from '@playwright/test';
+import { readdirSync } from 'node:fs';
+import path from 'node:path';
 import { observeIndexedDbOpens, readFirestoreCollection, readIndexedDbOpens, resetTestAccount, writeFirestoreFixture } from './emulator';
+import { createFinanceHousehold } from './finance-helpers';
 
 const COMPLETE_PAINT = 'household-account:startup:home:first-complete-paint';
+
+test.describe('첫 홈의 사용 시점 코드 로드', () => {
+  // Service Worker precache와 별개로 문서가 실제 요청하는 chunk를 검사합니다.
+  test.use({ serviceWorkers: 'block' });
+
+  test('[T-WEBVIEW-004][T-SYS-008][AND-012][SYS-008] iPhone 첫 홈은 미사용 코드를 요청하지 않고 실제 추가·검색·편집과 코드 재시도를 지원한다', async ({ page, request }, testInfo) => {
+    await observeIndexedDbOpens(page, true);
+    const chunkNames = ['home-add-expense', 'home-search', 'home-expense-detail',
+      'home-category-detail', 'home-local-currency', 'home-income-summary'];
+    const builtChunks = readdirSync(path.resolve(process.cwd(), '.next/static/chunks'));
+    const deferredChunks = chunkNames.map(name => {
+      const matches = builtChunks.filter(file => file.startsWith(`${name}.`) && file.endsWith('.js'));
+      expect(matches, `${name}은 실제 production 별도 chunk여야 합니다.`).toHaveLength(1);
+      return matches[0];
+    });
+    const requestedChunks: string[] = [];
+    page.on('request', request => {
+      if (request.resourceType() === 'script') requestedChunks.push(new URL(request.url()).pathname.split('/').at(-1)!);
+    });
+    await createFinanceHousehold(page, request);
+    await expect.poll(() => page.evaluate(name => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(1);
+    expect(requestedChunks.filter(file => deferredChunks.includes(file)), '닫힌 기능 코드는 첫 홈의 요청 경로에서 제외해야 합니다.').toEqual([]);
+    await expect(page.locator('head link[rel="preconnect"][href$="googleapis.com"]')).toHaveCount(0);
+    const initialScripts = [...requestedChunks];
+
+    await page.getByTestId(/^calendar-day-/).first().click();
+    await page.getByRole('button', { name: '지출 추가', exact: true }).click();
+    const add = page.getByRole('dialog', { name: '지출 추가', exact: true });
+    await add.getByPlaceholder('가맹점명을 입력하세요').fill('첫 사용 코드 검사');
+    await add.locator('input[type="number"]').fill('12300');
+    await add.getByRole('button', { name: '기타', exact: true }).click();
+    await add.getByRole('button', { name: '추가', exact: true }).click();
+    const expense = page.getByTestId('expense-item').filter({ hasText: '첫 사용 코드 검사' });
+    await expect(expense).toContainText('12,300원');
+    for (const name of ['home-expense-detail', 'home-add-expense']) {
+      expect(requestedChunks.some(file => file.startsWith(`${name}.`))).toBe(true);
+    }
+
+    let searchRequests = 0;
+    await page.route('**/_next/static/chunks/home-search.*.js', route => {
+      searchRequests += 1;
+      return searchRequests === 1 ? route.abort('failed') : route.continue();
+    });
+    await page.getByRole('button', { name: '검색', exact: true }).click();
+    const loadError = page.getByRole('alert').filter({ hasText: '검색 화면을 불러오지 못했습니다.' });
+    await expect(loadError).toBeVisible();
+    await expect(expense).toContainText('12,300원');
+    await loadError.getByRole('button', { name: '다시 시도', exact: true }).click();
+    const input = page.getByPlaceholder('지출처명, 메모, 카드명, 태그 검색');
+    await input.fill('첫 사용 코드 검사');
+    expect(searchRequests).toBe(2);
+    const search = page.locator('div.fixed').filter({ has: input });
+    await search.getByText('첫 사용 코드 검사', { exact: true }).click();
+    const edit = page.getByRole('dialog', { name: '지출 수정', exact: true });
+    await edit.locator('input[type="number"]').fill('15400');
+    await edit.getByPlaceholder('메모를 입력하세요').fill('늦게 로드한 편집 저장');
+    await edit.getByRole('button', { name: '저장', exact: true }).click();
+    await expect(page.getByText('1건 · 15,400원', { exact: true })).toBeVisible();
+    await expect.poll(async () => {
+      const households = await readFirestoreCollection(request, 'households');
+      const householdId = households[0].name.split('/').at(-1)!;
+      const transactions = await readFirestoreCollection(request, `households/${householdId}/ledgerTransactions`);
+      return transactions.some(doc => doc.fields?.merchant?.stringValue === '첫 사용 코드 검사'
+        && Number(doc.fields?.amountInWon?.integerValue) === 15400
+        && doc.fields?.memo?.stringValue === '늦게 로드한 편집 저장');
+    }).toBe(true);
+    await testInfo.attach('home-deferred-production-chunks', {
+      contentType: 'application/json',
+      body: Buffer.from(JSON.stringify({ deferredChunks, initialScripts, requestedChunks, searchRequests }, null, 2)),
+    });
+  });
+});
 
 function isAppVisit(request: Request): boolean {
   return request.method() === 'POST'

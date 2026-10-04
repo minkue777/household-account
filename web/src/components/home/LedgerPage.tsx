@@ -6,16 +6,11 @@ import { useLedgerHomeReadiness } from '@/features/ledger/useLedgerHomeReadiness
 import { useLedgerEditLink } from '@/features/ledger/useLedgerEditLink';
 import Calendar from '@/components/Calendar';
 import CategorySummary from '@/components/CategorySummary';
-import CategoryDetailModal from '@/components/CategoryDetailModal';
-import LocalCurrencyModal from '@/components/LocalCurrencyModal';
 import { Expense, Category, TransactionType } from '@/types/expense';
 import { useHomePreferences } from '@/features/home-preferences/homePreferences';
 import BalanceCards from '@/components/BalanceCards';
 import HomeHeader from '@/components/HomeHeader';
-import AddExpenseModal from '@/components/expense/AddExpenseModal';
-import ExpenseDetail from '@/components/expense/ExpenseDetail';
-import IncomeSummaryModal from '@/components/expense/IncomeSummaryModal';
-import SearchModal from '@/components/search/SearchModal';
+import { deferHomeContent } from './deferredHomeContent';
 import type { SplitItem } from '@/lib/expenseService';
 import { getSeoulCalendarParts } from '@/lib/utils/date';
 import { orderLedgerTransactions } from '@/features/ledger/domain/ledgerTransactionOrder';
@@ -23,6 +18,26 @@ import { useHousehold } from '@/contexts/HouseholdContext';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useLedgerReadModel } from '@/contexts/LedgerReadModelContext';
 import { normalizeExpenseTags } from '@/lib/utils/expenseTags';
+
+const AddExpenseModal = deferHomeContent(
+  () => import(/* webpackChunkName: "home-add-expense" */ '@/components/expense/AddExpenseModal'), '내역 추가',
+);
+const SearchModal = deferHomeContent(
+  () => import(/* webpackChunkName: "home-search" */ '@/components/search/SearchModal'), '검색',
+);
+const ExpenseDetail = deferHomeContent(
+  () => import(/* webpackChunkName: "home-expense-detail" */ '@/components/expense/ExpenseDetail'), '날짜별 내역',
+);
+const CategoryDetailModal = deferHomeContent(
+  () => import(/* webpackChunkName: "home-category-detail" */ '@/components/CategoryDetailModal'), '카테고리 내역',
+);
+const LocalCurrencyModal = deferHomeContent(
+  () => import(/* webpackChunkName: "home-local-currency" */ '@/components/LocalCurrencyModal'), '지역화폐 내역',
+);
+const IncomeSummaryModal = deferHomeContent(
+  () => import(/* webpackChunkName: "home-income-summary" */ '@/components/expense/IncomeSummaryModal'), '수입 내역',
+);
+
 interface LedgerPageProps {
   transactionType: TransactionType;
 }
