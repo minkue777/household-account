@@ -51,7 +51,7 @@ type WorkerMessageV1 =
 
 - `install`: versioned precache를 원자적으로 준비한 뒤 waiting 상태에서 client의 안전한 활성화 요청 또는 모든 구 client 종료를 기다린다. install 자체에서는 `skipWaiting()`하지 않는다.
 - `activate`: 새 버전 cache 준비가 확인된 뒤 현재 version 밖의 이 모듈 cache를 삭제하고 `clientsClaim()`한다.
-- `fetch`: build hash 정적 asset은 현재 version precache에서 제공하고 공개 비민감 아이콘·폰트·이미지의 `GET` 성공 응답만 명시적 allowlist로 최대 7일 runtime cache한다. navigation HTML, `Set-Cookie`가 있거나 `Cache-Control: private|no-store`인 응답, `/api/**`, 인증 header·cookie가 있거나 가구·거래·자산·통계 데이터를 포함한 응답, 비 GET method와 임의 cross-origin 응답은 network-only로 처리한다. cache key에 UID·memberId·householdId·token을 넣지 않는다.
+- `fetch`: build hash 정적 asset은 현재 version precache에서 제공하고 공개 비민감 아이콘·폰트·이미지의 `GET` 성공 응답만 명시적 allowlist로 최대 7일 runtime cache한다. navigation HTML, `Set-Cookie`가 있거나 `Cache-Control: private|no-store`인 응답, `/api/**`, 인증 header·cookie가 있거나 가구·거래·자산·통계 데이터를 포함한 응답, 비 GET method와 임의 cross-origin 응답은 network-only로 처리한다. 정적 allowlist 밖 요청에는 fetch route를 등록하지 않아 브라우저 기본 네트워크 경로를 사용한다. catch-all NetworkOnly의 respondWith·waitUntil은 오래 열린 요청을 구 active worker에 묶어 skipWaiting 이후에도 새 worker 활성화를 막을 수 있으므로 사용하지 않는다. 기존 요청을 취소하거나 완료를 기다려야만 갱신할 수 있게 만들지 않는다. cache key에 UID·memberId·householdId·token을 넣지 않는다.
 - `push`: Notifications v1 payload를 검증한 뒤 표시한다.
 - `notificationclick`: 구조화 payload의 식별자를 단일 segment로 인코딩한 뒤 URL API로 정규화하고, 허용된 same-origin path prefix와 정확한 segment 수를 다시 검증한 destination만 기존 창 focus 또는 새 창으로 연다. dot·percent·이중 encoding·역슬래시 traversal은 decode 깊이와 무관하게 거부한다.
 
@@ -183,7 +183,7 @@ web/public/manifest.json
 | PWA-005 | Contract, production build | Firebase worker config generator·실제 artifact | Web/worker config drift, 지원·미지원 SDK 조합, compat·deprecated API·설정 hardcode | 통합 `/sw.js`와 단일 산출 config, drift·미지원·hardcode 조합은 build 실패 | T-PWA-003 |
 | PWA-006 | Unit, 보안 E2E | NotificationNavigationPolicy | `/`, `?`, `#`, Unicode, dot·percent·이중 encoding·역슬래시 traversal, 잘못된 template, 외부·javascript URL | 정규화 뒤 허용 prefix·segment shape인 route만 focus/open | T-PWA-004 |
 | PWA-007 | Contract, 보안 E2E | WebResponseSecurityPolicy | document/API, wildcard framing, unsafe script/connect, unsafe referrer, HSTS 0 | directive 의미가 최소 권한인 header만 적용하고 불완전 정책은 build 실패 | T-PWA-005 |
-| PWA-008 | Unit, Integration, production E2E | WorkerVersionHandshake·ActivationPolicy·CachePolicy | 정확한 waiting version, 미저장 form, 장기 waiting, 사용자 갱신, 모든 client 종료, 부분 precache 실패, controllerchange 중복, 7일 경계 | 부분 cache·강제 reload·입력 유실 없이 허용된 client만 한 번 전환하고 공개 runtime cache 유지 | T-PWA-006 |
+| PWA-008 | Unit, Integration, production E2E | WorkerVersionHandshake·ActivationPolicy·CachePolicy | 정확한 waiting version, 미저장 form, 장기 waiting, 사용자 갱신, 모든 client 종료, 부분 precache 실패, controllerchange 중복, 7일 경계, 응답이 보류된 비정적 GET | 부분 cache·강제 reload·입력 유실 없이 허용된 client만 한 번 전환하고 공개 runtime cache 유지, 열린 비정적 요청은 갱신 뒤에도 정상 완료 | T-PWA-006 |
 
 추가 필수 시나리오:
 

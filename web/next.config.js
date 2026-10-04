@@ -37,10 +37,9 @@ const withPWA = require('next-pwa')({
           ? response : null }],
       },
     },
-    {
-      urlPattern: /.*/,
-      handler: 'NetworkOnly',
-    },
+    // Unmatched requests use the browser's network directly. A catch-all
+    // NetworkOnly route extends the old worker's lifetime for long-running
+    // reads and can block a requested update despite skipWaiting().
   ],
 });
 

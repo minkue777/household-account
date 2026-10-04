@@ -5,6 +5,7 @@ import { isAndroidHostAvailable } from '@/platform/android-host/androidHostBridg
 
 type Source = 'ledger' | 'categories' | 'currencyPreferences' | 'currencyBalances';
 export const INITIAL_HOME_READ_BUDGET_MS = 750;
+export const ANDROID_INITIAL_HOME_READ_BUDGET_MS = 2000;
 const attempted = new Set<Source>();
 
 /** A bounded server read precedes the watch, so an older watch cannot undo it. */
@@ -16,7 +17,8 @@ export function subscribeWithInitialHomeRead<T>(options: {
   listen: () => () => void;
 }): () => void {
   const { source, scope } = options;
-  if (!scope || (!Platform.isIOSPWA() && !isAndroidHostAvailable()) || !isClientStartupInProgress() || window.location.pathname !== '/' || attempted.has(source)) {
+  const isAndroid = isAndroidHostAvailable();
+  if (!scope || (!Platform.isIOSPWA() && !isAndroid) || !isClientStartupInProgress() || window.location.pathname !== '/' || attempted.has(source)) {
     return options.listen();
   }
   attempted.add(source);
@@ -34,7 +36,8 @@ export function subscribeWithInitialHomeRead<T>(options: {
     recordClientStartupTiming(`${source}InitialReadFallback`);
     startLive();
   };
-  const timer = setTimeout(fallback, INITIAL_HOME_READ_BUDGET_MS);
+  // Android WebView can complete healthy reads after 750ms; include module loading in both budgets.
+  const timer = setTimeout(fallback, isAndroid ? ANDROID_INITIAL_HOME_READ_BUDGET_MS : INITIAL_HOME_READ_BUDGET_MS);
   recordClientStartupTiming(`${source}InitialReadStarted`);
   // The SDK cannot abort this read. Cancellation permanently ignores its result.
   void Promise.resolve().then(() => current() && !decided ? options.read() : undefined).then(value => {

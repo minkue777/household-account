@@ -20,16 +20,27 @@ describe('production Workbox에 전달되는 실제 PWA 구성', () => {
     ]);
     expect(result.manifest).toEqual([{ url: '/_next/static/chunks/abc123.js' }]);
   });
-  it('인증·금융·임의 cross-origin·query 요청을 cache하지 않고 7일로 제한한다', () => {
+  it('정적 요청만 worker가 처리하고 인증·금융·임의 cross-origin·query 요청은 브라우저에 맡긴다', () => {
     const rule = mockOptions.runtimeCaching[0];
-    const match = (path: string, overrides = {}) => rule.urlPattern({
-      url: new URL(path, 'https://example.com'), request: { method: 'GET', headers: new Headers() }, sameOrigin: true, ...overrides,
-    });
+    const match = (path: string, overrides = {}) => {
+      const input = { url: new URL(path, 'https://example.com'),
+        request: { method: 'GET', headers: new Headers() }, sameOrigin: true, ...overrides };
+      // Test handler selection across every actual runtime rule, including a
+      // broad NetworkOnly rule that would not write cache but still hold fetch.
+      return mockOptions.runtimeCaching.some((candidate: any) =>
+        (candidate.method ?? 'GET') === input.request.method && (
+          typeof candidate.urlPattern === 'function' ? candidate.urlPattern(input)
+            : candidate.urlPattern instanceof RegExp ? candidate.urlPattern.test(input.url.href)
+              : candidate.urlPattern === input.url.href
+        ));
+    };
     expect(match('/_next/static/chunks/a.js')).toBe(true);
     expect(match('/icons/icon-192x192.png')).toBe(true);
     for (const path of ['/', '/api/expenses', '/_next/static/a.js?householdId=1', '/assets/a.json']) expect(match(path)).toBe(false);
     expect(match('/_next/static/a.js', { sameOrigin: false })).toBe(false);
     expect(match('/_next/static/a.js', { request: { method: 'GET', headers: new Headers({ authorization: 'Bearer secret' }) } })).toBe(false);
+    expect(match('/icons/icon-192x192.png', { request: { method: 'GET', headers: new Headers({ cookie: 'session=test' }) } })).toBe(false);
+    expect(match('/_next/static/a.js', { request: { method: 'POST', headers: new Headers() } })).toBe(false);
     expect(rule.options.expiration.maxAgeSeconds).toBe(604800);
   });
   it.each(['private', 'no-store', 'max-age=60, private="x"'])('민감 response %s는 저장하지 않는다', async control => {

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { createServer, request as httpRequest, type ServerResponse } from 'node:http';
 
 test('[T-PWA-005][PWA-006][PWA-007] 알림 주소는 HTTP redirect로 편집 대상을 보존하고 CSP 차단 없이 화면을 연다', async ({ page, request }) => {
   const blockedScripts: string[] = [];
@@ -27,6 +28,82 @@ test('[T-PWA-005][PWA-006][PWA-007] 알림 주소는 HTTP redirect로 편집 대
   }
   expect(blockedScripts).toEqual([]);
   expect(browserErrors).toEqual([]);
+});
+
+test('[T-PWA-006][T-PWA-002][PWA-004][PWA-008] 온라인 조회의 HTTP 응답을 기다리는 동안에도 새 worker로 갱신한다', async ({ page, baseURL }) => {
+  // Serve the actual production build through a local proxy. Only this explicit
+  // read is held by a real HTTP server; worker code/messages/clocks are unchanged.
+  let heldResponse: ServerResponse | undefined;
+  let received!: () => void;
+  const requestReceived = new Promise<void>(resolve => { received = resolve; });
+  const upstream = new URL(baseURL!);
+  const server = createServer((request, response) => {
+    if (request.url === '/__pwa_pending_read') {
+      heldResponse = response;
+      received();
+      return;
+    }
+    const outgoing = httpRequest({ hostname: upstream.hostname, port: upstream.port,
+      path: request.url, method: request.method, headers: request.headers }, incoming => {
+      response.writeHead(incoming.statusCode!, incoming.headers);
+      incoming.pipe(response);
+    });
+    outgoing.on('error', () => { response.writeHead(502); response.end(); });
+    request.pipe(outgoing);
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('PWA proxy did not bind a port');
+  const origin = `http://127.0.0.1:${address.port}`;
+  try {
+    await page.goto(origin);
+    await expect(page.getByRole('button', { name: /\uB85C\uADF8\uC778/ }).first()).toBeVisible();
+    await page.evaluate(async () => {
+      await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      await navigator.serviceWorker.ready;
+    });
+    await page.reload();
+    await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toBe(`${origin}/sw.js`);
+    const pendingRead = await page.evaluateHandle(() => {
+      const result = { settled: false, body: '' };
+      void fetch('/__pwa_pending_read').then(response => response.text()).then(body => {
+        result.body = body;
+        result.settled = true;
+      });
+      return result;
+    });
+    await requestReceived;
+    await page.evaluate(async () => { await navigator.serviceWorker.register('/sw.js?pending-read-update=1', { scope: '/' }); });
+    await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistration('/'))?.waiting?.state)).toBe('installed');
+    await page.evaluate(async () => {
+      const waiting = (await navigator.serviceWorker.getRegistration('/'))!.waiting!;
+      const channel = new MessageChannel();
+      const version = await new Promise<string>(resolve => {
+        channel.port1.onmessage = event => { channel.port1.close(); resolve(event.data.workerVersion); };
+        waiting.postMessage({ type: 'GET_WORKER_VERSION' }, [channel.port2]);
+      });
+      waiting.postMessage({ type: 'ACTIVATE_WAITING_WORKER', workerVersion: version });
+    });
+    await expect.poll(() => page.evaluate(async () => {
+      const registration = (await navigator.serviceWorker.getRegistration('/'))!;
+      return { controller: navigator.serviceWorker.controller?.scriptURL,
+        active: registration.active?.scriptURL, state: registration.active?.state };
+    })).toEqual({ controller: `${origin}/sw.js?pending-read-update=1`,
+      active: `${origin}/sw.js?pending-read-update=1`, state: 'activated' });
+    expect(heldResponse?.writableEnded).toBe(false);
+    expect(await pendingRead.evaluate(result => result.settled)).toBe(false);
+    heldResponse!.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' });
+    heldResponse!.end('online response after worker update');
+    await expect.poll(() => pendingRead.evaluate(result => result.body)).toBe('online response after worker update');
+    const cachedPaths = await page.evaluate(async () => (await Promise.all((await caches.keys()).map(async name =>
+      (await (await caches.open(name)).keys()).map(request => new URL(request.url).pathname)))).flat());
+    expect(cachedPaths).not.toContain('/__pwa_pending_read');
+    await pendingRead.dispose();
+  } finally {
+    heldResponse?.end();
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
 });
 
 test('[T-PWA-INSTALL-001][T-PWA-001][T-PWA-003][PWA-001][PWA-002][PWA-003][PWA-004][PWA-005][PWA-007][PWA-008] 빌드된 HTML의 CSP가 hydration을 허용하고 실제 root worker가 static만 cache한다', async ({ page, context, request }, testInfo) => {

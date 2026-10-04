@@ -81,7 +81,7 @@ QuickEdit의 입력은 저장 완료된 거래 ID와 표시용 snapshot입니다
 
 AND-012의 realtime SDK와 영속 저장소 정책은 유지합니다. 전체 기간 검색·자산 이력 통계의 단발 서버 조회는 별도의 읽기 전용 Firestore Lite 경계를 사용하여 IndexedDB 반영을 기다리지 않습니다. 두 SDK는 같은 FirebaseApp의 Auth를 공유하고 같은 Firestore Rules로 제한되며, 검색 window·통계 cache와 session generation 검증은 각 기능이 계속 소유합니다. 이 경계는 listener·로컬 쓰기·오프라인 결과를 제공하지 않습니다.
 
-AND-012의 Android WebView와 iPhone 첫 홈은 월 원장·카테고리·홈 설정·지역화폐 잔액을 Lite로 병렬 조회하고 각 응답 뒤 realtime 구독으로 전환한다. 750ms 초과·조회 실패 시 기존 구독으로 복귀하며 늦은 응답·이전 세션·첫 watch cache는 표시하지 않는다. 홈 카드와 잔액 선택은 동일한 설정 원본을 공유한다. 초기 조회는 문서 실행당 각 원본 한 번이며 이후 월 이동·재연결에는 반복하지 않는다. 기존 낙관적 수정·삭제와 최초 서버 자료 기준을 유지한다. [iPhone 설계·계약](../../../../operations/ios-home-initial-read-2026-10-04.md)과 [Android 적용·검증](../../../../operations/android-home-initial-read-2026-10-04.md)을 따른다.
+AND-012의 Android WebView와 iPhone 첫 홈은 월 원장·카테고리·홈 설정·지역화폐 잔액을 Lite로 병렬 조회하고 각 응답 뒤 realtime 구독으로 전환한다. 동적 모듈 로드를 포함하여 Android는 2,000ms, iPhone은 750ms 초과 시 기존 구독으로 복귀한다. 조회·해석 실패는 예산을 기다리지 않고 즉시 복귀하며 늦은 응답·이전 세션·첫 watch cache는 표시하지 않는다. 홈 카드와 잔액 선택은 동일한 설정 원본을 공유한다. 초기 조회는 문서 실행당 각 원본 한 번이며 이후 월 이동·재연결에는 반복하지 않는다. 기존 낙관적 수정·삭제와 최초 서버 자료 기준을 유지한다. [iPhone 설계·계약](../../../../operations/ios-home-initial-read-2026-10-04.md)과 [Android 적용·검증](../../../../operations/android-home-initial-read-2026-10-04.md)을 따른다.
 
 AND-012의 첫 화면 준비에서는 운영 HTML이 인증 토큰 서버와 Firestore 서버의 연결을 미리 준비할 수 있습니다. 힌트에 사용자·가구·token·query를 넣지 않고 Emulator 빌드에는 운영 연결 힌트를 포함하지 않습니다. 첫 홈에서 닫힌 검색·추가·요약 모달은 실제 사용 시 동적으로 불러옵니다. 자주 사용하는 날짜별 내역 코드는 첫 전체 홈 paint 이후 idle 시점에 미리 준비합니다. 완료 모듈과 진행 중 요청은 기능별로 재사용하되 날짜·가구별 편집 상태는 기존 key로 초기화하여 재진입 로딩 깜빡임을 제거합니다. 사전 준비 실패는 첫 사용에서 재시도하며 준비 예약은 unmount 시 취소합니다. 로딩 중에도 기존 홈은 유지하며 완료 후 기존 추가·검색·편집·수입 동작과 최신 서버 snapshot 기준을 보존합니다. 코드 로드 실패는 오류와 재시도 경로를 제공하며 접속 완료 계측이나 성공 기준을 앞당기지 않습니다.
 

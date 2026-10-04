@@ -71,7 +71,7 @@ class WebStartupFirebaseE2ETest {
                 .put("balanceInWon", JSONObject().put("integerValue", value.toString())))
             balance(25789)
             // Validate a normal cold launch first, then isolate the repeat-launch Lite success path.
-            // Cold code/auth preparation may legitimately exhaust the unchanged 750ms budget.
+            // Cold code/auth preparation may legitimately exhaust the bounded initial-read budget.
             for (preparing in listOf(true, false)) {
                 shell("appops set ${context.packageName} SYSTEM_ALERT_WINDOW deny")
                 eventually("Permission guide must precede the real navigation") { !Settings.canDrawOverlays(context) }
@@ -87,6 +87,7 @@ class WebStartupFirebaseE2ETest {
                     val observationScript = OBSERVE_REAL_OPERATIONS.replace("native-startup-listen-released",
                         "native-startup-listen-released-${SystemClock.elapsedRealtime()}")
                         .replace("__HOLD_LISTEN__", (!preparing).toString())
+                        .replace("__MIN_LITE_DELAY_MS__", if (preparing) "0" else LITE_RESPONSE_DELAY_MS.toString())
                         .replace("native-startup-hold-lite", "native-startup-hold-lite-${SystemClock.elapsedRealtime()}")
                     WebViewCompat.addDocumentStartJavaScript(webView, observationScript, setOf(origin))
                     assertTrue(webView.url.isNullOrBlank())
@@ -153,11 +154,19 @@ class WebStartupFirebaseE2ETest {
                     assertTrue(webTiming.getDouble(ready) <= webTiming.getDouble("homeReady"))
                     assertTrue(webTiming.getDouble(source + "ListenStarted") >= initialReceived)
                     assertFalse("Held Listen must not supply the first home", webTiming.has(source + "ServerSnapshotReceived"))
-                    assertFalse("Actual Lite requests must succeed within the existing budget", webTiming.has(source + "InitialReadFallback"))
+                    assertFalse("Actual Lite requests delayed beyond 750ms must succeed within the Android budget", webTiming.has(source + "InitialReadFallback"))
                 }
                 assertEquals(startup.getDouble("completePaintAt"), webTiming.getDouble("firstHomeCompletePaint"), 0.01)
                 assertTrue("Real Listen transport must have been held", first.getInt("heldListenRequests") > 0)
                 assertTrue("Actual Lite query and document responses must arrive", first.getInt("liteResponses") >= 4)
+                val delayedReads = first.getJSONArray("requests").let { requests ->
+                    (0 until requests.length()).map(requests::getJSONObject).filter { it.optInt("status") == 200 && it.has("deliveredAt") }
+                }
+                assertTrue("All four actual initial reads must pass the latency gate", delayedReads.size >= 4)
+                delayedReads.forEach { request ->
+                    assertTrue("Actual successful responses must be delivered beyond the old 750ms budget",
+                        request.getDouble("deliveredAt") - request.getDouble("startedAt") >= LITE_RESPONSE_DELAY_MS - 10)
+                }
                 val databases = first.getJSONArray("databases").let { entries -> (0 until entries.length()).map(entries::getString) }
                 assertTrue("Android Firestore must use memory cache", databases.none { it.startsWith("firestore/") })
                 val firstDocumentId = first.getString("documentId")
@@ -224,6 +233,7 @@ class WebStartupFirebaseE2ETest {
     }
 
     companion object {
+        private const val LITE_RESPONSE_DELAY_MS = 1250
         // Hold only Listen transport until the first real home; do not fabricate SDK results or clocks.
         private const val OBSERVE_REAL_OPERATIONS = """
             (() => {
@@ -274,11 +284,16 @@ class WebStartupFirebaseE2ETest {
                 if (observed) { observed.responseAt = performance.now(); observed.status = response.status; }
                 if (response.ok && lite) {
                   observation.liteResponses++;
+                  if (holding && !holdingLite) {
+                    const remaining = __MIN_LITE_DELAY_MS__ - (performance.now() - observed.startedAt);
+                    if (remaining > 0) await new Promise(resolve => setTimeout(resolve, Math.ceil(remaining)));
+                  }
                   if (holdingLite) {
                     observation.heldLiteResponses++;
                     await new Promise(resolve => lateResponses.push(resolve));
                     observation.releasedLiteResponses++;
                   }
+                  observed.deliveredAt = performance.now();
                 }
                 const body = args[1]?.body;
                 if (typeof body === 'string' && String(args[0]).includes('executeHouseholdCommand')) {
