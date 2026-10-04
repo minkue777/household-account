@@ -323,6 +323,7 @@ Queue root 상태는 `queued → submitting → completed | partial-retryable | 
 ### 7.1 Android 로컬 상태
 
 - 30초 cache는 메모리 전용입니다.
+- 최초 전달은 후보 한 개도 `enqueueBatchAndFlush` → `enqueueAll`을 사용합니다. 별도 단건 전송 구현은 두지 않으며 실패 복구는 기존 `flush`로 수행합니다.
 - 모든 원격 호출은 process 종료 중 유실을 막기 위해 로컬 Observation journal에 먼저 씁니다. 정상 online terminal 경로는 QuickEdit FIFO enqueue 뒤 journal을 즉시 지우고 WorkManager를 예약하지 않습니다.
 - Queue key는 설치 범위 무작위 `observationId`이며 같은 entry의 모든 retry에서 바꾸지 않습니다.
 - journal payload는 `AndroidRawNotification.v1`과 terminal branch marker이며 전체를 Android Keystore의 non-exportable AES-256-GCM 키로 암호화합니다. 백그라운드 WorkManager 실행을 위해 사용자 인증 요구 조건을 붙이지 않습니다.

@@ -32,50 +32,6 @@ object AndroidCaptureDelivery {
             ).also { queueInstance = it }
         }
 
-    suspend fun enqueueAndFlush(
-        context: Context,
-        envelope: CaptureDeliveryEnvelope
-    ): CaptureFlushOutcome? {
-        val scope = resolveScope(context)
-        if (!scope.isUsable) return null
-        // 원격 호출 중 process가 종료되어도 알림이 유실되지 않도록 먼저 암호화
-        // journal에 기록합니다. 정상 경로에서는 WorkManager를 예약하지 않고 즉시 호출합니다.
-        if (!queue(context).enqueue(scope, envelope)) return null
-        AndroidCaptureLatencyTelemetry.mark(
-            observationId = envelope.observationId,
-            stage = CaptureLatencyStage.JOURNAL_PERSISTED
-        )
-        val receipt = try {
-            submissionClient().submit(envelope)
-        } catch (_: Exception) {
-            scheduleRetry(context)
-            return CaptureFlushOutcome(emptyList(), retainedCount = 1)
-        }
-
-        val decision = evaluateCaptureReceipt(envelope, receipt)
-        try {
-            enqueueFollowUps(context, scope, decision.followUps)
-        } catch (_: Exception) {
-            scheduleRetry(context)
-            return CaptureFlushOutcome(emptyList(), retainedCount = 1)
-        }
-        val retainedCount = if (decision.completed) {
-            if (!queue(context).completeAfterAttempt(scope, envelope)) return null
-            0
-        } else {
-            if (
-                !queue(context).retainAfterAttempt(
-                    scope = scope,
-                    envelope = envelope,
-                    terminalBranches = decision.terminalBranches
-                )
-            ) return null
-            1
-        }
-        if (retainedCount > 0) scheduleRetry(context)
-        return CaptureFlushOutcome(decision.followUps, retainedCount)
-    }
-
     suspend fun enqueueBatchAndFlush(
         context: Context,
         envelopes: List<CaptureDeliveryEnvelope>

@@ -25,12 +25,12 @@ class CaptureDeliveryQueueTest {
         val store = MemoryStore()
         val queue = CaptureDeliveryQueue(store) { 1_000L }
         val envelope = rawEnvelope(".late")
-        queue.enqueue(scope, envelope)
+        queue.enqueueAll(scope, listOf(envelope))
         queue.purgeForSessionTransition(scope)
         assertEquals(false, queue.retainAfterAttempt(scope, envelope, emptySet()))
-        assertEquals(false, queue.enqueue(scope, envelope))
+        assertEquals(CaptureBatchEnqueueResult.Rejected, queue.enqueueAll(scope, listOf(envelope)))
         val next = scope.copy(sessionGeneration = scope.sessionGeneration + 1)
-        assertTrue(queue.enqueue(next, envelope))
+        assertEquals(CaptureBatchEnqueueResult.Accepted(listOf(envelope)), queue.enqueueAll(next, listOf(envelope)))
         queue.flush(scope, object : CaptureSubmissionClient {
             override suspend fun submit(envelope: CaptureDeliveryEnvelope): CaptureSubmissionReceipt =
                 error("old scope cannot submit")
@@ -42,7 +42,8 @@ class CaptureDeliveryQueueTest {
         val queue = CaptureDeliveryQueue(MemoryStore()) { 1_000L }
         queue.purgeForSessionTransition(scope)
         queue.resumeAfterFailedTransition(scope)
-        assertTrue(queue.enqueue(scope, rawEnvelope(".retry")))
+        val envelope = rawEnvelope(".retry")
+        assertEquals(CaptureBatchEnqueueResult.Accepted(listOf(envelope)), queue.enqueueAll(scope, listOf(envelope)))
     }
 
     @Test
@@ -141,14 +142,14 @@ class CaptureDeliveryQueueTest {
     }
 
     @Test
-    fun `단건 enqueue는 같은 payload가 이미 있으면 저장 없이 성공으로 처리한다`() = runTest {
+    fun `후보 한 개도 같은 payload가 이미 있으면 저장 없이 빈 접수 결과를 반환한다`() = runTest {
         val existing = rawEnvelope(".already-queued")
         val store = MemoryStore().apply {
             entries = listOf(QueuedCapture(scope, existing, 500L))
         }
         val queue = CaptureDeliveryQueue(store) { 1_000L }
 
-        assertTrue(queue.enqueue(scope, existing))
+        assertEquals(CaptureBatchEnqueueResult.Accepted(emptyList()), queue.enqueueAll(scope, listOf(existing)))
         assertEquals(0, store.replaceCalls)
         assertEquals(listOf(existing), store.entries.map { it.envelope })
     }
@@ -209,7 +210,7 @@ class CaptureDeliveryQueueTest {
     fun `payment 성공과 balance 재시도는 성공 후속효과를 한번만 만들고 entry를 유지한다`() = runTest {
         val store = MemoryStore()
         val queue = CaptureDeliveryQueue(store) { 1_000L }
-        queue.enqueue(scope, combinedEnvelope())
+        queue.enqueueAll(scope, listOf(combinedEnvelope()))
 
         val partial = object : CaptureSubmissionClient {
             override suspend fun submit(envelope: CaptureDeliveryEnvelope) = CaptureSubmissionReceipt(
@@ -231,7 +232,7 @@ class CaptureDeliveryQueueTest {
     fun `모든 branch가 terminal이면 삭제하고 다른 session entry는 제출하지 않는다`() = runTest {
         val store = MemoryStore()
         val queue = CaptureDeliveryQueue(store) { 1_000L }
-        queue.enqueue(scope, combinedEnvelope())
+        queue.enqueueAll(scope, listOf(combinedEnvelope()))
         var calls = 0
         val terminal = object : CaptureSubmissionClient {
             override suspend fun submit(envelope: CaptureDeliveryEnvelope): CaptureSubmissionReceipt {
@@ -255,7 +256,7 @@ class CaptureDeliveryQueueTest {
         val store = MemoryStore()
         var now = 1_000L
         val queue = CaptureDeliveryQueue(store) { now }
-        queue.enqueue(scope, combinedEnvelope())
+        queue.enqueueAll(scope, listOf(combinedEnvelope()))
         now += CaptureDeliveryQueue.MAX_RETENTION_MILLIS + 1L
         var calls = 0
 
@@ -274,7 +275,7 @@ class CaptureDeliveryQueueTest {
     fun `원문 envelope는 서버 completion이 terminal이면 parser 결과가 없어도 제거한다`() = runTest {
         val store = MemoryStore()
         val queue = CaptureDeliveryQueue(store) { 1_000L }
-        queue.enqueue(scope, rawEnvelope())
+        queue.enqueueAll(scope, listOf(rawEnvelope()))
 
         queue.flush(scope, object : CaptureSubmissionClient {
             override suspend fun submit(envelope: CaptureDeliveryEnvelope) =
@@ -288,7 +289,7 @@ class CaptureDeliveryQueueTest {
     fun `원문 envelope의 일부 branch가 재시도 가능하면 유지하고 Quick Edit은 한 번만 만든다`() = runTest {
         val store = MemoryStore()
         val queue = CaptureDeliveryQueue(store) { 1_000L }
-        queue.enqueue(scope, rawEnvelope())
+        queue.enqueueAll(scope, listOf(rawEnvelope()))
         val partial = object : CaptureSubmissionClient {
             override suspend fun submit(envelope: CaptureDeliveryEnvelope) = CaptureSubmissionReceipt(
                 completion = "partial-retryable",
@@ -367,7 +368,7 @@ class CaptureDeliveryQueueTest {
     fun `Quick Edit 후속효과를 내구화한 뒤에만 terminal capture를 제거한다`() = runTest {
         val store = MemoryStore()
         val queue = CaptureDeliveryQueue(store) { 1_000L }
-        queue.enqueue(scope, rawEnvelope())
+        queue.enqueueAll(scope, listOf(rawEnvelope()))
         var callbackObservedJournal = false
 
         queue.flush(
@@ -397,7 +398,7 @@ class CaptureDeliveryQueueTest {
     fun `Quick Edit 후속효과 내구화가 실패하면 capture journal을 보존한다`() = runTest {
         val store = MemoryStore()
         val queue = CaptureDeliveryQueue(store) { 1_000L }
-        queue.enqueue(scope, rawEnvelope())
+        queue.enqueueAll(scope, listOf(rawEnvelope()))
 
         runCatching {
             queue.flush(

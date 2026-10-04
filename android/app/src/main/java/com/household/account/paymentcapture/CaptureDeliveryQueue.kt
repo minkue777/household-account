@@ -122,15 +122,6 @@ class CaptureDeliveryQueue(
     private val mutex = Mutex()
     private val purgedScopes = mutableSetOf<CaptureSessionScope>()
 
-    suspend fun enqueue(
-        scope: CaptureSessionScope,
-        envelope: CaptureDeliveryEnvelope
-    ): Boolean = when (enqueueAll(scope, listOf(envelope))) {
-        is CaptureBatchEnqueueResult.Accepted -> true
-        is CaptureBatchEnqueueResult.PayloadConflict,
-        CaptureBatchEnqueueResult.Rejected -> false
-    }
-
     /** 모든 후보를 한 번의 암호화 store 교체로 기록한 뒤에만 원격 제출을 허용합니다. */
     internal suspend fun enqueueAll(
         scope: CaptureSessionScope,
