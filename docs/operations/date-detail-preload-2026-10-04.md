@@ -22,3 +22,11 @@ AND-012 / T-WEBVIEW-004, SYS-008 / T-SYS-008: 첫 전체 홈 paint 이후 날짜
 ## 로컬 검증 기록
 
 수정 전 신규 회귀 4개가 실패했고 수정 후 지연 로드·편집 초안·첫 paint 준비·스케줄링·런타임 경계 5파일 29개와 타입 검사가 통과했다. 날짜 key 변경 시 새 편집 상태를 유지하면서 동기 표시하며, 완료/진행 중 module 재사용 및 준비 실패 후 첫 사용 재요청을 확인했다. Emulator 준비의 Functions architecture 45개와 세 codebase 빌드도 통과했다. 실제 production WebKit 검사는 첫 paint 이후 chunk 요청 시각과 반복 선택 중 MutationObserver로 관측한 로딩 DOM 삽입 수, 기존 추가·검색·편집·chunk 재시도와 알림 편집 링크를 검사한다. 로그는 TEMP/household-date-detail-{before,unit,prepare,e2e}-20261004.log이며 전체 CI와 정확한 SHA의 Git 배포 상태를 후속 확인한다.
+
+실제 production WebKit + Firebase Emulator 5개 검사는 모두 통과했다. 제품 커밋 `d0afa7a01594bd93ec1cd8b88046202690bd2e43`의 Vercel Git 배포 성공과 운영 `/`·`/sw.js`의 HTTP 200 및 SHA, 해당 SHA `_buildManifest.js`의 HTTP 200도 확인했다. 로컬 Emulator는 정상 종료했다.
+
+## CI 관측 수정
+
+CI `37195876615`의 Web 단위 검사 중 `homeFirstCompletePaint.contract.test.tsx` 2개가 실패했다(873 passed / 2 failed). 테스트가 공유 스케줄러의 첫 번째 예약을 무조건 인접 월 조회로 간주하여 새 날짜별 코드 준비 callback을 대신 실행했고, 취소 여부도 다른 예약을 검사했다. 제품의 월 조회·취소 경로는 변경되지 않았다. 예약 옵션으로 두 작업을 구분하여 기존 인접 월 조회 실행·취소 검증을 유지하고, 날짜별 코드 준비는 첫 paint 전 fallback 없이 한 번 예약되며 읽기 세대 변경에는 유지되고 unmount 때 취소되는지 추가 확인한다. 후속 변경은 테스트와 이 문서뿐이다. 이전 실패 실행은 그대로 유지하고 수정 SHA의 CI로 후속 검증한다.
+
+관측 수정 후 로컬 Web 단위 검사 전체 123파일 875개 및 `tsc --noEmit`이 통과했다. 로그는 TEMP/household-date-detail-all-unit-20261004.log와 같은 이름의 JSON이다.
