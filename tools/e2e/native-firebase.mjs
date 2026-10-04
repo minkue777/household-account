@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { cpus, release, totalmem } from 'node:os';
 import { startNativeWebRuntime } from './native-web-runtime.mjs';
 import { startNativeCommandGate } from './native-command-gate.mjs';
+import { firstLogObject } from './structured-log.mjs';
 import { markdownTable } from '../performance/statistics.mjs';
 import { budgetMarkdown, evaluatePerformanceBudgets } from '../performance/budgets.mjs';
 
@@ -247,7 +248,7 @@ else {
       if (!line.includes('client.android-app-first-home-complete-paint.v1') || !/"endpoint"\s*:\s*"clientStartup"/.test(line)) continue;
       const elapsed = Number(line.match(/"elapsedMs"\s*:\s*([\d.]+)/)?.[1]);
       if (elapsed !== startup.durationMs) continue;
-      const logged = JSON.parse(line.slice(line.indexOf('{')));
+      const logged = firstLogObject(rawLine);
       assert.deepEqual(logged.clientStartupDiagnostics, startup.diagnostics,
         'Actual logger must preserve the same Native and Web startup diagnostics');
       const correlation = line.match(/"correlationId"\s*:\s*"([a-z0-9-]+)"/)?.[1];

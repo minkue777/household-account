@@ -27,3 +27,5 @@ AND-014 / T-ANDROID-STARTUP-001, ADM-006 / T-ADM-005: 기존 Activity 생성부�
 로컬 Web 관련 6파일 54개(최초 50개와 추가 손상 Native 관측 4개), 서버 2파일 110개, Native 준비 2suite 8개 및 Web 타입 검사가 통과했다. Emulator 준비의 Functions architecture 45개와 세 codebase 빌드가 통과했다. Android v1.2.32/code34 release 빌드와 APK v2 서명을 확인했다. 실제 Native→Web→서버 및 WebKit 회귀는 별도로 수행한다. 실기기 효과를 측정하는 작업이며 로컬 Emulator의 절대시간을 운영 성능으로 보고하지 않는다.
 
 로그는 저장소 밖 TEMP/household-android-diagnostics-{web-unit,functions-unit,native-unit,prepare,apk,native-e2e,ios-e2e}-20261004.log에 둔다.
+
+첫 Native 실행은 실제 Android E2E 4개가 통과했으나 runner의 신규 로그 대조에서 실패했다. Firebase CLI가 runtime JSON 뒤에 metadata JSON을 이어 쓰는 형식을 한 JSON으로 해석한 관측 도구 오류다. 따옴표·escape·중첩을 유지하며 첫 JSON 객체만 읽는 parser와 형식 회귀 3개를 추가하고, 실제 서버 진단 전체 동등성·1회 로그 assertion을 유지한다.
