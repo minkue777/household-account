@@ -247,6 +247,9 @@ else {
       if (!line.includes('client.android-app-first-home-complete-paint.v1') || !/"endpoint"\s*:\s*"clientStartup"/.test(line)) continue;
       const elapsed = Number(line.match(/"elapsedMs"\s*:\s*([\d.]+)/)?.[1]);
       if (elapsed !== startup.durationMs) continue;
+      const logged = JSON.parse(line.slice(line.indexOf('{')));
+      assert.deepEqual(logged.clientStartupDiagnostics, startup.diagnostics,
+        'Actual logger must preserve the same Native and Web startup diagnostics');
       const correlation = line.match(/"correlationId"\s*:\s*"([a-z0-9-]+)"/)?.[1];
       assert(correlation, 'Startup log must use a non-identifying correlation ID');
       observations.add(correlation);

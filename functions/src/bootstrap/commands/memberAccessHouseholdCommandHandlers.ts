@@ -110,8 +110,8 @@ export function createMemberAccessHouseholdCommandHandlers(
           }
           const platform = payload.platform as MemberAccessPlatform;
           const durationMs = startupDuration(payload.clientStartupDurationMs);
-          const diagnostics = platform === "ios-pwa" && durationMs !== undefined
-            ? normalizeClientStartupDiagnostics(payload.clientStartupDiagnostics, durationMs)
+          const diagnostics = platform !== "web" && durationMs !== undefined
+            ? normalizeClientStartupDiagnostics(payload.clientStartupDiagnostics, durationMs, platform)
             : undefined;
           if (platform === "web" && durationMs !== undefined) {
             throw new HouseholdCommandRejection("INVALID_PAYLOAD");

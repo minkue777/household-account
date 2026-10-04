@@ -1,4 +1,5 @@
 import { Platform } from '@/lib/utils/platform';
+import { isAndroidHostAvailable } from '@/platform/android-host/androidHostBridge';
 import type {
   ClientStartupDiagnostics, ClientStartupTiming,
 } from '@/platform/functions-api/clientStartupDiagnosticsContract';
@@ -61,7 +62,7 @@ function onVisibilityChange(): void {
 /** bootstrap 이전의 background 시간을 추정하거나 0으로 채우지 않습니다. */
 export function startClientStartupDiagnostics(startedAtMs?: number): void {
   try {
-    if (tracking || finished || !Platform.isIOSPWA()) return;
+    if (tracking || finished || (!Platform.isIOSPWA() && !isAndroidHostAvailable())) return;
     const time = startedAtMs === undefined ? now() : validTime(startedAtMs);
     if (time === undefined) return;
     const initialVisibility = visibility();

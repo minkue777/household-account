@@ -12,7 +12,8 @@ jest.mock('@/platform/read-model/firestoreServerReadModel', () => ({
   getDocFromServer: (...args: unknown[]) => mockRead(...args),
   getDocsFromServer: (...args: unknown[]) => mockRead(...args),
 }));
-jest.mock('@/lib/utils/platform', () => ({ Platform: { isIOSPWA: () => true } }));
+jest.mock('@/lib/utils/platform', () => ({ Platform: { isIOSPWA: jest.fn(() => true) } }));
+jest.mock('@/platform/android-host/androidHostBridge', () => ({ isAndroidHostAvailable: jest.fn(() => false) }));
 
 const identity = { sessionGeneration: 1, householdId: 'house-1', memberId: 'member-1', principalUid: 'user-1' };
 function deferred<T>() {
@@ -45,6 +46,19 @@ describe('[T-WEBVIEW-004][T-SYS-008][AND-012] 첫 홈 서버 조회 전환', () 
     const diagnostics = require('@/platform/performance/clientStartupDiagnostics') as typeof import('@/platform/performance/clientStartupDiagnostics');
     diagnostics.completeClientStartupDiagnostics();
     jest.useRealTimers();
+  });
+
+  it('Android 상세 계측이 실행 중이어도 초기 Lite 조회 없이 기존 구독을 즉시 시작한다', () => {
+    const platform = require('@/lib/utils/platform') as typeof import('@/lib/utils/platform');
+    const bridge = require('@/platform/android-host/androidHostBridge') as typeof import('@/platform/android-host/androidHostBridge');
+    jest.mocked(platform.Platform.isIOSPWA).mockReturnValue(false);
+    jest.mocked(bridge.isAndroidHostAvailable).mockReturnValue(true);
+    const value = setup();
+    expect(value.diagnostics.isClientStartupInProgress()).toBe(true);
+    const read = jest.fn(), listen = jest.fn(() => jest.fn());
+    value.subscribeWithInitialHomeRead({ source: 'ledger', scope: value.scope, read, publish: jest.fn(), listen })();
+    expect(read).not.toHaveBeenCalled();
+    expect(listen).toHaveBeenCalledTimes(1);
   });
 
   it('서버 응답을 표시한 뒤에만 구독을 시작하고 문서당 같은 원본을 재조회하지 않는다', async () => {

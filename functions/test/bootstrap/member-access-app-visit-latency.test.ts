@@ -43,6 +43,27 @@ function handler(dependencies: Parameters<
 }
 
 describe("member app visit startup latency", () => {
+  it("[T-ADM-005][T-ANDROID-STARTUP-001] Android 상세 진단은 실제 logger까지 두 시계 그대로 한 번 전달된다", async () => {
+    const logs = vi.spyOn(logger, "info").mockImplementation(() => {});
+    const recordAccess = vi.fn().mockResolvedValueOnce({ kind: "recorded", totalAccessCount: 1 })
+      .mockResolvedValueOnce({ kind: "already-recorded", totalAccessCount: 1 });
+    const subject = handler({ recordAccess });
+    const diagnostics = { version: 1, initialVisibility: "visible", visibilityTrackingStartedAtMs: 100,
+      hiddenMs: 0, hiddenCount: 0, timingsMs: { authReady: 200, ledgerListenStarted: 250,
+        ledgerServerSnapshotReceived: 600, firstHomeCompletePaint: 700 },
+      android: { webDurationMs: 700, bridgeRoundTripMs: 15, nativeTimingsMs: { webViewReady: 90, navigationRequested: 1_000 } } };
+    const payload = { visitId: "app-visit-1", platform: "android", clientStartupDurationMs: 2_000, clientStartupDiagnostics: diagnostics };
+    try {
+      await subject.execute(context(payload)); await subject.execute(context(payload));
+      expect(logs).toHaveBeenCalledExactlyOnceWith("interactive-latency", expect.objectContaining({
+        endpoint: "clientStartup", operation: "client.android-app-first-home-complete-paint.v1", stage: "total",
+        elapsedMs: 2_000, clientStartupDiagnostics: diagnostics,
+      }));
+      expect(JSON.stringify(logs.mock.calls)).not.toMatch(/uid-sensitive|household-sensitive|member-sensitive/);
+      expect(recordAccess.mock.calls[0]).toEqual([expect.not.objectContaining({ clientStartupDiagnostics: expect.anything() })]);
+    } finally { logs.mockRestore(); }
+  });
+
   it("[T-ADM-005] 실제 구조화 로그에 신규 16개 iPhone 관측을 같은 총시간과 한 번만 기록한다", async () => {
     const logs = vi.spyOn(logger, "info").mockImplementation(() => {});
     const recordAccess = vi.fn()

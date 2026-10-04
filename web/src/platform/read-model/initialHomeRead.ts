@@ -1,5 +1,6 @@
 import { getClientSessionScope, type ClientSessionScope } from '@/composition/clientSessionScope';
 import { isClientStartupInProgress, recordClientStartupTiming } from '@/platform/performance/clientStartupDiagnostics';
+import { Platform } from '@/lib/utils/platform';
 
 type Source = 'ledger' | 'categories' | 'currencyPreferences' | 'currencyBalances';
 export const INITIAL_HOME_READ_BUDGET_MS = 750;
@@ -14,7 +15,7 @@ export function subscribeWithInitialHomeRead<T>(options: {
   listen: () => () => void;
 }): () => void {
   const { source, scope } = options;
-  if (!scope || !isClientStartupInProgress() || window.location.pathname !== '/' || attempted.has(source)) {
+  if (!scope || !Platform.isIOSPWA() || !isClientStartupInProgress() || window.location.pathname !== '/' || attempted.has(source)) {
     return options.listen();
   }
   attempted.add(source);

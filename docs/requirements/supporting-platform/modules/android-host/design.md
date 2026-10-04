@@ -1,5 +1,7 @@
 # Android Host·WebView·QuickEdit 모듈 상세 설계
 
+AND-014의 구간별 계측은 [Android 시작 상세 계측 설계](../../../../operations/android-startup-diagnostics-2026-10-04.md)를 따릅니다. Native Activity clock의 두 준비 mark와 Web navigation clock의 기존 진단을 각각의 범위로 검증하며 서로 차감하지 않습니다. 기존 bridge·방문 명령·total 로그를 확장하고 최신 자료 표시 조건 및 플랫폼별 조회 경로를 유지합니다.
+
 > 요구사항: [Android Host·WebView·QuickEdit 모듈 요구사항](requirements.md)  
 > 상위 지도: [지원·읽기·플랫폼 영역](../../requirements.md)  
 > 공통 형식: [모듈 상세 설계 규약](../../../governance/module-design-standard.md)  

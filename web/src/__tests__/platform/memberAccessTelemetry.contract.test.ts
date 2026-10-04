@@ -30,12 +30,12 @@ describe('member access startup diagnostics forwarding', () => {
     }));
   });
 
-  it('Android 총시간은 유지하고 iPhone 전용 상세 진단은 보내지 않는다', async () => {
+  it('Android 총시간과 별도 기준점의 상세 진단을 기존 방문 명령에 함께 전달한다', async () => {
     const { observation, commands, telemetry } = dependencies();
-    jest.mocked(observation.readCapturedClientStartupObservation).mockResolvedValue({ platform: 'android', durationMs: 700, diagnostics });
+    const androidDiagnostics = { ...diagnostics, android: { webDurationMs: 500, bridgeRoundTripMs: 10 } };
+    jest.mocked(observation.readCapturedClientStartupObservation).mockResolvedValue({ platform: 'android', durationMs: 700, diagnostics: androidDiagnostics });
     await telemetry.recordCurrentAppVisit();
-    expect(commands.recordAppVisit).toHaveBeenCalledWith(expect.objectContaining({ clientStartupDurationMs: 700 }));
-    expect(jest.mocked(commands.recordAppVisit).mock.calls[0][0]).not.toHaveProperty('clientStartupDiagnostics');
+    expect(commands.recordAppVisit).toHaveBeenCalledWith(expect.objectContaining({ clientStartupDurationMs: 700, clientStartupDiagnostics: androidDiagnostics }));
   });
 
   it('실패한 통계는 사용자 오류로 전파하거나 재전송하지 않는다', async () => {

@@ -1,5 +1,7 @@
 # Android Host·WebView·QuickEdit 모듈 요구사항
 
+AND-014 / T-ANDROID-STARTUP-001의 Android 첫 홈 계측은 기존 Native 총시간과 Web navigation 기준 상세 시각을 분리합니다. WebView 설정 완료·최초 navigation 요청, 로그인·서버 조회·화면 준비 및 paint와 bridge 왕복을 선택 진단으로 기록하며 구 APK/Web을 지원합니다. 진단 실패는 접속과 화면에 영향을 주지 않고 Android 읽기 방식도 변경하지 않습니다. 계약·검증 추적성은 [Android 시작 상세 계측](../../../../operations/android-startup-diagnostics-2026-10-04.md)을 따릅니다.
+
 > 상위 Bounded Context: 없음 — [지원·읽기·플랫폼 영역](../../requirements.md)  
 > 아키텍처 역할: Android Delivery / Platform Shell  
 > 상세 설계: [모듈 상세 설계](design.md)  

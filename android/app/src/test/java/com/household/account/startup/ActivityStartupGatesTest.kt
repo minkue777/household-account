@@ -7,6 +7,36 @@ import org.junit.Test
 
 class ActivityStartupGatesTest {
     @Test
+    fun `준비 단계는 최초 시각만 기록하고 총시간 소비 뒤에는 동결한다`() {
+        var now = 1_000L
+        val clock = AppLaunchDurationClock { now }
+        now = 1_120L
+        clock.markWebViewReady()
+        val first = clock.snapshotTimings()
+        now = 1_900L
+        clock.markWebViewReady()
+        clock.markNavigationRequested()
+        assertEquals(mapOf("webViewReady" to 120L), first)
+        assertEquals(mapOf("webViewReady" to 120L, "navigationRequested" to 900L), clock.snapshotTimings())
+        now = 3_000L
+        assertEquals(2_000L, clock.consumeElapsedMillis())
+        now = 4_000L
+        clock.markNavigationRequested()
+        assertEquals(900L, clock.snapshotTimings()["navigationRequested"])
+        assertEquals(null, clock.consumeElapsedMillis())
+    }
+
+    @Test
+    fun `관측하지 않은 단계와 소비 후 뒤늦은 단계는 만들지 않는다`() {
+        val clock = AppLaunchDurationClock { 1_000L }
+        assertTrue(clock.snapshotTimings().isEmpty())
+        clock.consumeElapsedMillis()
+        clock.markWebViewReady()
+        clock.markNavigationRequested()
+        assertTrue(clock.snapshotTimings().isEmpty())
+    }
+
+    @Test
     fun `onCreate 직후 첫 resume만 중복 화면 갱신을 건너뛴다`() {
         val gate = FirstResumeRefreshGate()
 

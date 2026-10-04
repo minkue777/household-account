@@ -60,7 +60,10 @@ interface AndroidBridgeResultMap {
   'auth.sign-out': Record<string, never>;
   'session.refresh': { householdId: string; memberId: string; sessionGeneration: number };
   'app.get-version': { version: string | null };
-  'performance.get-app-launch-duration': { durationMs: number | null };
+  'performance.get-app-launch-duration': {
+    durationMs: number | null;
+    startupTimingsMs?: { webViewReady?: number; navigationRequested?: number };
+  };
   'quick-edit.get-update-feedback': unknown;
   'quick-edit.ack-update-feedback': unknown;
   'quick-edit.get-overlay-enabled': { enabled: boolean };

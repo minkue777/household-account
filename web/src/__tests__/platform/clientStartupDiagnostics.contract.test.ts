@@ -60,6 +60,38 @@ describe('iPhone startup diagnostics contract', () => {
     jest.restoreAllMocks();
   });
 
+  it.each([true, false])('Android는 두 시계를 분리하고 bridge 대기 전에 Web 진단을 동결한다 (Native 상세 지원=%s)', async nativeDetails => {
+    const platform = require('@/lib/utils/platform') as typeof import('@/lib/utils/platform');
+    const bridge = require('@/platform/android-host/androidHostBridge') as typeof import('@/platform/android-host/androidHostBridge');
+    jest.mocked(platform.Platform.isIOSPWA).mockReturnValue(false);
+    jest.mocked(bridge.isAndroidHostAvailable).mockReturnValue(true);
+    let finish!: (value: { durationMs: number; startupTimingsMs?: { webViewReady: number; navigationRequested: number } }) => void;
+    jest.mocked(bridge.requestAndroidHost).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const { marks, observation } = subject();
+    const diagnostics = require('@/platform/performance/clientStartupDiagnostics') as typeof import('@/platform/performance/clientStartupDiagnostics');
+    marks.markWebBootstrapStarted();
+    clock = 200; marks.markWebAuthStarted();
+    clock = 300; marks.markWebAuthCompleted(true);
+    clock = 350; diagnostics.recordClientStartupTiming('ledgerListenStarted');
+    clock = 700; diagnostics.recordClientStartupTiming('ledgerServerSnapshotReceived');
+    clock = 800; marks.markWebFirstHomeCompletePaint();
+    changeVisibility('hidden', 900);
+    clock = 1_000; diagnostics.recordClientStartupTiming('yearSummaryServerSnapshotReceived');
+    finish({ durationMs: 2_000, ...(nativeDetails ? { startupTimingsMs: { webViewReady: 90, navigationRequested: 1_100 } } : {}) });
+    const result = await observation.readCapturedClientStartupObservation();
+    expect(result).toMatchObject({ platform: 'android', durationMs: 2_000, diagnostics: {
+      hiddenMs: 0, hiddenCount: 0,
+      android: { webDurationMs: 800, bridgeRoundTripMs: 200 },
+      timingsMs: { bootstrapStarted: 100, authStarted: 200, authReady: 300,
+        ledgerListenStarted: 350, ledgerServerSnapshotReceived: 700, firstHomeCompletePaint: 800 },
+    } });
+    if (nativeDetails) expect(result?.diagnostics?.android?.nativeTimingsMs).toEqual({ webViewReady: 90, navigationRequested: 1_100 });
+    else expect(result?.diagnostics?.android?.nativeTimingsMs).toBeUndefined();
+    expect(result?.diagnostics?.timingsMs.yearSummaryServerSnapshotReceived).toBeUndefined();
+    expect(await observation.captureClientStartupObservation()).toBe(result);
+    expect(bridge.requestAndroidHost).toHaveBeenCalledTimes(1);
+  });
+
   it('실제 단계 callback 시각과 cache 경로를 최초 한 번 보존하고 전체 paint에서 동결한다', async () => {
     const { marks, observation } = subject();
     marks.markWebBootstrapStarted();

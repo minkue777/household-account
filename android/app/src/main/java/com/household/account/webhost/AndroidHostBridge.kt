@@ -19,7 +19,8 @@ import org.json.JSONObject
 class AndroidHostBridge(
     private val context: Activity,
     createAuthCoordinator: () -> NativeAuthCoordinator = { NativeAuthCoordinator(context) },
-    private val consumeAppLaunchDurationMillis: () -> Long?
+    private val consumeAppLaunchDurationMillis: () -> Long?,
+    private val readAppLaunchTimings: () -> Map<String, Long> = { emptyMap() }
 ) {
     // A restored Web Auth session does not need Native authentication at startup.
     private val authCoordinator by lazy(createAuthCoordinator)
@@ -54,13 +55,14 @@ class AndroidHostBridge(
                 requestId,
                 JSONObject().put("version", appVersion() ?: JSONObject.NULL)
             )
-            "performance.get-app-launch-duration" -> succeeded(
-                requestId,
-                JSONObject().put(
-                    "durationMs",
-                    consumeAppLaunchDurationMillis() ?: JSONObject.NULL
-                )
-            )
+            "performance.get-app-launch-duration" -> {
+                val duration = consumeAppLaunchDurationMillis()
+                val result = JSONObject().put("durationMs", duration ?: JSONObject.NULL)
+                if (duration != null) {
+                    result.put("startupTimingsMs", JSONObject(readAppLaunchTimings()))
+                }
+                succeeded(requestId, result)
+            }
             "quick-edit.get-overlay-enabled" -> scoped(requestId, payload) { householdId, memberId ->
                 JSONObject().put(
                     "enabled",

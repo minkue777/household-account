@@ -35,6 +35,15 @@ export interface ClientStartupDiagnostics {
   readonly hiddenCount: number;
   readonly serviceWorkerControlled?: boolean;
   readonly yearSummaryRequired?: boolean;
+  /** Web 시각과 Activity 시각은 기준점이 다르므로 서로 차감하지 않습니다. */
+  readonly android?: {
+    readonly webDurationMs: number;
+    readonly bridgeRoundTripMs: number;
+    readonly nativeTimingsMs?: {
+      readonly webViewReady?: number;
+      readonly navigationRequested?: number;
+    };
+  };
   readonly cache?: {
     readonly bootstrap?: 'hit' | 'miss';
     readonly membership?: 'hit' | 'prefetched';

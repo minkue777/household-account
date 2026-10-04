@@ -80,9 +80,11 @@ class MainActivity : AppCompatActivity() {
         }
         hostBridge = AndroidHostBridge(
             context = this,
-            consumeAppLaunchDurationMillis = appLaunchDurationClock::consumeElapsedMillis
+            consumeAppLaunchDurationMillis = appLaunchDurationClock::consumeElapsedMillis,
+            readAppLaunchTimings = appLaunchDurationClock::snapshotTimings
         )
         setupWebView(requireNotNull(webView))
+        appLaunchDurationClock.markWebViewReady()
         if (savedInstanceState?.getString("webEnvironmentVersion") == TrustedWebOrigin.ENVIRONMENT_VERSION) {
             savedInstanceState.getString("webRecoveryUrl")?.takeIf(TrustedWebOrigin::contains)?.let {
                 lastTrustedUrl = it
@@ -325,6 +327,7 @@ class MainActivity : AppCompatActivity() {
 
         if (!webNavigationStarted) {
             webNavigationStarted = true
+            appLaunchDurationClock.markNavigationRequested()
             pendingNavigation?.let { view.restoreState(it) }
             pendingNavigation = null
             // WebView Firebase Auth가 남아 있으면 그 세션을 즉시 재사용합니다.

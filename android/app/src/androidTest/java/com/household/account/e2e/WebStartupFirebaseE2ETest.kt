@@ -113,6 +113,23 @@ class WebStartupFirebaseE2ETest {
             assertTrue(duration >= beforeNavigationElapsed)
             assertTrue(duration <= SystemClock.elapsedRealtime() - startedAt)
             assertTrue("Native measurement includes the real phase before Web navigation", duration - startup.getDouble("completePaintAt") >= beforeNavigationElapsed - 250)
+            val diagnostics = startup.getJSONObject("payload").getJSONObject("clientStartupDiagnostics")
+            val androidTiming = diagnostics.getJSONObject("android")
+            val nativeTiming = androidTiming.getJSONObject("nativeTimingsMs")
+            val webDuration = androidTiming.getDouble("webDurationMs")
+            assertTrue(nativeTiming.getDouble("webViewReady") <= beforeNavigationElapsed)
+            assertTrue(nativeTiming.getDouble("navigationRequested") >= beforeNavigationElapsed)
+            assertTrue(nativeTiming.getDouble("navigationRequested") <= duration)
+            assertTrue(androidTiming.getDouble("bridgeRoundTripMs") >= 0)
+            val webTiming = diagnostics.getJSONObject("timingsMs")
+            for (key in listOf("bootstrapStarted", "authStarted", "authReady", "ledgerListenStarted",
+                "ledgerServerSnapshotReceived", "categoriesListenStarted", "categoriesServerSnapshotReceived",
+                "currencyPreferencesListenStarted", "currencyPreferencesServerSnapshotReceived",
+                "currencyBalancesListenStarted", "currencyBalancesServerSnapshotReceived", "homeReady", "firstHomeCompletePaint")) {
+                assertTrue("$key must be observed before Web completion", webTiming.getDouble(key) in 0.0..webDuration)
+            }
+            assertEquals(startup.getDouble("completePaintAt"), webTiming.getDouble("firstHomeCompletePaint"), 0.01)
+            assertFalse("Diagnostics must not enable iPhone Lite reads on Android", webTiming.keys().asSequence().any { it.contains("InitialRead") })
             val databases = first.getJSONArray("databases").let { entries -> (0 until entries.length()).map(entries::getString) }
             assertTrue("Android Firestore must use memory cache", databases.none { it.startsWith("firestore/") })
             val firstDocumentId = first.getString("documentId")
@@ -127,6 +144,7 @@ class WebStartupFirebaseE2ETest {
             assertTrue(evaluate("performance.getEntriesByName('household-account:startup:home:first-complete-paint').length === 1") == true)
             File(context.filesDir, "native-startup-e2e-result.json").writeText(JSONObject()
                 .put("platform", "android").put("durationMs", duration)
+                .put("diagnostics", diagnostics)
                 .put("beforeNavigationElapsedMs", beforeNavigationElapsed).put("sameActivityReloadStartupSamples", 0)
                 .put("latestLocalCurrencyBalance", 36890).toString())
         } finally {

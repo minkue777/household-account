@@ -37,6 +37,14 @@ export interface ClientStartupDiagnostics {
   readonly hiddenCount: number;
   readonly serviceWorkerControlled?: boolean;
   readonly yearSummaryRequired?: boolean;
+  readonly android?: {
+    readonly webDurationMs: number;
+    readonly bridgeRoundTripMs: number;
+    readonly nativeTimingsMs?: {
+      readonly webViewReady?: number;
+      readonly navigationRequested?: number;
+    };
+  };
   readonly cache?: {
     readonly bootstrap?: "hit" | "miss";
     readonly membership?: "hit" | "prefetched";
@@ -58,19 +66,43 @@ function onlyKeys(value: Record<string, unknown>, keys: readonly string[]): bool
 export function normalizeClientStartupDiagnostics(
   input: unknown,
   durationMs: number,
+  platform: "ios-pwa" | "android" = "ios-pwa",
 ): ClientStartupDiagnostics | undefined {
   const value = record(input);
   if (!value || !Number.isFinite(durationMs) || durationMs < 0 || durationMs > 120_000) {
     return undefined;
   }
-  const boundedTime = (candidate: unknown): candidate is number =>
+  const timeWithin = (candidate: unknown, limit: number): candidate is number =>
     typeof candidate === "number" && Number.isFinite(candidate) &&
-    candidate >= 0 && candidate <= durationMs;
+    candidate >= 0 && candidate <= limit;
   const rounded = (candidate: number) => Math.round(candidate * 1_000) / 1_000;
+  let android: ClientStartupDiagnostics["android"];
+  if (platform === "android") {
+    const source = record(value.android);
+    if (!source || !onlyKeys(source, ["webDurationMs", "bridgeRoundTripMs", "nativeTimingsMs"]) ||
+      !timeWithin(source.webDurationMs, 120_000) || !timeWithin(source.bridgeRoundTripMs, 120_000)) return undefined;
+    let nativeTimingsMs: NonNullable<ClientStartupDiagnostics["android"]>["nativeTimingsMs"];
+    if (source.nativeTimingsMs !== undefined) {
+      const native = record(source.nativeTimingsMs);
+      if (!native || !onlyKeys(native, ["webViewReady", "navigationRequested"])) return undefined;
+      for (const key of ["webViewReady", "navigationRequested"] as const) {
+        if (native[key] !== undefined && !timeWithin(native[key], durationMs)) return undefined;
+      }
+      if (typeof native.webViewReady === "number" && typeof native.navigationRequested === "number" &&
+        native.webViewReady > native.navigationRequested) return undefined;
+      nativeTimingsMs = {
+        ...(native.webViewReady === undefined ? {} : { webViewReady: rounded(native.webViewReady as number) }),
+        ...(native.navigationRequested === undefined ? {} : { navigationRequested: rounded(native.navigationRequested as number) }),
+      };
+    }
+    android = { webDurationMs: rounded(source.webDurationMs), bridgeRoundTripMs: rounded(source.bridgeRoundTripMs),
+      ...(nativeTimingsMs === undefined ? {} : { nativeTimingsMs }) };
+  } else if (value.android !== undefined) return undefined;
+  const boundedTime = (candidate: unknown): candidate is number => timeWithin(candidate, android?.webDurationMs ?? durationMs);
   if (!onlyKeys(value, [
     "version", "webBuild", "navigationType", "initialVisibility",
     "visibilityTrackingStartedAtMs", "hiddenMs", "hiddenCount",
-    "serviceWorkerControlled", "yearSummaryRequired", "cache", "timingsMs",
+    "serviceWorkerControlled", "yearSummaryRequired", "cache", "timingsMs", "android",
   ]) || value.version !== 1 ||
     typeof value.initialVisibility !== "string" ||
     !["visible", "hidden", "unknown"].includes(value.initialVisibility) ||
@@ -128,6 +160,7 @@ export function normalizeClientStartupDiagnostics(
       yearSummaryRequired: value.yearSummaryRequired as boolean,
     }),
     ...(cache === undefined ? {} : { cache }),
+    ...(android === undefined ? {} : { android }),
     timingsMs,
   };
 }

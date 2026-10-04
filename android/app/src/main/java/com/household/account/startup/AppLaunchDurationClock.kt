@@ -14,6 +14,22 @@ internal class AppLaunchDurationClock(
 ) {
     private val startedAtMillis = elapsedRealtimeMillis()
     private var consumed = false
+    private val timings = linkedMapOf<String, Long>()
+
+    @Synchronized
+    fun markWebViewReady() = markOnce("webViewReady")
+
+    @Synchronized
+    fun markNavigationRequested() = markOnce("navigationRequested")
+
+    private fun markOnce(name: String) {
+        if (!consumed && !timings.containsKey(name)) {
+            timings[name] = max(0L, elapsedRealtimeMillis() - startedAtMillis)
+        }
+    }
+
+    @Synchronized
+    fun snapshotTimings(): Map<String, Long> = timings.toMap()
 
     @Synchronized
     fun consumeElapsedMillis(): Long? {

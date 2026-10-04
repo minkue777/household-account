@@ -47,6 +47,32 @@ const readPhaseTimings = {
 };
 
 describe("[T-ADM-005] iPhone 시작 진단 로그 계약", () => {
+  const android = { webDurationMs: 2_000, bridgeRoundTripMs: 12.34567,
+    nativeTimingsMs: { webViewReady: 100, navigationRequested: 2_500 } };
+
+  it("Android의 Web와 Native 시각을 서로 다른 기준으로 검증하고 구 APK 누락은 보존한다", () => {
+    const result = normalizeClientStartupDiagnostics({ ...valid, android }, 3_000, "android");
+    expect(result).toEqual({ ...valid, android: { ...android, bridgeRoundTripMs: 12.346 } });
+    expect(result?.android?.nativeTimingsMs).not.toBe(android.nativeTimingsMs);
+    expect(normalizeClientStartupDiagnostics({ ...valid, android: { webDurationMs: 2_000, bridgeRoundTripMs: 0 } }, 1_000, "android")?.android)
+      .toEqual({ webDurationMs: 2_000, bridgeRoundTripMs: 0 });
+    expect(normalizeClientStartupDiagnostics({ ...valid, android }, 3_000)).toBeUndefined();
+    expect(normalizeClientStartupDiagnostics(valid, 3_000, "android")).toBeUndefined();
+  });
+
+  it.each([
+    { ...valid, android: { ...android, webDurationMs: 1_999 } },
+    { ...valid, android: { ...android, bridgeRoundTripMs: -1 } },
+    { ...valid, android: { ...android, bridgeRoundTripMs: 120_001 } },
+    { ...valid, android: { ...android, webDurationMs: Infinity } },
+    { ...valid, android: { ...android, nativeTimingsMs: { webViewReady: 3_001 } } },
+    { ...valid, android: { ...android, nativeTimingsMs: { webViewReady: 800, navigationRequested: 700 } } },
+    { ...valid, android: { ...android, nativeTimingsMs: { navigationRequested: "secret" } } },
+    { ...valid, android: { ...android, nativeTimingsMs: { url: "https://private" } } },
+    { ...valid, android: { ...android, user: "private" } },
+  ])("Android 범위·순서·비허용 필드 손상은 진단만 거부한다", input => {
+    expect(normalizeClientStartupDiagnostics(input, 3_000, "android")).toBeUndefined();
+  });
   it("허용된 빌드/단계/숨김 관측을 복사하고 없는 관측을 0으로 만들지 않는다", () => {
     const result = normalizeClientStartupDiagnostics(valid, 2_000);
     expect(result).toEqual(valid);

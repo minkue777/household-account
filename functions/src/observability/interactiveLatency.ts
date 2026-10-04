@@ -133,9 +133,10 @@ export function recordCompletedInteractiveLatency(input: {
   ) {
     return;
   }
-  const diagnostics = input.endpoint === "clientStartup" &&
-    input.operation === "client.ios-pwa-first-home-complete-paint.v1"
-    ? normalizeClientStartupDiagnostics(input.clientStartupDiagnostics, input.elapsedMs)
+  const startupPlatform = input.operation === "client.ios-pwa-first-home-complete-paint.v1" ? "ios-pwa"
+    : input.operation === "client.android-app-first-home-complete-paint.v1" ? "android" : undefined;
+  const diagnostics = input.endpoint === "clientStartup" && startupPlatform
+    ? normalizeClientStartupDiagnostics(input.clientStartupDiagnostics, input.elapsedMs, startupPlatform)
     : undefined;
   const entry: InteractiveLatencyLogEntry = {
     schemaVersion: INTERACTIVE_LATENCY_SCHEMA_VERSION,

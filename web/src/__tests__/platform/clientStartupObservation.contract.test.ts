@@ -18,6 +18,25 @@ describe('client startup observation contract', () => {
     jest.restoreAllMocks();
   });
 
+  it.each([
+    { webViewReady: -1 }, { navigationRequested: 2_001 },
+    { webViewReady: 800, navigationRequested: 700 }, { url: 'https://private' },
+  ])('손상 Native 상세 값은 생략하되 기존 총시간과 Web 구간은 보존한다: %j', async native => {
+    const bridge = require('@/platform/android-host/androidHostBridge') as typeof import('@/platform/android-host/androidHostBridge');
+    jest.mocked(bridge.isAndroidHostAvailable).mockReturnValue(true);
+    jest.mocked(bridge.requestAndroidHost).mockResolvedValue({ durationMs: 2_000, startupTimingsMs: native });
+    const clock = jest.spyOn(window.performance, 'now').mockReturnValue(100);
+    const diagnostics = require('@/platform/performance/clientStartupDiagnostics') as typeof import('@/platform/performance/clientStartupDiagnostics');
+    diagnostics.startClientStartupDiagnostics();
+    clock.mockReturnValue(500);
+    const subject = require('@/platform/performance/clientStartupObservation') as typeof import('@/platform/performance/clientStartupObservation');
+    const result = await subject.captureClientStartupObservation();
+    expect(result).toMatchObject({ platform: 'android', durationMs: 2_000, diagnostics: {
+      android: { webDurationMs: 500, bridgeRoundTripMs: 0 }, timingsMs: { bootstrapStarted: 100 },
+    } });
+    expect(result?.diagnostics?.android?.nativeTimingsMs).toBeUndefined();
+  });
+
   it('Android는 Web navigation이 아니라 Activity 생성부터의 Native 시간을 사용한다', async () => {
     const bridge = require(
       '@/platform/android-host/androidHostBridge'

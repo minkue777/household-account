@@ -32,6 +32,30 @@ function normalizedDuration(value: unknown): number | undefined {
   return Math.round(value * 1_000) / 1_000;
 }
 
+function webNow(): number | undefined {
+  try { return normalizedDuration(window.performance?.now()); } catch { return undefined; }
+}
+
+function captureDiagnostics(end: number | undefined): ClientStartupDiagnostics | undefined {
+  try { return completeClientStartupDiagnostics(end); } catch { return undefined; }
+}
+
+function nativeTimings(input: unknown, durationMs: number): NonNullable<ClientStartupDiagnostics['android']>['nativeTimingsMs'] {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
+  const source = input as Record<string, unknown>;
+  if (Object.keys(source).some(key => !['webViewReady', 'navigationRequested'].includes(key))) return undefined;
+  const result: { webViewReady?: number; navigationRequested?: number } = {};
+  for (const key of ['webViewReady', 'navigationRequested'] as const) {
+    if (source[key] === undefined) continue;
+    const time = normalizedDuration(source[key]);
+    if (time === undefined || time > durationMs) return undefined;
+    result[key] = time;
+  }
+  if (result.webViewReady !== undefined && result.navigationRequested !== undefined &&
+    result.webViewReady > result.navigationRequested) return undefined;
+  return result;
+}
+
 /**
  * 첫 화면의 모든 데이터가 실제로 그려진 순간 한 번 호출합니다.
  *
@@ -44,15 +68,25 @@ Promise<ClientStartupObservation | undefined> {
   if (capturedObservation !== undefined) return capturedObservation;
 
   if (isAndroidHostAvailable()) {
+    // Freeze Web observations at paint, before the asynchronous Native bridge round trip.
+    const webDurationMs = webNow();
+    const webDiagnostics = captureDiagnostics(webDurationMs);
     capturedObservation = requestAndroidHost(
       'performance.get-app-launch-duration',
       {}
     )
-      .then(({ durationMs }) => {
+      .then(({ durationMs, startupTimingsMs }) => {
         const normalized = normalizedDuration(durationMs);
-        return normalized === undefined
-          ? undefined
-          : { platform: 'android' as const, durationMs: normalized };
+        if (normalized === undefined) return undefined;
+        const receivedAt = webNow();
+        const bridgeRoundTripMs = receivedAt !== undefined && webDurationMs !== undefined
+          ? normalizedDuration(receivedAt - webDurationMs) : undefined;
+        const native = nativeTimings(startupTimingsMs, normalized);
+        const diagnostics = webDiagnostics && webDurationMs !== undefined && bridgeRoundTripMs !== undefined
+          ? { ...webDiagnostics, android: { webDurationMs, bridgeRoundTripMs,
+            ...(native === undefined ? {} : { nativeTimingsMs: native }) } } : undefined;
+        return { platform: 'android' as const, durationMs: normalized,
+          ...(diagnostics === undefined ? {} : { diagnostics }) };
       })
       .catch(() => undefined);
     return capturedObservation;
