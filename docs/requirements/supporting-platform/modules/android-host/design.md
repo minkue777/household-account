@@ -197,6 +197,8 @@ Client 검증은 즉시 피드백용이다. Ledger가 같은 불변식과 원자
 13. 지연 로드된 추가 창의 폼 초기화는 layout effect에서 화면 표시 전에 완료하여 첫 입력과 passive 초기화가 경합하지 않게 한다. 기본 카테고리·날짜·수입 항목 규칙은 유지하며, 편집 초안 회귀 검사는 실제 컴포넌트 로드 완료 이후 기존 성공·실패·세션 전환 assertion을 수행한다.
 12. `onRenderProcessGone`은 처리 완료를 반환하여 renderer 종료가 앱 전체 종료로 이어지지 않게 한다. 손상된 WebView에는 메시지·로딩 중지·상태 저장을 요청하지 않고 참조 해제·View 분리·destroy만 수행한다. 전경에서는 마지막으로 확인한 허용 URL을 새 WebView로 자동 복구하고 배경에서는 `onResume`까지 생성을 미룬다. 첫 복구는 즉시 수행하고 반복 종료는 재생성 간격만 최소 1초로 제한한다. 별도 안내 화면이나 재시도 버튼을 추가하지 않는다. 로그인 쿠키·Web Auth 저장소·캐시는 삭제하지 않으며 renderer 메모리의 미저장 입력까지 복구된다고 보장하지 않는다. 정상 초기화의 권한 요청·캡처 재전송 예약은 Activity당 한 번만 실행한다.
 
+iPhone PWA의 첫 홈은 `initialHomeRead.ts`에서 현재 월 원장·카테고리·홈 설정·지역화폐 잔액의 Lite 조회를 750ms 예산으로 수행합니다. 각 응답을 기존 mapper/projection에 적용한 다음 해당 realtime 구독을 시작하여 선행 watch 응답의 역전을 피합니다. 초과·실패 시 Lite 결과를 폐기하고 기존 구독을 시작하며 두 번째 Lite 요청을 만들지 않습니다. 취소·scope 교체는 timer와 callback을 무효화합니다. `homePreferencesReadModel.ts`는 카드와 잔액 선택에 같은 설정 조회·구독을 공유하고 마지막 observer 해제 때 종료합니다. Lite 뒤 첫 watch의 cache는 준비된 값으로 덮지 않습니다. 기존 Live 단계와 별도로 선택적 InitialReadStarted/Received/Fallback을 기록합니다. 상세 계약과 운영 평가 비용은 [작업 기록](../../../../operations/ios-home-initial-read-2026-10-04.md)을 따릅니다.
+
 단발 bulk 조회인 전체 기간 검색과 자산 이력 통계는 `firestoreServerReadModel.ts`의 Firestore Lite를 사용합니다. 같은 FirebaseApp의 Auth와 Firestore Rules를 공유하되 REST 조회가 realtime SDK의 IndexedDB 쓰기를 기다리지 않도록 분리합니다. 일반 브라우저의 persistent listener, 모바일 memory listener, iPhone PWA long-polling과 각 기능의 session/cache 무효화 정책은 바꾸지 않습니다. Full/Lite Query·DocumentReference·cursor는 서로 섞지 않으며, 화면 mapping에는 각 경계가 반환한 `id`와 `data()`만 사용합니다.
 
 ### 5.3 `SynchronizeSessionMirror`

@@ -1,7 +1,8 @@
+import { subscribeWithInitialHomeRead } from '@/platform/read-model/initialHomeRead';
+import { subscribeToHomePreferencesDocument } from '@/platform/read-model/homePreferencesReadModel';
 import {
   collection,
   db,
-  doc,
   onSnapshot,
   timestampToDate,
 } from '@/platform/read-model/firestoreReadModel';
@@ -35,36 +36,13 @@ export function subscribeToLocalCurrencyBalance(
 
   const ensurePreferenceSubscription = () => {
     if (unsubscribePreference !== undefined) return;
-    const preferenceReference = doc(
-      db,
-      'households',
-      scope.householdId,
-      'homePreferences',
-      'home'
-    );
-    recordClientStartupTiming('currencyPreferencesListenStarted');
-    unsubscribePreference = onSnapshot(
-      preferenceReference,
-      { includeMetadataChanges: true },
-      (snapshot) => {
-        if (active && getClientSessionScope() === scope && snapshot.metadata.fromCache === false) {
-          recordClientStartupTiming('currencyPreferencesServerSnapshotReceived');
-        }
-        if (!preferenceLoaded && snapshot.metadata.fromCache) return;
-        const data = snapshot.exists() ? snapshot.data() : undefined;
-        selectedType =
-          typeof data?.selectedLocalCurrencyType === 'string'
-          && data.selectedLocalCurrencyType.trim() !== ''
-            ? data.selectedLocalCurrencyType.trim()
-            : undefined;
-        preferenceLoaded = true;
-        emitCanonicalSelection();
-      },
-      (error) => {
-        console.error('지역화폐 선택 설정 구독 오류:', error);
-        options.onError?.(error);
-      }
-    );
+    unsubscribePreference = subscribeToHomePreferencesDocument(scope.householdId, data => {
+      if (!active || getClientSessionScope() !== scope) return;
+      selectedType = typeof data?.selectedLocalCurrencyType === 'string' && data.selectedLocalCurrencyType.trim() !== ''
+        ? data.selectedLocalCurrencyType.trim() : undefined;
+      preferenceLoaded = true;
+      emitCanonicalSelection();
+    }, error => { if (active && getClientSessionScope() === scope) options.onError?.(error); });
   };
 
   const emitCanonicalSelection = () => {
@@ -87,52 +65,58 @@ export function subscribeToLocalCurrencyBalance(
     scope.householdId,
     'localCurrencyBalances'
   );
-  recordClientStartupTiming('currencyBalancesListenStarted');
-  const unsubscribeBalances = onSnapshot(
-    balancesReference,
-    { includeMetadataChanges: true },
-    (snapshot) => {
-      if (active && getClientSessionScope() === scope && snapshot.metadata.fromCache === false) {
-        recordClientStartupTiming('currencyBalancesServerSnapshotReceived');
-      }
-      if (!balancesLoaded && snapshot.metadata.fromCache) return;
-      balances = new Map(
-        snapshot.docs.flatMap((balanceDocument) => {
-          const data = balanceDocument.data();
-          const currencyType =
-            typeof data.localCurrencyType === 'string' && data.localCurrencyType.trim() !== ''
-              ? data.localCurrencyType.trim()
-              : balanceDocument.id;
-          const rawBalance = data.balanceInWon ?? data.balance;
-          if (!Number.isSafeInteger(rawBalance)) return [];
-          const updatedAt =
-            timestampToDate(data.updatedAt)
-            ?? (
-              typeof data.observedAt === 'string'
-                ? new Date(data.observedAt)
-                : null
-            );
-          return [[
+  const publish = (documents: { id: string; data: () => Record<string, unknown> }[]) => {
+    balances = new Map(
+      documents.flatMap((balanceDocument) => {
+        const data = balanceDocument.data();
+        const currencyType =
+          typeof data.localCurrencyType === 'string' && data.localCurrencyType.trim() !== ''
+            ? data.localCurrencyType.trim()
+            : balanceDocument.id;
+        const rawBalance = data.balanceInWon ?? data.balance;
+        if (!Number.isSafeInteger(rawBalance)) return [];
+        const updatedAt =
+          timestampToDate(data.updatedAt)
+          ?? (
+            typeof data.observedAt === 'string'
+              ? new Date(data.observedAt)
+              : null
+          );
+        return [[
+          currencyType,
+          {
+            balance: rawBalance as number,
             currencyType,
-            {
-              balance: rawBalance as number,
-              currencyType,
-              updatedAt:
-                updatedAt instanceof Date && !Number.isNaN(updatedAt.getTime())
-                  ? updatedAt
-                  : null,
-            },
-          ] as const];
-        })
-      );
-      balancesLoaded = true;
-      emitCanonicalSelection();
+            updatedAt:
+              updatedAt instanceof Date && !Number.isNaN(updatedAt.getTime())
+                ? updatedAt
+                : null,
+          },
+        ] as const];
+      })
+    );
+    balancesLoaded = true;
+    emitCanonicalSelection();
+  };
+  let hasLiveServerSnapshot = false;
+  const unsubscribeBalances = subscribeWithInitialHomeRead({
+    source: 'currencyBalances', scope,
+    read: async () => {
+      const server = await import('@/platform/read-model/firestoreServerReadModel');
+      return server.getDocsFromServer(server.collection(server.db, 'households', scope.householdId, 'localCurrencyBalances'));
     },
-    (error) => {
-      console.error('지역화폐 잔액 구독 오류:', error);
-      options.onError?.(error);
-    }
-  );
+    publish: snapshot => publish(snapshot.docs),
+    listen: () => {
+      recordClientStartupTiming('currencyBalancesListenStarted');
+      return onSnapshot(balancesReference, { includeMetadataChanges: true }, snapshot => {
+        if (!active || getClientSessionScope() !== scope) return;
+        if (!snapshot.metadata.fromCache) recordClientStartupTiming('currencyBalancesServerSnapshotReceived');
+        if (!hasLiveServerSnapshot && snapshot.metadata.fromCache) return;
+        hasLiveServerSnapshot = true;
+        publish(snapshot.docs);
+      }, error => { if (active && getClientSessionScope() === scope) options.onError?.(error); });
+    },
+  });
 
   return () => {
     active = false;

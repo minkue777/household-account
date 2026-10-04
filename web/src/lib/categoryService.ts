@@ -1,3 +1,4 @@
+import { subscribeWithInitialHomeRead } from '@/platform/read-model/initialHomeRead';
 import {
   doc,
   onSnapshot,
@@ -116,18 +117,23 @@ function subscribeToCategoryCatalog(
   const scope = getClientSessionScope();
   let active = true;
   const reference = doc(db, 'households', householdId, 'categoryCatalog', 'current');
-  if (scope?.householdId === householdId) recordClientStartupTiming('categoriesListenStarted');
-  const unsubscribe = onSnapshot(reference, { includeMetadataChanges: true }, snapshot => {
-    if (active && scope?.householdId === householdId && getClientSessionScope() === scope
-      && snapshot.metadata.fromCache === false) {
-      recordClientStartupTiming('categoriesServerSnapshotReceived');
-    }
-    if (snapshot.metadata.fromCache) return;
-    try {
-      const catalog = readCategoryCatalog(snapshot.data(), householdId);
-      callback(catalog);
-    } catch (error) { onError?.(error); }
-  }, onError);
+  const publish = (data: Record<string, unknown> | undefined) => callback(readCategoryCatalog(data, householdId));
+  const unsubscribe = subscribeWithInitialHomeRead({
+    source: 'categories', scope: scope?.householdId === householdId ? scope : undefined,
+    read: async () => {
+      const server = await import('@/platform/read-model/firestoreServerReadModel');
+      return server.getDocFromServer(server.doc(server.db, 'households', householdId, 'categoryCatalog', 'current'));
+    },
+    publish: snapshot => publish(snapshot.data()),
+    listen: () => {
+      if (scope?.householdId === householdId) recordClientStartupTiming('categoriesListenStarted');
+      return onSnapshot(reference, { includeMetadataChanges: true }, snapshot => {
+        if (!active || getClientSessionScope() !== scope || snapshot.metadata.fromCache) return;
+        if (scope?.householdId === householdId) recordClientStartupTiming('categoriesServerSnapshotReceived');
+        try { publish(snapshot.data()); } catch (error) { onError?.(error); }
+      }, error => { if (active && getClientSessionScope() === scope) onError?.(error); });
+    },
+  });
   return () => { active = false; unsubscribe(); };
 }
 

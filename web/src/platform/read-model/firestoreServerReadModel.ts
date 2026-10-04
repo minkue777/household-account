@@ -9,6 +9,7 @@ import { firebaseEmulatorHosts, shouldConnectFirebaseEmulators } from '@/platfor
 
 export {
   collection,
+  doc,
   query,
   where,
   limit,
@@ -16,6 +17,7 @@ export {
   startAfter,
   documentId,
   getDocs as getDocsFromServer,
+  getDoc as getDocFromServer,
   type DocumentData,
   type QueryDocumentSnapshot,
   type QuerySnapshot,

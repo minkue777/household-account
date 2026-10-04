@@ -583,3 +583,9 @@ partner 선택 정책은 [DEC-022](../../../../governance/decisions.md#dec-022),
 - URL 원문·query·토큰·snapshot 자료·사용자/가구 식별자는 수집하지 않고 동일 구조화 total 로그에 허용된 숫자만 보존한다. 검증은 신규 키별 범위·손상·누락·구버전, 실제 logger 보존과 중복 방지, Resource Timing 미지원, 캐시/서버 callback과 mapper 순서, 최종 기록 후 무시를 포함한다. 이 변경은 관측 보강이며 기존 8.357초 표본의 속도 개선이나 원인 확정이 아니다.
 - token Resource Timing은 HTTP 실패 응답도 포함할 수 있으며 인증 성공이나 유효한 token을 보장하지 않는다. 구독 callback 계측은 `active && capturedScope === getClientSessionScope()`이고 요청 household가 일치할 때만 수행하되 기존 callback 전달·오류 흐름과 연간 구독의 metadata 옵션은 유지한다. 가구 metadata 백그라운드 갱신은 homeReady의 필수 조건이 아니므로 해당 선택 시각을 강제하지 않는다.
 - `authTokenRequestStarted`는 Resource Timing의 `startTime`이며 연결 준비를 포함한다. `authTokenResponseEnd`는 `responseEnd`이며 유한한 `0 <= startTime <= responseEnd <= 전체 시간`과 `responseEnd > 0`을 만족하는 완료 entry 중 가장 이른 시작 쌍을 사용한다. Timing-Allow-Origin으로 가려질 수 있는 `requestStart`를 사용하거나 순수 HTTP 전송 시간으로 해석하지 않는다. 유효한 관측 쌍이 없으면 둘 다 생략하며 token 캐시 hit으로 단정하지 않는다.
+
+### iPhone 첫 홈 Lite 조회 진단 (2026-10-04, ADM-006 / T-ADM-005)
+
+- 네 원본 `ledger`, `categories`, `currencyPreferences`, `currencyBalances`에 각각 `InitialReadStarted`, `InitialReadReceived`, `InitialReadFallback` 선택 필드를 추가한다. Started는 지연 모듈 로드를 포함한 초기 조회 경계 진입이고 Received는 mapper 전 실제 Lite 결과 수신이다. Fallback은 실패·해석 실패·750ms 예산 초과로 기존 구독으로 전환한 시각이며 성공으로 해석하지 않는다.
+- 기존 ListenStarted/ServerSnapshotReceived는 실제 realtime SDK 관측으로 남긴다. Lite 수신을 해당 키에 대입하지 않는다. Lite로 첫 paint가 끝나면 아직 도착하지 않은 realtime 관측은 없어도 된다. 기존 v1 범위·허용 목록·개인정보 제외·완료 동결 계약을 유지하며 서버 확장을 Web보다 먼저 배포한다.
+- 수용·준비 선후 관계와 실제 REST/Listen 전환 검증은 [작업 기록](../../../../../operations/ios-home-initial-read-2026-10-04.md)에 추적한다.

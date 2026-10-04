@@ -21,7 +21,7 @@ jest.mock('@/features/ledger/application/ledgerOptimisticProjection', () => ({
 jest.mock('@/lib/utils/platform', () => ({ Platform: { isIOSPWA: () => true } }));
 jest.mock('@/platform/performance/clientStartupDiagnostics', () => {
   const actual = jest.requireActual('@/platform/performance/clientStartupDiagnostics') as typeof import('@/platform/performance/clientStartupDiagnostics');
-  return { ...actual, recordClientStartupTiming: (...args: Parameters<typeof actual.recordClientStartupTiming>) => actual.recordClientStartupTiming(...args) };
+  return { ...actual, isClientStartupInProgress: () => false, recordClientStartupTiming: (...args: Parameters<typeof actual.recordClientStartupTiming>) => actual.recordClientStartupTiming(...args) };
 });
 
 const initialScope = {

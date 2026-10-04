@@ -1,3 +1,4 @@
+import { subscribeWithInitialHomeRead } from '@/platform/read-model/initialHomeRead';
 import { getSeoulLocalTime } from '@/lib/utils/date';
 import { normalizeExpenseTags } from '@/lib/utils/expenseTags';
 import {
@@ -447,17 +448,32 @@ function subscribeToMonthlyTransactionSource(
 
   const readSnapshot = createExpenseSnapshotReader();
   let hasServerSnapshot = false;
-  recordClientStartupTiming('ledgerListenStarted');
-  const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
-    if (active && getClientSessionScope() === scope && snapshot.metadata.fromCache === false) {
-      recordClientStartupTiming('ledgerServerSnapshotReceived');
-    }
-    if (!hasServerSnapshot && snapshot.metadata.fromCache) return;
-    hasServerSnapshot = true;
-    // Metadata events still advance authority/reconciliation, without decoding unchanged rows.
-    projection.publish(readSnapshot(snapshot));
-  }, (error) => {
-    onError?.(error);
+  const unsubscribe = subscribeWithInitialHomeRead({
+    source: 'ledger', scope,
+    read: async () => {
+      const server = await import('@/platform/read-model/firestoreServerReadModel');
+      return server.getDocsFromServer(server.query(
+        server.collection(server.db, 'households', householdId, COLLECTION_NAME),
+        server.where('householdId', '==', householdId),
+        server.where('accountingDate', '>=', startDate),
+        server.where('accountingDate', '<=', endDate),
+      ));
+    },
+    publish: snapshot => projection.publish(snapshot.docs.flatMap(document => {
+      const data = document.data();
+      return isVisibleLedgerReadDocument(data) ? [mapExpenseReadData(document.id, data)] : [];
+    })),
+    listen: () => {
+      recordClientStartupTiming('ledgerListenStarted');
+      return onSnapshot(q, { includeMetadataChanges: true }, snapshot => {
+        if (!active || getClientSessionScope() !== scope) return;
+        if (!snapshot.metadata.fromCache) recordClientStartupTiming('ledgerServerSnapshotReceived');
+        // Lite does not seed the watch cache or its incremental cursor.
+        if (!hasServerSnapshot && snapshot.metadata.fromCache) return;
+        hasServerSnapshot = true;
+        projection.publish(readSnapshot(snapshot));
+      }, error => { if (active && getClientSessionScope() === scope) onError?.(error); });
+    },
   });
 
   return () => {

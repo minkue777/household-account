@@ -1,3 +1,4 @@
+import { getClientSessionScope, setClientSessionScope, clearClientSessionScope } from '@/composition/clientSessionScope';
 import { subscribeToMonthlyTransactions, subscribeToDateRangeExpenses, mapDocToExpense } from '@/lib/expenseService';
 import { ledgerOptimisticProjection } from '@/features/ledger/application/ledgerOptimisticProjection';
 import { isVisibleLedgerReadDocument } from '@/features/ledger/application/ledgerReadVisibility';
@@ -6,10 +7,7 @@ import type { DocumentData, QueryDocumentSnapshot } from '@/platform/read-model/
 
 const mockOnSnapshot = jest.fn();
 let mockHouseholdId = 'house';
-jest.mock('@/composition/clientSessionScope', () => ({
-  ...jest.requireActual('@/composition/clientSessionScope'),
-  requireClientSessionScope: () => ({ householdId: mockHouseholdId }),
-}));
+
 jest.mock('@/platform/read-model/firestoreReadModel', () => ({
   db: {}, collection: jest.fn(), query: jest.fn(), where: jest.fn(),
   onSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
@@ -28,6 +26,7 @@ function event(docs: TestDocument[], changes: Change[] = [], fromCache = false) 
   return { docs, metadata: { fromCache }, docChanges: jest.fn(() => changes) };
 }
 function listen(kind: 'month' | 'range', callback: (items: Expense[]) => void) {
+  if (getClientSessionScope()?.householdId !== mockHouseholdId) setClientSessionScope({ householdId: mockHouseholdId, sessionGeneration: 1, principalUid: 'user-1', memberId: 'member-1' });
   const dispose = kind === 'month'
     ? subscribeToMonthlyTransactions(2026, 9, callback)
     : subscribeToDateRangeExpenses('2026-01-01', '2026-12-31', callback);
@@ -35,6 +34,7 @@ function listen(kind: 'month' | 'range', callback: (items: Expense[]) => void) {
   return { dispose, next: args[kind === 'month' ? 2 : 1] as (value: ReturnType<typeof event>) => void };
 }
 beforeEach(() => {
+  clearClientSessionScope();
   mockHouseholdId = 'house';
   mockOnSnapshot.mockReset().mockReturnValue(jest.fn());
   ledgerOptimisticProjection.reset();

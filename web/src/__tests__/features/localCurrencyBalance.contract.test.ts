@@ -1,3 +1,4 @@
+import { setClientSessionScope } from '@/composition/clientSessionScope';
 const collectionMock = jest.fn((...segments: unknown[]) => ({
   kind: 'balances',
   segments,
@@ -32,22 +33,7 @@ jest.mock('@/platform/read-model/firestoreReadModel', () => ({
   timestampToDate: (value: unknown) => value instanceof Date ? value : undefined,
 }));
 
-jest.mock('@/composition/clientSessionScope', () => ({
-  getClientSessionScope: () => ({
-    sessionGeneration: 1,
-    principalUid: 'principal-1',
-    householdId: 'household-1',
-    memberId: 'member-1',
-    accessMode: 'member',
-  }),
-  requireClientSessionScope: () => ({
-    sessionGeneration: 1,
-    principalUid: 'principal-1',
-    householdId: 'household-1',
-    memberId: 'member-1',
-    accessMode: 'member',
-  }),
-}));
+
 
 import { subscribeToLocalCurrencyBalance } from '@/lib/balanceService';
 
@@ -74,6 +60,7 @@ describe('지역화폐 잔액 읽기 계약', () => {
   let consoleError: jest.SpyInstance;
 
   beforeEach(() => {
+    setClientSessionScope({ sessionGeneration: 1, principalUid: 'uid-1', householdId: 'household-1', memberId: 'member-1', accessMode: 'member' });
     consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     listeners.clear();
     collectionMock.mockClear();

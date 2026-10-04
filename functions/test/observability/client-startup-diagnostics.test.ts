@@ -16,6 +16,18 @@ const valid = {
 };
 
 const readPhaseTimings = {
+  ledgerInitialReadStarted: 400,
+  ledgerInitialReadReceived: 500,
+  ledgerInitialReadFallback: 600,
+  categoriesInitialReadStarted: 400,
+  categoriesInitialReadReceived: 500,
+  categoriesInitialReadFallback: 600,
+  currencyPreferencesInitialReadStarted: 400,
+  currencyPreferencesInitialReadReceived: 500,
+  currencyPreferencesInitialReadFallback: 600,
+  currencyBalancesInitialReadStarted: 400,
+  currencyBalancesInitialReadReceived: 500,
+  currencyBalancesInitialReadFallback: 600,
   authTokenObserved: 300,
   authTokenRequestStarted: 250,
   authTokenResponseEnd: 280,
@@ -46,7 +58,7 @@ describe("[T-ADM-005] iPhone 시작 진단 로그 계약", () => {
     expect(normalizeClientStartupDiagnostics({ ...valid, timingsMs: {} }, 2_000)?.timingsMs).toEqual({});
   });
 
-  it("인증·서버 snapshot 16개 관측을 기존 v1의 선택 필드로 보존한다", () => {
+  it("인증·초기 조회·서버 snapshot 관측을 기존 v1의 선택 필드로 보존한다", () => {
     const candidate = { ...valid, timingsMs: { ...valid.timingsMs, ...readPhaseTimings } };
     const result = normalizeClientStartupDiagnostics(candidate, 2_000);
     expect(result).toEqual(candidate);

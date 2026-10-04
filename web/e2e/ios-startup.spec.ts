@@ -2,7 +2,7 @@ import { expect, test, type Page, type Request, type Response } from '@playwrigh
 import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { observeIndexedDbOpens, readFirestoreCollection, readIndexedDbOpens, resetTestAccount, writeFirestoreFixture } from './emulator';
-import { createFinanceHousehold } from './finance-helpers';
+import { createFinanceHousehold, addExpenseThroughUi, seoulDate } from './finance-helpers';
 
 const COMPLETE_PAINT = 'household-account:startup:home:first-complete-paint';
 
@@ -129,22 +129,98 @@ async function acceptedAppVisit(observed: ReturnType<typeof observeAppVisits>) {
 }
 
 function expectServerReadinessOrder(timings: Record<string, number>) {
-  for (const [started, received, ready] of [
-    ['ledgerListenStarted', 'ledgerServerSnapshotReceived', 'ledgerReady'],
-    ['categoriesListenStarted', 'categoriesServerSnapshotReceived', 'categoriesReady'],
-    ['currencyPreferencesListenStarted', 'currencyPreferencesServerSnapshotReceived', 'localCurrencyReady'],
-    ['currencyBalancesListenStarted', 'currencyBalancesServerSnapshotReceived', 'localCurrencyReady'],
+  for (const [source, ready] of [
+    ['ledger', 'ledgerReady'], ['categories', 'categoriesReady'],
+    ['currencyPreferences', 'localCurrencyReady'], ['currencyBalances', 'localCurrencyReady'],
   ]) {
+    const initial = timings[source + 'InitialReadReceived'] !== undefined && timings[source + 'InitialReadFallback'] === undefined;
+    const started = source + (initial ? 'InitialReadStarted' : 'ListenStarted');
+    const received = source + (initial ? 'InitialReadReceived' : 'ServerSnapshotReceived');
     for (const key of [started, received, ready, 'homeReady']) {
-      expect(timings, `${key}의 실제 SDK 또는 React 준비 관측이 있어야 합니다.`).toHaveProperty(key);
+      expect(timings, key + '의 실제 SDK 또는 React 준비 관측이 있어야 합니다.').toHaveProperty(key);
     }
-    expect(timings[received], `${received}는 실제 구독 시작 이후여야 합니다.`).toBeGreaterThanOrEqual(timings[started]);
-    expect(timings[ready], `${ready}는 mapper 전 서버 callback 이후여야 합니다.`).toBeGreaterThanOrEqual(timings[received]);
-    expect(timings.homeReady, `전체 홈은 ${ready} 이후 준비되어야 합니다.`).toBeGreaterThanOrEqual(timings[ready]);
+    expect(timings[received]).toBeGreaterThanOrEqual(timings[started]);
+    expect(timings[ready]).toBeGreaterThanOrEqual(timings[received]);
+    expect(timings.homeReady).toBeGreaterThanOrEqual(timings[ready]);
   }
 }
 
 test.beforeEach(async () => { await resetTestAccount(); });
+
+test.describe('첫 홈 별도 서버 조회', () => {
+  test.use({ serviceWorkers: 'block' });
+  test('[T-WEBVIEW-004][T-SYS-008][T-ADM-005][AND-012] 실제 Listen 대기 중 Lite로 최신 홈을 표시하고 구독 전환 뒤 변경·삭제를 반영한다', async ({ page, context, request }, testInfo) => {
+    await observeIndexedDbOpens(page, true);
+    const householdId = await createFinanceHousehold(page, request);
+    const transaction = await addExpenseThroughUi(page, request, { merchant: '첫 조회 전환', amount: 12300, date: seoulDate(0, 1) });
+    await expect.poll(() => page.evaluate(name => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(1);
+    await page.close();
+    await writeFirestoreFixture(request, `households/${householdId}/homePreferences/home`, {
+      left: { stringValue: 'MONTHLY_EXPENSE' }, right: { stringValue: 'LOCAL_CURRENCY_BALANCE' },
+      aggregateVersion: { integerValue: '1' }, selectedLocalCurrencyType: { stringValue: 'gyeonggi' },
+    });
+    await writeFirestoreFixture(request, `households/${householdId}/localCurrencyBalances/gyeonggi`, {
+      localCurrencyType: { stringValue: 'gyeonggi' }, balanceInWon: { integerValue: '36890' },
+    });
+    const restarted = await context.newPage();
+    await observeIndexedDbOpens(restarted, true);
+    const visits = observeAppVisits(restarted);
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    let heldRequests = 0;
+    const restResponses: string[] = [];
+    restarted.on('response', response => {
+      if (/\/documents(?:\/[^?]+)?:runQuery|\/documents:batchGet/.test(response.url()) && response.ok()) {
+        restResponses.push(new URL(response.url()).pathname.split(':').at(-1)!);
+      }
+    });
+    await restarted.route('**/google.firestore.v1.Firestore/Listen/channel**', async route => {
+      heldRequests += 1;
+      await held;
+      await route.continue();
+    });
+    try {
+      await restarted.goto('/');
+      await expect(restarted.locator('.calendar-glass')).toHaveAttribute('aria-busy', 'false');
+      const monthly = restarted.locator('.balance-card-glass').filter({ hasText: /월 지출/ });
+      await expect(monthly).toContainText('12,300');
+      await expect(restarted.locator('.balance-card-glass').filter({ hasText: '지역화폐 잔액' })).toContainText('36,890');
+      await restarted.getByTestId(/^calendar-day-/).first().click();
+      const expense = restarted.getByTestId('expense-item').filter({ hasText: '첫 조회 전환' });
+      await expect(expense).toContainText('12,300원');
+      await expect(expense.getByText('기타', { exact: true })).toBeVisible();
+      const visit = await acceptedAppVisit(visits);
+      const timings = visit.clientStartupDiagnostics!.timingsMs;
+      expectServerReadinessOrder(timings);
+      for (const source of ['ledger', 'categories', 'currencyPreferences', 'currencyBalances']) {
+        expect(timings).toHaveProperty(source + 'InitialReadReceived');
+        expect(timings).not.toHaveProperty(source + 'InitialReadFallback');
+        expect(timings).not.toHaveProperty(source + 'ServerSnapshotReceived');
+      }
+      expect(heldRequests).toBeGreaterThan(0);
+      expect(restResponses.filter(kind => kind === 'runQuery').length).toBeGreaterThanOrEqual(2);
+      expect(restResponses.filter(kind => kind === 'batchGet').length).toBeGreaterThanOrEqual(2);
+      release();
+      // Real server writes, followed by actual SDK subscription delivery.
+      const transactionPath = `households/${householdId}/ledgerTransactions/${transaction.name.split('/').at(-1)}`;
+      await writeFirestoreFixture(request, transactionPath, { ...transaction.fields,
+        amountInWon: { integerValue: '15400' }, aggregateVersion: { integerValue: '2' }, memo: { stringValue: '구독 전환 후' },
+      });
+      await expect(expense).toContainText('15,400원');
+      await expect(expense).toContainText('구독 전환 후');
+      await expect(monthly).toContainText('15,400');
+      await writeFirestoreFixture(request, transactionPath, { ...transaction.fields,
+        lifecycleState: { stringValue: 'deleted' }, aggregateVersion: { integerValue: '3' },
+      });
+      await expect(expense).toHaveCount(0);
+      await testInfo.attach('initial-read-live-handoff', { contentType: 'application/json',
+        body: Buffer.from(JSON.stringify({ timings, heldRequests, restResponses }, null, 2)) });
+    } finally {
+      release();
+      await restarted.unrouteAll({ behavior: 'wait' });
+    }
+  });
+});
 
 test('[T-SYS-008][T-ADM-005][ADM-006][AND-012][SYS-008] iPhone WebKit 재실행은 로그인 유지와 Firestore IndexedDB 대기 없이 최신 홈을 표시한다', async ({ page: initialPage, context, request }, testInfo) => {
   let page = initialPage;

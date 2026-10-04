@@ -1,8 +1,10 @@
 'use client';
 
+import { subscribeToHomePreferencesDocument } from '@/platform/read-model/homePreferencesReadModel';
+
 import { useEffect, useState } from 'react';
 import { useHousehold } from '@/contexts/HouseholdContext';
-import { collection, db, doc, onSnapshot } from '@/platform/read-model/firestoreReadModel';
+import { collection, db, onSnapshot } from '@/platform/read-model/firestoreReadModel';
 import { DEFAULT_HOME_SUMMARY_CONFIG, type HomeSummaryCardKey, type HomeSummaryConfig } from '@/types/household';
 
 export const HOME_CARD_LABELS: Record<HomeSummaryCardKey, string> = {
@@ -32,9 +34,9 @@ export function useHomePreferences() {
     if (!householdKey) return;
     let active = true;
     setError(false);
-    const unsubscribe = onSnapshot(doc(db, 'households', householdKey, 'homePreferences', 'home'), value => {
+    const unsubscribe = subscribeToHomePreferencesDocument(householdKey, value => {
       if (!active) return;
-      const data = value.exists() ? value.data() : {};
+      const data = value ?? {};
       setSnapshot({ householdId: householdKey,
         configuration: { leftCard: canonical[data.left] ?? fallback.leftCard, rightCard: canonical[data.right] ?? fallback.rightCard },
         version: Number.isSafeInteger(data.aggregateVersion) ? data.aggregateVersion : household?.homeSummaryConfigVersion ?? 0,

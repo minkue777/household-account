@@ -21,6 +21,10 @@ let tracking: {
 let finished = false;
 let captured: ClientStartupDiagnostics | undefined;
 
+export function isClientStartupInProgress(): boolean {
+  return tracking !== undefined && !finished;
+}
+
 function validTime(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value)
     && value >= 0 && value <= MAX_DURATION_MS

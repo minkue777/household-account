@@ -1,3 +1,4 @@
+import { setClientSessionScope } from '@/composition/clientSessionScope';
 const mockOnSnapshot = jest.fn();
 const mockGetDocsFromServer = jest.fn();
 const mockGetDocFromServer = jest.fn();
@@ -16,16 +17,7 @@ jest.mock('@/platform/read-model/firestoreReadModel', () => ({
   timestampToDate: (value: unknown) => value instanceof Date ? value : undefined,
 }));
 
-jest.mock('@/composition/clientSessionScope', () => ({
-  ...jest.requireActual('@/composition/clientSessionScope'),
-  requireClientSessionScope: () => ({
-    sessionGeneration: 1,
-    principalUid: 'uid-1',
-    householdId: 'household-1',
-    memberId: 'member-1',
-    accessMode: 'member',
-  }),
-}));
+
 
 jest.mock('@/features/ledger/application/ledgerOptimisticProjection', () => ({
   ledgerOptimisticProjection: {
@@ -59,6 +51,7 @@ function listenerArguments() {
 
 describe('가계부 첫 화면 server-first 조회 계약', () => {
   beforeEach(() => {
+    setClientSessionScope({ sessionGeneration: 1, principalUid: 'uid-1', householdId: 'household-1', memberId: 'member-1', accessMode: 'member' });
     mockOnSnapshot.mockReset();
     mockOnSnapshot.mockReturnValue(jest.fn());
     mockGetDocsFromServer.mockReset();
