@@ -126,5 +126,5 @@
 - [Android FID endpoint 등록](../../../../../../android/app/src/main/java/com/household/account/util/FidEndpointManager.kt)
 - [Android FCM 수신](../../../../../../android/app/src/main/java/com/household/account/service/FcmService.kt)
 - [Android WebView host bridge](../../../../../../android/app/src/main/java/com/household/account/webhost/AndroidHostBridge.kt)
-- [Android 거래 모델](../../../../../../android/app/src/main/java/com/household/account/data/Expense.kt)
+- [Android 거래 조회·Snapshot](../../../../../../android/app/src/main/java/com/household/account/ledger/HouseholdQueryClient.kt)
 - [Web 거래 서비스](../../../../../../web/src/lib/expenseService.ts)

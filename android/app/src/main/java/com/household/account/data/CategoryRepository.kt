@@ -3,9 +3,6 @@ package com.household.account.data
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.DocumentSnapshot
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
 /**
@@ -94,63 +91,4 @@ class CategoryRepository(private val firestore: FirebaseFirestore = FirebaseFire
         }
     }
 
-    /**
-     * 카테고리 실시간 구독 (householdId 필터링)
-     */
-    fun subscribeToCategories(householdId: String): Flow<List<CategoryData>> = callbackFlow {
-        if (householdId.isEmpty()) {
-            trySend(DEFAULT_CATEGORIES)
-            awaitClose { }
-            return@callbackFlow
-        }
-
-        val listenerRegistration = catalogReference(householdId)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null || snapshot == null) {
-                    Log.e(TAG, "CATEGORY_SUBSCRIPTION_FAILED")
-                    trySend(DEFAULT_CATEGORIES)
-                    return@addSnapshotListener
-                }
-                try {
-                    trySend(readCategories(snapshot, householdId).ifEmpty { DEFAULT_CATEGORIES })
-                } catch (e: Exception) {
-                    Log.e(TAG, "CATEGORY_CATALOG_INVALID")
-                    trySend(DEFAULT_CATEGORIES)
-                }
-            }
-
-        awaitClose {
-            listenerRegistration.remove()
-        }
-    }
-
-    /**
-     * key로 카테고리 찾기
-     */
-    fun findCategoryByKey(categories: List<CategoryData>, key: String): CategoryData? {
-        return categories.find { it.key == key }
-    }
-
-    /**
-     * label로 카테고리 찾기
-     */
-    fun findCategoryByLabel(categories: List<CategoryData>, label: String): CategoryData? {
-        return categories.find { it.label == label }
-    }
-
-    /**
-     * household 설정에서 기본 카테고리 키 가져오기
-     */
-    suspend fun getDefaultCategoryKey(householdId: String): String {
-        if (householdId.isEmpty()) return "etc"
-
-        return try {
-            val catalog = catalogReference(householdId).get().await()
-            val categories = readCategories(catalog, householdId)
-            categories.firstOrNull { it.isDefault }?.key ?: "etc"
-        } catch (e: Exception) {
-            Log.e(TAG, "DEFAULT_CATEGORY_READ_FAILED")
-            "etc"
-        }
-    }
 }

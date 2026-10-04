@@ -9,13 +9,11 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.household.account.data.CategoryRepository
-import com.household.account.data.CategoryData
 import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,15 +21,31 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class CategoryRepositoryInstrumentationTest {
     @Test
-    fun categoryLookupPreservesCaseSensitiveIds() {
-        val repository = CategoryRepository()
-        val lowercase = CategoryData(key = "category-abcd_123", label = "다른 카테고리")
-        val original = CategoryData(key = "category-aBcD_123", label = "간식/디저트/커피")
-        val categories = listOf(lowercase, original)
+    fun actualSdkCatalogPreservesCaseSensitiveIdsAndDefaultSelection() = runBlocking {
+        withIsolatedRepository { repository, firestore ->
+            val reference = firestore.collection("households").document("house-categories")
+                .collection("categoryCatalog").document("current")
+            val entries = listOf(
+                mapOf("categoryId" to "category-abcd_123", "name" to "다른 카테고리",
+                    "color" to "#123456", "sortOrder" to 2, "state" to "active"),
+                mapOf("categoryId" to "category-aBcD_123", "name" to "간식/디저트/커피",
+                    "color" to "#654321", "sortOrder" to 1, "state" to "active"),
+                mapOf("categoryId" to "archived", "name" to "보관 카테고리",
+                    "color" to "#000000", "sortOrder" to 0, "state" to "archived")
+            )
+            reference.set(mapOf("schemaVersion" to 1, "householdId" to "house-categories",
+                "categories" to entries, "catalogVersion" to 1,
+                "defaultCategoryId" to "category-aBcD_123"))
+            val source = reference.get().await()
+            assertEquals(3, (source.get("categories") as List<*>).size)
+            assertTrue(source.metadata.isFromCache)
 
-        assertEquals(original, repository.findCategoryByKey(categories, original.key))
-        assertEquals(lowercase, repository.findCategoryByKey(categories, lowercase.key))
-        assertNull(repository.findCategoryByKey(listOf(original), lowercase.key))
+            val categories = repository.getActiveCategories("house-categories")
+            assertEquals(listOf("category-aBcD_123", "category-abcd_123"), categories.map { it.key })
+            assertEquals(listOf(true, false), categories.map { it.isDefault })
+            assertEquals(listOf("간식/디저트/커피", "다른 카테고리"), categories.map { it.label })
+            assertTrue(categories.all { it.id == it.key && it.householdId == "house-categories" })
+        }
     }
 
     // CAT-004 / T-CAT-005: Legacy QuickEdit의 실제 adapter만 별도 SDK 인스턴스로 실행합니다.
@@ -64,7 +78,7 @@ class CategoryRepositoryInstrumentationTest {
             firestore.terminate().await()
             // Firestore 종료는 Auth의 이미 실행 중인 TokenRefresher까지 기다리지 않습니다.
             // 여기서 app.delete()하면 뒤의 Activity 검사 도중 SDK가 삭제된 앱에 접근합니다.
-            // 두 fixture는 고유 이름·demo 프로젝트·로컬 endpoint로 격리하며, FirebaseApp은
+            // 각 fixture는 고유 이름·demo 프로젝트·로컬 endpoint로 격리하며, FirebaseApp은
             // instrumentation 프로세스가 끝날 때 함께 회수합니다. 연결 종료 오류는 숨기지 않습니다.
         }
     }

@@ -10,6 +10,8 @@
 
 ## 1. 설계 목적과 추적성
 
+Android QuickEdit의 카테고리 조회는 `CategoryRepository.getActiveCategories` 한 진입점을 사용합니다. 실제 SDK가 반환한 Catalog에서 활성 항목을 정렬하고 안정 ID의 대소문자와 기본 참조를 보존합니다. 미사용 구독·개별 검색·기본 키 조회 API는 제거했습니다. 빈 결과·조회 실패의 기존 표시 전용 fallback은 `CAT-004 / T-CAT-005`에 따라 유지하며, 실제 SDK 조회와 Activity 선택·저장 검사에서 검증합니다.
+
 이 설계는 `CAT-001~004`와 `BUD-001~002`를 Category Catalog Command Domain과 조회 시 계산하는 Budget Query로 분리합니다. 요구사항의 상태와 기대 결과는 [requirements.md](requirements.md)가 소유하며, 이 문서는 API·Domain·저장·테스트 경계를 구체화합니다.
 
 설계 목표는 다음과 같습니다.

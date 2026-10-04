@@ -88,7 +88,7 @@
 ### 3.2 Framework가 Domain까지 침투
 
 - [asset.ts](../../web/src/types/asset.ts)와 [registeredCard.ts](../../web/src/types/registeredCard.ts)가 Firebase Timestamp를 직접 사용한다.
-- Android의 [Expense.kt](../../android/app/src/main/java/com/household/account/data/Expense.kt)는 아직 화면 경계 DTO로 남아 있지만, Firebase 타입을 포함하던 레거시 `MerchantRule.kt`는 제거했다. 가맹점 규칙의 정본 모델은 이제 [MerchantRuleSet](../../functions/src/contexts/payment-capture/configuration/domain/model/merchantRuleSet.ts)에 있다.
+- Android의 미사용 `Expense.kt`와 Firebase 타입을 포함하던 레거시 `MerchantRule.kt`는 제거했다. 실제 거래 화면은 [LedgerTransactionSnapshot](../../android/app/src/main/java/com/household/account/ledger/HouseholdQueryClient.kt)을 사용한다. 가맹점 규칙의 정본 모델은 [MerchantRuleSet](../../functions/src/contexts/payment-capture/configuration/domain/model/merchantRuleSet.ts)에 있다.
 - Functions의 업무 계산은 Firebase DocumentData를 직접 받는다.
 
 이 상태에서는 저장소 교체뿐 아니라 단위 테스트도 Firebase 표현에 종속된다.
@@ -99,7 +99,7 @@
 |---|---|
 | 월 분할 | LedgerPage, monthlySplitActions, expenseService, Android ExpenseRepository/QuickEdit |
 | 지출 중복 판정 | Android ExpenseRepository, Functions expenses |
-| 카드 토큰 정규화·매칭 | Web expenseService, Android CardLabelFormatter/Repositories, Functions expenses |
+| 카드 토큰 정규화·매칭 | Web expenseService, Functions expenses (미사용 Android CardLabelFormatter는 2026-10-05 제거) |
 | 가맹점 카테고리 매핑 | Web merchantRuleService, Android MerchantRuleRepository |
 | 주식 시세 조회 | Next API route, Functions assets |
 | 자산 순서 변경 | assetService의 updateAssetOrders와 updateAssetOrder |
