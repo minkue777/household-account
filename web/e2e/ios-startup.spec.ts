@@ -10,7 +10,7 @@ test.describe('첫 홈의 사용 시점 코드 로드', () => {
   // Service Worker precache와 별개로 문서가 실제 요청하는 chunk를 검사합니다.
   test.use({ serviceWorkers: 'block' });
 
-  test('[T-WEBVIEW-004][T-SYS-008][AND-012][SYS-008] iPhone 첫 홈은 미사용 코드를 요청하지 않고 실제 추가·검색·편집과 코드 재시도를 지원한다', async ({ page, request }, testInfo) => {
+  test('[T-WEBVIEW-004][T-SYS-008][AND-012][SYS-008] iPhone은 첫 홈 뒤 날짜별 내역을 준비하고 반복 날짜 선택·추가·검색·편집과 코드 재시도를 지원한다', async ({ page, request }, testInfo) => {
     await observeIndexedDbOpens(page, true);
     const chunkNames = ['home-add-expense', 'home-search', 'home-expense-detail',
       'home-category-detail', 'home-local-currency', 'home-income-summary'];
@@ -26,7 +26,16 @@ test.describe('첫 홈의 사용 시점 코드 로드', () => {
     });
     await createFinanceHousehold(page, request);
     await expect.poll(() => page.evaluate(name => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(1);
-    expect(requestedChunks.filter(file => deferredChunks.includes(file)), '닫힌 기능 코드는 첫 홈의 요청 경로에서 제외해야 합니다.').toEqual([]);
+    const detailChunk = deferredChunks.find(file => file.startsWith('home-expense-detail.'))!;
+    expect(requestedChunks.filter(file => deferredChunks.includes(file) && file !== detailChunk), '다른 닫힌 기능은 사용 전에 요청하지 않아야 합니다.').toEqual([]);
+    // Resource Timing proves this download started after paint, without a user click.
+    await expect.poll(() => page.evaluate(file => performance.getEntriesByType('resource')
+      .filter(entry => new URL(entry.name).pathname.endsWith('/' + file)).length, detailChunk)).toBe(1);
+    const detailTiming = await page.evaluate(({ file, mark }) => ({
+      requestedAt: performance.getEntriesByType('resource').find(entry => new URL(entry.name).pathname.endsWith('/' + file))!.startTime,
+      paintedAt: performance.getEntriesByName(mark)[0].startTime,
+    }), { file: detailChunk, mark: COMPLETE_PAINT });
+    expect(detailTiming.requestedAt).toBeGreaterThanOrEqual(detailTiming.paintedAt);
     await expect(page.locator('head link[rel="preconnect"][href$="googleapis.com"]')).toHaveCount(0);
     const initialScripts = [...requestedChunks];
 
@@ -43,6 +52,31 @@ test.describe('첫 홈의 사용 시점 코드 로드', () => {
     for (const name of ['home-expense-detail', 'home-add-expense']) {
       expect(requestedChunks.some(file => file.startsWith(`${name}.`))).toBe(true);
     }
+
+    // Observe even short-lived fallback DOM, not just the final settled screen.
+    await page.evaluate(() => {
+      const state = window as typeof window & { dateDetailLoadingInsertions?: number };
+      state.dateDetailLoadingInsertions = 0;
+      new MutationObserver(records => {
+        for (const record of records) for (const node of Array.from(record.addedNodes)) {
+          if (node.textContent?.includes('날짜별 내역 화면을 불러오는 중입니다.')) state.dateDetailLoadingInsertions! += 1;
+        }
+      }).observe(document.body, { childList: true, subtree: true });
+    });
+    const firstDay = page.getByTestId(/^calendar-day-/).first();
+    await page.getByTestId(/^calendar-day-/).nth(1).click();
+    await expect(page.getByRole('button', { name: '지출 추가', exact: true })).toBeVisible();
+    await expect(expense).toHaveCount(0);
+    await firstDay.click();
+    await expect(expense).toContainText('12,300원');
+    await firstDay.click();
+    await expect(page.getByRole('button', { name: '지출 추가', exact: true })).toHaveCount(0);
+    await firstDay.click();
+    await expect(expense).toContainText('12,300원');
+    const repeatedDateLoading = await page.evaluate(() =>
+      (window as typeof window & { dateDetailLoadingInsertions?: number }).dateDetailLoadingInsertions);
+    expect(repeatedDateLoading).toBe(0);
+    expect(requestedChunks.filter(file => file === detailChunk)).toHaveLength(1);
 
     let searchRequests = 0;
     await page.route('**/_next/static/chunks/home-search.*.js', route => {
@@ -74,7 +108,7 @@ test.describe('첫 홈의 사용 시점 코드 로드', () => {
     }).toBe(true);
     await testInfo.attach('home-deferred-production-chunks', {
       contentType: 'application/json',
-      body: Buffer.from(JSON.stringify({ deferredChunks, initialScripts, requestedChunks, searchRequests }, null, 2)),
+      body: Buffer.from(JSON.stringify({ deferredChunks, initialScripts, requestedChunks, searchRequests, detailTiming, repeatedDateLoading }, null, 2)),
     });
   });
 });

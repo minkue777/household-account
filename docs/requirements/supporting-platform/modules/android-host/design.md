@@ -405,3 +405,7 @@ WebView URL·허용 origin은 동일한 versioned 빌드 설정에서 읽고, Se
 3. origin 제한과 로그 redaction을 우선 교정한다.
 4. Firestore 직접 Repository를 generated Ledger/Category client로 교체한다.
 5. QuickEdit 분할을 서버 원자 Command로 전환한 뒤 legacy writer를 제거한다.
+
+### 날짜별 내역 코드 준비와 재사용 (AND-012 / T-WEBVIEW-004)
+
+`deferHomeContent`는 기능 factory마다 진행 중 loader와 완료 모듈을 공유합니다. 완료된 모듈은 새 인스턴스에서 동기적으로 선택하며 날짜별 key는 계속 컴포넌트 상태를 초기화합니다. `LedgerPage`는 첫 전체 홈 paint 이후 idle 시점(1초 deadline)에 날짜별 내역만 사전 준비하고 unmount 시 예약을 취소합니다. paint 전 fallback은 지정하지 않으며 다른 닫힌 모달을 미리 열거나 데이터를 추가 조회하지 않습니다. 사전 준비 실패는 실제 첫 사용에서 새 요청을 허용하고, 실제 사용 중 실패는 기존 오류·재시도 UI를 유지합니다. 상세 원인과 계약·검증은 [작업 기록](../../../../operations/date-detail-preload-2026-10-04.md)에 추적합니다.

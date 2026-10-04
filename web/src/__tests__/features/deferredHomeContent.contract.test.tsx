@@ -39,3 +39,55 @@ test('[T-WEBVIEW-004][AND-012] 코드 로드 실패는 홈을 유지하고 사�
     consoleError.mockRestore();
   }
 });
+
+test('[T-WEBVIEW-004][AND-012] 준비된 날짜별 내역은 key 변경과 재진입에도 로딩 표시 없이 최신 props와 새 화면 상태로 열린다', async () => {
+  const load = jest.fn(async () => ({ default: ({ date }: { date: string }) => <input aria-label="선택 날짜" defaultValue={date} /> }));
+  const Deferred = deferHomeContent(load, '날짜별 내역');
+  const view = render(<Deferred key="first" date="10월 1일" />);
+  expect(await screen.findByLabelText('선택 날짜')).toHaveValue('10월 1일');
+  fireEvent.change(screen.getByLabelText('선택 날짜'), { target: { value: '이전 화면 상태' } });
+  view.rerender(<Deferred key="second" date="10월 2일" />);
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('선택 날짜')).toHaveValue('10월 2일');
+  view.rerender(<></>);
+  view.rerender(<Deferred key="third" date="10월 3일" />);
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('선택 날짜')).toHaveValue('10월 3일');
+  expect(load).toHaveBeenCalledTimes(1);
+});
+
+test('[T-WEBVIEW-004][AND-012] 사전 준비가 끝나면 첫 표시도 동기적으로 준비된 코드를 사용한다', async () => {
+  const load = jest.fn(async () => ({ default: ({ date }: { date: string }) => <p>{date}</p> }));
+  const Deferred = deferHomeContent(load, '날짜별 내역');
+  await Deferred.preload();
+  render(<Deferred date="미리 준비한 날짜" />);
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(screen.getByText('미리 준비한 날짜')).toBeVisible();
+  expect(load).toHaveBeenCalledTimes(1);
+});
+
+test('[T-WEBVIEW-004][AND-012] 사전 준비 중 첫 사용과 여러 화면이 하나의 진행 중 loader를 공유한다', async () => {
+  let finish!: (value: { default: (props: { value: string }) => JSX.Element }) => void;
+  const load = jest.fn(() => new Promise<{ default: (props: { value: string }) => JSX.Element }>(resolve => { finish = resolve; }));
+  const Deferred = deferHomeContent(load, '날짜별 내역');
+  const preparing = Deferred.preload();
+  render(<><Deferred value="첫 화면" /><Deferred value="다른 화면" /></>);
+  await act(async () => {
+    finish({ default: ({ value }) => <p>{value}</p> });
+    await preparing;
+  });
+  expect(screen.getByText('첫 화면')).toBeVisible();
+  expect(screen.getByText('다른 화면')).toBeVisible();
+  expect(load).toHaveBeenCalledTimes(1);
+});
+
+test('[T-WEBVIEW-004][AND-012] 백그라운드 준비 실패는 실제 첫 사용에서 다시 요청할 수 있다', async () => {
+  const load = jest.fn().mockRejectedValueOnce(new Error('preload unavailable'))
+    .mockResolvedValueOnce({ default: () => <p>첫 사용 복구</p> });
+  const Deferred = deferHomeContent(load, '날짜별 내역');
+  await expect(Deferred.preload()).rejects.toThrow('preload unavailable');
+  render(<Deferred />);
+  expect(await screen.findByText('첫 사용 복구')).toBeVisible();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(load).toHaveBeenCalledTimes(2);
+});

@@ -1,9 +1,9 @@
 'use client';
 
-import { Component, lazy, Suspense, type ComponentProps, type ComponentType, type LazyExoticComponent } from 'react';
+import { Component, lazy, Suspense, type ComponentType, type LazyExoticComponent } from 'react';
 
 interface DeferredState<Props extends object> {
-  Content: LazyExoticComponent<ComponentType<Props>>;
+  Content: ComponentType<Props> | LazyExoticComponent<ComponentType<Props>>;
   failed: boolean;
 }
 
@@ -12,16 +12,40 @@ export function deferHomeContent<Props extends object>(
   load: () => Promise<{ default: ComponentType<Props> }>,
   label: string,
 ) {
+  type ContentModule = { default: ComponentType<Props> };
+  let resolved: ComponentType<Props> | undefined;
+  let pending: Promise<ContentModule> | undefined;
+  const loadShared = (): Promise<ContentModule> => {
+    if (pending) return pending;
+    let request: Promise<ContentModule>;
+    try { request = load(); } catch (error) { request = Promise.reject(error); }
+    pending = request.then(module => {
+      resolved = module.default;
+      return module;
+    }, error => {
+      pending = undefined;
+      // A rejected React.lazy is permanent; future mounts/retries need a fresh one.
+      SharedContent = lazy(loadShared);
+      throw error;
+    });
+    return pending;
+  };
+  let SharedContent = lazy(loadShared);
+
   return class DeferredHomeContent extends Component<Props, DeferredState<Props>> {
-    state: DeferredState<Props> = { Content: lazy(load), failed: false };
+    // A preloaded module bypasses the extra Promise turn on its first mount.
+    state: DeferredState<Props> = { Content: resolved ?? SharedContent, failed: false };
+
+    static preload(): Promise<void> {
+      return loadShared().then(() => undefined);
+    }
 
     static getDerivedStateFromError() {
       return { failed: true };
     }
 
     retry = () => {
-      // React.lazy는 실패도 기억하므로 사용자 재시도에서 새 경계를 만듭니다.
-      this.setState({ Content: lazy(load), failed: false });
+      this.setState({ Content: resolved ?? SharedContent, failed: false });
     };
 
     render() {
@@ -35,15 +59,15 @@ export function deferHomeContent<Props extends object>(
           </div>
         );
       }
-      const { Content } = this.state;
-      const contentProps = this.props as ComponentProps<typeof Content>;
+      // Both eager and lazy variants use the loader's same Props contract.
+      const Content = this.state.Content as ComponentType<Props>;
       return (
         <Suspense fallback={
           <div role="status" aria-busy="true" className="my-3 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
             {label} 화면을 불러오는 중입니다.
           </div>
         }>
-          <Content key="content" {...contentProps} />
+          <Content key="content" {...this.props} />
         </Suspense>
       );
     }

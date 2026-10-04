@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLedgerYearSummary } from '@/features/ledger/useLedgerYearSummary';
 import { useLedgerHomeReadiness } from '@/features/ledger/useLedgerHomeReadiness';
 import { useLedgerEditLink } from '@/features/ledger/useLedgerEditLink';
@@ -18,6 +18,7 @@ import { useHousehold } from '@/contexts/HouseholdContext';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useLedgerReadModel } from '@/contexts/LedgerReadModelContext';
 import { normalizeExpenseTags } from '@/lib/utils/expenseTags';
+import { scheduleAfterWebFirstHomeCompletePaint } from '@/platform/performance/webStartupPerformance';
 
 const AddExpenseModal = deferHomeContent(
   () => import(/* webpackChunkName: "home-add-expense" */ '@/components/expense/AddExpenseModal'), '내역 추가',
@@ -43,6 +44,10 @@ interface LedgerPageProps {
 }
 
 export default function LedgerPage({ transactionType }: LedgerPageProps) {
+  useEffect(() => scheduleAfterWebFirstHomeCompletePaint(() => {
+    // Optional code preparation: a failed preload is retried on actual first use.
+    void ExpenseDetail.preload().catch(() => {});
+  }, { idleTimeoutMs: 1_000 }), []);
   const isIncome = transactionType === 'income';
   const transactionLabel = isIncome ? '수입' : '지출';
   const {
