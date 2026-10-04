@@ -46,3 +46,13 @@ CI 37206047688의 Web 단위 검사는 통과했으나 기존 PWA worker 활성�
 실제 앱의 일반 최초 실행이 최신 첫 홈과 방문 Command까지 완료되는 것을 먼저 확인한 뒤, 새 Activity 재실행에서 Listen을 보류하고 네 Lite 성공·750ms 기준·서버 snapshot 없는 첫 홈 assertion을 그대로 검사한다. 같은 Activity reload에서는 반대로 실제 Lite 응답만 보류하고 기존 구독이 최신 잔액 36,890원을 표시해야 한다. 구독으로 47,901원까지 변경한 뒤 보류된 이전 Lite 응답을 전달해도 최신 값이 유지되는지 추가 검증한다. 숫자는 고정 demo fixture이며 운영 자료를 사용하지 않는다. 지연된 실제 응답만 전달하며 가짜 데이터·시간·성공값을 주입하지 않는다.
 
 제품의 750ms 예산·코드·90초 검사 제한은 변경하지 않는다. 실패 시 자료 본문 없이 실제 요청 종류·시각·응답 상태, 보류 수와 준비 mark를 logcat에 남긴다. 이 변경은 테스트 시나리오 보강이며 원 CI의 Lite 내부 지연 원인이나 운영 제품 결함을 해결했다고 표현하지 않는다.
+
+### 카테고리 SDK fixture의 비동기 수명 충돌
+
+후속 CI 37207879143의 Android 실패는 초기 조회 검사에 도달하기 전 기본 instrumentation에서 발생했다. 카테고리 검사 3개가 통과한 직후 `TokenRefresher` 스레드가 `FirebaseApp was deleted`로 프로세스를 종료했다. 따라서 이 실행은 앞선 Native 첫 홈 시간 초과의 재현도, 새 초기 조회 시나리오의 성공 증거도 아니다.
+
+`CategoryRepositoryInstrumentationTest`는 별도 demo FirebaseApp을 만들고 Firestore 종료 직후 앱을 삭제했다. 실제 설치된 Auth 24.2.0의 `zzar.run`은 이름으로 앱을 가져온 뒤 `zzad.zza(app)`에서 앱 component에 접근하며, CI stack은 이 두 단계 사이 앱이 삭제된 경우와 일치한다. 테스트 소스의 FirebaseApp 삭제 지점은 이 fixture뿐이다. Firestore 종료는 별도 Auth 작업까지 끝났다는 보장이 아니므로 임시 앱 두 개의 수명을 instrumentation 프로세스 종료까지 유지한다. Firestore는 계속 종료·await하고 종료 예외를 삼키던 코드를 제거한다. Auth도 명시적으로 로컬 endpoint에 연결하여 고유 이름·demo 프로젝트·네트워크 비활성 Firestore 격리를 유지한다.
+
+CAT-004 / T-CAT-005의 실제 SDK 빈 목록·조회 실패·기본 다섯 개·write 없음 assertion과 모든 Activity 검사를 유지한다. 테스트 fixture 수명만 변경하며 제품 코드·750ms 예산·검사 제한·배포는 바꾸지 않는다. 실패 로그와 artifact는 TEMP/household-android-initial-ci-native-{failure-}37207879143, 로컬 전후 검증은 TEMP/household-category-sdk-lifecycle-{before,after}-20261004.log에 보관한다.
+
+수정 후 로컬 API 36.1에서 카테고리·호스트 실제 SDK/Keystore 검사 10개가 통과했다(`focused` 로그). 기존 로컬 기기의 전체 검사에서는 수정 전 알림 권한 revoke에 의한 프로세스 종료, 수정 후 별도 Activity CREATED 전환 대기와 QuickEdit의 비로그인 전제 실패가 관측됐다. Auth 로그에는 검사 중 실제 로그인 이벤트가 있어 이전 사용 계정이 있는 로컬 기기의 환경과 CI의 새 기기를 구분한다. 이 결과를 45개 전체 성공이나 원 CI 오류의 로컬 재현으로 기록하지 않는다. CI 37207879143의 나머지 functions·web·web-e2e·android는 성공했고 요약은 Android 실패로 실패했다.
