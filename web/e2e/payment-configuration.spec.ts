@@ -135,20 +135,28 @@ test('[MER-001][MER-002][MER-007] 규칙은 좁은 매칭을 우선하며 중복
 });
 
 test('[MER-001][MER-003][MER-004] 동일 유형의 규칙 우선순위·수정·삭제 UI는 새 수집 결과와 새로고침에 반영된다', async ({ page, request }) => {
+  await page.setViewportSize({ width: 393, height: 852 });
   const actor = await createHouseholdThroughUi(page);
   await registerCard(request, actor);
-  const tea = await paymentCommand(request, actor, 'payment-configuration.create-merchant-rule.v1', { rule: { merchantKeyword: 'TEA', matchType: 'contains', mapping: { merchant: '차 규칙', category: 'food' } } });
+  const teaKeyword = 'TEA,메가엠지씨,메가MGC,컴포즈,스타벅스,투썸플레이스,커피빈';
+  const tea = await paymentCommand(request, actor, 'payment-configuration.create-merchant-rule.v1', { rule: { merchantKeyword: teaKeyword, matchType: 'contains', mapping: { merchant: '차 규칙', category: 'food' } } });
   const cafe = await paymentCommand(request, actor, 'payment-configuration.create-merchant-rule.v1', { rule: { merchantKeyword: 'CAFE', matchType: 'contains', mapping: { merchant: '커피 규칙', category: 'fixed' } } });
   await page.goto('/settings');
   await page.getByRole('button', { name: /^가맹점 규칙/ }).click();
+  await page.getByRole('button', { name: /^가맹점 규칙/ }).evaluate(element => element.scrollIntoView({ block: 'start' }));
+  for (const keyword of [teaKeyword, 'CAFE']) {
+    for (const action of ['규칙 수정', '규칙 삭제', '우선순위 올리기', '우선순위 내리기']) {
+      await expect(page.getByRole('button', { name: `${keyword} ${action}`, exact: true })).toBeInViewport({ ratio: 1 });
+    }
+  }
   const priorities = (await records(request, `households/${actor.householdId}/merchantRules`)).sort((left, right) => right.priority - left.priority);
   const lowerKeyword = priorities[1].keyword;
   await page.getByRole('button', { name: `${lowerKeyword} 우선순위 올리기`, exact: true }).click();
   await expect.poll(async () => (await records(request, `households/${actor.householdId}/merchantRules`)).sort((left, right) => right.priority - left.priority).map(row => row.keyword)).toEqual([lowerKeyword, priorities[0].keyword]);
-  const preferredId = lowerKeyword === 'TEA' ? tea.ruleId : cafe.ruleId;
-  const otherId = lowerKeyword === 'TEA' ? cafe.ruleId : tea.ruleId;
+  const preferredId = lowerKeyword === teaKeyword ? tea.ruleId : cafe.ruleId;
+  const otherId = lowerKeyword === teaKeyword ? cafe.ruleId : tea.ruleId;
   const first = await submitRaw(request, actor, rawNotification({ merchant: 'TEA CAFE' }));
-  expect(first.transactionResult.quickEditSnapshot.merchant).toBe(lowerKeyword === 'TEA' ? '차 규칙' : '커피 규칙');
+  expect(first.transactionResult.quickEditSnapshot.merchant).toBe(lowerKeyword === teaKeyword ? '차 규칙' : '커피 규칙');
   await page.getByRole('button', { name: `${lowerKeyword} 규칙 수정`, exact: true }).click();
   await page.getByPlaceholder('비워두면 원본 가맹점명 유지').fill('수정한 규칙');
   await page.getByPlaceholder('자동으로 추가될 메모').fill('설정에서 수정한 메모');
@@ -171,7 +179,7 @@ test('[MER-001][MER-003][MER-004] 동일 유형의 규칙 우선순위·수정·
   await page.getByRole('dialog', { name: '가맹점 규칙 삭제' }).getByRole('button', { name: '삭제', exact: true }).click();
   await expect(page.getByRole('button', { name: `${lowerKeyword} 규칙 수정`, exact: true })).toHaveCount(0);
   const afterDelete = await submitRaw(request, actor, rawNotification({ merchant: 'TEA CAFE', amount: 14000 }));
-  expect(afterDelete.transactionResult.quickEditSnapshot.merchant).toBe(lowerKeyword === 'TEA' ? '커피 규칙' : '차 규칙');
+  expect(afterDelete.transactionResult.quickEditSnapshot.merchant).toBe(lowerKeyword === teaKeyword ? '커피 규칙' : '차 규칙');
   const remaining = await records(request, `households/${actor.householdId}/merchantRules`);
   expect(remaining.map(row => row.id)).toEqual([otherId]);
   expect(remaining.map(row => row.id)).not.toContain(preferredId);

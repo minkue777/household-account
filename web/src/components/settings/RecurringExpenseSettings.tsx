@@ -178,7 +178,7 @@ export default function RecurringExpenseSettings() {
             </p>
           )}
           {mutation.error && !pendingDeleteRecurring && <p role="alert" className="p-3 text-sm text-red-600">{mutation.error}</p>}
-          <fieldset disabled={mutation.pending}>
+          <fieldset disabled={mutation.pending} className="min-w-0">
           {/* 추가/편집 폼 */}
           {(showAddRecurringForm || editingRecurringId) && (
             <div ref={recurringFormRef} className="scroll-mt-24 p-4 bg-slate-50 border-b border-slate-200">

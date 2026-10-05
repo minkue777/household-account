@@ -184,7 +184,7 @@ function MerchantRules({ householdKey }: { householdKey: string | null }) {
           {ruleError && <p role="alert" className="p-3 text-sm text-red-600">{ruleError}</p>}
           {readError && <p role="alert" className="p-3 text-sm text-red-600">규칙을 불러오지 못했습니다. <button onClick={() => setReadEpoch(value => value + 1)}>다시 시도</button></p>}
           {mutation.error && !pendingDeleteRule && <p role="alert" className="p-3 text-sm text-red-600">{mutation.error}</p>}
-          <fieldset disabled={mutation.pending}>
+          <fieldset disabled={mutation.pending} className="min-w-0">
           {/* 규칙 추가/편집 폼 */}
           {(showAddRuleForm || editingRuleId) && (
             <div ref={ruleFormRef} className="scroll-mt-24 p-4 bg-slate-50 border-b border-slate-200">

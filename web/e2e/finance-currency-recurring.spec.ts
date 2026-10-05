@@ -57,6 +57,7 @@ test('[BAL-003][BAL-004][LED-010][HOME-002] 지역화폐 잔액은 유형별 서
 });
 
 test('[REC-001][REC-006] 정기지출 생성·수정·비활성·재활성·삭제는 실제 서버에 저장되고 최초 등록자를 유지한다', async ({ page, request }) => {
+  await page.setViewportSize({ width: 393, height: 852 });
   const householdId = await createFinanceHousehold(page, request);
   await page.goto('/settings');
   await page.getByRole('button', { name: /^정기 지출\s*0개$/ }).click();
@@ -65,7 +66,7 @@ test('[REC-001][REC-006] 정기지출 생성·수정·비활성·재활성·삭�
   await page.getByPlaceholder('50000').fill('51000');
   await page.getByPlaceholder('15').fill('31');
   await page.getByRole('button', { name: '고정비', exact: true }).click();
-  await page.getByPlaceholder('예: 보험료').fill('자동 납부');
+  await page.getByPlaceholder('예: 보험료').fill('자동납부하는정기보험료의긴메모가있어도수정삭제버튼은가려지지않아야합니다');
   await page.getByRole('button', { name: '추가', exact: true }).click();
   await expect(page.getByText('매월 31일 · 51,000원', { exact: true })).toBeVisible();
   const plans = await readFirestoreCollection(request, `households/${householdId}/recurringPlans`);
@@ -73,6 +74,10 @@ test('[REC-001][REC-006] 정기지출 생성·수정·비활성·재활성·삭�
   const planId = documentId(plans[0]);
   const creator = textField(plans[0], 'creatorMemberId');
   expect(creator).toBeTruthy();
+  await page.getByRole('button', { name: /^정기 지출\s*1개$/ }).evaluate(element => element.scrollIntoView({ block: 'start' }));
+  await expect(page.getByRole('button', { name: '정기 보험료 정기 지출 수정' })).toBeInViewport({ ratio: 1 });
+  await expect(page.getByRole('button', { name: '정기 보험료 정기 지출 삭제' })).toBeInViewport({ ratio: 1 });
+  await expect(page.getByTitle('비활성화', { exact: true })).toBeInViewport({ ratio: 1 });
   await page.getByRole('button', { name: '정기 보험료 정기 지출 수정' }).click();
   await page.getByPlaceholder('50000').fill('62000');
   await page.getByPlaceholder('15').fill('15');

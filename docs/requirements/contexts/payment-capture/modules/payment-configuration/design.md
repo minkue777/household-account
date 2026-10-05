@@ -165,6 +165,8 @@ Resolve는 조회 실패와 불일치·규칙 데이터 충돌을 구분합니�
 
 ### 5.3 가맹점 규칙 변경 Use Case
 
+Web 설정의 수정·삭제·우선순위 버튼은 좁은 화면과 긴 OR 키워드에서도 카드 안에 보여야 합니다. 저장 중 입력을 잠그는 `fieldset`은 `min-width: 0`으로 부모 폭에 맞추며, 기존 텍스트 말줄임과 버튼의 고정 폭을 유지합니다. 내용 최소 폭으로 전체 묶음이 늘어나 외부 카드의 `overflow: hidden`에 버튼이 잘리지 않게 합니다. `MER-003/004`의 실제 브라우저 검사는 393px 화면에서 모든 버튼의 완전한 노출과 수정·재조회·수집 반영·삭제를 함께 검증합니다.
+
 1. Actor와 가구 쓰기 권한을 검증합니다.
 2. keyword·match type·mapping을 정규화하고 exact의 priority 입력을 거부하며 non-exact의 양의 정수 priority를 필수 검증합니다.
 3. category 치환이 있으면 Category Catalog의 `GetCategoryReference`를 transaction 밖에서 확인합니다.
