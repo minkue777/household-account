@@ -14,12 +14,12 @@ import { FirebaseLegacyMembershipStore } from "../../adapters/firebase/access/fi
 import { legacyMembershipClaimEnabled } from "../../adapters/firebase/access/legacyMembershipClaimConfiguration";
 import { FirebaseMemberRenameStore } from "../../adapters/firebase/access/firebaseMemberRenameStore";
 import { FirebaseCategoryCatalogStore } from "../../adapters/firebase/categories/firebaseCategoryCatalogStore";
-import { createAssetOwnerProfileApplication } from "../../contexts/access/asset-owner-profile/application/assetOwnerProfileApplication";
-import { createGoogleOnboardingApplication } from "../../contexts/access/google-onboarding/application/googleOnboardingApplication";
+import { createAssetOwnerProfile, renameAssetOwnerProfile, archiveAssetOwnerProfile } from "../../contexts/access/asset-owner-profile/application/assetOwnerProfileApplication";
+import { createHouseholdWithSelf, createInvitationCode, joinHouseholdAsSelf } from "../../contexts/access/google-onboarding/application/googleOnboardingApplication";
 import { GoogleOnboardingPayloadConflict } from "../../contexts/access/google-onboarding/application/ports/out/googleOnboardingStorePort";
 import { createLegacyMembershipApplication } from "../../contexts/access/legacy-membership/application/legacyMembershipApplication";
 import { createMemberRenameApplication } from "../../contexts/access/member-rename/application/memberRenameApplication";
-import { createCategoryCatalogApplication } from "../../contexts/household-finance/categories-budget/application/categoryCatalogApplication";
+import { initializeDefaultCategories } from "../../contexts/household-finance/categories-budget/application/categoryCatalogApplication";
 import {
   HouseholdCommandRejection,
   type HouseholdCommandExecutionContext,
@@ -76,32 +76,8 @@ function defaultCategoryInitializer(
         ),
         requestedAt: context.requestedAt,
       });
-      const application = createCategoryCatalogApplication({
-        store,
-        ids: {
-          nextCategoryId: (commandKey) =>
-            stableAccessId("category", context.principalUid, commandKey),
-          archiveProcessId: (commandKey) =>
-            stableAccessId("category-archive", context.principalUid, commandKey),
-        },
-        referenceRemapper: {
-          async remapRecurringReferences() {
-            return {
-              kind: "retryable-failure" as const,
-              code: "INITIALIZATION_ONLY",
-            };
-          },
-          async remapMerchantRuleReferences() {
-            return {
-              kind: "retryable-failure" as const,
-              code: "INITIALIZATION_ONLY",
-            };
-          },
-        },
-      });
-
       try {
-        const result = await application.initializeDefaults(commandId);
+        const result = await initializeDefaultCategories(store);
         return result.kind === "success" || result.kind === "already-processed"
           ? "completed" as const
           : "failed" as const;
@@ -199,34 +175,29 @@ export function createAccessHouseholdCommandHandlers(
             context.principalUid,
             context.envelope.idempotencyKey,
           );
-          const application = createGoogleOnboardingApplication({
-            store: new FirebaseGoogleOnboardingStore(database, {
-              principalUid: context.principalUid,
-              idempotencyKey: context.envelope.idempotencyKey,
-              payloadFingerprint: payloadFingerprint(
-                "create-household-with-self",
-                householdName.trim(),
-                memberName.trim(),
-              ),
-              requestedAt: context.requestedAt,
-              commandId: context.envelope.commandId,
-              mode: { kind: "create", householdId, memberId },
-            }),
-            clock: { now: () => context.requestedAt },
-            identities: {
-              nextHouseholdId: () => householdId,
-              nextMemberId: () => memberId,
+          const result = await createHouseholdWithSelf(
+            {
+              store: new FirebaseGoogleOnboardingStore(database, {
+                principalUid: context.principalUid,
+                idempotencyKey: context.envelope.idempotencyKey,
+                payloadFingerprint: payloadFingerprint(
+                  "create-household-with-self",
+                  householdName.trim(),
+                  memberName.trim(),
+                ),
+                requestedAt: context.requestedAt,
+                commandId: context.envelope.commandId,
+                mode: { kind: "create", householdId, memberId },
+              }),
+              identities: {
+                nextHouseholdId: () => householdId,
+                nextMemberId: () => memberId,
+              },
+              // 신규 가구가 첫 원장 명령을 즉시 사용할 수 있도록 기본 카탈로그를
+              // 같은 onboarding 흐름에서 생성합니다. initializeDefaults는 별도
+              // receipt를 가지므로 command 재시도와 향후 outbox 재처리에도 안전합니다.
+              initializer: defaultCategoryInitializer(database, context),
             },
-            invitations: {
-              issueCode: issueInvitationCode,
-              hashCode: sha256,
-            },
-            // 신규 가구가 첫 원장 명령을 즉시 사용할 수 있도록 기본 카탈로그를
-            // 같은 onboarding 흐름에서 생성합니다. initializeDefaults는 별도
-            // receipt를 가지므로 command 재시도와 향후 outbox 재처리에도 안전합니다.
-            initializer: defaultCategoryInitializer(database, context),
-          });
-          const result = await application.createHouseholdWithSelf(
             { uid: context.principalUid },
             {
               householdName,
@@ -300,31 +271,28 @@ export function createAccessHouseholdCommandHandlers(
             context.envelope.idempotencyKey,
           );
           const invitationHash = sha256(invitationCode.trim());
-          const application = createGoogleOnboardingApplication({
-            store: new FirebaseGoogleOnboardingStore(database, {
-              principalUid: context.principalUid,
-              idempotencyKey: context.envelope.idempotencyKey,
-              payloadFingerprint: payloadFingerprint(
-                "join-household-as-self",
-                invitationHash,
-                memberName.trim(),
-              ),
-              requestedAt: context.requestedAt,
-              commandId: context.envelope.commandId,
-              mode: { kind: "join", invitationHash, memberId },
-            }),
-            clock: { now: () => context.requestedAt },
-            identities: {
-              nextHouseholdId: () => "unused-household-id",
-              nextMemberId: () => memberId,
+          const result = await joinHouseholdAsSelf(
+            {
+              store: new FirebaseGoogleOnboardingStore(database, {
+                principalUid: context.principalUid,
+                idempotencyKey: context.envelope.idempotencyKey,
+                payloadFingerprint: payloadFingerprint(
+                  "join-household-as-self",
+                  invitationHash,
+                  memberName.trim(),
+                ),
+                requestedAt: context.requestedAt,
+                commandId: context.envelope.commandId,
+                mode: { kind: "join", invitationHash, memberId },
+              }),
+              clock: { now: () => context.requestedAt },
+              identities: {
+                nextMemberId: () => memberId,
+              },
+              invitations: {
+                hashCode: sha256,
+              },
             },
-            invitations: {
-              issueCode: issueInvitationCode,
-              hashCode: sha256,
-            },
-            initializer: { initialize: async () => "pending" },
-          });
-          const result = await application.joinHouseholdAsSelf(
             { uid: context.principalUid },
             {
               invitationCode,
@@ -347,33 +315,28 @@ export function createAccessHouseholdCommandHandlers(
             throw new HouseholdCommandRejection("INVITATION_ISSUE_FORBIDDEN");
           }
           payloadRecord(context.envelope.payload);
-          const application = createGoogleOnboardingApplication({
-            store: new FirebaseGoogleOnboardingStore(database, {
-              principalUid: context.principalUid,
-              idempotencyKey: context.envelope.idempotencyKey,
-              payloadFingerprint: payloadFingerprint(
-                "create-invitation",
-                context.actor.householdId,
-              ),
-              requestedAt: context.requestedAt,
-              commandId: context.envelope.commandId,
-              mode: {
-                kind: "issue-invitation",
-                householdId: context.actor.householdId,
+          const result = await createInvitationCode(
+            {
+              store: new FirebaseGoogleOnboardingStore(database, {
+                principalUid: context.principalUid,
+                idempotencyKey: context.envelope.idempotencyKey,
+                payloadFingerprint: payloadFingerprint(
+                  "create-invitation",
+                  context.actor.householdId,
+                ),
+                requestedAt: context.requestedAt,
+                commandId: context.envelope.commandId,
+                mode: {
+                  kind: "issue-invitation",
+                  householdId: context.actor.householdId,
+                },
+              }),
+              clock: { now: () => context.requestedAt },
+              invitations: {
+                issueCode: issueInvitationCode,
+                hashCode: sha256,
               },
-            }),
-            clock: { now: () => context.requestedAt },
-            identities: {
-              nextHouseholdId: () => "unused-household-id",
-              nextMemberId: () => "unused-member-id",
             },
-            invitations: {
-              issueCode: issueInvitationCode,
-              hashCode: sha256,
-            },
-            initializer: { initialize: async () => "pending" },
-          });
-          const result = await application.createInvitationCode(
             { uid: context.principalUid },
             {
               householdId: context.actor.householdId,
@@ -408,7 +371,7 @@ export function createAccessHouseholdCommandHandlers(
             payload.displayName,
             "ASSET_OWNER_PROFILE_NAME_REQUIRED",
           );
-          const application = createAssetOwnerProfileApplication({
+          const dependencies = {
             store: new FirebaseAssetOwnerProfileStore(database, {
               householdId: context.actor.householdId,
               principalUid: context.actor.principalUid,
@@ -422,13 +385,13 @@ export function createAccessHouseholdCommandHandlers(
               commandId: context.envelope.commandId,
             }),
             ids: {
-              nextDependentProfileId: (idempotencyKey) =>
+              nextDependentProfileId: (idempotencyKey: string) =>
                 dependentOwnerProfileId(
                   context.actor?.householdId ?? "missing-household",
                   idempotencyKey,
                 ),
             },
-          });
+          };
           const profileCapabilities = context.actor.capabilities.filter(
             (
               capability,
@@ -438,7 +401,8 @@ export function createAccessHouseholdCommandHandlers(
               capability === "household.asset-owner-profile.write" ||
               capability === "admin.asset-owner-profile.archive",
           );
-          const result = await application.createAssetOwnerProfile(
+          const result = await createAssetOwnerProfile(
+            dependencies,
             {
               principalUid: context.actor.principalUid,
               householdId: context.actor.householdId,
@@ -478,26 +442,22 @@ export function createAccessHouseholdCommandHandlers(
             payload.expectedVersion,
             "EXPECTED_VERSION_REQUIRED",
           );
-          const application = createAssetOwnerProfileApplication({
-            store: new FirebaseAssetOwnerProfileStore(database, {
-              householdId: context.actor.householdId,
-              principalUid: context.actor.principalUid,
-              idempotencyKey: context.envelope.idempotencyKey,
-              payloadFingerprint: payloadFingerprint(
-                "rename-asset-owner-profile",
-                context.actor.householdId,
-                profileId,
-                displayName.trim(),
-                expectedVersion,
-              ),
-              requestedAt: context.requestedAt,
-              commandId: context.envelope.commandId,
-            }),
-            ids: {
-              nextDependentProfileId: () => "unused-profile-id",
-            },
+          const store = new FirebaseAssetOwnerProfileStore(database, {
+            householdId: context.actor.householdId,
+            principalUid: context.actor.principalUid,
+            idempotencyKey: context.envelope.idempotencyKey,
+            payloadFingerprint: payloadFingerprint(
+              "rename-asset-owner-profile",
+              context.actor.householdId,
+              profileId,
+              displayName.trim(),
+              expectedVersion,
+            ),
+            requestedAt: context.requestedAt,
+            commandId: context.envelope.commandId,
           });
-          const result = await application.renameAssetOwnerProfile(
+          const result = await renameAssetOwnerProfile(
+            store,
             {
               principalUid: context.actor.principalUid,
               householdId: context.actor.householdId,
@@ -542,25 +502,21 @@ export function createAccessHouseholdCommandHandlers(
             payload.expectedVersion,
             "EXPECTED_VERSION_REQUIRED",
           );
-          const application = createAssetOwnerProfileApplication({
-            store: new FirebaseAssetOwnerProfileStore(database, {
+          const store = new FirebaseAssetOwnerProfileStore(database, {
+            householdId,
+            principalUid: context.administrator.principalRef,
+            idempotencyKey: context.envelope.idempotencyKey,
+            payloadFingerprint: payloadFingerprint(
+              "archive-asset-owner-profile",
               householdId,
-              principalUid: context.administrator.principalRef,
-              idempotencyKey: context.envelope.idempotencyKey,
-              payloadFingerprint: payloadFingerprint(
-                "archive-asset-owner-profile",
-                householdId,
-                profileId,
-                expectedVersion,
-              ),
-              requestedAt: context.requestedAt,
-              commandId: context.envelope.commandId,
-            }),
-            ids: {
-              nextDependentProfileId: () => "unused-profile-id",
-            },
+              profileId,
+              expectedVersion,
+            ),
+            requestedAt: context.requestedAt,
+            commandId: context.envelope.commandId,
           });
-          const result = await application.archiveAssetOwnerProfile(
+          const result = await archiveAssetOwnerProfile(
+            store,
             {
               principalUid: context.administrator.principalRef,
               householdId,

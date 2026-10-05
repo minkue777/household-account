@@ -3,6 +3,8 @@ import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { sha256 } from "../../../src/adapters/firebase/access/firebaseAccessPersistence";
+import { FirebaseGoogleOnboardingStore } from "../../../src/adapters/firebase/access/firebaseGoogleOnboardingStore";
+import { createHouseholdWithSelf } from "../../../src/contexts/access/google-onboarding/application/googleOnboardingApplication";
 import { createAccessHouseholdCommandHandlers } from "../../../src/bootstrap/commands/accessHouseholdCommandHandlers";
 import { createAdminAccessRouter } from "../../../src/bootstrap/admin/adminAccess";
 import { createAdminHouseholdAccessHandlers } from "../../../src/bootstrap/admin/handlers/adminHouseholdAccessHandlers";
@@ -68,6 +70,36 @@ describeWithFirestoreEmulator("Firebase Access command adapters", () => {
 
   afterAll(async () => {
     if (app !== undefined) await deleteApp(app);
+  });
+
+  it("[T-HH-003] 같은 저장소 재호출도 receipt를 재생하고 초기화 완료·삭제를 되돌리지 않는다", async () => {
+    const store = new FirebaseGoogleOnboardingStore(database, {
+      principalUid: "repeat-user", idempotencyKey: "repeat", payloadFingerprint: "same-input",
+      commandId: "repeat", requestedAt: REQUESTED_AT,
+      mode: { kind: "create", householdId: "repeat-house", memberId: "repeat-member" },
+    });
+    let outcome: "failed" | "completed" = "failed";
+    const dependencies = { store,
+      identities: { nextHouseholdId: () => "repeat-house", nextMemberId: () => "repeat-member" },
+      initializer: { initialize: async () => outcome },
+    };
+    const create = () => createHouseholdWithSelf(dependencies, { uid: "repeat-user" }, {
+      householdName: "재시도", selfDisplayName: "본인", idempotencyKey: "repeat",
+    });
+    expect(await create()).toMatchObject({ kind: "success", initializationStatus: "failed" });
+    outcome = "completed";
+    expect(await create()).toMatchObject({ kind: "success", initializationStatus: "completed" });
+    const household = database.doc("households/repeat-house");
+    const profile = (await household.collection("assetOwnerProfiles").get()).docs[0]!;
+    await profile.ref.update({ displayName: "수정한 명의", aggregateVersion: 4 });
+    outcome = "failed";
+    expect(await create()).toMatchObject({ kind: "success", initializationStatus: "completed" });
+    expect((await profile.ref.get()).data()).toMatchObject({ displayName: "수정한 명의", aggregateVersion: 4 });
+    expect((await household.collection("members").get()).size).toBe(1);
+    expect((await database.collection("outboxEvents").where("householdId", "==", household.id).get()).size).toBe(2);
+    await household.update({ lifecycleState: "deleted" });
+    expect(await create()).toMatchObject({ kind: "success", initializationStatus: "failed" });
+    expect((await household.get()).data()).toMatchObject({ lifecycleState: "deleted", initializationStatus: "completed" });
   });
 
   it("신규 가구부터 논리 삭제까지 canonical identity graph와 업무 데이터를 원자적으로 보존한다", async () => {
@@ -297,6 +329,35 @@ describeWithFirestoreEmulator("Firebase Access command adapters", () => {
       invitation.invitationCode,
     );
   });
+
+  it("[T-HH-003] 같은 초대의 동시 소비는 한 가입자의 identity graph만 저장한다", async () => {
+    const handlers = createAccessHouseholdCommandHandlers(database);
+    const created = await handlers.get("access.create-household-with-self.v1")!.execute(context({
+      principalUid: "inviter", command: "access.create-household-with-self.v1", commandId: "race-house",
+      payload: { householdName: "초대 경합", memberName: "본인" },
+    })) as { householdId: string; memberId: string };
+    const actor = { principalUid: "inviter", householdId: created.householdId, actingMemberId: created.memberId,
+      capabilities: ["household.read", "household.write"] };
+    const invitation = await handlers.get("access.create-invitation.v1")!.execute(context({
+      principalUid: "inviter", householdId: created.householdId, actor,
+      command: "access.create-invitation.v1", commandId: "race-invite", payload: {},
+    })) as { invitationCode: string };
+    const results = await Promise.allSettled(["first", "second"].map(principalUid =>
+      handlers.get("access.join-household-as-self.v1")!.execute(context({
+        principalUid, command: "access.join-household-as-self.v1", commandId: `join-${principalUid}`,
+        payload: { invitationCode: invitation.invitationCode, memberName: principalUid },
+      }))));
+    expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter(result => result.status === "rejected")).toEqual([
+      expect.objectContaining({ reason: expect.objectContaining({ code: "INVITATION_EXPIRED_OR_USED" }) }),
+    ]);
+    const household = database.doc(`households/${created.householdId}`);
+    for (const collection of ["members", "memberships", "assetOwnerProfiles"]) {
+      expect((await household.collection(collection).get()).size).toBe(2);
+    }
+    expect((await database.collection("principalMembershipClaims").where("householdId", "==", created.householdId).get()).size).toBe(2);
+    expect((await database.collection("outboxEvents").where("householdId", "==", created.householdId).get()).size).toBe(4);
+  }, 30_000);
 
   it("legacy 가구는 stable 가구·멤버와 선택적 이름을 검증한 뒤 기존 업무 데이터 없이 연결만 추가한다", async () => {
     const handlers = createAccessHouseholdCommandHandlers(database);

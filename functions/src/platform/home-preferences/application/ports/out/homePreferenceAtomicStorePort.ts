@@ -35,8 +35,9 @@ export interface HomePreferenceAtomicStorePort {
     metadata: HomePreferenceCommandMetadata,
     decide: (
       current: HomePreferenceCommandState,
-      availableLocalCurrencyTypes: ReadonlySet<string>,
-    ) => HomePreferenceMutation | { readonly kind: "rejected"; readonly code: string },
+      readLocalCurrencyTypes: () => Promise<ReadonlySet<string>>,
+    ) => HomePreferenceMutation | { readonly kind: "rejected"; readonly code: string }
+      | Promise<HomePreferenceMutation | { readonly kind: "rejected"; readonly code: string }>,
   ): Promise<
     | HomePreferenceAtomicResult
     | { readonly kind: "rejected"; readonly code: string }

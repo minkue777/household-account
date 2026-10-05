@@ -596,3 +596,7 @@ partner 선택 정책은 [DEC-022](../../../../governance/decisions.md#dec-022),
 ### 생명주기 실행 소유권 (2026-10-05)
 
 가구 논리삭제는 관리자 console, 복구는 household lifecycle, 영구삭제는 checkpoint 기반 purge process가 각각 담당한다. 복구 모듈에 별도 purge 상태나 테스트용 삭제/접근 API를 두지 않는다. 멤버 제거/복구의 실제 접근 판정은 canonical 로그인 resolver에서 검증한다. purge 저장 실패는 checkpoint를 변경하지 않고 호출자에게 전달하며 재시작은 같은 page부터 진행한다. [실행·검사 추적](../../../../../operations/lifecycle-simplicity-2026-10-05.md).
+
+### 동작별 의존성과 초기화 저장 (2026-10-05)
+
+가입·초대·가구 생성은 필요한 의존성만 받는 함수다. 초기화 완료 저장은 identity 생성 receipt와 구분한 명시적 동작이며 호출 횟수로 저장 정책을 바꾸지 않는다. 완료 상태는 늦은 실패로 내려가지 않으며 삭제 가구는 복원하지 않는다. 가구원 제거/복구는 대상 member의 graph만 읽는다. 명의 조회/변경에 사용하지 않는 members 자료나 가짜 ID 생성기를 전달하지 않는다. [실제 SDK 검증과 추적](../../../../../operations/access-command-simplicity-2026-10-05.md).

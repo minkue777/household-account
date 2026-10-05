@@ -128,11 +128,11 @@ export function createHomePreferenceRuntimeApplication(
       }
       const selected = input.localCurrencyTypeId.trim();
       return finalResult(
-        await store.transact(metadata(input), (current, availableTypes) => {
+        await store.transact(metadata(input), async (current, readLocalCurrencyTypes) => {
           if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0 || input.expectedVersion !== current.aggregateVersion) {
             return { kind: "rejected", code: "HOME_CONFIGURATION_VERSION_MISMATCH" };
           }
-          if (!availableTypes.has(selected)) {
+          if (!(await readLocalCurrencyTypes()).has(selected)) {
             return {
               kind: "rejected",
               code: "LOCAL_CURRENCY_TYPE_NOT_AVAILABLE",

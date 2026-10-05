@@ -69,11 +69,6 @@ describe("Google 로그인·자기 가구 생성·5분 초대 공개 계약", ()
     const subject = createSubject();
     subject.setCurrentTime("2026-07-19T09:00:00.000Z");
 
-    await expect(subject.resolveSignedInUser(creator)).resolves.toEqual({
-      kind: "first-visit-required",
-      choices: ["create", "join"],
-    });
-
     const created = await createHousehold(subject);
     const state = await subject.snapshot();
 

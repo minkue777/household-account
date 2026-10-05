@@ -77,9 +77,8 @@ export class FirebaseAssetOwnerProfileStore
     const householdReference = this.database
       .collection("households")
       .doc(this.input.householdId);
-    const [profiles, members, memberships] = await Promise.all([
+    const [profiles, memberships] = await Promise.all([
       transaction.get(householdReference.collection("assetOwnerProfiles")),
-      transaction.get(householdReference.collection("members")),
       transaction.get(householdReference.collection("memberships")),
     ]);
     return {
@@ -88,22 +87,6 @@ export class FirebaseAssetOwnerProfileStore
         profiles: profiles.docs.flatMap((snapshot) => {
           const mapped = mapProfile(this.input.householdId, snapshot);
           return mapped === undefined ? [] : [mapped];
-        }),
-        members: members.docs.flatMap((snapshot) => {
-          const data = snapshot.data();
-          const principalUid = stringField(data, "linkedPrincipalUid");
-          const displayName = stringField(data, "displayName");
-          if (principalUid === undefined || displayName === undefined) return [];
-          return [
-            {
-              principalUid,
-              memberId: snapshot.id,
-              displayName,
-              profileId:
-                stringField(data, "profileId") ?? `profile-member-${snapshot.id}`,
-              aggregateVersion: numberField(data, "aggregateVersion", 1),
-            },
-          ];
         }),
         memberships: memberships.docs.flatMap((snapshot) => {
           const data = snapshot.data();

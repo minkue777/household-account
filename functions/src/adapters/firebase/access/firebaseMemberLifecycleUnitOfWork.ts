@@ -110,14 +110,18 @@ export class FirebaseMemberLifecycleUnitOfWork
       this.input.administratorPrincipalRef,
       this.input.idempotencyKey,
     );
-    const [household, members, memberships, profiles, receiptSnapshot] =
-      await Promise.all([
-        transaction.get(householdReference),
-        transaction.get(householdReference.collection("members")),
-        transaction.get(householdReference.collection("memberships")),
-        transaction.get(householdReference.collection("assetOwnerProfiles")),
-        transaction.get(receiptReference),
-      ]);
+    const [household, member, receiptSnapshot] = await transaction.getAll(
+      householdReference,
+      householdReference.collection("members").doc(this.input.memberId),
+      receiptReference,
+    );
+    const members = member.exists ? [member] : [];
+    const memberships = await transaction.get(
+      householdReference.collection("memberships").where("memberId", "==", this.input.memberId),
+    );
+    const profiles = await transaction.get(
+      householdReference.collection("assetOwnerProfiles").where("linkedMemberId", "==", this.input.memberId),
+    );
     if (!household.exists) throw new Error("HOUSEHOLD_NOT_FOUND");
     const householdLifecycle =
       stringField(household.data(), "lifecycleState") ??
@@ -165,7 +169,7 @@ export class FirebaseMemberLifecycleUnitOfWork
           householdId: this.input.householdId,
           lifecycleState: "active",
         },
-        members: members.docs.flatMap((snapshot) => {
+        members: members.flatMap((snapshot) => {
           const data = snapshot.data();
           const principalUid = stringField(data, "linkedPrincipalUid");
           if (principalUid === undefined) return [];
@@ -233,7 +237,7 @@ export class FirebaseMemberLifecycleUnitOfWork
         events: [],
       },
       memberSnapshots: new Map(
-        members.docs.map((snapshot) => [snapshot.id, snapshot]),
+        members.map((snapshot) => [snapshot.id, snapshot]),
       ),
       membershipSnapshots,
       profileSnapshots: new Map(

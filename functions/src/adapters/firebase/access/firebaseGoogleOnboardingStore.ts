@@ -139,8 +139,6 @@ function invitation(
 }
 
 export class FirebaseGoogleOnboardingStore implements GoogleOnboardingStorePort {
-  private transactionInvocation = 0;
-
   constructor(
     private readonly database: firestore.Firestore,
     private readonly input: FirebaseGoogleOnboardingStoreInput,
@@ -249,17 +247,22 @@ export class FirebaseGoogleOnboardingStore implements GoogleOnboardingStorePort 
     };
   }
 
-  async read(): Promise<GoogleOnboardingState> {
-    return this.database.runTransaction(async (transaction) =>
-      (await this.load(transaction)).state,
-    );
+  async finalizeInitialization(householdId: string, status: "pending" | "completed" | "failed") {
+    const reference = this.database.collection("households").doc(householdId);
+    return this.database.runTransaction(async transaction => {
+      const snapshot = await transaction.get(reference);
+      if (!activeHousehold(snapshot) || snapshot.data()?.deletedAt != null) return "failed" as const;
+      if (snapshot.data()?.initializationStatus === "completed") return "completed" as const;
+      if (snapshot.data()?.initializationStatus !== status) {
+        transaction.update(reference, { initializationStatus: status, updatedAt: FieldValue.serverTimestamp() });
+      }
+      return status;
+    });
   }
 
   async transact<T>(
     operation: (current: GoogleOnboardingState) => GoogleOnboardingMutation<T>,
   ): Promise<T> {
-    this.transactionInvocation += 1;
-    const isPrimaryTransaction = this.transactionInvocation === 1;
     const receiptReference = accessReceiptReference(
       this.database,
       "access-google-onboarding",
@@ -268,14 +271,12 @@ export class FirebaseGoogleOnboardingStore implements GoogleOnboardingStorePort 
     );
 
     return this.database.runTransaction(async (transaction) => {
-      if (isPrimaryTransaction) {
-        const receipt = await transaction.get(receiptReference);
-        if (receipt.exists) {
-          if (receipt.data()?.payloadFingerprint !== this.input.payloadFingerprint) {
-            throw new GoogleOnboardingPayloadConflict();
-          }
-          return receipt.data()?.result as T;
+      const receipt = await transaction.get(receiptReference);
+      if (receipt.exists) {
+        if (receipt.data()?.payloadFingerprint !== this.input.payloadFingerprint) {
+          throw new GoogleOnboardingPayloadConflict();
         }
+        return receipt.data()?.result as T;
       }
 
       const loaded = await this.load(transaction);
@@ -284,33 +285,30 @@ export class FirebaseGoogleOnboardingStore implements GoogleOnboardingStorePort 
         transaction,
         loaded,
         mutation.state,
-        isPrimaryTransaction,
       );
 
-      if (isPrimaryTransaction) {
-        const safeResult =
-          this.input.mode.kind === "issue-invitation" &&
-          typeof mutation.value === "object" &&
-          mutation.value !== null &&
-          (mutation.value as { kind?: unknown }).kind === "success"
-            ? {
-                kind: "forbidden",
-                code: "INVITATION_ALREADY_ISSUED",
-              }
-            : mutation.value;
-        transaction.create(
-          receiptReference,
-          terminalReceiptFields({
-            principalUid: this.input.principalUid,
-            ...(this.input.mode.kind === "issue-invitation"
-              ? { householdId: this.input.mode.householdId }
-              : {}),
-            payloadFingerprint: this.input.payloadFingerprint,
-            result: safeResult,
-            completedAt: this.input.requestedAt,
-          }),
-        );
-      }
+      const safeResult =
+        this.input.mode.kind === "issue-invitation" &&
+        typeof mutation.value === "object" &&
+        mutation.value !== null &&
+        (mutation.value as { kind?: unknown }).kind === "success"
+          ? {
+              kind: "forbidden",
+              code: "INVITATION_ALREADY_ISSUED",
+            }
+          : mutation.value;
+      transaction.create(
+        receiptReference,
+        terminalReceiptFields({
+          principalUid: this.input.principalUid,
+          ...(this.input.mode.kind === "issue-invitation"
+            ? { householdId: this.input.mode.householdId }
+            : {}),
+          payloadFingerprint: this.input.payloadFingerprint,
+          result: safeResult,
+          completedAt: this.input.requestedAt,
+        }),
+      );
       return mutation.value;
     });
   }
@@ -319,7 +317,6 @@ export class FirebaseGoogleOnboardingStore implements GoogleOnboardingStorePort 
     transaction: firestore.Transaction,
     loaded: LoadedOnboardingState,
     state: GoogleOnboardingState,
-    persistIdentityGraph: boolean,
   ): void {
     const outbox = new FirebaseTransactionalOutbox(this.database);
 
@@ -329,13 +326,6 @@ export class FirebaseGoogleOnboardingStore implements GoogleOnboardingStorePort 
       const initializationStatus = state.initializations.find(
         (candidate) => candidate.householdId === household.householdId,
       )?.status;
-      if (!persistIdentityGraph) {
-        if (existing?.exists === true && household.lifecycleState === "active" &&
-          existing.data()?.initializationStatus !== "completed" && initializationStatus !== undefined) {
-          transaction.update(reference, { initializationStatus, updatedAt: FieldValue.serverTimestamp() });
-        }
-        continue;
-      }
       const fields = {
         householdId: household.householdId,
         name: household.name,
@@ -351,8 +341,6 @@ export class FirebaseGoogleOnboardingStore implements GoogleOnboardingStorePort 
       if (existing?.exists === true) transaction.set(reference, fields, { merge: true });
       else transaction.create(reference, fields);
     }
-
-    if (!persistIdentityGraph) return;
 
     for (const member of state.members) {
       const householdReference = this.database

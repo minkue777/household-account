@@ -58,6 +58,10 @@ describeWithEmulator("[HH-009][T-HH-004] 실제 이름 변경의 충돌·원자�
 
   it("성공 결과를 모든 표시 문서에 저장하고 재전송·버전 충돌·payload 충돌은 원본을 보존한다", async () => {
     await seed("replay");
+    const references = ["ledgerTransactions", "assets", "registeredCards", "notificationEndpoints"]
+      .map(collection => db.doc(`households/replay/${collection}/preserved`));
+    await Promise.all(references.map(ref => ref.set({ memberId: "a", ownerMemberId: "a", amount: 42, aggregateVersion: 7 })));
+    const beforeReferences = await Promise.all(references.map(async ref => (await ref.get()).data()));
     const result = await rename("replay", "a", "first", "새 민규");
     expect(result).toEqual({ kind: "success", member: { memberId: "a", displayName: "새 민규", aggregateVersion: 2 } });
     const saved = await snapshot("replay");
@@ -69,6 +73,7 @@ describeWithEmulator("[HH-009][T-HH-004] 실제 이름 변경의 충돌·원자�
     expect(await rename("replay", "a", "first", "다른 이름")).toEqual({ kind: "conflict", code: "IDEMPOTENCY_PAYLOAD_MISMATCH" });
     expect(await rename("replay", "a", "stale", "다른 이름")).toEqual({ kind: "conflict", code: "VERSION_MISMATCH", currentVersion: 2 });
     expect(await snapshot("replay")).toEqual(saved);
+    expect(await Promise.all(references.map(async ref => (await ref.get()).data()))).toEqual(beforeReferences);
     expect((await db.collection("outboxEvents").where("householdId", "==", "replay").get()).size).toBe(1);
   });
 });

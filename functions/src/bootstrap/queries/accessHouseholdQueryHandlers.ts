@@ -1,7 +1,7 @@
 import type * as firestore from "firebase-admin/firestore";
 
 import { FirebaseAssetOwnerProfileStore } from "../../adapters/firebase/access/firebaseAssetOwnerProfileStore";
-import { createAssetOwnerProfileApplication } from "../../contexts/access/asset-owner-profile/application/assetOwnerProfileApplication";
+import { listAssetOwnerProfiles } from "../../contexts/access/asset-owner-profile/application/assetOwnerProfileApplication";
 import {
   HouseholdQueryRejection,
   type HouseholdQueryHandler,
@@ -42,18 +42,16 @@ export function createAccessHouseholdQueryHandlers(
           }
           const principalRef =
             memberActor?.principalUid ?? administrator?.principalRef ?? "missing";
-          const application = createAssetOwnerProfileApplication({
-            store: new FirebaseAssetOwnerProfileStore(database, {
-              householdId,
-              principalUid: principalRef,
-              idempotencyKey: context.envelope.queryId,
-              payloadFingerprint: context.envelope.queryId,
-              requestedAt: new Date().toISOString(),
-              commandId: context.envelope.queryId,
-            }),
-            ids: { nextDependentProfileId: () => "unused-profile-id" },
+          const store = new FirebaseAssetOwnerProfileStore(database, {
+            householdId,
+            principalUid: principalRef,
+            idempotencyKey: context.envelope.queryId,
+            payloadFingerprint: context.envelope.queryId,
+            requestedAt: new Date().toISOString(),
+            commandId: context.envelope.queryId,
           });
-          const result = await application.listAssetOwnerProfiles(
+          const result = await listAssetOwnerProfiles(
+            store,
             memberActor === undefined
               ? {
                   principalUid: principalRef,

@@ -18,7 +18,6 @@ export {
   type GoogleOnboardingInputPort,
   type JoinHouseholdResult,
   type MembershipView,
-  type ResolveSignedInUserResult,
   type VerifiedGooglePrincipal,
 } from "./google-onboarding/application/ports/in/googleOnboardingInputPort";
 export {

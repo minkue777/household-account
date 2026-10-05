@@ -1,5 +1,5 @@
 import { deleteApp, initializeApp, type App } from "firebase-admin/app";
-import { getFirestore, DocumentReference, Query, type Firestore } from "firebase-admin/firestore";
+import { getFirestore, DocumentReference, Query, Transaction, type Firestore } from "firebase-admin/firestore";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createAdminAccessRouter } from "../../../src/bootstrap/admin/adminAccess";
@@ -199,6 +199,17 @@ describeWithFirestoreEmulator("Firebase 관리자 Access adapter", () => {
     await Promise.all(preserved.map(reference => reference.set({ householdId, memberId, amountInWon: 100, lifecycleState: 'active' })));
     const before = await Promise.all(preserved.map(async reference => (await reference.get()).data()));
     expect(await resolveFirebaseSignedInUser(database, principalUid)).toMatchObject({ kind: 'membership-found' });
+    const unrelated = [
+      household.collection("members").doc("unrelated-member"),
+      household.collection("memberships").doc("unrelated-user"),
+      household.collection("assetOwnerProfiles").doc("unrelated-profile"),
+      database.collection("principalMembershipClaims").doc(principalClaimId("unrelated-user")),
+    ];
+    await Promise.all(unrelated.map(reference => reference.set({ householdId, memberId: "unrelated-member",
+      linkedMemberId: "unrelated-member", principalUid: "unrelated-user", linkedPrincipalUid: "unrelated-user",
+      displayName: "다른 가구원", profileType: "member", lifecycleState: "active", aggregateVersion: 6 })));
+    const beforeUnrelated = await Promise.all(unrelated.map(async reference => (await reference.get()).data()));
+    const reads = vi.spyOn(Transaction.prototype, "get");
     const router = createAdminAccessRouter({
       handlers: createFirebaseAdminAccessHandlers(database),
     });
@@ -279,6 +290,13 @@ describeWithFirestoreEmulator("Firebase 관리자 Access adapter", () => {
     ).toMatchObject({ lifecycleState: "active", memberId });
     expect(await resolveFirebaseSignedInUser(database, principalUid)).toMatchObject({ kind: 'membership-found', membership: { memberId } });
     expect(await Promise.all(preserved.map(async reference => (await reference.get()).data()))).toEqual(before);
+    const observed = await Promise.all(reads.mock.results.map(result => result.value));
+    reads.mockRestore();
+    const readPaths = observed.flatMap(snapshot => "docs" in snapshot
+      ? snapshot.docs.map((doc: { ref: { path: string } }) => doc.ref.path) : [snapshot.ref.path]);
+    expect(readPaths.length).toBeGreaterThan(0);
+    expect(readPaths.filter(path => unrelated.some(reference => reference.path === path))).toEqual([]);
+    expect(await Promise.all(unrelated.map(async reference => (await reference.get()).data()))).toEqual(beforeUnrelated);
   });
 
   it("삭제 자산 복구는 정본 자산·자동화만 재개하고 이전 projection은 수정하지 않는다", async () => {

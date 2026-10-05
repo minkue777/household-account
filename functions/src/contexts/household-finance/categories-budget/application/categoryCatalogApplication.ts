@@ -60,39 +60,43 @@ export function legacyQuickEditDisplay(
   return defaultCategories().map(toView);
 }
 
+export async function initializeDefaultCategories(
+  store: CategoryCatalogStorePort,
+): Promise<CategoryResult<readonly CategoryView[]>> {
+  return store.transact<
+    CategoryResult<readonly CategoryView[]>
+  >((current) => {
+    if (current.categories.length > 0) {
+      return {
+        state: current,
+        value: {
+          kind: "already-processed" as const,
+          value: current.categories.map(toView),
+        },
+      };
+    }
+
+    const categories = defaultCategories();
+    return {
+      state: {
+        ...current,
+        categories,
+        defaultCategoryId: "etc",
+        catalogVersion: current.catalogVersion + 1,
+      },
+      value: {
+        kind: "success" as const,
+        value: categories.map(toView),
+      },
+    };
+  });
+}
+
 class DefaultCategoryCatalogApplication implements CategoryCatalogInputPort {
   constructor(private readonly dependencies: CategoryCatalogApplicationDependencies) {}
 
-  async initializeDefaults(
-    _commandKey: string,
-  ): Promise<CategoryResult<readonly CategoryView[]>> {
-    return this.dependencies.store.transact<
-      CategoryResult<readonly CategoryView[]>
-    >((current) => {
-      if (current.categories.length > 0) {
-        return {
-          state: current,
-          value: {
-            kind: "already-processed" as const,
-            value: current.categories.map(toView),
-          },
-        };
-      }
-
-      const categories = defaultCategories();
-      return {
-        state: {
-          ...current,
-          categories,
-          defaultCategoryId: "etc",
-          catalogVersion: current.catalogVersion + 1,
-        },
-        value: {
-          kind: "success" as const,
-          value: categories.map(toView),
-        },
-      };
-    });
+  initializeDefaults(_commandKey: string) {
+    return initializeDefaultCategories(this.dependencies.store);
   }
 
   async createCategory(

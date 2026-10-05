@@ -1,6 +1,5 @@
 import {
   AssetOwnerProfileCommandResult,
-  AssetOwnerProfileInputPort,
   AssetOwnerProfileListResult,
   AssetOwnerProfileView,
   VerifiedProfileActor,
@@ -86,233 +85,223 @@ function canWriteProfile(
   );
 }
 
-class DefaultAssetOwnerProfileApplication
-  implements AssetOwnerProfileInputPort
-{
-  constructor(private readonly dependencies: AssetOwnerProfileApplicationDependencies) {}
-
-  async createAssetOwnerProfile(
-    actor: VerifiedProfileActor,
-    input: { displayName: string; idempotencyKey: string },
-  ): Promise<AssetOwnerProfileCommandResult> {
-    const name = validateProfileName(input.displayName);
-    if (name.kind === "invalid") {
-      return { kind: "validation-error", code: name.code };
-    }
-
-    return this.dependencies.store.transact<AssetOwnerProfileCommandResult>(
-      (current) => {
-        if (!canWriteProfile(current, actor)) {
-          return {
-            state: current,
-            value: { kind: "forbidden", code: "PROFILE_WRITE_FORBIDDEN" },
-          };
-        }
-
-        const profile: AssetOwnerProfile = {
-          profileId: this.dependencies.ids.nextDependentProfileId(
-            input.idempotencyKey,
-          ),
-          householdId: current.householdId,
-          displayName: name.displayName,
-          profileType: "dependent",
-          lifecycleState: "active",
-          aggregateVersion: 1,
-        };
-        return {
-          state: {
-            ...current,
-            profiles: [...current.profiles, profile],
-            events: [...current.events, profileChangedEvent(profile, true)],
-          },
-          value: { kind: "success", profile: toView(profile) },
-        };
-      },
-    );
+export async function createAssetOwnerProfile(
+  dependencies: AssetOwnerProfileApplicationDependencies,
+  actor: VerifiedProfileActor,
+  input: { displayName: string; idempotencyKey: string },
+): Promise<AssetOwnerProfileCommandResult> {
+  const name = validateProfileName(input.displayName);
+  if (name.kind === "invalid") {
+    return { kind: "validation-error", code: name.code };
   }
 
-  async renameAssetOwnerProfile(
-    actor: VerifiedProfileActor,
-    input: {
-      profileId: string;
-      displayName: string;
-      expectedVersion: number;
-      idempotencyKey: string;
+  return dependencies.store.transact<AssetOwnerProfileCommandResult>(
+    (current) => {
+      if (!canWriteProfile(current, actor)) {
+        return {
+          state: current,
+          value: { kind: "forbidden", code: "PROFILE_WRITE_FORBIDDEN" },
+        };
+      }
+
+      const profile: AssetOwnerProfile = {
+        profileId: dependencies.ids.nextDependentProfileId(
+          input.idempotencyKey,
+        ),
+        householdId: current.householdId,
+        displayName: name.displayName,
+        profileType: "dependent",
+        lifecycleState: "active",
+        aggregateVersion: 1,
+      };
+      return {
+        state: {
+          ...current,
+          profiles: [...current.profiles, profile],
+          events: [...current.events, profileChangedEvent(profile, true)],
+        },
+        value: { kind: "success", profile: toView(profile) },
+      };
     },
-  ): Promise<AssetOwnerProfileCommandResult> {
-    const name = validateProfileName(input.displayName);
-    if (name.kind === "invalid") {
-      return { kind: "validation-error", code: name.code };
-    }
-
-    return this.dependencies.store.transact<AssetOwnerProfileCommandResult>(
-      (current) => {
-        if (!canWriteProfile(current, actor)) {
-          return {
-            state: current,
-            value: { kind: "forbidden", code: "PROFILE_WRITE_FORBIDDEN" },
-          };
-        }
-        const profile = current.profiles.find(
-          (candidate) => candidate.profileId === input.profileId,
-        );
-        if (profile === undefined || profile.householdId !== actor.householdId) {
-          return {
-            state: current,
-            value: {
-              kind: "not-found",
-              resource: "AssetOwnerProfile",
-              id: input.profileId,
-            },
-          };
-        }
-        if (profile.profileType === "member") {
-          return {
-            state: current,
-            value: { kind: "conflict", code: "MEMBER_PROFILE_IMMUTABLE" },
-          };
-        }
-        if (profile.lifecycleState === "archived") {
-          return {
-            state: current,
-            value: { kind: "conflict", code: "OWNER_PROFILE_ARCHIVED" },
-          };
-        }
-        if (profile.aggregateVersion !== input.expectedVersion) {
-          return {
-            state: current,
-            value: {
-              kind: "conflict",
-              code: "OWNER_PROFILE_VERSION_MISMATCH",
-              currentVersion: profile.aggregateVersion,
-            },
-          };
-        }
-
-        const renamed: AssetOwnerProfile = {
-          ...profile,
-          displayName: name.displayName,
-          aggregateVersion: profile.aggregateVersion + 1,
-        };
-        return {
-          state: {
-            ...current,
-            profiles: current.profiles.map((candidate) =>
-              candidate.profileId === renamed.profileId ? renamed : candidate,
-            ),
-            events: [...current.events, profileChangedEvent(renamed, true)],
-          },
-          value: { kind: "success", profile: toView(renamed) },
-        };
-      },
-    );
-  }
-
-  async archiveAssetOwnerProfile(
-    actor: VerifiedProfileActor,
-    input: {
-      profileId: string;
-      expectedVersion: number;
-      idempotencyKey: string;
-    },
-  ): Promise<AssetOwnerProfileCommandResult> {
-    return this.dependencies.store.transact<AssetOwnerProfileCommandResult>(
-      (current) => {
-        if (
-          actor.householdId !== current.householdId ||
-          !hasCapability(actor, "admin.asset-owner-profile.archive")
-        ) {
-          return {
-            state: current,
-            value: { kind: "forbidden", code: "PROFILE_ARCHIVE_FORBIDDEN" },
-          };
-        }
-        const profile = current.profiles.find(
-          (candidate) => candidate.profileId === input.profileId,
-        );
-        if (profile === undefined) {
-          return {
-            state: current,
-            value: {
-              kind: "not-found",
-              resource: "AssetOwnerProfile",
-              id: input.profileId,
-            },
-          };
-        }
-        if (profile.profileType === "member") {
-          return {
-            state: current,
-            value: { kind: "conflict", code: "MEMBER_PROFILE_IMMUTABLE" },
-          };
-        }
-        if (profile.lifecycleState === "archived") {
-          return {
-            state: current,
-            value: { kind: "conflict", code: "OWNER_PROFILE_ARCHIVED" },
-          };
-        }
-        if (profile.aggregateVersion !== input.expectedVersion) {
-          return {
-            state: current,
-            value: {
-              kind: "conflict",
-              code: "OWNER_PROFILE_VERSION_MISMATCH",
-              currentVersion: profile.aggregateVersion,
-            },
-          };
-        }
-
-        const archived: AssetOwnerProfile = {
-          ...profile,
-          lifecycleState: "archived",
-          aggregateVersion: profile.aggregateVersion + 1,
-        };
-        return {
-          state: {
-            ...current,
-            profiles: current.profiles.map((candidate) =>
-              candidate.profileId === archived.profileId ? archived : candidate,
-            ),
-            events: [...current.events, profileChangedEvent(archived, false)],
-          },
-          value: { kind: "success", profile: toView(archived) },
-        };
-      },
-    );
-  }
-
-  async listAssetOwnerProfiles(
-    actor: VerifiedProfileActor,
-    input: { includeArchived?: boolean },
-  ): Promise<AssetOwnerProfileListResult> {
-    const state = await this.dependencies.store.read();
-    const isAdministrator =
-      actor.householdId === state.householdId &&
-      hasCapability(actor, "admin.asset-owner-profile.archive");
-    if (!isActiveMember(state, actor) && !isAdministrator) {
-      return { kind: "forbidden", code: "PROFILE_READ_FORBIDDEN" };
-    }
-    const profiles = state.profiles
-      .filter(
-        (profile) =>
-          profile.householdId === actor.householdId &&
-          (input.includeArchived === true ||
-            profile.lifecycleState === "active"),
-      )
-      .slice()
-      .sort(compareByEntryOrder)
-      .map(toView);
-    return profiles.length === 0
-      ? { kind: "no-data" }
-      : { kind: "success", profiles };
-  }
-
-
+  );
 }
 
-export function createAssetOwnerProfileApplication(
-  dependencies: AssetOwnerProfileApplicationDependencies,
-): AssetOwnerProfileInputPort {
-  return new DefaultAssetOwnerProfileApplication(dependencies);
+export async function renameAssetOwnerProfile(
+  store: AssetOwnerProfileStorePort,
+  actor: VerifiedProfileActor,
+  input: {
+    profileId: string;
+    displayName: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+  },
+): Promise<AssetOwnerProfileCommandResult> {
+  const name = validateProfileName(input.displayName);
+  if (name.kind === "invalid") {
+    return { kind: "validation-error", code: name.code };
+  }
+
+  return store.transact<AssetOwnerProfileCommandResult>(
+    (current) => {
+      if (!canWriteProfile(current, actor)) {
+        return {
+          state: current,
+          value: { kind: "forbidden", code: "PROFILE_WRITE_FORBIDDEN" },
+        };
+      }
+      const profile = current.profiles.find(
+        (candidate) => candidate.profileId === input.profileId,
+      );
+      if (profile === undefined || profile.householdId !== actor.householdId) {
+        return {
+          state: current,
+          value: {
+            kind: "not-found",
+            resource: "AssetOwnerProfile",
+            id: input.profileId,
+          },
+        };
+      }
+      if (profile.profileType === "member") {
+        return {
+          state: current,
+          value: { kind: "conflict", code: "MEMBER_PROFILE_IMMUTABLE" },
+        };
+      }
+      if (profile.lifecycleState === "archived") {
+        return {
+          state: current,
+          value: { kind: "conflict", code: "OWNER_PROFILE_ARCHIVED" },
+        };
+      }
+      if (profile.aggregateVersion !== input.expectedVersion) {
+        return {
+          state: current,
+          value: {
+            kind: "conflict",
+            code: "OWNER_PROFILE_VERSION_MISMATCH",
+            currentVersion: profile.aggregateVersion,
+          },
+        };
+      }
+
+      const renamed: AssetOwnerProfile = {
+        ...profile,
+        displayName: name.displayName,
+        aggregateVersion: profile.aggregateVersion + 1,
+      };
+      return {
+        state: {
+          ...current,
+          profiles: current.profiles.map((candidate) =>
+            candidate.profileId === renamed.profileId ? renamed : candidate,
+          ),
+          events: [...current.events, profileChangedEvent(renamed, true)],
+        },
+        value: { kind: "success", profile: toView(renamed) },
+      };
+    },
+  );
+}
+
+export async function archiveAssetOwnerProfile(
+  store: AssetOwnerProfileStorePort,
+  actor: VerifiedProfileActor,
+  input: {
+    profileId: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+  },
+): Promise<AssetOwnerProfileCommandResult> {
+  return store.transact<AssetOwnerProfileCommandResult>(
+    (current) => {
+      if (
+        actor.householdId !== current.householdId ||
+        !hasCapability(actor, "admin.asset-owner-profile.archive")
+      ) {
+        return {
+          state: current,
+          value: { kind: "forbidden", code: "PROFILE_ARCHIVE_FORBIDDEN" },
+        };
+      }
+      const profile = current.profiles.find(
+        (candidate) => candidate.profileId === input.profileId,
+      );
+      if (profile === undefined) {
+        return {
+          state: current,
+          value: {
+            kind: "not-found",
+            resource: "AssetOwnerProfile",
+            id: input.profileId,
+          },
+        };
+      }
+      if (profile.profileType === "member") {
+        return {
+          state: current,
+          value: { kind: "conflict", code: "MEMBER_PROFILE_IMMUTABLE" },
+        };
+      }
+      if (profile.lifecycleState === "archived") {
+        return {
+          state: current,
+          value: { kind: "conflict", code: "OWNER_PROFILE_ARCHIVED" },
+        };
+      }
+      if (profile.aggregateVersion !== input.expectedVersion) {
+        return {
+          state: current,
+          value: {
+            kind: "conflict",
+            code: "OWNER_PROFILE_VERSION_MISMATCH",
+            currentVersion: profile.aggregateVersion,
+          },
+        };
+      }
+
+      const archived: AssetOwnerProfile = {
+        ...profile,
+        lifecycleState: "archived",
+        aggregateVersion: profile.aggregateVersion + 1,
+      };
+      return {
+        state: {
+          ...current,
+          profiles: current.profiles.map((candidate) =>
+            candidate.profileId === archived.profileId ? archived : candidate,
+          ),
+          events: [...current.events, profileChangedEvent(archived, false)],
+        },
+        value: { kind: "success", profile: toView(archived) },
+      };
+    },
+  );
+}
+
+export async function listAssetOwnerProfiles(
+  store: AssetOwnerProfileStorePort,
+  actor: VerifiedProfileActor,
+  input: { includeArchived?: boolean },
+): Promise<AssetOwnerProfileListResult> {
+  const state = await store.read();
+  const isAdministrator =
+    actor.householdId === state.householdId &&
+    hasCapability(actor, "admin.asset-owner-profile.archive");
+  if (!isActiveMember(state, actor) && !isAdministrator) {
+    return { kind: "forbidden", code: "PROFILE_READ_FORBIDDEN" };
+  }
+  const profiles = state.profiles
+    .filter(
+      (profile) =>
+        profile.householdId === actor.householdId &&
+        (input.includeArchived === true ||
+          profile.lifecycleState === "active"),
+    )
+    .slice()
+    .sort(compareByEntryOrder)
+    .map(toView);
+  return profiles.length === 0
+    ? { kind: "no-data" }
+    : { kind: "success", profiles };
 }

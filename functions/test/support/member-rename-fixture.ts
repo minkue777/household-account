@@ -29,12 +29,7 @@ export interface MemberRenameFixture {
     displayName: string;
     aggregateVersion: number;
   }[];
-  stableReferences: Readonly<{
-    transactions: readonly string[];
-    assets: readonly string[];
-    registeredCards: readonly string[];
-    notificationEndpoints: readonly string[];
-  }>;
+
 }
 
 export interface MemberRenameSnapshot {
@@ -48,7 +43,6 @@ export interface MemberRenameSnapshot {
     linkedMemberId: string;
     displayName: string;
   }[];
-  stableReferences: MemberRenameFixture["stableReferences"];
 }
 
 export interface MemberRenameFixtureSubject extends MemberRenameInputPort {
@@ -138,20 +132,10 @@ class FixtureMemberRenameStore implements MemberRenameStorePort {
 }
 
 class FixtureMemberRenameDriver implements MemberRenameFixtureSubject {
-  private readonly stableReferences: MemberRenameFixture["stableReferences"];
-
   constructor(
     private readonly application: MemberRenameInputPort,
     private readonly store: FixtureMemberRenameStore,
-    fixture: MemberRenameFixture,
-  ) {
-    this.stableReferences = {
-      transactions: [...fixture.stableReferences.transactions],
-      assets: [...fixture.stableReferences.assets],
-      registeredCards: [...fixture.stableReferences.registeredCards],
-      notificationEndpoints: [...fixture.stableReferences.notificationEndpoints],
-    };
-  }
+  ) {}
 
   renameSelf(...args: Parameters<MemberRenameInputPort["renameSelf"]>) {
     return this.application.renameSelf(...args);
@@ -166,12 +150,6 @@ class FixtureMemberRenameDriver implements MemberRenameFixtureSubject {
         aggregateVersion,
       })),
       memberOwnerProfiles: state.memberOwnerProfiles.map((profile) => ({ ...profile })),
-      stableReferences: {
-        transactions: [...this.stableReferences.transactions],
-        assets: [...this.stableReferences.assets],
-        registeredCards: [...this.stableReferences.registeredCards],
-        notificationEndpoints: [...this.stableReferences.notificationEndpoints],
-      },
     };
   }
 
@@ -187,6 +165,5 @@ export function createMemberRenameFixtureSubject(
   return new FixtureMemberRenameDriver(
     createMemberRenameApplication({ store }),
     store,
-    fixture,
   );
 }

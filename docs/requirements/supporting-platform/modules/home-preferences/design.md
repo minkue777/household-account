@@ -225,3 +225,7 @@ Theme에 형식적인 Domain 폴더를 만들지 않는다.
 4. V2 Preferences 저장소를 shadow-read/backfill한다.
 5. HOME-002의 지역화폐 선택 UI와 Command를 연결한다.
 6. `HomeCardSelectionPolicy`와 versioned `SaveHomeConfiguration`을 구현하고 설정 화면의 왼쪽·오른쪽 선택 UI를 연결한 뒤 `T-HOME-002`를 활성화한다.
+
+### 명령별 조회 범위 (2026-10-05)
+
+홈 카드 변경은 preference와 household만 조회하며 지역화폐 유형 목록을 읽지 않는다. 기존 receipt는 먼저 재생한다. 지역화폐 선택은 현재 버전 검증 후 필요한 유형 목록을 같은 transaction에서 읽으며 canonical/legacy query를 순차 수행한다. 상태·mirror·receipt·Outbox 원자성은 동일하다. [검증 추적](../../../../operations/access-command-simplicity-2026-10-05.md).

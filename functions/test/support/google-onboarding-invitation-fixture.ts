@@ -1,4 +1,4 @@
-import { createGoogleOnboardingApplication } from "../../src/contexts/access/google-onboarding/application/googleOnboardingApplication";
+import { createHouseholdWithSelf, createInvitationCode, joinHouseholdAsSelf } from "../../src/contexts/access/google-onboarding/application/googleOnboardingApplication";
 import type {
   GoogleOnboardingClockPort,
   GoogleOnboardingIdentityPort,
@@ -98,6 +98,14 @@ class FixtureGoogleOnboardingStore implements GoogleOnboardingStorePort {
     return cloneState(this.stateValue);
   }
 
+  finalizeInitialization(householdId: string, status: "pending" | "completed" | "failed") {
+    return this.transact(current => ({
+      state: { ...current, initializations: current.initializations.map(value =>
+        value.householdId === householdId ? { ...value, status } : value) },
+      value: status,
+    }));
+  }
+
   async transact<T>(
     operation: (current: GoogleOnboardingState) => GoogleOnboardingMutation<T>,
   ): Promise<T> {
@@ -182,10 +190,6 @@ class FixtureGoogleOnboardingDriver implements GoogleOnboardingFixtureSubject {
     this.clock.setCurrentTime(instant);
   }
 
-  resolveSignedInUser(...args: Parameters<GoogleOnboardingInputPort["resolveSignedInUser"]>) {
-    return this.application.resolveSignedInUser(...args);
-  }
-
   createHouseholdWithSelf(...args: Parameters<GoogleOnboardingInputPort["createHouseholdWithSelf"]>) {
     return this.application.createHouseholdWithSelf(...args);
   }
@@ -238,14 +242,16 @@ export function createGoogleOnboardingFixtureSubject(
 ): GoogleOnboardingFixtureSubject {
   const store = new FixtureGoogleOnboardingStore();
   const clock = new FixtureGoogleOnboardingClock();
-  const application = createGoogleOnboardingApplication({
-    store,
-    clock,
+  const dependencies = {
+    store, clock,
     identities: new FixtureGoogleOnboardingIdentities(),
     invitations: new FixtureInvitationSecurity(),
-    initializer: new FixtureHouseholdInitializer(
-      fixture.initializationOutcome ?? "completed",
-    ),
-  });
+    initializer: new FixtureHouseholdInitializer(fixture.initializationOutcome ?? "completed"),
+  };
+  const application: GoogleOnboardingInputPort = {
+    createHouseholdWithSelf: (...args) => createHouseholdWithSelf(dependencies, ...args),
+    createInvitationCode: (...args) => createInvitationCode(dependencies, ...args),
+    joinHouseholdAsSelf: (...args) => joinHouseholdAsSelf(dependencies, ...args),
+  };
   return new FixtureGoogleOnboardingDriver(application, store, clock);
 }

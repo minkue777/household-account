@@ -9,10 +9,6 @@ export interface MembershipView {
   capabilities: readonly string[];
 }
 
-export type ResolveSignedInUserResult =
-  | { kind: "membership-found"; membership: MembershipView }
-  | { kind: "first-visit-required"; choices: readonly ["create", "join"] };
-
 export type CreateHouseholdResult =
   | {
       kind: "success";
@@ -58,9 +54,6 @@ export type JoinHouseholdResult =
   | { kind: "forbidden"; code: string };
 
 export interface GoogleOnboardingInputPort {
-  resolveSignedInUser(
-    principal: VerifiedGooglePrincipal,
-  ): Promise<ResolveSignedInUserResult>;
   createHouseholdWithSelf(
     principal: VerifiedGooglePrincipal,
     input: {

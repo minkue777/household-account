@@ -13,8 +13,6 @@ import {
 
 /**
  * 자기 Member 표시 이름 변경의 공개 Application 경계입니다.
- * stableReferences는 다른 Context가 보유한 memberId 참조의 최종 지문이며
- * 각 저장소 호출 여부처럼 구현에 종속된 상호작용은 노출하지 않습니다.
  */
 export interface MemberRenameSubject extends MemberRenameInputPort {
   snapshot(): Promise<MemberRenameSnapshot>;
@@ -43,12 +41,6 @@ const fixture = (): MemberRenameFixture => ({
       aggregateVersion: 2,
     },
   ],
-  stableReferences: {
-    transactions: ["transaction:member-min"],
-    assets: ["asset:member-min"],
-    registeredCards: ["card:member-min"],
-    notificationEndpoints: ["endpoint:member-min"],
-  },
 });
 
 export function createSubject(): MemberRenameSubject {
@@ -58,8 +50,6 @@ export function createSubject(): MemberRenameSubject {
 describe("자기 가구원 표시 이름 변경 공개 계약", () => {
   it("[T-HH-004][HH-009] 자기 이름 변경은 안정 ID를 유지하고 Member와 연결 명의자의 이름만 원자 변경한다", async () => {
     const subject = createSubject();
-    const before = await subject.snapshot();
-
     const result = await subject.renameSelf(actor, {
       displayName: "  민규 새 이름  ",
       expectedVersion: 3,
@@ -94,7 +84,6 @@ describe("자기 가구원 표시 이름 변경 공개 계약", () => {
         },
       ]),
     );
-    expect(after.stableReferences).toEqual(before.stableReferences);
     expect(await subject.publishedEvents()).toEqual([
       {
         eventType: "MemberRenamed.v1",

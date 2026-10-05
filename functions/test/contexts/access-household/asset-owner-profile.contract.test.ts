@@ -57,7 +57,6 @@ const baseFixture = (
     },
   ],
   dependentProfiles: [],
-  ownerReferences: [],
   ...overrides,
 });
 
@@ -170,7 +169,6 @@ describe("AssetOwnerProfile household/dependent identity 공개 계약", () => {
     expect(profile).not.toHaveProperty("capabilities");
 
     const after = await subject.snapshot();
-    expect(after.members).toEqual(before.members);
     expect(after.memberships).toEqual(before.memberships);
     expect(after.profiles).toHaveLength(before.profiles.length + 1);
     const event = (await subject.publishedEvents()).find(
@@ -189,7 +187,7 @@ describe("AssetOwnerProfile household/dependent identity 공개 계약", () => {
     expect(event?.payload).not.toHaveProperty("principalUid");
   });
 
-  it("[T-AST-006][T-HH-006][HH-011] dependent 이름 변경은 profileId와 기존 자산의 owner reference를 유지한다", async () => {
+  it("[T-AST-006][T-HH-006][HH-011] dependent 이름 변경은 profileId를 유지한다", async () => {
     const existingProfile: AssetOwnerProfileView = {
       profileId: "profile-dependent-jia",
       householdId,
@@ -201,13 +199,8 @@ describe("AssetOwnerProfile household/dependent identity 공개 계약", () => {
     const subject = createSubject(
       baseFixture({
         dependentProfiles: [existingProfile],
-        ownerReferences: [
-          { referenceId: "asset-child-account", profileId: existingProfile.profileId },
-          { referenceId: "snapshot-2026-07-18", profileId: existingProfile.profileId },
-        ],
       }),
     );
-    const referenceBefore = await subject.snapshot();
 
     const result = await subject.renameAssetOwnerProfile(memberActor, {
       profileId: existingProfile.profileId,
@@ -225,7 +218,6 @@ describe("AssetOwnerProfile household/dependent identity 공개 계약", () => {
       },
     });
     const after = await subject.snapshot();
-    expect(after.ownerReferences).toEqual(referenceBefore.ownerReferences);
     expect(
       after.profiles.find(
         (profile) => profile.profileId === existingProfile.profileId,

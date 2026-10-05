@@ -18,6 +18,27 @@ function command(sequence: number, commandName: string) {
 }
 
 describe("Firebase home preference atomic adapter", () => {
+  it("카드 변경·재전송·버전 충돌은 잔액을 읽지 않고 실제 유형 선택만 두 저장소를 읽는다", async () => {
+    const memory = new InMemoryFirestore();
+    memory.seed("households/house-1", { lifecycleState: "active" });
+    memory.seed("households/house-1/localCurrencyBalances/gyeonggi", { localCurrencyType: "gyeonggi", balance: 0 });
+    const application = createHomePreferenceRuntimeApplication(new FirebaseHomePreferenceAtomicStore(memory as unknown as firestore.Firestore));
+    const update = { ...command(1, "home.update-summary-preferences.v1"), leftCard: "monthlySpent", rightCard: "yearlySpent" };
+    expect(await application.updateSummary(update)).toMatchObject({ kind: "success" });
+    expect(memory.transactionReads().filter(read => read.kind === "query")).toEqual([]);
+    memory.clearTransactionReads();
+    expect(await application.updateSummary(update)).toMatchObject({ kind: "success" });
+    expect(memory.transactionReads()).toHaveLength(1);
+    const select = { ...command(2, "home.select-local-currency.v1"), localCurrencyTypeId: "gyeonggi" };
+    memory.clearTransactionReads();
+    expect(await application.selectLocalCurrency({ ...select, expectedVersion: 0 })).toMatchObject({ code: "HOME_CONFIGURATION_VERSION_MISMATCH" });
+    expect(memory.transactionReads().filter(read => read.kind === "query")).toEqual([]);
+    memory.clearTransactionReads();
+    expect(await application.selectLocalCurrency(select)).toMatchObject({ kind: "success" });
+    expect(memory.transactionReads().filter(read => read.kind === "query").map(read => read.path).sort())
+      .toEqual(["balances", "households/house-1/localCurrencyBalances"]);
+  });
+
   it("저장된 지역화폐 선택은 카드 구성 변경과 유형 추가에도 유지하며 canonical·legacy·Outbox를 원자 갱신한다", async () => {
     const memory = new InMemoryFirestore();
     memory.seed("households/house-1", {

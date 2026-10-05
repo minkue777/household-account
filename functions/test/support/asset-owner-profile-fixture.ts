@@ -1,4 +1,4 @@
-import { createAssetOwnerProfileApplication } from "../../src/contexts/access/asset-owner-profile/application/assetOwnerProfileApplication";
+import { createAssetOwnerProfile, renameAssetOwnerProfile, archiveAssetOwnerProfile, listAssetOwnerProfiles } from "../../src/contexts/access/asset-owner-profile/application/assetOwnerProfileApplication";
 import type {
   AssetOwnerProfileIdPort,
   AssetOwnerProfileMutation,
@@ -26,29 +26,15 @@ export interface AssetOwnerProfileFixture {
   dependentProfiles?: readonly (AssetOwnerProfileView & {
     enteredAt?: string;
   })[];
-  ownerReferences?: readonly {
-    referenceId: string;
-    profileId: string;
-  }[];
 }
 
 export interface AssetOwnerProfileSnapshot {
   profiles: readonly AssetOwnerProfileView[];
-  members: readonly {
-    principalUid: string;
-    memberId: string;
-    displayName: string;
-    aggregateVersion: number;
-  }[];
   memberships: readonly {
     principalUid: string;
     memberId: string;
     householdId: string;
     status: "active";
-  }[];
-  ownerReferences: readonly {
-    referenceId: string;
-    profileId: string;
   }[];
 }
 
@@ -63,7 +49,6 @@ function cloneState(state: AssetOwnerProfileState): AssetOwnerProfileState {
   return {
     householdId: state.householdId,
     profiles: state.profiles.map((profile) => ({ ...profile })),
-    members: state.members.map((member) => ({ ...member })),
     memberships: state.memberships.map((membership) => ({ ...membership })),
     events: state.events.map((event) => ({
       ...event,
@@ -106,7 +91,6 @@ class FixtureAssetOwnerProfileStore implements AssetOwnerProfileStorePort {
             aggregateVersion: profile.aggregateVersion,
           })),
       ],
-      members: fixture.members.map((member) => ({ ...member })),
       memberships: fixture.members.map((member) => ({
         principalUid: member.principalUid,
         memberId: member.memberId,
@@ -153,20 +137,10 @@ class FixtureAssetOwnerProfileIds implements AssetOwnerProfileIdPort {
 class FixtureAssetOwnerProfileDriver
   implements AssetOwnerProfileFixtureSubject
 {
-  private readonly ownerReferences: readonly {
-    referenceId: string;
-    profileId: string;
-  }[];
-
   constructor(
     private readonly application: AssetOwnerProfileInputPort,
     private readonly store: FixtureAssetOwnerProfileStore,
-    fixture: AssetOwnerProfileFixture,
-  ) {
-    this.ownerReferences = (fixture.ownerReferences ?? []).map((reference) => ({
-      ...reference,
-    }));
-  }
+  ) {}
 
   createAssetOwnerProfile(...args: Parameters<AssetOwnerProfileInputPort["createAssetOwnerProfile"]>) {
     return this.application.createAssetOwnerProfile(...args);
@@ -190,14 +164,7 @@ class FixtureAssetOwnerProfileDriver
     const state = await this.store.read();
     return {
       profiles: state.profiles.map((profile) => ({ ...profile })),
-      members: state.members.map((member) => ({
-        principalUid: member.principalUid,
-        memberId: member.memberId,
-        displayName: member.displayName,
-        aggregateVersion: member.aggregateVersion,
-      })),
       memberships: state.memberships.map((membership) => ({ ...membership })),
-      ownerReferences: this.ownerReferences.map((reference) => ({ ...reference })),
     };
   }
 
@@ -214,9 +181,12 @@ export function createAssetOwnerProfileFixtureSubject(
   fixture: AssetOwnerProfileFixture,
 ): AssetOwnerProfileFixtureSubject {
   const store = new FixtureAssetOwnerProfileStore(fixture);
-  const application = createAssetOwnerProfileApplication({
-    store,
-    ids: new FixtureAssetOwnerProfileIds(),
-  });
-  return new FixtureAssetOwnerProfileDriver(application, store, fixture);
+  const dependencies = { store, ids: new FixtureAssetOwnerProfileIds() };
+  const application: AssetOwnerProfileInputPort = {
+    createAssetOwnerProfile: (...args) => createAssetOwnerProfile(dependencies, ...args),
+    renameAssetOwnerProfile: (...args) => renameAssetOwnerProfile(store, ...args),
+    archiveAssetOwnerProfile: (...args) => archiveAssetOwnerProfile(store, ...args),
+    listAssetOwnerProfiles: (...args) => listAssetOwnerProfiles(store, ...args),
+  };
+  return new FixtureAssetOwnerProfileDriver(application, store);
 }

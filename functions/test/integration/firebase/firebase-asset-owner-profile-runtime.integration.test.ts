@@ -110,7 +110,24 @@ describeWithFirestoreEmulator("자산 명의자 production runtime", () => {
     if (app !== undefined) await deleteApp(app);
   });
 
+  it("[T-HH-006] dependent 생성은 실제 member·membership 문서를 추가하거나 바꾸지 않는다", async () => {
+    const household = database.doc(`households/${HOUSEHOLD_ID}`);
+    const identity = async () => Promise.all(["members", "memberships"].map(async collection =>
+      (await household.collection(collection).get()).docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+    const before = await identity();
+    await createAccessHouseholdCommandHandlers(database).get("access.create-asset-owner-profile.v1")!.execute(command({
+      name: "access.create-asset-owner-profile.v1", id: "dependent-without-login", principalUid: memberActor.principalUid,
+      actor: memberActor, payload: { displayName: "새 명의" },
+    }));
+    expect(await identity()).toEqual(before);
+    expect((await household.collection("assetOwnerProfiles").get()).size).toBe(2);
+  });
+
   it("일반 멤버 rename은 profileId를 유지해 실제 문서를 version과 함께 갱신한다", async () => {
+    const references = ["assets/account", "assetSnapshots/day"].map(path =>
+      database.doc(`households/${HOUSEHOLD_ID}/${path}`));
+    await Promise.all(references.map(ref => ref.set({ ownerProfileId: "profile-dependent-jia", amount: 42, aggregateVersion: 7 })));
+    const before = await Promise.all(references.map(async ref => (await ref.get()).data()));
     const handlers = createAccessHouseholdCommandHandlers(database);
     const result = await handlers.get("access.rename-asset-owner-profile.v1")!.execute(
       command({
@@ -125,6 +142,7 @@ describeWithFirestoreEmulator("자산 명의자 production runtime", () => {
         },
       }),
     );
+    expect(await Promise.all(references.map(async ref => (await ref.get()).data()))).toEqual(before);
     expect(result).toMatchObject({
       profileId: "profile-dependent-jia",
       displayName: "지아(변경)",

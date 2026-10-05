@@ -10,7 +10,6 @@ export interface GoogleOnboardingMutation<T> {
 }
 
 export interface GoogleOnboardingStorePort {
-  read(): Promise<GoogleOnboardingState>;
   transact<T>(
     operation: (current: GoogleOnboardingState) => GoogleOnboardingMutation<T>,
   ): Promise<T>;
@@ -33,5 +32,12 @@ export interface InvitationSecurityPort {
 export interface HouseholdInitializationPort {
   initialize(
     householdId: string,
+  ): Promise<"pending" | "completed" | "failed">;
+}
+
+export interface HouseholdInitializationStorePort {
+  finalizeInitialization(
+    householdId: string,
+    status: "pending" | "completed" | "failed",
   ): Promise<"pending" | "completed" | "failed">;
 }

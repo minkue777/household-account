@@ -8,7 +8,6 @@ import type {
   HomePreferenceAtomicStorePort,
   HomePreferenceCommandMetadata,
   HomePreferenceCommandState,
-  HomePreferenceMutation,
 } from "../../../platform/home-preferences/application/ports/out/homePreferenceAtomicStorePort";
 import {
   DEFAULT_HOME_CONFIGURATION,
@@ -187,10 +186,7 @@ export class FirebaseHomePreferenceAtomicStore
 
   async transact(
     metadata: HomePreferenceCommandMetadata,
-    decide: (
-      current: HomePreferenceCommandState,
-      availableLocalCurrencyTypes: ReadonlySet<string>,
-    ) => HomePreferenceMutation | { readonly kind: "rejected"; readonly code: string },
+    decide: Parameters<HomePreferenceAtomicStorePort["transact"]>[1],
   ): Promise<
     | HomePreferenceAtomicResult
     | { readonly kind: "rejected"; readonly code: string }
@@ -203,21 +199,7 @@ export class FirebaseHomePreferenceAtomicStore
 
     try {
       return await this.database.runTransaction(async (transaction) => {
-        const [
-          receiptSnapshot,
-          preferenceSnapshot,
-          householdSnapshot,
-          canonicalBalanceSnapshot,
-          legacyBalanceSnapshot,
-        ] = await Promise.all([
-          transaction.get(receipt),
-          transaction.get(preference),
-          transaction.get(household),
-          transaction.get(canonicalBalances),
-          transaction.get(
-            legacyBalances.where("householdId", "==", metadata.householdId),
-          ),
-        ]);
+        const receiptSnapshot = await transaction.get(receipt);
         if (receiptSnapshot.exists) {
           if (receiptSnapshot.data()?.payloadFingerprint !== metadata.payloadFingerprint) {
             return { kind: "payload-mismatch" } as const;
@@ -229,6 +211,7 @@ export class FirebaseHomePreferenceAtomicStore
             >,
           } as const;
         }
+        const [preferenceSnapshot, householdSnapshot] = await transaction.getAll(preference, household);
         if (!householdSnapshot.exists) {
           return { kind: "rejected", code: "HOUSEHOLD_NOT_FOUND" } as const;
         }
@@ -238,11 +221,11 @@ export class FirebaseHomePreferenceAtomicStore
           canonical: preferenceSnapshot,
           household: householdSnapshot,
         });
-        const availableTypes = currencyTypes(
-          canonicalBalanceSnapshot.docs,
-          legacyBalanceSnapshot.docs,
-        );
-        const mutation = decide(current, availableTypes);
+        const mutation = await decide(current, async () => {
+          const canonical = await transaction.get(canonicalBalances);
+          const legacy = await transaction.get(legacyBalances.where("householdId", "==", metadata.householdId));
+          return currencyTypes(canonical.docs, legacy.docs);
+        });
         if ("kind" in mutation) return mutation;
 
         if (mutation.writes) {

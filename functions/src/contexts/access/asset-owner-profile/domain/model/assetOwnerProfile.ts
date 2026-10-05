@@ -13,14 +13,6 @@ export interface AssetOwnerProfile {
   aggregateVersion: number;
 }
 
-export interface HouseholdMember {
-  principalUid: string;
-  memberId: string;
-  displayName: string;
-  profileId: string;
-  aggregateVersion: number;
-}
-
 export interface HouseholdMembership {
   principalUid: string;
   memberId: string;
@@ -42,7 +34,6 @@ export interface AssetOwnerProfileChangedEvent {
 export interface AssetOwnerProfileState {
   householdId: string;
   profiles: readonly AssetOwnerProfile[];
-  members: readonly HouseholdMember[];
   memberships: readonly HouseholdMembership[];
   events: readonly AssetOwnerProfileChangedEvent[];
 }
