@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createRegisteredCardCommandBoundaryFixture } from "../../../support/registered-card-command-boundary-fixture";
+import { HOUSEHOLD_COMMAND_NAMES } from "../../../../src/bootstrap/commands/householdCommandManifest";
 
 interface CardActor {
   principalUid: string;
@@ -18,13 +19,6 @@ interface RegisteredCardRecord {
   order: number;
   version: number;
   lifecycle: "active" | "retired";
-}
-
-interface HistoricalCardEvidence {
-  transactionId: string;
-  householdId: string;
-  cardCompanyLabel: string;
-  lastFour?: string;
 }
 
 type CardCommandResult =
@@ -52,7 +46,6 @@ interface RegisteredCardCommandState {
     lastFour?: string;
     cardId: string;
   }[];
-  historicalEvidence: readonly HistoricalCardEvidence[];
   collectionVersions: Readonly<Record<string, number>>;
 }
 
@@ -84,17 +77,11 @@ export interface RegisteredCardCommandBoundarySubject {
     expectedCollectionVersion: number;
     commitOutcome?: "success" | "failure";
   }): CardCommandResult;
-  searchHistorical(input: {
-    actor: CardActor;
-    query: string;
-  }): readonly HistoricalCardEvidence[];
-  availableCommands(): readonly string[];
   state(): RegisteredCardCommandState;
 }
 
 export function createSubject(fixture?: {
   cards?: readonly RegisteredCardRecord[];
-  historicalEvidence?: readonly HistoricalCardEvidence[];
   collectionVersions?: Readonly<Record<string, number>>;
 }): RegisteredCardCommandBoundarySubject {
   return createRegisteredCardCommandBoundaryFixture(fixture);
@@ -106,6 +93,14 @@ const actor: CardActor = {
   memberId: "member-a",
   capability: "paymentConfiguration:manage",
 };
+
+it("[T-CARD-005][CARD-005] 실제 공개 명령에는 일반 카드 복구가 없다", () => {
+  const names = HOUSEHOLD_COMMAND_NAMES.filter(name => name.startsWith("payment-configuration.") && /card/i.test(name));
+  expect(names).toEqual([
+    "payment-configuration.register-card.v1", "payment-configuration.update-card.v1",
+    "payment-configuration.delete-card.v1", "payment-configuration.reorder-cards.v1",
+  ]);
+});
 
 function card(
   cardId: string,
@@ -445,45 +440,7 @@ describe("등록 카드 Command 권한·CRUD·원자 재정렬 공개 계약", (
     },
   );
 
-  it("[T-CARD-005][CARD-005] 끝 번호 수정·퇴역 뒤에도 과거 거래의 카드사·끝 번호 검색 증거는 변하지 않는다", () => {
-    const original = card("card-0001", 0, { lastFour: "1234" });
-    const evidence: HistoricalCardEvidence = {
-      transactionId: "expense-old",
-      householdId: "household-a",
-      cardCompanyLabel: "국민",
-      lastFour: "1234",
-    };
-    const subject = createSubject({ cards: [original], historicalEvidence: [evidence] });
 
-    expect(
-      subject.updateLastFour({
-        actor,
-        cardId: original.cardId,
-        rawLastFour: "5678",
-        expectedVersion: 1,
-      }),
-    ).toMatchObject({ kind: "Updated", card: { lastFour: "5678" } });
-    expect(
-      subject.retire({
-        actor,
-        cardId: original.cardId,
-        expectedVersion: 2,
-      }),
-    ).toMatchObject({ kind: "Retired" });
-    expect(subject.searchHistorical({ actor, query: "국민(1234)" })).toEqual([
-      evidence,
-    ]);
-    expect(subject.state().historicalEvidence).toEqual([evidence]);
-  });
-
-  it("[T-CARD-005][CARD-005] 공개 Command 목록에는 retired 카드를 일반 사용자가 복구하는 기능이 없다", () => {
-    expect(createSubject().availableCommands()).toEqual([
-      "RegisterCard",
-      "UpdateRegisteredCardLastFour",
-      "RetireRegisteredCard",
-      "ReorderCards",
-    ]);
-  });
 
   it("같은 owner·카드사·끝 번호의 활성 카드는 unique claim 충돌로 중복 등록하지 않는다", () => {
     const original = card("card-0001", 0, { lastFour: "1234" });
@@ -581,16 +538,5 @@ describe("등록 카드 Command 권한·CRUD·원자 재정렬 공개 계약", (
     expect(subject.state().cards).toHaveLength(1);
   });
 
-  it("과거 카드 증거는 카드사 전체명이나 끝 네 자리만으로도 검색한다", () => {
-    const evidence: HistoricalCardEvidence = {
-      transactionId: "expense-old",
-      householdId: "household-a",
-      cardCompanyLabel: "삼성카드",
-      lastFour: "3456",
-    };
-    const subject = createSubject({ historicalEvidence: [evidence] });
-
-    expect(subject.searchHistorical({ actor, query: "삼성카드" })).toEqual([evidence]);
-    expect(subject.searchHistorical({ actor, query: "3456" })).toEqual([evidence]);
-  });
 });
+

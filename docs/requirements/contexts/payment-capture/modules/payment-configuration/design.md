@@ -281,6 +281,8 @@ android/core/contracts/                                   # 생성 Kotlin DTO; �
 
 추가 공통 suite는 동일 idempotency key의 동일·상이 payload, 타 가구 Actor, stale version, callback 2회 실행, Repository 장애와 빈 결과 구분을 검증합니다.
 
+등록 카드와 가맹점 변경 계산은 현재 상태에서 `{state, value, writes}`를 반환합니다. 임시 저장소나 mutable application을 만들지 않으며 실제 Firebase adapter만 transaction과 receipt를 소유합니다. 카테고리 보관의 페이지 계산도 같은 원칙을 따르고, 페이지 재생은 DB receipt로 처리합니다. 카드의 과거 거래 보존은 실제 저장된 거래 재조회로, 과거 카드 검색은 Web 원장 검색 경로로 검증합니다.
+
 ## 12. 확정 정책과 구현 순서
 
 - 가맹점 규칙 선택·중복 정책은 [DEC-042](../../../../governance/decisions.md#dec-042)로 확정되었습니다. `MerchantRuleSelectionPolicy`는 좁은 match type을 먼저 고르고 non-exact 유형 안에서 고유 priority를 적용합니다.

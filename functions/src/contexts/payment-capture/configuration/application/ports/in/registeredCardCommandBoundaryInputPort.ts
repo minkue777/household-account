@@ -16,13 +16,6 @@ export interface RegisteredCardCommandRecord {
   readonly lifecycle: "active" | "retired";
 }
 
-export interface HistoricalCardEvidence {
-  readonly transactionId: string;
-  readonly householdId: string;
-  readonly cardCompanyLabel: string;
-  readonly lastFour?: string;
-}
-
 export type RegisteredCardCommandResult =
   | {
       readonly kind: "Created" | "Updated" | "Retired";
@@ -64,7 +57,6 @@ export interface RegisteredCardCommandState {
     readonly lastFour?: string;
     readonly cardId: string;
   }[];
-  readonly historicalEvidence: readonly HistoricalCardEvidence[];
   readonly collectionVersions: Readonly<Record<string, number>>;
 }
 
@@ -81,25 +73,16 @@ export interface RegisteredCardCommandBoundaryInputPort {
     readonly cardId: string;
     readonly rawLastFour?: string;
     readonly expectedVersion: number;
-    readonly commitOutcome?: "success" | "failure";
   }): RegisteredCardCommandResult;
   retire(input: {
     readonly actor: RegisteredCardCommandActor;
     readonly cardId: string;
     readonly expectedVersion: number;
-    readonly commitOutcome?: "success" | "failure";
   }): RegisteredCardCommandResult;
   reorder(input: {
     readonly actor: RegisteredCardCommandActor;
     readonly ownerMemberId: string;
     readonly orderedCardIds: readonly string[];
     readonly expectedCollectionVersion: number;
-    readonly commitOutcome?: "success" | "failure";
   }): RegisteredCardCommandResult;
-  searchHistorical(input: {
-    readonly actor: RegisteredCardCommandActor;
-    readonly query: string;
-  }): readonly HistoricalCardEvidence[];
-  availableCommands(): readonly string[];
-  state(): RegisteredCardCommandState;
 }

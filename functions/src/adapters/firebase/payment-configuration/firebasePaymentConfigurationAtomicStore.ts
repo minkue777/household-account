@@ -468,7 +468,6 @@ export class FirebasePaymentConfigurationAtomicStore
               ...(card.lastFour === undefined ? {} : { lastFour: card.lastFour }),
               cardId: card.cardId,
             })),
-          historicalEvidence: [],
           collectionVersions: {},
         };
         const mutation = decide(current);
@@ -590,7 +589,6 @@ export class FirebasePaymentConfigurationAtomicStore
               ...(card.lastFour === undefined ? {} : { lastFour: card.lastFour }),
               cardId: card.cardId,
             })),
-          historicalEvidence: [],
           collectionVersions: collectionVersions(metaSnapshot.data()),
         };
         const mutation = decide(current);

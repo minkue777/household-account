@@ -1,5 +1,5 @@
 import type { PaymentConfigurationAtomicStorePort } from "./ports/out/paymentConfigurationAtomicStorePort";
-import { createMerchantRuleCategoryRemapApplication } from "./merchantRuleCategoryRemapApplication";
+import { remapMerchantRulePage } from "./merchantRuleCategoryRemapApplication";
 
 export function createMerchantRuleCategoryArchiveApplication(store: PaymentConfigurationAtomicStorePort) {
   return {
@@ -13,19 +13,15 @@ export function createMerchantRuleCategoryArchiveApplication(store: PaymentConfi
           payloadFingerprint: JSON.stringify([input.householdId, input.processId, input.sourceCategoryId, input.destinationCategoryId, pageCursor]),
           householdId: input.householdId, actorMemberId: "system:category-archive", occurredAt: input.occurredAt,
         }, (current) => {
-          const application = createMerchantRuleCategoryRemapApplication(current.rules);
-          const page = application.remapPage({ householdId: input.householdId, archivedCategoryId: input.sourceCategoryId, defaultCategoryId: input.destinationCategoryId, processId: input.processId, cursor: pageCursor, limit: 100 });
-          if (page.kind !== "PageApplied") throw new Error(page.code);
-          const updated = new Map(application.state().rules.map((rule) => [rule.ruleId, rule]));
+          const { result: page, rules, changedTypes } = remapMerchantRulePage(current.rules, { householdId: input.householdId, archivedCategoryId: input.sourceCategoryId, defaultCategoryId: input.destinationCategoryId, processId: input.processId, cursor: pageCursor, limit: 100 });
           const collectionVersions = { ...current.collectionVersions };
-          const changedTypes = new Set(current.rules.filter((rule) => updated.get(rule.ruleId)?.version !== rule.version).map((rule) => rule.matchType));
           for (const type of changedTypes) if (type !== "exact") {
             const key = `${input.householdId}:${type}`;
             collectionVersions[key] = (collectionVersions[key] ?? 0) + 1;
           }
           return {
             writes: page.changedCount > 0,
-            state: { ...current, collectionVersions, rules: current.rules.map((rule) => ({ ...rule, ...updated.get(rule.ruleId) })) },
+            state: { ...current, collectionVersions, rules },
             value: { kind: "CategoryReferencesRemapped" as const, changedCount: page.changedCount, nextCursor: page.nextCursor },
           };
         });

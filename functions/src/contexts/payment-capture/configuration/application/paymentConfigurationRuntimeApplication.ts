@@ -12,13 +12,11 @@ import type {
   MerchantRuleCommandState,
   MerchantRuleMapping,
 } from "./ports/in/merchantRuleCommandInputPort";
-import { createRegisteredCardCommandBoundaryApplication } from "./registeredCardCommandBoundaryApplication";
+import { registerCardMutation, updateCardMutation, retireCardMutation, reorderCardsMutation, unchangedCards } from "./registeredCardMutation";
 import type {
   RegisteredCardCommandResult,
-  RegisteredCardCommandState,
 } from "./ports/in/registeredCardCommandBoundaryInputPort";
 import type {
-  AtomicPaymentConfigurationMutation,
   PaymentConfigurationAtomicStorePort,
   PaymentConfigurationCommandMetadata,
 } from "./ports/out/paymentConfigurationAtomicStorePort";
@@ -146,31 +144,6 @@ function metadata(
     householdId: input.actor.householdId,
     actorMemberId: input.actor.memberId,
     occurredAt: input.occurredAt,
-  };
-}
-
-function cardMutation(
-  current: RegisteredCardCommandState,
-  householdId: string,
-  execute: (
-    application: ReturnType<typeof createRegisteredCardCommandBoundaryApplication>,
-  ) => RegisteredCardCommandResult,
-): AtomicPaymentConfigurationMutation<
-  RegisteredCardCommandState,
-  RegisteredCardCommandResult
-> {
-  const application = createRegisteredCardCommandBoundaryApplication({
-    boundaryHouseholdId: householdId,
-    cards: current.cards,
-    historicalEvidence: current.historicalEvidence,
-    collectionVersions: current.collectionVersions,
-  });
-  const value = execute(application);
-  const state = application.state();
-  return {
-    state,
-    value,
-    writes: JSON.stringify(state) !== JSON.stringify(current),
   };
 }
 
@@ -415,8 +388,7 @@ export function createPaymentConfigurationRuntimeApplication(
       const atomic = await store.transactRegisteredCards(
         metadata(input),
         (current) =>
-          cardMutation(current, input.actor.householdId, (application) =>
-            application.register({
+          registerCardMutation(current, input.actor.householdId, {
               actor: cardActor(input),
               ownerMemberId: input.actor.memberId,
               cardId: deterministicId("registered-card", input.actor.householdId, input.commandId),
@@ -425,7 +397,6 @@ export function createPaymentConfigurationRuntimeApplication(
                 ? { rawLastFour: raw.cardLastFour }
                 : {}),
             }),
-          ),
       );
       return result(atomic, (value) =>
         value.kind === "Created" && "card" in value
@@ -466,31 +437,27 @@ export function createPaymentConfigurationRuntimeApplication(
       const atomic = await store.transactRegisteredCardUpdate(
         metadata(input),
         input.cardId,
-        (current) =>
-          cardMutation(current, input.actor.householdId, (application) => {
+        (current) => {
             const target = current.cards.find(({ cardId }) => cardId === input.cardId);
-            if (target === undefined) return { kind: "NotFound" };
-            if (target.version !== input.expectedVersion) return { kind: "Conflict", code: "VERSION_MISMATCH" };
+            if (target === undefined) return unchangedCards(current, { kind: "NotFound" });
+            if (target.version !== input.expectedVersion) return unchangedCards(current, { kind: "Conflict", code: "VERSION_MISMATCH" });
             if (
               typeof changes.cardLabel === "string" &&
               normalizeCardCompanyKey(changes.cardLabel) !==
                 normalizeCardCompanyKey(target.cardCompanyCode)
             ) {
-              return {
-                kind: "Forbidden",
-                code: "OWNER_FORBIDDEN",
-              };
+              return unchangedCards(current, { kind: "Forbidden", code: "OWNER_FORBIDDEN" });
             }
             if (changesLastFour === undefined) {
-              return { kind: "Updated", card: target };
+              return unchangedCards(current, { kind: "Updated", card: target });
             }
-            return application.updateLastFour({
+            return updateCardMutation(current, input.actor.householdId, {
               actor: cardActor(input),
               cardId: target.cardId,
               rawLastFour: changesLastFour,
               expectedVersion: input.expectedVersion,
             });
-          }),
+          },
       );
       const outcome = result(atomic, (value) =>
         value.kind === "Updated" ? {} : undefined,
@@ -510,17 +477,9 @@ export function createPaymentConfigurationRuntimeApplication(
     ): Promise<PaymentConfigurationRuntimeResult> {
       const atomic = await store.transactRegisteredCards(
         metadata(input),
-        (current) =>
-          cardMutation(current, input.actor.householdId, (application) => {
-            const target = current.cards.find(({ cardId }) => cardId === input.cardId);
-            return target === undefined
-              ? { kind: "NotFound" }
-              : application.retire({
-                  actor: cardActor(input),
-                  cardId: target.cardId,
-                  expectedVersion: input.expectedVersion,
-                });
-          }),
+        current => retireCardMutation(current, input.actor.householdId, {
+          actor: cardActor(input), cardId: input.cardId, expectedVersion: input.expectedVersion,
+        }),
       );
       return result(atomic, (value) =>
         value.kind === "Retired" ? {} : undefined,
@@ -535,16 +494,10 @@ export function createPaymentConfigurationRuntimeApplication(
     ): Promise<PaymentConfigurationRuntimeResult> {
       const atomic = await store.transactRegisteredCards(
         metadata(input),
-        (current) => {
-          return cardMutation(current, input.actor.householdId, (application) =>
-            application.reorder({
-              actor: cardActor(input),
-              ownerMemberId: input.actor.memberId,
-              orderedCardIds: input.cardIds,
-              expectedCollectionVersion: input.expectedCollectionVersion,
-            }),
-          );
-        },
+        current => reorderCardsMutation(current, input.actor.householdId, {
+          actor: cardActor(input), ownerMemberId: input.actor.memberId,
+          orderedCardIds: input.cardIds, expectedCollectionVersion: input.expectedCollectionVersion,
+        }),
       );
       return result(atomic, (value) =>
         value.kind === "Reordered" ? {} : undefined,

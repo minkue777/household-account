@@ -3,6 +3,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { FirebasePaymentConfigurationAtomicStore } from "../../../src/adapters/firebase/payment-configuration/firebasePaymentConfigurationAtomicStore";
 import { createPaymentConfigurationRuntimeApplication } from "../../../src/contexts/payment-capture/configuration/application/paymentConfigurationRuntimeApplication";
+import { createMerchantRuleCategoryArchiveApplication } from "../../../src/contexts/payment-capture/configuration/application/merchantRuleCategoryArchiveApplication";
 
 const describeWithEmulator = process.env.FIRESTORE_EMULATOR_HOST ? describe : describe.skip;
 
@@ -32,6 +33,28 @@ describeWithEmulator("[MER-004] 실제 규칙 저장의 원자성·경합·재�
     if (result.kind !== "success") throw new Error("Rule creation failed");
     return result.value.ruleId as string;
   };
+
+  it("[MER-007][T-CAT-004] 카테고리 변경 101개를 두 페이지로 저장하고 재개는 기존 receipt를 재생한다", async () => {
+    const householdId = "category-pages";
+    const rules = database.collection(`households/${householdId}/merchantRules`);
+    const batch = database.batch();
+    for (let index = 0; index < 101; index++) batch.set(rules.doc(String(index).padStart(3, "0")), {
+      householdId, keyword: `가게${index}`, matchType: "contains", priority: index + 1, active: index % 2 === 0,
+      mapping: { categoryId: "old", merchant: "가맹점 보존", memo: "메모 보존" }, aggregateVersion: 1,
+    });
+    await batch.commit();
+    const archive = createMerchantRuleCategoryArchiveApplication(new FirebasePaymentConfigurationAtomicStore(database));
+    const input = { householdId, processId: "archive", sourceCategoryId: "old", destinationCategoryId: "default", occurredAt: "2026-10-05T00:00:00.000Z" };
+    expect(await archive.remap(input)).toEqual({ kind: "success" });
+    const saved = (await rules.get()).docs.map(doc => doc.data());
+    expect(saved).toHaveLength(101);
+    for (const rule of saved) expect(rule).toMatchObject({ aggregateVersion: 2, mapping: {
+      categoryId: "default", merchant: "가맹점 보존", memo: "메모 보존",
+    } });
+    expect(await archive.remap(input)).toEqual({ kind: "success" });
+    expect((await rules.get()).docs.map(doc => doc.data())).toEqual(saved);
+    expect((await database.collection("commandReceipts/payment-configuration/receipts").where("householdId", "==", householdId).get()).size).toBe(2);
+  });
 
   it("같은 exact OR 토큰 생성 경합에서 한 규칙만 저장하고 receipt 재생·payload 충돌은 상태를 바꾸지 않는다", async () => {
     const householdId = "exact-race";

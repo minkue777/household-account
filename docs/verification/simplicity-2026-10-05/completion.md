@@ -24,13 +24,13 @@
 | [PT-07 — 과거 날짜 예외와 구 성능 gate를 테스트가 보존합니다 (높음)](platform-tests.md) | 미착수 | |
 | [PT-08 — category 조회 최적화 검사가 최초 수정·삭제 경로를 타지 않습니다 (높음)](platform-tests.md) | 미착수 | |
 | [PT-09 — 일반 tenant CRUD 행렬이 실제 Rules 계약처럼 보입니다 (높음)](platform-tests.md) | 미착수 | |
-| [후보 A01 — 사용처 없는 서버의 클라이언트 세션 모형 삭제](platform.md) | 미착수 | |
-| [후보 A02 — 서로 다른 Safe HTTP 모형 두 개 삭제](platform.md) | 미착수 | |
-| [후보 A03 — 미연결 ingress·결과분류·HTML 파서 모형 삭제](platform.md) | 미착수 | |
+| [후보 A01 — 사용처 없는 서버의 클라이언트 세션 모형 삭제](platform.md) | 구현·관련 검사 완료 | [서버 실행 경로 정비](../../operations/server-simplicity-2026-10-05.md) |
+| [후보 A02 — 서로 다른 Safe HTTP 모형 두 개 삭제](platform.md) | 구현·관련 검사 완료 | [서버 실행 경로 정비](../../operations/server-simplicity-2026-10-05.md) |
+| [후보 A03 — 미연결 ingress·결과분류·HTML 파서 모형 삭제](platform.md) | 구현·관련 검사 완료 | [서버 실행 경로 정비](../../operations/server-simplicity-2026-10-05.md) |
 | [후보 A04 — RenameSelf의 가짜 전체 상태 계약을 실제 transaction 입력으로 축소](platform.md) | 구현·관련 검사 완료 | [실제 SDK 재현 및 수정](../../operations/access-simplicity-2026-10-05.md) |
 | [후보 A05 — 온보딩 거대 Application의 dummy dependency 제거](platform.md) | 미착수 | |
 | [후보 A06 — 명령 등록·권한·멱등성 정책을 등록 위치 한 곳에서 읽게 축소](platform.md) | 미착수 | |
-| [후보 A07 — 계약 테스트의 문법/폴더 강제를 행동 검증으로 대체](platform.md) | 미착수 | |
+| [후보 A07 — 계약 테스트의 문법/폴더 강제를 행동 검증으로 대체](platform.md) | 구현·관련 검사 완료 | [서버 실행 경로 정비](../../operations/server-simplicity-2026-10-05.md) |
 | [후보 A08 — 운영 runner에 박힌 테스트 전용 실패 주입 제거](platform.md) | 미착수 | |
 | [후보 A09 — 30일 접속 통계 정리가 실제 저장에서도 적용되도록 단순화](platform.md) | 구현·관련 검사 완료 | [실제 SDK 재현 및 수정](../../operations/access-simplicity-2026-10-05.md) |
 | [후보 A10 — 관리자 조회를 실제 조회 범위에 맞추고 만료된 통계 예외 제거](platform.md) | 미착수 | |
@@ -64,4 +64,18 @@
 | [W9. 오래된 가맹점 API와 실패를 빈 성공으로 바꾸는 경계 — 삭제·교정 구분](web.md) | 미착수 | |
 | [W10. 더 이상 쓰지 않는 인자를 호출부까지 운반한다 — 작은 삭제 단위](web.md) | 미착수 | |
 | [W11. 명의 조회의 한 줄 위임 계층 — 기능 단위로 평탄화 가능](web.md) | 미착수 | |
+| [1. 운영에 연결되지 않은 configuration 메모리 application 3개 제거 검토](capture.md) | 구현·관련 검사 완료 | [카드·규칙 직접 변경 계산](../../operations/server-simplicity-2026-10-05.md) |
+| [2. Android 미사용 단건 capture 전달 API 제거](capture.md) | 이전 배포 완료 | [Android 1차](implementation.md) |
+| [3. capture ingress와 retry의 두 전달 알고리즘을 한 번의 attempt로 통일](capture.md) | 미착수 | |
+| [4. 서버 FID 등록에서 가상의 client session controller 제거](capture.md) | 미착수 | |
+| [5. configuration의 transaction 내부 가상 store를 순수 mutation으로 축소](capture.md) | 구현·관련 검사 완료 | [카드·규칙 직접 변경 계산](../../operations/server-simplicity-2026-10-05.md) |
+| [6. 테스트만 소비하는 legacy Shortcut owner 추론은 운영 src와 분리](capture.md) | 미착수 | |
+| [7. QuickEdit의 original/draft/Intent 필드 복제를 한 snapshot과 draft로 정리](capture.md) | 미착수 | |
+| [8. 모든 알림 event에 붙은 legacy Shortcut guard의 종료 조건 명시](capture.md) | 미착수 | |
+| [CT01 — 경합이라고 이름 붙인 검사가 순차 실행입니다. P1, 확신 높음](capture-tests.md) | 미착수 | |
+| [CT02 — 로그·원문 비저장의 일부 검사가 상수 빈 배열을 읽습니다. P1, 확신 높음](capture-tests.md) | 미착수 | |
+| [CT03 — receipt 조율 테스트가 취소·해시 별도 구현까지 유지합니다. P2, 확신 높음](capture-tests.md) | 미착수 | |
+| [CT04 — golden 결과 상수를 다시 검사하는 테스트를 행동 검증과 분리합니다. P3, 확신 높음](capture-tests.md) | 미착수 | |
+| [WE01 — 선택 상태를 CSS 구현으로 검증하는 작은 결합. P3, 확신 높음](web-e2e.md) | 미착수 | |
+| [WE02 — 첫 홈 성능 검사가 정확한 chunk 이름·개수를 고정합니다. P3, 확신 중간](web-e2e.md) | 미착수 | |
 
