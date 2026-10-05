@@ -12,6 +12,8 @@ export interface HouseholdHoldingSnapshots {
   cryptoHoldings: readonly CryptoHolding[];
   stockHoldingsReady: boolean;
   cryptoHoldingsReady: boolean;
+  stockHoldingsError?: unknown;
+  cryptoHoldingsError?: unknown;
 }
 
 interface HouseholdHoldingSnapshot extends HouseholdHoldingSnapshots {
@@ -75,25 +77,31 @@ export function useHouseholdHoldingSnapshots(
     };
     const reset = () => { dispose(); setSnapshot(emptySnapshot('')); };
     resetSubscriptions.add(reset);
+    const fail = (field: 'stockHoldingsError' | 'cryptoHoldingsError', error: unknown) => {
+      if (!isCurrent()) return;
+      const next = { ...currentSnapshot(sessionKey), [field]: error };
+      cachedSnapshot = next;
+      setSnapshot(next);
+    };
     try {
       unsubscribeStock = subscribeToHouseholdStockHoldings(stockHoldings => {
         if (!isCurrent()) return;
-        const next = { ...currentSnapshot(sessionKey), stockHoldings, stockHoldingsReady: true };
+        const next = { ...currentSnapshot(sessionKey), stockHoldings, stockHoldingsReady: true, stockHoldingsError: undefined };
         cachedSnapshot = next;
         setSnapshot(next);
-      });
+      }, error => fail('stockHoldingsError', error));
       unsubscribeCrypto = subscribeToHouseholdCryptoHoldings(cryptoHoldings => {
         if (!isCurrent()) return;
-        const next = { ...currentSnapshot(sessionKey), cryptoHoldings, cryptoHoldingsReady: true };
+        const next = { ...currentSnapshot(sessionKey), cryptoHoldings, cryptoHoldingsReady: true, cryptoHoldingsError: undefined };
         cachedSnapshot = next;
         setSnapshot(next);
-      });
-    } catch {
+      }, error => fail('cryptoHoldingsError', error));
+    } catch (error) {
       // A partial subscription setup must release its first listener as well.
       const current = isCurrent();
       dispose();
       if (current) {
-        const settled = { ...currentSnapshot(sessionKey), stockHoldingsReady: true, cryptoHoldingsReady: true };
+        const settled = { ...currentSnapshot(sessionKey), stockHoldingsError: error, cryptoHoldingsError: error };
         cachedSnapshot = settled;
         setSnapshot(settled);
       }

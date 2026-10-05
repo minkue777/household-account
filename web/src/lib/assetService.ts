@@ -967,8 +967,10 @@ export function subscribeToAssets(
   onSourceSnapshot?: (
     assets: readonly Asset[],
     metadata: { fromCache: boolean }
-  ) => void
+  ) => void,
+  onError?: (error: unknown) => void
 ): () => void {
+  let active = true;
   const householdId = getHouseholdId();
   const queueGeneration = assetUpdateQueueGeneration;
   const authoritativeState = getOrCreateAuthoritativeState(
@@ -985,12 +987,13 @@ export function subscribeToAssets(
 
   const q = collection(db, 'households', householdId, 'assets');
 
-  const unsubscribe = onSnapshot(
+  let unsubscribe: () => void;
+  try { unsubscribe = onSnapshot(
     q,
     { includeMetadataChanges: true },
     (snapshot) => {
       if (
-        queueGeneration !== assetUpdateQueueGeneration
+        !active || queueGeneration !== assetUpdateQueueGeneration
         || assetAuthoritativeStates.get(householdId) !== authoritativeState
       ) return;
       const assets = snapshot.docs.map(mapDocToAsset);
@@ -1014,24 +1017,22 @@ export function subscribeToAssets(
       projection.publish(assets);
     },
     (error) => {
+      if (!active || queueGeneration !== assetUpdateQueueGeneration
+        || assetAuthoritativeStates.get(householdId) !== authoritativeState) return;
       console.error('자산 구독 오류:', error);
-      if (
-        queueGeneration === assetUpdateQueueGeneration
-        && assetAuthoritativeStates.get(householdId) === authoritativeState
-      ) {
-        failAuthoritativeSubscription(
-          authoritativeState,
-          subscriptionId,
-          'ASSET_AUTHORITATIVE_READ_FAILED'
-        );
-      }
-      if (initialAssets === undefined) {
-        projection.publish([]);
-      }
+      failAuthoritativeSubscription(authoritativeState, subscriptionId, 'ASSET_AUTHORITATIVE_READ_FAILED');
+      onError?.(error);
     }
-  );
+  ); } catch (error) {
+    active = false;
+    projection.dispose();
+    failAuthoritativeSubscription(authoritativeState, subscriptionId, 'ASSET_AUTHORITATIVE_READ_FAILED');
+    unregisterAuthoritativeSubscription(authoritativeState, subscriptionId);
+    throw error;
+  }
 
   return () => {
+    active = false;
     unsubscribe();
     projection.dispose();
     if (
@@ -1661,8 +1662,10 @@ export async function deleteCryptoHolding(
  * 현재 가구의 모든 주식 보유 종목 실시간 구독
  */
 export function subscribeToHouseholdStockHoldings(
-  callback: (holdings: StockHolding[]) => void
+  callback: (holdings: StockHolding[]) => void,
+  onError?: (error: unknown) => void
 ): () => void {
+  let active = true;
   const householdId = getHouseholdId();
   const queueGeneration = assetUpdateQueueGeneration;
   const authoritativeState = getOrCreateAuthoritativeState(
@@ -1686,12 +1689,13 @@ export function subscribeToHouseholdStockHoldings(
 
   const q = householdPositions(householdId, 'stock');
 
-  const unsubscribe = onSnapshot(
+  let unsubscribe: () => void;
+  try { unsubscribe = onSnapshot(
     q,
     { includeMetadataChanges: true },
     (snapshot) => {
       if (
-        queueGeneration !== assetUpdateQueueGeneration
+        !active || queueGeneration !== assetUpdateQueueGeneration
         || stockAuthoritativeStates.get(householdId) !== authoritativeState
       ) return;
       const holdings = snapshot.docs.map(mapDocToHolding);
@@ -1708,22 +1712,22 @@ export function subscribeToHouseholdStockHoldings(
       projection.publish(holdings);
     },
     (error) => {
+      if (!active || queueGeneration !== assetUpdateQueueGeneration
+        || stockAuthoritativeStates.get(householdId) !== authoritativeState) return;
       console.error('보유 종목 구독 오류:', error);
-      if (
-        queueGeneration === assetUpdateQueueGeneration
-        && stockAuthoritativeStates.get(householdId) === authoritativeState
-      ) {
-        failAuthoritativeSubscription(
-          authoritativeState,
-          subscriptionId,
-          'ASSET_AUTHORITATIVE_READ_FAILED'
-        );
-      }
-      projection.publish([]);
+      failAuthoritativeSubscription(authoritativeState, subscriptionId, 'ASSET_AUTHORITATIVE_READ_FAILED');
+      onError?.(error);
     }
-  );
+  ); } catch (error) {
+    active = false;
+    projection.dispose();
+    failAuthoritativeSubscription(authoritativeState, subscriptionId, 'ASSET_AUTHORITATIVE_READ_FAILED');
+    unregisterAuthoritativeSubscription(authoritativeState, subscriptionId);
+    throw error;
+  }
 
   return () => {
+    active = false;
     unsubscribe();
     projection.dispose();
     if (
@@ -1742,8 +1746,10 @@ export function subscribeToHouseholdStockHoldings(
  * 현재 가구의 모든 코인 보유 종목 실시간 구독
  */
 export function subscribeToHouseholdCryptoHoldings(
-  callback: (holdings: CryptoHolding[]) => void
+  callback: (holdings: CryptoHolding[]) => void,
+  onError?: (error: unknown) => void
 ): () => void {
+  let active = true;
   const householdId = getHouseholdId();
   const queueGeneration = assetUpdateQueueGeneration;
   const authoritativeState = getOrCreateAuthoritativeState(
@@ -1767,12 +1773,13 @@ export function subscribeToHouseholdCryptoHoldings(
 
   const q = householdPositions(householdId, 'crypto');
 
-  const unsubscribe = onSnapshot(
+  let unsubscribe: () => void;
+  try { unsubscribe = onSnapshot(
     q,
     { includeMetadataChanges: true },
     (snapshot) => {
       if (
-        queueGeneration !== assetUpdateQueueGeneration
+        !active || queueGeneration !== assetUpdateQueueGeneration
         || cryptoAuthoritativeStates.get(householdId) !== authoritativeState
       ) return;
       const holdings = snapshot.docs.map(mapDocToCryptoHolding);
@@ -1789,22 +1796,22 @@ export function subscribeToHouseholdCryptoHoldings(
       projection.publish(holdings);
     },
     (error) => {
+      if (!active || queueGeneration !== assetUpdateQueueGeneration
+        || cryptoAuthoritativeStates.get(householdId) !== authoritativeState) return;
       console.error('코인 보유내역 구독 오류:', error);
-      if (
-        queueGeneration === assetUpdateQueueGeneration
-        && cryptoAuthoritativeStates.get(householdId) === authoritativeState
-      ) {
-        failAuthoritativeSubscription(
-          authoritativeState,
-          subscriptionId,
-          'ASSET_AUTHORITATIVE_READ_FAILED'
-        );
-      }
-      projection.publish([]);
+      failAuthoritativeSubscription(authoritativeState, subscriptionId, 'ASSET_AUTHORITATIVE_READ_FAILED');
+      onError?.(error);
     }
-  );
+  ); } catch (error) {
+    active = false;
+    projection.dispose();
+    failAuthoritativeSubscription(authoritativeState, subscriptionId, 'ASSET_AUTHORITATIVE_READ_FAILED');
+    unregisterAuthoritativeSubscription(authoritativeState, subscriptionId);
+    throw error;
+  }
 
   return () => {
+    active = false;
     unsubscribe();
     projection.dispose();
     if (

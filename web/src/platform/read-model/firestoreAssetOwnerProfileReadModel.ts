@@ -1,4 +1,3 @@
-import type { AssetOwnerProfileReadPort } from '@/features/access-household/application/assetOwnerProfileQueries';
 import type { AssetOwnerProfileView } from '@/features/access-household/domain/assetOwnerProfile';
 import {
   collection,
@@ -69,31 +68,33 @@ function compareEntryOrder(left: OrderedProfile, right: OrderedProfile): number 
   return left.sourceOrder - right.sourceOrder;
 }
 
-export class FirestoreAssetOwnerProfileReadModel implements AssetOwnerProfileReadPort {
-  subscribe(
-    householdId: string,
-    listener: (profiles: AssetOwnerProfileView[]) => void,
-    onError?: (error: Error) => void
-  ): () => void {
-    if (householdId.trim() === '') {
-      listener([]);
-      return () => {};
-    }
-
-    const profiles = collection(db, 'households', householdId, 'assetOwnerProfiles');
-    return onSnapshot(
-      profiles,
-      (snapshot) => {
-        const mappedProfiles = snapshot.docs
-          .map((document, index) => mapProfile(householdId, document, index))
-          .filter((entry): entry is OrderedProfile => entry !== undefined)
-          .sort(compareEntryOrder)
-          .map(({ profile }) => profile);
-        listener(mappedProfiles);
-      },
-      (error) => {
-        onError?.(error instanceof Error ? error : new Error('ASSET_OWNER_PROFILE_READ_FAILED'));
-      }
-    );
+export function subscribeToAssetOwnerProfiles(
+  householdId: string,
+  listener: (profiles: AssetOwnerProfileView[]) => void,
+  onError?: (error: Error) => void
+): () => void {
+  if (householdId.trim() === '') {
+    listener([]);
+    return () => {};
   }
+
+  let active = true;
+  const profiles = collection(db, 'households', householdId, 'assetOwnerProfiles');
+  const stop = onSnapshot(
+    profiles,
+    (snapshot) => {
+      if (!active) return;
+      const mappedProfiles = snapshot.docs
+        .map((document, index) => mapProfile(householdId, document, index))
+        .filter((entry): entry is OrderedProfile => entry !== undefined)
+        .sort(compareEntryOrder)
+        .map(({ profile }) => profile);
+      listener(mappedProfiles);
+    },
+    (error) => {
+      if (!active) return;
+      onError?.(error instanceof Error ? error : new Error('ASSET_OWNER_PROFILE_READ_FAILED'));
+    }
+  );
+  return () => { active = false; stop(); };
 }

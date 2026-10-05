@@ -30,6 +30,9 @@ interface AssetHistoryModalProps {
   cryptoHoldings: readonly CryptoHolding[];
   stockHoldingsReady: boolean;
   cryptoHoldingsReady: boolean;
+  stockHoldingsError?: unknown;
+  cryptoHoldingsError?: unknown;
+  onRetryHoldings?: () => void;
 }
 
 export default function AssetHistoryModal({
@@ -41,6 +44,9 @@ export default function AssetHistoryModal({
   cryptoHoldings,
   stockHoldingsReady,
   cryptoHoldingsReady,
+  stockHoldingsError,
+  cryptoHoldingsError,
+  onRetryHoldings,
 }: AssetHistoryModalProps) {
   const { showAlert } = useAppDialog();
   const stockManager = useStockHoldingManager({
@@ -71,10 +77,13 @@ export default function AssetHistoryModal({
   const isCrypto = asset.type === 'crypto';
   const isGoldEtf = asset.type === 'gold' && isGoldEtfSubType(asset.subType);
   const isHoldingManaged = isStock || isCrypto || isGoldEtf;
+  const holdingsError = isCrypto ? cryptoHoldingsError : stockHoldingsError;
+  const holdingsReady = isCrypto ? cryptoHoldingsReady : stockHoldingsReady;
+  const balanceUnavailable = isHoldingManaged && !!holdingsError && !holdingsReady;
   const signedBalance =
-    (isStock || isGoldEtf) && !stockManager.isLoadingHoldings
+    (isStock || isGoldEtf) && stockHoldingsReady
       ? stockManager.totalHoldingValue
-      : isCrypto && !cryptoManager.isLoadingHoldings
+      : isCrypto && cryptoHoldingsReady
         ? cryptoManager.totalHoldingValue
         : getAssetSignedBalance(asset);
   const investmentBase = asset.initialInvestment || asset.costBasis || 0;
@@ -82,7 +91,7 @@ export default function AssetHistoryModal({
     isHoldingManaged && investmentBase > 0 ? signedBalance - investmentBase : 0;
   const holdingProfitLossRate =
     isHoldingManaged && investmentBase > 0 ? (holdingProfitLoss / investmentBase) * 100 : 0;
-  const showHoldingProfitLoss = isHoldingManaged && investmentBase > 0;
+  const showHoldingProfitLoss = isHoldingManaged && investmentBase > 0 && !balanceUnavailable;
   const isHoldingProfit = holdingProfitLoss >= 0;
 
   return (
@@ -105,7 +114,7 @@ export default function AssetHistoryModal({
                 <p className="truncate text-sm text-slate-500">
                   {asset.subType ? `${asset.subType} · ` : ''}
                   {isHoldingManaged ? '평가금액 ' : ''}
-                  {signedBalance.toLocaleString()}원
+                  {balanceUnavailable ? '확인 불가' : `${signedBalance.toLocaleString()}원`}
                 </p>
               </div>
             </div>
@@ -146,6 +155,7 @@ export default function AssetHistoryModal({
           )}
         </div>
 
+        {isHoldingManaged && !!holdingsError && <p role="alert" className="p-4 text-sm text-red-600">보유 내역을 불러오지 못했습니다. {holdingsReady ? '마지막 확인값입니다. ' : ''}<button className="underline" onClick={onRetryHoldings}>다시 시도</button></p>}
         {isStock && (
           <div className="border-b border-blue-200 bg-blue-100 px-4 pt-4">
             <div className="mb-4 flex gap-2">
@@ -249,7 +259,8 @@ export default function AssetHistoryModal({
           {isStock || isGoldEtf ? (
             <StockHoldingList
               holdings={stockManager.holdings}
-              isLoading={stockManager.isLoadingHoldings}
+              isLoading={stockManager.isLoadingHoldings && !stockHoldingsError}
+              readFailed={!!stockHoldingsError}
               isRefreshing={stockManager.isRefreshingPrices}
               onRefresh={stockManager.refreshHoldingPrices}
               assetId={asset.id}
@@ -257,7 +268,8 @@ export default function AssetHistoryModal({
           ) : isCrypto ? (
             <CryptoHoldingList
               holdings={cryptoManager.holdings}
-              isLoading={cryptoManager.isLoadingHoldings}
+              isLoading={cryptoManager.isLoadingHoldings && !cryptoHoldingsError}
+              readFailed={!!cryptoHoldingsError}
               isRefreshing={cryptoManager.isRefreshingPrices}
               onRefresh={cryptoManager.refreshHoldingPrices}
               assetId={asset.id}

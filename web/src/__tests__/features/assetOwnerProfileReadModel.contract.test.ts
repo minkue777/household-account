@@ -12,7 +12,7 @@ jest.mock('@/platform/read-model/firestoreReadModel', () => ({
 }));
 
 import type { DocumentData, QueryDocumentSnapshot } from '@/platform/read-model/firestoreReadModel';
-import { FirestoreAssetOwnerProfileReadModel } from '@/platform/read-model/firestoreAssetOwnerProfileReadModel';
+import { subscribeToAssetOwnerProfiles } from '@/platform/read-model/firestoreAssetOwnerProfileReadModel';
 import { selectVisibleAssetOwnerProfiles } from '@/features/access-household/domain/assetOwnerProfile';
 
 type ProfileReference = { path: string };
@@ -47,7 +47,7 @@ describe('자산 명의자 Firestore 읽기 모델 계약', () => {
     });
     const listener = jest.fn();
 
-    const dispose = new FirestoreAssetOwnerProfileReadModel().subscribe(
+    const dispose = subscribeToAssetOwnerProfiles(
       'house-1',
       listener
     );
@@ -167,7 +167,7 @@ describe('자산 명의자 Firestore 읽기 모델 계약', () => {
     });
     const listener = jest.fn();
 
-    new FirestoreAssetOwnerProfileReadModel().subscribe(
+    subscribeToAssetOwnerProfiles(
       'house-1',
       listener,
       errorListener

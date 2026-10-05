@@ -11,7 +11,7 @@ jest.mock('@/contexts/ThemeContext', () => ({ useTheme: () => ({ themeConfig: { 
 jest.mock('@/contexts/AppDialogContext', () => ({ useAppDialog: () => ({ showPrompt: jest.fn() }) }));
 jest.mock('@/composition/webCommandRuntime', () => ({ getHouseholdCommandClient: () => ({ execute: mockCommand }) }));
 jest.mock('@/composition/webQueryRuntime', () => ({ getHouseholdQueryClient: () => ({ execute: jest.fn() }) }));
-jest.mock('@/composition/assetOwnerProfileReadRuntime', () => ({ getAssetOwnerProfileQueries: () => ({ subscribe: mockProfiles }) }));
+jest.mock('@/platform/read-model/firestoreAssetOwnerProfileReadModel', () => ({ subscribeToAssetOwnerProfiles: (...args: unknown[]) => mockProfiles(...args) }));
 jest.mock('@/composition/stockInstrumentCatalogRuntime', () => ({ warmStockInstrumentCatalog: jest.fn() }));
 jest.mock('@/lib/assetService', () => ({ subscribeToAssets: jest.fn(), refreshAllMarketValues: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('@/platform/read-model/assetDailyChangeReadModel', () => ({ readPreviousAssetDailySummary: jest.fn() }));
@@ -130,4 +130,17 @@ describe('[AST-009][T-AST-011] 실제 AssetsPage·명의자 command·일간 cach
     expect(screen.queryByText(/% \(/)).not.toBeInTheDocument();
     expect(readPreviousAssetDailySummary).toHaveBeenLastCalledWith('house-2', '2026-09-07');
   });
+  it('최초 자산 조회 실패는 합계를 0으로 확정하지 않고 재시도한 성공을 표시한다', () => {
+    render(<AssetsPage />);
+    act(() => jest.mocked(subscribeToAssets).mock.calls[0][3]?.(new Error('offline')));
+    expect(screen.getByRole('alert')).toHaveTextContent('자산 목록을 불러오지 못했습니다.');
+    expect(screen.queryByText('총 자산')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+    act(() => publishAssets(assets));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByTestId('asset-owner-a')).toBeInTheDocument();
+    act(() => jest.mocked(subscribeToAssets).mock.calls.at(-1)?.[3]?.(new Error('offline again')));
+    expect(screen.getByTestId('asset-owner-a')).toBeInTheDocument();
+  });
+
 });

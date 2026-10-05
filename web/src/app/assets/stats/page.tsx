@@ -155,6 +155,7 @@ export default function AssetStatsPage() {
   } = useHousehold();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [hasCurrentAssets, setHasCurrentAssets] = useState(false);
+  const [assetReadFailed, setAssetReadFailed] = useState(false);
   const [historyRead, setHistoryRead] = useState<{ key: string; history?: AssetHistoryEntry[]; failed: boolean }>({ key: '', failed: false });
   const [dividendPrefetch, setDividendPrefetch] = useState<{ key: string; source: AssetDividendPrefetch } | null>(null);
   const [revision, setRevision] = useState(0);
@@ -184,6 +185,7 @@ export default function AssetStatsPage() {
     let active = true;
     setAssets([]);
     setHasCurrentAssets(false);
+    setAssetReadFailed(false);
     if (!canRead) return undefined;
 
     try {
@@ -193,10 +195,12 @@ export default function AssetStatsPage() {
         if (active && !metadata.fromCache) {
           setAssets(previous => JSON.stringify(previous) === JSON.stringify(nextAssets) ? previous : [...nextAssets]);
           setHasCurrentAssets(true);
+          setAssetReadFailed(false);
         }
-      });
+      }, () => { if (active) setAssetReadFailed(true); });
       return () => { active = false; unsubscribe(); };
     } catch (error) {
+      setAssetReadFailed(true);
       console.error('자산 통계의 자산 목록을 불러오지 못했습니다.', error);
       return undefined;
     }
@@ -638,7 +642,8 @@ export default function AssetStatsPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {failed && (
+            {assetReadFailed && <p role="alert" className="mb-3 text-sm text-red-600">현재 자산을 불러오지 못했습니다. <button onClick={() => setRevision(value => value + 1)} className="underline">다시 시도</button></p>}
+        {failed && (
               <p role="alert" className="text-xs text-slate-500">최신 자산 이력을 확인하지 못했습니다. 이전 내역을 표시합니다.
                 <button type="button" className="ml-2 underline" onClick={() => setRefreshRevision(value => value + 1)}>다시 시도</button>
               </p>

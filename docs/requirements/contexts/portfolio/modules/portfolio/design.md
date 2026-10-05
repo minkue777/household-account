@@ -525,3 +525,7 @@ Domain은 Firebase·React와 다른 기능 Entity를 import하지 않습니다. 
 - 복구에는 공백이 아닌 감사 사유와 정확한 `expectedVersion`이 필요합니다. `purging` 자산과 stale version은 변경 없이 거부합니다.
 - 자동화 Plan이 있으면 복구일과 납입일 정책으로 `resumeFromDate`를 계산해 별도 resume revision을 기록합니다. 삭제 전 overdue는 유지하고 삭제 기간은 소급 생성하지 않습니다.
 - 일반 자산 UI에는 삭제 자산 목록과 복구 버튼을 제공하지 않으며, 영구 purge도 관리자 일반 UI/API 범위에 포함하지 않습니다.
+
+### 조회 실패 표시
+
+자산·보유종목 읽기는 마지막 성공값/최초 준비 여부와 오류를 구분합니다. 오류나 부분 구독 setup 실패는 빈 성공·0원·ready로 바꾸지 않습니다. 마지막 값이 없으면 평가 미확정, 있으면 마지막 값과 실패를 표시하고 재구독을 제공합니다. 정상 빈 snapshot은 0원입니다. 해제·세션 변경 뒤 이전 listener는 새 화면을 갱신하지 않습니다. 명의 목록은 실제 Firestore 구독 함수가 mapping/정렬/오류와 정리를 직접 소유합니다.

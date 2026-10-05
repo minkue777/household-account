@@ -165,9 +165,34 @@ describe('household holding snapshot contract', () => {
     subscribeCrypto.mockImplementationOnce(() => { throw new Error('setup failed'); });
     const hook = renderHook(() => useHouseholdHoldingSnapshots('household-1', true));
     expect(unsubscribeStock).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.stockHoldingsReady).toBe(false);
+    expect(hook.result.current.stockHoldingsError).toEqual(new Error('setup failed'));
     act(() => stockCallback([stockHolding()]));
     expect(hook.result.current.stockHoldings).toEqual([]);
     hook.unmount();
     expect(unsubscribeStock).toHaveBeenCalledTimes(1);
   });
+  test('최초 읽기 실패는 준비 완료나 빈 성공이 아니며 정상 빈 결과에서만 0건을 확정한다', () => {
+    const hook = renderHook(() => useHouseholdHoldingSnapshots('household-1', true));
+    const failure = new Error('unavailable');
+    act(() => subscribeStock.mock.calls[0][1]?.(failure));
+    expect(hook.result.current).toMatchObject({ stockHoldings: [], stockHoldingsReady: false, stockHoldingsError: failure });
+    act(() => stockCallback([]));
+    expect(hook.result.current).toMatchObject({ stockHoldings: [], stockHoldingsReady: true, stockHoldingsError: undefined });
+  });
+
+  test('읽기 실패는 마지막 정상 자료를 유지하고 재구독 뒤 늦은 오류는 무시한다', () => {
+    const hook = renderHook(({ epoch }) => useHouseholdHoldingSnapshots('household-1', true, epoch), { initialProps: { epoch: 0 } });
+    act(() => stockCallback([stockHolding()]));
+    const oldError = subscribeStock.mock.calls[0][1];
+    act(() => oldError?.(new Error('unavailable')));
+    expect(hook.result.current.stockHoldings).toEqual([stockHolding()]);
+    expect(hook.result.current.stockHoldingsReady).toBe(true);
+    hook.rerender({ epoch: 1 });
+    act(() => stockCallback([]));
+    act(() => oldError?.(new Error('late')));
+    expect(hook.result.current.stockHoldingsError).toBeUndefined();
+    expect(hook.result.current.stockHoldings).toEqual([]);
+  });
+
 });

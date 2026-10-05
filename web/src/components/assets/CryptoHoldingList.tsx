@@ -12,6 +12,7 @@ import FormattedIntegerInput from '@/components/common/FormattedIntegerInput';
 interface CryptoHoldingListProps {
   holdings: CryptoHolding[];
   isLoading: boolean;
+  readFailed?: boolean;
   isRefreshing: boolean;
   onRefresh: () => void;
   assetId: string;
@@ -38,6 +39,7 @@ function formatQuantity(quantity: number) {
 export default function CryptoHoldingList({
   holdings,
   isLoading,
+  readFailed = false,
   isRefreshing,
   onRefresh,
   assetId,
@@ -113,7 +115,7 @@ export default function CryptoHoldingList({
         )}
       </div>
 
-      {isLoading ? (
+      {readFailed && holdings.length === 0 ? null : isLoading ? (
         <div className="py-8 text-center text-slate-400">로딩 중...</div>
       ) : holdings.length === 0 ? (
         <div className="py-8 text-center text-slate-400">보유 코인이 없습니다</div>

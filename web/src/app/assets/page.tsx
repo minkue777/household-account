@@ -25,7 +25,7 @@ import {
   selectVisibleAssetOwnerProfiles,
   type AssetOwnerProfileView,
 } from '@/features/access-household/domain/assetOwnerProfile';
-import { getAssetOwnerProfileQueries } from '@/composition/assetOwnerProfileReadRuntime';
+import { subscribeToAssetOwnerProfiles } from '@/platform/read-model/firestoreAssetOwnerProfileReadModel';
 import {
   readDailyAssetChangeSnapshot,
   readAssetOwnerProfileSnapshot,
@@ -59,6 +59,8 @@ export default function AssetsPage() {
     amounts: {},
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [assetReadError, setAssetReadError] = useState(false);
+  const [readEpoch, setReadEpoch] = useState(0);
   const [sourceAssets, setSourceAssets] = useState<Asset[] | null>(null);
   const [serverAssetsReady, setServerAssetsReady] = useState(false);
   const [previousDailySummary, setPreviousDailySummary] = useState<{
@@ -88,7 +90,7 @@ export default function AssetsPage() {
   const holdingSnapshots = useHouseholdHoldingSnapshots(
     household?.id,
     isSessionVerified,
-    remoteReadEpoch
+    remoteReadEpoch + readEpoch
   );
   const visibleOwnerProfiles = useMemo(
     () => selectVisibleAssetOwnerProfiles(ownerProfiles),
@@ -123,6 +125,7 @@ export default function AssetsPage() {
 
   useLayoutEffect(() => {
     const householdId = household?.id;
+    setAssetReadError(false);
     if (!householdId) {
       cachedAssetsRef.current = undefined;
       setServerAssetsReady(false);
@@ -203,22 +206,28 @@ export default function AssetsPage() {
     }
     setServerAssetsReady(false);
     if (cachedAssetsRef.current === undefined) setIsLoading(true);
-    const unsubscribe = subscribeToAssets(
+    let active = true;
+    const fail = () => { if (active) { setAssetReadError(true); setIsLoading(false); setServerAssetsReady(false); } };
+    let unsubscribe: (() => void) | undefined;
+    try { unsubscribe = subscribeToAssets(
       (newAssets) => {
+        if (!active) return;
         setAssets(newAssets);
         setIsLoading(false);
       },
       cachedAssetsRef.current,
       (nextSourceAssets, metadata) => {
+        if (!active) return;
+        setAssetReadError(false);
         setSourceAssets([...nextSourceAssets]);
         writeAssetSnapshot(household.id, nextSourceAssets);
         if (!metadata.fromCache) {
           setServerAssetsReady(true);
         }
-      }
-    );
-    return () => unsubscribe();
-  }, [household?.id, isSessionVerified, remoteReadEpoch]);
+      }, fail
+    ); } catch { fail(); }
+    return () => { active = false; unsubscribe?.(); };
+  }, [household?.id, isSessionVerified, remoteReadEpoch, readEpoch]);
 
   useEffect(() => {
     if (
@@ -243,7 +252,7 @@ export default function AssetsPage() {
       setOwnerProfiles([]);
       return;
     }
-    return getAssetOwnerProfileQueries().subscribe(
+    return subscribeToAssetOwnerProfiles(
       householdId,
       (profiles) => {
         setOwnerProfiles(profiles);
@@ -433,7 +442,8 @@ export default function AssetsPage() {
           </div>
         </header>
 
-        {isLoading ? (
+        {assetReadError && <p role="alert" className="mb-4 text-sm text-red-600">자산 목록을 불러오지 못했습니다. <button className="underline" onClick={() => setReadEpoch(value => value + 1)}>다시 시도</button></p>}
+        {assetReadError && sourceAssets === null && cachedAssetsRef.current === undefined ? null : isLoading ? (
           <div className="py-12 text-center text-slate-400">로딩 중...</div>
         ) : (
           <div className="space-y-4">
@@ -516,6 +526,9 @@ export default function AssetsPage() {
             onEditAsset={handleEditAsset}
             stockHoldings={holdingSnapshots.stockHoldings}
             cryptoHoldings={holdingSnapshots.cryptoHoldings}
+            stockHoldingsError={holdingSnapshots.stockHoldingsError}
+            cryptoHoldingsError={holdingSnapshots.cryptoHoldingsError}
+            onRetryHoldings={() => setReadEpoch(value => value + 1)}
             stockHoldingsReady={holdingSnapshots.stockHoldingsReady}
             cryptoHoldingsReady={holdingSnapshots.cryptoHoldingsReady}
           />

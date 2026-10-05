@@ -28,6 +28,7 @@ interface DividendInfo {
 interface StockHoldingListProps {
   holdings: StockHolding[];
   isLoading: boolean;
+  readFailed?: boolean;
   isRefreshing: boolean;
   onRefresh: () => void;
   assetId: string;
@@ -362,6 +363,7 @@ function HoldingEditorCard({
 export default function StockHoldingList({
   holdings,
   isLoading,
+  readFailed = false,
   isRefreshing,
   onRefresh,
   assetId,
@@ -546,7 +548,7 @@ export default function StockHoldingList({
         ) : null}
       </div>
 
-      {isLoading ? (
+      {readFailed && orderedHoldings.length === 0 ? null : isLoading ? (
         <div className="py-8 text-center text-slate-400">로딩 중입니다.</div>
       ) : orderedHoldings.length === 0 ? (
         <div className="py-8 text-center text-slate-400">보유 항목이 없습니다.</div>

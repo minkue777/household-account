@@ -47,8 +47,8 @@
 | [WT-03 · 홈 설정 편집 version 고정·중복 카드 저장 거부](web-tests.md) | 미착수 | |
 | [WT-04 · PUSH-008 endpoint 등록: 서버 성공 뒤 active, 진행단계 순서](web-tests.md) | 미착수 | |
 | [WT-05 · PUSH-004/PUSH-011 malformed payload 차단, actor 변경 뒤 늦은 callback 격리](web-tests.md) | 미착수 | |
-| [WT-06 · 자산 조회 실패·정상 빈 값 구분(UI-01)](web-tests.md) | 미착수 | |
-| [UI-01 · 실패·빈 목록·0원의 소유 계약을 읽기 경계에서 하나로 정합니다](web-ui.md) | 미착수 | |
+| [WT-06 · 자산 조회 실패·정상 빈 값 구분(UI-01)](web-tests.md) | 구현·관련 검사 완료 | [자산 조회 실패와 명의 조회](../../operations/portfolio-read-simplicity-2026-10-05.md) |
+| [UI-01 · 실패·빈 목록·0원의 소유 계약을 읽기 경계에서 하나로 정합니다](web-ui.md) | 구현·관련 검사 완료 | [자산 조회 실패와 명의 조회](../../operations/portfolio-read-simplicity-2026-10-05.md) |
 | [UI-02 · 수입 요약 편집도 편집 시작 버전을 그대로 전달해야 합니다](web-ui.md) | 구현·관련 검사 완료 | [편집 초안과 시세 수명](../../operations/editor-simplicity-2026-10-05.md) |
 | [UI-03 · 설정 저장의 성공·중복·실패 결과 처리를 화면 한 곳으로 모읍니다](web-ui.md) | 구현·관련 검사 완료 | [설정 실패와 사용하지 않는 경계](../../operations/settings-simplicity-2026-10-05.md) |
 | [UI-04 · 폼의 초기화 단위를 외부 목록 참조가 아닌 편집 인스턴스로 맞춥니다](web-ui.md) | 구현·관련 검사 완료 | [편집 초안과 시세 수명](../../operations/editor-simplicity-2026-10-05.md) |
@@ -63,7 +63,7 @@
 | [W8. 같은 카테고리 문서를 목록과 버전으로 나눠 다시 구독한다 — 원본 단위 정비](web.md) | 미착수 | |
 | [W9. 오래된 가맹점 API와 실패를 빈 성공으로 바꾸는 경계 — 삭제·교정 구분](web.md) | 구현·관련 검사 완료 | [설정 실패와 사용하지 않는 경계](../../operations/settings-simplicity-2026-10-05.md) |
 | [W10. 더 이상 쓰지 않는 인자를 호출부까지 운반한다 — 작은 삭제 단위](web.md) | 구현·관련 검사 완료 | [설정 실패와 사용하지 않는 경계](../../operations/settings-simplicity-2026-10-05.md) |
-| [W11. 명의 조회의 한 줄 위임 계층 — 기능 단위로 평탄화 가능](web.md) | 미착수 | |
+| [W11. 명의 조회의 한 줄 위임 계층 — 기능 단위로 평탄화 가능](web.md) | 구현·관련 검사 완료 | [자산 조회 실패와 명의 조회](../../operations/portfolio-read-simplicity-2026-10-05.md) |
 | [1. 운영에 연결되지 않은 configuration 메모리 application 3개 제거 검토](capture.md) | 구현·관련 검사 완료 | [카드·규칙 직접 변경 계산](../../operations/server-simplicity-2026-10-05.md) |
 | [2. Android 미사용 단건 capture 전달 API 제거](capture.md) | 이전 배포 완료 | [Android 1차](implementation.md) |
 | [3. capture ingress와 retry의 두 전달 알고리즘을 한 번의 attempt로 통일](capture.md) | 미착수 | |

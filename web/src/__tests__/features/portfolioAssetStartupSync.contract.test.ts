@@ -1330,4 +1330,27 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
     await deletePending;
     unsubscribe();
   });
+  test.each(['asset', 'stock', 'crypto'])('읽기 오류와 늦은 응답이 %s 목록을 비우지 않는다', kind => {
+    const publish = jest.fn();
+    const fail = jest.fn();
+    const stop = kind === 'asset' ? subscribeToAssets(publish, undefined, undefined, fail)
+      : kind === 'stock' ? subscribeToHouseholdStockHoldings(publish, fail)
+      : subscribeToHouseholdCryptoHoldings(publish, fail);
+    const listener = listenerArguments();
+    const value = kind === 'asset' ? asset() : kind === 'stock' ? stockHolding() : cryptoHolding();
+    listener.next({ metadata: { fromCache: false }, docs: [snapshotAsset(value)] });
+    const previous = publish.mock.calls.at(-1)?.[0];
+    const failure = new Error('unavailable');
+    listener.error(failure);
+    expect(fail).toHaveBeenCalledWith(failure);
+    expect(publish).toHaveBeenLastCalledWith(previous);
+    expect(previous).toHaveLength(1);
+    const count = publish.mock.calls.length;
+    stop();
+    listener.next({ metadata: { fromCache: false }, docs: [] });
+    listener.error(new Error('late'));
+    expect(publish).toHaveBeenCalledTimes(count);
+    expect(fail).toHaveBeenCalledTimes(1);
+  });
+
 });
