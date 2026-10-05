@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -11,6 +11,7 @@ import {
   Tooltip,
   Legend,
   Filler,
+  type ChartData,
   type ChartOptions,
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
@@ -33,21 +34,13 @@ interface MonthlyTrendChartProps {
   expenses: Expense[];
   startDate: string;  // YYYY-MM-DD
   endDate: string;    // YYYY-MM-DD
-  enabledCategories?: Set<string>;
-  onCategoryToggle?: (categories: Set<string>) => void;
+  enabledCategories: Set<string>;
+  onCategoryToggle: (categories: Set<string>) => void;
 }
 
-function MonthlyTrendChart({ expenses, startDate, endDate, enabledCategories: externalEnabled, onCategoryToggle }: MonthlyTrendChartProps) {
+function MonthlyTrendChart({ expenses, startDate, endDate, enabledCategories, onCategoryToggle }: MonthlyTrendChartProps) {
   const { activeCategories } = useCategoryContext();
   const chartMotion = useChartMotion();
-
-  // 내부 상태 (외부에서 제어하지 않을 때 사용)
-  const [internalEnabled, setInternalEnabled] = useState<Set<string>>(() => {
-    return new Set<string>(['all']);
-  });
-
-  // 외부 제어 여부에 따라 사용할 상태 결정
-  const enabledCategories = externalEnabled ?? internalEnabled;
 
   // 월별 라벨 생성
   const months = useMemo(() => {
@@ -66,83 +59,44 @@ function MonthlyTrendChart({ expenses, startDate, endDate, enabledCategories: ex
     return result;
   }, [startDate, endDate]);
 
-  // 월별 데이터 집계
-  const monthlyData = useMemo(() => {
-    // 전체 합계
-    const allData: Record<string, number> = {};
-    // 카테고리별 합계
-    const categoryData: Record<string, Record<string, number>> = {};
+  const series = useMemo(() => {
+    const result = [
+      { key: 'all', label: '전체', color: '#3B82F6' },
+      ...activeCategories,
+    ].map(({ key, label, color }) => ({ key, label, color, data: months.map(() => 0) }));
+    const monthIndices = new Map(months.map((month, index) => [month, index]));
+    const categorySeries = new Map(result.slice(1).map(item => [item.key, item]));
 
-    // 초기화
-    months.forEach((month) => {
-      allData[month] = 0;
-      activeCategories.forEach((cat) => {
-        if (!categoryData[cat.key]) {
-          categoryData[cat.key] = {};
-        }
-        categoryData[cat.key][month] = 0;
-      });
-    });
-
-    // 데이터 집계
-    expenses.forEach((expense) => {
-      const month = expense.date.substring(0, 7); // YYYY-MM
-      if (allData[month] !== undefined) {
-        allData[month] += expense.amount;
-
-        if (categoryData[expense.category]?.[month] !== undefined) {
-          categoryData[expense.category][month] += expense.amount;
-        }
-      }
-    });
-
-    return { allData, categoryData };
+    for (const expense of expenses) {
+      const index = monthIndices.get(expense.date.substring(0, 7));
+      if (index === undefined) continue;
+      result[0].data[index] += expense.amount;
+      const category = categorySeries.get(expense.category);
+      if (category) category.data[index] += expense.amount;
+    }
+    return result;
   }, [expenses, months, activeCategories]);
 
-  // 차트 데이터
-  const chartData = useMemo(() => {
-    const datasets: any[] = [];
-
-    // 'All' 데이터셋
-    if (enabledCategories.has('all')) {
-      datasets.push({
-        label: '전체',
-        data: months.map((m) => monthlyData.allData[m]),
-        borderColor: '#3B82F6',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        borderWidth: 3,
-        fill: true,
+  const chartData = useMemo<ChartData<'line'>>(() => ({
+    labels: months.map(monthKey => {
+      const [year, month] = monthKey.split('-');
+      return `${year.slice(2)}.${month}`;
+    }),
+    datasets: series.filter(item => enabledCategories.has(item.key)).map(item => {
+      const isTotal = item.key === 'all';
+      return {
+        label: item.label,
+        data: item.data,
+        borderColor: item.color,
+        backgroundColor: isTotal ? 'rgba(59, 130, 246, 0.1)' : `${item.color}20`,
+        borderWidth: isTotal ? 3 : 2,
+        fill: isTotal,
         tension: 0.3,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-      });
-    }
-
-    // 카테고리별 데이터셋
-    activeCategories.forEach((cat) => {
-      if (enabledCategories.has(cat.key)) {
-        datasets.push({
-          label: cat.label,
-          data: months.map((m) => monthlyData.categoryData[cat.key]?.[m] ?? 0),
-          borderColor: cat.color,
-          backgroundColor: `${cat.color}20`,
-          borderWidth: 2,
-          fill: false,
-          tension: 0.3,
-          pointRadius: 3,
-          pointHoverRadius: 5,
-        });
-      }
-    });
-
-    return {
-      labels: months.map((m) => {
-        const [year, month] = m.split('-');
-        return `${year.slice(2)}.${month}`;
-      }),
-      datasets,
-    };
-  }, [months, monthlyData, enabledCategories, activeCategories]);
+        pointRadius: isTotal ? 4 : 3,
+        pointHoverRadius: isTotal ? 6 : 5,
+      };
+    }),
+  }), [months, series, enabledCategories]);
 
   const options = useMemo<ChartOptions<'line'>>(() => ({
     ...chartMotion,
@@ -193,52 +147,37 @@ function MonthlyTrendChart({ expenses, startDate, endDate, enabledCategories: ex
       next.add(key);
     }
 
-    if (onCategoryToggle) {
-      onCategoryToggle(next);
-    } else {
-      setInternalEnabled(next);
-    }
+    onCategoryToggle(next);
   };
 
   return (
     <div className="space-y-4">
       {/* 카테고리 토글 버튼들 */}
       <div className="flex flex-wrap gap-2">
-        {/* All 버튼 */}
-        <button
-          onClick={() => toggleCategory('all')}
-          aria-pressed={enabledCategories.has('all')}
-          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-            enabledCategories.has('all')
-              ? 'bg-blue-500 text-white shadow-md'
-              : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-          }`}
-        >
-          전체
-        </button>
-
-        {/* 카테고리 버튼들 */}
-        {activeCategories.map((cat) => (
-          <button
-            key={cat.key}
-            onClick={() => toggleCategory(cat.key)}
-            aria-pressed={enabledCategories.has(cat.key)}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${
-              enabledCategories.has(cat.key)
-                ? 'text-white shadow-md'
-                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-            }`}
-            style={{
-              backgroundColor: enabledCategories.has(cat.key) ? cat.color : undefined,
-            }}
-          >
-            <span
-              className="w-2 h-2 rounded-full"
-              style={{ backgroundColor: enabledCategories.has(cat.key) ? 'white' : cat.color }}
-            />
-            {cat.label}
-          </button>
-        ))}
+        {series.map(item => {
+          const isTotal = item.key === 'all';
+          const selected = enabledCategories.has(item.key);
+          const selectedClass = isTotal ? 'bg-blue-500 text-white shadow-md' : 'text-white shadow-md';
+          return (
+            <button
+              key={item.key}
+              onClick={() => toggleCategory(item.key)}
+              aria-pressed={selected}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                isTotal ? '' : 'flex items-center gap-1.5'
+              } ${selected ? selectedClass : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+              style={isTotal ? undefined : { backgroundColor: selected ? item.color : undefined }}
+            >
+              {!isTotal && (
+                <span
+                  className="w-2 h-2 rounded-full"
+                  style={{ backgroundColor: selected ? 'white' : item.color }}
+                />
+              )}
+              {item.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* 차트 */}

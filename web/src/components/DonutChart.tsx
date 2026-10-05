@@ -19,13 +19,13 @@ interface CategoryData {
 
 interface DonutChartProps {
   expenses: Expense[];
-  onCategoryClick?: (category: Category, expenses: Expense[]) => void;
+  onCategoryClick: (category: Category) => void;
 }
 
 function DonutChart({ expenses, onCategoryClick }: DonutChartProps) {
   const { getCategoryLabel, getCategoryColor } = useCategoryContext();
   const chartMotion = useChartMotion();
-  const chartRef = useRef<any>(null);
+  const chartRef = useRef<ChartJS<'doughnut'>>(null);
 
   const { chartData, categoryDataList, totalAmount } = useMemo(() => {
     // 카테고리별 합계 계산
@@ -51,17 +51,13 @@ function DonutChart({ expenses, onCategoryClick }: DonutChartProps) {
       percentage: totalAmount > 0 ? Math.round((amount / totalAmount) * 100) : 0,
     }));
 
-    const labels = categoryDataList.map((d) => d.label);
-    const data = categoryDataList.map((d) => d.amount);
-    const backgroundColor = categoryDataList.map((d) => d.color);
-
     return {
       chartData: {
-        labels,
+        labels: categoryDataList.map(item => item.label),
         datasets: [
           {
-            data,
-            backgroundColor,
+            data: categoryDataList.map(item => item.amount),
+            backgroundColor: categoryDataList.map(item => item.color),
             borderColor: '#ffffff',
             borderWidth: 2,
           },
@@ -83,31 +79,19 @@ function DonutChart({ expenses, onCategoryClick }: DonutChartProps) {
       },
       tooltip: {
         callbacks: {
-          label: function (context: any) {
-            const value = context.parsed;
-            return ` ${value.toLocaleString()}원`;
-          },
+          label: context => ` ${context.parsed.toLocaleString()}원`,
         },
       },
     },
   }), [chartMotion]);
 
   const handleChartClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!chartRef.current || !onCategoryClick) return;
+    if (!chartRef.current) return;
 
     const elements = getElementAtEvent(chartRef.current, event);
     if (elements.length > 0) {
-      const index = elements[0].index;
-      const categoryData = categoryDataList[index];
-      const categoryExpenses = expenses.filter((e) => e.category === categoryData.category);
-      onCategoryClick(categoryData.category, categoryExpenses);
+      onCategoryClick(categoryDataList[elements[0].index].category);
     }
-  };
-
-  const handleLegendClick = (categoryData: CategoryData) => {
-    if (!onCategoryClick) return;
-    const categoryExpenses = expenses.filter((e) => e.category === categoryData.category);
-    onCategoryClick(categoryData.category, categoryExpenses);
   };
 
   return (
@@ -135,7 +119,7 @@ function DonutChart({ expenses, onCategoryClick }: DonutChartProps) {
         {categoryDataList.map((data) => (
           <button
             key={data.category}
-            onClick={() => handleLegendClick(data)}
+            onClick={() => onCategoryClick(data.category)}
             className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-slate-100 transition-colors text-left"
           >
             <div className="flex items-center gap-2">

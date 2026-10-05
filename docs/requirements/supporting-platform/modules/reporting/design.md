@@ -39,6 +39,8 @@ Firebase Rules는 사용자·가구 읽기 범위를 검증합니다. 조회 ada
 
 지출은 actor/가구/기간/원격 revision으로 조회를 식별합니다. 캐시가 있으면 먼저 표시하고 서버 재검증을 합니다. 수정·삭제의 확정 응답은 기존 predecessor와 revision이 맞는 범위에 적용하며 그렇지 않으면 재조회합니다. 실패 시 편집 초안·선택 기간·기존 결과를 보존하고 오류를 안내합니다.
 
+지출 추이 선택은 StatsPage가 소유하며 MonthlyTrendChart는 전달받은 선택과 callback만 사용합니다. 전체·활성 카테고리를 같은 시리즈 정의로 집계·표시하되, 비활성/미등록 카테고리 거래도 전체 합계에 포함합니다. 빈 월은 0이며 모든 시리즈를 해제한 선택도 유효합니다. DonutChart는 선택한 카테고리 키만 전달하고 상세 목록은 부모의 최신 원천에서 계산합니다. 차트는 상세용 거래 배열을 따로 만들어 전달하지 않습니다.
+
 자산 이력은 같은 세션의 완성된 원본을 재사용하며 기간 변경은 메모리에서 처리합니다. 재진입·앱 복귀는 캐시를 즉시 표시한 뒤 서버를 확인합니다. 캐시는 Actor·원격 epoch·조회 종료일에 해당하는 마지막 완료 이력과 진행 요청 하나를 보관합니다. 모든 조회는 서버를 재확인하며 진행 중인 요청만 공유하므로 TTL·강제 갱신 옵션·범용 다중 쿼리 캐시는 두지 않습니다. 실패 시 완료값을 보존하고, 캐시 무효화·세션·epoch 변경 후 이전 요청은 결과 게시와 후속 page 조회를 중단합니다.
 
 화면 원천 key에는 Actor·가구·원격 epoch·조회 종료일만 포함하고, 자산 변경 revision은 재조회 trigger로 사용합니다. 같은 key의 완료 이력과 확인된 현재 자산은 revision 변경 중에도 유지하며 늦은 이전 요청은 effect cleanup에서 폐기합니다. 증감 차트는 전체 이력을 필수 입력으로 받아 계산·표시만 담당합니다. 별도 조회·실패·재시도 경로를 두지 않습니다.
@@ -75,6 +77,7 @@ Firebase Rules는 사용자·가구 읽기 범위를 검증합니다. 조회 ada
 |---|---|
 | 기간·월말·서울 기준 | statisticsPeriod.contract.test.ts, 실제 StatsPage 기간 선택 |
 | 페이지 완료·상한·중복 cursor·오류·세션 | reportingReadAdapters.test.ts, assetStatisticsReadModel.contract.test.ts |
+| 월별·카테고리 집계·controlled 선택·도넛 상세 키·입력 참조 | expenseChartInputs.test.tsx, statisticsPage.test.tsx |
 | 0원·빈 결과·실패·편집/삭제·늦은 응답 | statisticsPage.test.tsx, expenseStatistics* 검사 |
 | baseline·오늘 잔액·과거 dimension·독립 기간·캐시·선택 보존 | assetBalanceHistory.contract.test.ts, assetProfitSource.test.tsx, assetStatsSessionRead.contract.test.tsx, assetStatisticsReadModel.contract.test.ts |
 | 배당 canonical 월 합계·예상액·상세 정렬 | assetDividendChartIdentity.contract.test.tsx |

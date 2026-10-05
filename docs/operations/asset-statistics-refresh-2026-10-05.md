@@ -57,3 +57,9 @@ E2E 준비의 architecture 43개, 문서 링크·요구사항 추적성 13개와
 실제 이전/현재 page 계산부와 helper를 추출한 데스크톱 Node 24 측정에서 365일 중앙값은 0.793→0.375ms, 1,825일은 1.555→1.305ms, 49,999일/599,988 entry는 21.173→21.322ms였습니다. 7개 시리즈를 모두 선택하고 3개월을 표시하며, 준비 실행 후 일반 이력 41회·상한 근처 11회를 교차 측정했습니다. 상한 근처에서도 더 빠르다고 주장하지 않으며, 기기·렌더·네트워크 시간을 포함하지 않은 로컬 계산 비교입니다. 스크립트는 `TEMP/household-asset-statistics-pipeline-performance-20261005.cjs`, 최종 결과는 `TEMP/household-stats-series-performance-final-20261005.log`입니다. 최종 Jest·타입 로그는 `TEMP/household-stats-series-{unit,types}-final-20261005.log`, 수정 전 참조 회귀는 `TEMP/household-stats-series-reference-before-20261005.log`입니다.
 
 최종 production build와 실제 Auth/Functions/Firestore Emulator 기반 Chromium `portfolio-reporting.spec.ts` 7개가 44.7초에 통과했습니다. 실제 시세 응답·이력 읽기를 보류한 동안 세 canvas와 기간·상세·배당 연도 선택을 유지하고 해제 후 저장된 갱신값을 반영했습니다. E2E 준비 architecture 43개, 최종 문서 링크·요구사항 추적성 13개도 통과했습니다. 로그는 `TEMP/household-stats-series-e2e-final-20261005.log`와 `TEMP/household-stats-series-docs-final-20261005.log`이며 로컬 Emulator는 정상 종료했습니다. 배포 대상은 Web Git 자동배포뿐입니다. 직전 `37f7d40`의 CI `37282200572` 다섯 검사·요약과 Web 배포 성공을 확인했습니다.
+
+## f0d8149a 전체 CI 후속 확인
+
+[CI 37286076199](https://github.com/minkue777/household-account/actions/runs/37286076199)는 functions·web·android·android-instrumentation이 성공했고 web-e2e는 101 passed/1 failed, 요약은 실패했습니다. 실패는 iOS WebKit `notification-deeplink.spec.ts:13`의 `page.goto()`에서 `WebKit encountered an internal error`로 문서 이동이 약 2.104초 만에 거절된 것입니다. 이동 전 거래 생성·원장 재조회는 성공했지만 편집 URL의 document 요청은 status -1·본문 없음이며 편집 화면 검증에 도달하지 못했습니다. Chromium 딥링크, 다른 WebKit 딥링크와 자산 통계 Chromium 7개는 통과했습니다.
+
+브라우저/navigation 경계의 실패로 관측됐으나 내부 원인은 미확정입니다. navigation 실패 약 15ms 뒤 Auth IndexedDB connection-closing 오류가 있었지만 인과를 확정할 수 없습니다. 이전 배당 조회 30초 대기와는 단계가 다릅니다. 제품 코드를 바꾸거나 검사를 완화·재시도할 근거가 없어 무변경 재실행하지 않고, 다음 지출 차트 변경 SHA의 동일 전체 CI에서 후속 확인합니다. 이 실패 이력을 성공으로 덮지 않습니다. 증거는 `TEMP/household-asset-stats-ci-37286076199/trace-extracted/1-trace.{trace,network}`와 `test.trace`입니다.
