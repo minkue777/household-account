@@ -26,9 +26,10 @@ interface IncomeSummaryModalProps {
   onClose: () => void;
   onExpenseUpdate?: (
     expenseId: string,
-    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string }
+    data: { amount?: number; memo?: string; category?: string; merchant?: string; date?: string },
+    expectedVersion: number,
   ) => Promise<void> | void;
-  onDelete?: (expenseId: string) => Promise<void> | void;
+  onDelete?: (expenseId: string, expectedVersion: number) => Promise<void> | void;
 }
 
 function compareExpenses(a: Expense, b: Expense) {
@@ -110,7 +111,7 @@ export default function IncomeSummaryModal({
       return;
     }
 
-    await onExpenseUpdate(selectedExpense.id, updates);
+    await onExpenseUpdate(selectedExpense.id, updates, selectedExpense.aggregateVersion);
   };
 
   const handleDeleteExpense = async () => {
@@ -118,7 +119,7 @@ export default function IncomeSummaryModal({
       return;
     }
 
-    await onDelete(selectedExpense.id);
+    await onDelete(selectedExpense.id, selectedExpense.aggregateVersion);
   };
 
   const renderExpenseRow = (expense: Expense) => {

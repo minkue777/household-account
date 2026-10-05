@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { Plus, X } from 'lucide-react';
 import type { Expense } from '@/types/expense';
 import type { SplitItem } from '@/lib/expenseService';
@@ -22,28 +22,24 @@ function balanceRemainingAmount(items: SplitItem[], total: number, remainderInde
     : item);
 }
 
-export default function ExpenseSplitModal({
+export default function ExpenseSplitModal(props: ExpenseSplitModalProps) {
+  return props.isOpen ? <ExpenseSplitForm key={props.expense.id} {...props} /> : null;
+}
+
+function ExpenseSplitForm({
   expense,
   isOpen,
   onClose,
   onSave,
 }: ExpenseSplitModalProps) {
   const { showAlert } = useAppDialog();
-  const [splits, setSplits] = useState<SplitItem[]>([]);
+  const [splits, setSplits] = useState<SplitItem[]>(() => [
+    { merchant: expense.merchant, amount: Math.floor(expense.amount / 2), category: expense.category, memo: '' },
+    { merchant: expense.merchant, amount: expense.amount - Math.floor(expense.amount / 2), category: expense.category, memo: '' },
+  ]);
   const [emptyAmountIndex, setEmptyAmountIndex] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
-
-  // 모달이 열릴 때 상태 초기화
-  useEffect(() => {
-    if (isOpen) {
-      setSplits([
-        { merchant: expense.merchant, amount: Math.floor(expense.amount / 2), category: expense.category, memo: '' },
-        { merchant: expense.merchant, amount: expense.amount - Math.floor(expense.amount / 2), category: expense.category, memo: '' },
-      ]);
-      setEmptyAmountIndex(null);
-    }
-  }, [isOpen, expense]);
 
   // 분할 항목 추가
   const handleAddSplit = () => {

@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Asset,
   StockHolding,
-  StockPriceInfo,
-  StockSearchResult,
   isGoldEtfSubType,
 } from '@/types/asset';
 import {
@@ -11,6 +9,7 @@ import {
   refreshAssetMarketValues,
 } from '@/lib/assetService';
 import { calculateHoldingValue } from '@/lib/assets/holdingValuation';
+import { useInstrumentSearch } from './useInstrumentSearch';
 import { portfolioQueries } from '@/features/portfolio/application/portfolioQueries';
 
 function sanitizeNumericInput(rawValue: string) {
@@ -43,15 +42,8 @@ export function useStockHoldingManager({
   holdingsSnapshot = [],
   holdingsReady = true,
 }: UseStockHoldingManagerOptions) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<StockSearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [selectedStock, setSelectedStock] = useState<StockSearchResult | null>(null);
   const [quantity, setQuantity] = useState('');
   const [avgPrice, setAvgPrice] = useState('');
-  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
-  const [currentPriceInfo, setCurrentPriceInfo] = useState<StockPriceInfo | null>(null);
-  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const [isAddingHolding, setIsAddingHolding] = useState(false);
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
   const [manualName, setManualName] = useState('');
@@ -61,6 +53,12 @@ export function useStockHoldingManager({
   const isStockAsset =
     asset?.type === 'stock' || (asset?.type === 'gold' && isGoldEtfSubType(asset?.subType));
   const assetId = asset?.id;
+  const search = useInstrumentSearch({ enabled: isOpen && !!assetId && isStockAsset, scopeKey: assetId ?? '',
+    search: portfolioQueries.searchStocks, fetchQuote: portfolioQueries.getStockQuote });
+  const { query: searchQuery, results: searchResults, searching: isSearching, selected: selectedStock, quote, loadingQuote: isLoadingPrice,
+    select: selectStock, setQuery: setSearchQueryFromInput, reset: resetSearch, restore: restoreSearch } = search;
+  const currentPrice = quote?.price ?? null;
+  const currentPriceInfo = quote;
   const holdings = useMemo(
     () => (
       assetId && isStockAsset
@@ -71,15 +69,7 @@ export function useStockHoldingManager({
   );
   const isLoadingHoldings = Boolean(isOpen && isStockAsset && !holdingsReady);
 
-  const resetStockForm = useCallback(() => {
-    setSearchQuery('');
-    setSearchResults([]);
-    setSelectedStock(null);
-    setQuantity('');
-    setAvgPrice('');
-    setCurrentPrice(null);
-    setCurrentPriceInfo(null);
-  }, []);
+  const resetStockForm = useCallback(() => { resetSearch(); setQuantity(''); setAvgPrice(''); }, [resetSearch]);
 
   const resetManualForm = useCallback(() => {
     setManualName('');
@@ -96,46 +86,6 @@ export function useStockHoldingManager({
     resetStockForm();
     resetManualForm();
   }, [assetId, isOpen, isStockAsset, resetManualForm, resetStockForm]);
-
-  useEffect(() => {
-    if (searchQuery.length < 1) {
-      setSearchResults([]);
-      return;
-    }
-
-    let cancelled = false;
-    void (async () => {
-      setIsSearching(true);
-      try {
-        const results = await portfolioQueries.searchStocks(searchQuery);
-        if (!cancelled) {
-          setSearchResults(results);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setSearchResults([]);
-        }
-        console.error('Failed to search stocks:', error);
-      } finally {
-        if (!cancelled) {
-          setIsSearching(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [searchQuery]);
-
-  const setSearchQueryFromInput = useCallback((value: string) => {
-    setSearchQuery(value);
-    if (selectedStock) {
-      setSelectedStock(null);
-      setCurrentPrice(null);
-      setCurrentPriceInfo(null);
-    }
-  }, [selectedStock]);
 
   const setQuantityInput = useCallback((value: string) => {
     setQuantity(
@@ -157,25 +107,6 @@ export function useStockHoldingManager({
     setManualCurrentValue(sanitizeNumericInput(value));
   }, []);
 
-  const selectStock = useCallback(async (stock: StockSearchResult) => {
-    setSelectedStock(stock);
-    setSearchQuery(stock.name);
-    setSearchResults([]);
-    setIsLoadingPrice(true);
-
-    try {
-      const data = await portfolioQueries.getStockQuote(stock);
-      setCurrentPrice(data.price);
-      setCurrentPriceInfo(data);
-    } catch (error) {
-      setCurrentPrice(null);
-      setCurrentPriceInfo(null);
-      console.error('Failed to fetch stock price:', error);
-    } finally {
-      setIsLoadingPrice(false);
-    }
-  }, []);
-
   const addHolding = useCallback(async () => {
     if (!assetId || !isStockAsset || !selectedStock || !quantity || isAddingHolding) {
       return false;
@@ -184,6 +115,7 @@ export function useStockHoldingManager({
     setIsAddingHolding(true);
     const submitted = {
       selectedStock,
+      quote,
       quantity,
       avgPrice,
       currentPrice,
@@ -207,12 +139,9 @@ export function useStockHoldingManager({
       await pendingAdd;
       return true;
     } catch (error) {
-      setSelectedStock(submitted.selectedStock);
-      setSearchQuery(submitted.selectedStock.name);
+      restoreSearch(submitted.selectedStock, submitted.quote);
       setQuantity(submitted.quantity);
       setAvgPrice(submitted.avgPrice);
-      setCurrentPrice(submitted.currentPrice);
-      setCurrentPriceInfo(submitted.currentPriceInfo);
       console.error('Failed to add stock holding:', error);
       return false;
     } finally {
@@ -227,6 +156,8 @@ export function useStockHoldingManager({
     isStockAsset,
     quantity,
     resetStockForm,
+    quote,
+    restoreSearch,
     selectedStock,
   ]);
 

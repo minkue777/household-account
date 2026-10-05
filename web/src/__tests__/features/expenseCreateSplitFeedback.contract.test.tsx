@@ -6,7 +6,7 @@ import ExpenseSplitModal from '@/components/expense/ExpenseSplitModal';
 import type { Expense } from '@/types/expense';
 
 const mockShowAlert = jest.fn().mockResolvedValue(undefined);
-const mockActiveCategories = [
+let mockActiveCategories = [
   {
     id: 'category-food',
     key: 'food',
@@ -77,6 +77,34 @@ describe('거래 생성·분리 mutation feedback 계약', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  test('카테고리 재조회는 입력 초안을 지우지 않고 사라진 선택은 저장을 거부한다', async () => {
+    const original = mockActiveCategories;
+    const props = { isOpen: true, onClose: jest.fn(), onAdd: jest.fn(), transactionType: 'expense' as const };
+    const { rerender } = render(<AddExpenseModal {...props} />);
+    fireEvent.change(screen.getByPlaceholderText('가맹점명을 입력하세요'), { target: { value: '작성 중인 가게' } });
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '12000' } });
+    mockActiveCategories = original.map(item => ({ ...item }));
+    rerender(<AddExpenseModal {...props} />);
+    expect(screen.getByDisplayValue('작성 중인 가게')).toBeInTheDocument();
+    mockActiveCategories = [];
+    rerender(<AddExpenseModal {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: '추가' }));
+    await waitFor(() => expect(mockShowAlert).toHaveBeenCalledWith(expect.stringContaining('카테고리를 다시 선택')));
+    expect(props.onAdd).not.toHaveBeenCalled();
+    mockActiveCategories = original;
+  });
+
+  test('같은 거래의 새 객체를 받아도 분할 초안을 초기화하지 않는다', () => {
+    const props = { isOpen: true, onClose: jest.fn(), onSave: jest.fn() };
+    const { rerender } = render(<ExpenseSplitModal {...props} expense={expense} />);
+    editSplitAmount(0, 3000);
+    rerender(<ExpenseSplitModal {...props} expense={{ ...expense }} />);
+    expect(displayedSplitAmounts()).toEqual([3000, 7000]);
+    rerender(<ExpenseSplitModal {...props} expense={expense} isOpen={false} />);
+    rerender(<ExpenseSplitModal {...props} expense={expense} />);
+    expect(displayedSplitAmounts()).toEqual([5000, 5000]);
   });
 
   test('수동 지출 추가는 즉시 닫되 중복 전송을 막고 원격 실패를 앱 알림으로 보여준다', async () => {

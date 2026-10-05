@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import AmountInput from '@/components/common/AmountInput';
 import ModalOverlay from '@/components/common/ModalOverlay';
@@ -38,7 +38,11 @@ interface AddExpenseModalProps {
   availableTags?: string[];
 }
 
-export default function AddExpenseModal({
+export default function AddExpenseModal(props: AddExpenseModalProps) {
+  return props.isOpen ? <AddExpenseForm key={props.transactionType + ":" + props.selectedDate} {...props} /> : null;
+}
+
+function AddExpenseForm({
   isOpen,
   onClose,
   onAdd,
@@ -74,7 +78,7 @@ export default function AddExpenseModal({
     initial: {
       merchant: defaultMerchant,
       amount: '',
-      category: 'etc',
+      category: isIncome ? 'etc' : resolveDefaultCategoryKey(activeCategories),
       memo: '',
       date: defaultDate,
     },
@@ -89,29 +93,6 @@ export default function AddExpenseModal({
     handleSplitMonthsInputChange,
     getValidSplitMonths,
   } = useMonthlySplitInput();
-
-  // 코드가 늦게 도착해도 창을 그리기 전에 초기화를 마쳐 첫 입력을 지우지 않습니다.
-  useLayoutEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    resetExpenseFormState({
-      merchant: defaultMerchant,
-      amount: '',
-      category: resolveDefaultCategoryKey(activeCategories),
-      memo: '',
-      date: selectedDate || getTodayLocalDate(),
-    });
-    resetMonthlySplitInput();
-  }, [
-    activeCategories,
-    defaultMerchant,
-    isOpen,
-    resetExpenseFormState,
-    resetMonthlySplitInput,
-    selectedDate,
-  ]);
 
   const handleSubmit = async () => {
     if (isSubmittingRef.current) {
@@ -136,6 +117,10 @@ export default function AddExpenseModal({
     } else {
       const normalizedMerchant = trimExpenseMerchant(merchant);
       if (!normalizedMerchant) {
+        return;
+      }
+      if (!activeCategories.some(item => item.key === category)) {
+        await showAlert('선택한 카테고리를 사용할 수 없습니다. 카테고리를 다시 선택해 주세요.');
         return;
       }
 

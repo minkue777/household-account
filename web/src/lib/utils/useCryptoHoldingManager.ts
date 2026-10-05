@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Asset, CryptoHolding, CryptoSearchResult } from '@/types/asset';
+import { Asset, CryptoHolding } from '@/types/asset';
 import {
   addCryptoHolding,
   refreshAssetMarketValues,
 } from '@/lib/assetService';
+import { useInstrumentSearch } from './useInstrumentSearch';
 import { portfolioQueries } from '@/features/portfolio/application/portfolioQueries';
 import { calculateHoldingValue as calculateCryptoHoldingValue } from '@/lib/assets/holdingValuation';
 
@@ -33,19 +34,18 @@ export function useCryptoHoldingManager({
   holdingsSnapshot = [],
   holdingsReady = true,
 }: UseCryptoHoldingManagerOptions) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<CryptoSearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [selectedCoin, setSelectedCoin] = useState<CryptoSearchResult | null>(null);
   const [quantity, setQuantity] = useState('');
   const [avgPrice, setAvgPrice] = useState('');
-  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
-  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const [isAddingHolding, setIsAddingHolding] = useState(false);
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
 
   const isCryptoAsset = asset?.type === 'crypto';
   const assetId = asset?.id;
+  const search = useInstrumentSearch({ enabled: isOpen && !!assetId && isCryptoAsset, scopeKey: assetId ?? '',
+    search: portfolioQueries.searchCrypto, fetchQuote: portfolioQueries.getCryptoQuote });
+  const { query: searchQuery, results: searchResults, searching: isSearching, selected: selectedCoin, quote, loadingQuote: isLoadingPrice,
+    select: selectCoin, setQuery: setSearchQueryFromInput, reset: resetSearch, restore: restoreSearch } = search;
+  const currentPrice = quote?.price ?? null;
   const holdings = useMemo(
     () => (
       assetId && isCryptoAsset
@@ -56,14 +56,7 @@ export function useCryptoHoldingManager({
   );
   const isLoadingHoldings = Boolean(isOpen && isCryptoAsset && !holdingsReady);
 
-  const resetCryptoForm = useCallback(() => {
-    setSearchQuery('');
-    setSearchResults([]);
-    setSelectedCoin(null);
-    setQuantity('');
-    setAvgPrice('');
-    setCurrentPrice(null);
-  }, []);
+  const resetCryptoForm = useCallback(() => { resetSearch(); setQuantity(''); setAvgPrice(''); }, [resetSearch]);
 
   useEffect(() => {
     if (!isOpen || !assetId || !isCryptoAsset) {
@@ -74,48 +67,6 @@ export function useCryptoHoldingManager({
     resetCryptoForm();
   }, [assetId, isCryptoAsset, isOpen, resetCryptoForm]);
 
-  useEffect(() => {
-    if (searchQuery.length < 1) {
-      setSearchResults([]);
-      return;
-    }
-
-    let cancelled = false;
-    void (async () => {
-      setIsSearching(true);
-      try {
-        const results = await portfolioQueries.searchCrypto(searchQuery);
-        if (!cancelled) {
-          setSearchResults(results);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setSearchResults([]);
-        }
-        console.error('Failed to search crypto:', error);
-      } finally {
-        if (!cancelled) {
-          setIsSearching(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [searchQuery]);
-
-  const setSearchQueryFromInput = useCallback(
-    (value: string) => {
-      setSearchQuery(value);
-      if (selectedCoin) {
-        setSelectedCoin(null);
-        setCurrentPrice(null);
-      }
-    },
-    [selectedCoin]
-  );
-
   const setQuantityInput = useCallback((value: string) => {
     setQuantity(sanitizeDecimalInput(value));
   }, []);
@@ -124,30 +75,13 @@ export function useCryptoHoldingManager({
     setAvgPrice(value.replace(/[^0-9]/g, ''));
   }, []);
 
-  const selectCoin = useCallback(async (coin: CryptoSearchResult) => {
-    setSelectedCoin(coin);
-    setSearchQuery(coin.name);
-    setSearchResults([]);
-    setIsLoadingPrice(true);
-
-    try {
-      const data = await portfolioQueries.getCryptoQuote(coin);
-      setCurrentPrice(data.price);
-    } catch (error) {
-      setCurrentPrice(null);
-      console.error('Failed to fetch crypto price:', error);
-    } finally {
-      setIsLoadingPrice(false);
-    }
-  }, []);
-
   const addHolding = useCallback(async () => {
     if (!assetId || !isCryptoAsset || !selectedCoin || !quantity || isAddingHolding) {
       return false;
     }
 
     setIsAddingHolding(true);
-    const submitted = { selectedCoin, quantity, avgPrice, currentPrice };
+    const submitted = { selectedCoin, quantity, avgPrice, currentPrice, quote };
     const pendingAdd = addCryptoHolding({
       assetId,
       marketCode: selectedCoin.code,
@@ -161,11 +95,9 @@ export function useCryptoHoldingManager({
       await pendingAdd;
       return true;
     } catch (error) {
-      setSelectedCoin(submitted.selectedCoin);
-      setSearchQuery(submitted.selectedCoin.name);
+      restoreSearch(submitted.selectedCoin, submitted.quote);
       setQuantity(submitted.quantity);
       setAvgPrice(submitted.avgPrice);
-      setCurrentPrice(submitted.currentPrice);
       console.error('Failed to add crypto holding:', error);
       return false;
     } finally {

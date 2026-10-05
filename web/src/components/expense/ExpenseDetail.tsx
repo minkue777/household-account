@@ -63,7 +63,7 @@ export default function ExpenseDetail({
   // A pending date change or deletion can remove the row from this day's source.
   // Keep the selected transaction until the editor explicitly closes.
   const { expense: editingExpense, selectExpense: setEditingExpense, editorKey } = useExpenseEditor();
-  const [splittingExpenseId, setSplittingExpenseId] = useState<string | null>(null);
+  const [splittingExpense, setSplittingExpense] = useState<Expense | null>(null);
   const handleMergeError = useCallback((error: unknown) => {
     const detail = error instanceof Error && error.message.trim() !== ''
       ? `\n\n${error.message}`
@@ -89,7 +89,6 @@ export default function ExpenseDetail({
     onMergeExpenses,
     onMergeError: handleMergeError,
   });
-  const splittingExpense = expenses.find((expense) => expense.id === splittingExpenseId);
 
   useEffect(() => {
     if (!autoEditExpenseId || editingExpense?.id === autoEditExpenseId) {
@@ -101,19 +100,14 @@ export default function ExpenseDetail({
       return;
     }
 
-    setSplittingExpenseId(null);
+    setSplittingExpense(null);
     setEditingExpense(autoEditExpense);
     onAutoEditHandled?.();
   }, [autoEditExpenseId, editingExpense, expenses, onAutoEditHandled, setEditingExpense]);
 
-  useEffect(() => {
-    if (splittingExpenseId && !splittingExpense) {
-      setSplittingExpenseId(null);
-    }
-  }, [splittingExpense, splittingExpenseId]);
 
   const openExpenseEditor = (expense: Expense) => {
-    setSplittingExpenseId(null);
+    setSplittingExpense(null);
     setEditingExpense(expense);
   };
 
@@ -217,7 +211,7 @@ export default function ExpenseDetail({
             transactionType === 'expense' && onSplitExpense
               ? () => {
                   setEditingExpense(null);
-                  setSplittingExpenseId(editingExpense.id);
+                  setSplittingExpense(editingExpense);
                 }
               : undefined
           }
@@ -265,7 +259,7 @@ export default function ExpenseDetail({
         <ExpenseSplitModal
           expense={splittingExpense}
           isOpen
-          onClose={() => setSplittingExpenseId(null)}
+          onClose={() => setSplittingExpense(null)}
           onSave={(splits) => onSplitExpense?.(splittingExpense, splits)}
         />
       )}

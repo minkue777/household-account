@@ -1,16 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useInstrumentSearch } from '@/lib/utils/useInstrumentSearch';
 import { getSeoulCalendarParts } from '@/lib/utils/date';
 import {
   AssetInput,
   AssetOwnerOption,
   AssetType,
   ASSET_TYPE_CONFIG,
-  CryptoSearchResult,
   LoanRepaymentMethod,
-  StockPriceInfo,
-  StockSearchResult,
   isGoldEtfSubType,
 } from '@/types/asset';
 import { addAsset, addCryptoHolding, addStockHolding } from '@/lib/assetService';
@@ -103,7 +101,11 @@ function resolveInitialOwnerKey(defaultOwnerKey: string | undefined, ownerOption
     : ownerOptions[0]?.key || HOUSEHOLD_OWNER_OPTION;
 }
 
-export default function AssetAddModal({
+export default function AssetAddModal(props: AssetAddModalProps) {
+  return props.isOpen ? <AssetAddForm key={props.defaultType + ":" + props.defaultOwnerKey} {...props} /> : null;
+}
+
+function AssetAddForm({
   isOpen,
   onClose,
   defaultType = 'savings',
@@ -125,26 +127,13 @@ export default function AssetAddModal({
   const [memo, setMemo] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<StockSearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [selectedStock, setSelectedStock] = useState<StockSearchResult | null>(null);
   const [quantity, setQuantity] = useState('');
   const [avgPrice, setAvgPrice] = useState('');
-  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
-  const [currentPriceInfo, setCurrentPriceInfo] = useState<StockPriceInfo | null>(null);
-  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const [isAddingHolding, setIsAddingHolding] = useState(false);
   const [pendingHoldings, setPendingHoldings] = useState<PendingStockHolding[]>([]);
 
-  const [cryptoSearchQuery, setCryptoSearchQuery] = useState('');
-  const [cryptoSearchResults, setCryptoSearchResults] = useState<CryptoSearchResult[]>([]);
-  const [isCryptoSearching, setIsCryptoSearching] = useState(false);
-  const [selectedCoin, setSelectedCoin] = useState<CryptoSearchResult | null>(null);
   const [coinQuantity, setCoinQuantity] = useState('');
   const [coinAvgPrice, setCoinAvgPrice] = useState('');
-  const [coinCurrentPrice, setCoinCurrentPrice] = useState<number | null>(null);
-  const [isLoadingCoinPrice, setIsLoadingCoinPrice] = useState(false);
   const [isAddingCoinHolding, setIsAddingCoinHolding] = useState(false);
   const [pendingCryptoHoldings, setPendingCryptoHoldings] = useState<PendingCryptoHolding[]>([]);
 
@@ -156,24 +145,18 @@ export default function AssetAddModal({
     isLoanAsset &&
     (loanRepaymentMethod === '원리금균등상환' || loanRepaymentMethod === '원금균등상환');
 
-  const resetStockForm = () => {
-    setSearchQuery('');
-    setSearchResults([]);
-    setSelectedStock(null);
-    setQuantity('');
-    setAvgPrice('');
-    setCurrentPrice(null);
-    setCurrentPriceInfo(null);
-  };
+  const stockSearch = useInstrumentSearch({ enabled: isOpen && isStockLikeAsset, scopeKey: type + ':' + subType,
+    search: portfolioQueries.searchStocks, fetchQuote: portfolioQueries.getStockQuote });
+  const cryptoSearch = useInstrumentSearch({ enabled: isOpen && type === 'crypto', scopeKey: type,
+    search: portfolioQueries.searchCrypto, fetchQuote: portfolioQueries.getCryptoQuote });
+  const { selected: selectedStock, quote: currentPriceInfo } = stockSearch;
+  const currentPrice = currentPriceInfo?.price ?? null;
+  const { selected: selectedCoin } = cryptoSearch;
+  const coinCurrentPrice = cryptoSearch.quote?.price ?? null;
 
-  const resetCryptoForm = () => {
-    setCryptoSearchQuery('');
-    setCryptoSearchResults([]);
-    setSelectedCoin(null);
-    setCoinQuantity('');
-    setCoinAvgPrice('');
-    setCoinCurrentPrice(null);
-  };
+  const resetStockForm = () => { stockSearch.reset(); setQuantity(''); setAvgPrice(''); };
+
+  const resetCryptoForm = () => { cryptoSearch.reset(); setCoinQuantity(''); setCoinAvgPrice(''); };
 
   useEffect(() => {
     setName('');
@@ -196,123 +179,6 @@ export default function AssetAddModal({
       setSubType(ASSET_TYPE_CONFIG[type].subTypes[0] || '');
     }
   }, [subType, type]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    setType(defaultType);
-    setSubType(ASSET_TYPE_CONFIG[defaultType].subTypes[0] || '');
-
-    setOwnerKey(resolveInitialOwnerKey(defaultOwnerKey, ownerOptions));
-    setName('');
-    setBalance('');
-    setRecurringContributionAmount('');
-    setRecurringContributionDay('');
-    setLoanInterestRate('');
-    setLoanRepaymentMethod('');
-    setLoanMonthlyPaymentAmount('');
-    setLoanPaymentDay('');
-    setMemo('');
-    setPendingHoldings([]);
-    setPendingCryptoHoldings([]);
-    resetStockForm();
-    resetCryptoForm();
-  }, [defaultOwnerKey, defaultType, isOpen, ownerOptions]);
-
-  useEffect(() => {
-    if (!isStockLikeAsset || searchQuery.length < 1) {
-      setSearchResults([]);
-      return;
-    }
-
-    if (selectedStock && selectedStock.name === searchQuery) {
-      return;
-    }
-
-    let cancelled = false;
-    void (async () => {
-      setIsSearching(true);
-      try {
-        const results = await portfolioQueries.searchStocks(searchQuery);
-        if (!cancelled) {
-          setSearchResults(
-            isGoldEtf
-              ? results.filter((item) => isGoldRelatedStockName(item.name))
-              : results
-          );
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setSearchResults([]);
-        }
-        console.error('주식 검색 오류:', error);
-      } finally {
-        if (!cancelled) {
-          setIsSearching(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isGoldEtf, isStockLikeAsset, searchQuery, selectedStock]);
-
-  useEffect(() => {
-    if (type !== 'crypto' || cryptoSearchQuery.length < 1) {
-      setCryptoSearchResults([]);
-      return;
-    }
-
-    if (selectedCoin && selectedCoin.name === cryptoSearchQuery) {
-      return;
-    }
-
-    let cancelled = false;
-    void (async () => {
-      setIsCryptoSearching(true);
-      try {
-        const results = await portfolioQueries.searchCrypto(cryptoSearchQuery);
-        if (!cancelled) {
-          setCryptoSearchResults(results);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setCryptoSearchResults([]);
-        }
-        console.error('코인 검색 오류:', error);
-      } finally {
-        if (!cancelled) {
-          setIsCryptoSearching(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [cryptoSearchQuery, selectedCoin, type]);
-
-  const handleSelectStock = async (stock: StockSearchResult) => {
-    setSelectedStock(stock);
-    setSearchQuery(stock.name);
-    setSearchResults([]);
-    setIsLoadingPrice(true);
-
-    try {
-      const data = await portfolioQueries.getStockQuote(stock);
-      setCurrentPrice(data.price);
-      setCurrentPriceInfo(data);
-    } catch (error) {
-      setCurrentPrice(null);
-      setCurrentPriceInfo(null);
-      console.error('주가 조회 오류:', error);
-    } finally {
-      setIsLoadingPrice(false);
-    }
-  };
 
   const handleAddPendingHolding = async () => {
     if (!selectedStock || !quantity || isAddingHolding) {
@@ -339,23 +205,6 @@ export default function AssetAddModal({
       resetStockForm();
     } finally {
       setIsAddingHolding(false);
-    }
-  };
-
-  const handleSelectCoin = async (coin: CryptoSearchResult) => {
-    setSelectedCoin(coin);
-    setCryptoSearchQuery(coin.name);
-    setCryptoSearchResults([]);
-    setIsLoadingCoinPrice(true);
-
-    try {
-      const data = await portfolioQueries.getCryptoQuote(coin);
-      setCoinCurrentPrice(data.price);
-    } catch (error) {
-      setCoinCurrentPrice(null);
-      console.error('코인 시세 조회 오류:', error);
-    } finally {
-      setIsLoadingCoinPrice(false);
     }
   };
 
@@ -395,10 +244,13 @@ export default function AssetAddModal({
       return;
     }
 
+    const selectedOwner = ownerOptions.find(option => option.key === ownerKey);
+    if (!selectedOwner) {
+      await showAlert('선택한 명의를 사용할 수 없습니다. 명의를 다시 선택해 주세요.');
+      return;
+    }
     setIsSubmitting(true);
     try {
-      const selectedOwner =
-        ownerOptions.find((option) => option.key === ownerKey) ?? ownerOptions[0];
       const input: AssetInput = {
         name: name.trim(),
         type,
@@ -499,21 +351,12 @@ export default function AssetAddModal({
   }
 
   const stockSearchState: StockSearchState = {
-    searchQuery,
-    setSearchQuery: (value) => {
-      setSearchQuery(value);
-      if (selectedStock) {
-        setSelectedStock(null);
-        setCurrentPrice(null);
-        setCurrentPriceInfo(null);
-      }
-    },
-    searchResults,
-    isSearching,
+    searchQuery: stockSearch.query,
+    setSearchQuery: stockSearch.setQuery,
+    searchResults: isGoldEtf ? stockSearch.results.filter(item => isGoldRelatedStockName(item.name)) : stockSearch.results,
+    isSearching: stockSearch.searching,
     selectedStock,
-    selectStock: (stock) => {
-      void handleSelectStock(stock);
-    },
+    selectStock: stockSearch.select,
     quantity,
     setQuantityInput: (value) =>
       setQuantity(
@@ -530,31 +373,23 @@ export default function AssetAddModal({
       ),
     currentPrice,
     currentPriceInfo,
-    isLoadingPrice,
+    isLoadingPrice: stockSearch.loadingQuote,
     isAddingHolding,
   };
 
   const cryptoSearchState: CryptoSearchState = {
-    searchQuery: cryptoSearchQuery,
-    setSearchQuery: (value) => {
-      setCryptoSearchQuery(value);
-      if (selectedCoin) {
-        setSelectedCoin(null);
-        setCoinCurrentPrice(null);
-      }
-    },
-    searchResults: cryptoSearchResults,
-    isSearching: isCryptoSearching,
+    searchQuery: cryptoSearch.query,
+    setSearchQuery: cryptoSearch.setQuery,
+    searchResults: cryptoSearch.results,
+    isSearching: cryptoSearch.searching,
     selectedCoin,
-    selectCoin: (coin) => {
-      void handleSelectCoin(coin);
-    },
+    selectCoin: cryptoSearch.select,
     quantity: coinQuantity,
     setQuantityInput: (value) => setCoinQuantity(sanitizeDecimalInput(value)),
     avgPrice: coinAvgPrice,
     setAvgPriceInput: (value) => setCoinAvgPrice(sanitizeNumericInput(value)),
     currentPrice: coinCurrentPrice,
-    isLoadingPrice: isLoadingCoinPrice,
+    isLoadingPrice: cryptoSearch.loadingQuote,
     isAddingHolding: isAddingCoinHolding,
   };
 

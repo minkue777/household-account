@@ -3,6 +3,7 @@ import { useCryptoHoldingManager } from '@/lib/utils/useCryptoHoldingManager';
 import { useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
 import { portfolioQueries } from '@/features/portfolio/application/portfolioQueries';
 import type { Asset, CryptoHolding, StockHolding } from '@/types/asset';
+import { addCryptoHolding } from '@/lib/assetService';
 
 jest.mock('@/lib/assetService', () => ({
   addStockHolding: jest.fn(),
@@ -124,5 +125,29 @@ describe('holding manager in-memory snapshot contract', () => {
     });
 
     expect(searchCrypto).toHaveBeenCalledWith('비트코인');
+  });
+
+  test('코인 역순 응답·선택 취소가 소수 수량과 현재 종목의 제출 가격을 오염시키지 않는다', async () => {
+    type Quote = Awaited<ReturnType<typeof portfolioQueries.getCryptoQuote>>;
+    let resolveA!: (value: Quote) => void;
+    let resolveB!: (value: Quote) => void;
+    const pendingA = new Promise<Quote>(resolve => { resolveA = resolve; });
+    const pendingB = new Promise<Quote>(resolve => { resolveB = resolve; });
+    (portfolioQueries.getCryptoQuote as jest.Mock).mockImplementation(coin => coin.code === 'A' ? pendingA : pendingB);
+    (addCryptoHolding as jest.Mock).mockResolvedValue('holding');
+    const { result } = renderHook(() => useCryptoHoldingManager({ isOpen: true, asset: asset('crypto-a', 'crypto') }));
+    act(() => { void result.current.selectCoin({ code: 'A', name: '코인 A' }); });
+    act(() => { void result.current.selectCoin({ code: 'B', name: '코인 B' }); });
+    const quote = (code: string, price: number): Quote => ({ code, name: code, price, change: 0, changePercent: 0, previousClose: price, currency: 'KRW' });
+    await act(async () => resolveB(quote('B', 200)));
+    await act(async () => resolveA(quote('A', 100)));
+    expect(result.current.currentPrice).toBe(200);
+    act(() => { result.current.setQuantityInput('0.25'); result.current.setAvgPriceInput('180'); });
+    await act(async () => { expect(await result.current.addHolding()).toBe(true); });
+    expect(addCryptoHolding).toHaveBeenCalledWith({ assetId: 'crypto-a', marketCode: 'B', coinName: '코인 B', quantity: 0.25, avgPrice: 180, currentPrice: 200 });
+    act(() => { void result.current.selectCoin({ code: 'A', name: '코인 A' }); result.current.setSearchQuery(''); });
+    await act(async () => { await pendingA; });
+    expect(result.current.selectedCoin).toBeNull();
+    expect(result.current.currentPrice).toBeNull();
   });
 });
