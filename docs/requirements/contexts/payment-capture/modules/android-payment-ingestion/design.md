@@ -210,7 +210,7 @@ Functions의 `SourceSelector`는 서버 `PaymentSourceRegistry`에서 package를
 
 연도 없는 월·일·시·분은 parser별 휴리스틱으로 결정하지 않고 DEC-029의 `PaymentOccurrenceYearPolicyV1`을 사용합니다. Policy는 위에서 확정한 서울 기준 수신 시각을 입력받고 수신 연도의 후보가 수신 시각보다 미래면 전년으로 내립니다. 윤년처럼 후보가 유효하지 않으면 유효하면서 미래가 아닌 가장 가까운 과거 연도까지 탐색합니다. 같은 날짜의 미래 시각에도 허용 오차를 두지 않으며 불가능한 날짜·시각은 `INVALID_DATE` 또는 `INVALID_TIME`입니다. Kotlin과 TypeScript 구현은 `T-PARSE-003` JSON fixture로 계약을 공유합니다.
 
-SMS Adapter는 후보마다 KB → NH → NaverPay → Toss → KakaoPay → DigitalOnnuri → Paybooc → Samsung → Lotte → Gyeonggi → Daejeon 순으로 첫 성공을 선택하고, 모두 실패하면 `SmsCardMessageParser`를 마지막에 실행합니다. Sejong과 CityGas는 이 내부 순서에 포함하지 않습니다. 실행 순서는 실제 `smsBillProviderParser` 배열 한 곳에서 관리하며 `T-SMS-ORDER-001`은 실제 parser 호출 순서·겹치는 문자·중단을 검사합니다. 전용 앱은 package가 지역을 확정하지만 공용 SMS에서는 경기지역화폐·대전사랑카드/온통대전/대전지역화폐 서비스명이 있어야 해당 지역 parser를 선택합니다. 지역명이 없는 일반 결제·잔액이나 여민전을 경기지역화폐로 추정하지 않습니다.
+SMS Adapter는 후보마다 KB → NH → NaverPay → Toss → KakaoPay → DigitalOnnuri → Paybooc → Samsung → Lotte → Gyeonggi → Daejeon 순으로 첫 성공을 선택하고, 모두 실패하면 `SmsCardMessageParser`를 마지막에 실행합니다. Sejong과 CityGas는 이 내부 순서에 포함하지 않습니다. 실행 순서는 실제 `smsBillProviderParser` 배열 한 곳에서 관리하며 `T-SMS-ORDER-001`은 실제 parser 호출 순서·겹치는 문자·중단을 검사합니다. 전용 앱은 package가 지역을 확정하지만 공용 SMS에서는 서비스명을 먼저 해석합니다. 여민전·세종지역화폐는 SMS 지역 후보에서 제외하고, 대전사랑카드/온통대전/대전지역화폐는 대전으로, 나머지 `지역화폐` 서비스명은 기존 경기 시군별 명칭으로 처리합니다. `희망화성지역화폐_특례시기념` 같은 기존 지역 명칭도 보존합니다. 지역명이 없는 일반 결제·잔액이나 여민전을 경기지역화폐로 추정하지 않습니다.
 
 KakaoTalk Adapter는 `MessagingStyle.messages`의 현재 메시지를 표시 순서대로 독립 후보로 만들고 `historicMessages`는 후보에 넣지 않습니다. 후보별 admission·30초 claim·observation ID·암호화 Queue entry를 따로 만들기 때문에 `A` 알림이 `A+B`로 갱신돼도 A의 중복 여부와 새 B의 처리가 분리됩니다. 구조화 메시지가 없는 fallback은 기존 raw 필드 계약을 사용하되, 여러 거래의 필드를 서로 빌려 하나의 결과를 합성하지 않습니다.
 

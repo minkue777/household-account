@@ -89,12 +89,16 @@ function parseNhBill(
 }
 
 function parseSms(context: ProviderParserContext): AndroidProviderParseResult {
+  // 전용 앱과 달리 공용 SMS는 서비스명이 지역을 구분합니다. 경기의 시군별 명칭도 보존합니다.
+  const localCurrencyParser = /여민전|세종지역화폐/u.test(context.body) ? undefined
+    : /대전사랑카드|온통대전|대전지역화폐/u.test(context.body) ? daejeonLocalCurrencyProviderParser
+    : /지역화폐/u.test(context.body) ? gyeonggiLocalCurrencyProviderParser
+    : undefined;
   for (const candidate of smsCandidates(context.body)) {
     const candidateContext = { ...context, body: candidate };
     for (const parser of SMS_PAYMENT_PARSERS) {
-      // 전용 앱은 package가 지역을 확정하지만 공용 SMS는 본문의 발신 서비스명이 필요합니다.
-      if (parser === gyeonggiLocalCurrencyProviderParser && !/경기지역화폐/u.test(context.body)) continue;
-      if (parser === daejeonLocalCurrencyProviderParser && !/대전사랑카드|온통대전|대전지역화폐/u.test(context.body)) continue;
+      if ((parser === gyeonggiLocalCurrencyProviderParser || parser === daejeonLocalCurrencyProviderParser)
+        && parser !== localCurrencyParser) continue;
       const result = parser.parse(candidateContext);
       if (result.kind === "Parsed") {
         return result;

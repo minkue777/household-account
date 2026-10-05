@@ -21,4 +21,8 @@
 
 각 기능 문서가 검증 범위·로그를 보유합니다. 최종 묶음은 실제 배당 SDK 14개, 통계 Chromium 6개, iPhone WebKit 2개, Android JVM 109개·Activity/Keystore 19개·Native Firebase 4개·Native→Web 1개, 서버 입력 단위 109개·Rules/진단 SDK 17개를 통과했습니다. 최종 architecture 43개와 248개 요구사항의 추적성 생성도 통과했습니다. 앞선 기능들의 검사 결과도 진행표에서 연결했습니다.
 
-마지막 후보의 commit·push, Firebase 세 codebase, v1.2.34/code36 APK 공개와 원격 전체 CI는 이 파일 작성 시 배포 준비 중입니다. 이전 제품 Web은 Vercel Git 자동배포를 사용했고 마지막 묶음의 Web 변경은 검사뿐입니다. 최종 SHA와 배포 증거는 후속 기록 및 CI 자동 확인에 정확히 연결하며 pending을 성공으로 보고하지 않습니다.
+제품 후보 cdf60b3fc98adfde43bd09094a4155e4c8ca9358을 push했습니다. Firebase `release-20261005-simplicity-final-cdf60b3`의 세 codebase와 실제 로그인·가구 Query marker 검증은 성공했습니다. 같은 SHA의 Vercel Git 배포도 성공했으며 운영 `/`, `/sw.js`의 해당 SHA와 build manifest HTTP 200을 확인했습니다.
+
+[v1.2.34/code36](https://github.com/minkue777/household-account/releases/tag/v1.2.34)은 해당 제품 SHA를 target으로 공개했습니다. 다운로드 HTTP 200, 11,421,547 bytes, SHA256 `a673f95178d40ad5f7a0cdea4c3f9eeab4e36efd109ed5ff160d87ab87269fda`, APK v2 서명·운영 URL을 확인했습니다. 뒤의 서버 수정으로 APK를 덮어쓰지 않습니다.
+
+CI 37268472742의 functions 실패는 새 지역 서비스명 검사에서 기존 화성지역화폐 이름을 빠뜨린 제품 결함입니다. [수정과 실제 479개 검사](server-boundary-simplicity-2026-10-05.md#ci에서-확인한-지역-명칭-호환-수정)를 기록했고 서버 후속 후보를 배포합니다. 최종 전체 CI와 이 제품의 실제 Android 검사는 후속 자동 확인에서 함께 추적합니다. 실패 이력을 성공으로 덮거나 pending을 완료로 보고하지 않습니다.

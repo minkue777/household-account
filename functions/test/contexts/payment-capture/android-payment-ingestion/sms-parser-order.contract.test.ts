@@ -26,7 +26,7 @@ describe("실제 SMS parser 순서", () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  it("[T-SMS-ORDER-001][ING-007] 실제 공급자 함수를 정해진 순서로 호출하고 전부 실패하면 무시한다", () => {
+  it("[T-SMS-ORDER-001][ING-007] 발신 서비스에 맞는 실제 공급자 함수를 순서대로 호출하고 전부 실패하면 무시한다", () => {
     const parsers = [kbCardProviderParser, nhPayProviderParser, naverPayProviderParser, tossBankProviderParser,
       kakaoPayProviderParser, digitalOnnuriProviderParser, payboocProviderParser, samsungCardProviderParser,
       lotteCardProviderParser, gyeonggiLocalCurrencyProviderParser, daejeonLocalCurrencyProviderParser];
@@ -38,8 +38,9 @@ describe("실제 SMS parser 순서", () => {
         return original(context);
       });
     }
-    expect(parse("경기지역화폐 대전사랑카드 문자 형식 미일치")).toEqual({ kind: "Ignored", code: "NOT_COMPLETED_PAYMENT" });
-    expect(calls).toEqual(parsers.map(parser => parser.parserId));
+    expect(parse("경기지역화폐 문자 형식 미일치")).toEqual({ kind: "Ignored", code: "NOT_COMPLETED_PAYMENT" });
+    expect(calls).toEqual(parsers.filter(parser => parser !== daejeonLocalCurrencyProviderParser).map(parser => parser.parserId));
+    expect(daejeonLocalCurrencyProviderParser.parse).not.toHaveBeenCalled();
   });
 
   it("[T-SMS-ORDER-001][ING-007] 카드 승인과 청구 완료가 겹치면 카드 승인을 먼저 선택한다", () => {
@@ -52,7 +53,8 @@ describe("실제 SMS parser 순서", () => {
   });
 
   it.each([
-    ["경기지역화폐", "gyeonggi"], ["대전사랑카드", "daejeon"],
+    ["경기지역화폐", "gyeonggi"], ["희망화성지역화폐_특례시기념", "gyeonggi"],
+    ["대전사랑카드", "daejeon"], ["대전지역화폐", "daejeon"], ["온통대전", "daejeon"],
   ])("[T-SMS-ORDER-001][ING-007] %s 발신 근거가 있는 문자만 해당 지역으로 해석한다", (service, type) => {
     expect(parse(`${service}\n결제 완료 8,000원\n가맹점너\n잔액 32,000원`)).toMatchObject({
       kind: "Parsed", payment: { amountInWon: 8000, localCurrencyType: type },
