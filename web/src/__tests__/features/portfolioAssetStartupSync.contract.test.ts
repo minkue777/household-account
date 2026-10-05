@@ -1,3 +1,4 @@
+import { portfolioReplies, replySource, resetReplySources, confirmedReply, assetView, positionView } from './portfolioCommandReplies';
 const mockOnSnapshot = jest.fn();
 
 jest.mock('@/platform/read-model/firestoreReadModel', () => ({
@@ -67,12 +68,14 @@ function deferred<T>() {
 }
 
 function asset(overrides: Partial<Asset> = {}): Asset {
-  return {
+  return replySource({
     id: 'asset-1',
     aggregateVersion: 3,
     householdId: 'house-1',
     name: '새마을금고 출자금',
     type: 'savings',
+    ownerRef: { kind: 'household' },
+    memo: '',
     currentBalance: 20_000_000,
     currency: 'KRW',
     isActive: true,
@@ -80,16 +83,18 @@ function asset(overrides: Partial<Asset> = {}): Asset {
     createdAt: new Date('2026-07-01T00:00:00Z'),
     updatedAt: new Date('2026-07-01T00:00:00Z'),
     ...overrides,
-  };
+  });
 }
 
 function stockHolding(overrides: Partial<StockHolding> = {}): StockHolding {
-  return {
+  return replySource({
     id: 'stock-1',
     aggregateVersion: 3,
     householdId: 'house-1',
     assetId: 'asset-1',
     holdingType: 'stock',
+    instrumentType: 'stock',
+    priceScale: 1,
     stockCode: '005930',
     stockName: '삼성전자',
     market: 'KRX',
@@ -99,11 +104,11 @@ function stockHolding(overrides: Partial<StockHolding> = {}): StockHolding {
     createdAt: new Date('2026-07-01T00:00:00Z'),
     updatedAt: new Date('2026-07-01T00:00:00Z'),
     ...overrides,
-  };
+  });
 }
 
 function cryptoHolding(overrides: Partial<CryptoHolding> = {}): CryptoHolding {
-  return {
+  return replySource({
     id: 'crypto-1',
     aggregateVersion: 3,
     householdId: 'house-1',
@@ -116,7 +121,7 @@ function cryptoHolding(overrides: Partial<CryptoHolding> = {}): CryptoHolding {
     createdAt: new Date('2026-07-01T00:00:00Z'),
     updatedAt: new Date('2026-07-01T00:00:00Z'),
     ...overrides,
-  };
+  });
 }
 
 function snapshotAsset(value: Asset | StockHolding | CryptoHolding): { id: string; data: () => Record<string, unknown> } {
@@ -172,14 +177,15 @@ async function flushPromises(): Promise<void> {
 
 describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
   beforeEach(() => {
+    resetReplySources();
     resetClientOptimisticProjections();
     jest.clearAllMocks();
     mockOnSnapshot.mockReturnValue(jest.fn());
-    mockedCommands.updateAsset.mockReset().mockResolvedValue(undefined);
-    mockedCommands.deleteAsset.mockReset().mockResolvedValue(undefined);
-    mockedCommands.reorderAssets.mockReset().mockResolvedValue(undefined);
-    mockedCommands.updatePosition.mockReset().mockResolvedValue(undefined);
-    mockedCommands.deletePosition.mockReset().mockResolvedValue(undefined);
+    mockedCommands.updateAsset.mockReset().mockImplementation(async (...args) => portfolioReplies.updateAsset(...args));
+    mockedCommands.deleteAsset.mockReset().mockImplementation(async (...args) => portfolioReplies.deleteAsset(...args));
+    mockedCommands.reorderAssets.mockReset().mockImplementation(async (...args) => portfolioReplies.reorderAssets(...args));
+    mockedCommands.updatePosition.mockReset().mockImplementation(async (...args) => portfolioReplies.updatePosition(...args));
+    mockedCommands.deletePosition.mockReset().mockImplementation(async (...args) => portfolioReplies.deletePosition(...args));
   });
 
   afterEach(() => {
@@ -255,7 +261,7 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
     );
     const { options, next } = listenerArguments();
     const command = deferred<void>();
-    mockedCommands.updateAsset.mockReturnValue(command.promise);
+    mockedCommands.updateAsset.mockImplementation((...args) => { const reply = portfolioReplies.updateAsset(...args); return command.promise.then(() => reply); });
 
     const pending = updateAsset(
       'asset-1',
@@ -347,7 +353,7 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
     );
     const secondListener = listenerArguments();
     const command = deferred<void>();
-    mockedCommands.updateAsset.mockReturnValue(command.promise);
+    mockedCommands.updateAsset.mockImplementation((...args) => { const reply = portfolioReplies.updateAsset(...args); return command.promise.then(() => reply); });
 
     const pending = updateAsset('asset-1', { currentBalance: 20_000_001 }, 3);
     expect(rendered.at(-1)?.[0].currentBalance).toBe(20_000_001);
@@ -387,8 +393,8 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
     const firstCommand = deferred<void>();
     const secondCommand = deferred<void>();
     mockedCommands.updateAsset
-      .mockReturnValueOnce(firstCommand.promise)
-      .mockReturnValueOnce(secondCommand.promise);
+      .mockImplementationOnce((...args) => { const reply = portfolioReplies.updateAsset(...args); return firstCommand.promise.then(() => reply); })
+      .mockImplementationOnce((...args) => { const reply = portfolioReplies.updateAsset(...args); return secondCommand.promise.then(() => reply); });
 
     const firstPending = updateAsset('asset-1', { memo: '첫 수정' }, 3);
     const firstProjected = rendered.at(-1)![0];
@@ -466,7 +472,7 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
 
     await expect(pending).rejects.toThrow('ASSET_AUTHORITATIVE_READ_FAILED');
     expect(mockedCommands.updateAsset).not.toHaveBeenCalled();
-    expect(rendered.at(-1)?.[0].memo).toBeUndefined();
+    expect(rendered.at(-1)?.[0].memo).toBe('');
     unsubscribe();
     consoleError.mockRestore();
   });
@@ -548,8 +554,8 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
     const firstCommand = deferred<void>();
     const secondCommand = deferred<void>();
     mockedCommands.updateAsset
-      .mockReturnValueOnce(firstCommand.promise)
-      .mockReturnValueOnce(secondCommand.promise);
+      .mockImplementationOnce((...args) => { const reply = portfolioReplies.updateAsset(...args); return firstCommand.promise.then(() => reply); })
+      .mockImplementationOnce((...args) => { const reply = portfolioReplies.updateAsset(...args); return secondCommand.promise.then(() => reply); });
 
     const firstPending = updateAsset('asset-1', { memo: '첫 수정' }, 3);
     next({
@@ -772,7 +778,7 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
     );
     mockedCommands.updateAsset
       .mockRejectedValueOnce(mismatch)
-      .mockResolvedValueOnce(undefined);
+      .mockImplementationOnce(async (...args) => portfolioReplies.updateAsset(...args));
 
     const pending = updateAsset(
       'asset-1',
@@ -853,7 +859,7 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
       docs: [snapshotAsset(asset())],
     });
     const updateCommand = deferred<void>();
-    mockedCommands.updateAsset.mockReturnValue(updateCommand.promise);
+    mockedCommands.updateAsset.mockImplementation((...args) => { const reply = portfolioReplies.updateAsset(...args); return updateCommand.promise.then(() => reply); });
 
     const updatePending = updateAsset('asset-1', { memo: '삭제 전 수정' }, 3);
     const projected = rendered.at(-1)![0];
@@ -889,7 +895,7 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
     );
     mockedCommands.updatePosition
       .mockRejectedValueOnce(mismatch)
-      .mockResolvedValueOnce(undefined);
+      .mockImplementationOnce(async (...args) => portfolioReplies.updatePosition(...args));
 
     const base = stockHolding();
     const pending = updateStockHolding(
@@ -933,7 +939,7 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
       docs: [snapshotAsset(stockHolding())],
     });
     const updateCommand = deferred<void>();
-    mockedCommands.updatePosition.mockReturnValue(updateCommand.promise);
+    mockedCommands.updatePosition.mockImplementation((...args) => { const reply = portfolioReplies.updatePosition(...args); return updateCommand.promise.then(() => reply); });
 
     const updatePending = updateStockHolding(
       'stock-1',
@@ -977,7 +983,7 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
       docs: [snapshotAsset(asset())],
     });
     const updateCommand = deferred<void>();
-    mockedCommands.updateAsset.mockReturnValue(updateCommand.promise);
+    mockedCommands.updateAsset.mockImplementation((...args) => { const reply = portfolioReplies.updateAsset(...args); return updateCommand.promise.then(() => reply); });
 
     const updatePending = updateAsset(
       'asset-1',
@@ -1020,8 +1026,8 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
     const clearMemoCommand = deferred<void>();
     const balanceCommand = deferred<void>();
     mockedCommands.updateAsset
-      .mockReturnValueOnce(clearMemoCommand.promise)
-      .mockReturnValueOnce(balanceCommand.promise);
+      .mockImplementationOnce((...args) => { const reply = portfolioReplies.updateAsset(...args); return clearMemoCommand.promise.then(() => reply); })
+      .mockImplementationOnce((...args) => { const reply = portfolioReplies.updateAsset(...args); return balanceCommand.promise.then(() => reply); });
 
     const clearMemoPending = updateAsset(
       'asset-1',
@@ -1166,7 +1172,7 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
       docs: [snapshotAsset(first), snapshotAsset(second)],
     });
     const updateCommand = deferred<void>();
-    mockedCommands.updateAsset.mockReturnValue(updateCommand.promise);
+    mockedCommands.updateAsset.mockImplementation((...args) => { const reply = portfolioReplies.updateAsset(...args); return updateCommand.promise.then(() => reply); });
 
     const updatePending = updateAsset(first.id, { memo: '먼저 저장' }, 3, first);
     const reorderPending = updateAssetOrders([
@@ -1213,7 +1219,7 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
       docs: [snapshotAsset(first), snapshotAsset(second)],
     });
     const reorderCommand = deferred<void>();
-    mockedCommands.reorderAssets.mockReturnValue(reorderCommand.promise);
+    mockedCommands.reorderAssets.mockImplementation((...args) => { const reply = portfolioReplies.reorderAssets(...args); return reorderCommand.promise.then(() => reply); });
 
     const reorderPending = updateAssetOrders([
       { id: second.id, order: 0 },
@@ -1287,8 +1293,8 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
     });
     const reorderCommand = deferred<void>();
     const updateCommand = deferred<void>();
-    mockedCommands.reorderAssets.mockReturnValue(reorderCommand.promise);
-    mockedCommands.updateAsset.mockReturnValue(updateCommand.promise);
+    mockedCommands.reorderAssets.mockImplementation((...args) => { const reply = portfolioReplies.reorderAssets(...args); return reorderCommand.promise.then(() => reply); });
+    mockedCommands.updateAsset.mockImplementation((...args) => { const reply = portfolioReplies.updateAsset(...args); return updateCommand.promise.then(() => reply); });
 
     const reorderPending = updateAssetOrders([
       { id: second.id, order: 0 },
@@ -1330,6 +1336,81 @@ describe('자산 시작 snapshot과 수정 명령의 동기화 계약', () => {
     await deletePending;
     unsubscribe();
   });
+
+  test('확정 업무 필드·버전을 그대로 쓰고 commit 시각을 합성하지 않으며 늦은 캐시를 덮는다', async () => {
+    const rendered: Asset[][] = [];
+    const original = asset();
+    const stop = subscribeToAssets(items => rendered.push(items));
+    const listener = listenerArguments();
+    listener.next({ metadata: { fromCache: false }, docs: [snapshotAsset(original)] });
+    mockedCommands.updateAsset.mockResolvedValue(confirmedReply([
+      assetView({ ...original, name: '서버 정규화', memo: '서버 확정', aggregateVersion: 9 }),
+    ]));
+    await updateAsset(original.id, { name: '  입력 이름  ' }, 3);
+    expect(rendered.at(-1)?.[0]).toMatchObject({
+      name: '서버 정규화', memo: '서버 확정', aggregateVersion: 9,
+      createdAt: original.createdAt, updatedAt: original.updatedAt,
+    });
+    listener.next({ metadata: { fromCache: true }, docs: [snapshotAsset(original)] });
+    expect(rendered.at(-1)?.[0].aggregateVersion).toBe(9);
+    stop();
+  });
+
+  test('확정 응답보다 최신 snapshot을 이미 받았다면 이전 결과로 되돌리지 않는다', async () => {
+    const rendered: Asset[][] = [];
+    const original = asset();
+    const stop = subscribeToAssets(items => rendered.push(items));
+    const listener = listenerArguments();
+    listener.next({ metadata: { fromCache: false }, docs: [snapshotAsset(original)] });
+    const response = deferred<ReturnType<typeof confirmedReply>>();
+    mockedCommands.updateAsset.mockReturnValue(response.promise);
+    const pending = updateAsset(original.id, { memo: '내 수정' }, 3);
+    listener.next({ metadata: { fromCache: false }, docs: [snapshotAsset(asset({ memo: '더 최신 수정', aggregateVersion: 8 }))] });
+    response.resolve(confirmedReply([assetView({ ...original, memo: '내 수정', aggregateVersion: 4 })]));
+    await pending;
+    expect(rendered.at(-1)?.[0]).toMatchObject({ memo: '더 최신 수정', aggregateVersion: 8 });
+    stop();
+  });
+
+  test('과거 receipt의 빈 응답은 버전을 추정하지 않고 실제 서버 조회를 기다린다', async () => {
+    const original = asset();
+    const stop = subscribeToAssets(() => {});
+    const listener = listenerArguments();
+    listener.next({ metadata: { fromCache: false }, docs: [snapshotAsset(original)] });
+    mockedCommands.updateAsset.mockResolvedValue({});
+    const finished = jest.fn();
+    const pending = updateAsset(original.id, { memo: '과거 명령' }, 3).then(finished);
+    await flushPromises();
+    expect(finished).not.toHaveBeenCalled();
+    listener.next({ metadata: { fromCache: true }, docs: [snapshotAsset(asset({ memo: '과거 명령', aggregateVersion: 4 }))] });
+    await flushPromises();
+    expect(finished).not.toHaveBeenCalled();
+    listener.next({ metadata: { fromCache: false }, docs: [snapshotAsset(asset({ memo: '과거 명령', aggregateVersion: 4 }))] });
+    await pending;
+    expect(finished).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  test('종목 응답의 부모 자산 버전으로 다음 명령을 보내고 다른 계좌의 결과는 거절한다', async () => {
+    const parent = asset({ type: 'stock' });
+    const position = stockHolding();
+    const stopAsset = subscribeToAssets(() => {});
+    listenerArguments().next({ metadata: { fromCache: false }, docs: [snapshotAsset(parent)] });
+    const stopStock = subscribeToHouseholdStockHoldings(() => {});
+    listenerArguments().next({ metadata: { fromCache: false }, docs: [snapshotAsset(position)] });
+    const saved = { ...position, quantity: 11, aggregateVersion: 4 };
+    mockedCommands.updatePosition.mockResolvedValue(confirmedReply(
+      [assetView({ ...parent, aggregateVersion: 7, currentBalance: 880_000 })],
+      [positionView(saved, 'stock')],
+    ));
+    await updateStockHolding(position.id, parent.id, { quantity: 11 }, 3);
+    mockedCommands.updatePosition.mockResolvedValue(confirmedReply([], [positionView({ ...saved, assetId: 'other-account', aggregateVersion: 5 }, 'stock')]));
+    await expect(updateStockHolding(position.id, parent.id, { quantity: 12 }, 4)).rejects.toThrow('PORTFOLIO_CONFIRMATION_INVALID');
+    expect(mockedCommands.updatePosition).toHaveBeenLastCalledWith('house-1', 'stock', position.id, parent.id, { quantity: 12 }, 4, 7);
+    stopStock();
+    stopAsset();
+  });
+
   test.each(['asset', 'stock', 'crypto'])('읽기 오류와 늦은 응답이 %s 목록을 비우지 않는다', kind => {
     const publish = jest.fn();
     const fail = jest.fn();

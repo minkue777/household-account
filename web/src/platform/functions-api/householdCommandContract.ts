@@ -1,3 +1,4 @@
+import type { PortfolioMutationResult } from './portfolioCommandResult';
 import type { AssetOwnerProfileWireView } from './accessContractTypes';
 import type { ClientStartupDiagnostics } from './clientStartupDiagnosticsContract';
 
@@ -266,13 +267,13 @@ export interface HouseholdCommandResults {
   'home.update-summary-preferences.v1': Record<string, never>;
   'home.select-local-currency.v1': Record<string, never>;
 
-  'portfolio.create-asset.v1': { assetId: string };
-  'portfolio.update-asset.v1': Record<string, never>;
-  'portfolio.reorder-assets.v1': Record<string, never>;
-  'portfolio.delete-asset.v1': Record<string, never>;
-  'portfolio.add-position.v1': { positionId: string };
-  'portfolio.update-position.v1': Record<string, never>;
-  'portfolio.delete-position.v1': Record<string, never>;
+  'portfolio.create-asset.v1': PortfolioMutationResult & { assetId: string };
+  'portfolio.update-asset.v1': PortfolioMutationResult;
+  'portfolio.reorder-assets.v1': PortfolioMutationResult;
+  'portfolio.delete-asset.v1': PortfolioMutationResult;
+  'portfolio.add-position.v1': PortfolioMutationResult & { positionId: string };
+  'portfolio.update-position.v1': PortfolioMutationResult;
+  'portfolio.delete-position.v1': PortfolioMutationResult;
   'portfolio.refresh-market-values.v1': { refreshedCount: number; failedCount?: number; failedTargets?: { targetKey: string; assetId: string; positionId?: string; code: string; retryable: boolean }[]; retryCommandId?: string };
 
   'payment-configuration.create-merchant-rule.v1': { ruleId: string };

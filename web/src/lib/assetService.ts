@@ -1,3 +1,4 @@
+import type { PortfolioCommandConfirmation, PortfolioMutationResult } from '@/platform/functions-api/portfolioCommandResult';
 import {
   collection,
   collectionGroup,
@@ -52,6 +53,55 @@ function portfolioDocumentDate(value: unknown): Date {
   if (timestamp) return timestamp;
   const parsed = typeof value === 'string' ? new Date(value) : undefined;
   return parsed && Number.isFinite(parsed.getTime()) ? parsed : new Date(0);
+}
+
+async function confirmedEntity<Entity extends VersionedPortfolioEntity & { householdId: string; createdAt: Date; updatedAt: Date }>(
+  confirmation: PortfolioCommandConfirmation | undefined,
+  view: DocumentData | undefined,
+  base: Entity,
+  expectedVersion: number,
+  generation: number,
+  states: Map<string, AuthoritativeState<Entity>>,
+  map: (id: string, data: DocumentData) => Entity,
+): Promise<Entity> {
+  if (generation !== assetUpdateQueueGeneration) throw new Error('CLIENT_SESSION_RESET');
+  if (confirmation !== undefined) {
+    if (confirmation.schemaVersion !== 1 || !view || view.householdId !== base.householdId
+      || !Number.isSafeInteger(view.aggregateVersion) || view.aggregateVersion <= expectedVersion) {
+      throw new Error('PORTFOLIO_CONFIRMATION_INVALID');
+    }
+    // Commit Timestamp는 응답에 없다. 마지막 조회/초안의 표시 시각을 유지하고 구독에서 갱신한다.
+    return map(base.id, { ...view, createdAt: base.createdAt, updatedAt: base.updatedAt });
+  }
+  const state = states.get(base.householdId);
+  if (!state) throw new Error('PORTFOLIO_AUTHORITATIVE_READ_REQUIRED');
+  return waitForAuthoritativeEntity(state, base.id, generation, expectedVersion);
+}
+
+function confirmedAsset(result: PortfolioMutationResult, base: Asset, version: number, generation: number) {
+  return confirmedEntity(result.confirmation, result.confirmation?.assets.find(asset => asset.assetId === base.id),
+    base, version, generation, assetAuthoritativeStates, mapAssetData);
+}
+
+function confirmedStock(result: PortfolioMutationResult, base: StockHolding, version: number, generation: number) {
+  return confirmedEntity(result.confirmation, result.confirmation?.positions.find(position => position.positionId === base.id && position.assetId === base.assetId && position.positionKind === 'stock'),
+    base, version, generation, stockAuthoritativeStates, mapStockData);
+}
+
+function confirmedCrypto(result: PortfolioMutationResult, base: CryptoHolding, version: number, generation: number) {
+  return confirmedEntity(result.confirmation, result.confirmation?.positions.find(position => position.positionId === base.id && position.assetId === base.assetId && position.positionKind === 'crypto'),
+    base, version, generation, cryptoAuthoritativeStates, mapCryptoData);
+}
+
+function recordConfirmationAssets(confirmation: PortfolioCommandConfirmation | undefined, householdId: string): void {
+  if (!confirmation) return;
+  for (const view of confirmation.assets) {
+    const base = portfolioOptimisticProjection.current(view.assetId);
+    if (!base || view.householdId !== householdId || view.lifecycleState !== 'active') continue;
+    getOrCreateAuthoritativeState(assetAuthoritativeStates, householdId);
+    recordCommandFloor(assetAuthoritativeStates, householdId,
+      mapAssetData(view.assetId, { ...view, createdAt: base.createdAt, updatedAt: base.updatedAt }));
+  }
 }
 
 const assetUpdateTails = new Map<string, Promise<void>>();
@@ -519,11 +569,10 @@ function isPositionVersionMismatch(error: unknown): boolean {
 /**
  * Firestore 문서를 Asset 객체로 변환
  */
-function mapDocToAsset(docSnap: QueryDocumentSnapshot<DocumentData>): Asset {
-  const data = docSnap.data();
+function mapAssetData(id: string, data: DocumentData): Asset {
   const automation = data.automation ?? {};
   return {
-    id: docSnap.id,
+    id,
     aggregateVersion:
       Number.isSafeInteger(data.aggregateVersion) && data.aggregateVersion > 0
         ? data.aggregateVersion
@@ -582,6 +631,7 @@ function extractPhysicalGoldQuantity(asset: Pick<Asset, 'quantity' | 'memo'>): n
  */
 export async function addAsset(input: AssetInput): Promise<string> {
   const householdId = getHouseholdId();
+  const generation = assetUpdateQueueGeneration;
   const commandId = createHouseholdCommandId('portfolio-create');
   const assetId = `asset-${householdId}-${commandId}`;
   const now = new Date();
@@ -595,14 +645,19 @@ export async function addAsset(input: AssetInput): Promise<string> {
   };
   const mutationId = portfolioOptimisticProjection.beginCreate(optimisticAsset);
   try {
-    const confirmedAssetId = await portfolioCommands.createAsset(
+    const result = await portfolioCommands.createAsset(
       householdId,
       input,
       commandId
     );
-    if (confirmedAssetId !== assetId) throw new Error('ASSET_ID_CONTRACT_MISMATCH');
-    portfolioOptimisticProjection.commitCreate(mutationId, optimisticAsset);
-    return confirmedAssetId;
+    if (result.assetId !== assetId) throw new Error('ASSET_ID_CONTRACT_MISMATCH');
+    if (generation !== assetUpdateQueueGeneration) return result.assetId;
+    const canonical = await confirmedAsset(result, optimisticAsset, 0, generation);
+    if (generation === assetUpdateQueueGeneration) {
+      recordConfirmationAssets(result.confirmation, householdId);
+      portfolioOptimisticProjection.commitCreate(mutationId, canonical);
+    }
+    return result.assetId;
   } catch (error) {
     portfolioOptimisticProjection.rollback(mutationId);
     throw error;
@@ -651,6 +706,7 @@ export async function updateAsset(
       }
 
       let commandBase = current;
+      let result: PortfolioMutationResult;
       let commandExpectedVersion =
         previousUpdate === undefined
           ? expectedVersion
@@ -685,7 +741,7 @@ export async function updateAsset(
       }
 
       try {
-        await portfolioCommands.updateAsset(
+        result = await portfolioCommands.updateAsset(
           householdId,
           id,
           effectivePatch,
@@ -709,20 +765,17 @@ export async function updateAsset(
         }
         commandBase = fresh;
         commandExpectedVersion = fresh.aggregateVersion;
-        await portfolioCommands.updateAsset(
+        result = await portfolioCommands.updateAsset(
           householdId,
           id,
           effectivePatch,
           commandExpectedVersion
         );
       }
-      const canonical = {
-        ...commandBase,
-        ...effectivePatch,
-        aggregateVersion: commandExpectedVersion + 1,
-        updatedAt: new Date(),
-      };
+      if (queueGeneration !== assetUpdateQueueGeneration) return;
+      const canonical = await confirmedAsset(result, commandBase, commandExpectedVersion, queueGeneration);
       if (queueGeneration === assetUpdateQueueGeneration) {
+        recordConfirmationAssets(result.confirmation, householdId);
         recordCommandFloor(assetAuthoritativeStates, householdId, canonical);
         portfolioOptimisticProjection.commitUpdate(mutationId, canonical);
       }
@@ -815,18 +868,16 @@ export async function updateAssetOrders(assetOrders: { id: string; order: number
           ] as const;
         })
       );
-      await portfolioCommands.reorderAssets(householdId, normalized, Object.fromEntries(Array.from(commandBases, ([id, base]) => [id, base.aggregateVersion])));
-      mutations.forEach(({ current, update, mutationId }) => {
+      const result = await portfolioCommands.reorderAssets(householdId, normalized, Object.fromEntries(Array.from(commandBases, ([id, base]) => [id, base.aggregateVersion])));
+      if (queueGeneration !== assetUpdateQueueGeneration) return;
+      for (const { current, update, mutationId } of mutations) {
         const commandBase = commandBases.get(update.id) ?? current;
-        const canonical = {
-          ...commandBase,
-          order: update.order,
-          aggregateVersion: commandBase.aggregateVersion + 1,
-          updatedAt: new Date(),
-        };
+        if (queueGeneration !== assetUpdateQueueGeneration) return;
+        const canonical = await confirmedAsset(result, commandBase, commandBase.aggregateVersion, queueGeneration);
+        if (queueGeneration !== assetUpdateQueueGeneration) throw new Error('CLIENT_SESSION_RESET');
         recordCommandFloor(assetAuthoritativeStates, householdId, canonical);
         portfolioOptimisticProjection.commitUpdate(mutationId, canonical);
-      });
+      }
     } catch (error) {
       mutations.forEach(({ mutationId }) =>
         portfolioOptimisticProjection.rollback(mutationId)
@@ -996,7 +1047,7 @@ export function subscribeToAssets(
         !active || queueGeneration !== assetUpdateQueueGeneration
         || assetAuthoritativeStates.get(householdId) !== authoritativeState
       ) return;
-      const assets = snapshot.docs.map(mapDocToAsset);
+      const assets = snapshot.docs.map(document => mapAssetData(document.id, document.data()));
       // order 순으로 정렬, 같으면 이름순
       assets.sort((a, b) => {
         if (a.order !== b.order) return a.order - b.order;
@@ -1050,10 +1101,9 @@ export function subscribeToAssets(
 /**
  * Firestore 문서를 StockHolding 객체로 변환
  */
-function mapDocToHolding(docSnap: QueryDocumentSnapshot<DocumentData>): StockHolding {
-  const data = docSnap.data();
+function mapStockData(id: string, data: DocumentData): StockHolding {
   return {
-    id: docSnap.id,
+    id,
     aggregateVersion:
       Number.isSafeInteger(data.aggregateVersion) && data.aggregateVersion > 0
         ? data.aggregateVersion
@@ -1080,10 +1130,9 @@ function mapDocToHolding(docSnap: QueryDocumentSnapshot<DocumentData>): StockHol
   };
 }
 
-function mapDocToCryptoHolding(docSnap: QueryDocumentSnapshot<DocumentData>): CryptoHolding {
-  const data = docSnap.data();
+function mapCryptoData(id: string, data: DocumentData): CryptoHolding {
   return {
-    id: docSnap.id,
+    id,
     aggregateVersion:
       Number.isSafeInteger(data.aggregateVersion) && data.aggregateVersion > 0
         ? data.aggregateVersion
@@ -1104,13 +1153,15 @@ function mapDocToCryptoHolding(docSnap: QueryDocumentSnapshot<DocumentData>): Cr
  * 주식 보유 종목 추가
  */
 function assetVersionForPositionCommand(assetId: string): number {
-  const asset = portfolioOptimisticProjection.current(assetId);
+  const state = assetAuthoritativeStates.get(getHouseholdId());
+  const asset = (state && authoritativeEntity(state, assetId)) ?? portfolioOptimisticProjection.current(assetId);
   if (!asset) throw new Error('ASSET_READ_MODEL_REQUIRED');
   return asset.aggregateVersion;
 }
 
 export async function addStockHolding(input: StockHoldingInput): Promise<string> {
   const householdId = getHouseholdId();
+  const generation = assetUpdateQueueGeneration;
   const commandId = createHouseholdCommandId('portfolio-position-create');
   const positionId = `position-${householdId}-${commandId}`;
   const now = new Date();
@@ -1125,16 +1176,21 @@ export async function addStockHolding(input: StockHoldingInput): Promise<string>
   };
   const mutationId = stockHoldingOptimisticProjection.beginCreate(optimisticHolding);
   try {
-    const confirmedPositionId = await portfolioCommands.addPosition(
+    const result = await portfolioCommands.addPosition(
       householdId,
       'stock',
       input,
       commandId,
       assetVersionForPositionCommand(input.assetId)
     );
-    if (confirmedPositionId !== positionId) throw new Error('POSITION_ID_CONTRACT_MISMATCH');
-    stockHoldingOptimisticProjection.commitCreate(mutationId, optimisticHolding);
-    return confirmedPositionId;
+    if (result.positionId !== positionId) throw new Error('POSITION_ID_CONTRACT_MISMATCH');
+    if (generation !== assetUpdateQueueGeneration) return result.positionId;
+    const canonical = await confirmedStock(result, optimisticHolding, 0, generation);
+    if (generation === assetUpdateQueueGeneration) {
+      recordConfirmationAssets(result.confirmation, householdId);
+      stockHoldingOptimisticProjection.commitCreate(mutationId, canonical);
+    }
+    return result.positionId;
   } catch (error) {
     stockHoldingOptimisticProjection.rollback(mutationId);
     throw error;
@@ -1143,6 +1199,7 @@ export async function addStockHolding(input: StockHoldingInput): Promise<string>
 
 export async function addCryptoHolding(input: CryptoHoldingInput): Promise<string> {
   const householdId = getHouseholdId();
+  const generation = assetUpdateQueueGeneration;
   const commandId = createHouseholdCommandId('portfolio-position-create');
   const positionId = `position-${householdId}-${commandId}`;
   const now = new Date();
@@ -1156,16 +1213,21 @@ export async function addCryptoHolding(input: CryptoHoldingInput): Promise<strin
   };
   const mutationId = cryptoHoldingOptimisticProjection.beginCreate(optimisticHolding);
   try {
-    const confirmedPositionId = await portfolioCommands.addPosition(
+    const result = await portfolioCommands.addPosition(
       householdId,
       'crypto',
       input,
       commandId,
       assetVersionForPositionCommand(input.assetId)
     );
-    if (confirmedPositionId !== positionId) throw new Error('POSITION_ID_CONTRACT_MISMATCH');
-    cryptoHoldingOptimisticProjection.commitCreate(mutationId, optimisticHolding);
-    return confirmedPositionId;
+    if (result.positionId !== positionId) throw new Error('POSITION_ID_CONTRACT_MISMATCH');
+    if (generation !== assetUpdateQueueGeneration) return result.positionId;
+    const canonical = await confirmedCrypto(result, optimisticHolding, 0, generation);
+    if (generation === assetUpdateQueueGeneration) {
+      recordConfirmationAssets(result.confirmation, householdId);
+      cryptoHoldingOptimisticProjection.commitCreate(mutationId, canonical);
+    }
+    return result.positionId;
   } catch (error) {
     cryptoHoldingOptimisticProjection.rollback(mutationId);
     throw error;
@@ -1211,6 +1273,7 @@ export async function updateStockHolding(
         throw new Error('CLIENT_SESSION_RESET');
       }
       let commandBase = current;
+      let result: PortfolioMutationResult;
       let commandExpectedVersion =
         previousMutation === undefined
           ? expectedVersion
@@ -1241,7 +1304,7 @@ export async function updateStockHolding(
       commandExpectedVersion = fresh.aggregateVersion;
     }
     try {
-      await portfolioCommands.updatePosition(
+      result = await portfolioCommands.updatePosition(
         householdId,
         'stock',
         id,
@@ -1268,7 +1331,7 @@ export async function updateStockHolding(
       }
       commandBase = fresh;
       commandExpectedVersion = fresh.aggregateVersion;
-      await portfolioCommands.updatePosition(
+      result = await portfolioCommands.updatePosition(
         householdId,
         'stock',
         id,
@@ -1278,13 +1341,10 @@ export async function updateStockHolding(
         assetVersionForPositionCommand(assetId)
       );
     }
-      const canonical = {
-        ...commandBase,
-        ...effectivePatch,
-        aggregateVersion: commandExpectedVersion + 1,
-        updatedAt: new Date(),
-      };
+      if (queueGeneration !== assetUpdateQueueGeneration) return;
+      const canonical = await confirmedStock(result, commandBase, commandExpectedVersion, queueGeneration);
       if (queueGeneration === assetUpdateQueueGeneration) {
+        recordConfirmationAssets(result.confirmation, householdId);
         recordCommandFloor(stockAuthoritativeStates, householdId, canonical);
         stockHoldingOptimisticProjection.commitUpdate(mutationId, canonical);
       }
@@ -1339,6 +1399,7 @@ export async function updateCryptoHolding(
         throw new Error('CLIENT_SESSION_RESET');
       }
       let commandBase = current;
+      let result: PortfolioMutationResult;
       let commandExpectedVersion =
         previousMutation === undefined
           ? expectedVersion
@@ -1369,7 +1430,7 @@ export async function updateCryptoHolding(
       commandExpectedVersion = fresh.aggregateVersion;
     }
     try {
-      await portfolioCommands.updatePosition(
+      result = await portfolioCommands.updatePosition(
         householdId,
         'crypto',
         id,
@@ -1396,7 +1457,7 @@ export async function updateCryptoHolding(
       }
       commandBase = fresh;
       commandExpectedVersion = fresh.aggregateVersion;
-      await portfolioCommands.updatePosition(
+      result = await portfolioCommands.updatePosition(
         householdId,
         'crypto',
         id,
@@ -1406,13 +1467,10 @@ export async function updateCryptoHolding(
         assetVersionForPositionCommand(assetId)
       );
     }
-      const canonical = {
-        ...commandBase,
-        ...effectivePatch,
-        aggregateVersion: commandExpectedVersion + 1,
-        updatedAt: new Date(),
-      };
+      if (queueGeneration !== assetUpdateQueueGeneration) return;
+      const canonical = await confirmedCrypto(result, commandBase, commandExpectedVersion, queueGeneration);
       if (queueGeneration === assetUpdateQueueGeneration) {
+        recordConfirmationAssets(result.confirmation, householdId);
         recordCommandFloor(cryptoAuthoritativeStates, householdId, canonical);
         cryptoHoldingOptimisticProjection.commitUpdate(mutationId, canonical);
       }
@@ -1466,6 +1524,7 @@ export async function deleteStockHolding(
       if (queueGeneration !== assetUpdateQueueGeneration) {
         throw new Error('CLIENT_SESSION_RESET');
       }
+      let result: PortfolioMutationResult;
       let commandExpectedVersion =
         previousMutation === undefined
           ? expectedVersion
@@ -1494,7 +1553,7 @@ export async function deleteStockHolding(
         commandExpectedVersion = fresh.aggregateVersion;
       }
       try {
-        await portfolioCommands.deletePosition(
+        result = await portfolioCommands.deletePosition(
           householdId,
           'stock',
           id,
@@ -1519,7 +1578,7 @@ export async function deleteStockHolding(
           throw new Error('ASSET_VERSION_MISMATCH');
         }
         commandExpectedVersion = fresh.aggregateVersion;
-        await portfolioCommands.deletePosition(
+        result = await portfolioCommands.deletePosition(
           householdId,
           'stock',
           id,
@@ -1529,6 +1588,7 @@ export async function deleteStockHolding(
         );
       }
       if (queueGeneration === assetUpdateQueueGeneration) {
+        recordConfirmationAssets(result.confirmation, householdId);
         stockHoldingOptimisticProjection.commitDelete(mutationId);
       }
     } catch (error) {
@@ -1578,6 +1638,7 @@ export async function deleteCryptoHolding(
       if (queueGeneration !== assetUpdateQueueGeneration) {
         throw new Error('CLIENT_SESSION_RESET');
       }
+      let result: PortfolioMutationResult;
       let commandExpectedVersion =
         previousMutation === undefined
           ? expectedVersion
@@ -1606,7 +1667,7 @@ export async function deleteCryptoHolding(
         commandExpectedVersion = fresh.aggregateVersion;
       }
       try {
-        await portfolioCommands.deletePosition(
+        result = await portfolioCommands.deletePosition(
           householdId,
           'crypto',
           id,
@@ -1631,7 +1692,7 @@ export async function deleteCryptoHolding(
           throw new Error('ASSET_VERSION_MISMATCH');
         }
         commandExpectedVersion = fresh.aggregateVersion;
-        await portfolioCommands.deletePosition(
+        result = await portfolioCommands.deletePosition(
           householdId,
           'crypto',
           id,
@@ -1641,6 +1702,7 @@ export async function deleteCryptoHolding(
         );
       }
       if (queueGeneration === assetUpdateQueueGeneration) {
+        recordConfirmationAssets(result.confirmation, householdId);
         cryptoHoldingOptimisticProjection.commitDelete(mutationId);
       }
     } catch (error) {
@@ -1698,7 +1760,7 @@ export function subscribeToHouseholdStockHoldings(
         !active || queueGeneration !== assetUpdateQueueGeneration
         || stockAuthoritativeStates.get(householdId) !== authoritativeState
       ) return;
-      const holdings = snapshot.docs.map(mapDocToHolding);
+      const holdings = snapshot.docs.map(document => mapStockData(document.id, document.data()));
       holdings.sort((a, b) => a.stockName.localeCompare(b.stockName));
       if (snapshot.metadata.fromCache) {
         captureStartupEntities(authoritativeState, holdings);
@@ -1782,7 +1844,7 @@ export function subscribeToHouseholdCryptoHoldings(
         !active || queueGeneration !== assetUpdateQueueGeneration
         || cryptoAuthoritativeStates.get(householdId) !== authoritativeState
       ) return;
-      const holdings = snapshot.docs.map(mapDocToCryptoHolding);
+      const holdings = snapshot.docs.map(document => mapCryptoData(document.id, document.data()));
       holdings.sort((a, b) => a.coinName.localeCompare(b.coinName));
       if (snapshot.metadata.fromCache) {
         captureStartupEntities(authoritativeState, holdings);
@@ -1952,7 +2014,7 @@ export async function getAllStockHoldings(): Promise<StockHolding[]> {
   const q = householdPositions(householdId, 'stock');
 
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(mapDocToHolding);
+  return snapshot.docs.map(document => mapStockData(document.id, document.data()));
 }
 
 const refreshAllMarketValuesInFlight = new Map<string, Promise<void>>();

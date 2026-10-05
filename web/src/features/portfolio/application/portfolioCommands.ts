@@ -1,3 +1,4 @@
+import type { PortfolioMutationResult } from '@/platform/functions-api/portfolioCommandResult';
 import { getHouseholdCommandClient } from '@/composition/webCommandRuntime';
 import { getClientSessionScope } from '@/composition/clientSessionScope';
 import { assetStatisticsSessionKey, invalidateAssetStatisticsCache } from '@/platform/reporting/assetStatisticsQueryCache';
@@ -40,13 +41,13 @@ export const portfolioCommands = {
     householdId: string,
     asset: AssetInput,
     commandId?: string
-  ): Promise<string> {
+  ): Promise<PortfolioMutationResult & { assetId: string }> {
     const result = await executePortfolioCommand(
       'portfolio.create-asset.v1',
       { asset: definedFields(asset) },
       { householdId, ...(commandId ? { commandId, idempotencyKey: commandId } : {}) }
     );
-    return result.assetId;
+    return result;
   },
 
   async updateAsset(
@@ -54,8 +55,8 @@ export const portfolioCommands = {
     assetId: string,
     changes: Partial<Asset>,
     expectedVersion: number
-  ): Promise<void> {
-    await executePortfolioCommand(
+  ): Promise<PortfolioMutationResult> {
+    return executePortfolioCommand(
       'portfolio.update-asset.v1',
       { assetId, changes: definedFields(changes), expectedVersion },
       { householdId }
@@ -66,8 +67,8 @@ export const portfolioCommands = {
     householdId: string,
     assets: ReadonlyArray<{ id: string; order: number }>,
     expectedVersions: Record<string, number>
-  ): Promise<void> {
-    await executePortfolioCommand(
+  ): Promise<PortfolioMutationResult> {
+    return executePortfolioCommand(
       'portfolio.reorder-assets.v1',
       { assets: assets.map(({ id, order }) => ({ assetId: id, order })), expectedVersions },
       { householdId }
@@ -78,8 +79,8 @@ export const portfolioCommands = {
     householdId: string,
     assetId: string,
     expectedVersion: number
-  ): Promise<void> {
-    await executePortfolioCommand(
+  ): Promise<PortfolioMutationResult> {
+    return executePortfolioCommand(
       'portfolio.delete-asset.v1',
       { assetId, expectedVersion },
       { householdId }
@@ -92,13 +93,13 @@ export const portfolioCommands = {
     input: StockHoldingInput | CryptoHoldingInput,
     commandId: string | undefined,
     expectedAssetVersion: number
-  ): Promise<string> {
+  ): Promise<PortfolioMutationResult & { positionId: string }> {
     const result = await executePortfolioCommand(
       'portfolio.add-position.v1',
       { assetId: input.assetId, positionKind: kind, position: definedFields(input), expectedAssetVersion },
       { householdId, ...(commandId ? { commandId, idempotencyKey: commandId } : {}) }
     );
-    return result.positionId;
+    return result;
   },
 
   async updatePosition(
@@ -109,8 +110,8 @@ export const portfolioCommands = {
     changes: Partial<StockHolding> | Partial<CryptoHolding>,
     expectedVersion: number,
     expectedAssetVersion: number
-  ): Promise<void> {
-    await executePortfolioCommand(
+  ): Promise<PortfolioMutationResult> {
+    return executePortfolioCommand(
       'portfolio.update-position.v1',
       { assetId, positionId, positionKind: kind, changes: definedFields(changes), expectedVersion, expectedAssetVersion },
       { householdId }
@@ -124,8 +125,8 @@ export const portfolioCommands = {
     assetId: string,
     expectedVersion: number,
     expectedAssetVersion: number
-  ): Promise<void> {
-    await executePortfolioCommand(
+  ): Promise<PortfolioMutationResult> {
+    return executePortfolioCommand(
       'portfolio.delete-position.v1',
       { assetId, positionId, positionKind: kind, expectedVersion, expectedAssetVersion },
       { householdId }

@@ -25,7 +25,7 @@ describe('portfolio command contract', () => {
         avgPrice: 100_000,
         currentPrice: 140_000,
       }, undefined, 6),
-    ).resolves.toBe('position-1');
+    ).resolves.toEqual({ positionId: 'position-1' });
 
     expect(execute).toHaveBeenCalledWith(
       'portfolio.add-position.v1',

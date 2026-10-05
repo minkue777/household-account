@@ -1,3 +1,4 @@
+import { portfolioReplies, replySource, resetReplySources } from './portfolioCommandReplies';
 import { portfolioCommands } from '@/features/portfolio/application/portfolioCommands';
 import {
   portfolioOptimisticProjection,
@@ -45,12 +46,14 @@ function deferred<T>() {
 }
 
 function asset(overrides: Partial<Asset> = {}): Asset {
-  return {
+  return replySource({
     id: 'asset-1',
     aggregateVersion: 3,
     householdId: 'house-1',
     name: '예금',
     type: 'savings',
+    ownerRef: { kind: 'household' },
+    memo: '',
     currentBalance: 1_000_000,
     currency: 'KRW',
     isActive: true,
@@ -58,7 +61,7 @@ function asset(overrides: Partial<Asset> = {}): Asset {
     createdAt: new Date('2026-07-01T00:00:00Z'),
     updatedAt: new Date('2026-07-01T00:00:00Z'),
     ...overrides,
-  };
+  });
 }
 
 function holding(overrides: Partial<StockHolding> = {}): StockHolding {
@@ -66,12 +69,14 @@ function holding(overrides: Partial<StockHolding> = {}): StockHolding {
     const parents = portfolioOptimisticProjection.subscribe(() => {}, 'house-1');
     parents.publish([asset({ id: overrides.assetId ?? 'asset-1', type: 'stock' })]);
   }
-  return {
+  return replySource({
     id: 'position-1',
     aggregateVersion: 5,
     assetId: 'asset-1',
     householdId: 'house-1',
     holdingType: 'stock',
+    instrumentType: 'stock',
+    priceScale: 1,
     stockCode: '005930',
     stockName: '삼성전자',
     market: 'KRX',
@@ -79,11 +84,12 @@ function holding(overrides: Partial<StockHolding> = {}): StockHolding {
     createdAt: new Date('2026-07-01T00:00:00Z'),
     updatedAt: new Date('2026-07-01T00:00:00Z'),
     ...overrides,
-  };
+  });
 }
 
 describe('portfolio asset service optimistic contract', () => {
   beforeEach(() => {
+    resetReplySources();
     jest.clearAllMocks();
     resetClientOptimisticProjections();
   });
@@ -100,7 +106,7 @@ describe('portfolio asset service optimistic contract', () => {
     );
     subscription.publish([asset()]);
     const command = deferred<void>();
-    mockedCommands.updateAsset.mockReturnValue(command.promise);
+    mockedCommands.updateAsset.mockImplementation((...args) => { const reply = portfolioReplies.updateAsset(...args); return command.promise.then(() => reply); });
 
     const pending = updateAsset('asset-1', { memo: '즉시 반영' }, 3);
 
@@ -124,7 +130,7 @@ describe('portfolio asset service optimistic contract', () => {
     );
     subscription.publish([asset({ aggregateVersion: 3 })]);
     const firstCommand = deferred<void>();
-    mockedCommands.updateAsset.mockReturnValueOnce(firstCommand.promise);
+    mockedCommands.updateAsset.mockImplementationOnce((...args) => { const reply = portfolioReplies.updateAsset(...args); return firstCommand.promise.then(() => reply); });
 
     const firstPending = updateAsset('asset-1', { memo: '임시 메모' }, 3);
     const reopenedAsset = rendered.at(-1)?.[0];
@@ -135,7 +141,7 @@ describe('portfolio asset service optimistic contract', () => {
     });
 
     const secondCommand = deferred<void>();
-    mockedCommands.updateAsset.mockReturnValueOnce(secondCommand.promise);
+    mockedCommands.updateAsset.mockImplementationOnce((...args) => { const reply = portfolioReplies.updateAsset(...args); return secondCommand.promise.then(() => reply); });
     const secondPending = updateAsset(
       'asset-1',
       { memo: '', currentBalance: 1_000_002 },
@@ -173,7 +179,7 @@ describe('portfolio asset service optimistic contract', () => {
     );
     subscription.publish([asset({ aggregateVersion: 3 })]);
     const firstCommand = deferred<void>();
-    mockedCommands.updateAsset.mockReturnValueOnce(firstCommand.promise);
+    mockedCommands.updateAsset.mockImplementationOnce((...args) => { const reply = portfolioReplies.updateAsset(...args); return firstCommand.promise.then(() => reply); });
 
     const firstPending = updateAsset('asset-1', { memo: '실패할 메모' }, 3);
     const secondPending = updateAsset(
@@ -198,7 +204,7 @@ describe('portfolio asset service optimistic contract', () => {
       aggregateVersion: 3,
       currentBalance: 1_000_000,
     });
-    expect(rendered.at(-1)?.[0].memo).toBeUndefined();
+    expect(rendered.at(-1)?.[0].memo).toBe('');
   });
 
   test('첫 수정 전에 열린 stale 화면도 겹치지 않는 필드는 선행 수정 뒤 안전하게 이어 붙인다', async () => {
@@ -211,8 +217,8 @@ describe('portfolio asset service optimistic contract', () => {
     const firstCommand = deferred<void>();
     const secondCommand = deferred<void>();
     mockedCommands.updateAsset
-      .mockReturnValueOnce(firstCommand.promise)
-      .mockReturnValueOnce(secondCommand.promise);
+      .mockImplementationOnce((...args) => { const reply = portfolioReplies.updateAsset(...args); return firstCommand.promise.then(() => reply); })
+      .mockImplementationOnce((...args) => { const reply = portfolioReplies.updateAsset(...args); return secondCommand.promise.then(() => reply); });
 
     const firstPending = updateAsset('asset-1', { memo: '최신 메모' }, 3);
     const secondPending = updateAsset(
@@ -253,8 +259,8 @@ describe('portfolio asset service optimistic contract', () => {
     ]);
     const reorderCommand = deferred<void>();
     const updateCommand = deferred<void>();
-    mockedCommands.reorderAssets.mockReturnValueOnce(reorderCommand.promise);
-    mockedCommands.updateAsset.mockReturnValueOnce(updateCommand.promise);
+    mockedCommands.reorderAssets.mockImplementationOnce((...args) => { const reply = portfolioReplies.reorderAssets(...args); return reorderCommand.promise.then(() => reply); });
+    mockedCommands.updateAsset.mockImplementationOnce((...args) => { const reply = portfolioReplies.updateAsset(...args); return updateCommand.promise.then(() => reply); });
 
     const reorderPending = updateAssetOrders([
       { id: 'asset-2', order: 0 },
@@ -293,9 +299,9 @@ describe('portfolio asset service optimistic contract', () => {
     const newFirstCommand = deferred<void>();
     const newSecondCommand = deferred<void>();
     mockedCommands.updateAsset
-      .mockReturnValueOnce(oldFirstCommand.promise)
-      .mockReturnValueOnce(newFirstCommand.promise)
-      .mockReturnValueOnce(newSecondCommand.promise);
+      .mockImplementationOnce((...args) => { const reply = portfolioReplies.updateAsset(...args); return oldFirstCommand.promise.then(() => reply); })
+      .mockImplementationOnce((...args) => { const reply = portfolioReplies.updateAsset(...args); return newFirstCommand.promise.then(() => reply); })
+      .mockImplementationOnce((...args) => { const reply = portfolioReplies.updateAsset(...args); return newSecondCommand.promise.then(() => reply); });
 
     const oldFirstPending = updateAsset('asset-1', { memo: '이전 session 1' }, 3);
     const oldSecondPending = updateAsset(
@@ -351,7 +357,7 @@ describe('portfolio asset service optimistic contract', () => {
     );
     subscription.publish([asset()]);
     const command = deferred<void>();
-    mockedCommands.updateAsset.mockReturnValue(command.promise);
+    mockedCommands.updateAsset.mockImplementation((...args) => { const reply = portfolioReplies.updateAsset(...args); return command.promise.then(() => reply); });
 
     const pending = updateAsset('asset-1', { name: '실패할 이름' }, 3);
     expect(rendered.at(-1)?.[0].name).toBe('실패할 이름');
@@ -378,7 +384,7 @@ describe('portfolio asset service optimistic contract', () => {
     );
 
     const command = deferred<void>();
-    mockedCommands.updateAsset.mockReturnValue(command.promise);
+    mockedCommands.updateAsset.mockImplementation((...args) => { const reply = portfolioReplies.updateAsset(...args); return command.promise.then(() => reply); });
     const pending = updateAsset('asset-1', { memo: '오래 열린 화면의 메모' }, 3);
 
     expect(mockedCommands.updateAsset).toHaveBeenCalledWith(
@@ -398,7 +404,7 @@ describe('portfolio asset service optimistic contract', () => {
       aggregateVersion: 4,
       name: '다른 사용자의 이름',
     });
-    expect(rendered.at(-1)?.[0].memo).toBeUndefined();
+    expect(rendered.at(-1)?.[0].memo).toBe('');
   });
 
   test('자산·보유 항목 추가는 commandId로 예측한 ID를 같은 tick에 보여준다', async () => {
@@ -414,12 +420,8 @@ describe('portfolio asset service optimistic contract', () => {
     );
     assetSubscription.publish([]);
     holdingSubscription.publish([]);
-    mockedCommands.createAsset.mockImplementation(async (householdId, _input, commandId) =>
-      `asset-${householdId}-${commandId}`
-    );
-    mockedCommands.addPosition.mockImplementation(async (householdId, _kind, _input, commandId) =>
-      `position-${householdId}-${commandId}`
-    );
+    mockedCommands.createAsset.mockImplementation(async (...args) => portfolioReplies.createAsset(...args));
+    mockedCommands.addPosition.mockImplementation(async (...args) => portfolioReplies.addPosition(...args));
 
     const assetPending = addAsset({
       name: '새 자산',
@@ -454,7 +456,7 @@ describe('portfolio asset service optimistic contract', () => {
     );
     subscription.publish([holding()]);
     const updateCommand = deferred<void>();
-    mockedCommands.updatePosition.mockReturnValue(updateCommand.promise);
+    mockedCommands.updatePosition.mockImplementation((...args) => { const reply = portfolioReplies.updatePosition(...args); return updateCommand.promise.then(() => reply); });
 
     const updatePending = updateStockHolding('position-1', 'asset-1', { quantity: 20 }, 5);
     expect(rendered.at(-1)?.[0].quantity).toBe(20);
@@ -472,7 +474,7 @@ describe('portfolio asset service optimistic contract', () => {
     expect(rendered.at(-1)?.[0].quantity).toBe(10);
 
     const deleteCommand = deferred<void>();
-    mockedCommands.deletePosition.mockReturnValue(deleteCommand.promise);
+    mockedCommands.deletePosition.mockImplementation((...args) => { const reply = portfolioReplies.deletePosition(...args); return deleteCommand.promise.then(() => reply); });
     const deletePending = deleteStockHolding('position-1', 'asset-1', 5);
     expect(rendered.at(-1)).toEqual([]);
     deleteCommand.reject(new Error('DELETE_FAILED'));
@@ -502,7 +504,7 @@ describe('portfolio asset service optimistic contract', () => {
     );
     oldSubscription.publish([asset()]);
     const command = deferred<void>();
-    mockedCommands.updateAsset.mockReturnValue(command.promise);
+    mockedCommands.updateAsset.mockImplementation((...args) => { const reply = portfolioReplies.updateAsset(...args); return command.promise.then(() => reply); });
     const oldPending = updateAsset('asset-1', { memo: '이전 session 변경' }, 3);
 
     resetClientOptimisticProjections();
