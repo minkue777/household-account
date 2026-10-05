@@ -78,36 +78,7 @@ export function createAdminAssetAccessHandlers(
           if (result.kind === "forbidden") {
             return reject(result, "DELETED_ASSET_LIST_FORBIDDEN");
           }
-          const assetIds = result.kind === "no-data" ? [] : result.assetIds;
-          const assets = await Promise.all(
-            assetIds.map(async (assetId) => {
-              const canonical = await database
-                .collection("households").doc(householdId)
-                .collection("assets").doc(assetId).get();
-              const canonicalData = canonical.data();
-              const deletedAt = canonicalData?.deletedAt;
-              const asIso =
-                typeof deletedAt === "string"
-                  ? deletedAt
-                  : typeof deletedAt?.toDate === "function"
-                    ? deletedAt.toDate().toISOString()
-                    : undefined;
-              return {
-                assetId,
-                name:
-                  (typeof canonicalData?.name === "string"
-                    ? canonicalData.name
-                    : assetId),
-                lifecycleState: "deleted" as const,
-                aggregateVersion:
-                  typeof canonicalData?.aggregateVersion === "number"
-                    ? canonicalData.aggregateVersion
-                    : 1,
-                ...(asIso === undefined ? {} : { deletedAt: asIso }),
-              };
-            }),
-          );
-          return { assets };
+          return { assets: result.kind === "no-data" ? [] : result.assets };
         },
       },
     ],

@@ -285,7 +285,6 @@ export class RemoteInstrumentCatalogRunSource
       ...(manifestGeneration.value === undefined
         ? {}
         : { expectedManifestGeneration: manifestGeneration.value }),
-      uploadVerification: "valid",
     };
   }
 }
@@ -334,13 +333,13 @@ export class FirebaseInstrumentCatalogStorage
   }
 
   async commit(input: Parameters<CatalogPublicationStore["commit"]>[0]) {
-    const objectPath = snapshotPath(input.snapshot.asOfDate);
+    const objectPath = snapshotPath(input.draft.asOfDate);
     const body: StoredCatalogBody = {
       schemaVersion: 1,
-      asOfDate: input.snapshot.asOfDate,
+      asOfDate: input.draft.asOfDate,
       catalogVersion: CATALOG_VERSION,
-      itemCount: input.snapshot.items.length,
-      items: input.snapshot.items,
+      itemCount: input.draft.items.length,
+      items: input.draft.items,
     };
     const compressed = gzipSync(Buffer.from(JSON.stringify(body), "utf8"), {
       level: 9,
@@ -372,13 +371,20 @@ export class FirebaseInstrumentCatalogStorage
       catalogVersion: CATALOG_VERSION,
       snapshotObject: objectPath,
       snapshotGeneration,
-      asOfDate: input.snapshot.asOfDate,
+      asOfDate: input.draft.asOfDate,
       publishedAt: new Date().toISOString(),
       sha256,
       itemCount: body.itemCount,
-      sources: input.manifest.sources,
+      sources: [
+        { provider: "domestic-catalog", asOfDate: input.draft.asOfDate, itemCount: input.draft.domesticCount },
+        { provider: "us-catalog", asOfDate: input.draft.asOfDate, itemCount: input.draft.usCount },
+      ],
       manifestGeneration: "pending",
     };
+    const verified = await this.readSnapshot(plannedManifest);
+    if (verified.kind !== "available" || verified.value.itemCount !== body.itemCount) {
+      throw new Error("CATALOG_SNAPSHOT_VERIFICATION_FAILED");
+    }
     const latest = this.bucket.file(LATEST_OBJECT);
     const currentGeneration = await currentManifestGeneration(this.bucket);
     if (currentGeneration !== input.expectedManifestGeneration) {
@@ -471,17 +477,31 @@ export class FirebaseInstrumentCatalogStorage
     const [files] = await this.bucket.getFiles({
       prefix: `${CATALOG_PREFIX}/snapshots/`,
     });
-    const dates = [...new Set(
-      files
-        .map(({ name }) => /\/snapshots\/(\d{4}-\d{2}-\d{2})\//u.exec(name)?.[1])
-        .filter((value): value is string => value !== undefined),
-    )].sort((left, right) => right.localeCompare(left));
-    const retained = new Set(dates.slice(0, days));
+    // Count committed publications, not failed/CAS-conflicted snapshot uploads.
+    const receipts = this.database.collection("operations").doc("runtime")
+      .collection(RECEIPTS).orderBy("result.manifest.asOfDate", "desc");
+    const retained = new Set<string>();
+    let cursor: firestore.QueryDocumentSnapshot | undefined;
+    while (retained.size < days) {
+      const page = await (cursor ? receipts.startAfter(cursor) : receipts).limit(100).get();
+      for (const receipt of page.docs) {
+        const date = receipt.get("result.manifest.asOfDate");
+        if (typeof date === "string") retained.add(date);
+        if (retained.size === days) break;
+      }
+      if (page.size < 100) break;
+      cursor = page.docs.at(-1);
+    }
+    const oldestRetained = [...retained].sort()[0];
+    if (oldestRetained === undefined) return;
+    const current = await this.readManifest();
+    if (current.kind === "unavailable") return;
+    retained.add(current.value.asOfDate);
     await Promise.all(
       files
         .filter(({ name }) => {
           const date = /\/snapshots\/(\d{4}-\d{2}-\d{2})\//u.exec(name)?.[1];
-          return date !== undefined && !retained.has(date);
+          return date !== undefined && date < oldestRetained && !retained.has(date);
         })
         .map((file) => file.delete({ ignoreNotFound: true })),
     );

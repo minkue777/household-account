@@ -306,7 +306,7 @@ describe("Portfolio 자산 전체 lifecycle Workflow 계약", () => {
 
     expect(await subject.listDeletedAssetIds(operator)).toEqual({
       kind: "success",
-      assetIds: ["asset-1"],
+      assets: [expect.objectContaining({ assetId: "asset-1", name: "asset-1", lifecycleState: "deleted", aggregateVersion: 4 })],
     });
     const requested = await subject.requestPermanentPurge({
       actor: operator,

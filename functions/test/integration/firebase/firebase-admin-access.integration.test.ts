@@ -1,6 +1,6 @@
 import { deleteApp, initializeApp, type App } from "firebase-admin/app";
-import { getFirestore, type Firestore } from "firebase-admin/firestore";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { getFirestore, DocumentReference, Query, type Firestore } from "firebase-admin/firestore";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createAdminAccessRouter } from "../../../src/bootstrap/admin/adminAccess";
 import type { AdminAccessOperation } from "../../../src/bootstrap/admin/adminAccess";
@@ -311,12 +311,26 @@ describeWithFirestoreEmulator("Firebase 관리자 Access adapter", () => {
         requestedAt: NOW,
       });
 
-    await expect(
-      execute(envelope("list-deleted-assets", { householdId }, "admin-list-deleted-assets")),
-    ).resolves.toMatchObject({
-      kind: "success",
-      data: { assets: [{ assetId, name: "적금", aggregateVersion: 4 }] },
-    });
+    await Promise.all([
+      household.collection("assets").doc("active").set({ householdId, lifecycleState: "active" }),
+      household.collection("assets").doc("purging").set({ householdId, lifecycleState: "purging" }),
+      household.collection("assets").doc("foreign").set({ householdId: "different-house", lifecycleState: "deleted" }),
+    ]);
+    const documentReads = vi.spyOn(DocumentReference.prototype, "get");
+    const queryReads = vi.spyOn(Query.prototype, "get");
+    try {
+      await expect(
+        execute(envelope("list-deleted-assets", { householdId }, "admin-list-deleted-assets")),
+      ).resolves.toMatchObject({
+        kind: "success",
+        data: { assets: [{ assetId, name: "적금", aggregateVersion: 4, lifecycleState: "deleted", deletedAt: "2026-07-01T00:00:00.000Z" }] },
+      });
+      expect(queryReads).toHaveBeenCalledTimes(1);
+      expect(documentReads).not.toHaveBeenCalled();
+    } finally {
+      documentReads.mockRestore();
+      queryReads.mockRestore();
+    }
     await expect(
       execute(
         envelope(

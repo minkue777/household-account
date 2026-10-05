@@ -37,10 +37,16 @@ export type CatalogSourceResult =
       code: string;
     };
 
+export interface CatalogPublicationDraft {
+  readonly asOfDate: string;
+  readonly items: readonly CatalogInstrument[];
+  readonly domesticCount: number;
+  readonly usCount: number;
+}
+
 export interface CatalogRunData {
   domesticSource: CatalogSourceResult;
   usSource: CatalogSourceResult;
-  uploadVerification?: "valid" | "checksum-mismatch" | "metadata-mismatch";
   expectedManifestGeneration?: string;
 }
 

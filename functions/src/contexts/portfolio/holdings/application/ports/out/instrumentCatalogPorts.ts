@@ -1,5 +1,6 @@
 import type {
   CatalogManifest,
+  CatalogPublicationDraft,
   CatalogPublicationState,
   CatalogRunData,
   CatalogSnapshot,
@@ -16,9 +17,7 @@ export interface CatalogPublicationStore {
   commit(input: {
     runId: string;
     expectedManifestGeneration?: string;
-    snapshot: CatalogSnapshot;
-    manifest: CatalogManifest;
-    receipt: PublishCatalogResult;
+    draft: CatalogPublicationDraft;
     retainSuccessfulDays: number;
   }): Promise<
     | "generation-conflict"

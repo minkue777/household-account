@@ -381,7 +381,9 @@ class DefaultAssetOperationalRestorationDriver
     );
     return result.kind === "no-data"
       ? { kind: "success", assetIds: [] }
-      : result;
+      : result.kind === "success"
+        ? { kind: "success", assetIds: result.assets.map(asset => asset.assetId) }
+        : result;
   }
 
   async listDueMonths(query: {

@@ -34,7 +34,7 @@ export type VisibleAssetResult =
   | { readonly kind: "forbidden"; readonly code: string };
 
 export type DeletedAssetListResult =
-  | { readonly kind: "success"; readonly assetIds: readonly string[] }
+  | { readonly kind: "success"; readonly assets: readonly { readonly assetId: string; readonly name: string; readonly lifecycleState: "deleted"; readonly aggregateVersion: number; readonly deletedAt?: string }[] }
   | { readonly kind: "no-data" }
   | { readonly kind: "forbidden"; readonly code: string };
 

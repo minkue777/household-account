@@ -5,7 +5,6 @@ import type {
   ReadCatalogResult,
 } from "../domain/model/instrumentCatalog";
 import {
-  buildCatalogPublication,
   snapshotMatchesManifest,
   validateCatalogSources,
 } from "../domain/policies/instrumentCatalogPolicy";
@@ -81,26 +80,15 @@ export function createInstrumentCatalogApplication(dependencies: {
       if (validation.kind === "invalid") {
         return { kind: "contract-failure", code: validation.code };
       }
-      if ((run.uploadVerification ?? "valid") !== "valid") {
-        return { kind: "contract-failure", code: "SNAPSHOT_VERIFICATION_FAILED" };
-      }
-
-      const publication = buildCatalogPublication({
-        asOfDate: command.asOfDate,
-        items: validation.items,
-        domesticCount: run.domesticSource.items.length,
-        usCount: run.usSource.items.length,
-      });
-      const result: PublishCatalogResult = {
-        kind: "published",
-        manifest: publication.manifest,
-      };
       const committed = await dependencies.publicationStore.commit({
         runId: command.runId,
         expectedManifestGeneration: run.expectedManifestGeneration,
-        snapshot: publication.snapshot,
-        manifest: publication.manifest,
-        receipt: result,
+        draft: {
+          asOfDate: command.asOfDate,
+          items: validation.items,
+          domesticCount: run.domesticSource.items.length,
+          usCount: run.usSource.items.length,
+        },
         retainSuccessfulDays: 3,
       });
       if (committed === "generation-conflict") {

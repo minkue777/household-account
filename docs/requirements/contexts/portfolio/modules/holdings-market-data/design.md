@@ -584,3 +584,8 @@ Domain은 Firebase·node-fetch·HTML parser를 import하지 않습니다. `publi
 8. Firebase Scheduled Function의 구조화 logger, ProviderHealthStore와 Cloud Monitoring 경보를 연결해 `T-MARKET-001`을 활성화합니다.
 9. DEC-035의 catalog publisher·Cloud Storage snapshot/manifest Adapter·IndexedDB/메모리 기기 read model을 구현하고 `T-MARKET-002` 통과 뒤 `stocks.json` reader와 파일을 제거합니다.
 10. DEC-014 확정 뒤에만 Position history 저장·보존과 배당 recovery contract test를 활성화합니다.
+
+
+### 2026-10-05 발행 입력 축소
+
+발행 application은 검증한 asOfDate/items/source count만 Storage adapter에 전달한다. checksum·generation·publishedAt·receipt는 실제 gzip 업로드와 다운로드 검증 후 adapter에서 구성한다. latest CAS 전 검증 실패와 immutable 본문 충돌은 기존 latest를 보존한다. 최근 세 성공 날짜는 업로드 경로 목록이 아니라 확정 receipt에서 선택하며 최신 manifest가 참조한 객체를 삭제하지 않는다. 실제 Firestore/Storage SDK 검사와 실패 주입 경계는 [작업 기록](../../../../../operations/portfolio-storage-simplicity-2026-10-05.md)에 있다.

@@ -9,7 +9,6 @@ import type {
   CatalogManifest,
   CatalogPublicationState,
   CatalogSnapshot,
-  PublishCatalogResult,
 } from "../../src/contexts/portfolio/holdings/public";
 import type { CatalogRunData } from "../../src/contexts/portfolio/holdings/domain/model/instrumentCatalog";
 
@@ -47,40 +46,23 @@ export function createInstrumentCatalogFixture(fixture: {
   runs: Readonly<Record<string, CatalogRunData>>;
   legacyStocksJson?: readonly CatalogInstrument[];
 }) {
-  let state = cloneState(fixture.storage ?? { successfulSnapshots: [] });
+  const state = cloneState(fixture.storage ?? { successfulSnapshots: [] });
   let readScenario: StorageReadScenario = {
     manifest: "available",
     snapshot: "available",
   };
-  const receipts = new Map<string, PublishCatalogResult>();
 
   const runSource: InstrumentCatalogRunSource = {
     load: async (asOfDate) => fixture.runs[asOfDate],
   };
   const publicationStore: CatalogPublicationStore = {
-    findReceipt: async (runId) => receipts.get(runId),
+    findReceipt: async () => undefined,
     state: async () => cloneState(state),
-    commit: async (input) => {
-      if (
-        input.expectedManifestGeneration !== undefined &&
-        input.expectedManifestGeneration !== state.latest?.manifestGeneration
-      ) {
-        return "generation-conflict";
-      }
-
-      const snapshots = state.successfulSnapshots
-        .filter(({ asOfDate }) => asOfDate !== input.snapshot.asOfDate)
-        .concat(cloneSnapshot(input.snapshot))
-        .sort((left, right) => right.asOfDate.localeCompare(left.asOfDate))
-        .slice(0, input.retainSuccessfulDays);
-      state = {
-        latest: cloneManifest(input.manifest),
-        successfulSnapshots: snapshots,
-      };
-      receipts.set(input.runId, input.receipt);
-      return { kind: "committed", manifest: cloneManifest(input.manifest) };
-    },
+    // These cases exercise validation/read-cache behavior. Storage publication is
+    // covered with the real adapter and Storage/Firestore SDK in integration tests.
+    commit: async () => { throw new Error("Unexpected publication after source validation failure"); },
   };
+
   const readStore: CatalogReadStore = {
     readManifest: async () => {
       if (readScenario.manifest === "unavailable") return { kind: "unavailable" };

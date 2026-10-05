@@ -595,17 +595,23 @@ class DefaultAssetLifecycleApplication implements AssetLifecycleInputPort {
     const records = await this.dependencies.unitOfWork.listByHousehold(
       actor.householdId,
     );
-    const assetIds = records
+    const assets = records
       .map((record) => record.asset)
       .filter(
         (asset): asset is NonNullable<typeof asset> =>
-          asset !== undefined && asset.lifecycleState === "deleted",
+          asset !== undefined && asset.householdId === actor.householdId && asset.lifecycleState === "deleted",
       )
-      .map((asset) => asset.assetId)
-      .sort();
-    return assetIds.length === 0
+      .map((asset) => ({
+        assetId: asset.assetId,
+        name: asset.name ?? asset.assetId,
+        lifecycleState: "deleted" as const,
+        aggregateVersion: asset.aggregateVersion,
+        ...(asset.deletedAt === undefined ? {} : { deletedAt: asset.deletedAt }),
+      }))
+      .sort((left, right) => left.assetId.localeCompare(right.assetId));
+    return assets.length === 0
       ? { kind: "no-data" }
-      : { kind: "success", assetIds };
+      : { kind: "success", assets };
   }
 
   private nextProcess(

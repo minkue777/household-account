@@ -1,6 +1,7 @@
 export type CanonicalAssetLifecycle = "active" | "deleted" | "purging";
 
 export interface AssetLifecycleView {
+  readonly name?: string;
   readonly assetId: string;
   readonly householdId: string;
   readonly lifecycleState: CanonicalAssetLifecycle;

@@ -68,6 +68,7 @@ function mapAsset(
   return {
     assetId,
     householdId,
+    ...(typeof canonical.name === "string" ? { name: canonical.name } : {}),
     lifecycleState: lifecycle(canonical),
     aggregateVersion: numberField(
       canonical,

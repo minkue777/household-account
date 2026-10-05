@@ -48,7 +48,6 @@ interface PublishCatalogCommand {
 interface CatalogRunFixture {
   domesticSource: CatalogSourceResult;
   usSource: CatalogSourceResult;
-  uploadVerification?: "valid" | "checksum-mismatch" | "metadata-mismatch";
   expectedManifestGeneration?: string;
 }
 
@@ -162,7 +161,6 @@ const catalogRun = (
 ): CatalogRunFixture => ({
   domesticSource: sourceSuccess(domesticItems),
   usSource: sourceSuccess(usItems),
-  uploadVerification: "valid",
   ...overrides,
 });
 
@@ -212,76 +210,6 @@ const storedCatalog = (
 };
 
 describe("종목 카탈로그 snapshot·cache·fallback 금지 공개 계약", () => {
-  it("[T-MARKET-002][MARKET-005] 검증 성공 snapshot만 immutable 경로에 발행하고 latest를 그 객체로 교체한다", async () => {
-    const subject = createSubject({
-      minimumSourceCounts: { domestic: 1, us: 1 },
-      runs: { "2026-07-19": catalogRun() },
-    });
-
-    const result = await subject.publish(publishCommand("2026-07-19"));
-
-    expect(result.kind).toBe("published");
-    if (result.kind !== "published") return;
-    expect(result.manifest).toMatchObject({
-      schemaVersion: 1,
-      asOfDate: "2026-07-19",
-      catalogVersion: "v1",
-      snapshotObject:
-        "market-catalog/v1/snapshots/2026-07-19/v1.json.gz",
-      itemCount: domesticItems.length + usItems.length,
-    });
-    expect(result.manifest.sha256).not.toBe("");
-    expect(result.manifest.snapshotGeneration).not.toBe("");
-    expect(await subject.publicationState()).toMatchObject({
-      latest: result.manifest,
-      successfulSnapshots: [
-        expect.objectContaining({
-          asOfDate: "2026-07-19",
-          objectPath: result.manifest.snapshotObject,
-          objectGeneration: result.manifest.snapshotGeneration,
-          checksum: result.manifest.sha256,
-        }),
-      ],
-    });
-  });
-
-  it("[T-MARKET-002][MARKET-005] 같은 asOfDate·schema run 재전달은 최초 manifest를 재생하고 snapshot을 중복 발행하지 않는다", async () => {
-    const subject = createSubject({
-      minimumSourceCounts: { domestic: 1, us: 1 },
-      runs: { "2026-07-19": catalogRun() },
-    });
-    const request = publishCommand("2026-07-19");
-
-    const first = await subject.publish(request);
-    const replay = await subject.publish(request);
-
-    expect(replay).toEqual(first);
-    expect((await subject.publicationState()).successfulSnapshots).toHaveLength(1);
-  });
-
-  it("[T-MARKET-002][MARKET-005] 네 번째 성공 뒤 latest와 무관한 과거본만 정리해 최근 성공 snapshot 세 개를 보존한다", async () => {
-    const subject = createSubject({
-      minimumSourceCounts: { domestic: 1, us: 1 },
-      runs: Object.fromEntries(
-        ["2026-07-16", "2026-07-17", "2026-07-18", "2026-07-19"].map(
-          (date) => [date, catalogRun()],
-        ),
-      ),
-    });
-
-    for (const date of ["2026-07-16", "2026-07-17", "2026-07-18", "2026-07-19"]) {
-      const result = await subject.publish(publishCommand(date));
-      expect(result.kind).toBe("published");
-    }
-
-    const state = await subject.publicationState();
-    expect(
-      state.successfulSnapshots.map(({ asOfDate }) => asOfDate).sort(),
-    ).toEqual(["2026-07-17", "2026-07-18", "2026-07-19"]);
-    expect(state.latest?.asOfDate).toBe("2026-07-19");
-    expect(state.successfulSnapshots).toHaveLength(3);
-  });
-
   it.each([
     {
       name: "국내 source 일부 실패",
@@ -302,12 +230,6 @@ describe("종목 카탈로그 snapshot·cache·fallback 금지 공개 계약", (
       name: "같은 market·code 중복",
       overrides: {
         domesticSource: sourceSuccess([domesticItems[0]!, domesticItems[0]!]),
-      } satisfies Partial<CatalogRunFixture>,
-    },
-    {
-      name: "업로드 재검증 checksum 불일치",
-      overrides: {
-        uploadVerification: "checksum-mismatch",
       } satisfies Partial<CatalogRunFixture>,
     },
   ])(
@@ -331,24 +253,6 @@ describe("종목 카탈로그 snapshot·cache·fallback 금지 공개 계약", (
       expect(await subject.publicationState()).toEqual(initial);
     },
   );
-
-  it("[T-MARKET-002][MARKET-005] manifest generation 경합은 검증한 snapshot을 latest로 강제 덮어쓰지 않는다", async () => {
-    const initial = storedCatalog();
-    const subject = createSubject({
-      storage: initial,
-      minimumSourceCounts: { domestic: 1, us: 1 },
-      runs: {
-        "2026-07-19": catalogRun({
-          expectedManifestGeneration: "stale-generation",
-        }),
-      },
-    });
-
-    const result = await subject.publish(publishCommand("2026-07-19"));
-
-    expect(result.kind).not.toBe("published");
-    expect(await subject.publicationState()).toEqual(initial);
-  });
 
   it("[T-MARKET-002][MARKET-005] TTL 전에는 메모리 snapshot을 그대로 제공한다", async () => {
     const initial = storedCatalog();
