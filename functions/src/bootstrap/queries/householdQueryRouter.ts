@@ -12,14 +12,6 @@ import {
   setCurrentInteractiveLatencyOperation,
 } from "../../observability/interactiveLatency";
 
-const ADMINISTRATOR_OR_MEMBER_QUERIES = new Set([
-  "ledger.get-transaction.v1",
-  "portfolio.search-instruments.v1",
-  "portfolio.get-instrument-quote.v1",
-  "portfolio.get-dividend-projection.v1",
-  "access.list-asset-owner-profiles.v1",
-]);
-
 const STABLE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/u;
 const QUERY_PATTERN = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+\.v[1-9][0-9]*$/u;
 const RESERVED_IDENTITY_FIELDS = new Set([
@@ -131,9 +123,7 @@ export function createHouseholdQueryRouter(input: {
         return failure("QUERY_NOT_AVAILABLE", { queryId: parsed.queryId });
       }
       setCurrentInteractiveLatencyOperation(parsed.query);
-      const permitsAdministrator = ADMINISTRATOR_OR_MEMBER_QUERIES.has(
-        parsed.query,
-      );
+      const permitsAdministrator = handler.permitsAdministrator === true;
       const verifiedAdministrator =
         request.administrator !== undefined &&
         request.administrator.principalRef === principalUid
@@ -154,7 +144,7 @@ export function createHouseholdQueryRouter(input: {
         return failure("FORBIDDEN", { queryId: parsed.queryId });
       }
       try {
-        if ((parsed.query === "portfolio.search-instruments.v1" || parsed.query === "portfolio.get-instrument-quote.v1")
+        if (handler.usesExternalQueryQuota === true
           && input.externalQueryQuota !== undefined
           && !await input.externalQueryQuota.allow({ principalUid, householdId: parsed.householdId, sourceIp: request.sourceIp })) {
           return failure("EXTERNAL_QUERY_RATE_LIMITED", { queryId: parsed.queryId, retryable: true });

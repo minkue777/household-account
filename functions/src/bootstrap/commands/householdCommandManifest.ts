@@ -63,7 +63,6 @@ export const HOUSEHOLD_COMMAND_NAMES = Object.freeze([
   "home.select-local-currency.v1",
 ] as const);
 
-export type HouseholdCommandName = (typeof HOUSEHOLD_COMMAND_NAMES)[number];
 
 export function createManifestBackedHouseholdCommandRegistry(
   implemented: Iterable<readonly [string, HouseholdCommandHandler]>,

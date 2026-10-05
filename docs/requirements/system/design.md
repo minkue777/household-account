@@ -230,6 +230,8 @@ Cross-cutting 인증 진입점 검증은 [T-SEC-002](../cross-cutting/security-p
 
 ## 12. 미결정 사항과 구현 순서
 
+명령·조회 handler의 접근 정책과 receipt 소유 경계는 해당 등록 객체에서 선언합니다. 기본은 활성 가구원과 공통 command receipt이며, principal 전용·관리자 전용·읽기 전용·도메인 원자 receipt·외부 조회 quota만 명시적으로 선택합니다. Router의 실행/오류 변환은 한 경로를 사용하고 일회성 secret의 receipt 저장 금지와 commandId/idempotencyKey 구분을 유지합니다. 공개 manifest 검사는 callable이 사용하는 실제 Firebase registry factory를 대상으로 합니다. [A06 정비와 검증](../../operations/handler-policy-simplicity-2026-10-05.md)
+
 미결정 항목은 [코드 감사 후 미결정 사항](../governance/pending-decisions.md)에서 일괄 관리한다. legacy member name 매핑 실패는 운영 migration/repair가 자동 추정하지 않고 수동 연결 후보와 reconciliation report만 만든다.
 
 구현 순서:

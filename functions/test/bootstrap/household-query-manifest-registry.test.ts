@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { initializeApp, deleteApp } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import { createFirebaseHouseholdQueryRegistry } from "../../src/bootstrap/householdQueryRegistry";
+import { afterAll, describe, expect, it } from "vitest";
 
 import type { HouseholdQueryHandler } from "../../src/bootstrap/queries/householdQuery";
 import {
@@ -11,6 +14,9 @@ interface Manifest {
   readonly queries: readonly { readonly name: string }[];
 }
 
+const app = initializeApp({ projectId: "demo-query-registry" }, "query-registry");
+afterAll(() => deleteApp(app));
+
 describe("household query runtime registry", () => {
   const handler: HouseholdQueryHandler = { async execute() {} };
 
@@ -18,13 +24,15 @@ describe("household query runtime registry", () => {
     const manifest = readContractJson<Manifest>(
       "fixtures/system/household-query-manifest.v1.json",
     );
-    const registry = createManifestBackedHouseholdQueryRegistry(
-      HOUSEHOLD_QUERY_NAMES.map((name) => [name, handler] as const),
-    );
+    const registry = createFirebaseHouseholdQueryRegistry(getFirestore(app));
 
     expect([...registry.keys()].sort()).toEqual(
       manifest.queries.map(({ name }) => name).sort(),
     );
+    expect([...registry].filter(([, handler]) => !handler.permitsAdministrator).map(([name]) => name))
+      .toEqual(["shortcut.get-credential-status.v1"]);
+    expect([...registry].filter(([, handler]) => handler.usesExternalQueryQuota).map(([name]) => name))
+      .toEqual(["portfolio.search-instruments.v1", "portfolio.get-instrument-quote.v1"]);
   });
 
   it("누락·비공개·중복 query handler는 composition 단계에서 실패한다", () => {

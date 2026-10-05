@@ -22,6 +22,7 @@ export function createAccessHouseholdQueryHandlers(
     [
       "access.list-asset-owner-profiles.v1",
       {
+        permitsAdministrator: true,
         async execute(context) {
           const payload = context.envelope.payload;
           if (

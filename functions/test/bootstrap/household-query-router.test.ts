@@ -13,7 +13,7 @@ function fixture(handler: { execute(context: never): Promise<unknown> } = {
   },
 }) {
   const router = createHouseholdQueryRouter({
-    handlers: new Map([["ledger.get-transaction.v1", handler]]),
+    handlers: new Map([["ledger.get-transaction.v1", { ...handler, permitsAdministrator: true }]]),
     memberships: {
       async resolveActor({ principalUid, householdId }) {
         return principalUid === "uid-a" && householdId === "house-a"
@@ -147,4 +147,16 @@ describe("household query bootstrap boundary", () => {
       new Set(entries.map((entry) => entry.correlationId)),
     ).toEqual(new Set([latency.correlationId]));
   });
+});
+
+it("조회 정책을 생략한 credential 경계는 관리자도 membership 없이 통과할 수 없다", async () => {
+  let executions = 0;
+  const router = createHouseholdQueryRouter({
+    handlers: new Map([["shortcut.get-credential-status.v1", { async execute() { executions++; } }]]),
+    memberships: { async resolveActor() { return { kind: "forbidden" }; } },
+  });
+  await expect(router.execute({ principalUid: "admin", administrator: { principalRef: "admin", capabilities: ["admin.household-data.read"] },
+    request: { contractVersion: "household-query.v1", queryId: "q", householdId: "house", query: "shortcut.get-credential-status.v1", payload: {} } }))
+    .resolves.toMatchObject({ kind: "error", code: "FORBIDDEN" });
+  expect(executions).toBe(0);
 });

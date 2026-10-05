@@ -76,9 +76,22 @@ suite('포트폴리오 확정 응답과 실제 canonical 저장', () => {
       positionKind: 'stock', expectedVersion: 1, expectedAssetVersion: 2, changes: { quantity } });
     const results = await Promise.all([update('update-a', 12), update('update-b', 14)]);
     expect(results.filter(result => result.kind === 'success')).toHaveLength(1);
-    expect(results.find(result => result.kind === 'error')).toMatchObject({ kind: 'error', code: 'ASSET_VERSION_MISMATCH' });
     const winner = results.find(result => result.kind === 'success')!;
     await matchesCanonical(winner);
+    const loserIndex = results.findIndex(result => result.kind === 'error');
+    let loser = results[loserIndex];
+    if (loser.kind === 'error' && loser.code === 'PORTFOLIO_UOW_FAILED') {
+      // An Emulator RPC can lose its transaction ID after a lock timeout. The
+      // public contract exposes this as retryable, not as a version decision.
+      // Re-submit the identical command once and require the domain decision;
+      // neither the failed attempt nor its retry may change the winner's state.
+      expect(loser.retryable).toBe(true);
+      const id = loserIndex === 0 ? 'update-a' : 'update-b';
+      expect((await receiptReference(db, metadata(id)).get()).exists).toBe(false);
+      loser = await update(id, loserIndex === 0 ? 12 : 14);
+      await matchesCanonical(winner);
+    }
+    expect(loser).toMatchObject({ kind: 'error', code: 'ASSET_VERSION_MISMATCH' });
     const deleted = await runtime().deletePosition({ metadata: metadata('delete-position'), assetId, positionId, positionKind: 'stock', expectedVersion: 2, expectedAssetVersion: 3 });
     const removed = await matchesCanonical(deleted);
     expect(removed.positions[0]).toMatchObject({ lifecycleState: 'deleted', aggregateVersion: 3 });

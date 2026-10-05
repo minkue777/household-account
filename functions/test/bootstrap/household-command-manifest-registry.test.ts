@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { initializeApp, deleteApp } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import { createFirebaseHouseholdCommandRegistry } from "../../src/bootstrap/householdCommandRegistry";
+import { afterAll, describe, expect, it } from "vitest";
 
 import {
   HOUSEHOLD_COMMAND_NAMES,
@@ -8,25 +11,38 @@ import type { HouseholdCommandHandler } from "../../src/bootstrap/commands/house
 import { readContractJson } from "../support/contract-json";
 
 interface Manifest {
-  readonly commands: readonly { readonly name: string }[];
+  readonly commands: readonly { readonly name: string; readonly scope: "principal" | "household" }[];
 }
 
+const app = initializeApp({ projectId: "demo-command-registry" }, "command-registry");
+afterAll(() => deleteApp(app));
+
 describe("household command runtime registry", () => {
+  it("[T-CARD-005][CARD-005] 실제 서버 등록에는 일반 카드 복구 명령이 없다", () => {
+    const names = [...createFirebaseHouseholdCommandRegistry(getFirestore(app)).keys()]
+      .filter(name => name.startsWith("payment-configuration.") && /card/i.test(name));
+    expect(names).toEqual([
+      "payment-configuration.register-card.v1", "payment-configuration.update-card.v1",
+      "payment-configuration.delete-card.v1", "payment-configuration.reorder-cards.v1",
+    ]);
+  });
+
   it("공개 manifest의 모든 command와 런타임 registry가 정확히 일치한다", () => {
     const manifest = readContractJson<Manifest>(
       "fixtures/system/household-command-manifest.v1.json",
     );
 
-    expect([...HOUSEHOLD_COMMAND_NAMES].sort()).toEqual(
-      manifest.commands.map(({ name }) => name).sort(),
-    );
-    const handler: HouseholdCommandHandler = { async execute() {} };
-    const registry = createManifestBackedHouseholdCommandRegistry(
-      HOUSEHOLD_COMMAND_NAMES.map((name) => [name, handler] as const),
-    );
+    const registry = createFirebaseHouseholdCommandRegistry(getFirestore(app));
     expect([...registry.keys()].sort()).toEqual(
       manifest.commands.map(({ name }) => name).sort(),
     );
+    for (const command of manifest.commands) {
+      expect(registry.get(command.name)?.access === "signed-in-user").toBe(command.scope === "principal");
+    }
+    expect([...registry].filter(([, handler]) => handler.access === "administrator").map(([name]) => name))
+      .toEqual(["access.archive-asset-owner-profile.v1"]);
+    expect([...registry].filter(([, handler]) => handler.idempotencyBoundary === "read-only").map(([name]) => name))
+      .toEqual(["access.resolve-signed-in-user.v1"]);
   });
 
   it("구현되지 않은 공개 command가 있으면 composition 단계에서 즉시 실패한다", () => {

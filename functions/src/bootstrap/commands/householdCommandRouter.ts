@@ -20,28 +20,6 @@ import {
   setCurrentInteractiveLatencyOperation,
 } from "../../observability/interactiveLatency";
 
-const TENANTLESS_COMMANDS = new Set([
-  "access.resolve-signed-in-user.v1",
-  "access.claim-legacy-membership.v1",
-  "access.create-household-with-self.v1",
-  "access.join-household-as-self.v1",
-]);
-
-/**
- * 인증된 현재 상태를 조회하기만 하는 명령은 멱등 receipt를 만들지 않습니다.
- *
- * 이 조회는 매 앱 시작마다 새로운 commandId로 호출되므로 receipt가 재실행을
- * 막아 주지 못하고, 오히려 Firestore claim/complete 왕복만 추가합니다. 쓰기
- * 명령은 계속 아래의 공통 receipt 경계를 통과합니다.
- */
-const RECEIPTLESS_READ_COMMANDS = new Set([
-  "access.resolve-signed-in-user.v1",
-]);
-
-const ADMINISTRATOR_COMMANDS = new Set([
-  "access.archive-asset-owner-profile.v1",
-]);
-
 const RESERVED_IDENTITY_FIELDS = new Set([
   "principalUid",
   "actingMemberId",
@@ -81,7 +59,7 @@ function containsReservedIdentityField(value: unknown): boolean {
 function error(
   code: Extract<HouseholdCommandResult, { kind: "error" }> ["code"],
   input: { commandId?: string; retryable?: boolean; details?: Record<string, unknown> } = {},
-): HouseholdCommandResult {
+): Extract<HouseholdCommandResult, { kind: "error" }> {
   return {
     kind: "error",
     code,
@@ -166,7 +144,8 @@ export function createHouseholdCommandRouter(input: {
       const parsed = parseEnvelope(request.request);
       if ("kind" in parsed) return parsed;
 
-      const tenantless = TENANTLESS_COMMANDS.has(parsed.command);
+      const handler = input.handlers.get(parsed.command);
+      const tenantless = handler?.access === "signed-in-user";
       if (tenantless && parsed.householdId !== undefined) {
         return error("HOUSEHOLD_ID_NOT_ALLOWED", {
           commandId: parsed.commandId,
@@ -176,13 +155,12 @@ export function createHouseholdCommandRouter(input: {
         return error("HOUSEHOLD_ID_REQUIRED", { commandId: parsed.commandId });
       }
 
-      const handler = input.handlers.get(parsed.command);
       if (handler === undefined) {
         return error("COMMAND_NOT_AVAILABLE", { commandId: parsed.commandId });
       }
       setCurrentInteractiveLatencyOperation(parsed.command);
 
-      const requiresAdministrator = ADMINISTRATOR_COMMANDS.has(parsed.command);
+      const requiresAdministrator = handler.access === "administrator";
       if (
         requiresAdministrator &&
         (request.administrator === undefined ||
@@ -214,76 +192,48 @@ export function createHouseholdCommandRouter(input: {
         handler.idempotencyBoundary === "domain-idempotency-key" ||
         (handler.idempotencyBoundary === "domain-command-id" &&
           parsed.commandId === parsed.idempotencyKey);
-      if (RECEIPTLESS_READ_COMMANDS.has(parsed.command) || domainOwnsReceipt) {
-        try {
-          const data = await measureCurrentInteractiveLatency("handler", () =>
-            handler.execute({
-              envelope: parsed,
+      let receipt: { receiptId: string; payloadHash: string } | undefined;
+      if (handler.idempotencyBoundary !== "read-only" && !domainOwnsReceipt) {
+        const payloadHash = input.hashes.hash(canonicalJson({
+          contractVersion: parsed.contractVersion,
+          command: parsed.command,
+          householdId: parsed.householdId,
+          payload: parsed.payload,
+        }));
+        const receiptId = input.hashes.hash(
+          `${principalUid}\u0000${parsed.idempotencyKey}`,
+        );
+        const claim = await measureCurrentInteractiveLatency(
+          "command-receipt-claim",
+          () =>
+            input.receipts.claim({
+              receiptId,
               principalUid,
-              ...(actor?.kind === "active" ? { actor: actor.actor } : {}),
-              ...(requiresAdministrator && request.administrator !== undefined
-                ? { administrator: request.administrator }
-                : {}),
+              command: parsed.command,
+              payloadHash,
+              legacyEnvelope: parsed,
+              ...(householdId === undefined ? {} : { householdId }),
               requestedAt: request.requestedAt,
             }),
-          );
-          return {
-            kind: "success",
+        );
+        if (claim.kind === "payload-mismatch") {
+          return error("IDEMPOTENCY_PAYLOAD_MISMATCH", {
             commandId: parsed.commandId,
-            data,
-          };
-        } catch (caught) {
-          if (caught instanceof HouseholdCommandRejection) {
-            return error("COMMAND_FAILED", {
-              commandId: parsed.commandId,
-              retryable: caught.retryable,
-              details: { domainCode: caught.code },
-            });
-          }
-          return error("COMMAND_FAILED", {
+          });
+        }
+        if (claim.kind === "in-progress") {
+          return error("COMMAND_IN_PROGRESS", {
             commandId: parsed.commandId,
             retryable: true,
           });
         }
-      }
+        if (claim.kind === "completed") {
+          return claim.result.kind === "success"
+            ? { ...claim.result, commandId: parsed.commandId, replayed: true }
+            : { ...claim.result, commandId: parsed.commandId };
+        }
 
-      const payloadHash = input.hashes.hash(canonicalJson({
-        contractVersion: parsed.contractVersion,
-        command: parsed.command,
-        householdId: parsed.householdId,
-        payload: parsed.payload,
-      }));
-      const receiptId = input.hashes.hash(
-        `${principalUid}\u0000${parsed.idempotencyKey}`,
-      );
-      const claim = await measureCurrentInteractiveLatency(
-        "command-receipt-claim",
-        () =>
-          input.receipts.claim({
-            receiptId,
-            principalUid,
-            command: parsed.command,
-            payloadHash,
-            legacyEnvelope: parsed,
-            ...(householdId === undefined ? {} : { householdId }),
-            requestedAt: request.requestedAt,
-          }),
-      );
-      if (claim.kind === "payload-mismatch") {
-        return error("IDEMPOTENCY_PAYLOAD_MISMATCH", {
-          commandId: parsed.commandId,
-        });
-      }
-      if (claim.kind === "in-progress") {
-        return error("COMMAND_IN_PROGRESS", {
-          commandId: parsed.commandId,
-          retryable: true,
-        });
-      }
-      if (claim.kind === "completed") {
-        return claim.result.kind === "success"
-          ? { ...claim.result, commandId: parsed.commandId, replayed: true }
-          : { ...claim.result, commandId: parsed.commandId };
+        receipt = { receiptId, payloadHash };
       }
 
       try {
@@ -303,63 +253,40 @@ export function createHouseholdCommandRouter(input: {
           commandId: parsed.commandId,
           data,
         };
-        await measureCurrentInteractiveLatency(
-          "command-receipt-complete",
-          () =>
-            input.receipts.complete({
-              receiptId,
-              payloadHash,
-              result: {
-                ...result,
-                data: householdCommandReceiptValue(data),
-              },
-              completedAt: request.requestedAt,
-            }),
-        );
-        return result;
-      } catch (caught) {
-        if (caught instanceof HouseholdCommandRejection) {
-          const result = error("COMMAND_FAILED", {
-            commandId: parsed.commandId,
-            retryable: caught.retryable,
-            details: { domainCode: caught.code },
-          });
-          if (caught.retryable) {
-            await measureCurrentInteractiveLatency(
-              "command-receipt-abandon",
-              () => input.receipts.abandon({ receiptId, payloadHash }),
-            );
-            return result;
-          }
+        if (receipt) {
           await measureCurrentInteractiveLatency(
             "command-receipt-complete",
             () =>
               input.receipts.complete({
-                receiptId,
-                payloadHash,
-                result,
+                receiptId: receipt.receiptId,
+                payloadHash: receipt.payloadHash,
+                result: {
+                  ...result,
+                  data: householdCommandReceiptValue(data),
+                },
                 completedAt: request.requestedAt,
               }),
           );
-          return result;
         }
-        await measureCurrentInteractiveLatency(
-          "command-receipt-abandon",
-          () => input.receipts.abandon({ receiptId, payloadHash }),
-        );
-        return error("COMMAND_FAILED", {
+        return result;
+      } catch (caught) {
+        const rejection = caught instanceof HouseholdCommandRejection ? caught : undefined;
+        const result = error("COMMAND_FAILED", {
           commandId: parsed.commandId,
-          retryable: true,
+          retryable: rejection?.retryable ?? true,
+          ...(rejection ? { details: { domainCode: rejection.code } } : {}),
         });
+        if (receipt) {
+          if (result.retryable) {
+            await measureCurrentInteractiveLatency("command-receipt-abandon", () => input.receipts.abandon(receipt));
+          } else {
+            await measureCurrentInteractiveLatency("command-receipt-complete", () => input.receipts.complete({
+              ...receipt, result, completedAt: request.requestedAt,
+            }));
+          }
+        }
+        return result;
       }
     },
   };
 }
-
-export const householdCommandTenantlessAllowlist = Object.freeze([
-  ...TENANTLESS_COMMANDS,
-]);
-
-export const householdCommandAdministratorAllowlist = Object.freeze([
-  ...ADMINISTRATOR_COMMANDS,
-]);

@@ -1,3 +1,4 @@
+import { createFirebaseHouseholdCommandRegistry } from "./householdCommandRegistry";
 import * as functions from "firebase-functions/v1";
 
 import {
@@ -5,31 +6,9 @@ import {
   FirebaseHouseholdCommandReceiptAdapter,
   Sha256HouseholdCommandHashAdapter,
 } from "../adapters/firebase/commands/firebaseHouseholdCommandInfrastructure";
-import {
-  resolveFirebaseSignedInUser,
-  SignedInUserResolutionError,
-} from "../adapters/firebase/access/firebaseSignedInUserResolver";
 import { db, REGION } from "../config";
-import {
-  HouseholdCommandRejection,
-  type HouseholdCommandHandler,
-  type HouseholdCommandResult,
-} from "./commands/householdCommand";
+import type { HouseholdCommandResult } from "./commands/householdCommand";
 import { createHouseholdCommandRouter } from "./commands/householdCommandRouter";
-import { createLedgerHouseholdCommandHandlers } from "./commands/ledgerHouseholdCommandHandlers";
-import { createAccessHouseholdCommandHandlers } from "./commands/accessHouseholdCommandHandlers";
-import { createManifestBackedHouseholdCommandRegistry } from "./commands/householdCommandManifest";
-import { createNotificationHouseholdCommandHandlers } from "./commands/notificationHouseholdCommandHandlers";
-import { createCategoryHouseholdCommandHandlers } from "./commands/categoryHouseholdCommandHandlers";
-import { createRecurringHouseholdCommandHandlers } from "./commands/recurringHouseholdCommandHandlers";
-import { createPaymentConfigurationHouseholdCommandHandlers } from "./commands/paymentConfigurationHouseholdCommandHandlers";
-import { createHomeHouseholdCommandHandlers } from "./commands/homeHouseholdCommandHandlers";
-import { createPortfolioHouseholdCommandHandlers } from "./commands/portfolioHouseholdCommandHandlers";
-import { createMemberAccessHouseholdCommandHandlers } from "./commands/memberAccessHouseholdCommandHandlers";
-import {
-  createFirebaseShortcutCredentialLifecycle,
-  createShortcutCredentialHouseholdCommandHandlers,
-} from "./commands/shortcutCredentialHouseholdCommandHandlers";
 import { verifiedSystemAdministrator } from "./verifiedSystemAdministrator";
 import { startInteractiveLatencyInvocation } from "../observability/interactiveLatency";
 
@@ -88,41 +67,7 @@ export function toHouseholdCommandWireResponse(
   };
 }
 
-function accessReadHandlers(): ReadonlyMap<string, HouseholdCommandHandler> {
-  return new Map([
-    [
-      "access.resolve-signed-in-user.v1",
-      {
-        async execute({ principalUid }) {
-          try {
-            return await resolveFirebaseSignedInUser(db, principalUid);
-          } catch (error) {
-            if (error instanceof SignedInUserResolutionError) {
-              throw new HouseholdCommandRejection(error.code);
-            }
-            throw error;
-          }
-        },
-      },
-    ],
-  ]);
-}
-
-const handlers = createManifestBackedHouseholdCommandRegistry([
-  ...accessReadHandlers(),
-  ...createMemberAccessHouseholdCommandHandlers(db),
-  ...createAccessHouseholdCommandHandlers(db),
-  ...createLedgerHouseholdCommandHandlers(db),
-  ...createCategoryHouseholdCommandHandlers(db),
-  ...createRecurringHouseholdCommandHandlers(db),
-  ...createPaymentConfigurationHouseholdCommandHandlers(db),
-  ...createShortcutCredentialHouseholdCommandHandlers(
-    createFirebaseShortcutCredentialLifecycle(db),
-  ),
-  ...createHomeHouseholdCommandHandlers(db),
-  ...createPortfolioHouseholdCommandHandlers(db),
-  ...createNotificationHouseholdCommandHandlers(db),
-]);
+const handlers = createFirebaseHouseholdCommandRegistry(db);
 
 const router = createHouseholdCommandRouter({
   handlers,

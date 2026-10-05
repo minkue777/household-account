@@ -30,6 +30,9 @@ export interface HouseholdQueryExecutionContext {
 }
 
 export interface HouseholdQueryHandler {
+  /** Credential queries remain member-only when this is omitted. */
+  readonly permitsAdministrator?: boolean;
+  readonly usesExternalQueryQuota?: boolean;
   execute(context: HouseholdQueryExecutionContext): Promise<unknown>;
 }
 

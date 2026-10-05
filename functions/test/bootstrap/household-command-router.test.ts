@@ -70,6 +70,7 @@ class ReceiptMemory implements HouseholdCommandReceiptPort {
 function subject(
   customExecute?: HouseholdCommandHandler["execute"],
   idempotencyBoundary?: HouseholdCommandHandler["idempotencyBoundary"],
+  access?: HouseholdCommandHandler["access"],
 ) {
   let executions = 0;
   const receipts = new ReceiptMemory();
@@ -78,6 +79,7 @@ function subject(
       [
         "ledger.record-manual-transaction.v1",
         {
+          access,
           ...(idempotencyBoundary === undefined
             ? {}
             : { idempotencyBoundary }),
@@ -93,7 +95,7 @@ function subject(
       ],
       [
         "access.resolve-signed-in-user.v1",
-        { execute: async ({ principalUid }) => ({ principalUid }) },
+        { access: "signed-in-user", idempotencyBoundary: "read-only", execute: async ({ principalUid }) => ({ principalUid }) },
       ],
     ]),
     memberships: {
@@ -334,4 +336,24 @@ describe("Household command bootstrap boundary", () => {
     expect(serialized).not.toContain("command-a");
     expect(serialized).not.toContain("amountInWon");
   });
+});
+
+it("관리자 정책은 이름 추론 없이 적용되며 다른 principal의 관리자 객체로 우회할 수 없다", async () => {
+  const fixture = subject(async context => ({ administrator: context.administrator?.principalRef }), undefined, "administrator");
+  const input = { principalUid: "uid-admin", request: fixture.request, requestedAt: "2026-10-05T00:00:00Z" };
+  await expect(fixture.router.execute(input)).resolves.toMatchObject({ kind: "error", code: "HOUSEHOLD_FORBIDDEN" });
+  await expect(fixture.router.execute({ ...input, administrator: { principalRef: "another", capabilities: [] } }))
+    .resolves.toMatchObject({ kind: "error", code: "HOUSEHOLD_FORBIDDEN" });
+  expect(fixture.executions()).toBe(0);
+  expect(fixture.receipts.claimCount).toBe(0);
+  await expect(fixture.router.execute({ ...input, administrator: { principalRef: "uid-admin", capabilities: ["admin.asset-owner-profile.archive"] } }))
+    .resolves.toMatchObject({ kind: "success", data: { administrator: "uid-admin" } });
+});
+
+it("정책을 생략한 명령은 관리자가 제출해도 실제 가구 membership을 요구한다", async () => {
+  const fixture = subject();
+  await expect(fixture.router.execute({ principalUid: "uid-admin", request: fixture.request,
+    requestedAt: "2026-10-05T00:00:00Z", administrator: { principalRef: "uid-admin", capabilities: ["admin.household-data.read"] } }))
+    .resolves.toMatchObject({ kind: "error", code: "HOUSEHOLD_FORBIDDEN" });
+  expect(fixture.executions()).toBe(0);
 });

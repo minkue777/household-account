@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { createRegisteredCardCommandBoundaryFixture } from "../../../support/registered-card-command-boundary-fixture";
-import { HOUSEHOLD_COMMAND_NAMES } from "../../../../src/bootstrap/commands/householdCommandManifest";
 
 interface CardActor {
   principalUid: string;
@@ -94,13 +93,6 @@ const actor: CardActor = {
   capability: "paymentConfiguration:manage",
 };
 
-it("[T-CARD-005][CARD-005] 실제 공개 명령에는 일반 카드 복구가 없다", () => {
-  const names = HOUSEHOLD_COMMAND_NAMES.filter(name => name.startsWith("payment-configuration.") && /card/i.test(name));
-  expect(names).toEqual([
-    "payment-configuration.register-card.v1", "payment-configuration.update-card.v1",
-    "payment-configuration.delete-card.v1", "payment-configuration.reorder-cards.v1",
-  ]);
-});
 
 function card(
   cardId: string,

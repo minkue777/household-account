@@ -217,6 +217,7 @@ export function createPortfolioMarketHouseholdQueryHandlers(input: {
     [
       "portfolio.search-instruments.v1",
       {
+        permitsAdministrator: true, usesExternalQueryQuota: true,
         async execute(context) {
           const parsed = searchPayload(context.envelope.payload);
           if (parsed === undefined) {
@@ -246,6 +247,7 @@ export function createPortfolioMarketHouseholdQueryHandlers(input: {
     [
       "portfolio.get-instrument-quote.v1",
       {
+        permitsAdministrator: true, usesExternalQueryQuota: true,
         async execute(context) {
           const parsed = quotePayload(context.envelope.payload);
           if (parsed === undefined) {
@@ -278,6 +280,7 @@ export function createPortfolioMarketHouseholdQueryHandlers(input: {
     [
       "portfolio.get-dividend-projection.v1",
       {
+        permitsAdministrator: true,
         async execute(context) {
           const payload = context.envelope.payload;
           const instrumentCode = exactKeys(payload, ["instrumentCode"])

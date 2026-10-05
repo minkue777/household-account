@@ -29,7 +29,7 @@
 | [후보 A03 — 미연결 ingress·결과분류·HTML 파서 모형 삭제](platform.md) | 구현·관련 검사 완료 | [서버 실행 경로 정비](../../operations/server-simplicity-2026-10-05.md) |
 | [후보 A04 — RenameSelf의 가짜 전체 상태 계약을 실제 transaction 입력으로 축소](platform.md) | 구현·관련 검사 완료 | [실제 SDK 재현 및 수정](../../operations/access-simplicity-2026-10-05.md) |
 | [후보 A05 — 온보딩 거대 Application의 dummy dependency 제거](platform.md) | 구현·실제 SDK 검사 완료 | [명시적 동작과 실제 보존 검사](../../operations/access-command-simplicity-2026-10-05.md) |
-| [후보 A06 — 명령 등록·권한·멱등성 정책을 등록 위치 한 곳에서 읽게 축소](platform.md) | 미착수 | |
+| [후보 A06 — 명령 등록·권한·멱등성 정책을 등록 위치 한 곳에서 읽게 축소](platform.md) | 구현·관련 검사 완료 | [등록 정책과 실제 composition 검사](../../operations/handler-policy-simplicity-2026-10-05.md) |
 | [후보 A07 — 계약 테스트의 문법/폴더 강제를 행동 검증으로 대체](platform.md) | 구현·관련 검사 완료 | [서버 실행 경로 정비](../../operations/server-simplicity-2026-10-05.md) |
 | [후보 A08 — 운영 runner에 박힌 테스트 전용 실패 주입 제거](platform.md) | 구현·실제 SDK 검사 완료 | [생명주기 실행 경계](../../operations/lifecycle-simplicity-2026-10-05.md) |
 | [후보 A09 — 30일 접속 통계 정리가 실제 저장에서도 적용되도록 단순화](platform.md) | 구현·관련 검사 완료 | [실제 SDK 재현 및 수정](../../operations/access-simplicity-2026-10-05.md) |

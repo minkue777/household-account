@@ -40,3 +40,9 @@ SHA `1cef6a79c4ed05b2faf039125c607351c54787a0`의 [CI 36448234017](https://githu
 - E2E 준비의 Functions architecture 45개와 세 codebase 준비가 통과했습니다. 실행 후 웹 서버와 Firebase 에뮬레이터가 종료됐음을 확인했습니다. 로그는 `TEMP/household-home-listen-prepare-20260929.log`, `TEMP/household-home-listen-e2e-20260929.log`입니다.
 
 이번 관측 보강은 테스트·문서만 변경하므로 Firebase·Web 실행 파일·APK의 새 배포 대상이 아닙니다. 앞선 자산 기능 변경 `1cef6a7`은 Vercel Git 배포와 운영 반영이 성공했으나 CI는 위 실패로 미완료입니다. 후속 후보의 전체 CI를 확인하되 원래 실패 run을 무변경 재실행하지 않습니다.
+
+## 2026-10-05 실제 실패 응답 확인
+
+`a7c803d`의 CI `37258790487`에서 같은 표시 실패가 발생했습니다(100 passed/1 failed). 이번 trace의 `home-preferences-live-read`에는 canonical version 1과 브라우저가 받은 `documentChange`의 YEARLY_EXPENSE/LOCAL_CURRENCY_BALANCE/version 1이 모두 있습니다. target 1002가 유지되고 16개 frame 파싱, 오류·잘림 0입니다. 화면은 30초 뒤에도 월 지출/월 잔여 예산입니다. 따라서 이 실행의 저장 실패나 서버→브라우저 전달 누락은 배제할 수 있지만 SDK→공유 구독→React 사이의 정확한 중단점은 아직 확인하지 못했습니다.
+
+로컬에서는 임시 구독/표시 로그를 넣고 실제 Emulator·production build·Chromium으로 같은 검사를 6회 실행했으나 모두 통과했습니다(46초). 임시 제품 로그는 제거했습니다. `TEMP/household-simplicity-home-probe-20261005.log`, 실패 artifact의 `resources/73e1d0af1a595608d348768793e10ae696979da1`을 근거로 보존하며 제품 버그 해결로 기록하지 않습니다. 이전 `598f236` CI `37258239418`의 web-e2e는 success이고 Web unit mock 문제만 남았으며 해당 문제는 `21e5606`에서 수정했습니다.

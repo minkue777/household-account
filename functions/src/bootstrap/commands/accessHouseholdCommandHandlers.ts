@@ -95,6 +95,7 @@ export function createAccessHouseholdCommandHandlers(
     [
       "access.claim-legacy-membership.v1",
       {
+        access: "signed-in-user",
         async execute(context) {
           if (!legacyMembershipClaimEnabled()) throw new HouseholdCommandRejection("LEGACY_CLAIM_DISABLED");
           const payload = payloadRecord(context.envelope.payload);
@@ -155,6 +156,7 @@ export function createAccessHouseholdCommandHandlers(
     [
       "access.create-household-with-self.v1",
       {
+        access: "signed-in-user",
         idempotencyBoundary: "domain-idempotency-key",
         async execute(context) {
           const payload = payloadRecord(context.envelope.payload);
@@ -255,6 +257,7 @@ export function createAccessHouseholdCommandHandlers(
     [
       "access.join-household-as-self.v1",
       {
+        access: "signed-in-user",
         async execute(context) {
           const payload = payloadRecord(context.envelope.payload);
           const invitationCode = requiredString(
@@ -485,6 +488,7 @@ export function createAccessHouseholdCommandHandlers(
     [
       "access.archive-asset-owner-profile.v1",
       {
+        access: "administrator",
         async execute(context) {
           if (context.administrator === undefined) {
             throw new HouseholdCommandRejection("PROFILE_ARCHIVE_FORBIDDEN");

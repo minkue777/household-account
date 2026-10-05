@@ -10,7 +10,6 @@ export const HOUSEHOLD_QUERY_NAMES = Object.freeze([
   "access.list-asset-owner-profiles.v1",
 ] as const);
 
-export type HouseholdQueryName = (typeof HOUSEHOLD_QUERY_NAMES)[number];
 
 export function createManifestBackedHouseholdQueryRegistry(
   implemented: Iterable<readonly [string, HouseholdQueryHandler]>,

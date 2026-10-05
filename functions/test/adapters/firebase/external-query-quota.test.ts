@@ -7,7 +7,7 @@ import { InMemoryFirestore } from '../../support/in-memory-firestore';
 it('actual router applies durable actor and IP quota before a provider handler and resets by server time', async () => {
   const memory = new InMemoryFirestore();
   let now = 1000;
-  const handler = { execute: vi.fn(async () => ({ price: 1 })) };
+  const handler = { usesExternalQueryQuota: true, execute: vi.fn(async () => ({ price: 1 })) };
   const router = createHouseholdQueryRouter({ handlers: new Map([['portfolio.get-instrument-quote.v1', handler]]),
     memberships: { resolveActor: async ({ principalUid, householdId }) => ({ kind: 'active', actor: { principalUid, householdId, actingMemberId: 'member', capabilities: [] } }) },
     externalQueryQuota: new FirebaseExternalQueryQuota(memory as unknown as firestore.Firestore, () => now, { principal: 2, ip: 3, windowMs: 60000 }),

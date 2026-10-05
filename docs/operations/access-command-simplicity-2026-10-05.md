@@ -17,3 +17,7 @@ A05와 PT-03을 처리합니다. HH-003/HH-007의 가구 생성·초대·가입�
 - PT-03: fixture의 `stableReferences`/`ownerReferences` 복사본과 미사용 members 보존 assertion을 제거했습니다. 실제 SDK 검사에서 member/membership 및 자산·과거 snapshot·원장·카드·알림 문서를 저장하고 변경 전후 재조회합니다. 가구원 검사에는 관련 없는 다른 가구원 자료를 추가해 실제 Transaction 응답에 해당 문서가 포함되지 않음과 저장값 보존을 확인합니다.
 - 홈 조회 범위 검사는 별도의 adapter 관측 검사입니다. 메모리 대역의 query 호출 여부와 receipt 재생 1회 조회를 확인하며 실제 RPC 비용·동시성 증거로 표현하지 않습니다. 실제 경합/원자성은 위 Emulator 검사에서 확인합니다.
 - 로그: `TEMP/household-simplicity-access-read-final-20261005.log`. 운영 자료를 변경하지 않았습니다. 서버 실행 코드가 바뀌었으므로 최종 후보의 Firebase 세 codebase 배포 대상입니다. Web/APK 변경은 없습니다.
+
+## 배포 확인
+
+`58c2fd1b3b94cf7e9b10eb896029fe2061b6f6ea`를 `release-20261005-simplicity-access-58c2fd1`로 배포했습니다. 세 codebase와 누적 설정 변경에 해당하는 Rules/index/Storage, 인증된 로그인·Query smoke, provenance 기록이 성공했습니다. Artifact SHA256은 `b34487fc4e450c3a27c0442c7bae0cd83f6ebf71c2c9235210cb662a89583cef`입니다. 같은 SHA의 Vercel Git Production `6850741634`도 success이며 `/assets`·`/sw.js`의 SHA와 build manifest HTTP 200을 확인했습니다. CI의 별도 포트폴리오 경합 실패는 [후속 정비](handler-policy-simplicity-2026-10-05.md)에서 추적하며 배포 성공을 전체 검증 성공으로 표현하지 않습니다.
