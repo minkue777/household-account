@@ -3,7 +3,7 @@ import { useCryptoHoldingManager } from '@/lib/utils/useCryptoHoldingManager';
 import { useStockHoldingManager } from '@/lib/utils/useStockHoldingManager';
 import { portfolioQueries } from '@/features/portfolio/application/portfolioQueries';
 import type { Asset, CryptoHolding, StockHolding } from '@/types/asset';
-import { addCryptoHolding } from '@/lib/assetService';
+import { addCryptoHolding, addStockHolding } from '@/lib/assetService';
 
 jest.mock('@/lib/assetService', () => ({
   addStockHolding: jest.fn(),
@@ -149,5 +149,91 @@ describe('holding manager in-memory snapshot contract', () => {
     await act(async () => { await pendingA; });
     expect(result.current.selectedCoin).toBeNull();
     expect(result.current.currentPrice).toBeNull();
+  });
+});
+
+
+function deferredAdd() {
+  let resolve!: (value: string) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<string>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+describe.each(['stock', 'crypto', 'manual'] as const)('%s 추가 초안의 저장 수명', kind => {
+  let silence: jest.SpyInstance;
+  beforeEach(() => {
+    jest.resetAllMocks();
+    silence = jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.mocked(portfolioQueries.getStockQuote).mockResolvedValue({ code: 'A', name: 'A', price: 100, change: 0, changePercent: 0, previousClose: 100, currency: 'KRW' });
+    jest.mocked(portfolioQueries.getCryptoQuote).mockResolvedValue({ code: 'A', name: 'A', price: 100, change: 0, changePercent: 0, previousClose: 100, currency: 'KRW' });
+  });
+  afterEach(() => silence.mockRestore());
+
+  function setup() {
+    return renderHook(({ id }) => {
+      const stock = useStockHoldingManager({ isOpen: true, asset: asset(id, 'stock') });
+      const crypto = useCryptoHoldingManager({ isOpen: true, asset: asset(id, 'crypto') });
+      return {
+        async fill(name: string) {
+          if (kind === 'manual') { stock.setManualName(name); stock.setManualCurrentValueInput('123'); }
+          else if (kind === 'stock') { await stock.selectStock({ code: name, name, market: 'KRX' }); stock.setQuantityInput('2'); }
+          else { await crypto.selectCoin({ code: name, name }); crypto.setQuantityInput('0.25'); }
+        },
+        add: kind === 'manual' ? stock.addManualHolding : kind === 'stock' ? stock.addHolding : crypto.addHolding,
+        name: kind === 'manual' ? stock.manualName : kind === 'stock' ? stock.searchQuery : crypto.searchQuery,
+        pending: kind === 'manual' ? stock.isAddingManualHolding : kind === 'stock' ? stock.isAddingHolding : crypto.isAddingHolding,
+      };
+    }, { initialProps: { id: 'account-a' } });
+  }
+  const command = () => jest.mocked(kind === 'crypto' ? addCryptoHolding : addStockHolding);
+
+  test('실패한 초안은 다시 구성하지 않고 그대로 보존하며 재시도 성공 때 비운다', async () => {
+    const hook = setup();
+    await act(async () => hook.result.current.fill('초안 A'));
+    const gate = deferredAdd();
+    command().mockReturnValueOnce(gate.promise);
+    let pending!: Promise<boolean | undefined>;
+    act(() => { pending = hook.result.current.add(); });
+    expect(hook.result.current).toMatchObject({ name: '초안 A', pending: true });
+    await act(async () => { gate.reject(new Error('FAILED')); expect(await pending).toBe(false); });
+    expect(hook.result.current).toMatchObject({ name: '초안 A', pending: false });
+    command().mockResolvedValueOnce('saved');
+    await act(async () => { expect(await hook.result.current.add()).toBe(true); });
+    expect(hook.result.current).toMatchObject({ name: '', pending: false });
+  });
+
+  test.each([true, false])('저장 중 새로 입력한 초안은 이전 요청 성공=%s에도 보존한다', async success => {
+    const hook = setup();
+    await act(async () => hook.result.current.fill('초안 A'));
+    const gate = deferredAdd();
+    command().mockReturnValueOnce(gate.promise);
+    let pending!: Promise<boolean | undefined>;
+    act(() => { pending = hook.result.current.add(); });
+    await act(async () => hook.result.current.fill('새 초안 B'));
+    await act(async () => {
+      if (success) gate.resolve('saved'); else gate.reject(new Error('FAILED'));
+      expect(await pending).toBe(success);
+    });
+    expect(hook.result.current).toMatchObject({ name: '새 초안 B', pending: false });
+  });
+
+  test('계좌 전환 뒤 이전 실패가 새 계좌의 초안과 진행 상태를 바꾸지 않는다', async () => {
+    const hook = setup();
+    const first = deferredAdd(), second = deferredAdd();
+    command().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    await act(async () => hook.result.current.fill('계좌 A'));
+    let firstPending!: Promise<boolean | undefined>, secondPending!: Promise<boolean | undefined>;
+    act(() => { firstPending = hook.result.current.add(); });
+    hook.rerender({ id: 'account-b' });
+    expect(hook.result.current.pending).toBe(false);
+    await act(async () => hook.result.current.fill('계좌 B'));
+    act(() => { secondPending = hook.result.current.add(); });
+    await act(async () => { first.reject(new Error('OLD_FAILED')); expect(await firstPending).toBeUndefined(); });
+    expect(hook.result.current).toMatchObject({ name: '계좌 B', pending: true });
+    await act(async () => { second.resolve('saved'); expect(await secondPending).toBe(true); });
+    expect(hook.result.current).toMatchObject({ name: '', pending: false });
+    expect(command().mock.calls[0][0].assetId).toBe('account-a');
+    expect(command().mock.calls[1][0].assetId).toBe('account-b');
   });
 });

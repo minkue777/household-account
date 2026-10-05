@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Asset,
   StockHolding,
@@ -44,11 +44,11 @@ export function useStockHoldingManager({
 }: UseStockHoldingManagerOptions) {
   const [quantity, setQuantity] = useState('');
   const [avgPrice, setAvgPrice] = useState('');
-  const [isAddingHolding, setIsAddingHolding] = useState(false);
-  const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
+  const [pendingScope, setPendingScope] = useState<object | null>(null);
+  const [refreshingScope, setRefreshingScope] = useState<object | null>(null);
   const [manualName, setManualName] = useState('');
   const [manualCurrentValue, setManualCurrentValue] = useState('');
-  const [isAddingManualHolding, setIsAddingManualHolding] = useState(false);
+  const [pendingManualScope, setPendingManualScope] = useState<object | null>(null);
 
   const isStockAsset =
     asset?.type === 'stock' || (asset?.type === 'gold' && isGoldEtfSubType(asset?.subType));
@@ -56,7 +56,21 @@ export function useStockHoldingManager({
   const search = useInstrumentSearch({ enabled: isOpen && !!assetId && isStockAsset, scopeKey: assetId ?? '',
     search: portfolioQueries.searchStocks, fetchQuote: portfolioQueries.getStockQuote });
   const { query: searchQuery, results: searchResults, searching: isSearching, selected: selectedStock, quote, loadingQuote: isLoadingPrice,
-    select: selectStock, setQuery: setSearchQueryFromInput, reset: resetSearch, restore: restoreSearch } = search;
+    select: selectStock, setQuery: setSearchQueryFromInput, reset: resetSearch } = search;
+  const scope = useMemo(() => ({}), [assetId, isOpen, isStockAsset]);
+  const activeScope = useRef<object | null>(scope);
+  activeScope.current = scope;
+  useEffect(() => () => { activeScope.current = null; }, []);
+  const isAddingHolding = pendingScope === scope;
+  const isRefreshingPrices = refreshingScope === scope;
+  const isAddingManualHolding = pendingManualScope === scope;
+  const manualDraft = useMemo(() => ({ scope, manualName, manualCurrentValue }), [scope, manualName, manualCurrentValue]);
+  const currentManualDraft = useRef(manualDraft);
+  currentManualDraft.current = manualDraft;
+  const draft = useMemo(() => ({ scope, selectedStock, searchQuery, quantity, avgPrice }),
+    [scope, selectedStock, searchQuery, quantity, avgPrice]);
+  const currentDraft = useRef(draft);
+  currentDraft.current = draft;
   const currentPrice = quote?.price ?? null;
   const currentPriceInfo = quote;
   const holdings = useMemo(
@@ -77,12 +91,6 @@ export function useStockHoldingManager({
   }, []);
 
   useEffect(() => {
-    if (!isOpen || !assetId || !isStockAsset) {
-      resetStockForm();
-      resetManualForm();
-      return;
-    }
-
     resetStockForm();
     resetManualForm();
   }, [assetId, isOpen, isStockAsset, resetManualForm, resetStockForm]);
@@ -112,15 +120,7 @@ export function useStockHoldingManager({
       return false;
     }
 
-    setIsAddingHolding(true);
-    const submitted = {
-      selectedStock,
-      quote,
-      quantity,
-      avgPrice,
-      currentPrice,
-      currentPriceInfo,
-    };
+    setPendingScope(scope);
     const pendingAdd = addStockHolding({
       assetId,
       stockCode: selectedStock.code,
@@ -134,18 +134,17 @@ export function useStockHoldingManager({
       priceScale: currentPriceInfo?.priceScale || selectedStock.priceScale || 1,
       quoteAsOf: currentPriceInfo?.quoteAsOf,
     });
-    resetStockForm();
     try {
       await pendingAdd;
+      if (activeScope.current !== scope) return;
+      if (currentDraft.current === draft) resetStockForm();
       return true;
     } catch (error) {
-      restoreSearch(submitted.selectedStock, submitted.quote);
-      setQuantity(submitted.quantity);
-      setAvgPrice(submitted.avgPrice);
+      if (activeScope.current !== scope) return;
       console.error('Failed to add stock holding:', error);
       return false;
     } finally {
-      setIsAddingHolding(false);
+      setPendingScope(current => current === scope ? null : current);
     }
   }, [
     assetId,
@@ -157,7 +156,8 @@ export function useStockHoldingManager({
     quantity,
     resetStockForm,
     quote,
-    restoreSearch,
+    draft,
+    scope,
     selectedStock,
   ]);
 
@@ -166,8 +166,7 @@ export function useStockHoldingManager({
       return false;
     }
 
-    setIsAddingManualHolding(true);
-    const submitted = { manualName, manualCurrentValue };
+    setPendingManualScope(scope);
     const trimmedName = manualName.trim();
     const inferredManualType: ManualHoldingType =
       trimmedName.includes('예수금') ? 'cash' : 'manual';
@@ -180,17 +179,17 @@ export function useStockHoldingManager({
       quantity: 1,
       currentPrice: parseInt(manualCurrentValue, 10),
     });
-    resetManualForm();
     try {
       await pendingAdd;
+      if (activeScope.current !== scope) return;
+      if (currentManualDraft.current === manualDraft) resetManualForm();
       return true;
     } catch (error) {
-      setManualName(submitted.manualName);
-      setManualCurrentValue(submitted.manualCurrentValue);
+      if (activeScope.current !== scope) return;
       console.error('Failed to add manual holding:', error);
       return false;
     } finally {
-      setIsAddingManualHolding(false);
+      setPendingManualScope(current => current === scope ? null : current);
     }
   }, [
     assetId,
@@ -199,6 +198,8 @@ export function useStockHoldingManager({
     manualCurrentValue,
     manualName,
     resetManualForm,
+    manualDraft,
+    scope,
   ]);
 
   const refreshHoldingPrices = useCallback(async () => {
@@ -206,15 +207,15 @@ export function useStockHoldingManager({
       return;
     }
 
-    setIsRefreshingPrices(true);
+    setRefreshingScope(scope);
     try {
       await refreshAssetMarketValues(assetId, 'stock');
     } catch (error) {
       console.error('Failed to refresh asset stock prices:', error);
     } finally {
-      setIsRefreshingPrices(false);
+      setRefreshingScope(current => current === scope ? null : current);
     }
-  }, [assetId, isStockAsset]);
+  }, [assetId, isStockAsset, scope]);
 
   const totalHoldingValue = useMemo(() => {
     return holdings.reduce((sum, holding) => sum + calculateHoldingValue(holding), 0);

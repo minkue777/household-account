@@ -15,5 +15,5 @@ unknown 인자 배열에서 SDK observer/overload를 해석하고 함수 전체�
 - Web 타입 검사 통과.
 - projection/원장/자산/Native Web 피드백 8파일 118개 통과. 캐시 3회 누락, 첫 서버 삭제 확인, Native 수정 중 캐시 누락, 생성 확정과 오래된 같은 ID 자료의 순서 교란 포함.
 - 구독/인증/검색/설정 관련 23파일의 182개 중 대역 인자 위치 변경 누락 1개를 교정했다. 해당 검색 파일 58개가 후속 통과했고 다른 22파일 124개는 최초 통과했다. 기대 결과를 축소하지 않았다.
-- 실제 Emulator·production build 원장과 자산 브라우저 검증은 후속 확인한다.
+- 실제 Emulator·production build 원장과 자산 브라우저 검사 14개 통과(1.2분). 로그: `TEMP/household-simplicity-web-snapshot-e2e-20261005.log`.
 - 로그: `TEMP/household-simplicity-projection-jest-20261005.log`, `TEMP/household-simplicity-listener-jest-20261005.log`, `TEMP/household-simplicity-listener-followup-20261005.log`.

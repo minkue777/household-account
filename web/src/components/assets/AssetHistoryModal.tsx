@@ -208,7 +208,7 @@ export default function AssetHistoryModal({
               isAddingHolding: stockManager.isAddingHolding,
             }}
             onAdd={async () => {
-              if (!await stockManager.addHolding()) {
+              if (await stockManager.addHolding() === false) {
                 await showAlert('보유 종목 추가에 실패했습니다.');
               }
             }}
@@ -223,7 +223,7 @@ export default function AssetHistoryModal({
             onCurrentValueChange={stockManager.setManualCurrentValueInput}
             isAdding={stockManager.isAddingManualHolding}
             onAdd={async () => {
-              if (!await stockManager.addManualHolding()) {
+              if (await stockManager.addManualHolding() === false) {
                 await showAlert('보유 항목 추가에 실패했습니다.');
               }
             }}
@@ -248,7 +248,7 @@ export default function AssetHistoryModal({
               isAddingHolding: cryptoManager.isAddingHolding,
             }}
             onAdd={async () => {
-              if (!await cryptoManager.addHolding()) {
+              if (await cryptoManager.addHolding() === false) {
                 await showAlert('코인 추가에 실패했습니다.');
               }
             }}

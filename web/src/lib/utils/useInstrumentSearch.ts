@@ -67,12 +67,9 @@ export function useInstrumentSearch<T extends { name: string }, Q>({ enabled, sc
     assign(null);
     setQuery(value);
   }, [assign]);
-  const restore = useCallback((instrument: T, quote: Q | null) => {
-    assign({ instrument, quote, loading: false });
-    setQuery(instrument.name);
-  }, [assign]);
 
-  return { query, setQuery: changeQuery, results, searching, select, reset, restore,
+
+  return { query, setQuery: changeQuery, results, searching, select, reset,
     selected: enabled ? selection?.instrument ?? null : null,
     quote: enabled ? selection?.quote ?? null : null,
     loadingQuote: enabled && (selection?.loading ?? false) };

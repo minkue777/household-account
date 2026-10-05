@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Asset, CryptoHolding } from '@/types/asset';
 import {
   addCryptoHolding,
@@ -36,15 +36,25 @@ export function useCryptoHoldingManager({
 }: UseCryptoHoldingManagerOptions) {
   const [quantity, setQuantity] = useState('');
   const [avgPrice, setAvgPrice] = useState('');
-  const [isAddingHolding, setIsAddingHolding] = useState(false);
-  const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
+  const [pendingScope, setPendingScope] = useState<object | null>(null);
+  const [refreshingScope, setRefreshingScope] = useState<object | null>(null);
 
   const isCryptoAsset = asset?.type === 'crypto';
   const assetId = asset?.id;
   const search = useInstrumentSearch({ enabled: isOpen && !!assetId && isCryptoAsset, scopeKey: assetId ?? '',
     search: portfolioQueries.searchCrypto, fetchQuote: portfolioQueries.getCryptoQuote });
   const { query: searchQuery, results: searchResults, searching: isSearching, selected: selectedCoin, quote, loadingQuote: isLoadingPrice,
-    select: selectCoin, setQuery: setSearchQueryFromInput, reset: resetSearch, restore: restoreSearch } = search;
+    select: selectCoin, setQuery: setSearchQueryFromInput, reset: resetSearch } = search;
+  const scope = useMemo(() => ({}), [assetId, isOpen, isCryptoAsset]);
+  const activeScope = useRef<object | null>(scope);
+  activeScope.current = scope;
+  useEffect(() => () => { activeScope.current = null; }, []);
+  const isAddingHolding = pendingScope === scope;
+  const isRefreshingPrices = refreshingScope === scope;
+  const draft = useMemo(() => ({ scope, selectedCoin, searchQuery, quantity, avgPrice }),
+    [scope, selectedCoin, searchQuery, quantity, avgPrice]);
+  const currentDraft = useRef(draft);
+  currentDraft.current = draft;
   const currentPrice = quote?.price ?? null;
   const holdings = useMemo(
     () => (
@@ -59,11 +69,6 @@ export function useCryptoHoldingManager({
   const resetCryptoForm = useCallback(() => { resetSearch(); setQuantity(''); setAvgPrice(''); }, [resetSearch]);
 
   useEffect(() => {
-    if (!isOpen || !assetId || !isCryptoAsset) {
-      resetCryptoForm();
-      return;
-    }
-
     resetCryptoForm();
   }, [assetId, isCryptoAsset, isOpen, resetCryptoForm]);
 
@@ -80,8 +85,7 @@ export function useCryptoHoldingManager({
       return false;
     }
 
-    setIsAddingHolding(true);
-    const submitted = { selectedCoin, quantity, avgPrice, currentPrice, quote };
+    setPendingScope(scope);
     const pendingAdd = addCryptoHolding({
       assetId,
       marketCode: selectedCoin.code,
@@ -90,35 +94,34 @@ export function useCryptoHoldingManager({
       avgPrice: avgPrice ? parseInt(avgPrice, 10) : undefined,
       currentPrice: currentPrice ?? undefined,
     });
-    resetCryptoForm();
     try {
       await pendingAdd;
+      if (activeScope.current !== scope) return;
+      if (currentDraft.current === draft) resetCryptoForm();
       return true;
     } catch (error) {
-      restoreSearch(submitted.selectedCoin, submitted.quote);
-      setQuantity(submitted.quantity);
-      setAvgPrice(submitted.avgPrice);
+      if (activeScope.current !== scope) return;
       console.error('Failed to add crypto holding:', error);
       return false;
     } finally {
-      setIsAddingHolding(false);
+      setPendingScope(current => current === scope ? null : current);
     }
-  }, [assetId, avgPrice, currentPrice, isAddingHolding, isCryptoAsset, quantity, resetCryptoForm, selectedCoin]);
+  }, [assetId, avgPrice, currentPrice, isAddingHolding, isCryptoAsset, quantity, resetCryptoForm, selectedCoin, draft, scope]);
 
   const refreshHoldingPrices = useCallback(async () => {
     if (!assetId || !isCryptoAsset) {
       return;
     }
 
-    setIsRefreshingPrices(true);
+    setRefreshingScope(scope);
     try {
       await refreshAssetMarketValues(assetId, 'crypto');
     } catch (error) {
       console.error('Failed to refresh asset crypto prices:', error);
     } finally {
-      setIsRefreshingPrices(false);
+      setRefreshingScope(current => current === scope ? null : current);
     }
-  }, [assetId, isCryptoAsset]);
+  }, [assetId, isCryptoAsset, scope]);
 
   const totalHoldingValue = useMemo(() => {
     return holdings.reduce((sum, holding) => sum + calculateCryptoHoldingValue(holding), 0);
