@@ -7,7 +7,6 @@ jest.mock('@/contexts/HouseholdContext', () => ({ useHousehold: () => ({ current
 jest.mock('@/contexts/ThemeContext', () => ({ useTheme: () => ({ themeConfig: {} }) }));
 jest.mock('@/lib/pushNotificationService', () => ({ isIOS: () => false }));
 jest.mock('@/components/NotificationSettings', () => () => null);
-jest.mock('@/components/settings/HomePreferencesSettings', () => () => null);
 jest.mock('@/components/settings', () => ({
   CardSettings: () => null, CategorySettings: () => null, MerchantRuleSettings: () => null,
   QuickEditOverlaySettings: () => null, RecurringExpenseSettings: () => null,

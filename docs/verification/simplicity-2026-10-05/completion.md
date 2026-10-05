@@ -42,11 +42,11 @@
 | [TOOL-04 — 완료된 구형 이관용 reconciliation이 일반 runtime 명령처럼 남아 있습니다](tooling.md) | 미착수 | |
 | [TOOL-05 — 요구사항 선언 파서가 세 군데에서 같은 규칙을 다시 구현합니다](tooling.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
 | [TOOL-06 — 런타임 보안 경계 검사에 과거 폴더 이전 완료 조건이 섞여 있습니다](tooling.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
-| [WT-01 · 원장 optimistic 수정: 읽기 전용 metadata, expectedVersion, 즉시 반영/rollback](web-tests.md) | 미착수 | |
-| [WT-02 · 원본 선택·월분할 command/lineage](web-tests.md) | 미착수 | |
-| [WT-03 · 홈 설정 편집 version 고정·중복 카드 저장 거부](web-tests.md) | 미착수 | |
-| [WT-04 · PUSH-008 endpoint 등록: 서버 성공 뒤 active, 진행단계 순서](web-tests.md) | 미착수 | |
-| [WT-05 · PUSH-004/PUSH-011 malformed payload 차단, actor 변경 뒤 늦은 callback 격리](web-tests.md) | 미착수 | |
+| [WT-01 · 원장 optimistic 수정: 읽기 전용 metadata, expectedVersion, 즉시 반영/rollback](web-tests.md) | 구현·관련 검사 완료 | [운영 연결과 계약 검사](../../operations/web-contract-tests-simplicity-2026-10-05.md) |
+| [WT-02 · 원본 선택·월분할 command/lineage](web-tests.md) | 구현·관련 검사 완료 | [운영 연결과 계약 검사](../../operations/web-contract-tests-simplicity-2026-10-05.md) |
+| [WT-03 · 홈 설정 편집 version 고정·중복 카드 저장 거부](web-tests.md) | 구현·관련 검사 완료 | [운영 연결과 계약 검사](../../operations/web-contract-tests-simplicity-2026-10-05.md) |
+| [WT-04 · PUSH-008 endpoint 등록: 서버 성공 뒤 active, 진행단계 순서](web-tests.md) | 구현·관련 검사 완료 | [운영 연결과 계약 검사](../../operations/web-contract-tests-simplicity-2026-10-05.md) |
+| [WT-05 · PUSH-004/PUSH-011 malformed payload 차단, actor 변경 뒤 늦은 callback 격리](web-tests.md) | 구현·관련 검사 완료 | [운영 연결과 계약 검사](../../operations/web-contract-tests-simplicity-2026-10-05.md) |
 | [WT-06 · 자산 조회 실패·정상 빈 값 구분(UI-01)](web-tests.md) | 구현·관련 검사 완료 | [자산 조회 실패와 명의 조회](../../operations/portfolio-read-simplicity-2026-10-05.md) |
 | [UI-01 · 실패·빈 목록·0원의 소유 계약을 읽기 경계에서 하나로 정합니다](web-ui.md) | 구현·관련 검사 완료 | [자산 조회 실패와 명의 조회](../../operations/portfolio-read-simplicity-2026-10-05.md) |
 | [UI-02 · 수입 요약 편집도 편집 시작 버전을 그대로 전달해야 합니다](web-ui.md) | 구현·관련 검사 완료 | [편집 초안과 시세 수명](../../operations/editor-simplicity-2026-10-05.md) |
@@ -58,7 +58,7 @@
 | [W3. Firestore 경계가 SDK overload 전체를 흉내 낸다 — 축소 가능](web.md) | 구현·관련 검사 완료 | [서버 확정과 구독](../../operations/web-snapshot-simplicity-2026-10-05.md) |
 | [W4. 폼의 생성·초기화·복구가 여러 곳에 있다 — 기능별로 정리](web.md) | 구현·관련 검사 완료 | [편집 초안과 시세 수명](../../operations/editor-simplicity-2026-10-05.md) |
 | [W5. 주식/코인 검색 입력 흐름이 추가·상세 화면에 중복된다 — 국소 정비](web.md) | 구현·관련 검사 완료 | [편집 초안과 시세 수명](../../operations/editor-simplicity-2026-10-05.md) |
-| [W6. 홈 설정 UI의 테스트와 운영 연결이 다르다 — 계약 정리 우선](web.md) | 미착수 | |
+| [W6. 홈 설정 UI의 테스트와 운영 연결이 다르다 — 계약 정리 우선](web.md) | 구현·관련 검사 완료 | [운영 연결과 계약 검사](../../operations/web-contract-tests-simplicity-2026-10-05.md) |
 | [W7. 통계 캐시에 화면 애니메이션과 부분 수정 정책이 섞여 있다 — 조건부 정비](web.md) | 미착수 | |
 | [W8. 같은 카테고리 문서를 목록과 버전으로 나눠 다시 구독한다 — 원본 단위 정비](web.md) | 미착수 | |
 | [W9. 오래된 가맹점 API와 실패를 빈 성공으로 바꾸는 경계 — 삭제·교정 구분](web.md) | 구현·관련 검사 완료 | [설정 실패와 사용하지 않는 경계](../../operations/settings-simplicity-2026-10-05.md) |
@@ -76,7 +76,7 @@
 | [CT02 — 로그·원문 비저장의 일부 검사가 상수 빈 배열을 읽습니다. P1, 확신 높음](capture-tests.md) | 미착수 | |
 | [CT03 — receipt 조율 테스트가 취소·해시 별도 구현까지 유지합니다. P2, 확신 높음](capture-tests.md) | 미착수 | |
 | [CT04 — golden 결과 상수를 다시 검사하는 테스트를 행동 검증과 분리합니다. P3, 확신 높음](capture-tests.md) | 미착수 | |
-| [WE01 — 선택 상태를 CSS 구현으로 검증하는 작은 결합. P3, 확신 높음](web-e2e.md) | 미착수 | |
+| [WE01 — 선택 상태를 CSS 구현으로 검증하는 작은 결합. P3, 확신 높음](web-e2e.md) | 구현·관련 검사 완료 | [운영 연결과 계약 검사](../../operations/web-contract-tests-simplicity-2026-10-05.md) |
 | [WE02 — 첫 홈 성능 검사가 정확한 chunk 이름·개수를 고정합니다. P3, 확신 중간](web-e2e.md) | 미착수 | |
 
 

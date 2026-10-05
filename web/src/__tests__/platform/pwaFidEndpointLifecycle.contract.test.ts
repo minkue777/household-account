@@ -85,13 +85,13 @@ jest.mock('@/lib/utils/platform', () => ({
   },
 }));
 
-import {
+let {
   activatePwaFidEndpoint,
   getPwaFidEndpointRegistrationState,
   subscribePwaFidEndpointRegistrationState,
   removePwaFidEndpointForLogout,
   completePwaSessionCleanup,
-} from '@/platform/pwa/fidEndpointLifecycle';
+} = require('@/platform/pwa/fidEndpointLifecycle') as typeof import('@/platform/pwa/fidEndpointLifecycle');
 import {
   formatPwaEndpointRegistrationErrorCode,
   type PwaEndpointRegistrationPhase,
@@ -121,6 +121,14 @@ describe('iPhone PWA FID endpoint 등록 계약', () => {
   });
 
   beforeEach(() => {
+    jest.resetModules();
+    ({ activatePwaFidEndpoint, getPwaFidEndpointRegistrationState,
+      subscribePwaFidEndpointRegistrationState, removePwaFidEndpointForLogout,
+      completePwaSessionCleanup } = require('@/platform/pwa/fidEndpointLifecycle'));
+    mockRegisteredHandler = undefined;
+    mockUnregisteredHandler = undefined;
+    mockForegroundHandler = undefined;
+    Object.assign(mockSessionScope, { sessionGeneration: 7, principalUid: 'uid-1', householdId: 'household-1', memberId: 'member-1' });
     jest.clearAllMocks();
     completePwaSessionCleanup();
     localStorage.removeItem('pwa-fid-root-binding.v1');
@@ -154,12 +162,8 @@ describe('iPhone PWA FID endpoint 등록 계약', () => {
       status: 'active',
       registrationVersion: 12,
     });
-    expect(observedStatuses).toEqual([
-      ...Array(9).fill('registering'),
-      'active',
-      ...Array(7).fill('registering'),
-      'active',
-    ]);
+    expect(observedStatuses.filter((status, index) => status !== observedStatuses[index - 1]))
+      .toEqual(['registering', 'active', 'registering', 'active']);
     expect(mockRegister).toHaveBeenCalledTimes(3); // prime + reconnect, then cached activation
     expect(mockUnregister).toHaveBeenCalledTimes(1);
     expect(mockSdkRemoveEndpoint).not.toHaveBeenCalled();
@@ -179,7 +183,8 @@ describe('iPhone PWA FID endpoint 등록 계약', () => {
     mockRegisterEndpoint.mockResolvedValueOnce({ registrationVersion: 13 });
     await activatePwaFidEndpoint();
 
-    mockForegroundHandler?.({
+    expect(mockForegroundHandler).toEqual(expect.any(Function));
+    mockForegroundHandler!({
       notification: {
         title: '가계부 알림',
         body: '새 지출 내역을 확인해 주세요.',
@@ -207,7 +212,15 @@ describe('iPhone PWA FID endpoint 등록 계약', () => {
   });
 
   it('[T-PUSH-004][PUSH-011] 열린 PWA는 지출 수정 계약이 아닌 payload를 표시하지 않는다', async () => {
-    mockForegroundHandler?.({
+    await activatePwaFidEndpoint();
+    expect(mockForegroundHandler).toEqual(expect.any(Function));
+    mockForegroundHandler!({ data: {
+      payloadVersion: 'notification-payload.v1', type: 'expense-created', clickTarget: 'expense-edit', expenseId: 'positive-control',
+    } });
+    await waitFor(() => expect(mockShowNotification).toHaveBeenCalledTimes(1));
+    mockShowNotification.mockClear();
+    expect(mockForegroundHandler).toEqual(expect.any(Function));
+    mockForegroundHandler!({
       notification: { title: '알 수 없는 알림' },
       data: {
         payloadVersion: 'notification-payload.v2',
@@ -243,7 +256,8 @@ describe('iPhone PWA FID endpoint 등록 계약', () => {
     expect(mockUnregister).not.toHaveBeenCalled();
     expect(mockRetireLegacyWorkers).not.toHaveBeenCalled();
     expect(localStorage.getItem('pwa-fid-root-binding.v1')).toBe('existing-marker');
-    mockForegroundHandler?.({ data: {
+    expect(mockForegroundHandler).toEqual(expect.any(Function));
+    mockForegroundHandler!({ data: {
       payloadVersion: 'notification-payload.v1', type: 'expense-created', clickTarget: 'expense-edit', expenseId: 'after-update-failure',
     } });
     await waitFor(() => expect(mockShowNotification).toHaveBeenCalledTimes(1));
@@ -405,10 +419,19 @@ describe('iPhone PWA FID endpoint 등록 계약', () => {
   });
 
   it('actor가 바뀐 뒤 늦게 도착한 등록 callback과 foreground는 새 actor에 전달하지 않는다', async () => {
+    await activatePwaFidEndpoint();
+    expect(mockRegisteredHandler).toEqual(expect.any(Function));
+    expect(mockForegroundHandler).toEqual(expect.any(Function));
+    mockForegroundHandler!({ data: {
+      payloadVersion: 'notification-payload.v1', type: 'expense-created', clickTarget: 'expense-edit', expenseId: 'before-change',
+    } });
+    await waitFor(() => expect(mockShowNotification).toHaveBeenCalledTimes(1));
+    mockRegisterEndpoint.mockClear(); mockShowNotification.mockClear();
     mockSessionScope.sessionGeneration++;
     mockSessionScope.memberId = 'member-2';
-    mockRegisteredHandler?.('late-fid');
-    mockForegroundHandler?.({ data: {
+    mockRegisteredHandler!('late-fid');
+    expect(mockForegroundHandler).toEqual(expect.any(Function));
+    mockForegroundHandler!({ data: {
       payloadVersion: 'notification-payload.v1', type: 'expense-created', clickTarget: 'expense-edit', expenseId: 'expense-1',
     } });
     await Promise.resolve();

@@ -44,6 +44,7 @@ export default function CategorySelector({
           <button
             key={cat.key}
             type="button"
+            aria-pressed={value === cat.key}
             onClick={() => onChange(cat.key)}
             className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-colors text-xs ${
               value === cat.key
@@ -68,6 +69,7 @@ export default function CategorySelector({
         <button
           key={cat.key}
           type="button"
+          aria-pressed={value === cat.key}
           onClick={() => onChange(cat.key)}
           className={`flex flex-col items-center p-2 rounded-lg border-2 transition-colors min-w-[56px] ${
             value === cat.key

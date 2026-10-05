@@ -86,7 +86,7 @@ interface ThemePreferencePort {
 
 ### 5.1 `GetHomeConfiguration`
 
-Web의 홈 설정 조회는 Command 전송 모듈을 정적으로 가져오지 않습니다. `homePreferenceCommands.saveCards`와 `selectCurrency`를 실제 호출할 때 기존 Command runtime을 불러오며, payload·expectedVersion·가구 범위·거부 결과는 그대로 전달합니다.
+Web의 홈 설정 조회는 Command 전송 모듈을 가져오지 않습니다. 현재 운영 설정 화면에는 홈 카드 편집 UI가 연결되어 있지 않습니다(HOME-001). 미연결 편집 컴포넌트와 전송 wrapper는 제거했으며, 서버의 홈 구성·지역화폐 선택 Command와 기존 저장값 읽기는 유지합니다. HOME-004는 목표 명세로 남습니다. 실제 UI를 제공할 때 편집 시작 version, 실패 초안 보존, 중복 구성 거부를 그 화면과 서버 경계에서 검증해야 합니다.
 
 1. Actor의 household 접근을 검증한다.
 2. `HomeConfigurationStore`에서 현재 schema를 읽는다.
