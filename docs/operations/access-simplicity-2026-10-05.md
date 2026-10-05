@@ -13,3 +13,9 @@
 - 기존 이름 변경 정책 계약 7개 통과. 서버 test TypeScript 검사 통과.
 - 로그: `TEMP/household-simplicity-rename-red-20261005.log`, `TEMP/household-simplicity-retention-red-20261005.log`, `TEMP/household-simplicity-access-green-20261005.log`.
 - 운영 자료 직접 수정은 하지 않았습니다. Firebase 배포와 전체 CI는 최종 후보에서 별도로 기록합니다.
+
+## CI 후속 — SDK 대역 의미 (PT-04)
+
+8af00fd CI 37249740602의 Functions 4개 실패는 이름 변경을 호출하는 두 기존 테스트의 `InMemoryFirestore`에 SDK `doc/get`이 빠진 문제였습니다. 실제 이름 변경 Emulator 검사는 이미 통과했으며, 제품에 대역 호환 분기를 추가하지 않았습니다. 대역의 해당 조회 기능을 보완하고 중첩 저장의 `merge:true`(leaf 병합), `mergeFields`와 `update`(지정 map 교체), 빈 map·필드 삭제 의미를 실제 SDK와 비교했습니다. 기존 3개 파일 15개 및 새 실제 SDK 비교 1개가 통과했습니다. 이 대역은 MVCC/경합을 재현하지 않으므로 동시성·권한 Rules·read 비용의 증거로 쓰지 않으며 해당 검사는 실제 Emulator에서 유지합니다.
+
+로그: `TEMP/household-simplicity-ci-37249740602.log`, `TEMP/household-simplicity-firestore-double-20261005.log`.

@@ -1,4 +1,5 @@
 type StoredDocument = Record<string, unknown>;
+type WriteOptions = { merge?: boolean; mergeFields?: readonly string[] };
 
 function firestoreWriteValue(value: unknown): unknown {
   if (value instanceof Date) return new Date(value);
@@ -41,6 +42,10 @@ class MemoryDocumentSnapshot {
 
   data(): StoredDocument | undefined {
     return this.stored === undefined ? undefined : structuredClone(this.stored);
+  }
+
+  get(field: string): unknown {
+    return this.stored === undefined ? undefined : structuredClone(valueAt(this.stored, field));
   }
 }
 
@@ -175,7 +180,7 @@ class MemoryDocumentReference {
 
   async set(value: StoredDocument, options?: { merge?: boolean; mergeFields?: readonly string[] }): Promise<void> {
     if (this.database === undefined) throw new Error("MEMORY_DOCUMENT_DATABASE_NOT_BOUND");
-    this.database.write(this.path, value, options?.merge === true || options?.mergeFields !== undefined);
+    this.database.write(this.path, value, options);
   }
 
   async delete(): Promise<void> {
@@ -205,7 +210,7 @@ class MemoryDocumentReference {
       error.code = 6;
       throw error;
     }
-    this.database.write(this.path, value, false);
+    this.database.write(this.path, value);
   }
 
   async update(value: StoredDocument): Promise<void> {
@@ -213,7 +218,7 @@ class MemoryDocumentReference {
       throw new Error("MEMORY_DOCUMENT_DATABASE_NOT_BOUND");
     }
     if (!this.database.has(this.path)) throw new Error("NOT_FOUND");
-    this.database.write(this.path, value, true);
+    this.database.write(this.path, value, { mergeFields: Object.keys(value) });
   }
 }
 
@@ -222,7 +227,7 @@ type StagedWrite =
       readonly kind: "set";
       readonly path: string;
       readonly value: StoredDocument;
-      readonly merge: boolean;
+      readonly options?: WriteOptions;
       readonly requireAbsent: boolean;
     }
   | { readonly kind: "delete"; readonly path: string };
@@ -275,7 +280,7 @@ class MemoryTransaction {
       kind: "set",
       path: reference.path,
       value: firestoreWriteValue(value) as StoredDocument,
-      merge: options?.merge === true || options?.mergeFields !== undefined,
+      options,
       requireAbsent: false,
     });
     return this;
@@ -286,7 +291,6 @@ class MemoryTransaction {
       kind: "set",
       path: reference.path,
       value: firestoreWriteValue(value) as StoredDocument,
-      merge: false,
       requireAbsent: true,
     });
     return this;
@@ -294,7 +298,7 @@ class MemoryTransaction {
 
   update(reference: MemoryDocumentReference, value: StoredDocument): this {
     if (!this.database.has(reference.path)) throw new Error("NOT_FOUND");
-    return this.set(reference, value, { merge: true });
+    return this.set(reference, value, { mergeFields: Object.keys(value) });
   }
 
   delete(reference: MemoryDocumentReference): this {
@@ -313,7 +317,7 @@ class MemoryTransaction {
       if (write.kind === "delete") {
         this.database.remove(write.path);
       } else {
-        this.database.write(write.path, write.value, write.merge);
+        this.database.write(write.path, write.value, write.options);
       }
     }
   }
@@ -331,6 +335,10 @@ function valueAt(value: StoredDocument, field: string): unknown {
 export class InMemoryFirestore {
   private readonly documents = new Map<string, StoredDocument>();
   private readonly reads: InMemoryTransactionReadTarget[] = [];
+
+  doc(path: string): MemoryDocumentReference {
+    return new MemoryDocumentReference(path, this);
+  }
 
   collection(path: string): MemoryCollectionReference {
     return new MemoryCollectionReference(path, this);
@@ -383,12 +391,27 @@ export class InMemoryFirestore {
     this.documents.delete(path);
   }
 
-  write(path: string, value: StoredDocument, merge: boolean): void {
+  write(path: string, value: StoredDocument, options?: WriteOptions): void {
     const current = this.documents.get(path);
-    const next = merge && current !== undefined ? structuredClone(current) : {};
-    for (const [key, child] of Object.entries(firestoreWriteValue(value) as StoredDocument)) {
-      if (typeof child === "object" && child !== null && "__memoryFieldValue" in child && child.__memoryFieldValue === "delete") delete next[key];
-      else next[key] = child;
+    const next = (options?.merge || options?.mergeFields) && current !== undefined ? structuredClone(current) : {};
+    const data = firestoreWriteValue(value) as StoredDocument;
+    if (options?.mergeFields) {
+      for (const field of options.mergeFields) {
+        const child = field in data ? data[field] : valueAt(data, field);
+        if (child === undefined) throw new Error(`MISSING_MERGE_FIELD:${field}`);
+        assignField(next, field.split('.'), child);
+      }
+    } else {
+      const merge = (target: StoredDocument, changes: StoredDocument) => {
+        for (const [key, child] of Object.entries(changes)) {
+          if (options?.merge && isMap(child) && Object.keys(child).length > 0) {
+            const nested = isMap(target[key]) ? target[key] : {};
+            merge(nested, child);
+            target[key] = nested;
+          } else assignField(target, [key], child);
+        }
+      };
+      merge(next, data);
     }
     this.documents.set(path, next);
   }
@@ -410,4 +433,19 @@ export class InMemoryFirestore {
       .filter((path) => path.startsWith(prefix))
       .sort();
   }
+}
+
+function isMap(value: unknown): value is StoredDocument {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    && !(value instanceof Date) && !('__memoryFieldValue' in value);
+}
+
+function assignField(target: StoredDocument, path: readonly string[], value: unknown): void {
+  const [key, ...rest] = path;
+  if (rest.length) {
+    if (!isMap(target[key])) target[key] = {};
+    assignField(target[key] as StoredDocument, rest, value);
+  } else if (typeof value === 'object' && value !== null && '__memoryFieldValue' in value) {
+    delete target[key];
+  } else target[key] = value;
 }
