@@ -32,7 +32,7 @@ jest.mock('@/features/ledger/application/ledgerOptimisticProjection', () => ({
   },
 }));
 
-import { subscribeToCategories, subscribeToCategoryCatalogVersion } from '@/lib/categoryService';
+import { subscribeToCategoryCatalog } from '@/lib/categoryService';
 import {
   readMonthlyTransactionsForPrefetch,
   subscribeToMonthlyTransactions,
@@ -275,22 +275,22 @@ describe('가계부 첫 화면 server-first 조회 계약', () => {
 
   it('카테고리는 단일 catalog의 서버 snapshot부터 stable ID와 개별 버전을 방출한다', () => {
     const callback = jest.fn();
-    subscribeToCategories('household-1', callback);
+    subscribeToCategoryCatalog('household-1', callback);
     const { options, next } = listenerArguments();
     expect(options).toEqual({ includeMetadataChanges: true });
     next({ metadata: { fromCache: true }, data: () => catalogData() });
     expect(callback).not.toHaveBeenCalled();
     next({ metadata: { fromCache: false }, data: () => catalogData(1, 'food') });
-    expect(callback).toHaveBeenLastCalledWith([
+    expect(callback).toHaveBeenLastCalledWith({ catalogVersion: 1, defaultCategoryId: 'food', categories: [
       expect.objectContaining({ id: 'food', key: 'food', label: '최신', aggregateVersion: 3, isDefault: true }),
-    ]);
+    ] });
   });
 
   it('카테고리 카탈로그 버전은 목록과 같은 문서의 서버 변경을 구독하고 해제한다', () => {
     const callback = jest.fn();
     const unsubscribe = jest.fn();
     mockOnSnapshot.mockReturnValue(unsubscribe);
-    const dispose = subscribeToCategoryCatalogVersion('household-1', callback);
+    const dispose = subscribeToCategoryCatalog('household-1', callback);
     const { options, next } = listenerArguments();
     expect(mockOnSnapshot.mock.calls[0][0]).toEqual({ kind: 'document',
       segments: [{ kind: 'db' }, 'households', 'household-1', 'categoryCatalog', 'current'] });
@@ -300,7 +300,7 @@ describe('가계부 첫 화면 server-first 조회 계약', () => {
     next({ metadata: { fromCache: false }, data: () => catalogData(7, 'food') });
     next({ metadata: { fromCache: true }, data: () => catalogData(6) });
     next({ metadata: { fromCache: false }, data: () => catalogData(8) });
-    expect(callback.mock.calls).toEqual([[7, 'food'], [8, undefined]]);
+    expect(callback.mock.calls.map(([catalog]) => [catalog.catalogVersion, catalog.defaultCategoryId])).toEqual([[7, 'food'], [8, undefined]]);
     expect(mockGetDocFromServer).not.toHaveBeenCalled();
     expect(mockGetDocsFromServer).not.toHaveBeenCalled();
     dispose();
@@ -309,16 +309,16 @@ describe('가계부 첫 화면 server-first 조회 계약', () => {
 
   it('아직 생성되지 않은 catalog는 서버 저장소와 같은 빈 상태와 버전 0을 사용한다', () => {
     const callback = jest.fn();
-    subscribeToCategoryCatalogVersion('household-1', callback);
+    subscribeToCategoryCatalog('household-1', callback);
     listenerArguments().next({ metadata: { fromCache: false }, data: () => undefined });
-    expect(callback).toHaveBeenCalledWith(0, undefined);
+    expect(callback).toHaveBeenCalledWith({ categories: [], catalogVersion: 0 });
   });
 
   it('카테고리 카탈로그 권한 오류를 버전 0으로 위장하지 않고 호출자에게 전달한다', () => {
     const callback = jest.fn();
     const onError = jest.fn();
     const denied = Object.assign(new Error('permission denied'), { code: 'permission-denied' });
-    subscribeToCategoryCatalogVersion('household-1', callback, onError);
+    subscribeToCategoryCatalog('household-1', callback, onError);
     listenerArguments().error(denied);
     expect(onError).toHaveBeenCalledWith(denied);
     expect(callback).not.toHaveBeenCalled();
@@ -327,7 +327,7 @@ describe('가계부 첫 화면 server-first 조회 계약', () => {
   it('손상된 카탈로그 버전은 순서 변경에 전달하지 않는다', () => {
     const callback = jest.fn();
     const onError = jest.fn();
-    subscribeToCategoryCatalogVersion('household-1', callback, onError);
+    subscribeToCategoryCatalog('household-1', callback, onError);
     listenerArguments().next({ metadata: { fromCache: false }, data: () => ({ catalogVersion: -1 }) });
     expect(callback).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalledWith(expect.any(Error));

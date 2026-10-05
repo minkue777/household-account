@@ -258,12 +258,12 @@ export interface HouseholdCommandResults {
   'ledger.reconfigure-monthly-split.v1': { splitGroupId: string };
   'ledger.request-notification.v1': LedgerTransactionCommandResult;
 
-  'category.create.v1': { categoryId: string };
-  'category.update.v1': Record<string, never>;
-  'category.archive.v1': Record<string, never>;
-  'category.set-budget.v1': Record<string, never>;
-  'category.reorder.v1': Record<string, never>;
-  'category.set-default.v1': Record<string, never>;
+  'category.create.v1': { categoryId: string; catalogVersion?: number };
+  'category.update.v1': { catalogVersion?: number };
+  'category.archive.v1': { catalogVersion?: number };
+  'category.set-budget.v1': { catalogVersion?: number };
+  'category.reorder.v1': { catalogVersion?: number };
+  'category.set-default.v1': { catalogVersion?: number };
   'home.update-summary-preferences.v1': Record<string, never>;
   'home.select-local-currency.v1': Record<string, never>;
 

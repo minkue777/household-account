@@ -10,10 +10,13 @@ import React, {
   useMemo,
 } from 'react';
 import type { CategoryDocument } from '@/types/category';
+import type { CategoryCatalogReadModel } from '@/lib/categoryService';
 import { useHousehold } from '@/contexts/HouseholdContext';
 
 interface CategoryContextType {
   categories: CategoryDocument[];
+  catalogVersion: number | null;
+  defaultCategoryKey: string;
   isLoading: boolean;
   serverSnapshotReady: boolean;
   readError: unknown;
@@ -22,11 +25,12 @@ interface CategoryContextType {
   getCategoryColor: (key: string) => string;
   getCategoryBudget: (key: string) => number | null;
   // CRUD 작업
-  addCategory: (label: string, color: string, budget?: number | null) => Promise<string>;
-  updateCategory: (id: string, data: { label?: string; color?: string; budget?: number | null }, expectedVersion: number) => Promise<void>;
-  deleteCategory: (id: string, expectedVersion: number) => Promise<void>;
-  setBudget: (id: string, budget: number | null, expectedVersion: number) => Promise<void>;
-  reorderCategories: (categories: CategoryDocument[], expectedCatalogVersion: number) => Promise<void>;
+  addCategory: (label: string, color: string, budget?: number | null) => Promise<number>;
+  updateCategory: (id: string, data: { label?: string; color?: string; budget?: number | null }, expectedVersion: number) => Promise<number>;
+  deleteCategory: (id: string, expectedVersion: number) => Promise<number>;
+  setBudget: (id: string, budget: number | null, expectedVersion: number) => Promise<number>;
+  reorderCategories: (categories: CategoryDocument[], expectedCatalogVersion: number) => Promise<number>;
+  setDefaultCategory: (key: string, expectedCatalogVersion: number) => Promise<number>;
   activeCategories: CategoryDocument[];
 }
 
@@ -38,8 +42,11 @@ const UNKNOWN_CATEGORY = {
   color: '#6B7280',
 };
 
+const EMPTY_CATEGORIES: CategoryDocument[] = [];
+
 export function CategoryProvider({ children }: { children: React.ReactNode }) {
-  const [categories, setCategories] = useState<CategoryDocument[]>([]);
+  const [catalog, setCatalog] = useState<CategoryCatalogReadModel | null>(null);
+  const categories = catalog?.categories ?? EMPTY_CATEGORIES;
   const [isLoading, setIsLoading] = useState(true);
   const [serverSnapshotReady, setServerSnapshotReady] = useState(false);
   const [readError, setReadError] = useState<unknown>(null);
@@ -52,13 +59,13 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
 
   useLayoutEffect(() => {
     if (!householdId) {
-      setCategories([]);
+      setCatalog(null);
       setIsLoading(false);
       setServerSnapshotReady(false);
       setReadError(null);
       return;
     }
-    setCategories([]);
+    setCatalog(null);
     setIsLoading(true);
     setServerSnapshotReady(false);
     setReadError(null);
@@ -66,8 +73,9 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
 
   // 초기화 및 실시간 구독
   useEffect(() => {
+    setServerSnapshotReady(false);
     if (!householdId) {
-      setCategories([]);
+      setCatalog(null);
       setIsLoading(false);
       setServerSnapshotReady(false);
       setReadError(null);
@@ -79,15 +87,17 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
     let unsubscribe: (() => void) | undefined;
 
     void import('@/lib/categoryService')
-      .then(({ subscribeToCategories }) => {
+      .then(({ subscribeToCategoryCatalog }) => {
         if (cancelled) return;
         // 신규 가구의 기본 카테고리는 서버 온보딩 흐름이 별도 멱등 UoW로 생성합니다.
-        unsubscribe = subscribeToCategories(householdId, (cats) => {
-          setCategories(cats);
+        unsubscribe = subscribeToCategoryCatalog(householdId, (nextCatalog) => {
+          if (cancelled) return;
+          setCatalog(nextCatalog);
           setIsLoading(false);
           setServerSnapshotReady(true);
           setReadError(null);
         }, (error) => {
+          if (cancelled) return;
           setIsLoading(false);
           setServerSnapshotReady(false);
           setReadError(error);
@@ -133,7 +143,7 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
 
   // CRUD 작업
   const addCategory = useCallback(
-    async (label: string, color: string, budget: number | null = null): Promise<string> => {
+    async (label: string, color: string, budget: number | null = null): Promise<number> => {
       if (!householdId) throw new Error('householdId가 설정되지 않았습니다.');
       const key = `custom_${Date.now()}`;
       const order = categories.length;
@@ -144,28 +154,34 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateCategory = useCallback(
-    async (id: string, data: { label?: string; color?: string; budget?: number | null }, expectedVersion: number): Promise<void> => {
+    async (id: string, data: { label?: string; color?: string; budget?: number | null }, expectedVersion: number): Promise<number> => {
       const { updateCategory: updateCategoryService } = await import('@/lib/categoryService');
-      await updateCategoryService(id, data, expectedVersion);
+      return updateCategoryService(id, data, expectedVersion);
     },
     []
   );
 
-  const deleteCategory = useCallback(async (id: string, expectedVersion: number): Promise<void> => {
+  const deleteCategory = useCallback(async (id: string, expectedVersion: number): Promise<number> => {
     const { deleteCategory: deleteCategoryService } = await import('@/lib/categoryService');
-    await deleteCategoryService(id, expectedVersion);
+    return deleteCategoryService(id, expectedVersion);
   }, []);
 
-  const setBudget = useCallback(async (id: string, budget: number | null, expectedVersion: number): Promise<void> => {
+  const setBudget = useCallback(async (id: string, budget: number | null, expectedVersion: number): Promise<number> => {
     const { setBudget: setBudgetService } = await import('@/lib/categoryService');
-    await setBudgetService(id, budget, expectedVersion);
+    return setBudgetService(id, budget, expectedVersion);
   }, []);
 
-  const reorderCategories = useCallback(async (reorderedCategories: CategoryDocument[], expectedCatalogVersion: number): Promise<void> => {
+  const reorderCategories = useCallback(async (reorderedCategories: CategoryDocument[], expectedCatalogVersion: number): Promise<number> => {
     const updates = reorderedCategories.map((cat, index) => ({ id: cat.id, order: index }));
     const { reorderCategories: reorderCategoriesService } = await import('@/lib/categoryService');
-    await reorderCategoriesService(updates, expectedCatalogVersion);
+    return reorderCategoriesService(updates, expectedCatalogVersion);
   }, []);
+
+  const setDefaultCategory = useCallback(async (key: string, expectedCatalogVersion: number): Promise<number> => {
+    if (!householdId) throw new Error('householdId가 설정되지 않았습니다.');
+    const { categoryCommands } = await import('@/features/category-budget/application/categoryCommands');
+    return categoryCommands.setDefault(householdId, key, expectedCatalogVersion);
+  }, [householdId]);
 
   const activeCategories = useMemo(() => {
     return categories.filter((c) => c.isActive);
@@ -173,8 +189,10 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
 
   const value: CategoryContextType = {
     categories,
+    catalogVersion: catalog?.catalogVersion ?? null,
+    defaultCategoryKey: catalog?.defaultCategoryId ?? '',
     isLoading,
-    serverSnapshotReady,
+    serverSnapshotReady: isSessionVerified && serverSnapshotReady,
     readError,
     getCategoryLabel,
     getCategoryColor,
@@ -185,6 +203,7 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
     setBudget,
     reorderCategories,
     activeCategories,
+    setDefaultCategory,
   };
 
   return <CategoryContext.Provider value={value}>{children}</CategoryContext.Provider>;

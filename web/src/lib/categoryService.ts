@@ -18,7 +18,7 @@ function requireStoredHouseholdId(): string {
 export async function addCategory(
   category: Omit<CategoryDocument, 'id' | 'isDefault' | 'householdId'>,
   householdId: string
-): Promise<string> {
+): Promise<number> {
   const { categoryCommands } = await import(
     '@/features/category-budget/application/categoryCommands'
   );
@@ -30,45 +30,45 @@ export async function updateCategory(
   id: string,
   data: Partial<Omit<CategoryDocument, 'id' | 'isDefault'>>,
   expectedVersion: number
-): Promise<void> {
+): Promise<number> {
   const householdId = requireStoredHouseholdId();
   const { categoryCommands } = await import(
     '@/features/category-budget/application/categoryCommands'
   );
-  await categoryCommands.update(householdId, id, data, expectedVersion);
+  return categoryCommands.update(householdId, id, data, expectedVersion);
 }
 
 // 카테고리 삭제 (기본 카테고리는 삭제 불가)
-export async function deleteCategory(id: string, expectedVersion: number): Promise<void> {
+export async function deleteCategory(id: string, expectedVersion: number): Promise<number> {
   const householdId = requireStoredHouseholdId();
   const { categoryCommands } = await import(
     '@/features/category-budget/application/categoryCommands'
   );
-  await categoryCommands.archive(householdId, id, expectedVersion);
+  return categoryCommands.archive(householdId, id, expectedVersion);
 }
 
 // 예산 설정
-export async function setBudget(id: string, budget: number | null, expectedVersion: number): Promise<void> {
+export async function setBudget(id: string, budget: number | null, expectedVersion: number): Promise<number> {
   const householdId = requireStoredHouseholdId();
   const { categoryCommands } = await import(
     '@/features/category-budget/application/categoryCommands'
   );
-  await categoryCommands.setBudget(householdId, id, budget, expectedVersion);
+  return categoryCommands.setBudget(householdId, id, budget, expectedVersion);
 }
 
 // 카테고리 순서 변경
 export async function reorderCategories(
   categories: { id: string; order: number }[],
   expectedCatalogVersion: number
-): Promise<void> {
+): Promise<number> {
   const householdId = requireStoredHouseholdId();
   const { categoryCommands } = await import(
     '@/features/category-budget/application/categoryCommands'
   );
-  await categoryCommands.reorder(householdId, categories, expectedCatalogVersion);
+  return categoryCommands.reorder(householdId, categories, expectedCatalogVersion);
 }
 
-interface CategoryCatalogReadModel {
+export interface CategoryCatalogReadModel {
   categories: CategoryDocument[];
   catalogVersion: number;
   defaultCategoryId?: string;
@@ -108,7 +108,7 @@ function readCategoryCatalog(data: Record<string, unknown> | undefined, househol
     defaultCategoryId: typeof data.defaultCategoryId === 'string' ? data.defaultCategoryId : undefined };
 }
 
-function subscribeToCategoryCatalog(
+export function subscribeToCategoryCatalog(
   householdId: string,
   callback: (catalog: CategoryCatalogReadModel) => void,
   onError?: (error: unknown) => void,
@@ -137,28 +137,10 @@ function subscribeToCategoryCatalog(
   return () => { active = false; unsubscribe(); };
 }
 
-// 목록과 순서 변경 버전은 동일한 권위 문서에서 읽습니다.
-export function subscribeToCategoryCatalogVersion(
-  householdId: string,
-  callback: (version: number, defaultCategoryKey?: string) => void,
-  onError?: (error: unknown) => void,
-): () => void {
-  return subscribeToCategoryCatalog(householdId,
-    catalog => callback(catalog.catalogVersion, catalog.defaultCategoryId), onError);
-}
-
-export function subscribeToCategories(
-  householdId: string,
-  callback: (categories: CategoryDocument[]) => void,
-  onError?: (error: unknown) => void,
-): () => void {
-  if (!householdId) { callback([]); return () => {}; }
-  return subscribeToCategoryCatalog(householdId, catalog => callback(catalog.categories), onError);
-}
-
-// 고유한 카테고리 키 생성
-export function generateCategoryKey(): string {
-  return `custom_${Date.now()}`;
+export async function readCategoryCatalogFromServer(householdId: string): Promise<CategoryCatalogReadModel> {
+  const server = await import('@/platform/read-model/firestoreServerReadModel');
+  const snapshot = await server.getDocFromServer(server.doc(server.db, 'households', householdId, 'categoryCatalog', 'current'));
+  return readCategoryCatalog(snapshot.data(), householdId);
 }
 
 // 사용 중인 기존 색을 보존하고, 미사용 유사색만 교체한 16색 팔레트입니다.

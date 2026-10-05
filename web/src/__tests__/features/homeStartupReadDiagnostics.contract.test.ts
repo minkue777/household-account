@@ -154,14 +154,14 @@ describe('[T-ADM-005][ADM-006] 홈 read 서비스의 시작 단계 관측 계약
     observe(value);
     const callback = jest.fn(() => { events.push('callback'); });
     clock = 100;
-    value.categories.subscribeToCategories(initialScope.householdId, callback);
+    value.categories.subscribeToCategoryCatalog(initialScope.householdId, callback);
     clock = 150; next()(snapshot(true));
     expect(events).toEqual(['categoriesListenStarted', 'listen']);
     clock = 200;
     next()(snapshot(false, { schemaVersion: 1, householdId: initialScope.householdId,
       categories: [], catalogVersion: 1, defaultCategoryId: null }));
     expect(events).toEqual(['categoriesListenStarted', 'listen', 'categoriesServerSnapshotReceived', 'map', 'callback']);
-    expect(callback).toHaveBeenLastCalledWith([]);
+    expect(callback).toHaveBeenLastCalledWith({ categories: [], catalogVersion: 1, defaultCategoryId: undefined });
     expect(finish(value)).toMatchObject({ categoriesListenStarted: 100, categoriesServerSnapshotReceived: 200 });
   });
 
@@ -208,7 +208,7 @@ describe('[T-ADM-005][ADM-006] 홈 read 서비스의 시작 단계 관측 계약
     const value = subject();
     const subscribe = () => kind === '월' ? value.ledger.subscribeToMonthlyTransactions(2026, 9, jest.fn())
       : kind === '연간' ? value.ledger.subscribeToDateRangeExpenses('2026-01-01', '2026-12-31', jest.fn())
-        : kind === '카테고리' ? value.categories.subscribeToCategories(initialScope.householdId, jest.fn())
+        : kind === '카테고리' ? value.categories.subscribeToCategoryCatalog(initialScope.householdId, jest.fn())
           : value.currency.subscribeToLocalCurrencyBalance(jest.fn());
     const emit = (offset: number) => {
       const result = kind === '카테고리'

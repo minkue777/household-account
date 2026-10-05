@@ -77,13 +77,3 @@ export async function renameHouseholdMember(
   await householdCommands.renameSelf(householdKey, newName, expectedVersion);
 }
 
-export async function setDefaultCategoryKey(
-  householdKey: string,
-  categoryKey: string,
-  expectedCatalogVersion: number
-): Promise<void> {
-  const { categoryCommands } = await import(
-    '@/features/category-budget/application/categoryCommands'
-  );
-  await categoryCommands.setDefault(householdKey, categoryKey, expectedCatalogVersion);
-}

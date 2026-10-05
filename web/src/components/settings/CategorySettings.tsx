@@ -1,12 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { CategoryDocument } from '@/lib/categoryService';
 import ColorPicker from '@/components/common/ColorPicker';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
-import { COLOR_PALETTE, subscribeToCategoryCatalogVersion } from '@/lib/categoryService';
-import { setDefaultCategoryKey } from '@/lib/householdService';
+import { COLOR_PALETTE } from '@/lib/categoryService';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { useAppDialog } from '@/contexts/AppDialogContext';
 import { ChevronDown, Edit2, Plus, Star, Tags, Trash2 } from 'lucide-react';
@@ -16,7 +15,11 @@ import { useSettingsSectionExpansion } from './useSettingsSectionExpansion';
 type CategoryMutation = 'add' | 'edit' | 'delete' | 'default' | 'reorder';
 
 export default function CategorySettings() {
-  const { household, isSessionVerified = true, remoteReadEpoch = 0 } = useHousehold();
+  const { household } = useHousehold();
+  return <CategorySettingsEditor key={household?.id} />;
+}
+
+function CategorySettingsEditor() {
   const { showAlert } = useAppDialog();
   const {
     activeCategories: categories,
@@ -24,6 +27,11 @@ export default function CategorySettings() {
     updateCategory,
     deleteCategory,
     reorderCategories,
+    setDefaultCategory,
+    catalogVersion,
+    defaultCategoryKey: defaultCategory,
+    serverSnapshotReady,
+    readError,
   } = useCategoryContext();
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -33,9 +41,6 @@ export default function CategorySettings() {
 
   // 섹션 펼침/접힘 상태
   const [isCategoryOpen, setIsCategoryOpen] = useSettingsSectionExpansion();
-
-  // 기본 카테고리 설정
-  const [defaultCategory, setDefaultCategory] = useState<string>('');
 
   // 새 카테고리 폼 상태
   const [newLabel, setNewLabel] = useState('');
@@ -48,34 +53,14 @@ export default function CategorySettings() {
   const [editBudget, setEditBudget] = useState('');
   const mutationInFlightRef = useRef(false);
   const [pendingMutation, setPendingMutation] = useState<CategoryMutation | null>(null);
-  const [catalogVersion, setCatalogVersion] = useState<number | null>(null);
   const [completedMutationVersion, setCompletedMutationVersion] = useState<number | null>(null);
-  const [catalogReadFailed, setCatalogReadFailed] = useState(false);
-  const isCatalogReady = catalogVersion !== null
-    && (completedMutationVersion === null || catalogVersion > completedMutationVersion);
+  const isCatalogReady = serverSnapshotReady && catalogVersion !== null
+    && (completedMutationVersion === null || catalogVersion >= completedMutationVersion);
   const isMutating = pendingMutation !== null || !isCatalogReady;
-
-  useEffect(() => {
-    setCatalogVersion(null);
-    setCompletedMutationVersion(null);
-    setCatalogReadFailed(false);
-    if (!isCategoryOpen || !household?.id || !isSessionVerified) return;
-    return subscribeToCategoryCatalogVersion(household.id, (version, defaultCategoryKey) => {
-      setCatalogVersion(version);
-      if (defaultCategoryKey !== undefined) setDefaultCategory(defaultCategoryKey);
-    }, () => {
-      setCatalogVersion(null);
-      setCatalogReadFailed(true);
-    });
-  }, [isCategoryOpen, household?.id, isSessionVerified, remoteReadEpoch]);
-
-  useEffect(() => {
-    setDefaultCategory(categories.find(category => category.isDefault)?.key ?? '');
-  }, [categories]);
 
   const runMutation = useCallback(async (
     mutation: CategoryMutation,
-    operation: () => Promise<unknown>,
+    operation: () => Promise<number>,
     failureMessage: string
   ): Promise<boolean> => {
     if (mutationInFlightRef.current || !isCatalogReady) return false;
@@ -83,10 +68,8 @@ export default function CategorySettings() {
     mutationInFlightRef.current = true;
     setPendingMutation(mutation);
     try {
-      await operation();
-      // 명령 응답이 구독보다 먼저 와도 다음 변경에 이전 버전을 재사용하지 않습니다.
-      // archive는 준비와 완료 트랜잭션에서 각각 버전이 증가합니다.
-      setCompletedMutationVersion(catalogVersion! + (mutation === 'delete' ? 1 : 0));
+      const confirmedVersion = await operation();
+      setCompletedMutationVersion(confirmedVersion);
       return true;
     } catch (error) {
       console.error(`${failureMessage}:`, error);
@@ -96,7 +79,7 @@ export default function CategorySettings() {
       mutationInFlightRef.current = false;
       setPendingMutation(null);
     }
-  }, [showAlert, isCatalogReady, catalogVersion]);
+  }, [showAlert, isCatalogReady]);
 
   const handleAddCategory = async () => {
     const label = newLabel.trim();
@@ -170,16 +153,11 @@ export default function CategorySettings() {
   // 기본 카테고리 변경
   const handleDefaultCategoryChange = async (categoryKey: string) => {
     if (mutationInFlightRef.current || catalogVersion === null || categoryKey === defaultCategory) return;
-    const completed = await runMutation(
+    await runMutation(
       'default',
-      async () => {
-        if (!household?.id) throw new Error('인증된 가구 세션이 필요합니다.');
-        await setDefaultCategoryKey(household.id, categoryKey, catalogVersion);
-      },
+      () => setDefaultCategory(categoryKey, catalogVersion),
       '기본 카테고리를 변경하지 못했습니다. 다시 시도해 주세요.'
     );
-    if (!completed) return;
-    setDefaultCategory(categoryKey);
   };
 
   const reorder = useCategoryReorder(
@@ -221,7 +199,7 @@ export default function CategorySettings() {
           <p id="category-reorder-help" className="px-4 pt-3 text-xs text-slate-500">
             왼쪽 동그라미를 위아래로 끌어 순서를 바꾸세요.
           </p>
-          {catalogReadFailed && (
+          {readError != null && (
             <p role="alert" className="px-4 pt-2 text-sm text-red-600">카테고리 정보를 불러오지 못했습니다.</p>
           )}
           <div ref={reorder.listRef} data-testid="category-order-list" className="divide-y divide-slate-100">

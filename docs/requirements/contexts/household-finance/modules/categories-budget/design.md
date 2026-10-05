@@ -367,3 +367,7 @@ Budget Domain은 Ledger Domain을 import하지 않고 공개 월 범위 Query DT
 6. Ledger 월 범위 Query Adapter와 `GetMonthlyBudget`를 만들고 다중 page·실패·상한 테스트를 활성화합니다.
 7. 저장 구조 전환에서는 기존 Catalog를 단일 정본으로 이관하고 Web·Android·Functions를 함께 전환합니다. `households.defaultCategoryKey`와 개별 category/settings의 런타임 접근은 종료하며 직접 client write 금지는 유지합니다.
 8. DEC-015 archive process와 historical display, default archive 거부, 설정 참조 default remap·재시도 테스트를 활성화합니다.
+# 2026-10-05 카탈로그 확정 응답과 단일 구독
+
+카테고리 여섯 Command는 실제 변경 transaction과 receipt의 `catalogVersion`을 optional 응답으로 제공합니다. 기존 `categoryId`와 구 receipt 결과는 보존합니다. Web CategoryProvider는 목록·기본값·버전을 단일 `categoryCatalog/current` 구독에서 함께 갱신하고 설정 화면도 이를 소비합니다. 다음 편집은 서버 응답의 확정 버전 이상을 관측한 뒤 허용합니다. archive의 단계 수로 버전을 추정하지 않습니다. 구 receipt 응답에 버전이 없을 때만 서버 문서를 한 번 조회하며 실패를 임의 버전으로 바꾸지 않습니다. [검증과 배포](../../../../operations/category-catalog-simplicity-2026-10-05.md)를 따릅니다.
+

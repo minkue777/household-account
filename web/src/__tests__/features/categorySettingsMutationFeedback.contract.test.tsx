@@ -6,8 +6,6 @@ import { useAppDialog } from '@/contexts/AppDialogContext';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import type { CategoryDocument } from '@/types/category';
-import { subscribeToCategoryCatalogVersion } from '@/lib/categoryService';
-import { setDefaultCategoryKey } from '@/lib/householdService';
 
 jest.mock('@/contexts/AppDialogContext', () => ({
   useAppDialog: jest.fn(),
@@ -23,11 +21,6 @@ jest.mock('@/contexts/HouseholdContext', () => ({
 
 jest.mock('@/lib/categoryService', () => ({
   COLOR_PALETTE: ['#4ADE80', '#F472B6'],
-  subscribeToCategoryCatalogVersion: jest.fn(),
-}));
-
-jest.mock('@/lib/householdService', () => ({
-  setDefaultCategoryKey: jest.fn(),
 }));
 
 jest.mock('@/components/common/ColorPicker', () => ({
@@ -78,15 +71,10 @@ describe('CategorySettings mutation feedback contract', () => {
   const showAlert = jest.fn().mockResolvedValue(undefined);
   const addCategory = jest.fn();
   const reorderCategories = jest.fn();
-  let emitCatalogVersion: (version: number, defaultCategoryKey?: string) => void;
+  const setDefaultCategory = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.mocked(subscribeToCategoryCatalogVersion).mockImplementation((_id, callback) => {
-      emitCatalogVersion = callback;
-      callback(7);
-      return jest.fn();
-    });
     mockedUseAppDialog.mockReturnValue({
       showAlert,
       showConfirm: jest.fn(),
@@ -99,6 +87,9 @@ describe('CategorySettings mutation feedback contract', () => {
       },
     } as unknown as ReturnType<typeof useHousehold>);
     mockedUseCategoryContext.mockReturnValue({
+      catalogVersion: 7,
+      defaultCategoryKey: 'food',
+      setDefaultCategory,
       categories: [category()],
       activeCategories: [category()],
       isLoading: false,
@@ -120,7 +111,7 @@ describe('CategorySettings mutation feedback contract', () => {
   });
 
   test('추가 명령 중에는 추가 버튼을 비활성화하고 중복 제출을 막으며 실패를 안내한다', async () => {
-    const command = deferred<string>();
+    const command = deferred<number>();
     addCategory.mockReturnValue(command.promise);
     jest.spyOn(console, 'error').mockImplementation(() => {});
     const user = userEvent.setup();
@@ -172,9 +163,12 @@ describe('CategorySettings mutation feedback contract', () => {
       order: 1,
       isDefault: false,
     });
-    const command = deferred<void>();
+    const command = deferred<number>();
     reorderCategories.mockReturnValue(command.promise);
     mockedUseCategoryContext.mockReturnValue({
+      catalogVersion: 7,
+      defaultCategoryKey: 'food',
+      setDefaultCategory,
       categories: [firstCategory, secondCategory],
       activeCategories: [firstCategory, secondCategory],
       isLoading: false,
@@ -241,10 +235,13 @@ describe('CategorySettings mutation feedback contract', () => {
     const context = mockedUseCategoryContext();
     mockedUseCategoryContext.mockReturnValue({
       ...context,
+      catalogVersion: 7,
+      defaultCategoryKey: 'food',
+      setDefaultCategory,
       categories: [firstCategory, secondCategory],
       activeCategories: [firstCategory, secondCategory],
     });
-    reorderCategories.mockResolvedValue(undefined);
+    reorderCategories.mockResolvedValue(8);
     const { rerender } = render(<CategorySettings />);
     fireEvent.click(screen.getByRole('button', { name: /카테고리/ }));
     const first = screen.getByRole('button', { name: '식비 순서 이동' });
@@ -269,11 +266,11 @@ describe('CategorySettings mutation feedback contract', () => {
 
     mockedUseCategoryContext.mockReturnValue({
       ...context,
+      catalogVersion: 8,
       categories: [secondCategory, firstCategory],
       activeCategories: [secondCategory, firstCategory],
     });
     rerender(<CategorySettings />);
-    act(() => emitCatalogVersion(8));
     expect(first).toBeEnabled();
     await act(async () => { fireEvent.keyDown(first, { key: 'ArrowUp' }); });
     expect(reorderCategories).toHaveBeenLastCalledWith([firstCategory, secondCategory], 8);
@@ -286,10 +283,30 @@ describe('CategorySettings mutation feedback contract', () => {
     } as unknown as ReturnType<typeof useHousehold>);
     render(<CategorySettings />);
     fireEvent.click(screen.getByRole('button', { name: /카테고리/ }));
-    act(() => emitCatalogVersion(9, 'food'));
     expect(screen.getByText('기본', { exact: true })).toBeInTheDocument();
     fireEvent.click(screen.getByTitle('기본 카테고리로 설정'));
-    expect(setDefaultCategoryKey).not.toHaveBeenCalled();
+    expect(setDefaultCategory).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: '식비 순서 이동' })).toBeEnabled();
+  });
+
+  test('삭제 완료 버전까지 기다리며 준비 단계나 다른 변경의 버전으로 편집을 먼저 열지 않는다', async () => {
+    const context = mockedUseCategoryContext();
+    const target = category({ isDefault: false, aggregateVersion: 3 });
+    const deleteCategory = jest.fn().mockResolvedValue(12);
+    const state = { ...context, categories: [target], activeCategories: [target], deleteCategory };
+    mockedUseCategoryContext.mockReturnValue(state);
+    const { rerender } = render(<CategorySettings />);
+    fireEvent.click(screen.getByRole('button', { name: /카테고리/ }));
+    fireEvent.click(screen.getByRole('button', { name: '식비 삭제' }));
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '삭제', exact: true })); });
+    expect(deleteCategory).toHaveBeenCalledWith('category-1', 3);
+    const add = screen.getByRole('button', { name: '새 카테고리 추가' });
+    expect(add).toBeDisabled();
+    mockedUseCategoryContext.mockReturnValue({ ...state, catalogVersion: 11 });
+    rerender(<CategorySettings />);
+    expect(add).toBeDisabled();
+    mockedUseCategoryContext.mockReturnValue({ ...state, catalogVersion: 12, categories: [], activeCategories: [] });
+    rerender(<CategorySettings />);
+    expect(add).toBeEnabled();
   });
 });
