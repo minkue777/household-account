@@ -206,6 +206,18 @@ test.describe('첫 홈 별도 서버 조회', () => {
     });
     const restarted = await context.newPage();
     await observeIndexedDbOpens(restarted, true);
+    await restarted.addInitScript(() => {
+      const phases: string[] = [];
+      Object.assign(window, { homeStartupFrames: phases });
+      const observeFrame = () => {
+        const loading = document.querySelector('[role="status"][aria-busy="true"]');
+        const complete = document.querySelector('.calendar-glass') && document.querySelectorAll('.balance-card-glass').length === 2;
+        const phase = complete ? 'home' : loading?.textContent === '로딩중...' ? 'loading' : 'gap';
+        if ((phases.length > 0 || phase === 'loading') && phases.at(-1) !== phase) phases.push(phase);
+        if (!complete) requestAnimationFrame(observeFrame);
+      };
+      requestAnimationFrame(observeFrame);
+    });
     let release!: () => void;
     const held = new Promise<void>(resolve => { release = resolve; });
     let heldBalanceResponses = 0;
@@ -227,8 +239,8 @@ test.describe('첫 홈 별도 서버 조회', () => {
       await expect.poll(() => heldBalanceResponses).toBeGreaterThan(0);
       await expect.poll(() => restarted.evaluate(() => ['ledger:ready', 'categories:ready'].every(phase =>
         performance.getEntriesByName(`household-account:startup:${phase}`).length === 1))).toBe(true);
-      await expect(restarted.getByRole('main')).toHaveAttribute('aria-busy', 'true');
-      await expect(restarted.getByRole('main')).toBeEmpty();
+      await expect(restarted.getByRole('status')).toHaveAttribute('aria-busy', 'true');
+      await expect(restarted.getByRole('status')).toHaveText('로딩중...');
       await expect(restarted.locator('.calendar-glass')).toHaveCount(0);
       await expect(restarted.locator('.balance-card-glass')).toHaveCount(0);
       expect(await restarted.evaluate(() => performance.getEntriesByName('household-account:startup:ledger:first-paint').length)).toBe(0);
@@ -243,6 +255,9 @@ test.describe('첫 홈 별도 서버 조회', () => {
       await expect(restarted.getByTestId(`calendar-day-${seoulDate(0, 1)}`)).toContainText('12,300');
       await expect(restarted.getByText('가계부를 불러오는 중입니다.', { exact: true })).toHaveCount(0);
       await expect.poll(() => restarted.evaluate(name => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(1);
+      const frames = await restarted.evaluate(() => (window as typeof window & { homeStartupFrames: string[] }).homeStartupFrames);
+      expect(frames, '인증 대기부터 첫 홈까지 빈 화면이나 다른 로딩 단계를 거치면 안 됩니다.').toEqual(['loading', 'home']);
+      await expect(restarted.getByText('로딩중...', { exact: true })).toHaveCount(0);
       const originalCalendar = await calendar.elementHandle();
       await writeFirestoreFixture(request, balancePath, {
         localCurrencyType: { stringValue: 'gyeonggi' }, balanceInWon: { integerValue: '0' },
@@ -253,7 +268,7 @@ test.describe('첫 홈 별도 서버 조회', () => {
         .filter(entry => entry.name.startsWith('household-account:startup:')).map(entry => [entry.name, entry.startTime])));
       expect(marks['household-account:startup:ledger:first-paint']).toBeGreaterThanOrEqual(marks['household-account:startup:local-currency:ready']);
       await testInfo.attach('home-initial-complete-display', { contentType: 'application/json',
-        body: Buffer.from(JSON.stringify({ heldBalanceResponses, marks }, null, 2)) });
+        body: Buffer.from(JSON.stringify({ heldBalanceResponses, marks, frames }, null, 2)) });
     } finally {
       release();
       await restarted.unrouteAll({ behavior: 'wait' });

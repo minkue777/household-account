@@ -10,6 +10,7 @@ import { Expense, Category, TransactionType } from '@/types/expense';
 import { useHomePreferences } from '@/features/home-preferences/homePreferences';
 import BalanceCards from '@/components/BalanceCards';
 import HomeHeader from '@/components/HomeHeader';
+import AppLoadingScreen from '@/components/AppLoadingScreen';
 import { deferHomeContent } from './deferredHomeContent';
 import type { SplitItem } from '@/lib/expenseService';
 import { getSeoulCalendarParts } from '@/lib/utils/date';
@@ -263,14 +264,13 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   };
 
   if (!homeVisible) {
+    if (!initialReadFailed) return <AppLoadingScreen />;
     return (
-      <main className="flex min-h-[60vh] items-center justify-center p-4" aria-busy={!initialReadFailed}>
-        {initialReadFailed && (
-          <div role="alert" className="text-center text-sm text-slate-600">
-            <p>가계부를 불러오지 못했습니다.</p>
-            <button onClick={() => window.location.reload()} className="mt-3 rounded-lg px-4 py-2 text-blue-600 hover:bg-blue-50">다시 시도</button>
-          </div>
-        )}
+      <main className="flex min-h-[60vh] items-center justify-center p-4">
+        <div role="alert" className="text-center text-sm text-slate-600">
+          <p>가계부를 불러오지 못했습니다.</p>
+          <button onClick={() => window.location.reload()} className="mt-3 rounded-lg px-4 py-2 text-blue-600 hover:bg-blue-50">다시 시도</button>
+        </div>
       </main>
     );
   }

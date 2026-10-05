@@ -3,6 +3,7 @@
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import AppLoadingScreen from './AppLoadingScreen';
 
 const HouseholdLogin = dynamic(() => import('./HouseholdLogin'));
 
@@ -17,11 +18,7 @@ export default function HouseholdGuard({ children }: { children: React.ReactNode
 
   // 로딩 중
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-slate-400">로딩중...</div>
-      </div>
-    );
+    return <AppLoadingScreen />;
   }
 
   // 인증되지 않음

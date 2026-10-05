@@ -24,6 +24,7 @@ let ledgerRead = {
   prefetchAdjacentPeriods,
 };
 let householdKey = 'household-1';
+let householdLoading = false;
 let preferencesRead = {
   configuration: { leftCard: 'monthlySpent', rightCard: 'monthlyRemainingBudget' } as HomeSummaryConfig,
   ready: true, error: false,
@@ -51,6 +52,8 @@ jest.mock('@/contexts/HouseholdContext', () => ({
       },
     },
     householdKey,
+    isLoading: householdLoading,
+    isAuthenticated: true,
     isSessionVerified: true,
   }),
 }));
@@ -113,6 +116,7 @@ jest.mock('@/components/search/SearchModal', () => ({
 }));
 
 import LedgerPage from '@/components/home/LedgerPage';
+import HouseholdGuard from '@/components/HouseholdGuard';
 
 describe('first home complete paint contract', () => {
   let frameCallbacks: FrameRequestCallback[];
@@ -136,6 +140,7 @@ describe('first home complete paint contract', () => {
       prefetchAdjacentPeriods,
     };
     householdKey = 'household-1';
+    householdLoading = false;
     preferencesRead = { configuration: { leftCard: 'monthlySpent', rightCard: 'monthlyRemainingBudget' }, ready: true, error: false };
     yearRead = { expenses: [], total: null, error: false };
     frameCallbacks = [];
@@ -263,8 +268,8 @@ describe('first home complete paint contract', () => {
       flushFrame(); flushFrame();
       expect(screen.queryByTestId('home-cards')).not.toBeInTheDocument();
       expect(screen.queryByTestId('home-calendar')).not.toBeInTheDocument();
-      expect(screen.getByRole('main')).toHaveAttribute('aria-busy', 'true');
-      expect(screen.getByRole('main')).toBeEmptyDOMElement();
+      expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true');
+      expect(screen.getByRole('status')).toHaveTextContent('로딩중...');
       expect(markWebFirstLedgerPaint).not.toHaveBeenCalled();
       expect(markWebFirstHomeCompletePaint).not.toHaveBeenCalled();
       prepareHome();
@@ -298,6 +303,23 @@ describe('first home complete paint contract', () => {
       expect(markWebFirstHomeCompletePaint).not.toHaveBeenCalled();
     },
   );
+
+  it('[LED-001] 인증 확인에서 홈 데이터 대기로 넘어가도 같은 로딩 화면을 유지한다', () => {
+    householdLoading = true;
+    const content = <HouseholdGuard><LedgerPage transactionType="expense" /></HouseholdGuard>;
+    const view = render(content);
+    const loadingMarkup = screen.getByRole('status').outerHTML;
+    expect(screen.getByRole('status')).toHaveTextContent('로딩중...');
+    householdLoading = false;
+    view.rerender(<HouseholdGuard><LedgerPage transactionType="expense" /></HouseholdGuard>);
+    expect(screen.getByRole('status').outerHTML).toBe(loadingMarkup);
+    expect(screen.queryByTestId('home-calendar')).not.toBeInTheDocument();
+    prepareHome();
+    view.rerender(<HouseholdGuard><LedgerPage transactionType="expense" /></HouseholdGuard>);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-calendar')).toBeVisible();
+    expect(screen.getByTestId('home-cards')).toBeVisible();
+  });
 
   it('[LED-001] 표시한 가구의 재조회·실패에는 화면을 유지하고 가구 전환에는 다시 기다린다', () => {
     prepareHome();
