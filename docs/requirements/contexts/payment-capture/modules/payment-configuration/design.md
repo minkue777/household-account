@@ -96,7 +96,7 @@ interface MerchantMappingResult {
 | `CreateMerchantRule` Command | Web 설정, 거래 편집 흐름 | `MerchantRuleInput` | 생성 규칙 또는 `Duplicate`·`PriorityConflict` | `paymentConfiguration:write` | exact token/non-exact priority claim과 규칙 원자 생성; envelope key로 재생 |
 | `UpdateMerchantRule` Command | Web 설정 | `ruleId`, 변경 값, `expectedVersion` | 갱신 규칙 또는 `Conflict`·`Duplicate`·`PriorityConflict` | 동일 | claim 교체·규칙 갱신 원자 수행 |
 | `DeleteMerchantRule` Command | Web 설정 | `ruleId`, `expectedVersion` | `Success<void>` | 동일 | 규칙과 claim 원자 삭제 |
-| `ReorderMerchantRules` Command | Web 설정 | non-exact matchType, 해당 유형의 활성·비활성 전체 ruleIds 순서·expectedVersions | 재정렬 규칙 목록 또는 `Conflict`·`RuleSetMismatch` | 동일 | 전체 집합 검증 후 priority claim·규칙을 한 transaction에서 재번호 |
+| `ReorderMerchantRules` Command | 구형 클라이언트 호환(현재 Web 호출 없음) | non-exact matchType, 해당 유형의 활성·비활성 전체 ruleIds 순서·expectedVersions | 재정렬 규칙 목록 또는 `Conflict`·`RuleSetMismatch` | 동일 | 전체 집합 검증 후 priority claim·규칙을 한 transaction에서 재번호 |
 | `ListMerchantRules` Query | Web 설정 | `householdId`, 선택 active filter | 결정적 표시용 규칙 목록 | `paymentConfiguration:read` | match type 범위 순서 후 non-exact priority 내림차순, exact normalized keyword, ruleId |
 | `ResolveMerchantMapping` Query | Payment Intake | 원 가맹점, 선택 원 memo | `Matched(mapping)`·`Unmatched`·`ContractFailure` | 내부 `paymentCapture:resolve` | 한 repository snapshot에 순수 `MerchantRuleSelectionPolicy` 적용; canonical 동률 불가, legacy 충돌 임의 선택 금지 |
 | `RemapMerchantRuleCategoryReferences` Process Command v1 | Category Archive Process | fromCategoryId, toDefaultCategoryId, processId, cursor, limit | `Success<CategoryReferenceRemapPage>`, `Conflict`, `RetryableFailure` | `category-reference-remap` SystemActor | 규칙 page와 receipt 한 UoW; `processId:merchant-rules:cursor`로 멱등 |
@@ -165,7 +165,9 @@ Resolve는 조회 실패와 불일치·규칙 데이터 충돌을 구분합니�
 
 ### 5.3 가맹점 규칙 변경 Use Case
 
-Web 설정의 수정·삭제·우선순위 버튼은 좁은 화면과 긴 OR 키워드에서도 카드 안에 보여야 합니다. 저장 중 입력을 잠그는 `fieldset`은 `min-width: 0`으로 부모 폭에 맞추며, 기존 텍스트 말줄임과 버튼의 고정 폭을 유지합니다. 내용 최소 폭으로 전체 묶음이 늘어나 외부 카드의 `overflow: hidden`에 버튼이 잘리지 않게 합니다. `MER-003/004`의 실제 브라우저 검사는 393px 화면에서 모든 버튼의 완전한 노출과 수정·재조회·수집 반영·삭제를 함께 검증합니다.
+Web 설정 목록에는 수정·삭제 버튼 두 개만 제공합니다. 순서 변경 버튼·모드·클라이언트 명령 호출은 제거하며, 조회도 규칙 문서만 구독합니다. 재정렬에만 필요했던 collection version 구독·합성·대기는 제거하고 수정·삭제의 문서 version 검증과 구독 실패·종료 후 늦은 결과 차단을 유지합니다. 서버 내부의 기존 매칭 우선순위와 구형 클라이언트용 재정렬 프로토콜은 이번 화면 기능 제거로 변경하지 않습니다.
+
+수정·삭제 버튼은 좁은 화면과 긴 OR 키워드에서도 카드 안에 보여야 합니다. 저장 중 입력을 잠그는 `fieldset`은 `min-width: 0`으로 부모 폭에 맞춥니다. `MER-003/004`의 실제 브라우저 검사는 360px·393px 화면에서 버튼의 완전한 노출, 일반 가맹점명·매핑 설명의 말줄임 없는 표시, 긴 OR 키워드 공존 및 수정·재조회·수집 반영·삭제를 함께 검증합니다. 실제 스크린샷도 남겨 버튼 외의 내용 가독성을 확인합니다.
 
 1. Actor와 가구 쓰기 권한을 검증합니다.
 2. keyword·match type·mapping을 정규화하고 exact의 priority 입력을 거부하며 non-exact의 양의 정수 priority를 필수 검증합니다.

@@ -1,8 +1,6 @@
 import {
   collection,
-  doc,
   onSnapshot,
-  onDocumentSnapshot,
   db,
   type QueryDocumentSnapshot,
 } from '@/platform/read-model/firestoreReadModel';
@@ -64,11 +62,6 @@ export async function deleteMerchantRule(id: string, expectedVersion: number): P
   await paymentConfigurationCommands.deleteMerchantRule(requireHouseholdId(), id, expectedVersion);
 }
 
-export async function reorderMerchantRules(householdId: string, matchType: Exclude<MatchType, 'exact'>, rules: readonly MerchantRule[]): Promise<void> {
-  const { paymentConfigurationCommands } = await import('@/features/payment-configuration/application/paymentConfigurationCommands');
-  await paymentConfigurationCommands.reorderMerchantRules(householdId, matchType, rules.map((rule) => rule.id), rules[0]?.collectionVersion ?? 0);
-}
-
 /**
  * canonical 결제 설정 문서를 화면 모델로 변환합니다.
  */
@@ -113,25 +106,14 @@ export function subscribeToRules(
     active = false;
     onError(error);
   };
-  let latestRules: MerchantRule[] | undefined;
-  let versions: Record<string, number> | undefined;
-  const publish = () => {
-    if (active && latestRules !== undefined && versions !== undefined) callback(latestRules.map((rule) => ({ ...rule, collectionVersion: versions![`${householdId}:${rule.matchType}`] ?? 0 })));
-  };
-  const stopMeta = onDocumentSnapshot(doc(db, 'households', householdId, 'paymentConfigurationMeta', 'merchant-rules'), {}, (snapshot) => {
-    versions = snapshot.data()?.collectionVersions ?? {};
-    publish();
-  }, fail);
   let unsubscribe: () => void;
   try { unsubscribe = onSnapshot(
     q,
     {}, (snapshot) => {
-      const rules: MerchantRule[] = snapshot.docs.map(mapDocToRule);
-      latestRules = rules;
-      publish();
+      if (active) callback(snapshot.docs.map(mapDocToRule));
     },
     fail
-  ); } catch (error) { stopMeta(); fail(error); return () => {}; }
+  ); } catch (error) { fail(error); return () => {}; }
 
-  return () => { active = false; unsubscribe(); stopMeta(); };
+  return () => { active = false; unsubscribe(); };
 }

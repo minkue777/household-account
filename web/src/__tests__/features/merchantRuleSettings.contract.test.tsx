@@ -1,18 +1,16 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import type { MerchantRule } from '@/types/merchant';
-const mockReorder = jest.fn();
 const mockUpdate = jest.fn();
 const mockAdd = jest.fn();
 const mockDelete = jest.fn();
 const mockRules: MerchantRule[] = [
-  { id: 'a', householdId: 'house', merchantKeyword: 'A', matchType: 'contains', priority: 30, mapping: { merchant: '치환 이름', memo: '치환 메모', category: 'food' }, version: 1, collectionVersion: 4 },
-  { id: 'b', householdId: 'house', merchantKeyword: 'B', matchType: 'contains', priority: 20, mapping: {}, collectionVersion: 4 },
-  { id: 'inactive', householdId: 'house', merchantKeyword: 'C', matchType: 'contains', priority: 10, mapping: {}, collectionVersion: 4, isActive: false },
+  { id: 'a', householdId: 'house', merchantKeyword: 'A', matchType: 'contains', priority: 30, mapping: { merchant: '치환 이름', memo: '치환 메모', category: 'food' }, version: 1 },
+  { id: 'b', householdId: 'house', merchantKeyword: 'B', matchType: 'contains', priority: 20, mapping: {} },
+  { id: 'inactive', householdId: 'house', merchantKeyword: 'C', matchType: 'contains', priority: 10, mapping: {}, isActive: false },
 ];
 jest.mock('@/lib/merchantRuleService', () => ({
   subscribeToRules: (_household: string, callback: (rules: MerchantRule[]) => void) => { callback(mockRules); return jest.fn(); },
-  reorderMerchantRules: (...args: unknown[]) => mockReorder(...args),
   updateMerchantRuleV2: (...args: unknown[]) => mockUpdate(...args),
   addMerchantRuleV2: (...args: unknown[]) => mockAdd(...args),
   deleteMerchantRule: (...args: unknown[]) => mockDelete(...args),
@@ -22,9 +20,8 @@ jest.mock('@/contexts/HouseholdContext', () => ({ useHousehold: () => ({ househo
 jest.mock('@/contexts/CategoryContext', () => ({ useCategoryContext: () => ({ activeCategories: [{ key: 'food', label: '식비', color: '#000000' }], getCategoryLabel: (id: string) => id, getCategoryColor: () => '#000000' }) }));
 import MerchantRuleSettings from '@/components/settings/MerchantRuleSettings';
 
-describe('[MER-004] rule reorder UI', () => {
+describe('[MER-003][MER-004] 가맹점 규칙 설정', () => {
   beforeEach(() => {
-    mockReorder.mockReset();
     mockAdd.mockReset();
     mockDelete.mockReset();
     mockUpdate.mockReset().mockResolvedValue(undefined);
@@ -41,14 +38,12 @@ describe('[MER-004] rule reorder UI', () => {
       merchantKeyword: 'A', matchType: 'contains', mapping: { merchant: '', memo: '', category: 'food' },
     }, 1));
   });
-  test('moves one rule with all same-type rules including inactive ones and reports a stale failure', async () => {
-    mockReorder.mockRejectedValue(new Error('VERSION_MISMATCH'));
+  test('목록에는 수정·삭제만 제공하고 순서 변경 동작은 제공하지 않는다', () => {
     render(<MerchantRuleSettings />);
     fireEvent.click(screen.getByRole('button', { name: /가맹점 규칙/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'B 우선순위 올리기' }));
-    await waitFor(() => expect(mockReorder).toHaveBeenCalledWith('house', 'contains', [mockRules[1], mockRules[0], mockRules[2]]));
-    expect(mockReorder.mock.calls[0][2].every((rule: MerchantRule) => rule.collectionVersion === 4)).toBe(true);
-    expect(await screen.findByRole('alert')).toHaveTextContent('VERSION_MISMATCH');
+    expect(screen.queryByRole('button', { name: /우선순위|순서 변경/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /규칙 수정$/ })).toHaveLength(3);
+    expect(screen.getAllByRole('button', { name: /규칙 삭제$/ })).toHaveLength(3);
   });
   test('중복 생성과 전송 실패 후에도 같은 초안으로 재시도한다', async () => {
     mockAdd.mockResolvedValueOnce('').mockRejectedValueOnce(new Error('연결 실패')).mockResolvedValueOnce('created');

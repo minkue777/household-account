@@ -18,3 +18,15 @@
 ## 배포 범위
 
 Web 변경으로 Vercel Git 자동배포만 수행합니다. Firebase·APK 배포와 운영 데이터 변경은 없습니다. 전체 CI는 최종 커밋으로 후속 확인합니다.
+
+## 순서 변경 기능 제거
+
+첫 수정은 버튼의 잘림만 해결했습니다. 이후 사용자 화면에서 화살표 두 개가 가맹점명·설명 폭을 과하게 차지하는 문제가 확인됐습니다. 버튼의 완전 노출만으로 내용 가독성까지 보장했다고 판단한 검증 누락입니다. 사용자 요청에 따라 목록은 원래의 수정·삭제 두 버튼으로 복원하고 순서 변경 기능을 제거합니다. 별도 순서 변경 모드를 추가하지 않습니다.
+
+화면의 이동 핸들러·진행/오류 상태, 서비스·Application의 재정렬 호출과 조회 모델의 collection version을 제거합니다. 그 version을 얻기 위한 metadata 구독과 두 구독 결과를 합쳐 기다리는 로직도 제거합니다. 규칙 문서의 version·비활성 값·mapping 변환, 구독 오류와 종료 후 늦은 응답 차단은 유지합니다. 기존 서버의 자동 분류·priority 값과 구형 클라이언트 프로토콜은 유지하므로 Firebase·APK 재배포와 운영 데이터 변경은 없습니다.
+
+삭제한 기능의 UI 검사는 수정·삭제만 제공하는 계약으로 바꾸고 테스트 파일을 `merchantRuleSettings.contract.test.tsx`로 정리했습니다. 브라우저 검사는 360px·393px에서 `지에스더프레시`와 매핑 설명이 말줄임 없이 읽히는지 확인하고 두 화면의 스크린샷을 남깁니다. 긴 OR 키워드, 실제 수정·재조회·삭제·후속 수집 결과와 저장된 priority 보존 검사도 유지합니다.
+
+관련 Jest 2개 파일 7개, 문서 링크·추적성 13개, catalog/E2E 연결 검사가 통과했습니다. Production build와 실제 Auth/Functions/Firestore Emulator를 사용한 Chromium 시나리오도 1 passed(30.7초)이며, 두 화면의 스크린샷을 직접 확인했습니다. 실행 코드 4개 파일은 순감 46줄입니다. 로그는 `TEMP/household-merchant-actions-{unit,e2e,docs}-20261005.log`입니다. 로컬 Emulator는 정상 종료했습니다.
+
+직전 `7108b151`의 [CI 37314292723](https://github.com/minkue777/household-account/actions/runs/37314292723)는 네 검사 성공, web-e2e 101 passed/1 failed와 요약 실패입니다. 가맹점·정기지출 검사는 통과했고, 실패한 `notifications.spec.ts:156`의 PUSH-012는 업무 검사 전 가구 준비 중 Auth Emulator의 `accounts:signInWithPassword` POST가 `socket hang up`으로 끊겼습니다(`emulator.ts:191`). 관측된 실패 경계는 테스트 인증 환경이며 연결이 끊긴 내부 원인은 미확정입니다. 이 현상을 제품 결함 수정으로 보고하거나 재시도·시간 완화로 덮지 않습니다. 로그는 `TEMP/household-merchant-mobile-ci-37314292723.log`에 보존하고 이번 제품 변경의 전체 CI에서 같은 검사를 후속 확인합니다.

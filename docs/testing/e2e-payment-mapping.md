@@ -28,7 +28,7 @@
 | CARD-003 | 실제 pointer 길게 누르기 후 드래그·새로고침 순서 유지, 정확한 `cardIds` payload의 불완전 전체 집합을 `INCOMPLETE_CARD_SET`으로 거절 | 전체 집합 stale version·transaction 실패 원자성은 실제 Store 통합입니다. |
 | MER-001/003/005, CAT-004 | 사용자 카테고리 안정 ID, UI 쉼표 OR·대소문자 무시, 가맹점·메모 mapping, `이 가맹점 기억하기`로 현재 거래를 수정해도 기존 exact는 재사용·보존, 규칙 없는 다른 가맹점에서는 새 exact 생성 후 후속 수집 분류 | 실제 Kotlin Quick Edit의 카테고리 표시는 Android 계측 테스트입니다. 이 Web 테스트는 서버 snapshot과 Web 편집 표시를 검증합니다. |
 | MER-001/002/007 | exact/startsWith/endsWith/contains가 함께 맞으면 좁은 exact 선택, 중복 exact token 거절, archive 후 가맹점 mapping 유지·현재 기본 category로 변경 | 모든 비활성 규칙 page remap·재개는 실제 archive Application/Store 통합입니다. |
-| MER-004 | 동일 contains 유형 두 규칙의 UI 우선순위 이동→실제 priority 순서와 수집 승자 변경, 규칙 수정·삭제→후속 수집 결과, 새로고침 보존 | priority claim 충돌·잘못된 전체 집합·다른 유형 ID는 실제 runtime Command/Store 통합으로 검증합니다. |
+| MER-003/004 | 360px·393px 목록에 수정·삭제만 표시하고 일반 가맹점명·매핑 설명이 잘리지 않는지 검사합니다. 실제 규칙 수정·삭제→후속 수집 결과, 기존 priority 보존과 새로고침 반영을 확인합니다. | 사용자 순서 변경은 제거했습니다. 기존 매칭·priority claim 충돌과 구형 재정렬 프로토콜은 실제 runtime Command/Store 통합에서 검증합니다. |
 | MER-006 | 과거 `exactMatch`/`category` 및 `active=false` 문서를 fixture로 준비하고 기존 projection을 최초 수집 전에 무효화합니다. 실제 재구축 결과의 exact/contains/기본 category 및 비활성 보존을 검증하고 legacy 문서를 임의 재작성하지 않는지 확인합니다. | malformed legacy의 typed ContractFailure 세부 값은 실제 adapter/policy 테스트를 유지합니다. |
 | IOS-002 | 실제 HTTP 객체 우선 text와 중첩 배열을 정규화하여 거래 생성, 알 수 없는 객체·불리언·숫자 입력 거절 | iPhone 단축어 앱의 실제 변수 선택·자동화 권한 설정은 실기기 경계입니다. |
 | IOS-001/003/004/006/007/009/011/014 | 실제 발급 credential로 동시 HTTP 승인→거래 1개, 중복 재전송 결과, 생성자·카드 증거, 진단 원문은 진단 저장소에만 남고 credential 비노출, `no-store` 응답 | 진단의 실제 TTL 삭제 집행은 Firebase TTL 정책/운영 시간 경계입니다. |

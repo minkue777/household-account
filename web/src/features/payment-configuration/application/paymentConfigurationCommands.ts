@@ -8,9 +8,6 @@ function isDuplicate(error: unknown): boolean {
 }
 
 export const paymentConfigurationCommands = {
-  async reorderMerchantRules(householdId: string, matchType: 'startsWith' | 'endsWith' | 'contains', orderedRuleIds: string[], expectedCollectionVersion: number): Promise<void> {
-    await getHouseholdCommandClient().execute('payment-configuration.reorder-merchant-rules.v1', { matchType, orderedRuleIds, expectedCollectionVersion }, { householdId });
-  },
   async createMerchantRule(householdId: string, rule: CreateMerchantRuleInput): Promise<string> {
     try {
       const result = await getHouseholdCommandClient().execute(

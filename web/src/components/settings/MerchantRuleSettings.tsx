@@ -11,7 +11,6 @@ import {
   updateMerchantRuleV2,
   deleteMerchantRule,
   addMerchantRuleV2,
-  reorderMerchantRules,
   MATCH_TYPE_LABELS,
 } from '@/lib/merchantRuleService';
 import { useHousehold } from '@/contexts/HouseholdContext';
@@ -43,8 +42,6 @@ function MerchantRules({ householdKey }: { householdKey: string | null }) {
   const [editingRuleVersion, setEditingRuleVersion] = useState(1);
   const [showAddRuleForm, setShowAddRuleForm] = useState(false);
   const [pendingDeleteRule, setPendingDeleteRule] = useState<MerchantRule | null>(null);
-  const [ruleError, setRuleError] = useState<string | null>(null);
-  const [reordering, setReordering] = useState(false);
   const ruleFormRef = useRef<HTMLDivElement>(null);
 
   // 규칙 폼 상태 (추가/편집 공용)
@@ -140,22 +137,6 @@ function MerchantRules({ householdKey }: { householdKey: string | null }) {
       () => setPendingDeleteRule(null));
   };
 
-  const moveRule = async (rule: MerchantRule, offset: -1 | 1) => {
-    if (!householdKey || rule.matchType === 'exact' || reordering) return;
-    const matchType = rule.matchType ?? (rule.exactMatch ? 'exact' : 'contains');
-    const ordered = merchantRules.filter((item) => (item.matchType ?? (item.exactMatch ? 'exact' : 'contains')) === matchType)
-      .sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0));
-    const index = ordered.findIndex((item) => item.id === rule.id);
-    const next = index + offset;
-    if (index < 0 || next < 0 || next >= ordered.length) return;
-    [ordered[index], ordered[next]] = [ordered[next], ordered[index]];
-    setReordering(true);
-    setRuleError(null);
-    try { await reorderMerchantRules(householdKey, matchType, ordered); }
-    catch (error) { setRuleError(error instanceof Error ? error.message : '규칙 순서를 저장하지 못했습니다. 목록을 확인해 주세요.'); }
-    finally { setReordering(false); }
-  };
-
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
       <button
@@ -181,7 +162,6 @@ function MerchantRules({ householdKey }: { householdKey: string | null }) {
 
       {isRulesOpen && (
         <div className="border-t border-slate-100">
-          {ruleError && <p role="alert" className="p-3 text-sm text-red-600">{ruleError}</p>}
           {readError && <p role="alert" className="p-3 text-sm text-red-600">규칙을 불러오지 못했습니다. <button onClick={() => setReadEpoch(value => value + 1)}>다시 시도</button></p>}
           {mutation.error && !pendingDeleteRule && <p role="alert" className="p-3 text-sm text-red-600">{mutation.error}</p>}
           <fieldset disabled={mutation.pending} className="min-w-0">
@@ -362,10 +342,6 @@ function MerchantRules({ householdKey }: { householdKey: string | null }) {
                       >
                         <Edit2 className="h-5 w-5" />
                       </button>
-                      {(rule.matchType ?? (rule.exactMatch ? 'exact' : 'contains')) !== 'exact' && <>
-                        <button disabled={reordering} onClick={() => void moveRule(rule, -1)} aria-label={`${rule.merchantKeyword} 우선순위 올리기`} className="p-2">↑</button>
-                        <button disabled={reordering} onClick={() => void moveRule(rule, 1)} aria-label={`${rule.merchantKeyword} 우선순위 내리기`} className="p-2">↓</button>
-                      </>}
                       <button
                         onClick={() => { mutation.clearError(); setPendingDeleteRule(rule); }}
                         className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
