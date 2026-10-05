@@ -459,12 +459,6 @@ describe("가구 영구 purge 내부 system process 공개 계약", () => {
         (digest) => digest === undefined,
       ),
     ).toBe(true);
-    await expect(
-      subject.resolveSignedInUserAfterPurge("principal-a"),
-    ).resolves.toEqual({
-      kind: "first-visit-required",
-      choices: ["create", "join"],
-    });
     expect(
       (await subject.publishedEvents()).filter(
         ({ eventType }) => eventType === "HouseholdPurged.v1",

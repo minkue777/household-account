@@ -11,8 +11,8 @@ import {
 } from "../../support/legacy-membership-migration-fixture";
 
 /**
- * Web legacy 후보 캡처와 Access의 일회 Membership claim을 함께 검증합니다.
- * fixture와 snapshot은 테스트 driver이며 localStorage/DB 물리 경로를 계약화하지 않습니다.
+ * 서버의 일회 Membership claim과 후보 해석 정책을 검증합니다.
+ * 실제 Web 저장소 삭제와 세션 전환은 HouseholdProvider 검사에서 검증합니다.
  */
 export interface LegacyMembershipMigrationSubject
   extends LegacyMembershipMigrationInputPort {
@@ -51,7 +51,6 @@ const fixture = (
   households: [legacyHousehold],
   members: [legacyMember],
   memberships: [],
-  businessDataDigest: "finance-and-portfolio-data-v1",
   repositoryAvailability: "available",
   ...overrides,
 });
@@ -219,7 +218,6 @@ describe("legacy localStorage 일회 Membership 전환 공개 계약", () => {
     }
 
     const state = await subject.snapshot();
-    expect(state.businessDataDigest).toBe("finance-and-portfolio-data-v1");
     expect(state.members).toContainEqual({
       ...legacyMember,
       linkedPrincipalUid: "google-migrating",
@@ -231,11 +229,6 @@ describe("legacy localStorage 일회 Membership 전환 공개 계약", () => {
         lifecycleState: "active",
       }),
     ]);
-    expect(state.currentSession).toEqual(result.session);
-    expect(state.webLocalStorage).not.toHaveProperty("householdKey");
-    expect(state.webLocalStorage).not.toHaveProperty("currentMemberId");
-    expect(state.webLocalStorage).not.toHaveProperty("currentMemberName");
-    expect(state.webLocalStorage).toHaveProperty("unrelatedPreference", "keep-me");
   });
 
   it("[T-HH-002][HH-002] 같은 UID·Member 재시도는 같은 Membership을 멱등 반환한다", async () => {
@@ -304,7 +297,6 @@ describe("legacy localStorage 일회 Membership 전환 공개 계약", () => {
     });
     expect(afterConflict.members).toEqual(beforeConflict.members);
     expect(afterConflict.memberships).toEqual(beforeConflict.memberships);
-    expect(afterConflict.businessDataDigest).toBe(beforeConflict.businessDataDigest);
     expect(
       afterConflict.memberships.filter(
         (membership) => membership.principalUid === "google-second-claimer",
@@ -407,7 +399,6 @@ describe("legacy localStorage 일회 Membership 전환 공개 계약", () => {
         linkedPrincipalUid: "google-recovered",
       }),
     );
-    expect(state.businessDataDigest).toBe(before.businessDataDigest);
     expect(state.auditEvents).toEqual([
       {
         eventType: "LegacyMembershipClaimRepaired.v1",
@@ -465,7 +456,6 @@ describe("legacy localStorage 일회 Membership 전환 공개 계약", () => {
     expect(after.members).toEqual(before.members);
     expect(after.memberships).toEqual(before.memberships);
     expect(after.webLocalStorage).toEqual(before.webLocalStorage);
-    expect(after.businessDataDigest).toBe(before.businessDataDigest);
   });
 
   it("[T-HH-002][HH-001/HH-002] 존재하지 않는 memberId는 이름으로 추정하지 않고 첫 방문으로 보낸다", async () => {

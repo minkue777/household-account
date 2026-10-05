@@ -14,10 +14,6 @@ export type MemberLifecycleFixtureKind =
   | "last-member"
   | "removed-member";
 
-export type JoinOtherHouseholdResult =
-  | { kind: "success"; householdId: string; memberId: string }
-  | { kind: "conflict"; code: string };
-
 export interface MemberRemovalSnapshot {
   household: MemberLifecycleAggregate["household"];
   members: readonly Omit<
@@ -32,11 +28,7 @@ export interface MemberRemovalSnapshot {
 
 export interface MemberRemovalRestorationFixtureSubject
   extends MemberLifecycleInputPort {
-  joinAnotherHousehold(
-    principalUid: string,
-    householdId: string,
-    idempotencyKey: string,
-  ): Promise<JoinOtherHouseholdResult>;
+  seedOtherHouseholdClaim(principalUid: string, householdId: string): void;
   snapshot(): Promise<MemberRemovalSnapshot>;
   publishedEvents(): Promise<readonly HouseholdMemberLifecycleEvent[]>;
 }
@@ -172,34 +164,10 @@ class FixtureMemberLifecycleUnitOfWork
     return transaction;
   }
 
-  claimAnotherHousehold(
-    principalUid: string,
-    householdId: string,
-  ): Promise<JoinOtherHouseholdResult> {
-    return this.transact<JoinOtherHouseholdResult>((state) => {
-      if (
-        state.principalClaims.some(
-          (claim) => claim.principalUid === principalUid,
-        )
-      ) {
-        return {
-          state,
-          value: { kind: "conflict", code: "PRINCIPAL_ALREADY_JOINED" },
-        };
-      }
-      const memberId = `member-${householdId}-${principalUid}`;
-      return {
-        state: {
-          ...state,
-          principalClaims: [
-            ...state.principalClaims,
-            { principalUid, householdId, memberId },
-          ],
-        },
-        value: { kind: "success", householdId, memberId },
-      };
-    });
+  seedOtherHouseholdClaim(principalUid: string, householdId: string): void {
+    this.stateValue = { ...this.stateValue, principalClaims: [...this.stateValue.principalClaims, { principalUid, householdId, memberId: "other-member" }] };
   }
+
 }
 
 class MemberRemovalRestorationFixtureDriver
@@ -220,12 +188,8 @@ class MemberRemovalRestorationFixtureDriver
 
 
 
-  joinAnotherHousehold(
-    principalUid: string,
-    householdId: string,
-    _idempotencyKey: string,
-  ): Promise<JoinOtherHouseholdResult> {
-    return this.unitOfWork.claimAnotherHousehold(principalUid, householdId);
+  seedOtherHouseholdClaim(principalUid: string, householdId: string): void {
+    this.unitOfWork.seedOtherHouseholdClaim(principalUid, householdId);
   }
 
   async snapshot(): Promise<MemberRemovalSnapshot> {

@@ -198,12 +198,35 @@ describe('Android 가계부 server-first 복원 계약', () => {
     mockOnAuthChange.mockImplementation(() => jest.fn());
     mockRefreshAndroidWebAuth.mockImplementation(async (user) => ({ user }));
     mockRenameHouseholdMember.mockResolvedValue(undefined);
-    jest.mocked(captureLegacySessionCandidate).mockReturnValue(undefined);
+    jest.mocked(captureLegacySessionCandidate).mockReset().mockReturnValue(undefined);
+    jest.mocked(clearLegacySessionCandidate).mockReset();
+    window.localStorage.clear();
     mockRemovePwaFidEndpoint.mockReset();
   });
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  it.each([false, true])('[HH-003] 실제 이전 저장소 후보는 claim 실패=%s 동안 보존하고 성공 뒤에만 세션을 전환한다', async failure => {
+    const actual = jest.requireActual<typeof import('@/features/access-household/application/legacySessionCandidate')>('@/features/access-household/application/legacySessionCandidate');
+    jest.mocked(captureLegacySessionCandidate).mockImplementation(actual.captureLegacySessionCandidate);
+    jest.mocked(clearLegacySessionCandidate).mockImplementation(actual.clearLegacySessionCandidate);
+    for (const [key, value] of Object.entries({ householdKey: 'old', currentMemberId: 'legacy', currentMemberName: '기존', unrelatedPreference: 'keep' })) window.localStorage.setItem(key, value);
+    mockOnAuthChange.mockImplementation(listener => { listener({ uid: 'uid-new' } as User); return jest.fn(); });
+    mockResolveSignedInUser.mockResolvedValueOnce({ kind: 'first-visit-required', choices: ['create', 'join'] }).mockResolvedValue(cachedResolution);
+    if (failure) jest.mocked(householdCommands.claimLegacyMembership).mockRejectedValueOnce(new Error('network unavailable'));
+    else jest.mocked(householdCommands.claimLegacyMembership).mockResolvedValueOnce({ householdId: 'household-1', memberId: 'member-1' });
+    render(<HouseholdProvider><Probe /></HouseholdProvider>);
+    await screen.findByText('legacy-confirmation:none:member:no-member:unverified');
+    expect(actual.captureLegacySessionCandidate()).toEqual({ legacyHouseholdId: 'old', legacyMemberId: 'legacy', legacyMemberName: '기존' });
+    fireEvent.click(screen.getByRole('button', { name: 'claim' }));
+    await screen.findByText(failure ? 'legacy-confirmation:none:member:no-member:unverified' : 'ready:저장된 가계부:member:member-1:verified');
+    expect(householdCommands.claimLegacyMembership).toHaveBeenCalledWith({ legacyHouseholdId: 'old', legacyMemberId: 'legacy', legacyMemberName: '기존' });
+    expect(window.localStorage.getItem('householdKey')).toBe(failure ? 'old' : null);
+    expect(window.localStorage.getItem('currentMemberId')).toBe(failure ? 'legacy' : null);
+    expect(window.localStorage.getItem('currentMemberName')).toBe(failure ? '기존' : null);
+    expect(window.localStorage.getItem('unrelatedPreference')).toBe('keep');
   });
 
   it('[HH-007] 생성 graph를 유지하고 실패한 초기화만 다시 시도하여 서버 설정으로 복구한다', async () => {

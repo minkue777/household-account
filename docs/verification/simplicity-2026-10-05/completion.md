@@ -16,7 +16,7 @@
 | [FIN-06 · P3-조건부 · 지역화폐 Canonical/legacy 이중 저장의 종료 계획을 명시합니다](finance.md) | 미착수 | |
 | [FIN-07 · P3-조건부 · 배당 조회에서 이관 계획을 매번 재해석하는 복구 경로를 1회 자료 정비로 옮깁니다](finance.md) | 미착수 | |
 | [PT-01 — 구조 검사로 복잡한 배포/분해 모형을 고정합니다 (높음)](platform-tests.md) | 구현·관련 검사 완료 | [한 번의 후보 준비](../../operations/build-preparation-simplicity-2026-10-05.md) |
-| [PT-02 — fixture가 제품 경계의 행동을 직접 대신합니다 (높음)](platform-tests.md) | 미착수 | |
+| [PT-02 — fixture가 제품 경계의 행동을 직접 대신합니다 (높음)](platform-tests.md) | 실제 Web·SDK 검사로 대체 완료 | [가구 접근 검사 경계](../../operations/access-test-boundaries-2026-10-05.md) |
 | [PT-03 — 상수로 저장된 자료를 비교하는 보존 assertion은 삭제 가능합니다 (높음)](platform-tests.md) | 구현·실제 SDK 검사 완료 | [명시적 동작과 실제 보존 검사](../../operations/access-command-simplicity-2026-10-05.md) |
 | [PT-04 — 413줄 Firestore 대역의 SDK 의미 차이가 버그를 숨깁니다 (높음)](platform-tests.md) | SDK 차이 교정·범위 제한 | [실제 SDK 비교 및 동시성 범위 분리](../../operations/access-simplicity-2026-10-05.md) |
 | [PT-05 — RenameSelf 중복 이름 계약은 fixture에서만 충족됩니다 (높음)](platform-tests.md) | 구현·관련 검사 완료 | [실제 SDK 재현 및 수정](../../operations/access-simplicity-2026-10-05.md) |

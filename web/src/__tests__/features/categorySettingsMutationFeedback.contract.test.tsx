@@ -298,7 +298,7 @@ describe('CategorySettings mutation feedback contract', () => {
     const { rerender } = render(<CategorySettings />);
     fireEvent.click(screen.getByRole('button', { name: /카테고리/ }));
     fireEvent.click(screen.getByRole('button', { name: '식비 삭제' }));
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '삭제', exact: true })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '삭제' })); });
     expect(deleteCategory).toHaveBeenCalledWith('category-1', 3);
     const add = screen.getByRole('button', { name: '새 카테고리 추가' });
     expect(add).toBeDisabled();

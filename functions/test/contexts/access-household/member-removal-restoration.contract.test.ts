@@ -5,21 +5,16 @@ import type {
 } from "../../../src/contexts/access/public";
 import {
   createMemberRemovalRestorationFixtureSubject,
-  type JoinOtherHouseholdResult,
   type MemberLifecycleFixtureKind,
   type MemberRemovalSnapshot,
 } from "../../support/member-removal-restoration-fixture";
 
 /**
  * Access의 관리자 Member 제거·복구 경계입니다.
- * Notifications endpoint와 타 Context 데이터는 최종 지문으로만 관찰합니다.
+ * 다른 가구 가입과 복구의 경합은 실제 Firestore 통합 검사에서 실행합니다.
  */
 export interface MemberRemovalRestorationSubject extends MemberLifecycleInputPort {
-  joinAnotherHousehold(
-    principalUid: string,
-    householdId: string,
-    idempotencyKey: string,
-  ): Promise<JoinOtherHouseholdResult>;
+  seedOtherHouseholdClaim(principalUid: string, householdId: string): void;
   snapshot(): Promise<MemberRemovalSnapshot>;
   publishedEvents(): ReturnType<
     ReturnType<typeof createMemberRemovalRestorationFixtureSubject>["publishedEvents"]
@@ -235,17 +230,7 @@ describe("관리자 가구원 제거·복구 공개 계약", () => {
 
   it("[T-HH-007][HH-012/DEC-038] 제거 뒤 UID가 다른 가구에 가입했다면 복구는 claim을 덮어쓰지 않고 충돌한다", async () => {
     const subject = createSubject("removed-member");
-    await expect(
-      subject.joinAnotherHousehold(
-        "uid-removed",
-        "house-2",
-        "join-after-removal",
-      ),
-    ).resolves.toEqual({
-      kind: "success",
-      householdId: "house-2",
-      memberId: expect.any(String),
-    });
+    subject.seedOtherHouseholdClaim("uid-removed", "house-2");
     const beforeRestore = await subject.snapshot();
 
     const result = await subject.restoreRemovedHouseholdMember(administrator, {
@@ -263,42 +248,6 @@ describe("관리자 가구원 제거·복구 공개 계약", () => {
     expect(await subject.publishedEvents()).toEqual([]);
   });
 
-  it("[T-HH-007][HH-012/DEC-038] removed UID의 복구와 다른 가구 가입이 경합하면 전역 claim 하나만 성공한다", async () => {
-    const subject = createSubject("removed-member");
-
-    const [restored, joined] = await Promise.all([
-      subject.restoreRemovedHouseholdMember(administrator, {
-        householdId: "house-1",
-        memberId: "member-removed",
-        expectedMembershipVersion: 4,
-        idempotencyKey: "concurrent-restore",
-      }),
-      subject.joinAnotherHousehold(
-        "uid-removed",
-        "house-2",
-        "concurrent-other-join",
-      ),
-    ]);
-
-    expect(
-      [restored, joined].filter(({ kind }) => kind === "success"),
-    ).toHaveLength(1);
-    expect(
-      [restored, joined].filter(({ kind }) => kind === "conflict"),
-    ).toHaveLength(1);
-    const state = await subject.snapshot();
-    expect(
-      state.principalClaims.filter(
-        ({ principalUid }) => principalUid === "uid-removed",
-      ),
-    ).toHaveLength(1);
-    const claim = state.principalClaims.find(
-      ({ principalUid }) => principalUid === "uid-removed",
-    );
-    expect(claim?.householdId === "house-1" || claim?.householdId === "house-2").toBe(
-      true,
-    );
-  });
 
   it("[T-HH-007][HH-012] 같은 제거 명령 재전달은 결과를 재생하고 제거 Event를 중복 발행하지 않는다", async () => {
     const subject = createSubject();

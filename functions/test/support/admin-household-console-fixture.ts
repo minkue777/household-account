@@ -20,10 +20,6 @@ import type {
 
 export interface AdminConsoleSnapshot {
   households: readonly AdminHouseholdView[];
-  presentationEffects: readonly {
-    kind: "clipboard-copy";
-    text: string;
-  }[];
 }
 
 export type AdminConsoleEvent = AdminHouseholdEvent;
@@ -122,7 +118,6 @@ class FixtureAdminHouseholdConsoleController
   implements AdminHouseholdConsoleFixtureSubject
 {
   private actor: VerifiedAdminActor | undefined;
-  private readonly effects: { kind: "clipboard-copy"; text: string }[] = [];
 
   constructor(
     private readonly application: AdminHouseholdConsoleUseCases,
@@ -143,16 +138,8 @@ class FixtureAdminHouseholdConsoleController
     return this.application.createHousehold(this.actor, input);
   }
 
-  async copyLegacyShareKey(householdId: string) {
-    const result = await this.application.readLegacyShareKey(
-      this.actor,
-      householdId,
-    );
-    if (result.kind !== "success") {
-      return result;
-    }
-    this.effects.push({ kind: "clipboard-copy", text: result.value });
-    return { kind: "success" as const, value: { copied: true as const } };
+  readLegacyShareKey(householdId: string) {
+    return this.application.readLegacyShareKey(this.actor, householdId);
   }
 
   deleteHousehold(input: {
@@ -168,7 +155,6 @@ class FixtureAdminHouseholdConsoleController
     const state = await this.store.read();
     return {
       households: state.households.map(view),
-      presentationEffects: this.effects.map((effect) => ({ ...effect })),
     };
   }
 

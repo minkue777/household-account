@@ -31,7 +31,6 @@ export interface LegacyMigrationFixture {
     linkedPrincipalUid?: string;
   }[];
   memberships?: readonly LegacyMembershipView[];
-  businessDataDigest?: string;
   repositoryAvailability?: "available" | "temporarily-unavailable";
 }
 
@@ -50,12 +49,6 @@ export interface LegacyMigrationSnapshot {
     linkedMemberId: string;
     lifecycleState: "active";
   }[];
-  currentSession?: {
-    householdId: string;
-    actingMemberId: string;
-    principalUid: string;
-  };
-  businessDataDigest?: string;
   auditEvents: readonly {
     eventType: string;
     householdId: string;
@@ -152,19 +145,11 @@ class FixtureLegacyMigrationDriver
   implements LegacyMembershipMigrationFixtureSubject
 {
   private webLocalStorage: Record<string, string>;
-  private currentSession:
-    | {
-        householdId: string;
-        actingMemberId: string;
-        principalUid: string;
-      }
-    | undefined;
 
   constructor(
     private readonly application: LegacyMembershipUseCases,
     private readonly store: FixtureLegacyMembershipStore,
     fixture: LegacyMigrationFixture,
-    private readonly businessDataDigest: string | undefined,
   ) {
     this.webLocalStorage = { ...(fixture.webLocalStorage ?? {}) };
   }
@@ -181,17 +166,10 @@ class FixtureLegacyMigrationDriver
     );
   }
 
-  async claimLegacySession(
+  claimLegacySession(
     input: Parameters<LegacyMembershipMigrationInputPort["claimLegacySession"]>[0],
   ) {
-    const result = await this.application.claimLegacySession(input);
-    if (result.kind === "membership-linked" || result.kind === "already-linked") {
-      delete this.webLocalStorage.householdKey;
-      delete this.webLocalStorage.currentMemberId;
-      delete this.webLocalStorage.currentMemberName;
-      this.currentSession = { ...result.session };
-    }
-    return result;
+    return this.application.claimLegacySession(input);
   }
 
   repairLegacyMembershipClaim(
@@ -211,12 +189,6 @@ class FixtureLegacyMigrationDriver
       memberOwnerProfiles: state.memberOwnerProfiles.map((profile) => ({
         ...profile,
       })),
-      ...(this.currentSession === undefined
-        ? {}
-        : { currentSession: { ...this.currentSession } }),
-      ...(this.businessDataDigest === undefined
-        ? {}
-        : { businessDataDigest: this.businessDataDigest }),
       auditEvents: state.auditEvents.map((event) => ({ ...event })),
     };
   }
@@ -237,6 +209,5 @@ export function createLegacyMembershipMigrationFixtureSubject(
     application,
     store,
     fixture,
-    fixture.businessDataDigest,
   );
 }

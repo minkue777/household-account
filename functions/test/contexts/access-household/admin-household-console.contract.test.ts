@@ -10,8 +10,8 @@ import {
 } from "../../support/admin-household-console-fixture";
 
 /**
- * 현재 관리자 화면의 공개 Controller 계약입니다.
- * 복사는 Presentation effect, 삭제는 데이터 보존형 lifecycle 결과로 관찰합니다.
+ * 관리자 서버 application의 정책 계약입니다.
+ * Web의 실제 clipboard 동작은 adminCreationCopy.contract.test.tsx에서 검증합니다.
  */
 export interface AdminHouseholdConsoleSubject
   extends AdminHouseholdConsoleInputPort {
@@ -32,7 +32,7 @@ const allowedAdmin: VerifiedAdminActor = {
   ],
 };
 
-describe("관리자 가구 화면 공개 계약", () => {
+describe("관리자 가구 명령 계약", () => {
   it("[T-ADM-001][ADM-001] 허용된 Google 관리자는 최신순·안정 ID 보조 정렬로 가구 page를 조회한다", async () => {
     const subject = createSubject();
     await expect(subject.open(allowedAdmin)).resolves.toEqual({
@@ -65,7 +65,7 @@ describe("관리자 가구 화면 공개 계약", () => {
     }
   });
 
-  it("[T-ADM-001][ADM-001] 관리자는 가구를 생성하고 현재 전환 기간의 키를 Presentation에서 복사할 수 있다", async () => {
+  it("[T-ADM-001][ADM-001] 관리자는 가구를 생성하고 현재 전환 기간의 키를 조회할 수 있다", async () => {
     const subject = createSubject();
     await subject.open(allowedAdmin);
 
@@ -87,8 +87,8 @@ describe("관리자 가구 화면 공개 계약", () => {
     }
 
     await expect(
-      subject.copyLegacyShareKey(created.value.householdId),
-    ).resolves.toEqual({ kind: "success", value: { copied: true } });
+      subject.readLegacyShareKey(created.value.householdId),
+    ).resolves.toEqual({ kind: "success", value: created.value.legacyShareKey });
     const state = await subject.snapshot();
     expect(state.households).toEqual(
       expect.arrayContaining([
@@ -98,12 +98,6 @@ describe("관리자 가구 화면 공개 계약", () => {
         }),
       ]),
     );
-    expect(state.presentationEffects).toEqual([
-      {
-        kind: "clipboard-copy",
-        text: created.value.legacyShareKey,
-      },
-    ]);
     expect(await subject.publishedEvents()).toEqual([
       {
         eventType: "HouseholdCreated.v1",

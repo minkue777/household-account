@@ -36,9 +36,9 @@ export interface AdminHouseholdConsoleInputPort {
     name: string;
     idempotencyKey: string;
   }): Promise<AdminConsoleResult<AdminHouseholdView>>;
-  copyLegacyShareKey(
+  readLegacyShareKey(
     householdId: string,
-  ): Promise<AdminConsoleResult<{ copied: true }>>;
+  ): Promise<AdminConsoleResult<string>>;
   deleteHousehold(input: {
     householdId: string;
     confirmed: boolean;

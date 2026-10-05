@@ -8,6 +8,9 @@ import { createHouseholdWithSelf } from "../../../src/contexts/access/google-onb
 import { createAccessHouseholdCommandHandlers } from "../../../src/bootstrap/commands/accessHouseholdCommandHandlers";
 import { createAdminAccessRouter } from "../../../src/bootstrap/admin/adminAccess";
 import { createAdminHouseholdAccessHandlers } from "../../../src/bootstrap/admin/handlers/adminHouseholdAccessHandlers";
+import { createAdminMemberAccessHandlers } from "../../../src/bootstrap/admin/handlers/adminMemberAccessHandlers";
+import { principalClaimId } from "../../../src/adapters/firebase/access/firebasePrincipalMembershipClaim";
+import { resolveFirebaseSignedInUser } from "../../../src/adapters/firebase/access/firebaseSignedInUserResolver";
 import { verifiedSystemAdministrator } from "../../../src/bootstrap/verifiedSystemAdministrator";
 import { FirebaseHouseholdCommandMembershipAdapter } from "../../../src/adapters/firebase/commands/firebaseHouseholdCommandInfrastructure";
 import type {
@@ -357,6 +360,52 @@ describeWithFirestoreEmulator("Firebase Access command adapters", () => {
     }
     expect((await database.collection("principalMembershipClaims").where("householdId", "==", created.householdId).get()).size).toBe(2);
     expect((await database.collection("outboxEvents").where("householdId", "==", created.householdId).get()).size).toBe(4);
+  }, 30_000);
+
+  it("[T-HH-007][HH-012] 제거된 멤버 복구와 실제 다른 가구 가입이 경합해도 UID claim 하나만 확정한다", async () => {
+    const handlers = createAccessHouseholdCommandHandlers(database);
+    const created = [] as { householdId: string; memberId: string }[];
+    const invitations = [] as string[];
+    for (const principalUid of ["owner-a", "owner-b"]) {
+      const house = await handlers.get("access.create-household-with-self.v1")!.execute(context({
+        principalUid, command: "access.create-household-with-self.v1", commandId: principalUid,
+        payload: { householdName: principalUid, memberName: principalUid },
+      })) as { householdId: string; memberId: string };
+      created.push(house);
+      const invite = await handlers.get("access.create-invitation.v1")!.execute(context({
+        principalUid, householdId: house.householdId,
+        actor: { principalUid, householdId: house.householdId, actingMemberId: house.memberId, capabilities: ["household.read", "household.write"] },
+        command: "access.create-invitation.v1", commandId: `invite-${principalUid}`, payload: {},
+      })) as { invitationCode: string };
+      invitations.push(invite.invitationCode);
+    }
+    const join = (index: number) => handlers.get("access.join-household-as-self.v1")!.execute(context({
+      principalUid: "removed-user", command: "access.join-household-as-self.v1", commandId: `join-${index}`,
+      payload: { invitationCode: invitations[index], memberName: "가구원" },
+    })) as Promise<{ householdId: string; memberId: string }>;
+    const original = await join(0);
+    const router = createAdminAccessRouter({ handlers: new Map(createAdminMemberAccessHandlers(database)) });
+    const admin = (operation: "remove-household-member" | "restore-household-member", expectedVersion: number) => router.execute({
+      principalUid: "admin", administrator: verifiedSystemAdministrator("admin", { systemAdmin: true }), requestedAt: REQUESTED_AT,
+      request: { contractVersion: "admin-access.v1", requestId: operation, idempotencyKey: operation,
+        operation, payload: { ...original, expectedVersion, ...(operation === "remove-household-member" ? { reason: "테스트" } : {}) } },
+    });
+    expect(await admin("remove-household-member", 1)).toMatchObject({ kind: "success" });
+    expect(await resolveFirebaseSignedInUser(database, "removed-user")).toMatchObject({ kind: "first-visit-required" });
+    const results = await Promise.all([
+      admin("restore-household-member", 2),
+      join(1).then(value => ({ kind: "success", data: value }), (error: { code: string }) => ({ kind: "error", code: error.code })),
+    ]);
+    expect(results.filter(result => result.kind === "success")).toHaveLength(1);
+    expect(results.filter(result => result.kind !== "success")).toEqual([expect.objectContaining({ code: "PRINCIPAL_ALREADY_JOINED" })]);
+    const claims = await database.collection("principalMembershipClaims").where("principalUid", "==", "removed-user").get();
+    expect(claims.size).toBe(1);
+    expect(claims.docs[0]!.id).toBe(principalClaimId("removed-user"));
+    const winner = claims.docs[0]!.data();
+    expect(created.map(house => house.householdId)).toContain(winner.householdId);
+    expect(await resolveFirebaseSignedInUser(database, "removed-user")).toMatchObject({
+      kind: "membership-found", membership: { householdId: winner.householdId, memberId: winner.memberId },
+    });
   }, 30_000);
 
   it("legacy 가구는 stable 가구·멤버와 선택적 이름을 검증한 뒤 기존 업무 데이터 없이 연결만 추가한다", async () => {

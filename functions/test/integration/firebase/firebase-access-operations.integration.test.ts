@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createFirebaseHouseholdPurgeRuntime } from '../../../src/bootstrap/operations/householdPurgeRuntime';
 import { repairFirebaseLegacyMembership, reconcileFirebaseHouseholdClaimLifecycle } from '../../../src/bootstrap/operations/accessRecoveryRuntime';
 import { principalClaimId } from '../../../src/adapters/firebase/access/firebasePrincipalMembershipClaim';
+import { resolveFirebaseSignedInUser } from '../../../src/adapters/firebase/access/firebaseSignedInUserResolver';
 
 const projectId = 'demo-access-operations';
 let app: App;
@@ -77,6 +78,8 @@ suite('[HH-002][ADM-003] 실제 Firestore 운영 교정과 단계별 영구 삭�
     await db.doc('households/h1').set({ name: '삭제할 이름', lifecycleState: 'deleted', aggregateVersion: 2 });
     await db.doc('households/h2').set({ lifecycleState: 'active', aggregateVersion: 1 });
     await db.doc('households/h1/members/m1').set({ displayName: '사용자', linkedPrincipalUid: 'u1' });
+    await db.doc('users/u1/householdMembershipViews/h1').set({ principalUid: 'u1', householdId: 'h1', memberId: 'm1', lifecycleState: 'active' });
+    await db.doc('households/h1/memberships/u1').set({ principalUid: 'u1', householdId: 'h1', memberId: 'm1', lifecycleState: 'active' });
     for (let i = 1; i <= 3; i += 1) await db.doc(`principalMembershipClaims/c${i}`).set({ principalUid: `u${i}`, householdId: 'h1', memberId: `m${i}`, householdLifecycleState: 'deleted' });
     await db.doc('expenses/e1').set({ householdId: 'h1', amount: 100 });
     await db.doc('expenses/e2').set({ householdId: 'h2', amount: 200 });
@@ -121,6 +124,8 @@ suite('[HH-002][ADM-003] 실제 Firestore 운영 교정과 단계별 영구 삭�
     expect((await db.doc('notification_debug_logs/raw').get()).exists).toBe(false);
     expect((await db.doc('notificationDevices/device-1').get()).exists).toBe(true);
     expect((await db.collection('principalMembershipClaims').get()).docs.map(doc => doc.id)).toEqual(['c3']);
+    expect((await db.doc('users/u1/householdMembershipViews/h1').get()).exists).toBe(false);
+    expect(await resolveFirebaseSignedInUser(db, 'u1')).toMatchObject({ kind: 'first-visit-required', choices: ['create', 'join'] });
     expect(await runtime().application.runHouseholdPurgeProcess(runner, initial.processId)).toMatchObject({ kind: 'already-completed' });
     const process = (await db.doc(`householdPurgeProcesses/${initial.processId}`).get()).data()!.process;
     expect(process).toMatchObject({ claimSnapshotEntries: [], claimSnapshotEntryCount: 3, claimConflicts: [], claimConflictCount: 1 });

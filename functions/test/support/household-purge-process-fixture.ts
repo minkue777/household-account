@@ -95,16 +95,6 @@ export interface HouseholdPurgeProcessFixtureSubject
     claimRef: string,
     replacement: Omit<HouseholdPurgeClaim, "claimRef">,
   ): void;
-  resolveSignedInUserAfterPurge(
-    principalRef: string,
-  ): Promise<
-    | { readonly kind: "first-visit-required"; readonly choices: readonly ["create", "join"] }
-    | {
-        readonly kind: "membership-found";
-        readonly householdId: string;
-        readonly membershipId: string;
-      }
-  >;
   snapshot(): Promise<HouseholdPurgeProcessSnapshot>;
   participantCalls(): readonly PurgeParticipantCall[];
   publishedEvents(): Promise<readonly HouseholdPurgeProcessEvent[]>;
@@ -391,29 +381,6 @@ class HouseholdPurgeProcessFixtureDriver
     replacement: Omit<HouseholdPurgeClaim, "claimRef">,
   ): void {
     this.unitOfWork.replaceClaim(claimRef, replacement);
-  }
-
-  async resolveSignedInUserAfterPurge(
-    principalRef: string,
-  ): Promise<
-    | { readonly kind: "first-visit-required"; readonly choices: readonly ["create", "join"] }
-    | {
-        readonly kind: "membership-found";
-        readonly householdId: string;
-        readonly membershipId: string;
-      }
-  > {
-    const state = await this.unitOfWork.read();
-    const claim = state.currentClaims.find(
-      (candidate) => candidate.principalRef === principalRef,
-    );
-    return claim === undefined
-      ? { kind: "first-visit-required", choices: ["create", "join"] }
-      : {
-          kind: "membership-found",
-          householdId: claim.householdId,
-          membershipId: claim.membershipId,
-        };
   }
 
   async snapshot(): Promise<HouseholdPurgeProcessSnapshot> {
