@@ -49,15 +49,12 @@ it.each([
   await rejected;
 });
 
-it('rejects a completed source after its page/epoch ownership was cancelled', async () => {
+it('rejects a completed source after logout', async () => {
   const pending = deferred<typeof snapshot>();
   jest.mocked(getDividendSnapshot).mockReturnValueOnce(pending.promise);
-  let active = true;
-  const result = readAssetDividendStatistics(2026, () => {
-    if (!active) throw new Error('STATISTICS_SESSION_CHANGED');
-  });
+  const result = readAssetDividendStatistics(2026);
   const rejected = expect(result).rejects.toThrow('STATISTICS_SESSION_CHANGED');
-  active = false;
+  clearClientSessionScope();
   pending.resolve(snapshot);
   await rejected;
 });

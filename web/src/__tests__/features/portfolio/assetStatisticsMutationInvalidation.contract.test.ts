@@ -1,18 +1,24 @@
 import { getHouseholdCommandClient } from '@/composition/webCommandRuntime';
 import { clearClientSessionScope, setClientSessionScope } from '@/composition/clientSessionScope';
 import { portfolioCommands } from '@/features/portfolio/application/portfolioCommands';
-import { invalidateAssetStatisticsCache, readCachedAssetStatistics } from '@/platform/reporting/assetStatisticsQueryCache';
+import type { AssetHistoryEntry } from '@/types/asset';
+import { invalidateAssetStatisticsCache, peekCachedAssetStatistics, readCachedAssetStatistics } from '@/platform/reporting/assetStatisticsQueryCache';
 
 jest.mock('@/composition/webCommandRuntime', () => ({ getHouseholdCommandClient: jest.fn() }));
 const execute = jest.fn();
 const readSource = jest.fn();
-const readHistory = () => readCachedAssetStatistics('history', readSource);
+const readHistory = () => readCachedAssetStatistics('2026-10-05', readSource);
+const peekHistory = () => peekCachedAssetStatistics('2026-10-05');
+const history = (balance: number): AssetHistoryEntry[] => [{
+  id: 'total', householdId: 'house', assetId: 'TOTAL', date: '2026-10-05',
+  balance, changeAmount: 0, createdAt: new Date(0),
+}];
 
 beforeEach(() => {
   invalidateAssetStatisticsCache();
   setClientSessionScope({ principalUid: 'actor', householdId: 'house', memberId: 'member', sessionGeneration: 1 });
   execute.mockReset().mockResolvedValue({ assetId: 'asset', positionId: 'position', refreshedCount: 1 });
-  readSource.mockReset().mockResolvedValueOnce(['before']).mockResolvedValue(['after']);
+  readSource.mockReset().mockResolvedValueOnce(history(100)).mockResolvedValue(history(200));
   jest.mocked(getHouseholdCommandClient).mockReturnValue({ execute } as never);
 });
 afterEach(() => { invalidateAssetStatisticsCache(); clearClientSessionScope(); });
@@ -28,12 +34,13 @@ const changes: Array<[string, () => Promise<unknown>]> = [
   ['시세 갱신', () => portfolioCommands.refreshMarketValues('house', 'all')],
 ];
 
-it.each(changes)('%s 성공 후 통계 재진입은 이전 완료값 대신 원천을 다시 읽는다', async (_name, change) => {
-  await expect(readHistory()).resolves.toEqual(['before']);
-  await expect(readHistory()).resolves.toEqual(['before']);
+it.each(changes)('%s 성공은 이전 완료값을 폐기하고 통계 재진입에서 원천을 다시 읽는다', async (_name, change) => {
+  await expect(readHistory()).resolves.toEqual(history(100));
+  expect(peekHistory()).toEqual(history(100));
   expect(readSource).toHaveBeenCalledTimes(1);
   await change();
-  await expect(readHistory()).resolves.toEqual(['after']);
+  expect(peekHistory()).toBeUndefined();
+  await expect(readHistory()).resolves.toEqual(history(200));
   expect(readSource).toHaveBeenCalledTimes(2);
 });
 
@@ -41,7 +48,7 @@ it('거부된 변경은 완료된 통계 원천을 무효화하지 않는다', a
   await readHistory();
   execute.mockRejectedValueOnce(new Error('VERSION_CONFLICT'));
   await expect(portfolioCommands.updateAsset('house', 'asset', { currentBalance: 200 }, 1)).rejects.toThrow('VERSION_CONFLICT');
-  await expect(readHistory()).resolves.toEqual(['before']);
+  expect(peekHistory()).toEqual(history(100));
   expect(readSource).toHaveBeenCalledTimes(1);
 });
 
@@ -49,7 +56,8 @@ it('시세 일부 갱신 실패도 이미 변경된 항목이 있으므로 완�
   await readHistory();
   execute.mockResolvedValueOnce({ refreshedCount: 1, failedCount: 1 });
   await expect(portfolioCommands.refreshMarketValues('house', 'all')).rejects.toThrow('갱신하지 못했습니다');
-  await expect(readHistory()).resolves.toEqual(['after']);
+  expect(peekHistory()).toBeUndefined();
+  await expect(readHistory()).resolves.toEqual(history(200));
   expect(readSource).toHaveBeenCalledTimes(2);
 });
 
@@ -58,9 +66,9 @@ it('이전 멤버의 늦은 저장 완료가 다음 멤버의 통계 캐시를 �
   execute.mockReturnValueOnce(new Promise(resolve => { complete = resolve; }));
   const previousCommand = portfolioCommands.updateAsset('house', 'asset', { currentBalance: 200 }, 1);
   setClientSessionScope({ principalUid: 'next', householdId: 'house', memberId: 'next', sessionGeneration: 2 });
-  await expect(readHistory()).resolves.toEqual(['before']);
+  await expect(readHistory()).resolves.toEqual(history(100));
   complete({});
   await previousCommand;
-  await expect(readHistory()).resolves.toEqual(['before']);
+  expect(peekHistory()).toEqual(history(100));
   expect(readSource).toHaveBeenCalledTimes(1);
 });

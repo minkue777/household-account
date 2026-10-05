@@ -87,8 +87,8 @@ it('keeps the 50,000-document bound and rejects rather than publishing a truncat
 });
 it('[T-STAT-AST-002][STAT-AST-003] canonical baseline zero and stable archived-owner dimensions are preserved after migration', async () => {
   const snapshot = (date: string, total: number) => doc(date, { localDate: date, total, financial: total, byType: { stock: total }, byOwnerRefKey: { 'profile:old': total }, ownerDisplayNames: { 'profile:old': '지아' } });
-  read.mockResolvedValueOnce({ docs: [snapshot('2019-01-01', 0)] }).mockResolvedValueOnce({ docs: [snapshot('2026-09-03', 50)] });
-  const result = await readAssetStatisticsHistory('2026-09-01', '2026-09-30');
+  read.mockResolvedValueOnce({ docs: [snapshot('2019-01-01', 0), snapshot('2026-09-03', 50)] });
+  const result = await readAssetStatisticsHistory('2026-09-30');
   expect(result.filter(row => row.assetId === 'TOTAL').map(row => row.balance)).toEqual([0, 50]);
   expect(result.find(row => row.assetId === 'OWNER_REF_profile:old')).toMatchObject({ ownerKey: 'profile:old', ownerDisplayName: '지아' });
   expect(result.find(row => row.assetId === 'TOTAL' && row.date === '2026-09-03')?.changeAmount).toBe(50);

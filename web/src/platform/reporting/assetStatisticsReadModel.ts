@@ -6,22 +6,18 @@ import { assetStatisticsSessionKey, peekCachedAssetStatistics, readCachedAssetSt
 const PAGE_SIZE = 5_000;
 const MAX_PAGES = 10; // Preserve the existing 50,000-document safety bound for daily snapshots.
 
-export function peekAssetStatisticsHistory(startDate: string | undefined, endDate: string, options?: AssetStatisticsReadOptions): AssetHistoryEntry[] | undefined {
-  return peekCachedAssetStatistics<AssetHistoryEntry[]>(JSON.stringify(['history', startDate, endDate]), options)
+export function peekAssetStatisticsHistory(endDate: string, options?: AssetStatisticsReadOptions): AssetHistoryEntry[] | undefined {
+  return peekCachedAssetStatistics(endDate, options)
     ?.map(entry => ({ ...entry }));
 }
 
-export async function readAssetStatisticsHistory(startDate: string | undefined, endDate: string, options?: AssetStatisticsReadOptions): Promise<AssetHistoryEntry[]> {
+export async function readAssetStatisticsHistory(endDate: string, options?: AssetStatisticsReadOptions): Promise<AssetHistoryEntry[]> {
   const scope = { ...requireClientSessionScope() };
   const assertScope = () => {
     const active = getClientSessionScope();
     if (!active || assetStatisticsSessionKey(active) !== assetStatisticsSessionKey(scope)) throw new Error('STATISTICS_SESSION_CHANGED');
   };
-  const result = await readCachedAssetStatistics(JSON.stringify(['history', startDate, endDate]), async assertCacheCurrent => {
-    const current = () => {
-      assertScope();
-      assertCacheCurrent();
-    };
+  const result = await readCachedAssetStatistics(endDate, async assertCurrent => {
     const canonical: AssetHistoryEntry[] = [];
     const canonicalDates = new Set<string>();
     const previousBalances = new Map<string, number>();
@@ -50,32 +46,23 @@ export async function readAssetStatisticsHistory(startDate: string | undefined, 
         });
       }
     };
-    const readCanonical = async () => {
-      let cursor: QueryDocumentSnapshot<DocumentData> | undefined;
-      current();
-      const source = collection(db, 'households', scope.householdId, 'assetSnapshots');
-      if (startDate) {
-        const baseline = await getDocsFromServer(query(source, where('localDate', '<=', startDate), orderBy('localDate', 'desc'), limit(1)));
-        current();
-        baseline.docs.forEach(decode);
-      }
-      for (let page = 0; ; page++) {
-        if (page >= MAX_PAGES) throw new Error('STATISTICS_PAGE_LIMIT_EXCEEDED');
-        current();
-        const snapshot: { readonly docs: readonly QueryDocumentSnapshot<DocumentData>[] } = await getDocsFromServer(query(source,
-          ...(startDate ? [where('localDate', '>=', startDate)] : []), where('localDate', '<=', endDate),
-          orderBy('localDate', 'asc'), orderBy(documentId(), 'asc'), ...(cursor ? [startAfter(cursor)] : []), limit(PAGE_SIZE)));
-        current();
-        const documents = snapshot.docs;
-        documents.forEach(decode);
-        if (documents.length < PAGE_SIZE) break;
-        const next: QueryDocumentSnapshot<DocumentData> = documents[documents.length - 1];
-        if (cursor?.id === next.id) throw new Error('STATISTICS_CURSOR_REPEATED');
-        cursor = next;
-      }
-    };
-    await readCanonical();
-    current();
+    let cursor: QueryDocumentSnapshot<DocumentData> | undefined;
+    assertCurrent();
+    const source = collection(db, 'households', scope.householdId, 'assetSnapshots');
+    for (let page = 0; ; page++) {
+      if (page >= MAX_PAGES) throw new Error('STATISTICS_PAGE_LIMIT_EXCEEDED');
+      assertCurrent();
+      const snapshot: { readonly docs: readonly QueryDocumentSnapshot<DocumentData>[] } = await getDocsFromServer(query(source,
+        where('localDate', '<=', endDate),
+        orderBy('localDate', 'asc'), orderBy(documentId(), 'asc'), ...(cursor ? [startAfter(cursor)] : []), limit(PAGE_SIZE)));
+      assertCurrent();
+      const documents = snapshot.docs;
+      documents.forEach(decode);
+      if (documents.length < PAGE_SIZE) break;
+      const next: QueryDocumentSnapshot<DocumentData> = documents[documents.length - 1];
+      if (cursor?.id === next.id) throw new Error('STATISTICS_CURSOR_REPEATED');
+      cursor = next;
+    }
     return canonical;
   }, options);
   assertScope();

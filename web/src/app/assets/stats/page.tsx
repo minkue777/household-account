@@ -25,9 +25,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import AssetProfitChart from '@/components/assets/AssetProfitChart';
 import AssetDividendChart from '@/components/assets/AssetDividendChart';
-import { getSeoulCalendarParts, getTodayLocalDate } from '@/lib/utils/date';
+import { getTodayLocalDate } from '@/lib/utils/date';
 import { peekAssetStatisticsHistory, readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
-import { readAssetDividendStatistics, type AssetDividendPrefetch } from '@/platform/reporting/assetDividendReadModel';
 import { resolveAssetStatisticsPeriod } from '@/features/reporting/statisticsPeriod';
 import { sumSignedAssetBalances, sumSignedBalancesByAssetType } from '@/lib/assets/assetMath';
 import { getClientSessionScope } from '@/composition/clientSessionScope';
@@ -156,7 +155,6 @@ export default function AssetStatsPage() {
   } = useHousehold();
   const [assetRead, setAssetRead] = useState<{ key: string; assets?: Asset[]; failed: boolean }>({ key: '', failed: false });
   const [historyRead, setHistoryRead] = useState<{ key: string; history?: AssetHistoryEntry[]; failed: boolean }>({ key: '', failed: false });
-  const [dividendPrefetch, setDividendPrefetch] = useState<{ key: string; source: AssetDividendPrefetch } | null>(null);
   const [revision, setRevision] = useState(0);
   const [refreshRevision, setRefreshRevision] = useState(0);
   const pendingHistoryRead = useRef<{ key: string } | null>(null);
@@ -170,7 +168,7 @@ export default function AssetStatsPage() {
   const canRead = isSessionVerified && !!householdKey && sessionScope?.householdId === householdKey
     && (sessionScope.accessMode === 'administrator-readonly' || sessionScope.memberId === currentMember?.id);
   const sourceKey = JSON.stringify([actorKey, householdKey, currentMember?.id, remoteReadEpoch, selectedPeriodRange.endDate]);
-  const cachedHistory = useMemo(() => canRead ? peekAssetStatisticsHistory(undefined, selectedPeriodRange.endDate, { cacheEpoch: remoteReadEpoch }) : undefined,
+  const cachedHistory = useMemo(() => canRead ? peekAssetStatisticsHistory(selectedPeriodRange.endDate, { cacheEpoch: remoteReadEpoch }) : undefined,
     [canRead, sourceKey, remoteReadEpoch, selectedPeriodRange.endDate, revision]);
   const currentAssetRead = assetRead.key === sourceKey ? assetRead : undefined;
   const assets = currentAssetRead?.assets ?? EMPTY_ASSETS;
@@ -211,23 +209,6 @@ export default function AssetStatsPage() {
   }, [canRead, sourceKey, revision]);
 
   useEffect(() => {
-    let active = true;
-    if (!canRead) { setDividendPrefetch(null); return; }
-
-    // Dividend reads do not depend on history. Start them now and hand the
-    // complete source to the card once the existing history display gate opens.
-    const year = getSeoulCalendarParts().year;
-    const result = readAssetDividendStatistics(year, () => {
-      if (!active) throw new Error('STATISTICS_SESSION_CHANGED');
-    });
-    // The card retains this rejection, including when history finishes later.
-    // Observe it now so leaving the page cannot produce an unhandled rejection.
-    void result.catch(() => {});
-    setDividendPrefetch({ key: sourceKey, source: { year, result } });
-    return () => { active = false; };
-  }, [canRead, sourceKey, revision]);
-
-  useEffect(() => {
     if (!canRead) return;
     let active = true;
     const request = { key: sourceKey };
@@ -240,9 +221,8 @@ export default function AssetStatsPage() {
       try {
         // Re-entry/resume keeps the complete chart visible while verifying it.
         // Period buttons only select this source; they never restart the read.
-        const historyData = await readAssetStatisticsHistory(undefined, selectedPeriodRange.endDate, {
+        const historyData = await readAssetStatisticsHistory(selectedPeriodRange.endDate, {
           cacheEpoch: remoteReadEpoch,
-          forceRefresh: true,
         });
         if (active) setHistoryRead(previous => ({ key: sourceKey,
           history: previous.key === sourceKey && JSON.stringify(previous.history) === JSON.stringify(historyData)
@@ -636,147 +616,149 @@ export default function AssetStatsPage() {
           </h1>
         </header>
 
-        {!isCurrentSource && !failed ? (
-          <div role="status" className="py-12 text-center text-slate-400">불러오는 중...</div>
-        ) : !isCurrentSource ? (
-          <div role="alert" className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-            자산 통계를 불러오지 못했습니다.
-            <button type="button" className="ml-3 underline" onClick={() => setRevision((value) => value + 1)}>다시 시도</button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {assetReadFailed && <p role="alert" className="mb-3 text-sm text-red-600">현재 자산을 불러오지 못했습니다. <button onClick={() => setRevision(value => value + 1)} className="underline">다시 시도</button></p>}
-        {failed && (
-              <p role="alert" className="text-xs text-slate-500">최신 자산 이력을 확인하지 못했습니다. 이전 내역을 표시합니다.
-                <button type="button" className="ml-2 underline" onClick={() => setRefreshRevision(value => value + 1)}>다시 시도</button>
-              </p>
-            )}
-            <div className="relative rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-              <button
-                type="button"
-                aria-pressed={financialOnly}
-                onClick={() => setFinancialOnly((prev) => !prev)}
-                className={`absolute right-5 top-5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-                  financialOnly
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {financialOnly ? '금융자산' : '전체자산'}
-              </button>
-
-              <p className="mb-1 text-sm text-slate-500">
-                {financialOnly ? '금융자산' : hasCurrentAssets ? '현재 총 자산' : '마지막 기록 자산'}
-              </p>
-              {totalAssets === undefined ? <p className="text-sm text-slate-400">데이터가 없습니다</p> : <>
-                <p className="text-2xl font-bold text-slate-900">
-                  {totalAssets.toLocaleString()}
-                  <span className="ml-1 text-base font-medium text-slate-400">원</span>
-                </p>
-                <p className="mt-0.5 text-sm text-slate-400">
-                  ({formatKoreanUnit(totalAssets)}원)
-                </p>
-              </>}
-              {periodChange !== 0 && (
-                <p className={`mt-1 text-sm ${periodChange > 0 ? 'text-red-500' : 'text-blue-500'}`}>
-                  {periodChange > 0 ? '+' : ''}
-                  {periodChange.toLocaleString()}원 ({periodChangeRate > 0 ? '+' : ''}
-                  {periodChangeRate.toFixed(2)}%)
+        <div className="space-y-4">
+          {!isCurrentSource && !failed ? (
+            <div role="status" className="py-12 text-center text-slate-400">불러오는 중...</div>
+          ) : !isCurrentSource ? (
+            <div role="alert" className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+              자산 통계를 불러오지 못했습니다.
+              <button type="button" className="ml-3 underline" onClick={() => setRevision((value) => value + 1)}>다시 시도</button>
+            </div>
+          ) : (
+            <>
+              {assetReadFailed && <p role="alert" className="mb-3 text-sm text-red-600">현재 자산을 불러오지 못했습니다. <button onClick={() => setRevision(value => value + 1)} className="underline">다시 시도</button></p>}
+              {failed && (
+                <p role="alert" className="text-xs text-slate-500">최신 자산 이력을 확인하지 못했습니다. 이전 내역을 표시합니다.
+                  <button type="button" className="ml-2 underline" onClick={() => setRefreshRevision(value => value + 1)}>다시 시도</button>
                 </p>
               )}
-            </div>
-
-            <div className="flex gap-2">
-              {(['3M', '6M', '1Y', 'ALL'] as PeriodType[]).map((period) => (
+              <div className="relative rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
                 <button
                   type="button"
-                  key={period}
-                  aria-pressed={selectedPeriod === period}
-                  aria-label={{ '3M': '3개월', '6M': '6개월', '1Y': '1년', ALL: '전체 기간' }[period]}
-                  onClick={() => setSelectedPeriod(period)}
-                  className={`flex-1 rounded-xl py-2 text-sm font-medium transition-all ${
-                    selectedPeriod === period
+                  aria-pressed={financialOnly}
+                  onClick={() => setFinancialOnly((prev) => !prev)}
+                  className={`absolute right-5 top-5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+                    financialOnly
                       ? 'bg-blue-500 text-white'
-                      : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  {period === 'ALL' ? '전체' : period}
-                </button>
-              ))}
-            </div>
-
-            <div
-              className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm"
-              onClick={clearTrendChartSelection}
-            >
-              <h3 className="mb-4 text-sm font-semibold text-slate-700">자산 추이</h3>
-
-              <div className="mb-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  aria-pressed={enabledSeries.has('all')}
-                  onClick={() => toggleSeries('all')}
-                  className={`rounded-full px-3 py-1.5 text-sm font-medium transition-all ${
-                    enabledSeries.has('all')
-                      ? 'bg-blue-500 text-white shadow-md'
-                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                  }`}
-                >
-                  {financialOnly ? '금융자산' : '전체 자산'}
+                  {financialOnly ? '금융자산' : '전체자산'}
                 </button>
 
-                {availableTypes.map((type) => {
-                  const config = ASSET_TYPE_CONFIG[type];
-                  const isEnabled = enabledSeries.has(type);
-
-                  return (
-                    <button
-                      type="button"
-                      key={type}
-                      aria-pressed={isEnabled}
-                      onClick={() => toggleSeries(type)}
-                      className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all ${
-                        isEnabled
-                          ? 'text-white shadow-md'
-                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                      }`}
-                      style={{
-                        backgroundColor: isEnabled ? config.color : undefined,
-                      }}
-                    >
-                      <span
-                        className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: isEnabled ? 'white' : config.color }}
-                      />
-                      {config.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="h-[280px]" onClick={(event) => event.stopPropagation()}>
-                {chartData.datasets.some((dataset) => dataset.data.some((value) => value !== null)) ? (
-                  <Line ref={trendChartRef} data={chartData} options={chartOptions} />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-slate-400">
-                    표시할 자산 데이터가 없습니다.
-                  </div>
+                <p className="mb-1 text-sm text-slate-500">
+                  {financialOnly ? '금융자산' : hasCurrentAssets ? '현재 총 자산' : '마지막 기록 자산'}
+                </p>
+                {totalAssets === undefined ? <p className="text-sm text-slate-400">데이터가 없습니다</p> : <>
+                  <p className="text-2xl font-bold text-slate-900">
+                    {totalAssets.toLocaleString()}
+                    <span className="ml-1 text-base font-medium text-slate-400">원</span>
+                  </p>
+                  <p className="mt-0.5 text-sm text-slate-400">
+                    ({formatKoreanUnit(totalAssets)}원)
+                  </p>
+                </>}
+                {periodChange !== 0 && (
+                  <p className={`mt-1 text-sm ${periodChange > 0 ? 'text-red-500' : 'text-blue-500'}`}>
+                    {periodChange > 0 ? '+' : ''}
+                    {periodChange.toLocaleString()}원 ({periodChangeRate > 0 ? '+' : ''}
+                    {periodChangeRate.toFixed(2)}%)
+                  </p>
                 )}
               </div>
-            </div>
 
-            <AssetProfitChart
-              key={`profit:${actorKey}:${remoteReadEpoch}`}
-              snapshotId={snapshotType}
-              currentBalance={hasCurrentAssets ? totalAssets : undefined}
-              sourceHistory={allHistory}
-            />
+              <div className="flex gap-2">
+                {(['3M', '6M', '1Y', 'ALL'] as PeriodType[]).map((period) => (
+                  <button
+                    type="button"
+                    key={period}
+                    aria-pressed={selectedPeriod === period}
+                    aria-label={{ '3M': '3개월', '6M': '6개월', '1Y': '1년', ALL: '전체 기간' }[period]}
+                    onClick={() => setSelectedPeriod(period)}
+                    className={`flex-1 rounded-xl py-2 text-sm font-medium transition-all ${
+                      selectedPeriod === period
+                        ? 'bg-blue-500 text-white'
+                        : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {period === 'ALL' ? '전체' : period}
+                  </button>
+                ))}
+              </div>
 
-            {canRead && dividendPrefetch?.key === sourceKey && (
-              <AssetDividendChart key={`dividend:${actorKey}:${remoteReadEpoch}`} prefetchedSource={dividendPrefetch.source} />
-            )}
-          </div>
-        )}
+              <div
+                className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm"
+                onClick={clearTrendChartSelection}
+              >
+                <h3 className="mb-4 text-sm font-semibold text-slate-700">자산 추이</h3>
+
+                <div className="mb-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    aria-pressed={enabledSeries.has('all')}
+                    onClick={() => toggleSeries('all')}
+                    className={`rounded-full px-3 py-1.5 text-sm font-medium transition-all ${
+                      enabledSeries.has('all')
+                        ? 'bg-blue-500 text-white shadow-md'
+                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                    }`}
+                  >
+                    {financialOnly ? '금융자산' : '전체 자산'}
+                  </button>
+
+                  {availableTypes.map((type) => {
+                    const config = ASSET_TYPE_CONFIG[type];
+                    const isEnabled = enabledSeries.has(type);
+
+                    return (
+                      <button
+                        type="button"
+                        key={type}
+                        aria-pressed={isEnabled}
+                        onClick={() => toggleSeries(type)}
+                        className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all ${
+                          isEnabled
+                            ? 'text-white shadow-md'
+                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                        }`}
+                        style={{
+                          backgroundColor: isEnabled ? config.color : undefined,
+                        }}
+                      >
+                        <span
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: isEnabled ? 'white' : config.color }}
+                        />
+                        {config.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="h-[280px]" onClick={(event) => event.stopPropagation()}>
+                  {chartData.datasets.some((dataset) => dataset.data.some((value) => value !== null)) ? (
+                    <Line ref={trendChartRef} data={chartData} options={chartOptions} />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-slate-400">
+                      표시할 자산 데이터가 없습니다.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <AssetProfitChart
+                key={`profit:${actorKey}:${remoteReadEpoch}`}
+                snapshotId={snapshotType}
+                currentBalance={hasCurrentAssets ? totalAssets : undefined}
+                sourceHistory={allHistory}
+              />
+
+            </>
+          )}
+          {canRead && (
+            <AssetDividendChart key={`dividend:${actorKey}:${remoteReadEpoch}`} visible={isCurrentSource} revision={revision} />
+          )}
+        </div>
       </div>
     </main>
   );

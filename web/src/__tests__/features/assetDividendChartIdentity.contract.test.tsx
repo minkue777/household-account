@@ -2,16 +2,21 @@ import { render, screen, waitFor } from '@testing-library/react';
 import AssetDividendChart from '@/components/assets/AssetDividendChart';
 import { getAllStockHoldings, getDividendEventsByYear, getDividendSnapshot } from '@/lib/assetService';
 import { clearClientSessionScope, setClientSessionScope } from '@/composition/clientSessionScope';
+import { getSeoulCalendarParts } from '@/lib/utils/date';
 
 jest.mock('@/lib/assetService', () => ({ getAllStockHoldings: jest.fn(), getDividendEventsByYear: jest.fn(), getDividendSnapshot: jest.fn() }));
-jest.mock('@/lib/utils/date', () => ({ getSeoulCalendarParts: () => ({ year: 2026, month: 9, day: 6 }), getTodayLocalDate: () => '2026-09-06' }));
+jest.mock('@/lib/utils/date', () => ({ getSeoulCalendarParts: jest.fn(() => ({ year: 2026, month: 9, day: 6 })), getTodayLocalDate: () => '2026-09-06' }));
 const mockDividendOptions = jest.fn();
 jest.mock('react-chartjs-2', () => ({ Bar: ({ data, options }: { data: unknown; options: unknown }) => {
   mockDividendOptions(options);
   return <pre data-testid="dividend-chart">{JSON.stringify(data)}</pre>;
 } }));
 
-beforeEach(() => setClientSessionScope({ principalUid: 'uid', memberId: 'member', householdId: 'house', sessionGeneration: 1 }));
+beforeEach(() => {
+  jest.clearAllMocks();
+  jest.mocked(getSeoulCalendarParts).mockReturnValue({ year: 2026, month: 9, day: 6 });
+  setClientSessionScope({ principalUid: 'uid', memberId: 'member', householdId: 'house', sessionGeneration: 1 });
+});
 afterEach(clearClientSessionScope);
 
 test('[DIV-004] excludes the confirmed event identity and record-date-today estimates while retaining a distinct disclosure with identical payment facts', async () => {
@@ -33,4 +38,18 @@ test('[DIV-004] excludes the confirmed event identity and record-date-today esti
   const renders = mockDividendOptions.mock.calls.length;
   rerender(<AssetDividendChart />);
   expect(mockDividendOptions).toHaveBeenCalledTimes(renders);
+});
+
+test('uses the year at entry when a new year begins without reloading the application', async () => {
+  jest.mocked(getAllStockHoldings).mockResolvedValue([]);
+  jest.mocked(getDividendSnapshot).mockResolvedValue(null);
+  jest.mocked(getDividendEventsByYear).mockResolvedValue([]);
+  const { unmount } = render(<AssetDividendChart />);
+  await screen.findByText('2026년');
+  unmount();
+
+  jest.mocked(getSeoulCalendarParts).mockReturnValue({ year: 2027, month: 1, day: 1 });
+  render(<AssetDividendChart />);
+  await waitFor(() => expect(getDividendSnapshot).toHaveBeenLastCalledWith(2027));
+  expect(screen.getByText('2027년')).toBeInTheDocument();
 });

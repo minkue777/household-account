@@ -115,7 +115,7 @@ describe('actual asset statistics page', () => {
     read.mockResolvedValue([entry('TOTAL', '2019-01-01', 0), entry('TYPE_stock', '2019-01-01', 0), entry('OWNER_REF_profile:old', '2019-01-01', 0, { ownerKey: 'profile:old', ownerDisplayName: '지아' })]);
     render(<AssetStatsPage />);
     await screen.findByText('마지막 기록 자산');
-    expect(read).toHaveBeenCalledWith(undefined, expect.any(String), { cacheEpoch: 0, forceRefresh: true });
+    expect(read).toHaveBeenCalledWith(expect.any(String), { cacheEpoch: 0 });
     expect(screen.queryByText('데이터가 없습니다')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '지아' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('소유자별 자산 추이')).not.toBeInTheDocument();
@@ -180,7 +180,7 @@ describe('actual asset statistics page', () => {
     rerender(<AssetStatsPage />);
     await screen.findByText('25');
     expect(read).toHaveBeenCalledTimes(2);
-    expect(read).toHaveBeenLastCalledWith(undefined, expect.any(String), { cacheEpoch: 1, forceRefresh: true });
+    expect(read).toHaveBeenLastCalledWith(expect.any(String), { cacheEpoch: 1 });
   });
   it('paints the cached complete history on the first re-entry commit while verifying the server', async () => {
     mockScope.isSessionVerified = true;
@@ -191,7 +191,7 @@ describe('actual asset statistics page', () => {
     render(<Profiler id="cached-reentry" onRender={() => commits.push(document.body.textContent ?? '')}><AssetStatsPage /></Profiler>);
     expect(commits[0]).toContain('123,456');
     expect(screen.queryByText('최신 자산 이력 확인 중...')).not.toBeInTheDocument();
-    expect(read).toHaveBeenCalledWith(undefined, expect.any(String), { cacheEpoch: 0, forceRefresh: true });
+    expect(read).toHaveBeenCalledWith(expect.any(String), { cacheEpoch: 0 });
     fireEvent.click(screen.getByRole('button', { name: '월별' }));
     const toggle = screen.getByRole('button', { name: '월별 자산 변동' });
     fireEvent.click(toggle);
@@ -271,7 +271,7 @@ describe('actual asset statistics page', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByText('765,432')).toBeInTheDocument();
     expect(read).toHaveBeenCalledTimes(2);
-    expect(read).toHaveBeenLastCalledWith(undefined, expect.any(String), { cacheEpoch: 0, forceRefresh: true });
+    expect(read).toHaveBeenLastCalledWith(expect.any(String), { cacheEpoch: 0 });
   });
 
   it('[STAT-005][STAT-006] keeps completed charts and selections when a late portfolio command invalidates statistics', async () => {
@@ -317,7 +317,7 @@ describe('actual asset statistics page', () => {
     expect(screen.getByRole('button', { name: '월별 자산 변동' })).toBe(toggle);
   });
 
-  it('[STAT-006] preserves the selected dividend year through portfolio refresh and never restores the initial prefetch', async () => {
+  it('[STAT-006] refreshes only the selected dividend year while preserving its completed chart', async () => {
     mockScope.isSessionVerified = true;
     read.mockResolvedValue([]);
     jest.mocked(getDividendSnapshot).mockResolvedValueOnce(dividendSnapshot(1000))
@@ -330,14 +330,16 @@ describe('actual asset statistics page', () => {
     await screen.findByText('2,000원');
     const canvas = within(card).getByTestId('bar-chart');
     const refreshedYear = deferred<DividendSnapshotData>();
-    jest.mocked(getDividendSnapshot).mockResolvedValueOnce(dividendSnapshot(3000)).mockReturnValueOnce(refreshedYear.promise);
+    jest.mocked(getDividendSnapshot).mockReturnValueOnce(refreshedYear.promise);
     act(() => invalidateAssetStatisticsCache());
     expect(within(card).getByText(`${year - 1}년`)).toBeInTheDocument();
     expect(within(card).getByText('2,000원')).toBeInTheDocument();
     expect(within(card).getByTestId('bar-chart')).toBe(canvas);
     await act(async () => refreshedYear.resolve(dividendSnapshot(4000)));
     expect(within(card).getByText('4,000원')).toBeInTheDocument();
-    expect(jest.mocked(getDividendSnapshot).mock.calls.map(([value]) => value)).toEqual([year, year - 1, year, year - 1]);
+    expect(jest.mocked(getDividendSnapshot).mock.calls.map(([value]) => value)).toEqual([year, year - 1, year - 1]);
+    expect(getAllStockHoldings).toHaveBeenCalledTimes(3);
+    expect(getDividendEventsByYear).toHaveBeenCalledTimes(3);
   });
 
   it('[STAT-005] keeps completed dividends during a failed refresh and recovers without replacing the canvas', async () => {
@@ -396,7 +398,7 @@ describe('actual asset statistics page', () => {
     await screen.findByText('데이터가 없습니다');
   });
 
-  it('starts every dividend input while history is pending and hands the result to the card without rereading', async () => {
+  it('starts every dividend input while history is pending and displays the result without rereading', async () => {
     mockScope.isSessionVerified = true;
     const history = deferred<AssetHistoryEntry[]>();
     read.mockReturnValueOnce(history.promise);
@@ -411,6 +413,10 @@ describe('actual asset statistics page', () => {
     expect(screen.queryByText('배당금 현황')).not.toBeInTheDocument();
     expect(screen.queryByTestId('bar-chart')).not.toBeInTheDocument();
 
+    fireEvent(window, new Event('focus'));
+    fireEvent(document, new Event('visibilitychange'));
+    expect(getDividendSnapshot).toHaveBeenCalledTimes(1);
+
     await act(async () => history.resolve([]));
     await screen.findByText('4,321원');
     expect(screen.getByText('배당금 현황')).toBeInTheDocument();
@@ -422,7 +428,7 @@ describe('actual asset statistics page', () => {
     await waitFor(() => expect(getDividendSnapshot).toHaveBeenCalledTimes(2));
   });
 
-  it.each(['household', 'member', 'remote epoch'] as const)('discards pending dividend prefetch after %s changes', async change => {
+  it.each(['household', 'member', 'remote epoch'] as const)('discards pending dividend read after %s changes', async change => {
     mockScope.isSessionVerified = true;
     const oldHistory = deferred<AssetHistoryEntry[]>();
     const oldDividend = deferred<DividendSnapshotData>();
@@ -449,7 +455,7 @@ describe('actual asset statistics page', () => {
     expect(getDividendSnapshot).toHaveBeenCalledTimes(2);
   });
 
-  it('retains an early dividend prefetch failure until the history display gate opens', async () => {
+  it('retains an early dividend read failure until the history display gate opens', async () => {
     mockScope.isSessionVerified = true;
     const history = deferred<AssetHistoryEntry[]>();
     read.mockReturnValueOnce(history.promise);
@@ -464,7 +470,7 @@ describe('actual asset statistics page', () => {
     expect(screen.queryByText('0원')).not.toBeInTheDocument();
   });
 
-  it('reads fresh dividends when returning to the initial prefetched year', async () => {
+  it('reads fresh dividends when returning to the initial year', async () => {
     mockScope.isSessionVerified = true;
     jest.mocked(getDividendSnapshot).mockResolvedValueOnce(dividendSnapshot(1000))
       .mockResolvedValueOnce(dividendSnapshot(2000))
@@ -486,14 +492,14 @@ describe('actual asset statistics page', () => {
     expect(read).toHaveBeenCalledTimes(1);
   });
 
-  it.each(['household', 'member', 'remote epoch'] as const)('does not hand an already completed dividend prefetch to a new %s while old history is pending', async change => {
+  it.each(['household', 'member', 'remote epoch'] as const)('does not expose an already completed dividend read to a new %s while old history is pending', async change => {
     mockScope.isSessionVerified = true;
     const oldHistory = deferred<AssetHistoryEntry[]>();
     read.mockReturnValueOnce(oldHistory.promise);
     jest.mocked(getDividendSnapshot).mockResolvedValueOnce(dividendSnapshot(987654))
       .mockResolvedValueOnce(dividendSnapshot(2222));
     const commits: string[] = [];
-    const page = () => <Profiler id="completed-dividend-prefetch" onRender={() => commits.push(document.body.textContent ?? '')}><AssetStatsPage /></Profiler>;
+    const page = () => <Profiler id="completed-dividend-read" onRender={() => commits.push(document.body.textContent ?? '')}><AssetStatsPage /></Profiler>;
     const { rerender } = render(page());
     // Complete all immediate dividend inputs while keeping history unresolved.
     await act(async () => {});
@@ -514,7 +520,7 @@ describe('actual asset statistics page', () => {
     expect(getDividendSnapshot).toHaveBeenCalledTimes(2);
   });
 
-  it.each(['resolve', 'reject'] as const)('does not render or leave an unhandled %s after unmounting a pending dividend prefetch', async outcome => {
+  it.each(['resolve', 'reject'] as const)('does not render or leave an unhandled %s after unmounting a pending dividend read', async outcome => {
     mockScope.isSessionVerified = true;
     const history = deferred<AssetHistoryEntry[]>();
     const dividend = deferred<DividendSnapshotData>();
@@ -525,7 +531,7 @@ describe('actual asset statistics page', () => {
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
     window.addEventListener('unhandledrejection', unhandled);
     try {
-      const { container, unmount } = render(<Profiler id="unmounted-prefetch" onRender={onRender}><AssetStatsPage /></Profiler>);
+      const { container, unmount } = render(<Profiler id="unmounted-dividend-read" onRender={onRender}><AssetStatsPage /></Profiler>);
       await waitFor(() => expect(getDividendSnapshot).toHaveBeenCalledTimes(1));
       unmount();
       const committedBeforeCompletion = onRender.mock.calls.length;

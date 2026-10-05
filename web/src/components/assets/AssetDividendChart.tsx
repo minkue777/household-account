@@ -7,7 +7,6 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { StockHolding } from '@/types/asset';
 import {
   readAssetDividendStatistics,
-  type AssetDividendPrefetch,
   type AssetDividendStatistics,
 } from '@/platform/reporting/assetDividendReadModel';
 import ModalOverlay from '@/components/common/ModalOverlay';
@@ -25,8 +24,6 @@ interface DividendSnapshotEvent {
   isEstimated?: boolean;
 }
 
-const CURRENT_YEAR = getSeoulCalendarParts().year;
-
 function supportsDividendInfo(holding: StockHolding) {
   return (
     (holding.holdingType || 'stock') === 'stock' &&
@@ -38,10 +35,11 @@ function createEmptyMonthlyData() {
   return Array.from({ length: 12 }, () => 0);
 }
 
-function AssetDividendChart({ prefetchedSource }: { prefetchedSource?: AssetDividendPrefetch } = {}) {
+function AssetDividendChart({ visible = true, revision = 0 }: { visible?: boolean; revision?: number } = {}) {
+  const currentYear = getSeoulCalendarParts().year;
   const chartMotion = useChartMotion();
-  const initialSource = useRef(prefetchedSource);
-  const [dividendYear, setDividendYear] = useState(prefetchedSource?.year ?? CURRENT_YEAR);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [dividendYear, setDividendYear] = useState(currentYear);
   const [dividendRead, setDividendRead] = useState<{ year: number; data?: AssetDividendStatistics; failed: boolean }>({ year: dividendYear, failed: false });
   const currentRead = dividendRead.year === dividendYear ? dividendRead : undefined;
   const data = currentRead?.data;
@@ -52,22 +50,17 @@ function AssetDividendChart({ prefetchedSource }: { prefetchedSource?: AssetDivi
   const dividendEvents = data?.events ?? [];
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
 
-  // A new parent prefetch refreshes the current source without remounting the card.
-  useEffect(() => { initialSource.current = prefetchedSource; }, [prefetchedSource]);
-
   useEffect(() => {
     let isCancelled = false;
     let pending = false;
-    if (initialSource.current?.year !== dividendYear) initialSource.current = undefined;
-
-    const loadDividendData = async (prefetched?: Promise<AssetDividendStatistics>) => {
+    const loadDividendData = async () => {
       if (pending) return;
       pending = true;
       setDividendRead(previous => previous.year === dividendYear
         ? { ...previous, failed: false } : { year: dividendYear, failed: false });
 
       try {
-        const result = await (prefetched ?? readAssetDividendStatistics(dividendYear));
+        const result = await readAssetDividendStatistics(dividendYear);
 
         if (isCancelled) {
           return;
@@ -86,15 +79,15 @@ function AssetDividendChart({ prefetchedSource }: { prefetchedSource?: AssetDivi
     };
 
     const handleRefresh = () => {
-      if (typeof document !== 'undefined' && document.hidden) {
+      // Start the initial read immediately, but refresh only a displayed card.
+      if (document.hidden || !cardRef.current) {
         return;
       }
 
-      initialSource.current = undefined;
       void loadDividendData();
     };
 
-    void loadDividendData(initialSource.current?.result);
+    void loadDividendData();
     window.addEventListener('focus', handleRefresh);
     document.addEventListener('visibilitychange', handleRefresh);
 
@@ -103,9 +96,9 @@ function AssetDividendChart({ prefetchedSource }: { prefetchedSource?: AssetDivi
       window.removeEventListener('focus', handleRefresh);
       document.removeEventListener('visibilitychange', handleRefresh);
     };
-  }, [dividendYear, prefetchedSource]);
+  }, [dividendYear, revision]);
 
-  const isCurrentYear = dividendYear === CURRENT_YEAR;
+  const isCurrentYear = dividendYear === currentYear;
   const today = getTodayLocalDate();
 
   const holdingQuantityByCode = useMemo(() => {
@@ -310,9 +303,11 @@ function AssetDividendChart({ prefetchedSource }: { prefetchedSource?: AssetDivi
   const selectedMonthLabel = selectedMonth ? `${selectedMonth}월` : '';
   const selectedMonthTotal = selectedMonthEvents.reduce((sum, event) => sum + event.totalAmount, 0);
 
+  if (!visible) return null;
+
   return (
     <>
-      <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+      <div ref={cardRef} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-700">배당금 현황</h3>
         </div>

@@ -1,14 +1,14 @@
 'use client';
 
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import type { ChartOptions } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
 import { getSeoulCalendarParts, getTodayLocalDate, formatLocalDate } from '@/lib/utils/date';
-import { useHousehold } from '@/contexts/HouseholdContext';
-import { readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
 import type { AssetHistoryEntry } from '@/types/asset';
 import { useChartMotion } from '@/components/common/useChartMotion';
+
+type BalancePoint = Pick<AssetHistoryEntry, 'date' | 'balance' | 'changeAmount'>;
 
 function formatSignedAmount(value: number) {
   const prefix = value > 0 ? '+' : value < 0 ? '-' : '';
@@ -24,55 +24,39 @@ function formatSignedRate(value: number | undefined) {
 function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance, sourceHistory }: {
   snapshotId?: string;
   currentBalance?: number;
-  sourceHistory?: readonly AssetHistoryEntry[];
+  sourceHistory: readonly AssetHistoryEntry[];
 }) {
   const today = getSeoulCalendarParts();
   const chartMotion = useChartMotion();
-  const { householdKey, isSessionVerified, remoteReadEpoch = 0 } = useHousehold();
   const [view, setView] = useState<'monthly' | 'daily'>('daily');
   const [year, setYear] = useState(today.year);
   const [month, setMonth] = useState(today.month);
-  const [history, setHistory] = useState<AssetHistoryEntry[]>([]);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading');
-  const [revision, setRevision] = useState(0);
   const [showProfitTable, setShowProfitTable] = useState(false);
   const range = useMemo(() => ({
     start: formatLocalDate(new Date(year, view === 'monthly' ? 0 : month - 1, 1)),
     end: formatLocalDate(new Date(year, view === 'monthly' ? 12 : month, 0)),
   }), [year, month, view]);
-  useEffect(() => {
-    // The statistics page supplies its complete read so chart controls stay local.
-    if (sourceHistory !== undefined) return;
-    let active = true;
-    setHistory([]); setStatus('loading');
-    if (!householdKey || !isSessionVerified) return;
-    void readAssetStatisticsHistory(range.start, range.end).then(rows => {
-      if (active) { setHistory(rows.filter(entry => entry.assetId === snapshotId)); setStatus('ready'); }
-    }, () => { if (active) setStatus('failed'); });
-    return () => { active = false; };
-  }, [householdKey, isSessionVerified, remoteReadEpoch, range.start, range.end, snapshotId, revision, sourceHistory]);
-  const chartHistory = useMemo(() => sourceHistory === undefined ? history : sourceHistory.filter(
+  const chartHistory = useMemo(() => sourceHistory.filter(
     entry => entry.assetId === snapshotId && entry.date <= range.end,
-  ), [sourceHistory, history, snapshotId, range.end]);
-  const displayStatus = sourceHistory === undefined ? status : householdKey && isSessionVerified ? 'ready' : 'loading';
+  ), [sourceHistory, snapshotId, range.end]);
   const currentDate = getTodayLocalDate();
-  const displayHistory = useMemo(() => {
+  const displayHistory = useMemo<readonly BalancePoint[]>(() => {
     if (currentBalance === undefined || currentDate < range.start || currentDate > range.end) return chartHistory;
     const previous = chartHistory.filter(entry => entry.date < currentDate).at(-1);
     const todayEntry = chartHistory.find(entry => entry.date === currentDate);
     const baseline = previous?.balance ?? (todayEntry ? todayEntry.balance - todayEntry.changeAmount : undefined);
     // This display point comes from a confirmed asset read and is never saved.
-    const current: AssetHistoryEntry = {
-      id: `realtime_${snapshotId}_${currentDate}`, householdId: householdKey ?? '', assetId: snapshotId,
-      date: currentDate, balance: currentBalance, changeAmount: baseline === undefined ? 0 : currentBalance - baseline,
-      createdAt: new Date(0),
+    const current: BalancePoint = {
+      date: currentDate,
+      balance: currentBalance,
+      changeAmount: baseline === undefined ? 0 : currentBalance - baseline,
     };
     return [...chartHistory.filter(entry => entry.date !== currentDate), current].sort((a, b) => a.date.localeCompare(b.date));
-  }, [currentBalance, currentDate, range.start, range.end, chartHistory, householdKey, snapshotId]);
+  }, [currentBalance, currentDate, range.start, range.end, chartHistory]);
   const rows = useMemo(() => {
     const count = view === 'monthly' ? 12 : new Date(year, month, 0).getDate();
     let cursor = 0;
-    let baseline: AssetHistoryEntry | undefined;
+    let baseline: BalancePoint | undefined;
     return Array.from({ length: count }, (_, index) => {
       const start = formatLocalDate(new Date(year, view === 'monthly' ? index : month - 1, view === 'monthly' ? 1 : index + 1));
       const end = view === 'monthly' ? formatLocalDate(new Date(year, index + 1, 0)) : start;
@@ -155,14 +139,7 @@ function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance, sourceHistory 
         </button>
       </div>
 
-      {displayStatus === 'loading' ? (
-        <p role="status" className="py-8 text-center text-sm text-slate-400">변동 내역을 불러오는 중...</p>
-      ) : displayStatus === 'failed' ? (
-        <p role="alert" className="py-4 text-sm text-slate-500">
-          변동 내역을 불러오지 못했습니다.
-          <button type="button" className="ml-2 underline" onClick={() => setRevision(value => value + 1)}>다시 시도</button>
-        </p>
-      ) : rows.every(row => row.change === null) ? (
+      {rows.every(row => row.change === null) ? (
         <p className="py-8 text-center text-sm text-slate-400">변동 데이터가 없습니다</p>
       ) : <>
         <div className="mb-3 h-[180px]"><Bar data={chartData} options={chartOptions} /></div>

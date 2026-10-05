@@ -15,15 +15,9 @@ export interface AssetDividendStatistics {
   readonly events: DividendEventRecord[];
 }
 
-export interface AssetDividendPrefetch {
-  readonly year: number;
-  readonly result: Promise<AssetDividendStatistics>;
-}
-
 /** All independent dividend inputs must complete for the same verified actor. */
 export async function readAssetDividendStatistics(
   year: number,
-  assertCurrentSource: () => void = () => {},
 ): Promise<AssetDividendStatistics> {
   const scope = getClientSessionScope();
   if (!scope) throw new Error('STATISTICS_SESSION_CHANGED');
@@ -33,7 +27,6 @@ export async function readAssetDividendStatistics(
     if (!active || assetStatisticsSessionKey(active) !== actorKey) {
       throw new Error('STATISTICS_SESSION_CHANGED');
     }
-    assertCurrentSource();
   };
   assertCurrent();
   const [allHoldings, snapshot, events] = await Promise.all([
