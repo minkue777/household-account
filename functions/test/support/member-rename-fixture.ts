@@ -1,13 +1,25 @@
 import { createMemberRenameApplication } from "../../src/contexts/access/member-rename/application/memberRenameApplication";
 import type {
   MemberRenameMutation,
+  MemberRenameSnapshot as RenameSnapshot,
   MemberRenameStorePort,
 } from "../../src/contexts/access/member-rename/application/ports/out/memberRenameStorePort";
 import type {
   MemberRenamedEvent,
-  MemberRenameState,
+  MemberRenameReceipt,
+  RenameableHouseholdMember,
 } from "../../src/contexts/access/member-rename/domain/model/memberRename";
 import type { MemberRenameInputPort } from "../../src/contexts/access/public";
+import { memberRenamedEvent } from "../../src/contexts/access/member-rename/domain/policies/memberRenamePolicy";
+
+interface MemberRenameState {
+  householdId: string;
+  members: readonly RenameableHouseholdMember[];
+  memberships: readonly { principalUid: string; memberId: string; status: "active" | "removed" }[];
+  memberOwnerProfiles: readonly { profileId: string; linkedMemberId: string; displayName: string }[];
+  receipts: readonly MemberRenameReceipt[];
+  events: readonly MemberRenamedEvent[];
+}
 
 export interface MemberRenameFixture {
   householdId: string;
@@ -90,11 +102,31 @@ class FixtureMemberRenameStore implements MemberRenameStorePort {
   }
 
   async transact<T>(
-    operation: (state: MemberRenameState) => MemberRenameMutation<T>,
+    actor: Parameters<MemberRenameInputPort["renameSelf"]>[0],
+    displayName: string,
+    idempotencyKey: string,
+    operation: (snapshot: RenameSnapshot) => MemberRenameMutation<T>,
   ): Promise<T> {
     const transaction = this.serial.then(() => {
-      const mutation = operation(cloneState(this.stateValue));
-      this.stateValue = cloneState(mutation.state);
+      const state = this.stateValue;
+      const mutation = operation({
+        member: state.members.find(member => member.memberId === actor.actingMemberId),
+        activeSelf: actor.householdId === state.householdId && state.memberships.some(membership =>
+          membership.status === "active" && membership.principalUid === actor.principalUid && membership.memberId === actor.actingMemberId),
+        displayNameTaken: state.members.some(member => member.memberId !== actor.actingMemberId && member.displayName === displayName),
+        receipt: state.receipts.find(receipt => receipt.idempotencyKey === idempotencyKey),
+      });
+      if (mutation.change) {
+        const { member, receipt } = mutation.change;
+        this.stateValue = {
+          ...state,
+          members: state.members.map(current => current.memberId === member.memberId ? member : current),
+          memberOwnerProfiles: state.memberOwnerProfiles.map(profile => profile.linkedMemberId === member.memberId
+            ? { ...profile, displayName: member.displayName } : profile),
+          receipts: [...state.receipts, receipt],
+          events: [...state.events, memberRenamedEvent(state.householdId, member)],
+        };
+      }
       return mutation.value;
     });
     this.serial = transaction.then(

@@ -229,6 +229,8 @@ Value Object는 `HouseholdName`, `MemberDisplayName`, `AssetOwnerProfileName`, `
 
 실제 `RenameSelf` 구현 소유자는 `member-rename/application/memberRenameApplication.ts`와 `FirebaseMemberRenameStore`입니다. AssetOwnerProfile Application은 dependent 명의자 변경만 처리하며 별도 자기 이름 변경 API를 두지 않습니다.
 
+이름 변경 저장은 본인 Member·Membership·해당 receipt·요청 이름의 충돌과 연결 프로필만 읽습니다. 전체 상태 복사와 diff 저장은 하지 않습니다. 같은 가구 문서를 transaction에서 갱신하여 두 멤버의 동일 이름 선점도 직렬화합니다. 구형 가구의 Member 보완과 이름 mirror는 유지하며 실제 Firebase Emulator에서 중복·동시 선점 거부, 표시 문서 동기화, 버전 충돌 및 receipt 재생을 검사합니다.
+
 ### 5.5 자산 명의자 프로필 관리
 
 1. Member 생성·초대 가입·legacy 연결 UoW는 해당 memberId에 연결된 `member` 프로필이 없으면 함께 생성하고, 이미 있으면 같은 profileId를 재사용합니다.

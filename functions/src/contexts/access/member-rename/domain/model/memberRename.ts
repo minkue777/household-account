@@ -5,18 +5,6 @@ export interface RenameableHouseholdMember {
   aggregateVersion: number;
 }
 
-export interface MemberRenameMembership {
-  principalUid: string;
-  memberId: string;
-  status: "active" | "removed";
-}
-
-export interface LinkedMemberOwnerProfile {
-  profileId: string;
-  linkedMemberId: string;
-  displayName: string;
-}
-
 export interface MemberRenamedEvent {
   eventType: "MemberRenamed.v1";
   householdId: string;
@@ -37,11 +25,3 @@ export interface MemberRenameReceipt {
   };
 }
 
-export interface MemberRenameState {
-  householdId: string;
-  members: readonly RenameableHouseholdMember[];
-  memberships: readonly MemberRenameMembership[];
-  memberOwnerProfiles: readonly LinkedMemberOwnerProfile[];
-  receipts: readonly MemberRenameReceipt[];
-  events: readonly MemberRenamedEvent[];
-}

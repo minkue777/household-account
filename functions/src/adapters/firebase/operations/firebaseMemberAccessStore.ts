@@ -104,17 +104,16 @@ export class FirebaseMemberAccessStore {
         event,
       );
       if (!update.replayed) {
+        const document = {
+          ...update.stats,
+          schemaVersion: 1,
+          updatedAt: FieldValue.serverTimestamp(),
+          ...(snapshot.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
+        };
         transaction.set(
           reference,
-          {
-            ...update.stats,
-            schemaVersion: 1,
-            updatedAt: FieldValue.serverTimestamp(),
-            ...(snapshot.exists
-              ? {}
-              : { createdAt: FieldValue.serverTimestamp() }),
-          },
-          { merge: true },
+          document,
+          { mergeFields: Object.keys(document) },
         );
       }
       // 집계의 128개 최근 ID는 구형 기록 호환용이며, 중복 판정의 보존 기간을 제한하지 않습니다.
