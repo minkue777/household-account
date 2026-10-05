@@ -7,8 +7,9 @@ import { getFirestore } from "firebase-admin/firestore";
 
 function usage() {
   return [
+    "구 flat collection → 초기 canonical 이관 비교 전용 (현재 전체 런타임 상태 검사가 아닙니다):",
     "사용법:",
-    "  npm run reconcile:runtime -- --project PROJECT_ID --household HOUSEHOLD_ID",
+    "  npm run reconcile:legacy-runtime -- --project PROJECT_ID --household HOUSEHOLD_ID",
     "",
     "이 명령은 Firestore를 읽기만 하며 문서를 생성·수정·삭제하지 않습니다.",
   ].join("\n");
@@ -245,6 +246,7 @@ export async function main() {
   ];
   const report = {
     mode: "READ_ONLY_RECONCILIATION",
+    scope: "LEGACY_TO_INITIAL_CANONICAL",
     comparisonMode: "PRESERVED_BUSINESS_FACTS",
     transformedFieldsVerifiedByPlan: [
       "ledger.creatorMemberId",

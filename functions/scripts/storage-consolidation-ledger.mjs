@@ -1,4 +1,4 @@
-import { normalizers } from './reconcile-runtime.mjs';
+import { normalizers } from './reconcile-legacy-runtime.mjs';
 
 const stable = value => JSON.stringify(value, (_, entry) => entry && !Array.isArray(entry) && typeof entry === 'object'
   ? Object.fromEntries(Object.entries(entry).sort(([a], [b]) => a.localeCompare(b))) : entry);

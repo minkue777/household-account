@@ -81,19 +81,19 @@ node scripts/set-system-admin-claim.mjs `
 3. [런타임 데이터 전환 Runbook](runtime-migration-runbook.md)의 읽기 전용 계획을 생성하고 충돌·수동 연결 대상을 검토합니다.
 4. [Firestore TTL 전환 Runbook](firestore-ttl-backfill.md)의 dry-run에서 잘못된 날짜가 없고 대상 수량이 예상과 일치하는지 검토합니다.
 5. 별도 승인을 받은 계획만 plan hash와 프로젝트 재확인 값을 붙여 적용합니다.
-6. 아래 reconciliation이 가구별 `MATCH`인지 확인한 뒤에만 compatibility reader 제거를 별도 변경으로 진행합니다.
+6. 해당 이관 도구의 현재 canonical 대상 검증을 확인한 뒤에만 compatibility reader 제거를 별도 변경으로 진행합니다. 초기 전환과 현재 storage consolidation을 혼동하지 않습니다.
 
 각 도구는 기본적으로 읽기 전용이며, `--apply`가 필요한 단계는 코드 배포와 같은 승인으로 간주하지 않습니다. 실제 데이터 전환과 TTL 백필에는 각각 별도의 운영 승인이 필요합니다.
 
-### 읽기 전용 런타임 reconciliation
+### 초기 이관 기록을 위한 읽기 전용 legacy reconciliation
 
-Application Default Credentials가 설정된 운영자 환경에서 가구별로 아래 명령을 실행합니다. 이 도구는 Firestore read만 수행하고, 가구 ID 원문이나 개별 문서 내용 대신 count와 결정적 SHA-256 요약만 출력합니다.
+아래 명령은 과거 flat collection과 초기 canonical 구조를 비교할 때만 사용합니다. `categories`는 초기 가구별 categories를 비교하므로 현재 categoryCatalog의 배포 상태 판정에 사용할 수 없습니다. 현행 정본 정리는 [Storage consolidation](storage-consolidation-2026-09-18.md)의 검증을 따릅니다. Application Default Credentials가 설정된 운영자 환경에서 실행합니다. 이 도구는 Firestore read만 수행하고, 가구 ID 원문이나 개별 문서 내용 대신 count와 결정적 SHA-256 요약만 출력합니다.
 
 ```powershell
 cd functions
-npm run reconcile:runtime -- `
+npm run reconcile:legacy-runtime -- `
   --project household-account-6f300 `
   --household HOUSEHOLD_ID
 ```
 
-`ledger`, `assets`, `categories`, `recurring`, `positions`가 모두 `MATCH`인 가구만 해당 compatibility reader 제거 후보가 됩니다. `MISMATCH`이면 종료 코드 2를 반환하며 자동 backfill이나 추정 귀속은 수행하지 않습니다.
+초기 이관 범위에서 `ledger`, `assets`, `categories`, `recurring`, `positions`를 비교합니다. 이 결과만으로 현재 compatibility reader 제거를 결정하지 않습니다. `MISMATCH`이면 종료 코드 2를 반환하며 자동 backfill이나 추정 귀속은 수행하지 않습니다.

@@ -173,10 +173,10 @@ target은 create-only이며 이미 같은 결정이 반영된 경우만 replay�
 업무 통계가 아니라 migration drift 탐지 지표입니다. target count·금액·결정 hash 중
 하나라도 다르면 plan은 `failed/MISMATCH`이고 전환하지 않습니다.
 
-마지막으로 read-only 비교를 실행합니다.
+이 문서의 초기 전환에서는 마지막으로 read-only 비교를 실행합니다. 현재 categoryCatalog 전환 이후의 운영 상태 검사에는 이 과거 비교를 사용하지 않으며 [현행 storage consolidation](storage-consolidation-2026-09-18.md)의 검증을 따릅니다.
 
 ```powershell
-npm run reconcile:runtime -- --project PROJECT_ID --household HOUSEHOLD_ID
+npm run reconcile:legacy-runtime -- --project PROJECT_ID --household HOUSEHOLD_ID
 ```
 
 `ledger`, `assets`, `categories`, `recurring`, `positions`가 모두 `MATCH`이고 자동화

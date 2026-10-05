@@ -13,8 +13,8 @@
 | [FIN-04 · P2 · 정기지출은 Outbox 원자 저장 뒤 사용하지 않는 별도 publish 경로를 유지합니다](finance.md) | 구현·실제 SDK 검사 완료 | [정기 계획과 Outbox 단순화](../../operations/recurring-simplicity-2026-10-05.md) |
 | [FIN-05 · P2 · 삭제 자산 목록의 ID 왕복을 없애 한 번 읽은 문서를 그대로 반환합니다](finance.md) | 구현·실제 SDK 검사 완료 | [자산 조회·목록 발행](../../operations/portfolio-storage-simplicity-2026-10-05.md) |
 | [FIN-08 · P2 · 종목 catalog의 업로드 전 가상 metadata를 없애 실제 저장 결과에서 한 번만 구성합니다](finance.md) | 구현·실제 SDK 검사 완료 | [자산 조회·목록 발행](../../operations/portfolio-storage-simplicity-2026-10-05.md) |
-| [FIN-06 · P3-조건부 · 지역화폐 Canonical/legacy 이중 저장의 종료 계획을 명시합니다](finance.md) | 미착수 | |
-| [FIN-07 · P3-조건부 · 배당 조회에서 이관 계획을 매번 재해석하는 복구 경로를 1회 자료 정비로 옮깁니다](finance.md) | 미착수 | |
+| [FIN-06 · P3-조건부 · 지역화폐 Canonical/legacy 이중 저장의 종료 계획을 명시합니다](finance.md) | 검토 완료·계약상 유지 결정 | [근거와 종료 조건](../../operations/simplicity-retention-decisions-2026-10-05.md) |
+| [FIN-07 · P3-조건부 · 배당 조회에서 이관 계획을 매번 재해석하는 복구 경로를 1회 자료 정비로 옮깁니다](finance.md) | 검토 완료·계약상 유지 결정 | [근거와 종료 조건](../../operations/simplicity-retention-decisions-2026-10-05.md) |
 | [PT-01 — 구조 검사로 복잡한 배포/분해 모형을 고정합니다 (높음)](platform-tests.md) | 구현·관련 검사 완료 | [한 번의 후보 준비](../../operations/build-preparation-simplicity-2026-10-05.md) |
 | [PT-02 — fixture가 제품 경계의 행동을 직접 대신합니다 (높음)](platform-tests.md) | 실제 Web·SDK 검사로 대체 완료 | [가구 접근 검사 경계](../../operations/access-test-boundaries-2026-10-05.md) |
 | [PT-03 — 상수로 저장된 자료를 비교하는 보존 assertion은 삭제 가능합니다 (높음)](platform-tests.md) | 구현·실제 SDK 검사 완료 | [명시적 동작과 실제 보존 검사](../../operations/access-command-simplicity-2026-10-05.md) |
@@ -33,13 +33,13 @@
 | [후보 A07 — 계약 테스트의 문법/폴더 강제를 행동 검증으로 대체](platform.md) | 구현·관련 검사 완료 | [서버 실행 경로 정비](../../operations/server-simplicity-2026-10-05.md) |
 | [후보 A08 — 운영 runner에 박힌 테스트 전용 실패 주입 제거](platform.md) | 구현·실제 SDK 검사 완료 | [생명주기 실행 경계](../../operations/lifecycle-simplicity-2026-10-05.md) |
 | [후보 A09 — 30일 접속 통계 정리가 실제 저장에서도 적용되도록 단순화](platform.md) | 구현·관련 검사 완료 | [실제 SDK 재현 및 수정](../../operations/access-simplicity-2026-10-05.md) |
-| [후보 A10 — 관리자 조회를 실제 조회 범위에 맞추고 만료된 통계 예외 제거](platform.md) | 미착수 | |
+| [후보 A10 — 관리자 조회를 실제 조회 범위에 맞추고 만료된 통계 예외 제거](platform.md) | 검토 완료·계약상 유지 결정 | [근거와 종료 조건](../../operations/simplicity-retention-decisions-2026-10-05.md) |
 | [TB-01 — 저장 결과가 같다는 검사와 읽기·쓰기 비용 검사를 구별한다](test-boundaries.md) | 실제 SDK 검사·추적성 정리 완료 | [저장 보존과 실제 조회 비용](../../operations/read-cost-contract-tests-2026-10-05.md) |
 | [TB-02 — 공유 schema 검사를 생산자·소비자 실행 검사로 부르지 않는다](test-boundaries.md) | 실제 SDK 검사·추적성 정리 완료 | [저장 보존과 실제 조회 비용](../../operations/read-cost-contract-tests-2026-10-05.md) |
 | [TOOL-01 — Android 영향 범위를 수동 파일명 목록으로 관리하면서 보조 도구 검사가 스스로 빠집니다](tooling.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
 | [TOOL-02 — 현재 실행자가 쓰지 않는 과거 성능 PASS/FAIL 평가 모드를 계속 유지합니다](tooling.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
 | [TOOL-03 — 동일 후보를 준비하는 build와 구조 검사를 한 흐름에서 반복합니다](tooling.md) | 구현·관련 검사 완료 | [한 번의 후보 준비](../../operations/build-preparation-simplicity-2026-10-05.md) |
-| [TOOL-04 — 완료된 구형 이관용 reconciliation이 일반 runtime 명령처럼 남아 있습니다](tooling.md) | 미착수 | |
+| [TOOL-04 — 완료된 구형 이관용 reconciliation이 일반 runtime 명령처럼 남아 있습니다](tooling.md) | 이름·사용 범위 정리 및 검사 완료 | [과거 비교 도구 범위](../../operations/simplicity-retention-decisions-2026-10-05.md) |
 | [TOOL-05 — 요구사항 선언 파서가 세 군데에서 같은 규칙을 다시 구현합니다](tooling.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
 | [TOOL-06 — 런타임 보안 경계 검사에 과거 폴더 이전 완료 조건이 섞여 있습니다](tooling.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
 | [WT-01 · 원장 optimistic 수정: 읽기 전용 metadata, expectedVersion, 즉시 반영/rollback](web-tests.md) | 구현·관련 검사 완료 | [운영 연결과 계약 검사](../../operations/web-contract-tests-simplicity-2026-10-05.md) |
@@ -59,7 +59,7 @@
 | [W4. 폼의 생성·초기화·복구가 여러 곳에 있다 — 기능별로 정리](web.md) | 구현·관련 검사 완료 | [편집 초안과 시세 수명](../../operations/editor-simplicity-2026-10-05.md) |
 | [W5. 주식/코인 검색 입력 흐름이 추가·상세 화면에 중복된다 — 국소 정비](web.md) | 구현·관련 검사 완료 | [편집 초안과 시세 수명](../../operations/editor-simplicity-2026-10-05.md) |
 | [W6. 홈 설정 UI의 테스트와 운영 연결이 다르다 — 계약 정리 우선](web.md) | 구현·관련 검사 완료 | [운영 연결과 계약 검사](../../operations/web-contract-tests-simplicity-2026-10-05.md) |
-| [W7. 통계 캐시에 화면 애니메이션과 부분 수정 정책이 섞여 있다 — 조건부 정비](web.md) | 미착수 | |
+| [W7. 통계 캐시에 화면 애니메이션과 부분 수정 정책이 섞여 있다 — 조건부 정비](web.md) | 검토 완료·계약상 유지 결정 | [근거와 종료 조건](../../operations/simplicity-retention-decisions-2026-10-05.md) |
 | [W8. 같은 카테고리 문서를 목록과 버전으로 나눠 다시 구독한다 — 원본 단위 정비](web.md) | 서버 배포·Web 구현·브라우저 5개 완료 | [카탈로그 원본과 확정 버전](../../operations/category-catalog-simplicity-2026-10-05.md) |
 | [W9. 오래된 가맹점 API와 실패를 빈 성공으로 바꾸는 경계 — 삭제·교정 구분](web.md) | 구현·관련 검사 완료 | [설정 실패와 사용하지 않는 경계](../../operations/settings-simplicity-2026-10-05.md) |
 | [W10. 더 이상 쓰지 않는 인자를 호출부까지 운반한다 — 작은 삭제 단위](web.md) | 구현·관련 검사 완료 | [설정 실패와 사용하지 않는 경계](../../operations/settings-simplicity-2026-10-05.md) |
@@ -71,7 +71,7 @@
 | [5. configuration의 transaction 내부 가상 store를 순수 mutation으로 축소](capture.md) | 구현·관련 검사 완료 | [카드·규칙 직접 변경 계산](../../operations/server-simplicity-2026-10-05.md) |
 | [6. 테스트만 소비하는 legacy Shortcut owner 추론은 운영 src와 분리](capture.md) | 구현·관련 검사 완료 | [수집 인가와 과거 정책](../../operations/capture-authorization-simplicity-2026-10-05.md) |
 | [7. QuickEdit의 original/draft/Intent 필드 복제를 한 snapshot과 draft로 정리](capture.md) | 미착수 | |
-| [8. 모든 알림 event에 붙은 legacy Shortcut guard의 종료 조건 명시](capture.md) | 미착수 | |
+| [8. 모든 알림 event에 붙은 legacy Shortcut guard의 종료 조건 명시](capture.md) | 검토 완료·계약상 유지 결정 | [근거와 종료 조건](../../operations/simplicity-retention-decisions-2026-10-05.md) |
 | [CT01 — 경합이라고 이름 붙인 검사가 순차 실행입니다. P1, 확신 높음](capture-tests.md) | 미착수 | |
 | [CT02 — 로그·원문 비저장의 일부 검사가 상수 빈 배열을 읽습니다. P1, 확신 높음](capture-tests.md) | 미착수 | |
 | [CT03 — receipt 조율 테스트가 취소·해시 별도 구현까지 유지합니다. P2, 확신 높음](capture-tests.md) | 미착수 | |

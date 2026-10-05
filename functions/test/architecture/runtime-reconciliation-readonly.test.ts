@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const script = readFileSync(
-  resolve(__dirname, "../../scripts/reconcile-runtime.mjs"),
+  resolve(__dirname, "../../scripts/reconcile-legacy-runtime.mjs"),
   "utf8",
 );
 

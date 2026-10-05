@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 // @ts-ignore 운영용 ESM 스크립트는 별도 declaration을 배포하지 않습니다.
-import { comparison, normalizers } from "../../scripts/reconcile-runtime.mjs";
+import { comparison, normalizers } from "../../scripts/reconcile-legacy-runtime.mjs";
 
 describe("runtime reconciliation 보존 업무 사실 비교", () => {
   it("명시적으로 변환되는 creator·owner·기본 설정·최초 적용 월은 원문 동일성 대상이 아니다", () => {
