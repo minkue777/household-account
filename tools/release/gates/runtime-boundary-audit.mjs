@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -67,64 +67,6 @@ for (const path of sourceFiles("android/app/src/main", [".kt", ".java"])) {
       path: display(path),
       reason: "Firestore 직접 write 호출",
     });
-  }
-}
-
-const functionsEntryPath = resolve(root, "functions/src/index.ts");
-if (statSync(functionsEntryPath).isFile()) {
-  const entry = readFileSync(functionsEntryPath, "utf8");
-  const legacyExports = [
-    "./expenses",
-    "./assets",
-    "./dividends",
-    "./households",
-    "./notifications",
-  ].filter((modulePath) => entry.includes(modulePath));
-  if (legacyExports.length > 0) {
-    violations.push({
-      runtime: "functions",
-      path: display(functionsEntryPath),
-      reason: `flat legacy export: ${legacyExports.join(", ")}`,
-    });
-  }
-}
-
-const functionsFacadePath = resolve(
-  root,
-  "functions/src/bootstrap/firebaseFunctionFacade.ts",
-);
-if (statSync(functionsFacadePath).isFile()) {
-  const facade = readFileSync(functionsFacadePath, "utf8");
-  const legacyModules = [
-    "../expenses",
-    "../assets",
-    "../dividends",
-    "../households",
-    "../notifications",
-  ].filter((modulePath) => facade.includes(modulePath));
-  if (legacyModules.length > 0) {
-    violations.push({
-      runtime: "functions",
-      path: display(functionsFacadePath),
-      reason: `bootstrap을 우회하는 legacy handler: ${legacyModules.join(", ")}`,
-    });
-  }
-}
-
-for (const misplaced of [
-  "functions/src/platform/pwa",
-  "functions/src/platform/android-host",
-]) {
-  try {
-    if (statSync(resolve(root, misplaced)).isDirectory()) {
-      violations.push({
-        runtime: "placement",
-        path: misplaced,
-        reason: "실제 배포 단위(Web 또는 Android)로 이전되지 않은 참조 구현",
-      });
-    }
-  } catch {
-    // 목표 위치로 이전되어 경로가 사라진 정상 상태입니다.
   }
 }
 

@@ -256,7 +256,6 @@ jobs:
             functions/package-lock.json
             web/package-lock.json
       - name: Native 명령 보류 도구 회귀 검사
-        if: steps.scope.outputs.required == 'true'
         run: node --test tools/e2e/native-command-gate.test.mjs tools/e2e/structured-log.test.mjs
       - run: npm ci --prefix functions && npm ci --prefix web
         if: steps.scope.outputs.required == 'true'

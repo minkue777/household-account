@@ -36,12 +36,12 @@
 | [후보 A10 — 관리자 조회를 실제 조회 범위에 맞추고 만료된 통계 예외 제거](platform.md) | 미착수 | |
 | [TB-01 — 저장 결과가 같다는 검사와 읽기·쓰기 비용 검사를 구별한다](test-boundaries.md) | 미착수 | |
 | [TB-02 — 공유 schema 검사를 생산자·소비자 실행 검사로 부르지 않는다](test-boundaries.md) | 미착수 | |
-| [TOOL-01 — Android 영향 범위를 수동 파일명 목록으로 관리하면서 보조 도구 검사가 스스로 빠집니다](tooling.md) | 미착수 | |
+| [TOOL-01 — Android 영향 범위를 수동 파일명 목록으로 관리하면서 보조 도구 검사가 스스로 빠집니다](tooling.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
 | [TOOL-02 — 현재 실행자가 쓰지 않는 과거 성능 PASS/FAIL 평가 모드를 계속 유지합니다](tooling.md) | 미착수 | |
 | [TOOL-03 — 동일 후보를 준비하는 build와 구조 검사를 한 흐름에서 반복합니다](tooling.md) | 미착수 | |
 | [TOOL-04 — 완료된 구형 이관용 reconciliation이 일반 runtime 명령처럼 남아 있습니다](tooling.md) | 미착수 | |
 | [TOOL-05 — 요구사항 선언 파서가 세 군데에서 같은 규칙을 다시 구현합니다](tooling.md) | 미착수 | |
-| [TOOL-06 — 런타임 보안 경계 검사에 과거 폴더 이전 완료 조건이 섞여 있습니다](tooling.md) | 미착수 | |
+| [TOOL-06 — 런타임 보안 경계 검사에 과거 폴더 이전 완료 조건이 섞여 있습니다](tooling.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
 | [WT-01 · 원장 optimistic 수정: 읽기 전용 metadata, expectedVersion, 즉시 반영/rollback](web-tests.md) | 미착수 | |
 | [WT-02 · 원본 선택·월분할 command/lineage](web-tests.md) | 미착수 | |
 | [WT-03 · 홈 설정 편집 version 고정·중복 카드 저장 거부](web-tests.md) | 미착수 | |

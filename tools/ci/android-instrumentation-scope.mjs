@@ -3,18 +3,14 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const ANDROID_PREFIXES = ['android/', 'contracts/', 'web/src/platform/android-host/'];
+const ANDROID_PREFIXES = ['android/', 'contracts/', 'web/src/platform/android-host/', 'tools/e2e/', 'tools/ci/'];
 const ANDROID_INTEGRATION_FILES = new Set([
   '.github/workflows/quality-gates.yml',
-  'tools/ci/prepare-android-ui.mjs',
-  'tools/ci/prepare-android-ui.test.mjs',
   'web/src/lib/bridges/androidBridge.ts',
   'web/src/lib/authService.ts',
   'web/src/lib/firebase.ts',
   'web/e2e/native-quick-edit.spec.ts',
   'web/playwright.native.config.ts',
-  'tools/e2e/native-firebase.mjs',
-  'tools/e2e/native-web-runtime.mjs',
 ]);
 
 export function affectsAndroidRuntime(path) {

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { observeWorkerActivation } from './worker-activation-observer';
 import { createServer, request as httpRequest, type ServerResponse } from 'node:http';
 
 test('[T-PWA-005][PWA-006][PWA-007] 알림 주소는 HTTP redirect로 편집 대상을 보존하고 CSP 차단 없이 화면을 연다', async ({ page, request }) => {
@@ -107,6 +108,7 @@ test('[T-PWA-006][T-PWA-002][PWA-004][PWA-008] 온라인 조회의 HTTP 응답�
 });
 
 test('[T-PWA-INSTALL-001][T-PWA-001][T-PWA-003][PWA-001][PWA-002][PWA-003][PWA-004][PWA-005][PWA-007][PWA-008] 빌드된 HTML의 CSP가 hydration을 허용하고 실제 root worker가 static만 cache한다', async ({ page, context, request }, testInfo) => {
+  const workerObservation = observeWorkerActivation(context);
   const blockedScripts: string[] = [];
   page.on('console', message => { if (/Refused to execute inline script|violates.*script-src/i.test(message.text())) blockedScripts.push(message.text()); });
   const response = await page.goto('/');
@@ -137,6 +139,7 @@ test('[T-PWA-INSTALL-001][T-PWA-001][T-PWA-003][PWA-001][PWA-002][PWA-003][PWA-0
     await navigator.serviceWorker.register('/sw.js', { scope: '/' });
     await navigator.serviceWorker.ready;
   });
+  await workerObservation.ready();
   await page.reload();
   await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toContain('/sw.js');
   await page.evaluate(async () => {
@@ -204,6 +207,7 @@ test('[T-PWA-INSTALL-001][T-PWA-001][T-PWA-003][PWA-001][PWA-002][PWA-003][PWA-0
     await expect.poll(() => page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration('/'))?.waiting)).toBe(true);
     expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistration('/'))?.waiting?.scriptURL)).toBe(candidateUrl);
     expect(await page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toBe(before);
+    await workerObservation.ready();
     const version = await page.evaluate(async () => {
       const waiting = (await navigator.serviceWorker.getRegistration('/'))!.waiting!;
       const channel = new MessageChannel();
@@ -234,8 +238,16 @@ test('[T-PWA-INSTALL-001][T-PWA-001][T-PWA-003][PWA-001][PWA-002][PWA-003][PWA-0
       controller: { scriptURL: candidateUrl, state: 'activated' },
       active: { scriptURL: candidateUrl, state: 'activated' },
     } });
+    const candidateObservation = (await workerObservation.read()).find(value => value.url === candidateUrl);
+    expect(candidateObservation).toMatchObject({ events: expect.arrayContaining([
+      expect.objectContaining({ type: 'message', messageType: 'ACTIVATE_WAITING_WORKER', workerVersion: version }),
+      expect.objectContaining({ type: 'skipWaiting' }),
+      expect.objectContaining({ type: 'skipWaiting-resolved' }),
+    ]) });
     await expect(page.getByRole('button', { name: /\uB85C\uADF8\uC778/ }).first()).toBeVisible();
   } finally {
+    await testInfo.attach('worker-activation-events', { contentType: 'application/json', body: Buffer.from(JSON.stringify(await workerObservation.read(), null, 2)) });
+    await workerObservation.dispose();
     await testInfo.attach('worker-activation-lifecycle', { contentType: 'application/json',
       body: Buffer.from(JSON.stringify(await lifecycle.evaluate(probe => probe.read()), null, 2)) });
     await lifecycle.evaluate(probe => probe.dispose());
