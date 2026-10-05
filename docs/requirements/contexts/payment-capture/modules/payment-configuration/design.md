@@ -295,3 +295,7 @@ android/core/contracts/                                   # 생성 Kotlin DTO; �
 - 운영의 legacy read·dual-write 제거는 canonical 정합성 사전 검증과 `T-MER-002` 통과 뒤 배포합니다. 이전 문서는 복구용으로 보존할 수 있으며 live 설정의 원본으로 사용하지 않습니다.
 
 구현 순서는 (1) 현재 Web·Android 공용 fixture 추출, (2) 순수 정규화·매칭 Policy와 characterization test, (3) 서버 Query Port와 Legacy Mapper, (4) uniqueness claim·Command, (5) Web writer 전환, (6) Android·Shortcut의 직접 조회 제거, (7) category archive page remap Command와 receipt 추가, (8) backfill과 레거시 writer 제거 순입니다.
+
+### 설정 화면 저장 결과
+
+카드·가맹점 설정은 성공 응답에서만 폼/삭제 확인창을 닫습니다. 중복·통신 실패·버전 충돌은 입력과 편집 시작 version을 보존하고 오류를 표시합니다. 진행 중 중복 제출을 막고 가구/명의 전환 후 이전 요청 결과를 적용하지 않습니다. 규칙 구독 실패는 정상 빈 목록과 별개이며 마지막 성공 목록과 재시도 동작을 제공합니다. 이전 하위 호환 API와 쓰지 않는 category map은 화면 계약에 포함하지 않습니다.

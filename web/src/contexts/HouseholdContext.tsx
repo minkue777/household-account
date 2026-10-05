@@ -1028,7 +1028,6 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     if (!scope || getClientSessionScope() !== scope) return;
     await renameHouseholdMember(
       household.id,
-      currentMember.id,
       trimmedName,
       currentMember.aggregateVersion
     );

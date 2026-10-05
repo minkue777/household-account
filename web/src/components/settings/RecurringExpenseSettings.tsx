@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSettingsMutation } from './useSettingsMutation';
 import { useSettingsSectionExpansion } from './useSettingsSectionExpansion';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useHousehold } from '@/contexts/HouseholdContext';
@@ -21,6 +22,8 @@ export default function RecurringExpenseSettings() {
     getCategoryColor,
   } = useCategoryContext();
   const { householdKey, remoteReadEpoch = 0 } = useHousehold();
+
+  const mutation = useSettingsMutation(householdKey);
 
   // 섹션 펼침/접힘 상태
   const [isRecurringOpen, setIsRecurringOpen] = useSettingsSectionExpansion();
@@ -112,32 +115,33 @@ export default function RecurringExpenseSettings() {
 
     if (isNaN(amount) || isNaN(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) return;
 
-    if (editingRecurringId) {
-      await updateRecurringExpense(editingRecurringId, {
-        merchant: recurringMerchant.trim(),
-        amount,
-        category: recurringCategory,
-        dayOfMonth,
-        memo: recurringMemo.trim(),
-      }, editingRecurringVersion);
-    } else {
-      await addRecurringExpense(householdKey, {
-        merchant: recurringMerchant.trim(),
-        amount,
-        category: recurringCategory,
-        dayOfMonth,
-        memo: recurringMemo.trim(),
-      });
-    }
+    await mutation.run(async () => {
+      if (editingRecurringId) {
+        await updateRecurringExpense(editingRecurringId, {
+          merchant: recurringMerchant.trim(),
+          amount,
+          category: recurringCategory,
+          dayOfMonth,
+          memo: recurringMemo.trim(),
+        }, editingRecurringVersion);
+      } else {
+        await addRecurringExpense(householdKey, {
+          merchant: recurringMerchant.trim(),
+          amount,
+          category: recurringCategory,
+          dayOfMonth,
+          memo: recurringMemo.trim(),
+        });
+      }
 
-    resetRecurringForm();
+    }, resetRecurringForm);
   };
 
   const handleDeleteRecurring = async () => {
     if (!pendingDeleteRecurring) return;
 
-    await deleteRecurringExpense(pendingDeleteRecurring.id, pendingDeleteRecurring.aggregateVersion ?? 1);
-    setPendingDeleteRecurring(null);
+    await mutation.run(() => deleteRecurringExpense(pendingDeleteRecurring.id, pendingDeleteRecurring.aggregateVersion ?? 1),
+      () => setPendingDeleteRecurring(null));
   };
 
   return (
@@ -173,6 +177,8 @@ export default function RecurringExpenseSettings() {
               </button>
             </p>
           )}
+          {mutation.error && !pendingDeleteRecurring && <p role="alert" className="p-3 text-sm text-red-600">{mutation.error}</p>}
+          <fieldset disabled={mutation.pending}>
           {/* 추가/편집 폼 */}
           {(showAddRecurringForm || editingRecurringId) && (
             <div ref={recurringFormRef} className="scroll-mt-24 p-4 bg-slate-50 border-b border-slate-200">
@@ -325,7 +331,7 @@ export default function RecurringExpenseSettings() {
                       {/* 활성화/비활성화 토글 */}
                       <button
                         onClick={async () => {
-                          await updateRecurringExpense(expense.id, { isActive: !expense.isActive }, expense.aggregateVersion ?? 1);
+                          await mutation.run(() => updateRecurringExpense(expense.id, { isActive: !expense.isActive }, expense.aggregateVersion ?? 1));
                         }}
                         className={`p-2 rounded-lg transition-colors ${
                           expense.isActive
@@ -349,7 +355,7 @@ export default function RecurringExpenseSettings() {
                         <Edit2 className="h-5 w-5" />
                       </button>
                       <button
-                        onClick={() => setPendingDeleteRecurring(expense)}
+                        onClick={() => { mutation.clearError(); setPendingDeleteRecurring(expense); }}
                         className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                         aria-label={`${expense.merchant} 정기 지출 삭제`}
                         title="삭제"
@@ -373,6 +379,7 @@ export default function RecurringExpenseSettings() {
               <span className="font-medium">새 정기 지출 추가</span>
             </button>
           )}
+          </fieldset>
         </div>
       )}
 
@@ -387,6 +394,8 @@ export default function RecurringExpenseSettings() {
         confirmLabel="삭제"
         cancelLabel="취소"
         variant="danger"
+        pending={mutation.pending}
+        error={mutation.error}
         onConfirm={() => {
           void handleDeleteRecurring();
         }}

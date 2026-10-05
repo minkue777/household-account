@@ -19,7 +19,6 @@ interface SplitActionBaseOptions {
 
 interface RunSplitMonthsActionOptions extends SplitActionBaseOptions {
   months: number;
-  deleteExpense: (expenseId: string, expectedVersion: number) => AsyncVoid;
 }
 
 interface RunUpdateSplitGroupActionOptions extends SplitActionBaseOptions {
@@ -29,7 +28,6 @@ interface RunUpdateSplitGroupActionOptions extends SplitActionBaseOptions {
 export async function runSplitMonthsAction({
   expense,
   months,
-  deleteExpense: _deleteExpense,
   onSuccess,
   alertFn,
 }: RunSplitMonthsActionOptions): Promise<void> {
@@ -39,7 +37,6 @@ export async function runSplitMonthsAction({
   }
 
   try {
-    void _deleteExpense;
     const { splitExpenseMonthly } = await import('@/lib/expenseService');
     await splitExpenseMonthly(expense, months);
     await onSuccess?.();

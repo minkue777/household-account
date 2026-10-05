@@ -33,10 +33,6 @@ const COLLECTION_NAME = 'ledgerTransactions';
 const DEFAULT_TRANSACTION_TYPE: TransactionType = 'expense';
 const SEARCH_SOURCE_PAGE_SIZE = 5_000;
 
-interface AddExpenseOptions {
-  notifyOnCreate?: boolean;
-}
-
 interface ExpenseQueryOptions {
   transactionType?: TransactionType;
   onError?: (error: unknown) => void;
@@ -332,11 +328,9 @@ export function subscribeToExpenseProjection(
  * 지출 추가
  */
 export async function addExpense(
-  expense: Omit<Expense, 'id' | 'aggregateVersion'>,
-  options: AddExpenseOptions = {}
+  expense: Omit<Expense, 'id' | 'aggregateVersion'>
 ): Promise<string> {
   const householdId = getHouseholdId();
-  void options;
   const transaction = {
     ...expense,
     ...(expense.tags === undefined ? {} : { tags: normalizeExpenseTags(expense.tags) }),
@@ -916,13 +910,6 @@ function readExpenseSearchWindow(
 /** Only an explicitly opened search prepares its source; ordinary home visits do not read it. */
 export async function prepareExpenseSearchWindow(windowId: string): Promise<void> {
   await readExpenseSearchWindow(requireClientSessionScope(), windowId);
-}
-
-/**
- * 월별 분할 그룹 ID 생성
- */
-export function generateSplitGroupId(): string {
-  return `split_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
 /**

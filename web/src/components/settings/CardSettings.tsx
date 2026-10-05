@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSettingsSectionExpansion } from './useSettingsSectionExpansion';
+import { useSettingsMutation } from './useSettingsMutation';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import ModalOverlay from '@/components/common/ModalOverlay';
 import { ChevronDown, CreditCard, Plus, X } from 'lucide-react';
@@ -278,11 +279,16 @@ function getCardStyle(cardLabel: string) {
   }
 }
 
-export default function CardSettings({
+export default function CardSettings(props: CardSettingsProps) {
+  return <CardSettingsForm key={`${props.householdId}:${props.ownerMemberId}`} {...props} />;
+}
+
+function CardSettingsForm({
   householdId,
   ownerMemberId,
   ownerName,
 }: CardSettingsProps) {
+  const mutation = useSettingsMutation(`${householdId}:${ownerMemberId}`);
   const { remoteReadEpoch = 0 } = useHousehold();
   const [isOpen, setIsOpen] = useSettingsSectionExpansion();
   const [selectedTab, setSelectedTab] = useState<CardTab>('credit');
@@ -308,16 +314,18 @@ export default function CardSettings({
   const lastDragEndRef = useRef(0);
 
   useEffect(() => {
+    let active = true;
     setIsLoading(true);
     setLoadError('');
 
-    return subscribeToRegisteredCards(
+    const stop = subscribeToRegisteredCards(
       {
         householdId,
         ownerMemberId,
         legacyOwnerName: ownerName,
       },
       (nextCards) => {
+        if (!active) return;
         setCards(
           nextCards.map((card) => ({
             id: card.id,
@@ -332,10 +340,12 @@ export default function CardSettings({
         setIsLoading(false);
       },
       () => {
+        if (!active) return;
         setLoadError('카드 목록을 불러오지 못했습니다.');
         setIsLoading(false);
       }
     );
+    return () => { active = false; stop(); };
   }, [householdId, ownerMemberId, ownerName, remoteReadEpoch]);
 
   useEffect(() => {
@@ -405,22 +415,24 @@ export default function CardSettings({
       return;
     }
 
-    const documentId = await addRegisteredCard({
-      householdId,
-      owner: ownerName,
-      cardLabel: selectedLabel,
-      cardLastFour: hidesCardNumber ? '' : cardLastFour,
+    await mutation.run(async () => {
+      const documentId = await addRegisteredCard({
+        householdId,
+        owner: ownerName,
+        cardLabel: selectedLabel,
+        cardLastFour: hidesCardNumber ? '' : cardLastFour,
+      });
+
+      if (!documentId) {
+        throw new Error('이미 등록된 카드입니다.');
+      }
+
+    }, () => {
+      setCardLastFour('');
+      setSelectedLabel(tabLabelOptions[0] ?? '삼성');
+      setFormError('');
+      setIsAdding(false);
     });
-
-    if (!documentId) {
-      setFormError('이미 등록된 카드입니다.');
-      return;
-    }
-
-    setCardLastFour('');
-    setSelectedLabel(tabLabelOptions[0] ?? '삼성');
-    setFormError('');
-    setIsAdding(false);
   };
 
   const handleSaveDetail = async () => {
@@ -458,13 +470,14 @@ export default function CardSettings({
       return;
     }
 
-    await deleteRegisteredCard(pendingDeleteId, pendingDeleteVersion);
+    await mutation.run(() => deleteRegisteredCard(pendingDeleteId, pendingDeleteVersion), () => {
 
     if (selectedCardId === pendingDeleteId) {
       setSelectedCardId(null);
     }
 
     setPendingDeleteId(null);
+    });
   };
 
   const clearPressTimer = () => {
@@ -703,11 +716,13 @@ export default function CardSettings({
                       ) : null
                     )}
 
-                    {formError && <p className="text-sm text-red-500">{formError}</p>}
+                    {(formError || mutation.error) && <p role="alert" className="text-sm text-red-500">{formError || mutation.error}</p>}
 
                     <div className="flex gap-2">
                       <button
                         onClick={() => {
+                          if (mutation.pending) return;
+                          mutation.clearError();
                           setIsAdding(false);
                           setCardLastFour('');
                           setSelectedLabel(tabLabelOptions[0] ?? '삼성');
@@ -721,7 +736,7 @@ export default function CardSettings({
                         onClick={() => {
                           void handleSave();
                         }}
-                        disabled={!canSave}
+                        disabled={!canSave || mutation.pending}
                         className="flex-1 rounded-lg bg-violet-500 px-4 py-2 text-white transition-colors hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         저장
@@ -870,6 +885,8 @@ export default function CardSettings({
         confirmLabel="삭제"
         cancelLabel="취소"
         variant="danger"
+        pending={mutation.pending}
+        error={mutation.error}
         onConfirm={() => {
           void handleDelete();
         }}

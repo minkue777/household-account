@@ -279,7 +279,6 @@ describe('ExpenseDetail 모달 소유권 계약', () => {
     expect(mockRunSplitMonthsAction).toHaveBeenCalledWith({
       expense: firstExpense,
       months: 3,
-      deleteExpense: onDelete,
       alertFn: expect.any(Function),
     });
 

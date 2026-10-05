@@ -109,12 +109,9 @@ describe('CategorySettings mutation feedback contract', () => {
       deleteCategory: jest.fn(),
       setBudget: jest.fn(),
       reorderCategories,
-      getCategoryByKey: jest.fn(),
       getCategoryLabel: jest.fn(),
       getCategoryColor: jest.fn(),
       getCategoryBudget: jest.fn(),
-      categoryLabels: {},
-      categoryColors: {},
     });
   });
 
@@ -188,12 +185,9 @@ describe('CategorySettings mutation feedback contract', () => {
       deleteCategory: jest.fn(),
       setBudget: jest.fn(),
       reorderCategories,
-      getCategoryByKey: jest.fn(),
       getCategoryLabel: jest.fn(),
       getCategoryColor: jest.fn(),
       getCategoryBudget: jest.fn(),
-      categoryLabels: {},
-      categoryColors: {},
     });
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
     const user = userEvent.setup();

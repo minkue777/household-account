@@ -378,3 +378,5 @@ Recurring Domain은 Ledger Entity나 Firebase를 import하지 않습니다. Work
 9. AutomaticBackfillPolicy와 일일 batch checkpoint·부분 실패 재개 테스트를 활성화합니다.
 10. Category Archive Process용 page remap Command와 receipt를 구현하고 `T-CAT-004` 계약 fixture를 연결합니다.
 11. V2 shadow read와 reconciliation 후 legacy checkpoint/direct write를 제거합니다.
+
+정기 계획 설정의 생성·수정·삭제·활성 변경은 저장 실패를 화면에 표시하며 편집 초안과 시작 version을 유지합니다. 성공일 때만 편집/확인창을 닫고 진행 중 중복 제출과 가구 전환 뒤 늦은 완료를 격리합니다. 조회 실패는 마지막 정상 목록을 보존하는 별도 상태입니다.

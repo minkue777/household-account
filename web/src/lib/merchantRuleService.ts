@@ -1,10 +1,6 @@
 import {
   collection,
   doc,
-  getDoc,
-  query,
-  where,
-  getDocs,
   onSnapshot,
   db,
   type QueryDocumentSnapshot,
@@ -34,31 +30,13 @@ export async function addMerchantRuleV2(
   input: CreateMerchantRuleInput
 ): Promise<string> {
   if (!householdId) {
-    console.log('[merchantRule] householdId 없음');
-    return '';
+    throw new Error('인증된 가구 세션이 필요합니다.');
   }
 
   const { paymentConfigurationCommands } = await import(
     '@/features/payment-configuration/application/paymentConfigurationCommands'
   );
   return paymentConfigurationCommands.createMerchantRule(householdId, input);
-}
-
-/**
- * 규칙 추가 (하위 호환성 유지)
- * @deprecated Use addMerchantRuleV2 instead
- */
-export async function addMerchantRule(
-  householdId: string,
-  merchantKeyword: string,
-  category: string,
-  exactMatch: boolean = true
-): Promise<string> {
-  return addMerchantRuleV2(householdId, {
-    merchantKeyword,
-    matchType: exactMatch ? 'exact' : 'contains',
-    mapping: { category },
-  });
 }
 
 /**
@@ -76,20 +54,6 @@ export async function updateMerchantRuleV2(
 }
 
 /**
- * 규칙 수정 (하위 호환성 유지)
- * @deprecated Use updateMerchantRuleV2 instead
- */
-export async function updateMerchantRule(
-  id: string,
-  category: string,
-  expectedVersion: number
-): Promise<void> {
-  await updateMerchantRuleV2(id, {
-    mapping: { category },
-  }, expectedVersion);
-}
-
-/**
  * 규칙 삭제
  */
 export async function deleteMerchantRule(id: string, expectedVersion: number): Promise<void> {
@@ -102,36 +66,6 @@ export async function deleteMerchantRule(id: string, expectedVersion: number): P
 export async function reorderMerchantRules(householdId: string, matchType: Exclude<MatchType, 'exact'>, rules: readonly MerchantRule[]): Promise<void> {
   const { paymentConfigurationCommands } = await import('@/features/payment-configuration/application/paymentConfigurationCommands');
   await paymentConfigurationCommands.reorderMerchantRules(householdId, matchType, rules.map((rule) => rule.id), rules[0]?.collectionVersion ?? 0);
-}
-
-/**
- * 같은 키워드/매칭타입 규칙이 있는지 확인 (새로운 API)
- */
-export async function ruleExistsV2(
-  householdId: string,
-  keyword: string,
-  matchType: MatchType
-): Promise<boolean> {
-  const q = query(
-    ruleCollection(householdId),
-    where('keyword', '==', keyword),
-    where('matchType', '==', matchType)
-  );
-  const snapshot = await getDocs(q);
-  return !snapshot.empty;
-}
-
-/**
- * 같은 키워드 규칙이 있는지 확인 (하위 호환성)
- * @deprecated Use ruleExistsV2 instead
- */
-export async function ruleExists(householdId: string, keyword: string): Promise<boolean> {
-  const q = query(
-    ruleCollection(householdId),
-    where('keyword', '==', keyword)
-  );
-  const snapshot = await getDocs(q);
-  return !snapshot.empty;
 }
 
 /**
@@ -162,7 +96,8 @@ function mapDocToRule(doc: QueryDocumentSnapshot): MerchantRule {
  */
 export function subscribeToRules(
   householdId: string,
-  callback: (rules: MerchantRule[]) => void
+  callback: (rules: MerchantRule[]) => void,
+  onError: (error: unknown) => void,
 ): () => void {
   if (!householdId) {
     callback([]);
@@ -171,39 +106,31 @@ export function subscribeToRules(
 
   const q = ruleCollection(householdId);
 
+  let active = true;
+  const fail = (error: unknown) => {
+    if (!active) return;
+    active = false;
+    onError(error);
+  };
   let latestRules: MerchantRule[] | undefined;
   let versions: Record<string, number> | undefined;
   const publish = () => {
-    if (latestRules !== undefined && versions !== undefined) callback(latestRules.map((rule) => ({ ...rule, collectionVersion: versions![`${householdId}:${rule.matchType}`] ?? 0 })));
+    if (active && latestRules !== undefined && versions !== undefined) callback(latestRules.map((rule) => ({ ...rule, collectionVersion: versions![`${householdId}:${rule.matchType}`] ?? 0 })));
   };
   const stopMeta = onSnapshot(doc(db, 'households', householdId, 'paymentConfigurationMeta', 'merchant-rules'), (snapshot) => {
     versions = snapshot.data()?.collectionVersions ?? {};
     publish();
-  }, () => callback([]));
-  const unsubscribe = onSnapshot(
+  }, fail);
+  let unsubscribe: () => void;
+  try { unsubscribe = onSnapshot(
     q,
     (snapshot) => {
       const rules: MerchantRule[] = snapshot.docs.map(mapDocToRule);
       latestRules = rules;
       publish();
     },
-    (error) => {
-      callback([]);
-    }
-  );
+    fail
+  ); } catch (error) { stopMeta(); fail(error); return () => {}; }
 
-  return () => { unsubscribe(); stopMeta(); };
-}
-
-/**
- * 규칙 목록 일회성 조회
- */
-export async function getRules(householdId: string): Promise<MerchantRule[]> {
-  if (!householdId) return [];
-
-  const q = ruleCollection(householdId);
-
-  const [snapshot, meta] = await Promise.all([getDocs(q), getDoc(doc(db, 'households', householdId, 'paymentConfigurationMeta', 'merchant-rules'))]);
-  const versions = meta.data()?.collectionVersions ?? {};
-  return snapshot.docs.map(mapDocToRule).map((rule) => ({ ...rule, collectionVersion: versions[`${householdId}:${rule.matchType}`] ?? 0 }));
+  return () => { active = false; unsubscribe(); stopMeta(); };
 }

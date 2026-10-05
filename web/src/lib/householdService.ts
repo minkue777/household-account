@@ -68,7 +68,6 @@ export async function getHousehold(key: string): Promise<Household> {
 
 export async function renameHouseholdMember(
   householdKey: string,
-  _memberId: string,
   newName: string,
   expectedVersion: number
 ): Promise<void> {

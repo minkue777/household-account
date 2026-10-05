@@ -126,7 +126,6 @@ export default function ExpenseDetail({
     await runSplitMonthsAction({
       expense,
       months,
-      deleteExpense: onDelete,
       alertFn: (message) => void showAlert(message),
     });
   };

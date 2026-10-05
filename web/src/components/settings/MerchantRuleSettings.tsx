@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useSettingsMutation } from './useSettingsMutation';
 import { useSettingsSectionExpansion } from './useSettingsSectionExpansion';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 import {
@@ -19,6 +20,13 @@ import { Building2, ChevronDown, Edit2, Plus, Trash2 } from 'lucide-react';
 
 export default function MerchantRuleSettings() {
   const { householdKey } = useHousehold();
+  return <MerchantRules key={householdKey} householdKey={householdKey} />;
+}
+
+function MerchantRules({ householdKey }: { householdKey: string | null }) {
+  const mutation = useSettingsMutation(householdKey);
+  const [readError, setReadError] = useState(false);
+  const [readEpoch, setReadEpoch] = useState(0);
   const {
     activeCategories,
     getCategoryLabel,
@@ -54,16 +62,19 @@ export default function MerchantRuleSettings() {
       return undefined;
     }
     const householdId = householdKey;
+    setRulesLoading(true);
+    setReadError(false);
 
     const unsubscribeRules = subscribeToRules(householdId, (rules) => {
       setMerchantRules(rules);
       setRulesLoading(false);
-    });
+      setReadError(false);
+    }, () => { setReadError(true); setRulesLoading(false); });
 
     return () => {
       unsubscribeRules();
     };
-  }, [householdKey]);
+  }, [householdKey, readEpoch]);
 
   // 가맹점 규칙 핸들러
   const resetRuleForm = () => {
@@ -94,7 +105,7 @@ export default function MerchantRuleSettings() {
   const handleSaveRule = async () => {
     if (!ruleKeyword.trim() || !ruleCategory) return;
 
-    if (!householdKey) throw new Error('인증된 가구 세션이 필요합니다.');
+    if (!householdKey) return;
     const householdId = householdKey;
     const mapping = {
       merchant: ruleMappedMerchant.trim(),
@@ -102,30 +113,31 @@ export default function MerchantRuleSettings() {
       memo: ruleMemo.trim(),
     };
 
-    if (editingRuleId) {
-      // 편집
-      await updateMerchantRuleV2(editingRuleId, {
-        merchantKeyword: ruleKeyword.trim(),
-        matchType: ruleMatchType,
-        mapping,
-      }, editingRuleVersion);
-    } else {
-      // 추가
-      await addMerchantRuleV2(householdId, {
-        merchantKeyword: ruleKeyword.trim(),
-        matchType: ruleMatchType,
-        mapping,
-      });
-    }
-
-    resetRuleForm();
+    await mutation.run(async () => {
+      if (editingRuleId) {
+        // 편집
+        await updateMerchantRuleV2(editingRuleId, {
+          merchantKeyword: ruleKeyword.trim(),
+          matchType: ruleMatchType,
+          mapping,
+        }, editingRuleVersion);
+      } else {
+        // 추가
+        const id = await addMerchantRuleV2(householdId, {
+          merchantKeyword: ruleKeyword.trim(),
+          matchType: ruleMatchType,
+          mapping,
+        });
+        if (!id) throw new Error('이미 등록된 규칙입니다.');
+      }
+    }, resetRuleForm);
   };
 
   const handleDeleteRule = async () => {
     if (!pendingDeleteRule) return;
 
-    await deleteMerchantRule(pendingDeleteRule.id, pendingDeleteRule.version ?? 1);
-    setPendingDeleteRule(null);
+    await mutation.run(() => deleteMerchantRule(pendingDeleteRule.id, pendingDeleteRule.version ?? 1),
+      () => setPendingDeleteRule(null));
   };
 
   const moveRule = async (rule: MerchantRule, offset: -1 | 1) => {
@@ -158,7 +170,7 @@ export default function MerchantRuleSettings() {
           <div className="text-left">
             <div className="font-semibold text-slate-800">가맹점 규칙</div>
             <div className="text-sm text-slate-500">
-              {rulesLoading ? '로딩중...' : `${merchantRules.length}개`}
+              {rulesLoading ? '로딩중...' : readError ? '조회 실패' : `${merchantRules.length}개`}
             </div>
           </div>
         </div>
@@ -170,6 +182,9 @@ export default function MerchantRuleSettings() {
       {isRulesOpen && (
         <div className="border-t border-slate-100">
           {ruleError && <p role="alert" className="p-3 text-sm text-red-600">{ruleError}</p>}
+          {readError && <p role="alert" className="p-3 text-sm text-red-600">규칙을 불러오지 못했습니다. <button onClick={() => setReadEpoch(value => value + 1)}>다시 시도</button></p>}
+          {mutation.error && !pendingDeleteRule && <p role="alert" className="p-3 text-sm text-red-600">{mutation.error}</p>}
+          <fieldset disabled={mutation.pending}>
           {/* 규칙 추가/편집 폼 */}
           {(showAddRuleForm || editingRuleId) && (
             <div ref={ruleFormRef} className="scroll-mt-24 p-4 bg-slate-50 border-b border-slate-200">
@@ -301,7 +316,7 @@ export default function MerchantRuleSettings() {
 
           {rulesLoading ? (
             <div className="p-8 text-center text-slate-400">로딩중...</div>
-          ) : merchantRules.length === 0 && !showAddRuleForm ? (
+          ) : merchantRules.length === 0 && !showAddRuleForm && !readError ? (
             <div className="p-8 text-center text-slate-400">
               저장된 가맹점 규칙이 없습니다.
             </div>
@@ -352,7 +367,7 @@ export default function MerchantRuleSettings() {
                         <button disabled={reordering} onClick={() => void moveRule(rule, 1)} aria-label={`${rule.merchantKeyword} 우선순위 내리기`} className="p-2">↓</button>
                       </>}
                       <button
-                        onClick={() => setPendingDeleteRule(rule)}
+                        onClick={() => { mutation.clearError(); setPendingDeleteRule(rule); }}
                         className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                         aria-label={`${rule.merchantKeyword} 규칙 삭제`}
                         title="삭제"
@@ -376,6 +391,7 @@ export default function MerchantRuleSettings() {
               <span className="font-medium">새 규칙 추가</span>
             </button>
           )}
+          </fieldset>
         </div>
       )}
 
@@ -390,6 +406,8 @@ export default function MerchantRuleSettings() {
         confirmLabel="삭제"
         cancelLabel="취소"
         variant="danger"
+        pending={mutation.pending}
+        error={mutation.error}
         onConfirm={() => {
           void handleDeleteRule();
         }}

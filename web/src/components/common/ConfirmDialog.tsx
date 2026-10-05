@@ -9,6 +9,8 @@ interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   variant?: 'danger' | 'default';
+  pending?: boolean;
+  error?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -25,6 +27,8 @@ export default function ConfirmDialog({
   confirmLabel = '확인',
   cancelLabel = '취소',
   variant = 'default',
+  pending = false,
+  error,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -52,17 +56,20 @@ export default function ConfirmDialog({
           <div className="flex gap-3">
             <button
               onClick={onCancel}
+              disabled={pending}
               className="flex-1 py-2 px-4 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
             >
               {cancelLabel}
             </button>
             <button
               onClick={onConfirm}
+              disabled={pending}
               className={`flex-1 py-2 px-4 rounded-lg transition-colors ${confirmButtonClass}`}
             >
               {confirmLabel}
             </button>
           </div>
+          {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
         </div>
       </div>
     </Portal>

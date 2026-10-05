@@ -18,7 +18,6 @@ interface CategoryContextType {
   serverSnapshotReady: boolean;
   readError: unknown;
   // 카테고리 조회 헬퍼
-  getCategoryByKey: (key: string) => CategoryDocument | undefined;
   getCategoryLabel: (key: string) => string;
   getCategoryColor: (key: string) => string;
   getCategoryBudget: (key: string) => number | null;
@@ -28,9 +27,6 @@ interface CategoryContextType {
   deleteCategory: (id: string, expectedVersion: number) => Promise<void>;
   setBudget: (id: string, budget: number | null, expectedVersion: number) => Promise<void>;
   reorderCategories: (categories: CategoryDocument[], expectedCatalogVersion: number) => Promise<void>;
-  // 호환성 헬퍼 (기존 CATEGORY_LABELS, CATEGORY_COLORS 대체)
-  categoryLabels: Record<string, string>;
-  categoryColors: Record<string, string>;
   activeCategories: CategoryDocument[];
 }
 
@@ -111,13 +107,6 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
   }, [householdId, isSessionVerified, remoteReadEpoch]);
 
   // 카테고리 조회 헬퍼
-  const getCategoryByKey = useCallback(
-    (key: string): CategoryDocument | undefined => {
-      return categories.find((c) => c.key === key);
-    },
-    [categories]
-  );
-
   const getCategoryLabel = useCallback(
     (key: string): string => {
       const category = categories.find((c) => c.key === key);
@@ -178,23 +167,6 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
     await reorderCategoriesService(updates, expectedCatalogVersion);
   }, []);
 
-  // 호환성 헬퍼 (기존 코드와의 호환성을 위해)
-  const categoryLabels = useMemo(() => {
-    const labels: Record<string, string> = {};
-    for (const cat of categories) {
-      labels[cat.key] = cat.label;
-    }
-    return labels;
-  }, [categories]);
-
-  const categoryColors = useMemo(() => {
-    const colors: Record<string, string> = {};
-    for (const cat of categories) {
-      colors[cat.key] = cat.color;
-    }
-    return colors;
-  }, [categories]);
-
   const activeCategories = useMemo(() => {
     return categories.filter((c) => c.isActive);
   }, [categories]);
@@ -204,7 +176,6 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
     isLoading,
     serverSnapshotReady,
     readError,
-    getCategoryByKey,
     getCategoryLabel,
     getCategoryColor,
     getCategoryBudget,
@@ -213,8 +184,6 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
     deleteCategory,
     setBudget,
     reorderCategories,
-    categoryLabels,
-    categoryColors,
     activeCategories,
   };
 

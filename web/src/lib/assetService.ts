@@ -1898,24 +1898,6 @@ function mapDocToDividendEvent(docSnap: QueryDocumentSnapshot<DocumentData>): Di
   };
 }
 
-function buildDividendMonthlyDataFromEvents(
-  events: Record<string, DividendSnapshotEventRecord>
-): number[] {
-  const monthlyData = createEmptyDividendMonthlyData();
-
-  Object.values(events).forEach((event) => {
-    const [year, month] = event.paymentDate.split('-').map(Number);
-    if (!year || !month || month < 1 || month > 12) {
-      return;
-    }
-
-    monthlyData[month - 1] += event.totalAmount;
-  });
-
-  return monthlyData.map((amount) => Math.round(amount));
-}
-
-
 /**
  * 연도별 배당금 스냅샷 조회
  */
@@ -1990,8 +1972,4 @@ export async function refreshAssetMarketValues(
   assetClass: 'stock' | 'crypto' | 'physical-gold'
 ): Promise<void> {
   await portfolioCommands.refreshMarketValues(getHouseholdId(), assetClass, assetId);
-}
-
-export async function refreshAllPhysicalGoldValues(): Promise<void> {
-  await portfolioCommands.refreshMarketValues(getHouseholdId(), 'physical-gold');
 }

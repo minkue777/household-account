@@ -161,7 +161,6 @@ export default function SearchModal({
     await runSplitMonthsAction({
       expense: selectedExpense,
       months,
-      deleteExpense: onDelete,
       onSuccess: () => refreshSearch(session),
       alertFn: (message) => void showAlert(message),
     });
