@@ -227,7 +227,8 @@ test.describe('첫 홈 별도 서버 조회', () => {
       await expect.poll(() => heldBalanceResponses).toBeGreaterThan(0);
       await expect.poll(() => restarted.evaluate(() => ['ledger:ready', 'categories:ready'].every(phase =>
         performance.getEntriesByName(`household-account:startup:${phase}`).length === 1))).toBe(true);
-      await expect(restarted.getByRole('status')).toHaveText('가계부를 불러오는 중입니다.');
+      await expect(restarted.getByRole('main')).toHaveAttribute('aria-busy', 'true');
+      await expect(restarted.getByRole('main')).toBeEmpty();
       await expect(restarted.locator('.calendar-glass')).toHaveCount(0);
       await expect(restarted.locator('.balance-card-glass')).toHaveCount(0);
       expect(await restarted.evaluate(() => performance.getEntriesByName('household-account:startup:ledger:first-paint').length)).toBe(0);

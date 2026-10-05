@@ -265,12 +265,12 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   if (!homeVisible) {
     return (
       <main className="flex min-h-[60vh] items-center justify-center p-4" aria-busy={!initialReadFailed}>
-        {initialReadFailed ? (
+        {initialReadFailed && (
           <div role="alert" className="text-center text-sm text-slate-600">
             <p>가계부를 불러오지 못했습니다.</p>
             <button onClick={() => window.location.reload()} className="mt-3 rounded-lg px-4 py-2 text-blue-600 hover:bg-blue-50">다시 시도</button>
           </div>
-        ) : <p role="status" className="text-sm text-slate-400">가계부를 불러오는 중입니다.</p>}
+        )}
       </main>
     );
   }

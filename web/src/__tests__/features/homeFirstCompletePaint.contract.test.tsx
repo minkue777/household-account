@@ -263,7 +263,8 @@ describe('first home complete paint contract', () => {
       flushFrame(); flushFrame();
       expect(screen.queryByTestId('home-cards')).not.toBeInTheDocument();
       expect(screen.queryByTestId('home-calendar')).not.toBeInTheDocument();
-      expect(screen.getByRole('status')).toHaveTextContent('가계부를 불러오는 중');
+      expect(screen.getByRole('main')).toHaveAttribute('aria-busy', 'true');
+      expect(screen.getByRole('main')).toBeEmptyDOMElement();
       expect(markWebFirstLedgerPaint).not.toHaveBeenCalled();
       expect(markWebFirstHomeCompletePaint).not.toHaveBeenCalled();
       prepareHome();
