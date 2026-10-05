@@ -26,3 +26,17 @@
 [v1.2.34/code36](https://github.com/minkue777/household-account/releases/tag/v1.2.34)은 해당 제품 SHA를 target으로 공개했습니다. 다운로드 HTTP 200, 11,421,547 bytes, SHA256 `a673f95178d40ad5f7a0cdea4c3f9eeab4e36efd109ed5ff160d87ab87269fda`, APK v2 서명·운영 URL을 확인했습니다. 뒤의 서버 수정으로 APK를 덮어쓰지 않습니다.
 
 CI 37268472742의 functions 실패는 새 지역 서비스명 검사에서 기존 화성지역화폐 이름을 빠뜨린 제품 결함입니다. [수정과 실제 479개 검사](server-boundary-simplicity-2026-10-05.md#ci에서-확인한-지역-명칭-호환-수정)를 기록했고 서버 후속 후보를 배포합니다. 최종 전체 CI와 이 제품의 실제 Android 검사는 후속 자동 확인에서 함께 추적합니다. 실패 이력을 성공으로 덮거나 pending을 완료로 보고하지 않습니다.
+
+## 최종 CI의 WebKit 배당금 조회 대기 실패
+
+서버 후속 SHA `df7ae23816c0f089c6cc27ecc00f4dcf49f95f7c`의 Firebase `release-20261005-simplicity-sms-df7ae23` 세 codebase 배포와 실제 로그인·가구 Query marker 검증은 성공했습니다. 같은 SHA의 Vercel Git 배포와 운영 `/`, `/sw.js`, build manifest도 검증했습니다. 앞선 `cdf60b3`의 CI `37268472742`는 실제 Android instrumentation·Native Firebase·성능 검사와 web-e2e가 성공했습니다. 당시 functions 실패 이력은 위 SMS 수정으로 추적하며 성공으로 덮지 않습니다.
+
+[CI 37268915761](https://github.com/minkue777/household-account/actions/runs/37268915761)은 functions·web·android·android-instrumentation이 성공했지만 web-e2e의 후속 성능 시나리오와 요약이 실패했습니다. WebKit iteration 2의 `asset-stats.revisit`에서 30초 `PERFORMANCE_READY_TIMEOUT`이 발생했습니다. 자산 합계 7,699,000원과 추이·증감 차트 두 개는 표시됐지만 배당금 카드가 `조회 중`에 머물러 세 번째 canvas와 배당 결과가 나타나지 않았습니다. 뒤의 표본 누락은 시나리오 중단의 결과이며 별개의 170개 제품 오류가 아닙니다.
+
+동일 실행에서 Firebase Auth의 IndexedDB `_poll` 경로가 `InvalidStateError: The database connection is closing`을 발생시켰습니다. 배당금 조회는 realtime SDK의 `getDocs` 세 개(positions·dividend_snapshots·dividend_events)를 기다리며, 표시된 자산 이력은 별도의 단발 서버 조회를 사용합니다. 그러나 기존 artifact에는 Firestore 요청 수명·대상과 오류를 낸 문서의 식별 정보가 없어 인증 저장소 오류와 배당 대기의 인과관계, 실제 중단된 조회를 확정하지 못했습니다. 정적 JS/CSS의 요청 실패나 화면 오류 alert는 관측되지 않았습니다.
+
+후속 변경은 성능 검사의 실패 관측만 보강합니다. 실제 Emulator 요청의 시작·HTTP 상태·완료/실패 시각, Listen AID와 target ID·collection 이름, Firebase SDK 경고와 열린/닫힌 문서별 오류를 저장합니다. 인증 header·token·문서 값은 수집하지 않습니다. 같은 검사에서 배당금 조회 세 종류가 실제 관측되는지도 검증합니다. 요청 가로채기·캐시 해제·SDK 대체·오류 무시 없이 기존 동작과 30초·7개 표본·화면/저장 assertions를 유지합니다. 제품 원인이 해결됐다고 간주하지 않으며 Web/Firebase/APK 재배포는 필요하지 않습니다.
+
+원본 CI 자료: `TEMP/household-simplicity-performance-37268915761/failures/webkit-mobile-failure-2.{json,html,png}`, `TEMP/household-simplicity-ci-37268915761-failed.log`.
+
+로컬 production build + 실제 Auth/Functions/Firestore Emulator + WebKit에서 준비 실행 1회와 본 실행 7회가 모두 통과했습니다(1 passed, 4.5분). 33개 지표의 총 264개 관측과 배당금 세 조회 대상 관측을 확인했고, 기존 30초 실패·IndexedDB 오류는 재현되지 않았습니다. 별도 참고 성능 기준(report-only)에서는 검색 첫 진입과 자산 통계 재진입이 초과했으며 이를 숨기거나 기준을 바꾸지 않았습니다. 자산 통계 재진입의 7회 값은 375~467ms였으므로 CI의 30초 중단과 구분합니다. `tsc --noEmit`, E2E 준비의 architecture 43개, 문서 링크 검사도 통과했습니다. 로그는 `TEMP/household-simplicity-webkit-read-{prepare,diagnostics}-20261005.log`, 로컬 결과는 `TEMP/household-simplicity-webkit-read-results-20261005.json`입니다. 후속 최신 전체 CI 성공은 별도로 확인해야 합니다.

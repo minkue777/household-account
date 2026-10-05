@@ -18,6 +18,11 @@ interface DomExpectation {
   attribute?: [string, string];
 }
 interface ReadyData { elements: DomExpectation[]; mark?: string }
+interface ReadTransport {
+  endpoint: string; method: string; requestedAt: number; acknowledgedMessageId: string | null;
+  targets: Array<{ id: number; collections: string[] }>; removedTargets: number[];
+  status?: number; finishedAt?: number; failure?: string | null;
+}
 /** Browser-side predicate is serialized: no imported code, closures or polling clocks. */
 function domReady(data: ReadyData): boolean {
   if (data.mark && performance.getEntriesByName(data.mark).length === 0) return false;
@@ -285,14 +290,36 @@ test('핵심 사용 경로의 실제 Emulator 성능 기준선', async ({ page: 
     const context = await browser.newContext(options);
     if (testInfo.project.name.includes('webkit')) await context.addInitScript(() => Object.defineProperty(navigator, 'standalone', { get: () => true }));
     const errors: string[] = [];
-    const errorDetails: Array<{ message: string; stack?: string; at: number }> = [];
-    const recordPageError = (error: Error) => {
-      errors.push(error.message);
-      errorDetails.push({ message: error.message, stack: error.stack, at: Date.now() });
-    };
+    const errorDetails: Array<{ documentId: number; message: string; stack?: string; at: number }> = [];
+    const documents: Array<{ id: number; openedAt: number; closedAt?: number }> = [];
+    const firebaseWarnings: Array<{ at: number; message: string }> = [];
+    const reads = new Map<Request, ReadTransport>();
     // Observe normal requests without routing: route interception disables HTTP cache.
     const resources = new Map<Request, { url: string; type: string; requestedAt: number; status?: number; finishedAt?: number; failure?: string | null }>();
     context.on('request', request => {
+      const url = new URL(request.url());
+      // Emulator transport metadata only: never persist headers, tokens or document values.
+      if (url.hostname === '127.0.0.1' && url.port === '8080') {
+        const entry: ReadTransport = {
+          endpoint: url.pathname, method: request.method(), requestedAt: Date.now(),
+          acknowledgedMessageId: url.searchParams.get('AID'), targets: [], removedTargets: [],
+        };
+        if (url.pathname.endsWith('/google.firestore.v1.Firestore/Listen/channel')) {
+          for (const [key, value] of Array.from(new URLSearchParams(request.postData() ?? ''))) {
+            if (!/^req\d+___data__$/.test(key)) continue;
+            try {
+              const message = JSON.parse(value);
+              if (Number.isInteger(message.addTarget?.targetId)) entry.targets.push({
+                id: message.addTarget.targetId,
+                collections: (message.addTarget.query?.structuredQuery?.from ?? [])
+                  .map((source: { collectionId?: string }) => source.collectionId).filter((name: unknown): name is string => typeof name === 'string'),
+              });
+              if (Number.isInteger(message.removeTarget)) entry.removedTargets.push(message.removeTarget);
+            } catch { /* Non-query transport messages are outside this observation. */ }
+          }
+        }
+        reads.set(request, entry);
+      }
       if (['script', 'stylesheet'].includes(request.resourceType()) && new URL(request.url()).pathname.startsWith('/_next/static/')) {
         resources.set(request, { url: request.url(), type: request.resourceType(), requestedAt: Date.now() });
       }
@@ -300,19 +327,38 @@ test('핵심 사용 경로의 실제 Emulator 성능 기준선', async ({ page: 
     context.on('response', response => {
       const resource = resources.get(response.request());
       if (resource) resource.status = response.status();
+      const read = reads.get(response.request());
+      if (read) read.status = response.status();
     });
     context.on('requestfinished', request => {
       const resource = resources.get(request);
       if (resource) resource.finishedAt = Date.now();
+      const read = reads.get(request);
+      if (read) read.finishedAt = Date.now();
     });
     context.on('requestfailed', request => {
       const resource = resources.get(request);
       if (resource) { resource.finishedAt = Date.now(); resource.failure = request.failure()?.errorText; }
+      const read = reads.get(request);
+      if (read) { read.finishedAt = Date.now(); read.failure = request.failure()?.errorText; }
+    });
+    context.on('page', observedPage => {
+      const document: typeof documents[number] = { id: documents.length, openedAt: Date.now() };
+      documents.push(document);
+      observedPage.on('close', () => { document.closedAt = Date.now(); });
+      observedPage.on('pageerror', error => {
+        errors.push(error.message);
+        errorDetails.push({ documentId: document.id, message: error.message, stack: error.stack, at: Date.now() });
+      });
+      observedPage.on('console', message => {
+        if (['warning', 'error'].includes(message.type()) && /@firebase\/(auth|firestore)/.test(message.text())) {
+          firebaseWarnings.push({ at: Date.now(), message: message.text().slice(0, 1_000) });
+        }
+      });
     });
     let page: Page | undefined;
     try {
       page = await context.newPage();
-      page.on('pageerror', recordPageError);
       await installMeasurement(page);
       await measure(page, testInfo, { id: 'home.fresh-context', label: '첫 홈 → 달력·월 합계·지역화폐 표시', iteration, warmup: iteration === 0,
         cacheState: 'new-context/persisted-auth-and-bootstrap/empty-http-and-firestore-cache', navigation: true,
@@ -322,7 +368,6 @@ test('핵심 사용 경로의 실제 Emulator 성능 기준선', async ({ page: 
       await settleInitialServiceWorker(page, testInfo, iteration);
       await page.close();
       page = await context.newPage();
-      page.on('pageerror', recordPageError);
       await installMeasurement(page);
       await measure(page, testInfo, { id: 'home.relaunch', label: '앱 문서 재실행 → 홈 데이터 표시', iteration, warmup: iteration === 0,
         cacheState: 'same-context/new-document/persisted-auth-http-and-active-service-worker-static-cache', navigation: true,
@@ -333,6 +378,9 @@ test('핵심 사용 경로의 실제 Emulator 성능 기준선', async ({ page: 
       await installCatalogFixture(context);
       await measureJourney(page, testInfo, fixture, iteration);
       expect(errors).toEqual([]);
+      // Confirm that the diagnostic actually observes the three real dividend query sources.
+      expect(Array.from(reads.values()).flatMap(read => read.targets.flatMap(target => target.collections)))
+        .toEqual(expect.arrayContaining(['positions', 'dividend_snapshots', 'dividend_events']));
     } catch (error) {
       if (page && !page.isClosed()) {
         const failedPage = page;
@@ -352,6 +400,7 @@ test('핵심 사용 경로의 실제 Emulator 성능 기준선', async ({ page: 
               await testInfo.attach(`failure-${iteration}.json`, { contentType: 'application/json', body: JSON.stringify({
                 url: failedPage.url(), iteration, bodyText, alerts, pageErrors: errors,
                 pageErrorDetails: errorDetails, staticRequests: Array.from(resources.values()), documentState,
+                firestoreReads: Array.from(reads.values()), firebaseWarnings, documents,
               }, null, 2) });
               await testInfo.attach(`failure-${iteration}.html`, { contentType: 'text/html', body: html });
             }),
