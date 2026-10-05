@@ -96,10 +96,35 @@ export interface PortfolioCommandMetadata {
   readonly occurredAt: string;
 }
 
+// 확정 업무 필드만 반환한다. Firestore commit 시각(createdAt/updatedAt)은 조회 문서가 소유한다.
+export type PortfolioConfirmedAsset = Omit<PortfolioRuntimeAsset, "createdAt" | "updatedAt" | "ownerDisplayName">;
+export type PortfolioConfirmedPosition = Omit<PortfolioRuntimePosition, "createdAt" | "updatedAt">;
+export interface PortfolioCommandConfirmation {
+  readonly schemaVersion: 1;
+  readonly occurredAt: string;
+  readonly assets: readonly PortfolioConfirmedAsset[];
+  readonly positions: readonly PortfolioConfirmedPosition[];
+}
+
+export interface PortfolioCommandValue {
+  readonly assetId?: string;
+  readonly positionId?: string;
+  // 과거 receipt와 시세 갱신 결과에는 confirmation이 없다. 과거 결과를 추정해서 채우지 않는다.
+  readonly confirmation?: PortfolioCommandConfirmation;
+  readonly refreshedCount?: number;
+  readonly targetCount?: number;
+  readonly retainedLastSuccessCount?: number;
+  readonly failedCount?: number;
+  readonly completedTargetKeys?: readonly string[];
+  readonly failedTargets?: readonly { readonly targetKey: string; readonly assetId: string; readonly positionId?: string; readonly code: string; readonly retryable: boolean }[];
+  readonly retryCommandId?: string;
+  readonly skippedReason?: string;
+}
+
 export type PortfolioCommandResult =
   | {
       readonly kind: "success";
-      readonly value: Readonly<Record<string, unknown>>;
+      readonly value: PortfolioCommandValue;
     }
   | {
       readonly kind: "error";

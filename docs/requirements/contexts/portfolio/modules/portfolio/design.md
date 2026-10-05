@@ -529,3 +529,8 @@ Domain은 Firebase·React와 다른 기능 Entity를 import하지 않습니다. 
 ### 조회 실패 표시
 
 자산·보유종목 읽기는 마지막 성공값/최초 준비 여부와 오류를 구분합니다. 오류나 부분 구독 setup 실패는 빈 성공·0원·ready로 바꾸지 않습니다. 마지막 값이 없으면 평가 미확정, 있으면 마지막 값과 실패를 표시하고 재구독을 제공합니다. 정상 빈 snapshot은 0원입니다. 해제·세션 변경 뒤 이전 listener는 새 화면을 갱신하지 않습니다. 명의 목록은 실제 Firestore 구독 함수가 mapping/정렬/오류와 정리를 직접 소유합니다.
+
+
+### 명령 확정 응답 (2026-10-05)
+
+자산·보유종목 저장 성공은 canonical 업무 필드와 aggregateVersion을 `confirmation` v1으로 반환하며 동일 receipt에 저장한다. Position 명령에는 부모 자산의 재평가 결과도 포함한다. occurredAt은 업무 시각이고 실제 createdAt/updatedAt commit Timestamp는 조회 문서가 소유한다. 이전 receipt에는 확정 객체를 합성하지 않는다. 새 서버 선행 배포와 Web 소비자 전환은 [작업 기록](../../../../../operations/portfolio-command-confirmation-2026-10-05.md)을 따른다.

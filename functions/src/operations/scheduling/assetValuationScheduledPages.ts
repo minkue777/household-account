@@ -99,7 +99,7 @@ function refreshMetadata(input: {
 
 function numericResultValue(
   result: Extract<PortfolioCommandResult, { readonly kind: "success" }>,
-  field: string,
+  field: "refreshedCount" | "retainedLastSuccessCount" | "targetCount" | "failedCount",
 ): number {
   const value = result.value[field];
   return typeof value === "number" && Number.isFinite(value) ? value : 0;

@@ -16,6 +16,7 @@ import {
   noWrite,
   record,
   success,
+  portfolioConfirmation,
   type PortfolioAtomicExecutor,
 } from "./portfolioRuntimeSupport";
 import {
@@ -102,7 +103,7 @@ export function createPortfolioPositionCommands(
               occurredAt: metadata.occurredAt,
             }),
           ],
-          success({ positionId }),
+          success({ positionId, confirmation: portfolioConfirmation(metadata.occurredAt, [nextAsset], [parsed.value]) }),
         );
       }, { assetId, automationPlans: false });
     },
@@ -228,7 +229,7 @@ export function createPortfolioPositionCommands(
               occurredAt: metadata.occurredAt,
             }),
           ],
-          success({}),
+          success({ confirmation: portfolioConfirmation(metadata.occurredAt, [nextAsset], [updated]) }),
         );
       }, { assetId, automationPlans: false });
     },
@@ -303,7 +304,7 @@ export function createPortfolioPositionCommands(
               occurredAt: metadata.occurredAt,
             }),
           ],
-          success({}),
+          success({ confirmation: portfolioConfirmation(metadata.occurredAt, [nextAsset], [deleted]) }),
         );
       }, { assetId, automationPlans: false });
     },

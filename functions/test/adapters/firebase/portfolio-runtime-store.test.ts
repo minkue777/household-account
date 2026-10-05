@@ -252,7 +252,7 @@ describe("Firebase portfolio runtime store", () => {
         expectedVersion: 1,
         changes: { memo: "" },
       }),
-    ).resolves.toEqual({ kind: "success", value: {} });
+    ).resolves.toMatchObject({ kind: "success", value: { confirmation: { schemaVersion: 1 } } });
 
     expect(memory.document(`households/house-1/assets/${assetId}`)).toMatchObject({
       aggregateVersion: 2,
@@ -447,7 +447,7 @@ describe("Firebase portfolio runtime store", () => {
           recurringContributionDay: 25,
         },
       }),
-    ).toEqual({ kind: "success", value: {} });
+    ).toMatchObject({ kind: "success", value: { confirmation: { schemaVersion: 1 } } });
     expect(
       memory.document(`households/house-1/assetAutomationPlans/${planId}`),
     ).toMatchObject({
@@ -476,7 +476,7 @@ describe("Firebase portfolio runtime store", () => {
         expectedVersion: 2,
         changes: { memo: "unrelated change" },
       }),
-    ).toEqual({ kind: "success", value: {} });
+    ).toMatchObject({ kind: "success", value: { confirmation: { schemaVersion: 1 } } });
     expect(
       memory.document(`households/house-1/assetAutomationPlans/${planId}`),
     ).toMatchObject({ nextDueDate: "2026-07-18", currentRevision: 2 });
@@ -618,7 +618,7 @@ describe("Firebase portfolio runtime store", () => {
         assetId,
         expectedVersion: 2,
       }),
-    ).toEqual({ kind: "success", value: {} });
+    ).toMatchObject({ kind: "success", value: { confirmation: { schemaVersion: 1 } } });
     expect(memory.document(`households/house-1/assets/${assetId}`)).toMatchObject({
       lifecycleState: "deleted",
       aggregateVersion: 3,
@@ -663,7 +663,7 @@ describe("Firebase portfolio runtime store", () => {
         assetId: savingsId,
         expectedVersion: 1,
       }),
-    ).toEqual({ kind: "success", value: {} });
+    ).toMatchObject({ kind: "success", value: { confirmation: { schemaVersion: 1 } } });
     expect(
       memory.document(`households/house-1/assetAutomationPlans/${planId}`),
     ).toMatchObject({ assetId: savingsId, status: "active" });
@@ -712,7 +712,7 @@ describe("Firebase portfolio runtime store", () => {
         expectedVersion: 1,
         changes: { quantity: 12 },
       }),
-    ).toEqual({ kind: "success", value: {} });
+    ).toMatchObject({ kind: "success", value: { confirmation: { schemaVersion: 1 } } });
     expect(
       await runtime.deletePosition({
         metadata: command(4, "portfolio.delete-position.v1"),
@@ -721,7 +721,7 @@ describe("Firebase portfolio runtime store", () => {
         positionKind: "stock",
         expectedVersion: 2,
       }),
-    ).toEqual({ kind: "success", value: {} });
+    ).toMatchObject({ kind: "success", value: { confirmation: { schemaVersion: 1 } } });
 
     expect(
       memory.document(
@@ -777,7 +777,7 @@ describe("Firebase portfolio runtime store", () => {
           currentPrice: 1_500_000,
         },
       }),
-    ).toEqual({ kind: "success", value: {} });
+    ).toMatchObject({ kind: "success", value: { confirmation: { schemaVersion: 1 } } });
 
     expect(memory.has("stock_holdings/legacy-cash-1")).toBe(false);
     expect(

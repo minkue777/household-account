@@ -9,8 +9,11 @@ import type {
   PortfolioAtomicResult,
   PortfolioCommandMetadata,
   PortfolioCommandResult,
+  PortfolioCommandValue,
+  PortfolioCommandConfirmation,
   PortfolioOwnerProfileReference,
   PortfolioRuntimeAsset,
+  PortfolioRuntimePosition,
   PortfolioRuntimeEvent,
   PortfolioRuntimeMutation,
   PortfolioRuntimeState,
@@ -57,9 +60,30 @@ export type PortfolioAtomicExecutor = (
 ) => Promise<PortfolioCommandResult>;
 
 export function success(
-  value: Readonly<Record<string, unknown>>,
+  value: PortfolioCommandValue,
 ): PortfolioCommandResult {
   return { kind: "success", value };
+}
+
+function defined<T extends object>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, field]) => field !== undefined)) as T;
+}
+
+export function portfolioConfirmation(
+  occurredAt: string,
+  assets: readonly PortfolioRuntimeAsset[],
+  positions: readonly PortfolioRuntimePosition[] = [],
+): PortfolioCommandConfirmation {
+  return {
+    schemaVersion: 1,
+    occurredAt,
+    assets: assets.map(({ createdAt: _created, updatedAt: _updated, ownerDisplayName: _ownerName, ...asset }) =>
+      ({ ...defined(asset), automation: defined(asset.automation) })),
+    positions: positions.map(({ createdAt: _created, updatedAt: _updated, ...position }) => ({
+      ...defined(position),
+      ...(position.lastQuote === undefined ? {} : { lastQuote: defined(position.lastQuote) }),
+    })),
+  };
 }
 
 export function error(code: string, retryable = false): PortfolioCommandResult {

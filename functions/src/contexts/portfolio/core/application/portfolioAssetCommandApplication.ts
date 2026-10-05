@@ -25,6 +25,7 @@ import {
   record,
   stable,
   success,
+  portfolioConfirmation,
   validateAssetCreation,
   type PortfolioAtomicExecutor,
 } from "./portfolioRuntimeSupport";
@@ -203,7 +204,7 @@ export function createPortfolioAssetCommands(
               occurredAt: metadata.occurredAt,
             }),
           ],
-          success({ assetId }),
+          success({ assetId, confirmation: portfolioConfirmation(metadata.occurredAt, [asset]) }),
         );
       }, { positions: false, automationPlans: false });
     },
@@ -384,7 +385,7 @@ export function createPortfolioAssetCommands(
                 }),
               ]
             : [],
-          success({}),
+          success({ confirmation: portfolioConfirmation(metadata.occurredAt, [updated]) }),
         );
       }, { assetId, positions: false, automationPlans: readsAutomation });
     },
@@ -422,7 +423,7 @@ export function createPortfolioAssetCommands(
                 updatedAt: metadata.occurredAt,
               };
         });
-        return commit({ ...state, assets: nextAssets }, [], success({}));
+        return commit({ ...state, assets: nextAssets }, [], success({ confirmation: portfolioConfirmation(metadata.occurredAt, nextAssets.filter(asset => asset.lifecycleState === "active")) }));
       }, { positions: false, automationPlans: false });
     },
 
@@ -467,7 +468,7 @@ export function createPortfolioAssetCommands(
               occurredAt: metadata.occurredAt,
             }),
           ],
-          success({}),
+          success({ confirmation: portfolioConfirmation(metadata.occurredAt, [deleted]) }),
         );
       }, { assetId, positions: false, automationPlans: false });
     },

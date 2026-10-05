@@ -86,7 +86,7 @@ function metadata(
 }
 
 function value(result: PortfolioCommandResult): Readonly<Record<string, unknown>> {
-  if (result.kind === "success") return result.value;
+  if (result.kind === "success") return { ...result.value };
   throw new HouseholdCommandRejection(result.code, result.retryable === true);
 }
 

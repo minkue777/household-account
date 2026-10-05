@@ -7,7 +7,7 @@
 | [FT-01 / P2: 실제 동작과 연결되지 않는 상수 관측을 없애기](finance-tests.md) | 미착수 | |
 | [FT-02 / P2: Capture 조율용 fixture가 별도 금융 엔진을 구현하는 범위 줄이기](finance-tests.md) | 미착수 | |
 | [FIN-09 · P1 · 정기 계획 한 건의 명령을 가구 전체 plans·receipts 로딩과 diff 저장에서 분리합니다](finance.md) | 구현·실제 SDK 검사 완료 | [정기 계획과 Outbox 단순화](../../operations/recurring-simplicity-2026-10-05.md) |
-| [FIN-01 · P1 · 자산·보유종목 Command가 계산한 최종 상태를 버려 Web이 서버 상태를 추정합니다](finance.md) | 미착수 | |
+| [FIN-01 · P1 · 자산·보유종목 Command가 계산한 최종 상태를 버려 Web이 서버 상태를 추정합니다](finance.md) | 서버 구현·실제 SDK 완료, 배포·Web 전환 남음 | [명령 확정 응답](../../operations/portfolio-command-confirmation-2026-10-05.md) |
 | [FIN-02 · P1 · 실제 경로와 분리된 Reporting 상태기계·포트폴리오 정책을 계약 검사와 함께 정리합니다](finance.md) | 미착수 | |
 | [FIN-03 · P2 · 정기지출의 optional pagination이 테스트 때문에 무제한 조회 경로를 남깁니다](finance.md) | 구현·실제 SDK 검사 완료 | [정기 계획과 Outbox 단순화](../../operations/recurring-simplicity-2026-10-05.md) |
 | [FIN-04 · P2 · 정기지출은 Outbox 원자 저장 뒤 사용하지 않는 별도 publish 경로를 유지합니다](finance.md) | 구현·실제 SDK 검사 완료 | [정기 계획과 Outbox 단순화](../../operations/recurring-simplicity-2026-10-05.md) |
@@ -53,7 +53,7 @@
 | [UI-03 · 설정 저장의 성공·중복·실패 결과 처리를 화면 한 곳으로 모읍니다](web-ui.md) | 구현·관련 검사 완료 | [설정 실패와 사용하지 않는 경계](../../operations/settings-simplicity-2026-10-05.md) |
 | [UI-04 · 폼의 초기화 단위를 외부 목록 참조가 아닌 편집 인스턴스로 맞춥니다](web-ui.md) | 구현·관련 검사 완료 | [편집 초안과 시세 수명](../../operations/editor-simplicity-2026-10-05.md) |
 | [UI-05 · 신규 자산의 선택 종목과 시세를 같은 초안 세대에 속하게 합니다](web-ui.md) | 구현·관련 검사 완료 | [편집 초안과 시세 수명](../../operations/editor-simplicity-2026-10-05.md) |
-| [W1. 자산 저장 결과를 클라이언트가 다시 구성한다 — 우선 정비](web.md) | 미착수 | |
+| [W1. 자산 저장 결과를 클라이언트가 다시 구성한다 — 우선 정비](web.md) | 서버 구현·실제 SDK 완료, 배포·Web 전환 남음 | [명령 확정 응답](../../operations/portfolio-command-confirmation-2026-10-05.md) |
 | [W2. snapshot의 의미 대신 횟수로 확정을 추정한다 — 상세 설계 필요](web.md) | 미착수 | |
 | [W3. Firestore 경계가 SDK overload 전체를 흉내 낸다 — 축소 가능](web.md) | 미착수 | |
 | [W4. 폼의 생성·초기화·복구가 여러 곳에 있다 — 기능별로 정리](web.md) | 구현·관련 검사 완료 | [편집 초안과 시세 수명](../../operations/editor-simplicity-2026-10-05.md) |

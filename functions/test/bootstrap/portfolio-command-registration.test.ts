@@ -119,7 +119,12 @@ describe("Portfolio household command registration", () => {
         },
         requestedAt: "2026-07-22T12:00:00.000Z",
       }),
-    ).resolves.toEqual({});
+    ).resolves.toMatchObject({ confirmation: {
+      schemaVersion: 1, occurredAt: "2026-07-22T12:00:00.000Z",
+      assets: [expect.objectContaining({ assetId: "asset-1", aggregateVersion: 2, currentBalance: 1_500_000 })],
+      positions: [expect.objectContaining({ positionId: "legacy-cash-1", aggregateVersion: 4, quantity: 1,
+        lastQuote: { priceInWon: 1_500_000, provider: "client-observed", observedAt: "2026-07-22T12:00:00.000Z" } })],
+    } });
 
     expect(memory.document("households/house-1/assets/asset-1/positions/legacy-cash-1")).toMatchObject({
       holdingType: "cash",
