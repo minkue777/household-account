@@ -41,3 +41,15 @@ Web·APK 변경은 없습니다. 공개된 v1.2.33 APK는 덮어쓰지 않았고
 - 이전 Android Native Firebase 검증이 문서 gate 때문에 실행되지 못해, 새 제품 SHA에서 실제 Android 검사를 포함한 [37246241461](https://github.com/minkue777/household-account/actions/runs/37246241461)을 별도로 시작했습니다. 이 실행은 지역화폐 실패를 발견하기 전에 시작됐으며 서버 전체 검사는 통과했습니다. 실패만 지우기 위한 무변경 재실행이 아닙니다. 로컬 지역화폐 실제 Emulator 검사도 2 passed로 실패가 재현되지 않았습니다. 로그: `TEMP/household-simplicity-local-currency-repro-20261005.log`.
 - 실패 CI에서 Emulator 서버 로그가 보존되지 않아 먼저 트랜잭션이 닫힌 원인을 확인할 수 없었습니다. 후속 CI 변경은 Firebase 통합 검사 JSON 결과와 실패 시 Emulator 로그 artifact 보존만 추가합니다. 검사 입력·동시성·제한 시간·기대 결과·SDK 재시도 정책은 그대로이며 재발 시 원인 분석 자료로 사용합니다. 테스트 실행 설정·CI·문서만 바뀌므로 제품 재배포는 필요하지 않습니다.
 - 최종 전체 CI와 앞선 실제 Android 검사가 끝나기 전에는 검증 완료로 간주하지 않습니다.
+
+### WebKit 성능 시나리오의 지출 추가 로드 실패
+
+같은 push 실행 `37246051987`의 Web E2E 본 검사는 통과했지만, 이후 성능 시나리오가 WebKit 준비 실행(iteration 0)에서 실패했습니다. 자산·통계 화면을 거쳐 홈으로 돌아온 뒤 지출 추가 버튼을 누르면 `내역 추가 화면을 불러오는 중입니다.`에 머물러 입력창의 30초 대기 제한을 초과했습니다. Chromium 시나리오는 통과했습니다. 뒤따른 235건의 표본 누락은 이 중단의 결과이며 성능 기준 초과가 원인은 아닙니다.
+
+실패 JSON에는 `InvalidStateError: Failed to execute 'transaction' on 'IDBDatabase': The database connection is closing.`가 있지만 오류의 발생 위치·시각과 스크립트 다운로드 상태가 없으므로 지연 모듈 로드와의 인과관계는 미확정입니다. 제품 오류가 해결됐다고 간주하지 않습니다. 기존 실패 화면·HTML을 유지하면서 오류 stack/시각, 정적 JS·CSS 요청의 HTTP 상태·완료/실패, 현재 문서 script·stylesheet 로드 여부와 Service Worker controller를 실패 artifact에 추가합니다. 요청을 가로채거나 HTTP 캐시를 끄지 않으며, 검사 동작·30초 기준·기대 결과와 CI 표본 수를 유지합니다.
+
+원본 자료는 `TEMP/household-simplicity-performance-ci-37246051987`, `TEMP/household-simplicity-web-ci-37246051987`, 실패 로그는 `TEMP/household-simplicity-ci-failed-37246051987.log`입니다. 후속은 검사 관측·문서 변경으로 Web/Firebase/APK 제품 배포가 필요하지 않습니다.
+
+관측 보강 후 로컬 production build + 실제 Emulator + WebKit에서 준비 실행 1회와 진단 표본 1회의 전체 시나리오를 실행해 1 passed(1.8분), 33개 지표 66개 관측을 확인했습니다. 지출 추가·삭제와 기존 화면/저장 assertions를 통과했지만 간헐 실패가 재현되지 않아 원인 해결의 증거는 아닙니다. 로컬 진단 표본 수를 CI의 7회 성능 기준선과 혼동하지 않습니다. `tsc --noEmit`과 문서 링크 gate도 통과했습니다. 로그: `TEMP/household-simplicity-webkit-{prepare,diagnostics}-20261005.log`.
+
+2026-10-05 09:26 KST 확인에서 제품 SHA의 별도 실행 `37246241461`은 다섯 검사·CI 요약이 모두 success이며 실제 Android Emulator/Native Firebase E2E/성능 step도 실행 후 성공했습니다. `f33fefa`의 `37246929110`은 functions/web/android 성공, web-e2e/android-instrumentation 진행 중입니다. 앞선 실패는 유지하고 관측 보강 후 최신 SHA의 전체 CI를 후속 확인합니다.

@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContextOptions, type Page, type TestInfo } from '@playwright/test';
+import { expect, test, type BrowserContextOptions, type Page, type Request, type TestInfo } from '@playwright/test';
 import { installMeasurement, markNextAction, measure, type MeasurementOptions } from './measurement';
 import {
   ASSET_COUNT, STOCK_COUNT, EXPENSES_PER_MONTH, FIXTURE_MONTHS, LOCAL_CURRENCY_BALANCE,
@@ -285,10 +285,34 @@ test('핵심 사용 경로의 실제 Emulator 성능 기준선', async ({ page: 
     const context = await browser.newContext(options);
     if (testInfo.project.name.includes('webkit')) await context.addInitScript(() => Object.defineProperty(navigator, 'standalone', { get: () => true }));
     const errors: string[] = [];
+    const errorDetails: Array<{ message: string; stack?: string; at: number }> = [];
+    const recordPageError = (error: Error) => {
+      errors.push(error.message);
+      errorDetails.push({ message: error.message, stack: error.stack, at: Date.now() });
+    };
+    // Observe normal requests without routing: route interception disables HTTP cache.
+    const resources = new Map<Request, { url: string; type: string; requestedAt: number; status?: number; finishedAt?: number; failure?: string | null }>();
+    context.on('request', request => {
+      if (['script', 'stylesheet'].includes(request.resourceType()) && new URL(request.url()).pathname.startsWith('/_next/static/')) {
+        resources.set(request, { url: request.url(), type: request.resourceType(), requestedAt: Date.now() });
+      }
+    });
+    context.on('response', response => {
+      const resource = resources.get(response.request());
+      if (resource) resource.status = response.status();
+    });
+    context.on('requestfinished', request => {
+      const resource = resources.get(request);
+      if (resource) resource.finishedAt = Date.now();
+    });
+    context.on('requestfailed', request => {
+      const resource = resources.get(request);
+      if (resource) { resource.finishedAt = Date.now(); resource.failure = request.failure()?.errorText; }
+    });
     let page: Page | undefined;
     try {
       page = await context.newPage();
-      page.on('pageerror', error => errors.push(error.message));
+      page.on('pageerror', recordPageError);
       await installMeasurement(page);
       await measure(page, testInfo, { id: 'home.fresh-context', label: '첫 홈 → 달력·월 합계·지역화폐 표시', iteration, warmup: iteration === 0,
         cacheState: 'new-context/persisted-auth-and-bootstrap/empty-http-and-firestore-cache', navigation: true,
@@ -298,7 +322,7 @@ test('핵심 사용 경로의 실제 Emulator 성능 기준선', async ({ page: 
       await settleInitialServiceWorker(page, testInfo, iteration);
       await page.close();
       page = await context.newPage();
-      page.on('pageerror', error => errors.push(error.message));
+      page.on('pageerror', recordPageError);
       await installMeasurement(page);
       await measure(page, testInfo, { id: 'home.relaunch', label: '앱 문서 재실행 → 홈 데이터 표시', iteration, warmup: iteration === 0,
         cacheState: 'same-context/new-document/persisted-auth-http-and-active-service-worker-static-cache', navigation: true,
@@ -316,9 +340,19 @@ test('핵심 사용 경로의 실제 Emulator 성능 기준선', async ({ page: 
         // 진단 자체의 오류가 원래 실패를 덮어쓰지 않도록 각각 처리합니다.
         await Promise.allSettled([
           failedPage.screenshot({ fullPage: true, timeout: 10_000 }).then(body => testInfo.attach(`failure-${iteration}.png`, { contentType: 'image/png', body })),
-          Promise.all([failedPage.locator('body').innerText({ timeout: 10_000 }), failedPage.getByRole('alert').allTextContents(), failedPage.content()])
-            .then(async ([bodyText, alerts, html]) => {
-              await testInfo.attach(`failure-${iteration}.json`, { contentType: 'application/json', body: JSON.stringify({ url: failedPage.url(), iteration, bodyText, alerts, pageErrors: errors }, null, 2) });
+          Promise.all([failedPage.locator('body').innerText({ timeout: 10_000 }), failedPage.getByRole('alert').allTextContents(), failedPage.content(),
+            failedPage.evaluate(() => ({
+              at: Date.now(), readyState: document.readyState,
+              scripts: Array.from(document.scripts, script => script.src).filter(Boolean),
+              stylesheets: Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'), link => ({ href: link.href, loaded: link.sheet !== null })),
+              worker: navigator.serviceWorker?.controller?.scriptURL,
+            })),
+          ])
+            .then(async ([bodyText, alerts, html, documentState]) => {
+              await testInfo.attach(`failure-${iteration}.json`, { contentType: 'application/json', body: JSON.stringify({
+                url: failedPage.url(), iteration, bodyText, alerts, pageErrors: errors,
+                pageErrorDetails: errorDetails, staticRequests: Array.from(resources.values()), documentState,
+              }, null, 2) });
               await testInfo.attach(`failure-${iteration}.html`, { contentType: 'text/html', body: html });
             }),
         ]);
