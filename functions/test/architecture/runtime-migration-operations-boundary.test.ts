@@ -74,13 +74,6 @@ describe("runtime migration 운영 경계", () => {
   });
 
   it("plan builder는 collector orchestration만 담당하고 context 내부 구현을 import하지 않는다", () => {
-    expect(migrationBuilder.split(/\r?\n/u).length).toBeLessThan(400);
-    expect(migrationBuilder).toContain("collectFinanceRuntimeMigration");
-    expect(migrationBuilder).toContain(
-      "collectPaymentConfigurationRuntimeMigration",
-    );
-    expect(migrationBuilder).toContain("collectPortfolioAssetRuntimeMigration");
-    expect(migrationBuilder).toContain("collectPreferencesRuntimeMigration");
     expect(migrationBuilder).not.toMatch(
       /contexts\/.+\/(?:domain|application)\//u,
     );

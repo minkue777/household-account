@@ -130,7 +130,7 @@ async function main() {
   if (dirty) throw new Error('CLEAN_EXACT_HEAD_REQUIRED');
   const manifest = json(resolve(manifestPath));
   // Build the actual candidate; full test suites run independently in CI.
-  // Firebase predeploy already builds before its guard, so guards only recheck the artifact.
+  // Prepare once here. Every Firebase predeploy guard rechecks these exact artifacts, HEAD and lease.
   if (!guard) { npm(['run', 'build']); prepareCodebases(); }
   const { createDeploymentTargetCompatibilityApplication } = await import('../lib/platform/delivery-assurance/application/deploymentTargetCompatibilityApplication.js');
   const { createDeploymentProvenanceApplication } = await import('../lib/platform/delivery-assurance/application/deploymentProvenanceApplication.js');

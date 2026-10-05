@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { createDeploymentTargetCompatibilityApplication } from '../../src/platform/delivery-assurance/application/deploymentTargetCompatibilityApplication';
 import { readDeploymentMarker } from '../../src/bootstrap/deploymentMarker';
 
@@ -44,6 +46,15 @@ describe('[REL-001][REL-002][REL-003] 실제 배포 wrapper의 실패 차단', (
       ci: { policy: 'independent', workflow: 'quality-gates.yml', commitSha: sha, status: 'not-evaluated' } });
     expect(result).not.toHaveProperty('gateResults');
     expect(result.ci).not.toHaveProperty('runId');
+  });
+  it('실제 predeploy guard 진입점은 wrapper의 project/manifest 없는 직접 실행을 거절한다', () => {
+    const result = spawnSync(process.execPath, [fileURLToPath(new URL('../../scripts/deploy-firebase.mjs', import.meta.url)), '--guard'], {
+      encoding: 'utf8', windowsHide: true,
+      env: { ...process.env, HOUSEHOLD_DEPLOY_PROJECT: '', HOUSEHOLD_DEPLOY_MANIFEST: '' },
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('--project와 --manifest가 필요합니다.');
+    expect(result.stdout).not.toContain('approved');
   });
   it('dirty workspace와 변경 artifact를 policy 호출 전에 차단한다', async () => {
     const [script] = await scripts();

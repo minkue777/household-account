@@ -81,7 +81,7 @@ npm --prefix functions run deploy -- `
   --smoke-token-file "$env:TEMP\household-smoke.id-token"
 ```
 
-wrapper는 배포 검증을 수행하고 승인과 독립 CI 참조를 `approvedReleases/{releaseId}`에 저장합니다. `deploymentLeases/{projectId}`를 transaction으로 획득한 한 실행만 Firebase CLI를 시작합니다. Functions predeploy는 **build 후 guard** 순서로 실행하며, guard가 hash·actor·현재 배포 잠금 소유자를 다시 확인합니다. guard는 전체 테스트나 build를 다시 실행하지 않습니다. Rules와 Storage predeploy에도 같은 guard가 연결됩니다. 직접 `firebase deploy`를 실행하거나 `--guard`용 환경 변수를 수동으로 구성하지 않습니다.
+wrapper는 배포 검증을 수행하고 승인과 독립 CI 참조를 `approvedReleases/{releaseId}`에 저장합니다. `deploymentLeases/{projectId}`를 transaction으로 획득한 한 실행만 Firebase CLI를 시작합니다. wrapper는 architecture 검사와 production build를 한 번 수행하고 세 codebase 결과물을 준비합니다. Functions predeploy는 **동일 artifact를 재검증하는 guard만** 실행하며 hash·clean HEAD·actor·현재 배포 잠금 소유자를 다시 확인합니다. guard는 전체 테스트나 build를 다시 실행하지 않습니다. 변경되거나 오래된 결과물은 manifest hash 검증에서 거절됩니다. Rules와 Storage predeploy에도 같은 guard가 연결됩니다. 직접 `firebase deploy`를 실행하거나 `--guard`용 환경 변수를 수동으로 구성하지 않습니다.
 
 배포 후 smoke는 인증된 사용자 해석과 실제 가구 Query를 호출하고 release ID·commit SHA·artifact SHA를 확인합니다. `functions:default`를 배포했다면 새 후보 marker만 허용합니다. Rules·index 또는 child codebase만 배포했다면 Query 서버는 바꾸지 않았으므로 이전 성공 배포의 정확한 marker를 유지·검증합니다. 부분 배포가 이어져도 승인 evidence에서 그 marker를 계승합니다. 이 smoke는 공용 인증·Query 경로를 확인하며 Android App Check·결제 수집·WebView bridge의 전체 업무 흐름을 대신하지 않습니다. 해당 경로는 필수 CI/Emulator/E2E와 외부 설정 점검에서 별도로 검증합니다.
 

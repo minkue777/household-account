@@ -15,7 +15,7 @@
 | [FIN-08 · P2 · 종목 catalog의 업로드 전 가상 metadata를 없애 실제 저장 결과에서 한 번만 구성합니다](finance.md) | 구현·실제 SDK 검사 완료 | [자산 조회·목록 발행](../../operations/portfolio-storage-simplicity-2026-10-05.md) |
 | [FIN-06 · P3-조건부 · 지역화폐 Canonical/legacy 이중 저장의 종료 계획을 명시합니다](finance.md) | 미착수 | |
 | [FIN-07 · P3-조건부 · 배당 조회에서 이관 계획을 매번 재해석하는 복구 경로를 1회 자료 정비로 옮깁니다](finance.md) | 미착수 | |
-| [PT-01 — 구조 검사로 복잡한 배포/분해 모형을 고정합니다 (높음)](platform-tests.md) | 미착수 | |
+| [PT-01 — 구조 검사로 복잡한 배포/분해 모형을 고정합니다 (높음)](platform-tests.md) | 구현·관련 검사 완료 | [한 번의 후보 준비](../../operations/build-preparation-simplicity-2026-10-05.md) |
 | [PT-02 — fixture가 제품 경계의 행동을 직접 대신합니다 (높음)](platform-tests.md) | 미착수 | |
 | [PT-03 — 상수로 저장된 자료를 비교하는 보존 assertion은 삭제 가능합니다 (높음)](platform-tests.md) | 미착수 | |
 | [PT-04 — 413줄 Firestore 대역의 SDK 의미 차이가 버그를 숨깁니다 (높음)](platform-tests.md) | SDK 차이 교정·범위 제한 | [실제 SDK 비교 및 동시성 범위 분리](../../operations/access-simplicity-2026-10-05.md) |
@@ -38,7 +38,7 @@
 | [TB-02 — 공유 schema 검사를 생산자·소비자 실행 검사로 부르지 않는다](test-boundaries.md) | 미착수 | |
 | [TOOL-01 — Android 영향 범위를 수동 파일명 목록으로 관리하면서 보조 도구 검사가 스스로 빠집니다](tooling.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
 | [TOOL-02 — 현재 실행자가 쓰지 않는 과거 성능 PASS/FAIL 평가 모드를 계속 유지합니다](tooling.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
-| [TOOL-03 — 동일 후보를 준비하는 build와 구조 검사를 한 흐름에서 반복합니다](tooling.md) | 미착수 | |
+| [TOOL-03 — 동일 후보를 준비하는 build와 구조 검사를 한 흐름에서 반복합니다](tooling.md) | 구현·관련 검사 완료 | [한 번의 후보 준비](../../operations/build-preparation-simplicity-2026-10-05.md) |
 | [TOOL-04 — 완료된 구형 이관용 reconciliation이 일반 runtime 명령처럼 남아 있습니다](tooling.md) | 미착수 | |
 | [TOOL-05 — 요구사항 선언 파서가 세 군데에서 같은 규칙을 다시 구현합니다](tooling.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
 | [TOOL-06 — 런타임 보안 경계 검사에 과거 폴더 이전 완료 조건이 섞여 있습니다](tooling.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
