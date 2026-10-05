@@ -23,7 +23,6 @@ import {
 } from "../adapters/firebase/payment-capture/androidRawNotificationDecoder";
 import { Sha256AndroidRawNotificationHasher } from "../adapters/crypto/payment-capture/sha256AndroidRawNotificationHasher";
 import { FirebaseLocalCurrencyBalanceStore } from "../adapters/firebase/local-currency/firebaseLocalCurrencyBalanceStore";
-import { createTenantAuthorizationApplication } from "../contexts/access/tenant-authorization/application/tenantAuthorizationApplication";
 import { createCaptureBranchSubmissionApplication } from "../contexts/payment-capture/android-payment-ingestion/application/captureBranchSubmissionApplication";
 import { createCaptureSubmissionApplication } from "../contexts/payment-capture/android-payment-ingestion/application/captureSubmissionApplication";
 import { createCaptureTransactionGatewayApplication } from "../contexts/payment-capture/android-payment-ingestion/application/captureTransactionGatewayApplication";
@@ -252,9 +251,6 @@ export function createAndroidRawNotificationCallableHandler(input: {
   };
 }
 
-const tenantAuthorization = createTenantAuthorizationApplication({
-  memberships: { findByPrincipalUid: async () => undefined },
-});
 function createFirebaseCaptureConfigurationQuery(): CoalescingCaptureConfigurationQuery {
   return new CoalescingCaptureConfigurationQuery(
     withCaptureConfigurationLatency(
@@ -272,7 +268,6 @@ export function createFirebaseCaptureSubmissionPort(
     { now: () => new Date().toISOString() },
   );
   return createCaptureSubmissionApplication({
-    tenantAuthorization,
     branches: createCaptureBranchSubmissionApplication({
       receipts: withCaptureReceiptLatency(
         new FirebaseCaptureSubmissionReceiptStore(db),

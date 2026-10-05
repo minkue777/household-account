@@ -1,4 +1,3 @@
-import type { TenantAuthorizationInputPort } from "../../../access/public";
 import type {
   CaptureBalanceBranchResult,
   CaptureBranchEnvelope,
@@ -20,7 +19,6 @@ import {
 } from "../domain/policies/kakaoTalkPaymentKindPolicy";
 
 export interface CaptureSubmissionDependencies {
-  readonly tenantAuthorization: TenantAuthorizationInputPort;
   readonly branches: CaptureBranchSubmissionInputPort;
 }
 
@@ -208,9 +206,7 @@ class DefaultCaptureSubmissionApplication implements CaptureSubmissionInputPort 
     command: CaptureSubmissionCommand,
   ): Promise<CaptureSubmissionOutcome> {
     const authorization = authorizeCaptureSubmission({
-      tenantAuthorization: this.dependencies.tenantAuthorization,
       actor: command.actor,
-      envelopeHouseholdId: command.actor.householdId,
     });
     if (authorization.kind !== "Authorized") return authorization;
 

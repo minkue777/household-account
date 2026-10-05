@@ -23,7 +23,7 @@
 | [PT-06 — 실제 completion 경로와 다른 monitor 복구 API를 테스트가 살려 둡니다 (높음)](platform-tests.md) | 구현·실제 SDK 검사 완료 | [생명주기 실행 경계](../../operations/lifecycle-simplicity-2026-10-05.md) |
 | [PT-07 — 과거 날짜 예외와 구 성능 gate를 테스트가 보존합니다 (높음)](platform-tests.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
 | [PT-08 — category 조회 최적화 검사가 최초 수정·삭제 경로를 타지 않습니다 (높음)](platform-tests.md) | 실제 SDK 검사·추적성 정리 완료 | [저장 보존과 실제 조회 비용](../../operations/read-cost-contract-tests-2026-10-05.md) |
-| [PT-09 — 일반 tenant CRUD 행렬이 실제 Rules 계약처럼 보입니다 (높음)](platform-tests.md) | 미착수 | |
+| [PT-09 — 일반 tenant CRUD 행렬이 실제 Rules 계약처럼 보입니다 (높음)](platform-tests.md) | 구현·실제 Rules 검사 완료 | [수집 인가와 과거 정책](../../operations/capture-authorization-simplicity-2026-10-05.md) |
 | [후보 A01 — 사용처 없는 서버의 클라이언트 세션 모형 삭제](platform.md) | 구현·관련 검사 완료 | [서버 실행 경로 정비](../../operations/server-simplicity-2026-10-05.md) |
 | [후보 A02 — 서로 다른 Safe HTTP 모형 두 개 삭제](platform.md) | 구현·관련 검사 완료 | [서버 실행 경로 정비](../../operations/server-simplicity-2026-10-05.md) |
 | [후보 A03 — 미연결 ingress·결과분류·HTML 파서 모형 삭제](platform.md) | 구현·관련 검사 완료 | [서버 실행 경로 정비](../../operations/server-simplicity-2026-10-05.md) |
@@ -69,7 +69,7 @@
 | [3. capture ingress와 retry의 두 전달 알고리즘을 한 번의 attempt로 통일](capture.md) | 미착수 | |
 | [4. 서버 FID 등록에서 가상의 client session controller 제거](capture.md) | 구현·실제 SDK 검사 완료 | [설치 등록 명령](../../operations/mobile-endpoint-simplicity-2026-10-05.md) |
 | [5. configuration의 transaction 내부 가상 store를 순수 mutation으로 축소](capture.md) | 구현·관련 검사 완료 | [카드·규칙 직접 변경 계산](../../operations/server-simplicity-2026-10-05.md) |
-| [6. 테스트만 소비하는 legacy Shortcut owner 추론은 운영 src와 분리](capture.md) | 미착수 | |
+| [6. 테스트만 소비하는 legacy Shortcut owner 추론은 운영 src와 분리](capture.md) | 구현·관련 검사 완료 | [수집 인가와 과거 정책](../../operations/capture-authorization-simplicity-2026-10-05.md) |
 | [7. QuickEdit의 original/draft/Intent 필드 복제를 한 snapshot과 draft로 정리](capture.md) | 미착수 | |
 | [8. 모든 알림 event에 붙은 legacy Shortcut guard의 종료 조건 명시](capture.md) | 미착수 | |
 | [CT01 — 경합이라고 이름 붙인 검사가 순차 실행입니다. P1, 확신 높음](capture-tests.md) | 미착수 | |

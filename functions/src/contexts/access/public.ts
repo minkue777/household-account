@@ -31,20 +31,6 @@ export {
   type VerifiedLegacyRecoveryOperator,
 } from "./legacy-membership/application/ports/in/legacyMembershipInputPort";
 export {
-  type AuthenticatedTenantRequester,
-  type ResolveTenantActorResult,
-  type TenantActorContext,
-  type TenantAdministratorCapability,
-  type TenantAuthorizationDecision,
-  type TenantAuthorizationInputPort,
-  type TenantCollection,
-  type TenantCrudAction,
-  type TenantOperation,
-  type TenantOperationResult,
-  type TenantResourceScope,
-  type VerifiedAccessPrincipal,
-} from "./tenant-authorization/application/ports/in/tenantAuthorizationInputPort";
-export {
   type MemberRenameInputPort,
   type MemberRenameResult,
   type RenamedMemberView,

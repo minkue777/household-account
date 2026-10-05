@@ -293,10 +293,6 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       payloads: new Sha256AndroidRawNotificationHasher(),
       clock: { now: () => REQUESTED_AT },
       submissions: createCaptureSubmissionApplication({
-        tenantAuthorization: {
-          resolveActorContext: () => { throw new Error("Actor already resolved"); },
-          authorizeHouseholdAction: () => ({ kind: "allowed" }),
-        },
         branches: createCaptureBranchSubmissionApplication({
           receipts: new FirebaseCaptureSubmissionReceiptStore(database),
           payloads: new Sha256CapturePayloadFingerprint(),

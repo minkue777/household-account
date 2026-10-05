@@ -31,10 +31,6 @@ function setup() {
     ledger: new FirebaseCaptureLedgerPersistence(database),
   });
   const submissions = createCaptureSubmissionApplication({
-    tenantAuthorization: {
-      resolveActorContext: () => { throw new Error("Capture submission receives an already resolved actor"); },
-      authorizeHouseholdAction: () => ({ kind: "allowed" }),
-    },
     branches: createCaptureBranchSubmissionApplication({ receipts: new FirebaseCaptureSubmissionReceiptStore(database), payloads: new Sha256CapturePayloadFingerprint(), transactions: gateway, balances: { recordBalanceObservation: balance } }),
   });
   const raw = createAndroidRawNotificationSubmissionApplication({ parser: createAndroidProviderParser(), submissions, payloads: new Sha256AndroidRawNotificationHasher(), clock: { now: () => "2026-09-06T00:00:00.000Z" } });

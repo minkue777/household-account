@@ -127,7 +127,7 @@ const describeWithFirestoreEmulator = process.env.FIRESTORE_EMULATOR_HOST
   : describe.skip;
 
 describeWithFirestoreEmulator("서버 권위형 Firestore Rules", () => {
-  it("[T-SEC-001][SYS-001] 단일 카테고리 원본은 자기 가구와 검증된 관리자만 읽으며 다른 문서는 공개하지 않는다", async () => {
+  it("[T-HH-RULES-001][T-SEC-001][SYS-001] 단일 카테고리 원본은 자기 가구와 검증된 관리자만 읽으며 다른 문서는 공개하지 않는다", async () => {
     const member = environment.authenticatedContext(MEMBER_UID).firestore();
     const other = environment.authenticatedContext(OTHER_UID).firestore();
     const nonmember = environment.authenticatedContext("uid-no-membership").firestore();
@@ -147,7 +147,7 @@ describeWithFirestoreEmulator("서버 권위형 Firestore Rules", () => {
     }
   });
 
-  it("[T-SEC-001][SYS-001] positions collection-group 조회는 가구 조건과 현재 Membership을 함께 강제한다", async () => {
+  it("[T-HH-RULES-001][T-SEC-001][SYS-001] positions collection-group 조회는 가구 조건과 현재 Membership을 함께 강제한다", async () => {
     const member = environment.authenticatedContext(MEMBER_UID).firestore();
     const other = environment.authenticatedContext(OTHER_UID).firestore();
     const nonmember = environment.authenticatedContext("uid-no-membership").firestore();
@@ -166,7 +166,7 @@ describeWithFirestoreEmulator("서버 권위형 Firestore Rules", () => {
     await assertFails(getDocs(scoped(anonymous, HOUSEHOLD_ID)));
   });
 
-  it.each([false, true])("[T-SEC-001][SYS-001] 카탈로그와 보유종목의 생성·수정·삭제는 관리자=%s도 Client SDK로 수행하지 못한다", async (systemAdmin) => {
+  it.each([false, true])("[T-HH-RULES-001][T-SEC-001][SYS-001] 카탈로그와 보유종목의 생성·수정·삭제는 관리자=%s도 Client SDK로 수행하지 못한다", async (systemAdmin) => {
     const db = environment.authenticatedContext(MEMBER_UID, { systemAdmin }).firestore();
     for (const path of [
       `households/${HOUSEHOLD_ID}/categoryCatalog/current`,
@@ -210,14 +210,14 @@ describeWithFirestoreEmulator("서버 권위형 Firestore Rules", () => {
     }
   });
 
-  it("[T-SEC-001][SYS-001] 인증되지 않은 사용자는 가구와 legacy 금융 데이터를 읽을 수 없다", async () => {
+  it("[T-HH-RULES-001][T-SEC-001][SYS-001] 인증되지 않은 사용자는 가구와 legacy 금융 데이터를 읽을 수 없다", async () => {
     const firestore = environment.unauthenticatedContext().firestore();
 
     await assertFails(getDoc(doc(firestore, "households", HOUSEHOLD_ID)));
     await assertFails(getDoc(doc(firestore, "expenses", "legacy-expense-a")));
   });
 
-  it("[T-SEC-001][SYS-001] active Membership은 자기 가구의 공개 모델과 전환 중 legacy 모델만 읽는다", async () => {
+  it("[T-HH-RULES-001][T-SEC-001][SYS-001] active Membership은 자기 가구의 공개 모델과 전환 중 legacy 모델만 읽는다", async () => {
     const firestore = environment
       .authenticatedContext(MEMBER_UID)
       .firestore();
@@ -249,7 +249,7 @@ describeWithFirestoreEmulator("서버 권위형 Firestore Rules", () => {
     );
   });
 
-  it("[T-SEC-001][SYS-001] 다른 UID는 대상 가구 ID를 알아도 읽을 수 없다", async () => {
+  it("[T-HH-RULES-001][T-SEC-001][SYS-001] 다른 UID는 대상 가구 ID를 알아도 읽을 수 없다", async () => {
     const firestore = environment
       .authenticatedContext(OTHER_UID)
       .firestore();
@@ -268,7 +268,7 @@ describeWithFirestoreEmulator("서버 권위형 Firestore Rules", () => {
     await assertFails(getDoc(doc(firestore, "expenses", "legacy-expense-a")));
   });
 
-  it("[T-SEC-001][SYS-001] active Member도 Canonical·legacy 문서를 Client SDK로 쓸 수 없다", async () => {
+  it("[T-HH-RULES-001][T-SEC-001][SYS-001] active Member도 Canonical·legacy 문서를 Client SDK로 쓸 수 없다", async () => {
     const firestore = environment
       .authenticatedContext(MEMBER_UID)
       .firestore();
@@ -309,7 +309,7 @@ describeWithFirestoreEmulator("서버 권위형 Firestore Rules", () => {
     );
   });
 
-  it("[T-SEC-001][SYS-001] legacy collection query는 현재 가구 조건이 있을 때만 허용한다", async () => {
+  it("[T-HH-RULES-001][T-SEC-001][SYS-001] legacy collection query는 현재 가구 조건이 있을 때만 허용한다", async () => {
     const firestore = environment
       .authenticatedContext(MEMBER_UID)
       .firestore();

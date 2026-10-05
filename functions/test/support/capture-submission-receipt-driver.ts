@@ -1,4 +1,3 @@
-import { createTenantAuthorizationApplication } from "../../src/contexts/access/tenant-authorization/application/tenantAuthorizationApplication";
 import { createCaptureBranchSubmissionApplication } from "../../src/contexts/payment-capture/android-payment-ingestion/application/captureBranchSubmissionApplication";
 import {
   createCaptureSubmissionApplication,
@@ -474,11 +473,8 @@ export function createCaptureSubmissionReceiptDriver(
     transactions: ledger,
     balances,
   });
-  const tenantAuthorization = createTenantAuthorizationApplication({
-    memberships: { findByPrincipalUid: async () => undefined },
-  });
+
   const application = createCaptureSubmissionApplication({
-    tenantAuthorization,
     branches,
   });
 

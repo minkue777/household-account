@@ -1,4 +1,3 @@
-import type { TenantAuthorizationInputPort } from "../../../access/public";
 import type {
   CaptureApprovalActor,
   CaptureAuthorizationResult,
@@ -20,9 +19,7 @@ export type CaptureSubmissionAuthorizationDecision =
 const SUBMIT_CAPABILITY = "paymentCapture:submit";
 
 export function authorizeCaptureSubmission(input: {
-  readonly tenantAuthorization: TenantAuthorizationInputPort;
   readonly actor?: CaptureApprovalActor;
-  readonly envelopeHouseholdId?: string;
 }): CaptureSubmissionAuthorizationDecision {
   const actor = input.actor;
   if (actor === undefined) {
@@ -41,25 +38,9 @@ export function authorizeCaptureSubmission(input: {
     return { kind: "Forbidden", code: "CAPABILITY_REQUIRED" };
   }
 
-  const tenantDecision = input.tenantAuthorization.authorizeHouseholdAction(
-    {
-      principalKind: "member",
-      principalUid: actor.principalId,
-      householdId: actor.householdId,
-      actingMemberId: actor.actingMemberId,
-    },
-    {
-      action: "create",
-      collection: "transactions",
-      householdId: input.envelopeHouseholdId,
-      nextHouseholdId: input.envelopeHouseholdId,
-    },
-  );
-  return tenantDecision.kind === "allowed"
-    ? {
-        kind: "Authorized",
-        householdId: actor.householdId,
-        creatorMemberId: actor.actingMemberId,
-      }
-    : { kind: "Forbidden", code: "ACTOR_MISMATCH" };
+  return {
+    kind: "Authorized",
+    householdId: actor.householdId,
+    creatorMemberId: actor.actingMemberId,
+  };
 }

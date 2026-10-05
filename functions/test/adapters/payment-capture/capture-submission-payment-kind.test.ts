@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { createTenantAuthorizationApplication } from "../../../src/contexts/access/tenant-authorization/application/tenantAuthorizationApplication";
 import { createCaptureSubmissionApplication } from "../../../src/contexts/payment-capture/android-payment-ingestion/application/captureSubmissionApplication";
 import type { CaptureBranchEnvelope } from "../../../src/contexts/payment-capture/android-payment-ingestion/application/ports/in/captureBranchSubmissionInputPort";
 import type { CaptureEnvelopeInput } from "../../../src/contexts/payment-capture/android-payment-ingestion/application/ports/in/captureSubmissionInputPort";
@@ -48,9 +47,7 @@ function envelope(
 function subject() {
   const captured: CaptureBranchEnvelope[] = [];
   const application = createCaptureSubmissionApplication({
-    tenantAuthorization: createTenantAuthorizationApplication({
-      memberships: { findByPrincipalUid: async () => undefined },
-    }),
+
     branches: {
       submit: async (branchEnvelope) => {
         captured.push(branchEnvelope);
@@ -76,6 +73,17 @@ const actor = {
 };
 
 describe("Capture submission 내부 payment kind 전달", () => {
+  it.each([
+    { change: { householdId: " " }, code: "HOUSEHOLD_REQUIRED" },
+    { change: { actingMemberId: " " }, code: "ACTOR_MISMATCH" },
+    { change: { capabilities: [] }, code: "CAPABILITY_REQUIRED" },
+  ])("[T-ING-AUTH-001][ING-SAVE-001] $code 요청은 receipt/ledger branch에 전달하지 않는다", async ({ change, code }) => {
+    const { application, captured } = subject();
+    await expect(application.submit({ actor: { ...actor, ...change }, rootIdempotencyKey: "denied", envelope: envelope("denied", "card") }))
+      .resolves.toEqual({ kind: "Forbidden", code });
+    expect(captured).toEqual([]);
+  });
+
   it.each(["card", "bill"] as const)(
     "%s 판정을 transaction branch captureContext에 보존한다",
     async (paymentKind) => {

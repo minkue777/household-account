@@ -69,7 +69,7 @@ Architecture traceability gate가 소유권과 실제 계약 assertion의 연결
 
 의미가 가까운 시나리오는 다음처럼 경계를 나눠 소유권을 확정했습니다.
 
-- `T-SEC-001`은 전체 tenant CRUD 권한 행렬을, `T-HH-RULES-001`은 Access가 제공하는 가구 범위 Actor 계약을 소유합니다.
+- `T-SEC-001`과 `T-HH-RULES-001`은 실제 Firestore Rules의 가구 범위 읽기와 모든 Client SDK 쓰기 금지 행렬을 함께 추적합니다. Callable의 인증·Membership·capability는 실제 router/adapter 검사에서 검증하며 가상의 일반 CRUD application으로 Rules를 대체하지 않습니다.
 - `T-SEC-002`는 여러 무인증 진입점의 공통 종단 행렬을, `T-HH-SEC-001`·`T-IOS-SEC-001`·`T-PUSH-SEC-001`은 각 기능 입력의 typed 결과와 무변경 상태를 소유합니다.
 - `T-PUSH-002`는 알림 대상 계산을, `T-REC-PUSH-001`은 정기 거래가 자동 알림 요청을 만들지 않는 제공 Context 결과를 소유합니다.
 
