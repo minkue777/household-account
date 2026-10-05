@@ -30,4 +30,14 @@ Firestore 저장 구조·외부 wire·인증·멱등 key는 바꾸지 않았습�
 
 ## 배포
 
-Functions 구현 변경이므로 clean commit에서 배포 계획·hash를 고정하고 기존 wrapper로 필요한 codebase를 배포합니다. Web·APK 변경은 없습니다. 공개된 v1.2.33 APK는 덮어쓰지 않습니다. 원격 CI와 배포·로그인 smoke는 별도 결과이며 진행 중이면 완료로 간주하지 않습니다. 운영 가계부 자료는 수정하지 않습니다.
+제품 SHA `0f3e23cdf1fa2a0277024b5f707d34d3a1fe5f4a`를 release `release-20261005-merchant-simplicity-0f3e23c`로 배포했습니다. 기존 wrapper의 clean commit·manifest/hash 검사와 `default`, `payment-capture`, `access-session` 세 codebase 배포, 실제 인증된 query/login smoke, provenance 기록이 모두 성공했습니다. Artifact SHA256은 `89acd3e93583bf5eb8d4567e6b261a6154625f5e79635f39ff39887c1ce502ff`입니다.
+
+Web·APK 변경은 없습니다. 공개된 v1.2.33 APK는 덮어쓰지 않았고 운영 가계부 자료도 수정하지 않았습니다. 배포 로그는 `TEMP/household-simplicity-merchant-deploy-20261005.log`입니다.
+
+## CI 후속 관측
+
+- push CI [37246051987](https://github.com/minkue777/household-account/actions/runs/37246051987)의 새 가맹점 실제 저장 검사 3개와 mapping 검사 4개는 통과했습니다. 별개 지역화폐 검사 `firebase-local-currency-balance.integration.test.ts`의 최초 두 종류 동시 접수에서 `3 INVALID_ARGUMENT: Transaction is invalid or closed.`가 발생했습니다. 서버 통합 검사 결과는 110 passed / 1 failed이며 이 실패 이력을 성공으로 바꾸지 않습니다.
+- 실패 지점은 `prepareFirstLocalCurrencySelection`의 legacy 잔액 조회입니다. 이 경로는 이미 순차 조회하고 있고 SDK는 해당 오류 문구를 재시도 대상으로 보지 않습니다. 조회·잠금 순서, SDK 또는 Emulator 중 실제 원인은 아직 확정하지 못했습니다. 오류를 포괄적으로 재시도하거나 제품 로직을 추측으로 변경하지 않았습니다.
+- 이전 Android Native Firebase 검증이 문서 gate 때문에 실행되지 못해, 새 제품 SHA에서 실제 Android 검사를 포함한 [37246241461](https://github.com/minkue777/household-account/actions/runs/37246241461)을 별도로 시작했습니다. 이 실행은 지역화폐 실패를 발견하기 전에 시작됐으며 서버 전체 검사는 통과했습니다. 실패만 지우기 위한 무변경 재실행이 아닙니다. 로컬 지역화폐 실제 Emulator 검사도 2 passed로 실패가 재현되지 않았습니다. 로그: `TEMP/household-simplicity-local-currency-repro-20261005.log`.
+- 실패 CI에서 Emulator 서버 로그가 보존되지 않아 먼저 트랜잭션이 닫힌 원인을 확인할 수 없었습니다. 후속 CI 변경은 Firebase 통합 검사 JSON 결과와 실패 시 Emulator 로그 artifact 보존만 추가합니다. 검사 입력·동시성·제한 시간·기대 결과·SDK 재시도 정책은 그대로이며 재발 시 원인 분석 자료로 사용합니다. 테스트 실행 설정·CI·문서만 바뀌므로 제품 재배포는 필요하지 않습니다.
+- 최종 전체 CI와 앞선 실제 Android 검사가 끝나기 전에는 검증 완료로 간주하지 않습니다.

@@ -51,6 +51,17 @@ jobs:
         working-directory: functions
       - run: npm run test:firebase-integration
         working-directory: functions
+      - name: Firebase 통합 검사 실패 기록
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: functions-firebase-failure
+          path: |
+            functions/quality-firebase-integration.json
+            functions/firestore-debug.log
+            functions/firebase-debug.log
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
           name: quality-functions
