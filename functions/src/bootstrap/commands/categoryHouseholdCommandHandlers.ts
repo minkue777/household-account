@@ -64,15 +64,15 @@ function stableId(prefix: string, commandId: string): string {
     .slice(0, 22)}`;
 }
 
-function resultValue<T>(result: CategoryResult<T>): T | undefined {
-  if (result.kind === "success" || result.kind === "already-processed") {
-    return result.value;
-  }
-  if (result.kind === "accepted") return undefined;
-  throw new HouseholdCommandRejection(
-    result.code,
-    result.kind === "retryable-failure",
-  );
+function completedResult<T>(result: CategoryResult<T>): { value: T; catalogVersion?: number } {
+  if (result.kind === "success" || result.kind === "already-processed") return result;
+  if (result.kind === "accepted") throw new HouseholdCommandRejection("CATEGORY_COMMAND_INCOMPLETE", true);
+  throw new HouseholdCommandRejection(result.code, result.kind === "retryable-failure");
+}
+
+function confirmation(result: { catalogVersion?: number }) {
+  // 이전 receipt에는 확정 버전이 없습니다. 재전송 결과에 현재 버전을 끼워 넣지 않습니다.
+  return result.catalogVersion === undefined ? {} : { catalogVersion: result.catalogVersion };
 }
 
 function applicationFor(
@@ -148,7 +148,7 @@ export function createCategoryHouseholdCommandHandlers(
           const payload = record(context.envelope.payload);
           const category = record(payload.category);
           const { application } = applicationFor(database, context);
-          const result = resultValue(
+          const result = completedResult(
             await application.createCategory({
               commandKey: context.envelope.commandId,
               name: stringValue(category, "label"),
@@ -157,7 +157,7 @@ export function createCategoryHouseholdCommandHandlers(
                 category.budget === undefined ? null : budgetValue(category.budget),
             }),
           );
-          return { categoryId: result?.categoryId };
+          return { categoryId: result.value.categoryId, ...confirmation(result) };
         },
       },
     ],
@@ -175,7 +175,7 @@ export function createCategoryHouseholdCommandHandlers(
             store,
             stringValue(payload, "categoryId"),
           );
-          resultValue(
+          const result = completedResult(
             await application.updateCategory({
               commandKey: context.envelope.commandId,
               categoryId: category.categoryId,
@@ -194,7 +194,7 @@ export function createCategoryHouseholdCommandHandlers(
                   : budgetValue(changes.budget),
             }),
           );
-          return {};
+          return confirmation(result);
         },
       },
     ],
@@ -218,9 +218,10 @@ export function createCategoryHouseholdCommandHandlers(
             });
           if (archive.kind === "accepted") {
             const completion = applicationFor(database, { ...context, envelope: { ...context.envelope, commandId: `${context.envelope.commandId}:complete` } }).application;
-            resultValue(await completion.completeArchive(archive.processId));
-          } else resultValue(archive);
-          return {};
+            const result = completedResult(await completion.completeArchive(archive.processId));
+            return confirmation(result);
+          }
+          return confirmation(completedResult(archive));
         },
       },
     ],
@@ -237,7 +238,7 @@ export function createCategoryHouseholdCommandHandlers(
             store,
             stringValue(payload, "categoryId"),
           );
-          resultValue(
+          const result = completedResult(
             await application.updateCategory({
               commandKey: context.envelope.commandId,
               categoryId: category.categoryId,
@@ -247,7 +248,7 @@ export function createCategoryHouseholdCommandHandlers(
               budgetInWon: budgetValue(payload.budget),
             }),
           );
-          return {};
+          return confirmation(result);
         },
       },
     ],
@@ -292,14 +293,14 @@ export function createCategoryHouseholdCommandHandlers(
               return category.categoryId;
             }),
           );
-          resultValue(
+          const result = completedResult(
             await application.reorder({
               commandKey: context.envelope.commandId,
               expectedCatalogVersion: expectedVersion(payload, "expectedCatalogVersion"),
               orderedCategoryIds,
             }),
           );
-          return {};
+          return confirmation(result);
         },
       },
     ],
@@ -315,14 +316,14 @@ export function createCategoryHouseholdCommandHandlers(
             store,
             stringValue(payload, "categoryId"),
           );
-          resultValue(
+          const result = completedResult(
             await application.setDefault({
               commandKey: context.envelope.commandId,
               categoryId: category.categoryId,
               expectedCatalogVersion: expectedVersion(payload, "expectedCatalogVersion"),
             }),
           );
-          return {};
+          return confirmation(result);
         },
       },
     ],

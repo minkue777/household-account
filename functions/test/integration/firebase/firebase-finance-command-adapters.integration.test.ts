@@ -610,7 +610,13 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
 
   it("카테고리 6개 command가 단일 catalog 원본을 원자적으로 갱신한다", async () => {
     const handlers = createCategoryHouseholdCommandHandlers(database);
-    const first = (await execute(handlers, "category.create.v1", "category-create-1", {
+    const confirmed = async (name: string, id: string, payload: Record<string, unknown>) => {
+      const result = await execute(handlers, name, id, payload) as { categoryId?: string; catalogVersion: number };
+      const saved = (await database.doc(`households/${HOUSEHOLD_ID}/categoryCatalog/current`).get()).data()!;
+      expect(result.catalogVersion).toBe(saved.catalogVersion);
+      return result;
+    };
+    const first = (await confirmed("category.create.v1", "category-create-1", {
       category: {
         key: "client-key-1",
         label: "생활비",
@@ -620,7 +626,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
         isActive: true,
       },
     })) as { categoryId: string };
-    const second = (await execute(handlers, "category.create.v1", "category-create-2", {
+    const second = (await confirmed("category.create.v1", "category-create-2", {
       category: {
         key: "client-key-2",
         label: "취미",
@@ -631,31 +637,42 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       },
     })) as { categoryId: string };
 
-    await execute(handlers, "category.set-default.v1", "category-default-1", {
+    await confirmed("category.set-default.v1", "category-default-1", {
       expectedCatalogVersion: 2,
       categoryId: first.categoryId,
     });
-    await execute(handlers, "category.update.v1", "category-update-1", {
+    await confirmed("category.update.v1", "category-update-1", {
       expectedVersion: 1,
       categoryId: second.categoryId,
       changes: { label: "여가", color: "#ABCDEF" },
     });
-    await execute(handlers, "category.set-budget.v1", "category-budget-1", {
+    await confirmed("category.set-budget.v1", "category-budget-1", {
       expectedVersion: 2,
       categoryId: second.categoryId,
       budget: 55_000,
     });
-    await execute(handlers, "category.reorder.v1", "category-reorder-1", {
+    await confirmed("category.reorder.v1", "category-reorder-1", {
       expectedCatalogVersion: 5,
       categories: [
         { categoryId: second.categoryId, order: 0 },
         { categoryId: first.categoryId, order: 1 },
       ],
     });
-    await execute(handlers, "category.archive.v1", "category-archive-1", {
+    await confirmed("category.archive.v1", "category-archive-1", {
       expectedVersion: 4,
       categoryId: second.categoryId,
     });
+
+    const replayPayload = { category: { key: "client-key-1", label: "생활비", color: "#123456", budget: 100_000, order: 0, isActive: true } };
+    expect(await execute(handlers, "category.create.v1", "category-create-1", replayPayload)).toEqual(first);
+    const receipts = database.collection("commandReceipts").doc("household-finance-category-catalog").collection("receipts");
+    const receipt = (await receipts.get()).docs.find(doc => doc.data().result?.value?.categoryId === first.categoryId
+      && doc.data().result?.catalogVersion === 1)!;
+    const oldResult = { ...receipt.data().result };
+    delete oldResult.catalogVersion;
+    await receipt.ref.update({ result: oldResult });
+    expect(await execute(handlers, "category.create.v1", "category-create-1", replayPayload)).toEqual({ categoryId: first.categoryId });
+    expect((await receipt.ref.get()).data()?.result).toEqual(oldResult);
 
     const household = database.collection("households").doc(HOUSEHOLD_ID);
     const catalog = (await household.collection("categoryCatalog").doc("current").get()).data()!;

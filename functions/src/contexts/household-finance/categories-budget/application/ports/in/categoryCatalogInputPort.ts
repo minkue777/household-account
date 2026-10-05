@@ -20,8 +20,8 @@ export interface CategoryCatalogView {
 }
 
 export type CategoryResult<T> =
-  | { kind: "success"; value: T }
-  | { kind: "already-processed"; value: T }
+  | { kind: "success"; value: T; catalogVersion?: number }
+  | { kind: "already-processed"; value: T; catalogVersion?: number }
   | { kind: "accepted"; processId: string }
   | { kind: "validation-error"; code: string }
   | { kind: "conflict"; code: string }

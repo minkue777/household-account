@@ -141,7 +141,7 @@ class DefaultCategoryCatalogApplication implements CategoryCatalogInputPort {
           categories: [...current.categories, category],
           catalogVersion: current.catalogVersion + 1,
         },
-        value: { kind: "success" as const, value: toView(category) },
+        value: { kind: "success" as const, value: toView(category), catalogVersion: current.catalogVersion + 1 },
       };
       },
     );
@@ -198,7 +198,7 @@ class DefaultCategoryCatalogApplication implements CategoryCatalogInputPort {
           ),
           catalogVersion: current.catalogVersion + 1,
         },
-        value: { kind: "success" as const, value: toView(updated) },
+        value: { kind: "success" as const, value: toView(updated), catalogVersion: current.catalogVersion + 1 },
       };
       },
     );
@@ -223,6 +223,7 @@ class DefaultCategoryCatalogApplication implements CategoryCatalogInputPort {
         value: {
           kind: "success" as const,
           value: activeCategories(decision.catalog.categories).map(toView),
+          catalogVersion: decision.catalog.catalogVersion,
         },
       };
     });
@@ -298,7 +299,7 @@ class DefaultCategoryCatalogApplication implements CategoryCatalogInputPort {
       }
       return {
         state: completed,
-        value: { kind: "success" as const, value: toCatalogView(completed) },
+        value: { kind: "success" as const, value: toCatalogView(completed), catalogVersion: completed.catalogVersion },
       };
       },
     );
@@ -331,7 +332,8 @@ class DefaultCategoryCatalogApplication implements CategoryCatalogInputPort {
               ? current.catalogVersion
               : current.catalogVersion + 1,
         },
-        value: { kind: "success" as const, value: toView(category) },
+        value: { kind: "success" as const, value: toView(category),
+          catalogVersion: current.catalogVersion + (current.defaultCategoryId === category.categoryId ? 0 : 1) },
       };
       },
     );

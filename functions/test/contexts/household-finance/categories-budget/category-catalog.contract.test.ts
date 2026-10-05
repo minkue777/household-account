@@ -108,6 +108,7 @@ describe("Category Catalog 공개 계약", () => {
 
     expect(result).toEqual({
       kind: "success",
+      catalogVersion: 1,
       value: expect.objectContaining({ budgetInWon: null }),
     });
   });
@@ -132,6 +133,7 @@ describe("Category Catalog 공개 계약", () => {
 
     expect(result).toEqual({
       kind: "success",
+      catalogVersion: 1,
       value: expect.objectContaining({
         categoryId: "food",
         name: "외식비",
@@ -280,6 +282,7 @@ describe("Category Catalog 공개 계약", () => {
 
     expect(result).toEqual({
       kind: "success",
+      catalogVersion: 1,
       value: expect.objectContaining({ categoryId: "new-default", state: "active" }),
     });
     expect(subject.state().defaultCategoryId).toBe("new-default");
