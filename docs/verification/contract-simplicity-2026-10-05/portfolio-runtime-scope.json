@@ -1,0 +1,349 @@
+{
+  "baseline": "676731d9abda95439afc2dfd827690029d89e048",
+  "count": "whole-file physical lines; selected runtime source groups, not all transitive dependencies; tests/documents excluded",
+  "groups": [
+    {
+      "group": "P1 자산 생성·수정·정렬",
+      "files": [
+        {
+          "path": "functions/src/contexts/portfolio/core/application/portfolioAssetCommandApplication.ts",
+          "baselineLines": 476,
+          "currentLines": 443
+        },
+        {
+          "path": "functions/src/contexts/portfolio/core/domain/model/assetOrder.ts",
+          "baselineLines": 69,
+          "currentLines": 21
+        },
+        {
+          "path": "functions/src/contexts/portfolio/core/application/portfolioRuntimeApplication.ts",
+          "baselineLines": 52,
+          "currentLines": 52
+        },
+        {
+          "path": "functions/src/adapters/firebase/portfolio/firebasePortfolioRuntimeStore.ts",
+          "baselineLines": 92,
+          "currentLines": 92
+        }
+      ],
+      "baselineLines": 689,
+      "currentLines": 608
+    },
+    {
+      "group": "P2 삭제·복구·purge",
+      "files": [
+        {
+          "path": "functions/src/contexts/portfolio/core/application/assetLifecycleApplication.ts",
+          "baselineLines": 637,
+          "currentLines": 637
+        },
+        {
+          "path": "functions/src/adapters/firebase/portfolio/firebaseAssetLifecycleUnitOfWork.ts",
+          "baselineLines": 423,
+          "currentLines": 423
+        }
+      ],
+      "baselineLines": 1060,
+      "currentLines": 1060
+    },
+    {
+      "group": "P3 합계·스냅샷",
+      "files": [
+        {
+          "path": "functions/src/contexts/portfolio/core/domain/policies/portfolioTotals.ts",
+          "baselineLines": 109,
+          "currentLines": 109
+        },
+        {
+          "path": "functions/src/contexts/portfolio/core/application/assetSnapshotProjectionApplication.ts",
+          "baselineLines": 83,
+          "currentLines": 83
+        },
+        {
+          "path": "functions/src/adapters/firebase/portfolio/firebaseAssetSnapshotProjection.ts",
+          "baselineLines": 226,
+          "currentLines": 226
+        }
+      ],
+      "baselineLines": 418,
+      "currentLines": 418
+    },
+    {
+      "group": "P4 Web 조회·명령",
+      "files": [
+        {
+          "path": "web/src/lib/assetService.ts",
+          "baselineLines": 2044,
+          "currentLines": 2044
+        },
+        {
+          "path": "web/src/features/portfolio/application/portfolioCommands.ts",
+          "baselineLines": 150,
+          "currentLines": 150
+        },
+        {
+          "path": "web/src/features/portfolio/application/portfolioReadSnapshot.ts",
+          "baselineLines": 223,
+          "currentLines": 223
+        }
+      ],
+      "baselineLines": 2417,
+      "currentLines": 2417
+    },
+    {
+      "group": "H1 보유 CRUD·평가",
+      "files": [
+        {
+          "path": "functions/src/contexts/portfolio/core/application/portfolioPositionCommandApplication.ts",
+          "baselineLines": 312,
+          "currentLines": 312
+        },
+        {
+          "path": "functions/src/contexts/portfolio/core/application/portfolioPositionPolicy.ts",
+          "baselineLines": 251,
+          "currentLines": 233
+        },
+        {
+          "path": "functions/src/contexts/portfolio/core/application/portfolioRuntimeValuation.ts",
+          "baselineLines": 132,
+          "currentLines": 132
+        },
+        {
+          "path": "functions/src/contexts/portfolio/holdings/domain/policies/accountValuation.ts",
+          "baselineLines": 86,
+          "currentLines": 86
+        },
+        {
+          "path": "functions/src/contexts/portfolio/holdings/domain/policies/holdingValuationPolicy.ts",
+          "baselineLines": 114,
+          "currentLines": 0
+        },
+        {
+          "path": "functions/src/contexts/portfolio/holdings/domain/policies/assetRevaluationPolicy.ts",
+          "baselineLines": 44,
+          "currentLines": 0
+        },
+        {
+          "path": "functions/src/contexts/portfolio/holdings/public.ts",
+          "baselineLines": 149,
+          "currentLines": 141
+        }
+      ],
+      "baselineLines": 1088,
+      "currentLines": 904
+    },
+    {
+      "group": "H2 공급자·가격 갱신",
+      "files": [
+        {
+          "path": "functions/src/contexts/portfolio/core/application/portfolioMarketRefreshApplication.ts",
+          "baselineLines": 288,
+          "currentLines": 288
+        },
+        {
+          "path": "functions/src/contexts/portfolio/core/application/portfolioMarketRefreshPolicy.ts",
+          "baselineLines": 286,
+          "currentLines": 286
+        },
+        {
+          "path": "functions/src/adapters/firebase/portfolio/firebasePortfolioMarketData.ts",
+          "baselineLines": 546,
+          "currentLines": 546
+        },
+        {
+          "path": "functions/src/contexts/portfolio/holdings/domain/policies/foreignCurrencyValuationPolicy.ts",
+          "baselineLines": 78,
+          "currentLines": 59
+        },
+        {
+          "path": "functions/src/contexts/portfolio/holdings/domain/policies/marketRoutingPolicy.ts",
+          "baselineLines": 34,
+          "currentLines": 5
+        },
+        {
+          "path": "functions/src/contexts/portfolio/holdings/domain/policies/fundInstrumentNav.ts",
+          "baselineLines": 257,
+          "currentLines": 257
+        }
+      ],
+      "baselineLines": 1489,
+      "currentLines": 1441
+    },
+    {
+      "group": "H3 검색·catalog 발행",
+      "files": [
+        {
+          "path": "functions/src/contexts/portfolio/holdings/application/instrumentSearchApplication.ts",
+          "baselineLines": 18,
+          "currentLines": 18
+        },
+        {
+          "path": "functions/src/contexts/portfolio/holdings/application/instrumentCatalogApplication.ts",
+          "baselineLines": 176,
+          "currentLines": 176
+        },
+        {
+          "path": "functions/src/adapters/firebase/portfolio/firebasePortfolioInstrumentSearch.ts",
+          "baselineLines": 251,
+          "currentLines": 251
+        },
+        {
+          "path": "functions/src/adapters/firebase/portfolio/firebaseInstrumentCatalog.ts",
+          "baselineLines": 513,
+          "currentLines": 513
+        },
+        {
+          "path": "web/src/features/portfolio/instrument-catalog/application/localStockInstrumentCatalog.ts",
+          "baselineLines": 115,
+          "currentLines": 115
+        }
+      ],
+      "baselineLines": 1073,
+      "currentLines": 1073
+    },
+    {
+      "group": "H4 금 입력·시세 표시",
+      "files": [
+        {
+          "path": "web/src/lib/utils/useGoldHolding.ts",
+          "baselineLines": 140,
+          "currentLines": 130
+        }
+      ],
+      "baselineLines": 140,
+      "currentLines": 130
+    },
+    {
+      "group": "H5 배당 보유 이력",
+      "files": [
+        {
+          "path": "functions/src/adapters/firebase/portfolio/firebaseDividendHoldingQuery.ts",
+          "baselineLines": 259,
+          "currentLines": 259
+        },
+        {
+          "path": "functions/src/adapters/firebase/portfolio/firebaseMigratedPositionHistoryReader.ts",
+          "baselineLines": 44,
+          "currentLines": 44
+        }
+      ],
+      "baselineLines": 303,
+      "currentLines": 303
+    },
+    {
+      "group": "D1 배당 수집·수량확정·전이·저장",
+      "files": [
+        {
+          "path": "functions/src/contexts/portfolio/dividends/application/dividendScheduledRuntimeApplication.ts",
+          "baselineLines": 392,
+          "currentLines": 392
+        },
+        {
+          "path": "functions/src/contexts/portfolio/dividends/domain/policies/dividendEligibilityPolicy.ts",
+          "baselineLines": 69,
+          "currentLines": 49
+        },
+        {
+          "path": "functions/src/adapters/firebase/dividends/firebaseDividendEventRuntimeRepository.ts",
+          "baselineLines": 665,
+          "currentLines": 665
+        }
+      ],
+      "baselineLines": 1126,
+      "currentLines": 1106
+    },
+    {
+      "group": "D2 배당 조회",
+      "files": [
+        {
+          "path": "functions/src/adapters/firebase/portfolio/firebasePortfolioDividendProjectionReader.ts",
+          "baselineLines": 120,
+          "currentLines": 120
+        },
+        {
+          "path": "functions/src/contexts/portfolio/dividends/domain/policies/dividendReadPolicies.ts",
+          "baselineLines": 116,
+          "currentLines": 0
+        }
+      ],
+      "baselineLines": 236,
+      "currentLines": 120
+    },
+    {
+      "group": "A1 자동화 설정·날짜·월 평가",
+      "files": [
+        {
+          "path": "functions/src/contexts/portfolio/core/application/portfolioAssetAutomationSynchronization.ts",
+          "baselineLines": 131,
+          "currentLines": 103
+        },
+        {
+          "path": "functions/src/contexts/portfolio/automation/domain/policies/assetAutomationConfiguration.ts",
+          "baselineLines": 246,
+          "currentLines": 246
+        },
+        {
+          "path": "functions/src/contexts/portfolio/automation/domain/policies/effectivePaymentDate.ts",
+          "baselineLines": 28,
+          "currentLines": 28
+        },
+        {
+          "path": "functions/src/contexts/portfolio/automation/domain/policies/firstAutomationMonth.ts",
+          "baselineLines": 62,
+          "currentLines": 62
+        },
+        {
+          "path": "functions/src/contexts/portfolio/automation/domain/policies/savingsContribution.ts",
+          "baselineLines": 50,
+          "currentLines": 50
+        },
+        {
+          "path": "functions/src/contexts/portfolio/automation/domain/policies/loanPrincipalPayment.ts",
+          "baselineLines": 56,
+          "currentLines": 56
+        },
+        {
+          "path": "functions/src/contexts/portfolio/automation/public.ts",
+          "baselineLines": 93,
+          "currentLines": 52
+        }
+      ],
+      "baselineLines": 666,
+      "currentLines": 597
+    },
+    {
+      "group": "A2 자동화 월별 실행",
+      "files": [
+        {
+          "path": "functions/src/contexts/portfolio/automation/application/assetAutomationScheduledApplication.ts",
+          "baselineLines": 58,
+          "currentLines": 58
+        },
+        {
+          "path": "functions/src/adapters/firebase/portfolio/firebaseAssetAutomationRuntimeStore.ts",
+          "baselineLines": 808,
+          "currentLines": 723
+        }
+      ],
+      "baselineLines": 866,
+      "currentLines": 781
+    },
+    {
+      "group": "A3 운영 복구 시 자동화 재개",
+      "files": [
+        {
+          "path": "functions/src/contexts/portfolio/automation/application/assetRestorationParticipant.ts",
+          "baselineLines": 72,
+          "currentLines": 72
+        },
+        {
+          "path": "functions/src/contexts/portfolio/automation/domain/policies/assetAutomationRestoration.ts",
+          "baselineLines": 161,
+          "currentLines": 161
+        }
+      ],
+      "baselineLines": 233,
+      "currentLines": 233
+    }
+  ]
+}

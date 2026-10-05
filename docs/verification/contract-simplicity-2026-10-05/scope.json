@@ -1,0 +1,551 @@
+{
+  "baseline": "676731d9abda95439afc2dfd827690029d89e048",
+  "modules": [
+    {
+      "module": "household-access",
+      "requirements": "docs/requirements/contexts/access-household/modules/household-access/requirements.md",
+      "ids": [
+        "HH-001",
+        "HH-002",
+        "HH-003",
+        "HH-004",
+        "HH-005",
+        "HH-006",
+        "HH-007",
+        "HH-008",
+        "HH-009",
+        "HH-010",
+        "HH-011",
+        "HH-012",
+        "HH-JOIN-001",
+        "ADM-001",
+        "ADM-002",
+        "ADM-003",
+        "ADM-004",
+        "ADM-005",
+        "ADM-006"
+      ],
+      "contracts": [
+        "ResolveSignedInUser",
+        "ClaimLegacyMembership",
+        "CreateHouseholdWithSelf",
+        "CreateInvitationCode",
+        "JoinHouseholdAsSelf",
+        "LogoutHouseholdSession",
+        "RenameSelf",
+        "CreateAssetOwnerProfile",
+        "RenameAssetOwnerProfile",
+        "ArchiveAssetOwnerProfile",
+        "ListAssetOwnerProfiles",
+        "RemoveHouseholdMember",
+        "RestoreRemovedHouseholdMember",
+        "DeleteHousehold",
+        "RestoreDeletedHousehold",
+        "RequestPermanentHouseholdPurge",
+        "RepairLegacyMembershipClaim",
+        "AuthorizeHouseholdAction",
+        "RecordAppVisit",
+        "GetAdminOperationsDashboard",
+        "RunHouseholdPurgeProcess"
+      ],
+      "review": "reviewed",
+      "evidence": "platform.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "categories-budget",
+      "requirements": "docs/requirements/contexts/household-finance/modules/categories-budget/requirements.md",
+      "ids": [
+        "CAT-001",
+        "CAT-002",
+        "CAT-003",
+        "CAT-004",
+        "BUD-001",
+        "BUD-002"
+      ],
+      "contracts": [
+        "InitializeDefaultCategories",
+        "ListActiveCategories",
+        "UpdateCategoryCatalog",
+        "ContinueCategoryArchiveProcess",
+        "SetDefaultCategory",
+        "GetCategoryReference",
+        "GetMonthlyBudget",
+        "GetBudgetStatus"
+      ],
+      "review": "reviewed",
+      "evidence": "finance.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "ledger",
+      "requirements": "docs/requirements/contexts/household-finance/modules/ledger/requirements.md",
+      "ids": [
+        "LED-001",
+        "LED-002",
+        "LED-003",
+        "LED-004",
+        "LED-005",
+        "LED-006",
+        "LED-007",
+        "LED-008",
+        "LED-009",
+        "LED-010",
+        "LED-011",
+        "LED-012",
+        "SPL-001",
+        "SPL-002",
+        "SPL-003",
+        "SPL-004",
+        "SPL-005",
+        "SPL-006",
+        "MRG-001",
+        "MRG-002",
+        "SEA-001",
+        "SEA-002",
+        "SEA-003",
+        "SEA-004",
+        "SEA-005",
+        "SEA-006"
+      ],
+      "contracts": [
+        "RecordManualTransaction",
+        "RecordCapturedTransaction",
+        "RecordRecurringTransactionParticipant",
+        "Update",
+        "Delete",
+        "SubscribeLedger",
+        "SearchLedger",
+        "Split",
+        "Merge",
+        "Unmerge",
+        "CancelCapturedLineage",
+        "FindCancellationCandidates",
+        "RequestHouseholdNotification"
+      ],
+      "review": "reviewed",
+      "evidence": "finance.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "local-currency",
+      "requirements": "docs/requirements/contexts/household-finance/modules/local-currency/requirements.md",
+      "ids": [
+        "BAL-001",
+        "BAL-002",
+        "BAL-003",
+        "BAL-004",
+        "BAL-005"
+      ],
+      "contracts": [
+        "RecordBalanceObservation",
+        "GetBalance",
+        "SubscribeBalance"
+      ],
+      "review": "reviewed",
+      "evidence": "finance.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "recurring-transactions",
+      "requirements": "docs/requirements/contexts/household-finance/modules/recurring-transactions/requirements.md",
+      "ids": [
+        "REC-001",
+        "REC-002",
+        "REC-003",
+        "REC-004",
+        "REC-005",
+        "REC-006"
+      ],
+      "contracts": [
+        "ManageRecurringPlan",
+        "ListRecurringPlans",
+        "CalculateEffectiveDay",
+        "ProcessRecurringMonth",
+        "ProcessDueRecurringPlans",
+        "MapLegacyRecurringCreator",
+        "RemapRecurringCategoryReferences"
+      ],
+      "review": "reviewed",
+      "evidence": "finance.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "notifications",
+      "requirements": "docs/requirements/contexts/notifications/modules/notifications/requirements.md",
+      "ids": [
+        "PUSH-001",
+        "PUSH-002",
+        "PUSH-003",
+        "PUSH-004",
+        "PUSH-005",
+        "PUSH-006",
+        "PUSH-007",
+        "PUSH-008",
+        "PUSH-009",
+        "PUSH-010",
+        "PUSH-011",
+        "PUSH-012",
+        "PUSH-013",
+        "PUSH-014"
+      ],
+      "review": "reviewed",
+      "evidence": "capture-notifications.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "android-payment-ingestion",
+      "requirements": "docs/requirements/contexts/payment-capture/modules/android-payment-ingestion/requirements.md",
+      "ids": [
+        "ING-001",
+        "ING-002",
+        "ING-003",
+        "ING-004",
+        "ING-005",
+        "ING-006",
+        "ING-007",
+        "ING-008",
+        "ING-009",
+        "PARSE-KB-001",
+        "PARSE-NH-001",
+        "PARSE-NAVER-001",
+        "PARSE-TOSS-001",
+        "PARSE-KAKAO-001",
+        "PARSE-ONNURI-001",
+        "PARSE-PAYBOOC-001",
+        "PARSE-SAMSUNG-001",
+        "PARSE-LOTTE-001",
+        "PARSE-GYEONGGI-001",
+        "PARSE-DAEJEON-001",
+        "PARSE-SEJONG-001",
+        "PARSE-CITYGAS-001",
+        "PARSE-SMSBILL-001",
+        "PARSE-COMMON-001",
+        "ING-SAVE-001",
+        "ING-SAVE-002",
+        "ING-SAVE-003",
+        "ING-SAVE-004",
+        "ING-SAVE-005",
+        "ING-SAVE-006",
+        "ING-SAVE-007",
+        "CAN-001",
+        "CAN-002",
+        "CAN-003",
+        "CAN-004",
+        "CAN-005",
+        "CAN-006",
+        "CAN-007"
+      ],
+      "review": "reviewed",
+      "evidence": "capture-notifications.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "payment-configuration",
+      "requirements": "docs/requirements/contexts/payment-capture/modules/payment-configuration/requirements.md",
+      "ids": [
+        "CARD-001",
+        "CARD-002",
+        "CARD-003",
+        "CARD-004",
+        "CARD-005",
+        "MER-001",
+        "MER-002",
+        "MER-003",
+        "MER-004",
+        "MER-005",
+        "MER-006",
+        "MER-007"
+      ],
+      "contracts": [
+        "RegisterCard",
+        "UpdateRegisteredCard",
+        "DeleteRegisteredCard",
+        "ListMemberCards",
+        "ReorderCards",
+        "MatchRegisteredCard",
+        "CreateMerchantRule",
+        "ReorderMerchantRules",
+        "MatchMerchantRule",
+        "RemapMerchantRuleCategoryReferences"
+      ],
+      "review": "reviewed",
+      "evidence": "capture-notifications.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "shortcut-ingestion",
+      "requirements": "docs/requirements/contexts/payment-capture/modules/shortcut-ingestion/requirements.md",
+      "ids": [
+        "IOS-001",
+        "IOS-002",
+        "IOS-003",
+        "IOS-004",
+        "IOS-005",
+        "IOS-006",
+        "IOS-007",
+        "IOS-008",
+        "IOS-009",
+        "IOS-010",
+        "IOS-011",
+        "IOS-012",
+        "IOS-013",
+        "IOS-014",
+        "IOS-015"
+      ],
+      "review": "reviewed",
+      "evidence": "capture-notifications.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "asset-automation",
+      "requirements": "docs/requirements/contexts/portfolio/modules/asset-automation/requirements.md",
+      "ids": [
+        "AUTO-001",
+        "AUTO-002",
+        "LOAN-001",
+        "LOAN-002",
+        "AUTO-003"
+      ],
+      "review": "reviewed",
+      "contracts": [
+        "EvaluateSavingsContribution(asset, asOf)",
+        "CalculateEffectivePaymentDate(yearMonth, configuredDay)",
+        "CalculateLoanPrincipalPayment(balance, annualRate, repaymentMethod, monthlyPayment)",
+        "EvaluateLoanRepayment(asset, asOf)",
+        "ProcessDueAssetAutomation(asOfDate, runId, cursor)"
+      ],
+      "evidence": "portfolio.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "dividends",
+      "requirements": "docs/requirements/contexts/portfolio/modules/dividends/requirements.md",
+      "ids": [
+        "DIV-001",
+        "DIV-002",
+        "DIV-003",
+        "DIV-004",
+        "DIV-005",
+        "DIV-006",
+        "JOB-DIV-001",
+        "JOB-DIV-002"
+      ],
+      "review": "reviewed",
+      "contracts": [
+        "CollectDividendDisclosures(period)",
+        "UpsertDividendAnnouncement(disclosure, householdHolding)",
+        "AdvanceDividendStatus(event, asOf, eligibleQuantity?)",
+        "RebuildAnnualDividendSnapshot(householdId, year)",
+        "QueryDividendSnapshot(householdId, year)",
+        "QueryDividendEvents(householdId, year)",
+        "EstimateUpcomingDividends(holdings, announcements, confirmedEvents)"
+      ],
+      "evidence": "portfolio.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "holdings-market-data",
+      "requirements": "docs/requirements/contexts/portfolio/modules/holdings-market-data/requirements.md",
+      "ids": [
+        "HOLD-001",
+        "HOLD-002",
+        "HOLD-003",
+        "HOLD-004",
+        "HOLD-005",
+        "FUND-001",
+        "GOLD-001",
+        "GOLD-002",
+        "MARKET-001",
+        "MARKET-002",
+        "MARKET-003",
+        "MARKET-004",
+        "MARKET-005",
+        "MARKET-006",
+        "JOB-AST-001",
+        "JOB-AST-002",
+        "JOB-AST-003"
+      ],
+      "review": "reviewed",
+      "contracts": [
+        "AddHolding",
+        "SearchStocks(query)",
+        "GetStockQuote(instrument)",
+        "CalculateHoldingValue",
+        "RefreshAccountPrices(assetId)",
+        "RunDailyAssetValuation(asOf, idempotencyKey)"
+      ],
+      "evidence": "portfolio.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "portfolio",
+      "requirements": "docs/requirements/contexts/portfolio/modules/portfolio/requirements.md",
+      "ids": [
+        "AST-001",
+        "AST-002",
+        "AST-003",
+        "AST-004",
+        "AST-005",
+        "AST-006",
+        "AST-007",
+        "AST-008",
+        "AST-009"
+      ],
+      "review": "reviewed",
+      "contracts": [
+        "ListAssets(householdId)",
+        "ApplyAssetBalance(assetId, balance, costBasis?, reason, idempotencyKey)",
+        "CalculatePortfolioTotals(assets)",
+        "RecordAssetSnapshot(scope, date, balance, changeAmount)",
+        "QueryAssetHistory(period, scope)"
+      ],
+      "evidence": "portfolio.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "android-host",
+      "requirements": "docs/requirements/supporting-platform/modules/android-host/requirements.md",
+      "ids": [
+        "AND-001",
+        "AND-002",
+        "AND-003",
+        "AND-004",
+        "AND-005",
+        "AND-006",
+        "AND-007",
+        "AND-008",
+        "AND-009",
+        "AND-010",
+        "AND-011",
+        "AND-012",
+        "AND-013",
+        "AND-014",
+        "QE-001",
+        "QE-002",
+        "QE-003",
+        "QE-004",
+        "QE-005",
+        "QE-006",
+        "QE-007",
+        "QE-008",
+        "QE-009",
+        "QE-010",
+        "QE-011",
+        "QE-012",
+        "QE-013"
+      ],
+      "review": "reviewed",
+      "evidence": "platform.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "delivery-assurance",
+      "requirements": "docs/requirements/supporting-platform/modules/delivery-assurance/requirements.md",
+      "ids": [
+        "REL-001",
+        "REL-002",
+        "REL-003",
+        "REL-004"
+      ],
+      "review": "reviewed",
+      "contracts": [
+        "verifyCandidate(manifest, projectId, dependencies)",
+        "qualitySummary(needs, commitSha, runUrl)",
+        "ResolveDeploymentTarget(candidate)",
+        "VerifyCompatibilityWindow(manifest)",
+        "RecordDeploymentResult(releaseId, result)"
+      ],
+      "evidence": "platform.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "external-operations",
+      "requirements": "docs/requirements/supporting-platform/modules/external-operations/requirements.md",
+      "ids": [
+        "JOB-ERR-001",
+        "JOB-ERR-002",
+        "EXT-001",
+        "EXT-002",
+        "EXT-003",
+        "EXT-004"
+      ],
+      "review": "reviewed",
+      "contracts": [
+        "ExternalResult<T> = Success<T> | NoData | RetryableFailure | ContractFailure | InvalidData",
+        "JobExecutionResult = Complete | PartialFailure | Failed",
+        "ExecuteWithRetry(operation, retryPolicy, idempotencyKey)",
+        "RecordJobOutcome(jobName, scope, result)",
+        "HeartbeatJobRun(runId, lease, checkpoint)",
+        "DetectMissingOrOverdueRuns(asOf)",
+        "RecordProviderAttempt(provider, operation, result, metadata)",
+        "RecordProviderRunOutcome(provider, operation, executionKey, finalResult)",
+        "GetProviderHealth(provider?, operation?)",
+        "RefreshBillingCostSummary(calculatedAt)",
+        "GetBillingCostSummary()"
+      ],
+      "evidence": "platform.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "home-preferences",
+      "requirements": "docs/requirements/supporting-platform/modules/home-preferences/requirements.md",
+      "ids": [
+        "HOME-001",
+        "HOME-002",
+        "HOME-003",
+        "HOME-004",
+        "THEME-001"
+      ],
+      "contracts": [
+        "home.update-summary-preferences.v1",
+        "home.select-local-currency.v1"
+      ],
+      "review": "reviewed",
+      "evidence": "platform.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "pwa",
+      "requirements": "docs/requirements/supporting-platform/modules/pwa/requirements.md",
+      "ids": [
+        "PWA-001",
+        "PWA-002",
+        "PWA-003",
+        "PWA-004",
+        "PWA-005",
+        "PWA-006",
+        "PWA-007",
+        "PWA-008"
+      ],
+      "review": "reviewed",
+      "evidence": "platform.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    },
+    {
+      "module": "reporting",
+      "requirements": "docs/requirements/supporting-platform/modules/reporting/requirements.md",
+      "ids": [
+        "STAT-001",
+        "STAT-002",
+        "STAT-003",
+        "STAT-004",
+        "STAT-005",
+        "STAT-006",
+        "STAT-AST-001",
+        "STAT-AST-002",
+        "STAT-AST-003"
+      ],
+      "review": "reviewed",
+      "contracts": [
+        "ResolveExpenseStatisticsPeriod(preset, customRange, now)",
+        "BuildExpenseStatistics(expenses, categories, period)",
+        "ResolveInitialTrendCategories(categories)",
+        "BuildAssetStatistics(history, assets, period, financialOnly)",
+        "BuildCategoryDetail(categoryKey, expenses)"
+      ],
+      "evidence": "platform.md",
+      "implementation": "See evidence: current behavior and unimplemented goals are distinguished."
+    }
+  ]
+}

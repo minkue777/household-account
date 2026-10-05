@@ -383,6 +383,8 @@ contracts/fixtures/notifications/
 
 ## 11. 테스트 설계
 
+2026-10-05 계약별 정비에서 `pushNotificationService.ts`의 전달 함수는 PWA lifecycle 구현의 이름을 보존하는 직접 re-export로 정리했습니다. 권한·등록 상태·구독·foreground listener의 소유자는 기존 `fidEndpointLifecycle` 한 곳이며, facade가 별도 상태나 비동기 결과를 만들지 않습니다. 서버의 Event 수락, 전송 claim, Membership·endpoint version 재검증, 한 번의 provider 전송, 불명확한 전송 결과의 무재전송은 서로 다른 경계이므로 유지합니다. Android component 차단과 로컬 FID 억제 역시 서버 endpoint 삭제 실패 중 노출을 막는 독립 경계입니다.
+
 Repository Fake와 Firestore Adapter는 같은 Conformance Suite를 사용하며 `FixedClock`, `SequenceIdGenerator`, callback 2회 UoW, `InboxClaimFake`, FCM 성공·부분·일시·영구·contract drift fixture를 제공합니다.
 
 | 요구사항 ID | 테스트 수준 | 테스트 대상 | 핵심 fixture/경계값 | 관찰 결과 | Canonical 테스트 ID |

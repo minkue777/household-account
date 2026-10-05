@@ -449,3 +449,7 @@ Domain은 Firebase, React, Scheduler SDK와 Portfolio Core Entity를 import하�
 6. 매일 00:00 Scheduler를 `ProcessDueAssetAutomation`에 연결하고 화면 방문 자동 처리 호출을 제거합니다.
 7. Writer를 V2 Plan·Revision·Execution으로 전환하고 `assets` 혼합 필드 write를 차단합니다.
 8. 신규 생성 flow의 DEC-011, 일일 복구 DEC-052, 운영 전용 자산 복구의 `T-AUTO-003` 목표 테스트를 활성화합니다.
+
+### 계약별 단순화 검토 (2026-10-05)
+
+자동화 설정 파싱은 기존 첫 오류 순서대로 반환한다. 실제 월 처리 transaction의 설정 이상 분기들은 같은 `markNeedsAttention` 저장 동작을 공유하되 오류 코드·targetId·자산 및 nextDueDate 보존 조건은 각 분기가 소유한다. 테스트만 사용하던 날짜 policy factory는 제거하고 같은 운영 정책을 직접 검사한다. 월 execution key·effective revision·첫 활성화·중단 후 복구·삭제 기간 제외는 그대로 유지한다. 공개 계약 판정, 오류 격리 검사와 실제 SDK 검증은 [Portfolio 검토](../../../../../verification/contract-simplicity-2026-10-05/portfolio.md)에 있다.

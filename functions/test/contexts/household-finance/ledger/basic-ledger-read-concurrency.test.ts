@@ -33,7 +33,6 @@ function fixture(isUsable: LedgerCategoryUsagePolicy["isUsable"] = () => true) {
   const repository = {
     findReceipt: vi.fn(() => receipt.promise),
     findTransaction: vi.fn(() => current.promise),
-    listTransactions: vi.fn<LedgerCommandRepository["listTransactions"]>(),
     commit: vi.fn<LedgerCommandRepository["commit"]>().mockResolvedValue({ kind: "success" }),
   };
   const categories = { isUsable: vi.fn(isUsable) };

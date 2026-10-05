@@ -350,6 +350,12 @@ contracts/
 
 ## 11. 테스트 설계
 
+### 현행 설치 책임과 검증 경계 (2026-10-05)
+
+설정 화면은 `shortcutCredentialHouseholdCommandHandlers`가 호출하는 실제 `shortcutCredentialLifecycleApplication`의 `Issued` 응답에서 원문과 설치 URL을 받습니다. `ShortcutSettings`가 원문을 한 번 표시·복사하고 서버가 반환한 공유 Shortcut 링크를 엽니다. 공개 HTTP 계약은 별도의 실제 HTTP Adapter가 검증합니다. 운영 호출자가 없던 `shortcutCredentialStorageInstallerApplication`과 자체 생성 `ShortcutInstallation` 정의는 제거했습니다. 존재하지 않는 설치 실행기를 테스트하기 위해 별도의 DTO·결과 변환·factory를 유지하지 않습니다.
+
+`shortcut-credential-storage-and-installer.contract.test.ts`는 실제 lifecycle을 직접 호출하여 hash 저장, 원문 단회 응답, 재발급 경합·실패·재전송을 확인합니다. `ShortcutSettings.test.tsx`는 실제 화면에서 복사·설치 링크, 복사 실패 후 수동 진행, metadata 재조회 시 원문 비노출을 확인합니다. 기존 설치 정의의 문자열 비교는 외부 iCloud Shortcut 내용의 검증이 아니므로, 이 검사 성공을 공유 Shortcut 내부의 POST·JSON·Authorization 설정 인증으로 표현하지 않습니다. 해당 설치 계약은 유지하며 실제 HTTP 계약 검사와 외부 설치물 검증의 경계를 구분합니다.
+
 | 요구사항 ID | 테스트 수준 | 테스트 대상 | 핵심 fixture/경계값 | 관찰 결과 | Canonical 테스트 ID |
 |---|---|---|---|---|---|
 | [IOS-001](requirements.md#5-요구사항) | Contract, Application | HTTP method·필수값·parse 분기 | POST/OPTIONS/GET, 빈 message, body의 legacy household/owner alias, 비지원 message | 입력·인증·parse 오류가 구분되고 body alias는 Actor를 바꾸지 않으며 저장 없음 | `T-IOS-002`, `T-IOS-003`, `T-IOS-SEC-002` |

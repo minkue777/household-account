@@ -94,6 +94,48 @@ async function createStockAsset(
 
 describe("Firebase portfolio runtime store", () => {
   afterEach(() => vi.restoreAllMocks());
+  it.each([
+    [{ ownerRef: { kind: "profile", profileId: "missing" }, currentBalance: -1 }, "INVALID_OWNER_REF"],
+    [{ currentBalance: -1, quantity: -1, memo: 10 }, "INVALID_MONEY"],
+    [{ quantity: -1, memo: 10, recurringContributionAmount: -1 }, "INVALID_QUANTITY"],
+    [{ memo: 10, recurringContributionAmount: -1 }, "INVALID_MEMO"],
+    [{ recurringContributionAmount: -1, loanInterestRate: -1 }, "INVALID_AUTOMATION_AMOUNT"],
+    [{ loanInterestRate: -1, recurringContributionDay: 32 }, "INVALID_LOAN_INTEREST_RATE"],
+    [{ lastAutoContributionMonth: 1, loanRepaymentMethod: 1 }, "INVALID_AUTOMATION_CHECKPOINT"],
+  ])("자산 생성·수정은 먼저 검사하던 실패 %s를 반환하고 업무 자료는 저장하지 않는다", async (changes, code) => {
+    const memory = new InMemoryFirestore();
+    const runtime = application(memory);
+    const assetId = await createStockAsset(memory);
+    const writes = vi.spyOn(memory, "write");
+    await expect(runtime.createAsset({
+      metadata: command(2, "portfolio.create-asset.v1"),
+      asset: { name: "계좌", type: "stock", currentBalance: 0, ...changes },
+    })).resolves.toEqual({ kind: "error", code });
+    await expect(runtime.updateAsset({
+      metadata: command(3, "portfolio.update-asset.v1"),
+      assetId, expectedVersion: 1, changes,
+    })).resolves.toEqual({ kind: "error", code });
+    expect(writes.mock.calls.every(([path]) => path.startsWith("commandReceipts/portfolio/receipts/"))).toBe(true);
+  });
+
+  it.each([
+    [{ stockCode: "", stockName: "", quantity: -1 }, "POSITION_INSTRUMENT_REQUIRED"],
+    [{ quantity: -1, avgPrice: -1, currentPrice: -1 }, "INVALID_QUANTITY"],
+    [{ avgPrice: -1, currentPrice: -1 }, "INVALID_AVERAGE_PRICE"],
+    [{ currentPrice: -1, instrumentType: "invalid" }, "INVALID_CURRENT_PRICE"],
+    [{ instrumentType: "invalid" }, "INVALID_INSTRUMENT"],
+  ])("보유종목 입력은 먼저 검사하던 실패 %s를 반환하고 계좌도 변경하지 않는다", async (changes, code) => {
+    const memory = new InMemoryFirestore();
+    const runtime = application(memory);
+    const assetId = await createStockAsset(memory);
+    const writes = vi.spyOn(memory, "write");
+    await expect(runtime.addPosition({
+      metadata: command(2, "portfolio.add-position.v1"), assetId, positionKind: "stock", expectedAssetVersion: 1,
+      position: { stockCode: "005930", stockName: "삼성전자", market: "KRX", quantity: 1, ...changes },
+    })).resolves.toEqual({ kind: "error", code });
+    expect(writes.mock.calls.every(([path]) => path.startsWith("commandReceipts/portfolio/receipts/"))).toBe(true);
+  });
+
   it.each(["active", "needs-attention", "suspended", "recovering-before-stop"])("metadata 편집은 %s 자동화 계획과 보유종목을 읽거나 쓰지 않는다", async status => {
     const memory = new InMemoryFirestore();
     const runtime = application(memory);

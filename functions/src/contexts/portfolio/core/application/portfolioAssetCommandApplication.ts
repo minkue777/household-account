@@ -96,30 +96,14 @@ export function createPortfolioAssetCommands(
         );
         const memo = optionalText(raw.memo, "", "INVALID_MEMO");
         const automation = parseAutomationFields(raw);
-        if (
-          subType.kind === "error" ||
-          owner.kind === "error" ||
-          currentBalance.kind === "error" ||
-          costBasis.kind === "error" ||
-          initialInvestment.kind === "error" ||
-          quantity.kind === "error" ||
-          memo.kind === "error" ||
-          automation.kind === "error"
-        ) {
-          const failed = [
-            subType,
-            owner,
-            currentBalance,
-            costBasis,
-            initialInvestment,
-            quantity,
-            memo,
-            automation,
-          ].find((candidate) => candidate.kind === "error") as
-            | { readonly kind: "error"; readonly code: string }
-            | undefined;
-          return noWrite(state, error(failed?.code ?? "INVALID_ASSET"));
-        }
+        if (subType.kind === "error") return noWrite(state, error(subType.code));
+        if (owner.kind === "error") return noWrite(state, error(owner.code));
+        if (currentBalance.kind === "error") return noWrite(state, error(currentBalance.code));
+        if (costBasis.kind === "error") return noWrite(state, error(costBasis.code));
+        if (initialInvestment.kind === "error") return noWrite(state, error(initialInvestment.code));
+        if (quantity.kind === "error") return noWrite(state, error(quantity.code));
+        if (memo.kind === "error") return noWrite(state, error(memo.code));
+        if (automation.kind === "error") return noWrite(state, error(automation.code));
         const order =
           raw.order === undefined
             ? state.assets.filter(({ lifecycleState }) => lifecycleState === "active")
@@ -264,32 +248,15 @@ export function createPortfolioAssetCommands(
         );
         const memo = optionalText(raw.memo, current.memo, "INVALID_MEMO");
         const automation = parseAutomationFields(raw, current.automation);
-        if (
-          subType.kind === "error" ||
-          owner.kind === "error" ||
-          name.kind === "error" ||
-          balance.kind === "error" ||
-          costBasis.kind === "error" ||
-          initialInvestment.kind === "error" ||
-          quantity.kind === "error" ||
-          memo.kind === "error" ||
-          automation.kind === "error"
-        ) {
-          const failed = [
-            subType,
-            owner,
-            name,
-            balance,
-            costBasis,
-            initialInvestment,
-            quantity,
-            memo,
-            automation,
-          ].find((candidate) => candidate.kind === "error") as
-            | { readonly kind: "error"; readonly code: string }
-            | undefined;
-          return noWrite(state, error(failed?.code ?? "INVALID_ASSET_PATCH"));
-        }
+        if (subType.kind === "error") return noWrite(state, error(subType.code));
+        if (owner.kind === "error") return noWrite(state, error(owner.code));
+        if (name.kind === "error") return noWrite(state, error(name.code));
+        if (balance.kind === "error") return noWrite(state, error(balance.code));
+        if (costBasis.kind === "error") return noWrite(state, error(costBasis.code));
+        if (initialInvestment.kind === "error") return noWrite(state, error(initialInvestment.code));
+        if (quantity.kind === "error") return noWrite(state, error(quantity.code));
+        if (memo.kind === "error") return noWrite(state, error(memo.code));
+        if (automation.kind === "error") return noWrite(state, error(automation.code));
         const currency = raw.currency ?? current.currency;
         const order = raw.order ?? current.order;
         const validation = validateAssetCreation({

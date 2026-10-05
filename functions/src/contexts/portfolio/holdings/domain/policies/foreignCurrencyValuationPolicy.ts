@@ -1,8 +1,4 @@
-import type {
-  ExchangeRateObservation,
-  SourceQuoteObservation,
-  WonValuationQuote,
-} from "../model/foreignCurrencyValuation";
+import type { ExchangeRateObservation } from "../model/foreignCurrencyValuation";
 
 export type ExchangeRateParseResult =
   | { kind: "success"; value: ExchangeRateObservation }
@@ -59,20 +55,5 @@ export function parseFrankfurterRate(input: {
       observedAt: input.observedAt,
       provider: "frankfurter-v2",
     },
-  };
-}
-
-export function valueSourceQuoteInWon(
-  quote: SourceQuoteObservation,
-  rate: ExchangeRateObservation,
-): WonValuationQuote {
-  return {
-    priceInWon: quote.sourcePrice * rate.rate,
-    previousCloseInWon: quote.sourcePreviousClose * rate.rate,
-    quoteObservedAt: quote.observedAt,
-    quoteProvider: quote.provider,
-    exchangeRateDate: rate.rateDate,
-    exchangeRateObservedAt: rate.observedAt,
-    exchangeRateProvider: rate.provider,
   };
 }

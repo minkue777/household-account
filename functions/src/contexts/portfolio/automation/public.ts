@@ -1,23 +1,3 @@
-import {
-  calculateEffectivePaymentDatePolicy,
-  type EffectivePaymentDateResult,
-} from "./domain/policies/effectivePaymentDate";
-import {
-  firstMonthForInitialActivationPolicy,
-  type FirstAutomationMonthInput,
-  type FirstAutomationMonthResult,
-} from "./domain/policies/firstAutomationMonth";
-import {
-  calculateLoanPrincipalPaymentPolicy,
-  type LoanPrincipalPaymentInput,
-  type LoanPrincipalPaymentResult,
-} from "./domain/policies/loanPrincipalPayment";
-import {
-  evaluateSavingsContributionPolicy,
-  type SavingsContributionInput,
-  type SavingsContributionResult,
-} from "./domain/policies/savingsContribution";
-
 export type { EffectivePaymentDateResult } from "./domain/policies/effectivePaymentDate";
 export { calculateEffectivePaymentDatePolicy } from "./domain/policies/effectivePaymentDate";
 export {
@@ -37,27 +17,6 @@ export type {
   SavingsContributionInput,
   SavingsContributionResult,
 } from "./domain/policies/savingsContribution";
-
-export interface AssetAutomationDatePolicy {
-  calculateEffectivePaymentDate(
-    yearMonth: string,
-    configuredDay: number,
-  ): EffectivePaymentDateResult;
-  firstMonthForInitialActivation(
-    input: FirstAutomationMonthInput,
-  ): FirstAutomationMonthResult;
-  evaluateSavings(input: SavingsContributionInput): SavingsContributionResult;
-  calculateLoanPrincipal(input: LoanPrincipalPaymentInput): LoanPrincipalPaymentResult;
-}
-
-export function createAssetAutomationDatePolicy(): AssetAutomationDatePolicy {
-  return {
-    calculateEffectivePaymentDate: calculateEffectivePaymentDatePolicy,
-    firstMonthForInitialActivation: firstMonthForInitialActivationPolicy,
-    evaluateSavings: evaluateSavingsContributionPolicy,
-    calculateLoanPrincipal: calculateLoanPrincipalPaymentPolicy,
-  };
-}
 
 export type { LoanRepaymentWorkflow } from "./application/ports/in/loanRepaymentWorkflow";
 export type {

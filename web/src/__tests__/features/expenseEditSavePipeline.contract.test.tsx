@@ -22,6 +22,7 @@ jest.mock('@/contexts/AppDialogContext', () => ({
 }));
 
 import ExpenseEditModal from '@/components/expense/ExpenseEditModal';
+import { useExpenseEditor } from '@/components/expense/hooks/useExpenseEditor';
 
 const expense: Expense = {
   id: 'expense-1',
@@ -64,10 +65,41 @@ function EditorHarness({
   }} /> : <button onClick={() => setIsOpen(true)}>다시 열기</button>;
 }
 
+function SelectionHarness({ source }: { source: Expense }) {
+  const editor = useExpenseEditor();
+  return <>
+    <button onClick={() => editor.selectExpense(source)}>거래 선택</button>
+    {editor.expense && <ExpenseEditModal
+      key={editor.editorKey}
+      expense={editor.expense}
+      isOpen
+      onClose={() => editor.selectExpense(null)}
+      onSave={jest.fn()}
+      allowRememberMerchant
+      transactionType="expense"
+    />}
+  </>;
+}
+
 describe('ExpenseEditModal 저장 pipeline 계약', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockShowAlert.mockResolvedValue(undefined);
+  });
+
+  test('목록 갱신은 편집 초안을 보존하고 같은 거래를 다시 선택하면 새 원본으로 초기화한다', () => {
+    const view = render(<SelectionHarness source={expense} />);
+    fireEvent.click(screen.getByRole('button', { name: '거래 선택' }));
+    selectRememberedCategory();
+    fireEvent.change(screen.getByPlaceholderText('메모를 입력하세요'), { target: { value: '미저장 초안' } });
+    view.rerender(<SelectionHarness source={{ ...expense, aggregateVersion: 4, memo: '최신 원본' }} />);
+    expect(screen.getByPlaceholderText('메모를 입력하세요')).toHaveValue('미저장 초안');
+    expect(screen.getByRole('checkbox')).toBeChecked();
+
+    fireEvent.click(screen.getByRole('button', { name: '거래 선택' }));
+    expect(screen.getByPlaceholderText('메모를 입력하세요')).toHaveValue('최신 원본');
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '식비' })).toHaveClass('border-blue-500');
   });
 
   test('[MER-005] 카테고리와 기억 선택을 한 번 전달하고 서버 응답 전에 편집 화면을 숨긴다', async () => {

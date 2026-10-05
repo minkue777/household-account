@@ -67,7 +67,6 @@ function extractGoldQuantity(asset: Asset | null) {
 
 export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
   const [quantity, setQuantity] = useState('');
-  const [goldPrice, setGoldPrice] = useState<GoldPriceData | null>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
 
   const isGoldAsset = asset?.type === 'gold';
@@ -102,19 +101,10 @@ export function useGoldHolding({ isOpen, asset }: UseGoldHoldingOptions) {
     setQuantity(extractGoldQuantity(asset));
   }, [asset?.id, isOpen, isPhysicalGoldAsset]);
 
-  useEffect(() => {
-    if (!isOpen || !asset || !isPhysicalGoldAsset) {
-      setGoldPrice(null);
-      return;
-    }
-    setGoldPrice(observedGoldPrice(asset));
-  }, [
-    asset?.currentBalance,
-    asset?.quantity,
-    asset?.updatedAt,
-    isOpen,
-    isPhysicalGoldAsset,
-  ]);
+  const goldPrice = useMemo(
+    () => isOpen && isPhysicalGoldAsset ? observedGoldPrice(asset) : null,
+    [asset, isOpen, isPhysicalGoldAsset],
+  );
 
   const totalValue = useMemo(() => {
     if (!goldPrice || !quantity) {

@@ -3,7 +3,7 @@ import type {
   HomePreferenceCommandMetadata,
   HomePreferenceCommandState,
 } from "./ports/out/homePreferenceAtomicStorePort";
-import type { HomeCardType } from "../domain/homeSummary";
+import { WEB_HOME_CARD_TYPE } from "../domain/homeSummary";
 
 export interface HomePreferenceRuntimeCommand {
   readonly actor: { readonly householdId: string; readonly memberId: string };
@@ -18,13 +18,6 @@ export interface HomePreferenceRuntimeCommand {
 export type HomePreferenceRuntimeResult =
   | { readonly kind: "success"; readonly value: Readonly<Record<string, never>> }
   | { readonly kind: "rejected"; readonly code: string; readonly retryable?: true };
-
-const WEB_HOME_CARD_TYPE: Readonly<Record<string, HomeCardType>> = Object.freeze({
-  localCurrencyBalance: "LOCAL_CURRENCY_BALANCE",
-  monthlyRemainingBudget: "MONTHLY_REMAINING_BUDGET",
-  monthlySpent: "MONTHLY_EXPENSE",
-  yearlySpent: "YEARLY_EXPENSE",
-});
 
 function metadata(input: HomePreferenceRuntimeCommand): HomePreferenceCommandMetadata {
   return {
@@ -80,11 +73,11 @@ export function createHomePreferenceRuntimeApplication(
     ): Promise<HomePreferenceRuntimeResult> {
       const left =
         typeof input.leftCard === "string"
-          ? WEB_HOME_CARD_TYPE[input.leftCard]
+          ? WEB_HOME_CARD_TYPE.get(input.leftCard)
           : undefined;
       const right =
         typeof input.rightCard === "string"
-          ? WEB_HOME_CARD_TYPE[input.rightCard]
+          ? WEB_HOME_CARD_TYPE.get(input.rightCard)
           : undefined;
       if (left === undefined || right === undefined) {
         return { kind: "rejected", code: "UNSUPPORTED_HOME_CARD_TYPE" };

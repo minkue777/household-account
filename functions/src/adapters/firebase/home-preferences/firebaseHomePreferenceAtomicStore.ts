@@ -11,6 +11,8 @@ import type {
 } from "../../../platform/home-preferences/application/ports/out/homePreferenceAtomicStorePort";
 import {
   DEFAULT_HOME_CONFIGURATION,
+  WEB_HOME_CARD_TYPE,
+  isHomeCardType,
   type HomeCardType,
 } from "../../../platform/home-preferences/domain/homeSummary";
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
@@ -19,13 +21,6 @@ import { autoSelectFirstLocalCurrency } from "../../../platform/home-preferences
 
 const RECEIPT_CONTEXT = "home-preferences";
 const RETENTION_MILLIS = 30 * 24 * 60 * 60 * 1_000;
-
-const WEB_TO_CANONICAL: Readonly<Record<string, HomeCardType>> = Object.freeze({
-  localCurrencyBalance: "LOCAL_CURRENCY_BALANCE",
-  monthlyRemainingBudget: "MONTHLY_REMAINING_BUDGET",
-  monthlySpent: "MONTHLY_EXPENSE",
-  yearlySpent: "YEARLY_EXPENSE",
-});
 
 const CANONICAL_TO_WEB = Object.freeze({
   LOCAL_CURRENCY_BALANCE: "localCurrencyBalance",
@@ -64,15 +59,8 @@ function number(
 }
 
 function canonicalCard(value: unknown, fallback: HomeCardType): HomeCardType {
-  if (
-    value === "LOCAL_CURRENCY_BALANCE" ||
-    value === "MONTHLY_REMAINING_BUDGET" ||
-    value === "MONTHLY_EXPENSE" ||
-    value === "YEARLY_EXPENSE"
-  ) {
-    return value;
-  }
-  return typeof value === "string" ? WEB_TO_CANONICAL[value] ?? fallback : fallback;
+  if (isHomeCardType(value)) return value;
+  return typeof value === "string" ? WEB_HOME_CARD_TYPE.get(value) ?? fallback : fallback;
 }
 
 function currentState(input: {
@@ -116,13 +104,11 @@ function currencyTypes(
   legacy: readonly firestore.DocumentSnapshot[],
 ): ReadonlySet<string> {
   const types = new Set<string>();
-  for (const snapshot of canonical) {
-    const type = text(snapshot.data(), "localCurrencyType", "currencyType");
-    if (type !== undefined && type !== "legacy-unknown") types.add(type);
-  }
-  for (const snapshot of legacy) {
-    const type = text(snapshot.data(), "localCurrencyType", "currencyType");
-    if (type !== undefined && type !== "legacy-unknown") types.add(type);
+  for (const snapshots of [canonical, legacy]) {
+    for (const snapshot of snapshots) {
+      const type = text(snapshot.data(), "localCurrencyType", "currencyType");
+      if (type !== undefined && type !== "legacy-unknown") types.add(type);
+    }
   }
   return types;
 }

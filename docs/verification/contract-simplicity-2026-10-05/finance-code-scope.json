@@ -1,0 +1,481 @@
+{
+  "base": "676731d9abda95439afc2dfd827690029d89e048",
+  "groups": {
+    "ledger": {
+      "files": 29,
+      "before": 4899,
+      "after": 4484,
+      "reduction": 415
+    },
+    "recurring": {
+      "files": 24,
+      "before": 2663,
+      "after": 2253,
+      "reduction": 410
+    },
+    "categories": {
+      "files": 12,
+      "before": 1492,
+      "after": 1422,
+      "reduction": 70
+    },
+    "localCurrency": {
+      "files": 10,
+      "before": 853,
+      "after": 853,
+      "reduction": 0
+    }
+  },
+  "files": [
+    {
+      "group": "ledger",
+      "path": "functions/src/adapters/firebase/ledger/firebaseItemSplitStore.ts",
+      "before": 354,
+      "after": 354
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/adapters/firebase/ledger/firebaseLedgerCommandRepository.ts",
+      "before": 297,
+      "after": 270
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/adapters/firebase/ledger/firebaseMonthlySplitLifecycleStore.ts",
+      "before": 343,
+      "after": 343
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/adapters/firebase/ledger/firebaseTransformationLineageStore.ts",
+      "before": 574,
+      "after": 574
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/adapters/firebase/ledger/ledgerDocumentMapping.ts",
+      "before": 55,
+      "after": 55
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/bootstrap/commands/ledgerHouseholdCommandHandlers.ts",
+      "before": 711,
+      "after": 711
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/application/commands/basicLedgerService.ts",
+      "before": 403,
+      "after": 353
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/application/commands/itemSplitRestorationService.ts",
+      "before": 220,
+      "after": 220
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/application/commands/monthlySplitLifecycleService.ts",
+      "before": 379,
+      "after": 379
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/application/commands/transformationLineageService.ts",
+      "before": 624,
+      "after": 506
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/application/ports/basicLedgerRepository.ts",
+      "before": 42,
+      "after": 39
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/application/ports/itemSplitStore.ts",
+      "before": 20,
+      "after": 20
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/application/ports/monthlySplitLifecycleStore.ts",
+      "before": 23,
+      "after": 23
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/application/ports/out/ledgerReadSource.ts",
+      "before": 12,
+      "after": 0
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/application/ports/transformationLineageStore.ts",
+      "before": 35,
+      "after": 35
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/application/queries/ledgerPeriodQuery.ts",
+      "before": 108,
+      "after": 0
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/domain/model/itemSplitRestoration.ts",
+      "before": 43,
+      "after": 43
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/domain/model/ledgerReadFact.ts",
+      "before": 9,
+      "after": 0
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/domain/model/ledgerTransaction.ts",
+      "before": 52,
+      "after": 41
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/domain/model/monthlySplitLifecycle.ts",
+      "before": 34,
+      "after": 34
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/domain/model/transformationLineage.ts",
+      "before": 58,
+      "after": 58
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/domain/policies/basicLedgerPolicy.ts",
+      "before": 57,
+      "after": 57
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/domain/policies/captureLineageCancellationGraph.ts",
+      "before": 88,
+      "after": 88
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/domain/policies/expenseTags.ts",
+      "before": 36,
+      "after": 36
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/domain/policies/ledgerReadSelection.ts",
+      "before": 66,
+      "after": 0
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/domain/policies/localCurrencyTypeCompatibility.ts",
+      "before": 14,
+      "after": 14
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/domain/policies/monthlySplit.ts",
+      "before": 129,
+      "after": 129
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/domain/policies/recurringPosting.ts",
+      "before": 60,
+      "after": 60
+    },
+    {
+      "group": "ledger",
+      "path": "functions/src/contexts/household-finance/ledger/public.ts",
+      "before": 53,
+      "after": 42
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/adapters/firebase/recurring/firebaseRecurringCategoryRemapper.ts",
+      "before": 60,
+      "after": 60
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/adapters/firebase/recurring/firebaseRecurringFinanceUnitOfWork.ts",
+      "before": 418,
+      "after": 418
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/adapters/firebase/recurring/firebaseRecurringPlanManagementStore.ts",
+      "before": 199,
+      "after": 199
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/bootstrap/commands/recurringHouseholdCommandHandlers.ts",
+      "before": 220,
+      "after": 220
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/application/ports/in/recurringCategoryRemapInputPort.ts",
+      "before": 19,
+      "after": 19
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/application/ports/in/recurringCreatorInputPort.ts",
+      "before": 70,
+      "after": 0
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/application/ports/in/recurringPlanManagementInputPort.ts",
+      "before": 95,
+      "after": 95
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/application/ports/in/recurringSchedulerWorkflowInputPort.ts",
+      "before": 44,
+      "after": 44
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/application/ports/out/recurringCategoryRemapPorts.ts",
+      "before": 19,
+      "after": 19
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/application/ports/out/recurringCreatorPorts.ts",
+      "before": 40,
+      "after": 0
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/application/ports/out/recurringPlanManagementPorts.ts",
+      "before": 34,
+      "after": 34
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/application/ports/out/recurringProcessingPorts.ts",
+      "before": 27,
+      "after": 27
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/application/recurringCategoryRemapApplication.ts",
+      "before": 25,
+      "after": 25
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/application/recurringCreatorApplication.ts",
+      "before": 276,
+      "after": 0
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/application/recurringPlanManagementApplication.ts",
+      "before": 147,
+      "after": 147
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/application/recurringSchedulerWorkflowApplication.ts",
+      "before": 123,
+      "after": 123
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/domain/model/recurringCategoryRemap.ts",
+      "before": 63,
+      "after": 63
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/domain/model/recurringPlan.ts",
+      "before": 63,
+      "after": 47
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/domain/model/recurringProcessing.ts",
+      "before": 85,
+      "after": 85
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/domain/policies/recurringCategoryRemapPolicy.ts",
+      "before": 110,
+      "after": 110
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/domain/policies/recurringPlanPolicy.ts",
+      "before": 128,
+      "after": 128
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/domain/policies/recurringProcessingPolicy.ts",
+      "before": 184,
+      "after": 184
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/domain/policies/recurringSchedule.ts",
+      "before": 180,
+      "after": 180
+    },
+    {
+      "group": "recurring",
+      "path": "functions/src/contexts/household-finance/recurring/public.ts",
+      "before": 34,
+      "after": 26
+    },
+    {
+      "group": "categories",
+      "path": "functions/src/adapters/firebase/categories/categoryCatalogDocument.ts",
+      "before": 52,
+      "after": 52
+    },
+    {
+      "group": "categories",
+      "path": "functions/src/adapters/firebase/categories/categoryReadMapping.ts",
+      "before": 44,
+      "after": 44
+    },
+    {
+      "group": "categories",
+      "path": "functions/src/adapters/firebase/categories/firebaseCategoryCatalogStore.ts",
+      "before": 267,
+      "after": 251
+    },
+    {
+      "group": "categories",
+      "path": "functions/src/adapters/firebase/categories/firebaseCategoryReferenceReader.ts",
+      "before": 13,
+      "after": 13
+    },
+    {
+      "group": "categories",
+      "path": "functions/src/bootstrap/commands/categoryHouseholdCommandHandlers.ts",
+      "before": 331,
+      "after": 331
+    },
+    {
+      "group": "categories",
+      "path": "functions/src/contexts/household-finance/categories-budget/application/categoryCatalogApplication.ts",
+      "before": 373,
+      "after": 337
+    },
+    {
+      "group": "categories",
+      "path": "functions/src/contexts/household-finance/categories-budget/application/ports/in/categoryCatalogInputPort.ts",
+      "before": 97,
+      "after": 86
+    },
+    {
+      "group": "categories",
+      "path": "functions/src/contexts/household-finance/categories-budget/application/ports/out/categoryCatalogStorePort.ts",
+      "before": 26,
+      "after": 20
+    },
+    {
+      "group": "categories",
+      "path": "functions/src/contexts/household-finance/categories-budget/application/ports/out/categoryReferenceRemapPort.ts",
+      "before": 18,
+      "after": 18
+    },
+    {
+      "group": "categories",
+      "path": "functions/src/contexts/household-finance/categories-budget/domain/model/categoryCatalog.ts",
+      "before": 25,
+      "after": 25
+    },
+    {
+      "group": "categories",
+      "path": "functions/src/contexts/household-finance/categories-budget/domain/policies/categoryCatalogPolicy.ts",
+      "before": 233,
+      "after": 233
+    },
+    {
+      "group": "categories",
+      "path": "functions/src/contexts/household-finance/categories-budget/public.ts",
+      "before": 13,
+      "after": 12
+    },
+    {
+      "group": "localCurrency",
+      "path": "functions/src/adapters/firebase/local-currency/firebaseLocalCurrencyBalanceStore.ts",
+      "before": 240,
+      "after": 240
+    },
+    {
+      "group": "localCurrency",
+      "path": "functions/src/contexts/household-finance/local-currency/application/balanceObservationIntakeApplication.ts",
+      "before": 70,
+      "after": 70
+    },
+    {
+      "group": "localCurrency",
+      "path": "functions/src/contexts/household-finance/local-currency/application/localCurrencyBalanceApplication.ts",
+      "before": 190,
+      "after": 190
+    },
+    {
+      "group": "localCurrency",
+      "path": "functions/src/contexts/household-finance/local-currency/application/ports/in/balanceObservationIntakePort.ts",
+      "before": 39,
+      "after": 39
+    },
+    {
+      "group": "localCurrency",
+      "path": "functions/src/contexts/household-finance/local-currency/application/ports/in/localCurrencyBalancePort.ts",
+      "before": 47,
+      "after": 47
+    },
+    {
+      "group": "localCurrency",
+      "path": "functions/src/contexts/household-finance/local-currency/application/ports/outbound/localCurrencyBalanceStore.ts",
+      "before": 53,
+      "after": 53
+    },
+    {
+      "group": "localCurrency",
+      "path": "functions/src/contexts/household-finance/local-currency/domain/model/localCurrencyBalance.ts",
+      "before": 50,
+      "after": 50
+    },
+    {
+      "group": "localCurrency",
+      "path": "functions/src/contexts/household-finance/local-currency/domain/policies/balanceObservationEnvelope.ts",
+      "before": 56,
+      "after": 56
+    },
+    {
+      "group": "localCurrency",
+      "path": "functions/src/contexts/household-finance/local-currency/domain/policies/latestBalanceObservation.ts",
+      "before": 94,
+      "after": 94
+    },
+    {
+      "group": "localCurrency",
+      "path": "functions/src/contexts/household-finance/local-currency/public.ts",
+      "before": 14,
+      "after": 14
+    }
+  ]
+}

@@ -7,27 +7,16 @@ import {
 
 export type { MonthlyInstallment, MonthlySplitInput, MonthlySplitResult };
 
-export interface MonthlySplitPolicy {
-  split(input: MonthlySplitInput): MonthlySplitResult;
-}
-
 export function splitMonthly(input: MonthlySplitInput): MonthlySplitResult {
   return applyMonthlySplitPolicy(input);
 }
 
-export type {
-  CompatibleLedgerReadResult,
-  CompatibleLedgerReader,
-  LedgerPeriodQuery,
-  LedgerPeriodQueryResult,
-} from "./application/queries/ledgerPeriodQuery";
 export type { BasicLedgerCommands } from "./application/commands/basicLedgerService";
 export type { MonthlySplitLifecycleCommands } from "./application/commands/monthlySplitLifecycleService";
 export type { ItemSplitRestorationCommands } from "./application/commands/itemSplitRestorationService";
 export type { LedgerTransformationCommands } from "./application/commands/transformationLineageService";
 export type {
   LedgerCommandResult,
-  LedgerSummaryResult,
   LedgerTransactionType,
   LedgerTransactionView,
 } from "./domain/model/ledgerTransaction";

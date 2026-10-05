@@ -45,19 +45,3 @@ export interface RecurringPlanChangedEvent {
   changeKind: "created" | "updated" | "deleted";
   planVersion: number;
 }
-
-export interface RecurringCreatorMigrationReceipt {
-  commandId: string;
-  householdId: string;
-  planId: string;
-  creatorMemberId: string;
-  migrationActorId: string;
-  migratedAt: string;
-  previousPlanVersion: number;
-}
-
-export interface RecurringCreatorMigrationState {
-  plans: readonly RecurringPlan[];
-  receipts: readonly RecurringCreatorMigrationReceipt[];
-  events: readonly RecurringPlanChangedEvent[];
-}

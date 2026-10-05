@@ -1,16 +1,8 @@
-import {
-  calculateAccountValuationPolicy,
+export {
+  calculateAccountValuationPolicy as calculateAccountValuation,
   type AccountValuation,
   type ValuationPosition,
 } from "./domain/policies/accountValuation";
-
-export type { AccountValuation, ValuationPosition };
-
-export function calculateAccountValuation(
-  positions: readonly ValuationPosition[],
-): AccountValuation {
-  return calculateAccountValuationPolicy(positions);
-}
 
 export {
   searchFundInstruments,

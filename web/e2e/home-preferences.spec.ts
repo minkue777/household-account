@@ -72,6 +72,11 @@ test('[T-HOME-002][T-HOME-003][HOME-001][HOME-003][HOME-004] 기본 홈 카드�
   expect(await documents(request, `households/${scope.householdId}/homePreferences`)).toEqual(stored);
   await expect(executeHouseholdCommand(request, { ...scope, command: save.command, payload: { leftCard: 'monthlySpent', rightCard: 'monthlyRemainingBudget', expectedVersion: 0 } })).rejects.toThrow('HOME_CONFIGURATION_VERSION_MISMATCH');
   await expect(executeHouseholdCommand(request, { ...scope, command: save.command, payload: { leftCard: 'monthlySpent', rightCard: 'monthlySpent', expectedVersion: 1 } })).rejects.toThrow();
+  for (const leftCard of ['toString', 'constructor', '__proto__']) {
+    await expect(executeHouseholdCommand(request, {
+      ...scope, command: save.command, payload: { leftCard, rightCard: 'monthlySpent', expectedVersion: 1 },
+    })).rejects.toThrow('UNSUPPORTED_HOME_CARD_TYPE');
+  }
   expect(await documents(request, `households/${scope.householdId}/homePreferences`)).toEqual(stored);
   await page.reload();
   await expect(page.locator('.balance-card-glass').first()).toContainText('년 지출');

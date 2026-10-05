@@ -260,7 +260,7 @@ describe("Category Catalog 공개 계약", () => {
     });
   });
 
-  it("[T-CAT-004][CAT-003] active 카테고리를 기본값으로 바꾸면 Web 수동 등록도 같은 안정 ID를 사용한다", async () => {
+  it("[T-CAT-004][CAT-003] active 카테고리를 기본값으로 바꾸면 Catalog에 같은 안정 ID를 저장한다", async () => {
     const subject = createSubject({
       state: {
         categories: [category("old-default"), category("new-default")],
@@ -279,64 +279,5 @@ describe("Category Catalog 공개 계약", () => {
       value: expect.objectContaining({ categoryId: "new-default", state: "active" }),
     });
     expect(subject.state().defaultCategoryId).toBe("new-default");
-    await expect(subject.defaultForManualEntry()).resolves.toEqual({
-      kind: "success",
-      value: expect.objectContaining({ categoryId: "new-default" }),
-    });
   });
-
-  it("[T-CAT-005][CAT-004] 활성 카테고리만 sortOrder와 안정 ID 순으로 제공한다", async () => {
-    const subject = createSubject({
-      state: {
-        categories: [
-          category("b", { sortOrder: 1 }),
-          category("archived", { state: "archived", sortOrder: 0 }),
-          category("a", { sortOrder: 1 }),
-          category("first", { sortOrder: 0 }),
-        ],
-      },
-    });
-
-    const result = await subject.listActive();
-
-    expect(result).toEqual({
-      kind: "success",
-      items: expect.arrayContaining([]),
-    });
-    if (result.kind === "success") {
-      expect(result.items.map(({ categoryId }) => categoryId)).toEqual([
-        "first",
-        "a",
-        "b",
-      ]);
-    }
-  });
-
-  it("[T-CAT-006][CAT-004] Repository 실패를 빈 카테고리나 기본 다섯 개로 위장하지 않는다", async () => {
-    const result = await createSubject({ failList: true }).listActive();
-
-    expect(result).toEqual({
-      kind: "retryable-failure",
-      code: "CATEGORY_REPOSITORY_UNAVAILABLE",
-    });
-  });
-
-  it.each([
-    { fixture: { state: { categories: [] } }, reason: "empty" },
-    { fixture: { failList: true }, reason: "failure" },
-  ])(
-    "[T-CAT-005][CAT-004] legacy Android QuickEdit은 $reason을 구분하지 않고 표시 전용 기본 다섯 개로 fallback한다",
-    async ({ fixture }) => {
-      const items = await createSubject(fixture).legacyQuickEditCategories();
-
-      expect(items.map(({ name }) => name)).toEqual([
-        "생활비",
-        "육아비",
-        "고정비",
-        "식비",
-        "기타",
-      ]);
-      expect(createSubject(fixture).state().categories).toEqual([]);
-    },
-  );
 });

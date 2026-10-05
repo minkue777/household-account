@@ -153,33 +153,6 @@ export class FirebaseLedgerCommandRepository
     }
   }
 
-  async listTransactions(
-    householdId: string,
-  ): Promise<LedgerRepositoryReadResult<readonly LedgerTransactionView[]>> {
-    if (householdId !== this.householdId) {
-      return { kind: "ready", value: [] };
-    }
-    try {
-      const canonical = await this.database
-          .collection("households")
-          .doc(householdId)
-          .collection("ledgerTransactions")
-          .get();
-      const mapAll = (documents: readonly firestore.QueryDocumentSnapshot[]) =>
-        documents
-          .map(mapTransaction)
-          .filter(
-            (value): value is LedgerTransactionView => value !== undefined,
-          );
-      return {
-        kind: "ready",
-        value: mapAll(canonical.docs),
-      };
-    } catch (_error) {
-      return { kind: "retryable-failure", code: "LEDGER_READ_UNAVAILABLE" };
-    }
-  }
-
   async commit(input: Parameters<LedgerCommandRepository["commit"]>[0]) {
     if (
       input.householdId !== this.householdId ||

@@ -12,6 +12,8 @@ import { createCaptureTransactionGatewayApplication } from "../../../src/context
 import { FirebaseCaptureConfigurationQuery } from "../../../src/adapters/firebase/payment-capture/firebaseCaptureConfigurationQuery";
 import { FirebaseCaptureLedgerPersistence } from "../../../src/adapters/firebase/payment-capture/firebaseCaptureLedgerPersistence";
 import { FirebaseTransformationLineageStore } from "../../../src/adapters/firebase/ledger/firebaseTransformationLineageStore";
+import { FirebaseLedgerCommandRepository } from "../../../src/adapters/firebase/ledger/firebaseLedgerCommandRepository";
+import { FirebaseItemSplitStore } from "../../../src/adapters/firebase/ledger/firebaseItemSplitStore";
 import { createLedgerTransformationCommands } from "../../../src/contexts/household-finance/ledger/application/commands/transformationLineageService";
 import { FirebaseCaptureSubmissionReceiptStore, Sha256CapturePayloadFingerprint } from "../../../src/adapters/firebase/payment-capture/firebaseCaptureSubmissionReceiptStore";
 import { Sha256AndroidRawNotificationHasher } from "../../../src/adapters/crypto/payment-capture/sha256AndroidRawNotificationHasher";
@@ -164,6 +166,78 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     const read = async (transactionId: string) => (await canonical.doc(transactionId).get()).data();
     return { run, record, read, canonical };
   }
+
+  it.each(["update", "split"] as const)("[T-LED-002] 같은 version의 Update/Split 경합은 %s가 먼저 저장하면 나머지 쓰기를 전부 거절한다", async (winner) => {
+    const { run, record, read, canonical } = await tagFixture();
+    const original = await record("race-source", ["여행"]);
+    const update = () => run("ledger.update-transaction.v1", "race-update", {
+      transactionId: original.transactionId, expectedVersion: 1, patch: { memo: "수정한 메모" },
+    });
+    const split = () => run("ledger.split-transaction.v1", "race-split", {
+      transactionId: original.transactionId, expectedVersion: 1,
+      operation: { kind: "items", items: [
+        { merchant: "식사", amountInWon: 6000, categoryId: "food", memo: "" },
+        { merchant: "간식", amountInWon: 6000, categoryId: "food", memo: "" },
+      ] },
+    });
+    let signalRead!: () => void;
+    let release!: () => void;
+    const readCompleted = new Promise<void>(resolve => { signalRead = resolve; });
+    const released = new Promise<void>(resolve => { release = resolve; });
+    // 실제 SDK 조회 결과를 보존한 채 패자의 저장만 늦춰 두 명령이 version 1을 읽게 합니다.
+    const findTransaction = FirebaseLedgerCommandRepository.prototype.findTransaction;
+    const load = FirebaseItemSplitStore.prototype.load;
+    const heldRead = winner === "update"
+      ? vi.spyOn(FirebaseItemSplitStore.prototype, "load").mockImplementation(async function (this: FirebaseItemSplitStore, input) {
+        const result = await load.call(this, input);
+        signalRead(); await released;
+        return result;
+      })
+      : vi.spyOn(FirebaseLedgerCommandRepository.prototype, "findTransaction").mockImplementation(async function (this: FirebaseLedgerCommandRepository, id) {
+        const result = await findTransaction.call(this, id);
+        signalRead(); await released;
+        return result;
+      });
+    const loser = (winner === "update" ? split() : update()).then(
+      value => ({ value }), error => ({ error }),
+    );
+    try {
+      await Promise.race([readCompleted, loser.then(result => {
+        if ("error" in result && result.error instanceof Error) throw result.error;
+        throw new Error(`경합 대상 명령이 실제 조회 gate에 도달하기 전에 종료됐습니다: ${JSON.stringify(result)}`);
+      })]);
+      const result = await (winner === "update" ? update() : split());
+      release();
+      expect(await loser).toMatchObject({ error: { code: "LEDGER_CONCURRENT_WRITE" } });
+      const transactions = await canonical.get();
+      const parent = await read(original.transactionId);
+      expect(parent).toMatchObject({ aggregateVersion: 2, tags: ["여행"] });
+      if (winner === "update") {
+        expect(transactions.docs).toHaveLength(1);
+        expect(parent).toMatchObject({ lifecycleState: "active", memo: "수정한 메모" });
+      } else {
+        expect(transactions.docs).toHaveLength(3);
+        expect(parent).toMatchObject({ lifecycleState: "superseded", memo: "" });
+        expect(result).toMatchObject({ transactionIds: expect.arrayContaining(transactions.docs.filter(doc => doc.id !== original.transactionId).map(doc => doc.id)) });
+        expect(transactions.docs.filter(doc => doc.id !== original.transactionId).map(doc => doc.data())).toEqual([
+          expect.objectContaining({ amountInWon: 6000, tags: ["여행"], aggregateVersion: 1, lifecycleState: "active" }),
+          expect.objectContaining({ amountInWon: 6000, tags: ["여행"], aggregateVersion: 1, lifecycleState: "active" }),
+        ]);
+      }
+      const receipts = (await database.collectionGroup("receipts").get()).docs
+        .filter(doc => doc.data().commandId === "race-update" || doc.data().operationKey === "race-split");
+      expect(receipts).toHaveLength(1);
+      expect(receipts[0].data()).toMatchObject(winner === "update" ? { commandId: "race-update" } : { operationKey: "race-split" });
+      const events = (await database.collection("outboxEvents").get()).docs
+        .filter(doc => ["race-update", "race-split"].includes(doc.data().correlationId));
+      expect(events).toHaveLength(winner === "update" ? 1 : 3);
+      expect(events.every(doc => doc.data().correlationId === `race-${winner}`)).toBe(true);
+    } finally {
+      release();
+      await loser;
+      heldRead.mockRestore();
+    }
+  });
 
   it("[T-LED-011][LED-011] 지출 태그는 저장·재조회되며 구버전 수정 요청은 보존하고 명시한 빈 배열은 제거한다", async () => {
     const { run, record, read, canonical } = await tagFixture();

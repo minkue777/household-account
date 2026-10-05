@@ -7,10 +7,12 @@ export const HOME_CARD_TYPES = [
 
 export type HomeCardType = (typeof HOME_CARD_TYPES)[number];
 
-export type HomeCardSourceState =
-  | { readonly kind: "READY"; readonly amountInWon: number; readonly asOf: string }
-  | { readonly kind: "NO_DATA"; readonly reason: string }
-  | { readonly kind: "FAILED"; readonly code: string; readonly retryable?: true };
+export const WEB_HOME_CARD_TYPE: ReadonlyMap<string, HomeCardType> = new Map([
+  ["localCurrencyBalance", "LOCAL_CURRENCY_BALANCE"],
+  ["monthlyRemainingBudget", "MONTHLY_REMAINING_BUDGET"],
+  ["monthlySpent", "MONTHLY_EXPENSE"],
+  ["yearlySpent", "YEARLY_EXPENSE"],
+]);
 
 export function isHomeCardType(value: unknown): value is HomeCardType {
   return typeof value === "string" && HOME_CARD_TYPES.includes(value as HomeCardType);

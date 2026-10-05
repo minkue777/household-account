@@ -589,3 +589,7 @@ Domain은 Firebase·node-fetch·HTML parser를 import하지 않습니다. `publi
 ### 2026-10-05 발행 입력 축소
 
 발행 application은 검증한 asOfDate/items/source count만 Storage adapter에 전달한다. checksum·generation·publishedAt·receipt는 실제 gzip 업로드와 다운로드 검증 후 adapter에서 구성한다. latest CAS 전 검증 실패와 immutable 본문 충돌은 기존 latest를 보존한다. 최근 세 성공 날짜는 업로드 경로 목록이 아니라 확정 receipt에서 선택하며 최신 manifest가 참조한 객체를 삭제하지 않는다. 실제 Firestore/Storage SDK 검사와 실패 주입 경계는 [작업 기록](../../../../../operations/portfolio-storage-simplicity-2026-10-05.md)에 있다.
+
+### 계약별 단순화 검토 (2026-10-05)
+
+Position 입력은 기존 첫 오류 우선순위로 직접 반환한다. 현재 runtime의 `portfolioRuntimeValuation`·`accountValuation`과 실제 공급자 조회만 평가를 수행하며, 사용되지 않는 병행 평가 및 공급자 이름 목록 함수는 제거한다. 공개 `calculateAccountValuation` 이름은 실제 정책의 직접 export로 유지한다. 가격 단위·환율 관측·마지막 성공값·실패 구분은 바꾸지 않는다. 실물 금 입력의 시세는 확정 Asset에서 바로 파생하고 편집 중 수량만 독립 상태로 보존한다. 전체 공개 계약 판정과 검증은 [Portfolio 검토](../../../../../verification/contract-simplicity-2026-10-05/portfolio.md)에 있다.

@@ -127,30 +127,12 @@ export function createPositionFromRaw(input: {
     undefined,
     "INVALID_CURRENT_PRICE",
   );
-  if (
-    code.kind === "error" ||
-    name.kind === "error" ||
-    quantity.kind === "error" ||
-    averagePrice.kind === "error" ||
-    currentPrice.kind === "error" ||
-    instrumentType === undefined
-  ) {
-    return {
-      kind: "error",
-      code:
-        code.kind === "error"
-          ? code.code
-          : name.kind === "error"
-            ? name.code
-            : quantity.kind === "error"
-              ? quantity.code
-              : averagePrice.kind === "error"
-                ? averagePrice.code
-                : currentPrice.kind === "error"
-                  ? currentPrice.code
-                  : "INVALID_INSTRUMENT",
-    };
-  }
+  if (code.kind === "error") return code;
+  if (name.kind === "error") return name;
+  if (quantity.kind === "error") return quantity;
+  if (averagePrice.kind === "error") return averagePrice;
+  if (currentPrice.kind === "error") return currentPrice;
+  if (instrumentType === undefined) return { kind: "error", code: "INVALID_INSTRUMENT" };
   const defaultScale = instrumentType === "fund" ? 1_000 : 1;
   const priceScale = raw.priceScale ?? defaultScale;
   if (

@@ -11,21 +11,9 @@ import type {
 import { planCaptureLineageCancellation } from "../../domain/policies/captureLineageCancellationGraph";
 import { areLocalCurrencyTypesCompatible } from "../../domain/policies/localCurrencyTypeCompatibility";
 
-import { readExpenseTags, validateExpenseTags } from "../../domain/policies/expenseTags";
+import { validateExpenseTags } from "../../domain/policies/expenseTags";
 
 export interface LedgerTransformationCommands {
-  splitItems(command: {
-    operationKey: string;
-    sourceId: string;
-    expectedVersion: number;
-    items: readonly {
-      amountInWon: number;
-      merchant: string;
-      categoryId: string;
-      memo: string;
-      tags?: string[];
-    }[];
-  }): Promise<LedgerTransformationResult>;
   merge(command: {
     operationKey: string;
     targetId: string;
@@ -36,12 +24,6 @@ export interface LedgerTransformationCommands {
     operationKey: string;
     mergedTransactionId: string;
     expectedVersion: number;
-  }): Promise<LedgerTransformationResult>;
-  update(command: {
-    operationKey: string;
-    transactionId: string;
-    expectedVersion: number;
-    amountInWon: number;
   }): Promise<LedgerTransformationResult>;
   cancelCapturedLineage(command: {
     cancellationKey: string;
@@ -174,106 +156,6 @@ export function createLedgerTransformationCommands(input: {
   }
 
   return {
-    splitItems: async (command) => {
-      const replay = await input.store.findReceipt(command.operationKey);
-      if (replay !== undefined) return replay;
-      const selection = { transactionIds: [command.sourceId] };
-      const state = await input.store.load(selection);
-      const source = state.transactions.find(
-        (transaction) =>
-          transaction.transactionId === command.sourceId &&
-          transaction.lifecycleState === "active",
-      );
-      if (source === undefined || source.aggregateVersion !== command.expectedVersion) {
-        return { kind: "conflict", code: "VERSION_MISMATCH" };
-      }
-      if (
-        command.items.length < 2 ||
-        command.items.some(
-          (item) =>
-            !Number.isSafeInteger(item.amountInWon) || item.amountInWon <= 0,
-        ) ||
-        command.items.reduce((sum, item) => sum + item.amountInWon, 0) !==
-          source.amountInWon
-      ) {
-        return { kind: "contract-failure", code: "INVALID_ITEM_SPLIT" };
-      }
-      const invalidTags = command.items.map((item) => validateExpenseTags(item.tags))
-        .find((result) => result.kind === "validation-error");
-      if (invalidTags?.kind === "validation-error") return { kind: "contract-failure", code: invalidTags.code };
-      const superseded: LedgerTransformationTransaction = {
-        ...copyTransaction(source),
-        lifecycleState: "superseded",
-        aggregateVersion: source.aggregateVersion + 1,
-      };
-      const derived = command.items.map<LedgerTransformationTransaction>(
-        (item, index) => ({
-          ...copyTransaction(source),
-          transactionId: `${source.transactionId}:item:${index + 1}:${command.operationKey}`,
-          lifecycleState: "active",
-          amountInWon: item.amountInWon,
-          merchant: item.merchant,
-          categoryId: item.categoryId,
-          memo: item.memo,
-          tags: item.tags === undefined ? [...(source.tags ?? [])] : readExpenseTags(item.tags),
-          aggregateVersion: 1,
-          provenance: { ...source.provenance },
-        }),
-      );
-      const transactions = state.transactions.map((transaction) =>
-        transaction.transactionId === source.transactionId
-          ? superseded
-          : copyTransaction(transaction),
-      );
-      transactions.push(...derived);
-      return commit(
-        command.operationKey,
-        { [source.transactionId]: command.expectedVersion },
-        selection,
-        state,
-        replaceTransactions(state, transactions),
-        derived.map((transaction) => transaction.transactionId),
-      );
-    },
-
-    update: async (command) => {
-      const replay = await input.store.findReceipt(command.operationKey);
-      if (replay !== undefined) return replay;
-      const selection = { transactionIds: [command.transactionId] };
-      const state = await input.store.load(selection);
-      const current = state.transactions.find(
-        (transaction) =>
-          transaction.transactionId === command.transactionId &&
-          transaction.lifecycleState === "active",
-      );
-      if (
-        current === undefined ||
-        current.aggregateVersion !== command.expectedVersion
-      ) {
-        return { kind: "conflict", code: "VERSION_MISMATCH" };
-      }
-      const changed: LedgerTransformationTransaction = {
-        ...copyTransaction(current),
-        amountInWon: command.amountInWon,
-        aggregateVersion: current.aggregateVersion + 1,
-      };
-      return commit(
-        command.operationKey,
-        { [current.transactionId]: command.expectedVersion },
-        selection,
-        state,
-        replaceTransactions(
-          state,
-          state.transactions.map((transaction) =>
-            transaction.transactionId === current.transactionId
-              ? changed
-              : copyTransaction(transaction),
-          ),
-        ),
-        [changed.transactionId],
-      );
-    },
-
     merge: async (command) => {
       const replay = await input.store.findReceipt(command.operationKey);
       if (replay !== undefined) return replay;

@@ -66,6 +66,8 @@ Android QuickEdit의 카테고리 조회는 `CategoryRepository.getActiveCategor
 
 `UpdateCategoryCatalog`의 operation은 versioned discriminated union입니다.
 
+현재 목록·기본값 표시는 Web의 `categoryService → CategoryProvider`와 Android `CategoryRepository`가 실제 소비하는 canonical Catalog 문서에서 파생합니다. 호출자 없는 서버 `listActive`, `defaultForManualEntry`, `legacyQuickEditCategories`와 전용 read port를 별도 구현으로 유지하지 않습니다. Web은 active 정렬·기본값·빈 값과 오류 구분을 실제 mapper/Provider 계약으로 검증하며, legacy Android의 표시 전용 다섯 카테고리 fallback은 실제 SDK 검사로 보존합니다. 공개 Read Contract와 향후 page 목표는 유지합니다. 범위·검증은 [계약별 정비 기록](../../../../../verification/contract-simplicity-2026-10-05/finance.md)을 참조합니다.
+
 | kind | payload | 추가 규칙 |
 |---|---|---|
 | `create` | name, color, optional budgetInWon | 새 categoryId는 서버 생성 |

@@ -65,6 +65,8 @@
 
 `ManageRecurringPlan` operation은 다음 versioned union입니다.
 
+현재 작성자 계약은 `recurringPlanManagementApplication`의 생성·수정 판정, `recurringSchedulerWorkflowApplication`과 Firebase Finance UoW의 월 처리, 승인 manifest를 받는 `financeRuntimeMigrationCollector`의 기존 작성자 mapping에서 검증합니다. 실행·테스트 호출자가 없는 별도 `recurringCreatorApplication`과 그 전용 port/receipt state는 제거했습니다. `MapLegacyRecurringCreator` 목표 계약과 명시적 같은 가구 mapping·기존 작성자 불변성·과거 원장 보존은 그대로 유지하며, 독립 endpoint가 이미 구현됐다고 간주하지 않습니다. 범위·검증은 [계약별 정비 기록](../../../../../verification/contract-simplicity-2026-10-05/finance.md)을 참조합니다.
+
 | kind | payload | 결과 |
 |---|---|---|
 | `create` | merchant, amountInWon, categoryId, dayOfMonth, optional memo, active | 새 plan |

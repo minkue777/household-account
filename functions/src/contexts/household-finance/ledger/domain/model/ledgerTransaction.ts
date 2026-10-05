@@ -39,14 +39,3 @@ export type LedgerCommandResult =
   | { kind: "conflict"; code: string; currentVersion?: number }
   | { kind: "not-found" }
   | { kind: "retryable-failure"; code: string };
-
-export type LedgerSummaryResult =
-  | {
-      kind: "success";
-      selectedDateAmountInWon: number;
-      monthAmountInWon: number;
-      yearAmountInWon: number;
-      categories: readonly { categoryId: string; amountInWon: number }[];
-    }
-  | { kind: "no-data" }
-  | { kind: "retryable-failure"; code: string };

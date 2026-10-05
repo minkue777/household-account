@@ -1,5 +1,4 @@
 export {
-  type ActiveCategoryListResult,
   type ArchiveCategoryCommand,
   type CategoryCatalogInputPort,
   type CategoryCatalogView,

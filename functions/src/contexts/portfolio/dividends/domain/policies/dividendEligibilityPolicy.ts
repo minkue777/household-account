@@ -1,7 +1,4 @@
-import type {
-  DividendEligibilityContribution,
-  PositionSnapshot,
-} from "../model/dividendLifecycle";
+import type { PositionSnapshot } from "../model/dividendLifecycle";
 
 function localDateDistance(left: string, right: string): number {
   const leftTime = Date.parse(`${left}T00:00:00Z`);
@@ -49,21 +46,4 @@ export function selectNearestPositionSnapshots(input: {
       })[0];
       return selected === undefined ? [] : [{ ...selected }];
     });
-}
-
-export function selectDividendEligibility(input: {
-  instrumentCode: string;
-  recordDate: string;
-  snapshots: readonly PositionSnapshot[];
-}): readonly DividendEligibilityContribution[] {
-  return selectNearestPositionSnapshots(input).map((selected) => ({
-    assetId: selected.assetId,
-    quantity: selected.quantity,
-    kind:
-      selected.snapshotDate === input.recordDate
-        ? "record-date-position"
-        : "nearest-position-snapshot",
-    snapshotDate: selected.snapshotDate,
-    sourceVersion: selected.sourceVersion,
-  }));
 }

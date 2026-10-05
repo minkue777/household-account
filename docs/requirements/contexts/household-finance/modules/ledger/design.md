@@ -78,6 +78,8 @@
 
 `RecordRecurringTransaction`은 transport endpoint가 아니며 `public.ts`의 Context Workflow용 제한 계약입니다. 이를 제공하는 Port 이름은 `RecordRecurringTransactionParticipant`입니다. participant는 commit하지 않고 검증 결과와 persistence-neutral 변경 의도만 반환합니다.
 
+현재 실행 경계에서 Update는 `basicLedgerService`, 항목 Split/복원은 `itemSplitRestorationService`, 월 Split은 `monthlySplitLifecycleService`가 담당합니다. `transformationLineageService`는 Merge/Unmerge와 지정 계보 취소 복구만 담당하며, 시험용으로 중복했던 Update/Split 구현은 두지 않습니다. 같은 version의 Update/Split 경합은 실제 Firebase SDK에서 두 저장 순서와 패자 원장·receipt·outbox 무변경을 검증합니다. 현재 기간 조회·검색·합계는 Web 공개 read model과 Reporting 소비자에서 제공하므로 호출자 없는 서버 기간 Query와 basic summary를 제거했습니다. 위의 목표 공개 Query 계약은 유지합니다. 범위·검증은 [계약별 정비 기록](../../../../../verification/contract-simplicity-2026-10-05/finance.md)을 참조합니다.
+
 일반 사용자용 공개 Port에는 deleted 거래의 조회·복구·물리 삭제를 두지 않습니다. 실수 삭제 복구는 감사 사유와 transactionId, expectedVersion을 요구하는 운영자 전용 `RestoreDeletedTransaction`으로 같은 ID를 active로 되돌리고, 영구 정리는 사용자가 대상을 명시해 요청한 뒤 운영자/Agent 전용 `PurgeDeletedTransaction`으로만 수행합니다. 두 작업은 일반 Web capability나 목록 UI에 노출하지 않으며, capture lineage·dedup claim이 연결된 거래는 DEC-041의 재등록 방지 자료까지 포함한 소유 경계 계획 없이는 단일 문서만 지우지 않습니다.
 
 ### 3.2 Command DTO
@@ -155,6 +157,8 @@ QuickEdit `items` operation은 DEC-055에 따라 분할을 누른 시점의 merc
 수동 생성과 일반 수정의 성공값은 `{contractVersion: "household-command-response.v1", commandId, result: {kind: "succeeded", value: LedgerTransactionCommandResult}}`에 담깁니다. receipt replay는 기존 response 규약을 따르며 `already-processed`도 성공값으로 해석합니다. `LedgerTransactionCommandResult.tags`와 Web `Expense.tags`는 이전 응답·문서를 읽도록 선택 필드로 유지합니다. [read/command Mapper](../../../../../../web/src/features/ledger/application/ledgerExpenseMapping.ts)가 문서와 응답의 배열을 같은 Expense 값으로 옮기며 목록·검색·낙관적 Projection에서 사용합니다. 이전 서버의 응답에 tags가 없다는 이유로 저장된 태그를 지웠다고 판단하지 않습니다.
 
 ### 3.3 Read Model
+
+편집 초안의 초기화는 부모의 `useExpenseEditor.editorKey`가 만드는 새 인스턴스에 맡깁니다. 목록 갱신 때 폼을 다시 초기화하지 않으며, 같은 거래를 재선택할 때에도 최신 원본으로 새 초안을 만듭니다. 저장·삭제는 모달 안의 공통 `runMutation`으로 pending 숨김·성공 종료·실패 안내 후 복구를 처리합니다. 알림과 분할은 종료 시점이 다르므로 이 흐름에 합치지 않습니다.
 
 Web 일반 수정과 삭제는 Command를 시작하면서 같은 pending 상태로 편집창을 즉시 숨겨 원장의 낙관적 변경을 바로 표시합니다. 삭제는 사용자 확인 뒤에만 시작하며, 마지막 거래를 지워 해당 날짜가 비어도 편집창을 서버 응답까지 노출하지 않습니다. 서버 응답을 기다리는 동안 해당 편집 인스턴스에 초안을 보관하고 중복 제출을 막습니다. 성공하면 인스턴스를 정리하고, 실패하면 서비스가 해당 변경을 원복한 뒤 오류 안내를 확인할 때 같은 초안을 다시 표시합니다. 다른 거래를 열거나 날짜·가구·페이지를 전환해 편집 인스턴스를 벗어나면 이전 수정·삭제 응답이 오류창을 띄우거나 창을 다시 열거나 새 편집창을 닫지 않습니다. 통계의 카테고리 내역 목록은 수정·삭제 요청 시 닫으며, 서버 확정으로 통계 캐시가 갱신됩니다.
 

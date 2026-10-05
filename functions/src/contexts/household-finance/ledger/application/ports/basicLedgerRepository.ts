@@ -13,9 +13,6 @@ export interface LedgerCommandRepository {
   findTransaction(
     transactionId: string,
   ): Promise<LedgerRepositoryReadResult<LedgerTransactionView | undefined>>;
-  listTransactions(
-    householdId: string,
-  ): Promise<LedgerRepositoryReadResult<readonly LedgerTransactionView[]>>;
   commit(input: {
     commandId: string;
     householdId: string;

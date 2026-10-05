@@ -4,7 +4,6 @@ import type * as firestore from "firebase-admin/firestore";
 import { FieldValue } from "firebase-admin/firestore";
 
 import type {
-  ActiveCategorySourceResult,
   CategoryCatalogMutation,
   CategoryCatalogStorePort,
 } from "../../../contexts/household-finance/categories-budget/application/ports/out/categoryCatalogStorePort";
@@ -128,21 +127,6 @@ export class FirebaseCategoryCatalogStore implements CategoryCatalogStorePort {
     return this.database.runTransaction(async (transaction) =>
       (await this.load(transaction)).state,
     );
-  }
-
-  async readActiveCategories(): Promise<ActiveCategorySourceResult> {
-    try {
-      const state = readCategoryCatalogDocument(
-        (await categoryCatalogReference(this.database, this.input.householdId).get()).data(),
-        this.input.householdId,
-      );
-      return {
-        kind: "success",
-        categories: state.categories.filter((category) => category.state === "active"),
-      };
-    } catch {
-      return { kind: "retryable-failure", code: "CATEGORY_REPOSITORY_UNAVAILABLE" };
-    }
   }
 
   async transact<T>(

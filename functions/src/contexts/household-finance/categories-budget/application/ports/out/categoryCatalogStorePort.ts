@@ -1,6 +1,5 @@
 import {
   CategoryCatalog,
-  CategoryEntity,
 } from "../../../domain/model/categoryCatalog";
 
 export interface CategoryCatalogMutation<T> {
@@ -8,13 +7,8 @@ export interface CategoryCatalogMutation<T> {
   value: T;
 }
 
-export type ActiveCategorySourceResult =
-  | { kind: "success"; categories: readonly CategoryEntity[] }
-  | { kind: "retryable-failure"; code: string };
-
 export interface CategoryCatalogStorePort {
   read(): Promise<CategoryCatalog>;
-  readActiveCategories(): Promise<ActiveCategorySourceResult>;
   transact<T>(
     operation: (current: CategoryCatalog) => CategoryCatalogMutation<T>,
   ): Promise<T>;

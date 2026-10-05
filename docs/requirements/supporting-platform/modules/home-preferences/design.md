@@ -229,3 +229,9 @@ Theme에 형식적인 Domain 폴더를 만들지 않는다.
 ### 명령별 조회 범위 (2026-10-05)
 
 홈 카드 변경은 preference와 household만 조회하며 지역화폐 유형 목록을 읽지 않는다. 기존 receipt는 먼저 재생한다. 지역화폐 선택은 현재 버전 검증 후 필요한 유형 목록을 같은 transaction에서 읽으며 canonical/legacy query를 순차 수행한다. 상태·mirror·receipt·Outbox 원자성은 동일하다. [검증 추적](../../../../operations/access-command-simplicity-2026-10-05.md).
+
+### 카드 키 해석의 단일 정의 (2026-10-05)
+
+서버 `homeSummary`의 카드 키 표와 `isHomeCardType`을 명령 입력과 canonical/legacy 저장 해석에서 함께 사용합니다. 명령은 기존 Web 키만 받고 저장 읽기는 canonical 키도 허용하는 차이를 유지합니다. 조회 순서·version·receipt·Outbox·지역화폐 최초 선택 정책은 바꾸지 않습니다. 미사용 서버 카드 결과 DTO를 제거했으며 실제 카드 원천 상태는 Web 조합 경계가 계속 소유합니다.
+
+카드 표는 `ReadonlyMap`으로 정의하여 일반 객체에서 상속되는 키도 지원 카드로 해석하지 않습니다. 미지원 키는 `UNSUPPORTED_HOME_CARD_TYPE`으로 거부하며 Preferences·receipt·Outbox를 변경하지 않습니다.

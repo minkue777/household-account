@@ -18,6 +18,18 @@ function command(sequence: number, commandName: string) {
 }
 
 describe("Firebase home preference atomic adapter", () => {
+  it.each(["toString", "constructor", "__proto__"])("지원하지 않는 카드 키 %s는 상태·receipt·Outbox를 쓰지 않는다", async (leftCard) => {
+    const memory = new InMemoryFirestore();
+    memory.seed("households/house-1", { lifecycleState: "active" });
+    const application = createHomePreferenceRuntimeApplication(new FirebaseHomePreferenceAtomicStore(memory as unknown as firestore.Firestore));
+    expect(await application.updateSummary({
+      ...command(1, "home.update-summary-preferences.v1"), leftCard, rightCard: "monthlySpent",
+    })).toEqual({ kind: "rejected", code: "UNSUPPORTED_HOME_CARD_TYPE" });
+    expect(memory.document("households/house-1/homePreferences/home")).toBeUndefined();
+    expect(memory.paths("commandReceipts/home-preferences/receipts/")).toEqual([]);
+    expect(memory.paths("outboxEvents/")).toEqual([]);
+  });
+
   it("카드 변경·재전송·버전 충돌은 잔액을 읽지 않고 실제 유형 선택만 두 저장소를 읽는다", async () => {
     const memory = new InMemoryFirestore();
     memory.seed("households/house-1", { lifecycleState: "active" });

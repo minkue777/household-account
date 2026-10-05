@@ -1,0 +1,229 @@
+{
+  "baseline": "676731d9abda95439afc2dfd827690029d89e048",
+  "counting": "Whole changed runtime source files, physical lines including blank lines and comments; tests/docs/generated excluded; deleted files count as zero.",
+  "files": [
+    {
+      "path": "functions/src/adapters/firebase/categories/firebaseCategoryCatalogStore.ts",
+      "before": 267,
+      "after": 251
+    },
+    {
+      "path": "functions/src/adapters/firebase/home-preferences/firebaseHomePreferenceAtomicStore.ts",
+      "before": 316,
+      "after": 302
+    },
+    {
+      "path": "functions/src/adapters/firebase/ledger/firebaseLedgerCommandRepository.ts",
+      "before": 297,
+      "after": 270
+    },
+    {
+      "path": "functions/src/adapters/firebase/portfolio/firebaseAssetAutomationRuntimeStore.ts",
+      "before": 808,
+      "after": 723
+    },
+    {
+      "path": "functions/src/contexts/household-finance/categories-budget/application/categoryCatalogApplication.ts",
+      "before": 373,
+      "after": 337
+    },
+    {
+      "path": "functions/src/contexts/household-finance/categories-budget/application/ports/in/categoryCatalogInputPort.ts",
+      "before": 97,
+      "after": 86
+    },
+    {
+      "path": "functions/src/contexts/household-finance/categories-budget/application/ports/out/categoryCatalogStorePort.ts",
+      "before": 26,
+      "after": 20
+    },
+    {
+      "path": "functions/src/contexts/household-finance/categories-budget/public.ts",
+      "before": 13,
+      "after": 12
+    },
+    {
+      "path": "functions/src/contexts/household-finance/ledger/application/commands/basicLedgerService.ts",
+      "before": 403,
+      "after": 353
+    },
+    {
+      "path": "functions/src/contexts/household-finance/ledger/application/commands/transformationLineageService.ts",
+      "before": 624,
+      "after": 506
+    },
+    {
+      "path": "functions/src/contexts/household-finance/ledger/application/ports/basicLedgerRepository.ts",
+      "before": 42,
+      "after": 39
+    },
+    {
+      "path": "functions/src/contexts/household-finance/ledger/application/ports/out/ledgerReadSource.ts",
+      "before": 12,
+      "after": 0
+    },
+    {
+      "path": "functions/src/contexts/household-finance/ledger/application/queries/ledgerPeriodQuery.ts",
+      "before": 108,
+      "after": 0
+    },
+    {
+      "path": "functions/src/contexts/household-finance/ledger/domain/model/ledgerReadFact.ts",
+      "before": 9,
+      "after": 0
+    },
+    {
+      "path": "functions/src/contexts/household-finance/ledger/domain/model/ledgerTransaction.ts",
+      "before": 52,
+      "after": 41
+    },
+    {
+      "path": "functions/src/contexts/household-finance/ledger/domain/policies/ledgerReadSelection.ts",
+      "before": 66,
+      "after": 0
+    },
+    {
+      "path": "functions/src/contexts/household-finance/ledger/public.ts",
+      "before": 53,
+      "after": 42
+    },
+    {
+      "path": "functions/src/contexts/household-finance/recurring/application/ports/in/recurringCreatorInputPort.ts",
+      "before": 70,
+      "after": 0
+    },
+    {
+      "path": "functions/src/contexts/household-finance/recurring/application/ports/out/recurringCreatorPorts.ts",
+      "before": 40,
+      "after": 0
+    },
+    {
+      "path": "functions/src/contexts/household-finance/recurring/application/recurringCreatorApplication.ts",
+      "before": 276,
+      "after": 0
+    },
+    {
+      "path": "functions/src/contexts/household-finance/recurring/domain/model/recurringPlan.ts",
+      "before": 63,
+      "after": 47
+    },
+    {
+      "path": "functions/src/contexts/household-finance/recurring/public.ts",
+      "before": 34,
+      "after": 26
+    },
+    {
+      "path": "functions/src/contexts/payment-capture/shortcut-ingestion/application/ports/in/shortcutCredentialStorageInstallerInputPort.ts",
+      "before": 31,
+      "after": 0
+    },
+    {
+      "path": "functions/src/contexts/payment-capture/shortcut-ingestion/application/shortcutCredentialStorageInstallerApplication.ts",
+      "before": 91,
+      "after": 0
+    },
+    {
+      "path": "functions/src/contexts/payment-capture/shortcut-ingestion/domain/model/shortcutCredentialStorageInstaller.ts",
+      "before": 74,
+      "after": 0
+    },
+    {
+      "path": "functions/src/contexts/payment-capture/shortcut-ingestion/domain/policies/createShortcutInstallation.ts",
+      "before": 40,
+      "after": 0
+    },
+    {
+      "path": "functions/src/contexts/payment-capture/shortcut-ingestion/public.ts",
+      "before": 71,
+      "after": 45
+    },
+    {
+      "path": "functions/src/contexts/portfolio/automation/public.ts",
+      "before": 93,
+      "after": 52
+    },
+    {
+      "path": "functions/src/contexts/portfolio/core/application/portfolioAssetAutomationSynchronization.ts",
+      "before": 131,
+      "after": 103
+    },
+    {
+      "path": "functions/src/contexts/portfolio/core/application/portfolioAssetCommandApplication.ts",
+      "before": 476,
+      "after": 443
+    },
+    {
+      "path": "functions/src/contexts/portfolio/core/application/portfolioPositionPolicy.ts",
+      "before": 251,
+      "after": 233
+    },
+    {
+      "path": "functions/src/contexts/portfolio/core/domain/model/assetOrder.ts",
+      "before": 69,
+      "after": 21
+    },
+    {
+      "path": "functions/src/contexts/portfolio/dividends/domain/policies/dividendEligibilityPolicy.ts",
+      "before": 69,
+      "after": 49
+    },
+    {
+      "path": "functions/src/contexts/portfolio/dividends/domain/policies/dividendReadPolicies.ts",
+      "before": 116,
+      "after": 0
+    },
+    {
+      "path": "functions/src/contexts/portfolio/holdings/domain/policies/assetRevaluationPolicy.ts",
+      "before": 44,
+      "after": 0
+    },
+    {
+      "path": "functions/src/contexts/portfolio/holdings/domain/policies/foreignCurrencyValuationPolicy.ts",
+      "before": 78,
+      "after": 59
+    },
+    {
+      "path": "functions/src/contexts/portfolio/holdings/domain/policies/holdingValuationPolicy.ts",
+      "before": 114,
+      "after": 0
+    },
+    {
+      "path": "functions/src/contexts/portfolio/holdings/domain/policies/marketRoutingPolicy.ts",
+      "before": 34,
+      "after": 5
+    },
+    {
+      "path": "functions/src/contexts/portfolio/holdings/public.ts",
+      "before": 149,
+      "after": 141
+    },
+    {
+      "path": "functions/src/platform/home-preferences/application/homePreferenceRuntimeApplication.ts",
+      "before": 158,
+      "after": 151
+    },
+    {
+      "path": "functions/src/platform/home-preferences/domain/homeSummary.ts",
+      "before": 22,
+      "after": 24
+    },
+    {
+      "path": "web/src/components/expense/ExpenseEditModal.tsx",
+      "before": 706,
+      "after": 665
+    },
+    {
+      "path": "web/src/lib/pushNotificationService.ts",
+      "before": 55,
+      "after": 19
+    },
+    {
+      "path": "web/src/lib/utils/useGoldHolding.ts",
+      "before": 140,
+      "after": 130
+    }
+  ],
+  "before": 7061,
+  "after": 5195,
+  "removed": 1866
+}

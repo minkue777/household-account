@@ -7,8 +7,6 @@ import type {
 import type {
   LedgerCommandResult,
   LedgerEvent,
-  LedgerSummaryResult,
-  LedgerTransactionType,
   LedgerTransactionView,
 } from "../../domain/model/ledgerTransaction";
 import {
@@ -58,13 +56,6 @@ export interface BasicLedgerCommands {
     transactionId: string;
     expectedVersion: number;
   }): Promise<LedgerCommandResult>;
-  summary(input: {
-    householdId: string;
-    transactionType: LedgerTransactionType;
-    selectedDate: string;
-    yearMonth: string;
-    year: number;
-  }): Promise<LedgerSummaryResult>;
   requestNotification(input: {
     commandId: string;
     actor: { householdId: string; actingMemberId: string };
@@ -320,47 +311,6 @@ export function createBasicLedgerCommands(input: {
         type: "TransactionDeleted.v1",
         transactionId: deleted.transactionId,
       });
-    },
-
-    summary: async (query) => {
-      const loaded = await input.repository.listTransactions(query.householdId);
-      if (loaded.kind !== "ready") return loaded;
-      const active = loaded.value.filter(
-        (transaction) =>
-          transaction.lifecycleState === "active" &&
-          transaction.transactionType === query.transactionType &&
-          transaction.accountingDate.startsWith(`${query.year}-`),
-      );
-      if (active.length === 0) return { kind: "no-data" };
-
-      const categoryTotals = new Map<string, number>();
-      for (const transaction of active) {
-        categoryTotals.set(
-          transaction.categoryId,
-          (categoryTotals.get(transaction.categoryId) ?? 0) +
-            transaction.amountInWon,
-        );
-      }
-      return {
-        kind: "success",
-        selectedDateAmountInWon: active
-          .filter((transaction) => transaction.accountingDate === query.selectedDate)
-          .reduce((sum, transaction) => sum + transaction.amountInWon, 0),
-        monthAmountInWon: active
-          .filter((transaction) => transaction.accountingDate.startsWith(query.yearMonth))
-          .reduce((sum, transaction) => sum + transaction.amountInWon, 0),
-        yearAmountInWon: active.reduce(
-          (sum, transaction) => sum + transaction.amountInWon,
-          0,
-        ),
-        categories: [...categoryTotals.entries()]
-          .map(([categoryId, amountInWon]) => ({ categoryId, amountInWon }))
-          .sort(
-            (left, right) =>
-              right.amountInWon - left.amountInWon ||
-              left.categoryId.localeCompare(right.categoryId),
-          ),
-      };
     },
 
     requestNotification: async (command) => {

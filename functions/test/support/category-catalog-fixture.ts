@@ -1,9 +1,7 @@
 import {
   createCategoryCatalogApplication,
-  legacyQuickEditDisplay,
 } from "../../src/contexts/household-finance/categories-budget/application/categoryCatalogApplication";
 import type {
-  ActiveCategorySourceResult,
   CategoryCatalogIdPort,
   CategoryCatalogMutation,
   CategoryCatalogStorePort,
@@ -32,8 +30,6 @@ export interface CategoryCatalogFixtureState {
 
 export interface CategoryCatalogFixture {
   state?: Partial<CategoryCatalogFixtureState>;
-  failList?: boolean;
-  emptyQuickEditList?: boolean;
 }
 
 export interface CategoryCatalogFixtureSubject extends CategoryCatalogInputPort {
@@ -55,7 +51,6 @@ class FixtureCategoryCatalogStore implements CategoryCatalogStorePort {
 
   constructor(
     fixture: CategoryCatalogFixture,
-    private readonly failList: boolean,
   ) {
     this.catalog = {
       categories: (fixture.state?.categories ?? []).map((category) => ({
@@ -70,16 +65,6 @@ class FixtureCategoryCatalogStore implements CategoryCatalogStorePort {
   async read(): Promise<CategoryCatalog> {
     await this.serial;
     return cloneCatalog(this.catalog);
-  }
-
-  async readActiveCategories(): Promise<ActiveCategorySourceResult> {
-    await this.serial;
-    return this.failList
-      ? {
-          kind: "retryable-failure",
-          code: "CATEGORY_REPOSITORY_UNAVAILABLE",
-        }
-      : { kind: "success", categories: cloneCatalog(this.catalog).categories };
   }
 
   async transact<T>(
@@ -158,7 +143,6 @@ class FixtureCategoryCatalogDriver implements CategoryCatalogFixtureSubject {
     private readonly store: FixtureCategoryCatalogStore,
     private readonly remapper: FixtureCategoryReferenceRemapper,
     private readonly historicalTransactionCategoryIds: readonly string[],
-    private readonly emptyQuickEditList: boolean,
   ) {}
 
   initializeDefaults(commandKey: string) {
@@ -189,20 +173,6 @@ class FixtureCategoryCatalogDriver implements CategoryCatalogFixtureSubject {
     return this.application.setDefault(input);
   }
 
-  listActive() {
-    return this.application.listActive();
-  }
-
-  async legacyQuickEditCategories(): Promise<readonly CategoryView[]> {
-    return this.emptyQuickEditList
-      ? legacyQuickEditDisplay({ kind: "no-data" })
-      : this.application.legacyQuickEditCategories();
-  }
-
-  defaultForManualEntry() {
-    return this.application.defaultForManualEntry();
-  }
-
   state(): CategoryCatalogFixtureState {
     const catalog = this.store.snapshot();
     return {
@@ -221,7 +191,7 @@ class FixtureCategoryCatalogDriver implements CategoryCatalogFixtureSubject {
 export function createCategoryCatalogFixtureSubject(
   fixture: CategoryCatalogFixture = {},
 ): CategoryCatalogFixtureSubject {
-  const store = new FixtureCategoryCatalogStore(fixture, fixture.failList ?? false);
+  const store = new FixtureCategoryCatalogStore(fixture);
   const remapper = new FixtureCategoryReferenceRemapper(fixture);
   const application = createCategoryCatalogApplication({
     store,
@@ -233,6 +203,5 @@ export function createCategoryCatalogFixtureSubject(
     store,
     remapper,
     fixture.state?.historicalTransactionCategoryIds ?? [],
-    fixture.emptyQuickEditList ?? false,
   );
 }

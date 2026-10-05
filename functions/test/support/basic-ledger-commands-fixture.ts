@@ -39,15 +39,6 @@ export function createBasicLedgerCommandsFixtureSubject(fixture: {
         ),
       };
     },
-    listTransactions: async () => {
-      if (fixture.repositoryFailure !== undefined) {
-        return { kind: "retryable-failure", code: fixture.repositoryFailure };
-      }
-      return {
-        kind: "ready",
-        value: transactions.map((transaction) => ({ ...transaction })),
-      };
-    },
     commit: async ({ commandId, transaction, event, result }) => {
       if (failNextWrite) {
         failNextWrite = false;

@@ -350,6 +350,14 @@ export class FirebaseAssetAutomationRuntimeStore
 
     try {
       return await this.database.runTransaction(async (transaction) => {
+        const markNeedsAttention = (code: string, targetId: string): AssetAutomationTargetResult => {
+          transaction.update(planReference, {
+            status: "needs-attention",
+            attentionCode: code,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+          return { kind: "needs-attention", targetId, code };
+        };
         const planSnapshot = await transaction.get(planReference);
         if (!planSnapshot.exists) {
           return {
@@ -362,16 +370,7 @@ export class FirebaseAssetAutomationRuntimeStore
         const assetId = text(planData, "assetId");
         const parsedOperation = operation(planData.operation);
         if (assetId === undefined || parsedOperation === undefined) {
-          transaction.update(planReference, {
-            status: "needs-attention",
-            attentionCode: "AUTOMATION_PLAN_IDENTITY_INVALID",
-            updatedAt: FieldValue.serverTimestamp(),
-          });
-          return {
-            kind: "needs-attention",
-            targetId: executionTargetId(input.plan),
-            code: "AUTOMATION_PLAN_IDENTITY_INVALID",
-          } as const;
+          return markNeedsAttention("AUTOMATION_PLAN_IDENTITY_INVALID", executionTargetId(input.plan));
         }
         if (
           (input.plan.assetId !== undefined && input.plan.assetId !== assetId) ||
@@ -424,16 +423,7 @@ export class FirebaseAssetAutomationRuntimeStore
           } as const;
         }
         if (receiptSnapshot.exists) {
-          transaction.update(planReference, {
-            status: "needs-attention",
-            attentionCode: "AUTOMATION_RECEIPT_WITHOUT_EXECUTION",
-            updatedAt: FieldValue.serverTimestamp(),
-          });
-          return {
-            kind: "needs-attention",
-            targetId: executionTargetId(input.plan),
-            code: "AUTOMATION_RECEIPT_WITHOUT_EXECUTION",
-          } as const;
+          return markNeedsAttention("AUTOMATION_RECEIPT_WITHOUT_EXECUTION", executionTargetId(input.plan));
         }
 
         const status = text(planData, "status");
@@ -491,43 +481,16 @@ export class FirebaseAssetAutomationRuntimeStore
               !["installment", "적금"].includes(text(assetData, "subType") ?? ""))) ||
           (parsedOperation === "loan-repayment" && assetType !== "loan")
         ) {
-          transaction.update(planReference, {
-            status: "needs-attention",
-            attentionCode: "PLAN_ASSET_TYPE_MISMATCH",
-            updatedAt: FieldValue.serverTimestamp(),
-          });
-          return {
-            kind: "needs-attention",
-            targetId: executionKey,
-            code: "PLAN_ASSET_TYPE_MISMATCH",
-          } as const;
+          return markNeedsAttention("PLAN_ASSET_TYPE_MISMATCH", executionKey);
         }
 
         const rawBalance = assetData.currentBalance;
         if (typeof rawBalance !== "number" || !Number.isFinite(rawBalance)) {
-          transaction.update(planReference, {
-            status: "needs-attention",
-            attentionCode: "INVALID_ASSET_BALANCE",
-            updatedAt: FieldValue.serverTimestamp(),
-          });
-          return {
-            kind: "needs-attention",
-            targetId: executionKey,
-            code: "INVALID_ASSET_BALANCE",
-          } as const;
+          return markNeedsAttention("INVALID_ASSET_BALANCE", executionKey);
         }
         const currentBalance = Math.max(0, Math.round(Math.abs(rawBalance)));
         if (revisionSnapshot.empty) {
-          transaction.update(planReference, {
-            status: "needs-attention",
-            attentionCode: "AUTOMATION_REVISION_NOT_FOUND",
-            updatedAt: FieldValue.serverTimestamp(),
-          });
-          return {
-            kind: "needs-attention",
-            targetId: executionKey,
-            code: "AUTOMATION_REVISION_NOT_FOUND",
-          } as const;
+          return markNeedsAttention("AUTOMATION_REVISION_NOT_FOUND", executionKey);
         }
         const mappedRevisions = revisionSnapshot.docs.map((document) => ({
           data: document.data(),
@@ -553,16 +516,7 @@ export class FirebaseAssetAutomationRuntimeStore
           !revisionSet.has(currentRevision) ||
           revisionIdentityInvalid
         ) {
-          transaction.update(planReference, {
-            status: "needs-attention",
-            attentionCode: "AUTOMATION_REVISION_INVALID",
-            updatedAt: FieldValue.serverTimestamp(),
-          });
-          return {
-            kind: "needs-attention",
-            targetId: executionKey,
-            code: "AUTOMATION_REVISION_INVALID",
-          } as const;
+          return markNeedsAttention("AUTOMATION_REVISION_INVALID", executionKey);
         }
         const activation = {
           firstApplicableMonth: text(planData, "firstApplicableMonth"),
@@ -578,22 +532,10 @@ export class FirebaseAssetAutomationRuntimeStore
           input.plan.nextDueDate,
         );
         if (selected === undefined || selected.effectiveDate !== input.plan.nextDueDate) {
-          transaction.update(planReference, {
-            status: "needs-attention",
-            attentionCode:
-              selected === undefined
-                ? "AUTOMATION_REVISION_NOT_FOUND"
-                : "AUTOMATION_NEXT_DUE_DATE_MISMATCH",
-            updatedAt: FieldValue.serverTimestamp(),
-          });
-          return {
-            kind: "needs-attention",
-            targetId: executionKey,
-            code:
-              selected === undefined
-                ? "AUTOMATION_REVISION_NOT_FOUND"
-                : "AUTOMATION_NEXT_DUE_DATE_MISMATCH",
-          } as const;
+          return markNeedsAttention(
+            selected === undefined ? "AUTOMATION_REVISION_NOT_FOUND" : "AUTOMATION_NEXT_DUE_DATE_MISMATCH",
+            executionKey,
+          );
         }
 
         let appliedAmount = selected.revision.amountInWon;
@@ -613,16 +555,7 @@ export class FirebaseAssetAutomationRuntimeStore
             method !== "equal-principal" &&
             method !== "equal-principal-and-interest"
           ) {
-            transaction.update(planReference, {
-              status: "needs-attention",
-              attentionCode: "UNSUPPORTED_LOAN_REPAYMENT_METHOD",
-              updatedAt: FieldValue.serverTimestamp(),
-            });
-            return {
-              kind: "needs-attention",
-              targetId: executionKey,
-              code: "UNSUPPORTED_LOAN_REPAYMENT_METHOD",
-            } as const;
+            return markNeedsAttention("UNSUPPORTED_LOAN_REPAYMENT_METHOD", executionKey);
           }
           const repayment = calculateLoanPrincipalPaymentPolicy({
             balance: currentBalance,
@@ -631,16 +564,7 @@ export class FirebaseAssetAutomationRuntimeStore
             method,
           });
           if (repayment.kind === "validation-error") {
-            transaction.update(planReference, {
-              status: "needs-attention",
-              attentionCode: repayment.code,
-              updatedAt: FieldValue.serverTimestamp(),
-            });
-            return {
-              kind: "needs-attention",
-              targetId: executionKey,
-              code: repayment.code,
-            } as const;
+            return markNeedsAttention(repayment.code, executionKey);
           }
           if (repayment.kind === "unsupported-method") {
             return {
@@ -657,16 +581,7 @@ export class FirebaseAssetAutomationRuntimeStore
         const followingMonth = nextYearMonth(parsedTargetMonth);
         const nextRevision = effectiveRevision(revisions, followingMonth, activation);
         if (nextRevision === undefined) {
-          transaction.update(planReference, {
-            status: "needs-attention",
-            attentionCode: "AUTOMATION_REVISION_NOT_FOUND",
-            updatedAt: FieldValue.serverTimestamp(),
-          });
-          return {
-            kind: "needs-attention",
-            targetId: executionKey,
-            code: "AUTOMATION_REVISION_NOT_FOUND",
-          } as const;
+          return markNeedsAttention("AUTOMATION_REVISION_NOT_FOUND", executionKey);
         }
         const nextDueDate = nextRevision.effectiveDate;
         const planVersion = safeVersion(planData) + 1;

@@ -497,3 +497,7 @@ Domain은 Firebase, node-fetch, HTML parser와 Holdings Entity를 import하지 �
 6. 명시적 KRX ETF discovery page와 Canonical nonterminal lifecycle sweep page를 분리하고 `T-DIV-002`, `T-DIV-003`을 활성화합니다.
 7. 최근 1년 discovery와 부분 실패·retry contract를 연결합니다.
 8. Position history Adapter와 DEC-014의 최근접·이전 날짜 동률 우선 `T-DIV-001` 목표 테스트를 활성화합니다.
+
+### 계약별 단순화 검토 (2026-10-05)
+
+실제 수집·전이는 `dividendScheduledRuntimeApplication`, 확정 Event와 연간 projection의 원자 저장은 `FirebaseDividendEventRuntimeRepository`, 조회는 실제 projection reader와 Web read model이 소유한다. 소비자 없는 병행 연간 합계·예상 배당·적격 수량 wrapper를 제거했다. source Asset별 수량 증거, 정정/명시 취소와 paid 불변, NoData/실패 구분, 이관 자료 조회 호환은 유지한다. 승인된 자료 backfill 없이 이관 fallback을 삭제하지 않는다. 공개 계약과 검증 근거는 [Portfolio 검토](../../../../../verification/contract-simplicity-2026-10-05/portfolio.md)에 있다.

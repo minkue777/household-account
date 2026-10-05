@@ -534,3 +534,7 @@ Domain은 Firebase·React와 다른 기능 Entity를 import하지 않습니다. 
 ### 명령 확정 응답 (2026-10-05)
 
 자산·보유종목 저장 성공은 canonical 업무 필드와 aggregateVersion을 `confirmation` v1으로 반환하며 동일 receipt에 저장한다. Position 명령에는 부모 자산의 재평가 결과도 포함한다. occurredAt은 업무 시각이고 실제 createdAt/updatedAt commit Timestamp는 조회 문서가 소유한다. 이전 receipt에는 확정 객체를 합성하지 않는다. 새 서버 선행 배포와 Web 소비자 전환은 [작업 기록](../../../../../operations/portfolio-command-confirmation-2026-10-05.md)을 따른다.
+
+### 계약별 단순화 검토 (2026-10-05)
+
+자산 생성·수정의 필드 검증은 기존 우선순서대로 실패를 즉시 반환한다. 여러 실패 결과를 다시 배열로 모아 찾거나 불가능한 기본 오류를 합성하지 않는다. 실제 runtime의 정렬 집합·version 검증을 유지하고 호출자가 없는 별도 정렬 정책만 제거했다. receipt·원자 저장·운영 복구·purge와 명의/합계 규칙은 유지한다. 공개 계약별 판정과 실행 파일 범위는 [Portfolio 검토](../../../../../verification/contract-simplicity-2026-10-05/portfolio.md)에 있다.

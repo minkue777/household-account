@@ -76,7 +76,6 @@ export default function ExpenseEditModal({
     setDate,
     setTags,
     setTagInput,
-    resetExpenseFormState,
   } = useExpenseFormState({
     initial: {
       merchant: expense.merchant,
@@ -93,7 +92,6 @@ export default function ExpenseEditModal({
     splitMonthsInput,
     showSplitInput,
     splitMonthsError,
-    resetMonthlySplitInput,
     toggleSplitInput,
     handleSplitMonthsInputChange,
     getValidSplitMonths,
@@ -142,27 +140,35 @@ export default function ExpenseEditModal({
     return () => { isOpenRef.current = false; };
   }, [isOpen]);
 
-  useEffect(() => {
-    // Optimistic updates and rollback must not erase the submitted draft.
-    if (!isOpen || isSubmittingRef.current) {
-      return;
-    }
+  const runMutation = async (action: '수정' | '삭제', mutate: () => Promise<void> | void) => {
+    if (isSubmittingRef.current) return;
 
-    resetExpenseFormState({
-      merchant: expense.merchant,
-      amount: expense.amount.toString(),
-      category: expense.category,
-      memo: expense.memo || '',
-      date: expense.date,
-      tags: normalizeExpenseTags(expense.tags),
-    });
-    setRememberMerchant(false);
-    resetMonthlySplitInput();
-    setEditSplitMonths(expense.splitTotal || 2);
-    setShowEditSplitGroup(false);
-    setShowDeleteConfirm(false);
-    setPendingActionConfirm(null);
-  }, [expense, isOpen, resetExpenseFormState, resetMonthlySplitInput]);
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
+    // Keep this editor's draft while the optimistic list is visible.
+    setIsMutationPending(true);
+    try {
+      await mutate();
+      if (isOpenRef.current) onClose();
+    } catch (error) {
+      // A response from an abandoned editor must not affect the new selection.
+      if (!isOpenRef.current) return;
+      const detail = error instanceof Error && error.message.trim() !== ''
+        ? `\n\n${error.message}`
+        : '';
+      const failure = action === '수정'
+        ? `${transactionLabel} 수정을 저장하지 못했습니다.`
+        : `${transactionLabel}을 삭제하지 못했습니다.`;
+      await showAlert(
+        `${failure} 최신 내역을 확인한 뒤 다시 시도해 주세요.${detail}`,
+        `${transactionLabel} ${action} 실패`
+      );
+    } finally {
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
+      setIsMutationPending(false);
+    }
+  };
 
   const handleSave = async () => {
     if (isSubmittingRef.current) {
@@ -170,7 +176,6 @@ export default function ExpenseEditModal({
     }
 
     let updates: ExpenseUpdates;
-
 
     if (isIncome) {
       const item = memo.trim();
@@ -213,65 +218,19 @@ export default function ExpenseEditModal({
         return;
       }
       updates = expenseUpdates;
-
-
     }
 
-    isSubmittingRef.current = true;
-    setIsSubmitting(true);
-    // Reveal the optimistic list immediately, retaining the draft until the command settles.
-    setIsMutationPending(true);
-    try {
-      const pendingSave = Object.keys(updates).length > 0
-        ? onSave(updates, allowRememberMerchant && !isIncome && rememberMerchant && category !== expense.category)
-        : undefined;
-      await pendingSave;
-      if (isOpenRef.current) onClose();
-
-    } catch (error) {
-      // An abandoned editor must not interrupt another transaction or page.
-      if (!isOpenRef.current) return;
-      const detail = error instanceof Error && error.message.trim() !== ''
-        ? `\n\n${error.message}`
-        : '';
-      await showAlert(
-        `${transactionLabel} 수정을 저장하지 못했습니다. 최신 내역을 확인한 뒤 다시 시도해 주세요.${detail}`,
-        `${transactionLabel} 수정 실패`
-      );
-    } finally {
-      isSubmittingRef.current = false;
-      setIsSubmitting(false);
-      setIsMutationPending(false);
-    }
+    await runMutation('수정', () => {
+      if (Object.keys(updates).length > 0) {
+        return onSave(updates, allowRememberMerchant && !isIncome && rememberMerchant && category !== expense.category);
+      }
+    });
   };
 
   const handleDelete = async () => {
-    if (!onDelete || isSubmittingRef.current) {
-      return;
-    }
-
-    isSubmittingRef.current = true;
-    setIsSubmitting(true);
+    if (!onDelete || isSubmittingRef.current) return;
     setShowDeleteConfirm(false);
-    setIsMutationPending(true);
-    try {
-      const pendingDelete = onDelete();
-      await pendingDelete;
-      if (isOpenRef.current) onClose();
-    } catch (error) {
-      if (!isOpenRef.current) return;
-      const detail = error instanceof Error && error.message.trim() !== ''
-        ? `\n\n${error.message}`
-        : '';
-      await showAlert(
-        `${transactionLabel}을 삭제하지 못했습니다. 최신 내역을 확인한 뒤 다시 시도해 주세요.${detail}`,
-        `${transactionLabel} 삭제 실패`
-      );
-    } finally {
-      isSubmittingRef.current = false;
-      setIsSubmitting(false);
-      setIsMutationPending(false);
-    }
+    await runMutation('삭제', onDelete);
   };
 
   const handleNotifyPartner = async () => {

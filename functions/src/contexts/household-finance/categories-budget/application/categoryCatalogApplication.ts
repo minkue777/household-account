@@ -1,5 +1,4 @@
 import {
-  ActiveCategoryListResult,
   ArchiveCategoryCommand,
   CategoryCatalogInputPort,
   CategoryCatalogView,
@@ -49,15 +48,6 @@ function toCatalogView(catalog: CategoryCatalog): CategoryCatalogView {
     defaultCategoryId: catalog.defaultCategoryId,
     catalogVersion: catalog.catalogVersion,
   };
-}
-
-export function legacyQuickEditDisplay(
-  result: ActiveCategoryListResult,
-): readonly CategoryView[] {
-  if (result.kind === "success" && result.items.length > 0) {
-    return result.items;
-  }
-  return defaultCategories().map(toView);
 }
 
 export async function initializeDefaultCategories(
@@ -337,32 +327,6 @@ class DefaultCategoryCatalogApplication implements CategoryCatalogInputPort {
       };
       },
     );
-  }
-
-  async listActive(): Promise<ActiveCategoryListResult> {
-    const source = await this.dependencies.store.readActiveCategories();
-    if (source.kind !== "success") {
-      return source;
-    }
-    const items = activeCategories(source.categories).map(toView);
-    return items.length === 0 ? { kind: "no-data" } : { kind: "success", items };
-  }
-
-  async legacyQuickEditCategories(): Promise<readonly CategoryView[]> {
-    return legacyQuickEditDisplay(await this.listActive());
-  }
-
-  async defaultForManualEntry(): Promise<
-    | { kind: "success"; value: CategoryView }
-    | { kind: "contract-failure"; code: "DEFAULT_CATEGORY_REQUIRED" }
-  > {
-    const catalog = await this.dependencies.store.read();
-    const category = catalog.categories.find(
-      ({ categoryId }) => categoryId === catalog.defaultCategoryId,
-    );
-    return category !== undefined && category.state === "active"
-      ? { kind: "success", value: toView(category) }
-      : { kind: "contract-failure", code: "DEFAULT_CATEGORY_REQUIRED" };
   }
 }
 

@@ -65,17 +65,6 @@ interface LedgerLineageFixture {
 }
 
 export interface LedgerTransformationSubject {
-  splitItems(command: {
-    operationKey: string;
-    sourceId: string;
-    expectedVersion: number;
-    items: readonly {
-      amountInWon: number;
-      merchant: string;
-      categoryId: string;
-      memo: string;
-    }[];
-  }): Promise<LedgerMutationResult>;
   merge(command: {
     operationKey: string;
     targetId: string;
@@ -86,12 +75,6 @@ export interface LedgerTransformationSubject {
     operationKey: string;
     mergedTransactionId: string;
     expectedVersion: number;
-  }): Promise<LedgerMutationResult>;
-  update(command: {
-    operationKey: string;
-    transactionId: string;
-    expectedVersion: number;
-    amountInWon: number;
   }): Promise<LedgerMutationResult>;
   cancelCapturedLineage(command: {
     cancellationKey: string;
@@ -164,111 +147,6 @@ function fixture(
 }
 
 describe("Ledger 구조 변경·capture lineage 공개 계약", () => {
-  it("[T-LED-003][SPL-001/LED-009] item split은 원본을 같은 ID로 superseded 보존하고 모든 파생에 불변 provenance를 전달한다", async () => {
-    const original = captured("original", 10_000, "lineage-a", {
-      provenance: {
-        source: "ios-shortcut",
-        originChannel: "shortcut",
-        creatorMemberId: "member-a",
-        cardEvidence: "KB:9876",
-        captureLineageId: "lineage-a",
-        localCurrencyType: "gyeonggi",
-      },
-    });
-    const subject = createSubject(fixture([original]));
-
-    const result = await subject.splitItems({
-      operationKey: "split-1",
-      sourceId: "original",
-      expectedVersion: 1,
-      items: [
-        { amountInWon: 4_000, merchant: "A", categoryId: "food", memo: "a" },
-        { amountInWon: 6_000, merchant: "B", categoryId: "etc", memo: "b" },
-      ],
-    });
-
-    expect(result.kind).toBe("success");
-    const state = subject.state();
-    const source = state.transactions.find(
-      ({ transactionId }) => transactionId === "original",
-    );
-    const derived = state.transactions.filter(
-      ({ transactionId }) => transactionId !== "original",
-    );
-    expect(source?.lifecycleState).toBe("superseded");
-    expect(derived).toHaveLength(2);
-    expect(derived.reduce((sum, item) => sum + item.amountInWon, 0)).toBe(10_000);
-    expect(derived.every(({ lifecycleState }) => lifecycleState === "active")).toBe(
-      true,
-    );
-    derived.forEach(({ provenance }) => {
-      expect(provenance).toEqual(original.provenance);
-    });
-    expect(state.dedupClaims).toEqual(fixture([original]).dedupClaims);
-  });
-
-  it("[T-SPL-003][LED-008] commit 경계 실패는 원본·파생·claim을 모두 이전 상태로 유지한다", async () => {
-    const original = captured("original", 10_000, "lineage-a");
-    const initial = fixture([original]);
-    const subject = createSubject(initial);
-    subject.failNextCommitAtBoundary();
-
-    const result = await subject.splitItems({
-      operationKey: "split-fail",
-      sourceId: "original",
-      expectedVersion: 1,
-      items: [
-        { amountInWon: 5_000, merchant: "A", categoryId: "food", memo: "" },
-        { amountInWon: 5_000, merchant: "B", categoryId: "food", memo: "" },
-      ],
-    });
-
-    expect(result).toEqual({
-      kind: "retryable-failure",
-      code: "LEDGER_UOW_COMMIT_FAILED",
-    });
-    expect(subject.state()).toEqual({
-      transactions: initial.transactions,
-      dedupClaims: initial.dedupClaims,
-      cancelledLineages: [],
-    });
-  });
-
-  it("[T-LED-002][LED-005/LED-008] 같은 version의 Update와 Split은 하나만 commit하고 stale 요청은 덮어쓰지 않는다", async () => {
-    const original = captured("original", 10_000, "lineage-a");
-    const subject = createSubject(fixture([original]));
-
-    const results = await Promise.all([
-      subject.update({
-        operationKey: "update",
-        transactionId: "original",
-        expectedVersion: 1,
-        amountInWon: 12_000,
-      }),
-      subject.splitItems({
-        operationKey: "split",
-        sourceId: "original",
-        expectedVersion: 1,
-        items: [
-          { amountInWon: 4_000, merchant: "A", categoryId: "food", memo: "" },
-          { amountInWon: 6_000, merchant: "B", categoryId: "food", memo: "" },
-        ],
-      }),
-    ]);
-
-    expect(results.filter(({ kind }) => kind === "success")).toHaveLength(1);
-    expect(results.filter(({ kind }) => kind === "conflict")).toEqual([
-      { kind: "conflict", code: "VERSION_MISMATCH" },
-    ]);
-    const active = subject
-      .state()
-      .transactions.filter(({ lifecycleState }) => lifecycleState === "active");
-    expect(
-      active.length === 1 && active[0].amountInWon === 12_000
-        ? true
-        : active.reduce((sum, item) => sum + item.amountInWon, 0) === 10_000,
-    ).toBe(true);
-  });
 
   it("[T-MRG-001][DEC-056] A+B=M 뒤 M+C=N은 A·B·C leaf로 평탄화하고 중간 M은 감사 이력으로만 보존한다", async () => {
     const subject = createSubject(

@@ -27,11 +27,6 @@ export type CategoryResult<T> =
   | { kind: "conflict"; code: string }
   | { kind: "retryable-failure"; code: string };
 
-export type ActiveCategoryListResult =
-  | { kind: "success"; items: readonly CategoryView[] }
-  | { kind: "no-data" }
-  | { kind: "retryable-failure"; code: string };
-
 export interface CreateCategoryCommand {
   commandKey: string;
   name: string;
@@ -88,10 +83,4 @@ export interface CategoryCatalogInputPort {
   setDefault(
     input: SetDefaultCategoryCommand,
   ): Promise<CategoryResult<CategoryView>>;
-  listActive(): Promise<ActiveCategoryListResult>;
-  legacyQuickEditCategories(): Promise<readonly CategoryView[]>;
-  defaultForManualEntry(): Promise<
-    | { kind: "success"; value: CategoryView }
-    | { kind: "contract-failure"; code: "DEFAULT_CATEGORY_REQUIRED" }
-  >;
 }

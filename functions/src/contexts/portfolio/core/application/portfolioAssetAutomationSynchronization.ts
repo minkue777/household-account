@@ -37,23 +37,9 @@ export function parseAutomationFields(
     defaults.loanInterestRate,
     "INVALID_LOAN_INTEREST_RATE",
   );
-  if (
-    recurringAmount.kind === "error" ||
-    loanAmount.kind === "error" ||
-    interest.kind === "error"
-  ) {
-    return {
-      kind: "error",
-      code:
-        recurringAmount.kind === "error"
-          ? recurringAmount.code
-          : loanAmount.kind === "error"
-            ? loanAmount.code
-            : interest.kind === "error"
-              ? interest.code
-              : "INVALID_AUTOMATION_PLAN",
-    };
-  }
+  if (recurringAmount.kind === "error") return recurringAmount;
+  if (loanAmount.kind === "error") return loanAmount;
+  if (interest.kind === "error") return interest;
   const parseDay = (value: unknown, fallback: number): number | undefined => {
     const resolved = value === undefined ? fallback : value;
     return Number.isInteger(resolved) &&
@@ -85,23 +71,9 @@ export function parseAutomationFields(
     defaults.loanRepaymentMethod,
     "INVALID_LOAN_REPAYMENT_METHOD",
   );
-  if (
-    contributionMonth.kind === "error" ||
-    repaymentMonth.kind === "error" ||
-    repaymentMethod.kind === "error"
-  ) {
-    return {
-      kind: "error",
-      code:
-        contributionMonth.kind === "error"
-          ? contributionMonth.code
-          : repaymentMonth.kind === "error"
-            ? repaymentMonth.code
-            : repaymentMethod.kind === "error"
-              ? repaymentMethod.code
-              : "INVALID_AUTOMATION_PLAN",
-    };
-  }
+  if (contributionMonth.kind === "error") return contributionMonth;
+  if (repaymentMonth.kind === "error") return repaymentMonth;
+  if (repaymentMethod.kind === "error") return repaymentMethod;
   if (
     (contributionMonth.value !== "" &&
       parseYearMonth(contributionMonth.value) === undefined) ||
