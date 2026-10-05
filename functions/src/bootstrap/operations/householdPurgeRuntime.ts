@@ -33,7 +33,6 @@ export function createFirebaseHouseholdPurgeRuntime(db: Firestore, input: { hous
   const application = createHouseholdPurgeProcessApplication({
     unitOfWork: store, execution: store, claimPageSize: pageSize,
     identities: { processId: () => processId }, hash: { hash: purgeHash }, clock: { now: () => new Date().toISOString() },
-    faults: { beforeStep: () => ({ kind: 'proceed' }) },
     participants: {
       async purgeHouseholdData(request) {
         if (request.participant !== 'notifications') return participants[request.participant]!.purgeHouseholdData(request);

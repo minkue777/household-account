@@ -20,7 +20,7 @@
 | [PT-03 — 상수로 저장된 자료를 비교하는 보존 assertion은 삭제 가능합니다 (높음)](platform-tests.md) | 미착수 | |
 | [PT-04 — 413줄 Firestore 대역의 SDK 의미 차이가 버그를 숨깁니다 (높음)](platform-tests.md) | SDK 차이 교정·범위 제한 | [실제 SDK 비교 및 동시성 범위 분리](../../operations/access-simplicity-2026-10-05.md) |
 | [PT-05 — RenameSelf 중복 이름 계약은 fixture에서만 충족됩니다 (높음)](platform-tests.md) | 구현·관련 검사 완료 | [실제 SDK 재현 및 수정](../../operations/access-simplicity-2026-10-05.md) |
-| [PT-06 — 실제 completion 경로와 다른 monitor 복구 API를 테스트가 살려 둡니다 (높음)](platform-tests.md) | 미착수 | |
+| [PT-06 — 실제 completion 경로와 다른 monitor 복구 API를 테스트가 살려 둡니다 (높음)](platform-tests.md) | 구현·실제 SDK 검사 완료 | [생명주기 실행 경계](../../operations/lifecycle-simplicity-2026-10-05.md) |
 | [PT-07 — 과거 날짜 예외와 구 성능 gate를 테스트가 보존합니다 (높음)](platform-tests.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
 | [PT-08 — category 조회 최적화 검사가 최초 수정·삭제 경로를 타지 않습니다 (높음)](platform-tests.md) | 미착수 | |
 | [PT-09 — 일반 tenant CRUD 행렬이 실제 Rules 계약처럼 보입니다 (높음)](platform-tests.md) | 미착수 | |
@@ -31,7 +31,7 @@
 | [후보 A05 — 온보딩 거대 Application의 dummy dependency 제거](platform.md) | 미착수 | |
 | [후보 A06 — 명령 등록·권한·멱등성 정책을 등록 위치 한 곳에서 읽게 축소](platform.md) | 미착수 | |
 | [후보 A07 — 계약 테스트의 문법/폴더 강제를 행동 검증으로 대체](platform.md) | 구현·관련 검사 완료 | [서버 실행 경로 정비](../../operations/server-simplicity-2026-10-05.md) |
-| [후보 A08 — 운영 runner에 박힌 테스트 전용 실패 주입 제거](platform.md) | 미착수 | |
+| [후보 A08 — 운영 runner에 박힌 테스트 전용 실패 주입 제거](platform.md) | 구현·실제 SDK 검사 완료 | [생명주기 실행 경계](../../operations/lifecycle-simplicity-2026-10-05.md) |
 | [후보 A09 — 30일 접속 통계 정리가 실제 저장에서도 적용되도록 단순화](platform.md) | 구현·관련 검사 완료 | [실제 SDK 재현 및 수정](../../operations/access-simplicity-2026-10-05.md) |
 | [후보 A10 — 관리자 조회를 실제 조회 범위에 맞추고 만료된 통계 예외 제거](platform.md) | 미착수 | |
 | [TB-01 — 저장 결과가 같다는 검사와 읽기·쓰기 비용 검사를 구별한다](test-boundaries.md) | 미착수 | |

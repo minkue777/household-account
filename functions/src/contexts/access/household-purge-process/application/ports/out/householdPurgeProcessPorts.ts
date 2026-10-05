@@ -52,19 +52,6 @@ export interface HouseholdPurgeParticipantPort {
   }): Promise<HouseholdPurgeParticipantResult>;
 }
 
-export interface HouseholdPurgeFaultPort {
-  beforeStep(input: {
-    readonly phase:
-      | "claim-snapshot"
-      | "context-purge"
-      | "claim-finalization";
-    readonly checkpoint: string;
-    readonly participant?: HouseholdPurgeParticipant;
-  }):
-    | { readonly kind: "proceed" }
-    | { readonly kind: "retryable-failure" };
-}
-
 export interface HouseholdPurgeIdentityPort {
   processId(idempotencyKey: string): string;
 }

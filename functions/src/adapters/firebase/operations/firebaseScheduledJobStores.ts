@@ -21,7 +21,6 @@ import type {
   JobExecutionIdentityPort,
   JobExecutionObservationPort,
   ScheduledJobRunRepositoryPort,
-  TopLevelJobFailurePort,
 } from "../../../platform/external-operations/application/ports/out/scheduledJobExecutionPorts";
 import type {
   JobIncidentIdentityPort,
@@ -563,11 +562,5 @@ export class StructuredJobExecutionObservation
     } else {
       logger.error("scheduled-job-outcome", observation);
     }
-  }
-}
-
-export class NoInjectedTopLevelJobFailure implements TopLevelJobFailurePort {
-  failure(): undefined {
-    return undefined;
   }
 }

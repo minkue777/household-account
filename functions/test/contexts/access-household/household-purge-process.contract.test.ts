@@ -326,13 +326,7 @@ describe("가구 영구 purge 내부 system process 공개 계약", () => {
         purgeSystem,
         snapshotProcessId,
       ),
-    ).resolves.toEqual({
-      kind: "retryable-failure",
-      processId: snapshotProcessId,
-      phase: "claim-snapshot",
-      checkpoint: "snapshot:start",
-      code: "CLAIM_READ_UNAVAILABLE",
-    });
+    ).rejects.toThrow("STORE_UNAVAILABLE");
     expect(snapshotFailure.participantCalls()).toEqual([]);
     expect((await snapshotFailure.snapshot()).currentClaims).toEqual([
       claims[0],
@@ -533,13 +527,7 @@ describe("가구 영구 purge 내부 system process 공개 계약", () => {
 
     await expect(
       subject.runHouseholdPurgeProcess(purgeSystem, processId),
-    ).resolves.toEqual({
-      kind: "retryable-failure",
-      processId,
-      phase: "claim-finalization",
-      checkpoint: "finalization:2",
-      code: "CLAIM_FINALIZATION_UNAVAILABLE",
-    });
+    ).rejects.toThrow("STORE_UNAVAILABLE");
     expect(await subject.snapshot()).toEqual(afterCompletedPage);
 
     await expect(

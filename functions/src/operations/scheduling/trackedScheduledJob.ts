@@ -4,7 +4,6 @@ import type { ScheduledFeaturePagePort } from "../../platform/external-operation
 import {
   FirebaseScheduledJobExecutionRepository,
   FirebaseScheduledJobExpectationWriter,
-  NoInjectedTopLevelJobFailure,
   Sha256ScheduledJobIdentity,
   StructuredJobExecutionObservation,
   SystemScheduledJobClock,
@@ -75,7 +74,6 @@ export async function runTrackedScheduledJob(input: {
     observations: new StructuredJobExecutionObservation(),
     identity,
     clock: new SystemScheduledJobClock(),
-    topLevelFailure: new NoInjectedTopLevelJobFailure(),
     leaseDurationMs: definition.leaseDurationSeconds * 1_000,
     maxPagesPerExecution: definition.maxPagesPerOccurrence,
   }).run(command);

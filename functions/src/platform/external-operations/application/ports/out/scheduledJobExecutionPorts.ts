@@ -61,7 +61,3 @@ export interface JobExecutionIdentityPort {
 export interface JobExecutionClockPort {
   now(): string;
 }
-
-export interface TopLevelJobFailurePort {
-  failure(): { readonly code: string; readonly retryable: boolean } | undefined;
-}

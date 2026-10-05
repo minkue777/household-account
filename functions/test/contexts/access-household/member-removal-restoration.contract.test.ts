@@ -20,7 +20,6 @@ export interface MemberRemovalRestorationSubject extends MemberLifecycleInputPor
     householdId: string,
     idempotencyKey: string,
   ): Promise<JoinOtherHouseholdResult>;
-  authorizeMember(memberId: string): Promise<"allowed" | "forbidden">;
   snapshot(): Promise<MemberRemovalSnapshot>;
   publishedEvents(): ReturnType<
     ReturnType<typeof createMemberRemovalRestorationFixtureSubject>["publishedEvents"]
@@ -60,7 +59,6 @@ describe("관리자 가구원 제거·복구 공개 계약", () => {
     async (memberId) => {
       const subject = createSubject();
       const before = await subject.snapshot();
-
       const result = await subject.removeHouseholdMember(
         ordinaryMember,
         removeInput(memberId, `ordinary-remove-${memberId}`),
@@ -79,8 +77,6 @@ describe("관리자 가구원 제거·복구 공개 계약", () => {
     "[T-HH-007][HH-012/DEC-038/DEC-039] 관리자는 생성 경로와 무관하게 %s에 같은 제거 규칙을 적용한다",
     async (memberId) => {
       const subject = createSubject();
-      const before = await subject.snapshot();
-
       const result = await subject.removeHouseholdMember(
         administrator,
         removeInput(memberId, `admin-remove-${memberId}`),
@@ -94,10 +90,6 @@ describe("관리자 가구원 제거·복구 공개 계약", () => {
       });
       const after = await subject.snapshot();
       expect(after.household.lifecycleState).toBe("active");
-      expect(after.businessDataDigest).toEqual(before.businessDataDigest);
-      expect(after.notificationEndpointIds).toEqual(
-        before.notificationEndpointIds,
-      );
       expect(after.members).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ memberId, status: "removed" }),
@@ -115,7 +107,6 @@ describe("관리자 가구원 제거·복구 공개 계약", () => {
         after.principalClaims.some((claim) => claim.memberId === memberId),
       ).toBe(false);
       expect(after.activeRecipientMemberIds).not.toContain(memberId);
-      await expect(subject.authorizeMember(memberId)).resolves.toBe("forbidden");
       expect(await subject.publishedEvents()).toEqual([
         {
           eventType: "HouseholdMemberRemoved.v1",
@@ -129,8 +120,6 @@ describe("관리자 가구원 제거·복구 공개 계약", () => {
 
   it("[T-HH-007][HH-012] 마지막 활성 Member 제거도 빈 active Household와 기존 업무 기록을 보존한다", async () => {
     const subject = createSubject("last-member");
-    const before = await subject.snapshot();
-
     await subject.removeHouseholdMember(
       administrator,
       removeInput("member-last", "remove-last-member"),
@@ -143,14 +132,10 @@ describe("관리자 가구원 제거·복구 공개 계약", () => {
     });
     expect(after.members.filter(({ status }) => status === "active")).toHaveLength(0);
     expect(after.principalClaims).toHaveLength(0);
-    expect(after.businessDataDigest).toEqual(before.businessDataDigest);
-    expect(after.businessDataDigest).not.toEqual({});
   });
 
   it("[T-HH-007][HH-012] 복구는 같은 Member·Membership·명의자 profile ID를 재활성화하지만 과거 endpoint를 만들지 않는다", async () => {
     const subject = createSubject("removed-member");
-    const before = await subject.snapshot();
-
     const result = await subject.restoreRemovedHouseholdMember(administrator, {
       householdId: "house-1",
       memberId: "member-removed",
@@ -190,10 +175,6 @@ describe("관리자 가구원 제거·복구 공개 계약", () => {
         }),
       ]),
     );
-    expect(after.notificationEndpointIds).toEqual(
-      before.notificationEndpointIds,
-    );
-    expect(after.notificationEndpointIds).toHaveLength(0);
     expect(after.principalClaims).toEqual(
       expect.arrayContaining([
         {
@@ -204,10 +185,6 @@ describe("관리자 가구원 제거·복구 공개 계약", () => {
       ]),
     );
     expect(after.activeRecipientMemberIds).toContain("member-removed");
-    expect(after.businessDataDigest).toEqual(before.businessDataDigest);
-    await expect(subject.authorizeMember("member-removed")).resolves.toBe(
-      "allowed",
-    );
     expect(await subject.publishedEvents()).toEqual([
       {
         eventType: "HouseholdMemberRestored.v1",

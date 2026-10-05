@@ -58,7 +58,6 @@ describe("asset-valuation-daily scheduled pages", () => {
       observations: { record: () => undefined },
       identity: { runId: () => "terminal-failure", leaseToken: (_id, attempt) => `lease-${attempt}`, hash: value => value },
       clock: { now: () => instant },
-      topLevelFailure: { failure: () => undefined },
     }).run({
       jobName: "daily", executionKey: "terminal-failure", workerId: "worker",
       scheduledFor: instant, deadlineAt: "2026-09-17T00:04:00Z",
@@ -87,7 +86,7 @@ describe("asset-valuation-daily scheduled pages", () => {
         snapshots: { project: async input => { snapshotCalls.push(input.householdId); return { kind: 'projected', snapshot: { schemaVersion: 1, householdId: input.householdId, localDate: input.localDate,
           total: 1, financial: 1, byType: { savings: 1, stock: 0, crypto: 0, property: 0, gold: 0, loan: 0 }, byOwnerRefKey: { household: 1 }, ownerDisplayNames: { household: '가구' }, sourceAssetVersions: {}, sourceCheckpoint: input.sourceCheckpoint, calculatedAt: input.calculatedAt } }; } },
       }),
-      observations: { record: () => undefined }, identity: { runId: () => 'daily', leaseToken: (_id, attempt) => 'lease-' + attempt, hash: value => value }, clock: { now: () => instant }, topLevelFailure: { failure: () => undefined },
+      observations: { record: () => undefined }, identity: { runId: () => 'daily', leaseToken: (_id, attempt) => 'lease-' + attempt, hash: value => value }, clock: { now: () => instant },
     }).run({ jobName: 'daily', executionKey: 'day', workerId: 'worker', scheduledFor: instant, deadlineAt: '2026-09-06T00:04:00Z' });
     expect((await execute()).status).toBe('PARTIAL_FAILURE');
     expect(snapshotCalls).toEqual(['a']);

@@ -60,8 +60,5 @@ export interface AssetOwnerProfileInputPort {
     actor: VerifiedProfileActor,
     input: { includeArchived?: boolean },
   ): Promise<AssetOwnerProfileListResult>;
-  resolveOwnerProfileForHistory(
-    actor: VerifiedProfileActor,
-    profileId: string,
-  ): Promise<AssetOwnerProfileView | undefined>;
+
 }

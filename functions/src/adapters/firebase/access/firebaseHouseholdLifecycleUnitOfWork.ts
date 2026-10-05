@@ -100,12 +100,6 @@ export class FirebaseHouseholdLifecycleUnitOfWork
     };
   }
 
-  async read(): Promise<HouseholdLifecycleState> {
-    return this.database.runTransaction(async (transaction) =>
-      (await this.load(transaction)).state,
-    );
-  }
-
   async transact<T>(
     operation: (state: HouseholdLifecycleState) => HouseholdLifecycleMutation<T>,
   ): Promise<T> {
@@ -153,16 +147,6 @@ export class FirebaseHouseholdLifecycleUnitOfWork
       }
 
       for (const event of mutation.state.events) {
-        if (
-          event.eventType !== "HouseholdDeleted.v1" &&
-          event.eventType !== "HouseholdRestored.v1"
-        ) {
-          continue;
-        }
-        const occurredAt =
-          event.eventType === "HouseholdDeleted.v1"
-            ? event.deletedAt
-            : event.restoredAt;
         new FirebaseTransactionalOutbox(this.database).append(transaction, {
           eventId: accessEventId(
             this.input.commandId,
@@ -173,21 +157,14 @@ export class FirebaseHouseholdLifecycleUnitOfWork
           householdId: event.householdId,
           aggregateId: event.householdId,
           aggregateVersion: household.aggregateVersion,
-          occurredAt,
+          occurredAt: event.restoredAt,
           correlationId: this.input.commandId,
           causationId: this.input.commandId,
-          payload:
-            event.eventType === "HouseholdDeleted.v1"
-              ? {
-                  householdId: event.householdId,
-                  deletedAt: event.deletedAt,
-                  deletedByHash: event.deletedByHash,
-                }
-              : {
-                  householdId: event.householdId,
-                  restoredAt: event.restoredAt,
-                  restoredByHash: event.restoredByHash,
-                },
+          payload: {
+            householdId: event.householdId,
+            restoredAt: event.restoredAt,
+            restoredByHash: event.restoredByHash,
+          },
         });
       }
       return mutation.value;

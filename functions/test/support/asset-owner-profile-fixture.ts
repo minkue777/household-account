@@ -184,9 +184,7 @@ class FixtureAssetOwnerProfileDriver
     return this.application.listAssetOwnerProfiles(...args);
   }
 
-  resolveOwnerProfileForHistory(...args: Parameters<AssetOwnerProfileInputPort["resolveOwnerProfileForHistory"]>) {
-    return this.application.resolveOwnerProfileForHistory(...args);
-  }
+
 
   async snapshot(): Promise<AssetOwnerProfileSnapshot> {
     const state = await this.store.read();

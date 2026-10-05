@@ -15,23 +15,9 @@ export interface VerifiedAdministrativeActor {
   )[];
 }
 
-export interface RequestHouseholdDeletionCommand {
-  householdId: string;
-  reason: string;
-  expectedVersion: number;
-  idempotencyKey: string;
-}
-
 export interface RestoreDeletedHouseholdCommand {
   householdId: string;
   reason: string;
-  expectedVersion: number;
-  idempotencyKey: string;
-}
-
-export interface RequestPermanentHouseholdPurgeCommand {
-  householdId: string;
-  confirmation: string;
   expectedVersion: number;
   idempotencyKey: string;
 }
@@ -46,22 +32,9 @@ export type HouseholdLifecycleCommandResult =
   | { kind: "conflict"; code: string; currentVersion?: number }
   | { kind: "forbidden"; code: string };
 
-export type BusinessAccessResult =
-  | { kind: "allowed"; householdId: string }
-  | { kind: "conflict"; code: "HOUSEHOLD_NOT_ACTIVE" };
-
 export interface HouseholdLifecycleInputPort {
-  requestHouseholdDeletion(
-    actor: VerifiedAdministrativeActor,
-    input: RequestHouseholdDeletionCommand,
-  ): Promise<HouseholdLifecycleCommandResult>;
   restoreDeletedHousehold(
     actor: VerifiedAdministrativeActor,
     input: RestoreDeletedHouseholdCommand,
   ): Promise<HouseholdLifecycleCommandResult>;
-  requestPermanentHouseholdPurge(
-    actor: VerifiedAdministrativeActor,
-    input: RequestPermanentHouseholdPurgeCommand,
-  ): Promise<HouseholdLifecycleCommandResult>;
-  authorizeBusinessAccess(householdId: string): Promise<BusinessAccessResult>;
 }

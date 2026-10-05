@@ -11,7 +11,6 @@ import type {
 import type {
   HouseholdPurgeClockPort,
   HouseholdPurgeExecutionPort,
-  HouseholdPurgeFaultPort,
   HouseholdPurgeHashPort,
   HouseholdPurgeIdentityPort,
   HouseholdPurgeMutation,
@@ -157,7 +156,9 @@ class FixtureHouseholdPurgeUnitOfWork
   private stateValue: HouseholdPurgeAggregateState;
   private serial: Promise<void> = Promise.resolve();
 
-  constructor(fixture: HouseholdPurgeProcessFixture) {
+  private failureConsumed = false;
+
+  constructor(private readonly fixture: HouseholdPurgeProcessFixture) {
     this.stateValue = {
       household: {
         householdId: fixture.householdId,
@@ -182,6 +183,13 @@ class FixtureHouseholdPurgeUnitOfWork
     ) => HouseholdPurgeMutation<T>,
   ): Promise<T> {
     const transaction = this.serial.then(() => {
+      const failure = this.fixture.failOnce;
+      const process = Object.values(this.stateValue.processes)[0];
+      if (!this.failureConsumed && failure && failure.phase !== "context-purge" && process?.phase === failure.phase &&
+          (failure.phase === "claim-snapshot" ? process.claimSnapshotCheckpoint : process.claimFinalizationCheckpoint) === failure.checkpoint) {
+        this.failureConsumed = true;
+        throw new Error("STORE_UNAVAILABLE");
+      }
       const mutation = operation(cloneState(this.stateValue));
       this.stateValue = cloneState(mutation.state);
       return mutation.value;
@@ -212,35 +220,6 @@ class FixtureHouseholdPurgeUnitOfWork
         claim.claimRef === claimRef ? { claimRef, ...replacement } : claim,
       ),
     };
-  }
-}
-
-class FixtureHouseholdPurgeFaults implements HouseholdPurgeFaultPort {
-  private consumed = false;
-
-  constructor(
-    private readonly failure: HouseholdPurgeProcessFixture["failOnce"],
-  ) {}
-
-  beforeStep(input: {
-    readonly phase:
-      | "claim-snapshot"
-      | "context-purge"
-      | "claim-finalization";
-    readonly checkpoint: string;
-    readonly participant?: HouseholdPurgeParticipant;
-  }): { readonly kind: "proceed" } | { readonly kind: "retryable-failure" } {
-    if (
-      !this.consumed &&
-      this.failure !== undefined &&
-      this.failure.phase !== "context-purge" &&
-      this.failure.phase === input.phase &&
-      this.failure.checkpoint === input.checkpoint
-    ) {
-      this.consumed = true;
-      return { kind: "retryable-failure" };
-    }
-    return { kind: "proceed" };
   }
 }
 
@@ -487,7 +466,6 @@ export function createHouseholdPurgeProcessFixtureSubject(
     createHouseholdPurgeProcessApplication({
       unitOfWork,
       participants,
-      faults: new FixtureHouseholdPurgeFaults(fixture.failOnce),
       identities: new FixtureHouseholdPurgeIdentity(),
       hash: new FixtureHouseholdPurgeHash(),
       clock: new FixtureHouseholdPurgeClock(),

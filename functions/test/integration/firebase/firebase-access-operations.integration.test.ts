@@ -17,6 +17,50 @@ suite('[HH-002][ADM-003] 실제 Firestore 운영 교정과 단계별 영구 삭�
   const runner = { systemRef: 'test-runner', capabilities: ['householdLifecycle:purge'] as const };
   const runtime = () => createFirebaseHouseholdPurgeRuntime(db, { householdId: 'h1', idempotencyKey: 'request', operatorRef: 'operator', pageSize: 1 });
 
+  it.each(['snapshot', 'finalization'] as const)('실제 %s transaction 중단은 checkpoint·claim을 보존하고 재시작으로 완료한다', async phase => {
+    await db.doc('households/h1').set({ lifecycleState: 'deleted', aggregateVersion: 1 });
+    await db.doc('principalMembershipClaims/c1').set({ householdId: 'h1', memberId: 'm1' });
+    const initial = runtime();
+    await initial.application.requestPermanentHouseholdPurge(admin, { householdId: 'h1', idempotencyKey: 'request', expectedVersion: 1, confirmation: '승인' });
+    const processRef = db.doc(`householdPurgeProcesses/${initial.processId}`);
+    if (phase === 'finalization') {
+      for (let step = 0; step < 30; step += 1) {
+        if ((await processRef.get()).get('process.phase') === 'claim-finalization') break;
+        await runtime().application.runHouseholdPurgeProcess(runner, initial.processId);
+      }
+      expect((await processRef.get()).get('process.phase')).toBe('claim-finalization');
+    }
+    const before = (await processRef.get()).get('process');
+    const abortingDatabase = new Proxy(db, { get(target, property) {
+      if (property === 'runTransaction') return (operation: Parameters<Firestore['runTransaction']>[0]) => target.runTransaction(async transaction => {
+        let abort = false;
+        const observed = new Proxy(transaction, { get(current, key) {
+          if (key === 'set' || key === 'delete') return (...args: unknown[]) => {
+            const path = (args[0] as { path: string }).path;
+            if ((phase === 'snapshot' && path.includes('/claimSnapshots/')) ||
+                (phase === 'finalization' && key === 'delete' && path.startsWith('principalMembershipClaims/'))) abort = true;
+            return Reflect.apply(current[key], current, args);
+          };
+          const value = Reflect.get(current, key); return typeof value === 'function' ? value.bind(current) : value;
+        } });
+        const result = await operation(observed);
+        if (abort) throw new Error('STORE_COMMIT_ABORTED');
+        return result;
+      });
+      const value = Reflect.get(target, property); return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    const failing = createFirebaseHouseholdPurgeRuntime(abortingDatabase, { householdId: 'h1', idempotencyKey: 'request', operatorRef: 'operator', pageSize: 1 });
+    await expect(failing.application.runHouseholdPurgeProcess(runner, initial.processId)).rejects.toThrow('STORE_COMMIT_ABORTED');
+    expect((await processRef.get()).get('process')).toEqual(before);
+    expect((await db.doc('principalMembershipClaims/c1').get()).exists).toBe(true);
+    for (let step = 0; step < 30; step += 1) {
+      const result = await runtime().application.runHouseholdPurgeProcess(runner, initial.processId);
+      if (result.kind === 'completed') break;
+    }
+    expect((await processRef.get()).get('process.phase')).toBe('completed');
+    expect((await db.doc('principalMembershipClaims/c1').get()).exists).toBe(false);
+  }, 30_000);
+
   it('일반 권한·active 가구는 시작할 수 없고 요청 재생은 추가 Event를 만들지 않는다', async () => {
     await db.doc('households/h1').set({ lifecycleState: 'active', aggregateVersion: 1 });
     const command = { householdId: 'h1', idempotencyKey: 'request', expectedVersion: 1, confirmation: '별도 영구 삭제 요청' };

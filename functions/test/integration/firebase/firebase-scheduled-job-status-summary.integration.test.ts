@@ -1,7 +1,8 @@
 import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { FirebaseScheduledJobExecutionRepository, FirebaseScheduledJobExpectationWriter } from '../../../src/adapters/firebase/operations/firebaseScheduledJobStores';
+import { FirebaseScheduledJobExecutionRepository, FirebaseScheduledJobExpectationWriter, FirebaseScheduledJobMonitorRepository, Sha256ScheduledJobIdentity } from '../../../src/adapters/firebase/operations/firebaseScheduledJobStores';
+import { createScheduledJobMonitorApplication } from '../../../src/platform/external-operations/application/scheduledJobMonitorApplication';
 import { scheduledJobDefinition } from '../../../src/operations/scheduling/scheduledJobDefinitions';
 import * as projection from '../../../src/adapters/firebase/operations/scheduledJobStatusSummary';
 import type { JobRun } from '../../../src/platform/external-operations/application/ports/in/scheduledJobExecutionInputPort';
@@ -36,6 +37,28 @@ suite('Firebase scheduled job status summary', () => {
     if (!response.ok) throw new Error('EMULATOR_RESET_FAILED');
   });
   afterAll(async () => { if (app) await deleteApp(app); });
+
+  it('실제 완료 transaction이 이전 장애를 한 번 해제하며 실패 이력과 늦은 monitor의 fencing을 유지한다', async () => {
+    const oldId = `${jobName}:missing`;
+    await operations().collection('scheduledJobRuns').doc(oldId).set({
+      occurrenceId: oldId, runId: oldId, jobName, status: 'MISSING',
+      scheduledFor: '2026-09-10T00:00:00.000Z', startGraceDeadlineAt: '2026-09-10T00:30:00.000Z',
+      executionDeadlineAt: '2026-09-10T01:00:00.000Z', completedTargetReceipts: [],
+    });
+    const incident = { occurrenceId: oldId, incidentId: 'old-alarm', reason: 'MISSING' as const,
+      state: 'OPEN' as const, openedAt: '2026-09-10T01:00:01.000Z', alertOpenCount: 1, alertResolveCount: 0 };
+    await operations().collection('scheduledJobIncidents').doc(oldId).set(incident);
+    const run = await start('recovery', '2026-09-18T00:00:00.000Z');
+    await complete(new FirebaseScheduledJobExecutionRepository(database, () => now), run);
+    const repository = new FirebaseScheduledJobMonitorRepository(database, () => now);
+    expect(await repository.getIncident(oldId)).toMatchObject({ state: 'RESOLVED', alertResolveCount: 1,
+      resolvedAt: now, recoveryOccurrenceId: run.runId });
+    expect((await operations().collection('scheduledJobRuns').doc(oldId).get()).get('status')).toBe('MISSING');
+    await repository.saveIncident(incident);
+    const monitor = createScheduledJobMonitorApplication({ repository, incidentIds: new Sha256ScheduledJobIdentity() });
+    expect((await monitor.detectMissingOrOverdueRuns({ monitorOccurrenceId: 'after-recovery', observedAt: now })).resolvedIncidentIds).toEqual([]);
+    expect(await repository.getIncident(oldId)).toMatchObject({ state: 'RESOLVED', alertResolveCount: 1 });
+  });
 
   it('동시 완료·초기화 경합에도 최신 예약이 유지되며 완료 이력 TTL을 보존한다', async () => {
     const older = await start('older', '2026-09-17T00:00:00.000Z');

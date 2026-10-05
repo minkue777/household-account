@@ -6,7 +6,6 @@ export interface HouseholdLifecycleMutation<T> {
 }
 
 export interface HouseholdLifecycleUnitOfWorkPort {
-  read(): Promise<HouseholdLifecycleState>;
   transact<T>(
     operation: (
       state: HouseholdLifecycleState,
@@ -16,10 +15,6 @@ export interface HouseholdLifecycleUnitOfWorkPort {
 
 export interface HouseholdLifecycleClockPort {
   now(): string;
-}
-
-export interface HouseholdLifecycleIdentityPort {
-  nextPurgeProcessId(idempotencyKey: string): string;
 }
 
 export interface HouseholdLifecycleHashPort {

@@ -4,7 +4,6 @@ import { FirebaseAdminHouseholdStore } from "../../../adapters/firebase/access/f
 import { FirebaseHouseholdLifecycleUnitOfWork } from "../../../adapters/firebase/access/firebaseHouseholdLifecycleUnitOfWork";
 import {
   sha256,
-  stableAccessId,
   stableHouseholdId,
 } from "../../../adapters/firebase/access/firebaseAccessPersistence";
 import { createAdminHouseholdConsoleApplication } from "../../../contexts/access/admin-household-console/application/adminHouseholdConsoleApplication";
@@ -73,9 +72,6 @@ function householdLifecycleApplication(input: {
       commandId: input.requestId,
     }),
     clock: { now: () => input.requestedAt },
-    identities: {
-      nextPurgeProcessId: (key) => stableAccessId("household-purge", key),
-    },
     hash: { hashSensitiveReference: sha256 },
   });
 }

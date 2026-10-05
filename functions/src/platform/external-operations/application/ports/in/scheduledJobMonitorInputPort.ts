@@ -59,11 +59,6 @@ export interface ScheduledJobMonitorInputPort {
     readonly monitorOccurrenceId: string;
     readonly observedAt: string;
   }): Promise<JobMonitorResult>;
-  recordRunRecovery(input: {
-    readonly occurrenceId: string;
-    readonly terminalStatus: "COMPLETE" | "PARTIAL_FAILURE" | "FAILED";
-    readonly recoveredAt: string;
-  }): Promise<{ readonly kind: "success"; readonly run: MonitoredJobRun }>;
   getRun(occurrenceId: string): Promise<MonitoredJobRun>;
   getIncident(occurrenceId: string): Promise<JobIncident | undefined>;
 }

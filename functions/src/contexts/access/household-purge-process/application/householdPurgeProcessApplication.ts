@@ -9,7 +9,6 @@ import type {
 import type {
   HouseholdPurgeClockPort,
   HouseholdPurgeExecutionPort,
-  HouseholdPurgeFaultPort,
   HouseholdPurgeHashPort,
   HouseholdPurgeIdentityPort,
   HouseholdPurgeParticipantPort,
@@ -32,7 +31,6 @@ import {
 export interface HouseholdPurgeProcessApplicationDependencies {
   readonly unitOfWork: HouseholdPurgeUnitOfWorkPort;
   readonly participants: HouseholdPurgeParticipantPort;
-  readonly faults: HouseholdPurgeFaultPort;
   readonly identities: HouseholdPurgeIdentityPort;
   readonly hash: HouseholdPurgeHashPort;
   readonly clock: HouseholdPurgeClockPort;
@@ -274,20 +272,6 @@ class DefaultHouseholdPurgeProcessApplication
     observed: HouseholdPurgeProcessRecord,
   ): Promise<RunHouseholdPurgeProcessResult> {
     const checkpoint = observed.claimSnapshotCheckpoint;
-    const fault = this.dependencies.faults.beforeStep({
-      phase: "claim-snapshot",
-      checkpoint,
-    });
-    if (fault.kind === "retryable-failure") {
-      return {
-        kind: "retryable-failure",
-        processId: observed.processId,
-        phase: "claim-snapshot",
-        checkpoint,
-        code: "CLAIM_READ_UNAVAILABLE",
-      };
-    }
-
     return this.dependencies.unitOfWork.transact<RunHouseholdPurgeProcessResult>(
       (state) => {
         const process = state.processes[observed.processId];
@@ -541,20 +525,6 @@ class DefaultHouseholdPurgeProcessApplication
     observed: HouseholdPurgeProcessRecord,
   ): Promise<RunHouseholdPurgeProcessResult> {
     const checkpoint = observed.claimFinalizationCheckpoint;
-    const fault = this.dependencies.faults.beforeStep({
-      phase: "claim-finalization",
-      checkpoint,
-    });
-    if (fault.kind === "retryable-failure") {
-      return {
-        kind: "retryable-failure",
-        processId: observed.processId,
-        phase: "claim-finalization",
-        checkpoint,
-        code: "CLAIM_FINALIZATION_UNAVAILABLE",
-      };
-    }
-
     return this.dependencies.unitOfWork.transact<RunHouseholdPurgeProcessResult>(
       (state) => {
         const process = state.processes[observed.processId];

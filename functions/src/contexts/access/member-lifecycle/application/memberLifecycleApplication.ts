@@ -305,11 +305,7 @@ class DefaultMemberLifecycleApplication implements MemberLifecycleInputPort {
     );
   }
 
-  async authorizeMember(memberId: string): Promise<"allowed" | "forbidden"> {
-    const state = await this.dependencies.unitOfWork.read();
-    const membership = lifecycleMembership(state, memberId);
-    return membership?.status === "active" ? "allowed" : "forbidden";
-  }
+
 }
 
 export function createMemberLifecycleApplication(

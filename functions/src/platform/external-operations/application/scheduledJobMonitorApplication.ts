@@ -2,7 +2,6 @@ import { hasScheduledJobRecovered } from "./scheduledJobIncidentRecovery";
 import type {
   JobIncident,
   JobMonitorResult,
-  MonitoredJobRun,
   MonitoredJobStatus,
   ScheduledJobMonitorInputPort,
 } from "./ports/in/scheduledJobMonitorInputPort";
@@ -113,19 +112,6 @@ export function createScheduledJobMonitorApplication(dependencies: {
       };
       await dependencies.repository.saveMonitorReceipt(result);
       return result;
-    },
-
-    async recordRunRecovery(input) {
-      const run = await dependencies.repository.getRun(input.occurrenceId);
-      if (run === undefined) throw new Error("SCHEDULED_JOB_RUN_NOT_FOUND");
-      const recovered: MonitoredJobRun = {
-        ...run,
-        status: input.terminalStatus,
-        lease: undefined,
-        heartbeatDeadlineAt: undefined,
-      };
-      if (await dependencies.repository.saveRun(recovered) === false) throw new Error("SCHEDULED_JOB_EXECUTION_COMPLETION_REQUIRED");
-      return { kind: "success", run: recovered };
     },
 
     async getRun(occurrenceId) {

@@ -23,7 +23,7 @@ export function createScheduledJobExecutionFixture(fixture: {
   readonly pages: readonly PageFixture[];
   readonly existingRun?: JobRun;
   readonly interruptionAfterCheckpoint?: string;
-  readonly topLevelFailure?: { readonly code: string; readonly retryable: boolean };
+  readonly pageReadFails?: boolean;
   readonly maxPagesPerExecution?: number;
 }) {
   const runs = new Map<string, JobRun>();
@@ -48,6 +48,7 @@ export function createScheduledJobExecutionFixture(fixture: {
   const application = createScheduledJobExecutionApplication({
     pages: {
       async nextPage(checkpoint) {
+        if (fixture.pageReadFails) throw new Error("TARGET_PAGE_UNAVAILABLE");
         if (
           checkpoint !== undefined &&
           fixture.interruptionAfterCheckpoint === checkpoint &&
@@ -89,7 +90,6 @@ export function createScheduledJobExecutionFixture(fixture: {
       hash: (value) => `hash:${value}`,
     },
     clock: { now: () => fixture.now },
-    topLevelFailure: { failure: () => fixture.topLevelFailure },
     maxPagesPerExecution: fixture.maxPagesPerExecution,
   });
 

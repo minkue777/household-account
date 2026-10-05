@@ -591,3 +591,8 @@ partner 선택 정책은 [DEC-022](../../../../governance/decisions.md#dec-022),
 - 네 원본 `ledger`, `categories`, `currencyPreferences`, `currencyBalances`에 각각 `InitialReadStarted`, `InitialReadReceived`, `InitialReadFallback` 선택 필드를 추가한다. Started는 지연 모듈 로드를 포함한 초기 조회 경계 진입이고 Received는 mapper 전 실제 Lite 결과 수신이다. Fallback은 실패·해석 실패·플랫폼별 예산 초과(Android 2,000ms, iPhone 750ms)로 기존 구독으로 전환한 시각이며 성공으로 해석하지 않는다.
 - 기존 ListenStarted/ServerSnapshotReceived는 실제 realtime SDK 관측으로 남긴다. Lite 수신을 해당 키에 대입하지 않는다. Lite로 첫 paint가 끝나면 아직 도착하지 않은 realtime 관측은 없어도 된다. 기존 v1 범위·허용 목록·개인정보 제외·완료 동결 계약을 유지하며 서버 확장을 Web보다 먼저 배포한다.
 - 수용·준비 선후 관계와 실제 REST/Listen 전환 검증은 [작업 기록](../../../../../operations/ios-home-initial-read-2026-10-04.md)에 추적한다.
+
+
+### 생명주기 실행 소유권 (2026-10-05)
+
+가구 논리삭제는 관리자 console, 복구는 household lifecycle, 영구삭제는 checkpoint 기반 purge process가 각각 담당한다. 복구 모듈에 별도 purge 상태나 테스트용 삭제/접근 API를 두지 않는다. 멤버 제거/복구의 실제 접근 판정은 canonical 로그인 resolver에서 검증한다. purge 저장 실패는 checkpoint를 변경하지 않고 호출자에게 전달하며 재시작은 같은 page부터 진행한다. [실행·검사 추적](../../../../../operations/lifecycle-simplicity-2026-10-05.md).

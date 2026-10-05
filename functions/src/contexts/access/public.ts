@@ -60,13 +60,10 @@ export {
   type RestoreRemovedHouseholdMemberCommand,
 } from "./member-lifecycle/application/ports/in/memberLifecycleInputPort";
 export {
-  type BusinessAccessResult,
   type HouseholdLifecycleCommandResult,
   type HouseholdLifecycleEvent,
   type HouseholdLifecycleInputPort,
   type HouseholdLifecycleView,
-  type RequestHouseholdDeletionCommand,
-  type RequestPermanentHouseholdPurgeCommand,
   type RestoreDeletedHouseholdCommand,
   type VerifiedAdministrativeActor,
 } from "./household-lifecycle/application/ports/in/householdLifecycleInputPort";

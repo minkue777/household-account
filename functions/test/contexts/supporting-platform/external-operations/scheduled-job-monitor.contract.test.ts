@@ -72,11 +72,6 @@ export interface ScheduledJobMonitorSubject {
     monitorOccurrenceId: string;
     observedAt: string;
   }): Promise<JobMonitorResult>;
-  recordRunRecovery(input: {
-    occurrenceId: string;
-    terminalStatus: "COMPLETE" | "PARTIAL_FAILURE" | "FAILED";
-    recoveredAt: string;
-  }): Promise<{ kind: "success"; run: MonitoredJobRunView }>;
   getRun(occurrenceId: string): Promise<MonitoredJobRunView>;
   getIncident(occurrenceId: string): Promise<JobIncidentView | undefined>;
   monitorReceipts(): readonly {
@@ -313,23 +308,8 @@ describe("예약 occurrence Missing·Overdue 감시 계약", () => {
     };
     const subject = createSubject({
       expectedOccurrences: [expected],
-      runs: [running({ status: "OVERDUE" })],
+      runs: [running({ status: "COMPLETE", lease: undefined, heartbeatDeadlineAt: undefined })],
       incidents: [incident],
-    });
-
-    const recovered = await subject.recordRunRecovery({
-      occurrenceId: expected.occurrenceId,
-      terminalStatus: "COMPLETE",
-      recoveredAt: "2026-07-20T00:10:00+09:00",
-    });
-    expect(recovered).toEqual({
-      kind: "success",
-      run: expect.objectContaining({
-        occurrenceId: expected.occurrenceId,
-        status: "COMPLETE",
-        checkpoint: "page-1",
-        completedTargetReceipts: ["receipt:asset-a"],
-      }),
     });
 
     const monitored = await subject.detectMissingOrOverdueRuns({

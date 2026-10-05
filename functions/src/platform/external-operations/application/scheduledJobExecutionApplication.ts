@@ -12,7 +12,6 @@ import type {
   JobExecutionObservationPort,
   ScheduledFeaturePagePort,
   ScheduledJobRunRepositoryPort,
-  TopLevelJobFailurePort,
 } from "./ports/out/scheduledJobExecutionPorts";
 
 const LEASE_DURATION_MS = 5 * 60 * 1_000;
@@ -54,7 +53,6 @@ export function createScheduledJobExecutionApplication(dependencies: {
   readonly observations: JobExecutionObservationPort;
   readonly identity: JobExecutionIdentityPort;
   readonly clock: JobExecutionClockPort;
-  readonly topLevelFailure: TopLevelJobFailurePort;
   readonly leaseDurationMs?: number;
   readonly maxPagesPerExecution?: number;
 }): ScheduledJobExecutionInputPort {
@@ -258,10 +256,7 @@ export function createScheduledJobExecutionApplication(dependencies: {
         lastHeartbeatAt: startedAt,
       };
       await dependencies.repository.saveRun(run);
-      const topLevelFailure = dependencies.topLevelFailure.failure();
-      return topLevelFailure === undefined
-        ? processPages(run, startedAt, command.deadlineAt)
-        : failAtTopLevel(run, startedAt, topLevelFailure);
+      return processPages(run, startedAt, command.deadlineAt);
     },
 
     async resume(command) {

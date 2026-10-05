@@ -28,8 +28,6 @@ export interface MemberRemovalSnapshot {
   memberOwnerProfiles: MemberLifecycleAggregate["memberOwnerProfiles"];
   principalClaims: MemberLifecycleAggregate["principalClaims"];
   activeRecipientMemberIds: readonly string[];
-  businessDataDigest: Readonly<Record<string, string>>;
-  notificationEndpointIds: readonly string[];
 }
 
 export interface MemberRemovalRestorationFixtureSubject
@@ -207,25 +205,10 @@ class FixtureMemberLifecycleUnitOfWork
 class MemberRemovalRestorationFixtureDriver
   implements MemberRemovalRestorationFixtureSubject
 {
-  private readonly businessDataDigest = {
-    transactions: "transactions:stable-member-id-references",
-    assets: "assets:stable-member-id-references",
-    registeredCards: "cards:stable-member-id-references",
-  } as const;
-  private readonly notificationEndpointIds: readonly string[];
-
   constructor(
     private readonly application: MemberLifecycleInputPort,
     private readonly unitOfWork: FixtureMemberLifecycleUnitOfWork,
-    kind: MemberLifecycleFixtureKind,
-  ) {
-    this.notificationEndpointIds =
-      kind === "removed-member"
-        ? []
-        : kind === "last-member"
-          ? ["endpoint-last"]
-          : ["endpoint-creator", "endpoint-invitee"];
-  }
+  ) {}
 
   removeHouseholdMember(...args: Parameters<MemberLifecycleInputPort["removeHouseholdMember"]>) {
     return this.application.removeHouseholdMember(...args);
@@ -235,9 +218,7 @@ class MemberRemovalRestorationFixtureDriver
     return this.application.restoreRemovedHouseholdMember(...args);
   }
 
-  authorizeMember(...args: Parameters<MemberLifecycleInputPort["authorizeMember"]>) {
-    return this.application.authorizeMember(...args);
-  }
+
 
   joinAnotherHousehold(
     principalUid: string,
@@ -265,8 +246,6 @@ class MemberRemovalRestorationFixtureDriver
       activeRecipientMemberIds: state.memberships
         .filter((membership) => membership.status === "active")
         .map((membership) => membership.memberId),
-      businessDataDigest: { ...this.businessDataDigest },
-      notificationEndpointIds: [...this.notificationEndpointIds],
     };
   }
 
@@ -282,6 +261,5 @@ export function createMemberRemovalRestorationFixtureSubject(
   return new MemberRemovalRestorationFixtureDriver(
     createMemberLifecycleApplication({ unitOfWork }),
     unitOfWork,
-    kind,
   );
 }

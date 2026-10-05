@@ -41,5 +41,5 @@ export interface MemberLifecycleInputPort {
     actor: HouseholdMemberAdminActor,
     input: RestoreRemovedHouseholdMemberCommand,
   ): Promise<MemberLifecycleCommandResult>;
-  authorizeMember(memberId: string): Promise<"allowed" | "forbidden">;
+
 }

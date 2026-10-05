@@ -7,6 +7,7 @@ import type { AdminAccessOperation } from "../../../src/bootstrap/admin/adminAcc
 import { createFirebaseAdminAccessHandlers } from "../../../src/bootstrap/firebaseAdminAccess";
 import { verifiedSystemAdministrator } from "../../../src/bootstrap/verifiedSystemAdministrator";
 import { principalClaimId } from "../../../src/adapters/firebase/access/firebaseAccessPersistence";
+import { resolveFirebaseSignedInUser } from "../../../src/adapters/firebase/access/firebaseSignedInUserResolver";
 
 const PROJECT_ID = "demo-household-account-admin-access";
 const NOW = "2026-07-21T09:00:00.000Z";
@@ -151,6 +152,8 @@ describeWithFirestoreEmulator("Firebase 관리자 Access adapter", () => {
         createdAt: NOW,
       }),
       household.collection("members").doc(memberId).set({
+        householdId,
+        memberId,
         linkedPrincipalUid: principalUid,
         displayName: "가구원",
         lifecycleState: "active",
@@ -187,6 +190,15 @@ describeWithFirestoreEmulator("Firebase 관리자 Access adapter", () => {
         .doc(householdId)
         .set({ principalUid, householdId, memberId, lifecycleState: "active" }),
     ]);
+    const preserved = [
+      household.collection('ledgerTransactions').doc('entry'),
+      household.collection('assets').doc('asset'),
+      household.collection('registeredCards').doc('card'),
+      database.collection('notificationEndpoints').doc('endpoint'),
+    ];
+    await Promise.all(preserved.map(reference => reference.set({ householdId, memberId, amountInWon: 100, lifecycleState: 'active' })));
+    const before = await Promise.all(preserved.map(async reference => (await reference.get()).data()));
+    expect(await resolveFirebaseSignedInUser(database, principalUid)).toMatchObject({ kind: 'membership-found' });
     const router = createAdminAccessRouter({
       handlers: createFirebaseAdminAccessHandlers(database),
     });
@@ -236,6 +248,9 @@ describeWithFirestoreEmulator("Firebase 관리자 Access adapter", () => {
       ).exists,
     ).toBe(false);
 
+    expect(await resolveFirebaseSignedInUser(database, principalUid)).toMatchObject({ kind: 'first-visit-required' });
+    expect(await Promise.all(preserved.map(async reference => (await reference.get()).data()))).toEqual(before);
+
     await expect(
       execute(
         envelope(
@@ -262,6 +277,8 @@ describeWithFirestoreEmulator("Firebase 관리자 Access adapter", () => {
           .get()
       ).data(),
     ).toMatchObject({ lifecycleState: "active", memberId });
+    expect(await resolveFirebaseSignedInUser(database, principalUid)).toMatchObject({ kind: 'membership-found', membership: { memberId } });
+    expect(await Promise.all(preserved.map(async reference => (await reference.get()).data()))).toEqual(before);
   });
 
   it("삭제 자산 복구는 정본 자산·자동화만 재개하고 이전 projection은 수정하지 않는다", async () => {

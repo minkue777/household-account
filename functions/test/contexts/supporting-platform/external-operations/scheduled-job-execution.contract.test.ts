@@ -115,7 +115,7 @@ interface ScheduledJobFixture {
   existingRun?: JobRunView;
   /** 테스트 경계가 업무 handler의 중단을 재현하며 제품 API에는 노출되지 않습니다. */
   interruptionAfterCheckpoint?: string;
-  topLevelFailure?: { code: string; retryable: boolean };
+  pageReadFails?: boolean;
   maxPagesPerExecution?: number;
 }
 
@@ -275,7 +275,7 @@ describe("예약 JobRun 실행·lease·부분 실패 공개 계약", () => {
     const subject = createSubject({
       now: "2026-07-19T23:56:00+09:00",
       pages: [],
-      topLevelFailure: { code: "TARGET_PAGE_UNAVAILABLE", retryable: true },
+      pageReadFails: true,
     });
 
     const result = await subject.run(command());
@@ -284,7 +284,7 @@ describe("예약 JobRun 실행·lease·부분 실패 공개 계약", () => {
     expect(result.failures).toEqual([
       expect.objectContaining({
         scope: "job",
-        code: "TARGET_PAGE_UNAVAILABLE",
+        code: "SCHEDULED_JOB_PAGE_FAILED",
         retryable: true,
       }),
     ]);

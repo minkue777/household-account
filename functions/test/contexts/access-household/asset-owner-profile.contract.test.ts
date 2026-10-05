@@ -293,15 +293,7 @@ describe("AssetOwnerProfile household/dependent identity 공개 계약", () => {
         }),
       ]),
     });
-    await expect(
-      subject.resolveOwnerProfileForHistory(memberActor, profile.profileId),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        profileId: profile.profileId,
-        displayName: profile.displayName,
-        lifecycleState: "archived",
-      }),
-    );
+
   });
 
   it("[T-HH-006][HH-011/DEC-037] 전체 관리자도 Member 연결 프로필은 보관할 수 없다", async () => {

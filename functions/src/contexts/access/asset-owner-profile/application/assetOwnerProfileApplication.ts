@@ -308,21 +308,7 @@ class DefaultAssetOwnerProfileApplication
       : { kind: "success", profiles };
   }
 
-  async resolveOwnerProfileForHistory(
-    actor: VerifiedProfileActor,
-    profileId: string,
-  ): Promise<AssetOwnerProfileView | undefined> {
-    const state = await this.dependencies.store.read();
-    if (!isActiveMember(state, actor)) {
-      return undefined;
-    }
-    const profile = state.profiles.find(
-      (candidate) =>
-        candidate.householdId === actor.householdId &&
-        candidate.profileId === profileId,
-    );
-    return profile === undefined ? undefined : toView(profile);
-  }
+
 }
 
 export function createAssetOwnerProfileApplication(
