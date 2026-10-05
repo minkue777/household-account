@@ -237,15 +237,7 @@ object QuickEditCoordinator {
             putExtra(QuickEditActivity.EXTRA_HOUSEHOLD_ID, expectedScope.householdId)
             putExtra(QuickEditActivity.EXTRA_MEMBER_ID, expectedScope.memberId)
             putExtra(QuickEditActivity.EXTRA_SESSION_GENERATION, expectedScope.sessionGeneration)
-            putExtra(QuickEditActivity.EXTRA_EXPENSE_ID, snapshot.transactionId)
-            putExtra(QuickEditActivity.EXTRA_MERCHANT, snapshot.merchant)
-            putExtra(QuickEditActivity.EXTRA_AMOUNT, snapshot.amountInWon)
-            putExtra(QuickEditActivity.EXTRA_DATE, snapshot.accountingDate)
-            putExtra(QuickEditActivity.EXTRA_TIME, snapshot.localTime)
-            putExtra(QuickEditActivity.EXTRA_CATEGORY, snapshot.categoryId)
-            putExtra(QuickEditActivity.EXTRA_MEMO, snapshot.memo)
-            putStringArrayListExtra(QuickEditActivity.EXTRA_TAGS, ArrayList(snapshot.tags))
-            putExtra(QuickEditActivity.EXTRA_VERSION, snapshot.aggregateVersion)
+            putQuickEditSnapshot(snapshot)
             observationId?.let {
                 putExtra(QuickEditActivity.EXTRA_CAPTURE_OBSERVATION_ID, it)
             }

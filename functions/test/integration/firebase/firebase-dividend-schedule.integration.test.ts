@@ -368,7 +368,7 @@ describeWithFirestoreEmulator("Firebase dividend hourly vertical slice", () => {
     ).toMatchObject({ empty: true });
   });
 
-  it("holding 삭제 뒤에도 history의 동률 이전 날짜를 골라 fixed·paid로 진행하고 canonical 전체로 projection을 교체한다", async () => {
+  it("[T-DIV-006][DIV-003] holding 삭제 뒤에도 history의 동률 이전 날짜를 골라 fixed·paid로 진행하고 canonical 전체로 projection을 교체한다", async () => {
     await seedPosition({ market: "KRX", instrumentType: "etf", code: "102110" });
     await seedHistory("2026-07-09", 9, "STOCK");
     await seedHistory("2026-07-11", 11, "STOCK");
@@ -395,6 +395,10 @@ describeWithFirestoreEmulator("Firebase dividend hourly vertical slice", () => {
       .collection("positions")
       .doc(POSITION_ID)
       .update({ lifecycleState: "deleted", aggregateVersion: 2 });
+    const announced = (await database.collection("dividend_events").get()).docs[0];
+    expect(announced.data().status).toBe("announced");
+    await runtime.runLifecyclePage({ limit: 50, executionKey: "before-record-date", asOfDate: "2026-07-09", observedAt: "2026-07-09T09:00:00+09:00" });
+    expect((await announced.ref.get()).data()).toEqual(announced.data());
     const fixedPage = await runtime.runLifecyclePage({
       limit: 50,
       executionKey: "dividend-hourly:2026-07-10T09",
@@ -425,6 +429,10 @@ describeWithFirestoreEmulator("Firebase dividend hourly vertical slice", () => {
     });
     event = (await database.collection("dividend_events").get()).docs[0];
     expect(event.data()).toMatchObject({ status: "paid", totalAmount: 1_080 });
+
+    const paid = event.data();
+    await runtime.runLifecyclePage({ limit: 50, executionKey: "late-old-as-of-date", asOfDate: "2026-07-09", observedAt: "2026-07-21T09:00:00+09:00" });
+    expect((await event.ref.get()).data()).toEqual(paid);
 
     await database.collection("dividend_snapshots").doc(`${HOUSEHOLD_ID}_2026`).set({
       householdId: HOUSEHOLD_ID,

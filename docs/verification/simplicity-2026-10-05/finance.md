@@ -156,16 +156,16 @@ Functions의 원장·카테고리·지역화폐·정기 계획·자산·보유�
 
 근거:
 
-- [functions/src/read-side/reporting/application/reportingAuthoritativeActionController.ts:26](../../../functions/src/read-side/reporting/application/reportingAuthoritativeActionController.ts#L26)
-- [functions/src/read-side/reporting/application/reportingCategoryActionController.ts:18](../../../functions/src/read-side/reporting/application/reportingCategoryActionController.ts#L18)
-- [functions/src/read-side/reporting/application/queries/boundedReportingQuery.ts:70](../../../functions/src/read-side/reporting/application/queries/boundedReportingQuery.ts#L70)
-- [functions/src/read-side/reporting/application/queries/boundedAssetStatisticsQuery.ts:101](../../../functions/src/read-side/reporting/application/queries/boundedAssetStatisticsQuery.ts#L101)
-- [functions/test/support/reporting-authoritative-action-fixture.ts:47](../../../functions/test/support/reporting-authoritative-action-fixture.ts#L47)
+- [functions/src/read-side/reporting/application/reportingAuthoritativeActionController.ts:26](https://github.com/minkue777/household-account/blob/12a582bf63bae7ad5b7c66bcfbf67ac96fb338da/functions/src/read-side/reporting/application/reportingAuthoritativeActionController.ts#L26)
+- [functions/src/read-side/reporting/application/reportingCategoryActionController.ts:18](https://github.com/minkue777/household-account/blob/12a582bf63bae7ad5b7c66bcfbf67ac96fb338da/functions/src/read-side/reporting/application/reportingCategoryActionController.ts#L18)
+- [functions/src/read-side/reporting/application/queries/boundedReportingQuery.ts:70](https://github.com/minkue777/household-account/blob/12a582bf63bae7ad5b7c66bcfbf67ac96fb338da/functions/src/read-side/reporting/application/queries/boundedReportingQuery.ts#L70)
+- [functions/src/read-side/reporting/application/queries/boundedAssetStatisticsQuery.ts:101](https://github.com/minkue777/household-account/blob/12a582bf63bae7ad5b7c66bcfbf67ac96fb338da/functions/src/read-side/reporting/application/queries/boundedAssetStatisticsQuery.ts#L101)
+- [functions/test/support/reporting-authoritative-action-fixture.ts:47](https://github.com/minkue777/household-account/blob/12a582bf63bae7ad5b7c66bcfbf67ac96fb338da/functions/test/support/reporting-authoritative-action-fixture.ts#L47)
 - [docs/requirements/supporting-platform/modules/reporting/design.md:9](../../../docs/requirements/supporting-platform/modules/reporting/design.md#L9)
 - [functions/src/contexts/portfolio/holdings/domain/policies/assetRevaluationPolicy.ts:24](../../../functions/src/contexts/portfolio/holdings/domain/policies/assetRevaluationPolicy.ts#L24)
-- [functions/src/contexts/portfolio/automation/domain/policies/automationDueTasks.ts:37](../../../functions/src/contexts/portfolio/automation/domain/policies/automationDueTasks.ts#L37)
-- [functions/src/contexts/portfolio/dividends/domain/entities/dividendEvent.ts:215](../../../functions/src/contexts/portfolio/dividends/domain/entities/dividendEvent.ts#L215)
-- [functions/test/contexts/portfolio/dividend-state-transition-contract.contract.test.ts:62](../../../functions/test/contexts/portfolio/dividend-state-transition-contract.contract.test.ts#L62)
+- [functions/src/contexts/portfolio/automation/domain/policies/automationDueTasks.ts:37](https://github.com/minkue777/household-account/blob/12a582bf63bae7ad5b7c66bcfbf67ac96fb338da/functions/src/contexts/portfolio/automation/domain/policies/automationDueTasks.ts#L37)
+- [functions/src/contexts/portfolio/dividends/domain/entities/dividendEvent.ts:215](https://github.com/minkue777/household-account/blob/12a582bf63bae7ad5b7c66bcfbf67ac96fb338da/functions/src/contexts/portfolio/dividends/domain/entities/dividendEvent.ts#L215)
+- [functions/test/contexts/portfolio/dividend-state-transition-contract.contract.test.ts:62](https://github.com/minkue777/household-account/blob/12a582bf63bae7ad5b7c66bcfbf67ac96fb338da/functions/test/contexts/portfolio/dividend-state-transition-contract.contract.test.ts#L62)
 - [functions/src/adapters/firebase/dividends/firebaseDividendEventRuntimeRepository.ts:266](../../../functions/src/adapters/firebase/dividends/firebaseDividendEventRuntimeRepository.ts#L266)
 
 현재 흐름: 현재 Web 통계 → expenseStatisticsReadModel/cache + expenseService Command + 화면 revision; 별도 Functions controller/query → fixture source/가짜 owner gateway만 호출

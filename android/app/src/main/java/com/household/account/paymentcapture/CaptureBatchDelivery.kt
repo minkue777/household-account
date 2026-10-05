@@ -1,10 +1,6 @@
 package com.household.account.paymentcapture
 
-/**
- * 한 OS 알림의 모든 envelope를 먼저 journal에 기록한 뒤, 네트워크 호출은 Queue mutex
- * 밖에서 순서대로 실행합니다. 각 commit은 짧은 Queue 연산으로 직렬화되어 동시 enqueue를
- * 덮어쓰지 않습니다.
- */
+/** OS 알림의 모든 후보를 먼저 내구화한 뒤 재시도와 같은 전달 경로를 사용합니다. */
 internal suspend fun enqueueAndSubmitCaptureBatch(
     queue: CaptureDeliveryQueue,
     scope: CaptureSessionScope,
@@ -23,36 +19,7 @@ internal suspend fun enqueueAndSubmitCaptureBatch(
     if (persistedEnvelopes.isEmpty()) return null
     afterJournalPersisted(persistedEnvelopes)
 
-    val followUps = mutableListOf<CaptureDeliveryFollowUp>()
-    var retainedCount = 0
-    persistedEnvelopes.forEach { envelope ->
-        val receipt = try {
-            client.submit(envelope)
-        } catch (_: Exception) {
-            retainedCount++
-            return@forEach
-        }
-        val decision = evaluateCaptureReceipt(envelope, receipt)
-        try {
-            beforeCommitFollowUps(decision.followUps)
-        } catch (_: Exception) {
-            retainedCount++
-            return@forEach
-        }
-
-        val committed = if (decision.completed) {
-            queue.completeAfterAttempt(scope, envelope)
-        } else {
-            queue.retainAfterAttempt(scope, envelope, decision.terminalBranches)
-        }
-        if (!committed) {
-            retainedCount++
-            return@forEach
-        }
-        followUps += decision.followUps
-        if (!decision.completed) retainedCount++
-    }
-    return CaptureFlushOutcome(followUps, retainedCount)
+    return queue.flush(scope, client, beforeCommitFollowUps)
 }
 
 internal class CaptureIdempotencyPayloadMismatchException(

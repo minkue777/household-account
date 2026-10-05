@@ -1,7 +1,6 @@
 export interface DiagnosticActor {
   readonly householdId: string;
   readonly memberId: string;
-  readonly role: "member" | "administrator" | "diagnostic-reader";
 }
 
 export interface DiagnosticNotification {
@@ -41,10 +40,6 @@ export type DiagnosticCollectionResult =
       readonly businessOutcome: DiagnosticBusinessOutcome;
     };
 
-export type DiagnosticReadResult =
-  | { readonly kind: "Allowed"; readonly documents: readonly DiagnosticDocument[] }
-  | { readonly kind: "Forbidden" };
-
 export interface DiagnosticRetentionInputPort {
   collect(input: {
     readonly actor?: DiagnosticActor;
@@ -52,5 +47,4 @@ export interface DiagnosticRetentionInputPort {
     readonly notification: DiagnosticNotification;
     readonly businessOutcome: DiagnosticBusinessOutcome;
   }): Promise<DiagnosticCollectionResult>;
-  readAll(actor: DiagnosticActor): Promise<DiagnosticReadResult>;
 }

@@ -68,7 +68,7 @@ async function openEditor() {
   return screen.getByRole('dialog', { name: '지출 수정' });
 }
 
-it('distinguishes observed zero, NoData and source failure and advances revision only after a successful command', async () => {
+it('[T-STAT-001][T-STAT-005][STAT-004][STAT-005] distinguishes observed zero, NoData and source failure and advances revision only after a successful command', async () => {
   mockCategories = [category('food', 500), category('living', null)];
   read.mockResolvedValueOnce([row]).mockResolvedValueOnce([{ ...row, amount: 20 }]);
   jest.mocked(updateExpense).mockImplementation(confirmMutation);
@@ -451,4 +451,14 @@ it('keeps the restored edit draft across background resume revalidation failure'
   await screen.findByRole('alert');
   expect(within(screen.getByRole('dialog', { name: '지출 수정' })).getByDisplayValue('복귀 후에도 보존할 내용')).toBeInTheDocument();
   expect(screen.getByTestId('donut-source')).toHaveTextContent('food:10');
+});
+
+it('[T-STAT-003][STAT-002] 실제 통계 화면은 지출 없는 중간 월을 0으로 유지하고 총액과 카테고리 추이가 일치한다', async () => {
+  const range = resolveExpenseStatisticsPeriod('3months', '', '');
+  mockCategories = [category('food', 100)];
+  read.mockResolvedValue([{ ...row, id: 'first', date: range.startDate, amount: 12000 }, { ...row, id: 'last', date: range.endDate, amount: 8000 }]);
+  render(<StatsPage />);
+  await screen.findByText('20,000원');
+  fireEvent.click(screen.getByRole('button', { name: '3개월' }));
+  expect(mockTrendInputs.at(-1)?.data.datasets).toEqual([expect.objectContaining({ label: 'food', data: [12000, 0, 8000] })]);
 });

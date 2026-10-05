@@ -96,7 +96,6 @@ export function createNotificationDiagnosticCallableHandler(input: {
         actor: {
           householdId: membership.householdId,
           memberId: membership.memberId,
-          role: "member",
         },
         sourceRegistered: source !== undefined,
         notification: {

@@ -1,5 +1,6 @@
 package com.household.account.paymentcapture
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -120,6 +121,7 @@ class CaptureDeliveryQueue(
     private val nowEpochMillis: () -> Long = System::currentTimeMillis
 ) {
     private val mutex = Mutex()
+    private val deliveryMutex = Mutex()
     private val purgedScopes = mutableSetOf<CaptureSessionScope>()
 
     /** 모든 후보를 한 번의 암호화 store 교체로 기록한 뒤에만 원격 제출을 허용합니다. */
@@ -172,41 +174,45 @@ class CaptureDeliveryQueue(
         currentScope: CaptureSessionScope,
         client: CaptureSubmissionClient,
         beforeCommitFollowUps: suspend (List<CaptureDeliveryFollowUp>) -> Unit = {}
-    ): CaptureFlushOutcome = mutex.withLock {
-        if (!currentScope.isUsable || currentScope in purgedScopes) {
-            return@withLock CaptureFlushOutcome(emptyList(), store.load().size)
+    ): CaptureFlushOutcome = deliveryMutex.withLock {
+        val pending = mutex.withLock {
+            if (!currentScope.isUsable || currentScope in purgedScopes) emptyList()
+            else {
+                val stored = store.load()
+                val active = stored.filter { it.scope == currentScope && !isExpired(it) }
+                if (active.size != stored.size) store.replace(active)
+                active
+            }
         }
-        val retained = mutableListOf<QueuedCapture>()
         val followUps = mutableListOf<CaptureDeliveryFollowUp>()
-
-        for (entry in store.load()) {
-            if (isExpired(entry) || entry.scope != currentScope || !currentScope.isUsable) {
-                continue
+        for (entry in pending) {
+            val canSubmit = mutex.withLock {
+                currentScope !in purgedScopes && !isExpired(entry) && entry in store.load()
             }
-
-            val receipt = try {
-                client.submit(entry.envelope)
+            if (!canSubmit) continue
+            try {
+                // Delivery is serialized, but incoming journal writes and logout never wait for HTTP.
+                val receipt = client.submit(entry.envelope)
+                mutex.withLock commit@ {
+                    val current = store.load()
+                    if (currentScope in purgedScopes || isExpired(entry) || entry !in current) return@commit
+                    val decision = evaluateCaptureReceipt(entry.envelope, receipt, entry.terminalBranches)
+                    // Persist QuickEdit first. Its transactionId dedup covers a crash between stores.
+                    beforeCommitFollowUps(decision.followUps)
+                    store.replace(current.mapNotNull {
+                        if (it != entry) it
+                        else if (decision.completed) null
+                        else it.copy(terminalBranches = decision.terminalBranches)
+                    })
+                    followUps += decision.followUps
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
-                retained += entry
-                continue
-            }
-
-            val decision = evaluateCaptureReceipt(
-                envelope = entry.envelope,
-                receipt = receipt,
-                previouslyTerminal = entry.terminalBranches
-            )
-            followUps += decision.followUps
-            if (!decision.completed) {
-                retained += entry.copy(terminalBranches = decision.terminalBranches)
+                // The original journal entry remains retryable after transport or local commit failure.
             }
         }
-
-        // 두 로컬 저장소를 하나의 transaction으로 묶을 수 없으므로 QuickEdit FIFO를
-        // 먼저 내구화하고, 재실행 중복은 transactionId dedup으로 흡수합니다.
-        beforeCommitFollowUps(followUps)
-        store.replace(retained)
-        CaptureFlushOutcome(followUps, retained.size)
+        mutex.withLock { CaptureFlushOutcome(followUps, store.load().size) }
     }
 
     suspend fun purgeForSessionTransition(previousScope: CaptureSessionScope? = null) = mutex.withLock {
@@ -218,46 +224,6 @@ class CaptureDeliveryQueue(
 
     suspend fun resumeAfterFailedTransition(scope: CaptureSessionScope) = mutex.withLock {
         purgedScopes.remove(scope)
-    }
-
-    suspend fun retainAfterAttempt(
-        scope: CaptureSessionScope,
-        envelope: CaptureDeliveryEnvelope,
-        terminalBranches: Set<CaptureBranch>
-    ): Boolean = mutex.withLock {
-        if (!scope.isUsable || scope in purgedScopes) return@withLock false
-        val entries = store.load().filterNot { isExpired(it) }.toMutableList()
-        val index = entries.indexOfFirst {
-            it.envelope.observationId == envelope.observationId
-        }
-        if (index >= 0) {
-            val current = entries[index]
-            entries[index] = current.copy(
-                terminalBranches = current.terminalBranches + terminalBranches
-            )
-        } else {
-            entries += QueuedCapture(
-                scope = scope,
-                envelope = envelope,
-                queuedAtEpochMillis = nowEpochMillis(),
-                terminalBranches = terminalBranches
-            )
-        }
-        store.replace(entries)
-        true
-    }
-
-    suspend fun completeAfterAttempt(
-        scope: CaptureSessionScope,
-        envelope: CaptureDeliveryEnvelope
-    ): Boolean = mutex.withLock {
-        if (!scope.isUsable) return@withLock false
-        val current = store.load()
-        val retained = current.filterNot {
-            it.scope == scope && it.envelope.observationId == envelope.observationId
-        }
-        store.replace(retained)
-        true
     }
 
     fun snapshot(): List<QueuedCapture> = store.load()

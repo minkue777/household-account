@@ -210,7 +210,7 @@ Functions의 `SourceSelector`는 서버 `PaymentSourceRegistry`에서 package를
 
 연도 없는 월·일·시·분은 parser별 휴리스틱으로 결정하지 않고 DEC-029의 `PaymentOccurrenceYearPolicyV1`을 사용합니다. Policy는 위에서 확정한 서울 기준 수신 시각을 입력받고 수신 연도의 후보가 수신 시각보다 미래면 전년으로 내립니다. 윤년처럼 후보가 유효하지 않으면 유효하면서 미래가 아닌 가장 가까운 과거 연도까지 탐색합니다. 같은 날짜의 미래 시각에도 허용 오차를 두지 않으며 불가능한 날짜·시각은 `INVALID_DATE` 또는 `INVALID_TIME`입니다. Kotlin과 TypeScript 구현은 `T-PARSE-003` JSON fixture로 계약을 공유합니다.
 
-SMS Adapter는 후보마다 KB → NH → NaverPay → Toss → KakaoPay → DigitalOnnuri → Paybooc → Samsung → Lotte → Gyeonggi → Daejeon 순으로 첫 성공을 선택하고, 모두 실패하면 `SmsCardMessageParser`를 마지막에 실행합니다. Sejong과 CityGas는 이 내부 순서에 포함하지 않습니다. 순서는 이름으로 발견한 parser 목록이나 DI 등록 순서에 맡기지 않고 versioned `SmsParserOrderPolicy`와 `T-SMS-ORDER-001` fixture로 고정합니다.
+SMS Adapter는 후보마다 KB → NH → NaverPay → Toss → KakaoPay → DigitalOnnuri → Paybooc → Samsung → Lotte → Gyeonggi → Daejeon 순으로 첫 성공을 선택하고, 모두 실패하면 `SmsCardMessageParser`를 마지막에 실행합니다. Sejong과 CityGas는 이 내부 순서에 포함하지 않습니다. 실행 순서는 실제 `smsBillProviderParser` 배열 한 곳에서 관리하며 `T-SMS-ORDER-001`은 실제 parser 호출 순서·겹치는 문자·중단을 검사합니다. 전용 앱은 package가 지역을 확정하지만 공용 SMS에서는 경기지역화폐·대전사랑카드/온통대전/대전지역화폐 서비스명이 있어야 해당 지역 parser를 선택합니다. 지역명이 없는 일반 결제·잔액이나 여민전을 경기지역화폐로 추정하지 않습니다.
 
 KakaoTalk Adapter는 `MessagingStyle.messages`의 현재 메시지를 표시 순서대로 독립 후보로 만들고 `historicMessages`는 후보에 넣지 않습니다. 후보별 admission·30초 claim·observation ID·암호화 Queue entry를 따로 만들기 때문에 `A` 알림이 `A+B`로 갱신돼도 A의 중복 여부와 새 B의 처리가 분리됩니다. 구조화 메시지가 없는 fallback은 기존 raw 필드 계약을 사용하되, 여러 거래의 필드를 서로 빌려 하나의 결과를 합성하지 않습니다.
 
@@ -325,7 +325,8 @@ Queue root 상태는 `queued → submitting → completed | partial-retryable | 
 ### 7.1 Android 로컬 상태
 
 - 30초 cache는 메모리 전용입니다.
-- 최초 전달은 후보 한 개도 `enqueueBatchAndFlush` → `enqueueAll`을 사용합니다. 별도 단건 전송 구현은 두지 않으며 실패 복구는 기존 `flush`로 수행합니다.
+- 최초 전달은 후보 한 개도 `enqueueBatchAndFlush` → `enqueueAll` → `flush`를 사용합니다. WorkManager 재시도도 같은 `flush`를 호출하며 응답 해석·후속 효과·journal 확정을 별도로 구현하지 않습니다.
+- 전달 mutex는 중복 flush를 직렬화하고 저장 mutex는 journal 읽기·교체만 보호합니다. HTTP 대기 중에도 신규 journal 기록과 로그아웃 purge가 진행됩니다. 제출 직전과 응답 확정 직후 원래 scope·만료·entry 존재를 확인하여 이전 세션의 늦은 응답이 자료나 QuickEdit을 되살리지 않습니다. coroutine 취소는 호출자에게 전달하고 원래 journal은 재시도할 수 있게 남깁니다.
 - 모든 원격 호출은 process 종료 중 유실을 막기 위해 로컬 Observation journal에 먼저 씁니다. 정상 online terminal 경로는 QuickEdit FIFO enqueue 뒤 journal을 즉시 지우고 WorkManager를 예약하지 않습니다.
 - Queue key는 설치 범위 무작위 `observationId`이며 같은 entry의 모든 retry에서 바꾸지 않습니다.
 - journal payload는 `AndroidRawNotification.v1`과 terminal branch marker이며 전체를 Android Keystore의 non-exportable AES-256-GCM 키로 암호화합니다. 백그라운드 WorkManager 실행을 위해 사용자 인증 요구 조건을 붙이지 않습니다.
@@ -450,7 +451,7 @@ parser golden fixture에는 정상 승인, 지원 취소, 빈 필드, 0원·음�
 | [ING-004](requirements.md#51-수집출처-선택중복-처리) | Domain Unit | recent cache | 29,999·30,000·30,001ms, process restart, 카카오 알림 `A → A+B` 갱신 | 앞 둘 중복, 마지막·재시작 후 재처리, A는 후보 중복·B는 새 후보 수용 | `T-ING-002` |
 | [ING-005](requirements.md#51-수집출처-선택중복-처리) | Adapter Integration, Security | DiagnosticSink | actor 없음, 등록·미등록 source, 같은 원문 반복, 쓰기 실패, 비관리자, 장기 경과 | gate 밖 미수집·업무 결과 불변·접근 거부·기능 제거 전 모든 진단 문서 유지·별도 Secret 비수집 | `T-DIAG-001` |
 | [ING-006](requirements.md#51-수집출처-선택중복-처리) | Android Admission + Server Parser Unit | 다목적 앱 전송 gate·SMS 후보·KakaoTalk 현재 메시지 분리 | 일반 대화, Google·Samsung·MMS, 0·1·2행 제거, 카카오 현재 승인 3개·과거 메시지·도시가스 고지서 | 일반·과거 대화 미전송, 카카오 현재 메시지별 독립 후보, 카드·고지서 후보만 자기 server parser 실행 | `T-PARSE-001`, `T-PARSE-002` |
-| [ING-007](requirements.md#51-수집출처-선택중복-처리) | Parser Unit | SmsParserOrderPolicy | 여러 parser와 청구가 동시에 맞는 후보, 세종 후보 | 명시 순서의 첫 성공 하나, 청구는 마지막, 세종 미포함 | `T-SMS-ORDER-001` |
+| [ING-007](requirements.md#51-수집출처-선택중복-처리) | Parser Unit | 실제 SMS parser | 여러 parser와 청구가 동시에 맞는 후보, 세종 후보 | 명시 순서의 첫 성공 하나, 청구는 마지막, 세종 미포함 | `T-SMS-ORDER-001` |
 | [ING-008](requirements.md#51-수집출처-선택중복-처리) | Android Integration, Security, Clock | write-ahead journal·direct delivery·WorkManager·contract router | online terminal, 원격 호출 중 process 종료, transport failure·재시작, 71:59:59·72:00:00, partial retry, follow-up enqueue 실패, parser 무결과 terminal, legacy entry, logout·키 무효화 | 원격 호출 전 ciphertext journal, terminal은 QuickEdit FIFO durable enqueue 뒤 journal 제거·Worker 없음, 실패는 같은 observation 재시도, QuickEdit 중복 없음, terminal·만료·session 전환 삭제, legacy 유실 없음 | `T-QUEUE-001`, `T-ING-BAL-001` |
 | [ING-009](requirements.md#51-수집출처-선택중복-처리) | Application, Context Contract | 독립 branch coordinator·receipt | balance-only, 카드 거부+잔액, 거래 성공+잔액 실패, 거래 실패+잔액 성공 | 결과·stage·key 독립, 성공 branch rollback·재호출 없음 | `T-ING-BAL-001` |
 | [PARSE-KB-001](requirements.md#52-지원-입력-형식) | Parser Golden | KB parser | 승인·취소·요약형·게시시각 없음, 줄바꿈 없는 inline `MM/DD HH:mm` 본문과 후행 `누적`, `KB국민체크(1164)` 문자 분리형과 `가맹점 사용` | 명의자 무시, inline 가맹점 추출·후행 누적 제거, 사용 접미사 제거, 금액·일시·국민 token 추출 | `T-PARSE-001`, `T-PARSE-002` |

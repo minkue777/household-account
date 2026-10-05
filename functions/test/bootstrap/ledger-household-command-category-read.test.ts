@@ -81,6 +81,15 @@ function subject() {
 }
 
 describe("Ledger command category lookup boundary", () => {
+  it.each([["transfer", "TRANSACTION_TYPE_INVALID"], ["Expense", "TRANSACTION_TYPE_INVALID"], ["", "TRANSACTION_TYPE_INVALID"], [undefined, "TRANSACTIONTYPE_REQUIRED"], [null, "TRANSACTIONTYPE_REQUIRED"], [123, "TRANSACTIONTYPE_REQUIRED"]])("알 수 없는 수동 거래 유형 %s는 저장소 접근 전에 거부한다", async (transactionType, code) => {
+    const handlers = createLedgerHouseholdCommandHandlers({} as firestore.Firestore);
+    const execute = handlers.get("ledger.record-manual-transaction.v1")!.execute;
+    await expect(execute({ principalUid: "uid-1", requestedAt: "2026-07-22T12:00:00Z", envelope: { contractVersion: "household-command.v1", command: "ledger.record-manual-transaction.v1", commandId: "invalid-type", idempotencyKey: "invalid-type", householdId: "household-1", payload: {
+      transactionType, merchant: "가맹점", amountInWon: 10_000,
+      categoryId: "etc", accountingDate: "2026-07-22",
+    } } } as HouseholdCommandExecutionContext)).rejects.toMatchObject({ code });
+  });
+
   it("기본 CRUD만 도메인 command receipt fast path를 선언한다", () => {
     const database = {} as firestore.Firestore;
     const handlers = createLedgerHouseholdCommandHandlers(database);

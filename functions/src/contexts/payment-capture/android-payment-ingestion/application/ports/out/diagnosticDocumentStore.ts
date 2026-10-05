@@ -1,5 +1,4 @@
 import type {
-  DiagnosticDocument,
   DiagnosticNotification,
 } from "../in/diagnosticRetentionInputPort";
 
@@ -11,5 +10,4 @@ export interface DiagnosticDocumentStore {
     | { readonly kind: "Written"; readonly diagnosticId: string }
     | { readonly kind: "Failed" }
   >;
-  readAll(): Promise<readonly DiagnosticDocument[]>;
 }

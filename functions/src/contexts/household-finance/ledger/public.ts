@@ -22,7 +22,6 @@ export type {
   LedgerPeriodQueryResult,
 } from "./application/queries/ledgerPeriodQuery";
 export type { BasicLedgerCommands } from "./application/commands/basicLedgerService";
-export type { CapturedLineageCancellationCommands } from "./application/commands/cancelCapturedLineage";
 export type { MonthlySplitLifecycleCommands } from "./application/commands/monthlySplitLifecycleService";
 export type { ItemSplitRestorationCommands } from "./application/commands/itemSplitRestorationService";
 export type { LedgerTransformationCommands } from "./application/commands/transformationLineageService";
@@ -32,11 +31,6 @@ export type {
   LedgerTransactionType,
   LedgerTransactionView,
 } from "./domain/model/ledgerTransaction";
-export type {
-  CapturedLineageCancellationResult,
-  CapturedLineageCancellationState,
-  CapturedMonthlyTransaction,
-} from "./domain/model/capturedLineageCancellation";
 export type {
   SplitLifecycleResult,
   SplitTransaction,

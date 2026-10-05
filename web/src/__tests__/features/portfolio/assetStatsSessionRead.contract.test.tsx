@@ -110,7 +110,7 @@ describe('actual asset statistics page', () => {
     expect(commits.every(text => !text.includes('자산 통계를 불러오지 못했습니다.'))).toBe(true);
     expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument();
   });
-  it('shows only asset-type series, preserves observed zero and reads ALL without a 2020 cutoff', async () => {
+  it('[T-STAT-AST-003][STAT-AST-001] shows only asset-type series, preserves observed zero and reads ALL without a 2020 cutoff', async () => {
     mockScope.isSessionVerified = true;
     read.mockResolvedValue([entry('TOTAL', '2019-01-01', 0), entry('TYPE_stock', '2019-01-01', 0), entry('OWNER_REF_profile:old', '2019-01-01', 0, { ownerKey: 'profile:old', ownerDisplayName: '지아' })]);
     render(<AssetStatsPage />);

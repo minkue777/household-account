@@ -1,7 +1,6 @@
 import type {
   DiagnosticActor,
   DiagnosticCollectionResult,
-  DiagnosticReadResult,
   DiagnosticRetentionInputPort,
 } from "./ports/in/diagnosticRetentionInputPort";
 import type { DiagnosticDocumentStore } from "./ports/out/diagnosticDocumentStore";
@@ -72,15 +71,7 @@ class DefaultDiagnosticRetentionApplication
         };
   }
 
-  async readAll(actor: DiagnosticActor): Promise<DiagnosticReadResult> {
-    if (actor.role !== "administrator" && actor.role !== "diagnostic-reader") {
-      return { kind: "Forbidden" };
-    }
-    return {
-      kind: "Allowed",
-      documents: await this.store.readAll(),
-    };
-  }
+
 }
 
 export function createDiagnosticRetentionApplication(

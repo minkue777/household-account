@@ -4,7 +4,6 @@ import { createDiagnosticRetentionDriver } from "../../../support/diagnostic-ret
 export interface DiagnosticActorFixture {
   householdId: string;
   memberId: string;
-  role: "member" | "administrator" | "diagnostic-reader";
 }
 
 export interface DiagnosticNotificationFixture {
@@ -32,10 +31,6 @@ export type DiagnosticCollectionResult =
       businessOutcome: "Accepted" | "Ignored";
     };
 
-export type DiagnosticReadResult =
-  | { kind: "Allowed"; documents: readonly DiagnosticDocumentView[] }
-  | { kind: "Forbidden" };
-
 export interface DiagnosticDocumentView extends DiagnosticNotificationFixture {
   diagnosticId: string;
   householdId: string;
@@ -59,7 +54,6 @@ export interface DiagnosticRetentionContractSubject {
       householdAccessKey: string;
     };
   }): Promise<DiagnosticCollectionResult>;
-  readAll(actor: DiagnosticActorFixture): Promise<DiagnosticReadResult>;
   state(at: string): Promise<DiagnosticRetentionState>;
 }
 
@@ -81,10 +75,9 @@ const notification = (
   collectedAt: "2026-07-20T10:00:00+09:00",
 });
 
-const member = (role: DiagnosticActorFixture["role"] = "member"): DiagnosticActorFixture => ({
+const member = (): DiagnosticActorFixture => ({
   householdId: "household-1",
   memberId: "member-1",
-  role,
 });
 
 describe("임시 알림 원문 진단 Adapter 공개 계약", () => {
@@ -210,24 +203,4 @@ describe("임시 알림 원문 진단 Adapter 공개 계약", () => {
     expect(document).not.toHaveProperty("householdAccessKey");
   });
 
-  it("[T-DIAG-001][ING-005] 일반 멤버는 원문을 읽을 수 없고 관리자·진단 역할만 읽는다", async () => {
-    const subject = createSubject();
-    await subject.collect({
-      actor: member(),
-      sourceRegistered: true,
-      notification: notification(),
-      businessOutcome: "Ignored",
-    });
-
-    expect(await subject.readAll(member("member"))).toEqual({ kind: "Forbidden" });
-    expect(await subject.readAll(member("administrator"))).toMatchObject({
-      kind: "Allowed",
-      documents: [expect.objectContaining(notification())],
-    });
-    expect(await subject.readAll(member("diagnostic-reader"))).toMatchObject({
-      kind: "Allowed",
-      documents: [expect.objectContaining(notification())],
-    });
-    expect((await subject.state("2036-07-20T10:00:00+09:00")).documents).toHaveLength(1);
-  });
 });

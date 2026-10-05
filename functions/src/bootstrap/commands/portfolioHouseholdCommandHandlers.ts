@@ -135,9 +135,7 @@ export function createPortfolioHouseholdCommandHandlers(
               metadata: metadata(context),
               assetId: stringField(payload, "assetId"),
               changes: payload.changes,
-              ...(expectedVersion(payload) === undefined
-                ? {}
-                : { expectedVersion: expectedVersion(payload) }),
+              expectedVersion: expectedVersion(payload),
             }),
           );
         },
@@ -184,12 +182,11 @@ export function createPortfolioHouseholdCommandHandlers(
         async execute(context) {
           const payload = record(context.envelope.payload);
           exactFields(payload, ["assetId", "expectedVersion"]);
-          const version = expectedVersion(payload);
           return value(
             await application.deleteAsset({
               metadata: metadata(context),
               assetId: stringField(payload, "assetId"),
-              ...(version === undefined ? {} : { expectedVersion: version }),
+              expectedVersion: expectedVersion(payload),
             }),
           );
         },
@@ -228,7 +225,6 @@ export function createPortfolioHouseholdCommandHandlers(
             "expectedVersion",
             "expectedAssetVersion",
           ]);
-          const version = expectedVersion(payload);
           return value(
             await application.updatePosition({
               metadata: metadata(context),
@@ -237,7 +233,7 @@ export function createPortfolioHouseholdCommandHandlers(
               positionKind: positionKind(payload.positionKind),
               changes: payload.changes,
               expectedAssetVersion: expectedVersion({ expectedVersion: payload.expectedAssetVersion }),
-              ...(version === undefined ? {} : { expectedVersion: version }),
+              expectedVersion: expectedVersion(payload),
             }),
           );
         },
@@ -256,7 +252,6 @@ export function createPortfolioHouseholdCommandHandlers(
             "expectedVersion",
             "expectedAssetVersion",
           ]);
-          const version = expectedVersion(payload);
           return value(
             await application.deletePosition({
               expectedAssetVersion: expectedVersion({ expectedVersion: payload.expectedAssetVersion }),
@@ -264,7 +259,7 @@ export function createPortfolioHouseholdCommandHandlers(
               assetId: stringField(payload, "assetId"),
               positionId: stringField(payload, "positionId"),
               positionKind: positionKind(payload.positionKind),
-              ...(version === undefined ? {} : { expectedVersion: version }),
+              expectedVersion: expectedVersion(payload),
             }),
           );
         },

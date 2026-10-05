@@ -244,6 +244,9 @@ export function createLedgerHouseholdCommandHandlers(
         async execute(context) {
           const payload = record(context.envelope.payload);
           const transactionType = stringValue(payload, "transactionType");
+          if (transactionType !== "expense" && transactionType !== "income") {
+            throw new HouseholdCommandRejection("TRANSACTION_TYPE_INVALID");
+          }
           const categories =
             transactionType === "income"
               ? undefined

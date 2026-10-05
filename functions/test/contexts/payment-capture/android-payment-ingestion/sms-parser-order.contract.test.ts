@@ -1,121 +1,72 @@
-import { describe, expect, it } from "vitest";
-import {
-  createSmsParserOrderDriver,
-  type SmsParserId,
-  type SmsParserOrderInputPort,
-  type SmsParserOrderState,
-} from "../../../support/sms-parser-order-driver";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createAndroidProviderParser } from "../../../../src/contexts/payment-capture/android-payment-ingestion/public";
+import { resolvePaymentOccurrenceYear } from "../../../../src/contexts/payment-capture/intake/public";
+import { kbCardProviderParser, nhPayProviderParser, payboocProviderParser, samsungCardProviderParser, lotteCardProviderParser } from "../../../../src/contexts/payment-capture/android-payment-ingestion/domain/parsers/cardProviderParsers";
+import { naverPayProviderParser, tossBankProviderParser, kakaoPayProviderParser, digitalOnnuriProviderParser } from "../../../../src/contexts/payment-capture/android-payment-ingestion/domain/parsers/walletProviderParsers";
+import { gyeonggiLocalCurrencyProviderParser, daejeonLocalCurrencyProviderParser } from "../../../../src/contexts/payment-capture/android-payment-ingestion/domain/parsers/localCurrencyProviderParsers";
 
-export interface SmsParserOrderContractSubject extends SmsParserOrderInputPort {
-  state(): SmsParserOrderState;
-}
+const clockNow = "2026-07-19T20:01:00+09:00";
+const parse = (text: string) => createAndroidProviderParser().parse({
+  source: { packageName: "com.samsung.android.messaging", parserId: "sms-card-message-parser" },
+  notification: { text, postedAt: clockNow }, clockNow,
+});
+const bill = "[NH농협카드]\n07월분 아파트관리비 182,000원\n카드 정상(승인)납부 완료.";
+afterEach(() => vi.restoreAllMocks());
 
-export function createSubject(): SmsParserOrderContractSubject {
-  return createSmsParserOrderDriver();
-}
-
-const parserPriority = [
-  "KB",
-  "NH",
-  "NaverPay",
-  "Toss",
-  "KakaoPay",
-  "DigitalOnnuri",
-  "Paybooc",
-  "Samsung",
-  "Lotte",
-  "Gyeonggi",
-  "Daejeon",
-  "SmsCardBill",
-] as const satisfies readonly SmsParserId[];
-
-describe("SMS parser 순서 공개 계약", () => {
-  it("[T-SMS-ORDER-001][ING-007] 여러 parser가 성공해도 명시된 공급자 순서의 첫 결과만 선택한다", () => {
-    const subject = createSubject();
-
-    const result = subject.select({
-      candidateId: "candidate-1",
-      successfulParserIds: ["Daejeon", "Samsung", "Toss", "KB"],
-    });
-
-    expect(result).toEqual({
-      kind: "Selected",
-      parserId: "KB",
-      candidateId: "candidate-1",
-    });
-    expect(subject.state()).toEqual({
-      selectedParserId: "KB",
-      unsupportedInternalParserIds: [],
-    });
+describe("실제 SMS parser 순서", () => {
+  it("[T-SMS-ORDER-001][ING-007] 같은 본문을 KB와 NH가 모두 해석할 때 KB 결과로 중단한다", () => {
+    const text = "KB국민카드1234 승인\nNH카드 5678 승인\n12,300원 일시불\n07/19 10:15\n가맹점가";
+    const context = { title: "", body: text, postedAt: clockNow, clockNow, resolveOccurrenceYear: resolvePaymentOccurrenceYear };
+    const kb = kbCardProviderParser.parse(context);
+    const nh = nhPayProviderParser.parse(context);
+    expect(kb).toMatchObject({ kind: "Parsed", payment: { cardCompany: "국민", maskedCardToken: "1234" } });
+    expect(nh).toMatchObject({ kind: "Parsed", payment: { cardCompany: "농협", maskedCardToken: "5678" } });
+    const next = vi.spyOn(nhPayProviderParser, "parse");
+    expect(parse(text)).toEqual(kb);
+    expect(next).not.toHaveBeenCalled();
   });
 
-  it("[T-SMS-ORDER-001][ING-007] 문자 청구 parser는 다른 모든 지원 parser가 실패한 뒤에만 선택한다", () => {
-    const subject = createSubject();
-
-    expect(
-      subject.select({
-        candidateId: "candidate-2",
-        successfulParserIds: ["SmsCardBill", "Lotte"],
-      }),
-    ).toEqual({
-      kind: "Selected",
-      parserId: "Lotte",
-      candidateId: "candidate-2",
-    });
-    expect(subject.state().selectedParserId).toBe("Lotte");
-  });
-
-  it("[T-SMS-ORDER-001][ING-007] 세종 parser는 SMS 내부 후보가 아니므로 성공 신호가 있어도 선택하지 않는다", () => {
-    const subject = createSubject();
-
-    expect(
-      subject.select({
-        candidateId: "candidate-3",
-        successfulParserIds: ["Sejong"],
-      }),
-    ).toEqual({ kind: "Unmatched" });
-    expect(subject.state()).toEqual({
-      selectedParserId: undefined,
-      unsupportedInternalParserIds: ["Sejong"],
-    });
-  });
-
-  it("[T-SMS-ORDER-001][ING-007] 각 우선순위 suffix에서 가장 앞선 parser를 결정적으로 선택한다", () => {
-    const subject = createSubject();
-
-    parserPriority.forEach((expectedParserId, index) => {
-      const candidateId = `priority-candidate-${index}`;
-      const successfulParserIds = [
-        ...parserPriority.slice(index).reverse(),
-        "Sejong",
-      ] as const;
-
-      expect(
-        subject.select({ candidateId, successfulParserIds }),
-      ).toEqual({
-        kind: "Selected",
-        parserId: expectedParserId,
-        candidateId,
+  it("[T-SMS-ORDER-001][ING-007] 실제 공급자 함수를 정해진 순서로 호출하고 전부 실패하면 무시한다", () => {
+    const parsers = [kbCardProviderParser, nhPayProviderParser, naverPayProviderParser, tossBankProviderParser,
+      kakaoPayProviderParser, digitalOnnuriProviderParser, payboocProviderParser, samsungCardProviderParser,
+      lotteCardProviderParser, gyeonggiLocalCurrencyProviderParser, daejeonLocalCurrencyProviderParser];
+    const calls: string[] = [];
+    for (const parser of parsers) {
+      const original = parser.parse;
+      vi.spyOn(parser, "parse").mockImplementation(context => {
+        calls.push(parser.parserId);
+        return original(context);
       });
-      expect(subject.state()).toEqual({
-        selectedParserId: expectedParserId,
-        unsupportedInternalParserIds: ["Sejong"],
-      });
-    });
+    }
+    expect(parse("경기지역화폐 대전사랑카드 문자 형식 미일치")).toEqual({ kind: "Ignored", code: "NOT_COMPLETED_PAYMENT" });
+    expect(calls).toEqual(parsers.map(parser => parser.parserId));
   });
 
-  it("[T-SMS-ORDER-001][ING-007] 성공한 지원 parser가 하나도 없으면 선택 결과를 만들지 않는다", () => {
-    const subject = createSubject();
+  it("[T-SMS-ORDER-001][ING-007] 카드 승인과 청구 완료가 겹치면 카드 승인을 먼저 선택한다", () => {
+    const result = parse("삼성1234승인\n12,300원 일시불\n07/19 10:15 가맹점가\n" + bill);
+    expect(result).toMatchObject({ kind: "Parsed", payment: { cardCompany: "삼성", amountInWon: 12300 } });
+  });
 
-    expect(
-      subject.select({
-        candidateId: "candidate-unmatched",
-        successfulParserIds: [],
-      }),
-    ).toEqual({ kind: "Unmatched" });
-    expect(subject.state()).toEqual({
-      selectedParserId: undefined,
-      unsupportedInternalParserIds: [],
+  it("[T-SMS-ORDER-001][ING-007] 일반 카드가 실패한 청구 완료는 실제 청구 parser로 해석한다", () => {
+    expect(parse(bill)).toMatchObject({ kind: "Parsed", payment: { cardCompany: "농협", amountInWon: 182000, merchant: "07월분 아파트관리비" } });
+  });
+
+  it.each([
+    ["경기지역화폐", "gyeonggi"], ["대전사랑카드", "daejeon"],
+  ])("[T-SMS-ORDER-001][ING-007] %s 발신 근거가 있는 문자만 해당 지역으로 해석한다", (service, type) => {
+    expect(parse(`${service}\n결제 완료 8,000원\n가맹점너\n잔액 32,000원`)).toMatchObject({
+      kind: "Parsed", payment: { amountInWon: 8000, localCurrencyType: type },
+      balance: { amountInWon: 32000, localCurrencyType: type },
     });
+    expect(parse("결제 완료 8,000원\n가맹점너\n잔액 32,000원")).toEqual({ kind: "Ignored", code: "NOT_COMPLETED_PAYMENT" });
+  });
+
+  it("[T-SMS-ORDER-001][ING-007] 여민전 형식은 전용 parser만 지원하며 SMS 내부에는 추가하지 않는다", () => {
+    const text = "결제 완료 8,000원\n가맹점너\n여민전 총 보유 잔액 32,000원";
+    expect(createAndroidProviderParser().parse({
+      source: { packageName: "gov.sejong.yeominpay", parserId: "sejong-local-currency-parser" },
+      notification: { text, postedAt: clockNow }, clockNow,
+    })).toMatchObject({ kind: "Parsed", balance: { amountInWon: 32000 } });
+    expect(parse(text)).toEqual({ kind: "Ignored", code: "NOT_COMPLETED_PAYMENT" });
   });
 });

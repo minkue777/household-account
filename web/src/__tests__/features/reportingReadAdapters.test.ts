@@ -12,7 +12,7 @@ const expense = (id: string, extra = {}) => doc(id, { householdId: 'home', accou
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { resolve, promise }; }
 beforeEach(() => { jest.clearAllMocks(); mockScope = { householdId: 'home', principalUid: 'uid', memberId: 'member', sessionGeneration: 1 }; });
 
-it('reads every bounded expense page before publishing and excludes income/deleted rows using the actual mapper', async () => {
+it('[T-STAT-002][T-STAT-003][STAT-002][STAT-006] reads every bounded expense page before publishing and excludes income/deleted rows using the actual mapper', async () => {
   const lastPage = deferred<{ docs: ReturnType<typeof expense>[] }>();
   const lastPageStarted = deferred<void>();
   read.mockResolvedValueOnce({ docs: Array.from({ length: 5_000 }, (_, i) => expense('a' + i)) })
@@ -85,7 +85,7 @@ it('keeps the 50,000-document bound and rejects rather than publishing a truncat
   expect(offset).toBe(50_000);
   expect(read).toHaveBeenCalledTimes(10);
 });
-it('canonical baseline zero and stable archived-owner dimensions are preserved after migration', async () => {
+it('[T-STAT-AST-002][STAT-AST-003] canonical baseline zero and stable archived-owner dimensions are preserved after migration', async () => {
   const snapshot = (date: string, total: number) => doc(date, { localDate: date, total, financial: total, byType: { stock: total }, byOwnerRefKey: { 'profile:old': total }, ownerDisplayNames: { 'profile:old': '지아' } });
   read.mockResolvedValueOnce({ docs: [snapshot('2019-01-01', 0)] }).mockResolvedValueOnce({ docs: [snapshot('2026-09-03', 50)] });
   const result = await readAssetStatisticsHistory('2026-09-01', '2026-09-30');

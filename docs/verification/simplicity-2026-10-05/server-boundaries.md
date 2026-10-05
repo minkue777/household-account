@@ -71,8 +71,8 @@ default exports 구성은 유지합니다. 무소비 demo 경로는 SB-01 제거
 근거:
 
 - [functions/src/contexts/payment-capture/android-payment-ingestion/public.ts:53](../../../functions/src/contexts/payment-capture/android-payment-ingestion/public.ts#L53)
-- [functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/recentNotificationCache.ts:27](../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/recentNotificationCache.ts#L27)
-- [functions/src/demo/portfolio/application/demoAssetFixtureApplication.ts:8](../../../functions/src/demo/portfolio/application/demoAssetFixtureApplication.ts#L8)
+- [functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/recentNotificationCache.ts:27](https://github.com/minkue777/household-account/blob/12a582bf63bae7ad5b7c66bcfbf67ac96fb338da/functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/recentNotificationCache.ts#L27)
+- [functions/src/demo/portfolio/application/demoAssetFixtureApplication.ts:8](https://github.com/minkue777/household-account/blob/12a582bf63bae7ad5b7c66bcfbf67ac96fb338da/functions/src/demo/portfolio/application/demoAssetFixtureApplication.ts#L8)
 - [functions/src/contexts/payment-capture/android-payment-ingestion/application/diagnosticRetentionApplication.ts:75](../../../functions/src/contexts/payment-capture/android-payment-ingestion/application/diagnosticRetentionApplication.ts#L75)
 - [functions/src/adapters/firebase/payment-capture/firebaseDiagnosticDocumentStore.ts:49](../../../functions/src/adapters/firebase/payment-capture/firebaseDiagnosticDocumentStore.ts#L49)
 - [firestore.rules:218](../../../firestore.rules#L218)
@@ -103,9 +103,9 @@ default exports 구성은 유지합니다. 무소비 demo 경로는 SB-01 제거
 
 근거:
 
-- [functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/selectSmsParserByPriority.ts:7](../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/selectSmsParserByPriority.ts#L7)
+- [functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/selectSmsParserByPriority.ts:7](https://github.com/minkue777/household-account/blob/12a582bf63bae7ad5b7c66bcfbf67ac96fb338da/functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/selectSmsParserByPriority.ts#L7)
 - [functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/smsBillProviderParser.ts:32](../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/smsBillProviderParser.ts#L32)
-- [functions/test/support/sms-parser-order-driver.ts:29](../../../functions/test/support/sms-parser-order-driver.ts#L29)
+- [functions/test/support/sms-parser-order-driver.ts:29](https://github.com/minkue777/household-account/blob/12a582bf63bae7ad5b7c66bcfbf67ac96fb338da/functions/test/support/sms-parser-order-driver.ts#L29)
 - [functions/src/contexts/payment-capture/android-payment-ingestion/public.ts:37](../../../functions/src/contexts/payment-capture/android-payment-ingestion/public.ts#L37)
 
 실제 연결: 운영 SMS는 smsBillProviderParser의 실제 parser 배열을 차례로 실행합니다. 별도 selectSmsParserByPriority는 미리 성공했다는 ID 배열만 받아 선택하며 test driver만 소비합니다.

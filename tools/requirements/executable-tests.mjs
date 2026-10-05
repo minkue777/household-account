@@ -44,7 +44,7 @@ export function executableTests() {
       if (ts.isCallExpression(node)) {
         const callee = node.expression.getText(tree);
         const first = node.arguments[0];
-        const callback = node.arguments.at(-1);
+        const callback = node.arguments.find(argument => ts.isArrowFunction(argument) || ts.isFunctionExpression(argument));
         const title = first && (ts.isStringLiteralLike(first) ? first.text : undefined);
         const disabled = /\.(?:skip|todo|fixme)\b/.test(callee);
         if (/^(?:describe|test\.describe)(?:\b|\.)/.test(callee) && title && callback && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))) {

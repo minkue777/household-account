@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Request, type Response } from '@playwright/test';
-import { readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { observeIndexedDbOpens, readFirestoreCollection, readIndexedDbOpens, resetTestAccount, writeFirestoreFixture } from './emulator';
 import { createFinanceHousehold, addExpenseThroughUi, seoulDate } from './finance-helpers';
@@ -12,30 +12,35 @@ test.describe('첫 홈의 사용 시점 코드 로드', () => {
 
   test('[T-WEBVIEW-004][T-SYS-008][AND-012][SYS-008] iPhone은 첫 홈 뒤 날짜별 내역을 준비하고 반복 날짜 선택·추가·검색·편집과 코드 재시도를 지원한다', async ({ page, request }, testInfo) => {
     await observeIndexedDbOpens(page, true);
-    const chunkNames = ['home-add-expense', 'home-search', 'home-expense-detail',
-      'home-category-detail', 'home-local-currency', 'home-income-summary'];
-    const builtChunks = readdirSync(path.resolve(process.cwd(), '.next/static/chunks'));
-    const deferredChunks = chunkNames.map(name => {
-      const matches = builtChunks.filter(file => file.startsWith(`${name}.`) && file.endsWith('.js'));
-      expect(matches, `${name}은 실제 production 별도 chunk여야 합니다.`).toHaveLength(1);
-      return matches[0];
-    });
+    // Resolve each feature from this build's dynamic import manifest. File names and
+    // how many shared chunks webpack emits are build details, not this contract.
+    const manifest = JSON.parse(readFileSync(path.resolve(process.cwd(), '.next/react-loadable-manifest.json'), 'utf8')) as Record<string, { files: string[] }>;
+    const featureImports = ['CategoryDetailModal', 'LocalCurrencyModal', 'expense/AddExpenseModal', 'expense/ExpenseDetail', 'expense/IncomeSummaryModal', 'search/SearchModal'];
+    const featureChunks = Object.fromEntries(featureImports.map(feature => {
+      const entry = Object.entries(manifest).find(([key]) => key.replaceAll('\\', '/').endsWith(`LedgerPage.tsx -> @/components/${feature}`));
+      expect(entry, `${feature}의 실제 지연 import가 manifest에 있어야 합니다.`).toBeDefined();
+      const files = entry![1].files.filter(file => file.endsWith('.js')).map(file => path.posix.basename(file));
+      expect(files.length, `${feature}에는 사용 시 로드할 코드가 있어야 합니다.`).toBeGreaterThan(0);
+      return [feature, files];
+    }));
+    const deferredChunks = Array.from(new Set(Object.values(featureChunks).flat()));
+    const detailChunks = featureChunks['expense/ExpenseDetail'];
+    const searchChunks = featureChunks['search/SearchModal'].filter(file => !detailChunks.includes(file));
+    expect(searchChunks.length, '검색을 열기 전에 별도로 로드해야 할 코드가 있어야 합니다.').toBeGreaterThan(0);
     const requestedChunks: string[] = [];
     page.on('request', request => {
       if (request.resourceType() === 'script') requestedChunks.push(new URL(request.url()).pathname.split('/').at(-1)!);
     });
     await createFinanceHousehold(page, request);
     await expect.poll(() => page.evaluate(name => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(1);
-    const detailChunk = deferredChunks.find(file => file.startsWith('home-expense-detail.'))!;
-    expect(requestedChunks.filter(file => deferredChunks.includes(file) && file !== detailChunk), '다른 닫힌 기능은 사용 전에 요청하지 않아야 합니다.').toEqual([]);
-    // Resource Timing proves this download started after paint, without a user click.
-    await expect.poll(() => page.evaluate(file => performance.getEntriesByType('resource')
-      .filter(entry => new URL(entry.name).pathname.endsWith('/' + file)).length, detailChunk)).toBe(1);
-    const detailTiming = await page.evaluate(({ file, mark }) => ({
-      requestedAt: performance.getEntriesByType('resource').find(entry => new URL(entry.name).pathname.endsWith('/' + file))!.startTime,
+    expect(requestedChunks.filter(file => deferredChunks.includes(file) && !detailChunks.includes(file)), '다른 닫힌 기능은 사용 전에 요청하지 않아야 합니다.').toEqual([]);
+    await expect.poll(() => detailChunks.every(file => requestedChunks.includes(file))).toBe(true);
+    const detailTiming = await page.evaluate(({ files, mark }) => ({
+      requests: performance.getEntriesByType('resource').filter(entry => files.includes(new URL(entry.name).pathname.split('/').at(-1)!)).map(entry => ({ file: new URL(entry.name).pathname.split('/').at(-1)!, requestedAt: entry.startTime })),
       paintedAt: performance.getEntriesByName(mark)[0].startTime,
-    }), { file: detailChunk, mark: COMPLETE_PAINT });
-    expect(detailTiming.requestedAt).toBeGreaterThanOrEqual(detailTiming.paintedAt);
+    }), { files: detailChunks, mark: COMPLETE_PAINT });
+    // Shared code may already be loaded; the feature must start preparing after paint.
+    expect(detailTiming.requests.some(entry => entry.requestedAt >= detailTiming.paintedAt)).toBe(true);
     await expect(page.locator('head link[rel="preconnect"][href$="googleapis.com"]')).toHaveCount(0);
     const initialScripts = [...requestedChunks];
 
@@ -49,8 +54,8 @@ test.describe('첫 홈의 사용 시점 코드 로드', () => {
     await add.getByRole('button', { name: '추가', exact: true }).click();
     const expense = page.getByTestId('expense-item').filter({ hasText: '첫 사용 코드 검사' });
     await expect(expense).toContainText('12,300원');
-    for (const name of ['home-expense-detail', 'home-add-expense']) {
-      expect(requestedChunks.some(file => file.startsWith(`${name}.`))).toBe(true);
+    for (const feature of ['expense/ExpenseDetail', 'expense/AddExpenseModal']) {
+      expect(featureChunks[feature].every(file => requestedChunks.includes(file))).toBe(true);
     }
 
     // Observe even short-lived fallback DOM, not just the final settled screen.
@@ -76,12 +81,13 @@ test.describe('첫 홈의 사용 시점 코드 로드', () => {
     const repeatedDateLoading = await page.evaluate(() =>
       (window as typeof window & { dateDetailLoadingInsertions?: number }).dateDetailLoadingInsertions);
     expect(repeatedDateLoading).toBe(0);
-    expect(requestedChunks.filter(file => file === detailChunk)).toHaveLength(1);
+    for (const file of detailChunks) expect(requestedChunks.filter(requested => requested === file)).toHaveLength(1);
 
-    let searchRequests = 0;
-    await page.route('**/_next/static/chunks/home-search.*.js', route => {
-      searchRequests += 1;
-      return searchRequests === 1 ? route.abort('failed') : route.continue();
+    let abortedSearchChunk: string | undefined;
+    await page.route(url => searchChunks.includes(url.pathname.split('/').at(-1)!), route => {
+      if (abortedSearchChunk !== undefined) return route.continue();
+      abortedSearchChunk = route.request().url().split('/').at(-1)!;
+      return route.abort('failed');
     });
     await page.getByRole('button', { name: '검색', exact: true }).click();
     const loadError = page.getByRole('alert').filter({ hasText: '검색 화면을 불러오지 못했습니다.' });
@@ -90,7 +96,8 @@ test.describe('첫 홈의 사용 시점 코드 로드', () => {
     await loadError.getByRole('button', { name: '다시 시도', exact: true }).click();
     const input = page.getByPlaceholder('지출처명, 메모, 카드명, 태그 검색');
     await input.fill('첫 사용 코드 검사');
-    expect(searchRequests).toBe(2);
+    expect(abortedSearchChunk).toBeDefined();
+    expect(requestedChunks.filter(file => file === abortedSearchChunk)).toHaveLength(2);
     const search = page.locator('div.fixed').filter({ has: input });
     await search.getByText('첫 사용 코드 검사', { exact: true }).click();
     const edit = page.getByRole('dialog', { name: '지출 수정', exact: true });
@@ -108,7 +115,7 @@ test.describe('첫 홈의 사용 시점 코드 로드', () => {
     }).toBe(true);
     await testInfo.attach('home-deferred-production-chunks', {
       contentType: 'application/json',
-      body: Buffer.from(JSON.stringify({ deferredChunks, initialScripts, requestedChunks, searchRequests, detailTiming, repeatedDateLoading }, null, 2)),
+      body: Buffer.from(JSON.stringify({ deferredChunks, initialScripts, requestedChunks, abortedSearchChunk, detailTiming, repeatedDateLoading }, null, 2)),
     });
   });
 });

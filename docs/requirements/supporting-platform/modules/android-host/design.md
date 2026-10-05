@@ -111,6 +111,8 @@ QuickEdit Controller가 소비하는 서버 Port:
 
 태그의 업무 규칙은 [Ledger LED-011·LED-012](../../../contexts/household-finance/modules/ledger/design.md#321-태그-값과-호환-계약--led-011)이 소유합니다. QuickEdit은 `tags?: string[]`를 기존 v1 snapshot·일반 Ledger Command의 선택 필드로 전달합니다. 별도 태그 저장소, QuickEdit 전용 서버 명령 또는 새로운 envelope version을 만들지 않습니다.
 
+Activity 원본은 하나의 `LedgerTransactionSnapshot`이며 수정·분할 순간 `QuickEditDraft`와 비교하여 변경 필드만 보냅니다. expectedVersion은 이 원본의 버전입니다. 기존 Intent extra의 기록·복원은 `QuickEditSnapshotIntent`에서 함께 관리하며 extra 이름·구버전 태그 누락·기본 버전 호환을 유지합니다. 편집 중 입력은 화면 상태에 남고, 분할은 분할 버튼을 누른 순간의 초안 전체를 고정합니다.
+
 | 경계 | 계약 |
 |---|---|
 | 서버 표시 snapshot → Android DTO → Intent → 화면 | 제공된 태그를 같은 순서로 초기 표시합니다. 필드가 없는 구버전 응답·Intent는 태그 없는 표시로 호환하며 태그를 가져오기 위한 추가 Query를 만들지 않습니다. 서버 응답에 필드가 있지만 null·비배열·비문자열 원소이면 계약 실패로 처리하며 정상 빈 배열로 바꾸지 않습니다. |

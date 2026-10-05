@@ -8,7 +8,7 @@
 | [FT-02 / P2: Capture 조율용 fixture가 별도 금융 엔진을 구현하는 범위 줄이기](finance-tests.md) | 구현·실제 SDK 검사 완료 | [실제 수집·저장 검사](../../operations/capture-test-boundaries-2026-10-05.md) |
 | [FIN-09 · P1 · 정기 계획 한 건의 명령을 가구 전체 plans·receipts 로딩과 diff 저장에서 분리합니다](finance.md) | 구현·실제 SDK 검사 완료 | [정기 계획과 Outbox 단순화](../../operations/recurring-simplicity-2026-10-05.md) |
 | [FIN-01 · P1 · 자산·보유종목 Command가 계산한 최종 상태를 버려 Web이 서버 상태를 추정합니다](finance.md) | 서버 배포·Web 구현·브라우저 5개 완료 | [명령 확정 응답](../../operations/portfolio-command-confirmation-2026-10-05.md) |
-| [FIN-02 · P1 · 실제 경로와 분리된 Reporting 상태기계·포트폴리오 정책을 계약 검사와 함께 정리합니다](finance.md) | 미착수 | |
+| [FIN-02 · P1 · 실제 경로와 분리된 Reporting 상태기계·포트폴리오 정책을 계약 검사와 함께 정리합니다](finance.md) | 구현·실제 Web·SDK 검사 완료 | [실제 통계·배당 경로](../../operations/reporting-runtime-simplicity-2026-10-05.md) |
 | [FIN-03 · P2 · 정기지출의 optional pagination이 테스트 때문에 무제한 조회 경로를 남깁니다](finance.md) | 구현·실제 SDK 검사 완료 | [정기 계획과 Outbox 단순화](../../operations/recurring-simplicity-2026-10-05.md) |
 | [FIN-04 · P2 · 정기지출은 Outbox 원자 저장 뒤 사용하지 않는 별도 publish 경로를 유지합니다](finance.md) | 구현·실제 SDK 검사 완료 | [정기 계획과 Outbox 단순화](../../operations/recurring-simplicity-2026-10-05.md) |
 | [FIN-05 · P2 · 삭제 자산 목록의 ID 왕복을 없애 한 번 읽은 문서를 그대로 반환합니다](finance.md) | 구현·실제 SDK 검사 완료 | [자산 조회·목록 발행](../../operations/portfolio-storage-simplicity-2026-10-05.md) |
@@ -66,17 +66,21 @@
 | [W11. 명의 조회의 한 줄 위임 계층 — 기능 단위로 평탄화 가능](web.md) | 구현·관련 검사 완료 | [자산 조회 실패와 명의 조회](../../operations/portfolio-read-simplicity-2026-10-05.md) |
 | [1. 운영에 연결되지 않은 configuration 메모리 application 3개 제거 검토](capture.md) | 구현·관련 검사 완료 | [카드·규칙 직접 변경 계산](../../operations/server-simplicity-2026-10-05.md) |
 | [2. Android 미사용 단건 capture 전달 API 제거](capture.md) | 이전 배포 완료 | [Android 1차](implementation.md) |
-| [3. capture ingress와 retry의 두 전달 알고리즘을 한 번의 attempt로 통일](capture.md) | 미착수 | |
+| [3. capture ingress와 retry의 두 전달 알고리즘을 한 번의 attempt로 통일](capture.md) | 구현·실제 Native/Web 검사 완료 | [전달과 원본 정비](../../operations/android-capture-simplicity-2026-10-05.md) |
 | [4. 서버 FID 등록에서 가상의 client session controller 제거](capture.md) | 구현·실제 SDK 검사 완료 | [설치 등록 명령](../../operations/mobile-endpoint-simplicity-2026-10-05.md) |
 | [5. configuration의 transaction 내부 가상 store를 순수 mutation으로 축소](capture.md) | 구현·관련 검사 완료 | [카드·규칙 직접 변경 계산](../../operations/server-simplicity-2026-10-05.md) |
 | [6. 테스트만 소비하는 legacy Shortcut owner 추론은 운영 src와 분리](capture.md) | 구현·관련 검사 완료 | [수집 인가와 과거 정책](../../operations/capture-authorization-simplicity-2026-10-05.md) |
-| [7. QuickEdit의 original/draft/Intent 필드 복제를 한 snapshot과 draft로 정리](capture.md) | 미착수 | |
+| [7. QuickEdit의 original/draft/Intent 필드 복제를 한 snapshot과 draft로 정리](capture.md) | 구현·실제 Native/Web 검사 완료 | [전달과 원본 정비](../../operations/android-capture-simplicity-2026-10-05.md) |
 | [8. 모든 알림 event에 붙은 legacy Shortcut guard의 종료 조건 명시](capture.md) | 검토 완료·계약상 유지 결정 | [근거와 종료 조건](../../operations/simplicity-retention-decisions-2026-10-05.md) |
 | [CT01 — 경합이라고 이름 붙인 검사가 순차 실행입니다. P1, 확신 높음](capture-tests.md) | 구현·실제 SDK 검사 완료 | [실제 수집·저장 검사](../../operations/capture-test-boundaries-2026-10-05.md) |
 | [CT02 — 로그·원문 비저장의 일부 검사가 상수 빈 배열을 읽습니다. P1, 확신 높음](capture-tests.md) | 구현·실제 SDK 검사 완료 | [실제 수집·저장 검사](../../operations/capture-test-boundaries-2026-10-05.md) |
 | [CT03 — receipt 조율 테스트가 취소·해시 별도 구현까지 유지합니다. P2, 확신 높음](capture-tests.md) | 구현·실제 SDK 검사 완료 | [실제 수집·저장 검사](../../operations/capture-test-boundaries-2026-10-05.md) |
 | [CT04 — golden 결과 상수를 다시 검사하는 테스트를 행동 검증과 분리합니다. P3, 확신 높음](capture-tests.md) | 구현·실제 SDK 검사 완료 | [실제 수집·저장 검사](../../operations/capture-test-boundaries-2026-10-05.md) |
 | [WE01 — 선택 상태를 CSS 구현으로 검증하는 작은 결합. P3, 확신 높음](web-e2e.md) | 구현·관련 검사 완료 | [운영 연결과 계약 검사](../../operations/web-contract-tests-simplicity-2026-10-05.md) |
-| [WE02 — 첫 홈 성능 검사가 정확한 chunk 이름·개수를 고정합니다. P3, 확신 중간](web-e2e.md) | 미착수 | |
+| [WE02 — 첫 홈 성능 검사가 정확한 chunk 이름·개수를 고정합니다. P3, 확신 중간](web-e2e.md) | 구현·실제 WebKit 검사 완료 | [실제 빌드 manifest](../../operations/reporting-runtime-simplicity-2026-10-05.md) |
+| [SB-01 — 미사용 ingress·demo·진단 readAll 제거](server-boundaries.md) | 구현·실제 경계 검사 완료 | [서버 경계 정비](../../operations/server-boundary-simplicity-2026-10-05.md) |
+| [SB-02 — 실제 SMS parser 순서와 발신 서비스 확인](server-boundaries.md) | 구현·실제 경계 검사 완료 | [서버 경계 정비](../../operations/server-boundary-simplicity-2026-10-05.md) |
+| [SB-03 — 필수 expectedVersion의 불가능한 분기 제거](server-boundaries.md) | 구현·실제 경계 검사 완료 | [서버 경계 정비](../../operations/server-boundary-simplicity-2026-10-05.md) |
+| [SB-04 — 수동 거래 유형을 저장 전 검증](server-boundaries.md) | 구현·실제 경계 검사 완료 | [서버 경계 정비](../../operations/server-boundary-simplicity-2026-10-05.md) |
 
-
+모든 조사 후보는 구현·관련 검증 또는 계약상 유지 결정에 연결했습니다. 최종 배포와 전체 CI는 별도 상태이며 [전체 정비 완료 기록](../../operations/simplicity-completion-2026-10-05.md)에서 추적합니다.

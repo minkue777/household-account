@@ -30,6 +30,9 @@ import com.household.account.data.CategoryData
 import com.household.account.quickedit.AndroidKeystoreQuickEditCommandOutboxStore
 import com.household.account.quickedit.AndroidKeystoreQuickEditQueueStore
 import com.household.account.quickedit.QuickEditCoordinator
+import com.household.account.quickedit.putQuickEditSnapshot
+import com.household.account.quickedit.readQuickEditSnapshot
+import com.household.account.ledger.LedgerTransactionSnapshot
 import com.household.account.quickedit.QuickEditPendingQueue
 import com.household.account.paymentcapture.CaptureDeliveryFollowUp
 import com.household.account.paymentcapture.CaptureQuickEditSnapshot
@@ -538,6 +541,16 @@ class QuickEditActivityInstrumentationTest {
         }
         if (!wasAllowed) setMode("allow")
         try { block() } finally { if (!wasAllowed) setMode("default") }
+    }
+
+    @Test fun originalSnapshotUsesTheSameIntentContractWithLegacyDefaults() {
+        val snapshot = LedgerTransactionSnapshot("transaction-roundtrip", 7, "active", "expense", 12300, "2026-10-05", "14:00", "원본 가맹점", "custom-Category", "원본 메모", listOf("여행", "용돈"))
+        assertEquals(snapshot, Intent().putQuickEditSnapshot(snapshot).readQuickEditSnapshot())
+        val legacy = Intent().putExtra(QuickEditActivity.EXTRA_EXPENSE_ID, "legacy").putExtra(QuickEditActivity.EXTRA_VERSION, 0).readQuickEditSnapshot()
+        assertEquals("legacy", legacy.transactionId)
+        assertEquals(1, legacy.aggregateVersion)
+        assertEquals("etc", legacy.categoryId)
+        assertEquals(emptyList<String>(), legacy.tags)
     }
 
     private fun launchQuickEdit(categoryId: String = "food", tags: List<String> = emptyList()): ActivityScenario<QuickEditActivity> {

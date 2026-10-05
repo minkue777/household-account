@@ -1,4 +1,4 @@
-import { resolveExpenseStatisticsPeriod } from '@/features/reporting/statisticsPeriod';
+import { resolveExpenseStatisticsPeriod, resolveAssetStatisticsPeriod } from '@/features/reporting/statisticsPeriod';
 
 const now = new Date('2026-07-19T12:34:56+09:00');
 
@@ -33,4 +33,10 @@ describe('실제 통계 화면의 기간 정책', () => {
     expect(resolveExpenseStatisticsPeriod('3months', '', '', new Date('2026-07-31T15:30:00Z')))
       .toEqual({ startDate: '2026-06-01', endDate: '2026-08-31', error: undefined });
   });
+});
+
+it.each([
+  ['3M', '2026-05-01'], ['6M', '2026-02-01'], ['1Y', '2025-08-01'], ['ALL', undefined],
+] as const)('[T-STAT-AST-003][STAT-AST-001] 실제 자산 기간 %s는 서울 월 경계를 쓰고 ALL에 임의 시작일을 넣지 않는다', (period, startDate) => {
+  expect(resolveAssetStatisticsPeriod(period, now)).toEqual({ startDate, endDate: '2026-07-31' });
 });

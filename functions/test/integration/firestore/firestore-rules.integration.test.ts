@@ -333,7 +333,7 @@ describeWithFirestoreEmulator("서버 권위형 Firestore Rules", () => {
     );
   });
 
-  it("[T-SEC-001] endpoint·receipt·진단 자료는 일반 가구원에게 공개하지 않는다", async () => {
+  it("[T-DIAG-001][ING-005][T-SEC-001] endpoint·receipt·진단 자료는 일반 가구원에게 공개하지 않는다", async () => {
     const firestore = environment
       .authenticatedContext(MEMBER_UID)
       .firestore();
@@ -346,7 +346,7 @@ describeWithFirestoreEmulator("서버 권위형 Firestore Rules", () => {
     );
   });
 
-  it("[T-SEC-001] 검증된 시스템 관리자만 진단 자료를 읽고 직접 쓰지는 못한다", async () => {
+  it("[T-DIAG-001][ING-005][T-SEC-001] 검증된 시스템 관리자만 진단 자료를 읽고 직접 쓰지는 못한다", async () => {
     const firestore = environment
       .authenticatedContext("uid-admin", { systemAdmin: true })
       .firestore();

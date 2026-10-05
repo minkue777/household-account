@@ -34,6 +34,9 @@ import com.household.account.quickedit.QuickEditCoordinator
 import com.household.account.quickedit.QuickEditPresentationOwner
 import com.household.account.quickedit.QuickEditTagsValidation
 import com.household.account.quickedit.buildQuickEditUpdatePatch
+import com.household.account.quickedit.QuickEditDraft
+import com.household.account.quickedit.readQuickEditSnapshot
+import com.household.account.ledger.LedgerTransactionSnapshot
 import com.household.account.quickedit.normalizeQuickEditTags
 import com.household.account.quickedit.validateQuickEditTags
 import kotlinx.coroutines.CoroutineScope
@@ -79,15 +82,7 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
     private lateinit var editingScope: CaptureSessionScope
 
     // 원본 데이터
-    private var expenseId: String = ""
-    private var originalMerchant: String = ""
-    private var originalAmount: Int = 0
-    private var originalCategory: String = ""
-    private var originalDate: String = ""
-    private var originalTime: String = ""
-    private var originalMemo: String = ""
-    private var originalTags: List<String> = emptyList()
-    private var originalVersion: Int = 1
+    private lateinit var original: LedgerTransactionSnapshot
 
     // 현재 선택된 값들
     private var selectedCategoryKey: String = ""
@@ -106,6 +101,7 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        original = intent.readQuickEditSnapshot()
 
         // Activity 재생성도 처음 표시한 거래의 scope를 유지하며 현재 세션으로 바꾸지 않습니다.
         editingScope = CaptureSessionScope(
@@ -122,22 +118,12 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
         setFinishOnTouchOutside(false)  // 외부 터치해도 닫히지 않음
         setContentView(R.layout.activity_quick_edit)
 
-        // Intent 데이터 추출
-        expenseId = intent.getStringExtra(EXTRA_EXPENSE_ID) ?: ""
-        originalMerchant = intent.getStringExtra(EXTRA_MERCHANT) ?: ""
-        originalAmount = intent.getIntExtra(EXTRA_AMOUNT, 0)
-        originalDate = intent.getStringExtra(EXTRA_DATE) ?: ""
-        originalTime = intent.getStringExtra(EXTRA_TIME) ?: ""
-        originalCategory = intent.getStringExtra(EXTRA_CATEGORY) ?: "etc"
-        originalMemo = intent.getStringExtra(EXTRA_MEMO) ?: ""
-        originalTags = normalizeQuickEditTags(intent.getStringArrayListExtra(EXTRA_TAGS).orEmpty())
-        selectedTags = savedInstanceState?.getStringArrayList(STATE_SELECTED_TAGS)?.toList() ?: originalTags
-        originalVersion = intent.getIntExtra(EXTRA_VERSION, 1).coerceAtLeast(1)
+        selectedTags = savedInstanceState?.getStringArrayList(STATE_SELECTED_TAGS)?.toList() ?: original.tags
         captureObservationId = intent.getStringExtra(EXTRA_CAPTURE_OBSERVATION_ID)
-        QuickEditCoordinator.presentations.created(editingScope, expenseId, this)
+        QuickEditCoordinator.presentations.created(editingScope, original.transactionId, this)
 
         // 서버가 확정한 카테고리 ID는 대소문자를 포함해 그대로 보존합니다.
-        selectedCategoryKey = originalCategory
+        selectedCategoryKey = original.categoryId
 
         initViews()
         setupUI()
@@ -159,7 +145,7 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
         super.onStart()
         quickEditStarted = true
         if (::editingScope.isInitialized) {
-            QuickEditCoordinator.presentations.started(editingScope, expenseId, this)
+            QuickEditCoordinator.presentations.started(editingScope, original.transactionId, this)
         }
     }
 
@@ -176,7 +162,7 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
     override fun onDestroy() {
         quickEditStarted = false
         if (::editingScope.isInitialized) {
-            QuickEditCoordinator.presentations.destroyed(editingScope, expenseId, this, isChangingConfigurations)
+            QuickEditCoordinator.presentations.destroyed(editingScope, original.transactionId, this, isChangingConfigurations)
         }
         super.onDestroy()
     }
@@ -222,25 +208,25 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
 
     private fun setupUI() {
         // 가맹점
-        etMerchant.setText(originalMerchant)
+        etMerchant.setText(original.merchant)
 
         // 금액
-        etAmount.setText(originalAmount.toString())
+        etAmount.setText(original.amountInWon.toString())
 
         // 메모
-        etMemo.setText(originalMemo)
+        etMemo.setText(original.memo)
         renderTags()
 
         // 날짜/시간 포맷팅
         val dateTime = buildString {
-            if (originalDate.length >= 10) {
-                append(originalDate.substring(5, 7))
+            if (original.accountingDate.length >= 10) {
+                append(original.accountingDate.substring(5, 7))
                 append("/")
-                append(originalDate.substring(8, 10))
+                append(original.accountingDate.substring(8, 10))
             }
-            if (originalTime.isNotEmpty()) {
+            if (original.localTime.isNotEmpty()) {
                 append(" ")
-                append(originalTime)
+                append(original.localTime)
             }
         }
         tvDateTime.text = dateTime
@@ -439,7 +425,7 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
     }
 
     private fun readTagDraft(): List<String>? = when (
-        val validation = validateQuickEditTags(selectedTags + etTags.text.toString(), originalTags)
+        val validation = validateQuickEditTags(selectedTags + etTags.text.toString(), original.tags)
     ) {
         is QuickEditTagsValidation.Valid -> {
             etTags.error = null
@@ -460,7 +446,7 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
     }
 
     private fun sendNotifyOnly() {
-        if (expenseId.isEmpty()) {
+        if (original.transactionId.isEmpty()) {
             finish()
             return
         }
@@ -468,8 +454,8 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
         submitCommand(
             kind = HouseholdCommandKind.REQUEST_HOUSEHOLD_NOTIFICATION,
             payload = mapOf(
-                "transactionId" to expenseId,
-                "expectedVersion" to originalVersion
+                "transactionId" to original.transactionId,
+                "expectedVersion" to original.aggregateVersion
             )
         )
     }
@@ -490,24 +476,14 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
             return
         }
 
-        if (expenseId.isEmpty()) {
+        if (original.transactionId.isEmpty()) {
             finish()
             return
         }
 
         val tags = readTagDraft() ?: return
-        val patch = buildQuickEditUpdatePatch(
-            originalMerchant = originalMerchant,
-            originalAmountInWon = originalAmount,
-            originalCategoryId = originalCategory,
-            originalMemo = originalMemo,
-            merchant = merchant,
-            amountInWon = amount,
-            categoryId = selectedCategoryKey,
-            memo = memo,
-            originalTags = originalTags,
-            tags = tags
-        )
+        val draft = QuickEditDraft(merchant, amount, selectedCategoryKey, memo, tags)
+        val patch = buildQuickEditUpdatePatch(original, draft)
         if (patch.isEmpty()) {
             activityScope.launch { completeCurrentQuickEdit() }
             return
@@ -516,8 +492,8 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
         submitCommand(
             kind = HouseholdCommandKind.UPDATE,
             payload = mapOf(
-                "transactionId" to expenseId,
-                "expectedVersion" to originalVersion,
+                "transactionId" to original.transactionId,
+                "expectedVersion" to original.aggregateVersion,
                 "patch" to patch
             )
         )
@@ -526,7 +502,7 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
     private fun showDeleteConfirmation() {
         AlertDialog.Builder(this)
             .setTitle("삭제 확인")
-            .setMessage("\"$originalMerchant\" ${NumberFormat.getNumberInstance(Locale.KOREA).format(originalAmount)}원을 삭제하시겠습니까?")
+            .setMessage("\"${original.merchant}\" ${NumberFormat.getNumberInstance(Locale.KOREA).format(original.amountInWon)}원을 삭제하시겠습니까?")
             .setPositiveButton("삭제") { _, _ ->
                 deleteExpense()
             }
@@ -535,7 +511,7 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
     }
 
     private fun deleteExpense() {
-        if (expenseId.isEmpty()) {
+        if (original.transactionId.isEmpty()) {
             finish()
             return
         }
@@ -543,18 +519,20 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
         submitCommand(
             kind = HouseholdCommandKind.DELETE,
             payload = mapOf(
-                "transactionId" to expenseId,
-                "expectedVersion" to originalVersion
+                "transactionId" to original.transactionId,
+                "expectedVersion" to original.aggregateVersion
             )
         )
     }
 
     private fun showSplitDialog() {
-        val currentAmount = etAmount.text.toString().toIntOrNull() ?: originalAmount
-        val currentMerchant = etMerchant.text.toString().ifEmpty { originalMerchant }
-        val currentCategory = selectedCategoryKey
-        val currentMemo = etMemo.text.toString().trim()
-        val currentTags = readTagDraft() ?: return
+        val draft = QuickEditDraft(
+            merchant = etMerchant.text.toString().ifEmpty { original.merchant },
+            amountInWon = etAmount.text.toString().toIntOrNull() ?: original.amountInWon,
+            categoryId = selectedCategoryKey,
+            memo = etMemo.text.toString().trim(),
+            tags = readTagDraft() ?: return
+        )
 
         val dialog = AlertDialog.Builder(this, R.style.Theme_QuickEdit)
             .create()
@@ -571,14 +549,14 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
         )
 
         val splits = mutableListOf(
-            SplitItem(currentMerchant, currentAmount / 2, currentCategory, ""),
-            SplitItem(currentMerchant, currentAmount - currentAmount / 2, currentCategory, "")
+            SplitItem(draft.merchant, draft.amountInWon / 2, draft.categoryId, ""),
+            SplitItem(draft.merchant, draft.amountInWon - draft.amountInWon / 2, draft.categoryId, "")
         )
 
         val splitItemsContainer = view.findViewById<LinearLayout>(R.id.splitItemsContainer)
         val tvSplitInfo = view.findViewById<TextView>(R.id.tvSplitInfo)
 
-        tvSplitInfo.text = "$currentMerchant ${NumberFormat.getNumberInstance(Locale.KOREA).format(currentAmount)}원을 여러 항목으로 나눕니다"
+        tvSplitInfo.text = "${draft.merchant} ${NumberFormat.getNumberInstance(Locale.KOREA).format(draft.amountInWon)}원을 여러 항목으로 나눕니다"
 
         // 각 항목의 EditText 참조 저장 (자동 금액 조정용)
         val amountEditTexts = mutableListOf<EditText>()
@@ -643,7 +621,7 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
                         // 2개 항목일 때만 다른 쪽 자동 조정
                         if (splits.size == 2) {
                             val otherIndex = if (index == 0) 1 else 0
-                            val otherAmount = maxOf(0, currentAmount - newAmount)
+                            val otherAmount = maxOf(0, draft.amountInWon - newAmount)
                             splits[otherIndex].amount = otherAmount
 
                             // 다른 EditText 업데이트
@@ -671,8 +649,8 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
         // 항목 추가 버튼
         view.findViewById<Button>(R.id.btnAddSplit).setOnClickListener {
             val totalUsed = splits.sumOf { it.amount }
-            val remaining = maxOf(0, currentAmount - totalUsed)
-            splits.add(SplitItem(currentMerchant, remaining, currentCategory, ""))
+            val remaining = maxOf(0, draft.amountInWon - totalUsed)
+            splits.add(SplitItem(draft.merchant, remaining, draft.categoryId, ""))
             renderSplitItems()
         }
 
@@ -684,7 +662,7 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
         // 나누기 확인 버튼
         view.findViewById<Button>(R.id.btnConfirmSplit).setOnClickListener {
             val total = splits.sumOf { it.amount }
-            if (total != currentAmount) {
+            if (total != draft.amountInWon) {
                 Toast.makeText(this, "분할 금액의 합이 원래 금액과 일치하지 않습니다", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
@@ -697,18 +675,18 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
             submitCommand(
                 kind = HouseholdCommandKind.SPLIT,
                 payload = mapOf(
-                    "transactionId" to expenseId,
-                    "expectedVersion" to originalVersion,
+                    "transactionId" to original.transactionId,
+                    "expectedVersion" to original.aggregateVersion,
                     "operation" to mapOf(
                         "kind" to "items",
                         // 분할 버튼을 누른 시점의 미저장 form을 immutable baseDraft로 보냅니다.
                         "baseDraft" to buildMap<String, Any?> {
-                            put("merchant", currentMerchant)
-                            put("amountInWon", currentAmount)
-                            put("categoryId", currentCategory)
-                            put("memo", currentMemo)
+                            put("merchant", draft.merchant)
+                            put("amountInWon", draft.amountInWon)
+                            put("categoryId", draft.categoryId)
+                            put("memo", draft.memo)
                             // 기존 태그는 서버에서 상속하고 미저장 변경만 명시합니다.
-                            if (currentTags != originalTags) put("tags", currentTags)
+                            if (draft.tags != original.tags) put("tags", draft.tags)
                         },
                         "items" to splits.map { split ->
                             mapOf(
@@ -753,7 +731,7 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
 
             val stablePayload = payload.toString()
             val operationId = UUID.nameUUIDFromBytes(
-                "$expenseId|$originalVersion|${kind.wireName}|$stablePayload"
+                "${original.transactionId}|${original.aggregateVersion}|${kind.wireName}|$stablePayload"
                     .toByteArray(Charsets.UTF_8)
             ).toString()
             val envelope = HouseholdCommandEnvelopeV1.create(
@@ -767,7 +745,7 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
                 QuickEditCommandDelivery.enqueueAndDispatch(
                     context = applicationContext,
                     expectedScope = editingScope,
-                    transactionId = expenseId,
+                    transactionId = original.transactionId,
                     envelope = envelope
                 )
             ) {
@@ -792,7 +770,7 @@ class QuickEditActivity : AppCompatActivity(), QuickEditPresentationOwner {
     }
 
     private suspend fun completeCurrentQuickEdit() {
-        val completedTransactionId = expenseId
+        val completedTransactionId = original.transactionId
         QuickEditCoordinator.completeCurrent(applicationContext, editingScope, completedTransactionId)
         finish()
         QuickEditCoordinator.presentNextAsync(applicationContext)

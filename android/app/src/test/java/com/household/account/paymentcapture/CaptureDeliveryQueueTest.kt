@@ -1,10 +1,16 @@
 package com.household.account.paymentcapture
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class CaptureDeliveryQueueTest {
     private class MemoryStore : CaptureQueueStore {
         var entries = emptyList<QueuedCapture>()
@@ -27,7 +33,6 @@ class CaptureDeliveryQueueTest {
         val envelope = rawEnvelope(".late")
         queue.enqueueAll(scope, listOf(envelope))
         queue.purgeForSessionTransition(scope)
-        assertEquals(false, queue.retainAfterAttempt(scope, envelope, emptySet()))
         assertEquals(CaptureBatchEnqueueResult.Rejected, queue.enqueueAll(scope, listOf(envelope)))
         val next = scope.copy(sessionGeneration = scope.sessionGeneration + 1)
         assertEquals(CaptureBatchEnqueueResult.Accepted(listOf(envelope)), queue.enqueueAll(next, listOf(envelope)))
@@ -420,6 +425,77 @@ class CaptureDeliveryQueueTest {
         }
 
         assertEquals(1, store.entries.size)
+    }
+
+    @Test fun `HTTP 대기 중 새 입력과 purge는 진행되고 이전 응답은 다음 세대 journal을 지우지 않는다`() = runTest {
+        val store = MemoryStore()
+        val queue = CaptureDeliveryQueue(store) { 1_000L }
+        val first = rawEnvelope(".waiting")
+        queue.enqueueAll(scope, listOf(first, rawEnvelope(".pending-old")))
+        val response = CompletableDeferred<CaptureSubmissionReceipt>()
+        val delivered = mutableListOf<CaptureDeliveryFollowUp>()
+        val submissions = mutableListOf<String>()
+        val flushing = async { queue.flush(scope, object : CaptureSubmissionClient {
+            override suspend fun submit(envelope: CaptureDeliveryEnvelope): CaptureSubmissionReceipt {
+                submissions += envelope.observationId
+                return response.await()
+            }
+        }, beforeCommitFollowUps = { delivered += it }) }
+        runCurrent()
+        withTimeout(1_000) { queue.enqueueAll(scope, listOf(rawEnvelope(".new"))) }
+        assertEquals(3, store.entries.size)
+        withTimeout(1_000) { queue.purgeForSessionTransition(scope) }
+        val next = scope.copy(sessionGeneration = scope.sessionGeneration + 1)
+        queue.enqueueAll(next, listOf(rawEnvelope(".next")))
+        response.complete(CaptureSubmissionReceipt("terminal", CaptureBranchReceipt("created", "old-transaction", aggregateVersion = 1), null))
+        assertTrue(flushing.await().followUps.isEmpty())
+        assertTrue(delivered.isEmpty())
+        assertEquals(listOf(first.observationId), submissions)
+        assertEquals(next, store.entries.single().scope)
+        assertEquals(rawEnvelope(".next"), store.entries.single().envelope)
+    }
+
+    @Test fun `새 알림 직접 전달과 worker 재시도는 하나의 attempt를 공유하며 후속효과를 중복 저장하지 않는다`() = runTest {
+        val store = MemoryStore()
+        val queue = CaptureDeliveryQueue(store) { 1_000L }
+        val response = CompletableDeferred<CaptureSubmissionReceipt>()
+        var attempts = 0
+        val followUps = mutableListOf<CaptureDeliveryFollowUp>()
+        val client = object : CaptureSubmissionClient {
+            override suspend fun submit(envelope: CaptureDeliveryEnvelope): CaptureSubmissionReceipt {
+                attempts++
+                return response.await()
+            }
+        }
+        val direct = async { enqueueAndSubmitCaptureBatch(queue, scope, listOf(rawEnvelope()), client, beforeCommitFollowUps = { followUps += it }) }
+        runCurrent()
+        val retry = async { queue.flush(scope, client, beforeCommitFollowUps = { followUps += it }) }
+        runCurrent()
+        assertEquals(1, attempts)
+        response.complete(CaptureSubmissionReceipt("terminal", CaptureBranchReceipt("created", "transaction", aggregateVersion = 1), null))
+        direct.await()
+        retry.await()
+        assertEquals(1, attempts)
+        assertEquals(listOf("transaction"), followUps.map { it.transactionId })
+        assertTrue(store.entries.isEmpty())
+    }
+
+    @Test fun `coroutine 취소는 journal을 남기고 나머지 envelope를 전송하지 않는다`() = runTest {
+        val store = MemoryStore()
+        val queue = CaptureDeliveryQueue(store) { 1_000L }
+        queue.enqueueAll(scope, listOf(rawEnvelope(".a"), rawEnvelope(".b")))
+        val response = CompletableDeferred<CaptureSubmissionReceipt>()
+        var attempts = 0
+        val flushing = async { queue.flush(scope, object : CaptureSubmissionClient {
+            override suspend fun submit(envelope: CaptureDeliveryEnvelope): CaptureSubmissionReceipt {
+                attempts++
+                return response.await()
+            }
+        }) }
+        runCurrent()
+        flushing.cancelAndJoin()
+        assertEquals(1, attempts)
+        assertEquals(2, store.entries.size)
     }
 
     private fun combinedEnvelope() = CaptureEnvelopeV1(

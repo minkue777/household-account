@@ -1,10 +1,5 @@
 import { parseCityGasBill } from "./domain/policies/parseCityGasBill";
 import type { CityGasParserInputPort } from "./application/ports/in/cityGasParserInputPort";
-import { selectSmsParserByPriority } from "./domain/policies/selectSmsParserByPriority";
-import type { SmsParserOrderInputPort } from "./application/ports/in/smsParserOrderInputPort";
-import { buildNotificationEnvelope } from "./domain/policies/buildNotificationEnvelope";
-import { createRecentNotificationCache } from "./domain/policies/recentNotificationCache";
-import type { NotificationIngressInputPort } from "./application/ports/in/notificationIngressInputPort";
 import { createAndroidProviderParserApplication } from "./application/androidProviderParserApplication";
 import type { AndroidProviderParserInputPort } from "./application/ports/in/androidProviderParserInputPort";
 import { resolvePaymentOccurrenceYear } from "../intake/public";
@@ -24,40 +19,6 @@ export type {
 
 export function createCityGasParser(): CityGasParserInputPort {
   return { parse: parseCityGasBill };
-}
-
-export type {
-  SelectSmsParserInput,
-  SmsParserId,
-  SmsParserOrderResult,
-} from "./domain/model/smsParserOrder";
-
-export type { SmsParserOrderInputPort } from "./application/ports/in/smsParserOrderInputPort";
-
-export function createSmsParserOrderPolicy(): SmsParserOrderInputPort {
-  return { select: selectSmsParserByPriority };
-}
-
-export type {
-  NotificationEnvelopeResult,
-  NotificationEnvelopeView,
-  NotificationIngressState,
-  RawNotificationInput,
-  RecentNotificationClaimInput,
-  RecentNotificationDecision,
-  RecentNotificationEntry,
-} from "./domain/model/notificationIngress";
-
-export type { NotificationIngressInputPort } from "./application/ports/in/notificationIngressInputPort";
-
-export function createNotificationIngress(): NotificationIngressInputPort {
-  const recent = createRecentNotificationCache();
-  return {
-    buildEnvelope: buildNotificationEnvelope,
-    claimRecent: (input) => recent.claim(input),
-    restartProcess: () => recent.restartProcess(),
-    state: () => recent.state(),
-  };
 }
 
 export type {

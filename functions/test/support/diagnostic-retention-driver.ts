@@ -5,7 +5,6 @@ import type {
   DiagnosticCollectionResult,
   DiagnosticDocument,
   DiagnosticNotification,
-  DiagnosticReadResult,
 } from "../../src/contexts/payment-capture/android-payment-ingestion/application/ports/in/diagnosticRetentionInputPort";
 import type { DiagnosticDocumentStore } from "../../src/contexts/payment-capture/android-payment-ingestion/application/ports/out/diagnosticDocumentStore";
 
@@ -22,7 +21,6 @@ export interface DiagnosticRetentionDriver {
       readonly householdAccessKey: string;
     };
   }): Promise<DiagnosticCollectionResult>;
-  readAll(actor: DiagnosticActor): Promise<DiagnosticReadResult>;
   state(at: string): Promise<{ readonly documents: readonly DiagnosticDocument[] }>;
 }
 
@@ -85,7 +83,6 @@ export function createDiagnosticRetentionDriver(): DiagnosticRetentionDriver {
       if (storageOutcome === "failure") store.failOnce();
       return application.collect(input);
     },
-    readAll: (actor) => application.readAll(actor),
     state: async (at) => {
       void at;
       return { documents: await store.readAll() };

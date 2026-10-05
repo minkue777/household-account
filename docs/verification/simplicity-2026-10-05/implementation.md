@@ -43,3 +43,7 @@ Android v1.2.33/code35의 release build와 APK v2 서명을 확인했습니다. 
 실제 transaction 안의 가상 저장소·중첩 transaction·가변 결과 회수를 제거하고, 생성·수정·삭제·순서 변경·규칙 기억하기를 직접적인 변경 계산으로 연결했습니다. 실제 DB adapter만 원자 저장을 담당합니다. 상세 계약·전후 구조·검증·남은 범위는 [가맹점 규칙 정비 기록](../../operations/merchant-rule-simplicity-2026-10-05.md)을 따릅니다. 기존 관련 검사 54개, 실제 Firestore 검사 7개, architecture 45개와 build·타입 검사가 통과했습니다.
 
 1차 CI에서 분석 문서의 Windows 절대 경로 링크 62개가 실패한 문제도 상대 링크로 수정했습니다. Android 제품은 바꾸지 않으므로 APK 재발행은 없습니다.
+
+## 후속 전체 정비
+
+위 1·2차 기록 이후의 모든 후보 처리 결과는 [전체 후보 진행표](completion.md)와 [완료 기록](../../operations/simplicity-completion-2026-10-05.md)을 따릅니다. 앞 문단의 미완료 표시는 각 차수 당시의 상태입니다.

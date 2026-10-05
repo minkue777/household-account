@@ -92,6 +92,9 @@ function parseSms(context: ProviderParserContext): AndroidProviderParseResult {
   for (const candidate of smsCandidates(context.body)) {
     const candidateContext = { ...context, body: candidate };
     for (const parser of SMS_PAYMENT_PARSERS) {
+      // 전용 앱은 package가 지역을 확정하지만 공용 SMS는 본문의 발신 서비스명이 필요합니다.
+      if (parser === gyeonggiLocalCurrencyProviderParser && !/경기지역화폐/u.test(context.body)) continue;
+      if (parser === daejeonLocalCurrencyProviderParser && !/대전사랑카드|온통대전|대전지역화폐/u.test(context.body)) continue;
       const result = parser.parse(candidateContext);
       if (result.kind === "Parsed") {
         return result;

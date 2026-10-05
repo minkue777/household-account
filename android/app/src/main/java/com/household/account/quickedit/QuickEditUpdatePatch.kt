@@ -1,24 +1,23 @@
 package com.household.account.quickedit
 
+import com.household.account.ledger.LedgerTransactionSnapshot
+
+data class QuickEditDraft(
+    val merchant: String,
+    val amountInWon: Int,
+    val categoryId: String,
+    val memo: String,
+    val tags: List<String>
+)
+
 fun buildQuickEditUpdatePatch(
-    originalMerchant: String,
-    originalAmountInWon: Int,
-    originalCategoryId: String,
-    originalMemo: String,
-    merchant: String,
-    amountInWon: Int,
-    categoryId: String,
-    memo: String,
-    originalTags: List<String> = emptyList(),
-    tags: List<String> = originalTags
+    original: LedgerTransactionSnapshot,
+    draft: QuickEditDraft
 ): Map<String, Any?> = buildMap {
-    if (merchant != originalMerchant) put("merchant", merchant)
-    if (amountInWon != originalAmountInWon) put("amountInWon", amountInWon)
-    if (categoryId != originalCategoryId) {
-        put("categoryId", categoryId)
-    }
-    // 빈 문자열도 기존 memo를 지우는 명시적 변경 값입니다.
-    if (memo != originalMemo) put("memo", memo)
-    // 빈 배열도 기존 태그 전체 제거를 뜻하는 명시적인 변경입니다.
-    if (tags != originalTags) put("tags", tags)
+    if (draft.merchant != original.merchant) put("merchant", draft.merchant)
+    if (draft.amountInWon != original.amountInWon) put("amountInWon", draft.amountInWon)
+    if (draft.categoryId != original.categoryId) put("categoryId", draft.categoryId)
+    // 빈 문자열과 배열도 기존 메모·태그를 지우는 명시적 변경입니다.
+    if (draft.memo != original.memo) put("memo", draft.memo)
+    if (draft.tags != original.tags) put("tags", draft.tags)
 }

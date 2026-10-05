@@ -55,7 +55,6 @@ function recordingDiagnostics(
             businessOutcome: input.businessOutcome,
           };
     },
-    readAll: async () => ({ kind: "Forbidden" }),
   };
 }
 
@@ -83,7 +82,6 @@ describe("submitNotificationDiagnostic callable wire", () => {
         actor: {
           householdId: "server-household",
           memberId: "server-member",
-          role: "member",
         },
         sourceRegistered: true,
         notification: expect.objectContaining({
