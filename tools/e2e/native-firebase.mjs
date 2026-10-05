@@ -208,8 +208,8 @@ else {
         ['android.home.activity-reopen-complete', 'android.quick-edit.notification-to-shown',
           'android.quick-edit.notification-to-ready', 'android.quick-edit.save-to-closed', 'android.quick-edit.save-to-server-observed'];
       const performance = evaluatePerformanceBudgets(result.samples, { projects: ['android-emulator'], metrics: expectedMetrics,
-        samplesPerMetric: performanceSamples, reportOnly: true, warmupMetrics: expectedMetrics.filter(metric => metric.startsWith('android.quick-edit.')),
-        diagnostic: isolateWebView || process.env.PERFORMANCE_DIAGNOSTIC === 'true', ci: Boolean(process.env.CI || process.env.GITHUB_ACTIONS),
+        samplesPerMetric: performanceSamples, warmupMetrics: expectedMetrics.filter(metric => metric.startsWith('android.quick-edit.')),
+        mode: isolateWebView || process.env.PERFORMANCE_DIAGNOSTIC === 'true' ? 'diagnostic' : 'report-only', ci: Boolean(process.env.CI || process.env.GITHUB_ACTIONS),
         profile: process.env.PERFORMANCE_PROFILE });
       result.status = validationErrors.length > 0 || performance.status === 'fail' ? 'failed' : performance.status;
       result.validationErrors = validationErrors;

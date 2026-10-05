@@ -148,7 +148,7 @@ export function renderPerformanceReport(report, { title } = {}) {
     <p>막대는 선택한 조건의 참고 시간 대비 비율입니다. 시간 초과는 참고용으로 표시하며 CI 성공 여부에 영향을 주지 않습니다.</p>
     <p>반복은 기록된 참고 횟수번째 본표본(7회 중 6회)을 사용하며 준비 실행은 제외합니다.</p>` : `<p>CI ${badge(performance.status)} · 공통 UX ${badge(performance.uxStatus)}</p>
     <p>막대는 선택한 조건의 허용 시간 대비 비율입니다. 행의 상태 아이콘은 세 조건을 합친 원본 판정을 유지합니다. 모든 조건을 만족해야 통과합니다.</p>
-    <p>반복은 기록된 최소 허용 횟수번째 본표본(7회 중 6회)을 사용합니다. 정식 판정은 최소 ${number(performance.minimumGateSamples)}회이며 준비 실행은 제외합니다.</p>`}
+    <p>반복은 기록된 최소 허용 횟수번째 본표본(7회 중 6회)을 사용합니다. 정식 판정은 최소 ${number(performance.minimumReportSamples ?? performance.minimumGateSamples)}회이며 준비 실행은 제외합니다.</p>`}
     <p>기준은 이 실행의 JSON에 기록된 값입니다. 에뮬레이터 측정이며 실제 휴대폰·운영 네트워크 시간과 다릅니다.</p>
     <dl>${metadata.map(([name, value]) => `<dt>${escape(name)}</dt><dd>${escape(value)}</dd>`).join('')}</dl>
     <details class="warmup"><summary>준비 실행 ${warmup.length}개</summary><ul>${warmup.map(sample => `<li>${escape(projectName(sample.project))} · ${escape(sample.label ?? sample.metric)} · ${number(sample.durationMs)} ms</li>`).join('')}</ul></details>

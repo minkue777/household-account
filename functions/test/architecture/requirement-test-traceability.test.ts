@@ -3,9 +3,11 @@ import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
+import { readDeclarations } from "../../../tools/requirements/declarations.mjs";
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const requirementsRoot = join(workspaceRoot, "docs", "requirements");
+const declared = readDeclarations(requirementsRoot);
 const testRoots = [
   join(workspaceRoot, "functions", "test"),
   join(workspaceRoot, "web", "src", "__tests__"),
@@ -37,22 +39,7 @@ function listFiles(root: string, extension: string): string[] {
 }
 
 function canonicalTestDeclarations(): string[] {
-  const declarationPattern = /^\|\s*(T-[A-Z0-9-]+)\s*\|/gm;
-  return listFiles(requirementsRoot, ".md").flatMap((file) => {
-    const contents = readFileSync(file, "utf8");
-    return Array.from(contents.matchAll(declarationPattern), (match) => match[1]);
-  });
-}
-
-function requirementSourceFiles(): string[] {
-  return listFiles(requirementsRoot, ".md").filter((file) => {
-    const path = relative(requirementsRoot, file).replace(/\\/g, "/");
-    return (
-      /^(?:contexts\/[^/]+\/modules|supporting-platform\/modules)\/[^/]+\/requirements\.md$/.test(
-        path,
-      ) || path === "system/context.md"
-    );
-  });
+  return [...declared.tests.keys()];
 }
 
 function moduleSpecificationFiles(): string[] {
@@ -72,25 +59,7 @@ interface RequirementDeclaration {
 }
 
 function requirementDeclarationEntries(): RequirementDeclaration[] {
-  const declarationPattern =
-    /^\|\s*\[?((?!T-)[A-Z][A-Z0-9-]*-\d{3})(?:\]\([^)]+\))?\s*\|/gm;
-  const declarations: RequirementDeclaration[] = [];
-
-  for (const file of requirementSourceFiles()) {
-    const contents = readFileSync(file, "utf8");
-    const requirementSection =
-      contents.match(
-        /## (?:5\. 요구사항|6\. 공통 요구사항)\s*\r?\n([\s\S]*?)(?=\r?\n## |$)/,
-      )?.[1] ?? "";
-    for (const match of requirementSection.matchAll(declarationPattern)) {
-      declarations.push({
-        id: match[1],
-        file: relative(requirementsRoot, file).replace(/\\/g, "/"),
-      });
-    }
-  }
-
-  return declarations;
+  return declared.requirements.map(({ id, file }) => ({ id, file: relative(requirementsRoot, file).replace(/\\/g, "/") }));
 }
 
 function requirementDeclarations(): ReadonlyMap<string, string> {

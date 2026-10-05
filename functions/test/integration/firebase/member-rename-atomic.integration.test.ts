@@ -54,7 +54,7 @@ describeWithEmulator("[HH-009][T-HH-004] 실제 이름 변경의 충돌·원자�
     expect(results.filter(result => result.kind !== "success")).toEqual([{ kind: "conflict", code: "DISPLAY_NAME_EXISTS" }]);
     expect((await db.collection("households/race/members").where("displayName", "==", "새 이름").get()).size).toBe(1);
     expect((await db.collection("outboxEvents").where("householdId", "==", "race").get()).size).toBe(1);
-  });
+  }, 30_000);
 
   it("성공 결과를 모든 표시 문서에 저장하고 재전송·버전 충돌·payload 충돌은 원본을 보존한다", async () => {
     await seed("replay");

@@ -21,7 +21,7 @@
 | [PT-04 — 413줄 Firestore 대역의 SDK 의미 차이가 버그를 숨깁니다 (높음)](platform-tests.md) | SDK 차이 교정·범위 제한 | [실제 SDK 비교 및 동시성 범위 분리](../../operations/access-simplicity-2026-10-05.md) |
 | [PT-05 — RenameSelf 중복 이름 계약은 fixture에서만 충족됩니다 (높음)](platform-tests.md) | 구현·관련 검사 완료 | [실제 SDK 재현 및 수정](../../operations/access-simplicity-2026-10-05.md) |
 | [PT-06 — 실제 completion 경로와 다른 monitor 복구 API를 테스트가 살려 둡니다 (높음)](platform-tests.md) | 미착수 | |
-| [PT-07 — 과거 날짜 예외와 구 성능 gate를 테스트가 보존합니다 (높음)](platform-tests.md) | 미착수 | |
+| [PT-07 — 과거 날짜 예외와 구 성능 gate를 테스트가 보존합니다 (높음)](platform-tests.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
 | [PT-08 — category 조회 최적화 검사가 최초 수정·삭제 경로를 타지 않습니다 (높음)](platform-tests.md) | 미착수 | |
 | [PT-09 — 일반 tenant CRUD 행렬이 실제 Rules 계약처럼 보입니다 (높음)](platform-tests.md) | 미착수 | |
 | [후보 A01 — 사용처 없는 서버의 클라이언트 세션 모형 삭제](platform.md) | 구현·관련 검사 완료 | [서버 실행 경로 정비](../../operations/server-simplicity-2026-10-05.md) |
@@ -37,10 +37,10 @@
 | [TB-01 — 저장 결과가 같다는 검사와 읽기·쓰기 비용 검사를 구별한다](test-boundaries.md) | 미착수 | |
 | [TB-02 — 공유 schema 검사를 생산자·소비자 실행 검사로 부르지 않는다](test-boundaries.md) | 미착수 | |
 | [TOOL-01 — Android 영향 범위를 수동 파일명 목록으로 관리하면서 보조 도구 검사가 스스로 빠집니다](tooling.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
-| [TOOL-02 — 현재 실행자가 쓰지 않는 과거 성능 PASS/FAIL 평가 모드를 계속 유지합니다](tooling.md) | 미착수 | |
+| [TOOL-02 — 현재 실행자가 쓰지 않는 과거 성능 PASS/FAIL 평가 모드를 계속 유지합니다](tooling.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
 | [TOOL-03 — 동일 후보를 준비하는 build와 구조 검사를 한 흐름에서 반복합니다](tooling.md) | 미착수 | |
 | [TOOL-04 — 완료된 구형 이관용 reconciliation이 일반 runtime 명령처럼 남아 있습니다](tooling.md) | 미착수 | |
-| [TOOL-05 — 요구사항 선언 파서가 세 군데에서 같은 규칙을 다시 구현합니다](tooling.md) | 미착수 | |
+| [TOOL-05 — 요구사항 선언 파서가 세 군데에서 같은 규칙을 다시 구현합니다](tooling.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
 | [TOOL-06 — 런타임 보안 경계 검사에 과거 폴더 이전 완료 조건이 섞여 있습니다](tooling.md) | 구현·관련 검사 완료 | [검사 경계 정비](../../operations/verification-simplicity-2026-10-05.md) |
 | [WT-01 · 원장 optimistic 수정: 읽기 전용 metadata, expectedVersion, 즉시 반영/rollback](web-tests.md) | 미착수 | |
 | [WT-02 · 원본 선택·월분할 command/lineage](web-tests.md) | 미착수 | |

@@ -31,6 +31,7 @@ jobs:
           java-version: 21
       - run: npm ci
         working-directory: functions
+      - run: node --test tools/requirements/declarations.test.mjs
       - run: npm test -- --reporter=default --reporter=json --outputFile=quality-functions.json
         working-directory: functions
       - run: npm run test:types

@@ -9,13 +9,13 @@ import { evaluatePerformanceBudgets } from './budgets.mjs';
 import { renderPerformanceReport } from './html-report.mjs';
 
 function reportFor(values = Array(7).fill(350), {
-  project = 'webkit-mobile', metric = 'search.change-keyword', diagnostic = false, reportOnly = false, requested = values.length,
+  project = 'webkit-mobile', metric = 'search.change-keyword', diagnostic = false, requested = values.length,
 } = {}) {
   const samples = [10000, ...values].map((durationMs, iteration) => ({
     project, metric, durationMs, iteration, warmup: iteration === 0, cacheState: 'search-window-memory', label: '검색어 변경',
   }));
   const performance = evaluatePerformanceBudgets(samples, { projects: [project], metrics: [metric],
-    samplesPerMetric: requested, diagnostic, reportOnly, profile: 'github-hosted-v2' });
+    samplesPerMetric: requested, mode: diagnostic ? 'diagnostic' : 'report-only', profile: 'github-hosted-v2' });
   return { status: performance.status === 'pass' ? 'passed' : ['reported', 'diagnostic'].includes(performance.status) ? performance.status : 'failed',
     commit: 'a'.repeat(40), timestamp: '2026-09-17T05:00:00Z',
     environment: { cpu: 'test CPU', backend: 'local emulators' },
@@ -33,7 +33,7 @@ test('report-only charts retain timing comparisons without pass or fail verdicts
     [Array(7).fill(900), false, false, 'exceeded'],
     [[100, 100, 100, 100, 100, 100, 1001], false, false, 'within'],
   ]) {
-    const report = reportFor(values, { reportOnly: true });
+    const report = reportFor(values, {});
     const original = JSON.stringify(report);
     const html = renderPerformanceReport(report);
     const row = measuredRow(html);
@@ -57,7 +57,7 @@ test('report-only charts retain timing comparisons without pass or fail verdicts
 });
 
 test('report-only preserves functional errors and incomplete measurements as execution failures', () => {
-  const functionalFailure = reportFor(Array(7).fill(900), { reportOnly: true });
+  const functionalFailure = reportFor(Array(7).fill(900), {});
   functionalFailure.status = 'failed';
   functionalFailure.failures = ['저장 결과 검증 실패'];
   const failedHtml = renderPerformanceReport(functionalFailure);
@@ -65,7 +65,7 @@ test('report-only preserves functional errors and incomplete measurements as exe
   assert.equal(rowAttribute(failedHtml, 'data-status'), 'reported');
   assert.match(failedHtml, /저장 결과 검증 실패/);
 
-  const incomplete = reportFor([100, 100], { reportOnly: true, requested: 7 });
+  const incomplete = reportFor([100, 100], { requested: 7 });
   incomplete.coverage.metrics.push('search.first');
   const html = renderPerformanceReport(incomplete);
   assert.equal(executionStatus(html), 'failed');
@@ -76,25 +76,16 @@ test('report-only preserves functional errors and incomplete measurements as exe
   assert.match(html, /data-status="missing"/);
 });
 
-test('preserves independent CI and UX chart thresholds and the evaluator verdicts', () => {
-  const report = reportFor();
+test('saved historical verdicts render without re-evaluation', () => {
+  const report = JSON.parse(readFileSync(new URL('./fixtures/historical-gate-report.json', import.meta.url), 'utf8'));
+  const original = JSON.stringify(report);
   const html = renderPerformanceReport(report);
-  const row = measuredRow(html);
   assert.equal(executionStatus(html), 'passed');
-  assert.equal(attribute(row, 'data-status'), 'pass');
-  assert.equal(attribute(row, 'data-ux'), 'fail');
-  for (const [name, value] of Object.entries({
-    'data-median': 350, 'data-repeat': 350, 'data-max': 350,
-    'data-ci-median': 400, 'data-ci-repeat': 650, 'data-ci-max': 1000,
-    'data-ux-median': 300, 'data-ux-repeat': 500, 'data-ux-max': 1000,
-  })) assert.equal(Number(attribute(row, name)), value, name);
-  assert.match(row, /class="bar within"/);
-  assert.match(row, /role="img"/);
-  assert.match(row, /aria-label="[^"]*87\.5%[^"]*"/);
-  assert.match(row, /aria-label="[^"]*350[^"]*400[^"]*"/);
-  assert.match(row, /중앙값 초과/);
-  assert.match(html, /100%/);
-  assert(!/^<details[^>]*\bopen(?:[\s=>])/.test(row));
+  assert.equal(rowAttribute(html, 'data-status'), 'pass');
+  assert.equal(rowAttribute(html, 'data-ux'), 'fail');
+  assert.equal(rowAttribute(html, 'data-ci-median'), '400');
+  assert.equal(rowAttribute(html, 'data-ux-median'), '300');
+  assert.equal(JSON.stringify(report), original);
 });
 
 test('preserves historical recorded budgets instead of silently applying current configuration', () => {
@@ -105,7 +96,8 @@ test('preserves historical recorded budgets instead of silently applying current
     ['asset-stats.revisit', 675, 650, 700, 1200],
   ]) {
     const report = reportFor(Array(7).fill(value), { metric });
-    assert.equal(report.performance.status, 'pass', `current ${metric}`);
+    assert.equal(report.performance.status, 'reported', `current ${metric}`);
+    report.performance.mode = 'gate';
     // A stored report owns its original limit and verdict even when its timings
     // would pass today's configuration. Rendering must never re-evaluate it.
     const recorded = report.performance.results[0];
@@ -138,8 +130,10 @@ test('the reviewed hosted graph lines retain their stricter UX comparison', () =
     ['ledger.delete', 600, 700, 200],
   ]) {
     const html = renderPerformanceReport(reportFor(Array(7).fill(value), { metric }));
-    assert.equal(rowAttribute(html, 'data-status'), 'pass');
-    assert.equal(rowAttribute(html, 'data-ux'), 'fail');
+    assert.equal(rowAttribute(html, 'data-status'), 'reported');
+    assert.equal(rowAttribute(html, 'data-ux'), 'reported');
+    assert.equal(rowAttribute(html, 'data-ci-within'), 'true');
+    assert.equal(rowAttribute(html, 'data-ux-within'), 'false');
     assert.equal(rowAttribute(html, 'data-ci-median'), String(ciMedian));
     assert.equal(rowAttribute(html, 'data-ux-median'), String(uxMedian));
     assert.equal(rowAttribute(html, 'data-median'), String(value));
@@ -150,7 +144,8 @@ test('the repeat chart uses the recorded required order statistic from measured 
   const report = reportFor([1100, 100, 1001, 100, 100, 100, 100], { metric: 'search.first' });
   let html = renderPerformanceReport(report);
   assert.equal(rowAttribute(html, 'data-repeat'), '1001');
-  assert.equal(rowAttribute(html, 'data-status'), 'fail');
+  assert.equal(rowAttribute(html, 'data-status'), 'reported');
+  assert.equal(rowAttribute(html, 'data-ci-within'), 'false');
   assert.match(measuredRow(html), /반복 허용 시간 초과/);
 
   const eightSamples = reportFor([800, 100, 600, 400, 200, 700, 300, 500], { metric: 'search.first' });
@@ -186,9 +181,10 @@ test('each independent timing failure remains visible and warmup is kept outside
     [[100, 100, 100, 100, 100, 100, 1501], '개별 최대 시간 초과'],
   ]) {
     const html = renderPerformanceReport(reportFor(values, { metric: 'search.first' }));
-    assert.equal(executionStatus(html), 'failed');
+    assert.equal(executionStatus(html), 'reported');
     const row = measuredRow(html);
-    assert.equal(attribute(row, 'data-status'), 'fail');
+    assert.equal(attribute(row, 'data-status'), 'reported');
+    assert.equal(attribute(row, 'data-ci-within'), 'false');
     assert(row.includes(reason));
     if (reason === '개별 최대 시간 초과') {
       assert.equal(attribute(row, 'data-median'), '100');
@@ -208,7 +204,7 @@ test('a functional failure cannot appear as overall success even when timings pa
   report.failures = ['합계 검증 실패'];
   const html = renderPerformanceReport(report);
   assert.equal(executionStatus(html), 'failed');
-  assert.equal(rowAttribute(html, 'data-status'), 'pass');
+  assert.equal(rowAttribute(html, 'data-status'), 'reported');
   assert.match(html, /합계 검증 실패/);
 });
 

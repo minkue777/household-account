@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve, relative, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readDeclarations } from './declarations.mjs';
 
 export const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const require = createRequire(resolve(workspaceRoot, 'functions/package.json'));
@@ -79,14 +80,9 @@ export function executableEvidence() {
 }
 
 export function requirementDeclarations() {
-  const root = resolve(workspaceRoot, 'docs/requirements');
-  return files(root).filter(file => /(?:\/|\\)(?:requirements|context)\.md$/.test(file)).flatMap(file => {
-    const source = readFileSync(file, 'utf8');
-    const section = source.match(/## (?:5\. 요구사항|6\. 공통 요구사항)\s*\r?\n([\s\S]*?)(?=\r?\n## |$)/)?.[1] ?? '';
-    return [...section.matchAll(/^\|\s*\[?((?!T-)[A-Z][A-Z0-9-]*-\d{3})(?:\]\([^)]+\))?\s*\|([^\n]*)/gm)].map(match => ({
-      id: match[1], file: relative(workspaceRoot, file).replaceAll('\\', '/'), row: match[2].trim(),
-    }));
-  });
+  return readDeclarations(resolve(workspaceRoot, 'docs/requirements')).requirements.map(({ id, file, row }) => ({
+    id, file: relative(workspaceRoot, file).replaceAll('\\', '/'), row,
+  }));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -146,105 +146,14 @@ describe("Google Cloud interactive latency reader", () => {
     ]);
   });
 
-  it("drops samples before each split operation's latest measurement baseline", () => {
-    const remeasuredOperations = [
-      "ledger.split-existing-transaction-monthly.v1",
-      "ledger.cancel-monthly-split.v1",
-    ] as const;
-    const observations: InteractiveLatencyObservation[] = remeasuredOperations.flatMap(
-      (operation) => [
-        {
-          endpoint: "executeHouseholdCommand",
-          operation,
-          elapsedMs: 20_000,
-          status: "succeeded",
-          timestamp: "2026-07-28T15:10:23.000Z",
-        },
-        {
-          endpoint: "executeHouseholdCommand",
-          operation,
-          elapsedMs: 300,
-          status: "succeeded",
-          timestamp: "2026-07-28T15:10:25.000Z",
-        },
-      ],
-    );
-    observations.push(
-      {
-        endpoint: "executeHouseholdCommand",
-        operation: "ledger.split-transaction.v1",
-        elapsedMs: 310,
-        status: "succeeded",
-        timestamp: "2026-07-28T14:28:01.000Z",
-      },
-    );
-
-    const summary = summarizeInteractiveLatency(observations);
-    expect(summary).toHaveLength(3);
-    expect(summary).toEqual(
-      expect.arrayContaining(remeasuredOperations.map((operation) => ({
-        endpoint: "executeHouseholdCommand",
-        operation,
-        sampleCount: 1,
-        succeededCount: 1,
-        rejectedCount: 0,
-
-        failedCount: 0,
-        averageMs: 300,
-        p95Ms: 300,
-        maxMs: 300,
-        latestAt: "2026-07-28T15:10:25.000Z",
-      }))),
-    );
-    expect(summary).toContainEqual({
-      endpoint: "executeHouseholdCommand",
-      operation: "ledger.split-transaction.v1",
-      sampleCount: 1,
-      succeededCount: 1,
-      rejectedCount: 0,
-
-      failedCount: 0,
-      averageMs: 310,
-      p95Ms: 310,
-      maxMs: 310,
-      latestAt: "2026-07-28T14:28:01.000Z",
-    });
-  });
-
-  it("drops pre-fix market refresh rejections from the admin failure count", () => {
-    const operation = "portfolio.refresh-market-values.v1";
-    const summary = summarizeInteractiveLatency([
-      {
-        endpoint: "executeHouseholdCommand",
-        operation,
-        elapsedMs: 120,
-        status: "rejected",
-        timestamp: "2026-07-29T10:45:28.394Z",
-      },
-      {
-        endpoint: "executeHouseholdCommand",
-        operation,
-        elapsedMs: 180,
-        status: "succeeded",
-        timestamp: "2026-07-29T10:45:28.396Z",
-      },
-    ]);
-
-    expect(summary).toEqual([
-      {
-        endpoint: "executeHouseholdCommand",
-        operation,
-        sampleCount: 1,
-        succeededCount: 1,
-        rejectedCount: 0,
-
-        failedCount: 0,
-        averageMs: 180,
-        p95Ms: 180,
-        maxMs: 180,
-        latestAt: "2026-07-29T10:45:28.396Z",
-      },
-    ]);
+  it("과거 사건별 날짜 cutoff 없이 요청 범위의 표본을 그대로 집계한다", () => {
+    for (const operation of ["ledger.split-transaction.v1", "ledger.split-existing-transaction-monthly.v1", "ledger.cancel-monthly-split.v1", "portfolio.refresh-market-values.v1", "notifications.deliver-ios-shortcut.v1"]) {
+      const rows: InteractiveLatencyObservation[] = [
+        { endpoint: "executeHouseholdCommand", operation, elapsedMs: 20_000, status: "succeeded", timestamp: "2026-07-28T00:00:00Z" },
+        { endpoint: "executeHouseholdCommand", operation, elapsedMs: 300, status: "succeeded", timestamp: "2026-10-05T00:00:00Z" },
+      ];
+      expect(summarizeInteractiveLatency(rows)).toEqual([expect.objectContaining({ sampleCount: 2, succeededCount: 2, maxMs: 20_000, averageMs: 10_150 })]);
+    }
   });
 
   it("사용자 체감과 무관한 요청 저장·관리자 보조 조회를 제외하고 실제 FCM 접수 시간을 집계한다", () => {

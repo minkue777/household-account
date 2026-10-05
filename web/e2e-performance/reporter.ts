@@ -59,8 +59,8 @@ export default class PerformanceReporter implements Reporter {
     mkdirSync(output, { recursive: true });
     const samplesRequested = Number(process.env.PERFORMANCE_SAMPLES ?? 7);
     const performance = evaluatePerformanceBudgets(this.samples, { projects: this.selectedProjects,
-      metrics: WEB_PERFORMANCE_METRICS, samplesPerMetric: samplesRequested, reportOnly: true,
-      diagnostic: process.env.PERFORMANCE_DIAGNOSTIC === 'true', ci: Boolean(process.env.CI || process.env.GITHUB_ACTIONS),
+      metrics: WEB_PERFORMANCE_METRICS, samplesPerMetric: samplesRequested,
+      mode: process.env.PERFORMANCE_DIAGNOSTIC === 'true' ? 'diagnostic' : 'report-only', ci: Boolean(process.env.CI || process.env.GITHUB_ACTIONS),
       profile: process.env.PERFORMANCE_PROFILE });
     const statistics = performance.statistics;
     const errors = [...this.reportingErrors, ...performance.errors];

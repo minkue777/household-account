@@ -75,32 +75,6 @@ const EXCLUDED_OPERATIONS = new Set([
   // 일반 사용자 기능의 체감 성능을 나타내지 않으므로 운영 성능 표에서 제외합니다.
   "access.list-asset-owner-profiles.v1",
 ]);
-const LATENCY_RESET_AT_BY_OPERATION = new Map<string, number>([
-  // 2026-07-28에 전체 원장 조회·재기록을 제거한 버전이 배포되었습니다.
-  // 개선 전 측정치는 현재 구현의 지연 통계를 오염시키므로 집계에서 제외합니다.
-  ["ledger.split-transaction.v1", Date.parse("2026-07-28T14:28:00.794Z")],
-  [
-    "ledger.split-existing-transaction-monthly.v1",
-    Date.parse("2026-07-28T15:10:24.296Z"),
-  ],
-  [
-    "ledger.cancel-monthly-split.v1",
-    Date.parse("2026-07-28T15:10:24.296Z"),
-  ],
-  // 실행 중인 동일 범위의 시세 갱신 요청을 오류가 아닌 정상 생략으로
-  // 분류하기 전 표본에는 중복 요청 거부가 실패로 섞여 있습니다.
-  [
-    "portfolio.refresh-market-values.v1",
-    Date.parse("2026-07-29T10:45:28.395Z"),
-  ],
-  // NoTarget을 예외로 던지던 구 consumer가 같은 네 Outbox event를 반복해
-  // 실패 238건과 수 시간짜리 지연으로 오염시킨 표본을 제외합니다.
-  [
-    "notifications.deliver-ios-shortcut.v1",
-    Date.parse("2026-08-02T13:30:00.000Z"),
-  ],
-]);
-
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -228,14 +202,7 @@ export function summarizeInteractiveLatency(
   observations: readonly InteractiveLatencyObservation[],
 ): readonly AdminDashboardFunctionLatency[] {
   const groups = new Map<string, InteractiveLatencyObservation[]>();
-  const eligible = observations.filter((item) => {
-    if (EXCLUDED_OPERATIONS.has(item.operation)) return false;
-    const resetAt = LATENCY_RESET_AT_BY_OPERATION.get(item.operation);
-    if (resetAt !== undefined && Date.parse(item.timestamp) < resetAt) {
-      return false;
-    }
-    return true;
-  });
+  const eligible = observations.filter(item => !EXCLUDED_OPERATIONS.has(item.operation));
   for (const item of latestCorrelatedObservations(eligible)) {
     // NoTarget 같은 rejected 결과에는 FCM provider 호출이 없습니다. 알림 행의
     // 호출·성공 수는 provider에 실제 접수한 결과만 나타냅니다.

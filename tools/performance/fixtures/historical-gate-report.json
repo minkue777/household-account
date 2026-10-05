@@ -1,0 +1,197 @@
+{
+  "status": "passed",
+  "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "timestamp": "2026-09-17T05:00:00Z",
+  "environment": {
+    "cpu": "historical fixture CPU",
+    "backend": "local emulators"
+  },
+  "coverage": {
+    "projects": [
+      "webkit-mobile"
+    ],
+    "metrics": [
+      "search.change-keyword"
+    ],
+    "complete": true,
+    "errors": []
+  },
+  "performance": {
+    "policyVersion": "household-performance-budgets.v2",
+    "profile": "github-hosted-v2",
+    "status": "pass",
+    "uxStatus": "fail",
+    "mode": "gate",
+    "minimumGateSamples": 7,
+    "samplesRequested": 7,
+    "requiredWithinBudgetRule": "ceil(measuredSampleCount * 6 / 7)",
+    "coverage": {
+      "complete": true,
+      "errors": []
+    },
+    "errors": [],
+    "results": [
+      {
+        "project": "webkit-mobile",
+        "metric": "search.change-keyword",
+        "label": "검색어 변경",
+        "cacheState": "search-window-memory",
+        "n": 7,
+        "budget": {
+          "medianMs": 400,
+          "sixOfSevenMs": 650,
+          "maxMs": 1000,
+          "projects": [
+            "webkit-mobile"
+          ],
+          "diagnosticOnly": false
+        },
+        "observed": {
+          "medianMs": 350,
+          "maxMs": 350,
+          "withinBudget": 7,
+          "requiredWithinBudget": 6
+        },
+        "withinTimeBudget": true,
+        "status": "pass",
+        "reasons": [],
+        "budgetSource": "github-hosted-v2",
+        "ux": {
+          "budget": {
+            "medianMs": 300,
+            "sixOfSevenMs": 500,
+            "maxMs": 1000,
+            "projects": [
+              "chromium-mobile",
+              "webkit-mobile"
+            ],
+            "diagnosticOnly": false
+          },
+          "observed": {
+            "medianMs": 350,
+            "maxMs": 350,
+            "withinBudget": 7,
+            "requiredWithinBudget": 6
+          },
+          "withinTimeBudget": false,
+          "status": "fail",
+          "reasons": [
+            "median-exceeded"
+          ]
+        }
+      }
+    ],
+    "statistics": [
+      {
+        "project": "webkit-mobile",
+        "metric": "search.change-keyword",
+        "label": "검색어 변경",
+        "cacheState": "search-window-memory",
+        "n": 7,
+        "minMs": 350,
+        "medianMs": 350,
+        "meanMs": 350,
+        "maxMs": 350,
+        "samplesMs": [
+          350,
+          350,
+          350,
+          350,
+          350,
+          350,
+          350
+        ]
+      }
+    ],
+    "exceededMetrics": [],
+    "uxExceededMetrics": [
+      "webkit-mobile/search.change-keyword"
+    ],
+    "warmupSamples": [
+      {
+        "project": "webkit-mobile",
+        "metric": "search.change-keyword",
+        "durationMs": 10000,
+        "iteration": 0,
+        "warmup": true,
+        "cacheState": "search-window-memory",
+        "label": "검색어 변경"
+      }
+    ],
+    "firstExecutionPerformanceValidated": false
+  },
+  "samples": [
+    {
+      "project": "webkit-mobile",
+      "metric": "search.change-keyword",
+      "durationMs": 10000,
+      "iteration": 0,
+      "warmup": true,
+      "cacheState": "search-window-memory",
+      "label": "검색어 변경"
+    },
+    {
+      "project": "webkit-mobile",
+      "metric": "search.change-keyword",
+      "durationMs": 350,
+      "iteration": 1,
+      "warmup": false,
+      "cacheState": "search-window-memory",
+      "label": "검색어 변경"
+    },
+    {
+      "project": "webkit-mobile",
+      "metric": "search.change-keyword",
+      "durationMs": 350,
+      "iteration": 2,
+      "warmup": false,
+      "cacheState": "search-window-memory",
+      "label": "검색어 변경"
+    },
+    {
+      "project": "webkit-mobile",
+      "metric": "search.change-keyword",
+      "durationMs": 350,
+      "iteration": 3,
+      "warmup": false,
+      "cacheState": "search-window-memory",
+      "label": "검색어 변경"
+    },
+    {
+      "project": "webkit-mobile",
+      "metric": "search.change-keyword",
+      "durationMs": 350,
+      "iteration": 4,
+      "warmup": false,
+      "cacheState": "search-window-memory",
+      "label": "검색어 변경"
+    },
+    {
+      "project": "webkit-mobile",
+      "metric": "search.change-keyword",
+      "durationMs": 350,
+      "iteration": 5,
+      "warmup": false,
+      "cacheState": "search-window-memory",
+      "label": "검색어 변경"
+    },
+    {
+      "project": "webkit-mobile",
+      "metric": "search.change-keyword",
+      "durationMs": 350,
+      "iteration": 6,
+      "warmup": false,
+      "cacheState": "search-window-memory",
+      "label": "검색어 변경"
+    },
+    {
+      "project": "webkit-mobile",
+      "metric": "search.change-keyword",
+      "durationMs": 350,
+      "iteration": 7,
+      "warmup": false,
+      "cacheState": "search-window-memory",
+      "label": "검색어 변경"
+    }
+  ]
+}
