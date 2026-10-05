@@ -1,6 +1,6 @@
 import { deleteApp, initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { getFirestore, setLogFunction } from "firebase-admin/firestore";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { FirebaseMemberRenameStore } from "../../../src/adapters/firebase/access/firebaseMemberRenameStore";
 import { createMemberRenameApplication } from "../../../src/contexts/access/member-rename/application/memberRenameApplication";
 
@@ -49,11 +49,51 @@ describeWithEmulator("[HH-009][T-HH-004] 실제 이름 변경의 충돌·원자�
 
   it("두 멤버가 같은 새 이름으로 변경하면 한 명만 저장한다", async () => {
     await seed("race");
-    const results = await Promise.all([rename("race", "a", "a", "새 이름"), rename("race", "b", "b", "새 이름")]);
-    expect(results.filter(result => result.kind === "success")).toHaveLength(1);
-    expect(results.filter(result => result.kind !== "success")).toEqual([{ kind: "conflict", code: "DISPLAY_NAME_EXISTS" }]);
-    expect((await db.collection("households/race/members").where("displayName", "==", "새 이름").get()).size).toBe(1);
-    expect((await db.collection("outboxEvents").where("householdId", "==", "race").get()).size).toBe(1);
+    const runTransaction = db.runTransaction.bind(db);
+    const attempts: number[] = [];
+    const firstResults: unknown[] = [];
+    const sdkLog: string[] = [];
+    let release!: () => void;
+    const bothPrepared = new Promise<void>(resolve => { release = resolve; });
+    setLogFunction(message => sdkLog.push(message));
+    const observed = vi.spyOn(db, "runTransaction").mockImplementation(operation => {
+      const index = attempts.push(0) - 1;
+      return runTransaction(async transaction => {
+        const firstAttempt = ++attempts[index] === 1;
+        const result = await operation(transaction);
+        if (firstAttempt) {
+          // 두 변경이 같은 초기 상태에서 준비된 뒤 실제 SDK가 commit 충돌을 처리하게 합니다.
+          firstResults.push(result);
+          if (firstResults.length === 2) release();
+          await bothPrepared;
+        }
+        return result;
+      });
+    });
+    try {
+      const settled = await Promise.allSettled([
+        rename("race", "a", "a", "새 이름").finally(release),
+        rename("race", "b", "b", "새 이름").finally(release),
+      ]);
+      const results = settled.map(result => {
+        if (result.status === "rejected") throw result.reason;
+        return result.value;
+      });
+      expect(firstResults).toEqual([expect.objectContaining({ kind: "success" }), expect.objectContaining({ kind: "success" })]);
+      expect(attempts).toHaveLength(2);
+      expect(attempts.some(count => count > 1)).toBe(true);
+      expect(results.filter(result => result.kind === "success")).toHaveLength(1);
+      expect(results.filter(result => result.kind !== "success")).toEqual([{ kind: "conflict", code: "DISPLAY_NAME_EXISTS" }]);
+      expect((await db.collection("households/race/members").where("displayName", "==", "새 이름").get()).size).toBe(1);
+      expect((await db.collection("outboxEvents").where("householdId", "==", "race").get()).size).toBe(1);
+    } catch (error) {
+      console.error(sdkLog.join("\n"));
+      throw error;
+    } finally {
+      release();
+      observed.mockRestore();
+      setLogFunction(null);
+    }
   }, 30_000);
 
   it("성공 결과를 모든 표시 문서에 저장하고 재전송·버전 충돌·payload 충돌은 원본을 보존한다", async () => {
