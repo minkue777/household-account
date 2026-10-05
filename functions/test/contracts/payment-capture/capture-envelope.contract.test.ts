@@ -108,7 +108,7 @@ function caseById(caseId: string): CaptureEnvelopeGoldenCase {
   return found;
 }
 
-describe("CaptureEnvelope.v1 producer·consumer 공유 계약", () => {
+describe("CaptureEnvelope.v1 공유 schema와 golden 예제 일관성", () => {
   it("[T-ING-003][T-IOS-001] AJV strict mode에서 모든 golden envelope가 Schema를 만족한다", () => {
     const validate = compileSchema();
 
@@ -119,7 +119,7 @@ describe("CaptureEnvelope.v1 producer·consumer 공유 계약", () => {
     }
   });
 
-  it("[T-PARSE-001][T-PARSE-002][T-ING-BAL-001][T-PARSE-004] producer 결과와 Payment Intake의 branch 해석이 일치한다", () => {
+  it("[T-PARSE-001][T-PARSE-002][T-ING-BAL-001][T-PARSE-004] golden fixture의 envelope와 expectedConsumer branch 예시가 일치한다", () => {
     const expectedCaseIds = [
       "android-approval-only",
       "android-balance-only",

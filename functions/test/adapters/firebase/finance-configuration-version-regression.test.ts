@@ -35,7 +35,7 @@ describe("Finance configuration client version boundary", () => {
     const handlers = createCategoryHouseholdCommandHandlers(memory as unknown as Firestore);
     await expect(execute(handlers, "category.update.v1", { categoryId: "food", expectedVersion: 1, changes: { label: "stale" } }, "stale")).rejects.toThrow();
     expect((memory.document("households/house/categoryCatalog/current")?.categories as Array<Record<string, unknown>>).find(category => category.categoryId === "food")).toMatchObject({ name: "식비", version: 2 });
-    await expect(execute(handlers, "category.update.v1", { categoryId: "food", expectedVersion: 2, changes: { label: "fresh" } }, "fresh")).resolves.toEqual({});
+    await expect(execute(handlers, "category.update.v1", { categoryId: "food", expectedVersion: 2, changes: { label: "fresh" } }, "fresh")).resolves.toEqual({ catalogVersion: 2 });
     expect((memory.document("households/house/categoryCatalog/current")?.categories as Array<Record<string, unknown>>).find(category => category.categoryId === "food")).toMatchObject({ name: "fresh", version: 3 });
   });
 
@@ -78,7 +78,7 @@ describe("Finance configuration client version boundary", () => {
     for (const active of [true, false]) memory.seed(`households/house/recurringPlans/${active}`, { householdId: "house", categoryId: "food", merchant: "plan", amountInWon: 1000, dayOfMonth: 10, active, lifecycleState: "active", version: 1 });
     memory.seed("expenses/history", { householdId: "house", category: "food" });
     const handlers = createCategoryHouseholdCommandHandlers(memory as unknown as Firestore);
-    await expect(execute(handlers, "category.archive.v1", { categoryId: "food", expectedVersion: 1 }, "archive")).resolves.toEqual({});
+    await expect(execute(handlers, "category.archive.v1", { categoryId: "food", expectedVersion: 1 }, "archive")).resolves.toEqual({ catalogVersion: 3 });
     expect((memory.document("households/house/categoryCatalog/current")?.categories as Array<Record<string, unknown>>).find(category => category.categoryId === "food")).toMatchObject({ state: "archived" });
     for (const active of [true, false]) expect(memory.document(`households/house/recurringPlans/${active}`)).toMatchObject({ categoryId: "etc", version: 2, active });
     expect(memory.document("expenses/history")).toMatchObject({ category: "food" });

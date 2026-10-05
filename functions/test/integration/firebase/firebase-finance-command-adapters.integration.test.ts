@@ -1,6 +1,6 @@
 import { deleteApp, initializeApp, type App } from "firebase-admin/app";
-import { getFirestore, type Firestore } from "firebase-admin/firestore";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { DocumentReference, Query, Transaction, getFirestore, type Firestore } from "firebase-admin/firestore";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { categoryCatalogDocument } from "../../support/category-catalog-document";
 
 import { createCategoryHouseholdCommandHandlers } from "../../../src/bootstrap/commands/categoryHouseholdCommandHandlers";
@@ -78,6 +78,20 @@ async function execute(
   payload: Record<string, unknown>,
 ) {
   return handlers.get(command)!.execute(context({ command, commandId, payload }));
+}
+
+async function observeReads<T>(action: () => Promise<T>) {
+  const reads = [vi.spyOn(Transaction.prototype, "get"), vi.spyOn(Query.prototype, "get"), vi.spyOn(DocumentReference.prototype, "get")];
+  try {
+    const value = await action();
+    const snapshots = await Promise.all(reads.flatMap(read => read.mock.results.filter(result => result.type === "return").map(result => result.value)));
+    const paths: string[] = snapshots.flatMap(snapshot => {
+      if ("docs" in snapshot) return snapshot.docs.map((doc: { ref: { path: string } }) => doc.ref.path);
+      if ("ref" in snapshot) return [snapshot.ref.path];
+      throw new Error("UNEXPECTED_AGGREGATE_READ");
+    });
+    return { value, paths };
+  } finally { reads.forEach(read => read.mockRestore()); }
 }
 
 describeWithFirestoreEmulator("Firebase finance command adapters", () => {
@@ -422,6 +436,38 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     ).toBe(false);
   });
 
+  it("최초 메모 수정·삭제·알림 요청은 catalog를 읽지 않고 명시적 분류 변경만 실제 catalog를 검증한다", async () => {
+    const handlers = createLedgerHouseholdCommandHandlers(database);
+    const catalog = database.doc(`households/${HOUSEHOLD_ID}/categoryCatalog/current`);
+    await catalog.set(categoryCatalogDocument(HOUSEHOLD_ID, [{ categoryId: "food", name: "식비" }]));
+    const created = await execute(handlers, "ledger.record-manual-transaction.v1", "lookup-seed", {
+      transactionType: "expense", merchant: "식당", amountInWon: 1000, categoryId: "food", accountingDate: "2026-07-22",
+    }) as { transactionId: string };
+    const reference = database.doc(`households/${HOUSEHOLD_ID}/ledgerTransactions/${created.transactionId}`);
+    for (const [name, id, payload] of [
+      ["ledger.update-transaction.v1", "lookup-memo", { transactionId: created.transactionId, expectedVersion: 1, patch: { memo: "수정" } }],
+      ["ledger.request-notification.v1", "lookup-notify", { transactionId: created.transactionId, expectedVersion: 2 }],
+      ["ledger.delete-transaction.v1", "lookup-delete", { transactionId: created.transactionId, expectedVersion: 3 }],
+    ] as const) {
+      const observed = await observeReads(() => execute(handlers, name, id, payload));
+      expect(observed.paths).toContain(reference.path);
+      expect(observed.paths).not.toContain(catalog.path);
+      const after = await reference.get();
+      expect(after.data()).toMatchObject({ memo: "수정", lifecycleState: id === "lookup-delete" ? "deleted" : "active" });
+    }
+    const created2 = await execute(handlers, "ledger.record-manual-transaction.v1", "lookup-seed-2", {
+      transactionType: "expense", merchant: "식당2", amountInWon: 2000, categoryId: "food", accountingDate: "2026-07-22",
+    }) as { transactionId: string };
+    const changed = await observeReads(() => execute(handlers, "ledger.update-transaction.v1", "lookup-category", {
+      transactionId: created2.transactionId, expectedVersion: 1, patch: { categoryId: "food" },
+    }));
+    expect(changed.paths).toContain(catalog.path);
+    expect(changed.value).toMatchObject({ categoryId: "food", aggregateVersion: 2 });
+    await expect(execute(handlers, "ledger.update-transaction.v1", "lookup-stale", {
+      transactionId: created2.transactionId, expectedVersion: 1, patch: { memo: "실패" },
+    })).rejects.toMatchObject({ code: "VERSION_MISMATCH" });
+  });
+
   it("월 분할은 대량 원장에서도 변경 항목만 저장하고 보이는 파생 version만으로 취소한다", async () => {
     const household = database.collection("households").doc(HOUSEHOLD_ID);
     const canonical = household.collection("ledgerTransactions");
@@ -462,14 +508,16 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       aggregateVersion: 1,
     });
     await seed.commit();
+    const beforeUnrelated = (await canonical.get()).docs.filter(doc => doc.id.startsWith("unrelated-"));
 
     const handlers = createLedgerHouseholdCommandHandlers(database);
-    const split = (await execute(
+    const observed = await observeReads(() => execute(
       handlers,
       "ledger.split-existing-transaction-monthly.v1",
       "forest-split-2",
       { transactionId: "forest", expectedVersion: 1, months: 2 },
-    )) as { transactionIds: string[]; splitGroupId: string };
+    ));
+    const split = observed.value as { transactionIds: string[]; splitGroupId: string };
 
     expect(split.transactionIds).toHaveLength(2);
     expect((await canonical.doc("forest").get()).data()).toMatchObject({
@@ -514,6 +562,10 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       aggregateVersion: 1,
       merchant: "무관 거래 259",
     });
+    expect(observed.paths.some(path => path.startsWith(canonical.path + "/"))).toBe(true);
+    expect(observed.paths.filter(path => path.startsWith(canonical.path + "/unrelated-"))).toEqual([]);
+    const afterUnrelated = await database.getAll(...beforeUnrelated.map(doc => doc.ref));
+    expect(afterUnrelated.every((doc, index) => doc.updateTime?.isEqual(beforeUnrelated[index].updateTime!))).toBe(true);
   });
 
   it("지출 나누기는 대량 원장을 읽거나 재저장하지 않고 원본과 파생 항목만 변경한다", async () => {
@@ -560,8 +612,9 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       aggregateVersion: 1,
     });
     await seed.commit();
+    const beforeUnrelated = (await canonical.get()).docs.filter(doc => doc.id.startsWith("unrelated-item-"));
 
-    const result = (await execute(
+    const observed = await observeReads(() => execute(
       createLedgerHouseholdCommandHandlers(database),
       "ledger.split-transaction.v1",
       "item-split-large-ledger",
@@ -583,7 +636,8 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
           },
         ],
       },
-    )) as { transactionIds: string[] };
+    ));
+    const result = observed.value as { transactionIds: string[] };
 
     expect(result.transactionIds).toHaveLength(2);
     expect((await canonical.doc("item-split-source").get()).data()).toMatchObject({
@@ -606,6 +660,10 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       aggregateVersion: 1,
       merchant: "무관 항목 259",
     });
+    expect(observed.paths.some(path => path.startsWith(canonical.path + "/"))).toBe(true);
+    expect(observed.paths.filter(path => path.startsWith(canonical.path + "/unrelated-item-"))).toEqual([]);
+    const afterUnrelated = await database.getAll(...beforeUnrelated.map(doc => doc.ref));
+    expect(afterUnrelated.every((doc, index) => doc.updateTime?.isEqual(beforeUnrelated[index].updateTime!))).toBe(true);
   });
 
   it("카테고리 6개 command가 단일 catalog 원본을 원자적으로 갱신한다", async () => {

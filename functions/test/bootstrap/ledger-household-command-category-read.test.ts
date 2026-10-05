@@ -117,7 +117,7 @@ describe("Ledger command category lookup boundary", () => {
       "ledger.request-notification.v1",
       { transactionId: "transaction-1", expectedVersion: 1 },
     ],
-  ])("%s does not scan the category catalog", async (_case, command, payload) => {
+  ])("%s receipt replay does not scan the category catalog", async (_case, command, payload) => {
     const fixture = subject();
 
     await fixture.execute(command, payload);
@@ -125,7 +125,7 @@ describe("Ledger command category lookup boundary", () => {
     expect(fixture.categoryReads()).toBe(0);
   });
 
-  it("validates an explicit category change against the active catalog", async () => {
+  it("explicit category payload validates the catalog even on this adapter receipt path", async () => {
     const fixture = subject();
 
     await fixture.execute("ledger.update-transaction.v1", {
